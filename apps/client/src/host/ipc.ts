@@ -7,6 +7,7 @@
 // lo verifica leggendo i sorgenti: un `import` di troppo altrove è rosso, non
 // una svista che si scopre il giorno del port su PWA o mobile.
 import { Channel, convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
@@ -146,6 +147,9 @@ function toVault<T extends object>(payload: T, vault?: string | null): T & { vau
 
 export const api = {
   initialVault: () => invoke<string | null>("initial_vault"),
+  // La versione di questo binario, dalla configurazione Tauri (che la prende
+  // da `Cargo.toml`): è quella che la scheda «Informazioni» mostra.
+  appVersion: () => getVersion(),
   // L'avviso di sessione (§25.5): la diagnosi «la cartella di configurazione
   // non si può scrivere» (o non c'è), una volta per sessione. È un tiraggio:
   // la diagnosi nasce all'avvio del backend, prima che questo ascoltatore

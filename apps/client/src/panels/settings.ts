@@ -74,6 +74,7 @@ import {
 import { setTooltip } from "../ui/tooltip";
 import { enterSurface, exitSurface } from "../ui/motion";
 import { icon } from "../ui/icons";
+import { SOURCE_URL, checkMessage, mountUpdateCheck, type UpdateChecker } from "./about";
 import { reducedMotion } from "../theme/reduced-motion";
 import {
   CSS_SNIPPETS_KEY, DEFAULT_CSS_SNIPPETS, cancelCssSnippetsPreview,
@@ -197,7 +198,7 @@ let settingsHooks: Hooks;
 /// Le schede che questo pannello ospita. `views` è la superficie
 /// `settings_tab` del contratto (§2.2): la dichiarano le view, e finora questa
 /// shell non aveva dove metterle.
-type SettingsTab = "settings" | "components" | "shortcuts" | "vault";
+type SettingsTab = "settings" | "components" | "shortcuts" | "vault" | "about";
 
 /// La figura di ogni scheda nella colonna di navigazione.
 const TAB_ICONS: Record<SettingsTab, string> = {
@@ -205,6 +206,7 @@ const TAB_ICONS: Record<SettingsTab, string> = {
   components: "component",
   shortcuts: "keyboard",
   vault: "vault",
+  about: "info",
 };
 
 let tab: SettingsTab = "settings";
@@ -318,6 +320,9 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
   }
   parent?.add(teardown);
   settingsLifetime = lifetime;
+  updateChecker = mountUpdateCheck(lifetime, () => {
+    if (tab === "about") void render();
+  });
 
   tab = "settings";
   renderedTab = null;
@@ -439,6 +444,9 @@ export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
 
 let mountedTeardown: Teardown | null = null;
 let settingsLifetime: Lifetime | null = null;
+/// Il controllo degli aggiornamenti della scheda «Informazioni»: vive quanto il
+/// pannello, e il suo esito ridisegna la scheda se è quella aperta.
+let updateChecker: UpdateChecker | null = null;
 
 
 /// Come si scioglie la trappola del fuoco, quando il pannello è aperto.
@@ -548,6 +556,7 @@ function tabContent(): Promise<HTMLElement[]> {
   if (tab === "settings") return renderForm();
   if (tab === "components") return renderComponents();
   if (tab === "shortcuts") return renderShortcuts();
+  if (tab === "about") return renderAbout();
   return renderVault();
 }
 
@@ -2814,6 +2823,56 @@ async function renderVault(): Promise<HTMLElement[]> {
   card.className = "settings-card";
   card.append(...vaults.map(renderVaultRow));
   return [card];
+}
+
+/// La scheda «Informazioni»: versione, licenza, sorgente e il controllo degli
+/// aggiornamenti, che parte soltanto dal suo pulsante.
+async function renderAbout(): Promise<HTMLElement[]> {
+  const version = await api.appVersion();
+  const about = sectionBlock(t("about.title"), 0);
+  const versionRow = document.createElement("div");
+  versionRow.className = "setting-row";
+  const versionText = document.createElement("div");
+  versionText.className = "setting-text";
+  const versionLabel = row("setting-label", t("about.version", { version }));
+  const license = row("muted setting-path", t("about.license"));
+  versionText.append(versionLabel, license);
+  const source = document.createElement("a");
+  source.className = "link-button";
+  source.href = SOURCE_URL;
+  source.target = "_blank";
+  source.rel = "noopener noreferrer";
+  source.textContent = t("about.source");
+  versionRow.append(versionText, source);
+  about.body.append(versionRow);
+
+  const check = updateChecker?.state() ?? { kind: "idle" as const };
+  const updates = sectionBlock(t("about.updates"), 1);
+  const checkRow = document.createElement("div");
+  checkRow.className = "setting-row";
+  const status = row("setting-text muted", checkMessage(check, version));
+  status.setAttribute("role", "status");
+  const actions = document.createElement("div");
+  actions.className = "setting-control";
+  if (check.kind === "done" && check.newer && check.url) {
+    const page = document.createElement("a");
+    page.className = "link-button";
+    page.href = check.url;
+    page.target = "_blank";
+    page.rel = "noopener noreferrer";
+    page.textContent = t("about.release_page");
+    actions.append(page);
+  }
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "settings-btn";
+  button.textContent = t("about.check");
+  button.disabled = check.kind === "checking";
+  button.addEventListener("click", () => void updateChecker?.start());
+  actions.append(button);
+  checkRow.append(status, actions);
+  updates.body.append(checkRow);
+  return [about.section, updates.section];
 }
 
 function renderVaultRow(vault: KnownVault): HTMLElement {

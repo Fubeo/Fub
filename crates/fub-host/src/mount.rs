@@ -463,6 +463,7 @@ pub(crate) fn mount_with_formats(
             )
             .with_token(token),
         ));
+        bundles.push(Arc::new(crate::updates::UpdatesBundle));
     }
 
     let mut registry = BundleRegistry::new();

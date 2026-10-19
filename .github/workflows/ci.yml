@@ -45,6 +45,8 @@ jobs:
         run: cargo build --manifest-path tools/varco-wasm/Cargo.toml --target wasm32-unknown-unknown
       - name: le versioni delle dipendenze si scrivono in un posto solo
         run: node .github/scripts/check-cargo-versions.mjs
+      - name: la versione del prodotto è la stessa in Cargo, Tauri e npm
+        run: node .github/scripts/check-release-version.mjs
       - name: ogni cargo feature è compilata da qualcuno
         run: node .github/scripts/check-cargo-feature-default.mjs
       - name: ogni forma di libreria è consumata da qualcuno

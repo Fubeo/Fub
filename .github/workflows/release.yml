@@ -1,0 +1,126 @@
+name: Rilascio
+
+# Un tag `vX.Y.Z` costruisce gli installer desktop sulle tre piattaforme e li
+# carica, con il loro SHA-256, in una release **bozza**: la pubblica una
+# persona, dopo averli provati (docs/development/versioning-and-releases.md).
+# `workflow_dispatch` costruisce gli stessi installer senza release, come
+# artefatti della corsa.
+#
+# La firma è facoltativa e passa soltanto dai segreti: senza `APPLE_*` il
+# `.dmg` non è firmato né notarizzato, e gli installer Windows e Linux non lo
+# sono mai. Le note della release lo dicono.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  prepare:
+    name: versione e release bozza
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+      - name: il tag e le versioni dicono lo stesso numero
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            node .github/scripts/check-release-version.mjs "$GITHUB_REF_NAME"
+          else
+            node .github/scripts/check-release-version.mjs
+          fi
+      - name: release bozza, se non c'è già
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+              --title "Fub ${GITHUB_REF_NAME#v}" --generate-notes \
+              --notes "Gli installer Windows e Linux non sono firmati; il .dmg lo è soltanto se la corsa aveva i segreti Apple. Ogni file ha accanto il suo .sha256."
+          fi
+
+  build:
+    name: installer (${{ matrix.os }})
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      - name: Dipendenze di sistema di Tauri
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev
+      - name: Installa esattamente il lockfile del frontend
+        working-directory: apps/client
+        run: npm ci
+      - name: Tauri CLI major 2
+        run: cargo install tauri-cli --version "^2" --locked
+      - name: la firma Apple, soltanto se i segreti ci sono
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        # Una variabile vuota non è «niente firma»: Tauri proverebbe a importare
+        # un certificato vuoto e fallirebbe. Si esporta soltanto ciò che c'è.
+        run: |
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+                      APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -n "${!name}" ]; then echo "$name=${!name}" >> "$GITHUB_ENV"; fi
+          done
+      - name: Costruisci gli installer
+        run: cargo tauri build --config crates/fub-app/tauri.conf.json
+      - name: Raccogli gli installer con il loro SHA-256
+        shell: bash
+        run: |
+          mkdir -p dist-release
+          find target/release/bundle -maxdepth 2 -type f \
+            \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o -name '*.dmg' \
+               -o -name '*.msi' -o -name '*-setup.exe' \) -exec cp {} dist-release/ \;
+          cd dist-release
+          ls
+          [ -n "$(ls)" ] || { echo "nessun installer prodotto"; exit 1; }
+          for file in *; do
+            if command -v sha256sum >/dev/null; then sha256sum "$file" > "$file.sha256";
+            else shasum -a 256 "$file" > "$file.sha256"; fi
+          done
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: installer-${{ matrix.os }}
+          path: dist-release/
+          if-no-files-found: error
+      - name: Carica nella release bozza
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist-release/* --clobber

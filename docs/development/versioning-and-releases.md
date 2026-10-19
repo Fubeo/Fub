@@ -115,10 +115,65 @@ flowchart LR
 4. aggiorna versione del prodotto e lockfile;
 5. sposta le voci da `Non rilasciato` alla versione;
 6. genera SBOM;
-7. costruisci gli artefatti;
-8. crea tag e note;
-9. verifica installazione e avvio dagli artefatti;
+7. spingi il tag `vX.Y.Z`: il workflow costruisce gli artefatti;
+8. completa le note della release bozza;
+9. verifica installazione e avvio dagli artefatti, poi pubblica la bozza;
 10. riapri `Non rilasciato`.
+
+### Coerenza della versione
+
+La versione del prodotto sta in quattro posti: `[workspace.package]` di
+`Cargo.toml`, `crates/fub-app/tauri.conf.json`, `apps/client/package.json` e il
+suo lockfile. `node .github/scripts/check-release-version.mjs [vX.Y.Z]` li
+confronta fra loro e, se lo riceve, con il tag. La CI lo esegue senza tag; il
+workflow di rilascio con il tag che lo ha avviato.
+
+### Artefatti
+
+[`release.yml`](../../.github/workflows/release.yml) parte da un tag `v*`:
+
+1. controlla le versioni e crea la release **bozza**, se non esiste;
+2. su Linux (Ubuntu 22.04), Windows e macOS esegue `npm ci` e
+   `cargo tauri build --config crates/fub-app/tauri.conf.json`;
+3. raccoglie `.deb`, `.rpm`, `.AppImage`, `.dmg`, `.msi` e `-setup.exe`,
+   ciascuno con un file `.sha256` accanto;
+4. li carica come artefatti della corsa e nella release bozza.
+
+Avviato a mano (`workflow_dispatch`) costruisce gli stessi artefatti senza
+toccare le release.
+
+La firma è facoltativa. Il `.dmg` è firmato e notarizzato soltanto se il
+repository ha i segreti `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`,
+`APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` e `APPLE_TEAM_ID`.
+Gli installer Windows e Linux non sono firmati, e le note della release lo
+dicono.
+
+### Versione visibile e aggiornamenti
+
+La scheda «Informazioni» delle preferenze mostra la versione del binario, la
+licenza e il link al codice sorgente.
+
+Il controllo degli aggiornamenti è il comando `updates.check` del bundle
+`fub.updates` ([`updates.rs`](../../crates/fub-host/src/updates.rs)), presente
+con la feature `http-client` dell'host:
+
+- parte soltanto dal pulsante «Controlla aggiornamenti», mai in sottofondo;
+- accoda un job, che chiede a GitHub l'ultima release pubblicata del
+  repository e la confronta con `CARGO_PKG_VERSION`;
+- il manifest concede la rete al solo `api.github.com`, e il `Guard` chiude ogni
+  altro host;
+- l'esito è `{current, latest, newer, url}`: `latest` nullo vuol dire nessuna
+  release pubblicata, e `url` c'è soltanto se porta alle release del
+  repository;
+- una risposta che non si usa (altro stato, corpo illeggibile, tag che non è
+  una versione) è l'esito `{current, failed, status}`, che la shell dice nella
+  lingua di chi guarda; è un errore soltanto la rete che non risponde;
+- non scarica e non installa niente.
+
+Come ogni job, il controllo vive in un vault aperto: senza vault la scheda lo
+dice. Non c'è un aggiornatore integrato: aggiungerne uno vorrebbe dire una
+dipendenza nuova e un canale di firma degli aggiornamenti, due decisioni sulla
+supply chain ancora da prendere.
 
 ## Changelog
 

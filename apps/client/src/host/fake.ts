@@ -148,6 +148,8 @@ export interface Options {
   file?: Record<string, string>;
   root?: string | null;
   sessionNotice?: KernelNotice | null;
+  /// La versione che `appVersion` dichiara; di serie `0.1.0`.
+  appVersion?: string;
   view?: ViewSpec[];
   commands?: CommandSpec[];
   settings?: SettingEntry[];
@@ -1195,6 +1197,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const module: typeof import("./ipc") = {
     api: {
       initialVault: () => gate("initialVault", [], Promise.resolve(root)),
+      appVersion: () => gate("appVersion", [], Promise.resolve(options.appVersion ?? "0.1.0")),
       sessionNotice: () =>
         gate("sessionNotice", [], Promise.resolve(options.sessionNotice ?? null)),
       // Il vault in memoria non ha cartella di configurazione, log o dialog

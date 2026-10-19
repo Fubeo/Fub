@@ -119,6 +119,8 @@ pub mod shell;
 pub mod support;
 mod teardown;
 pub mod theme;
+#[cfg(feature = "http-client")]
+pub mod updates;
 pub mod uri_inbox;
 pub mod vaults;
 /// **Chi aspetta cosa** fra il turno di scrittura e l'istanza di un componente
