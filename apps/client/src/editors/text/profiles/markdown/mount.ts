@@ -7,6 +7,7 @@ import { openLifetime, type Lifetime, type Teardown } from "../../../../ui/lifet
 import { mountMermaidBlocks } from "../../../../ui/mermaid";
 import type { DiagramLight } from "../../../../ui/mermaid-styles";
 import { mountMathBlocks } from "./math";
+import { claimQueryBlocks, fillQueryBlock } from "./query-block";
 import { hydrateVaultMedia, scenePlaceholder, showEmbeddedDrawing, vaultImageSource } from "./media";
 import { openLightbox } from "../../../../ui/lightbox";
 import { mediaKindOfId, mimeOfId } from "../../../media/media-types";
@@ -473,14 +474,20 @@ export function mountMarkdown(
         for (const part of rendered.parts) parts.push(part);
       }
     }
+    const queries = claimQueryBlocks(container);
     enhanceContent(container, parts, options, mountedLife);
     hasEmbeds = !!container.querySelector(".embed[data-embed-page]");
     const hasImages = !!container.querySelector("img[data-vault-src]");
-    if (options.documentId && (hasEmbeds || hasImages)) {
-      const documentId = options.documentId;
+    const documentId = options.documentId;
+    if (queries.length > 0 || (documentId && (hasEmbeds || hasImages))) {
       void mountedRace.last((expected) => Promise.all([
-        hydrateEmbeds(container, new Set([JSON.stringify([documentId, null, null])]), new Map(), expected, options, mountedLife),
-        hydrateVaultMedia(container, documentId, expected, mountedLife),
+        ...(documentId && (hasEmbeds || hasImages)
+          ? [
+            hydrateEmbeds(container, new Set([JSON.stringify([documentId, null, null])]), new Map(), expected, options, mountedLife),
+            hydrateVaultMedia(container, documentId, expected, mountedLife),
+          ]
+          : []),
+        ...queries.map(({ block, query }) => fillQueryBlock(block, query, expected, mountedLife)),
       ])).catch((error: unknown) => {
         if (!mountedLife.closed) notify(t("preview.embed_failed", { reason: errorText(error) }), "guasto");
       });

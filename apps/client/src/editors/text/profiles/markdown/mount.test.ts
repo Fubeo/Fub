@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EmbedContent } from "../../../../host/contract";
 import { renderMarkdown } from "./render";
 
-const query = vi.hoisted(() => ({ renderEmbed: vi.fn() }));
+const query = vi.hoisted(() => ({
+  renderEmbed: vi.fn(),
+  matchingDocuments: vi.fn(),
+  searchExpression: vi.fn((input: string) => ({ text: input })),
+}));
 vi.mock("../../../../host/query", () => query);
 // Chi monta i diagrammi, e con quale luce: il resto è il componente vero.
 const diagrams = vi.hoisted(() => ({ appearances: [] as unknown[] }));
@@ -62,12 +66,45 @@ function drawingLeases() {
 }
 
 beforeEach(() => {
+  query.matchingDocuments.mockReset();
   query.renderEmbed.mockReset().mockResolvedValue({ doc_id: "Altra.md", html: "<p>contenuto</p>", parts: [] });
 });
 afterEach(() => {
   for (const dispose of disposers.splice(0)) dispose();
   document.body.replaceChildren();
   vi.restoreAllMocks();
+});
+
+describe("il blocco query", () => {
+  it("mostra al posto del recinto le note trovate, come link che si aprono", async () => {
+    query.matchingDocuments.mockResolvedValue({ items: [{ doc: "note/Spesa.md" }], offset: 0, total: 52 });
+    const opened: string[] = [];
+    const host = document.createElement("div");
+    document.body.append(host);
+    disposers.push(mountMarkdown(host, renderMarkdown("```query\npane\n```\n").html, {
+      documentId: "Nota.md",
+      openPath: (path) => { opened.push(path); },
+    }));
+    expect(host.querySelector("pre")).toBeNull();
+    await vi.waitFor(() => expect(host.querySelector(".block-query a.internal-path")).not.toBeNull());
+    expect(query.searchExpression).toHaveBeenCalledWith("pane");
+    const block = host.querySelector<HTMLElement>(".block-query")!;
+    expect(block.dataset.mdFrom).toBe("0");
+    expect(block.getAttribute("aria-busy")).toBeNull();
+    expect(block.textContent).toContain("52");
+    expect(block.textContent).toContain("51");
+    host.querySelector<HTMLAnchorElement>("a.internal-path")!.click();
+    await vi.waitFor(() => expect(opened).toEqual(["note/Spesa.md"]));
+  });
+
+  it("un recinto vuoto o una ricerca che fallisce si dicono nel blocco", async () => {
+    const empty = mount(renderMarkdown("```query\n```\n").html);
+    await vi.waitFor(() => expect(empty.querySelector(".block-query-note")).not.toBeNull());
+    expect(query.matchingDocuments).not.toHaveBeenCalled();
+    query.matchingDocuments.mockRejectedValue(new Error("rotta"));
+    const broken = mount(renderMarkdown("```query\nx\n```\n").html);
+    await vi.waitFor(() => expect(broken.querySelector(".block-query-note")?.textContent).toContain("rotta"));
+  });
 });
 
 describe("la resa dell'host montata come la Lettura (la stampa)", () => {

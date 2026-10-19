@@ -45,6 +45,10 @@ e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
   o sotto lo stesso titolo: `line:(rosa spina)`, `block:"frase"`. Diventano
   la foglia `scoped`, che l'indice full-text valuta sui suoi candidati.
 
+Un recinto ```` ```query ```` in una nota porta una ricerca con la stessa
+sintassi: in Lettura mostra al suo posto le prime 50 note trovate, come link, e
+conta le altre. Il testo del documento resta il recinto.
+
 Un nome seguito da `:` che non è un operatore resta testo, così un orario o un
 URL non producono un errore. Un errore di sintassi porta la specie e la
 colonna, e la barra lo mostra al posto dei risultati. Un gruppo negato non è
