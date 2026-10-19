@@ -25,6 +25,10 @@ La finestra di duecento voci per livello vale per note e file insieme.
 Dal menu contestuale un allegato si rinomina, conservando l'estensione, e si
 cestina come una nota: il kernel lo toglie dall'anagrafe con `EntryRemoved` e
 il ripristino lo rimette dov'era, byte per byte.
+«Mostra la cartella degli allegati», dalla palette, apre nell'albero la
+cartella di `files.attachment-folder`, dove finiscono gli allegati incollati o
+trascinati. Se la cartella non c'è ancora lo dice e non la crea: la crea il
+primo allegato.
 
 ## Cartelle nuove
 

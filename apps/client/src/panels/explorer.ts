@@ -51,6 +51,7 @@ import {
   registerShellCommand,
 } from "../ui/commands";
 import { VAULT_EXPORT } from "../ui/vault-export";
+import { DEFAULT_ATTACHMENT_FOLDER } from "../editors/media/attachment-target";
 import { IMPORT_PREPARE } from "../ui/note-import";
 import { showPanel } from "./sidebar";
 import { writeClipboardText } from "../platform/clipboard";
@@ -171,6 +172,14 @@ export function mountExplorer(lifetime: Lifetime): void {
     layer: "global",
     available: () => state.currentDoc !== null,
     run: () => revealActive(),
+  });
+  registerShellCommand({
+    id: "shell.explorer.reveal_attachments",
+    title: "commands.explorer.reveal_attachments",
+    description: "commands.explorer.reveal_attachments.desc",
+    layer: "global",
+    available: () => openVaultRoot() !== undefined,
+    run: () => revealAttachments(),
   });
   // Dentro l'albero li prendono F2 e Canc (`treeArrows`); i comandi sono la
   // stessa azione per la palette e per un accordo che l'utente sceglie.
@@ -1189,14 +1198,19 @@ async function followActive(): Promise<void> {
 
 async function revealActive(): Promise<void> {
   const doc = state.currentDoc;
-  if (!doc) return;
-  if (state.activeSpace !== null && !doc.startsWith(`${state.activeSpace}/`)) {
+  if (doc) await revealPath(doc, false);
+}
+
+/// Porta in vista una voce dell'albero: apre le cartelle che la contengono e,
+/// con `open`, la cartella stessa. `false` se dopo il giro la voce non c'è.
+async function revealPath(path: string, open: boolean): Promise<boolean> {
+  if (state.activeSpace !== null && !path.startsWith(`${state.activeSpace}/`)) {
     state.activeSpace = null;
     saveActiveSpace();
   }
   const root = state.activeSpace ?? "";
   let opened = false;
-  for (let folder = parentOf(doc); folder !== "" && folder !== root; folder = parentOf(folder)) {
+  for (let folder = open ? path : parentOf(path); folder !== "" && folder !== root; folder = parentOf(folder)) {
     if (!state.expanded.has(folder)) {
       state.expanded.add(folder);
       opened = true;
@@ -1206,10 +1220,26 @@ async function revealActive(): Promise<void> {
   revealSidePanel("sidebar");
   showPanel("files");
   await refreshFromKernel(true);
-  const li = entry(doc);
-  if (!li) return;
-  roving(doc);
+  const li = entry(path);
+  if (!li) {
+    // Una cartella che non c'è non resta fra le aperte salvate.
+    if (open && state.expanded.delete(path)) saveExpanded();
+    return false;
+  }
+  roving(path);
   li.scrollIntoView?.({ block: "nearest" });
+  return true;
+}
+
+/// La cartella in cui finiscono gli allegati (`files.attachment-folder`),
+/// aperta nell'albero. Una cartella che non c'è ancora si dice, non si crea:
+/// la crea il primo allegato.
+async function revealAttachments(): Promise<void> {
+  const configured = (await settings()).find((item) => item.spec.key === "files.attachment-folder")?.value;
+  const folder = (typeof configured === "string" ? configured : DEFAULT_ATTACHMENT_FOLDER).trim().replace(/\/+$/g, "");
+  if (!folder || !(await revealPath(folder, true))) {
+    notify(t("explorer.attachments_missing", { folder }));
+  }
 }
 
 /// Accende la nota aperta, nell'albero e fra le appuntate.

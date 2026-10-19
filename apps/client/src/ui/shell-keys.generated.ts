@@ -19,6 +19,7 @@ export const SHELL_KEYS = {
   "shell.palette": "Mod-Shift-p",
   "shell.panel.files": "Mod-Shift-e",
   "shell.explorer.reveal": null,
+  "shell.explorer.reveal_attachments": null,
   "shell.explorer.rename": null,
   "shell.explorer.trash": null,
   "shell.explorer.collapse_all": null,

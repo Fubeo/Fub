@@ -535,6 +535,45 @@ describe("navigazione accessibile dell'esploratore", () => {
   });
 });
 
+describe("mostra la cartella degli allegati", () => {
+  const folder = (value: string): SettingEntry => ({
+    spec: {
+      key: "files.attachment-folder",
+      label: "Cartella degli allegati",
+      description: "",
+      group: "",
+      scope: "machine",
+      kind: { kind: "text", default: "attachments" },
+      program_writable: false,
+    },
+    value,
+    source: "machine",
+  }) as SettingEntry;
+
+  it("apre la cartella nell'albero, e dice quando non c'è ancora", async () => {
+    await start(VAULT, [folder("note")]);
+    const registry = await import("./ui/commands");
+    const command = registry.allCommands().find((entry) => entry.id === "shell.explorer.reveal_attachments");
+    expect(command?.binding).toBeNull();
+    await command!.run!();
+    await settle();
+    const item = document.querySelector<HTMLElement>('#file-list li[data-path="note"]');
+    expect(item?.getAttribute("aria-expanded")).toBe("true");
+    expect(item?.tabIndex).toBe(0);
+    expect(document.querySelector('#file-list li[data-path="note/Spesa.md"]')).not.toBeNull();
+  });
+
+  it("una cartella che non c'è si dice e non si crea", async () => {
+    const host = await start(VAULT);
+    const { recentNotices } = await import("./ui/notify");
+    const registry = await import("./ui/commands");
+    await registry.allCommands().find((entry) => entry.id === "shell.explorer.reveal_attachments")!.run!();
+    await settle();
+    expect(recentNotices().some((notice) => notice.text.includes("«attachments»"))).toBe(true);
+    expect(host.calls.some((call) => call.gate === "createFolder")).toBe(false);
+  });
+});
+
 describe("copia il link a questo punto", () => {
   it("dà al paragrafo un id e copia [[Nota#^id]]", async () => {
     await start(VAULT);
