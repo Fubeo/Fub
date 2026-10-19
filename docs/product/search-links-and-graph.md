@@ -216,6 +216,14 @@ Due altri filtri, spenti di default, aggiungono nodi che non sono file:
 Spento, il grafo mostra solo i file che esistono. Una nota collegata solo a un
 tag non conta come orfana, e tag e note mancanti non hanno gruppo di cartella.
 
+Il campo **Filtro** della barra accetta la sintassi della barra di ricerca:
+restano le note che la ricerca trova, gli allegati collegati a loro e il seme
+della vista locale. Un filtro che non si legge, o che l'indice non sa servire,
+lascia il grafo intero e si scrive in rosso. Con **Colori per → Ricerca** ogni
+ricerca del campo **Gruppi**, separate da `;`, è un gruppo: una nota prende il
+colore della prima che la trova, e la legenda le nomina. Filtro e ricerche dei
+gruppi sono stato della vista, come gli altri filtri.
+
 Il grafo non ha un posto riservato nella shell. Si apre con il comando
 `graph.open` che il componente dichiara (`Mod-Shift-g`), dalla palette, dal menu
 Vista o dalla rail, che mostrano ogni view principale apribile senza argomenti.

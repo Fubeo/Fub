@@ -363,3 +363,73 @@ fn missing_notes_become_nodes_only_when_asked() {
     let with_attachments = toggle(&mut ws, "show_attachments");
     assert!(nodes(&with_attachments).contains(&"manca.png".to_string()));
 }
+
+/// Un'azione della view, e il payload del grafo ridisegnato.
+fn act(ws: &mut Workspace, action: &str, args: serde_json::Value) -> serde_json::Value {
+    let update = ws
+        .view_action(
+            &ViewInstance::only(GRAPH_VIEW),
+            UiAction::new(action).with_payload(args),
+        )
+        .unwrap();
+    let ViewUpdate::Replace { root } = update else {
+        panic!("graph redraw")
+    };
+    payload(&root)
+}
+
+/// Il filtro si scrive con la sintassi della ricerca: restano le note che
+/// trova, con gli archi fra loro. Uno che non si legge lascia il grafo intero
+/// e lo dice; vuoto si dimentica.
+#[test]
+fn the_search_filter_keeps_the_notes_it_finds() {
+    let vault = Vault::new();
+    vault.put("A.md", "#alfa [[B]] [[C]]\n");
+    vault.put("B.md", "#alfa\n");
+    vault.put("C.md", "niente\n");
+    let mut ws = vault.open();
+    let p = act(&mut ws, "query", serde_json::json!({ "query": "tag:alfa" }));
+    assert_eq!(nodes(&p), ["A.md", "B.md"]);
+    assert_eq!(edges(&p), [("A.md".to_string(), "B.md".to_string())]);
+    assert_eq!(p["query"], "tag:alfa");
+    assert!(p.get("query_invalid").is_none());
+    let bad = act(
+        &mut ws,
+        "query",
+        serde_json::json!({ "query": "(tag:alfa" }),
+    );
+    assert_eq!(nodes(&bad), ["A.md", "B.md", "C.md"]);
+    assert_eq!(bad["query_invalid"], true);
+    let cleared = act(&mut ws, "query", serde_json::json!({ "query": "  " }));
+    assert_eq!(nodes(&cleared), ["A.md", "B.md", "C.md"]);
+    assert!(cleared.get("query").is_none());
+}
+
+/// Coi gruppi per ricerca ogni nota va nel gruppo della prima ricerca che la
+/// trova, e il gruppo si chiama come la ricerca.
+#[test]
+fn search_groups_take_the_first_query_that_finds_the_note() {
+    let vault = Vault::new();
+    vault.put("A.md", "#alfa #beta\n");
+    vault.put("B.md", "#beta\n");
+    vault.put("C.md", "niente\n");
+    let mut ws = vault.open();
+    act(
+        &mut ws,
+        "group_by",
+        serde_json::json!({ "group_by": "query" }),
+    );
+    let p = act(
+        &mut ws,
+        "group_queries",
+        serde_json::json!({ "group_queries": ["tag:alfa", " ", "tag:beta", "tag:alfa"] }),
+    );
+    assert_eq!(p["group_by"], "query");
+    assert_eq!(
+        p["group_queries"],
+        serde_json::json!(["tag:alfa", "tag:beta"])
+    );
+    assert_eq!(p["groups"]["A.md"], "tag:alfa");
+    assert_eq!(p["groups"]["B.md"], "tag:beta");
+    assert_eq!(p["groups"]["C.md"], "");
+}

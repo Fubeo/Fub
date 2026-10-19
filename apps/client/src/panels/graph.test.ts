@@ -269,6 +269,39 @@ describe("lifecycle del renderer graph", () => {
     unmount!();
   });
 
+  it("il filtro di ricerca e i gruppi per ricerca vanno al provider", async () => {
+    mountTestGraph();
+    const render = customRenderer(GRAPH_NS, null)!;
+    const actions: Array<{ action: string; payload: unknown }> = [];
+    const host = document.createElement("div");
+    document.body.append(host);
+    const unmount = render(
+      host,
+      { nodes: ["A.md"], edges: [], query: "(tag", query_invalid: true, group_by: "query", group_queries: ["tag:a", "path:b"] },
+      ((action: { action: string; payload: unknown }) => {
+        actions.push(action);
+      }) as never,
+      NO_RENDER_CONTEXT,
+    );
+    await vi.dynamicImportSettled();
+    const [filter, groups] = [...host.querySelectorAll<HTMLInputElement>("input[type=search]")];
+    expect(filter!.value).toBe("(tag");
+    expect(filter!.getAttribute("aria-invalid")).toBe("true");
+    expect(groups!.value).toBe("tag:a; path:b");
+    // Lo stesso testo non rimanda niente; uno nuovo sì.
+    filter!.dispatchEvent(new Event("change"));
+    expect(actions).toEqual([]);
+    filter!.value = "tag:alfa";
+    filter!.dispatchEvent(new Event("change"));
+    groups!.value = "tag:a;; tag:c ";
+    groups!.dispatchEvent(new Event("change"));
+    expect(actions).toEqual([
+      { action: "query", payload: { query: "tag:alfa" } },
+      { action: "group_queries", payload: { group_queries: ["tag:a", "tag:c"] } },
+    ]);
+    unmount!();
+  });
+
   it("filtra nodi e archi per data indicizzata senza ricostruire il layout", async () => {
     mountTestGraph();
     const render = customRenderer(GRAPH_NS, null)!;

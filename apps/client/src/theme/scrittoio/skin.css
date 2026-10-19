@@ -9541,6 +9541,24 @@ h6.ui-heading {
   cursor: pointer;
 }
 
+/* Il campo di testo del filtro e dei gruppi: come la scelta, sta dentro la
+   pastiglia senza un bordo suo. Un filtro che non si legge si scrive in rosso. */
+.graph-toolbar-field input[type="search"] {
+  width: 14em;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 var(--space-1);
+  border: none;
+  border-radius: var(--radius-chip);
+  background-color: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: var(--weight-regular);
+}
+.graph-toolbar-field input[aria-invalid="true"] {
+  color: var(--danger);
+}
+
 /* Il vault è cambiato sotto il grafo: l'unica pastiglia che chiede qualcosa,
    e lo chiede in blu. */
 .graph-toolbar > .graph-refresh {

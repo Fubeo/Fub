@@ -72,6 +72,13 @@ const SHOW_TAGS = "show_tags";
 const SHOW_MISSING = "show_missing";
 /// Nel click su un nodo tag, il tag da cercare (gemella di `TAG` in `graph.rs`).
 const TAG = "tag";
+/// Il filtro con la sintassi della ricerca e le ricerche dei gruppi (gemelle di
+/// `QUERY`, `QUERY_INVALID` e `GROUP_QUERIES` in `graph.rs`).
+const QUERY = "query";
+const QUERY_INVALID = "query_invalid";
+const GROUP_QUERIES = "group_queries";
+/// Fra le ricerche dei gruppi, scritte in un campo solo.
+const GROUP_SEPARATOR = ";";
 const REFRESH = "refresh";
 
 
@@ -89,7 +96,12 @@ interface GraphData {
   /// La vista locale in corso, o `null` per il grafo intero.
   local: { seed: string; depth: number; direction: string } | null;
   filter: { showOrphans: boolean; showAttachments: boolean; showTags: boolean; showMissing: boolean };
-  groupBy: "folder" | "tag";
+  groupBy: "folder" | "tag" | "query";
+  /// Il filtro di ricerca scritto, e se il provider non l'ha saputo leggere.
+  query: string;
+  queryInvalid: boolean;
+  /// Le ricerche dei gruppi, nell'ordine.
+  groupQueries: string[];
   /// I nodi tag (`#nome`) e quelli delle note che non esistono.
   tags: ReadonlySet<string>;
   missing: ReadonlySet<string>;
@@ -146,7 +158,7 @@ function readData(payload: unknown): GraphData {
           !!e && typeof e.from === "string" && typeof e.to === "string",
       )
     : [];
-  const extra = (payload ?? {}) as { groups?: unknown; local?: unknown; filter?: unknown; group_by?: unknown; tags?: unknown; missing?: unknown };
+  const extra = (payload ?? {}) as Record<string, unknown> & { groups?: unknown; local?: unknown; filter?: unknown; group_by?: unknown; tags?: unknown; missing?: unknown };
   const known = new Set(nodes);
   const idsOf = (raw: unknown): Set<string> =>
     new Set(Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string" && known.has(id)) : []);
@@ -177,7 +189,12 @@ function readData(payload: unknown): GraphData {
       showTags: rawFilter.show_tags === true,
       showMissing: rawFilter.show_missing === true,
     },
-    groupBy: extra.group_by === "tag" ? "tag" : "folder",
+    groupBy: extra.group_by === "tag" || extra.group_by === "query" ? extra.group_by : "folder",
+    query: typeof extra[QUERY] === "string" ? extra[QUERY] : "",
+    queryInvalid: extra[QUERY_INVALID] === true,
+    groupQueries: Array.isArray(extra[GROUP_QUERIES])
+      ? (extra[GROUP_QUERIES] as unknown[]).filter((q): q is string => typeof q === "string")
+      : [],
     tags: idsOf(extra.tags),
     missing: idsOf(extra.missing),
   };
@@ -689,10 +706,44 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
       ], (v) => act(DIRECTION, { [DIRECTION]: v })),
     );
   }
+  /// Un campo di testo della barra: manda il valore all'Invio e quando si esce
+  /// dal campo, se è cambiato.
+  const text = (label: string, value: string, placeholder: string, run: (value: string) => void): HTMLLabelElement => {
+    const wrap = document.createElement("label");
+    wrap.className = "graph-toolbar-field";
+    const name = document.createElement("span");
+    name.textContent = label;
+    const field = document.createElement("input");
+    field.type = "search";
+    field.value = value;
+    field.placeholder = placeholder;
+    field.spellcheck = false;
+    field.addEventListener("change", () => {
+      if (field.value.trim() !== value) run(field.value);
+    });
+    wrap.append(name, field);
+    return wrap;
+  };
+  const filterField = text(t("graph.query.label"), data.query, t("graph.query.placeholder"), (v) => act(QUERY, { [QUERY]: v }));
+  if (data.queryInvalid) {
+    const input = filterField.querySelector("input")!;
+    input.setAttribute("aria-invalid", "true");
+    setTooltip(input, t("graph.query.invalid"));
+  }
+  toolbar.append(filterField);
   toolbar.append(select(t("graph.group.label"), data.groupBy, [
     ["folder", t("graph.group.folder")],
     ["tag", t("graph.group.tag")],
+    ["query", t("graph.group.query")],
   ], (v) => act(GROUP_BY, { [GROUP_BY]: v })));
+  if (data.groupBy === "query") {
+    toolbar.append(text(
+      t("graph.group.queries"),
+      data.groupQueries.join(`${GROUP_SEPARATOR} `),
+      t("graph.group.queries_placeholder"),
+      (v) => act(GROUP_QUERIES, { [GROUP_QUERIES]: v.split(GROUP_SEPARATOR).map((q) => q.trim()).filter((q) => q !== "") }),
+    ));
+  }
   const toggle = (label: string, checked: boolean, key: string): HTMLLabelElement => {
     const wrap = document.createElement("label");
     wrap.className = "graph-toolbar-field";
