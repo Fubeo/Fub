@@ -63,6 +63,15 @@ export interface CompletionSources {
   headingsOf?(page: string): Promise<readonly HeadingOption[]>;
   /// I titoli del vault che contengono `text`, per `[[##…`, già in ordine.
   searchHeadings?(text: string): Promise<readonly VaultHeading[]>;
+  /// I blocchi con un id della nota che `page` nomina, per `[[Nota#^`; `page`
+  /// vuota è la nota stessa. Assente, `#^` non completa.
+  blocksOf?(page: string): Promise<readonly BlockOption[]>;
+}
+
+/// Un blocco da proporre: il suo id e l'inizio del suo testo.
+export interface BlockOption {
+  readonly id: string;
+  readonly text: string;
 }
 
 /// Un titolo da proporre: il testo e il livello.
@@ -111,6 +120,62 @@ export function headingContext(before: string): (ContextMatch & { page: string }
   const query = inner.slice(hash + 1);
   if (query.startsWith("^") || query.includes("#")) return null;
   return { from: open + 2 + hash + 1, query, page: inner.slice(0, hash) };
+}
+
+/// `[[Nota#^id` o `[[#^id`: l'id di blocco che si sta scrivendo dentro un
+/// wikilink aperto. `from` è subito dopo il `^`.
+export function blockContext(before: string): (ContextMatch & { page: string }) | null {
+  const open = before.lastIndexOf("[[");
+  if (open === -1) return null;
+  const inner = before.slice(open + 2);
+  if (inner.includes("]]") || inner.includes("\n") || inner.includes("|") || inner.startsWith("##")) return null;
+  const hash = inner.indexOf("#^");
+  if (hash === -1) return null;
+  const query = inner.slice(hash + 2);
+  if (!/^[A-Za-z0-9-]*$/u.test(query)) return null;
+  return { from: open + 2 + hash + 2, query, page: inner.slice(0, hash) };
+}
+
+/// Quanti caratteri del testo di un blocco accompagnano il suo id.
+const BLOCK_TEXT = 60;
+const BLOCK_ID_AT_END = /(?:^|[ \t])\^([A-Za-z0-9-]+)[ \t]*$/u;
+const FENCE = /^ {0,3}(`{3,}|~{3,})/u;
+
+/// Gli id di blocco di una nota Markdown, nell'ordine in cui compaiono: un
+/// `^id` in fondo a una riga, o su una riga sua, che allora nomina il blocco
+/// sopra. Il frontmatter e i blocchi di codice non ne hanno.
+export function blockIds(markdown: string): BlockOption[] {
+  const lines = markdown.split(/\r?\n/u);
+  const found: BlockOption[] = [];
+  const seen = new Set<string>();
+  let fence: string | null = null;
+  let start = 0;
+  if (lines[0] === "---") {
+    const close = lines.findIndex((line, index) => index > 0 && (line === "---" || line === "..."));
+    if (close !== -1) start = close + 1;
+  }
+  let previous = "";
+  for (let index = start; index < lines.length; index++) {
+    const line = lines[index]!;
+    const marker = FENCE.exec(line)?.[1];
+    if (fence !== null) {
+      if (marker && marker[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = null;
+      continue;
+    }
+    if (marker) {
+      fence = marker;
+      continue;
+    }
+    const match = BLOCK_ID_AT_END.exec(line);
+    if (match && !seen.has(match[1]!)) {
+      seen.add(match[1]!);
+      const own = line.slice(0, match.index).trim();
+      const text = (own === "" ? previous : own).replace(/^(?:[>\s]*(?:[-*+]|\d+[.)])?\s*(?:\[.\]\s*)?)/u, "");
+      found.push({ id: match[1]!, text: text.length > BLOCK_TEXT ? `${text.slice(0, BLOCK_TEXT - 1)}…` : text });
+    }
+    if (line.trim() !== "") previous = line.trim();
+  }
+  return found;
 }
 
 /// `[[##testo`: un titolo cercato in tutto il vault. `from` è l'inizio di
@@ -221,7 +286,7 @@ export function wikilinkSource(searchNotes: CompletionSources["searchNotes"]): C
     if (!match) return null;
     // Dopo `#` si scrive un titolo, non il nome della nota: lo completano le
     // sorgenti dei titoli.
-    if (headingContext(before) || vaultHeadingContext(before)) return null;
+    if (headingContext(before) || vaultHeadingContext(before) || blockContext(before)) return null;
     const cursorOffset = ctx.pos - line.from;
     const afterCursor = line.text.slice(cursorOffset);
     const suffix = afterCursor.search(/(?:[|#]|\]\])/);
@@ -289,6 +354,29 @@ export function headingSource(headingsOf: NonNullable<CompletionSources["heading
       // Qui i titoli sono pochi e tutti in mano: il filtro può farlo
       // CodeMirror mentre si scrive, senza un altro giro.
       validFor: /^[^[\]|#^\n]*$/,
+    };
+  };
+}
+
+/// La sorgente dei blocchi di una nota, dopo `[[Nota#^` o `[[#^`.
+export function blockSource(blocksOf: NonNullable<CompletionSources["blocksOf"]>): CompletionSource {
+  return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
+    if (isStrictlyInsideCode(ctx.state, ctx.pos)) return null;
+    const line = ctx.state.doc.lineAt(ctx.pos);
+    const match = blockContext(ctx.state.sliceDoc(line.from, ctx.pos));
+    if (!match) return null;
+    const { to, closed } = fieldEnd(ctx);
+    const blocks = await blocksOf(match.page);
+    return {
+      from: line.from + match.from,
+      to,
+      options: blocks.map((block) => ({
+        label: block.id,
+        detail: block.text,
+        apply: closed ? block.id : `${block.id}]]`,
+        type: "text",
+      })),
+      validFor: /^[A-Za-z0-9-]*$/u,
     };
   };
 }
@@ -486,6 +574,7 @@ export function markdownCompletions(sources: CompletionSources): Extension {
       wikilinkSource(sources.searchNotes),
       ...(sources.headingsOf ? [headingSource(sources.headingsOf)] : []),
       ...(sources.searchHeadings ? [vaultHeadingSource(sources.searchHeadings)] : []),
+      ...(sources.blocksOf ? [blockSource(sources.blocksOf)] : []),
       tagSource(sources.listTags),
       diagramTemplateSource(),
     ],

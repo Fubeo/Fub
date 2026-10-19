@@ -123,8 +123,10 @@ Dentro un wikilink, dopo `[[Nota#` il completamento propone i titoli di quella
 nota, e dopo `[[#` quelli della nota stessa. `[[##parole` cerca i titoli di
 tutto il vault: le note che la ricerca trova per quelle parole, di cui si
 propongono i titoli che le contengono, e la scelta scrive `Nota#Titolo`, col
-percorso quando due note hanno lo stesso nome. I blocchi (`#^`, `[[^^`) non si
-completano.
+percorso quando due note hanno lo stesso nome. Dopo `[[Nota#^` e `[[#^` si
+propongono gli id dei blocchi della nota, ciascuno con l'inizio del suo testo,
+letti dalla sessione aperta se c'è, altrimenti dal file. La ricerca dei blocchi
+di tutto il vault (`[[^^`) non c'è.
 
 Il pannello Struttura mostra i titoli della nota aperta come un albero. Il
 campo in cima lo filtra: restano i titoli che contengono il testo, con i

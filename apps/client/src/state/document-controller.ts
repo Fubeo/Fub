@@ -53,6 +53,7 @@ import { mediaKindOfId, mimeOfId } from "../editors/media/media-types";
 import { openResourcePort, type ResourceTransport } from "../editors/media/resource-port";
 import { vaultImageSource } from "../editors/text/profiles/markdown/media";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
+import { blockIds, type BlockOption } from "../editors/text/profiles/markdown/completions";
 import { depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, relativeUrl, type AttachmentDeposit } from "../editors/media/attachment-target";
 import { createViewStateCrashDeposit } from "../editors/media/recorder-store";
 import { mountRecorderSurface } from "../editors/media/recorder-surface";
@@ -449,6 +450,17 @@ async function noteHeadings(page: string): Promise<{ text: string; level: number
   return (await documentOutline(doc)).map(({ text, level }) => ({ text, level }));
 }
 
+/// I blocchi con un id della nota che `page` nomina: dal testo della sessione
+/// aperta, che ha anche gli id non ancora salvati, o dal file.
+async function noteBlocks(page: string): Promise<BlockOption[]> {
+  const from = slashContextDoc();
+  const doc = page.trim() === ""
+    ? from
+    : (await resolvedReference({ kind: "wiki", value: { page, heading: null, block: null } }, from ?? undefined))?.doc;
+  if (!doc || !doc.toLowerCase().endsWith(".md")) return [];
+  return blockIds(documentSessions.text(doc) ?? (await api.readDocument(doc)).text);
+}
+
 /// I titoli del vault che contengono `text`: le note che la ricerca trova per
 /// quelle parole, e di ciascuna i titoli che le contengono davvero. Una finestra
 /// di note, non il vault intero: si chiede a ogni battuta.
@@ -726,6 +738,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       listTags: () => vaultTags(WITHOUT_PAGE).catch(() => []),
       headingsOf: (page: string) => noteHeadings(page).catch(() => []),
       searchHeadings: (text: string) => vaultHeadings(text).catch(() => []),
+      blocksOf: (page: string) => noteBlocks(page).catch(() => []),
     },
     gridHost: api,
     media: {

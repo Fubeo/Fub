@@ -3,6 +3,9 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
 import { CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import {
+  blockContext,
+  blockIds,
+  blockSource,
   diagramFenceContext,
   diagramTemplateSource,
   headingContext,
@@ -420,5 +423,46 @@ describe("titoli nei wikilink", () => {
     const result = (await source(ctxAt("[[##", 4))) as CompletionResult;
     expect(asked).toBe(false);
     expect(result.options).toEqual([]);
+  });
+});
+
+describe("blocchi", () => {
+  it("riconosce [[Nota#^ e [[#^, non i titoli né l'alias", () => {
+    expect(blockContext("vedi [[Nota#^ab")).toEqual({ from: 13, query: "ab", page: "Nota" });
+    expect(blockContext("[[#^")).toEqual({ from: 4, query: "", page: "" });
+    expect(blockContext("[[Nota#tit")).toBeNull();
+    expect(blockContext("[[Nota#^ab|alias")).toBeNull();
+    expect(blockContext("[[Nota#^ab]] dopo")).toBeNull();
+  });
+
+  it("legge gli id in coda o su una riga loro, fuori da frontmatter e codice", () => {
+    const note = [
+      "---", "id: ^finto", "---",
+      "Primo paragrafo ^uno",
+      "- [ ] un compito ^due",
+      "```", "codice ^tre", "```",
+      "> Una citazione", "",
+      "^quattro",
+      "Di nuovo ^uno",
+    ].join("\n");
+    expect(blockIds(note)).toEqual([
+      { id: "uno", text: "Primo paragrafo" },
+      { id: "due", text: "un compito" },
+      { id: "quattro", text: "Una citazione" },
+    ]);
+  });
+
+  it("la sorgente propone gli id della nota nominata e chiude il link", async () => {
+    let asked = "";
+    const blocksOf = async (page: string) => {
+      asked = page;
+      return [{ id: "uno", text: "Primo paragrafo" }];
+    };
+    const doc = "vedi [[Nota#^u";
+    const res = (await blockSource(blocksOf)(ctxAt(doc, doc.length))) as CompletionResult;
+    expect(asked).toBe("Nota");
+    expect(res.from).toBe(13);
+    expect(res.options.map((o) => [o.label, o.detail, o.apply])).toEqual([["uno", "Primo paragrafo", "uno]]"]]);
+    expect(await wikilinkSource(async () => ["Nota.md"])(ctxAt(doc, doc.length))).toBeNull();
   });
 });
