@@ -87,8 +87,31 @@ destinazione **nuova**, fuori dal vault, col dialogo di sistema.
   disco.
 
 L'esito resta nella finestra: quanti file, dove, e gli avvisi dell'exporter uno
-per riga. L'export di una nota sola dal suo riquadro resta quello di sempre: il
-file arriva al centro attività, da cui lo si salva.
+per riga. L'export di una nota sola dal suo riquadro arriva invece al centro
+attività (vedi sotto).
+
+## Esportare una nota
+
+Il menu del riquadro di una nota ha «Esporta come HTML» ed «Esporta come PDF
+(testo statico)», e «Esporta…» li offre nel launcher. Prima si salva la coda
+della nota; poi il core esegue l'export sul documento salvato e il file arriva
+al centro attività, da cui lo si salva dove si vuole.
+
+- **HTML** (`importers.html`): un file per nota, che si apre da solo in un
+  browser. Il corpo è la resa di stampa della nota. Le immagini del vault
+  entrano nel file come `data:` URI (fino a 16 MiB l'una, 64 MiB per file), e
+  le note incorporate entrano con la loro resa, fino a quattro livelli e senza
+  giri. Il file porta una Content-Security-Policy che non esegue script e non
+  carica niente da fuori.
+- **PDF** (`importers.pdf.single`): il testo della nota in un PDF statico, col
+  nome della nota. Per diagrammi, formule e immagini c'è «Stampa», che il
+  sistema salva anche in PDF.
+
+Ciò che non entra lo dice il rapporto, con la nota a cui si riferisce: una
+parte che solo Fub disegna (un diagramma, una query, una vista), che
+nell'HTML resta un riquadro col suo nome; un'immagine remota, che resta un
+collegamento; un riferimento che non si risolve, un'immagine oltre il tetto,
+una nota incorporata troppo in profondità o in un giro.
 
 ## Il formato Markdown
 

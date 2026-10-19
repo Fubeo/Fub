@@ -52,6 +52,7 @@ pub mod connectors;
 pub mod csv;
 pub mod enex;
 pub mod export_csv;
+pub mod export_html;
 pub mod export_pdf;
 pub mod html;
 pub mod json_import;
@@ -80,6 +81,7 @@ pub use connectors::{AirtableApiImport, ConnectorSecrets, NoSecrets, NotionApiIm
 pub use csv::CsvImport;
 pub use enex::EnexImport;
 pub use export_csv::{CsvExport, TARGET_CSV};
+pub use export_html::{HtmlExport, TARGET_HTML};
 pub use export_pdf::{PdfExport, TARGET_PDF};
 pub use html::HtmlImport;
 pub use json_import::JsonImport;
@@ -186,7 +188,7 @@ pub fn import_providers_with(
 
 /// Every export provider in this bundle.
 pub fn export_providers() -> Vec<Box<dyn ExportProvider>> {
-    vec![CsvExport::boxed(), PdfExport::boxed()]
+    vec![CsvExport::boxed(), PdfExport::boxed(), HtmlExport::boxed()]
 }
 
 /// The conversion commands of P10.5.

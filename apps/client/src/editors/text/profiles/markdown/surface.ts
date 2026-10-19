@@ -38,6 +38,7 @@ import {
   type EditorActionState,
   type SurfaceEditorActions,
 } from "../../../core/editor-actions";
+import { MARKDOWN_EXPORTS } from "./exports";
 import { markdownReference } from "./references";
 import { renderMarkdown } from "./render";
 import type { ProofPorts } from "../../../core/proof-ports";
@@ -518,6 +519,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       return mountMarkdown(host, renderMarkdown(normalizeLineBreaks(engine.getDoc()), forms).html, renderedOptions());
     },
     printable: true,
+    exports: MARKDOWN_EXPORTS,
     setReadOnly: (value) => {
       closeSlashPalette(parent);
       readOnly = value;
