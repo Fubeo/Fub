@@ -128,11 +128,12 @@ pub use commands::{
 pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
 #[cfg(feature = "draw")]
 pub use draw::{
-    AnnotatedPdfExport, DrawCommands, JpegExport, PdfExport, PngExport, RedactedPdfExport,
-    SvgExport, DRAWING_CREATE, DRAW_ANNOTATED_PDF, DRAW_CUSTOM_DEFAULT, DRAW_CUSTOM_KEY, DRAW_ID,
-    DRAW_JPEG, DRAW_LEVELS, DRAW_LEVEL_KEY, DRAW_PDF, DRAW_PNG, DRAW_REDACTED_PDF,
-    DRAW_SUGGESTIONS_KEY, DRAW_SVG, DRAW_SYMBOLS_DEFAULT, DRAW_SYMBOLS_KEY, DRAW_TEMPLATES_DEFAULT,
-    DRAW_TEMPLATES_KEY, PDF_ANNOTATE,
+    AnnotatedPdfExport, DrawCommands, DrawioExport, ExcalidrawExport, JpegExport, PdfExport,
+    PngExport, RedactedPdfExport, SvgExport, DRAWING_CREATE, DRAW_ANNOTATED_PDF,
+    DRAW_CUSTOM_DEFAULT, DRAW_CUSTOM_KEY, DRAW_DRAWIO, DRAW_EXCALIDRAW, DRAW_ID, DRAW_JPEG,
+    DRAW_LEVELS, DRAW_LEVEL_KEY, DRAW_PDF, DRAW_PNG, DRAW_REDACTED_PDF, DRAW_SUGGESTIONS_KEY,
+    DRAW_SVG, DRAW_SYMBOLS_DEFAULT, DRAW_SYMBOLS_KEY, DRAW_TEMPLATES_DEFAULT, DRAW_TEMPLATES_KEY,
+    PDF_ANNOTATE,
 };
 #[cfg(feature = "formatting")]
 pub use formatting::{FormattingCommands, FORMATTING_ID};

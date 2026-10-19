@@ -73,8 +73,8 @@ base = ["dep:fub-format-base", "properties"]
 # La barra dichiara i pulsanti; la modifica la esegue la shell. Nessuna
 # dipendenza, di compilazione o di funzionamento.
 formatting = []
-# I disegni: il comando che ne fa nascere uno e l'export in PNG, JPEG, SVG e
-# PDF. È l'unica feature **fuori** dal default, ed è una scelta e non una
+# I disegni: il comando che ne fa nascere uno e l'export in PNG, JPEG, SVG,
+# PDF, Excalidraw e draw.io. È l'unica feature **fuori** dal default, ed è una scelta e non una
 # dimenticanza: porta un rasterizzatore, un convertitore PDF e i caratteri di
 # Fub incorporati nel binario, e li porta solo con il formato dei disegni, che
 # sta dietro la feature `draw` di `fub-host`. Chi compila senza disegni non

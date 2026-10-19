@@ -70,7 +70,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Forme | Standard | il pulsante «Forme» e il suo pannello: le raccolte di forme, la ricerca, e inserire con un clic, con `Invio` o `Spazio`, o trascinando ([Disegni, raccolte di forme](drawing-library.md)) |
 | Copia e incolla lo stile | Standard | «Copia lo stile» (`Ctrl+Alt+C`) e «Incolla lo stile» (`Ctrl+Alt+V`) |
 | Pannello delle proprietà | Standard | «Proprietà», il pannello accanto al foglio; senza, `Invio` apre le finestre «Posizione e misure» e «Proprietà del disegno» |
-| Finestra «Esporta» | Standard | «Esporta…» apre la finestra con il disegno, la selezione o le tavole, i quattro formati, la misura e l'anteprima; senza, chiede soltanto PNG o PDF ([Disegni, esportare](drawing-export.md)) |
+| Finestra «Esporta» | Standard | «Esporta…» apre la finestra con il disegno, la selezione o le tavole, i sei formati, la misura e l'anteprima; senza, chiede soltanto PNG o PDF ([Disegni, esportare](drawing-export.md)) |
 | Nodi, Costruttore di forme, Forbici, Spessore, Bézier | Esperto | lo strumento (`N`, `M`, `C`, `W`, `B`); lo Spessore anche i profili in «Contorno» |
 | Attributi | Esperto | la loro sezione nelle proprietà, o senza il pannello «Attributi» (`Ctrl+Maiusc+X`) |
 | Contorno: tratteggio, estremi e angoli | Esperto | «Contorno» |

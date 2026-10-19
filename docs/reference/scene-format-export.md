@@ -1,7 +1,7 @@
 # Formato della scena, export
 
 > **Ambito:** che cosa diventa un disegno quando esce da Fub: le opzioni delle
-> quattro destinazioni di `fub.draw`, la derivazione che sceglie il disegno, le
+> sei destinazioni di `fub.draw`, la derivazione che sceglie il disegno, le
 > tavole o la selezione e toglie lo sfondo, l'SVG pulito, la misura delle
 > immagini, i formati, i nomi dei file e la pagina di stampa del PDF.
 > Versione 1.
@@ -11,7 +11,7 @@
 > derivano, misurano e impaginano allo stesso modo per l'anteprima, con i
 > vettori di prova in `apps/client/src/__fixtures__/scene-export/`; le
 > opzioni, i formati e i nomi in `crates/fub-features/src/draw.rs` e
-> `draw/choice.rs`.
+> `draw/choice.rs`; Excalidraw e draw.io in `draw/interop.rs`.
 
 Una parte del [formato della scena](scene-format.md), §9. L'export legge il
 file del vault e ne fa il file da scrivere in tre passi: sceglie che cosa,
@@ -32,8 +32,8 @@ pixel: un file per tavola, `Scienze/acqua (Copertina).png` ed
 
 ## 1. Le destinazioni e le opzioni
 
-Il bundle `fub.draw` ha quattro destinazioni: `draw.png`, `draw.jpeg`,
-`draw.svg` e `draw.pdf`. Le opzioni stanno nel campo `options` della richiesta
+Il bundle `fub.draw` ha sei destinazioni: `draw.png`, `draw.jpeg`,
+`draw.svg`, `draw.pdf`, `draw.excalidraw` e `draw.drawio`. Le opzioni stanno nel campo `options` della richiesta
 di export, un oggetto JSON; il contratto di export non cambia.
 
 | Opzione | Valori | Di serie | Per |
@@ -222,8 +222,41 @@ del vault resta l'originale.
   il pannello dei segnalibri. Ciò che le pagine hanno uguale, un carattere o
   un'immagine, si scrive una volta. Il titolo del disegno va nei metadati.
   Ogni pagina va sulla stessa pagina di stampa (§7).
-- **Gli stessi byte** escono a ogni export, in tutti e quattro i formati:
-  nessuno porta date, e l'ordine interno del PDF non cambia.
+- **Excalidraw:** il JSON `excalidraw` versione 2, con `elements`, `appState`
+  (`viewBackgroundColor` dalla carta, o `transparent`) e `files`. Le
+  coordinate sono le unità del disegno, non i pixel della sua misura; ogni
+  elemento ha l'id dell'oggetto, `roughness` 0, e `seed` e `versionNonce`
+  dati dall'id. `rect`, `ellipse` e `circle` diventano `rectangle` ed
+  `ellipse`, un tracciato a rombo `diamond`, se la trasformazione intera
+  ruota e scala senza inclinare né specchiare; `line`, `polyline` e un
+  tracciato di soli segmenti diventano `line`, la freccia e il connettore
+  `arrow`, con `startBinding`/`endBinding` verso l'oggetto agganciato (di un
+  gruppo, la sua forma con l'etichetta) e le punte di `fub:marker`. Un testo
+  con `fub:inside` o `fub:along` diventa il testo legato (`containerId`)
+  della sua forma o della sua linea; `fontFamily` è 3 per un carattere
+  monospaziato, 2 per gli altri. La trasparenza del tratto e del
+  riempimento sta nel colore (`#rrggbbaa`), quella dei gruppi in
+  `opacity`. Le tavole del disegno intero sono `frame`, e un oggetto ha il
+  `frameId` della tavola che ne contiene il centro.
+- **draw.io:** un `mxfile` non compresso, un `diagram` per pagina: il disegno
+  o la selezione una, le tavole una per tavola col nome della tavola, il
+  disegno intero col suo titolo. Ogni livello è una cella figlia di `0`, con
+  `locked=1` se è bloccato; gli oggetti fuori da un livello stanno in una
+  cella `1`. Le forme sono celle `vertex` con lo stile `rounded`, `ellipse` o
+  `rhombus`, i testi celle `text`, il connettore una cella `edge` con
+  `source` e `target`, `exitX`/`exitY` ed `entryX`/`entryY` per un capo al
+  centro di un lato, i punti di mezzo in `Array`; l'etichetta è il `value`
+  della cella, in HTML. Un oggetto con un collegamento sta in un
+  `UserObject` col suo `link`.
+- **Le immagini** nei due formati: un'immagine raster resta coi suoi byte;
+  ogni altro oggetto che non ha una forma nel programma, e ogni elemento
+  estraneo che si vede e ha un id, esce come SVG incorporato, la derivazione
+  della selezione del solo oggetto (§2) col margine di un'unità, ripulita
+  (§3) e con le immagini del vault dentro. Gli oggetti nascosti, quelli senza
+  id e gli elementi estranei che non si vedono restano fuori; il log conta
+  ciascuna specie, e ciò che cambia nel programma.
+- **Gli stessi byte** escono a ogni export, in tutti i formati: nessuno porta
+  date, e l'ordine interno del PDF non cambia.
 - **Le risorse** sono quelle del formato della scena, §9: immagini raster in
   data URI e del vault, queste fino a 64 MiB per disegno, e caratteri di Fub
   e del vault, fino a 64 MiB fissati per disegno ([testo](scene-format-text.md),
@@ -235,14 +268,14 @@ del vault resta l'originale.
 ## 6. I nomi dei file
 
 - **Il disegno:** `Scienze/acqua.png`, col nome e le cartelle del disegno e
-  l'estensione `.png`, `.jpg` o `.pdf`. In SVG il nome sarebbe quello del
+  l'estensione `.png`, `.jpg`, `.pdf`, `.excalidraw` o `.drawio`. In SVG il nome sarebbe quello del
   disegno, che salvato accanto prenderebbe il suo posto: ha la parola di
   `suffix`, `Scienze/acqua (esportato).svg`, di serie `exported`. **La
   selezione:** `Scienze/acqua (selezione).png`, con la parola di `suffix`, di
   serie `selection`.
-- **Le tavole:** in PNG, JPEG e SVG un file per tavola,
-  `Scienze/acqua (Copertina).png`; in PDF un file solo, `Scienze/acqua.pdf`,
-  o `Scienze/acqua (Copertina).pdf` se la tavola è una.
+- **Le tavole:** in PNG, JPEG, SVG ed Excalidraw un file per tavola,
+  `Scienze/acqua (Copertina).png`; in PDF e draw.io un file solo,
+  `Scienze/acqua.pdf`, o `Scienze/acqua (Copertina).pdf` se la tavola è una.
 - **Il nome di una tavola nel nome del file:** `/ \ : * ? " < > |` diventano
   `-`, i caratteri di controllo si tolgono, gli spazi, a capo compresi, si
   riducono a uno e quelli in cima e in fondo si tolgono, con i punti finali;

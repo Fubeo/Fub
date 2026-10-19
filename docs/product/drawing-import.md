@@ -11,6 +11,9 @@ un disegno come gli altri, con forme, testi, connettori e tavole che l'editor
 cambia come se li avesse disegnati lui. Niente usa la rete: il file si legge
 sulla macchina, e un'immagine che nel file non c'è resta fuori.
 
+Per la strada inversa, un disegno di Fub che esce come file di Excalidraw o di
+draw.io, c'è [Disegni, esportare](drawing-export.md#i-formati).
+
 ## Da dove si apre
 
 «Importa disegno» c'è dove si crea un disegno nuovo, quando la feature `draw`

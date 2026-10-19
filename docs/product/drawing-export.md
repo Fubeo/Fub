@@ -7,8 +7,10 @@
 
 Un [disegno](drawing.md) è già un SVG che ogni browser apre. «Esporta…» ne fa
 anche un PNG o un JPEG, per i programmi che vogliono un'immagine, un SVG
-pulito, per il web, o un PDF, per chi legge e per stampare, anche in
-tipografia: il disegno intero, la selezione o le [tavole](drawing-boards.md).
+pulito, per il web, un PDF, per chi legge e per stampare, anche in
+tipografia, o un file di Excalidraw o di draw.io, per continuare a lavorarci
+in quei programmi: il disegno intero, la selezione o le
+[tavole](drawing-boards.md).
 Il disegno non cambia. Le
 annotazioni di un PDF hanno i loro due export, descritti in [Annotazioni dei
 PDF](pdf-annotations.md#esportare).
@@ -41,8 +43,8 @@ l'anteprima va sopra.
   oggetti; le tavole, se il disegno ne ha, ciascuna con la sua casella.
   Senza una tavola scelta non si esporta, e la finestra lo dice. La
   selezione si sceglie soltanto dove la si vede, sul foglio del Disegno.
-- **Il formato:** PNG, JPEG, SVG o PDF, ciascuno con una riga che dice che
-  cosa dà.
+- **Il formato:** PNG, JPEG, SVG, PDF, Excalidraw o draw.io, ciascuno con
+  una riga che dice che cosa dà.
 - **La misura**, per PNG e JPEG: la scala, da 1× a 4×, o la larghezza in
   pixel, da 1 a 16 384, che parte da quella della scala di prima.
 - **La pagina**, per il PDF, dall'Esperto: la carta, l'abbondanza e i
@@ -99,6 +101,32 @@ PDF.
   del disegno, ciascuna della sua misura e con un segnalibro col suo nome,
   o tutte sulla stessa carta. Il titolo del disegno va fra le proprietà del
   file.
+
+- **Excalidraw:** un file `.excalidraw` che Excalidraw apre e modifica.
+  Rettangoli, angoli tondi compresi, ellissi, rombi, linee, frecce e
+  connettori restano forme di Excalidraw, coi colori, la trasparenza, lo
+  spessore, la rotazione, i gruppi, i blocchi e i collegamenti; un connettore
+  resta agganciato ai suoi oggetti, e l'etichetta di una forma o di una
+  linea resta legata a lei. I testi restano testi, nel carattere di
+  Excalidraw più vicino; le tavole diventano riquadri (*frame*) col loro nome;
+  le immagini restano immagini.
+- **draw.io:** un file `.drawio` che draw.io (diagrams.net) apre e modifica.
+  Le forme diventano celle e i connettori archi agganciati, coi lati da cui
+  escono ed entrano e i loro gomiti; le etichette sono il testo della cella,
+  i livelli restano livelli, i caratteri i loro, i tratteggi esatti. Le
+  tavole sono un file solo, una pagina per tavola col suo nome; il disegno
+  intero è una pagina.
+
+In Excalidraw e in draw.io ciò che non ha una forma loro, cioè un tratto a
+mano libera, un tracciato con curve, un riempimento sfumato o a motivo, un
+effetto, un'istanza di un simbolo, un testo su un tracciato, esce come
+immagine SVG dentro il file: si vede uguale, ma non si modifica come una
+forma. In draw.io lo è anche un poligono che non è un rombo. Le note
+dell'export dicono quanti oggetti sono diventati immagini e che cosa altro
+cambia: gli oggetti e i livelli nascosti, che restano fuori; in Excalidraw i
+livelli fusi in uno, i caratteri sostituiti, i tratteggi e le punte
+avvicinati e gli stili misti di un testo ridotti al primo; in draw.io i
+gruppi sciolti e, per il disegno intero, le tavole su una pagina sola.
 
 **La misura delle immagini.** Un'immagine resta entro 16 384 pixel per lato e
 32 milioni di pixel in tutto: oltre, esce alla scala più grande che ci sta.
@@ -193,15 +221,17 @@ vault, e un export del testo di prima direbbe il falso. Se il salvataggio non
 riesce, l'export non parte e lo dice.
 
 Il file si chiama come il disegno, con le sue cartelle: `Scienze/acqua.svg`
-diventa `Scienze/acqua.png`, `Scienze/acqua.jpg` o `Scienze/acqua.pdf`.
+diventa `Scienze/acqua.png`, `Scienze/acqua.jpg`, `Scienze/acqua.pdf`,
+`Scienze/acqua.excalidraw` o `Scienze/acqua.drawio`.
 
 - **L'SVG del disegno intero** ha la parola fra parentesi,
   `Scienze/acqua (esportato).svg`: salvato accanto al disegno, col suo nome
   ne prenderebbe il posto.
 - **La selezione** ha la parola fra parentesi: `Scienze/acqua (selezione).png`.
-- **Le tavole** in PNG, JPEG e SVG sono un file per tavola, col nome della
-  tavola: `Scienze/acqua (Copertina).png`. In PDF sono un file solo,
-  `Scienze/acqua.pdf`, o `Scienze/acqua (Copertina).pdf` se la tavola è una.
+- **Le tavole** in PNG, JPEG, SVG ed Excalidraw sono un file per tavola, col
+  nome della tavola: `Scienze/acqua (Copertina).png`. In PDF e in draw.io
+  sono un file solo, `Scienze/acqua.pdf`, o `Scienze/acqua (Copertina).pdf`
+  se la tavola è una.
 - **Nel nome del file** i caratteri che un sistema non ammette diventano `-`,
   e un nome lungo si ferma a 40 caratteri; due tavole con lo stesso nome
   prendono ` 1`, ` 2`, come due disegni.
@@ -213,8 +243,9 @@ dell'export: una misura ridotta ai limiti, un'immagine rimasta fuori; un
 avviso e un errore lo dicono anche a parole.
 
 Due export dello stesso disegno danno gli stessi file, byte per byte: né le
-immagini né il PDF portano date, e l'ordine interno del PDF non cambia da un
-export all'altro.
+immagini né il PDF portano date, l'ordine interno del PDF non cambia da un
+export all'altro, e i numeri casuali di Excalidraw vengono dall'id
+dell'oggetto.
 
 Il formato dei file e le regole delle risorse sono nel
 [formato della scena](../reference/scene-format.md), §9; le opzioni, il
