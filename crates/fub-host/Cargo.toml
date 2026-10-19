@@ -18,11 +18,10 @@ fub-format-sheet = { workspace = true }
 fub-format-canvas = { workspace = true }
 fub-format-base = { workspace = true }
 # Le scene di FubDraw (ADR 0203): i formati `svg` e `fubann`, le annotazioni
-# dei PDF, dietro la feature `draw` qui sotto. Non è nel `default` perché
-# accenderlo cambia la natura di ogni SVG del vault: da allegato a documento,
-# che si salva con `writeDocument`, entra nell'indice e nel grafo e diventa
-# candidato a nota di cartella. È una scelta di chi monta, finché la
-# superficie che li disegna non è pronta.
+# dei PDF, dietro la feature `draw` qui sotto, che è nel `default`. Accesa,
+# ogni SVG del vault è un documento: si salva con `writeDocument`, entra
+# nell'indice e nel grafo e diventa candidato a nota di cartella. Un SVG di un
+# altro programma resta un'immagine finché l'utente non lo adotta.
 fub-format-svg = { workspace = true, optional = true }
 fub-format-rich = { workspace = true, optional = true }
 fub-importers = { workspace = true }
@@ -140,7 +139,7 @@ ureq = { version = "3", default-features = false, features = [
 rustix = { workspace = true }
 
 [features]
-default = ["notify-watcher", "http-client", "official-features", "rich"]
+default = ["notify-watcher", "http-client", "official-features", "rich", "draw"]
 notify-watcher = ["dep:notify", "dep:notify-debouncer-full"]
 
 # I documenti di videoscrittura (`fub-format-rich`: Word, OpenDocument, RTF,
@@ -201,9 +200,8 @@ proof = ["fub-features/proof"]
 
 # Il formato `svg` delle scene di FubDraw (ADR 0203), e con lui l'export dei
 # disegni in PNG, JPEG, SVG e PDF (`fub.draw` in `fub-features`): un export di
-# disegni senza disegni nel vault non avrebbe niente da esportare. Fuori dal
-# `default`: la CI lo compila e lo prova in un passo suo (`FUORI_DAL_DEFAULT`
-# in `check-cargo-feature-default.mjs`).
+# disegni senza disegni nel vault non avrebbe niente da esportare. Nel
+# `default`; la CI prova anche l'host senza, in un passo suo.
 draw = ["dep:fub-format-svg", "fub-features/draw"]
 
 [dev-dependencies]

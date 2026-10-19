@@ -1,6 +1,6 @@
 # 0203 — Le superfici spaziali modificano sorgenti SVG con operazioni testuali
 
-- **Stato:** proposta
+- **Stato:** accolta
 - **Data:** 2026-10-02
 - **Ambito:** frontend
 - **Sostituisce:** —
@@ -145,7 +145,8 @@ riferimenti esterni, stili e script, mentre un `<img>` non esegue nulla.
 - fixture generate da `fub-scene` e lette dalla superficie;
 - vault con SVG preesistenti, con la feature `draw`: specie, indice, ricerca,
   backlink da `a href`, rinomina, note di cartella ed embed;
-- la CI compila e prova `fub-host` con e senza la feature `draw`;
+- la CI compila e prova `fub-host` con e senza la feature `draw`, che dal
+  2026-10-19 è nel `default` dell'host e quindi nell'app;
 - due superfici sullo stesso documento, con undo locale, sincronizzazione ed
   esito `realigned`; «Apri come sorgente» sulla stessa sessione;
 - nessun nodo estraneo nel DOM vivo della superficie;
