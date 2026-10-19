@@ -14,6 +14,7 @@ import { markdownEditingExtensions } from "./commands";
 import { markdownCompletions, type CompletionSources } from "./completions";
 import { livePreview, type LivePreviewCallbacks } from "./livepreview";
 import { markdownPaste } from "./paste";
+import { openLinkKeymap } from "./open-link";
 import { markdownGrammar } from "./grammar";
 import { frontmatterRange } from "./render";
 
@@ -162,6 +163,7 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
         frontmatter,
         markdownEditingExtensions(),
         markdownPaste,
+        openLinkKeymap(options.callbacks),
         markdown({ base: markdownGrammar, codeLanguages: languages }),
         previewOn ? livePreview(options.callbacks, syntaxForms) : [],
         markdownCompletions(options.completions),
