@@ -10680,6 +10680,10 @@ h6.ui-heading {
   flex-direction: column;
   gap: var(--space-3);
 }
+/* I `display` qui battono `[hidden]` del browser. */
+.modale .palette-form [hidden] {
+  display: none;
+}
 .modale .palette-form > .palette-desc {
   margin: 0;
   color: var(--muted);
@@ -10699,9 +10703,10 @@ h6.ui-heading {
 .modale .palette-path > button {
   flex: none;
 }
-/* «Esporta…»: le opzioni del formato sono interruttori in fila, non campi in
-   colonna; l'esito elenca gli avvisi uno per riga. */
-.modale .vault-export-options {
+/* «Esporta…»: le opzioni sono interruttori; gli avvisi uno per riga. */
+.modale .vault-export-options,
+.modale .vault-export-result,
+.modale .note-import-token {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -10713,36 +10718,22 @@ h6.ui-heading {
   flex-direction: row;
   align-items: center;
 }
-.modale .vault-export-result {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
 .modale .vault-export-summary {
   margin: 0;
   color: var(--text);
 }
-.modale .vault-export-notes {
-  margin: 0;
-  padding-inline-start: var(--space-6);
-  max-height: 12rem;
-  overflow-y: auto;
-  color: var(--muted);
-  font-size: var(--text-sm);
-}
-.modale .vault-export-note {
-  overflow-wrap: anywhere;
-}
-/* «Importa note…»: il file accanto al suo «Scegli…»; il piano è un elenco
-   che scorre, le perdite un secondo elenco sotto. */
+/* «Importa note…»: il piano e le perdite sono elenchi che scorrono. */
 .modale .note-import-fields,
+.modale .note-import-remote,
 .modale .note-import-plan {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
 }
-.modale .note-import-file {
+.modale .note-import-file,
+.modale .note-import-token-row {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
   align-items: center;
 }
@@ -10752,6 +10743,7 @@ h6.ui-heading {
   overflow-wrap: anywhere;
 }
 .modale .note-import-status,
+.modale .note-import-token-state,
 .modale .note-import-tally {
   margin: 0;
   color: var(--muted);
@@ -10761,6 +10753,7 @@ h6.ui-heading {
   margin: 0;
   font-size: var(--text-sm);
 }
+.modale .vault-export-notes,
 .modale .note-import-docs,
 .modale .note-import-losses {
   margin: 0;
@@ -10769,14 +10762,24 @@ h6.ui-heading {
   overflow-y: auto;
   font-size: var(--text-sm);
 }
+.modale .vault-export-note,
 .modale .note-import-doc,
 .modale .note-import-loss,
 .modale .note-import-more {
   overflow-wrap: anywhere;
 }
+.modale .vault-export-notes,
 .modale .note-import-loss,
 .modale .note-import-more {
   color: var(--muted);
+}
+.modale .vault-export-options > legend,
+.modale .note-import-token > legend {
+  padding: 0;
+}
+.modale .note-import-token-row > input {
+  flex: 1 1 12rem;
+  min-width: 0;
 }
 .modale .palette-label {
   color: var(--text);

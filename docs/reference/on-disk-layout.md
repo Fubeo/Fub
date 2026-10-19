@@ -38,6 +38,7 @@ La cartella viene scelta in ordine:
 | `catalog-feed.json` | autorevole, dell'operatore | n/a | feed firmato del catalogo |
 | `sync/vaults/<chiave>/` | autorevole locale | n/a | stato di sync di un vault |
 | `services-token` | segreto | n/a | token dei servizi salvato da `fub-cli login` |
+| `connectors/<connettore>.token` | segreto | n/a | token di Notion o Airtable salvato da `connector.token` |
 
 Se la cartella di configurazione non è disponibile, l'host può lavorare in
 memoria. Un file illeggibile non viene riscritto da uno stato vuoto.
@@ -53,6 +54,13 @@ Sync e pubblicazione leggono il token da `FUB_SERVICES_TOKEN_FILE`, poi da
 `FUB_SERVICES_TOKEN`, poi da `services-token`. Il file vale soltanto se è
 regolare, non è un collegamento e, su Unix, è leggibile dal solo proprietario,
 come lo scrive `login`.
+
+I connettori Notion e Airtable leggono il token, quando il job d'import parte,
+da `options.token_env` se la richiesta nomina una variabile, altrimenti da
+`connectors/<connettore>.token`. Il file segue le stesse regole di
+`services-token`; `connector.token` lo scrive già del solo proprietario e con
+una rename, e un token vuoto lo toglie. Il token non entra mai nella richiesta
+d'import, nel payload del job o nel manifesto di staging.
 
 La cornice della shell (rail con ordine e icone nascoste, pannelli laterali
 affiancati, stato e strumenti del riquadro, cornice della finestra) sta in

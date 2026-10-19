@@ -13,7 +13,7 @@ export const LAUNCHER: PartAnatomy = {
     // «Esporta…»: gli interruttori del formato e, a cose fatte, ciò che non è passato.
     { name: "export-form", states: [S("rest"), S("focused")], hooks: ["vault-export-options", "vault-export-option", "vault-export-result", "vault-export-summary", "vault-export-notes", "vault-export-note"] },
     // «Importa note…»: la sorgente, poi il piano e l'esito con ciò che non passa.
-    { name: "import-form", states: [S("rest"), S("focused")], hooks: ["note-import-fields", "note-import-file", "note-import-file-name", "note-import-status", "note-import-plan", "note-import-plan-title", "note-import-tally", "note-import-docs", "note-import-doc", "note-import-more", "note-import-losses", "note-import-loss"] },
+    { name: "import-form", states: [S("rest"), S("focused")], hooks: ["note-import-fields", "note-import-file", "note-import-file-name", "note-import-status", "note-import-plan", "note-import-plan-title", "note-import-tally", "note-import-docs", "note-import-doc", "note-import-more", "note-import-losses", "note-import-loss", "note-import-remote", "note-import-token", "note-import-token-state", "note-import-token-row"] },
     { name: "command-plan", states: REST, hooks: ["palette-summary", "palette-plan", "palette-error"] },
     { name: "dialog-actions", states: INTERACTIVE, hooks: ["palette-actions", "primary", "danger"] },
     { name: "compare", states: REST, hooks: ["compare-box", "compare-lines", "compare-line"] },

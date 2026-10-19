@@ -7,11 +7,13 @@
 //!
 //! Sources are synthetic (`notion://…` / `airtable://…` names): the host
 //! dialog cannot pick a remote API, so selection builds the source from the
-//! connector options (token source + ids). Tokens travel in `request.options`
-//! (`token` or `token_env` naming an already-injected secret — never logged,
-//! never persisted: the manifest carries no secret, the report redacts it).
-//! Without credentials the provider fails closed (`BadArgs` naming the exact
-//! missing option), never with invented notes.
+//! connector options (ids). The token comes, in order, from `options.token`
+//! (direct callers only: `import.prepare` refuses it), from `options.token_env`
+//! naming an already-injected secret, or from the token the user saved on this
+//! machine ([`ConnectorSecrets`], read when the job runs). It is never logged,
+//! never persisted by the import: the manifest carries no secret, the report
+//! redacts it. Without credentials the provider fails closed (`BadArgs`
+//! naming what is missing), never with invented notes.
 //!
 //! - Notion (`api.notion.com`, `Notion-Version: 2022-06-28`):
 //!   pages/blocks/children/databases/query, recursive block fetch with
@@ -38,7 +40,34 @@ pub const AIRTABLE_HOST: &str = "api.airtable.com";
 /// Bounded 429 retries; then the import reports instead of spinning.
 const MAX_RATE_RETRIES: usize = 5;
 
-fn auth_token(request: &ImportRequest, owner: &str) -> Result<String, PluginError> {
+/// The connector ids, which are also the names under which a token is saved.
+pub const NOTION: &str = "notion";
+pub const AIRTABLE: &str = "airtable";
+pub const CONNECTORS: [&str; 2] = [NOTION, AIRTABLE];
+
+/// Il token che l'utente ha salvato per un connettore su questa macchina. Lo
+/// fornisce l'host, che sa dov'è la configurazione; il connettore lo chiede
+/// soltanto quando il job parte, così il segreto non passa mai per il payload
+/// del job, per gli argomenti di un comando o per il manifesto dell'import.
+pub trait ConnectorSecrets: Send + Sync {
+    /// Il token salvato per `connector` ([`CONNECTORS`]), se c'è.
+    fn token(&self, connector: &str) -> Option<String>;
+}
+
+/// Nessun token salvato: un host senza configurazione di macchina.
+pub struct NoSecrets;
+
+impl ConnectorSecrets for NoSecrets {
+    fn token(&self, _connector: &str) -> Option<String> {
+        None
+    }
+}
+
+fn auth_token(
+    request: &ImportRequest,
+    owner: &str,
+    secrets: &dyn ConnectorSecrets,
+) -> Result<String, PluginError> {
     if let Some(t) = request
         .options
         .get("token")
@@ -60,8 +89,11 @@ fn auth_token(request: &ImportRequest, owner: &str) -> Result<String, PluginErro
             "{owner}: `options.token_env={name}` is set but empty in this environment"
         )));
     }
+    if let Some(saved) = secrets.token(owner) {
+        return Ok(saved);
+    }
     Err(bad_args(format!(
-        "{owner}: missing credential: set `options.token` (or `options.token_env` naming an injected secret)"
+        "{owner}: missing credential: save a token for `{owner}` on this machine, or set `options.token_env` naming an injected secret"
     )))
 }
 
@@ -166,12 +198,26 @@ fn notion_headers(token: &str) -> Vec<fub_abi::net::HttpHeader> {
 
 // --- Notion ---------------------------------------------------------------
 
-#[derive(Default)]
-pub struct NotionApiImport;
+pub struct NotionApiImport {
+    secrets: std::sync::Arc<dyn ConnectorSecrets>,
+}
+
+impl Default for NotionApiImport {
+    fn default() -> Self {
+        Self {
+            secrets: std::sync::Arc::new(NoSecrets),
+        }
+    }
+}
 
 impl NotionApiImport {
     pub fn boxed() -> Box<dyn ImportProvider> {
-        Box::new(NotionApiImport)
+        Box::new(NotionApiImport::default())
+    }
+
+    /// The connector reading the tokens saved on this machine.
+    pub fn with_secrets(secrets: std::sync::Arc<dyn ConnectorSecrets>) -> Box<dyn ImportProvider> {
+        Box::new(NotionApiImport { secrets })
     }
 
     fn page_id(request: &ImportRequest) -> Result<String, PluginError> {
@@ -200,7 +246,7 @@ impl ImportProvider for NotionApiImport {
         request: &ImportRequest,
         host: &mut dyn HostApi,
     ) -> Result<ImportReport, PluginError> {
-        let token = auth_token(request, "notion")?;
+        let token = auth_token(request, NOTION, self.secrets.as_ref())?;
         let root_id = Self::page_id(request)?;
         let mut report = ImportReport::new(request.mode);
         let net: &dyn HostNetwork = host;
@@ -678,12 +724,26 @@ fn notion_property_text(prop: &serde_json::Value) -> String {
 
 // --- Airtable ---------------------------------------------------------------
 
-#[derive(Default)]
-pub struct AirtableApiImport;
+pub struct AirtableApiImport {
+    secrets: std::sync::Arc<dyn ConnectorSecrets>,
+}
+
+impl Default for AirtableApiImport {
+    fn default() -> Self {
+        Self {
+            secrets: std::sync::Arc::new(NoSecrets),
+        }
+    }
+}
 
 impl AirtableApiImport {
     pub fn boxed() -> Box<dyn ImportProvider> {
-        Box::new(AirtableApiImport)
+        Box::new(AirtableApiImport::default())
+    }
+
+    /// The connector reading the tokens saved on this machine.
+    pub fn with_secrets(secrets: std::sync::Arc<dyn ConnectorSecrets>) -> Box<dyn ImportProvider> {
+        Box::new(AirtableApiImport { secrets })
     }
 
     fn base_and_table(request: &ImportRequest) -> Result<(String, Vec<String>), PluginError> {
@@ -721,7 +781,7 @@ impl ImportProvider for AirtableApiImport {
         request: &ImportRequest,
         host: &mut dyn HostApi,
     ) -> Result<ImportReport, PluginError> {
-        let token = auth_token(request, "airtable")?;
+        let token = auth_token(request, AIRTABLE, self.secrets.as_ref())?;
         let (base, tables) = Self::base_and_table(request)?;
         let mut report = ImportReport::new(request.mode);
         // Table list (when `tables` is empty, enumerate — schema call).
@@ -904,7 +964,7 @@ mod tests {
     fn only_the_404_status_falls_back_to_the_database() {
         let source = ImportSource::from_bytes("notion://abc", Vec::new());
         let mut host = MemoryHost::new().with_response(answer(502, "upstream said HTTP 404"));
-        let error = NotionApiImport
+        let error = NotionApiImport::default()
             .import(&source, &notion_request(), &mut host)
             .unwrap_err();
         assert!(error.to_string().contains("HTTP 502"), "{error}");
@@ -913,11 +973,60 @@ mod tests {
         let mut host = MemoryHost::new()
             .with_response(answer(404, "{}"))
             .with_response(answer(500, "down"));
-        let error = NotionApiImport
+        let error = NotionApiImport::default()
             .import(&source, &notion_request(), &mut host)
             .unwrap_err();
         let requests = host.network_requests();
         assert_eq!(requests.len(), 2, "{error}");
         assert!(requests[1].url.ends_with("/v1/databases/abc"));
+    }
+
+    struct Saved;
+
+    impl ConnectorSecrets for Saved {
+        fn token(&self, connector: &str) -> Option<String> {
+            (connector == NOTION).then(|| "salvato".to_string())
+        }
+    }
+
+    // Il token salvato sulla macchina basta: la richiesta porta soltanto gli
+    // id, e il segreto arriva all'header senza passare per le opzioni.
+    #[test]
+    fn the_saved_token_reaches_the_header_and_its_absence_fails_closed() {
+        let source = ImportSource::from_bytes("notion://abc", Vec::new());
+        let mut request = ImportRequest::apply();
+        request.options = serde_json::json!({ "page_id": "abc" });
+        let mut host = MemoryHost::new().with_response(answer(500, "down"));
+        let mut saved = NotionApiImport {
+            secrets: std::sync::Arc::new(Saved),
+        };
+        saved.import(&source, &request, &mut host).unwrap_err();
+        let sent = host.network_requests();
+        assert_eq!(sent.len(), 1);
+        assert!(sent[0].headers.iter().any(|h| h.value == "Bearer salvato"));
+
+        let mut host = MemoryHost::new();
+        let error = NotionApiImport::default()
+            .import(&source, &request, &mut host)
+            .unwrap_err();
+        assert!(matches!(error, PluginError::BadArgs(_)), "{error}");
+        assert!(error.to_string().contains("save a token"), "{error}");
+        assert!(
+            host.network_requests().is_empty(),
+            "nessuna chiamata senza token"
+        );
+
+        let source = ImportSource::from_bytes("airtable://base", Vec::new());
+        let mut request = ImportRequest::apply();
+        request.options = serde_json::json!({ "base_id": "app1" });
+        let error = AirtableApiImport {
+            secrets: std::sync::Arc::new(Saved),
+        }
+        .import(&source, &request, &mut MemoryHost::new())
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("airtable"),
+            "il token di Notion non vale per Airtable: {error}"
+        );
     }
 }

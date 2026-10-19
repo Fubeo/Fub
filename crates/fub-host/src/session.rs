@@ -95,7 +95,7 @@ const SNAPSHOT_APPLY: &str = "vault.snapshot.apply";
 /// I comandi che l'host esegue in proprio: il kernel li riserva al mount
 /// (`Workspace::reserve_host_commands`), così un plugin che li invoca sente che
 /// non sono suoi da chiamare e nessun provider ne registra un omonimo.
-pub(crate) const HOST_COMMANDS: [&str; 9] = [
+pub(crate) const HOST_COMMANDS: [&str; 11] = [
     OS_TRASH_COMMAND,
     MOUNT_ADD,
     MOUNT_REMOVE,
@@ -105,6 +105,8 @@ pub(crate) const HOST_COMMANDS: [&str; 9] = [
     SNAPSHOT_APPLY,
     crate::capture::CAPTURE_APPLY,
     crate::export_folder::EXPORT_FOLDER,
+    crate::connector_tokens::CONNECTOR_TOKEN,
+    crate::connector_tokens::CONNECTOR_TOKENS,
 ];
 
 /// Lo stesso catalogo host-owned serve l'elenco e la scelta del dispatcher.
@@ -1906,7 +1908,6 @@ impl Host {
             Arc::clone(&self.system_locale),
             &self.levels,
             prepared_formats,
-            #[cfg(feature = "http-client")]
             self.configuration_root(),
             self.network.clone(),
             Arc::clone(&self.clock),
@@ -3736,6 +3737,9 @@ impl Host {
                     && spec.id != FOLDER_CREATE
                     && spec.id != crate::capture::CAPTURE_APPLY
                     && spec.id != crate::export_folder::EXPORT_FOLDER
+                    && !crate::connector_tokens::specs()
+                        .iter()
+                        .any(|own| own.id == spec.id)
                     && !mounts.iter().any(|own| own.id == spec.id)
             });
             specs.retain(|spec| spec.id != SNAPSHOT_CREATE && spec.id != SNAPSHOT_APPLY);
@@ -3745,6 +3749,7 @@ impl Host {
                 crate::capture::spec(),
                 crate::export_folder::spec(&workspace.export_targets()),
             ];
+            own.extend(crate::connector_tokens::specs());
             own.extend(mounts);
             own.extend(snapshot_specs());
             // I comandi dell'host parlano col catalogo del core, nella lingua di
@@ -4131,6 +4136,15 @@ impl Host {
                 (session.root.clone(), session.workspace.clone())
             })?;
             let result = crate::export_folder::invoke(&root, &workspace, args, mode);
+            return self.localized_host_result(vault, result);
+        }
+        if let Some(spec) = crate::connector_tokens::specs()
+            .into_iter()
+            .find(|spec| spec.id == command)
+        {
+            // I token sono della macchina, non del vault: nessun prestito.
+            let result =
+                crate::connector_tokens::invoke(self.configuration_root(), &spec, args, mode);
             return self.localized_host_result(vault, result);
         }
         let (workspace, mounts, storage) = self.with_session(vault, |session| {

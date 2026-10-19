@@ -137,7 +137,7 @@ pub fn invoke(
             .is_some()
         {
             return Err(bad_args(
-                "raw API tokens cannot be queued or persisted; use token_env",
+                "raw API tokens cannot be queued or persisted: save the token with `connector.token`, or use token_env",
             ));
         }
         let job = required(&args, "job")?;

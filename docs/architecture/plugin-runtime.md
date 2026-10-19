@@ -441,6 +441,7 @@ Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).
   `renderer`, `service`, `importer`, `exporter`) è rifiutato al caricamento
   con `UnservedExports`, come chi importa una famiglia host non servita;
 - i comandi che l'host esegue in proprio (`mount.*`, `folder.create`,
-  `trash.os`, `vault.snapshot.*`, `vault.export`, `capture.apply`) sono
+  `trash.os`, `vault.snapshot.*`, `vault.export`, `capture.apply`,
+  `connector.token`, `connector.tokens`) sono
   riservati nel registro al mount: un plugin che li invoca con `run_command` riceve `Unserved`, e
   nessun provider può registrarne un omonimo.

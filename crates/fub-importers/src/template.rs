@@ -279,7 +279,7 @@ impl StagingManifest {
         Self::validate_job(job)?;
         preflight(source, MAX_SOURCE_BYTES)?;
         if request.options.get("token").is_some() {
-            return Err(bad_args("staging does not persist API tokens: use options.token_env with an injected secret"));
+            return Err(bad_args("staging does not persist API tokens: save the token with `connector.token`, or use options.token_env with an injected secret"));
         }
         importer.check(source)?;
         let bytes = match &source.content {

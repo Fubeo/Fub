@@ -14,6 +14,15 @@
 //    offre «Annulla l'import» (`import.rollback`), che rimette i file come
 //    erano finché nessuno li ha toccati dopo.
 //
+// # Notion e Airtable
+//
+// La sorgente può essere anche un connettore: allora non c'è un file ma l'id
+// di una pagina, di un database o di una base, e il connettore legge dalla
+// sua API quando il job parte. Il token non passa mai dalla richiesta
+// d'import (l'host la rifiuterebbe, e finirebbe nel payload del job): si salva
+// una volta sulla macchina con `connector.token`, e la finestra sa soltanto
+// se c'è (`connector.tokens`).
+//
 // Chiudere la finestra dopo l'anteprima toglie la sorgente depositata
 // (`import.cancel`): un'anteprima abbandonata non resta nello spazio del
 // plugin. L'id del job che si aspetta arriva tipizzato nell'esito del comando
@@ -24,6 +33,7 @@ import { vaultFolders } from "../host/query";
 import type { CommandOutcome } from "../host/contract";
 import { t } from "../i18n/strings";
 import { onEvent } from "../state/kernel";
+import { state } from "../state/store";
 import { identifier } from "./a11y";
 import { actions, openFrame } from "./dialogs";
 import { openLifetime, type Lifetime } from "./lifetime";
@@ -73,6 +83,32 @@ export function queuedJob(outcome: CommandOutcome): string | null {
 /// decine di MiB è la differenza fra una stringa e un milione di oggetti.
 export function sourceJson(name: string, mediaType: string | null, bytes: Uint8Array): string {
   return `{"name":${JSON.stringify(name)},"media_type":${JSON.stringify(mediaType)},"content":{"kind":"bytes","value":[${bytes.join(",")}]}}`;
+}
+
+/// Le sorgenti che non sono un file: l'id è anche il nome del connettore.
+export type ConnectorId = "notion" | "airtable";
+
+/// L'id di una pagina o di un database Notion, anche da un link copiato:
+/// sono 32 cifre esadecimali, con o senza trattini, in fondo al path.
+export function notionId(raw: string): string {
+  const text = raw.trim();
+  const path = text.split(/[?#]/)[0] ?? text;
+  const found = path.match(/([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})(?!.*[0-9a-f]{32})/i);
+  return found ? found[1]!.replace(/-/g, "").toLowerCase() : text;
+}
+
+/// L'id di una base Airtable, anche da un link: `app` e quattordici caratteri.
+export function airtableBase(raw: string): string {
+  const text = raw.trim();
+  return text.match(/\bapp[A-Za-z0-9]{14}\b/)?.[0] ?? text;
+}
+
+/// I connettori che hanno un token salvato, dall'esito di `connector.tokens`.
+export function savedTokens(outcome: CommandOutcome): ConnectorId[] {
+  const effect = outcome.effect;
+  if (effect.kind !== "custom" || effect.ns !== "fub.connector.tokens") return [];
+  const saved = (effect.payload as { saved?: unknown } | null)?.saved;
+  return Array.isArray(saved) ? saved.filter((id): id is ConnectorId => id === "notion" || id === "airtable") : [];
 }
 
 /// Un id di job nuovo: lettere, cifre e trattini, come vuole lo staging.
@@ -242,6 +278,13 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
   // --- La sorgente e dove atterra ----------------------------------------
 
   const fields = element("div", "note-import-fields");
+  const connectors = state.commandSpecs.some((spec) => spec.id === "connector.token");
+  const kindLabel = element("label", "");
+  const kind = document.createElement("select");
+  kind.append(option(t("import.source.file"), "file"), option("Notion", "notion"), option("Airtable", "airtable"));
+  kindLabel.append(element("span", "palette-label", t("import.source")), kind);
+  kindLabel.hidden = !connectors;
+
   const fileRow = element("div", "note-import-file");
   const choose = element("button", "", t("import.choose"));
   choose.type = "button";
@@ -270,7 +313,46 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
     option(t("import.conflict.replace"), "replace"),
   );
   conflictLabel.append(element("span", "palette-label", t("import.conflict")), conflict);
-  fields.append(fileRow, folderLabel, conflictLabel);
+  // --- Il connettore: l'id e il token ----------------------------------------
+
+  const remote = element("div", "note-import-remote");
+  remote.hidden = true;
+  const idLabel = element("label", "");
+  const remoteId = document.createElement("input");
+  remoteId.type = "text";
+  remoteId.autocomplete = "off";
+  remoteId.spellcheck = false;
+  const idTitle = element("span", "palette-label");
+  idLabel.append(idTitle, remoteId);
+  const tablesLabel = element("label", "");
+  const tables = document.createElement("input");
+  tables.type = "text";
+  tables.autocomplete = "off";
+  tables.spellcheck = false;
+  tables.placeholder = t("import.airtable.tables.placeholder");
+  tablesLabel.append(element("span", "palette-label", t("import.airtable.tables")), tables);
+
+  const tokenBox = element("fieldset", "note-import-token");
+  const tokenLegend = element("legend", "palette-label", t("import.token"));
+  const tokenState = element("p", "note-import-token-state");
+  tokenState.setAttribute("role", "status");
+  const tokenInput = document.createElement("input");
+  tokenInput.type = "password";
+  tokenInput.autocomplete = "off";
+  tokenInput.spellcheck = false;
+  tokenInput.id = identifier("note-import-token");
+  const tokenInputLabel = element("label", "sr-only", t("import.token.field"));
+  tokenInputLabel.htmlFor = tokenInput.id;
+  const tokenRow = element("div", "note-import-token-row");
+  const saveToken = element("button", "", t("import.token.save"));
+  saveToken.type = "button";
+  const forgetToken = element("button", "", t("import.token.forget"));
+  forgetToken.type = "button";
+  tokenRow.append(tokenInput, saveToken, forgetToken);
+  tokenBox.append(tokenLegend, tokenState, tokenInputLabel, tokenRow);
+  remote.append(idLabel, tablesLabel, tokenBox);
+
+  fields.append(kindLabel, fileRow, remote, folderLabel, conflictLabel);
 
   const status = element("p", "note-import-status");
   status.setAttribute("role", "status");
@@ -296,6 +378,68 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
     fileName.textContent = file === null ? t("import.no_file") : t("import.file", { name: file.name, size: Math.ceil(file.size / 1024) });
   };
   showFile();
+
+  /// I connettori con un token salvato su questa macchina.
+  let saved: ConnectorId[] = [];
+  const connector = (): ConnectorId | null => (kind.value === "notion" || kind.value === "airtable" ? kind.value : null);
+  const showSource = (): void => {
+    const which = connector();
+    fileRow.hidden = which !== null;
+    remote.hidden = which === null;
+    if (which === null) return;
+    idTitle.textContent = t(which === "notion" ? "import.notion.id" : "import.airtable.base");
+    remoteId.placeholder = t(which === "notion" ? "import.notion.id.placeholder" : "import.airtable.base.placeholder");
+    tablesLabel.hidden = which !== "airtable";
+    const has = saved.includes(which);
+    tokenState.textContent = t(has ? "import.token.saved" : "import.token.missing", { connector: which === "notion" ? "Notion" : "Airtable" });
+    forgetToken.hidden = !has;
+    saveToken.textContent = t(has ? "import.token.replace" : "import.token.save");
+  };
+  showSource();
+
+  const refreshTokens = async (): Promise<void> => {
+    try {
+      saved = savedTokens(await api.invokeCommand("connector.tokens", {}, "apply"));
+    } catch {
+      saved = [];
+    }
+    if (!closed) showSource();
+  };
+
+  const storeToken = async (value: string): Promise<void> => {
+    const which = connector();
+    if (which === null || busy) return;
+    if (value === "" && !saved.includes(which)) return;
+    alert.replaceChildren();
+    try {
+      const outcome = await api.invokeCommand("connector.token", { connector: which, token: value }, "apply");
+      // Il campo si svuota subito: il token non resta nel DOM più del
+      // necessario.
+      tokenInput.value = "";
+      saved = savedTokens(outcome);
+      if (closed) return;
+      showSource();
+      if (outcome.notify) status.textContent = outcome.notify;
+    } catch (error) {
+      if (!closed) showError(t("import.error.token", { reason: errorText(error) }));
+    }
+  };
+
+  /// Il nome della sorgente e le opzioni del connettore, o un errore da dire.
+  const remoteSource = (which: ConnectorId): { name: string; options: Record<string, unknown> } | string => {
+    if (which === "notion") {
+      const id = notionId(remoteId.value);
+      if (id === "") return t("import.error.notion_id");
+      return { name: `notion://${id}`, options: { page_id: id } };
+    }
+    const base = airtableBase(remoteId.value);
+    if (base === "") return t("import.error.airtable_base");
+    const wanted = tables.value
+      .split(",")
+      .map((name) => name.trim())
+      .filter((name) => name !== "");
+    return { name: `airtable://${base}`, options: wanted.length > 0 ? { base_id: base, tables: wanted } : { base_id: base } };
+  };
 
   /// Il piano o l'esito, come elenco: i conteggi, le prime note, le perdite.
   const showPlan = (heading: string, result: ImportPlan): void => {
@@ -328,6 +472,22 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
   };
 
   const preview = async (): Promise<void> => {
+    const which = connector();
+    if (which !== null) {
+      const source = remoteSource(which);
+      if (typeof source === "string") {
+        showError(source);
+        remoteId.focus();
+        return;
+      }
+      if (!saved.includes(which)) {
+        showError(t("import.error.no_token", { connector: which === "notion" ? "Notion" : "Airtable" }));
+        tokenInput.focus();
+        return;
+      }
+      await staging(source.name, null, new Uint8Array(), source.options, which === "notion" ? "Notion" : "Airtable");
+      return;
+    }
     if (file === null) {
       showError(t("import.error.no_file"));
       choose.focus();
@@ -338,16 +498,27 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
       return;
     }
     working(true, t("import.reading"));
+    let bytes: Uint8Array;
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      if (closed) return;
+      bytes = new Uint8Array(await file.arrayBuffer());
+    } catch (error) {
+      if (!closed) {
+        showError(t("import.error.failed", { reason: errorText(error) }));
+        working(false);
+      }
+      return;
+    }
+    if (closed) return;
+    await staging(file.name, file.type === "" ? null : file.type, bytes, {}, file.name);
+  };
+
+  /// Deposita la sorgente e mostra il piano.
+  const staging = async (name: string, mediaType: string | null, bytes: Uint8Array, extra: Record<string, unknown>, label: string): Promise<void> => {
+    working(true, t("import.preparing"));
+    try {
       const job = newJobId();
-      const request = { mode: "apply", folder: folder.value.trim().replace(/^\/+|\/+$/g, ""), on_conflict: conflict.value, options: {} };
-      status.textContent = t("import.preparing");
-      const manifest = await runTransfer(
-        IMPORT_PREPARE,
-        { job, source_json: sourceJson(file.name, file.type === "" ? null : file.type, bytes), request_json: JSON.stringify(request) },
-      );
+      const request = { mode: "apply", folder: folder.value.trim().replace(/^\/+|\/+$/g, ""), on_conflict: conflict.value, options: extra };
+      const manifest = await runTransfer(IMPORT_PREPARE, { job, source_json: sourceJson(name, mediaType, bytes), request_json: JSON.stringify(request) });
       if (closed) {
         // La finestra è andata via durante l'anteprima: la sorgente
         // depositata non serve a nessuno.
@@ -356,7 +527,7 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
       }
       staged = job;
       const result = planOf(manifest);
-      showPlan(t("import.plan", { name: file.name }), result);
+      showPlan(t("import.plan", { name: label }), result);
       const count = tally(result.documents);
       fields.hidden = true;
       submit.textContent = t("import.commit", { count: count.created + count.replaced });
@@ -437,6 +608,29 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
     });
   });
   life.listen(undo, "click", () => void rollback());
+  life.listen(kind, "change", () => {
+    // L'id di un connettore non vale per l'altro.
+    remoteId.value = "";
+    tables.value = "";
+    alert.replaceChildren();
+    showSource();
+  });
+  life.listen(saveToken, "click", () => {
+    const value = tokenInput.value.trim();
+    if (value === "") {
+      showError(t("import.error.empty_token"));
+      tokenInput.focus();
+      return;
+    }
+    void storeToken(value);
+  });
+  life.listen(forgetToken, "click", () => void storeToken(""));
+  life.listen(tokenInput, "keydown", (event) => {
+    // Invio nel campo del token salva il token, non avvia l'anteprima.
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    saveToken.click();
+  });
   life.listen(form, "submit", (event) => {
     event.preventDefault();
     if (busy || closed) return;
@@ -444,6 +638,7 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
     void (staged === null ? preview() : commit());
   });
 
+  if (connectors) void refreshTokens();
   void vaultFolders({ offset: 0, limit: FOLDER_SUGGESTIONS })
     .then((folders) => {
       if (closed) return;

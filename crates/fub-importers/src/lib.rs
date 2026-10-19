@@ -76,7 +76,7 @@ pub use clipper::{
     ClipResult, MAX_ASSETS, MAX_INPUT,
 };
 pub use common::TextImport;
-pub use connectors::{AirtableApiImport, NotionApiImport};
+pub use connectors::{AirtableApiImport, ConnectorSecrets, NoSecrets, NotionApiImport};
 pub use csv::CsvImport;
 pub use enex::EnexImport;
 pub use export_csv::{CsvExport, TARGET_CSV};
@@ -159,6 +159,14 @@ impl Plugin for ImportPlugin {
 
 /// Every import provider in dispatch order (after `fub.markdown`).
 pub fn import_providers() -> Vec<Box<dyn ImportProvider>> {
+    import_providers_with(std::sync::Arc::new(NoSecrets))
+}
+
+/// Every import provider, with the connectors reading the tokens `secrets`
+/// keeps for them.
+pub fn import_providers_with(
+    secrets: std::sync::Arc<dyn ConnectorSecrets>,
+) -> Vec<Box<dyn ImportProvider>> {
     vec![
         EnexImport::boxed(),
         TomboyImport::boxed(),
@@ -171,8 +179,8 @@ pub fn import_providers() -> Vec<Box<dyn ImportProvider>> {
         HtmlImport::boxed(),
         JsonImport::boxed(),
         TextImport::boxed(),
-        NotionApiImport::boxed(),
-        AirtableApiImport::boxed(),
+        NotionApiImport::with_secrets(std::sync::Arc::clone(&secrets)),
+        AirtableApiImport::with_secrets(secrets),
     ]
 }
 

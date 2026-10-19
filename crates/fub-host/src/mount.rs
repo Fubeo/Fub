@@ -142,8 +142,12 @@ impl Bundle for CoreBundle {
 }
 
 /// Native transfer bundle: each importer/exporter and the conversion commands
-/// share one owner, with the explicitly restricted network manifest.
-struct ImportersBundle;
+/// share one owner, with the explicitly restricted network manifest. The
+/// connectors read the tokens saved on this machine
+/// ([`MachineTokens`](crate::connector_tokens::MachineTokens)).
+struct ImportersBundle {
+    secrets: Arc<dyn importers::ConnectorSecrets>,
+}
 
 impl Bundle for ImportersBundle {
     fn manifest(&self) -> PluginManifest {
@@ -160,7 +164,7 @@ impl Bundle for ImportersBundle {
 
     fn register(&self, registrar: &mut Registrar<'_>) -> Vec<String> {
         let mut failures = Vec::new();
-        for provider in importers::import_providers() {
+        for provider in importers::import_providers_with(Arc::clone(&self.secrets)) {
             if let Err(error) = registrar.register_import_provider(provider) {
                 failures.push(format!("import provider not registered: {error}"));
             }
@@ -236,7 +240,6 @@ pub fn mount(
         system_locale,
         levels,
         crate::PreparedFormatSource::empty(),
-        #[cfg(feature = "http-client")]
         None,
         default_network(),
         Arc::new(fub_kernel::time::SystemClock),
@@ -262,7 +265,7 @@ pub(crate) fn mount_with_formats(
     system_locale: Arc<SystemLocale>,
     levels: &fub_kernel::log::Levels,
     prepared_formats: crate::PreparedFormatSource,
-    #[cfg(feature = "http-client")] config_root: Option<&Utf8Path>,
+    config_root: Option<&Utf8Path>,
     network: Option<Arc<dyn HostNetwork>>,
     clock: Arc<dyn fub_kernel::time::Clock>,
 ) -> Result<Mounted, String> {
@@ -371,7 +374,9 @@ pub(crate) fn mount_with_formats(
             "Markdown",
             register_markdown_transfer,
         )),
-        Arc::new(ImportersBundle),
+        Arc::new(ImportersBundle {
+            secrets: Arc::new(crate::connector_tokens::MachineTokens::new(config_root)),
+        }),
         Arc::new(crate::theme::ThemeBundle::series()),
         Arc::new(CoreBundle::new(
             fub_format_sheet::index::SHEET_ID,

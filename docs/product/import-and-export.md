@@ -28,6 +28,22 @@ Chiudere la finestra dopo l'anteprima toglie la sorgente depositata
 (`import.cancel`). Un file che supera il tetto di una sorgente intera, 64 MiB,
 non parte.
 
+### Da Notion o da Airtable
+
+Nella stessa finestra la «Sorgente» può essere Notion o Airtable invece di un
+file. Si scrive il link o l'id di una pagina o di un database Notion, oppure
+di una base Airtable con, se serve, le tabelle separate da virgole (vuoto vuol
+dire tutte). Le tappe restano le stesse: anteprima, import, annullamento.
+
+Il connettore ha bisogno di un token. Lo si incolla una volta nel riquadro
+«Token» e si salva su questa macchina, nella cartella di configurazione,
+leggibile dal solo proprietario. La finestra dice soltanto se un token c'è e
+permette di sostituirlo o di toglierlo; non lo mostra mai. Il token non
+viaggia con la richiesta d'import: il connettore lo legge quando il job parte.
+Dalla palette gli stessi passi sono `connector.token` e `connector.tokens`.
+Dettagli del file in
+[Layout su disco](../reference/on-disk-layout.md).
+
 Un trascinamento di file dal sistema nell'explorer non è un import: copia i
 file così come sono (vedi [Explorer e cartelle](explorer-and-folders.md)).
 

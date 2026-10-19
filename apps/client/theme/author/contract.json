@@ -960,6 +960,10 @@
     "note-import-more",
     "note-import-losses",
     "note-import-loss",
+    "note-import-remote",
+    "note-import-token",
+    "note-import-token-state",
+    "note-import-token-row",
     "palette-summary",
     "palette-plan",
     "palette-error",
@@ -3636,7 +3640,11 @@
         "note-import-doc",
         "note-import-more",
         "note-import-losses",
-        "note-import-loss"
+        "note-import-loss",
+        "note-import-remote",
+        "note-import-token",
+        "note-import-token-state",
+        "note-import-token-row"
       ],
       "states": [
         "rest",
@@ -5184,7 +5192,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1070,
+    "hooks": 1074,
     "state_names": 7,
     "assigned_states": 618,
     "components": 183,

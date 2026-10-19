@@ -88,6 +88,7 @@ mod bridge;
 pub mod capture;
 pub mod config;
 /// **La porta unica dei lucchetti** e la politica del veleno (decisione 0120).
+mod connector_tokens;
 mod custody;
 mod export_folder;
 pub mod format_source;
@@ -108,6 +109,7 @@ pub mod remote;
 pub mod resources;
 mod rich;
 pub mod runner;
+mod secret_file;
 pub mod session;
 pub mod settings;
 pub mod shell;

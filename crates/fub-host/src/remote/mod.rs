@@ -421,9 +421,6 @@ pub fn resolve_endpoint(
 /// di configurazione della macchina.
 pub const TOKEN_FILE: &str = "services-token";
 
-/// Il tetto di un file di segreto: un token è una riga, non un documento.
-const MAX_SECRET_FILE: u64 = 4_096;
-
 /// Da dove si legge il token bearer dei servizi. In ordine: il file indicato
 /// da `FUB_SERVICES_TOKEN_FILE`, la variabile `FUB_SERVICES_TOKEN`, e il file
 /// che `fub-cli login` ha salvato nella configurazione della macchina
@@ -472,27 +469,8 @@ impl TokenSource {
     }
 }
 
-/// Il contenuto di un file di segreto scritto come lo scrive `login`: regolare,
-/// non un collegamento, piccolo e, su Unix, del solo proprietario.
 fn owner_only_secret(path: &std::path::Path) -> Option<String> {
-    let meta = std::fs::symlink_metadata(path).ok()?;
-    if !meta.is_file() || meta.len() > MAX_SECRET_FILE {
-        tracing::warn!(target: "fub.host", "token dei servizi ignorato: non è un file regolare");
-        return None;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        if meta.permissions().mode() & 0o077 != 0 {
-            tracing::warn!(
-                target: "fub.host",
-                "token dei servizi ignorato: leggibile da altri oltre al proprietario"
-            );
-            return None;
-        }
-    }
-    let token = std::fs::read_to_string(path).ok()?.trim().to_string();
-    (!token.is_empty()).then_some(token)
+    crate::secret_file::owner_only(path)
 }
 
 /// Lo stato di sync di **un** vault su questa macchina:

@@ -9,7 +9,8 @@ vi.mock("../host/ipc", () => ({ api: { invokeCommand: fake.invokeCommand } }));
 vi.mock("../host/query", () => ({ vaultFolders: () => Promise.resolve({ items: [], total: 0 }) }));
 
 const { forwardNotice } = await import("../state/kernel");
-const { openNoteImport, planOf, queuedJob, sourceJson, tally } = await import("./note-import");
+const { state } = await import("../state/store");
+const { airtableBase, notionId, openNoteImport, planOf, queuedJob, savedTokens, sourceJson, tally } = await import("./note-import");
 
 const settle = async () => {
   for (let i = 0; i < 6; i++) await new Promise((resolve) => setTimeout(resolve, 0));
@@ -52,6 +53,20 @@ describe("le regole della finestra d'import", () => {
     expect(JSON.parse(raw)).toEqual({ name: 'a "b".md', media_type: null, content: { kind: "bytes", value: [0, 255, 10] } });
   });
 
+  it("un link copiato dà l'id della pagina o della base", () => {
+    expect(notionId("https://www.notion.so/team/Diario-0123456789abcdef0123456789ABCDEF?v=fedcba9876543210fedcba9876543210")).toBe("0123456789abcdef0123456789abcdef");
+    expect(notionId("01234567-89ab-cdef-0123-456789abcdef")).toBe("0123456789abcdef0123456789abcdef");
+    expect(notionId("  qualcosa  ")).toBe("qualcosa");
+    expect(airtableBase("https://airtable.com/appAbCdEfGh123456/tblX/viwY")).toBe("appAbCdEfGh123456");
+    expect(airtableBase("")).toBe("");
+  });
+
+  it("dei token si sanno i nomi, dall'esito tipizzato", () => {
+    const outcome = { notify: null, effect: { kind: "custom", ns: "fub.connector.tokens", payload: { saved: ["notion", "dropbox"] } }, undo: null, partial: null } as unknown as CommandOutcome;
+    expect(savedTokens(outcome)).toEqual(["notion"]);
+    expect(savedTokens({ notify: null, effect: { kind: "done" }, undo: null, partial: null } as CommandOutcome)).toEqual([]);
+  });
+
   it("il piano conta per esito e porta le perdite", () => {
     const plan = planOf(manifest);
     expect(tally(plan.documents)).toEqual({ created: 1, replaced: 0, skipped: 1, failed: 0 });
@@ -64,6 +79,7 @@ describe("la finestra «Importa note»", () => {
   beforeEach(() => {
     document.body.replaceChildren();
     fake.invokeCommand.mockReset();
+    state.commandSpecs = [];
   });
 
   it("anteprima, poi import, poi annullamento: ognuno aspetta il suo job", async () => {
@@ -142,5 +158,48 @@ describe("la finestra «Importa note»", () => {
     await settle();
     expect(fake.invokeCommand).not.toHaveBeenCalled();
     expect(document.querySelector(".note-import-alert")!.textContent).toContain("grande.zip");
+  });
+
+  it("da Notion: il token si salva sulla macchina, e la richiesta porta soltanto l'id", async () => {
+    state.commandSpecs = [{ id: "connector.token" } as never];
+    const tokens = (saved: string[]): CommandOutcome =>
+      ({ notify: saved.length > 0 ? "Token di Notion salvato su questa macchina." : null, effect: { kind: "custom", ns: "fub.connector.tokens", payload: { saved } }, undo: null, partial: null }) as unknown as CommandOutcome;
+    fake.invokeCommand.mockImplementation((command) => {
+      if (command === "connector.tokens") return Promise.resolve(tokens([]));
+      if (command === "connector.token") return Promise.resolve(tokens(["notion"]));
+      return Promise.resolve(queued("21"));
+    });
+    openNoteImport({}, host());
+    await settle();
+    const form = document.querySelector<HTMLFormElement>(".note-import-form")!;
+    const kind = form.querySelector<HTMLSelectElement>("select")!;
+    kind.value = "notion";
+    kind.dispatchEvent(new Event("change"));
+    expect(form.querySelector<HTMLElement>(".note-import-file")!.hidden).toBe(true);
+    expect(form.querySelector<HTMLElement>(".note-import-remote")!.hidden).toBe(false);
+    const id = form.querySelector<HTMLInputElement>(".note-import-remote input[type=text]")!;
+    id.value = "https://www.notion.so/Diario-0123456789abcdef0123456789abcdef";
+
+    // Senza token l'anteprima non parte e lo dice.
+    form.requestSubmit();
+    await settle();
+    expect(fake.invokeCommand.mock.calls.some(([command]) => command === "import.prepare")).toBe(false);
+    expect(document.querySelector(".note-import-alert")!.textContent).toContain("Notion");
+
+    const secret = form.querySelector<HTMLInputElement>("input[type=password]")!;
+    secret.value = "secret_abc";
+    [...form.querySelectorAll<HTMLButtonElement>(".note-import-token-row button")].find((button) => !button.hidden)!.click();
+    await settle();
+    expect(fake.invokeCommand).toHaveBeenCalledWith("connector.token", { connector: "notion", token: "secret_abc" }, "apply");
+    expect(secret.value).toBe("");
+    expect(form.querySelector(".note-import-token-state")!.textContent).toContain("salvato");
+
+    form.requestSubmit();
+    await settle();
+    const prepare = fake.invokeCommand.mock.calls.find(([command]) => command === "import.prepare")!;
+    const request = JSON.parse(String(prepare[1]!.request_json));
+    expect(request.options).toEqual({ page_id: "0123456789abcdef0123456789abcdef" });
+    expect(JSON.parse(String(prepare[1]!.source_json))).toEqual({ name: "notion://0123456789abcdef0123456789abcdef", media_type: null, content: { kind: "bytes", value: [] } });
+    expect(String(prepare[1]!.request_json)).not.toContain("secret_abc");
   });
 });
