@@ -687,9 +687,9 @@ fn to_rendered_html(
     parts: &[fub_abi::render::RenderedPart],
 ) -> Result<(String, Vec<w_index::RenderedPart>), PluginError> {
     if !parts.is_empty() {
-        return Err(PluginError::Unserved(
-            "una resa con parti UI non si consegna ancora a un componente".into(),
-        ));
+        return Err(PluginError::Unserved(fub_abi::text::Text::key(
+            "host.wasm.render_parts",
+        )));
     }
     Ok((html.to_string(), Vec::new()))
 }

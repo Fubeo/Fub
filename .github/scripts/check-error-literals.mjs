@@ -20,7 +20,7 @@ const root = process.argv[2] ?? process.cwd();
 
 /// I crate i cui errori arrivano all'utente, e quanti letterali hanno oggi.
 const THRESHOLDS = {
-  "fub-app": 90,
+  "fub-app": 88,
   "fub-features": 80,
   "fub-host": 377,
   "fub-kernel": 166,

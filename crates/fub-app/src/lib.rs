@@ -573,6 +573,7 @@ fn start_control(app: &tauri::App) {
 
 #[tauri::command]
 async fn viewer_open(
+    host: State<'_, Host>,
     app: AppHandle,
     window: tauri::WebviewWindow,
     config: State<'_, ViewerConfig>,
@@ -583,21 +584,26 @@ async fn viewer_open(
     })?;
     // Il loader pdf.js atteso dalla shell resta quello in bundle locale, mai una fetch remota.
     let _loader = resources::make_pdf_loader();
-    resources::open_viewer(app, window, open, dir).await
+    let opened = resources::open_viewer(app, window, open, dir).await;
+    for_the_shell(&host, None, opened)
 }
 
 /// Indietro, avanti, ricarica, chiudi o porta davanti la finestra del visore:
 /// i gesti della barra che la shell disegna nella finestra principale.
 #[tauri::command]
 fn viewer_control(
+    host: State<'_, Host>,
     app: AppHandle,
     window: tauri::WebviewWindow,
     action: String,
 ) -> Result<(), PluginError> {
-    let origin = window.url().map_err(|error| {
-        PluginError::Internal(format!("viewer window URL unavailable: {error}").into())
-    })?;
-    resources::viewer_control(&app, window.label(), origin.as_str(), &action)
+    let done = window
+        .url()
+        .map_err(|error| resources::viewer_failed("host.viewer.url_unavailable", error))
+        .and_then(|origin| {
+            resources::viewer_control(&app, window.label(), origin.as_str(), &action)
+        });
+    for_the_shell(&host, None, done)
 }
 
 #[tauri::command]
@@ -610,15 +616,19 @@ async fn viewer_save(
     vault: Option<String>,
     attachment_folder: String,
 ) -> Result<fub_host::resources::ResourceWriteReceipt, PluginError> {
-    let origin = window.url().map_err(|error| {
-        PluginError::Internal(format!("viewer window URL unavailable: {error}").into())
-    })?;
+    let origin = for_the_shell(
+        &host,
+        None,
+        window
+            .url()
+            .map_err(|error| resources::viewer_failed("host.viewer.url_unavailable", error)),
+    )?;
     // Il filo verso fuori è quello dell'host: lo stesso che i workspace
     // montati usano, e lo stesso che un banco sostituisce.
     let network = host.network().ok_or_else(|| {
         PluginError::Unserved("this host has no network client for the viewer".into())
     })?;
-    resources::viewer_save(
+    let saved = resources::viewer_save(
         &*host,
         &*network,
         window.label(),
@@ -629,7 +639,8 @@ async fn viewer_save(
         vault.as_deref(),
         &attachment_folder,
     )
-    .await
+    .await;
+    for_the_shell(&host, vault.as_deref(), saved)
 }
 
 /// Superfici grid dichiarate dai provider montati. La shell negozia famiglia e

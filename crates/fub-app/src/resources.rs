@@ -47,6 +47,7 @@
 
 use fub_abi::edit::Revision;
 use fub_abi::net::HttpRequest;
+use fub_abi::text::{Arg, Text};
 use fub_abi::traits::HostNetwork;
 use fub_abi::PluginError;
 use fub_host::resources::{
@@ -585,7 +586,7 @@ pub async fn open_viewer<R: tauri::Runtime>(
     if let Some(previous) = app.get_webview_window(VIEWER_LABEL) {
         previous
             .navigate(prepared.url)
-            .map_err(|and| PluginError::Internal(format!("viewer not navigated: {and}").into()))?;
+            .map_err(|and| viewer_failed("host.viewer.not_navigated", and))?;
         let _ = previous.set_title(&prepared.title);
         let _ = previous.set_focus();
         return Ok(VIEWER_LABEL.to_string());
@@ -618,7 +619,7 @@ pub async fn open_viewer<R: tauri::Runtime>(
         .on_new_window(|_url, _features| NewWindowResponse::Deny)
         .on_download(|_webview, _event| false)
         .build()
-        .map_err(|and| PluginError::Internal(format!("viewer window not opened: {and}").into()))?;
+        .map_err(|and| viewer_failed("host.viewer.not_opened", and))?;
     let closing = app.clone();
     viewer.on_window_event(move |event| {
         if matches!(event, tauri::WindowEvent::Destroyed) {
@@ -677,9 +678,10 @@ pub fn viewer_control<R: tauri::Runtime>(
         "reload" => Some("location.reload()"),
         "close" | "focus" => None,
         other => {
-            return Err(PluginError::BadArgs(
-                format!("`{other}` is not a viewer action").into(),
-            ))
+            return Err(PluginError::BadArgs(Text::message(
+                "host.viewer.bad_action",
+                vec![Arg::text("action", other)],
+            )))
         }
     };
     let Some(viewer) = app.get_webview_window(VIEWER_LABEL) else {
@@ -687,7 +689,7 @@ pub fn viewer_control<R: tauri::Runtime>(
         if action == "close" {
             return Ok(());
         }
-        return Err(PluginError::NotFound("the web viewer is not open".into()));
+        return Err(PluginError::NotFound(Text::key("host.viewer.not_open")));
     };
     let done = match (action, script) {
         ("close", _) => viewer.close(),
@@ -695,7 +697,16 @@ pub fn viewer_control<R: tauri::Runtime>(
         (_, Some(script)) => viewer.eval(script),
         _ => Ok(()),
     };
-    done.map_err(|and| PluginError::Internal(format!("viewer action failed: {and}").into()))
+    done.map_err(|and| viewer_failed("host.viewer.action_failed", and))
+}
+
+/// Un guasto della finestra del visore, con la ragione di Tauri come argomento:
+/// la frase è del catalogo del core, e la risolve `for_the_shell`.
+pub(crate) fn viewer_failed(key: &str, reason: impl std::fmt::Display) -> PluginError {
+    PluginError::Internal(Text::message(
+        key,
+        vec![Arg::text("reason", reason.to_string())],
+    ))
 }
 
 /// Salvataggio come nota da URL approvato: trasformazione controllata, non

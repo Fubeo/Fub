@@ -750,6 +750,10 @@ const IO: &str = "io";
 const UNSERVED_LEAF: &str = "unserved_leaf";
 const UNSERVED_FAMILY: &str = "unserved_family";
 const SELECT_UNSUPPORTED: &str = "select_unsupported";
+/// I due tetti di `line:`, `block:` e `section:`: si cerca riga per riga, e
+/// soltanto dentro un numero limitato di candidati.
+const SCOPE_TOO_MANY: &str = "scope_too_many";
+const SCOPE_TOO_LARGE: &str = "scope_too_large";
 /// I nomi degli argomenti.
 const PATH: &str = "path";
 const REASON: &str = "reason";
@@ -902,6 +906,16 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "La ricerca non ordina per proprietà e non sceglie le colonne: \
                  quello lo fa chi ha il frontmatter.",
             )
+            .with(
+                SCOPE_TOO_MANY,
+                "line:, block: e section: guardano al massimo 2048 note: \
+                 aggiungi una parola o un filtro.",
+            )
+            .with(
+                SCOPE_TOO_LARGE,
+                "line:, block: e section: leggono al massimo 8 MiB di testo: \
+                 aggiungi una parola o un filtro.",
+            )
             .with(S_GROUP, "Ricerca")
             .with(S_NAME, "Peso del nome della nota")
             .with(
@@ -963,6 +977,16 @@ pub fn catalog() -> Vec<StringCatalog> {
                 SELECT_UNSUPPORTED,
                 "The search does not sort by property and does not pick columns: \
                  that is for whoever has the frontmatter.",
+            )
+            .with(
+                SCOPE_TOO_MANY,
+                "line:, block: and section: look at 2048 notes at most: \
+                 add a word or a filter.",
+            )
+            .with(
+                SCOPE_TOO_LARGE,
+                "line:, block: and section: read 8 MiB of text at most: \
+                 add a word or a filter.",
             )
             .with(S_GROUP, "Search")
             .with(S_NAME, "Note name weight")
@@ -1786,9 +1810,7 @@ impl SearchIndex {
             )
             .map_err(|err| PluginError::Internal(reason(SEARCH, err)))?;
         if found.len() > MAX_SCAN_DOCS as usize {
-            return Err(PluginError::BadArgs(
-                "line/block/section search is limited to 2048 candidate documents".into(),
-            ));
+            return Err(PluginError::BadArgs(Text::key(SCOPE_TOO_MANY)));
         }
         let mut docs = Vec::new();
         let mut scanned = 0usize;
@@ -1805,9 +1827,7 @@ impl SearchIndex {
                 .unwrap_or("");
             scanned = scanned.saturating_add(layout.len());
             if scanned > MAX_SCAN_BYTES {
-                return Err(PluginError::BadArgs(
-                    "line/block/section search exceeds 8 MiB of indexed text".into(),
-                ));
+                return Err(PluginError::BadArgs(Text::key(SCOPE_TOO_LARGE)));
             }
             if matches(layout) {
                 docs.push((Occur::Should, term_query(self.fields.doc_id, id)));

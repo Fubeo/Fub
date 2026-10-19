@@ -41,6 +41,7 @@ use camino::Utf8Path;
 use fub_abi::command::InvokeMode;
 use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::settings::SettingValue;
+use fub_abi::text::{Arg, Text};
 use fub_abi::traits::{IndexQuery, ViewInstance};
 use fub_abi::ui::UiAction;
 use fub_abi::{DocId, PluginError};
@@ -223,7 +224,7 @@ pub fn answer(host: &Host, call: Call) -> Result<Value, PluginError> {
         } => {
             let bytes = base64::engine::general_purpose::STANDARD
                 .decode(bytes)
-                .map_err(|_| PluginError::BadArgs("byte non in base64".into()))?;
+                .map_err(|_| PluginError::BadArgs(Text::key("host.control.not_base64")))?;
             to_value(host.write_document_bytes(vault.as_deref(), &doc, &bytes, expected)?)
         }
         Call::Views { vault } => to_value(host.views(vault.as_deref())?),
@@ -308,9 +309,10 @@ impl Endpoint {
     /// [`PluginError::Unserved`].
     pub fn call(&self, call: Call) -> Result<Value, PluginError> {
         let unserved = |error: std::io::Error| {
-            PluginError::Unserved(
-                format!("l'app non risponde sul canale di controllo: {error}").into(),
-            )
+            spoken(PluginError::Unserved(Text::message(
+                "host.control.no_answer",
+                vec![Arg::text("reason", error.to_string())],
+            )))
         };
         let mut stream =
             TcpStream::connect_timeout(&self.addr, Duration::from_secs(2)).map_err(unserved)?;
@@ -331,17 +333,21 @@ impl Endpoint {
         match serde_json::from_slice::<Reply>(&reply) {
             Ok(Reply::Ok(value)) => Ok(value),
             Ok(Reply::Err(error)) => Err(error),
-            Err(_) => Err(PluginError::Unserved(
-                "l'app ha chiuso il canale di controllo senza rispondere".into(),
-            )),
+            Err(_) => Err(spoken(PluginError::Unserved(Text::key(
+                "host.control.closed",
+            )))),
         }
     }
 
     /// Come [`call`](Endpoint::call), con la risposta nel suo tipo.
     pub fn call_as<T: serde::de::DeserializeOwned>(&self, call: Call) -> Result<T, PluginError> {
         let value = self.call(call)?;
-        serde_json::from_value(value)
-            .map_err(|error| PluginError::Internal(format!("risposta del canale: {error}").into()))
+        serde_json::from_value(value).map_err(|error| {
+            spoken(PluginError::Internal(Text::message(
+                "host.control.bad_reply",
+                vec![Arg::text("reason", error.to_string())],
+            )))
+        })
     }
 }
 
@@ -453,9 +459,7 @@ fn accept_loop(listener: TcpListener, stop: Arc<AtomicBool>, token: String, hand
             active.fetch_sub(1, Ordering::SeqCst);
             let _ = respond(
                 &stream,
-                Reply::Err(PluginError::Unserved(
-                    "l'app sta già servendo troppe domande: riprova".into(),
-                )),
+                Reply::Err(PluginError::Unserved(Text::key("host.control.busy"))),
             );
             continue;
         }
@@ -484,16 +488,16 @@ fn serve(stream: TcpStream, token: &str, handler: &Handler) {
         .read_until(b'\n', &mut line);
     let reply = match read {
         Err(_) => return,
-        Ok(_) if !line.ends_with(b"\n") => Reply::Err(PluginError::BadArgs(
-            "domanda troppo grande o interrotta".into(),
-        )),
+        Ok(_) if !line.ends_with(b"\n") => {
+            Reply::Err(PluginError::BadArgs(Text::key("host.control.too_large")))
+        }
         Ok(_) => match serde_json::from_slice::<Request>(&line) {
-            Err(_) => Reply::Err(PluginError::BadArgs("domanda illeggibile".into())),
+            Err(_) => Reply::Err(PluginError::BadArgs(Text::key("host.control.unreadable"))),
             Ok(request) if !same_token(&request.token, token) => {
                 tracing::warn!(target: "fub.host", "canale di controllo: token rifiutato");
-                Reply::Err(PluginError::PermissionDenied(
-                    "token del canale non valido".into(),
-                ))
+                Reply::Err(PluginError::PermissionDenied(Text::key(
+                    "host.control.bad_token",
+                )))
             }
             Ok(request) => match handler(request.call) {
                 Ok(value) => Reply::Ok(value),
@@ -505,10 +509,25 @@ fn serve(stream: TcpStream, token: &str, handler: &Handler) {
 }
 
 fn respond(mut stream: &TcpStream, reply: Reply) -> std::io::Result<()> {
+    let reply = match reply {
+        Reply::Err(error) => Reply::Err(spoken(error)),
+        ok => ok,
+    };
     let mut body = serde_json::to_vec(&reply).map_err(std::io::Error::other)?;
     body.push(b'\n');
     stream.write_all(&body)?;
     stream.flush()
+}
+
+/// Un errore del canale detto in parole: dall'altra parte c'è un terminale, che
+/// non ha un catalogo e stamperebbe la chiave. Le chiavi sono del core, e
+/// senza un vault di cui leggere la lingua vale quella di serie del core.
+fn spoken(mut error: PluginError) -> PluginError {
+    let catalogs = crate::settings::core_catalog_assembled();
+    let locale = fub_abi::locale::Locale::default();
+    fub_abi::text::Strings::new(&catalogs, crate::settings::CORE_DEFAULT_LOCALE, &locale)
+        .localize(&mut error);
+    error
 }
 
 /// La cartella che il server e i client usano per [`ENDPOINT`]: quella data,
