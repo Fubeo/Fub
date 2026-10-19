@@ -64,6 +64,7 @@ import type { Teardown } from "../../ui/lifetime";
 import { editorTheme } from "./theme";
 import { HistoryFootprints } from "./history-footprints";
 import { smartLists } from "./smart-lists";
+import { pasteHtml } from "./paste-html";
 import {
   operationFromText,
   tryApplyOperation,
@@ -115,6 +116,7 @@ export const EDITOR_INDENT_KEY = "editor.indent";
 export const EDITOR_CLOSE_BRACKETS_KEY = "editor.close-brackets";
 export const EDITOR_FOLD_GUTTER_KEY = "editor.fold-gutter";
 export const EDITOR_SMART_LISTS_KEY = "editor.smart-lists";
+export const EDITOR_PASTE_HTML_KEY = "editor.paste-html";
 const INPUT_KEYS = new Set([
   EDITOR_SPELLCHECK_KEY,
   EDITOR_VIM_KEY,
@@ -124,6 +126,7 @@ const INPUT_KEYS = new Set([
   EDITOR_CLOSE_BRACKETS_KEY,
   EDITOR_FOLD_GUTTER_KEY,
   EDITOR_SMART_LISTS_KEY,
+  EDITOR_PASTE_HTML_KEY,
 ]);
 
 /// Come si dispone il testo: numeri di riga (visibili solo in Sorgente, Live
@@ -139,6 +142,8 @@ interface LayoutPreferences {
   readonly foldGutter: boolean;
   /// `Invio` che continua gli elenchi.
   readonly smartLists: boolean;
+  /// L'HTML incollato diventa Markdown.
+  readonly pasteHtml: boolean;
 }
 const DEFAULT_LAYOUT: LayoutPreferences = {
   lineNumbers: true,
@@ -147,6 +152,7 @@ const DEFAULT_LAYOUT: LayoutPreferences = {
   closeBrackets: true,
   foldGutter: true,
   smartLists: true,
+  pasteHtml: true,
 };
 const FIELD_LAYOUT: LayoutPreferences = { ...DEFAULT_LAYOUT, lineNumbers: false };
 
@@ -158,6 +164,7 @@ function layoutExtensions(layout: LayoutPreferences): Extension {
     indentUnit.of(unit),
     layout.foldGutter ? foldGutter({ openText: "↓" }) : [],
     smartLists.of(layout.smartLists),
+    pasteHtml.of(layout.pasteHtml),
     layout.closeBrackets ? [closeBrackets(), keymap.of(closeBracketsKeymap)] : [],
   ];
 }
@@ -474,7 +481,8 @@ export class TextEngine {
       && next.indent === this.layout.indent
       && next.closeBrackets === this.layout.closeBrackets
       && next.foldGutter === this.layout.foldGutter
-      && next.smartLists === this.layout.smartLists;
+      && next.smartLists === this.layout.smartLists
+      && next.pasteHtml === this.layout.pasteHtml;
     if (this.disposed || same) return;
     this.layout = next;
     this.reconfigureInput();
@@ -521,6 +529,7 @@ export class TextEngine {
         closeBrackets: value(EDITOR_CLOSE_BRACKETS_KEY) !== false,
         foldGutter: value(EDITOR_FOLD_GUTTER_KEY) !== false,
         smartLists: value(EDITOR_SMART_LISTS_KEY) !== false,
+        pasteHtml: value(EDITOR_PASTE_HTML_KEY) !== false,
       });
     } catch {
       // Defaults remain available before a vault is open or when settings fail.

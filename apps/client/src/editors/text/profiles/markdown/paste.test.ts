@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { EditorSelection } from "@codemirror/state";
+import { EditorSelection, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { createTextEngine } from "../../engine";
 import { createMarkdownProfile } from "./profile";
-import { markdownFromClipboard } from "./paste";
+import { markdownFromClipboard, markdownPaste } from "./paste";
+import { pasteHtml } from "../../paste-html";
 
 function paste(
   html: string,
@@ -46,6 +47,25 @@ describe("Markdown clipboard paste", () => {
   // da qualche istante.
   beforeAll(async () => {
     await markdownFromClipboard({ getData: (type: string) => (type === "text/html" ? "<b>x</b>" : "") } as DataTransfer);
+  });
+
+  it("con la conversione spenta lascia l'incolla a CodeMirror", () => {
+    const incolla = (convert: boolean) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const view = new EditorView({ parent: host, doc: "", extensions: [Prec.highest(markdownPaste), pasteHtml.of(convert)] });
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { getData: (type: string) => (type === "text/html" ? '<a href="https://example.org/a">Link</a>' : type === "text/plain" ? "Link" : "") },
+      });
+      view.contentDOM.dispatchEvent(event);
+      const doc = view.state.doc.toString();
+      view.destroy();
+      host.remove();
+      return doc;
+    };
+    expect(incolla(true)).toContain("[Link](https://example.org/a)");
+    expect(incolla(false)).toBe("Link");
   });
 
   it("converts lists, links, and fenced code without changing unrelated CRLF bytes", () => {

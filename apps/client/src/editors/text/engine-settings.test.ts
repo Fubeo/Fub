@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { smartLists } from "./smart-lists";
+import { pasteHtml } from "./paste-html";
 import { describe, expect, it, vi } from "vitest";
 import { getCM } from "@replit/codemirror-vim";
 import { EditorView } from "@codemirror/view";
@@ -11,6 +12,7 @@ import {
   EDITOR_CLOSE_BRACKETS_KEY,
   EDITOR_FOLD_GUTTER_KEY,
   EDITOR_SMART_LISTS_KEY,
+  EDITOR_PASTE_HTML_KEY,
   EDITOR_SPELLCHECK_KEY,
   EDITOR_VIM_KEY,
 } from "./engine";
@@ -127,6 +129,13 @@ describe("text input settings", () => {
       origin: { actor: { kind: "user" }, batch: null },
     });
     await vi.waitFor(() => expect(view.state.facet(smartLists)).toBe(false));
+    expect(view.state.facet(pasteHtml)).toBe(true);
+    read.mockResolvedValue([entry(EDITOR_PASTE_HTML_KEY, false)]);
+    forwardNotice({
+      event: { type: "setting_changed", key: EDITOR_PASTE_HTML_KEY, scope: "machine" },
+      origin: { actor: { kind: "user" }, batch: null },
+    });
+    await vi.waitFor(() => expect(view.state.facet(pasteHtml)).toBe(false));
     engine.destroy();
     host.remove();
   });

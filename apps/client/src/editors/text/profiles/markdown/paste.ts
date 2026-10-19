@@ -1,3 +1,4 @@
+import { pasteHtml } from "../../paste-html";
 import { EditorView, ViewPlugin } from "@codemirror/view";
 import type TurndownService from "turndown";
 import { inContentSpace, sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
@@ -217,6 +218,7 @@ export async function markdownFromClipboard(data: DataTransfer): Promise<string 
 const pasteHandler = EditorView.domEventHandlers({
   paste(event, view) {
     if (view.state.readOnly || view.compositionStarted || !event.clipboardData) return false;
+    if (!view.state.facet(pasteHtml)) return false;
     const rich = richPaste(event.clipboardData);
     if (rich === null) return false;
     const insert = (markdown: string) =>
