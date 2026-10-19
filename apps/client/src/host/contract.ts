@@ -394,7 +394,11 @@ export type UiKind =
 // Un nodo: la sua chiave e la sua specie. `key` è l'identità del nodo fra due
 // ridisegni — è ciò su cui il riconciliatore lavora (§2.8) —, è assente quando
 // il provider non la dichiara, e la sua unicità vale FRA I FRATELLI.
-export type UiNode = UiKind & { key?: string };
+export type UiNode = UiKind & { key?: string; drag?: UiDrag };
+
+// Che cosa si trascina da un nodo (decisione 0157: il nodo nomina la cosa, la
+// shell decide come si offre e dove si lascia). Assente: il nodo non si trascina.
+export type UiDrag = { kind: "document"; doc: string };
 
 // L'azione che la shell manda al provider: le due metà con i due proprietari
 // (§2.7). `payload` è quello che il provider aveva attaccato al nodo e gli torna

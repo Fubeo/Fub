@@ -630,7 +630,7 @@ fn to_floating(s: &fub_abi::session::FloatingSelection) -> w_session::FloatingSe
 // componente dichiara e risponde. L'unica cosa che passa di là è il modo
 // dell'invocazione, che è `to_invoke_mode`.
 
-fn from_doc(id: String) -> fub_abi::model::DocId {
+pub(crate) fn from_doc(id: String) -> fub_abi::model::DocId {
     fub_abi::model::DocId(id)
 }
 

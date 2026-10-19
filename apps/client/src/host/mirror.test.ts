@@ -63,6 +63,7 @@ import type {
   FieldValue,
   TrashEntry,
   UiAction,
+  UiDrag,
   UiNode,
   ViewInstance,
   PluginInfo,
@@ -1214,6 +1215,23 @@ describe("mirror TS↔Rust", () => {
     const withKey = (fixture.UiNode as UiNode[]).filter((n) => n.key !== undefined);
     expect(withKey.length, "manca un campione con la chiave").toBeGreaterThan(0);
     for (const n of withKey) expect(typeof n.key).toBe("string");
+  });
+
+  it("il trascinamento viaggia accanto alla specie e nomina una nota", () => {
+    const dragged = (fixture.UiNode as UiNode[]).filter((n) => n.drag !== undefined);
+    expect(dragged.length, "manca un campione col trascinamento").toBeGreaterThan(0);
+    for (const n of dragged) {
+      const drag: UiDrag = n.drag!;
+      switch (drag.kind) {
+        case "document":
+          expect(typeof drag.doc).toBe("string");
+          break;
+        default: {
+          const never: never = drag.kind;
+          throw new Error(`UiDrag sconosciuto: ${String(never)}`);
+        }
+      }
+    }
   });
 
   it("ogni KernelEvent prodotto da Rust è una variante gestita dal mirror", () => {

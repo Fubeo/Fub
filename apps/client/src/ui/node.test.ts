@@ -1243,3 +1243,85 @@ describe("la giuntura di movimento", () => {
     });
   });
 });
+
+describe("un nodo che nomina una nota si trascina (decisione 0157)", () => {
+  const item = (drag?: UiNode["drag"]): UiNode => ({
+    node: "list",
+    items: [{ node: "list_item", title: "Nota", subtitle: null, action: null, selected: false, key: "a.md#0", drag }],
+  });
+  const start = (el: HTMLElement) => {
+    const offered = new Map<string, string>();
+    const event = new Event("dragstart", { bubbles: true, cancelable: true }) as DragEvent;
+    Object.defineProperty(event, "dataTransfer", {
+      value: { effectAllowed: "none", setData: (type: string, value: string) => offered.set(type, value) },
+    });
+    el.dispatchEvent(event);
+    return { offered, prevented: event.defaultPrevented };
+  };
+
+  it("offre la nota come l'albero, e un riuso senza `drag` smette di offrirla", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, item({ kind: "document", doc: "a.md" }), async () => {});
+    const row = host.querySelector<HTMLElement>(".ui-list-item")!;
+    expect(row.draggable).toBe(true);
+    expect(start(row).offered.get("application/x-fub-note")).toBe("a.md");
+
+    // Una voce è una foglia e si ridisegna: conta che la nota sia quella nuova.
+    mountTree(host, item({ kind: "document", doc: "b.md" }), async () => {});
+    const again = start(host.querySelector<HTMLElement>(".ui-list-item")!);
+    expect(again.offered.get("application/x-fub-note")).toBe("b.md");
+    expect(again.offered.size, "un solo ascoltatore, una sola offerta").toBe(2);
+
+    mountTree(host, item(), async () => {});
+    const now = host.querySelector<HTMLElement>(".ui-list-item")!;
+    expect(now.draggable).not.toBe(true);
+    const after = start(now);
+    expect(after.offered.size).toBe(0);
+    host.remove();
+  });
+
+  it("senza `drag` il nodo non si trascina", () => {
+    const host = document.createElement("div");
+    mountTree(host, item(), async () => {});
+    expect(host.querySelector<HTMLElement>(".ui-list-item")!.draggable).not.toBe(true);
+  });
+
+  it("un contenitore riusato in posto cambia nota senza un secondo ascoltatore", () => {
+    const section = (drag?: UiNode["drag"]): UiNode => ({
+      node: "section",
+      title: "Parte",
+      collapsed: false,
+      children: [],
+      key: "parte",
+      drag,
+    });
+    const host = document.createElement("div");
+    mountTree(host, section({ kind: "document", doc: "a.md" }), async () => {});
+    const el = host.firstElementChild as HTMLElement;
+    mountTree(host, section({ kind: "document", doc: "b.md" }), async () => {});
+    expect(host.firstElementChild, "la sezione si riusa").toBe(el);
+    let offers = 0;
+    const event = new Event("dragstart", { bubbles: true, cancelable: true }) as DragEvent;
+    Object.defineProperty(event, "dataTransfer", {
+      value: {
+        effectAllowed: "none",
+        setData: (type: string, value: string) => {
+          if (type === "application/x-fub-note") {
+            offers++;
+            expect(value).toBe("b.md");
+          }
+        },
+      },
+    });
+    el.dispatchEvent(event);
+    expect(offers).toBe(1);
+    mountTree(host, section(), async () => {});
+    expect(el.draggable).toBe(false);
+    const late = new Event("dragstart", { bubbles: true, cancelable: true }) as DragEvent;
+    Object.defineProperty(late, "dataTransfer", { value: { setData: () => offers++ } });
+    el.dispatchEvent(late);
+    expect(late.defaultPrevented).toBe(true);
+    expect(offers).toBe(1);
+  });
+});

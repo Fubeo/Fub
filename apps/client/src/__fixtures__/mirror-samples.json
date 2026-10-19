@@ -204,7 +204,11 @@
       "node": "stack",
       "dir": "column",
       "gap": 8,
-      "children": []
+      "children": [],
+      "drag": {
+        "kind": "document",
+        "doc": "a.md"
+      }
     },
     {
       "node": "text",

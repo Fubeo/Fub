@@ -654,7 +654,7 @@ interface renderer {
 /// Protocollo di UI dichiarativa (`UiNode`).
 interface ui {
     use json.{json};
-    use model.{span};
+    use model.{span, doc-id};
     use text.{text};
 
     type action-id = string;
@@ -937,13 +937,19 @@ interface ui {
     ///
     /// Un nodo NON dichiara se accetta un rilascio (decisione 0157): il
     /// trascinamento del puntatore (`preferred-size`) non è un bersaglio di
-    /// drop, e il drag & drop resta della shell finché non esiste una seconda
-    /// superficie che trascina. Il giorno che ci sarà, la forma è un campo in
-    /// fondo a questo record (additivo) e il carico nel `payload` di
-    /// `ui-action`.
+    /// drop, e i bersagli restano della shell. `drag` dice che cosa si
+    /// trascina da lui: è il campo in fondo che la 0157 aveva previsto.
     record ui-node {
         key: option<string>,
         kind: ui-kind,
+        drag: option<ui-drag>,
+    }
+
+    /// Che cosa porta un nodo trascinato; la shell decide come si offre e
+    /// dove si lascia. `document`: una nota del vault, che nell'editor
+    /// diventa un link.
+    variant ui-drag {
+        document(doc-id),
     }
 
     /// Arena dell'albero UI: `root` indicizza `nodes`. Lato Rust è un

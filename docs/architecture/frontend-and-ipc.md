@@ -76,7 +76,10 @@ provider, come apertura del vault, scritture, bozze e lifecycle desktop.
 ## UI dichiarativa
 
 Una view restituisce `UiNode`, non DOM. Ogni nodo ha una specie, una chiave
-stabile e, quando serve, un'azione con payload opaco.
+stabile e, quando serve, un'azione con payload opaco. Un nodo può dire anche che
+cosa si trascina da lui (`drag`, il cui unico caso è una nota del vault): la shell lo
+offre come una nota dell'albero, senza il file fuori dall'app, e i bersagli del
+rilascio restano suoi (decisione 0157).
 
 ```mermaid
 sequenceDiagram

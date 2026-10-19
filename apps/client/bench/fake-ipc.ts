@@ -839,8 +839,8 @@ const TREES: Record<string, UiNode> = {
         node: "section", title: "Entranti · 2", collapsed: false, key: "incoming", children: [{
           node: "list",
           items: [
-            { node: "list_item", title: "Benvenuto", subtitle: "…sta in Sintassi di Fub, i colori della nota e i link…", action: { action: "open", payload: "Benvenuto.md" }, selected: false },
-            { node: "list_item", title: "Il banco che vede", subtitle: "Vedi anche Sintassi di Fub e una delle scene del banco.", action: { action: "open", payload: "Progetti/Il banco che vede.md" }, selected: false },
+            { node: "list_item", title: "Benvenuto", subtitle: "…sta in Sintassi di Fub, i colori della nota e i link…", action: { action: "open", payload: "Benvenuto.md" }, selected: false, drag: { kind: "document", doc: "Benvenuto.md" } },
+            { node: "list_item", title: "Il banco che vede", subtitle: "Vedi anche Sintassi di Fub e una delle scene del banco.", action: { action: "open", payload: "Progetti/Il banco che vede.md" }, selected: false, drag: { kind: "document", doc: "Progetti/Il banco che vede.md" } },
           ],
         }],
       },
@@ -848,8 +848,8 @@ const TREES: Record<string, UiNode> = {
         node: "section", title: "Uscenti · 2", collapsed: false, key: "outgoing", children: [{
           node: "list",
           items: [
-            { node: "list_item", title: "Benvenuto", subtitle: "Un wikilink risolto: Benvenuto.", action: { action: "open", payload: "Benvenuto.md" }, selected: false },
-            { node: "list_item", title: "Frammenti di codice", subtitle: "Uno con alias: i frammenti.", action: { action: "open", payload: "Guida/Frammenti di codice.md" }, selected: false },
+            { node: "list_item", title: "Benvenuto", subtitle: "Un wikilink risolto: Benvenuto.", action: { action: "open", payload: "Benvenuto.md" }, selected: false, drag: { kind: "document", doc: "Benvenuto.md" } },
+            { node: "list_item", title: "Frammenti di codice", subtitle: "Uno con alias: i frammenti.", action: { action: "open", payload: "Guida/Frammenti di codice.md" }, selected: false, drag: { kind: "document", doc: "Guida/Frammenti di codice.md" } },
           ],
         }],
       },
@@ -858,7 +858,7 @@ const TREES: Record<string, UiNode> = {
           node: "list",
           items: [{
             node: "stack", dir: "row", gap: 6, children: [
-              { node: "list_item", title: "Nota lunga", subtitle: "…la sintassi di fub resta la stessa in ogni nota…", action: { action: "open", payload: "Guida/Nota lunga.md" }, selected: false },
+              { node: "list_item", title: "Nota lunga", subtitle: "…la sintassi di fub resta la stessa in ogni nota…", action: { action: "open", payload: "Guida/Nota lunga.md" }, selected: false, drag: { kind: "document", doc: "Guida/Nota lunga.md" } },
               { node: "button", label: "Collega", intent: "neutral", action: { action: "convert", payload: null } },
             ],
           }],

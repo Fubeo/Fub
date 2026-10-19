@@ -123,7 +123,7 @@ use fub_abi::transfer::{
 };
 use fub_abi::ui::{
     ActionId, ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction,
-    UiNode, UiOption, UiValue, ViewUpdate,
+    UiDrag, UiNode, UiOption, UiValue, ViewUpdate,
 };
 
 // CARGO_MANIFEST_DIR = crates/fub-abi ; il contratto è alla radice del repo.
@@ -340,6 +340,7 @@ wit_kebab! {
     UiOption,
     KeyValueEntry,
     TableColumn,
+    UiDrag,
     Align,
     ViewUpdate,
 
@@ -1441,6 +1442,12 @@ fn block_case(b: &arena::Block) -> Case {
                 ("span", wit(span)),
             ],
         ),
+    }
+}
+
+fn ui_drag_case(d: &UiDrag) -> Case {
+    match d {
+        UiDrag::Document { doc } => case_ty("document", wit(doc)),
     }
 }
 
@@ -4870,11 +4877,26 @@ fn conform(source: &str) -> Result<(), String> {
         &[("title", wit(&title)), ("align", wit(&align))],
     );
 
-    let arena::UiNode { key, kind } = arena::UiNode {
+    let arena::UiNode { key, kind, drag } = arena::UiNode {
         key: None,
         kind: arena::UiKind::Separator,
+        drag: None,
     };
-    contract.record("ui-node", &[("key", wit(&key)), ("kind", wit(&kind))]);
+    contract.record(
+        "ui-node",
+        &[
+            ("key", wit(&key)),
+            ("kind", wit(&kind)),
+            ("drag", wit(&drag)),
+        ],
+    );
+    contract.variant_src(
+        "ui-drag",
+        ("ui.rs", "UiDrag"),
+        &[ui_drag_case(&UiDrag::Document {
+            doc: DocId::new("a"),
+        })],
+    );
 
     // --- la rete (§23.3): due record, un enum, e il corpo che è byte
     contract.enumeration(

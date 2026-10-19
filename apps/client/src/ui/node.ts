@@ -64,6 +64,7 @@ import { notify } from "./notify";
 import { setTooltip } from "./tooltip";
 import { tabIndexForKey } from "./tab-keys";
 import { iconEl } from "./icons";
+import { offerNote } from "./drag-types";
 import type { Lifetime, Teardown } from "./lifetime";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
@@ -319,6 +320,7 @@ function reconcile(el: HTMLElement, next: UiNode, onAction: Port): HTMLElement {
   if (update(el, prev, next, onAction)) {
     rendered.set(el, { ...rendered.get(el)!, node: next });
     key(el, next);
+    dragSource(el, next);
     return el;
   }
   const newItem = renderUiNode(next, onAction);
@@ -658,12 +660,42 @@ function renderUiNode(node: UiNode, onAction: Port): HTMLElement {
   const el = draw(node, onAction);
   rendered.set(el, { ...(rendered.get(el) ?? {}), node });
   key(el, node);
+  dragSource(el, node);
   return el;
 }
 
 function key(el: HTMLElement, node: UiNode): void {
   if (node.key !== undefined) el.dataset.key = node.key;
   else delete el.dataset.key;
+}
+
+/// Gli elementi che hanno già il loro ascoltatore di `dragstart`.
+const dragSources = new WeakSet<HTMLElement>();
+
+/// Un nodo che nomina una nota (`drag`) si trascina come una nota dell'albero:
+/// nell'editor diventa un link, sulla striscia delle schede si apre. Fuori
+/// dall'app non porta il file: il nodo viene da un provider, e il percorso su
+/// disco lo offre soltanto ciò che la shell disegna da sé.
+///
+/// L'ascoltatore si attacca una volta e legge il nodo **corrente**: un riuso
+/// che cambia nota, o che toglie il trascinamento, non ne aggiunge un altro.
+/// Vive e muore con l'elemento.
+function dragSource(el: HTMLElement, node: UiNode): void {
+  const doc = node.drag?.kind === "document" ? node.drag.doc : undefined;
+  if (doc === undefined && !dragSources.has(el)) return;
+  el.draggable = doc !== undefined;
+  if (dragSources.has(el)) return;
+  dragSources.add(el);
+  el.addEventListener("dragstart", (event) => {
+    // Un nodo trascinabile dentro un altro: parte quello più interno.
+    if (event.target !== el) return;
+    const now = rendered.get(el)?.node.drag;
+    if (now?.kind !== "document" || !event.dataTransfer) {
+      event.preventDefault();
+      return;
+    }
+    offerNote(event.dataTransfer, now.doc);
+  });
 }
 
 function ensureRowCell(row: HTMLTableRowElement): void {

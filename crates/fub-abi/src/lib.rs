@@ -161,5 +161,5 @@ pub use transfer::{
 };
 pub use ui::{
     ActionId, ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction,
-    UiKind, UiNode, UiOption, UiValue, ViewUpdate,
+    UiDrag, UiKind, UiNode, UiOption, UiValue, ViewUpdate,
 };

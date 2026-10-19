@@ -269,14 +269,19 @@ fn ui_node_samples() -> Vec<Value> {
             | UiKind::Failed { .. } => {}
         }
     }
-    // Il primo campione porta anche la **chiave**, che viaggia accanto alla
-    // specie: senza, il mirror TS non vedrebbe mai il campo che il
-    // riconciliatore usa.
+    // Il primo campione porta anche la **chiave** e il **trascinamento**, che
+    // viaggiano accanto alla specie: senza, il mirror TS non vedrebbe mai i
+    // campi che il riconciliatore e il `dragstart` usano.
     all.iter()
         .enumerate()
         .map(|(the, kind)| {
             let node = UiNode::new(kind.clone());
-            to_value(&if the == 0 { node.with_key("k") } else { node })
+            to_value(&if the == 0 {
+                node.with_key("k")
+                    .dragging_document(fub_abi::model::DocId::new("a.md"))
+            } else {
+                node
+            })
         })
         .collect()
 }

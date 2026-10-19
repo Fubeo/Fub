@@ -582,6 +582,9 @@ pub fn build_backlinks_view(refs: &[BacklinkRef]) -> UiNode {
                 )),
             )
             .with_key(key)
+            // la riga si trascina come la nota che nomina: nell'editor
+            // diventa un link, sulla striscia delle schede si apre.
+            .dragging_document(r.source.clone())
         })
         .collect();
     UiNode::list(items)
@@ -616,6 +619,7 @@ pub fn build_outgoing_view(targets: &[(DocId, Option<String>)]) -> UiNode {
                 )),
             )
             .with_key(key)
+            .dragging_document(target.clone())
         })
         .collect();
     UiNode::list(items)
@@ -1079,7 +1083,8 @@ fn build_unlinked_view(mentions: &[UnlinkedMention]) -> UiNode {
                             OPEN,
                             serde_json::json!({ DOC: if mention.outbound { mention.target.as_str() } else { mention.doc.as_str() } }),
                         )),
-                    ),
+                    )
+                    .dragging_document(if mention.outbound { mention.target.clone() } else { mention.doc.clone() }),
                     UiNode::button(
                         Text::key(CONVERT_LABEL),
                         Default::default(),
@@ -1181,6 +1186,10 @@ mod tests {
         assert!(
             json.contains(r#""key":"a/Nota.md#0""#),
             "each row carries its own identity across redraws"
+        );
+        assert!(
+            json.contains(r#""drag":{"kind":"document","doc":"a/Nota.md"}"#),
+            "the row drags as the note it names"
         );
     }
 

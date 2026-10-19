@@ -317,6 +317,8 @@ pub struct UiNode {
     pub key: Option<String>,
     #[serde(flatten)]
     pub kind: UiKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drag: Option<ui::UiDrag>,
 }
 
 /// [`ui::UiKind`] con i figli sostituiti da indici.
@@ -1190,6 +1192,7 @@ impl UiTree {
         Ok(ui::UiNode {
             key: node.key.clone(),
             kind,
+            drag: node.drag.clone(),
         })
     }
 
@@ -1452,6 +1455,7 @@ fn ui_push(nodes: &mut Vec<UiNode>, n: &ui::UiNode) -> UiRef {
     nodes.push(UiNode {
         key: n.key.clone(),
         kind,
+        drag: n.drag.clone(),
     });
     at
 }
@@ -1634,7 +1638,9 @@ mod tests {
             vec![
                 U::heading(3, "3 backlink"),
                 U::list(vec![
-                    U::list_item("Note", Some("context".into()), action()).with_key("a.md"),
+                    U::list_item("Note", Some("context".into()), action())
+                        .with_key("a.md")
+                        .dragging_document(crate::model::DocId::new("a.md")),
                     U::list_item("No action", None, None),
                 ]),
                 U::button("Do", Intent::Danger, ActionRef::new("do")),
@@ -1950,6 +1956,7 @@ mod tests {
                     gap: 0,
                     children: vec![UiRef(0)],
                 },
+                drag: None,
             }],
             root: UiRef(0),
         };
