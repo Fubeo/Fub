@@ -60,6 +60,10 @@ export interface Signals {
   /// **Senza payload**: chi lo rispecchia in un'altra finestra legge gli
   /// strati montati da `theme/loader.ts`.
   theme: [];
+  /// Una cartella del percorso nella testata è stata premuta: l'esplora la
+  /// apre e la porta in vista. Il verso è questo perché la testata è della
+  /// vista del documento e l'albero dell'esplora, che non si conoscono.
+  "reveal-folder": [folder: string];
 }
 
 type Listener = (...args: never[]) => unknown;

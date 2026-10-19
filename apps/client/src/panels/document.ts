@@ -14,7 +14,7 @@ import { promptText } from "../ui/dialogs";
 import { openCompare } from "../ui/compare";
 import { iconEl } from "../ui/icons";
 import { api } from "../host/ipc";
-import { on, state } from "../state/store";
+import { emit, on, state } from "../state/store";
 import { documentSessions } from "../state/document-session";
 import { openDocument as openRecreated } from "../state/document-controller";
 import { clearRemovedNotice, dismissSheetNotice, limitedMode, removedNoticeOf, sheetNoticesOf, type SheetNoticeKind } from "../state/sheet-notices";
@@ -915,6 +915,33 @@ function drawTabOverflow(r: PaneFrame, tabs: Tab[], active: number): void {
 /// dalla superficie + menu con azioni esistenti. Usa percorso focus/mode
 /// esistente, mai seconda verità; una sola modalità = nessun segmentato (U24);
 /// mai ricreare EditorView (solo chrome, superficie intatta).
+
+/// Il percorso nella testata. Per un documento ogni cartella è un pezzo a sé
+/// (`data-folder` col suo percorso intero), così si può premere; il testo resta
+/// quello di sempre. Si riscrive soltanto quando il percorso cambia.
+function drawCrumbs(crumbs: HTMLElement, path: string, doc: boolean): void {
+  const drawn = doc ? path : "";
+  if (crumbs.dataset.path === drawn && crumbs.textContent === path) return;
+  if (!doc) {
+    delete crumbs.dataset.path;
+    crumbs.textContent = path;
+    return;
+  }
+  crumbs.dataset.path = path;
+  const parts = path.split("/");
+  const pieces: (Node | string)[] = [];
+  parts.forEach((part, i) => {
+    if (i === parts.length - 1) {
+      pieces.push(part);
+      return;
+    }
+    const folder = document.createElement("span");
+    folder.dataset.folder = parts.slice(0, i + 1).join("/");
+    folder.textContent = part;
+    pieces.push(folder, "/");
+  });
+  crumbs.replaceChildren(...pieces);
+}
 function drawToolbar(r: Pane): void {
   const bar = frameOf(r).toolbarEl;
   if (!bar.firstElementChild) {
@@ -936,6 +963,13 @@ function drawToolbar(r: Pane): void {
     }
     const crumbs = document.createElement("span");
     crumbs.className = "muted";
+    // Una cartella del percorso si preme col puntatore e si apre nell'esplora;
+    // il resto del titolo è della rinomina (`title-rename.ts`).
+    crumbs.addEventListener("click", (event) => {
+      const folder = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-folder]") : null;
+      if (!folder || event.detail === 0 || folder.dataset.folder === undefined) return;
+      emit("reveal-folder", folder.dataset.folder);
+    });
     // Il posto dello stato del documento (salvataggio, statistiche): lo
     // occupa soltanto il riquadro col fuoco, vedi `hostPaneStatus`.
     const status = document.createElement("span");
@@ -971,7 +1005,7 @@ function drawToolbar(r: Pane): void {
   status.hidden = tab?.k !== "doc";
   nav.hidden = !tab;
   const path = tab?.k === "doc" ? tab.doc : tab?.k === "view" ? nameTab(tab) : "";
-  crumbs.textContent = path;
+  drawCrumbs(crumbs, path, tab?.k === "doc");
   setTooltip(crumbs, path);
   group.setAttribute("aria-label", t("document.toolbar.modes"));
   menu.setAttribute("aria-label", t("document.pane.menu"));

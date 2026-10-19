@@ -287,6 +287,7 @@ export function mountExplorer(lifetime: Lifetime): void {
   // L'organizzazione cambiata ridisegna la stessa vista senza richiederla:
   // icone, pin e ordine non passano dal kernel.
   lifetime.add(on("organization", renderFileList));
+  lifetime.add(on("reveal-folder", (folder) => void revealPath(folder, true)));
   // L'elenco dei comandi arriva dopo l'apertura del vault: un albero vuoto
   // offre «Nuovo disegno…» solo da quel momento, e lo toglie se il comando se
   // ne va. Un albero con delle note non ha niente da ridisegnare.

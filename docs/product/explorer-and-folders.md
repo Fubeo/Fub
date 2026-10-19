@@ -29,6 +29,9 @@ il ripristino lo rimette dov'era, byte per byte.
 cartella di `files.attachment-folder`, dove finiscono gli allegati incollati o
 trascinati. Se la cartella non c'è ancora lo dice e non la crea: la crea il
 primo allegato.
+Nella testata del foglio ogni cartella del percorso della nota si preme col
+puntatore: l'albero la apre e la porta in vista. Il nome resta il titolo che
+si rinomina col doppio clic o con F2.
 
 ## Cartelle nuove
 

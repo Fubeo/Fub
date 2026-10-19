@@ -533,6 +533,34 @@ describe("navigazione accessibile dell'esploratore", () => {
     ).toBe("true");
     expect(document.activeElement).toBe(focused);
   });
+
+  it("una cartella del percorso nella testata si apre nell'esplora; il nome resta il titolo", async () => {
+    await start(VAULT);
+    const noteItem = () =>
+      document.querySelector<HTMLElement>('#file-list li[data-path="note/Riunione.md"]');
+    const chevron = () =>
+      document.querySelector<HTMLButtonElement>('#file-list li[data-path="note"] > .tree-row > .chevron')!;
+    chevron().click();
+    await waitFor("la cartella si apre", () => !!noteItem());
+    noteItem()!.querySelector<HTMLElement>(".tree-row")!.click();
+    await waitFor("la nota si apre", () => textToVideo().includes("riunione"));
+    chevron().click();
+    await waitFor("la cartella si richiude", () => !noteItem());
+
+    const crumb = document.querySelector<HTMLElement>(".pane.focus .pane-toolbar > .muted")!;
+    expect(crumb.textContent).toBe("note/Riunione.md");
+    const folder = crumb.querySelector<HTMLElement>("[data-folder]")!;
+    expect(folder.dataset.folder).toBe("note");
+    expect(folder.textContent).toBe("note");
+    // Due colpi sulla cartella non aprono il campo della rinomina.
+    folder.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+    folder.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, detail: 2 }));
+    await waitFor("la cartella si apre dall'intestazione", () => !!noteItem());
+    expect(
+      document.querySelector('#file-list li[data-path="note"]')?.getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(document.querySelector(".sheet-title-edit")).toBeNull();
+  });
 });
 
 describe("mostra la cartella degli allegati", () => {

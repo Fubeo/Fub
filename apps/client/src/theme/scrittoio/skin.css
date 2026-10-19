@@ -3498,6 +3498,12 @@ kbd,
 .sheet-title:hover {
   color: var(--text);
 }
+/* Una cartella del percorso apre l'esplora: sotto il puntatore si sottolinea,
+   perché il clic lì porta altrove. */
+.sheet-title [data-folder]:hover {
+  text-decoration: underline;
+  cursor: pointer;
+}
 .sheet-title:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 3px;
