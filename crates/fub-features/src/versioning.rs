@@ -94,6 +94,7 @@ use fub_abi::model::DocId;
 use fub_abi::rules::media;
 use fub_abi::schema::SchemaVersion;
 use fub_abi::session::ContextMask;
+use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
     CommandProvider, EntryKind, EventHandler, FolderScope, HostApi, HostQuery, IndexQuery,
@@ -188,6 +189,15 @@ const DONE_RESTORE: &str = "done.restore";
 const UNDO_RESTORE: &str = "undo.restore";
 const AND_NO_NOTES_GIVEN: &str = "err.no_note_given";
 const E_NO_TS_GIVEN: &str = "err.no_ts_given";
+const CLEAR_TITLE: &str = "version.clear.title";
+const CLEAR_DESC: &str = "version.clear.desc";
+const PLAN_CLEAR: &str = "plan.clear";
+const DONE_CLEAR: &str = "done.clear";
+const S_GROUP: &str = "s.group";
+const S_INTERVAL: &str = "s.interval";
+const S_INTERVAL_DESC: &str = "s.interval.desc";
+const S_RETENTION: &str = "s.retention";
+const S_RETENTION_DESC: &str = "s.retention.desc";
 
 /// I nomi degli argomenti.
 const DOC: &str = "doc";
@@ -195,6 +205,8 @@ const WHEN: &str = "when";
 const PATH: &str = "path";
 const REASON: &str = "reason";
 const LIMIT: &str = "limit";
+const VERSIONS: &str = "versions";
+const NOTES: &str = "notes";
 
 /// Le stringhe del versioning. Vedi
 /// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stia nel
@@ -300,7 +312,34 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(DONE_RESTORE, "{doc} riportata alla versione del {when}")
             .with(UNDO_RESTORE, "Rimetti {doc} com'era prima del ripristino")
             .with(AND_NO_NOTES_GIVEN, "Nessuna nota da ripristinare.")
-            .with(E_NO_TS_GIVEN, "Nessun istante da ripristinare."),
+            .with(E_NO_TS_GIVEN, "Nessun istante da ripristinare.")
+            .with(CLEAR_TITLE, "Svuota la cronologia")
+            .with(
+                CLEAR_DESC,
+                "Cancella tutte le versioni salvate di tutte le note del vault. Le \
+                 note non si toccano; da qui non si torna indietro.",
+            )
+            .with(
+                PLAN_CLEAR,
+                "Versioni da cancellare: {versions}. Note con una cronologia: {notes}.",
+            )
+            .with(
+                DONE_CLEAR,
+                "Cronologia svuotata. Versioni cancellate: {versions}. Note: {notes}.",
+            )
+            .with(S_GROUP, "Vault")
+            .with(S_INTERVAL, "Intervallo fra le versioni")
+            .with(
+                S_INTERVAL_DESC,
+                "Minuti. Nelle ultime 24 ore si tiene al più una versione per \
+                 intervallo, più l'ultima; 0 le tiene tutte.",
+            )
+            .with(S_RETENTION, "Durata della cronologia")
+            .with(
+                S_RETENTION_DESC,
+                "Giorni. Le versioni più vecchie se ne vanno quando la nota si salva \
+                 di nuovo; l'ultima versione resta sempre. 0 tiene tutto.",
+            ),
         StringCatalog::new("en")
             .with(NO_VERSIONS, "No version of {doc}.")
             .with(NO_SUCH_VERSION, "There is no version of {doc} from {when}.")
@@ -395,7 +434,34 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(DONE_RESTORE, "{doc} taken back to the version from {when}")
             .with(UNDO_RESTORE, "Put {doc} back as it was before the restore")
             .with(AND_NO_NOTES_GIVEN, "No note to restore.")
-            .with(E_NO_TS_GIVEN, "No instant to restore."),
+            .with(E_NO_TS_GIVEN, "No instant to restore.")
+            .with(CLEAR_TITLE, "Clear the history")
+            .with(
+                CLEAR_DESC,
+                "Deletes every saved version of every note in the vault. The notes \
+                 are not touched; this cannot be undone.",
+            )
+            .with(
+                PLAN_CLEAR,
+                "Versions to delete: {versions}. Notes with a history: {notes}.",
+            )
+            .with(
+                DONE_CLEAR,
+                "History cleared. Versions deleted: {versions}. Notes: {notes}.",
+            )
+            .with(S_GROUP, "Vault")
+            .with(S_INTERVAL, "Interval between versions")
+            .with(
+                S_INTERVAL_DESC,
+                "Minutes. Within the last 24 hours at most one version per interval \
+                 is kept, plus the latest; 0 keeps them all.",
+            )
+            .with(S_RETENTION, "History length")
+            .with(
+                S_RETENTION_DESC,
+                "Days. Older versions go when the note is saved again; the latest \
+                 version always stays. 0 keeps everything.",
+            ),
     ]
 }
 
@@ -407,12 +473,84 @@ const METADATA_FILE: &str = "meta.json";
 const MS_HOUR: u64 = 3_600_000;
 const MS_DAY: u64 = 24 * MS_HOUR;
 
-/// Fasce di ritenzione (D6): sotto le 24 ore si tiene **tutto**, fino a una
-/// settimana una versione all'ora, fino a tre mesi una al giorno. Oltre, la
-/// storia recente — quella che si ripesca davvero — è già al sicuro.
+/// Fasce di ritenzione (D6): sotto le 24 ore si tiene **tutto** (o una
+/// versione per [`VERSIONING_INTERVAL_KEY`]), fino a una settimana una
+/// versione all'ora, fino all'orizzonte una al giorno. L'orizzonte è
+/// [`VERSIONING_RETENTION_KEY`], tre mesi di serie. Oltre, la storia recente —
+/// quella che si ripesca davvero — è già al sicuro.
 const BAND_ALL: u64 = MS_DAY;
 const BAND_HOURLY: u64 = 7 * MS_DAY;
-const BAND_DAILY: u64 = 90 * MS_DAY;
+const RETENTION_DEFAULT_DAYS: u64 = 90;
+#[cfg(test)]
+const BAND_DAILY: u64 = RETENTION_DEFAULT_DAYS * MS_DAY;
+
+/// Ogni quanti minuti, al più, una versione nelle ultime 24 ore; `0` le tiene
+/// tutte, ed è il default: è la forma che il versioning ha sempre avuto.
+pub const VERSIONING_INTERVAL_KEY: &str = "versioning.interval";
+/// Per quanti giorni si tiene la storia; `0` la tiene per sempre.
+pub const VERSIONING_RETENTION_KEY: &str = "versioning.retention";
+/// Un intervallo oltre il giorno non vuol dire niente: oltre le 24 ore decide
+/// la fascia oraria.
+const INTERVAL_MAX_MINUTES: f64 = 1440.0;
+const MS_MINUTE: u64 = 60_000;
+
+/// Le due regolazioni della ritenzione.
+///
+/// **Non** `program_writable`, per la ragione di `backup.keep`: abbassarle
+/// cancella versioni al salvataggio dopo, e un componente che potesse farlo da
+/// sé potrebbe togliere di mezzo la storia su cui l'utente conta. Lo stesso
+/// vale per [`VERSION_CLEAR`], che è un comando irreversibile e si conferma.
+pub fn settings() -> Vec<SettingSpec> {
+    vec![
+        SettingSpec::new(
+            VERSIONING_INTERVAL_KEY,
+            Text::key(S_INTERVAL),
+            SettingKind::Number {
+                default: 0.0,
+                min: Some(0.0),
+                max: Some(INTERVAL_MAX_MINUTES),
+            },
+        )
+        .describing(Text::key(S_INTERVAL_DESC))
+        .grouped(Text::key(S_GROUP)),
+        SettingSpec::new(
+            VERSIONING_RETENTION_KEY,
+            Text::key(S_RETENTION),
+            SettingKind::Number {
+                default: RETENTION_DEFAULT_DAYS as f64,
+                min: Some(0.0),
+                max: None,
+            },
+        )
+        .describing(Text::key(S_RETENTION_DESC))
+        .grouped(Text::key(S_GROUP)),
+    ]
+}
+
+/// La ritenzione letta adesso, in millisecondi.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Retention {
+    /// Una versione per intervallo nelle ultime 24 ore; `0` le tiene tutte.
+    interval: u64,
+    /// Oltre questa età una versione se ne va; `None` la tiene per sempre.
+    horizon: Option<u64>,
+}
+
+impl Retention {
+    fn read(host: &dyn ReadApi) -> Self {
+        let number = |key: &str| host.setting(key).ok().and_then(|value| value.as_number());
+        let minutes = number(VERSIONING_INTERVAL_KEY)
+            .unwrap_or(0.0)
+            .clamp(0.0, INTERVAL_MAX_MINUTES);
+        let days = number(VERSIONING_RETENTION_KEY)
+            .unwrap_or(RETENTION_DEFAULT_DAYS as f64)
+            .max(0.0);
+        Retention {
+            interval: (minutes * MS_MINUTE as f64) as u64,
+            horizon: (days > 0.0).then_some((days * MS_DAY as f64) as u64),
+        }
+    }
+}
 
 /// Il contenuto più grande che il versioning fotografa: 64 MiB.
 ///
@@ -836,6 +974,84 @@ impl VersionStore {
     /// esiste, al disco cosa contiene — e l'unico modo perché non si
     /// contraddicano è che la storia unita finisca tutta sotto una cartella
     /// sola, coi nomi che `read` andrà davvero a cercare.
+    /// Quante note hanno una cronologia, e quante versioni in tutto.
+    pub fn census(&self) -> (usize, usize) {
+        let inner = self.inner.lock().expect("mutex");
+        let versions = inner.docs.values().map(|doc| doc.versions.len()).sum();
+        (inner.docs.len(), versions)
+    }
+
+    /// **Svuota la cronologia del vault intero**: versioni e tombstone di ogni
+    /// documento. Le note non si toccano. Restituisce quanti documenti e quante
+    /// versioni se ne sono andati.
+    ///
+    /// L'ordine è quello che rende innocua ogni interruzione:
+    ///
+    /// 1. l'indice se ne va per primo, come in [`VersionStore::in_batch`]: un
+    ///    indice assente è la condizione da cui [`VersionStore::open`]
+    ///    ricostruisce, uno vecchio sarebbe un derivato che si crede la verità;
+    /// 2. ogni cartella smette di dire di chi è (`meta.json`, l'autorità). Una
+    ///    ricostruzione a questo punto salta le cartelle già liberate e ritrova
+    ///    intere le altre: la cronologia è svuotata a metà, mai mescolata;
+    /// 3. l'indice torna, con ciò che resta;
+    /// 4. solo allora i contenuti se ne vanno, compresi gli orfani che nessun
+    ///    indice nominava più. Una cartella senza `meta.json` non è di nessuno,
+    ///    e toglierne i blob non rompe nessuna lettura.
+    ///
+    /// Il prestito attraversa il disco per tutto il giro, per la ragione di
+    /// [`Inner::apply`]: un salvataggio che entrasse in mezzo scriverebbe il suo
+    /// indice sopra quello che si sta svuotando.
+    pub fn clear(&self, host: &mut dyn HostApi) -> Result<(usize, usize), PluginError> {
+        let mut inner = self.inner.lock().expect("mutex");
+        host.data_remove(INDEX_FILE)?;
+        let mut released: Vec<String> = Vec::new();
+        let mut failure = None;
+        for (key, doc) in &inner.docs {
+            if !doc.dir.is_empty() {
+                if let Err(error) = host.data_remove(&blob(&doc.dir, METADATA_FILE)) {
+                    failure = Some(error);
+                    break;
+                }
+            }
+            released.push(key.clone());
+        }
+        let mut dirs: Vec<String> = Vec::new();
+        let mut versions = 0;
+        for key in &released {
+            if let Some(doc) = inner.docs.remove(key) {
+                versions += doc.versions.len();
+                if !doc.dir.is_empty() {
+                    dirs.push(doc.dir);
+                }
+            }
+        }
+        // Se l'indice non torna, resta assente: chi legge ricostruisce dalle
+        // cartelle che dicono ancora di chi sono, cioè da ciò che resta. Per
+        // questo i contenuti liberati si tolgono comunque.
+        let index = write_index(&inner.docs, inner.registered, host);
+        for dir in &dirs {
+            match host.data_list(dir) {
+                Ok(paths) => sweep(&paths, host),
+                Err(and) => {
+                    tracing::warn!(target: "fub.versioning", "{dir} non si elenca, i suoi contenuti restano: {and}");
+                }
+            }
+        }
+        drop(inner);
+        tracing::info!(
+            target: "fub.versioning",
+            "cronologia svuotata: {versions} version{} di {} document{}",
+            if versions == 1 { "e" } else { "i" },
+            released.len(),
+            if released.len() == 1 { "o" } else { "i" }
+        );
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        index?;
+        Ok((released.len(), versions))
+    }
+
     pub fn rename(
         &self,
         from: &DocId,
@@ -1284,6 +1500,7 @@ fn write_index(
 #[must_use = "sono i contenuti da spazzare dopo aver scritto l'indice"]
 fn prune(doc: &mut DocVersions, id: &DocId, host: &dyn HostApi) -> Vec<String> {
     let now = host.now_unix_millis();
+    let policy = Retention::read(host);
     let mut kept: Vec<VersionRef> = Vec::with_capacity(doc.versions.len());
     let mut fasce_seen: Vec<(u8, u64)> = Vec::new();
     // Dalla più recente: dentro ogni fascia vince la più recente.
@@ -1291,14 +1508,16 @@ fn prune(doc: &mut DocVersions, id: &DocId, host: &dyn HostApi) -> Vec<String> {
         let eta = now.saturating_sub(v.ts);
         // La più recente non si pota mai: è la versione che rappresenta lo
         // stato attuale della nota, anche se la nota è ferma da un anno.
-        let key = if the == 0 || eta < BAND_ALL {
+        let key = if the == 0 {
             None
+        } else if policy.horizon.is_some_and(|horizon| eta >= horizon) {
+            continue; // oltre l'orizzonte: non si conserva
+        } else if eta < BAND_ALL {
+            (policy.interval > 0).then(|| (0, v.ts / policy.interval))
         } else if eta < BAND_HOURLY {
             Some((1, v.ts / MS_HOUR))
-        } else if eta < BAND_DAILY {
-            Some((2, v.ts / MS_DAY))
         } else {
-            continue; // oltre l'ultima fascia: non si conserva
+            Some((2, v.ts / MS_DAY))
         };
         if let Some(key) = key {
             if fasce_seen.contains(&key) {
@@ -2084,6 +2303,8 @@ impl EventHandler for VersioningHandler {
 pub const HISTORY_VIEW: &str = "history";
 /// L'id, nel registro, del comando che riporta una nota a una sua versione.
 pub const VERSION_RESTORE: &str = "version.restore";
+/// L'id del comando che svuota la cronologia del vault intero.
+pub const VERSION_CLEAR: &str = "version.clear";
 
 /// Mostra il contenuto di una versione; l'istante sta nel payload.
 const A_PREVIEW: &str = "preview";
@@ -2687,11 +2908,55 @@ fn row(
 /// *fa accadere qualcosa e risponde con un messaggio*, quindi è un comando del
 /// registro — e il pannello cronologia era il suo unico chiamante. Migrandolo
 /// col pannello, la palette lo eredita gratis.
-pub struct VersioningCommands;
+///
+/// Il ripristino non ha bisogno dello store: scrive la nota, e la fotografia
+/// la fa il gancio. Lo svuotamento invece sì — togliere la storia da sotto
+/// l'esemplare in memoria lo lascerebbe a nominare contenuti spariti, e il
+/// salvataggio dopo riscriverebbe l'indice vecchio — quindi
+/// [`VERSION_CLEAR`] c'è soltanto nei comandi costruiti con
+/// [`VersioningCommands::over`], cioè da chi ha aperto lo store.
+#[derive(Clone, Default)]
+pub struct VersioningCommands {
+    store: Option<VersionStore>,
+}
+
+impl VersioningCommands {
+    /// I comandi con lo store di chi monta: anche [`VERSION_CLEAR`].
+    pub fn over(store: VersionStore) -> Self {
+        VersioningCommands { store: Some(store) }
+    }
+
+    fn clear(
+        &self,
+        mode: InvokeMode,
+        host: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        let Some(store) = &self.store else {
+            return Err(PluginError::UnknownCommand(
+                VERSION_CLEAR.to_string().into(),
+            ));
+        };
+        let counted = |key: &str, (notes, versions): (usize, usize)| {
+            Text::message(
+                key,
+                vec![
+                    Arg::int(VERSIONS, versions as i64),
+                    Arg::int(NOTES, notes as i64),
+                ],
+            )
+        };
+        if mode.is_dry_run() {
+            let plan = CommandPlan::of_edits(counted(PLAN_CLEAR, store.census()), Vec::new());
+            return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(plan)));
+        }
+        let cleared = store.clear(host)?;
+        Ok(CommandOutcome::notify(counted(DONE_CLEAR, cleared)))
+    }
+}
 
 impl CommandProvider for VersioningCommands {
     fn commands(&self) -> Vec<CommandSpec> {
-        vec![CommandSpec::new(VERSION_RESTORE, Text::key(RESTORE_TITLE))
+        let mut commands = vec![CommandSpec::new(VERSION_RESTORE, Text::key(RESTORE_TITLE))
             .describing(Text::key(RESTORE_DESC))
             .with_param(
                 ParamSpec::new(DOC, Text::key(RESTORE_DOC_TITLE), ParamKind::Document)
@@ -2705,7 +2970,18 @@ impl CommandProvider for VersioningCommands {
             // Reversibile, e non per ottimismo: il ripristino è a sua volta una
             // scrittura, quindi una versione (D8), quindi c'è una versione a cui
             // tornare. L'`Undo` qui sotto la nomina.
-            .with_scope(CommandScope::writing(CommandReach::Document))]
+            .with_scope(CommandScope::writing(CommandReach::Document))];
+        if self.store.is_some() {
+            commands.push(
+                CommandSpec::new(VERSION_CLEAR, Text::key(CLEAR_TITLE))
+                    .describing(Text::key(CLEAR_DESC))
+                    // Scrive lo spazio dati, non le note; ma è la storia di
+                    // tutto il vault, e non si torna indietro: la conferma
+                    // rafforzata è la sua.
+                    .with_scope(CommandScope::writing(CommandReach::Vault).irreversible()),
+            );
+        }
+        commands
     }
 
     fn invoke(
@@ -2715,6 +2991,9 @@ impl CommandProvider for VersioningCommands {
         mode: InvokeMode,
         host: &mut dyn HostApi,
     ) -> Result<CommandOutcome, PluginError> {
+        if command == VERSION_CLEAR {
+            return self.clear(mode, host);
+        }
         if command != VERSION_RESTORE {
             return Err(PluginError::UnknownCommand(command.to_string().into()));
         }
@@ -3562,6 +3841,175 @@ mod tests {
         assert_eq!(remaining, expected, "un blob potato è rimasto nello store");
     }
 
+    /// Un banco con le due regolazioni della ritenzione scritte dall'utente.
+    fn tuned(interval_minutes: f64, retention_days: f64) -> MemoryHost {
+        let specs = settings();
+        MemoryHost::new()
+            .with_value(
+                specs[0].clone(),
+                fub_abi::settings::SettingValue::Number(interval_minutes),
+            )
+            .with_value(
+                specs[1].clone(),
+                fub_abi::settings::SettingValue::Number(retention_days),
+            )
+    }
+
+    /// Cinque salvataggi in dodici minuti, uno al minuto o quasi.
+    fn twelve_minutes(store: &VersionStore, host: &mut MemoryHost) {
+        for (n, salto) in [0, 60_000, 60_000, 9 * 60_000, 60_000]
+            .into_iter()
+            .enumerate()
+        {
+            host.advance(salto);
+            store
+                .snapshot(&id("a.md"), format!("versione {n}").as_bytes(), host)
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn without_an_interval_the_first_day_keeps_every_version() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        twelve_minutes(&store, &mut host);
+        assert_eq!(store.list(&id("a.md")).len(), 5);
+    }
+
+    #[test]
+    fn an_interval_keeps_one_version_per_slot_and_always_the_latest() {
+        let mut host = tuned(10.0, 90.0);
+        let store = VersionStore::open(&mut host).unwrap();
+        twelve_minutes(&store, &mut host);
+
+        let kept = store.list(&id("a.md"));
+        assert!(
+            kept.len() < 5,
+            "l'intervallo deve aver assottigliato: {kept:?}"
+        );
+        assert_eq!(
+            store.read(&id("a.md"), kept[0].ts, &host).unwrap(),
+            "versione 4",
+            "l'ultima resta sempre"
+        );
+        let slots: Vec<u64> = kept[1..].iter().map(|v| v.ts / (10 * MS_MINUTE)).collect();
+        let mut unique = slots.clone();
+        unique.dedup();
+        assert_eq!(
+            slots, unique,
+            "due versioni nello stesso intervallo: {kept:?}"
+        );
+    }
+
+    #[test]
+    fn the_retention_sets_the_horizon_and_zero_keeps_everything() {
+        let mut host = tuned(0.0, 2.0);
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), b"vecchia", &mut host).unwrap();
+        host.advance(3 * MS_DAY);
+        store.snapshot(&id("a.md"), b"nuova", &mut host).unwrap();
+        assert_eq!(
+            store.list(&id("a.md")).len(),
+            1,
+            "oltre i due giorni non si tiene"
+        );
+
+        let mut host = tuned(0.0, 0.0);
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), b"vecchia", &mut host).unwrap();
+        host.advance(400 * MS_DAY);
+        store.snapshot(&id("a.md"), b"nuova", &mut host).unwrap();
+        assert_eq!(store.list(&id("a.md")).len(), 2, "0 vuol dire per sempre");
+    }
+
+    #[test]
+    fn clearing_empties_every_history_and_leaves_no_content_behind() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), b"uno", &mut host).unwrap();
+        host.advance(1_000);
+        store.snapshot(&id("a.md"), b"due", &mut host).unwrap();
+        store.snapshot(&id("b/c.md"), b"tre", &mut host).unwrap();
+        store.tombstone(&id("b/c.md"), &mut host).unwrap();
+        // Un orfano che nessun indice nomina: lo svuotamento toglie anche lui.
+        let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
+        host.data_write(&blob(&dir, "7.md"), b"orfano").unwrap();
+        assert_eq!(store.census(), (2, 3));
+
+        assert_eq!(store.clear(&mut host).unwrap(), (2, 3));
+        assert_eq!(store.census(), (0, 0));
+        assert!(store.list(&id("a.md")).is_empty());
+        assert!(!store.is_deleted(&id("b/c.md")));
+        assert_eq!(host.data_list("").unwrap(), vec![INDEX_FILE.to_string()]);
+
+        // Riaperto dal disco, lo store è vuoto; e il salvataggio dopo
+        // ricomincia una storia nuova.
+        let store = VersionStore::open(&mut host).unwrap();
+        assert!(store.documents().is_empty());
+        store.snapshot(&id("a.md"), b"dopo", &mut host).unwrap();
+        assert_eq!(store.list(&id("a.md")).len(), 1);
+    }
+
+    #[test]
+    fn a_clear_whose_index_cannot_be_written_rebuilds_from_what_is_left() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), b"uno", &mut host).unwrap();
+        host.denies_write(INDEX_FILE);
+        assert!(
+            store.clear(&mut host).is_err(),
+            "un indice negato non è un successo"
+        );
+        // L'indice non c'è: chi riapre ricostruisce dalle cartelle che dicono
+        // ancora di chi sono, cioè da nessuna. Nessuna storia mescolata, nessun
+        // indice che nomina un contenuto sparito.
+        assert!(host.data_list("").unwrap().is_empty());
+        let store = VersionStore::open(&mut host).unwrap();
+        assert!(store.documents().is_empty());
+    }
+
+    #[test]
+    fn the_clear_command_needs_the_store_plans_first_and_cannot_be_undone() {
+        let bare = VersioningCommands::default();
+        assert!(
+            bare.commands().iter().all(|c| c.id != VERSION_CLEAR),
+            "senza lo store lo svuotamento non si offre"
+        );
+
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store.snapshot(&id("a.md"), b"uno", &mut host).unwrap();
+        let commands = VersioningCommands::over(store.clone());
+        let spec = commands
+            .commands()
+            .into_iter()
+            .find(|c| c.id == VERSION_CLEAR)
+            .expect("con lo store c'è");
+        assert!(spec.scope.writes && !spec.scope.reversible);
+
+        let plan = commands
+            .invoke(
+                VERSION_CLEAR,
+                serde_json::json!({}),
+                InvokeMode::DryRun,
+                &mut host,
+            )
+            .unwrap();
+        assert!(matches!(plan.effect, CommandEffect::Plan(_)));
+        assert_eq!(store.census(), (1, 1), "il piano non cancella niente");
+
+        let done = commands
+            .invoke(
+                VERSION_CLEAR,
+                serde_json::json!({}),
+                InvokeMode::Apply,
+                &mut host,
+            )
+            .unwrap();
+        assert!(done.undo.is_none());
+        assert_eq!(store.census(), (0, 0));
+    }
+
     /// La potatura giudicata sul ramo che conta: decide di buttare qualcosa e
     /// la scrittura dell'indice non riesce.
     ///
@@ -4249,7 +4697,7 @@ mod tests {
         host.denies_write(INDEX_FILE);
         let rebuilt = VersionStore::open(&mut host).unwrap();
         assert_eq!(rebuilt.list(&doc), versions);
-        VersioningCommands
+        VersioningCommands::default()
             .invoke(
                 VERSION_RESTORE,
                 serde_json::json!({ DOC: doc.as_str(), TS: versions[1].ts }),
@@ -4284,7 +4732,7 @@ mod tests {
             Err(PluginError::Internal(_))
         ));
         assert!(matches!(
-            VersioningCommands.invoke(
+            VersioningCommands::default().invoke(
                 VERSION_RESTORE,
                 serde_json::json!({ DOC: doc.as_str(), TS: version.ts }),
                 InvokeMode::Apply,
@@ -4393,7 +4841,7 @@ mod tests {
         let grown = vec![b'x'; MAX_VERSION_BYTES as usize + 1];
         host.write_document_bytes(&doc, &grown, Some(base)).unwrap();
 
-        let refused = VersioningCommands.invoke(
+        let refused = VersioningCommands::default().invoke(
             VERSION_RESTORE,
             serde_json::json!({ DOC: doc.as_str(), TS: version.ts }),
             InvokeMode::Apply,

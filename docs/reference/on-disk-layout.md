@@ -246,8 +246,10 @@ di ogni cartella le impronte che l'indice ricorda — quelle della scrittura —
 poi riscrive l'indice con `registered: true`. Si fa una volta sola e solo da un
 indice che c'è: un indice ricostruito dai byte non registra le impronte che ha
 appena ricalcolato. Il primo salvataggio le registra comunque. Ogni nuova versione
-pota le altre per fasce: tutte sotto le 24 ore, una per ora fino a 7 giorni,
-una per giorno fino a 90. Oltre resta solo la più recente. Ogni `VersionRef`
+pota le altre per fasce: sotto le 24 ore tutte, o una per `versioning.interval`
+minuti; una per ora fino a 7 giorni, una per giorno fino a `versioning.retention`
+giorni (90 di serie, 0 nessun limite). Oltre resta solo la più recente. Le due
+impostazioni non sono `program_writable`: abbassarle cancella versioni. Ogni `VersionRef`
 nell'indice registra la dimensione in byte e l'impronta FNV-1a del contenuto.
 Gli snapshot conservano i byte originali, anche per allegati binari, senza
 convertire BOM o terminatori di riga. Nessuno snapshot supera 64 MiB
@@ -276,6 +278,12 @@ libero e chi lo riprende è un'altra nota: il ripristino la riunisce al path
 d'arrivo, come una rinomina. Se la voce non si riconosce (una cancellazione che
 il cestino non ha visto, un cestino che non si elenca) la storia resta sotto il
 path col suo `deleted_at`, come prima.
+
+`version.clear` svuota lo store di tutto il vault in quest'ordine: toglie
+l'indice, toglie il `meta.json` di ogni cartella, riscrive l'indice con ciò che
+resta e solo allora cancella i blob delle cartelle liberate, orfani compresi.
+Un'interruzione lascia al più una cronologia svuotata a metà, che la
+ricostruzione ritrova senza mescolare storie.
 
 Se l'indice manca o non è leggibile, lo store lo ricostruisce dagli snapshot e
 prova a ripubblicarlo. Un errore di scrittura del solo indice genera un avviso:

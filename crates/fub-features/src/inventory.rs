@@ -262,12 +262,14 @@ static OFFICIALS: &[OfficialFeature] = &[
         // registrano — insieme all'handler e sotto l'interruttore del
         // versioning — e lo dice `wiring`.
         view: Some(|| Box::new(HistoryView)),
-        commands: Some(|| Box::new(VersioningCommands)),
+        // Senza store: lo svuotamento lo aggiunge chi monta, che lo store ce
+        // l'ha (`VersioningCommands::over`).
+        commands: Some(|| Box::new(VersioningCommands::default())),
         index: None,
         syntax: None,
         renderers: None,
         exports: None,
-        settings: None,
+        settings: Some(versioning::settings),
         provides: &[],
         requires: &[],
         wiring: HostWiring::VersionStore,

@@ -291,19 +291,18 @@ Il versioning conserva snapshot del contenuto. L'impostazione del vault
 dalla scrittura successiva, senza riaprire il vault. Spenta, la storia già
 registrata resta leggibile e segue le note rinominate o cancellate, mentre
 `version.restore` rifiuta finché non si riaccende: nessuno fotograferebbe il
-contenuto che il ripristino sostituisce. `version.restore` cattura la
-revisione del documento, quindi verifica che il riferimento alla versione
-esista e che il blob sia leggibile e integro (dimensione e impronta FNV-1a).
-La scrittura condizionata usa quella revisione come confronto e scambio (CAS).
-Per gli writer cooperativi, una modifica intervenuta durante la lettura viene
-rifiutata come conflitto.
-Per gli writer esterni il controllo è best-effort: una modifica già osservabile
-al confronto produce lo stesso conflitto. Un riferimento o un blob non valido e
-gli errori di lettura o confronto non modificano né il documento né l'indice
-delle versioni. Le garanzie di un errore di scrittura dipendono dal supporto:
-per i file regolari sostituibili il valore precedente resta intatto; symlink,
-hardlink e filesystem senza conteggio dei nomi richiedono invece la scrittura
-in-place descritta nel riferimento tecnico.
+contenuto che il ripristino sostituisce. `version.restore` cattura la revisione
+del documento, quindi verifica che il riferimento alla versione esista e che il
+blob sia leggibile e integro (dimensione e impronta FNV-1a). La scrittura
+condizionata usa quella revisione come confronto e scambio (CAS). Per gli writer
+cooperativi, una modifica intervenuta durante la lettura viene rifiutata come
+conflitto. Per gli writer esterni il controllo è best-effort: una modifica già
+osservabile al confronto produce lo stesso conflitto. Un riferimento o un blob
+non valido e gli errori di lettura o confronto non modificano né il documento né
+l'indice delle versioni. Le garanzie di un errore di scrittura dipendono dal
+supporto: per i file regolari sostituibili il valore precedente resta intatto;
+symlink, hardlink e filesystem senza conteggio dei nomi richiedono invece la
+scrittura in-place descritta nel riferimento tecnico.
 
 Il pannello cronologia mostra il testo di una versione oppure il suo confronto
 riga per riga con la nota attuale. Il testo di una versione si può anche
@@ -316,10 +315,11 @@ Quando riesce, il ripristino è una scrittura normale: fotografa prima il
 contenuto sostituito e, se il contenuto cambia, crea una nuova versione; quando
 esiste una versione precedente, il comando dichiara anche il ripristino inverso.
 
-Le versioni si diradano col tempo, a ogni nuova versione della nota. Nelle
-ultime 24 ore restano tutte; fino a 7 giorni ne resta una per ora, fino a 90
-giorni una per giorno. Oltre i 90 giorni resta soltanto la versione più recente
-della nota. Le fasce non sono configurabili.
+Le versioni si diradano a ogni nuova versione della nota: nelle ultime 24 ore
+tutte, o una per `versioning.interval` (minuti, 0 di serie); fino a 7 giorni una
+per ora, poi una al giorno fino a `versioning.retention` (giorni: 90 di serie, 0
+per sempre); oltre, solo la più recente. `version.clear` svuota la cronologia
+del vault anche a versioning spento, con conferma rafforzata e senza ritorno.
 
 Un file oltre 64 MiB non ha versioni: il versioning non lo apre e non lo
 copia, e una scrittura su di lui passa senza fotografia, come a versioning

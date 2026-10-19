@@ -162,6 +162,43 @@ fn turned_off_the_history_stays_readable_and_the_switch_needs_no_reopening() {
     );
 }
 
+/// Svuotare la cronologia passa dallo store vivo, anche a versioning spento:
+/// togliere la storia non chiede di fotografarne di nuova. E le due
+/// regolazioni della ritenzione sono dichiarate dal bundle.
+#[test]
+fn the_mounted_bundle_clears_the_history_even_when_turned_off() {
+    let v = Vault::new();
+    let host = headless();
+    host.open(&v.root).expect("opens");
+    let nota = DocId::new("Nota.md");
+    host.write_document(None, &nota, "# Nota\n\nuno\n", WriteBase::Dictated)
+        .expect("writes");
+    assert!(!host.list_versions(None, &nota).unwrap().is_empty());
+    for (key, value) in [("versioning.interval", 5.0), ("versioning.retention", 30.0)] {
+        host.set_setting_for_user(None, key, SettingValue::Number(value))
+            .unwrap_or_else(|error| panic!("{key} is declared: {error:?}"));
+    }
+
+    host.set_setting_for_user(None, "versioning.enabled", SettingValue::Toggle(false))
+        .expect("turned off");
+    let cleared = host.invoke_user_command(
+        None,
+        fub_features::versioning::VERSION_CLEAR,
+        serde_json::json!({}),
+        InvokeMode::Apply,
+    );
+    assert!(cleared.is_ok(), "clearing needs no photograph: {cleared:?}");
+    assert!(
+        host.list_versions(None, &nota).unwrap().is_empty(),
+        "the store the app reads is the one that was cleared"
+    );
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("Nota.md")).unwrap(),
+        "# Nota\n\nuno\n",
+        "the note itself is untouched"
+    );
+}
+
 #[test]
 fn a_component_off_not_is_mounts_at_all_and_is_turns_on_again() {
     let v = Vault::new();

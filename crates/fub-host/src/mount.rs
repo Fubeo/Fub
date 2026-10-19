@@ -629,12 +629,15 @@ fn register_feature(
     if let Some(build) = feature.commands {
         let commands = build();
         // Il ripristino scrive, e la preimmagine la fotografa il gancio che
-        // l'interruttore spegne: spento, si legge e non si ripristina.
+        // l'interruttore spegne: spento, si legge e non si ripristina. I
+        // comandi si ricostruiscono sullo store appena aperto, perché lo
+        // svuotamento della cronologia deve passare dall'esemplare vivo.
         #[cfg(feature = "versioning")]
-        let commands: Box<dyn fub_abi::traits::CommandProvider> = if opened_versions.is_some() {
-            Box::new(SwitchedRestore(commands))
-        } else {
-            commands
+        let commands: Box<dyn fub_abi::traits::CommandProvider> = match &opened_versions {
+            Some(store) => Box::new(SwitchedRestore(Box::new(
+                fub_features::versioning::VersioningCommands::over(store.clone()),
+            ))),
+            None => commands,
         };
         failures.extend(register_commands(registrar, commands));
     }
@@ -747,7 +750,8 @@ impl fub_abi::traits::EventHandler for SwitchedVersioning {
 
 /// I comandi del versioning dietro l'interruttore. Il ripristino sostituisce
 /// la nota, e con il versioning spento nessuno fotograferebbe ciò che
-/// sostituisce: rifiuta, e dice come riaverlo, invece di perderlo.
+/// sostituisce: rifiuta, e dice come riaverlo, invece di perderlo. Lo
+/// svuotamento no: togliere la storia non ha bisogno di fotografarne di nuova.
 #[cfg(feature = "versioning")]
 struct SwitchedRestore(Box<dyn fub_abi::traits::CommandProvider>);
 
@@ -764,7 +768,7 @@ impl fub_abi::traits::CommandProvider for SwitchedRestore {
         mode: fub_abi::InvokeMode,
         host: &mut dyn fub_abi::traits::HostApi,
     ) -> Result<fub_abi::CommandOutcome, fub_abi::PluginError> {
-        if !versioning_on(host) {
+        if command == fub_features::versioning::VERSION_RESTORE && !versioning_on(host) {
             return Err(fub_abi::PluginError::Unserved(fub_abi::text::Text::key(
                 crate::settings::VERSIONING_OFF_RESTORE,
             )));
