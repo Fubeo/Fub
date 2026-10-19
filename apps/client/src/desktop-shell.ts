@@ -103,7 +103,7 @@ import { newNoteInActiveSpace } from "./state/new-note";
 import { paletteHost } from "./state/palette-host";
 import { preferredPaneMode } from "./state/pane-mode";
 import { setSearchPort } from "./state/search-port";
-import { zoomBy } from "./state/zoom";
+import { mountWheelTextSize, zoomBy } from "./state/zoom";
 
 /// Le impostazioni della macchina che ricordano i due pannelli laterali, e le
 /// chiavi `localStorage` dove stavano prima (si adottano una volta).
@@ -715,6 +715,7 @@ async function init(): Promise<Teardown> {
   // riconfigurarlo subito dopo.
   reducedMotion();
   mountTheme(pageWindowLifetime, setEditorTheme);
+  mountWheelTextSize(pageWindowLifetime);
 
   // Le stringhe accanto al tema, e per la stessa ragione (§12.4): sono le due
   // cose che vanno applicate **prima** che qualcosa disegni, o il primo
