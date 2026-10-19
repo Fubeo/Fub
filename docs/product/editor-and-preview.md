@@ -318,7 +318,7 @@ indisponibili sulla superficie attiva non entrano nella palette né nel router;
 i renderer non installano listener globali propri.
 Note giornaliere, template, note uniche e casuali, inserimento data/ora,
 slash, compositore e statistiche sono comandi e provider ufficiali sullo
-stesso buffer e registro: giornaliere con cartella, formato data e template
+stesso buffer e registro: giornaliere con cartella, `daily.format`, formato data e template
 configurabili e orologio deterministico; template con variabili chiuse e merge
 delle proprietà; slash e palette condividono registro, contesto valido e flush
 senza toccare il buffer. Il menu `/` offre i comandi che lo dichiarano nella

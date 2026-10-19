@@ -69,6 +69,12 @@ const UNTITLED: &str = "Untitled";
 pub const DAILY_FOLDER_KEY: &str = "daily.folder";
 /// Template delle giornaliere deciso nelle impostazioni.
 pub const DAILY_TEMPLATE_KEY: &str = "daily.template";
+/// Il nome della giornaliera dentro la sua cartella: token `YYYY`, `YY`,
+/// `MMMM`, `MMM`, `MM`, `M`, `DD`, `D`, `dddd`, `ddd`, testo fra `[…]`
+/// letterale; una `/` fa una sottocartella.
+pub const DAILY_FORMAT_KEY: &str = "daily.format";
+/// Il nome di sempre: ordinabile, e quello che `note.daily` accetta come data.
+pub const DAILY_FORMAT_DEFAULT: &str = "YYYY-MM-DD";
 /// Formato di `note.insert_datetime`: `date`, `time` o `datetime`.
 pub const DATE_FORMAT_KEY: &str = "insert.date-format";
 /// Orologio a 12 o 24 ore per l'inserimento dell'ora.
@@ -90,6 +96,9 @@ const S_DAILY_FOLDER: &str = "template.daily_folder";
 const S_DAILY_FOLDER_DESC: &str = "template.daily_folder.desc";
 const S_DAILY_TEMPLATE: &str = "template.daily_template";
 const S_DAILY_TEMPLATE_DESC: &str = "template.daily_template.desc";
+const S_DAILY_FORMAT: &str = "template.daily_format";
+const S_DAILY_FORMAT_DESC: &str = "template.daily_format.desc";
+const E_BAD_DAILY_FORMAT: &str = "e_bad_daily_format";
 const S_DATE_FORMAT: &str = "template.date_format";
 const S_DATE_FORMAT_DESC: &str = "template.date_format.desc";
 const S_TIME_FORMAT: &str = "template.time_format";
@@ -392,6 +401,15 @@ fn catalog_it() -> StringCatalog {
             S_DAILY_TEMPLATE_DESC,
             "Template usato da `note.daily` quando la nota non esiste.",
         )
+        .with(S_DAILY_FORMAT, "Nome della giornaliera")
+        .with(
+            S_DAILY_FORMAT_DESC,
+            "YYYY, YY, MMMM, MMM, MM, M, DD, D, dddd, ddd; il testo fra [ ] resta com'è e una / fa una sottocartella. Esempio: YYYY/MMMM/YYYY-MM-DD.",
+        )
+        .with(
+            E_BAD_DAILY_FORMAT,
+            "Il nome della giornaliera «{value}» non è un percorso valido: controlla daily.format.",
+        )
         .with(S_DATE_FORMAT, "Formato di data/ora")
         .with(
             S_DATE_FORMAT_DESC,
@@ -621,6 +639,15 @@ fn catalog_en() -> StringCatalog {
             S_DAILY_TEMPLATE_DESC,
             "Template used by `note.daily` when the note does not exist.",
         )
+        .with(S_DAILY_FORMAT, "Daily note name")
+        .with(
+            S_DAILY_FORMAT_DESC,
+            "YYYY, YY, MMMM, MMM, MM, M, DD, D, dddd, ddd; text between [ ] stays as written and a / makes a subfolder. Example: YYYY/MMMM/YYYY-MM-DD.",
+        )
+        .with(
+            E_BAD_DAILY_FORMAT,
+            "The daily note name {value} is not a valid path: check daily.format.",
+        )
         .with(S_DATE_FORMAT, "Date/time format")
         .with(
             S_DATE_FORMAT_DESC,
@@ -844,6 +871,16 @@ impl TemplateCommands {
             .grouped(Text::key(S_GROUP))
             .program_writable(),
             SettingSpec::new(
+                DAILY_FORMAT_KEY,
+                Text::key(S_DAILY_FORMAT),
+                SettingKind::Text {
+                    default: DAILY_FORMAT_DEFAULT.into(),
+                },
+            )
+            .describing(Text::key(S_DAILY_FORMAT_DESC))
+            .grouped(Text::key(S_GROUP))
+            .program_writable(),
+            SettingSpec::new(
                 DATE_FORMAT_KEY,
                 Text::key(S_DATE_FORMAT),
                 SettingKind::Text {
@@ -989,7 +1026,20 @@ fn daily(
         .map(str::to_string)
         .unwrap_or_else(|| daily_template(host));
     let extension = crate::formats::new_note_extension(host)?;
-    let id = DocId::new(format!("{folder}/{date}.{extension}"));
+    let name = daily_name(
+        &daily_format(host),
+        &date,
+        host.user_locale().language_base(),
+    );
+    let path = format!("{folder}/{name}.{extension}");
+    if check_name(&path, Naming::New).is_err() {
+        return Err(PluginError::BadArgs(Text::message(
+            E_BAD_DAILY_FORMAT,
+            vec![Arg::text(A_VALUE, &name)],
+        )));
+    }
+    let id = DocId::new(path);
+    let title = name.rsplit('/').next().unwrap_or(&name).to_string();
     let summary = Text::message(P_DAILY, vec![Arg::text(DATE, &date)]);
     if mode.is_dry_run() {
         return Ok(plan(summary, id));
@@ -1004,7 +1054,7 @@ fn daily(
     }
     let ctx = context_of(host, &date)?;
     let body = match host.read_document(&DocId::new(with_extension(host, &template)?)) {
-        Ok(grezzo) => expand_full(&grezzo, &date, &ctx, host)?,
+        Ok(grezzo) => expand_full(&grezzo, &title, &ctx, host)?,
         Err(PluginError::NotFound(_)) => String::new(),
         Err(and) => return Err(and),
     };
@@ -1326,6 +1376,126 @@ fn daily_folder(host: &dyn HostApi) -> String {
         }
         _ => FOLDER_DAILY.into(),
     }
+}
+
+fn daily_format(host: &dyn HostApi) -> String {
+    match host.setting(DAILY_FORMAT_KEY) {
+        Ok(fub_abi::settings::SettingValue::Text(s)) if !s.trim().is_empty() => {
+            s.trim().to_string()
+        }
+        _ => DAILY_FORMAT_DEFAULT.into(),
+    }
+}
+
+const MONTHS_IT: [&str; 12] = [
+    "gennaio",
+    "febbraio",
+    "marzo",
+    "aprile",
+    "maggio",
+    "giugno",
+    "luglio",
+    "agosto",
+    "settembre",
+    "ottobre",
+    "novembre",
+    "dicembre",
+];
+const MONTHS_EN: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+const WEEKDAYS_IT: [&str; 7] = [
+    "lunedì",
+    "martedì",
+    "mercoledì",
+    "giovedì",
+    "venerdì",
+    "sabato",
+    "domenica",
+];
+const WEEKDAYS_EN: [&str; 7] = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+];
+
+/// Il nome della giornaliera di `date` (già valida, `YYYY-MM-DD`) nel formato
+/// dichiarato. I nomi di mesi e giorni sono nella lingua di chi legge
+/// (italiano o, per ogni altra, inglese); un token più lungo vince sul più
+/// corto, e `[…]` protegge il testo che somiglia a un token.
+fn daily_name(format: &str, date: &str, language: &str) -> String {
+    let year: i32 = date[..4].parse().unwrap_or_default();
+    let month: u8 = date[5..7].parse().unwrap_or(1);
+    let day: u8 = date[8..10].parse().unwrap_or(1);
+    let weekday = fub_abi::traits::CivilTime {
+        year,
+        month,
+        day,
+        hour: 0,
+        minute: 0,
+        second: 0,
+    }
+    .weekday()
+    .iso();
+    let (months, weekdays) = if language == "it" {
+        (MONTHS_IT, WEEKDAYS_IT)
+    } else {
+        (MONTHS_EN, WEEKDAYS_EN)
+    };
+    let month_name = months[usize::from(month.clamp(1, 12)) - 1];
+    let weekday_name = weekdays[usize::from(weekday.clamp(1, 7)) - 1];
+    let short = |name: &str| name.chars().take(3).collect::<String>();
+    let mut out = String::new();
+    let mut rest = format;
+    while let Some(c) = rest.chars().next() {
+        if c == '[' {
+            if let Some(end) = rest.find(']') {
+                out.push_str(&rest[1..end]);
+                rest = &rest[end + 1..];
+                continue;
+            }
+        }
+        let value = [
+            ("YYYY", format!("{year:04}")),
+            ("YY", format!("{:02}", year.rem_euclid(100))),
+            ("MMMM", month_name.to_string()),
+            ("MMM", short(month_name)),
+            ("MM", format!("{month:02}")),
+            ("M", month.to_string()),
+            ("DD", format!("{day:02}")),
+            ("D", day.to_string()),
+            ("dddd", weekday_name.to_string()),
+            ("ddd", short(weekday_name)),
+        ]
+        .into_iter()
+        .find(|(token, _)| rest.starts_with(token));
+        match value {
+            Some((token, value)) => {
+                out.push_str(&value);
+                rest = &rest[token.len()..];
+            }
+            None => {
+                out.push(c);
+                rest = &rest[c.len_utf8()..];
+            }
+        }
+    }
+    out
 }
 
 fn daily_template(host: &dyn HostApi) -> String {
@@ -2593,6 +2763,28 @@ mod tests {
             assert!(valid_date(invalid).is_err(), "{invalid}");
         }
         assert_eq!(valid_date("2024-02-29").unwrap(), "2024-02-29");
+    }
+
+    #[test]
+    fn daily_names_follow_the_declared_format() {
+        assert_eq!(
+            daily_name(DAILY_FORMAT_DEFAULT, "2026-10-19", "it"),
+            "2026-10-19"
+        );
+        assert_eq!(
+            daily_name("YYYY/MMMM/YYYY-MMM-DD", "2026-10-19", "it"),
+            "2026/ottobre/2026-ott-19"
+        );
+        assert_eq!(
+            daily_name("YYYY/MM MMMM/dddd D", "2026-03-01", "en"),
+            "2026/03 March/Sunday 1"
+        );
+        assert_eq!(
+            daily_name("[Diario] YY.M.D ddd", "2024-02-29", "it"),
+            "Diario 24.2.29 gio"
+        );
+        // Una `[` senza chiusura resta un carattere.
+        assert_eq!(daily_name("[YYYY", "2026-10-19", "it"), "[2026");
     }
 
     #[test]

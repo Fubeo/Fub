@@ -256,6 +256,55 @@ fn daily_creates_and_the_second_time_opens() {
 }
 
 #[test]
+fn daily_format_names_the_note_and_makes_subfolders() {
+    use fub_abi::settings::SettingValue;
+    let vault = Vault::new();
+    vault.put("Templates/Daily.md", "# {{title}}\n");
+    let mut ws = vault.open();
+    ws.set_setting(
+        "daily.format",
+        SettingValue::Text("YYYY/MM MMMM/[Diario] DD".into()),
+    )
+    .expect("formato");
+    let daily = |ws: &mut Workspace| {
+        let outcome = ws
+            .invoke_command(
+                NOTES_DAILY,
+                serde_json::json!({ "date": "2026-10-19" }),
+                InvokeMode::Apply,
+                Actor::User,
+            )
+            .expect("daily");
+        let CommandEffect::Navigate { doc } = outcome.effect else {
+            panic!("{:?}", outcome.effect);
+        };
+        doc
+    };
+    let doc = daily(&mut ws);
+    // Il locale del banco non dichiara una lingua: i nomi sono in inglese.
+    assert_eq!(doc, DocId::new("Daily/2026/10 October/Diario 19.md"));
+    assert_eq!(ws.read_source(&doc).unwrap(), "# Diario 19\n");
+    assert_eq!(daily(&mut ws), doc, "la seconda volta la ritrova");
+
+    ws.set_setting("daily.format", SettingValue::Text("../YYYY".into()))
+        .expect("formato");
+    let before = ws.documents();
+    assert!(ws
+        .invoke_command(
+            NOTES_DAILY,
+            serde_json::json!({ "date": "2026-10-20" }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .is_err());
+    assert_eq!(
+        ws.documents(),
+        before,
+        "un nome che esce dal vault non crea niente"
+    );
+}
+
+#[test]
 fn the_view_lists_the_template() {
     let vault = Vault::new();
     vault.put("Templates/A.md", "a\n");
