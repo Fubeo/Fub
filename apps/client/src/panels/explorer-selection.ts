@@ -3,8 +3,8 @@
 // Ctrl/Cmd-clic aggiunge o toglie una nota dalla scelta, Maiusc-clic sceglie
 // tutte le note visibili fra l'ultima toccata e questa, Ctrl-Spazio fa come il
 // Ctrl-clic da tastiera. Una barra sopra l'albero dice quante sono e offre i
-// due gesti che hanno senso su un gruppo — **sposta in…** e **cestina** — più
-// «deseleziona»; Esc la azzera. Un clic normale riprende a funzionare com'è:
+// gesti che hanno senso su un gruppo — **sposta in…**, **in una cartella
+// nuova** e **cestina** — più «deseleziona»; Esc la azzera. Un clic normale riprende a funzionare com'è:
 // azzera la scelta e apre la nota.
 //
 // # Solo ciò che si vede
@@ -29,6 +29,8 @@ export interface TreeSelectionHost {
   currentDoc(): string | null;
   trash(paths: string[]): Promise<unknown>;
   move(paths: string[]): Promise<unknown>;
+  /// Una cartella nuova, con dentro le note scelte.
+  group(paths: string[]): Promise<unknown>;
   readonly lifetime: Lifetime;
 }
 
@@ -60,9 +62,10 @@ export function mountTreeSelection(host: TreeSelectionHost): TreeSelection {
     return each;
   };
   const move = button("", "tree-selection-move", () => void act(host.move));
+  const group = button("", "tree-selection-group", () => void act(host.group));
   const trash = button("", "tree-selection-trash", () => void act(host.trash));
   const clearButton = button("", "tree-selection-clear", () => clear());
-  bar.append(count, move, trash, clearButton);
+  bar.append(count, move, group, trash, clearButton);
   list.before(bar);
   lifetime.add(() => bar.remove());
   list.setAttribute("aria-multiselectable", "true");
@@ -78,6 +81,7 @@ export function mountTreeSelection(host: TreeSelectionHost): TreeSelection {
   const label = (): void => {
     bar.setAttribute("aria-label", t("explorer.selection.label"));
     move.textContent = t("explorer.selection.move");
+    group.textContent = t("explorer.selection.group");
     trash.textContent = t("explorer.selection.trash");
     clearButton.textContent = t("explorer.selection.clear");
     count.textContent = t("explorer.selection.count", { n: String(picked.size) });

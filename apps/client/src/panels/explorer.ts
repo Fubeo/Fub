@@ -7,7 +7,7 @@
 // dato sta nel sidecar (`state/organization.ts`). Qui c'è il DOM.
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE, type DraggedEntry } from "../ui/drag-types";
 import { revealSidePanel } from "../ui/side-panels";
-import { pickFromList } from "../ui/dialogs";
+import { pickFromList, promptText } from "../ui/dialogs";
 import { vaultFolders, folderContent, existingDocuments, settings } from "../host/query";
 import { Race } from "../ui/race";
 import type { VaultFolder } from "../host/contract";
@@ -268,6 +268,7 @@ export function mountExplorer(lifetime: Lifetime): void {
     currentDoc: () => state.currentDoc,
     trash: (paths) => trashManyWithConfirm(paths),
     move: (paths) => pickMoveFolders(paths),
+    group: (paths) => groupIntoNewFolder(paths),
     lifetime,
   });
   lifetime.add(() => {
@@ -1016,6 +1017,28 @@ async function pickMoveFolders(ids: readonly string[]): Promise<void> {
     if (folderRowOf(id)) await moveFolderInto(id, choice);
     else await moveIntoFolder(id, choice);
   }
+}
+
+/// «In una cartella nuova»: la cartella nasce nella casa comune delle note
+/// scelte (la radice visibile, se ne hanno più d'una) e le note ci entrano con
+/// lo stesso spostamento del menu. Se la cartella non nasce, nessuna si muove.
+async function groupIntoNewFolder(ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const homes = new Set(ids.map(parentOf));
+  const parent = homes.size === 1 ? [...homes][0]! : (state.activeSpace ?? "");
+  const name = (await promptText({ title: t("explorer.selection.group"), label: t("explorer.new_folder") }))?.trim();
+  if (!name) return;
+  const wanted = parent ? `${parent}/${name}` : name;
+  try {
+    await createFolder(wanted);
+  } catch (e) {
+    notify(t("explorer.new_folder_failed", { folder: wanted, reason: errorText(e) }), "guasto");
+    return;
+  }
+  for (const folder of [parent, wanted]) if (folder) state.expanded.add(folder);
+  saveExpanded();
+  for (const id of ids) await moveIntoFolder(id, wanted);
+  await refreshFromKernel(true);
 }
 
 /// Quante cartelle chiede il selettore di destinazione: più di un livello
