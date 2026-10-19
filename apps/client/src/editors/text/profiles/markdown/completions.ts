@@ -20,14 +20,18 @@
 // solo lì). Anche lui si riconosce su un `EditorState` (`diagramFenceContext`),
 // senza vista.
 import {
+  acceptCompletion,
   autocompletion,
+  completionStatus,
+  selectedCompletion,
   type Completion,
   type CompletionContext,
   type CompletionResult,
   type CompletionSource,
 } from "@codemirror/autocomplete";
 import { syntaxTree } from "@codemirror/language";
-import type { EditorState, Extension } from "@codemirror/state";
+import { Prec, type EditorState, type Extension } from "@codemirror/state";
+import { keymap, type EditorView } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { isStrictlyInsideCode } from "./parser";
 import { catalogLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
@@ -319,6 +323,52 @@ export function vaultHeadingSource(searchHeadings: NonNullable<CompletionSources
   };
 }
 
+/// Dove finisce il tag che il cursore attraversa: i caratteri da tag dopo
+/// il cursore fanno parte del token sostituito.
+function tagEnd(text: string, offset: number): number {
+  let to = offset;
+  while (to < text.length) {
+    const character = String.fromCodePoint(text.codePointAt(to)!);
+    if (!TAG_CHARACTER.test(character)) break;
+    to += character.length;
+  }
+  return to;
+}
+
+/// Tab nel completamento dei tag completa un segmento alla volta: su `#pro`
+/// con `#progetti/fub/alfa` scelto mette `#progetti/` e il popup resta,
+/// filtrato sui figli. L'ultimo segmento si accetta intero. Restituisce il
+/// testo da scrivere al posto del token, o `null` se non resta un segmento.
+export function tagSegment(typed: string, label: string): string | null {
+  const start = label.toLowerCase().startsWith(typed.toLowerCase()) ? typed.length : 1;
+  const slash = label.indexOf("/", start);
+  return slash < 0 || slash === label.length - 1 ? null : label.slice(0, slash + 1);
+}
+
+/// Il tasto: agisce solo col popup dei tag aperto (le altre sorgenti non
+/// hanno etichette `#` di tipo `keyword`); altrove Tab resta il rientro.
+export function completeTagSegment(view: EditorView): boolean {
+  if (completionStatus(view.state) !== "active") return false;
+  const option = selectedCompletion(view.state);
+  if (!option || option.type !== "keyword" || !option.label.startsWith("#")) return false;
+  const head = view.state.selection.main.head;
+  const line = view.state.doc.lineAt(head);
+  const match = tagContext(view.state.sliceDoc(line.from, head));
+  if (!match) return false;
+  const from = line.from + match.from;
+  const segment = tagSegment(view.state.sliceDoc(from, head), option.label);
+  if (segment === null) {
+    acceptCompletion(view);
+    return true;
+  }
+  view.dispatch({
+    changes: { from, to: line.from + tagEnd(line.text, head - line.from), insert: segment },
+    selection: { anchor: from + segment.length },
+    userEvent: "input.type",
+  });
+  return true;
+}
+
 /// La sorgente CM6 dei tag; come `wikilinkSource`, esportata per i test.
 export function tagSource(listTags: CompletionSources["listTags"]): CompletionSource {
   return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
@@ -327,16 +377,9 @@ export function tagSource(listTags: CompletionSources["listTags"]): CompletionSo
     const match = tagContext(ctx.state.sliceDoc(line.from, ctx.pos));
     if (!match) return null;
     const tags = await listTags();
-    let to = ctx.pos - line.from;
-    while (to < line.text.length) {
-      const cp = line.text.codePointAt(to)!;
-      const character = String.fromCodePoint(cp);
-      if (!TAG_CHARACTER.test(character)) break;
-      to += character.length;
-    }
     return {
       from: line.from + match.from,
-      to: line.from + to,
+      to: line.from + tagEnd(line.text, ctx.pos - line.from),
       options: tagCompletions(tags),
       // La stessa classe di `tagInCorso`, presa da lì: un `validFor` più
       // stretto chiuderebbe il popup su un carattere che il tag accetta.
@@ -438,7 +481,7 @@ export function diagramTemplateSource(today: () => Date = () => new Date()): Com
 /// popup compare). `override` scavalca le sorgenti di default del linguaggio:
 /// qui completiamo note, tag e modelli di diagramma, non parole qualsiasi.
 export function markdownCompletions(sources: CompletionSources): Extension {
-  return autocompletion({
+  return [Prec.highest(keymap.of([{ key: "Tab", run: completeTagSegment }])), autocompletion({
     override: [
       wikilinkSource(sources.searchNotes),
       ...(sources.headingsOf ? [headingSource(sources.headingsOf)] : []),
@@ -447,5 +490,5 @@ export function markdownCompletions(sources: CompletionSources): Extension {
       diagramTemplateSource(),
     ],
     activateOnTyping: true,
-  });
+  })];
 }

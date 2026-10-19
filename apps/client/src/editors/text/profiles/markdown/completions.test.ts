@@ -11,6 +11,7 @@ import {
   tagCompletions,
   tagContext,
   tagSource,
+  tagSegment,
   vaultHeadingContext,
   vaultHeadingSource,
   wikilinkContext,
@@ -256,6 +257,21 @@ describe("tagSource (headless)", () => {
   it("su un heading risponde null", async () => {
     const doc = "# Heading";
     expect(await tagSource(listTags)(ctxAt(doc, doc.length))).toBeNull();
+  });
+});
+
+describe("tagSegment", () => {
+  it("completa fino alla prossima barra, poi il resto intero", () => {
+    expect(tagSegment("#pro", "#progetti/fub/alfa")).toBe("#progetti/");
+    expect(tagSegment("#progetti", "#progetti/fub")).toBe("#progetti/");
+    expect(tagSegment("#progetti/", "#progetti/fub/alfa")).toBe("#progetti/fub/");
+    expect(tagSegment("#progetti/", "#progetti/fub")).toBeNull();
+    expect(tagSegment("#ru", "#rust")).toBeNull();
+  });
+
+  it("le maiuscole non contano, e un'etichetta trovata altrove parte dal primo segmento", () => {
+    expect(tagSegment("#PRO", "#progetti/fub")).toBe("#progetti/");
+    expect(tagSegment("#fub", "#progetti/fub")).toBe("#progetti/");
   });
 });
 
