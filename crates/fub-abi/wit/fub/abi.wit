@@ -2081,6 +2081,11 @@ interface index {
         /// si filtra né si ordina come una data. Chi ha dichiarato il formato
         /// non vede qui ciò che quel formato legge.
         unrecognized-dates,
+        /// Note senza link verso il vault: un URL esce, un `[[#Sezione]]` resta
+        /// nella nota, un link rotto invece conta.
+        dead-ends,
+        /// Allegati che nessun documento nomina, né come link né come embed.
+        unused-attachments,
     }
 
     record index-query-backlinks {

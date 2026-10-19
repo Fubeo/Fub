@@ -559,6 +559,8 @@ fn to_health_check(c: &fub_abi::traits::HealthCheck) -> w_index::HealthCheck {
         R::OrphanDocuments => w_index::HealthCheck::OrphanDocuments,
         R::CollidingPaths => w_index::HealthCheck::CollidingPaths,
         R::UnrecognizedDates => w_index::HealthCheck::UnrecognizedDates,
+        R::DeadEnds => w_index::HealthCheck::DeadEnds,
+        R::UnusedAttachments => w_index::HealthCheck::UnusedAttachments,
     }
 }
 
@@ -740,6 +742,8 @@ fn from_health_check(c: w_index::HealthCheck) -> fub_abi::traits::HealthCheck {
         w_index::HealthCheck::OrphanDocuments => R::OrphanDocuments,
         w_index::HealthCheck::CollidingPaths => R::CollidingPaths,
         w_index::HealthCheck::UnrecognizedDates => R::UnrecognizedDates,
+        w_index::HealthCheck::DeadEnds => R::DeadEnds,
+        w_index::HealthCheck::UnusedAttachments => R::UnusedAttachments,
     }
 }
 

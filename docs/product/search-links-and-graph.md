@@ -196,6 +196,13 @@ gesti — ripristino, testo intero, copia —; la versione attuale non offre il
 ripristino. Ripristinare chiede conferma al posto del bottone, perché riscrive
 la nota; il testo di prima resta nella cronologia.
 
+I controlli di salute del vault (`vault_health` in `query_index`, `--health`
+nella CLI) trovano link rotti, note orfane, path che collidono, date non
+riconosciute, vicoli ciechi e allegati non usati. Un vicolo cieco è una nota
+senza link verso il vault: un URL o un `[[#Sezione]]` non portano altrove, un
+link rotto invece conta come uscita. Un allegato non usato è un file di specie
+allegato che nessun link o embed raggiunge, risolto come per i link rotti.
+
 Un file non letto o non parsato non può produrre link affidabili; l'apertura lo
 dichiara invece di inventare un grafo completo.
 

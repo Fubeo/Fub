@@ -1482,9 +1482,12 @@ pub fn diagnostics(
             "orphans" | "orphan" => fub_abi::HealthCheck::OrphanDocuments,
             "colliding" | "collisions" => fub_abi::HealthCheck::CollidingPaths,
             "dates" => fub_abi::HealthCheck::UnrecognizedDates,
+            "dead-ends" | "deadends" => fub_abi::HealthCheck::DeadEnds,
+            "unused-attachments" | "unused" => fub_abi::HealthCheck::UnusedAttachments,
             other => {
                 return Err(Failure::bad_args(format!(
-                    "--health `{other}` (broken-links|orphans|colliding|dates)"
+                    "--health `{other}` \
+                     (broken-links|orphans|colliding|dates|dead-ends|unused-attachments)"
                 )))
             }
         };

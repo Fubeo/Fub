@@ -89,6 +89,8 @@ export type HealthCheck =
   | "orphan_documents"
   | "colliding_paths"
   | "unrecognized_dates"
+  | "dead_ends"
+  | "unused_attachments"
 ;
 
 export type HourCycle = "h23" | "h12";

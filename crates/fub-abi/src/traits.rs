@@ -2705,6 +2705,14 @@ pub enum HealthCheck {
     /// ciò che due dichiarazioni leggerebbero in due modi è esattamente ciò su
     /// cui vale la pena chiedere a chi possiede il vault.
     UnrecognizedDates,
+    /// Note da cui non si va da nessuna parte: nessun link verso il vault. Un
+    /// URL esce dal vault e un `[[#Sezione]]` resta nella nota; un link rotto
+    /// invece conta, perché chi l'ha scritto voleva andare da qualche parte.
+    DeadEnds,
+    /// Allegati che nessun documento nomina, né come link né come embed. Un
+    /// file che nessuno sa cosa sia ([`EntryKind::Unknown`]) non è un
+    /// allegato e non c'entra.
+    UnusedAttachments,
 }
 
 impl HealthCheck {
@@ -2716,11 +2724,13 @@ impl HealthCheck {
     /// verde: il rapporto continua a essere un array, ha solo una riga in meno,
     /// e nessuno confronta quell'array con l'enum. È la stessa forma di
     /// [`ViewSurface::ALL`], e ha lo stesso presidio dei discriminanti.
-    pub const ALL: [HealthCheck; 4] = [
+    pub const ALL: [HealthCheck; 6] = [
         HealthCheck::BrokenLinks,
         HealthCheck::OrphanDocuments,
         HealthCheck::CollidingPaths,
         HealthCheck::UnrecognizedDates,
+        HealthCheck::DeadEnds,
+        HealthCheck::UnusedAttachments,
     ];
 }
 
@@ -4865,6 +4875,8 @@ mod tests {
             HealthCheck::OrphanDocuments => 1,
             HealthCheck::CollidingPaths => 2,
             HealthCheck::UnrecognizedDates => 3,
+            HealthCheck::DeadEnds => 4,
+            HealthCheck::UnusedAttachments => 5,
         }
     }
 
@@ -4872,7 +4884,7 @@ mod tests {
     fn the_discriminants_cover_every_check_of_health() {
         assert_eq!(
             HealthCheck::ALL.len(),
-            place_of_the_check(HealthCheck::UnrecognizedDates) + 1,
+            place_of_the_check(HealthCheck::UnusedAttachments) + 1,
             "`HealthCheck::ALL` è più corto dell'enum: c'è un controllo che il \
              compilatore conosce e che l'elenco non nomina, quindi il rapporto \
              diagnostico non lo eseguirà mai."
