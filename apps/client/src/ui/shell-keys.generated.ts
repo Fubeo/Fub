@@ -36,6 +36,7 @@ export const SHELL_KEYS = {
   "shell.doc.source.side": null,
   "shell.doc.source.close": null,
   "shell.doc.export": null,
+  "shell.doc.copy_anchor_link": null,
   "shell.live.start": null,
   "shell.live.show": null,
   "shell.live.stop": null,

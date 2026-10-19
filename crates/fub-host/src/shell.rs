@@ -105,6 +105,9 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // lavoro e non mentre si lavora, e il comando c'è soltanto dove la
     // superficie dichiara un export.
     ("shell.doc.export", None),
+    // Il link al titolo o al paragrafo sotto il cursore. **Senza accordo**:
+    // si usa ogni tanto, e lo si cerca dalla palette.
+    ("shell.doc.copy_anchor_link", None),
     // La sessione live di un disegno (ADR 0205): avviarla col QR, riaprirne
     // il pannello, terminarla. **Senza accordo**: si avvia una volta per
     // lezione o riunione, e terminarla con un tasto premuto per sbaglio

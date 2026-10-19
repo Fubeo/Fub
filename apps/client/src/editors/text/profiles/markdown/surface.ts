@@ -26,6 +26,7 @@ import type {
   SurfaceLocation,
   SurfaceMode,
   SurfaceMountContext,
+  SurfaceAnchor,
   SurfacePoint,
   SurfaceReference,
 } from "../../../core/registry";
@@ -33,6 +34,7 @@ import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine, type CursorContext } from "../../engine";
 import type { CompletionSources } from "./completions";
 import { createMarkdownProfile } from "./profile";
+import { anchorAtCursor, writeAnchor } from "./anchor-link";
 import type { TableGridActions } from "./table-grid";
 import { MARKDOWN_ACTIONS, markdownActionState } from "./actions";
 import {
@@ -93,6 +95,7 @@ export interface MarkdownSurface extends BufferedSurface {
   setTheme(theme: Theme): void;
   setSyntaxForms(forms: readonly SyntaxForm[]): void;
   insertReferences(references: readonly SurfaceReference[], at?: SurfacePoint): boolean;
+  anchorHere(): SurfaceAnchor | null;
   mountPresentation(host: HTMLElement): () => void;
   readonly editorActions: SurfaceEditorActions;
   undo(): boolean;
@@ -549,6 +552,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     },
     setTheme: (theme) => engine.setTheme(theme),
     editorActions,
+    anchorHere: () => {
+      if (life.closed) return null;
+      const found = engine.readState((state) => anchorAtCursor(state));
+      if (!found) return null;
+      // L'id nuovo si scrive solo dove si scrive: in Lettura o in sola lettura
+      // un blocco senza id non ha ancora un link.
+      if (found.insert && (!editable() || !engine.runCommand(writeAnchor(found)))) return null;
+      return found.anchor;
+    },
     destroy: () => {
       actionListeners.clear();
       closeSlashPalette(parent);

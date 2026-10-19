@@ -535,6 +535,26 @@ describe("navigazione accessibile dell'esploratore", () => {
   });
 });
 
+describe("copia il link a questo punto", () => {
+  it("dà al paragrafo un id e copia [[Nota#^id]]", async () => {
+    await start(VAULT);
+    row("Benvenuto").click();
+    await waitFor("la nota si apre", () => textToVideo().includes("primo documento"));
+    const copied: string[] = [];
+    const { declareClipboard } = await import("./platform/clipboard");
+    const undeclare = declareClipboard(async (text) => { copied.push(text); });
+    const registry = await import("./ui/commands");
+    const command = registry.allCommands().find((entry) => entry.id === "shell.doc.copy_anchor_link");
+    expect(command?.binding).toBeNull();
+    await command!.run!();
+    await waitFor("il link è negli appunti", () => copied.length === 1);
+    const id = /^\[\[Benvenuto#\^([a-z0-9]{6})\]\]$/.exec(copied[0]!)?.[1];
+    expect(id).toBeDefined();
+    expect(textToVideo()).toContain(`Il primo documento di questo vault. ^${id}`);
+    undeclare();
+  });
+});
+
 describe("comprimi ed espandi tutto dall'albero", () => {
   const folderItem = (path: string) =>
     document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"]`);

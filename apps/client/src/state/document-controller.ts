@@ -39,6 +39,7 @@ import {
   type SurfaceLocation,
   type SurfaceMode,
   type SurfaceOverride,
+  type SurfaceAnchor,
   type SurfaceReference,
   type SurfaceRequest,
 } from "../editors/core/registry";
@@ -432,6 +433,36 @@ async function droppedFiles(data: DataTransfer): Promise<readonly File[]> {
   }
   for (const entry of entries) await visit(entry);
   return files;
+}
+
+/// La superficie del riquadro col fuoco che sa dire il punto sotto il cursore,
+/// col documento che mostra.
+function focusedAnchorSurface(): { doc: string; anchorHere: () => SurfaceAnchor | null } | null {
+  const r = panes.get(layout.focus);
+  if (r?.shown?.k !== "doc" || !r.surface?.anchorHere) return null;
+  const surface = r.surface;
+  return { doc: r.shown.doc, anchorHere: () => surface.anchorHere?.() ?? null };
+}
+
+/// «Copia il link a questo punto»: `[[Nota#Titolo]]` o `[[Nota#^id]]` negli
+/// appunti. Il nome è il più corto che il vault risolve, come per una nota
+/// trascinata; a un blocco senza id la superficie ne scrive uno.
+async function copyAnchorLink(): Promise<void> {
+  const focused = focusedAnchorSurface();
+  if (!focused) return;
+  const anchor = focused.anchorHere();
+  if (!anchor) {
+    notify(t("document.anchor_none"), "info");
+    return;
+  }
+  // I caratteri che un wikilink usa per sé non possono stare in un titolo
+  // citato: chiuderebbero il link o ne aprirebbero un altro campo.
+  const fragment = anchor.kind === "block" ? `^${anchor.id}` : anchor.text.replace(/[[\]|#^]/g, " ").replace(/\s+/g, " ").trim();
+  const link = `[[${await wikiReference(focused.doc)}#${fragment}]]`;
+  await writeClipboardText(link).then(
+    () => notify(t("document.anchor_copied", { link }), "info"),
+    () => notify(t("tabmenu.copy_failed"), "guasto"),
+  );
 }
 
 /// Il riferimento più corto che porta davvero alla nota: il nome, poi il nome
@@ -908,6 +939,14 @@ function registerCommands(): void {
     layer: "document",
     available: () => offeredExports(panes.get(layout.focus)).length > 0,
     run: () => void chooseExport(layout.focus),
+  });
+  registerShellCommand({
+    id: "shell.doc.copy_anchor_link",
+    title: "commands.doc.copy_anchor_link",
+    description: "commands.doc.copy_anchor_link.desc",
+    layer: "document",
+    available: () => focusedAnchorSurface() !== null,
+    run: () => void copyAnchorLink(),
   });
   registerShellCommand({
     id: "shell.doc.save",

@@ -121,6 +121,11 @@ un wikilink porta alla nota, alla sezione o al blocco che nomina, come
 Ctrl/Cmd+click; un indirizzo esterno si apre solo se la policy di Lettura lo
 permette. Dentro il codice il tasto non apre niente.
 
+«Copia il link a questo punto», dalla palette, mette negli appunti il link al
+titolo o al paragrafo dove sta il cursore: `[[Nota#Titolo]]`, o
+`[[Nota#^id]]` per un paragrafo, che riceve un id nuovo in coda se non ne ha
+uno. In Lettura si copia solo un id già scritto.
+
 Un merge che cestina una sorgente citata da altre note porta i loro link sulla
 destinazione, con alias e frammenti intatti. Il piano lo calcola il kernel come
 per una rinomina (`VaultRead::link_retarget_edits`), il testo lo scrive il
