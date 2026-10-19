@@ -795,6 +795,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-format-base/src/formula.rs::title_case",
+            (
+                Family::ContextualCase,
+                "implementa `title` del linguaggio formule: maiuscola a inizio parola e minuscola \
+                 nel resto, con la piegatura full-Unicode di `lower` e `upper`. Come `call_known` \
+                 non decide un'identità ma produce una stringa per l'utente, e l'apostrofo non apre \
+                 una parola nuova perché `L'anno` non diventi `L'Anno`.",
+            ),
+        ),
+        (
             "crates/fub-format-base/src/model.rs::validate",
             (
                 Family::ContextualCase,

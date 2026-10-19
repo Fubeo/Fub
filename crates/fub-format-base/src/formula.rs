@@ -1340,18 +1340,7 @@ fn call_known(name: &str, args: Vec<BaseValue>, ctx: &RowContext) -> Result<Base
             Ok(BaseValue::Bool(regex.is_match(&text)))
         }
         "escapeHTML" | "escape_html" => {
-            let text = string_arg(&args[0], name)?;
-            let mut out = String::with_capacity(text.len());
-            for c in text.chars() {
-                match c {
-                    '&' => out.push_str("&amp;"),
-                    '<' => out.push_str("&lt;"),
-                    '>' => out.push_str("&gt;"),
-                    '"' => out.push_str("&quot;"),
-                    '\'' => out.push_str("&#39;"),
-                    other => out.push(other),
-                }
-            }
+            let out = fub_abi::html::escape(&string_arg(&args[0], name)?);
             if out.len() > MAX_TEXT_BYTES {
                 return Err(EvalError::Value("stringa oltre il limite".to_string()));
             }
