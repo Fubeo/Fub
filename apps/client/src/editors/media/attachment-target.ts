@@ -9,6 +9,7 @@
 // Gemello Rust: `sanitize_file_name`, `attachment_candidate`,
 // `split_file_name`, `relative_url` in `crates/fub-host/src/resources.rs`.
 import type { Lifetime } from "../../ui/lifetime";
+import { t } from "../../i18n/strings";
 
 export const DEFAULT_ATTACHMENT_FOLDER = "attachments";
 
@@ -18,10 +19,10 @@ export const MAX_FILE_NAME_BYTES = 255;
 export function sanitizeFileName(name: string): string {
   const base = name.replace(/\\/g, "/").split("/").pop()?.trim() ?? "";
   if (!base || base === "." || base === ".." || /[\u0000-\u001f\u007f]/.test(base)) {
-    throw new Error(`\`${name}\` is not a usable file name`);
+    throw new Error(t("errors.attachment.bad_name", { name }));
   }
   if (new TextEncoder().encode(base).byteLength > MAX_FILE_NAME_BYTES) {
-    throw new Error(`\`${name}\` exceeds the ${MAX_FILE_NAME_BYTES}-byte file name limit`);
+    throw new Error(t("errors.attachment.long_name", { name, limit: String(MAX_FILE_NAME_BYTES) }));
   }
   return base;
 }
@@ -85,7 +86,7 @@ export function attachmentTarget(folder: string, fileName: string): string {
   const trimmed = folder.trim();
   const clean = trimmed.replace(/\/+$/g, "");
   if (trimmed.startsWith("/") || !clean || clean.split("/").some((part) => !part || part === "." || part === ".." || part.includes("\\") || /[\u0000-\u001f\u007f]/.test(part))) {
-    throw new Error(`\`${folder}\` is not a usable attachment folder`);
+    throw new Error(t("errors.attachment.bad_folder", { folder }));
   }
   return `${clean}/${sanitizeFileName(fileName)}`;
 }
@@ -111,7 +112,7 @@ export async function depositAttachment(
   const name = sanitizeFileName(originalName);
   const { stem, ext } = splitFileName(name);
   if (bytes.byteLength > 64 * 1024 * 1024) {
-    throw new Error(`attachment ${name} exceeds the 67108864-byte inline deposit limit`);
+    throw new Error(t("errors.attachment.too_large", { name }));
   }
   for (let n = 0; n <= 10_000; n++) {
     const candidate = attachmentTarget(deposit.folder, attachmentCandidate("", stem, ext, n));
@@ -124,7 +125,7 @@ export async function depositAttachment(
       }
     }
   }
-  throw new Error(`no free attachment name remains for ${name}`);
+  throw new Error(t("errors.attachment.no_name", { name }));
 }
 
 /** Paste/drop files are deposited only after the user's actual gesture. */
@@ -135,7 +136,7 @@ export async function depositFiles(
 ): Promise<void> {
   for (const file of Array.from(files)) {
     if (file.size > 64 * 1024 * 1024) {
-      throw new Error(`attachment ${file.name} exceeds the 67108864-byte inline deposit limit`);
+      throw new Error(t("errors.attachment.too_large", { name: file.name }));
     }
     const bytes = new Uint8Array(await file.arrayBuffer());
     const { link } = await depositAttachment(deposit, file.name, bytes);
@@ -181,11 +182,11 @@ export async function saveRemoteAttachment(
   save: (url: string) => Promise<AttachmentReceipt>,
   fromDocument: string,
 ): Promise<string> {
-  if (!consent) throw new Error("saving remote content requires an explicit user gesture");
+  if (!consent) throw new Error(t("errors.attachment.needs_gesture"));
   const parsed = new URL(url);
   if (parsed.protocol !== "https:" || parsed.port || parsed.username || parsed.password ||
       !allowedHosts.some((host) => host.toLowerCase() === parsed.hostname.toLowerCase())) {
-    throw new Error("remote attachment origin is not allowlisted");
+    throw new Error(t("errors.attachment.origin"));
   }
   const receipt = await save(parsed.href);
   return relativeUrl(fromDocument, receipt.id);

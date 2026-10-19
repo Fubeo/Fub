@@ -5,6 +5,7 @@ import type { RenderedDocument } from "../../host/contract";
 import { setSanitizedHtml } from "../../ui/sanitize";
 import { openLifetime } from "../../ui/lifetime";
 import { writeClipboardText } from "../../platform/clipboard";
+import { t } from "../../i18n/strings";
 
 export interface PrintOptions {
   title: string;
@@ -176,7 +177,7 @@ const PRINT_CSS = `
  */
 export async function printRendered(options: PrintOptions): Promise<() => void> {
   if (typeof window.print !== "function") {
-    throw new Error("Printing is unavailable in this environment");
+    throw new Error(t("errors.print.unavailable"));
   }
   const life = openLifetime();
   const host = document.createElement("div");
@@ -218,7 +219,7 @@ export async function printRendered(options: PrintOptions): Promise<() => void> 
 
 /** Copia testo negli appunti, con errore che dice cosa e' fallito. */
 export async function copyRenderedText(text: string): Promise<void> {
-  if (!text) throw new Error("nothing to copy: the rendered text is empty");
+  if (!text) throw new Error(t("errors.print.nothing_to_copy"));
   try {
     await writeClipboardText(text);
   } catch (error) {

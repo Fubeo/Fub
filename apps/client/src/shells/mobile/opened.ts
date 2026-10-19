@@ -75,25 +75,25 @@ export function mountMobileOpenedActions(
     void (async () => {
       // The Rust classifier owns the URI grammar; never trust the event bus.
       const validated = await bridge.classifyOpenedUrl(incoming.raw);
-      if (validated.kind !== incoming.kind) throw new Error("URI esterno cambiato");
+      if (validated.kind !== incoming.kind) throw new Error(t("errors.uri.changed"));
       const url = new URL(validated.raw);
       const action = validated.kind === "fub" ? url.hostname : validated.kind;
       if (validated.kind === "fub" && action !== "capture" && url.searchParams.has("vault")) {
-        throw new Error("Selezione di un altro vault non disponibile: aprilo esplicitamente");
+        throw new Error(t("errors.uri.other_vault"));
       }
       switch (action) {
         case "open": {
           const doc = url.searchParams.get("note");
           if (["heading", "block", "split", "window"].some((key) => url.searchParams.has(key))) {
-            throw new Error("Ancora, split e finestra esterni non disponibili");
+            throw new Error(t("errors.uri.no_layout"));
           }
-          if (!doc) throw new Error("Nota non indicata");
+          if (!doc) throw new Error(t("errors.uri.no_note"));
           await openMobileDoc(doc);
           break;
         }
         case "new": {
           if (["folder", "title", "template"].some((key) => url.searchParams.has(key))) {
-            throw new Error("Cartella, titolo e template esterni non disponibili in questa azione");
+            throw new Error(t("errors.uri.no_create_options"));
           }
           const doc = await createNote(url.searchParams.get("name") ?? undefined);
           if (doc) await openMobileDoc(doc);
@@ -101,7 +101,7 @@ export function mountMobileOpenedActions(
         }
         case "daily": {
           if (url.searchParams.has("date")) {
-            throw new Error("Data giornaliera esterna non disponibile in questa azione");
+            throw new Error(t("errors.uri.no_daily_date"));
           }
           const outcome = await api.invokeCommand("note.daily", {});
           if (outcome.effect.kind === "navigate") await openMobileDoc(outcome.effect.doc);
@@ -109,7 +109,7 @@ export function mountMobileOpenedActions(
         }
         case "search":
           if (url.searchParams.has("tag") || url.searchParams.has("folder")) {
-            throw new Error("Filtri di ricerca esterni non disponibili");
+            throw new Error(t("errors.uri.no_search_filters"));
           }
           openMobileSearch();
           searchFor(url.searchParams.get("q") ?? "");
@@ -123,7 +123,7 @@ export function mountMobileOpenedActions(
         case "capture":
         case "http_share": {
           if (url.searchParams.has("success_callback") || url.searchParams.has("error_callback")) {
-            throw new Error("Callback esterne negate per impostazione predefinita");
+            throw new Error(t("errors.uri.no_callbacks"));
           }
           const draft: CaptureDraft = {
             title: title.value,
@@ -141,7 +141,7 @@ export function mountMobileOpenedActions(
         }
         case "tree_grant": {
           if (!ports.requestTreeGrant || !ports.grantStore) {
-            throw new Error("Selettore cartella nativo non disponibile");
+            throw new Error(t("errors.uri.no_folder_picker"));
           }
           // Never turn a URL parameter into a grant. Only the native picker
           // can prove an OS permission that survives a process restart.
@@ -152,7 +152,7 @@ export function mountMobileOpenedActions(
           break;
         }
         default:
-          throw new Error(`Azione non supportata: ${action}`);
+          throw new Error(t("errors.uri.unsupported", { action }));
       }
       queue.shift();
     })().catch((error: unknown) => notify(errorText(error), "guasto"))

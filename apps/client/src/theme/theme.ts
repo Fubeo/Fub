@@ -24,6 +24,7 @@ import { setMotionPreference } from "../moto/level";
 import { setFrameRatePreference } from "./frame-rate";
 import { setDiagramStylePreference } from "./diagram-style";
 import { applyThemeOptions, resolveThemeOptions, type ThemeOption } from "./options";
+import { t } from "../i18n/strings";
 
 export type Theme = "light" | "dark";
 export type Density = "compact" | "comfortable" | "relaxed";
@@ -495,7 +496,7 @@ export async function previewTheme(id: string, light: Theme): Promise<void> {
   if (id !== SERIES_THEME_ID) {
     const info = installedThemes.find((theme) => theme.manifest.id === id);
     if (!info || !info.manifest.lights.includes(light)) {
-      throw new Error("tema non disponibile");
+      throw new Error(t("errors.theme.unavailable"));
     }
   }
   const generation = ++selectionGeneration;
@@ -505,7 +506,7 @@ export async function previewTheme(id: string, light: Theme): Promise<void> {
   if (!mountedVariant.startsWith(id + ":" + light + ":")) {
     previewSelection = null;
     await apply();
-    throw new Error("anteprima tema non disponibile");
+    throw new Error(t("errors.theme.preview_unavailable"));
   }
 }
 
@@ -515,7 +516,7 @@ export async function selectTheme(id: string, light: Theme | ""): Promise<void> 
   if (id !== SERIES_THEME_ID) {
     const info = installedThemes.find((theme) => theme.manifest.id === id);
     if (!info || !info.manifest.lights.includes(light as Theme)) {
-      throw new Error("tema non disponibile");
+      throw new Error(t("errors.theme.unavailable"));
     }
   }
   const generation = ++selectionGeneration;

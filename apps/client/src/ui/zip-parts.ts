@@ -13,6 +13,7 @@
 // che portano dimensioni e CRC della directory. Una voce che da sola supera un
 // tetto non entra in nessuna parte: torna in `oversized`, e chi chiama lo
 // dice, invece di perderla in silenzio.
+import { t } from "../i18n/strings";
 
 /// Una voce della directory centrale.
 export interface ZipEntry {
@@ -71,7 +72,7 @@ async function bytesOf(blob: Blob, start: number, end: number): Promise<Uint8Arr
 
 function u64(view: DataView, at: number): number {
   const value = view.getUint32(at, true) + view.getUint32(at + 4, true) * 2 ** 32;
-  if (!Number.isSafeInteger(value)) throw new Error("ZIP: un offset supera i 2^53 byte");
+  if (!Number.isSafeInteger(value)) throw new Error(t("errors.zip.offset"));
   return value;
 }
 
@@ -89,7 +90,7 @@ function nameOf(bytes: Uint8Array, flags: number): string {
 /// leggibile: un archivio su più dischi, una directory che esce dal file.
 export async function readDirectory(blob: Blob): Promise<ZipEntry[]> {
   const size = blob.size;
-  if (size < 22) throw new Error("ZIP: troppo corto");
+  if (size < 22) throw new Error(t("errors.zip.short"));
   const tailStart = Math.max(0, size - (65535 + 22));
   const tail = await bytesOf(blob, tailStart, size);
   const tailView = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
@@ -100,9 +101,9 @@ export async function readDirectory(blob: Blob): Promise<ZipEntry[]> {
       break;
     }
   }
-  if (eocd < 0) throw new Error("ZIP: fine della directory non trovata");
+  if (eocd < 0) throw new Error(t("errors.zip.no_end"));
   if (tailView.getUint16(eocd + 4, true) !== 0 || tailView.getUint16(eocd + 6, true) !== 0) {
-    throw new Error("ZIP: un archivio su più dischi non si legge");
+    throw new Error(t("errors.zip.multidisk"));
   }
   let count = tailView.getUint16(eocd + 10, true);
   let directorySize = tailView.getUint32(eocd + 12, true);
@@ -110,26 +111,26 @@ export async function readDirectory(blob: Blob): Promise<ZipEntry[]> {
   if (count === 0xffff || directorySize === FULL32 || directoryStart === FULL32) {
     // ZIP64: il localizzatore sta subito prima della fine della directory.
     const locatorAt = tailStart + eocd - 20;
-    if (locatorAt < 0) throw new Error("ZIP: ZIP64 senza localizzatore");
+    if (locatorAt < 0) throw new Error(t("errors.zip.no_locator"));
     const locator = await bytesOf(blob, locatorAt, locatorAt + 20);
     const locatorView = new DataView(locator.buffer);
-    if (locatorView.getUint32(0, true) !== ZIP64_LOCATOR) throw new Error("ZIP: ZIP64 senza localizzatore");
+    if (locatorView.getUint32(0, true) !== ZIP64_LOCATOR) throw new Error(t("errors.zip.no_locator"));
     const recordAt = u64(locatorView, 8);
     const record = await bytesOf(blob, recordAt, recordAt + 56);
     const recordView = new DataView(record.buffer);
-    if (record.length < 56 || recordView.getUint32(0, true) !== ZIP64_EOCD) throw new Error("ZIP: record ZIP64 illeggibile");
+    if (record.length < 56 || recordView.getUint32(0, true) !== ZIP64_EOCD) throw new Error(t("errors.zip.bad_zip64"));
     count = u64(recordView, 32);
     directorySize = u64(recordView, 40);
     directoryStart = u64(recordView, 48);
   }
-  if (directoryStart + directorySize > size) throw new Error("ZIP: la directory esce dal file");
-  if (directorySize > MAX_DIRECTORY_BYTES) throw new Error("ZIP: directory centrale troppo grande");
+  if (directoryStart + directorySize > size) throw new Error(t("errors.zip.directory_outside"));
+  if (directorySize > MAX_DIRECTORY_BYTES) throw new Error(t("errors.zip.directory_large"));
   const directory = await bytesOf(blob, directoryStart, directoryStart + directorySize);
   const view = new DataView(directory.buffer);
   const found: Omit<ZipEntry, "end">[] = [];
   let at = 0;
   for (let index = 0; index < count; index++) {
-    if (at + 46 > directory.length || view.getUint32(at, true) !== CENTRAL) throw new Error("ZIP: voce della directory illeggibile");
+    if (at + 46 > directory.length || view.getUint32(at, true) !== CENTRAL) throw new Error(t("errors.zip.bad_entry"));
     const flags = view.getUint16(at + 8, true);
     const nameLength = view.getUint16(at + 28, true);
     const extraLength = view.getUint16(at + 30, true);
@@ -140,7 +141,7 @@ export async function readDirectory(blob: Blob): Promise<ZipEntry[]> {
     const nameStart = at + 46;
     const extraStart = nameStart + nameLength;
     const next = extraStart + extraLength + commentLength;
-    if (next > directory.length) throw new Error("ZIP: voce della directory troncata");
+    if (next > directory.length) throw new Error(t("errors.zip.truncated_entry"));
     // I campi pieni stanno nel campo esteso ZIP64, in quest'ordine.
     for (let extra = extraStart; extra + 4 <= extraStart + extraLength; ) {
       const id = view.getUint16(extra, true);
@@ -178,7 +179,7 @@ export async function readDirectory(blob: Blob): Promise<ZipEntry[]> {
   const ordered = [...found].sort((a, b) => a.offset - b.offset);
   return ordered.map((entry, index) => {
     const end = index + 1 < ordered.length ? ordered[index + 1]!.offset : directoryStart;
-    if (end < entry.offset + 30 + entry.compressed) throw new Error(`ZIP: la voce «${entry.name}» si sovrappone alla seguente`);
+    if (end < entry.offset + 30 + entry.compressed) throw new Error(t("errors.zip.overlap", { name: entry.name }));
     return { ...entry, end };
   });
 }
@@ -245,10 +246,10 @@ export async function buildPart(blob: Blob, part: readonly ZipEntry[]): Promise<
       spanView = new DataView(span.buffer);
     }
     const local = entry.offset - first;
-    if (local + 30 > span.length || spanView.getUint32(local, true) !== LOCAL) throw new Error(`ZIP: intestazione locale di «${entry.name}» illeggibile`);
+    if (local + 30 > span.length || spanView.getUint32(local, true) !== LOCAL) throw new Error(t("errors.zip.bad_local", { name: entry.name }));
     const dataStart = local + 30 + spanView.getUint16(local + 26, true) + spanView.getUint16(local + 28, true);
     const dataEnd = dataStart + entry.compressed;
-    if (dataEnd > span.length) throw new Error(`ZIP: i dati di «${entry.name}» escono dall'archivio`);
+    if (dataEnd > span.length) throw new Error(t("errors.zip.data_outside", { name: entry.name }));
     offsets.push(at);
     view.setUint32(at, LOCAL, true);
     view.setUint16(at + 4, 20, true);

@@ -3,6 +3,7 @@
 // se la scelta shared ha perso il permesso OS. Il mount resta di SystemStorage.
 
 import type { MobileBridge, MobileMountMode, MobilePermissionState, MobileStorageInfo, MobileStoragePreference, MobileTreeGrant } from "./bridge";
+import { t } from "../../i18n/strings";
 
 export type MobileStorageChoice = "private" | "shared";
 
@@ -105,7 +106,7 @@ export function mobileGrantStore(bridge: MobileBridge): GrantStore {
     read: bridge.storagePreference,
     update: async (patch) => {
       const previous = await bridge.storagePreference();
-      if (previous.version !== 1) throw new Error("Schema storage mobile non supportato");
+      if (previous.version !== 1) throw new Error(t("errors.mobile.storage_schema"));
       await bridge.setStoragePreference({ ...previous, ...patch });
     },
   };
@@ -115,7 +116,7 @@ export function mobileGrantStore(bridge: MobileBridge): GrantStore {
 export async function loadStorageChoice(store: GrantStore): Promise<MobileStorageChoice | null> {
   const { choice } = await store.read();
   if (choice !== null && choice !== "private" && choice !== "shared") {
-    throw new Error("Scelta storage mobile non riconosciuta");
+    throw new Error(t("errors.mobile.storage_choice"));
   }
   return choice;
 }

@@ -4,6 +4,7 @@ import { operationFromText, transformPair, tryApplyOperation, validateOperation,
 import { documentSessions, type DocumentSession, type DocumentSurfaceDescriptor } from "./document-session";
 import { on, state } from "./store";
 import { mountedTheme, type MirroredTheme } from "../theme/loader";
+import { t } from "../i18n/strings";
 export type { MirroredTheme } from "../theme/loader";
 
 const normalized = (text: string): string => text.replace(/\r\n?/g, "\n");
@@ -162,7 +163,7 @@ export async function attachRemoteSurface(
   vault: string,
   profileFor: (source: DocumentSurfaceDescriptor) => string | null,
 ): Promise<{ request: DocumentWindowRequest; handle: RemoteSurfaceHandle }> {
-  if (!doc || !vault || state.vaultRoot !== vault) throw new Error("Vault documento non disponibile");
+  if (!doc || !vault || state.vaultRoot !== vault) throw new Error(t("errors.bridge.vault_gone"));
   let releaseLease = documentSessions.retain(doc);
   let authority: Authority;
   try {
@@ -170,13 +171,13 @@ export async function attachRemoteSurface(
     const profile = profileFor(source);
     if (profile === null) throw new DocumentWindowUnsupported(doc);
     const owner = documentSessions.get(doc);
-    if (state.vaultRoot !== vault || !owner || owner.snapshot().lifecycle !== "open") throw new Error("Sessione documento cambiata");
+    if (state.vaultRoot !== vault || !owner || owner.snapshot().lifecycle !== "open") throw new Error(t("errors.bridge.session_changed"));
     const key = keyOf(vault, doc);
     const old = authorities.get(key);
     if (old && old.owner === owner) {
       authority = old;
     } else {
-      if (old?.endpoints.size) throw new Error("La sessione precedente ha ancora finestre aperte");
+      if (old?.endpoints.size) throw new Error(t("errors.bridge.windows_open"));
       const created: Authority = { owner, session: unique(), epoch: unique(), revision: 0, steps: [], endpoints: new Set(), applyingSurface: null, detach: () => {} };
       const detachSurface = documentSessions.attachSurface(doc, {
         id: `bridge:${created.session}`,
@@ -517,7 +518,7 @@ export function attachChildBridge(
   port.postMessage({ ...id, kind: "hello" } satisfies RemoteMessage);
   return {
     sendEdit: (text, operation) => {
-      if (!alive || frozen || failed || !initialized) throw new Error("Finestra non pronta alla modifica");
+      if (!alive || frozen || failed || !initialized) throw new Error(t("errors.bridge.not_ready"));
       const previous = pending.reduce<string | null>((value, intent) => {
         if (value === null) return null;
         const next = tryApplyOperation(value, intent.operation);
@@ -526,7 +527,7 @@ export function attachChildBridge(
       const changed = previous === null ? null : tryApplyOperation(previous, operation);
       if (!changed || changed.kind !== "applied" || changed.text !== normalized(text)) {
         report("Modifica locale non valida: testo conservato nella finestra");
-        throw new Error("Operazione locale incoerente");
+        throw new Error(t("errors.bridge.bad_operation"));
       }
       pending.push({ seq: ++nextSeq, operation });
       sendNext();
@@ -535,7 +536,7 @@ export function attachChildBridge(
       if (alive) port.postMessage({ ...id, kind: "navigate", target } satisfies RemoteMessage);
     },
     resolveConflict: (choice) => {
-      if (!alive || !failed || frozen) throw new Error("Conflitto non recuperabile durante il drain");
+      if (!alive || !failed || frozen) throw new Error(t("errors.bridge.drain_conflict"));
       recovery = choice === "mine" ? current() : null;
       pending.length = 0;
       outstanding = false;

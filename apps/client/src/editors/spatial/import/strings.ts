@@ -76,6 +76,7 @@ const IT = {
   "draw.import.error.name": "Il nome non va: {reason}.",
   "draw.import.error.write": "Il disegno non si scrive: {reason}",
   "draw.import.done": "Disegno importato in «{path}».",
+  "draw.import.no_name": "Non resta un nome libero per «{name}».",
 } as const;
 
 /// Una chiave del catalogo dell'importazione.
@@ -147,6 +148,7 @@ const EN: Readonly<Record<keyof typeof IT, string>> = {
   "draw.import.error.name": "The name won’t do: {reason}.",
   "draw.import.error.write": "The drawing can’t be written: {reason}",
   "draw.import.done": "Drawing imported to “{path}”.",
+  "draw.import.no_name": "No free name remains for “{name}”.",
 };
 
 /// Il catalogo dell'importazione: `t` e `plural` come quelli della shell,

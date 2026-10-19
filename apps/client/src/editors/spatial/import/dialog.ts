@@ -276,7 +276,7 @@ export function openImport(from: DrawingSource, host: Pick<PaletteHost, "onEffec
         if (!taken(error)) throw error;
       }
     }
-    throw new Error(`nessun nome libero per «${base}»`);
+    throw new Error(t("draw.import.no_name", { name: base }));
   };
 
   const create = async (): Promise<void> => {

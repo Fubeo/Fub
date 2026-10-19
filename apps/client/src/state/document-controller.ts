@@ -456,7 +456,7 @@ function insertAttachmentLinks(r: Pane, doc: string, links: readonly string[]): 
       closeDraining || documentSessions.isDeletionPending(doc)) return;
   const references = links.map((link): SurfaceReference => ({ kind: "attachment", link }));
   if (!r.surface.insertReferences(references)) {
-    throw new Error("The document editor is not available for attachment insertion");
+    throw new Error(t("errors.document.no_editor"));
   }
 }
 
@@ -612,7 +612,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       searchTag: (tag) => deps.searchTag(tag),
     }),
     canvasMedia: {
-      openExternal: async () => { throw new Error("External opening is not available in this host"); },
+      openExternal: async () => { throw new Error(t("errors.document.no_external")); },
       // Il consenso, la barra e gli errori sono del visore della finestra.
       openViewer: async (url) => { await openWebPage(url); },
     },
@@ -622,7 +622,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
         const deposit = await attachmentDeposit(documentId);
         const paths: string[] = [];
         for (const file of files) {
-          if (file.size > 64 * 1024 * 1024) throw new Error(`Attachment ${file.name} exceeds the inline deposit limit`);
+          if (file.size > 64 * 1024 * 1024) throw new Error(t("errors.attachment.too_large", { name: file.name }));
           const saved = await depositAttachment(deposit, file.name, new Uint8Array(await file.arrayBuffer()));
           paths.push(saved.receipt.id);
         }
@@ -1913,7 +1913,7 @@ export async function toggleRecorder(r: Pane, doc: string): Promise<void> {
       staging: createViewStateCrashDeposit({ get: (key) => api.viewState(key), set: api.setViewState }),
       attachment,
       onEmbed: (link) => {
-        if (r.surface !== surface) throw new Error("The document editor has closed");
+        if (r.surface !== surface) throw new Error(t("errors.document.editor_closed"));
         insertAttachmentLinks(r, doc, [link]);
       },
     });

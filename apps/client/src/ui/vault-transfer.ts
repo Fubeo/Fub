@@ -14,6 +14,7 @@
 //
 // Qui non si sa niente dell'albero né dell'host: chi chiama passa le porte.
 import { attachmentCandidate, sanitizeFileName, splitFileName } from "../editors/media/attachment-target";
+import { t } from "../i18n/strings";
 
 /// Il limite di un deposito in linea, lo stesso degli allegati.
 export const MAX_IMPORT_BYTES = 64 * 1024 * 1024;
@@ -115,7 +116,7 @@ export async function importDropped(
         const candidate = attachmentCandidate("", stem, ext, n);
         if (!taken.has(foldKey(candidate))) chosen = candidate;
       }
-      if (chosen === null) throw new Error(`no free name remains for ${name}`);
+      if (chosen === null) throw new Error(t("errors.transfer.no_name", { name }));
       taken.add(foldKey(chosen));
     } catch (error) {
       skipped.push({ name: top, reason: describe(error) });
@@ -185,7 +186,7 @@ async function writeFree(ports: ImportPorts, id: string, bytes: Uint8Array): Pro
       if (!error || typeof error !== "object" || !("kind" in error) || error.kind !== "already_exists") throw error;
     }
   }
-  throw new Error(`no free name remains for ${id}`);
+  throw new Error(t("errors.transfer.no_name", { name: id }));
 }
 
 function ancestors(id: string): string[] {

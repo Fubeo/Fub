@@ -94,7 +94,7 @@ type PayloadForQuery<K extends QueryKind> =
 
 function open<K extends keyof PayloadOf>(result: IndexResult, kind: K): PayloadOf[K] {
   if (result.kind !== kind) {
-    throw new Error(`il canale dati ha risposto ${result.kind}, atteso ${kind}`);
+    throw new Error(t("errors.query.wrong_kind", { got: result.kind, want: kind }));
   }
   // Il `kind` combacia, quindi il payload è quello del suo caso: TypeScript non
   // sa restringere un generico su un discriminante, e il cast è l'unico punto
@@ -187,14 +187,14 @@ export function searchExpression(input: string, excluded: readonly string[] = []
   const raw = input.trim();
   let expr: QueryExpr;
   if (raw.startsWith('{"any"') || raw.startsWith('{ "any"')) {
-    if (raw.length > 32_768) throw new Error("La query supera 32 KiB");
+    if (raw.length > 32_768) throw new Error(t("errors.query.too_large"));
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || !("any" in parsed)
       || !Array.isArray(parsed.any) || parsed.any.length > 32
       || !parsed.any.every((clause: unknown) =>
         !!clause && typeof clause === "object" && "all" in clause
         && Array.isArray(clause.all) && clause.all.length <= 32)) {
-      throw new Error("Espressione di ricerca non valida");
+      throw new Error(t("errors.query.invalid"));
     }
     expr = parsed as QueryExpr;
   } else {
