@@ -43,6 +43,8 @@ pub const PROPERTY_KEY_RENAME: &str = "property.key.rename";
 pub const PROPERTY_KEY_DELETE: &str = "property.key.delete";
 /// Aggiunge un alias alla nota, nella lista `aliases` del frontmatter.
 pub const NOTES_ALIAS_ADD: &str = "note.alias.add";
+/// Toglie tutto il frontmatter della nota.
+pub const NOTES_PROPERTIES_CLEAR: &str = "note.properties.clear";
 
 /// Chiavi del core: il formato di data e il registro dei tipi del vault.
 const DATE_FORMAT_KEY: &str = "properties.date-format";
@@ -94,6 +96,9 @@ const ALIASES: &str = "aliases";
 const P_ALIAS: &str = "p_alias";
 const P_ALIAS_PRESENT: &str = "p_alias_present";
 const U_ALIAS: &str = "u_alias";
+const P_CLEAR: &str = "p_clear";
+const P_CLEAR_NONE: &str = "p_clear_none";
+const U_CLEAR: &str = "u_clear";
 const FAILED: &str = "failed";
 /// La nota del giorno di una proprietà data: il percorso inverso di
 /// `note.daily`, che la data la scrive nella giornaliera. Il comando si chiama
@@ -212,6 +217,9 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(P_ALIAS, "Alias «{alias}» aggiunto a {doc}")
             .with(P_ALIAS_PRESENT, "{doc} ha già l'alias «{alias}»")
             .with(U_ALIAS, "Annulla alias «{alias}»")
+            .with(P_CLEAR, "Tolte le proprietà di {doc}")
+            .with(P_CLEAR_NONE, "{doc} non ha proprietà")
+            .with(U_CLEAR, "Rimetti le proprietà di {doc}")
             .with("property.type.set.title", "Dichiara tipo proprietà")
             .with(
                 "property.type.set.desc",
@@ -253,6 +261,19 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("note.alias.add.doc.title", "Nota")
             .with(
                 "note.alias.add.doc.desc",
+                "La nota; se manca, quella attiva.",
+            )
+            .with(
+                "note.properties.clear.title",
+                "Cancella le proprietà della nota",
+            )
+            .with(
+                "note.properties.clear.desc",
+                "Toglie tutto il frontmatter della nota, con anteprima e annullo.",
+            )
+            .with("note.properties.clear.doc.title", "Nota")
+            .with(
+                "note.properties.clear.doc.desc",
                 "La nota; se manca, quella attiva.",
             ),
         StringCatalog::new("en")
@@ -358,6 +379,9 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(P_ALIAS, "Alias «{alias}» added to {doc}")
             .with(P_ALIAS_PRESENT, "{doc} already has the alias «{alias}»")
             .with(U_ALIAS, "Undo alias «{alias}»")
+            .with(P_CLEAR, "Cleared the properties of {doc}")
+            .with(P_CLEAR_NONE, "{doc} has no properties")
+            .with(U_CLEAR, "Restore the properties of {doc}")
             .with("property.type.set.title", "Declare property type")
             .with(
                 "property.type.set.desc",
@@ -396,6 +420,16 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("note.alias.add.doc.title", "Note")
             .with(
                 "note.alias.add.doc.desc",
+                "The note; the active one if omitted.",
+            )
+            .with("note.properties.clear.title", "Clear note properties")
+            .with(
+                "note.properties.clear.desc",
+                "Remove the note's whole frontmatter, with a preview and undo.",
+            )
+            .with("note.properties.clear.doc.title", "Note")
+            .with(
+                "note.properties.clear.doc.desc",
                 "The note; the active one if omitted.",
             ),
     ])
@@ -1086,6 +1120,9 @@ impl CommandProvider for PropertiesCommands {
                 .with_param(parameter(NOTES_ALIAS_ADD, ALIAS, ParamKind::Text).required())
                 .with_param(parameter(NOTES_ALIAS_ADD, DOC, ParamKind::Document))
                 .with_scope(CommandScope::writing(CommandReach::Document)),
+            command(NOTES_PROPERTIES_CLEAR)
+                .with_param(parameter(NOTES_PROPERTIES_CLEAR, DOC, ParamKind::Document))
+                .with_scope(CommandScope::writing(CommandReach::Document)),
         ]
     }
 
@@ -1112,6 +1149,7 @@ impl CommandProvider for PropertiesCommands {
             PROPERTY_KEY_RENAME => rename_property_key(Args::new(&args), mode, host),
             PROPERTY_KEY_DELETE => delete_property_key(Args::new(&args), mode, host),
             NOTES_ALIAS_ADD => add_alias(Args::new(&args), mode, host),
+            NOTES_PROPERTIES_CLEAR => clear_properties(Args::new(&args), mode, host),
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
     }
@@ -1560,6 +1598,40 @@ fn add_alias(
             Ok(())
         },
     )
+}
+
+/// Il blocco intero, dai delimitatori al terminatore della riga di chiusura: il
+/// corpo resta byte per byte. Un frontmatter vuoto (`---` e `---`) si toglie
+/// anche lui; una nota senza blocco non si tocca.
+fn clear_properties(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let doc = doc_from(args, host)?;
+    let revision = host.document_revision(&doc)?;
+    let source = host.read_document(&doc)?;
+    let named = || vec![Arg::text(DOC, doc.as_str())];
+    let span = frontmatter_span(&source);
+    if span.start == span.end {
+        return Ok(CommandOutcome::notify(Text::message(P_CLEAR_NONE, named())));
+    }
+    let request = EditRequest::new(revision, vec![TextEdit::replace(span, String::new())]);
+    if mode.is_dry_run() {
+        return Ok(
+            CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
+                Text::message(P_CLEAR, named()),
+                vec![PlannedEdit::new(doc.clone(), request)],
+            ))),
+        );
+    }
+    let report = host.apply_edit(&doc, request)?;
+    Ok(CommandOutcome::notify(Text::message(P_CLEAR, named()))
+        .undoable(Undo::of_edits(
+            Text::message(U_CLEAR, named()),
+            vec![PlannedEdit::new(doc.clone(), report.inverse())],
+        ))
+        .with_effect(CommandEffect::Done))
 }
 
 /// Il gemello di [`rename_property_key`]: stesse revisioni fissate prima di

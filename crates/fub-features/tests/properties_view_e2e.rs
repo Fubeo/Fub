@@ -15,8 +15,8 @@ use fub_abi::traits::{PluginManifest, ViewInstance};
 use fub_abi::ui::{FieldValue, UiAction, UiKind, UiNode, UiValue};
 use fub_features::{
     PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_ALIAS_ADD,
-    NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID, PROPERTIES_VIEW, PROPERTY_KEY_DELETE,
-    PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
+    NOTES_PROPERTIES_CLEAR, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID,
+    PROPERTIES_VIEW, PROPERTY_KEY_DELETE, PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace, MAIN_PANE};
@@ -834,4 +834,40 @@ fn an_alias_joins_the_list_and_a_string_becomes_a_list() {
     let c = vault.read("c.md");
     assert!(c.contains("alias:") && !c.contains("aliases"), "{c}");
     assert!(c.contains("Vecchio") && c.contains("Nuovo"), "{c}");
+}
+
+#[test]
+fn clearing_takes_the_whole_block_and_leaves_the_body() {
+    let vault = Vault::new();
+    vault.put(
+        "a.md",
+        "---\r\ntitolo: Uno # nota\r\ntags: [a]\r\n---\r\n\r\n# Corpo\r\n",
+    );
+    vault.put("b.md", "# Senza\n");
+    let mut ws = vault.open();
+    let before = vault.read("a.md");
+    let mut clear = |doc: &str, mode: InvokeMode| {
+        ws.invoke_command(
+            NOTES_PROPERTIES_CLEAR,
+            serde_json::json!({"doc": doc}),
+            mode,
+            Actor::User,
+        )
+        .unwrap()
+    };
+    let plan = clear("a.md", InvokeMode::DryRun);
+    assert!(matches!(plan.effect, CommandEffect::Plan(_)), "{plan:?}");
+    assert_eq!(vault.read("a.md"), before);
+    let done = clear("a.md", InvokeMode::Apply);
+    assert_eq!(vault.read("a.md"), "\r\n# Corpo\r\n");
+    let none = clear("b.md", InvokeMode::Apply);
+    assert!(none.undo.is_none());
+    assert_eq!(vault.read("b.md"), "# Senza\n");
+    for step in done.undo.unwrap().steps {
+        let UndoStep::Edit(planned) = step else {
+            panic!("inverse edit expected")
+        };
+        ws.apply_edit(&planned.doc, planned.edit).unwrap();
+    }
+    assert_eq!(vault.read("a.md"), before);
 }
