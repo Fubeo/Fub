@@ -167,6 +167,7 @@ pub const EDITOR_CLOSE_BRACKETS: &str = "editor.close-brackets";
 pub const EDITOR_FOLD_GUTTER: &str = "editor.fold-gutter";
 pub const EDITOR_SMART_LISTS: &str = "editor.smart-lists";
 pub const EDITOR_PASTE_HTML: &str = "editor.paste-html";
+pub const EDITOR_STRICT_LINE_BREAKS: &str = "editor.strict-line-breaks";
 /// Cosa inserisce Tab e con cosa si rientrano gli elenchi: `tab`, `2` o `4`
 /// spazi. Il default è quello che CodeMirror usava prima che fosse una scelta.
 pub const EDITOR_INDENT: &str = "editor.indent";
@@ -446,6 +447,12 @@ fn editor_settings() -> Vec<SettingSpec> {
                 EDITOR_SMART_LISTS,
                 C_EDITOR_SMART_LISTS,
                 C_EDITOR_SMART_LISTS_DESC,
+                true,
+            ),
+            (
+                EDITOR_STRICT_LINE_BREAKS,
+                C_EDITOR_STRICT_LINE_BREAKS,
+                C_EDITOR_STRICT_LINE_BREAKS_DESC,
                 true,
             ),
             (
@@ -976,6 +983,8 @@ const C_EDITOR_FOLD_GUTTER: &str = "core.editor.fold_gutter";
 const C_EDITOR_FOLD_GUTTER_DESC: &str = "core.editor.fold_gutter.desc";
 const C_EDITOR_SMART_LISTS: &str = "core.editor.smart_lists";
 const C_EDITOR_SMART_LISTS_DESC: &str = "core.editor.smart_lists.desc";
+const C_EDITOR_STRICT_LINE_BREAKS: &str = "core.editor.strict_line_breaks";
+const C_EDITOR_STRICT_LINE_BREAKS_DESC: &str = "core.editor.strict_line_breaks.desc";
 const C_EDITOR_PASTE_HTML: &str = "core.editor.paste_html";
 const C_EDITOR_PASTE_HTML_DESC: &str = "core.editor.paste_html.desc";
 const C_EDITOR_LINE_WRAP: &str = "core.editor.line_wrap";
@@ -1405,6 +1414,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_FOLD_GUTTER_DESC, "Mostra nel margine le frecce per piegare titoli e blocchi.")
         .with(C_EDITOR_SMART_LISTS, "Elenchi intelligenti")
         .with(C_EDITOR_SMART_LISTS_DESC, "Invio continua la voce dell'elenco e su una voce vuota chiude l'elenco. Spenti, Invio va a capo e basta.")
+        .with(C_EDITOR_STRICT_LINE_BREAKS, "Interruzioni di riga rigorose")
+        .with(C_EDITOR_STRICT_LINE_BREAKS_DESC, "Acceso, una riga a capo singola in Lettura si unisce alla riga prima, come in CommonMark. Spento, resta un'interruzione.")
         .with(C_EDITOR_PASTE_HTML, "Converti l'HTML incollato")
         .with(C_EDITOR_PASTE_HTML_DESC, "Incollando testo formattato da un'altra app, lo trasforma in Markdown. Spento, incolla il testo semplice.")
         .with(C_EDITOR_LINE_WRAP, "A capo automatico")
@@ -1810,6 +1821,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_FOLD_GUTTER_DESC, "Shows the arrows in the margin to fold headings and blocks.")
         .with(C_EDITOR_SMART_LISTS, "Smart lists")
         .with(C_EDITOR_SMART_LISTS_DESC, "Enter continues the list item and ends the list on an empty item. Off, Enter just starts a new line.")
+        .with(C_EDITOR_STRICT_LINE_BREAKS, "Strict line breaks")
+        .with(C_EDITOR_STRICT_LINE_BREAKS_DESC, "On, a single newline in Reading joins the previous line, as in CommonMark. Off, it stays a line break.")
         .with(C_EDITOR_PASTE_HTML, "Convert pasted HTML")
         .with(C_EDITOR_PASTE_HTML_DESC, "Pasting formatted text from another app turns it into Markdown. Off, it pastes plain text.")
         .with(C_EDITOR_LINE_WRAP, "Wrap lines")

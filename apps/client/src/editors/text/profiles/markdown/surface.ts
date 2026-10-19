@@ -16,6 +16,8 @@ import { taskChecked } from "../../../../rules/mirrored";
 import { t } from "../../../../i18n/strings";
 import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mount";
 import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
+import { settings } from "../../../../host/query";
+import { onEvent } from "../../../../state/kernel";
 import { openLifetime } from "../../../../ui/lifetime";
 import { closeSlashPalette, openSlashPalette } from "../../../../ui/palette";
 import type {
@@ -117,6 +119,7 @@ export function cursorIsLiteral(cursor: Pick<CursorContext, "nodes" | "lineBefor
 /// La finestra in cui la lettura raccoglie le modifiche arrivate da un altro
 /// riquadro prima di ridisegnarsi.
 const READING_SYNC_MS = 120;
+const STRICT_LINE_BREAKS_KEY = "editor.strict-line-breaks";
 
 function isMarkdownMode(mode: string): mode is MarkdownMode {
   return MARKDOWN_MODES.some((candidate) => candidate.id === mode);
@@ -223,6 +226,22 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   reading.setAttribute("role", "document");
   parent.append(reading);
   parent.dataset.markdownMode = mode;
+  // «Interruzioni di riga rigorose» spente: in Lettura un a capo singolo
+  // resta un'interruzione. La resa lo dice con un attributo, e la pelle lo
+  // legge; il testo del documento non cambia.
+  let breaksRead = 0;
+  const readLineBreaks = async (): Promise<void> => {
+    const mine = ++breaksRead;
+    const entries = await settings().catch(() => null);
+    if (!entries || mine !== breaksRead || life.closed) return;
+    const strict = entries.find((entry) => entry.spec.key === STRICT_LINE_BREAKS_KEY)?.value;
+    if (strict === false) parent.dataset.lineBreaks = "keep";
+    else delete parent.dataset.lineBreaks;
+  };
+  void readLineBreaks();
+  life.add(onEvent("setting_changed", (event) => {
+    if (event.key === STRICT_LINE_BREAKS_KEY) void readLineBreaks();
+  }));
 
   // Reading owns browser selection; only history commands reach the hidden editor.
   life.listen(reading, "keydown", (event) => {

@@ -3915,6 +3915,10 @@ kbd,
 .markdown-rendered ::selection {
   background: var(--doc-selection);
 }
+/* «Interruzioni di riga rigorose» spente: un a capo singolo resta un a capo. */
+.pane-editor[data-line-breaks="keep"] .markdown-rendered p {
+  white-space: pre-line;
+}
 .markdown-rendered strong,
 .cm-editor .cm-content .cm-fub-strong {
   font-weight: var(--weight-bold);
