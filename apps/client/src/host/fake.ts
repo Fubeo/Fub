@@ -85,7 +85,7 @@ import type {
   LiveStatus,
   LiveWriterStatus,
 } from "./contract";
-import type { PrintArtifactOutcome, SaveArtifactOutcome } from "./ipc";
+import type { PrintArtifactOutcome, RevealOutcome, SaveArtifactOutcome } from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
 
 /// Una chiamata arrivata alla porta: quale, e con cosa.
@@ -181,6 +181,8 @@ export interface Options {
   /** Explicit OS save simulation. Unconfigured fake cannot create files. */
   saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
   printArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<PrintArtifactOutcome>;
+  /// Il sistema che riceve una voce del vault. Senza, la porta non è servita.
+  revealInSystem?: (path: string, open: boolean) => Promise<RevealOutcome>;
   /// La rete della macchina per la sessione live. Senza, le porte `live*` non
   /// sono servite; con zero indirizzi è un PC fuori da una rete locale, che
   /// l'app rifiuta con `unserved`.
@@ -1306,6 +1308,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
         options.printArtifact
           ? gate("printArtifact", [suggestedName, mediaType, bytes], options.printArtifact(suggestedName, mediaType, bytes))
           : unavailable("printArtifact", [suggestedName, mediaType, bytes]),
+      revealInSystem: (path, open) =>
+        options.revealInSystem
+          ? gate("revealInSystem", [path, open], options.revealInSystem(path, open))
+          : unavailable("revealInSystem", [path, open]),
       listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve(grid ? [grid.surface] : [])),
       openGrid: (surface, source, revision) => gate("openGrid", [surface, source, revision], Promise.resolve().then(() => {
         if (!grid || surface !== grid.surface.id) throw new Error("host fake: la famiglia grid non è montata");

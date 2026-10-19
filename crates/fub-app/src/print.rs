@@ -142,7 +142,7 @@ fn sweep(base: &Path, now: SystemTime) {
 }
 
 /// Il programma che apre `path` col programma che il sistema sceglie.
-fn opener(path: &Path) -> Command {
+pub(crate) fn opener(path: &Path) -> Command {
     #[cfg(target_os = "macos")]
     let mut command = Command::new("open");
     #[cfg(target_os = "windows")]
@@ -157,30 +157,38 @@ fn opener(path: &Path) -> Command {
     command
 }
 
-/// Apre `path` nel programma del sistema. Un programma che non parte, o
-/// un'uscita che non riesce entro [`OPEN_WAIT`], vuol dire che nessuno l'ha
-/// aperto; dopo, chi è ancora aperto lo si lascia andare, e così chi non dice
-/// com'è andata. `explorer.exe` esce con 1 anche quando apre, quindi lì conta
-/// soltanto che parta.
+/// Apre `path` nel programma del sistema.
 fn open_with_system(path: &Path) -> PrintOutcome {
-    let Ok(mut child) = opener(path).spawn() else {
-        return PrintOutcome::NoViewer;
+    if launched(opener(path)) {
+        PrintOutcome::Opened
+    } else {
+        PrintOutcome::NoViewer
+    }
+}
+
+/// Fa partire `command`, che passa qualcosa al sistema, e dice se il sistema
+/// l'ha preso. Un programma che non parte, o un'uscita che non riesce entro
+/// [`OPEN_WAIT`], vuol dire di no; dopo, chi è ancora aperto lo si lascia
+/// andare, e così chi non dice com'è andata. `explorer.exe` esce con 1 anche
+/// quando apre, quindi lì conta soltanto che parta.
+pub(crate) fn launched(mut command: Command) -> bool {
+    let Ok(mut child) = command.spawn() else {
+        return false;
     };
     if cfg!(target_os = "windows") {
         std::thread::spawn(move || child.wait());
-        return PrintOutcome::Opened;
+        return true;
     }
     let start = Instant::now();
     loop {
         match child.try_wait() {
-            Ok(Some(status)) if status.success() => return PrintOutcome::Opened,
-            Ok(Some(_)) => return PrintOutcome::NoViewer,
+            Ok(Some(status)) => return status.success(),
             Ok(None) if start.elapsed() < OPEN_WAIT => {
                 std::thread::sleep(Duration::from_millis(50));
             }
             Ok(None) | Err(_) => {
                 std::thread::spawn(move || child.wait());
-                return PrintOutcome::Opened;
+                return true;
             }
         }
     }

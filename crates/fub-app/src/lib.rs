@@ -63,6 +63,7 @@ mod live;
 mod mobile;
 mod print;
 mod resources;
+mod reveal;
 mod support;
 mod tree_access;
 mod web_viewer;
@@ -1889,6 +1890,24 @@ async fn print_artifact(
         .map_err(|error| unfinished("print", error))
 }
 
+/// «Mostra nel file manager» e «Apri con l'app di sistema»: una voce del
+/// vault, per percorso relativo alla radice, passa al sistema (`reveal.rs`).
+/// Soltanto dalla shell, e soltanto dentro il vault.
+#[tauri::command]
+async fn reveal_in_system(
+    window: tauri::WebviewWindow,
+    host: State<'_, Host>,
+    vault: Option<String>,
+    path: String,
+    open: bool,
+) -> Result<reveal::RevealOutcome, PluginError> {
+    guard_main_shell(&window, "reveal entries")?;
+    let root = host.root(vault.as_deref())?;
+    tauri::async_runtime::spawn_blocking(move || reveal::hand_over(root.as_std_path(), &path, open))
+        .await
+        .map_err(|error| unfinished("reveal", error))?
+}
+
 // --- superficie IPC da `support` (demo, diagnostica, recupero) ----------------
 //
 // Wrapper sottili: la logica resta in `support` come `pub fn` pura,
@@ -2580,6 +2599,7 @@ pub fn run() {
             session_notice,
             save_artifact,
             print_artifact,
+            reveal_in_system,
             demo_root,
             open_demo,
             close_demo,

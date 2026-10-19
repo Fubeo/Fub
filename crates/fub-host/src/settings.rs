@@ -1339,6 +1339,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.viewer.not_opened", "La finestra del visore web non si è aperta: {reason}")
         .with("host.viewer.bad_action", "«{action}» non è un gesto del visore web.")
         .with("host.viewer.not_open", "Il visore web non è aperto.")
+        .with("host.reveal.outside", "{path} è fuori dal vault.")
+        .with("host.reveal.root", "La cartella del vault non si legge: {reason}")
         .with(
             "host.mobile.shared_path",
             "La cartella condivisa non ha un percorso utilizzabile.",
@@ -1758,6 +1760,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.viewer.not_opened", "The web viewer window did not open: {reason}")
         .with("host.viewer.bad_action", "“{action}” is not a web viewer gesture.")
         .with("host.viewer.not_open", "The web viewer is not open.")
+        .with("host.reveal.outside", "{path} is outside the vault.")
+        .with("host.reveal.root", "The vault folder cannot be read: {reason}")
         .with(
             "host.mobile.shared_path",
             "The shared folder has no usable path.",

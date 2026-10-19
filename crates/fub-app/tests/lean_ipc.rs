@@ -370,6 +370,7 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("viewer_save", Why::AppSurface),
     ("save_artifact", Why::AppSurface),
     ("print_artifact", Why::AppSurface),
+    ("reveal_in_system", Why::AppSurface),
     // --- macchina e catalogo: sopra ogni vault --------------------------------
     //
     // Profili d'impostazione, capacità del frame, inventario installato e

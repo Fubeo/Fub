@@ -132,6 +132,8 @@ export interface CatalogUpdateOutcome { plugin: InstalledPluginInfo; diagnostics
 export type SaveArtifactOutcome = { status: "saved"; path: string } | { status: "cancelled" };
 /** How «Print…» went: opened in the system PDF program, no such program, or not written. */
 export type PrintArtifactOutcome = { status: "opened" } | { status: "no_viewer" } | { status: "unwritable"; reason: string };
+/** How a vault entry went to the system: taken, no program took it, or a program that opening would run. */
+export type RevealOutcome = { status: "opened" } | { status: "no_opener" } | { status: "executable" };
 
 /// Il vault a cui una chiamata si rivolge, quando chi chiama lo sa (FUB-001).
 ///
@@ -216,6 +218,10 @@ export const api = {
   /** A PDF goes to the program the system opens PDFs with, and is printed from there. */
   printArtifact: (suggestedName: string, mediaType: string, bytes: readonly number[]) =>
     invoke<PrintArtifactOutcome>("print_artifact", { suggestedName, mediaType, bytes }),
+  /// «Mostra nel file manager» (`open: false`) e «Apri con l'app di sistema»
+  /// (`open: true`) di una voce del vault, per percorso relativo alla radice.
+  revealInSystem: (path: string, open: boolean, vault?: string | null) =>
+    invoke<RevealOutcome>("reveal_in_system", toVault({ path, open }, vault)),
   listGridSurfaces: () => invoke<GridSurfaceSpec[]>("list_grid_surfaces"),
   openGrid: (surface: string, source: string, revision: string) =>
     invoke<GridSession>("open_grid", { surface, source, revision }),

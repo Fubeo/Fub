@@ -20,7 +20,7 @@ import {
   setSpace,
 } from "../state/organization";
 import { on, saveActiveSpace, saveExpanded, saveExplorerSort, state } from "../state/store";
-import { createFolder, createNote, duplicateNote, importIntoVault, openVaultRoot, refreshDocuments, renameFolder, trashFolder, undoLastOperation } from "../state/vault";
+import { createFolder, createNote, duplicateNote, handToSystem, importIntoVault, openVaultRoot, refreshDocuments, renameFolder, trashFolder, undoLastOperation } from "../state/vault";
 import { carriesFiles, offerOutside, pickedFiles, readDropped, type Dropped } from "../ui/vault-transfer";
 import { confirm } from "../platform/confirm";
 import {
@@ -886,6 +886,8 @@ function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
     { label: t("explorer.open_window"), run: () => void openCurrentInNewWindow(id) },
     { label: t("explorer.duplicate"), run: () => void duplicateEntry(id) },
     { label: t("explorer.copy_path"), run: () => void copyPath(id) },
+    { label: t("explorer.reveal_system"), run: () => void handToSystem(id, false) },
+    { label: t("explorer.open_system"), run: () => void handToSystem(id, true) },
     { label: t("explorer.bookmark"), run: () => void bookmarkEntry({ k: "doc", doc: id }, id) },
     ...(move ? [move] : []),
     { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
@@ -1135,6 +1137,7 @@ function folderMenu(at: MouseEvent, path: string): void {
       { separator: true, label: t("explorer.rename"), hint: "F2", run: () => void renameFolderRow(path) },
       { label: t("explorer.move"), run: () => void pickMoveFolders([path]) },
       { label: t("explorer.copy_path"), run: () => void copyPath(path) },
+      { label: t("explorer.reveal_system"), run: () => void handToSystem(path, false) },
       { label: t("explorer.bookmark"), run: () => void bookmarkEntry({ k: "folder", path }, path) },
       { label: t("explorer.search_in_folder"), run: () => searchInFolder(path) },
       { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, path) },

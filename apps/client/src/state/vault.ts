@@ -75,6 +75,22 @@ export async function duplicateNote(doc: string): Promise<string | null> {
   return outcome.effect.kind === "navigate" ? outcome.effect.doc : null;
 }
 
+/// Passa una voce del vault al sistema: la mostra nel file manager o, con
+/// `open`, la apre col programma che il sistema sceglie. Un programma non si
+/// apre (aprirlo vorrebbe dire eseguirlo): si mostra, e lo si dice.
+export async function handToSystem(path: string, open: boolean): Promise<void> {
+  try {
+    const outcome = await api.revealInSystem(path, open, openVaultRoot());
+    if (outcome.status === "no_opener") notify(t("explorer.system_none"), "guasto");
+    if (outcome.status === "executable") {
+      notify(t("explorer.system_executable"), "info");
+      await handToSystem(path, false);
+    }
+  } catch (error) {
+    notify(t("explorer.system_failed", { reason: errorText(error) }), "guasto");
+  }
+}
+
 /// Crea una cartella vuota e restituisce il path che il kernel ha scritto.
 ///
 /// Il path torna normalizzato (NFC, spazi ai bordi dei segmenti) e può quindi
