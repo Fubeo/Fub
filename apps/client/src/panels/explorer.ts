@@ -8,7 +8,8 @@
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE, type DraggedEntry } from "../ui/drag-types";
 import { revealSidePanel } from "../ui/side-panels";
 import { pickFromList, promptText } from "../ui/dialogs";
-import { vaultFolders, folderContent, existingDocuments, settings } from "../host/query";
+import { vaultEntries, vaultFolders, folderContent, existingDocuments, settings, WITHOUT_PAGE } from "../host/query";
+import { mountExplorerFilter, type ExplorerFilter, type FilterEntry } from "./explorer-filter";
 import { Race } from "../ui/race";
 import type { VaultFolder } from "../host/contract";
 import { onEvent } from "../state/kernel";
@@ -166,6 +167,18 @@ export function mountExplorer(lifetime: Lifetime): void {
   });
   lifetime.listen(spaceTitleEl, "click", openSpaceNote);
   registerShellCommand({
+    id: "shell.explorer.filter",
+    title: "commands.explorer.filter",
+    description: "commands.explorer.filter.desc",
+    layer: "global",
+    available: () => openVaultRoot() !== undefined,
+    run: () => {
+      revealSidePanel("sidebar");
+      showPanel("files");
+      filter?.show();
+    },
+  });
+  registerShellCommand({
     id: "shell.explorer.reveal",
     title: "commands.explorer.reveal",
     description: "commands.explorer.reveal.desc",
@@ -284,6 +297,19 @@ export function mountExplorer(lifetime: Lifetime): void {
   // Una lista chiesta esplicitamente (apertura del vault, creazione, rinomina,
   // ripristino) si richiede sempre: il segnale dice *quando*, non *cosa*.
   lifetime.add(on("documents", () => void refreshFromKernel(true)));
+  filter = mountExplorerFilter({
+    lifetime,
+    before: pinnedTitleEl,
+    covering: (covered) => {
+      fileListEl.hidden = covered;
+      if (!lifetime.closed) renderFileList();
+    },
+    entries: filterEntries,
+    open: openFiltered,
+  });
+  lifetime.add(() => (filter = null));
+  lifetime.add(on("documents", () => filter?.stale()));
+  lifetime.add(on("vault", () => filter?.hide()));
   // L'organizzazione cambiata ridisegna la stessa vista senza richiederla:
   // icone, pin e ordine non passano dal kernel.
   lifetime.add(on("organization", renderFileList));
@@ -1239,6 +1265,38 @@ async function followActive(): Promise<void> {
   entry(doc)?.scrollIntoView?.({ block: "nearest" });
 }
 
+/// Il filtro per percorso sopra l'albero, finché l'esplora è montata.
+let filter: ExplorerFilter | null = null;
+
+/// Ogni voce e cartella dello spazio corrente, per il filtro: due domande sole
+/// a tutto lo spazio, fatte una volta per filtro.
+async function filterEntries(): Promise<FilterEntry[]> {
+  const space = state.activeSpace;
+  const scope = space ? { path: space, descendants: true } : undefined;
+  const [folders, entries] = await Promise.all([
+    vaultFolders(WITHOUT_PAGE, scope),
+    vaultEntries(WITHOUT_PAGE, undefined, scope),
+  ]);
+  return [
+    ...folders.items.filter((f) => f.path !== space).map((f): FilterEntry => ({ path: f.path, kind: "folder" })),
+    ...entries.items.map((e): FilterEntry => ({ path: e.id, kind: e.kind === "document" ? "document" : "file" })),
+  ];
+}
+
+/// Una voce scelta dall'elenco filtrato: la nota o il file si aprono come
+/// dall'albero, e il filtro resta; una cartella chiude il filtro e si apre
+/// nell'albero.
+function openFiltered(entry: FilterEntry): void {
+  if (entry.kind === "folder") {
+    filter?.hide();
+    void revealPath(entry.path, true);
+  } else if (entry.kind === "document" || canShowFile(entry.path)) {
+    void openDocument(entry.path);
+  } else if (!(canImportFile(entry.path) && importDrawing({ kind: "vault", path: entry.path }))) {
+    notify(t("explorer.no_viewer", { name: childName(entry.path) }), "info");
+  }
+}
+
 async function revealActive(): Promise<void> {
   const doc = state.currentDoc;
   if (doc) await revealPath(doc, false);
@@ -1332,8 +1390,10 @@ function markActive(): void {
 function renderPinned(): void {
   const pinned = state.meta.pinned.filter((id) => view.existing.has(id));
   // U08: la sezione Appuntate si vede soltanto se contiene elementi.
-  pinnedTitleEl.hidden = pinned.length === 0;
-  pinnedListEl.hidden = pinned.length === 0;
+  // Col filtro aperto l'elenco filtrato sta al posto di albero e appuntate.
+  const hidePinned = pinned.length === 0 || filter?.active() === true;
+  pinnedTitleEl.hidden = hidePinned;
+  pinnedListEl.hidden = hidePinned;
   pinnedListEl.innerHTML = "";
   for (const id of pinned) {
     const li = document.createElement("li");

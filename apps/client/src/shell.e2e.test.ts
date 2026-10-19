@@ -563,6 +563,36 @@ describe("navigazione accessibile dell'esploratore", () => {
   });
 });
 
+describe("filtra l'esplora per percorso", () => {
+  it("le voci col percorso giusto prendono il posto dell'albero; una cartella si apre nell'albero", async () => {
+    await start(VAULT);
+    const registry = await import("./ui/commands");
+    const command = registry.allCommands().find((entry) => entry.id === "shell.explorer.filter");
+    expect(command?.binding).toBeNull();
+    await command!.run!();
+    const input = document.querySelector<HTMLInputElement>(".explorer-filter input")!;
+    expect(document.activeElement).toBe(input);
+    const rows = () => [...document.querySelectorAll<HTMLElement>("#files-panel .search-results .search-result")];
+    input.value = "note riun";
+    input.dispatchEvent(new Event("input"));
+    await waitFor("l'elenco filtrato", () => rows().length > 0);
+    expect(rows().map((row) => row.dataset.path)).toEqual(["note/Riunione.md"]);
+    expect(document.querySelector<HTMLElement>("#file-list")!.hidden).toBe(true);
+    rows()[0].click();
+    await waitFor("la nota si apre", () => textToVideo().includes("riunione"));
+
+    input.value = "note -riunione";
+    input.dispatchEvent(new Event("input"));
+    await waitFor("l'elenco cambia", () => rows()[0]?.dataset.path === "note");
+    expect(rows().map((row) => row.dataset.path)).not.toContain("note/Riunione.md");
+    rows()[0].click();
+    await waitFor("l'albero torna", () => !document.querySelector<HTMLElement>("#file-list")!.hidden);
+    await settle();
+    expect(document.querySelector('#file-list li[data-path="note"]')?.getAttribute("aria-expanded")).toBe("true");
+    expect(document.querySelector<HTMLElement>(".explorer-filter")!.hidden).toBe(true);
+  });
+});
+
 describe("mostra la cartella degli allegati", () => {
   const folder = (value: string): SettingEntry => ({
     spec: {

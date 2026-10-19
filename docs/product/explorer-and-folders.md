@@ -29,6 +29,14 @@ il ripristino lo rimette dov'era, byte per byte.
 cartella di `files.attachment-folder`, dove finiscono gli allegati incollati o
 trascinati. Se la cartella non c'è ancora lo dice e non la crea: la crea il
 primo allegato.
+«Filtra l'esplora per percorso» (`shell.explorer.filter`, dalla palette) apre
+un campo sopra l'albero. Con del testo l'albero cede il posto a un elenco
+piatto delle voci e cartelle dello spazio il cui percorso intero contiene ogni
+parola, senza badare alle maiuscole. `-parola` toglie ogni voce con un pezzo di
+percorso che la contiene, quindi una cartella sparisce con tutto il contenuto;
+fra virgolette una frase vale una parola. Invio apre la prima voce, una
+cartella scelta chiude il filtro e si apre nell'albero, Esc chiude il filtro.
+L'elenco disegna duecento voci alla volta e dice quante ne restano.
 Nella testata del foglio ogni cartella del percorso della nota si preme col
 puntatore: l'albero la apre e la porta in vista. Il nome resta il titolo che
 si rinomina col doppio clic o con F2.

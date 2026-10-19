@@ -2300,6 +2300,11 @@ kbd,
 .files-panel .plain-list + .plain-list {
   margin-top: var(--space-4);
 }
+/* Il filtro per percorso sta sopra l'albero (`shell.explorer.filter`): un
+   campo largo quanto le righe, staccato da ciò che filtra. */
+.explorer-filter {
+  padding: 0 var(--space-2) var(--space-3);
+}
 
 /* **Una riga del cassetto**: nota o cartella, nell'albero o tra le appuntate.
    È larga quanto il cassetto a ogni profondità — il rientro è un margine

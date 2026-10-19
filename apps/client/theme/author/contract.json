@@ -309,6 +309,7 @@
     "tree-selection-action",
     "tree-selection-trash",
     "tree-empty",
+    "explorer-filter",
     "search-input",
     "hit-title",
     "hit-path",
@@ -1949,6 +1950,17 @@
       ],
       "states": [
         "rest"
+      ]
+    },
+    {
+      "name": "tree-filter",
+      "part": "tree",
+      "hooks": [
+        "explorer-filter"
+      ],
+      "states": [
+        "rest",
+        "focused"
       ]
     },
     {
@@ -5211,10 +5223,10 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1077,
+    "hooks": 1078,
     "state_names": 7,
-    "assigned_states": 623,
-    "components": 184,
+    "assigned_states": 625,
+    "components": 185,
     "preference_tokens": 121
   }
 }

@@ -63,6 +63,7 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // orientamento raro, e `Mod-Shift-e` porta già l'albero sotto gli occhi.
     ("shell.explorer.reveal", None),
     ("shell.explorer.reveal_attachments", None),
+    ("shell.explorer.filter", None),
     // Rinomina e cestina la voce dell'albero col fuoco, o la nota attiva.
     // **Senza accordo**: dentro l'albero li prendono F2 e Canc, tasti nudi
     // della sua keymap locale che un accordo globale non può essere; fuori,

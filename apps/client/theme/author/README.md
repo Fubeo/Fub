@@ -2,7 +2,7 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **1077 hook**, **7 stati** (623 assegnazioni su 184 componenti) e lascia ridichiarare alla persona **121 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **1078 hook**, **7 stati** (625 assegnazioni su 185 componenti) e lascia ridichiarare alla persona **121 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
 ## Struttura minima
 
