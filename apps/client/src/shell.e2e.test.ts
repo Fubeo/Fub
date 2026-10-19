@@ -1245,6 +1245,12 @@ describe("una sessione e le sue superfici", () => {
     expect(texts[0]).toContain(" [dopo il rimonto]");
   });
 
+  it("«Apri a lato» dal menu della riga apre la nota in un secondo riquadro", async () => {
+    await start(VAULT);
+    await contextMenu(row("Benvenuto"), "Apri a lato");
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+  });
+
   it("«Duplica» dal menu della riga crea la copia accanto all'originale e la apre", async () => {
     await start(VAULT);
     await contextMenu(row("Benvenuto"), "Duplica");

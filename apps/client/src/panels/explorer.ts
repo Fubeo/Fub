@@ -56,7 +56,8 @@ import { showPanel } from "./sidebar";
 import { writeClipboardText } from "../platform/clipboard";
 import { searchFor } from "../state/search-port";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
-import { canShowFile, focusEditor, openDocument } from "../state/document-controller";
+import { canShowFile, focusEditor, openDocument, openDocumentBeside } from "../state/document-controller";
+import { openCurrentInNewWindow } from "../state/document-windows";
 import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../state/document-session";
 import { contextMenuItems, hasContextMenuViews, type ContextTarget } from "../ui/context-views";
 import { trashManyWithConfirm, trashWithConfirm } from "./trash";
@@ -859,6 +860,8 @@ function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
   const reorder = reorderActions(id);
   showMenuFor(at, [
     { label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
+    { label: t("explorer.open_beside"), run: () => void openDocumentBeside(id, "row") },
+    { label: t("explorer.open_window"), run: () => void openCurrentInNewWindow(id) },
     { label: t("explorer.duplicate"), run: () => void duplicateEntry(id) },
     { label: t("explorer.copy_path"), run: () => void copyPath(id) },
     ...(move ? [move] : []),
