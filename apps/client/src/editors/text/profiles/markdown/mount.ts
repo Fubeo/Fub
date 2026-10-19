@@ -16,6 +16,7 @@ import type { FenceEdit } from "./render-types";
 import { isMathInfo } from "./render";
 import { mountTree, unmountTree } from "../../../../ui/node";
 import { notify } from "../../../../ui/notify";
+import { attachTooltip } from "../../../../ui/tooltip";
 import { Race, type Expected } from "../../../../ui/race";
 import { external, hasScheme, isAllowedLink, sanitizeMarkdownHtml, setSanitizedHtml } from "../../../../ui/sanitize";
 import { writeClipboardText } from "../../../../platform/clipboard";
@@ -290,7 +291,31 @@ function enhanceContent(
   }));
   life.add(mountMathBlocks(container));
   wireContent(container, options, life);
+  wireFootnotePreviews(container, life);
   life.add(highlightMarkdownCode(container));
+}
+
+/// Il richiamo di una nota a piè di pagina mostra la nota al passaggio e al
+/// fuoco, senza scorrere fino in fondo. Un incorporamento ha le sue note: il
+/// richiamo cerca soltanto fra quelle del suo stesso documento.
+function wireFootnotePreviews(container: HTMLElement, life: Lifetime): void {
+  const notes = Array.from(container.querySelectorAll<HTMLElement>(".block-footnote-definition[id]"));
+  if (notes.length === 0) return;
+  for (const ref of container.querySelectorAll<HTMLAnchorElement>("a.footnote-ref")) {
+    const id = ref.getAttribute("href")?.slice(1);
+    const scope = ref.closest(".embed-loaded");
+    const note = notes.find((each) => each.id === id && each.closest(".embed-loaded") === scope);
+    const text = note ? footnoteText(note) : "";
+    if (text) life.add(attachTooltip(ref, text));
+  }
+}
+
+/// Il testo di una nota come si legge: senza il numero davanti e senza i
+/// ritorni ai richiami.
+export function footnoteText(note: HTMLElement): string {
+  const copy = note.cloneNode(true) as HTMLElement;
+  for (const back of copy.querySelectorAll(".footnote-backref")) back.remove();
+  return (copy.textContent ?? "").replace(/\s+/g, " ").trim().replace(/^\d+\.\s*/, "");
 }
 
 function mountContent(

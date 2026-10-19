@@ -27,7 +27,7 @@ vi.mock("mermaid", () => ({
     render: async () => ({ svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>' }),
   },
 }));
-import { mountMarkdown, mountRenderedDocument, sourceElementAt } from "./mount";
+import { footnoteText, mountMarkdown, mountRenderedDocument, sourceElementAt } from "./mount";
 import { api } from "../../../../host/ipc";
 import { registerCustomRenderer } from "../../../../ui/custom";
 import { closeLightbox } from "../../../../ui/lightbox";
@@ -398,5 +398,19 @@ describe("posizione nel testo reso", () => {
     expect(sourceElementAt(element, 2)?.textContent).toBe("primo");
     expect(sourceElementAt(element, 25)?.textContent).toBe("secondo");
     expect(sourceElementAt(element, 99)?.textContent).toBe("secondo");
+  });
+});
+
+describe("anteprima delle note a piè di pagina", () => {
+  it("il richiamo descrive la nota col suo testo, senza numero né ritorni", () => {
+    const root = mount(renderMarkdown("Testo[^a] e ancora[^a].\n\n[^a]: Una **nota** breve.\n").html);
+    const note = root.querySelector<HTMLElement>(".block-footnote-definition")!;
+    expect(footnoteText(note)).toBe("Una nota breve.");
+    const refs = Array.from(root.querySelectorAll<HTMLElement>("a.footnote-ref"));
+    expect(refs).toHaveLength(2);
+    refs[1]!.dispatchEvent(new FocusEvent("focus"));
+    const tip = document.getElementById(refs[1]!.getAttribute("aria-describedby")!);
+    expect(tip?.textContent).toBe("Una nota breve.");
+    refs[1]!.dispatchEvent(new FocusEvent("blur"));
   });
 });
