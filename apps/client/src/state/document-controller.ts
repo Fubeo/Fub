@@ -1071,6 +1071,7 @@ function registerCommands(): void {
     ["shell.unfold.all", "text.unfold.all", "commands.unfold.all", "commands.unfold.all.desc"],
     ["shell.fold.more", "text.fold.more", "commands.fold.more", "commands.fold.more.desc"],
     ["shell.fold.less", "text.fold.less", "commands.fold.less", "commands.fold.less.desc"],
+    ["shell.fold.properties", "text.fold.properties", "commands.fold.properties", "commands.fold.properties.desc"],
   ] as const) {
     registerShellCommand({
       id,

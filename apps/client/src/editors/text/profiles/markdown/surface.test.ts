@@ -458,6 +458,23 @@ describe("le azioni dell'editor della superficie", () => {
     ed.destroy();
   });
 
+  it("piega le proprietà chiude il frontmatter sotto la prima riga e lo stesso comando lo riapre", () => {
+    const { ed, view } = editor();
+    const text = "---\ntitolo: Uno\ntag: [a]\n---\n\n# Testo\n";
+    ed.buffer.setDoc(text);
+    const placeholders = () => view().dom.querySelectorAll(".cm-foldPlaceholder").length;
+    expect(ed.editorActions.run("text.fold.properties")).toBe(true);
+    expect(placeholders()).toBe(1);
+    expect(view().dom.textContent).not.toContain("titolo");
+    expect(view().dom.textContent).toContain("Testo");
+    expect(ed.editorActions.run("text.fold.properties")).toBe(true);
+    expect(placeholders()).toBe(0);
+    expect(ed.buffer.getDoc()).toBe(text);
+    ed.buffer.setDoc("# Senza proprietà\n");
+    expect(ed.editorActions.run("text.fold.properties")).toBe(false);
+    ed.destroy();
+  });
+
   it("piega di più e di meno vanno un livello alla volta, dall'interno e dall'esterno", () => {
     const { ed, view } = editor();
     const text = "# Uno\n\n## Sotto\n\ntesto\n\n# Due\n\naltro\n";

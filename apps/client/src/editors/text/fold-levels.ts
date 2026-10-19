@@ -46,6 +46,13 @@ export const foldMore = (view: EditorView): boolean => {
   return true;
 };
 
+/// Chiude la regione se è aperta, la riapre se è già chiusa così com'è.
+export function toggleFold(view: EditorView, span: Span): boolean {
+  const closed = folds(view.state).some((fold) => fold.from === span.from && fold.to === span.to);
+  view.dispatch({ effects: (closed ? unfoldEffect : foldEffect).of(span) });
+  return true;
+}
+
 export const foldLess = (view: EditorView): boolean => {
   const folded = folds(view.state);
   const outer = folded.filter((fold) => !folded.some((other) => within(fold, other)));

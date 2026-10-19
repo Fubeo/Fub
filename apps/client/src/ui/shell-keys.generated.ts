@@ -98,6 +98,7 @@ export const SHELL_KEYS = {
   "shell.unfold.all": null,
   "shell.fold.more": null,
   "shell.fold.less": null,
+  "shell.fold.properties": null,
   "shell.zoom.in": "Mod-=",
   "shell.zoom.out": "Mod--",
   "shell.zoom.reset": "Mod-0",

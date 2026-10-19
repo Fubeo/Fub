@@ -41,7 +41,8 @@ import type { TableGridActions } from "./table-grid";
 import { deleteFootnoteAt, footnoteAt, MARKDOWN_ACTIONS, markdownActionState } from "./actions";
 import { showContextMenu } from "../../../../ui/menu";
 import { foldAll, unfoldAll } from "@codemirror/language";
-import { foldLess, foldMore } from "../../fold-levels";
+import { foldLess, foldMore, toggleFold } from "../../fold-levels";
+import type { EditorView } from "@codemirror/view";
 import {
   ACTION_UNAVAILABLE,
   type EditorActionState,
@@ -49,7 +50,7 @@ import {
 } from "../../../core/editor-actions";
 import { MARKDOWN_EXPORTS } from "./exports";
 import { markdownReference } from "./references";
-import { renderMarkdown } from "./render";
+import { frontmatterRange, renderMarkdown } from "./render";
 import type { ProofPorts } from "../../../core/proof-ports";
 
 /// Le tre viste esclusive sullo stesso buffer. `source` e `live_preview`
@@ -110,11 +111,22 @@ export interface MarkdownSurface extends BufferedSurface {
 /// Piegare e aprire tutti i titoli, le liste e i blocchi della nota, o un
 /// livello alla volta: azioni della superficie come annulla, fuori dalla
 /// barra di formattazione.
-const FOLDS = new Map([
+/// «Piega le proprietà»: il frontmatter si chiude sotto la sua prima riga,
+/// e lo stesso comando lo riapre.
+const foldProperties = (view: EditorView): boolean => {
+  const range = frontmatterRange(view.state.doc);
+  if (!range) return false;
+  const from = view.state.doc.lineAt(range.from).to;
+  const to = view.state.doc.lineAt(Math.max(range.to - 1, range.from)).to;
+  return to > from && toggleFold(view, { from, to });
+};
+
+const FOLDS = new Map<string, (view: EditorView) => boolean>([
   ["text.fold.all", foldAll],
   ["text.unfold.all", unfoldAll],
   ["text.fold.more", foldMore],
   ["text.fold.less", foldLess],
+  ["text.fold.properties", foldProperties],
 ]);
 
 /// La palette slash si apre a inizio riga o dopo uno spazio: dentro una
