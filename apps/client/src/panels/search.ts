@@ -459,6 +459,8 @@ const SYNTAX: readonly (readonly [string, Parameters<typeof t>[0]])[] = [
   ["path:2026/", "search.syntax.path"],
   ["file:riunione", "search.syntax.file"],
   ["heading:obiettivi", "search.syntax.heading"],
+  ["line:(rosa spina)", "search.syntax.line"],
+  ["section:(rosa spina)", "search.syntax.section"],
   ["task:todo", "search.syntax.task"],
   ['"frase esatta"', "search.syntax.phrase"],
   ["/regex/", "search.syntax.regex"],

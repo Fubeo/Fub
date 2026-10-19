@@ -768,6 +768,12 @@ fn search_syntax_cases() -> Vec<Value> {
         ),
         ("[aliases:\"Home page\"] [n:+.5] [v:1.2.3]", false),
         ("ore 10:30 https://esempio.it/x", false),
+        (
+            "line:(rosa spina) -block:\"due parole\" section:lago",
+            false,
+        ),
+        ("città line:(rosa", false),
+        ("line:( , )", false),
         ("((a OR b) (c OR d))", false),
         ("città \"aperta", false),
         ("città /aperta", false),

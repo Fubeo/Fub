@@ -39,6 +39,7 @@ import type {
   TaskStatus,
   TextField,
   TextMode,
+  TextScope,
   TextTolerance,
   ThemeEngine,
   ThemeLight,
@@ -1423,7 +1424,11 @@ export type QueryPredicate =
   | { kind: "regex"; pattern: string; fields: TextField[] }
   | { kind: "task"; status: TaskStatus }
   | { kind: "path"; glob: string }
-  | { kind: "file"; extension: string };
+  | { kind: "file"; extension: string }
+  | { kind: "scoped"; scope: TextScope; text: TextQuery };
+
+// L'unità del corpo dentro cui uno `scoped` vuole tutti i suoi termini.
+export type { TextScope } from "./enums.generated";
 
 export interface QueryLiteral {
   negated: boolean;

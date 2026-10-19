@@ -753,6 +753,14 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return new RegExp(`^${p.glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, "\u0000").replace(/\*/g, "[^/]*").replace(/\u0000/g, ".*").replace(/\?/g, "[^/]")}$`).test(id);
       case "file":
         return id.toLowerCase().endsWith(`.${p.extension.toLowerCase()}`);
+      case "scoped": {
+        // Le righe del sorgente; un blocco è ciò che sta fra righe vuote, una
+        // sezione ciò che sta fra due titoli.
+        const units =
+          p.scope === "line" ? text.split("\n") : p.scope === "block" ? text.split(/\n\s*\n/) : text.split(/^(?=#{1,6}\s)/m);
+        const words = p.text.text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+        return words.length > 0 && units.some((unit) => words.every((word) => unit.toLowerCase().includes(word)));
+      }
       default:
         throw new Error(`host fake: non so leggere il predicato ${p.kind}`);
     }

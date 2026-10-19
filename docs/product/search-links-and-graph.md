@@ -39,7 +39,11 @@ e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
   confrontati per specie;
 - gli operatori `tag:`, `path:`, `folder:`, `file:`, `content:`, `heading:`,
   `ext:`, `task:todo`, `task:done` e `match-case:`, con valore anche fra
-  virgolette.
+  virgolette;
+- `line:`, `block:` e `section:`, che vogliono tutte le parole nella stessa
+  riga scritta, nello stesso blocco (paragrafo, titolo, voce, codice, tabella)
+  o sotto lo stesso titolo: `line:(rosa spina)`, `block:"frase"`. Diventano
+  la foglia `scoped`, che l'indice full-text valuta sui suoi candidati.
 
 Un nome seguito da `:` che non è un operatore resta testo, così un orario o un
 URL non producono un errore. Un errore di sintassi porta la specie e la

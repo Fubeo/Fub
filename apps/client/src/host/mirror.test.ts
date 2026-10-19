@@ -503,6 +503,7 @@ function touchQueryExpr(e: QueryExpr): void {
         case "task":
         case "path":
         case "file":
+        case "scoped":
           continue;
         default:
           assertNever(p);

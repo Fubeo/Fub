@@ -1984,6 +1984,16 @@ interface index {
     record task-predicate { status: task-status }
     record path-predicate { glob: string }
     record file-predicate { extension: string }
+    /// L'unità del corpo dentro cui stanno tutti i termini di uno `scoped`:
+    /// una riga scritta, un blocco (paragrafo, titolo, voce, codice, tabella),
+    /// una sezione (da un titolo al seguente).
+    enum text-scope { line, block, section }
+    /// Il testo, tutto nella stessa unità del corpo; i campi di `text` non
+    /// contano.
+    record scoped-predicate {
+        scope: text-scope,
+        text: text-query,
+    }
     /// Le foglie: ognuna è un fatto sul vault che qualcuno sa verificare.
     variant query-predicate {
         text(text-query),
@@ -1997,6 +2007,7 @@ interface index {
         task(task-predicate),
         path(path-predicate),
         file(file-predicate),
+        scoped(scoped-predicate),
     }
     /// Un predicato, eventualmente negato: in forma normale la negazione finisce
     /// sulle foglie, ed è la casella «diverso da» di un builder.
@@ -2388,6 +2399,7 @@ interface index {
         task,
         path,
         file,
+        scoped,
     }
     /// Cosa un indice dichiara alla registrazione. Una FAMIGLIA ha un
     /// proprietario solo (lì la risposta si compone, e due autori vorrebbero

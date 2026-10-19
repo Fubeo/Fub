@@ -135,6 +135,8 @@ export type TextField = "name" | "body" | "tags" | "heading";
 
 export type TextMode = "terms" | "phrase";
 
+export type TextScope = "line" | "block" | "section";
+
 export type TextTolerance = "exact" | "typos";
 
 export type ThemeEngine = "theme-1" | "theme-2";

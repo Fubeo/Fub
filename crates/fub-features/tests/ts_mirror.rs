@@ -735,6 +735,13 @@ fn index_query_samples() -> Vec<Value> {
                         extension: "md".into(),
                     },
                 },
+                QueryLiteral {
+                    negated: false,
+                    predicate: QueryPredicate::Scoped {
+                        scope: fub_abi::query::TextScope::Section,
+                        text: TextQuery::terms("rosa spina"),
+                    },
+                },
             ],
         }],
     };

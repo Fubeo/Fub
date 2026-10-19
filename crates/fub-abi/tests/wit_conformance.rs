@@ -94,7 +94,7 @@ use fub_abi::options::OptionMap;
 use fub_abi::organization::Organization;
 use fub_abi::query::{
     QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TaskStatus, TextField, TextMode,
-    TextQuery, TextTolerance,
+    TextQuery, TextScope, TextTolerance,
 };
 use fub_abi::render::{EmbedContent, RenderedDocument, RenderedPart};
 use fub_abi::session::{
@@ -485,6 +485,7 @@ wit_kebab! {
     TextField,
     TextTolerance,
     TaskStatus,
+    TextScope,
     QueryKind,
     PredicateKind,
     QueryRoute,
@@ -2209,6 +2210,11 @@ fn query_predicate_case(p: &QueryPredicate) -> Case {
             "file-predicate",
             vec![("extension", wit(extension))],
         ),
+        QueryPredicate::Scoped { scope, text } => case_rec(
+            "scoped",
+            "scoped-predicate",
+            vec![("scope", wit(scope)), ("text", wit(text))],
+        ),
     }
 }
 
@@ -2259,6 +2265,7 @@ fn predicate_kind_case(k: &PredicateKind) -> Case {
         PredicateKind::Task => case("task"),
         PredicateKind::Path => case("path"),
         PredicateKind::File => case("file"),
+        PredicateKind::Scoped => case("scoped"),
     }
 }
 
@@ -3009,6 +3016,10 @@ fn conform(source: &str) -> Result<(), String> {
             query_predicate_case(&QueryPredicate::File {
                 extension: String::new(),
             }),
+            query_predicate_case(&QueryPredicate::Scoped {
+                scope: TextScope::Line,
+                text: TextQuery::terms(""),
+            }),
         ],
     );
 
@@ -3063,6 +3074,7 @@ fn conform(source: &str) -> Result<(), String> {
             predicate_kind_case(&PredicateKind::Task),
             predicate_kind_case(&PredicateKind::Path),
             predicate_kind_case(&PredicateKind::File),
+            predicate_kind_case(&PredicateKind::Scoped),
         ],
     );
 
@@ -3081,6 +3093,7 @@ fn conform(source: &str) -> Result<(), String> {
 
     contract.enumeration_from("text-tolerance", ("query.rs", "TextTolerance"));
     contract.enumeration_from("task-status", ("query.rs", "TaskStatus"));
+    contract.enumeration_from("text-scope", ("query.rs", "TextScope"));
 
     contract.variant_src(
         "property-test",
@@ -4612,6 +4625,13 @@ fn conform(source: &str) -> Result<(), String> {
     contract.record("task-predicate", &[("status", wit(&TaskStatus::Open))]);
     contract.record("path-predicate", &[("glob", wit(&String::new()))]);
     contract.record("file-predicate", &[("extension", wit(&String::new()))]);
+    contract.record(
+        "scoped-predicate",
+        &[
+            ("scope", wit(&TextScope::Line)),
+            ("text", wit(&TextQuery::terms(""))),
+        ],
+    );
 
     let PropertyFilter { key, test } = PropertyFilter {
         key: String::new(),

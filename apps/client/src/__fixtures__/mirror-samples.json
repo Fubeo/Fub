@@ -980,6 +980,21 @@
                   "kind": "file",
                   "extension": "md"
                 }
+              },
+              {
+                "negated": false,
+                "predicate": {
+                  "kind": "scoped",
+                  "scope": "section",
+                  "text": {
+                    "text": "rosa spina",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
               }
             ]
           }

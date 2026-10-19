@@ -111,6 +111,8 @@ use tantivy::snippet::SnippetGenerator;
 use tantivy::tokenizer::TokenStream;
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Term};
 
+mod scope;
+
 const MAX_SCAN_DOCS: u64 = 2048;
 const MAX_SCAN_BYTES: usize = 8 * 1024 * 1024;
 const MAX_REGEX_BYTES: usize = 256;
@@ -139,7 +141,8 @@ pub const SEARCH_ID: &str = "fub.search";
 /// v6: `headings` e `tags` memorizzati per la scansione regex/case-sensitive;
 /// `task_state` per i marker open/done. Gli alias restano in `page_name` e
 /// sono coperti dall'impronta del contenuto.
-const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(6);
+/// v7: `layout`, righe, blocchi e sezioni del corpo per `QueryPredicate::Scoped`.
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(7);
 
 /// **La forma che quel numero versiona** (§15.3,
 /// [0106](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)).
@@ -159,7 +162,7 @@ const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(6);
 #[cfg(test)]
 const FINGERPRINT_OF_THE_SCHEMA: &str = "doc_id:raw:stored page_name:default:stored \
 body:default:stored tags:raw:stored tag_paths:raw folder:raw folder_exact:raw \
-headings:default:stored task_state:raw";
+headings:default:stored task_state:raw layout:-:stored";
 
 /// Nome del manifest nello spazio dati del plugin (vedi [`Manifest`]).
 const MANIFEST: &str = "manifest.json";
@@ -383,6 +386,10 @@ fn fingerprint(doc: &DocumentModel) -> u64 {
     }
     let (open, done) = task_states(doc);
     h.update(&[u8::from(open), u8::from(done)]);
+    // Le righe del corpo non stanno nel testo piatto: un a-capo morbido ci
+    // diventa uno spazio, e la ricerca per riga lo vedrebbe vecchio.
+    h.update(&[0]);
+    h.update(scope::layout(doc).as_bytes());
     h.value()
 }
 /// Task presenti nell'albero, compresi liste annidate, citazioni e custom
@@ -440,6 +447,8 @@ struct Fields {
     /// che `TextField::Heading` esiste per dire.
     headings: Field,
     task_state: Field,
+    /// Righe, blocchi e sezioni del corpo (vedi [`scope`]).
+    layout: Field,
 }
 
 /// La forma dello schema, in una riga: `nome:tokenizer[:stored]` per campo, in
@@ -494,6 +503,9 @@ fn build_schema() -> (Schema, Fields) {
     // indietro niente — gli estratti li genera il corpo.
     let headings = b.add_text_field("headings", TEXT | STORED);
     let task_state = b.add_text_field("task_state", STRING);
+    // Soltanto memorizzato: si rilegge per i candidati di `Scoped`, che
+    // l'indice ha già trovato col corpo.
+    let layout = b.add_text_field("layout", STORED);
     (
         b.build(),
         Fields {
@@ -506,6 +518,7 @@ fn build_schema() -> (Schema, Fields) {
             folder_exact,
             headings,
             task_state,
+            layout,
         },
     )
 }
@@ -1037,6 +1050,7 @@ impl SearchIndex {
         for heading in &doc.outline {
             td.add_text(f.headings, &heading.text);
         }
+        td.add_text(f.layout, scope::layout(doc));
         // Un valore per tag (non una stringa unita): col tokenizer raw ogni
         // valore È un termine, e il termine è la forma canonica — la stessa
         // chiave con cui il kernel aggrega e il pannello interroga.
@@ -1456,6 +1470,22 @@ impl SearchIndex {
                     values.iter().any(|value| regex.is_match(value))
                 })
             }
+            QueryPredicate::Scoped { scope, text } => {
+                // I candidati li trova l'indice, col corpo e le sue regole; qui
+                // si tengono quelli che hanno tutto nella stessa unità.
+                let body = TextQuery {
+                    fields: vec![TextField::Body],
+                    ..text.clone()
+                };
+                let Some(matcher) = scope::Matcher::new(text) else {
+                    return Ok(None);
+                };
+                let Some(candidates) = self.text_query(&body)? else {
+                    return Ok(None);
+                };
+                text_parts.push(candidates.box_clone());
+                self.scan_layouts(&*candidates, |layout| matcher.within(layout, *scope))
+            }
             QueryPredicate::Tag { name, descendants } => {
                 let field = if *descendants { f.tag_paths } else { f.tags };
                 Ok(Some(term_query(field, &canonical_tag(name))))
@@ -1737,6 +1767,55 @@ impl SearchIndex {
         Ok((!docs.is_empty()).then(|| Box::new(BooleanQuery::new(docs)) as Box<dyn Query>))
     }
 
+    /// I documenti di `candidates` la cui forma (`layout`) passa `matches`.
+    ///
+    /// Gli stessi tetti di [`Self::scan_fields`], ma sui soli candidati: chi
+    /// cerca in una riga ha già detto quali parole ci devono stare.
+    fn scan_layouts(
+        &self,
+        candidates: &dyn Query,
+        mut matches: impl FnMut(&str) -> bool,
+    ) -> Result<Option<Box<dyn Query>>, PluginError> {
+        self.commit()?;
+        let searcher = self.reader.searcher();
+        let found = searcher
+            .search(
+                candidates,
+                &tantivy::collector::TopDocs::with_limit(MAX_SCAN_DOCS as usize + 1)
+                    .order_by_score(),
+            )
+            .map_err(|err| PluginError::Internal(reason(SEARCH, err)))?;
+        if found.len() > MAX_SCAN_DOCS as usize {
+            return Err(PluginError::BadArgs(
+                "line/block/section search is limited to 2048 candidate documents".into(),
+            ));
+        }
+        let mut docs = Vec::new();
+        let mut scanned = 0usize;
+        for (_, address) in found {
+            let doc: TantivyDocument = searcher
+                .doc(address)
+                .map_err(|err| PluginError::Internal(reason(DOC_READ, err)))?;
+            let Some(id) = doc.get_first(self.fields.doc_id).and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let layout = doc
+                .get_first(self.fields.layout)
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            scanned = scanned.saturating_add(layout.len());
+            if scanned > MAX_SCAN_BYTES {
+                return Err(PluginError::BadArgs(
+                    "line/block/section search exceeds 8 MiB of indexed text".into(),
+                ));
+            }
+            if matches(layout) {
+                docs.push((Occur::Should, term_query(self.fields.doc_id, id)));
+            }
+        }
+        Ok((!docs.is_empty()).then(|| Box::new(BooleanQuery::new(docs)) as Box<dyn Query>))
+    }
+
     /// Un termine **incompleto**: tutto ciò che comincia così.
     ///
     /// È un automa sul dizionario dei termini — cioè un intervallo aperto nella
@@ -1850,6 +1929,7 @@ impl IndexProvider for SearchIndex {
             QueryRoute::Predicate(PredicateKind::Task),
             QueryRoute::Predicate(PredicateKind::Tag),
             QueryRoute::Predicate(PredicateKind::Folder),
+            QueryRoute::Predicate(PredicateKind::Scoped),
         ]
     }
 

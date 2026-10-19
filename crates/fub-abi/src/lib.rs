@@ -124,7 +124,7 @@ pub use options::{OptionMap, OptionStatus};
 pub use organization::Organization;
 pub use query::{
     Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate, TaskStatus,
-    TextField, TextMode, TextQuery, TextTolerance,
+    TextField, TextMode, TextQuery, TextScope, TextTolerance,
 };
 pub use render::{EmbedContent, RenderedDocument, RenderedPart};
 pub use schema::SchemaVersion;

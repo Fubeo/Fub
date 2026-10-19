@@ -9,6 +9,8 @@ import type {
   QueryPredicate,
   TextField,
   TextMode,
+  TextQuery,
+  TextScope,
 } from "../host/contract";
 
 export const MAX_CLAUSES = 32;
@@ -245,6 +247,15 @@ class Parser {
     return fail("unclosed-quote", open);
   }
 
+  /// `(…)` dopo un operatore d'ambito: le parole fino alla `)`.
+  words(): string {
+    const open = this.pos;
+    const close = this.src.indexOf(")", open + 1);
+    if (close < 0) fail("unclosed-group", open);
+    this.pos = close + 1;
+    return this.src.slice(open + 1, close).trim();
+  }
+
   regex(): string {
     const open = this.pos;
     let escaped = false;
@@ -303,7 +314,8 @@ class Parser {
     const colon = word.indexOf(":");
     if (colon >= 0) {
       const name = word.slice(0, colon);
-      const op = OPERATORS[name];
+      // Soltanto i nomi dichiarati: `constructor:` non è un operatore.
+      const op = Object.prototype.hasOwnProperty.call(OPERATORS, name) ? OPERATORS[name] : undefined;
       if (op) {
         this.pos += name.length + 1;
         let value: string;
@@ -311,6 +323,8 @@ class Parser {
         if (this.peek() === '"') {
           value = this.quoted();
           quoted = true;
+        } else if (Object.prototype.hasOwnProperty.call(SCOPES, name) && this.peek() === "(") {
+          value = this.words();
         } else {
           value = word.slice(colon + 1);
           this.pos += value.length;
@@ -329,7 +343,23 @@ class Parser {
 
 const hasWs = (value: string) => Array.from(value).some((c) => isWs(c));
 
+const SCOPES: Record<string, TextScope> = { line: "line", block: "block", section: "section" };
+
+/// `char::is_alphanumeric` di Rust: alfabetico o numerico.
+const hasWord = (value: string) => /[\p{Alphabetic}\p{N}]/u.test(value);
+
+function scoped(scope: TextScope): (value: string, quoted: boolean) => QueryPredicate | null {
+  return (value, quoted) => {
+    if (!hasWord(value)) return null;
+    const { kind: _, ...text } = textPredicate(value, quoted ? "phrase" : "terms", [], false) as { kind: "text" } & TextQuery;
+    return { kind: "scoped", scope, text };
+  };
+}
+
 const OPERATORS: Record<string, (value: string, quoted: boolean) => QueryPredicate | null> = {
+  line: scoped("line"),
+  block: scoped("block"),
+  section: scoped("section"),
   tag: (value) => {
     const name = value.replace(/^#+/, "");
     return name === "" || hasWs(name) ? null : { kind: "tag", name, descendants: true };

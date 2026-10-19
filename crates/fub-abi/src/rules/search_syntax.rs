@@ -23,7 +23,11 @@
 //! - operatori `nome:valore`, con valore anche fra virgolette: `tag:`,
 //!   `path:` (sottostringa, o glob se contiene `*`/`?`), `folder:`, `file:`
 //!   (nel nome), `content:` (nel corpo), `heading:`, `ext:`, `task:todo` /
-//!   `task:done`, `match-case:` (testo con maiuscole esatte).
+//!   `task:done`, `match-case:` (testo con maiuscole esatte);
+//! - `line:`, `block:`, `section:` vogliono tutte le parole nella stessa riga,
+//!   nello stesso blocco o nella stessa sezione del corpo: più parole fra
+//!   parentesi, `line:(rosa spina)`, una frase fra virgolette o una parola
+//!   sola. Fra le parentesi è testo, non un gruppo: niente `OR` né operatori.
 //!
 //! Un `nome:valore` con un nome che non è un operatore è testo: `ore 10:30` o
 //! un URL non diventano un errore. Un errore porta la specie e l'offset in
@@ -31,7 +35,7 @@
 use crate::model::{PropertyDate, PropertyScalar, PropertyValue};
 use crate::query::{
     QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TaskStatus, TextField, TextMode,
-    TextQuery,
+    TextQuery, TextScope,
 };
 use crate::traits::{PropertyFilter, PropertyTest};
 
@@ -350,6 +354,18 @@ impl Parser<'_> {
         Err(fault(SearchFaultKind::UnclosedQuote, open))
     }
 
+    /// `(…)` dopo un operatore d'ambito: le parole fino alla `)`, così come
+    /// sono. La posizione di un errore è sulla `(`.
+    fn words(&mut self) -> Result<String, SearchFault> {
+        let open = self.pos;
+        let Some(close) = self.src[open + 1..].find(')') else {
+            return Err(fault(SearchFaultKind::UnclosedGroup, open));
+        };
+        let inside = self.src[open + 1..open + 1 + close].trim().to_string();
+        self.pos = open + 1 + close + 1;
+        Ok(inside)
+    }
+
     /// `/…/` con `\/` come barra letterale (le altre escape restano del regex).
     fn regex(&mut self) -> Result<String, SearchFault> {
         let open = self.pos;
@@ -426,6 +442,8 @@ impl Parser<'_> {
                 self.pos += name.len() + 1;
                 let (value, quoted) = if self.peek() == Some('"') {
                     (self.quoted()?, true)
+                } else if op.scope().is_some() && self.peek() == Some('(') {
+                    (self.words()?, false)
                 } else {
                     self.pos += value.len();
                     (value.to_string(), false)
@@ -461,6 +479,9 @@ enum Operator {
     Ext,
     Task,
     MatchCase,
+    Line,
+    Block,
+    Section,
 }
 
 impl Operator {
@@ -475,8 +496,21 @@ impl Operator {
             "ext" => Self::Ext,
             "task" => Self::Task,
             "match-case" => Self::MatchCase,
+            "line" => Self::Line,
+            "block" => Self::Block,
+            "section" => Self::Section,
             _ => return None,
         })
+    }
+
+    /// L'unità degli operatori d'ambito.
+    fn scope(self) -> Option<TextScope> {
+        match self {
+            Self::Line => Some(TextScope::Line),
+            Self::Block => Some(TextScope::Block),
+            Self::Section => Some(TextScope::Section),
+            _ => None,
+        }
     }
 
     fn predicate(self, value: String, quoted: bool) -> Option<QueryPredicate> {
@@ -485,6 +519,19 @@ impl Operator {
         } else {
             TextMode::Terms
         };
+        if let Some(scope) = self.scope() {
+            // Senza una parola non c'è niente da tenere insieme.
+            if !value.chars().any(char::is_alphanumeric) {
+                return None;
+            }
+            return Some(QueryPredicate::Scoped {
+                scope,
+                text: TextQuery {
+                    mode,
+                    ..TextQuery::terms(value)
+                },
+            });
+        }
         Some(match self {
             Self::Tag => {
                 let name = value.trim_start_matches('#');
@@ -527,6 +574,7 @@ impl Operator {
                     extension: extension.to_string(),
                 }
             }
+            Self::Line | Self::Block | Self::Section => unreachable!("risolti sopra"),
             Self::Task => QueryPredicate::Task {
                 status: match value.as_str() {
                     "todo" | "open" => TaskStatus::Open,
@@ -700,6 +748,60 @@ mod tests {
             panic!()
         };
         assert!(!t.partial_last_term);
+    }
+
+    #[test]
+    fn scoped_operators_keep_their_words_together() {
+        let e = parse(
+            "line:(rosa spina) -block:\"due parole\" section:lago",
+            false,
+        )
+        .unwrap();
+        let scoped: Vec<_> = e.any[0]
+            .all
+            .iter()
+            .map(|l| match &l.predicate {
+                QueryPredicate::Scoped { scope, text } => {
+                    (l.negated, *scope, text.text.clone(), text.mode)
+                }
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            scoped,
+            [
+                (
+                    false,
+                    TextScope::Line,
+                    "rosa spina".to_string(),
+                    TextMode::Terms
+                ),
+                (
+                    true,
+                    TextScope::Block,
+                    "due parole".to_string(),
+                    TextMode::Phrase
+                ),
+                (
+                    false,
+                    TextScope::Section,
+                    "lago".to_string(),
+                    TextMode::Terms
+                ),
+            ]
+        );
+        assert_eq!(
+            parse("a line:(rosa", false).unwrap_err(),
+            fault(SearchFaultKind::UnclosedGroup, 7)
+        );
+        assert_eq!(
+            parse("line:( , )", false).unwrap_err().kind,
+            SearchFaultKind::BadValue
+        );
+        assert_eq!(
+            parse("line:", false).unwrap_err().kind,
+            SearchFaultKind::EmptyValue
+        );
     }
 
     #[test]

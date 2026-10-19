@@ -139,6 +139,10 @@ pub enum QueryPredicate {
     Path { glob: String },
     /// Estensione di file (senza punto), confrontata senza distinzione di caso.
     File { extension: String },
+    /// Il testo, ma tutto dentro la stessa riga, lo stesso blocco o la stessa
+    /// sezione del corpo: `rosa spina` in una riga sola, non uno in testa e
+    /// l'altro in fondo. I campi di `text` non contano: l'unità è del corpo.
+    Scoped { scope: TextScope, text: TextQuery },
 }
 
 /// La foglia di testo: cosa cercare, come, e dove.
@@ -271,6 +275,23 @@ pub enum TextField {
 pub enum TaskStatus {
     Open,
     Done,
+}
+
+/// L'unità del corpo dentro cui un [`QueryPredicate::Scoped`] cerca tutti i
+/// suoi termini.
+///
+/// - `line`: una riga come l'autore l'ha scritta (un a-capo, anche morbido,
+///   la chiude; una riga di tabella è una riga);
+/// - `block`: un paragrafo, un titolo, una voce di elenco, un blocco di
+///   codice, una tabella;
+/// - `section`: ciò che sta sotto un titolo fino al titolo seguente, titolo
+///   compreso; il testo prima del primo titolo è una sezione anche lui.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TextScope {
+    Line,
+    Block,
+    Section,
 }
 
 impl QueryExpr {

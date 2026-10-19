@@ -630,6 +630,85 @@
       }
     },
     {
+      "input": "line:(rosa spina) -block:\"due parole\" section:lago",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "scoped",
+                    "scope": "line",
+                    "text": {
+                      "text": "rosa spina",
+                      "mode": "terms",
+                      "fields": [],
+                      "tolerance": "exact",
+                      "partial_last_term": false,
+                      "case_sensitive": false
+                    }
+                  }
+                },
+                {
+                  "negated": true,
+                  "predicate": {
+                    "kind": "scoped",
+                    "scope": "block",
+                    "text": {
+                      "text": "due parole",
+                      "mode": "phrase",
+                      "fields": [],
+                      "tolerance": "exact",
+                      "partial_last_term": false,
+                      "case_sensitive": false
+                    }
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "scoped",
+                    "scope": "section",
+                    "text": {
+                      "text": "lago",
+                      "mode": "terms",
+                      "fields": [],
+                      "tolerance": "exact",
+                      "partial_last_term": false,
+                      "case_sensitive": false
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "città line:(rosa",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "unclosed-group",
+          "at": 11
+        }
+      }
+    },
+    {
+      "input": "line:( , )",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "bad-value",
+          "at": 0
+        }
+      }
+    },
+    {
       "input": "((a OR b) (c OR d))",
       "typing": false,
       "out": {

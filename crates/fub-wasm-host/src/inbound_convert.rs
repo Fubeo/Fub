@@ -176,6 +176,7 @@ pub(crate) fn from_predicate_kind(
         w_index::PredicateKind::Task => R::Task,
         w_index::PredicateKind::Path => R::Path,
         w_index::PredicateKind::File => R::File,
+        w_index::PredicateKind::Scoped => R::Scoped,
     })
 }
 
@@ -364,6 +365,14 @@ fn to_predicate(
         }
         R::File { extension } => w_index::QueryPredicate::File(w_index::FilePredicate {
             extension: extension.clone(),
+        }),
+        R::Scoped { scope, text } => w_index::QueryPredicate::Scoped(w_index::ScopedPredicate {
+            scope: match scope {
+                fub_abi::query::TextScope::Line => w_index::TextScope::Line,
+                fub_abi::query::TextScope::Block => w_index::TextScope::Block,
+                fub_abi::query::TextScope::Section => w_index::TextScope::Section,
+            },
+            text: to_text_query(text)?,
         }),
     })
 }

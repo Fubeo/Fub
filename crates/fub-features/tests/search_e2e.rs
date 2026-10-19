@@ -197,6 +197,84 @@ fn advanced_leaves_share_dnf_and_keep_negation_exact() {
 }
 
 #[test]
+fn scoped_text_wants_every_word_in_the_same_line_block_or_section() {
+    use fub_abi::query::{QueryClause, QueryLiteral, TextScope};
+    let v = Vault::new();
+    v.put("Riga.md", "rosa e spina nella stessa riga\n");
+    v.put(
+        "Blocco.md",
+        "la rosa in una riga\ne la spina nella seguente\n",
+    );
+    v.put(
+        "Sezione.md",
+        "# Giardino\n\nUna rosa.\n\nUna spina.\n\n# Altro\n\nniente\n",
+    );
+    v.put("Lontane.md", "# Uno\n\nrosa\n\n# Due\n\nspina\n");
+    v.put(
+        "Elenco.md",
+        "- rosa\n- spina\n\n| fiore | difesa |\n| --- | --- |\n| rosa | spina |\n",
+    );
+    let ws = v.open();
+    let ids = |scope, negated| {
+        let mut names = matching(
+            &ws,
+            QueryExpr {
+                any: vec![QueryClause {
+                    all: vec![QueryLiteral {
+                        negated,
+                        predicate: QueryPredicate::Scoped {
+                            scope,
+                            text: TextQuery::terms("Rosa spina"),
+                        },
+                    }],
+                }],
+            },
+        )
+        .into_iter()
+        .map(|m| m.doc.to_string())
+        .collect::<Vec<_>>();
+        names.sort();
+        names
+    };
+    // La riga di una tabella è una riga; due voci di elenco no.
+    assert_eq!(ids(TextScope::Line, false), ["Elenco.md", "Riga.md"]);
+    assert_eq!(
+        ids(TextScope::Block, false),
+        ["Blocco.md", "Elenco.md", "Riga.md"]
+    );
+    assert_eq!(
+        ids(TextScope::Section, false),
+        ["Blocco.md", "Elenco.md", "Riga.md", "Sezione.md"]
+    );
+    // La negazione è del valutatore comune: tutto il resto del vault.
+    assert_eq!(ids(TextScope::Section, true), ["Lontane.md"]);
+
+    // Riscritta, la nota cambia unità senza cambiare testo piatto.
+    let mut ws = ws;
+    ws.write_document(
+        &DocId::new("Riga.md"),
+        "rosa e\nspina nella stessa riga\n",
+        WriteBase::Dictated,
+    )
+    .unwrap();
+    let ids_after = |scope| {
+        let mut names = matching(
+            &ws,
+            QueryExpr::of(QueryPredicate::Scoped {
+                scope,
+                text: TextQuery::terms("rosa spina"),
+            }),
+        )
+        .into_iter()
+        .map(|m| m.doc.to_string())
+        .collect::<Vec<_>>();
+        names.sort();
+        names
+    };
+    assert_eq!(ids_after(TextScope::Line), ["Elenco.md"]);
+}
+
+#[test]
 fn finds_notes_by_content_title_and_tag() {
     let v = Vault::new();
     v.put(
