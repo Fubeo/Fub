@@ -54,6 +54,22 @@ import { tagInProgress } from "../../../../rules/syntax";
 export interface CompletionSources {
   searchNotes(prefix: string): Promise<string[]>;
   listTags(): Promise<{ name: string; count: number }[]>;
+  /// I titoli della nota che `page` nomina come sta scritto nel link; `page`
+  /// vuota è la nota stessa (`[[#…`). Assente, `[[Nota#` non completa.
+  headingsOf?(page: string): Promise<readonly HeadingOption[]>;
+  /// I titoli del vault che contengono `text`, per `[[##…`, già in ordine.
+  searchHeadings?(text: string): Promise<readonly VaultHeading[]>;
+}
+
+/// Un titolo da proporre: il testo e il livello.
+export interface HeadingOption {
+  readonly text: string;
+  readonly level: number;
+}
+
+/// Un titolo del vault, con la nota che lo porta.
+export interface VaultHeading extends HeadingOption {
+  readonly doc: string;
 }
 
 /// Un contesto di completamento riconosciuto nel testo prima del cursore:
@@ -75,6 +91,38 @@ export function wikilinkContext(before: string): ContextMatch | null {
   if (query.includes("]]") || query.includes("\n")) return null;
   const separator = query.search(/[|#]/);
   return { from: open + 2, query: separator === -1 ? query : query.slice(0, separator) };
+}
+
+/// `[[Nota#tit` o `[[#tit`: il titolo che si sta scrivendo dentro un wikilink
+/// aperto. `page` è la nota come sta scritta (vuota per la nota stessa),
+/// `from` è dove comincia il titolo, subito dopo il `#`. Non vale per
+/// `[[##…` (titoli del vault), né per un blocco `#^` o dopo l'alias `|`.
+export function headingContext(before: string): (ContextMatch & { page: string }) | null {
+  const open = before.lastIndexOf("[[");
+  if (open === -1) return null;
+  const inner = before.slice(open + 2);
+  if (inner.includes("]]") || inner.includes("\n") || inner.includes("|") || inner.startsWith("##")) return null;
+  const hash = inner.indexOf("#");
+  if (hash === -1) return null;
+  const query = inner.slice(hash + 1);
+  if (query.startsWith("^") || query.includes("#")) return null;
+  return { from: open + 2 + hash + 1, query, page: inner.slice(0, hash) };
+}
+
+/// `[[##testo`: un titolo cercato in tutto il vault. `from` è l'inizio di
+/// `##`, che il completamento sostituisce con `Nota#Titolo`.
+export function vaultHeadingContext(before: string): ContextMatch | null {
+  const open = before.lastIndexOf("[[");
+  if (open === -1) return null;
+  const inner = before.slice(open + 2);
+  if (!inner.startsWith("##") || inner.includes("]]") || inner.includes("\n") || inner.includes("|")) return null;
+  return { from: open + 2, query: inner.slice(2) };
+}
+
+/// Un titolo come lo scrive un link: senza i caratteri che il wikilink usa
+/// per sé, che lo chiuderebbero o ne aprirebbero un altro campo.
+export function headingLinkText(text: string): string {
+  return text.replace(/[[\]|#^]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 /// Il cursore è su un token `#...` a inizio parola?
@@ -164,8 +212,12 @@ export function wikilinkSource(searchNotes: CompletionSources["searchNotes"]): C
   return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
     if (isStrictlyInsideCode(ctx.state, ctx.pos)) return null;
     const line = ctx.state.doc.lineAt(ctx.pos);
-    const match = wikilinkContext(ctx.state.sliceDoc(line.from, ctx.pos));
+    const before = ctx.state.sliceDoc(line.from, ctx.pos);
+    const match = wikilinkContext(before);
     if (!match) return null;
+    // Dopo `#` si scrive un titolo, non il nome della nota: lo completano le
+    // sorgenti dei titoli.
+    if (headingContext(before) || vaultHeadingContext(before)) return null;
     const cursorOffset = ctx.pos - line.from;
     const afterCursor = line.text.slice(cursorOffset);
     const suffix = afterCursor.search(/(?:[|#]|\]\])/);
@@ -198,6 +250,70 @@ export function wikilinkSource(searchNotes: CompletionSources["searchNotes"]): C
       // l'indice. Senza, il fuzzy di CodeMirror riordinerebbe (e scarterebbe)
       // secondo un criterio suo, e le due ricerche dell'app tornerebbero due —
       // che è precisamente ciò che la 0082 esiste per impedire.
+      filter: false,
+    };
+  };
+}
+
+/// Fin dove arriva il campo che si completa: fino a `|`, `#` o `]]` dopo il
+/// cursore, o alla fine della riga. `closed` dice se il link è già chiuso.
+function fieldEnd(ctx: CompletionContext): { to: number; closed: boolean } {
+  const line = ctx.state.doc.lineAt(ctx.pos);
+  const afterCursor = line.text.slice(ctx.pos - line.from);
+  const suffix = afterCursor.search(/(?:[|#]|\]\])/);
+  const to = suffix === -1 ? line.to : ctx.pos + suffix;
+  const after = line.text.slice(to - line.from);
+  return { to, closed: after.startsWith("]]") || after.startsWith("|") };
+}
+
+/// La sorgente dei titoli di una nota, dopo `[[Nota#` o `[[#`.
+export function headingSource(headingsOf: NonNullable<CompletionSources["headingsOf"]>): CompletionSource {
+  return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
+    if (isStrictlyInsideCode(ctx.state, ctx.pos)) return null;
+    const line = ctx.state.doc.lineAt(ctx.pos);
+    const match = headingContext(ctx.state.sliceDoc(line.from, ctx.pos));
+    if (!match) return null;
+    const { to, closed } = fieldEnd(ctx);
+    const headings = await headingsOf(match.page);
+    return {
+      from: line.from + match.from,
+      to,
+      options: headings.map((heading) => {
+        const text = headingLinkText(heading.text);
+        return { label: text, detail: `H${heading.level}`, apply: closed ? text : `${text}]]`, type: "text" };
+      }),
+      // Qui i titoli sono pochi e tutti in mano: il filtro può farlo
+      // CodeMirror mentre si scrive, senza un altro giro.
+      validFor: /^[^[\]|#^\n]*$/,
+    };
+  };
+}
+
+/// La sorgente dei titoli del vault, dopo `[[##`: ogni opzione scrive
+/// `Nota#Titolo`, con il percorso dove due note hanno lo stesso nome.
+export function vaultHeadingSource(searchHeadings: NonNullable<CompletionSources["searchHeadings"]>): CompletionSource {
+  return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
+    if (isStrictlyInsideCode(ctx.state, ctx.pos)) return null;
+    const line = ctx.state.doc.lineAt(ctx.pos);
+    const match = vaultHeadingContext(ctx.state.sliceDoc(line.from, ctx.pos));
+    if (!match) return null;
+    const { to, closed } = fieldEnd(ctx);
+    const headings = match.query.trim() === "" ? [] : await searchHeadings(match.query);
+    const docsByName = new Map<string, Set<string>>();
+    for (const heading of headings) {
+      const key = resolutionKey(pageName(heading.doc));
+      docsByName.set(key, (docsByName.get(key) ?? new Set()).add(heading.doc));
+    }
+    return {
+      from: line.from + match.from,
+      to,
+      options: headings.map((heading) => {
+        const name = pageName(heading.doc);
+        const ambiguous = (docsByName.get(resolutionKey(name))?.size ?? 0) > 1;
+        const target = `${ambiguous ? pathWithoutExtension(heading.doc) : name}#${headingLinkText(heading.text)}`;
+        return { label: headingLinkText(heading.text), detail: heading.doc, apply: closed ? target : `${target}]]`, type: "text" };
+      }),
+      // Come per le note: l'ordine è di chi cerca, e si ricerca a ogni battuta.
       filter: false,
     };
   };
@@ -323,7 +439,13 @@ export function diagramTemplateSource(today: () => Date = () => new Date()): Com
 /// qui completiamo note, tag e modelli di diagramma, non parole qualsiasi.
 export function markdownCompletions(sources: CompletionSources): Extension {
   return autocompletion({
-    override: [wikilinkSource(sources.searchNotes), tagSource(sources.listTags), diagramTemplateSource()],
+    override: [
+      wikilinkSource(sources.searchNotes),
+      ...(sources.headingsOf ? [headingSource(sources.headingsOf)] : []),
+      ...(sources.searchHeadings ? [vaultHeadingSource(sources.searchHeadings)] : []),
+      tagSource(sources.listTags),
+      diagramTemplateSource(),
+    ],
     activateOnTyping: true,
   });
 }

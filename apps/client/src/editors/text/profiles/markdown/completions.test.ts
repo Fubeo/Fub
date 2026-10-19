@@ -5,10 +5,14 @@ import { CompletionContext, type CompletionResult } from "@codemirror/autocomple
 import {
   diagramFenceContext,
   diagramTemplateSource,
+  headingContext,
+  headingSource,
   noteCompletions,
   tagCompletions,
   tagContext,
   tagSource,
+  vaultHeadingContext,
+  vaultHeadingSource,
   wikilinkContext,
   wikilinkInsertText,
   wikilinkSource,
@@ -340,5 +344,65 @@ describe("diagramTemplateSource (headless)", () => {
   it("dentro il recinto le note e i tag restano zitti", async () => {
     const doc = "```mermaid\n[[Al";
     expect(await wikilinkSource(async () => ["Alpha.md"])(ctxAt(doc, doc.length))).toBeNull();
+  });
+});
+
+describe("titoli nei wikilink", () => {
+  it("riconosce il titolo di una nota e quello della nota stessa", () => {
+    expect(headingContext("vedi [[Alpha#Pia")).toEqual({ from: 13, query: "Pia", page: "Alpha" });
+    expect(headingContext("[[#")).toEqual({ from: 3, query: "", page: "" });
+    expect(headingContext("[[Alpha#^blo")).toBeNull();
+    expect(headingContext("[[Alpha|alias#x")).toBeNull();
+    expect(headingContext("[[##tutto")).toBeNull();
+    expect(headingContext("[[Alpha]] #tag")).toBeNull();
+  });
+
+  it("riconosce [[## come titolo del vault", () => {
+    expect(vaultHeadingContext("vedi [[##pia")).toEqual({ from: 7, query: "pia" });
+    expect(vaultHeadingContext("[[#pia")).toBeNull();
+  });
+
+  it("propone i titoli della nota nominata e chiude il link", async () => {
+    const asked: string[] = [];
+    const source = headingSource(async (page) => {
+      asked.push(page);
+      return [{ text: "Piano [bozza]", level: 2 }];
+    });
+    const result = (await source(ctxAt("[[Alpha#", 8))) as CompletionResult;
+    expect(asked).toEqual(["Alpha"]);
+    expect(result.from).toBe(8);
+    expect(result.options).toEqual([{ label: "Piano bozza", detail: "H2", apply: "Piano bozza]]", type: "text" }]);
+    const closed = (await source(ctxAt("[[#]]", 3))) as CompletionResult;
+    expect(asked[1]).toBe("");
+    expect(closed.options[0]!.apply).toBe("Piano bozza");
+  });
+
+  it("dopo # la sorgente delle note tace", async () => {
+    const source = wikilinkSource(async () => ["Alpha.md"]);
+    expect(await source(ctxAt("[[Alpha#", 8))).toBeNull();
+    expect(await source(ctxAt("[[##x", 5))).toBeNull();
+  });
+
+  it("[[## scrive Nota#Titolo, col percorso per le omonime", async () => {
+    const source = vaultHeadingSource(async (text) => {
+      expect(text).toBe("pia");
+      return [
+        { doc: "a/Alpha.md", text: "Piano", level: 1 },
+        { doc: "b/Alpha.md", text: "Piano", level: 1 },
+        { doc: "Beta.md", text: "Il piano", level: 2 },
+      ];
+    });
+    const result = (await source(ctxAt("vedi [[##pia", 12))) as CompletionResult;
+    expect(result.from).toBe(7);
+    expect(result.options.map((o) => o.apply)).toEqual(["a/Alpha#Piano]]", "b/Alpha#Piano]]", "Beta#Il piano]]"]);
+    expect(result.filter).toBe(false);
+  });
+
+  it("[[## senza testo non cerca", async () => {
+    let asked = false;
+    const source = vaultHeadingSource(async () => { asked = true; return []; });
+    const result = (await source(ctxAt("[[##", 4))) as CompletionResult;
+    expect(asked).toBe(false);
+    expect(result.options).toEqual([]);
   });
 });

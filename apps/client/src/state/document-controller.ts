@@ -64,7 +64,7 @@ import { openWebPage } from "../ui/web-viewer";
 import { invalidateDocumentCaches, renameInDocumentCaches } from "./document-caches";
 import type { Theme } from "../theme/theme";
 import { api } from "../host/ipc";
-import { WITHOUT_PAGE, notesByName, renderPrint, resolvedReference, settings, vaultEntries, vaultTags } from "../host/query";
+import { WITHOUT_PAGE, documentOutline, matchingDocuments, notesByName, renderPrint, resolvedReference, searchExpression, settings, vaultEntries, vaultTags } from "../host/query";
 import { theseDocuments, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
 import { existingRecentNotes } from "./recent";
 import { onEvent } from "./kernel";
@@ -435,6 +435,32 @@ async function droppedFiles(data: DataTransfer): Promise<readonly File[]> {
   return files;
 }
 
+/// I titoli della nota che un link nomina, risolta dalla nota corrente come la
+/// risolverebbe il link; `page` vuota è la nota stessa.
+async function noteHeadings(page: string): Promise<{ text: string; level: number }[]> {
+  const from = slashContextDoc();
+  const doc = page.trim() === ""
+    ? from
+    : (await resolvedReference({ kind: "wiki", value: { page, heading: null, block: null } }, from ?? undefined))?.doc;
+  if (!doc) return [];
+  return (await documentOutline(doc)).map(({ text, level }) => ({ text, level }));
+}
+
+/// I titoli del vault che contengono `text`: le note che la ricerca trova per
+/// quelle parole, e di ciascuna i titoli che le contengono davvero. Una finestra
+/// di note, non il vault intero: si chiede a ogni battuta.
+const HEADING_NOTES = 20;
+async function vaultHeadings(text: string): Promise<{ doc: string; text: string; level: number }[]> {
+  const wanted = text.trim().toLocaleLowerCase();
+  if (wanted === "") return [];
+  const found = await matchingDocuments(searchExpression(text), { offset: 0, limit: HEADING_NOTES }, "omit");
+  const outlines = await Promise.all(found.items.map(async ({ doc }) =>
+    (await documentOutline(doc).catch(() => []))
+      .filter((heading) => heading.text.toLocaleLowerCase().includes(wanted))
+      .map(({ text: title, level }) => ({ doc, text: title, level }))));
+  return outlines.flat();
+}
+
 /// La superficie del riquadro col fuoco che sa dire il punto sotto il cursore,
 /// col documento che mostra.
 function focusedAnchorSurface(): { doc: string; anchorHere: () => SurfaceAnchor | null } | null {
@@ -672,6 +698,8 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       searchNotes: (prefix: string) =>
         (prefix.trim() ? notesByName(prefix) : existingRecentNotes()).catch(() => []),
       listTags: () => vaultTags(WITHOUT_PAGE).catch(() => []),
+      headingsOf: (page: string) => noteHeadings(page).catch(() => []),
+      searchHeadings: (text: string) => vaultHeadings(text).catch(() => []),
     },
     gridHost: api,
     media: {
