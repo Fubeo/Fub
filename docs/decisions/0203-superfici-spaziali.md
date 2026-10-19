@@ -17,8 +17,9 @@ file `.svg` non hanno un formato: la famiglia `text` li apre con il profilo
 I vincoli che contano:
 
 - un componente WASM non può disegnare: i renderer `ui-custom` sono codice del
-  bundle della shell (`apps/client/src/ui/custom.ts`), `host-vault-write` non è
-  collegato al guest e ogni chiamata ha un tetto di memoria e di tempo;
+  bundle della shell (`apps/client/src/ui/custom.ts`), `host-vault-write` non era
+  collegato al guest (lo è dal 2026-10-19) e ogni chiamata ha un tetto di
+  memoria e di tempo;
 - la `DocumentSession` è testuale: accetta `SurfaceEdit { text, operation }` e
   valida l'operazione applicandola al buffer;
 - il protocollo Grid della [0201](0201-superfici-strutturate-a-finestre.md)

@@ -726,7 +726,9 @@ fn from_text_edit(and: w_edit::TextEdit) -> Result<fub_abi::edit::TextEdit, Plug
     })
 }
 
-fn from_edit_request(r: w_edit::EditRequest) -> Result<fub_abi::edit::EditRequest, PluginError> {
+pub(crate) fn from_edit_request(
+    r: w_edit::EditRequest,
+) -> Result<fub_abi::edit::EditRequest, PluginError> {
     Ok(fub_abi::edit::EditRequest {
         base: fub_abi::edit::Revision(r.base),
         edits: r

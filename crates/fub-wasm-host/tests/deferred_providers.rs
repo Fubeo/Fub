@@ -242,14 +242,14 @@ fn an_unserved_host_family_names_itself_and_leaves_a_reusable_host() {
     let vault = Vault::new();
     let host = host(&vault);
 
-    let rejected = WasmBundle::from_file(&common::ping("con-rete"), Trust::Community)
+    let rejected = WasmBundle::from_file(&common::ping("con-trasferimento"), Trust::Community)
         .expect_err("an unserved family is rejected before mounting");
     let message = rejected.to_string();
     assert!(
         matches!(rejected, LoadError::UnservedFamilies(_)),
         "{message}"
     );
-    assert!(message.contains("host-network"), "{message}");
+    assert!(message.contains("host-transfer-read"), "{message}");
     assert!(!host
         .plugin_ids(None)
         .expect("inventory")

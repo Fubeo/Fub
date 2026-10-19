@@ -89,6 +89,16 @@ const FAMILIES_SERVED: &[&str] = &[
     "fub:abi/host-vault-read",
     "fub:abi/host-data-read",
     "fub:abi/host-data-write",
+    "fub:abi/host-vault-write",
+    "fub:abi/host-vault-structure",
+    "fub:abi/host-settings-read",
+    "fub:abi/host-settings-write",
+    "fub:abi/host-view-state-read",
+    "fub:abi/host-view-state-write",
+    "fub:abi/host-query",
+    "fub:abi/host-services",
+    "fub:abi/host-network",
+    "fub:abi/host-commands",
     "fub:abi/host-events",
 ];
 const HOST_FAMILY_PREFIX: &str = "fub:abi/host-";

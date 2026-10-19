@@ -18,26 +18,41 @@
 //! gira, e scopre a metà lavoro che una capacità non c'era: lo stesso guasto,
 //! più tardi e senza il nome.
 //!
-//! Le famiglie di oggi sono cinque: `host-env` (l'orologio, il locale, il caso,
-//! il fuoco), `host-vault-read` (leggere il vault, modello del documento
-//! compreso), `host-data-read` (rilegge i propri blob persistiti, autorevoli e
-//! di cache) e `host-data-write` (scrive e cancella gli stessi blob — due
-//! interfacce e non una, perché il percorso di render rilegge ciò che il
-//! provider si è salvato e non deve poter scrivere mentre disegna), e
-//! `host-events` (emettere eventi, avviare job e riportare progresso). Le prime
-//! due sono quelle che il ping del primo plugin nativo attraversa, cioè quelle
-//! su cui c'è una parità da provare; l'ultima è l'unica in cui il guest chiama
-//! l'host mentre l'host sta chiamando il guest, e per questo il suo `impl` sta
-//! in [`crate::events`] e non qui.
+//! Le famiglie servite sono tutte quelle di un plugin: `host-env` (l'orologio,
+//! il locale, il caso, il fuoco), `host-vault-read` (leggere il vault, modello
+//! del documento compreso), `host-vault-write` e `host-vault-structure`
+//! (scrivere testo, e creare, spostare, cestinare), `host-data-read` e
+//! `host-data-write` (i propri blob persistiti — due interfacce e non una,
+//! perché il percorso di render rilegge ciò che il provider si è salvato e non
+//! deve poter scrivere mentre disegna), le impostazioni e lo stato di vista
+//! (anche loro in due metà, per la stessa ragione), `host-query`,
+//! `host-services`, `host-network`, `host-commands` e `host-events` (emettere
+//! eventi, avviare job e riportare progresso). L'ultima è l'unica in cui il
+//! guest chiama l'host mentre l'host sta chiamando il guest, e per questo il suo
+//! `impl` sta in [`crate::events`] e non qui.
+//!
+//! Restano fuori `host-transfer-read` e `host-transfer-write`: le loro sorgenti
+//! e i loro artefatti esistono soltanto dentro una chiamata di `importer` o di
+//! `exporter`, export che questo crate non collega. Un plugin che le importa
+//! non si carica, e il rifiuto le nomina.
+//!
+//! Le scritture passano dal prestito in scrittura (`guest!`): durante una
+//! chiamata in sola lettura — un render — rispondono `internal` invece di
+//! scrivere. Le conversioni nel verso di queste famiglie stanno in
+//! [`crate::served_convert`].
 
 use fub_abi::model::DocId;
 use wasmtime::component::{HasSelf, Linker};
 
 use crate::borrow::State;
 use crate::contract::fub::abi::{
-    edit as w_edit, format as w_format, host_data_read, host_data_write, host_env, host_events,
-    host_vault_read, index as w_index, intl as w_intl, model as w_model, session as w_session,
+    command as w_command, edit as w_edit, format as w_format, host_commands, host_data_read,
+    host_data_write, host_env, host_events, host_network, host_query, host_services,
+    host_settings_read, host_settings_write, host_vault_read, host_vault_structure,
+    host_vault_write, host_view_state_read, host_view_state_write, index as w_index,
+    intl as w_intl, model as w_model, net as w_net, session as w_session, settings as w_settings,
 };
+use crate::served_convert as sc;
 use crate::translate as tr;
 
 /// Aggiunge al linker le famiglie che questo crate serve.
@@ -46,9 +61,19 @@ pub(crate) fn add_to_linker(linker: &mut Linker<State>) -> wasmtime::Result<()> 
     host_vault_read::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
     host_data_read::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
     host_data_write::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
+    host_vault_write::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
+    host_vault_structure::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
+    host_settings_read::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
+    host_settings_write::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
+    host_view_state_read::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
+    host_view_state_write::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
+    host_query::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
+    host_services::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
+    host_network::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
+    host_commands::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
     // L'ultima è servita da `crate::events`: l'`impl` sta là perché la sua è
     // l'unica famiglia in cui la chiamata va dal guest all'host mentre l'host
-    // sta chiamando il guest. La riga però sta qui, con le altre quattro,
+    // sta chiamando il guest. La riga però sta qui, con le altre,
     // perché linkare è una cosa sola e un secondo posto da cui linkare sarebbe
     // un secondo posto in cui dimenticarsene.
     host_events::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
@@ -270,6 +295,216 @@ impl host_data_write::Host for State {
     ) -> Result<(), crate::contract::fub::abi::errors::PluginError> {
         let h = guest!(self);
         h.cache_write(&path, &bytes)
+            .map_err(|and| tr::to_error(&and))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// host-vault-write / host-vault-structure: scrivere il vault (`fub:write-vault`)
+// ---------------------------------------------------------------------------
+
+impl host_vault_write::Host for State {
+    fn write_document(
+        &mut self,
+        id: w_model::DocId,
+        source: String,
+        base: w_edit::WriteBase,
+    ) -> Result<String, crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.write_document(&DocId::new(id), &source, sc::from_write_base(base))
+            .map(|r| r.0)
+            .map_err(|and| tr::to_error(&and))
+    }
+
+    fn apply_edit(
+        &mut self,
+        id: w_model::DocId,
+        request: w_edit::EditRequest,
+    ) -> Result<w_edit::EditReport, crate::contract::fub::abi::errors::PluginError> {
+        let request = tr::from_edit_request(request).map_err(|and| tr::to_error(&and))?;
+        let h = guest!(self);
+        h.apply_edit(&DocId::new(id), request)
+            .map(|report| sc::to_edit_report(&report))
+            .map_err(|and| tr::to_error(&and))
+    }
+}
+
+impl host_vault_structure::Host for State {
+    fn create_document(
+        &mut self,
+        id: w_model::DocId,
+        source: String,
+    ) -> Result<(), crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.create_document(&DocId::new(id), &source)
+            .map_err(|and| tr::to_error(&and))
+    }
+
+    fn rename_document(
+        &mut self,
+        from: w_model::DocId,
+        to: w_model::DocId,
+    ) -> Result<(), crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.rename_document(&DocId::new(from), &DocId::new(to))
+            .map_err(|and| tr::to_error(&and))
+    }
+
+    fn trash_document(
+        &mut self,
+        id: w_model::DocId,
+    ) -> Result<w_model::DocId, crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.trash_document(&DocId::new(id))
+            .map(|d| d.0)
+            .map_err(|and| tr::to_error(&and))
+    }
+
+    fn restore_document(
+        &mut self,
+        entry: w_model::DocId,
+        to: Option<w_model::DocId>,
+    ) -> Result<w_model::DocId, crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.restore_document(&DocId::new(entry), to.map(DocId::new))
+            .map(|d| d.0)
+            .map_err(|and| tr::to_error(&and))
+    }
+
+    fn empty_trash(&mut self) -> Result<u64, crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.empty_trash().map_err(|and| tr::to_error(&and))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// host-settings-* e host-view-state-*: le impostazioni e lo stato di vista
+// ---------------------------------------------------------------------------
+
+impl host_settings_read::Host for State {
+    fn setting(
+        &mut self,
+        key: String,
+    ) -> Result<w_settings::SettingValue, crate::contract::fub::abi::errors::PluginError> {
+        let h = reader!(self);
+        h.setting(&key)
+            .map(|v| sc::to_setting_value(&v))
+            .map_err(|and| tr::to_error(&and))
+    }
+}
+
+impl host_settings_write::Host for State {
+    fn set_setting(
+        &mut self,
+        key: String,
+        value: w_settings::SettingValue,
+    ) -> Result<(), crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.set_setting(&key, sc::from_setting_value(value))
+            .map_err(|and| tr::to_error(&and))
+    }
+
+    fn reset_setting(
+        &mut self,
+        key: String,
+    ) -> Result<(), crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.reset_setting(&key).map_err(|and| tr::to_error(&and))
+    }
+}
+
+impl host_view_state_read::Host for State {
+    fn view_state(
+        &mut self,
+        key: String,
+    ) -> Result<Option<String>, crate::contract::fub::abi::errors::PluginError> {
+        let h = reader!(self);
+        h.view_state(&key)
+            .map(|v| v.as_ref().map(tr::to_json))
+            .map_err(|and| tr::to_error(&and))
+    }
+}
+
+impl host_view_state_write::Host for State {
+    fn set_view_state(
+        &mut self,
+        key: String,
+        value: Option<String>,
+    ) -> Result<(), crate::contract::fub::abi::errors::PluginError> {
+        let value = value
+            .as_deref()
+            .map(tr::from_json)
+            .transpose()
+            .map_err(|and| tr::to_error(&and))?;
+        let h = guest!(self);
+        h.set_view_state(&key, value)
+            .map_err(|and| tr::to_error(&and))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// host-query, host-services, host-network, host-commands
+// ---------------------------------------------------------------------------
+
+impl host_query::Host for State {
+    fn query_index(
+        &mut self,
+        query: w_index::IndexQuery,
+    ) -> Result<w_index::IndexResult, crate::contract::fub::abi::errors::PluginError> {
+        let query = sc::from_index_query(query).map_err(|and| tr::to_error(&and))?;
+        let h = reader!(self);
+        h.query_index(query)
+            .and_then(|result| sc::to_index_result(&result))
+            .map_err(|and| tr::to_error(&and))
+    }
+}
+
+impl host_services::Host for State {
+    fn call_service(
+        &mut self,
+        service: String,
+        method: String,
+        args: String,
+    ) -> Result<String, crate::contract::fub::abi::errors::PluginError> {
+        let args = tr::from_json(&args).map_err(|and| tr::to_error(&and))?;
+        let h = guest!(self);
+        h.call_service(&service, &method, args)
+            .map(|v| tr::to_json(&v))
+            .map_err(|and| tr::to_error(&and))
+    }
+}
+
+impl host_network::Host for State {
+    fn fetch(
+        &mut self,
+        request: w_net::HttpRequest,
+    ) -> Result<w_net::HttpResponse, crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.fetch(sc::from_http_request(request))
+            .map(sc::to_http_response)
+            .map_err(|and| tr::to_error(&and))
+    }
+}
+
+impl host_commands::Host for State {
+    fn run_command(
+        &mut self,
+        command: String,
+        args: String,
+    ) -> Result<w_command::CommandOutcome, crate::contract::fub::abi::errors::PluginError> {
+        let args = tr::from_json(&args).map_err(|and| tr::to_error(&and))?;
+        let h = guest!(self);
+        h.run_command(&command, args)
+            .map(|o| sc::to_command_outcome(&o))
+            .map_err(|and| tr::to_error(&and))
+    }
+
+    fn undo_last(
+        &mut self,
+    ) -> Result<Option<w_command::Undone>, crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.undo_last()
+            .map(|u| u.as_ref().map(sc::to_undone))
             .map_err(|and| tr::to_error(&and))
     }
 }

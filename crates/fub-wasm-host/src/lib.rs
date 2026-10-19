@@ -42,6 +42,7 @@ mod instance_lock;
 mod limits;
 pub mod managed;
 mod model;
+mod served_convert;
 mod translate;
 mod ui;
 pub use component::{
