@@ -363,10 +363,11 @@ fn catalog_it() -> StringCatalog {
         .with("note.extract.replace.title", "Sostituisci con")
         .with(
             "note.extract.replace.desc",
-            "link o embed. Assente: link.",
+            "link, embed o niente. Assente: link.",
         )
         .with("note.extract.replace.link", "Link")
         .with("note.extract.replace.embed", "Embed")
+        .with("note.extract.replace.none", "Niente")
         .with("note.merge.title", "Unisci note")
         .with(
             "note.merge.desc",
@@ -601,10 +602,11 @@ fn catalog_en() -> StringCatalog {
         .with("note.extract.replace.title", "Replace with")
         .with(
             "note.extract.replace.desc",
-            "link or embed. Absent: link.",
+            "link, embed or nothing. Absent: link.",
         )
         .with("note.extract.replace.link", "Link")
         .with("note.extract.replace.embed", "Embed")
+        .with("note.extract.replace.none", "Nothing")
         .with("note.merge.title", "Merge notes")
         .with(
             "note.merge.desc",
@@ -822,6 +824,7 @@ impl TemplateCommands {
                     ParamKind::Choice(vec![
                         Choice::new("link", Text::key("note.extract.replace.link")),
                         Choice::new("embed", Text::key("note.extract.replace.embed")),
+                        Choice::new("none", Text::key("note.extract.replace.none")),
                     ]),
                 ))
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
@@ -2112,12 +2115,16 @@ fn extract(
         )));
     }
     check_relative_assets(host, &from, &id, Some(span))?;
-    let embed = matches!(args.text(REPLACE).unwrap_or("link").trim(), "embed");
-    let link = crate::formats::link_text(
-        host,
-        &from,
-        &crate::formats::wikilink(id.page_name(), None, embed),
-    )?;
+    // «Niente» toglie la selezione e basta: il testo vive nella nota nuova, e
+    // l'annullamento lo rimette dov'era come per gli altri due.
+    let link = match args.text(REPLACE).unwrap_or("link").trim() {
+        "none" => String::new(),
+        replace => crate::formats::link_text(
+            host,
+            &from,
+            &crate::formats::wikilink(id.page_name(), None, replace == "embed"),
+        )?,
+    };
     let summary = Text::message(
         P_EXTRACT,
         vec![
@@ -2187,9 +2194,9 @@ fn extract(
 /// dice `{{selection}}`, altrimenti in coda al suo testo dopo una riga vuota,
 /// con i terminatori di riga del template.
 ///
-/// La sorgente sostituisce la selezione con un link in ogni caso, quindi un
-/// template che non la colloca non può lasciarla fuori: il testo non starebbe
-/// più da nessuna parte (difetto I21).
+/// La sorgente toglie la selezione in ogni caso (al suo posto un link, un
+/// embed o niente), quindi un template che non la colloca non può lasciarla
+/// fuori: il testo non starebbe più da nessuna parte (difetto I21).
 fn wrap_selection(expanded: String, selected: &str) -> String {
     const SELECTION: &str = "{{selection}}";
     if expanded.contains(SELECTION) {

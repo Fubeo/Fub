@@ -1016,6 +1016,49 @@ fn extract_keeps_the_selection_when_the_template_does_not_place_it() {
     }
 }
 
+/// «Niente» al posto della selezione: la sorgente perde il testo, la nota nuova
+/// lo tiene, e un solo annullamento rimette le cose com'erano.
+#[test]
+fn extracting_with_nothing_in_its_place_leaves_no_link_and_undoes_in_one_step() {
+    let vault = Vault::new();
+    let source = "Prima. Da spostare. Dopo.";
+    vault.put("source.md", source);
+    let mut ws = vault.open_with_properties();
+    let at = source.find("Da spostare.").unwrap();
+    ws.set_active_context(Some(
+        fub_abi::session::ViewContext::new("main")
+            .with_doc(Some(DocId::new("source.md")))
+            .with_selections(Some(fub_abi::session::SelectionSet::anchored(
+                Span::new(at, at + "Da spostare.".len()),
+                "Da spostare.",
+            ))),
+    ));
+    ws.invoke_command(
+        NOTES_EXTRACT,
+        serde_json::json!({"name": "spostata", "replace": "none"}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("the extraction");
+    assert_eq!(
+        ws.read_source(&DocId::new("source.md")).unwrap(),
+        "Prima.  Dopo."
+    );
+    assert_eq!(
+        ws.read_source(&DocId::new("spostata.md")).unwrap(),
+        "Da spostare."
+    );
+    ws.invoke_command(
+        VAULT_UNDO,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("one undo");
+    assert_eq!(ws.read_source(&DocId::new("source.md")).unwrap(), source);
+    assert!(!ws.documents().contains(&DocId::new("spostata.md")));
+}
+
 #[test]
 fn extract_refuses_to_move_relative_embedded_assets_across_folders() {
     let vault = Vault::new();
