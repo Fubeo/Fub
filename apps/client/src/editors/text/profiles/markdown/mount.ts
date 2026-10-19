@@ -19,7 +19,8 @@ import { notify } from "../../../../ui/notify";
 import { attachTooltip } from "../../../../ui/tooltip";
 import { Race, type Expected } from "../../../../ui/race";
 import { external, hasScheme, isAllowedLink, sanitizeMarkdownHtml, setSanitizedHtml } from "../../../../ui/sanitize";
-import { writeClipboardText } from "../../../../platform/clipboard";
+import { clipboardSupports, writeClipboardData, writeClipboardText } from "../../../../platform/clipboard";
+import { showContextMenu } from "../../../../ui/menu";
 import { openWebLink } from "../../../../ui/web-viewer";
 
 export interface MarkdownMountOptions {
@@ -292,6 +293,7 @@ function enhanceContent(
   life.add(mountMathBlocks(container));
   wireContent(container, options, life);
   wireFootnotePreviews(container, life);
+  wireImageMenu(container, life);
   life.add(highlightMarkdownCode(container));
 }
 
@@ -308,6 +310,64 @@ function wireFootnotePreviews(container: HTMLElement, life: Lifetime): void {
     const text = note ? footnoteText(note) : "";
     if (text) life.add(attachTooltip(ref, text));
   }
+}
+
+/// Il tasto destro su un'immagine resa: copiarla negli appunti come PNG, e
+/// per un'immagine del vault anche il suo percorso. Un incorporamento dentro
+/// l'altro risponde per primo, e il menu esterno non si apre sopra il suo.
+function wireImageMenu(container: HTMLElement, life: Lifetime): void {
+  life.listen(container, "contextmenu", (event) => {
+    if (event.defaultPrevented) return;
+    const target = event.target instanceof Element ? event.target : null;
+    const picture = target?.closest<HTMLImageElement>("img");
+    if (!picture || !container.contains(picture) || picture.closest("[data-ui-slot]")) return;
+    event.preventDefault();
+    const id = picture.dataset.vaultId;
+    showContextMenu(event, [
+      {
+        label: t("preview.image.copy"),
+        disabled: !clipboardSupports("image/png") || !(picture.currentSrc || picture.src),
+        run: () => {
+          // La promessa dei byte entra subito negli appunti, dentro il gesto:
+          // alcuni motori non lasciano scrivere dopo.
+          const png = pngOf(picture);
+          png.catch(() => undefined);
+          void writeClipboardData({ "image/png": png }).then(
+            () => notify(t("preview.image.copied"), "info"),
+            () => notify(t("preview.image.copy_failed"), "guasto"),
+          );
+        },
+      },
+      ...(id ? [{
+        label: t("tabmenu.copy_path"),
+        run: () => {
+          void writeClipboardText(id).then(
+            () => notify(t("tabmenu.path_copied", { path: id }), "info"),
+            () => notify(t("tabmenu.copy_failed"), "guasto"),
+          );
+        },
+      }] : []),
+    ]);
+  });
+}
+
+/// L'immagine come PNG: i byte stessi se lo sono già, altrimenti ridisegnati
+/// su una tela alla misura naturale. Una sorgente che non si legge rifiuta.
+export async function pngOf(picture: HTMLImageElement): Promise<Blob> {
+  const source = await (await fetch(picture.currentSrc || picture.src)).blob();
+  if (source.type === "image/png") return source;
+  const drawable: CanvasImageSource = await createImageBitmap(source).catch(() => picture);
+  const width = "naturalWidth" in drawable ? drawable.naturalWidth : drawable.width;
+  const height = "naturalHeight" in drawable ? drawable.naturalHeight : drawable.height;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context || width === 0 || height === 0) throw new Error("immagine senza misura");
+  context.drawImage(drawable, 0, 0);
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("PNG non prodotto"))), "image/png");
+  });
 }
 
 /// Il testo di una nota come si legge: senza il numero davanti e senza i

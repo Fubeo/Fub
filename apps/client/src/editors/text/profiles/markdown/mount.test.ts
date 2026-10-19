@@ -31,6 +31,7 @@ import { footnoteText, mountMarkdown, mountRenderedDocument, sourceElementAt } f
 import { api } from "../../../../host/ipc";
 import { registerCustomRenderer } from "../../../../ui/custom";
 import { closeLightbox } from "../../../../ui/lightbox";
+import { declareClipboard } from "../../../../platform/clipboard";
 import { setReducedMotionPreference } from "../../../../theme/reduced-motion";
 
 const disposers: (() => void)[] = [];
@@ -412,5 +413,38 @@ describe("anteprima delle note a piè di pagina", () => {
     const tip = document.getElementById(refs[1]!.getAttribute("aria-describedby")!);
     expect(tip?.textContent).toBe("Una nota breve.");
     refs[1]!.dispatchEvent(new FocusEvent("blur"));
+  });
+});
+
+describe("menu di un'immagine", () => {
+  it("copia l'immagine come PNG e il percorso di quella del vault", async () => {
+    const written: string[][] = [];
+    const texts: string[] = [];
+    const undeclare = declareClipboard(async (text) => void texts.push(text), {
+      supports: (type) => type === "image/png",
+      write: async (content) => {
+        written.push(Object.keys(content));
+        await Promise.allSettled(Object.values(content));
+      },
+      read: async () => [],
+    });
+    try {
+      const root = mount('<p><img data-vault-id="foto.png" alt="Foto"></p>');
+      const picture = root.querySelector<HTMLImageElement>("img")!;
+      // La sorgente arriva dopo, dall'idratazione dei media del vault.
+      picture.src = "blob:foto";
+      const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 5, clientY: 5 });
+      picture.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      const items = () => Array.from(document.querySelectorAll<HTMLElement>("#context-menu [role=menuitem]"));
+      expect(items().map((item) => item.textContent?.trim())).toEqual(["Copia immagine", "Copia il percorso"]);
+      items()[0]!.click();
+      await vi.waitFor(() => expect(written).toEqual([["image/png"]]));
+      picture.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+      items()[1]!.click();
+      await vi.waitFor(() => expect(texts).toEqual(["foto.png"]));
+    } finally {
+      undeclare();
+    }
   });
 });
