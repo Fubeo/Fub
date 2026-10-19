@@ -109,10 +109,10 @@ il limite Mermaid degli archi è 500. Il cambio di superficie rilascia gli
 osservatori e gli URL delle immagini; una risposta vecchia non rimonta il
 diagramma.
 
-I link espliciti contenuti nel diagramma diventano controlli adiacenti
-navigabili soltanto per destinazioni `http`, `https`, `mailto` o frammenti
-locali. Lo SVG resta un'immagine inerte: non porta callback o navigazione propria
-nella webview.
+I link espliciti del diagramma diventano controlli adiacenti, soltanto per
+`http`, `https`, `mailto` o frammenti locali; un nodo con la classe
+`internal-link` aggiunge un wikilink alla nota col suo testo. Lo SVG resta
+un'immagine inerte, senza callback o navigazione propria nella webview.
 
 ## Formule
 
