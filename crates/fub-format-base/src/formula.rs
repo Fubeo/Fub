@@ -1191,6 +1191,9 @@ fn eval_call(
     budget: &mut EvalBudget,
     depth: usize,
 ) -> Result<BaseValue, EvalError> {
+    if let Some(kind) = Lambda::named(name) {
+        return eval_lambda(kind, name, args, ctx, budget, depth);
+    }
     let Some((min, max)) = function_arity(name) else {
         return Err(EvalError::Name(format!("funzione sconosciuta `{name}`")));
     };
@@ -1211,6 +1214,90 @@ fn eval_call(
         }
     }
     call_known(name, values, ctx)
+}
+
+/// Le tre funzioni che ricevono un'espressione invece di un valore, come in
+/// Obsidian: `lista.filter(value > 2)`, `lista.map(value * 2)`,
+/// `lista.reduce(acc + value, 0)`. L'espressione si valuta una volta per
+/// elemento, con `value` (l'elemento), `index` (la posizione, da 0) e, per
+/// `reduce`, `acc` (il risultato fin lì) come nomi locali: dentro
+/// l'espressione coprono una proprietà con lo stesso nome. Ogni giro spende
+/// il budget come ogni altro passo, quindi una lista lunga si ferma lì.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Lambda {
+    Filter,
+    Map,
+    Reduce,
+}
+
+impl Lambda {
+    fn named(name: &str) -> Option<Self> {
+        Some(match name {
+            "filter" => Lambda::Filter,
+            "map" => Lambda::Map,
+            "reduce" => Lambda::Reduce,
+            _ => return None,
+        })
+    }
+}
+
+fn eval_lambda(
+    kind: Lambda,
+    name: &str,
+    args: &[FormulaAst],
+    ctx: &RowContext,
+    budget: &mut EvalBudget,
+    depth: usize,
+) -> Result<BaseValue, EvalError> {
+    let wanted = if kind == Lambda::Reduce { 3 } else { 2 };
+    if args.len() != wanted {
+        return Err(EvalError::Value(format!(
+            "`{name}` vuole {wanted} argomenti"
+        )));
+    }
+    let items = match eval(&args[0], ctx, budget, depth + 1)? {
+        BaseValue::List(items) => items,
+        BaseValue::Empty => Vec::new(),
+        BaseValue::Error(code) => return Ok(BaseValue::Error(code)),
+        _ => return Err(EvalError::Value(format!("`{name}` vuole una lista"))),
+    };
+    let mut acc = if kind == Lambda::Reduce {
+        match eval(&args[2], ctx, budget, depth + 1)? {
+            BaseValue::Error(code) => return Ok(BaseValue::Error(code)),
+            value => value,
+        }
+    } else {
+        BaseValue::Empty
+    };
+    let mut local = ctx.clone();
+    let mut out = Vec::new();
+    for (index, item) in items.into_iter().enumerate() {
+        budget.step()?;
+        local.props.insert("value".into(), item.clone());
+        local
+            .props
+            .insert("index".into(), BaseValue::Number(index as f64));
+        if kind == Lambda::Reduce {
+            local.props.insert("acc".into(), acc.clone());
+        }
+        let result = eval(&args[1], &local, budget, depth + 1)?;
+        if let BaseValue::Error(code) = result {
+            return Ok(BaseValue::Error(code));
+        }
+        match kind {
+            Lambda::Filter => {
+                if truthy(&result) {
+                    out.push(item);
+                }
+            }
+            Lambda::Map => out.push(result),
+            Lambda::Reduce => acc = result,
+        }
+    }
+    Ok(match kind {
+        Lambda::Reduce => acc,
+        _ => BaseValue::List(out),
+    })
 }
 
 fn call_known(name: &str, args: Vec<BaseValue>, ctx: &RowContext) -> Result<BaseValue, EvalError> {
@@ -2305,6 +2392,44 @@ mod tests {
         for (source, expected) in cases {
             assert_eq!(value_of(source), expected, "{source}");
         }
+    }
+
+    #[test]
+    fn filter_map_e_reduce_valutano_l_espressione_per_ogni_elemento() {
+        let n = |x: f64| BaseValue::Number(x);
+        assert_eq!(
+            value_of("[1, 2, 3, 4].filter(value > 2)"),
+            BaseValue::List(vec![n(3.0), n(4.0)])
+        );
+        assert_eq!(
+            value_of("[1, 2, 3].map(value * 10 + index)"),
+            BaseValue::List(vec![n(10.0), n(21.0), n(32.0)])
+        );
+        assert_eq!(value_of("[1, 2, 3].reduce(acc + value, 0)"), n(6.0));
+        assert_eq!(value_of("reduce([], acc + value, 5)"), n(5.0));
+        // `value` copre la proprietà solo dentro l'espressione.
+        assert_eq!(
+            value_of("[1].map(status)"),
+            BaseValue::List(vec![BaseValue::Text("done".into())])
+        );
+        assert_eq!(
+            value_of("'abc'.filter(value)"),
+            BaseValue::Error(FormulaErrorCode::Value)
+        );
+        assert_eq!(
+            value_of("[1, 2].map(value / 0)"),
+            BaseValue::Error(FormulaErrorCode::DivZero)
+        );
+        assert_eq!(
+            value_of("[1].reduce(acc + value)"),
+            BaseValue::Error(FormulaErrorCode::Value)
+        );
+        // Una lista lunga si ferma al budget, non gira all'infinito.
+        let formula = Formula::parse("[1, 2, 3].map(value)").unwrap();
+        assert_eq!(
+            formula.evaluate(&ctx(), &mut EvalBudget::new(4)),
+            BaseValue::Error(FormulaErrorCode::Budget)
+        );
     }
 
     #[test]
