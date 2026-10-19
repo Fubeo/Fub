@@ -301,3 +301,65 @@ fn tag_groups_are_memberships_of_each_node_not_a_shared_facet() {
     assert_eq!(p["groups"]["B.md"], "beta");
     assert_eq!(p["groups"]["C.md"], "");
 }
+
+/// Un passo di filtro sulla view, e il payload che ne esce.
+fn toggle(ws: &mut Workspace, key: &str) -> serde_json::Value {
+    let update = ws
+        .view_action(
+            &ViewInstance::only(GRAPH_VIEW),
+            UiAction::new("filter").with_payload(serde_json::json!({ "key": key })),
+        )
+        .unwrap();
+    let ViewUpdate::Replace { root } = update else {
+        panic!("graph redraw")
+    };
+    payload(&root)
+}
+
+/// Coi tag come nodi ogni tag è un nodo `#nome`, collegato alle note che lo
+/// portano; una nota che ha solo un tag non è più orfana.
+#[test]
+fn tags_become_nodes_linked_to_their_notes() {
+    let vault = Vault::new();
+    vault.put("A.md", "#alfa #beta\n");
+    vault.put("B.md", "#alfa\n");
+    vault.put("C.md", "niente\n");
+    let mut ws = vault.open();
+    toggle(&mut ws, "show_orphans");
+    let p = toggle(&mut ws, "show_tags");
+    assert_eq!(nodes(&p), ["#alfa", "#beta", "A.md", "B.md"]);
+    let mut got = edges(&p);
+    got.sort();
+    assert_eq!(
+        got,
+        [
+            ("A.md".to_string(), "#alfa".to_string()),
+            ("A.md".to_string(), "#beta".to_string()),
+            ("B.md".to_string(), "#alfa".to_string()),
+        ]
+    );
+    assert_eq!(p["tags"], serde_json::json!(["#alfa", "#beta"]));
+    assert!(p["groups"].get("#alfa").is_none(), "un tag non ha cartella");
+    assert_eq!(p["filter"]["show_tags"], true);
+}
+
+/// Con le note mancanti un link che non risolve diventa un nodo, collegato a
+/// chi lo scrive; spento, il grafo mostra solo i file che esistono.
+#[test]
+fn missing_notes_become_nodes_only_when_asked() {
+    let vault = Vault::new();
+    vault.put("A.md", "[[B]] e [[Fantasma]] e [[Fantasma]]\n");
+    vault.put("B.md", "![[manca.png]]\n");
+    let mut ws = vault.open();
+    let tree = ws.render_view(&ViewInstance::only(GRAPH_VIEW)).unwrap();
+    let off = payload(&tree);
+    assert_eq!(nodes(&off), ["A.md", "B.md"]);
+    assert!(off.get("missing").is_none());
+    let on = toggle(&mut ws, "show_missing");
+    assert_eq!(nodes(&on), ["A.md", "B.md", "Fantasma"]);
+    assert!(edges(&on).contains(&("A.md".to_string(), "Fantasma".to_string())));
+    assert_eq!(on["missing"], serde_json::json!(["Fantasma"]));
+    // Un allegato mancante segue il filtro degli allegati.
+    let with_attachments = toggle(&mut ws, "show_attachments");
+    assert!(nodes(&with_attachments).contains(&"manca.png".to_string()));
+}

@@ -7,6 +7,8 @@ import { GRAPH_NS, mountGraph } from "./graph";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 
 interface FakeChart {
+  open: ((id: string) => void) | undefined;
+  setGhostNodes: Mock;
   onFocusChange: ((index: number) => void) | undefined;
   focusNode: Mock;
   focusedNode: Mock;
@@ -31,6 +33,7 @@ const fakes = vi.hoisted(() => ({
   languageListeners: [] as Array<() => void>,
   groups: [] as string[],
   lifetimes: [] as Lifetime[],
+  openWikilink: vi.fn(async (_page: string) => {}),
   layoutRegistrations: [] as Array<{
     listener: Mock;
     disposer: () => void;
@@ -69,6 +72,7 @@ vi.mock("../graph/chart", () => ({
       nodeId: vi.fn(() => null),
       nodeCount: vi.fn(() => 0),
       setVisibleNodes: vi.fn(),
+      setGhostNodes: vi.fn(),
       setGroups: vi.fn(() => fakes.groups),
       setOpenDocuments: vi.fn(),
       setA11yLabel: vi.fn(),
@@ -118,6 +122,10 @@ vi.mock("../i18n/strings", () => ({
   },
 }));
 
+vi.mock("../state/document-controller", () => ({
+  openWikilink: (page: string) => fakes.openWikilink(page),
+}));
+
 vi.mock("../state/layout", () => ({
   panes: () => [],
   pane: () => undefined,
@@ -138,6 +146,7 @@ beforeEach(() => {
   fakes.languageListeners.length = 0;
   fakes.layoutRegistrations.length = 0;
   fakes.groups = [];
+  fakes.openWikilink.mockClear();
 });
 
 function mountTestGraph(): void {
@@ -215,6 +224,48 @@ describe("lifecycle del renderer graph", () => {
     second.click();
     expect(chart.focusNode).toHaveBeenCalledWith(50);
     expect(opened).toEqual(["n0", "n50"]);
+    unmount!();
+  });
+
+  it("un nodo tag cerca il tag, una nota mancante si crea come il suo wikilink", async () => {
+    mountTestGraph();
+    const render = customRenderer(GRAPH_NS, null)!;
+    const actions: Array<{ action: string; payload: unknown }> = [];
+    const host = document.createElement("div");
+    document.body.append(host);
+    const unmount = render(
+      host,
+      {
+        nodes: ["A.md", "#alfa", "Fantasma"],
+        edges: [{ from: "A.md", to: "#alfa" }, { from: "A.md", to: "Fantasma" }],
+        tags: ["#alfa", "#estraneo"],
+        missing: ["Fantasma"],
+        filter: { show_orphans: true, show_attachments: false, show_tags: true, show_missing: true },
+      },
+      ((action: { action: string; payload: unknown }) => {
+        actions.push(action);
+      }) as never,
+      NO_RENDER_CONTEXT,
+    );
+    await vi.dynamicImportSettled();
+    const chart = fakes.charts[fakes.charts.length - 1]!;
+    expect(chart.setGhostNodes).toHaveBeenCalledWith(new Set(["Fantasma"]));
+    chart.open!("#alfa");
+    chart.open!("Fantasma");
+    chart.open!("A.md");
+    expect(actions).toEqual([
+      { action: "open", payload: { tag: "alfa" } },
+      { action: "open", payload: { doc: "A.md" } },
+    ]);
+    expect(fakes.openWikilink).toHaveBeenCalledWith("Fantasma");
+    // I due filtri nuovi sono caselle della barra, accese come dice il provider.
+    const boxes = [...host.querySelectorAll<HTMLLabelElement>("label.graph-toolbar-field")]
+      .filter((l) => l.querySelector("input[type=checkbox]"));
+    const checked = Object.fromEntries(boxes.map((l) => [l.textContent, l.querySelector("input")!.checked]));
+    expect(checked).toMatchObject({ "graph.filter.tags": true, "graph.filter.missing": true });
+    boxes.find((l) => l.textContent === "graph.filter.missing")!.querySelector("input")!
+      .dispatchEvent(new Event("change"));
+    expect(actions[actions.length - 1]).toEqual({ action: "filter", payload: { key: "show_missing" } });
     unmount!();
   });
 

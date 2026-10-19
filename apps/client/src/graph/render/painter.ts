@@ -40,6 +40,8 @@ export interface DrawState {
   camera: Camera;
   openDocuments: ReadonlySet<string>;
   visible?: ReadonlySet<string>;
+  /// I nodi delle note che non esistono: si disegnano in trasparenza.
+  ghosts?: ReadonlySet<string>;
   hovered: number;
   dragged: number;
   /// Il nodo selezionato da tastiera (frecce): è «focus» quanto l'hover per
@@ -73,6 +75,8 @@ export interface DrawState {
 /// L'etichetta di un nodo: il nome della nota, senza cartella né estensione.
 /// Il percorso intero sta nell'elenco accessibile e nello stato.
 export function nodeLabel(id: string): string {
+  // Un nodo tag (`#progetto/fub`) si legge intero: il suo nome è il tag.
+  if (id.startsWith("#") && !id.includes(".")) return id;
   const base = id.slice(id.lastIndexOf("/") + 1);
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(0, dot) : base;
@@ -119,6 +123,8 @@ export const MIN_NODE_PX = 1.5;
 /// Le etichette: corpo del testo, distanza dal nodo e lato della griglia di
 /// occupazione che evita di sovrapporle.
 const LABEL_PX = 11;
+/// L'opacità di un nodo che non è un file: una nota nominata e mai scritta.
+const GHOST_ALPHA = 0.4;
 const LABEL_GAP = 5;
 const LABEL_CELL = 8;
 
@@ -434,7 +440,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
   function redraw(state: DrawState): void {
     previousState = state;
     if (!ctx) return;
-    const { s, camera: c, openDocuments, visible, hovered, dragged, focused, alpha, tier, elapsedMs, reducedMotion } = state;
+    const { s, camera: c, openDocuments, visible, ghosts, hovered, dragged, focused, alpha, tier, elapsedMs, reducedMotion } = state;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const cameraMoved = !lastCamera || lastCamera.scale !== c.scale || lastCamera.tx !== c.tx || lastCamera.ty !== c.ty;
@@ -618,7 +624,10 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
       // L'alone pulsante dei nodi aperti: fase dall'hash dell'id, così i
       // vicini non pulsano in sincrono (sembra vivo, non un semaforo).
       const alone = pulseOpacity(s.id[i], elapsedMs, alpha, !reducedMotion && isOpen && config.pulse);
+      const ghost = ghosts?.has(s.id[i]) === true;
+      if (ghost) ctx.globalAlpha = GHOST_ALPHA;
       paintNode(i, sx, sy, rS, role, alone);
+      if (ghost) ctx.globalAlpha = 1;
       if (i === focus) {
         ringPath(sx, sy, rS + 2.5);
         ctx.strokeStyle = dragged === i ? tints.active : tints.hover;

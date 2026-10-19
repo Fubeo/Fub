@@ -106,6 +106,9 @@ fn the_keys_of_the_action_is_agree_between_the_two_ends() {
         "key",
         "show_orphans",
         "show_attachments",
+        "show_tags",
+        "show_missing",
+        "tag",
         "refresh",
     ] {
         let quoted = format!("\"{letterale}\"");

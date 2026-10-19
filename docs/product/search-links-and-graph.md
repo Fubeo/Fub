@@ -204,6 +204,18 @@ filtro li aggiunge come nodi con i loro archi. Quale nodo è un documento lo
 dice il registro dei formati. Posizione e animazione restano stato della
 shell, in memoria e mai nel vault.
 
+Due altri filtri, spenti di default, aggiungono nodi che non sono file:
+
+- **Tag** aggiunge un nodo `#nome` per ogni tag delle note mostrate, con un
+  arco da ogni nota che lo porta; il click cerca il tag;
+- **Note mancanti** aggiunge un nodo per ogni destinazione di un link rotto,
+  presa dal controllo di salute del vault, con l'arco dalla nota che la scrive.
+  Il nodo è in trasparenza, e il click crea la nota come farebbe il suo
+  wikilink. Un allegato mancante segue il filtro degli allegati.
+
+Spento, il grafo mostra solo i file che esistono. Una nota collegata solo a un
+tag non conta come orfana, e tag e note mancanti non hanno gruppo di cartella.
+
 Il grafo non ha un posto riservato nella shell. Si apre con il comando
 `graph.open` che il componente dichiara (`Mod-Shift-g`), dalla palette, dal menu
 Vista o dalla rail, che mostrano ogni view principale apribile senza argomenti.

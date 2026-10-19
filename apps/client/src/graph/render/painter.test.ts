@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MIN_NODE_PX, labelFade, labelReach, pulseOpacity, screenRadius, trailFade } from "./painter";
+import { MIN_NODE_PX, labelFade, labelReach, nodeLabel, pulseOpacity, screenRadius, trailFade } from "./painter";
 import { createStructure, organicConfig } from "../sim/types";
 
 describe("pulse dei nodi", () => {
@@ -66,5 +66,13 @@ describe("labelReach", () => {
   it("dove le etichette non si disegnano non sporge niente", () => {
     expect(labelFade(0.5)).toBe(0);
     expect(labelReach(pair(), 0.5, 100, (i) => widths[i])).toBe(0);
+  });
+});
+
+describe("nodeLabel", () => {
+  it("toglie cartella ed estensione a una nota, lascia intero un tag", () => {
+    expect(nodeLabel("Progetti/Idea.md")).toBe("Idea");
+    expect(nodeLabel("Fantasma")).toBe("Fantasma");
+    expect(nodeLabel("#progetto/fub")).toBe("#progetto/fub");
   });
 });

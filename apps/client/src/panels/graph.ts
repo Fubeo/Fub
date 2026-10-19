@@ -40,6 +40,7 @@ import { GROUP_TOKENS } from "../graph/render/atlas";
 import { nodeLabel } from "../graph/render/painter";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
+import { openWikilink } from "../state/document-controller";
 import { loadConfig, saveConfig } from "../graph/config";
 import type { Chart } from "../graph/chart";
 import type { SavedLayout } from "../graph/sim/memory";
@@ -55,7 +56,7 @@ const OPEN = "open";
 const DOC = "doc";
 /// Le azioni della barra dei controlli e le chiavi dei loro payload. Gemelle di
 /// `SEED_ACTION`, `DEPTH_ACTION`, `DIRECTION_ACTION`, `GROUP_ACTION`,
-/// `FILTER_ACTION`/`FILTER_KEY`, `SHOW_ORPHANS`/`SHOW_ATTACHMENTS` e
+/// `FILTER_ACTION`/`FILTER_KEY`, i filtri `SHOW_*` e
 /// `REFRESH_ACTION` in `graph.rs`: sono protocollo fra le due metà del
 /// componente come `OPEN`, e `graph_has_two_halves.rs` le presidia allo stesso
 /// modo.
@@ -67,6 +68,10 @@ const FILTER = "filter";
 const FILTER_KEY = "key";
 const SHOW_ORPHANS = "show_orphans";
 const SHOW_ATTACHMENTS = "show_attachments";
+const SHOW_TAGS = "show_tags";
+const SHOW_MISSING = "show_missing";
+/// Nel click su un nodo tag, il tag da cercare (gemella di `TAG` in `graph.rs`).
+const TAG = "tag";
 const REFRESH = "refresh";
 
 
@@ -83,8 +88,11 @@ interface GraphData {
   groups: Record<string, string>;
   /// La vista locale in corso, o `null` per il grafo intero.
   local: { seed: string; depth: number; direction: string } | null;
-  filter: { showOrphans: boolean; showAttachments: boolean };
+  filter: { showOrphans: boolean; showAttachments: boolean; showTags: boolean; showMissing: boolean };
   groupBy: "folder" | "tag";
+  /// I nodi tag (`#nome`) e quelli delle note che non esistono.
+  tags: ReadonlySet<string>;
+  missing: ReadonlySet<string>;
 }
 
 /// Attacca la metà shell del grafo: il renderer del suo `ns`.
@@ -138,7 +146,10 @@ function readData(payload: unknown): GraphData {
           !!e && typeof e.from === "string" && typeof e.to === "string",
       )
     : [];
-  const extra = (payload ?? {}) as { groups?: unknown; local?: unknown; filter?: unknown; group_by?: unknown };
+  const extra = (payload ?? {}) as { groups?: unknown; local?: unknown; filter?: unknown; group_by?: unknown; tags?: unknown; missing?: unknown };
+  const known = new Set(nodes);
+  const idsOf = (raw: unknown): Set<string> =>
+    new Set(Array.isArray(raw) ? raw.filter((id): id is string => typeof id === "string" && known.has(id)) : []);
   const groups: Record<string, string> = Object.create(null);
   if (extra.groups && typeof extra.groups === "object" && !Array.isArray(extra.groups)) {
     for (const [id, name] of Object.entries(extra.groups as Record<string, unknown>)) {
@@ -153,7 +164,7 @@ function readData(payload: unknown): GraphData {
       direction: typeof rawLocal.direction === "string" ? rawLocal.direction : "outbound",
     }
     : null;
-  const rawFilter = (extra.filter ?? {}) as { show_orphans?: unknown; show_attachments?: unknown };
+  const rawFilter = (extra.filter ?? {}) as { show_orphans?: unknown; show_attachments?: unknown; show_tags?: unknown; show_missing?: unknown };
   return {
     nodes,
     edges,
@@ -163,8 +174,12 @@ function readData(payload: unknown): GraphData {
     filter: {
       showOrphans: rawFilter.show_orphans !== false,
       showAttachments: rawFilter.show_attachments === true,
+      showTags: rawFilter.show_tags === true,
+      showMissing: rawFilter.show_missing === true,
     },
     groupBy: extra.group_by === "tag" ? "tag" : "folder",
+    tags: idsOf(extra.tags),
+    missing: idsOf(extra.missing),
   };
 }
 
@@ -323,10 +338,18 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   let zoomControls: HTMLElement | null = null;
   let panel: PhysicsPanel | null = null;
   let disposed = false;
+  /// Il click su un nodo: un tag si cerca, una nota che non c'è si crea come
+  /// farebbe il suo wikilink, il resto si apre dal provider.
+  const openNode = (id: string): void => {
+    if (data.tags.has(id)) onAction({ action: OPEN, payload: { [TAG]: id.slice(1) } }, []);
+    else if (data.missing.has(id)) void openWikilink(id).catch((error) => notify(errorText(error)));
+    else onAction({ action: OPEN, payload: { [DOC]: id } }, []);
+  };
   const settleEngine = (engine: GraphEngine): void => {
     if (disposed) return;
     const next = engine.createChart({ config, data, layout: rememberedLayout });
     next.setVisibleNodes(masked() ? visible : null);
+    next.setGhostNodes(data.missing.size > 0 ? data.missing : null);
     chart = next;
     const created = engine.createPhysicsPanel({
       config,
@@ -344,7 +367,7 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     });
     panel = created;
     // L'apertura nota: il grafico non conosce `onAction`, lo riceve qui.
-    next.open = (id: string) => onAction({ action: OPEN, payload: { [DOC]: id } }, []);
+    next.open = openNode;
     next.onFocusChange = showSelection;
     next.mount(viewport);
     drawLegend(next.setGroups(Object.keys(data.groups).length > 0 ? data.groups : null));
@@ -473,7 +496,7 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
       const at = i;
       trackListButton(open, () => {
         chart?.focusNode(at);
-        void (chart ? chart.open(id) : onAction({ action: OPEN, payload: { [DOC]: id } }, []));
+        openNode(id);
       });
       li.append(open);
       listBox.append(li);
@@ -683,6 +706,8 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   toolbar.append(
     toggle(t("graph.filter.orphans"), data.filter.showOrphans, SHOW_ORPHANS),
     toggle(t("graph.filter.attachments"), data.filter.showAttachments, SHOW_ATTACHMENTS),
+    toggle(t("graph.filter.tags"), data.filter.showTags, SHOW_TAGS),
+    toggle(t("graph.filter.missing"), data.filter.showMissing, SHOW_MISSING),
   );
   // Il grafo non si ridisegna da solo (la simulazione non riparte sotto il
   // mouse); quando il vault cambia lo dice, e si aggiorna a richiesta.
