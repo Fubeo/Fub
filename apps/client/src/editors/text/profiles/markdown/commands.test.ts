@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { smartLists } from "../../smart-lists";
 import { undo, history } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { EditorSelection, EditorState, type StateCommand, type Transaction } from "@codemirror/state";
@@ -164,6 +165,18 @@ describe("formattazione inline", () => {
 });
 
 describe("smartListEnter", () => {
+  it("con gli elenchi intelligenti spenti cede il passo all'Invio normale", () => {
+    const state = EditorState.create({
+      doc: "- uno",
+      selection: EditorSelection.single(5),
+      extensions: [markdown({ base: markdownLanguage }), smartLists.of(false)],
+    });
+    let dispatched = false;
+    const handled = smartListEnter({ state, dispatch: () => { dispatched = true; } });
+    expect(handled).toBe(false);
+    expect(dispatched).toBe(false);
+  });
+
   it("continua i puntati con lo stesso pallino", () => {
     expect(run(smartListEnter, "- uno|").out).toBe("- uno\n- |");
     expect(run(smartListEnter, "* uno|").out).toBe("* uno\n* |");

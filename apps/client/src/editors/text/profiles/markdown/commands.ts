@@ -14,6 +14,7 @@ import { taskChecked } from "../../../../rules/mirrored";
 import { nextMarker, listItem, type ListEntry } from "../../../../rules/syntax";
 import { isStrictlyInsideCode } from "./parser";
 import { textKeymap } from "../../commands";
+import { smartLists } from "../../smart-lists";
 
 // ── Formattazione inline ─────────────────────────────────────────────────────
 
@@ -236,7 +237,7 @@ export const toggleInlineMath = toggleWrap("$");
 /// o col cursore ancora dentro il marcatore — restituisce `false`: lì l'Enter
 /// di default fa già la cosa giusta.
 export const smartListEnter: StateCommand = ({ state, dispatch }) => {
-  if (state.readOnly) return false;
+  if (state.readOnly || !state.facet(smartLists)) return false;
   const owned: { line: Line; item: ListEntry }[] = [];
   const splits = new Map<number, number>();
   const emptied = new Set<number>();

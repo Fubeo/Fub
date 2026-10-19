@@ -63,6 +63,7 @@ import { onEvent } from "../../state/kernel";
 import type { Teardown } from "../../ui/lifetime";
 import { editorTheme } from "./theme";
 import { HistoryFootprints } from "./history-footprints";
+import { smartLists } from "./smart-lists";
 import {
   operationFromText,
   tryApplyOperation,
@@ -113,6 +114,7 @@ export const EDITOR_LINE_WRAP_KEY = "editor.line-wrap";
 export const EDITOR_INDENT_KEY = "editor.indent";
 export const EDITOR_CLOSE_BRACKETS_KEY = "editor.close-brackets";
 export const EDITOR_FOLD_GUTTER_KEY = "editor.fold-gutter";
+export const EDITOR_SMART_LISTS_KEY = "editor.smart-lists";
 const INPUT_KEYS = new Set([
   EDITOR_SPELLCHECK_KEY,
   EDITOR_VIM_KEY,
@@ -121,6 +123,7 @@ const INPUT_KEYS = new Set([
   EDITOR_INDENT_KEY,
   EDITOR_CLOSE_BRACKETS_KEY,
   EDITOR_FOLD_GUTTER_KEY,
+  EDITOR_SMART_LISTS_KEY,
 ]);
 
 /// Come si dispone il testo: numeri di riga (visibili solo in Sorgente, Live
@@ -134,6 +137,8 @@ interface LayoutPreferences {
   /// per piegare. Due interruttori della pagina Editor, di questa macchina.
   readonly closeBrackets: boolean;
   readonly foldGutter: boolean;
+  /// `Invio` che continua gli elenchi.
+  readonly smartLists: boolean;
 }
 const DEFAULT_LAYOUT: LayoutPreferences = {
   lineNumbers: true,
@@ -141,6 +146,7 @@ const DEFAULT_LAYOUT: LayoutPreferences = {
   indent: "2",
   closeBrackets: true,
   foldGutter: true,
+  smartLists: true,
 };
 const FIELD_LAYOUT: LayoutPreferences = { ...DEFAULT_LAYOUT, lineNumbers: false };
 
@@ -151,6 +157,7 @@ function layoutExtensions(layout: LayoutPreferences): Extension {
     layout.lineWrap ? EditorView.lineWrapping : [],
     indentUnit.of(unit),
     layout.foldGutter ? foldGutter({ openText: "↓" }) : [],
+    smartLists.of(layout.smartLists),
     layout.closeBrackets ? [closeBrackets(), keymap.of(closeBracketsKeymap)] : [],
   ];
 }
@@ -466,7 +473,8 @@ export class TextEngine {
       && next.lineWrap === this.layout.lineWrap
       && next.indent === this.layout.indent
       && next.closeBrackets === this.layout.closeBrackets
-      && next.foldGutter === this.layout.foldGutter;
+      && next.foldGutter === this.layout.foldGutter
+      && next.smartLists === this.layout.smartLists;
     if (this.disposed || same) return;
     this.layout = next;
     this.reconfigureInput();
@@ -512,6 +520,7 @@ export class TextEngine {
         indent: indent === "tab" || indent === "4" ? indent : "2",
         closeBrackets: value(EDITOR_CLOSE_BRACKETS_KEY) !== false,
         foldGutter: value(EDITOR_FOLD_GUTTER_KEY) !== false,
+        smartLists: value(EDITOR_SMART_LISTS_KEY) !== false,
       });
     } catch {
       // Defaults remain available before a vault is open or when settings fail.

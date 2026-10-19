@@ -165,6 +165,7 @@ pub const EDITOR_LINE_NUMBERS: &str = "editor.line-numbers";
 pub const EDITOR_LINE_WRAP: &str = "editor.line-wrap";
 pub const EDITOR_CLOSE_BRACKETS: &str = "editor.close-brackets";
 pub const EDITOR_FOLD_GUTTER: &str = "editor.fold-gutter";
+pub const EDITOR_SMART_LISTS: &str = "editor.smart-lists";
 /// Cosa inserisce Tab e con cosa si rientrano gli elenchi: `tab`, `2` o `4`
 /// spazi. Il default è quello che CodeMirror usava prima che fosse una scelta.
 pub const EDITOR_INDENT: &str = "editor.indent";
@@ -430,6 +431,12 @@ fn editor_settings() -> Vec<SettingSpec> {
                 EDITOR_FOLD_GUTTER,
                 C_EDITOR_FOLD_GUTTER,
                 C_EDITOR_FOLD_GUTTER_DESC,
+                true,
+            ),
+            (
+                EDITOR_SMART_LISTS,
+                C_EDITOR_SMART_LISTS,
+                C_EDITOR_SMART_LISTS_DESC,
                 true,
             ),
         ]
@@ -950,6 +957,8 @@ const C_EDITOR_CLOSE_BRACKETS: &str = "core.editor.close_brackets";
 const C_EDITOR_CLOSE_BRACKETS_DESC: &str = "core.editor.close_brackets.desc";
 const C_EDITOR_FOLD_GUTTER: &str = "core.editor.fold_gutter";
 const C_EDITOR_FOLD_GUTTER_DESC: &str = "core.editor.fold_gutter.desc";
+const C_EDITOR_SMART_LISTS: &str = "core.editor.smart_lists";
+const C_EDITOR_SMART_LISTS_DESC: &str = "core.editor.smart_lists.desc";
 const C_EDITOR_LINE_WRAP: &str = "core.editor.line_wrap";
 const C_EDITOR_LINE_WRAP_DESC: &str = "core.editor.line_wrap.desc";
 const C_EDITOR_INDENT: &str = "core.editor.indent";
@@ -1370,6 +1379,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_CLOSE_BRACKETS_DESC, "Scrivendo una parentesi, una virgoletta o un simbolo di apertura, chiude da sé la coppia.")
         .with(C_EDITOR_FOLD_GUTTER, "Margine di piegatura")
         .with(C_EDITOR_FOLD_GUTTER_DESC, "Mostra nel margine le frecce per piegare titoli e blocchi.")
+        .with(C_EDITOR_SMART_LISTS, "Elenchi intelligenti")
+        .with(C_EDITOR_SMART_LISTS_DESC, "Invio continua la voce dell'elenco e su una voce vuota chiude l'elenco. Spenti, Invio va a capo e basta.")
         .with(C_EDITOR_LINE_WRAP, "A capo automatico")
         .with(C_EDITOR_LINE_WRAP_DESC, "Manda a capo le righe lunghe invece di farle scorrere in orizzontale.")
         .with(C_EDITOR_INDENT, "Rientro")
@@ -1766,6 +1777,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_CLOSE_BRACKETS_DESC, "Typing an opening bracket, quote or symbol closes the pair for you.")
         .with(C_EDITOR_FOLD_GUTTER, "Fold gutter")
         .with(C_EDITOR_FOLD_GUTTER_DESC, "Shows the arrows in the margin to fold headings and blocks.")
+        .with(C_EDITOR_SMART_LISTS, "Smart lists")
+        .with(C_EDITOR_SMART_LISTS_DESC, "Enter continues the list item and ends the list on an empty item. Off, Enter just starts a new line.")
         .with(C_EDITOR_LINE_WRAP, "Wrap lines")
         .with(C_EDITOR_LINE_WRAP_DESC, "Wrap long lines instead of scrolling horizontally.")
         .with(C_EDITOR_INDENT, "Indentation")

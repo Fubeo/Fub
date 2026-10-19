@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { smartLists } from "./smart-lists";
 import { describe, expect, it, vi } from "vitest";
 import { getCM } from "@replit/codemirror-vim";
 import { EditorView } from "@codemirror/view";
@@ -9,6 +10,7 @@ import {
   createTextEngine,
   EDITOR_CLOSE_BRACKETS_KEY,
   EDITOR_FOLD_GUTTER_KEY,
+  EDITOR_SMART_LISTS_KEY,
   EDITOR_SPELLCHECK_KEY,
   EDITOR_VIM_KEY,
 } from "./engine";
@@ -105,6 +107,26 @@ describe("text input settings", () => {
     await vi.waitFor(() => expect(host.querySelector(".cm-foldGutter")).toBeNull());
     expect(view.state.facet(EditorView.inputHandler).some((h) => h(view, 0, 0, "(", () => view.state.update({}))))
       .toBe(false);
+    engine.destroy();
+    host.remove();
+  });
+
+  it("gli elenchi intelligenti seguono l'impostazione", async () => {
+    const read = vi.mocked(settings);
+    read.mockReset();
+    read.mockResolvedValue([]);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const engine = createTextEngine(host, { onChange: () => {}, onSelectionChange: () => {} });
+    const view = EditorView.findFromDOM(host)!;
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(view.state.facet(smartLists)).toBe(true);
+    read.mockResolvedValue([entry(EDITOR_SMART_LISTS_KEY, false)]);
+    forwardNotice({
+      event: { type: "setting_changed", key: EDITOR_SMART_LISTS_KEY, scope: "machine" },
+      origin: { actor: { kind: "user" }, batch: null },
+    });
+    await vi.waitFor(() => expect(view.state.facet(smartLists)).toBe(false));
     engine.destroy();
     host.remove();
   });
