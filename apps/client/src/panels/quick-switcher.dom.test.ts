@@ -228,4 +228,24 @@ describe("combobox del quick switcher", () => {
     expect(document.getElementById("quick-switcher")).toBeNull();
     expect(document.activeElement).toBe(opener);
   });
+
+  it("un risultato si trascina fuori come la nota: la modale lascia passare il rilascio e poi si chiude", async () => {
+    const { overlay, list } = await openSwitcher();
+    const button = options(list)[1]!.querySelector<HTMLButtonElement>("button")!;
+    expect(button.draggable).toBe(true);
+    const offered = new Map<string, string>();
+    const start = new Event("dragstart", { bubbles: true }) as DragEvent;
+    Object.defineProperty(start, "dataTransfer", {
+      value: { effectAllowed: "none", setData: (type: string, value: string) => offered.set(type, value) },
+    });
+    button.dispatchEvent(start);
+    expect(offered.get("application/x-fub-note")).toBe("notes/Beta.md");
+    expect(overlay.style.pointerEvents).toBe("");
+    button.dispatchEvent(new Event("drag", { bubbles: true }));
+    expect(overlay.style.pointerEvents).toBe("none");
+    expect(fake.openDocument).not.toHaveBeenCalled();
+    button.dispatchEvent(new Event("dragend", { bubbles: true }));
+    vi.runAllTimers();
+    expect(document.getElementById("quick-switcher")).toBeNull();
+  });
 });

@@ -64,6 +64,9 @@ import { cancelScheduledPreview, hidePreview, schedulePreview, showStickyPreview
 import { openDocument } from "../state/document-controller";
 import { platformSupports } from "../platform/capabilities";
 import { listStep } from "../ui/list-step";
+import { offerNote } from "../ui/drag-types";
+import { offerOutside } from "../ui/vault-transfer";
+import { openVaultRoot } from "../state/store";
 
 const OVERLAY_ID = "quick-switcher";
 const LIST_ID = `${OVERLAY_ID}-list`;
@@ -282,6 +285,26 @@ export function openQuickSwitcher(): void {
         button.addEventListener("focus", () => schedulePreview(entry.doc, box, false));
         button.addEventListener("mouseleave", cancelScheduledPreview);
         button.addEventListener("blur", cancelScheduledPreview);
+        // Il risultato si trascina fuori come la nota che è. Al primo `drag`
+        // l'immagine del trascinamento è già presa: la modale si fa trasparente
+        // ai puntatori, così il rilascio arriva a editor, schede o segnalibri,
+        // e si chiude quando il gesto finisce.
+        button.draggable = true;
+        const doc = entry.doc;
+        button.addEventListener("dragstart", (event) => {
+          if (!event.dataTransfer) return;
+          cancelScheduledPreview();
+          hidePreview();
+          offerOutside(event.dataTransfer, openVaultRoot(), [doc]);
+          offerNote(event.dataTransfer, doc);
+        });
+        button.addEventListener("drag", () => {
+          const overlay = document.getElementById(OVERLAY_ID);
+          // Stile in riga e non del tema: è il comportamento del gesto, e un
+          // tema di terzi non deve poterlo togliere.
+          if (overlay) Object.assign(overlay.style, { pointerEvents: "none", opacity: "0" });
+        }, { once: true });
+        button.addEventListener("dragend", () => closeQuickSwitcher());
       }
       li.append(button);
       newItems.appendChild(li);

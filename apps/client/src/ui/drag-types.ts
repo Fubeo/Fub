@@ -18,7 +18,7 @@ export interface DraggedEntry {
 }
 
 /// Una nota trascinata da una lista che non è l'albero (i risultati della
-/// ricerca): porta gli stessi tipi di una nota dell'albero, così cade come lei
+/// ricerca, il selettore rapido): porta gli stessi tipi di una nota dell'albero, così cade come lei
 /// nell'editor (un collegamento), sulla striscia delle schede (si apre) e nei
 /// segnalibri. Ciò che arriva fuori dall'app lo decide chi chiama.
 export function offerNote(transfer: DataTransfer, doc: string): void {

@@ -57,7 +57,8 @@ conta le altre. Il testo del documento resta il recinto.
 
 Un risultato del pannello si trascina come una nota dell'albero: in una nota
 diventa un collegamento, sulla striscia delle schede si apre, nei segnalibri
-resta, e fuori dall'app arriva il file.
+resta, e fuori dall'app arriva il file. Lo stesso vale per un risultato del
+cambio rapido: la modale lascia passare il rilascio e si chiude a gesto finito.
 
 Un nome seguito da `:` che non è un operatore resta testo, così un orario o un
 URL non producono un errore. Un errore di sintassi porta la specie e la
