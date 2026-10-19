@@ -568,6 +568,7 @@ const SYNTAX: readonly (readonly [string, Parameters<typeof t>[0]])[] = [
   ["line:(rosa spina)", "search.syntax.line"],
   ["section:(rosa spina)", "search.syntax.section"],
   ["task:todo", "search.syntax.task"],
+  ["due:<2026-11-01", "search.syntax.due"],
   ['"frase esatta"', "search.syntax.phrase"],
   ["/regex/", "search.syntax.regex"],
   ["[stato:fatto]", "search.syntax.property"],

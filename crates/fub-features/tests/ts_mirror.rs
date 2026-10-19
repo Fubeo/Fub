@@ -742,6 +742,16 @@ fn index_query_samples() -> Vec<Value> {
                         text: TextQuery::terms("rosa spina"),
                     },
                 },
+                QueryLiteral {
+                    negated: false,
+                    predicate: QueryPredicate::TaskDue {
+                        min: None,
+                        max: Some(fub_abi::query::DueBound {
+                            date: "2026-10-19".into(),
+                            inclusive: false,
+                        }),
+                    },
+                },
             ],
         }],
     };

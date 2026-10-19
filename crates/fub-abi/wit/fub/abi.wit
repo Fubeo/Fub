@@ -1994,6 +1994,17 @@ interface index {
         scope: text-scope,
         text: text-query,
     }
+    /// Un estremo della scadenza: una data `AAAA-MM-GG` e se è compresa.
+    record due-bound {
+        date: string,
+        inclusive: bool,
+    }
+    /// Una task aperta con la scadenza (`📅 AAAA-MM-GG` nel suo testo) fra i
+    /// due estremi; un estremo assente non limita.
+    record task-due-predicate {
+        min: option<due-bound>,
+        max: option<due-bound>,
+    }
     /// Le foglie: ognuna è un fatto sul vault che qualcuno sa verificare.
     variant query-predicate {
         text(text-query),
@@ -2008,6 +2019,7 @@ interface index {
         path(path-predicate),
         file(file-predicate),
         scoped(scoped-predicate),
+        task-due(task-due-predicate),
     }
     /// Un predicato, eventualmente negato: in forma normale la negazione finisce
     /// sulle foglie, ed è la casella «diverso da» di un builder.
@@ -2405,6 +2417,7 @@ interface index {
         path,
         file,
         scoped,
+        task-due,
     }
     /// Cosa un indice dichiara alla registrazione. Una FAMIGLIA ha un
     /// proprietario solo (lì la risposta si compone, e due autori vorrebbero

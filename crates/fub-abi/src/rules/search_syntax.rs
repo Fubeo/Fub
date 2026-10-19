@@ -29,6 +29,8 @@
 //!   nello stesso blocco o nella stessa sezione del corpo: più parole fra
 //!   parentesi, `line:(rosa spina)`, una frase fra virgolette o una parola
 //!   sola. Fra le parentesi è testo, non un gruppo: niente `OR` né operatori.
+//! - `due:AAAA-MM-GG`, `due:<D`, `due:<=D`, `due:>D`, `due:>=D`: una task
+//!   aperta con la scadenza `📅` in quel giorno o da quel lato della data.
 //!
 //! Un `nome:valore` con un nome che non è un operatore è testo: `ore 10:30` o
 //! un URL non diventano un errore. Un errore porta la specie e l'offset in
@@ -479,6 +481,7 @@ enum Operator {
     Heading,
     Ext,
     Task,
+    Due,
     MatchCase,
     IgnoreCase,
     Line,
@@ -497,6 +500,7 @@ impl Operator {
             "heading" => Self::Heading,
             "ext" => Self::Ext,
             "task" => Self::Task,
+            "due" => Self::Due,
             "match-case" => Self::MatchCase,
             "ignore-case" => Self::IgnoreCase,
             "line" => Self::Line,
@@ -586,8 +590,34 @@ impl Operator {
                     _ => return None,
                 },
             },
+            Self::Due => due_predicate(&value)?,
         })
     }
+}
+
+/// `due:AAAA-MM-GG` è quel giorno; `due:<D`, `due:<=D`, `due:>D` e `due:>=D`
+/// sono un estremo solo. Un valore che non è una data `AAAA-MM-GG` non si
+/// confronta.
+fn due_predicate(value: &str) -> Option<QueryPredicate> {
+    let (op, date) = ["<=", ">=", "<", ">"]
+        .iter()
+        .find_map(|op| value.strip_prefix(op).map(|rest| (*op, rest)))
+        .unwrap_or(("=", value));
+    iso_date(date)?;
+    let bound = |inclusive| {
+        Some(crate::query::DueBound {
+            date: date.to_string(),
+            inclusive,
+        })
+    };
+    let (min, max) = match op {
+        "<" => (None, bound(false)),
+        "<=" => (None, bound(true)),
+        ">" => (bound(false), None),
+        ">=" => (bound(true), None),
+        _ => (bound(true), bound(true)),
+    };
+    Some(QueryPredicate::TaskDue { min, max })
 }
 
 fn unquote(v: &str) -> &str {

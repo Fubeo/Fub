@@ -711,6 +711,112 @@
       }
     },
     {
+      "input": "due:2026-10-19 -due:<2026-01-01 due:>=2026-10-01",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "task_due",
+                    "min": {
+                      "date": "2026-10-19",
+                      "inclusive": true
+                    },
+                    "max": {
+                      "date": "2026-10-19",
+                      "inclusive": true
+                    }
+                  }
+                },
+                {
+                  "negated": true,
+                  "predicate": {
+                    "kind": "task_due",
+                    "min": null,
+                    "max": {
+                      "date": "2026-01-01",
+                      "inclusive": false
+                    }
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "task_due",
+                    "min": {
+                      "date": "2026-10-01",
+                      "inclusive": true
+                    },
+                    "max": null
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "due:<=2026-12-31 due:>2026-01-01",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "task_due",
+                    "min": null,
+                    "max": {
+                      "date": "2026-12-31",
+                      "inclusive": true
+                    }
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "task_due",
+                    "min": {
+                      "date": "2026-01-01",
+                      "inclusive": false
+                    },
+                    "max": null
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "due:domani",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "bad-value",
+          "at": 0
+        }
+      }
+    },
+    {
+      "input": "due:<",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "bad-value",
+          "at": 0
+        }
+      }
+    },
+    {
       "input": "line:( , )",
       "typing": false,
       "out": {

@@ -80,6 +80,7 @@
 //! regole del contratto, i link dal grafo del kernel.
 
 use std::collections::HashMap;
+use std::ops::Bound;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -88,7 +89,7 @@ use fub_abi::edit::{Fnv1a, Revision};
 use fub_abi::event::{Event, EventKind, EventMask, Notice};
 use fub_abi::model::{canonical_tag, Block, DocId, DocumentModel, Span};
 use fub_abi::query::{
-    QueryClause, QueryExpr, QueryPredicate, TaskStatus, TextField, TextMode, TextQuery,
+    DueBound, QueryClause, QueryExpr, QueryPredicate, TaskStatus, TextField, TextMode, TextQuery,
     TextTolerance,
 };
 use fub_abi::rules::folders;
@@ -103,8 +104,8 @@ use fub_abi::traits::{
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
 use tantivy::query::{
-    AllQuery, BooleanQuery, BoostQuery, Occur, PhrasePrefixQuery, PhraseQuery, Query, RegexQuery,
-    TermQuery,
+    AllQuery, BooleanQuery, BoostQuery, Occur, PhrasePrefixQuery, PhraseQuery, Query, RangeQuery,
+    RegexQuery, TermQuery,
 };
 use tantivy::schema::{Field, IndexRecordOption, Schema, Value, STORED, STRING, TEXT};
 use tantivy::snippet::SnippetGenerator;
@@ -142,7 +143,8 @@ pub const SEARCH_ID: &str = "fub.search";
 /// `task_state` per i marker open/done. Gli alias restano in `page_name` e
 /// sono coperti dall'impronta del contenuto.
 /// v7: `layout`, righe, blocchi e sezioni del corpo per `QueryPredicate::Scoped`.
-const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(7);
+/// v8: `task_due`, le scadenze `📅` delle task aperte per `QueryPredicate::TaskDue`.
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(8);
 
 /// **La forma che quel numero versiona** (§15.3,
 /// [0106](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)).
@@ -162,7 +164,7 @@ const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(7);
 #[cfg(test)]
 const FINGERPRINT_OF_THE_SCHEMA: &str = "doc_id:raw:stored page_name:default:stored \
 body:default:stored tags:raw:stored tag_paths:raw folder:raw folder_exact:raw \
-headings:default:stored task_state:raw layout:-:stored";
+headings:default:stored task_state:raw layout:-:stored task_due:raw";
 
 /// Nome del manifest nello spazio dati del plugin (vedi [`Manifest`]).
 const MANIFEST: &str = "manifest.json";
@@ -384,19 +386,31 @@ fn fingerprint(doc: &DocumentModel) -> u64 {
         h.update(alias.as_bytes());
         h.update(&[0x1f]);
     }
-    let (open, done) = task_states(doc);
-    h.update(&[u8::from(open), u8::from(done)]);
+    let tasks = task_states(doc);
+    h.update(&[u8::from(tasks.open), u8::from(tasks.done)]);
+    for due in &tasks.due {
+        h.update(due.as_bytes());
+        h.update(&[0x1f]);
+    }
     // Le righe del corpo non stanno nel testo piatto: un a-capo morbido ci
     // diventa uno spazio, e la ricerca per riga lo vedrebbe vecchio.
     h.update(&[0]);
     h.update(scope::layout(doc).as_bytes());
     h.value()
 }
+/// Le task di un documento: se ce n'è una aperta, una fatta, e le scadenze
+/// delle aperte.
+#[derive(Default)]
+struct Tasks {
+    open: bool,
+    done: bool,
+    due: Vec<String>,
+}
+
 /// Task presenti nell'albero, compresi liste annidate, citazioni e custom
-/// block. Fermarsi quando entrambi gli stati sono noti limita il cammino.
-fn task_states(doc: &DocumentModel) -> (bool, bool) {
-    let mut open = false;
-    let mut done = false;
+/// block.
+fn task_states(doc: &DocumentModel) -> Tasks {
+    let mut tasks = Tasks::default();
     let mut pending: Vec<&Block> = doc.body.iter().collect();
     while let Some(block) = pending.pop() {
         match block {
@@ -404,9 +418,12 @@ fn task_states(doc: &DocumentModel) -> (bool, bool) {
                 for item in items {
                     if let Some(marker) = item.task {
                         if marker.checked() {
-                            done = true;
+                            tasks.done = true;
                         } else {
-                            open = true;
+                            tasks.open = true;
+                            if let Some(due) = item_due(&item.blocks) {
+                                tasks.due.push(due);
+                            }
                         }
                     }
                     pending.extend(&item.blocks);
@@ -415,11 +432,11 @@ fn task_states(doc: &DocumentModel) -> (bool, bool) {
             Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => pending.extend(blocks),
             _ => {}
         }
-        if open && done {
-            break;
-        }
     }
-    (open, done)
+    // L'ordine delle date è quello del cammino: l'impronta lo vuole stabile.
+    tasks.due.sort();
+    tasks.due.dedup();
+    tasks
 }
 
 /// I campi dello schema, risolti una volta sola.
@@ -449,6 +466,9 @@ struct Fields {
     task_state: Field,
     /// Righe, blocchi e sezioni del corpo (vedi [`scope`]).
     layout: Field,
+    /// Le scadenze delle task aperte, `AAAA-MM-GG`: una chiave per data, che
+    /// si confronta come testo.
+    task_due: Field,
 }
 
 /// La forma dello schema, in una riga: `nome:tokenizer[:stored]` per campo, in
@@ -506,6 +526,7 @@ fn build_schema() -> (Schema, Fields) {
     // Soltanto memorizzato: si rilegge per i candidati di `Scoped`, che
     // l'indice ha già trovato col corpo.
     let layout = b.add_text_field("layout", STORED);
+    let task_due = b.add_text_field("task_due", STRING);
     (
         b.build(),
         Fields {
@@ -519,6 +540,7 @@ fn build_schema() -> (Schema, Fields) {
             headings,
             task_state,
             layout,
+            task_due,
         },
     )
 }
@@ -1094,12 +1116,15 @@ impl SearchIndex {
             td.add_text(f.folder, folder);
         }
         td.add_text(f.folder_exact, fub_abi::query::folder_of(&doc.id));
-        let (open, done) = task_states(doc);
-        if open {
+        let tasks = task_states(doc);
+        if tasks.open {
             td.add_text(f.task_state, "open");
         }
-        if done {
+        if tasks.done {
             td.add_text(f.task_state, "done");
+        }
+        for due in &tasks.due {
+            td.add_text(f.task_due, due);
         }
         td
     }
@@ -1480,6 +1505,26 @@ impl SearchIndex {
                     TaskStatus::Done => "done",
                 },
             ))),
+            QueryPredicate::TaskDue { min, max } => {
+                let term = |date: &str| Term::from_field_text(f.task_due, date);
+                let edge = |bound: &Option<DueBound>, open: Bound<Term>| match bound {
+                    Some(DueBound {
+                        date,
+                        inclusive: true,
+                    }) => Bound::Included(term(date)),
+                    Some(DueBound {
+                        date,
+                        inclusive: false,
+                    }) => Bound::Excluded(term(date)),
+                    None => open,
+                };
+                // Senza estremo in basso si parte dalla chiave vuota, che sta
+                // prima di ogni data: l'intervallo deve sapere il suo campo.
+                Ok(Some(Box::new(RangeQuery::new(
+                    edge(min, Bound::Included(term(""))),
+                    edge(max, Bound::Unbounded),
+                ))))
+            }
             QueryPredicate::Regex { pattern, fields } => {
                 if pattern.len() > MAX_REGEX_BYTES {
                     return Err(PluginError::BadArgs("regex exceeds 256 bytes".into()));
@@ -1886,6 +1931,34 @@ impl SearchIndex {
     }
 }
 
+/// La scadenza di una task: la data dopo `📅` nel paragrafo della voce, come
+/// la scrive il plugin Tasks (`📅 2026-10-19`).
+fn item_due(blocks: &[Block]) -> Option<String> {
+    let Some(Block::Paragraph { inlines, .. }) = blocks.first() else {
+        return None;
+    };
+    let text: String = inlines
+        .iter()
+        .map(|inline| match inline {
+            fub_abi::model::Inline::Text(s) => s.as_str(),
+            _ => " ",
+        })
+        .collect();
+    let after = text.rsplit_once('📅')?.1.trim_start();
+    let date = after.get(..10)?;
+    let b = date.as_bytes();
+    let shaped = b.iter().enumerate().all(|(at, c)| match at {
+        4 | 7 => *c == b'-',
+        _ => c.is_ascii_digit(),
+    });
+    (shaped
+        && after[10..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_ascii_digit()))
+    .then(|| date.to_string())
+}
+
 fn term_query(field: Field, value: &str) -> Box<dyn Query> {
     Box::new(TermQuery::new(
         Term::from_field_text(field, value),
@@ -1950,6 +2023,7 @@ impl IndexProvider for SearchIndex {
             QueryRoute::Predicate(PredicateKind::Tag),
             QueryRoute::Predicate(PredicateKind::Folder),
             QueryRoute::Predicate(PredicateKind::Scoped),
+            QueryRoute::Predicate(PredicateKind::TaskDue),
         ]
     }
 

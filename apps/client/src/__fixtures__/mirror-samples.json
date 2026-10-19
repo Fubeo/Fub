@@ -995,6 +995,17 @@
                     "case_sensitive": false
                   }
                 }
+              },
+              {
+                "negated": false,
+                "predicate": {
+                  "kind": "task_due",
+                  "min": null,
+                  "max": {
+                    "date": "2026-10-19",
+                    "inclusive": false
+                  }
+                }
               }
             ]
           }

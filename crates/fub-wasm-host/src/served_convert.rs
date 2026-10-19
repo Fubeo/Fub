@@ -515,7 +515,18 @@ fn from_predicate(
             },
             text: from_text_query(s.text),
         },
+        w_index::QueryPredicate::TaskDue(d) => R::TaskDue {
+            min: d.min.map(from_due_bound),
+            max: d.max.map(from_due_bound),
+        },
     })
+}
+
+fn from_due_bound(b: w_index::DueBound) -> fub_abi::query::DueBound {
+    fub_abi::query::DueBound {
+        date: b.date,
+        inclusive: b.inclusive,
+    }
 }
 
 fn from_text_query(t: w_index::TextQuery) -> fub_abi::query::TextQuery {

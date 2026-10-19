@@ -50,6 +50,10 @@ e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
   riga scritta, nello stesso blocco (paragrafo, titolo, voce, codice, tabella)
   o sotto lo stesso titolo: `line:(rosa spina)`, `block:"frase"`. Diventano
   la foglia `scoped`, che l'indice full-text valuta sui suoi candidati.
+- `due:2026-10-19`, `due:<D`, `due:<=D`, `due:>D` e `due:>=D`: le note con una
+  task aperta la cui scadenza (`📅 AAAA-MM-GG` nel suo testo, la scrittura del
+  plugin Tasks) cade quel giorno o da quel lato della data. Diventano la foglia
+  `task_due`; l'indice full-text tiene le scadenze delle task aperte (schema v8).
 
 Un recinto ```` ```query ```` in una nota porta una ricerca con la stessa
 sintassi: in Lettura mostra al suo posto le prime 50 note trovate, come link, e

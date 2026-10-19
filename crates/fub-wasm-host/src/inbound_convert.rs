@@ -177,6 +177,7 @@ pub(crate) fn from_predicate_kind(
         w_index::PredicateKind::Path => R::Path,
         w_index::PredicateKind::File => R::File,
         w_index::PredicateKind::Scoped => R::Scoped,
+        w_index::PredicateKind::TaskDue => R::TaskDue,
     })
 }
 
@@ -374,7 +375,18 @@ fn to_predicate(
             },
             text: to_text_query(text)?,
         }),
+        R::TaskDue { min, max } => w_index::QueryPredicate::TaskDue(w_index::TaskDuePredicate {
+            min: min.as_ref().map(to_due_bound),
+            max: max.as_ref().map(to_due_bound),
+        }),
     })
+}
+
+fn to_due_bound(bound: &fub_abi::query::DueBound) -> w_index::DueBound {
+    w_index::DueBound {
+        date: bound.date.clone(),
+        inclusive: bound.inclusive,
+    }
 }
 
 fn to_text_query(t: &fub_abi::query::TextQuery) -> Result<w_index::TextQuery, PluginError> {

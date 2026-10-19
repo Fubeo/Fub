@@ -762,3 +762,38 @@ fn the_search_syntax_runs_on_the_real_index_with_frontmatter_tags() {
         ["Diario/oggi.md", "Progetti/Città.md"]
     );
 }
+
+#[test]
+fn due_dates_of_open_tasks_filter_by_day_and_by_side() {
+    let v = Vault::new();
+    v.put(
+        "Oggi.md",
+        "- [ ] pagare 📅 2026-10-19\n- [x] fatta 📅 2026-01-01\n",
+    );
+    v.put(
+        "Dopo.md",
+        "- [ ] spedire *pacco* 📅 2026-11-02 🔁 every week\n",
+    );
+    v.put("Fatta.md", "- [x] chiusa 📅 2026-10-19\n");
+    v.put(
+        "Senza.md",
+        "- [ ] niente data\n\nUn 📅 2026-10-19 fuori dalle task\n",
+    );
+    let ws = v.open();
+    let ids = |line: &str| {
+        let expr = fub_abi::rules::search_syntax::parse(line, false).expect("sintassi valida");
+        let mut names = matching(&ws, expr)
+            .into_iter()
+            .map(|m| m.doc.to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    };
+    assert_eq!(ids("due:2026-10-19"), ["Oggi.md"]);
+    assert_eq!(ids("due:<2026-10-19"), Vec::<String>::new());
+    assert_eq!(ids("due:<=2026-10-19"), ["Oggi.md"]);
+    assert_eq!(ids("due:>2026-10-19"), ["Dopo.md"]);
+    assert_eq!(ids("due:>=2026-01-01"), ["Dopo.md", "Oggi.md"]);
+    assert_eq!(ids("due:>=2026-10-01 due:<2026-11-01"), ["Oggi.md"]);
+    assert_eq!(ids("task:todo -due:>=2000-01-01"), ["Senza.md"]);
+}

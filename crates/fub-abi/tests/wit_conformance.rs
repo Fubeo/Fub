@@ -93,8 +93,8 @@ use fub_abi::net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
 use fub_abi::options::OptionMap;
 use fub_abi::organization::Organization;
 use fub_abi::query::{
-    QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TaskStatus, TextField, TextMode,
-    TextQuery, TextScope, TextTolerance,
+    DueBound, QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TaskStatus, TextField,
+    TextMode, TextQuery, TextScope, TextTolerance,
 };
 use fub_abi::render::{EmbedContent, RenderedDocument, RenderedPart};
 use fub_abi::session::{
@@ -486,6 +486,7 @@ wit_kebab! {
     TextTolerance,
     TaskStatus,
     TextScope,
+    DueBound,
     QueryKind,
     PredicateKind,
     QueryRoute,
@@ -2215,6 +2216,11 @@ fn query_predicate_case(p: &QueryPredicate) -> Case {
             "scoped-predicate",
             vec![("scope", wit(scope)), ("text", wit(text))],
         ),
+        QueryPredicate::TaskDue { min, max } => case_rec(
+            "task-due",
+            "task-due-predicate",
+            vec![("min", wit(min)), ("max", wit(max))],
+        ),
     }
 }
 
@@ -2266,6 +2272,7 @@ fn predicate_kind_case(k: &PredicateKind) -> Case {
         PredicateKind::Path => case("path"),
         PredicateKind::File => case("file"),
         PredicateKind::Scoped => case("scoped"),
+        PredicateKind::TaskDue => case("task-due"),
     }
 }
 
@@ -3020,6 +3027,10 @@ fn conform(source: &str) -> Result<(), String> {
                 scope: TextScope::Line,
                 text: TextQuery::terms(""),
             }),
+            query_predicate_case(&QueryPredicate::TaskDue {
+                min: None,
+                max: None,
+            }),
         ],
     );
 
@@ -3075,6 +3086,7 @@ fn conform(source: &str) -> Result<(), String> {
             predicate_kind_case(&PredicateKind::Path),
             predicate_kind_case(&PredicateKind::File),
             predicate_kind_case(&PredicateKind::Scoped),
+            predicate_kind_case(&PredicateKind::TaskDue),
         ],
     );
 
@@ -4625,6 +4637,21 @@ fn conform(source: &str) -> Result<(), String> {
     contract.record("task-predicate", &[("status", wit(&TaskStatus::Open))]);
     contract.record("path-predicate", &[("glob", wit(&String::new()))]);
     contract.record("file-predicate", &[("extension", wit(&String::new()))]);
+    let DueBound { date, inclusive } = DueBound {
+        date: String::new(),
+        inclusive: true,
+    };
+    contract.record(
+        "due-bound",
+        &[("date", wit(&date)), ("inclusive", wit(&inclusive))],
+    );
+    contract.record(
+        "task-due-predicate",
+        &[
+            ("min", wit_of::<Option<DueBound>>()),
+            ("max", wit_of::<Option<DueBound>>()),
+        ],
+    );
     contract.record(
         "scoped-predicate",
         &[

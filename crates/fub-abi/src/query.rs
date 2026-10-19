@@ -143,6 +143,17 @@ pub enum QueryPredicate {
     /// sezione del corpo: `rosa spina` in una riga sola, non uno in testa e
     /// l'altro in fondo. I campi di `text` non contano: l'unità è del corpo.
     Scoped { scope: TextScope, text: TextQuery },
+    /// Documento con almeno una task **aperta** la cui scadenza cade fra i due
+    /// estremi. La scadenza è la data dopo `📅` nel testo della task
+    /// (`📅 AAAA-MM-GG`, la scrittura del plugin Tasks, come `🔁` per le
+    /// ricorrenze); un estremo assente non limita. Le date sono ISO e si
+    /// confrontano come testo.
+    TaskDue {
+        #[serde(default)]
+        min: Option<DueBound>,
+        #[serde(default)]
+        max: Option<DueBound>,
+    },
 }
 
 /// La foglia di testo: cosa cercare, come, e dove.
@@ -275,6 +286,14 @@ pub enum TextField {
 pub enum TaskStatus {
     Open,
     Done,
+}
+
+/// Un estremo di [`QueryPredicate::TaskDue`]: una data `AAAA-MM-GG` e se la
+/// data stessa è dentro.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DueBound {
+    pub date: String,
+    pub inclusive: bool,
 }
 
 /// L'unità del corpo dentro cui un [`QueryPredicate::Scoped`] cerca tutti i

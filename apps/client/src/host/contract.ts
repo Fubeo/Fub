@@ -1425,7 +1425,15 @@ export type QueryPredicate =
   | { kind: "task"; status: TaskStatus }
   | { kind: "path"; glob: string }
   | { kind: "file"; extension: string }
-  | { kind: "scoped"; scope: TextScope; text: TextQuery };
+  | { kind: "scoped"; scope: TextScope; text: TextQuery }
+  | { kind: "task_due"; min: DueBound | null; max: DueBound | null };
+
+// Un estremo della scadenza di una task (rispecchia fub_abi::query::DueBound):
+// una data `AAAA-MM-GG` e se è compresa.
+export interface DueBound {
+  date: string;
+  inclusive: boolean;
+}
 
 // L'unità del corpo dentro cui uno `scoped` vuole tutti i suoi termini.
 export type { TextScope } from "./enums.generated";

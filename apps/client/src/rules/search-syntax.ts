@@ -396,6 +396,19 @@ const OPERATORS: Record<string, (value: string, quoted: boolean) => QueryPredica
     const extension = value.replace(/^\.+/, "");
     return extension === "" || /[/\\.]/.test(extension) ? null : { kind: "file", extension };
   },
+  due: (value) => {
+    const op = ["<=", ">=", "<", ">"].find((each) => value.startsWith(each)) ?? "=";
+    const date = op === "=" ? value : value.slice(op.length);
+    if (!isoDate(date)) return null;
+    const bound = (inclusive: boolean) => ({ date, inclusive });
+    const [min, max] =
+      op === "<" ? [null, bound(false)]
+        : op === "<=" ? [null, bound(true)]
+          : op === ">" ? [bound(false), null]
+            : op === ">=" ? [bound(true), null]
+              : [bound(true), bound(true)];
+    return { kind: "task_due", min, max };
+  },
   task: (value) =>
     value === "todo" || value === "open"
       ? { kind: "task", status: "open" }

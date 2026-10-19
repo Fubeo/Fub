@@ -765,6 +765,16 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const words = p.text.text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
         return words.length > 0 && units.some((unit) => words.every((word) => unit.toLowerCase().includes(word)));
       }
+      case "task_due": {
+        // Le task aperte con `📅 AAAA-MM-GG` nella riga.
+        const inside = (date: string) =>
+          (!p.min || (p.min.inclusive ? date >= p.min.date : date > p.min.date)) &&
+          (!p.max || (p.max.inclusive ? date <= p.max.date : date < p.max.date));
+        return text.split("\n").some((line) => {
+          const due = /^\s*[-*+]\s*\[ \].*📅\s*(\d{4}-\d{2}-\d{2})/u.exec(line);
+          return due !== null && inside(due[1]!);
+        });
+      }
       default:
         throw new Error(`host fake: non so leggere il predicato ${p.kind}`);
     }

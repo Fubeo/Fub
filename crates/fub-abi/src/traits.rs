@@ -3389,6 +3389,7 @@ pub enum PredicateKind {
     Path,
     File,
     Scoped,
+    TaskDue,
 }
 
 impl PredicateKind {
@@ -3400,6 +3401,7 @@ impl PredicateKind {
             QueryPredicate::Path { .. } => Some(PredicateKind::Path),
             QueryPredicate::File { .. } => Some(PredicateKind::File),
             QueryPredicate::Scoped { .. } => Some(PredicateKind::Scoped),
+            QueryPredicate::TaskDue { .. } => Some(PredicateKind::TaskDue),
             QueryPredicate::Property { .. } => Some(PredicateKind::Property),
             QueryPredicate::Tag { .. } => Some(PredicateKind::Tag),
             QueryPredicate::Folder { .. } => Some(PredicateKind::Folder),
