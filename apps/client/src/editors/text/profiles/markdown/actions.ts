@@ -232,10 +232,56 @@ const quoteActive = (state: EditorState): boolean => {
   return QUOTED.test(line.text) && !isStrictlyInsideCode(state, line.from);
 };
 
+/// L'intestazione di un callout, `> [!tipo]` con l'eventuale piega e titolo.
+const CALLOUT_HEAD = /^( {0,3})> ?\[![^\]\s]+\][+-]?[ \t]*(.*)$/;
+
+/// Il callout attorno al cursore: dall'intestazione all'ultima riga citata
+/// che la segue. Un callout annidato dentro un altro è corpo del primo.
+function enclosingCallout(state: EditorState): { first: number; last: number } | null {
+  const doc = state.doc;
+  let at = doc.lineAt(state.selection.main.head).number;
+  if (!QUOTED.test(doc.line(at).text) || isStrictlyInsideCode(state, doc.line(at).from)) return null;
+  while (!CALLOUT_HEAD.test(doc.line(at).text)) {
+    if (at === 1 || !QUOTED.test(doc.line(at - 1).text)) return null;
+    at -= 1;
+  }
+  let last = at;
+  while (last < doc.lines && QUOTED.test(doc.line(last + 1).text) && !CALLOUT_HEAD.test(doc.line(last + 1).text)) last += 1;
+  return { first: at, last };
+}
+
+/// Toglie il callout e lascia il testo: il titolo, se c'è, resta come riga,
+/// le altre righe perdono un livello di citazione.
+function removeCallout(
+  state: EditorState,
+  dispatch: Parameters<StateCommand>[0]["dispatch"],
+  callout: { first: number; last: number },
+): boolean {
+  const doc = state.doc;
+  const head = doc.line(callout.first);
+  const match = CALLOUT_HEAD.exec(head.text)!;
+  const title = match[2]!.trim();
+  const specs: ChangeSpec[] = [];
+  if (title !== "") specs.push({ from: head.from, to: head.to, insert: `${match[1]}${title}` });
+  else if (callout.last > callout.first) specs.push({ from: head.from, to: doc.line(callout.first + 1).from });
+  else specs.push({ from: head.from, to: head.to });
+  for (let n = callout.first + 1; n <= callout.last; n += 1) {
+    const line = doc.line(n);
+    const quoted = QUOTED.exec(line.text)!;
+    specs.push({ from: line.from, to: line.from + quoted[0].length, insert: quoted[1] });
+  }
+  return dispatchChanges(state, dispatch, specs);
+}
+
+const calloutActive = (state: EditorState): boolean => enclosingCallout(state) !== null;
+
 /// Un callout: l'intestazione `> [!note]` sopra le righe, che diventano il suo
 /// corpo. Su una riga vuota si scrive l'intestazione e si resta nel corpo.
+/// Dentro un callout, lo toglie.
 const insertCallout: StateCommand = ({ state, dispatch }) => {
   if (state.readOnly) return false;
+  const callout = enclosingCallout(state);
+  if (callout) return removeCallout(state, dispatch, callout);
   const lines = selectedLines(state);
   const first = lines[0]!;
   const last = lines[lines.length - 1]!;
@@ -673,7 +719,7 @@ export const MARKDOWN_ACTIONS: ReadonlyMap<string, MarkdownAction> = new Map<str
     chord: "Shift-Tab",
   }],
   ["markdown.quote", { run: toggleQuote, active: quoteActive, prose: true }],
-  ["markdown.callout", { run: insertCallout, prose: true }],
+  ["markdown.callout", { run: insertCallout, active: calloutActive, prose: true }],
   ["markdown.codeblock", { run: toggleCodeBlock, active: (s) => enclosingCodeFence(s) !== null }],
   ["markdown.mathblock", { run: toggleMathBlock, active: (s) => enclosingMathFence(s) !== null, prose: true }],
   ["markdown.rule", { run: insertRule, prose: true }],

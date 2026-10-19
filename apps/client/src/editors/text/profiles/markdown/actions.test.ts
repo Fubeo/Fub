@@ -176,6 +176,18 @@ describe("blocchi", () => {
     expect(run("markdown.callout", "Nota|")).toBe("> [!‹note›]\n> Nota");
   });
 
+  it("dentro un callout lo toglie e lascia il testo, titolo compreso", () => {
+    expect(stateAt("markdown.callout", "> [!tip] Consiglio\n> uno|").active).toBe(true);
+    expect(stateAt("markdown.callout", "> solo citazione|").active).toBe(false);
+    expect(run("markdown.callout", "> [!tip]- Consiglio\n> uno|\n>\n> due\n\nfuori"))
+      .toBe("Consiglio\nuno|\n\ndue\n\nfuori");
+    expect(run("markdown.callout", "> [!note]\n> c|orpo")).toBe("c|orpo");
+    expect(run("markdown.callout", "> [!note]|")).toBe("|");
+    // Annidato: si toglie quello di fuori, quello dentro resta un callout.
+    expect(run("markdown.callout", "> [!note] Fuori\n> > [!tip] Dentro\n> > te|sto"))
+      .toBe("Fuori\n> [!tip] Dentro\n> te|sto");
+  });
+
   it("il blocco di codice avvolge la selezione e si toglie da dentro", () => {
     expect(run("markdown.codeblock", "|")).toBe("```\n|\n```");
     expect(run("markdown.codeblock", "‹let x = 1›")).toBe("```\n‹let x = 1›\n```");
