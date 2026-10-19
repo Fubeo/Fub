@@ -145,6 +145,8 @@ Il rapporto della finestra lo dice prima di scrivere, una frase per genere:
 - un oggetto che non si sa leggere, un contenuto incorporato (una pagina web,
   un video) e un'immagine che sta fuori dal file o in un formato che non si
   legge restano fuori;
+- un oggetto senza posizione nel file, come una forma senza riquadro o una
+  linea senza due capi, resta fuori; ciò che una forma così contiene entra;
 - un collegamento su un oggetto o in un testo si perde: l'oggetto o il testo
   resta;
 - un pezzo dell'aspetto di un testo che il disegno non ha (un'immagine nel

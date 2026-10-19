@@ -284,7 +284,10 @@ export type NoteKind =
   /// nei suoi limiti.
   | "shadow"
   /// Un segnaposto di draw.io (`%nome%`) lasciato com'è.
-  | "placeholder";
+  | "placeholder"
+  /// Un oggetto senza posizione nel file: una forma senza riquadro, un arco
+  /// senza due capi.
+  | "placeless";
 
 /// Una nota: il genere, quante volte, e un esempio che la dice meglio, come
 /// il nome di una forma; vuoto se non ce n'è uno che dica qualcosa a chi

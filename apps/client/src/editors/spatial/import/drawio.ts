@@ -1310,7 +1310,12 @@ class PageReader {
     if (!cell.vertex) return this.nodesIn(cell.id, parentBox);
     this.cellNotes(cell);
     const box = this.boxOfCell(cell);
-    if (box === null) return [];
+    if (box === null) {
+      // Senza riquadro la forma non ha dove stare, ma ciò che contiene ha la
+      // sua posizione: entra, e la forma si dice.
+      this.notes.add("placeless");
+      return cell.collapsed ? [] : this.nodesIn(cell.id, parentBox);
+    }
     let own = this.own(cell, box);
     // Una cella che non si vede, come la riga di una tabella, tiene il suo
     // riquadro per gli archi che vi si agganciano.
@@ -1973,7 +1978,10 @@ class PageReader {
   private edge(cell: Cell): Node[] {
     const style = cell.style;
     const geometry = this.endsOf(cell);
-    if (geometry === null) return [];
+    if (geometry === null) {
+      this.notes.add("placeless");
+      return [];
+    }
     const { source, target, via, startFixed, endFixed, startAt, endAt } = geometry;
     const look = this.look(style, false);
     // Un arco senza tratto non si vede, con le sue punte: restano le
