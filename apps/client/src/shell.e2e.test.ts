@@ -435,6 +435,19 @@ describe("il pannello delle impostazioni", () => {
 });
 
 describe("vita della finestra", () => {
+  it("un avvio lento lo dice, col tratto più lungo, e i tempi si copiano", async () => {
+    // L'orologio fermo a venti secondi: la pagina sembra averli spesi tutti.
+    const now = vi.spyOn(performance, "now").mockReturnValue(20_000);
+    try {
+      await start(VAULT);
+    } finally {
+      now.mockRestore();
+    }
+    const toast = [...document.querySelectorAll(".toast")].find((each) => each.textContent?.includes("20,0 s"));
+    expect(toast?.textContent).toContain("il caricamento della pagina");
+    expect(toast?.querySelector("button")?.textContent).toContain("Copia i tempi");
+  });
+
   it("smette i gesti quando si smonta e non duplica al rimontaggio", async () => {
     const first = await mount({});
     const stopFirst = await first.startup;

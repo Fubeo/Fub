@@ -26,6 +26,7 @@ import { takeNoticeAfterReload } from "./ui/intents";
 import { mountLinkPreview } from "./ui/link-preview";
 import { FORMATBAR_EVENT } from "./panels/selection-bubble";
 import { listenForFailures, mountNotifications, notify, setWatcherOff } from "./ui/notify";
+import { writeClipboardText } from "./platform/clipboard";
 import { closeCommandPalette, openCommandPalette, startCommand } from "./ui/palette";
 import {
   allCommands,
@@ -63,7 +64,7 @@ import { mountWebViewer } from "./ui/web-viewer";
 import { confirm } from "./platform/confirm";
 import { registerBaseRenderer } from "./editors/base/surface";
 import { applyRailMachineSettings, mountRail, refreshRailShortcuts, syncRail } from "./panels/rail";
-import { mountStrings, onLanguage, t } from "./i18n/strings";
+import { mountStrings, onLanguage, resolvedLanguage, t, type Key } from "./i18n/strings";
 import { mountSplitter } from "./kit";
 import { mountActivity } from "./panels/activity";
 import { mountSettings } from "./panels/settings";
@@ -102,6 +103,7 @@ import { createVaultSession } from "./state/vault-session";
 import { newNoteInActiveSpace } from "./state/new-note";
 import { paletteHost } from "./state/palette-host";
 import { FILES_STARTUP, FILES_STARTUP_NOTE, startupCommand, startupNote } from "./state/startup";
+import { slowPhase, startupClock, type StartupPhase, type StartupTimes } from "./state/startup-timing";
 import { preferredPaneMode } from "./state/pane-mode";
 import { setSearchPort } from "./state/search-port";
 import { mountWheelTextSize, zoomBy } from "./state/zoom";
@@ -707,6 +709,8 @@ async function init(): Promise<Teardown> {
     lifetime.close();
   };
   const alive = (): boolean => !lifetime.closed && pageEpoch === epoch;
+  const clock = startupClock(() => performance.now());
+  clock.mark("page");
   // Il tema **per primo**, e prima di qualunque cosa disegni (§12.4): applica
   // subito l'ultima scelta nota, così il primo fotogramma è già nella luce
   // giusta invece di correggersi mezzo secondo dopo. La preferenza di moto si
@@ -1080,6 +1084,7 @@ async function init(): Promise<Teardown> {
   await loadKeyOverrides();
   if (!alive()) return teardown;
   refreshTitlebarShortcuts();
+  clock.mark("shell");
 
   const initial = await api.initialVault();
   if (!alive()) return teardown;
@@ -1094,11 +1099,43 @@ async function init(): Promise<Teardown> {
   if (initial) await openInitialVault(initial, alive);
   else await synchronize();
   if (!alive()) return teardown;
+  // Senza un vault iniziale l'avvio finisce nella scelta, che aspetta chi
+  // sceglie: non c'è niente di lento da dire.
+  if (initial) {
+    clock.mark("vault");
+    reportSlowStartup(clock.times());
+  }
   // L'avviso di una ricarica voluta (un ripristino da snapshot): la finestra
   // che lo ha chiesto non c'è più per dirlo.
   const reloaded = takeNoticeAfterReload();
   if (reloaded) notify(reloaded);
   return teardown;
+}
+
+const STARTUP_PHASE: Record<StartupPhase, Key> = {
+  page: "app.startup_phase.page",
+  shell: "app.startup_phase.shell",
+  vault: "app.startup_phase.vault",
+};
+
+/// Un avvio lento si dice, col tratto che è durato di più; i tempi di ogni
+/// tratto si copiano per chi deve capire perché.
+function reportSlowStartup(times: StartupTimes): void {
+  const slowest = slowPhase(times);
+  if (!slowest) return;
+  const format = new Intl.NumberFormat(resolvedLanguage(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const seconds = (ms: number) => format.format(ms / 1000);
+  const report = [
+    ...times.phases.map(({ phase, ms }) => `${t(STARTUP_PHASE[phase])}: ${seconds(ms)} s`),
+    `${t("app.slow_startup.total")}: ${seconds(times.total)} s`,
+  ].join("\n");
+  notify(t("app.slow_startup", { seconds: seconds(times.total), phase: t(STARTUP_PHASE[slowest]) }), "info", {
+    label: t("app.slow_startup.copy"),
+    run: () => void writeClipboardText(report).then(
+      () => notify(t("app.slow_startup.copied"), "info"),
+      () => notify(t("tabmenu.copy_failed"), "guasto"),
+    ),
+  });
 }
 
 /// L'ultimo vault, all'avvio. Se non si apre — un altro Fub lo tiene, il

@@ -137,6 +137,11 @@ L'impostazione di vault `files.startup` può aprirci sopra la nota del giorno
 Una nota precisa che non c'è più si dice con un avviso e non apre una scheda
 vuota. Cambiare vault riprende soltanto le sue schede.
 
+Un avvio che con l'ultimo vault supera gli otto secondi si dice con un avviso:
+quanto è durato e quale tratto è stato il più lungo (il caricamento della
+pagina, l'avvio della shell o l'apertura del vault). «Copia i tempi» mette negli
+appunti la durata di ogni tratto.
+
 ## Approfondimenti
 
 - [Vault e file](vault-and-files.md)
