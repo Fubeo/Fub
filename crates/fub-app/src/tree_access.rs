@@ -340,6 +340,8 @@ mod tests {
         assert!(backend_cas(&grant));
         grant.platform = MobileGrantPlatform::Android;
         assert!(!backend_cas(&grant));
+        // Assoluto per Unix, cioè per iOS: su Windows manca l'unità.
+        #[cfg(unix)]
         assert!(accept_shared_root("/private/var/mobile/Appunti").is_ok());
         assert!(accept_shared_root("Appunti").is_err());
         assert!(accept_shared_root("/private/../etc").is_err());
