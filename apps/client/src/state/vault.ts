@@ -15,7 +15,8 @@ import { api } from "../host/ipc";
 import { settings, vaultEntries, vaultFolders, WITHOUT_PAGE } from "../host/query";
 import { importDropped, type Dropped, type ImportOutcome } from "../ui/vault-transfer";
 import { COMMANDS, type CommandOutcome, type Undo } from "../host/contract";
-import { emit, openVaultRoot, setCommandSpecs, vaultArg } from "./store";
+import { emit, openVaultRoot, setCommandSpecs, state, vaultArg } from "./store";
+import { folderForNote } from "../rules/mirrored";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
@@ -54,6 +55,7 @@ export async function beforeNote(): Promise<string | null> {
 /// riuscito ma non ha detto dove: non è un caso previsto, e chi chiama decide
 /// se è un errore da mostrare.
 export async function createNote(name?: string, folder?: string): Promise<string | null> {
+  folder ??= await folderOfOpenNote();
   const args: Record<string, string> = {};
   if (name) args.name = name;
   if (folder) args.folder = folder;
@@ -65,6 +67,21 @@ export async function createNote(name?: string, folder?: string): Promise<string
   );
   refreshDocuments();
   return outcome.effect.kind === "navigate" ? outcome.effect.doc : null;
+}
+
+/// La cartella delle nuove note quando `files.new-note-folder` comincia con
+/// `./` e c'è una nota aperta: quella della nota, o una sua sottocartella. Il
+/// kernel non sa quale nota è aperta, e senza cartella crea dalla radice.
+/// `undefined` lascia decidere a lui.
+export async function folderOfOpenNote(): Promise<string | undefined> {
+  const doc = state.currentDoc;
+  if (!doc) return undefined;
+  const declared = (await settings().catch(() => []))
+    .find((item) => item.spec.key === "files.new-note-folder")?.value;
+  if (typeof declared !== "string") return undefined;
+  const trimmed = declared.trim();
+  if (trimmed !== "." && !trimmed.startsWith("./")) return undefined;
+  return folderForNote(trimmed, doc);
 }
 
 /// Duplica un file accanto all'originale (`note.duplicate`): il kernel sceglie

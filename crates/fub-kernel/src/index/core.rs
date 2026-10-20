@@ -256,7 +256,7 @@ fn resolve_entry_in_folder(
         LinkTarget::Wiki { page, .. } => {
             if !page.contains('/') {
                 let folder = attachment_folder
-                    .map(|folder| fub_abi::rules::folders::attachments_for(folder, source.as_str()))
+                    .map(|folder| fub_abi::rules::folders::for_note(folder, source.as_str()))
                     .filter(|folder| !folder.is_empty());
                 if let Some(folder) = folder {
                     let candidate = DocId::new(format!("{folder}/{page}"));

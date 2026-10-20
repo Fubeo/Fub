@@ -64,13 +64,15 @@ pub fn contains(folder: &str, path: &str) -> bool {
     within(folder, parent(path), true)
 }
 
-/// La cartella degli allegati di una nota, da quella che il vault dichiara.
+/// Una cartella dichiarata (quella degli allegati, quella delle nuove note),
+/// letta per una nota.
 ///
 /// Una cartella che comincia con `./` è relativa alla cartella della nota, come
 /// in Obsidian: `./` è la cartella stessa, `./allegati` una sua sottocartella.
 /// Ogni altra è una cartella del vault, uguale per tutte le note. `""` è la
+/// radice, e per chi non ha una nota in mano (`source` vuoto) `./` è la
 /// radice.
-pub fn attachments_for(declared: &str, source: &str) -> String {
+pub fn for_note(declared: &str, source: &str) -> String {
     let declared = declared.trim();
     let relative = if declared == "." {
         Some("")
@@ -129,19 +131,16 @@ mod tests {
 
     #[test]
     fn an_attachment_folder_with_a_dot_follows_the_note() {
+        assert_eq!(for_note("attachments", "Progetti/Alpha.md"), "attachments");
+        assert_eq!(for_note("/attachments/", "Alpha.md"), "attachments");
+        assert_eq!(for_note("./", "Progetti/Alpha.md"), "Progetti");
+        assert_eq!(for_note(".", "Progetti/Alpha.md"), "Progetti");
         assert_eq!(
-            attachments_for("attachments", "Progetti/Alpha.md"),
-            "attachments"
-        );
-        assert_eq!(attachments_for("/attachments/", "Alpha.md"), "attachments");
-        assert_eq!(attachments_for("./", "Progetti/Alpha.md"), "Progetti");
-        assert_eq!(attachments_for(".", "Progetti/Alpha.md"), "Progetti");
-        assert_eq!(
-            attachments_for("./img", "Progetti/2026/Alpha.md"),
+            for_note("./img", "Progetti/2026/Alpha.md"),
             "Progetti/2026/img"
         );
-        assert_eq!(attachments_for("./img/", "Alpha.md"), "img");
-        assert_eq!(attachments_for("./", "Alpha.md"), "");
+        assert_eq!(for_note("./img/", "Alpha.md"), "img");
+        assert_eq!(for_note("./", "Alpha.md"), "");
     }
 
     #[test]

@@ -2202,7 +2202,7 @@
       "out": false
     }
   ],
-  "attachments_for": [
+  "folder_for_note": [
     {
       "declared": "attachments",
       "source": "Progetti/Alpha.md",

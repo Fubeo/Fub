@@ -341,6 +341,36 @@ fn configured_folder_receives_only_notes_without_an_explicit_path() {
     );
 }
 
+#[test]
+fn a_dot_folder_without_an_open_note_creates_at_the_root() {
+    let (_scratch, mut ws) = open_scratch();
+    ws.register_plugin(
+        PluginManifest::core("fub.core-test", "Core test").configuring(vec![SettingSpec::new(
+            NEW_NOTE_FOLDER,
+            "Cartella nuove note",
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )]),
+        Trust::Core,
+    )
+    .expect("setting dichiarata");
+    // `./` segue la nota aperta, che soltanto la shell conosce: chi crea senza
+    // cartella parte dalla radice, e `./Bozze` dalla sua sottocartella.
+    ws.set_setting(NEW_NOTE_FOLDER, SettingValue::Text("./".to_string()))
+        .expect("setting scritta");
+    assert_eq!(
+        ws.create_notes(Some("Idea")).unwrap(),
+        DocId::new("Idea.md")
+    );
+    ws.set_setting(NEW_NOTE_FOLDER, SettingValue::Text("./Bozze".to_string()))
+        .expect("setting scritta");
+    assert_eq!(
+        ws.create_notes(Some("Idea")).unwrap(),
+        DocId::new("Bozze/Idea.md")
+    );
+}
+
 /// I link markdown ordinari (decisione 0004) sul parser vero: gli `Span` sono quelli di
 /// comrak, non quelli di un provider giocattolo, e la riscrittura al rename
 /// ritaglia dentro di essi.

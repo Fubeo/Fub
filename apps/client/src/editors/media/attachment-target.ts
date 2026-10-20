@@ -2,7 +2,7 @@
 //
 // La cartella e' la chiave `files.attachment-folder` esistente (default
 // `attachments`): nessuna nuova impostazione. Con `./` davanti segue la nota
-// (`attachmentsFor`). Le collisioni le risolve il
+// (`folderForNote`). Le collisioni le risolve il
 // kernel (`Workspace::free_name`, forma `foto.png`, `foto 1.png`, …); qui si
 // calcola solo il candidato da proporre, mai lo stato del disco. I link sono
 // relativi al documento che li ospita (`../allegati/foto.png`), con percent-
@@ -11,7 +11,7 @@
 // `split_file_name`, `relative_url` in `crates/fub-host/src/resources.rs`.
 import type { Lifetime } from "../../ui/lifetime";
 import { t } from "../../i18n/strings";
-import { attachmentsFor } from "../../rules/mirrored";
+import { folderForNote } from "../../rules/mirrored";
 
 export const DEFAULT_ATTACHMENT_FOLDER = "attachments";
 
@@ -118,7 +118,7 @@ export async function depositAttachment(
   }
   // Una cartella con `./` segue la nota, e per una nota nella radice è la
   // radice stessa.
-  const folder = attachmentsFor(deposit.folder, deposit.fromDocument);
+  const folder = folderForNote(deposit.folder, deposit.fromDocument);
   const atRoot = folder === "" && deposit.folder.trim().startsWith(".");
   for (let n = 0; n <= 10_000; n++) {
     const file = attachmentCandidate("", stem, ext, n);

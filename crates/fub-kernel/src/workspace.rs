@@ -8359,7 +8359,10 @@ impl Workspace {
                 .ok()
                 .and_then(|(value, _)| value.as_text().map(str::to_owned))
                 .unwrap_or_default();
-            let folder = fub_abi::rules::folders::normalized(&folder);
+            // Una cartella con `./` segue la nota aperta: è la shell a saperla,
+            // e la passa come cartella. Chi crea senza (la riga di comando, un
+            // nome nudo) parte dalla radice.
+            let folder = fub_abi::rules::folders::for_note(&folder, "");
             if !folder.is_empty() {
                 id = new_doc_id(&format!("{folder}/{}", id.as_str()))?;
             }

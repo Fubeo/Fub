@@ -31,8 +31,11 @@ trascinati. Se la cartella non c'è ancora lo dice e non la crea: la crea il
 primo allegato. Una cartella che comincia con `./` segue la nota, come in
 Obsidian: con `./` l'allegato va accanto alla nota, con `./allegati` in una sua
 sottocartella, e un `![[foto.png]]` nudo si cerca prima lì. Il comando apre
-allora quella della nota aperta. La regola è `fub_abi::rules::folders::attachments_for`,
-con la gemella `attachmentsFor` nella shell.
+allora quella della nota aperta. Lo stesso vale per `files.new-note-folder`:
+con `./` una nota nuova nasce accanto a quella aperta, e vince sullo spazio
+attivo; una cartella scelta da chi crea (il menu di una cartella) vince su
+tutto, e senza una nota aperta si parte dalla radice. La regola è
+`fub_abi::rules::folders::for_note`, con la gemella `folderForNote` nella shell.
 «Filtra l'esplora per percorso» (`shell.explorer.filter`, dalla palette) apre
 un campo sopra l'albero. Con del testo l'albero cede il posto a un elenco
 piatto delle voci e cartelle dello spazio il cui percorso intero contiene ogni

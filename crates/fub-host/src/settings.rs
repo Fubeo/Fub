@@ -1541,7 +1541,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_NEW_NOTE_FOLDER, "Cartella delle nuove note")
         .with(
             C_NEW_NOTE_FOLDER_DESC,
-            "La cartella del vault per le note create senza un path esplicito; vuota indica la radice.",
+            "La cartella del vault per le note create senza un path esplicito; vuota indica la radice. Con `./` davanti segue la nota aperta: `./` è la sua cartella, `./Bozze` una sua sottocartella.",
         )
         .with(C_NEW_NOTE_EXTENSION, "Estensione delle nuove note")
         .with(
@@ -2027,7 +2027,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_NEW_NOTE_FOLDER, "New note folder")
         .with(
             C_NEW_NOTE_FOLDER_DESC,
-            "The vault folder for notes created without an explicit path; empty means the vault root.",
+            "The vault folder for notes created without an explicit path; empty means the vault root. A leading `./` follows the open note: `./` is its folder, `./Drafts` a subfolder of it.",
         )
         .with(C_NEW_NOTE_EXTENSION, "New note extension")
         .with(

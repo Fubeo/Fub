@@ -40,7 +40,7 @@ use fub_abi::event::{BatchId, DocChange, DocChanges, Event, EventKind, EventMask
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, TaskMarker};
 use fub_abi::rules::events::{folder_contains, topic_matches};
-use fub_abi::rules::folders::attachments_for;
+use fub_abi::rules::folders::for_note;
 use fub_abi::rules::keys;
 use fub_abi::rules::path::{relative_ref, resolution_key, resolve_against};
 use fub_abi::rules::path_policy::{check, normalized, Naming};
@@ -396,9 +396,10 @@ fn folder_contains_cases() -> Vec<Value> {
     .collect()
 }
 
-/// Dove finiscono gli allegati di una nota: la shell ci deposita, il kernel ci
-/// cerca un `![[foto.png]]` nudo. `./` segue la cartella della nota.
-fn attachments_for_cases() -> Vec<Value> {
+/// Una cartella dichiarata letta per una nota: la shell ci deposita gli
+/// allegati e ci crea le note nuove, il kernel ci cerca un `![[foto.png]]`
+/// nudo. `./` segue la cartella della nota.
+fn folder_for_note_cases() -> Vec<Value> {
     [
         ("attachments", "Progetti/Alpha.md"),
         ("/attachments/", "Alpha.md"),
@@ -412,7 +413,7 @@ fn attachments_for_cases() -> Vec<Value> {
         (".hidden", "Progetti/Alpha.md"),
     ]
     .into_iter()
-    .map(|(declared, source)| json!({"declared": declared, "source": source, "out": attachments_for(declared, source)}))
+    .map(|(declared, source)| json!({"declared": declared, "source": source, "out": for_note(declared, source)}))
     .collect()
 }
 
@@ -852,7 +853,7 @@ fn expected() -> Value {
         "task_checked": task_checked_cases(),
         "topic_matches": topic_matches_cases(),
         "folder_contains": folder_contains_cases(),
-        "attachments_for": attachments_for_cases(),
+        "folder_for_note": folder_for_note_cases(),
         "mask_wants": mask_wants_cases(),
         "scan_tags": scan_tags_cases(),
         "canonical_chord": canonical_chord_cases(),

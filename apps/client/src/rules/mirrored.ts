@@ -381,10 +381,10 @@ export function topicMatches(prefix: string, topic: string): boolean {
   return next === undefined || next === ":" || next === ".";
 }
 
-/// La cartella degli allegati di una nota. Gemella di
-/// `fub_abi::rules::folders::attachments_for`: `./` comincia dalla cartella
+/// Una cartella dichiarata (allegati, nuove note) letta per una nota. Gemella di
+/// `fub_abi::rules::folders::for_note`: `./` comincia dalla cartella
 /// della nota, ogni altra cartella è del vault. `""` è la radice.
-export function attachmentsFor(declared: string, source: string): string {
+export function folderForNote(declared: string, source: string): string {
   const trimmed = declared.trim();
   const rest = trimmed === "." ? "" : trimmed.startsWith("./") ? trimmed.slice(2) : null;
   if (rest === null) return trimmed.replace(/^\/+|\/+$/g, "");
