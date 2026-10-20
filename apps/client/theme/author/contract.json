@@ -5065,6 +5065,8 @@
     "text-reading",
     "leading-relaxed",
     "content-width",
+    "font-ui",
+    "font-mono",
     "titlebar-h",
     "chrome-btn",
     "win-ctrl-w",
@@ -5227,6 +5229,6 @@
     "state_names": 7,
     "assigned_states": 625,
     "components": 185,
-    "preference_tokens": 121
+    "preference_tokens": 123
   }
 }

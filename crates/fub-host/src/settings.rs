@@ -135,6 +135,10 @@ pub const APPEARANCE_BODY: &str = "appearance.body";
 pub const APPEARANCE_LINE_HEIGHT: &str = "appearance.line-height";
 pub const APPEARANCE_MEASURE: &str = "appearance.measure";
 pub const APPEARANCE_FONT: &str = "appearance.font";
+/// Il carattere dell'interfaccia (barre, cassetti, menu): il token `font-ui`.
+pub const APPEARANCE_FONT_UI: &str = "appearance.font-ui";
+/// Il carattere a spaziatura fissa (codice, sorgente): il token `font-mono`.
+pub const APPEARANCE_FONT_MONO: &str = "appearance.font-mono";
 pub const APPEARANCE_ACCENT: &str = "appearance.accent";
 pub const APPEARANCE_ZOOM: &str = "appearance.zoom";
 pub const APPEARANCE_CSS_SNIPPETS: &str = "appearance.css-snippets";
@@ -713,6 +717,28 @@ fn appearance_settings() -> Vec<SettingSpec> {
                 UiOption::new("system", Text::key(C_FONT_SYSTEM)),
             ],
         ),
+        choice(
+            APPEARANCE_FONT_UI,
+            C_FONT_UI,
+            C_FONT_UI_DESC,
+            "hanken",
+            vec![
+                UiOption::new("hanken", Text::key(C_FONT_HANKEN)),
+                UiOption::new("inter", Text::key(C_FONT_INTER)),
+                UiOption::new("system", Text::key(C_FONT_SYSTEM)),
+            ],
+        ),
+        choice(
+            APPEARANCE_FONT_MONO,
+            C_FONT_MONO,
+            C_FONT_MONO_DESC,
+            "plex",
+            vec![
+                UiOption::new("plex", Text::key(C_FONT_PLEX)),
+                UiOption::new("jetbrains", Text::key(C_FONT_JETBRAINS)),
+                UiOption::new("system", Text::key(C_FONT_SYSTEM)),
+            ],
+        ),
         number(APPEARANCE_BODY, C_BODY, C_BODY_DESC, 17.0, 12.0, 28.0),
         number(
             APPEARANCE_LINE_HEIGHT,
@@ -1116,6 +1142,12 @@ const C_FONT_HANKEN: &str = "core.font.hanken";
 const C_FONT_LITERATA: &str = "core.font.literata";
 const C_FONT_INTER: &str = "core.font.inter";
 const C_FONT_SYSTEM: &str = "core.font.system";
+const C_FONT_UI: &str = "core.font_ui";
+const C_FONT_UI_DESC: &str = "core.font_ui.desc";
+const C_FONT_MONO: &str = "core.font_mono";
+const C_FONT_MONO_DESC: &str = "core.font_mono.desc";
+const C_FONT_PLEX: &str = "core.font.plex";
+const C_FONT_JETBRAINS: &str = "core.font.jetbrains";
 const C_ACCENT: &str = "core.accent";
 const C_ACCENT_DESC: &str = "core.accent.desc";
 const C_COMPACTNESS: &str = "core.compactness";
@@ -1596,6 +1628,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FONT_LITERATA, "Literata")
         .with(C_FONT_INTER, "Inter")
         .with(C_FONT_SYSTEM, "Del sistema")
+        .with(C_FONT_UI, "Carattere dell'interfaccia")
+        .with(C_FONT_UI_DESC, "Famiglia di barre, cassetti, menu e finestre.")
+        .with(C_FONT_MONO, "Carattere del codice")
+        .with(C_FONT_MONO_DESC, "Famiglia a spaziatura fissa del codice e del sorgente.")
+        .with(C_FONT_PLEX, "IBM Plex Mono")
+        .with(C_FONT_JETBRAINS, "JetBrains Mono")
         .with(C_ACCENT, "Tinta dell'accento (0–360)")
         .with(
             C_ACCENT_DESC,
@@ -2022,6 +2060,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FONT_LITERATA, "Literata")
         .with(C_FONT_INTER, "Inter")
         .with(C_FONT_SYSTEM, "System")
+        .with(C_FONT_UI, "Interface font")
+        .with(C_FONT_UI_DESC, "Font family of bars, drawers, menus and dialogs.")
+        .with(C_FONT_MONO, "Code font")
+        .with(C_FONT_MONO_DESC, "Monospaced font family for code and source.")
+        .with(C_FONT_PLEX, "IBM Plex Mono")
+        .with(C_FONT_JETBRAINS, "JetBrains Mono")
         .with(C_ACCENT, "Accent hue (0–360)")
         .with(
             C_ACCENT_DESC,

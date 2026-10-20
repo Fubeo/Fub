@@ -66,6 +66,8 @@ export const SCRITTOIO_SERIES: ThemeSeries = {
     lineHeight: 1.65,
     measure: 68,
     font: "newsreader",
+    uiFont: "hanken",
+    monoFont: "plex",
     accent: DEFAULT_ACCENT_HUE,
     compactness: 0,
   },
@@ -75,6 +77,17 @@ export const SCRITTOIO_SERIES: ThemeSeries = {
     literata: '"Literata Variable", Georgia, "Times New Roman", serif',
     inter: '"Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
     system: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+  },
+  // Le prime voci sono le pile dei fogli: scelte, non cambiano un pixel.
+  uiFonts: {
+    hanken: '"Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    inter: '"Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    system: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+  },
+  monoFonts: {
+    plex: '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace',
+    jetbrains: '"JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace',
+    system: 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace',
   },
   sheet(light, contrast) {
     return SHEET_TEXT[SHEETS[light][contrast]]!;

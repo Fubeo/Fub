@@ -41,8 +41,8 @@ subito. I titoli usano l'inchiostro del documento in tutte e tre le modalità �
 solo i `#` restano sintassi colorata — e i link resi usano lo stesso inchiostro
 dei wikilink. Il ritmo verticale è lo stesso in Live e Lettura: un passo sotto
 ogni blocco, due passi sopra i titoli di sezione. In Live il ritmo vive sui
-widget (i margini dei figli non escono dal blocco isolato). Font, corpo,
-interlinea e misura rispettano le preferenze di lettura.
+widget (i margini dei figli non escono dal blocco isolato). Testo, codice e
+interfaccia hanno caratteri propri; corpo, interlinea e misura sono preferenze.
 
 L'editor testuale supporta folding, selezioni multiple e rettangolari,
 indentazione, liste intelligenti, matching e chiusura delle parentesi. L'incolla

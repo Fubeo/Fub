@@ -754,6 +754,8 @@ fn the_keys_of_appearance_are_the_same_here_and_there_and_are_machine_keys() {
         ),
         ("MEASURE_KEY", fub_host::settings::APPEARANCE_MEASURE),
         ("FONT_KEY", fub_host::settings::APPEARANCE_FONT),
+        ("UI_FONT_KEY", fub_host::settings::APPEARANCE_FONT_UI),
+        ("MONO_FONT_KEY", fub_host::settings::APPEARANCE_FONT_MONO),
         ("ACCENT_KEY", fub_host::settings::APPEARANCE_ACCENT),
         ("ZOOM_KEY", fub_host::settings::APPEARANCE_ZOOM),
         ("FRAME_RATE_KEY", fub_host::settings::APPEARANCE_FRAME_RATE),
@@ -849,6 +851,11 @@ fn the_defaults_of_appearance_are_those_of_the_series() {
         ),
         (fub_host::settings::APPEARANCE_MEASURE, declared("measure")),
         (fub_host::settings::APPEARANCE_FONT, declared("font")),
+        (fub_host::settings::APPEARANCE_FONT_UI, declared("uiFont")),
+        (
+            fub_host::settings::APPEARANCE_FONT_MONO,
+            declared("monoFont"),
+        ),
         (fub_host::settings::APPEARANCE_ACCENT, accent.to_owned()),
     ];
     let core = fub_host::settings::core_settings();

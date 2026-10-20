@@ -213,7 +213,8 @@ pannelli) lo Scrittoio compone:
   colori, fogli, struttura e pelle a pezzi. La pelle passa dal sanitizer CSS
   del motore, e ogni classe di un pezzo è un hook dell'anatomia di quel pezzo.
 
-I predefiniti dell'aspetto (accento, carattere, corpo, interlinea, giustezza)
+I predefiniti dell'aspetto (accento, i tre caratteri, corpo, interlinea,
+giustezza)
 li dichiara l'host e coincidono con quelli della serie; un test Rust lo
 verifica. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
 400 px, ispettore da 248 a 440 px. Un tema `theme-1` installato non si monta, e
