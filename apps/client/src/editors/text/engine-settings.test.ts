@@ -16,6 +16,7 @@ import {
   EDITOR_INDENT_GUIDES_KEY,
   EDITOR_PASTE_HTML_KEY,
   EDITOR_PROPERTIES_KEY,
+  EDITOR_RTL_KEY,
   EDITOR_SPELLCHECK_KEY,
   EDITOR_VIM_KEY,
 } from "./engine";
@@ -91,6 +92,26 @@ describe("text input settings", () => {
     cell.destroy();
     document_.remove();
     field.remove();
+  });
+
+  it("il testo da destra a sinistra gira la stessa vista e torna indietro", async () => {
+    const read = vi.mocked(settings);
+    read.mockReset();
+    read.mockResolvedValue([entry(EDITOR_RTL_KEY, true)]);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const engine = createTextEngine(host, { onChange: () => {}, onSelectionChange: () => {} });
+    const view = EditorView.findFromDOM(host)!;
+    await vi.waitFor(() => expect(view.contentDOM.getAttribute("dir")).toBe("rtl"));
+    read.mockResolvedValue([entry(EDITOR_RTL_KEY, false)]);
+    forwardNotice({
+      event: { type: "setting_changed", key: EDITOR_RTL_KEY, scope: "machine" },
+      origin: { actor: { kind: "user" }, batch: null },
+    });
+    // Spento, torna la direzione che il testo dice da sé.
+    await vi.waitFor(() => expect(view.contentDOM.getAttribute("dir")).toBe("auto"));
+    engine.destroy();
+    host.remove();
   });
 
   it("il margine di piegatura e la chiusura delle parentesi si spengono dalla stessa vista", async () => {

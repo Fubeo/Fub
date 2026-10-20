@@ -152,6 +152,7 @@ export function cursorIsLiteral(cursor: Pick<CursorContext, "nodes" | "lineBefor
 /// riquadro prima di ridisegnarsi.
 const READING_SYNC_MS = 120;
 const STRICT_LINE_BREAKS_KEY = "editor.strict-line-breaks";
+const RTL_KEY = "editor.rtl";
 
 function isMarkdownMode(mode: string): mode is MarkdownMode {
   return MARKDOWN_MODES.some((candidate) => candidate.id === mode);
@@ -305,7 +306,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   parent.dataset.markdownMode = mode;
   // «Interruzioni di riga rigorose» spente: in Lettura un a capo singolo
   // resta un'interruzione. La resa lo dice con un attributo, e la pelle lo
-  // legge; il testo del documento non cambia.
+  // legge; il testo del documento non cambia. «Testo da destra a sinistra»
+  // gira la Lettura; l'editor lo legge da sé.
   let breaksRead = 0;
   const readLineBreaks = async (): Promise<void> => {
     const mine = ++breaksRead;
@@ -314,10 +316,12 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     const strict = entries.find((entry) => entry.spec.key === STRICT_LINE_BREAKS_KEY)?.value;
     if (strict === false) parent.dataset.lineBreaks = "keep";
     else delete parent.dataset.lineBreaks;
+    if (entries.find((entry) => entry.spec.key === RTL_KEY)?.value === true) reading.dir = "rtl";
+    else reading.removeAttribute("dir");
   };
   void readLineBreaks();
   life.add(onEvent("setting_changed", (event) => {
-    if (event.key === STRICT_LINE_BREAKS_KEY) void readLineBreaks();
+    if (event.key === STRICT_LINE_BREAKS_KEY || event.key === RTL_KEY) void readLineBreaks();
   }));
 
   // Reading owns browser selection; only history commands reach the hidden editor.

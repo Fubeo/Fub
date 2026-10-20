@@ -172,6 +172,8 @@ pub const EDITOR_FOLD_GUTTER: &str = "editor.fold-gutter";
 pub const EDITOR_SMART_LISTS: &str = "editor.smart-lists";
 pub const EDITOR_PASTE_HTML: &str = "editor.paste-html";
 pub const EDITOR_INDENT_GUIDES: &str = "editor.indent-guides";
+/// Il testo dell'editor e della Lettura va da destra a sinistra (arabo, ebraico).
+pub const EDITOR_RTL: &str = "editor.rtl";
 /// L'anteprima di un link al passaggio vuole sempre Ctrl/Cmd, anche in Lettura.
 pub const EDITOR_PREVIEW_MODIFIER: &str = "editor.preview-modifier";
 pub const EDITOR_STRICT_LINE_BREAKS: &str = "editor.strict-line-breaks";
@@ -567,6 +569,7 @@ fn editor_settings() -> Vec<SettingSpec> {
                 C_EDITOR_PASTE_HTML_DESC,
                 true,
             ),
+            (EDITOR_RTL, C_EDITOR_RTL, C_EDITOR_RTL_DESC, false),
             (
                 EDITOR_PREVIEW_MODIFIER,
                 C_EDITOR_PREVIEW_MODIFIER,
@@ -1150,6 +1153,8 @@ const C_EDITOR_SMART_LISTS_DESC: &str = "core.editor.smart_lists.desc";
 const C_EDITOR_STRICT_LINE_BREAKS: &str = "core.editor.strict_line_breaks";
 const C_EDITOR_STRICT_LINE_BREAKS_DESC: &str = "core.editor.strict_line_breaks.desc";
 const C_EDITOR_INDENT_GUIDES: &str = "core.editor.indent_guides";
+const C_EDITOR_RTL: &str = "core.editor.rtl";
+const C_EDITOR_RTL_DESC: &str = "core.editor.rtl.desc";
 const C_EDITOR_INDENT_GUIDES_DESC: &str = "core.editor.indent_guides.desc";
 const C_EDITOR_PREVIEW_MODIFIER: &str = "core.editor.preview_modifier";
 const C_EDITOR_PREVIEW_MODIFIER_DESC: &str = "core.editor.preview_modifier.desc";
@@ -1631,6 +1636,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_SMART_LISTS_DESC, "Invio continua la voce dell'elenco e su una voce vuota chiude l'elenco. Spenti, Invio va a capo e basta.")
         .with(C_EDITOR_STRICT_LINE_BREAKS, "Interruzioni di riga rigorose")
         .with(C_EDITOR_STRICT_LINE_BREAKS_DESC, "Acceso, una riga a capo singola in Lettura si unisce alla riga prima, come in CommonMark. Spento, resta un'interruzione.")
+        .with(C_EDITOR_RTL, "Testo da destra a sinistra")
+        .with(C_EDITOR_RTL_DESC, "Per l'arabo, l'ebraico e le altre scritture da destra a sinistra: l'editor e la Lettura partono dal margine destro.")
         .with(C_EDITOR_INDENT_GUIDES, "Guide di rientro")
         .with(C_EDITOR_INDENT_GUIDES_DESC, "Disegna una riga verticale per ogni livello di rientro. Funziona in modalità Sorgente.")
         .with(C_EDITOR_PREVIEW_MODIFIER, "Anteprima dei link solo con Ctrl")
@@ -2089,6 +2096,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_SMART_LISTS_DESC, "Enter continues the list item and ends the list on an empty item. Off, Enter just starts a new line.")
         .with(C_EDITOR_STRICT_LINE_BREAKS, "Strict line breaks")
         .with(C_EDITOR_STRICT_LINE_BREAKS_DESC, "On, a single newline in Reading joins the previous line, as in CommonMark. Off, it stays a line break.")
+        .with(C_EDITOR_RTL, "Right-to-left text")
+        .with(C_EDITOR_RTL_DESC, "For Arabic, Hebrew and other right-to-left scripts: the editor and Reading start from the right margin.")
         .with(C_EDITOR_INDENT_GUIDES, "Indentation guides")
         .with(C_EDITOR_INDENT_GUIDES_DESC, "Draws a vertical line for each indentation level. Works in Source mode.")
         .with(C_EDITOR_PREVIEW_MODIFIER, "Link preview only with Ctrl")
