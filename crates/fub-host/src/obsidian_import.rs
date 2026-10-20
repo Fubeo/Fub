@@ -17,10 +17,13 @@
 //! hanno un gemello in Fub; quelle di un comando senza gemello, o con un tasto
 //! che Fub non sa premere (Ctrl distinto da Cmd, lo spazio), tornano per nome.
 //!
-//! I segnalibri (`bookmarks.json`) non sono impostazioni: li tiene la shell,
-//! nello stato di vista del vault. Il comando li legge e li consegna così come
-//! sono nell'esito, e la shell li traduce nei suoi; l'host non conosce la forma
-//! dei segnalibri di Fub.
+//! I frammenti CSS (`snippets/*.css`, accesi da `enabledCssSnippets`), i
+//! segnalibri (`bookmarks.json`) e gli spazi di lavoro (`workspaces.json`)
+//! passano dalla shell: i frammenti li vaglia lei, che conosce il vocabolario
+//! dei suoi agganci, e segnalibri e spazi li tiene lei, nello stato di vista
+//! del vault. Il comando li legge e li consegna
+//! nell'esito; l'host non conosce né quel vocabolario né la forma dei
+//! segnalibri e dei riquadri di Fub.
 //!
 //! Il comando gira solo a richiesta dell'utente: è dell'host, il kernel lo
 //! riserva e un plugin non lo può chiamare. Scrive con la stessa porta del
@@ -53,6 +56,11 @@ const APPEARANCE: &str = "appearance.json";
 const DAILY: &str = "daily-notes.json";
 const BOOKMARKS: &str = "bookmarks.json";
 const HOTKEYS: &str = "hotkeys.json";
+const WORKSPACES: &str = "workspaces.json";
+/// La cartella dei frammenti CSS, quanti Fub ne tiene e quanto può pesarne uno.
+const SNIPPETS: &str = "snippets";
+const MAX_SNIPPETS: usize = 32;
+const SNIPPET_BYTES: u64 = 256 * 1024;
 /// Oltre questa misura un file non è delle impostazioni di Obsidian.
 const MAX_BYTES: u64 = 1024 * 1024;
 
@@ -185,6 +193,8 @@ pub fn translate(
                     ),
                     None => out.lose(APPEARANCE, name, Why::Value),
                 },
+                // Quali frammenti sono accesi lo sa la shell, che li vaglia.
+                ("enabledCssSnippets", Value::Array(_)) => {}
                 _ => out.lose(APPEARANCE, name, Why::NoEquivalent),
             }
         }
@@ -568,6 +578,82 @@ fn read_config(root: &Utf8Path, file: &str) -> Result<Option<Map<String, Value>>
     }
 }
 
+/// I frammenti letti, `(nome, css)`, e quelli che non si leggono.
+#[derive(Default)]
+struct Snippets {
+    files: Vec<(String, String)>,
+    lost: Vec<Lost>,
+}
+
+/// I frammenti di `snippets/`, per nome senza `.css`, in ordine di nome. Un
+/// collegamento non si segue, un file troppo grande o non UTF-8 si nomina, e
+/// oltre i trentadue che Fub tiene il resto si nomina.
+fn read_snippets(root: &Utf8Path) -> Result<Snippets, PluginError> {
+    let unreadable = |why: String| {
+        PluginError::BadArgs(Text::message(
+            "host.obsidian_import.unreadable",
+            vec![
+                Arg::text("file", format!("{DIR}/{SNIPPETS}")),
+                Arg::text("why", why),
+            ],
+        ))
+    };
+    let vault =
+        cap_std::fs::Dir::open_ambient_dir(root.as_std_path(), cap_std::ambient_authority())
+            .map_err(|why| unreadable(why.to_string()))?;
+    let dir = match vault.open_dir(format!("{DIR}/{SNIPPETS}")) {
+        Ok(dir) => dir,
+        Err(why) if why.kind() == std::io::ErrorKind::NotFound => return Ok(Snippets::default()),
+        Err(why) => return Err(unreadable(why.to_string())),
+    };
+    let mut names = Vec::new();
+    for entry in dir.entries().map_err(|why| unreadable(why.to_string()))? {
+        let entry = entry.map_err(|why| unreadable(why.to_string()))?;
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
+        if !name.ends_with(".css") {
+            continue;
+        }
+        let is_file = entry
+            .file_type()
+            .map_err(|why| unreadable(why.to_string()))?
+            .is_file();
+        names.push((name, is_file));
+    }
+    names.sort();
+    let mut snippets = Vec::new();
+    let mut lost = Vec::new();
+    let from = |name: &str| format!("{DIR}/{SNIPPETS}/{name}");
+    for (name, is_file) in names {
+        if !is_file || snippets.len() == MAX_SNIPPETS {
+            lost.push(Lost {
+                from: from(&name),
+                why: Why::Value,
+            });
+            continue;
+        }
+        let mut bytes = Vec::new();
+        let read = dir
+            .open(&name)
+            .and_then(|mut file| (&mut file).take(SNIPPET_BYTES + 1).read_to_end(&mut bytes));
+        match read.ok().and_then(|_| {
+            (bytes.len() as u64 <= SNIPPET_BYTES).then_some(())?;
+            String::from_utf8(bytes).ok()
+        }) {
+            Some(css) => snippets.push((name.trim_end_matches(".css").to_string(), css)),
+            None => lost.push(Lost {
+                from: from(&name),
+                why: Why::Value,
+            }),
+        }
+    }
+    Ok(Snippets {
+        files: snippets,
+        lost,
+    })
+}
+
 /// Legge, traduce e — fuori dalla prova — scrive.
 pub(crate) fn invoke(
     host: &Host,
@@ -581,6 +667,20 @@ pub(crate) fn invoke(
     let appearance = read_config(root, APPEARANCE)?;
     let daily = read_config(root, DAILY)?;
     let hotkeys = read_config(root, HOTKEYS)?;
+    let workspaces =
+        match read_config(root, WORKSPACES)?.and_then(|mut file| file.remove("workspaces")) {
+            Some(Value::Object(named)) => Some(named),
+            _ => None,
+        };
+    let Snippets {
+        files: snippets,
+        lost: unread_snippets,
+    } = read_snippets(root)?;
+    let enabled_snippets = appearance
+        .as_ref()
+        .and_then(|file| file.get("enabledCssSnippets"))
+        .cloned()
+        .unwrap_or_else(|| Value::Array(Vec::new()));
     // Le voci dei segnalibri, così come Obsidian le scrive: un elenco, anche
     // vuoto, o niente se il file non c'è o non ne ha.
     let bookmarks = match read_config(root, BOOKMARKS)?.and_then(|mut file| file.remove("items")) {
@@ -592,12 +692,16 @@ pub(crate) fn invoke(
         && daily.is_none()
         && hotkeys.is_none()
         && bookmarks.is_none()
+        && workspaces.is_none()
+        && snippets.is_empty()
+        && unread_snippets.is_empty()
     {
         return Err(PluginError::NotFound(Text::key(
             "host.obsidian_import.none",
         )));
     }
     let mut translation = translate(app.as_ref(), appearance.as_ref(), daily.as_ref());
+    translation.lost.extend(unread_snippets);
     if let Some(hotkeys) = &hotkeys {
         translate_hotkeys(hotkeys, &mut translation);
     }
@@ -636,6 +740,8 @@ pub(crate) fn invoke(
                         Arg::int("count", changes.len() as i64),
                         Arg::text("list", list),
                         Arg::int("bookmarks", bookmarks.as_ref().map_or(0, Vec::len) as i64),
+                        Arg::int("snippets", snippets.len() as i64),
+                        Arg::int("workspaces", workspaces.as_ref().map_or(0, Map::len) as i64),
                         Arg::text("lost", lost_names(&translation.lost)),
                     ],
                 ),
@@ -676,6 +782,11 @@ pub(crate) fn invoke(
             "same": same.iter().map(|write| write.key).collect::<Vec<_>>(),
             "lost": translation.lost.iter().map(|lost| serde_json::json!({ "from": lost.from, "why": lost.why.tag() })).collect::<Vec<_>>(),
             "bookmarks": bookmarks.unwrap_or_default(),
+            "workspaces": workspaces.unwrap_or_default(),
+            "snippets": {
+                "files": snippets.iter().map(|(name, css)| serde_json::json!({ "name": name, "css": css })).collect::<Vec<_>>(),
+                "enabled": enabled_snippets,
+            },
         }),
     }))
 }

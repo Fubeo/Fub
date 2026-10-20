@@ -71,7 +71,7 @@ file così come sono (vedi [Explorer e cartelle](explorer-and-folders.md)).
 
 Un vault che viene da Obsidian ha `.obsidian/` nella radice. Fub la ignora come
 parte del vault, ma «Importa le impostazioni di Obsidian» (il comando
-dell'host `settings.import_obsidian`, dalla palette) ne legge cinque file e
+dell'host `settings.import_obsidian`, dalla palette) ne legge i file e
 scrive le scelte che Fub sa esprimere:
 
 - da `app.json`: cartella degli allegati (anche `./` e `./sotto`), posizione
@@ -85,7 +85,9 @@ scrive le scelte che Fub sa esprimere:
 - da `hotkeys.json`: le scorciatoie dei comandi che hanno un gemello in Fub
   (palette, schede, riquadri, barre laterali, piegatura, zoom, formattazione),
   una per comando;
-- da `bookmarks.json`: i segnalibri.
+- da `bookmarks.json`: i segnalibri;
+- da `snippets/*.css`: i frammenti CSS, accesi come lo erano;
+- da `workspaces.json`: gli spazi di lavoro, come workspace di Fub.
 
 Ogni impostazione va al suo livello, del vault o della macchina, con la stessa
 porta del pannello. Una chiave che Fub non sa dire (la larghezza leggibile, un
@@ -103,6 +105,21 @@ pagine web e gruppi hanno la loro gemella; un gruppo dentro un gruppo diventa
 un gruppo suo, perché i gruppi di Fub non si annidano. Il grafo di Obsidian e
 una specie che Fub non conosce si nominano nell'avviso. Una voce che c'è già
 non si raddoppia, e un gruppo con lo stesso nome si riusa.
+
+I frammenti CSS passano dallo stesso vaglio di un frammento scritto a mano
+(`theme/snippets.ts`): uno che regge entra come `obsidian-<nome>` e si accende
+se era acceso in Obsidian; uno che nomina agganci che Fub non ha (quasi
+sempre, perché Obsidian ha le sue classi) entra spento, si nomina, e lo si
+corregge dalle impostazioni. Un id che c'è già non si riscrive; oltre i
+trentadue frammenti il resto si nomina.
+
+Di uno spazio di lavoro si porta l'area principale
+(`state/obsidian-workspaces.ts`): divisioni, gruppi di schede, le schede che
+aprono un file, quella davanti e le appuntate. Le barre laterali di Obsidian
+hanno pannelli che non sono quelli di Fub e restano fuori; una scheda che non
+apre un file (il grafo, una ricerca) si nomina per tipo. Uno spazio col nome di
+un workspace che c'è già non si raddoppia, e che i file esistano lo verifica
+l'apertura del workspace, come per ogni altro.
 
 ## Esportare una cartella o il vault
 

@@ -132,6 +132,18 @@ fn the_bookmarks_come_back_as_obsidian_wrote_them() {
 }
 
 #[test]
+fn the_workspaces_come_back_by_name() {
+    let named = json!({ "Scrivere": { "main": { "type": "split", "children": [] } } });
+    let file = json!({ "workspaces": named, "active": "Scrivere" }).to_string();
+    let (_dir, _root, host) = vault(&[
+        ("Nota.md", "# Nota\n"),
+        (".obsidian/workspaces.json", &file),
+    ]);
+    let report = payload(&import(&host, InvokeMode::Apply).expect("importa"));
+    assert_eq!(report["workspaces"], named);
+}
+
+#[test]
 fn the_hotkeys_become_the_keys_of_the_twin_commands() {
     let file = json!({
         "command-palette:open": [{ "modifiers": ["Mod", "Shift"], "key": "K" }],
@@ -149,6 +161,39 @@ fn the_hotkeys_become_the_keys_of_the_twin_commands() {
         SettingValue::Text("Mod-Alt-b".into())
     );
     assert_eq!(report["lost"], json!([]));
+}
+
+#[test]
+fn the_css_snippets_come_back_with_which_are_on() {
+    let (dir, root, host) = vault(&[
+        ("Nota.md", "# Nota\n"),
+        (
+            ".obsidian/appearance.json",
+            r#"{ "enabledCssSnippets": ["uno"] }"#,
+        ),
+        (".obsidian/snippets/uno.css", ".fub-a { color: red; }"),
+        (".obsidian/snippets/due.css", ".fub-b { color: blue; }"),
+        (".obsidian/snippets/note.txt", "non è un frammento"),
+    ]);
+    // Un collegamento fra i frammenti non si segue, e si nomina.
+    let outside = dir.path().join("fuori.css");
+    std::fs::write(&outside, "body { color: red; }").unwrap();
+    std::os::unix::fs::symlink(&outside, root.join(".obsidian/snippets/fuori.css")).unwrap();
+    let report = payload(&import(&host, InvokeMode::Apply).expect("importa"));
+    assert_eq!(
+        report["snippets"],
+        json!({
+            "files": [
+                { "name": "due", "css": ".fub-b { color: blue; }" },
+                { "name": "uno", "css": ".fub-a { color: red; }" },
+            ],
+            "enabled": ["uno"],
+        })
+    );
+    assert_eq!(
+        report["lost"],
+        json!([{ "from": ".obsidian/snippets/fuori.css", "why": "value" }])
+    );
 }
 
 #[test]
