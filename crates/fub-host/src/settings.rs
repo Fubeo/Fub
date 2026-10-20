@@ -231,6 +231,10 @@ pub const FILES_TRASH_VAULT: &str = "vault";
 /// Chiedere prima di cestinare una cartella con tutto ciò che contiene. Spenta,
 /// la cartella va nel cestino subito, e l'«Annulla» dell'avviso la riporta.
 pub const FILES_CONFIRM_TRASH: &str = "files.confirm-trash";
+/// I collegamenti `fub://` che scrivono senza chiedere: `new`, `daily`,
+/// `unique`, `capture`. Di macchina, e vuota di default: un vault arrivato da
+/// fuori non può decidere che un link del browser scriva in silenzio.
+pub const URI_ALLOWED: &str = "uri.allowed";
 /// Come nasce un link a una nota trascinata o copiata: wikilink (`[[Nota]]`)
 /// o link Markdown (`[Nota](Nota.md)`), che leggono anche gli altri programmi.
 pub const FILES_LINK_STYLE: &str = "files.link-style";
@@ -394,6 +398,18 @@ pub fn core_settings() -> Vec<SettingSpec> {
         SettingSpec::toggle(FILES_CONFIRM_TRASH, Text::key(C_FILES_CONFIRM_TRASH), true)
             .describing(Text::key(C_FILES_CONFIRM_TRASH_DESC))
             .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::new(
+            URI_ALLOWED,
+            Text::key(C_URI_ALLOWED),
+            SettingKind::List {
+                default: Vec::new(),
+            },
+        )
+        .describing(Text::key(C_URI_ALLOWED_DESC))
+        .grouped(Text::key(C_GROUP_FILES))
+        .for_machine(),
     );
     settings.push(
         SettingSpec::new(
@@ -1118,6 +1134,8 @@ const C_FILES_TRASH_VAULT: &str = "core.files_trash.vault";
 const C_FILES_TRASH_SYSTEM: &str = "core.files_trash.system";
 const C_FILES_CONFIRM_TRASH: &str = "core.files_confirm_trash";
 const C_FILES_CONFIRM_TRASH_DESC: &str = "core.files_confirm_trash.desc";
+const C_URI_ALLOWED: &str = "core.uri_allowed";
+const C_URI_ALLOWED_DESC: &str = "core.uri_allowed.desc";
 const C_FILES_LINK_STYLE: &str = "core.files_link_style";
 const C_FILES_LINK_STYLE_DESC: &str = "core.files_link_style.desc";
 const C_FILES_LINK_WIKI: &str = "core.files_link_style.wiki";
@@ -1571,6 +1589,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_FILES_CONFIRM_TRASH_DESC,
             "Spenta, la cartella va subito nel cestino del vault; «Annulla» nell'avviso la riporta. Svuotare il cestino chiede sempre.",
+        )
+        .with(C_URI_ALLOWED, "Collegamenti fub:// che scrivono senza chiedere")
+        .with(
+            C_URI_ALLOWED_DESC,
+            "Le azioni scelte (nota nuova, giornaliera, nota unica, cattura) scrivono appena il collegamento arriva, senza conferma. Aprire un altro vault chiede sempre. Vale su questo computer.",
         )
         .with(C_FILES_LINK_STYLE, "Nuovi link")
         .with(
@@ -2064,6 +2087,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_FILES_CONFIRM_TRASH_DESC,
             "When off, the folder goes straight to the vault trash; Undo in the notice brings it back. Deleting from the trash always asks.",
+        )
+        .with(C_URI_ALLOWED, "fub:// links that write without asking")
+        .with(
+            C_URI_ALLOWED_DESC,
+            "The chosen actions (new note, daily note, unique note, capture) write as soon as the link arrives, without a confirmation. Opening another vault always asks. Applies on this computer.",
         )
         .with(C_FILES_LINK_STYLE, "New links")
         .with(

@@ -214,9 +214,9 @@ arriva con il motivo e non si esegue.
   in uno nuovo (`split`) o in una finestra (`window`). Una nota che non c'è si
   dice e non si crea.
 - `search` apre la ricerca con il testo e i filtri `tag:` e `folder:`.
-- `new`, `daily`, `unique` e `capture` scrivono con `uri.apply`. La finestra
-  chiede prima la prova a vuoto, che dice quale nota nascerà, e scrive soltanto
-  dopo la conferma. Una cattura mostra anche l'inizio del testo.
+- `new`, `daily`, `unique` e `capture` scrivono con `uri.apply`, dopo la prova
+  a vuoto (quale nota nascerà, l'inizio di una cattura) e la conferma; le
+  azioni in `uri.allowed` (di macchina, vuota di default) scrivono subito.
 
 Un collegamento per un altro vault noto apre quel vault dopo una conferma, con
 lo stesso flusso del pulsante. Se il vault non si apre, il collegamento si

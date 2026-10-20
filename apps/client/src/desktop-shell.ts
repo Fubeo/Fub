@@ -59,7 +59,7 @@ import { mountAppMenu } from "./ui/app-menu";
 import { mountWebviewFocusMonitor } from "./ui/node";
 import { registerMermaidRenderer } from "./ui/mermaid";
 import { mountOnboarding } from "./ui/onboarding";
-import { mountIncomingLinks } from "./ui/incoming-links";
+import { mountIncomingLinks, URI_ALLOWED } from "./ui/incoming-links";
 import { mountWebViewer } from "./ui/web-viewer";
 import { confirm } from "./platform/confirm";
 import { registerBaseRenderer } from "./editors/base/surface";
@@ -619,6 +619,15 @@ function mountAdaptiveShell(): void {
     },
     chooseVault: () => void pickVault(),
     show: (doc) => openDocument(doc),
+    allowed: async () => {
+      try {
+        const entry = (await settings()).find((item) => item.spec.key === URI_ALLOWED);
+        return Array.isArray(entry?.value) ? entry.value : [];
+      } catch {
+        // Senza impostazioni si chiede: è la risposta che non scrive.
+        return [];
+      }
+    },
   });
   // Il visore web: il consenso per sito, la barra e il salvataggio come nota.
   mountWebViewer(pageWindowLifetime, document.body, {

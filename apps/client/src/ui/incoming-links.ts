@@ -9,7 +9,8 @@
 // Nessun collegamento scrive da solo. Aprire una nota e cercare non scrivono, e
 // si eseguono; creare una nota, la giornaliera o una cattura passano da una
 // conferma che dice che cosa nascerà (la prova di `uri.apply`), e scrivono
-// soltanto dopo il sì. Un collegamento che nomina un altro vault chiede prima
+// soltanto dopo il sì — o subito, se l'utente ha messo quell'azione fra le
+// consentite (`uri.allowed`, di macchina). Un collegamento che nomina un altro vault chiede prima
 // di aprirlo. Un collegamento non valido, o con una callback, lo dice.
 import { api } from "../host/ipc";
 import type { CommandOutcome } from "../host/contract";
@@ -19,6 +20,11 @@ import type { ConfirmOptions } from "../platform/confirm";
 import type { Lifetime } from "./lifetime";
 
 export const URI_APPLY = "uri.apply";
+/// L'impostazione delle azioni che scrivono senza chiedere.
+export const URI_ALLOWED = "uri.allowed";
+/// Le azioni che scrivono, nell'ordine in cui il campo le mostra.
+export const WRITING_ACTIONS = ["new", "daily", "unique", "capture"] as const;
+export type WritingAction = (typeof WRITING_ACTIONS)[number];
 
 /// Un collegamento come l'host lo descrive.
 export interface IncomingLink {
@@ -57,6 +63,9 @@ export interface IncomingPorts {
   chooseVault(): void;
   /// Apre la nota che un collegamento ha appena scritto.
   show(doc: string): Promise<void>;
+  /// Le azioni che scrivono senza chiedere (`uri.allowed`), lette a ogni
+  /// collegamento: un cambio nelle impostazioni vale dal successivo.
+  allowed(): Promise<readonly string[]>;
 }
 
 interface Pending {
@@ -161,16 +170,21 @@ export function mountIncomingLinks(life: Lifetime, ports: IncomingPorts): void {
       ports.search(searchQuery(link));
       return;
     }
-    // Chi scrive: prima la prova, che dice quale nota nascerà, poi il sì.
-    const plan = await api.invokeCommand(URI_APPLY, { uri: link.raw }, "dry_run");
-    const planned = plan.effect.kind === "plan" ? plan.effect.summary : "";
-    const body = link.action === "capture" ? excerpt(link.markdown) : "";
-    const message = [asked(link), planned, body].filter(Boolean).join("\n\n");
-    const yes = await ports.confirm(message, {
-      title: t("incoming.write.title"),
-      okLabel: t("incoming.write.ok"),
-    });
-    if (!yes || life.closed) return;
+    // Chi scrive: prima la prova, che dice quale nota nascerà, poi il sì —
+    // tranne un'azione che l'utente ha consentito una volta per tutte.
+    const trusted = (await ports.allowed()).includes(link.action);
+    if (life.closed) return;
+    if (!trusted) {
+      const plan = await api.invokeCommand(URI_APPLY, { uri: link.raw }, "dry_run");
+      const planned = plan.effect.kind === "plan" ? plan.effect.summary : "";
+      const body = link.action === "capture" ? excerpt(link.markdown) : "";
+      const message = [asked(link), planned, body].filter(Boolean).join("\n\n");
+      const yes = await ports.confirm(message, {
+        title: t("incoming.write.title"),
+        okLabel: t("incoming.write.ok"),
+      });
+      if (!yes || life.closed) return;
+    }
     const done = await api.invokeCommand(URI_APPLY, { uri: link.raw }, "apply");
     if (done.notify) ports.notify(done.notify, "info");
     if (done.effect.kind === "navigate") await ports.show(done.effect.doc);

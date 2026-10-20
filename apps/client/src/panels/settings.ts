@@ -1402,6 +1402,10 @@ const OWN_LIST_FIELDS = new Map<string, () => Promise<OwnListField>>([
     "draw.custom",
     () => import("../editors/spatial/custom-field").then(({ customField, describeCustom }) => ({ field: customField, describe: describeCustom })),
   ],
+  [
+    "uri.allowed",
+    () => import("../ui/uri-allowed-field").then(({ uriAllowedField, describeUriAllowed }) => ({ field: uriAllowedField, describe: describeUriAllowed })),
+  ],
 ]);
 const ownListFields = new Map<string, OwnListField>();
 

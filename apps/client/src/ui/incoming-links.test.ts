@@ -34,7 +34,7 @@ const here = { asked: "Diario", root: "/v/Diario", current: true };
 
 type Mocked = { [K in keyof IncomingPorts]: ReturnType<typeof vi.fn<IncomingPorts[K]>> };
 
-function ports(answer = true): Mocked {
+function ports(answer = true, allowed: readonly string[] = []): Mocked {
   return {
     confirm: vi.fn<IncomingPorts["confirm"]>(async () => answer),
     notify: vi.fn<IncomingPorts["notify"]>(),
@@ -43,6 +43,7 @@ function ports(answer = true): Mocked {
     search: vi.fn<IncomingPorts["search"]>(),
     chooseVault: vi.fn<IncomingPorts["chooseVault"]>(),
     show: vi.fn<IncomingPorts["show"]>(async () => {}),
+    allowed: vi.fn<IncomingPorts["allowed"]>(async () => allowed),
   };
 }
 
@@ -115,6 +116,19 @@ describe("collegamenti fub:// in arrivo", () => {
     expect(fake.invoke).toHaveBeenCalledWith("uri.apply", { uri: link.raw }, "apply");
     expect(yes.show).toHaveBeenCalledWith("Ciao.md");
     expect(yes.notify).toHaveBeenCalledWith("Creata Ciao.md", "info");
+  });
+
+  it("un'azione consentita scrive senza chiedere; le altre chiedono ancora", async () => {
+    const note: IncomingLink = { raw: "fub://new?title=Ciao", action: "new", writes: true, vault: here, title: "Ciao" };
+    const capture: IncomingLink = { raw: "fub://capture?title=Ciao", action: "capture", writes: true, vault: here, title: "Ciao" };
+    pendingSequence(queue([note, capture]));
+    const p = ports(false, ["new"]);
+    mountIncomingLinks(openLifetime(), p);
+    await settle();
+    expect(fake.invoke).toHaveBeenCalledWith("uri.apply", { uri: note.raw }, "apply");
+    expect(fake.invoke).not.toHaveBeenCalledWith("uri.apply", { uri: note.raw }, "dry_run");
+    expect(p.confirm).toHaveBeenCalledTimes(1);
+    expect(fake.invoke).not.toHaveBeenCalledWith("uri.apply", { uri: capture.raw }, "apply");
   });
 
   it("un altro vault si apre dopo il sì; uno sconosciuto o rifiutato ferma il collegamento", async () => {
