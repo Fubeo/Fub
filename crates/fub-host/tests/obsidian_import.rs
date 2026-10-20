@@ -163,6 +163,7 @@ fn the_hotkeys_become_the_keys_of_the_twin_commands() {
     assert_eq!(report["lost"], json!([]));
 }
 
+#[cfg(unix)]
 #[test]
 fn the_css_snippets_come_back_with_which_are_on() {
     let (dir, root, host) = vault(&[

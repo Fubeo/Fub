@@ -283,7 +283,9 @@ fn paired_native_attachment_verifies_digest_before_writing_bytes() {
     );
 }
 
-#[cfg(unix)]
+// I profili di `~/.mozilla` e `~/.config/chromium` sono di Linux: su macOS
+// le cartelle stanno sotto `Library/Application Support`.
+#[cfg(target_os = "linux")]
 #[test]
 fn native_install_writes_the_manifest_only_where_the_browser_is_and_only_with_yes() {
     let home = tempfile::tempdir().unwrap();
