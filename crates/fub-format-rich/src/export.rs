@@ -432,6 +432,8 @@ pub enum Item {
     Highlight,
     Superscript,
     Subscript,
+    Caps,
+    SmallCaps,
     Footnotes,
     Endnotes,
     Comments,
@@ -447,7 +449,7 @@ pub enum Item {
 }
 
 impl Item {
-    pub const ALL: [Item; 24] = [
+    pub const ALL: [Item; 26] = [
         Item::Words,
         Item::Headings,
         Item::ListItems,
@@ -460,6 +462,8 @@ impl Item {
         Item::Highlight,
         Item::Superscript,
         Item::Subscript,
+        Item::Caps,
+        Item::SmallCaps,
         Item::Footnotes,
         Item::Endnotes,
         Item::Comments,
@@ -489,6 +493,8 @@ impl Item {
             Item::Highlight => ("carattere evidenziato", "caratteri evidenziati"),
             Item::Superscript => ("carattere in apice", "caratteri in apice"),
             Item::Subscript => ("carattere in pedice", "caratteri in pedice"),
+            Item::Caps => ("carattere in maiuscolo", "caratteri in maiuscolo"),
+            Item::SmallCaps => ("carattere in maiuscoletto", "caratteri in maiuscoletto"),
             Item::Footnotes => ("nota a piè di pagina", "note a piè di pagina"),
             Item::Endnotes => ("nota di chiusura", "note di chiusura"),
             Item::Comments => ("commento", "commenti"),
@@ -628,6 +634,8 @@ fn mark_item(mark: Mark) -> Item {
         Mark::H => Item::Highlight,
         Mark::Sup => Item::Superscript,
         Mark::Sub => Item::Subscript,
+        Mark::Caps => Item::Caps,
+        Mark::SmallCaps => Item::SmallCaps,
     }
 }
 

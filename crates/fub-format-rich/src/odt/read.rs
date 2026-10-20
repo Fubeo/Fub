@@ -24,7 +24,7 @@ use super::keys::{AtomKey, CellKey, Level, ParaKey, RowKey, RunKey, TableKey};
 use super::styles::{LevelKind, Styles};
 use super::xml::{Kind, NodeId, Tree};
 use crate::blob;
-use crate::projection::{AtomKind, Block, Cell, Inline, Para, Role, Row, Table};
+use crate::projection::{AtomKind, Block, Cell, Inline, Look, Para, Role, Row, Table};
 use crate::{ReadOnly, RichError};
 
 /// Più spazi di così in un solo `text:s` non sono un documento ma un attacco.
@@ -440,6 +440,17 @@ impl Reader<'_> {
             align: self.styles.align(style),
             k: Some(blob::encode(&key)?),
             sect: None,
+            page: None,
+            header: None,
+            footer: None,
+            p: self.styles.layout(style),
+            s: (role == Role::Body)
+                .then(|| self.styles.common_of(style))
+                .flatten()
+                .map(String::into_boxed_str),
+            f: Box::new(self.styles.text(style, &[]).base()),
+            ins: None,
+            del: None,
             c,
         })
     }
@@ -496,7 +507,7 @@ impl Reader<'_> {
             rows: movable,
         };
         Ok(Table {
-            k: blob::encode(&key)?,
+            k: Some(blob::encode(&key)?),
             rows,
         })
     }
@@ -559,14 +570,16 @@ impl Reader<'_> {
                     open: self.src(e.open.clone())?,
                     tail: self.src(tail)?,
                 };
+                let span = e.attr("table:number-columns-spanned");
                 Ok(Cell {
-                    k: blob::encode(&key)?,
+                    k: Some(blob::encode(&key)?),
+                    span: span.and_then(|n| n.parse().ok()).filter(|n| *n > 1),
                     blocks: self.cell_blocks(cell)?,
                 })
             })
             .collect::<Result<_, RichError>>()?;
         Ok(Row {
-            k: blob::encode(&key)?,
+            k: Some(blob::encode(&key)?),
             cells,
         })
     }
@@ -649,9 +662,16 @@ struct Inlines<'r, 'a> {
     /// Il prossimo spazio letterale non conta.
     ignore: bool,
     wrappers: Vec<Wrapper>,
-    /// `k`, enfasi e link del testo agli involucri correnti.
-    current: Option<(Option<String>, Vec<crate::projection::Mark>, Option<String>)>,
+    /// `k`, enfasi, link e aspetto del testo agli involucri correnti.
+    current: Option<Current>,
 }
+
+type Current = (
+    Option<String>,
+    Vec<crate::projection::Mark>,
+    Option<String>,
+    Look,
+);
 
 impl<'a> Inlines<'_, 'a> {
     fn walk(&mut self, id: NodeId) -> Result<(), RichError> {
@@ -742,19 +762,23 @@ impl<'a> Inlines<'_, 'a> {
                 })?)
             };
             let layers: Vec<Vec<String>> = self.wrappers.iter().map(|w| w.styles.clone()).collect();
-            let m = self.reader.styles.text(self.para_style, &layers).marks();
+            let props = self.reader.styles.text(self.para_style, &layers);
+            let m = props.marks();
+            let f = props.look(&self.reader.styles.text(self.para_style, &[]));
             let href = self.wrappers.iter().rev().find_map(|w| w.href.clone());
-            self.current = Some((k, m, href));
+            self.current = Some((k, m, href, f));
         }
-        let (k, m, href) = self.current.clone().expect("just set");
+        let (k, m, href, f) = self.current.clone().expect("just set");
         if let Some(Inline::Text {
             x: previous,
             k: pk,
             m: pm,
             href: ph,
+            f: pf,
+            ..
         }) = self.out.last_mut()
         {
-            if *pk == k && *pm == m && *ph == href {
+            if *pk == k && *pm == m && *ph == href && *pf == f {
                 previous.push_str(x);
                 return Ok(());
             }
@@ -764,6 +788,9 @@ impl<'a> Inlines<'_, 'a> {
             k,
             m,
             href,
+            f,
+            ins: None,
+            del: None,
         });
         Ok(())
     }
@@ -776,11 +803,18 @@ impl<'a> Inlines<'_, 'a> {
         };
         let (kind, label, size) = describe(tree, id);
         Ok(Inline::Atom {
-            k: blob::encode(&key)?,
+            k: Some(blob::encode(&key)?),
             kind,
             label,
             w: size.map(|(w, _)| w),
             h: size.map(|(_, h)| h),
+            data: None,
+            note: None,
+            end: false,
+            toc: None,
+            comment: None,
+            ins: None,
+            del: None,
         })
     }
 }

@@ -11,29 +11,43 @@
 // soltanto i blocchi diversi e non entra nella cronologia locale. Il motore
 // non scrive mai `k` che il documento non abbia già: lo garantisce il filtro
 // di ciò che si incolla (`paste.ts`).
+//
+// Mentre il documento registra le modifiche, ogni transazione dell'utente
+// passa da `track.ts` prima di applicarsi: ciò che non si registra non entra.
 import { baseKeymap, chainCommands } from "prosemirror-commands";
 import { history, isHistoryTransaction, redo, undo, undoDepth } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
-import type { Node as PmNode, Slice } from "prosemirror-model";
-import { EditorState, Plugin, Selection, TextSelection, type Transaction } from "prosemirror-state";
+import type { Mark as PmMark, Node as PmNode, Slice } from "prosemirror-model";
+import { EditorState, Plugin, Selection, TextSelection, type Command, type Transaction } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { operationFromText, type EditorChange, type EditorChangeOrigin } from "../core/text-operation";
 import { ProofClient, type ProofPorts } from "../core/proof";
 import {
+  applyFormat,
   backspace,
   deleteForward,
+  formatAt,
+  selectedLook,
+  type LookState,
   fillTableKeys,
   insertBreak,
   insertTab,
+  ASK_ACTIONS,
   richActionState,
   RICH_ACTIONS,
   shiftListLevel,
   splitParagraph,
 } from "./commands";
 import { collectKeys, filterSlice, uniqueKeys } from "./paste";
-import { parseProjection, writeHead, type Projection, type ReadOnlyReason } from "./projection";
+import { parseProjection, writeComment, writeHead, writeRunning, type Look, type Page, type RunningText, type ParaStyle, type Projection, type ReadOnlyReason } from "./projection";
+import { pageStyle, samePage } from "./page";
 import { richProof } from "./proof";
+import { commentPlugin, commentsOf } from "./comments";
+import { findPlugin, revisionPlugin, showMatches, type FindQuery } from "./review";
 import { BlockWriter, richSchema, toDoc } from "./schema";
+import { deleteChar, reviewAuthor, trackable, trackTransaction, tracking } from "./track";
+
+export { mountStrip } from "./strip";
 
 export interface RichEngineOptions {
   readonly onChange: (change: EditorChange) => void;
@@ -55,14 +69,22 @@ export class RichEngine {
   readonly #writer = new BlockWriter();
   readonly #known = new Set<string>();
   readonly #listeners = new Set<() => void>();
+  /// Chi apre le richieste delle azioni che chiedono (un link, trova e
+  /// sostituisci): la striscia.
+  readonly #asks = new Map<string, Set<() => void>>();
   readonly #proofClient: ProofClient | null;
-  #head: Pick<Projection, "readonly" | "lang"> = {};
+  #head: Pick<Projection, "readonly" | "lang" | "f" | "styles"> = {};
   /// Il testo del buffer come lo tiene il motore: quello ricevuto finché
   /// nessuno lo cambia, poi quello riscritto.
   #source = "";
   #intake: Intake = { kind: "invalid", reason: "" };
   #shellReadOnly = false;
   #destroyed = false;
+  /// «Copia formato»: l'aspetto preso, che va sulla prossima selezione finita.
+  #painter: readonly PmMark[] | null = null;
+  /// Una selezione col puntatore o con Maiusc non è finita finché si tiene.
+  #pointerDown = false;
+  #shiftDown = false;
 
   constructor(parent: HTMLElement, options: RichEngineOptions) {
     this.#options = options;
@@ -70,8 +92,14 @@ export class RichEngine {
     this.#view = new EditorView(parent, {
       state: this.#state(richSchema.nodes.doc.create(null, richSchema.nodes.para.create())),
       editable: () => this.editable(),
-      attributes: () => ({
+      attributes: (state) => ({
         class: "rich-content",
+        // La dimensione di un paragrafo senza stile (quella di uno con uno
+        // stile proprio si misura su questa) e la pagina del documento.
+        style: [
+          ...(this.#head.f?.size !== undefined ? [`--rich-doc-pt: ${this.#head.f.size}`] : []),
+          ...pageStyle(state.doc.attrs.page as Page | null),
+        ].join("; "),
         role: "textbox",
         "aria-multiline": "true",
         "aria-label": options.label(),
@@ -80,6 +108,27 @@ export class RichEngine {
       }),
       dispatchTransaction: (tr) => this.#dispatch(tr),
       transformPasted: (slice, view) => this.#filter(slice, view),
+      handleDOMEvents: {
+        pointerdown: () => {
+          this.#pointerDown = true;
+          return false;
+        },
+        pointerup: () => {
+          this.#pointerDown = false;
+          this.#paint();
+          return false;
+        },
+        keydown: (_view, event) => {
+          if (event.key === "Shift") this.#shiftDown = true;
+          return false;
+        },
+        keyup: (_view, event) => {
+          if (event.key !== "Shift") return false;
+          this.#shiftDown = false;
+          this.#paint();
+          return false;
+        },
+      },
     });
   }
 
@@ -87,6 +136,9 @@ export class RichEngine {
     const plugins: Plugin[] = [
       history(),
       fillTableKeys,
+      findPlugin,
+      revisionPlugin,
+      commentPlugin,
       keymap(this.#keys()),
       keymap(baseKeymap),
     ];
@@ -107,16 +159,20 @@ export class RichEngine {
       Enter: splitParagraph,
       "Shift-Enter": insertBreak("\n"),
       "Mod-Enter": insertBreak("\u000c"),
-      Backspace: backspace,
-      Delete: deleteForward,
+      Backspace: chainCommands(backspace, deleteChar(-1)),
+      Delete: chainCommands(deleteForward, deleteChar(1)),
       "Mod-y": redo,
       Tab: chainCommands(shiftListLevel(1), insertTab),
       "Shift-Tab": shiftListLevel(-1),
-      // Il sottolineato non ha un'azione nella barra, ma l'accordo di Word sì.
-      "Mod-u": toggleUnderline,
+      Escape: () => {
+        if (!this.#painter) return false;
+        this.disarmPainter();
+        return true;
+      },
     };
-    for (const [, action] of RICH_ACTIONS) {
-      if (action.chord && !(action.chord in keys)) keys[action.chord] = action.run;
+    for (const [id, action] of RICH_ACTIONS) {
+      if (!action.chord || action.chord in keys) continue;
+      keys[action.chord] = ASK_ACTIONS.has(id) ? (state) => action.run(state) && this.#ask(id) : action.run;
     }
     keys["Mod-z"] = undo;
     keys["Mod-Shift-z"] = redo;
@@ -159,25 +215,35 @@ export class RichEngine {
     }
     const next = toDoc(projection);
     const current = this.#view.state.doc;
+    const tr = this.#view.state.tr;
     const start = current.content.findDiffStart(next.content);
-    if (start === null) {
+    if (start !== null) {
+      const end = current.content.findDiffEnd(next.content);
+      let a = end ? end.a : current.content.size;
+      let b = end ? end.b : next.content.size;
+      // Le due estremità si sovrappongono quando il cambio ripete testo vicino.
+      const overlap = start - Math.min(a, b);
+      if (overlap > 0) {
+        a += overlap;
+        b += overlap;
+      }
+      tr.replace(start, a, next.slice(start, b));
+    }
+    const comments = commentsOf(next);
+    if (comments.map(writeComment).join() !== commentsOf(current).map(writeComment).join()) {
+      tr.setDocAttribute("comments", comments);
+    }
+    if (tracking(next) !== tracking(current)) tr.setDocAttribute("track", tracking(next));
+    if (!samePage(next.attrs.page as Page | null, current.attrs.page as Page | null)) tr.setDocAttribute("page", next.attrs.page);
+    for (const key of ["header", "footer"] as const) {
+      const [a, b] = [next.attrs[key] as RunningText | null, current.attrs[key] as RunningText | null];
+      if ((a ? writeRunning(a) : "") !== (b ? writeRunning(b) : "")) tr.setDocAttribute(key, a);
+    }
+    if (!tr.docChanged) {
       this.#notify();
       return;
     }
-    const end = current.content.findDiffEnd(next.content);
-    let a = end ? end.a : current.content.size;
-    let b = end ? end.b : next.content.size;
-    // Le due estremità si sovrappongono quando il cambio ripete testo vicino.
-    const overlap = start - Math.min(a, b);
-    if (overlap > 0) {
-      a += overlap;
-      b += overlap;
-    }
-    const tr = this.#view.state.tr
-      .replace(start, a, next.slice(start, b))
-      .setMeta("addToHistory", false)
-      .setMeta(SYNC, true);
-    this.#view.dispatch(tr);
+    this.#view.dispatch(tr.setMeta("addToHistory", false).setMeta(SYNC, true));
     this.#notify();
   }
 
@@ -188,7 +254,7 @@ export class RichEngine {
   #read(source: string): Projection | null {
     try {
       const projection = parseProjection(source);
-      this.#head = { readonly: projection.readonly, lang: projection.lang };
+      this.#head = { readonly: projection.readonly, lang: projection.lang, f: projection.f, styles: projection.styles };
       this.#intake = { kind: "ok", readonly: projection.readonly ?? null };
       // Un aggiornamento da fuori aggiunge ciò che porta: quello che l'utente
       // ha tagliato prima resta noto, e si può incollare.
@@ -202,16 +268,29 @@ export class RichEngine {
     }
   }
 
-  #dispatch(tr: Transaction): void {
+  #dispatch(given: Transaction): void {
     if (this.#destroyed) return;
     const before = this.#view.state;
+    let tr = given;
+    if (tracking(before.doc) && tr.docChanged && !tr.getMeta(SYNC)) {
+      const tracked = trackTransaction(before, tr, reviewAuthor());
+      // Ciò che non ha una revisione da scrivere non cambia il documento.
+      if (!tracked) {
+        this.#notify();
+        return;
+      }
+      tr = tracked;
+    }
     const state = before.apply(tr);
     this.#view.updateState(state);
     if (tr.docChanged && !tr.getMeta(SYNC)) {
       // Ciò che il documento ha, l'ha avuto: un taglia e incolla lo ritrova.
       collectKeys(state.doc, this.#known);
       const previous = this.#source;
-      this.#source = writeHead(this.#head) + this.#writer.write(state.doc).join(",") + "]}";
+      this.#source = writeHead({ ...this.#head, track: tracking(state.doc), page: (state.doc.attrs.page as Page | null) ?? undefined,
+          header: (state.doc.attrs.header as RunningText | null) ?? undefined,
+          footer: (state.doc.attrs.footer as RunningText | null) ?? undefined,
+          comments: commentsOf(state.doc) }) + this.#writer.write(state.doc).join(",") + "]}";
       if (this.#source !== previous) {
         this.#options.onChange({
           text: this.#source,
@@ -226,6 +305,76 @@ export class RichEngine {
       this.#options.onSelectionChange();
       this.#notify();
     }
+    if (tr.selectionSet && !tr.docChanged) this.#paint();
+  }
+
+  /// Dà l'aspetto preso alla selezione, se ce n'è una finita.
+  #paint(): void {
+    const marks = this.#painter;
+    if (!marks || this.#pointerDown || this.#shiftDown || this.#view.state.selection.empty) return;
+    this.#painter = null;
+    applyFormat(marks)(this.#view.state, (tr) => this.#view.dispatch(tr));
+    this.#notify();
+  }
+
+  /// «Copia formato»: prende l'aspetto della selezione per la prossima. Un
+  /// secondo tocco lo lascia.
+  togglePainter(): void {
+    if (!this.editable()) return;
+    this.#painter = this.#painter ? null : formatAt(this.#view.state);
+    this.#notify();
+    this.#view.focus();
+  }
+
+  disarmPainter(): void {
+    if (!this.#painter) return;
+    this.#painter = null;
+    this.#notify();
+  }
+
+  painterArmed(): boolean {
+    return this.#painter !== null;
+  }
+
+  /// L'aspetto della selezione, per chi lo mostra.
+  look(): LookState {
+    return selectedLook(this.#view.state);
+  }
+
+  /// Legge lo stato dell'editor con `read`, per chi mostra la selezione.
+  read<T>(read: (state: EditorState) => T): T {
+    return read(this.#view.state);
+  }
+
+  /// Gli stili di paragrafo che il documento propone oltre ai ruoli.
+  styles(): readonly ParaStyle[] {
+    return this.#head.styles ?? [];
+  }
+
+  /// Il carattere e la dimensione di un paragrafo senza stile.
+  documentLook(): Look | undefined {
+    return this.#head.f;
+  }
+
+  /// I caratteri che il documento usa: i suoi paragrafi e i suoi tratti.
+  fonts(): string[] {
+    const out = new Set<string>();
+    this.#view.state.doc.descendants((node) => {
+      const base = (node.attrs.f as { font?: string } | null | undefined)?.font;
+      if (base) out.add(base);
+      for (const mark of node.marks) if (mark.type.name === "font") out.add(mark.attrs.family as string);
+      return true;
+    });
+    return [...out];
+  }
+
+  /// Esegue un comando come una battuta. `focus`: il fuoco torna al testo
+  /// (non da un modulo che resta aperto).
+  apply(command: Command, focus = true): boolean {
+    if (!this.editable()) return false;
+    const done = command(this.#view.state, (tr) => this.#view.dispatch(tr), this.#view);
+    if (done && focus) this.#view.focus();
+    return done;
   }
 
   #filter(slice: Slice, view: EditorView): Slice {
@@ -236,10 +385,12 @@ export class RichEngine {
     });
   }
 
-  /// Esegue un'azione del catalogo come una battuta.
+  /// Esegue un'azione del catalogo come una battuta. Un'azione che chiede
+  /// (il link, trova e sostituisci) passa a chi lo sa chiedere.
   run(id: string): boolean {
     const action = RICH_ACTIONS.get(id);
     if (!action || !this.editable()) return false;
+    if (ASK_ACTIONS.has(id)) return action.run(this.#view.state) && this.#ask(id);
     const done = action.run(this.#view.state, (tr) => this.#view.dispatch(tr), this.#view);
     if (done) this.#view.focus();
     return done;
@@ -247,13 +398,51 @@ export class RichEngine {
 
   actionState(id: string): { enabled: boolean; active: boolean | null } {
     if (!this.editable()) return { enabled: false, active: null };
-    return richActionState(id, this.#view.state);
+    const state = richActionState(id, this.#view.state);
+    // Mentre si registra, un'azione che non si registra non si offre.
+    if (state.enabled && this.tracking() && !ASK_ACTIONS.has(id)) {
+      let recorded = true;
+      RICH_ACTIONS.get(id)!.run(this.#view.state, (tr) => {
+        recorded = trackable(tr);
+      });
+      if (!recorded) return { ...state, enabled: false };
+    }
+    return state;
+  }
+
+  /// Il documento registra le modifiche.
+  tracking(): boolean {
+    return tracking(this.#view.state.doc);
+  }
+
+  /// Mostra le occorrenze di una ricerca (nessuna con `null`) e seleziona
+  /// quella di indice `current`. Non cambia il documento: vale anche quando
+  /// non si scrive, così una ricerca chiusa non lascia segni.
+  find(query: FindQuery | null, current = -1): void {
+    if (this.#destroyed) return;
+    showMatches(query, current)(this.#view.state, (tr) => this.#view.dispatch(tr));
   }
 
   /// Avvisa quando stato delle azioni, sola lettura o contenuto cambiano.
   subscribe(listener: () => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  /// Avvisa quando qualcuno chiede l'azione `id` (`Mod-k` per un link, o
+  /// l'azione dalla barra).
+  onAsk(id: string, listener: () => void): () => void {
+    let listeners = this.#asks.get(id);
+    if (!listeners) this.#asks.set(id, (listeners = new Set()));
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }
+
+  #ask(id: string): boolean {
+    const listeners = this.#asks.get(id);
+    if (!listeners || listeners.size === 0 || !this.editable()) return false;
+    for (const listener of [...listeners]) listener();
+    return true;
   }
 
   #notify(): void {
@@ -263,6 +452,7 @@ export class RichEngine {
   setReadOnly(readOnly: boolean): void {
     if (this.#shellReadOnly === readOnly) return;
     this.#shellReadOnly = readOnly;
+    if (readOnly) this.#painter = null;
     // `editable` è una funzione: ProseMirror la rilegge a ogni aggiornamento.
     this.#view.setProps({});
     this.#notify();
@@ -297,6 +487,7 @@ export class RichEngine {
     if (this.#destroyed) return;
     this.#destroyed = true;
     this.#listeners.clear();
+    this.#asks.clear();
     this.#view.destroy();
     this.#proofClient?.dispose();
   }
@@ -324,21 +515,6 @@ export class RichEngine {
 }
 
 const SYNC = "fub-rich-sync";
-
-const toggleUnderline = (state: EditorState, dispatch?: (tr: Transaction) => void): boolean => {
-  const type = richSchema.marks.u;
-  const { from, to, empty, $from } = state.selection;
-  if (empty) {
-    const marks = state.storedMarks ?? $from.marks();
-    if (dispatch) dispatch(state.tr.setStoredMarks(type.isInSet(marks) ? type.removeFromSet(marks) : type.create().addToSet(marks)));
-    return true;
-  }
-  if (dispatch) {
-    const has = state.doc.rangeHasMark(from, to, type);
-    dispatch(has ? state.tr.removeMark(from, to, type) : state.tr.addMark(from, to, type.create()));
-  }
-  return true;
-};
 
 /// La cronologia dice che una sua transazione è sua, non se annulla o
 /// ripete: lo dice la profondità degli annullamenti che scende.

@@ -12,7 +12,7 @@ use camino::Utf8PathBuf;
 use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::model::DocId;
 use fub_abi::PluginError;
-use fub_format_rich::projection::{Block, Inline, Projection, Role};
+use fub_format_rich::projection::{Block, Inline, Layout, Look, Projection, Role};
 use fub_format_rich::Codec;
 use fub_host::Host;
 
@@ -73,11 +73,22 @@ fn paragraph(text: &str) -> Block {
         align: None,
         k: None,
         sect: None,
+        page: None,
+        header: None,
+        footer: None,
+        p: Layout::default(),
+        s: None,
+        f: Box::default(),
+        ins: None,
+        del: None,
         c: vec![Inline::Text {
             x: text.to_string(),
             k: None,
             m: Vec::new(),
             href: None,
+            f: Look::default(),
+            ins: None,
+            del: None,
         }],
     })
 }
@@ -448,6 +459,8 @@ fn un_odt_nuovo_nasce_dalla_sua_proiezione() {
     )
     .unwrap();
     projection.blocks = vec![paragraph("Appena nato.")];
+    // La pagina di un `.docx` non si scrive in un `.odt`: il codec la rifiuta.
+    projection.page = None;
     vault
         .host
         .write_document(

@@ -16,7 +16,10 @@ import type { EditorChange } from "../core/text-operation";
 import type { ProofPorts } from "../core/proof-ports";
 import { onLanguage, t, type Key } from "../../i18n/strings";
 import type { RichEngine } from "./engine";
+import type { RichStrip } from "./strip";
 import type { ReadOnlyReason } from "./projection";
+import type { DrawingImagePort } from "../canvas/surface";
+import { relativeRef } from "../../rules/mirrored";
 
 export const RICH_OWNER = "fub.shell.rich";
 export const RICH_FAMILY = "rich";
@@ -29,6 +32,10 @@ export const RICH_FORMATS: Readonly<Record<string, string>> = {
   rtf: RICH_PROFILE,
   doc: RICH_PROFILE,
 };
+
+/// I formati che scrivono commenti nuovi e registrano le modifiche: il codec
+/// ODT non li scrive ancora.
+export const RICH_REVIEW_FORMATS: ReadonlySet<string> = new Set(["docx"]);
 
 /// Gli id delle azioni che la superficie esegue, noti prima che il motore
 /// arrivi: la barra disegna i pulsanti subito, spenti finché non scrive.
@@ -46,17 +53,56 @@ export const RICH_ACTION_IDS: ReadonlySet<string> = new Set([
   "markdown.italic",
   "markdown.strikethrough",
   "markdown.highlight",
+  "rich.underline",
+  "rich.superscript",
+  "rich.subscript",
+  "rich.caps",
+  "rich.small_caps",
+  "rich.font.grow",
+  "rich.font.shrink",
   "markdown.clear",
   "markdown.list.bullet",
   "markdown.list.ordered",
   "markdown.list.indent",
   "markdown.list.dedent",
   "markdown.quote",
+  "rich.align.left",
+  "rich.align.center",
+  "rich.align.right",
+  "rich.align.justify",
+  "rich.indent.increase",
+  "rich.indent.decrease",
+  "rich.line.1",
+  "rich.line.1.15",
+  "rich.line.1.5",
+  "rich.line.2",
+  "rich.line.2.5",
+  "rich.line.3",
+  "rich.break.page",
+  "rich.break.column",
+  "rich.link",
+  "rich.link.remove",
+  "rich.find",
+  "rich.rev.previous",
+  "rich.rev.next",
+  "rich.rev.accept",
+  "rich.rev.reject",
+  "rich.rev.accept_all",
+  "rich.rev.reject_all",
+  "rich.comment",
   "markdown.table.row.before",
   "markdown.table.row.after",
   "markdown.table.row.up",
   "markdown.table.row.down",
   "markdown.table.row.delete",
+  "markdown.table",
+  "markdown.table.column.before",
+  "markdown.table.column.after",
+  "markdown.table.column.left",
+  "markdown.table.column.right",
+  "markdown.table.column.delete",
+  "rich.table.merge",
+  "rich.table.split",
 ]);
 
 export const RICH_CHORDS: Readonly<Record<string, string>> = {
@@ -65,16 +111,44 @@ export const RICH_CHORDS: Readonly<Record<string, string>> = {
   "markdown.bold": "Mod-b",
   "markdown.italic": "Mod-i",
   "markdown.strikethrough": "Mod-Shift-x",
+  "rich.underline": "Mod-u",
+  "rich.superscript": "Mod-Shift-=",
+  "rich.subscript": "Mod-=",
+  "rich.caps": "Mod-Shift-a",
+  "rich.small_caps": "Mod-Shift-k",
+  "rich.font.grow": "Mod-]",
+  "rich.font.shrink": "Mod-[",
   "markdown.list.bullet": "Mod-Shift-8",
   "markdown.list.ordered": "Mod-Shift-7",
   "markdown.list.indent": "Tab",
   "markdown.list.dedent": "Shift-Tab",
+  "rich.align.left": "Mod-l",
+  "rich.align.right": "Mod-r",
+  "rich.align.justify": "Mod-j",
+  "rich.indent.increase": "Mod-m",
+  "rich.indent.decrease": "Mod-Shift-m",
+  "rich.line.1": "Mod-1",
+  "rich.line.1.5": "Mod-5",
+  "rich.line.2": "Mod-2",
+  "rich.break.page": "Mod-Enter",
+  "rich.break.column": "Mod-Shift-Enter",
+  "rich.link": "Mod-k",
+  "rich.find": "Mod-h",
+  "rich.comment": "Mod-Alt-m",
   "markdown.table.row.before": "Mod-Alt-Shift-ArrowUp",
   "markdown.table.row.after": "Mod-Alt-Shift-ArrowDown",
   "markdown.table.row.up": "Mod-Alt-ArrowUp",
   "markdown.table.row.down": "Mod-Alt-ArrowDown",
   "markdown.table.row.delete": "Mod-Alt-Backspace",
+  "markdown.table.column.before": "Mod-Alt-Shift-ArrowLeft",
+  "markdown.table.column.after": "Mod-Alt-Shift-ArrowRight",
+  "markdown.table.column.left": "Mod-Alt-ArrowLeft",
+  "markdown.table.column.right": "Mod-Alt-ArrowRight",
+  "markdown.table.column.delete": "Mod-Alt-Shift-Backspace",
 };
+
+/// L'immagine più pesante che un documento accoglie, come il codec.
+export const RICH_IMAGE_LIMIT = 16 * 1024 * 1024;
 
 const READ_ONLY_KEYS: Readonly<Record<ReadOnlyReason, Key>> = {
   revisions: "rich.readonly.revisions",
@@ -89,6 +163,8 @@ export interface RichSurfaceCallbacks {
   readonly onChange: (paneId: string, change: EditorChange) => void;
   readonly onSelectionChange: (paneId: string) => void;
   readonly proof?: { readonly ports: ProofPorts; readonly notify?: (message: string) => void };
+  /// Le immagini del vault, per inserirne una nel documento.
+  readonly images?: DrawingImagePort;
   /// Per i test: il modulo del motore. Di solito è `import("./engine")`.
   readonly loadEngine?: () => Promise<typeof import("./engine")>;
 }
@@ -110,6 +186,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   parent.append(root);
 
   let engine: RichEngine | null = null;
+  let strip: RichStrip | null = null;
   let pending: string | null = null;
   let readOnly = false;
   let closed = false;
@@ -125,14 +202,29 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     let text = failed ? t("rich.unavailable") : "";
     if (intake?.kind === "invalid") text = t("rich.invalid");
     else if (intake?.kind === "ok" && intake.readonly) text = t(READ_ONLY_KEYS[intake.readonly]);
+    else if (engine?.editable() && engine.tracking()) text = t("rich.track.notice");
     notice.textContent = text;
     notice.hidden = text === "";
     root.dataset.readonly = String(!(engine?.editable() ?? false));
   }
 
+  /// L'immagine scelta nel vault, letta dal documento come un suo link.
+  function pickImage(): (() => Promise<Blob | "unreadable" | null>) | undefined {
+    const images = callbacks.images;
+    const pick = images?.pick;
+    if (!images || !pick) return undefined;
+    return async () => {
+      const doc = await pick(context.documentId);
+      if (doc === null) return null;
+      const ref = relativeRef(context.documentId, doc);
+      const blob = await images.read(ref.startsWith(".") ? ref : `./${ref}`, context.documentId, RICH_IMAGE_LIMIT);
+      return blob ?? "unreadable";
+    };
+  }
+
   const load = callbacks.loadEngine ?? (() => import("./engine"));
   load().then(
-    ({ RichEngine }) => {
+    ({ RichEngine, mountStrip }) => {
       if (closed) return;
       page.removeAttribute("aria-busy");
       engine = new RichEngine(page, {
@@ -141,6 +233,11 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
         proof: callbacks.proof,
       });
+      strip = mountStrip(engine, (id) => RICH_CHORDS[id] ?? null, {
+        pickImage: pickImage(),
+        review: RICH_REVIEW_FORMATS.has(context.formatId ?? ""),
+      });
+      root.insertBefore(strip.element, page);
       stopEngine = engine.subscribe(() => {
         showNotice();
         notify();
@@ -226,6 +323,8 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       closed = true;
       stopLanguage();
       stopEngine?.();
+      strip?.destroy();
+      strip = null;
       listeners.clear();
       engine?.destroy();
       engine = null;

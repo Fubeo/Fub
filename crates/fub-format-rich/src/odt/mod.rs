@@ -16,7 +16,8 @@
 //! [`ReadOnly::Import`].
 //!
 //! **Salvare** rilegge il file nuovo e lo confronta con ciò che si voleva
-//! scrivere: testo, ruoli, enfasi, link, oggetti e struttura delle tabelle.
+//! scrivere: testo, ruoli, stili, disposizione dei paragrafi, enfasi, link,
+//! oggetti e struttura delle tabelle.
 
 mod keys;
 mod package;
@@ -31,7 +32,9 @@ use self::package::Package;
 use self::read::Body;
 use self::styles::Styles;
 use self::xml::Tree;
-use crate::projection::{self, Block, Inline, Mark, Projection, Role, FORMAT, VERSION};
+use crate::projection::{
+    self, Align, Block, Inline, Layout, Look, Mark, Projection, Role, FORMAT, VERSION,
+};
 use crate::session::{Opened, Saved};
 use crate::{ReadOnly, RichError};
 
@@ -89,6 +92,17 @@ pub(crate) fn open(bytes: &[u8]) -> Result<Opened, RichError> {
         version: VERSION,
         readonly,
         lang: doc.styles.lang.clone(),
+        f: doc.styles.text(None, &[]).base(),
+        styles: {
+            let mut used = std::collections::BTreeSet::new();
+            projection::used_styles(&blocks, &mut used);
+            doc.styles.gallery(&used)
+        },
+        track: false,
+        page: None,
+        header: None,
+        footer: None,
+        comments: Vec::new(),
         blocks,
     };
     if readonly.is_none() && Projection::from_json(&projection.to_json()?)? != projection {
@@ -153,6 +167,27 @@ pub(crate) fn save(current: &[u8], json: &str) -> Result<Saved, RichError> {
     if let Some(reason) = projection.readonly {
         return Err(RichError::ReadOnly(reason));
     }
+    // Registrare le modifiche viene da un altro formato: qui non si scrive.
+    if projection.track {
+        return Err(RichError::Codec(
+            "odt: recording changes is not written".into(),
+        ));
+    }
+    // La pagina di un `.odt`, intestazioni comprese, sta nei suoi stili, che
+    // il codec tiene come sono: una pagina nella proiezione viene da un altro
+    // formato.
+    if projection.page.is_some()
+        || projection.header.is_some()
+        || projection.footer.is_some()
+        || has_page(&projection.blocks)
+    {
+        return Err(RichError::Codec("odt: page setup is not written".into()));
+    }
+    // I commenti di un `.odt` sono oggetti del testo, tenuti come sono: un
+    // elenco di commenti viene da un altro formato, e qui non si scrive.
+    if !projection.comments.is_empty() {
+        return Err(RichError::Codec("odt: comments are not written".into()));
+    }
     let wanted = normalized(&projection.blocks);
     let base = doc.body.blocks();
     if wanted == normalized(&base) {
@@ -163,7 +198,7 @@ pub(crate) fn save(current: &[u8], json: &str) -> Result<Saved, RichError> {
     if let Some(styles) = &output.styles {
         parts.push((package::STYLES, styles));
     }
-    let bytes = package::replace(current, &parts)?;
+    let bytes = package::replace(current, &parts, &output.pictures)?;
     let (_, reread) = parse(&bytes).map_err(|_| RichError::Fidelity)?;
     if visible(&reread.body.blocks()) != visible(&output.expected) {
         return Err(RichError::Fidelity);
@@ -191,14 +226,33 @@ fn normalized(blocks: &[Block]) -> Vec<Block> {
                     match (c.last_mut(), inline) {
                         (_, Inline::Text { x, .. }) if x.is_empty() => {}
                         (
-                            Some(Inline::Text { x, k, m, href }),
+                            Some(Inline::Text {
+                                x,
+                                k,
+                                m,
+                                href,
+                                f,
+                                ins,
+                                del,
+                            }),
                             Inline::Text {
                                 x: nx,
                                 k: nk,
                                 m: nm,
                                 href: nh,
+                                f: nf,
+                                ins: ni,
+                                del: nd,
                             },
-                        ) if *k == nk && *m == nm && *href == nh => x.push_str(&nx),
+                        ) if *k == nk
+                            && *m == nm
+                            && *href == nh
+                            && *f == nf
+                            && *ins == ni
+                            && *del == nd =>
+                        {
+                            x.push_str(&nx)
+                        }
                         (_, inline) => c.push(inline),
                     }
                 }
@@ -225,13 +279,13 @@ fn normalized(blocks: &[Block]) -> Vec<Block> {
 /// Ciò che chi legge vede di un blocco.
 #[derive(Debug, PartialEq)]
 enum Seen {
-    Para(Role, Vec<SeenInline>),
+    Para(Role, Option<Align>, Layout, Option<String>, Vec<SeenInline>),
     Table(Vec<Vec<Vec<Seen>>>),
 }
 
 #[derive(Debug, PartialEq)]
 enum SeenInline {
-    Text(String, Vec<Mark>, Option<String>),
+    Text(String, Vec<Mark>, Option<String>, Look),
     Atom(String),
 }
 
@@ -243,22 +297,37 @@ fn visible(blocks: &[Block]) -> Vec<Seen> {
                 let mut out: Vec<SeenInline> = Vec::new();
                 for inline in &para.c {
                     match inline {
-                        Inline::Text { x, m, href, .. } => match out.last_mut() {
-                            Some(SeenInline::Text(px, pm, ph)) if pm == m && ph == href => {
+                        Inline::Text { x, m, href, f, .. } => match out.last_mut() {
+                            Some(SeenInline::Text(px, pm, ph, pf))
+                                if pm == m && ph == href && pf == f =>
+                            {
                                 px.push_str(x)
                             }
                             _ if x.is_empty() => {}
-                            _ => out.push(SeenInline::Text(x.clone(), m.clone(), href.clone())),
+                            _ => out.push(SeenInline::Text(
+                                x.clone(),
+                                m.clone(),
+                                href.clone(),
+                                f.clone(),
+                            )),
                         },
                         Inline::Atom { k, .. } => {
-                            let xml = crate::blob::decode::<keys::AtomKey>(k)
+                            let xml = k
+                                .as_deref()
+                                .and_then(|k| crate::blob::decode::<keys::AtomKey>(k).ok())
                                 .map(|key| key.xml)
                                 .unwrap_or_default();
                             out.push(SeenInline::Atom(xml));
                         }
                     }
                 }
-                Seen::Para(para.role, out)
+                Seen::Para(
+                    para.role,
+                    para.align,
+                    para.p.clone(),
+                    para.s.as_deref().map(str::to_string),
+                    out,
+                )
             }
             Block::Table(table) => Seen::Table(
                 table
@@ -269,4 +338,15 @@ fn visible(blocks: &[Block]) -> Vec<Seen> {
             ),
         })
         .collect()
+}
+
+/// Una pagina (o un'intestazione) in un paragrafo, anche dentro una tabella.
+fn has_page(blocks: &[Block]) -> bool {
+    blocks.iter().any(|block| match block {
+        Block::Para(para) => para.page.is_some() || para.header.is_some() || para.footer.is_some(),
+        Block::Table(table) => table
+            .rows
+            .iter()
+            .any(|row| row.cells.iter().any(|cell| has_page(&cell.blocks))),
+    })
 }

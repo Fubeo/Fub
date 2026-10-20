@@ -12,30 +12,148 @@ delle note. Si salva nel file stesso, senza conversioni e senza copie a lato.
 
 Si modificano:
 
-- il testo, con a-capo, tabulazioni e salti di pagina o di colonna;
-- grassetto, corsivo, barrato ed evidenziato dalla barra; sottolineato, apice
-  e pedice restano dove sono e si copiano col testo;
-- lo stile del paragrafo: testo, titoli da 1 a 6, citazione;
+- il testo, con a-capo, tabulazioni e salti di pagina (`Ctrl+Invio`) o di
+  colonna (`Ctrl+Maiusc+Invio`), anche dal gruppo **Inserisci** della striscia;
+- i link: `Ctrl+K` o il pulsante della striscia chiedono l'indirizzo (web o
+  posta) e lo mettono sulla selezione, sul link al cursore o, senza
+  selezione, su un testo nuovo; dallo stesso modulo un link si toglie;
+- grassetto, corsivo, barrato ed evidenziato dalla barra;
+- l'aspetto del carattere dalla striscia sopra il foglio: tipo e
+  dimensione (anche a passi, `Ctrl+]` e `Ctrl+[`), colore del testo, colore
+  dell'evidenziatore, sottolineato (`Ctrl+U`), apice (`Ctrl+Maiusc+=`), pedice
+  (`Ctrl+=`), tutto maiuscolo (`Ctrl+Maiusc+A`) e maiuscoletto
+  (`Ctrl+Maiusc+K`). **Copia formato** prende l'aspetto del punto in cui sta
+  il cursore e lo dà alla prossima selezione, una volta; Esc lo lascia.
+  Un valore uguale a quello del paragrafo non si scrive: il tratto torna a
+  seguire il suo stile;
+- lo stile del paragrafo: testo, titoli da 1 a 6, citazione e, dalla
+  striscia, gli stili di paragrafo che il documento propone o usa;
+- il paragrafo, dalla stessa striscia: allineamento a sinistra (`Ctrl+L`),
+  centrato, a destra (`Ctrl+R`) e giustificato (`Ctrl+J`); rientro sinistro a
+  passi di mezzo pollice (`Ctrl+M`, `Ctrl+Maiusc+M`); interlinea singola,
+  1,5 e doppia (`Ctrl+1`, `Ctrl+5`, `Ctrl+2`) o 1,15, 2,5 e tripla; rientri,
+  prima riga e spazi prima e dopo in punti. Un campo vuoto torna al valore
+  dello stile, e come per il carattere un valore uguale a quello dello stile
+  non si scrive;
 - elenchi puntati e numerati su nove livelli;
-- le righe delle tabelle: aggiungere, spostare, togliere.
+- le tabelle: una nuova dal pulsante **Tabella** della striscia, scegliendo
+  righe e colonne sulla griglia (col mouse o con le frecce), dopo il paragrafo
+  del cursore o al posto di uno vuoto; è la griglia di Word, a tutta riga, a
+  colonne uguali e con i bordi (anche **Inserisci tabella** della barra, 2 × 2).
+  Righe e colonne si aggiungono, si spostano e si tolgono dal menu tabella
+  della barra o con le scorciatoie della tabella Markdown; una colonna nuova
+  copia le proprietà delle celle accanto e la griglia si rifà alla larghezza
+  di prima, nelle proporzioni delle colonne. Dalla striscia le celle che la
+  selezione tocca in una riga si uniscono (i loro paragrafi, tranne i vuoti,
+  vanno nella prima) e una cella unita si divide;
+- le immagini e le note nuove, dal gruppo **Inserisci** della striscia:
+  **Immagine** sceglie un PNG, un JPEG o un GIF del vault (fino a 16 MB) e lo
+  mette al cursore, nel testo, alla sua misura (un pixel CSS è tre quarti di
+  punto) ridotta se serve alla colonna di una pagina Letter; **Nota** chiede il
+  testo, una riga, e se va a piè di pagina o in chiusura, e la scrive con gli
+  stili delle note di Word.
 
-Il resto del documento (proprietà dei paragrafi e dei tratti, stili, sezioni,
-intestazioni, immagini, forme, campi, note, formule, commenti) resta nel file
+Dal gruppo **Revisione** della striscia:
+
+- **Trova e sostituisci** (`Ctrl+H`; `Ctrl+F` resta la ricerca nella nota
+  della shell) mostra nel testo le occorrenze mentre si scrive, con maiuscole
+  e minuscole o soltanto parole intere; Invio va alla prossima, Maiusc+Invio
+  alla precedente. Un'occorrenza sta dentro un paragrafo e non scavalca un
+  oggetto o un segno (l'inizio di un commento, un segnalibro). Il testo nuovo
+  prende l'aspetto del primo carattere sostituito, e **Sostituisci tutto** è
+  una battuta sola, che si annulla in una volta;
+- **Conteggio parole** dice parole, caratteri con e senza spazi e paragrafi
+  del documento e, se c'è, della selezione: una parola è ciò che sta fra due
+  spazi, un oggetto separa senza contare, il testo delle note non conta;
+- le **revisioni tracciate** di un `.docx` si vedono: il testo inserito
+  sottolineato, quello eliminato barrato, un segno di paragrafo inserito o
+  eliminato come `¶`, con autore e data al passaggio del puntatore. In un
+  documento che ne ha, la striscia le scorre (precedente, successiva) e le
+  **accetta** o **rifiuta**, una alla volta (quella del cursore o quelle
+  della selezione) o tutte insieme. Tratti vicini con la stessa revisione
+  sono una modifica sola, e i due capi di uno spostamento vanno insieme.
+  Accettare un segno di paragrafo eliminato, o rifiutarne uno inserito,
+  unisce il paragrafo al seguente, che gli dà le sue proprietà. Ciò che si
+  scrive dentro o accanto a una revisione non ne fa parte;
+- i **commenti** di un `.docx` si leggono nel pannello **Commenti**, con
+  autore, data e risposte sotto, e il testo che commentano ha uno sfondo, con
+  il commento al passaggio del puntatore. Un commento nuovo (`Ctrl+Alt+M`)
+  segna la selezione, con testo semplice (una riga per paragrafo) e l'autore,
+  che la sessione ricorda. Ogni commento si mostra nel testo, riceve una
+  risposta, si **risolve** o si riapre con le sue risposte, e si elimina con
+  loro e con i loro segni; ogni gesto è una battuta, che l'annulla disfa. Il
+  testo di un commento che c'era resta com'è. Il segno di un commento nuovo
+  si sposta trascinandolo, ma non si copia;
+- **Registra modifiche** in un `.docx` chiede l'autore (lo stesso dei
+  commenti) e accende l'impostazione del documento, che il file conserva: da
+  lì ciò che si scrive, si cancella, si incolla o si sostituisce diventa una
+  revisione tracciata di quell'autore, con la data. Il testo eliminato resta
+  barrato e Backspace e Canc lo scavalcano; Invio fa un segno di paragrafo
+  inserito, unire due paragrafi ne elimina uno. Ciò che l'autore aveva
+  inserito si toglie davvero, e un tratto battuto di seguito resta una
+  modifica sola. Mentre si registra il formato non si cambia (aspetto, stile,
+  spaziatura, tabelle), perché non ha una revisione da scrivere; commenti,
+  accettare e rifiutare restano liberi. Un `.docx` che registra già si apre
+  così, non più in sola lettura;
+- **Pagina** in un `.docx` cambia la pagina della sezione dove sta il
+  cursore: la dimensione della carta (quelle di Word), l'orientamento, i
+  margini (già pronti o in centimetri) e le colonne. Una pagina girata tiene
+  la sua carta; margini che non lasciano spazio al testo non si prendono, e
+  l'avviso lo dice. Il resto della sezione (la rilegatura, la larghezza delle
+  colonne, le intestazioni) resta com'è, ma cambiare il numero di colonne le
+  rende uguali. Mentre si registra la pagina non si cambia. Un `.odt` non
+  offre la pagina. Il foglio di un `.docx` è la pagina dell'ultima sezione,
+  larga quanto la carta e con i suoi margini, e la si cambia vedendola; in un
+  riquadro più stretto il foglio si stringe con i margini in proporzione. Le
+  colonne e le pagine delle altre sezioni non si vedono sul foglio;
+- **Intestazione e piè di pagina** in un `.docx` scrivono quelli della
+  sezione del cursore come testo, una riga per paragrafo, con il numero di
+  pagina (`{PAGE}`) e il numero delle pagine (`{NUMPAGES}`) messi dai loro
+  bottoni. Una riga riscritta tiene l'aspetto di quella di prima; una nuova
+  prende gli stili Intestazione e Piè di pagina di Word. Vuoti, la sezione
+  mostra quelli della sezione prima. Quelli della prima pagina e delle pagine
+  pari restano come sono, e uno con immagini, tabelle o aspetti diversi si
+  legge ma si modifica in Word. Mentre si registra non si cambiano;
+- **Sommario** in un `.docx` mette prima del paragrafo del cursore il
+  sommario dei titoli fino al terzo livello, o rifà quello già messo da Fub
+  con i titoli di adesso. I numeri di pagina li calcola Word aprendo il file.
+  Senza titoli il bottone è spento; mentre si registra non si usa.
+
+Il resto del documento (le altre proprietà dei paragrafi e dei tratti, la
+definizione degli stili, il resto delle sezioni,
+le intestazioni che non sono testo semplice, immagini, forme, campi, note, formule, il testo dei commenti) resta nel file
 così com'è. Un oggetto si vede come una casella con il suo nome o il suo testo
 alternativo; la fine di una sezione è un filo doppio che non si cancella con un
 Backspace.
 
 Un documento si apre **soltanto in lettura**, con il motivo in testa, quando
-ha revisioni tracciate, registra le modifiche, è protetto, oppure quando la
+ha modifiche di formato tracciate o revisioni fuori dal corpo (note,
+intestazioni, piè di pagina, commenti, caselle di testo), è protetto,
+oppure quando la
 superficie o il codec non saprebbero riscriverlo identico. Un documento cifrato
 o più grande di 256 MiB non si apre. Un salvataggio che non si rilegge uguale a
 ciò che si voleva scrivere non scrive, e il testo resta nel buffer.
 
 Limiti attuali:
 
-- le immagini non si disegnano, e un oggetto non si modifica dalla superficie;
-- i link si conservano ma non si creano né si modificano; le colonne delle
-  tabelle non si aggiungono né si tolgono;
+- le immagini del file non si disegnano: si vede soltanto un'immagine appena
+  inserita, finché il documento resta aperto; un oggetto non si modifica dalla
+  superficie, e il testo di una nota esistente non si cambia;
+- una nota nuova è testo semplice su una riga, senza formattazione; copiata e
+  incollata, è una seconda nota con lo stesso testo;
+- l'interlinea «almeno» ed «esattamente» si mostra e si conserva, ma dalla
+  striscia si sceglie soltanto un multiplo; rientri, spazi e interlinea che
+  vengono dallo stile non si disegnano (il foglio usa quelli del tema), e un
+  campo vuoto della spaziatura non dice quanto valgono;
+- un carattere che la macchina non ha si mostra con uno di ripiego, ma nel
+  file resta quello scelto; in un `.docx` l'evidenziatore ha soltanto i sedici
+  colori di Word;
+- un link porta soltanto a un indirizzo web, di posta o a un segnalibro
+  già nel documento;
+- le colonne si aggiungono, si spostano e si tolgono soltanto in una tabella
+  le cui righe hanno tutte le stesse celle, senza celle unite in larghezza;
+  le celle si uniscono soltanto in larghezza, e una cella unita in altezza si
+  mostra come una cella per riga;
 - un elenco numerato mostra sempre numeri arabi, qualunque sia la numerazione
   del documento, che resta quella del file;
 - il codec riscrive il file in forma propria: rinumera intestazioni, piè di
@@ -46,19 +164,29 @@ Limiti attuali:
 ## OpenDocument
 
 Un `.odt` si apre nella stessa superficie e si modifica come un `.docx`, con
-gli stessi limiti; un salto di pagina o di colonna però non si scrive. Il
+gli stessi limiti; un salto di pagina o di colonna però non si scrive, e una
+tabella nuova ha una colonna per cella della riga più lunga e celle con un
+bordo sottile (lo stile automatico `FubC…`). Le colonne si aggiungono o si
+tolgono soltanto in una tabella con le colonne tutte uguali, e le celle si
+uniscono o si dividono soltanto in una tabella senza celle unite in altezza;
+altrimenti il salvataggio lo rifiuta e il testo resta nel buffer. Il
 salvataggio riscrive soltanto i blocchi toccati: il resto di `content.xml` e
 ogni altra parte del pacchetto (immagini, impostazioni, metadati) restano byte
-per byte com'erano. Un ruolo o un'enfasi nuovi aggiungono gli stili automatici
-che servono (`FubP…`, `FubT…`, `FubL…`) e, se mancano, gli stili comuni dei
-titoli e della citazione, senza toccare gli altri.
+per byte com'erano. Un ruolo, un'enfasi, un aspetto del carattere o una
+disposizione del paragrafo nuovi aggiungono gli stili automatici che servono
+(`FubP…`, `FubT…`, `FubL…`) e, se mancano, gli stili comuni dei titoli e della
+citazione, senza toccare gli altri. Le lunghezze nuove si scrivono in punti. Le revisioni tracciate e i commenti di un `.odt`
+non si scrivono: un testo che ne porta (incollato da un `.docx`) non si
+salva, e la striscia non offre commenti nuovi.
 
 Oltre ai motivi del `.docx`, un `.odt` si apre **in sola lettura** quando la
 superficie non saprebbe riscriverlo identico, per esempio con due elenchi uguali
 uno dopo l'altro. Uno che il codec non sa rappresentare (voci d'elenco vuote,
 righe ripetute, commenti XML dentro un paragrafo) si legge con l'importatore di
 WordCraft, come un `.rtf`. Una nota, un segnalibro o un commento non si
-incollano due volte: il salvataggio lo rifiuta.
+incollano due volte: il salvataggio lo rifiuta. Un'immagine nuova entra in
+`Pictures/` col nome dei suoi byte (`fub-….png`) e nel manifesto, e una nota
+nuova prende lo stile `Footnote` o `Endnote` del documento, se c'è.
 
 ## RTF e Word 97-2003
 

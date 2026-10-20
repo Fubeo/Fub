@@ -2198,6 +2198,7 @@ dependencies = [
  "wordcraft-docbin",
  "wordcraft-docx",
  "wordcraft-formats",
+ "wordcraft-geom",
  "zip",
 ]
 

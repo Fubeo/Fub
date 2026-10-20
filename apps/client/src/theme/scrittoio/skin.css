@@ -6063,6 +6063,109 @@ kbd,
   color: var(--text);
   font-size: var(--text-sm);
 }
+/* La striscia del carattere, sopra il foglio. */
+.rich-strip {
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-6);
+  border-bottom: 1px solid var(--border);
+  background: var(--sheet);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.rich-strip-group {
+  gap: var(--space-1);
+  padding-inline-end: var(--space-2);
+  border-right: 1px solid var(--border);
+}
+.rich-strip-group:last-child {
+  border-right: none;
+}
+.rich-strip-button,
+.rich-strip-swatch-none,
+.rich-strip-swatch-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.rich-strip-button {
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  color: var(--muted);
+  line-height: 1;
+}
+.rich-strip-button:hover:not(:disabled),
+.rich-strip-button[aria-expanded="true"],
+.rich-strip-swatch-none:hover,
+.rich-strip-swatch-custom:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.rich-strip-button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.rich-strip-button:focus-visible,
+.rich-strip-select:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.rich-strip-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.rich-strip-underline {
+  text-decoration: underline;
+}
+.rich-strip-marker {
+  font-style: italic;
+}
+.rich-strip-bar {
+  border-radius: 1px;
+}
+.rich-strip-bar[data-empty="true"] {
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.rich-strip-select {
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--sheet);
+  color: var(--text);
+  font: inherit;
+}
+.rich-strip-font {
+  width: 156px;
+}
+.rich-strip-size {
+  width: 64px;
+}
+.rich-strip-swatches {
+  gap: var(--space-1);
+  padding: var(--space-3);
+}
+.rich-strip-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  cursor: pointer;
+}
+.rich-strip-swatch:hover,
+.rich-strip-swatch:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
 .rich-content {
   max-width: calc(var(--content-width) + 2 * var(--space-9));
   margin-inline: auto;

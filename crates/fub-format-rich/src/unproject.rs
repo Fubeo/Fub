@@ -8,38 +8,68 @@
 //! - un tratto riprende le proprie proprietà opache, e un'enfasi diversa da
 //!   quella che chi legge vedeva diventa formattazione diretta;
 //! - un paragrafo riprende le proprie, e cambia stile o elenco soltanto se il
-//!   suo ruolo è cambiato;
-//! - un oggetto riprende sé stesso, purché ciò che nomina ci sia ancora.
+//!   suo ruolo o il suo stile sono cambiati; allineamento, rientri,
+//!   spaziature e interlinea diversi da quelli mostrati diventano
+//!   formattazione diretta con la regola delle enfasi;
+//! - un oggetto riprende sé stesso, purché ciò che nomina ci sia ancora;
+//! - un'immagine nuova entra fra le immagini del documento, col nome dei suoi
+//!   byte, e una nota nuova diventa una storia con lo stile delle note, come
+//!   la inserisce WordCraft.
 //!
 //! Ciò che la shell ha tolto si toglie come lo toglie WordCraft: i segni di
 //! campi e controlli rimasti senza compagno se ne vanno, e così le caselle di
-//! testo che nessuno mostra più.
+//! testo e le note che nessuno mostra più.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
 use wordcraft_doc::numbering::ListKind;
-use wordcraft_doc::para::{Run, OBJ};
+use wordcraft_doc::para::{NoteKind, Run, OBJ};
 use wordcraft_doc::props::{Highlight, NumRef, Underline, VertAlign};
 use wordcraft_doc::{
-    Block as WcBlock, CharProps, Document, InlineObject, ParaProps, Paragraph, SectionProps,
-    StyleKind, StyleSheet,
+    Align as WcAlign, Block as WcBlock, CharProps, Comment, Document, InlineObject, ParaProps,
+    Paragraph, Part, PartKind, Revision, RevisionKind, SectionProps, StyleKind, StyleSheet,
 };
 
-use crate::blob;
-use crate::projection::{self, AtomKeep, Block, Inline, Mark, Para, ParaKeep, Projection, Role};
+use crate::projection::{
+    self, Align, AtomKeep, AtomKind, Block, CommentKeep, Inline, Layout, Line, Look, Mark, Para,
+    ParaKeep, Projection, Rev, Role, SectKeep,
+};
 use crate::RichError;
+use crate::{blob, fidelity, fresh, running, stories};
 
 /// Il documento che la proiezione descrive, a partire da `base`.
 pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Document, RichError> {
     let mut document = base.clone();
+    document.settings.track_changes = projection.track;
+    if let Some(page) = &projection.page {
+        page.apply(&mut document.last_section)?;
+    }
+    let mut last = std::mem::take(&mut document.last_section);
+    running::apply(
+        &mut document,
+        &mut last,
+        projection.header.as_ref(),
+        projection.footer.as_ref(),
+    )?;
+    document.last_section = last;
+    toc_styles(&projection.blocks, &mut document.styles);
     let mut state = State {
         stories: HashSet::new(),
         last_list: [None, None],
         own: Dangling::of(base),
+        notes: Vec::new(),
+        claimed: HashSet::new(),
+        sections: Vec::new(),
     };
+    // Prima i commenti: un segno del testo resta soltanto se il suo c'è.
+    comments(projection, &mut document, &mut state)?;
     let body = blocks(&projection.blocks, &mut document, &mut state)?;
     document.body = body;
+    drop_lost_anchors(&mut document);
+    prune(base, &mut document);
+    drop_lost_stories(base, &mut document);
+    add_notes(&mut document, state.notes)?;
     document.ensure_nonempty();
     document.balance_field_ranges();
     document.balance_controls();
@@ -55,6 +85,19 @@ struct State {
     /// che diventa voce d'elenco continua quello vicino, come in Word.
     last_list: [Option<u32>; 2],
     own: Dangling,
+    /// Le note nuove, nell'ordine del testo: il loro riferimento porta per
+    /// ora l'id provvisorio [`placeholder`].
+    notes: Vec<(NoteKind, String)>,
+    /// Gli id del documento che un oggetto ha già preso per le sue storie.
+    claimed: HashSet<u32>,
+    /// Le storie portate dalle sezioni già incontrate, con il loro posto: più
+    /// sezioni possono mostrare la stessa intestazione.
+    sections: Vec<(BTreeMap<u32, Part>, BTreeMap<u32, u32>)>,
+}
+
+/// L'id provvisorio della nota nuova `index`: nessun documento ne ha tanti.
+fn placeholder(index: usize) -> u32 {
+    u32::MAX - index as u32
 }
 
 /// Gli stili e gli elenchi che il documento stesso nomina senza averli. Un
@@ -129,7 +172,25 @@ fn blocks(
                 paragraph(para, document, state).map(|p| Arc::new(WcBlock::Para(p)))
             }
             Block::Table(table) => {
-                let mut out: wordcraft_doc::Table = blob::decode(&table.k)?;
+                let mut out: wordcraft_doc::Table = match &table.k {
+                    Some(k) => blob::decode(k)?,
+                    // Una tabella nuova è quella di Word: la griglia a tutta
+                    // riga, a colonne uguali, con i bordi.
+                    None => {
+                        let cols = table.rows.iter().map(|row| {
+                            row.cells.iter().map(|c| c.span.unwrap_or(1) as usize).sum()
+                        });
+                        let cols = cols.max().unwrap_or(0);
+                        let mut fresh =
+                            wordcraft_doc::Table::new(1, cols, document.last_section.text_width());
+                        fresh.rows.clear();
+                        fresh.props.style = builtin_style(&mut document.styles, "TableGrid");
+                        fresh
+                    }
+                };
+                let grid = out.grid.clone();
+                // Celle unite o divise dalla shell: le larghezze si rifanno.
+                let respanned = std::cell::Cell::new(false);
                 if out
                     .props
                     .style
@@ -142,12 +203,33 @@ fn blocks(
                     .rows
                     .iter()
                     .map(|row| {
-                        let mut out: wordcraft_doc::Row = blob::decode(&row.k)?;
+                        let mut out: wordcraft_doc::Row = match &row.k {
+                            Some(k) => blob::decode(k)?,
+                            None => wordcraft_doc::Row::default(),
+                        };
                         out.cells = row
                             .cells
                             .iter()
-                            .map(|cell| {
-                                let mut out: wordcraft_doc::Cell = blob::decode(&cell.k)?;
+                            .enumerate()
+                            .map(|(c, cell)| {
+                                let mut out: wordcraft_doc::Cell = match &cell.k {
+                                    Some(k) => blob::decode(k)?,
+                                    None => {
+                                        let mut fresh = wordcraft_doc::Cell::empty();
+                                        fresh.props.width = grid.get(c).copied();
+                                        fresh
+                                    }
+                                };
+                                let span = cell.span.unwrap_or(1) as usize;
+                                if span == 0 || span > wordcraft_doc::table::MAX_COLS {
+                                    return Err(RichError::Malformed(
+                                        "a cell spanning no or too many columns".into(),
+                                    ));
+                                }
+                                if out.span() != span {
+                                    out.props.span = span as u32;
+                                    respanned.set(true);
+                                }
                                 out.blocks = self::blocks(&cell.blocks, document, state)?;
                                 if !out.blocks.iter().any(|b| matches!(**b, WcBlock::Para(_))) {
                                     // Word vuole un paragrafo in fondo a ogni cella.
@@ -161,6 +243,20 @@ fn blocks(
                     .collect::<Result<_, RichError>>()?;
                 if out.rows.is_empty() || out.rows.iter().any(|row| row.cells.is_empty()) {
                     return Err(RichError::Malformed("table without rows or cells".into()));
+                }
+                let cols = out
+                    .rows
+                    .iter()
+                    .map(|row| row.cells.iter().map(|c| c.span()).sum());
+                let cols: usize = cols.max().unwrap_or(0);
+                if cols > wordcraft_doc::table::MAX_COLS {
+                    return Err(RichError::Malformed("a table with too many columns".into()));
+                }
+                if cols != out.grid.len() {
+                    let width = document.last_section.text_width();
+                    regrid(&mut out, cols, width);
+                } else if respanned.get() {
+                    fit(&mut out);
                 }
                 Ok(Arc::new(WcBlock::Table(out)))
             }
@@ -186,9 +282,23 @@ fn paragraph(
     // L'enfasi che la shell mostrava era risolta con lo stile di prima.
     let shown_style = keep.props.style.clone();
     let before = projection::role(document, &keep.props);
+    let shown_align = projection::align(&document.styles, &keep.props);
+    let shown_layout = projection::layout(&document.styles, &keep.props);
+    let shown_s = (before == Role::Body)
+        .then(|| projection::style_of(document, &keep.props))
+        .flatten();
     if before != para.role {
         keep.props = with_role(keep.props, before, para.role, document, state);
     }
+    if para.role == Role::Body && para.s.as_deref() != shown_s.as_deref() {
+        keep.props = with_style(keep.props, para.s.as_deref(), &document.styles);
+    }
+    keep.props = with_layout(
+        keep.props,
+        (para.align, &para.p),
+        (shown_align, &shown_layout),
+        &document.styles,
+    );
     if let Role::List { ordered, .. } = para.role {
         if let Some(n) = document.styles.resolve_para(&keep.props).numbering {
             state.last_list[usize::from(ordered)] = Some(n.num);
@@ -197,10 +307,23 @@ fn paragraph(
 
     let mut out = Paragraph::new();
     out.props = keep.props;
-    out.mark = keep.mark.clone();
+    out.mark = tracked(
+        keep.mark.clone(),
+        para.ins.as_deref(),
+        para.del.as_deref(),
+        document,
+    );
     for inline in &para.c {
         match inline {
-            Inline::Text { x, k, m, href } => {
+            Inline::Text {
+                x,
+                k,
+                m,
+                href,
+                f,
+                ins,
+                del,
+            } => {
                 if x.contains(OBJ) {
                     return Err(RichError::Malformed("object marker inside text".into()));
                 }
@@ -218,28 +341,461 @@ fn paragraph(
                     shown_style.as_deref(),
                     &mut document.styles,
                 );
+                let props = with_look(props, m, f, shown_style.as_deref(), &document.styles);
+                let props = tracked(props, ins.as_ref(), del.as_ref(), document);
                 push(&mut out, x, props);
             }
-            Inline::Atom { k, .. } => {
-                let AtomKeep { props, object } = blob::decode(k)?;
-                let Some(object) = known_object(object, document, state)? else {
+            Inline::Atom {
+                k: Some(k),
+                data: None,
+                note: None,
+                end: false,
+                ins,
+                del,
+                ..
+            } => {
+                let AtomKeep {
+                    props,
+                    mut object,
+                    parts,
+                } = blob::decode(k)?;
+                let mut carried = BTreeMap::new();
+                if !parts.is_empty() {
+                    // Le storie portate: ciascuna da un oggetto solo, come
+                    // quelle nominate per id.
+                    for id in parts.keys() {
+                        if !state.stories.insert(*id) {
+                            return Err(RichError::DuplicateStory(*id));
+                        }
+                    }
+                    let claimed = &state.claimed;
+                    carried = stories::restore(document, parts, &|id| !claimed.contains(&id))?;
+                    state.claimed.extend(carried.values().copied());
+                    stories::remap_object(&mut object, &carried);
+                }
+                let Some(object) = known_object(object, document, state, &carried)? else {
                     continue;
                 };
                 let props = known_char(props, &document.styles, &state.own);
+                let props = tracked(props, ins.as_ref(), del.as_ref(), document);
                 push(&mut out, &OBJ.to_string(), props);
                 out.objects.push(object);
             }
+            Inline::Atom {
+                k: None,
+                kind: AtomKind::Marker,
+                data: None,
+                note: None,
+                end: false,
+                comment: Some(anchor),
+                ins,
+                del,
+                ..
+            } => {
+                let object = if anchor.end {
+                    InlineObject::CommentEnd { id: anchor.id }
+                } else {
+                    InlineObject::CommentStart { id: anchor.id }
+                };
+                let Some(object) = known_object(object, document, state, &BTreeMap::new())? else {
+                    continue;
+                };
+                let props = tracked(CharProps::default(), ins.as_ref(), del.as_ref(), document);
+                push(&mut out, &OBJ.to_string(), props);
+                out.objects.push(object);
+            }
+            Inline::Atom {
+                k: None,
+                kind: AtomKind::Image,
+                data: Some(data),
+                note: None,
+                end: false,
+                toc: None,
+                comment: None,
+                label,
+                w,
+                h,
+                ins,
+                del,
+            } => {
+                let image = fresh::image(data, *w, *h)?;
+                let (w, h) = (image.w, image.h);
+                let media = media_key(document, image);
+                let props = tracked(CharProps::default(), ins.as_ref(), del.as_ref(), document);
+                push(&mut out, &OBJ.to_string(), props);
+                out.objects.push(InlineObject::Image {
+                    media,
+                    w,
+                    h,
+                    alt: label.clone(),
+                    float: Default::default(),
+                    crop: [0.0; 4],
+                    ole: None,
+                });
+            }
+            Inline::Atom {
+                k: None,
+                kind: AtomKind::Note,
+                data: None,
+                note: Some(text),
+                end,
+                toc: None,
+                ins,
+                del,
+                ..
+            } => {
+                let kind = if *end {
+                    NoteKind::Endnote
+                } else {
+                    NoteKind::Footnote
+                };
+                let id = placeholder(state.notes.len());
+                state.notes.push((kind, fresh::note(text)?.to_string()));
+                let style = builtin_style(&mut document.styles, note_styles(kind).1);
+                let props = CharProps {
+                    style,
+                    ..CharProps::default()
+                };
+                let props = tracked(props, ins.as_ref(), del.as_ref(), document);
+                push(&mut out, &OBJ.to_string(), props);
+                out.objects.push(InlineObject::NoteRef {
+                    kind,
+                    id,
+                    custom: String::new(),
+                });
+            }
+            Inline::Atom {
+                k: None,
+                kind: AtomKind::Field,
+                data: None,
+                note: None,
+                toc: Some(levels),
+                ins,
+                del,
+                ..
+            } => {
+                if !(1..=9).contains(levels) {
+                    return Err(RichError::Malformed(
+                        "a table of contents of no levels".into(),
+                    ));
+                }
+                let props = tracked(CharProps::default(), ins.as_ref(), del.as_ref(), document);
+                push(&mut out, &OBJ.to_string(), props);
+                // Senza pagine calcolate: Word lo rifà aprendo il file.
+                out.objects.push(InlineObject::Field {
+                    instr: format!("TOC \\o \"1-{levels}\" \\h \\z \\u"),
+                    result: String::new(),
+                    locked: false,
+                    dirty: true,
+                    code: false,
+                    form: String::new(),
+                });
+            }
+            Inline::Atom { .. } => {
+                return Err(RichError::Malformed(
+                    "an object that is neither kept nor a new image, note or table of contents"
+                        .into(),
+                ));
+            }
         }
     }
-    out.section = para
-        .sect
-        .as_deref()
-        .map(blob::decode::<SectionProps>)
-        .transpose()?
-        .filter(|section| known_section(section, document))
-        .map(Box::new);
+    out.section = match para.sect.as_deref() {
+        Some(blob) => section(blob, document, state)?,
+        None if para.page.is_some() || para.header.is_some() || para.footer.is_some() => {
+            return Err(RichError::Malformed(
+                "a page on a paragraph that ends no section".into(),
+            ))
+        }
+        None => None,
+    };
+    if let Some(section) = out.section.as_deref_mut() {
+        if let Some(page) = para.page.as_deref() {
+            page.apply(section)?;
+        }
+        running::apply(
+            document,
+            section,
+            para.header.as_deref(),
+            para.footer.as_deref(),
+        )?;
+    }
     out.normalize();
     Ok(out)
+}
+
+/// La sezione di un paragrafo, con le sue intestazioni al loro posto; nessuna
+/// se nomina parti che il documento non ha.
+fn section(
+    blob: &str,
+    document: &mut Document,
+    state: &mut State,
+) -> Result<Option<Box<SectionProps>>, RichError> {
+    let SectKeep { mut section, parts } = SectKeep::decode(blob)?;
+    if !parts.is_empty() {
+        let moved = match state.sections.iter().find(|(seen, _)| *seen == parts) {
+            Some((_, moved)) => moved.clone(),
+            None => {
+                let moved = stories::restore(document, parts.clone(), &|_| true)?;
+                state.sections.push((parts, moved.clone()));
+                moved
+            }
+        };
+        stories::remap_section(&mut section, &moved);
+    }
+    Ok(known_section(&section, document).then(|| Box::new(section)))
+}
+
+/// La chiave dell'immagine nuova fra le immagini del documento: quella dei
+/// byte uguali, se ci sono già, altrimenti il nome dei byte.
+fn media_key(document: &mut Document, image: fresh::Image) -> String {
+    if let Some((key, _)) = document
+        .media
+        .iter()
+        .find(|(_, bytes)| bytes.as_slice() == image.bytes.as_slice())
+    {
+        return key.clone();
+    }
+    let name = image.name();
+    let mut key = name.clone();
+    let mut n = 1;
+    while document.media.contains_key(&key) {
+        n += 1;
+        key = name.replacen('.', &format!("_{n}."), 1);
+    }
+    document.media.insert(key.clone(), Arc::new(image.bytes));
+    key
+}
+
+/// Lo stile del testo e quello del riferimento di una nota.
+fn note_styles(kind: NoteKind) -> (&'static str, &'static str) {
+    match kind {
+        NoteKind::Footnote => ("FootnoteText", "FootnoteReference"),
+        NoteKind::Endnote => ("EndnoteText", "EndnoteReference"),
+    }
+}
+
+/// Le parti che il documento di partenza mostrava e la proiezione non mostra
+/// più: la shell ne ha tolto il riferimento, o un oggetto le ha riportate con
+/// un altro id, e una nota senza riferimento non si legge da nessuna parte.
+/// Quelle che nessuno mostrava restano com'erano.
+/// Gli stili di Word del sommario, se la proiezione ne mette uno nuovo: il
+/// suo titolo e le sue voci li nominano prima che il sommario si incontri.
+fn toc_styles(blocks: &[Block], styles: &mut StyleSheet) {
+    for block in blocks {
+        match block {
+            Block::Para(para) => {
+                for inline in &para.c {
+                    if let Inline::Atom {
+                        k: None,
+                        toc: Some(levels),
+                        ..
+                    } = inline
+                    {
+                        builtin_style(styles, "TOCHeading");
+                        for level in 1..=(*levels).min(9) {
+                            builtin_style(styles, &format!("TOC{level}"));
+                        }
+                    }
+                }
+            }
+            Block::Table(table) => {
+                for cell in table.rows.iter().flat_map(|row| &row.cells) {
+                    toc_styles(&cell.blocks, styles);
+                }
+            }
+        }
+    }
+}
+
+/// Le intestazioni e i piè di pagina rimessi da una sezione e poi sostituiti
+/// da quelli nuovi: nessuno li mostra, e non erano del documento.
+fn drop_lost_stories(base: &Document, document: &mut Document) {
+    let kept: BTreeSet<u32> = fidelity::referenced(document).into_iter().collect();
+    document.parts.retain(|id, part| {
+        kept.contains(id)
+            || base.parts.contains_key(id)
+            || !matches!(part.kind, PartKind::Header | PartKind::Footer)
+    });
+}
+
+fn prune(base: &Document, document: &mut Document) {
+    let kept: BTreeSet<u32> = fidelity::referenced(document).into_iter().collect();
+    for id in fidelity::referenced(base) {
+        if !kept.contains(&id) {
+            document.parts.remove(&id);
+        }
+    }
+}
+
+/// I commenti che la proiezione elenca, al posto di quelli del documento:
+/// uno tenuto riprende la sua storia (con l'id che ha nel documento, se lì è
+/// identica) e prende soltanto lo stato di risolto; uno nuovo ha una storia
+/// nuova, un paragrafo per riga.
+fn comments(
+    projection: &Projection,
+    document: &mut Document,
+    state: &mut State,
+) -> Result<(), RichError> {
+    let mut out = BTreeMap::new();
+    for view in &projection.comments {
+        let comment = match &view.k {
+            Some(k) => {
+                let CommentKeep { mut comment, parts } = blob::decode(k)?;
+                for id in parts.keys() {
+                    if !state.stories.insert(*id) {
+                        return Err(RichError::DuplicateStory(*id));
+                    }
+                }
+                let claimed = &state.claimed;
+                let carried = stories::restore(document, parts, &|id| !claimed.contains(&id))?;
+                state.claimed.extend(carried.values().copied());
+                if let Some(new) = carried.get(&comment.part) {
+                    comment.part = *new;
+                }
+                if !document.parts.contains_key(&comment.part) {
+                    return Err(RichError::Missing(format!("comment {}", view.id)));
+                }
+                comment.resolved = view.done;
+                comment
+            }
+            None => {
+                let blocks = fresh::comment(&view.text)?
+                    .map(|line| {
+                        Arc::new(WcBlock::Para(Paragraph::with_text(
+                            line,
+                            CharProps::default(),
+                        )))
+                    })
+                    .collect();
+                let part = document
+                    .try_add_part(PartKind::Comment, blocks)
+                    .map_err(|error| RichError::Codec(error.to_string()))?;
+                state.stories.insert(part);
+                state.claimed.insert(part);
+                Comment {
+                    author: view.by.clone(),
+                    initials: initials(&view.by),
+                    date: view.at.clone(),
+                    parent: view.parent,
+                    resolved: view.done,
+                    part,
+                    ..Default::default()
+                }
+            }
+        };
+        if out.insert(view.id, comment).is_some() {
+            return Err(RichError::Malformed(format!("comment {} twice", view.id)));
+        }
+    }
+    // Una risposta senza il suo commento non ha più un filo.
+    if let Some((id, _)) = out
+        .iter()
+        .find(|(_, c)| c.parent.is_some_and(|parent| !out.contains_key(&parent)))
+    {
+        return Err(RichError::Malformed(format!(
+            "comment {id} replies to a missing comment"
+        )));
+    }
+    document.comments = out;
+    Ok(())
+}
+
+/// Le iniziali di un autore, come le scrive Word: la prima lettera di ogni
+/// parola.
+fn initials(author: &str) -> String {
+    author
+        .split_whitespace()
+        .filter_map(|word| word.chars().next())
+        .flat_map(char::to_uppercase)
+        .collect()
+}
+
+/// I segni dei commenti tolti, nelle storie che il corpo non mostra con i
+/// suoi oggetti: note, intestazioni, caselle di testo, altri commenti.
+fn drop_lost_anchors(document: &mut Document) {
+    let comments: BTreeSet<u32> = document.comments.keys().copied().collect();
+    let lost = |object: &InlineObject| {
+        matches!(object, InlineObject::CommentStart { id } | InlineObject::CommentEnd { id }
+            if !comments.contains(id))
+    };
+    for story in document.parts.values_mut() {
+        for block in &mut story.blocks {
+            let mut found = false;
+            fidelity::each_paragraph(block, &mut |paragraph| {
+                found |= paragraph.objects.iter().any(lost);
+            });
+            if !found {
+                continue;
+            }
+            stories::each_paragraph_mut(Arc::make_mut(block), &mut |paragraph| {
+                let offsets: Vec<usize> = paragraph
+                    .object_offsets()
+                    .into_iter()
+                    .zip(paragraph.objects.iter())
+                    .filter(|(_, object)| lost(object))
+                    .map(|(at, _)| at)
+                    .collect();
+                for at in offsets.into_iter().rev() {
+                    // Un oggetto è un carattere del testo: si toglie sempre.
+                    let _ = paragraph.delete(at, at + OBJ.len_utf8());
+                }
+            });
+        }
+    }
+}
+
+/// Le storie delle note nuove, e il loro id al posto di quello provvisorio.
+/// Si aggiungono dopo aver tolto le note scomparse: una nota nuova salvata di
+/// nuovo riprende così l'id che aveva.
+fn add_notes(document: &mut Document, notes: Vec<(NoteKind, String)>) -> Result<(), RichError> {
+    let mut ids = Vec::with_capacity(notes.len());
+    for (kind, text) in notes {
+        let (style, reference) = note_styles(kind);
+        let part = match kind {
+            NoteKind::Footnote => PartKind::Footnote,
+            NoteKind::Endnote => PartKind::Endnote,
+        };
+        let id = document
+            .try_add_part(part, Vec::new())
+            .map_err(|error| RichError::Codec(error.to_string()))?;
+        let style = builtin_style(&mut document.styles, style);
+        let reference = builtin_style(&mut document.styles, reference);
+        let mut paragraph = Paragraph::new();
+        paragraph.props.style = style;
+        push(
+            &mut paragraph,
+            &OBJ.to_string(),
+            CharProps {
+                style: reference,
+                ..CharProps::default()
+            },
+        );
+        paragraph.objects.push(InlineObject::NoteRef {
+            kind,
+            id,
+            custom: String::new(),
+        });
+        push(&mut paragraph, &format!(" {text}"), CharProps::default());
+        paragraph.normalize();
+        if let Some(story) = document.parts.get_mut(&id) {
+            story.blocks = vec![Arc::new(WcBlock::Para(paragraph))];
+        }
+        ids.push(id);
+    }
+    if !ids.is_empty() {
+        let first = placeholder(ids.len() - 1);
+        document.objects_mut(
+            &|object| matches!(object, InlineObject::NoteRef { id, .. } if *id >= first),
+            &mut |object| {
+                if let InlineObject::NoteRef { id, .. } = object {
+                    if let Some(real) = ids.get((u32::MAX - *id) as usize) {
+                        *id = *real;
+                    }
+                }
+            },
+        );
+    }
+    Ok(())
 }
 
 fn push(paragraph: &mut Paragraph, text: &str, props: CharProps) {
@@ -272,8 +828,43 @@ fn known_para(mut props: ParaProps, document: &Document, own: &Dangling) -> Para
     props
 }
 
-/// Le proprietà di un tratto, con la stessa regola. Le revisioni tracciate non
-/// passano: un documento che ne ha si apre in sola lettura.
+/// Le proprietà con le revisioni che la proiezione dice: quelle del dato
+/// opaco non valgono, perché la shell accetta e rifiuta togliendo `ins` e
+/// `del`, e il file riletto rinumera le revisioni.
+fn tracked(
+    mut props: CharProps,
+    ins: Option<&Rev>,
+    del: Option<&Rev>,
+    document: &mut Document,
+) -> CharProps {
+    props.ins = ins.map(|rev| revision(document, RevisionKind::Insert, rev));
+    props.del = del.map(|rev| revision(document, RevisionKind::Delete, rev));
+    props
+}
+
+/// L'indice della revisione `rev` nel documento: quella uguale che c'è già,
+/// o una nuova in fondo.
+fn revision(document: &mut Document, kind: RevisionKind, rev: &Rev) -> u32 {
+    let wanted = Revision {
+        kind,
+        author: rev.by.clone(),
+        date: rev.at.clone(),
+        move_name: rev.mv.clone(),
+    };
+    let index = match document.revisions.iter().position(|r| *r == wanted) {
+        Some(index) => index,
+        None => {
+            document.revisions.push(wanted);
+            document.revisions.len() - 1
+        }
+    };
+    index as u32
+}
+
+/// Le proprietà di un tratto, con la stessa regola. Le revisioni del dato
+/// opaco non passano: le dice la proiezione (vedi [`tracked`]). Una modifica
+/// di formato tracciata non passa: un documento che ne ha si apre in sola
+/// lettura.
 fn known_char(mut props: CharProps, styles: &StyleSheet, own: &Dangling) -> CharProps {
     if props
         .style
@@ -303,12 +894,21 @@ fn known_object(
     object: InlineObject,
     document: &Document,
     state: &mut State,
+    carried: &BTreeMap<u32, u32>,
 ) -> Result<Option<InlineObject>, RichError> {
+    // Le storie portate dall'oggetto sono già al loro posto.
+    let story = |id: u32, state: &mut State| {
+        if carried.values().any(|new| *new == id) {
+            Ok(())
+        } else {
+            story(id, document, state)
+        }
+    };
     match &object {
         InlineObject::Image { media, .. } if !document.media.contains_key(media) => {
             return Err(RichError::Missing(format!("image {media}")));
         }
-        InlineObject::NoteRef { id, .. } => story(*id, document, state)?,
+        InlineObject::NoteRef { id, .. } => story(*id, state)?,
         InlineObject::CommentStart { id } | InlineObject::CommentEnd { id }
             if !document.comments.contains_key(id) =>
         {
@@ -317,7 +917,7 @@ fn known_object(
         _ => {}
     }
     for id in object.text_boxes() {
-        story(id, document, state)?;
+        story(id, state)?;
     }
     Ok(Some(object))
 }
@@ -329,6 +929,7 @@ fn story(id: u32, document: &Document, state: &mut State) -> Result<(), RichErro
     if !state.stories.insert(id) {
         return Err(RichError::DuplicateStory(id));
     }
+    state.claimed.insert(id);
     Ok(())
 }
 
@@ -397,6 +998,114 @@ fn with_role(
     props
 }
 
+/// Le proprietà di un paragrafo di corpo con lo stile `style`; `None` è
+/// quello predefinito. Uno stile che il documento non ha lascia le cose come
+/// sono.
+fn with_style(mut props: ParaProps, style: Option<&str>, styles: &StyleSheet) -> ParaProps {
+    match style {
+        Some(id)
+            if styles
+                .get(id)
+                .is_some_and(|s| s.kind == StyleKind::Paragraph) =>
+        {
+            props.style = Some(id.to_string());
+        }
+        Some(_) => {}
+        None => props.style = None,
+    }
+    props
+}
+
+/// Le proprietà di un paragrafo con l'allineamento e la disposizione voluti,
+/// con la regola delle enfasi: un valore diverso da quello mostrato si toglie
+/// se basta toglierlo, se no si scrive diretto. Ciò che la disposizione non
+/// nomina è quello dello stile.
+fn with_layout(
+    mut props: ParaProps,
+    (align, want): (Option<Align>, &Layout),
+    (shown_align, shown): (Option<Align>, &Layout),
+    styles: &StyleSheet,
+) -> ParaProps {
+    let left = |a: Option<Align>| a.filter(|a| *a != Align::Left);
+    let (align, shown_align) = (left(align), left(shown_align));
+    if align != shown_align {
+        props.align = None;
+        if projection::align(styles, &props) != align {
+            props.align = Some(match align {
+                None | Some(Align::Left) => WcAlign::Left,
+                Some(Align::Center) => WcAlign::Center,
+                Some(Align::Right) => WcAlign::Right,
+                Some(Align::Justify) => WcAlign::Justify,
+            });
+        }
+    }
+    let plain = styles.resolve_para(&projection::bare_layout(&props));
+    let same = projection::same_size;
+    if want.left != shown.left {
+        let target = want.left.unwrap_or(plain.indent_left);
+        props.indent_left = None;
+        props.indent_left_chars = None;
+        if !same(styles.resolve_para(&props).indent_left, target) {
+            props.indent_left = Some(target);
+            if !same(styles.resolve_para(&props).indent_left, target) {
+                props.indent_left_chars = Some(0.0);
+            }
+        }
+    }
+    if want.right != shown.right {
+        let target = want.right.unwrap_or(plain.indent_right);
+        props.indent_right = None;
+        props.indent_right_chars = None;
+        if !same(styles.resolve_para(&props).indent_right, target) {
+            props.indent_right = Some(target);
+            if !same(styles.resolve_para(&props).indent_right, target) {
+                props.indent_right_chars = Some(0.0);
+            }
+        }
+    }
+    if want.first != shown.first {
+        let target = want.first.unwrap_or(plain.indent_first);
+        props.indent_first = None;
+        props.indent_first_chars = None;
+        if !same(styles.resolve_para(&props).indent_first, target) {
+            props.indent_first = Some(target);
+            if !same(styles.resolve_para(&props).indent_first, target) {
+                props.indent_first_chars = Some(0.0);
+            }
+        }
+    }
+    if want.before != shown.before {
+        let target = want.before.unwrap_or(plain.space_before);
+        props.space_before = None;
+        props.space_before_auto = None;
+        if !same(styles.resolve_para(&props).space_before, target) {
+            props.space_before = Some(target);
+            if !same(styles.resolve_para(&props).space_before, target) {
+                props.space_before_auto = Some(false);
+            }
+        }
+    }
+    if want.after != shown.after {
+        let target = want.after.unwrap_or(plain.space_after);
+        props.space_after = None;
+        props.space_after_auto = None;
+        if !same(styles.resolve_para(&props).space_after, target) {
+            props.space_after = Some(target);
+            if !same(styles.resolve_para(&props).space_after, target) {
+                props.space_after_auto = Some(false);
+            }
+        }
+    }
+    if want.line != shown.line {
+        let target = want.line.unwrap_or_else(|| Line::of(plain.line_spacing));
+        props.line_spacing = None;
+        if !Line::of(styles.resolve_para(&props).line_spacing).same(target) {
+            props.line_spacing = Some(target.spacing());
+        }
+    }
+    props
+}
+
 fn kind(ordered: bool) -> ListKind {
     if ordered {
         ListKind::Numbered
@@ -422,10 +1131,51 @@ fn heading_style(styles: &mut StyleSheet, level: u8) -> Option<String> {
     builtin_style(styles, &id)
 }
 
+/// Una tabella a cui la shell ha aggiunto o tolto colonne: la griglia si
+/// rifà dalle larghezze della prima riga senza celle unite, riportate alla
+/// larghezza di prima (o del testo); senza una riga così, a colonne uguali.
+fn regrid(table: &mut wordcraft_doc::Table, cols: usize, text: f32) {
+    let total = match table.grid.iter().sum::<f32>() {
+        sum if sum > 0.0 => sum,
+        _ => text,
+    };
+    let widths = table
+        .rows
+        .iter()
+        .filter(|row| row.cells.len() == cols && row.cells.iter().all(|c| c.span() == 1))
+        .find_map(|row| {
+            let widths = row.cells.iter().map(|c| c.props.width.filter(|w| *w > 0.0));
+            widths.collect::<Option<Vec<f32>>>()
+        });
+    let grid: Vec<f32> = match widths {
+        Some(widths) => {
+            let sum: f32 = widths.iter().sum();
+            widths.iter().map(|w| w * total / sum).collect()
+        }
+        None => vec![total / cols as f32; cols],
+    };
+    table.grid = grid;
+    fit(table);
+}
+
+/// Ogni cella prende la larghezza delle colonne della griglia che copre.
+fn fit(table: &mut wordcraft_doc::Table) {
+    let grid = &table.grid;
+    for row in &mut table.rows {
+        let mut at = 0;
+        for cell in &mut row.cells {
+            let end = (at + cell.span()).min(grid.len());
+            cell.props.width = Some(grid[at.min(end)..end].iter().sum());
+            cell.props.width_pct = None;
+            at = end;
+        }
+    }
+}
+
 /// `id` nel documento, copiato dagli stili predefiniti di WordCraft (con la
 /// catena da cui deriva) se il documento non lo ha; `None` se non c'è nemmeno
 /// fra quelli.
-fn builtin_style(styles: &mut StyleSheet, id: &str) -> Option<String> {
+pub(crate) fn builtin_style(styles: &mut StyleSheet, id: &str) -> Option<String> {
     if styles.get(id).is_some() {
         return Some(id.to_string());
     }
@@ -470,6 +1220,8 @@ fn with_marks(
         Mark::H,
         Mark::Sup,
         Mark::Sub,
+        Mark::Caps,
+        Mark::SmallCaps,
     ] {
         let on = want.contains(&mark);
         if on == shown.contains(&mark) {
@@ -493,6 +1245,61 @@ fn with_marks(
             Some(_) if props.style.is_none() => props.style = builtin_style(styles, "Hyperlink"),
             None if props.style.as_deref() == Some("Hyperlink") => props.style = None,
             _ => {}
+        }
+    }
+    props
+}
+
+/// Riporta sul tratto l'aspetto voluto con la stessa regola delle enfasi: un
+/// valore che differisce da quello mostrato si toglie se basta toglierlo, se
+/// no si scrive diretto. Quello che il tratto non nomina è quello del
+/// paragrafo.
+fn with_look(
+    mut props: CharProps,
+    marks: &[Mark],
+    look: &Look,
+    shown_style: Option<&str>,
+    styles: &StyleSheet,
+) -> CharProps {
+    let plain = styles.resolve_char(shown_style, &CharProps::default());
+    let shown = |props: &CharProps| styles.resolve_char(shown_style, props);
+
+    let font = look.font.clone().unwrap_or_else(|| plain.font.clone());
+    if shown(&props).font != font {
+        props.font = None;
+        if shown(&props).font != font {
+            props.font = Some(font);
+        }
+    }
+    let size = look.size.unwrap_or(plain.size);
+    if !projection::same_size(shown(&props).size, size) {
+        props.size = None;
+        if !projection::same_size(shown(&props).size, size) {
+            props.size = Some(size);
+        }
+    }
+    let color = look
+        .color
+        .as_deref()
+        .and_then(projection::color_of)
+        .unwrap_or(plain.color);
+    if shown(&props).color != color {
+        props.color = None;
+        if shown(&props).color != color {
+            props.color = Some(color);
+        }
+    }
+    if marks.contains(&Mark::H) {
+        let highlight = look
+            .hl
+            .as_deref()
+            .and_then(projection::highlight_of)
+            .unwrap_or(Highlight::Yellow);
+        if shown(&props).highlight != highlight.rgb() {
+            props.highlight = None;
+            if shown(&props).highlight != highlight.rgb() {
+                props.highlight = Some(highlight);
+            }
         }
     }
     props
@@ -539,5 +1346,7 @@ fn set(props: &mut CharProps, mark: Mark, on: Option<bool>) {
                 Some(false) => Some(VertAlign::Baseline),
             };
         }
+        Mark::Caps => props.caps = on,
+        Mark::SmallCaps => props.small_caps = on,
     }
 }

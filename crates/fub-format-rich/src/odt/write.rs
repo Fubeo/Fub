@@ -9,7 +9,9 @@
 //! - un paragrafo riprende il proprio tag; se il ruolo cambia cambiano
 //!   l'elemento (`text:p`, `text:h`), lo stile (uno stile automatico si copia
 //!   con il genitore nuovo, così la sua formattazione diretta resta) e gli
-//!   elenchi che lo contengono;
+//!   elenchi che lo contengono; uno stile scelto cambia allo stesso modo, e
+//!   un allineamento o una disposizione diversi da quelli mostrati diventano
+//!   uno stile automatico `FubP<n>`, o la copia di quello che c'era;
 //! - un tratto riprende i propri involucri; un'enfasi diversa da quella che
 //!   chi scrive vedeva diventa uno stile automatico `FubT<n>` attorno al testo;
 //! - un oggetto riprende il proprio XML, purché il documento lo avesse;
@@ -27,11 +29,15 @@ use super::keys::{
     self, name_of, opening, AtomKey, CellKey, Level, ParaKey, RowKey, RunKey, TableKey,
 };
 use super::read::{self, inner, Body, Unit};
-use super::styles::{Def, LevelKind, Position, Styles, TextProps};
-use super::xml::{self, Tree};
-use crate::blob;
-use crate::projection::{AtomKind, Block, Cell, Inline, Mark, Para, Role, Row, Table};
+use super::styles::{
+    self as odt_styles, Def, LevelKind, ParaChange, Position, Size, Styles, TextProps,
+};
+use super::xml::{self, escape_text, Tree};
+use crate::projection::{
+    self, Align, AtomKind, Block, Cell, Inline, Line, Look, Mark, Para, Role, Row, Table,
+};
 use crate::RichError;
+use crate::{blob, fresh};
 
 /// Oltre questo prodotto di lunghezze l'allineamento non cerca la
 /// sottosequenza comune nel mezzo: accoppia per posizione.
@@ -53,6 +59,8 @@ pub(crate) struct Output {
     /// Ciò che il file nuovo deve mostrare: i blocchi voluti, con l'enfasi che
     /// gli stili scritti danno davvero.
     pub expected: Vec<Block>,
+    /// Le immagini nuove da mettere nel pacchetto: percorso, tipo e byte.
+    pub pictures: Vec<(String, &'static str, Vec<u8>)>,
 }
 
 /// Scrive `blocks` sul documento `base`. Con `force` non riusa niente e
@@ -68,6 +76,7 @@ pub(crate) fn write(base: &Base, blocks: &[Block], force: bool) -> Result<Output
         content,
         styles,
         expected: writer.expected,
+        pictures: writer.pictures,
     })
 }
 
@@ -83,7 +92,18 @@ struct Writer<'a> {
     seen: HashSet<String>,
     atoms: HashMap<String, usize>,
     used: HashMap<String, usize>,
-    tables: Vec<(String, Vec<String>)>,
+    /// Le tabelle di partenza: chiave, chiavi delle righe e colonne.
+    tables: Vec<(Option<String>, Vec<Option<String>>, usize)>,
+    /// Lo stile delle celle delle tabelle nuove, una volta scritto.
+    grid_cell: Option<String>,
+    /// Le tabelle nuove già nominate.
+    named: usize,
+    /// Le immagini e le note nuove già nominate.
+    framed: usize,
+    noted: usize,
+    /// Le note nuove a piè di pagina e di chiusura già scritte.
+    cited: [usize; 2],
+    pictures: Vec<(String, &'static str, Vec<u8>)>,
     expected: Vec<Block>,
 }
 
@@ -108,6 +128,120 @@ fn style_attr(attrs: &[(String, String)]) -> Option<String> {
         .iter()
         .find(|(k, _)| k == "text:style-name")
         .map(|(_, v)| v.clone())
+}
+
+/// Le colonne che le righe di una tabella occupano, celle coperte comprese.
+fn width(table: &Table) -> Result<usize, RichError> {
+    let covered = |xml: &str| xml.matches("<table:covered-table-cell").count();
+    let mut width = 0;
+    for row in &table.rows {
+        let mut n = match &row.k {
+            Some(k) => covered(&blob::decode::<RowKey>(k)?.lead),
+            None => 0,
+        };
+        for cell in &row.cells {
+            let span = cell.span.unwrap_or(1) as usize;
+            n += match &cell.k {
+                // Le celle coperte che seguono, tolte quelle di uno span che
+                // la shell ha cambiato.
+                Some(k) => {
+                    let key = blob::decode::<CellKey>(k)?;
+                    (1 + covered(&key.tail) + span).saturating_sub(spanned(&key.open))
+                }
+                None => span,
+            };
+        }
+        width = width.max(n);
+    }
+    Ok(width)
+}
+
+/// Le colonne che una cella dice di coprire.
+fn spanned(open: &str) -> usize {
+    keys::tag(open)
+        .and_then(|(_, attrs)| {
+            attr(&attrs, "table:number-columns-spanned").and_then(|n| n.parse().ok())
+        })
+        .unwrap_or(1)
+        .max(1)
+}
+
+/// Una cella a cui la shell ha cambiato le colonne coperte (unendo o
+/// dividendo celle): lo span nel tag e le celle coperte che la seguono.
+/// Con celle unite anche in altezza le celle coperte non sono soltanto sue,
+/// e una coperta che ha un contenuto lo perderebbe: in quei casi no.
+fn respan(mut key: CellKey, span: usize, movable: bool) -> Result<CellKey, RichError> {
+    if span == spanned(&key.open) {
+        return Ok(key);
+    }
+    if span == 0 || span > wordcraft_doc::table::MAX_COLS {
+        return Err(RichError::Malformed(
+            "a cell spanning no or too many columns".into(),
+        ));
+    }
+    if !movable || key.tail.contains("</table:covered-table-cell>") {
+        return Err(RichError::Codec(
+            "odt: cells of a table with cells merged across rows cannot be merged or split".into(),
+        ));
+    }
+    let Some((name, mut attrs)) = keys::tag(&key.open) else {
+        return Err(RichError::Malformed("a table cell".into()));
+    };
+    let wanted = (span > 1).then(|| span.to_string());
+    set_attr(&mut attrs, "table:number-columns-spanned", wanted);
+    key.open = xml::open_tag(&name, &attrs, key.open.ends_with("/>"));
+    let mut tail = key.tail.as_str();
+    let mut kept = String::new();
+    while let Some(at) = tail.find("<table:covered-table-cell") {
+        let end = at + tail[at..].find('>').map_or(tail.len() - at, |e| e + 1);
+        kept.push_str(&tail[..at]);
+        tail = &tail[end..];
+    }
+    kept.push_str(tail);
+    key.tail = "<table:covered-table-cell/>".repeat(span - 1) + &kept;
+    Ok(key)
+}
+
+/// Le colonne di una tabella a cui la shell ne ha aggiunte (`delta` positivo)
+/// o tolte. Colonne tutte uguali si riscrivono, quante servono; fra colonne
+/// diverse non si sa quale sia cambiata, e il salvataggio lo rifiuta.
+fn columns(head: &str, delta: isize) -> Result<String, RichError> {
+    let mut had = 0;
+    let mut same: Option<Option<Vec<(String, String)>>> = None;
+    let mut rest = head.trim_start();
+    while let Some(end) = rest.starts_with('<').then(|| rest.find('>')).flatten() {
+        let tag = &rest[..=end];
+        rest = rest[end + 1..].trim_start();
+        let Some((name, mut attrs)) = keys::tag(tag) else {
+            same = Some(None);
+            continue;
+        };
+        if name != "table:table-column" {
+            same = Some(None);
+            continue;
+        }
+        had += attr(&attrs, "table:number-columns-repeated")
+            .and_then(|n| n.parse::<usize>().ok())
+            .unwrap_or(1);
+        set_attr(&mut attrs, "table:number-columns-repeated", None);
+        let plain = tag.ends_with("/>").then_some(attrs);
+        same = match same {
+            None => Some(plain),
+            Some(seen) => Some(seen.filter(|seen| Some(seen) == plain.as_ref())),
+        };
+    }
+    let width = had as isize + delta;
+    match same {
+        Some(Some(mut attrs)) if rest.is_empty() && width >= 1 => {
+            if width > 1 {
+                attrs.push(("table:number-columns-repeated".into(), width.to_string()));
+            }
+            Ok(xml::open_tag("table:table-column", &attrs, true))
+        }
+        _ => Err(RichError::Codec(
+            "odt: columns of a table whose columns differ cannot be added or removed".into(),
+        )),
+    }
 }
 
 fn set_attr(attrs: &mut Vec<(String, String)>, key: &str, value: Option<String>) {
@@ -174,8 +308,71 @@ fn href_of(wrap: &[String]) -> Option<String> {
     })
 }
 
-/// Le proprietà che portano l'enfasi da `shown` a `want`.
-fn diff(want: &BTreeSet<Mark>, shown: &BTreeSet<Mark>) -> TextProps {
+/// L'aspetto voluto, senza i valori che sono già quelli di `plain`, il testo
+/// del paragrafo senza involucri: due forme dello stesso aspetto diventano una.
+fn relative(look: &Look, plain: &TextProps) -> Look {
+    let plain_color = plain
+        .color
+        .clone()
+        .unwrap_or_else(|| projection::COLOR_AUTO.into());
+    Look {
+        font: look
+            .font
+            .clone()
+            .filter(|font| Some(font) != plain.font.as_ref()),
+        size: look.size.filter(|size| {
+            !plain
+                .points()
+                .is_some_and(|p| projection::same_size(*size, p))
+        }),
+        color: look.color.clone().filter(|color| *color != plain_color),
+        hl: look
+            .hl
+            .clone()
+            .filter(|hl| hl != projection::HIGHLIGHT_DEFAULT),
+    }
+}
+
+/// Le proprietà che portano il testo da `shown` all'enfasi `want` e
+/// all'aspetto `look`, relativo a `plain`.
+fn diff(want: &BTreeSet<Mark>, look: &Look, plain: &TextProps, shown: &TextProps) -> TextProps {
+    let mut out = diff_marks(want, &shown.marks().into_iter().collect());
+    let target = look.clone();
+    let font = target.font.or_else(|| plain.font.clone());
+    if font.is_some() && font != shown.font {
+        out.font = font;
+    }
+    let size = target.size.or_else(|| plain.points());
+    if let Some(size) = size {
+        if !shown
+            .points()
+            .is_some_and(|p| projection::same_size(p, size))
+        {
+            out.size = Some(Size::Points(size));
+        }
+    }
+    let color_of = |p: &TextProps| {
+        p.color
+            .clone()
+            .unwrap_or_else(|| projection::COLOR_AUTO.into())
+    };
+    let color = target.color.unwrap_or_else(|| color_of(plain));
+    if color != color_of(shown) {
+        out.color = Some(color);
+    }
+    if want.contains(&Mark::H) {
+        let hl = target
+            .hl
+            .unwrap_or_else(|| projection::HIGHLIGHT_DEFAULT.into());
+        if shown.highlight != Some(true) || shown.background.as_deref() != Some(hl.as_str()) {
+            out.highlight = Some(true);
+            out.background = Some(hl);
+        }
+    }
+    out
+}
+
+fn diff_marks(want: &BTreeSet<Mark>, shown: &BTreeSet<Mark>) -> TextProps {
     let flip =
         |mark: Mark| (want.contains(&mark) != shown.contains(&mark)).then(|| want.contains(&mark));
     let position = [Mark::Sup, Mark::Sub]
@@ -197,6 +394,9 @@ fn diff(want: &BTreeSet<Mark>, shown: &BTreeSet<Mark>) -> TextProps {
         strike: flip(Mark::S),
         highlight: flip(Mark::H),
         position,
+        caps: flip(Mark::Caps),
+        small_caps: flip(Mark::SmallCaps),
+        ..TextProps::default()
     }
 }
 
@@ -233,7 +433,13 @@ fn text_properties(props: &TextProps) -> String {
         None => {}
     }
     match props.highlight {
-        Some(true) => add("fo:background-color", "#ffff00"),
+        Some(true) => add(
+            "fo:background-color",
+            props
+                .background
+                .as_deref()
+                .unwrap_or(projection::HIGHLIGHT_DEFAULT),
+        ),
         Some(false) => add("fo:background-color", "transparent"),
         None => {}
     }
@@ -243,7 +449,92 @@ fn text_properties(props: &TextProps) -> String {
         Some(Position::Baseline) => add("style:text-position", "0% 100%"),
         None => {}
     }
+    if let Some(on) = props.caps {
+        add("fo:text-transform", if on { "uppercase" } else { "none" });
+    }
+    if let Some(on) = props.small_caps {
+        add("fo:font-variant", if on { "small-caps" } else { "normal" });
+    }
+    if let Some(font) = &props.font {
+        let family = if font.contains(' ') {
+            format!("'{font}'")
+        } else {
+            font.clone()
+        };
+        add("fo:font-family", &family);
+    }
+    match props.size {
+        Some(Size::Points(pt)) => add(
+            "fo:font-size",
+            &format!("{}pt", (pt * 100.0).round() / 100.0),
+        ),
+        Some(Size::Percent(p)) => add("fo:font-size", &format!("{p}%")),
+        None => {}
+    }
+    match props.color.as_deref() {
+        Some(projection::COLOR_AUTO) => add("style:use-window-font-color", "true"),
+        Some(color) => add("fo:color", color),
+        None => {}
+    }
     xml::open_tag("style:text-properties", &attrs, true)
+}
+
+/// Centimetri in punti.
+fn cm(cm: f32) -> f32 {
+    cm * 72.0 / 2.54
+}
+
+/// Porta gli attributi di `style:paragraph-properties` al cambiamento. Un
+/// `fo:margin` si scioglie nei quattro lati prima di cambiarne uno.
+fn apply(attrs: &mut Vec<(String, String)>, change: &ParaChange) {
+    let sides = [
+        ("fo:margin-left", change.left),
+        ("fo:margin-right", change.right),
+        ("fo:margin-top", change.before),
+        ("fo:margin-bottom", change.after),
+    ];
+    if sides.iter().any(|(_, c)| c.is_some()) {
+        if let Some(all) = attr(attrs, "fo:margin").map(str::to_string) {
+            set_attr(attrs, "fo:margin", None);
+            for (name, _) in sides {
+                if attr(attrs, name).is_none() {
+                    set_attr(attrs, name, Some(all.clone()));
+                }
+            }
+        }
+    }
+    for (name, c) in sides.into_iter().chain([("fo:text-indent", change.first)]) {
+        if let Some(value) = c {
+            set_attr(attrs, name, value.map(odt_styles::points));
+        }
+    }
+    if let Some(line) = change.line {
+        set_attr(attrs, "fo:line-height", None);
+        set_attr(attrs, "style:line-height-at-least", None);
+        match line {
+            Some(Line::Multiple(m)) => set_attr(
+                attrs,
+                "fo:line-height",
+                Some(format!("{}%", (m * 1000.0).round() / 10.0)),
+            ),
+            Some(Line::Exactly(pt)) => {
+                set_attr(attrs, "fo:line-height", Some(odt_styles::points(pt)))
+            }
+            Some(Line::AtLeast(pt)) => set_attr(
+                attrs,
+                "style:line-height-at-least",
+                Some(odt_styles::points(pt)),
+            ),
+            None => {}
+        }
+    }
+    if let Some(align) = change.align {
+        set_attr(
+            attrs,
+            "fo:text-align",
+            align.map(|a| odt_styles::align_value(a).to_string()),
+        );
+    }
 }
 
 /// Un paragrafo che la shell mostra vuoto in una cella vuota: ProseMirror ne
@@ -334,12 +625,18 @@ impl<'a> Writer<'a> {
             base,
             styles: base.styles.clone(),
             auto_xml: String::new(),
+            grid_cell: None,
+            named: 0,
             common_xml: String::new(),
             clones: HashMap::new(),
             seen: HashSet::new(),
             atoms: HashMap::new(),
             used: HashMap::new(),
             tables: Vec::new(),
+            framed: 0,
+            noted: 0,
+            cited: [0; 2],
+            pictures: Vec::new(),
             expected: Vec::new(),
         };
         let blocks = base.body.blocks();
@@ -353,7 +650,7 @@ impl<'a> Writer<'a> {
             match block {
                 Block::Para(p) => {
                     for inline in &p.c {
-                        if let Inline::Atom { k, .. } = inline {
+                        if let Inline::Atom { k: Some(k), .. } = inline {
                             if let Ok(key) = blob::decode::<AtomKey>(k) {
                                 *self.atoms.entry(key.xml).or_default() += 1;
                             }
@@ -361,8 +658,8 @@ impl<'a> Writer<'a> {
                     }
                 }
                 Block::Table(t) => {
-                    self.tables
-                        .push((t.k.clone(), t.rows.iter().map(|r| r.k.clone()).collect()));
+                    let rows = t.rows.iter().map(|r| r.k.clone()).collect();
+                    self.tables.push((t.k.clone(), rows, width(t).unwrap_or(0)));
                     for row in &t.rows {
                         for cell in &row.cells {
                             self.inventory(&cell.blocks);
@@ -670,7 +967,84 @@ impl<'a> Writer<'a> {
 
     // ── Paragrafi ───────────────────────────────────────────────────────────
 
+    /// Il piano di un paragrafo: quello del ruolo, poi lo stile scelto, poi
+    /// allineamento e disposizione.
     fn plan(&mut self, para: &Para, prev: Option<&[Level]>) -> Result<Plan, RichError> {
+        let key: Option<ParaKey> = para.k.as_deref().map(blob::decode).transpose()?;
+        let before = key.as_ref().map(|key| read::role(&self.styles, key));
+        let mut plan = self.plan_role(para, prev)?;
+        let (name, mut attrs) = keys::tag(&plan.tag)
+            .ok_or_else(|| RichError::Malformed("odt: paragraph tag".into()))?;
+        let shown = plan.shown.clone();
+
+        let shown_s = (before == Some(Role::Body))
+            .then(|| self.styles.common_of(shown.as_deref()))
+            .flatten();
+        if para.role == Role::Body && para.s.as_deref() != shown_s.as_deref() {
+            let target = match para.s.as_deref() {
+                Some(id) if self.styles.common("paragraph", id) => Some(Some(id.to_string())),
+                Some(_) => None,
+                None => Some(None),
+            };
+            if let Some(target) = target {
+                self.restyle(&mut attrs, target)?;
+                plan.kept = false;
+            }
+        }
+
+        let current = style_attr(&attrs);
+        let common = self.styles.common_of(current.as_deref());
+        let plain = self.styles.para(common.as_deref());
+        let plain_align = self.styles.align(common.as_deref());
+        let shown_layout = self.styles.layout(shown.as_deref());
+        let left = |a: Option<Align>| a.filter(|a| *a != Align::Left);
+        let mut change = ParaChange::default();
+        if left(para.align) != self.styles.align(shown.as_deref()) {
+            let want = left(para.align);
+            change.align = Some((want != plain_align).then(|| want.unwrap_or(Align::Left)));
+        }
+        let length = |want: Option<f32>, shown: Option<f32>, plain: Option<f32>| {
+            (want != shown).then(|| {
+                let plain = plain.unwrap_or(0.0);
+                let target = want.unwrap_or(plain);
+                (!projection::same_size(target, plain)).then_some(target)
+            })
+        };
+        let want = &para.p;
+        change.left = length(want.left, shown_layout.left, plain.left);
+        change.right = length(want.right, shown_layout.right, plain.right);
+        change.first = length(want.first, shown_layout.first, plain.first);
+        change.before = length(want.before, shown_layout.before, plain.before);
+        change.after = length(want.after, shown_layout.after, plain.after);
+        if want.line != shown_layout.line {
+            let plain = plain.line.unwrap_or(Line::Multiple(1.0));
+            let target = want.line.unwrap_or(plain);
+            change.line = Some((!target.same(plain)).then_some(target));
+        }
+        if !change.is_empty() {
+            let automatic = current
+                .as_deref()
+                .filter(|c| self.styles.get("paragraph", c).is_some_and(|d| d.automatic))
+                .map(str::to_string);
+            let value = match automatic {
+                Some(auto) => {
+                    let parent = self
+                        .styles
+                        .get("paragraph", &auto)
+                        .and_then(|d| d.parent.clone());
+                    Some(self.clone_para_with(&auto, parent, Some(&change))?)
+                }
+                None if change.only_clears() => current,
+                None => Some(self.para_style(current, &change)),
+            };
+            set_attr(&mut attrs, "text:style-name", value);
+        }
+        plan.style = style_attr(&attrs);
+        plan.tag = keys::rebuild(&name, &attrs);
+        Ok(plan)
+    }
+
+    fn plan_role(&mut self, para: &Para, prev: Option<&[Level]>) -> Result<Plan, RichError> {
         let key: Option<ParaKey> = para.k.as_deref().map(blob::decode).transpose()?;
         let before = key.as_ref().map(|key| read::role(&self.styles, key));
         if let (Some(key), Some(before)) = (&key, before) {
@@ -827,17 +1201,26 @@ impl<'a> Writer<'a> {
             .filter(|c| self.styles.get("paragraph", c).is_some_and(|d| d.automatic))
             .map(str::to_string);
         let value = match automatic {
-            Some(auto) => Some(self.clone_para(&auto, target)?),
+            Some(auto) => Some(self.clone_para_with(&auto, target, None)?),
             None => target,
         };
         set_attr(attrs, "text:style-name", value);
         Ok(())
     }
 
-    fn clone_para(&mut self, auto: &str, parent: Option<String>) -> Result<String, RichError> {
+    /// Copia lo stile automatico `auto` col genitore `parent` e, se c'è, la
+    /// disposizione cambiata.
+    fn clone_para_with(
+        &mut self,
+        auto: &str,
+        parent: Option<String>,
+        change: Option<&ParaChange>,
+    ) -> Result<String, RichError> {
         let key = (auto.to_string(), parent.clone());
-        if let Some(name) = self.clones.get(&key) {
-            return Ok(name.clone());
+        if change.is_none() {
+            if let Some(name) = self.clones.get(&key) {
+                return Ok(name.clone());
+            }
         }
         let tree = self.base.content;
         let container = tree
@@ -856,15 +1239,57 @@ impl<'a> Writer<'a> {
         set_attr(&mut attrs, "style:name", Some(name.clone()));
         set_attr(&mut attrs, "style:parent-style-name", parent.clone());
         let span = tree.nodes[id].span.clone();
-        if element.open == span {
-            self.auto_xml
-                .push_str(&xml::open_tag("style:style", &attrs, true));
-        } else {
-            self.auto_xml
-                .push_str(&xml::open_tag("style:style", &attrs, false));
-            self.auto_xml.push_str(&String::from_utf8_lossy(
-                &tree.source[element.open.end..span.end],
-            ));
+        let raw = |range: Range<usize>| String::from_utf8_lossy(&tree.source[range]).into_owned();
+        match change {
+            None if element.open == span => {
+                self.auto_xml
+                    .push_str(&xml::open_tag("style:style", &attrs, true))
+            }
+            None => {
+                self.auto_xml
+                    .push_str(&xml::open_tag("style:style", &attrs, false));
+                self.auto_xml.push_str(&raw(element.open.end..span.end));
+            }
+            Some(change) => {
+                let mut out = xml::open_tag("style:style", &attrs, false);
+                let props = tree
+                    .elements(id)
+                    .find(|(_, e)| e.name == "style:paragraph-properties");
+                match props {
+                    Some((pid, props)) => {
+                        let pspan = tree.nodes[pid].span.clone();
+                        let mut pattrs = props.attrs.clone();
+                        apply(&mut pattrs, change);
+                        out.push_str(&raw(element.open.end..pspan.start));
+                        if props.open == pspan {
+                            out.push_str(&xml::open_tag(
+                                "style:paragraph-properties",
+                                &pattrs,
+                                true,
+                            ));
+                        } else {
+                            out.push_str(&xml::open_tag(
+                                "style:paragraph-properties",
+                                &pattrs,
+                                false,
+                            ));
+                            out.push_str(&raw(props.open.end..pspan.end));
+                        }
+                        out.push_str(&raw(pspan.end..span.end));
+                    }
+                    None => {
+                        let mut pattrs = Vec::new();
+                        apply(&mut pattrs, change);
+                        out.push_str(&xml::open_tag("style:paragraph-properties", &pattrs, true));
+                        if element.open == span {
+                            out.push_str("</style:style>");
+                        } else {
+                            out.push_str(&raw(element.open.end..span.end));
+                        }
+                    }
+                }
+                self.auto_xml.push_str(&out);
+            }
         }
         let mut def = self
             .styles
@@ -873,9 +1298,54 @@ impl<'a> Writer<'a> {
             .unwrap_or_default();
         def.parent = parent;
         def.automatic = true;
+        if let Some(change) = change {
+            def.para = def.para.changed(change);
+            def.align = change.align.unwrap_or(def.align);
+        } else {
+            self.clones.insert(key, name.clone());
+        }
         self.styles.define("paragraph", &name, def);
-        self.clones.insert(key, name.clone());
         Ok(name)
+    }
+
+    /// Uno stile automatico nuovo di genitore `parent` con soltanto la
+    /// disposizione `change`, o quello uguale già scritto.
+    fn para_style(&mut self, parent: Option<String>, change: &ParaChange) -> String {
+        let para = odt_styles::ParaProps::default().changed(change);
+        let align = change.align.flatten();
+        if let Some(name) = self
+            .styles
+            .find_para("FubP", parent.as_deref(), &para, align)
+        {
+            return name;
+        }
+        let name = self.styles.fresh("FubP");
+        let mut attrs = vec![
+            ("style:name".to_string(), name.clone()),
+            ("style:family".to_string(), "paragraph".to_string()),
+        ];
+        if let Some(parent) = &parent {
+            attrs.push(("style:parent-style-name".into(), parent.clone()));
+        }
+        let mut pattrs = Vec::new();
+        apply(&mut pattrs, change);
+        self.auto_xml.push_str(&format!(
+            "{}{}</style:style>",
+            xml::open_tag("style:style", &attrs, false),
+            xml::open_tag("style:paragraph-properties", &pattrs, true)
+        ));
+        self.styles.define(
+            "paragraph",
+            &name,
+            Def {
+                parent,
+                para,
+                align,
+                automatic: true,
+                ..Def::default()
+            },
+        );
+        name
     }
 
     fn body_style(&self) -> Option<String> {
@@ -924,6 +1394,11 @@ impl<'a> Writer<'a> {
                 ..TextProps::default()
             },
             outline_level: Some(level),
+            para: odt_styles::ParaProps {
+                before: Some(cm(0.423)),
+                after: Some(cm(0.212)),
+                ..odt_styles::ParaProps::default()
+            },
             ..Def::default()
         };
         self.styles.define("paragraph", &name, def);
@@ -942,7 +1417,22 @@ impl<'a> Writer<'a> {
              fo:margin-right=\"1cm\" fo:margin-top=\"0cm\" fo:margin-bottom=\"0.283cm\" \
              fo:text-indent=\"0cm\" style:auto-text-indent=\"false\"/></style:style>",
         );
-        self.styles.define("paragraph", name, Def::default());
+        let para = odt_styles::ParaProps {
+            left: Some(cm(1.0)),
+            right: Some(cm(1.0)),
+            first: Some(0.0),
+            before: Some(0.0),
+            after: Some(cm(0.283)),
+            line: None,
+        };
+        self.styles.define(
+            "paragraph",
+            name,
+            Def {
+                para,
+                ..Def::default()
+            },
+        );
         Ok(name.to_string())
     }
 
@@ -999,6 +1489,20 @@ impl<'a> Writer<'a> {
     }
 
     fn para(&mut self, para: &Para, plan: &Plan, out: &mut String) -> Result<Para, RichError> {
+        // Le revisioni tracciate un `.odt` di Fub non le legge e non le
+        // scrive: una proiezione che ne porta non viene da qui.
+        if para.ins.is_some()
+            || para.del.is_some()
+            || para.c.iter().any(|inline| match inline {
+                Inline::Text { ins, del, .. } | Inline::Atom { ins, del, .. } => {
+                    ins.is_some() || del.is_some()
+                }
+            })
+        {
+            return Err(RichError::Codec(
+                "odt: tracked changes are not written".into(),
+            ));
+        }
         let tag = self.fresh(&plan.tag, false);
         out.push_str(&tag);
         let mut stack: Vec<String> = Vec::new();
@@ -1006,7 +1510,9 @@ impl<'a> Writer<'a> {
         let mut expected = Vec::new();
         for inline in &para.c {
             match inline {
-                Inline::Text { x, k, m, href } => {
+                Inline::Text {
+                    x, k, m, href, f, ..
+                } => {
                     if x.is_empty() {
                         continue;
                     }
@@ -1016,21 +1522,21 @@ impl<'a> Writer<'a> {
                     };
                     self.link(&mut wrap, href.as_deref());
                     let want: BTreeSet<Mark> = m.iter().copied().collect();
-                    let shown: BTreeSet<Mark> = self
-                        .styles
-                        .text(plan.shown.as_deref(), &layers(&wrap))
-                        .marks()
-                        .into_iter()
-                        .collect();
-                    if want != shown {
-                        let name = self.text_style(diff(&want, &shown));
+                    let plain = self.styles.text(plan.shown.as_deref(), &[]);
+                    let look = relative(f, &plain);
+                    let shown = self.styles.text(plan.shown.as_deref(), &layers(&wrap));
+                    let change = diff(&want, &look, &plain, &shown);
+                    if change != TextProps::default() {
+                        let name = self.text_style(change);
                         wrap.push(format!("<text:span text:style-name=\"{}\">", quoted(&name)));
                     }
-                    let got = self
-                        .styles
-                        .text(plan.style.as_deref(), &layers(&wrap))
-                        .marks();
-                    if plan.kept && got.iter().copied().collect::<BTreeSet<_>>() != want {
+                    let got_props = self.styles.text(plan.style.as_deref(), &layers(&wrap));
+                    let got_look = got_props.look(&self.styles.text(plan.style.as_deref(), &[]));
+                    let got = got_props.marks();
+                    if plan.kept
+                        && (got.iter().copied().collect::<BTreeSet<_>>() != want
+                            || got_look != look)
+                    {
                         return Err(RichError::Fidelity);
                     }
                     sync(&mut stack, &wrap, out);
@@ -1040,24 +1546,62 @@ impl<'a> Writer<'a> {
                         k: None,
                         m: got,
                         href: href_of(&wrap),
+                        f: got_look,
+                        ins: None,
+                        del: None,
                     });
                 }
-                Inline::Atom { k, .. } => {
+                Inline::Atom { k: Some(k), .. } => {
                     let key: AtomKey = blob::decode(k)?;
                     sync(&mut stack, &key.wrap, out);
                     out.push_str(&key.xml);
                     space_ok = false;
                     expected.push(inline.clone());
                 }
+                Inline::Atom { k: None, .. } => {
+                    let (kind, xml) = self.new_atom(inline)?;
+                    sync(&mut stack, &[], out);
+                    out.push_str(&xml);
+                    space_ok = false;
+                    expected.push(Inline::Atom {
+                        k: Some(blob::encode(&AtomKey {
+                            wrap: Vec::new(),
+                            xml,
+                        })?),
+                        kind,
+                        label: String::new(),
+                        w: None,
+                        h: None,
+                        data: None,
+                        note: None,
+                        end: false,
+                        toc: None,
+                        comment: None,
+                        ins: None,
+                        del: None,
+                    });
+                }
             }
         }
         sync(&mut stack, &[], out);
         out.push_str(&format!("</{}>", name_of(&plan.tag)));
+        let style = plan.style.as_deref();
         Ok(Para {
             role: para.role,
-            align: None,
+            align: self.styles.align(style),
             k: None,
             sect: None,
+            page: None,
+            header: None,
+            footer: None,
+            p: self.styles.layout(style),
+            s: (para.role == Role::Body)
+                .then(|| self.styles.common_of(style))
+                .flatten()
+                .map(String::into_boxed_str),
+            f: Box::default(),
+            ins: None,
+            del: None,
             c: expected,
         })
     }
@@ -1103,7 +1647,11 @@ impl<'a> Writer<'a> {
             match block {
                 Block::Para(p) => {
                     for inline in &p.c {
-                        if let Inline::Atom { k, kind, .. } = inline {
+                        // Uno nuovo lo controlla chi lo scrive.
+                        if let Inline::Atom {
+                            k: Some(k), kind, ..
+                        } = inline
+                        {
                             self.check_atom(&blob::decode(k)?, *kind)?;
                         }
                     }
@@ -1140,14 +1688,18 @@ impl<'a> Writer<'a> {
     // ── Tabelle ─────────────────────────────────────────────────────────────
 
     fn table(&mut self, table: &Table, out: &mut String) -> Result<Table, RichError> {
-        let key: TableKey = blob::decode(&table.k)?;
+        let fresh = table.k.is_none();
+        let key: TableKey = match &table.k {
+            Some(k) => blob::decode(k)?,
+            None => self.new_table(table),
+        };
         if !key.rows {
             let base = self
                 .tables
                 .iter()
-                .find(|(k, _)| *k == table.k)
+                .find(|(k, ..)| *k == table.k)
                 .ok_or_else(|| RichError::Missing("a table".into()))?;
-            let rows: Vec<&String> = table.rows.iter().map(|r| &r.k).collect();
+            let rows: Vec<&Option<String>> = table.rows.iter().map(|r| &r.k).collect();
             if rows.len() != base.1.len() || rows.iter().zip(&base.1).any(|(a, b)| *a != b) {
                 return Err(RichError::Codec(
                     "odt: rows of a table with cells merged across rows cannot be added, \
@@ -1160,12 +1712,29 @@ impl<'a> Writer<'a> {
             return Err(RichError::Malformed("table without rows or cells".into()));
         }
         out.push_str(&self.fresh(&key.open, false));
-        out.push_str(&key.head);
+        // Le colonne cambiano se la shell ne ha aggiunte o tolte rispetto alla
+        // tabella di partenza, non se il file le dichiarava male.
+        let had = self.tables.iter().find(|(k, ..)| *k == table.k);
+        let delta = match had {
+            Some((.., had)) if !fresh => width(table)? as isize - *had as isize,
+            _ => 0,
+        };
+        match delta {
+            0 => out.push_str(&key.head),
+            delta => out.push_str(&columns(&key.head, delta)?),
+        }
         let mut header = false;
         let mut headers_done = false;
         let mut rows = Vec::new();
         for row in &table.rows {
-            let rk: RowKey = blob::decode(&row.k)?;
+            let rk: RowKey = match &row.k {
+                Some(k) => blob::decode(k)?,
+                None => RowKey {
+                    open: "<table:table-row>".into(),
+                    header: false,
+                    lead: String::new(),
+                },
+            };
             if rk.header != header {
                 if rk.header {
                     if headers_done {
@@ -1184,7 +1753,21 @@ impl<'a> Writer<'a> {
             out.push_str(&rk.lead);
             let mut cells = Vec::new();
             for cell in &row.cells {
-                let ck: CellKey = blob::decode(&cell.k)?;
+                let ck: CellKey = match &cell.k {
+                    Some(k) => blob::decode(k)?,
+                    None => CellKey {
+                        open: match fresh {
+                            true => format!(
+                                "<table:table-cell table:style-name=\"{}\" \
+                                 office:value-type=\"string\">",
+                                self.grid_cell()
+                            ),
+                            false => "<table:table-cell office:value-type=\"string\">".into(),
+                        },
+                        tail: String::new(),
+                    },
+                };
+                let ck = respan(ck, cell.span.unwrap_or(1) as usize, key.rows)?;
                 let blocks = if bare_cell(&cell.blocks) {
                     if ck.open.ends_with("/>") {
                         out.push_str(&ck.open);
@@ -1202,6 +1785,7 @@ impl<'a> Writer<'a> {
                 out.push_str(&ck.tail);
                 cells.push(Cell {
                     k: cell.k.clone(),
+                    span: cell.span,
                     blocks,
                 });
             }
@@ -1219,6 +1803,137 @@ impl<'a> Writer<'a> {
             k: table.k.clone(),
             rows,
         })
+    }
+
+    /// Una tabella nuova: un nome che il documento non ha, una colonna per
+    /// cella della riga più lunga, come la griglia di Word.
+    fn new_table(&mut self, table: &Table) -> TableKey {
+        let cols = table.rows.iter().map(|row| row.cells.len()).max();
+        let repeated = match cols.unwrap_or(1) {
+            0 | 1 => String::new(),
+            n => format!(" table:number-columns-repeated=\"{n}\""),
+        };
+        let source = String::from_utf8_lossy(&self.base.content.source);
+        let name = loop {
+            self.named += 1;
+            let name = format!("Tabella{}", self.named);
+            if !source.contains(&format!("table:name=\"{name}\"")) {
+                break name;
+            }
+        };
+        TableKey {
+            open: format!("<table:table table:name=\"{name}\">"),
+            head: format!("<table:table-column{repeated}/>"),
+            rows: true,
+        }
+    }
+
+    /// L'XML di un oggetto nuovo: un'immagine in una cornice nel testo, con
+    /// il file fra le immagini del pacchetto, o una nota con il suo testo.
+    fn new_atom(&mut self, atom: &Inline) -> Result<(AtomKind, String), RichError> {
+        let source = String::from_utf8_lossy(&self.base.content.source).into_owned();
+        match atom {
+            Inline::Atom {
+                kind: AtomKind::Image,
+                data: Some(data),
+                note: None,
+                end: false,
+                toc: None,
+                label,
+                w,
+                h,
+                ..
+            } => {
+                let image = fresh::image(data, *w, *h)?;
+                let path = format!("Pictures/{}", image.name());
+                let name = loop {
+                    self.framed += 1;
+                    let name = format!("Immagine{}", self.framed);
+                    if !source.contains(&format!("draw:name=\"{name}\"")) {
+                        break name;
+                    }
+                };
+                let mut xml = format!(
+                    "<draw:frame draw:name=\"{name}\" text:anchor-type=\"as-char\" \
+                     svg:width=\"{:.2}pt\" svg:height=\"{:.2}pt\" draw:z-index=\"0\">\
+                     <draw:image xlink:href=\"{path}\" xlink:type=\"simple\" \
+                     xlink:show=\"embed\" xlink:actuate=\"onLoad\"/>",
+                    image.w, image.h
+                );
+                if !label.is_empty() {
+                    xml.push_str("<svg:title>");
+                    escape_text(label, &mut xml);
+                    xml.push_str("</svg:title>");
+                }
+                xml.push_str("</draw:frame>");
+                if !self.pictures.iter().any(|(p, ..)| *p == path) {
+                    self.pictures.push((path, image.mime, image.bytes));
+                }
+                Ok((AtomKind::Image, xml))
+            }
+            Inline::Atom {
+                kind: AtomKind::Note,
+                data: None,
+                note: Some(text),
+                end,
+                toc: None,
+                ..
+            } => {
+                let text = fresh::note(text)?;
+                let (class, prefix, style) = if *end {
+                    ("endnote", "edn", "Endnote")
+                } else {
+                    ("footnote", "ftn", "Footnote")
+                };
+                let id = loop {
+                    self.noted += 1;
+                    let id = format!("{prefix}{}", self.noted);
+                    if !source.contains(&format!("text:id=\"{id}\"")) {
+                        break id;
+                    }
+                };
+                // Il numero lo ricalcola chi apre il file: qui basta che ci sia.
+                let cited = &mut self.cited[usize::from(*end)];
+                *cited += 1;
+                let citation = source
+                    .matches(&format!("text:note-class=\"{class}\""))
+                    .count()
+                    + *cited;
+                let style = if self.styles.common("paragraph", style) {
+                    format!(" text:style-name=\"{style}\"")
+                } else {
+                    String::new()
+                };
+                let mut xml = format!(
+                    "<text:note text:id=\"{id}\" text:note-class=\"{class}\">\
+                     <text:note-citation>{citation}</text:note-citation>\
+                     <text:note-body><text:p{style}>"
+                );
+                let mut space_ok = false;
+                self::text(text, &mut space_ok, &mut xml)?;
+                xml.push_str("</text:p></text:note-body></text:note>");
+                Ok((AtomKind::Note, xml))
+            }
+            _ => Err(RichError::Malformed(
+                "an object that is neither kept nor a new image or note".into(),
+            )),
+        }
+    }
+
+    /// Lo stile delle celle di una tabella nuova: il bordo sottile della
+    /// griglia di Word.
+    fn grid_cell(&mut self) -> String {
+        if let Some(name) = &self.grid_cell {
+            return name.clone();
+        }
+        let name = self.styles.fresh("FubC");
+        self.auto_xml.push_str(&format!(
+            "<style:style style:name=\"{name}\" style:family=\"table-cell\">\
+             <style:table-cell-properties fo:padding=\"0.04in\" \
+             fo:border=\"0.5pt solid #000000\"/></style:style>"
+        ));
+        self.grid_cell = Some(name.clone());
+        name
     }
 
     // ── Le parti ───────────────────────────────────────────────────────────

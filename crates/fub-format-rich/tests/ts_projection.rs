@@ -18,10 +18,15 @@ mod common;
 use std::path::PathBuf;
 
 use common::{bytes, sample, text};
-use fub_format_rich::projection::{Block, Inline, Mark, Projection, Role};
+use fub_format_rich::projection::{
+    Align, AtomKind, Block, Inline, Layout, Line, Look, Mark, PageField, Piece, Projection, Role,
+};
 use fub_format_rich::{open, save, Codec, Saved};
 use serde_json::{json, Value};
-use wordcraft_doc::{para_block, CharProps, Document, SectionProps};
+use wordcraft_doc::{
+    para_block, CharProps, Comment, Document, InlineObject, Paragraph, PartKind, Revision,
+    RevisionKind, SectionProps,
+};
 
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -30,9 +35,30 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 /// L'esempio comune, con ciò che serve in più alla superficie: un salto
-/// pagina in un paragrafo, la fine di una sezione e un ultimo paragrafo.
+/// pagina in un paragrafo, la fine di una sezione, un paragrafo con
+/// revisioni tracciate, uno con un commento, un ultimo paragrafo e
+/// l'intestazione con il numero di pagina.
 fn document() -> Document {
     let mut d = sample();
+    // L'intestazione dell'ultima sezione, con il numero di pagina.
+    let mut header = text("Lettera — pagina ", CharProps::default());
+    let at = header.len();
+    header
+        .insert_object(
+            at,
+            InlineObject::Field {
+                instr: "PAGE".into(),
+                result: "1".into(),
+                locked: false,
+                dirty: false,
+                code: false,
+                form: String::new(),
+            },
+            &CharProps::default(),
+        )
+        .unwrap();
+    let header = d.add_part(PartKind::Header, vec![para_block(header)]);
+    d.last_section.headers.default = Some(header);
     d.body.push(para_block(text(
         "Prima\u{c}dopo il salto",
         CharProps::default(),
@@ -40,6 +66,65 @@ fn document() -> Document {
     let mut end = text("Fine della prima sezione", CharProps::default());
     end.section = Some(Box::new(SectionProps::default()));
     d.body.push(para_block(end));
+    d.revisions = vec![
+        Revision::new(RevisionKind::Insert, "Ada", "2026-10-18T10:00:00Z"),
+        Revision::new(RevisionKind::Delete, "Bea", "2026-10-18T11:00:00Z"),
+    ];
+    let mut tracked = Paragraph::new();
+    tracked.mark.ins = Some(0);
+    for (piece, ins, del) in [
+        ("Revisione: ", None, None),
+        ("nuova", Some(0), None),
+        (" ", None, None),
+        ("vecchia", None, Some(1)),
+    ] {
+        let props = CharProps {
+            ins,
+            del,
+            ..Default::default()
+        };
+        let at = tracked.len();
+        tracked.insert_text(at, piece, &props).unwrap();
+    }
+    d.body.push(para_block(tracked));
+    // Un commento su «questo passo», con una risposta.
+    for (id, author, said, parent) in [
+        (1, "Redazione", "Da rivedere.", None),
+        (2, "Ada", "Fatto.", Some(1)),
+    ] {
+        let part = d.add_part(
+            PartKind::Comment,
+            vec![para_block(text(said, CharProps::default()))],
+        );
+        d.comments.insert(
+            id,
+            Comment {
+                author: author.into(),
+                date: "2026-10-18T12:00:00Z".into(),
+                parent,
+                part,
+                ..Default::default()
+            },
+        );
+    }
+    let mut commented = text("Commento: questo passo.", CharProps::default());
+    let start = "Commento: ".len();
+    commented
+        .insert_object(
+            start,
+            InlineObject::CommentStart { id: 1 },
+            &CharProps::default(),
+        )
+        .unwrap();
+    let end = commented.len() - 1;
+    commented
+        .insert_object(
+            end,
+            InlineObject::CommentEnd { id: 1 },
+            &CharProps::default(),
+        )
+        .unwrap();
+    d.body.push(para_block(commented));
     d.body.push(para_block(text("Fine.", CharProps::default())));
     d
 }
@@ -107,6 +192,30 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
     // La parola scritta in fondo al secondo paragrafo.
     let (_, prose, _) = plain(&p.blocks, 1);
     assert!(prose.ends_with("link. Scritto dalla shell."), "{prose}");
+    // L'aspetto messo su «dalla shell».
+    let Block::Para(para) = &p.blocks[1] else {
+        unreachable!()
+    };
+    let styled = para
+        .c
+        .iter()
+        .find_map(|i| match i {
+            Inline::Text { x, m, f, .. } if x == "dalla shell" => Some((m.clone(), f.clone())),
+            _ => None,
+        })
+        .expect("il tratto con l'aspetto della shell");
+    assert_eq!(
+        styled,
+        (
+            vec![Mark::H, Mark::SmallCaps],
+            Look {
+                font: Some("Courier New".into()),
+                size: Some(18.0),
+                color: Some("#c00000".into()),
+                hl: Some("#00ffff".into()),
+            }
+        )
+    );
     // Il grassetto messo su «Figura».
     let figure = p
         .blocks
@@ -142,6 +251,212 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
         })
         .expect("la tabella");
     assert_eq!(table.rows.len(), 3);
+    // E la colonna aggiunta: tre celle in ogni riga, con le proprietà.
+    assert!(table
+        .rows
+        .iter()
+        .all(|row| row.cells.len() == 3 && row.cells.iter().all(|c| c.k.is_some())));
+    // La tabella nuova, dopo il paragrafo del salto: ora ha le sue proprietà.
+    let fresh = p
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            Block::Table(table) => Some(table),
+            _ => None,
+        })
+        .nth(1)
+        .expect("la tabella nuova");
+    assert_eq!(fresh.rows.len(), 2);
+    // La prima cella copre due colonne: due celle nella prima riga, tre
+    // nell'altra.
+    let shape: Vec<Vec<Option<u32>>> = fresh
+        .rows
+        .iter()
+        .map(|row| row.cells.iter().map(|c| c.span).collect())
+        .collect();
+    assert_eq!(shape, [vec![Some(2), None], vec![None, None, None]]);
+    assert!(fresh.k.is_some() && fresh.rows[1].cells[2].k.is_some());
+    let Block::Para(first) = &fresh.rows[0].cells[0].blocks[0] else {
+        panic!("la prima cella")
+    };
+    assert!(matches!(&first.c[..], [Inline::Text { x, .. }] if x == "nuova"));
+    // La prosa torna alla prima riga dello stile e tiene lo spazio dopo.
+    assert_eq!(
+        para_of(&p, "Una prosa").p,
+        Layout {
+            after: Some(14.0),
+            ..Layout::default()
+        }
+    );
+    // I link: uno cambiato, uno nuovo che prende lo stile dei collegamenti.
+    let href = |text: &str| {
+        para_of(&p, text).c.iter().find_map(|i| match i {
+            Inline::Text { x, href, .. } if x == text => href.clone(),
+            _ => None,
+        })
+    };
+    assert_eq!(href("link").as_deref(), Some("https://fub.app/nuovo"));
+    assert_eq!(href("Prima").as_deref(), Some("https://fub.app/prima"));
+    // Le revisioni della shell: l'inserimento accettato resta testo,
+    // l'eliminazione accettata se ne va; il segno di fine inserito resta.
+    let tracked = para_of(&p, "Revisione");
+    assert_eq!(tracked.ins.as_ref().map(|rev| rev.by.as_str()), Some("Ada"));
+    assert!(matches!(
+        &tracked.c[..],
+        [Inline::Text { x, ins: None, del: None, .. }] if x == "Revisione: nuova "
+    ));
+    // I commenti della shell: una risposta e il filo risolto, un commento
+    // nuovo su «Fine»; riletti, sono commenti come gli altri.
+    let comments: Vec<_> = p
+        .comments
+        .iter()
+        .map(|c| {
+            (
+                c.id,
+                c.by.as_str(),
+                c.parent,
+                c.done,
+                c.text.as_str(),
+                c.k.is_some(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        comments,
+        [
+            (1, "Redazione", None, true, "Da rivedere.", true),
+            (2, "Ada", Some(1), true, "Fatto.", true),
+            (3, "Bea", Some(1), true, "Risposta\ndella shell.", true),
+            (4, "Bea", None, false, "Un commento nuovo.", true),
+        ]
+    );
+    let anchors = |para: &fub_format_rich::projection::Para| -> Vec<(u32, bool)> {
+        para.c
+            .iter()
+            .filter_map(|i| match i {
+                Inline::Atom { comment, .. } => comment.map(|a| (a.id, a.end)),
+                _ => None,
+            })
+            .collect()
+    };
+    assert_eq!(
+        anchors(para_of(&p, "questo passo")),
+        [(1, false), (3, false), (1, true), (3, true)]
+    );
+    let Some(Block::Para(last)) = p.blocks.last() else {
+        panic!("l'ultimo blocco non è un paragrafo");
+    };
+    assert_eq!(anchors(last), [(4, false), (4, true)]);
+    // Il paragrafo del salto ha lo stile Sottotitolo.
+    assert_eq!(para_of(&p, "dopo il salto").s.as_deref(), Some("Subtitle"));
+    // In fondo al paragrafo del salto: l'immagine e le due note della shell,
+    // ora tenute come ogni altro oggetto.
+    let shell: Vec<(AtomKind, bool)> = para_of(&p, "dopo il salto")
+        .c
+        .iter()
+        .filter_map(|i| match i {
+            Inline::Atom { kind, k, .. } => Some((*kind, k.is_some())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        shell,
+        [
+            (AtomKind::Image, true),
+            (AtomKind::Note, true),
+            (AtomKind::Note, true)
+        ]
+    );
+    let document = wordcraft_docx::read(&out).unwrap();
+    let story = |kind: PartKind| {
+        document
+            .parts
+            .values()
+            .filter(|part| part.kind == kind)
+            .map(|part| part.blocks[0].as_para().unwrap().plain_text())
+            .collect::<Vec<_>>()
+    };
+    assert!(story(PartKind::Footnote)
+        .iter()
+        .any(|t| t.ends_with(" Una nota della shell.")));
+    assert!(story(PartKind::Endnote)
+        .iter()
+        .any(|t| t.ends_with(" In chiusura.")));
+    assert!(document
+        .media
+        .values()
+        .any(|bytes| bytes.as_slice() == common::PNG));
+    // Il sommario: il suo titolo finisce con il campo da rifare, e le voci
+    // hanno gli stili di Word.
+    let styled = |style: &str| {
+        document
+            .body
+            .iter()
+            .filter_map(|block| block.as_para())
+            .filter(|para| para.props.style.as_deref() == Some(style))
+            .collect::<Vec<_>>()
+    };
+    let [head] = styled("TOCHeading")[..] else {
+        panic!("il sommario non c'è");
+    };
+    assert!(matches!(
+        head.objects.last(),
+        Some(InlineObject::Field { instr, dirty: true, .. }) if instr.starts_with("TOC \\o \"1-3\"")
+    ));
+    assert_eq!(styled("TOC1").len(), 1);
+    assert!(!styled("TOC2").is_empty());
+    // Il paragrafo della sezione: centrato, rientrato, interlinea e spazio.
+    let section = para_of(&p, "Fine della prima sezione");
+    assert_eq!(section.align, Some(Align::Center));
+    assert_eq!(
+        section.p,
+        Layout {
+            left: Some(36.0),
+            before: Some(6.0),
+            line: Some(Line::Multiple(1.5)),
+            ..Layout::default()
+        }
+    );
+    // Registrando, Bea ha scritto in fondo alla sezione: un suo inserimento.
+    assert!(p.track, "il documento registra le modifiche");
+    assert!(section.c.iter().any(|inline| matches!(
+        inline,
+        Inline::Text { x, ins: Some(rev), .. } if x == " rivista" && rev.by == "Bea"
+    )));
+    // La prima sezione è girata, con due colonne; l'ultima ha i margini stretti.
+    let page = section
+        .page
+        .as_deref()
+        .expect("la pagina della prima sezione");
+    assert!(page.w > page.h, "{page:?}");
+    assert_eq!(page.cols, 2);
+    let last = p.page.expect("la pagina dell'ultima sezione");
+    assert_eq!(
+        (last.top, last.bottom, last.left, last.right),
+        (36.0, 36.0, 36.0, 36.0)
+    );
+    // L'intestazione dell'ultima sezione ha il testo nuovo e i suoi numeri; la
+    // prima sezione ha un piè di pagina di due righe.
+    let page = Piece::Field {
+        field: PageField::Page,
+    };
+    assert_eq!(
+        p.header.as_ref().map(|header| &header.lines[..]),
+        Some(
+            &[vec![
+                Piece::Text("Lettera, pagina ".into()),
+                page.clone(),
+                Piece::Text(" di ".into()),
+                Piece::Field {
+                    field: PageField::Pages
+                },
+            ]][..]
+        )
+    );
+    assert_eq!(
+        section.footer.as_ref().map(|footer| &footer.lines[..]),
+        Some(&[vec![Piece::Text("Prima sezione".into())], vec![page]][..])
+    );
     // L'ultimo paragrafo è un titolo di secondo livello, e la sezione resta.
     let (role, last, _) = plain(&p.blocks, p.blocks.len() - 1);
     assert_eq!((role, last.as_str()), (Role::Heading { level: 2 }, "Fine."));
@@ -149,6 +464,24 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
         .blocks
         .iter()
         .any(|b| matches!(b, Block::Para(para) if para.sect.is_some())));
+}
+
+/// Il paragrafo del documento che contiene `text`.
+fn para_of<'a>(p: &'a Projection, text: &str) -> &'a fub_format_rich::projection::Para {
+    p.blocks
+        .iter()
+        .find_map(|b| match b {
+            Block::Para(para)
+                if para
+                    .c
+                    .iter()
+                    .any(|i| matches!(i, Inline::Text { x, .. } if x.contains(text))) =>
+            {
+                Some(para)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("il paragrafo con «{text}»"))
 }
 
 /// Ogni motivo di sola lettura, una volta: il `match` senza ramo di riserva

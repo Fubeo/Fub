@@ -2,18 +2,30 @@
 //!
 //! Il codec non riscrive il file com'era: rinumera le parti (intestazioni, piè
 //! di pagina, note, caselle di testo) nell'ordine in cui le scrive, fonde la
-//! copia delle impostazioni originali con quelle che genera, e lascia le
-//! immagini che nessuno mostra. Niente di questo perde contenuto, ma rende
+//! copia delle impostazioni originali con quelle che genera, lascia le
+//! immagini che nessuno mostra, e dà i separatori predefiniti alle note di un
+//! documento che non ne ha di suoi. Niente di questo perde contenuto, ma rende
 //! diverso il modello riletto. Questo modulo toglie esattamente quelle
 //! differenze, e ciascuna con la propria prova: tutto il resto deve essere
 //! uguale campo per campo.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
+use wordcraft_doc::para::NoteKind;
 use wordcraft_doc::section::HeaderSet;
-use wordcraft_doc::{Block, Document, InlineObject, Paragraph};
+use wordcraft_doc::{
+    para_block, Block, CharProps, Document, InlineObject, NoteSeparators, Paragraph, PartKind,
+    Revision, RevisionKind,
+};
+
+use crate::stories::each_paragraph_mut;
 use wordcraft_docx::{settings_kept_unowned, SETTINGS_ORIG};
+
+/// Lo stesso documento, salvo il numero che ha ogni parte.
+pub(crate) fn same(a: &Document, b: &Document) -> bool {
+    a == b || canonical(a.clone()) == canonical(b.clone())
+}
 
 /// `reread` è `wanted` dopo una scrittura e una lettura del codec.
 pub(crate) fn reads_back(wanted: &Document, reread: &Document) -> bool {
@@ -43,6 +55,28 @@ pub(crate) fn reads_back(wanted: &Document, reread: &Document) -> bool {
     kept.passthrough.remove(SETTINGS_ORIG);
     let mut reread = reread.clone();
     reread.passthrough.remove(SETTINGS_ORIG);
+    // I separatori delle note: senza quelli del documento il codec scrive i
+    // propri, che riletti sembrano del documento. Soltanto quelli.
+    if let Some((foot, end)) = written_separators() {
+        if kept.footnote_separators.is_empty() && reread.footnote_separators == *foot {
+            reread.footnote_separators = NoteSeparators::default();
+        }
+        if kept.endnote_separators.is_empty() && reread.endnote_separators == *end {
+            reread.endnote_separators = NoteSeparators::default();
+        }
+    }
+    // Un commento fatto qui non ha l'id durevole di Word né la data UTC: il
+    // codec li assegna scrivendo. Soltanto quelli che mancavano.
+    for (id, comment) in kept.comments.iter_mut() {
+        if let Some(written) = reread.comments.get(id) {
+            if comment.durable_id.is_none() {
+                comment.durable_id.clone_from(&written.durable_id);
+            }
+            if comment.date_utc.is_none() {
+                comment.date_utc.clone_from(&written.date_utc);
+            }
+        }
+    }
     let (mut kept, mut reread) = (canonical(kept), canonical(reread));
     if kept == reread {
         return true;
@@ -62,6 +96,40 @@ pub(crate) fn reads_back(wanted: &Document, reread: &Document) -> bool {
         (Ok(kept), Ok(reread)) => close(&kept, &reread),
         _ => false,
     }
+}
+
+/// I separatori che il codec scrive per le note a piè di pagina e di
+/// chiusura di un documento che non ne ha di suoi, come si rileggono.
+fn written_separators() -> Option<&'static (NoteSeparators, NoteSeparators)> {
+    static WRITTEN: OnceLock<Option<(NoteSeparators, NoteSeparators)>> = OnceLock::new();
+    WRITTEN
+        .get_or_init(|| {
+            let mut document = Document::new();
+            let mut paragraph = Paragraph::new();
+            for (kind, part) in [
+                (NoteKind::Footnote, PartKind::Footnote),
+                (NoteKind::Endnote, PartKind::Endnote),
+            ] {
+                let id = document.add_part(part, Vec::new());
+                let at = paragraph.len();
+                paragraph
+                    .insert_object(
+                        at,
+                        InlineObject::NoteRef {
+                            kind,
+                            id,
+                            custom: String::new(),
+                        },
+                        &CharProps::default(),
+                    )
+                    .ok()?;
+            }
+            document.body = vec![para_block(paragraph)];
+            let bytes = wordcraft_docx::write(&document).ok()?;
+            let reread = wordcraft_docx::read(&bytes).ok()?;
+            Some((reread.footnote_separators, reread.endnote_separators))
+        })
+        .as_ref()
 }
 
 /// Mezzo twip in punti: la più piccola differenza che il file sa scrivere è
@@ -172,11 +240,95 @@ pub(crate) fn canonical(mut document: Document) -> Document {
             (map(id), part)
         })
         .collect();
+    canonical_revisions(&mut document);
     document
+}
+
+/// Le revisioni numerate nell'ordine in cui il testo le usa (il corpo, poi
+/// le parti), ciascuna una volta, e senza quelle che nessuno usa più: il
+/// codec scrive soltanto quelle usate, e il file riletto le rinumera. Con una
+/// modifica di formato tracciata, che le nomina da molti altri posti, il
+/// documento resta com'è: si apre soltanto in lettura.
+fn canonical_revisions(document: &mut Document) {
+    if document
+        .revisions
+        .iter()
+        .any(|revision| revision.kind == RevisionKind::Format)
+    {
+        return;
+    }
+    let old = std::mem::take(&mut document.revisions);
+    let mut new: Vec<Revision> = Vec::new();
+    let mut paragraph = |paragraph: &mut Paragraph| {
+        let indices = [&mut paragraph.mark.ins, &mut paragraph.mark.del]
+            .into_iter()
+            .chain(
+                paragraph
+                    .runs
+                    .iter_mut()
+                    .flat_map(|run| [&mut run.props.ins, &mut run.props.del]),
+            );
+        for index in indices {
+            let Some(at) = *index else {
+                continue;
+            };
+            // Un indice senza la sua revisione resta distinto da ognuna.
+            let Some(revision) = old.get(at as usize) else {
+                *index = Some(u32::MAX - at.min(u32::MAX / 2));
+                continue;
+            };
+            let found = new.iter().position(|r| r == revision).unwrap_or_else(|| {
+                new.push(revision.clone());
+                new.len() - 1
+            });
+            *index = Some(found as u32);
+        }
+    };
+    let parts = document
+        .parts
+        .values_mut()
+        .flat_map(|part| part.blocks.iter_mut());
+    for block in document.body.iter_mut().chain(parts) {
+        each_paragraph_mut(Arc::make_mut(block), &mut paragraph);
+    }
+    document.revisions = new;
+}
+
+/// Le revisioni tracciate fuori dal corpo (note, intestazioni, commenti,
+/// caselle di testo): la superficie non le mostra.
+pub(crate) fn revisions_outside_body(document: &Document) -> bool {
+    let mut found = false;
+    for part in document.parts.values() {
+        for block in &part.blocks {
+            each_paragraph(block, &mut |paragraph| {
+                found |= paragraph.mark.ins.is_some()
+                    || paragraph.mark.del.is_some()
+                    || paragraph
+                        .runs
+                        .iter()
+                        .any(|run| run.props.ins.is_some() || run.props.del.is_some());
+            });
+        }
+    }
+    found
 }
 
 /// Gli id delle parti nell'ordine canonico: ciascuno una volta.
 fn reference_order(document: &Document) -> Vec<u32> {
+    let mut order = referenced(document);
+    let mut seen: std::collections::BTreeSet<u32> = order.iter().copied().collect();
+    for id in document.parts.keys() {
+        if seen.insert(*id) {
+            order.push(*id);
+        }
+    }
+    order
+}
+
+/// Gli id delle parti che il documento nomina, nell'ordine di una lettura:
+/// il corpo con le sue sezioni, le intestazioni dell'ultima, i commenti, poi
+/// in largo ciò che quelle parti nominano a loro volta.
+pub(crate) fn referenced(document: &Document) -> Vec<u32> {
     let mut order: Vec<u32> = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
     let mut push = |id: u32, order: &mut Vec<u32>| {
@@ -220,14 +372,11 @@ fn reference_order(document: &Document) -> Vec<u32> {
             push(id, &mut order);
         }
     }
-    for id in document.parts.keys() {
-        push(*id, &mut order);
-    }
     order
 }
 
 /// Le parti che un paragrafo mostra: le note e le caselle di testo.
-fn shown(paragraph: &Paragraph) -> Vec<u32> {
+pub(crate) fn shown(paragraph: &Paragraph) -> Vec<u32> {
     paragraph
         .objects
         .iter()
@@ -240,7 +389,7 @@ fn shown(paragraph: &Paragraph) -> Vec<u32> {
 
 /// Ogni paragrafo di un blocco, in ordine di documento, per quanto annidate
 /// siano le tabelle: una pila al posto della ricorsione.
-fn each_paragraph<'a>(block: &'a Block, f: &mut dyn FnMut(&'a Paragraph)) {
+pub(crate) fn each_paragraph<'a>(block: &'a Block, f: &mut dyn FnMut(&'a Paragraph)) {
     let mut todo = vec![block];
     while let Some(block) = todo.pop() {
         match block {

@@ -349,6 +349,7 @@ export function createDocumentSurfaceRegistry(
         return mountRichSurface(profile, context, {
           onChange: options.onChange,
           onSelectionChange: options.onSelectionChange,
+          images: options.drawingImages,
           proof: {
             ports: proofPorts(openVaultRoot()),
             notify: options.slash ? (message) => options.slash!.notify(message) : undefined,

@@ -274,6 +274,48 @@ passa dalle stesse porte dei documenti, senza una porta in più:
 - `save_draft` conserva la proiezione come testo del buffer, come per ogni
   altro documento.
 
+Un tratto, un oggetto e un paragrafo (per il suo segno di fine) portano
+`ins` e `del` quando sono una revisione tracciata: `{"by", "at", "mv"}`,
+autore, data e nome dello spostamento, ciascuno assente se vuoto. Due
+revisioni con gli stessi campi sono la stessa; togliere `ins` o `del` la
+accetta o la rifiuta.
+
+I commenti sono l'elenco `comments`, fra `styles` e `blocks`: `{"id", "k",
+"by", "at", "parent", "done", "text"}`, con `parent` l'id del commento a cui
+risponde e `done` risolto. Di un commento con `k` cambia soltanto `done`; uno
+senza `k` è nuovo, e `text` ne è il testo semplice, un paragrafo per riga.
+L'intervallo è segnato da due oggetti `marker` con `"comment": {"id", "end"}`:
+uno nuovo non ha `k`. Un segno senza il suo commento si toglie; due commenti
+con lo stesso id, o una risposta senza il suo, sono una proiezione malformata.
+Il codec ODT rifiuta un elenco non vuoto.
+
+`"track": true`, fra `readonly` e `lang`, dice che il documento registra le
+modifiche (assente quando non lo fa): la shell scrive ciò che cambia come
+revisioni `ins` e `del`, e il codec salva l'impostazione con il documento. Il
+codec ODT rifiuta `track`.
+
+`page` è la pagina di una sezione in punti, `{"w", "h", "top", "bottom",
+"left", "right", "cols"}`, con `w` e `h` già nel verso della pagina e `cols`
+assente quando è una. La porta il paragrafo che chiude la sezione, dopo
+`sect`, e la testa della proiezione per l'ultima, fra `styles` e `comments`.
+Il codec la rilegge al ventesimo di punto e rifiuta lati fuori da 7,2–1584,
+margini negativi o che lasciano meno di 36 punti al testo, `cols` fuori da
+1–12 e una pagina su un paragrafo senza `sect`; cambiare `cols` rende uguali
+le colonne. Il codec ODT rifiuta `page`.
+
+`header` e `footer`, dopo `page`, sono l'intestazione e il piè di pagina
+della stessa sezione (quelli delle pagine senza uno proprio): `{"lines":
+[[…]], "locked"}`, una riga per paragrafo, ogni pezzo una stringa o
+`{"field": "page" | "pages"}`. Assenti, la sezione mostra quelli della
+sezione prima. Uno `locked` non si cambia; una riga che va a capo, un elenco
+di righe vuoto o un `locked` cambiato sono una proiezione malformata. Il
+codec ODT li rifiuta.
+
+Un oggetto nuovo (`"t": "atom"` senza `k`) di specie `field` con `"toc": N`,
+dopo `end`, è un sommario dei titoli fino al livello N (1–9): il codec Word
+lo scrive come campo `TOC` da ricalcolare all'apertura, e rifiuta un `toc`
+fuori da 1–9 o su un'altra specie; il codec ODT lo rifiuta.
+
 Un documento che il codec o la proiezione non riportano identico si apre con
 `"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
 `projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo
