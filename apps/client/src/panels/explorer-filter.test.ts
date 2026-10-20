@@ -2,7 +2,8 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
-import { filtered, matchesPath, mountExplorerFilter, parsePathFilter, type FilterEntry } from "./explorer-filter";
+import { matchesPath, parsePathFilter } from "../state/path-filter";
+import { filtered, mountExplorerFilter, type FilterEntry } from "./explorer-filter";
 
 describe("la regola del filtro per percorso", () => {
   it("separa le parole da tenere da quelle col meno, e una frase fra virgolette vale una", () => {

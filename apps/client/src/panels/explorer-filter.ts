@@ -5,47 +5,20 @@
 // e cartella dello spazio il cui percorso intero contiene tutte le parole.
 // Una parola col meno davanti (`-bozze`) toglie le voci che hanno un pezzo di
 // percorso che la contiene: una cartella che corrisponde sparisce con tutto il
-// suo contenuto. Fra virgolette una frase vale come una parola sola.
+// suo contenuto. Fra virgolette una frase vale come una parola sola. La regola
+// è in `state/path-filter.ts`, la stessa del pannello dei segnalibri.
 //
 // L'elenco viene dall'anagrafe del kernel, chiesto una volta per filtro e
 // richiesto quando i documenti cambiano. Se ne disegna una finestra, e ciò che
 // resta fuori si dice.
 import { errorText } from "../host/errors";
+import { emptyFilter, matchesPath, parsePathFilter, type PathFilter } from "../state/path-filter";
 import { pageName } from "../rules/mirrored";
 import { plural, t } from "../i18n/strings";
 import { textField } from "../kit";
 import type { Lifetime } from "../ui/lifetime";
 import { Race } from "../ui/race";
 import { setTooltip } from "../ui/tooltip";
-
-/// Le parole di un filtro: quelle che il percorso deve contenere e quelle che
-/// nessun suo pezzo può contenere. Tutto in minuscolo.
-export interface PathFilter {
-  include: string[];
-  exclude: string[];
-}
-
-export function parsePathFilter(text: string): PathFilter {
-  const filter: PathFilter = { include: [], exclude: [] };
-  for (const match of text.matchAll(/(-?)(?:"([^"]*)"?|(\S+))/g)) {
-    const word = (match[2] ?? match[3] ?? "").toLocaleLowerCase();
-    if (word === "" || (match[1] === "" && word === "-")) continue;
-    (match[1] === "-" ? filter.exclude : filter.include).push(word);
-  }
-  return filter;
-}
-
-export const emptyFilter = (filter: PathFilter): boolean =>
-  filter.include.length === 0 && filter.exclude.length === 0;
-
-/// Se il percorso passa il filtro.
-export function matchesPath(filter: PathFilter, path: string): boolean {
-  const lower = path.toLocaleLowerCase();
-  if (!filter.include.every((word) => lower.includes(word))) return false;
-  if (filter.exclude.length === 0) return true;
-  const parts = lower.split("/");
-  return !filter.exclude.some((word) => parts.some((part) => part.includes(word)));
-}
 
 export interface FilterEntry {
   path: string;

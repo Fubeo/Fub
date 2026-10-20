@@ -10,6 +10,7 @@
 // `parseLayout`: un valore che non regge la forma vale come assente, futuro
 // (`v > 1`) = sola lettura con fallback esplicito, mai riscrittura
 // automatica. Nessuna rete, nessun provider chiamato, nessun lock tenuto.
+import { emptyFilter, matchesPath, parsePathFilter } from "./path-filter";
 import type { Tab } from "./layout";
 import { readState, writeState, state } from "./store";
 import { asRecord } from "./guard";
@@ -478,8 +479,18 @@ export function futureRawForTest(): { version: number; raw: unknown } {
 // Un segnalibro resta col filtro se il titolo o la destinazione lo
 // contengono, senza badare alle maiuscole.
 export function bookmarkMatches(title: string, where: string, query: string): boolean {
-  const needle = query.trim().toLowerCase();
-  return needle === "" || title.toLowerCase().includes(needle) || where.toLowerCase().includes(needle);
+  // La regola dell'esplora (`path-filter.ts`): ogni parola sta nel nome o nel
+  // percorso, e una parola col meno toglie il segnalibro se la contiene il
+  // nome o un pezzo del percorso.
+  const filter = parsePathFilter(query);
+  if (emptyFilter(filter)) return true;
+  const name = title.toLocaleLowerCase();
+  const text = `${name}\n${where.toLocaleLowerCase()}`;
+  if (!filter.include.every((word) => text.includes(word))) return false;
+  return (
+    !filter.exclude.some((word) => name.includes(word)) &&
+    matchesPath({ include: [], exclude: filter.exclude }, where)
+  );
 }
 
 // Le voci lasciate cadere sul pannello, ognuna un segnalibro col suo nome:

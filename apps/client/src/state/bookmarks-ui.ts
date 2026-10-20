@@ -198,7 +198,7 @@ function drawLists(el: HTMLElement): void {
     for (const g of groups) {
       // Un gruppo che corrisponde per nome si mostra intero; altrimenti
       // restano i segnalibri che corrispondono, e un gruppo vuoto sparisce.
-      const whole = query !== "" && g.title.toLowerCase().includes(query);
+      const whole = query !== "" && bookmarkMatches(g.title, "", query);
       const members = g.bookmarkIds
         .map((id) => bookmarks.find((x) => x.id === id))
         .filter((b): b is Bookmark => b !== undefined && (whole || shown(b)));

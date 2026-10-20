@@ -57,6 +57,15 @@ describe("filtro dei segnalibri", () => {
     expect(bookmarkMatches("Diario", "note/Viaggi.md", "VIAGGI")).toBe(true);
     expect(bookmarkMatches("Diario", "note/diario.md", "ricette")).toBe(false);
   });
+
+  it("le parole stanno nel nome o nel percorso, e -parola toglie la cartella intera", () => {
+    expect(bookmarkMatches("Diario", "note/viaggi/oslo.md", "diario oslo")).toBe(true);
+    expect(bookmarkMatches("Diario", "note/viaggi/oslo.md", "diario roma")).toBe(false);
+    expect(bookmarkMatches("Diario", "note/viaggi/oslo.md", "diario -viaggi")).toBe(false);
+    expect(bookmarkMatches("Diario", "note/oslo.md", "-diario")).toBe(false);
+    expect(bookmarkMatches("Diario", "note/oslo.md", "-viaggi")).toBe(true);
+    expect(bookmarkMatches("Diario", "note/Viaggi in treno.md", '"viaggi in"')).toBe(true);
+  });
 });
 
 describe("rilascio sul pannello", () => {
