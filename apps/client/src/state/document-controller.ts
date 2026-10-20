@@ -69,6 +69,7 @@ import { api } from "../host/ipc";
 import { WITHOUT_PAGE, documentOutline, matchingDocuments, notesByName, renderPrint, resolvedReference, searchExpression, settings, vaultEntries, vaultTags } from "../host/query";
 import { theseDocuments, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
 import { existingRecentNotes } from "./recent";
+import { linkPreference, markdownDestination, wikiPathCandidates, type LinkFormat, type LinkPreference } from "./note-links";
 import { onEvent } from "./kernel";
 import { drawingFonts } from "./drawing-fonts";
 import { drawingSymbols } from "./drawing-symbols";
@@ -486,8 +487,9 @@ function focusedAnchorSurface(): { doc: string; anchorHere: () => SurfaceAnchor 
 }
 
 /// «Copia il link a questo punto»: `[[Nota#Titolo]]` o `[[Nota#^id]]` negli
-/// appunti. Il nome è il più corto che il vault risolve, come per una nota
-/// trascinata; a un blocco senza id la superficie ne scrive uno.
+/// appunti, scritto come vuole il vault, come per una nota trascinata; a un
+/// blocco senza id la superficie ne scrive uno. Negli appunti un link Markdown
+/// non sa ancora dove andrà, quindi parte dalla radice del vault.
 async function copyAnchorLink(): Promise<void> {
   const focused = focusedAnchorSurface();
   if (!focused) return;
@@ -496,10 +498,18 @@ async function copyAnchorLink(): Promise<void> {
     notify(t("document.anchor_none"), "info");
     return;
   }
-  // I caratteri che un wikilink usa per sé non possono stare in un titolo
-  // citato: chiuderebbero il link o ne aprirebbero un altro campo.
-  const fragment = anchor.kind === "block" ? `^${anchor.id}` : anchor.text.replace(/[[\]|#^]/g, " ").replace(/\s+/g, " ").trim();
-  const link = `[[${await wikiReference(focused.doc)}#${fragment}]]`;
+  const preference = await linkPreference();
+  let link: string;
+  if (preference.style === "markdown") {
+    const point = anchor.kind === "block" ? `^${anchor.id}` : encodeURIComponent(anchor.text);
+    const title = anchor.kind === "heading" ? anchor.text : pageName(focused.doc);
+    link = `[${title.replace(/[[\]\\]/g, "\\$&")}](${markdownDestination("", focused.doc, "absolute")}#${point})`;
+  } else {
+    // I caratteri che un wikilink usa per sé non possono stare in un titolo
+    // citato: chiuderebbero il link o ne aprirebbero un altro campo.
+    const fragment = anchor.kind === "block" ? `^${anchor.id}` : anchor.text.replace(/[[\]|#^]/g, " ").replace(/\s+/g, " ").trim();
+    link = `[[${await wikiTarget(focused.doc, preference.format)}#${fragment}]]`;
+  }
   await writeClipboardText(link).then(
     () => notify(t("document.anchor_copied", { link }), "info"),
     () => notify(t("tabmenu.copy_failed"), "guasto"),
@@ -512,13 +522,33 @@ async function copyAnchorLink(): Promise<void> {
 async function wikiReference(doc: string): Promise<string> {
   const fileName = doc.slice(doc.lastIndexOf("/") + 1);
   const withoutExtension = doc.replace(/\.[^./]+$/, "");
-  for (const candidate of [pageName(doc), fileName, withoutExtension]) {
+  return firstResolving(doc, [pageName(doc), fileName, withoutExtension]);
+}
+
+/// Il primo candidato che il vault risolve davvero a `doc`; altrimenti il
+/// percorso intero, che è sempre una risposta.
+async function firstResolving(doc: string, candidates: readonly string[]): Promise<string> {
+  for (const candidate of candidates) {
     const resolved = await resolvedReference(
       { kind: "wiki", value: { page: candidate, heading: null, block: null } },
     ).catch(() => null);
     if (resolved?.doc === doc) return candidate;
   }
   return doc;
+}
+
+/// Il bersaglio di un wikilink secondo `files.link-format`: il nome più corto,
+/// o il percorso dalla radice (un wikilink non ha forma relativa).
+function wikiTarget(doc: string, format: LinkFormat): Promise<string> {
+  return format === "shortest" ? wikiReference(doc) : firstResolving(doc, wikiPathCandidates(doc));
+}
+
+/// Il rimando a una nota scritto da dentro `from` come vuole il vault.
+async function noteReference(from: string, doc: string, preference: LinkPreference): Promise<SurfaceReference> {
+  if (preference.style === "markdown") {
+    return { kind: "note", name: pageName(doc), link: markdownDestination(from, doc, preference.format) };
+  }
+  return { kind: "note", name: await wikiTarget(doc, preference.format) };
 }
 
 /// Gli allegati depositati entrano nel documento come rimandi: come si
@@ -571,9 +601,9 @@ function mountDocumentAttachments(r: Pane, doc: string): void {
       event.preventDefault();
       event.stopPropagation();
       const { clientX: x, clientY: y } = event;
-      void wikiReference(note).then((reference) => {
+      void linkPreference().then((preference) => noteReference(doc, note, preference)).then((reference) => {
         if (life.closed || r.surface !== surface) return;
-        surface.insertReferences?.([{ kind: "note", name: reference }], { x, y });
+        surface.insertReferences?.([reference], { x, y });
       });
       return;
     }
@@ -586,9 +616,9 @@ function mountDocumentAttachments(r: Pane, doc: string): void {
       const { clientX: x, clientY: y } = event;
       // Senza un punto vero (un rilascio sintetico) si scrive al cursore.
       const at = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
-      void Promise.all(entries.map(async (each): Promise<SurfaceReference> =>
-        each.note ? { kind: "note", name: await wikiReference(each.id) } : { kind: "attachment", link: relativeUrl(doc, each.id) },
-      )).then((references) => {
+      void linkPreference().then((preference) => Promise.all(entries.map(async (each): Promise<SurfaceReference> =>
+        each.note ? noteReference(doc, each.id, preference) : { kind: "attachment", link: relativeUrl(doc, each.id) },
+      ))).then((references) => {
         if (life.closed || r.surface !== surface) return;
         surface.insertReferences?.(references, at);
       });

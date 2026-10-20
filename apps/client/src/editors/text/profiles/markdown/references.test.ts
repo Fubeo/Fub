@@ -16,6 +16,11 @@ describe("il Markdown di un rimando", () => {
     expect(markdownReference({ kind: "note", name: "Progetti/Alpha" })).toBe("[[Progetti/Alpha]]");
   });
 
+  it("scrive una nota come link Markdown col titolo quando il vault vuole i percorsi", () => {
+    expect(markdownReference({ kind: "note", name: "Alpha [v2]", link: "../Progetti/Alpha%20%5Bv2%5D.md" }))
+      .toBe("[Alpha \\[v2\\]](../Progetti/Alpha%20%5Bv2%5D.md)");
+  });
+
   it("scrive una pagina web come link col titolo, e chiude fra <> un indirizzo con spazi o parentesi", () => {
     expect(markdownReference({ kind: "web", title: "Sito [beta]", url: "https://example.org/a" })).toBe("[Sito \\[beta\\]](https://example.org/a)");
     expect(markdownReference({ kind: "web", title: "W", url: "https://it.wikipedia.org/wiki/Fub_(app)" })).toBe("[W](<https://it.wikipedia.org/wiki/Fub_(app)>)");

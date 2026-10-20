@@ -182,6 +182,15 @@ titolo o al paragrafo dove sta il cursore: `[[Nota#Titolo]]`, o
 `[[Nota#^id]]` per un paragrafo, che riceve un id nuovo in coda se non ne ha
 uno. In Lettura si copia solo un id già scritto.
 
+Come nasce un link a una nota, trascinata nel testo o copiata, lo decidono due
+impostazioni del vault in «File»: `files.link-style` (wikilink o link
+Markdown) e `files.link-format` (il nome più corto che il vault risolve, il
+percorso relativo alla nota, o quello dalla radice). Un link Markdown è sempre
+un percorso, quindi «più corto» lo scrive relativo, e negli appunti, che non
+sanno dove andrà, parte dalla radice (`/cartella/Nota.md#Titolo`). Un wikilink
+non ha forma relativa: «relativo» lo scrive dalla radice. Il `[[` digitato
+resta un wikilink.
+
 Passando col puntatore su un wikilink si apre l'anteprima della nota: in
 Lettura dopo un breve ritardo, subito con Ctrl/Cmd; mentre si scrive soltanto
 con Ctrl/Cmd. L'impostazione `editor.preview-modifier` chiede Ctrl/Cmd

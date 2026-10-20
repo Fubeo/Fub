@@ -1684,6 +1684,35 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     expect(editorTexts().join("\n")).not.toContain("/vault/");
   });
 
+  it("con i link Markdown una nota lasciata in una nota diventa un link col percorso relativo", async () => {
+    const style = {
+      spec: {
+        key: "files.link-style",
+        label: "Nuovi link",
+        description: "",
+        group: "",
+        scope: "vault",
+        kind: { kind: "choice", default: "wiki", options: [{ value: "wiki", label: "Wikilink" }, { value: "markdown", label: "Link Markdown" }] },
+        program_writable: false,
+      },
+      value: "markdown",
+      source: "vault",
+    } as SettingEntry;
+    await start(VAULT, [style]);
+    row("note")!.click();
+    await waitFor("la cartella si apre", () => !!row("note/Spesa.md"));
+    const offered = new Map<string, string>();
+    row("note/Spesa.md")!.dispatchEvent(dragEvent("dragstart", { set: offered }));
+    const entries = offered.get("application/x-fub-entries")!;
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", {
+      value: { types: ["application/x-fub-entries"], files: [], getData: (kind: string) => (kind === "application/x-fub-entries" ? entries : "") },
+    });
+    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    await waitFor("il link è nel testo", () => editorTexts().some((text) => text.includes("[Spesa](note/Spesa.md)")));
+    expect(editorTexts().join("\n")).not.toContain("[[");
+  });
+
   it("un collegamento web lasciato in una nota diventa un link, il resto un allegato", async () => {
     const host = await start(VAULT);
     const shortcut = new File(["[InternetShortcut]\r\nURL=https://example.org/pagina\r\n"], "Pagina utile.url");

@@ -136,8 +136,12 @@ export interface SurfaceLocation {
 export type SurfaceReference =
   /** A resource just deposited, as a URL relative to the document. */
   | { readonly kind: "attachment"; readonly link: string }
-  /** A note, by the shortest name that resolves to it in this vault. */
-  | { readonly kind: "note"; readonly name: string }
+  /**
+   * A note. Without `link`, by the name the vault's link preference resolves to
+   * it; with `link`, the vault wants path links: `link` is the URL from the
+   * document and `name` the note's title.
+   */
+  | { readonly kind: "note"; readonly name: string; readonly link?: string }
   /** A web page, from a dropped `.webloc` or `.url` shortcut. */
   | { readonly kind: "web"; readonly title: string; readonly url: string };
 

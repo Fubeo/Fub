@@ -226,6 +226,20 @@ pub const FILES_TRASH: &str = "files.trash";
 /// L'esplora segue la nota aperta: ne apre le cartelle e la porta in vista.
 pub const FILES_AUTO_REVEAL: &str = "files.auto-reveal";
 pub const FILES_TRASH_VAULT: &str = "vault";
+/// Come nasce un link a una nota trascinata o copiata: wikilink (`[[Nota]]`)
+/// o link Markdown (`[Nota](Nota.md)`), che leggono anche gli altri programmi.
+pub const FILES_LINK_STYLE: &str = "files.link-style";
+pub const FILES_LINK_WIKI: &str = "wiki";
+pub const FILES_LINK_MARKDOWN: &str = "markdown";
+/// Quale percorso porta il nuovo link: il nome più corto che il vault
+/// risolve, il percorso relativo alla nota o quello dalla radice del vault.
+/// Un link Markdown è sempre un percorso, quindi «più corto» lo scrive
+/// relativo; un wikilink non ha forma relativa, quindi «relativo» lo scrive
+/// dalla radice.
+pub const FILES_LINK_FORMAT: &str = "files.link-format";
+pub const FILES_LINK_SHORTEST: &str = "shortest";
+pub const FILES_LINK_RELATIVE: &str = "relative";
+pub const FILES_LINK_ABSOLUTE: &str = "absolute";
 pub const FILES_TRASH_SYSTEM: &str = "system";
 /// Che cosa si apre all'avvio dell'app, sopra la sessione ripristinata: niente
 /// (`""`), la nota del giorno, una nota nuova o la nota di [`FILES_STARTUP_NOTE`].
@@ -369,6 +383,37 @@ pub fn core_settings() -> Vec<SettingSpec> {
             },
         )
         .describing(Text::key(C_FILES_STARTUP_NOTE_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::new(
+            FILES_LINK_STYLE,
+            Text::key(C_FILES_LINK_STYLE),
+            SettingKind::Choice {
+                default: FILES_LINK_WIKI.into(),
+                options: vec![
+                    UiOption::new(FILES_LINK_WIKI, Text::key(C_FILES_LINK_WIKI)),
+                    UiOption::new(FILES_LINK_MARKDOWN, Text::key(C_FILES_LINK_MARKDOWN)),
+                ],
+            },
+        )
+        .describing(Text::key(C_FILES_LINK_STYLE_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::new(
+            FILES_LINK_FORMAT,
+            Text::key(C_FILES_LINK_FORMAT),
+            SettingKind::Choice {
+                default: FILES_LINK_SHORTEST.into(),
+                options: vec![
+                    UiOption::new(FILES_LINK_SHORTEST, Text::key(C_FILES_LINK_SHORTEST)),
+                    UiOption::new(FILES_LINK_RELATIVE, Text::key(C_FILES_LINK_RELATIVE)),
+                    UiOption::new(FILES_LINK_ABSOLUTE, Text::key(C_FILES_LINK_ABSOLUTE)),
+                ],
+            },
+        )
+        .describing(Text::key(C_FILES_LINK_FORMAT_DESC))
         .grouped(Text::key(C_GROUP_FILES)),
     );
     settings.push(
@@ -1060,6 +1105,15 @@ const C_FILES_AUTO_REVEAL: &str = "core.files_auto_reveal";
 const C_FILES_AUTO_REVEAL_DESC: &str = "core.files_auto_reveal.desc";
 const C_FILES_TRASH_VAULT: &str = "core.files_trash.vault";
 const C_FILES_TRASH_SYSTEM: &str = "core.files_trash.system";
+const C_FILES_LINK_STYLE: &str = "core.files_link_style";
+const C_FILES_LINK_STYLE_DESC: &str = "core.files_link_style.desc";
+const C_FILES_LINK_WIKI: &str = "core.files_link_style.wiki";
+const C_FILES_LINK_MARKDOWN: &str = "core.files_link_style.markdown";
+const C_FILES_LINK_FORMAT: &str = "core.files_link_format";
+const C_FILES_LINK_FORMAT_DESC: &str = "core.files_link_format.desc";
+const C_FILES_LINK_SHORTEST: &str = "core.files_link_format.shortest";
+const C_FILES_LINK_RELATIVE: &str = "core.files_link_format.relative";
+const C_FILES_LINK_ABSOLUTE: &str = "core.files_link_format.absolute";
 const C_FILES_STARTUP: &str = "core.files_startup";
 const C_FILES_STARTUP_DESC: &str = "core.files_startup.desc";
 const C_FILES_STARTUP_SESSION: &str = "core.files_startup.session";
@@ -1491,6 +1545,21 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with(C_FILES_TRASH_VAULT, "Cestino del vault")
         .with(C_FILES_TRASH_SYSTEM, "Cestino del sistema")
+        .with(C_FILES_LINK_STYLE, "Nuovi link")
+        .with(
+            C_FILES_LINK_STYLE_DESC,
+            "Come si scrive il link a una nota trascinata nel testo o copiata. I link Markdown li leggono anche gli altri programmi.",
+        )
+        .with(C_FILES_LINK_WIKI, "Wikilink")
+        .with(C_FILES_LINK_MARKDOWN, "Link Markdown")
+        .with(C_FILES_LINK_FORMAT, "Percorso dei nuovi link")
+        .with(
+            C_FILES_LINK_FORMAT_DESC,
+            "Un link Markdown è sempre un percorso: «più corto» lo scrive relativo. Un wikilink non ha forma relativa: «relativo» lo scrive dalla radice del vault.",
+        )
+        .with(C_FILES_LINK_SHORTEST, "Il più corto possibile")
+        .with(C_FILES_LINK_RELATIVE, "Relativo alla nota")
+        .with(C_FILES_LINK_ABSOLUTE, "Dalla radice del vault")
         .with(C_FILES_STARTUP, "All'avvio apri")
         .with(
             C_FILES_STARTUP_DESC,
@@ -1955,6 +2024,21 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with(C_FILES_TRASH_VAULT, "Vault trash")
         .with(C_FILES_TRASH_SYSTEM, "System trash")
+        .with(C_FILES_LINK_STYLE, "New links")
+        .with(
+            C_FILES_LINK_STYLE_DESC,
+            "How the link to a note dropped into the text or copied is written. Other programs read Markdown links too.",
+        )
+        .with(C_FILES_LINK_WIKI, "Wikilinks")
+        .with(C_FILES_LINK_MARKDOWN, "Markdown links")
+        .with(C_FILES_LINK_FORMAT, "Path of new links")
+        .with(
+            C_FILES_LINK_FORMAT_DESC,
+            "A Markdown link is always a path: \"shortest\" writes it relative. A wikilink has no relative form: \"relative\" writes it from the vault root.",
+        )
+        .with(C_FILES_LINK_SHORTEST, "Shortest possible")
+        .with(C_FILES_LINK_RELATIVE, "Relative to the note")
+        .with(C_FILES_LINK_ABSOLUTE, "From the vault root")
         .with(C_FILES_STARTUP, "On startup open")
         .with(
             C_FILES_STARTUP_DESC,
