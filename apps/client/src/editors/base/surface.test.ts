@@ -174,6 +174,32 @@ describe("Base raggruppata", () => {
     } finally { again.done(); }
   });
 
+  it("l'ordine dei gruppi si sceglie per vista, il gruppo vuoto resta in fondo, e si ricorda", async () => {
+    const { host, setViewState, done } = mount("table");
+    try {
+      await vi.waitFor(() => expect(toggles(host)).toHaveLength(3));
+      const order = host.querySelector<HTMLSelectElement>(".base-group-order")!;
+      expect(order.hidden).toBe(false);
+      expect(order.value).toBe("rows");
+      order.value = "asc";
+      order.dispatchEvent(new Event("change"));
+      expect(toggles(host)).toEqual(["aperto (1)", "fatto (2)", "∅ (1)"]);
+      order.value = "desc";
+      order.dispatchEvent(new Event("change"));
+      expect(toggles(host)).toEqual(["fatto (2)", "aperto (1)", "∅ (1)"]);
+      await vi.waitFor(() => expect(setViewState).toHaveBeenCalledWith("base.group-order:views/gruppi.base:Vista", "desc"));
+      const select = host.querySelector<HTMLSelectElement>(".base-group-by")!;
+      select.value = "";
+      select.dispatchEvent(new Event("change"));
+      expect(order.hidden).toBe(true);
+    } finally { done(); }
+    const again = mount("cards", { "base.group-order:views/gruppi.base:Vista": "asc" });
+    try {
+      await vi.waitFor(() => expect(again.host.querySelectorAll("section.base-group").length).toBe(3));
+      expect([...again.host.querySelectorAll<HTMLElement>("section.base-group")].map((s) => s.dataset.group)).toEqual(["aperto", "fatto", ""]);
+    } finally { again.done(); }
+  });
+
   it("schede ed elenco mettono ogni gruppo nella sua sezione", async () => {
     for (const viewType of ["cards", "list"]) {
       const { host, done } = mount(viewType);
