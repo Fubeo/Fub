@@ -71,8 +71,8 @@ file così come sono (vedi [Explorer e cartelle](explorer-and-folders.md)).
 
 Un vault che viene da Obsidian ha `.obsidian/` nella radice. Fub la ignora come
 parte del vault, ma «Importa le impostazioni di Obsidian» (il comando
-dell'host `settings.import_obsidian`, dalla palette) ne legge tre file e scrive
-le scelte che Fub sa esprimere:
+dell'host `settings.import_obsidian`, dalla palette) ne legge cinque file e
+scrive le scelte che Fub sa esprimere:
 
 - da `app.json`: cartella degli allegati (anche `./` e `./sotto`), posizione
   delle note nuove (radice, accanto alla nota aperta, una cartella), stile e
@@ -81,15 +81,28 @@ le scelte che Fub sa esprimere:
   elenchi, guide di rientro, HTML incollato, destra a sinistra, piegatura,
   proprietà, interruzioni di riga rigorose);
 - da `appearance.json`: la luce e la misura del testo;
-- da `daily-notes.json`: cartella, formato e modello della giornaliera.
+- da `daily-notes.json`: cartella, formato e modello della giornaliera;
+- da `hotkeys.json`: le scorciatoie dei comandi che hanno un gemello in Fub
+  (palette, schede, riquadri, barre laterali, piegatura, zoom, formattazione),
+  una per comando;
+- da `bookmarks.json`: i segnalibri.
 
 Ogni impostazione va al suo livello, del vault o della macchina, con la stessa
 porta del pannello. Una chiave che Fub non sa dire (la larghezza leggibile, un
 tema di Obsidian, un filtro con un'espressione regolare, la radice come
 cartella degli allegati) torna nell'esito per nome, e così una chiave di una
-feature spenta. I file di Obsidian si leggono soltanto, dentro la radice: un
-collegamento che porta fuori dal vault non si segue. Un file guasto ferma
-l'import prima di scrivere.
+feature spenta e una scorciatoia che Fub non sa prendere: di un comando senza
+gemello, con Ctrl distinto da Cmd, la seconda di un comando. I file di
+Obsidian si leggono soltanto, dentro la radice: un collegamento che porta fuori
+dal vault non si segue. Un file guasto ferma l'import prima di scrivere.
+
+I segnalibri sono della shell, non impostazioni: l'host li consegna nell'esito
+così come Obsidian li scrive, e la shell li porta nei suoi
+(`state/obsidian-bookmarks.ts`). Note, heading, blocchi, cartelle, ricerche,
+pagine web e gruppi hanno la loro gemella; un gruppo dentro un gruppo diventa
+un gruppo suo, perché i gruppi di Fub non si annidano. Il grafo di Obsidian e
+una specie che Fub non conosce si nominano nell'avviso. Una voce che c'è già
+non si raddoppia, e un gruppo con lo stesso nome si riusa.
 
 ## Esportare una cartella o il vault
 

@@ -2,15 +2,25 @@
 //! come impostazioni di Fub.
 //!
 //! Chi migra apre in Fub il vault che aveva in Obsidian, e `.obsidian/` è già
-//! lì: la cartella resta ignorata (non è parte del vault), ma tre suoi file
-//! dicono scelte che Fub sa esprimere — dove vanno allegati e note nuove, che
-//! forma hanno i link, come si comporta l'editor, la giornaliera, la luce.
+//! lì: la cartella resta ignorata (non è parte del vault), ma quattro suoi
+//! file dicono scelte che Fub sa esprimere — dove vanno allegati e note nuove,
+//! che forma hanno i link, come si comporta l'editor, la giornaliera, la luce,
+//! le scorciatoie.
 //! Questo comando le traduce una per una e scrive soltanto quelle.
 //!
 //! Niente si perde in silenzio: ogni chiave dei file di Obsidian che non
 //! diventa un'impostazione di Fub torna nell'esito per nome, con la ragione
 //! (Fub non ha quella scelta, o non quel valore, o la feature che la possiede è
 //! spenta). I file di Obsidian si leggono soltanto, e restano com'erano.
+//!
+//! Le scorciatoie (`hotkeys.json`) diventano chiavi `keys.*` dei comandi che
+//! hanno un gemello in Fub; quelle di un comando senza gemello, o con un tasto
+//! che Fub non sa premere (Ctrl distinto da Cmd, lo spazio), tornano per nome.
+//!
+//! I segnalibri (`bookmarks.json`) non sono impostazioni: li tiene la shell,
+//! nello stato di vista del vault. Il comando li legge e li consegna così come
+//! sono nell'esito, e la shell li traduce nei suoi; l'host non conosce la forma
+//! dei segnalibri di Fub.
 //!
 //! Il comando gira solo a richiesta dell'utente: è dell'host, il kernel lo
 //! riserva e un plugin non lo può chiamare. Scrive con la stessa porta del
@@ -41,6 +51,8 @@ const DIR: &str = ".obsidian";
 const APP: &str = "app.json";
 const APPEARANCE: &str = "appearance.json";
 const DAILY: &str = "daily-notes.json";
+const BOOKMARKS: &str = "bookmarks.json";
+const HOTKEYS: &str = "hotkeys.json";
 /// Oltre questa misura un file non è delle impostazioni di Obsidian.
 const MAX_BYTES: u64 = 1024 * 1024;
 
@@ -198,6 +210,132 @@ pub fn translate(
         }
     }
     out
+}
+
+/// I comandi di Obsidian che hanno un gemello in Fub, con la chiave della sua
+/// scorciatoia. Soltanto quelli che fanno la stessa cosa: un comando che di là
+/// alterna e di qua no (la lettura, il segnalibro) non è un gemello.
+const HOTKEY_TWINS: [(&str, &str); 55] = [
+    ("command-palette:open", "keys.shell.palette"),
+    ("switcher:open", "keys.shell.switcher"),
+    ("global-search:open", "keys.shell.panel.search"),
+    ("file-explorer:open", "keys.shell.panel.files"),
+    (
+        "file-explorer:reveal-active-file",
+        "keys.shell.explorer.reveal",
+    ),
+    ("file-explorer:new-file", "keys.shell.note.new"),
+    ("app:toggle-left-sidebar", "keys.shell.sidebar.toggle"),
+    ("app:toggle-right-sidebar", "keys.shell.inspector.toggle"),
+    ("app:go-back", "keys.shell.pane.back"),
+    ("app:go-forward", "keys.shell.pane.forward"),
+    ("app:open-settings", "keys.shell.settings"),
+    ("workspace:split-vertical", "keys.shell.pane.split.right"),
+    ("workspace:split-horizontal", "keys.shell.pane.split.down"),
+    ("workspace:close", "keys.shell.tab.close"),
+    ("workspace:close-others", "keys.shell.tab.close.others"),
+    ("workspace:undo-close-pane", "keys.shell.tab.reopen"),
+    ("workspace:next-tab", "keys.shell.tab.next"),
+    ("workspace:previous-tab", "keys.shell.tab.previous"),
+    ("workspace:goto-tab-1", "keys.shell.tab.go.1"),
+    ("workspace:goto-tab-2", "keys.shell.tab.go.2"),
+    ("workspace:goto-tab-3", "keys.shell.tab.go.3"),
+    ("workspace:goto-tab-4", "keys.shell.tab.go.4"),
+    ("workspace:goto-tab-5", "keys.shell.tab.go.5"),
+    ("workspace:goto-tab-6", "keys.shell.tab.go.6"),
+    ("workspace:goto-tab-7", "keys.shell.tab.go.7"),
+    ("workspace:goto-tab-8", "keys.shell.tab.go.8"),
+    ("workspace:goto-last-tab", "keys.shell.tab.go.last"),
+    ("window:zoom-in", "keys.shell.zoom.in"),
+    ("window:zoom-out", "keys.shell.zoom.out"),
+    ("window:reset-zoom", "keys.shell.zoom.reset"),
+    ("editor:save-file", "keys.shell.doc.save"),
+    ("editor:open-search", "keys.shell.doc.search"),
+    ("editor:fold-all", "keys.shell.fold.all"),
+    ("editor:unfold-all", "keys.shell.unfold.all"),
+    ("editor:fold-more", "keys.shell.fold.more"),
+    ("editor:fold-less", "keys.shell.fold.less"),
+    ("editor:toggle-bold", "keys.markdown.bold"),
+    ("editor:toggle-italics", "keys.markdown.italic"),
+    ("editor:toggle-strikethrough", "keys.markdown.strikethrough"),
+    ("editor:toggle-highlight", "keys.markdown.highlight"),
+    ("editor:toggle-code", "keys.markdown.code"),
+    ("editor:insert-link", "keys.markdown.link"),
+    ("editor:insert-codeblock", "keys.markdown.codeblock"),
+    ("editor:toggle-blockquote", "keys.markdown.quote"),
+    ("editor:toggle-bullet-list", "keys.markdown.list.bullet"),
+    ("editor:toggle-numbered-list", "keys.markdown.list.ordered"),
+    ("editor:toggle-checklist-status", "keys.markdown.list.task"),
+    ("editor:indent-list", "keys.markdown.list.indent"),
+    ("editor:unindent-list", "keys.markdown.list.dedent"),
+    ("editor:set-heading-1", "keys.markdown.heading.1"),
+    ("editor:set-heading-2", "keys.markdown.heading.2"),
+    ("editor:set-heading-3", "keys.markdown.heading.3"),
+    ("editor:set-heading-4", "keys.markdown.heading.4"),
+    ("editor:set-heading-5", "keys.markdown.heading.5"),
+    ("editor:set-heading-6", "keys.markdown.heading.6"),
+];
+
+/// Le scorciatoie di `hotkeys.json`: per ogni comando che l'utente ha
+/// toccato, l'elenco dei suoi accordi (vuoto se le ha tolte). Fub ne tiene uno
+/// per comando: il primo; gli altri si nominano.
+pub fn translate_hotkeys(hotkeys: &Map<String, Value>, out: &mut Translation) {
+    for (command, value) in hotkeys {
+        let twin = HOTKEY_TWINS
+            .iter()
+            .find(|(id, _)| id == command)
+            .map(|(_, key)| *key);
+        let Some(key) = twin else {
+            out.lose(HOTKEYS, command, Why::NoEquivalent);
+            continue;
+        };
+        let Value::Array(bindings) = value else {
+            out.lose(HOTKEYS, command, Why::Value);
+            continue;
+        };
+        let Some(first) = bindings.first() else {
+            out.write(HOTKEYS, command, key, text(""));
+            continue;
+        };
+        match chord_of(first) {
+            Some(chord) => out.write(HOTKEYS, command, key, text(&chord)),
+            None => out.lose(HOTKEYS, command, Why::Value),
+        }
+        if bindings.len() > 1 {
+            out.lose(
+                HOTKEYS,
+                &format!("{command} (dalla seconda scorciatoia)"),
+                Why::Value,
+            );
+        }
+    }
+}
+
+/// `{"modifiers": ["Mod", "Shift"], "key": "P"}` → `Mod-Shift-p`, o `None` se
+/// Fub non lo sa premere: Ctrl e Meta distinti da Mod, un tasto vuoto o con
+/// spazi, un accordo senza modificatore.
+fn chord_of(binding: &Value) -> Option<String> {
+    let modifiers = binding.get("modifiers")?.as_array()?;
+    let key = binding.get("key")?.as_str()?;
+    if key.is_empty() || key.chars().any(char::is_whitespace) {
+        return None;
+    }
+    let mut parts: Vec<&str> = Vec::new();
+    for wanted in ["Mod", "Alt", "Shift"] {
+        if modifiers.iter().any(|m| m.as_str() == Some(wanted)) {
+            parts.push(wanted);
+        }
+    }
+    if parts.len() != modifiers.len() {
+        return None;
+    }
+    let key = if key.chars().count() == 1 {
+        key.to_lowercase()
+    } else {
+        key.to_string()
+    };
+    let chord = format!("{}-{key}", parts.join("-"));
+    fub_abi::rules::keys::chords(&chord).map(|_| chord)
 }
 
 fn translate_app(app: &Map<String, Value>, out: &mut Translation) {
@@ -442,12 +580,27 @@ pub(crate) fn invoke(
     let app = read_config(root, APP)?;
     let appearance = read_config(root, APPEARANCE)?;
     let daily = read_config(root, DAILY)?;
-    if app.is_none() && appearance.is_none() && daily.is_none() {
+    let hotkeys = read_config(root, HOTKEYS)?;
+    // Le voci dei segnalibri, così come Obsidian le scrive: un elenco, anche
+    // vuoto, o niente se il file non c'è o non ne ha.
+    let bookmarks = match read_config(root, BOOKMARKS)?.and_then(|mut file| file.remove("items")) {
+        Some(Value::Array(items)) => Some(items),
+        _ => None,
+    };
+    if app.is_none()
+        && appearance.is_none()
+        && daily.is_none()
+        && hotkeys.is_none()
+        && bookmarks.is_none()
+    {
         return Err(PluginError::NotFound(Text::key(
             "host.obsidian_import.none",
         )));
     }
     let mut translation = translate(app.as_ref(), appearance.as_ref(), daily.as_ref());
+    if let Some(hotkeys) = &hotkeys {
+        translate_hotkeys(hotkeys, &mut translation);
+    }
     let current: BTreeMap<String, SettingValue> =
         match host.query_index(vault, IndexQuery::Settings { plugin: None })? {
             IndexResult::Settings(entries) => entries
@@ -482,6 +635,7 @@ pub(crate) fn invoke(
                     vec![
                         Arg::int("count", changes.len() as i64),
                         Arg::text("list", list),
+                        Arg::int("bookmarks", bookmarks.as_ref().map_or(0, Vec::len) as i64),
                         Arg::text("lost", lost_names(&translation.lost)),
                     ],
                 ),
@@ -521,6 +675,7 @@ pub(crate) fn invoke(
             "written": written.iter().map(|write| serde_json::json!({ "from": write.from, "key": write.key })).collect::<Vec<_>>(),
             "same": same.iter().map(|write| write.key).collect::<Vec<_>>(),
             "lost": translation.lost.iter().map(|lost| serde_json::json!({ "from": lost.from, "why": lost.why.tag() })).collect::<Vec<_>>(),
+            "bookmarks": bookmarks.unwrap_or_default(),
         }),
     }))
 }
@@ -671,5 +826,57 @@ mod tests {
                 "daily-notes.json:autorun"
             ]
         );
+    }
+
+    #[test]
+    fn the_hotkeys_of_twin_commands_become_their_keys() {
+        let hotkeys = object(json!({
+            "editor:toggle-bold": [{ "modifiers": ["Shift", "Mod"], "key": "B" }],
+            "app:go-back": [],
+            "workspace:close": [
+                { "modifiers": ["Mod"], "key": "W" },
+                { "modifiers": ["Mod"], "key": "F4" }
+            ],
+            "app:toggle-left-sidebar": [{ "modifiers": ["Ctrl"], "key": "L" }],
+            "editor:toggle-italics": [{ "modifiers": [], "key": "I" }],
+            "graph:open": [{ "modifiers": ["Mod"], "key": "G" }]
+        }));
+        let mut out = Translation::default();
+        translate_hotkeys(&hotkeys, &mut out);
+        assert_eq!(
+            written(&out, "keys.markdown.bold"),
+            Some(text("Mod-Shift-b"))
+        );
+        assert_eq!(written(&out, "keys.shell.pane.back"), Some(text("")));
+        assert_eq!(written(&out, "keys.shell.tab.close"), Some(text("Mod-w")));
+        let lost: Vec<(&str, Why)> = out.lost.iter().map(|l| (l.from.as_str(), l.why)).collect();
+        assert_eq!(
+            lost,
+            vec![
+                (
+                    "hotkeys.json:workspace:close (dalla seconda scorciatoia)",
+                    Why::Value
+                ),
+                ("hotkeys.json:app:toggle-left-sidebar", Why::Value),
+                ("hotkeys.json:editor:toggle-italics", Why::Value),
+                ("hotkeys.json:graph:open", Why::NoEquivalent),
+            ]
+        );
+    }
+
+    /// Ogni gemello nomina un comando che c'è: una chiave sbagliata qui
+    /// finirebbe fra le «feature spente» e nessuno saprebbe perché.
+    #[test]
+    fn every_twin_names_a_shell_or_formatting_command() {
+        let shell: Vec<String> = crate::shell::SHELL_COMMANDS
+            .iter()
+            .map(|(id, _)| fub_abi::settings::keybinding_key(id))
+            .collect();
+        for (from, key) in HOTKEY_TWINS {
+            assert!(
+                shell.iter().any(|k| k == key) || key.starts_with("keys.markdown."),
+                "{from} → {key}"
+            );
+        }
     }
 }

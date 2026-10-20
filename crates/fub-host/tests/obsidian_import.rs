@@ -117,6 +117,41 @@ fn the_dry_run_names_the_changes_and_writes_nothing() {
 }
 
 #[test]
+fn the_bookmarks_come_back_as_obsidian_wrote_them() {
+    let items = json!([
+        { "type": "file", "path": "Nota.md", "subpath": "#Titolo", "title": "Qui" },
+        { "type": "group", "title": "Lavoro", "items": [{ "type": "folder", "path": "Diario" }] },
+    ]);
+    let file = json!({ "items": items }).to_string();
+    let (_dir, _root, host) =
+        vault(&[("Nota.md", "# Nota\n"), (".obsidian/bookmarks.json", &file)]);
+    // Bastano i segnalibri perché ci sia qualcosa da importare.
+    let report = payload(&import(&host, InvokeMode::Apply).expect("importa"));
+    assert_eq!(report["bookmarks"], items);
+    assert_eq!(report["written"], json!([]));
+}
+
+#[test]
+fn the_hotkeys_become_the_keys_of_the_twin_commands() {
+    let file = json!({
+        "command-palette:open": [{ "modifiers": ["Mod", "Shift"], "key": "K" }],
+        "editor:toggle-bold": [{ "modifiers": ["Mod", "Alt"], "key": "B" }],
+    })
+    .to_string();
+    let (_dir, _root, host) = vault(&[("Nota.md", "# Nota\n"), (".obsidian/hotkeys.json", &file)]);
+    let report = payload(&import(&host, InvokeMode::Apply).expect("importa"));
+    assert_eq!(
+        value(&host, "keys.shell.palette"),
+        SettingValue::Text("Mod-Shift-k".into())
+    );
+    assert_eq!(
+        value(&host, "keys.markdown.bold"),
+        SettingValue::Text("Mod-Alt-b".into())
+    );
+    assert_eq!(report["lost"], json!([]));
+}
+
+#[test]
 fn a_vault_without_obsidian_says_so() {
     let (_dir, _root, host) = vault(&[("Nota.md", "# Nota\n")]);
     assert!(matches!(

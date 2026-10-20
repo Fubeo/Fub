@@ -30,6 +30,11 @@ export const CLIPBOARD_TEXT_NS = "fub.clipboard.text";
 /// risposta che non ne salva un pezzo per sbaglio è ricaricare la finestra.
 export const VAULT_RESTORED_NS = "fub.vault.restored";
 
+/// L'esito di `settings.import_obsidian`: le impostazioni le ha già scritte
+/// l'host, i segnalibri di Obsidian (`bookmarks`) sono della shell e si
+/// portano qui (`state/obsidian-bookmarks.ts`).
+export const OBSIDIAN_IMPORTED_NS = "fub.settings.imported";
+
 /// La chiave con cui un avviso sopravvive alla ricarica che lo ha causato.
 const NOTICE_AFTER_RELOAD = "fub.notice-after-reload";
 
@@ -87,6 +92,10 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
         editorAction(intent.payload);
         break;
       }
+      if (intent.ns === OBSIDIAN_IMPORTED_NS) {
+        await importBookmarks(intent.payload);
+        break;
+      }
       if (intent.ns === VAULT_RESTORED_NS) {
         try {
           sessionStorage.setItem(NOTICE_AFTER_RELOAD, t("vault.restored"));
@@ -119,6 +128,25 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
       const unknown: never = intent;
       console.info(`Fub: intento ignorato (kind: ${(unknown as { kind: string }).kind}).`);
     }
+  }
+}
+
+/// I segnalibri di un import da Obsidian. Un esito senza segnalibri (il file
+/// non c'è) non dice niente: l'avviso delle impostazioni è già arrivato.
+async function importBookmarks(payload: unknown): Promise<void> {
+  const items = (payload as { bookmarks?: unknown } | null)?.bookmarks;
+  if (!Array.isArray(items) || items.length === 0) return;
+  const { importObsidianBookmarks } = await import("../state/obsidian-bookmarks");
+  const done = await importObsidianBookmarks(items);
+  if (done.refused) notify(t("bookmarks.save_failed"), "guasto");
+  const lost = done.lost.length ? done.lost.join(", ") : "";
+  notify(
+    t(lost ? "bookmarks.imported_lost" : "bookmarks.imported", { added: done.added, same: done.same, lost }),
+    "info",
+  );
+  if (done.added > 0) {
+    const { openBookmarksPanel } = await import("../state/bookmarks-ui");
+    openBookmarksPanel();
   }
 }
 

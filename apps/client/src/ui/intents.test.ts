@@ -16,6 +16,14 @@ vi.mock("../state/document-controller", () => ({
   },
 }));
 vi.mock("../state/search-port", () => ({ searchFor: vi.fn() }));
+const imported = vi.hoisted(() => ({ items: [] as unknown[], added: 0, opened: 0 }));
+vi.mock("../state/obsidian-bookmarks", () => ({
+  importObsidianBookmarks: async (items: unknown[]) => {
+    imported.items.push(...items);
+    return { added: imported.added, same: 1, lost: ["graph"], refused: false };
+  },
+}));
+vi.mock("../state/bookmarks-ui", () => ({ openBookmarksPanel: () => imported.opened++ }));
 // Il layout ricorda se stesso a ogni cambio: qui non c'è un backend a cui dirlo.
 vi.mock("../host/ipc", () => ({ api: { setViewState: async () => {} } }));
 
@@ -25,6 +33,7 @@ import { activeTab, defaultLayout, layout, setLayout } from "../state/layout";
 import {
   applyIntent,
   CLIPBOARD_TEXT_NS,
+  OBSIDIAN_IMPORTED_NS,
   setReloaderForTests,
   takeNoticeAfterReload,
   VAULT_RESTORED_NS,
@@ -91,6 +100,24 @@ describe("l'intento degli appunti", () => {
     clipboard(writeText);
     await applyIntent({ kind: "custom", ns: CLIPBOARD_TEXT_NS, payload: { text: 3 } });
     expect(writeText).not.toHaveBeenCalled();
+    expect(notified).toHaveLength(0);
+  });
+});
+
+describe("l'import da Obsidian", () => {
+  it("porta i segnalibri, dice quanti e quali no, e mostra il pannello", async () => {
+    imported.added = 2;
+    const items = [{ type: "file", path: "Nota.md" }];
+    await applyIntent({ kind: "custom", ns: OBSIDIAN_IMPORTED_NS, payload: { written: [], bookmarks: items } });
+    expect(imported.items).toEqual(items);
+    expect(notified).toEqual([[t("bookmarks.imported_lost", { added: 2, same: 1, lost: "graph" }), "info"]]);
+    expect(imported.opened).toBe(1);
+  });
+
+  it("senza segnalibri non dice niente: l'avviso delle impostazioni c'è già", async () => {
+    imported.items.length = 0;
+    await applyIntent({ kind: "custom", ns: OBSIDIAN_IMPORTED_NS, payload: { written: [], bookmarks: [] } });
+    expect(imported.items).toEqual([]);
     expect(notified).toHaveLength(0);
   });
 });
