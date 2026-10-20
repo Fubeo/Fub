@@ -13,7 +13,7 @@ import {
 } from "./palette";
 import type { CommandEntry } from "./commands";
 import { slashPlace } from "./palette";
-import { setPrimaryViews } from "./primary-views";
+import { setPrimaryViews, setSidePanelOpener, setSidePanelViews } from "./primary-views";
 
 // Le decisioni della palette sono funzioni pure apposta: la regola del consenso
 // (quando mostrare il piano prima di eseguire) e la costruzione degli argomenti
@@ -310,6 +310,22 @@ describe("le view principali nella palette", () => {
   it("senza view principali non aggiunge niente", () => {
     setPrimaryViews([]);
     expect(viewEntries({ onEffect: () => {} })).toEqual([]);
+  });
+
+  it("le view della barra sinistra si mostrano al loro posto, solo se qualcuno sa farlo", async () => {
+    setPrimaryViews([]);
+    setSidePanelViews([{ ...mainView("sync.status"), surface: "left_sidebar" }]);
+    expect(viewEntries({ onEffect: () => {} })).toEqual([]);
+    const shown: string[] = [];
+    setSidePanelOpener((id) => void shown.push(id));
+    const entries = viewEntries({ onEffect: () => {} });
+    expect(entries.map((entry) => [entry.id, entry.title])).toEqual([
+      ["panel:sync.status", t("palette.show_panel", { title: "Vista sync.status" })],
+    ]);
+    await entries[0]!.run!();
+    expect(shown).toEqual(["sync.status"]);
+    setSidePanelOpener(null);
+    setSidePanelViews([]);
   });
 });
 

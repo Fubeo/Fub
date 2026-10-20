@@ -36,7 +36,7 @@ import { readState, setCommandSpecs, writeState } from "../state/store";
 import { openVaultRoot, undoLastOperation, vaultArg } from "../state/vault";
 import { invokeSlash, slashArgs, slashCandidates, slashContextDoc } from "../state/slash";
 import { openLifetime, type Lifetime } from "./lifetime";
-import { opensWithoutParams, primaryViews } from "./primary-views";
+import { openSidePanelView, opensWithoutParams, primaryViews, sidePanelViews } from "./primary-views";
 import { withPathPicker } from "./path-fields";
 import { listStep } from "./list-step";
 
@@ -424,9 +424,11 @@ export function closeCommandPalette() {
 /// Le view principali come voci della palette. Aprirne una è lo stesso intento
 /// che consegnerebbe un comando (`open_view`), e la palette lo consegna alla
 /// shell allo stesso modo: nessuna view ha un posto riservato, e una che chiede
-/// argomenti obbligatori la apre chi glieli dà.
+/// argomenti obbligatori la apre chi glieli dà. Dopo di loro le view della
+/// barra sinistra, che non si aprono in un riquadro ma si mostrano al loro
+/// posto: la sincronizzazione, il cestino, le collezioni.
 export function viewEntries(host: Pick<PaletteHost, "onEffect">): CommandEntry[] {
-  return primaryViews().filter(opensWithoutParams).map((spec) => ({
+  const mains = primaryViews().filter(opensWithoutParams).map((spec): CommandEntry => ({
     id: `view:${spec.id}`,
     title: t("palette.open_view", { title: spec.title }),
     description: t("palette.open_view.desc"),
@@ -436,6 +438,17 @@ export function viewEntries(host: Pick<PaletteHost, "onEffect">): CommandEntry[]
     spec: null,
     run: () => host.onEffect({ kind: "open_view", view: spec.id, params: null }),
   }));
+  const panels = sidePanelViews().map((spec): CommandEntry => ({
+    id: `panel:${spec.id}`,
+    title: t("palette.show_panel", { title: spec.title }),
+    description: t("palette.show_panel.desc"),
+    layer: "global",
+    binding: null,
+    declared: null,
+    spec: null,
+    run: () => openSidePanelView(spec.id),
+  }));
+  return [...mains, ...panels];
 }
 
 /// Apre la palette. Tre passi al più: scegli, compila, approva.
