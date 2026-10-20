@@ -75,6 +75,7 @@ import { setTooltip } from "../ui/tooltip";
 import { enterSurface, exitSurface } from "../ui/motion";
 import { icon } from "../ui/icons";
 import { SOURCE_URL, checkMessage, mountUpdateCheck, type UpdateChecker } from "./about";
+import { vaultNameEditor } from "./vault-rename";
 import { reducedMotion } from "../theme/reduced-motion";
 import {
   CSS_SNIPPETS_KEY, DEFAULT_CSS_SNIPPETS, cancelCssSnippetsPreview,
@@ -2883,16 +2884,16 @@ async function renderAbout(): Promise<HTMLElement[]> {
   return [about.section, updates.section];
 }
 
-function renderVaultRow(vault: KnownVault): HTMLElement {
+function renderVaultRow(vault: KnownVault, index: number): HTMLElement {
   const el = document.createElement("div");
   el.className = "setting-row settings-vault";
   const text = document.createElement("div");
   text.className = "setting-text";
-  const label = document.createElement("div");
-  label.className = "setting-label";
   // Il nome vuoto è il nome della cartella, e lo ricava chi disegna: tenerlo
   // scritto vorrebbe dire mostrare il nome vecchio dopo una rinomina.
-  label.textContent = `${vault.icon ?? ""} ${vault.name || nameFolder(vault.root)}`.trim();
+  const { label, rename } = vaultNameEditor(vault, nameFolder(vault.root), `vault-name-${index}`, (name) => {
+    void writeVault(() => api.setVaultLook(vault.root, vault.icon ?? null, name));
+  });
   const path = row("muted setting-path", vault.root);
   text.append(label, path);
 
@@ -2940,7 +2941,7 @@ function renderVaultRow(vault: KnownVault): HTMLElement {
 
   const actions = document.createElement("div");
   actions.className = "setting-control settings-actions";
-  actions.append(favoriteButton, open, forget);
+  actions.append(favoriteButton, open, rename, forget);
   el.append(text, actions);
   return el;
 }
