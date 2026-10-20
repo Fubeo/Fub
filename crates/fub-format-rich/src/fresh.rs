@@ -32,9 +32,14 @@ pub(crate) struct Image {
 
 impl Image {
     /// Il nome del file nel pacchetto, dai byte: la stessa immagine ha sempre
-    /// lo stesso nome.
+    /// lo stesso nome. L'impronta è l'FNV-1a di `fub_abi`, stabile fra le
+    /// versioni come serve a un nome su disco.
     pub fn name(&self) -> String {
-        format!("fub-{:016x}.{}", fnv(&self.bytes), self.ext)
+        format!(
+            "fub-{:016x}.{}",
+            fub_abi::Fnv1a::hash(&self.bytes),
+            self.ext
+        )
     }
 }
 
@@ -106,13 +111,6 @@ fn sniff(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
     } else {
         None
     }
-}
-
-/// FNV-1a a 64 bit: stabile fra le versioni, come serve a un nome su disco.
-fn fnv(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
-        (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
-    })
 }
 
 #[cfg(test)]

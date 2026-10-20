@@ -443,7 +443,53 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  alfanumerica, e senza `composed` l'accento non divergeva, spariva.",
             ),
         ),
+        (
+            "crates/fub-format-rich/src/unproject.rs::initials",
+            (
+                Family::PerCharacterCase,
+                "non confronta niente: costruisce le iniziali di un autore di commento, la \
+                 prima lettera di ogni parola in maiuscolo, come le scrive Word. Lavora per \
+                 carattere perché prende un carattere per parola, e non c'è un nome da \
+                 riconoscere né un path da risolvere.",
+            ),
+        ),
         // -- CasoAscii: dove è dimostrabilmente la stessa risposta ----------
+        (
+            "crates/fub-format-rich/src/odt/styles.rs::hex",
+            (
+                Family::AsciiCase,
+                "scrive in minuscolo un colore ODF `#rrggbb` già controllato come sei cifre \
+                 esadecimali: l'alfabeto è ASCII per costruzione, e la piegatura serve solo a \
+                 dare al colore la forma che la proiezione confronta. Non è un nome.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/projection.rs::color_name",
+            (
+                Family::AsciiCase,
+                "scrive un colore RGB del documento come `#rrggbb` minuscolo, la forma della \
+                 proiezione: la stringa viene da `hex()` di WordCraft, solo cifre esadecimali \
+                 ASCII. Normalizza un numero, non confronta nomi.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/projection.rs::look",
+            (
+                Family::AsciiCase,
+                "come `color_name`, per il colore di evidenziazione: lo scrive in minuscolo per \
+                 confrontarlo col valore di default della proiezione, e le cifre esadecimali \
+                 sono ASCII per costruzione.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/running.rs::page_field",
+            (
+                Family::AsciiCase,
+                "riconosce i codici di campo di Word `PAGE`, `NUMPAGES` e l'interruttore \
+                 `MERGEFORMAT`: sono parole chiave ASCII del formato, che Word accetta senza \
+                 distinguere le maiuscole. Non tocca nomi scritti dall'utente.",
+            ),
+        ),
         (
             "crates/fub-app/src/live.rs::pc_name",
             (

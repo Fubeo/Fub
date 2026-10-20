@@ -137,6 +137,7 @@ flowchart LR
     rich --> wdocbin
     rich --> wdocx
     rich --> wformats
+    rich -.-> wgeom
     wdoc --> wgeom
     wdocx --> wdoc
     wdocx --> wgeom
