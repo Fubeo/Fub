@@ -1279,6 +1279,7 @@ pub(crate) fn run_pass_on(
             .get("entries_truncated")
             .and_then(|v| v.as_bool())
             .ok_or_else(|| PluginError::Internal("sync status truncation missing".into()))?,
+        skipped: too_large.iter().take(MAX_SKIPPED_ROWS).cloned().collect(),
         last_error: pass_error(held, &too_large),
         paused: false,
     };
@@ -1294,6 +1295,9 @@ pub(crate) fn run_pass_on(
         "too_large": too_large.len(), "pending": snapshot.pending,
     }))
 }
+
+/// Quanti file lasciati fuori la vista di stato nomina uno per uno.
+const MAX_SKIPPED_ROWS: usize = 500;
 
 /// Cosa il passaggio non ha potuto fare, per la vista di stato: le op remote
 /// trattenute e i file che non stanno in una sola op.

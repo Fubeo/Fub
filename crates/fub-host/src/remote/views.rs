@@ -48,6 +48,8 @@ const T_ENTRY: &str = "entry";
 const T_ENTRY_DETAIL: &str = "entry.detail";
 const T_TRUNCATED: &str = "truncated";
 const T_LOG: &str = "log";
+const T_SKIPPED: &str = "skipped";
+const T_SKIPPED_ROW: &str = "skipped.row";
 const T_NO_CONFLICTS: &str = "no_conflicts";
 const T_NO_VERSIONS: &str = "no_versions";
 const T_RETRY: &str = "retry";
@@ -83,6 +85,8 @@ pub fn catalog() -> Vec<StringCatalog> {
         .with(T_ENTRY_DETAIL, "{state} · locale {local} / server {server} · {detail}")
         .with(T_TRUNCATED, "Sul server ci sono altri file: l'elenco si ferma a 5000.")
         .with(T_LOG, "{kind} · {when}")
+        .with(T_SKIPPED, "Restano fuori dalla sincronizzazione: {count}")
+        .with(T_SKIPPED_ROW, "supera i 7 MiB di una sola operazione")
         .with(T_NO_CONFLICTS, "Nessun conflitto.")
         .with(T_NO_VERSIONS, "Ancora nessuna versione sincronizzata.")
         .with(T_RETRY, "Riprova")
@@ -130,6 +134,8 @@ pub fn catalog() -> Vec<StringCatalog> {
             "More files on the server; the list stops at 5000.",
         )
         .with(T_LOG, "{kind} · {when}")
+        .with(T_SKIPPED, "Left out of sync: {count}")
+        .with(T_SKIPPED_ROW, "exceeds the 7 MiB single-operation cap")
         .with(T_NO_CONFLICTS, "No conflicts.")
         .with(T_NO_VERSIONS, "No synced versions yet.")
         .with(T_RETRY, "Retry")
@@ -185,6 +191,10 @@ pub struct SyncSnapshot {
     pub log: Vec<SyncLogRow>,
     #[serde(default)]
     pub entries_truncated: bool,
+    /// I file che il passaggio ha lasciato fuori, per nome: quelli oltre
+    /// il tetto di una sola operazione.
+    #[serde(default)]
+    pub skipped: Vec<String>,
     #[serde(default)]
     pub last_error: Option<String>,
     #[serde(default)]
@@ -471,6 +481,24 @@ fn status_tree(snap: &SyncSnapshot, faults: &[&'static str]) -> UiNode {
     if snap.entries_truncated {
         children.push(UiNode::text(Text::key(T_TRUNCATED)));
     }
+    if !snap.skipped.is_empty() {
+        children.push(UiNode::text(Text::message(
+            T_SKIPPED,
+            vec![Arg::int("count", snap.skipped.len() as i64)],
+        )));
+        children.push(UiNode::list(
+            snap.skipped
+                .iter()
+                .map(|doc| {
+                    UiNode::list_item(
+                        Text::from(doc.clone()),
+                        Some(Text::key(T_SKIPPED_ROW)),
+                        None,
+                    )
+                })
+                .collect::<Vec<_>>(),
+        ));
+    }
     if !snap.log.is_empty() {
         children.push(UiNode::list(
             snap.log
@@ -693,5 +721,43 @@ mod tests {
                 if *command == "sync.restore_version"),
             "{error:?}"
         );
+    }
+    fn items(node: &UiNode, out: &mut Vec<(String, Option<Text>)>) {
+        if let UiKind::ListItem {
+            title, subtitle, ..
+        } = &node.kind
+        {
+            out.push((
+                title.as_literal().unwrap_or_default().to_string(),
+                subtitle.clone(),
+            ));
+        }
+        for child in node.children() {
+            items(child, out);
+        }
+    }
+
+    /// Un file lasciato fuori dal passaggio si nomina nel registro, uno per
+    /// riga col perché, e non soltanto il primo dentro l'ultimo errore.
+    #[test]
+    fn the_status_names_every_file_left_out() {
+        let snap = SyncSnapshot {
+            replica_id: "replica".into(),
+            vault_id: "vault".into(),
+            skipped: vec!["Video/grande.mp4".into(), "Archivio.zip".into()],
+            ..serde_json::from_value(serde_json::json!({})).unwrap()
+        };
+        let mut found = Vec::new();
+        items(&status_tree(&snap, &[]), &mut found);
+        let skipped: Vec<&str> = found
+            .iter()
+            .filter(|(_, subtitle)| *subtitle == Some(Text::key(T_SKIPPED_ROW)))
+            .map(|(title, _)| title.as_str())
+            .collect();
+        assert_eq!(skipped, ["Video/grande.mp4", "Archivio.zip"]);
+
+        let old: SyncSnapshot =
+            serde_json::from_value(serde_json::json!({"replica_id": "r"})).unwrap();
+        assert!(old.skipped.is_empty(), "uno stato di prima si legge ancora");
     }
 }
