@@ -102,6 +102,7 @@ pub mod mount;
 /// ce l'hanno.
 #[cfg(feature = "http-client")]
 pub mod net;
+pub mod obsidian_import;
 #[cfg(feature = "http-client")]
 pub mod publish;
 mod query;

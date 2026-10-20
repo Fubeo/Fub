@@ -95,7 +95,7 @@ const SNAPSHOT_APPLY: &str = "vault.snapshot.apply";
 /// I comandi che l'host esegue in proprio: il kernel li riserva al mount
 /// (`Workspace::reserve_host_commands`), così un plugin che li invoca sente che
 /// non sono suoi da chiamare e nessun provider ne registra un omonimo.
-pub(crate) const HOST_COMMANDS: [&str; 14] = [
+pub(crate) const HOST_COMMANDS: [&str; 15] = [
     OS_TRASH_COMMAND,
     MOUNT_ADD,
     MOUNT_REMOVE,
@@ -106,6 +106,7 @@ pub(crate) const HOST_COMMANDS: [&str; 14] = [
     crate::capture::CAPTURE_APPLY,
     crate::web_clip::WEB_CLIP,
     crate::export_folder::EXPORT_FOLDER,
+    crate::obsidian_import::OBSIDIAN_IMPORT,
     crate::connector_tokens::CONNECTOR_TOKEN,
     crate::connector_tokens::CONNECTOR_TOKENS,
     crate::uri_inbox::URI_PENDING,
@@ -3752,6 +3753,7 @@ impl Host {
                     && spec.id != crate::capture::CAPTURE_APPLY
                     && spec.id != crate::web_clip::WEB_CLIP
                     && spec.id != crate::export_folder::EXPORT_FOLDER
+                    && spec.id != crate::obsidian_import::OBSIDIAN_IMPORT
                     && !crate::connector_tokens::specs()
                         .iter()
                         .any(|own| own.id == spec.id)
@@ -3767,6 +3769,7 @@ impl Host {
                 crate::capture::spec(),
                 crate::web_clip::spec(),
                 crate::export_folder::spec(&workspace.export_targets()),
+                crate::obsidian_import::spec(),
             ];
             own.extend(crate::connector_tokens::specs());
             own.extend(crate::uri_inbox::specs());
@@ -4170,6 +4173,13 @@ impl Host {
             // La coda è della macchina e l'azione compone comandi del
             // registro, ognuno col suo prestito: niente sessione presa qui.
             let result = crate::uri_inbox::invoke(self, &self.uris, &spec, args, mode);
+            return self.localized_host_result(vault, result);
+        }
+        if command == crate::obsidian_import::OBSIDIAN_IMPORT {
+            // Scrive con la porta del pannello, che prende i suoi prestiti:
+            // qui si prende soltanto la radice.
+            let root = self.with_session(vault, |session| session.root.clone())?;
+            let result = crate::obsidian_import::invoke(self, vault, &root, args, mode);
             return self.localized_host_result(vault, result);
         }
         if let Some(spec) = crate::connector_tokens::specs()

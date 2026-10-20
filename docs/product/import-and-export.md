@@ -67,6 +67,30 @@ Dettagli del file in
 Un trascinamento di file dal sistema nell'explorer non è un import: copia i
 file così come sono (vedi [Explorer e cartelle](explorer-and-folders.md)).
 
+## Le impostazioni di Obsidian
+
+Un vault che viene da Obsidian ha `.obsidian/` nella radice. Fub la ignora come
+parte del vault, ma «Importa le impostazioni di Obsidian» (il comando
+dell'host `settings.import_obsidian`, dalla palette) ne legge tre file e scrive
+le scelte che Fub sa esprimere:
+
+- da `app.json`: cartella degli allegati (anche `./` e `./sotto`), posizione
+  delle note nuove (radice, accanto alla nota aperta, una cartella), stile e
+  formato dei link, conferma e cestino, cartelle escluse, e gli interruttori
+  dell'editor (modalità, rientro, numeri di riga, ortografia, Vim, parentesi,
+  elenchi, guide di rientro, HTML incollato, destra a sinistra, piegatura,
+  proprietà, interruzioni di riga rigorose);
+- da `appearance.json`: la luce e la misura del testo;
+- da `daily-notes.json`: cartella, formato e modello della giornaliera.
+
+Ogni impostazione va al suo livello, del vault o della macchina, con la stessa
+porta del pannello. Una chiave che Fub non sa dire (la larghezza leggibile, un
+tema di Obsidian, un filtro con un'espressione regolare, la radice come
+cartella degli allegati) torna nell'esito per nome, e così una chiave di una
+feature spenta. I file di Obsidian si leggono soltanto, dentro la radice: un
+collegamento che porta fuori dal vault non si segue. Un file guasto ferma
+l'import prima di scrivere.
+
 ## Esportare una cartella o il vault
 
 «Esporta il vault…» nel menu File ed «Esporta la cartella…» nel menu di una
