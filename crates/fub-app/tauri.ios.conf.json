@@ -3,6 +3,9 @@
   "productName": "Fub",
   "version": "0.1.0",
   "bundle": {
+    "iOS": {
+      "minimumSystemVersion": "14.0"
+    },
     "fileAssociations": [
       {
         "ext": ["md", "markdown"],
@@ -26,8 +29,5 @@
     "deep-link": {
       "mobile": [{ "scheme": ["fub"], "appLink": false }]
     }
-  },
-  "ios": {
-    "minimumSystemVersion": "14.0"
   }
 }

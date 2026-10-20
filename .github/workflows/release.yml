@@ -78,8 +78,10 @@ jobs:
       - name: Installa esattamente il lockfile del frontend
         working-directory: apps/client
         run: npm ci
-      - name: Tauri CLI major 2
-        run: cargo install tauri-cli --version "^2" --locked
+      # La stessa versione di `tauri` nel lockfile: la CLI legge la config con
+      # il suo schema, e dalla 2.12 chiede Rust 1.90, oltre il toolchain fissato.
+      - name: Tauri CLI 2.11.5
+        run: cargo install tauri-cli --version "=2.11.5" --locked
       - name: la firma Apple, soltanto se i segreti ci sono
         if: runner.os == 'macOS'
         shell: bash

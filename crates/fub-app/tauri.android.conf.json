@@ -3,6 +3,10 @@
   "productName": "Fub",
   "version": "0.1.0",
   "bundle": {
+    "android": {
+      "minSdkVersion": 24,
+      "autoIncrementVersionCode": false
+    },
     "fileAssociations": [
       {
         "ext": ["md", "markdown"],
@@ -10,7 +14,7 @@
         "description": "Note di Fub",
         "role": "Editor",
         "mimeType": "text/markdown",
-        "androidIntentActionFilters": ["Send", "SendMultiple", "View"]
+        "androidIntentActionFilters": ["send", "sendMultiple", "view"]
       }
     ]
   },
@@ -23,9 +27,5 @@
     "deep-link": {
       "mobile": [{ "scheme": ["fub"], "appLink": false }]
     }
-  },
-  "android": {
-    "minSdkVersion": 24,
-    "autoIncrementVersionCode": false
   }
 }
