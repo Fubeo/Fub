@@ -594,8 +594,11 @@ pub async fn open_viewer<R: tauri::Runtime>(
     let navigation = app.clone();
     let viewer = WebviewWindowBuilder::new(&app, VIEWER_LABEL, WebviewUrl::External(prepared.url))
         .title(prepared.title)
-        .inner_size(1024.0, 760.0)
-        .center()
+        .inner_size(1024.0, 760.0);
+    // Centrare è del desktop: su Android e iOS la finestra occupa lo schermo.
+    #[cfg(desktop)]
+    let viewer = viewer.center();
+    let viewer = viewer
         .focused(true)
         .visible(true)
         .decorations(true)

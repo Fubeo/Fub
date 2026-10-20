@@ -1833,9 +1833,11 @@ async fn save_artifact(
     guard_main_shell(&window, "save artifacts")?;
     check_artifact(&suggested_name, &media_type, &bytes, None)?;
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-    app.dialog()
-        .file()
-        .set_parent(&window)
+    let dialog = app.dialog().file();
+    // Il genitore della finestra di dialogo esiste solo sul desktop.
+    #[cfg(desktop)]
+    let dialog = dialog.set_parent(&window);
+    dialog
         .set_file_name(suggested_name)
         .save_file(move |selection| {
             let _ = sender.send(selection);
