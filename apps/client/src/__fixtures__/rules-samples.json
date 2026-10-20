@@ -2202,6 +2202,58 @@
       "out": false
     }
   ],
+  "attachments_for": [
+    {
+      "declared": "attachments",
+      "source": "Progetti/Alpha.md",
+      "out": "attachments"
+    },
+    {
+      "declared": "/attachments/",
+      "source": "Alpha.md",
+      "out": "attachments"
+    },
+    {
+      "declared": " attachments ",
+      "source": "Alpha.md",
+      "out": "attachments"
+    },
+    {
+      "declared": "./",
+      "source": "Progetti/Alpha.md",
+      "out": "Progetti"
+    },
+    {
+      "declared": ".",
+      "source": "Progetti/Alpha.md",
+      "out": "Progetti"
+    },
+    {
+      "declared": "./img",
+      "source": "Progetti/2026/Alpha.md",
+      "out": "Progetti/2026/img"
+    },
+    {
+      "declared": "./img/",
+      "source": "Alpha.md",
+      "out": "img"
+    },
+    {
+      "declared": "./",
+      "source": "Alpha.md",
+      "out": ""
+    },
+    {
+      "declared": "",
+      "source": "Progetti/Alpha.md",
+      "out": ""
+    },
+    {
+      "declared": ".hidden",
+      "source": "Progetti/Alpha.md",
+      "out": ".hidden"
+    }
+  ],
   "mask_wants": [
     {
       "mask_name": "narrow",

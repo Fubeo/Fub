@@ -1536,7 +1536,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_ATTACHMENT_FOLDER, "Cartella degli allegati")
         .with(
             C_ATTACHMENT_FOLDER_DESC,
-            "La cartella del vault in cui cercare e depositare gli allegati.",
+            "La cartella del vault in cui cercare e depositare gli allegati. Con `./` davanti segue la nota: `./` è la sua cartella, `./allegati` una sua sottocartella.",
         )
         .with(C_NEW_NOTE_FOLDER, "Cartella delle nuove note")
         .with(
@@ -2022,7 +2022,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_ATTACHMENT_FOLDER, "Attachment folder")
         .with(
             C_ATTACHMENT_FOLDER_DESC,
-            "The vault folder where attachments are found and deposited.",
+            "The vault folder where attachments are found and deposited. A leading `./` follows the note: `./` is its folder, `./attachments` a subfolder of it.",
         )
         .with(C_NEW_NOTE_FOLDER, "New note folder")
         .with(

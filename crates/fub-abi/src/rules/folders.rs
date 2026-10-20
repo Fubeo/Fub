@@ -64,6 +64,31 @@ pub fn contains(folder: &str, path: &str) -> bool {
     within(folder, parent(path), true)
 }
 
+/// La cartella degli allegati di una nota, da quella che il vault dichiara.
+///
+/// Una cartella che comincia con `./` è relativa alla cartella della nota, come
+/// in Obsidian: `./` è la cartella stessa, `./allegati` una sua sottocartella.
+/// Ogni altra è una cartella del vault, uguale per tutte le note. `""` è la
+/// radice.
+pub fn attachments_for(declared: &str, source: &str) -> String {
+    let declared = declared.trim();
+    let relative = if declared == "." {
+        Some("")
+    } else {
+        declared.strip_prefix("./")
+    };
+    let Some(rest) = relative else {
+        return normalized(declared).to_owned();
+    };
+    let own = parent(source);
+    let rest = normalized(rest);
+    match (own.is_empty(), rest.is_empty()) {
+        (true, _) => rest.to_owned(),
+        (false, true) => own.to_owned(),
+        (false, false) => format!("{own}/{rest}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,6 +125,23 @@ mod tests {
             assert!(within(root, "", false), "the root is itself");
             assert!(!within(root, "Progetti", false));
         }
+    }
+
+    #[test]
+    fn an_attachment_folder_with_a_dot_follows_the_note() {
+        assert_eq!(
+            attachments_for("attachments", "Progetti/Alpha.md"),
+            "attachments"
+        );
+        assert_eq!(attachments_for("/attachments/", "Alpha.md"), "attachments");
+        assert_eq!(attachments_for("./", "Progetti/Alpha.md"), "Progetti");
+        assert_eq!(attachments_for(".", "Progetti/Alpha.md"), "Progetti");
+        assert_eq!(
+            attachments_for("./img", "Progetti/2026/Alpha.md"),
+            "Progetti/2026/img"
+        );
+        assert_eq!(attachments_for("./img/", "Alpha.md"), "img");
+        assert_eq!(attachments_for("./", "Alpha.md"), "");
     }
 
     #[test]

@@ -1,7 +1,8 @@
 // Dove finisce un allegato e come lo si nomina (P07/F23).
 //
 // La cartella e' la chiave `files.attachment-folder` esistente (default
-// `attachments`): nessuna nuova impostazione. Le collisioni le risolve il
+// `attachments`): nessuna nuova impostazione. Con `./` davanti segue la nota
+// (`attachmentsFor`). Le collisioni le risolve il
 // kernel (`Workspace::free_name`, forma `foto.png`, `foto 1.png`, …); qui si
 // calcola solo il candidato da proporre, mai lo stato del disco. I link sono
 // relativi al documento che li ospita (`../allegati/foto.png`), con percent-
@@ -10,6 +11,7 @@
 // `split_file_name`, `relative_url` in `crates/fub-host/src/resources.rs`.
 import type { Lifetime } from "../../ui/lifetime";
 import { t } from "../../i18n/strings";
+import { attachmentsFor } from "../../rules/mirrored";
 
 export const DEFAULT_ATTACHMENT_FOLDER = "attachments";
 
@@ -114,8 +116,13 @@ export async function depositAttachment(
   if (bytes.byteLength > 64 * 1024 * 1024) {
     throw new Error(t("errors.attachment.too_large", { name }));
   }
+  // Una cartella con `./` segue la nota, e per una nota nella radice è la
+  // radice stessa.
+  const folder = attachmentsFor(deposit.folder, deposit.fromDocument);
+  const atRoot = folder === "" && deposit.folder.trim().startsWith(".");
   for (let n = 0; n <= 10_000; n++) {
-    const candidate = attachmentTarget(deposit.folder, attachmentCandidate("", stem, ext, n));
+    const file = attachmentCandidate("", stem, ext, n);
+    const candidate = atRoot ? sanitizeFileName(file) : attachmentTarget(folder, file);
     try {
       const receipt = await deposit.write(candidate, bytes);
       return { receipt, link: relativeUrl(deposit.fromDocument, receipt.id) };

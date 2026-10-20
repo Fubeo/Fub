@@ -28,7 +28,11 @@ il ripristino lo rimette dov'era, byte per byte.
 «Mostra la cartella degli allegati», dalla palette, apre nell'albero la
 cartella di `files.attachment-folder`, dove finiscono gli allegati incollati o
 trascinati. Se la cartella non c'è ancora lo dice e non la crea: la crea il
-primo allegato.
+primo allegato. Una cartella che comincia con `./` segue la nota, come in
+Obsidian: con `./` l'allegato va accanto alla nota, con `./allegati` in una sua
+sottocartella, e un `![[foto.png]]` nudo si cerca prima lì. Il comando apre
+allora quella della nota aperta. La regola è `fub_abi::rules::folders::attachments_for`,
+con la gemella `attachmentsFor` nella shell.
 «Filtra l'esplora per percorso» (`shell.explorer.filter`, dalla palette) apre
 un campo sopra l'albero. Con del testo l'albero cede il posto a un elenco
 piatto delle voci e cartelle dello spazio il cui percorso intero contiene ogni

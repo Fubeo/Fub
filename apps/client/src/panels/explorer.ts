@@ -66,7 +66,7 @@ import { contextMenuItems, hasContextMenuViews, type ContextTarget } from "../ui
 import { trashManyWithConfirm, trashWithConfirm } from "./trash";
 import { mountTreeSelection, type TreeSelection } from "./explorer-selection";
 import { errorText } from "../host/errors";
-import { nameFault, normalizedName } from "../rules/mirrored";
+import { attachmentsFor, nameFault, normalizedName } from "../rules/mirrored";
 import { onLanguage, plural, t } from "../i18n/strings";
 import { notify } from "../ui/notify";
 import type { Lifetime } from "../ui/lifetime";
@@ -1335,10 +1335,10 @@ async function revealPath(path: string, open: boolean): Promise<boolean> {
 
 /// La cartella in cui finiscono gli allegati (`files.attachment-folder`),
 /// aperta nell'albero. Una cartella che non c'è ancora si dice, non si crea:
-/// la crea il primo allegato.
+/// la crea il primo allegato. Con `./` è quella della nota aperta.
 async function revealAttachments(): Promise<void> {
   const configured = (await settings()).find((item) => item.spec.key === "files.attachment-folder")?.value;
-  const folder = (typeof configured === "string" ? configured : DEFAULT_ATTACHMENT_FOLDER).trim().replace(/\/+$/g, "");
+  const folder = attachmentsFor(typeof configured === "string" ? configured : DEFAULT_ATTACHMENT_FOLDER, state.currentDoc ?? "");
   if (!folder || !(await revealPath(folder, true))) {
     notify(t("explorer.attachments_missing", { folder }));
   }
