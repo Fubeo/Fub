@@ -1,0 +1,104 @@
+name: Mobile
+
+# Il build mobile, che il ciclo principale non fa. Android: progetto generato
+# da `cargo tauri android init --ci`, template nativi fusi da
+# `crates/fub-app/mobile/install-mobile.sh` (con la sua verifica `--check`),
+# poi un APK di debug per aarch64, caricato come artefatto. iOS: la sola
+# compilazione Rust del binario per il dispositivo, perché il progetto Xcode
+# chiede i target Share e Widget creati a mano (install-mobile.sh lo dice) e
+# una firma; nessun .ipa esce da qui.
+#
+# Non è un controllo richiesto: gira sui cambi che toccano il mobile, su `main`
+# e a richiesta. L'APK non è firmato per la distribuzione.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "crates/fub-app/**"
+      - "apps/client/src/shells/mobile/**"
+      - "apps/client/src/entrypoints/mobile*"
+      - "apps/client/mobile.html"
+      - ".github/workflows/mobile.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  android:
+    name: android (apk di debug)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      - name: JDK 17 e NDK del runner
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+      - name: Installa esattamente il lockfile del frontend
+        working-directory: apps/client
+        run: npm ci
+      - name: Tauri CLI major 2
+        run: cargo install tauri-cli --version "^2" --locked
+      # `crates/fub-app/Cargo.toml` spiega perché sul desktop la libreria è
+      # soltanto `rlib`: le due forme che Android e iOS consumano tornano qui,
+      # nel target che le usa, e non costano niente al ciclo principale.
+      - name: La libreria anche come cdylib e staticlib
+        run: |
+          sed -i 's/^crate-type = \["rlib"\]$/crate-type = ["staticlib", "cdylib", "rlib"]/' crates/fub-app/Cargo.toml
+          grep -q '^crate-type = \["staticlib", "cdylib", "rlib"\]$' crates/fub-app/Cargo.toml
+      - name: Progetto Android generato
+        working-directory: crates/fub-app
+        run: cargo tauri android init --ci
+      - name: Template nativi fusi e verificati
+        run: |
+          bash crates/fub-app/mobile/install-mobile.sh --gen crates/fub-app/gen
+          bash crates/fub-app/mobile/install-mobile.sh --gen crates/fub-app/gen --check
+      - name: APK di debug per aarch64
+        working-directory: crates/fub-app
+        run: cargo tauri android build --debug --apk --target aarch64
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: fub-android-debug
+          path: crates/fub-app/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+
+  ios:
+    name: ios (compilazione Rust)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      # `generate_context!` incorpora il frontend già costruito.
+      - name: Frontend costruito
+        working-directory: apps/client
+        run: |
+          npm ci
+          npm run build
+      - name: fub-app per il dispositivo iOS
+        run: cargo check -p fub-app --target aarch64-apple-ios --locked

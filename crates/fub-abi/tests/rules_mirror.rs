@@ -40,6 +40,7 @@ use fub_abi::event::{BatchId, DocChange, DocChanges, Event, EventKind, EventMask
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, TaskMarker};
 use fub_abi::rules::events::{folder_contains, topic_matches};
+use fub_abi::rules::folders::for_note;
 use fub_abi::rules::keys;
 use fub_abi::rules::path::{relative_ref, resolution_key, resolve_against};
 use fub_abi::rules::path_policy::{check, normalized, Naming};
@@ -392,6 +393,27 @@ fn folder_contains_cases() -> Vec<Value> {
     ]
     .into_iter()
     .map(|(folder, id)| json!({"folder": folder, "id": id, "out": folder_contains(folder, id)}))
+    .collect()
+}
+
+/// Una cartella dichiarata letta per una nota: la shell ci deposita gli
+/// allegati e ci crea le note nuove, il kernel ci cerca un `![[foto.png]]`
+/// nudo. `./` segue la cartella della nota.
+fn folder_for_note_cases() -> Vec<Value> {
+    [
+        ("attachments", "Progetti/Alpha.md"),
+        ("/attachments/", "Alpha.md"),
+        (" attachments ", "Alpha.md"),
+        ("./", "Progetti/Alpha.md"),
+        (".", "Progetti/Alpha.md"),
+        ("./img", "Progetti/2026/Alpha.md"),
+        ("./img/", "Alpha.md"),
+        ("./", "Alpha.md"),
+        ("", "Progetti/Alpha.md"),
+        (".hidden", "Progetti/Alpha.md"),
+    ]
+    .into_iter()
+    .map(|(declared, source)| json!({"declared": declared, "source": source, "out": for_note(declared, source)}))
     .collect()
 }
 
@@ -760,7 +782,7 @@ fn search_syntax_cases() -> Vec<Value> {
             "path:*.canvas file:\"Città del\" content:note heading:Obiettivi",
             false,
         ),
-        ("task:todo task:done match-case:API", false),
+        ("task:todo task:done match-case:API ignore-case:Api", false),
         ("/fo+\\/bar/ -/x/", false),
         (
             "[stato] [stato:attivo] [priorità:>2] [scadenza:<2026-10-01] [fatto:false]",
@@ -768,6 +790,16 @@ fn search_syntax_cases() -> Vec<Value> {
         ),
         ("[aliases:\"Home page\"] [n:+.5] [v:1.2.3]", false),
         ("ore 10:30 https://esempio.it/x", false),
+        (
+            "line:(rosa spina) -block:\"due parole\" section:lago",
+            false,
+        ),
+        ("città line:(rosa", false),
+        ("due:2026-10-19 -due:<2026-01-01 due:>=2026-10-01", false),
+        ("due:<=2026-12-31 due:>2026-01-01", false),
+        ("due:domani", false),
+        ("due:<", false),
+        ("line:( , )", false),
         ("((a OR b) (c OR d))", false),
         ("città \"aperta", false),
         ("città /aperta", false),
@@ -821,6 +853,7 @@ fn expected() -> Value {
         "task_checked": task_checked_cases(),
         "topic_matches": topic_matches_cases(),
         "folder_contains": folder_contains_cases(),
+        "folder_for_note": folder_for_note_cases(),
         "mask_wants": mask_wants_cases(),
         "scan_tags": scan_tags_cases(),
         "canonical_chord": canonical_chord_cases(),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  folderForNote,
   folderContains,
   maskWants,
   nameFault,
@@ -75,6 +76,7 @@ const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   // rende leggibile un caso fallito: la regola guarda `mask` ed `event`.
   topic_matches: (c) => topicMatches(c.prefix, c.topic),
   folder_contains: (c) => folderContains(c.folder, c.id),
+  folder_for_note: (c) => folderForNote(c.declared, c.source),
   mask_wants: (c) => maskWants(c.mask, c.event),
   // La sintassi della barra di ricerca (P04): una riga, la stessa `QueryExpr`.
   search_syntax: (c) => parseSearch(c.input, c.typing),

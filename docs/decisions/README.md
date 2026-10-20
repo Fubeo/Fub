@@ -35,7 +35,7 @@ Nuove decisioni usano il [template](template.md).
 | [0200 — L'inventario installato è distinto dal runtime e dai dati plugin](0200-inventario-componenti-installati.md) | accolta | storage | 0187 |
 | [0201 — Le superfici strutturate usano sessioni, finestre e patch coordinate](0201-superfici-strutturate-a-finestre.md) | accolta | contratto | — |
 | [0202 — Snapshot globali offline recuperabili](0202-snapshot-globali-recuperabili.md) | accolta | storage | — |
-| [0203 — Le superfici spaziali modificano sorgenti SVG con operazioni testuali](0203-superfici-spaziali.md) | proposta | frontend | — |
+| [0203 — Le superfici spaziali modificano sorgenti SVG con operazioni testuali](0203-superfici-spaziali.md) | accolta | frontend | — |
 | [0204 — L'inchiostro è un componente di sistema, non di un prodotto](0204-nucleo-inchiostro.md) | proposta | frontend | 0203 |
 | [0205 — La sessione live è un servizio dell'app con un canale verso la shell](0205-sessione-live.md) | proposta | host | — |
 | [0206 — Un tema dichiara il proprio motore e, da `theme-2`, le proprie impostazioni](0206-motori-dei-temi-e-impostazioni.md) | accolta | contratto | — |

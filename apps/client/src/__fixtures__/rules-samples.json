@@ -391,7 +391,7 @@
       }
     },
     {
-      "input": "task:todo task:done match-case:API",
+      "input": "task:todo task:done match-case:API ignore-case:Api",
       "typing": false,
       "out": {
         "ok": {
@@ -422,6 +422,18 @@
                     "tolerance": "exact",
                     "partial_last_term": false,
                     "case_sensitive": true
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "Api",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
                   }
                 }
               ]
@@ -626,6 +638,191 @@
               ]
             }
           ]
+        }
+      }
+    },
+    {
+      "input": "line:(rosa spina) -block:\"due parole\" section:lago",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "scoped",
+                    "scope": "line",
+                    "text": {
+                      "text": "rosa spina",
+                      "mode": "terms",
+                      "fields": [],
+                      "tolerance": "exact",
+                      "partial_last_term": false,
+                      "case_sensitive": false
+                    }
+                  }
+                },
+                {
+                  "negated": true,
+                  "predicate": {
+                    "kind": "scoped",
+                    "scope": "block",
+                    "text": {
+                      "text": "due parole",
+                      "mode": "phrase",
+                      "fields": [],
+                      "tolerance": "exact",
+                      "partial_last_term": false,
+                      "case_sensitive": false
+                    }
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "scoped",
+                    "scope": "section",
+                    "text": {
+                      "text": "lago",
+                      "mode": "terms",
+                      "fields": [],
+                      "tolerance": "exact",
+                      "partial_last_term": false,
+                      "case_sensitive": false
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "città line:(rosa",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "unclosed-group",
+          "at": 11
+        }
+      }
+    },
+    {
+      "input": "due:2026-10-19 -due:<2026-01-01 due:>=2026-10-01",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "task_due",
+                    "min": {
+                      "date": "2026-10-19",
+                      "inclusive": true
+                    },
+                    "max": {
+                      "date": "2026-10-19",
+                      "inclusive": true
+                    }
+                  }
+                },
+                {
+                  "negated": true,
+                  "predicate": {
+                    "kind": "task_due",
+                    "min": null,
+                    "max": {
+                      "date": "2026-01-01",
+                      "inclusive": false
+                    }
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "task_due",
+                    "min": {
+                      "date": "2026-10-01",
+                      "inclusive": true
+                    },
+                    "max": null
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "due:<=2026-12-31 due:>2026-01-01",
+      "typing": false,
+      "out": {
+        "ok": {
+          "any": [
+            {
+              "all": [
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "task_due",
+                    "min": null,
+                    "max": {
+                      "date": "2026-12-31",
+                      "inclusive": true
+                    }
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "task_due",
+                    "min": {
+                      "date": "2026-01-01",
+                      "inclusive": false
+                    },
+                    "max": null
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "input": "due:domani",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "bad-value",
+          "at": 0
+        }
+      }
+    },
+    {
+      "input": "due:<",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "bad-value",
+          "at": 0
+        }
+      }
+    },
+    {
+      "input": "line:( , )",
+      "typing": false,
+      "out": {
+        "fault": {
+          "kind": "bad-value",
+          "at": 0
         }
       }
     },
@@ -2003,6 +2200,58 @@
       "folder": "Projects/2026",
       "id": "Projects/2027/Alpha.md",
       "out": false
+    }
+  ],
+  "folder_for_note": [
+    {
+      "declared": "attachments",
+      "source": "Progetti/Alpha.md",
+      "out": "attachments"
+    },
+    {
+      "declared": "/attachments/",
+      "source": "Alpha.md",
+      "out": "attachments"
+    },
+    {
+      "declared": " attachments ",
+      "source": "Alpha.md",
+      "out": "attachments"
+    },
+    {
+      "declared": "./",
+      "source": "Progetti/Alpha.md",
+      "out": "Progetti"
+    },
+    {
+      "declared": ".",
+      "source": "Progetti/Alpha.md",
+      "out": "Progetti"
+    },
+    {
+      "declared": "./img",
+      "source": "Progetti/2026/Alpha.md",
+      "out": "Progetti/2026/img"
+    },
+    {
+      "declared": "./img/",
+      "source": "Alpha.md",
+      "out": "img"
+    },
+    {
+      "declared": "./",
+      "source": "Alpha.md",
+      "out": ""
+    },
+    {
+      "declared": "",
+      "source": "Progetti/Alpha.md",
+      "out": ""
+    },
+    {
+      "declared": ".hidden",
+      "source": "Progetti/Alpha.md",
+      "out": ".hidden"
     }
   ],
   "mask_wants": [

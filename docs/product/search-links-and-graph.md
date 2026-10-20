@@ -23,6 +23,12 @@ documenti e byte. La stessa espressione vale per ricerca globale, viste,
 query salvate e ricerca incorporata: il pianificatore instrada ogni foglia al
 proprietario e ricompone l'AND/OR senza divergenze.
 
+«Vai alla nota» cerca le note per nome e per alias, perché l'indice tiene gli
+alias del frontmatter nello stesso campo del nome. Una nota trovata soltanto
+per un alias mostra l'alias, con le parole scritte segnate, e sotto «alias di»
+la nota. `Maiusc+Invio` crea la nota col nome scritto anche se qualcosa
+combacia.
+
 Le query salvate stanno in `queries.json`, nello spazio dati di `fub.queries`.
 Un file scritto da una versione più recente di Fub non si usa e non si
 riscrive; i campi che questa versione non conosce tornano su disco come erano.
@@ -38,8 +44,33 @@ e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
   `[chiave:>v]`, `[chiave:<v]`, con valori numerici, booleani o date ISO
   confrontati per specie;
 - gli operatori `tag:`, `path:`, `folder:`, `file:`, `content:`, `heading:`,
-  `ext:`, `task:todo`, `task:done` e `match-case:`, con valore anche fra
-  virgolette.
+  `ext:`, `task:todo`, `task:done` e `match-case:` e `ignore-case:` (quest’ultimo vince sull’opzione «maiuscole» della barra), con valore anche fra
+  virgolette;
+- `line:`, `block:` e `section:`, che vogliono tutte le parole nella stessa
+  riga scritta, nello stesso blocco (paragrafo, titolo, voce, codice, tabella)
+  o sotto lo stesso titolo: `line:(rosa spina)`, `block:"frase"`. Diventano
+  la foglia `scoped`, che l'indice full-text valuta sui suoi candidati.
+- `due:2026-10-19`, `due:<D`, `due:<=D`, `due:>D` e `due:>=D`: le note con una
+  task aperta la cui scadenza (`📅 AAAA-MM-GG` nel suo testo, la scrittura del
+  plugin Tasks) cade quel giorno o da quel lato della data. Diventano la foglia
+  `task_due`; l'indice full-text tiene le scadenze delle task aperte (schema v8).
+
+Un recinto ```` ```query ```` in una nota porta una ricerca con la stessa
+sintassi: in Lettura mostra al suo posto le prime 50 note trovate, come link, e
+conta le altre. Il testo del documento resta il recinto.
+
+«Più contesto» mette sotto ogni occorrenza la sua riga con quella prima e
+quella dopo, lette dal sorgente della nota attorno alla posizione che l'indice
+ha dato; l'estratto del kernel resta breve e non cambia.
+
+Un risultato del pannello si trascina come una nota dell'albero: in una nota
+diventa un collegamento, sulla striscia delle schede si apre, nei segnalibri
+resta, e fuori dall'app arriva il file. Lo stesso vale per un risultato del
+cambio rapido: la modale lascia passare il rilascio e si chiude a gesto finito.
+Anche le righe del pannello dei collegamenti (entranti, uscenti e menzioni non
+collegate) si trascinano come la nota che nominano, ma fuori dall'app non
+portano il file. Così anche un wikilink in Lettura, quando la nota esiste; in
+Live il collegamento è testo e trascinarlo sposta il testo.
 
 Un nome seguito da `:` che non è un operatore resta testo, così un orario o un
 URL non producono un errore. Un errore di sintassi porta la specie e la
@@ -93,6 +124,40 @@ tramite RunSearch la stessa ricerca che si scriverebbe nella barra
 nel documento sono opzioni di presentazione degli stessi dati, non indici
 duplicati.
 
+`tag.rename`, dalla palette, rinomina un tag e i tag sotto di lui in tutto il
+vault: nel testo e nel valore di `tags` del frontmatter, riscrivendo soltanto
+i nomi, mentre il codice e il resto del YAML restano com'erano. L'anteprima
+mostra le note che cambiano; un annulla le riporta tutte indietro. Una nota
+cambiata nel frattempo, o il cui frontmatter non si lascia riscrivere senza
+cambiarne la forma, resta com'era e il risultato la elenca fra i fallimenti.
+
+Dentro un wikilink, dopo `[[Nota#` il completamento propone i titoli di quella
+nota, e dopo `[[#` quelli della nota stessa. `[[##parole` cerca i titoli di
+tutto il vault: le note che la ricerca trova per quelle parole, di cui si
+propongono i titoli che le contengono, e la scelta scrive `Nota#Titolo`, col
+percorso quando due note hanno lo stesso nome. Dopo `[[Nota#^` e `[[#^` si
+propongono gli id dei blocchi della nota, ciascuno con l'inizio del suo testo,
+letti dalla sessione aperta se c'è, altrimenti dal file. La ricerca dei blocchi
+di tutto il vault (`[[^^`) non c'è.
+
+Il pannello Struttura mostra i titoli della nota aperta come un albero. Il
+campo in cima lo filtra: restano i titoli che contengono il testo, con i
+titoli sopra di loro. «Comprimi tutto» chiude l'albero; un filtro lo riapre
+su quello che trova.
+
+`heading.rename`, dalla palette, rinomina un titolo della nota aperta e
+aggiorna i `[[nota#titolo]]` che lo nominano, nella nota stessa
+(`[[#titolo]]`) e nelle altre. Si tocca un link solo se porta a quel titolo
+e col nome nuovo smetterebbe di portarci: un link a un omonimo in
+un'altra nota, o scritto con l'id esplicito del titolo, resta com'è. Il
+comando rifiuta un titolo con formattazione nel testo, un nome che un titolo
+precedente porta già e una rinomina che sposterebbe l'indirizzo di un omonimo
+(`titolo-1`). Un link Markdown con frammento (`Nota.md#titolo` fra parentesi,
+o solo `#Titolo%20due`) cambia nel modo in cui era scritto: uno slug diventa lo
+slug nuovo, un testo il testo nuovo con gli spazi in `%20`; una destinazione
+con escape o un link per riferimento restano com'erano. Anteprima, CAS e
+annulla funzionano come per `tag.rename`.
+
 ```mermaid
 flowchart LR
     SOURCE["sorgente"] --> PARSE["link estratto"]
@@ -107,6 +172,38 @@ collegata in una scheda di sola lettura; in Live serve Ctrl/Cmd, per non
 disturbare chi scrive. La scheda legge dal canale dati come gli embed, non apre
 sessioni né buffer, e si chiude uscendo dal link e dalla scheda o con Esc. Un
 link che non si risolve non apre niente.
+
+Nell'editor, Live o Sorgente, `Alt+Invio` apre il link su cui sta il cursore:
+un wikilink porta alla nota, alla sezione o al blocco che nomina, come
+Ctrl/Cmd+click; un indirizzo esterno si apre solo se la policy di Lettura lo
+permette. Dentro il codice il tasto non apre niente.
+
+«Copia il link a questo punto», dalla palette, mette negli appunti il link al
+titolo o al paragrafo dove sta il cursore: `[[Nota#Titolo]]`, o
+`[[Nota#^id]]` per un paragrafo, che riceve un id nuovo in coda se non ne ha
+uno. In Lettura si copia solo un id già scritto.
+
+Come nasce un link a una nota, trascinata nel testo o copiata, lo decidono due
+impostazioni del vault in «File»: `files.link-style` (wikilink o link
+Markdown) e `files.link-format` (il nome più corto che il vault risolve, il
+percorso relativo alla nota, o quello dalla radice). Un link Markdown è sempre
+un percorso, quindi «più corto» lo scrive relativo, e negli appunti, che non
+sanno dove andrà, parte dalla radice (`/cartella/Nota.md#Titolo`). Un wikilink
+non ha forma relativa: «relativo» lo scrive dalla radice. Il `[[` digitato
+resta un wikilink.
+
+Passando col puntatore su un wikilink si apre l'anteprima della nota: in
+Lettura dopo un breve ritardo, subito con Ctrl/Cmd; mentre si scrive soltanto
+con Ctrl/Cmd. L'impostazione `editor.preview-modifier` chiede Ctrl/Cmd
+dappertutto. Un link che non si risolve, o che nomina un allegato, non apre
+niente.
+
+Un merge che cestina una sorgente citata da altre note porta i loro link sulla
+destinazione, con alias e frammenti intatti. Il piano lo calcola il kernel come
+per una rinomina (`VaultRead::link_retarget_edits`), il testo lo scrive il
+formato di ciascuna nota e la simulazione mostra anche quelle note. Se un link
+non passa, la sorgente resta al suo posto e l'esito lo dice; un host che non sa
+fare il piano, come un componente WASM, rifiuta il merge.
 
 ## Backlink e vicini
 
@@ -127,6 +224,8 @@ col suo alias o col nome della nota, non con la sua sintassi. Il filtro delle
 menzioni sta in fondo, in una sezione chiusa finché non è attivo, e usa la
 sintassi della barra di ricerca (un filtro salvato come JSON vale ancora); un
 filtro che non si legge lo dice accanto al campo, col carattere a cui si ferma.
+La banda di stato dice quanti collegamenti entrano nella nota attiva
+(vista `backlinks.status`); senza una nota aperta resta vuota.
 
 Il pannello Cronologia elenca le versioni della nota con l'istante e la
 variazione di dimensione rispetto alla precedente. Una versione si sceglie col
@@ -134,6 +233,13 @@ click: la sua anteprima parte dal confronto con la nota attuale e porta i
 gesti — ripristino, testo intero, copia —; la versione attuale non offre il
 ripristino. Ripristinare chiede conferma al posto del bottone, perché riscrive
 la nota; il testo di prima resta nella cronologia.
+
+I controlli di salute del vault (`vault_health` in `query_index`, `--health`
+nella CLI) trovano link rotti, note orfane, path che collidono, date non
+riconosciute, vicoli ciechi e allegati non usati. Un vicolo cieco è una nota
+senza link verso il vault: un URL o un `[[#Sezione]]` non portano altrove, un
+link rotto invece conta come uscita. Un allegato non usato è un file di specie
+allegato che nessun link o embed raggiunge, risolto come per i link rotti.
 
 Un file non letto o non parsato non può produrre link affidabili; l'apertura lo
 dichiara invece di inventare un grafo completo.
@@ -148,6 +254,26 @@ assenti valgono il grafo globale. Gli allegati sono nascosti di default; il
 filtro li aggiunge come nodi con i loro archi. Quale nodo è un documento lo
 dice il registro dei formati. Posizione e animazione restano stato della
 shell, in memoria e mai nel vault.
+
+Due altri filtri, spenti di default, aggiungono nodi che non sono file:
+
+- **Tag** aggiunge un nodo `#nome` per ogni tag delle note mostrate, con un
+  arco da ogni nota che lo porta; il click cerca il tag;
+- **Note mancanti** aggiunge un nodo per ogni destinazione di un link rotto,
+  presa dal controllo di salute del vault, con l'arco dalla nota che la scrive.
+  Il nodo è in trasparenza, e il click crea la nota come farebbe il suo
+  wikilink. Un allegato mancante segue il filtro degli allegati.
+
+Spento, il grafo mostra solo i file che esistono. Una nota collegata solo a un
+tag non conta come orfana, e tag e note mancanti non hanno gruppo di cartella.
+
+Il campo **Filtro** della barra accetta la sintassi della barra di ricerca:
+restano le note che la ricerca trova, gli allegati collegati a loro e il seme
+della vista locale. Un filtro che non si legge, o che l'indice non sa servire,
+lascia il grafo intero e si scrive in rosso. Con **Colori per → Ricerca** ogni
+ricerca del campo **Gruppi**, separate da `;`, è un gruppo: una nota prende il
+colore della prima che la trova, e la legenda le nomina. Filtro e ricerche dei
+gruppi sono stato della vista, come gli altri filtri.
 
 Il grafo non ha un posto riservato nella shell. Si apre con il comando
 `graph.open` che il componente dichiara (`Mod-Shift-g`), dalla palette, dal menu
@@ -237,6 +363,15 @@ scritta. Il quartiere del nodo a fuoco si accende e si spegne in dissolvenza,
 senza transizione col moto ridotto. La scia del movimento è un'opzione spenta
 di default e sbiadisce verso il trasparente, senza coprire la griglia.
 
+La sezione Vista del pannello regola anche la resa degli archi e dei nodi. Le
+**Frecce** in punta agli archi indicano la nota a cui il link porta, e si
+possono spegnere. **Dimensione nodi** moltiplica il raggio da metà a due volte e
+mezza: cambiano il disegno, il bordo da cui partono etichette e frecce e la zona
+che risponde al puntatore, non il layout. **Spessore archi** moltiplica il tratto
+da metà a tre volte. **Densità etichette** sposta la soglia di grado oltre la
+quale i nomi compaiono. «Reimposta» riporta anche queste opzioni ai valori
+predefiniti.
+
 Il loop segue il refresh dello schermo, qualunque sia: il passo della fisica è
 il tempo reale fra due fotogrammi, e la scia sbiadisce a tempo, non a
 fotogrammi. Col moto ridotto il passo è invece quello nominale (1/60 s): conta
@@ -250,6 +385,28 @@ dopo cinque secondi di fotogrammi di nuovo nel budget.
 La modularizzazione del renderer è tracciata nell'issue
 [#12](https://github.com/Fubeo/Fub/issues/12). La prova di scala e durata è
 nell'issue [#6](https://github.com/Fubeo/Fub/issues/6).
+
+## Proprietà nella nota
+
+L'impostazione di macchina `editor.properties` sceglie come Live mostra il
+frontmatter in cima alla nota: **YAML** (il default) lo lascia testo,
+**Visibili** lo fa una tabella chiave–valore, **Nascoste** una riga sola col
+numero delle proprietà. La tabella è una lettura: una lista diventa `a, b`, un
+testo su più righe una riga; il valore resta quello del file. Un clic su una
+proprietà, o un cursore che entra nel frontmatter, riapre lo YAML su quella
+riga; Sorgente mostra sempre lo YAML. Con il frontmatter chiuso, ciò che si
+scrive all'inizio del documento finisce sotto la chiusura, non sopra `---`.
+
+Mod+; apre una riga vuota per una proprietà nuova prima della chiusura, o crea
+il frontmatter in cima se non c'è. Alt+↑ e Alt+↓ sulla riga di una chiave
+spostano la proprietà intera, con le righe rientrate della sua lista; ai bordi
+del frontmatter il tasto resta fermo, e fuori da una riga di chiave sposta le
+righe come altrove. I tre gesti sono anche comandi della palette e voci del
+menu dei blocchi nella barra di formattazione. Il pannello Proprietà
+dell'ispettore resta il modo strutturato di scrivere valori tipizzati.
+La banda di stato dice quante proprietà ha la nota attiva (vista
+`properties.status`); tace su una nota senza proprietà e su un documento che
+non è Markdown.
 
 ## Comportamenti da non confondere
 

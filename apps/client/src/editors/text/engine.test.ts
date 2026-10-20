@@ -418,6 +418,27 @@ describe("raggruppamento degli eventi utente", () => {
   });
 });
 describe("keymap e input history nativi", () => {
+  it("senza selezione taglia e copia la riga intera", () => {
+    const { ed, view } = editor();
+    ed.setDoc("uno\ndue\ntre");
+    view().focus();
+    view().dispatch({ selection: { anchor: 5 } });
+    const copied: string[] = [];
+    const clipboard = (type: "cut" | "copy") => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { clearData() {}, setData: (_: string, text: string) => copied.push(text) },
+      });
+      view().contentDOM.dispatchEvent(event);
+    };
+    clipboard("copy");
+    expect(copied).toEqual(["due"]);
+    expect(ed.getDoc()).toBe("uno\ndue\ntre");
+    clipboard("cut");
+    expect(copied[1]).toBe("due");
+    expect(ed.getDoc()).toBe("uno\ntre");
+  });
+
   it("gestisce beforeinput historyUndo e historyRedo sulla vista reale", () => {
     const { ed, view } = editor();
     ed.setDoc("base");

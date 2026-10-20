@@ -128,6 +128,30 @@ describe("Mermaid lifecycle", () => {
     expect(nav.hidden).toBe(true);
   });
 
+  it("un nodo con la classe internal-link diventa un wikilink alla nota col suo testo", async () => {
+    renderer.render.mockResolvedValueOnce({ svg: `<svg xmlns="http://www.w3.org/2000/svg">
+      <g class="node default internal-link" id="flowchart-A-0"><text><tspan>Idee</tspan> <tspan>sparse</tspan></text></g>
+      <g class="node default" id="flowchart-B-1"><text>Solo testo</text></g>
+      <g class="node default internal-link" id="flowchart-C-2"><text>Idee sparse</text></g>
+    </svg>` });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:note");
+    const source = "flowchart LR; A[Idee sparse]-->B[Solo testo]; class A internal-link";
+    const diagram = createMermaidView(source, { noteLinks: true });
+    mounted.push(diagram);
+    document.body.append(diagram.element);
+    await vi.waitFor(() => expect(diagram.element.dataset.state).toBe("ready"));
+    const nav = diagram.element.querySelector("nav")!;
+    expect(nav.hidden).toBe(false);
+    const anchors = Array.from(nav.querySelectorAll<HTMLAnchorElement>("a"));
+    expect(anchors.map((anchor) => [anchor.className, anchor.dataset.wikilinkPage, anchor.textContent])).toEqual([
+      ["wikilink", "Idee sparse", "Idee sparse"],
+    ]);
+    // Senza chi li apre, come in una vista dichiarativa, non compaiono.
+    const inert = view(source);
+    await vi.waitFor(() => expect(inert.element.dataset.state).toBe("ready"));
+    expect(inert.element.querySelector("nav")!.hidden).toBe(true);
+  });
+
   it("replaces links on theme rerender and discards stale rendering and failed diagrams", async () => {
     document.documentElement.dataset.theme = "dark";
     renderer.render.mockResolvedValueOnce({ svg: linkedSvg });

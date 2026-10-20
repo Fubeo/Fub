@@ -51,6 +51,15 @@ pub enum CliCommand {
     Properties(PropertiesArgs),
     Tasks(TasksArgs),
     Templates(TemplatesArgs),
+    Daily(DailyArgs),
+    Outline(DocArgs),
+    Wordcount(DocArgs),
+    Random {
+        global: GlobalArgs,
+    },
+    Bookmarks {
+        global: GlobalArgs,
+    },
     Views(ViewsArgs),
     Plugin(PluginArgs),
     Theme(ThemeArgs),
@@ -73,6 +82,9 @@ pub enum CliCommand {
     NativeInstall {
         global: GlobalArgs,
         extension_id: String,
+        /// `--browser`, ripetibile: senza, ogni browser trovato.
+        browsers: Vec<String>,
+        uninstall: bool,
     },
     Pair {
         global: GlobalArgs,
@@ -201,6 +213,31 @@ pub struct TemplatesArgs {
     pub name: Option<String>,
     pub daily: bool,
     pub date: Option<String>,
+}
+
+/// `daily`: la giornaliera di un giorno, oggi senza `--date`.
+#[derive(Clone, Debug)]
+pub struct DailyArgs {
+    pub global: GlobalArgs,
+    pub date: Option<String>,
+    pub action: DailyAction,
+}
+
+/// Che cosa fa `daily` della giornaliera: dirne il nome (senza flag), leggerla,
+/// o scriverci una riga in fondo o in testa al corpo.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DailyAction {
+    Path,
+    Read,
+    Append(String),
+    Prepend(String),
+}
+
+/// Un comando che prende soltanto un documento: `outline`, `wordcount`.
+#[derive(Clone, Debug)]
+pub struct DocArgs {
+    pub global: GlobalArgs,
+    pub doc: String,
 }
 
 #[derive(Clone, Debug)]
@@ -341,6 +378,8 @@ impl CliCommand {
         match self {
             CliCommand::Help { global, .. }
             | CliCommand::Repl { global }
+            | CliCommand::Random { global }
+            | CliCommand::Bookmarks { global }
             | CliCommand::Completion { global, .. }
             | CliCommand::Vault { global, .. }
             | CliCommand::Uri { global, .. }
@@ -358,6 +397,8 @@ impl CliCommand {
             CliCommand::Properties(a) => a.global.clone(),
             CliCommand::Tasks(a) => a.global.clone(),
             CliCommand::Templates(a) => a.global.clone(),
+            CliCommand::Daily(a) => a.global.clone(),
+            CliCommand::Outline(a) | CliCommand::Wordcount(a) => a.global.clone(),
             CliCommand::Views(a) => a.global.clone(),
             CliCommand::Plugin(a) => a.global.clone(),
             CliCommand::Theme(a) => a.global.clone(),
@@ -373,6 +414,8 @@ impl CliCommand {
     pub fn with_global(self, global: GlobalArgs) -> CliCommand {
         match self {
             CliCommand::Repl { .. } => CliCommand::Repl { global },
+            CliCommand::Random { .. } => CliCommand::Random { global },
+            CliCommand::Bookmarks { .. } => CliCommand::Bookmarks { global },
             CliCommand::Completion { shell, .. } => CliCommand::Completion { shell, global },
             CliCommand::Help { topic, .. } => CliCommand::Help { topic, global },
             CliCommand::Vault { action, .. } => CliCommand::Vault { action, global },
@@ -381,8 +424,15 @@ impl CliCommand {
                 execute,
                 global,
             },
-            CliCommand::NativeInstall { extension_id, .. } => CliCommand::NativeInstall {
+            CliCommand::NativeInstall {
                 extension_id,
+                browsers,
+                uninstall,
+                ..
+            } => CliCommand::NativeInstall {
+                extension_id,
+                browsers,
+                uninstall,
                 global,
             },
             CliCommand::Callback { action, .. } => CliCommand::Callback { action, global },
@@ -430,6 +480,18 @@ impl CliCommand {
             CliCommand::Templates(mut a) => {
                 a.global = global;
                 CliCommand::Templates(a)
+            }
+            CliCommand::Daily(mut a) => {
+                a.global = global;
+                CliCommand::Daily(a)
+            }
+            CliCommand::Outline(mut a) => {
+                a.global = global;
+                CliCommand::Outline(a)
+            }
+            CliCommand::Wordcount(mut a) => {
+                a.global = global;
+                CliCommand::Wordcount(a)
             }
             CliCommand::Views(mut a) => {
                 a.global = global;
@@ -1330,6 +1392,95 @@ fn parse_command(
             }
             Ok(CliCommand::Templates(args))
         }
+        "daily" => {
+            let mut args = DailyArgs {
+                global,
+                date: None,
+                action: DailyAction::Path,
+            };
+            let mut actions = 0;
+            while let Some(arg) = parser.peek() {
+                let Some((name, inline)) = split_flag(arg) else {
+                    break;
+                };
+                match name {
+                    "path" | "read" => {
+                        if inline.is_some() {
+                            return Err(format!("--{name} non prende valori"));
+                        }
+                        args.action = if name == "path" {
+                            DailyAction::Path
+                        } else {
+                            DailyAction::Read
+                        };
+                        actions += 1;
+                        parser.next();
+                    }
+                    "append" | "prepend" => {
+                        let v = inline.map(str::to_string).unwrap_or_else(|| {
+                            parser.next();
+                            parser.next().unwrap_or("").to_string()
+                        });
+                        if v.trim().is_empty() {
+                            return Err(format!("--{name} vuole un testo"));
+                        }
+                        if inline.is_some() {
+                            parser.next();
+                        }
+                        args.action = if name == "append" {
+                            DailyAction::Append(v)
+                        } else {
+                            DailyAction::Prepend(v)
+                        };
+                        actions += 1;
+                    }
+                    "date" => {
+                        let v = inline.map(str::to_string).unwrap_or_else(|| {
+                            parser.next();
+                            parser.next().unwrap_or("").to_string()
+                        });
+                        if v.is_empty() {
+                            return Err("--date vuole AAAA-MM-GG".to_string());
+                        }
+                        if inline.is_some() {
+                            parser.next();
+                        }
+                        args.date = Some(v);
+                    }
+                    _ => break,
+                }
+            }
+            if actions > 1 {
+                return Err(
+                    "daily: un'azione sola fra --path, --read, --append e --prepend".to_string(),
+                );
+            }
+            Ok(CliCommand::Daily(args))
+        }
+        "outline" | "wordcount" => {
+            let doc = parser
+                .next()
+                .ok_or_else(|| format!("{head} vuole un documento"))?
+                .to_string();
+            let args = DocArgs { global, doc };
+            Ok(if head == "outline" {
+                CliCommand::Outline(args)
+            } else {
+                CliCommand::Wordcount(args)
+            })
+        }
+        "random" => {
+            if parser.peek().is_some_and(|arg| split_flag(arg).is_none()) {
+                return Err("random non prende argomenti".to_string());
+            }
+            Ok(CliCommand::Random { global })
+        }
+        "bookmarks" => {
+            if parser.peek().is_some_and(|arg| split_flag(arg).is_none()) {
+                return Err("bookmarks non prende argomenti".to_string());
+            }
+            Ok(CliCommand::Bookmarks { global })
+        }
         "views" | "view" => {
             let mut args = ViewsArgs {
                 global,
@@ -1957,23 +2108,33 @@ fn parse_command(
         }
         "native-install" => {
             let mut extension_id: Option<String> = None;
+            let mut browsers = Vec::new();
+            let mut uninstall = false;
             while let Some(arg) = parser.peek() {
                 let Some((name, inline)) = split_flag(arg) else {
                     break;
                 };
                 match name {
-                    "extension-id" => {
+                    "extension-id" | "browser" => {
                         let v = inline.map(str::to_string).unwrap_or_else(|| {
                             parser.next();
                             parser.next().unwrap_or("").to_string()
                         });
                         if v.is_empty() {
-                            return Err("--extension-id vuole un valore".to_string());
+                            return Err(format!("--{name} vuole un valore"));
                         }
                         if inline.is_some() {
                             parser.next();
                         }
-                        extension_id = Some(v);
+                        if name == "browser" {
+                            browsers.push(v);
+                        } else {
+                            extension_id = Some(v);
+                        }
+                    }
+                    "uninstall" => {
+                        parser.next();
+                        uninstall = true;
                     }
                     _ => break,
                 }
@@ -1984,6 +2145,8 @@ fn parse_command(
             Ok(CliCommand::NativeInstall {
                 global,
                 extension_id,
+                browsers,
+                uninstall,
             })
         }
         "pair" => {
@@ -2175,6 +2338,11 @@ pub fn command_names() -> Vec<&'static str> {
         "properties",
         "tasks",
         "templates",
+        "daily",
+        "outline",
+        "wordcount",
+        "random",
+        "bookmarks",
         "views",
         "plugin",
         "theme",
@@ -2195,18 +2363,18 @@ pub fn command_names() -> Vec<&'static str> {
     ]
 }
 pub fn usage() -> &'static str {
-    "uso: fub-cli [--vault PATH] [--format json|jsonl|tsv|csv|md|text] [--config-dir DIR] [--no-watcher] [--standalone] <comando> [args]\ncomandi: vault read write create exec files query search command properties tasks templates views plugin theme diagnostics capture uri callback login mfa config sync publish native-install pair repl completion help"
+    "uso: fub-cli [--vault PATH] [--format json|jsonl|tsv|csv|md|text] [--config-dir DIR] [--no-watcher] [--standalone] <comando> [args]\ncomandi: vault read write create exec files query search command properties tasks templates daily outline wordcount random bookmarks views plugin theme diagnostics capture uri callback login mfa config sync publish native-install pair repl completion help"
 }
 
 pub fn help_text(topic: Option<&str>) -> String {
     match topic {
-        None => format!("fub-cli — automazione locale sopra Host.\n\n{}\n\nflag globali: --vault PATH --format F --config-dir DIR --no-watcher --standalone --limit N --offset N --dry-run --yes --no-input --quiet --verbose --no-color --color\nUsa `help <comando>` per la sintassi. --standalone non elude il writer lock; vault occupato = busy.", usage()),
+        None => format!("fub-cli — automazione locale sopra Host.\n\n{}\n\nflag globali: --vault PATH --format F --config-dir DIR --no-watcher --standalone --limit N --offset N --dry-run --yes --no-input --quiet --verbose --no-color --color\nUsa `help <comando>` per la sintassi. Con il vault aperto nell'app, i comandi passano dall'app (canale di controllo locale); --standalone non passa dall'app e non elude il writer lock: vault occupato = busy.", usage()),
         Some(name) => match name {
             "read" => "read <doc> [--revision] [--model]\nLegge sorgente+revisione via Host::read_document. --model aggiunge il modello parsato. Vault da --vault/FUB_VAULT/corrente.".to_string(),
             "write" => "write <doc> [--base REV|--force] [--stdin|--text T|--file F]\nScrive con guardia CAS: --base la revisione letta, --force detta esplicita. Sorgente da --text/--file/stdin. Exit 5 su conflitto.".to_string(),
             "create" => "create [name] [--text T|--file F|--stdin] [--template T] [--title T]\nCrea senza sovrascrivere (AlreadyExists se occupato). --template espande note.from_template, --daily via templates.".to_string(),
             "query" => "query [JSON] [--text T] [--tag T] [--folder F] [--property k=op:v] [--backlinks D] [--neighbors D] [--resolve R]\nInterroga Host::query_index. --property: chiave=valore, chiave~=sottostringa, chiave!=valore, chiave?=exists, chiave!=exists. Operatori multipli in AND nella stessa query. --text usa la sintassi della barra (vedi `help search`); i flag si aggiungono a ogni alternativa.".to_string(),
-            "search" => "search <q> [--field …] [--phrase] [--tag T] [--folder F] [--select k]\nRicerca full-text con faccette tag/cartella e select proprietà. Senza --field/--phrase la riga usa la sintassi della barra della shell: tag:, path:, folder:, file:, content:, heading:, ext:, task:todo|done, match-case:, \"frase\", -x, OR, ( ), /regex/, [prop], [prop:v], [prop:>v].".to_string(),
+            "search" => "search <q> [--field …] [--phrase] [--tag T] [--folder F] [--select k]\nRicerca full-text con faccette tag/cartella e select proprietà. Senza --field/--phrase la riga usa la sintassi della barra della shell: tag:, path:, folder:, file:, content:, heading:, ext:, task:todo|done, due:AAAA-MM-GG|<D|<=D|>D|>=D, match-case:, ignore-case:, line:(…), block:(…), section:(…), \"frase\", -x, OR, ( ), /regex/, [prop], [prop:v], [prop:>v].".to_string(),
             "command" => "command [--list|<nome> --args JSON --plan]\nElenca/invoca il registro comandi come la palette. --plan = dry-run esplicito oltre --dry-run globale.".to_string(),
             "capture" => "capture (--file F|--json J|--title T --text T) [--mode …] [--folder F] [--note N] [--source-url U] [--prop k=v]\nIngresso non autenticato: valida con gli stessi limiti NM e scrive con conferma (--yes) o rifiuto (--no-input). Modo daily senza nota = giornaliera.".to_string(),
             "uri" => "uri <fub://…> [--execute]\nDescrive senza scrivere. --execute applica open/new/daily/unique/search/capture; capture richiede consenso e callback autorizzata richiede consenso separato.".to_string(),
@@ -2220,6 +2388,11 @@ pub fn help_text(topic: Option<&str>) -> String {
             "properties" => "properties <doc> [--list|--set k=v|--remove k]".to_string(),
             "tasks" => "tasks <doc> [--list|--toggle N]".to_string(),
             "templates" => "templates [--list|--from DOC --name N|--daily]".to_string(),
+            "daily" => "daily [--date AAAA-MM-GG] [--path|--read|--append T|--prepend T]\nLa giornaliera del giorno (oggi senza --date), col nome che decide note.daily. Senza flag ne dice il nome e se c'è; --read la legge; --append scrive una riga in fondo, --prepend in testa al corpo, dopo il frontmatter, e la crea se manca (con il suo template).".to_string(),
+            "outline" => "outline <doc>\nGli heading del documento in ordine: livello, testo, slug e span, dal modello parsato.".to_string(),
+            "wordcount" => "wordcount <doc>\nParole e caratteri del documento, contati come il pannello statistiche (view stats.document): la prosa sul sorgente, un formato strutturato sul suo testo.".to_string(),
+            "bookmarks" => "bookmarks\nLe note appuntate in cima alla sidebar, nell'ordine scelto (l'organizzazione del vault).".to_string(),
+            "random" => "random\nUna nota a caso fra quelle in prosa del vault, scelta da note.random. Non scrive.".to_string(),
             "views" => "views [--list|--render ID|--action ID --payload JSON]".to_string(),
             "plugin" => "plugin [--list|--enable ID|--disable ID]".to_string(),
             "theme" => "theme [--list|--show ID|--light ID]".to_string(),
@@ -2227,7 +2400,7 @@ pub fn help_text(topic: Option<&str>) -> String {
             "config" => "config [--list|--get KEY|--set KEY=VALUE|--reset KEY]".to_string(),
             "sync" => "sync status|once|watch [--interval SEC]".to_string(),
             "pair" => "pair pair --extension-id ID [--vault PATH] [--folder PATH] | pairs | unpair --extension-id ID".to_string(),
-            "native-install" => "native-install --extension-id ID".to_string(),
+            "native-install" => "native-install --extension-id ID [--browser chrome|chromium|edge|brave|vivaldi|firefox]… [--uninstall]\nSenza --yes dice dove scriverebbe il manifest dell'host nativo e lo mostra; con --yes lo scrive per l'utente in ogni browser trovato (Windows: anche la chiave HKCU). L'id decide la famiglia: 32 lettere a–p = Chromium, altrimenti Firefox. Un file d'altri non si tocca. Dopo: `pair pair --extension-id ID`.".to_string(),
             "repl" => "repl: sessione interattiva; history solo comandi non sensibili".to_string(),
             "completion" => "completion bash|zsh|fish".to_string(),
             "help" => "help [comando]".to_string(),

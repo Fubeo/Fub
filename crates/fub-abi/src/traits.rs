@@ -9,7 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::command::{CommandOutcome, CommandSpec, InvokeMode, ParamSpec, Undone};
+use crate::command::{CommandOutcome, CommandSpec, InvokeMode, ParamSpec, PlannedEdit, Undone};
 use crate::custom::SyntaxForm;
 use crate::edit::{EditReport, EditRequest, Revision, WriteBase};
 use crate::error::PluginError;
@@ -512,6 +512,30 @@ pub trait VaultRead: Send + Sync {
     /// ancora.
     fn format_link(&self, doc: &DocId, link: &LinkInsert) -> Result<Option<String>, PluginError>;
 
+    /// Gli edit che portano su `to` i riferimenti che oggi raggiungono `from`:
+    /// è la riscrittura dei backlink di una rinomina, per quando il contenuto
+    /// di `from` confluisce in un documento che **esiste già** (l'unione di
+    /// note). Il piano è quello del kernel — quali link puntano davvero a
+    /// `from`, con quale nome o path chiamare `to` —, il testo lo scrive il
+    /// formato di ciascun documento, con la sua grammatica, alias e frammenti
+    /// compresi.
+    ///
+    /// Non scrive niente: ogni edit porta la revisione su cui è stato
+    /// calcolato, e chi lo applica con [`apply_edit`](VaultWrite::apply_edit)
+    /// trova un conflitto se il documento è cambiato nel frattempo. Gli edit
+    /// dentro `from` (i link a sé stessa) sono calcolati come se il suo testo
+    /// stesse già in `to`. Un host che non sa fare il piano risponde
+    /// [`PluginError::Unserved`], e chi chiede resta sulla via di prima.
+    fn link_retarget_edits(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Result<Vec<PlannedEdit>, PluginError> {
+        Err(PluginError::Unserved(
+            format!("questo host non sa riportare su `{to}` i link verso `{from}`").into(),
+        ))
+    }
+
     /// La modifica che porta a fatto (`done`) o da fare il task di `marker`,
     /// scritta dal formato di `doc` sul sorgente attuale.
     ///
@@ -728,6 +752,40 @@ pub trait VaultStructure: VaultRead {
     /// occupato e `to` non è stato dato, è un errore e non un nome scelto
     /// d'ufficio: chi chiama ha [`free_name`](VaultRead::free_name) e decide.
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError>;
+
+    /// Crea una cartella vuota (e quelle che le mancano sopra), e fallisce se
+    /// quel path è già occupato.
+    ///
+    /// Serve a chi sposta una cartella intera: le voci si spostano una per una
+    /// e portano con sé le cartelle che attraversano, ma una sottocartella
+    /// **vuota** non ha una voce che la porti. Un host che non la sa creare
+    /// risponde [`PluginError::Unserved`], e chi chiede dice cosa resta dietro.
+    fn create_folder(&mut self, folder: &str) -> Result<(), PluginError> {
+        Err(PluginError::Unserved(
+            format!("questo host non sa creare la cartella `{folder}`").into(),
+        ))
+    }
+
+    /// Toglie una cartella **vuota sul disco**. Una cartella che contiene
+    /// ancora qualcosa — anche un file che il vault non mostra — resta dov'è,
+    /// e l'errore lo dice: non c'è una variante che cancelli il contenuto.
+    fn remove_empty_folder(&mut self, folder: &str) -> Result<(), PluginError> {
+        Err(PluginError::Unserved(
+            format!("questo host non sa togliere la cartella `{folder}`").into(),
+        ))
+    }
+
+    /// Dice al vault che una cartella sta per cambiare path, perché ciò che tiene
+    /// **per path di cartella** — l'icona, lo spazio, l'ordine scelto a mano dei
+    /// figli — la segua. Le voci si spostano poi una per una, e ognuna porta con
+    /// sé il proprio; la cartella non ha una voce che lo faccia per lei.
+    /// Un host che non tiene niente del genere risponde
+    /// [`PluginError::Unserved`], e lo spostamento va avanti lo stesso.
+    fn migrate_folder_organization(&mut self, from: &str, to: &str) -> Result<(), PluginError> {
+        Err(PluginError::Unserved(
+            format!("questo host non sa portare `{from}` in `{to}`").into(),
+        ))
+    }
 
     /// Svuota il cestino e dice quante voci ha distrutto.
     ///
@@ -2647,6 +2705,14 @@ pub enum HealthCheck {
     /// ciò che due dichiarazioni leggerebbero in due modi è esattamente ciò su
     /// cui vale la pena chiedere a chi possiede il vault.
     UnrecognizedDates,
+    /// Note da cui non si va da nessuna parte: nessun link verso il vault. Un
+    /// URL esce dal vault e un `[[#Sezione]]` resta nella nota; un link rotto
+    /// invece conta, perché chi l'ha scritto voleva andare da qualche parte.
+    DeadEnds,
+    /// Allegati che nessun documento nomina, né come link né come embed. Un
+    /// file che nessuno sa cosa sia ([`EntryKind::Unknown`]) non è un
+    /// allegato e non c'entra.
+    UnusedAttachments,
 }
 
 impl HealthCheck {
@@ -2658,11 +2724,13 @@ impl HealthCheck {
     /// verde: il rapporto continua a essere un array, ha solo una riga in meno,
     /// e nessuno confronta quell'array con l'enum. È la stessa forma di
     /// [`ViewSurface::ALL`], e ha lo stesso presidio dei discriminanti.
-    pub const ALL: [HealthCheck; 4] = [
+    pub const ALL: [HealthCheck; 6] = [
         HealthCheck::BrokenLinks,
         HealthCheck::OrphanDocuments,
         HealthCheck::CollidingPaths,
         HealthCheck::UnrecognizedDates,
+        HealthCheck::DeadEnds,
+        HealthCheck::UnusedAttachments,
     ];
 }
 
@@ -3320,6 +3388,8 @@ pub enum PredicateKind {
     Task,
     Path,
     File,
+    Scoped,
+    TaskDue,
 }
 
 impl PredicateKind {
@@ -3330,6 +3400,8 @@ impl PredicateKind {
             QueryPredicate::Task { .. } => Some(PredicateKind::Task),
             QueryPredicate::Path { .. } => Some(PredicateKind::Path),
             QueryPredicate::File { .. } => Some(PredicateKind::File),
+            QueryPredicate::Scoped { .. } => Some(PredicateKind::Scoped),
+            QueryPredicate::TaskDue { .. } => Some(PredicateKind::TaskDue),
             QueryPredicate::Property { .. } => Some(PredicateKind::Property),
             QueryPredicate::Tag { .. } => Some(PredicateKind::Tag),
             QueryPredicate::Folder { .. } => Some(PredicateKind::Folder),
@@ -3588,6 +3660,21 @@ impl IndexResult {
             other => Err(PluginError::Internal(
                 format!(
                     "risposta fuori tema: attesi dei documenti, arrivato {}",
+                    other.kind_name()
+                )
+                .into(),
+            )),
+        }
+    }
+
+    /// I backlink, o l'errore che dice cosa è arrivato invece: la stessa
+    /// forma di [`documents`](IndexResult::documents).
+    pub fn backlinks(self) -> Result<Paged<BacklinkRef>, PluginError> {
+        match self {
+            IndexResult::Backlinks(refs) => Ok(refs),
+            other => Err(PluginError::Internal(
+                format!(
+                    "risposta fuori tema: attesi dei backlink, arrivato {}",
                     other.kind_name()
                 )
                 .into(),
@@ -4790,6 +4877,8 @@ mod tests {
             HealthCheck::OrphanDocuments => 1,
             HealthCheck::CollidingPaths => 2,
             HealthCheck::UnrecognizedDates => 3,
+            HealthCheck::DeadEnds => 4,
+            HealthCheck::UnusedAttachments => 5,
         }
     }
 
@@ -4797,7 +4886,7 @@ mod tests {
     fn the_discriminants_cover_every_check_of_health() {
         assert_eq!(
             HealthCheck::ALL.len(),
-            place_of_the_check(HealthCheck::UnrecognizedDates) + 1,
+            place_of_the_check(HealthCheck::UnusedAttachments) + 1,
             "`HealthCheck::ALL` è più corto dell'enum: c'è un controllo che il \
              compilatore conosce e che l'elenco non nomina, quindi il rapporto \
              diagnostico non lo eseguirà mai."

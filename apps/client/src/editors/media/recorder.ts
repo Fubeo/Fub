@@ -16,6 +16,7 @@
 
 import { depositAttachment, type AttachmentDeposit } from "./attachment-target";
 import { errorText } from "../../host/errors";
+import { t } from "../../i18n/strings";
 export type RecorderState = "idle" | "requesting" | "recording" | "stopped" | "denied" | "failed";
 
 export interface RecordingMeta {
@@ -126,7 +127,7 @@ export function createAudioRecorder(deposit: CrashDeposit, events: RecorderEvent
         media = await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch (error) {
         set("denied", error instanceof Error ? error.message : String(error));
-        throw new Error(`microphone denied: ${error instanceof Error ? error.message : error}`);
+        throw new Error(t("errors.recorder.denied", { reason: error instanceof Error ? error.message : String(error) }));
       }
       if (destroyed) {
         for (const track of media.getTracks()) track.stop();
@@ -138,7 +139,7 @@ export function createAudioRecorder(deposit: CrashDeposit, events: RecorderEvent
       if (supported.length === 0) {
         releaseStream();
         set("failed", "this browser cannot record audio");
-        throw new Error("this browser cannot record audio");
+        throw new Error(t("errors.recorder.unsupported"));
       }
       startedAt = Date.now();
       let cause: unknown;
@@ -154,7 +155,7 @@ export function createAudioRecorder(deposit: CrashDeposit, events: RecorderEvent
       if (!recorder) {
         releaseStream();
         set("failed", `no supported audio encoder started: ${String(cause)}`);
-        throw new Error(`no supported audio encoder started: ${String(cause)}`);
+        throw new Error(t("errors.recorder.no_encoder", { reason: String(cause) }));
       }
       stopped = new Promise<void>((resolve) => {
         recorder!.onstop = () => {
@@ -212,8 +213,8 @@ export function createAudioRecorder(deposit: CrashDeposit, events: RecorderEvent
       await stopped;
       await pendingWrite;
       releaseStream();
-      if (writeFailure) throw new Error(`recording could not be staged: ${String(writeFailure)}`);
-      if (destroyed || !recordingActive()) throw new Error("recording stopped because microphone access or staging failed");
+      if (writeFailure) throw new Error(t("errors.recorder.staging", { reason: String(writeFailure) }));
+      if (destroyed || !recordingActive()) throw new Error(t("errors.recorder.stopped"));
       set("stopped");
       return { id, startedAt, mime, bytes, finalized: false };
     },
@@ -262,10 +263,10 @@ export async function finalizeRecording(
 ): Promise<{ blob: Blob; meta: RecordingMeta }> {
   const bytes = await deposit.read(recordingKey(id));
   if (!bytes || bytes.byteLength === 0) {
-    throw new Error(`recording ${id} has no recoverable audio`);
+    throw new Error(t("errors.recorder.empty", { id }));
   }
   const mime = sniffRecordingMime(bytes);
-  if (!mime) throw new Error(`recording ${id} has an unrecognized audio container`);
+  if (!mime) throw new Error(t("errors.recorder.container", { id }));
   const blob = new Blob([bytes as BlobPart], { type: mime });
   return { blob, meta: { id, startedAt: 0, mime, bytes: bytes.byteLength, finalized: false } };
 }

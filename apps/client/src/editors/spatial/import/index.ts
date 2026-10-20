@@ -12,7 +12,8 @@ import type { Content, Diagram, Node, Note, Type } from "./diagram";
 import { drawioInPng, NotDrawio, readDrawio } from "./drawio";
 import { NotExcalidraw, readExcalidraw } from "./excalidraw";
 import { imagesOf, settleImages, type Pictures } from "./images";
-import { sourceOf, type Source } from "./sources";
+import { sniff } from "./foreign";
+import { sourceOf } from "./sources";
 import { TooLarge, writeDiagram, type Setup } from "./write";
 
 export { importedName, IMPORT_ACCEPT, sourceOf, type Source } from "./sources";
@@ -33,28 +34,6 @@ export class ImportError extends Error {
   constructor(readonly reason: Unreadable, message: string) {
     super(message);
   }
-}
-
-/// Ciò che può venire prima della radice di un XML: la dichiarazione, i
-/// commenti e il DOCTYPE.
-const PROLOG = String.raw`^(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE[^>]*>\s*)?`;
-
-/// Il nome della radice di un SVG. Sta in una costante: nessun file del
-/// client scrive quel tag a mano fuori dalle prove.
-const SVG_ROOT = "svg";
-
-/// Un XML di draw.io, e un SVG di draw.io, che porta il file nell'attributo
-/// `content`.
-const DRAWIO_XML = new RegExp(String.raw`${PROLOG}<(mxfile|mxGraphModel)[\s>]`);
-const DRAWIO_SVG = new RegExp(String.raw`${PROLOG}<${SVG_ROOT}[^>]*\scontent="&lt;(mxfile|mxGraphModel)[\s&]`);
-
-/// Il programma di un file dal contenuto: un JSON di Excalidraw o un XML di
-/// draw.io.
-function sniff(text: string): Source | null {
-  const head = text.slice(0, 4096).trimStart();
-  if (head.startsWith("{") && /"type"\s*:\s*"excalidraw(\/clipboard)?"/.test(head)) return "excalidraw";
-  if (DRAWIO_XML.test(head) || DRAWIO_SVG.test(head)) return "drawio";
-  return null;
 }
 
 /// Il diagramma del file `name` di byte `bytes`. Lancia [`ImportError`] se

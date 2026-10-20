@@ -36,9 +36,14 @@ import {
 
 export type ExportWhat = "drawing" | "selection" | "boards";
 
-export type ExportFormat = "png" | "jpeg" | "svg" | "pdf";
+export type ExportFormat = "png" | "jpeg" | "svg" | "pdf" | "excalidraw" | "drawio";
 
-export const EXPORT_FORMATS: readonly ExportFormat[] = ["png", "jpeg", "svg", "pdf"];
+export const EXPORT_FORMATS: readonly ExportFormat[] = ["png", "jpeg", "svg", "pdf", "excalidraw", "drawio"];
+
+/// I formati con le tavole in un file solo, una pagina ciascuna.
+export function hasPages(format: ExportFormat): boolean {
+  return format === "pdf" || format === "drawio";
+}
 
 /// Le scale che la finestra offre.
 export const EXPORT_SCALES: readonly number[] = [1, 2, 3, 4];

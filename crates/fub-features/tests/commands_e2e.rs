@@ -20,9 +20,9 @@ use fub_abi::model::{DocId, Span};
 use fub_abi::session::{AnchoredSelection, AnchoredSelections, SelectionSet, ViewContext};
 use fub_abi::PluginError;
 use fub_features::{
-    CoreCommands, COMMANDS_ID, NOTES_CREATE, NOTES_RENAME, NOTES_TRASH, SELECTION_WIKILINK,
-    SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET, SETTINGS_SET, TRASH_EMPTY,
-    VAULT_ARCHIVE, VAULT_REPLACE,
+    CoreCommands, COMMANDS_ID, NOTES_CREATE, NOTES_DUPLICATE, NOTES_RENAME, NOTES_TRASH,
+    SELECTION_WIKILINK, SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET,
+    SETTINGS_SET, TRASH_EMPTY, VAULT_ARCHIVE, VAULT_REPLACE,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace, MAIN_PANE};
@@ -379,7 +379,7 @@ fn the_registry_is_what_a_palette_or_a_cli_reads() {
     let vault = Vault::new();
     let ws = vault.open();
     let specs = ws.commands();
-    assert_eq!(specs.len(), 15, "i quindici comandi ufficiali");
+    assert_eq!(specs.len(), 18, "i diciotto comandi ufficiali");
     let replace = specs
         .iter()
         .find(|s| s.id == VAULT_REPLACE)
@@ -567,6 +567,90 @@ fn the_whole_life_of_a_notes_uses_registry_and_staged_restore() {
         .contains('0'));
 }
 
+/// «Duplica» copia i byte accanto all'originale con un nome libero, non
+/// sovrascrive mai, e si annulla col cestino.
+#[test]
+fn duplicating_copies_the_bytes_under_a_free_name_and_undoes_to_trash() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.invoke_command(
+        NOTES_CREATE,
+        serde_json::json!({ "name": "Idee" }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("crea");
+    let dup = |ws: &mut Workspace| {
+        let outcome = ws
+            .invoke_command(
+                NOTES_DUPLICATE,
+                serde_json::json!({ "doc": "Idee.md" }),
+                InvokeMode::Apply,
+                Actor::User,
+            )
+            .expect("duplica");
+        let CommandEffect::Navigate { doc } = outcome.effect else {
+            panic!("duplicare risponde con la copia")
+        };
+        doc
+    };
+    assert_eq!(dup(&mut ws).as_str(), "Idee copia.md");
+    let second = dup(&mut ws);
+    assert_ne!(
+        second.as_str(),
+        "Idee copia.md",
+        "il nome occupato non si sovrascrive"
+    );
+    assert_eq!(ws.documents().len(), 3);
+    assert_eq!(
+        ws.read_source(&DocId::new("Idee copia.md")).unwrap(),
+        ws.read_source(&DocId::new("Idee.md")).unwrap()
+    );
+}
+
+/// «Incolla» nell'esplora risorse: la copia in un'altra cartella tiene il
+/// nome dell'originale finché è libero; nella stessa cartella resta «copia».
+#[test]
+fn duplicating_into_another_folder_keeps_the_name_while_free() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    for (name, folder) in [("Idee", ""), ("Altro", "archivio")] {
+        ws.invoke_command(
+            NOTES_CREATE,
+            serde_json::json!({ "name": name, "folder": folder }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("crea");
+    }
+    let paste = |ws: &mut Workspace, doc: &str, folder: &str| {
+        let outcome = ws
+            .invoke_command(
+                NOTES_DUPLICATE,
+                serde_json::json!({ "doc": doc, "folder": folder }),
+                InvokeMode::Apply,
+                Actor::User,
+            )
+            .expect("incolla");
+        let CommandEffect::Navigate { doc } = outcome.effect else {
+            panic!("incollare risponde con la copia")
+        };
+        doc.as_str().to_string()
+    };
+    assert_eq!(paste(&mut ws, "Idee.md", "archivio/"), "archivio/Idee.md");
+    let again = paste(&mut ws, "Idee.md", "archivio");
+    assert!(
+        again.starts_with("archivio/") && again != "archivio/Idee.md",
+        "il nome occupato non si sovrascrive: {again}"
+    );
+    assert_eq!(paste(&mut ws, "archivio/Altro.md", ""), "Altro.md");
+    assert_eq!(paste(&mut ws, "Idee.md", ""), "Idee copia.md");
+    assert_eq!(
+        ws.read_source(&DocId::new("archivio/Idee.md")).unwrap(),
+        ws.read_source(&DocId::new("Idee.md")).unwrap()
+    );
+}
+
 /// Il protocollo staged conserva `AlreadyExists`: è la variante su cui il
 /// pannello cestino decide se proporre un nome alternativo.
 #[test]
@@ -689,6 +773,60 @@ fn checking_a_task_goes_through_the_parsed_model_and_writes_one_byte() {
     assert_eq!(
         ws.read_source(&DocId::new("spesa.md")).expect("rilegge"),
         source
+    );
+}
+
+/// Un compito ricorrente spuntato lascia sopra di sé il prossimo, con la
+/// scadenza spostata; le sottovoci restano a quello fatto, e un solo
+/// annullamento toglie tutt'e due le cose.
+#[test]
+fn ticking_a_recurring_task_writes_the_next_one_above_it() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    let source = "- [ ] Annaffia 🔁 every week 📅 2026-10-19\r\n  - [ ] il basilico\r\n";
+    ws.write_document(&DocId::new("casa.md"), source, WriteBase::Dictated)
+        .expect("scrive");
+    let at = source.find("Annaffia").expect("c'è") as u64;
+    let outcome = ws
+        .invoke_command(
+            fub_features::NOTES_TASK_TOGGLE,
+            serde_json::json!({ "doc": "casa.md", "at": [at] }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("spunta");
+    assert_eq!(
+        ws.read_source(&DocId::new("casa.md")).expect("rilegge"),
+        "- [ ] Annaffia 🔁 every week 📅 2026-10-26\r\n\
+         - [x] Annaffia 🔁 every week 📅 2026-10-19\r\n  - [ ] il basilico\r\n"
+    );
+    assert!(outcome.undo.is_some(), "si annulla");
+    ws.invoke_command(
+        fub_features::VAULT_UNDO,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("annulla");
+    assert_eq!(
+        ws.read_source(&DocId::new("casa.md")).expect("rilegge"),
+        source
+    );
+
+    // Togliere la spunta non crea niente: la ricorrenza è del gesto «fatto».
+    let done = "- [x] Annaffia 🔁 every week 📅 2026-10-19\n";
+    ws.write_document(&DocId::new("fatto.md"), done, WriteBase::Dictated)
+        .expect("scrive");
+    ws.invoke_command(
+        fub_features::NOTES_TASK_TOGGLE,
+        serde_json::json!({ "doc": "fatto.md", "at": [8] }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("de-spunta");
+    assert_eq!(
+        ws.read_source(&DocId::new("fatto.md")).expect("rilegge"),
+        "- [ ] Annaffia 🔁 every week 📅 2026-10-19\n"
     );
 }
 

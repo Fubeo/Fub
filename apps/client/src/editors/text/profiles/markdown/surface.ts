@@ -16,7 +16,11 @@ import { taskChecked } from "../../../../rules/mirrored";
 import { t } from "../../../../i18n/strings";
 import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mount";
 import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
+import { settings } from "../../../../host/query";
+import { onEvent } from "../../../../state/kernel";
 import { openLifetime } from "../../../../ui/lifetime";
+import { notify } from "../../../../ui/notify";
+import { writeClipboardText } from "../../../../platform/clipboard";
 import { closeSlashPalette, openSlashPalette } from "../../../../ui/palette";
 import type {
   BufferedSurface,
@@ -24,6 +28,7 @@ import type {
   SurfaceLocation,
   SurfaceMode,
   SurfaceMountContext,
+  SurfaceAnchor,
   SurfacePoint,
   SurfaceReference,
 } from "../../../core/registry";
@@ -31,15 +36,23 @@ import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine, type CursorContext } from "../../engine";
 import type { CompletionSources } from "./completions";
 import { createMarkdownProfile } from "./profile";
+import { anchorAtCursor, writeAnchor } from "./anchor-link";
 import type { TableGridActions } from "./table-grid";
-import { MARKDOWN_ACTIONS, markdownActionState } from "./actions";
+import { deleteFootnoteAt, footnoteAt, MARKDOWN_ACTIONS, markdownActionState } from "./actions";
+import { showContextMenu } from "../../../../ui/menu";
+import { foldAll, unfoldAll } from "@codemirror/language";
+import { foldLess, foldMore, toggleFold } from "../../fold-levels";
+import type { EditorView } from "@codemirror/view";
 import {
   ACTION_UNAVAILABLE,
   type EditorActionState,
   type SurfaceEditorActions,
 } from "../../../core/editor-actions";
+import { MARKDOWN_EXPORTS } from "./exports";
 import { markdownReference } from "./references";
-import { renderMarkdown } from "./render";
+import { frontmatterRange, renderMarkdown } from "./render";
+import { addProperty, clearProperties } from "./properties";
+import { clipboardHtml } from "./copy-html";
 import type { ProofPorts } from "../../../core/proof-ports";
 
 /// Le tre viste esclusive sullo stesso buffer. `source` e `live_preview`
@@ -90,11 +103,33 @@ export interface MarkdownSurface extends BufferedSurface {
   setTheme(theme: Theme): void;
   setSyntaxForms(forms: readonly SyntaxForm[]): void;
   insertReferences(references: readonly SurfaceReference[], at?: SurfacePoint): boolean;
+  anchorHere(): SurfaceAnchor | null;
   mountPresentation(host: HTMLElement): () => void;
   readonly editorActions: SurfaceEditorActions;
   undo(): boolean;
   redo(): boolean;
 }
+
+/// Piegare e aprire tutti i titoli, le liste e i blocchi della nota, o un
+/// livello alla volta: azioni della superficie come annulla, fuori dalla
+/// barra di formattazione.
+/// «Piega le proprietà»: il frontmatter si chiude sotto la sua prima riga,
+/// e lo stesso comando lo riapre.
+const foldProperties = (view: EditorView): boolean => {
+  const range = frontmatterRange(view.state.doc);
+  if (!range) return false;
+  const from = view.state.doc.lineAt(range.from).to;
+  const to = view.state.doc.lineAt(Math.max(range.to - 1, range.from)).to;
+  return to > from && toggleFold(view, { from, to });
+};
+
+const FOLDS = new Map<string, (view: EditorView) => boolean>([
+  ["text.fold.all", foldAll],
+  ["text.unfold.all", unfoldAll],
+  ["text.fold.more", foldMore],
+  ["text.fold.less", foldLess],
+  ["text.fold.properties", foldProperties],
+]);
 
 /// La palette slash si apre a inizio riga o dopo uno spazio: dentro una
 /// parola il `/` è testo («e/o», «km/h», 24/09).
@@ -116,6 +151,8 @@ export function cursorIsLiteral(cursor: Pick<CursorContext, "nodes" | "lineBefor
 /// La finestra in cui la lettura raccoglie le modifiche arrivate da un altro
 /// riquadro prima di ridisegnarsi.
 const READING_SYNC_MS = 120;
+const STRICT_LINE_BREAKS_KEY = "editor.strict-line-breaks";
+const RTL_KEY = "editor.rtl";
 
 function isMarkdownMode(mode: string): mode is MarkdownMode {
   return MARKDOWN_MODES.some((candidate) => candidate.id === mode);
@@ -166,6 +203,51 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const actionsChanged = () => {
     for (const listener of [...actionListeners]) listener();
   };
+  // Il tasto destro su un richiamo o sulla definizione di una nota a piè di
+  // pagina offre di eliminarla tutta; sulle proprietà rese, di aggiungerne
+  // una o di svuotarle; altrove resta il menu del sistema.
+  life.listen(parent, "contextmenu", (event) => {
+    if (readOnly || mode === "reading" || event.defaultPrevented) return;
+    if (!(event.target instanceof Element) || !event.target.closest(".cm-content")) return;
+    if (event.target.closest(".cm-fub-properties")) {
+      event.preventDefault();
+      showContextMenu(event, [
+        { label: t("editor.properties.add"), run: () => void engine.runCommand(addProperty) },
+        { label: t("editor.properties.clear"), run: () => void engine.runCommand(clearProperties) },
+      ]);
+      return;
+    }
+    const pos = engine.posAtPoint(event.clientX, event.clientY);
+    if (pos === null || engine.readState((state) => footnoteAt(state, pos)) === null) return;
+    event.preventDefault();
+    showContextMenu(event, [{ label: t("editor.footnote.delete"), run: () => void engine.runCommand(deleteFootnoteAt(pos)) }]);
+  });
+  // Copiare o tagliare una selezione porta anche l'HTML, per incollare con la
+  // formattazione fuori da Fub. Il testo si legge prima di CodeMirror, perché
+  // un taglio lo toglie dal documento; l'HTML si aggiunge dopo, perché
+  // CodeMirror svuota gli appunti prima di scriverci il testo semplice.
+  let copied: string | null = null;
+  const beforeCopy = (event: ClipboardEvent) => {
+    copied = null;
+    if (mode === "reading" || !(event.target instanceof Element) || !event.target.closest(".cm-content")) return;
+    // La griglia di una tabella copia le sue celle da sé.
+    if (event.target.closest(".cm-md-grid-block")) return;
+    copied = engine.readState((state) => {
+      const parts = state.selection.ranges.filter((range) => !range.empty)
+        .map((range) => state.sliceDoc(range.from, range.to));
+      return parts.length > 0 ? parts.join(state.lineBreak) : null;
+    });
+  };
+  const afterCopy = (event: ClipboardEvent) => {
+    const text = copied;
+    copied = null;
+    if (text === null || !event.defaultPrevented || !event.clipboardData) return;
+    event.clipboardData.setData("text/html", clipboardHtml(text, forms));
+  };
+  life.listen(parent, "copy", beforeCopy, { capture: true });
+  life.listen(parent, "cut", beforeCopy, { capture: true });
+  life.listen(parent, "copy", afterCopy);
+  life.listen(parent, "cut", afterCopy);
   life.listen(parent, "keydown", (event) => {
     const slash = opts.slash;
     if (
@@ -222,6 +304,25 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   reading.setAttribute("role", "document");
   parent.append(reading);
   parent.dataset.markdownMode = mode;
+  // «Interruzioni di riga rigorose» spente: in Lettura un a capo singolo
+  // resta un'interruzione. La resa lo dice con un attributo, e la pelle lo
+  // legge; il testo del documento non cambia. «Testo da destra a sinistra»
+  // gira la Lettura; l'editor lo legge da sé.
+  let breaksRead = 0;
+  const readLineBreaks = async (): Promise<void> => {
+    const mine = ++breaksRead;
+    const entries = await settings().catch(() => null);
+    if (!entries || mine !== breaksRead || life.closed) return;
+    const strict = entries.find((entry) => entry.spec.key === STRICT_LINE_BREAKS_KEY)?.value;
+    if (strict === false) parent.dataset.lineBreaks = "keep";
+    else delete parent.dataset.lineBreaks;
+    if (entries.find((entry) => entry.spec.key === RTL_KEY)?.value === true) reading.dir = "rtl";
+    else reading.removeAttribute("dir");
+  };
+  void readLineBreaks();
+  life.add(onEvent("setting_changed", (event) => {
+    if (event.key === STRICT_LINE_BREAKS_KEY || event.key === RTL_KEY) void readLineBreaks();
+  }));
 
   // Reading owns browser selection; only history commands reach the hidden editor.
   life.listen(reading, "keydown", (event) => {
@@ -243,6 +344,16 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       range.selectNodeContents(reading);
       selection.removeAllRanges();
       selection.addRange(range);
+    } else if (key === "c" && !event.shiftKey) {
+      // Senza niente di selezionato nella resa, Ctrl+C copia il sorgente
+      // della nota, com'è nel buffer: una selezione vera resta del browser.
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && selection.anchorNode && reading.contains(selection.anchorNode)) return;
+      event.preventDefault();
+      void writeClipboardText(engine.getDoc()).then(
+        () => notify(t("mode.reading.source_copied"), "info"),
+        () => notify(t("mode.reading.copy_failed"), "guasto"),
+      );
     }
   });
 
@@ -403,10 +514,11 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   }
   const editable = () => !readOnly && mode !== "reading" && !life.closed;
   const editorActions: SurfaceEditorActions = {
-    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo",
+    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id),
     editable,
     state(id): EditorActionState {
       if (!editable()) return ACTION_UNAVAILABLE;
+      if (FOLDS.has(id)) return { enabled: true, active: null };
       if (id === "text.undo" || id === "text.redo") {
         const depth = engine.historyDepth();
         return { enabled: (id === "text.undo" ? depth.undo : depth.redo) > 0, active: null };
@@ -421,6 +533,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       closeSlashPalette(parent);
       if (id === "text.undo") return engine.undo();
       if (id === "text.redo") return engine.redo();
+      const fold = FOLDS.get(id);
+      if (fold) return engine.runViewCommand(fold);
       if (tableGrid) return tableGrid.runAction(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return false;
@@ -518,6 +632,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       return mountMarkdown(host, renderMarkdown(normalizeLineBreaks(engine.getDoc()), forms).html, renderedOptions());
     },
     printable: true,
+    exports: MARKDOWN_EXPORTS,
     setReadOnly: (value) => {
       closeSlashPalette(parent);
       readOnly = value;
@@ -528,6 +643,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     },
     setTheme: (theme) => engine.setTheme(theme),
     editorActions,
+    anchorHere: () => {
+      if (life.closed) return null;
+      const found = engine.readState((state) => anchorAtCursor(state));
+      if (!found) return null;
+      // L'id nuovo si scrive solo dove si scrive: in Lettura o in sola lettura
+      // un blocco senza id non ha ancora un link.
+      if (found.insert && (!editable() || !engine.runCommand(writeAnchor(found)))) return null;
+      return found.anchor;
+    },
     destroy: () => {
       actionListeners.clear();
       closeSlashPalette(parent);

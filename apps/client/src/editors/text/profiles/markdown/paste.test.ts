@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { EditorSelection } from "@codemirror/state";
+import { EditorSelection, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { createTextEngine } from "../../engine";
 import { createMarkdownProfile } from "./profile";
-import { markdownFromClipboard } from "./paste";
+import { markdownFromClipboard, markdownPaste, pastePlainText } from "./paste";
+import { declareClipboard } from "../../../../platform/clipboard";
+import { pasteHtml } from "../../paste-html";
 
 function paste(
   html: string,
@@ -46,6 +48,68 @@ describe("Markdown clipboard paste", () => {
   // da qualche istante.
   beforeAll(async () => {
     await markdownFromClipboard({ getData: (type: string) => (type === "text/html" ? "<b>x</b>" : "") } as DataTransfer);
+  });
+
+  it("un indirizzo incollato sul testo selezionato diventa un link", () => {
+    const link = paste("", "https://example.org/a(b)");
+    expect(link.event.defaultPrevented).toBe(true);
+    expect(link.engine.getDoc()).toBe("prima\r\n[qui](https://example.org/a%28b%29)\r\nfine");
+    link.engine.destroy();
+    link.host.remove();
+    // Senza selezione, o con del testo che non è un indirizzo, l'incolla resta il solito.
+    const plain = paste("", "non è un link");
+    expect(plain.engine.getDoc()).not.toContain("](");
+    plain.engine.destroy();
+    plain.host.remove();
+    const empty = paste("", "https://example.org", "", EditorSelection.single(6));
+    expect(empty.engine.getDoc()).not.toContain("](");
+    empty.engine.destroy();
+    empty.host.remove();
+  });
+
+  it("Mod-Shift-v incolla il testo semplice, senza link e senza conversione", async () => {
+    const entries = [{
+      types: ["text/html", "text/plain"],
+      getType: async (type: string) => new Blob([type === "text/html" ? "<b>https://example.org</b>" : "https://example.org"]),
+    }];
+    let read = async () => entries;
+    const withdraw = declareClipboard(async () => {}, { write: async () => {}, read: () => read(), supports: () => true });
+    try {
+      const plain = paste("", "", "", undefined, false);
+      expect(pastePlainText(plain.view)).toBe(true);
+      await vi.waitFor(() => expect(plain.engine.getDoc()).toBe("prima\r\nhttps://example.org\r\nfine"));
+      plain.engine.destroy();
+      plain.host.remove();
+      // Appunti negati: non entra niente, e niente salta.
+      read = () => Promise.reject(new Error("negato"));
+      const denied = paste("", "", "", undefined, false);
+      pastePlainText(denied.view);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(denied.engine.getDoc()).toBe("prima\r\nqui\r\nfine");
+      denied.engine.destroy();
+      denied.host.remove();
+    } finally {
+      withdraw();
+    }
+  });
+
+  it("con la conversione spenta lascia l'incolla a CodeMirror", () => {
+    const incolla = (convert: boolean) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const view = new EditorView({ parent: host, doc: "", extensions: [Prec.highest(markdownPaste), pasteHtml.of(convert)] });
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: { getData: (type: string) => (type === "text/html" ? '<a href="https://example.org/a">Link</a>' : type === "text/plain" ? "Link" : "") },
+      });
+      view.contentDOM.dispatchEvent(event);
+      const doc = view.state.doc.toString();
+      view.destroy();
+      host.remove();
+      return doc;
+    };
+    expect(incolla(true)).toContain("[Link](https://example.org/a)");
+    expect(incolla(false)).toBe("Link");
   });
 
   it("converts lists, links, and fenced code without changing unrelated CRLF bytes", () => {

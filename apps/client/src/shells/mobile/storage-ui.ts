@@ -1,7 +1,7 @@
 import type { Lifetime } from "../../ui/lifetime";
 import { notify } from "../../ui/notify";
 import { declareVaultPicker } from "../../platform/vault-picker";
-import type { MobileBridge, MobileTreeGrant } from "./bridge";
+import type { MobileBridge, MobileTreeCopy, MobileTreeGrant } from "./bridge";
 import {
   decideStorage,
   inspectSharedStorage,
@@ -27,11 +27,10 @@ export interface MobileStorageMountPorts extends SharedStoragePorts {
 }
 
 /**
- * The mount ports mobile can honour today. The private space mounts: the
- * backend resolves and verifies its path (`open_vault` accepts only that
- * one). A shared folder needs a native grant verifier that does not exist
- * yet: its permission stays unknown, the proposal NeedGrant, and mounting it
- * is a stated error, never a silent fallback to the private space.
+ * The private space alone. The backend resolves and verifies its path
+ * (`open_vault` accepts only that one); a shared folder is a stated error,
+ * never a silent fallback to the private space. Kept for a host without the
+ * native bridge.
  */
 export function privateStoragePorts(
   bridge: MobileBridge,
@@ -49,6 +48,60 @@ export function privateStoragePorts(
     unmountShared: () => Promise.resolve(),
     verifyGrant: () => Promise.resolve("unknown"),
     backendCas: () => Promise.resolve(false),
+  };
+}
+
+/** What a copy did, said in one line: what came, what did not, where. */
+export function copyReport(copy: MobileTreeCopy): { text: string; tone: "info" | "guasto" } {
+  const folder = copy.folder.split("/").pop() ?? copy.folder;
+  const files = String(copy.files);
+  if (copy.truncated) return { text: t("mobile.storage.copied_truncated", { files, folder }), tone: "guasto" };
+  if (copy.skipped.length > 0) {
+    const shown = copy.skipped.slice(0, 5).join(", ") + (copy.skipped.length > 5 ? ", …" : "");
+    return { text: t("mobile.storage.copied_partial", { files, folder, skipped: shown }), tone: "guasto" };
+  }
+  return { text: t("mobile.storage.copied", { files, folder }), tone: "info" };
+}
+
+/**
+ * The ports with the native bridge (`tree_access.rs`). The OS answers: the
+ * picker, today's permission, the path (iOS) or the copy (Android). The
+ * backend decides the mount mode itself; `backendCas` here only mirrors the
+ * platform rule for the panel and is not trusted by the backend.
+ */
+export function nativeStoragePorts(
+  bridge: MobileBridge,
+  open: (dir: string) => Promise<void>,
+): MobileStorageMountPorts {
+  return {
+    store: mobileGrantStore(bridge),
+    requestTreeGrant: () => bridge.pickTree(),
+    verifyGrant: (grant) => bridge.verifyTree(grant),
+    backendCas: (grant) => Promise.resolve(grant.platform === "ios"),
+    mount: async (decision) => {
+      if (decision.choice === "private") {
+        if (decision.dir === null) throw new Error(t("mobile.storage.shared_unavailable"));
+        await open(decision.dir);
+        return;
+      }
+      if (!decision.grant) throw new Error(t("mobile.storage.shared_unavailable"));
+      if (decision.mount === "copy_import") {
+        const copy = await bridge.copyTree(decision.grant);
+        await open(copy.vault);
+        const report = copyReport(copy);
+        notify(report.text, report.tone);
+        return;
+      }
+      if (decision.mount === "read_write") {
+        await open(await bridge.openSharedTree(decision.grant));
+        return;
+      }
+      // Read-only: the kernel cannot read an SAF tree in place.
+      throw new Error(t("mobile.storage.copy_only"));
+    },
+    unmountShared: async () => {
+      await bridge.closeSharedTree();
+    },
   };
 }
 

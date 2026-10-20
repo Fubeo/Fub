@@ -3,12 +3,20 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
 import { CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import {
+  blockContext,
+  blockIds,
+  blockSource,
   diagramFenceContext,
   diagramTemplateSource,
+  headingContext,
+  headingSource,
   noteCompletions,
   tagCompletions,
   tagContext,
   tagSource,
+  tagSegment,
+  vaultHeadingContext,
+  vaultHeadingSource,
   wikilinkContext,
   wikilinkInsertText,
   wikilinkSource,
@@ -255,6 +263,21 @@ describe("tagSource (headless)", () => {
   });
 });
 
+describe("tagSegment", () => {
+  it("completa fino alla prossima barra, poi il resto intero", () => {
+    expect(tagSegment("#pro", "#progetti/fub/alfa")).toBe("#progetti/");
+    expect(tagSegment("#progetti", "#progetti/fub")).toBe("#progetti/");
+    expect(tagSegment("#progetti/", "#progetti/fub/alfa")).toBe("#progetti/fub/");
+    expect(tagSegment("#progetti/", "#progetti/fub")).toBeNull();
+    expect(tagSegment("#ru", "#rust")).toBeNull();
+  });
+
+  it("le maiuscole non contano, e un'etichetta trovata altrove parte dal primo segmento", () => {
+    expect(tagSegment("#PRO", "#progetti/fub")).toBe("#progetti/");
+    expect(tagSegment("#fub", "#progetti/fub")).toBe("#progetti/");
+  });
+});
+
 describe("diagramFenceContext", () => {
   const at = (doc: string, pos = doc.length) => diagramFenceContext(ctxAt(doc, pos).state, pos);
 
@@ -340,5 +363,106 @@ describe("diagramTemplateSource (headless)", () => {
   it("dentro il recinto le note e i tag restano zitti", async () => {
     const doc = "```mermaid\n[[Al";
     expect(await wikilinkSource(async () => ["Alpha.md"])(ctxAt(doc, doc.length))).toBeNull();
+  });
+});
+
+describe("titoli nei wikilink", () => {
+  it("riconosce il titolo di una nota e quello della nota stessa", () => {
+    expect(headingContext("vedi [[Alpha#Pia")).toEqual({ from: 13, query: "Pia", page: "Alpha" });
+    expect(headingContext("[[#")).toEqual({ from: 3, query: "", page: "" });
+    expect(headingContext("[[Alpha#^blo")).toBeNull();
+    expect(headingContext("[[Alpha|alias#x")).toBeNull();
+    expect(headingContext("[[##tutto")).toBeNull();
+    expect(headingContext("[[Alpha]] #tag")).toBeNull();
+  });
+
+  it("riconosce [[## come titolo del vault", () => {
+    expect(vaultHeadingContext("vedi [[##pia")).toEqual({ from: 7, query: "pia" });
+    expect(vaultHeadingContext("[[#pia")).toBeNull();
+  });
+
+  it("propone i titoli della nota nominata e chiude il link", async () => {
+    const asked: string[] = [];
+    const source = headingSource(async (page) => {
+      asked.push(page);
+      return [{ text: "Piano [bozza]", level: 2 }];
+    });
+    const result = (await source(ctxAt("[[Alpha#", 8))) as CompletionResult;
+    expect(asked).toEqual(["Alpha"]);
+    expect(result.from).toBe(8);
+    expect(result.options).toEqual([{ label: "Piano bozza", detail: "H2", apply: "Piano bozza]]", type: "text" }]);
+    const closed = (await source(ctxAt("[[#]]", 3))) as CompletionResult;
+    expect(asked[1]).toBe("");
+    expect(closed.options[0]!.apply).toBe("Piano bozza");
+  });
+
+  it("dopo # la sorgente delle note tace", async () => {
+    const source = wikilinkSource(async () => ["Alpha.md"]);
+    expect(await source(ctxAt("[[Alpha#", 8))).toBeNull();
+    expect(await source(ctxAt("[[##x", 5))).toBeNull();
+  });
+
+  it("[[## scrive Nota#Titolo, col percorso per le omonime", async () => {
+    const source = vaultHeadingSource(async (text) => {
+      expect(text).toBe("pia");
+      return [
+        { doc: "a/Alpha.md", text: "Piano", level: 1 },
+        { doc: "b/Alpha.md", text: "Piano", level: 1 },
+        { doc: "Beta.md", text: "Il piano", level: 2 },
+      ];
+    });
+    const result = (await source(ctxAt("vedi [[##pia", 12))) as CompletionResult;
+    expect(result.from).toBe(7);
+    expect(result.options.map((o) => o.apply)).toEqual(["a/Alpha#Piano]]", "b/Alpha#Piano]]", "Beta#Il piano]]"]);
+    expect(result.filter).toBe(false);
+  });
+
+  it("[[## senza testo non cerca", async () => {
+    let asked = false;
+    const source = vaultHeadingSource(async () => { asked = true; return []; });
+    const result = (await source(ctxAt("[[##", 4))) as CompletionResult;
+    expect(asked).toBe(false);
+    expect(result.options).toEqual([]);
+  });
+});
+
+describe("blocchi", () => {
+  it("riconosce [[Nota#^ e [[#^, non i titoli né l'alias", () => {
+    expect(blockContext("vedi [[Nota#^ab")).toEqual({ from: 13, query: "ab", page: "Nota" });
+    expect(blockContext("[[#^")).toEqual({ from: 4, query: "", page: "" });
+    expect(blockContext("[[Nota#tit")).toBeNull();
+    expect(blockContext("[[Nota#^ab|alias")).toBeNull();
+    expect(blockContext("[[Nota#^ab]] dopo")).toBeNull();
+  });
+
+  it("legge gli id in coda o su una riga loro, fuori da frontmatter e codice", () => {
+    const note = [
+      "---", "id: ^finto", "---",
+      "Primo paragrafo ^uno",
+      "- [ ] un compito ^due",
+      "```", "codice ^tre", "```",
+      "> Una citazione", "",
+      "^quattro",
+      "Di nuovo ^uno",
+    ].join("\n");
+    expect(blockIds(note)).toEqual([
+      { id: "uno", text: "Primo paragrafo" },
+      { id: "due", text: "un compito" },
+      { id: "quattro", text: "Una citazione" },
+    ]);
+  });
+
+  it("la sorgente propone gli id della nota nominata e chiude il link", async () => {
+    let asked = "";
+    const blocksOf = async (page: string) => {
+      asked = page;
+      return [{ id: "uno", text: "Primo paragrafo" }];
+    };
+    const doc = "vedi [[Nota#^u";
+    const res = (await blockSource(blocksOf)(ctxAt(doc, doc.length))) as CompletionResult;
+    expect(asked).toBe("Nota");
+    expect(res.from).toBe(13);
+    expect(res.options.map((o) => [o.label, o.detail, o.apply])).toEqual([["uno", "Primo paragrafo", "uno]]"]]);
+    expect(await wikilinkSource(async () => ["Nota.md"])(ctxAt(doc, doc.length))).toBeNull();
   });
 });

@@ -84,6 +84,12 @@ pub fn vault(
                     Failure::new(2, "bad_args", "vault open vuole un path (o FUB_VAULT)")
                 })?;
             connection.open_vault(&path)?;
+            if let Some(root) = connection.host.app_root() {
+                print(&envelope_ok(
+                    serde_json::json!({ "root": root.as_str(), "via": "app" }),
+                ));
+                return Ok(());
+            }
             let info = connection
                 .host
                 .open(camino::Utf8Path::new(&path))
@@ -1218,6 +1224,320 @@ pub fn templates(
     Ok(())
 }
 
+/// `daily`: la giornaliera di un giorno. Il nome lo decide `note.daily` in
+/// prova, con le sue regole di cartella, formato e data: la CLI non ne scrive
+/// una seconda copia.
+pub fn daily(
+    connection: &Connection,
+    global: &GlobalArgs,
+    _format: &OutputFormat,
+    args: DailyArgs,
+    print: impl Fn(&serde_json::Value),
+) -> Result<(), Failure> {
+    vault_required(connection)?;
+    let invoke_args = match args.date.as_deref() {
+        Some(date) => serde_json::json!({ "date": date }),
+        None => serde_json::json!({}),
+    };
+    let note_daily = |mode| {
+        connection
+            .host
+            .invoke_user_command(
+                connection.vault_selector(),
+                "note.daily",
+                invoke_args.clone(),
+                mode,
+            )
+            .map_err(|error| Failure::from_plugin(&error))
+    };
+    let planned = match note_daily(fub_abi::InvokeMode::DryRun)?.effect {
+        fub_abi::CommandEffect::Plan(plan) => plan.docs.into_iter().next(),
+        _ => None,
+    }
+    .ok_or_else(|| Failure::local("note.daily non ha nominato la giornaliera"))?;
+    let exists = match connection
+        .host
+        .read_document(connection.vault_selector(), &planned)
+    {
+        Ok(_) => true,
+        Err(fub_abi::PluginError::NotFound(_)) => false,
+        Err(error) => return Err(Failure::from_plugin(&error)),
+    };
+    let (text, prepend) = match args.action {
+        DailyAction::Path => {
+            print(&envelope_ok(
+                serde_json::json!({ "doc": planned.as_str(), "exists": exists }),
+            ));
+            return Ok(());
+        }
+        DailyAction::Read => {
+            let (source, revision) = connection
+                .host
+                .read_document(connection.vault_selector(), &planned)
+                .map_err(|error| Failure::from_plugin(&error))?;
+            print(&envelope_ok(serde_json::json!({
+                "doc": planned.as_str(), "revision": revision.as_str(), "source": source,
+            })));
+            return Ok(());
+        }
+        DailyAction::Append(text) => (text, false),
+        DailyAction::Prepend(text) => (text, true),
+    };
+    if dry_run(global) {
+        print(&envelope_ok(serde_json::json!({
+            "doc": planned.as_str(), "would_create": !exists,
+            "would_write_bytes": text.len(), "dry_run": true,
+        })));
+        return Ok(());
+    }
+    confirm_write(
+        global,
+        &format!("scrivere nella giornaliera `{}`", planned.as_str()),
+    )?;
+    // Se manca la crea `note.daily`, con il suo template: la riga va nella
+    // nota che il comando ha creato, non nel nome previsto.
+    let doc = if exists {
+        planned
+    } else {
+        match note_daily(fub_abi::InvokeMode::Apply)?.effect {
+            fub_abi::CommandEffect::Navigate { doc } => doc,
+            _ => return Err(Failure::local("note.daily non ha nominato la giornaliera")),
+        }
+    };
+    match write_line(connection, &doc, &text, prepend) {
+        Ok(revision) => {
+            print(&envelope_ok(serde_json::json!({
+                "doc": doc.as_str(), "revision": revision.as_str(), "created": !exists,
+            })));
+            Ok(())
+        }
+        Err(error) => {
+            if !exists {
+                // Una giornaliera nata qui e rimasta senza la riga torna nel
+                // cestino: un nuovo tentativo ritrova il vault di prima.
+                let _ = connection.host.invoke_user_command(
+                    connection.vault_selector(),
+                    "note.trash",
+                    serde_json::json!({ "doc": doc.as_str() }),
+                    fub_abi::InvokeMode::Apply,
+                );
+            }
+            Err(Failure::from_plugin(&error))
+        }
+    }
+}
+
+/// Una riga in fondo al documento, o in testa al corpo (dopo il frontmatter,
+/// dove lo dice il modello), con i terminatori di riga del documento. Una
+/// scrittura sola, che discende dalla lettura: un'altra scrittura nel
+/// frattempo è un conflitto, mai una riga persa.
+fn write_line(
+    connection: &Connection,
+    doc: &fub_abi::DocId,
+    text: &str,
+    prepend: bool,
+) -> Result<fub_abi::Revision, fub_abi::PluginError> {
+    let vault = connection.vault_selector();
+    let (source, revision) = connection.host.read_document(vault, doc)?;
+    let eol = if source.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let line = text.trim_end_matches(['\r', '\n']).replace("\r\n", "\n");
+    let line = match eol {
+        "\n" => line,
+        eol => line.replace('\n', eol),
+    };
+    let updated = if prepend {
+        let model = connection.host.read_model(vault, doc)?;
+        let (_, again) = connection.host.read_document(vault, doc)?;
+        if again != revision {
+            return Err(fub_abi::PluginError::Conflict(
+                format!("`{doc}` è cambiato mentre lo si leggeva").into(),
+            ));
+        }
+        let at = model
+            .body_start(&source)
+            .map_err(|span| {
+                fub_abi::PluginError::Internal(
+                    format!(
+                        "`{doc}`: il blocco in {}..{} è fuori dal sorgente",
+                        span.start, span.end
+                    )
+                    .into(),
+                )
+            })?
+            .unwrap_or(fub_abi::rules::text_policy::bom_len(&source));
+        let (before, after) = source.split_at(at);
+        format!("{before}{line}{eol}{after}")
+    } else {
+        let mut updated = source.clone();
+        if !updated.is_empty() && !updated.ends_with('\n') {
+            updated.push_str(eol);
+        }
+        updated.push_str(&line);
+        updated.push_str(eol);
+        updated
+    };
+    connection.host.write_document(
+        vault,
+        doc,
+        &updated,
+        fub_abi::WriteBase::DescendsFrom(revision),
+    )
+}
+
+/// `outline`: gli heading del documento come li ha letti il suo formato.
+pub fn outline(
+    connection: &Connection,
+    global: &GlobalArgs,
+    _format: &OutputFormat,
+    args: DocArgs,
+    print: impl Fn(&serde_json::Value),
+) -> Result<(), Failure> {
+    vault_required(connection)?;
+    let id = doc_id(&args.doc)?;
+    let model = connection
+        .host
+        .read_model(connection.vault_selector(), &id)
+        .map_err(|error| Failure::from_plugin(&error))?;
+    let rows: Vec<serde_json::Value> = model
+        .outline
+        .iter()
+        .map(|heading| {
+            serde_json::json!({
+                "level": heading.level, "text": heading.text, "slug": heading.slug,
+                "start": heading.span.start, "end": heading.span.end,
+            })
+        })
+        .collect();
+    let offset = global.offset.unwrap_or(0);
+    let (page, total) = paginate(rows, offset, global.limit);
+    print(&envelope_ok(
+        serde_json::json!({ "items": page, "offset": offset, "total": total }),
+    ));
+    Ok(())
+}
+
+/// `wordcount`: i conteggi della view `stats.document`, cioè la regola del
+/// pannello statistiche (quale testo contare, e come) letta dal suo owner.
+pub fn wordcount(
+    connection: &Connection,
+    _global: &GlobalArgs,
+    _format: &OutputFormat,
+    args: DocArgs,
+    print: impl Fn(&serde_json::Value),
+) -> Result<(), Failure> {
+    vault_required(connection)?;
+    let id = doc_id(&args.doc)?;
+    let instance = fub_abi::traits::ViewInstance {
+        view: "stats.document".to_string(),
+        instance: "cli.wordcount".to_string(),
+        params: serde_json::json!({ "doc": id.as_str() }),
+    };
+    let tree = connection
+        .host
+        .render_view(connection.vault_selector(), &instance)
+        .map_err(|error| Failure::from_plugin(&error))?;
+    if tree.key.as_deref() == Some("no_doc") {
+        return Err(Failure::from_plugin(&fub_abi::PluginError::NotFound(
+            fub_abi::Text::Literal(id.as_str().to_string()),
+        )));
+    }
+    let count = |key: &str| {
+        count_of(&tree, key)
+            .ok_or_else(|| Failure::local(format!("stats.document non ha detto `{key}`")))
+    };
+    print(&envelope_ok(serde_json::json!({
+        "doc": id.as_str(), "words": count("words")?, "chars": count("chars")?,
+        "minutes": count("minutes")?,
+    })));
+    Ok(())
+}
+
+/// Il numero della cella con questa chiave: la view scrive i conteggi in
+/// cifre, con la chiave del conteggio, perché una frase tradotta non si rilegge.
+fn count_of(node: &fub_abi::ui::UiNode, key: &str) -> Option<u64> {
+    use fub_abi::ui::UiKind;
+    if node.key.as_deref() == Some(key) {
+        if let UiKind::Text {
+            content: fub_abi::Text::Literal(n),
+        } = &node.kind
+        {
+            return n.parse().ok();
+        }
+    }
+    match &node.kind {
+        UiKind::Table { rows: children, .. }
+        | UiKind::Row {
+            cells: children, ..
+        }
+        | UiKind::Stack { children, .. }
+        | UiKind::Section { children, .. } => {
+            children.iter().find_map(|child| count_of(child, key))
+        }
+        _ => None,
+    }
+}
+
+/// `bookmarks`: le note appuntate, dall'organizzazione del vault.
+pub fn bookmarks(
+    connection: &Connection,
+    global: &GlobalArgs,
+    _format: &OutputFormat,
+    print: impl Fn(&serde_json::Value),
+) -> Result<(), Failure> {
+    vault_required(connection)?;
+    match connection
+        .host
+        .query_index(
+            connection.vault_selector(),
+            fub_abi::IndexQuery::Organization,
+        )
+        .map_err(|error| Failure::from_plugin(&error))?
+    {
+        fub_abi::IndexResult::Organization(organization) => {
+            let offset = global.offset.unwrap_or(0);
+            let (page, total) = paginate(organization.pinned, offset, global.limit);
+            print(&envelope_ok(
+                serde_json::json!({ "items": page, "offset": offset, "total": total }),
+            ));
+            Ok(())
+        }
+        other => Err(Failure::local(format!(
+            "bookmarks ha risposto {}",
+            other.kind_name()
+        ))),
+    }
+}
+
+/// `random`: la nota che sceglie `note.random`, che non scrive.
+pub fn random(
+    connection: &Connection,
+    _global: &GlobalArgs,
+    _format: &OutputFormat,
+    print: impl Fn(&serde_json::Value),
+) -> Result<(), Failure> {
+    vault_required(connection)?;
+    let outcome = connection
+        .host
+        .invoke_user_command(
+            connection.vault_selector(),
+            "note.random",
+            serde_json::json!({}),
+            fub_abi::InvokeMode::DryRun,
+        )
+        .map_err(|error| Failure::from_plugin(&error))?;
+    match outcome.effect {
+        fub_abi::CommandEffect::Navigate { doc } => {
+            print(&envelope_ok(serde_json::json!({ "doc": doc.as_str() })));
+            Ok(())
+        }
+        _ => Err(Failure::local("note.random non ha nominato una nota")),
+    }
+}
+
 pub fn views(
     connection: &Connection,
     global: &GlobalArgs,
@@ -1476,9 +1796,12 @@ pub fn diagnostics(
             "orphans" | "orphan" => fub_abi::HealthCheck::OrphanDocuments,
             "colliding" | "collisions" => fub_abi::HealthCheck::CollidingPaths,
             "dates" => fub_abi::HealthCheck::UnrecognizedDates,
+            "dead-ends" | "deadends" => fub_abi::HealthCheck::DeadEnds,
+            "unused-attachments" | "unused" => fub_abi::HealthCheck::UnusedAttachments,
             other => {
                 return Err(Failure::bad_args(format!(
-                    "--health `{other}` (broken-links|orphans|colliding|dates)"
+                    "--health `{other}` \
+                     (broken-links|orphans|colliding|dates|dead-ends|unused-attachments)"
                 )))
             }
         };
@@ -1509,12 +1832,19 @@ pub fn diagnostics(
     Ok(())
 }
 
+/// `native-install`: senza `--yes` dice dove scriverebbe e che cosa; con
+/// `--yes` scrive il manifest per l'utente in ogni browser trovato (o in
+/// quelli nominati da `--browser`), su Windows anche la chiave di registro.
+/// `--uninstall` toglie ciò che ha scritto, mai un file d'altri.
 pub fn native_install(
-    _global: &GlobalArgs,
+    global: &GlobalArgs,
     _format: &OutputFormat,
     extension_id: String,
+    browsers: Vec<String>,
+    uninstall: bool,
     print: impl Fn(&serde_json::Value),
 ) -> Result<(), Failure> {
+    use crate::native::{self, Browser, Dirs, Os};
     use fub_host::automation::validate_envelope;
     use fub_host::automation::{CaptureEnvelope, CLIPPER_ORIGIN};
     // Valida l'id con le stesse regole del filo NM.
@@ -1529,30 +1859,166 @@ pub fn native_install(
     let clipper_host = exe.with_file_name("fub-clipper-host");
     #[cfg(windows)]
     let clipper_host = clipper_host.with_extension("exe");
-    let manifest = serde_json::json!({
-        "name": fub_host::automation::NM_HOST_NAME,
-        "description": "Fub clipper native host (stdio, solo capture v1)",
-        "path": clipper_host.to_string_lossy(),
-        "type": "stdio",
-        "allowed_origins": [format!("chrome-extension://{extension_id}/")],
-    });
-    let firefox = serde_json::json!({
-        "name": fub_host::automation::NM_HOST_NAME,
-        "description": "Fub clipper native host (stdio, solo capture v1)",
-        "path": clipper_host.to_string_lossy(),
-        "type": "stdio",
-        "allowed_extensions": [extension_id.clone()],
-    });
-    // Stampa i manifest: chi installa li scrive nei posti del browser
-    // (o usa --yes per scriverli da qui, vedi sotto).
-    print(&envelope_ok(serde_json::json!({
+    let family = native::id_family(&extension_id);
+    let named: Vec<Browser> = browsers
+        .iter()
+        .map(|name| {
+            Browser::parse(name).ok_or_else(|| {
+                Failure::bad_args(format!(
+                    "--browser `{name}` (chrome|chromium|edge|brave|vivaldi|firefox)"
+                ))
+            })
+        })
+        .collect::<Result<_, _>>()?;
+    if let Some(wrong) = named.iter().find(|b| b.family() != family) {
+        return Err(Failure::bad_args(format!(
+            "l'id `{extension_id}` non è di un'estensione per {}: {}",
+            wrong.name(),
+            match family {
+                native::Family::Chromium =>
+                    "Firefox vuole l'id del manifest (es. clipper@fub.local)",
+                native::Family::Firefox =>
+                    "i browser Chromium vogliono le 32 lettere di chrome://extensions",
+            }
+        )));
+    }
+    let os = Os::current();
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(std::path::PathBuf::from)
+        .ok_or_else(|| Failure::local("nessuna cartella utente (HOME)"))?;
+    let config = config_path(global, "clipper-pairing.json")?
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .ok_or_else(|| Failure::local("nessuna config dir"))?;
+    let dirs = Dirs {
+        home,
+        app_data: std::env::var_os("APPDATA").map(Into::into),
+        local_app_data: std::env::var_os("LOCALAPPDATA").map(Into::into),
+        config,
+    };
+    let explicit = !named.is_empty();
+    let chosen: Vec<native::Target> = if explicit {
+        named
+    } else {
+        Browser::ALL.to_vec()
+    }
+    .into_iter()
+    .filter(|b| b.family() == family)
+    .filter_map(|b| native::target(b, os, &dirs))
+    // Senza nomi, soltanto i browser che ci sono: niente cartelle
+    // inventate per programmi mai installati.
+    .filter(|t| explicit || t.root.is_dir())
+    .collect();
+    let apply = global.yes && !global.dry_run;
+    if apply && chosen.is_empty() {
+        return Err(Failure::new(
+            1,
+            "not_found",
+            "nessun browser trovato per questo id: nominalo con --browser",
+        ));
+    }
+    if apply && !uninstall && !clipper_host.is_file() {
+        return Err(Failure::new(
+            1,
+            "not_found",
+            format!(
+                "manca l'host nativo accanto alla CLI: {}",
+                clipper_host.to_string_lossy()
+            ),
+        ));
+    }
+    let body = serde_json::to_vec_pretty(&native::manifest(family, &clipper_host, &extension_id))
+        .map_err(|e| Failure::local(e.to_string()))?;
+    let mut targets = Vec::new();
+    let mut failed = false;
+    for target in &chosen {
+        let status = if !apply {
+            if uninstall {
+                "would_remove"
+            } else {
+                "would_write"
+            }
+            .to_string()
+        } else {
+            match native_apply(target, &body, uninstall) {
+                Ok(status) => status.to_string(),
+                Err(why) => {
+                    failed = true;
+                    format!("error: {why}")
+                }
+            }
+        };
+        targets.push(serde_json::json!({
+            "browser": target.browser.name(),
+            "manifest": target.manifest.to_string_lossy(),
+            "registry": target.registry,
+            "status": status,
+        }));
+    }
+    let mut data = serde_json::json!({
         "extension_id": extension_id,
         "host": fub_host::automation::NM_HOST_NAME,
         "binary": clipper_host.to_string_lossy(),
-        "chromium": manifest,
-        "firefox": firefox,
-    })));
+        "applied": apply,
+        "targets": targets,
+        "chromium": native::manifest(native::Family::Chromium, &clipper_host, &extension_id),
+        "firefox": native::manifest(native::Family::Firefox, &clipper_host, &extension_id),
+    });
+    if !apply {
+        data["next"] = serde_json::json!(format!(
+            "fub-cli --yes native-install --extension-id {extension_id}{}, poi fub-cli pair pair --extension-id {extension_id}",
+            if uninstall { " --uninstall" } else { "" }
+        ));
+    }
+    if failed {
+        return Err(Failure::local(format!(
+            "installazione incompleta: {}",
+            serde_json::to_string(&data["targets"]).unwrap_or_default()
+        )));
+    }
+    print(&envelope_ok(data));
     Ok(())
+}
+
+fn native_apply(
+    target: &crate::native::Target,
+    body: &[u8],
+    uninstall: bool,
+) -> Result<&'static str, String> {
+    use crate::native;
+    if !native::ours_or_absent(&target.manifest)? {
+        return Ok("skipped_foreign");
+    }
+    if uninstall {
+        let existed = target.manifest.exists();
+        if existed {
+            std::fs::remove_file(&target.manifest).map_err(|e| e.to_string())?;
+        }
+        if let Some(key) = &target.registry {
+            // Una chiave che non c'è non è un errore: è già tolta.
+            let _ = std::process::Command::new("reg")
+                .args(["delete", key, "/f"])
+                .output();
+        }
+        return Ok(if existed { "removed" } else { "absent" });
+    }
+    native::write_atomic(&target.manifest, body)?;
+    if let Some(key) = &target.registry {
+        let out = std::process::Command::new("reg")
+            .args(["add", key, "/ve", "/t", "REG_SZ", "/d"])
+            .arg(&target.manifest)
+            .arg("/f")
+            .output()
+            .map_err(|e| format!("reg: {e}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "reg add {key}: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+    }
+    Ok("written")
 }
 
 pub fn config_path(global: &GlobalArgs, name: &str) -> Result<std::path::PathBuf, Failure> {

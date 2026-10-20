@@ -204,7 +204,11 @@
       "node": "stack",
       "dir": "column",
       "gap": 8,
-      "children": []
+      "children": [],
+      "drag": {
+        "kind": "document",
+        "doc": "a.md"
+      }
     },
     {
       "node": "text",
@@ -979,6 +983,32 @@
                 "predicate": {
                   "kind": "file",
                   "extension": "md"
+                }
+              },
+              {
+                "negated": false,
+                "predicate": {
+                  "kind": "scoped",
+                  "scope": "section",
+                  "text": {
+                    "text": "rosa spina",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
+                  }
+                }
+              },
+              {
+                "negated": false,
+                "predicate": {
+                  "kind": "task_due",
+                  "min": null,
+                  "max": {
+                    "date": "2026-10-19",
+                    "inclusive": false
+                  }
                 }
               }
             ]

@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use fub_abi::command::{CommandOutcome, Undone};
+use fub_abi::command::{CommandOutcome, PlannedEdit, Undone};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
@@ -952,6 +952,20 @@ impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
         self.inner.format_link(doc, link)
     }
 
+    /// Il piano legge i documenti che linkano `from`, che possono essere
+    /// ovunque nel vault: serve la lettura di tutto il vault, come la
+    /// riscrittura dei backlink di una rinomina chiede la scrittura di tutto.
+    fn link_retarget_edits(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Result<Vec<PlannedEdit>, PluginError> {
+        self.check_path(Capability::VaultRead, "", || {
+            format!("planning the links of `{from}` onto `{to}`")
+        })?;
+        self.inner.link_retarget_edits(from, to)
+    }
+
     fn task_state_edit(
         &self,
         doc: &DocId,
@@ -1063,6 +1077,27 @@ impl<H: VaultStructure, P: Policy> VaultStructure for Guard<H, P> {
                 .ok_or_else(|| PluginError::NotFound(entry.to_string().into()))
         })?;
         self.inner.restore_document(entry, Some(target))
+    }
+    fn create_folder(&mut self, folder: &str) -> Result<(), PluginError> {
+        self.check_path(Capability::VaultStructure, folder, || {
+            format!("creating folder `{folder}`")
+        })?;
+        self.inner.create_folder(folder)
+    }
+    fn remove_empty_folder(&mut self, folder: &str) -> Result<(), PluginError> {
+        self.check_path(Capability::VaultStructure, folder, || {
+            format!("removing folder `{folder}`")
+        })?;
+        self.inner.remove_empty_folder(folder)
+    }
+    fn migrate_folder_organization(&mut self, from: &str, to: &str) -> Result<(), PluginError> {
+        self.check_path(Capability::VaultStructure, from, || {
+            format!("moving folder `{from}`")
+        })?;
+        self.check_path(Capability::VaultStructure, to, || {
+            format!("moving folder to `{to}`")
+        })?;
+        self.inner.migrate_folder_organization(from, to)
     }
     fn empty_trash(&mut self) -> Result<u64, PluginError> {
         self.check_path(Capability::VaultStructure, "", || "emptying trash".into())?;

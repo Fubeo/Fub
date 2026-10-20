@@ -80,6 +80,7 @@
 //! regole del contratto, i link dal grafo del kernel.
 
 use std::collections::HashMap;
+use std::ops::Bound;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -88,7 +89,7 @@ use fub_abi::edit::{Fnv1a, Revision};
 use fub_abi::event::{Event, EventKind, EventMask, Notice};
 use fub_abi::model::{canonical_tag, Block, DocId, DocumentModel, Span};
 use fub_abi::query::{
-    QueryClause, QueryExpr, QueryPredicate, TaskStatus, TextField, TextMode, TextQuery,
+    DueBound, QueryClause, QueryExpr, QueryPredicate, TaskStatus, TextField, TextMode, TextQuery,
     TextTolerance,
 };
 use fub_abi::rules::folders;
@@ -103,13 +104,15 @@ use fub_abi::traits::{
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
 use tantivy::query::{
-    AllQuery, BooleanQuery, BoostQuery, Occur, PhrasePrefixQuery, PhraseQuery, Query, RegexQuery,
-    TermQuery,
+    AllQuery, BooleanQuery, BoostQuery, Occur, PhrasePrefixQuery, PhraseQuery, Query, RangeQuery,
+    RegexQuery, TermQuery,
 };
 use tantivy::schema::{Field, IndexRecordOption, Schema, Value, STORED, STRING, TEXT};
 use tantivy::snippet::SnippetGenerator;
 use tantivy::tokenizer::TokenStream;
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Term};
+
+mod scope;
 
 const MAX_SCAN_DOCS: u64 = 2048;
 const MAX_SCAN_BYTES: usize = 8 * 1024 * 1024;
@@ -139,7 +142,9 @@ pub const SEARCH_ID: &str = "fub.search";
 /// v6: `headings` e `tags` memorizzati per la scansione regex/case-sensitive;
 /// `task_state` per i marker open/done. Gli alias restano in `page_name` e
 /// sono coperti dall'impronta del contenuto.
-const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(6);
+/// v7: `layout`, righe, blocchi e sezioni del corpo per `QueryPredicate::Scoped`.
+/// v8: `task_due`, le scadenze `📅` delle task aperte per `QueryPredicate::TaskDue`.
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(8);
 
 /// **La forma che quel numero versiona** (§15.3,
 /// [0106](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)).
@@ -159,7 +164,7 @@ const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(6);
 #[cfg(test)]
 const FINGERPRINT_OF_THE_SCHEMA: &str = "doc_id:raw:stored page_name:default:stored \
 body:default:stored tags:raw:stored tag_paths:raw folder:raw folder_exact:raw \
-headings:default:stored task_state:raw";
+headings:default:stored task_state:raw layout:-:stored task_due:raw";
 
 /// Nome del manifest nello spazio dati del plugin (vedi [`Manifest`]).
 const MANIFEST: &str = "manifest.json";
@@ -381,15 +386,31 @@ fn fingerprint(doc: &DocumentModel) -> u64 {
         h.update(alias.as_bytes());
         h.update(&[0x1f]);
     }
-    let (open, done) = task_states(doc);
-    h.update(&[u8::from(open), u8::from(done)]);
+    let tasks = task_states(doc);
+    h.update(&[u8::from(tasks.open), u8::from(tasks.done)]);
+    for due in &tasks.due {
+        h.update(due.as_bytes());
+        h.update(&[0x1f]);
+    }
+    // Le righe del corpo non stanno nel testo piatto: un a-capo morbido ci
+    // diventa uno spazio, e la ricerca per riga lo vedrebbe vecchio.
+    h.update(&[0]);
+    h.update(scope::layout(doc).as_bytes());
     h.value()
 }
+/// Le task di un documento: se ce n'è una aperta, una fatta, e le scadenze
+/// delle aperte.
+#[derive(Default)]
+struct Tasks {
+    open: bool,
+    done: bool,
+    due: Vec<String>,
+}
+
 /// Task presenti nell'albero, compresi liste annidate, citazioni e custom
-/// block. Fermarsi quando entrambi gli stati sono noti limita il cammino.
-fn task_states(doc: &DocumentModel) -> (bool, bool) {
-    let mut open = false;
-    let mut done = false;
+/// block.
+fn task_states(doc: &DocumentModel) -> Tasks {
+    let mut tasks = Tasks::default();
     let mut pending: Vec<&Block> = doc.body.iter().collect();
     while let Some(block) = pending.pop() {
         match block {
@@ -397,9 +418,12 @@ fn task_states(doc: &DocumentModel) -> (bool, bool) {
                 for item in items {
                     if let Some(marker) = item.task {
                         if marker.checked() {
-                            done = true;
+                            tasks.done = true;
                         } else {
-                            open = true;
+                            tasks.open = true;
+                            if let Some(due) = item_due(&item.blocks) {
+                                tasks.due.push(due);
+                            }
                         }
                     }
                     pending.extend(&item.blocks);
@@ -408,11 +432,11 @@ fn task_states(doc: &DocumentModel) -> (bool, bool) {
             Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => pending.extend(blocks),
             _ => {}
         }
-        if open && done {
-            break;
-        }
     }
-    (open, done)
+    // L'ordine delle date è quello del cammino: l'impronta lo vuole stabile.
+    tasks.due.sort();
+    tasks.due.dedup();
+    tasks
 }
 
 /// I campi dello schema, risolti una volta sola.
@@ -440,6 +464,11 @@ struct Fields {
     /// che `TextField::Heading` esiste per dire.
     headings: Field,
     task_state: Field,
+    /// Righe, blocchi e sezioni del corpo (vedi [`scope`]).
+    layout: Field,
+    /// Le scadenze delle task aperte, `AAAA-MM-GG`: una chiave per data, che
+    /// si confronta come testo.
+    task_due: Field,
 }
 
 /// La forma dello schema, in una riga: `nome:tokenizer[:stored]` per campo, in
@@ -494,6 +523,10 @@ fn build_schema() -> (Schema, Fields) {
     // indietro niente — gli estratti li genera il corpo.
     let headings = b.add_text_field("headings", TEXT | STORED);
     let task_state = b.add_text_field("task_state", STRING);
+    // Soltanto memorizzato: si rilegge per i candidati di `Scoped`, che
+    // l'indice ha già trovato col corpo.
+    let layout = b.add_text_field("layout", STORED);
+    let task_due = b.add_text_field("task_due", STRING);
     (
         b.build(),
         Fields {
@@ -506,6 +539,8 @@ fn build_schema() -> (Schema, Fields) {
             folder_exact,
             headings,
             task_state,
+            layout,
+            task_due,
         },
     )
 }
@@ -737,6 +772,10 @@ const IO: &str = "io";
 const UNSERVED_LEAF: &str = "unserved_leaf";
 const UNSERVED_FAMILY: &str = "unserved_family";
 const SELECT_UNSUPPORTED: &str = "select_unsupported";
+/// I due tetti di `line:`, `block:` e `section:`: si cerca riga per riga, e
+/// soltanto dentro un numero limitato di candidati.
+const SCOPE_TOO_MANY: &str = "scope_too_many";
+const SCOPE_TOO_LARGE: &str = "scope_too_large";
 /// I nomi degli argomenti.
 const PATH: &str = "path";
 const REASON: &str = "reason";
@@ -889,6 +928,16 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "La ricerca non ordina per proprietà e non sceglie le colonne: \
                  quello lo fa chi ha il frontmatter.",
             )
+            .with(
+                SCOPE_TOO_MANY,
+                "line:, block: e section: guardano al massimo 2048 note: \
+                 aggiungi una parola o un filtro.",
+            )
+            .with(
+                SCOPE_TOO_LARGE,
+                "line:, block: e section: leggono al massimo 8 MiB di testo: \
+                 aggiungi una parola o un filtro.",
+            )
             .with(S_GROUP, "Ricerca")
             .with(S_NAME, "Peso del nome della nota")
             .with(
@@ -950,6 +999,16 @@ pub fn catalog() -> Vec<StringCatalog> {
                 SELECT_UNSUPPORTED,
                 "The search does not sort by property and does not pick columns: \
                  that is for whoever has the frontmatter.",
+            )
+            .with(
+                SCOPE_TOO_MANY,
+                "line:, block: and section: look at 2048 notes at most: \
+                 add a word or a filter.",
+            )
+            .with(
+                SCOPE_TOO_LARGE,
+                "line:, block: and section: read 8 MiB of text at most: \
+                 add a word or a filter.",
             )
             .with(S_GROUP, "Search")
             .with(S_NAME, "Note name weight")
@@ -1037,6 +1096,7 @@ impl SearchIndex {
         for heading in &doc.outline {
             td.add_text(f.headings, &heading.text);
         }
+        td.add_text(f.layout, scope::layout(doc));
         // Un valore per tag (non una stringa unita): col tokenizer raw ogni
         // valore È un termine, e il termine è la forma canonica — la stessa
         // chiave con cui il kernel aggrega e il pannello interroga.
@@ -1056,12 +1116,15 @@ impl SearchIndex {
             td.add_text(f.folder, folder);
         }
         td.add_text(f.folder_exact, fub_abi::query::folder_of(&doc.id));
-        let (open, done) = task_states(doc);
-        if open {
+        let tasks = task_states(doc);
+        if tasks.open {
             td.add_text(f.task_state, "open");
         }
-        if done {
+        if tasks.done {
             td.add_text(f.task_state, "done");
+        }
+        for due in &tasks.due {
+            td.add_text(f.task_due, due);
         }
         td
     }
@@ -1442,6 +1505,26 @@ impl SearchIndex {
                     TaskStatus::Done => "done",
                 },
             ))),
+            QueryPredicate::TaskDue { min, max } => {
+                let term = |date: &str| Term::from_field_text(f.task_due, date);
+                let edge = |bound: &Option<DueBound>, open: Bound<Term>| match bound {
+                    Some(DueBound {
+                        date,
+                        inclusive: true,
+                    }) => Bound::Included(term(date)),
+                    Some(DueBound {
+                        date,
+                        inclusive: false,
+                    }) => Bound::Excluded(term(date)),
+                    None => open,
+                };
+                // Senza estremo in basso si parte dalla chiave vuota, che sta
+                // prima di ogni data: l'intervallo deve sapere il suo campo.
+                Ok(Some(Box::new(RangeQuery::new(
+                    edge(min, Bound::Included(term(""))),
+                    edge(max, Bound::Unbounded),
+                ))))
+            }
             QueryPredicate::Regex { pattern, fields } => {
                 if pattern.len() > MAX_REGEX_BYTES {
                     return Err(PluginError::BadArgs("regex exceeds 256 bytes".into()));
@@ -1455,6 +1538,22 @@ impl SearchIndex {
                 self.scan_fields(fields, |values| {
                     values.iter().any(|value| regex.is_match(value))
                 })
+            }
+            QueryPredicate::Scoped { scope, text } => {
+                // I candidati li trova l'indice, col corpo e le sue regole; qui
+                // si tengono quelli che hanno tutto nella stessa unità.
+                let body = TextQuery {
+                    fields: vec![TextField::Body],
+                    ..text.clone()
+                };
+                let Some(matcher) = scope::Matcher::new(text) else {
+                    return Ok(None);
+                };
+                let Some(candidates) = self.text_query(&body)? else {
+                    return Ok(None);
+                };
+                text_parts.push(candidates.box_clone());
+                self.scan_layouts(&*candidates, |layout| matcher.within(layout, *scope))
             }
             QueryPredicate::Tag { name, descendants } => {
                 let field = if *descendants { f.tag_paths } else { f.tags };
@@ -1737,6 +1836,51 @@ impl SearchIndex {
         Ok((!docs.is_empty()).then(|| Box::new(BooleanQuery::new(docs)) as Box<dyn Query>))
     }
 
+    /// I documenti di `candidates` la cui forma (`layout`) passa `matches`.
+    ///
+    /// Gli stessi tetti di [`Self::scan_fields`], ma sui soli candidati: chi
+    /// cerca in una riga ha già detto quali parole ci devono stare.
+    fn scan_layouts(
+        &self,
+        candidates: &dyn Query,
+        mut matches: impl FnMut(&str) -> bool,
+    ) -> Result<Option<Box<dyn Query>>, PluginError> {
+        self.commit()?;
+        let searcher = self.reader.searcher();
+        let found = searcher
+            .search(
+                candidates,
+                &tantivy::collector::TopDocs::with_limit(MAX_SCAN_DOCS as usize + 1)
+                    .order_by_score(),
+            )
+            .map_err(|err| PluginError::Internal(reason(SEARCH, err)))?;
+        if found.len() > MAX_SCAN_DOCS as usize {
+            return Err(PluginError::BadArgs(Text::key(SCOPE_TOO_MANY)));
+        }
+        let mut docs = Vec::new();
+        let mut scanned = 0usize;
+        for (_, address) in found {
+            let doc: TantivyDocument = searcher
+                .doc(address)
+                .map_err(|err| PluginError::Internal(reason(DOC_READ, err)))?;
+            let Some(id) = doc.get_first(self.fields.doc_id).and_then(|v| v.as_str()) else {
+                continue;
+            };
+            let layout = doc
+                .get_first(self.fields.layout)
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            scanned = scanned.saturating_add(layout.len());
+            if scanned > MAX_SCAN_BYTES {
+                return Err(PluginError::BadArgs(Text::key(SCOPE_TOO_LARGE)));
+            }
+            if matches(layout) {
+                docs.push((Occur::Should, term_query(self.fields.doc_id, id)));
+            }
+        }
+        Ok((!docs.is_empty()).then(|| Box::new(BooleanQuery::new(docs)) as Box<dyn Query>))
+    }
+
     /// Un termine **incompleto**: tutto ciò che comincia così.
     ///
     /// È un automa sul dizionario dei termini — cioè un intervallo aperto nella
@@ -1785,6 +1929,34 @@ impl SearchIndex {
         }
         Ok(terms)
     }
+}
+
+/// La scadenza di una task: la data dopo `📅` nel paragrafo della voce, come
+/// la scrive il plugin Tasks (`📅 2026-10-19`).
+fn item_due(blocks: &[Block]) -> Option<String> {
+    let Some(Block::Paragraph { inlines, .. }) = blocks.first() else {
+        return None;
+    };
+    let text: String = inlines
+        .iter()
+        .map(|inline| match inline {
+            fub_abi::model::Inline::Text(s) => s.as_str(),
+            _ => " ",
+        })
+        .collect();
+    let after = text.rsplit_once('📅')?.1.trim_start();
+    let date = after.get(..10)?;
+    let b = date.as_bytes();
+    let shaped = b.iter().enumerate().all(|(at, c)| match at {
+        4 | 7 => *c == b'-',
+        _ => c.is_ascii_digit(),
+    });
+    (shaped
+        && after[10..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_ascii_digit()))
+    .then(|| date.to_string())
 }
 
 fn term_query(field: Field, value: &str) -> Box<dyn Query> {
@@ -1850,6 +2022,8 @@ impl IndexProvider for SearchIndex {
             QueryRoute::Predicate(PredicateKind::Task),
             QueryRoute::Predicate(PredicateKind::Tag),
             QueryRoute::Predicate(PredicateKind::Folder),
+            QueryRoute::Predicate(PredicateKind::Scoped),
+            QueryRoute::Predicate(PredicateKind::TaskDue),
         ]
     }
 

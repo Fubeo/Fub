@@ -20,6 +20,7 @@
 //   quello in pixel accanto resta com'era.
 
 import { DEFAULT_CURVE, type PenCurve } from "../../../ink/input/pressure";
+import { NO_STABILIZER, type StabilizerConfig } from "../../../ink/input/stabilizer";
 import type { Bounds } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
 import { UNIT_SIZE, UNITS, type LengthUnit } from "../scene/rulers";
@@ -63,6 +64,33 @@ export interface Grid {
   readonly taps: boolean;
   /// La curva della pressione della penna (`ink/input/pressure.ts`).
   readonly pen: PenCurve;
+  /// Lo stabilizzatore del tratto (`ink/input/stabilizer.ts`). Assente,
+  /// spento: una griglia ricordata prima di lui disegna com'era.
+  readonly steady?: Steady;
+}
+
+/// Quanto si leviga il tratto mentre si disegna.
+export interface Steady {
+  /// Da 0 (spento) a 1 (il massimo).
+  readonly amount: number;
+  /// La corda («lazy mouse») invece della media.
+  readonly string: boolean;
+}
+
+/// `value` come stabilizzatore, se lo è: `amount` in 0…1 e `string` vero o falso.
+export function validSteady(value: unknown): Steady | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { amount, string } = value as Record<string, unknown>;
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount < 0 || amount > 1 || typeof string !== "boolean") return null;
+  return { amount, string };
+}
+
+/// La configurazione dell'inchiostro per `steady`: assente, spento. Il
+/// pennino raggiunge il puntatore alla fine e mentre è fermo, come chi
+/// disegna si aspetta da un tratto che non resta indietro.
+export function stabilizerOf(steady: Steady | undefined): StabilizerConfig {
+  if (steady === undefined || steady.amount <= 0) return NO_STABILIZER;
+  return { amount: steady.amount, pulledString: steady.string, catchUp: true, catchUpOnEnd: true };
 }
 
 /// I passi fra cui si sceglie, nell'unità: in pixel dividono tutti la

@@ -28,3 +28,7 @@ export async function pickFile(): Promise<string | null> {
 export async function pickSupportDestination(): Promise<string | null> {
   return null;
 }
+
+export async function pickNewFolder(): Promise<string | null> {
+  return null;
+}

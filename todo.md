@@ -87,7 +87,7 @@ non una decisione presa.
 
 | ID | Decisione | Opzioni | Raccomandazione | Cosa blocca |
 |---|---|---|---|---|
-| D11 | Snapshot completo offline: destinazione | a) path assoluto digitato nella palette (attuale); b) dialogo di sistema nel selettore dei vault e nel menu File | b, senza nuova porta IPC: il dialogo passa il path al comando esistente | Uso quotidiano di P01.5 |
+| D11 | Snapshot completo offline: destinazione | a) path assoluto digitato nella palette; b) dialogo di sistema nel selettore dei vault e nel menu File (attuale) | b, senza nuova porta IPC: il dialogo passa il path al comando esistente | Uso quotidiano di P01.5 |
 | D12 | Formato del contenitore snapshot | a) cartella `manifest.json` + `payload/` (attuale); b) archivio unico | a, finché un archivio non ha un caso reale | Nessuno |
 | D13 | Banco visuale della shell mobile | a) nessun bridge mobile finto (attuale: `mobile.html` non parte nel banco); b) bridge finto nel banco | b se servono foto e a11y mobile in CI | Prove visive di P14 fuori dai dispositivi |
 

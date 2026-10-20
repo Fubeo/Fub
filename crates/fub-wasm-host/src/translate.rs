@@ -630,7 +630,7 @@ fn to_floating(s: &fub_abi::session::FloatingSelection) -> w_session::FloatingSe
 // componente dichiara e risponde. L'unica cosa che passa di là è il modo
 // dell'invocazione, che è `to_invoke_mode`.
 
-fn from_doc(id: String) -> fub_abi::model::DocId {
+pub(crate) fn from_doc(id: String) -> fub_abi::model::DocId {
     fub_abi::model::DocId(id)
 }
 
@@ -726,7 +726,9 @@ fn from_text_edit(and: w_edit::TextEdit) -> Result<fub_abi::edit::TextEdit, Plug
     })
 }
 
-fn from_edit_request(r: w_edit::EditRequest) -> Result<fub_abi::edit::EditRequest, PluginError> {
+pub(crate) fn from_edit_request(
+    r: w_edit::EditRequest,
+) -> Result<fub_abi::edit::EditRequest, PluginError> {
     Ok(fub_abi::edit::EditRequest {
         base: fub_abi::edit::Revision(r.base),
         edits: r

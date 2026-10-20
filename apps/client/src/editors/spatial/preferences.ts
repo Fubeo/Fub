@@ -33,7 +33,7 @@ import { onEvent } from "../../state/kernel";
 import { notify } from "../../ui/notify";
 import { validCurve } from "../../ink/input/pressure";
 import { exportMemoryOf, type ExportMemory } from "./tools/export-plan";
-import { DEFAULT_GRID, validClosed, validStep, validSteps, type Grid } from "./tools/grid";
+import { DEFAULT_GRID, validClosed, validStep, validSteady, validSteps, type Grid } from "./tools/grid";
 import { RECENT_COLORS } from "./tools/palette";
 import { CUSTOM_DEFAULT, isLevel, type Level } from "./tools/registry";
 import type { Suggested } from "./tools/suggestions";
@@ -174,7 +174,7 @@ export function watchLevel(apply: (level: Level, custom: readonly string[]) => v
 /// penna com'è. Un passo ricordato che la griglia non accetta non conta.
 function gridOf(value: unknown): Grid | null {
   if (typeof value !== "object" || value === null) return null;
-  const { shown, snap, step, steps, guides, rulers, rulerGuides, panel, bar, shapes, closed, twist, taps, pen } = value as Record<string, unknown>;
+  const { shown, snap, step, steps, guides, rulers, rulerGuides, panel, bar, shapes, closed, twist, taps, pen, steady } = value as Record<string, unknown>;
   if (typeof shown !== "boolean" || typeof snap !== "boolean" || typeof step !== "number" || !validStep(step)) return null;
   for (const flag of [guides, rulers, rulerGuides, bar, shapes, twist, taps]) if (flag !== undefined && typeof flag !== "boolean") return null;
   if (panel !== undefined && panel !== null && typeof panel !== "boolean") return null;
@@ -183,6 +183,8 @@ function gridOf(value: unknown): Grid | null {
   if (sections === null) return null;
   const curve = pen === undefined ? DEFAULT_GRID.pen : validCurve(pen);
   if (curve === null) return null;
+  // Uno stabilizzatore che non si legge vale spento, e non butta la griglia.
+  const steadied = steady === undefined ? null : validSteady(steady);
   return {
     shown,
     snap,
@@ -198,6 +200,7 @@ function gridOf(value: unknown): Grid | null {
     twist: (twist as boolean | undefined) ?? DEFAULT_GRID.twist,
     taps: (taps as boolean | undefined) ?? DEFAULT_GRID.taps,
     pen: curve,
+    ...(steadied === null ? {} : { steady: steadied }),
   };
 }
 

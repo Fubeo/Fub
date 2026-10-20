@@ -34,6 +34,7 @@ fn node(key: &str, kind: UiKind) -> UiNode {
     UiNode {
         key: Some(key.to_string()),
         kind,
+        drag: None,
     }
 }
 
@@ -282,6 +283,7 @@ impl ViewGuest for Component {
             node("nested", UiKind::Tree(vec![6])),
             fub::abi::ui::UiNode {
                 key: None,
+                drag: None,
                 kind: UiKind::TreeItem(fub::abi::ui::UiTreeItem {
                     label: literal("nested"),
                     expanded: true,
@@ -292,6 +294,7 @@ impl ViewGuest for Component {
             },
             fub::abi::ui::UiNode {
                 key: None,
+                drag: None,
                 kind: UiKind::TreeItem(fub::abi::ui::UiTreeItem {
                     label: literal("leaf"),
                     expanded: false,

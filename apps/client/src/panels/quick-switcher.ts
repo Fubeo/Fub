@@ -40,7 +40,7 @@
 // Non l'ho trovata, creala. Compare solo a risultati vuoti, e il nome che
 // propone non è la query così com'è: passa da `rules/nome-cercato.ts`, perché
 // `note.create` prende un **path** e una query può contenere uno slash.
-import { notesByName } from "../host/query";
+import { notesByNameWithAliases } from "../host/query";
 import { Race } from "../ui/race";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
@@ -63,6 +63,10 @@ import { enterSurface, exitSurface } from "../ui/motion";
 import { cancelScheduledPreview, hidePreview, schedulePreview, showStickyPreview } from "../state/preview";
 import { openDocument } from "../state/document-controller";
 import { platformSupports } from "../platform/capabilities";
+import { listStep } from "../ui/list-step";
+import { offerNote } from "../ui/drag-types";
+import { offerOutside } from "../ui/vault-transfer";
+import { openVaultRoot } from "../state/store";
 
 const OVERLAY_ID = "quick-switcher";
 const LIST_ID = `${OVERLAY_ID}-list`;
@@ -73,6 +77,19 @@ let dispatchOpen: (doc: string, mode: SwitcherOpenMode) => Promise<void> | void 
 
 /// Ctrl/Cmd apre accanto, con Maiusc in una finestra nuova. Dove la
 /// piattaforma ha una finestra sola, Maiusc resta un'apertura accanto.
+/// L'alias per cui una nota è fra i risultati: il primo che contiene tutte le
+/// parole scritte, e solo se il nome non le contiene già. L'indice cerca nome e
+/// alias insieme; qui si ritrova soltanto quale dei due spiega la riga.
+export function matchedAlias(doc: string, aliases: string[], text: string): string | undefined {
+  const terms = text.toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  const holds = (name: string) => {
+    const lower = name.toLocaleLowerCase();
+    return terms.every((term) => lower.includes(term));
+  };
+  if (terms.length === 0 || holds(pageName(doc))) return undefined;
+  return aliases.find(holds);
+}
+
 function openMode(e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }): SwitcherOpenMode {
   if (!e.ctrlKey && !e.metaKey) return "here";
   return e.shiftKey && platformSupports("multipleWindows") ? "window" : "split";
@@ -93,8 +110,9 @@ function optionId(entry: Entry): string {
 /// vorrebbero dire tenere d'accordo un indice con un'aritmetica di confini, che
 /// è la cosa che si sbaglia il giorno in cui se ne aggiunge una quarta.
 type Entry =
-  /// Una nota del vault, per path.
-  | { k: "doc"; doc: string }
+  /// Una nota del vault, per path; `alias` è quello per cui l'ha trovata,
+  /// quando il nome da solo non contiene ciò che si è scritto.
+  | { k: "doc"; doc: string; alias?: string }
   /// Una ricerca fatta di recente: si ripesca per rifarla.
   | { k: "query"; q: string }
   /// La nota che non c'era, col nome che il testo cercato propone.
@@ -244,8 +262,9 @@ export function openQuickSwitcher(): void {
         // è anche il caso in cui questa superficie serve di più.
         // Le parole scritte, segnate nel nome: si vede *perché* una nota è lì,
         // e fra tre omonime quale combacia meglio.
-        title.append(markedTerms(pageName(entry.doc), input.value.trim()));
-        where.textContent = entry.doc;
+        // Trovata per un alias: si mostra l'alias, e sotto di chi è.
+        title.append(markedTerms(entry.alias ?? pageName(entry.doc), input.value.trim()));
+        where.textContent = entry.alias ? t("switcher.alias_of", { doc: entry.doc }) : entry.doc;
         setTooltip(button, entry.doc);
       } else if (entry.k === "query") {
         title.textContent = entry.q;
@@ -266,6 +285,26 @@ export function openQuickSwitcher(): void {
         button.addEventListener("focus", () => schedulePreview(entry.doc, box, false));
         button.addEventListener("mouseleave", cancelScheduledPreview);
         button.addEventListener("blur", cancelScheduledPreview);
+        // Il risultato si trascina fuori come la nota che è. Al primo `drag`
+        // l'immagine del trascinamento è già presa: la modale si fa trasparente
+        // ai puntatori, così il rilascio arriva a editor, schede o segnalibri,
+        // e si chiude quando il gesto finisce.
+        button.draggable = true;
+        const doc = entry.doc;
+        button.addEventListener("dragstart", (event) => {
+          if (!event.dataTransfer) return;
+          cancelScheduledPreview();
+          hidePreview();
+          offerOutside(event.dataTransfer, openVaultRoot(), [doc]);
+          offerNote(event.dataTransfer, doc);
+        });
+        button.addEventListener("drag", () => {
+          const overlay = document.getElementById(OVERLAY_ID);
+          // Stile in riga e non del tema: è il comportamento del gesto, e un
+          // tema di terzi non deve poterlo togliere.
+          if (overlay) Object.assign(overlay.style, { pointerEvents: "none", opacity: "0" });
+        }, { once: true });
+        button.addEventListener("dragend", () => closeQuickSwitcher());
       }
       li.append(button);
       newItems.appendChild(li);
@@ -355,7 +394,8 @@ export function openQuickSwitcher(): void {
       // `catch`, quindi non c'è dove perdere il segnale di scadenza.
       return expected(
         (text
-          ? notesByName(text).then((d) => d.map((doc): Entry => ({ k: "doc", doc })))
+          ? notesByNameWithAliases(text).then((d) =>
+              d.map(({ doc, aliases }): Entry => ({ k: "doc", doc, alias: matchedAlias(doc, aliases, text) })))
           : existingRecentNotes().then((d) => [
               ...d.map((doc): Entry => ({ k: "doc", doc })),
               ...recentSearches().map((q): Entry => ({ k: "query", q })),
@@ -402,10 +442,10 @@ export function openQuickSwitcher(): void {
     timer = window.setTimeout(() => void search(), 180);
   });
   input.addEventListener("keydown", (e) => {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    const step = listStep(e);
+    if (step) {
       e.preventDefault();
       if (visibleItems.length === 0) return;
-      const step = e.key === "ArrowDown" ? 1 : -1;
       selected = (selected + step + visibleItems.length) % visibleItems.length;
       render();
       list.children[selected]?.scrollIntoView?.({ block: "nearest" });

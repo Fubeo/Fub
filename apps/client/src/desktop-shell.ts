@@ -15,7 +15,7 @@
 // accatastati.
 import { pickVaultLocation } from "./platform/vault-picker";
 import { api, window as nativeWindow } from "./host/ipc";
-import { settings } from "./host/query";
+import { resolvedReference, settings } from "./host/query";
 import { forwardNotice, onEvent, startKernelRouter } from "./state/kernel";
 import { mountLocale } from "./state/locale";
 import { emit, on, state } from "./state/store";
@@ -26,6 +26,7 @@ import { takeNoticeAfterReload } from "./ui/intents";
 import { mountLinkPreview } from "./ui/link-preview";
 import { FORMATBAR_EVENT } from "./panels/selection-bubble";
 import { listenForFailures, mountNotifications, notify, setWatcherOff } from "./ui/notify";
+import { writeClipboardText } from "./platform/clipboard";
 import { closeCommandPalette, openCommandPalette, startCommand } from "./ui/palette";
 import {
   allCommands,
@@ -43,6 +44,8 @@ import {
   registerShellCommand,
 } from "./ui/commands";
 import { mountKeyboard } from "./ui/keyboard";
+import { openVaultExport, VAULT_EXPORT } from "./ui/vault-export";
+import { IMPORT_PREPARE, openNoteImport } from "./ui/note-import";
 import { openLifetime, type Lifetime, type Teardown } from "./ui/lifetime";
 import { mountSidebarCommands, showPanel } from "./panels/sidebar";
 import { revealSidePanel, setSidePanelController, toggleSidePanel, type SidePanel } from "./ui/side-panels";
@@ -56,9 +59,12 @@ import { mountAppMenu } from "./ui/app-menu";
 import { mountWebviewFocusMonitor } from "./ui/node";
 import { registerMermaidRenderer } from "./ui/mermaid";
 import { mountOnboarding } from "./ui/onboarding";
+import { mountIncomingLinks, URI_ALLOWED } from "./ui/incoming-links";
+import { mountWebViewer } from "./ui/web-viewer";
+import { confirm } from "./platform/confirm";
 import { registerBaseRenderer } from "./editors/base/surface";
 import { applyRailMachineSettings, mountRail, refreshRailShortcuts, syncRail } from "./panels/rail";
-import { mountStrings, onLanguage, t } from "./i18n/strings";
+import { mountStrings, onLanguage, resolvedLanguage, t, type Key } from "./i18n/strings";
 import { mountSplitter } from "./kit";
 import { mountActivity } from "./panels/activity";
 import { mountSettings } from "./panels/settings";
@@ -67,6 +73,8 @@ import { reducedMotion } from "./theme/reduced-motion";
 import {
   mountDocument,
   openDocument,
+  openDocumentBeside,
+  reveal,
   setEditorTheme,
   synchronize,
 } from "./panels/document";
@@ -94,9 +102,11 @@ import { mountCloseGuard } from "./state/close-guard";
 import { createVaultSession } from "./state/vault-session";
 import { newNoteInActiveSpace } from "./state/new-note";
 import { paletteHost } from "./state/palette-host";
+import { FILES_STARTUP, FILES_STARTUP_NOTE, startupCommand, startupNote } from "./state/startup";
+import { slowPhase, startupClock, type StartupPhase, type StartupTimes } from "./state/startup-timing";
 import { preferredPaneMode } from "./state/pane-mode";
 import { setSearchPort } from "./state/search-port";
-import { zoomBy } from "./state/zoom";
+import { mountWheelTextSize, zoomBy } from "./state/zoom";
 
 /// Le impostazioni della macchina che ricordano i due pannelli laterali, e le
 /// chiavi `localStorage` dove stavano prima (si adottano una volta).
@@ -548,8 +558,10 @@ function mountAdaptiveShell(): void {
     emit("vault", "");
   };
   mountOnboarding({
+    // La demo: il vault di prima resta aperto nell'host, perché chiudendo la
+    // demo l'host lo rende di nuovo corrente.
     openPath: async (path) => {
-      await openVaultPath(path, () => !life.closed, true);
+      await openVaultPath(path, () => !life.closed, true, true);
       if (life.closed) return;
       syncOnboarding();
       applyAdaptive();
@@ -581,6 +593,49 @@ function mountAdaptiveShell(): void {
       applyAdaptive();
     },
   }, pageWindowLifetime);
+  // I `fub://` del sistema: aprire un altro vault passa dallo stesso flusso del
+  // pulsante, e un vault che non si è aperto ferma il collegamento invece di
+  // eseguirlo in quello di prima.
+  mountIncomingLinks(pageWindowLifetime, {
+    confirm,
+    notify,
+    openVault: async (root) => {
+      await openVaultFlow(root);
+      return !life.closed && state.vaultRoot === root;
+    },
+    open: async (note, heading, block, place) => {
+      const target = await resolvedReference({ kind: "wiki", value: { page: note, heading, block } });
+      if (!target) return false;
+      if (place === "window") await openCurrentInNewWindow(target.doc);
+      else if (place === "here") await openDocument(target.doc);
+      else await openDocumentBeside(target.doc, place);
+      if (target.at && place !== "window") await reveal(target.doc, { span: target.at.span });
+      return true;
+    },
+    search: (query) => {
+      revealSidePanel("sidebar");
+      showPanel("search");
+      searchFor(query);
+    },
+    chooseVault: () => void pickVault(),
+    show: (doc) => openDocument(doc),
+    allowed: async () => {
+      try {
+        const entry = (await settings()).find((item) => item.spec.key === URI_ALLOWED);
+        return Array.isArray(entry?.value) ? entry.value : [];
+      } catch {
+        // Senza impostazioni si chiede: è la risposta che non scrive.
+        return [];
+      }
+    },
+  });
+  // Il visore web: il consenso per sito, la barra e il salvataggio come nota.
+  mountWebViewer(pageWindowLifetime, document.body, {
+    confirm,
+    notify,
+    show: (doc) => openDocument(doc),
+    openExternal: (url) => { window.open(url, "_blank", "noopener,noreferrer"); },
+  });
   applyAdaptive();
   syncOnboarding();
   pageWindowLifetime.add(on("vault", () => syncOnboarding()));
@@ -663,6 +718,8 @@ async function init(): Promise<Teardown> {
     lifetime.close();
   };
   const alive = (): boolean => !lifetime.closed && pageEpoch === epoch;
+  const clock = startupClock(() => performance.now());
+  clock.mark("page");
   // Il tema **per primo**, e prima di qualunque cosa disegni (§12.4): applica
   // subito l'ultima scelta nota, così il primo fotogramma è già nella luce
   // giusta invece di correggersi mezzo secondo dopo. La preferenza di moto si
@@ -672,6 +729,7 @@ async function init(): Promise<Teardown> {
   // riconfigurarlo subito dopo.
   reducedMotion();
   mountTheme(pageWindowLifetime, setEditorTheme);
+  mountWheelTextSize(pageWindowLifetime);
 
   // Le stringhe accanto al tema, e per la stessa ragione (§12.4): sono le due
   // cose che vanno applicate **prima** che qualcosa disegni, o il primo
@@ -923,6 +981,7 @@ async function init(): Promise<Teardown> {
       ...(canCreateDrawing() ? [{ label: t("menu.file.new_drawing"), run: () => void newDrawing() }] : []),
       ...(canImportDrawing() ? [{ label: t("menu.file.import_drawing"), run: () => void pickDrawingImport() }] : []),
     ],
+    vault: vaultGestures,
   }));
   refreshTitlebarShortcuts();
   pageWindowLifetime.add(onLanguage(refreshTitlebarShortcuts));
@@ -965,6 +1024,15 @@ async function init(): Promise<Teardown> {
           notify(t("commands.failed", { command, reason: errorText(error) }), "guasto");
         });
     }),
+  );
+  // «Esporta…» ha la sua finestra: formato, cartella, opzioni e destinazione,
+  // e l'esito con gli avvisi resta lì.
+  pageWindowLifetime.add(
+    registerCommandForm(VAULT_EXPORT, (prefill) => openVaultExport(prefill, paletteHost)),
+  );
+  // «Importa note…»: anteprima, commit e rollback dei comandi `import.*`.
+  pageWindowLifetime.add(
+    registerCommandForm(IMPORT_PREPARE, (prefill) => openNoteImport(prefill, paletteHost)),
   );
   // «Importa disegno» legge il file e prepara il disegno nella sua finestra,
   // che arriva coi lettori dei due programmi la prima volta che serve.
@@ -1025,6 +1093,7 @@ async function init(): Promise<Teardown> {
   await loadKeyOverrides();
   if (!alive()) return teardown;
   refreshTitlebarShortcuts();
+  clock.mark("shell");
 
   const initial = await api.initialVault();
   if (!alive()) return teardown;
@@ -1036,14 +1105,110 @@ async function init(): Promise<Teardown> {
   // l'onboarding a vault vuoto e applica i breakpoint, senza toccare l'ordine
   // di apertura qui sotto.
   mountAdaptiveShell();
-  if (initial) await openVaultPath(initial, alive);
+  if (initial) await openInitialVault(initial, alive);
   else await synchronize();
   if (!alive()) return teardown;
+  // Senza un vault iniziale l'avvio finisce nella scelta, che aspetta chi
+  // sceglie: non c'è niente di lento da dire. Nemmeno sotto il server di
+  // sviluppo, che trasforma i moduli alla prima richiesta: lì la pagina è
+  // lenta per lui, non per chi userà l'app.
+  if (initial && !import.meta.env.DEV) {
+    clock.mark("vault");
+    reportSlowStartup(clock.times());
+  }
   // L'avviso di una ricarica voluta (un ripristino da snapshot): la finestra
   // che lo ha chiesto non c'è più per dirlo.
   const reloaded = takeNoticeAfterReload();
   if (reloaded) notify(reloaded);
   return teardown;
+}
+
+const STARTUP_PHASE: Record<StartupPhase, Key> = {
+  page: "app.startup_phase.page",
+  shell: "app.startup_phase.shell",
+  vault: "app.startup_phase.vault",
+};
+
+/// Un avvio lento si dice, col tratto che è durato di più; i tempi di ogni
+/// tratto si copiano per chi deve capire perché.
+function reportSlowStartup(times: StartupTimes): void {
+  const slowest = slowPhase(times);
+  if (!slowest) return;
+  const format = new Intl.NumberFormat(resolvedLanguage(), { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const seconds = (ms: number) => format.format(ms / 1000);
+  const report = [
+    ...times.phases.map(({ phase, ms }) => `${t(STARTUP_PHASE[phase])}: ${seconds(ms)} s`),
+    `${t("app.slow_startup.total")}: ${seconds(times.total)} s`,
+  ].join("\n");
+  notify(t("app.slow_startup", { seconds: seconds(times.total), phase: t(STARTUP_PHASE[slowest]) }), "info", {
+    label: t("app.slow_startup.copy"),
+    run: () => void writeClipboardText(report).then(
+      () => notify(t("app.slow_startup.copied"), "info"),
+      () => notify(t("tabmenu.copy_failed"), "guasto"),
+    ),
+  });
+}
+
+/// L'ultimo vault, all'avvio. Se non si apre — un altro Fub lo tiene, il
+/// disco non risponde — la finestra non è un guasto: dice perché e mostra la
+/// scelta del vault, come al primo avvio. Prima l'errore chiudeva la vita della
+/// pagina, e l'unica via d'uscita era riavviare.
+async function openInitialVault(path: string, alive: () => boolean): Promise<void> {
+  try {
+    await openVaultPath(path, alive);
+  } catch (error) {
+    if (!alive()) return;
+    notify(t("app.initial_vault_failed", { path, reason: errorText(error) }), "guasto");
+    await synchronize();
+    return;
+  }
+  // Soltanto all'avvio: cambiare vault riprende le sue schede e basta.
+  await openAtStartup(alive).catch((error: unknown) => {
+    if (alive()) notify(errorText(error), "guasto");
+  });
+}
+
+/// Apre ciò che `files.startup` chiede, se il comando è nel registro: senza la
+/// feature dei modelli la nota del giorno non c'è, e resta la sessione.
+async function openAtStartup(alive: () => boolean): Promise<void> {
+  const entries = await settings();
+  if (!alive()) return;
+  const choice = entries.find((entry) => entry.spec.key === FILES_STARTUP)?.value;
+  const note = startupNote(choice, entries.find((entry) => entry.spec.key === FILES_STARTUP_NOTE)?.value);
+  if (note !== null) {
+    // Si legge prima di aprire: una nota che non c'è più si dice, e non lascia
+    // una scheda vuota sopra la sessione.
+    try {
+      await api.readDocument(note);
+      if (!alive()) return;
+      await openDocument(note);
+    } catch (error) {
+      if (alive()) notify(t("app.startup_note_failed", { path: note, reason: errorText(error) }), "guasto");
+    }
+    return;
+  }
+  const id = startupCommand(choice);
+  const entry = id === null ? undefined : allCommands().find((candidate) => candidate.id === id);
+  if (entry) startCommand(entry, paletteHost);
+}
+
+/// I gesti sul vault intero che il menu File e il chip del vault offrono:
+/// snapshot completo e ripristino, cioè i comandi dell'host con il loro modulo
+/// (che ora sceglie le cartelle col dialogo di sistema). Senza vault aperto, o
+/// senza il comando nel registro, la voce non c'è.
+const VAULT_GESTURES = [
+  { command: "import.prepare", label: "menu.file.import_notes" },
+  { command: "vault.export", label: "menu.file.export_vault" },
+  { command: "vault.snapshot.create", label: "menu.file.snapshot_create" },
+  { command: "vault.snapshot.apply", label: "menu.file.snapshot_apply" },
+] as const;
+
+export function vaultGestures(): { label: string; run(): void }[] {
+  if (!state.vaultRoot) return [];
+  return VAULT_GESTURES.flatMap(({ command, label }) => {
+    const entry = allCommands().find((candidate) => candidate.id === command);
+    return entry ? [{ label: t(label), run: () => startCommand(entry, paletteHost) }] : [];
+  });
 }
 
 /// Come si esce dalla concentrazione lo si dice una volta per finestra: chi

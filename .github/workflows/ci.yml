@@ -45,6 +45,8 @@ jobs:
         run: cargo build --manifest-path tools/varco-wasm/Cargo.toml --target wasm32-unknown-unknown
       - name: le versioni delle dipendenze si scrivono in un posto solo
         run: node .github/scripts/check-cargo-versions.mjs
+      - name: la versione del prodotto è la stessa in Cargo, Tauri e npm
+        run: node .github/scripts/check-release-version.mjs
       - name: ogni cargo feature è compilata da qualcuno
         run: node .github/scripts/check-cargo-feature-default.mjs
       - name: ogni forma di libreria è consumata da qualcuno
@@ -109,8 +111,8 @@ jobs:
             librsvg2-dev patchelf libgtk-3-dev
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: clippy con la feature `draw` dell'host (FUORI_DAL_DEFAULT)
-        run: cargo clippy -p fub-host --features draw --all-targets -- -D warnings
+      - name: clippy dell'host senza la feature `draw`
+        run: cargo clippy -p fub-host --no-default-features --features notify-watcher,http-client,official-features,rich --all-targets -- -D warnings
       - name: clippy con la feature `draw` delle feature (FUORI_DAL_DEFAULT)
         run: cargo clippy -p fub-features --features draw --all-targets -- -D warnings
       - name: Il ramo Windows del kernel, compilato da qui
@@ -149,8 +151,8 @@ jobs:
       - name: cestino e ripristino attraverso il contratto
         run: cargo test -p fub-kernel --test trash --test structural_host -- --nocapture
       - run: cargo test --workspace --no-fail-fast
-      - name: le scene di FubDraw, con la feature `draw` dell'host (FUORI_DAL_DEFAULT)
-        run: cargo test -p fub-host --features draw --no-fail-fast
+      - name: l'host senza la feature `draw`, con gli SVG come allegati
+        run: cargo test -p fub-host --no-default-features --features notify-watcher,http-client,official-features,rich --no-fail-fast
       - name: «Nuovo disegno» e l'export dei disegni, con la feature `draw` delle feature (FUORI_DAL_DEFAULT)
         run: cargo test -p fub-features --features draw --no-fail-fast
 

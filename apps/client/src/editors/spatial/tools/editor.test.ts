@@ -4,6 +4,7 @@
 // cosa è successo.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DEFAULT_GRID } from "./grid";
 import { FIDELITY } from "../../../../bench/fidelity-corpus";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { applyOperation } from "../../core/text-operation";
@@ -255,6 +256,26 @@ describe("gli strumenti", () => {
     drag([[10, 10], [14, 12], [20, 15], [28, 16], [36, 16]]);
     expect(editor.engine.text).toMatch(/<path id="o[a-z0-9]{8}" fub:tool="pen" fub:at="[^"]+Z" fub:brush="pf1 size=4 [^"]*" d="M[^"]+" fill="#000000" fub:ink="1 [^"]+"\/>/);
     expect(spoken()).toBe("Tratto aggiunto. Il disegno ha 2 oggetti.");
+  });
+
+  it("con lo stabilizzatore di «Penna e dita» la corda assorbe il tremito del tratto", () => {
+    const shaky: [number, number][] = [[10, 10], [14, 13], [18, 9], [22, 13], [26, 9], [30, 13], [34, 9], [60, 11]];
+    const pathOf = (): string => /fub:tool="pen"[^>]* d="([^"]+)"/.exec(editor.engine.text)![1]!;
+    mount(SOURCE, { level: "standard" });
+    drag(shaky);
+    const raw = pathOf();
+    editor.dispose();
+    mount(SOURCE, { level: "standard", grid: { ...DEFAULT_GRID, steady: { amount: 1, string: true } } });
+    drag(shaky);
+    const steady = pathOf();
+    expect(steady).not.toBe(raw);
+    // La corda tiene fermo il pennino sotto un tremito più corto di lei: il
+    // contorno del tratto stabilizzato è più basso di quello che trema.
+    const span = (d: string): number => {
+      const ys = [...d.matchAll(/(-?[\d.]+)[ ,](-?[\d.]+)/g)].map((m) => Number(m[2]));
+      return Math.max(...ys) - Math.min(...ys);
+    };
+    expect(span(steady)).toBeLessThan(span(raw));
   });
 
   it("la gomma toglie gli oggetti interi che attraversa", () => {
@@ -11673,6 +11694,30 @@ describe("gli appunti", () => {
     expect(editor.engine.text).toBe(before);
   });
 
+  it("ciò che Excalidraw e draw.io mettono negli appunti entra coi suoi oggetti, e il rapporto lo dice", async () => {
+    mount();
+    size(1000, 500);
+    const shape = {
+      type: "rectangle", id: "r", x: 0, y: 0, width: 100, height: 50, angle: 0, strokeColor: "#1e1e1e",
+      backgroundColor: "transparent", fillStyle: "hachure", strokeWidth: 2, strokeStyle: "solid", roughness: 1,
+      opacity: 100, groupIds: [], roundness: null, isDeleted: false, locked: false, link: null, boundElements: null,
+    };
+    const excalidraw = JSON.stringify({ type: "excalidraw/clipboard", elements: [shape], files: {} });
+    const pasted = clip("paste", holding(excalidraw));
+    expect(pasted.defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(rects().length).toBeGreaterThan(1), { timeout: 4000 });
+    expect(editor.selection.length).toBeGreaterThan(0);
+    // Il tratto a schizzo non entra uguale, e lo si dice.
+    expect(spoken()).toMatch(/schizzo/);
+
+    const drawio = encodeURIComponent(
+      '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="a" value="" style="rounded=0;" vertex="1" parent="1"><mxGeometry x="0" y="0" width="40" height="20" as="geometry"/></mxCell></root></mxGraphModel>',
+    );
+    const count = rects().length;
+    expect(clip("paste", holding(drawio)).defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(rects().length).toBeGreaterThan(count), { timeout: 4000 });
+  });
+
   it("un file .svg lasciato sul foglio va dove cade, col suo nome; due sono un passo", async () => {
     mount();
     size(1000, 500);
@@ -12189,6 +12234,7 @@ describe("la vista girata e i gesti, dal livello Standard", () => {
     expect(checks.map((check) => [check.closest("label")!.textContent, check.checked])).toEqual([
       ["Due dita che ruotano girano il foglio", true],
       ["Un tocco di due dita annulla, uno di tre ripete", true],
+      ["Tira il tratto con una corda: un tremito più corto della corda non lo muove", false],
     ]);
     expect(document.activeElement).toBe(checks[0]);
     checks[0]!.click();
@@ -12202,6 +12248,8 @@ describe("la vista girata e i gesti, dal livello Standard", () => {
     expect(editor.grid.twist).toBe(false);
     expect(editor.grid.taps).toBe(true);
     expect(editor.grid.pen).toEqual({ soft: 1, min: 0, full: 1 });
+    // Lo stabilizzatore lasciato a zero resta spento.
+    expect(editor.grid.steady).toEqual({ amount: 0, string: false });
     expect(grids[grids.length - 1]).toEqual(editor.grid);
 
     // Un ottavo della corsa, sulla curva più morbida, è metà pressione.

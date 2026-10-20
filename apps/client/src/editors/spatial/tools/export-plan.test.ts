@@ -9,6 +9,7 @@ import {
   exportMemoryOf,
   exportPieces,
   exportRequest,
+  hasPages,
   initialState,
   memoryOf,
   offered,
@@ -159,6 +160,19 @@ describe("ciò che esce", () => {
       scope: "boards",
       boards: ["b1", "b2", "b3"],
     });
+  });
+
+  it("Excalidraw e draw.io hanno le loro destinazioni, senza misura né parola nel nome", () => {
+    expect(exportRequest(state({ format: "excalidraw", size: { scale: 3 } }), BOARDS, WORDS)).toEqual({
+      target: "draw.excalidraw",
+      options: { background: "paper", scope: "drawing" },
+    });
+    expect(exportRequest(state({ what: "boards", format: "drawio" }), BOARDS, WORDS)).toEqual({
+      target: "draw.drawio",
+      options: { background: "paper", scope: "boards", boards: ["b1", "b2", "b3"] },
+    });
+    expect(hasPages("drawio")).toBe(true);
+    expect(hasPages("excalidraw")).toBe(false);
   });
 
   it("si esporta con almeno una tavola e una larghezza intera nei limiti", () => {

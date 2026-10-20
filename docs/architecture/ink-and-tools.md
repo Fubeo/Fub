@@ -116,9 +116,10 @@ superficie non si è vista una penna.
   da codice MIT di terzi (vedi
   [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md)). Quando è acceso i
   campioni del tratto sono quelli del pennino e non quelli del puntatore, e la
-  predizione non si consegna. L'adattatore lo accetta (`stabilizer`, letto a ogni
-  `pointerdown`) ma FubDraw non lo passa ancora: non c'è una preferenza che lo
-  accenda.
+  predizione non si consegna. L'adattatore lo legge a ogni `pointerdown`
+  (`stabilizer`, con `scale` per la corda in pixel dello schermo). In FubDraw si
+  sceglie in «Penna e dita» (levigatura e corda), è della macchina come la curva
+  e vive nella griglia ricordata (`steady`); assente, è spento.
 
 ## L'adattatore del browser
 

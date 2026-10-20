@@ -88,7 +88,12 @@ mod bridge;
 pub mod capture;
 pub mod config;
 /// **La porta unica dei lucchetti** e la politica del veleno (decisione 0120).
+mod connector_tokens;
+/// Il canale di controllo: la CLI e l'host nativo del clipper chiedono all'app
+/// che tiene aperto il vault, invece di trovarlo occupato.
+pub mod control;
 mod custody;
+mod export_folder;
 pub mod format_source;
 pub mod jobs;
 pub mod mount;
@@ -97,6 +102,7 @@ pub mod mount;
 /// ce l'hanno.
 #[cfg(feature = "http-client")]
 pub mod net;
+pub mod obsidian_import;
 #[cfg(feature = "http-client")]
 pub mod publish;
 mod query;
@@ -107,12 +113,16 @@ pub mod remote;
 pub mod resources;
 mod rich;
 pub mod runner;
+mod secret_file;
 pub mod session;
 pub mod settings;
 pub mod shell;
 pub mod support;
 mod teardown;
 pub mod theme;
+#[cfg(feature = "http-client")]
+pub mod updates;
+pub mod uri_inbox;
 pub mod vaults;
 /// **Chi aspetta cosa** fra il turno di scrittura e l'istanza di un componente
 /// (FUB-019): il grafo che lascia cedere a chi sta dentro il guest.
@@ -120,6 +130,7 @@ pub mod waits;
 /// Il tempo di **parete** dello scheduler (§22.4, decisione 0091).
 mod wall;
 mod watcher;
+pub mod web_clip;
 extern crate self as fub_host;
 pub use custody::Custody;
 #[cfg(feature = "notify-watcher")]

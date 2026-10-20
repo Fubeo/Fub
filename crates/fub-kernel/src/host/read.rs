@@ -1,5 +1,6 @@
 //! [`ReadHost`]: il percorso di lettura, che non ha le altre capacità.
 
+use fub_abi::command::PlannedEdit;
 use fub_abi::edit::{EditRequest, Revision};
 use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
@@ -83,6 +84,21 @@ impl VaultRead for ReadHost<'_> {
 
     fn format_link(&self, doc: &DocId, link: &LinkInsert) -> Result<Option<String>, PluginError> {
         self.ws.format_link(doc, link)
+    }
+
+    /// Un piano e non una scrittura: chi lo vuole applicare passa dall'host
+    /// che scrive.
+    fn link_retarget_edits(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Result<Vec<PlannedEdit>, PluginError> {
+        Ok(self
+            .ws
+            .link_retarget_edits(from, to)?
+            .into_iter()
+            .map(|(doc, edit)| PlannedEdit::new(doc, edit))
+            .collect())
     }
 
     /// Calcolare la modifica è una lettura, come la revisione: la si consegna

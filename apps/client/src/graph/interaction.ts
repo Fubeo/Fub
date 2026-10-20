@@ -53,6 +53,9 @@ export interface InteractionOptions {
   /// I gesti d'impulso (il lancio di un nodo) sono ammessi? Col moto ridotto
   /// no: il nodo resta dove è stato lasciato. Assente, sì.
   playful?: () => boolean;
+  /// Il moltiplicatore del raggio con cui il pittore disegna i nodi: il
+  /// hit-test usa lo stesso. Assente, 1.
+  nodeSize?: () => number;
 }
 
 export interface Interaction {
@@ -70,14 +73,14 @@ export interface Interaction {
 /// — 6 px di tolleranza **di schermo**, non di mondo. Senza la scala il
 /// hit-test era giusto solo a scala 1 e il click mancava i nodi zoommati.
 /// Ritorna l'indice del nodo più vicino entro soglia, −1 se nessuno.
-export function nodeAt(s: Structure, c: Camera, x: number, y: number, isVisible?: (index: number) => boolean): number {
+export function nodeAt(s: Structure, c: Camera, x: number, y: number, isVisible?: (index: number) => boolean, size = 1): number {
   let best = -1;
   let bestD = Infinity;
   for (let i = 0; i < s.n; i++) {
     if (isVisible && !isVisible(i)) continue;
     const dx = s.x[i] * c.scale + c.tx - x;
     const dy = s.y[i] * c.scale + c.ty - y;
-    const threshold = s.radius[i] * c.scale + 6;
+    const threshold = s.radius[i] * size * c.scale + 6;
     const d2 = dx * dx + dy * dy;
     if (d2 < threshold * threshold && d2 < bestD) {
       best = i;
@@ -272,10 +275,10 @@ const WHEEL_STEP_MAX = 0.5;
 const WHEEL_LINE_PX = 16;
 
 export function createInteraction(options: InteractionOptions): Interaction {
-  const { canvas, structureRef, cameraState, actions, isVisible = () => true, playful = () => true } = options;
+  const { canvas, structureRef, cameraState, actions, isVisible = () => true, playful = () => true, nodeSize = () => 1 } = options;
 
   const s2m = (x: number, y: number): Point => screenToWorld(cameraState.state(), { x, y });
-  const hit = (x: number, y: number): number => nodeAt(structureRef(), cameraState.state(), x, y, isVisible);
+  const hit = (x: number, y: number): number => nodeAt(structureRef(), cameraState.state(), x, y, isVisible, nodeSize());
   const viewport = (): { w: number; h: number } => {
     const r = canvas.getBoundingClientRect();
     return { w: Math.max(1, r.width), h: Math.max(1, r.height) };

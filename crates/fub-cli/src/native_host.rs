@@ -26,8 +26,13 @@ struct Transfer {
     bytes: Vec<u8>,
 }
 
+// L'host dell'app che tiene aperto il vault, quando c'è: lo stesso della CLI.
+#[allow(dead_code)]
+#[path = "port.rs"]
+mod port;
+
 struct NativeState {
-    host: fub_host::Host,
+    host: port::HostPort,
     transfer: Option<Transfer>,
 }
 
@@ -49,7 +54,7 @@ fn run() -> i32 {
         host = host.with_config_dir(dir.as_path());
     }
     let mut state = NativeState {
-        host,
+        host: port::HostPort::new(host),
         transfer: None,
     };
     let stdin = std::io::stdin();
@@ -158,20 +163,34 @@ impl NativeState {
         std::path::Path::new(root)
             .canonicalize()
             .map_err(|_| NmResponse::err(AutomationKind::NotFound, "NM: vault assente"))?;
+        if let Some(open) = self.host.app_root() {
+            // Già attraverso l'app: un altro vault non si apre accanto a lei.
+            let same = std::path::Path::new(root).canonicalize().ok()
+                == open.as_std_path().canonicalize().ok();
+            return if same {
+                Ok(())
+            } else {
+                Err(NmResponse::err(
+                    AutomationKind::Conflict,
+                    "NM: l'host lavora già attraverso l'app su un altro vault",
+                ))
+            };
+        }
         // Il lock di scrittura lo prende l'host aprendo, e lo tiene la sessione.
-        self.host
-            .open(camino::Utf8Path::new(root))
-            .map_err(|error| {
-                if fub_host::automation::is_writer_busy(&error) {
-                    NmResponse::err(
-                        AutomationKind::Conflict,
-                        "NM: vault occupato da altro writer",
-                    )
-                } else {
-                    NmResponse::err(map_kind(&error), error.to_string())
-                }
-            })?;
-        Ok(())
+        // Se il vault è dell'app aperta, la cattura la scrive lei.
+        match self.host.open(camino::Utf8Path::new(root)) {
+            Ok(_) => Ok(()),
+            Err(error)
+                if fub_host::automation::is_writer_busy(&error) && self.host.through_app(root) =>
+            {
+                Ok(())
+            }
+            Err(error) if fub_host::automation::is_writer_busy(&error) => Err(NmResponse::err(
+                AutomationKind::Conflict,
+                "NM: vault occupato da altro writer",
+            )),
+            Err(error) => Err(NmResponse::err(map_kind(&error), error.to_string())),
+        }
     }
 }
 
@@ -384,11 +403,11 @@ fn nm_gate(
 /// Scrive la cattura autorizzata nel vault che `open_vault` ha già aperto, con
 /// il comando dell'host `capture.apply`: lo stesso della CLI e del mobile.
 fn apply_capture(
-    host: &fub_host::Host,
+    host: &port::HostPort,
     request: &NmRequest,
 ) -> Result<(), (AutomationKind, String)> {
     let payload = &request.payload;
-    fub_host::capture::apply(host, payload.target.vault.as_deref(), payload, None)
+    host.capture(payload.target.vault.as_deref(), payload)
         .map(|_| ())
         .map_err(|e| (map_kind(&e), e.to_string()))
 }

@@ -122,7 +122,7 @@ const KEYMAP_EDITOR = editorKeymap;
 /// il comando dell'editor che se la prende comunque.
 type CollisionPair = readonly [canonicalChord: string, declared: string, editor: string];
 
-/// Quella che c'è, e nessun'altra. `Mod-Shift-\\` (split in basso) e
+/// Quelle che ci sono, e nessun'altra. `Mod-Shift-\\` (split in basso) e
 /// `Mod-Shift-l` (Live) non hanno più accordo: dentro l'editor vinceva sempre
 /// CodeMirror. Chi ne aggiunge una la vede qui.
 const KNOWN_COLLISIONS: readonly CollisionPair[] = [
@@ -131,6 +131,10 @@ const KNOWN_COLLISIONS: readonly CollisionPair[] = [
   // aprivano insieme. Da 0156 a runtime non scattano più entrambi: decide il
   // fuoco, e dentro l'editor vince l'editor.
   ["mod-f", "shell.doc.search", "openSearchPanel"],
+  // Indietro e avanti come nei browser: fuori dall'editor (esplora, lettura,
+  // toolbar) cambiano nota, dentro l'editor restano il salto di sintassi.
+  ["alt-arrowleft", "shell.pane.back", "cursorSyntaxLeft"],
+  ["alt-arrowright", "shell.pane.forward", "cursorSyntaxRight"],
 ];
 
 /// Gli accordi dei due registri dichiarati, in forma canonica, con chi li porta.

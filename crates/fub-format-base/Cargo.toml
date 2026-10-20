@@ -10,5 +10,6 @@ description = "Native .base document format: YAML view definitions over note pro
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml_ng = { workspace = true }
+regex = { workspace = true }
 thiserror = { workspace = true }
 fub-abi = { workspace = true }

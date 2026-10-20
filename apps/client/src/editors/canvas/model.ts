@@ -206,7 +206,11 @@ export function parseCanvas(source: string): CanvasDocument {
   if (!source.trim()) return { nodes: [], edges: [] };
   let root: unknown;
   try {
-    root = JSON.parse(source, (_key, value: unknown) => {
+    // Un BOM iniziale si salta, non si toglie (RFC 8259 §8.1, come
+    // `text_policy::strip_bom` in Rust): la sorgente lo conserva, il patcher
+    // lo copia e gli offset lo contano (#97).
+    const json = source.charCodeAt(0) === 0xfeff ? source.slice(1) : source;
+    root = JSON.parse(json, (_key, value: unknown) => {
       if (typeof value === "number" && !Number.isFinite(value)) throw new RangeError("canvas JSON number out of range");
       return value;
     });

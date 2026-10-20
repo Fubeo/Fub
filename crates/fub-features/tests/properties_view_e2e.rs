@@ -11,11 +11,14 @@ use fub_abi::event::Actor;
 use fub_abi::model::{DocId, PropertyType, PropertyTypes};
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
+use fub_abi::text::Text;
 use fub_abi::traits::{PluginManifest, ViewInstance};
 use fub_abi::ui::{FieldValue, UiAction, UiKind, UiNode, UiValue};
 use fub_features::{
-    PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_PROPERTY_REMOVE,
-    NOTES_PROPERTY_SET, PROPERTIES_ID, PROPERTIES_VIEW, PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
+    PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_ALIAS_ADD,
+    NOTES_PROPERTIES_CLEAR, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID,
+    PROPERTIES_STATUS_VIEW, PROPERTIES_VIEW, PROPERTY_KEYS_MIGRATE, PROPERTY_KEY_DELETE,
+    PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace, MAIN_PANE};
@@ -155,6 +158,25 @@ fn no_one_notes_open_and_empty_state() {
     let ws = vault.open();
     let tree = ws.render_view(&instance()).unwrap();
     assert!(and_empty_state(&tree));
+}
+
+#[test]
+fn the_status_bar_counts_the_properties_and_is_silent_otherwise() {
+    let vault = Vault::new();
+    vault.put("a.md", MISTA);
+    vault.put("b.md", "# Solo corpo\n");
+    let ws = vault.open();
+    let status = ViewInstance::only(PROPERTIES_STATUS_VIEW);
+    let silent = |tree: &UiNode| tree.children().is_empty();
+    assert!(silent(&ws.render_view(&status).unwrap()));
+    open_notes(&ws, "a.md");
+    let tree = ws.render_view(&status).unwrap();
+    let UiKind::Text { content } = &tree.kind else {
+        panic!("the status is a text: {tree:?}");
+    };
+    assert_eq!(*content, Text::from("Proprietà: 6".to_string()));
+    open_notes(&ws, "b.md");
+    assert!(silent(&ws.render_view(&status).unwrap()));
 }
 
 #[test]
@@ -708,4 +730,328 @@ fn datetime_inside_a_list_keeps_its_clock_and_offset_in_global_values() {
     let ws = vault.open();
     let global = serde_json::to_string(&ws.render_view(&global_instance()).unwrap()).unwrap();
     assert!(global.contains("2026-01-02T10:20:30+02:00"), "{global}");
+}
+
+/// Senza i modelli di nota il pulsante della nota del giorno non porta da
+/// nessuna parte e lo dice, invece di non fare niente.
+#[test]
+fn without_templates_the_daily_button_says_why() {
+    let vault = Vault::new();
+    vault.put("a.md", "---\ndate: 2024-03-05\n---\n");
+    let mut ws = vault.open();
+    open_notes(&ws, "a.md");
+    let update = ws
+        .view_action(
+            &instance(),
+            UiAction::new("daily").with_payload(serde_json::json!({ "value": "2024-03-05" })),
+        )
+        .unwrap();
+    let fub_abi::ui::ViewUpdate::Replace { root } = update else {
+        panic!("{update:?}");
+    };
+    let shown = serde_json::to_string(&root).unwrap();
+    assert!(shown.contains("i modelli di nota sono spenti"), "{shown}");
+    assert!(!vault.root.join("Daily").exists());
+}
+
+/// Dalla data di una nota (la `date` di una giornaliera, o qualunque altra) alle
+/// altre note di quel giorno: qualsiasi chiave, anche con l'ora o dentro un
+/// elenco; lo stesso pulsante chiude la lista, e una nota senza quel giorno
+/// non la mostra.
+#[test]
+fn the_same_day_button_lists_the_other_notes_with_that_date() {
+    let vault = Vault::new();
+    vault.put("Diario.md", "---\ndate: 2024-03-05\n---\n");
+    vault.put("Riunione.md", "---\ncreata: 2024-03-05T10:00+02:00\n---\n");
+    vault.put("Viaggio.md", "---\ngiorni: [2024-03-05, 2024-04-01]\n---\n");
+    vault.put("Dopo.md", "---\ndate: 2024-03-06\n---\n");
+    vault.put("Nuda.md", "Niente frontmatter.\n");
+    let mut ws = vault.open();
+    open_notes(&ws, "Diario.md");
+    let press = |ws: &mut Workspace| {
+        let update = ws
+            .view_action(
+                &instance(),
+                UiAction::new("same_day")
+                    .with_payload(serde_json::json!({ "value": "2024-03-05" })),
+            )
+            .unwrap();
+        let fub_abi::ui::ViewUpdate::Replace { root } = update else {
+            panic!("{update:?}");
+        };
+        serde_json::to_string(&root).unwrap()
+    };
+    let shown = press(&mut ws);
+    assert!(shown.contains("Altre note del 2024-03-05"), "{shown}");
+    assert!(
+        shown.contains("Riunione.md") && shown.contains("Viaggio.md"),
+        "{shown}"
+    );
+    assert!(
+        !shown.contains("Dopo.md") && !shown.contains("Nuda.md"),
+        "{shown}"
+    );
+    assert!(
+        !shown.contains("\"key\":\"Diario.md\""),
+        "la nota stessa non c'è: {shown}"
+    );
+    let navigate = ws
+        .view_action(
+            &instance(),
+            UiAction::new("open").with_payload(serde_json::json!({ "doc": "Riunione.md" })),
+        )
+        .unwrap();
+    assert_eq!(
+        navigate,
+        fub_abi::ui::ViewUpdate::Navigate {
+            doc_id: "Riunione.md".into()
+        }
+    );
+    open_notes(&ws, "Dopo.md");
+    let elsewhere = serde_json::to_string(&ws.render_view(&instance()).unwrap()).unwrap();
+    assert!(!elsewhere.contains("Riunione.md"), "{elsewhere}");
+    open_notes(&ws, "Diario.md");
+    let closed = press(&mut ws);
+    assert!(!closed.contains("Riunione.md"), "{closed}");
+}
+
+/// Un giorno che nessun'altra nota ha lo dice, invece di una lista vuota.
+#[test]
+fn the_same_day_list_says_when_no_other_note_has_the_day() {
+    let vault = Vault::new();
+    vault.put("Sola.md", "---\ndate: 2024-03-05\n---\n");
+    let mut ws = vault.open();
+    open_notes(&ws, "Sola.md");
+    let update = ws
+        .view_action(
+            &instance(),
+            UiAction::new("same_day").with_payload(serde_json::json!({ "value": "2024-03-05" })),
+        )
+        .unwrap();
+    let shown = serde_json::to_string(&update).unwrap();
+    assert!(
+        shown.contains("Nessun'altra nota ha la data 2024-03-05."),
+        "{shown}"
+    );
+}
+
+/// Oltre la cinquantesima le note dello stesso giorno si contano, non si
+/// elencano: il pannello resta leggibile.
+#[test]
+fn the_same_day_list_counts_what_it_does_not_show() {
+    let vault = Vault::new();
+    vault.put("Oggi.md", "---\ndate: 2024-03-05\n---\n");
+    for n in 0..53 {
+        vault.put(&format!("n{n:02}.md"), "---\ndate: 2024-03-05\n---\n");
+    }
+    let mut ws = vault.open();
+    open_notes(&ws, "Oggi.md");
+    let update = ws
+        .view_action(
+            &instance(),
+            UiAction::new("same_day").with_payload(serde_json::json!({ "value": "2024-03-05" })),
+        )
+        .unwrap();
+    let shown = serde_json::to_string(&update).unwrap();
+    assert!(
+        shown.contains("n49.md") && !shown.contains("n50.md"),
+        "{shown}"
+    );
+    assert!(shown.contains("e altre 3"), "{shown}");
+}
+
+#[test]
+fn deleting_a_key_from_the_vault_previews_applies_and_undoes() {
+    let vault = Vault::new();
+    vault.put(
+        "a.md",
+        "---\nstato: bozza # da rivedere\naltro: si\n---\n\n# Resta\n",
+    );
+    vault.put("b.md", "---\nstato: [uno, due]\n---\n\nTesto\n");
+    vault.put("c.md", "---\naltro: no\n---\n");
+    let mut ws = vault.open();
+    let before_a = vault.read("a.md");
+    let before_b = vault.read("b.md");
+    let before_c = vault.read("c.md");
+    let args = serde_json::json!({"key":"stato"});
+    let plan = ws
+        .invoke_command(
+            PROPERTY_KEY_DELETE,
+            args.clone(),
+            InvokeMode::DryRun,
+            Actor::User,
+        )
+        .unwrap();
+    let CommandEffect::Plan(plan) = plan.effect else {
+        panic!("expected dry-run plan")
+    };
+    assert_eq!(plan.edits.len(), 2);
+    assert_eq!(vault.read("a.md"), before_a);
+    let result = ws
+        .invoke_command(
+            PROPERTY_KEY_DELETE,
+            args.clone(),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .unwrap();
+    assert!(result.partial.is_none());
+    let a = vault.read("a.md");
+    assert!(!a.contains("stato"), "{a}");
+    assert!(a.contains("altro: si") && a.contains("# Resta"), "{a}");
+    assert!(!vault.read("b.md").contains("stato"));
+    assert!(vault.read("b.md").contains("Testo"));
+    assert_eq!(vault.read("c.md"), before_c);
+    let rerun = ws
+        .invoke_command(PROPERTY_KEY_DELETE, args, InvokeMode::Apply, Actor::User)
+        .unwrap();
+    assert!(rerun.undo.is_none());
+    for step in result.undo.unwrap().steps {
+        let UndoStep::Edit(planned) = step else {
+            panic!("inverse edit expected")
+        };
+        ws.apply_edit(&planned.doc, planned.edit).unwrap();
+    }
+    assert_eq!(vault.read("a.md"), before_a);
+    assert_eq!(vault.read("b.md"), before_b);
+}
+
+#[test]
+fn old_keys_become_plural_in_one_edit_per_note_and_both_forms_are_left_alone() {
+    let vault = Vault::new();
+    vault.put(
+        "a.md",
+        "---\ntag: [uno]\nalias: Prima\n\"cssclass\": wide\n---\n\nTesto\n",
+    );
+    vault.put("b.md", "---\ntag: due\ntags: [tre]\n---\n");
+    vault.put("c.md", "---\ntags: [quattro]\n---\n");
+    let mut ws = vault.open();
+    let before_a = vault.read("a.md");
+    let before_b = vault.read("b.md");
+    let before_c = vault.read("c.md");
+    let args = serde_json::json!({});
+    let plan = ws
+        .invoke_command(
+            PROPERTY_KEYS_MIGRATE,
+            args.clone(),
+            InvokeMode::DryRun,
+            Actor::User,
+        )
+        .unwrap();
+    let CommandEffect::Plan(plan) = plan.effect else {
+        panic!("expected dry-run plan")
+    };
+    assert_eq!(plan.edits.len(), 1);
+    assert_eq!(plan.edits[0].edit.edits.len(), 3);
+    assert_eq!(vault.read("a.md"), before_a);
+    let result = ws
+        .invoke_command(
+            PROPERTY_KEYS_MIGRATE,
+            args.clone(),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .unwrap();
+    assert_eq!(
+        vault.read("a.md"),
+        "---\ntags: [uno]\naliases: Prima\n\"cssclasses\": wide\n---\n\nTesto\n"
+    );
+    assert_eq!(vault.read("b.md"), before_b);
+    assert_eq!(vault.read("c.md"), before_c);
+    let partial = result.partial.as_ref().expect("b.md non si converte");
+    assert_eq!(partial.failures.len(), 1, "{partial:?}");
+    let rerun = ws
+        .invoke_command(PROPERTY_KEYS_MIGRATE, args, InvokeMode::Apply, Actor::User)
+        .unwrap();
+    assert!(rerun.undo.is_none());
+    for step in result.undo.unwrap().steps {
+        let UndoStep::Edit(planned) = step else {
+            panic!("inverse edit expected")
+        };
+        ws.apply_edit(&planned.doc, planned.edit).unwrap();
+    }
+    assert_eq!(vault.read("a.md"), before_a);
+}
+
+#[test]
+fn deleting_an_empty_key_is_refused() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    assert!(ws
+        .invoke_command(
+            PROPERTY_KEY_DELETE,
+            serde_json::json!({"key":"  "}),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .is_err());
+}
+
+#[test]
+fn an_alias_joins_the_list_and_a_string_becomes_a_list() {
+    let vault = Vault::new();
+    vault.put("a.md", "---\ntitolo: Uno\n---\n\nTesto\n");
+    vault.put("b.md", "---\naliases: Primo\n---\n");
+    vault.put("c.md", "---\nalias: [Vecchio]\n---\n");
+    let mut ws = vault.open();
+    let mut add = |doc: &str, alias: &str| {
+        ws.invoke_command(
+            NOTES_ALIAS_ADD,
+            serde_json::json!({"doc": doc, "alias": alias}),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .unwrap()
+    };
+    let first = add("a.md", "Uno bis");
+    assert!(first.undo.is_some());
+    add("a.md", "Altro");
+    let a = vault.read("a.md");
+    assert!(a.contains("titolo: Uno") && a.contains("Testo"), "{a}");
+    assert!(a.contains("Uno bis") && a.contains("Altro"), "{a}");
+    let again = add("a.md", "Altro");
+    assert!(again.undo.is_none(), "un alias già presente non riscrive");
+    add("b.md", "Secondo");
+    let b = vault.read("b.md");
+    assert!(b.contains("Primo") && b.contains("Secondo"), "{b}");
+    add("c.md", "Nuovo");
+    let c = vault.read("c.md");
+    assert!(c.contains("alias:") && !c.contains("aliases"), "{c}");
+    assert!(c.contains("Vecchio") && c.contains("Nuovo"), "{c}");
+}
+
+#[test]
+fn clearing_takes_the_whole_block_and_leaves_the_body() {
+    let vault = Vault::new();
+    vault.put(
+        "a.md",
+        "---\r\ntitolo: Uno # nota\r\ntags: [a]\r\n---\r\n\r\n# Corpo\r\n",
+    );
+    vault.put("b.md", "# Senza\n");
+    let mut ws = vault.open();
+    let before = vault.read("a.md");
+    let mut clear = |doc: &str, mode: InvokeMode| {
+        ws.invoke_command(
+            NOTES_PROPERTIES_CLEAR,
+            serde_json::json!({"doc": doc}),
+            mode,
+            Actor::User,
+        )
+        .unwrap()
+    };
+    let plan = clear("a.md", InvokeMode::DryRun);
+    assert!(matches!(plan.effect, CommandEffect::Plan(_)), "{plan:?}");
+    assert_eq!(vault.read("a.md"), before);
+    let done = clear("a.md", InvokeMode::Apply);
+    assert_eq!(vault.read("a.md"), "\r\n# Corpo\r\n");
+    let none = clear("b.md", InvokeMode::Apply);
+    assert!(none.undo.is_none());
+    assert_eq!(vault.read("b.md"), "# Senza\n");
+    for step in done.undo.unwrap().steps {
+        let UndoStep::Edit(planned) = step else {
+            panic!("inverse edit expected")
+        };
+        ws.apply_edit(&planned.doc, planned.edit).unwrap();
+    }
+    assert_eq!(vault.read("a.md"), before);
 }

@@ -99,3 +99,117 @@ describe("Base table windows", () => {
     }
   });
 });
+
+describe("Base raggruppata", () => {
+  const rows = [
+    { doc: "a.md", values: { status: { kind: "text", value: "fatto" } } },
+    { doc: "b.md", values: { status: { kind: "text", value: "aperto" } } },
+    { doc: "c.md", values: { status: { kind: "text", value: "fatto" } } },
+    { doc: "d.md", values: { status: { kind: "empty" } } },
+  ];
+  const grouped = (viewType: string) => (request: IndexQuery): Promise<IndexResult> => {
+    if (request.kind === "documents") {
+      return Promise.resolve({ kind: "documents", value: { offset: 0, total: rows.length, items: rows.map(({ doc }) => ({ doc, properties: [] })) } });
+    }
+    if (request.kind !== "custom" || typeof request.query !== "object" || !request.query || !("op" in request.query)) throw new Error("unexpected query");
+    const op = request.query.op;
+    if (op === "parse") return Promise.resolve({ kind: "custom", value: { views: ["Vista"] } });
+    if (op === "plan") return Promise.resolve({ kind: "custom", value: {
+      view: "Vista", view_type: viewType, columns: ["status"], column_labels: {},
+      required_props: [], all_properties: false, group: "status", limit: null, map: null, create_defaults: {},
+    } });
+    if (op === "derive") return Promise.resolve({ kind: "custom", value: { rows, summaries: {} } });
+    throw new Error("unexpected Base operation");
+  };
+  const mount = (viewType: string, saved: Record<string, unknown> = {}) => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const setViewState = vi.fn(async () => {});
+    const surface = mountBaseSurface("base", { paneId: `base-${viewType}`, documentId: "views/gruppi.base", parent: host }, {
+      queryIndex: grouped(viewType),
+      invokeCommand: vi.fn(async () => ({})),
+      viewState: async <T,>(key: string) => (saved[key] ?? null) as T | null,
+      setViewState,
+      onOpenDocument: () => {},
+    });
+    surface.buffer.setDoc(`views:\n  - {name: Vista, type: ${viewType}, group: {key: status}}\n`);
+    return { host, setViewState, done: () => { surface.destroy(); host.remove(); } };
+  };
+  const toggles = (host: HTMLElement) =>
+    [...host.querySelectorAll<HTMLButtonElement>(".base-group-toggle")].map((toggle) => toggle.textContent);
+
+  it("la tabella intercala un'intestazione per gruppo, nell'ordine della vista, e un gruppo si chiude", async () => {
+    const { host, done } = mount("table");
+    try {
+      await vi.waitFor(() => expect(toggles(host)).toEqual(["fatto (2)", "aperto (1)", "∅ (1)"]));
+      const docs = () => [...host.querySelectorAll<HTMLElement>(".base-table tbody tr[data-doc]")].map((tr) => tr.dataset.doc);
+      expect(docs()).toEqual(["a.md", "c.md", "b.md", "d.md"]);
+      const first = host.querySelector<HTMLButtonElement>(".base-group-toggle")!;
+      expect(first.getAttribute("aria-expanded")).toBe("true");
+      first.click();
+      expect(docs()).toEqual(["b.md", "d.md"]);
+      expect(host.querySelector(".base-group-toggle")!.getAttribute("aria-expanded")).toBe("false");
+      host.querySelector<HTMLButtonElement>(".base-group-toggle")!.click();
+      expect(docs()).toEqual(["a.md", "c.md", "b.md", "d.md"]);
+    } finally { done(); }
+  });
+
+  it("«Raggruppa» nella barra toglie i gruppi e lo ricorda per vista, senza riscrivere il file", async () => {
+    const { host, setViewState, done } = mount("table");
+    try {
+      await vi.waitFor(() => expect(toggles(host)).toHaveLength(3));
+      const select = host.querySelector<HTMLSelectElement>(".base-group-by")!;
+      expect(select.hidden).toBe(false);
+      expect(select.value).toBe("status");
+      select.value = "";
+      select.dispatchEvent(new Event("change"));
+      expect(toggles(host)).toEqual([]);
+      await vi.waitFor(() => expect(setViewState).toHaveBeenCalledWith("base.group:views/gruppi.base:Vista", ""));
+    } finally { done(); }
+    const again = mount("table", { "base.group:views/gruppi.base:Vista": "" });
+    try {
+      await vi.waitFor(() => expect(again.host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(4));
+      expect(toggles(again.host)).toEqual([]);
+      expect(again.host.querySelector<HTMLSelectElement>(".base-group-by")!.value).toBe("");
+    } finally { again.done(); }
+  });
+
+  it("l'ordine dei gruppi si sceglie per vista, il gruppo vuoto resta in fondo, e si ricorda", async () => {
+    const { host, setViewState, done } = mount("table");
+    try {
+      await vi.waitFor(() => expect(toggles(host)).toHaveLength(3));
+      const order = host.querySelector<HTMLSelectElement>(".base-group-order")!;
+      expect(order.hidden).toBe(false);
+      expect(order.value).toBe("rows");
+      order.value = "asc";
+      order.dispatchEvent(new Event("change"));
+      expect(toggles(host)).toEqual(["aperto (1)", "fatto (2)", "∅ (1)"]);
+      order.value = "desc";
+      order.dispatchEvent(new Event("change"));
+      expect(toggles(host)).toEqual(["fatto (2)", "aperto (1)", "∅ (1)"]);
+      await vi.waitFor(() => expect(setViewState).toHaveBeenCalledWith("base.group-order:views/gruppi.base:Vista", "desc"));
+      const select = host.querySelector<HTMLSelectElement>(".base-group-by")!;
+      select.value = "";
+      select.dispatchEvent(new Event("change"));
+      expect(order.hidden).toBe(true);
+    } finally { done(); }
+    const again = mount("cards", { "base.group-order:views/gruppi.base:Vista": "asc" });
+    try {
+      await vi.waitFor(() => expect(again.host.querySelectorAll("section.base-group").length).toBe(3));
+      expect([...again.host.querySelectorAll<HTMLElement>("section.base-group")].map((s) => s.dataset.group)).toEqual(["aperto", "fatto", ""]);
+    } finally { again.done(); }
+  });
+
+  it("schede ed elenco mettono ogni gruppo nella sua sezione", async () => {
+    for (const viewType of ["cards", "list"]) {
+      const { host, done } = mount(viewType);
+      try {
+        await vi.waitFor(() => expect(host.querySelectorAll("section.base-group").length).toBe(3));
+        const section = host.querySelector<HTMLElement>('section.base-group[data-group="fatto"]')!;
+        expect([...section.querySelectorAll<HTMLElement>(".base-card")].map((card) => card.dataset.doc)).toEqual(["a.md", "c.md"]);
+        section.querySelector<HTMLButtonElement>(".base-group-toggle")!.click();
+        expect(host.querySelector('section.base-group[data-group="fatto"] .base-card')).toBeNull();
+      } finally { done(); }
+    }
+  });
+});

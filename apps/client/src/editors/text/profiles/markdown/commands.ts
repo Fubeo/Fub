@@ -14,6 +14,8 @@ import { taskChecked } from "../../../../rules/mirrored";
 import { nextMarker, listItem, type ListEntry } from "../../../../rules/syntax";
 import { isStrictlyInsideCode } from "./parser";
 import { textKeymap } from "../../commands";
+import { smartLists } from "../../smart-lists";
+import { addProperty, moveProperty } from "./properties";
 
 // ── Formattazione inline ─────────────────────────────────────────────────────
 
@@ -236,7 +238,7 @@ export const toggleInlineMath = toggleWrap("$");
 /// o col cursore ancora dentro il marcatore — restituisce `false`: lì l'Enter
 /// di default fa già la cosa giusta.
 export const smartListEnter: StateCommand = ({ state, dispatch }) => {
-  if (state.readOnly) return false;
+  if (state.readOnly || !state.facet(smartLists)) return false;
   const owned: { line: Line; item: ListEntry }[] = [];
   const splits = new Map<number, number>();
   const emptied = new Set<number>();
@@ -741,6 +743,11 @@ const markdownKeymapPrefix: KeyBinding[] = [
   { key: "Mod-Enter", run: toggleCheckbox },
   { key: "Tab", run: indentListItem },
   { key: "Shift-Tab", run: dedentListItem },
+  // Prima di `Alt-↑/↓` delle righe: sulla chiave di una proprietà si sposta
+  // la voce intera, altrove passa la mano.
+  { key: "Mod-;", run: addProperty },
+  { key: "Alt-ArrowUp", run: moveProperty(-1) },
+  { key: "Alt-ArrowDown", run: moveProperty(1) },
 ];
 
 const markdownKeymapSuffix: KeyBinding[] = [

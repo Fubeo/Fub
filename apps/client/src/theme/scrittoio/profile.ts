@@ -80,7 +80,14 @@ export const DENSITY_TOKENS: readonly string[] = [
   "row-h",
 ];
 
-export const READING_TOKENS: readonly string[] = ["font-reading", "text-reading", "leading-relaxed", "content-width"];
+export const READING_TOKENS: readonly string[] = [
+  "font-reading",
+  "text-reading",
+  "leading-relaxed",
+  "content-width",
+  "font-ui",
+  "font-mono",
+];
 
 /**
  * Ciò che la persona può ridichiarare, nell'ordine in cui lo si scrive.

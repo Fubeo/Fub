@@ -301,3 +301,135 @@ fn tag_groups_are_memberships_of_each_node_not_a_shared_facet() {
     assert_eq!(p["groups"]["B.md"], "beta");
     assert_eq!(p["groups"]["C.md"], "");
 }
+
+/// Un passo di filtro sulla view, e il payload che ne esce.
+fn toggle(ws: &mut Workspace, key: &str) -> serde_json::Value {
+    let update = ws
+        .view_action(
+            &ViewInstance::only(GRAPH_VIEW),
+            UiAction::new("filter").with_payload(serde_json::json!({ "key": key })),
+        )
+        .unwrap();
+    let ViewUpdate::Replace { root } = update else {
+        panic!("graph redraw")
+    };
+    payload(&root)
+}
+
+/// Coi tag come nodi ogni tag è un nodo `#nome`, collegato alle note che lo
+/// portano; una nota che ha solo un tag non è più orfana.
+#[test]
+fn tags_become_nodes_linked_to_their_notes() {
+    let vault = Vault::new();
+    vault.put("A.md", "#alfa #beta\n");
+    vault.put("B.md", "#alfa\n");
+    vault.put("C.md", "niente\n");
+    let mut ws = vault.open();
+    toggle(&mut ws, "show_orphans");
+    let p = toggle(&mut ws, "show_tags");
+    assert_eq!(nodes(&p), ["#alfa", "#beta", "A.md", "B.md"]);
+    let mut got = edges(&p);
+    got.sort();
+    assert_eq!(
+        got,
+        [
+            ("A.md".to_string(), "#alfa".to_string()),
+            ("A.md".to_string(), "#beta".to_string()),
+            ("B.md".to_string(), "#alfa".to_string()),
+        ]
+    );
+    assert_eq!(p["tags"], serde_json::json!(["#alfa", "#beta"]));
+    assert!(p["groups"].get("#alfa").is_none(), "un tag non ha cartella");
+    assert_eq!(p["filter"]["show_tags"], true);
+}
+
+/// Con le note mancanti un link che non risolve diventa un nodo, collegato a
+/// chi lo scrive; spento, il grafo mostra solo i file che esistono.
+#[test]
+fn missing_notes_become_nodes_only_when_asked() {
+    let vault = Vault::new();
+    vault.put("A.md", "[[B]] e [[Fantasma]] e [[Fantasma]]\n");
+    vault.put("B.md", "![[manca.png]]\n");
+    let mut ws = vault.open();
+    let tree = ws.render_view(&ViewInstance::only(GRAPH_VIEW)).unwrap();
+    let off = payload(&tree);
+    assert_eq!(nodes(&off), ["A.md", "B.md"]);
+    assert!(off.get("missing").is_none());
+    let on = toggle(&mut ws, "show_missing");
+    assert_eq!(nodes(&on), ["A.md", "B.md", "Fantasma"]);
+    assert!(edges(&on).contains(&("A.md".to_string(), "Fantasma".to_string())));
+    assert_eq!(on["missing"], serde_json::json!(["Fantasma"]));
+    // Un allegato mancante segue il filtro degli allegati.
+    let with_attachments = toggle(&mut ws, "show_attachments");
+    assert!(nodes(&with_attachments).contains(&"manca.png".to_string()));
+}
+
+/// Un'azione della view, e il payload del grafo ridisegnato.
+fn act(ws: &mut Workspace, action: &str, args: serde_json::Value) -> serde_json::Value {
+    let update = ws
+        .view_action(
+            &ViewInstance::only(GRAPH_VIEW),
+            UiAction::new(action).with_payload(args),
+        )
+        .unwrap();
+    let ViewUpdate::Replace { root } = update else {
+        panic!("graph redraw")
+    };
+    payload(&root)
+}
+
+/// Il filtro si scrive con la sintassi della ricerca: restano le note che
+/// trova, con gli archi fra loro. Uno che non si legge lascia il grafo intero
+/// e lo dice; vuoto si dimentica.
+#[test]
+fn the_search_filter_keeps_the_notes_it_finds() {
+    let vault = Vault::new();
+    vault.put("A.md", "#alfa [[B]] [[C]]\n");
+    vault.put("B.md", "#alfa\n");
+    vault.put("C.md", "niente\n");
+    let mut ws = vault.open();
+    let p = act(&mut ws, "query", serde_json::json!({ "query": "tag:alfa" }));
+    assert_eq!(nodes(&p), ["A.md", "B.md"]);
+    assert_eq!(edges(&p), [("A.md".to_string(), "B.md".to_string())]);
+    assert_eq!(p["query"], "tag:alfa");
+    assert!(p.get("query_invalid").is_none());
+    let bad = act(
+        &mut ws,
+        "query",
+        serde_json::json!({ "query": "(tag:alfa" }),
+    );
+    assert_eq!(nodes(&bad), ["A.md", "B.md", "C.md"]);
+    assert_eq!(bad["query_invalid"], true);
+    let cleared = act(&mut ws, "query", serde_json::json!({ "query": "  " }));
+    assert_eq!(nodes(&cleared), ["A.md", "B.md", "C.md"]);
+    assert!(cleared.get("query").is_none());
+}
+
+/// Coi gruppi per ricerca ogni nota va nel gruppo della prima ricerca che la
+/// trova, e il gruppo si chiama come la ricerca.
+#[test]
+fn search_groups_take_the_first_query_that_finds_the_note() {
+    let vault = Vault::new();
+    vault.put("A.md", "#alfa #beta\n");
+    vault.put("B.md", "#beta\n");
+    vault.put("C.md", "niente\n");
+    let mut ws = vault.open();
+    act(
+        &mut ws,
+        "group_by",
+        serde_json::json!({ "group_by": "query" }),
+    );
+    let p = act(
+        &mut ws,
+        "group_queries",
+        serde_json::json!({ "group_queries": ["tag:alfa", " ", "tag:beta", "tag:alfa"] }),
+    );
+    assert_eq!(p["group_by"], "query");
+    assert_eq!(
+        p["group_queries"],
+        serde_json::json!(["tag:alfa", "tag:beta"])
+    );
+    assert_eq!(p["groups"]["A.md"], "tag:alfa");
+    assert_eq!(p["groups"]["B.md"], "tag:beta");
+    assert_eq!(p["groups"]["C.md"], "");
+}

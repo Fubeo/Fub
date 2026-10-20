@@ -223,6 +223,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-features/src/outline.rs::kept_by",
+            (
+                Family::ContextualCase,
+                "filtra i titoli del pannello Struttura col testo che l'utente scrive nel campo: \
+                 cerca una sottostringa in un titolo, non stabilisce l'identità di un nome. \
+                 Piega filtro e titolo perché la grafia del filtro non cambi i titoli che \
+                 restano, come la ricerca nelle celle di un foglio.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/custom.rs::claims",
             (
                 Family::ContextualCase,
@@ -445,6 +455,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-app/src/reveal.rs::runs",
+            (
+                Family::AsciiCase,
+                "decide se aprire un file con l'app di sistema vorrebbe dire eseguirlo, \
+                 confrontando la sua estensione con un elenco di lanciatori (`exe`, `bat`, \
+                 `desktop`, …). Le estensioni dell'elenco sono tutte ASCII, e Windows le \
+                 riconosce senza distinguere le maiuscole: `.EXE` si esegue come `.exe`.",
+            ),
+        ),
+        (
             "crates/fub-features/src/formats.rs::new_note_extension",
             (
                 Family::AsciiCase,
@@ -471,6 +491,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  `.PDF`, per non aggiungerne una seconda al file temporaneo che «Stampa…» passa al \
                  lettore dei PDF. I sistemi scelgono quel lettore dall'estensione senza badare alle \
                  maiuscole, e l'alfabeto di un'estensione è ASCII.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/native.rs::parse",
+            (
+                Family::AsciiCase,
+                "non è identità di un nome del vault: riconosce il nome di un browser scritto da \
+                 chi lancia `fub-cli native-install --browser`, fra sei parole ASCII chiuse \
+                 (`chrome`, `firefox`, …). `Chrome` e `chrome` sono lo stesso browser, e una \
+                 piegatura Unicode attribuirebbe equivalenze a un vocabolario che non ne ha.",
             ),
         ),
         (
@@ -785,6 +815,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-format-base/src/formula.rs::title_case",
+            (
+                Family::ContextualCase,
+                "implementa `title` del linguaggio formule: maiuscola a inizio parola e minuscola \
+                 nel resto, con la piegatura full-Unicode di `lower` e `upper`. Come `call_known` \
+                 non decide un'identità ma produce una stringa per l'utente, e l'apostrofo non apre \
+                 una parola nuova perché `L'anno` non diventi `L'Anno`.",
+            ),
+        ),
+        (
             "crates/fub-format-base/src/model.rs::validate",
             (
                 Family::ContextualCase,
@@ -925,6 +965,63 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  è ASCII o punycode, come dichiara `normalized_host`. Diverge da lei perché qui non \
                  si normalizza niente — si decide se il viewer può aprire — e la porta 443 fa parte \
                  della regola.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/web_clip.rs::viewer_host",
+            (
+                Family::AsciiCase,
+                "riconosce lo schema `https://` e abbassa l'host DNS della pagina da salvare: è la \
+                 domanda di `web_viewer.rs::host_allowed`, ma qui l'URL arriva come testo da un \
+                 comando del registro, senza il parser di Tauri, e la risposta è l'host da \
+                 confrontare, non un sì.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/web_clip.rs::approved",
+            (
+                Family::AsciiCase,
+                "confronta l'host della pagina con i siti approvati di `viewer.hosts` con \
+                 `eq_ignore_ascii_case`, come `web_viewer.rs::host_allowed`: chi salva la pagina \
+                 deve dire sì agli stessi siti di chi la apre. Diverge da lei solo perché la lista \
+                 qui si rilegge dalla macchina invece di arrivare dalla shell.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/web_clip.rs::is_page",
+            (
+                Family::AsciiCase,
+                "abbassa il `Content-Type` della risposta per riconoscere una pagina HTML o di \
+                 testo: il tipo di media non distingue il caso (RFC 9110). Diverge da \
+                 `net.rs::header`, che trova l'header, perché qui si giudica il suo valore.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/web_clip.rs::page_title",
+            (
+                Family::AsciiCase,
+                "abbassa l'HTML in ASCII per trovare il tag `<title>`: i nomi dei tag HTML sono \
+                 ASCII e non distinguono il caso. Diverge da `html.rs::is_http_img` perché qui si \
+                 cerca un tag, non uno schema, e l'esito è solo il titolo proposto per la nota.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/draw/interop.rs::words",
+            (
+                Family::AsciiCase,
+                "abbassa il nome di una famiglia di caratteri per riconoscere un monospazio \
+                 (`mono`, `code`, `courier`) quando il disegno va in Excalidraw: indovina uno stile \
+                 di destinazione, non decide l'identità di un nome, e sbagliare costa solo l'aspetto \
+                 del testo esportato.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/commands/recurrence.rs::rule_of",
+            (
+                Family::AsciiCase,
+                "abbassa la regola scritta dopo `🔁` per riconoscere parole chiave tutte ASCII \
+                 (`every`, `ogni`, `week`, `mesi`, `when done`): non confronta due nomi, legge una \
+                 piccola grammatica, e una parola che non è ASCII non è comunque una delle sue.",
             ),
         ),
         (

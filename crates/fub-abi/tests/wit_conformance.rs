@@ -93,8 +93,8 @@ use fub_abi::net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
 use fub_abi::options::OptionMap;
 use fub_abi::organization::Organization;
 use fub_abi::query::{
-    QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TaskStatus, TextField, TextMode,
-    TextQuery, TextTolerance,
+    DueBound, QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TaskStatus, TextField,
+    TextMode, TextQuery, TextScope, TextTolerance,
 };
 use fub_abi::render::{EmbedContent, RenderedDocument, RenderedPart};
 use fub_abi::session::{
@@ -123,7 +123,7 @@ use fub_abi::transfer::{
 };
 use fub_abi::ui::{
     ActionId, ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction,
-    UiNode, UiOption, UiValue, ViewUpdate,
+    UiDrag, UiNode, UiOption, UiValue, ViewUpdate,
 };
 
 // CARGO_MANIFEST_DIR = crates/fub-abi ; il contratto è alla radice del repo.
@@ -340,6 +340,7 @@ wit_kebab! {
     UiOption,
     KeyValueEntry,
     TableColumn,
+    UiDrag,
     Align,
     ViewUpdate,
 
@@ -485,6 +486,8 @@ wit_kebab! {
     TextField,
     TextTolerance,
     TaskStatus,
+    TextScope,
+    DueBound,
     QueryKind,
     PredicateKind,
     QueryRoute,
@@ -1442,6 +1445,12 @@ fn block_case(b: &arena::Block) -> Case {
     }
 }
 
+fn ui_drag_case(d: &UiDrag) -> Case {
+    match d {
+        UiDrag::Document { doc } => case_ty("document", wit(doc)),
+    }
+}
+
 fn property_value_case(p: &PropertyValue) -> Case {
     match p {
         PropertyValue::Empty => case("empty"),
@@ -2209,6 +2218,16 @@ fn query_predicate_case(p: &QueryPredicate) -> Case {
             "file-predicate",
             vec![("extension", wit(extension))],
         ),
+        QueryPredicate::Scoped { scope, text } => case_rec(
+            "scoped",
+            "scoped-predicate",
+            vec![("scope", wit(scope)), ("text", wit(text))],
+        ),
+        QueryPredicate::TaskDue { min, max } => case_rec(
+            "task-due",
+            "task-due-predicate",
+            vec![("min", wit(min)), ("max", wit(max))],
+        ),
     }
 }
 
@@ -2259,6 +2278,8 @@ fn predicate_kind_case(k: &PredicateKind) -> Case {
         PredicateKind::Task => case("task"),
         PredicateKind::Path => case("path"),
         PredicateKind::File => case("file"),
+        PredicateKind::Scoped => case("scoped"),
+        PredicateKind::TaskDue => case("task-due"),
     }
 }
 
@@ -3009,6 +3030,14 @@ fn conform(source: &str) -> Result<(), String> {
             query_predicate_case(&QueryPredicate::File {
                 extension: String::new(),
             }),
+            query_predicate_case(&QueryPredicate::Scoped {
+                scope: TextScope::Line,
+                text: TextQuery::terms(""),
+            }),
+            query_predicate_case(&QueryPredicate::TaskDue {
+                min: None,
+                max: None,
+            }),
         ],
     );
 
@@ -3063,6 +3092,8 @@ fn conform(source: &str) -> Result<(), String> {
             predicate_kind_case(&PredicateKind::Task),
             predicate_kind_case(&PredicateKind::Path),
             predicate_kind_case(&PredicateKind::File),
+            predicate_kind_case(&PredicateKind::Scoped),
+            predicate_kind_case(&PredicateKind::TaskDue),
         ],
     );
 
@@ -3081,6 +3112,7 @@ fn conform(source: &str) -> Result<(), String> {
 
     contract.enumeration_from("text-tolerance", ("query.rs", "TextTolerance"));
     contract.enumeration_from("task-status", ("query.rs", "TaskStatus"));
+    contract.enumeration_from("text-scope", ("query.rs", "TextScope"));
 
     contract.variant_src(
         "property-test",
@@ -4612,6 +4644,28 @@ fn conform(source: &str) -> Result<(), String> {
     contract.record("task-predicate", &[("status", wit(&TaskStatus::Open))]);
     contract.record("path-predicate", &[("glob", wit(&String::new()))]);
     contract.record("file-predicate", &[("extension", wit(&String::new()))]);
+    let DueBound { date, inclusive } = DueBound {
+        date: String::new(),
+        inclusive: true,
+    };
+    contract.record(
+        "due-bound",
+        &[("date", wit(&date)), ("inclusive", wit(&inclusive))],
+    );
+    contract.record(
+        "task-due-predicate",
+        &[
+            ("min", wit_of::<Option<DueBound>>()),
+            ("max", wit_of::<Option<DueBound>>()),
+        ],
+    );
+    contract.record(
+        "scoped-predicate",
+        &[
+            ("scope", wit(&TextScope::Line)),
+            ("text", wit(&TextQuery::terms(""))),
+        ],
+    );
 
     let PropertyFilter { key, test } = PropertyFilter {
         key: String::new(),
@@ -4823,11 +4877,26 @@ fn conform(source: &str) -> Result<(), String> {
         &[("title", wit(&title)), ("align", wit(&align))],
     );
 
-    let arena::UiNode { key, kind } = arena::UiNode {
+    let arena::UiNode { key, kind, drag } = arena::UiNode {
         key: None,
         kind: arena::UiKind::Separator,
+        drag: None,
     };
-    contract.record("ui-node", &[("key", wit(&key)), ("kind", wit(&kind))]);
+    contract.record(
+        "ui-node",
+        &[
+            ("key", wit(&key)),
+            ("kind", wit(&kind)),
+            ("drag", wit(&drag)),
+        ],
+    );
+    contract.variant_src(
+        "ui-drag",
+        ("ui.rs", "UiDrag"),
+        &[ui_drag_case(&UiDrag::Document {
+            doc: DocId::new("a"),
+        })],
+    );
 
     // --- la rete (§23.3): due record, un enum, e il corpo che è byte
     contract.enumeration(

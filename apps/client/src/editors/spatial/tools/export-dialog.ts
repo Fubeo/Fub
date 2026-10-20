@@ -51,6 +51,7 @@ import {
   backgroundOf,
   chosenBoards,
   EXPORT_FORMATS,
+  hasPages,
   EXPORT_PAPERS,
   EXPORT_SCALES,
   exportPieces,
@@ -539,7 +540,7 @@ export function exportDialog(options: ExportDialogOptions): Promise<ExportChoice
       previous.disabled = shown === 0;
       next.disabled = shown >= pieces.length - 1;
       if (many && piece !== undefined) {
-        const key = state.format === "pdf" ? "draw.export.page" : "draw.export.file";
+        const key = hasPages(state.format) ? "draw.export.page" : "draw.export.file";
         page.textContent = t(key, { index: number(shown + 1), count: number(pieces.length), name: piece.board ?? "" });
       }
       stage.dataset.backdrop = state.format === "jpeg" || state.format === "pdf" ? "white" : "checker";
@@ -745,15 +746,15 @@ export function labelOf(state: ExportState, scene: ExportScene): string {
 }
 
 /// La misura del file di un rettangolo di `width` × `height` unità: i pixel
-/// per PNG e JPEG, come li conta l'host, le unità per l'SVG, i millimetri
-/// della pagina per il PDF.
+/// per PNG e JPEG, come li conta l'host, le unità per l'SVG, Excalidraw e
+/// draw.io, i millimetri della pagina per il PDF.
 export function measureText(state: ExportState, width: number, height: number): string {
   if (isRaster(state.format)) {
     const size = measureExport(width, height, state.size);
     const args = { width: number(size.width), height: number(size.height) };
     return size.reduced ? t("draw.export.pixels.reduced", { ...args, side: number(SIDE_MAX) }) : t("draw.export.pixels", args);
   }
-  if (state.format === "svg") return t("draw.export.units", { width: number(width, 2), height: number(height, 2) });
+  if (state.format !== "pdf") return t("draw.export.units", { width: number(width, 2), height: number(height, 2) });
   return t("draw.export.millimetres", { width: number(width * MM_PER_UNIT, 1), height: number(height * MM_PER_UNIT, 1) });
 }
 

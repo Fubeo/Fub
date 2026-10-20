@@ -13,7 +13,8 @@ use fub_abi::ui::{UiAction, UiKind, UiNode};
 use fub_abi::OptionMap;
 #[cfg(all(feature = "properties", feature = "commands"))]
 use fub_features::{
-    CoreCommands, PropertiesCommands, COMMANDS_ID, NOTES_INSERT_TEMPLATE, PROPERTIES_ID, VAULT_UNDO,
+    CoreCommands, PropertiesCommands, PropertiesView, COMMANDS_ID, NOTES_INSERT_TEMPLATE,
+    PROPERTIES_ID, PROPERTIES_VIEW, VAULT_UNDO,
 };
 use fub_features::{
     TemplateCommands, TemplateView, NOTES_DAILY, NOTES_EXTRACT, NOTES_FROM_TEMPLATE, NOTES_MERGE,
@@ -91,6 +92,8 @@ impl Vault {
         .expect("properties");
         ws.register_command_provider(PROPERTIES_ID, Box::new(PropertiesCommands))
             .expect("properties provider");
+        ws.register_view_provider(PROPERTIES_ID, Box::new(PropertiesView))
+            .expect("properties view");
         ws.reindex().expect("reindex");
         ws
     }
@@ -253,6 +256,55 @@ fn daily_creates_and_the_second_time_opens() {
 }
 
 #[test]
+fn daily_format_names_the_note_and_makes_subfolders() {
+    use fub_abi::settings::SettingValue;
+    let vault = Vault::new();
+    vault.put("Templates/Daily.md", "# {{title}}\n");
+    let mut ws = vault.open();
+    ws.set_setting(
+        "daily.format",
+        SettingValue::Text("YYYY/MM MMMM/[Diario] DD".into()),
+    )
+    .expect("formato");
+    let daily = |ws: &mut Workspace| {
+        let outcome = ws
+            .invoke_command(
+                NOTES_DAILY,
+                serde_json::json!({ "date": "2026-10-19" }),
+                InvokeMode::Apply,
+                Actor::User,
+            )
+            .expect("daily");
+        let CommandEffect::Navigate { doc } = outcome.effect else {
+            panic!("{:?}", outcome.effect);
+        };
+        doc
+    };
+    let doc = daily(&mut ws);
+    // Il locale del banco non dichiara una lingua: i nomi sono in inglese.
+    assert_eq!(doc, DocId::new("Daily/2026/10 October/Diario 19.md"));
+    assert_eq!(ws.read_source(&doc).unwrap(), "# Diario 19\n");
+    assert_eq!(daily(&mut ws), doc, "la seconda volta la ritrova");
+
+    ws.set_setting("daily.format", SettingValue::Text("../YYYY".into()))
+        .expect("formato");
+    let before = ws.documents();
+    assert!(ws
+        .invoke_command(
+            NOTES_DAILY,
+            serde_json::json!({ "date": "2026-10-20" }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .is_err());
+    assert_eq!(
+        ws.documents(),
+        before,
+        "un nome che esce dal vault non crea niente"
+    );
+}
+
+#[test]
 fn the_view_lists_the_template() {
     let vault = Vault::new();
     vault.put("Templates/A.md", "a\n");
@@ -344,6 +396,51 @@ fn a_note_from_a_template_gets_no_property_the_template_does_not_have() {
         assert_eq!(ws.read_source(&doc).unwrap(), expected);
         assert_eq!(ws.read_model(&doc).unwrap().frontmatter.get("date"), None);
     }
+}
+
+/// Il percorso inverso di `note.daily`: dalla data di una nota alla nota di
+/// quel giorno, dal pannello delle proprietà.
+#[cfg(all(feature = "properties", feature = "commands"))]
+#[test]
+fn a_date_property_opens_the_daily_note_of_that_day() {
+    let vault = Vault::new();
+    vault.put("Riunione.md", "---\ndate: 2024-03-05\n---\nappunti\n");
+    let mut ws = vault.open_with_properties();
+    ws.set_active_context(Some(
+        ViewContext::new(MAIN_PANE).with_doc(Some(DocId::new("Riunione.md"))),
+    ));
+    let panel = ViewInstance::only(PROPERTIES_VIEW);
+    let tree = serde_json::to_string(&ws.render_view(&panel).unwrap()).unwrap();
+    assert!(
+        tree.contains("\"action\":\"daily\"") && tree.contains("2024-03-05"),
+        "{tree}"
+    );
+    let update = ws
+        .view_action(
+            &panel,
+            UiAction::new("daily").with_payload(serde_json::json!({ "value": "2024-03-05" })),
+        )
+        .unwrap();
+    let fub_abi::ui::ViewUpdate::Navigate { doc_id } = update else {
+        panic!("{update:?}");
+    };
+    assert_eq!(doc_id, "Daily/2024-03-05.md");
+    let daily = DocId::new(doc_id.as_str());
+    assert_eq!(
+        ws.read_model(&daily).unwrap().frontmatter.get("date"),
+        Some(&serde_json::json!("2024-03-05")),
+    );
+    // La seconda volta la apre, non ne fa un'altra.
+    let again = ws
+        .view_action(
+            &panel,
+            UiAction::new("daily").with_payload(serde_json::json!({ "value": "2024-03-05" })),
+        )
+        .unwrap();
+    assert!(
+        matches!(&again, fub_abi::ui::ViewUpdate::Navigate { doc_id } if doc_id == "Daily/2024-03-05.md"),
+        "{again:?}"
+    );
 }
 
 #[cfg(all(feature = "properties", feature = "commands"))]
@@ -494,33 +591,169 @@ fn extraction_rejects_a_stale_selection_without_creating_an_orphan() {
     assert!(!ws.documents().contains(&DocId::new("Extracted.md")));
 }
 
+/// **Una sorgente che altri citano si unisce, e i loro link la seguono** (6.4):
+/// prima l'unione si rifiutava e lasciava all'utente la riscrittura a mano.
+/// Il nome, il titolo dentro la nota e l'alias restano quelli scritti; il link
+/// markdown col path cambia path; la sorgente va nel cestino.
 #[test]
-fn merge_refuses_to_trash_a_source_with_incoming_references() {
+fn merge_moves_the_incoming_links_onto_the_destination() {
+    let vault = Vault::new();
+    vault.put("source.md", "# Parte\nsource text");
+    vault.put("target.md", "target text");
+    vault.put(
+        "reader.md",
+        "See [[source]], [[source#Parte|la parte]] and [md](source.md#parte)",
+    );
+    let mut ws = vault.open();
+    let args = serde_json::json!({"from":["source.md"], "into":"target.md"});
+    let CommandEffect::Plan(plan) = ws
+        .invoke_command(NOTES_MERGE, args.clone(), InvokeMode::DryRun, Actor::User)
+        .expect("the plan")
+        .effect
+    else {
+        panic!("a merge plans first");
+    };
+    let planned: Vec<&str> = plan.edits.iter().map(|edit| edit.doc.as_str()).collect();
+    assert_eq!(
+        planned,
+        ["target.md", "reader.md"],
+        "the plan names the reader too"
+    );
+    assert_eq!(
+        ws.read_source(&DocId::new("reader.md")).unwrap(),
+        "See [[source]], [[source#Parte|la parte]] and [md](source.md#parte)",
+        "a dry run writes nothing"
+    );
+
+    ws.invoke_command(NOTES_MERGE, args, InvokeMode::Apply, Actor::User)
+        .expect("the merge");
+    assert_eq!(
+        ws.read_source(&DocId::new("reader.md")).unwrap(),
+        "See [[target]], [[target#Parte|la parte]] and [md](target.md#parte)"
+    );
+    assert_eq!(
+        ws.read_source(&DocId::new("target.md")).unwrap(),
+        "target text\n\n# Parte\nsource text"
+    );
+    assert!(!ws.documents().contains(&DocId::new("source.md")));
+}
+
+/// I link della sorgente a sé stessa entrano nella destinazione e lì puntano
+/// alla destinazione: lasciarli com'erano li avrebbe resi rotti al cestino.
+#[test]
+fn a_merged_self_link_points_at_its_new_home() {
+    let vault = Vault::new();
+    vault.put("source.md", "Back to [[source]]");
+    vault.put("target.md", "Already [[source]]");
+    let mut ws = vault.open();
+    ws.invoke_command(
+        NOTES_MERGE,
+        serde_json::json!({"from":["source.md"], "into":"target.md"}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("the merge");
+    assert_eq!(
+        ws.read_source(&DocId::new("target.md")).unwrap(),
+        "Already [[target]]\n\nBack to [[target]]"
+    );
+    assert!(!ws.documents().contains(&DocId::new("source.md")));
+}
+
+/// Una sorgente che ne cita un'altra dello stesso lotto: il suo link cambia
+/// mentre l'unione la aspetta, e non per questo è «cambiata da qualcun altro».
+#[test]
+fn a_source_that_cites_another_source_still_merges() {
+    let vault = Vault::new();
+    vault.put("a.md", "A text");
+    vault.put("b.md", "B cites [[a]]");
+    vault.put("target.md", "T");
+    let mut ws = vault.open();
+    let outcome = ws
+        .invoke_command(
+            NOTES_MERGE,
+            serde_json::json!({"from":["a.md", "b.md"], "into":"target.md"}),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("the merge");
+    assert!(
+        outcome
+            .partial
+            .as_ref()
+            .is_none_or(|partial| partial.failures.is_empty()),
+        "{:?}",
+        outcome.partial
+    );
+    assert_eq!(
+        ws.read_source(&DocId::new("target.md")).unwrap(),
+        "T\n\nA text\n\nB cites [[target]]"
+    );
+    assert!(!ws.documents().contains(&DocId::new("a.md")));
+    assert!(!ws.documents().contains(&DocId::new("b.md")));
+}
+
+/// Tenere la sorgente lascia i link dove sono: puntano ancora a una nota che
+/// c'è.
+#[test]
+fn a_kept_source_keeps_its_links() {
     let vault = Vault::new();
     vault.put("source.md", "source text");
     vault.put("target.md", "target text");
     vault.put("reader.md", "See [[source]]");
     let mut ws = vault.open();
-    let err = ws
-        .invoke_command(
-            NOTES_MERGE,
-            serde_json::json!({"from":["source.md"], "into":"target.md"}),
-            InvokeMode::Apply,
-            Actor::User,
-        )
-        .unwrap_err();
-    assert!(matches!(err, fub_abi::PluginError::Conflict(_)));
+    ws.invoke_command(
+        NOTES_MERGE,
+        serde_json::json!({"from":["source.md"], "into":"target.md", "trash": false}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("the merge");
+    assert_eq!(
+        ws.read_source(&DocId::new("reader.md")).unwrap(),
+        "See [[source]]"
+    );
     assert_eq!(
         ws.read_source(&DocId::new("source.md")).unwrap(),
         "source text"
+    );
+}
+
+/// Un annulla solo riporta tutto: il testo della destinazione, i link di chi
+/// citava la sorgente e la sorgente stessa.
+#[cfg(all(feature = "properties", feature = "commands"))]
+#[test]
+fn one_undo_takes_back_the_merge_and_its_links() {
+    let vault = Vault::new();
+    vault.put("source.md", "source text");
+    vault.put("target.md", "target text");
+    vault.put("reader.md", "See [[source]]");
+    let mut ws = vault.open_with_properties();
+    ws.invoke_command(
+        NOTES_MERGE,
+        serde_json::json!({"from":["source.md"], "into":"target.md"}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("the merge");
+    ws.invoke_command(
+        VAULT_UNDO,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("one undo");
+    assert_eq!(
+        ws.read_source(&DocId::new("reader.md")).unwrap(),
+        "See [[source]]"
     );
     assert_eq!(
         ws.read_source(&DocId::new("target.md")).unwrap(),
         "target text"
     );
     assert_eq!(
-        ws.read_source(&DocId::new("reader.md")).unwrap(),
-        "See [[source]]"
+        ws.read_source(&DocId::new("source.md")).unwrap(),
+        "source text"
     );
 }
 
@@ -781,6 +1014,49 @@ fn extract_keeps_the_selection_when_the_template_does_not_place_it() {
             "Initial source text that is [[extracted_note]]"
         );
     }
+}
+
+/// «Niente» al posto della selezione: la sorgente perde il testo, la nota nuova
+/// lo tiene, e un solo annullamento rimette le cose com'erano.
+#[test]
+fn extracting_with_nothing_in_its_place_leaves_no_link_and_undoes_in_one_step() {
+    let vault = Vault::new();
+    let source = "Prima. Da spostare. Dopo.";
+    vault.put("source.md", source);
+    let mut ws = vault.open_with_properties();
+    let at = source.find("Da spostare.").unwrap();
+    ws.set_active_context(Some(
+        fub_abi::session::ViewContext::new("main")
+            .with_doc(Some(DocId::new("source.md")))
+            .with_selections(Some(fub_abi::session::SelectionSet::anchored(
+                Span::new(at, at + "Da spostare.".len()),
+                "Da spostare.",
+            ))),
+    ));
+    ws.invoke_command(
+        NOTES_EXTRACT,
+        serde_json::json!({"name": "spostata", "replace": "none"}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("the extraction");
+    assert_eq!(
+        ws.read_source(&DocId::new("source.md")).unwrap(),
+        "Prima.  Dopo."
+    );
+    assert_eq!(
+        ws.read_source(&DocId::new("spostata.md")).unwrap(),
+        "Da spostare."
+    );
+    ws.invoke_command(
+        VAULT_UNDO,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("one undo");
+    assert_eq!(ws.read_source(&DocId::new("source.md")).unwrap(), source);
+    assert!(!ws.documents().contains(&DocId::new("spostata.md")));
 }
 
 #[test]

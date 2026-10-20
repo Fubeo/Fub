@@ -245,7 +245,7 @@ export function installLayersGrid(ctx: EditorContext): void {
     else if (ctx.grid.rulerGuides !== before.rulerGuides) announce(t(ctx.grid.rulerGuides ? "draw.rulers.guides.shown" : "draw.rulers.guides.hidden"));
     else if (ctx.grid.shapes !== before.shapes) announce(t(ctx.grid.shapes ? "draw.recognize.on" : "draw.recognize.off"));
     else if (ctx.grid.bar !== before.bar) announce(t(ctx.grid.bar ? "draw.bar.beside.on" : "draw.bar.beside.off"));
-    else if (ctx.grid.twist !== before.twist || ctx.grid.taps !== before.taps || !sameCurve(ctx.grid.pen, before.pen)) announce(t("draw.touch.changed"));
+    else if (ctx.grid.twist !== before.twist || ctx.grid.taps !== before.taps || !sameCurve(ctx.grid.pen, before.pen) || ctx.grid.steady?.amount !== before.steady?.amount || ctx.grid.steady?.string !== before.steady?.string) announce(t("draw.touch.changed"));
     // Il pannello aperto o chiuso, e le sue sezioni, si ricordano in silenzio:
     // lo si vede, e il pulsante lo dice.
     else if (ctx.grid.panel === before.panel && ctx.grid.closed.join("\n") === before.closed.join("\n")) return;

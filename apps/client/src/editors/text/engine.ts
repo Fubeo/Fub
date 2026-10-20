@@ -21,6 +21,7 @@ import {
   keymap,
   lineNumbers,
   rectangularSelection,
+  type Command,
   type DecorationSet,
   type ViewUpdate,
 } from "@codemirror/view";
@@ -39,6 +40,7 @@ import {
   closeBrackets,
   closeBracketsKeymap,
   completionKeymap,
+  moveCompletionSelection,
 } from "@codemirror/autocomplete";
 import {
   defaultKeymap,
@@ -57,11 +59,20 @@ import { lintKeymap } from "@codemirror/lint";
 import { currentTheme as getCurrentTheme, type Theme } from "../../theme/theme";
 import { byteToNormalizedCharIndices, charToByteIndices } from "../../rules/offsets";
 import { onLanguage, t } from "../../i18n/strings";
+import { editorPhrases } from "./phrases";
 import { settings } from "../../host/query";
+import { api } from "../../host/ipc";
+import { errorText } from "../../host/errors";
+import { showContextMenu } from "../../ui/menu";
+import { notify } from "../../ui/notify";
 import { onEvent } from "../../state/kernel";
 import type { Teardown } from "../../ui/lifetime";
 import { editorTheme } from "./theme";
 import { HistoryFootprints } from "./history-footprints";
+import { smartLists } from "./smart-lists";
+import { propertiesDisplay, propertiesDisplayOf, type PropertiesDisplay } from "./properties-display";
+import { pasteHtml } from "./paste-html";
+import { indentGuides } from "./indent-guides";
 import {
   operationFromText,
   tryApplyOperation,
@@ -110,12 +121,26 @@ export const EDITOR_VIM_KEY = "editor.vim";
 export const EDITOR_LINE_NUMBERS_KEY = "editor.line-numbers";
 export const EDITOR_LINE_WRAP_KEY = "editor.line-wrap";
 export const EDITOR_INDENT_KEY = "editor.indent";
+export const EDITOR_CLOSE_BRACKETS_KEY = "editor.close-brackets";
+export const EDITOR_FOLD_GUTTER_KEY = "editor.fold-gutter";
+export const EDITOR_SMART_LISTS_KEY = "editor.smart-lists";
+export const EDITOR_PASTE_HTML_KEY = "editor.paste-html";
+export const EDITOR_INDENT_GUIDES_KEY = "editor.indent-guides";
+export const EDITOR_RTL_KEY = "editor.rtl";
+export const EDITOR_PROPERTIES_KEY = "editor.properties";
 const INPUT_KEYS = new Set([
   EDITOR_SPELLCHECK_KEY,
   EDITOR_VIM_KEY,
   EDITOR_LINE_NUMBERS_KEY,
   EDITOR_LINE_WRAP_KEY,
   EDITOR_INDENT_KEY,
+  EDITOR_CLOSE_BRACKETS_KEY,
+  EDITOR_FOLD_GUTTER_KEY,
+  EDITOR_SMART_LISTS_KEY,
+  EDITOR_PASTE_HTML_KEY,
+  EDITOR_INDENT_GUIDES_KEY,
+  EDITOR_RTL_KEY,
+  EDITOR_PROPERTIES_KEY,
 ]);
 
 /// Come si dispone il testo: numeri di riga (visibili solo in Sorgente, Live
@@ -125,9 +150,34 @@ interface LayoutPreferences {
   readonly lineNumbers: boolean;
   readonly lineWrap: boolean;
   readonly indent: string;
+  /// Chiude da sé parentesi, virgolette e simboli; e il margine con le frecce
+  /// per piegare. Due interruttori della pagina Editor, di questa macchina.
+  readonly closeBrackets: boolean;
+  readonly foldGutter: boolean;
+  /// `Invio` che continua gli elenchi.
+  readonly smartLists: boolean;
+  /// L'HTML incollato diventa Markdown.
+  readonly pasteHtml: boolean;
+  /// Righe di rientro nel margine sinistro del testo.
+  readonly indentGuides: boolean;
+  /// Il testo va da destra a sinistra.
+  readonly rtl: boolean;
+  /// Come Live mostra il frontmatter (`properties-display.ts`).
+  readonly properties: PropertiesDisplay;
 }
-const DEFAULT_LAYOUT: LayoutPreferences = { lineNumbers: true, lineWrap: true, indent: "2" };
-const FIELD_LAYOUT: LayoutPreferences = { lineNumbers: false, lineWrap: true, indent: "2" };
+const DEFAULT_LAYOUT: LayoutPreferences = {
+  lineNumbers: true,
+  lineWrap: true,
+  indent: "2",
+  closeBrackets: true,
+  foldGutter: true,
+  smartLists: true,
+  pasteHtml: true,
+  indentGuides: false,
+  rtl: false,
+  properties: "source",
+};
+const FIELD_LAYOUT: LayoutPreferences = { ...DEFAULT_LAYOUT, lineNumbers: false };
 
 function layoutExtensions(layout: LayoutPreferences): Extension {
   const unit = layout.indent === "tab" ? "\t" : layout.indent === "4" ? "    " : "  ";
@@ -135,6 +185,15 @@ function layoutExtensions(layout: LayoutPreferences): Extension {
     layout.lineNumbers ? lineNumbers() : [],
     layout.lineWrap ? EditorView.lineWrapping : [],
     indentUnit.of(unit),
+    layout.foldGutter ? foldGutter({ openText: "↓" }) : [],
+    smartLists.of(layout.smartLists),
+    pasteHtml.of(layout.pasteHtml),
+    propertiesDisplay.of(layout.properties),
+    layout.indentGuides ? indentGuides : [],
+    // Sopra il `dir: "auto"` di sempre, che altrimenti vince: un documento che
+    // comincia in latino (il frontmatter) partirebbe da sinistra.
+    layout.rtl ? Prec.highest(EditorView.contentAttributes.of({ dir: "rtl" })) : [],
+    layout.closeBrackets ? [closeBrackets(), keymap.of(closeBracketsKeymap)] : [],
   ];
 }
 
@@ -148,6 +207,7 @@ export class TextEngine {
   private readonly vimCompartment = new Compartment();
   private readonly spellcheckCompartment = new Compartment();
   private readonly layoutCompartment = new Compartment();
+  private readonly phrasesCompartment = new Compartment();
   private readonly nativeHistoryExtension = nativeHistory({
     minDepth: 100,
     newGroupDelay: 500,
@@ -158,6 +218,7 @@ export class TextEngine {
   private readonly listener: Extension;
   private readonly stopLanguage: Teardown;
   private readonly stopSettings: Teardown;
+  private readonly stopGutterMenu: Teardown;
   private settingsGeneration = 0;
   private vimEnabled = false;
   private spellcheckEnabled = true;
@@ -192,14 +253,21 @@ export class TextEngine {
     this.view.scrollDOM.tabIndex = 0;
     this.view.scrollDOM.setAttribute("role", "document");
     if (options.field === true) {
-      this.stopSettings = () => {};
+      this.stopSettings = this.stopGutterMenu = () => {};
     } else {
+      // Il margine sta fuori dal contenteditable, dove CodeMirror non ascolta.
+      const gutterMenu = (event: MouseEvent) => this.gutterMenu(event);
+      this.view.dom.addEventListener("contextmenu", gutterMenu);
+      this.stopGutterMenu = () => this.view.dom.removeEventListener("contextmenu", gutterMenu);
       this.stopSettings = onEvent("setting_changed", (event) => {
         if (INPUT_KEYS.has(event.key)) void this.loadInputPreferences();
       });
       void this.loadInputPreferences();
     }
-    this.stopLanguage = onLanguage(() => this.updateAccessibleLabels());
+    this.stopLanguage = onLanguage(() => {
+      this.updateAccessibleLabels();
+      if (!this.disposed) this.view.dispatch({ effects: this.phrasesCompartment.reconfigure(editorPhrases()) });
+    });
     this.updateAccessibleLabels();
   }
   public setDoc(text: string): void {
@@ -352,6 +420,17 @@ export class TextEngine {
   /// Esegue un comando del profilo come una battuta dell'utente: la stessa
   /// via della tastiera, quindi cronologia locale e sessione. Rifiuta in sola
   /// lettura e dopo `destroy`, come ogni altra scrittura del motore.
+  /// Un comando che vuole la vista e non il testo, come piegare: nessuna
+  /// battuta nella cronologia, e vale anche in sola lettura.
+  public runViewCommand(command: Command): boolean {
+    if (this.disposed) return false;
+    try {
+      return command(this.view);
+    } catch {
+      return false;
+    }
+  }
+
   public runCommand(command: StateCommand): boolean {
     if (this.disposed || this.readOnlyEnabled) return false;
     try {
@@ -411,6 +490,7 @@ export class TextEngine {
     if (this.scrollFrame !== null) cancelAnimationFrame(this.scrollFrame);
     this.settingsGeneration += 1;
     this.stopSettings();
+    this.stopGutterMenu();
     this.stopLanguage();
     this.footprints.reset();
     this.view.destroy();
@@ -443,7 +523,14 @@ export class TextEngine {
   private setLayout(next: LayoutPreferences): void {
     const same = next.lineNumbers === this.layout.lineNumbers
       && next.lineWrap === this.layout.lineWrap
-      && next.indent === this.layout.indent;
+      && next.indent === this.layout.indent
+      && next.closeBrackets === this.layout.closeBrackets
+      && next.foldGutter === this.layout.foldGutter
+      && next.smartLists === this.layout.smartLists
+      && next.pasteHtml === this.layout.pasteHtml
+      && next.indentGuides === this.layout.indentGuides
+      && next.rtl === this.layout.rtl
+      && next.properties === this.layout.properties;
     if (this.disposed || same) return;
     this.layout = next;
     this.reconfigureInput();
@@ -474,6 +561,30 @@ export class TextEngine {
     }
   }
 
+  /// Il tasto destro sul margine mostra o nasconde i numeri di riga e le
+  /// frecce per piegare: le stesse impostazioni della pagina Editor, che
+  /// tornano qui da `setting_changed`. Un campo non ha margine da regolare.
+  private gutterMenu(event: MouseEvent): void {
+    if (!(event.target instanceof Element) || !event.target.closest(".cm-gutters")) return;
+    event.preventDefault();
+    const toggle = (key: string, shown: boolean) => () => {
+      void api.setSetting(key, !shown).catch((error: unknown) => {
+        notify(t("editor.gutter.failed", { reason: errorText(error) }), "guasto");
+      });
+    };
+    const { lineNumbers, foldGutter } = this.layout;
+    showContextMenu(event, [
+      {
+        label: t(lineNumbers ? "editor.gutter.line_numbers.hide" : "editor.gutter.line_numbers.show"),
+        run: toggle(EDITOR_LINE_NUMBERS_KEY, lineNumbers),
+      },
+      {
+        label: t(foldGutter ? "editor.gutter.fold.hide" : "editor.gutter.fold.show"),
+        run: toggle(EDITOR_FOLD_GUTTER_KEY, foldGutter),
+      },
+    ]);
+  }
+
   private async loadInputPreferences(): Promise<void> {
     const generation = ++this.settingsGeneration;
     try {
@@ -487,6 +598,13 @@ export class TextEngine {
         lineNumbers: value(EDITOR_LINE_NUMBERS_KEY) !== false,
         lineWrap: value(EDITOR_LINE_WRAP_KEY) !== false,
         indent: indent === "tab" || indent === "4" ? indent : "2",
+        closeBrackets: value(EDITOR_CLOSE_BRACKETS_KEY) !== false,
+        foldGutter: value(EDITOR_FOLD_GUTTER_KEY) !== false,
+        smartLists: value(EDITOR_SMART_LISTS_KEY) !== false,
+        pasteHtml: value(EDITOR_PASTE_HTML_KEY) !== false,
+        indentGuides: value(EDITOR_INDENT_GUIDES_KEY) === true,
+        rtl: value(EDITOR_RTL_KEY) === true,
+        properties: propertiesDisplayOf(value(EDITOR_PROPERTIES_KEY)),
       });
     } catch {
       // Defaults remain available before a vault is open or when settings fail.
@@ -531,6 +649,13 @@ export class TextEngine {
       userEvent: "input",
     });
     return true;
+  }
+
+  /// La posizione del testo sotto un punto dello schermo, o `null` fuori dal
+  /// testo disegnato.
+  public posAtPoint(x: number, y: number): number | null {
+    if (this.disposed) return null;
+    return this.view.posAtCoords({ x, y });
   }
 
   /// Inserisce testo nel punto dello schermo dove qualcosa è stato lasciato
@@ -739,6 +864,7 @@ export class TextEngine {
     return [
       ...(convertLineBreaks === null ? [] : [EditorState.lineSeparator.of(convertLineBreaks)]),
       this.profile.of(this.profileExtensions()),
+      this.phrasesCompartment.of(editorPhrases()),
       this.vimCompartment.of(this.vimEnabled ? vim() : []),
       this.spellcheckCompartment.of(EditorView.contentAttributes.of({
         spellcheck: String(this.spellcheckEnabled),
@@ -758,14 +884,12 @@ export class TextEngine {
       this.layoutCompartment.of(layoutExtensions(this.layout)),
       highlightActiveLineGutter(),
       highlightSpecialChars(),
-      foldGutter({ openText: "↓" }),
       drawSelection(),
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),
       indentOnInput(),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
       bracketMatching(),
-      closeBrackets(),
       autocompletion(),
       rectangularSelection(),
       crosshairCursor(),
@@ -789,7 +913,10 @@ export class TextEngine {
         ),
       ),
       keymap.of([
-        ...closeBracketsKeymap,
+        // Ctrl-N/Ctrl-P scorrono i suggerimenti come nella palette; senza un
+        // completamento aperto il tasto passa oltre.
+        { key: "Ctrl-n", run: moveCompletionSelection(true) },
+        { key: "Ctrl-p", run: moveCompletionSelection(false) },
         ...defaultKeymap,
         ...historyKeymap,
         ...searchKeymap,

@@ -435,6 +435,33 @@ describe("il pannello delle impostazioni", () => {
 });
 
 describe("vita della finestra", () => {
+  it("un avvio lento lo dice, col tratto più lungo, e i tempi si copiano", async () => {
+    // L'orologio fermo a venti secondi: la pagina sembra averli spesi tutti.
+    // Fuori dal server di sviluppo, dove l'avviso vale.
+    const now = vi.spyOn(performance, "now").mockReturnValue(20_000);
+    vi.stubEnv("DEV", false);
+    try {
+      await start(VAULT);
+    } finally {
+      now.mockRestore();
+      vi.unstubAllEnvs();
+    }
+    const toast = [...document.querySelectorAll(".toast")].find((each) => each.textContent?.includes("20,0 s"));
+    expect(toast?.textContent).toContain("il caricamento della pagina");
+    expect(toast?.querySelector("button")?.textContent).toContain("Copia i tempi");
+  });
+
+  it("sotto il server di sviluppo un avvio lento non si dice: è lento lui", async () => {
+    const now = vi.spyOn(performance, "now").mockReturnValue(20_000);
+    try {
+      await start(VAULT);
+    } finally {
+      now.mockRestore();
+    }
+    const toasts = [...document.querySelectorAll(".toast")].map((each) => each.textContent ?? "");
+    expect(toasts.some((text) => text.includes("20,0 s"))).toBe(false);
+  });
+
   it("smette i gesti quando si smonta e non duplica al rimontaggio", async () => {
     const first = await mount({});
     const stopFirst = await first.startup;
@@ -533,6 +560,142 @@ describe("navigazione accessibile dell'esploratore", () => {
     ).toBe("true");
     expect(document.activeElement).toBe(focused);
   });
+
+  it("una cartella del percorso nella testata si apre nell'esplora; il nome resta il titolo", async () => {
+    await start(VAULT);
+    const noteItem = () =>
+      document.querySelector<HTMLElement>('#file-list li[data-path="note/Riunione.md"]');
+    const chevron = () =>
+      document.querySelector<HTMLButtonElement>('#file-list li[data-path="note"] > .tree-row > .chevron')!;
+    chevron().click();
+    await waitFor("la cartella si apre", () => !!noteItem());
+    noteItem()!.querySelector<HTMLElement>(".tree-row")!.click();
+    await waitFor("la nota si apre", () => textToVideo().includes("riunione"));
+    chevron().click();
+    await waitFor("la cartella si richiude", () => !noteItem());
+
+    const crumb = document.querySelector<HTMLElement>(".pane.focus .pane-toolbar > .muted")!;
+    expect(crumb.textContent).toBe("note/Riunione.md");
+    const folder = crumb.querySelector<HTMLElement>("[data-folder]")!;
+    expect(folder.dataset.folder).toBe("note");
+    expect(folder.textContent).toBe("note");
+    // Due colpi sulla cartella non aprono il campo della rinomina.
+    folder.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+    folder.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true, detail: 2 }));
+    await waitFor("la cartella si apre dall'intestazione", () => !!noteItem());
+    expect(
+      document.querySelector('#file-list li[data-path="note"]')?.getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(document.querySelector(".sheet-title-edit")).toBeNull();
+  });
+});
+
+describe("filtra l'esplora per percorso", () => {
+  it("le voci col percorso giusto prendono il posto dell'albero; una cartella si apre nell'albero", async () => {
+    await start(VAULT);
+    const registry = await import("./ui/commands");
+    const command = registry.allCommands().find((entry) => entry.id === "shell.explorer.filter");
+    expect(command?.binding).toBeNull();
+    await command!.run!();
+    const input = document.querySelector<HTMLInputElement>(".explorer-filter input")!;
+    expect(document.activeElement).toBe(input);
+    const rows = () => [...document.querySelectorAll<HTMLElement>("#files-panel .search-results .search-result")];
+    input.value = "note riun";
+    input.dispatchEvent(new Event("input"));
+    await waitFor("l'elenco filtrato", () => rows().length > 0);
+    expect(rows().map((row) => row.dataset.path)).toEqual(["note/Riunione.md"]);
+    expect(document.querySelector<HTMLElement>("#file-list")!.hidden).toBe(true);
+    rows()[0].click();
+    await waitFor("la nota si apre", () => textToVideo().includes("riunione"));
+
+    input.value = "note -riunione";
+    input.dispatchEvent(new Event("input"));
+    await waitFor("l'elenco cambia", () => rows()[0]?.dataset.path === "note");
+    expect(rows().map((row) => row.dataset.path)).not.toContain("note/Riunione.md");
+    rows()[0].click();
+    await waitFor("l'albero torna", () => !document.querySelector<HTMLElement>("#file-list")!.hidden);
+    await settle();
+    expect(document.querySelector('#file-list li[data-path="note"]')?.getAttribute("aria-expanded")).toBe("true");
+    expect(document.querySelector<HTMLElement>(".explorer-filter")!.hidden).toBe(true);
+  });
+});
+
+describe("mostra la cartella degli allegati", () => {
+  const folder = (value: string): SettingEntry => ({
+    spec: {
+      key: "files.attachment-folder",
+      label: "Cartella degli allegati",
+      description: "",
+      group: "",
+      scope: "machine",
+      kind: { kind: "text", default: "attachments" },
+      program_writable: false,
+    },
+    value,
+    source: "machine",
+  }) as SettingEntry;
+
+  it("apre la cartella nell'albero, e dice quando non c'è ancora", async () => {
+    await start(VAULT, [folder("note")]);
+    const registry = await import("./ui/commands");
+    const command = registry.allCommands().find((entry) => entry.id === "shell.explorer.reveal_attachments");
+    expect(command?.binding).toBeNull();
+    await command!.run!();
+    await settle();
+    const item = document.querySelector<HTMLElement>('#file-list li[data-path="note"]');
+    expect(item?.getAttribute("aria-expanded")).toBe("true");
+    expect(item?.tabIndex).toBe(0);
+    expect(document.querySelector('#file-list li[data-path="note/Spesa.md"]')).not.toBeNull();
+  });
+
+  it("una cartella che non c'è si dice e non si crea", async () => {
+    const host = await start(VAULT);
+    const { recentNotices } = await import("./ui/notify");
+    const registry = await import("./ui/commands");
+    await registry.allCommands().find((entry) => entry.id === "shell.explorer.reveal_attachments")!.run!();
+    await settle();
+    expect(recentNotices().some((notice) => notice.text.includes("«attachments»"))).toBe(true);
+    expect(host.calls.some((call) => call.gate === "createFolder")).toBe(false);
+  });
+});
+
+describe("copia il link a questo punto", () => {
+  it("dà al paragrafo un id e copia [[Nota#^id]]", async () => {
+    await start(VAULT);
+    row("Benvenuto").click();
+    await waitFor("la nota si apre", () => textToVideo().includes("primo documento"));
+    const copied: string[] = [];
+    const { declareClipboard } = await import("./platform/clipboard");
+    const undeclare = declareClipboard(async (text) => { copied.push(text); });
+    const registry = await import("./ui/commands");
+    const command = registry.allCommands().find((entry) => entry.id === "shell.doc.copy_anchor_link");
+    expect(command?.binding).toBeNull();
+    await command!.run!();
+    await waitFor("il link è negli appunti", () => copied.length === 1);
+    const id = /^\[\[Benvenuto#\^([a-z0-9]{6})\]\]$/.exec(copied[0]!)?.[1];
+    expect(id).toBeDefined();
+    expect(textToVideo()).toContain(`Il primo documento di questo vault. ^${id}`);
+    undeclare();
+  });
+});
+
+describe("comprimi ed espandi tutto dall'albero", () => {
+  const folderItem = (path: string) =>
+    document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"]`);
+  const command = async (id: string) => {
+    const registry = await import("./ui/commands");
+    return registry.allCommands().find((entry) => entry.id === id);
+  };
+
+  it("espande ogni cartella, poi le comprime tutte", async () => {
+    await start(VAULT);
+    await (await command("shell.explorer.expand_all"))!.run!();
+    await settle();
+    expect(folderItem("note")?.getAttribute("aria-expanded")).toBe("true");
+    await (await command("shell.explorer.collapse_all"))!.run!();
+    await settle();
+    expect(folderItem("note")?.getAttribute("aria-expanded")).toBe("false");
+  });
 });
 
 describe("rinomina e cestino dal registro dei comandi", () => {
@@ -542,6 +705,63 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     const registry = await import("./ui/commands");
     return registry.allCommands().find((entry) => entry.id === id);
   };
+
+  it("con «Mostra la nota aperta» l'albero apre le cartelle della nota che si apre", async () => {
+    const autoReveal = {
+      spec: {
+        key: "files.auto-reveal",
+        label: "Mostra la nota aperta nell'esplora",
+        description: "",
+        group: "",
+        scope: "machine",
+        kind: { kind: "toggle", default: false },
+        program_writable: false,
+      },
+      value: true,
+      source: "machine",
+    } as SettingEntry;
+    await start(VAULT, [autoReveal]);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await waitFor("la cartella si apre da sé", () => noteItem("note/Riunione.md") !== null);
+  });
+
+  it("cestinare una cartella chiede, finché «Conferma prima di cestinare» non è spenta", async () => {
+    const press = () => {
+      const folder = noteItem("note")!;
+      folder.focus();
+      const canc = new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true });
+      folder.dispatchEvent(canc);
+      expect(canc.defaultPrevented).toBe(true);
+    };
+    let host = await start(VAULT);
+    let asked = box.asked;
+    box.confirm = false;
+    press();
+    await waitFor("la domanda arriva", () => box.asked === asked + 1);
+    await settle();
+    expect(host.atGate("invokeCommand").some((call) => call.args[0] === "folder.trash")).toBe(false);
+
+    const noConfirm = {
+      spec: {
+        key: "files.confirm-trash",
+        label: "Conferma prima di cestinare una cartella",
+        description: "",
+        group: "",
+        scope: "vault",
+        kind: { kind: "toggle", default: true },
+        program_writable: false,
+      },
+      value: false,
+      source: "vault",
+    } as SettingEntry;
+    host = await start(VAULT, [noConfirm]);
+    asked = box.asked;
+    press();
+    await waitFor("la cartella va nel cestino", () =>
+      host.atGate("invokeCommand").some((call) => call.args[0] === "folder.trash"));
+    expect(box.asked).toBe(asked);
+  });
 
   it("da fuori dell'albero rinomina la nota attiva, portandola in vista", async () => {
     await start(VAULT);
@@ -1226,6 +1446,44 @@ describe("una sessione e le sue superfici", () => {
     expect(texts[0]).toContain(" [dopo il rimonto]");
   });
 
+  it("«Apri a lato» dal menu della riga apre la nota in un secondo riquadro", async () => {
+    await start(VAULT);
+    await contextMenu(row("Benvenuto"), "Apri a lato");
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+  });
+
+  it("«Duplica» dal menu della riga crea la copia accanto all'originale e la apre", async () => {
+    await start(VAULT);
+    await contextMenu(row("Benvenuto"), "Duplica");
+    await waitFor("la copia compare nell'albero", () => !!row("Benvenuto copia"));
+    expect(row("Benvenuto")).toBeTruthy();
+  });
+
+  it("Ctrl-C su una nota e Ctrl-V su una cartella ci mettono una copia col suo nome", async () => {
+    await start(VAULT);
+    const item = (path: string) => document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"]`);
+    const press = (on: HTMLElement, key: string) => {
+      const event = new KeyboardEvent("keydown", { key, ctrlKey: true, bubbles: true, cancelable: true });
+      on.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(press(item("Benvenuto.md")!, "c")).toBe(true);
+    expect(press(item("note")!, "v")).toBe(true);
+    document.querySelector<HTMLButtonElement>('#file-list li[data-path="note"] > .tree-row > .chevron')!.click();
+    await waitFor("la copia compare nella cartella", () => !!item("note/Benvenuto.md"));
+    expect(item("Benvenuto.md")).toBeTruthy();
+    await contextMenu(item("note")!.querySelector<HTMLElement>(".tree-row")!, "Incolla");
+    await waitFor("la seconda copia prende un nome libero", () => !!item("note/Benvenuto 1.md"));
+  });
+
+  it("«Aggiungi ai segnalibri» dal menu della riga salva la nota tra i segnalibri", async () => {
+    await start(VAULT);
+    await contextMenu(row("Benvenuto"), "Aggiungi ai segnalibri");
+    const { listBookmarks } = await import("./state/bookmarks");
+    await waitFor("il segnalibro è salvato", () =>
+      listBookmarks().some((b) => b.target.k === "doc" && b.title.includes("Benvenuto")));
+  });
+
   it("la rinomina non stacca le superfici: due riquadri restano una sessione", async () => {
     const host = await start(VAULT);
     document.dispatchEvent(
@@ -1376,6 +1634,176 @@ describe("nuova cartella", () => {
     await waitFor("il rifiuto chiude il campo", () => !document.querySelector("input.new-folder"));
     expect(host.atGate("invokeCommand")).toHaveLength(3);
     expect(document.querySelectorAll('#file-list li[data-path="note"]')).toHaveLength(1);
+  });
+});
+
+describe("trascinare nell'albero e da e verso gli altri programmi", () => {
+  const row = (path: string) =>
+    document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"] > .tree-row`);
+  /// Un evento di trascinamento col suo `DataTransfer` finto: `types` e
+  /// `files` per un rilascio dal sistema, `set` raccoglie ciò che la shell
+  /// offre fuori.
+  const dragEvent = (type: string, data: { types?: string[]; files?: File[]; set?: Map<string, string> } = {}, clientY = 10): Event => {
+    const e = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(e, "clientY", { value: clientY });
+    Object.defineProperty(e, "dataTransfer", {
+      value: {
+        effectAllowed: "",
+        dropEffect: "",
+        types: data.types ?? [],
+        files: data.files ?? [],
+        items: [],
+        setData: (kind: string, value: string) => data.set?.set(kind, value),
+      },
+    });
+    return e;
+  };
+  /// La riga sotto il cursore, alta 20 px: a metà è «dentro».
+  const sized = (el: HTMLElement): HTMLElement => {
+    el.getBoundingClientRect = () => ({ top: 0, height: 20, bottom: 20, left: 0, right: 100, width: 100, x: 0, y: 0, toJSON: () => ({}) });
+    return el;
+  };
+  const commands = (host: FakeHost, id: string) =>
+    host.atGate("invokeCommand").filter((call) => call.args[0] === id).map((call) => call.args[1]);
+
+  it("una cartella si rinomina con F2 e si sposta trascinandola su un'altra", async () => {
+    const host = await start({ ...VAULT, "Archivio/vecchio.md": "x" });
+    const folder = document.querySelector<HTMLElement>('#file-list li[data-path="note"]')!;
+    folder.focus();
+    const f2 = new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true });
+    folder.dispatchEvent(f2);
+    expect(f2.defaultPrevented).toBe(true);
+    const field = row("note")!.querySelector<HTMLInputElement>("input")!;
+    expect(field.value).toBe("note");
+    field.value = "Appunti";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await waitFor("la cartella ha il nome nuovo", () => !!row("Appunti"));
+    expect(commands(host, "folder.rename")).toEqual([{ folder: "note", to: "Appunti" }]);
+
+    row("Appunti")!.dispatchEvent(dragEvent("dragstart"));
+    const target = sized(row("Archivio")!);
+    target.dispatchEvent(dragEvent("dragover"));
+    expect(target.classList.contains("drop-into")).toBe(true);
+    target.dispatchEvent(dragEvent("drop"));
+    await waitFor("la cartella è dentro l'altra", () => commands(host, "folder.rename").length === 2);
+    expect(commands(host, "folder.rename")[1]).toEqual({ folder: "Appunti", to: "Archivio/Appunti" });
+    expect((await host.module.api.readDocument("Archivio/Appunti/Spesa.md")).text).toBe("pane, latte, arance\n");
+  });
+
+  it("una cartella non entra in una sua figlia", async () => {
+    const host = await start({ ...VAULT, "note/dentro/x.md": "x" });
+    row("note")!.click();
+    await waitFor("la cartella si apre", () => !!row("note/dentro"));
+    row("note")!.dispatchEvent(dragEvent("dragstart"));
+    const child = sized(row("note/dentro")!);
+    const over = dragEvent("dragover");
+    child.dispatchEvent(over);
+    expect(over.defaultPrevented).toBe(false);
+    child.dispatchEvent(dragEvent("drop"));
+    await settle();
+    expect(commands(host, "folder.rename")).toEqual([]);
+  });
+
+  it("le note scelte insieme si trascinano insieme", async () => {
+    const host = await start({ ...VAULT, "Altro.md": "y" });
+    row("Benvenuto.md")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
+    row("Altro.md")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
+    const offered = new Map<string, string>();
+    row("Altro.md")!.dispatchEvent(dragEvent("dragstart", { set: offered }));
+    expect(offered.get("text/uri-list")).toBe("file:///vault/Benvenuto.md\r\nfile:///vault/Altro.md");
+    const folder = sized(row("note")!);
+    folder.dispatchEvent(dragEvent("dragover"));
+    folder.dispatchEvent(dragEvent("drop"));
+    await waitFor("entrambe sono nella cartella", () => !!host.module && commands(host, "note.rename").length === 2);
+    expect(commands(host, "note.rename")).toEqual([
+      expect.objectContaining({ doc: "Benvenuto.md", to: "note/Benvenuto.md" }),
+      expect.objectContaining({ doc: "Altro.md", to: "note/Altro.md" }),
+    ]);
+  });
+
+  it("una nota trascinata fuori porta il file vero: uri-list, path e DownloadURL", async () => {
+    await start(VAULT);
+    const offered = new Map<string, string>();
+    row("Benvenuto.md")!.dispatchEvent(dragEvent("dragstart", { set: offered }));
+    expect(offered.get("text/uri-list")).toBe("file:///vault/Benvenuto.md");
+    expect(offered.get("text/plain")).toBe("/vault/Benvenuto.md");
+    expect(offered.get("DownloadURL")).toBe("text/markdown:Benvenuto.md:file:///vault/Benvenuto.md");
+  });
+
+  it("un file dell'albero lasciato in una nota diventa un rimando relativo, non il suo path", async () => {
+    await start({ ...VAULT, "img/foto.png": "png" });
+    row("img")!.click();
+    await waitFor("la cartella si apre", () => !!row("img/foto.png"));
+    const offered = new Map<string, string>();
+    row("img/foto.png")!.dispatchEvent(dragEvent("dragstart", { set: offered }));
+    const entries = offered.get("application/x-fub-entries")!;
+    expect(JSON.parse(entries)).toEqual([{ id: "img/foto.png", note: false }]);
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", {
+      value: { types: ["application/x-fub-entries"], files: [], getData: (kind: string) => (kind === "application/x-fub-entries" ? entries : "") },
+    });
+    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    expect(drop.defaultPrevented).toBe(true);
+    await waitFor("il rimando è nel testo", () => editorTexts().some((text) => text.includes("img/foto.png")));
+    expect(editorTexts().join("\n")).not.toContain("/vault/");
+  });
+
+  it("con i link Markdown una nota lasciata in una nota diventa un link col percorso relativo", async () => {
+    const style = {
+      spec: {
+        key: "files.link-style",
+        label: "Nuovi link",
+        description: "",
+        group: "",
+        scope: "vault",
+        kind: { kind: "choice", default: "wiki", options: [{ value: "wiki", label: "Wikilink" }, { value: "markdown", label: "Link Markdown" }] },
+        program_writable: false,
+      },
+      value: "markdown",
+      source: "vault",
+    } as SettingEntry;
+    await start(VAULT, [style]);
+    row("note")!.click();
+    await waitFor("la cartella si apre", () => !!row("note/Spesa.md"));
+    const offered = new Map<string, string>();
+    row("note/Spesa.md")!.dispatchEvent(dragEvent("dragstart", { set: offered }));
+    const entries = offered.get("application/x-fub-entries")!;
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", {
+      value: { types: ["application/x-fub-entries"], files: [], getData: (kind: string) => (kind === "application/x-fub-entries" ? entries : "") },
+    });
+    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    await waitFor("il link è nel testo", () => editorTexts().some((text) => text.includes("[Spesa](note/Spesa.md)")));
+    expect(editorTexts().join("\n")).not.toContain("[[");
+  });
+
+  it("un collegamento web lasciato in una nota diventa un link, il resto un allegato", async () => {
+    const host = await start(VAULT);
+    const shortcut = new File(["[InternetShortcut]\r\nURL=https://example.org/pagina\r\n"], "Pagina utile.url");
+    const files = [shortcut, new File([new Uint8Array([1, 2, 3])], "foto.png")];
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", { value: { types: ["Files"], files, getData: () => "" } });
+    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    expect(drop.defaultPrevented).toBe(true);
+    await waitFor("il link è nel testo", () => editorTexts().some((text) => text.includes("[Pagina utile](https://example.org/pagina)")));
+    await waitFor("l'immagine è depositata", () => host.atGate("resourceWrite").length === 1);
+    expect(String(host.atGate("resourceWrite")[0]!.args[0])).toMatch(/foto\.png$/);
+  });
+
+  it("i file del sistema lasciati su una cartella entrano lì, e un nome preso non si sovrascrive", async () => {
+    const host = await start(VAULT);
+    const folder = row("note")!;
+    const files = [new File(["altro"], "Spesa.md"), new File([new Uint8Array([1, 2, 3])], "foto.png")];
+    const over = dragEvent("dragover", { types: ["Files"], files });
+    folder.dispatchEvent(over);
+    expect(over.defaultPrevented).toBe(true);
+    folder.dispatchEvent(dragEvent("drop", { types: ["Files"], files }));
+    await waitFor("i due file sono scritti", () => host.atGate("resourceWrite").length === 2);
+    expect(host.atGate("resourceWrite").map((call) => [call.args[0], call.args[2]])).toEqual([
+      ["note/Spesa 1.md", null],
+      ["note/foto.png", null],
+    ]);
+    expect((await host.module.api.readDocument("note/Spesa.md")).text).toBe("pane, latte, arance\n");
   });
 });
 
@@ -2132,6 +2560,47 @@ describe("spostare un file col testo non ancora sul disco", () => {
 });
 
 describe("cerca", () => {
+  it("ordina per nome e comprime i risultati, dal pannello", async () => {
+    await start(VAULT);
+    const field = document.querySelector<HTMLInputElement>("#search-input")!;
+    field.value = "e";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    await waitFor("i risultati arrivano", () => document.querySelectorAll("#search-results li > button.search-result").length > 1);
+    const order = document.querySelector<HTMLSelectElement>("#search-results select")!;
+    order.value = "name-desc";
+    order.dispatchEvent(new Event("change", { bubbles: true }));
+    const titles = () =>
+      [...document.querySelectorAll<HTMLElement>("#search-results .hit-path")].map((e) => e.textContent ?? "");
+    await waitFor("l'ordine cambia", () => {
+      const list = titles();
+      return list.length > 1 && list[0] !== [...list].sort((x, y) => x.localeCompare(y, "it", { numeric: true }))[0];
+    });
+    expect(titles()).toEqual([...titles()].sort((x, y) => y.localeCompare(x, "it", { numeric: true })));
+    const collapse = [...document.querySelectorAll<HTMLButtonElement>("#search-results .search-tools button")]
+      .find((b) => b.getAttribute("aria-pressed") === "false")!;
+    collapse.click();
+    expect(document.querySelectorAll("#search-results .hit-snippet").length).toBe(0);
+  });
+
+  it("un risultato si trascina come la nota che è", async () => {
+    await start(VAULT);
+    const field = document.querySelector<HTMLInputElement>("#search-input")!;
+    field.value = "arance";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    await waitFor("i risultati arrivano", () => document.querySelectorAll("#search-results li > button.search-result").length > 0);
+    const result = document.querySelector<HTMLButtonElement>("#search-results li > button.search-result")!;
+    expect(result.draggable).toBe(true);
+    const offered = new Map<string, string>();
+    const begin = new Event("dragstart", { bubbles: true, cancelable: true });
+    const transfer = { effectAllowed: "", dropEffect: "", types: [], files: [], items: [], setData: (kind: string, value: string) => offered.set(kind, value) };
+    Object.defineProperty(begin, "dataTransfer", { value: transfer });
+    result.dispatchEvent(begin);
+    expect(offered.get("application/x-fub-note")).toBe("note/Spesa.md");
+    expect(JSON.parse(offered.get("application/x-fub-entries")!)).toEqual([{ id: "note/Spesa.md", note: true }]);
+    expect(offered.get("text/uri-list")).toBe("file:///vault/note/Spesa.md");
+    expect(transfer.effectAllowed).toBe("copy");
+  });
+
   it("la casella trova, e il risultato apre il documento", async () => {
     const host = await start(VAULT);
     const field = document.querySelector<HTMLInputElement>("#search-input");

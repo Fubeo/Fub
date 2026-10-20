@@ -135,6 +135,10 @@ pub const APPEARANCE_BODY: &str = "appearance.body";
 pub const APPEARANCE_LINE_HEIGHT: &str = "appearance.line-height";
 pub const APPEARANCE_MEASURE: &str = "appearance.measure";
 pub const APPEARANCE_FONT: &str = "appearance.font";
+/// Il carattere dell'interfaccia (barre, cassetti, menu): il token `font-ui`.
+pub const APPEARANCE_FONT_UI: &str = "appearance.font-ui";
+/// Il carattere a spaziatura fissa (codice, sorgente): il token `font-mono`.
+pub const APPEARANCE_FONT_MONO: &str = "appearance.font-mono";
 pub const APPEARANCE_ACCENT: &str = "appearance.accent";
 pub const APPEARANCE_ZOOM: &str = "appearance.zoom";
 pub const APPEARANCE_CSS_SNIPPETS: &str = "appearance.css-snippets";
@@ -163,9 +167,23 @@ pub const EDITOR_SPELLCHECK: &str = "editor.spellcheck";
 pub const EDITOR_VIM: &str = "editor.vim";
 pub const EDITOR_LINE_NUMBERS: &str = "editor.line-numbers";
 pub const EDITOR_LINE_WRAP: &str = "editor.line-wrap";
+pub const EDITOR_CLOSE_BRACKETS: &str = "editor.close-brackets";
+pub const EDITOR_FOLD_GUTTER: &str = "editor.fold-gutter";
+pub const EDITOR_SMART_LISTS: &str = "editor.smart-lists";
+pub const EDITOR_PASTE_HTML: &str = "editor.paste-html";
+pub const EDITOR_INDENT_GUIDES: &str = "editor.indent-guides";
+/// Il testo dell'editor e della Lettura va da destra a sinistra (arabo, ebraico).
+pub const EDITOR_RTL: &str = "editor.rtl";
+/// L'anteprima di un link al passaggio vuole sempre Ctrl/Cmd, anche in Lettura.
+pub const EDITOR_PREVIEW_MODIFIER: &str = "editor.preview-modifier";
+pub const EDITOR_STRICT_LINE_BREAKS: &str = "editor.strict-line-breaks";
 /// Cosa inserisce Tab e con cosa si rientrano gli elenchi: `tab`, `2` o `4`
 /// spazi. Il default è quello che CodeMirror usava prima che fosse una scelta.
 pub const EDITOR_INDENT: &str = "editor.indent";
+/// Come Live mostra il frontmatter: `visible` lo fa una tabella di
+/// proprietà, `hidden` lo riduce a una riga che si apre, `source` lo lascia
+/// YAML. Il default è quello di prima che fosse una scelta.
+pub const EDITOR_PROPERTIES: &str = "editor.properties";
 /// In che modalità si apre un riquadro nuovo: `source`, `live_preview` o
 /// `reading`, gli id delle modalità della superficie testuale.
 pub const EDITOR_DEFAULT_MODE: &str = "editor.default-mode";
@@ -207,8 +225,39 @@ pub const DEFAULT_NEW_NOTE_EXTENSION: &str = "md";
 /// operativo tramite `trash.os`, che ripiega sull'interno se il sistema non ne
 /// offre uno. È del vault, come le altre scelte sui suoi file.
 pub const FILES_TRASH: &str = "files.trash";
+/// L'esplora segue la nota aperta: ne apre le cartelle e la porta in vista.
+pub const FILES_AUTO_REVEAL: &str = "files.auto-reveal";
 pub const FILES_TRASH_VAULT: &str = "vault";
+/// Chiedere prima di cestinare una cartella con tutto ciò che contiene. Spenta,
+/// la cartella va nel cestino subito, e l'«Annulla» dell'avviso la riporta.
+pub const FILES_CONFIRM_TRASH: &str = "files.confirm-trash";
+/// I collegamenti `fub://` che scrivono senza chiedere: `new`, `daily`,
+/// `unique`, `capture`. Di macchina, e vuota di default: un vault arrivato da
+/// fuori non può decidere che un link del browser scriva in silenzio.
+pub const URI_ALLOWED: &str = "uri.allowed";
+/// Come nasce un link a una nota trascinata o copiata: wikilink (`[[Nota]]`)
+/// o link Markdown (`[Nota](Nota.md)`), che leggono anche gli altri programmi.
+pub const FILES_LINK_STYLE: &str = "files.link-style";
+pub const FILES_LINK_WIKI: &str = "wiki";
+pub const FILES_LINK_MARKDOWN: &str = "markdown";
+/// Quale percorso porta il nuovo link: il nome più corto che il vault
+/// risolve, il percorso relativo alla nota o quello dalla radice del vault.
+/// Un link Markdown è sempre un percorso, quindi «più corto» lo scrive
+/// relativo; un wikilink non ha forma relativa, quindi «relativo» lo scrive
+/// dalla radice.
+pub const FILES_LINK_FORMAT: &str = "files.link-format";
+pub const FILES_LINK_SHORTEST: &str = "shortest";
+pub const FILES_LINK_RELATIVE: &str = "relative";
+pub const FILES_LINK_ABSOLUTE: &str = "absolute";
 pub const FILES_TRASH_SYSTEM: &str = "system";
+/// Che cosa si apre all'avvio dell'app, sopra la sessione ripristinata: niente
+/// (`""`), la nota del giorno, una nota nuova o la nota di [`FILES_STARTUP_NOTE`].
+pub const FILES_STARTUP: &str = "files.startup";
+pub const FILES_STARTUP_DAILY: &str = "daily";
+pub const FILES_STARTUP_NEW: &str = "new";
+pub const FILES_STARTUP_FIXED: &str = "note";
+/// Il percorso nel vault della nota che `files.startup = note` apre.
+pub const FILES_STARTUP_NOTE: &str = "files.startup-note";
 
 /// La shell ricorda cosa si è cercato e cosa si è aperto? (chiave dell'app)
 ///
@@ -317,6 +366,88 @@ pub fn core_settings() -> Vec<SettingSpec> {
         .describing(Text::key(C_FILES_TRASH_DESC))
         .grouped(Text::key(C_GROUP_FILES)),
     );
+    settings.push(
+        SettingSpec::new(
+            FILES_STARTUP,
+            Text::key(C_FILES_STARTUP),
+            SettingKind::Choice {
+                default: String::new(),
+                options: vec![
+                    UiOption::new("", Text::key(C_FILES_STARTUP_SESSION)),
+                    UiOption::new(FILES_STARTUP_DAILY, Text::key(C_FILES_STARTUP_DAILY)),
+                    UiOption::new(FILES_STARTUP_NEW, Text::key(C_FILES_STARTUP_NEW)),
+                    UiOption::new(FILES_STARTUP_FIXED, Text::key(C_FILES_STARTUP_FIXED)),
+                ],
+            },
+        )
+        .describing(Text::key(C_FILES_STARTUP_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::new(
+            FILES_STARTUP_NOTE,
+            Text::key(C_FILES_STARTUP_NOTE),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(C_FILES_STARTUP_NOTE_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::toggle(FILES_CONFIRM_TRASH, Text::key(C_FILES_CONFIRM_TRASH), true)
+            .describing(Text::key(C_FILES_CONFIRM_TRASH_DESC))
+            .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::new(
+            URI_ALLOWED,
+            Text::key(C_URI_ALLOWED),
+            SettingKind::List {
+                default: Vec::new(),
+            },
+        )
+        .describing(Text::key(C_URI_ALLOWED_DESC))
+        .grouped(Text::key(C_GROUP_FILES))
+        .for_machine(),
+    );
+    settings.push(
+        SettingSpec::new(
+            FILES_LINK_STYLE,
+            Text::key(C_FILES_LINK_STYLE),
+            SettingKind::Choice {
+                default: FILES_LINK_WIKI.into(),
+                options: vec![
+                    UiOption::new(FILES_LINK_WIKI, Text::key(C_FILES_LINK_WIKI)),
+                    UiOption::new(FILES_LINK_MARKDOWN, Text::key(C_FILES_LINK_MARKDOWN)),
+                ],
+            },
+        )
+        .describing(Text::key(C_FILES_LINK_STYLE_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::new(
+            FILES_LINK_FORMAT,
+            Text::key(C_FILES_LINK_FORMAT),
+            SettingKind::Choice {
+                default: FILES_LINK_SHORTEST.into(),
+                options: vec![
+                    UiOption::new(FILES_LINK_SHORTEST, Text::key(C_FILES_LINK_SHORTEST)),
+                    UiOption::new(FILES_LINK_RELATIVE, Text::key(C_FILES_LINK_RELATIVE)),
+                    UiOption::new(FILES_LINK_ABSOLUTE, Text::key(C_FILES_LINK_ABSOLUTE)),
+                ],
+            },
+        )
+        .describing(Text::key(C_FILES_LINK_FORMAT_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::toggle(FILES_AUTO_REVEAL, Text::key(C_FILES_AUTO_REVEAL), false)
+            .describing(Text::key(C_FILES_AUTO_REVEAL_DESC))
+            .grouped(Text::key(C_GROUP_FILES))
+            .for_machine(),
+    );
     // **Non** `program_writable`, ed è la riga che conta: un componente che
     // potesse spegnere gli altri sarebbe un componente con potere di veto su
     // tutto ciò che gli sta accanto — compreso ciò che lo controlla. Chi
@@ -338,6 +469,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     #[cfg(feature = "http-client")]
     settings.extend(service_settings());
     settings.extend(live_settings());
+    settings.extend(viewer_settings());
     // **Le famiglie del kernel, tutte, e non una a una.** Quelle righe erano
     // quattro `extend` scritti a mano — `locale`, `journal`, `properties`,
     // `ignore` — e ogni chiave del kernel sta là dove sta chi la legge (§11.1):
@@ -417,6 +549,49 @@ fn editor_settings() -> Vec<SettingSpec> {
                 C_EDITOR_LINE_NUMBERS_DESC,
                 true,
             ),
+            (
+                EDITOR_CLOSE_BRACKETS,
+                C_EDITOR_CLOSE_BRACKETS,
+                C_EDITOR_CLOSE_BRACKETS_DESC,
+                true,
+            ),
+            (
+                EDITOR_FOLD_GUTTER,
+                C_EDITOR_FOLD_GUTTER,
+                C_EDITOR_FOLD_GUTTER_DESC,
+                true,
+            ),
+            (
+                EDITOR_SMART_LISTS,
+                C_EDITOR_SMART_LISTS,
+                C_EDITOR_SMART_LISTS_DESC,
+                true,
+            ),
+            (
+                EDITOR_STRICT_LINE_BREAKS,
+                C_EDITOR_STRICT_LINE_BREAKS,
+                C_EDITOR_STRICT_LINE_BREAKS_DESC,
+                true,
+            ),
+            (
+                EDITOR_INDENT_GUIDES,
+                C_EDITOR_INDENT_GUIDES,
+                C_EDITOR_INDENT_GUIDES_DESC,
+                false,
+            ),
+            (
+                EDITOR_PASTE_HTML,
+                C_EDITOR_PASTE_HTML,
+                C_EDITOR_PASTE_HTML_DESC,
+                true,
+            ),
+            (EDITOR_RTL, C_EDITOR_RTL, C_EDITOR_RTL_DESC, false),
+            (
+                EDITOR_PREVIEW_MODIFIER,
+                C_EDITOR_PREVIEW_MODIFIER,
+                C_EDITOR_PREVIEW_MODIFIER_DESC,
+                false,
+            ),
         ]
         .into_iter()
         .map(|(key, label, description, default)| {
@@ -435,6 +610,17 @@ fn editor_settings() -> Vec<SettingSpec> {
             UiOption::new("tab", Text::key(C_EDITOR_INDENT_TAB)),
             UiOption::new("2", Text::key(C_EDITOR_INDENT_2)),
             UiOption::new("4", Text::key(C_EDITOR_INDENT_4)),
+        ],
+    ));
+    settings.push(choice(
+        EDITOR_PROPERTIES,
+        C_EDITOR_PROPERTIES,
+        C_EDITOR_PROPERTIES_DESC,
+        "source",
+        vec![
+            UiOption::new("visible", Text::key(C_EDITOR_PROPERTIES_VISIBLE)),
+            UiOption::new("hidden", Text::key(C_EDITOR_PROPERTIES_HIDDEN)),
+            UiOption::new("source", Text::key(C_EDITOR_PROPERTIES_SOURCE)),
         ],
     ));
     settings.push(
@@ -600,6 +786,28 @@ fn appearance_settings() -> Vec<SettingSpec> {
                 UiOption::new("hanken", Text::key(C_FONT_HANKEN)),
                 UiOption::new("literata", Text::key(C_FONT_LITERATA)),
                 UiOption::new("inter", Text::key(C_FONT_INTER)),
+                UiOption::new("system", Text::key(C_FONT_SYSTEM)),
+            ],
+        ),
+        choice(
+            APPEARANCE_FONT_UI,
+            C_FONT_UI,
+            C_FONT_UI_DESC,
+            "hanken",
+            vec![
+                UiOption::new("hanken", Text::key(C_FONT_HANKEN)),
+                UiOption::new("inter", Text::key(C_FONT_INTER)),
+                UiOption::new("system", Text::key(C_FONT_SYSTEM)),
+            ],
+        ),
+        choice(
+            APPEARANCE_FONT_MONO,
+            C_FONT_MONO,
+            C_FONT_MONO_DESC,
+            "plex",
+            vec![
+                UiOption::new("plex", Text::key(C_FONT_PLEX)),
+                UiOption::new("jetbrains", Text::key(C_FONT_JETBRAINS)),
                 UiOption::new("system", Text::key(C_FONT_SYSTEM)),
             ],
         ),
@@ -784,6 +992,31 @@ fn service_settings() -> Vec<SettingSpec> {
     ]
 }
 
+/// Il visore web: di macchina, perché fidarsi di un sito è una scelta di chi
+/// usa questo PC, non un dato del vault che si sincronizza altrove.
+fn viewer_settings() -> Vec<SettingSpec> {
+    vec![
+        SettingSpec::new(
+            crate::web_clip::VIEWER_HOSTS,
+            Text::key(C_VIEWER_HOSTS),
+            SettingKind::List {
+                default: Vec::new(),
+            },
+        )
+        .describing(Text::key(C_VIEWER_HOSTS_DESC))
+        .grouped(Text::key(C_GROUP_VIEWER))
+        .for_machine(),
+        SettingSpec::toggle(
+            crate::web_clip::VIEWER_LINKS,
+            Text::key(C_VIEWER_LINKS),
+            false,
+        )
+        .describing(Text::key(C_VIEWER_LINKS_DESC))
+        .grouped(Text::key(C_GROUP_VIEWER))
+        .for_machine(),
+    ]
+}
+
 /// La sessione live: di macchina, perché la porta è una regola del firewall di
 /// questo PC e non di un vault.
 fn live_settings() -> Vec<SettingSpec> {
@@ -895,8 +1128,31 @@ const C_NEW_NOTE_EXTENSION: &str = "core.new_note_extension";
 const C_NEW_NOTE_EXTENSION_DESC: &str = "core.new_note_extension.desc";
 const C_FILES_TRASH: &str = "core.files_trash";
 const C_FILES_TRASH_DESC: &str = "core.files_trash.desc";
+const C_FILES_AUTO_REVEAL: &str = "core.files_auto_reveal";
+const C_FILES_AUTO_REVEAL_DESC: &str = "core.files_auto_reveal.desc";
 const C_FILES_TRASH_VAULT: &str = "core.files_trash.vault";
 const C_FILES_TRASH_SYSTEM: &str = "core.files_trash.system";
+const C_FILES_CONFIRM_TRASH: &str = "core.files_confirm_trash";
+const C_FILES_CONFIRM_TRASH_DESC: &str = "core.files_confirm_trash.desc";
+const C_URI_ALLOWED: &str = "core.uri_allowed";
+const C_URI_ALLOWED_DESC: &str = "core.uri_allowed.desc";
+const C_FILES_LINK_STYLE: &str = "core.files_link_style";
+const C_FILES_LINK_STYLE_DESC: &str = "core.files_link_style.desc";
+const C_FILES_LINK_WIKI: &str = "core.files_link_style.wiki";
+const C_FILES_LINK_MARKDOWN: &str = "core.files_link_style.markdown";
+const C_FILES_LINK_FORMAT: &str = "core.files_link_format";
+const C_FILES_LINK_FORMAT_DESC: &str = "core.files_link_format.desc";
+const C_FILES_LINK_SHORTEST: &str = "core.files_link_format.shortest";
+const C_FILES_LINK_RELATIVE: &str = "core.files_link_format.relative";
+const C_FILES_LINK_ABSOLUTE: &str = "core.files_link_format.absolute";
+const C_FILES_STARTUP: &str = "core.files_startup";
+const C_FILES_STARTUP_DESC: &str = "core.files_startup.desc";
+const C_FILES_STARTUP_SESSION: &str = "core.files_startup.session";
+const C_FILES_STARTUP_DAILY: &str = "core.files_startup.daily";
+const C_FILES_STARTUP_NEW: &str = "core.files_startup.new";
+const C_FILES_STARTUP_FIXED: &str = "core.files_startup.note";
+const C_FILES_STARTUP_NOTE: &str = "core.files_startup_note";
+const C_FILES_STARTUP_NOTE_DESC: &str = "core.files_startup_note.desc";
 
 const C_GROUP_APPEARANCE: &str = "core.group.appearance";
 const C_GROUP_EDITOR: &str = "core.group.editor";
@@ -906,6 +1162,22 @@ const C_EDITOR_VIM: &str = "core.editor.vim";
 const C_EDITOR_VIM_DESC: &str = "core.editor.vim.desc";
 const C_EDITOR_LINE_NUMBERS: &str = "core.editor.line_numbers";
 const C_EDITOR_LINE_NUMBERS_DESC: &str = "core.editor.line_numbers.desc";
+const C_EDITOR_CLOSE_BRACKETS: &str = "core.editor.close_brackets";
+const C_EDITOR_CLOSE_BRACKETS_DESC: &str = "core.editor.close_brackets.desc";
+const C_EDITOR_FOLD_GUTTER: &str = "core.editor.fold_gutter";
+const C_EDITOR_FOLD_GUTTER_DESC: &str = "core.editor.fold_gutter.desc";
+const C_EDITOR_SMART_LISTS: &str = "core.editor.smart_lists";
+const C_EDITOR_SMART_LISTS_DESC: &str = "core.editor.smart_lists.desc";
+const C_EDITOR_STRICT_LINE_BREAKS: &str = "core.editor.strict_line_breaks";
+const C_EDITOR_STRICT_LINE_BREAKS_DESC: &str = "core.editor.strict_line_breaks.desc";
+const C_EDITOR_INDENT_GUIDES: &str = "core.editor.indent_guides";
+const C_EDITOR_RTL: &str = "core.editor.rtl";
+const C_EDITOR_RTL_DESC: &str = "core.editor.rtl.desc";
+const C_EDITOR_INDENT_GUIDES_DESC: &str = "core.editor.indent_guides.desc";
+const C_EDITOR_PREVIEW_MODIFIER: &str = "core.editor.preview_modifier";
+const C_EDITOR_PREVIEW_MODIFIER_DESC: &str = "core.editor.preview_modifier.desc";
+const C_EDITOR_PASTE_HTML: &str = "core.editor.paste_html";
+const C_EDITOR_PASTE_HTML_DESC: &str = "core.editor.paste_html.desc";
 const C_EDITOR_LINE_WRAP: &str = "core.editor.line_wrap";
 const C_EDITOR_LINE_WRAP_DESC: &str = "core.editor.line_wrap.desc";
 const C_EDITOR_INDENT: &str = "core.editor.indent";
@@ -913,6 +1185,11 @@ const C_EDITOR_INDENT_DESC: &str = "core.editor.indent.desc";
 const C_EDITOR_INDENT_TAB: &str = "core.editor.indent.tab";
 const C_EDITOR_INDENT_2: &str = "core.editor.indent.2";
 const C_EDITOR_INDENT_4: &str = "core.editor.indent.4";
+const C_EDITOR_PROPERTIES: &str = "core.editor.properties";
+const C_EDITOR_PROPERTIES_DESC: &str = "core.editor.properties.desc";
+const C_EDITOR_PROPERTIES_VISIBLE: &str = "core.editor.properties.visible";
+const C_EDITOR_PROPERTIES_HIDDEN: &str = "core.editor.properties.hidden";
+const C_EDITOR_PROPERTIES_SOURCE: &str = "core.editor.properties.source";
 const C_EDITOR_DEFAULT_MODE: &str = "core.editor.default_mode";
 const C_EDITOR_DEFAULT_MODE_DESC: &str = "core.editor.default_mode.desc";
 const C_MODE_SOURCE: &str = "core.mode.source";
@@ -952,6 +1229,12 @@ const C_FONT_HANKEN: &str = "core.font.hanken";
 const C_FONT_LITERATA: &str = "core.font.literata";
 const C_FONT_INTER: &str = "core.font.inter";
 const C_FONT_SYSTEM: &str = "core.font.system";
+const C_FONT_UI: &str = "core.font_ui";
+const C_FONT_UI_DESC: &str = "core.font_ui.desc";
+const C_FONT_MONO: &str = "core.font_mono";
+const C_FONT_MONO_DESC: &str = "core.font_mono.desc";
+const C_FONT_PLEX: &str = "core.font.plex";
+const C_FONT_JETBRAINS: &str = "core.font.jetbrains";
 const C_ACCENT: &str = "core.accent";
 const C_ACCENT_DESC: &str = "core.accent.desc";
 const C_COMPACTNESS: &str = "core.compactness";
@@ -1013,6 +1296,11 @@ const C_GROUP_PUBLISH: &str = "core.group.publish";
 const C_PUBLISH_SERVER_URL: &str = "core.publish.server_url";
 const C_PUBLISH_SERVER_URL_DESC: &str = "core.publish.server_url.desc";
 const C_GROUP_LIVE: &str = "core.group.live";
+const C_GROUP_VIEWER: &str = "core.group.viewer";
+const C_VIEWER_HOSTS: &str = "core.viewer.hosts";
+const C_VIEWER_HOSTS_DESC: &str = "core.viewer.hosts.desc";
+const C_VIEWER_LINKS: &str = "core.viewer.links";
+const C_VIEWER_LINKS_DESC: &str = "core.viewer.links.desc";
 const C_LIVE_PORT: &str = "core.live.port";
 const C_LIVE_PORT_DESC: &str = "core.live.port.desc";
 
@@ -1155,6 +1443,101 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.live.writer_connected", "Il tablet è collegato: un QR nuovo si chiede quando esce.")
         .with("host.live.refused", "La sessione live ha rifiutato il messaggio: {why}")
         .with("host.live.internal", "La sessione live non si è potuta preparare: {why}")
+        .with("host.export.title", "Esporta in una cartella")
+        .with("host.export.desc", "Esporta il vault, o una sua cartella, in una cartella nuova fuori dal vault, nel formato scelto.")
+        .with("host.param.export_format", "Formato")
+        .with("host.param.export_folder", "Cartella del vault da esportare (vuoto: tutto il vault)")
+        .with("host.param.export_target", "Cartella di destinazione (path assoluto)")
+        .with("host.param.export_options", "Opzioni del formato (JSON)")
+        .with("host.export.options", "Le opzioni non sono JSON valido: {why}")
+        .with("host.export.plan.vault", "Esporta tutto il vault in «{target}».")
+        .with("host.export.plan.folder", "Esporta la cartella «{folder}» in «{target}».")
+        .with("host.export.create", "Non si può creare «{target}»: {why}")
+        .with("host.export.empty.vault", "Nel vault non c'è niente che questo formato sappia esportare.")
+        .with("host.export.empty.folder", "La cartella «{folder}» non c'è, o non contiene niente che questo formato sappia esportare.")
+        .with("host.obsidian_import.title", "Importa le impostazioni di Obsidian")
+        .with("host.obsidian_import.desc", "Legge .obsidian/ nella radice del vault (impostazioni, aspetto, giornaliera, scorciatoie, segnalibri, frammenti CSS, spazi di lavoro) e scrive le scelte che Fub sa esprimere: allegati, note nuove, link, editor, cestino, cartelle escluse, luce, giornaliera, scorciatoie, segnalibri, frammenti CSS, spazi di lavoro. I file di Obsidian non cambiano; ciò che non si importa si dice per nome.")
+        .with("host.obsidian_import.none", "In questo vault non c'è una cartella .obsidian con impostazioni da importare.")
+        .with("host.obsidian_import.unreadable", "«{file}» non si legge: {why}")
+        .with("host.obsidian_import.plan", "Cambia {count} impostazioni: {list}. Porta {bookmarks} segnalibri, {snippets} frammenti CSS e {workspaces} spazi di lavoro. Non si importano: {lost}.")
+        .with("host.obsidian_import.done", "Impostazioni di Obsidian importate: {written} cambiate, {same} erano già così.")
+        .with("host.obsidian_import.done_lost", "Impostazioni di Obsidian importate: {written} cambiate, {same} erano già così. Non importate: {lost}.")
+        .with("host.connector.notion", "Notion")
+        .with("host.connector.airtable", "Airtable")
+        .with("host.param.connector", "Connettore")
+        .with("host.param.connector_token", "Token (vuoto per toglierlo)")
+        .with("host.connector.token.title", "Connettori: salva il token")
+        .with("host.connector.token.desc", "Salva su questa macchina, leggibile solo da te, il token con cui Fub importa da Notion o da Airtable. Un token vuoto toglie quello salvato.")
+        .with("host.connector.tokens.title", "Connettori: token salvati")
+        .with("host.connector.tokens.desc", "Dice quali connettori hanno un token salvato su questa macchina, senza mostrarlo.")
+        .with("host.connector.no_config", "Questa installazione non ha una cartella di configurazione: il token non ha dove stare.")
+        .with("host.connector.plan.save", "Salverebbe il token di {connector} su questa macchina.")
+        .with("host.connector.plan.forget", "Toglierebbe il token di {connector} da questa macchina.")
+        .with("host.connector.saved", "Token di {connector} salvato su questa macchina.")
+        .with("host.connector.forgotten", "Token di {connector} tolto da questa macchina.")
+        .with("host.connector.bad_token", "Un token è una riga sola, di al più 4000 caratteri.")
+        .with("host.connector.write", "Il token di {connector} non si è potuto salvare: {why}")
+        .with("host.uri.pending.title", "Collegamenti fub:// in arrivo")
+        .with("host.uri.pending.desc", "Prende i collegamenti fub:// che il sistema ha aperto, con che cosa chiedono e in quale vault.")
+        .with("host.uri.apply.title", "Esegui un collegamento fub://")
+        .with("host.uri.apply.desc", "Crea la nota o la cattura che un collegamento fub:// chiede; in prova dice soltanto quale.")
+        .with("host.param.uri", "Collegamento")
+        .with("host.uri.invalid", "Il collegamento non è valido: {why}")
+        .with("host.uri.unknown_vault", "Il vault «{vault}» non è fra quelli che questa macchina conosce.")
+        .with("host.uri.no_vault", "Nessun vault aperto: il collegamento non ha dove scrivere.")
+        .with("host.uri.reads", "«{action}» non scrive: lo esegue la finestra.")
+        .with("host.uri.capture_missing", "La cattura chiede anche «{what}».")
+        .with("host.web.clip.title", "Salva la pagina web come nota")
+        .with("host.web.clip.desc", "Scarica di nuovo una pagina di un sito approvato e la scrive come nota Markdown, con la fonte; in prova dice soltanto dove.")
+        .with("host.param.url", "Indirizzo")
+        .with("host.web.clip.not_https", "«{url}» non è un indirizzo https che il visore possa aprire.")
+        .with("host.web.clip.not_approved", "Il sito {site} non è fra quelli approvati per il visore: aprilo e approvalo prima di salvarlo.")
+        .with("host.web.clip.plan", "Salverebbe {url} come nuova nota nella cartella «{folder}».")
+        .with("host.web.clip.plan_root", "Salverebbe {url} come nuova nota nella radice del vault.")
+        .with("host.web.clip.no_network", "Questa finestra non ha accesso alla rete: la pagina non si può scaricare.")
+        .with("host.control.not_base64", "I byte non sono in base64.")
+        .with("host.wasm.render_parts", "Una resa con parti UI non si consegna ancora a un componente.")
+        .with("host.control.no_answer", "L'app non risponde sul canale di controllo: {reason}")
+        .with("host.control.closed", "L'app ha chiuso il canale di controllo senza rispondere.")
+        .with("host.control.bad_reply", "La risposta del canale di controllo non si legge: {reason}")
+        .with("host.control.busy", "L'app sta già servendo troppe domande: riprova.")
+        .with("host.control.too_large", "Domanda troppo grande o interrotta.")
+        .with("host.control.unreadable", "Domanda illeggibile.")
+        .with("host.control.bad_token", "Il token del canale di controllo non è valido.")
+        .with("host.viewer.url_unavailable", "L'indirizzo della finestra non si legge: {reason}")
+        .with("host.viewer.not_navigated", "Il visore web non ha cambiato pagina: {reason}")
+        .with("host.viewer.not_opened", "La finestra del visore web non si è aperta: {reason}")
+        .with("host.viewer.bad_action", "«{action}» non è un gesto del visore web.")
+        .with("host.viewer.not_open", "Il visore web non è aperto.")
+        .with("host.reveal.outside", "{path} è fuori dal vault.")
+        .with("host.reveal.root", "La cartella del vault non si legge: {reason}")
+        .with(
+            "host.mobile.shared_path",
+            "La cartella condivisa non ha un percorso utilizzabile.",
+        )
+        .with(
+            "host.mobile.native_failed",
+            "Il sistema non ha risposto sulla cartella condivisa: {reason}",
+        )
+        .with(
+            "host.mobile.copy_only",
+            "Su questo dispositivo la cartella condivisa si apre come copia nel vault privato.",
+        )
+        .with(
+            "host.mobile.no_native",
+            "La cartella condivisa richiede l'app mobile.",
+        )
+        .with("host.viewer.action_failed", "Il gesto del visore web non è riuscito: {reason}")
+        .with("host.web.clip.status", "Il sito ha risposto {status} per {url}: la pagina non è stata salvata.")
+        .with("host.web.clip.not_html", "La risposta è {kind}, non una pagina web: non è stata salvata.")
+        .with("host.web.clip.too_large", "La pagina {url} supera i 2 MiB: non è stata salvata.")
+        .with("host.web.clip.refused", "La pagina non si può salvare come nota: {why}")
+        .with("host.web.clip.done", "Pagina salvata in {doc}.")
+        .with("host.web.clip.done_with_notes", "Pagina salvata in {doc}. Rimasto fuori: {notes}")
+        .with("host.uri.plan", "Scriverebbe {doc}.")
+        .with("host.uri.done", "Scritta {doc}.")
+        .with("host.export.done", "Export scritto in «{target}»: {count} file.")
+        .with("host.export.done_with_notes", "Export scritto in «{target}»: {count} file, {notes} avvisi su ciò che non è passato.")
         .with("host.snapshot.create.title", "Snapshot completo del vault")
         .with("host.snapshot.create.desc", "Chiude il vault, ne copia ogni voce autorevole in una cartella esterna nuova e lo riapre.")
         .with("host.snapshot.apply.title", "Ripristina uno snapshot completo")
@@ -1172,18 +1555,18 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.path.not_absolute", "Serve un path assoluto: {path}")
         .with("host.path.invalid", "Non è una destinazione valida: {path}")
         .with("host.path.missing_parent", "La cartella {path} non esiste.")
-        .with("host.path.exists", "{path} esiste già: uno snapshot non sovrascrive.")
+        .with("host.path.exists", "{path} esiste già: non si sovrascrive.")
         .with("host.path.inside_vault", "{path} è dentro il vault.")
         .with(C_GROUP_FILES, "File")
         .with(C_ATTACHMENT_FOLDER, "Cartella degli allegati")
         .with(
             C_ATTACHMENT_FOLDER_DESC,
-            "La cartella del vault in cui cercare e depositare gli allegati.",
+            "La cartella del vault in cui cercare e depositare gli allegati. Con `./` davanti segue la nota: `./` è la sua cartella, `./allegati` una sua sottocartella.",
         )
         .with(C_NEW_NOTE_FOLDER, "Cartella delle nuove note")
         .with(
             C_NEW_NOTE_FOLDER_DESC,
-            "La cartella del vault per le note create senza un path esplicito; vuota indica la radice.",
+            "La cartella del vault per le note create senza un path esplicito; vuota indica la radice. Con `./` davanti segue la nota aperta: `./` è la sua cartella, `./Bozze` una sua sottocartella.",
         )
         .with(C_NEW_NOTE_EXTENSION, "Estensione delle nuove note")
         .with(
@@ -1195,8 +1578,52 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_FILES_TRASH_DESC,
             "Dove finisce una nota cancellata: il cestino del vault o quello del sistema. Se il sistema non ne ha uno, si usa il cestino del vault.",
         )
+        .with(C_FILES_AUTO_REVEAL, "Mostra la nota aperta nell'esplora")
+        .with(
+            C_FILES_AUTO_REVEAL_DESC,
+            "Cambiando nota, l'esplora apre le cartelle che la contengono e la porta in vista.",
+        )
         .with(C_FILES_TRASH_VAULT, "Cestino del vault")
         .with(C_FILES_TRASH_SYSTEM, "Cestino del sistema")
+        .with(C_FILES_CONFIRM_TRASH, "Conferma prima di cestinare una cartella")
+        .with(
+            C_FILES_CONFIRM_TRASH_DESC,
+            "Spenta, la cartella va subito nel cestino del vault; «Annulla» nell'avviso la riporta. Svuotare il cestino chiede sempre.",
+        )
+        .with(C_URI_ALLOWED, "Collegamenti fub:// che scrivono senza chiedere")
+        .with(
+            C_URI_ALLOWED_DESC,
+            "Le azioni scelte (nota nuova, giornaliera, nota unica, cattura) scrivono appena il collegamento arriva, senza conferma. Aprire un altro vault chiede sempre. Vale su questo computer.",
+        )
+        .with(C_FILES_LINK_STYLE, "Nuovi link")
+        .with(
+            C_FILES_LINK_STYLE_DESC,
+            "Come si scrive il link a una nota trascinata nel testo o copiata. I link Markdown li leggono anche gli altri programmi.",
+        )
+        .with(C_FILES_LINK_WIKI, "Wikilink")
+        .with(C_FILES_LINK_MARKDOWN, "Link Markdown")
+        .with(C_FILES_LINK_FORMAT, "Percorso dei nuovi link")
+        .with(
+            C_FILES_LINK_FORMAT_DESC,
+            "Un link Markdown è sempre un percorso: «più corto» lo scrive relativo. Un wikilink non ha forma relativa: «relativo» lo scrive dalla radice del vault.",
+        )
+        .with(C_FILES_LINK_SHORTEST, "Il più corto possibile")
+        .with(C_FILES_LINK_RELATIVE, "Relativo alla nota")
+        .with(C_FILES_LINK_ABSOLUTE, "Dalla radice del vault")
+        .with(C_FILES_STARTUP, "All'avvio apri")
+        .with(
+            C_FILES_STARTUP_DESC,
+            "Che cosa si apre all'avvio, sopra le schede della volta precedente.",
+        )
+        .with(C_FILES_STARTUP_SESSION, "Le schede della volta precedente")
+        .with(C_FILES_STARTUP_DAILY, "La nota del giorno")
+        .with(C_FILES_STARTUP_NEW, "Una nota nuova")
+        .with(C_FILES_STARTUP_FIXED, "Una nota precisa")
+        .with(C_FILES_STARTUP_NOTE, "Nota da aprire all'avvio")
+        .with(
+            C_FILES_STARTUP_NOTE_DESC,
+            "Il percorso nel vault della nota che «Una nota precisa» apre; senza estensione vale .md.",
+        )
         .with(C_GROUP_APPEARANCE, "Aspetto")
         .with(C_GROUP_CHROME, "Interfaccia")
         .with(C_CHROME_SCHEMA, "Versione configurazione dell'interfaccia")
@@ -1231,6 +1658,22 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_VIM_DESC, "Usa i comandi Vim nel motore testuale; spenta per impostazione predefinita.")
         .with(C_EDITOR_LINE_NUMBERS, "Numeri di riga")
         .with(C_EDITOR_LINE_NUMBERS_DESC, "Mostra i numeri di riga in modalità Sorgente.")
+        .with(C_EDITOR_CLOSE_BRACKETS, "Chiusura automatica di parentesi")
+        .with(C_EDITOR_CLOSE_BRACKETS_DESC, "Scrivendo una parentesi, una virgoletta o un simbolo di apertura, chiude da sé la coppia.")
+        .with(C_EDITOR_FOLD_GUTTER, "Margine di piegatura")
+        .with(C_EDITOR_FOLD_GUTTER_DESC, "Mostra nel margine le frecce per piegare titoli e blocchi.")
+        .with(C_EDITOR_SMART_LISTS, "Elenchi intelligenti")
+        .with(C_EDITOR_SMART_LISTS_DESC, "Invio continua la voce dell'elenco e su una voce vuota chiude l'elenco. Spenti, Invio va a capo e basta.")
+        .with(C_EDITOR_STRICT_LINE_BREAKS, "Interruzioni di riga rigorose")
+        .with(C_EDITOR_STRICT_LINE_BREAKS_DESC, "Acceso, una riga a capo singola in Lettura si unisce alla riga prima, come in CommonMark. Spento, resta un'interruzione.")
+        .with(C_EDITOR_RTL, "Testo da destra a sinistra")
+        .with(C_EDITOR_RTL_DESC, "Per l'arabo, l'ebraico e le altre scritture da destra a sinistra: l'editor e la Lettura partono dal margine destro.")
+        .with(C_EDITOR_INDENT_GUIDES, "Guide di rientro")
+        .with(C_EDITOR_INDENT_GUIDES_DESC, "Disegna una riga verticale per ogni livello di rientro. Funziona in modalità Sorgente.")
+        .with(C_EDITOR_PREVIEW_MODIFIER, "Anteprima dei link solo con Ctrl")
+        .with(C_EDITOR_PREVIEW_MODIFIER_DESC, "Passando sopra un link, l'anteprima della nota si apre solo tenendo premuto Ctrl (Cmd sul Mac), anche in Lettura. Mentre si scrive serve sempre.")
+        .with(C_EDITOR_PASTE_HTML, "Converti l'HTML incollato")
+        .with(C_EDITOR_PASTE_HTML_DESC, "Incollando testo formattato da un'altra app, lo trasforma in Markdown. Spento, incolla il testo semplice.")
         .with(C_EDITOR_LINE_WRAP, "A capo automatico")
         .with(C_EDITOR_LINE_WRAP_DESC, "Manda a capo le righe lunghe invece di farle scorrere in orizzontale.")
         .with(C_EDITOR_INDENT, "Rientro")
@@ -1238,6 +1681,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_INDENT_TAB, "Tabulazione")
         .with(C_EDITOR_INDENT_2, "2 spazi")
         .with(C_EDITOR_INDENT_4, "4 spazi")
+        .with(C_EDITOR_PROPERTIES, "Proprietà nel testo")
+        .with(C_EDITOR_PROPERTIES_DESC, "Come Live mostra il frontmatter in cima alla nota. Un click sulle proprietà riapre lo YAML da scrivere; in Sorgente resta sempre YAML.")
+        .with(C_EDITOR_PROPERTIES_VISIBLE, "Visibili")
+        .with(C_EDITOR_PROPERTIES_HIDDEN, "Nascoste")
+        .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
         .with(C_EDITOR_DEFAULT_MODE, "Modalità iniziale")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "La modalità di una finestra nuova o di un vault aperto per la prima volta. Un riquadro diviso eredita quella del riquadro da cui nasce, e ognuno ricorda la sua.")
         .with(C_MODE_SOURCE, "Sorgente")
@@ -1301,6 +1749,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FONT_LITERATA, "Literata")
         .with(C_FONT_INTER, "Inter")
         .with(C_FONT_SYSTEM, "Del sistema")
+        .with(C_FONT_UI, "Carattere dell'interfaccia")
+        .with(C_FONT_UI_DESC, "Famiglia di barre, cassetti, menu e finestre.")
+        .with(C_FONT_MONO, "Carattere del codice")
+        .with(C_FONT_MONO_DESC, "Famiglia a spaziatura fissa del codice e del sorgente.")
+        .with(C_FONT_PLEX, "IBM Plex Mono")
+        .with(C_FONT_JETBRAINS, "JetBrains Mono")
         .with(C_ACCENT, "Tinta dell'accento (0–360)")
         .with(
             C_ACCENT_DESC,
@@ -1353,6 +1807,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_PUBLISH_SERVER_URL_DESC,
             "URL HTTPS del servizio; HTTP è ammesso solo in loopback. Vuoto significa nessun server configurato.",
+        )
+        .with(C_GROUP_VIEWER, "Visore web")
+        .with(C_VIEWER_HOSTS, "Siti approvati")
+        .with(
+            C_VIEWER_HOSTS_DESC,
+            "I siti che il visore apre senza chiedere, uno per riga (per esempio it.wikipedia.org). Solo https; un sottodominio va scritto a parte.",
+        )
+        .with(C_VIEWER_LINKS, "Apri i link web nel visore")
+        .with(
+            C_VIEWER_LINKS_DESC,
+            "Un link https di una nota si apre nel visore isolato invece che nel browser di sistema. Alt+clic lo apre nel visore in ogni caso.",
         )
         .with(C_GROUP_LIVE, "Sessione live")
         .with(C_LIVE_PORT, "Porta della sessione live")
@@ -1453,6 +1918,98 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.live.writer_connected", "The tablet is connected: ask for a new QR code once it leaves.")
         .with("host.live.refused", "The live session refused the message: {why}")
         .with("host.live.internal", "The live session could not be prepared: {why}")
+        .with("host.export.title", "Export to a folder")
+        .with("host.export.desc", "Exports the vault, or one of its folders, into a new folder outside the vault, in the chosen format.")
+        .with("host.param.export_format", "Format")
+        .with("host.param.export_folder", "Vault folder to export (empty: the whole vault)")
+        .with("host.param.export_target", "Destination folder (absolute path)")
+        .with("host.param.export_options", "Format options (JSON)")
+        .with("host.export.options", "The options are not valid JSON: {why}")
+        .with("host.export.plan.vault", "Exports the whole vault into “{target}”.")
+        .with("host.export.plan.folder", "Exports the folder “{folder}” into “{target}”.")
+        .with("host.export.create", "Cannot create “{target}”: {why}")
+        .with("host.export.empty.vault", "The vault holds nothing this format can export.")
+        .with("host.export.empty.folder", "The folder “{folder}” does not exist, or holds nothing this format can export.")
+        .with("host.obsidian_import.title", "Import Obsidian settings")
+        .with("host.obsidian_import.desc", "Reads .obsidian/ at the vault root (settings, appearance, daily note, hotkeys, bookmarks, CSS snippets, workspaces) and writes the choices Fub can express: attachments, new notes, links, editor, trash, excluded folders, light, daily note, hotkeys, bookmarks, CSS snippets, workspaces. Obsidian's files do not change; whatever is not imported is named.")
+        .with("host.obsidian_import.none", "This vault has no .obsidian folder with settings to import.")
+        .with("host.obsidian_import.unreadable", "“{file}” cannot be read: {why}")
+        .with("host.obsidian_import.plan", "Changes {count} settings: {list}. Brings {bookmarks} bookmarks, {snippets} CSS snippets and {workspaces} workspaces. Not imported: {lost}.")
+        .with("host.obsidian_import.done", "Obsidian settings imported: {written} changed, {same} were already so.")
+        .with("host.obsidian_import.done_lost", "Obsidian settings imported: {written} changed, {same} were already so. Not imported: {lost}.")
+        .with("host.connector.notion", "Notion")
+        .with("host.connector.airtable", "Airtable")
+        .with("host.param.connector", "Connector")
+        .with("host.param.connector_token", "Token (empty to remove it)")
+        .with("host.connector.token.title", "Connectors: save token")
+        .with("host.connector.token.desc", "Save on this machine, readable only by you, the token Fub uses to import from Notion or Airtable. An empty token removes the saved one.")
+        .with("host.connector.tokens.title", "Connectors: saved tokens")
+        .with("host.connector.tokens.desc", "Tells which connectors have a token saved on this machine, without showing it.")
+        .with("host.connector.no_config", "This installation has no configuration folder: the token has nowhere to live.")
+        .with("host.connector.plan.save", "Would save the {connector} token on this machine.")
+        .with("host.connector.plan.forget", "Would remove the {connector} token from this machine.")
+        .with("host.connector.saved", "{connector} token saved on this machine.")
+        .with("host.connector.forgotten", "{connector} token removed from this machine.")
+        .with("host.connector.bad_token", "A token is a single line of at most 4000 characters.")
+        .with("host.connector.write", "The {connector} token could not be saved: {why}")
+        .with("host.uri.pending.title", "Incoming fub:// links")
+        .with("host.uri.pending.desc", "Takes the fub:// links the system has opened, with what they ask for and in which vault.")
+        .with("host.uri.apply.title", "Run a fub:// link")
+        .with("host.uri.apply.desc", "Creates the note or capture a fub:// link asks for; as a dry run it only says which.")
+        .with("host.param.uri", "Link")
+        .with("host.uri.invalid", "The link is not valid: {why}")
+        .with("host.uri.unknown_vault", "The vault “{vault}” is not one this machine knows.")
+        .with("host.uri.no_vault", "No vault is open: the link has nowhere to write.")
+        .with("host.uri.reads", "“{action}” does not write: the window runs it.")
+        .with("host.uri.capture_missing", "The capture also needs “{what}”.")
+        .with("host.web.clip.title", "Save the web page as a note")
+        .with("host.web.clip.desc", "Downloads a page of an approved site again and writes it as a Markdown note, with its source; a dry run only says where.")
+        .with("host.param.url", "Address")
+        .with("host.web.clip.not_https", "“{url}” is not an https address the viewer can open.")
+        .with("host.web.clip.not_approved", "The site {site} is not one approved for the viewer: open it and approve it before saving it.")
+        .with("host.web.clip.plan", "Would save {url} as a new note in the folder “{folder}”.")
+        .with("host.web.clip.plan_root", "Would save {url} as a new note at the root of the vault.")
+        .with("host.web.clip.no_network", "This window has no network access: the page cannot be downloaded.")
+        .with("host.control.not_base64", "The bytes are not base64.")
+        .with("host.wasm.render_parts", "A render with UI parts cannot be handed to a component yet.")
+        .with("host.control.no_answer", "The app does not answer on the control channel: {reason}")
+        .with("host.control.closed", "The app closed the control channel without answering.")
+        .with("host.control.bad_reply", "The control channel answer cannot be read: {reason}")
+        .with("host.control.busy", "The app is already serving too many requests: try again.")
+        .with("host.control.too_large", "Request too large or interrupted.")
+        .with("host.control.unreadable", "Unreadable request.")
+        .with("host.control.bad_token", "The control channel token is not valid.")
+        .with("host.viewer.url_unavailable", "The window address cannot be read: {reason}")
+        .with("host.viewer.not_navigated", "The web viewer did not change page: {reason}")
+        .with("host.viewer.not_opened", "The web viewer window did not open: {reason}")
+        .with("host.viewer.bad_action", "“{action}” is not a web viewer gesture.")
+        .with("host.viewer.not_open", "The web viewer is not open.")
+        .with("host.reveal.outside", "{path} is outside the vault.")
+        .with("host.reveal.root", "The vault folder cannot be read: {reason}")
+        .with(
+            "host.mobile.shared_path",
+            "The shared folder has no usable path.",
+        )
+        .with(
+            "host.mobile.native_failed",
+            "The system did not answer about the shared folder: {reason}",
+        )
+        .with(
+            "host.mobile.copy_only",
+            "On this device the shared folder opens as a copy in the private vault.",
+        )
+        .with("host.mobile.no_native", "The shared folder needs the mobile app.")
+        .with("host.viewer.action_failed", "The web viewer gesture failed: {reason}")
+        .with("host.web.clip.status", "The site answered {status} for {url}: the page was not saved.")
+        .with("host.web.clip.not_html", "The answer is {kind}, not a web page: it was not saved.")
+        .with("host.web.clip.too_large", "The page {url} is over 2 MiB: it was not saved.")
+        .with("host.web.clip.refused", "The page cannot be saved as a note: {why}")
+        .with("host.web.clip.done", "Page saved in {doc}.")
+        .with("host.web.clip.done_with_notes", "Page saved in {doc}. Left out: {notes}")
+        .with("host.uri.plan", "Would write {doc}.")
+        .with("host.uri.done", "Wrote {doc}.")
+        .with("host.export.done", "Export written to “{target}”: {count} files.")
+        .with("host.export.done_with_notes", "Export written to “{target}”: {count} files, {notes} warnings about what did not make it.")
         .with("host.snapshot.create.title", "Full vault snapshot")
         .with("host.snapshot.create.desc", "Closes the vault, copies every authoritative entry into a new external folder and reopens it.")
         .with("host.snapshot.apply.title", "Restore a full snapshot")
@@ -1470,7 +2027,7 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.path.not_absolute", "An absolute path is required: {path}")
         .with("host.path.invalid", "Not a valid destination: {path}")
         .with("host.path.missing_parent", "The folder {path} does not exist.")
-        .with("host.path.exists", "{path} already exists: a snapshot never overwrites.")
+        .with("host.path.exists", "{path} already exists: nothing is overwritten.")
         .with("host.path.inside_vault", "{path} is inside the vault.")
         .with(C_GROUP_FILES, "Files")
         .with(C_GROUP_CHROME, "Interface")
@@ -1502,12 +2059,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_ATTACHMENT_FOLDER, "Attachment folder")
         .with(
             C_ATTACHMENT_FOLDER_DESC,
-            "The vault folder where attachments are found and deposited.",
+            "The vault folder where attachments are found and deposited. A leading `./` follows the note: `./` is its folder, `./attachments` a subfolder of it.",
         )
         .with(C_NEW_NOTE_FOLDER, "New note folder")
         .with(
             C_NEW_NOTE_FOLDER_DESC,
-            "The vault folder for notes created without an explicit path; empty means the vault root.",
+            "The vault folder for notes created without an explicit path; empty means the vault root. A leading `./` follows the open note: `./` is its folder, `./Drafts` a subfolder of it.",
         )
         .with(C_NEW_NOTE_EXTENSION, "New note extension")
         .with(
@@ -1519,8 +2076,52 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_FILES_TRASH_DESC,
             "Where a deleted note goes: the vault trash or the system trash. If the system has none, the vault trash is used.",
         )
+        .with(C_FILES_AUTO_REVEAL, "Reveal the open note in the explorer")
+        .with(
+            C_FILES_AUTO_REVEAL_DESC,
+            "When you switch notes, the explorer opens the folders that contain it and scrolls it into view.",
+        )
         .with(C_FILES_TRASH_VAULT, "Vault trash")
         .with(C_FILES_TRASH_SYSTEM, "System trash")
+        .with(C_FILES_CONFIRM_TRASH, "Confirm before trashing a folder")
+        .with(
+            C_FILES_CONFIRM_TRASH_DESC,
+            "When off, the folder goes straight to the vault trash; Undo in the notice brings it back. Deleting from the trash always asks.",
+        )
+        .with(C_URI_ALLOWED, "fub:// links that write without asking")
+        .with(
+            C_URI_ALLOWED_DESC,
+            "The chosen actions (new note, daily note, unique note, capture) write as soon as the link arrives, without a confirmation. Opening another vault always asks. Applies on this computer.",
+        )
+        .with(C_FILES_LINK_STYLE, "New links")
+        .with(
+            C_FILES_LINK_STYLE_DESC,
+            "How the link to a note dropped into the text or copied is written. Other programs read Markdown links too.",
+        )
+        .with(C_FILES_LINK_WIKI, "Wikilinks")
+        .with(C_FILES_LINK_MARKDOWN, "Markdown links")
+        .with(C_FILES_LINK_FORMAT, "Path of new links")
+        .with(
+            C_FILES_LINK_FORMAT_DESC,
+            "A Markdown link is always a path: \"shortest\" writes it relative. A wikilink has no relative form: \"relative\" writes it from the vault root.",
+        )
+        .with(C_FILES_LINK_SHORTEST, "Shortest possible")
+        .with(C_FILES_LINK_RELATIVE, "Relative to the note")
+        .with(C_FILES_LINK_ABSOLUTE, "From the vault root")
+        .with(C_FILES_STARTUP, "On startup open")
+        .with(
+            C_FILES_STARTUP_DESC,
+            "What opens on startup, on top of the tabs from last time.",
+        )
+        .with(C_FILES_STARTUP_SESSION, "The tabs from last time")
+        .with(C_FILES_STARTUP_DAILY, "Today's note")
+        .with(C_FILES_STARTUP_NEW, "A new note")
+        .with(C_FILES_STARTUP_FIXED, "A specific note")
+        .with(C_FILES_STARTUP_NOTE, "Note to open on startup")
+        .with(
+            C_FILES_STARTUP_NOTE_DESC,
+            "The vault path of the note that «A specific note» opens; without an extension it means .md.",
+        )
         .with(C_GROUP_APPEARANCE, "Appearance")
         .with(C_GROUP_EDITOR, "Editor")
         .with(C_EDITOR_SPELLCHECK, "Spellcheck")
@@ -1529,6 +2130,22 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_VIM_DESC, "Use Vim commands in text editors; off by default.")
         .with(C_EDITOR_LINE_NUMBERS, "Line numbers")
         .with(C_EDITOR_LINE_NUMBERS_DESC, "Show line numbers in Source mode.")
+        .with(C_EDITOR_CLOSE_BRACKETS, "Auto-close brackets")
+        .with(C_EDITOR_CLOSE_BRACKETS_DESC, "Typing an opening bracket, quote or symbol closes the pair for you.")
+        .with(C_EDITOR_FOLD_GUTTER, "Fold gutter")
+        .with(C_EDITOR_FOLD_GUTTER_DESC, "Shows the arrows in the margin to fold headings and blocks.")
+        .with(C_EDITOR_SMART_LISTS, "Smart lists")
+        .with(C_EDITOR_SMART_LISTS_DESC, "Enter continues the list item and ends the list on an empty item. Off, Enter just starts a new line.")
+        .with(C_EDITOR_STRICT_LINE_BREAKS, "Strict line breaks")
+        .with(C_EDITOR_STRICT_LINE_BREAKS_DESC, "On, a single newline in Reading joins the previous line, as in CommonMark. Off, it stays a line break.")
+        .with(C_EDITOR_RTL, "Right-to-left text")
+        .with(C_EDITOR_RTL_DESC, "For Arabic, Hebrew and other right-to-left scripts: the editor and Reading start from the right margin.")
+        .with(C_EDITOR_INDENT_GUIDES, "Indentation guides")
+        .with(C_EDITOR_INDENT_GUIDES_DESC, "Draws a vertical line for each indentation level. Works in Source mode.")
+        .with(C_EDITOR_PREVIEW_MODIFIER, "Link preview only with Ctrl")
+        .with(C_EDITOR_PREVIEW_MODIFIER_DESC, "Hovering a link opens the note preview only while Ctrl (Cmd on Mac) is held, in Reading too. While writing it is always needed.")
+        .with(C_EDITOR_PASTE_HTML, "Convert pasted HTML")
+        .with(C_EDITOR_PASTE_HTML_DESC, "Pasting formatted text from another app turns it into Markdown. Off, it pastes plain text.")
         .with(C_EDITOR_LINE_WRAP, "Wrap lines")
         .with(C_EDITOR_LINE_WRAP_DESC, "Wrap long lines instead of scrolling horizontally.")
         .with(C_EDITOR_INDENT, "Indentation")
@@ -1536,6 +2153,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_INDENT_TAB, "Tab")
         .with(C_EDITOR_INDENT_2, "2 spaces")
         .with(C_EDITOR_INDENT_4, "4 spaces")
+        .with(C_EDITOR_PROPERTIES, "Properties in the text")
+        .with(C_EDITOR_PROPERTIES_DESC, "How Live shows the frontmatter at the top of the note. A click on the properties reopens the YAML for writing; Source always shows YAML.")
+        .with(C_EDITOR_PROPERTIES_VISIBLE, "Visible")
+        .with(C_EDITOR_PROPERTIES_HIDDEN, "Hidden")
+        .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
         .with(C_EDITOR_DEFAULT_MODE, "Initial mode")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "The mode of a new window or of a vault opened for the first time. A split pane inherits the mode of the pane it comes from, and each pane remembers its own.")
         .with(C_MODE_SOURCE, "Source")
@@ -1593,6 +2215,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FONT_LITERATA, "Literata")
         .with(C_FONT_INTER, "Inter")
         .with(C_FONT_SYSTEM, "System")
+        .with(C_FONT_UI, "Interface font")
+        .with(C_FONT_UI_DESC, "Font family of bars, drawers, menus and dialogs.")
+        .with(C_FONT_MONO, "Code font")
+        .with(C_FONT_MONO_DESC, "Monospaced font family for code and source.")
+        .with(C_FONT_PLEX, "IBM Plex Mono")
+        .with(C_FONT_JETBRAINS, "JetBrains Mono")
         .with(C_ACCENT, "Accent hue (0–360)")
         .with(
             C_ACCENT_DESC,
@@ -1645,6 +2273,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_PUBLISH_SERVER_URL_DESC,
             "Service HTTPS URL; HTTP is allowed only on loopback. Empty means no server configured.",
+        )
+        .with(C_GROUP_VIEWER, "Web viewer")
+        .with(C_VIEWER_HOSTS, "Approved sites")
+        .with(
+            C_VIEWER_HOSTS_DESC,
+            "The sites the viewer opens without asking, one per line (for example en.wikipedia.org). https only; a subdomain is listed on its own.",
+        )
+        .with(C_VIEWER_LINKS, "Open web links in the viewer")
+        .with(
+            C_VIEWER_LINKS_DESC,
+            "An https link in a note opens in the isolated viewer instead of the system browser. Alt+click opens it in the viewer either way.",
         )
         .with(C_GROUP_LIVE, "Live session")
         .with(C_LIVE_PORT, "Live session port")

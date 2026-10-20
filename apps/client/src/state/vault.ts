@@ -12,9 +12,11 @@
 // per questo che qui non c'è quasi nulla — la logica sta nelle feature, e
 // questo modulo è solo il posto dove la shell smette di avere scorciatoie.
 import { api } from "../host/ipc";
-import { settings, vaultEntries } from "../host/query";
-import { COMMANDS, type Undo } from "../host/contract";
-import { emit, openVaultRoot, setCommandSpecs, vaultArg } from "./store";
+import { settings, vaultEntries, vaultFolders, WITHOUT_PAGE } from "../host/query";
+import { importDropped, type Dropped, type ImportOutcome } from "../ui/vault-transfer";
+import { COMMANDS, type CommandOutcome, type Undo } from "../host/contract";
+import { emit, openVaultRoot, setCommandSpecs, state, vaultArg } from "./store";
+import { folderForNote } from "../rules/mirrored";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
@@ -53,6 +55,7 @@ export async function beforeNote(): Promise<string | null> {
 /// riuscito ma non ha detto dove: non è un caso previsto, e chi chiama decide
 /// se è un errore da mostrare.
 export async function createNote(name?: string, folder?: string): Promise<string | null> {
+  folder ??= await folderOfOpenNote();
   const args: Record<string, string> = {};
   if (name) args.name = name;
   if (folder) args.folder = folder;
@@ -64,6 +67,46 @@ export async function createNote(name?: string, folder?: string): Promise<string
   );
   refreshDocuments();
   return outcome.effect.kind === "navigate" ? outcome.effect.doc : null;
+}
+
+/// La cartella delle nuove note quando `files.new-note-folder` comincia con
+/// `./` e c'è una nota aperta: quella della nota, o una sua sottocartella. Il
+/// kernel non sa quale nota è aperta, e senza cartella crea dalla radice.
+/// `undefined` lascia decidere a lui.
+export async function folderOfOpenNote(): Promise<string | undefined> {
+  const doc = state.currentDoc;
+  if (!doc) return undefined;
+  const declared = (await settings().catch(() => []))
+    .find((item) => item.spec.key === "files.new-note-folder")?.value;
+  if (typeof declared !== "string") return undefined;
+  const trimmed = declared.trim();
+  if (trimmed !== "." && !trimmed.startsWith("./")) return undefined;
+  return folderForNote(trimmed, doc);
+}
+
+/// Duplica un file accanto all'originale (`note.duplicate`): il kernel sceglie
+/// il nome libero e copia i byte. Torna l'id della copia, dall'effetto `navigate`.
+export async function duplicateNote(doc: string, folder?: string): Promise<string | null> {
+  const args = folder === undefined ? { doc } : { doc, folder };
+  const outcome = await api.invokeCommand(COMMANDS.duplicate, args, undefined, openVaultRoot());
+  refreshDocuments();
+  return outcome.effect.kind === "navigate" ? outcome.effect.doc : null;
+}
+
+/// Passa una voce del vault al sistema: la mostra nel file manager o, con
+/// `open`, la apre col programma che il sistema sceglie. Un programma non si
+/// apre (aprirlo vorrebbe dire eseguirlo): si mostra, e lo si dice.
+export async function handToSystem(path: string, open: boolean): Promise<void> {
+  try {
+    const outcome = await api.revealInSystem(path, open, openVaultRoot());
+    if (outcome.status === "no_opener") notify(t("explorer.system_none"), "guasto");
+    if (outcome.status === "executable") {
+      notify(t("explorer.system_executable"), "info");
+      await handToSystem(path, false);
+    }
+  } catch (error) {
+    notify(t("explorer.system_failed", { reason: errorText(error) }), "guasto");
+  }
 }
 
 /// Crea una cartella vuota e restituisce il path che il kernel ha scritto.
@@ -91,6 +134,46 @@ export async function createFolder(path: string): Promise<string> {
 export async function renameNote(from: string, to: string): Promise<void> {
   await api.invokeCommand(COMMANDS.rename, { doc: from, to }, undefined, openVaultRoot());
   refreshDocuments();
+}
+
+/// Rinomina o sposta una cartella intera (`folder.rename`): ogni voce passa
+/// dalla rinomina del kernel, e le sessioni aperte la seguono con il loro
+/// `document_renamed`. Come per una nota, chi chiama ha già messo in salvo i
+/// buffer. Torna l'esito, che porta la frase e l'annullamento.
+export async function renameFolder(from: string, to: string): Promise<CommandOutcome> {
+  const outcome = await api.invokeCommand(COMMANDS.renameFolder, { folder: from, to }, undefined, openVaultRoot());
+  refreshDocuments();
+  return outcome;
+}
+
+/// Manda nel cestino del vault una cartella intera (`folder.trash`).
+export async function trashFolder(folder: string): Promise<CommandOutcome> {
+  const outcome = await api.invokeCommand(COMMANDS.trashFolder, { folder }, undefined, openVaultRoot());
+  refreshDocuments();
+  return outcome;
+}
+
+/// Porta nel vault, sotto `folder`, file e cartelle arrivati da fuori (un
+/// rilascio dal sistema o il selettore dei file). Il vault è quello aperto
+/// quando il gesto è cominciato: un cambio di vault a metà non devia le
+/// scritture che restano.
+export async function importIntoVault(dropped: Dropped, folder: string): Promise<ImportOutcome> {
+  const vault = openVaultRoot();
+  const scope = { path: folder, descendants: false };
+  const outcome = await importDropped(dropped, folder, {
+    taken: async () => {
+      const [folders, entries] = await Promise.all([
+        vaultFolders(WITHOUT_PAGE, scope),
+        vaultEntries(WITHOUT_PAGE, undefined, scope),
+      ]);
+      const name = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+      return new Set([...folders.items.map((f) => name(f.path)), ...entries.items.map((e) => name(e.id))]);
+    },
+    write: (id, bytes) => api.resourceWrite(id, bytes, null, vault),
+    createFolder: (path) => api.invokeCommand(COMMANDS.createFolder, { path }, undefined, vault),
+  }, errorText);
+  refreshDocuments();
+  return outcome;
 }
 
 /// Sposta una nota nel cestino scelto da `files.trash`.

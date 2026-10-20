@@ -5,12 +5,21 @@ const calls = vi.hoisted(() => ({
   resolved: new Map<string, string>(),
   scheduled: [] as Array<{ doc: string; immediate: boolean }>,
   hidden: 0,
+  modifier: false,
+  listeners: [] as Array<(event: { key: string }) => void>,
 }));
 
 vi.mock("../host/query", () => ({
   resolvedReference: async (target: { value: { page: string } }) => {
     const doc = calls.resolved.get(target.value.page);
     return doc ? { doc } : null;
+  },
+  settings: async () => [{ spec: { key: "editor.preview-modifier" }, value: calls.modifier }],
+}));
+vi.mock("../state/kernel", () => ({
+  onEvent: (_kind: string, listener: (event: { key: string }) => void) => {
+    calls.listeners.push(listener);
+    return () => calls.listeners.splice(calls.listeners.indexOf(listener), 1);
   },
 }));
 vi.mock("../state/preview", () => ({
@@ -32,6 +41,7 @@ beforeEach(() => {
   calls.resolved.clear();
   calls.scheduled.length = 0;
   calls.hidden = 0;
+  calls.modifier = false;
 });
 afterEach(() => {
   document.body.innerHTML = "";
@@ -105,5 +115,33 @@ describe("l'anteprima al passaggio", () => {
     life.close();
     expect(document.querySelector(".link-preview")).toBeNull();
     expect(calls.hidden).toBeGreaterThan(0);
+  });
+
+  it("con l'impostazione chiede Ctrl/Cmd anche in Lettura, e la segue quando cambia", async () => {
+    calls.resolved.set("Nota", "Nota.md");
+    calls.modifier = true;
+    document.body.innerHTML = '<a class="wikilink" data-wikilink-page="Nota">x</a>';
+    const life = openLifetime();
+    mountLinkPreview(life);
+    await settle();
+    const reading = document.querySelector("a")!;
+
+    reading.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    await settle();
+    expect(calls.scheduled).toEqual([]);
+    reading.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, metaKey: true }));
+    await settle();
+    expect(calls.scheduled).toEqual([{ doc: "Nota.md", immediate: true }]);
+
+    document.body.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    calls.modifier = false;
+    for (const listener of calls.listeners) listener({ key: "editor.preview-modifier" });
+    await settle();
+    reading.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    await settle();
+    expect(calls.scheduled[calls.scheduled.length - 1]).toEqual({ doc: "Nota.md", immediate: false });
+
+    life.close();
+    expect(calls.listeners).toEqual([]);
   });
 });

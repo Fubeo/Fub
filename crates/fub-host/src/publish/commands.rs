@@ -33,6 +33,16 @@ pub const PUBLISH_DRY_RUN: &str = "publish.dry_run";
 pub const PUBLISH_COMMIT: &str = "publish.commit";
 pub const PUBLISH_UNPUBLISH: &str = "publish.unpublish";
 pub const PUBLISH_ROLLBACK: &str = "publish.rollback";
+/// I tre gesti sulla nota aperta: segnarla per il sito e prepararne la prova,
+/// copiarne l'indirizzo pubblico, aprirla nel sito.
+pub const PUBLISH_NOTE: &str = "publish.note";
+pub const PUBLISH_NOTE_COPY_URL: &str = "publish.note.copy_url";
+pub const PUBLISH_NOTE_OPEN: &str = "publish.note.open";
+
+/// La proprietà con cui una nota chiede di stare nel sito.
+const PUBLISH_KEY: &str = "publish";
+/// Il comando che la scrive: quello delle proprietà, con le sue regole.
+const PROPERTY_SET: &str = "note.property.set";
 
 /// Endpoint setting (mirror of the registered `publish.server_url` key:
 /// the name is the contract, not the symbol).
@@ -182,8 +192,47 @@ pub(crate) fn catalog_rows(
             "cmd.rollback.desc",
             "Rimette online una versione pubblicata prima.",
         )
+        .with("cmd.note", "Pubblicazione: pubblica questa nota")
+        .with(
+            "cmd.note.desc",
+            "Segna la nota con publish: true e prepara la prova del sito scelto; si pubblica dal pannello.",
+        )
+        .with("cmd.note.copy_url", "Pubblicazione: copia l'indirizzo pubblico")
+        .with(
+            "cmd.note.copy_url.desc",
+            "Copia l'indirizzo della nota nel sito scelto.",
+        )
+        .with("cmd.note.open", "Pubblicazione: apri nel sito")
+        .with("cmd.note.open.desc", "Apre la pagina della nota nel sito scelto.")
+        .with("param.doc", "Nota")
         .with("param.site", "Sito")
         .with("param.version", "Versione")
+        .with("e.no_note", "Nessuna nota aperta da pubblicare.")
+        .with(
+            "e.no_site",
+            "Nessun sito scelto: sceglilo nel pannello Pubblicazione.",
+        )
+        .with(
+            "e.not_public",
+            "La nota non è pubblica: «Pubblica questa nota» la segna con publish: true.",
+        )
+        .with(
+            "e.held",
+            "La nota ha private o draft: resta fuori dal sito finché non li togli.",
+        )
+        .with("e.unsafe_page", "Il path della nota non può diventare una pagina del sito.")
+        .with(
+            "note.marked",
+            "Nota segnata per {site}: la prova è in coda, si pubblica dal pannello.",
+        )
+        .with(
+            "note.preview",
+            "La nota è già pubblica: la prova di {site} è in coda, si pubblica dal pannello.",
+        )
+        .with(
+            "note.offline",
+            "Il sito {site} non è ancora online: l'indirizzo risponde dopo la prima pubblicazione.",
+        )
         .with(
             "dry_run",
             "Prova: il sito {site} si metterebbe in coda, ma non si pubblica niente.",
@@ -210,8 +259,44 @@ pub(crate) fn catalog_rows(
             "cmd.rollback.desc",
             "Put a previously published version back online.",
         )
+        .with("cmd.note", "Publish: publish this note")
+        .with(
+            "cmd.note.desc",
+            "Mark the note with publish: true and prepare the chosen site's dry run; publish from the panel.",
+        )
+        .with("cmd.note.copy_url", "Publish: copy public address")
+        .with(
+            "cmd.note.copy_url.desc",
+            "Copy the note's address on the chosen site.",
+        )
+        .with("cmd.note.open", "Publish: open on site")
+        .with("cmd.note.open.desc", "Open the note's page on the chosen site.")
+        .with("param.doc", "Note")
         .with("param.site", "Site")
         .with("param.version", "Version")
+        .with("e.no_note", "No open note to publish.")
+        .with("e.no_site", "No site chosen: choose one in the Publish panel.")
+        .with(
+            "e.not_public",
+            "The note is not public: \u{201c}Publish this note\u{201d} marks it with publish: true.",
+        )
+        .with(
+            "e.held",
+            "The note has private or draft: it stays off the site until you remove them.",
+        )
+        .with("e.unsafe_page", "The note's path cannot become a site page.")
+        .with(
+            "note.marked",
+            "Note marked for {site}: the dry run is queued, publish from the panel.",
+        )
+        .with(
+            "note.preview",
+            "The note is already public: the dry run of {site} is queued, publish from the panel.",
+        )
+        .with(
+            "note.offline",
+            "Site {site} is not online yet: the address answers after the first publication.",
+        )
         .with(
             "dry_run",
             "Dry run: site {site} would be queued, nothing is published.",
@@ -222,6 +307,15 @@ pub(crate) fn catalog_rows(
 
 fn site_param() -> ParamSpec {
     ParamSpec::new("site", Text::key("param.site"), ParamKind::Text).required()
+}
+
+fn note_param() -> ParamSpec {
+    ParamSpec::new("doc", Text::key("param.doc"), ParamKind::Document)
+}
+
+/// Il sito, facoltativo: senza, quello scelto nel pannello.
+fn chosen_site_param() -> ParamSpec {
+    ParamSpec::new("site", Text::key("param.site"), ParamKind::Text)
 }
 
 fn version_param() -> ParamSpec {
@@ -260,6 +354,27 @@ impl CommandProvider for PublishCommands {
                 CommandScope::writing(CommandReach::Vault),
                 vec![site_param(), version_param()],
             ),
+            spec(
+                PUBLISH_NOTE,
+                "cmd.note",
+                "cmd.note.desc",
+                CommandScope::writing(CommandReach::Document),
+                vec![note_param(), chosen_site_param()],
+            ),
+            spec(
+                PUBLISH_NOTE_COPY_URL,
+                "cmd.note.copy_url",
+                "cmd.note.copy_url.desc",
+                CommandScope::read_only(),
+                vec![note_param(), chosen_site_param()],
+            ),
+            spec(
+                PUBLISH_NOTE_OPEN,
+                "cmd.note.open",
+                "cmd.note.open.desc",
+                CommandScope::read_only(),
+                vec![note_param(), chosen_site_param()],
+            ),
         ]
     }
 
@@ -273,6 +388,39 @@ impl CommandProvider for PublishCommands {
         use fub_abi::traits::JobSpec;
         let map = Args::new(&args);
         let dry = mode.is_dry_run();
+        match command {
+            PUBLISH_NOTE => return publish_note(&map, dry, host),
+            PUBLISH_NOTE_COPY_URL | PUBLISH_NOTE_OPEN => {
+                let doc = note_of(&map, host)?;
+                let site = chosen_site(&map, host)?;
+                let url = note_url(host, &doc, &site)?;
+                let (ns, payload) = if command == PUBLISH_NOTE_COPY_URL {
+                    (
+                        fub_abi::ui::CLIPBOARD_TEXT_NS,
+                        serde_json::json!({ "text": url }),
+                    )
+                } else {
+                    (fub_abi::ui::WEB_OPEN_NS, serde_json::json!({ "url": url }))
+                };
+                // Che l'indirizzo sia negli appunti lo dice la shell; qui
+                // soltanto che il sito non risponde ancora.
+                let outcome = if site_online(host, &site) {
+                    CommandOutcome::done()
+                } else {
+                    CommandOutcome::notify(Text::message(
+                        "note.offline",
+                        vec![fub_abi::text::Arg::text("site", site.clone())],
+                    ))
+                };
+                return Ok(
+                    outcome.with_effect(fub_abi::command::CommandEffect::Custom {
+                        ns: ns.to_string(),
+                        payload,
+                    }),
+                );
+            }
+            _ => {}
+        }
         // Validate everything up front: unknown command, missing site,
         // garbage version — all before any job is queued.
         let (op, site, extra) = match command {
@@ -320,6 +468,119 @@ impl CommandProvider for PublishCommands {
             vec![fub_abi::text::Arg::text("site", site)],
         )))
     }
+}
+
+/// La nota: quella dell'argomento, o quella aperta.
+fn note_of(args: &Args, host: &dyn HostApi) -> Result<fub_abi::model::DocId, PluginError> {
+    args.document("doc")
+        .or_else(|| host.active_context().and_then(|context| context.doc))
+        .ok_or_else(|| PluginError::BadArgs(Text::key("e.no_note")))
+}
+
+/// Il sito: quello dell'argomento, o quello scelto nel pannello.
+fn chosen_site(args: &Args, host: &dyn HostApi) -> Result<String, PluginError> {
+    if args
+        .text("site")
+        .is_some_and(|site| !site.trim().is_empty())
+    {
+        return site_of(args);
+    }
+    host.view_state(super::views::SELECTED_SITE)
+        .ok()
+        .flatten()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .filter(|site| site::valid_site_id(site))
+        .ok_or_else(|| PluginError::BadArgs(Text::key("e.no_site")))
+}
+
+/// Il frontmatter della nota, se il suo formato ne ha uno.
+fn opt_in_of(host: &dyn HostApi, doc: &fub_abi::model::DocId) -> Result<site::OptIn, PluginError> {
+    let frontmatter = host.format_of(doc).is_some_and(|format| {
+        format
+            .capabilities
+            .supports(fub_abi::options::syntax::FRONTMATTER)
+    });
+    if !frontmatter {
+        return Err(PluginError::BadArgs(Text::key("e.unsafe_page")));
+    }
+    Ok(site::opt_in(&host.read_model(doc)?.frontmatter.0))
+}
+
+/// L'indirizzo della nota nel sito: il servizio serve ogni sito sotto
+/// `/s/<sito>/`, e la pagina ha il path che le dà l'export.
+fn note_url(
+    host: &dyn HostApi,
+    doc: &fub_abi::model::DocId,
+    site_id: &str,
+) -> Result<String, PluginError> {
+    match opt_in_of(host, doc)? {
+        site::OptIn::Asked => {}
+        site::OptIn::Held => return Err(PluginError::BadArgs(Text::key("e.held"))),
+        site::OptIn::Not => return Err(PluginError::BadArgs(Text::key("e.not_public"))),
+    }
+    let page = site::doc_path(&doc.0);
+    if !site::publishable_page(&page) {
+        return Err(PluginError::BadArgs(Text::key("e.unsafe_page")));
+    }
+    // `endpoint` passa da `validate_base_url`, che toglie già la `/` finale.
+    let base = endpoint(host)?;
+    Ok(format!(
+        "{base}/s/{site_id}/{}",
+        fub_abi::rules::path::percent_encode_path(&page)
+    ))
+}
+
+/// Se il registro locale del sito ha una versione online.
+fn site_online(host: &dyn HostApi, site_id: &str) -> bool {
+    host.data_read(&format!("sites/{site_id}/record.json"))
+        .ok()
+        .flatten()
+        .and_then(|bytes| serde_json::from_slice::<super::views::SiteView>(&bytes).ok())
+        .is_some_and(|record| record.live_version.is_some())
+}
+
+/// «Pubblica questa nota»: la segna con `publish: true`, se non lo è, e mette
+/// in coda la prova del sito. Pubblicare resta un gesto del pannello, dopo la
+/// prova: niente arriva in rete senza essere stato visto.
+fn publish_note(
+    args: &Args,
+    dry: bool,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    use fub_abi::traits::JobSpec;
+    let doc = note_of(args, host)?;
+    let site = chosen_site(args, host)?;
+    let state = opt_in_of(host, &doc)?;
+    if state == site::OptIn::Held {
+        return Err(PluginError::BadArgs(Text::key("e.held")));
+    }
+    if !site::publishable_page(&site::doc_path(&doc.0)) {
+        return Err(PluginError::BadArgs(Text::key("e.unsafe_page")));
+    }
+    let key = if state == site::OptIn::Asked {
+        "note.preview"
+    } else {
+        "note.marked"
+    };
+    let notify = Text::message(key, vec![fub_abi::text::Arg::text("site", site.clone())]);
+    if dry {
+        return Ok(CommandOutcome::notify(notify));
+    }
+    let mut undo = None;
+    if state == site::OptIn::Not {
+        let written = host.run_command(
+            PROPERTY_SET,
+            serde_json::json!({ "doc": doc.0, "key": PUBLISH_KEY, "value": "true" }),
+        )?;
+        undo = written.undo;
+    }
+    host.spawn_job(JobSpec {
+        job: PUBLISH_PASS_JOB.to_string(),
+        payload: serde_json::json!({ "site_id": site, "op": "dry-run", "extra": {} }),
+    })?;
+    let mut outcome = CommandOutcome::notify(notify);
+    outcome.undo = undo;
+    Ok(outcome)
 }
 
 fn site_of(args: &Args) -> Result<String, PluginError> {
@@ -871,7 +1132,7 @@ mod tests {
     #[test]
     fn only_remote_backed_commands_are_registered() {
         let specs = bundle().commands().commands();
-        assert_eq!(specs.len(), 4);
+        assert_eq!(specs.len(), 7);
         let commit = specs.iter().find(|s| s.id == PUBLISH_COMMIT).unwrap();
         assert!(commit.scope.writes);
         assert!(commit.scope.reversible);

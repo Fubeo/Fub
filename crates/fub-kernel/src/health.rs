@@ -1,4 +1,5 @@
-//! I controlli di salute del vault: link rotti, note orfane, path che collidono.
+//! I controlli di salute del vault: link rotti, note orfane, path che collidono,
+//! date non riconosciute, vicoli ciechi e allegati che nessuno usa.
 //!
 //! Sono le prime tre voci di 7.2 (che ne conta una trentina) e stanno qui,
 //! dietro [`IndexQuery::VaultHealth`], invece che in un comando dell'app per la
@@ -18,9 +19,9 @@ use fub_abi::rules::health::{broken_target, unrecognized_dates, LinkResolver};
 use fub_abi::rules::path::resolution_key;
 use fub_abi::traits::{HealthCheck, HealthIssue};
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
-use fub_abi::traits::VaultEntry;
+use fub_abi::traits::{EntryKind, VaultEntry};
 
 use crate::graph::LinkGraph;
 use crate::index::core::{resolve_entry_in, EntryNames};
@@ -90,7 +91,65 @@ pub(crate) fn run<'a>(
         // è la ragione per cui questi due controlli non condividono l'elenco su
         // cui camminano.
         HealthCheck::UnrecognizedDates => dates(docs.map(|(id, _, fm)| (id, fm)), formats),
+        HealthCheck::DeadEnds => dead_ends(docs.map(|(id, links, _)| (id, links))),
+        // I link di tutti i documenti dicono dove si arriva, l'anagrafe dice
+        // quali allegati ci sono: servono tutt'e due.
+        HealthCheck::UnusedAttachments => unused(docs.map(|(id, links, _)| (id, links)), view),
     }
+}
+
+/// Le note senza un link verso il vault.
+///
+/// Un URL esce dal vault e un `[[#Sezione]]` nomina la nota stessa: nessuno
+/// dei due porta altrove. Un link rotto invece conta come uscita — chi l'ha
+/// scritto voleva andare da qualche parte, e il guasto lo dice già
+/// [`HealthCheck::BrokenLinks`]: dirlo due volte, con due nomi, sarebbe
+/// rumore.
+fn dead_ends<'a>(docs: impl Iterator<Item = (&'a DocId, &'a [Link])>) -> Vec<HealthIssue> {
+    docs.filter(|(_, links)| {
+        !links
+            .iter()
+            .any(|link| !matches!(link.target, LinkTarget::Url(_)) && !link.target.names_host())
+    })
+    .map(|(id, _)| HealthIssue {
+        doc: id.clone(),
+        check: HealthCheck::DeadEnds,
+        // Come l'orfana: il problema è la nota, non un punto del sorgente.
+        detail: None,
+        span: None,
+    })
+    .collect()
+}
+
+/// Gli allegati che nessun link raggiunge.
+///
+/// Si risolve con lo stesso risolutore dei link rotti, quindi «usato» e «non
+/// rotto» sono la stessa risposta letta dai due lati. Solo
+/// [`EntryKind::Asset`]: un file che nessuno sa cosa sia (`.DS_Store`, una
+/// configurazione) non è un allegato dimenticato. L'ordine è quello
+/// dell'anagrafe, come per le collisioni.
+fn unused<'a>(
+    docs: impl Iterator<Item = (&'a DocId, &'a [Link])>,
+    view: &VaultView<'_>,
+) -> Vec<HealthIssue> {
+    let mut used: HashSet<DocId> = HashSet::new();
+    for (id, links) in docs {
+        for link in links {
+            if let Some(target) = view.resolve_entry(id, &link.target) {
+                used.insert(target);
+            }
+        }
+    }
+    view.entries
+        .values()
+        .filter(|entry| entry.kind == EntryKind::Asset && !used.contains(&entry.id))
+        .map(|entry| HealthIssue {
+            doc: entry.id.clone(),
+            check: HealthCheck::UnusedAttachments,
+            detail: None,
+            span: None,
+        })
+        .collect()
 }
 
 fn broken_links<'a>(
@@ -217,7 +276,6 @@ fn dates<'a>(
 mod tests {
     use super::*;
     use fub_abi::model::{DocumentModel, Span};
-    use fub_abi::traits::EntryKind;
 
     fn md() -> Vec<String> {
         vec!["md".to_string()]
@@ -232,6 +290,20 @@ mod tests {
     fn wiki(page: &str) -> Link {
         Link {
             target: LinkTarget::wiki(page),
+            embed: false,
+            span: Span::new(0, 1),
+            context: None,
+        }
+    }
+
+    /// `[[#heading]]`: un link alla nota stessa.
+    fn wiki_here(heading: &str) -> Link {
+        Link {
+            target: LinkTarget::Wiki {
+                page: String::new(),
+                heading: Some(heading.to_string()),
+                block: None,
+            },
             embed: false,
             span: Span::new(0, 1),
             context: None,
@@ -426,6 +498,54 @@ mod tests {
             "orphan = zero incoming references; linking does not save from orphanhood"
         );
         assert!(found[0].detail.is_none() && found[0].span.is_none());
+    }
+
+    #[test]
+    fn a_dead_end_has_no_way_into_the_vault() {
+        let url = Link {
+            target: LinkTarget::Url("https://example.invalid".to_string()),
+            embed: false,
+            span: Span::new(0, 1),
+            context: None,
+        };
+        let docs = vec![
+            doc("esce.md", vec![wiki("Altra")]),
+            doc("rotto.md", vec![wiki("Non esiste")]),
+            doc("Altra.md", vec![url, wiki_here("Sezione")]),
+            doc("muta.md", vec![]),
+        ];
+        let graph = LinkGraph::build(docs.iter());
+        let found = issues(HealthCheck::DeadEnds, &docs, &graph);
+        let ends: Vec<&str> = found.iter().map(|the| the.doc.as_str()).collect();
+        assert_eq!(
+            ends,
+            vec!["Altra.md", "muta.md"],
+            "a URL and a link to the note itself go nowhere in the vault; a broken \
+             link still counts as a way out"
+        );
+        assert!(found[0].detail.is_none() && found[0].span.is_none());
+    }
+
+    #[test]
+    fn an_attachment_nobody_names_is_unused() {
+        let docs = vec![
+            doc("a.md", vec![path("img/usata.png"), wiki("embed.png")]),
+            doc("b.md", vec![wiki("Non esiste")]),
+        ];
+        let graph = LinkGraph::build(docs.iter());
+        let mut entries = entries_of(&["img/usata.png", "embed.png", "img/sola.png", "a.md"]);
+        entries.get_mut(&DocId::new("a.md")).unwrap().kind = EntryKind::Document;
+        let mut strange = entries_of(&[".DS_Store"]);
+        strange.get_mut(&DocId::new(".DS_Store")).unwrap().kind = EntryKind::Unknown;
+        entries.append(&mut strange);
+        let found = issues_with(HealthCheck::UnusedAttachments, &docs, &graph, &entries);
+        let unused: Vec<&str> = found.iter().map(|the| the.doc.as_str()).collect();
+        assert_eq!(
+            unused,
+            vec!["img/sola.png"],
+            "a link and an embed both use an attachment; a note and an unknown \
+             file are not attachments"
+        );
     }
 
     #[test]

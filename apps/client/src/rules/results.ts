@@ -15,6 +15,9 @@ export interface ResultRow {
   /// è ciò che questo pannello faceva per **tutti** i risultati prima della
   /// §21.3.
   byteOffset?: number;
+  /// Dove finisce l'occorrenza, per disegnarne il contesto; c'è quando c'è
+  /// `byteOffset` e la riga non è compressa.
+  byteEnd?: number;
   /// Il numero dell'occorrenza (2, 3, …) per le righe che ne sono una; assente
   /// per la riga della nota.
   occurrence?: number;
@@ -35,9 +38,15 @@ export interface ResultRow {
 /// **dirla**.
 ///
 /// Sta fuori dal disegno perché è la regola, e una regola si prova senza un DOM.
-export function rowsToShow(hits: DocumentMatch[]): ResultRow[] {
+export function rowsToShow(hits: DocumentMatch[], collapsed = false): ResultRow[] {
   const rows: ResultRow[] = [];
   for (const hit of hits) {
+    // Compressa, una nota è il suo titolo: né estratto né altre occorrenze, ma
+    // il clic apre ancora sulla prima corrispondenza.
+    if (collapsed) {
+      rows.push({ doc: hit.doc, byteOffset: hit.occurrences?.[0]?.span.start });
+      continue;
+    }
     const occurrences = hit.occurrences ?? [];
     // `total` si valorizza solo quando il kernel ha calcolato le occorrenze:
     // `occurrences` assente = «nessuno le ha calcolate» (riga sola, nessun
@@ -46,6 +55,7 @@ export function rowsToShow(hits: DocumentMatch[]): ResultRow[] {
     rows.push({
       doc: hit.doc,
       byteOffset: occurrences[0]?.span.start,
+      ...(occurrences[0] ? { byteEnd: occurrences[0].span.end } : {}),
       snippet: hit.snippet,
       highlights: hit.highlights,
       ...(total === undefined ? {} : { total }),
@@ -54,10 +64,46 @@ export function rowsToShow(hits: DocumentMatch[]): ResultRow[] {
       rows.push({
         doc: hit.doc,
         byteOffset: position.span.start,
+        byteEnd: position.span.end,
         occurrence: i + 2,
         ...(total === undefined ? {} : { total }),
       });
     });
   }
   return rows;
+}
+
+/// L'ordine dei risultati: per rilevanza (quello del kernel) o per nome e data.
+export type SearchSort = "relevance" | "name-asc" | "name-desc" | "modified-new" | "modified-old";
+
+export const SEARCH_SORTS: readonly SearchSort[] = [
+  "relevance",
+  "name-asc",
+  "name-desc",
+  "modified-new",
+  "modified-old",
+];
+
+/// Riordina i risultati. `relevance` li lascia come sono; le date vengono da
+/// `mtimes` (ms unix) e chi non ce l'ha va in fondo, alla pari per nome.
+export function sortHits(
+  hits: readonly DocumentMatch[],
+  mode: SearchSort,
+  mtimes: Readonly<Record<string, number>> = {},
+): DocumentMatch[] {
+  if (mode === "relevance") return [...hits];
+  const collator = new Intl.Collator("it", { sensitivity: "base", numeric: true });
+  const name = (a: DocumentMatch, b: DocumentMatch) => collator.compare(a.doc, b.doc);
+  if (mode === "name-asc") return [...hits].sort(name);
+  if (mode === "name-desc") return [...hits].sort((a, b) => name(b, a));
+  const sign = mode === "modified-new" ? -1 : 1;
+  return [...hits].sort((a, b) => {
+    const x = mtimes[a.doc];
+    const y = mtimes[b.doc];
+    if (x === undefined || y === undefined) {
+      if (x === y) return name(a, b);
+      return x === undefined ? 1 : -1;
+    }
+    return x === y ? name(a, b) : sign * (x - y);
+  });
 }

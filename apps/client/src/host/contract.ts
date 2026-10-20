@@ -39,6 +39,7 @@ import type {
   TaskStatus,
   TextField,
   TextMode,
+  TextScope,
   TextTolerance,
   ThemeEngine,
   ThemeLight,
@@ -393,7 +394,11 @@ export type UiKind =
 // Un nodo: la sua chiave e la sua specie. `key` è l'identità del nodo fra due
 // ridisegni — è ciò su cui il riconciliatore lavora (§2.8) —, è assente quando
 // il provider non la dichiara, e la sua unicità vale FRA I FRATELLI.
-export type UiNode = UiKind & { key?: string };
+export type UiNode = UiKind & { key?: string; drag?: UiDrag };
+
+// Che cosa si trascina da un nodo (decisione 0157: il nodo nomina la cosa, la
+// shell decide come si offre e dove si lascia). Assente: il nodo non si trascina.
+export type UiDrag = { kind: "document"; doc: string };
 
 // L'azione che la shell manda al provider: le due metà con i due proprietari
 // (§2.7). `payload` è quello che il provider aveva attaccato al nodo e gli torna
@@ -1423,7 +1428,19 @@ export type QueryPredicate =
   | { kind: "regex"; pattern: string; fields: TextField[] }
   | { kind: "task"; status: TaskStatus }
   | { kind: "path"; glob: string }
-  | { kind: "file"; extension: string };
+  | { kind: "file"; extension: string }
+  | { kind: "scoped"; scope: TextScope; text: TextQuery }
+  | { kind: "task_due"; min: DueBound | null; max: DueBound | null };
+
+// Un estremo della scadenza di una task (rispecchia fub_abi::query::DueBound):
+// una data `AAAA-MM-GG` e se è compresa.
+export interface DueBound {
+  date: string;
+  inclusive: boolean;
+}
+
+// L'unità del corpo dentro cui uno `scoped` vuole tutti i suoi termini.
+export type { TextScope } from "./enums.generated";
 
 export interface QueryLiteral {
   negated: boolean;
@@ -2143,12 +2160,27 @@ export interface Organization {
 /// cambia in un posto.
 export const COMMANDS = {
   create: "note.create",
+  duplicate: "note.duplicate",
   rename: "note.rename",
   trash: "note.trash",
   restore: "trash.restore",
   clear: "trash.empty",
   createFolder: "folder.create",
+  renameFolder: "folder.rename",
+  trashFolder: "folder.trash",
   osTrash: "trash.os",
   undo: "vault.undo",
   replace: "vault.replace",
 } as const;
+
+/**
+ * Che cosa succede nella finestra del visore web (`fub://viewer`), detto alla
+ * finestra principale. Rispecchia `fub_app::resources::ViewerEvent`.
+ */
+export type ViewerEvent =
+  | { kind: "navigated"; url: string }
+  | { kind: "blocked"; url: string }
+  | { kind: "closed" };
+
+/** I gesti della barra del visore (`viewer_control`). */
+export type ViewerAction = "back" | "forward" | "reload" | "close" | "focus";

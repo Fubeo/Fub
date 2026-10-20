@@ -48,6 +48,7 @@ import {
 } from "./render-inline";
 import { mediaKindOfId } from "../../../media/media-types";
 import { TableWidget, tableGrids, tableOfBlock, type TableGridCallbacks } from "./table-widget";
+import { propertiesExtension } from "./properties";
 
 /// I varchi verso il resto dell'app: il modulo non importa `api.ts` né tocca
 /// lo stato — chi monta l'editor inietta cosa succede al click.
@@ -1428,5 +1429,5 @@ export function livePreview(
       click(event, view) { return handleClick(event, view, callbacks); },
     },
   });
-  return [theme, blocks, plugin, tableGrids(callbacks)];
+  return [theme, blocks, plugin, tableGrids(callbacks), propertiesExtension()];
 }

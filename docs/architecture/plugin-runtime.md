@@ -224,13 +224,13 @@ non sia più disponibile.
 Il runtime non replica la policy. Riceve un `HostApi` già incappucciato dal
 `Guard` del kernel.
 
-Le interfacce host vengono linkate una alla volta. Il runtime WASM serve
-cinque famiglie: `host-env`, `host-vault-read`, `host-data-read`,
-`host-data-write` e `host-events`. Le altre famiglie `host-*` del WIT (scrittura
-e struttura del vault, impostazioni, stato delle view, query, servizi, rete,
-comandi, trasferimenti) esistono nel contratto ma non ancora qui. Se un
-componente importa una famiglia non servita, il caricamento fallisce con
-`UnservedFamilies` e l'errore nomina la famiglia.
+Le interfacce host vengono linkate una alla volta. Il runtime WASM serve tutte
+le famiglie `host-*` di un plugin: ambiente, lettura, scrittura e struttura del
+vault, dati, impostazioni, stato delle view, query, servizi, rete, comandi ed
+eventi (`crates/fub-wasm-host/src/guest.rs`). Restano fuori `host-transfer-read`
+e `host-transfer-write`, legate agli export `importer` ed `exporter` che il
+runtime non collega. Se un componente importa una famiglia non servita, il
+caricamento fallisce con `UnservedFamilies` e l'errore nomina la famiglia.
 
 ## Sandbox
 
@@ -441,6 +441,8 @@ Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).
   `renderer`, `service`, `importer`, `exporter`) è rifiutato al caricamento
   con `UnservedExports`, come chi importa una famiglia host non servita;
 - i comandi che l'host esegue in proprio (`mount.*`, `folder.create`,
-  `trash.os`, `vault.snapshot.*`, `capture.apply`) sono riservati nel registro
-  al mount: un plugin che li invoca con `run_command` riceve `Unserved`, e
+  `trash.os`, `vault.snapshot.*`, `vault.export`, `capture.apply`,
+  `settings.import_obsidian`, `connector.token`, `connector.tokens`,
+  `uri.pending`, `uri.apply`) sono
+  riservati nel registro al mount: un plugin che li invoca con `run_command` riceve `Unserved`, e
   nessun provider può registrarne un omonimo.

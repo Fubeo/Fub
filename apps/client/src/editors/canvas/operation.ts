@@ -1,5 +1,6 @@
 import {
   invertOperation,
+  lineFeeds,
   operationFromText,
   type TextOperation,
 } from "../core/text-operation";
@@ -149,7 +150,11 @@ export function commitCanvasPatches(
             return { kind: patch.kind, before: [...patch.before], after: [...patch.after] } as CanvasPatch;
         }
       }),
-      ...operationFromText(beforeSource, source),
+      // Gli offset di un'operazione si contano sul testo a `\n`, come li
+      // valida la sessione: su un file CRLF quelli del testo grezzo non
+      // tornerebbero e la modifica sparirebbe (#97). Il testo emesso tiene i
+      // terminatori del file: il patcher copia i separatori che trova.
+      ...operationFromText(lineFeeds(beforeSource), lineFeeds(source)),
     },
   };
 }

@@ -442,3 +442,37 @@ fn span_inside_extra_is_rejected_not_rewritten() {
         "span in extra: errore, mai rewrite"
     );
 }
+
+/// #97: un file con BOM (e CRLF) si apre, e gli span dei collegamenti restano
+/// nelle coordinate del file, BOM compreso: la riscrittura tocca il byte giusto.
+#[test]
+fn bom_and_crlf_open_and_rewrite_in_file_coordinates() {
+    let lf = "{\n  \"nodes\": [\n    {\"id\":\"t\",\"type\":\"text\",\"x\":0,\"y\":0,\"width\":200,\"height\":100,\"text\":\"vedi [[Altra]]\"}\n  ],\n  \"edges\": []\n}\n";
+    for source in [
+        format!("\u{feff}{lf}"),
+        format!("\u{feff}{}", lf.replace('\n', "\r\n")),
+        lf.replace('\n', "\r\n"),
+    ] {
+        assert_eq!(parse_canvas(&source).unwrap().nodes.len(), 1);
+        let model = parse(&source);
+        let wiki = model
+            .links
+            .iter()
+            .find(|l| matches!(l.target, LinkTarget::Wiki { .. }))
+            .expect("il wikilink della card");
+        assert_eq!(&source[wiki.span.start..wiki.span.end], "[[Altra]]");
+        let edits = rewrite(
+            &source,
+            &[LinkRewrite {
+                span: wiki.span,
+                target: wiki.target.clone(),
+                replacement: "Nuova".to_string(),
+            }],
+        )
+        .unwrap();
+        let out = apply(&source, &edits[0]);
+        assert!(out.contains("vedi [[Nuova]]"), "{out}");
+        assert_eq!(out.starts_with('\u{feff}'), source.starts_with('\u{feff}'));
+        assert_eq!(out.matches("\r\n").count(), source.matches("\r\n").count());
+    }
+}

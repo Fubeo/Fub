@@ -89,6 +89,8 @@ export type HealthCheck =
   | "orphan_documents"
   | "colliding_paths"
   | "unrecognized_dates"
+  | "dead_ends"
+  | "unused_attachments"
 ;
 
 export type HourCycle = "h23" | "h12";
@@ -134,6 +136,8 @@ export type TaskStatus = "open" | "done";
 export type TextField = "name" | "body" | "tags" | "heading";
 
 export type TextMode = "terms" | "phrase";
+
+export type TextScope = "line" | "block" | "section";
 
 export type TextTolerance = "exact" | "typos";
 

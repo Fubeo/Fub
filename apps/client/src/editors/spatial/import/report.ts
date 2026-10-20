@@ -14,6 +14,7 @@ import { plural, t, type ImportKey as Key } from "./strings";
 /// esaustivo: un genere nuovo non compila finché non ha le sue frasi.
 const SENTENCES: Readonly<Record<NoteKind, readonly [Key, Key]>> = {
   unknown: ["draw.import.note.unknown.one", "draw.import.note.unknown.other"],
+  placeless: ["draw.import.note.placeless.one", "draw.import.note.placeless.other"],
   embed: ["draw.import.note.embed.one", "draw.import.note.embed.other"],
   image: ["draw.import.note.image.one", "draw.import.note.image.other"],
   shadow: ["draw.import.note.shadow.one", "draw.import.note.shadow.other"],

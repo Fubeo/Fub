@@ -7,13 +7,16 @@
 // della pressione di adesso, un tratto d'esempio che va da leggero a pieno e
 // torna, e un riquadro dove provare la penna, che disegna con la curva della
 // finestra. Il tratto d'esempio fa vedere la curva anche a chi non ha la
-// penna in mano; i campi sono cursori con il valore scritto accanto. Si
-// scrive tutto alla conferma.
+// penna in mano; i campi sono cursori con il valore scritto accanto. Sotto,
+// lo stabilizzatore del tratto (`ink/input/stabilizer.ts`): quanto leviga e
+// se tira il pennino con la corda invece che con la media. Si scrive tutto
+// alla conferma.
 
 import { actions, openFrame } from "../../../ui/dialogs";
 import { t as appT, resolvedLanguage } from "../../../i18n/strings";
 import { curvePath, DEFAULT_CURVE, isDefaultCurve, MAX_MIN, MIN_FULL, pressureCurve, type PenCurve } from "../../../ink/input/pressure";
 import { t } from "../strings";
+import type { Steady } from "./grid";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -36,6 +39,8 @@ export interface TouchChoice {
   readonly twist: boolean;
   readonly taps: boolean;
   readonly pen: PenCurve;
+  /// Lo stabilizzatore; assente, spento.
+  readonly steady?: Steady;
 }
 
 /// Una manopola della curva: il cursore, in centesimi, e dove scrive il
@@ -239,12 +244,37 @@ export function touchDialog(choice: TouchChoice): Promise<TouchChoice | null> {
     pad.addEventListener("pointerup", lift);
     pad.addEventListener("pointercancel", lift);
 
+    // --- Lo stabilizzatore --------------------------------------------------
+
+    const steadyGroup = group(t("draw.touch.steady"));
+    const steadyHint = document.createElement("p");
+    steadyHint.className = "draw-touch-hint";
+    steadyHint.id = `draw-touch-steady-hint-${id}`;
+    steadyHint.textContent = t("draw.touch.steady.hint");
+    steadyGroup.setAttribute("aria-describedby", steadyHint.id);
+    const steadyKnobs = document.createElement("div");
+    steadyKnobs.className = "draw-touch-knobs";
+    const amount = knob(t("draw.touch.steady.amount"), 0, 1, choice.steady?.amount ?? 0, (v) => (v === 0 ? t("draw.touch.steady.off") : percent.format(v)));
+    // `knob` mette la manopola fra quelle della curva: qui sta nel suo gruppo.
+    steadyKnobs.append(amount.input.parentElement!);
+    const pulled = check(steadyGroup, t("draw.touch.steady.string"), choice.steady?.string ?? false);
+    steadyGroup.insertBefore(steadyHint, pulled.parentElement);
+    steadyGroup.insertBefore(steadyKnobs, pulled.parentElement);
+    const showSteady = (): void => {
+      const text = amount.text(valueOf(amount));
+      amount.output.textContent = text;
+      amount.input.setAttribute("aria-valuetext", text);
+      pulled.disabled = valueOf(amount) === 0;
+    };
+    amount.input.addEventListener("input", showSteady);
+    showSteady();
+
     show();
     const row = actions(appT("app.ok"), () => settle(null));
-    form.append(fingers, pressure, row);
+    form.append(fingers, pressure, steadyGroup, row);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      settle({ twist: twist.checked, taps: taps.checked, pen: curveNow() });
+      settle({ twist: twist.checked, taps: taps.checked, pen: curveNow(), steady: { amount: valueOf(amount), string: pulled.checked } });
     });
     frame.box.append(form);
     twist.focus();

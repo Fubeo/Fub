@@ -67,3 +67,50 @@ fn after_mount_markdown_export_targets_exist() {
     assert!(ids.contains(&TARGET_FILES.to_string()), "{ids:?}");
     assert!(ids.contains(&TARGET_SINGLE.to_string()), "{ids:?}");
 }
+
+/// Un canvas non è markdown: nella cartella esportata è lo stesso file, byte
+/// per byte; nel documento unico resta fuori e il rapporto lo nomina, invece
+/// di diventare JSON incollato fra le note.
+#[test]
+fn a_canvas_is_copied_as_a_file_and_never_pasted_into_the_single_document() {
+    use fub_abi::transfer::{ExportRequest, ExportSelection, NoteLevel};
+    let (_dir, root) = vault();
+    let canvas = "{\"nodes\":[],\"edges\":[]}\n";
+    std::fs::write(root.join("Nota.md"), "# Nota\n").unwrap();
+    std::fs::write(root.join("Mappa.canvas"), canvas).unwrap();
+    let mut mounted = mount(&root);
+    mounted.workspace.reindex().unwrap();
+    assert!(mounted
+        .workspace
+        .documents()
+        .contains(&DocId::new("Mappa.canvas")));
+
+    let files = mounted
+        .workspace
+        .export(&ExportRequest::new(
+            TARGET_FILES,
+            ExportSelection::default(),
+        ))
+        .unwrap();
+    let copy = files
+        .artifacts
+        .iter()
+        .find(|a| a.path == "Mappa.canvas")
+        .expect("il canvas è nella cartella");
+    assert_eq!(copy.as_bytes(), Some(canvas.as_bytes()));
+
+    let single = mounted
+        .workspace
+        .export(&ExportRequest::new(
+            TARGET_SINGLE,
+            ExportSelection::default(),
+        ))
+        .unwrap();
+    let text = std::str::from_utf8(single.artifacts[0].as_bytes().unwrap()).unwrap();
+    assert!(!text.contains("nodes"), "{text}");
+    assert!(single
+        .log
+        .iter()
+        .any(|note| note.level == NoteLevel::Warning
+            && note.entry.as_deref() == Some("Mappa.canvas")));
+}

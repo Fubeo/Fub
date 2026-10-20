@@ -5,10 +5,11 @@
 // la logica dell'alberatura (cosa è una cartella, cosa è una folder note, che
 // ordine hanno i fratelli) sta in `rules/organizer.ts`, ed è pura e provata; il
 // dato sta nel sidecar (`state/organization.ts`). Qui c'è il DOM.
-import { NOTE_DRAG_TYPE } from "../ui/drag-types";
+import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE, type DraggedEntry } from "../ui/drag-types";
 import { revealSidePanel } from "../ui/side-panels";
-import { pickFromList } from "../ui/dialogs";
-import { vaultFolders, folderContent, existingDocuments } from "../host/query";
+import { pickFromList, promptText } from "../ui/dialogs";
+import { vaultEntries, vaultFolders, folderContent, existingDocuments, settings, WITHOUT_PAGE } from "../host/query";
+import { mountExplorerFilter, type ExplorerFilter, type FilterEntry } from "./explorer-filter";
 import { Race } from "../ui/race";
 import type { VaultFolder } from "../host/contract";
 import { onEvent } from "../state/kernel";
@@ -19,8 +20,10 @@ import {
   setPinned,
   setSpace,
 } from "../state/organization";
-import { on, saveActiveSpace, saveExpanded, state } from "../state/store";
-import { createFolder, createNote, refreshDocuments } from "../state/vault";
+import { on, saveActiveSpace, saveExpanded, saveExplorerSort, state } from "../state/store";
+import { createFolder, createNote, duplicateNote, handToSystem, importIntoVault, openVaultRoot, refreshDocuments, renameFolder, trashFolder, undoLastOperation } from "../state/vault";
+import { carriesFiles, offerOutside, pickedFiles, readDropped, type Dropped } from "../ui/vault-transfer";
+import { confirm } from "../platform/confirm";
 import {
   LEVEL_PAGE,
   childName,
@@ -30,21 +33,40 @@ import {
   orderedNames,
   pageName,
   parentOf,
+  EXPLORER_SORTS,
   sortContent,
+  type ExplorerSort,
   type FolderContent,
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
 import { pickIcon, showContextMenu, type MenuItem } from "../ui/menu";
-import { canCreateDrawing, canImportDrawing, canImportFile, importDrawing, newDrawing, pickDrawingImport, registerShellCommand } from "../ui/commands";
+import {
+  canCreateDrawing,
+  canImportDrawing,
+  canImportFile,
+  hasKernelCommand,
+  importDrawing,
+  launchCommand,
+  newDrawing,
+  pickDrawingImport,
+  registerShellCommand,
+} from "../ui/commands";
+import { VAULT_EXPORT } from "../ui/vault-export";
+import { DEFAULT_ATTACHMENT_FOLDER } from "../editors/media/attachment-target";
+import { IMPORT_PREPARE } from "../ui/note-import";
 import { showPanel } from "./sidebar";
+import { writeClipboardText } from "../platform/clipboard";
+import { searchFor } from "../state/search-port";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
-import { canShowFile, focusEditor, openDocument } from "../state/document-controller";
+import { canShowFile, focusEditor, openDocument, openDocumentBeside } from "../state/document-controller";
+import { addBookmark, loadBookmarks, type BookmarkTarget } from "../state/bookmarks";
+import { openCurrentInNewWindow } from "../state/document-windows";
 import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../state/document-session";
 import { contextMenuItems, hasContextMenuViews, type ContextTarget } from "../ui/context-views";
 import { trashManyWithConfirm, trashWithConfirm } from "./trash";
 import { mountTreeSelection, type TreeSelection } from "./explorer-selection";
 import { errorText } from "../host/errors";
-import { nameFault, normalizedName } from "../rules/mirrored";
+import { folderForNote, nameFault, normalizedName } from "../rules/mirrored";
 import { onLanguage, plural, t } from "../i18n/strings";
 import { notify } from "../ui/notify";
 import type { Lifetime } from "../ui/lifetime";
@@ -61,7 +83,9 @@ const pinnedTitleEl = $("#pinned-title");
 const pinnedListEl = $("#pinned-list");
 
 /// Il drag in corso nella sidebar, se c'è.
-let drag: { path: string; kind: "note" | "folder"; parent: string } | null = null;
+/// Il trascinamento in corso dentro l'albero: la voce presa e, se era nella
+/// scelta multipla, tutte le scelte (`group`, la presa compresa).
+let drag: { path: string; kind: "note" | "folder"; parent: string; group: string[] } | null = null;
 
 /// Sostando su una cartella chiusa durante un trascinamento la si apre, come in
 /// ogni file manager: così si arriva a una destinazione annidata senza mollare
@@ -134,9 +158,26 @@ export function mountExplorer(lifetime: Lifetime): void {
         ? [{ label: t("explorer.import_drawing_here"), run: () => void pickDrawingImport(state.activeSpace ?? "") }]
         : []),
       { label: t("explorer.new_folder"), run: () => startNewFolder(state.activeSpace ?? "") },
+      { separator: true, label: t("explorer.import_files"), run: () => pickImport(state.activeSpace ?? "", false) },
+      { label: t("explorer.import_folder"), run: () => pickImport(state.activeSpace ?? "", true) },
+      { separator: true, label: t("explorer.sort"), run: () => sortMenu(e) },
+      { label: t("explorer.collapse_all"), run: () => collapseAll() },
+      { label: t("explorer.expand_all"), run: () => void expandAll() },
     ]);
   });
   lifetime.listen(spaceTitleEl, "click", openSpaceNote);
+  registerShellCommand({
+    id: "shell.explorer.filter",
+    title: "commands.explorer.filter",
+    description: "commands.explorer.filter.desc",
+    layer: "global",
+    available: () => openVaultRoot() !== undefined,
+    run: () => {
+      revealSidePanel("sidebar");
+      showPanel("files");
+      filter?.show();
+    },
+  });
   registerShellCommand({
     id: "shell.explorer.reveal",
     title: "commands.explorer.reveal",
@@ -144,6 +185,14 @@ export function mountExplorer(lifetime: Lifetime): void {
     layer: "global",
     available: () => state.currentDoc !== null,
     run: () => revealActive(),
+  });
+  registerShellCommand({
+    id: "shell.explorer.reveal_attachments",
+    title: "commands.explorer.reveal_attachments",
+    description: "commands.explorer.reveal_attachments.desc",
+    layer: "global",
+    available: () => openVaultRoot() !== undefined,
+    run: () => revealAttachments(),
   });
   // Dentro l'albero li prendono F2 e Canc (`treeArrows`); i comandi sono la
   // stessa azione per la palette e per un accordo che l'utente sceglie.
@@ -173,14 +222,66 @@ export function mountExplorer(lifetime: Lifetime): void {
       if (id !== null) await trashWithConfirm(id);
     },
   });
+  registerShellCommand({
+    id: "shell.explorer.collapse_all",
+    title: "commands.explorer.collapse_all",
+    description: "commands.explorer.collapse_all.desc",
+    layer: "global",
+    available: () => state.expanded.size > 0,
+    run: () => collapseAll(),
+  });
+  registerShellCommand({
+    id: "shell.explorer.expand_all",
+    title: "commands.explorer.expand_all",
+    description: "commands.explorer.expand_all.desc",
+    layer: "global",
+    run: () => expandAll(),
+  });
+  registerShellCommand({
+    id: "shell.explorer.sort.manual",
+    title: "commands.explorer.sort.manual",
+    description: "commands.explorer.sort.manual.desc",
+    layer: "global",
+    run: () => setSort("manual"),
+  });
+  registerShellCommand({
+    id: "shell.explorer.sort.name_asc",
+    title: "commands.explorer.sort.name_asc",
+    description: "commands.explorer.sort.name_asc.desc",
+    layer: "global",
+    run: () => setSort("name-asc"),
+  });
+  registerShellCommand({
+    id: "shell.explorer.sort.name_desc",
+    title: "commands.explorer.sort.name_desc",
+    description: "commands.explorer.sort.name_desc.desc",
+    layer: "global",
+    run: () => setSort("name-desc"),
+  });
+  registerShellCommand({
+    id: "shell.explorer.sort.modified_new",
+    title: "commands.explorer.sort.modified_new",
+    description: "commands.explorer.sort.modified_new.desc",
+    layer: "global",
+    run: () => setSort("modified-new"),
+  });
+  registerShellCommand({
+    id: "shell.explorer.sort.modified_old",
+    title: "commands.explorer.sort.modified_old",
+    description: "commands.explorer.sort.modified_old.desc",
+    layer: "global",
+    run: () => setSort("modified-old"),
+  });
   treeArrows(lifetime);
   wireRootDropTarget(lifetime);
+  wireOutsideDrops(lifetime);
   lifetime.add(cancelHoverOpen);
   selection = mountTreeSelection({
     list: fileListEl,
     currentDoc: () => state.currentDoc,
     trash: (paths) => trashManyWithConfirm(paths),
     move: (paths) => pickMoveFolders(paths),
+    group: (paths) => groupIntoNewFolder(paths),
     lifetime,
   });
   lifetime.add(() => {
@@ -196,9 +297,23 @@ export function mountExplorer(lifetime: Lifetime): void {
   // Una lista chiesta esplicitamente (apertura del vault, creazione, rinomina,
   // ripristino) si richiede sempre: il segnale dice *quando*, non *cosa*.
   lifetime.add(on("documents", () => void refreshFromKernel(true)));
+  filter = mountExplorerFilter({
+    lifetime,
+    before: pinnedTitleEl,
+    covering: (covered) => {
+      fileListEl.hidden = covered;
+      if (!lifetime.closed) renderFileList();
+    },
+    entries: filterEntries,
+    open: openFiltered,
+  });
+  lifetime.add(() => (filter = null));
+  lifetime.add(on("documents", () => filter?.stale()));
+  lifetime.add(on("vault", () => filter?.hide()));
   // L'organizzazione cambiata ridisegna la stessa vista senza richiederla:
   // icone, pin e ordine non passano dal kernel.
   lifetime.add(on("organization", renderFileList));
+  lifetime.add(on("reveal-folder", (folder) => void revealPath(folder, true)));
   // L'elenco dei comandi arriva dopo l'apertura del vault: un albero vuoto
   // offre «Nuovo disegno…» solo da quel momento, e lo toglie se il comando se
   // ne va. Un albero con delle note non ha niente da ridisegnare.
@@ -206,6 +321,18 @@ export function mountExplorer(lifetime: Lifetime): void {
     if (fileListEl.querySelector(".tree-empty") !== null) renderFileList();
   }));
   lifetime.add(on("active-doc", markActive));
+  // «Mostra la nota aperta»: cambiando nota l'albero segue, senza aprire il
+  // pannello se è chiuso (a quello pensa il comando «Rivela»).
+  const autoReads = new Race();
+  const readAutoReveal = () => autoReads.last(async (expected) => {
+    const entries = await expected(settings().catch(() => null));
+    if (entries) autoReveal = entries.find((entry) => entry.spec.key === FILES_AUTO_REVEAL)?.value === true;
+  });
+  void readAutoReveal();
+  lifetime.add(onEvent("setting_changed", (event) => {
+    if (event.key === FILES_AUTO_REVEAL) void readAutoReveal();
+  }));
+  lifetime.add(on("active-doc", () => { if (autoReveal) void followActive(); }));
 
   // Una rinomina non è solo una lista invecchiata: l'organizzazione (icona,
   // pin, ordine) è indicizzata per path, e va riletta prima del ridisegno.
@@ -332,13 +459,18 @@ function signatureOf(v: View): string {
     ([path, c]) =>
       `${path}[${c.folders.map((f) => `${f.path}:${f.folders}:${f.entries}`).join(",")}][${c.notes.join(",")}][${c.files.join(",")}]`,
   );
-  return `${folders.join(";")}|${[...v.existing].sort().join(",")}`;
+  // La data entra nell'impronta solo se è lei a decidere l'ordine: altrimenti
+  // ogni salvataggio ridisegnerebbe l'albero per niente.
+  const dated = state.explorerSort.startsWith("modified")
+    ? [...v.folders.values()].map((c) => JSON.stringify(c.mtimes ?? {})).join(";")
+    : "";
+  return `${folders.join(";")}|${[...v.existing].sort().join(",")}|${state.explorerSort}|${dated}`;
 }
 
 /// Il contenuto di una cartella nell'ordine in cui si vede, se è caricata.
 function children(path: string): FolderContent | null {
   const content = view.folders.get(path);
-  return content ? sortContent(content, state.meta) : null;
+  return content ? sortContent(content, state.meta, state.explorerSort) : null;
 }
 
 function renderFileList(): void {
@@ -489,6 +621,17 @@ function treeArrows(lifetime: Lifetime): void {
     if (!current) return;
     // I binding rimappabili prevalgono: un accordo con modificatori (anche su
     // Invio, Spazio o frecce) è della tastiera globale, non dell'albero.
+    // Ctrl-C e Ctrl-V copiano file da una cartella all'altra, come nel file
+    // manager del sistema. Nessuno dei due è un accordo della tastiera globale.
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === "c" || e.key === "v")) {
+      const path = current.dataset.path;
+      if (path === undefined) return;
+      const folder = current.hasAttribute("aria-expanded");
+      e.preventDefault();
+      if (e.key === "c") copyEntries(folder ? [] : pickedOr(path));
+      else void pasteEntries(folder ? path : parentPath(path));
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     // Tasto Menu / Shift+F10: il contestuale della voce a fuoco, per la stessa
     // strada del click destro — stesse voci, stessa disponibilità.
@@ -558,13 +701,16 @@ function treeArrows(lifetime: Lifetime): void {
       // I tasti nudi della keymap dell'albero: un accordo globale non può
       // esserlo. L'azione è quella di `shell.explorer.rename/trash`.
       case "F2": {
-        if (path && renameEntry(path)) e.preventDefault();
+        if (path && (renameEntry(path) || renameFolderRow(path))) e.preventDefault();
         return;
       }
       case "Delete": {
         if (path && entryRow(path)) {
           e.preventDefault();
           void trashWithConfirm(path);
+        } else if (path && folderRowOf(path)) {
+          e.preventDefault();
+          void trashFolderWithConfirm(path);
         }
         return;
       }
@@ -727,6 +873,7 @@ function fileRow(id: string): HTMLElement {
   name.className = "row-name";
   name.textContent = childName(id);
   row.appendChild(name);
+  wireDrag(row, id, "note", false);
   // Un file di Excalidraw o di draw.io che Fub non mostra si apre
   // importandolo: la finestra lo prepara, e niente si scrive prima di
   // «Importa».
@@ -745,6 +892,7 @@ function fileRow(id: string): HTMLElement {
       [
         ...(canImportFile(id) ? [{ label: t("explorer.import_drawing"), run: () => void importDrawing({ kind: "vault", path: id }) }] : []),
         { label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
+        { label: t("explorer.copy"), run: () => copyEntries(pickedOr(id)) },
         { label: t("explorer.move"), run: () => void pickMoveFolder(id) },
         { separator: true, label: t("explorer.delete"), hint: "Del", danger: true, run: () => void trashWithConfirm(id) },
       ],
@@ -774,6 +922,14 @@ function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
   const reorder = reorderActions(id);
   showMenuFor(at, [
     { label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
+    { label: t("explorer.open_beside"), run: () => void openDocumentBeside(id, "row") },
+    { label: t("explorer.open_window"), run: () => void openCurrentInNewWindow(id) },
+    { label: t("explorer.duplicate"), run: () => void duplicateEntry(id) },
+    { label: t("explorer.copy"), run: () => copyEntries(pickedOr(id)) },
+    { label: t("explorer.copy_path"), run: () => void copyPath(id) },
+    { label: t("explorer.reveal_system"), run: () => void handToSystem(id, false) },
+    { label: t("explorer.open_system"), run: () => void handToSystem(id, true) },
+    { label: t("explorer.bookmark"), run: () => void bookmarkEntry({ k: "doc", doc: id }, id) },
     ...(move ? [move] : []),
     { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
     { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, id) },
@@ -820,6 +976,12 @@ function reorderAdjacent(row: HTMLElement, delta: -1 | 1): void {
 function entryRow(id: string): HTMLElement | null {
   const row = entry(id)?.querySelector<HTMLElement>(":scope > .tree-row");
   return row && !row.classList.contains("folder") ? row : null;
+}
+
+/// La riga di una cartella dell'albero, se `path` ne è una a schermo.
+function folderRowOf(path: string): HTMLElement | null {
+  const row = entry(path)?.querySelector<HTMLElement>(":scope > .tree-row");
+  return row?.classList.contains("folder") ? row : null;
 }
 
 function treeFocused(): boolean {
@@ -891,7 +1053,32 @@ async function pickMoveFolders(ids: readonly string[]): Promise<void> {
     more: other,
   });
   if (choice === null) return;
-  for (const id of ids) await moveIntoFolder(id, choice);
+  for (const id of ids) {
+    if (folderRowOf(id)) await moveFolderInto(id, choice);
+    else await moveIntoFolder(id, choice);
+  }
+}
+
+/// «In una cartella nuova»: la cartella nasce nella casa comune delle note
+/// scelte (la radice visibile, se ne hanno più d'una) e le note ci entrano con
+/// lo stesso spostamento del menu. Se la cartella non nasce, nessuna si muove.
+async function groupIntoNewFolder(ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const homes = new Set(ids.map(parentOf));
+  const parent = homes.size === 1 ? [...homes][0]! : (state.activeSpace ?? "");
+  const name = (await promptText({ title: t("explorer.selection.group"), label: t("explorer.new_folder") }))?.trim();
+  if (!name) return;
+  const wanted = parent ? `${parent}/${name}` : name;
+  try {
+    await createFolder(wanted);
+  } catch (e) {
+    notify(t("explorer.new_folder_failed", { folder: wanted, reason: errorText(e) }), "guasto");
+    return;
+  }
+  for (const folder of [parent, wanted]) if (folder) state.expanded.add(folder);
+  saveExpanded();
+  for (const id of ids) await moveIntoFolder(id, wanted);
+  await refreshFromKernel(true);
 }
 
 /// Quante cartelle chiede il selettore di destinazione: più di un livello
@@ -1002,9 +1189,27 @@ function folderMenu(at: MouseEvent, path: string): void {
         ? [{ label: t("explorer.import_drawing_here"), run: () => void pickDrawingImport(path) }]
         : []),
       { label: t("explorer.new_folder"), run: () => startNewFolder(path) },
+      ...(copied.length > 0 && copied[0]!.vault === openVaultRoot()
+        ? [{ label: t("explorer.paste"), run: () => void pasteEntries(path) }]
+        : []),
+      { label: t("explorer.import_files"), run: () => pickImport(path, false) },
+      { label: t("explorer.import_folder"), run: () => pickImport(path, true) },
+      ...(hasKernelCommand(IMPORT_PREPARE)
+        ? [{ label: t("explorer.import_notes"), run: () => void launchCommand(IMPORT_PREPARE, { folder: path }) }]
+        : []),
+      ...(hasKernelCommand(VAULT_EXPORT)
+        ? [{ label: t("explorer.export_folder"), run: () => void launchCommand(VAULT_EXPORT, { folder: path }) }]
+        : []),
+      { separator: true, label: t("explorer.rename"), hint: "F2", run: () => void renameFolderRow(path) },
+      { label: t("explorer.move"), run: () => void pickMoveFolders([path]) },
+      { label: t("explorer.copy_path"), run: () => void copyPath(path) },
+      { label: t("explorer.reveal_system"), run: () => void handToSystem(path, false) },
+      { label: t("explorer.bookmark"), run: () => void bookmarkEntry({ k: "folder", path }, path) },
+      { label: t("explorer.search_in_folder"), run: () => searchInFolder(path) },
       { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, path) },
       { label: t("explorer.as_space"), run: () => addSpace(path) },
       ...reorder.map((action, index) => ({ ...action, separator: index === 0 })),
+      { separator: true, label: t("explorer.delete"), hint: "Del", danger: true, run: () => void trashFolderWithConfirm(path) },
     ],
     { kind: "folder", id: path },
   );
@@ -1032,16 +1237,82 @@ function toggleFolder(path: string): void {
 /// Non prende il fuoco: chi rivela sta scrivendo, e il gesto serve a vedere
 /// dove si trova, non a lasciare l'editor. La voce diventa però la fermata del
 /// tab nell'albero, così chi ci entra da tastiera parte da lì.
-async function revealActive(): Promise<void> {
+const FILES_AUTO_REVEAL = "files.auto-reveal";
+const FILES_CONFIRM_TRASH = "files.confirm-trash";
+
+/// Vero se la macchina vuole che l'albero segua la nota aperta.
+let autoReveal = false;
+
+/// Apre le cartelle della nota aperta e la porta in vista, senza toccare il
+/// pannello laterale né il filtro di spazio: se la nota è fuori dallo spazio
+/// attivo l'albero resta com'è.
+async function followActive(): Promise<void> {
   const doc = state.currentDoc;
   if (!doc) return;
-  if (state.activeSpace !== null && !doc.startsWith(`${state.activeSpace}/`)) {
+  if (state.activeSpace !== null && !doc.startsWith(`${state.activeSpace}/`)) return;
+  const root = state.activeSpace ?? "";
+  let opened = false;
+  for (let folder = parentOf(doc); folder !== "" && folder !== root; folder = parentOf(folder)) {
+    if (!state.expanded.has(folder)) {
+      state.expanded.add(folder);
+      opened = true;
+    }
+  }
+  if (opened) {
+    saveExpanded();
+    await refreshFromKernel(true);
+  }
+  if (state.currentDoc !== doc) return;
+  entry(doc)?.scrollIntoView?.({ block: "nearest" });
+}
+
+/// Il filtro per percorso sopra l'albero, finché l'esplora è montata.
+let filter: ExplorerFilter | null = null;
+
+/// Ogni voce e cartella dello spazio corrente, per il filtro: due domande sole
+/// a tutto lo spazio, fatte una volta per filtro.
+async function filterEntries(): Promise<FilterEntry[]> {
+  const space = state.activeSpace;
+  const scope = space ? { path: space, descendants: true } : undefined;
+  const [folders, entries] = await Promise.all([
+    vaultFolders(WITHOUT_PAGE, scope),
+    vaultEntries(WITHOUT_PAGE, undefined, scope),
+  ]);
+  return [
+    ...folders.items.filter((f) => f.path !== space).map((f): FilterEntry => ({ path: f.path, kind: "folder" })),
+    ...entries.items.map((e): FilterEntry => ({ path: e.id, kind: e.kind === "document" ? "document" : "file" })),
+  ];
+}
+
+/// Una voce scelta dall'elenco filtrato: la nota o il file si aprono come
+/// dall'albero, e il filtro resta; una cartella chiude il filtro e si apre
+/// nell'albero.
+function openFiltered(entry: FilterEntry): void {
+  if (entry.kind === "folder") {
+    filter?.hide();
+    void revealPath(entry.path, true);
+  } else if (entry.kind === "document" || canShowFile(entry.path)) {
+    void openDocument(entry.path);
+  } else if (!(canImportFile(entry.path) && importDrawing({ kind: "vault", path: entry.path }))) {
+    notify(t("explorer.no_viewer", { name: childName(entry.path) }), "info");
+  }
+}
+
+async function revealActive(): Promise<void> {
+  const doc = state.currentDoc;
+  if (doc) await revealPath(doc, false);
+}
+
+/// Porta in vista una voce dell'albero: apre le cartelle che la contengono e,
+/// con `open`, la cartella stessa. `false` se dopo il giro la voce non c'è.
+async function revealPath(path: string, open: boolean): Promise<boolean> {
+  if (state.activeSpace !== null && !path.startsWith(`${state.activeSpace}/`)) {
     state.activeSpace = null;
     saveActiveSpace();
   }
   const root = state.activeSpace ?? "";
   let opened = false;
-  for (let folder = parentOf(doc); folder !== "" && folder !== root; folder = parentOf(folder)) {
+  for (let folder = open ? path : parentOf(path); folder !== "" && folder !== root; folder = parentOf(folder)) {
     if (!state.expanded.has(folder)) {
       state.expanded.add(folder);
       opened = true;
@@ -1051,10 +1322,26 @@ async function revealActive(): Promise<void> {
   revealSidePanel("sidebar");
   showPanel("files");
   await refreshFromKernel(true);
-  const li = entry(doc);
-  if (!li) return;
-  roving(doc);
+  const li = entry(path);
+  if (!li) {
+    // Una cartella che non c'è non resta fra le aperte salvate.
+    if (open && state.expanded.delete(path)) saveExpanded();
+    return false;
+  }
+  roving(path);
   li.scrollIntoView?.({ block: "nearest" });
+  return true;
+}
+
+/// La cartella in cui finiscono gli allegati (`files.attachment-folder`),
+/// aperta nell'albero. Una cartella che non c'è ancora si dice, non si crea:
+/// la crea il primo allegato. Con `./` è quella della nota aperta.
+async function revealAttachments(): Promise<void> {
+  const configured = (await settings()).find((item) => item.spec.key === "files.attachment-folder")?.value;
+  const folder = folderForNote(typeof configured === "string" ? configured : DEFAULT_ATTACHMENT_FOLDER, state.currentDoc ?? "");
+  if (!folder || !(await revealPath(folder, true))) {
+    notify(t("explorer.attachments_missing", { folder }));
+  }
 }
 
 /// Accende la nota aperta, nell'albero e fra le appuntate.
@@ -1104,8 +1391,10 @@ function markActive(): void {
 function renderPinned(): void {
   const pinned = state.meta.pinned.filter((id) => view.existing.has(id));
   // U08: la sezione Appuntate si vede soltanto se contiene elementi.
-  pinnedTitleEl.hidden = pinned.length === 0;
-  pinnedListEl.hidden = pinned.length === 0;
+  // Col filtro aperto l'elenco filtrato sta al posto di albero e appuntate.
+  const hidePinned = pinned.length === 0 || filter?.active() === true;
+  pinnedTitleEl.hidden = hidePinned;
+  pinnedListEl.hidden = hidePinned;
   pinnedListEl.innerHTML = "";
   for (const id of pinned) {
     const li = document.createElement("li");
@@ -1250,6 +1539,139 @@ function openSpaceNote(): void {
 // --- crea, rinomina, converti -----------------------------------------------
 
 /// Crea una nota e la apre.
+
+const SORT_LABELS = {
+  manual: "explorer.sort.manual",
+  "name-asc": "explorer.sort.name-asc",
+  "name-desc": "explorer.sort.name-desc",
+  "modified-new": "explorer.sort.modified-new",
+  "modified-old": "explorer.sort.modified-old",
+} as const satisfies Record<ExplorerSort, string>;
+
+/// Il sotto-menu dell'ordine, con quello in uso selezionato.
+function sortMenu(at: MouseEvent): void {
+  showContextMenu(
+    at,
+    EXPLORER_SORTS.map((mode) => ({
+      label: t(SORT_LABELS[mode]),
+      selected: state.explorerSort === mode,
+      run: () => setSort(mode),
+    })),
+  );
+}
+
+/// Cambia l'ordine dell'albero e lo ridisegna: l'impronta lo include.
+function setSort(mode: ExplorerSort): void {
+  if (state.explorerSort === mode) return;
+  state.explorerSort = mode;
+  saveExplorerSort();
+  void refreshFromKernel(true);
+}
+
+/// Chiude ogni cartella aperta.
+function collapseAll(): void {
+  if (state.expanded.size === 0) return;
+  state.expanded.clear();
+  saveExpanded();
+  void refreshFromKernel(true);
+}
+
+/// Apre ogni cartella che l'albero conosce. Un livello si carica quando si
+/// apre, quindi un livello nuovo porta le sue sottocartelle e ci si ferma
+/// quando non ne arrivano più; il tetto difende da vault enormi.
+async function expandAll(): Promise<void> {
+  for (let round = 0; round < EXPAND_ROUNDS; round += 1) {
+    let added = false;
+    for (const content of view.folders.values()) {
+      for (const sub of content.folders) {
+        if (!state.expanded.has(sub.path)) {
+          state.expanded.add(sub.path);
+          added = true;
+        }
+      }
+    }
+    if (!added) break;
+    saveExpanded();
+    await refreshFromKernel(true);
+  }
+}
+
+/// Quanti livelli di profondità `expandAll` scende al massimo.
+const EXPAND_ROUNDS = 12;
+
+/// I file copiati con Ctrl-C, ciascuno col vault da cui viene: un incolla in
+/// un altro vault non troverebbe l'originale.
+let copied: { vault: string | undefined; id: string }[] = [];
+
+/// Le voci scelte se `id` è fra loro, altrimenti `id` da solo.
+function pickedOr(id: string): string[] {
+  const picked = selection?.paths() ?? [];
+  return picked.includes(id) ? picked : [id];
+}
+
+function parentPath(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash < 0 ? "" : path.slice(0, slash);
+}
+
+/// Copia: niente si scrive finché non si incolla.
+function copyEntries(ids: string[]): void {
+  if (ids.length === 0) return;
+  const vault = openVaultRoot();
+  copied = ids.map((id) => ({ vault, id }));
+  notify(t("explorer.copied", { count: String(ids.length) }), "info");
+}
+
+/// Incolla nella cartella: ogni file è una copia dei suoi byte, col nome
+/// dell'originale se lì è libero. Uno che non riesce non ferma gli altri.
+async function pasteEntries(folder: string): Promise<void> {
+  const vault = openVaultRoot();
+  const ids = copied.filter((entry) => entry.vault === vault).map((entry) => entry.id);
+  if (ids.length === 0) return;
+  for (const id of ids) {
+    try {
+      await duplicateNote(id, folder);
+    } catch (error) {
+      notify(t("explorer.paste_failed", { name: childName(id), reason: errorText(error) }), "guasto");
+    }
+  }
+}
+
+/// Duplica il file e apre la copia: il nome libero lo sceglie il kernel.
+async function duplicateEntry(id: string): Promise<void> {
+  try {
+    const copy = await duplicateNote(id);
+    if (copy) await openDocument(copy);
+  } catch (error) {
+    notify(t("explorer.duplicate_failed", { reason: errorText(error) }), "guasto");
+  }
+}
+
+/// Il percorso della voce relativo al vault, negli appunti.
+/// «Segnalibro» dal menu di una riga: carica prima lo stato salvato, così
+/// l'aggiunta non parte da una memoria vuota.
+async function bookmarkEntry(target: BookmarkTarget, path: string): Promise<void> {
+  await loadBookmarks();
+  const title = path.split("/").filter(Boolean).pop() ?? path;
+  if (addBookmark(title, target)) notify(t("bookmarks.saved"), "info");
+  else notify(t("bookmarks.save_failed"), "guasto");
+}
+
+async function copyPath(path: string): Promise<void> {
+  try {
+    await writeClipboardText(path);
+  } catch {
+    // Senza appunti non c'è niente da dire: il gesto è un comodo, non un dato.
+  }
+}
+
+/// Porta nel pannello Cerca una domanda ristretta alla cartella.
+function searchInFolder(path: string): void {
+  revealSidePanel("sidebar");
+  showPanel("search");
+  searchFor(`folder:"${path.replace(/"/g, "")}" `);
+}
+
 async function newNote(folder: string | null = state.activeSpace): Promise<void> {
   try {
     const created = await createNote(undefined, folder ?? undefined);
@@ -1325,15 +1747,18 @@ function startNewFolder(parent: string): void {
 /// Si rinomina il **nome pagina**, non il path: cartella ed estensione restano
 /// quelle di prima, perché è ciò che l'utente si aspetta scrivendo sopra un
 /// titolo. Spostare una nota altrove è un'altra operazione.
-function startRename(row: HTMLElement, id: string, preset?: string, problem?: string): void {
+function startRename(row: HTMLElement, id: string, preset?: string, problem?: string, folder = false): void {
+  // Una cartella si chiama col suo ultimo segmento intero: non ha un'estensione
+  // da tenere da parte, e `v1.2` resta `v1.2`.
+  const current = folder ? childName(id) : pageName(id);
   // Il campo vive **dentro la riga**, non al posto del `li`: il `treeitem`
   // resta dov'è (stesso `data-path`, stesso `aria-selected`), quindi un
   // ridisegno concorrente non sposta il fuoco fuori dall'albero e la riga
   // può mostrare il progresso con `aria-busy`.
   const name = row.querySelector<HTMLElement>(".row-name");
   const input = document.createElement("input");
-  input.value = preset ?? pageName(id);
-  input.setAttribute("aria-label", pageName(id));
+  input.value = preset ?? current;
+  input.setAttribute("aria-label", current);
   if (name) {
     name.replaceWith(input);
   } else {
@@ -1373,7 +1798,7 @@ function startRename(row: HTMLElement, id: string, preset?: string, problem?: st
   const confirm = async () => {
     if (closed || busy) return;
     const newItem = input.value.trim();
-    if (!newItem || newItem === pageName(id)) {
+    if (!newItem || newItem === current) {
       closed = true;
       renderFileList();
       entry(id)?.focus();
@@ -1385,7 +1810,8 @@ function startRename(row: HTMLElement, id: string, preset?: string, problem?: st
     closed = true;
     input.disabled = true;
     row.setAttribute("aria-busy", "true");
-    await renameDoc(id, newItem, input.value);
+    if (folder) await renameFolderTo(id, newItem, input.value);
+    else await renameDoc(id, newItem, input.value);
   };
 
   input.addEventListener("keydown", (e) => {
@@ -1463,11 +1889,130 @@ async function renameDoc(from: string, newPageName: string, typed?: string): Pro
 
 /// Riapre il campo di rinomina sullo stesso `treeitem` col testo digitato:
 /// su errore il nome precedente resta nel vault e l'input non si perde.
-function reopenRename(id: string, typed: string, problem?: string): void {
+function reopenRename(id: string, typed: string, problem?: string, folder = false): void {
   renderFileList();
-  const li = entry(id);
-  if (!li) return;
-  startRename(li, id, typed, problem);
+  const row = folder ? folderRowOf(id) : entry(id);
+  if (!row) return;
+  startRename(row, id, typed, problem, folder);
+}
+
+/// Il campo del nome sulla riga di una cartella (F2, contestuale): `false` se la
+/// riga non c'è.
+function renameFolderRow(path: string): boolean {
+  const row = folderRowOf(path);
+  if (!row) return false;
+  startRename(row, path, undefined, undefined, true);
+  return true;
+}
+
+/// Rinomina in posto di una cartella: cambia l'ultimo segmento, la madre resta.
+/// Il nome passa dalla stessa regola di un nome che nasce, prima del giro IPC.
+async function renameFolderTo(from: string, newName: string, typed: string): Promise<void> {
+  const parent = parentOf(from);
+  const to = normalizedName(parent ? `${parent}/${newName}` : newName);
+  const failure = nameFault(to, "new");
+  if (failure !== null) {
+    reopenRename(from, typed, t("explorer.bad_name", { name: newName, reason: nameFaultText(failure) }), true);
+    return;
+  }
+  const problem = await moveFolder(from, to);
+  if (problem !== null) reopenRename(from, typed, problem, true);
+}
+
+/// Sposta una cartella dentro un'altra (drag, «Sposta in…»): stesso comando
+/// della rinomina, col path intero nuovo.
+async function moveFolderInto(path: string, folderPath: string): Promise<void> {
+  if (folderPath === path || folderPath.startsWith(`${path}/`)) return;
+  const to = folderPath ? `${folderPath}/${childName(path)}` : childName(path);
+  const problem = await moveFolder(path, to);
+  if (problem !== null) notify(problem, "guasto");
+}
+
+/// `folder.rename`, con ciò che gli serve intorno: i buffer in salvo prima — il
+/// kernel riscrive i link entranti di ogni voce che sposta —, il progresso sulla
+/// riga, e le cartelle aperte e lo spazio attivo che seguono il path nuovo.
+/// Torna il perché di un rifiuto, `null` se è andata.
+async function moveFolder(from: string, to: string): Promise<string | null> {
+  if (to === from || moving.has(from)) return null;
+  if (await ensureSaved()) return t("explorer.folder_move_failed", { folder: from, to, reason: t("explorer.folder_unsaved") });
+  moving.add(from);
+  markMoving(from, true);
+  try {
+    const outcome = await renameFolder(from, to);
+    followFolder(from, to);
+    notify(outcome.notify ?? t("explorer.folder_moved", { folder: from, to }), "info", undoGesture(outcome.undo !== null));
+  } catch (e) {
+    return t("explorer.folder_move_failed", { folder: from, to, reason: errorText(e) });
+  } finally {
+    moving.delete(from);
+    markMoving(from, false);
+  }
+  const parent = parentOf(to);
+  if (parent) state.expanded.add(parent);
+  saveExpanded();
+  await refreshFromKernel(true);
+  return null;
+}
+
+/// Le cartelle aperte, le finestre dei livelli e lo spazio attivo sono stato
+/// della shell scritto per path: una cartella che cambia path se li porta
+/// dietro, o l'albero si richiuderebbe sotto le mani di chi l'ha spostata.
+function followFolder(from: string, to: string): void {
+  const moved = (path: string): string | null =>
+    path === from ? to : path.startsWith(`${from}/`) ? `${to}${path.slice(from.length)}` : null;
+  for (const path of [...state.expanded]) {
+    const next = moved(path);
+    if (next === null) continue;
+    state.expanded.delete(path);
+    state.expanded.add(next);
+  }
+  for (const [path, size] of [...levelWindows]) {
+    const next = moved(path);
+    if (next === null) continue;
+    levelWindows.delete(path);
+    levelWindows.set(next, size);
+  }
+  saveExpanded();
+  const space = state.activeSpace === null ? null : moved(state.activeSpace);
+  if (space !== null) {
+    state.activeSpace = space;
+    saveActiveSpace();
+  }
+}
+
+/// Il gesto «Annulla» accanto all'esito di un'operazione sulle cartelle.
+function undoGesture(undoable: boolean): { label: string; run: () => void } | undefined {
+  if (!undoable) return undefined;
+  return {
+    label: t("app.undo"),
+    run: () => void undoLastOperation().catch((error: unknown) =>
+      notify(t("trash.undo_failed", { reason: errorText(error) }), "guasto")),
+  };
+}
+
+/// Una cartella nel cestino del vault, con tutto ciò che contiene: si chiede,
+/// perché sono molte voci con un gesto solo, finché `files.confirm-trash` non
+/// è spenta; un'impostazione che non si legge chiede. Il cestino è quello del
+/// vault anche quando `files.trash` sceglie il sistema: è da lì che
+/// l'annullamento le riporta tutte insieme.
+async function trashFolderWithConfirm(path: string): Promise<void> {
+  const ask = await settings()
+    .then((entries) => entries.find((entry) => entry.spec.key === FILES_CONFIRM_TRASH)?.value !== false)
+    .catch(() => true);
+  const ok = !ask || await confirm(t("explorer.folder_trash_confirm", { folder: childName(path) }), {
+    title: t("explorer.folder_trash_title"),
+    okLabel: t("explorer.delete"),
+  }).catch(() => false);
+  if (!ok) return;
+  if (await ensureSaved()) return;
+  try {
+    const outcome = await trashFolder(path);
+    notify(outcome.notify ?? t("explorer.folder_trashed", { folder: path }), "info", undoGesture(outcome.undo !== null));
+  } catch (e) {
+    notify(t("explorer.folder_trash_failed", { folder: path, reason: errorText(e) }), "guasto");
+    return;
+  }
+  await refreshFromKernel(true);
 }
 
 /// **Il testo non salvato esce prima**, e se non ce la fa l'operazione non parte.
@@ -1523,22 +2068,32 @@ async function convertToFolder(id: string): Promise<void> {
 // Due gesti: riordinare tra fratelli dello stesso tipo (l'ordine finisce in
 // `meta.order`, per cartella) e trascinare una nota SU una cartella per
 // spostarcela dentro (che è un rename: il kernel sposta il file e riscrive i
-// wikilink). Le cartelle non si spostano: sarebbero N rename, un'operazione
-// che merita di più di un gesto ambiguo.
+// wikilink). Una cartella trascinata su un'altra ci entra con tutto ciò che
+// contiene: è `folder.rename`, una rinomina per voce con un annullamento solo.
 //
 // Questo gesto è della shell (decisione 0157): il contratto non dichiara un
 // bersaglio di rilascio, e un terzo non ha una porta finché non esiste una
 // seconda superficie che trascina. Il giorno che ci sarà, la forma è un campo
 // in fondo a `ui-node` e il carico nel `payload` di `ui-action`.
 
-function wireDrag(row: HTMLElement, path: string, kind: "note" | "folder"): void {
+function wireDrag(row: HTMLElement, path: string, kind: "note" | "folder", isNote = kind === "note"): void {
   row.draggable = true;
   row.addEventListener("dragstart", (e) => {
-    drag = { path, kind, parent: parentOf(path) };
-    // Spostare dentro l'albero, o lasciarla cadere in una nota per collegarla.
-    e.dataTransfer!.effectAllowed = kind === "note" ? "copyMove" : "move";
-    e.dataTransfer!.setData("text/plain", path);
-    if (kind === "note") e.dataTransfer!.setData(NOTE_DRAG_TYPE, path);
+    // Una voce della scelta multipla porta con sé tutte le scelte.
+    const picked = selection?.paths() ?? [];
+    const group = picked.length > 1 && picked.includes(path) ? picked : [path];
+    drag = { path, kind, parent: parentOf(path), group };
+    // Spostare dentro l'albero, lasciarla cadere in una nota per collegarla,
+    // o fuori, in un altro programma, come il file vero che è sul disco.
+    e.dataTransfer!.effectAllowed = "copyMove";
+    e.dataTransfer!.setData("text/plain", group.join("\n"));
+    offerOutside(e.dataTransfer!, openVaultRoot(), group);
+    if (isNote && group.length === 1) e.dataTransfer!.setData(NOTE_DRAG_TYPE, path);
+    // Le voci per un documento che le riceve: le cartelle non ci entrano.
+    const entries: DraggedEntry[] = group
+      .filter((each) => !folderRowOf(each))
+      .map((each) => ({ id: each, note: each === path ? isNote : !entry(each)?.querySelector(":scope > .tree-row.file") }));
+    if (entries.length) e.dataTransfer!.setData(ENTRIES_DRAG_TYPE, JSON.stringify(entries));
   });
   row.addEventListener("dragend", () => {
     drag = null;
@@ -1570,7 +2125,7 @@ function wireDrag(row: HTMLElement, path: string, kind: "note" | "folder"): void
     clearDropMarks();
     if (!gesture || !drag) return;
     e.preventDefault();
-    if (gesture === "into") await moveIntoFolder(drag.path, path);
+    if (gesture === "into") await moveGroupInto(drag, path);
     else applyReorder(drag.parent, childName(drag.path), childName(path), gesture === "before");
     drag = null;
   });
@@ -1587,7 +2142,9 @@ function dropGesture(
 ): "before" | "after" | "into" | null {
   if (!drag || drag.path === path) return null;
   const siblings = drag.kind === kind && drag.parent === parentOf(path);
-  const inside = kind === "folder" && drag.kind === "note" && drag.parent !== path;
+  // Una cartella entra in un'altra, ma non in sé stessa né in una sua figlia.
+  const ownSubtree = drag.group.some((each) => path === each || path.startsWith(`${each}/`));
+  const inside = kind === "folder" && drag.parent !== path && !ownSubtree;
   // `offsetY` sarebbe relativo all'elemento più interno sotto il cursore (uno
   // span, magari): la frazione va calcolata sulla riga intera.
   const box = row.getBoundingClientRect();
@@ -1679,7 +2236,7 @@ function markMoving(id: string, busy: boolean): void {
 function wireRootDropTarget(lifetime: Lifetime): void {
   lifetime.listen(filesTitleEl, "dragover", (e) => {
     const root = state.activeSpace ?? "";
-    if (drag?.kind === "note" && drag.parent !== root) {
+    if (drag && drag.parent !== root) {
       e.preventDefault();
       filesTitleEl.classList.add("drop-into");
     }
@@ -1687,9 +2244,112 @@ function wireRootDropTarget(lifetime: Lifetime): void {
   lifetime.listen(filesTitleEl, "dragleave", () => filesTitleEl.classList.remove("drop-into"));
   lifetime.listen(filesTitleEl, "drop", async (e) => {
     filesTitleEl.classList.remove("drop-into");
-    if (drag?.kind !== "note") return;
+    if (!drag) return;
     e.preventDefault();
-    await moveIntoFolder(drag.path, state.activeSpace ?? "");
+    await moveGroupInto(drag, state.activeSpace ?? "");
     drag = null;
   });
+}
+
+/// Sposta ciò che si trascina dentro una cartella: la voce presa o, se era
+/// nella scelta, tutte le scelte, una alla volta e con lo stesso comando del
+/// menu. Una cartella non entra in sé stessa né in una figlia: la si salta.
+async function moveGroupInto(dragged: NonNullable<typeof drag>, folder: string): Promise<void> {
+  for (const path of dragged.group) {
+    if (path === folder || folder.startsWith(`${path}/`) || parentOf(path) === folder) continue;
+    if (folderRowOf(path) || (path === dragged.path && dragged.kind === "folder")) await moveFolderInto(path, folder);
+    else await moveIntoFolder(path, folder);
+  }
+  if (dragged.group.length > 1) selection?.clear();
+}
+
+/// La cartella che riceve un rilascio da fuori sotto `target`: la cartella
+/// stessa se è la sua riga, la madre se è una nota o un file, la radice
+/// visibile (vault o spazio attivo) altrimenti.
+function outsideTarget(target: EventTarget | null): string {
+  const row = target instanceof Element ? target.closest<HTMLElement>(".tree-row") : null;
+  const path = row?.closest<HTMLElement>("li[data-path]")?.dataset.path ?? row?.dataset.path;
+  if (!row || path === undefined) return state.activeSpace ?? "";
+  return row.classList.contains("folder") ? path : parentOf(path);
+}
+
+/// File e cartelle del sistema lasciati cadere sull'albero o sul titolo del
+/// pannello. Una cartella chiusa sotto il cursore si apre dopo una sosta, come
+/// per un trascinamento interno.
+function wireOutsideDrops(lifetime: Lifetime): void {
+  const over = (e: DragEvent) => {
+    if (drag || !carriesFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer!.dropEffect = "copy";
+    const folder = e.currentTarget === filesTitleEl ? state.activeSpace ?? "" : outsideTarget(e.target);
+    clearDropMarks();
+    const row = folder ? folderRowOf(folder) : null;
+    (row ?? filesTitleEl).classList.add("drop-into");
+    if (row && !state.expanded.has(folder)) scheduleHoverOpen(folder);
+  };
+  const drop = async (e: DragEvent) => {
+    if (drag || !carriesFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    cancelHoverOpen();
+    clearDropMarks();
+    filesTitleEl.classList.remove("drop-into");
+    const folder = e.currentTarget === filesTitleEl ? state.activeSpace ?? "" : outsideTarget(e.target);
+    let dropped: Dropped;
+    try {
+      dropped = await readDropped(e.dataTransfer!);
+    } catch (error) {
+      notify(t("explorer.import_failed", { reason: errorText(error) }), "guasto");
+      return;
+    }
+    await importHere(dropped, folder);
+  };
+  const leave = (e: DragEvent) => {
+    const into = e.relatedTarget instanceof Node ? e.relatedTarget : null;
+    if (into && (fileListEl.contains(into) || filesTitleEl.contains(into))) return;
+    clearDropMarks();
+    filesTitleEl.classList.remove("drop-into");
+    cancelHoverOpen();
+  };
+  for (const target of [fileListEl, filesTitleEl]) {
+    lifetime.listen(target, "dragover", over);
+    lifetime.listen(target, "dragleave", leave);
+    lifetime.listen(target, "drop", (e) => void drop(e));
+  }
+}
+
+/// Il selettore dei file del sistema, per chi non trascina: «Importa file…»
+/// sceglie dei file, «Importa una cartella…» una cartella intera.
+function pickImport(folder: string, wholeFolder: boolean): void {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.multiple = true;
+  if (wholeFolder) input.webkitdirectory = true;
+  input.addEventListener("change", () => {
+    if (input.files?.length) void importHere(pickedFiles(input.files), folder);
+  }, { once: true });
+  input.click();
+}
+
+/// Importa e racconta: quante voci sono entrate e, una per una, quelle che
+/// non sono entrate col loro perché.
+async function importHere(dropped: Dropped, folder: string): Promise<void> {
+  if (!dropped.files.length && !dropped.folders.length) return;
+  let outcome;
+  try {
+    outcome = await importIntoVault(dropped, folder);
+  } catch (error) {
+    notify(t("explorer.import_failed", { reason: errorText(error) }), "guasto");
+    return;
+  }
+  if (folder) state.expanded.add(folder);
+  saveExpanded();
+  const where = folder || t("explorer.root");
+  if (outcome.imported.length) {
+    notify(t("explorer.imported", { count: String(outcome.imported.length), folder: where }), "info");
+  }
+  if (outcome.skipped.length) {
+    const list = outcome.skipped.map((each) => `${each.name}: ${each.reason}`).join("; ");
+    notify(t("explorer.import_skipped", { count: String(outcome.skipped.length), list }), "guasto");
+  }
+  await refreshFromKernel(true);
 }

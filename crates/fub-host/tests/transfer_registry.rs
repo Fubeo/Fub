@@ -240,3 +240,62 @@ fn an_unknown_target_is_still_refused() {
         "{refused:?}"
     );
 }
+
+/// Il flusso della shell: `import.prepare` dice quale job ha accodato, e chi
+/// aspetta riconosce il suo `job_done` dall'id e non da una frase. I byte
+/// arrivano al job dallo spazio privato, non dentro il payload.
+#[test]
+fn prepare_and_commit_name_their_jobs_and_import_for_real() {
+    let (_dir, root, host) = open(&[]);
+    let events = host.subscribe(None).unwrap();
+    let run = |command: &str, args: serde_json::Value| -> serde_json::Value {
+        let outcome = host
+            .invoke_user_command(None, command, args, InvokeMode::Apply)
+            .unwrap_or_else(|e| panic!("{command}: {e}"));
+        let fub_abi::command::CommandEffect::Custom { ns, payload } = outcome.effect else {
+            panic!("{command}: l'esito porta il job");
+        };
+        assert_eq!(ns, "fub.transfer.queued");
+        let id = payload["job_id"]
+            .as_str()
+            .expect("id come stringa")
+            .to_owned();
+        loop {
+            let notice = events
+                .recv_timeout(std::time::Duration::from_secs(30))
+                .expect("the job ends");
+            if let fub_abi::Event::JobDone {
+                id: done, result, ..
+            } = notice.event
+            {
+                if done.0.to_string() == id {
+                    break result.unwrap_or_else(|e| panic!("{command}: {e}"));
+                }
+            }
+        }
+    };
+    let source = ImportSource::text_source("Hegel.zz", "fenomenologia");
+    let manifest = run(
+        "import.prepare",
+        serde_json::json!({
+            "job": "shell-1",
+            "source_json": serde_json::to_string(&source).unwrap(),
+            "request_json": serde_json::to_string(&ImportRequest::apply()).unwrap(),
+        }),
+    );
+    assert_eq!(
+        manifest["preview"]["documents"][0]["doc"], "Hegel.md",
+        "{manifest}"
+    );
+    assert!(!root.join("Hegel.md").exists(), "l'anteprima non scrive");
+    run("import.commit", serde_json::json!({ "job": "shell-1" }));
+    assert_eq!(
+        std::fs::read_to_string(root.join("Hegel.md")).unwrap(),
+        "zz: fenomenologia"
+    );
+    run("import.rollback", serde_json::json!({ "job": "shell-1" }));
+    assert!(
+        !root.join("Hegel.md").exists(),
+        "il rollback toglie ciò che è entrato"
+    );
+}

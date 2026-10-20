@@ -62,6 +62,8 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // Mostra nell'albero il documento attivo. **Senza accordo**: è un gesto di
     // orientamento raro, e `Mod-Shift-e` porta già l'albero sotto gli occhi.
     ("shell.explorer.reveal", None),
+    ("shell.explorer.reveal_attachments", None),
+    ("shell.explorer.filter", None),
     // Rinomina e cestina la voce dell'albero col fuoco, o la nota attiva.
     // **Senza accordo**: dentro l'albero li prendono F2 e Canc, tasti nudi
     // della sua keymap locale che un accordo globale non può essere; fuori,
@@ -69,6 +71,16 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // deve poter fare.
     ("shell.explorer.rename", None),
     ("shell.explorer.trash", None),
+    // Comprimi o espandi ogni cartella dell'albero. **Senza accordo**: sono
+    // gesti d'ordine, non di scrittura, e la palette li trova per nome.
+    ("shell.explorer.collapse_all", None),
+    ("shell.explorer.expand_all", None),
+    // Ordine dell'albero: a mano, per nome (A–Z, Z–A), per data di modifica.
+    ("shell.explorer.sort.manual", None),
+    ("shell.explorer.sort.name_asc", None),
+    ("shell.explorer.sort.name_desc", None),
+    ("shell.explorer.sort.modified_new", None),
+    ("shell.explorer.sort.modified_old", None),
     // L'accordo che era conteso. Lo tiene la shell: qui il gesto è completo —
     // si preme e la ricerca è sotto gli occhi — mentre di là serviva compilare
     // un parametro obbligatorio prima di vedere qualcosa (0081).
@@ -95,6 +107,9 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // lavoro e non mentre si lavora, e il comando c'è soltanto dove la
     // superficie dichiara un export.
     ("shell.doc.export", None),
+    // Il link al titolo o al paragrafo sotto il cursore. **Senza accordo**:
+    // si usa ogni tanto, e lo si cerca dalla palette.
+    ("shell.doc.copy_anchor_link", None),
     // La sessione live di un disegno (ADR 0205): avviarla col QR, riaprirne
     // il pannello, terminarla. **Senza accordo**: si avvia una volta per
     // lezione o riunione, e terminarla con un tasto premuto per sbaglio
@@ -138,11 +153,14 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.tab.move.pane.next", Some("Mod-Alt-PageDown")),
     ("shell.tab.close.others", None),
     ("shell.tab.close.unpinned", None),
-    // **Senza accordo**: `Mod-Alt-←/→` dentro l'editor sono di CodeMirror.
-    // Indietro e avanti passano dai tasti laterali del mouse e dai due
-    // bottoni nella toolbar del riquadro.
-    ("shell.pane.back", None),
-    ("shell.pane.forward", None),
+    // `Alt-←/→`, come nei browser e nei file manager. Fuori dall'editor
+    // (esplora, lettura, toolbar) cambiano nota; dentro l'editor vince
+    // CodeMirror col salto di sintassi (salto di parola su macOS), e lì
+    // restano i tasti laterali del mouse e i bottoni della toolbar. Non
+    // `Mod-Alt-←/→`, che nelle tabelle muovono le colonne, né `Mod-Alt-[`,
+    // che sulle tastiere italiane è AltGr con la parentesi.
+    ("shell.pane.back", Some("Alt-ArrowLeft")),
+    ("shell.pane.forward", Some("Alt-ArrowRight")),
     ("shell.pane.link", None),
     ("shell.pane.unlink", None),
     ("shell.bookmarks.toggle", None),
@@ -174,6 +192,28 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.tab.reopen", Some("Mod-Shift-t")),
     ("shell.tab.next", Some("Mod-PageDown")),
     ("shell.tab.previous", Some("Mod-PageUp")),
+    // In ordine d'uso, come Obsidian: tenendo giù il modificatore si scende.
+    ("shell.tab.recent", Some("Mod-Tab")),
+    ("shell.tab.recent.back", Some("Mod-Shift-Tab")),
+    // La scheda per posizione, come nei browser: `Mod-1…8` la n-esima,
+    // `Mod-9` l'ultima. Un editor che usa lo stesso accordo (la maschera del
+    // disegno, `Mod-7`) lo tiene, perché la shell cede all'evento già preso.
+    ("shell.tab.go.1", Some("Mod-1")),
+    ("shell.tab.go.2", Some("Mod-2")),
+    ("shell.tab.go.3", Some("Mod-3")),
+    ("shell.tab.go.4", Some("Mod-4")),
+    ("shell.tab.go.5", Some("Mod-5")),
+    ("shell.tab.go.6", Some("Mod-6")),
+    ("shell.tab.go.7", Some("Mod-7")),
+    ("shell.tab.go.8", Some("Mod-8")),
+    ("shell.tab.go.last", Some("Mod-9")),
+    // Piega e apre tutti i titoli e le liste della nota col fuoco, o un
+    // livello alla volta.
+    ("shell.fold.all", None),
+    ("shell.unfold.all", None),
+    ("shell.fold.more", None),
+    ("shell.fold.less", None),
+    ("shell.fold.properties", None),
     ("shell.zoom.in", Some("Mod-=")),
     ("shell.zoom.out", Some("Mod--")),
     ("shell.zoom.reset", Some("Mod-0")),

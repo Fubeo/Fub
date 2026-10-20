@@ -13,10 +13,10 @@ import type { BufferedSurface, SurfaceMountContext } from "../core/registry";
 import { uniformRowRange } from "../grid/engine";
 import {
   BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS,
-  allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, deriveBaseRows, expectedProperty,
+  allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, deriveBaseRows, expectedProperty, groupBaseRows,
   fetchAllDocuments, parseBaseEmbed, parseBaseViews, persistBaseView,
   planBaseView, prepareBaseMutations, restoreBaseView,
-  type BaseCellValue, type BasePlan, type BaseRow, type BaseSurfaceDeps,
+  type BaseCellValue, type BaseGroupOrder, type BasePlan, type BaseRow, type BaseSurfaceDeps,
 } from "./data";
 import { writeClipboardText } from "../../platform/clipboard";
 
@@ -59,6 +59,12 @@ export function mountBaseSurface(
   toolbar.className = "base-toolbar";
   const views = document.createElement("select");
   views.className = "base-views";
+  // «Raggruppa»: una scelta della superficie, ricordata per vista come le
+  // corsie della bacheca; il file `.base` non si riscrive.
+  const groupBy = document.createElement("select");
+  groupBy.className = "base-group-by";
+  const groupOrder = document.createElement("select");
+  groupOrder.className = "base-group-order";
   const search = document.createElement("input");
   search.type = "search";
   search.className = "base-search";
@@ -72,7 +78,7 @@ export function mountBaseSurface(
   status.setAttribute("role", "status");
   const body = document.createElement("div");
   body.className = "base-body";
-  toolbar.append(views, search, newNote, copyCsv, downloadCsv, status);
+  toolbar.append(views, groupBy, groupOrder, search, newNote, copyCsv, downloadCsv, status);
   root.append(toolbar, body);
   context.parent.replaceChildren(root);
 
@@ -92,6 +98,61 @@ export function mountBaseSurface(
   let writeEpoch = 0;
   let persistQueue = Promise.resolve();
   const localLanes = new Map<string, Set<string>>();
+  // I gruppi chiusi di tabella, schede ed elenco, per vista: stato della
+  // superficie, come lo scroll, che il file `.base` non conosce.
+  const collapsedGroups = new Map<string, Set<string>>();
+  const groupToggle = (name: string, count: number): HTMLButtonElement => {
+    const view = plan?.view ?? "";
+    const closed = collapsedGroups.get(view)?.has(name) === true;
+    const toggle = button(`${name || "∅"} (${count})`, () => {
+      let names = collapsedGroups.get(view);
+      if (!names) { names = new Set(); collapsedGroups.set(view, names); }
+      if (!names.delete(name)) names.add(name);
+      draw();
+    });
+    toggle.className = "base-group-toggle";
+    toggle.setAttribute("aria-expanded", String(!closed));
+    return toggle;
+  };
+  const groupOpen = (name: string) => collapsedGroups.get(plan?.view ?? "")?.has(name) !== true;
+  // Assente: vale il `group:` del file; "" è «senza gruppi».
+  const groupChoices = new Map<string, string>();
+  const groupOrders = new Map<string, BaseGroupOrder>();
+  const orderOf = (): BaseGroupOrder => groupOrders.get(plan?.view ?? "") ?? "rows";
+  const regroupable = () => plan?.viewType === "table" || plan?.viewType === "cards" || plan?.viewType === "list";
+  const grouping = (): string | null => {
+    if (!plan || !regroupable()) return plan?.group ?? null;
+    const choice = groupChoices.get(plan.view);
+    if (choice === undefined) return plan.group;
+    if (choice === "") return null;
+    return plan.columns.includes(choice) || choice === plan.group ? choice : plan.group;
+  };
+  const fillGroupBy = (): void => {
+    groupBy.hidden = !regroupable();
+    groupOrder.hidden = !regroupable() || grouping() === null;
+    const order = orderOf();
+    groupOrder.replaceChildren(...(["rows", "asc", "desc"] as const).map((value) => {
+      const each = document.createElement("option");
+      each.value = value;
+      each.textContent = t(`base.group.order.${value}`);
+      each.selected = value === order;
+      return each;
+    }));
+    const current = grouping() ?? "";
+    const keys = [...(plan?.columns ?? [])];
+    if (plan?.group && !keys.includes(plan.group)) keys.push(plan.group);
+    const option = (value: string, label: string) => {
+      const each = document.createElement("option");
+      each.value = value;
+      each.textContent = label;
+      each.selected = value === current;
+      return each;
+    };
+    groupBy.replaceChildren(
+      option("", t("base.group.none")),
+      ...keys.map((key) => option(key, t("base.group.by_named", { name: plan?.columnLabels[key] ?? key }))),
+    );
+  };
   const downloads = new Map<string, number>();
   const saveLanes = (view: string) => {
     const laneNames = [...(localLanes.get(view) ?? [])];
@@ -143,6 +204,15 @@ export function mountBaseSurface(
         names = nextNames;
         activeView = chosen;
         plan = nextPlan;
+        const savedGroup = await deps.viewState<unknown>(`base.group:${context.documentId}:${nextPlan.view}`);
+        if (!valid(ticket)) return;
+        if (savedGroup === null) groupChoices.delete(nextPlan.view);
+        else if (typeof savedGroup === "string" && savedGroup.length <= 256) groupChoices.set(nextPlan.view, savedGroup);
+        else throw new Error("base: gruppo salvato malformato");
+        const savedOrder = await deps.viewState<unknown>(`base.group-order:${context.documentId}:${nextPlan.view}`);
+        if (!valid(ticket)) return;
+        if (savedOrder === "asc" || savedOrder === "desc" || savedOrder === "rows") groupOrders.set(nextPlan.view, savedOrder);
+        else groupOrders.delete(nextPlan.view);
         if (nextPlan.viewType === "kanban") {
           const saved = await deps.viewState<unknown>(`base.kanban-lanes:${context.documentId}:${nextPlan.view}`);
           if (!valid(ticket)) return;
@@ -151,6 +221,7 @@ export function mountBaseSurface(
           else throw new Error("base: corsie salvate malformate");
         }
         fillOptions();
+        fillGroupBy();
       }
       const nextPlan = plan;
       if (!nextPlan) throw new Error("base: piano assente");
@@ -240,13 +311,31 @@ export function mountBaseSurface(
       td.style.cssText = `height:${height}px;padding:0;border:0`;
       return tr;
     };
+    // Con un gruppo la tabella intercala una riga d'intestazione per gruppo,
+    // alta come le altre: la finestra virtuale resta a righe uniformi.
+    const key = grouping();
+    const items: ({ group: string; count: number } | BaseRow)[] = key
+      ? groupBaseRows(page, key, orderOf()).flatMap(({ name, rows }) => [{ group: name, count: rows.length }, ...(groupOpen(name) ? rows : [])])
+      : page;
     const renderWindow = () => {
-      const range = uniformRowRange(page.length, viewport.scrollTop, viewport.clientHeight || TABLE_VIEWPORT_HEIGHT, TABLE_ROW_HEIGHT);
+      const range = uniformRowRange(items.length, viewport.scrollTop, viewport.clientHeight || TABLE_VIEWPORT_HEIGHT, TABLE_ROW_HEIGHT);
       if (!range) { tableBody.replaceChildren(); return; }
       const fragment = document.createDocumentFragment();
       if (range.start) fragment.append(spacer(range.start * TABLE_ROW_HEIGHT));
       for (let index = range.start; index <= range.end; index++) {
-        const row = page[index]!;
+        const item = items[index]!;
+        if ("group" in item) {
+          const tr = document.createElement("tr");
+          tr.className = "base-group-row";
+          tr.dataset.group = item.group;
+          tr.style.height = `${TABLE_ROW_HEIGHT}px`;
+          const cell = tr.insertCell();
+          cell.colSpan = (plan?.columns.length ?? 0) + 1;
+          cell.append(groupToggle(item.group, item.count));
+          fragment.append(tr);
+          continue;
+        }
+        const row = item;
         const tr = document.createElement("tr");
         tr.dataset.doc = row.doc;
         tr.style.height = `${TABLE_ROW_HEIGHT}px`;
@@ -260,7 +349,7 @@ export function mountBaseSurface(
         }
         fragment.append(tr);
       }
-      if (range.end + 1 < page.length) fragment.append(spacer((page.length - range.end - 1) * TABLE_ROW_HEIGHT));
+      if (range.end + 1 < items.length) fragment.append(spacer((items.length - range.end - 1) * TABLE_ROW_HEIGHT));
       tableBody.replaceChildren(fragment);
     };
     viewport.addEventListener("scroll", renderWindow);
@@ -269,6 +358,21 @@ export function mountBaseSurface(
     renderWindow();
   };
   const drawCards = (page: BaseRow[], list: boolean): void => {
+    const key = grouping();
+    if (!key) { body.append(gallery(page, list)); return; }
+    // Un gruppo è una sezione col suo titolo, che apre e chiude le sue schede.
+    for (const { name, rows } of groupBaseRows(page, key, orderOf())) {
+      const section = document.createElement("section");
+      section.className = "base-group";
+      section.dataset.group = name;
+      const heading = document.createElement("h3");
+      heading.append(groupToggle(name, rows.length));
+      section.append(heading);
+      if (groupOpen(name)) section.append(gallery(rows, list));
+      body.append(section);
+    }
+  };
+  const gallery = (page: BaseRow[], list: boolean): HTMLElement => {
     const gallery = document.createElement("div");
     gallery.className = list ? "base-list" : "base-cards";
     for (const row of page) {
@@ -286,7 +390,7 @@ export function mountBaseSurface(
       }
       gallery.append(card);
     }
-    body.append(gallery);
+    return gallery;
   };
   const drawKanban = (page: BaseRow[]): void => {
     const key = plan?.group, view = plan?.view;
@@ -597,6 +701,9 @@ export function mountBaseSurface(
   ];
   const relabel = () => {
     views.setAttribute("aria-label", labels().view);
+    groupBy.setAttribute("aria-label", t("base.group.by"));
+    groupOrder.setAttribute("aria-label", t("base.group.order"));
+    if (plan) fillGroupBy();
     search.setAttribute("aria-label", labels().search);
     search.placeholder = labels().search;
     newNote.setAttribute("aria-label", t("explorer.new.hint"));
@@ -614,6 +721,23 @@ export function mountBaseSurface(
       persistQueue = persistQueue.then(() => destroyed ? undefined : persistBaseView(deps, context.documentId, chosen)).catch(presentError);
     }
     void reload(true);
+  });
+  groupBy.addEventListener("change", () => {
+    const view = plan?.view;
+    if (!view) return;
+    const choice = groupBy.value;
+    groupChoices.set(view, choice);
+    persistQueue = persistQueue.then(() => destroyed ? undefined : deps.setViewState(`base.group:${context.documentId}:${view}`, choice)).catch(presentError);
+    fillGroupBy();
+    draw();
+  });
+  groupOrder.addEventListener("change", () => {
+    const view = plan?.view;
+    const order = groupOrder.value;
+    if (!view || (order !== "rows" && order !== "asc" && order !== "desc")) return;
+    groupOrders.set(view, order);
+    persistQueue = persistQueue.then(() => destroyed ? undefined : deps.setViewState(`base.group-order:${context.documentId}:${view}`, order)).catch(presentError);
+    draw();
   });
   search.addEventListener("input", () => { displayed = VISIBLE_STEP; draw(); });
   const modes = baseSurfaceModes();

@@ -2300,6 +2300,11 @@ kbd,
 .files-panel .plain-list + .plain-list {
   margin-top: var(--space-4);
 }
+/* Il filtro per percorso sta sopra l'albero (`shell.explorer.filter`): un
+   campo largo quanto le righe, staccato da ciò che filtra. */
+.explorer-filter {
+  padding: 0 var(--space-2) var(--space-3);
+}
 
 /* **Una riga del cassetto**: nota o cartella, nell'albero o tra le appuntate.
    È larga quanto il cassetto a ogni profondità — il rientro è un margine
@@ -2847,6 +2852,23 @@ kbd,
   -webkit-line-clamp: 3;
 }
 .hit-snippet mark {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--highlight);
+  color: var(--text);
+}
+/* «Più contesto»: le righe attorno all'occorrenza, come stanno nella nota. */
+.hit-context {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  line-height: 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.hit-context mark {
   padding: 0 var(--space-1);
   border-radius: var(--radius-xs);
   background: var(--highlight);
@@ -3481,6 +3503,12 @@ kbd,
 .sheet-title:hover {
   color: var(--text);
 }
+/* Una cartella del percorso apre l'esplora: sotto il puntatore si sottolinea,
+   perché il clic lì porta altrove. */
+.sheet-title [data-folder]:hover {
+  text-decoration: underline;
+  cursor: pointer;
+}
 .sheet-title:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 3px;
@@ -3915,6 +3943,10 @@ kbd,
 .markdown-rendered ::selection {
   background: var(--doc-selection);
 }
+/* «Interruzioni di riga rigorose» spente: un a capo singolo resta un a capo. */
+.pane-editor[data-line-breaks="keep"] .markdown-rendered p {
+  white-space: pre-line;
+}
 .markdown-rendered strong,
 .cm-editor .cm-content .cm-fub-strong {
   font-weight: var(--weight-bold);
@@ -4222,14 +4254,16 @@ kbd,
 .markdown-rendered .callout[data-callout="info"],
 .markdown-rendered .callout[data-callout="abstract"],
 .markdown-rendered .callout[data-callout="summary"],
-.markdown-rendered .callout[data-callout="todo"] {
+.markdown-rendered .callout[data-callout="todo"],
+.markdown-rendered .callout[data-callout="tldr"] {
   background: var(--info-wash);
 }
 .markdown-rendered .callout[data-callout="note"] > .callout-title,
 .markdown-rendered .callout[data-callout="info"] > .callout-title,
 .markdown-rendered .callout[data-callout="abstract"] > .callout-title,
 .markdown-rendered .callout[data-callout="summary"] > .callout-title,
-.markdown-rendered .callout[data-callout="todo"] > .callout-title {
+.markdown-rendered .callout[data-callout="todo"] > .callout-title,
+.markdown-rendered .callout[data-callout="tldr"] > .callout-title {
   color: var(--info);
 }
 .markdown-rendered .callout[data-callout="tip"],
@@ -4250,29 +4284,45 @@ kbd,
 .markdown-rendered .callout[data-callout="caution"],
 .markdown-rendered .callout[data-callout="attention"],
 .markdown-rendered .callout[data-callout="important"],
-.markdown-rendered .callout[data-callout="question"] {
+.markdown-rendered .callout[data-callout="question"],
+.markdown-rendered .callout[data-callout="help"],
+.markdown-rendered .callout[data-callout="faq"] {
   background: var(--warning-wash);
 }
 .markdown-rendered .callout[data-callout="warning"] > .callout-title,
 .markdown-rendered .callout[data-callout="caution"] > .callout-title,
 .markdown-rendered .callout[data-callout="attention"] > .callout-title,
 .markdown-rendered .callout[data-callout="important"] > .callout-title,
-.markdown-rendered .callout[data-callout="question"] > .callout-title {
+.markdown-rendered .callout[data-callout="question"] > .callout-title,
+.markdown-rendered .callout[data-callout="help"] > .callout-title,
+.markdown-rendered .callout[data-callout="faq"] > .callout-title {
   color: var(--warning);
 }
 .markdown-rendered .callout[data-callout="danger"],
 .markdown-rendered .callout[data-callout="error"],
 .markdown-rendered .callout[data-callout="failure"],
 .markdown-rendered .callout[data-callout="fail"],
-.markdown-rendered .callout[data-callout="bug"] {
+.markdown-rendered .callout[data-callout="bug"],
+.markdown-rendered .callout[data-callout="missing"] {
   background: var(--danger-wash);
 }
 .markdown-rendered .callout[data-callout="danger"] > .callout-title,
 .markdown-rendered .callout[data-callout="error"] > .callout-title,
 .markdown-rendered .callout[data-callout="failure"] > .callout-title,
 .markdown-rendered .callout[data-callout="fail"] > .callout-title,
-.markdown-rendered .callout[data-callout="bug"] > .callout-title {
+.markdown-rendered .callout[data-callout="bug"] > .callout-title,
+.markdown-rendered .callout[data-callout="missing"] > .callout-title {
   color: var(--danger);
+}
+.markdown-rendered .callout[data-callout="example"] {
+  background: var(--accent-wash);
+}
+.markdown-rendered .callout[data-callout="example"] > .callout-title {
+  color: var(--accent);
+}
+.markdown-rendered .callout[data-callout="quote"] > .callout-title,
+.markdown-rendered .callout[data-callout="cite"] > .callout-title {
+  color: var(--doc-gutter-fg);
 }
 
 /* ── Elenchi e caselle ───────────────────────────────────────────────────── */
@@ -8198,12 +8248,79 @@ button.draw-isolation-crumb:hover {
   border-radius: var(--radius-pill);
   font-size: var(--text-sm);
 }
+/* Il sommario è un elenco a tendina, in misura di pillola come il campo. */
+.media-pdf-toolbar > select {
+  flex: 0 1 12rem;
+  min-width: 6rem;
+  height: 28px;
+  margin: 0 var(--space-2);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+}
+.media-pdf-toolbar > button[aria-pressed="true"] {
+  background: var(--overlay-active);
+  color: var(--text);
+}
 .media-pdf > [role="status"] {
   margin: var(--space-4) var(--space-5) 0;
   color: var(--muted);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   text-align: center;
+}
+/* Le miniature stanno a sinistra del piano, in colonna, ciascuna col suo
+   numero; quella della pagina davanti è segnata. */
+.media-pdf-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.media-pdf-thumbs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+  gap: var(--space-4);
+  overflow: auto;
+  padding: var(--space-5) var(--space-4) var(--space-9);
+  scrollbar-width: thin;
+}
+.media-pdf-thumbs[hidden] {
+  display: none;
+}
+.media-pdf-thumbs > button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.media-pdf-thumbs > button:hover,
+.media-pdf-thumbs > button:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.media-pdf-thumbs > button[aria-current="page"] {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+.media-pdf-thumbs canvas {
+  display: block;
+  width: 96px;
+  min-height: 72px;
+  border-radius: var(--radius-xs);
+  background: var(--sheet);
+  box-shadow: var(--shadow-1);
 }
 /* Il piano scorre nei due versi: una pagina più larga del foglio non si
    rimpicciolisce, si percorre. */
@@ -8222,6 +8339,18 @@ button.draw-isolation-crumb:hover {
   margin: 0 auto;
   border-radius: var(--radius-xs);
   box-shadow: var(--shadow-1);
+}
+.media-pdf-page canvas[hidden] {
+  display: none;
+}
+.media-pdf-page.media-pdf-spread {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+.media-pdf-page.media-pdf-spread canvas {
+  margin: 0;
 }
 .media-pdf-page > p {
   max-width: 34rem;
@@ -8607,6 +8736,48 @@ button.draw-isolation-crumb:hover {
   color: var(--muted);
   opacity: 0.4;
   cursor: default;
+}
+
+/* ── La barra del visore web ─────────────────────────────────────────────── */
+
+/*
+   La pagina sta in una finestra sua, isolata; qui resta la sua barra: una
+   pillola in rialzo sopra la barra di stato, come quella dello zoom,
+   con l'indirizzo e i gesti. Sta sopra i fogli e sotto menu e modali.
+*/
+.web-viewer-bar {
+  position: fixed;
+  right: var(--space-5);
+  bottom: calc(var(--status-h) + var(--space-3));
+  left: var(--space-5);
+  z-index: var(--z-drawer);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: calc(100% - 2 * var(--space-5));
+  margin: 0 auto;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.web-viewer-bar[hidden] {
+  display: none;
+}
+.web-viewer-address {
+  overflow: hidden;
+  max-width: 40ch;
+  padding: 0 var(--space-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* ── skin/nodes.css ─────────────────────────────────────────────────────── */
@@ -9475,6 +9646,24 @@ h6.ui-heading {
   font: inherit;
   font-weight: var(--weight-medium);
   cursor: pointer;
+}
+
+/* Il campo di testo del filtro e dei gruppi: come la scelta, sta dentro la
+   pastiglia senza un bordo suo. Un filtro che non si legge si scrive in rosso. */
+.graph-toolbar-field input[type="search"] {
+  width: 14em;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 var(--space-1);
+  border: none;
+  border-radius: var(--radius-chip);
+  background-color: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: var(--weight-regular);
+}
+.graph-toolbar-field input[aria-invalid="true"] {
+  color: var(--danger);
 }
 
 /* Il vault è cambiato sotto il grafo: l'unica pastiglia che chiede qualcosa,
@@ -10680,10 +10869,106 @@ h6.ui-heading {
   flex-direction: column;
   gap: var(--space-3);
 }
+/* I `display` qui battono `[hidden]` del browser. */
+.modale .palette-form [hidden] {
+  display: none;
+}
 .modale .palette-form > .palette-desc {
   margin: 0;
   color: var(--muted);
   font-size: var(--text-sm);
+}
+/* Un path del disco col suo «Scegli…»: il campo prende la riga, il bottone
+   resta della sua misura accanto. */
+.modale .palette-path {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+.modale .palette-path > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.modale .palette-path > button {
+  flex: none;
+}
+/* «Esporta…»: le opzioni sono interruttori; gli avvisi uno per riga. */
+.modale .vault-export-options,
+.modale .vault-export-result,
+.modale .note-import-token {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.modale .palette-form label.vault-export-option {
+  flex-direction: row;
+  align-items: center;
+}
+.modale .vault-export-summary {
+  margin: 0;
+  color: var(--text);
+}
+/* «Importa note…»: il piano e le perdite sono elenchi che scorrono. */
+.modale .note-import-fields,
+.modale .note-import-remote,
+.modale .note-import-plan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.modale .note-import-file,
+.modale .note-import-token-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+.modale .note-import-file-name {
+  min-width: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.modale .note-import-status,
+.modale .note-import-token-state,
+.modale .note-import-tally {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.modale .note-import-plan-title {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.modale .vault-export-notes,
+.modale .note-import-docs,
+.modale .note-import-losses {
+  margin: 0;
+  padding-inline-start: var(--space-6);
+  max-height: 12rem;
+  overflow-y: auto;
+  font-size: var(--text-sm);
+}
+.modale .vault-export-note,
+.modale .note-import-doc,
+.modale .note-import-loss,
+.modale .note-import-more {
+  overflow-wrap: anywhere;
+}
+.modale .vault-export-notes,
+.modale .note-import-loss,
+.modale .note-import-more {
+  color: var(--muted);
+}
+.modale .vault-export-options > legend,
+.modale .note-import-token > legend {
+  padding: 0;
+}
+.modale .note-import-token-row > input {
+  flex: 1 1 12rem;
+  min-width: 0;
 }
 .modale .palette-label {
   color: var(--text);

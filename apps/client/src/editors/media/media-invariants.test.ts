@@ -109,6 +109,18 @@ describe("i nomi di deposito non sfuggono", () => {
     expect(long.endsWith(" 1.png")).toBe(true);
   });
 
+  it("una cartella con ./ mette l'allegato accanto alla nota, o in una sua sottocartella", async () => {
+    const deposit = (folder: string, fromDocument: string) => depositAttachment({
+      folder,
+      fromDocument,
+      async write(id) { return { id, revision: "r" }; },
+    }, "foto.png", new Uint8Array([1]));
+    expect(await deposit("./", "note/a.md")).toEqual({ receipt: { id: "note/foto.png", revision: "r" }, link: "foto.png" });
+    expect((await deposit("./img", "note/a.md")).receipt.id).toBe("note/img/foto.png");
+    expect((await deposit("./", "a.md")).receipt.id).toBe("foto.png");
+    expect((await deposit("./img", "a.md")).link).toBe("img/foto.png");
+  });
+
   it("remote deposit requires a gesture and exact HTTPS host", async () => {
     let requests = 0;
     const save = async () => { requests++; return { id: "allegati/a.html", revision: "r" }; };

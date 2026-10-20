@@ -10,9 +10,11 @@ import { openDocument, openFromView, reveal, runEditorAction } from "../state/do
 import { EDITOR_ACTION_NS, editorActionOf } from "../editors/core/editor-actions";
 import { state } from "../state/store";
 import { searchFor } from "../state/search-port";
+import { errorText } from "../host/errors";
 import { notify } from "./notify";
 import { openPrimaryView } from "./primary-views";
 import { writeClipboardText } from "../platform/clipboard";
+import { openWebLink } from "./web-viewer";
 
 /// Il namespace con cui `settings.export` consegna ciò che ha esportato
 /// (`fub_features::SETTINGS_NS`). Il comando non scrive un file e non può:
@@ -25,10 +27,22 @@ export const SETTINGS_EXPORT_NS = "settings.export";
 /// soltanto dal core lo garantisce il kernel, prima che l'intento arrivi qui.
 export const CLIPBOARD_TEXT_NS = "fub.clipboard.text";
 
+/// Un comando del core chiede di aprire una pagina web
+/// (`fub_abi::ui::WEB_OPEN_NS`, payload `{ url }`): «Apri nel sito» della
+/// pubblicazione. Va dove va un link web di una nota.
+export const WEB_OPEN_NS = "fub.web.open";
+
 /// Il vault è stato sostituito da uno snapshot (`fub_abi::ui::VAULT_RESTORED_NS`):
 /// ogni buffer, sessione e vista in memoria è del contenuto di prima, e l'unica
 /// risposta che non ne salva un pezzo per sbaglio è ricaricare la finestra.
 export const VAULT_RESTORED_NS = "fub.vault.restored";
+
+/// L'esito di `settings.import_obsidian`: le impostazioni le ha già scritte
+/// l'host; segnalibri (`bookmarks`), frammenti CSS (`snippets`) e spazi di
+/// lavoro (`workspaces`) sono della shell e si portano qui
+/// (`state/obsidian-bookmarks.ts`, `theme/snippets.ts`,
+/// `state/obsidian-workspaces.ts`).
+export const OBSIDIAN_IMPORTED_NS = "fub.settings.imported";
 
 /// La chiave con cui un avviso sopravvive alla ricarica che lo ha causato.
 const NOTICE_AFTER_RELOAD = "fub.notice-after-reload";
@@ -83,8 +97,18 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
         await copyText(intent.payload);
         break;
       }
+      if (intent.ns === WEB_OPEN_NS) {
+        openPage(intent.payload);
+        break;
+      }
       if (intent.ns === EDITOR_ACTION_NS) {
         editorAction(intent.payload);
+        break;
+      }
+      if (intent.ns === OBSIDIAN_IMPORTED_NS) {
+        await importBookmarks(intent.payload);
+        await importSnippets(intent.payload);
+        await importWorkspaces(intent.payload);
         break;
       }
       if (intent.ns === VAULT_RESTORED_NS) {
@@ -120,6 +144,66 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
       console.info(`Fub: intento ignorato (kind: ${(unknown as { kind: string }).kind}).`);
     }
   }
+}
+
+/// Solo `http(s)`: un altro schema non è una pagina, e non si apre.
+function openPage(payload: unknown): void {
+  const url = typeof payload === "object" && payload !== null ? (payload as { url?: unknown }).url : null;
+  if (typeof url !== "string" || !/^https?:\/\//i.test(url)) {
+    notify(t("intent.web_open_refused"), "guasto");
+    return;
+  }
+  openWebLink(url, false);
+}
+
+/// I segnalibri di un import da Obsidian. Un esito senza segnalibri (il file
+/// non c'è) non dice niente: l'avviso delle impostazioni è già arrivato.
+async function importBookmarks(payload: unknown): Promise<void> {
+  const items = (payload as { bookmarks?: unknown } | null)?.bookmarks;
+  if (!Array.isArray(items) || items.length === 0) return;
+  const { importObsidianBookmarks } = await import("../state/obsidian-bookmarks");
+  const done = await importObsidianBookmarks(items);
+  if (done.refused) notify(t("bookmarks.save_failed"), "guasto");
+  const lost = done.lost.length ? done.lost.join(", ") : "";
+  notify(
+    t(lost ? "bookmarks.imported_lost" : "bookmarks.imported", { added: done.added, same: done.same, lost }),
+    "info",
+  );
+  if (done.added > 0) {
+    const { openBookmarksPanel } = await import("../state/bookmarks-ui");
+    openBookmarksPanel();
+  }
+}
+
+/// I frammenti CSS di un import da Obsidian, con lo stesso silenzio quando
+/// non ce ne sono.
+async function importSnippets(payload: unknown): Promise<void> {
+  const snippets = (payload as { snippets?: { files?: unknown; enabled?: unknown } } | null)?.snippets;
+  const files = Array.isArray(snippets?.files) ? snippets.files : [];
+  const enabled = Array.isArray(snippets?.enabled) ? snippets.enabled : [];
+  if (files.length === 0 && enabled.length === 0) return;
+  const { importObsidianSnippets } = await import("../theme/snippets");
+  try {
+    const done = await importObsidianSnippets(snippets);
+    const lost = done.lost.join(", ");
+    notify(
+      t(lost ? "settings.css.imported_lost" : "settings.css.imported", { added: done.added, on: done.on, same: done.same, lost }),
+      "info",
+    );
+  } catch (error) {
+    notify(t("settings.css.import_failed", { reason: errorText(error) }), "guasto");
+  }
+}
+
+/// Gli spazi di lavoro di un import da Obsidian, con lo stesso silenzio.
+async function importWorkspaces(payload: unknown): Promise<void> {
+  const named = (payload as { workspaces?: unknown } | null)?.workspaces;
+  if (!named || typeof named !== "object" || Object.keys(named).length === 0) return;
+  const { importObsidianWorkspaces } = await import("../state/obsidian-workspaces");
+  const done = await importObsidianWorkspaces(named);
+  if (done.refused) notify(t("workspaces.save_failed"), "guasto");
+  const lost = done.lost.join(", ");
+  notify(t(lost ? "workspaces.imported_lost" : "workspaces.imported", { added: done.added, same: done.same, lost }), "info");
 }
 
 /// Un'azione dell'editor chiesta da un comando (la barra di formattazione

@@ -815,6 +815,9 @@ pub enum FubUri {
         success_callback: Option<String>,
         error_callback: Option<String>,
     },
+    /// Apre il selettore dei vault: niente da scrivere, niente da scegliere
+    /// qui. Non porta parametri, nemmeno `vault`.
+    ChooseVault,
 }
 
 impl FubUri {
@@ -826,6 +829,7 @@ impl FubUri {
             FubUri::Unique { .. } => "unique",
             FubUri::Search { .. } => "search",
             FubUri::Capture { .. } => "capture",
+            FubUri::ChooseVault => "choose-vault",
         }
     }
 }
@@ -997,6 +1001,7 @@ pub fn parse_fub_uri(raw: &str) -> Result<FubUri, AutomationError> {
         "new" => &["vault", "folder", "name", "title", "template"],
         "daily" => &["vault", "date"],
         "unique" => &["vault", "folder", "prefix"],
+        "choose-vault" => &[],
         "search" => &["vault", "q", "tag", "folder"],
         "capture" => &[
             "vault",
@@ -1096,6 +1101,7 @@ pub fn parse_fub_uri(raw: &str) -> Result<FubUri, AutomationError> {
                 date,
             })
         }
+        "choose-vault" => Ok(FubUri::ChooseVault),
         "unique" => {
             let folder = lookup(&pairs, "folder");
             let prefix = lookup(&pairs, "prefix");

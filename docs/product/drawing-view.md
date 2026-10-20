@@ -148,7 +148,16 @@ penna ci disegna con la curva scelta, e un punto sulla curva dice quanto si
 sta premendo. Senza prove il riquadro mostra un tratto d'esempio, sottile ai
 capi e pieno a metà. **Ripristina la curva** torna alla diagonale, la
 pressione come la dà la penna, e **Pulisci la prova** toglie i tratti di
-prova. Le scelte valgono con **OK**: «Penna e dita aggiornate.».
+prova.
+
+Sotto la curva c'è lo **Stabilizzatore**, spento di partenza: **Levigatura**,
+da spento al 100%, leviga il tratto mentre si disegna, per una mano che trema
+o per il mouse; con **Tira il tratto con una corda** il pennino segue il
+puntatore solo quando la corda è tesa, e un tremito più corto della corda non
+lo muove. Il tratto finisce comunque dove si è alzato il puntatore. Come la
+curva, vale su questo dispositivo in tutti i disegni.
+
+Le scelte valgono con **OK**: «Penna e dita aggiornate.».
 
 Come la griglia, sono scelte di questo dispositivo, perché ogni tavoletta e
 ogni mano premono a modo loro: non entrano nel file e si ricordano su questa

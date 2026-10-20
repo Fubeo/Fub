@@ -1,8 +1,10 @@
 // Il pannello della ricerca: la barra, il debounce, i risultati.
 import type { DocumentMatch } from "../host/contract";
-import { matchingDocuments, SearchSyntaxError, searchExpression, vaultStatus } from "../host/query";
+import { entryTimes, matchingDocuments, SearchSyntaxError, searchExpression, vaultStatus } from "../host/query";
 import { pageName } from "../rules/organizer";
-import { rowsToShow } from "../rules/results";
+import { rowsToShow, SEARCH_SORTS, sortHits, type SearchSort } from "../rules/results";
+import { occurrenceContext } from "../rules/search-context";
+import { api } from "../host/ipc";
 import { $ } from "../ui/dom";
 import { highlighted } from "../ui/highlight";
 import { setTooltip } from "../ui/tooltip";
@@ -21,6 +23,9 @@ import { mountSearchTools, type Replacement, type SearchTools } from "./search-t
 import { on } from "../state/store";
 import type { Lifetime } from "../ui/lifetime";
 import { ClipboardUnavailable, writeClipboardText } from "../platform/clipboard";
+import { offerNote } from "../ui/drag-types";
+import { offerOutside } from "../ui/vault-transfer";
+import { openVaultRoot } from "../state/store";
 
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchSummaryEl = $("#search-summary");
@@ -28,6 +33,14 @@ const searchResultsEl = $("#search-results");
 /// Finestra del disegno: quante righe si chiedono al kernel per volta. La forma
 /// delle righe resta in `rules/results.ts`; qui si decide solo il tetto.
 const SEARCH_PAGE = 50;
+/// Con un ordine che non è la rilevanza il kernel non può dare "i migliori
+/// cinquanta": si carica una finestra più larga e si ordina quella. Se il totale
+/// la supera, il riepilogo lo dice (N di M).
+const SORT_PAGE = 500;
+let sortMode: SearchSort = "relevance";
+let collapsedResults = false;
+/// «Più contesto»: sotto ogni occorrenza le righe attorno, lette dalla nota.
+let widerContext = false;
 const excluded = new Set<string>();
 const excludedFolders = new Set<string>();
 let shownHits: DocumentMatch[] = [];
@@ -245,7 +258,7 @@ async function runSearch(): Promise<void> {
       const isFailure = (v: SearchPage | SearchFailure): v is SearchFailure => "error" in v;
       const page = await expected(
         Promise.resolve()
-          .then(() => matchingDocuments(expression, { offset: 0, limit: SEARCH_PAGE }))
+          .then(() => loadHits(expression, 0))
           .catch((e: unknown): SearchFailure => ({ error: errorText(e) })),
       );
       if (isFailure(page)) {
@@ -281,6 +294,29 @@ async function runSearch(): Promise<void> {
     }
   });
 }
+
+/// Carica i risultati nell'ordine scelto. Per rilevanza è la finestra del
+/// kernel (`already` + una pagina); per nome o data, una finestra larga che si
+/// ordina qui, con le date chieste al vault solo quando servono.
+async function loadHits(
+  expression: ReturnType<typeof searchExpression>,
+  already: number,
+): Promise<{ items: DocumentMatch[]; total: number }> {
+  if (sortMode === "relevance") {
+    return matchingDocuments(expression, { offset: 0, limit: already + SEARCH_PAGE });
+  }
+  const loaded = await matchingDocuments(expression, { offset: 0, limit: already + SORT_PAGE });
+  const times = sortMode.startsWith("modified") ? await entryTimes() : {};
+  return { items: sortHits(loaded.items, sortMode, times), total: loaded.total };
+}
+
+const SORT_LABELS = {
+  relevance: "search.sort.relevance",
+  "name-asc": "search.sort.name_asc",
+  "name-desc": "search.sort.name_desc",
+  "modified-new": "search.sort.modified_new",
+  "modified-old": "search.sort.modified_old",
+} as const satisfies Record<SearchSort, string>;
 
 function showSearchResults(
   hits: DocumentMatch[],
@@ -353,6 +389,44 @@ function showSearchResults(
     help.setAttribute("aria-expanded", "true");
   });
   tools.append(help);
+  if (hits.length > 0) {
+    const order = document.createElement("select");
+    order.className = "search-action";
+    order.setAttribute("aria-label", t("search.sort"));
+    for (const mode of SEARCH_SORTS) {
+      const option = document.createElement("option");
+      option.value = mode;
+      option.textContent = t(SORT_LABELS[mode]);
+      option.selected = mode === sortMode;
+      order.append(option);
+    }
+    order.addEventListener("change", () => {
+      sortMode = SEARCH_SORTS.find((mode) => mode === order.value) ?? "relevance";
+      void runSearch();
+    });
+    const collapse = document.createElement("button");
+    collapse.type = "button";
+    collapse.className = "search-action";
+    collapse.textContent = t(collapsedResults ? "search.expand_results" : "search.collapse_results");
+    collapse.setAttribute("aria-pressed", String(collapsedResults));
+    collapse.addEventListener("click", () => {
+      collapsedResults = !collapsedResults;
+      showSearchResults(hits, error, indexing, total);
+    });
+    tools.append(order, collapse);
+    if (!collapsedResults) {
+      const context = document.createElement("button");
+      context.type = "button";
+      context.className = "search-action";
+      context.textContent = t(widerContext ? "search.less_context" : "search.more_context");
+      context.setAttribute("aria-pressed", String(widerContext));
+      context.addEventListener("click", () => {
+        widerContext = !widerContext;
+        showSearchResults(hits, error, indexing, total);
+      });
+      tools.append(context);
+    }
+  }
   searchResultsEl.append(tools);
   // Le righe si montano **fuori dal documento** e si attaccano in una volta
   // sola. Non è cosmetica: una pagina di cinquanta note con le loro occorrenze
@@ -361,7 +435,18 @@ function showSearchResults(
   // qualche migliaio di volte — a ogni tasto premuto, perché questo pannello si
   // ridisegna mentre si scrive.
   const newItems = document.createDocumentFragment();
-  for (const row of rowsToShow(hits)) {
+  // Il sorgente di ogni nota si legge una volta sola per disegno, e solo con
+  // «più contesto» acceso.
+  const sources = new Map<string, Promise<Uint8Array>>();
+  const sourceOf = (doc: string) => {
+    let source = sources.get(doc);
+    if (!source) {
+      source = api.readDocument(doc).then(({ text }) => new TextEncoder().encode(text));
+      sources.set(doc, source);
+    }
+    return source;
+  };
+  for (const row of rowsToShow(hits, collapsedResults)) {
     const li = document.createElement("li");
     setTooltip(li, row.doc);
     const button = document.createElement("button");
@@ -378,15 +463,36 @@ function showSearchResults(
       path.className = "hit-path";
       path.textContent = row.doc;
       button.append(path);
-      if (row.snippet !== undefined && row.snippet !== "") {
+      if (row.snippet !== undefined && row.snippet !== "" && !(widerContext && row.byteEnd !== undefined)) {
         const snippet = document.createElement("span");
         snippet.className = "hit-snippet";
         snippet.appendChild(highlighted(row.snippet, row.highlights ?? []));
         button.append(snippet);
       }
+      // Il risultato si trascina come una nota dell'albero: dentro l'app è
+      // la nota, fuori il file vero.
+      button.draggable = true;
+      const doc = row.doc;
+      button.addEventListener("dragstart", (event) => {
+        if (!event.dataTransfer) return;
+        offerOutside(event.dataTransfer, openVaultRoot(), [doc]);
+        offerNote(event.dataTransfer, doc);
+      });
     } else {
       button.classList.add("hit-occurrence");
       button.textContent = t("search.occurrence", { n: row.occurrence });
+    }
+    if (widerContext && row.byteOffset !== undefined && row.byteEnd !== undefined) {
+      const context = document.createElement("span");
+      context.className = "hit-context";
+      button.append(context);
+      const [start, end] = [row.byteOffset, row.byteEnd];
+      // Una nota che non si lascia leggere resta senza contesto: la riga
+      // porta comunque all'occorrenza.
+      void sourceOf(row.doc).then((source) => {
+        const around = occurrenceContext(source, start, end);
+        context.replaceChildren(highlighted(around.text, [around.highlight]));
+      }, () => context.remove());
     }
     openAt(button, row.doc, row.byteOffset);
     li.appendChild(button);
@@ -459,7 +565,10 @@ const SYNTAX: readonly (readonly [string, Parameters<typeof t>[0]])[] = [
   ["path:2026/", "search.syntax.path"],
   ["file:riunione", "search.syntax.file"],
   ["heading:obiettivi", "search.syntax.heading"],
+  ["line:(rosa spina)", "search.syntax.line"],
+  ["section:(rosa spina)", "search.syntax.section"],
   ["task:todo", "search.syntax.task"],
+  ["due:<2026-11-01", "search.syntax.due"],
   ['"frase esatta"', "search.syntax.phrase"],
   ["/regex/", "search.syntax.regex"],
   ["[stato:fatto]", "search.syntax.property"],
@@ -577,7 +686,7 @@ async function runSearchMore(knownTotal: number): Promise<void> {
     type SearchPage = { items: DocumentMatch[]; total: number };
     const page: SearchPage | { error: string } = await expected(
       Promise.resolve()
-        .then(() => matchingDocuments(searchExpression(query, [...excluded], [...excludedFolders]), { offset: 0, limit: shown + SEARCH_PAGE }))
+        .then(() => loadHits(searchExpression(query, [...excluded], [...excludedFolders]), shown))
         .then((p) => ({ items: p.items, total: p.total }))
         .catch((e: unknown) => ({ error: errorText(e) })),
     );

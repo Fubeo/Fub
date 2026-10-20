@@ -32,7 +32,7 @@ vi.mock("../shells/mobile/bootstrap", () => ({
   },
 }));
 vi.mock("../shells/mobile/storage-ui", () => ({
-  privateStoragePorts: () => ({ ports: "private" }),
+  nativeStoragePorts: () => ({ ports: "native" }),
 }));
 // La cornice importa la shell comune: la fabbrica gira al primo `import()`, e
 // l'istante in cui gira è ciò che la prova guarda.
@@ -67,9 +67,9 @@ describe("l'avvio dello Scrittoio su un telefono", () => {
     if (imported !== -1) expect(imported).toBeGreaterThan(world.log.indexOf("series:scrittoio"));
   });
 
-  it("senza porte di storage native usa quelle dello spazio privato", async () => {
+  it("senza porte di storage iniettate usa quelle del ponte nativo", async () => {
     await startupMobile(bridge);
-    expect(world.storage).toEqual({ ports: "private" });
+    expect(world.storage).toEqual({ ports: "native" });
     const native = { marker: true };
     await startupMobile(bridge, { storage: native as never });
     expect(world.storage).toBe(native);

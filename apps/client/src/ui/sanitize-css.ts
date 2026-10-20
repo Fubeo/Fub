@@ -1,4 +1,5 @@
 import postcss, { type AtRule, type ChildNode, type Declaration, type Root, type Rule } from "postcss";
+import { t } from "../i18n/strings";
 
 export type ThemeCssViolationCode =
   | "syntax-error"
@@ -1173,7 +1174,7 @@ export function sanitizeThemeCss(css: string, policy: ThemeCssPolicy): string {
  * combinators beyond one descendant class are available to snippets. */
 export function sanitizeUserCss(css: string, allowedHooks: readonly string[]): string {
   if (new TextEncoder().encode(css).length > 64 * 1024) {
-    throw new Error("user CSS exceeds the 64 KiB limit");
+    throw new Error(t("errors.css.too_large"));
   }
   return sanitizeThemeCss(css, {
     kind: "snippet",

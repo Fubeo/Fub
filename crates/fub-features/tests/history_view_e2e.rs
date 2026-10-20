@@ -142,7 +142,7 @@ impl Vault {
         // gli presti l'esemplare in memoria di chi scrive.
         ws.register_view_provider(VERSIONING_ID, Box::new(HistoryView))
             .expect("view registrata");
-        ws.register_command_provider(VERSIONING_ID, Box::new(VersioningCommands))
+        ws.register_command_provider(VERSIONING_ID, Box::new(VersioningCommands::default()))
             .expect("comando registrato");
         ws.reindex().expect("reindex");
         ws
@@ -168,7 +168,7 @@ impl Vault {
             .expect("handler registrato");
         ws.register_view_provider(VERSIONING_ID, Box::new(HistoryView))
             .expect("view registrata");
-        ws.register_command_provider(VERSIONING_ID, Box::new(VersioningCommands))
+        ws.register_command_provider(VERSIONING_ID, Box::new(VersioningCommands::default()))
             .expect("comando registrato");
         ws.reindex().expect("reindex");
         ws

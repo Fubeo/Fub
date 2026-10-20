@@ -38,6 +38,7 @@ La cartella viene scelta in ordine:
 | `catalog-feed.json` | autorevole, dell'operatore | n/a | feed firmato del catalogo |
 | `sync/vaults/<chiave>/` | autorevole locale | n/a | stato di sync di un vault |
 | `services-token` | segreto | n/a | token dei servizi salvato da `fub-cli login` |
+| `connectors/<connettore>.token` | segreto | n/a | token di Notion o Airtable salvato da `connector.token` |
 
 Se la cartella di configurazione non è disponibile, l'host può lavorare in
 memoria. Un file illeggibile non viene riscritto da uno stato vuoto.
@@ -53,6 +54,13 @@ Sync e pubblicazione leggono il token da `FUB_SERVICES_TOKEN_FILE`, poi da
 `FUB_SERVICES_TOKEN`, poi da `services-token`. Il file vale soltanto se è
 regolare, non è un collegamento e, su Unix, è leggibile dal solo proprietario,
 come lo scrive `login`.
+
+I connettori Notion e Airtable leggono il token, quando il job d'import parte,
+da `options.token_env` se la richiesta nomina una variabile, altrimenti da
+`connectors/<connettore>.token`. Il file segue le stesse regole di
+`services-token`; `connector.token` lo scrive già del solo proprietario e con
+una rename, e un token vuoto lo toglie. Il token non entra mai nella richiesta
+d'import, nel payload del job o nel manifesto di staging.
 
 La cornice della shell (rail con ordine e icone nascoste, pannelli laterali
 affiancati, stato e strumenti del riquadro, cornice della finestra) sta in
@@ -238,8 +246,10 @@ di ogni cartella le impronte che l'indice ricorda — quelle della scrittura —
 poi riscrive l'indice con `registered: true`. Si fa una volta sola e solo da un
 indice che c'è: un indice ricostruito dai byte non registra le impronte che ha
 appena ricalcolato. Il primo salvataggio le registra comunque. Ogni nuova versione
-pota le altre per fasce: tutte sotto le 24 ore, una per ora fino a 7 giorni,
-una per giorno fino a 90. Oltre resta solo la più recente. Ogni `VersionRef`
+pota le altre per fasce: sotto le 24 ore tutte, o una per `versioning.interval`
+minuti; una per ora fino a 7 giorni, una per giorno fino a `versioning.retention`
+giorni (90 di serie, 0 nessun limite). Oltre resta solo la più recente. Le due
+impostazioni non sono `program_writable`: abbassarle cancella versioni. Ogni `VersionRef`
 nell'indice registra la dimensione in byte e l'impronta FNV-1a del contenuto.
 Gli snapshot conservano i byte originali, anche per allegati binari, senza
 convertire BOM o terminatori di riga. Nessuno snapshot supera 64 MiB
@@ -268,6 +278,12 @@ libero e chi lo riprende è un'altra nota: il ripristino la riunisce al path
 d'arrivo, come una rinomina. Se la voce non si riconosce (una cancellazione che
 il cestino non ha visto, un cestino che non si elenca) la storia resta sotto il
 path col suo `deleted_at`, come prima.
+
+`version.clear` svuota lo store di tutto il vault in quest'ordine: toglie
+l'indice, toglie il `meta.json` di ogni cartella, riscrive l'indice con ciò che
+resta e solo allora cancella i blob delle cartelle liberate, orfani compresi.
+Un'interruzione lascia al più una cronologia svuotata a metà, che la
+ricostruzione ritrova senza mescolare storie.
 
 Se l'indice manca o non è leggibile, lo store lo ricostruisce dagli snapshot e
 prova a ripubblicarlo. Un errore di scrittura del solo indice genera un avviso:
@@ -443,6 +459,14 @@ lo stesso host il lease è condiviso: riaprire un vault già aperto, o aprirlo i
 due chiamate concorrenti, non si esclude da solo. Snapshot e azzeramento della
 demo tengono il lease dalla chiusura alla riapertura.
 
+Con il vault aperto nell'app desktop, la CLI e l'host nativo del clipper non
+trovano soltanto `busy`: chiedono all'app per il canale di controllo, e l'app
+scrive con le sue sessioni. L'indirizzo e il token del canale stanno in
+`control.endpoint`, nella cartella di configurazione, del solo proprietario;
+l'app lo scrive all'avvio e lo toglie all'uscita. `--standalone` non passa
+dall'app. Le regole sono in
+[Permessi e sicurezza](permissions-and-security.md#canale-di-controllo).
+
 ## Snapshot globale offline
 
 L'applicazione globale di uno snapshot è distinta dal backup per-file di
@@ -506,6 +530,11 @@ dello snapshot su quella appena catturata prima di applicarlo. La prova a vuoto
 esegue gli stessi controlli di destinazione e di lettura senza chiudere niente.
 Dopo il ripristino la shell ricarica la finestra, perché ogni stato in memoria
 appartiene al contenuto sostituito.
+La shell offre i due comandi nel menu File e nel menu del chip del vault. Nel
+loro modulo ogni path ha un «Scegli…» che apre il dialogo di sistema: una
+cartella esistente per `source`, il dialogo di salvataggio per un nome nuovo in
+`target` e `backup`. Il path scelto resta nel campo e arriva al comando di
+sempre: non esiste una porta IPC dedicata.
 
 Il drill backup/restore dell'issue #7 resta una prova offline separata del
 fixture storico e del restore completo con `Host`; non è l'applicatore globale

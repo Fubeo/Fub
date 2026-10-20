@@ -103,7 +103,12 @@ impl ExportProvider for PdfExport {
             }
             ensure_page_budget(&pages)?;
             let pdf = render_pdf(&pages);
-            let h = out.open_artifact("export.pdf", "application/pdf")?;
+            // Una nota sola porta il suo nome: «export.pdf» non dice di chi è.
+            let name = match docs.as_slice() {
+                [_] => pdf_names(&docs).remove(0),
+                _ => "export.pdf".to_string(),
+            };
+            let h = out.open_artifact(&name, "application/pdf")?;
             // Chunked writes: the sink sees a stream, not a buffer.
             for chunk in pdf.chunks(64 * 1024) {
                 out.write_artifact(h, chunk)?;

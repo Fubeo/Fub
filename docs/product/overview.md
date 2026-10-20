@@ -81,6 +81,12 @@ possono attraversare il runtime WASM quando la relativa interfaccia è servita.
 - frontmatter;
 - wikilink, tag, heading, task, tabelle, callout ed embed supportati dal
   provider Markdown;
+- compiti ricorrenti con la scrittura del plugin Tasks: spuntare
+  `- [ ] … 🔁 every week 📅 2026-10-19` scrive sopra il compito successivo, con
+  scadenza (`📅`), data programmata (`⏳`) e inizio (`🛫`) spostate di un
+  intervallo (`every N day|week|month|year`, anche `ogni 2 settimane`; con
+  `when done` si conta dal giorno della spunta); una regola che non si legge
+  non ricorre;
 - revisioni e conflitti espliciti;
 - sincronizzazione fra più riquadri dello stesso documento nella stessa
   sessione locale.
@@ -96,6 +102,13 @@ Rust, con fallback sugli input grezzi quando non è disponibile.
 - backlink e vicini;
 - risoluzione di link per nome, alias e path;
 - outline, proprietà e tag;
+- calendario delle giornaliere nella barra di destra (view `calendar` di
+  `fub.template`): un mese per volta, settimane col numero ISO e primo giorno
+  dal locale; un giorno apre o crea la sua giornaliera con `note.daily`, e
+  quello che l'ha già è in evidenza;
+- nel pannello delle proprietà una data porta nei due versi: «Nota del giorno»
+  apre la giornaliera, «Stesso giorno» elenca le altre note che hanno quel
+  giorno in una proprietà qualsiasi, anche con l'ora o dentro un elenco;
 - Graph View resa dalla shell.
 
 ### Estensibilità
@@ -129,6 +142,8 @@ stato autorevole è in [`../project/status.md`](../project/status.md).
 ## Approfondimenti
 
 - [Vault e file](vault-and-files.md)
+- [Explorer e cartelle](explorer-and-folders.md)
+- [Importare ed esportare](import-and-export.md)
 - [Editor e anteprima](editor-and-preview.md)
 - [Ricerca, link e grafo](search-links-and-graph.md)
 - [Plugin ed estensioni](plugins-and-extensions.md)

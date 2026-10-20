@@ -95,7 +95,7 @@ const SNAPSHOT_APPLY: &str = "vault.snapshot.apply";
 /// I comandi che l'host esegue in proprio: il kernel li riserva al mount
 /// (`Workspace::reserve_host_commands`), così un plugin che li invoca sente che
 /// non sono suoi da chiamare e nessun provider ne registra un omonimo.
-pub(crate) const HOST_COMMANDS: [&str; 8] = [
+pub(crate) const HOST_COMMANDS: [&str; 15] = [
     OS_TRASH_COMMAND,
     MOUNT_ADD,
     MOUNT_REMOVE,
@@ -104,6 +104,13 @@ pub(crate) const HOST_COMMANDS: [&str; 8] = [
     SNAPSHOT_CREATE,
     SNAPSHOT_APPLY,
     crate::capture::CAPTURE_APPLY,
+    crate::web_clip::WEB_CLIP,
+    crate::export_folder::EXPORT_FOLDER,
+    crate::obsidian_import::OBSIDIAN_IMPORT,
+    crate::connector_tokens::CONNECTOR_TOKEN,
+    crate::connector_tokens::CONNECTOR_TOKENS,
+    crate::uri_inbox::URI_PENDING,
+    crate::uri_inbox::URI_APPLY,
 ];
 
 /// Lo stesso catalogo host-owned serve l'elenco e la scelta del dispatcher.
@@ -205,7 +212,7 @@ fn snapshot_specs() -> [CommandSpec; 2] {
 /// Una cartella esterna **nuova** per uno snapshot: path assoluto, genitore
 /// esistente, nome libero e fuori dal vault (anche attraverso symlink del
 /// genitore, che si risolve prima del confronto).
-fn snapshot_destination(root: &Utf8Path, raw: &str) -> Result<Utf8PathBuf, PluginError> {
+pub(crate) fn new_outside_folder(root: &Utf8Path, raw: &str) -> Result<Utf8PathBuf, PluginError> {
     let path = Utf8Path::new(raw.trim());
     if !path.is_absolute() {
         return Err(PluginError::BadArgs(path_text(
@@ -1056,10 +1063,13 @@ pub struct Host {
     /// forma di `Custodia::denuncia` serve a chi deve rispondere a ogni
     /// chiamata, non a chi risponde alla prima.
     session_notice: Mutex<Option<String>>,
+    /// I `fub://` che il sistema ha consegnato e la shell non ha ancora
+    /// preso: la coda è della macchina, come l'app che li riceve.
+    uris: crate::uri_inbox::UriInbox,
     /// Il **livello macchina** della configurazione (§11.1), condiviso da tutti
     /// i vault che questo host apre: la configurazione della macchina è una, e N
     /// copie sarebbero N idee del tema.
-    machine: Arc<MachineSettings>,
+    pub(crate) machine: Arc<MachineSettings>,
     /// Lo **stato di vista** (§11.2): dove ogni esemplare di view era rimasto.
     /// Condiviso come il livello macchina e per la stessa ragione — i vault
     /// aperti sono N e la macchina è una — e potato da chi dimentica un vault
@@ -1195,6 +1205,7 @@ impl Host {
             format_source: None,
             startup_source: None,
             session_notice: Mutex::new(None),
+            uris: Default::default(),
             machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
             vaults: VaultRegistry::in_memory(),
@@ -1905,7 +1916,6 @@ impl Host {
             Arc::clone(&self.system_locale),
             &self.levels,
             prepared_formats,
-            #[cfg(feature = "http-client")]
             self.configuration_root(),
             self.network.clone(),
             Arc::clone(&self.clock),
@@ -3097,6 +3107,13 @@ impl Host {
     /// C'è un vault corrente? È la domanda che distingue «la shell sta lavorando
     /// su un archivio» da «la finestra è aperta e basta», e la pone chi deve
     /// decidere se una domanda si può servire senza vault.
+    /// Un `fub://` che il sistema ha consegnato all'app: resta in coda finché
+    /// la shell non lo prende con `uri.pending`, anche se arriva prima che
+    /// la shell esista. `false` se la coda è piena e l'URI resta fuori.
+    pub fn receive_uri(&self, raw: &str) -> bool {
+        self.uris.push(raw)
+    }
+
     pub fn has_current_vault(&self) -> bool {
         self.sessions.read().is_ok_and(|s| s.current().is_some())
     }
@@ -3734,6 +3751,15 @@ impl Host {
                 spec.id != OS_TRASH_COMMAND
                     && spec.id != FOLDER_CREATE
                     && spec.id != crate::capture::CAPTURE_APPLY
+                    && spec.id != crate::web_clip::WEB_CLIP
+                    && spec.id != crate::export_folder::EXPORT_FOLDER
+                    && spec.id != crate::obsidian_import::OBSIDIAN_IMPORT
+                    && !crate::connector_tokens::specs()
+                        .iter()
+                        .any(|own| own.id == spec.id)
+                    && !crate::uri_inbox::specs()
+                        .iter()
+                        .any(|own| own.id == spec.id)
                     && !mounts.iter().any(|own| own.id == spec.id)
             });
             specs.retain(|spec| spec.id != SNAPSHOT_CREATE && spec.id != SNAPSHOT_APPLY);
@@ -3741,7 +3767,12 @@ impl Host {
                 os_trash_spec(),
                 folder_create_spec(),
                 crate::capture::spec(),
+                crate::web_clip::spec(),
+                crate::export_folder::spec(&workspace.export_targets()),
+                crate::obsidian_import::spec(),
             ];
+            own.extend(crate::connector_tokens::specs());
+            own.extend(crate::uri_inbox::specs());
             own.extend(mounts);
             own.extend(snapshot_specs());
             // I comandi dell'host parlano col catalogo del core, nella lingua di
@@ -3875,7 +3906,7 @@ impl Host {
         spec.validate_args(&args)?;
         let text = |key: &str| args[key].as_str().expect("spec validata").to_owned();
         if spec.id == SNAPSHOT_CREATE {
-            let target = snapshot_destination(&root, &text("target"))?;
+            let target = new_outside_folder(&root, &text("target"))?;
             if mode.is_dry_run() {
                 let summary = Text::message(
                     "host.snapshot.plan.create",
@@ -3919,7 +3950,7 @@ impl Host {
         }
 
         let source = snapshot_source(&root, &text("source"))?;
-        let backup = snapshot_destination(&root, &text("backup"))?;
+        let backup = new_outside_folder(&root, &text("backup"))?;
         if source.starts_with(&backup) || backup.starts_with(&source) {
             return Err(PluginError::BadArgs(Text::key("host.snapshot.distinct")));
         }
@@ -4121,6 +4152,43 @@ impl Host {
         // workspace deve essere preso qui, perché ognuno prende il suo.
         if command == crate::capture::CAPTURE_APPLY {
             let result = crate::capture::invoke(self, vault, args, mode);
+            return self.localized_host_result(vault, result);
+        }
+        // Come la cattura, che compone: la rete si chiama senza prestiti.
+        if command == crate::web_clip::WEB_CLIP {
+            let result = crate::web_clip::invoke(self, vault, args, mode);
+            return self.localized_host_result(vault, result);
+        }
+        if command == crate::export_folder::EXPORT_FOLDER {
+            let (root, workspace) = self.with_session(vault, |session| {
+                (session.root.clone(), session.workspace.clone())
+            })?;
+            let result = crate::export_folder::invoke(&root, &workspace, args, mode);
+            return self.localized_host_result(vault, result);
+        }
+        if let Some(spec) = crate::uri_inbox::specs()
+            .into_iter()
+            .find(|spec| spec.id == command)
+        {
+            // La coda è della macchina e l'azione compone comandi del
+            // registro, ognuno col suo prestito: niente sessione presa qui.
+            let result = crate::uri_inbox::invoke(self, &self.uris, &spec, args, mode);
+            return self.localized_host_result(vault, result);
+        }
+        if command == crate::obsidian_import::OBSIDIAN_IMPORT {
+            // Scrive con la porta del pannello, che prende i suoi prestiti:
+            // qui si prende soltanto la radice.
+            let root = self.with_session(vault, |session| session.root.clone())?;
+            let result = crate::obsidian_import::invoke(self, vault, &root, args, mode);
+            return self.localized_host_result(vault, result);
+        }
+        if let Some(spec) = crate::connector_tokens::specs()
+            .into_iter()
+            .find(|spec| spec.id == command)
+        {
+            // I token sono della macchina, non del vault: nessun prestito.
+            let result =
+                crate::connector_tokens::invoke(self.configuration_root(), &spec, args, mode);
             return self.localized_host_result(vault, result);
         }
         let (workspace, mounts, storage) = self.with_session(vault, |session| {

@@ -41,7 +41,7 @@ Fub/
 | testare un provider in memoria | `crates/fub-sdk/` |
 | testare host e kernel insieme | `crates/fub-testkit/` |
 
-## I nove crate
+## I crate
 
 | Crate | Responsabilità |
 |---|---|
@@ -49,10 +49,21 @@ Fub/
 | `fub-kernel` | workspace, storage, indici, policy ed eventi |
 | `fub-host` | composition root, sessioni, bundle, watcher e job |
 | `fub-app` | binario Tauri e adattatori IPC |
+| `fub-cli` | CLI di automazione e host di messaggistica nativa del clipper |
 | `fub-sdk` | helper per gli autori e `MemoryHost` |
 | `fub-testkit` | banco di integrazione host/kernel |
 | `fub-format-markdown` | provider Markdown |
+| `fub-format-base` | provider `.base`: viste YAML sulle proprietà delle note |
+| `fub-format-canvas` | provider JSON Canvas (`.canvas`) |
+| `fub-format-rich` | documenti di videoscrittura (`.docx`, `.odt`, `.rtf`, `.doc`) |
+| `fub-format-sheet` | provider dei fogli `.fubsheet` |
+| `fub-format-svg` | provider delle scene di FubDraw (`.svg`) |
 | `fub-features` | feature ufficiali dietro feature Cargo |
+| `fub-importers` | import ed export ufficiali (HTML, CSV, ZIP, ENEX, PDF, connettori) |
+| `fub-services` | servizio locale di account, sincronizzazione e pubblicazione |
+| `fub-scene` | lettura e diagnostica delle scene di FubDraw |
+| `fub-ink` | nucleo dell'inchiostro: campioni, pressione, stabilizzatore |
+| `fub-live` | sessione di disegno dal vivo fra PC e tablet |
 | `fub-wasm-host` | adattatore Wasmtime verso i trait comuni |
 
 ## Flusso per tipo di modifica

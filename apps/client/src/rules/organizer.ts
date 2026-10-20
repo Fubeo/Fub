@@ -16,6 +16,17 @@ import { childName, pageName, resolutionKey } from "./mirrored";
 
 export { childName, pageName };
 
+/// Gli ordinamenti dell'albero. `manual` è l'ordine scelto trascinando.
+export type ExplorerSort = "manual" | "name-asc" | "name-desc" | "modified-new" | "modified-old";
+
+export const EXPLORER_SORTS: readonly ExplorerSort[] = [
+  "manual",
+  "name-asc",
+  "name-desc",
+  "modified-new",
+  "modified-old",
+];
+
 /// Cosa c'è **direttamente** dentro una cartella: ciò che disegna un livello.
 export interface FolderContent {
   /// Path relativo al vault, senza slash finale ("" per la radice).
@@ -33,6 +44,9 @@ export interface FolderContent {
   /// dice**, e per dirlo bisogna portarselo fin qui. Zero è il caso normale.
   otherFolders: number;
   otherNote: number;
+  /// Ultima modifica (ms unix) di note e file diretti, per ordinare per data.
+  /// Assente dove chi costruisce il livello non la porta.
+  mtimes?: Readonly<Record<string, number>>;
 }
 
 /// Quante voci di un livello l'albero chiede e disegna (§2.9).
@@ -61,7 +75,12 @@ export function parentOf(path: string): string {
 
 /// Lo stesso contenuto, nell'ordine in cui la sidebar lo mostra: prima chi
 /// compare nell'ordine scelto a mano, poi gli altri in alfabetico.
-export function sortContent(content: FolderContent, meta: Organization): FolderContent {
+export function sortContent(
+  content: FolderContent,
+  meta: Organization,
+  mode: ExplorerSort = "manual",
+): FolderContent {
+  if (mode !== "manual") return sortBy(content, mode);
   // La posizione nell'ordine a mano, cercata una volta per nome: il
   // comparatore la chiede O(n log n) volte.
   const custom = new Map<string, number>();
@@ -77,6 +96,33 @@ export function sortContent(content: FolderContent, meta: Organization): FolderC
     files: [...content.files].sort((a, b) => collator.compare(childName(a), childName(b))),
     otherFolders: content.otherFolders,
     otherNote: content.otherNote,
+  };
+}
+
+/// L'ordine scelto dal menu dell'albero, che ignora l'ordine a mano: per nome le
+/// cartelle seguono il verso, per data restano in alfabetico e le voci con la
+/// data più recente (o più vecchia) vengono prima. Alla pari, vale il nome.
+function sortBy(content: FolderContent, mode: Exclude<ExplorerSort, "manual">): FolderContent {
+  const byDate = mode === "modified-new" || mode === "modified-old";
+  const sign = mode === "name-desc" || mode === "modified-new" ? -1 : 1;
+  const when = (id: string) => content.mtimes?.[id] ?? 0;
+  const items = (ids: string[]) =>
+    [...ids].sort((a, b) => {
+      if (byDate) {
+        const diff = when(a) - when(b);
+        if (diff !== 0) return sign * diff;
+        return collator.compare(childName(a), childName(b));
+      }
+      return sign * collator.compare(childName(a), childName(b));
+    });
+  const folderSign = mode === "name-desc" ? -1 : 1;
+  return {
+    ...content,
+    folders: [...content.folders].sort(
+      (a, b) => folderSign * collator.compare(childName(a.path), childName(b.path)),
+    ),
+    notes: items(content.notes),
+    files: items(content.files),
   };
 }
 

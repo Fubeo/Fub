@@ -251,11 +251,12 @@ fn resolve_entry_in_folder(
     let raw = match target {
         // Un wikilink nomina un file **per nome**, come nomina una nota per
         // nome: `![[foto.png]]` è il modo in cui si incorpora un allegato.
-        // Se il vault dichiara una cartella, quella è la prima candidata.
+        // Se il vault dichiara una cartella, quella è la prima candidata: per
+        // una cartella con `./`, quella accanto alla nota che nomina.
         LinkTarget::Wiki { page, .. } => {
             if !page.contains('/') {
                 let folder = attachment_folder
-                    .map(fub_abi::rules::folders::normalized)
+                    .map(|folder| fub_abi::rules::folders::for_note(folder, source.as_str()))
                     .filter(|folder| !folder.is_empty());
                 if let Some(folder) = folder {
                     let candidate = DocId::new(format!("{folder}/{page}"));
@@ -990,6 +991,17 @@ impl CoreIndex {
         if !path.is_empty() {
             self.folders.insert(path);
         }
+    }
+
+    /// Toglie una cartella, e le sue discendenti, da quelle che ci sono.
+    ///
+    /// Solo per chi l'ha appena tolta dal disco: le voci dentro di lei se ne
+    /// sono già andate per la loro strada, e una cartella sparita che l'albero
+    /// continuasse a mostrare sarebbe una cartella che nessuno può aprire.
+    pub(crate) fn forget_folder(&mut self, path: &str) {
+        let inside = format!("{path}/");
+        self.folders
+            .retain(|folder| folder != path && !folder.starts_with(&inside));
     }
 
     /// Registra le cartelle che un path **attraversa**, dalla radice in giù.
@@ -1906,6 +1918,37 @@ mod tests {
             Some(DocId::new("media/photo.png"))
         );
     }
+
+    #[test]
+    fn a_dot_folder_looks_next_to_the_note_that_names_the_attachment() {
+        let entries = BTreeMap::from([
+            (DocId::new("a/photo.png"), asset("a/photo.png")),
+            (DocId::new("b/img/photo.png"), asset("b/img/photo.png")),
+        ]);
+        let names = EntryNames::of(&entries);
+        let target = LinkTarget::wiki("photo.png");
+        assert_eq!(
+            resolve_entry_in_folder(
+                &entries,
+                &names,
+                &DocId::new("a/note.md"),
+                &target,
+                Some("./")
+            ),
+            Some(DocId::new("a/photo.png"))
+        );
+        assert_eq!(
+            resolve_entry_in_folder(
+                &entries,
+                &names,
+                &DocId::new("b/note.md"),
+                &target,
+                Some("./img")
+            ),
+            Some(DocId::new("b/img/photo.png"))
+        );
+    }
+
     #[test]
     fn a_path_link_with_a_fragment_names_the_same_point_as_a_wikilink() {
         // Un `[t](Note/Doppia.md#...)` nomina lo stesso punto di `[[Doppia#...]]`:

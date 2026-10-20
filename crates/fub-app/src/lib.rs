@@ -63,7 +63,9 @@ mod live;
 mod mobile;
 mod print;
 mod resources;
+mod reveal;
 mod support;
+mod tree_access;
 mod web_viewer;
 pub use live::{LiveAddress, LiveStart, LiveStarted};
 pub use support::DemoClosed;
@@ -335,13 +337,21 @@ impl EventSink for WebviewEvents {
 
 #[tauri::command]
 fn open_vault(app: AppHandle, host: State<Host>, path: String) -> Result<VaultInfo, PluginError> {
-    // Su mobile si monta soltanto il vault privato, che il backend risolve da
-    // sé nella sandbox; una cartella condivisa chiede un grant verificato.
+    // Su mobile si monta il vault privato, che il backend risolve da sé nella
+    // sandbox, o la cartella condivisa che il codice nativo ha consegnato per
+    // un grant verificato (`mobile_open_shared`): nessun altro path.
     #[cfg(mobile)]
     return for_the_shell(
         &host,
         None,
-        mobile::open_private_vault(&host, mobile::private_vault_root(&app).as_deref(), &path),
+        mobile::open_mobile_vault(
+            &host,
+            mobile::private_vault_root(&app).as_deref(),
+            app.try_state::<tree_access::TreeAccess>()
+                .and_then(|tree| tree.shared_root())
+                .as_deref(),
+            &path,
+        ),
     );
     // Il lock di scrittura fra processi lo prende l'host aprendo, e lo lascia
     // chiudendo: qui non c'è niente da tenere. Un altro scrittore è un
@@ -545,8 +555,35 @@ fn resource_write(
 
 struct ViewerConfig(Option<Utf8PathBuf>);
 
+/// Il canale di controllo dell'app ([`fub_host::control`]): la CLI e l'host
+/// nativo del clipper lavorano attraverso l'app sui vault che lei tiene aperti.
+/// Lo possiede l'app; si chiude all'uscita, prima dei vault.
+#[cfg(not(mobile))]
+struct ControlChannel(std::sync::Mutex<Option<fub_host::control::ControlServer>>);
+
+#[cfg(not(mobile))]
+fn start_control(app: &tauri::App) {
+    let Some(dir) = app.state::<ViewerConfig>().0.clone() else {
+        return;
+    };
+    let handle = app.handle().clone();
+    match fub_host::control::ControlServer::start(&dir, move |call| {
+        fub_host::control::answer(&handle.state::<Host>(), call)
+    }) {
+        Ok(server) => {
+            app.manage(ControlChannel(std::sync::Mutex::new(Some(server))));
+        }
+        // Senza canale la CLI trova il vault occupato, come prima: l'app
+        // funziona lo stesso.
+        Err(error) => {
+            tracing::warn!(target: "fub.app", %error, "canale di controllo non avviato");
+        }
+    }
+}
+
 #[tauri::command]
 async fn viewer_open(
+    host: State<'_, Host>,
     app: AppHandle,
     window: tauri::WebviewWindow,
     config: State<'_, ViewerConfig>,
@@ -557,7 +594,26 @@ async fn viewer_open(
     })?;
     // Il loader pdf.js atteso dalla shell resta quello in bundle locale, mai una fetch remota.
     let _loader = resources::make_pdf_loader();
-    resources::open_viewer(app, window, open, dir).await
+    let opened = resources::open_viewer(app, window, open, dir).await;
+    for_the_shell(&host, None, opened)
+}
+
+/// Indietro, avanti, ricarica, chiudi o porta davanti la finestra del visore:
+/// i gesti della barra che la shell disegna nella finestra principale.
+#[tauri::command]
+fn viewer_control(
+    host: State<'_, Host>,
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    action: String,
+) -> Result<(), PluginError> {
+    let done = window
+        .url()
+        .map_err(|error| resources::viewer_failed("host.viewer.url_unavailable", error))
+        .and_then(|origin| {
+            resources::viewer_control(&app, window.label(), origin.as_str(), &action)
+        });
+    for_the_shell(&host, None, done)
 }
 
 #[tauri::command]
@@ -570,15 +626,19 @@ async fn viewer_save(
     vault: Option<String>,
     attachment_folder: String,
 ) -> Result<fub_host::resources::ResourceWriteReceipt, PluginError> {
-    let origin = window.url().map_err(|error| {
-        PluginError::Internal(format!("viewer window URL unavailable: {error}").into())
-    })?;
+    let origin = for_the_shell(
+        &host,
+        None,
+        window
+            .url()
+            .map_err(|error| resources::viewer_failed("host.viewer.url_unavailable", error)),
+    )?;
     // Il filo verso fuori è quello dell'host: lo stesso che i workspace
     // montati usano, e lo stesso che un banco sostituisce.
     let network = host.network().ok_or_else(|| {
         PluginError::Unserved("this host has no network client for the viewer".into())
     })?;
-    resources::viewer_save(
+    let saved = resources::viewer_save(
         &*host,
         &*network,
         window.label(),
@@ -589,7 +649,8 @@ async fn viewer_save(
         vault.as_deref(),
         &attachment_folder,
     )
-    .await
+    .await;
+    for_the_shell(&host, vault.as_deref(), saved)
 }
 
 /// Superfici grid dichiarate dai provider montati. La shell negozia famiglia e
@@ -1649,8 +1710,21 @@ struct OpenedAction {
 }
 
 fn forward_uri(app: &AppHandle, raw: &str) {
+    // Prima la coda dell'host, che c'è anche a freddo, quando la webview non
+    // esiste ancora: la shell la prende con `uri.pending` all'avvio e a ogni
+    // evento qui sotto, che è soltanto il campanello.
+    if let Some(host) = app.try_state::<Host>() {
+        if !host.receive_uri(raw) {
+            // Il testo non va nel log: una cattura porta il ritaglio intero.
+            tracing::warn!(target: "fub.app", "coda dei fub:// piena: un collegamento resta fuori");
+        }
+    }
     let action = match uri::handle_fub_uri(raw) {
-        Ok(uri::UriOutcome::Navigate { .. } | uri::UriOutcome::Search { .. }) => OpenedAction {
+        Ok(
+            uri::UriOutcome::Navigate { .. }
+            | uri::UriOutcome::Search { .. }
+            | uri::UriOutcome::ChooseVault,
+        ) => OpenedAction {
             raw: raw.to_string(),
             kind: "navigation",
             reason: None,
@@ -1679,10 +1753,10 @@ fn forward_uri(app: &AppHandle, raw: &str) {
 }
 
 // `pending_opened_urls`, `mobile_pending_opened_urls` e `release_info` non ci
-// sono più: nessuna riga di `apps/client/src` li invocava e nessun listener di
-// eventi li drenava (`fub://pending-action` / `fub://opened-url` restano
-// spinte senza coda di recupero). Una porta che nessuno attraversa è una
-// promessa che nessuno mantiene: toglierla è il modo giusto di reggerla.
+// sono più: nessuna riga di `apps/client/src` li invocava. Sul desktop la coda
+// di recupero è dell'host (`uri.pending`, un comando come gli altri), e
+// `fub://pending-action` è il campanello; `fub://opened-url` del mobile resta
+// una spinta senza coda.
 
 #[derive(serde::Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]
@@ -1814,6 +1888,24 @@ async fn print_artifact(
     tauri::async_runtime::spawn_blocking(move || print::open_for_print(&suggested_name, &bytes))
         .await
         .map_err(|error| unfinished("print", error))
+}
+
+/// «Mostra nel file manager» e «Apri con l'app di sistema»: una voce del
+/// vault, per percorso relativo alla radice, passa al sistema (`reveal.rs`).
+/// Soltanto dalla shell, e soltanto dentro il vault.
+#[tauri::command]
+async fn reveal_in_system(
+    window: tauri::WebviewWindow,
+    host: State<'_, Host>,
+    vault: Option<String>,
+    path: String,
+    open: bool,
+) -> Result<reveal::RevealOutcome, PluginError> {
+    guard_main_shell(&window, "reveal entries")?;
+    let root = host.root(vault.as_deref())?;
+    tauri::async_runtime::spawn_blocking(move || reveal::hand_over(root.as_std_path(), &path, open))
+        .await
+        .map_err(|error| unfinished("reveal", error))?
 }
 
 // --- superficie IPC da `support` (demo, diagnostica, recupero) ----------------
@@ -1975,13 +2067,212 @@ fn mobile_register_tree_grant(
     mobile::mobile_register_tree_grant(grant)
 }
 
+/// La proposta di mount per la cartella condivisa. Il permesso lo chiede qui
+/// al sistema operativo (`tree_access`) e il CAS lo dice la piattaforma: i due
+/// booleani del webview restano nella firma per compatibilità e non decidono.
 #[tauri::command]
-fn mobile_shared_mount_mode(
+async fn mobile_shared_mount_mode(
+    app: AppHandle,
     grant: Option<mobile::MobileTreeGrant>,
     backend_cas: bool,
     copy_accepted: bool,
-) -> mobile::MobileMountMode {
-    mobile::mobile_shared_mount_mode(grant, backend_cas, copy_accepted)
+) -> Result<mobile::MobileMountMode, PluginError> {
+    #[cfg(mobile)]
+    {
+        let _ = backend_cas;
+        let Some(grant) = grant else {
+            return Ok(mobile::MobileMountMode::NeedGrant);
+        };
+        let mode = on_tree(&app, move |tree| {
+            let permission = tree.verify(&grant);
+            let cas = tree_access::backend_cas(&grant);
+            Ok(mobile::verified_mount_mode(
+                &grant,
+                permission,
+                cas,
+                copy_accepted,
+            ))
+        })
+        .await;
+        // Senza plugin nativo la proposta resta quella di sempre.
+        Ok(mode.unwrap_or(mobile::MobileMountMode::NeedGrant))
+    }
+    #[cfg(not(mobile))]
+    {
+        let _ = app;
+        Ok(mobile::mobile_shared_mount_mode(
+            grant,
+            backend_cas,
+            copy_accepted,
+        ))
+    }
+}
+
+// --- la cartella condivisa (P14/F37): il sistema operativo risponde ---------
+//
+// Il picker, la verifica del permesso, l'accesso e la copia li fa il codice
+// nativo (`tree_access.rs`), che questi comandi raggiungono fuori dal thread
+// principale: il picker è un'interfaccia del sistema, e aspettarlo lì
+// fermerebbe proprio chi lo deve mostrare. Sul desktop rispondono `Unserved`.
+
+#[cfg(mobile)]
+async fn on_tree<T: Send + 'static>(
+    app: &AppHandle,
+    work: impl FnOnce(&tree_access::TreeAccess) -> Result<T, PluginError> + Send + 'static,
+) -> Result<T, PluginError> {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let tree = app
+            .try_state::<tree_access::TreeAccess>()
+            .ok_or_else(no_native_tree)?;
+        work(&*tree)
+    })
+    .await
+    .map_err(|error| {
+        PluginError::Internal(fub_abi::text::Text::message(
+            "host.mobile.native_failed",
+            vec![fub_abi::text::Arg::text("reason", error.to_string())],
+        ))
+    })?
+}
+
+fn no_native_tree() -> PluginError {
+    PluginError::Unserved(fub_abi::text::Text::key("host.mobile.no_native"))
+}
+
+/// Il picker di cartella del sistema. `None`: la persona l'ha chiuso.
+#[tauri::command]
+async fn mobile_pick_tree(
+    app: AppHandle,
+    host: State<'_, Host>,
+) -> Result<Option<mobile::MobileTreeGrant>, PluginError> {
+    #[cfg(mobile)]
+    let picked = on_tree(&app, |tree| tree.pick()).await;
+    #[cfg(not(mobile))]
+    let picked = {
+        let _ = app;
+        Err(no_native_tree())
+    };
+    for_the_shell(&host, None, picked)
+}
+
+/// Il permesso del sistema sul grant, adesso: una ricevuta salvata non basta.
+#[tauri::command]
+async fn mobile_verify_tree(
+    app: AppHandle,
+    grant: mobile::MobileTreeGrant,
+) -> Result<mobile::MobilePermissionState, PluginError> {
+    #[cfg(mobile)]
+    return Ok(on_tree(&app, move |tree| Ok(tree.verify(&grant)))
+        .await
+        .unwrap_or(mobile::MobilePermissionState::Unknown));
+    #[cfg(not(mobile))]
+    {
+        let _ = (app, grant);
+        Ok(mobile::MobilePermissionState::Unknown)
+    }
+}
+
+/// iOS: apre l'accesso alla cartella e ne restituisce il path, che da qui in
+/// poi `open_vault` accetta. Android non ha un path: la cartella si copia.
+#[tauri::command]
+async fn mobile_open_shared(
+    app: AppHandle,
+    host: State<'_, Host>,
+    grant: mobile::MobileTreeGrant,
+) -> Result<String, PluginError> {
+    #[cfg(mobile)]
+    let opened = on_tree(&app, move |tree| tree.open_shared(&grant))
+        .await
+        .map(Utf8PathBuf::into_string);
+    #[cfg(not(mobile))]
+    let opened = {
+        let _ = (app, grant);
+        Err(no_native_tree())
+    };
+    for_the_shell(&host, None, opened)
+}
+
+/// Chiude la cartella condivisa aperta: prima il vault, poi l'accesso del
+/// sistema. Restituisce ciò che non è diventato durevole chiudendo, come
+/// `close_vault`.
+#[tauri::command]
+async fn mobile_close_shared(
+    app: AppHandle,
+    host: State<'_, Host>,
+    windows: State<'_, document_windows::DocumentWindows>,
+) -> Result<Vec<PluginError>, PluginError> {
+    #[cfg(mobile)]
+    {
+        let Some(tree) = app.try_state::<tree_access::TreeAccess>() else {
+            return Ok(Vec::new());
+        };
+        let Some(root) = tree.shared_root() else {
+            return Ok(Vec::new());
+        };
+        let report = if host.vaults().iter().any(|open| *open == root) {
+            for_the_shell(
+                &host,
+                None,
+                document_windows::close_vault(&host, &windows, root.as_str()),
+            )?
+        } else {
+            Vec::new()
+        };
+        let closing = app.clone();
+        let _ = on_tree(&closing, |tree| {
+            tree.close_shared();
+            Ok(())
+        })
+        .await;
+        Ok(report)
+    }
+    #[cfg(not(mobile))]
+    {
+        let _ = (app, host, windows);
+        Ok(Vec::new())
+    }
+}
+
+/// Android: copia la cartella condivisa in una sottocartella nuova del vault
+/// privato. Niente si sovrascrive; il vault da aprire è il privato.
+#[tauri::command]
+async fn mobile_copy_tree(
+    app: AppHandle,
+    host: State<'_, Host>,
+    grant: mobile::MobileTreeGrant,
+) -> Result<MobileCopy, PluginError> {
+    #[cfg(mobile)]
+    let copied = {
+        let private = mobile::private_vault_root(&app);
+        on_tree(&app, move |tree| {
+            let private = private.ok_or_else(no_native_tree)?;
+            let (folder, copied) = tree.copy_into(&grant, &private)?;
+            Ok(MobileCopy {
+                vault: private.into_string(),
+                folder: folder.into_string(),
+                copied,
+            })
+        })
+        .await
+    };
+    #[cfg(not(mobile))]
+    let copied = {
+        let _ = (app, grant);
+        Err(no_native_tree())
+    };
+    for_the_shell(&host, None, copied)
+}
+
+/// L'esito di `mobile_copy_tree`: il vault da aprire, la cartella nuova e
+/// quanto è stato copiato.
+#[derive(serde::Serialize)]
+#[cfg_attr(not(mobile), allow(dead_code))]
+struct MobileCopy {
+    vault: String,
+    folder: String,
+    #[serde(flatten)]
+    copied: tree_access::Copied,
 }
 
 // --- La sessione live (ADR 0205) ---
@@ -2243,6 +2534,12 @@ pub fn run() {
             }
         }));
     }
+    // Il ponte nativo delle cartelle condivise: nessun comando suo, lo
+    // raggiungono soltanto i comandi `mobile_*` qui sopra (`tree_access.rs`).
+    #[cfg(mobile)]
+    {
+        builder = builder.plugin(tree_access::init());
+    }
     builder = builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init());
@@ -2286,6 +2583,8 @@ pub fn run() {
             for raw in std::env::args().filter(|arg| arg.starts_with("fub://")) {
                 forward_uri(app.handle(), &raw);
             }
+            #[cfg(not(mobile))]
+            start_control(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -2300,6 +2599,7 @@ pub fn run() {
             session_notice,
             save_artifact,
             print_artifact,
+            reveal_in_system,
             demo_root,
             open_demo,
             close_demo,
@@ -2318,6 +2618,7 @@ pub fn run() {
             resource_close,
             resource_write,
             viewer_open,
+            viewer_control,
             viewer_save,
             list_grid_surfaces,
             open_grid,
@@ -2387,6 +2688,11 @@ pub fn run() {
             mobile_classify_opened_url,
             mobile_register_tree_grant,
             mobile_shared_mount_mode,
+            mobile_pick_tree,
+            mobile_verify_tree,
+            mobile_open_shared,
+            mobile_close_shared,
+            mobile_copy_tree,
             live_start,
             live_pairing,
             live_send,
@@ -2433,6 +2739,14 @@ pub fn run() {
                 }
             }
             if let tauri::RunEvent::Exit = event {
+                // Il canale di controllo si chiude prima dei vault: nessuna
+                // domanda della CLI arriva a una sessione che si sta chiudendo.
+                #[cfg(not(mobile))]
+                if let Some(control) = app.try_state::<ControlChannel>() {
+                    if let Some(server) = control.0.lock().ok().and_then(|mut slot| slot.take()) {
+                        server.close();
+                    }
+                }
                 // Lo scrittore riceve `bye` prima che il runtime cada con il
                 // processo; le sessioni non toccano i vault, che si chiudono
                 // dopo.

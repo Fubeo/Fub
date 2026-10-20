@@ -10,6 +10,7 @@
 // `parseLayout`: un valore che non regge la forma vale come assente, futuro
 // (`v > 1`) = sola lettura con fallback esplicito, mai riscrittura
 // automatica. Nessuna rete, nessun provider chiamato, nessun lock tenuto.
+import { emptyFilter, matchesPath, parsePathFilter } from "./path-filter";
 import type { Tab } from "./layout";
 import { readState, writeState, state } from "./store";
 import { asRecord } from "./guard";
@@ -368,16 +369,48 @@ export function renameBookmark(id: string, title: string): boolean {
   return touched;
 }
 
-/// Riordina un segnalibro dentro l'elenco: lo toglie da dove sta e lo
-/// rimette a `to`. Come `moveTab`: oltre il ricalcolo non cambia niente.
-export function moveBookmark(id: string, to: number): boolean {
-  const from = memory.bookmarks.findIndex((b) => b.id === id);
-  if (from < 0 || to < 0 || to >= memory.bookmarks.length || from === to) return false;
+/// Un passo su (`-1`) o giù (`1`) fra i segnalibri che si vedono insieme:
+/// quelli del suo gruppo, nell'ordine del gruppo, o quelli senza gruppo. Lo
+/// spostamento nell'elenco intero non basta: un gruppo disegna i suoi in
+/// `bookmarkIds`, e un vicino nell'elenco può stare in un altro gruppo.
+export function stepBookmark(id: string, step: -1 | 1): boolean {
   if (status === "future" || status === "corrupt") return false;
+  if (!memory.bookmarks.some((b) => b.id === id)) return false;
+  const known = new Set(memory.bookmarks.map((b) => b.id));
+  const group = memory.groups.find((g) => g.bookmarkIds.includes(id));
+  if (group) {
+    const ids = [...group.bookmarkIds];
+    const from = ids.indexOf(id);
+    let to = from + step;
+    while (to >= 0 && to < ids.length && !known.has(ids[to]!)) to += step;
+    if (to < 0 || to >= ids.length) return false;
+    [ids[from], ids[to]] = [ids[to]!, ids[from]!];
+    memory.groups = memory.groups.map((g) => (g.id === group.id ? { ...g, bookmarkIds: ids } : g));
+    persist();
+    return true;
+  }
+  const grouped = new Set(memory.groups.flatMap((g) => g.bookmarkIds));
+  const loose = memory.bookmarks.filter((b) => !grouped.has(b.id)).map((b) => b.id);
+  const neighbour = loose[loose.indexOf(id) + step];
+  if (neighbour === undefined) return false;
   const list = [...memory.bookmarks];
-  const [item] = list.splice(from, 1);
-  list.splice(to, 0, item!);
+  const from = list.findIndex((b) => b.id === id);
+  const to = list.findIndex((b) => b.id === neighbour);
+  [list[from], list[to]] = [list[to]!, list[from]!];
   memory.bookmarks = list;
+  persist();
+  return true;
+}
+
+/// Un passo su o giù per un gruppo, fra i gruppi.
+export function stepGroup(id: string, step: -1 | 1): boolean {
+  if (status === "future" || status === "corrupt") return false;
+  const from = memory.groups.findIndex((g) => g.id === id);
+  const to = from + step;
+  if (from < 0 || to < 0 || to >= memory.groups.length) return false;
+  const list = [...memory.groups];
+  [list[from], list[to]] = [list[to]!, list[from]!];
+  memory.groups = list;
   persist();
   return true;
 }
@@ -441,4 +474,32 @@ export function setBookmarksForTest(store: BookmarkStoreV1): void {
 
 export function futureRawForTest(): { version: number; raw: unknown } {
   return { version: futureVersion, raw: rawFuture };
+}
+
+// Un segnalibro resta col filtro se il titolo o la destinazione lo
+// contengono, senza badare alle maiuscole.
+export function bookmarkMatches(title: string, where: string, query: string): boolean {
+  // La regola dell'esplora (`path-filter.ts`): ogni parola sta nel nome o nel
+  // percorso, e una parola col meno toglie il segnalibro se la contiene il
+  // nome o un pezzo del percorso.
+  const filter = parsePathFilter(query);
+  if (emptyFilter(filter)) return true;
+  const name = title.toLocaleLowerCase();
+  const text = `${name}\n${where.toLocaleLowerCase()}`;
+  if (!filter.include.every((word) => text.includes(word))) return false;
+  return (
+    !filter.exclude.some((word) => name.includes(word)) &&
+    matchesPath({ include: [], exclude: filter.exclude }, where)
+  );
+}
+
+// Le voci lasciate cadere sul pannello, ognuna un segnalibro col suo nome:
+// quante sono entrate (una che non entra non ferma le altre).
+export function bookmarkDropped(ids: readonly string[]): number {
+  let added = 0;
+  for (const id of ids) {
+    const title = id.split("/").filter(Boolean).pop() ?? id;
+    if (addBookmark(title, { k: "doc", doc: id })) added += 1;
+  }
+  return added;
 }

@@ -29,17 +29,44 @@ world ping {
     export fub:abi/command@0.2.0;
 }
 
-// Lo stesso ping, che in più chiede la rete. Non esiste per fare qualcosa:
-// esiste perché il rifiuto abbia un componente vero davanti a cui pronunciarsi.
-// `fub:abi/host-network` è fuori dall'elenco che l'host serve, ed è la famiglia
-// che ne uscirà per ultima: è l'unica che apre una porta fuori dalla macchina, e
-// il permesso `fub:network` esiste da prima che ci sia qualcuno a servirlo. Il
-// test `una_famiglia_non_servita_si_fa_nominare` pretende che il caricamento la
-// nomini invece di montare un plugin che cadrà a metà lavoro.
+// Lo stesso ping, che in più chiede la rete. Era il componente davanti a cui
+// l'host rifiutava una famiglia non servita; da quando `host-network` è servita
+// si monta, e il test lo usa per vedere il cancello del permesso `fub:network`
+// chiudersi a runtime.
 world ping-con-rete {
     import fub:abi/host-env@0.2.0;
     import fub:abi/host-vault-read@0.2.0;
     import fub:abi/host-network@0.2.0;
+
+    export fub:abi/plugin@0.2.0;
+}
+
+// Lo stesso ping, che chiede `host-transfer-read`: la famiglia che l'host non
+// collega fuori da un importer, e che un plugin non può quindi importare. Non
+// esiste per fare qualcosa: esiste perché il rifiuto al caricamento abbia un
+// componente vero davanti a cui pronunciarsi.
+world ping-con-trasferimento {
+    import fub:abi/host-env@0.2.0;
+    import fub:abi/host-vault-read@0.2.0;
+    import fub:abi/host-transfer-read@0.2.0;
+
+    export fub:abi/plugin@0.2.0;
+}
+
+// Lo stesso ping, che attraversa le famiglie di scrittura, di struttura, delle
+// impostazioni, dello stato di vista, della query, dei comandi e dei servizi:
+// un job solo le chiama tutte e riporta cosa ha visto.
+world ping-con-famiglie {
+    import fub:abi/host-env@0.2.0;
+    import fub:abi/host-vault-read@0.2.0;
+    import fub:abi/host-vault-write@0.2.0;
+    import fub:abi/host-vault-structure@0.2.0;
+    import fub:abi/host-settings-read@0.2.0;
+    import fub:abi/host-view-state-read@0.2.0;
+    import fub:abi/host-view-state-write@0.2.0;
+    import fub:abi/host-query@0.2.0;
+    import fub:abi/host-commands@0.2.0;
+    import fub:abi/host-services@0.2.0;
 
     export fub:abi/plugin@0.2.0;
 }

@@ -8,9 +8,9 @@
  * - **IBM Plex Mono** per la sorgente (`--font-mono`): quattro tagli statici,
  *   perché il pacchetto non ha un file variabile.
  *
- * Inter, Literata e JetBrains Mono restano dichiarati: `appearance.font` li
- * nomina ancora come scelte valide, e i diagrammi misurano il testo con
- * Literata. Un `@font-face` che nessuna regola usa non scarica niente.
+ * Inter, Literata e JetBrains Mono restano dichiarati: `appearance.font`,
+ * `appearance.font-ui` e `appearance.font-mono` li nominano come scelte, e i
+ * diagrammi misurano il testo con Literata. Un `@font-face` che nessuna regola usa non scarica niente.
  *
  * Tutti i file stanno in `public/fonts/`, sottoinsieme `latin`, licenza SIL
  * Open Font License 1.1: la CSP dell'app non lascia raggiungere un carattere in

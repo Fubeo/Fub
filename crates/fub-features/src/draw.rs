@@ -1,5 +1,6 @@
 //! I disegni nel vault (bundle `fub.draw`): il comando che ne fa nascere uno,
-//! l'export in PNG, JPEG, SVG e PDF, e le impostazioni dell'editor.
+//! l'export in PNG, JPEG, SVG, PDF, Excalidraw e draw.io, e le impostazioni
+//! dell'editor.
 //!
 //! Il comando «Nuovo disegno» è nel modulo [`create`]: un disegno nasce vuoto
 //! dal provider del formato, da un modello distribuito con Fub o da un disegno
@@ -7,7 +8,7 @@
 //! il PDF» è nel modulo [`annotate`]: apre le annotazioni di un PDF, il file
 //! `.pdf.fubann` accanto, e le fa nascere dal provider `fubann` se non ci sono.
 //!
-//! L'export sono quattro [`ExportProvider`], uno per formato, che leggono il
+//! L'export sono sei [`ExportProvider`], uno per formato, che leggono il
 //! disegno nello stesso modo. Le opzioni della richiesta ([`choice`]) dicono
 //! che cosa esce: il disegno intero, alcune tavole o gli oggetti scelti, con
 //! la carta o senza, e per il PDF su che pagina di stampa. Il disegno intero
@@ -16,7 +17,9 @@
 //! passa da `usvg`, che ne fa un albero, e da lì `resvg` rasterizza il PNG e
 //! il JPEG e `svg2pdf` scrive il PDF vettoriale, sulla carta, con
 //! l'abbondanza e i segni chiesti ([`fub_scene::export::print`]); l'SVG è il
-//! testo stesso, ripulito per il web. Un disegno è
+//! testo stesso, ripulito per il web. Excalidraw e draw.io leggono la scena
+//! e l'albero insieme, e ne fanno le forme dei due programmi ([`interop`]).
+//! Un disegno è
 //! un documento del formato `svg`; gli altri documenti della selezione si
 //! saltano, e il log dice quanti.
 //!
@@ -120,6 +123,7 @@ mod choice;
 mod create;
 mod fonts;
 mod index;
+mod interop;
 mod templates;
 mod typefaces;
 
@@ -144,6 +148,12 @@ pub const DRAW_JPEG: &str = "draw.jpeg";
 pub const DRAW_SVG: &str = "draw.svg";
 /// La destinazione PDF: un file vettoriale per disegno, una pagina per tavola.
 pub const DRAW_PDF: &str = "draw.pdf";
+/// La destinazione Excalidraw: un file `.excalidraw` per disegno, con le
+/// forme che Excalidraw modifica e il resto come immagine.
+pub const DRAW_EXCALIDRAW: &str = "draw.excalidraw";
+/// La destinazione draw.io: un file `.drawio` per disegno, una pagina per
+/// tavola.
+pub const DRAW_DRAWIO: &str = "draw.drawio";
 
 /// L'impostazione del livello d'interfaccia dell'editor: quali strumenti offre.
 pub const DRAW_LEVEL_KEY: &str = "draw.level";
@@ -405,6 +415,8 @@ pub fn exports() -> Vec<Box<dyn ExportProvider>> {
         Box::new(JpegExport),
         Box::new(SvgExport),
         Box::new(PdfExport),
+        Box::new(ExcalidrawExport),
+        Box::new(DrawioExport),
         Box::new(AnnotatedPdfExport),
         Box::new(RedactedPdfExport),
     ]
@@ -442,6 +454,81 @@ pub struct SvgExport;
 /// nell'ordine del documento, ciascuna con un segnalibro col suo nome.
 #[derive(Default)]
 pub struct PdfExport;
+
+/// L'export in Excalidraw: per disegno, per tavola o per la selezione, un
+/// file `.excalidraw` coi rettangoli, le ellissi, i rombi, le linee, le
+/// frecce agganciate, i testi e le etichette che Excalidraw modifica, le
+/// tavole come riquadri, e come immagine ciò che non ha una forma sua
+/// ([`interop`]). Il log dice ciò che cambia.
+#[derive(Default)]
+pub struct ExcalidrawExport;
+
+/// L'export in draw.io: un file `.drawio` per disegno, con le forme, i
+/// connettori agganciati, i testi, le etichette e i livelli che draw.io
+/// modifica, e come immagine il resto ([`interop`]). Le tavole sono un file
+/// solo, una pagina per tavola. Il log dice ciò che cambia.
+#[derive(Default)]
+pub struct DrawioExport;
+
+impl ExportProvider for ExcalidrawExport {
+    fn targets(&self) -> Vec<ExportTarget> {
+        vec![ExportTarget {
+            id: DRAW_EXCALIDRAW.to_string(),
+            name: "Excalidraw (editable shapes)".to_string(),
+            extension: None,
+        }]
+    }
+
+    fn export(
+        &self,
+        request: &ExportRequest,
+        host: &dyn ReadApi,
+        out: &mut dyn ArtifactSink,
+    ) -> Result<ExportReport, PluginError> {
+        check_target(request, DRAW_EXCALIDRAW)?;
+        let choice = Choice::read(&request.options)?;
+        export_drawings(
+            request,
+            host,
+            out,
+            Format::Excalidraw,
+            &choice,
+            &mut |drawing, file, out, report| {
+                interop::write(interop::Target::Excalidraw, drawing, file, out, report)
+            },
+        )
+    }
+}
+
+impl ExportProvider for DrawioExport {
+    fn targets(&self) -> Vec<ExportTarget> {
+        vec![ExportTarget {
+            id: DRAW_DRAWIO.to_string(),
+            name: "draw.io (editable shapes, one page per board)".to_string(),
+            extension: None,
+        }]
+    }
+
+    fn export(
+        &self,
+        request: &ExportRequest,
+        host: &dyn ReadApi,
+        out: &mut dyn ArtifactSink,
+    ) -> Result<ExportReport, PluginError> {
+        check_target(request, DRAW_DRAWIO)?;
+        let choice = Choice::read(&request.options)?;
+        export_drawings(
+            request,
+            host,
+            out,
+            Format::Drawio,
+            &choice,
+            &mut |drawing, file, out, report| {
+                interop::write(interop::Target::Drawio, drawing, file, out, report)
+            },
+        )
+    }
+}
 
 impl ExportProvider for PngExport {
     fn targets(&self) -> Vec<ExportTarget> {
@@ -574,6 +661,8 @@ enum Format {
     Jpeg,
     Svg,
     Pdf,
+    Excalidraw,
+    Drawio,
 }
 
 impl Format {
@@ -583,12 +672,14 @@ impl Format {
             Format::Jpeg => "jpg",
             Format::Svg => "svg",
             Format::Pdf => "pdf",
+            Format::Excalidraw => "excalidraw",
+            Format::Drawio => "drawio",
         }
     }
 
     /// Le tavole stanno in un file solo, una pagina ciascuna.
     fn has_pages(self) -> bool {
-        self == Format::Pdf
+        matches!(self, Format::Pdf | Format::Drawio)
     }
 }
 

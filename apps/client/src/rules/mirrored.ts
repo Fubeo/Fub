@@ -381,6 +381,19 @@ export function topicMatches(prefix: string, topic: string): boolean {
   return next === undefined || next === ":" || next === ".";
 }
 
+/// Una cartella dichiarata (allegati, nuove note) letta per una nota. Gemella di
+/// `fub_abi::rules::folders::for_note`: `./` comincia dalla cartella
+/// della nota, ogni altra cartella è del vault. `""` è la radice.
+export function folderForNote(declared: string, source: string): string {
+  const trimmed = declared.trim();
+  const rest = trimmed === "." ? "" : trimmed.startsWith("./") ? trimmed.slice(2) : null;
+  if (rest === null) return trimmed.replace(/^\/+|\/+$/g, "");
+  const own = source.includes("/") ? source.slice(0, source.lastIndexOf("/")) : "";
+  const inner = rest.replace(/^\/+|\/+$/g, "");
+  if (!own) return inner;
+  return inner ? `${own}/${inner}` : own;
+}
+
 /// Questo documento sta dentro questa cartella, a qualunque profondità?
 ///
 /// Gemella di `fub_abi::rules::cartelle::contiene`, che di là è la stessa riga

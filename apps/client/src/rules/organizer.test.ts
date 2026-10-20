@@ -70,3 +70,37 @@ describe("l'organizzazione di un livello (§14.3, §14.4)", () => {
     expect(folderNoteCandidates("", ["md"])).toEqual([]);
   });
 });
+
+describe("l'ordine scelto dal menu dell'albero", () => {
+  const content = {
+    path: "P",
+    folders: [folder("P/Beta"), folder("P/Alfa")],
+    notes: ["P/b.md", "P/a.md", "P/c.md"],
+    files: ["P/y.png", "P/x.png"],
+    otherFolders: 0,
+    otherNote: 0,
+    mtimes: { "P/a.md": 300, "P/b.md": 100, "P/c.md": 100, "P/x.png": 50, "P/y.png": 200 },
+  };
+  const names = (ids: string[]) => ids.map((id) => id.slice(2));
+
+  it("per nome ignora l'ordine a mano, e Z–A rovescia anche le cartelle", () => {
+    const hand = meta({ P: ["c.md", "b.md"] });
+    expect(names(sortContent(content, hand).notes)).toEqual(["c.md", "b.md", "a.md"]);
+    const asc = sortContent(content, hand, "name-asc");
+    expect(names(asc.notes)).toEqual(["a.md", "b.md", "c.md"]);
+    const desc = sortContent(content, hand, "name-desc");
+    expect(names(desc.notes)).toEqual(["c.md", "b.md", "a.md"]);
+    expect(desc.folders.map((f) => f.path)).toEqual(["P/Beta", "P/Alfa"]);
+  });
+
+  it("per data mette prima il più recente, e a parità vale il nome", () => {
+    expect(names(sortContent(content, meta(), "modified-new").notes)).toEqual(["a.md", "b.md", "c.md"]);
+    expect(names(sortContent(content, meta(), "modified-old").notes)).toEqual(["b.md", "c.md", "a.md"]);
+    expect(names(sortContent(content, meta(), "modified-new").files)).toEqual(["y.png", "x.png"]);
+  });
+
+  it("senza date non si rompe: tutte alla pari, ordina il nome", () => {
+    const bare = { ...content, mtimes: undefined };
+    expect(names(sortContent(bare, meta(), "modified-new").notes)).toEqual(["a.md", "b.md", "c.md"]);
+  });
+});

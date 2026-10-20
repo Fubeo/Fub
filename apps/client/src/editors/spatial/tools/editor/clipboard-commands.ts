@@ -21,11 +21,13 @@ import { rasterize } from "../png";
 import { snapDelta, wholeSteps } from "../grid";
 import { sceneBox, seenBox, toScene, toScreen } from "../../view";
 import { elemBounds, type Unit } from "../hit";
+import { foreignDrawing } from "../../import/foreign";
 import { copySvg, looksLikeSvg, pasteFrame, planPaste, readPaste, SVG_TYPE, type PasteProblem, type PasteSource } from "../clipboard";
 import {
   browserCodec,
   budgetFor,
   dataUri,
+  foreignFiles,
   imageElem,
   imageFiles,
   jpegOrientation,
@@ -132,6 +134,10 @@ export interface Carried {
   readonly text: string | null;
   readonly svgs: readonly File[];
   readonly images: readonly File[];
+  /// Il testo di un disegno di Excalidraw o di draw.io negli appunti, e i
+  /// loro file: entrano con il lettore dell'importazione.
+  readonly foreign?: string | null;
+  readonly foreignFiles?: readonly File[];
 }
 
 /// Ciò che gli appunti, le immagini incollate e lo stile copiato dà agli altri pezzi dell'editor.
@@ -511,15 +517,25 @@ export function installClipboardCommands(ctx: EditorContext): void {
     const plain = data.getData("text/plain");
     const typed = looksLikeSvg(plain) ? plain : data.getData(SVG_TYPE);
     if (looksLikeSvg(typed)) return { text: typed, svgs: [], images: [] };
+    // Un DataTransfer di un altro ambiente può non dare un testo.
+    const foreign = typeof plain === "string" ? foreignDrawing(plain) : null;
+    if (foreign !== null) return { text: null, svgs: [], images: [], foreign: foreign.text };
     const svgs = svgFiles(data);
     const images = imageFiles(data);
-    return svgs.length === 0 && images.length === 0 ? null : { text: null, svgs, images };
+    const others = foreignFiles(data);
+    return svgs.length === 0 && images.length === 0 && others.length === 0 ? null : { text: null, svgs, images, foreignFiles: others };
   };
   ctx.carriedBy = carriedBy;
 
   /// Porta `carried` sul foglio: gli SVG in un passo, poi le immagini nel
   /// loro. Un file più grande di un disegno modificabile non si legge.
   async function pasteCarried(carried: Carried, at: Point | null, inPlace: boolean): Promise<void> {
+    // Senza disegni di altri programmi l'incolla non aspetta niente in più.
+    const files = carried.foreignFiles ?? [];
+    if (carried.foreign || files.length > 0) {
+      const texts = await Promise.all(files.map((file) => file.text().catch(() => "")));
+      await pasteForeign(carried.foreign ? [carried.foreign, ...texts] : texts, at, inPlace);
+    }
     if (carried.text !== null) {
       await pasteSvgs([{ text: carried.text, name: null }], at, inPlace);
       return;
@@ -533,6 +549,30 @@ export function installClipboardCommands(ctx: EditorContext): void {
     if (carried.images.length > 0) await addImages(carried.images, at);
   }
   ctx.pasteCarried = pasteCarried;
+
+  /// Incolla i disegni di Excalidraw o di draw.io di `texts`: il lettore
+  /// dell'importazione ne fa un disegno di FubDraw, che entra come un SVG, e
+  /// poi si dice che cosa non è entrato o è entrato cambiato.
+  async function pasteForeign(texts: readonly string[], at: Point | null, inPlace: boolean): Promise<void> {
+    const { pastedDrawing } = await import("../../import/paste");
+    const svgs: Array<{ readonly text: string; readonly name: null }> = [];
+    const notes: string[] = [];
+    let failed = false;
+    for (const text of texts) {
+      try {
+        const done = await pastedDrawing(text);
+        svgs.push({ text: done.svg, name: null });
+        for (const note of done.notes) if (!notes.includes(note)) notes.push(note);
+      } catch {
+        failed = true;
+      }
+    }
+    if (ctx.disposed) return;
+    if (svgs.length > 0) await pasteSvgs(svgs, at, inPlace);
+    if (ctx.disposed) return;
+    const said = [failed ? t("draw.paste.foreign.failed") : "", ...notes].filter(Boolean);
+    if (said.length > 0) announce(said.join(" "));
+  }
 
   /// Il contenitore del modello che `to` nomina.
   const containerOf = (model: DocumentModel, to: Destination): ContainerNode | null => {
@@ -713,20 +753,26 @@ export function installClipboardCommands(ctx: EditorContext): void {
     // Un tipo che non arriva, come il PNG di una copia superata, non c'è.
     const read = (item: ClipboardEntry, type: string): Promise<Blob | null> => item.getType(type).catch(() => null);
     let svg: string | null = null;
+    let foreign: string | null = null;
     const images: File[] = [];
     for (const item of items) {
       for (const type of ["text/plain", SVG_TYPE]) {
         if (svg !== null || !item.types.includes(type)) continue;
         const text = (await (await read(item, type))?.text().catch(() => null)) ?? "";
         if (looksLikeSvg(text)) svg = text;
+        else if (type === "text/plain") foreign ??= foreignDrawing(text)?.text ?? null;
       }
       const raster = item.types.find((type) => type.startsWith("image/") && type !== SVG_TYPE);
       const blob = svg === null && raster !== undefined ? await read(item, raster) : null;
       if (blob !== null) images.push(new File([blob], "image", { type: raster }));
     }
     if (ctx.disposed) return;
-    if (svg === null && images.length === 0) {
+    if (svg === null && foreign === null && images.length === 0) {
       announce(t("draw.paste.nothing"));
+      return;
+    }
+    if (svg === null && foreign !== null) {
+      await pasteCarried({ text: null, svgs: [], images: [], foreign }, at, inPlace);
       return;
     }
     await pasteCarried({ text: svg, svgs: [], images: svg === null ? images : [] }, at, inPlace);

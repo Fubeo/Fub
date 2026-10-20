@@ -92,9 +92,46 @@ pub fn attr(name: &str, value: &str) -> String {
     format!(" {name}=\"{}\"", escape(value))
 }
 
+/// Il contrario di [`escape`], con la stessa tabella: le cinque entità tornano
+/// i loro caratteri, in un passo solo (`&amp;lt;` resta `&lt;`, non diventa
+/// `<`). Le altre entità restano come sono: chi legge HTML vero ha un parser.
+pub fn unescape(s: &str) -> String {
+    if !s.contains('&') {
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(at) = rest.find('&') {
+        out.push_str(&rest[..at]);
+        let tail = &rest[at..];
+        match TABLE.iter().find(|(_, entity)| tail.starts_with(entity)) {
+            Some((c, entity)) => {
+                out.push(*c);
+                rest = &tail[entity.len()..];
+            }
+            None => {
+                out.push('&');
+                rest = &tail[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Andata e ritorno, e un passo solo: un'entità escapata due volte torna
+    /// escapata una volta.
+    #[test]
+    fn unescape_undoes_escape_in_one_pass() {
+        let text = "a<b>&\"' Caffè";
+        assert_eq!(unescape(&escape(text)), text);
+        assert_eq!(unescape("&amp;lt;"), "&lt;");
+        assert_eq!(unescape("&nbsp;&copy; & fine"), "&nbsp;&copy; & fine");
+    }
 
     /// La tabella, fissata carattere per carattere.
     ///

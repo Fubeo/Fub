@@ -24,6 +24,7 @@ import { setMotionPreference } from "../moto/level";
 import { setFrameRatePreference } from "./frame-rate";
 import { setDiagramStylePreference } from "./diagram-style";
 import { applyThemeOptions, resolveThemeOptions, type ThemeOption } from "./options";
+import { t } from "../i18n/strings";
 
 export type Theme = "light" | "dark";
 export type Density = "compact" | "comfortable" | "relaxed";
@@ -43,6 +44,8 @@ export const BODY_KEY = "appearance.body";
 export const LINE_HEIGHT_KEY = "appearance.line-height";
 export const MEASURE_KEY = "appearance.measure";
 export const FONT_KEY = "appearance.font";
+export const UI_FONT_KEY = "appearance.font-ui";
+export const MONO_FONT_KEY = "appearance.font-mono";
 export const ACCENT_KEY = "appearance.accent";
 export const ZOOM_KEY = "appearance.zoom";
 export const THEME_ID_KEY = "appearance.theme-id";
@@ -61,6 +64,10 @@ export interface AppearancePreferences {
   lineHeight: number;
   measure: number;
   font: ReadingFont;
+  /** `appearance.font-ui`: una voce di `uiFonts` della serie. Assente = la sua. */
+  uiFont?: string;
+  /** `appearance.font-mono`: una voce di `monoFonts` della serie. Assente = la sua. */
+  monoFont?: string;
   accent: number;
   /** `chrome.compactness`: lo spazio dell'interfaccia, da 0 a 4. Assente = 0. */
   compactness?: number;
@@ -86,6 +93,10 @@ export interface ThemeSeries {
   readonly defaults: AppearancePreferences;
   /** Le voci di `appearance.font` che la serie sa rendere, con la loro pila. */
   readonly readingFonts: Readonly<Record<string, string>>;
+  /** Le voci di `appearance.font-ui` e `appearance.font-mono`, con la loro pila.
+   *  Una serie che non le dà lascia i caratteri dei suoi fogli. */
+  readonly uiFonts?: Readonly<Record<string, string>>;
+  readonly monoFonts?: Readonly<Record<string, string>>;
   sheet(light: Theme, contrast: ContrastLevel): string;
   /** I token di densità, accento e cornice: ciò che è proprio della serie. */
   tokens(preferences: AppearancePreferences, light: Theme, contrast: ContrastLevel): Record<string, string>;
@@ -187,6 +198,8 @@ function bounded(value: unknown, fallback: number, min: number, max: number): nu
 function normalizedPreferences(raw: Partial<AppearancePreferences>): AppearancePreferences {
   const defaults = series.defaults;
   const known = typeof raw.font === "string" && Object.prototype.hasOwnProperty.call(series.readingFonts, raw.font);
+  const among = (value: unknown, fonts: Readonly<Record<string, string>> | undefined, fallback: string | undefined) =>
+    typeof value === "string" && fonts !== undefined && Object.prototype.hasOwnProperty.call(fonts, value) ? value : fallback;
   return {
     density:
       raw.density === "compact" || raw.density === "relaxed" || raw.density === "comfortable"
@@ -196,6 +209,8 @@ function normalizedPreferences(raw: Partial<AppearancePreferences>): AppearanceP
     lineHeight: bounded(raw.lineHeight, defaults.lineHeight, 1.2, 2.4),
     measure: bounded(raw.measure, defaults.measure, 40, 100),
     font: known ? (raw.font as string) : defaults.font,
+    uiFont: among(raw.uiFont, series.uiFonts, defaults.uiFont),
+    monoFont: among(raw.monoFont, series.monoFonts, defaults.monoFont),
     accent: bounded(raw.accent, defaults.accent, 0, 360),
     compactness: Math.round(bounded(raw.compactness, defaults.compactness ?? 0, 0, 4)),
   };
@@ -210,6 +225,10 @@ export function preferenceTokens(
   const safe = normalizedPreferences(value);
   const tokens: Record<string, string> = {};
   tokens["font-reading"] = series.readingFonts[safe.font] ?? series.readingFonts[series.defaults.font]!;
+  const ui = safe.uiFont === undefined ? undefined : series.uiFonts?.[safe.uiFont];
+  if (ui !== undefined) tokens["font-ui"] = ui;
+  const mono = safe.monoFont === undefined ? undefined : series.monoFonts?.[safe.monoFont];
+  if (mono !== undefined) tokens["font-mono"] = mono;
   tokens["text-reading"] = `${safe.body}px`;
   tokens["leading-relaxed"] = String(safe.lineHeight);
   tokens["content-width"] = `${safe.measure}ch`;
@@ -375,6 +394,8 @@ async function reread(): Promise<void> {
     lineHeight: valueOf(entries, LINE_HEIGHT_KEY) as number,
     measure: valueOf(entries, MEASURE_KEY) as number,
     font: valueOf(entries, FONT_KEY) as ReadingFont,
+    uiFont: valueOf(entries, UI_FONT_KEY) as string,
+    monoFont: valueOf(entries, MONO_FONT_KEY) as string,
     accent: valueOf(entries, ACCENT_KEY) as number,
     compactness: valueOf(entries, COMPACTNESS_KEY) as number,
   });
@@ -495,7 +516,7 @@ export async function previewTheme(id: string, light: Theme): Promise<void> {
   if (id !== SERIES_THEME_ID) {
     const info = installedThemes.find((theme) => theme.manifest.id === id);
     if (!info || !info.manifest.lights.includes(light)) {
-      throw new Error("tema non disponibile");
+      throw new Error(t("errors.theme.unavailable"));
     }
   }
   const generation = ++selectionGeneration;
@@ -505,7 +526,7 @@ export async function previewTheme(id: string, light: Theme): Promise<void> {
   if (!mountedVariant.startsWith(id + ":" + light + ":")) {
     previewSelection = null;
     await apply();
-    throw new Error("anteprima tema non disponibile");
+    throw new Error(t("errors.theme.preview_unavailable"));
   }
 }
 
@@ -515,7 +536,7 @@ export async function selectTheme(id: string, light: Theme | ""): Promise<void> 
   if (id !== SERIES_THEME_ID) {
     const info = installedThemes.find((theme) => theme.manifest.id === id);
     if (!info || !info.manifest.lights.includes(light as Theme)) {
-      throw new Error("tema non disponibile");
+      throw new Error(t("errors.theme.unavailable"));
     }
   }
   const generation = ++selectionGeneration;

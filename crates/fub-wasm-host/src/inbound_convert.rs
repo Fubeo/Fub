@@ -176,6 +176,8 @@ pub(crate) fn from_predicate_kind(
         w_index::PredicateKind::Task => R::Task,
         w_index::PredicateKind::Path => R::Path,
         w_index::PredicateKind::File => R::File,
+        w_index::PredicateKind::Scoped => R::Scoped,
+        w_index::PredicateKind::TaskDue => R::TaskDue,
     })
 }
 
@@ -365,7 +367,26 @@ fn to_predicate(
         R::File { extension } => w_index::QueryPredicate::File(w_index::FilePredicate {
             extension: extension.clone(),
         }),
+        R::Scoped { scope, text } => w_index::QueryPredicate::Scoped(w_index::ScopedPredicate {
+            scope: match scope {
+                fub_abi::query::TextScope::Line => w_index::TextScope::Line,
+                fub_abi::query::TextScope::Block => w_index::TextScope::Block,
+                fub_abi::query::TextScope::Section => w_index::TextScope::Section,
+            },
+            text: to_text_query(text)?,
+        }),
+        R::TaskDue { min, max } => w_index::QueryPredicate::TaskDue(w_index::TaskDuePredicate {
+            min: min.as_ref().map(to_due_bound),
+            max: max.as_ref().map(to_due_bound),
+        }),
     })
+}
+
+fn to_due_bound(bound: &fub_abi::query::DueBound) -> w_index::DueBound {
+    w_index::DueBound {
+        date: bound.date.clone(),
+        inclusive: bound.inclusive,
+    }
 }
 
 fn to_text_query(t: &fub_abi::query::TextQuery) -> Result<w_index::TextQuery, PluginError> {
@@ -550,6 +571,8 @@ fn to_health_check(c: &fub_abi::traits::HealthCheck) -> w_index::HealthCheck {
         R::OrphanDocuments => w_index::HealthCheck::OrphanDocuments,
         R::CollidingPaths => w_index::HealthCheck::CollidingPaths,
         R::UnrecognizedDates => w_index::HealthCheck::UnrecognizedDates,
+        R::DeadEnds => w_index::HealthCheck::DeadEnds,
+        R::UnusedAttachments => w_index::HealthCheck::UnusedAttachments,
     }
 }
 
@@ -731,6 +754,8 @@ fn from_health_check(c: w_index::HealthCheck) -> fub_abi::traits::HealthCheck {
         w_index::HealthCheck::OrphanDocuments => R::OrphanDocuments,
         w_index::HealthCheck::CollidingPaths => R::CollidingPaths,
         w_index::HealthCheck::UnrecognizedDates => R::UnrecognizedDates,
+        w_index::HealthCheck::DeadEnds => R::DeadEnds,
+        w_index::HealthCheck::UnusedAttachments => R::UnusedAttachments,
     }
 }
 

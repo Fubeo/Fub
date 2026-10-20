@@ -636,6 +636,33 @@ export function cycleTab(id: string, delta: 1 | -1, l: Layout = layout): boolean
   return true;
 }
 
+/// Le linguette del riquadro in ordine d'uso, come indici: l'attiva, poi
+/// quelle lasciate più di recente (la cronologia del riquadro), poi le altre
+/// nell'ordine della striscia. È l'ordine di `Ctrl+Tab`.
+export function recentTabs(id: string, l: Layout = layout): number[] {
+  const p = l.panes[id];
+  if (!p) return [];
+  const order: number[] = [];
+  const add = (index: number): void => {
+    if (index >= 0 && index < p.tabs.length && !order.includes(index)) order.push(index);
+  };
+  add(p.active);
+  for (const tab of [...(p.history?.past ?? [])].reverse()) add(p.tabs.findIndex((each) => sameTab(each, tab)));
+  p.tabs.forEach((_, index) => add(index));
+  return order;
+}
+
+/// Attiva la tab in posizione `index` del riquadro, contando da zero; `"last"`
+/// è l'ultima. Torna `false` se quella tab non c'è o è già quella attiva.
+export function goToTab(id: string, index: number | "last", l: Layout = layout): boolean {
+  const p = l.panes[id];
+  if (!p || p.tabs.length === 0) return false;
+  const at = index === "last" ? p.tabs.length - 1 : index;
+  if (at < 0 || at >= p.tabs.length || at === p.active) return false;
+  activateTab(id, at, l);
+  return true;
+}
+
 /// Toglie la tab e basta: **niente annuncio, niente scrittura**. Torna `false`
 /// se non c'era niente da togliere.
 ///

@@ -79,6 +79,21 @@ function diagramLinks(svg: Document): Array<{ href: string; label: string }> {
   return links;
 }
 
+/// Le note che il diagramma nomina, come in Obsidian: un nodo con la classe
+/// `internal-link` (`class A internal-link`) è un link alla nota col suo testo.
+/// Diventano wikilink nell'elenco dei link, mai nodi SVG nella shell.
+function diagramNotes(svg: Document): string[] {
+  if (svg.documentElement.localName !== "svg" || svg.documentElement.namespaceURI !== SVG_NAMESPACE) return [];
+  const notes: string[] = [];
+  for (const node of svg.querySelectorAll("g")) {
+    if (node.namespaceURI !== SVG_NAMESPACE || !node.classList.contains("internal-link")) continue;
+    const label = Array.from(node.querySelectorAll("text"), (text) => text.textContent ?? "")
+      .join(" ").replace(/\s+/gu, " ").trim();
+    if (label && !notes.includes(label)) notes.push(label);
+  }
+  return notes;
+}
+
 const MAX_SOURCE_LENGTH = 50_000;
 // Mermaid has process-wide configuration. Theme selection and rendering must
 // share the same queue, not just calls to mermaid.render().
@@ -255,6 +270,7 @@ async function fontReady(font: DiagramFont): Promise<void> {
 interface Rendered {
   readonly svg: string;
   readonly links: ReadonlyArray<{ href: string; label: string }>;
+  readonly notes: readonly string[];
   readonly description: string;
   readonly width: number | null;
   readonly height: number | null;
@@ -402,6 +418,9 @@ export interface MermaidViewOptions {
   /// Scrive nel sorgente la modifica che dà (o toglie) lo stile a questo
   /// diagramma soltanto. C'è dove il sorgente si può modificare (Live).
   editSource?: (edit: SourceEdit) => void;
+  /// Mostra le note dei nodi `internal-link` come wikilink: soltanto dove chi
+  /// monta la resa li apre (Live e Lettura), non in una vista dichiarativa.
+  noteLinks?: boolean;
 }
 
 /** A diagram is an image, never active SVG/HTML in the shell. The source is
@@ -549,6 +568,17 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
       item.append(anchor);
       return item;
     });
+    // Un wikilink come quelli del testo: lo apre chi monta la resa.
+    for (const page of options.noteLinks ? rendered.notes : []) {
+      const item = document.createElement("li");
+      const anchor = document.createElement("a");
+      anchor.className = "wikilink";
+      anchor.setAttribute("href", "#");
+      anchor.dataset.wikilinkPage = page;
+      anchor.textContent = page;
+      item.append(anchor);
+      items.push(item);
+    }
     // Ogni vista ha il suo URL, anche quando la resa viene dalla cache: così
     // lo revoca da sola, senza contare chi altro lo mostra.
     const nextUrl = URL.createObjectURL(new Blob([rendered.svg], { type: "image/svg+xml" }));
@@ -630,6 +660,7 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
         const description = Array.from(svgDocument.querySelectorAll("title, desc"))
           .map((node) => node.textContent?.trim()).filter(Boolean).join(". ");
         const links = diagramLinks(svgDocument);
+        const notes = diagramNotes(svgDocument);
         // Carta, carattere ed etichette delle fette entrano nell'SVG prima che
         // diventi un'immagine: dopo, niente della pagina lo raggiunge più.
         const isSvg = svgDocument.documentElement.localName === "svg";
@@ -639,6 +670,7 @@ export function createMermaidView(source: string, options: MermaidViewOptions = 
         const rendered: Rendered = {
           svg: isSvg ? new XMLSerializer().serializeToString(svgDocument) : result.svg,
           links,
+          notes,
           description,
           width,
           height: box && width !== null ? (box.height * width) / box.width : null,
@@ -799,6 +831,7 @@ export function mountMermaidBlocks(container: HTMLElement, options: MermaidBlock
         }
         : undefined,
       appearance: options.appearance,
+      noteLinks: true,
       onResize: () => container.dispatchEvent(new Event("markdown-resize", { bubbles: true })),
     });
     // Preserve the coordinate space of the renderer that produced the fence.

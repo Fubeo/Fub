@@ -9,11 +9,41 @@ import { layout, openViewIn } from "../state/layout";
 import { notify } from "./notify";
 
 const specs = new Map<string, ViewSpec>();
+/// Le view montate nella barra laterale sinistra, e chi sa mostrarne una: la
+/// palette le elenca accanto a quelle principali, e la sidebar le mostra.
+const sidePanels = new Map<string, ViewSpec>();
+let showSidePanel: ((id: string) => void) | null = null;
 
 /// Sostituisce l'elenco, nell'ordine dato: è l'esito di un giro di discovery.
 export function setPrimaryViews(next: readonly ViewSpec[]): void {
   specs.clear();
   for (const spec of next) specs.set(spec.id, spec);
+}
+
+/// Sostituisce le view della barra sinistra: anche loro, l'esito di un giro.
+export function setSidePanelViews(next: readonly ViewSpec[]): void {
+  sidePanels.clear();
+  for (const spec of next) sidePanels.set(spec.id, spec);
+}
+
+/// Le view della barra sinistra, se qualcuno sa mostrarle.
+export function sidePanelViews(): ViewSpec[] {
+  return showSidePanel ? [...sidePanels.values()] : [];
+}
+
+/// Chi mostra un pannello della barra: lo dichiara la sidebar, che ne
+/// possiede la regola.
+export function setSidePanelOpener(open: ((id: string) => void) | null): void {
+  showSidePanel = open;
+}
+
+/// Mostra la view della barra sinistra, se c'è ancora.
+export function openSidePanelView(id: string): void {
+  if (!sidePanels.has(id) || !showSidePanel) {
+    notify(t("views.open_unavailable", { view: id }), "guasto");
+    return;
+  }
+  showSidePanel(id);
 }
 
 /// Le view che un riquadro può ospitare, in ordine di dichiarazione.

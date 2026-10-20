@@ -11,6 +11,9 @@ un disegno come gli altri, con forme, testi, connettori e tavole che l'editor
 cambia come se li avesse disegnati lui. Niente usa la rete: il file si legge
 sulla macchina, e un'immagine che nel file non c'è resta fuori.
 
+Per la strada inversa, un disegno di Fub che esce come file di Excalidraw o di
+draw.io, c'è [Disegni, esportare](drawing-export.md#i-formati).
+
 ## Da dove si apre
 
 «Importa disegno» c'è dove si crea un disegno nuovo, quando la feature `draw`
@@ -145,6 +148,8 @@ Il rapporto della finestra lo dice prima di scrivere, una frase per genere:
 - un oggetto che non si sa leggere, un contenuto incorporato (una pagina web,
   un video) e un'immagine che sta fuori dal file o in un formato che non si
   legge restano fuori;
+- un oggetto senza posizione nel file, come una forma senza riquadro o una
+  linea senza due capi, resta fuori; ciò che una forma così contiene entra;
 - un collegamento su un oggetto o in un testo si perde: l'oggetto o il testo
   resta;
 - un pezzo dell'aspetto di un testo che il disegno non ha (un'immagine nel

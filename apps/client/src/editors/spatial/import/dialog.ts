@@ -28,7 +28,6 @@
 import { errorText } from "../../../host/errors";
 import { api } from "../../../host/ipc";
 import { vaultFolders } from "../../../host/query";
-import { resolvedLanguage } from "../../../i18n/strings";
 import { nameFault, normalizedName } from "../../../rules/mirrored";
 import { identifier } from "../../../ui/a11y";
 import type { DrawingSource } from "../../../ui/commands";
@@ -41,15 +40,15 @@ import { openResourcePort, type ResourceTransport } from "../../media/resource-p
 import { appFonts, selfContained, type FontSheets } from "../picture";
 import { MAX_EDIT_BYTES } from "../scene/read";
 import { utf8Length } from "../scene/text";
-import { drawStrings, t as drawT } from "../strings";
-import { browserMeasure, estimate, loadFonts } from "../tools/measure";
+import { loadFonts } from "../tools/measure";
 import { ensureTextFont } from "../tools/text";
 import type { Diagram } from "./diagram";
 import { browserPictures, type Pictures } from "./images";
 import { fontsOf, importedName, ImportError, readDiagram, writeImported, type Imported } from "./index";
 import { countText, noteText, reportOrder } from "./report";
 import { t } from "./strings";
-import { retitled, type Setup } from "./write";
+import { setupFor } from "./setup";
+import { retitled } from "./write";
 
 /// Quanto si legge di un file da importare: quanto una risorsa passa intera
 /// per il confine con l'host.
@@ -122,20 +121,6 @@ async function bytesOf(from: DrawingSource): Promise<Uint8Array> {
   } finally {
     await port.close();
   }
-}
-
-/// Lo `Setup` dello scrittore per un disegno che si chiama `title`: i nomi di
-/// partenza dell'editor nella lingua dell'interfaccia, e la misura del
-/// browser coi caratteri già letti.
-function setupFor(title: string): Setup {
-  const strings = drawStrings.catalogFor(resolvedLanguage());
-  return {
-    title,
-    measure: browserMeasure() ?? estimate,
-    layerName: (n) => drawT("draw.layer.default", { n }),
-    boardName: (n) => drawT("draw.board.name", { n }),
-    shapeName: (key) => strings[key] ?? key,
-  };
 }
 
 /// La frase di un file che non si importa.
@@ -291,7 +276,7 @@ export function openImport(from: DrawingSource, host: Pick<PaletteHost, "onEffec
         if (!taken(error)) throw error;
       }
     }
-    throw new Error(`nessun nome libero per «${base}»`);
+    throw new Error(t("draw.import.no_name", { name: base }));
   };
 
   const create = async (): Promise<void> => {

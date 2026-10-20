@@ -42,6 +42,7 @@ import { contrast } from "./contrast";
 import { mountMirroredOptions, mountedThemeOptions, type MirroredOptions } from "./options";
 import type { ContrastPair } from "./contrast-fixture";
 import { THEME_2_PROFILE } from "./scrittoio/profile";
+import { t } from "../i18n/strings";
 
 export type Layer = "caratteri" | "foglio" | "pelle" | "preferenze" | "snippets";
 
@@ -372,10 +373,10 @@ export function mountPreferences(tokens: Readonly<Record<string, string>>): void
   const allowed = new Set<string>(profile.preferenceTokens);
   for (const [token, value] of Object.entries(tokens)) {
     if (!allowed.has(token)) {
-      throw new Error(`il token --${token} non è una preferenza ammessa`);
+      throw new Error(t("errors.theme.token_not_allowed", { token }));
     }
     if (value.trim() === "" || /[;{}\n\r]/.test(value)) {
-      throw new Error(`il valore di --${token} non è una dichiarazione CSS sicura`);
+      throw new Error(t("errors.theme.token_unsafe", { token }));
     }
   }
 

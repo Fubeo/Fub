@@ -30,7 +30,7 @@ use fub_abi::model::{
     Block, DocId, DocumentModel, Frontmatter, Heading, HeadingSlugs, Link, LinkTarget, Span, Tag,
 };
 use fub_abi::options::{syntax, OptionMap};
-use fub_abi::rules::{path as rules_path, tag};
+use fub_abi::rules::{path as rules_path, tag, text_policy};
 use fub_abi::{FormatError, FormatProvider};
 
 use super::json_map::{canvas_literals, decoded_to_raw, literals_by_path};
@@ -47,7 +47,9 @@ pub fn parse_canvas(source: &str) -> Result<Canvas, CanvasError> {
     if source.trim().is_empty() {
         return Ok(Canvas::default());
     }
-    let canvas: Canvas = serde_json::from_str(source)?;
+    // Un BOM iniziale si salta e non si toglie (RFC 8259 §8.1): serde non lo
+    // accetta, e la sorgente resta quella del file (#97).
+    let canvas: Canvas = serde_json::from_str(text_policy::strip_bom(source))?;
     canvas.validate()?;
     Ok(canvas)
 }

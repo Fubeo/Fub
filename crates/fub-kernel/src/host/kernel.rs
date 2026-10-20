@@ -1,7 +1,7 @@
 //! [`KernelHost`]: l'host che fa davvero le cose.
 
 use camino::Utf8PathBuf;
-use fub_abi::command::{CommandOutcome, InvokeMode, Undone};
+use fub_abi::command::{CommandOutcome, InvokeMode, PlannedEdit, Undone};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
@@ -182,6 +182,19 @@ impl VaultRead for KernelHost<'_> {
         self.ws.format_link(doc, link)
     }
 
+    fn link_retarget_edits(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Result<Vec<PlannedEdit>, PluginError> {
+        Ok(self
+            .ws
+            .link_retarget_edits(from, to)?
+            .into_iter()
+            .map(|(doc, edit)| PlannedEdit::new(doc, edit))
+            .collect())
+    }
+
     fn task_state_edit(
         &self,
         doc: &DocId,
@@ -285,6 +298,25 @@ impl VaultStructure for KernelHost<'_> {
             let (error, _) = *failure;
             error
         })
+    }
+
+    fn create_folder(&mut self, folder: &str) -> Result<(), PluginError> {
+        self.ws
+            .create_folder(folder)
+            .map(drop)
+            .map_err(PluginError::from)
+    }
+
+    fn remove_empty_folder(&mut self, folder: &str) -> Result<(), PluginError> {
+        self.ws
+            .remove_empty_folder(folder)
+            .map_err(PluginError::from)
+    }
+
+    fn migrate_folder_organization(&mut self, from: &str, to: &str) -> Result<(), PluginError> {
+        self.ws
+            .migrate_folder_organization(from, to)
+            .map_err(PluginError::from)
     }
 
     fn empty_trash(&mut self) -> Result<u64, PluginError> {

@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EmbedContent } from "../../../../host/contract";
 import { renderMarkdown } from "./render";
 
-const query = vi.hoisted(() => ({ renderEmbed: vi.fn() }));
+const query = vi.hoisted(() => ({
+  renderEmbed: vi.fn(),
+  matchingDocuments: vi.fn(),
+  searchExpression: vi.fn((input: string) => ({ text: input })),
+}));
 vi.mock("../../../../host/query", () => query);
 // Chi monta i diagrammi, e con quale luce: il resto è il componente vero.
 const diagrams = vi.hoisted(() => ({ appearances: [] as unknown[] }));
@@ -23,10 +27,11 @@ vi.mock("mermaid", () => ({
     render: async () => ({ svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>' }),
   },
 }));
-import { mountMarkdown, mountRenderedDocument, sourceElementAt } from "./mount";
+import { footnoteText, mountMarkdown, mountRenderedDocument, sourceElementAt } from "./mount";
 import { api } from "../../../../host/ipc";
 import { registerCustomRenderer } from "../../../../ui/custom";
 import { closeLightbox } from "../../../../ui/lightbox";
+import { declareClipboard } from "../../../../platform/clipboard";
 import { setReducedMotionPreference } from "../../../../theme/reduced-motion";
 
 const disposers: (() => void)[] = [];
@@ -62,12 +67,45 @@ function drawingLeases() {
 }
 
 beforeEach(() => {
+  query.matchingDocuments.mockReset();
   query.renderEmbed.mockReset().mockResolvedValue({ doc_id: "Altra.md", html: "<p>contenuto</p>", parts: [] });
 });
 afterEach(() => {
   for (const dispose of disposers.splice(0)) dispose();
   document.body.replaceChildren();
   vi.restoreAllMocks();
+});
+
+describe("il blocco query", () => {
+  it("mostra al posto del recinto le note trovate, come link che si aprono", async () => {
+    query.matchingDocuments.mockResolvedValue({ items: [{ doc: "note/Spesa.md" }], offset: 0, total: 52 });
+    const opened: string[] = [];
+    const host = document.createElement("div");
+    document.body.append(host);
+    disposers.push(mountMarkdown(host, renderMarkdown("```query\npane\n```\n").html, {
+      documentId: "Nota.md",
+      openPath: (path) => { opened.push(path); },
+    }));
+    expect(host.querySelector("pre")).toBeNull();
+    await vi.waitFor(() => expect(host.querySelector(".block-query a.internal-path")).not.toBeNull());
+    expect(query.searchExpression).toHaveBeenCalledWith("pane");
+    const block = host.querySelector<HTMLElement>(".block-query")!;
+    expect(block.dataset.mdFrom).toBe("0");
+    expect(block.getAttribute("aria-busy")).toBeNull();
+    expect(block.textContent).toContain("52");
+    expect(block.textContent).toContain("51");
+    host.querySelector<HTMLAnchorElement>("a.internal-path")!.click();
+    await vi.waitFor(() => expect(opened).toEqual(["note/Spesa.md"]));
+  });
+
+  it("un recinto vuoto o una ricerca che fallisce si dicono nel blocco", async () => {
+    const empty = mount(renderMarkdown("```query\n```\n").html);
+    await vi.waitFor(() => expect(empty.querySelector(".block-query-note")).not.toBeNull());
+    expect(query.matchingDocuments).not.toHaveBeenCalled();
+    query.matchingDocuments.mockRejectedValue(new Error("rotta"));
+    const broken = mount(renderMarkdown("```query\nx\n```\n").html);
+    await vi.waitFor(() => expect(broken.querySelector(".block-query-note")?.textContent).toContain("rotta"));
+  });
 });
 
 describe("la resa dell'host montata come la Lettura (la stampa)", () => {
@@ -361,5 +399,52 @@ describe("posizione nel testo reso", () => {
     expect(sourceElementAt(element, 2)?.textContent).toBe("primo");
     expect(sourceElementAt(element, 25)?.textContent).toBe("secondo");
     expect(sourceElementAt(element, 99)?.textContent).toBe("secondo");
+  });
+});
+
+describe("anteprima delle note a piè di pagina", () => {
+  it("il richiamo descrive la nota col suo testo, senza numero né ritorni", () => {
+    const root = mount(renderMarkdown("Testo[^a] e ancora[^a].\n\n[^a]: Una **nota** breve.\n").html);
+    const note = root.querySelector<HTMLElement>(".block-footnote-definition")!;
+    expect(footnoteText(note)).toBe("Una nota breve.");
+    const refs = Array.from(root.querySelectorAll<HTMLElement>("a.footnote-ref"));
+    expect(refs).toHaveLength(2);
+    refs[1]!.dispatchEvent(new FocusEvent("focus"));
+    const tip = document.getElementById(refs[1]!.getAttribute("aria-describedby")!);
+    expect(tip?.textContent).toBe("Una nota breve.");
+    refs[1]!.dispatchEvent(new FocusEvent("blur"));
+  });
+});
+
+describe("menu di un'immagine", () => {
+  it("copia l'immagine come PNG e il percorso di quella del vault", async () => {
+    const written: string[][] = [];
+    const texts: string[] = [];
+    const undeclare = declareClipboard(async (text) => void texts.push(text), {
+      supports: (type) => type === "image/png",
+      write: async (content) => {
+        written.push(Object.keys(content));
+        await Promise.allSettled(Object.values(content));
+      },
+      read: async () => [],
+    });
+    try {
+      const root = mount('<p><img data-vault-id="foto.png" alt="Foto"></p>');
+      const picture = root.querySelector<HTMLImageElement>("img")!;
+      // La sorgente arriva dopo, dall'idratazione dei media del vault.
+      picture.src = "blob:foto";
+      const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 5, clientY: 5 });
+      picture.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      const items = () => Array.from(document.querySelectorAll<HTMLElement>("#context-menu [role=menuitem]"));
+      expect(items().map((item) => item.textContent?.trim())).toEqual(["Copia immagine", "Copia il percorso"]);
+      items()[0]!.click();
+      await vi.waitFor(() => expect(written).toEqual([["image/png"]]));
+      picture.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+      items()[1]!.click();
+      await vi.waitFor(() => expect(texts).toEqual(["foto.png"]));
+    } finally {
+      undeclare();
+    }
   });
 });

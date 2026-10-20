@@ -52,6 +52,9 @@ export interface MenuHost {
   /// apertura del menu: una feature accesa o spenta ne cambia l'elenco, e
   /// senza il comando del kernel la voce non c'è.
   creations?(): readonly MenuCreation[];
+  /// Snapshot completo e ripristino, se il kernel ha i comandi e un vault è
+  /// aperto: comandi del kernel e non di shell, per questo arrivano da qui.
+  vault?(): readonly MenuView[];
 }
 
 /// Una view principale come voce del menu Vista: il nome già tradotto e il
@@ -85,6 +88,8 @@ type MenuEntry = (
   | { views: true }
   /// Il posto delle altre creazioni: zero, una o più voci.
   | { creations: true }
+  /// Il posto dei gesti sul vault intero (snapshot, ripristino).
+  | { vault: true }
 ) & { separator?: boolean };
 
 const MENU: { title: string; entries: MenuEntry[] }[] = [
@@ -96,6 +101,7 @@ const MENU: { title: string; entries: MenuEntry[] }[] = [
       { label: "launcher.command.templates", command: "shell.launcher.templates", optional: true },
       { label: "menu.file.save", command: "shell.doc.save" },
       { label: "menu.file.open_vault", command: "shell.vault.open", separator: true },
+      { vault: true },
       { label: "menu.file.reopen_tab", command: "shell.tab.reopen", separator: true },
       { label: "menu.file.close_tab", command: "shell.tab.close" },
       { label: "menu.tools.settings", command: "shell.settings", separator: true },
@@ -317,8 +323,8 @@ export function mountAppMenu(host: MenuHost): Teardown {
   /// stesso gesto.
   function itemsOf(entries: MenuEntry[]): MenuItem[] {
     return entries.flatMap((v): MenuItem[] => {
-      if ("views" in v || "creations" in v) {
-        const extra = "views" in v ? host.views?.() : host.creations?.();
+      if ("views" in v || "creations" in v || "vault" in v) {
+        const extra = "views" in v ? host.views?.() : "creations" in v ? host.creations?.() : host.vault?.();
         return (extra ?? []).map((view, i) => ({
           label: view.label,
           separator: i === 0 ? v.separator : undefined,

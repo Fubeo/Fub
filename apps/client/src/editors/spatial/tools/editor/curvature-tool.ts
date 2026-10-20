@@ -7,6 +7,8 @@ import type { InkSample } from "../../../../ink/sample";
 import type { InkPointerType } from "../../../../ink/input/pointer";
 import { attachInkInput, type InkInputOptions, type InkInput } from "../../../../ink/dom/pointer-adapter";
 import { isDefaultCurve, pressureCurve, type PenCurve } from "../../../../ink/input/pressure";
+import { NO_STABILIZER } from "../../../../ink/input/stabilizer";
+import { stabilizerOf } from "../grid";
 import { apply, type Point } from "../../scene/matrix";
 import type { Op } from "../../scene/ops";
 import { plural, t } from "../../strings";
@@ -603,6 +605,10 @@ export function installCurvatureTool(ctx: EditorContext): void {
     },
     turn: () => ctx.camera.angle,
     pressure: penPressure,
+    // Lo stabilizzatore che chi disegna ha scelto in «Penna e dita», se il
+    // livello offre quella finestra; la corda si misura in pixel dello schermo.
+    stabilizer: () => (has("gestures") ? stabilizerOf(ctx.grid.steady) : NO_STABILIZER),
+    scale: () => ctx.camera.scale,
     onStart(start) {
       // Un gesto lungo che la pipeline divide al limite dei campioni
       // continua nel tratto nuovo; il tratto a penna si scrive a pezzi,

@@ -184,17 +184,89 @@ fn a_component_without_the_permission_sees_close_the_gate() {
 /// importa una che non ci sta
 /// lo scopre al caricamento invece che a metà lavoro. Il componente di prova è
 /// lo stesso ping, compilato contro un mondo che importa anche
-/// `fub:abi/host-network`.
+/// `fub:abi/host-transfer-read`, che un plugin non ottiene.
 #[test]
 fn a_family_not_served_is_does_name() {
-    let wasm = common::ping("con-rete");
+    let wasm = common::ping("con-trasferimento");
     let error = WasmBundle::from_file(&wasm, Trust::Community)
         .expect_err("una famiglia non servita non si carica");
     let said = error.to_string();
     assert!(
-        said.contains("host-network"),
+        said.contains("host-transfer-read"),
         "il rifiuto nomina la famiglia che manca: {said}"
     );
+}
+
+/// `host-network` è servita: il componente che la importa si monta, e senza
+/// `fub:network` nel manifest il cancello si chiude a runtime e lo dice.
+#[test]
+fn the_network_family_is_served_and_the_gate_closes_without_permission() {
+    let v = Vault::new();
+    let (host, events) = bench_component(&v, "con-rete");
+    let key = fub_abi::settings::permission_key(ID, permission::READ_VAULT);
+    host.set_setting_for_user(None, &key, fub_abi::settings::SettingValue::Toggle(true))
+        .expect("il permesso di lettura è concesso");
+
+    host.spawn_job(
+        None,
+        ID,
+        "demo.ping:scarica".to_string(),
+        serde_json::json!("https://example.com/"),
+    )
+    .expect("aperto");
+    let (job, result) = next_result(&events);
+    assert_eq!(job, "demo.ping:scarica");
+    assert!(
+        matches!(result, Err(PluginError::PermissionDenied(_))),
+        "{result:?}"
+    );
+    host.close();
+}
+
+/// Le famiglie di scrittura, struttura, impostazioni, stato di vista, query,
+/// comandi e servizi attraversano il confine con la semantica del trait: le
+/// scritture arrivano sul disco, i rifiuti con la loro specie.
+#[test]
+fn a_component_crosses_the_served_families() {
+    let v = Vault::new();
+    let (host, events) = bench_component(&v, "con-famiglie");
+    for granted in [
+        permission::READ_VAULT,
+        permission::WRITE_VAULT,
+        permission::RUN_COMMAND,
+        permission::CALL_SERVICE,
+    ] {
+        let key = fub_abi::settings::permission_key(ID, granted);
+        host.set_setting_for_user(None, &key, fub_abi::settings::SettingValue::Toggle(true))
+            .expect("il permesso è concesso");
+    }
+
+    ask(&host, "demo.ping:famiglie");
+    let (job, result) = next_result(&events);
+    assert_eq!(job, "demo.ping:famiglie");
+    assert_eq!(
+        result.expect("il giro delle famiglie riesce"),
+        serde_json::json!({
+            "modificata": true,
+            "vecchia": "conflict",
+            "doppione": "already-exists",
+            "tornata": "Spostata.md",
+            "titoli": "Nota",
+            "fuori_schema": "bad-args",
+            "vista": true,
+            "scrivi_vista": "bad-args",
+            "comando": "unknown-command",
+            "annulla": "ok",
+            "servizio": "unserved",
+        })
+    );
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("Scritta.md")).unwrap(),
+        "due\n"
+    );
+    assert!(v.root.join("Spostata.md").exists());
+    assert!(!v.root.join("Nuova.md").exists());
+    host.close();
 }
 
 /// Le due famiglie host-data fanno round-trip e tengono la cache separata.

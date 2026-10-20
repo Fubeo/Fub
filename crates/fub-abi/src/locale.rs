@@ -274,9 +274,48 @@ pub fn civil_from_days(days: i64) -> (i64, u64, u64) {
     (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
+/// I giorni di un mese del calendario gregoriano (mese 1–12; un mese fuori
+/// misura vale 31).
+pub fn days_in_month(year: i64, month: u64) -> u64 {
+    match month {
+        2 if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    }
+}
+
+/// Giorni dall'epoca UNIX di una data civile: l'inversa di
+/// [`civil_from_days`], con lo stesso algoritmo di Hinnant. Mese e giorno
+/// fuori misura si fermano al bordo (1–12, 1–31): chi vuole sapere se un
+/// giorno esiste lo chiede prima a [`days_in_month`].
+pub fn days_from_civil(year: i64, month: u64, day: u64) -> i64 {
+    let m = month.clamp(1, 12) as i64;
+    let d = day.clamp(1, 31) as i64;
+    let y = year - if m <= 2 { 1 } else { 0 };
+    let was = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - was * 400;
+    let doy = (153 * (m + if m > 2 { -3 } else { 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    was * 146_097 + doe - 719_468
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn civil_days_go_there_and_back() {
+        for day in [-719_468, -1, 0, 59, 10_000, 20_745, 2_932_896] {
+            let (y, m, d) = civil_from_days(day);
+            assert!(d <= days_in_month(y, m), "{y}-{m}-{d}");
+            assert_eq!(days_from_civil(y, m, d), day);
+        }
+        assert_eq!(days_from_civil(2026, 10, 19), 20_745);
+        assert_eq!(days_in_month(2028, 2), 29);
+        assert_eq!(days_in_month(2100, 2), 28);
+        assert_eq!(days_in_month(2000, 2), 29);
+    }
 
     #[test]
     fn the_default_names_no_country() {

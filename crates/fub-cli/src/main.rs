@@ -13,7 +13,9 @@ mod commands;
 mod completer;
 mod local;
 mod login;
+mod native;
 mod output;
+mod port;
 mod remote;
 
 use std::io::IsTerminal;
@@ -299,6 +301,21 @@ fn dispatch(
         CliCommand::Templates(args) => {
             local::templates(connection, global, format, args, print_line(global, format))
         }
+        CliCommand::Daily(args) => {
+            local::daily(connection, global, format, args, print_line(global, format))
+        }
+        CliCommand::Outline(args) => {
+            local::outline(connection, global, format, args, print_line(global, format))
+        }
+        CliCommand::Wordcount(args) => {
+            local::wordcount(connection, global, format, args, print_line(global, format))
+        }
+        CliCommand::Random { .. } => {
+            local::random(connection, global, format, print_line(global, format))
+        }
+        CliCommand::Bookmarks { .. } => {
+            local::bookmarks(connection, global, format, print_line(global, format))
+        }
         CliCommand::Views(args) => {
             local::views(connection, global, format, args, print_line(global, format))
         }
@@ -334,9 +351,19 @@ fn dispatch(
         CliCommand::Publish(args) => {
             remote::publish_cmd(connection, global, format, args, print_line(global, format))
         }
-        CliCommand::NativeInstall { extension_id, .. } => {
-            local::native_install(global, format, extension_id, print_line(global, format))
-        }
+        CliCommand::NativeInstall {
+            extension_id,
+            browsers,
+            uninstall,
+            ..
+        } => local::native_install(
+            global,
+            format,
+            extension_id,
+            browsers,
+            uninstall,
+            print_line(global, format),
+        ),
         CliCommand::Pair { action, .. } => {
             local::pairing(global, format, action, print_line(global, format))
         }

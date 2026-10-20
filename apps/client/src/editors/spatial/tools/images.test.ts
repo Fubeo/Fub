@@ -19,6 +19,7 @@ import {
   roomFor,
   sniffRaster,
   svgFiles,
+  foreignFiles,
   type Decoded,
   type EncodeType,
 } from "./images";
@@ -93,7 +94,12 @@ describe("il tipo e i file", () => {
     data.items.add(new File(["x"], "c.txt", { type: "text/plain" }));
     data.items.add(new File([PNG], "d", { type: "" }));
     data.items.add(new File(["<svg/>"], "E.SVG", { type: "" }));
+    data.items.add(new File(["{}"], "f.excalidraw", { type: "" }));
+    data.items.add(new File(["<mxfile/>"], "g.drawio", { type: "" }));
     expect(imageFiles(data).map((file) => file.name)).toEqual(["a.png", "d"]);
+    // Un file di Excalidraw o di draw.io non è un'immagine: entra col lettore
+    // dell'importazione.
+    expect(foreignFiles(data).map((file) => file.name)).toEqual(["f.excalidraw", "g.drawio"]);
     expect(svgFiles(data).map((file) => file.name)).toEqual(["b.svg", "E.SVG"]);
     expect(imageFiles(null)).toEqual([]);
     expect(svgFiles(null)).toEqual([]);

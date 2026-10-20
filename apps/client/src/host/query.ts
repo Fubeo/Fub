@@ -94,7 +94,7 @@ type PayloadForQuery<K extends QueryKind> =
 
 function open<K extends keyof PayloadOf>(result: IndexResult, kind: K): PayloadOf[K] {
   if (result.kind !== kind) {
-    throw new Error(`il canale dati ha risposto ${result.kind}, atteso ${kind}`);
+    throw new Error(t("errors.query.wrong_kind", { got: result.kind, want: kind }));
   }
   // Il `kind` combacia, quindi il payload è quello del suo caso: TypeScript non
   // sa restringere un generico su un discriminante, e il cast è l'unico punto
@@ -187,14 +187,14 @@ export function searchExpression(input: string, excluded: readonly string[] = []
   const raw = input.trim();
   let expr: QueryExpr;
   if (raw.startsWith('{"any"') || raw.startsWith('{ "any"')) {
-    if (raw.length > 32_768) throw new Error("La query supera 32 KiB");
+    if (raw.length > 32_768) throw new Error(t("errors.query.too_large"));
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || !("any" in parsed)
       || !Array.isArray(parsed.any) || parsed.any.length > 32
       || !parsed.any.every((clause: unknown) =>
         !!clause && typeof clause === "object" && "all" in clause
         && Array.isArray(clause.all) && clause.all.length <= 32)) {
-      throw new Error("Espressione di ricerca non valida");
+      throw new Error(t("errors.query.invalid"));
     }
     expr = parsed as QueryExpr;
   } else {
@@ -252,6 +252,36 @@ export async function notesByName(text: string, count = MAX_NAMES): Promise<stri
     "omit",
   );
   return page.items.map((m) => m.doc);
+}
+
+/// Le note di [`notesByName`], ognuna con i suoi alias del frontmatter.
+///
+/// L'indice cerca il nome **e** gli alias nello stesso campo, quindi una nota
+/// può tornare per un alias senza che il suo nome contenga ciò che si è scritto:
+/// gli alias servono a chi la mostra per dire perché è lì. Stessa domanda,
+/// stesso ordine; in più soltanto le due chiavi `aliases` e `alias`.
+export async function notesByNameWithAliases(
+  text: string,
+  count = MAX_NAMES,
+): Promise<{ doc: string; aliases: string[] }[]> {
+  const written = text.trim();
+  if (!written) return [];
+  const page = await runQuery({
+    kind: "documents",
+    matching: nameQuery(written),
+    sort: null,
+    select: { kind: "keys", keys: ["aliases", "alias"] },
+    page: { offset: 0, limit: count },
+    excerpts: "omit",
+  });
+  return page.items.map((m) => ({ doc: m.doc, aliases: aliasesOf(m.properties) }));
+}
+
+function aliasesOf(properties: DocumentMatch["properties"]): string[] {
+  const value = properties?.find((p) => p.key === "aliases")?.value
+    ?? properties?.find((p) => p.key === "alias")?.value;
+  const list = Array.isArray(value) ? value : [value];
+  return list.filter((alias): alias is string => typeof alias === "string" && alias.trim() !== "");
 }
 
 /// Quali di questi documenti **esistono**, in una domanda sola.
@@ -402,6 +432,14 @@ export async function vaultEntries(
   return runQuery(query);
 }
 
+/// Ultima modifica (ms unix) di ogni voce del vault, per id: serve a ordinare
+/// risultati che portano solo il nome. Una domanda sola a tutto il vault, quindi
+/// si chiede soltanto quando l'ordine per data è davvero scelto.
+export async function entryTimes(): Promise<Record<string, number>> {
+  const page = await vaultEntries(WITHOUT_PAGE);
+  return Object.fromEntries(page.items.map((e) => [e.id, e.mtime]));
+}
+
 /// Le cartelle (§14.3), in ordine di path.
 ///
 /// `under` assente = ogni cartella del vault, a ogni profondità: è l'elenco da
@@ -441,6 +479,8 @@ export interface FolderContent {
   files: string[];
   otherFolders: number;
   otherNote: number;
+  /// Ultima modifica (ms unix) di ogni voce diretta, per l'ordine per data.
+  mtimes: Record<string, number>;
 }
 
 /// Un livello dell'albero: sottocartelle e **ogni** voce dell'anagrafe, note,
@@ -461,6 +501,7 @@ export async function folderContent(
     files: entries.items.filter((e) => e.kind !== "document").map((e) => e.id),
     otherFolders: Math.max(0, folders.total - folders.offset - folders.items.length),
     otherNote: Math.max(0, entries.total - entries.offset - entries.items.length),
+    mtimes: Object.fromEntries(entries.items.map((e) => [e.id, e.mtime])),
   };
 }
 

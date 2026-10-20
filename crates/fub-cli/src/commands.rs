@@ -91,10 +91,13 @@ fn render_arg_value(value: &fub_abi::ArgValue) -> String {
 }
 
 /// Il lock di scrittura fra processi lo prende l'host aprendo il vault e lo
-/// tiene finché la sessione vive: la CLI non ne possiede uno suo.
+/// tiene finché la sessione vive: la CLI non ne possiede uno suo. Se il vault
+/// è dell'app aperta, le porte del vault vanno a lei ([`HostPort`]), a meno di
+/// `--standalone`.
 pub struct Connection {
-    pub host: fub_host::Host,
+    pub host: crate::port::HostPort,
     vault: Option<String>,
+    standalone: bool,
 }
 
 impl Connection {
@@ -135,7 +138,11 @@ impl Connection {
                 .ok()
                 .filter(|s| !s.trim().is_empty())
         });
-        let mut connection = Connection { host, vault };
+        let mut connection = Connection {
+            host: crate::port::HostPort::new(host),
+            vault,
+            standalone: global.standalone,
+        };
         if mount {
             connection.ensure_open()?;
         }
@@ -165,19 +172,41 @@ impl Connection {
         std::path::Path::new(root)
             .canonicalize()
             .map_err(|error| Failure::local(format!("vault: {error}")))?;
-        self.host
-            .open(camino::Utf8Path::new(root))
-            .map_err(|error| {
-                if fub_host::automation::is_writer_busy(&error) {
-                    Failure::new(
-                        5,
-                        "busy",
-                        "vault già aperto da un writer: usa l'istanza proprietaria o riprova",
-                    )
-                } else {
-                    Failure::from_plugin(&error)
-                }
-            })?;
+        if let Some(open) = self.host.app_root() {
+            // Si lavora già attraverso l'app: lo stesso vault va bene, un
+            // altro no, perché l'host locale non ne apre accanto a lei.
+            let same = std::path::Path::new(root).canonicalize().ok()
+                == open.as_std_path().canonicalize().ok();
+            if !same {
+                return Err(Failure::new(
+                    5,
+                    "busy",
+                    "la CLI lavora attraverso l'app su un altro vault: un vault per volta",
+                ));
+            }
+            return Ok(());
+        }
+        match self.host.open(camino::Utf8Path::new(root)) {
+            Ok(_) => {}
+            // L'app tiene il vault: si chiede a lei, se risponde e se è
+            // proprio lei ad averlo.
+            Err(error)
+                if fub_host::automation::is_writer_busy(&error)
+                    && !self.standalone
+                    && self.host.through_app(root) => {}
+            Err(error) if fub_host::automation::is_writer_busy(&error) => {
+                return Err(Failure::new(
+                    5,
+                    "busy",
+                    if self.standalone {
+                        "vault già aperto da un writer, e --standalone non passa dall'app"
+                    } else {
+                        "vault già aperto da un writer che non è un'app raggiungibile: chiudilo o riprova"
+                    },
+                ))
+            }
+            Err(error) => return Err(Failure::from_plugin(&error)),
+        }
         self.vault = Some(root.to_string());
         self.wait_indexed()
     }

@@ -11,6 +11,8 @@ import {
   openIn,
   openViewIn,
   activateTab,
+  goToTab,
+  recentTabs,
   loadLayout,
   closePane,
   closeTab,
@@ -235,6 +237,29 @@ describe("le tab di un riquadro", () => {
     openIn("main", "a.md", l);
     activateTab("main", 7, l);
     expect(activeDoc("main", l)).toBe("a.md");
+  });
+
+  it("una tab si raggiunge per posizione, e l'ultima per nome", () => {
+    const l = newItem();
+    for (const doc of ["a.md", "b.md", "c.md"]) openIn("main", doc, l);
+    expect(goToTab("main", 0, l)).toBe(true);
+    expect(activeDoc("main", l)).toBe("a.md");
+    expect(goToTab("main", "last", l)).toBe(true);
+    expect(activeDoc("main", l)).toBe("c.md");
+    // Già lì, o una posizione che non c'è: niente da fare, e lo si dice.
+    expect(goToTab("main", "last", l)).toBe(false);
+    expect(goToTab("main", 7, l)).toBe(false);
+    expect(activeDoc("main", l)).toBe("c.md");
+  });
+
+  it("l'ordine d'uso parte dall'attiva e segue le schede lasciate per ultime", () => {
+    const l = newItem();
+    for (const doc of ["a.md", "b.md", "c.md", "d.md"]) openIn("main", doc, l);
+    activateTab("main", 1, l);
+    activateTab("main", 0, l);
+    // Attiva a, prima b, prima ancora d; c era stata lasciata prima di d.
+    expect(recentTabs("main", l)).toEqual([0, 1, 3, 2]);
+    expect(recentTabs("nessuno", l)).toEqual([]);
   });
 });
 

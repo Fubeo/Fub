@@ -18,16 +18,11 @@ import {
 import { rejoinDrafts, type DraftBuffer, type DraftBufferStore } from "./drafts";
 import { state as shellState } from "./store";
 import { renameNote, vaultArg } from "./vault";
-import { tryApplyOperation, type TextOperation } from "../editors/core/text-operation";
+import { lineFeeds, tryApplyOperation, type TextOperation } from "../editors/core/text-operation";
 
 const SAVE_MS = 400;
 const DRAFT_MS = 1_000;
 
-/// Il testo coi terminatori di riga ridotti a `\n`. Senza un `\r` il testo
-/// resta quello: un testo grande non si ripassa tutto per niente.
-function lineFeeds(text: string): string {
-  return text.indexOf("\r") < 0 ? text : text.replace(/\r\n?/g, "\n");
-}
 
 /// La porta con cui una superficie si sottoscrive a una sessione. Soltanto
 /// dati: niente DOM, niente editor, niente cursore, selezione o history —

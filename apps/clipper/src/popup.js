@@ -417,6 +417,14 @@
     if ($("note").value.trim()) t.note = $("note").value.trim();
     return t;
   }
+  // The install and pairing commands name this extension's real id, so the
+  // user can paste them as they are.
+  function withId(text) {
+    return text.replace(/\{id\}/g, runtimeExtensionId() || "<id>");
+  }
+  function nativeSetup() {
+    return withId(t("popup.native.setup", "For authenticated delivery install the native host: `fub-cli native-install --extension-id {id} --yes`, then `fub-cli pair pair --extension-id {id}`."));
+  }
   function runtimeExtensionId() {
     try {
       if (bn && bn.runtime && bn.runtime.id) return String(bn.runtime.id);
@@ -468,13 +476,13 @@
         var res = r.result || { ok: false, kind: "unavailable" };
         if (res.ok) setStatus(t("popup.transport.native.ok", "Sent via paired native host. Same nonce, safe to retry."));
         else if (res.needs_pairing === true) {
-          setError(t("errors.needs_pairing", "Needs pairing") + ": " + t("popup.pairing.required", "Needs pairing: run `fub-cli pair --extension-id <id>` first, then retry with the same nonce."));
+          setError(t("errors.needs_pairing", "Needs pairing") + ": " + withId(t("popup.pairing.required", "Needs pairing: run `fub-cli pair pair --extension-id {id}` first, then retry with the same nonce.")));
         } else {
           setError(errLabel(res.kind || "unavailable") + (res.message ? ": " + res.message : ""));
         }
-      } else if (r.delivered) setStatus(r.transport.kind === "uri"
+      } else if (r.delivered) setStatus((r.transport.kind === "uri"
         ? t("popup.transport.uri", "UNAUTHENTICATED import: Fub app opened — confirm vault + destination there. Same nonce, safe to retry.")
-        : t("popup.transport.file", "Saved — run `fub-cli capture --file <it>`. Same nonce, safe to retry."));
+        : t("popup.transport.file", "Saved — run `fub-cli capture --file <it>`. Same nonce, safe to retry.")) + " " + nativeSetup());
       else if (r.reason === "manual-save") setStatus(t("popup.transport.manual", "Safari has no downloads permission: use Copy file JSON, then `fub-cli capture --file <it>`."));
       // Explicit image downloads for checked assets only (granted origins).
       // fetch is passed explicitly: the cap needs real bytes on every path,

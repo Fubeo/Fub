@@ -677,10 +677,30 @@ describe("«Esporta…» su un disegno", () => {
     expect(await offered(EXPORT_COMMANDS)).toEqual(EXPORT_COMMANDS);
     await open("logo.svg");
     expect(await offered(EXPORT_COMMANDS), "un SVG estraneo").toEqual(EXPORT_COMMANDS);
-    for (const doc of ["Benvenuto.md", "lavagna.canvas", "conti.fubsheet", "foto.png"]) {
+    for (const doc of ["lavagna.canvas", "conti.fubsheet", "foto.png"]) {
       await open(doc);
       expect(await offered(EXPORT_COMMANDS), doc).toEqual([]);
     }
+  });
+
+  it("una nota offre l'HTML e il PDF dal menu del riquadro", async () => {
+    const host = await start(withExport());
+    const { t } = await import("./i18n/strings");
+    await open("Benvenuto.md");
+    expect(await offered(EXPORT_COMMANDS)).toEqual(EXPORT_COMMANDS);
+    focusedPane().querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
+    await settle();
+    const entries = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")];
+    const labels = entries.map((button) => button.querySelector(".menu-label")?.textContent ?? "");
+    expect(labels.filter((label) => label.startsWith(t("pane.export", { what: "" })))).toEqual([
+      t("pane.export", { what: t("markdown.export.html") }),
+      t("pane.export", { what: t("markdown.export.pdf") }),
+    ]);
+    entries[labels.indexOf(t("pane.export", { what: t("markdown.export.html") }))]!.click();
+    await waitFor("l'export è chiesto", () => requests(host).length === 1);
+    expect(requests(host)).toEqual([
+      { target: "importers.html", selection: { kind: "documents", value: ["Benvenuto.md"] }, options: {} },
+    ]);
   });
 
   it("senza `export.run` nel kernel non c'è", async () => {

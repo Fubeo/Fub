@@ -76,7 +76,10 @@ provider, come apertura del vault, scritture, bozze e lifecycle desktop.
 ## UI dichiarativa
 
 Una view restituisce `UiNode`, non DOM. Ogni nodo ha una specie, una chiave
-stabile e, quando serve, un'azione con payload opaco.
+stabile e, quando serve, un'azione con payload opaco. Un nodo può dire anche che
+cosa si trascina da lui (`drag`, il cui unico caso è una nota del vault): la shell lo
+offre come una nota dell'albero, senza il file fuori dall'app, e i bersagli del
+rilascio restano suoi (decisione 0157).
 
 ```mermaid
 sequenceDiagram
@@ -210,7 +213,8 @@ pannelli) lo Scrittoio compone:
   colori, fogli, struttura e pelle a pezzi. La pelle passa dal sanitizer CSS
   del motore, e ogni classe di un pezzo è un hook dell'anatomia di quel pezzo.
 
-I predefiniti dell'aspetto (accento, carattere, corpo, interlinea, giustezza)
+I predefiniti dell'aspetto (accento, i tre caratteri, corpo, interlinea,
+giustezza)
 li dichiara l'host e coincidono con quelli della serie; un test Rust lo
 verifica. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
 400 px, ispettore da 248 a 440 px. Un tema `theme-1` installato non si monta, e
@@ -302,9 +306,27 @@ divisori trascinabili, finestre multiple.
 La cartella di un vault la sceglie il selettore della shell attiva
 (`platform/vault-picker.ts`). Sul desktop è il selettore di cartelle del
 sistema. Su mobile è il pannello dello spazio, dove la scelta fra spazio
-privato e cartella condivisa è esplicita. Su mobile il backend monta soltanto
-il vault privato, di cui risolve da sé il path; una cartella condivisa chiede
-una verifica nativa del permesso che non esiste ancora, e resta da concedere.
+privato e cartella condivisa è esplicita. Il backend monta il vault privato,
+di cui risolve da sé il path, e una cartella condivisa soltanto attraverso il
+ponte nativo `fub-tree` (`crates/fub-app/src/tree_access.rs`, con
+`FubTreePlugin.kt` e `FubTreePlugin.swift` in `crates/fub-app/mobile/`). Il
+webview non attesta niente: il selettore, il permesso del sistema e il path li
+danno i comandi `mobile_pick_tree`, `mobile_verify_tree`,
+`mobile_shared_mount_mode`, `mobile_open_shared`, `mobile_copy_tree` e
+`mobile_close_shared`, che chiedono al codice nativo. I due sistemi danno cose
+diverse:
+
+- **iOS** risolve il bookmark in un path con l'accesso security-scoped aperto
+  finché il vault è montato. Il kernel ci scrive come in ogni cartella;
+  `open_vault` accetta quel path e nessun altro oltre al privato.
+- **Android** dà un albero SAF, che non ha path né rinomina atomica. La
+  proposta è sola lettura, e la cartella si apre come **copia** dentro una
+  sottocartella nuova del vault privato, per gesto esplicito: niente si
+  sovrascrive e l'originale resta com'è. File illeggibili, nomi non validi e
+  tetti raggiunti (20 000 file, 4 GiB) sono elencati nell'esito.
+
+Un permesso non più concesso è NeedGrant e smonta la cartella condivisa; non
+ripiega mai sul vault privato.
 
 Gli appunti passano da una porta sola (`platform/clipboard.ts`): di serie sono
 quelli della webview, e una shell che ne ha di propri li dichiara con

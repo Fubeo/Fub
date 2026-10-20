@@ -37,11 +37,12 @@ const sources = import.meta.glob("../**/*.{ts,tsx,js,mjs,html,css}", {
 describe("il costrutto delle icone", () => {
   it("tutte le icone rispettano griglia e tratto dichiarati", () => {
     const names = iconNames();
-    // Il set conta trentaquattro icone (§31.4, misurabile con questo test): la
+    // Il set conta trentacinque icone (§31.4, misurabile con questo test): la
     // ventottesima è la puntina delle tab appuntate, tre sono quelle che le
-    // view di sincronizzazione e pubblicazione dichiarano, e le ultime tre
-    // (componente, tastiera, schermo) sono delle schede delle impostazioni.
-    expect(names).toHaveLength(34);
+    // view di sincronizzazione e pubblicazione dichiarano, e le ultime quattro
+    // (informazioni, componente, tastiera, schermo) sono delle schede delle
+    // impostazioni.
+    expect(names).toHaveLength(35);
     expect(new Set(names).size).toBe(names.length);
 
     for (const name of names) {

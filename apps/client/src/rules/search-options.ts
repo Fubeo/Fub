@@ -9,6 +9,7 @@
 // un prefisso (la barra cerca mentre si digita, e `arch` trova *architettura*).
 // La sostituzione nel vault ha un suo `whole_word` e non passa di qui.
 import type { QueryExpr, QueryPredicate } from "../host/contract";
+import { ignoresCase } from "./search-syntax";
 
 export interface SearchOptions {
   readonly caseSensitive: boolean;
@@ -56,7 +57,7 @@ export function applyOptions(expression: QueryExpr, options: SearchOptions): Que
 }
 
 function textOptions(predicate: QueryPredicate, options: SearchOptions): QueryPredicate {
-  if (predicate.kind !== "text") return predicate;
+  if (predicate.kind !== "text" || ignoresCase(predicate)) return predicate;
   return {
     ...predicate,
     case_sensitive: predicate.case_sensitive || options.caseSensitive,

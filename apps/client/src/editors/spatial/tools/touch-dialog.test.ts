@@ -35,14 +35,17 @@ describe("touchDialog", () => {
   it("mostra i gesti e le tre manopole coi loro valori, col fuoco sul primo gesto", () => {
     void touchDialog(CHOICE);
     expect(dialog().querySelector("h2")!.textContent).toBe("Penna e dita");
-    expect([...dialog().querySelectorAll("legend")].map((legend) => legend.textContent)).toEqual(["Dita", "Pressione della penna"]);
+    expect([...dialog().querySelectorAll("legend")].map((legend) => legend.textContent)).toEqual(["Dita", "Pressione della penna", "Stabilizzatore"]);
     const checks = [...dialog().querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
-    expect(checks.map((check) => check.checked)).toEqual([true, false]);
+    expect(checks.map((check) => check.checked)).toEqual([true, false, false]);
+    // Senza levigatura la corda non conta, e lo dice.
+    expect(checks[2]!.disabled).toBe(true);
     expect(document.activeElement).toBe(checks[0]);
     expect(knobs().map((knob) => [knob.closest("label")!.querySelector("span")!.textContent, knob.min, knob.max, knob.value, knob.getAttribute("aria-valuetext")])).toEqual([
       ["Morbidezza", "-100", "100", "0", "0%"],
       ["Pressione minima", "0", "50", "0", "0%"],
       ["Pieno da", "50", "100", "100", "100%"],
+      ["Levigatura", "0", "100", "0", "spento"],
     ]);
     // Il valore scritto accanto al cursore è suo.
     const output = knobs()[1]!.closest("label")!.querySelector("output")!;
@@ -72,7 +75,20 @@ describe("touchDialog", () => {
     expect(document.activeElement).toBe(knobs()[0]);
     slide(knobs()[2]!, 75);
     submit();
-    expect(await answer).toEqual({ twist: true, taps: false, pen: { soft: 0, min: 0, full: 0.75 } });
+    expect(await answer).toEqual({ twist: true, taps: false, pen: { soft: 0, min: 0, full: 0.75 }, steady: { amount: 0, string: false } });
+  });
+
+  it("lo stabilizzatore parte da quello scelto e torna con la levigatura e la corda", async () => {
+    const answer = touchDialog({ ...CHOICE, steady: { amount: 0.4, string: false } });
+    const amount = knobs()[3]!;
+    expect(amount.getAttribute("aria-valuetext")).toBe("40%");
+    const string = [...dialog().querySelectorAll<HTMLInputElement>('input[type="checkbox"]')][2]!;
+    expect(string.disabled).toBe(false);
+    slide(amount, 70);
+    string.click();
+    expect(amount.closest("label")!.querySelector("output")!.textContent).toBe("70%");
+    submit();
+    expect((await answer)!.steady).toEqual({ amount: 0.7, string: true });
   });
 
   it("la penna nella prova disegna con la curva, e il punto sulla curva dice la pressione", () => {

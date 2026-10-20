@@ -1164,6 +1164,22 @@ fn function_arity(name: &str) -> Option<(usize, usize)> {
         "flat" => (1, 1),
         "first" => (1, 1),
         "last" => (1, 1),
+        // Testo, numeri, date e file alla maniera di Obsidian: pure e a
+        // budget, nessuna legge l'orologio o il disco.
+        "title" => (1, 1),
+        "repeat" => (2, 2),
+        "matches" => (2, 2),
+        "escapeHTML" | "escape_html" => (1, 1),
+        "toFixed" | "to_fixed" => (2, 2),
+        "format" => (2, 2),
+        "relative" => (1, 1),
+        "time" => (1, 1),
+        "hasTag" | "has_tag" => (2, usize::MAX),
+        "hasProperty" | "has_property" => (1, 1),
+        "hasLink" | "has_link" | "linksTo" | "links_to" => (2, 2),
+        "inFolder" | "in_folder" => (2, 2),
+        "asLink" | "as_link" => (1, 2),
+        "asFile" | "as_file" => (1, 1),
         _ => return None,
     })
 }
@@ -1175,6 +1191,9 @@ fn eval_call(
     budget: &mut EvalBudget,
     depth: usize,
 ) -> Result<BaseValue, EvalError> {
+    if let Some(kind) = Lambda::named(name) {
+        return eval_lambda(kind, name, args, ctx, budget, depth);
+    }
     let Some((min, max)) = function_arity(name) else {
         return Err(EvalError::Name(format!("funzione sconosciuta `{name}`")));
     };
@@ -1197,6 +1216,90 @@ fn eval_call(
     call_known(name, values, ctx)
 }
 
+/// Le tre funzioni che ricevono un'espressione invece di un valore, come in
+/// Obsidian: `lista.filter(value > 2)`, `lista.map(value * 2)`,
+/// `lista.reduce(acc + value, 0)`. L'espressione si valuta una volta per
+/// elemento, con `value` (l'elemento), `index` (la posizione, da 0) e, per
+/// `reduce`, `acc` (il risultato fin lì) come nomi locali: dentro
+/// l'espressione coprono una proprietà con lo stesso nome. Ogni giro spende
+/// il budget come ogni altro passo, quindi una lista lunga si ferma lì.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Lambda {
+    Filter,
+    Map,
+    Reduce,
+}
+
+impl Lambda {
+    fn named(name: &str) -> Option<Self> {
+        Some(match name {
+            "filter" => Lambda::Filter,
+            "map" => Lambda::Map,
+            "reduce" => Lambda::Reduce,
+            _ => return None,
+        })
+    }
+}
+
+fn eval_lambda(
+    kind: Lambda,
+    name: &str,
+    args: &[FormulaAst],
+    ctx: &RowContext,
+    budget: &mut EvalBudget,
+    depth: usize,
+) -> Result<BaseValue, EvalError> {
+    let wanted = if kind == Lambda::Reduce { 3 } else { 2 };
+    if args.len() != wanted {
+        return Err(EvalError::Value(format!(
+            "`{name}` vuole {wanted} argomenti"
+        )));
+    }
+    let items = match eval(&args[0], ctx, budget, depth + 1)? {
+        BaseValue::List(items) => items,
+        BaseValue::Empty => Vec::new(),
+        BaseValue::Error(code) => return Ok(BaseValue::Error(code)),
+        _ => return Err(EvalError::Value(format!("`{name}` vuole una lista"))),
+    };
+    let mut acc = if kind == Lambda::Reduce {
+        match eval(&args[2], ctx, budget, depth + 1)? {
+            BaseValue::Error(code) => return Ok(BaseValue::Error(code)),
+            value => value,
+        }
+    } else {
+        BaseValue::Empty
+    };
+    let mut local = ctx.clone();
+    let mut out = Vec::new();
+    for (index, item) in items.into_iter().enumerate() {
+        budget.step()?;
+        local.props.insert("value".into(), item.clone());
+        local
+            .props
+            .insert("index".into(), BaseValue::Number(index as f64));
+        if kind == Lambda::Reduce {
+            local.props.insert("acc".into(), acc.clone());
+        }
+        let result = eval(&args[1], &local, budget, depth + 1)?;
+        if let BaseValue::Error(code) = result {
+            return Ok(BaseValue::Error(code));
+        }
+        match kind {
+            Lambda::Filter => {
+                if truthy(&result) {
+                    out.push(item);
+                }
+            }
+            Lambda::Map => out.push(result),
+            Lambda::Reduce => acc = result,
+        }
+    }
+    Ok(match kind {
+        Lambda::Reduce => acc,
+        _ => BaseValue::List(out),
+    })
+}
+
 fn call_known(name: &str, args: Vec<BaseValue>, ctx: &RowContext) -> Result<BaseValue, EvalError> {
     match name {
         "if" => {
@@ -1212,6 +1315,122 @@ fn call_known(name: &str, args: Vec<BaseValue>, ctx: &RowContext) -> Result<Base
         "bool" => Ok(BaseValue::Bool(truthy(&args[0]))),
         "date" => parse_date_value(&args[0]),
         "duration" => parse_duration_value(&args[0]),
+        "title" => Ok(BaseValue::Text(title_case(&string_arg(&args[0], name)?))),
+        "repeat" => {
+            let text = string_arg(&args[0], name)?;
+            let times = number_arg(&args[1], name)?;
+            if !(0.0..=MAX_TEXT_BYTES as f64).contains(&times) {
+                return Err(EvalError::Value("repeat fuori misura".to_string()));
+            }
+            let times = times as usize;
+            if text.len().saturating_mul(times) > MAX_TEXT_BYTES {
+                return Err(EvalError::Value("stringa oltre il limite".to_string()));
+            }
+            Ok(BaseValue::Text(text.repeat(times)))
+        }
+        "matches" => {
+            let text = string_arg(&args[0], name)?;
+            let pattern = string_arg(&args[1], name)?;
+            // Il motore `regex` non fa backtracking: il costo è lineare nel
+            // testo, e la dimensione del programma ha un tetto.
+            let regex = regex::RegexBuilder::new(&pattern)
+                .size_limit(1 << 20)
+                .build()
+                .map_err(|e| EvalError::Value(format!("espressione regolare: {e}")))?;
+            Ok(BaseValue::Bool(regex.is_match(&text)))
+        }
+        "escapeHTML" | "escape_html" => {
+            let out = fub_abi::html::escape(&string_arg(&args[0], name)?);
+            if out.len() > MAX_TEXT_BYTES {
+                return Err(EvalError::Value("stringa oltre il limite".to_string()));
+            }
+            Ok(BaseValue::Text(out))
+        }
+        "toFixed" | "to_fixed" => {
+            let value = number_arg(&args[0], name)?;
+            let digits = number_arg(&args[1], name)?;
+            if !(0.0..=20.0).contains(&digits) || digits.fract() != 0.0 {
+                return Err(EvalError::Value("toFixed vuole 0..20 cifre".to_string()));
+            }
+            Ok(BaseValue::Text(format!("{value:.*}", digits as usize)))
+        }
+        "format" => {
+            let ms = date_arg(&args[0], name)?;
+            Ok(BaseValue::Text(format_date(
+                ms,
+                &string_arg(&args[1], name)?,
+            )))
+        }
+        "time" => Ok(BaseValue::Text(format_date(
+            date_arg(&args[0], name)?,
+            "HH:mm:ss",
+        ))),
+        "relative" => Ok(BaseValue::Text(relative_time(
+            date_arg(&args[0], name)?,
+            ctx.now_ms,
+        ))),
+        "hasTag" | "has_tag" => {
+            let tags = tag_names(&args[0]);
+            let wanted = args[1..]
+                .iter()
+                .map(|v| string_arg(v, name))
+                .collect::<Result<Vec<_>, _>>()?;
+            // Un tag cercato nomina anche i suoi discendenti: `a` trova `a/b`.
+            Ok(BaseValue::Bool(wanted.iter().any(|want| {
+                let want = want.trim_start_matches('#');
+                tags.iter()
+                    .any(|tag| tag == want || tag.starts_with(&format!("{want}/")))
+            })))
+        }
+        "hasProperty" | "has_property" => {
+            let key = string_arg(&args[0], name)?;
+            Ok(BaseValue::Bool(
+                ctx.props
+                    .get(&key)
+                    .is_some_and(|v| !matches!(v, BaseValue::Empty)),
+            ))
+        }
+        "hasLink" | "has_link" | "linksTo" | "links_to" => {
+            let wanted = link_target(&args[1]);
+            let found = match &args[0] {
+                BaseValue::List(items) => items.iter().any(|item| link_target(item) == wanted),
+                single => link_target(single) == wanted,
+            };
+            Ok(BaseValue::Bool(found))
+        }
+        "inFolder" | "in_folder" => {
+            let path = match &args[0] {
+                BaseValue::File { path, .. } => path.clone(),
+                BaseValue::Link { target, .. } => target.clone(),
+                other => string_arg(other, name)?,
+            };
+            let folder = string_arg(&args[1], name)?;
+            let folder = folder.trim_matches('/');
+            Ok(BaseValue::Bool(
+                folder.is_empty() || path.starts_with(&format!("{folder}/")),
+            ))
+        }
+        "asLink" | "as_link" => {
+            let target = match &args[0] {
+                BaseValue::File { path, .. } => path.clone(),
+                BaseValue::Link { target, .. } => target.clone(),
+                other => string_arg(other, name)?,
+            };
+            let label = if args.len() > 1 {
+                Some(string_arg(&args[1], name)?)
+            } else {
+                None
+            };
+            Ok(BaseValue::Link { target, label })
+        }
+        "asFile" | "as_file" => {
+            let path = match &args[0] {
+                BaseValue::File { path, .. } => path.clone(),
+                BaseValue::Link { target, .. } => target.clone(),
+                other => string_arg(other, name)?,
+            };
+            Ok(BaseValue::File { path, label: None })
+        }
         "link" => {
             let target = string_arg(&args[0], name)?;
             let label = if args.len() > 1 {
@@ -1602,6 +1821,182 @@ fn parse_duration_value(value: &BaseValue) -> Result<BaseValue, EvalError> {
     }
 }
 
+/// Maiuscola a inizio parola, minuscola nel resto.
+fn title_case(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut start = true;
+    for c in text.chars() {
+        if c.is_alphanumeric() {
+            if start {
+                out.extend(c.to_uppercase());
+            } else {
+                out.extend(c.to_lowercase());
+            }
+            start = false;
+        } else {
+            out.push(c);
+            start = !(c == '\'' || c == '’');
+        }
+    }
+    out
+}
+
+/// I nomi dei tag di un valore: lista o testo con virgole, senza `#`.
+fn tag_names(value: &BaseValue) -> Vec<String> {
+    let clean = |s: &str| s.trim().trim_start_matches('#').to_string();
+    match value {
+        BaseValue::List(items) => items.iter().map(|v| clean(&v.display())).collect(),
+        BaseValue::Text(text) => text
+            .split(',')
+            .map(clean)
+            .filter(|t| !t.is_empty())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Il bersaglio di un link, senza estensione `.md`, per confrontare `[[a]]`
+/// con `a.md`.
+fn link_target(value: &BaseValue) -> String {
+    let raw = match value {
+        BaseValue::Link { target, .. } => target.clone(),
+        BaseValue::File { path, .. } => path.clone(),
+        other => other.display(),
+    };
+    raw.trim_start_matches("[[")
+        .trim_end_matches("]]")
+        .trim_end_matches(".md")
+        .to_string()
+}
+
+fn date_arg(value: &BaseValue, function: &str) -> Result<i64, EvalError> {
+    match value {
+        BaseValue::Date(ms) => Ok(*ms),
+        other => Err(EvalError::Value(format!(
+            "`{function}` vuole una data, trovato {}",
+            other.type_name()
+        ))),
+    }
+}
+
+/// (anno, mese 1..12, giorno 1..31) di un giorno dall'epoca, calendario
+/// gregoriano proletttico (algoritmo di Hinnant).
+fn civil_from_days(days: i64) -> (i64, i64, i64) {
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let year = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    (if month <= 2 { year + 1 } else { year }, month, day)
+}
+
+const MONTHS: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+const WEEKDAYS: [&str; 7] = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+];
+
+/// Formatta una data (UTC) coi segnaposto di Moment più usati: `YYYY YY MMMM
+/// MMM MM M DD D dddd ddd HH H hh h mm m ss s A a`. Il testo fra `[ ]` resta
+/// com'è; ogni altro carattere passa.
+fn format_date(ms: i64, pattern: &str) -> String {
+    let days = ms.div_euclid(86_400_000);
+    let secs = ms.rem_euclid(86_400_000) / 1000;
+    let (year, month, day) = civil_from_days(days);
+    let weekday = (days + 4).rem_euclid(7) as usize;
+    let (hour, minute, second) = (secs / 3600, secs / 60 % 60, secs % 60);
+    let hour12 = if hour % 12 == 0 { 12 } else { hour % 12 };
+    let chars: Vec<char> = pattern.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '[' {
+            if let Some(close) = chars[i + 1..].iter().position(|c| *c == ']') {
+                out.extend(&chars[i + 1..i + 1 + close]);
+                i += close + 2;
+                continue;
+            }
+        }
+        let run = chars[i..].iter().take_while(|c| **c == chars[i]).count();
+        let token: String = chars[i..i + run].iter().collect();
+        let piece = match token.as_str() {
+            "YYYY" => Some(format!("{year:04}")),
+            "YY" => Some(format!("{:02}", year.rem_euclid(100))),
+            "MMMM" => Some(MONTHS[(month - 1) as usize].to_string()),
+            "MMM" => Some(MONTHS[(month - 1) as usize][..3].to_string()),
+            "MM" => Some(format!("{month:02}")),
+            "M" => Some(month.to_string()),
+            "DD" => Some(format!("{day:02}")),
+            "D" => Some(day.to_string()),
+            "dddd" => Some(WEEKDAYS[weekday].to_string()),
+            "ddd" => Some(WEEKDAYS[weekday][..3].to_string()),
+            "HH" => Some(format!("{hour:02}")),
+            "H" => Some(hour.to_string()),
+            "hh" => Some(format!("{hour12:02}")),
+            "h" => Some(hour12.to_string()),
+            "mm" => Some(format!("{minute:02}")),
+            "m" => Some(minute.to_string()),
+            "ss" => Some(format!("{second:02}")),
+            "s" => Some(second.to_string()),
+            "A" => Some(if hour < 12 { "AM" } else { "PM" }.to_string()),
+            "a" => Some(if hour < 12 { "am" } else { "pm" }.to_string()),
+            _ => None,
+        };
+        match piece {
+            Some(p) => out.push_str(&p),
+            None => out.push_str(&token),
+        }
+        i += run;
+    }
+    out
+}
+
+/// «3 days ago» / «in 2 hours», con la scala che userebbe Obsidian.
+fn relative_time(ms: i64, now_ms: i64) -> String {
+    let delta = ms - now_ms;
+    let secs = delta.abs() / 1000;
+    let (count, unit) = match secs {
+        0..=44 => return "just now".to_string(),
+        45..=2_699 => ((secs + 30) / 60, "minute"),
+        2_700..=75_599 => ((secs + 1800) / 3600, "hour"),
+        75_600..=2_332_799 => ((secs + 43_200) / 86_400, "day"),
+        2_332_800..=27_647_999 => ((secs + 1_296_000) / 2_592_000, "month"),
+        _ => ((secs + 15_768_000) / 31_536_000, "year"),
+    };
+    let unit = if count == 1 {
+        unit.to_string()
+    } else {
+        format!("{unit}s")
+    };
+    if delta < 0 {
+        format!("{count} {unit} ago")
+    } else {
+        format!("in {count} {unit}")
+    }
+}
+
 fn string_arg(value: &BaseValue, _fn: &str) -> Result<String, EvalError> {
     match value {
         BaseValue::Text(s) => Ok(s.clone()),
@@ -1914,6 +2309,139 @@ mod tests {
             BaseValue::Error(FormulaErrorCode::DivZero)
         );
     }
+    #[test]
+    fn funzioni_di_testo_numeri_date_e_file_alla_maniera_di_obsidian() {
+        let day = "date('2026-10-19')";
+        let cases = [
+            (
+                "title('hello wORLD of fub')",
+                BaseValue::Text("Hello World Of Fub".into()),
+            ),
+            ("status.title()", BaseValue::Text("Done".into())),
+            ("repeat('ab', 3)", BaseValue::Text("ababab".into())),
+            ("matches('Fub 2026', 'b [0-9]+')", BaseValue::Bool(true)),
+            ("matches('Fub', '^x')", BaseValue::Bool(false)),
+            (
+                "escapeHTML('<a href=\"x\">&</a>')",
+                BaseValue::Text("&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;".into()),
+            ),
+            ("toFixed(3.14159, 2)", BaseValue::Text("3.14".into())),
+            ("toFixed(2, 0)", BaseValue::Text("2".into())),
+            (
+                &format!("format({day}, 'YYYY-MM-DD')"),
+                BaseValue::Text("2026-10-19".into()),
+            ),
+            (
+                &format!("format({day}, 'dddd D MMMM YY [at] HH:mm')"),
+                BaseValue::Text("Monday 19 October 26 at 00:00".into()),
+            ),
+            (&format!("time({day})"), BaseValue::Text("00:00:00".into())),
+            ("hasTag(prop.tags, 'a')", BaseValue::Bool(true)),
+            ("hasTag(prop.tags, 'b', 'a')", BaseValue::Bool(true)),
+            ("hasTag(prop.tags, 'b')", BaseValue::Bool(false)),
+            ("hasTag(['a/b'], 'a')", BaseValue::Bool(true)),
+            ("hasTag(['ab'], 'a')", BaseValue::Bool(false)),
+            ("hasProperty('rating')", BaseValue::Bool(true)),
+            ("hasProperty('assente')", BaseValue::Bool(false)),
+            (
+                "hasLink([link('B.md'), link('C')], 'C.md')",
+                BaseValue::Bool(true),
+            ),
+            ("linksTo([link('B')], 'Z')", BaseValue::Bool(false)),
+            (
+                "inFolder(file('Projects/x/t.md'), 'Projects')",
+                BaseValue::Bool(true),
+            ),
+            (
+                "inFolder(file('Projectsx/t.md'), 'Projects')",
+                BaseValue::Bool(false),
+            ),
+            (
+                "asLink(file('a/b.md'), 'Ciao').target",
+                BaseValue::Text("a/b.md".into()),
+            ),
+            (
+                "asFile(link('a/b.md')).path",
+                BaseValue::Text("a/b.md".into()),
+            ),
+            (
+                "repeat('x', 1e9)",
+                BaseValue::Error(FormulaErrorCode::Value),
+            ),
+            ("toFixed(1, 99)", BaseValue::Error(FormulaErrorCode::Value)),
+            (
+                "matches('a', '(')",
+                BaseValue::Error(FormulaErrorCode::Value),
+            ),
+            (
+                "format('non una data', 'YYYY')",
+                BaseValue::Error(FormulaErrorCode::Value),
+            ),
+        ];
+        for (source, expected) in cases {
+            assert_eq!(value_of(source), expected, "{source}");
+        }
+    }
+
+    #[test]
+    fn filter_map_e_reduce_valutano_l_espressione_per_ogni_elemento() {
+        let n = |x: f64| BaseValue::Number(x);
+        assert_eq!(
+            value_of("[1, 2, 3, 4].filter(value > 2)"),
+            BaseValue::List(vec![n(3.0), n(4.0)])
+        );
+        assert_eq!(
+            value_of("[1, 2, 3].map(value * 10 + index)"),
+            BaseValue::List(vec![n(10.0), n(21.0), n(32.0)])
+        );
+        assert_eq!(value_of("[1, 2, 3].reduce(acc + value, 0)"), n(6.0));
+        assert_eq!(value_of("reduce([], acc + value, 5)"), n(5.0));
+        // `value` copre la proprietà solo dentro l'espressione.
+        assert_eq!(
+            value_of("[1].map(status)"),
+            BaseValue::List(vec![BaseValue::Text("done".into())])
+        );
+        assert_eq!(
+            value_of("'abc'.filter(value)"),
+            BaseValue::Error(FormulaErrorCode::Value)
+        );
+        assert_eq!(
+            value_of("[1, 2].map(value / 0)"),
+            BaseValue::Error(FormulaErrorCode::DivZero)
+        );
+        assert_eq!(
+            value_of("[1].reduce(acc + value)"),
+            BaseValue::Error(FormulaErrorCode::Value)
+        );
+        // Una lista lunga si ferma al budget, non gira all'infinito.
+        let formula = Formula::parse("[1, 2, 3].map(value)").unwrap();
+        assert_eq!(
+            formula.evaluate(&ctx(), &mut EvalBudget::new(4)),
+            BaseValue::Error(FormulaErrorCode::Budget)
+        );
+    }
+
+    #[test]
+    fn relative_dice_quanto_manca_o_e_passato() {
+        let at = |delta_ms: i64| relative_time(delta_ms, 0);
+        assert_eq!(at(10_000), "just now");
+        assert_eq!(at(-3 * 60_000), "3 minutes ago");
+        assert_eq!(at(60 * 60_000), "in 1 hour");
+        assert_eq!(at(-3 * 86_400_000), "3 days ago");
+        assert_eq!(at(400 * 86_400_000), "in 1 year");
+    }
+
+    #[test]
+    fn la_data_civile_regge_epoca_bisestili_e_prima_del_1970() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(11_016), (2000, 2, 29));
+        assert_eq!(civil_from_days(-1), (1969, 12, 31));
+        assert_eq!(
+            format_date(-1, "YYYY-MM-DD HH:mm:ss"),
+            "1969-12-31 23:59:59"
+        );
+    }
+
     #[test]
     fn frozen_list_object_link_tag_folder_matrix_and_typed_unknowns() {
         assert_eq!(

@@ -15,6 +15,7 @@
 import { revealSidePanel } from "../ui/side-panels";
 import { $ } from "../ui/dom";
 import { registerShellCommand } from "../ui/commands";
+import { setSidePanelOpener } from "../ui/primary-views";
 
 /// Quale pannello della sidebar è attivo: i due della shell, o l'id di una
 /// view dichiarata con `left_sidebar`. L'unione è `string` e non un enum
@@ -115,6 +116,11 @@ export function isPanelVisible(panel: "files" | "search"): boolean {
 /// due che si escludono — ed è la stessa ragione per cui quella regola si è
 /// spostata fuori da `main.ts` a suo tempo.
 export function mountSidebarCommands(): void {
+  // Le view della barra elencate dalla palette si mostrano come dalla rail.
+  setSidePanelOpener((id) => {
+    revealSidePanel("sidebar");
+    showPanel(id);
+  });
   registerShellCommand({
     id: "shell.panel.files",
     title: "commands.panel.files",

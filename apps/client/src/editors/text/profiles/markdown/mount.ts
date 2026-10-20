@@ -7,6 +7,7 @@ import { openLifetime, type Lifetime, type Teardown } from "../../../../ui/lifet
 import { mountMermaidBlocks } from "../../../../ui/mermaid";
 import type { DiagramLight } from "../../../../ui/mermaid-styles";
 import { mountMathBlocks } from "./math";
+import { claimQueryBlocks, fillQueryBlock } from "./query-block";
 import { hydrateVaultMedia, scenePlaceholder, showEmbeddedDrawing, vaultImageSource } from "./media";
 import { openLightbox } from "../../../../ui/lightbox";
 import { mediaKindOfId, mimeOfId } from "../../../media/media-types";
@@ -15,9 +16,12 @@ import type { FenceEdit } from "./render-types";
 import { isMathInfo } from "./render";
 import { mountTree, unmountTree } from "../../../../ui/node";
 import { notify } from "../../../../ui/notify";
+import { attachTooltip } from "../../../../ui/tooltip";
 import { Race, type Expected } from "../../../../ui/race";
 import { external, hasScheme, isAllowedLink, sanitizeMarkdownHtml, setSanitizedHtml } from "../../../../ui/sanitize";
-import { writeClipboardText } from "../../../../platform/clipboard";
+import { clipboardSupports, writeClipboardData, writeClipboardText } from "../../../../platform/clipboard";
+import { showContextMenu } from "../../../../ui/menu";
+import { openWebLink } from "../../../../ui/web-viewer";
 
 export interface MarkdownMountOptions {
   readonly documentId?: string;
@@ -245,10 +249,12 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
     }
     // Nessun link naviga la webview: la shell è una pagina sola, e seguirne uno
     // la scaricherebbe con i buffer, le bozze in volo e la storia di ogni
-    // riquadro. Un indirizzo con schema va al sistema, uno relativo è un
-    // documento del vault.
+    // riquadro. Un indirizzo web va al visore o al browser (lo decide il
+    // visore, con l'Alt per forzarlo), un altro schema al sistema, uno
+    // relativo è un documento del vault.
     event.preventDefault();
-    if (hasScheme(href) || external(href)) window.open(href, "_blank", "noopener,noreferrer");
+    if (/^https?:/i.test(href)) openWebLink(href, event.altKey);
+    else if (hasScheme(href) || external(href)) window.open(href, "_blank", "noopener,noreferrer");
     else openPath(safeDecode(href));
   });
 }
@@ -286,7 +292,90 @@ function enhanceContent(
   }));
   life.add(mountMathBlocks(container));
   wireContent(container, options, life);
+  wireFootnotePreviews(container, life);
+  wireImageMenu(container, life);
   life.add(highlightMarkdownCode(container));
+}
+
+/// Il richiamo di una nota a piè di pagina mostra la nota al passaggio e al
+/// fuoco, senza scorrere fino in fondo. Un incorporamento ha le sue note: il
+/// richiamo cerca soltanto fra quelle del suo stesso documento.
+function wireFootnotePreviews(container: HTMLElement, life: Lifetime): void {
+  const notes = Array.from(container.querySelectorAll<HTMLElement>(".block-footnote-definition[id]"));
+  if (notes.length === 0) return;
+  for (const ref of container.querySelectorAll<HTMLAnchorElement>("a.footnote-ref")) {
+    const id = ref.getAttribute("href")?.slice(1);
+    const scope = ref.closest(".embed-loaded");
+    const note = notes.find((each) => each.id === id && each.closest(".embed-loaded") === scope);
+    const text = note ? footnoteText(note) : "";
+    if (text) life.add(attachTooltip(ref, text));
+  }
+}
+
+/// Il tasto destro su un'immagine resa: copiarla negli appunti come PNG, e
+/// per un'immagine del vault anche il suo percorso. Un incorporamento dentro
+/// l'altro risponde per primo, e il menu esterno non si apre sopra il suo.
+function wireImageMenu(container: HTMLElement, life: Lifetime): void {
+  life.listen(container, "contextmenu", (event) => {
+    if (event.defaultPrevented) return;
+    const target = event.target instanceof Element ? event.target : null;
+    const picture = target?.closest<HTMLImageElement>("img");
+    if (!picture || !container.contains(picture) || picture.closest("[data-ui-slot]")) return;
+    event.preventDefault();
+    const id = picture.dataset.vaultId;
+    showContextMenu(event, [
+      {
+        label: t("preview.image.copy"),
+        disabled: !clipboardSupports("image/png") || !(picture.currentSrc || picture.src),
+        run: () => {
+          // La promessa dei byte entra subito negli appunti, dentro il gesto:
+          // alcuni motori non lasciano scrivere dopo.
+          const png = pngOf(picture);
+          png.catch(() => undefined);
+          void writeClipboardData({ "image/png": png }).then(
+            () => notify(t("preview.image.copied"), "info"),
+            () => notify(t("preview.image.copy_failed"), "guasto"),
+          );
+        },
+      },
+      ...(id ? [{
+        label: t("tabmenu.copy_path"),
+        run: () => {
+          void writeClipboardText(id).then(
+            () => notify(t("tabmenu.path_copied", { path: id }), "info"),
+            () => notify(t("tabmenu.copy_failed"), "guasto"),
+          );
+        },
+      }] : []),
+    ]);
+  });
+}
+
+/// L'immagine come PNG: i byte stessi se lo sono già, altrimenti ridisegnati
+/// su una tela alla misura naturale. Una sorgente che non si legge rifiuta.
+export async function pngOf(picture: HTMLImageElement): Promise<Blob> {
+  const source = await (await fetch(picture.currentSrc || picture.src)).blob();
+  if (source.type === "image/png") return source;
+  const drawable: CanvasImageSource = await createImageBitmap(source).catch(() => picture);
+  const width = "naturalWidth" in drawable ? drawable.naturalWidth : drawable.width;
+  const height = "naturalHeight" in drawable ? drawable.naturalHeight : drawable.height;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context || width === 0 || height === 0) throw new Error("immagine senza misura");
+  context.drawImage(drawable, 0, 0);
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("PNG non prodotto"))), "image/png");
+  });
+}
+
+/// Il testo di una nota come si legge: senza il numero davanti e senza i
+/// ritorni ai richiami.
+export function footnoteText(note: HTMLElement): string {
+  const copy = note.cloneNode(true) as HTMLElement;
+  for (const back of copy.querySelectorAll(".footnote-backref")) back.remove();
+  return (copy.textContent ?? "").replace(/\s+/g, " ").trim().replace(/^\d+\.\s*/, "");
 }
 
 function mountContent(
@@ -470,14 +559,20 @@ export function mountMarkdown(
         for (const part of rendered.parts) parts.push(part);
       }
     }
+    const queries = claimQueryBlocks(container);
     enhanceContent(container, parts, options, mountedLife);
     hasEmbeds = !!container.querySelector(".embed[data-embed-page]");
     const hasImages = !!container.querySelector("img[data-vault-src]");
-    if (options.documentId && (hasEmbeds || hasImages)) {
-      const documentId = options.documentId;
+    const documentId = options.documentId;
+    if (queries.length > 0 || (documentId && (hasEmbeds || hasImages))) {
       void mountedRace.last((expected) => Promise.all([
-        hydrateEmbeds(container, new Set([JSON.stringify([documentId, null, null])]), new Map(), expected, options, mountedLife),
-        hydrateVaultMedia(container, documentId, expected, mountedLife),
+        ...(documentId && (hasEmbeds || hasImages)
+          ? [
+            hydrateEmbeds(container, new Set([JSON.stringify([documentId, null, null])]), new Map(), expected, options, mountedLife),
+            hydrateVaultMedia(container, documentId, expected, mountedLife),
+          ]
+          : []),
+        ...queries.map(({ block, query }) => fillQueryBlock(block, query, expected, mountedLife)),
       ])).catch((error: unknown) => {
         if (!mountedLife.closed) notify(t("preview.embed_failed", { reason: errorText(error) }), "guasto");
       });

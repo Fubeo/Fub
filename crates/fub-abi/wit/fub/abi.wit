@@ -654,7 +654,7 @@ interface renderer {
 /// Protocollo di UI dichiarativa (`UiNode`).
 interface ui {
     use json.{json};
-    use model.{span};
+    use model.{span, doc-id};
     use text.{text};
 
     type action-id = string;
@@ -937,13 +937,19 @@ interface ui {
     ///
     /// Un nodo NON dichiara se accetta un rilascio (decisione 0157): il
     /// trascinamento del puntatore (`preferred-size`) non è un bersaglio di
-    /// drop, e il drag & drop resta della shell finché non esiste una seconda
-    /// superficie che trascina. Il giorno che ci sarà, la forma è un campo in
-    /// fondo a questo record (additivo) e il carico nel `payload` di
-    /// `ui-action`.
+    /// drop, e i bersagli restano della shell. `drag` dice che cosa si
+    /// trascina da lui: è il campo in fondo che la 0157 aveva previsto.
     record ui-node {
         key: option<string>,
         kind: ui-kind,
+        drag: option<ui-drag>,
+    }
+
+    /// Che cosa porta un nodo trascinato; la shell decide come si offre e
+    /// dove si lascia. `document`: una nota del vault, che nell'editor
+    /// diventa un link.
+    variant ui-drag {
+        document(doc-id),
     }
 
     /// Arena dell'albero UI: `root` indicizza `nodes`. Lato Rust è un
@@ -1984,6 +1990,27 @@ interface index {
     record task-predicate { status: task-status }
     record path-predicate { glob: string }
     record file-predicate { extension: string }
+    /// L'unità del corpo dentro cui stanno tutti i termini di uno `scoped`:
+    /// una riga scritta, un blocco (paragrafo, titolo, voce, codice, tabella),
+    /// una sezione (da un titolo al seguente).
+    enum text-scope { line, block, section }
+    /// Il testo, tutto nella stessa unità del corpo; i campi di `text` non
+    /// contano.
+    record scoped-predicate {
+        scope: text-scope,
+        text: text-query,
+    }
+    /// Un estremo della scadenza: una data `AAAA-MM-GG` e se è compresa.
+    record due-bound {
+        date: string,
+        inclusive: bool,
+    }
+    /// Una task aperta con la scadenza (`📅 AAAA-MM-GG` nel suo testo) fra i
+    /// due estremi; un estremo assente non limita.
+    record task-due-predicate {
+        min: option<due-bound>,
+        max: option<due-bound>,
+    }
     /// Le foglie: ognuna è un fatto sul vault che qualcuno sa verificare.
     variant query-predicate {
         text(text-query),
@@ -1997,6 +2024,8 @@ interface index {
         task(task-predicate),
         path(path-predicate),
         file(file-predicate),
+        scoped(scoped-predicate),
+        task-due(task-due-predicate),
     }
     /// Un predicato, eventualmente negato: in forma normale la negazione finisce
     /// sulle foglie, ed è la casella «diverso da» di un builder.
@@ -2070,6 +2099,11 @@ interface index {
         /// si filtra né si ordina come una data. Chi ha dichiarato il formato
         /// non vede qui ciò che quel formato legge.
         unrecognized-dates,
+        /// Note senza link verso il vault: un URL esce, un `[[#Sezione]]` resta
+        /// nella nota, un link rotto invece conta.
+        dead-ends,
+        /// Allegati che nessun documento nomina, né come link né come embed.
+        unused-attachments,
     }
 
     record index-query-backlinks {
@@ -2388,6 +2422,8 @@ interface index {
         task,
         path,
         file,
+        scoped,
+        task-due,
     }
     /// Cosa un indice dichiara alla registrazione. Una FAMIGLIA ha un
     /// proprietario solo (lì la risposta si compone, e due autori vorrebbero

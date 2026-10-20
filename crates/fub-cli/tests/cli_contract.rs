@@ -176,6 +176,118 @@ fn create_and_uri_new_write_into_the_note_the_command_made() {
     );
 }
 
+/// I comandi della giornaliera, dell'outline, del conteggio e della nota a caso
+/// passano dai comandi e dalle view dei loro owner: il nome della giornaliera è
+/// quello di `note.daily`, i conteggi quelli del pannello statistiche.
+#[test]
+fn daily_outline_wordcount_and_random_answer_through_their_owners() {
+    let tmp = tempfile::tempdir().unwrap();
+    let vault = tmp.path().join("vault");
+    let config = tmp.path().join("config");
+    std::fs::create_dir(&vault).unwrap();
+    std::fs::write(vault.join("a.md"), "# Uno\n\ntesto\n\n## Due\n").unwrap();
+    std::fs::write(vault.join("b.md"), "uno due tre").unwrap();
+    std::fs::create_dir(vault.join(".fub")).unwrap();
+    std::fs::write(
+        vault.join(".fub/workspace.json"),
+        r#"{"icons":{},"pinned":["b.md"],"order":{},"spaces":[]}"#,
+    )
+    .unwrap();
+    let run = |args: &[&str]| {
+        let mut all = vec![
+            "--vault",
+            vault.to_str().unwrap(),
+            "--config-dir",
+            config.to_str().unwrap(),
+            "--format",
+            "json",
+            "--yes",
+        ];
+        all.extend_from_slice(args);
+        let output = cli(&all);
+        assert!(
+            output.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap()
+    };
+
+    let planned = run(&["daily", "--date", "2026-10-19"]);
+    let doc = planned["data"]["doc"].as_str().unwrap().to_string();
+    assert!(doc.ends_with("2026-10-19.md"), "{planned}");
+    assert_eq!(planned["data"]["exists"], false);
+    assert!(!vault.join(&doc).exists(), "asking the name writes nothing");
+
+    let appended = run(&["daily", "--date", "2026-10-19", "--append", "prima riga"]);
+    assert_eq!(appended["data"]["doc"], doc.as_str());
+    assert_eq!(appended["data"]["created"], true);
+    run(&["daily", "--date", "2026-10-19", "--append", "seconda riga"]);
+    run(&["daily", "--date", "2026-10-19", "--prepend", "in testa"]);
+    let written = std::fs::read_to_string(vault.join(&doc)).unwrap();
+    let body = match written.strip_prefix("---") {
+        // Un frontmatter resta la prima cosa del file: la riga va dopo.
+        Some(rest) => &rest[rest.find("\n---").expect("closed frontmatter") + 4..],
+        None => written.as_str(),
+    };
+    assert!(
+        body.trim_start_matches('\n').starts_with("in testa\n"),
+        "{written:?}"
+    );
+    assert!(
+        written.ends_with("prima riga\nseconda riga\n"),
+        "{written:?}"
+    );
+    let read = run(&["daily", "--date", "2026-10-19", "--read"]);
+    assert_eq!(read["data"]["source"], written.as_str());
+
+    let outline = run(&["outline", "a.md"]);
+    let headings: Vec<_> = outline["data"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|h| (h["level"].as_u64().unwrap(), h["text"].as_str().unwrap()))
+        .collect();
+    assert_eq!(headings, vec![(1, "Uno"), (2, "Due")]);
+
+    let counted = run(&["wordcount", "b.md"]);
+    assert_eq!(counted["data"]["words"], 3, "{counted}");
+    assert_eq!(counted["data"]["chars"], 11, "{counted}");
+    assert_eq!(counted["data"]["minutes"], 1, "{counted}");
+
+    let picked = run(&["random"]);
+    let picked = picked["data"]["doc"].as_str().unwrap();
+    assert!(["a.md", "b.md", doc.as_str()].contains(&picked), "{picked}");
+
+    let pinned = run(&["bookmarks"]);
+    assert_eq!(
+        pinned["data"]["items"],
+        serde_json::json!(["b.md"]),
+        "{pinned}"
+    );
+
+    let both = cli(&["daily", "--read", "--append", "x"]);
+    assert!(!both.status.success(), "one action at a time");
+
+    let missing = cli(&[
+        "--vault",
+        vault.to_str().unwrap(),
+        "--config-dir",
+        config.to_str().unwrap(),
+        "--format",
+        "json",
+        "wordcount",
+        "manca.md",
+    ]);
+    let said = format!(
+        "{}{}",
+        String::from_utf8_lossy(&missing.stdout),
+        String::from_utf8_lossy(&missing.stderr)
+    );
+    assert_eq!(missing.status.code(), Some(1), "a missing note: {said}");
+    assert!(said.contains("not_found"), "{said}");
+}
+
 /// Un comando secco apre il vault, domanda ed esce: le domande sul grafo e il
 /// piano di un `--dry-run` rispondono a indice pronto, non a indice vuoto con
 /// `ok: true`. Le note sono abbastanza perché l'indicizzazione dell'apertura

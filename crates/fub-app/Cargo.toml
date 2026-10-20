@@ -14,8 +14,9 @@ name = "fub_app_lib"
 # `desktop-schema.json` e `linux-schema.json` — e i due artefatti in più non li
 # consumava nessuno: il binario `fub` linka il solo `.rlib`, e lo stesso fa
 # `tests/ts_mirror_app.rs`. Erano tre codegen e tre link dell'intero albero,
-# tauri compreso, per 883 righe di sorgente. Se un giorno arriva il mobile, le
-# due parole tornano **insieme al target che le consuma**, non prima.
+# tauri compreso, per 883 righe di sorgente. Le due parole tornano **insieme al
+# target che le consuma**: `.github/workflows/mobile.yml` le aggiunge nel suo
+# runner prima del build Android, e il ciclo desktop non le paga.
 crate-type = ["rlib"]
 
 [[bin]]

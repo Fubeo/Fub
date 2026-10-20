@@ -39,19 +39,22 @@ import {
   type SurfaceLocation,
   type SurfaceMode,
   type SurfaceOverride,
+  type SurfaceAnchor,
   type SurfaceReference,
   type SurfaceRequest,
 } from "../editors/core/registry";
 import { modeForContext, offersContext, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
-import { NOTE_DRAG_TYPE } from "../ui/drag-types";
+import { draggedEntries, ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../ui/drag-types";
 import { pageName } from "../rules/organizer";
+import { looksLikeWebShortcut, webShortcut } from "../rules/web-shortcut";
 import { declaredFences } from "../rules/syntax";
 import { pdfIdWithoutFragment } from "../editors/media/pdf-view";
 import { mediaKindOfId, mimeOfId } from "../editors/media/media-types";
 import { openResourcePort, type ResourceTransport } from "../editors/media/resource-port";
 import { vaultImageSource } from "../editors/text/profiles/markdown/media";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
-import { depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, type AttachmentDeposit } from "../editors/media/attachment-target";
+import { blockIds, type BlockOption } from "../editors/text/profiles/markdown/completions";
+import { depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, relativeUrl, type AttachmentDeposit } from "../editors/media/attachment-target";
 import { createViewStateCrashDeposit } from "../editors/media/recorder-store";
 import { mountRecorderSurface } from "../editors/media/recorder-surface";
 import { printDocument } from "../editors/media/print-view";
@@ -59,12 +62,14 @@ import { mountSlidePresentation } from "../ui/slides";
 import { mountMarkdown, mountRenderedDocument } from "../editors/text/profiles/markdown/mount";
 import { applyNoteCssClasses } from "../theme/snippets";
 import { Queue } from "../ui/race";
+import { openWebPage } from "../ui/web-viewer";
 import { invalidateDocumentCaches, renameInDocumentCaches } from "./document-caches";
 import type { Theme } from "../theme/theme";
 import { api } from "../host/ipc";
-import { WITHOUT_PAGE, notesByName, renderPrint, resolvedReference, settings, vaultEntries, vaultTags } from "../host/query";
+import { WITHOUT_PAGE, documentOutline, matchingDocuments, notesByName, renderPrint, resolvedReference, searchExpression, settings, vaultEntries, vaultTags } from "../host/query";
 import { theseDocuments, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
 import { existingRecentNotes } from "./recent";
+import { linkPreference, markdownDestination, wikiPathCandidates, type LinkFormat, type LinkPreference } from "./note-links";
 import { onEvent } from "./kernel";
 import { drawingFonts } from "./drawing-fonts";
 import { drawingSymbols } from "./drawing-symbols";
@@ -97,6 +102,7 @@ import {
   setPinnedTab,
   reopenClosedTab,
   cycleTab,
+  goToTab,
   setPaneLink,
   split,
   activeDoc,
@@ -111,6 +117,7 @@ import {
   rename,
   sameTab,
   activateTab,
+  recentTabs,
   sameOverride,
   setTabOverride,
   tabOverride,
@@ -433,19 +440,115 @@ async function droppedFiles(data: DataTransfer): Promise<readonly File[]> {
   return files;
 }
 
+/// I titoli della nota che un link nomina, risolta dalla nota corrente come la
+/// risolverebbe il link; `page` vuota è la nota stessa.
+async function noteHeadings(page: string): Promise<{ text: string; level: number }[]> {
+  const from = slashContextDoc();
+  const doc = page.trim() === ""
+    ? from
+    : (await resolvedReference({ kind: "wiki", value: { page, heading: null, block: null } }, from ?? undefined))?.doc;
+  if (!doc) return [];
+  return (await documentOutline(doc)).map(({ text, level }) => ({ text, level }));
+}
+
+/// I blocchi con un id della nota che `page` nomina: dal testo della sessione
+/// aperta, che ha anche gli id non ancora salvati, o dal file.
+async function noteBlocks(page: string): Promise<BlockOption[]> {
+  const from = slashContextDoc();
+  const doc = page.trim() === ""
+    ? from
+    : (await resolvedReference({ kind: "wiki", value: { page, heading: null, block: null } }, from ?? undefined))?.doc;
+  if (!doc || !doc.toLowerCase().endsWith(".md")) return [];
+  return blockIds(documentSessions.text(doc) ?? (await api.readDocument(doc)).text);
+}
+
+/// I titoli del vault che contengono `text`: le note che la ricerca trova per
+/// quelle parole, e di ciascuna i titoli che le contengono davvero. Una finestra
+/// di note, non il vault intero: si chiede a ogni battuta.
+const HEADING_NOTES = 20;
+async function vaultHeadings(text: string): Promise<{ doc: string; text: string; level: number }[]> {
+  const wanted = text.trim().toLocaleLowerCase();
+  if (wanted === "") return [];
+  const found = await matchingDocuments(searchExpression(text), { offset: 0, limit: HEADING_NOTES }, "omit");
+  const outlines = await Promise.all(found.items.map(async ({ doc }) =>
+    (await documentOutline(doc).catch(() => []))
+      .filter((heading) => heading.text.toLocaleLowerCase().includes(wanted))
+      .map(({ text: title, level }) => ({ doc, text: title, level }))));
+  return outlines.flat();
+}
+
+/// La superficie del riquadro col fuoco che sa dire il punto sotto il cursore,
+/// col documento che mostra.
+function focusedAnchorSurface(): { doc: string; anchorHere: () => SurfaceAnchor | null } | null {
+  const r = panes.get(layout.focus);
+  if (r?.shown?.k !== "doc" || !r.surface?.anchorHere) return null;
+  const surface = r.surface;
+  return { doc: r.shown.doc, anchorHere: () => surface.anchorHere?.() ?? null };
+}
+
+/// «Copia il link a questo punto»: `[[Nota#Titolo]]` o `[[Nota#^id]]` negli
+/// appunti, scritto come vuole il vault, come per una nota trascinata; a un
+/// blocco senza id la superficie ne scrive uno. Negli appunti un link Markdown
+/// non sa ancora dove andrà, quindi parte dalla radice del vault.
+async function copyAnchorLink(): Promise<void> {
+  const focused = focusedAnchorSurface();
+  if (!focused) return;
+  const anchor = focused.anchorHere();
+  if (!anchor) {
+    notify(t("document.anchor_none"), "info");
+    return;
+  }
+  const preference = await linkPreference();
+  let link: string;
+  if (preference.style === "markdown") {
+    const point = anchor.kind === "block" ? `^${anchor.id}` : encodeURIComponent(anchor.text);
+    const title = anchor.kind === "heading" ? anchor.text : pageName(focused.doc);
+    link = `[${title.replace(/[[\]\\]/g, "\\$&")}](${markdownDestination("", focused.doc, "absolute")}#${point})`;
+  } else {
+    // I caratteri che un wikilink usa per sé non possono stare in un titolo
+    // citato: chiuderebbero il link o ne aprirebbero un altro campo.
+    const fragment = anchor.kind === "block" ? `^${anchor.id}` : anchor.text.replace(/[[\]|#^]/g, " ").replace(/\s+/g, " ").trim();
+    link = `[[${await wikiTarget(focused.doc, preference.format)}#${fragment}]]`;
+  }
+  await writeClipboardText(link).then(
+    () => notify(t("document.anchor_copied", { link }), "info"),
+    () => notify(t("tabmenu.copy_failed"), "guasto"),
+  );
+}
+
 /// Il riferimento più corto che porta davvero alla nota: il nome, poi il nome
 /// con l'estensione, poi il percorso senza estensione, poi il percorso intero.
 /// Lo decide la risoluzione del vault, non una regola copiata qui.
 async function wikiReference(doc: string): Promise<string> {
   const fileName = doc.slice(doc.lastIndexOf("/") + 1);
   const withoutExtension = doc.replace(/\.[^./]+$/, "");
-  for (const candidate of [pageName(doc), fileName, withoutExtension]) {
+  return firstResolving(doc, [pageName(doc), fileName, withoutExtension]);
+}
+
+/// Il primo candidato che il vault risolve davvero a `doc`; altrimenti il
+/// percorso intero, che è sempre una risposta.
+async function firstResolving(doc: string, candidates: readonly string[]): Promise<string> {
+  for (const candidate of candidates) {
     const resolved = await resolvedReference(
       { kind: "wiki", value: { page: candidate, heading: null, block: null } },
     ).catch(() => null);
     if (resolved?.doc === doc) return candidate;
   }
   return doc;
+}
+
+/// Il bersaglio di un wikilink secondo `files.link-format`: il nome più corto,
+/// o il percorso dalla radice (un wikilink non ha forma relativa).
+function wikiTarget(doc: string, format: LinkFormat): Promise<string> {
+  return format === "shortest" ? wikiReference(doc) : firstResolving(doc, wikiPathCandidates(doc));
+}
+
+/// Il rimando a una nota scritto da dentro `from` come vuole il vault.
+async function noteReference(from: string, doc: string, preference: LinkPreference): Promise<SurfaceReference> {
+  if (preference.style === "markdown") {
+    return { kind: "note", name: pageName(doc), link: markdownDestination(from, doc, preference.format) };
+  }
+  return { kind: "note", name: await wikiTarget(doc, preference.format) };
 }
 
 /// Gli allegati depositati entrano nel documento come rimandi: come si
@@ -455,7 +558,7 @@ function insertAttachmentLinks(r: Pane, doc: string, links: readonly string[]): 
       closeDraining || documentSessions.isDeletionPending(doc)) return;
   const references = links.map((link): SurfaceReference => ({ kind: "attachment", link }));
   if (!r.surface.insertReferences(references)) {
-    throw new Error("The document editor is not available for attachment insertion");
+    throw new Error(t("errors.document.no_editor"));
   }
 }
 
@@ -485,7 +588,7 @@ function mountDocumentAttachments(r: Pane, doc: string): void {
   };
   life.listen(r.editorEl, "dragover", (event) => {
     const types = event.dataTransfer?.types ?? [];
-    if (!types.includes("Files") && !types.includes(NOTE_DRAG_TYPE)) return;
+    if (!types.includes("Files") && !types.includes(NOTE_DRAG_TYPE) && !types.includes(ENTRIES_DRAG_TYPE)) return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer!.dropEffect = "copy";
@@ -498,16 +601,49 @@ function mountDocumentAttachments(r: Pane, doc: string): void {
       event.preventDefault();
       event.stopPropagation();
       const { clientX: x, clientY: y } = event;
-      void wikiReference(note).then((reference) => {
+      void linkPreference().then((preference) => noteReference(doc, note, preference)).then((reference) => {
         if (life.closed || r.surface !== surface) return;
-        surface.insertReferences?.([{ kind: "note", name: reference }], { x, y });
+        surface.insertReferences?.([reference], { x, y });
+      });
+      return;
+    }
+    // Più voci, o un file del vault: ogni nota un collegamento, ogni file un
+    // rimando relativo al documento che lo riceve, nell'ordine dell'albero.
+    const entries = draggedEntries(event.dataTransfer?.getData(ENTRIES_DRAG_TYPE));
+    if (entries.length) {
+      event.preventDefault();
+      event.stopPropagation();
+      const { clientX: x, clientY: y } = event;
+      // Senza un punto vero (un rilascio sintetico) si scrive al cursore.
+      const at = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
+      void linkPreference().then((preference) => Promise.all(entries.map(async (each): Promise<SurfaceReference> =>
+        each.note ? noteReference(doc, each.id, preference) : { kind: "attachment", link: relativeUrl(doc, each.id) },
+      ))).then((references) => {
+        if (life.closed || r.surface !== surface) return;
+        surface.insertReferences?.(references, at);
       });
       return;
     }
     if (!event.dataTransfer?.files.length) return;
     event.preventDefault();
     event.stopPropagation();
-    accept(Array.from(event.dataTransfer.files));
+    const files = Array.from(event.dataTransfer.files);
+    const shortcuts = files.filter((file) => looksLikeWebShortcut(file.name, file.size));
+    if (!shortcuts.length) {
+      accept(files);
+      return;
+    }
+    // Un `.webloc` o un `.url` diventa un link alla pagina dove cade; uno che
+    // non si legge entra come gli altri file, allegato.
+    const { clientX: x, clientY: y } = event;
+    const at = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
+    void Promise.all(shortcuts.map(async (file) => ({ file, link: webShortcut(file.name, await file.text()) }))).then((read) => {
+      if (life.closed || r.surface !== surface) return;
+      const links = read.flatMap(({ link }): SurfaceReference[] => (link ? [{ kind: "web", ...link }] : []));
+      if (links.length) surface.insertReferences?.(links, at);
+      const rest = files.filter((file) => !read.some((each) => each.file === file && each.link));
+      if (rest.length) accept(rest);
+    }).catch(fail);
   }, { capture: true });
   life.listen(r.editorEl, "paste", (event) => {
     if (!event.clipboardData?.files.length) return;
@@ -545,6 +681,13 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   // vi si cliccano tornano qui, dove ci sono i riquadri e la ricerca.
   setDocumentWindowNavigation({ navigate: followRemote });
   lifetime.add(() => setDocumentWindowNavigation(null));
+  // Il giro di Ctrl+Tab finisce quando si lascia il modificatore.
+  lifetime.listen(document, "keyup", (event) => {
+    if (event.key === "Control" || event.key === "Meta") recentRound = null;
+  });
+  lifetime.add(() => {
+    recentRound = null;
+  });
   surfaceRegistry = createDocumentSurfaceRegistry({
     onChange: written,
     onSelectionChange: (paneId) => {
@@ -594,14 +737,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       searchTag: (tag) => deps.searchTag(tag),
     }),
     canvasMedia: {
-      openExternal: async () => { throw new Error("External opening is not available in this host"); },
-      openViewer: async (url) => {
-        try {
-          await api.viewerOpen(url, url, { allowRemote: false, allowlist: [] });
-        } catch (error) {
-          notify(t("document.viewer_unavailable", { reason: errorText(error) }), "guasto");
-        }
-      },
+      openExternal: async () => { throw new Error(t("errors.document.no_external")); },
+      // Il consenso, la barra e gli errori sono del visore della finestra.
+      openViewer: async (url) => { await openWebPage(url); },
     },
     canvasAttachments: {
       expandFiles: droppedFiles,
@@ -609,7 +747,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
         const deposit = await attachmentDeposit(documentId);
         const paths: string[] = [];
         for (const file of files) {
-          if (file.size > 64 * 1024 * 1024) throw new Error(`Attachment ${file.name} exceeds the inline deposit limit`);
+          if (file.size > 64 * 1024 * 1024) throw new Error(t("errors.attachment.too_large", { name: file.name }));
           const saved = await depositAttachment(deposit, file.name, new Uint8Array(await file.arrayBuffer()));
           paths.push(saved.receipt.id);
         }
@@ -628,6 +766,9 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       searchNotes: (prefix: string) =>
         (prefix.trim() ? notesByName(prefix) : existingRecentNotes()).catch(() => []),
       listTags: () => vaultTags(WITHOUT_PAGE).catch(() => []),
+      headingsOf: (page: string) => noteHeadings(page).catch(() => []),
+      searchHeadings: (text: string) => vaultHeadings(text).catch(() => []),
+      blocksOf: (page: string) => noteBlocks(page).catch(() => []),
     },
     gridHost: api,
     media: {
@@ -815,6 +956,27 @@ function invalidateLoads(doc: string): void {
 // riconfigurare. Passano dalla stessa porta del click, così il cablaggio sta in
 // un punto solo.
 
+/// Il giro di `Ctrl+Tab`: l'ordine d'uso preso alla prima pressione e il punto
+/// raggiunto. Finché il modificatore resta giù le pressioni scendono in quello
+/// stesso ordine; lasciato, il giro finisce e la scheda scelta è la più recente.
+let recentRound: { pane: string; order: Tab[]; at: number } | null = null;
+
+function stepRecentTab(step: 1 | -1): void {
+  const id = layout.focus;
+  const p = layout.panes[id];
+  if (!p || p.tabs.length < 2) return;
+  const current = p.tabs[p.active];
+  const round = recentRound;
+  const going = round && round.pane === id && current && sameTab(current, round.order[round.at]!) ? round : null;
+  const next = going ?? { pane: id, order: recentTabs(id).map((index) => p.tabs[index]!), at: 0 };
+  next.at = (next.at + step + next.order.length) % next.order.length;
+  recentRound = next;
+  const index = p.tabs.findIndex((each) => sameTab(each, next.order[next.at]!));
+  if (index < 0) return;
+  activateTab(id, index);
+  void synchronize();
+}
+
 function registerCommands(): void {
   // Le modalità come comandi (§18.2): erano bottoni nel commutatore, cioè
   // raggiungibili col mouse e con nient'altro. Passano dalla stessa porta del
@@ -897,6 +1059,14 @@ function registerCommands(): void {
     run: () => void chooseExport(layout.focus),
   });
   registerShellCommand({
+    id: "shell.doc.copy_anchor_link",
+    title: "commands.doc.copy_anchor_link",
+    description: "commands.doc.copy_anchor_link.desc",
+    layer: "document",
+    available: () => focusedAnchorSurface() !== null,
+    run: () => void copyAnchorLink(),
+  });
+  registerShellCommand({
     id: "shell.doc.save",
     title: "commands.doc.save",
     description: "commands.doc.save.desc",
@@ -930,6 +1100,42 @@ function registerCommands(): void {
       if (cycleTab(layout.focus, -1)) void synchronize();
     },
   });
+  for (const [id, step] of [["shell.tab.recent", 1], ["shell.tab.recent.back", -1]] as const) {
+    registerShellCommand({
+      id,
+      title: step === 1 ? "commands.tab.recent" : "commands.tab.recent.back",
+      description: step === 1 ? "commands.tab.recent.desc" : "commands.tab.recent.back.desc",
+      layer: "global",
+      run: () => stepRecentTab(step),
+    });
+  }
+  for (const [id, action, title, description] of [
+    ["shell.fold.all", "text.fold.all", "commands.fold.all", "commands.fold.all.desc"],
+    ["shell.unfold.all", "text.unfold.all", "commands.unfold.all", "commands.unfold.all.desc"],
+    ["shell.fold.more", "text.fold.more", "commands.fold.more", "commands.fold.more.desc"],
+    ["shell.fold.less", "text.fold.less", "commands.fold.less", "commands.fold.less.desc"],
+    ["shell.fold.properties", "text.fold.properties", "commands.fold.properties", "commands.fold.properties.desc"],
+  ] as const) {
+    registerShellCommand({
+      id,
+      title,
+      description,
+      layer: "global",
+      available: () => editorActionReady(action),
+      run: () => void runEditorAction(action),
+    });
+  }
+  for (const position of [1, 2, 3, 4, 5, 6, 7, 8, "last"] as const) {
+    registerShellCommand({
+      id: `shell.tab.go.${position}`,
+      title: `commands.tab.go.${position}`,
+      description: `commands.tab.go.${position}.desc`,
+      layer: "global",
+      run: () => {
+        if (goToTab(layout.focus, position === "last" ? "last" : position - 1)) void synchronize();
+      },
+    });
+  }
   registerShellCommand({
     id: "shell.pane.split.right",
     title: "commands.pane.split.right",
@@ -1876,11 +2082,18 @@ function focusedModes(): readonly SurfaceMode[] {
 /// Esegue un'azione dell'editor nella superficie del riquadro col fuoco: è
 /// l'intento `fub.editor.action` di un comando invocato dalla palette o da una
 /// scorciatoia. La barra non passa di qui: agisce sul proprio riquadro.
+/// L'azione c'è nella superficie del riquadro col fuoco, e si può eseguire.
+export function editorActionReady(action: string): boolean {
+  const r = panes.get(layout.focus);
+  const actions = r?.shown?.k === "doc" ? r.surface?.editorActions : undefined;
+  return !!actions?.has(action) && actions.editable();
+}
+
 export function runEditorAction(action: string): "done" | "nothing" | "unavailable" {
   const r = panes.get(layout.focus);
   const surface = r?.shown?.k === "doc" ? r.surface : null;
   const actions = surface?.editorActions;
-  if (!actions?.has(action) || !actions.editable()) return "unavailable";
+  if (!actions || !editorActionReady(action)) return "unavailable";
   if (!actions.run(action)) return "nothing";
   surface?.focus?.();
   return "done";
@@ -1900,7 +2113,7 @@ export async function toggleRecorder(r: Pane, doc: string): Promise<void> {
       staging: createViewStateCrashDeposit({ get: (key) => api.viewState(key), set: api.setViewState }),
       attachment,
       onEmbed: (link) => {
-        if (r.surface !== surface) throw new Error("The document editor has closed");
+        if (r.surface !== surface) throw new Error(t("errors.document.editor_closed"));
         insertAttachmentLinks(r, doc, [link]);
       },
     });
@@ -2083,6 +2296,14 @@ export async function openFromView(id: string): Promise<void> {
     return;
   }
   focusPane(other);
+  await openDocument(id);
+}
+
+/// Apre un documento in un riquadro nuovo accanto a quello col fuoco, a
+/// destra (`row`) o sotto (`col`): è il `split` di un `fub://open`.
+export async function openDocumentBeside(id: string, dir: "row" | "col"): Promise<void> {
+  const other = split(layout.focus, dir);
+  if (other) focusPane(other);
   await openDocument(id);
 }
 

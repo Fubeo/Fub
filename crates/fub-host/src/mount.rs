@@ -142,8 +142,12 @@ impl Bundle for CoreBundle {
 }
 
 /// Native transfer bundle: each importer/exporter and the conversion commands
-/// share one owner, with the explicitly restricted network manifest.
-struct ImportersBundle;
+/// share one owner, with the explicitly restricted network manifest. The
+/// connectors read the tokens saved on this machine
+/// ([`MachineTokens`](crate::connector_tokens::MachineTokens)).
+struct ImportersBundle {
+    secrets: Arc<dyn importers::ConnectorSecrets>,
+}
 
 impl Bundle for ImportersBundle {
     fn manifest(&self) -> PluginManifest {
@@ -160,7 +164,7 @@ impl Bundle for ImportersBundle {
 
     fn register(&self, registrar: &mut Registrar<'_>) -> Vec<String> {
         let mut failures = Vec::new();
-        for provider in importers::import_providers() {
+        for provider in importers::import_providers_with(Arc::clone(&self.secrets)) {
             if let Err(error) = registrar.register_import_provider(provider) {
                 failures.push(format!("import provider not registered: {error}"));
             }
@@ -236,7 +240,6 @@ pub fn mount(
         system_locale,
         levels,
         crate::PreparedFormatSource::empty(),
-        #[cfg(feature = "http-client")]
         None,
         default_network(),
         Arc::new(fub_kernel::time::SystemClock),
@@ -262,7 +265,7 @@ pub(crate) fn mount_with_formats(
     system_locale: Arc<SystemLocale>,
     levels: &fub_kernel::log::Levels,
     prepared_formats: crate::PreparedFormatSource,
-    #[cfg(feature = "http-client")] config_root: Option<&Utf8Path>,
+    config_root: Option<&Utf8Path>,
     network: Option<Arc<dyn HostNetwork>>,
     clock: Arc<dyn fub_kernel::time::Clock>,
 ) -> Result<Mounted, String> {
@@ -371,7 +374,9 @@ pub(crate) fn mount_with_formats(
             "Markdown",
             register_markdown_transfer,
         )),
-        Arc::new(ImportersBundle),
+        Arc::new(ImportersBundle {
+            secrets: Arc::new(crate::connector_tokens::MachineTokens::new(config_root)),
+        }),
         Arc::new(crate::theme::ThemeBundle::series()),
         Arc::new(CoreBundle::new(
             fub_format_sheet::index::SHEET_ID,
@@ -458,6 +463,7 @@ pub(crate) fn mount_with_formats(
             )
             .with_token(token),
         ));
+        bundles.push(Arc::new(crate::updates::UpdatesBundle));
     }
 
     let mut registry = BundleRegistry::new();
@@ -623,12 +629,15 @@ fn register_feature(
     if let Some(build) = feature.commands {
         let commands = build();
         // Il ripristino scrive, e la preimmagine la fotografa il gancio che
-        // l'interruttore spegne: spento, si legge e non si ripristina.
+        // l'interruttore spegne: spento, si legge e non si ripristina. I
+        // comandi si ricostruiscono sullo store appena aperto, perché lo
+        // svuotamento della cronologia deve passare dall'esemplare vivo.
         #[cfg(feature = "versioning")]
-        let commands: Box<dyn fub_abi::traits::CommandProvider> = if opened_versions.is_some() {
-            Box::new(SwitchedRestore(commands))
-        } else {
-            commands
+        let commands: Box<dyn fub_abi::traits::CommandProvider> = match &opened_versions {
+            Some(store) => Box::new(SwitchedRestore(Box::new(
+                fub_features::versioning::VersioningCommands::over(store.clone()),
+            ))),
+            None => commands,
         };
         failures.extend(register_commands(registrar, commands));
     }
@@ -741,7 +750,8 @@ impl fub_abi::traits::EventHandler for SwitchedVersioning {
 
 /// I comandi del versioning dietro l'interruttore. Il ripristino sostituisce
 /// la nota, e con il versioning spento nessuno fotograferebbe ciò che
-/// sostituisce: rifiuta, e dice come riaverlo, invece di perderlo.
+/// sostituisce: rifiuta, e dice come riaverlo, invece di perderlo. Lo
+/// svuotamento no: togliere la storia non ha bisogno di fotografarne di nuova.
 #[cfg(feature = "versioning")]
 struct SwitchedRestore(Box<dyn fub_abi::traits::CommandProvider>);
 
@@ -758,7 +768,7 @@ impl fub_abi::traits::CommandProvider for SwitchedRestore {
         mode: fub_abi::InvokeMode,
         host: &mut dyn fub_abi::traits::HostApi,
     ) -> Result<fub_abi::CommandOutcome, fub_abi::PluginError> {
-        if !versioning_on(host) {
+        if command == fub_features::versioning::VERSION_RESTORE && !versioning_on(host) {
             return Err(fub_abi::PluginError::Unserved(fub_abi::text::Text::key(
                 crate::settings::VERSIONING_OFF_RESTORE,
             )));

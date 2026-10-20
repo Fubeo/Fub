@@ -7,6 +7,7 @@
 // lo verifica leggendo i sorgenti: un `import` di troppo altrove è rosso, non
 // una svista che si scopre il giorno del port su PWA o mobile.
 import { Channel, convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
@@ -49,6 +50,8 @@ import type {
   ViewContext,
   ViewSpec,
   ViewUpdate,
+  ViewerAction,
+  ViewerEvent,
   WriteBase,
   SettingScope,
   CatalogEntry,
@@ -129,6 +132,8 @@ export interface CatalogUpdateOutcome { plugin: InstalledPluginInfo; diagnostics
 export type SaveArtifactOutcome = { status: "saved"; path: string } | { status: "cancelled" };
 /** How «Print…» went: opened in the system PDF program, no such program, or not written. */
 export type PrintArtifactOutcome = { status: "opened" } | { status: "no_viewer" } | { status: "unwritable"; reason: string };
+/** How a vault entry went to the system: taken, no program took it, or a program that opening would run. */
+export type RevealOutcome = { status: "opened" } | { status: "no_opener" } | { status: "executable" };
 
 /// Il vault a cui una chiamata si rivolge, quando chi chiama lo sa (FUB-001).
 ///
@@ -144,6 +149,9 @@ function toVault<T extends object>(payload: T, vault?: string | null): T & { vau
 
 export const api = {
   initialVault: () => invoke<string | null>("initial_vault"),
+  // La versione di questo binario, dalla configurazione Tauri (che la prende
+  // da `Cargo.toml`): è quella che la scheda «Informazioni» mostra.
+  appVersion: () => getVersion(),
   // L'avviso di sessione (§25.5): la diagnosi «la cartella di configurazione
   // non si può scrivere» (o non c'è), una volta per sessione. È un tiraggio:
   // la diagnosi nasce all'avvio del backend, prima che questo ascoltatore
@@ -165,6 +173,10 @@ export const api = {
   recoverConfig: (path: string, action: RecoverAction) =>
     invoke<RecoverOutcome>("recover_config", { path, action }),
   openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
+  // Chiude un vault nell'host: flush, indici, plugin, watcher e lock di
+  // scrittura. Torna ciò che è andato storto chiudendo, con la specie di
+  // ciascuno (#216).
+  closeVault: (path: string) => invoke<PluginError[]>("close_vault", { path }),
   // `listDocuments` **non c'è più** (§14.4): restituiva l'intero vault in un
   // `string[]`, senza finestra e senza saper dire *quale cartella*. Chi vuole
   // l'elenco lo chiede dal canale dati (`vociDelVault`, `contenutoDiCartella`),
@@ -195,12 +207,21 @@ export const api = {
     openViewer(mediaInvoke, url, title, policy),
   viewerSave: (url: string, title: string, allowlist: readonly string[], attachmentFolder: string, vault?: string) =>
     saveViewer(mediaInvoke, url, title, allowlist, attachmentFolder, vault),
+  /** Indietro, avanti, ricarica, chiudi o porta davanti la finestra del visore. */
+  viewerControl: (action: ViewerAction) => invoke<void>("viewer_control", { action }),
+  /** Le navigazioni del visore, ammesse o fermate, e la sua chiusura. */
+  onViewer: (handler: (event: ViewerEvent) => void): Promise<() => void> =>
+    listen<ViewerEvent>("fub://viewer", ({ payload }) => handler(payload)),
   /** Native picker owns the destination. Never accept a destination path from JS. */
   saveArtifact: (suggestedName: string, mediaType: string, bytes: readonly number[]) =>
     invoke<SaveArtifactOutcome>("save_artifact", { suggestedName, mediaType, bytes }),
   /** A PDF goes to the program the system opens PDFs with, and is printed from there. */
   printArtifact: (suggestedName: string, mediaType: string, bytes: readonly number[]) =>
     invoke<PrintArtifactOutcome>("print_artifact", { suggestedName, mediaType, bytes }),
+  /// «Mostra nel file manager» (`open: false`) e «Apri con l'app di sistema»
+  /// (`open: true`) di una voce del vault, per percorso relativo alla radice.
+  revealInSystem: (path: string, open: boolean, vault?: string | null) =>
+    invoke<RevealOutcome>("reveal_in_system", toVault({ path, open }, vault)),
   listGridSurfaces: () => invoke<GridSurfaceSpec[]>("list_grid_surfaces"),
   openGrid: (surface: string, source: string, revision: string) =>
     invoke<GridSession>("open_grid", { surface, source, revision }),
@@ -483,6 +504,15 @@ export const api = {
     listen<DocumentWindowEvent>("fub://document-window-close-requested", ({ payload }) => handler(payload)),
   onDocumentWindowClosed: (handler: (event: DocumentWindowEvent) => void): Promise<() => void> =>
     listen<DocumentWindowEvent>("fub://document-window-closed", ({ payload }) => handler(payload)),
+  // Un `fub://` è arrivato dal sistema. L'evento è soltanto un campanello: i
+  // collegamenti li tiene l'host, e la shell li prende con `uri.pending`, così
+  // anche quelli arrivati prima che la finestra esistesse.
+  onPendingUris: (handler: () => void): Promise<() => void> =>
+    listen<unknown>("fub://pending-action", () => handler()),
+  // La coda stessa: è il comando `uri.pending` del registro, con una porta sua
+  // perché la shell lo chiede a ogni avvio e non è un gesto di chi scrive.
+  takePendingUris: () =>
+    invoke<CommandOutcome>("invoke_command", { command: "uri.pending", args: null, mode: null }),
 
   // --- la sessione live (ADR 0205) ------------------------------------------
   //

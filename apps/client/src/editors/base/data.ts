@@ -241,6 +241,29 @@ export function baseRowsToCsv(rows: BaseRow[], columns: string[]): string {
   const escape = (value: string): string => /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
   return `${[columns.map(escape).join(","), ...rows.map((row) => columns.map((key) => escape(cellText(row.values[key]))).join(","))].join("\r\n")}\r\n`;
 }
+/// Le righe divise per il valore di `key`, nell'ordine in cui il primo di ogni
+/// gruppo compare: l'ordinamento della vista resta quello dentro ogni gruppo.
+/// L'ordine dei gruppi: quello delle righe, o per nome nei due versi.
+export type BaseGroupOrder = "rows" | "asc" | "desc";
+
+const GROUP_NAMES = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+/// Le righe per gruppo. Per nome, i numeri contano come numeri e il gruppo
+/// senza valore resta in fondo nei due versi.
+export function groupBaseRows(rows: readonly BaseRow[], key: string, order: BaseGroupOrder = "rows"): { name: string; rows: BaseRow[] }[] {
+  const groups = new Map<string, BaseRow[]>();
+  for (const row of rows) {
+    const name = cellText(row.values[key]);
+    const members = groups.get(name);
+    if (members) members.push(row);
+    else groups.set(name, [row]);
+  }
+  const out = [...groups].map(([name, members]) => ({ name, rows: members }));
+  if (order === "rows") return out;
+  const sign = order === "asc" ? 1 : -1;
+  return out.sort((a, b) => (a.name === "") !== (b.name === "") ? (a.name === "" ? 1 : -1) : sign * GROUP_NAMES.compare(a.name, b.name));
+}
+
 export function cellText(value: BaseCellValue | undefined): string {
   if (!value || value.kind === "empty") return "";
   switch (value.kind) {

@@ -136,8 +136,22 @@ export interface SurfaceLocation {
 export type SurfaceReference =
   /** A resource just deposited, as a URL relative to the document. */
   | { readonly kind: "attachment"; readonly link: string }
-  /** A note, by the shortest name that resolves to it in this vault. */
-  | { readonly kind: "note"; readonly name: string };
+  /**
+   * A note. Without `link`, by the name the vault's link preference resolves to
+   * it; with `link`, the vault wants path links: `link` is the URL from the
+   * document and `name` the note's title.
+   */
+  | { readonly kind: "note"; readonly name: string; readonly link?: string }
+  /** A web page, from a dropped `.webloc` or `.url` shortcut. */
+  | { readonly kind: "web"; readonly title: string; readonly url: string };
+
+/**
+ * A point inside the document that a link can name: a heading by its text, or
+ * a block by its id (`[[Note#Heading]]`, `[[Note#^id]]`).
+ */
+export type SurfaceAnchor =
+  | { readonly kind: "heading"; readonly text: string }
+  | { readonly kind: "block"; readonly id: string };
 
 /** A point on screen, in client coordinates: where something was dropped. */
 export interface SurfacePoint {
@@ -239,6 +253,12 @@ export interface EditorSurface {
    * booleans cross it.
    */
   readonly editorActions?: SurfaceEditorActions;
+  /**
+   * The heading or block under the cursor, for «copy link to this point».
+   * A block without an id receives one, written as a user edit; `null` where
+   * there is nothing to link to, or when the id cannot be written now.
+   */
+  anchorHere?(): SurfaceAnchor | null;
   destroy(): void;
 }
 

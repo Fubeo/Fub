@@ -40,6 +40,8 @@ export interface DrawState {
   camera: Camera;
   openDocuments: ReadonlySet<string>;
   visible?: ReadonlySet<string>;
+  /// I nodi delle note che non esistono: si disegnano in trasparenza.
+  ghosts?: ReadonlySet<string>;
   hovered: number;
   dragged: number;
   /// Il nodo selezionato da tastiera (frecce): è «focus» quanto l'hover per
@@ -73,6 +75,8 @@ export interface DrawState {
 /// L'etichetta di un nodo: il nome della nota, senza cartella né estensione.
 /// Il percorso intero sta nell'elenco accessibile e nello stato.
 export function nodeLabel(id: string): string {
+  // Un nodo tag (`#progetto/fub`) si legge intero: il suo nome è il tag.
+  if (id.startsWith("#") && !id.includes(".")) return id;
   const base = id.slice(id.lastIndexOf("/") + 1);
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(0, dot) : base;
@@ -119,6 +123,8 @@ export const MIN_NODE_PX = 1.5;
 /// Le etichette: corpo del testo, distanza dal nodo e lato della griglia di
 /// occupazione che evita di sovrapporle.
 const LABEL_PX = 11;
+/// L'opacità di un nodo che non è un file: una nota nominata e mai scritta.
+const GHOST_ALPHA = 0.4;
 const LABEL_GAP = 5;
 const LABEL_CELL = 8;
 
@@ -145,11 +151,11 @@ export function labelFade(scale: number): number {
 /// non scala con lo zoom: inquadrare i soli centri lasciava tagliate dal bordo
 /// quelle dei nodi più a destra. A scala senza etichette non sporge niente;
 /// le poche scritte comunque (focus, note aperte) non spostano l'inquadratura.
-export function labelReach(s: Structure, scale: number, maxX: number, width: (i: number) => number): number {
+export function labelReach(s: Structure, scale: number, maxX: number, width: (i: number) => number, size = 1): number {
   if (labelFade(scale) <= 0.01) return 0;
   let reach = 0;
   for (let i = 0; i < s.n; i++) {
-    const right = screenRadius(s.radius[i], scale) + LABEL_GAP + width(i) - (maxX - s.x[i]) * scale;
+    const right = screenRadius(s.radius[i] * size, scale) + LABEL_GAP + width(i) - (maxX - s.x[i]) * scale;
     if (right > reach) reach = right;
   }
   return reach;
@@ -364,14 +370,14 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     // Freccia nella tangente finale della Bézier, arretrata rispetto al disco
     // di destinazione. Stessa path e stesso stroke dell'arco: un solo batch per
     // livello di focus, non un draw call per arco (anche su 10k archi).
-    if (L * c.scale < 24) return;
+    if (!config.arrows || L * c.scale < 24) return;
     const tx = x2 - cx;
     const ty = y2 - cy;
     const tangent = Math.hypot(tx, ty);
     if (tangent < 0.001) return;
     const ux = tx / tangent;
     const uy = ty / tangent;
-    const back = screenRadius(s.radius[s.to[e]], c.scale) + 4;
+    const back = screenRadius(s.radius[s.to[e]] * config.nodeSize, c.scale) + 4;
     const tipX = x2 * c.scale + c.tx - ux * back;
     const tipY = y2 * c.scale + c.ty - uy * back;
     const baseX = tipX - ux * 9;
@@ -428,13 +434,13 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
     // Fuori da `redraw` il font del contesto è quello lasciato dall'ultimo
     // disegno: le larghezze da misurare sono del corpo normale, chiave «n».
     ctx.font = `${LABEL_PX}px ${currentFont}`;
-    return labelReach(s, scale, maxX, (i) => labelWidth(ctx, "n" + s.id[i], nodeLabel(s.id[i])));
+    return labelReach(s, scale, maxX, (i) => labelWidth(ctx, "n" + s.id[i], nodeLabel(s.id[i])), config.nodeSize);
   }
 
   function redraw(state: DrawState): void {
     previousState = state;
     if (!ctx) return;
-    const { s, camera: c, openDocuments, visible, hovered, dragged, focused, alpha, tier, elapsedMs, reducedMotion } = state;
+    const { s, camera: c, openDocuments, visible, ghosts, hovered, dragged, focused, alpha, tier, elapsedMs, reducedMotion } = state;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const cameraMoved = !lastCamera || lastCamera.scale !== c.scale || lastCamera.tx !== c.tx || lastCamera.ty !== c.ty;
@@ -499,7 +505,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
         addEdge(ctx, s, c, e, curv, bend);
       }
       ctx.globalAlpha = edgeAlpha * dimAlpha;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = config.edgeWidth;
       ctx.stroke();
     }
     ctx.beginPath();
@@ -510,7 +516,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
       addEdge(ctx, s, c, e, curv, bend);
     }
     ctx.globalAlpha = edgeAlpha + (0.85 - edgeAlpha) * lit;
-    ctx.lineWidth = 1 + 0.5 * lit;
+    ctx.lineWidth = (1 + 0.5 * lit) * config.edgeWidth;
     ctx.stroke();
     ctx.globalAlpha = 1;
 
@@ -601,7 +607,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
         if (mark[i] || !shown(i)) continue;
         const sx = s.x[i] * c.scale + c.tx;
         const sy = s.y[i] * c.scale + c.ty;
-        const rS = screenRadius(s.radius[i], c.scale);
+        const rS = screenRadius(s.radius[i] * config.nodeSize, c.scale);
         if (!inView(sx, sy, rS)) continue;
         paintNode(i, sx, sy, rS, openDocuments.has(s.id[i]) ? "active" : "node", undefined);
       }
@@ -611,14 +617,17 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
       if (!mark[i] || !shown(i)) continue;
       const sx = s.x[i] * c.scale + c.tx;
       const sy = s.y[i] * c.scale + c.ty;
-      const rS = screenRadius(s.radius[i], c.scale);
+      const rS = screenRadius(s.radius[i] * config.nodeSize, c.scale);
       if (!inView(sx, sy, rS)) continue;
       const isOpen = openDocuments.has(s.id[i]);
       const role: TintRole = dragged === i ? "active" : hovered === i ? "hover" : isOpen ? "active" : "node";
       // L'alone pulsante dei nodi aperti: fase dall'hash dell'id, così i
       // vicini non pulsano in sincrono (sembra vivo, non un semaforo).
       const alone = pulseOpacity(s.id[i], elapsedMs, alpha, !reducedMotion && isOpen && config.pulse);
+      const ghost = ghosts?.has(s.id[i]) === true;
+      if (ghost) ctx.globalAlpha = GHOST_ALPHA;
       paintNode(i, sx, sy, rS, role, alone);
+      if (ghost) ctx.globalAlpha = 1;
       if (i === focus) {
         ringPath(sx, sy, rS + 2.5);
         ctx.strokeStyle = dragged === i ? tints.active : tints.hover;
@@ -650,7 +659,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
             if (groups[i] !== g || (mark[i] ? 1 : 0) !== pass || !shown(i)) continue;
             const sx = s.x[i] * c.scale + c.tx;
             const sy = s.y[i] * c.scale + c.ty;
-            const rS = screenRadius(s.radius[i], c.scale);
+            const rS = screenRadius(s.radius[i] * config.nodeSize, c.scale);
             if (!inView(sx, sy, rS)) continue;
             ctx.moveTo(sx + rS + 1.5, sy);
             ctx.arc(sx, sy, rS + 1.5, 0, Math.PI * 2);
@@ -686,7 +695,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
       if (sx < -CULL_MARGIN || sx > W + CULL_MARGIN || sy < -CULL_MARGIN || sy > H + CULL_MARGIN) return;
       const text = nodeLabel(s.id[i]);
       const width = labelWidth(ctx, (bold ? "b" : "n") + s.id[i], text);
-      placeLabel(ctx, text, width, sx + screenRadius(s.radius[i], c.scale) + LABEL_GAP + clearance, sy, force);
+      placeLabel(ctx, text, width, sx + screenRadius(s.radius[i] * config.nodeSize, c.scale) + LABEL_GAP + clearance, sy, force);
     };
     ctx.font = fontBold;
     // Il focus ha l'anello (raggio + 2.5, tratto 2): l'etichetta gli sta fuori.

@@ -174,3 +174,67 @@ export function mountCssSnippets(lifetime: Lifetime): void {
   });
   void reread();
 }
+
+/// Che cosa è successo ai frammenti CSS di un import da Obsidian.
+export interface SnippetImport {
+  added: number;
+  on: number;
+  same: number;
+  /// Per nome: i frammenti che Fub non applica (scritti per gli agganci di
+  /// Obsidian, oltre il limite, accesi di là ma senza file).
+  lost: string[];
+}
+
+/// L'id con cui un frammento di Obsidian entra fra quelli di Fub.
+export function obsidianSnippetId(name: string): string {
+  const slug = name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[^a-z0-9]+|-+$/g, "");
+  return `obsidian-${slug || "frammento"}`.slice(0, 64);
+}
+
+/// I frammenti di `.obsidian/snippets/` che l'host ha letto (`settings.import_obsidian`),
+/// portati fra quelli di Fub. Ognuno passa dallo stesso vaglio di un frammento
+/// scritto a mano: quello che regge si accende se era acceso in Obsidian,
+/// quello che nomina agganci che Fub non ha entra spento — lo si può correggere
+/// dalle impostazioni — e si nomina. Un id che c'è già non si riscrive.
+export async function importObsidianSnippets(payload: unknown): Promise<SnippetImport> {
+  const record = payload && typeof payload === "object" ? payload as { files?: unknown; enabled?: unknown } : {};
+  const files = Array.isArray(record.files)
+    ? record.files.filter((f): f is { name: string; css: string } =>
+      !!f && typeof f === "object" && typeof (f as { name?: unknown }).name === "string" && typeof (f as { css?: unknown }).css === "string")
+    : [];
+  const enabled = new Set(Array.isArray(record.enabled) ? record.enabled.filter((n): n is string => typeof n === "string") : []);
+  const out: SnippetImport = { added: 0, on: 0, same: 0, lost: [] };
+  for (const name of enabled) {
+    if (!files.some((f) => f.name === name)) out.lost.push(name);
+  }
+  if (files.length === 0) return out;
+  const entry = (await settings()).find((item) => item.spec.key === CSS_SNIPPETS_KEY);
+  // Un documento di una versione futura o rovinato non si riscrive: lo dice
+  // `parseCssSnippets`, e i frammenti restano fuori, per nome.
+  const doc = parseCssSnippets(typeof entry?.value === "string" ? entry.value : DEFAULT_CSS_SNIPPETS);
+  const snippets: CssSnippet[] = [...doc.snippets];
+  for (const file of files) {
+    const id = obsidianSnippetId(file.name);
+    if (snippets.some((snippet) => snippet.id === id)) {
+      out.same++;
+      continue;
+    }
+    if (snippets.length >= 32) {
+      out.lost.push(file.name);
+      continue;
+    }
+    let fits = true;
+    try {
+      sanitizeUserCss(file.css, allowedHooks());
+    } catch {
+      fits = false;
+      out.lost.push(file.name);
+    }
+    const on = fits && enabled.has(file.name);
+    snippets.push({ id, css: file.css, enabled: on });
+    out.added++;
+    if (on) out.on++;
+  }
+  if (out.added > 0) await saveCssSnippets(JSON.stringify({ ...doc, snippets }));
+  return out;
+}

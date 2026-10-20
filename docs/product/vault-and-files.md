@@ -153,39 +153,11 @@ che non finisce con `.pdf` o un PDF che non c'è non si annotano. Il PDF non si
 scrive mai. Impronta e numero di pagine li scrive l'editor col primo gesto,
 come racconta [Annotazioni dei PDF](pdf-annotations.md).
 
-## Albero dei file
+## Explorer e cartelle
 
-L'explorer chiede un livello per volta all'anagrafe del kernel, che contiene
-ogni voce del disco e non solo i documenti. Dopo sottocartelle e note mostra
-quindi anche allegati e file che nessun provider riconosce. Immagini, audio,
-video e PDF si aprono nel visualizzatore in sola lettura. Un SVG si apre invece
-come testo modificabile con l'anteprima accanto, e si salva a byte (vedi
-[Editor e anteprima](editor-and-preview.md)). Per gli altri file la shell
-avvisa che non c'è un visualizzatore e non tenta di leggerli come testo.
-
-Il visualizzatore delle immagini ingrandisce al cursore con la rotella o il
-pizzico, si trascina, ruota di 90°, adatta l'immagine alla finestra o la mostra
-alle dimensioni reali. Sotto la trasparenza alterna una scacchiera, un fondo
-chiaro e uno scuro; la barra dice formato, misure in pixel e peso del file. Un
-SVG, anche con prologo XML, commenti o `<!DOCTYPE>` prima di `<svg>`, si mostra
-come immagine inerte. HEIC e TIFF, che la webview non decodifica, mostrano un
-messaggio al posto dell'immagine e lasciano il file intatto.
-La finestra di duecento voci per livello vale per note e file insieme.
-Dal menu contestuale un allegato si rinomina, conservando l'estensione, e si
-cestina come una nota: il kernel lo toglie dall'anagrafe con `EntryRemoved` e
-il ripristino lo rimette dov'era, byte per byte.
-
-## Cartelle nuove
-
-Il comando `folder.create` (`path` obbligatorio) crea una cartella vuota,
-insieme alle cartelle mancanti sopra di lei. L'explorer lo invoca dal menu
-contestuale di una cartella o del titolo del pannello; la palette lo raggiunge
-come ogni altro comando. Il nome segue le regole di un documento che nasce:
-recinto del vault, `.fub/`, nomi nascosti e caratteri riservati sono
-rifiutati, e una cartella esclusa dalle impostazioni non viene creata. Se il
-path è già occupato da una cartella o da un file, l'esito è un conflitto e il
-disco resta invariato. La prova a vuoto esegue lo stesso controllo senza
-scrivere. La creazione non è annullabile dal registro dei comandi.
+L'albero dei file, le cartelle nuove e le operazioni su una cartella intera
+(rinomina, spostamento, cestino) sono descritti in
+[Explorer e cartelle](explorer-and-folders.md).
 
 ## Cattura rapida
 
@@ -195,7 +167,8 @@ Il clipper del browser, la condivisione mobile, `fub-cli capture` e l'URI
 testo JSON; `template` è facoltativo e vale soltanto per una cattura che crea.
 La validazione è la stessa per ogni trasporto: titolo su una riga, testo non
 vuoto, `source_url` http o https senza credenziali, e `vault`, `folder` e
-`note` dentro il recinto del vault.
+`note` dentro il recinto del vault. L'host nativo del clipper si installa come
+in [Permessi e sicurezza](../reference/permissions-and-security.md#host-nativo-del-clipper).
 
 - `create` crea la nota con `note.create`, o con `note.from_template` se c'è
   un template. Il nome è `note` se c'è; altrimenti il titolo diventa un
@@ -221,6 +194,33 @@ vuoto dice quale documento verrebbe scritto.
 `fub://new` segue le stesse regole di nome e di titolo: senza `name` il nome
 viene dal titolo, e il titolo va in testa al corpo, dopo l'eventuale
 frontmatter del template.
+
+## Collegamenti `fub://` sul desktop
+
+Il sistema consegna un `fub://` all'app desktop, anche quando l'app parte
+proprio per aprirlo. L'host tiene i collegamenti in una coda della macchina,
+che resta valida anche senza un vault aperto e prima che esista una finestra.
+La coda ne tiene al più 32 e conta quelli che non ha preso. L'evento
+`fub://pending-action` sveglia la finestra, che prende la coda con
+`uri.pending` all'avvio e a ogni evento. Ogni collegamento si prende una
+volta.
+
+`uri.pending` descrive ogni collegamento: l'azione, se scrive, il vault chiesto
+con la sua radice e se è quello aperto. Un vault si riconosce dalla radice o da
+un nome unico fra i vault noti. Un collegamento non valido, o con una callback,
+arriva con il motivo e non si esegue.
+
+- `open` apre la nota al titolo o al blocco chiesti, nel riquadro col fuoco,
+  in uno nuovo (`split`) o in una finestra (`window`). Una nota che non c'è si
+  dice e non si crea.
+- `search` apre la ricerca con il testo e i filtri `tag:` e `folder:`.
+- `new`, `daily`, `unique` e `capture` scrivono con `uri.apply`, dopo la prova
+  a vuoto (quale nota nascerà, l'inizio di una cattura) e la conferma; le
+  azioni in `uri.allowed` (di macchina, vuota di default) scrivono subito.
+
+Un collegamento per un altro vault noto apre quel vault dopo una conferma, con
+lo stesso flusso del pulsante. Se il vault non si apre, il collegamento si
+ferma. Un vault sconosciuto non si apre mai da un collegamento.
 
 ## Bozze
 
@@ -291,19 +291,18 @@ Il versioning conserva snapshot del contenuto. L'impostazione del vault
 dalla scrittura successiva, senza riaprire il vault. Spenta, la storia già
 registrata resta leggibile e segue le note rinominate o cancellate, mentre
 `version.restore` rifiuta finché non si riaccende: nessuno fotograferebbe il
-contenuto che il ripristino sostituisce. `version.restore` cattura la
-revisione del documento, quindi verifica che il riferimento alla versione
-esista e che il blob sia leggibile e integro (dimensione e impronta FNV-1a).
-La scrittura condizionata usa quella revisione come confronto e scambio (CAS).
-Per gli writer cooperativi, una modifica intervenuta durante la lettura viene
-rifiutata come conflitto.
-Per gli writer esterni il controllo è best-effort: una modifica già osservabile
-al confronto produce lo stesso conflitto. Un riferimento o un blob non valido e
-gli errori di lettura o confronto non modificano né il documento né l'indice
-delle versioni. Le garanzie di un errore di scrittura dipendono dal supporto:
-per i file regolari sostituibili il valore precedente resta intatto; symlink,
-hardlink e filesystem senza conteggio dei nomi richiedono invece la scrittura
-in-place descritta nel riferimento tecnico.
+contenuto che il ripristino sostituisce. `version.restore` cattura la revisione
+del documento, quindi verifica che il riferimento alla versione esista e che il
+blob sia leggibile e integro (dimensione e impronta FNV-1a). La scrittura
+condizionata usa quella revisione come confronto e scambio (CAS). Per gli writer
+cooperativi, una modifica intervenuta durante la lettura viene rifiutata come
+conflitto. Per gli writer esterni il controllo è best-effort: una modifica già
+osservabile al confronto produce lo stesso conflitto. Un riferimento o un blob
+non valido e gli errori di lettura o confronto non modificano né il documento né
+l'indice delle versioni. Le garanzie di un errore di scrittura dipendono dal
+supporto: per i file regolari sostituibili il valore precedente resta intatto;
+symlink, hardlink e filesystem senza conteggio dei nomi richiedono invece la
+scrittura in-place descritta nel riferimento tecnico.
 
 Il pannello cronologia mostra il testo di una versione oppure il suo confronto
 riga per riga con la nota attuale. Il testo di una versione si può anche
@@ -316,10 +315,11 @@ Quando riesce, il ripristino è una scrittura normale: fotografa prima il
 contenuto sostituito e, se il contenuto cambia, crea una nuova versione; quando
 esiste una versione precedente, il comando dichiara anche il ripristino inverso.
 
-Le versioni si diradano col tempo, a ogni nuova versione della nota. Nelle
-ultime 24 ore restano tutte; fino a 7 giorni ne resta una per ora, fino a 90
-giorni una per giorno. Oltre i 90 giorni resta soltanto la versione più recente
-della nota. Le fasce non sono configurabili.
+Le versioni si diradano a ogni nuova versione della nota: nelle ultime 24 ore
+tutte, o una per `versioning.interval` (minuti, 0 di serie); fino a 7 giorni una
+per ora, poi una al giorno fino a `versioning.retention` (giorni: 90 di serie, 0
+per sempre); oltre, solo la più recente. `version.clear` svuota la cronologia
+del vault anche a versioning spento, con conferma rafforzata e senza ritorno.
 
 Un file oltre 64 MiB non ha versioni: il versioning non lo apre e non lo
 copia, e una scrittura su di lui passa senza fotografia, come a versioning
@@ -366,12 +366,17 @@ wikilink, tag, heading, ancore ed embed. Il provider decide la semantica del
 formato; il kernel conserva path e sorgente senza incorporare regole Markdown.
 
 Le proprietà del frontmatter restano nel file. Un vault può dichiararne il tipo
-per nome nell'impostazione versionata `properties.types`; questa dichiarazione
-sceglie widget e semantica di query, ma non rinomina chiavi convenzionali né
-sposta valori in un database. Gli aggiornamenti strutturati modificano la sola
-chiave interessata e conservano commenti, ordine, virgolette, terminatori e
-corpo non coinvolti. YAML incompatibile o non rappresentabile resta disponibile
-in modalità sorgente.
+per nome nell'impostazione versionata `properties.types`, che sceglie widget e
+semantica di query senza spostare valori in un database. Gli aggiornamenti
+strutturati modificano la sola chiave interessata e conservano commenti, ordine,
+virgolette, terminatori e corpo; rinominare o togliere una chiave da tutto il
+vault (`property.key.rename`, `property.key.delete`, `property.keys.migrate`)
+si vede in anteprima e si annulla. YAML non rappresentabile resta sorgente.
+
+## Importare ed esportare
+
+Importare note da altri programmi ed esportare il vault, o una sua cartella,
+ha una pagina propria: [Importare ed esportare](import-and-export.md).
 
 ## Snapshot globale e backup
 

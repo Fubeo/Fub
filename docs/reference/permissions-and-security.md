@@ -118,8 +118,9 @@ la forma alla shell; i provider ancora differiti non creano un bypass.
 Alcuni intenti `Custom` fanno eseguire alla shell un'azione con un privilegio
 del processo: scrivere negli appunti (`fub.clipboard.text`,
 `settings.export`), ricaricare la finestra dopo un ripristino
-(`fub.vault.restored`) e modificare il testo della nota aperta come una
-battuta dell'utente (`fub.editor.action`). L'elenco è
+(`fub.vault.restored`), modificare il testo della nota aperta come una
+battuta dell'utente (`fub.editor.action`) e aprire una pagina web
+(`fub.web.open`, soltanto `http` e `https`). L'elenco è
 `fub_abi::ui::privileged_intent`. Il kernel
 accetta questi intenti soltanto da provider `Core`, sia come `ViewUpdate` di
 una view sia come `CommandEffect` di un comando, nel percorso sincrono e in
@@ -132,6 +133,79 @@ aperti a tutti.
 La Content Security Policy impedisce script remoti, iframe e oggetti non
 previsti. Il rendering non deve creare HTML attivo da una stringa del vault o
 del plugin senza sanitizzazione e una decisione esplicita.
+
+## Visore web
+
+Una pagina web non entra mai nella webview della shell. Si apre nella finestra
+`fub-viewer`, che ha un profilo suo, incognito, sotto la cartella di
+configurazione. Non ha un ponte IPC, perché nessuna capability nomina la sua
+label. Nega le nuove finestre e i download.
+
+- **Indirizzi.** Il visore apre soltanto `https` sulla porta 443, senza
+  credenziali nell'URL, e mai `javascript:`, `data:`, `file:`, `blob:` o gli
+  schemi delle risorse del vault. La stessa regola vale per ogni navigazione
+  della pagina.
+- **Siti approvati.** Un host si apre soltanto se sta in `viewer.hosts`, una
+  lista di macchina. La shell lo aggiunge dopo il sì dell'utente a una
+  conferma, e le impostazioni lo mostrano e lo tolgono. Un sottodominio è un
+  sito a parte.
+- **Navigazione fermata.** Una pagina che porta su un sito non approvato viene
+  fermata. La finestra principale riceve l'evento `fub://viewer` e chiede di
+  nuovo; un sito rifiutato non si richiede nella stessa sessione.
+- **Barra.** Indirizzo, indietro, avanti, ricarica, porta davanti e chiudi
+  stanno nella finestra principale e arrivano al visore con `viewer_control`.
+  Quel comando esegue soltanto tre script scritti nel codice nativo.
+- **Salvataggio come nota.** `web.clip` è un comando dell'host. Rilegge da sé
+  `viewer.hosts`, riscarica la pagina dalla rete dell'host, che non segue i
+  redirect, e scrive Markdown con la fonte, attraverso la cattura. Una
+  risposta che non è 2xx, che non è HTML o che supera 2 MiB non scrive niente
+  e lo dice. In prova il comando non chiama la rete.
+
+Un link `https` di una nota va al browser di sistema. Va al visore con Alt+clic
+o quando `viewer.links` è acceso. Un indirizzo che il visore non apre resta al
+browser di sistema.
+
+## Host nativo del clipper
+
+Il clipper del browser consegna prima a `fub-clipper-host` (nome
+`local.fub.clipper`), per messaggistica nativa: è il solo canale autenticato,
+perché l'host accetta soltanto un'estensione abbinata con
+`fub-cli pair pair --extension-id ID`. `fub://capture` e il file
+`.fubcapture.json` sono il ripiego, senza autenticazione e con
+un'approvazione per ogni cattura.
+
+Il browser trova l'host da un manifest dell'utente, mai di sistema.
+`fub-cli native-install --extension-id ID` dice dove lo scriverebbe; con
+`--yes` lo scrive in ogni browser installato, o in quelli dati con
+`--browser`. Su Windows scrive anche la chiave di `HKEY_CURRENT_USER` che punta
+al manifest. L'id decide la famiglia: le 32 lettere di un'estensione Chromium
+danno `allowed_origins`, l'id di Firefox `allowed_extensions`, e un id della
+famiglia sbagliata per il browser nominato è un errore d'uso. Un file con quel
+nome che non è un manifest dell'host resta com'è; `--uninstall` toglie
+soltanto ciò che l'host ha scritto. Quando l'invio ripiega, il popup scrive i
+due comandi con l'id vero dell'estensione.
+
+## Canale di controllo
+
+Un vault ha un solo scrittore. Quando lo tiene l'app desktop, la CLI e l'host
+nativo del clipper non aprono un secondo writer: mandano all'app le porte
+generiche dell'host (indice, comandi, view, lettura e scrittura con revisione,
+job, impostazioni, cattura) e l'app le esegue con le sue regole, il suo
+`Guard` e i suoi eventi. Una scrittura con una revisione vecchia è un
+conflitto anche da qui, e la shell vede la modifica come vede quella di
+un'altra finestra. Il canale serve soltanto i vault che l'app ha già aperto:
+non apre, non chiude e non cambia il vault corrente; aprire un altro vault,
+chiuderlo o elencare i plugin si fa dall'app, o con l'app chiusa.
+
+Il server (`fub_host::control`) ascolta soltanto su `127.0.0.1`, su una porta
+scelta dal sistema, e risponde soltanto a chi porta il token: 32 byte casuali,
+confrontati senza fermarsi al primo byte diverso. Il token sta in
+`control.endpoint`, che la CLI accetta soltanto se è un file regolare del solo
+proprietario e se indica il loopback. Una domanda è al più 48 MiB, le domande
+servite insieme al più otto. Il server ha un owner: l'app lo chiude
+all'uscita, prima dei vault, e toglie il file se è ancora il suo. Un file
+rimasto da un'app caduta indica una porta che non risponde, e il vault resta
+`busy`. `--standalone` non passa mai dall'app.
 
 ## Supply chain
 

@@ -36,7 +36,9 @@ import { readState, setCommandSpecs, writeState } from "../state/store";
 import { openVaultRoot, undoLastOperation, vaultArg } from "../state/vault";
 import { invokeSlash, slashArgs, slashCandidates, slashContextDoc } from "../state/slash";
 import { openLifetime, type Lifetime } from "./lifetime";
-import { opensWithoutParams, primaryViews } from "./primary-views";
+import { openSidePanelView, opensWithoutParams, primaryViews, sidePanelViews } from "./primary-views";
+import { withPathPicker } from "./path-fields";
+import { listStep } from "./list-step";
 
 /// Ciò che la palette chiede alla shell: executere gli intenti, dire qualcosa
 /// all'utente, e mettere in salvo i buffer prima di un comando che scrive. Il
@@ -422,9 +424,11 @@ export function closeCommandPalette() {
 /// Le view principali come voci della palette. Aprirne una è lo stesso intento
 /// che consegnerebbe un comando (`open_view`), e la palette lo consegna alla
 /// shell allo stesso modo: nessuna view ha un posto riservato, e una che chiede
-/// argomenti obbligatori la apre chi glieli dà.
+/// argomenti obbligatori la apre chi glieli dà. Dopo di loro le view della
+/// barra sinistra, che non si aprono in un riquadro ma si mostrano al loro
+/// posto: la sincronizzazione, il cestino, le collezioni.
 export function viewEntries(host: Pick<PaletteHost, "onEffect">): CommandEntry[] {
-  return primaryViews().filter(opensWithoutParams).map((spec) => ({
+  const mains = primaryViews().filter(opensWithoutParams).map((spec): CommandEntry => ({
     id: `view:${spec.id}`,
     title: t("palette.open_view", { title: spec.title }),
     description: t("palette.open_view.desc"),
@@ -434,6 +438,17 @@ export function viewEntries(host: Pick<PaletteHost, "onEffect">): CommandEntry[]
     spec: null,
     run: () => host.onEffect({ kind: "open_view", view: spec.id, params: null }),
   }));
+  const panels = sidePanelViews().map((spec): CommandEntry => ({
+    id: `panel:${spec.id}`,
+    title: t("palette.show_panel", { title: spec.title }),
+    description: t("palette.show_panel.desc"),
+    layer: "global",
+    binding: null,
+    declared: null,
+    spec: null,
+    run: () => openSidePanelView(spec.id),
+  }));
+  return [...mains, ...panels];
 }
 
 /// Apre la palette. Tre passi al più: scegli, compila, approva.
@@ -665,7 +680,7 @@ export async function openSlashPalette(
       const field = fieldFor(param, "palette-docs");
       if (param.required) field.required = true;
       fields.set(param.name, field);
-      label.append(name, field);
+      label.append(name, withPathPicker(spec.id, param.name, param.title, field));
       form.append(label);
     }
     const actions = document.createElement("div");
@@ -703,10 +718,10 @@ export async function openSlashPalette(
     if (event.key === "Escape") {
       event.preventDefault();
       closeSlashPalette(owner);
-    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    } else if (listStep(event)) {
       event.preventDefault();
       if (!visible.length) return;
-      selected = (selected + (event.key === "ArrowDown" ? 1 : -1) + visible.length) % visible.length;
+      selected = (selected + listStep(event) + visible.length) % visible.length;
       render();
     } else if (event.key === "Enter") {
       event.preventDefault();
@@ -952,10 +967,10 @@ function chooseSpecs(
   };
 
   const handleKey = (e: KeyboardEvent) => {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    const step = listStep(e);
+    if (step) {
       e.preventDefault();
       if (visibleItems.length === 0) return;
-      const step = e.key === "ArrowDown" ? 1 : -1;
       // Le frecce spostano la scelta, non cambiano la lista: si ritoccano le
       // due righe, senza rifiltrare e ricostruire tutti i comandi.
       list.children[selected]?.setAttribute("aria-selected", "false");
@@ -1064,7 +1079,7 @@ function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost, pref
     const known = prefill[param.name];
     if (known !== undefined && !(field instanceof HTMLInputElement && field.type === "checkbox")) field.value = known;
     fields.set(param.name, field);
-    label.appendChild(field);
+    label.appendChild(withPathPicker(spec.id, param.name, param.title, field));
     if (param.description) {
       const help = document.createElement("span");
       help.className = "palette-help";

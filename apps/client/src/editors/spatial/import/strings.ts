@@ -59,6 +59,8 @@ const IT = {
   "draw.import.note.link.other": "{count} collegamenti si perdono: gli oggetti e i testi restano, ma non aprono niente.",
   "draw.import.note.unknown.one": "Un oggetto che non si sa leggere resta fuori.",
   "draw.import.note.unknown.other": "{count} oggetti che non si sanno leggere restano fuori.",
+  "draw.import.note.placeless.one": "Un oggetto senza posizione nel file (una forma senza riquadro, una linea senza due capi) resta fuori; ciò che contiene entra.",
+  "draw.import.note.placeless.other": "{count} oggetti senza posizione nel file (forme senza riquadro, linee senza due capi) restano fuori; ciò che contengono entra.",
   "draw.import.note.html.one": "Un pezzo dell’aspetto di un testo (un’immagine, un apice, uno sfondo) resta fuori.",
   "draw.import.note.html.other": "{count} pezzi dell’aspetto dei testi (immagini, apici, sfondi) restano fuori.",
   "draw.import.note.shadow.one": "Un’ombra resta fuori: con le ombre, il disegno non sta nei suoi limiti.",
@@ -74,6 +76,7 @@ const IT = {
   "draw.import.error.name": "Il nome non va: {reason}.",
   "draw.import.error.write": "Il disegno non si scrive: {reason}",
   "draw.import.done": "Disegno importato in «{path}».",
+  "draw.import.no_name": "Non resta un nome libero per «{name}».",
 } as const;
 
 /// Una chiave del catalogo dell'importazione.
@@ -128,6 +131,8 @@ const EN: Readonly<Record<keyof typeof IT, string>> = {
   "draw.import.note.link.other": "{count} links are lost: the objects and texts stay, but open nothing.",
   "draw.import.note.unknown.one": "One object that can’t be read is left out.",
   "draw.import.note.unknown.other": "{count} objects that can’t be read are left out.",
+  "draw.import.note.placeless.one": "One object with no position in the file (a shape with no box, a line without two ends) is left out; what it contains comes in.",
+  "draw.import.note.placeless.other": "{count} objects with no position in the file (shapes with no box, lines without two ends) are left out; what they contain comes in.",
   "draw.import.note.html.one": "One piece of a text’s look (an image, a superscript, a background) is left out.",
   "draw.import.note.html.other": "{count} pieces of the texts’ look (images, superscripts, backgrounds) are left out.",
   "draw.import.note.shadow.one": "One shadow is left out: with shadows, the drawing doesn’t fit within its limits.",
@@ -143,6 +148,7 @@ const EN: Readonly<Record<keyof typeof IT, string>> = {
   "draw.import.error.name": "The name won’t do: {reason}.",
   "draw.import.error.write": "The drawing can’t be written: {reason}",
   "draw.import.done": "Drawing imported to “{path}”.",
+  "draw.import.no_name": "No free name remains for “{name}”.",
 };
 
 /// Il catalogo dell'importazione: `t` e `plural` come quelli della shell,

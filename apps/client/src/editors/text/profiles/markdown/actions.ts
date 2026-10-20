@@ -24,6 +24,7 @@ import { listItem } from "../../../../rules/syntax";
 import { t } from "../../../../i18n/strings";
 import { isStrictlyInsideCode } from "./parser";
 import { containerMath, isMathContainer } from "./render-inline";
+import { addProperty, canMoveProperty, moveProperty } from "./properties";
 import {
   dedentListItem,
   deleteTableColumn,
@@ -231,10 +232,56 @@ const quoteActive = (state: EditorState): boolean => {
   return QUOTED.test(line.text) && !isStrictlyInsideCode(state, line.from);
 };
 
+/// L'intestazione di un callout, `> [!tipo]` con l'eventuale piega e titolo.
+const CALLOUT_HEAD = /^( {0,3})> ?\[![^\]\s]+\][+-]?[ \t]*(.*)$/;
+
+/// Il callout attorno al cursore: dall'intestazione all'ultima riga citata
+/// che la segue. Un callout annidato dentro un altro è corpo del primo.
+function enclosingCallout(state: EditorState): { first: number; last: number } | null {
+  const doc = state.doc;
+  let at = doc.lineAt(state.selection.main.head).number;
+  if (!QUOTED.test(doc.line(at).text) || isStrictlyInsideCode(state, doc.line(at).from)) return null;
+  while (!CALLOUT_HEAD.test(doc.line(at).text)) {
+    if (at === 1 || !QUOTED.test(doc.line(at - 1).text)) return null;
+    at -= 1;
+  }
+  let last = at;
+  while (last < doc.lines && QUOTED.test(doc.line(last + 1).text) && !CALLOUT_HEAD.test(doc.line(last + 1).text)) last += 1;
+  return { first: at, last };
+}
+
+/// Toglie il callout e lascia il testo: il titolo, se c'è, resta come riga,
+/// le altre righe perdono un livello di citazione.
+function removeCallout(
+  state: EditorState,
+  dispatch: Parameters<StateCommand>[0]["dispatch"],
+  callout: { first: number; last: number },
+): boolean {
+  const doc = state.doc;
+  const head = doc.line(callout.first);
+  const match = CALLOUT_HEAD.exec(head.text)!;
+  const title = match[2]!.trim();
+  const specs: ChangeSpec[] = [];
+  if (title !== "") specs.push({ from: head.from, to: head.to, insert: `${match[1]}${title}` });
+  else if (callout.last > callout.first) specs.push({ from: head.from, to: doc.line(callout.first + 1).from });
+  else specs.push({ from: head.from, to: head.to });
+  for (let n = callout.first + 1; n <= callout.last; n += 1) {
+    const line = doc.line(n);
+    const quoted = QUOTED.exec(line.text)!;
+    specs.push({ from: line.from, to: line.from + quoted[0].length, insert: quoted[1] });
+  }
+  return dispatchChanges(state, dispatch, specs);
+}
+
+const calloutActive = (state: EditorState): boolean => enclosingCallout(state) !== null;
+
 /// Un callout: l'intestazione `> [!note]` sopra le righe, che diventano il suo
 /// corpo. Su una riga vuota si scrive l'intestazione e si resta nel corpo.
+/// Dentro un callout, lo toglie.
 const insertCallout: StateCommand = ({ state, dispatch }) => {
   if (state.readOnly) return false;
+  const callout = enclosingCallout(state);
+  if (callout) return removeCallout(state, dispatch, callout);
   const lines = selectedLines(state);
   const first = lines[0]!;
   const last = lines[lines.length - 1]!;
@@ -551,6 +598,67 @@ const insertFootnote: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 
+const FOOTNOTE_DEFINITION = /^\[\^([^\]\s]+)\]:/;
+
+/// La nota a piè di pagina sotto `pos`: il richiamo `[^id]` che lo contiene
+/// (i bordi compresi), o la riga della definizione `[^id]: …`.
+export function footnoteAt(state: EditorState, pos: number): string | null {
+  const line = state.doc.lineAt(pos);
+  const definition = FOOTNOTE_DEFINITION.exec(line.text);
+  if (definition) return definition[1]!;
+  for (const match of line.text.matchAll(/\[\^([^\]\s]+)\]/g)) {
+    const from = line.from + match.index;
+    if (pos >= from && pos <= from + match[0].length) return match[1]!;
+  }
+  return null;
+}
+
+/// Toglie la nota a piè di pagina sotto `pos`: ogni suo richiamo e la sua
+/// definizione con le righe rientrate che la continuano. Se la definizione
+/// chiudeva il documento, se ne vanno anche le righe vuote che la
+/// precedevano.
+export function deleteFootnoteAt(pos: number): StateCommand {
+  return ({ state, dispatch }) => {
+    if (state.readOnly) return false;
+    const id = footnoteAt(state, pos);
+    if (id === null) return false;
+    const doc = state.doc;
+    const reference = `[^${id}]`;
+    const changes: { from: number; to: number; insert?: string }[] = [];
+    for (let n = 1; n <= doc.lines; n++) {
+      const line = doc.line(n);
+      if (FOOTNOTE_DEFINITION.exec(line.text)?.[1] === id) {
+        let last = line;
+        while (last.number < doc.lines) {
+          const next = doc.line(last.number + 1);
+          if (next.text.trim() === "" || !/^(\t| {2,})/.test(next.text)) break;
+          last = next;
+        }
+        let from = line.from;
+        let to = last.number < doc.lines ? last.to + 1 : last.to;
+        let insert = "";
+        if (doc.sliceString(to).trim() === "") {
+          let before = line.number - 1;
+          while (before >= 1 && doc.line(before).text.trim() === "") before--;
+          from = before >= 1 ? doc.line(before).to : 0;
+          to = doc.length;
+          insert = before >= 1 && doc.sliceString(doc.length - 1) === "\n" ? state.lineBreak : "";
+        }
+        changes.push({ from, to, insert });
+        n = last.number;
+        continue;
+      }
+      for (let at = line.text.indexOf(reference); at >= 0; at = line.text.indexOf(reference, at + reference.length)) {
+        changes.push({ from: line.from + at, to: line.from + at + reference.length });
+      }
+    }
+    dispatch(state.update({ changes, scrollIntoView: true, userEvent: "delete" }));
+    return true;
+  };
+}
+
+const deleteFootnote: StateCommand = (target) => deleteFootnoteAt(target.state.selection.main.head)(target);
+
 // ── Pulizia ──────────────────────────────────────────────────────────────────
 
 const FORMATTED = nodeSet("StrongEmphasis", "Emphasis", "Strikethrough", "InlineCode");
@@ -651,6 +759,10 @@ export const MARKDOWN_ACTIONS: ReadonlyMap<string, MarkdownAction> = new Map<str
   ["markdown.wikilink", { run: toggleWikilink, active: (s) => insidePair(s, WIKILINK_PAIR), prose: true, chord: "Mod-k" }],
   ["markdown.image", { run: insertImage, prose: true }],
   ["markdown.footnote", { run: insertFootnote, prose: true }],
+  ["markdown.footnote.delete", {
+    run: deleteFootnote,
+    applicable: (state) => footnoteAt(state, state.selection.main.head) !== null,
+  }],
   ["markdown.list.bullet", {
     run: toggleBulletList,
     active: listActive("bullet"),
@@ -672,11 +784,14 @@ export const MARKDOWN_ACTIONS: ReadonlyMap<string, MarkdownAction> = new Map<str
     chord: "Shift-Tab",
   }],
   ["markdown.quote", { run: toggleQuote, active: quoteActive, prose: true }],
-  ["markdown.callout", { run: insertCallout, prose: true }],
+  ["markdown.callout", { run: insertCallout, active: calloutActive, prose: true }],
   ["markdown.codeblock", { run: toggleCodeBlock, active: (s) => enclosingCodeFence(s) !== null }],
   ["markdown.mathblock", { run: toggleMathBlock, active: (s) => enclosingMathFence(s) !== null, prose: true }],
   ["markdown.rule", { run: insertRule, prose: true }],
   ["markdown.table", { run: insertTable, prose: true }],
+  ["markdown.property.add", { run: addProperty, chord: "Mod-;" }],
+  ["markdown.property.up", { run: moveProperty(-1), applicable: canMoveProperty(-1), chord: "Alt-ArrowUp" }],
+  ["markdown.property.down", { run: moveProperty(1), applicable: canMoveProperty(1), chord: "Alt-ArrowDown" }],
   ["markdown.table.row.before", { ...tableAction(insertTableRow("before")), chord: "Mod-Alt-Shift-ArrowUp" }],
   ["markdown.table.row.after", { ...tableAction(insertTableRow("after")), chord: "Mod-Alt-Shift-ArrowDown" }],
   ["markdown.table.row.up", { ...tableAction(moveTableRow(-1)), chord: "Mod-Alt-ArrowUp" }],

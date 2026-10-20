@@ -85,7 +85,7 @@ import type {
   LiveStatus,
   LiveWriterStatus,
 } from "./contract";
-import type { PrintArtifactOutcome, SaveArtifactOutcome } from "./ipc";
+import type { PrintArtifactOutcome, RevealOutcome, SaveArtifactOutcome } from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
 
 /// Una chiamata arrivata alla porta: quale, e con cosa.
@@ -148,6 +148,8 @@ export interface Options {
   file?: Record<string, string>;
   root?: string | null;
   sessionNotice?: KernelNotice | null;
+  /// La versione che `appVersion` dichiara; di serie `0.1.0`.
+  appVersion?: string;
   view?: ViewSpec[];
   commands?: CommandSpec[];
   settings?: SettingEntry[];
@@ -179,6 +181,8 @@ export interface Options {
   /** Explicit OS save simulation. Unconfigured fake cannot create files. */
   saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
   printArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<PrintArtifactOutcome>;
+  /// Il sistema che riceve una voce del vault. Senza, la porta non è servita.
+  revealInSystem?: (path: string, open: boolean) => Promise<RevealOutcome>;
   /// La rete della macchina per la sessione live. Senza, le porte `live*` non
   /// sono servite; con zero indirizzi è un PC fuori da una rete locale, che
   /// l'app rifiuta con `unserved`.
@@ -753,6 +757,24 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return new RegExp(`^${p.glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*/g, "\u0000").replace(/\*/g, "[^/]*").replace(/\u0000/g, ".*").replace(/\?/g, "[^/]")}$`).test(id);
       case "file":
         return id.toLowerCase().endsWith(`.${p.extension.toLowerCase()}`);
+      case "scoped": {
+        // Le righe del sorgente; un blocco è ciò che sta fra righe vuote, una
+        // sezione ciò che sta fra due titoli.
+        const units =
+          p.scope === "line" ? text.split("\n") : p.scope === "block" ? text.split(/\n\s*\n/) : text.split(/^(?=#{1,6}\s)/m);
+        const words = p.text.text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+        return words.length > 0 && units.some((unit) => words.every((word) => unit.toLowerCase().includes(word)));
+      }
+      case "task_due": {
+        // Le task aperte con `📅 AAAA-MM-GG` nella riga.
+        const inside = (date: string) =>
+          (!p.min || (p.min.inclusive ? date >= p.min.date : date > p.min.date)) &&
+          (!p.max || (p.max.inclusive ? date <= p.max.date : date < p.max.date));
+        return text.split("\n").some((line) => {
+          const due = /^\s*[-*+]\s*\[ \].*📅\s*(\d{4}-\d{2}-\d{2})/u.exec(line);
+          return due !== null && inside(due[1]!);
+        });
+      }
       default:
         throw new Error(`host fake: non so leggere il predicato ${p.kind}`);
     }
@@ -936,6 +958,24 @@ export function createFakeHost(options: Options = {}): FakeHost {
         emit({ type: "document_changed", id: doc });
         return { notify: null, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };
       }
+      case "note.duplicate": {
+        const from = String(args?.doc);
+        const before = docs.get(from);
+        if (!before) throw new Error(`host fake: «${from}» non esiste`);
+        const dot = from.lastIndexOf(".");
+        const stem = dot > from.lastIndexOf("/") + 1 ? from.slice(0, dot) : from;
+        const ext = stem.length === from.length ? "" : from.slice(dot);
+        // Come il kernel: in un'altra cartella la copia tiene il nome.
+        const folder = typeof args?.folder === "string" ? args.folder.replace(/^\/+|\/+$/g, "") : undefined;
+        const own = from.slice(0, Math.max(from.lastIndexOf("/"), 0));
+        const name = stem.slice(stem.lastIndexOf("/") + 1);
+        const base = folder === undefined || folder === own ? `${stem} copia` : folder === "" ? name : `${folder}/${name}`;
+        let doc = `${base}${ext}`;
+        for (let n = 1; docs.has(doc); n += 1) doc = `${base} ${n}${ext}`;
+        docs.set(doc, { ...before });
+        emit({ type: "document_changed", id: doc });
+        return { notify: null, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };
+      }
       case "note.rename": {
         const from = String(args?.doc);
         const to = String(args?.to);
@@ -1065,6 +1105,59 @@ export function createFakeHost(options: Options = {}): FakeHost {
           partial: null,
         };
       }
+      case "folder.rename": {
+        // Come il comando vero: ogni voce sotto la cartella si sposta col suo
+        // `document_renamed`, la destinazione non deve avere voci, e una
+        // cartella non va dentro sé stessa.
+        const trim = (p: unknown) => String(p ?? "").trim().replace(/^\/+|\/+$/g, "");
+        const from = trim(args?.folder);
+        const to = trim(args?.to);
+        if (!from || !to) throw { kind: "bad_args", message: "Manca la cartella." } satisfies PluginError;
+        if (to.startsWith(`${from}/`)) throw { kind: "bad_args", message: `«${from}» non si sposta dentro sé stessa.` } satisfies PluginError;
+        const inside = (id: string, folder: string) => id.startsWith(`${folder}/`);
+        const moving = [...docs.keys()].filter((id) => inside(id, from));
+        const folders = [...createdFolders].filter((f) => f === from || inside(f, from));
+        if (moving.length === 0 && folders.length === 0) throw { kind: "not_found", message: `«${from}» non c'è` } satisfies PluginError;
+        if ([...docs.keys()].some((id) => id === to || inside(id, to))) throw { kind: "already_exists", message: `«${to}» c'è già` } satisfies PluginError;
+        for (const id of moving) {
+          const target = `${to}${id.slice(from.length)}`;
+          docs.set(target, docs.get(id)!);
+          docs.delete(id);
+          emit({ type: "document_renamed", from: id, to: target });
+        }
+        for (const folder of folders) {
+          createdFolders.delete(folder);
+          createdFolders.add(`${to}${folder.slice(from.length)}`);
+        }
+        emit({ type: "index_updated" });
+        return {
+          notify: `«${from}» è diventata «${to}» · Voci: ${moving.length}`,
+          effect: { kind: "custom" as const, ns: "fub.folder.moved", payload: { from, to } },
+          undo: { label: `lo spostamento di «${from}» in «${to}»`, steps: [{ kind: "command" as const, command: "folder.rename", args: { folder: to, to: from } }] },
+          partial: null,
+        };
+      }
+      case "folder.trash": {
+        const folder = String(args?.folder ?? "").trim().replace(/^\/+|\/+$/g, "");
+        const inside = (id: string) => id.startsWith(`${folder}/`);
+        const leaving = [...docs.keys()].filter(inside);
+        const folders = [...createdFolders].filter((f) => f === folder || inside(f));
+        if (!folder || (leaving.length === 0 && folders.length === 0)) throw { kind: "not_found", message: `«${folder}» non c'è` } satisfies PluginError;
+        for (const id of leaving) {
+          trashedCount += 1;
+          trash.set(`.trash/${trashedCount}-${id}`, { original: id, text: docs.get(id)!.text });
+          docs.delete(id);
+          emit({ type: "document_removed", id });
+        }
+        for (const f of folders) createdFolders.delete(f);
+        emit({ type: "index_updated" });
+        return {
+          notify: `«${folder}» è nel cestino · Voci: ${leaving.length}`,
+          effect: { kind: "custom" as const, ns: "fub.folder.trashed", payload: { folder } },
+          undo: { label: `il cestino di «${folder}»`, steps: [] },
+          partial: null,
+        };
+      }
       case "vault.replace": {
         // Come il vero: sostituzione **letterale** nei byte, con la parola intera
         // se richiesta; `dry_run` dà il piano e non scrive, `apply` scrive.
@@ -1134,6 +1227,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const module: typeof import("./ipc") = {
     api: {
       initialVault: () => gate("initialVault", [], Promise.resolve(root)),
+      appVersion: () => gate("appVersion", [], Promise.resolve(options.appVersion ?? "0.1.0")),
       sessionNotice: () =>
         gate("sessionNotice", [], Promise.resolve(options.sessionNotice ?? null)),
       // Il vault in memoria non ha cartella di configurazione, log o dialog
@@ -1152,6 +1246,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const info: VaultInfo = { root: path, extensions, plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
+      closeVault: (path) => gate("closeVault", [path], Promise.resolve([])),
       readDocument: (id, vault) => {
         const doc = docs.get(id);
         if (!doc) return gate("readDocument", named([id], vault), Promise.reject(new Error(`«${id}» non c'è`)));
@@ -1213,6 +1308,13 @@ export function createFakeHost(options: Options = {}): FakeHost {
         gate("viewerOpen", [url, title, policy], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
       viewerSave: (url, title, allowlist, attachmentFolder, vault) =>
         gate("viewerSave", [url, title, allowlist, attachmentFolder, vault], Promise.reject(new Error("host fake: viewer download is unavailable"))),
+      viewerControl: (action) =>
+        gate("viewerControl", [action], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
+      // Il finto non ha una finestra del visore: niente da raccontare.
+      onViewer: () => {
+        calls.push({ gate: "onViewer", args: [] });
+        return Promise.resolve(() => {});
+      },
       saveArtifact: (suggestedName, mediaType, bytes) =>
         options.saveArtifact
           ? gate("saveArtifact", [suggestedName, mediaType, bytes], options.saveArtifact(suggestedName, mediaType, bytes))
@@ -1221,6 +1323,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
         options.printArtifact
           ? gate("printArtifact", [suggestedName, mediaType, bytes], options.printArtifact(suggestedName, mediaType, bytes))
           : unavailable("printArtifact", [suggestedName, mediaType, bytes]),
+      revealInSystem: (path, open) =>
+        options.revealInSystem
+          ? gate("revealInSystem", [path, open], options.revealInSystem(path, open))
+          : unavailable("revealInSystem", [path, open]),
       listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve(grid ? [grid.surface] : [])),
       openGrid: (surface, source, revision) => gate("openGrid", [surface, source, revision], Promise.resolve().then(() => {
         if (!grid || surface !== grid.surface.id) throw new Error("host fake: la famiglia grid non è montata");
@@ -1486,6 +1592,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
         calls.push({ gate: "onDocumentWindowCloseRequested", args: [] });
         windowCloseRequested.add(handler);
         return Promise.resolve(() => { windowCloseRequested.delete(handler); });
+      },
+      onPendingUris: () => {
+        calls.push({ gate: "onPendingUris", args: [] });
+        return Promise.resolve(() => {});
+      },
+      // Il finto non riceve collegamenti dal sistema: la sua coda è vuota.
+      takePendingUris: () => {
+        calls.push({ gate: "takePendingUris", args: [] });
+        return Promise.resolve({
+          notify: null,
+          effect: { kind: "custom" as const, ns: "fub.uri.pending", payload: { actions: [], refused: 0 } },
+          undo: null,
+          partial: null,
+        });
       },
       onDocumentWindowClosed: (handler) => {
         calls.push({ gate: "onDocumentWindowClosed", args: [] });

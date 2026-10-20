@@ -33,6 +33,7 @@ import type { Bounds } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
 import { MAX_EDIT_BYTES } from "../scene/read";
 import type { Elem } from "../scene/serialize";
+import { sourceOf } from "../import/sources";
 
 /// I tipi che un disegno incorpora così come sono.
 export type RasterType = "image/png" | "image/jpeg" | "image/webp" | "image/gif";
@@ -148,7 +149,18 @@ const isSvgFile = (file: File): boolean => file.type === "image/svg+xml" || (fil
 /// raster e non si incorpora (formato della scena); entra come disegno.
 export function imageFiles(data: DataTransfer | null): File[] {
   if (data === null) return [];
-  return Array.from(data.files).filter((file) => !isSvgFile(file) && (file.type === "" || file.type.startsWith("image/")));
+  return Array.from(data.files).filter((file) => !isSvgFile(file) && !isForeignFile(file) && (file.type === "" || file.type.startsWith("image/")));
+}
+
+/// Un file di Excalidraw o di draw.io dal nome, che non è un SVG né un PNG:
+/// quelli entrano come gli altri della loro specie.
+const isForeignFile = (file: File): boolean => sourceOf(file.name) !== null && !/\.(svg|png)$/i.test(file.name);
+
+/// I file di Excalidraw o di draw.io di `data`, che entrano come un incolla
+/// dai loro programmi.
+export function foreignFiles(data: DataTransfer | null): File[] {
+  if (data === null) return [];
+  return Array.from(data.files).filter(isForeignFile);
 }
 
 /// I file SVG di `data`, che entrano come disegni (`clipboard.ts`).

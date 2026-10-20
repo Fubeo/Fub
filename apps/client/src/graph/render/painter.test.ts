@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MIN_NODE_PX, labelFade, labelReach, pulseOpacity, screenRadius, trailFade } from "./painter";
+import { MIN_NODE_PX, labelFade, labelReach, nodeLabel, pulseOpacity, screenRadius, trailFade } from "./painter";
 import { createStructure, organicConfig } from "../sim/types";
 
 describe("pulse dei nodi", () => {
@@ -58,8 +58,21 @@ describe("labelReach", () => {
     expect(labelReach(pair(), 4, 100, (i) => widths[i])).toBeCloseTo(24 + 5 + 40, 10);
   });
 
+  it("parte dal bordo del nodo ingrandito", () => {
+    // Nodi grandi il doppio: a: 12 + 5 + 200 − 100 = 117.
+    expect(labelReach(pair(), 1, 100, (i) => widths[i], 2)).toBeCloseTo(117, 10);
+  });
+
   it("dove le etichette non si disegnano non sporge niente", () => {
     expect(labelFade(0.5)).toBe(0);
     expect(labelReach(pair(), 0.5, 100, (i) => widths[i])).toBe(0);
+  });
+});
+
+describe("nodeLabel", () => {
+  it("toglie cartella ed estensione a una nota, lascia intero un tag", () => {
+    expect(nodeLabel("Progetti/Idea.md")).toBe("Idea");
+    expect(nodeLabel("Fantasma")).toBe("Fantasma");
+    expect(nodeLabel("#progetto/fub")).toBe("#progetto/fub");
   });
 });

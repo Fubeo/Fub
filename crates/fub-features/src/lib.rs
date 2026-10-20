@@ -103,7 +103,9 @@ pub mod trash;
 pub mod versioning;
 
 #[cfg(feature = "backlinks")]
-pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
+pub use backlinks::{
+    build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_STATUS_VIEW, BACKLINKS_VIEW,
+};
 #[cfg(feature = "backup")]
 pub use backup::{
     BackupCommands, BackupView, BACKUP_ID, BACKUP_KEEP_KEY, BACKUP_VIEW, VAULT_BACKUP,
@@ -119,20 +121,21 @@ pub use blocks::{
 };
 #[cfg(feature = "commands")]
 pub use commands::{
-    occurrences, CoreCommands, COMMANDS_ID, NOTES_CREATE, NOTES_RENAME, NOTES_TASK_TOGGLE,
-    NOTES_TRASH, SEARCH_OPEN, SELECTION_WIKILINK, SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS,
-    SETTINGS_RESET, SETTINGS_SET, TRASH_EMPTY, TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE,
-    VAULT_UNDO,
+    occurrences, CoreCommands, COMMANDS_ID, FOLDER_RENAME, FOLDER_TRASH, NOTES_CREATE,
+    NOTES_DUPLICATE, NOTES_RENAME, NOTES_TASK_TOGGLE, NOTES_TRASH, SEARCH_OPEN, SELECTION_WIKILINK,
+    SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET, SETTINGS_SET, TRASH_EMPTY,
+    TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE, VAULT_UNDO,
 };
 #[cfg(feature = "dashboard")]
 pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
 #[cfg(feature = "draw")]
 pub use draw::{
-    AnnotatedPdfExport, DrawCommands, JpegExport, PdfExport, PngExport, RedactedPdfExport,
-    SvgExport, DRAWING_CREATE, DRAW_ANNOTATED_PDF, DRAW_CUSTOM_DEFAULT, DRAW_CUSTOM_KEY, DRAW_ID,
-    DRAW_JPEG, DRAW_LEVELS, DRAW_LEVEL_KEY, DRAW_PDF, DRAW_PNG, DRAW_REDACTED_PDF,
-    DRAW_SUGGESTIONS_KEY, DRAW_SVG, DRAW_SYMBOLS_DEFAULT, DRAW_SYMBOLS_KEY, DRAW_TEMPLATES_DEFAULT,
-    DRAW_TEMPLATES_KEY, PDF_ANNOTATE,
+    AnnotatedPdfExport, DrawCommands, DrawioExport, ExcalidrawExport, JpegExport, PdfExport,
+    PngExport, RedactedPdfExport, SvgExport, DRAWING_CREATE, DRAW_ANNOTATED_PDF,
+    DRAW_CUSTOM_DEFAULT, DRAW_CUSTOM_KEY, DRAW_DRAWIO, DRAW_EXCALIDRAW, DRAW_ID, DRAW_JPEG,
+    DRAW_LEVELS, DRAW_LEVEL_KEY, DRAW_PDF, DRAW_PNG, DRAW_REDACTED_PDF, DRAW_SUGGESTIONS_KEY,
+    DRAW_SVG, DRAW_SYMBOLS_DEFAULT, DRAW_SYMBOLS_KEY, DRAW_TEMPLATES_DEFAULT, DRAW_TEMPLATES_KEY,
+    PDF_ANNOTATE,
 };
 #[cfg(feature = "formatting")]
 pub use formatting::{FormattingCommands, FORMATTING_ID};
@@ -140,13 +143,18 @@ pub use formatting::{FormattingCommands, FORMATTING_ID};
 pub use graph::{GraphCommands, GraphView, GRAPH_ID, GRAPH_NS, GRAPH_OPEN, GRAPH_VIEW};
 pub use inventory::{every_official_feature, every_official_view, HostWiring, OfficialFeature};
 #[cfg(feature = "outline")]
-pub use outline::{build_outline_view, OutlineView, FOOTNOTES_VIEW, OUTLINE_ID, OUTLINE_VIEW};
+pub use outline::{
+    build_outline_view, OutlineCommands, OutlineView, FOOTNOTES_VIEW, HEADING_RENAME, OUTLINE_ID,
+    OUTLINE_VIEW,
+};
 #[cfg(feature = "proof")]
 pub use proof::{ProofCommands, ProofIndex, PROOF_ID, WORDS_KEY, WORD_ADD, WORD_REMOVE};
 #[cfg(feature = "properties")]
 pub use properties::{
-    PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_PROPERTY_REMOVE,
-    NOTES_PROPERTY_SET, PROPERTIES_ID, PROPERTIES_VIEW, PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
+    PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_ALIAS_ADD,
+    NOTES_PROPERTIES_CLEAR, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID,
+    PROPERTIES_STATUS_VIEW, PROPERTIES_VIEW, PROPERTY_KEYS_MIGRATE, PROPERTY_KEY_DELETE,
+    PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
 };
 #[cfg(feature = "queries")]
 pub use queries::{
@@ -157,10 +165,11 @@ pub use queries::{
 pub use search::{SearchIndex, SEARCH_ID};
 #[cfg(feature = "stats")]
 pub use stats::{
-    build_stats_view, count, reading_minutes, StatsView, TextStats, STATS_ID, STATS_VIEW,
+    build_document_counts, build_stats_view, count, reading_minutes, StatsView, TextStats,
+    STATS_DOCUMENT_VIEW, STATS_ID, STATS_VIEW,
 };
 #[cfg(feature = "tags")]
-pub use tags::{build_tags_view, TagPanelView, TAGS_ID, TAGS_VIEW};
+pub use tags::{build_tags_view, TagCommands, TagPanelView, TAGS_ID, TAGS_VIEW, TAG_RENAME};
 #[cfg(feature = "template")]
 pub use template::{
     TemplateCommands, TemplateView, CLOCK_12, CLOCK_24, CLOCK_DATETIME, CLOCK_TIME,

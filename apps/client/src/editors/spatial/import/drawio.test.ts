@@ -563,3 +563,19 @@ describe("gli archi", () => {
     expect(diagram.notes).toEqual([{ kind: "route", count: 1, sample: "" }]);
   });
 });
+
+describe("ciò che non ha posizione", () => {
+  it("una forma senza riquadro si dice, e i suoi figli entrano", () => {
+    const diagram = readDrawio(model(
+      `<mxCell id="p" value="" style="swimlane;" vertex="1" parent="1"></mxCell>${vertex("c", "rounded=0;", [10, 20, 30, 40], "Dentro", "p")}`,
+    ));
+    expect(find(diagram, "c")).toMatchObject({ type: "shape" });
+    expect(diagram.notes).toEqual([{ kind: "placeless", count: 1, sample: "" }]);
+  });
+
+  it("una linea senza due capi si dice", () => {
+    const diagram = readDrawio(model(edge("e", "endArrow=classic;", null, null)));
+    expect(top(diagram)).toEqual([]);
+    expect(diagram.notes).toEqual([{ kind: "placeless", count: 1, sample: "" }]);
+  });
+});

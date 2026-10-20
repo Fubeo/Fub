@@ -16,6 +16,14 @@ vi.mock("../state/document-controller", () => ({
   },
 }));
 vi.mock("../state/search-port", () => ({ searchFor: vi.fn() }));
+const imported = vi.hoisted(() => ({ items: [] as unknown[], added: 0, opened: 0 }));
+vi.mock("../state/obsidian-bookmarks", () => ({
+  importObsidianBookmarks: async (items: unknown[]) => {
+    imported.items.push(...items);
+    return { added: imported.added, same: 1, lost: ["graph"], refused: false };
+  },
+}));
+vi.mock("../state/bookmarks-ui", () => ({ openBookmarksPanel: () => imported.opened++ }));
 // Il layout ricorda se stesso a ogni cambio: qui non c'è un backend a cui dirlo.
 vi.mock("../host/ipc", () => ({ api: { setViewState: async () => {} } }));
 
@@ -25,9 +33,11 @@ import { activeTab, defaultLayout, layout, setLayout } from "../state/layout";
 import {
   applyIntent,
   CLIPBOARD_TEXT_NS,
+  OBSIDIAN_IMPORTED_NS,
   setReloaderForTests,
   takeNoticeAfterReload,
   VAULT_RESTORED_NS,
+  WEB_OPEN_NS,
 } from "./intents";
 import { setPrimaryViews } from "./primary-views";
 import { EDITOR_ACTION_NS } from "../editors/core/editor-actions";
@@ -95,6 +105,24 @@ describe("l'intento degli appunti", () => {
   });
 });
 
+describe("l'import da Obsidian", () => {
+  it("porta i segnalibri, dice quanti e quali no, e mostra il pannello", async () => {
+    imported.added = 2;
+    const items = [{ type: "file", path: "Nota.md" }];
+    await applyIntent({ kind: "custom", ns: OBSIDIAN_IMPORTED_NS, payload: { written: [], bookmarks: items } });
+    expect(imported.items).toEqual(items);
+    expect(notified).toEqual([[t("bookmarks.imported_lost", { added: 2, same: 1, lost: "graph" }), "info"]]);
+    expect(imported.opened).toBe(1);
+  });
+
+  it("senza segnalibri non dice niente: l'avviso delle impostazioni c'è già", async () => {
+    imported.items.length = 0;
+    await applyIntent({ kind: "custom", ns: OBSIDIAN_IMPORTED_NS, payload: { written: [], bookmarks: [] } });
+    expect(imported.items).toEqual([]);
+    expect(notified).toHaveLength(0);
+  });
+});
+
 describe("il vault ripristinato", () => {
   it("ricarica la finestra e lascia un avviso che si legge una volta sola", async () => {
     const reload = vi.fn();
@@ -140,5 +168,17 @@ describe("una view aperta da un comando (OpenView)", () => {
     await applyIntent({ kind: "open_view", view: "outline", params: null });
     expect(layout.panes[layout.focus]!.tabs).toEqual([]);
     expect(notified).toEqual([[t("views.open_unavailable", { view: "outline" }), "guasto"]]);
+  });
+});
+
+describe("l'intento della pagina web", () => {
+  it("apre un indirizzo http(s) e rifiuta, dicendolo, ogni altro schema", async () => {
+    const opened = vi.spyOn(window, "open").mockImplementation(() => null);
+    await applyIntent({ kind: "custom", ns: WEB_OPEN_NS, payload: { url: "https://pub.example.org/s/blog/a.html" } });
+    expect(opened).toHaveBeenCalledWith("https://pub.example.org/s/blog/a.html", "_blank", "noopener,noreferrer");
+    await applyIntent({ kind: "custom", ns: WEB_OPEN_NS, payload: { url: "javascript:alert(1)" } });
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(notified).toEqual([[t("intent.web_open_refused"), "guasto"]]);
+    opened.mockRestore();
   });
 });

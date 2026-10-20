@@ -6,9 +6,9 @@
 
 ## Un disegno è un file SVG
 
-Con la feature `draw` dell'host un file `.svg` ha il formato `svg` e si apre
-come disegno: il profilo `vector` della famiglia `canvas`
-(`apps/client/src/editors/spatial/surface.ts`). Senza la feature il file resta
+Con la feature `draw` dell'host, accesa nel build predefinito, un `.svg` ha il
+formato `svg` e si apre come disegno: il profilo `vector` della famiglia
+`canvas` (`apps/client/src/editors/spatial/surface.ts`). Senza la feature resta
 testo con l'anteprima accanto ([Editor e anteprima](editor-and-preview.md)).
 Un disegno nuovo nasce vuoto o da un modello: [Nuovo disegno](drawing-new.md).
 

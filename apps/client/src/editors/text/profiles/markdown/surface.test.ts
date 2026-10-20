@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
+import { t } from "../../../../i18n/strings";
 import { EditorView } from "@codemirror/view";
 import { createTextEngine } from "../../engine";
 import { createMarkdownProfile } from "./profile";
@@ -7,6 +8,8 @@ import { cursorIsLiteral, mountMarkdownSurface, type EditorSlashHost, type Markd
 import { api } from "../../../../host/ipc";
 import { state } from "../../../../state/store";
 import { closeCommandPalette } from "../../../../ui/palette";
+import { closeContextMenu } from "../../../../ui/menu";
+import { declareClipboard } from "../../../../platform/clipboard";
 
 interface TestEditor {
   ed: MarkdownSurface;
@@ -100,6 +103,32 @@ describe("la superficie Markdown", () => {
       expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();
+    }
+  });
+  it("in lettura Ctrl+C senza selezione copia il sorgente, con una selezione no", async () => {
+    const copied: string[] = [];
+    const undeclare = declareClipboard(async (text) => void copied.push(text));
+    try {
+      const { ed, reading } = editor();
+      ed.buffer.setDoc("# Titolo\r\n\r\n**forte**\r\n");
+      ed.setMode("reading");
+      window.getSelection()?.removeAllRanges();
+      const press = () => {
+        const event = new KeyboardEvent("keydown", { key: "c", ctrlKey: true, bubbles: true, cancelable: true });
+        reading().dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      expect(press()).toBe(true);
+      await vi.waitFor(() => expect(copied).toEqual(["# Titolo\r\n\r\n**forte**\r\n"]));
+      const range = document.createRange();
+      range.selectNodeContents(reading());
+      window.getSelection()!.addRange(range);
+      expect(press()).toBe(false);
+      expect(copied).toHaveLength(1);
+      window.getSelection()?.removeAllRanges();
+      ed.destroy();
+    } finally {
+      undeclare();
     }
   });
   it("il task cliccato in lettura cambia solo il simbolo ed è annullabile", () => {
@@ -412,6 +441,145 @@ describe("le azioni dell'editor della superficie", () => {
 
     expect(ed.editorActions.run("text.undo")).toBe(true);
     expect(ed.buffer.getDoc()).toBe("parola");
+    ed.destroy();
+  });
+
+  it("piega tutto e apri tutto non toccano il testo né la cronologia", () => {
+    const { ed, view } = editor();
+    const text = "# Uno\n\ntesto\n\n# Due\n\naltro\n";
+    ed.buffer.setDoc(text);
+    expect(ed.editorActions.has("text.fold.all")).toBe(true);
+    expect(ed.editorActions.state("text.fold.all")).toEqual({ enabled: true, active: null });
+    expect(ed.editorActions.run("text.fold.all")).toBe(true);
+    expect(view().dom.querySelectorAll(".cm-foldPlaceholder").length).toBeGreaterThan(0);
+    expect(ed.editorActions.run("text.unfold.all")).toBe(true);
+    expect(view().dom.querySelectorAll(".cm-foldPlaceholder").length).toBe(0);
+    expect(ed.buffer.getDoc()).toBe(text);
+    expect(ed.editorActions.state("text.undo").enabled).toBe(false);
+    ed.destroy();
+  });
+
+  it("piega le proprietà chiude il frontmatter sotto la prima riga e lo stesso comando lo riapre", () => {
+    const { ed, view } = editor();
+    const text = "---\ntitolo: Uno\ntag: [a]\n---\n\n# Testo\n";
+    ed.buffer.setDoc(text);
+    const placeholders = () => view().dom.querySelectorAll(".cm-foldPlaceholder").length;
+    expect(ed.editorActions.run("text.fold.properties")).toBe(true);
+    expect(placeholders()).toBe(1);
+    expect(view().dom.textContent).not.toContain("titolo");
+    expect(view().dom.textContent).toContain("Testo");
+    expect(ed.editorActions.run("text.fold.properties")).toBe(true);
+    expect(placeholders()).toBe(0);
+    expect(ed.buffer.getDoc()).toBe(text);
+    ed.buffer.setDoc("# Senza proprietà\n");
+    expect(ed.editorActions.run("text.fold.properties")).toBe(false);
+    ed.destroy();
+  });
+
+  it("piega di più e di meno vanno un livello alla volta, dall'interno e dall'esterno", () => {
+    const { ed, view } = editor();
+    const text = "# Uno\n\n## Sotto\n\ntesto\n\n# Due\n\naltro\n";
+    ed.buffer.setDoc(text);
+    const placeholders = () => view().dom.querySelectorAll(".cm-foldPlaceholder").length;
+    expect(ed.editorActions.state("text.fold.more")).toEqual({ enabled: true, active: null });
+    expect(ed.editorActions.run("text.fold.more")).toBe(true);
+    expect(placeholders()).toBe(1);
+    expect(view().dom.textContent).toContain("Sotto");
+    expect(view().dom.textContent).not.toContain("testo");
+    expect(ed.editorActions.run("text.fold.more")).toBe(true);
+    expect(placeholders()).toBe(2);
+    expect(view().dom.textContent).not.toContain("Sotto");
+    expect(ed.editorActions.run("text.fold.more")).toBe(false);
+    expect(ed.editorActions.run("text.fold.less")).toBe(true);
+    expect(placeholders()).toBe(1);
+    expect(view().dom.textContent).toContain("Sotto");
+    expect(ed.editorActions.run("text.fold.less")).toBe(true);
+    expect(placeholders()).toBe(0);
+    expect(ed.editorActions.run("text.fold.less")).toBe(false);
+    expect(ed.buffer.getDoc()).toBe(text);
+    expect(ed.editorActions.state("text.undo").enabled).toBe(false);
+    ed.destroy();
+  });
+
+  it("il tasto destro sulle proprietà rese offre di aggiungerne una e di svuotarle", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("---\ntitle: x\n---\nTesto\n");
+    const items = (spot: Element) => {
+      const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 1, clientY: 1 });
+      spot.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      return [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitem]")];
+    };
+    const widget = () => {
+      const spot = document.createElement("div");
+      spot.className = "cm-fub-properties";
+      view().contentDOM.append(spot);
+      return spot;
+    };
+    const add = items(widget()).find((each) => each.textContent?.includes(t("editor.properties.add")));
+    expect(add).toBeDefined();
+    add!.click();
+    expect(ed.buffer.getDoc()).toBe("---\ntitle: x\n\n---\nTesto\n");
+    const clear = items(widget()).find((each) => each.textContent?.includes(t("editor.properties.clear")));
+    expect(clear).toBeDefined();
+    clear!.click();
+    expect(ed.buffer.getDoc()).toBe("Testo\n");
+    closeContextMenu();
+    document.getElementById("context-menu")?.remove();
+    ed.destroy();
+  });
+
+  it("copiare e tagliare portano anche l'HTML della selezione, in lettura no", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("Un **forte** qui\n");
+    const copy = (type: "copy" | "cut") => {
+      const data = new Map<string, string>();
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: {
+          clearData: () => data.clear(),
+          setData: (kind: string, value: string) => void data.set(kind, value),
+          getData: (kind: string) => data.get(kind) ?? "",
+        },
+      });
+      view().contentDOM.dispatchEvent(event);
+      return data;
+    };
+    view().focus();
+    view().dispatch({ selection: { anchor: 0, head: 12 } });
+    const copied = copy("copy");
+    expect(copied.get("text/plain")).toBe("Un **forte**");
+    expect(copied.get("text/html")).toContain("<strong>forte</strong>");
+    view().dispatch({ selection: { anchor: 0, head: 12 } });
+    const cut = copy("cut");
+    expect(cut.get("text/html")).toContain("<strong>forte</strong>");
+    expect(ed.buffer.getDoc()).toBe(" qui\n");
+    view().dispatch({ selection: { anchor: 0 } });
+    expect(copy("copy").has("text/html")).toBe(false);
+    ed.destroy();
+  });
+
+  it("il tasto destro su un richiamo offre di eliminare la nota, altrove lascia il menu del sistema", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("Uno[^1] due\n\n[^1]: prima\n");
+    const content = view().contentDOM;
+    const spot = { pos: 4 };
+    const original = view().posAtCoords.bind(view());
+    view().posAtCoords = ((_coords: { x: number; y: number }) => spot.pos) as typeof original;
+    const plain = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 1, clientY: 1 });
+    spot.pos = 9;
+    content.dispatchEvent(plain);
+    expect(plain.defaultPrevented).toBe(false);
+    expect(document.querySelector("#context-menu [role=menuitem]")).toBeNull();
+    spot.pos = 4;
+    const onReference = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 1, clientY: 1 });
+    content.dispatchEvent(onReference);
+    expect(onReference.defaultPrevented).toBe(true);
+    const item = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitem]")].find((each) =>
+      each.textContent?.includes(t("editor.footnote.delete")));
+    expect(item).toBeDefined();
+    item!.click();
+    expect(ed.buffer.getDoc()).toBe("Uno due\n");
     ed.destroy();
   });
 

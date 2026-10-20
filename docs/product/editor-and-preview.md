@@ -41,24 +41,24 @@ subito. I titoli usano l'inchiostro del documento in tutte e tre le modalità �
 solo i `#` restano sintassi colorata — e i link resi usano lo stesso inchiostro
 dei wikilink. Il ritmo verticale è lo stesso in Live e Lettura: un passo sotto
 ogni blocco, due passi sopra i titoli di sezione. In Live il ritmo vive sui
-widget (i margini dei figli non escono dal blocco isolato). Font, corpo,
-interlinea e misura rispettano le preferenze di lettura.
+widget (i margini dei figli non escono dal blocco isolato). Testo, codice e
+interfaccia hanno caratteri propri; corpo, interlinea e misura sono preferenze.
 
 L'editor testuale supporta folding, selezioni multiple e rettangolari,
 indentazione, liste intelligenti, matching e chiusura delle parentesi. L'incolla
-da HTML passa dal sanitizzatore e viene convertito in Markdown, tabelle,
-barrato ed elenchi di attività GFM compresi; testo semplice e Markdown
-dichiarato restano invece input autorevole. Un allegato depositato incollando o
-trascinando si incorpora se la lettura lo sa mostrare (immagini, audio, video,
-PDF) e diventa un link col suo nome altrimenti; una nota trascinata dall'albero
-diventa un wikilink nel punto in cui cade. Correttore ortografico, modalità
-Vim, numeri di riga (visibili in Sorgente), a capo automatico e unità di
-rientro sono preferenze di macchina aggiornate senza rimontare la sessione.
-Valgono per le superfici di documento: la barra delle formule e l'editor di
-cella della griglia sono campi con una disposizione fissa, senza numeri di
-riga, Vim o correttore.
-La direzione del testo è automatica per riga e la misura leggibile riusa la
-preferenza di aspetto.
+da HTML passa dal sanitizzatore e diventa Markdown, tabelle, barrato ed elenchi
+di attività GFM compresi; testo semplice e Markdown dichiarato restano input
+autorevole. Copiare o tagliare aggiunge l'HTML della selezione, senza link
+interni. Un allegato incollato o trascinato si incorpora se la lettura lo sa
+mostrare (immagini, audio, video, PDF), altrimenti diventa un link col suo nome;
+una nota trascinata dall'albero diventa un wikilink nel punto in cui cade.
+Correttore ortografico, modalità Vim, numeri di riga (visibili in Sorgente), a
+capo automatico e unità di rientro sono preferenze di macchina aggiornate senza
+rimontare la sessione; il tasto destro sul margine mostra o nasconde numeri di
+riga e frecce di piegatura. Valgono per le superfici di documento: la barra
+delle formule e l'editor di cella della griglia sono campi con una disposizione
+fissa, senza numeri di riga, Vim o correttore. La direzione del testo è
+automatica per riga e la misura leggibile riusa la preferenza di aspetto.
 
 ## Codice e diagrammi Mermaid
 
@@ -109,10 +109,10 @@ il limite Mermaid degli archi è 500. Il cambio di superficie rilascia gli
 osservatori e gli URL delle immagini; una risposta vecchia non rimonta il
 diagramma.
 
-I link espliciti contenuti nel diagramma diventano controlli adiacenti
-navigabili soltanto per destinazioni `http`, `https`, `mailto` o frammenti
-locali. Lo SVG resta un'immagine inerte: non porta callback o navigazione propria
-nella webview.
+I link espliciti del diagramma diventano controlli adiacenti, soltanto per
+`http`, `https`, `mailto` o frammenti locali; un nodo con la classe
+`internal-link` aggiunge un wikilink alla nota col suo testo. Lo SVG resta
+un'immagine inerte, senza callback o navigazione propria nella webview.
 
 ## Formule
 
@@ -276,9 +276,9 @@ La preview usa le forme prodotte dal provider e le policy della webview. I
 blocchi HTML attraversano l'allowlist del sanitizzatore prima di diventare nodi
 DOM; classi e attributi `data-*` scritti nella nota non possono imitare i
 contratti privati della shell. Script, iframe, handler e URL di risorsa remoti
-restano inattivi. Se un blocco non contiene alcun elemento consentito, la
-sorgente resta leggibile invece di produrre un riquadro vuoto. Il Markdown
-dentro un blocco HTML non viene reinterpretato.
+restano inattivi. Un blocco senza elementi consentiti resta sorgente leggibile.
+Il Markdown dentro un blocco HTML non viene reinterpretato. Un link `https` apre
+il browser, o il [visore web](../reference/permissions-and-security.md#visore-web).
 
 La UI dichiarativa di un plugin WASM passa da `UiNode::validate_untrusted()`
 prima di raggiungere la shell; `Html` e `WebView` sono rifiutati per
@@ -318,7 +318,7 @@ indisponibili sulla superficie attiva non entrano nella palette né nel router;
 i renderer non installano listener globali propri.
 Note giornaliere, template, note uniche e casuali, inserimento data/ora,
 slash, compositore e statistiche sono comandi e provider ufficiali sullo
-stesso buffer e registro: giornaliere con cartella, formato data e template
+stesso buffer e registro: giornaliere con cartella, `daily.format`, formato data e template
 configurabili e orologio deterministico; template con variabili chiuse e merge
 delle proprietà; slash e palette condividono registro, contesto valido e flush
 senza toccare il buffer. Il menu `/` offre i comandi che lo dichiarano nella
@@ -328,8 +328,8 @@ non ne tiene un elenco, e un plugin vi entra con la stessa dichiarazione;
 estrazione e merge pianificano riferimenti e dati prima di eliminare la
 sorgente, e la selezione va in coda a un template che non la colloca; le
 statistiche contano anche lingue senza spazi con aggiornamenti incrementali.
-Di una nota in prosa contano il sorgente; di un formato strutturato (canvas,
-base) il testo del suo modello, non il JSON o lo YAML che lo tiene.
+Contano il sorgente di una nota in prosa, e di un formato strutturato (canvas,
+base) il testo del modello; la view `stats.document` li dà a `fub-cli wordcount`.
 
 ## Barra di formattazione
 
@@ -346,9 +346,9 @@ Un pulsante agisce sulla selezione, o sulla parola sotto il cursore, come la
 scorciatoia corrispondente, e la modifica entra nella cronologia locale del
 riquadro. Lo stato si legge sulla barra: il grassetto è premuto con il cursore
 dentro un grassetto, il selettore dello stile dice «Titolo 2» su un titolo di
-secondo livello, le operazioni sulla tabella sono spente fuori da una tabella
-e le formattazioni in riga sono spente dentro il codice. In sola lettura tutto
-è spento.
+secondo livello, le operazioni sulla tabella sono spente fuori da una tabella e
+le formattazioni in riga sono spente dentro il codice. In sola lettura tutto è
+spento. Il tasto destro toglie una nota a piè di pagina e i suoi richiami.
 
 La barra sta su una riga: i gruppi che non entrano scendono nel menu «altri
 strumenti». La tastiera la raggiunge con un solo arresto di tabulazione:

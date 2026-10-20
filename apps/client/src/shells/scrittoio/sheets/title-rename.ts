@@ -4,7 +4,8 @@
 // .muted`). Qui quel percorso diventa il posto da cui si rinomina: doppio clic,
 // oppure F2 (o Invio, o Spazio) col fuoco sul titolo, e al suo posto compare un
 // campo col nome della pagina. Invio rinomina, Esc e la perdita del fuoco
-// lasciano tutto com'era.
+// lasciano tutto com'era. Le cartelle del percorso (`[data-folder]`) sono della
+// vista, che le apre nell'esplora: il doppio clic lì non rinomina.
 //
 // # La strada
 //
@@ -271,7 +272,8 @@ export function mountTitleRename(lifetime: Lifetime): void {
   lifetime.listen(panes, "dblclick", (event) => {
     const title = titleOf(event.target);
     const bar = title ? barOf(title) : null;
-    if (!bar) return;
+    // Una cartella del percorso si apre nell'esplora: due colpi lì non rinominano.
+    if (!bar || (event.target as Element).closest("[data-folder]")) return;
     event.preventDefault();
     open(bar);
   });

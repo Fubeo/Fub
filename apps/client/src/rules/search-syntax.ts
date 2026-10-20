@@ -9,6 +9,8 @@ import type {
   QueryPredicate,
   TextField,
   TextMode,
+  TextQuery,
+  TextScope,
 } from "../host/contract";
 
 export const MAX_CLAUSES = 32;
@@ -54,6 +56,16 @@ type Item =
   | { kind: "word"; word: string }
   | { kind: "literal"; literal: QueryLiteral }
   | { kind: "group"; alternatives: Item[][] };
+
+/// I predicati che dicono «senza distinguere le maiuscole» **per sé**
+/// (`ignore-case:`): l'opzione «maiuscole» della barra non li tocca. Una
+/// identità e non un campo del predicato, perché il contratto Rust non ha dove
+/// metterla: lì l'opzione globale non esiste.
+const CASE_IGNORED = new WeakSet<object>();
+
+export function ignoresCase(predicate: object): boolean {
+  return CASE_IGNORED.has(predicate);
+}
 
 function textPredicate(text: string, mode: TextMode, fields: TextField[], caseSensitive: boolean): QueryPredicate {
   return {
@@ -106,7 +118,10 @@ function markPartial(clauses: QueryClause[]): void {
 }
 
 function cloneLiteral(lit: QueryLiteral): QueryLiteral {
-  return JSON.parse(JSON.stringify(lit)) as QueryLiteral;
+  const copy = JSON.parse(JSON.stringify(lit)) as QueryLiteral;
+  // La copia è un altro oggetto: il marchio di `ignore-case:` va rimesso.
+  if (CASE_IGNORED.has(lit.predicate)) CASE_IGNORED.add(copy.predicate);
+  return copy;
 }
 
 function distribute(items: Item[], end: number): QueryClause[] {
@@ -245,6 +260,15 @@ class Parser {
     return fail("unclosed-quote", open);
   }
 
+  /// `(…)` dopo un operatore d'ambito: le parole fino alla `)`.
+  words(): string {
+    const open = this.pos;
+    const close = this.src.indexOf(")", open + 1);
+    if (close < 0) fail("unclosed-group", open);
+    this.pos = close + 1;
+    return this.src.slice(open + 1, close).trim();
+  }
+
   regex(): string {
     const open = this.pos;
     let escaped = false;
@@ -303,7 +327,8 @@ class Parser {
     const colon = word.indexOf(":");
     if (colon >= 0) {
       const name = word.slice(0, colon);
-      const op = OPERATORS[name];
+      // Soltanto i nomi dichiarati: `constructor:` non è un operatore.
+      const op = Object.prototype.hasOwnProperty.call(OPERATORS, name) ? OPERATORS[name] : undefined;
       if (op) {
         this.pos += name.length + 1;
         let value: string;
@@ -311,6 +336,8 @@ class Parser {
         if (this.peek() === '"') {
           value = this.quoted();
           quoted = true;
+        } else if (Object.prototype.hasOwnProperty.call(SCOPES, name) && this.peek() === "(") {
+          value = this.words();
         } else {
           value = word.slice(colon + 1);
           this.pos += value.length;
@@ -329,7 +356,23 @@ class Parser {
 
 const hasWs = (value: string) => Array.from(value).some((c) => isWs(c));
 
+const SCOPES: Record<string, TextScope> = { line: "line", block: "block", section: "section" };
+
+/// `char::is_alphanumeric` di Rust: alfabetico o numerico.
+const hasWord = (value: string) => /[\p{Alphabetic}\p{N}]/u.test(value);
+
+function scoped(scope: TextScope): (value: string, quoted: boolean) => QueryPredicate | null {
+  return (value, quoted) => {
+    if (!hasWord(value)) return null;
+    const { kind: _, ...text } = textPredicate(value, quoted ? "phrase" : "terms", [], false) as { kind: "text" } & TextQuery;
+    return { kind: "scoped", scope, text };
+  };
+}
+
 const OPERATORS: Record<string, (value: string, quoted: boolean) => QueryPredicate | null> = {
+  line: scoped("line"),
+  block: scoped("block"),
+  section: scoped("section"),
   tag: (value) => {
     const name = value.replace(/^#+/, "");
     return name === "" || hasWs(name) ? null : { kind: "tag", name, descendants: true };
@@ -344,9 +387,27 @@ const OPERATORS: Record<string, (value: string, quoted: boolean) => QueryPredica
   content: (value, quoted) => textPredicate(value, quoted ? "phrase" : "terms", ["body"], false),
   heading: (value, quoted) => textPredicate(value, quoted ? "phrase" : "terms", ["heading"], false),
   "match-case": (value, quoted) => textPredicate(value, quoted ? "phrase" : "terms", [], true),
+  "ignore-case": (value, quoted) => {
+    const predicate = textPredicate(value, quoted ? "phrase" : "terms", [], false);
+    CASE_IGNORED.add(predicate);
+    return predicate;
+  },
   ext: (value) => {
     const extension = value.replace(/^\.+/, "");
     return extension === "" || /[/\\.]/.test(extension) ? null : { kind: "file", extension };
+  },
+  due: (value) => {
+    const op = ["<=", ">=", "<", ">"].find((each) => value.startsWith(each)) ?? "=";
+    const date = op === "=" ? value : value.slice(op.length);
+    if (!isoDate(date)) return null;
+    const bound = (inclusive: boolean) => ({ date, inclusive });
+    const [min, max] =
+      op === "<" ? [null, bound(false)]
+        : op === "<=" ? [null, bound(true)]
+          : op === ">" ? [bound(false), null]
+            : op === ">=" ? [bound(true), null]
+              : [bound(true), bound(true)];
+    return { kind: "task_due", min, max };
   },
   task: (value) =>
     value === "todo" || value === "open"

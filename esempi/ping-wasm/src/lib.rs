@@ -20,6 +20,8 @@
 
 #[cfg(all(
     not(feature = "con-rete"),
+    not(feature = "con-trasferimento"),
+    not(feature = "con-famiglie"),
     not(feature = "con-dati"),
     not(feature = "con-sintassi")
 ))]
@@ -30,12 +32,27 @@ wit_bindgen::generate!({
 });
 
 // Lo stesso componente, con un mondo che chiede anche la rete. Vedi
-// `wit/ping.wit`: serve a far pronunciare il rifiuto dell'host, non a fare
-// qualcosa.
+// `wit/ping.wit`: serve a vedere il cancello di `fub:network` chiudersi.
 #[cfg(feature = "con-rete")]
 wit_bindgen::generate!({
     path: ["../../crates/fub-abi/wit/fub", "wit"],
     world: "esempio:ping/ping-con-rete",
+    generate_all,
+});
+
+// Il mondo che chiede `host-transfer-read`, che l'host non collega a un plugin.
+#[cfg(feature = "con-trasferimento")]
+wit_bindgen::generate!({
+    path: ["../../crates/fub-abi/wit/fub", "wit"],
+    world: "esempio:ping/ping-con-trasferimento",
+    generate_all,
+});
+
+// Il mondo che attraversa le famiglie servite in più.
+#[cfg(feature = "con-famiglie")]
+wit_bindgen::generate!({
+    path: ["../../crates/fub-abi/wit/fub", "wit"],
+    world: "esempio:ping/ping-con-famiglie",
     generate_all,
 });
 
@@ -105,6 +122,19 @@ impl Guest for Componente {
                 // l'unica differenza fra i due `.wasm` che il test monta.
                 granted: if cfg!(feature = "senza-permessi") {
                     vec![]
+                } else if cfg!(feature = "con-famiglie") {
+                    [
+                        "fub:read-vault",
+                        "fub:write-vault",
+                        "fub:run-command",
+                        "fub:call-service",
+                    ]
+                    .iter()
+                    .map(|key| OptionEntry {
+                        key: key.to_string(),
+                        value: "true".to_string(),
+                    })
+                    .collect()
                 } else {
                     vec![OptionEntry {
                         key: "fub:read-vault".to_string(),
@@ -143,11 +173,8 @@ impl Guest for Componente {
         Ok(())
     }
 
-    /// Il ramo che tiene viva l'import della rete: senza una chiamata vera
-    /// l'ottimizzatore la toglierebbe dal componente, e il componente non
-    /// chiederebbe più la famiglia che il test vuole vedere rifiutata. Non gira
-    /// mai — il job non esiste dall'altra parte — ma nessuno lo sa a compile
-    /// time, ed è appunto il punto.
+    /// Il job `demo.ping:scarica` chiede la rete senza che `fub:network` sia
+    /// dichiarato: il test vede il rifiuto del cancello attraversare il confine.
     #[cfg(feature = "con-rete")]
     fn run_job(job: String, payload: String) -> Result<String, PluginError> {
         if job == "demo.ping:scarica" {
@@ -190,7 +217,35 @@ impl Guest for Componente {
         ))
     }
 
-    #[cfg(all(not(feature = "con-rete"), not(feature = "con-dati")))]
+    /// Il ramo che tiene viva l'import del trasferimento: senza una chiamata
+    /// vera l'ottimizzatore la toglierebbe dal componente, e il componente non
+    /// chiederebbe più la famiglia che il test vuole vedere rifiutata. Non gira
+    /// mai, perché il componente non si carica.
+    #[cfg(feature = "con-trasferimento")]
+    fn run_job(job: String, _payload: String) -> Result<String, PluginError> {
+        if job == "demo.ping:leggi" {
+            let letti = fub::abi::host_transfer_read::read_source(0, 0, 1)?;
+            return Ok(format!("{{\"letti\":{}}}", letti.len()));
+        }
+        Self::ping(job)
+    }
+
+    /// Il job `demo.ping:famiglie` chiama una funzione per famiglia e riporta
+    /// cosa ha visto, come oggetto JSON piatto.
+    #[cfg(feature = "con-famiglie")]
+    fn run_job(job: String, _payload: String) -> Result<String, PluginError> {
+        if job == "demo.ping:famiglie" {
+            return famiglie::giro();
+        }
+        Self::ping(job)
+    }
+
+    #[cfg(all(
+        not(feature = "con-rete"),
+        not(feature = "con-trasferimento"),
+        not(feature = "con-famiglie"),
+        not(feature = "con-dati")
+    ))]
     fn run_job(job: String, _payload: String) -> Result<String, PluginError> {
         Self::ping(job)
     }
@@ -200,13 +255,15 @@ impl Guest for Componente {
 // I comandi
 // ---------------------------------------------------------------------------
 //
-// Solo nel mondo `ping`: `ping-con-rete` e `ping-con-dati` esistono per farsi
-// rifiutare al caricamento, e non arrivano mai a un comando.
+// Solo nel mondo `ping`: gli altri mondi provano una famiglia o un rifiuto, e
+// non arrivano mai a un comando.
 
 /// La nota su cui lavorano i due comandi. La stessa del job: un esempio con un
 /// documento solo è un esempio in cui si vede cosa attraversa.
 #[cfg(all(
     not(feature = "con-rete"),
+    not(feature = "con-trasferimento"),
+    not(feature = "con-famiglie"),
     not(feature = "con-dati"),
     not(feature = "con-sintassi")
 ))]
@@ -214,6 +271,8 @@ const NOTA: &str = "Nota.md";
 
 #[cfg(all(
     not(feature = "con-rete"),
+    not(feature = "con-trasferimento"),
+    not(feature = "con-famiglie"),
     not(feature = "con-dati"),
     not(feature = "con-sintassi")
 ))]
@@ -422,6 +481,106 @@ mod comandi {
                 }],
             }),
         })
+    }
+}
+
+#[cfg(feature = "con-famiglie")]
+mod famiglie {
+    use crate::fub::abi::edit::{EditRequest, TextEdit, WriteBase};
+    use crate::fub::abi::errors::PluginError;
+    use crate::fub::abi::index::{IndexQuery, IndexResult};
+    use crate::fub::abi::model::Span;
+    use crate::fub::abi::{
+        host_commands, host_query, host_services, host_settings_read, host_vault_read,
+        host_vault_structure, host_vault_write, host_view_state_read, host_view_state_write,
+    };
+
+    /// La specie di un errore, come parola: è ciò che il test confronta.
+    fn specie(e: &PluginError) -> &'static str {
+        match e {
+            PluginError::UnknownCommand(_) => "unknown-command",
+            PluginError::UnknownView(_) => "unknown-view",
+            PluginError::UnknownJob(_) => "unknown-job",
+            PluginError::BadArgs(_) => "bad-args",
+            PluginError::PermissionDenied(_) => "permission-denied",
+            PluginError::Internal(_) => "internal",
+            PluginError::Conflict(_) => "conflict",
+            PluginError::Unserved(_) => "unserved",
+            PluginError::Cancelled(_) => "cancelled",
+            PluginError::NotFound(_) => "not-found",
+            PluginError::AlreadyExists(_) => "already-exists",
+            PluginError::Io(_) => "io",
+        }
+    }
+
+    fn esito<T>(r: &Result<T, PluginError>) -> &'static str {
+        match r {
+            Ok(_) => "ok",
+            Err(e) => specie(e),
+        }
+    }
+
+    pub(crate) fn giro() -> Result<String, PluginError> {
+        // Scrivere: dettato, poi un pezzo con la sua base, poi una base vecchia.
+        let prima = host_vault_write::write_document("Scritta.md", "uno\n", &WriteBase::Dictated)?;
+        let report = host_vault_write::apply_edit(
+            "Scritta.md",
+            &EditRequest {
+                base: prima.clone(),
+                edits: vec![TextEdit {
+                    span: Span { start: 0, end: 3 },
+                    text: "due".to_string(),
+                }],
+            },
+        )?;
+        let modificata = host_vault_read::read_document("Scritta.md")? == "due\n"
+            && report.revision != prima
+            && report.applied.len() == 1
+            && report.applied[0].replaced == "uno";
+        let vecchia = host_vault_write::write_document(
+            "Scritta.md",
+            "perso\n",
+            &WriteBase::DescendsFrom(prima),
+        );
+
+        // La struttura: creare, rifiutare il doppione, spostare, cestinare, riportare.
+        host_vault_structure::create_document("Nuova.md", "n\n")?;
+        let doppione = host_vault_structure::create_document("Nuova.md", "m\n");
+        host_vault_structure::rename_document("Nuova.md", "Spostata.md")?;
+        let voce = host_vault_structure::trash_document("Spostata.md")?;
+        let tornata = host_vault_structure::restore_document(&voce, None)?;
+
+        // La query, sull'indice dell'host.
+        let indice = host_query::query_index(&IndexQuery::Outline("Nota.md".to_string()))?;
+        let titoli = match indice {
+            IndexResult::Outline(h) => h.into_iter().map(|h| h.text).collect::<Vec<_>>().join(","),
+            _ => "?".to_string(),
+        };
+
+        // Le impostazioni e lo stato di vista, fuori da un esemplare di view.
+        let fuori_schema = host_settings_read::setting("demo.ping.nessuna");
+        let vista = host_view_state_read::view_state("scroll")?;
+        let scrivi_vista = host_view_state_write::set_view_state("scroll", Some("1"));
+
+        // Comandi e servizi che nessuno offre.
+        let comando = host_commands::run_command("demo.nessuno:x", "{}");
+        let annulla = host_commands::undo_last();
+        let servizio = host_services::call_service("demo.nessuno", "m", "{}");
+
+        Ok(format!(
+            "{{\"modificata\":{modificata},\"vecchia\":\"{}\",\"doppione\":\"{}\",\
+             \"tornata\":\"{tornata}\",\"titoli\":\"{titoli}\",\"fuori_schema\":\"{}\",\
+             \"vista\":{},\"scrivi_vista\":\"{}\",\"comando\":\"{}\",\"annulla\":\"{}\",\
+             \"servizio\":\"{}\"}}",
+            esito(&vecchia),
+            esito(&doppione),
+            esito(&fuori_schema),
+            vista.is_none(),
+            esito(&scrivi_vista),
+            esito(&comando),
+            esito(&annulla),
+            esito(&servizio),
+        ))
     }
 }
 

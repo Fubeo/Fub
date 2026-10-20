@@ -112,8 +112,8 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
 - `insertReferences` scrive rimandi a note e allegati nella sintassi del
   formato, al punto del rilascio o al cursore, come una battuta dell'utente;
 - `mountPresentation` monta la resa da presentare come slide;
-- `printable` dichiara una resa di stampa del provider del formato
-  (`IndexQuery::RenderPrint`);
+- `printable` dichiara una resa di stampa del provider (`IndexQuery::RenderPrint`);
+- `anchorHere` dà titolo o blocco sotto il cursore a `shell.doc.copy_anchor_link`;
 - `exports` dichiara gli export registrati che valgono per il documento: il
   disegno offre PNG e PDF, il profilo `pdf` il PDF annotato e quello redatto.
   Il core ne fa `shell.doc.export` e una voce del menu del riquadro ciascuno,

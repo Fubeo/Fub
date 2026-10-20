@@ -12,9 +12,12 @@
 //! sono l'unico posto del progetto a cui è concesso sapere che il markdown
 //! esiste.
 
+use std::collections::BTreeMap;
+
 use fub_abi::edit::WriteBase;
 use fub_abi::format::ParseContext;
-use fub_abi::traits::ReadApi;
+use fub_abi::model::{DocId, LinkTarget};
+use fub_abi::traits::{EntryKind, IndexQuery, IndexResult, ReadApi};
 use fub_abi::transfer::{
     ArtifactSink, ConflictPolicy, ExportProvider, ExportReport, ExportRequest, ExportTarget,
     ImportMode, ImportOutcome, ImportProvider, ImportReport, ImportRequest, ImportSource,
@@ -232,12 +235,54 @@ impl ExportProvider for MarkdownExport {
         // opzione che il markdown ha davvero: tutto il resto (tema, allegati,
         // impaginazione) è di destinazioni che il markdown non è.
         let frontmatter = request.flag("frontmatter", true);
+        // «Con o senza allegati», la terza voce di 17.2: vale per la cartella,
+        // dove un allegato è un file accanto alle note. In un documento unico
+        // non c'è dove metterlo, e il rapporto lo dice.
+        let attachments = request.flag("attachments", true);
 
         let docs = request.selection.resolve(host)?;
         let mut report = ExportReport::default();
         let mut single = String::new();
+        let kinds = entry_kinds(host)?;
+        // Gli allegati che l'esito porta (o perde), coi documenti che li citano.
+        let mut wanted: BTreeMap<DocId, Vec<DocId>> = BTreeMap::new();
+        if let fub_abi::transfer::ExportSelection::Folder(folder) = &request.selection {
+            for (id, kind) in &kinds {
+                if *kind != EntryKind::Document
+                    && fub_abi::rules::folders::contains(folder, id.as_str())
+                {
+                    wanted.entry(id.clone()).or_default();
+                }
+            }
+        }
 
         for doc in docs {
+            // Un canvas, una base o un foglio non sono markdown: nella cartella
+            // si copiano come sono, byte per byte; in un documento unico il loro
+            // JSON o YAML diventerebbe prosa che non significa niente, quindi
+            // restano fuori e il rapporto lo dice.
+            if !is_markdown(&doc) {
+                if request.target == TARGET_FILES {
+                    match host.read_document_bytes(&doc) {
+                        Ok(bytes) => {
+                            let h = out.open_artifact(doc.as_str(), media_type(&doc))?;
+                            out.write_artifact(h, &bytes)?;
+                            report.artifacts.push(out.close_artifact(h)?);
+                        }
+                        Err(and) => report
+                            .log
+                            .push(TransferNote::warning(and.to_string()).about(doc.to_string())),
+                    }
+                } else {
+                    report.log.push(
+                        TransferNote::warning(
+                            "not Markdown: left out of the single document".to_string(),
+                        )
+                        .about(doc.to_string()),
+                    );
+                }
+                continue;
+            }
             let source = match host.read_document(&doc) {
                 Ok(source) => source,
                 // Un documento sparito fra la selezione e la lettura non fa
@@ -249,6 +294,9 @@ impl ExportProvider for MarkdownExport {
                     continue;
                 }
             };
+            for attachment in linked_attachments(host, &doc, &kinds) {
+                wanted.entry(attachment).or_default().push(doc.clone());
+            }
             // Il documento diviso nelle due parti che le due destinazioni usano
             // in modi diversi: una le concatena, l'altra le copia.
             let (head, body) = match frontmatter_end(&source, doc.as_str()) {
@@ -308,6 +356,41 @@ impl ExportProvider for MarkdownExport {
             }
         }
 
+        // Gli allegati: nella cartella si copiano al loro path, così i link
+        // relativi delle note tornano a puntare dove puntavano; altrove, o se
+        // esclusi, ciascuno è una nota del rapporto, mai un silenzio.
+        for (attachment, citing) in wanted {
+            let about = citing
+                .first()
+                .map_or_else(|| attachment.to_string(), DocId::to_string);
+            if request.target != TARGET_FILES {
+                report.log.push(
+                    TransferNote::warning(format!(
+                        "attachment {attachment} is not part of the single document"
+                    ))
+                    .about(about),
+                );
+                continue;
+            }
+            if !attachments {
+                report.log.push(
+                    TransferNote::info(format!("attachment {attachment} left out on request"))
+                        .about(about),
+                );
+                continue;
+            }
+            match host.read_document_bytes(&attachment) {
+                Ok(bytes) => {
+                    let h = out.open_artifact(attachment.as_str(), media_type(&attachment))?;
+                    out.write_artifact(h, &bytes)?;
+                    report.artifacts.push(out.close_artifact(h)?);
+                }
+                Err(and) => report.log.push(
+                    TransferNote::warning(format!("attachment {attachment}: {and}")).about(about),
+                ),
+            }
+        }
+
         if request.target == TARGET_SINGLE {
             // Qui il buffer c'è comunque — un documento unico è una
             // concatenazione, e concatenare vuol dire tenere — quindi il sink
@@ -322,6 +405,66 @@ impl ExportProvider for MarkdownExport {
         }
         Ok(report)
     }
+}
+
+/// Che specie è ogni voce del vault: l'anagrafe, che vede anche ciò che non è
+/// un documento. Un host che non la serve lascia l'export com'era, senza
+/// allegati da cercare.
+fn entry_kinds(host: &dyn ReadApi) -> Result<BTreeMap<DocId, EntryKind>, PluginError> {
+    match host.query_index(IndexQuery::Entries {
+        of_kind: None,
+        within: None,
+        page: None,
+    }) {
+        Ok(IndexResult::Entries(entries)) => {
+            Ok(entries.items.into_iter().map(|e| (e.id, e.kind)).collect())
+        }
+        Ok(_) | Err(PluginError::Unserved(_)) => Ok(BTreeMap::new()),
+        Err(error) => Err(error),
+    }
+}
+
+/// Gli allegati che una nota cita (link o incorporamento), risolti dal vault
+/// come li risolve l'editor: un riferimento che non porta a un file che non è
+/// un documento non è un allegato.
+fn linked_attachments(
+    host: &dyn ReadApi,
+    doc: &DocId,
+    kinds: &BTreeMap<DocId, EntryKind>,
+) -> Vec<DocId> {
+    let Ok(model) = host.read_model(doc) else {
+        return Vec::new();
+    };
+    let mut found = Vec::new();
+    for link in model.links {
+        if matches!(link.target, LinkTarget::Url(_)) {
+            continue;
+        }
+        let Ok(IndexResult::Resolved(Some(resolved))) = host.query_index(IndexQuery::Resolve {
+            target: link.target,
+            from: Some(doc.clone()),
+        }) else {
+            continue;
+        };
+        if kinds
+            .get(&resolved.doc)
+            .is_some_and(|kind| *kind != EntryKind::Document)
+            && !found.contains(&resolved.doc)
+        {
+            found.push(resolved.doc);
+        }
+    }
+    found
+}
+
+/// Markdown è ciò che l'import riconosce come markdown: una regola sola per
+/// le due direzioni, estensioni comprese.
+fn is_markdown(doc: &DocId) -> bool {
+    MarkdownImport.can_handle(&ImportSource::text_source(doc.as_str(), ""))
+}
+
+fn media_type(doc: &DocId) -> &'static str {
+    fub_abi::rules::media::mime_of(doc).unwrap_or("application/octet-stream")
 }
 
 /// L'indice a cui il **frontmatter finisce e il corpo comincia**, tagliato sullo

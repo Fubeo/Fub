@@ -129,6 +129,17 @@ const DIRECTION: &str = "direction";
 const SHOW_ORPHANS: &str = "show_orphans";
 /// Mostra gli allegati linkati (default falso: il grafo è di note).
 const SHOW_ATTACHMENTS: &str = "show_attachments";
+/// Il filtro che aggiunge un nodo per ogni tag, collegato alle note che lo
+/// portano.
+const SHOW_TAGS: &str = "show_tags";
+/// Il filtro che aggiunge un nodo per ogni link a una nota che non c'è.
+const SHOW_MISSING: &str = "show_missing";
+/// Nel payload, gli id dei nodi tag (`#nome`) e quelli dei nodi mancanti: la
+/// shell li disegna e li apre in un altro modo.
+const TAGS: &str = "tags";
+const MISSING: &str = "missing";
+/// Nel payload del click, il tag da cercare al posto di una nota da aprire.
+const TAG: &str = "tag";
 /// Il gruppo da cui colorare: `"folder"` o `"tag"` (default cartella).
 const GROUP_BY: &str = "group_by";
 /// Raggruppa per cartella contenitrice.
@@ -162,6 +173,18 @@ const FILTER_KEY: &str = "key";
 /// simulazione non riparte da sola sotto il mouse), ma chi ha visto che il
 /// vault è cambiato può chiedere i dati nuovi.
 const REFRESH_ACTION: &str = "refresh";
+/// Il filtro scritto con la sintassi della ricerca: azione, chiave del suo
+/// payload, stato di vista e chiave del payload del grafo hanno lo stesso nome.
+const QUERY: &str = "query";
+/// Nel payload, `true` quando il filtro non si legge: il grafo resta intero.
+const QUERY_INVALID: &str = "query_invalid";
+/// Il raggruppamento per ricerche: ogni ricerca è un gruppo, nell'ordine.
+const GROUP_QUERY: &str = "query";
+/// Le ricerche dei gruppi: azione, chiave, stato e payload.
+const GROUP_QUERIES: &str = "group_queries";
+/// Quante ricerche di gruppo si tengono, e quanto può essere lunga una ricerca.
+const MAX_GROUP_QUERIES: usize = 16;
+const MAX_QUERY_CHARS: usize = 1000;
 /// Profondità massima della vista locale: oltre tre passi il vicinato è il
 /// vault, e la «locale» mente.
 const MAX_DEPTH: u8 = 3;
@@ -258,12 +281,24 @@ impl ViewProvider for GraphView {
             // Il click su un nodo. `Navigate` e non un intento nuovo: è
             // letteralmente ciò che fa il backlink, e il grafo è un elenco di
             // riferimenti disegnato tondo.
-            OPEN => match action.payload.get(DOC).and_then(|v| v.as_str()) {
-                Some(doc) => Ok(ViewUpdate::Navigate {
-                    doc_id: doc.to_string(),
-                }),
-                None => Ok(ViewUpdate::None),
-            },
+            // Il click su un nodo tag cerca il tag, con la sintassi che
+            // l'utente scriverebbe nella barra.
+            OPEN => {
+                if let Some(tag) = action.payload.get(TAG).and_then(|v| v.as_str()) {
+                    return Ok(match tag.trim() {
+                        "" => ViewUpdate::None,
+                        name => ViewUpdate::RunSearch {
+                            query: tag_query(name),
+                        },
+                    });
+                }
+                match action.payload.get(DOC).and_then(|v| v.as_str()) {
+                    Some(doc) => Ok(ViewUpdate::Navigate {
+                        doc_id: doc.to_string(),
+                    }),
+                    None => Ok(ViewUpdate::None),
+                }
+            }
             // Il seme della vista locale: la nota da cui si cammina. Si ricorda
             // in stato di vista (per esemplare, come il filtro dei tag) e si
             // ridisegna; vuoto si dimentica e torna il grafo globale.
@@ -307,6 +342,7 @@ impl ViewProvider for GraphView {
                 let group = action.payload.get(GROUP_BY).and_then(|v| v.as_str());
                 let value = match group {
                     Some(GROUP_TAG) => Some(serde_json::Value::from(GROUP_TAG)),
+                    Some(GROUP_QUERY) => Some(serde_json::Value::from(GROUP_QUERY)),
                     Some(GROUP_FOLDER) => None,
                     _ => return Ok(ViewUpdate::None),
                 };
@@ -325,6 +361,8 @@ impl ViewProvider for GraphView {
                 match key {
                     SHOW_ORPHANS => filter.show_orphans = !filter.show_orphans,
                     SHOW_ATTACHMENTS => filter.show_attachments = !filter.show_attachments,
+                    SHOW_TAGS => filter.show_tags = !filter.show_tags,
+                    SHOW_MISSING => filter.show_missing = !filter.show_missing,
                     _ => return Ok(ViewUpdate::None),
                 }
                 // I default non si scrivono: la chiave torna a non esserci come
@@ -333,12 +371,31 @@ impl ViewProvider for GraphView {
                 let value = if filter.is_default() {
                     None
                 } else {
-                    Some(json!({
-                        SHOW_ORPHANS: filter.show_orphans,
-                        SHOW_ATTACHMENTS: filter.show_attachments,
-                    }))
+                    Some(filter.to_json())
                 };
                 host.set_view_state(FILTER_STATE, value)?;
+                Ok(ViewUpdate::Replace { root: tree(host)? })
+            }
+            // Il filtro di ricerca: vuoto si dimentica. Si salva anche se non
+            // si legge, e il grafo lo dice invece di perdere ciò che si è scritto.
+            QUERY => {
+                let Some(text) = action.payload.get(QUERY).and_then(|v| v.as_str()) else {
+                    return Ok(ViewUpdate::None);
+                };
+                let text: String = text.trim().chars().take(MAX_QUERY_CHARS).collect();
+                let value = (!text.is_empty()).then(|| serde_json::Value::from(text));
+                host.set_view_state(QUERY, value)?;
+                Ok(ViewUpdate::Replace { root: tree(host)? })
+            }
+            // Le ricerche dei gruppi, in ordine; le vuote si tolgono.
+            GROUP_QUERIES => {
+                let Some(list) = action.payload.get(GROUP_QUERIES).and_then(|v| v.as_array())
+                else {
+                    return Ok(ViewUpdate::None);
+                };
+                let queries = clean_queries(list);
+                let value = (!queries.is_empty()).then(|| json!(queries));
+                host.set_view_state(GROUP_QUERIES, value)?;
                 Ok(ViewUpdate::Replace { root: tree(host)? })
             }
             REFRESH_ACTION => Ok(ViewUpdate::Replace { root: tree(host)? }),
@@ -399,8 +456,43 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
             edge_values(host, QueryExpr::all(), LinkDirection::Outbound)?,
         ),
     };
-    let (nodes, edges) = apply_filter(host, nodes, edges, &filter);
-    let groups = groups_for(host, &nodes, &group_by)?;
+    let (nodes, edges) = keep_documents(host, nodes, edges, filter.show_attachments);
+    let query = host
+        .view_state(QUERY)?
+        .and_then(|v| v.as_str().map(str::to_string));
+    let group_queries = group_queries_of(host)?;
+    let (mut nodes, mut edges, query_invalid) = match query.as_deref() {
+        Some(text) => match matching(host, text)? {
+            Some(keep) => {
+                let (nodes, edges) =
+                    keep_matching(host, nodes, edges, &keep, selection.seed.as_deref());
+                (nodes, edges, false)
+            }
+            None => (nodes, edges, true),
+        },
+        None => (nodes, edges, false),
+    };
+    // I gruppi sono delle note: un tag o una nota che non c'è non ha cartella.
+    let groups = if group_by == GROUP_QUERY {
+        groups_by_query(host, &nodes, &group_queries)?
+    } else {
+        groups_for(host, &nodes, &group_by)?
+    };
+    let tags = if filter.show_tags {
+        tag_nodes(host, &mut nodes, &mut edges)?
+    } else {
+        Vec::new()
+    };
+    let missing = if filter.show_missing {
+        missing_nodes(host, &mut nodes, &mut edges, filter.show_attachments)?
+    } else {
+        Vec::new()
+    };
+    let (nodes, edges) = if filter.show_orphans {
+        (nodes, edges)
+    } else {
+        drop_orphans(nodes, edges)
+    };
     let visible = nodes
         .iter()
         .map(String::as_str)
@@ -438,10 +530,22 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
             },
         });
     }
-    payload[FILTER] = json!({
-        SHOW_ORPHANS: filter.show_orphans,
-        SHOW_ATTACHMENTS: filter.show_attachments,
-    });
+    if !tags.is_empty() {
+        payload[TAGS] = json!(tags);
+    }
+    if !missing.is_empty() {
+        payload[MISSING] = json!(missing);
+    }
+    payload[FILTER] = filter.to_json();
+    if let Some(text) = query {
+        payload[QUERY] = json!(text);
+    }
+    if query_invalid {
+        payload[QUERY_INVALID] = json!(true);
+    }
+    if !group_queries.is_empty() {
+        payload[GROUP_QUERIES] = json!(group_queries);
+    }
     payload[GROUP_BY] = json!(group_by);
     Ok(UiNode::new(UiKind::Custom {
         ns: GRAPH_NS.to_string(),
@@ -486,15 +590,27 @@ impl LocalSelection {
     }
 }
 
-/// I filtri di disegno: orfani visibili di default, allegati no.
+/// I filtri di disegno: orfani visibili di default, allegati, tag e note
+/// mancanti no.
 struct GraphFilter {
     show_orphans: bool,
     show_attachments: bool,
+    show_tags: bool,
+    show_missing: bool,
 }
 
 impl GraphFilter {
     fn is_default(&self) -> bool {
-        self.show_orphans && !self.show_attachments
+        self.show_orphans && !self.show_attachments && !self.show_tags && !self.show_missing
+    }
+
+    fn to_json(&self) -> serde_json::Value {
+        json!({
+            SHOW_ORPHANS: self.show_orphans,
+            SHOW_ATTACHMENTS: self.show_attachments,
+            SHOW_TAGS: self.show_tags,
+            SHOW_MISSING: self.show_missing,
+        })
     }
 }
 
@@ -505,13 +621,22 @@ fn filter_of(host: &dyn ReadApi) -> Result<GraphFilter, PluginError> {
     let mut filter = GraphFilter {
         show_orphans: true,
         show_attachments: false,
+        show_tags: false,
+        show_missing: false,
     };
     if let Some(object) = value.as_ref().and_then(|v| v.as_object()) {
-        if let Some(show) = object.get(SHOW_ORPHANS).and_then(|v| v.as_bool()) {
+        let flag = |key: &str| object.get(key).and_then(|v| v.as_bool());
+        if let Some(show) = flag(SHOW_ORPHANS) {
             filter.show_orphans = show;
         }
-        if let Some(show) = object.get(SHOW_ATTACHMENTS).and_then(|v| v.as_bool()) {
+        if let Some(show) = flag(SHOW_ATTACHMENTS) {
             filter.show_attachments = show;
+        }
+        if let Some(show) = flag(SHOW_TAGS) {
+            filter.show_tags = show;
+        }
+        if let Some(show) = flag(SHOW_MISSING) {
+            filter.show_missing = show;
         }
     }
     Ok(filter)
@@ -524,8 +649,8 @@ fn group_of(host: &dyn ReadApi) -> Result<String, PluginError> {
         .view_state(GROUP_STATE)?
         .and_then(|v| v.as_str().map(str::to_string))
         .unwrap_or_else(|| GROUP_FOLDER.to_string());
-    if group == GROUP_TAG {
-        Ok(GROUP_TAG.to_string())
+    if group == GROUP_TAG || group == GROUP_QUERY {
+        Ok(group)
     } else {
         Ok(GROUP_FOLDER.to_string())
     }
@@ -581,28 +706,45 @@ fn local_graph(
 
 /// Applica i filtri di disegno: senza orfani si tolgono i nodi isolati (chi ha
 /// un arco resta); senza allegati si tolgono i non-documenti e i loro archi.
-///
-/// Gli allegati arrivano da `Neighbors` come foglie uscenti (`![[foto.png]]`):
-/// il grafo globale parte dai documenti, e un allegato mostrato entra fra i
-/// nodi dall'arco che lo nomina. Che cosa è un documento lo dice il registro
-/// dei formati (`format_of`), non una lista di estensioni tenuta qui.
+#[cfg(test)]
 fn apply_filter(
     host: &dyn ReadApi,
     nodes: Vec<String>,
     edges: Vec<serde_json::Value>,
     filter: &GraphFilter,
 ) -> (Vec<String>, Vec<serde_json::Value>) {
+    let (nodes, edges) = keep_documents(host, nodes, edges, filter.show_attachments);
+    if filter.show_orphans {
+        return (nodes, edges);
+    }
+    drop_orphans(nodes, edges)
+}
+
+/// Gli estremi di un arco del payload.
+fn endpoints(e: &serde_json::Value) -> (String, String) {
+    (
+        e.get(FROM)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        e.get(TO).and_then(|v| v.as_str()).unwrap_or("").to_string(),
+    )
+}
+
+/// Il filtro degli allegati.
+///
+/// Gli allegati arrivano da `Neighbors` come foglie uscenti (`![[foto.png]]`):
+/// il grafo globale parte dai documenti, e un allegato mostrato entra fra i
+/// nodi dall'arco che lo nomina. Che cosa è un documento lo dice il registro
+/// dei formati (`format_of`), non una lista di estensioni tenuta qui.
+fn keep_documents(
+    host: &dyn ReadApi,
+    nodes: Vec<String>,
+    edges: Vec<serde_json::Value>,
+    show_attachments: bool,
+) -> (Vec<String>, Vec<serde_json::Value>) {
     let is_document = |path: &str| host.format_of(&fub_abi::model::DocId::new(path)).is_some();
-    let endpoints = |e: &serde_json::Value| {
-        (
-            e.get(FROM)
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string(),
-            e.get(TO).and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        )
-    };
-    let (nodes, edges) = if filter.show_attachments {
+    if show_attachments {
         let mut all: std::collections::BTreeSet<String> = nodes.into_iter().collect();
         for e in &edges {
             let (from, to) = endpoints(e);
@@ -620,10 +762,14 @@ fn apply_filter(
             .collect::<Vec<_>>();
         let nodes = nodes.into_iter().filter(|n| is_document(n)).collect();
         (nodes, edges)
-    };
-    if filter.show_orphans {
-        return (nodes, edges);
     }
+}
+
+/// Toglie i nodi senza archi.
+fn drop_orphans(
+    nodes: Vec<String>,
+    edges: Vec<serde_json::Value>,
+) -> (Vec<String>, Vec<serde_json::Value>) {
     let mut linked = std::collections::BTreeSet::new();
     for e in &edges {
         let (from, to) = endpoints(e);
@@ -645,64 +791,11 @@ fn groups_for(
 ) -> Result<std::collections::BTreeMap<String, String>, PluginError> {
     use std::collections::BTreeMap;
     if group_by == GROUP_TAG {
-        let matching = QueryExpr::of(fub_abi::query::QueryPredicate::Docs {
-            docs: nodes.iter().map(fub_abi::model::DocId::new).collect(),
-        });
-        let mut counts = match host.query_index(IndexQuery::Tags {
-            matching,
-            page: None,
-        })? {
-            IndexResult::Tags(t) => t.items,
-            other => {
-                return Err(PluginError::Internal(
-                    format!("tags query: off-topic response: {}", other.kind_name()).into(),
-                ))
-            }
-        };
-        counts.sort_by(|a, b| a.name.cmp(&b.name));
         let mut groups = BTreeMap::new();
-        for tag in counts {
-            if groups.len() == nodes.len() {
-                break;
-            }
-            let matching = QueryExpr {
-                any: vec![fub_abi::query::QueryClause {
-                    all: vec![
-                        fub_abi::query::QueryLiteral {
-                            negated: false,
-                            predicate: fub_abi::query::QueryPredicate::Tag {
-                                name: tag.name.clone(),
-                                descendants: false,
-                            },
-                        },
-                        fub_abi::query::QueryLiteral {
-                            negated: false,
-                            predicate: fub_abi::query::QueryPredicate::Docs {
-                                docs: nodes.iter().map(fub_abi::model::DocId::new).collect(),
-                            },
-                        },
-                    ],
-                }],
-            };
-            let matches = match host.query_index(IndexQuery::Documents {
-                matching,
-                sort: None,
-                select: Default::default(),
-                page: Some(fub_abi::traits::Page::new(0, nodes.len() as u32)),
-                excerpts: fub_abi::traits::Excerpts::Omit,
-            })? {
-                IndexResult::Documents(page) => page,
-                other => {
-                    return Err(PluginError::Internal(
-                        format!("documents query: off-topic response: {}", other.kind_name())
-                            .into(),
-                    ))
-                }
-            };
-            for hit in matches.items {
-                groups
-                    .entry(hit.doc.as_str().to_string())
-                    .or_insert_with(|| tag.name.clone());
+        // Il primo tag in ordine canonico vince: `tag_members` li dà in quell'ordine.
+        for (tag, docs) in tag_members(host, nodes, true)? {
+            for doc in docs {
+                groups.entry(doc).or_insert_with(|| tag.clone());
             }
         }
         for node in nodes {
@@ -720,6 +813,283 @@ fn groups_for(
     }
     Ok(groups)
 }
+/// I tag delle note `nodes`, in ordine canonico, ognuno con le note che lo
+/// portano. La faccetta individua i tag presenti, poi ogni tag seleziona i
+/// propri documenti con lo stesso planner di Documents: non si leggono N
+/// modelli. Con `until_covered` ci si ferma appena ogni nota ha un tag, che è
+/// tutto ciò che chiede il raggruppamento.
+fn tag_members(
+    host: &dyn ReadApi,
+    nodes: &[String],
+    until_covered: bool,
+) -> Result<Vec<(String, Vec<String>)>, PluginError> {
+    if nodes.is_empty() {
+        return Ok(Vec::new());
+    }
+    let docs = || fub_abi::query::QueryPredicate::Docs {
+        docs: nodes.iter().map(fub_abi::model::DocId::new).collect(),
+    };
+    let mut counts = match host.query_index(IndexQuery::Tags {
+        matching: QueryExpr::of(docs()),
+        page: None,
+    })? {
+        IndexResult::Tags(t) => t.items,
+        other => {
+            return Err(PluginError::Internal(
+                format!("tags query: off-topic response: {}", other.kind_name()).into(),
+            ))
+        }
+    };
+    counts.sort_by(|a, b| a.name.cmp(&b.name));
+    let mut covered = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for tag in counts {
+        if until_covered && covered.len() == nodes.len() {
+            break;
+        }
+        let matching = QueryExpr {
+            any: vec![fub_abi::query::QueryClause {
+                all: vec![
+                    fub_abi::query::QueryLiteral {
+                        negated: false,
+                        predicate: fub_abi::query::QueryPredicate::Tag {
+                            name: tag.name.clone(),
+                            descendants: false,
+                        },
+                    },
+                    fub_abi::query::QueryLiteral {
+                        negated: false,
+                        predicate: docs(),
+                    },
+                ],
+            }],
+        };
+        let members: Vec<String> = host
+            .query_index(IndexQuery::Documents {
+                matching,
+                sort: None,
+                select: Default::default(),
+                page: Some(fub_abi::traits::Page::new(0, nodes.len() as u32)),
+                excerpts: fub_abi::traits::Excerpts::Omit,
+            })?
+            .documents()?
+            .items
+            .into_iter()
+            .map(|hit| hit.doc.to_string())
+            .collect();
+        if members.is_empty() {
+            continue;
+        }
+        covered.extend(members.iter().cloned());
+        out.push((tag.name, members));
+    }
+    Ok(out)
+}
+
+/// Un nodo `#nome` per ogni tag delle note, con un arco da ogni nota che lo
+/// porta. Un tag il cui id coincide con quello di un nodo non si aggiunge: due
+/// nodi con lo stesso id sarebbero uno solo, con gli archi di entrambi.
+fn tag_nodes(
+    host: &dyn ReadApi,
+    nodes: &mut Vec<String>,
+    edges: &mut Vec<serde_json::Value>,
+) -> Result<Vec<String>, PluginError> {
+    let taken: std::collections::BTreeSet<String> = nodes.iter().cloned().collect();
+    let mut ids = Vec::new();
+    for (tag, members) in tag_members(host, nodes, false)? {
+        let id = format!("#{tag}");
+        if taken.contains(&id) {
+            continue;
+        }
+        for doc in members {
+            edges.push(json!({ FROM: doc, TO: id }));
+        }
+        ids.push(id);
+    }
+    nodes.extend(ids.iter().cloned());
+    Ok(ids)
+}
+
+/// Un nodo per ogni destinazione di un link rotto scritto in una delle note
+/// `nodes`, con l'arco dalla nota che lo scrive. La destinazione è quella che
+/// il controllo di salute riporta, come era scritta; una che ha un'estensione
+/// che nessun formato legge è un allegato, e segue il filtro degli allegati.
+fn missing_nodes(
+    host: &dyn ReadApi,
+    nodes: &mut Vec<String>,
+    edges: &mut Vec<serde_json::Value>,
+    show_attachments: bool,
+) -> Result<Vec<String>, PluginError> {
+    let issues = match host.query_index(IndexQuery::VaultHealth {
+        check: fub_abi::traits::HealthCheck::BrokenLinks,
+        page: None,
+    })? {
+        IndexResult::VaultHealth(page) => page.items,
+        other => {
+            return Err(PluginError::Internal(
+                format!(
+                    "vault health query: off-topic response: {}",
+                    other.kind_name()
+                )
+                .into(),
+            ))
+        }
+    };
+    let present: std::collections::BTreeSet<String> = nodes.iter().cloned().collect();
+    let mut ids = std::collections::BTreeSet::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for issue in issues {
+        let Some(target) = issue.detail.as_deref().map(str::trim) else {
+            continue;
+        };
+        if target.is_empty() || !present.contains(issue.doc.as_str()) || present.contains(target) {
+            continue;
+        }
+        let has_extension = target
+            .rsplit_once('/')
+            .map_or(target, |(_, name)| name)
+            .contains('.');
+        if !show_attachments
+            && has_extension
+            && host
+                .format_of(&fub_abi::model::DocId::new(target))
+                .is_none()
+        {
+            continue;
+        }
+        if seen.insert((issue.doc.to_string(), target.to_string())) {
+            edges.push(json!({ FROM: issue.doc.as_str(), TO: target }));
+        }
+        ids.insert(target.to_string());
+    }
+    let ids: Vec<String> = ids.into_iter().collect();
+    nodes.extend(ids.iter().cloned());
+    Ok(ids)
+}
+
+/// Le ricerche dei gruppi come le ha scritte l'utente: stringhe non vuote,
+/// tagliate, senza doppioni, al più [`MAX_GROUP_QUERIES`].
+fn clean_queries(list: &[serde_json::Value]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for text in list.iter().filter_map(|v| v.as_str()) {
+        let text: String = text.trim().chars().take(MAX_QUERY_CHARS).collect();
+        if !text.is_empty() && !out.contains(&text) && out.len() < MAX_GROUP_QUERIES {
+            out.push(text);
+        }
+    }
+    out
+}
+
+fn group_queries_of(host: &dyn ReadApi) -> Result<Vec<String>, PluginError> {
+    Ok(match host.view_state(GROUP_QUERIES)? {
+        Some(serde_json::Value::Array(list)) => clean_queries(&list),
+        _ => Vec::new(),
+    })
+}
+
+/// I documenti che una ricerca trova, o `None` se la ricerca non si legge o
+/// l'indice non sa servirla: il grafo allora la ignora e lo dice.
+fn matching(
+    host: &dyn ReadApi,
+    text: &str,
+) -> Result<Option<std::collections::BTreeSet<String>>, PluginError> {
+    let Ok(expr) = fub_abi::rules::search_syntax::parse(text, false) else {
+        return Ok(None);
+    };
+    let page = match host.query_index(IndexQuery::Documents {
+        matching: expr,
+        sort: None,
+        select: Default::default(),
+        excerpts: fub_abi::traits::Excerpts::Omit,
+        page: None,
+    }) {
+        Ok(result) => result.documents()?,
+        Err(PluginError::BadArgs(_) | PluginError::Unserved(_)) => return Ok(None),
+        Err(other) => return Err(other),
+    };
+    Ok(Some(
+        page.items
+            .into_iter()
+            .map(|hit| hit.doc.to_string())
+            .collect(),
+    ))
+}
+
+/// Tiene i documenti che la ricerca trova, il seme della vista locale e gli
+/// allegati ancora collegati a un documento tenuto; gli archi seguono i nodi.
+fn keep_matching(
+    host: &dyn ReadApi,
+    nodes: Vec<String>,
+    edges: Vec<serde_json::Value>,
+    keep: &std::collections::BTreeSet<String>,
+    seed: Option<&str>,
+) -> (Vec<String>, Vec<serde_json::Value>) {
+    let is_document = |path: &str| host.format_of(&fub_abi::model::DocId::new(path)).is_some();
+    let kept = |n: &str| !is_document(n) || keep.contains(n) || seed == Some(n);
+    let edges: Vec<serde_json::Value> = edges
+        .into_iter()
+        .filter(|e| {
+            let (from, to) = endpoints(e);
+            kept(&from) && kept(&to)
+        })
+        .collect();
+    let mut linked = std::collections::BTreeSet::new();
+    for e in &edges {
+        let (from, to) = endpoints(e);
+        linked.insert(from);
+        linked.insert(to);
+    }
+    let nodes = nodes
+        .into_iter()
+        .filter(|n| {
+            if is_document(n) {
+                kept(n)
+            } else {
+                linked.contains(n)
+            }
+        })
+        .collect();
+    (nodes, edges)
+}
+
+/// I gruppi per ricerca: ogni nota va nel gruppo della prima ricerca che la
+/// trova, e il nome del gruppo è la ricerca. Una ricerca che non si legge non
+/// trova niente.
+fn groups_by_query(
+    host: &dyn ReadApi,
+    nodes: &[String],
+    queries: &[String],
+) -> Result<std::collections::BTreeMap<String, String>, PluginError> {
+    let mut groups: std::collections::BTreeMap<String, String> =
+        nodes.iter().map(|n| (n.clone(), String::new())).collect();
+    for text in queries {
+        let Some(found) = matching(host, text)? else {
+            continue;
+        };
+        for doc in found {
+            if let Some(group) = groups.get_mut(&doc) {
+                if group.is_empty() {
+                    *group = text.clone();
+                }
+            }
+        }
+    }
+    Ok(groups)
+}
+
+/// La ricerca di un tag, scritta come la scriverebbe l'utente: fra virgolette
+/// quando il nome ha spazi o caratteri che la sintassi legge.
+fn tag_query(name: &str) -> String {
+    let plain = name
+        .chars()
+        .all(|c| !c.is_whitespace() && !matches!(c, '"' | '(' | ')' | '[' | ']'));
+    if plain {
+        format!("tag:{name}")
+    } else {
+        format!("tag:\"{}\"", name.replace('"', ""))
+    }
+}
+
 /// I nodi: ogni documento del vault.
 ///
 /// Senza finestra, come i tag: un grafo mostrato a pagine non è un grafo. È
@@ -783,7 +1153,7 @@ fn edge_values(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fub_abi::traits::ViewStateWrite;
+    use fub_abi::traits::{ViewStateRead, ViewStateWrite};
     use fub_sdk::testing::MemoryHost;
 
     /// Il nodo custom dell'albero, con il suo payload.
@@ -1005,6 +1375,8 @@ mod tests {
         let hidden = GraphFilter {
             show_orphans: false,
             show_attachments: true,
+            show_tags: false,
+            show_missing: false,
         };
         let (nodes, edges) = apply_filter(&MemoryHost::new(), nodes, edges, &hidden);
         assert_eq!(nodes, vec!["a.md".to_string(), "b.md".to_string()]);
@@ -1023,6 +1395,8 @@ mod tests {
         let hidden = GraphFilter {
             show_orphans: true,
             show_attachments: false,
+            show_tags: false,
+            show_missing: false,
         };
         let (shown_nodes, shown_edges) = apply_filter(&host, nodes(), edges(), &hidden);
         assert_eq!(shown_nodes, ["a.md"]);
@@ -1030,6 +1404,8 @@ mod tests {
         let shown = GraphFilter {
             show_orphans: true,
             show_attachments: true,
+            show_tags: false,
+            show_missing: false,
         };
         let (shown_nodes, shown_edges) = apply_filter(&host, nodes(), edges(), &shown);
         assert_eq!(shown_nodes, ["a.md", "foto.png"]);
@@ -1049,6 +1425,59 @@ mod tests {
         assert!(selection.seed.is_none());
         assert_eq!(selection.depth, 1);
         assert!(matches!(selection.direction, LinkDirection::Outbound));
+    }
+
+    /// Il click su un nodo tag cerca il tag, e un nome con spazi va fra
+    /// virgolette: la barra lo legge come un tag solo.
+    #[test]
+    fn clicking_a_tag_node_searches_the_tag() {
+        let mut host = MemoryHost::new().with_instance("uno");
+        let update = GraphView
+            .on_action(
+                &ViewInstance::only(GRAPH_VIEW),
+                UiAction::new(OPEN).with_payload(json!({ TAG: "progetto/fub" })),
+                &mut host,
+            )
+            .unwrap();
+        assert_eq!(
+            update,
+            ViewUpdate::RunSearch {
+                query: "tag:progetto/fub".into()
+            }
+        );
+        assert_eq!(tag_query("due parole"), "tag:\"due parole\"");
+        let empty = GraphView
+            .on_action(
+                &ViewInstance::only(GRAPH_VIEW),
+                UiAction::new(OPEN).with_payload(json!({ TAG: " " })),
+                &mut host,
+            )
+            .unwrap();
+        assert_eq!(empty, ViewUpdate::None);
+    }
+
+    /// I filtri nuovi si commutano come gli altri, e tornati ai default la
+    /// riga di stato sparisce.
+    #[test]
+    fn tags_and_missing_toggle_and_fall_back_to_defaults() {
+        let mut host = MemoryHost::new().with_instance("uno");
+        let toggle = |host: &mut MemoryHost, key: &str| {
+            GraphView
+                .on_action(
+                    &ViewInstance::only(GRAPH_VIEW),
+                    UiAction::new(FILTER_ACTION).with_payload(json!({ FILTER_KEY: key })),
+                    host,
+                )
+                .unwrap();
+        };
+        toggle(&mut host, SHOW_TAGS);
+        toggle(&mut host, SHOW_MISSING);
+        let filter = filter_of(&host).unwrap();
+        assert!(filter.show_tags && filter.show_missing);
+        toggle(&mut host, SHOW_TAGS);
+        toggle(&mut host, SHOW_MISSING);
+        assert!(filter_of(&host).unwrap().is_default());
+        assert_eq!(host.view_state(FILTER_STATE).unwrap(), None);
     }
 
     /// I gruppi per cartella sono puri path: la radice è il gruppo vuoto, una

@@ -889,17 +889,18 @@ pub struct ExportSnapshot {
     pub assets: Vec<CommitAsset>,
 }
 
-/// Read the authoritative vault census. No raw vault HTML, dynamic block,
-/// remote embed or unapproved local reference reaches the network.
-pub fn collect_export(
-    host: &dyn fub_abi::traits::ReadApi,
-    site_id: &str,
-    version: u64,
-) -> Result<ExportSnapshot, fub_abi::PluginError> {
-    use base64::Engine as _;
-    use fub_abi::model::DocId;
-    use std::collections::{BTreeMap, BTreeSet};
+/// Che cosa dice il frontmatter di una nota sulla pubblicazione.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum OptIn {
+    /// `publish: true`, e niente che la trattenga.
+    Asked,
+    /// `private` o `draft` la tengono fuori, con o senza `publish`.
+    Held,
+    /// Nessun `publish` vero.
+    Not,
+}
 
+pub(crate) fn opt_in(frontmatter: &serde_json::Map<String, serde_json::Value>) -> OptIn {
     fn truthy(value: Option<&serde_json::Value>) -> bool {
         match value {
             Some(serde_json::Value::Bool(flag)) => *flag,
@@ -925,6 +926,31 @@ pub fn collect_export(
             _ => true,
         }
     }
+    if excluded(frontmatter.get("private")) || excluded(frontmatter.get("draft")) {
+        OptIn::Held
+    } else if truthy(frontmatter.get("publish")) {
+        OptIn::Asked
+    } else {
+        OptIn::Not
+    }
+}
+
+/// Una pagina che il sito può servire: path valido e non privato.
+pub(crate) fn publishable_page(path: &str) -> bool {
+    valid_publish_path(path) && !is_private_path(path)
+}
+
+/// Read the authoritative vault census. No raw vault HTML, dynamic block,
+/// remote embed or unapproved local reference reaches the network.
+pub fn collect_export(
+    host: &dyn fub_abi::traits::ReadApi,
+    site_id: &str,
+    version: u64,
+) -> Result<ExportSnapshot, fub_abi::PluginError> {
+    use base64::Engine as _;
+    use fub_abi::model::DocId;
+    use std::collections::{BTreeMap, BTreeSet};
+
     if !valid_site_id(site_id) || version == 0 {
         return Err(fub_abi::PluginError::BadArgs(
             "invalid publish site or version".into(),
@@ -960,11 +986,9 @@ pub fn collect_export(
                     "publish model identity mismatch".into(),
                 ));
             }
-            let publish = truthy(model.frontmatter.0.get("publish"))
-                && !excluded(model.frontmatter.0.get("private"))
-                && !excluded(model.frontmatter.0.get("draft"));
+            let publish = opt_in(&model.frontmatter.0) == OptIn::Asked;
             let path = doc_path(&doc.0);
-            let approved = publish && valid_publish_path(&path) && !is_private_path(&path);
+            let approved = publish && publishable_page(&path);
             vault.push(LinkedDoc {
                 doc_id: doc.0.clone(),
                 allowed: approved,
@@ -1226,7 +1250,8 @@ fn resolve_links(
     Ok(resolved)
 }
 
-fn doc_path(doc_id: &str) -> String {
+/// La pagina di un documento dentro il sito.
+pub(crate) fn doc_path(doc_id: &str) -> String {
     let stem = fub_abi::rules::path::strip_ext(doc_id)
         .trim_matches('/')
         .replace([' ', '\\'], "-")

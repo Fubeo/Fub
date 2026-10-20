@@ -9,9 +9,19 @@ import { mediaKindOfId } from "../../../media/media-types";
 /// Il Markdown di un rimando. Immagini, audio, video e PDF si incorporano,
 /// perché la lettura li sa mostrare; ogni altro allegato diventa un link col
 /// suo nome — prima uno zip diventava un'immagine rotta. Una nota diventa un
-/// wikilink col nome più corto che la risolve.
+/// wikilink col nome che la risolve, o un link Markdown col suo titolo quando
+/// il vault vuole i percorsi; una pagina web un link col titolo del
+/// collegamento.
 export function markdownReference(reference: SurfaceReference): string {
-  if (reference.kind === "note") return `[[${reference.name}]]`;
+  if (reference.kind === "note") {
+    return reference.link === undefined
+      ? `[[${reference.name}]]`
+      : `[${reference.name.replace(/[[\]\\]/g, "\\$&")}](${reference.link})`;
+  }
+  if (reference.kind === "web") {
+    const destination = /[\s()<>]/.test(reference.url) ? `<${reference.url.replace(/[<>]/g, encodeURIComponent)}>` : reference.url;
+    return `[${reference.title.replace(/[[\]\\]/g, "\\$&")}](${destination})`;
+  }
   const link = reference.link;
   let name = link.split("/").pop() ?? link;
   try {

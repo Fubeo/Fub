@@ -15,6 +15,7 @@
 // ricerca, le voci del cestino, l'anteprima di una versione). Uno store che
 // raccoglie tutto torna a essere l'oggetto-dio, con un file diverso.
 import type { CommandSpec, Organization } from "../host/contract";
+import { EXPLORER_SORTS, type ExplorerSort } from "../rules/organizer";
 import { api } from "../host/ipc";
 import { errorText } from "../host/errors";
 import { CoalescingQueue } from "../ui/race";
@@ -59,6 +60,10 @@ export interface Signals {
   /// **Senza payload**: chi lo rispecchia in un'altra finestra legge gli
   /// strati montati da `theme/loader.ts`.
   theme: [];
+  /// Una cartella del percorso nella testata è stata premuta: l'esplora la
+  /// apre e la porta in vista. Il verso è questo perché la testata è della
+  /// vista del documento e l'albero dell'esplora, che non si conoscono.
+  "reveal-folder": [folder: string];
 }
 
 type Listener = (...args: never[]) => unknown;
@@ -175,6 +180,9 @@ export interface ShellState {
   activeSpace: string | null;
   /// Cartelle aperte nell'albero.
   expanded: Set<string>;
+  /// Come l'albero ordina i fratelli: a mano (con l'alfabeto per il resto) o per
+  /// nome e data di modifica. È di questa macchina, non del vault.
+  explorerSort: ExplorerSort;
   /// I comandi dichiarati dal kernel, per le scorciatoie: quali esistano lo
   /// dice il registro (`list_commands`), non questa shell.
   commandSpecs: CommandSpec[];
@@ -191,6 +199,7 @@ export const state: ShellState = {
   meta: emptyMeta(),
   activeSpace: null,
   expanded: new Set(),
+  explorerSort: "manual",
   commandSpecs: [],
 };
 
@@ -222,6 +231,17 @@ export const state: ShellState = {
 
 const EXPANDED_KEY = "expanded";
 const ACTIVE_SPACE_KEY = "activeSpace";
+const EXPLORER_SORT_KEY = "explorerSort";
+
+export async function loadExplorerSort(): Promise<void> {
+  const saved = await readState<string>(EXPLORER_SORT_KEY);
+  state.explorerSort = EXPLORER_SORTS.find((mode) => mode === saved) ?? "manual";
+}
+
+export function saveExplorerSort(): void {
+  // L'ordine a mano è il predefinito: si dimentica invece di scriverlo.
+  writeState(EXPLORER_SORT_KEY, state.explorerSort === "manual" ? null : state.explorerSort);
+}
 
 export async function loadExpanded(): Promise<void> {
   const saved = await readState<string[]>(EXPANDED_KEY);

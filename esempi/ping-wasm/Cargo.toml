@@ -28,9 +28,15 @@ crate-type = ["cdylib"]
 # del banco nativo (`il_primo_plugin.rs`) portato di qua dal confine, e serve a
 # provare che il cancello del §7.3 si chiude anche davanti a un componente.
 senza-permessi = []
-# Il mondo che chiede anche la rete (vedi `wit/ping.wit`): esiste perché il
-# rifiuto dell'host abbia davanti un componente vero.
+# Il mondo che chiede anche la rete (vedi `wit/ping.wit`): il permesso
+# `fub:network` non è concesso, e il cancello deve chiudersi a runtime.
 con-rete = []
+# Il mondo che chiede `host-transfer-read`, che un plugin non ottiene: rifiutato
+# al caricamento, con un componente vero davanti.
+con-trasferimento = []
+# Il mondo che attraversa le famiglie di scrittura, struttura, impostazioni,
+# stato di vista, query, comandi e servizi.
+con-famiglie = []
 # Il mondo che chiede i dati persistiti: il backend WASM lo rifiuta al caricamento.
 con-dati = []
 # Il mondo che esporta anche `syntax`, che l'host non collega: rifiutato al

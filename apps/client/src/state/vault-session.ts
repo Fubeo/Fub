@@ -12,6 +12,7 @@
 // le dichiara quando crea la sessione, nella forma di `setSidePanelController`
 // (`ui/side-panels.ts`).
 import { api } from "../host/ipc";
+import { errorText, isErrorKind } from "../host/errors";
 import { vaultStatus } from "../host/query";
 import { plural, t } from "../i18n/strings";
 import { allCommands, conflictMessage, keybindingKey, loadKeyOverrides } from "../ui/commands";
@@ -22,7 +23,7 @@ import { drainDocumentWindows } from "./document-windows";
 import { activeDoc, loadLayout } from "./layout";
 import { loadOrganization } from "./organization";
 import { preferredPaneMode } from "./pane-mode";
-import { emit, loadActiveSpace, loadExpanded, state } from "./store";
+import { emit, loadActiveSpace, loadExpanded, loadExplorerSort, state } from "./store";
 import { beforeNote, loadCommandSpecs } from "./vault";
 
 /// Ciò che l'apertura di un vault chiede alla shell che la compone.
@@ -59,15 +60,32 @@ export interface VaultSession {
   ///
   /// `alive` dice se chi ha chiesto c'è ancora (per default la porta
   /// omonima); `alreadyDrained` salta lo svuotamento di finestre e coda di
-  /// salvataggio, per chi l'ha già fatto da sé prima di chiamare.
-  open(dir: string, alive?: () => boolean, alreadyDrained?: boolean): Promise<void>;
+  /// salvataggio, per chi l'ha già fatto da sé prima di chiamare; `keepLeft`
+  /// lascia aperto nell'host il vault da cui si viene, per chi ci tornerà da
+  /// sé (la demo, che alla chiusura rende corrente quello di prima).
+  open(dir: string, alive?: () => boolean, alreadyDrained?: boolean, keepLeft?: boolean): Promise<void>;
 }
 
 export function createVaultSession(ports: VaultSessionPorts): VaultSession {
+  /// Chiude nell'host il vault che la finestra ha lasciato. Non ferma
+  /// l'apertura: il vault nuovo è già aperto, e un guasto chiudendo il vecchio
+  /// non deve lasciare la shell a metà. Si dice, voce per voce.
+  async function closeLeftVault(root: string): Promise<void> {
+    try {
+      const troubles = await api.closeVault(root);
+      for (const trouble of troubles) ports.notify(t("vault.close.trouble", { error: errorText(trouble) }), "guasto");
+    } catch (error) {
+      // Già chiuso da chi l'ha lasciato (la demo si chiude da sé): niente da dire.
+      if (isErrorKind(error, "not_found")) return;
+      ports.notify(t("vault.close.trouble", { error: errorText(error) }), "guasto");
+    }
+  }
+
   async function openVaultPath(
     dir: string,
     alive: () => boolean = ports.alive,
     alreadyDrained = false,
+    keepLeft = false,
   ): Promise<void> {
     if (!alive()) return;
     if (state.vaultRoot && !alreadyDrained) {
@@ -82,6 +100,7 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
       }
     }
     if (!alive()) return;
+    const left = state.vaultRoot;
     const info = await api.openVault(dir);
     if (!alive()) return;
     // **Ciò che è stato battuto mentre l'host apriva il vault nuovo** (FUB-001).
@@ -95,6 +114,13 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     if (!alive()) return;
     const unsaved = await resetDocumentsForVault();
     if (unsaved.length > 0) ports.notify(t("demo.unsaved", { files: unsaved.join(", ") }), "guasto");
+    if (!alive()) return;
+    // **Il vault lasciato si chiude** (#216), dopo il flush e dopo le sue
+    // sessioni: altrimenti resterebbero vivi il suo watcher, i suoi job e il
+    // lock di scrittura, e i suoi eventi — che non nominano il vault —
+    // arriverebbero alla shell come fatti di questo. Tornarci è una
+    // riapertura completa. Ciò che non è diventato durevole chiudendo si dice.
+    if (left && left !== info.root && !keepLeft) await closeLeftVault(left);
     if (!alive()) return;
     // Il segnale watcher è del vault che si sta aprendo: azzerarlo subito, poi
     // `warnIfUnwatched` lo rialza col suo stato (I04, mai verità del vault prima).
@@ -131,7 +157,7 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     // loro: `Promise.all` lo tiene fermo. Nessuna delle quattro può rifiutare —
     // tutte e quattro hanno il proprio `catch` dentro — quindi qui non c'è la
     // domanda «cosa resta a metà se una va storta».
-    await Promise.all([loadOrganization(), loadLayout(preferredPaneMode()), loadExpanded(), loadActiveSpace()]);
+    await Promise.all([loadOrganization(), loadLayout(preferredPaneMode()), loadExpanded(), loadExplorerSort(), loadActiveSpace()]);
     if (!alive()) return;
     await synchronize();
     if (!alive()) return;

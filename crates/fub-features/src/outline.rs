@@ -17,6 +17,9 @@
 
 use std::collections::HashSet;
 
+mod rename;
+pub use rename::{OutlineCommands, HEADING_RENAME};
+
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
@@ -63,6 +66,15 @@ const ORPHANS: &str = "orphans";
 const INLINE: &str = "inline";
 const UP: &str = "up";
 const DOWN: &str = "down";
+const FILTER: &str = "filter";
+const FILTER_FIELD: &str = "outline_filter";
+const FILTER_STATE: &str = "outline.filter";
+const COLLAPSE: &str = "collapse";
+const COLLAPSE_STATE: &str = "outline.collapsed";
+const FILTER_LABEL: &str = "filter_label";
+const COLLAPSE_ALL: &str = "collapse_all";
+const EXPAND_ALL: &str = "expand_all";
+const NO_MATCH: &str = "no_match";
 
 /// Il pannello struttura. Senza stato: heading e documento attivo li chiede
 /// all'host a ogni chiamata.
@@ -140,11 +152,22 @@ impl ViewProvider for OutlineView {
                 ));
             }
         };
+        let tools = Tools {
+            filter: host
+                .view_state(FILTER_STATE)?
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_default(),
+            collapsed: host
+                .view_state(COLLAPSE_STATE)?
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+        };
         Ok(build_outline_view_at(
             &headings,
             caret_of(&context.selections),
             active.as_str(),
             Some(&host.document_revision(&active)?.0),
+            Some(&tools),
         ))
     }
 
@@ -161,6 +184,27 @@ impl ViewProvider for OutlineView {
                 ));
             }
             move_section(&action, host)?;
+            return Ok(ViewUpdate::Replace {
+                root: self.render_view(instance, host)?,
+            });
+        }
+        if instance.view == OUTLINE_VIEW && matches!(action.action.0.as_str(), FILTER | COLLAPSE) {
+            if action.action.0 == FILTER {
+                let value = action.text_field(FILTER_FIELD).unwrap_or_default();
+                host.set_view_state(
+                    FILTER_STATE,
+                    (!value.trim().is_empty()).then(|| serde_json::json!(value)),
+                )?;
+            } else {
+                let collapsed = host
+                    .view_state(COLLAPSE_STATE)?
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                host.set_view_state(
+                    COLLAPSE_STATE,
+                    (!collapsed).then(|| serde_json::json!(true)),
+                )?;
+            }
             return Ok(ViewUpdate::Replace {
                 root: self.render_view(instance, host)?,
             });
@@ -525,8 +569,65 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(UP, "Su")
             .with(DOWN, "Giù")
             .with("reorder", "Riordina sezioni")
+            .with(FILTER_LABEL, "Cerca nei titoli")
+            .with(COLLAPSE_ALL, "Comprimi tutto")
+            .with(EXPAND_ALL, "Espandi tutto")
+            .with(NO_MATCH, "Nessun titolo corrisponde.")
             .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
-            .with(EMPTY, "Nessun heading."),
+            .with(EMPTY, "Nessun heading.")
+            .with("heading.rename.title", "Rinomina titolo")
+            .with(
+                "heading.rename.desc",
+                "Rinomina un titolo della nota e aggiorna i link [[nota#titolo]] che lo nominano.",
+            )
+            .with("heading.rename.doc.title", "Nota")
+            .with(
+                "heading.rename.doc.desc",
+                "La nota del titolo; senza, quella aperta.",
+            )
+            .with("heading.rename.heading.title", "Titolo")
+            .with(
+                "heading.rename.heading.desc",
+                "Il titolo da rinominare, com'è scritto.",
+            )
+            .with("heading.rename.new_heading.title", "Nuovo titolo")
+            .with(
+                "heading.rename.new_heading.desc",
+                "Il testo nuovo del titolo.",
+            )
+            .with(
+                rename::P_RENAME,
+                "«{heading}» diventa «{new_heading}»: link aggiornati in {count} altre note.",
+            )
+            .with(
+                rename::U_RENAME,
+                "Rinomina di «{heading}» in «{new_heading}»",
+            )
+            .with(rename::E_NO_DOC, "Nessuna nota a cui rinominare il titolo.")
+            .with(
+                rename::E_MISSING,
+                "Nessun titolo «{heading}» in questa nota.",
+            )
+            .with(
+                rename::E_INVALID,
+                "Il titolo nuovo è vuoto o contiene [ ] | # ^.",
+            )
+            .with(
+                rename::E_SAME,
+                "Il titolo nuovo è uguale a quello di adesso.",
+            )
+            .with(
+                rename::E_FORMATTED,
+                "«{heading}» ha formattazione nel testo: rinominalo a mano.",
+            )
+            .with(
+                rename::E_TAKEN,
+                "Un titolo precedente si chiama già «{new_heading}»: i link andrebbero a quello.",
+            )
+            .with(
+                rename::E_SLUGS,
+                "Con «{new_heading}» cambierebbe l'indirizzo di un titolo omonimo.",
+            ),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Outline")
             .with(FOOTNOTES_TITLE, "Footnotes")
@@ -538,8 +639,59 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(UP, "Up")
             .with(DOWN, "Down")
             .with("reorder", "Reorder sections")
+            .with(FILTER_LABEL, "Search headings")
+            .with(COLLAPSE_ALL, "Collapse all")
+            .with(EXPAND_ALL, "Expand all")
+            .with(NO_MATCH, "No heading matches.")
             .with(NO_ACTIVE_DOC, "No note open.")
-            .with(EMPTY, "No headings."),
+            .with(EMPTY, "No headings.")
+            .with("heading.rename.title", "Rename heading")
+            .with(
+                "heading.rename.desc",
+                "Rename a heading of the note and update the [[note#heading]] links that name it.",
+            )
+            .with("heading.rename.doc.title", "Note")
+            .with(
+                "heading.rename.doc.desc",
+                "The note of the heading; without it, the open one.",
+            )
+            .with("heading.rename.heading.title", "Heading")
+            .with(
+                "heading.rename.heading.desc",
+                "The heading to rename, as written.",
+            )
+            .with("heading.rename.new_heading.title", "New heading")
+            .with(
+                "heading.rename.new_heading.desc",
+                "The new text of the heading.",
+            )
+            .with(
+                rename::P_RENAME,
+                "“{heading}” becomes “{new_heading}”: links updated in {count} other notes.",
+            )
+            .with(rename::U_RENAME, "Rename of “{heading}” to “{new_heading}”")
+            .with(rename::E_NO_DOC, "No note to rename the heading in.")
+            .with(rename::E_MISSING, "No heading “{heading}” in this note.")
+            .with(
+                rename::E_INVALID,
+                "The new heading is empty or contains [ ] | # ^.",
+            )
+            .with(
+                rename::E_SAME,
+                "The new heading is the same as the current one.",
+            )
+            .with(
+                rename::E_FORMATTED,
+                "“{heading}” has formatting in its text: rename it by hand.",
+            )
+            .with(
+                rename::E_TAKEN,
+                "An earlier heading is already called “{new_heading}”: links would go there.",
+            )
+            .with(
+                rename::E_SLUGS,
+                "With “{new_heading}” the address of a same-named heading would change.",
+            ),
     ]
 }
 
@@ -569,7 +721,37 @@ fn section_of(headings: &[Heading], caret: usize) -> Option<usize> {
 /// e la sezione col cursore è `selected` invece di essere un sottotitolo che
 /// dice «cursore qui».
 pub fn build_outline_view(headings: &[Heading], caret: Option<usize>, doc: &str) -> UiNode {
-    build_outline_view_at(headings, caret, doc, None)
+    build_outline_view_at(headings, caret, doc, None, None)
+}
+
+/// Il filtro e la compressione del pannello: stato della vista, non della
+/// nota, quindi restano quando si cambia nota.
+struct Tools {
+    filter: String,
+    collapsed: bool,
+}
+
+/// Quali titoli restano con un filtro: quelli che lo contengono e i loro
+/// antenati, perché un titolo senza la strada che porta a lui non si capisce.
+fn kept_by(headings: &[Heading], filter: &str) -> Vec<bool> {
+    let needle = filter.trim().to_lowercase();
+    let mut kept: Vec<bool> = headings
+        .iter()
+        .map(|h| needle.is_empty() || h.text.to_lowercase().contains(&needle))
+        .collect();
+    for at in (0..headings.len()).rev() {
+        if !kept[at] {
+            continue;
+        }
+        let mut level = headings[at].level;
+        for up in (0..at).rev() {
+            if headings[up].level < level {
+                kept[up] = true;
+                level = headings[up].level;
+            }
+        }
+    }
+    kept
 }
 
 fn build_outline_view_at(
@@ -577,13 +759,53 @@ fn build_outline_view_at(
     caret: Option<usize>,
     doc: &str,
     base: Option<&str>,
+    tools: Option<&Tools>,
 ) -> UiNode {
     if headings.is_empty() {
         return placeholder(EMPTY);
     }
     let current = caret.and_then(|c| section_of(headings, c));
-    let (roots, _) = subtree(headings, 0, 0, current, doc, base);
-    let mut children = vec![UiNode::new(UiKind::Tree { roots })];
+    let filter = tools.map_or("", |t| t.filter.as_str());
+    let kept = kept_by(headings, filter);
+    // Un filtro apre quello che trova: comprimere e cercare insieme
+    // nasconderebbero proprio i titoli trovati.
+    let shape = Shape {
+        current,
+        doc,
+        base,
+        kept: &kept,
+        expanded: !filter.trim().is_empty() || !tools.is_some_and(|t| t.collapsed),
+    };
+    let (roots, _) = subtree(headings, 0, 0, &shape);
+    let mut children = Vec::new();
+    if let Some(tools) = tools {
+        children.push(UiNode::row(
+            1,
+            vec![
+                UiNode::new(UiKind::TextInput {
+                    field: FILTER_FIELD.to_string(),
+                    label: Some(Text::key(FILTER_LABEL)),
+                    value: tools.filter.clone(),
+                    placeholder: None,
+                    action: Some(ActionRef::new(FILTER)),
+                }),
+                UiNode::button(
+                    Text::key(if tools.collapsed {
+                        EXPAND_ALL
+                    } else {
+                        COLLAPSE_ALL
+                    }),
+                    Intent::Neutral,
+                    ActionRef::new(COLLAPSE),
+                ),
+            ],
+        ));
+    }
+    if roots.is_empty() {
+        children.push(placeholder(NO_MATCH));
+    } else {
+        children.push(UiNode::new(UiKind::Tree { roots }));
+    }
     if let Some(base) = base {
         let mut rows = Vec::new();
         for (index, heading) in headings.iter().enumerate() {
@@ -630,26 +852,42 @@ fn build_outline_view_at(
 /// *di livello esattamente uno in più*. Una nota scritta a mano non è tenuta a
 /// essere ben annidata, e un outline che perdesse gli heading di un documento
 /// disordinato sarebbe peggio di uno piatto.
+/// Quello che ogni voce dell'albero condivide: la sezione del cursore, il
+/// documento disegnato, i titoli tenuti dal filtro e se le voci nascono aperte.
+struct Shape<'a> {
+    current: Option<usize>,
+    doc: &'a str,
+    base: Option<&'a str>,
+    kept: &'a [bool],
+    expanded: bool,
+}
+
 fn subtree(
     headings: &[Heading],
     at: usize,
     parent_level: u8,
-    current: Option<usize>,
-    doc: &str,
-    base: Option<&str>,
+    shape: &Shape<'_>,
 ) -> (Vec<UiNode>, usize) {
+    let Shape {
+        current, doc, base, ..
+    } = *shape;
     let mut nodes = Vec::new();
     let mut the = at;
     while let Some(h) = headings.get(the) {
         if h.level <= parent_level {
             break;
         }
-        let (children, next) = subtree(headings, the + 1, h.level, current, doc, base);
+        let (children, next) = subtree(headings, the + 1, h.level, shape);
+        if !shape.kept[the] {
+            the = next;
+            continue;
+        }
         nodes.push(
             UiNode::new(UiKind::TreeItem {
                 label: h.text.clone().into(),
-                // Aperto: un outline che nasce chiuso non è un outline.
-                expanded: true,
+                // Aperto: un outline che nasce chiuso non è un outline, se
+                // non lo si chiede con «comprimi tutto».
+                expanded: shape.expanded,
                 action: Some(ActionRef::with(
                     REVEAL,
                     serde_json::json!({ DOC: doc, BASE: base, START: h.span.start, END: h.span.end }),
@@ -689,8 +927,11 @@ mod tests {
         let UiKind::Stack { children, .. } = &tree.kind else {
             panic!("l'outline è uno stack")
         };
-        let UiKind::Tree { roots } = &children[0].kind else {
-            panic!("the first child is the tree")
+        let Some(roots) = children.iter().find_map(|child| match &child.kind {
+            UiKind::Tree { roots } => Some(roots),
+            _ => None,
+        }) else {
+            panic!("the outline has a tree")
         };
         fn descend(nodes: &[UiNode], depth: usize, out: &mut Vec<(usize, String, bool)>) {
             for n in nodes {
@@ -845,6 +1086,127 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["Uno", "Due"]
         );
+    }
+
+    /// Gli `expanded` delle voci, in ordine di lettura.
+    fn opened(node: &UiNode, out: &mut Vec<bool>) {
+        if let UiKind::TreeItem {
+            expanded, children, ..
+        } = &node.kind
+        {
+            out.push(*expanded);
+            for child in children {
+                opened(child, out);
+            }
+        } else {
+            for child in node.children() {
+                opened(child, out);
+            }
+        }
+    }
+
+    fn filter_action(value: &str) -> UiAction {
+        UiAction::new(FILTER).with_fields(vec![fub_abi::ui::FieldValue {
+            field: FILTER_FIELD.to_string(),
+            value: fub_abi::ui::UiValue::Text(value.to_string()),
+        }])
+    }
+
+    fn replaced(update: ViewUpdate) -> UiNode {
+        let ViewUpdate::Replace { root } = update else {
+            panic!("the outline redraws itself")
+        };
+        root
+    }
+
+    #[test]
+    fn the_filter_keeps_matching_headings_with_their_ancestors() {
+        let mut host = MemoryHost::new()
+            .with_instance("struttura")
+            .with_document("nota.md", "x")
+            .with_outline(
+                "nota.md",
+                &[
+                    h(1, "Uno", 0, 1),
+                    h(2, "Mele rosse", 2, 3),
+                    h(2, "Pere", 4, 5),
+                    h(1, "Due", 6, 7),
+                    h(3, "Altre mele", 8, 9),
+                ],
+            );
+        host.set_active(Some("nota.md"));
+        let instance = ViewInstance::only(OUTLINE_VIEW);
+        let tree = replaced(
+            OutlineView
+                .on_action(&instance, filter_action("MELE"), &mut host)
+                .unwrap(),
+        );
+        assert_eq!(
+            entries(&tree),
+            [
+                (0, "Uno".to_string(), false),
+                (1, "Mele rosse".to_string(), false),
+                (0, "Due".to_string(), false),
+                (1, "Altre mele".to_string(), false),
+            ]
+        );
+        let none = replaced(
+            OutlineView
+                .on_action(&instance, filter_action("kiwi"), &mut host)
+                .unwrap(),
+        );
+        assert!(none
+            .children()
+            .iter()
+            .any(|child| matches!(child.kind, UiKind::EmptyState { .. })));
+        let all = replaced(
+            OutlineView
+                .on_action(&instance, filter_action("  "), &mut host)
+                .unwrap(),
+        );
+        assert_eq!(entries(&all).len(), 5);
+    }
+
+    #[test]
+    fn collapse_all_closes_every_heading_and_toggles_back() {
+        let mut host = MemoryHost::new()
+            .with_instance("struttura")
+            .with_document("nota.md", "x")
+            .with_outline("nota.md", &[h(1, "Uno", 0, 1), h(2, "Due", 2, 3)]);
+        host.set_active(Some("nota.md"));
+        let instance = ViewInstance::only(OUTLINE_VIEW);
+        let mut states = Vec::new();
+        let drawn = OutlineView.render_view(&instance, &host).unwrap();
+        opened(&drawn, &mut states);
+        assert_eq!(states, [true, true]);
+        let closed = replaced(
+            OutlineView
+                .on_action(&instance, UiAction::new(COLLAPSE), &mut host)
+                .unwrap(),
+        );
+        let mut states = Vec::new();
+        opened(&closed, &mut states);
+        assert_eq!(states, [false, false]);
+        // Un filtro apre quello che trova anche a pannello compresso.
+        let found = replaced(
+            OutlineView
+                .on_action(&instance, filter_action("due"), &mut host)
+                .unwrap(),
+        );
+        let mut states = Vec::new();
+        opened(&found, &mut states);
+        assert_eq!(states, [true, true]);
+        OutlineView
+            .on_action(&instance, filter_action(""), &mut host)
+            .unwrap();
+        let open = replaced(
+            OutlineView
+                .on_action(&instance, UiAction::new(COLLAPSE), &mut host)
+                .unwrap(),
+        );
+        let mut states = Vec::new();
+        opened(&open, &mut states);
+        assert_eq!(states, [true, true]);
     }
 
     #[test]

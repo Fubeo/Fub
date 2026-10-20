@@ -31,6 +31,8 @@ pub const PROPERTIES_ID: &str = "fub.properties";
 pub const PROPERTIES_VIEW: &str = "properties";
 /// Id della vista globale del vault.
 pub const GLOBAL_PROPERTIES_VIEW: &str = "properties.global";
+/// Id del contatore nella banda di stato: quante proprietà ha la nota attiva.
+pub const PROPERTIES_STATUS_VIEW: &str = "properties.status";
 /// Imposta (o aggiunge) una chiave del frontmatter.
 pub const NOTES_PROPERTY_SET: &str = "note.property.set";
 /// Toglie una chiave del frontmatter.
@@ -39,6 +41,15 @@ pub const NOTES_PROPERTY_REMOVE: &str = "note.property.remove";
 pub const PROPERTY_TYPE_SET: &str = "property.type.set";
 /// Rinomina una chiave frontmatter in tutte le note che la portano.
 pub const PROPERTY_KEY_RENAME: &str = "property.key.rename";
+/// Toglie una chiave frontmatter da tutte le note che la portano.
+pub const PROPERTY_KEY_DELETE: &str = "property.key.delete";
+/// Aggiunge un alias alla nota, nella lista `aliases` del frontmatter.
+pub const NOTES_ALIAS_ADD: &str = "note.alias.add";
+/// Toglie tutto il frontmatter della nota.
+pub const NOTES_PROPERTIES_CLEAR: &str = "note.properties.clear";
+/// Converte le chiavi vecchie di Obsidian (`tag`, `alias`, `cssclass`) nelle
+/// plurali, su tutto il vault.
+pub const PROPERTY_KEYS_MIGRATE: &str = "property.keys.migrate";
 
 /// Chiavi del core: il formato di data e il registro dei tipi del vault.
 const DATE_FORMAT_KEY: &str = "properties.date-format";
@@ -75,6 +86,8 @@ const U_SET: &str = "u_set";
 const U_REMOVE: &str = "u_remove";
 const SOURCE_ONLY: &str = "source_only";
 const GLOBAL_TITLE: &str = "global_title";
+const STATUS_TITLE: &str = "status_title";
+const STATUS_COUNT: &str = "status_count";
 const GLOBAL_EMPTY: &str = "global_empty";
 const GLOBAL_FILTER: &str = "global_filter";
 const GLOBAL_COUNT: &str = "global_count";
@@ -83,7 +96,50 @@ const GLOBAL_DOCS: &str = "global_docs";
 const P_TYPE: &str = "p_type";
 const P_RENAME: &str = "p_rename";
 const U_RENAME: &str = "u_rename";
+const P_DELETE: &str = "p_delete";
+const U_DELETE: &str = "u_delete";
+const P_MIGRATE: &str = "p_migrate";
+const U_MIGRATE: &str = "u_migrate";
+
+/// Le chiavi singolari che Obsidian ha sostituito con le plurali (1.4).
+const LEGACY_KEYS: [(&str, &str); 3] = [
+    ("tag", "tags"),
+    ("alias", "aliases"),
+    ("cssclass", "cssclasses"),
+];
+const ALIAS: &str = "alias";
+const ALIASES: &str = "aliases";
+const P_ALIAS: &str = "p_alias";
+const P_ALIAS_PRESENT: &str = "p_alias_present";
+const U_ALIAS: &str = "u_alias";
+const P_CLEAR: &str = "p_clear";
+const P_CLEAR_NONE: &str = "p_clear_none";
+const U_CLEAR: &str = "u_clear";
 const FAILED: &str = "failed";
+/// La nota del giorno di una proprietà data: il percorso inverso di
+/// `note.daily`, che la data la scrive nella giornaliera. Il comando si chiama
+/// per id, come ogni comando di un'altra feature: con i modelli spenti non c'è,
+/// e il pannello lo dice.
+const DAILY: &str = "daily";
+const DAILY_COMMAND: &str = "note.daily";
+const DAILY_LABEL: &str = "daily_label";
+const E_DAILY: &str = "e_daily";
+const E_DAILY_OFF: &str = "e_daily_off";
+/// Le altre note dello stesso giorno: il verso che manca a `note.daily`, da una
+/// giornaliera (che ha la sua `date`) o da qualunque nota con una data. Il
+/// giorno aperto vive nello stato della view, e la lista si ricalcola a ogni
+/// resa: è la stessa lettura dell'indice che fa la vista globale.
+const SAME_DAY: &str = "same_day";
+const SAME_DAY_STATE: &str = "property.same_day";
+const SAME_DAY_LABEL: &str = "same_day_label";
+const SAME_DAY_TITLE: &str = "same_day_title";
+const SAME_DAY_NONE: &str = "same_day_none";
+const SAME_DAY_MORE: &str = "same_day_more";
+/// Quante note dello stesso giorno si mostrano; le altre si contano.
+const SAME_DAY_ROWS: usize = 50;
+/// Una nota con la chiave al singolare e al plurale insieme: la conversione
+/// non sceglie per l'utente.
+const E_BOTH_FORMS: &str = "e_both_forms";
 
 /// Le stringhe del pannello e dei comandi. Vedi
 /// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stiano qui.
@@ -106,6 +162,17 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(U_SET, "Annulla: proprietà «{key}» in {doc}")
             .with(U_REMOVE, "Annulla: togli «{key}» da {doc}")
             .with(FAILED, "Non ho aggiornato le proprietà: {reason}")
+            .with(DAILY_LABEL, "Nota del giorno")
+            .with(SAME_DAY_LABEL, "Stesso giorno")
+            .with(SAME_DAY_TITLE, "Altre note del {date}")
+            .with(SAME_DAY_NONE, "Nessun'altra nota ha la data {date}.")
+            .with(SAME_DAY_MORE, "e altre {count}")
+            .with(E_DAILY, "Non ho aperto la nota del {date}: {reason}")
+            .with(
+                E_DAILY_OFF,
+                "La nota del giorno non c'è: i modelli di nota sono spenti.",
+            )
+            .with(E_BOTH_FORMS, "{doc}: «{old}» e «{new}» ci sono entrambe")
             .with("note.property.set.title", "Imposta proprietà")
             .with(
                 "note.property.set.desc",
@@ -170,6 +237,8 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("mode.source", "Sorgente")
             .with("source_open", "Apri il sorgente")
             .with(GLOBAL_TITLE, "Proprietà del vault")
+            .with(STATUS_TITLE, "Proprietà della nota")
+            .with(STATUS_COUNT, "Proprietà: {count}")
             .with(GLOBAL_EMPTY, "Nessuna proprietà trovata.")
             .with(GLOBAL_FILTER, "Cerca chiavi o valori")
             .with(GLOBAL_COUNT, "{key} · {count} note")
@@ -181,6 +250,24 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Rinominata «{old_key}» in «{new_key}»: {count} note",
             )
             .with(U_RENAME, "Annulla rinomina «{old_key}» in «{new_key}»")
+            .with(P_DELETE, "Tolta «{key}»: {count} note")
+            .with(U_DELETE, "Annulla rimozione di «{key}» dal vault")
+            .with(P_MIGRATE, "Proprietà vecchie convertite: {count} note")
+            .with(U_MIGRATE, "Annulla la conversione delle proprietà vecchie")
+            .with(
+                "property.keys.migrate.title",
+                "Converti le proprietà vecchie",
+            )
+            .with(
+                "property.keys.migrate.desc",
+                "Scrive tag, alias e cssclass come tags, aliases e cssclasses in tutto il vault, con anteprima e annullo.",
+            )
+            .with(P_ALIAS, "Alias «{alias}» aggiunto a {doc}")
+            .with(P_ALIAS_PRESENT, "{doc} ha già l'alias «{alias}»")
+            .with(U_ALIAS, "Annulla alias «{alias}»")
+            .with(P_CLEAR, "Tolte le proprietà di {doc}")
+            .with(P_CLEAR_NONE, "{doc} non ha proprietà")
+            .with(U_CLEAR, "Rimetti le proprietà di {doc}")
             .with("property.type.set.title", "Dichiara tipo proprietà")
             .with(
                 "property.type.set.desc",
@@ -204,6 +291,38 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 "property.key.rename.new_key.desc",
                 "Chiave di destinazione.",
+            )
+            .with("property.key.delete.title", "Elimina proprietà dal vault")
+            .with(
+                "property.key.delete.desc",
+                "Toglie la chiave da tutte le note che la portano, con anteprima.",
+            )
+            .with("property.key.delete.key.title", "Chiave")
+            .with("property.key.delete.key.desc", "Chiave da togliere.")
+            .with("note.alias.add.title", "Aggiungi alias")
+            .with(
+                "note.alias.add.desc",
+                "Aggiunge un nome alternativo alla nota, nella lista aliases.",
+            )
+            .with("note.alias.add.alias.title", "Alias")
+            .with("note.alias.add.alias.desc", "Il nome alternativo.")
+            .with("note.alias.add.doc.title", "Nota")
+            .with(
+                "note.alias.add.doc.desc",
+                "La nota; se manca, quella attiva.",
+            )
+            .with(
+                "note.properties.clear.title",
+                "Cancella le proprietà della nota",
+            )
+            .with(
+                "note.properties.clear.desc",
+                "Toglie tutto il frontmatter della nota, con anteprima e annullo.",
+            )
+            .with("note.properties.clear.doc.title", "Nota")
+            .with(
+                "note.properties.clear.doc.desc",
+                "La nota; se manca, quella attiva.",
             ),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Properties")
@@ -222,6 +341,17 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(U_SET, "Undo: property «{key}» in {doc}")
             .with(U_REMOVE, "Undo: remove «{key}» from {doc}")
             .with(FAILED, "Could not update properties: {reason}")
+            .with(DAILY_LABEL, "Daily note")
+            .with(SAME_DAY_LABEL, "Same day")
+            .with(SAME_DAY_TITLE, "Other notes on {date}")
+            .with(SAME_DAY_NONE, "No other note has the date {date}.")
+            .with(SAME_DAY_MORE, "and {count} more")
+            .with(E_DAILY, "Could not open the note for {date}: {reason}")
+            .with(
+                E_DAILY_OFF,
+                "There is no daily note: note templates are off.",
+            )
+            .with(E_BOTH_FORMS, "{doc}: both «{old}» and «{new}» are there")
             .with("note.property.set.title", "Set property")
             .with(
                 "note.property.set.desc",
@@ -286,6 +416,8 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("mode.source", "Source")
             .with("source_open", "Open source")
             .with(GLOBAL_TITLE, "Vault properties")
+            .with(STATUS_TITLE, "Note properties")
+            .with(STATUS_COUNT, "Properties: {count}")
             .with(GLOBAL_EMPTY, "No properties found.")
             .with(GLOBAL_FILTER, "Search keys or values")
             .with(GLOBAL_COUNT, "{key} · {count} notes")
@@ -297,6 +429,21 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Renamed «{old_key}» to «{new_key}» in {count} notes",
             )
             .with(U_RENAME, "Undo rename «{old_key}» to «{new_key}»")
+            .with(P_DELETE, "Removed «{key}» from {count} notes")
+            .with(U_DELETE, "Undo removing «{key}» from the vault")
+            .with(P_MIGRATE, "Converted old properties: {count} notes")
+            .with(U_MIGRATE, "Undo converting old properties")
+            .with("property.keys.migrate.title", "Convert old properties")
+            .with(
+                "property.keys.migrate.desc",
+                "Write tag, alias and cssclass as tags, aliases and cssclasses across the vault, with a preview and undo.",
+            )
+            .with(P_ALIAS, "Alias «{alias}» added to {doc}")
+            .with(P_ALIAS_PRESENT, "{doc} already has the alias «{alias}»")
+            .with(U_ALIAS, "Undo alias «{alias}»")
+            .with(P_CLEAR, "Cleared the properties of {doc}")
+            .with(P_CLEAR_NONE, "{doc} has no properties")
+            .with(U_CLEAR, "Restore the properties of {doc}")
             .with("property.type.set.title", "Declare property type")
             .with(
                 "property.type.set.desc",
@@ -317,7 +464,36 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("property.key.rename.old_key.title", "Old key")
             .with("property.key.rename.old_key.desc", "Existing key.")
             .with("property.key.rename.new_key.title", "New key")
-            .with("property.key.rename.new_key.desc", "Destination key."),
+            .with("property.key.rename.new_key.desc", "Destination key.")
+            .with("property.key.delete.title", "Delete vault property")
+            .with(
+                "property.key.delete.desc",
+                "Remove the key from every note that has it, with a preview.",
+            )
+            .with("property.key.delete.key.title", "Key")
+            .with("property.key.delete.key.desc", "Key to remove.")
+            .with("note.alias.add.title", "Add alias")
+            .with(
+                "note.alias.add.desc",
+                "Add an alternative name to the note, in the aliases list.",
+            )
+            .with("note.alias.add.alias.title", "Alias")
+            .with("note.alias.add.alias.desc", "The alternative name.")
+            .with("note.alias.add.doc.title", "Note")
+            .with(
+                "note.alias.add.doc.desc",
+                "The note; the active one if omitted.",
+            )
+            .with("note.properties.clear.title", "Clear note properties")
+            .with(
+                "note.properties.clear.desc",
+                "Remove the note's whole frontmatter, with a preview and undo.",
+            )
+            .with("note.properties.clear.doc.title", "Note")
+            .with(
+                "note.properties.clear.doc.desc",
+                "The note; the active one if omitted.",
+            ),
     ])
 }
 
@@ -353,6 +529,12 @@ impl ViewProvider for PropertiesView {
             )
             .with_icon("vault")
             .ordered(4),
+            ViewSpec::new(
+                PROPERTIES_STATUS_VIEW,
+                Text::key(STATUS_TITLE),
+                ViewSurface::StatusBar,
+            )
+            .open_by_default(),
         ]
     }
 
@@ -363,6 +545,8 @@ impl ViewProvider for PropertiesView {
     ) -> Result<UiNode, PluginError> {
         if instance.view == GLOBAL_PROPERTIES_VIEW {
             global_tree(host)
+        } else if instance.view == PROPERTIES_STATUS_VIEW {
+            status_count(host)
         } else {
             tree(host, None)
         }
@@ -433,9 +617,62 @@ impl ViewProvider for PropertiesView {
                 }
                 command_then_tree(host, NOTES_PROPERTY_SET, args)
             }
+            DAILY => {
+                let Some(date) = action.payload.get(VALUE).and_then(|v| v.as_str()) else {
+                    return Ok(ViewUpdate::None);
+                };
+                open_daily(host, date)
+            }
+            SAME_DAY => {
+                let Some(date) = action.payload.get(VALUE).and_then(|v| v.as_str()) else {
+                    return Ok(ViewUpdate::None);
+                };
+                // Lo stesso pulsante apre e chiude.
+                let open = host.view_state(SAME_DAY_STATE)?;
+                let next = (open.as_ref().and_then(|v| v.as_str()) != Some(date))
+                    .then(|| serde_json::json!(date));
+                host.set_view_state(SAME_DAY_STATE, next)?;
+                Ok(ViewUpdate::Replace {
+                    root: tree(host, None)?,
+                })
+            }
+            OPEN => {
+                let Some(doc) = action.payload.get(DOC).and_then(|v| v.as_str()) else {
+                    return Ok(ViewUpdate::None);
+                };
+                Ok(ViewUpdate::Navigate {
+                    doc_id: doc.to_string(),
+                })
+            }
             _ => Ok(ViewUpdate::None),
         }
     }
+}
+
+/// Apre (o crea) la giornaliera di `date` e ci porta. Ciò che `note.daily`
+/// rifiuta resta scritto sopra le proprietà, come ogni altro rifiuto.
+fn open_daily(host: &mut dyn HostApi, date: &str) -> Result<ViewUpdate, PluginError> {
+    let warning = match host.run_command(DAILY_COMMAND, serde_json::json!({ "date": date })) {
+        Ok(outcome) => match outcome.effect {
+            CommandEffect::Navigate { doc } => {
+                return Ok(ViewUpdate::Navigate {
+                    doc_id: doc.as_str().to_string(),
+                })
+            }
+            _ => return Ok(ViewUpdate::None),
+        },
+        Err(PluginError::UnknownCommand(_)) => Text::key(E_DAILY_OFF),
+        Err(and) => Text::message(
+            E_DAILY,
+            vec![
+                Arg::text("date", date),
+                Arg::text("reason", and.to_string()),
+            ],
+        ),
+    };
+    Ok(ViewUpdate::Replace {
+        root: tree(host, Some(warning))?,
+    })
 }
 
 fn command_then_tree(
@@ -524,17 +761,50 @@ fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError
     let props = model
         .frontmatter
         .properties_with_types(&date_formats(host), &property_types(host));
+    let same_day = host
+        .view_state(SAME_DAY_STATE)?
+        .and_then(|v| v.as_str().map(str::to_string))
+        .filter(|day| props.iter().any(|(_, v)| has_day(v, day)));
     if props.is_empty() {
         children.push(UiNode::empty_state(Text::key(EMPTY_NO_PROPS)));
     } else {
         children.extend(
             props
                 .iter()
-                .map(|(k, v)| row(&doc, k, v, model.frontmatter.get(k))),
+                .map(|(k, v)| row(&doc, k, v, model.frontmatter.get(k), same_day.as_deref())),
         );
+    }
+    if let Some(day) = &same_day {
+        children.push(same_day_list(host, &doc, day)?);
     }
     children.push(add_form(&doc));
     Ok(UiNode::column(1, children))
+}
+
+/// Il contatore della banda di stato. Tace senza nota, su una nota senza
+/// proprietà e su un documento che non ha un modello Markdown (un foglio, un
+/// disegno): lì non c'è frontmatter da contare, e un errore nella banda non
+/// direbbe niente di utile.
+fn status_count(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
+    let silent = || Ok(UiNode::row(12, Vec::new()));
+    let Some(doc) = host.active_context().and_then(|c| c.doc) else {
+        return silent();
+    };
+    let Ok(model) = host.read_model(&doc) else {
+        return silent();
+    };
+    let count = model
+        .frontmatter
+        .properties_with_types(&date_formats(host), &property_types(host))
+        .len();
+    if count == 0 {
+        return silent();
+    }
+    Ok(UiNode::text(Text::message(
+        STATUS_COUNT,
+        vec![Arg::int("count", i64::try_from(count).unwrap_or(i64::MAX))],
+    ))
+    .with_key(STATUS_COUNT))
 }
 
 fn frontmatter_span(source: &str) -> Span {
@@ -725,7 +995,93 @@ fn date_formats(host: &dyn ReadApi) -> DateFormats {
     }
 }
 
-fn row(doc: &DocId, key: &str, value: &PropertyValue, raw: Option<&serde_json::Value>) -> UiNode {
+/// Il giorno scritto di una data, `AAAA-MM-GG`: ora e fuso non lo spostano,
+/// perché è il giorno che l'utente ha scritto quello che cerca.
+fn day_of(date: &fub_abi::model::PropertyDate) -> String {
+    format!("{:04}-{:02}-{:02}", date.year, date.month, date.day)
+}
+
+/// Il valore porta questo giorno, da solo o dentro un elenco?
+fn has_day(value: &PropertyValue, day: &str) -> bool {
+    match value {
+        PropertyValue::Date(date) => day_of(date) == day,
+        PropertyValue::List(items) => items
+            .iter()
+            .any(|item| matches!(item, PropertyScalar::Date(date) if day_of(date) == day)),
+        _ => false,
+    }
+}
+
+/// Le altre note che hanno, in una proprietà qualsiasi, una data di quel
+/// giorno. Le chiavi non si sanno prima (`date`, `created`, `scadenza`…): si
+/// leggono le proprietà dall'indice, come fa la vista globale, e si guarda il
+/// valore già tipato.
+fn same_day_list(host: &dyn ReadApi, doc: &DocId, day: &str) -> Result<UiNode, PluginError> {
+    let documents = host
+        .query_index(IndexQuery::Documents {
+            matching: QueryExpr::all(),
+            sort: None,
+            select: PropertySelect::All,
+            page: None,
+            excerpts: Excerpts::Omit,
+        })?
+        .documents()?;
+    let mut others: Vec<DocId> = documents
+        .items
+        .into_iter()
+        .filter(|m| &m.doc != doc && m.properties.iter().any(|p| has_day(&p.value, day)))
+        .map(|m| m.doc)
+        .collect();
+    others.sort();
+    let date = Arg::text("date", day);
+    if others.is_empty() {
+        return Ok(
+            UiNode::empty_state(Text::message(SAME_DAY_NONE, vec![date])).with_key(SAME_DAY),
+        );
+    }
+    let hidden = others.len().saturating_sub(SAME_DAY_ROWS);
+    let items: Vec<UiNode> = others
+        .iter()
+        .take(SAME_DAY_ROWS)
+        .map(|other| {
+            UiNode::list_item(
+                Text::from(other.as_str().to_string()),
+                None,
+                Some(ActionRef::with(
+                    OPEN,
+                    serde_json::json!({ DOC: other.as_str() }),
+                )),
+            )
+            .with_key(other.as_str())
+        })
+        .collect();
+    let mut entries = vec![
+        UiNode::text(Text::message(SAME_DAY_TITLE, vec![date])),
+        UiNode::list(items),
+    ];
+    if hidden > 0 {
+        entries.push(UiNode::text(Text::message(
+            SAME_DAY_MORE,
+            vec![Arg::int("count", i64::try_from(hidden).unwrap_or(i64::MAX))],
+        )));
+    }
+    Ok(UiNode::keyed(
+        SAME_DAY,
+        UiKind::Stack {
+            dir: fub_abi::ui::Axis::Column,
+            gap: 1,
+            children: entries,
+        },
+    ))
+}
+
+fn row(
+    doc: &DocId,
+    key: &str,
+    value: &PropertyValue,
+    raw: Option<&serde_json::Value>,
+    same_day: Option<&str>,
+) -> UiNode {
     let payload = serde_json::json!({ KEY: key, DOC: doc.as_str() });
     let source_only = matches!(value, PropertyValue::Unknown(_) | PropertyValue::Empty)
         || matches!(value, PropertyValue::List(items) if items.iter().any(|v|
@@ -751,6 +1107,23 @@ fn row(doc: &DocId, key: &str, value: &PropertyValue, raw: Option<&serde_json::V
     if source_only {
         controls.push(source_button(doc));
     } else {
+        if let PropertyValue::Date(date) = value {
+            let day = day_of(date);
+            controls.push(UiNode::button(
+                Text::key(DAILY_LABEL),
+                Intent::Neutral,
+                ActionRef::with(DAILY, serde_json::json!({ VALUE: day })),
+            ));
+            controls.push(UiNode::button(
+                Text::key(SAME_DAY_LABEL),
+                if same_day == Some(day.as_str()) {
+                    Intent::Primary
+                } else {
+                    Intent::Neutral
+                },
+                ActionRef::with(SAME_DAY, serde_json::json!({ VALUE: day })),
+            ));
+        }
         controls.push(UiNode::button(
             Text::key(REMOVE_LABEL),
             Intent::Danger,
@@ -955,6 +1328,17 @@ impl CommandProvider for PropertiesCommands {
                 .with_param(parameter(PROPERTY_KEY_RENAME, OLD_KEY, ParamKind::Text).required())
                 .with_param(parameter(PROPERTY_KEY_RENAME, NEW_KEY, ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
+            command(PROPERTY_KEY_DELETE)
+                .with_param(parameter(PROPERTY_KEY_DELETE, KEY, ParamKind::Text).required())
+                .with_scope(CommandScope::writing(CommandReach::Vault)),
+            command(PROPERTY_KEYS_MIGRATE).with_scope(CommandScope::writing(CommandReach::Vault)),
+            command(NOTES_ALIAS_ADD)
+                .with_param(parameter(NOTES_ALIAS_ADD, ALIAS, ParamKind::Text).required())
+                .with_param(parameter(NOTES_ALIAS_ADD, DOC, ParamKind::Document))
+                .with_scope(CommandScope::writing(CommandReach::Document)),
+            command(NOTES_PROPERTIES_CLEAR)
+                .with_param(parameter(NOTES_PROPERTIES_CLEAR, DOC, ParamKind::Document))
+                .with_scope(CommandScope::writing(CommandReach::Document)),
         ]
     }
 
@@ -979,6 +1363,10 @@ impl CommandProvider for PropertiesCommands {
             }
             PROPERTY_TYPE_SET => set_property_type(Args::new(&args), mode, host),
             PROPERTY_KEY_RENAME => rename_property_key(Args::new(&args), mode, host),
+            PROPERTY_KEY_DELETE => delete_property_key(Args::new(&args), mode, host),
+            PROPERTY_KEYS_MIGRATE => migrate_property_keys(mode, host),
+            NOTES_ALIAS_ADD => add_alias(Args::new(&args), mode, host),
+            NOTES_PROPERTIES_CLEAR => clear_properties(Args::new(&args), mode, host),
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
     }
@@ -1372,6 +1760,280 @@ fn rename_property_key(
             ),
             inverses,
         ));
+    }
+    Ok(outcome)
+}
+
+/// Un alias in più, accodato alla lista: un `aliases` scritto come stringa
+/// diventa una lista con il vecchio valore davanti. Un vault che usa la chiave
+/// singolare `alias` la tiene, se `aliases` non c'è.
+fn add_alias(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let doc = doc_from(args, host)?;
+    let alias = args.text(ALIAS).unwrap_or("").trim().to_string();
+    if alias.is_empty() {
+        return Err(PluginError::BadArgs(Text::key(E_EMPTY_KEY)));
+    }
+    let model = host.read_model(&doc)?;
+    let key =
+        if model.frontmatter.0.get(ALIASES).is_none() && model.frontmatter.0.get(ALIAS).is_some() {
+            ALIAS
+        } else {
+            ALIASES
+        };
+    let mut list = match model.frontmatter.0.get(key) {
+        None | Some(serde_json::Value::Null) => Vec::new(),
+        Some(serde_json::Value::Array(items)) => items.clone(),
+        Some(other) => vec![other.clone()],
+    };
+    let named = vec![Arg::text(ALIAS, &alias), Arg::text(DOC, doc.as_str())];
+    if list
+        .iter()
+        .any(|item| item.as_str() == Some(alias.as_str()))
+    {
+        return Ok(CommandOutcome::notify(Text::message(
+            P_ALIAS_PRESENT,
+            named,
+        )));
+    }
+    list.push(serde_json::Value::String(alias.clone()));
+    let value = serde_json::Value::Array(list);
+    rewrite(
+        key,
+        &None,
+        None,
+        host,
+        &doc,
+        mode,
+        Text::message(P_ALIAS, named),
+        Text::message(U_ALIAS, vec![Arg::text(ALIAS, &alias)]),
+        |map| {
+            map.insert(key.to_string(), value.clone());
+            Ok(())
+        },
+    )
+}
+
+/// Il blocco intero, dai delimitatori al terminatore della riga di chiusura: il
+/// corpo resta byte per byte. Un frontmatter vuoto (`---` e `---`) si toglie
+/// anche lui; una nota senza blocco non si tocca.
+fn clear_properties(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let doc = doc_from(args, host)?;
+    let revision = host.document_revision(&doc)?;
+    let source = host.read_document(&doc)?;
+    let named = || vec![Arg::text(DOC, doc.as_str())];
+    let span = frontmatter_span(&source);
+    if span.start == span.end {
+        return Ok(CommandOutcome::notify(Text::message(P_CLEAR_NONE, named())));
+    }
+    let request = EditRequest::new(revision, vec![TextEdit::replace(span, String::new())]);
+    if mode.is_dry_run() {
+        return Ok(
+            CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
+                Text::message(P_CLEAR, named()),
+                vec![PlannedEdit::new(doc.clone(), request)],
+            ))),
+        );
+    }
+    let report = host.apply_edit(&doc, request)?;
+    Ok(CommandOutcome::notify(Text::message(P_CLEAR, named()))
+        .undoable(Undo::of_edits(
+            Text::message(U_CLEAR, named()),
+            vec![PlannedEdit::new(doc.clone(), report.inverse())],
+        ))
+        .with_effect(CommandEffect::Done))
+}
+
+/// Il gemello di [`rename_property_key`]: stesse revisioni fissate prima di
+/// scrivere, stesso esito parziale, e un annullo che rimette ogni valore. Il
+/// tipo dichiarato resta: la chiave può tornare, e il registro non è un dato
+/// delle note.
+fn delete_property_key(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let key = key_from(args)?;
+    let docs = host
+        .query_index(IndexQuery::Documents {
+            matching: QueryExpr::of(QueryPredicate::Property {
+                filter: PropertyFilter {
+                    key: key.clone(),
+                    test: PropertyTest::Exists,
+                },
+            }),
+            sort: None,
+            select: PropertySelect::None,
+            page: None,
+            excerpts: Excerpts::Omit,
+        })?
+        .documents()?
+        .items;
+    let attempted = docs.len();
+    let mut plans = Vec::with_capacity(attempted);
+    let mut failures = Vec::new();
+    for entry in docs {
+        let doc = entry.doc;
+        let prepared = (|| -> Result<Option<PlannedEdit>, PluginError> {
+            crate::formats::require(host, &doc, fub_abi::options::syntax::FRONTMATTER)?;
+            let revision = host.document_revision(&doc)?;
+            let source = host.read_document(&doc)?;
+            let model = host.read_model(&doc)?;
+            if model.frontmatter.get(&key).is_none() {
+                return Ok(None); // già tolta: si può rilanciare
+            }
+            let edit = edit_property_frontmatter(&source, &model, &key, None)?;
+            Ok(Some(PlannedEdit::new(
+                doc.clone(),
+                EditRequest::new(revision, vec![edit]),
+            )))
+        })();
+        match prepared {
+            Ok(Some(edit)) => plans.push(edit),
+            Ok(None) => {}
+            Err(error) => failures.push(Failure::of(doc, error)),
+        }
+    }
+    let summary = |count: usize| {
+        Text::message(
+            P_DELETE,
+            vec![
+                Arg::text(KEY, key.as_str()),
+                Arg::text("count", count.to_string()),
+            ],
+        )
+    };
+    if mode.is_dry_run() {
+        let planned = plans.len();
+        return Ok(CommandOutcome::done()
+            .with_effect(CommandEffect::Plan(CommandPlan::of_edits(
+                summary(planned),
+                plans,
+            )))
+            .partially(Partial::of(attempted, planned, failures)));
+    }
+    let mut inverses = Vec::new();
+    for planned in plans {
+        match host.apply_edit(&planned.doc, planned.edit) {
+            Ok(report) => inverses.push(PlannedEdit::new(planned.doc, report.inverse())),
+            Err(error) => failures.push(Failure::of(planned.doc, error)),
+        }
+    }
+    let changed = inverses.len();
+    let mut outcome = CommandOutcome::notify(summary(changed))
+        .partially(Partial::of(attempted, changed, failures));
+    if !inverses.is_empty() {
+        inverses.reverse();
+        outcome = outcome.undoable(Undo::of_edits(
+            Text::message(U_DELETE, vec![Arg::text(KEY, key.as_str())]),
+            inverses,
+        ));
+    }
+    Ok(outcome)
+}
+
+/// [`rename_property_key`] per le tre chiavi vecchie insieme: una nota sola
+/// riceve le sue rinomine in una richiesta, così l'anteprima e l'annullo la
+/// trattano intera. Una nota con entrambe le forme di una chiave non si tocca:
+/// unire i due valori deciderebbe al posto di chi scrive.
+fn migrate_property_keys(
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let mut docs: Vec<DocId> = Vec::new();
+    for (old, _) in LEGACY_KEYS {
+        let found = host
+            .query_index(IndexQuery::Documents {
+                matching: QueryExpr::of(QueryPredicate::Property {
+                    filter: PropertyFilter {
+                        key: old.to_string(),
+                        test: PropertyTest::Exists,
+                    },
+                }),
+                sort: None,
+                select: PropertySelect::None,
+                page: None,
+                excerpts: Excerpts::Omit,
+            })?
+            .documents()?
+            .items;
+        for entry in found {
+            if !docs.contains(&entry.doc) {
+                docs.push(entry.doc);
+            }
+        }
+    }
+    let attempted = docs.len();
+    let mut plans = Vec::with_capacity(attempted);
+    let mut failures = Vec::new();
+    for doc in docs {
+        let prepared = (|| -> Result<Option<PlannedEdit>, PluginError> {
+            crate::formats::require(host, &doc, fub_abi::options::syntax::FRONTMATTER)?;
+            let revision = host.document_revision(&doc)?;
+            let source = host.read_document(&doc)?;
+            let model = host.read_model(&doc)?;
+            let mut edits = Vec::new();
+            for (old, new) in LEGACY_KEYS {
+                if model.frontmatter.get(old).is_none() {
+                    continue;
+                }
+                if model.frontmatter.get(new).is_some() {
+                    return Err(PluginError::Conflict(Text::message(
+                        E_BOTH_FORMS,
+                        vec![
+                            Arg::text(DOC, doc.as_str()),
+                            Arg::text("old", old),
+                            Arg::text("new", new),
+                        ],
+                    )));
+                }
+                edits.push(edit_property_key(&source, old, new)?);
+            }
+            if edits.is_empty() {
+                return Ok(None); // già convertita: si può rilanciare
+            }
+            Ok(Some(PlannedEdit::new(
+                doc.clone(),
+                EditRequest::new(revision, edits),
+            )))
+        })();
+        match prepared {
+            Ok(Some(edit)) => plans.push(edit),
+            Ok(None) => {}
+            Err(error) => failures.push(Failure::of(doc, error)),
+        }
+    }
+    let summary =
+        |count: usize| Text::message(P_MIGRATE, vec![Arg::text("count", count.to_string())]);
+    if mode.is_dry_run() {
+        let planned = plans.len();
+        return Ok(CommandOutcome::done()
+            .with_effect(CommandEffect::Plan(CommandPlan::of_edits(
+                summary(planned),
+                plans,
+            )))
+            .partially(Partial::of(attempted, planned, failures)));
+    }
+    let mut inverses = Vec::new();
+    for planned in plans {
+        match host.apply_edit(&planned.doc, planned.edit) {
+            Ok(report) => inverses.push(PlannedEdit::new(planned.doc, report.inverse())),
+            Err(error) => failures.push(Failure::of(planned.doc, error)),
+        }
+    }
+    let changed = inverses.len();
+    let mut outcome = CommandOutcome::notify(summary(changed))
+        .partially(Partial::of(attempted, changed, failures));
+    if !inverses.is_empty() {
+        inverses.reverse();
+        outcome = outcome.undoable(Undo::of_edits(Text::key(U_MIGRATE), inverses));
     }
     Ok(outcome)
 }

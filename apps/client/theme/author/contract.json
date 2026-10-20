@@ -309,10 +309,12 @@
     "tree-selection-action",
     "tree-selection-trash",
     "tree-empty",
+    "explorer-filter",
     "search-input",
     "hit-title",
     "hit-path",
     "hit-snippet",
+    "hit-context",
     "hit-occurrence",
     "hit-create",
     "search-action",
@@ -837,10 +839,15 @@
     "media-pdf",
     "media-pdf-toolbar",
     "media-pdf-page",
+    "media-pdf-spread",
+    "media-pdf-body",
+    "media-pdf-thumbs",
     "media-audio",
     "media-video",
     "media-error",
     "media-recorder",
+    "web-viewer-bar",
+    "web-viewer-address",
     "slide-deck",
     "slide-status",
     "slide-stage",
@@ -941,6 +948,29 @@
     "palette-form",
     "palette-label",
     "palette-help",
+    "palette-path",
+    "vault-export-options",
+    "vault-export-option",
+    "vault-export-result",
+    "vault-export-summary",
+    "vault-export-notes",
+    "vault-export-note",
+    "note-import-fields",
+    "note-import-file",
+    "note-import-file-name",
+    "note-import-status",
+    "note-import-plan",
+    "note-import-plan-title",
+    "note-import-tally",
+    "note-import-docs",
+    "note-import-doc",
+    "note-import-more",
+    "note-import-losses",
+    "note-import-loss",
+    "note-import-remote",
+    "note-import-token",
+    "note-import-token-state",
+    "note-import-token-row",
     "palette-summary",
     "palette-plan",
     "palette-error",
@@ -1926,6 +1956,17 @@
       ]
     },
     {
+      "name": "tree-filter",
+      "part": "tree",
+      "hooks": [
+        "explorer-filter"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
       "name": "search-field",
       "part": "search",
       "hooks": [
@@ -1945,6 +1986,7 @@
         "hit-title",
         "hit-path",
         "hit-snippet",
+        "hit-context",
         "hit-occurrence",
         "hit-create"
       ],
@@ -3146,7 +3188,10 @@
       "hooks": [
         "media-pdf",
         "media-pdf-toolbar",
-        "media-pdf-page"
+        "media-pdf-page",
+        "media-pdf-spread",
+        "media-pdf-body",
+        "media-pdf-thumbs"
       ],
       "states": [
         "rest",
@@ -3177,6 +3222,21 @@
       "part": "media",
       "hooks": [
         "media-recorder"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "web-viewer-bar",
+      "part": "media",
+      "hooks": [
+        "web-viewer-bar",
+        "web-viewer-address"
       ],
       "states": [
         "rest",
@@ -3576,13 +3636,56 @@
       "hooks": [
         "palette-form",
         "palette-label",
-        "palette-help"
+        "palette-help",
+        "palette-path"
       ],
       "states": [
         "rest",
         "hover",
         "focused",
         "disabled"
+      ]
+    },
+    {
+      "name": "export-form",
+      "part": "launcher",
+      "hooks": [
+        "vault-export-options",
+        "vault-export-option",
+        "vault-export-result",
+        "vault-export-summary",
+        "vault-export-notes",
+        "vault-export-note"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "import-form",
+      "part": "launcher",
+      "hooks": [
+        "note-import-fields",
+        "note-import-file",
+        "note-import-file-name",
+        "note-import-status",
+        "note-import-plan",
+        "note-import-plan-title",
+        "note-import-tally",
+        "note-import-docs",
+        "note-import-doc",
+        "note-import-more",
+        "note-import-losses",
+        "note-import-loss",
+        "note-import-remote",
+        "note-import-token",
+        "note-import-token-state",
+        "note-import-token-row"
+      ],
+      "states": [
+        "rest",
+        "focused"
       ]
     },
     {
@@ -4968,6 +5071,8 @@
     "text-reading",
     "leading-relaxed",
     "content-width",
+    "font-ui",
+    "font-mono",
     "titlebar-h",
     "chrome-btn",
     "win-ctrl-w",
@@ -5126,10 +5231,10 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1051,
+    "hooks": 1081,
     "state_names": 7,
-    "assigned_states": 614,
-    "components": 181,
-    "preference_tokens": 121
+    "assigned_states": 625,
+    "components": 185,
+    "preference_tokens": 123
   }
 }

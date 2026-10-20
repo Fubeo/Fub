@@ -13,6 +13,8 @@
 //! testo: un template che cita una variabile ignota la ritrova identica nella
 //! nota, non un errore e non una stringa vuota.
 
+use std::collections::BTreeMap;
+
 use fub_abi::command::{
     Args, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
     CommandSpec, CommandSurface, Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit,
@@ -21,7 +23,7 @@ use fub_abi::command::{
 use fub_abi::edit::{EditRequest, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
-use fub_abi::locale::{civil_from_days, HourCycle};
+use fub_abi::locale::{civil_from_days, days_from_civil, days_in_month, HourCycle};
 use fub_abi::model::{valid_civil_date, DocId, LinkTarget};
 use fub_abi::options::syntax;
 use fub_abi::rules::path_policy::{check as check_name, Naming};
@@ -34,10 +36,13 @@ use fub_abi::traits::{
     CommandProvider, HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance, ViewInterests,
     ViewProvider, ViewSpec, ViewSurface,
 };
-use fub_abi::ui::{ActionRef, UiAction, UiNode, ViewUpdate};
+use fub_abi::ui::{ActionRef, Align, Intent, TableColumn, UiAction, UiKind, UiNode, ViewUpdate};
 
 pub const TEMPLATE_ID: &str = "fub.template";
 pub const TEMPLATE_VIEW: &str = "templates";
+/// Il calendario delle giornaliere: un mese, le settimane numerate, un giorno
+/// per bottone.
+pub const CALENDAR_VIEW: &str = "calendar";
 pub const NOTES_FROM_TEMPLATE: &str = "note.from_template";
 pub const NOTES_DAILY: &str = "note.daily";
 /// Crea una nota con un nome univoco (`name`, poi `name 1`, `name 2`, …)
@@ -67,6 +72,12 @@ const UNTITLED: &str = "Untitled";
 pub const DAILY_FOLDER_KEY: &str = "daily.folder";
 /// Template delle giornaliere deciso nelle impostazioni.
 pub const DAILY_TEMPLATE_KEY: &str = "daily.template";
+/// Il nome della giornaliera dentro la sua cartella: token `YYYY`, `YY`,
+/// `MMMM`, `MMM`, `MM`, `M`, `DD`, `D`, `dddd`, `ddd`, testo fra `[…]`
+/// letterale; una `/` fa una sottocartella.
+pub const DAILY_FORMAT_KEY: &str = "daily.format";
+/// Il nome di sempre: ordinabile, e quello che `note.daily` accetta come data.
+pub const DAILY_FORMAT_DEFAULT: &str = "YYYY-MM-DD";
 /// Formato di `note.insert_datetime`: `date`, `time` o `datetime`.
 pub const DATE_FORMAT_KEY: &str = "insert.date-format";
 /// Orologio a 12 o 24 ore per l'inserimento dell'ora.
@@ -88,6 +99,9 @@ const S_DAILY_FOLDER: &str = "template.daily_folder";
 const S_DAILY_FOLDER_DESC: &str = "template.daily_folder.desc";
 const S_DAILY_TEMPLATE: &str = "template.daily_template";
 const S_DAILY_TEMPLATE_DESC: &str = "template.daily_template.desc";
+const S_DAILY_FORMAT: &str = "template.daily_format";
+const S_DAILY_FORMAT_DESC: &str = "template.daily_format.desc";
+const E_BAD_DAILY_FORMAT: &str = "e_bad_daily_format";
 const S_DATE_FORMAT: &str = "template.date_format";
 const S_DATE_FORMAT_DESC: &str = "template.date_format.desc";
 const S_TIME_FORMAT: &str = "template.time_format";
@@ -122,6 +136,15 @@ const SEPARATOR: &str = "separator";
 
 const VIEW_TITLE: &str = "view_title";
 const EMPTY: &str = "empty";
+const CALENDAR_TITLE: &str = "calendar.title";
+const CALENDAR_PREV: &str = "calendar.prev";
+const CALENDAR_NEXT: &str = "calendar.next";
+const CALENDAR_TODAY: &str = "calendar.today";
+const CALENDAR_WEEK: &str = "calendar.week";
+/// Il gesto su un giorno: apre la sua giornaliera, o la crea.
+const CALENDAR_OPEN: &str = "calendar.open";
+/// La chiave dello stato di vista: il mese mostrato, come `anno*12 + mese-1`.
+const SHOWN: &str = "shown";
 const E_NO_TEMPLATE: &str = "e_no_template";
 const E_EMPTY_TEMPLATE: &str = "e_empty_template";
 const E_NO_NOTES: &str = "e_no_notes";
@@ -182,6 +205,11 @@ fn catalog_it() -> StringCatalog {
     StringCatalog::new("it")
         .with(VIEW_TITLE, "Template")
         .with(EMPTY, "Nessun template in Templates/.")
+        .with(CALENDAR_TITLE, "Calendario")
+        .with(CALENDAR_PREV, "Mese prima")
+        .with(CALENDAR_NEXT, "Mese dopo")
+        .with(CALENDAR_TODAY, "Oggi")
+        .with(CALENDAR_WEEK, "Sett.")
         .with(E_NO_TEMPLATE, "Nessun template indicato.")
         .with(E_EMPTY_TEMPLATE, "Il template «{doc}» è vuoto di nome.")
         .with(E_NO_NOTES, "Nessuna nota nel vault.")
@@ -352,10 +380,11 @@ fn catalog_it() -> StringCatalog {
         .with("note.extract.replace.title", "Sostituisci con")
         .with(
             "note.extract.replace.desc",
-            "link o embed. Assente: link.",
+            "link, embed o niente. Assente: link.",
         )
         .with("note.extract.replace.link", "Link")
         .with("note.extract.replace.embed", "Embed")
+        .with("note.extract.replace.none", "Niente")
         .with("note.merge.title", "Unisci note")
         .with(
             "note.merge.desc",
@@ -390,6 +419,15 @@ fn catalog_it() -> StringCatalog {
             S_DAILY_TEMPLATE_DESC,
             "Template usato da `note.daily` quando la nota non esiste.",
         )
+        .with(S_DAILY_FORMAT, "Nome della giornaliera")
+        .with(
+            S_DAILY_FORMAT_DESC,
+            "YYYY, YY, MMMM, MMM, MM, M, DD, D, dddd, ddd; il testo fra [ ] resta com'è e una / fa una sottocartella. Esempio: YYYY/MMMM/YYYY-MM-DD.",
+        )
+        .with(
+            E_BAD_DAILY_FORMAT,
+            "Il nome della giornaliera «{value}» non è un percorso valido: controlla daily.format.",
+        )
         .with(S_DATE_FORMAT, "Formato di data/ora")
         .with(
             S_DATE_FORMAT_DESC,
@@ -411,6 +449,11 @@ fn catalog_en() -> StringCatalog {
     StringCatalog::new("en")
         .with(VIEW_TITLE, "Templates")
         .with(EMPTY, "No templates in Templates/.")
+        .with(CALENDAR_TITLE, "Calendar")
+        .with(CALENDAR_PREV, "Previous month")
+        .with(CALENDAR_NEXT, "Next month")
+        .with(CALENDAR_TODAY, "Today")
+        .with(CALENDAR_WEEK, "Wk")
         .with(E_NO_TEMPLATE, "No template given.")
         .with(E_EMPTY_TEMPLATE, "Template «{doc}» has no usable name.")
         .with(E_NO_NOTES, "No notes in the vault.")
@@ -581,10 +624,11 @@ fn catalog_en() -> StringCatalog {
         .with("note.extract.replace.title", "Replace with")
         .with(
             "note.extract.replace.desc",
-            "link or embed. Absent: link.",
+            "link, embed or nothing. Absent: link.",
         )
         .with("note.extract.replace.link", "Link")
         .with("note.extract.replace.embed", "Embed")
+        .with("note.extract.replace.none", "Nothing")
         .with("note.merge.title", "Merge notes")
         .with(
             "note.merge.desc",
@@ -619,6 +663,15 @@ fn catalog_en() -> StringCatalog {
             S_DAILY_TEMPLATE_DESC,
             "Template used by `note.daily` when the note does not exist.",
         )
+        .with(S_DAILY_FORMAT, "Daily note name")
+        .with(
+            S_DAILY_FORMAT_DESC,
+            "YYYY, YY, MMMM, MMM, MM, M, DD, D, dddd, ddd; text between [ ] stays as written and a / makes a subfolder. Example: YYYY/MMMM/YYYY-MM-DD.",
+        )
+        .with(
+            E_BAD_DAILY_FORMAT,
+            "The daily note name {value} is not a valid path: check daily.format.",
+        )
         .with(S_DATE_FORMAT, "Date/time format")
         .with(
             S_DATE_FORMAT_DESC,
@@ -647,29 +700,44 @@ impl ViewProvider for TemplateView {
     }
 
     fn views(&self) -> Vec<ViewSpec> {
-        vec![ViewSpec::new(
-            TEMPLATE_VIEW,
-            Text::key(VIEW_TITLE),
-            ViewSurface::LeftSidebar,
-        )
-        .with_icon("template")
-        .ordered(4)]
+        vec![
+            ViewSpec::new(
+                TEMPLATE_VIEW,
+                Text::key(VIEW_TITLE),
+                ViewSurface::LeftSidebar,
+            )
+            .with_icon("template")
+            .ordered(4),
+            ViewSpec::new(
+                CALENDAR_VIEW,
+                Text::key(CALENDAR_TITLE),
+                ViewSurface::RightSidebar,
+            )
+            .with_icon("calendar")
+            .ordered(7),
+        ]
     }
 
     fn render_view(
         &self,
-        _instance: &ViewInstance,
+        instance: &ViewInstance,
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
+        if instance.view == CALENDAR_VIEW {
+            return calendar(host);
+        }
         tree(host)
     }
 
     fn on_action(
         &mut self,
-        _instance: &ViewInstance,
+        instance: &ViewInstance,
         action: UiAction,
         host: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
+        if instance.view == CALENDAR_VIEW {
+            return calendar_action(action, host);
+        }
         if action.action.0 != USE {
             return Ok(ViewUpdate::None);
         }
@@ -691,6 +759,193 @@ impl ViewProvider for TemplateView {
             }),
         }
     }
+}
+
+/// Il mese che il calendario mostra: quello salvato nello stato di vista, o
+/// quello di oggi.
+fn shown_month(host: &dyn ReadApi) -> Result<i64, PluginError> {
+    if let Some(index) = host.view_state(SHOWN)?.and_then(|v| v.as_i64()) {
+        return Ok(index);
+    }
+    let today = today(host)?;
+    let year: i64 = today[..4].parse().unwrap_or(1970);
+    let month: i64 = today[5..7].parse().unwrap_or(1);
+    Ok(year * 12 + month - 1)
+}
+
+/// Il giorno della settimana ISO (lunedì = 1) di un giorno dall'epoca, che era
+/// un giovedì.
+fn iso_weekday(day: i64) -> i64 {
+    (day + 3).rem_euclid(7) + 1
+}
+
+/// Il numero ISO 8601 della settimana di un giorno: quella del suo giovedì,
+/// contata dal primo giovedì dell'anno.
+fn iso_week(day: i64) -> i64 {
+    let thursday = day - iso_weekday(day) + 4;
+    let (year, _, _) = civil_from_days(thursday);
+    (thursday - days_from_civil(year, 1, 1)) / 7 + 1
+}
+
+/// Un mese di giornaliere: le righe sono settimane che cominciano dal primo
+/// giorno della settimana del locale, con il numero ISO della settimana in
+/// testa; un giorno che ha già la sua giornaliera è un bottone in evidenza.
+///
+/// La giornaliera di un giorno si riconosce dal path che `note.daily` le
+/// darebbe, con cartella, formato ed estensione di adesso: una nota scritta
+/// con un formato vecchio non c'è, come non la troverebbe il comando.
+fn calendar(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
+    let index = shown_month(host)?;
+    let (year, month) = (index.div_euclid(12), index.rem_euclid(12) as u64 + 1);
+    let locale = host.user_locale();
+    let language = locale.language_base().to_string();
+    let first = days_from_civil(year, month, 1);
+    let length = days_in_month(year, month) as i64;
+    let start = i64::from(locale.first_day_of_week.iso());
+    let offset = (iso_weekday(first) - start).rem_euclid(7);
+    let weeks = (offset + length + 6) / 7;
+    let existing: std::collections::HashSet<DocId> =
+        host.list_documents(None)?.items.into_iter().collect();
+    let folder = daily_folder(host);
+    let format = daily_format(host);
+    let extension = crate::formats::new_note_extension(host)?;
+    let today = today(host)?;
+    let weekdays = if language == "it" {
+        WEEKDAYS_IT
+    } else {
+        WEEKDAYS_EN
+    };
+    let months = if language == "it" {
+        MONTHS_IT
+    } else {
+        MONTHS_EN
+    };
+    let mut columns = vec![TableColumn::new(Text::key(CALENDAR_WEEK))];
+    for d in 0..7 {
+        let name = weekdays[((start - 1 + d) % 7) as usize];
+        let short: String = name.chars().take(3).collect();
+        let mut column = TableColumn::new(Text::from(short));
+        column.align = Align::Center;
+        columns.push(column);
+    }
+    let rows = (0..weeks)
+        .map(|week| {
+            let from = first - offset + 7 * week;
+            // Il numero è quello del giovedì della riga, che con la settimana
+            // da lunedì è la regola ISO e con quella da domenica (o da sabato)
+            // dà alla riga la settimana ISO della maggior parte dei suoi giorni.
+            let thursday = (from..from + 7)
+                .find(|day| iso_weekday(*day) == 4)
+                .unwrap_or(from);
+            let mut cells = vec![UiNode::text(Text::from(iso_week(thursday).to_string()))];
+            for d in 0..7 {
+                let (y, m, day) = civil_from_days(from + d);
+                if m != month {
+                    cells.push(UiNode::text(Text::from(String::new())));
+                    continue;
+                }
+                let date = format!("{y:04}-{m:02}-{day:02}");
+                let name = daily_name(&format, &date, &language);
+                let id = DocId::new(format!("{folder}/{name}.{extension}"));
+                let intent = if existing.contains(&id) {
+                    Intent::Primary
+                } else {
+                    Intent::Neutral
+                };
+                // Oggi si riconosce dal punto: il contratto non ha uno stato
+                // «corrente» per un bottone, e il colore lo dice già la nota.
+                let label = if date == today {
+                    format!("{day}•")
+                } else {
+                    day.to_string()
+                };
+                cells.push(
+                    UiNode::button(
+                        Text::from(label),
+                        intent,
+                        ActionRef::with(CALENDAR_OPEN, serde_json::json!({ DATE: date })),
+                    )
+                    .with_key(date),
+                );
+            }
+            UiNode::keyed(
+                format!("week-{}", from),
+                UiKind::Row {
+                    cells,
+                    action: None,
+                },
+            )
+        })
+        .collect();
+    let title = format!("{} {year}", months[(month - 1) as usize]);
+    Ok(UiNode::column(
+        8,
+        vec![
+            UiNode::row(
+                4,
+                vec![
+                    UiNode::button(
+                        Text::key(CALENDAR_PREV),
+                        Intent::Neutral,
+                        ActionRef::with(CALENDAR_PREV, serde_json::Value::Null),
+                    ),
+                    UiNode::heading(3, Text::from(title)),
+                    UiNode::button(
+                        Text::key(CALENDAR_NEXT),
+                        Intent::Neutral,
+                        ActionRef::with(CALENDAR_NEXT, serde_json::Value::Null),
+                    ),
+                    UiNode::button(
+                        Text::key(CALENDAR_TODAY),
+                        Intent::Neutral,
+                        ActionRef::with(CALENDAR_TODAY, serde_json::Value::Null),
+                    ),
+                ],
+            )
+            .with_key("calendar-bar"),
+            UiNode::keyed(format!("month-{index}"), UiKind::Table { columns, rows }),
+        ],
+    ))
+}
+
+/// I gesti del calendario: si cambia mese ricordandolo nello stato di vista, e
+/// un giorno apre (o crea) la sua giornaliera con `note.daily`, la stessa
+/// strada della palette.
+fn calendar_action(action: UiAction, host: &mut dyn HostApi) -> Result<ViewUpdate, PluginError> {
+    let step = match action.action.0.as_str() {
+        CALENDAR_PREV => Some(-1),
+        CALENDAR_NEXT => Some(1),
+        CALENDAR_TODAY => {
+            host.set_view_state(SHOWN, None)?;
+            None
+        }
+        CALENDAR_OPEN => {
+            let Some(date) = action.payload.get(DATE).and_then(|v| v.as_str()) else {
+                return Ok(ViewUpdate::None);
+            };
+            return match host.run_command(NOTES_DAILY, serde_json::json!({ DATE: date })) {
+                Ok(outcome) => match outcome.effect {
+                    CommandEffect::Navigate { doc } => Ok(ViewUpdate::Navigate {
+                        doc_id: doc.as_str().to_string(),
+                    }),
+                    _ => Ok(ViewUpdate::Replace {
+                        root: calendar(host)?,
+                    }),
+                },
+                Err(and) => Ok(ViewUpdate::Replace {
+                    root: UiNode::failed(Text::from(and.to_string()), None),
+                }),
+            };
+        }
+        _ => return Ok(ViewUpdate::None),
+    };
+    if let Some(step) = step {
+        let index = shown_month(host)? + step;
+        host.set_view_state(SHOWN, Some(serde_json::json!(index)))?;
+    }
+    Ok(ViewUpdate::Replace {
+        root: calendar(host)?,
+    })
 }
 
 fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
@@ -793,6 +1048,7 @@ impl TemplateCommands {
                     ParamKind::Choice(vec![
                         Choice::new("link", Text::key("note.extract.replace.link")),
                         Choice::new("embed", Text::key("note.extract.replace.embed")),
+                        Choice::new("none", Text::key("note.extract.replace.none")),
                     ]),
                 ))
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
@@ -839,6 +1095,16 @@ impl TemplateCommands {
                 },
             )
             .describing(Text::key(S_DAILY_TEMPLATE_DESC))
+            .grouped(Text::key(S_GROUP))
+            .program_writable(),
+            SettingSpec::new(
+                DAILY_FORMAT_KEY,
+                Text::key(S_DAILY_FORMAT),
+                SettingKind::Text {
+                    default: DAILY_FORMAT_DEFAULT.into(),
+                },
+            )
+            .describing(Text::key(S_DAILY_FORMAT_DESC))
             .grouped(Text::key(S_GROUP))
             .program_writable(),
             SettingSpec::new(
@@ -987,7 +1253,20 @@ fn daily(
         .map(str::to_string)
         .unwrap_or_else(|| daily_template(host));
     let extension = crate::formats::new_note_extension(host)?;
-    let id = DocId::new(format!("{folder}/{date}.{extension}"));
+    let name = daily_name(
+        &daily_format(host),
+        &date,
+        host.user_locale().language_base(),
+    );
+    let path = format!("{folder}/{name}.{extension}");
+    if check_name(&path, Naming::New).is_err() {
+        return Err(PluginError::BadArgs(Text::message(
+            E_BAD_DAILY_FORMAT,
+            vec![Arg::text(A_VALUE, &name)],
+        )));
+    }
+    let id = DocId::new(path);
+    let title = name.rsplit('/').next().unwrap_or(&name).to_string();
     let summary = Text::message(P_DAILY, vec![Arg::text(DATE, &date)]);
     if mode.is_dry_run() {
         return Ok(plan(summary, id));
@@ -1002,7 +1281,7 @@ fn daily(
     }
     let ctx = context_of(host, &date)?;
     let body = match host.read_document(&DocId::new(with_extension(host, &template)?)) {
-        Ok(grezzo) => expand_full(&grezzo, &date, &ctx, host)?,
+        Ok(grezzo) => expand_full(&grezzo, &title, &ctx, host)?,
         Err(PluginError::NotFound(_)) => String::new(),
         Err(and) => return Err(and),
     };
@@ -1317,13 +1596,133 @@ fn folder_arg(raw: Option<&str>) -> Result<Option<String>, PluginError> {
 /// La cartella delle giornaliere decisa nelle impostazioni, o il default. Una
 /// parola illeggibile nel file vale il default — come `date_formats` del
 /// kernel — invece di rendere il vault illeggibile.
-fn daily_folder(host: &dyn HostApi) -> String {
+fn daily_folder(host: &dyn ReadApi) -> String {
     match host.setting(DAILY_FOLDER_KEY) {
         Ok(fub_abi::settings::SettingValue::Text(s)) => {
             valid_folder(&s).unwrap_or_else(|_| FOLDER_DAILY.into())
         }
         _ => FOLDER_DAILY.into(),
     }
+}
+
+fn daily_format(host: &dyn ReadApi) -> String {
+    match host.setting(DAILY_FORMAT_KEY) {
+        Ok(fub_abi::settings::SettingValue::Text(s)) if !s.trim().is_empty() => {
+            s.trim().to_string()
+        }
+        _ => DAILY_FORMAT_DEFAULT.into(),
+    }
+}
+
+const MONTHS_IT: [&str; 12] = [
+    "gennaio",
+    "febbraio",
+    "marzo",
+    "aprile",
+    "maggio",
+    "giugno",
+    "luglio",
+    "agosto",
+    "settembre",
+    "ottobre",
+    "novembre",
+    "dicembre",
+];
+const MONTHS_EN: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+const WEEKDAYS_IT: [&str; 7] = [
+    "lunedì",
+    "martedì",
+    "mercoledì",
+    "giovedì",
+    "venerdì",
+    "sabato",
+    "domenica",
+];
+const WEEKDAYS_EN: [&str; 7] = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+];
+
+/// Il nome della giornaliera di `date` (già valida, `YYYY-MM-DD`) nel formato
+/// dichiarato. I nomi di mesi e giorni sono nella lingua di chi legge
+/// (italiano o, per ogni altra, inglese); un token più lungo vince sul più
+/// corto, e `[…]` protegge il testo che somiglia a un token.
+fn daily_name(format: &str, date: &str, language: &str) -> String {
+    let year: i32 = date[..4].parse().unwrap_or_default();
+    let month: u8 = date[5..7].parse().unwrap_or(1);
+    let day: u8 = date[8..10].parse().unwrap_or(1);
+    let weekday = fub_abi::traits::CivilTime {
+        year,
+        month,
+        day,
+        hour: 0,
+        minute: 0,
+        second: 0,
+    }
+    .weekday()
+    .iso();
+    let (months, weekdays) = if language == "it" {
+        (MONTHS_IT, WEEKDAYS_IT)
+    } else {
+        (MONTHS_EN, WEEKDAYS_EN)
+    };
+    let month_name = months[usize::from(month.clamp(1, 12)) - 1];
+    let weekday_name = weekdays[usize::from(weekday.clamp(1, 7)) - 1];
+    let short = |name: &str| name.chars().take(3).collect::<String>();
+    let mut out = String::new();
+    let mut rest = format;
+    while let Some(c) = rest.chars().next() {
+        if c == '[' {
+            if let Some(end) = rest.find(']') {
+                out.push_str(&rest[1..end]);
+                rest = &rest[end + 1..];
+                continue;
+            }
+        }
+        let value = [
+            ("YYYY", format!("{year:04}")),
+            ("YY", format!("{:02}", year.rem_euclid(100))),
+            ("MMMM", month_name.to_string()),
+            ("MMM", short(month_name)),
+            ("MM", format!("{month:02}")),
+            ("M", month.to_string()),
+            ("DD", format!("{day:02}")),
+            ("D", day.to_string()),
+            ("dddd", weekday_name.to_string()),
+            ("ddd", short(weekday_name)),
+        ]
+        .into_iter()
+        .find(|(token, _)| rest.starts_with(token));
+        match value {
+            Some((token, value)) => {
+                out.push_str(&value);
+                rest = &rest[token.len()..];
+            }
+            None => {
+                out.push(c);
+                rest = &rest[c.len_utf8()..];
+            }
+        }
+    }
+    out
 }
 
 fn daily_template(host: &dyn HostApi) -> String {
@@ -1940,12 +2339,16 @@ fn extract(
         )));
     }
     check_relative_assets(host, &from, &id, Some(span))?;
-    let embed = matches!(args.text(REPLACE).unwrap_or("link").trim(), "embed");
-    let link = crate::formats::link_text(
-        host,
-        &from,
-        &crate::formats::wikilink(id.page_name(), None, embed),
-    )?;
+    // «Niente» toglie la selezione e basta: il testo vive nella nota nuova, e
+    // l'annullamento lo rimette dov'era come per gli altri due.
+    let link = match args.text(REPLACE).unwrap_or("link").trim() {
+        "none" => String::new(),
+        replace => crate::formats::link_text(
+            host,
+            &from,
+            &crate::formats::wikilink(id.page_name(), None, replace == "embed"),
+        )?,
+    };
     let summary = Text::message(
         P_EXTRACT,
         vec![
@@ -2015,9 +2418,9 @@ fn extract(
 /// dice `{{selection}}`, altrimenti in coda al suo testo dopo una riga vuota,
 /// con i terminatori di riga del template.
 ///
-/// La sorgente sostituisce la selezione con un link in ogni caso, quindi un
-/// template che non la colloca non può lasciarla fuori: il testo non starebbe
-/// più da nessuna parte (difetto I21).
+/// La sorgente toglie la selezione in ogni caso (al suo posto un link, un
+/// embed o niente), quindi un template che non la colloca non può lasciarla
+/// fuori: il testo non starebbe più da nessuna parte (difetto I21).
 fn wrap_selection(expanded: String, selected: &str) -> String {
     const SELECTION: &str = "{{selection}}";
     if expanded.contains(SELECTION) {
@@ -2150,29 +2553,22 @@ fn merge(
     // otherwise a failure discovered halfway through would leave a merge
     // duplicated in one note while the rest were silently skipped.
     let mut bodies: Vec<(DocId, String)> = Vec::new();
+    let mut relinks: Vec<PlannedEdit> = Vec::new();
     for source in &sources {
         let body = host.read_document(source)?;
         if text_policy::strip_bom(&body).trim().is_empty() {
             continue;
         }
         check_relative_assets(host, source, &into, None)?;
-        if trash_sources {
-            match host.query_index(IndexQuery::Backlinks {
-                target: source.clone(),
-                page: None,
-            })? {
-                IndexResult::Backlinks(backlinks) if !backlinks.items.is_empty() => {
-                    return Err(PluginError::Conflict(Text::message(
-                        E_REFERENCED_SOURCE,
-                        vec![Arg::text(A_DOC, source.as_str())],
-                    )));
-                }
-                IndexResult::Backlinks(_) => {}
-                _ => {
-                    return Err(PluginError::Internal(
-                        "backlink query returned another result".into(),
-                    ))
-                }
+        // Una sorgente che altri citano si può cestinare solo se i loro link
+        // passano alla destinazione: lo dice qui il piano dell'host, così la
+        // simulazione li mostra, e un host che non lo sa fare rifiuta prima di
+        // toccare niente, come prima.
+        if trash_sources && has_backlinks(host, source)? {
+            match host.link_retarget_edits(source, &into) {
+                Ok(edits) => relinks.extend(edits.into_iter().filter(|edit| &edit.doc != source)),
+                Err(PluginError::Unserved(_)) => return Err(referenced(source)),
+                Err(and) => return Err(and),
             }
         }
         bodies.push((source.clone(), body));
@@ -2202,12 +2598,10 @@ fn merge(
             format!("{separator}{}", join_bodies(&bodies, &separator))
         };
         let request = EditRequest::new(revision, vec![TextEdit::insert(at, preview)]);
-        return Ok(
-            CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
-                summary,
-                vec![PlannedEdit::new(into, request)],
-            ))),
-        );
+        let mut edits = vec![PlannedEdit::new(into, request)];
+        edits.extend(relinks);
+        return Ok(CommandOutcome::done()
+            .with_effect(CommandEffect::Plan(CommandPlan::of_edits(summary, edits))));
     }
     let mut failed: Vec<Failure> = Vec::new();
     let mut back_edits: Vec<PlannedEdit> = Vec::new();
@@ -2217,13 +2611,18 @@ fn merge(
     // testa però ognuno entra nello stesso punto, sopra quelli già entrati: si
     // parte dall'ultima sorgente, e il risultato è il loro ordine, quello del
     // piano.
-    let mut queue: Vec<&(DocId, String)> = bodies.iter().collect();
+    let mut queue: Vec<DocId> = bodies.iter().map(|(source, _)| source.clone()).collect();
     if prepend {
         queue.reverse();
     }
-    for (source, body) in queue {
+    // Il testo che ogni sorgente deve avere ancora: quello letto prima, o
+    // quello che le ha dato questa stessa unione portando sulla destinazione
+    // un suo link verso una sorgente già entrata.
+    let mut expected: BTreeMap<DocId, String> = bodies.iter().cloned().collect();
+    for source in &queue {
+        let body = expected[source].clone();
         match host.read_document(source) {
-            Ok(latest) if latest == *body => {}
+            Ok(latest) if latest == body => {}
             Ok(_) => {
                 failed.push(Failure::of(
                     source.clone(),
@@ -2258,7 +2657,7 @@ fn merge(
             (current.len(), "")
         };
         let at = snap_to_boundary(&current, at);
-        let inserted = text_policy::strip_bom(body);
+        let inserted = text_policy::strip_bom(&body);
         let text = if prepend {
             format!("{lead}{inserted}{separator}")
         } else {
@@ -2277,11 +2676,20 @@ fn merge(
                 made += 1;
                 back_edits.push(PlannedEdit::new(into.clone(), report.inverse()));
                 if trash_sources {
+                    // I link verso la sorgente passano alla destinazione, che
+                    // adesso ha il suo testo; se uno non passa, la sorgente
+                    // resta dov'è e nessun link resta rotto.
+                    if let Err(and) =
+                        move_links(host, source, &into, &mut back_edits, &mut expected)
+                    {
+                        failed.push(Failure::of(source.clone(), and));
+                        continue;
+                    }
                     // Another writer may have changed the source while we
                     // patched the destination. Keep both copies and surface a
                     // partial merge instead of trashing their newer version.
                     match host.read_document(source) {
-                        Ok(latest) if latest == *body => match host.trash_document(source) {
+                        Ok(latest) if latest == body => match host.trash_document(source) {
                             Ok(entry) => trashed.push((source.clone(), entry)),
                             Err(and) => failed.push(Failure::of(source.clone(), and)),
                         },
@@ -2341,6 +2749,59 @@ fn merge(
         .partially(count))
 }
 
+/// La sorgente ha riferimenti entranti?
+fn has_backlinks(host: &dyn HostApi, source: &DocId) -> Result<bool, PluginError> {
+    match host.query_index(IndexQuery::Backlinks {
+        target: source.clone(),
+        page: None,
+    })? {
+        IndexResult::Backlinks(backlinks) => Ok(!backlinks.items.is_empty()),
+        _ => Err(PluginError::Internal(
+            "backlink query returned another result".into(),
+        )),
+    }
+}
+
+fn referenced(source: &DocId) -> PluginError {
+    PluginError::Conflict(Text::message(
+        E_REFERENCED_SOURCE,
+        vec![Arg::text(A_DOC, source.as_str())],
+    ))
+}
+
+/// Porta su `into` i link che raggiungono `source`, appena il suo testo è
+/// entrato in `into`: il piano si chiede adesso e non al preflight, perché la
+/// destinazione è cambiata e porta con sé anche i link a sé stessa che la
+/// sorgente conteneva. Gli edit dentro la sorgente non servono: va nel
+/// cestino. Ogni inverso finisce nell'annulla, dopo quello dell'inserimento.
+fn move_links(
+    host: &mut dyn HostApi,
+    source: &DocId,
+    into: &DocId,
+    back_edits: &mut Vec<PlannedEdit>,
+    expected: &mut BTreeMap<DocId, String>,
+) -> Result<(), PluginError> {
+    let edits = match host.link_retarget_edits(source, into) {
+        Ok(edits) => edits,
+        Err(PluginError::Unserved(_)) if has_backlinks(host, source)? => {
+            return Err(referenced(source))
+        }
+        Err(PluginError::Unserved(_)) => return Ok(()),
+        Err(and) => return Err(and),
+    };
+    for edit in edits {
+        if &edit.doc == source {
+            continue;
+        }
+        let report = host.apply_edit(&edit.doc, edit.edit)?;
+        back_edits.push(PlannedEdit::new(edit.doc.clone(), report.inverse()));
+        if let Some(body) = expected.get_mut(&edit.doc) {
+            *body = host.read_document(&edit.doc)?;
+        }
+    }
+    Ok(())
+}
+
 /// Dove entra un'unione in testa: dopo il BOM e dopo il frontmatter della
 /// destinazione, che deve restare la prima cosa del file. Lo dice il modello
 /// ([`fub_abi::model::DocumentModel::body_start`]), qualunque sia la sintassi
@@ -2388,6 +2849,125 @@ mod tests {
 
     /// Ogni comando del template si offre nel menu `/`: è lì che si inserisce
     /// uno scheletro mentre si scrive, e la shell non ne tiene un elenco.
+    /// Le celle di ogni settimana del calendario, come testo: un bottone è la
+    /// sua etichetta (con `*` se ha la giornaliera), un testo è sé stesso.
+    fn weeks(root: &UiNode) -> (String, Vec<String>, Vec<Vec<String>>) {
+        let UiKind::Stack { children, .. } = &root.kind else {
+            panic!("una colonna: barra e mese")
+        };
+        let UiKind::Stack { children: bar, .. } = &children[0].kind else {
+            panic!("la barra")
+        };
+        let UiKind::Heading { content, .. } = &bar[1].kind else {
+            panic!("il titolo fra le frecce")
+        };
+        let UiKind::Table { columns, rows } = &children[1].kind else {
+            panic!("il mese è una tabella")
+        };
+        let label = |text: &Text| match text {
+            Text::Literal(s) => s.clone(),
+            Text::Message(m) => format!("<{}>", m.key),
+        };
+        let cells = rows
+            .iter()
+            .map(|row| {
+                let UiKind::Row { cells, .. } = &row.kind else {
+                    panic!("una settimana è una riga")
+                };
+                cells
+                    .iter()
+                    .map(|cell| match &cell.kind {
+                        UiKind::Text { content } => label(content),
+                        UiKind::Button {
+                            label: l, intent, ..
+                        } => {
+                            let mark = if *intent == Intent::Primary { "*" } else { "" };
+                            format!("{}{mark}", label(l))
+                        }
+                        other => panic!("{other:?}"),
+                    })
+                    .collect()
+            })
+            .collect();
+        (
+            label(content),
+            columns.iter().map(|c| label(&c.title)).collect(),
+            cells,
+        )
+    }
+
+    /// Il banco dice 2023-11-14 (il suo orologio fisso); novembre 2023 comincia
+    /// di mercoledì, nella settimana ISO 44.
+    #[test]
+    fn the_calendar_shows_the_month_with_numbered_weeks_and_the_daily_notes() {
+        let host = MemoryHost::new()
+            .with_document("Daily/2023-11-03.md", "")
+            .with_document("Daily/2023-12-01.md", "");
+        let (title, columns, cells) = weeks(&calendar(&host).unwrap());
+        assert_eq!(title, "November 2023");
+        assert_eq!(
+            columns,
+            [
+                "<calendar.week>",
+                "Mon",
+                "Tue",
+                "Wed",
+                "Thu",
+                "Fri",
+                "Sat",
+                "Sun"
+            ]
+        );
+        assert_eq!(cells.len(), 5);
+        assert_eq!(cells[0], ["44", "", "", "1", "2", "3*", "4", "5"]);
+        assert_eq!(cells[2][0], "46");
+        assert_eq!(cells[2][2], "14•", "today has its dot");
+        assert_eq!(cells[4], ["48", "27", "28", "29", "30", "", "", ""]);
+    }
+
+    #[test]
+    fn the_week_starts_where_the_locale_says() {
+        let host = MemoryHost::new().with_locale(Locale {
+            language: "it".into(),
+            first_day_of_week: fub_abi::locale::Weekday::Sunday,
+            ..Locale::default()
+        });
+        let (title, columns, cells) = weeks(&calendar(&host).unwrap());
+        assert_eq!(title, "novembre 2023");
+        assert_eq!(
+            columns[1..],
+            ["dom", "lun", "mar", "mer", "gio", "ven", "sab"]
+        );
+        // La settimana da domenica 29 ottobre: il suo giovedì è il 2 novembre,
+        // settimana ISO 44.
+        assert_eq!(cells[0], ["44", "", "", "", "1", "2", "3", "4"]);
+    }
+
+    #[test]
+    fn the_calendar_remembers_the_month_it_was_moved_to() {
+        let mut host = MemoryHost::new().with_instance(CALENDAR_VIEW);
+        let go = |host: &mut MemoryHost, action: &str| {
+            let update = calendar_action(UiAction::new(action), host).unwrap();
+            let ViewUpdate::Replace { root } = update else {
+                panic!("un mese nuovo si ridisegna")
+            };
+            weeks(&root).0
+        };
+        assert_eq!(go(&mut host, CALENDAR_NEXT), "December 2023");
+        assert_eq!(go(&mut host, CALENDAR_NEXT), "January 2024");
+        assert_eq!(
+            weeks(&calendar(&host).unwrap()).0,
+            "January 2024",
+            "a redraw keeps the month the view state remembers"
+        );
+        assert_eq!(go(&mut host, CALENDAR_PREV), "December 2023");
+        assert_eq!(go(&mut host, CALENDAR_TODAY), "November 2023");
+        assert_eq!(
+            fub_abi::traits::ViewStateRead::view_state(&host, SHOWN).unwrap(),
+            None
+        );
+    }
+
     #[test]
     fn every_template_command_is_offered_in_the_slash_menu() {
         for spec in TemplateCommands::specs() {
@@ -2533,6 +3113,28 @@ mod tests {
             assert!(valid_date(invalid).is_err(), "{invalid}");
         }
         assert_eq!(valid_date("2024-02-29").unwrap(), "2024-02-29");
+    }
+
+    #[test]
+    fn daily_names_follow_the_declared_format() {
+        assert_eq!(
+            daily_name(DAILY_FORMAT_DEFAULT, "2026-10-19", "it"),
+            "2026-10-19"
+        );
+        assert_eq!(
+            daily_name("YYYY/MMMM/YYYY-MMM-DD", "2026-10-19", "it"),
+            "2026/ottobre/2026-ott-19"
+        );
+        assert_eq!(
+            daily_name("YYYY/MM MMMM/dddd D", "2026-03-01", "en"),
+            "2026/03 March/Sunday 1"
+        );
+        assert_eq!(
+            daily_name("[Diario] YY.M.D ddd", "2024-02-29", "it"),
+            "Diario 24.2.29 gio"
+        );
+        // Una `[` senza chiusura resta un carattere.
+        assert_eq!(daily_name("[YYYY", "2026-10-19", "it"), "[2026");
     }
 
     #[test]

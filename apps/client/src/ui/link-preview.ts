@@ -11,9 +11,11 @@
 //   `state/preview.ts`; con Ctrl/Cmd arriva subito.
 // - In Live serve Ctrl/Cmd: chi scrive passa col puntatore sul testo di
 //   continuo, e una scheda a ogni passaggio sarebbe rumore.
+// - Con `editor.preview-modifier` serve Ctrl/Cmd dappertutto.
 // - Si chiude uscendo dal link e dalla scheda, con Esc, o quando la shell si
 //   smonta. Un link che non si risolve non apre niente.
-import { resolvedReference } from "../host/query";
+import { resolvedReference, settings } from "../host/query";
+import { onEvent } from "../state/kernel";
 import { cancelScheduledPreview, hidePreview, schedulePreview } from "../state/preview";
 import { state } from "../state/store";
 import type { Lifetime } from "./lifetime";
@@ -21,6 +23,9 @@ import type { Lifetime } from "./lifetime";
 /// Quanto aspettare, uscito dal link, prima di chiudere: il tempo di arrivare
 /// col puntatore sulla scheda.
 const LEAVE_MS = 250;
+
+/// L'impostazione che chiede Ctrl/Cmd anche fuori dalla Live.
+export const PREVIEW_MODIFIER_KEY = "editor.preview-modifier";
 
 interface Target {
   page: string;
@@ -53,6 +58,25 @@ export function mountLinkPreview(life: Lifetime): void {
   let current: HTMLElement | null = null;
   let leaving: number | undefined;
   let generation = 0;
+  let needsModifier = false;
+  let asked = 0;
+
+  // Vale l'ultima lettura chiesta: una risposta vecchia non scrive sopra una
+  // nuova.
+  const loadPreference = async () => {
+    const mine = ++asked;
+    try {
+      const entries = await settings();
+      if (mine !== asked) return;
+      needsModifier = entries.find((entry) => entry.spec.key === PREVIEW_MODIFIER_KEY)?.value === true;
+    } catch {
+      // Senza vault o senza impostazioni resta il comportamento di serie.
+    }
+  };
+  life.add(onEvent("setting_changed", (event) => {
+    if (event.key === PREVIEW_MODIFIER_KEY) void loadPreference();
+  }));
+  void loadPreference();
 
   const close = () => {
     generation += 1;
@@ -112,7 +136,7 @@ export function mountLinkPreview(life: Lifetime): void {
     const hit = linkTarget(event.target instanceof Element ? event.target : null);
     if (!hit) return;
     const modifier = event.ctrlKey || event.metaKey;
-    if (hit.target.live && !modifier) return;
+    if ((hit.target.live || needsModifier) && !modifier) return;
     if (leaving !== undefined) window.clearTimeout(leaving);
     leaving = undefined;
     void open(hit.link, hit.target, modifier);

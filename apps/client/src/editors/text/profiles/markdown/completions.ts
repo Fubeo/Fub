@@ -20,14 +20,18 @@
 // solo lì). Anche lui si riconosce su un `EditorState` (`diagramFenceContext`),
 // senza vista.
 import {
+  acceptCompletion,
   autocompletion,
+  completionStatus,
+  selectedCompletion,
   type Completion,
   type CompletionContext,
   type CompletionResult,
   type CompletionSource,
 } from "@codemirror/autocomplete";
 import { syntaxTree } from "@codemirror/language";
-import type { EditorState, Extension } from "@codemirror/state";
+import { Prec, type EditorState, type Extension } from "@codemirror/state";
+import { keymap, type EditorView } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { isStrictlyInsideCode } from "./parser";
 import { catalogLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
@@ -54,6 +58,31 @@ import { tagInProgress } from "../../../../rules/syntax";
 export interface CompletionSources {
   searchNotes(prefix: string): Promise<string[]>;
   listTags(): Promise<{ name: string; count: number }[]>;
+  /// I titoli della nota che `page` nomina come sta scritto nel link; `page`
+  /// vuota è la nota stessa (`[[#…`). Assente, `[[Nota#` non completa.
+  headingsOf?(page: string): Promise<readonly HeadingOption[]>;
+  /// I titoli del vault che contengono `text`, per `[[##…`, già in ordine.
+  searchHeadings?(text: string): Promise<readonly VaultHeading[]>;
+  /// I blocchi con un id della nota che `page` nomina, per `[[Nota#^`; `page`
+  /// vuota è la nota stessa. Assente, `#^` non completa.
+  blocksOf?(page: string): Promise<readonly BlockOption[]>;
+}
+
+/// Un blocco da proporre: il suo id e l'inizio del suo testo.
+export interface BlockOption {
+  readonly id: string;
+  readonly text: string;
+}
+
+/// Un titolo da proporre: il testo e il livello.
+export interface HeadingOption {
+  readonly text: string;
+  readonly level: number;
+}
+
+/// Un titolo del vault, con la nota che lo porta.
+export interface VaultHeading extends HeadingOption {
+  readonly doc: string;
 }
 
 /// Un contesto di completamento riconosciuto nel testo prima del cursore:
@@ -75,6 +104,94 @@ export function wikilinkContext(before: string): ContextMatch | null {
   if (query.includes("]]") || query.includes("\n")) return null;
   const separator = query.search(/[|#]/);
   return { from: open + 2, query: separator === -1 ? query : query.slice(0, separator) };
+}
+
+/// `[[Nota#tit` o `[[#tit`: il titolo che si sta scrivendo dentro un wikilink
+/// aperto. `page` è la nota come sta scritta (vuota per la nota stessa),
+/// `from` è dove comincia il titolo, subito dopo il `#`. Non vale per
+/// `[[##…` (titoli del vault), né per un blocco `#^` o dopo l'alias `|`.
+export function headingContext(before: string): (ContextMatch & { page: string }) | null {
+  const open = before.lastIndexOf("[[");
+  if (open === -1) return null;
+  const inner = before.slice(open + 2);
+  if (inner.includes("]]") || inner.includes("\n") || inner.includes("|") || inner.startsWith("##")) return null;
+  const hash = inner.indexOf("#");
+  if (hash === -1) return null;
+  const query = inner.slice(hash + 1);
+  if (query.startsWith("^") || query.includes("#")) return null;
+  return { from: open + 2 + hash + 1, query, page: inner.slice(0, hash) };
+}
+
+/// `[[Nota#^id` o `[[#^id`: l'id di blocco che si sta scrivendo dentro un
+/// wikilink aperto. `from` è subito dopo il `^`.
+export function blockContext(before: string): (ContextMatch & { page: string }) | null {
+  const open = before.lastIndexOf("[[");
+  if (open === -1) return null;
+  const inner = before.slice(open + 2);
+  if (inner.includes("]]") || inner.includes("\n") || inner.includes("|") || inner.startsWith("##")) return null;
+  const hash = inner.indexOf("#^");
+  if (hash === -1) return null;
+  const query = inner.slice(hash + 2);
+  if (!/^[A-Za-z0-9-]*$/u.test(query)) return null;
+  return { from: open + 2 + hash + 2, query, page: inner.slice(0, hash) };
+}
+
+/// Quanti caratteri del testo di un blocco accompagnano il suo id.
+const BLOCK_TEXT = 60;
+const BLOCK_ID_AT_END = /(?:^|[ \t])\^([A-Za-z0-9-]+)[ \t]*$/u;
+const FENCE = /^ {0,3}(`{3,}|~{3,})/u;
+
+/// Gli id di blocco di una nota Markdown, nell'ordine in cui compaiono: un
+/// `^id` in fondo a una riga, o su una riga sua, che allora nomina il blocco
+/// sopra. Il frontmatter e i blocchi di codice non ne hanno.
+export function blockIds(markdown: string): BlockOption[] {
+  const lines = markdown.split(/\r?\n/u);
+  const found: BlockOption[] = [];
+  const seen = new Set<string>();
+  let fence: string | null = null;
+  let start = 0;
+  if (lines[0] === "---") {
+    const close = lines.findIndex((line, index) => index > 0 && (line === "---" || line === "..."));
+    if (close !== -1) start = close + 1;
+  }
+  let previous = "";
+  for (let index = start; index < lines.length; index++) {
+    const line = lines[index]!;
+    const marker = FENCE.exec(line)?.[1];
+    if (fence !== null) {
+      if (marker && marker[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = null;
+      continue;
+    }
+    if (marker) {
+      fence = marker;
+      continue;
+    }
+    const match = BLOCK_ID_AT_END.exec(line);
+    if (match && !seen.has(match[1]!)) {
+      seen.add(match[1]!);
+      const own = line.slice(0, match.index).trim();
+      const text = (own === "" ? previous : own).replace(/^(?:[>\s]*(?:[-*+]|\d+[.)])?\s*(?:\[.\]\s*)?)/u, "");
+      found.push({ id: match[1]!, text: text.length > BLOCK_TEXT ? `${text.slice(0, BLOCK_TEXT - 1)}…` : text });
+    }
+    if (line.trim() !== "") previous = line.trim();
+  }
+  return found;
+}
+
+/// `[[##testo`: un titolo cercato in tutto il vault. `from` è l'inizio di
+/// `##`, che il completamento sostituisce con `Nota#Titolo`.
+export function vaultHeadingContext(before: string): ContextMatch | null {
+  const open = before.lastIndexOf("[[");
+  if (open === -1) return null;
+  const inner = before.slice(open + 2);
+  if (!inner.startsWith("##") || inner.includes("]]") || inner.includes("\n") || inner.includes("|")) return null;
+  return { from: open + 2, query: inner.slice(2) };
+}
+
+/// Un titolo come lo scrive un link: senza i caratteri che il wikilink usa
+/// per sé, che lo chiuderebbero o ne aprirebbero un altro campo.
+export function headingLinkText(text: string): string {
+  return text.replace(/[[\]|#^]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 /// Il cursore è su un token `#...` a inizio parola?
@@ -164,8 +281,12 @@ export function wikilinkSource(searchNotes: CompletionSources["searchNotes"]): C
   return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
     if (isStrictlyInsideCode(ctx.state, ctx.pos)) return null;
     const line = ctx.state.doc.lineAt(ctx.pos);
-    const match = wikilinkContext(ctx.state.sliceDoc(line.from, ctx.pos));
+    const before = ctx.state.sliceDoc(line.from, ctx.pos);
+    const match = wikilinkContext(before);
     if (!match) return null;
+    // Dopo `#` si scrive un titolo, non il nome della nota: lo completano le
+    // sorgenti dei titoli.
+    if (headingContext(before) || vaultHeadingContext(before) || blockContext(before)) return null;
     const cursorOffset = ctx.pos - line.from;
     const afterCursor = line.text.slice(cursorOffset);
     const suffix = afterCursor.search(/(?:[|#]|\]\])/);
@@ -203,6 +324,139 @@ export function wikilinkSource(searchNotes: CompletionSources["searchNotes"]): C
   };
 }
 
+/// Fin dove arriva il campo che si completa: fino a `|`, `#` o `]]` dopo il
+/// cursore, o alla fine della riga. `closed` dice se il link è già chiuso.
+function fieldEnd(ctx: CompletionContext): { to: number; closed: boolean } {
+  const line = ctx.state.doc.lineAt(ctx.pos);
+  const afterCursor = line.text.slice(ctx.pos - line.from);
+  const suffix = afterCursor.search(/(?:[|#]|\]\])/);
+  const to = suffix === -1 ? line.to : ctx.pos + suffix;
+  const after = line.text.slice(to - line.from);
+  return { to, closed: after.startsWith("]]") || after.startsWith("|") };
+}
+
+/// La sorgente dei titoli di una nota, dopo `[[Nota#` o `[[#`.
+export function headingSource(headingsOf: NonNullable<CompletionSources["headingsOf"]>): CompletionSource {
+  return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
+    if (isStrictlyInsideCode(ctx.state, ctx.pos)) return null;
+    const line = ctx.state.doc.lineAt(ctx.pos);
+    const match = headingContext(ctx.state.sliceDoc(line.from, ctx.pos));
+    if (!match) return null;
+    const { to, closed } = fieldEnd(ctx);
+    const headings = await headingsOf(match.page);
+    return {
+      from: line.from + match.from,
+      to,
+      options: headings.map((heading) => {
+        const text = headingLinkText(heading.text);
+        return { label: text, detail: `H${heading.level}`, apply: closed ? text : `${text}]]`, type: "text" };
+      }),
+      // Qui i titoli sono pochi e tutti in mano: il filtro può farlo
+      // CodeMirror mentre si scrive, senza un altro giro.
+      validFor: /^[^[\]|#^\n]*$/,
+    };
+  };
+}
+
+/// La sorgente dei blocchi di una nota, dopo `[[Nota#^` o `[[#^`.
+export function blockSource(blocksOf: NonNullable<CompletionSources["blocksOf"]>): CompletionSource {
+  return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
+    if (isStrictlyInsideCode(ctx.state, ctx.pos)) return null;
+    const line = ctx.state.doc.lineAt(ctx.pos);
+    const match = blockContext(ctx.state.sliceDoc(line.from, ctx.pos));
+    if (!match) return null;
+    const { to, closed } = fieldEnd(ctx);
+    const blocks = await blocksOf(match.page);
+    return {
+      from: line.from + match.from,
+      to,
+      options: blocks.map((block) => ({
+        label: block.id,
+        detail: block.text,
+        apply: closed ? block.id : `${block.id}]]`,
+        type: "text",
+      })),
+      validFor: /^[A-Za-z0-9-]*$/u,
+    };
+  };
+}
+
+/// La sorgente dei titoli del vault, dopo `[[##`: ogni opzione scrive
+/// `Nota#Titolo`, con il percorso dove due note hanno lo stesso nome.
+export function vaultHeadingSource(searchHeadings: NonNullable<CompletionSources["searchHeadings"]>): CompletionSource {
+  return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
+    if (isStrictlyInsideCode(ctx.state, ctx.pos)) return null;
+    const line = ctx.state.doc.lineAt(ctx.pos);
+    const match = vaultHeadingContext(ctx.state.sliceDoc(line.from, ctx.pos));
+    if (!match) return null;
+    const { to, closed } = fieldEnd(ctx);
+    const headings = match.query.trim() === "" ? [] : await searchHeadings(match.query);
+    const docsByName = new Map<string, Set<string>>();
+    for (const heading of headings) {
+      const key = resolutionKey(pageName(heading.doc));
+      docsByName.set(key, (docsByName.get(key) ?? new Set()).add(heading.doc));
+    }
+    return {
+      from: line.from + match.from,
+      to,
+      options: headings.map((heading) => {
+        const name = pageName(heading.doc);
+        const ambiguous = (docsByName.get(resolutionKey(name))?.size ?? 0) > 1;
+        const target = `${ambiguous ? pathWithoutExtension(heading.doc) : name}#${headingLinkText(heading.text)}`;
+        return { label: headingLinkText(heading.text), detail: heading.doc, apply: closed ? target : `${target}]]`, type: "text" };
+      }),
+      // Come per le note: l'ordine è di chi cerca, e si ricerca a ogni battuta.
+      filter: false,
+    };
+  };
+}
+
+/// Dove finisce il tag che il cursore attraversa: i caratteri da tag dopo
+/// il cursore fanno parte del token sostituito.
+function tagEnd(text: string, offset: number): number {
+  let to = offset;
+  while (to < text.length) {
+    const character = String.fromCodePoint(text.codePointAt(to)!);
+    if (!TAG_CHARACTER.test(character)) break;
+    to += character.length;
+  }
+  return to;
+}
+
+/// Tab nel completamento dei tag completa un segmento alla volta: su `#pro`
+/// con `#progetti/fub/alfa` scelto mette `#progetti/` e il popup resta,
+/// filtrato sui figli. L'ultimo segmento si accetta intero. Restituisce il
+/// testo da scrivere al posto del token, o `null` se non resta un segmento.
+export function tagSegment(typed: string, label: string): string | null {
+  const start = label.toLowerCase().startsWith(typed.toLowerCase()) ? typed.length : 1;
+  const slash = label.indexOf("/", start);
+  return slash < 0 || slash === label.length - 1 ? null : label.slice(0, slash + 1);
+}
+
+/// Il tasto: agisce solo col popup dei tag aperto (le altre sorgenti non
+/// hanno etichette `#` di tipo `keyword`); altrove Tab resta il rientro.
+export function completeTagSegment(view: EditorView): boolean {
+  if (completionStatus(view.state) !== "active") return false;
+  const option = selectedCompletion(view.state);
+  if (!option || option.type !== "keyword" || !option.label.startsWith("#")) return false;
+  const head = view.state.selection.main.head;
+  const line = view.state.doc.lineAt(head);
+  const match = tagContext(view.state.sliceDoc(line.from, head));
+  if (!match) return false;
+  const from = line.from + match.from;
+  const segment = tagSegment(view.state.sliceDoc(from, head), option.label);
+  if (segment === null) {
+    acceptCompletion(view);
+    return true;
+  }
+  view.dispatch({
+    changes: { from, to: line.from + tagEnd(line.text, head - line.from), insert: segment },
+    selection: { anchor: from + segment.length },
+    userEvent: "input.type",
+  });
+  return true;
+}
+
 /// La sorgente CM6 dei tag; come `wikilinkSource`, esportata per i test.
 export function tagSource(listTags: CompletionSources["listTags"]): CompletionSource {
   return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
@@ -211,16 +465,9 @@ export function tagSource(listTags: CompletionSources["listTags"]): CompletionSo
     const match = tagContext(ctx.state.sliceDoc(line.from, ctx.pos));
     if (!match) return null;
     const tags = await listTags();
-    let to = ctx.pos - line.from;
-    while (to < line.text.length) {
-      const cp = line.text.codePointAt(to)!;
-      const character = String.fromCodePoint(cp);
-      if (!TAG_CHARACTER.test(character)) break;
-      to += character.length;
-    }
     return {
       from: line.from + match.from,
-      to: line.from + to,
+      to: line.from + tagEnd(line.text, ctx.pos - line.from),
       options: tagCompletions(tags),
       // La stessa classe di `tagInCorso`, presa da lì: un `validFor` più
       // stretto chiuderebbe il popup su un carattere che il tag accetta.
@@ -322,8 +569,15 @@ export function diagramTemplateSource(today: () => Date = () => new Date()): Com
 /// popup compare). `override` scavalca le sorgenti di default del linguaggio:
 /// qui completiamo note, tag e modelli di diagramma, non parole qualsiasi.
 export function markdownCompletions(sources: CompletionSources): Extension {
-  return autocompletion({
-    override: [wikilinkSource(sources.searchNotes), tagSource(sources.listTags), diagramTemplateSource()],
+  return [Prec.highest(keymap.of([{ key: "Tab", run: completeTagSegment }])), autocompletion({
+    override: [
+      wikilinkSource(sources.searchNotes),
+      ...(sources.headingsOf ? [headingSource(sources.headingsOf)] : []),
+      ...(sources.searchHeadings ? [vaultHeadingSource(sources.searchHeadings)] : []),
+      ...(sources.blocksOf ? [blockSource(sources.blocksOf)] : []),
+      tagSource(sources.listTags),
+      diagramTemplateSource(),
+    ],
     activateOnTyping: true,
-  });
+  })];
 }

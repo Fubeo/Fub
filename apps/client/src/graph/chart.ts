@@ -151,6 +151,8 @@ export interface Chart {
   /// Maschera temporale di sola presentazione; la simulazione conserva il layout.
   /// `null` mostra tutti i nodi. I nodi nascosti non ricevono focus/click.
   setVisibleNodes(visible: ReadonlySet<string> | null): void;
+  /// I nodi delle note che non esistono, disegnati in trasparenza. `null` nessuno.
+  setGhostNodes(ghosts: ReadonlySet<string> | null): void;
   /// Colora i nodi per gruppo (id → nome del gruppo). I gruppi più numerosi
   /// prendono i colori della tavolozza, gli altri restano senza. Restituisce i
   /// gruppi colorati, in ordine di colore, per la legenda. `null` spegne.
@@ -219,6 +221,7 @@ export function createChart(options: ChartOptions = {}): Chart {
 
   const openDocuments = new Set<string>();
   let visibleNodes: ReadonlySet<string> | null = null;
+  let ghostNodes: ReadonlySet<string> | null = null;
   let groupNames: Readonly<Record<string, string>> | null = null;
   let groupIndex: Int16Array | null = null;
   /// Quanti colori ha la tavolozza dei gruppi (i token di sintassi del tema).
@@ -287,7 +290,7 @@ export function createChart(options: ChartOptions = {}): Chart {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
-    const h = nodeAt(s, cameraState.state(), x, y, isVisible);
+    const h = nodeAt(s, cameraState.state(), x, y, isVisible, liveGraphics.nodeSize);
     if (h !== hovered) {
       hovered = h;
       // Un piccolo sussulto di gelatina al passaggio: il nodo si accorge del
@@ -657,6 +660,7 @@ export function createChart(options: ChartOptions = {}): Chart {
       camera: cam,
       openDocuments,
       visible: visibleNodes ?? undefined,
+      ghosts: ghostNodes ?? undefined,
       hovered,
       dragged: s.dragged,
       focused: interaction.getFocusedNode(),
@@ -744,6 +748,7 @@ export function createChart(options: ChartOptions = {}): Chart {
       cameraState: userCamera,
       isVisible,
       playful: () => !reduced,
+      nodeSize: () => liveGraphics.nodeSize,
       actions: {
         open: (id: string) => openExternal(id),
         warm: (level: number) => warm(level),
@@ -822,6 +827,11 @@ export function createChart(options: ChartOptions = {}): Chart {
     const ranked = computeGroups();
     requestRedraw();
     return ranked;
+  }
+
+  function setGhostNodes(ghosts: ReadonlySet<string> | null): void {
+    ghostNodes = ghosts;
+    requestRedraw();
   }
 
   function setVisibleNodes(visible: ReadonlySet<string> | null): void {
@@ -974,6 +984,7 @@ export function createChart(options: ChartOptions = {}): Chart {
     },
     setOpenDocuments,
     setVisibleNodes,
+    setGhostNodes,
     setGroups,
     setConfig,
     warm,

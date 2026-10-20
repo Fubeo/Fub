@@ -46,6 +46,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::model::DocId;
 use crate::text::{Localize, Text};
 
 /// Id di un'azione richiamabile dalla UI (torna al provider via `on_action`).
@@ -237,15 +238,29 @@ impl Localize for TableColumn {
 ///
 /// Un nodo **non** dichiara se accetta un rilascio (decisione 0157): il
 /// trascinamento del puntatore (`preferred-size`) non è un bersaglio di drop, e
-/// il drag & drop resta della shell finché non esiste una seconda superficie
-/// che trascina. Il giorno che ci sarà, la forma è un campo in fondo a questo
-/// record (additivo) e il carico nel `payload` di `UiAction`.
+/// i bersagli restano della shell. Può invece dire **che cosa si trascina** da
+/// lui ([`UiDrag`]): il pannello dei collegamenti è la seconda superficie che
+/// trascina una nota, dopo l'esplora risorse, e la forma è quella che la 0157
+/// aveva previsto, un campo in fondo a questo record.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UiNode {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
     #[serde(flatten)]
     pub kind: UiKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drag: Option<UiDrag>,
+}
+
+/// Che cosa porta con sé un nodo trascinato. Il provider nomina la cosa, la
+/// shell decide come si offre (la stessa nota che parte dall'albero) e dove si
+/// può lasciare. Un caso nuovo si aggiunge in coda.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum UiDrag {
+    /// Una nota del vault: lasciata nell'editor diventa un link, sulla
+    /// striscia delle schede si apre.
+    Document { doc: DocId },
 }
 
 /// La specie di un nodo. Il frontend ha un componente per variante; il tema è
@@ -492,7 +507,11 @@ pub enum UiKind {
 impl UiNode {
     /// Un nodo senza chiave.
     pub fn new(kind: UiKind) -> Self {
-        UiNode { key: None, kind }
+        UiNode {
+            key: None,
+            kind,
+            drag: None,
+        }
     }
 
     /// Un nodo con la sua identità attraverso i ridisegni.
@@ -500,11 +519,18 @@ impl UiNode {
         UiNode {
             key: Some(key.into()),
             kind,
+            drag: None,
         }
     }
 
     pub fn with_key(mut self, key: impl Into<String>) -> Self {
         self.key = Some(key.into());
+        self
+    }
+
+    /// Il nodo si trascina come la nota `doc`.
+    pub fn dragging_document(mut self, doc: DocId) -> Self {
+        self.drag = Some(UiDrag::Document { doc });
         self
     }
 
@@ -883,6 +909,10 @@ pub const VAULT_RESTORED_NS: &str = "fub.vault.restored";
 /// privilegiato: un comando di terzi con `writes: false` non ottiene per
 /// questa via di scrivere nella nota di chi lo invoca.
 pub const EDITOR_ACTION_NS: &str = "fub.editor.action";
+/// Il `ns` con cui un comando chiede alla shell di aprire una pagina web: il
+/// payload è `{ "url": "https://..." }`. Aprire un indirizzo scelto da altri
+/// porta fuori dalla finestra, quindi è un intento privilegiato.
+pub const WEB_OPEN_NS: &str = "fub.web.open";
 
 /// Un intento `Custom` che la shell esegue con un privilegio del processo —
 /// scrivere negli appunti, ricaricare la finestra o modificare il testo aperto —
@@ -894,6 +924,7 @@ pub fn privileged_intent(ns: &str) -> bool {
         || ns == SETTINGS_EXPORT_NS
         || ns == VAULT_RESTORED_NS
         || ns == EDITOR_ACTION_NS
+        || ns == WEB_OPEN_NS
 }
 
 /// Aggiornamento restituito da un `ViewProvider` dopo un'azione.

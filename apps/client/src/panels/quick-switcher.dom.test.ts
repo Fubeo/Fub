@@ -15,7 +15,12 @@ const fake = vi.hoisted(() => ({
   setTooltip: vi.fn(),
 }));
 
-vi.mock("../host/query", () => ({ notesByName: fake.notesByName, settings: fake.settings }));
+vi.mock("../host/query", () => ({
+  notesByNameWithAliases: async (text: string) =>
+    ((await fake.notesByName(text)) as (string | { doc: string; aliases: string[] })[])
+      .map((found) => (typeof found === "string" ? { doc: found, aliases: [] } : found)),
+  settings: fake.settings,
+}));
 vi.mock("../state/recent", () => ({
   existingRecentNotes: fake.existingRecentNotes,
   recentSearches: fake.recentSearches,
@@ -157,6 +162,28 @@ describe("combobox del quick switcher", () => {
     expect(fake.openDocument).toHaveBeenCalledWith("Riunione.md");
   });
 
+  it("una nota trovata per un alias mostra l'alias e di chi è", async () => {
+    const { input, list } = await openSwitcher();
+    fake.notesByName.mockResolvedValue([
+      { doc: "persone/Mario Rossi.md", aliases: ["Il capo", "MR"] },
+      { doc: "notes/Capodanno.md", aliases: ["Il capo"] },
+    ]);
+    input.value = "capo";
+    input.dispatchEvent(new Event("input"));
+    vi.advanceTimersByTime(200);
+    await settleSearch();
+    const [first, second] = options(list);
+    expect(first!.querySelector(".palette-title")?.textContent).toBe("Il capo");
+    expect(first!.querySelector(".palette-title mark")?.textContent).toBe("capo");
+    expect(first!.querySelector(".palette-desc")?.textContent).toContain("persone/Mario Rossi.md");
+    // Il nome combacia già: l'alias non serve a spiegare la riga.
+    expect(second!.querySelector(".palette-title")?.textContent).toBe("Capodanno");
+    expect(second!.querySelector(".palette-desc")?.textContent).toBe("notes/Capodanno.md");
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await settleSearch();
+    expect(fake.openDocument).toHaveBeenCalledWith("persone/Mario Rossi.md");
+  });
+
   it("dispatches here, split and window from distinct keyboard modifiers", async () => {
     const dispatch = vi.fn();
     const unmount = mountQuickSwitcher(dispatch);
@@ -200,5 +227,25 @@ describe("combobox del quick switcher", () => {
 
     expect(document.getElementById("quick-switcher")).toBeNull();
     expect(document.activeElement).toBe(opener);
+  });
+
+  it("un risultato si trascina fuori come la nota: la modale lascia passare il rilascio e poi si chiude", async () => {
+    const { overlay, list } = await openSwitcher();
+    const button = options(list)[1]!.querySelector<HTMLButtonElement>("button")!;
+    expect(button.draggable).toBe(true);
+    const offered = new Map<string, string>();
+    const start = new Event("dragstart", { bubbles: true }) as DragEvent;
+    Object.defineProperty(start, "dataTransfer", {
+      value: { effectAllowed: "none", setData: (type: string, value: string) => offered.set(type, value) },
+    });
+    button.dispatchEvent(start);
+    expect(offered.get("application/x-fub-note")).toBe("notes/Beta.md");
+    expect(overlay.style.pointerEvents).toBe("");
+    button.dispatchEvent(new Event("drag", { bubbles: true }));
+    expect(overlay.style.pointerEvents).toBe("none");
+    expect(fake.openDocument).not.toHaveBeenCalled();
+    button.dispatchEvent(new Event("dragend", { bubbles: true }));
+    vi.runAllTimers();
+    expect(document.getElementById("quick-switcher")).toBeNull();
   });
 });

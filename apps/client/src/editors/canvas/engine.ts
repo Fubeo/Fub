@@ -1,7 +1,7 @@
 import type { Theme } from "../../theme/theme";
 import type { SyntaxForm } from "../../host/contract";
 import { t, onLanguage } from "../../i18n/strings";
-import { tryApplyOperation, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
+import { lineFeeds, tryApplyOperation, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import {
   applyCanvasPatches,
   commitCanvasPatches,
@@ -225,9 +225,10 @@ export class CanvasEngine {
     this.#epoch++;
     this.#intakeError = "";
     const operation = typeof update === "string" ? null : update.operation;
-    const verified = operation ? tryApplyOperation(this.#source, operation) : null;
+    // Gli offset sono sul testo a `\n`, come li conta la sessione.
+    const verified = operation ? tryApplyOperation(lineFeeds(this.#source), operation) : null;
     const patched = operation && isCanvasOperation(operation) && this.#doc
-      && verified?.kind === "applied" && verified.text === source
+      && verified?.kind === "applied" && verified.text === lineFeeds(source)
       && applyCanvasPatches(this.#doc, operation.patches)
       && JSON.stringify(this.#doc) === JSON.stringify(parsed);
     this.#source = source;

@@ -123,8 +123,8 @@ pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
 pub use options::{OptionMap, OptionStatus};
 pub use organization::Organization;
 pub use query::{
-    Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate, TaskStatus,
-    TextField, TextMode, TextQuery, TextTolerance,
+    DueBound, Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate,
+    TaskStatus, TextField, TextMode, TextQuery, TextScope, TextTolerance,
 };
 pub use render::{EmbedContent, RenderedDocument, RenderedPart};
 pub use schema::SchemaVersion;
@@ -161,5 +161,5 @@ pub use transfer::{
 };
 pub use ui::{
     ActionId, ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction,
-    UiKind, UiNode, UiOption, UiValue, ViewUpdate,
+    UiDrag, UiKind, UiNode, UiOption, UiValue, ViewUpdate,
 };

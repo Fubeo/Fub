@@ -233,20 +233,10 @@ fn instant_of(d: &PropertyDate) -> i64 {
             local - t.offset_minutes.unwrap_or(0) as i64
         }
     };
-    days_from_civil(d.year as i64, d.month, d.day) * 1440 + minutes_in_day
-}
-
-/// Giorni dall'epoca civile (algoritmo di Howard Hinnant): il calendario senza
-/// dipendere da `chrono`, che nel kernel non c'è e per un confronto non serve.
-fn days_from_civil(year: i64, month: u8, day: u8) -> i64 {
-    let m = month.clamp(1, 12) as i64;
-    let d = day.clamp(1, 31) as i64;
-    let y = year - if m <= 2 { 1 } else { 0 };
-    let was = if y >= 0 { y } else { y - 399 } / 400;
-    let yoe = y - was * 400;
-    let doy = (153 * (m + if m > 2 { -3 } else { 9 }) + 2) / 5 + d - 1;
-    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    was * 146_097 + doe - 719_468
+    // Il calendario senza dipendere da `chrono`, che nel kernel non c'è e per
+    // un confronto non serve.
+    crate::locale::days_from_civil(d.year as i64, d.month as u64, d.day as u64) * 1440
+        + minutes_in_day
 }
 
 /// Le proprietà da restituire, in ordine di chiave. Una chiave chiesta e

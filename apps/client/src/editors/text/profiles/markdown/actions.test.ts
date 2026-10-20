@@ -141,6 +141,16 @@ describe("collegamenti e rimandi", () => {
       "Uno[^1] e due[^2]\n\n[^1]: prima\n\n[^2]: |",
     );
   });
+
+  it("eliminare una nota toglie i richiami e la definizione, e chiude il fondo", () => {
+    expect(run("markdown.footnote.delete", "Uno[^1|] e due[^1]\n\n[^1]: prima\n")).toBe("Uno| e due\n");
+    expect(run("markdown.footnote.delete", "Uno[^a] e[^b]\n\n[^a]: prima|\n    seguito\n[^b]: seconda\n")).toBe(
+      "Uno e[^b]\n\n|[^b]: seconda\n",
+    );
+    expect(run("markdown.footnote.delete", "Testo[^1]|\n\n[^1]: x")).toBe("Testo|");
+    expect(stateAt("markdown.footnote.delete", "Testo| [^1]").enabled).toBe(false);
+    expect(stateAt("markdown.footnote.delete", "Testo [^1|]").enabled).toBe(true);
+  });
 });
 
 describe("liste", () => {
@@ -174,6 +184,18 @@ describe("blocchi", () => {
   it("il callout mette l'intestazione sopra le righe e seleziona il tipo", () => {
     expect(run("markdown.callout", "|")).toBe("> [!note]\n> |");
     expect(run("markdown.callout", "Nota|")).toBe("> [!‹note›]\n> Nota");
+  });
+
+  it("dentro un callout lo toglie e lascia il testo, titolo compreso", () => {
+    expect(stateAt("markdown.callout", "> [!tip] Consiglio\n> uno|").active).toBe(true);
+    expect(stateAt("markdown.callout", "> solo citazione|").active).toBe(false);
+    expect(run("markdown.callout", "> [!tip]- Consiglio\n> uno|\n>\n> due\n\nfuori"))
+      .toBe("Consiglio\nuno|\n\ndue\n\nfuori");
+    expect(run("markdown.callout", "> [!note]\n> c|orpo")).toBe("c|orpo");
+    expect(run("markdown.callout", "> [!note]|")).toBe("|");
+    // Annidato: si toglie quello di fuori, quello dentro resta un callout.
+    expect(run("markdown.callout", "> [!note] Fuori\n> > [!tip] Dentro\n> > te|sto"))
+      .toBe("Fuori\n> [!tip] Dentro\n> te|sto");
   });
 
   it("il blocco di codice avvolge la selezione e si toglie da dentro", () => {

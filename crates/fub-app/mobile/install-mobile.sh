@@ -88,6 +88,7 @@ if android.is_dir():
         fail('manifest parzialmente fuso: intervento manuale richiesto')
     for src, dst in (
         ('FubTreeAccess.kt', 'java/dev/fub/app/FubTreeAccess.kt'),
+        ('FubTreePlugin.kt', 'java/dev/fub/app/FubTreePlugin.kt'),
         ('ShareBridge.kt', 'java/dev/fub/app/ShareBridge.kt'),
         ('FubWidgetProvider.kt', 'java/dev/fub/app/FubWidgetProvider.kt'),
         ('fub-widget-info.xml', 'res/xml/fub_widget_info.xml'),
@@ -111,15 +112,16 @@ if ios.is_dir():
     if 'com.apple.product-type.app-extension' not in project or share.name not in project or widget.name not in project:
         fail('iOS: Share e Widget Extension non registrate nel progetto Xcode')
     if 'PBXFileSystemSynchronizedRootGroup' not in project and not all(
-        name in project for name in ('FubTreeAccess.swift', 'ShareViewController.swift', 'FubWidget.swift')
+        name in project for name in ('FubTreeAccess.swift', 'FubTreePlugin.swift', 'ShareViewController.swift', 'FubWidget.swift')
     ):
-        fail('iOS: registra esplicitamente i tre Swift nei target Xcode prima della fusione')
+        fail('iOS: registra esplicitamente i quattro Swift nei target Xcode prima della fusione')
     apps = [p for p in sources.iterdir() if p.is_dir() and p not in (share, widget)] if sources.is_dir() else []
     plists = [p for p in ios.rglob('Info.plist') if 'Pods' not in p.parts and share not in p.parents and widget not in p.parents]
     entitlements = [p for p in ios.rglob('*.entitlements') if share not in p.parents and widget not in p.parents]
     if len(apps) != 1 or len(plists) != 1 or len(entitlements) != 1:
         fail('iOS ambiguo: occorre un Sources/<App>, un Info.plist e un .entitlements per la app')
     copy('FubTreeAccess.swift', apps[0] / 'FubTreeAccess.swift')
+    copy('FubTreePlugin.swift', apps[0] / 'FubTreePlugin.swift')
     copy('ShareViewController.swift', share / 'ShareViewController.swift')
     copy('FubWidget.swift', widget / 'FubWidget.swift')
     for src, dst in (('Info.plist.snippet.plist', plists[0]), ('Fub.entitlements', entitlements[0])):

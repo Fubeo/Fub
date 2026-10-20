@@ -10,6 +10,7 @@ let life: Lifetime;
 let sel: TreeSelection;
 let trash: ReturnType<typeof vi.fn<(paths: string[]) => Promise<unknown>>>;
 let move: ReturnType<typeof vi.fn<(paths: string[]) => Promise<unknown>>>;
+let group: ReturnType<typeof vi.fn<(paths: string[]) => Promise<unknown>>>;
 let current: string | null;
 
 function build(paths: string[]): void {
@@ -37,9 +38,10 @@ beforeEach(() => {
   life = openLifetime();
   trash = vi.fn(async (_paths: string[]) => 0);
   move = vi.fn(async (_paths: string[]) => {});
+  group = vi.fn(async (_paths: string[]) => {});
   current = null;
   build(["a.md", "b.md", "c.md", "d.md", "dir/"]);
-  sel = mountTreeSelection({ list, currentDoc: () => current, trash, move, lifetime: life });
+  sel = mountTreeSelection({ list, currentDoc: () => current, trash, move, group, lifetime: life });
 });
 afterEach(() => life.close());
 
@@ -112,6 +114,11 @@ describe("scelta multipla dell'albero", () => {
     click("b.md", { ctrlKey: true });
     document.querySelector<HTMLButtonElement>(".tree-selection-move")!.click();
     await vi.waitFor(() => expect(move).toHaveBeenCalledWith(["b.md"]));
+    click("a.md", { ctrlKey: true });
+    click("d.md", { ctrlKey: true });
+    document.querySelector<HTMLButtonElement>(".tree-selection-group")!.click();
+    await vi.waitFor(() => expect(group).toHaveBeenCalledWith(["a.md", "d.md"]));
+    await vi.waitFor(() => expect(sel.paths()).toEqual([]));
   });
 
   it("la riga della nota aperta resta selezionata quando esce dalla scelta", () => {

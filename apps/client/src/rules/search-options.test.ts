@@ -67,3 +67,16 @@ describe("che cosa si può sostituire", () => {
     expect(replaceableText(expr("gatto"), on({ typos: true }))).toBeNull();
   });
 });
+
+describe("ignore-case: davanti all'opzione «maiuscole»", () => {
+  it("l'opzione rende esatto il resto della riga, non il termine che lo rifiuta", () => {
+    const both = applyOptions(expr("Api ignore-case:Api"), on({ caseSensitive: true }));
+    const [plain, ignored] = both.any[0]!.all.map((l) => l.predicate);
+    expect(plain).toMatchObject({ kind: "text", case_sensitive: true });
+    expect(ignored).toMatchObject({ kind: "text", case_sensitive: false });
+  });
+  it("senza l'opzione nessuno dei due distingue le maiuscole", () => {
+    const predicate = firstText(expr("ignore-case:Api"));
+    expect(predicate.case_sensitive).toBe(false);
+  });
+});

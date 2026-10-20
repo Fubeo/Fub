@@ -53,7 +53,7 @@ import { iconEl } from "./icons";
 import { setTooltip } from "./tooltip";
 import { tabIndexForKey } from "./tab-keys";
 import { openLifetime, type Lifetime, type Teardown } from "./lifetime";
-import { primaryView, setPrimaryViews } from "./primary-views";
+import { primaryView, setPrimaryViews, setSidePanelViews } from "./primary-views";
 import { setContextMenuViews } from "./context-views";
 import { activeDoc } from "../state/layout";
 import { on } from "../state/store";
@@ -260,6 +260,7 @@ function clearMountedViews(): void {
   }
   mounted.clear();
   setPrimaryViews([]);
+  setSidePanelViews([]);
   setContextMenuViews([]);
   for (const el of [
     viewsLeftEl,
@@ -336,6 +337,7 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
     }
   }
   const mains: ViewSpec[] = [];
+  const lefts: ViewSpec[] = [];
   const contextSpecs: ViewSpec[] = [];
   for (const el of [
     viewsLeftEl,
@@ -390,9 +392,11 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
       continue;
     }
     mountSpec(spec, host);
+    if (spec.surface === "left_sidebar") lefts.push(spec);
   }
 
   setPrimaryViews(mains);
+  setSidePanelViews(lefts);
   setContextMenuViews(contextSpecs);
 
   viewsBottomEl.hidden = viewsBottomEl.childElementCount === 0;

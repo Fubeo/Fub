@@ -398,6 +398,11 @@ fn preflight(t: &w_ui::UiTree) -> Result<(), PluginError> {
 fn node(n: w_ui::UiNode) -> Result<arena::UiNode, PluginError> {
     use w_ui::UiKind as W;
     let key = n.key;
+    let drag = n.drag.map(|d| match d {
+        w_ui::UiDrag::Document(doc) => ui::UiDrag::Document {
+            doc: tr::from_doc(doc),
+        },
+    });
     let kind = match n.kind {
         W::Stack(x) => arena::UiKind::Stack {
             dir: axis(x.dir),
@@ -557,7 +562,7 @@ fn node(n: w_ui::UiNode) -> Result<arena::UiNode, PluginError> {
             retry: opt_action(x.retry)?,
         },
     };
-    Ok(arena::UiNode { key, kind })
+    Ok(arena::UiNode { key, kind, drag })
 }
 
 pub(crate) fn from_tree(t: w_ui::UiTree) -> Result<ui::UiNode, PluginError> {
@@ -622,6 +627,7 @@ mod tests {
     fn text(value: &str) -> w_ui::UiNode {
         w_ui::UiNode {
             key: None,
+            drag: None,
             kind: w_ui::UiKind::Text(crate::contract::fub::abi::text::Text::Literal(
                 value.to_owned(),
             )),
@@ -652,9 +658,33 @@ mod tests {
     }
 
     #[test]
+    fn the_dragged_note_crosses_the_boundary() {
+        let mut leaf = text("Nota");
+        leaf.drag = Some(w_ui::UiDrag::Document("a/Nota.md".into()));
+        let node = from_tree(w_ui::UiTree {
+            nodes: vec![leaf],
+            root: 0,
+        })
+        .expect("albero valido");
+        assert_eq!(
+            node.drag,
+            Some(ui::UiDrag::Document {
+                doc: fub_abi::model::DocId::new("a/Nota.md")
+            })
+        );
+        let plain = from_tree(w_ui::UiTree {
+            nodes: vec![text("x")],
+            root: 0,
+        })
+        .expect("albero valido");
+        assert_eq!(plain.drag, None);
+    }
+
+    #[test]
     fn rejects_range_cycle_depth_and_budget() {
         let bad_ref = w_ui::UiNode {
             key: None,
+            drag: None,
             kind: w_ui::UiKind::Stack(w_ui::UiStack {
                 dir: w_ui::Axis::Column,
                 gap: 0,
@@ -668,6 +698,7 @@ mod tests {
         .is_err());
         let cycle = w_ui::UiNode {
             key: None,
+            drag: None,
             kind: w_ui::UiKind::Stack(w_ui::UiStack {
                 dir: w_ui::Axis::Column,
                 gap: 0,
@@ -683,6 +714,7 @@ mod tests {
         for i in 0..65 {
             nodes.push(w_ui::UiNode {
                 key: None,
+                drag: None,
                 kind: w_ui::UiKind::Stack(w_ui::UiStack {
                     dir: w_ui::Axis::Column,
                     gap: 0,
@@ -693,6 +725,7 @@ mod tests {
         assert!(from_tree(w_ui::UiTree { nodes, root: 65 }).is_err());
         let huge = w_ui::UiNode {
             key: None,
+            drag: None,
             kind: w_ui::UiKind::Html("x".repeat((MAX_UNITS + 1) as usize)),
         };
         assert!(from_tree(w_ui::UiTree {
@@ -707,6 +740,7 @@ mod tests {
         let leaf = text("shared");
         let root = w_ui::UiNode {
             key: None,
+            drag: None,
             kind: w_ui::UiKind::Stack(w_ui::UiStack {
                 dir: w_ui::Axis::Column,
                 gap: 0,
@@ -724,6 +758,7 @@ mod tests {
     fn rejects_dag_height_even_when_shared_node_was_seen_shallow() {
         let stack = |children| w_ui::UiNode {
             key: None,
+            drag: None,
             kind: w_ui::UiKind::Stack(w_ui::UiStack {
                 dir: w_ui::Axis::Column,
                 gap: 0,
@@ -749,6 +784,7 @@ mod tests {
     fn rejects_oversized_button_action_json_before_conversion() {
         let node = w_ui::UiNode {
             key: None,
+            drag: None,
             kind: w_ui::UiKind::Button(w_ui::UiButton {
                 label: crate::contract::fub::abi::text::Text::Literal("go".into()),
                 intent: w_ui::Intent::Primary,
@@ -770,6 +806,7 @@ mod tests {
         let root = text("ok");
         let custom = w_ui::UiNode {
             key: None,
+            drag: None,
             kind: w_ui::UiKind::Custom(w_ui::UiCustom {
                 ns: "test".into(),
                 payload: "x".repeat((MAX_UNITS + 1) as usize),
@@ -786,6 +823,7 @@ mod tests {
     fn rejects_repeated_edge_materialization_budget() {
         let stack = |children| w_ui::UiNode {
             key: None,
+            drag: None,
             kind: w_ui::UiKind::Stack(w_ui::UiStack {
                 dir: w_ui::Axis::Column,
                 gap: 0,
@@ -830,7 +868,11 @@ mod tests {
             },
         ];
         let tree = |kind| w_ui::UiTree {
-            nodes: vec![w_ui::UiNode { key: None, kind }],
+            nodes: vec![w_ui::UiNode {
+                key: None,
+                kind,
+                drag: None,
+            }],
             root: 0,
         };
 

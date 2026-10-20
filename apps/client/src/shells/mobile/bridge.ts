@@ -61,6 +61,17 @@ export interface MobileCapturePayload {
   properties?: Record<string, string | number | boolean | string[]>;
   target: MobileCaptureTarget;
 }
+/// L'esito di `mobile_copy_tree`: il vault da aprire (il privato), la
+/// cartella nuova e ciò che non si è potuto copiare.
+export interface MobileTreeCopy {
+  vault: string;
+  folder: string;
+  files: number;
+  bytes: number;
+  truncated: boolean;
+  skipped: string[];
+}
+
 export interface MobileBridge {
   validateCapture: (payload: MobileCapturePayload) => Promise<void>;
   submitCapture: (
@@ -79,6 +90,15 @@ export interface MobileBridge {
     backendCas: boolean,
     copyAccepted: boolean,
   ) => Promise<MobileMountMode>;
+  /** Il selettore di cartella del sistema; `null` se la persona lo chiude. */
+  pickTree: () => Promise<MobileTreeGrant | null>;
+  /** Il permesso del sistema adesso, non quello ricordato. */
+  verifyTree: (grant: MobileTreeGrant) => Promise<MobilePermissionState>;
+  /** iOS: il path della cartella, che da qui `open_vault` accetta. */
+  openSharedTree: (grant: MobileTreeGrant) => Promise<string>;
+  closeSharedTree: () => Promise<unknown[]>;
+  /** Android: la copia in una sottocartella nuova del vault privato. */
+  copyTree: (grant: MobileTreeGrant) => Promise<MobileTreeCopy>;
   onSuspended: (handler: () => void) => Promise<() => void>;
   onResumed: (handler: () => void) => Promise<() => void>;
   onOpenedUrl: (handler: (url: MobileOpenedUrl) => void) => Promise<() => void>;
@@ -121,6 +141,11 @@ export function createMobileBridge(
         backendCas,
         copyAccepted,
       }),
+    pickTree: () => invoker.invoke<MobileTreeGrant | null>("mobile_pick_tree"),
+    verifyTree: (grant) => invoker.invoke<MobilePermissionState>("mobile_verify_tree", { grant }),
+    openSharedTree: (grant) => invoker.invoke<string>("mobile_open_shared", { grant }),
+    closeSharedTree: () => invoker.invoke<unknown[]>("mobile_close_shared"),
+    copyTree: (grant) => invoker.invoke<MobileTreeCopy>("mobile_copy_tree", { grant }),
     onSuspended: (handler) => bus.listen("tauri://suspended", () => handler()),
     onResumed: (handler) => bus.listen("tauri://resumed", () => handler()),
     onOpenedUrl: (handler) =>

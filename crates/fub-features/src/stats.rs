@@ -15,6 +15,7 @@
 //! metterà — quindi in [`PaneMode::Reading`] il pannello mostra il tempo di
 //! lettura al posto del conteggio della selezione.
 
+use fub_abi::command::{ParamKind, ParamSpec};
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
 use fub_abi::session::{ContextMask, PaneMode, SelectionSet};
@@ -22,12 +23,19 @@ use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{
     HostApi, ReadApi, ViewInstance, ViewInterests, ViewProvider, ViewSpec, ViewSurface,
 };
-use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
+use fub_abi::ui::{Align, TableColumn, UiAction, UiKind, UiNode, ViewUpdate};
+use fub_abi::DocId;
 
 /// Id del provider (spazio dati/registrazione) e id della view che offre.
 pub const STATS_ID: &str = "fub.stats";
 /// Id della `ViewSpec`: è ciò con cui la shell chiede questa view al kernel.
 pub const STATS_VIEW: &str = "stats";
+/// I conteggi di un documento **nominato**, senza contesto né selezione: è ciò
+/// che chiede chi non ha un pannello aperto (`fub-cli wordcount`), con la
+/// stessa scelta del testo da contare del pannello.
+pub const STATS_DOCUMENT_VIEW: &str = "stats.document";
+/// Il parametro di [`STATS_DOCUMENT_VIEW`].
+const DOC: &str = "doc";
 
 /// Parole al minuto di una lettura media. È una costante dichiarata e non un
 /// parametro perché finché non ci sono impostazioni (§11.1) un numero
@@ -203,14 +211,37 @@ impl ViewProvider for StatsView {
             // ed è il primo cliente di una superficie nuova.
             ViewSpec::new(STATS_VIEW, Text::key(VIEW_TITLE), ViewSurface::StatusBar)
                 .open_by_default(),
+            ViewSpec::new(
+                STATS_DOCUMENT_VIEW,
+                Text::key(VIEW_TITLE),
+                ViewSurface::Main,
+            )
+            .with_params(vec![ParamSpec::new(
+                DOC,
+                Text::key(DOC_PARAM),
+                ParamKind::Document,
+            )
+            .required()]),
         ]
     }
 
     fn render_view(
         &self,
-        _instance: &ViewInstance,
+        instance: &ViewInstance,
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
+        if instance.view == STATS_DOCUMENT_VIEW {
+            let doc = instance
+                .text_param(DOC)
+                .ok_or_else(|| PluginError::BadArgs(Text::key(E_DOC_PARAM)))?;
+            // Una nota che non c'è è uno stato da dire, non un errore: la view
+            // si apre anche su un id scritto a mano.
+            return match counted_text(host, &DocId::new(doc)) {
+                Ok(text) => Ok(build_document_counts(count(&text))),
+                Err(PluginError::NotFound(_)) => Ok(row(Text::key(NO_DOC)).with_key(NO_DOC)),
+                Err(error) => Err(error),
+            };
+        }
         // **Una lettura sola.** Il contesto si prendeva due volte — una per
         // ricavarne il documento, una per le selezioni e la modalità — sotto un
         // commento che dichiarava il contrario, e la seconda non era gratis:
@@ -231,20 +262,8 @@ impl ViewProvider for StatsView {
         let Some(doc) = context.doc.as_ref() else {
             return Ok(row(Text::key(NO_ACTIVE_DOC)));
         };
-        // Un formato strutturato si conta sul modello; la prosa, e un file che
-        // nessun formato rivendica, sul sorgente.
-        let structured = host.format_of(doc).is_some_and(|format| {
-            !format
-                .capabilities
-                .supports(fub_abi::options::source::PROSE)
-        });
-        let text = if structured {
-            host.read_model(doc)?.text
-        } else {
-            host.read_document(doc)?
-        };
         Ok(build_stats_view(
-            count(&text),
+            count(&counted_text(host, doc)?),
             selection_stats(&context.selections),
             context.mode,
         ))
@@ -303,6 +322,21 @@ fn selection_stats(selections: &Option<SelectionSet>) -> Option<(usize, TextStat
     }
 }
 
+/// Il testo che si conta di un documento: un formato strutturato si conta sul
+/// modello; la prosa, e un file che nessun formato rivendica, sul sorgente.
+fn counted_text(host: &dyn ReadApi, doc: &DocId) -> Result<String, PluginError> {
+    let structured = host.format_of(doc).is_some_and(|format| {
+        !format
+            .capabilities
+            .supports(fub_abi::options::source::PROSE)
+    });
+    if structured {
+        Ok(host.read_model(doc)?.text)
+    } else {
+        host.read_document(doc)
+    }
+}
+
 /// Costruisce l'albero della view. Separato dal provider perché è pura
 /// trasformazione dati→UI: si prova senza un host.
 ///
@@ -332,6 +366,33 @@ pub fn build_stats_view(
         (_, None) => {}
     }
     UiNode::row(12, rows.into_iter().map(UiNode::text).collect())
+}
+
+/// I conteggi di un documento nominato ([`STATS_DOCUMENT_VIEW`]): una tabella
+/// di una riga, parole, caratteri e minuti di lettura.
+///
+/// Le celle sono cifre e portano la chiave del loro conteggio (`words`,
+/// `chars`, `minutes`). L'host rende i messaggi nella lingua di chi guarda, e
+/// una frase tradotta non si rilegge; una chiave e un numero scritto in cifre
+/// restano quelli: è così che li trova chi legge la view da fuori, come
+/// `fub-cli wordcount`.
+pub fn build_document_counts(stats: TextStats) -> UiNode {
+    let cell = |key: &str, n: usize| UiNode::text(Text::Literal(n.to_string())).with_key(key);
+    UiNode::new(UiKind::Table {
+        columns: vec![
+            TableColumn::aligned(Text::key(WORDS_TITLE), Align::End),
+            TableColumn::aligned(Text::key(CHARS_TITLE), Align::End),
+            TableColumn::aligned(Text::key(MINUTES_TITLE), Align::End),
+        ],
+        rows: vec![UiNode::new(UiKind::Row {
+            cells: vec![
+                cell(WORDS, stats.words),
+                cell(CHARS, stats.chars),
+                cell(MINUTES, reading_minutes(stats.words)),
+            ],
+            action: None,
+        })],
+    })
 }
 
 /// Una riga di conteggi: i due numeri **come numeri**, non come pezzi di frase
@@ -369,10 +430,20 @@ fn row(text: Text) -> UiNode {
 const VIEW_TITLE: &str = "view_title";
 /// Nessuna nota aperta: non è un errore, è uno stato.
 const NO_ACTIVE_DOC: &str = "no_active_doc";
+/// La nota chiesta a `stats.document` non esiste.
+const NO_DOC: &str = "no_doc";
+/// `stats.document` chiamata senza la nota da contare.
+const E_DOC_PARAM: &str = "e_doc_param";
 /// I conteggi del documento, e quelli della selezione: due chiavi e non una con
 /// un prefisso, perché in una lingua qualsiasi la seconda può non essere la
 /// prima con una parola davanti.
 const DOC_COUNTS: &str = "doc_counts";
+/// L'etichetta del parametro `doc` di [`STATS_DOCUMENT_VIEW`].
+const DOC_PARAM: &str = "doc_param";
+/// Le intestazioni della tabella di [`build_document_counts`].
+const WORDS_TITLE: &str = "words_title";
+const CHARS_TITLE: &str = "chars_title";
+const MINUTES_TITLE: &str = "minutes_title";
 const SELECTION_COUNTS: &str = "selection_counts";
 /// Lo stesso, con più selezioni: il totale, e **quanti punti** ci stanno
 /// dentro. Chiave a parte e non un argomento in più a quella sopra, per la
@@ -396,6 +467,12 @@ pub fn catalog() -> Vec<StringCatalog> {
         StringCatalog::new("it")
             .with(VIEW_TITLE, "Statistiche")
             .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
+            .with(NO_DOC, "La nota non esiste.")
+            .with(E_DOC_PARAM, "Manca la nota da contare.")
+            .with(DOC_PARAM, "Documento")
+            .with(WORDS_TITLE, "Parole")
+            .with(CHARS_TITLE, "Caratteri")
+            .with(MINUTES_TITLE, "Minuti di lettura")
             .with(DOC_COUNTS, "Parole: {words} · Caratteri: {chars}")
             .with(
                 SELECTION_COUNTS,
@@ -409,6 +486,12 @@ pub fn catalog() -> Vec<StringCatalog> {
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Statistics")
             .with(NO_ACTIVE_DOC, "No note open.")
+            .with(NO_DOC, "The note does not exist.")
+            .with(E_DOC_PARAM, "The note to count is missing.")
+            .with(DOC_PARAM, "Document")
+            .with(WORDS_TITLE, "Words")
+            .with(CHARS_TITLE, "Characters")
+            .with(MINUTES_TITLE, "Reading minutes")
             .with(DOC_COUNTS, "Words: {words} · Characters: {chars}")
             .with(
                 SELECTION_COUNTS,
@@ -658,6 +741,56 @@ mod tests {
             ),
             vec!["Parole: 2 · Caratteri: 10".to_string()]
         );
+    }
+
+    /// La view del documento nominato conta quel documento, non quello aperto,
+    /// e senza la selezione di chi guarda: è la domanda di `fub-cli wordcount`.
+    #[test]
+    fn the_document_view_counts_the_named_note_and_not_the_open_one() {
+        let host = MemoryHost::new()
+            .with_document("a.md", "uno due tre")
+            .with_document("b.md", "quattro");
+        host.set_active(Some("b.md"));
+        let instance = ViewInstance {
+            view: STATS_DOCUMENT_VIEW.into(),
+            instance: "cli".into(),
+            params: serde_json::json!({ "doc": "a.md" }),
+        };
+        let tree = StatsView.render_view(&instance, &host).unwrap();
+        let UiKind::Table { columns, rows } = &tree.kind else {
+            panic!("a table: {tree:?}")
+        };
+        assert_eq!(columns.len(), 3);
+        let UiKind::Row { cells, .. } = &rows[0].kind else {
+            panic!("a row: {rows:?}")
+        };
+        let cells: Vec<_> = cells
+            .iter()
+            .map(|cell| match &cell.kind {
+                UiKind::Text {
+                    content: Text::Literal(n),
+                } => (cell.key.as_deref().unwrap(), n.as_str()),
+                other => panic!("a number: {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            cells,
+            vec![("words", "3"), ("chars", "11"), ("minutes", "1")]
+        );
+        let without = ViewInstance {
+            params: serde_json::Value::Null,
+            ..instance
+        };
+        assert!(matches!(
+            StatsView.render_view(&without, &host),
+            Err(PluginError::BadArgs(_))
+        ));
+        let missing = ViewInstance {
+            params: serde_json::json!({ "doc": "manca.md" }),
+            ..without
+        };
+        let said = StatsView.render_view(&missing, &host).unwrap();
+        assert_eq!(said.key.as_deref(), Some(NO_DOC), "{said:?}");
     }
 
     #[test]

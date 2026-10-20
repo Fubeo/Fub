@@ -56,7 +56,7 @@ use std::sync::Arc;
 use crate::custody::{Custody, WriteTurn};
 use crate::query::query_workspace;
 
-use fub_abi::command::{CommandOutcome, Failure, InvokeMode, UndoStep};
+use fub_abi::command::{CommandOutcome, Failure, InvokeMode, PlannedEdit, UndoStep};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
@@ -808,6 +808,30 @@ impl VaultRead for JobHost {
         }
     }
 
+    /// Il piano si fotografa sotto la lettura del workspace; i provider che
+    /// scrivono gli edit girano dopo, senza la guardia.
+    fn link_retarget_edits(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Result<Vec<PlannedEdit>, PluginError> {
+        self.stopped()?;
+        let prepared = {
+            let workspace = self.workspace.read()?;
+            let policy = workspace.granted_policy(&self.plugin);
+            authorize_path(&policy, Capability::VaultRead, "", || {
+                format!("planning the links of `{from}` onto `{to}`")
+            })?;
+            workspace.prepare_link_retarget(from, to)?
+        };
+        Ok(prepared
+            .edits()
+            .map_err(PluginError::from)?
+            .into_iter()
+            .map(|(doc, edit)| PlannedEdit::new(doc, edit))
+            .collect())
+    }
+
     fn task_state_edit(
         &self,
         doc: &DocId,
@@ -907,6 +931,42 @@ impl VaultWrite for JobHost {
             )?;
         }
         self.apply_edit_detached(id, request)
+    }
+}
+
+impl JobHost {
+    /// Crea o toglie una cartella: un `mkdir` o un `rmdir` sotto il turno di
+    /// scrittura, che non chiama codice di nessuno e quindi non ha una parte
+    /// da fare fuori dalla guardia.
+    fn folder_structure(
+        &mut self,
+        folder: &str,
+        doing: &str,
+        apply: impl FnOnce(&mut Workspace) -> fub_kernel::Result<()>,
+    ) -> Result<(), PluginError> {
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = self.turn(&workspace)?;
+        {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    folder,
+                    || format!("{doing} `{folder}`"),
+                )?;
+            }
+            authorize_path(
+                &ws.granted_policy(&self.plugin),
+                Capability::VaultStructure,
+                folder,
+                || format!("{doing} `{folder}`"),
+            )?;
+        }
+        with_event_drain(&workspace, apply)?.map_err(PluginError::from)
     }
 }
 
@@ -1172,6 +1232,25 @@ impl VaultStructure for JobHost {
         };
         drain_events(&workspace)?;
         Ok(outcome)
+    }
+
+    fn create_folder(&mut self, folder: &str) -> Result<(), PluginError> {
+        self.folder_structure(folder, "creating folder", |ws| {
+            ws.create_folder(folder).map(drop)
+        })
+    }
+
+    fn remove_empty_folder(&mut self, folder: &str) -> Result<(), PluginError> {
+        self.folder_structure(folder, "removing folder", |ws| {
+            ws.remove_empty_folder(folder)
+        })
+    }
+
+    fn migrate_folder_organization(&mut self, from: &str, to: &str) -> Result<(), PluginError> {
+        self.folder_structure(to, "moving folder to", |ws| {
+            ws.migrate_folder_organization(from, to)
+        })?;
+        Ok(())
     }
 
     fn empty_trash(&mut self) -> Result<u64, PluginError> {

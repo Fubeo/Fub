@@ -183,7 +183,9 @@ fn apply_payload(
     }
     // Nome, corpo, proprietà e ordine delle scritture sono del comando
     // dell'host `capture.apply`, lo stesso del clipper e del mobile.
-    let doc = fub_host::capture::apply(&connection.host, vault.as_deref(), &payload, None)
+    let doc = connection
+        .host
+        .capture(vault.as_deref(), &payload)
         .map_err(|error| Failure::from_plugin(&error))?;
     Ok(serde_json::json!({ "mode": payload.target.mode.as_str(), "doc": doc.as_str() }))
 }
@@ -453,6 +455,7 @@ pub fn uri(
         | FubUri::Unique { vault, .. }
         | FubUri::Search { vault, .. }
         | FubUri::Capture { vault, .. } => vault.clone(),
+        FubUri::ChooseVault => None,
     };
     if let Some(root) = selected_vault.as_deref() {
         connection.open_vault(root)?;
@@ -501,7 +504,9 @@ pub fn uri(
             };
             let selector = connection.vault_selector();
             let new_note = |mode| {
-                fub_host::capture::new_note(&connection.host, selector, &note, mode)
+                connection
+                    .host
+                    .new_note(selector, &note, mode)
                     .map_err(|error| Failure::from_plugin(&error))
             };
             // Il piano nomina la nota che nascerà: è quella che si approva.
@@ -566,6 +571,11 @@ pub fn uri(
             }
             serde_json::json!({ "action": "unique", "doc": created.map(|d| d.as_str().to_string()),
                 "dry_run": global.dry_run })
+        }
+        FubUri::ChooseVault => {
+            return Err(Failure::bad_args(
+                "choose-vault è un'azione GUI, non eseguibile dalla CLI",
+            ));
         }
         FubUri::Search { q, tag, folder, .. } => {
             vault_required(connection)?;
@@ -685,6 +695,7 @@ fn describe_uri(uri: &fub_host::automation::FubUri) -> String {
         } => {
             format!("unique vault={vault:?} folder={folder:?} prefix={prefix:?} (nome libero)")
         }
+        FubUri::ChooseVault => "choose-vault (azione GUI)".to_string(),
         FubUri::Search {
             vault,
             q,

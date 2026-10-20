@@ -201,6 +201,13 @@ const BUTTONS: &[Button] = &[
         "Footnote",
         "Inserts a numbered reference and writes its note at the end.",
     ],
+    [
+        "markdown.footnote.delete",
+        "Elimina nota a piè di pagina",
+        "Toglie la nota del cursore: i suoi richiami e la sua definizione.",
+        "Delete footnote",
+        "Removes the cursor's footnote: its references and its definition.",
+    ],
     // Liste.
     [
         "markdown.list.bullet",
@@ -272,6 +279,28 @@ const BUTTONS: &[Button] = &[
         "Inserisce una linea orizzontale dopo la riga corrente.",
         "Horizontal rule",
         "Inserts a horizontal rule after the current line.",
+    ],
+    // Proprietà: il frontmatter scritto dall'editor.
+    [
+        "markdown.property.add",
+        "Aggiungi proprietà",
+        "Apre una riga per una proprietà nuova nel frontmatter, o lo crea in cima alla nota.",
+        "Add property",
+        "Opens a line for a new property in the frontmatter, or creates it at the top of the note.",
+    ],
+    [
+        "markdown.property.up",
+        "Sposta proprietà in su",
+        "Porta la proprietà del cursore prima di quella sopra, con tutti i suoi valori.",
+        "Move property up",
+        "Moves the cursor's property before the one above, with all its values.",
+    ],
+    [
+        "markdown.property.down",
+        "Sposta proprietà in giù",
+        "Porta la proprietà del cursore dopo quella sotto, con tutti i suoi valori.",
+        "Move property down",
+        "Moves the cursor's property after the one below, with all its values.",
     ],
     // Tabelle.
     [

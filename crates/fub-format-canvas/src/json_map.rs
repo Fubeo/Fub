@@ -376,7 +376,8 @@ pub(crate) fn canvas_literals(source: &str) -> Result<Vec<MappedLiteral>, String
     let mut lx = Lexer {
         source,
         bytes: source.as_bytes(),
-        pos: 0,
+        // Il BOM si salta: gli span restano nelle coordinate del file.
+        pos: fub_abi::rules::text_policy::bom_len(source),
         depth: 0,
     };
     let mut out = Vec::new();
