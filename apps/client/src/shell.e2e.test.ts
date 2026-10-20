@@ -699,6 +699,43 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     await waitFor("la cartella si apre da sé", () => noteItem("note/Riunione.md") !== null);
   });
 
+  it("cestinare una cartella chiede, finché «Conferma prima di cestinare» non è spenta", async () => {
+    const press = () => {
+      const folder = noteItem("note")!;
+      folder.focus();
+      const canc = new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true });
+      folder.dispatchEvent(canc);
+      expect(canc.defaultPrevented).toBe(true);
+    };
+    let host = await start(VAULT);
+    let asked = box.asked;
+    box.confirm = false;
+    press();
+    await waitFor("la domanda arriva", () => box.asked === asked + 1);
+    await settle();
+    expect(host.atGate("invokeCommand").some((call) => call.args[0] === "folder.trash")).toBe(false);
+
+    const noConfirm = {
+      spec: {
+        key: "files.confirm-trash",
+        label: "Conferma prima di cestinare una cartella",
+        description: "",
+        group: "",
+        scope: "vault",
+        kind: { kind: "toggle", default: true },
+        program_writable: false,
+      },
+      value: false,
+      source: "vault",
+    } as SettingEntry;
+    host = await start(VAULT, [noConfirm]);
+    asked = box.asked;
+    press();
+    await waitFor("la cartella va nel cestino", () =>
+      host.atGate("invokeCommand").some((call) => call.args[0] === "folder.trash"));
+    expect(box.asked).toBe(asked);
+  });
+
   it("da fuori dell'albero rinomina la nota attiva, portandola in vista", async () => {
     await start(VAULT);
     const { openDocument } = await import("./panels/document");

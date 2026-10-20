@@ -1238,6 +1238,7 @@ function toggleFolder(path: string): void {
 /// dove si trova, non a lasciare l'editor. La voce diventa però la fermata del
 /// tab nell'albero, così chi ci entra da tastiera parte da lì.
 const FILES_AUTO_REVEAL = "files.auto-reveal";
+const FILES_CONFIRM_TRASH = "files.confirm-trash";
 
 /// Vero se la macchina vuole che l'albero segua la nota aperta.
 let autoReveal = false;
@@ -1989,12 +1990,16 @@ function undoGesture(undoable: boolean): { label: string; run: () => void } | un
   };
 }
 
-/// Una cartella nel cestino del vault, con tutto ciò che contiene: si chiede
-/// sempre, perché sono molte voci con un gesto solo. Il cestino è quello del
+/// Una cartella nel cestino del vault, con tutto ciò che contiene: si chiede,
+/// perché sono molte voci con un gesto solo, finché `files.confirm-trash` non
+/// è spenta; un'impostazione che non si legge chiede. Il cestino è quello del
 /// vault anche quando `files.trash` sceglie il sistema: è da lì che
 /// l'annullamento le riporta tutte insieme.
 async function trashFolderWithConfirm(path: string): Promise<void> {
-  const ok = await confirm(t("explorer.folder_trash_confirm", { folder: childName(path) }), {
+  const ask = await settings()
+    .then((entries) => entries.find((entry) => entry.spec.key === FILES_CONFIRM_TRASH)?.value !== false)
+    .catch(() => true);
+  const ok = !ask || await confirm(t("explorer.folder_trash_confirm", { folder: childName(path) }), {
     title: t("explorer.folder_trash_title"),
     okLabel: t("explorer.delete"),
   }).catch(() => false);
