@@ -839,6 +839,7 @@
     "media-pdf",
     "media-pdf-toolbar",
     "media-pdf-page",
+    "media-pdf-spread",
     "media-audio",
     "media-video",
     "media-error",
@@ -3185,7 +3186,8 @@
       "hooks": [
         "media-pdf",
         "media-pdf-toolbar",
-        "media-pdf-page"
+        "media-pdf-page",
+        "media-pdf-spread"
       ],
       "states": [
         "rest",
@@ -5225,7 +5227,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1078,
+    "hooks": 1079,
     "state_names": 7,
     "assigned_states": 625,
     "components": 185,

@@ -8287,6 +8287,18 @@ button.draw-isolation-crumb:hover {
   border-radius: var(--radius-xs);
   box-shadow: var(--shadow-1);
 }
+.media-pdf-page canvas[hidden] {
+  display: none;
+}
+.media-pdf-page.media-pdf-spread {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: var(--space-6);
+}
+.media-pdf-page.media-pdf-spread canvas {
+  margin: 0;
+}
 .media-pdf-page > p {
   max-width: 34rem;
   margin: var(--space-9) auto var(--space-5);

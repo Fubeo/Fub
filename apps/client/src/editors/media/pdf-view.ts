@@ -283,6 +283,12 @@ export interface PdfView {
  * view mostra il fallback con le istruzioni di installazione, mai un riquadro
  * vuoto e mai un viewer del browser.
  */
+/// Lo spazio fra le due pagine affiancate, in pixel CSS: lo stesso del foglio.
+const SPREAD_GAP = 16;
+/// Il filtro dei colori scuri, sul canvas: non passa dal tema, che non
+/// conosce `invert()`.
+const DARK_FILTER = "invert(1) hue-rotate(180deg)";
+
 export function mountPdfView(
   descriptor: ResourceDescriptor,
   bytes: Uint8Array,
@@ -305,9 +311,12 @@ export function mountPdfView(
   const status = document.createElement("p");
   status.setAttribute("role", "status");
   const canvas = document.createElement("canvas");
+  // La seconda pagina, nella vista a due pagine.
+  const facing = document.createElement("canvas");
+  facing.hidden = true;
   const viewer = document.createElement("div");
   viewer.className = "media-pdf-page";
-  viewer.append(canvas);
+  viewer.append(canvas, facing);
   root.append(toolbar, status, viewer);
 
   let engine: PdfEngine | null = null;
@@ -317,6 +326,8 @@ export function mountPdfView(
   /// della sua misura in punti.
   let fit = false;
   let fitWidth = 0;
+  /// Due pagine affiancate, come un libro aperto: la dispari a sinistra.
+  let spread = false;
 
   /// La larghezza utile del piano, senza il suo margine interno.
   function available(): number {
@@ -324,23 +335,50 @@ export function mountPdfView(
     return viewer.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
   }
 
-  async function show(idx: number): Promise<void> {
-    if (!engine || destroyed) return;
-    const clamped = Math.min(Math.max(1, idx), engine.pageCount || 1);
-    page = clamped;
-    status.textContent = t("media.pdf.page", { page: clamped, count: engine.pageCount });
+  /// Disegna la pagina `index` (da 0) in `target`; adattata, larga `room`.
+  async function paint(index: number, target: HTMLCanvasElement, room: number, clamped: number): Promise<void> {
+    if (!engine) return;
     const ratio = devicePixelRatio || 1;
     if (!fit) {
-      await engine.renderPage(clamped - 1, canvas, ratio);
+      await engine.renderPage(index, target, ratio);
       return;
     }
-    const [width, height] = await engine.pageSize(clamped - 1);
-    fitWidth = available();
-    const zoom = width > 0 && fitWidth > 0 ? fitWidth / width : 1;
-    await engine.renderPage(clamped - 1, canvas, ratio * zoom);
+    const [width, height] = await engine.pageSize(index);
+    const zoom = width > 0 && room > 0 ? room / width : 1;
+    await engine.renderPage(index, target, ratio * zoom);
     if (destroyed || !fit || page !== clamped) return;
-    canvas.style.width = `${width * zoom}px`;
-    canvas.style.height = `${height * zoom}px`;
+    target.style.width = `${width * zoom}px`;
+    target.style.height = `${height * zoom}px`;
+  }
+
+  /// La prima pagina della coppia che contiene `n`.
+  function spreadStart(n: number): number {
+    return n % 2 === 0 ? n - 1 : n;
+  }
+
+  async function show(idx: number): Promise<void> {
+    if (!engine || destroyed) return;
+    const count = engine.pageCount || 1;
+    let clamped = Math.min(Math.max(1, idx), count);
+    if (spread) clamped = spreadStart(clamped);
+    page = clamped;
+    const second = spread && clamped < count ? clamped + 1 : null;
+    status.textContent = second
+      ? t("media.pdf.pages", { first: clamped, last: second, count: engine.pageCount })
+      : t("media.pdf.page", { page: clamped, count: engine.pageCount });
+    fitWidth = available();
+    viewer.classList.toggle("media-pdf-spread", second !== null);
+    facing.hidden = second === null;
+    // Le due pagine si dividono il piano, meno lo spazio fra loro. Si
+    // disegnano una dopo l'altra: il motore interrompe una resa quando ne
+    // comincia un'altra.
+    const room = second ? Math.max(0, (fitWidth - SPREAD_GAP) / 2) : fitWidth;
+    await paint(clamped - 1, canvas, room, clamped);
+    if (second && !destroyed && page === clamped) await paint(second - 1, facing, room, clamped);
+  }
+
+  function step(delta: -1 | 1): void {
+    void show(page + delta * (spread ? 2 : 1)).catch(showFailed);
   }
 
   function showFailed(error: unknown): void {
@@ -370,15 +408,11 @@ export function mountPdfView(
   const prev = document.createElement("button");
   prev.type = "button";
   prev.textContent = "‹";
-  life.listen(prev, "click", () => void show(page - 1).catch((error) => {
-    if (!destroyed) status.textContent = t("media.pdf.page_failed", { reason: errorText(error) });
-  }));
+  life.listen(prev, "click", () => step(-1));
   const next = document.createElement("button");
   next.type = "button";
   next.textContent = "›";
-  life.listen(next, "click", () => void show(page + 1).catch((error) => {
-    if (!destroyed) status.textContent = t("media.pdf.page_failed", { reason: errorText(error) });
-  }));
+  life.listen(next, "click", () => step(1));
   const search = document.createElement("input");
   search.type = "search";
   search.placeholder = t("media.pdf.search");
@@ -414,6 +448,26 @@ export function mountPdfView(
     fitButton.setAttribute("aria-pressed", String(fit));
     void show(page).catch(showFailed);
   });
+  const spreadButton = document.createElement("button");
+  spreadButton.type = "button";
+  spreadButton.textContent = t("media.pdf.two_pages");
+  spreadButton.setAttribute("aria-pressed", "false");
+  life.listen(spreadButton, "click", () => {
+    spread = !spread;
+    spreadButton.setAttribute("aria-pressed", String(spread));
+    void show(page).catch(showFailed);
+  });
+  // I colori del tema scuro: la pagina si inverte, e il giro di tinta riporta
+  // i colori al loro tono (il rosso resta rosso, su fondo scuro).
+  const darkButton = document.createElement("button");
+  darkButton.type = "button";
+  darkButton.textContent = t("media.pdf.dark");
+  darkButton.setAttribute("aria-pressed", "false");
+  life.listen(darkButton, "click", () => {
+    const dark = darkButton.getAttribute("aria-pressed") !== "true";
+    darkButton.setAttribute("aria-pressed", String(dark));
+    for (const target of [canvas, facing]) target.style.filter = dark ? DARK_FILTER : "";
+  });
   // Il piano cambia larghezza (la finestra, una barra laterale): la pagina
   // adattata si ridisegna, ma non per il pixel che la barra di scorrimento
   // sposta.
@@ -425,7 +479,7 @@ export function mountPdfView(
     resize.observe(viewer);
   }
   life.add(() => resize?.disconnect());
-  toolbar.append(prev, next, contents, search, fitButton);
+  toolbar.append(prev, next, contents, search, fitButton, spreadButton, darkButton);
   if (options.onAnnotate) {
     const annotate = document.createElement("button");
     annotate.type = "button";

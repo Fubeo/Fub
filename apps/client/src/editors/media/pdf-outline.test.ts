@@ -87,3 +87,48 @@ it("«Adatta alla larghezza» si accende e si spegne", async () => {
   expect(button.getAttribute("aria-pressed")).toBe("false");
   life.close();
 });
+
+it("«Due pagine» affianca la dispari e la pari, e le frecce vanno di due", async () => {
+  const life = new Lifetime();
+  // Come pdf.js: una resa nuova interrompe quella in corso.
+  const drawn: number[] = [];
+  let generation = 0;
+  const renderPage = async (index: number) => {
+    const mine = ++generation;
+    await Promise.resolve();
+    if (mine === generation) drawn.push(index);
+  };
+  const engine = { ...fake(undefined), pageCount: 5, renderPage };
+  const view = mountPdfView(descriptor, new Uint8Array([1]), { loader: async () => engine, initialPage: 2 }, life);
+  await settle();
+  const buttons = [...view.element.querySelectorAll("button")];
+  const status = view.element.querySelector("[role=status]")!;
+  buttons.find((b) => b.textContent === t("media.pdf.two_pages"))!.click();
+  await settle();
+  expect(status.textContent).toBe(t("media.pdf.pages", { first: 1, last: 2, count: 5 }));
+  buttons.find((b) => b.textContent === "›")!.click();
+  await settle();
+  expect(status.textContent).toBe(t("media.pdf.pages", { first: 3, last: 4, count: 5 }));
+  expect(drawn.slice(-2)).toEqual([2, 3]);
+  buttons.find((b) => b.textContent === "›")!.click();
+  await settle();
+  // L'ultima pagina, dispari, resta sola.
+  expect(status.textContent).toBe(t("media.pdf.page", { page: 5, count: 5 }));
+  expect(view.element.querySelectorAll("canvas")[1]!.hidden).toBe(true);
+  expect(drawn.slice(-1)).toEqual([4]);
+  life.close();
+});
+
+it("«Colori scuri» inverte le pagine e torna indietro", async () => {
+  const life = new Lifetime();
+  const view = mountPdfView(descriptor, new Uint8Array([1]), { loader: async () => fake(undefined) }, life);
+  await settle();
+  const button = [...view.element.querySelectorAll("button")].find((b) => b.textContent === t("media.pdf.dark"))!;
+  const page = view.element.querySelector("canvas")!;
+  button.click();
+  expect(button.getAttribute("aria-pressed")).toBe("true");
+  expect(page.style.filter).toContain("invert");
+  button.click();
+  expect(page.style.filter).toBe("");
+  life.close();
+});
