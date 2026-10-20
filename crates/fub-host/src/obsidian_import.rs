@@ -339,13 +339,24 @@ fn chord_of(binding: &Value) -> Option<String> {
     if parts.len() != modifiers.len() {
         return None;
     }
-    let key = if key.chars().count() == 1 {
-        key.to_lowercase()
-    } else {
-        key.to_string()
+    // Il tasto lo piega la regola delle scorciatoie, come lo legge la shell:
+    // l'accordo si riscrive da ciò che `chords` ha capito.
+    let parsed = fub_abi::rules::keys::chords(&format!("{}-{key}", parts.join("-")))?;
+    let [chord] = parsed.as_slice() else {
+        return None;
     };
-    let chord = format!("{}-{key}", parts.join("-"));
-    fub_abi::rules::keys::chords(&chord).map(|_| chord)
+    let mut out: Vec<&str> = Vec::new();
+    for (on, name) in [
+        (chord.command, "Mod"),
+        (chord.alt, "Alt"),
+        (chord.shift, "Shift"),
+    ] {
+        if on {
+            out.push(name);
+        }
+    }
+    out.push(&chord.key);
+    Some(out.join("-"))
 }
 
 fn translate_app(app: &Map<String, Value>, out: &mut Translation) {
