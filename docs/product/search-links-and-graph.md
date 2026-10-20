@@ -69,7 +69,8 @@ resta, e fuori dall'app arriva il file. Lo stesso vale per un risultato del
 cambio rapido: la modale lascia passare il rilascio e si chiude a gesto finito.
 Anche le righe del pannello dei collegamenti (entranti, uscenti e menzioni non
 collegate) si trascinano come la nota che nominano, ma fuori dall'app non
-portano il file.
+portano il file. Così anche un wikilink in Lettura, quando la nota esiste; in
+Live il collegamento è testo e trascinarlo sposta il testo.
 
 Un nome seguito da `:` che non è un operatore resta testo, così un orario o un
 URL non producono un errore. Un errore di sintassi porta la specie e la

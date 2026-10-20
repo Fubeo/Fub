@@ -8,6 +8,7 @@ import type { Lifetime } from "../../ui/lifetime";
 import { mountDesk } from "./sheets/desk";
 import { mountHeadingThread } from "./sheets/heading-thread";
 import { mountLinkCards } from "./sheets/link-card";
+import { mountLinkDrag } from "./sheets/link-drag";
 import { mountSaveState } from "./sheets/save-state";
 import { mountTabDrop } from "./sheets/tab-drop";
 import { mountTabStrips } from "./sheets/tab-strip";
@@ -21,4 +22,5 @@ export function mountSheets(lifetime: Lifetime): void {
   mountDesk(lifetime);
   mountHeadingThread(lifetime);
   mountLinkCards(lifetime);
+  mountLinkDrag(lifetime);
 }
