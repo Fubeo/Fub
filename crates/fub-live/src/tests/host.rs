@@ -477,7 +477,15 @@ async fn over_tcp() {
             None => panic!("the client ended"),
         }
     }
-    let stats = host.status().stats;
+    // Il rifiuto dello sconosciuto lo conta il server quando vede chiudersi
+    // l'handshake, che il client ha già abbandonato: può arrivare dopo l'ack.
+    let stats = loop {
+        let stats = host.status().stats;
+        if stats.rejected > 0 {
+            break stats;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    };
     assert_eq!((stats.admitted, stats.rejected), (1, 1));
 
     let report = host.stop(EndReason::Terminated).await;
