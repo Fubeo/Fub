@@ -909,6 +909,10 @@ pub const VAULT_RESTORED_NS: &str = "fub.vault.restored";
 /// privilegiato: un comando di terzi con `writes: false` non ottiene per
 /// questa via di scrivere nella nota di chi lo invoca.
 pub const EDITOR_ACTION_NS: &str = "fub.editor.action";
+/// Il `ns` con cui un comando chiede alla shell di aprire una pagina web: il
+/// payload è `{ "url": "https://..." }`. Aprire un indirizzo scelto da altri
+/// porta fuori dalla finestra, quindi è un intento privilegiato.
+pub const WEB_OPEN_NS: &str = "fub.web.open";
 
 /// Un intento `Custom` che la shell esegue con un privilegio del processo —
 /// scrivere negli appunti, ricaricare la finestra o modificare il testo aperto —
@@ -920,6 +924,7 @@ pub fn privileged_intent(ns: &str) -> bool {
         || ns == SETTINGS_EXPORT_NS
         || ns == VAULT_RESTORED_NS
         || ns == EDITOR_ACTION_NS
+        || ns == WEB_OPEN_NS
 }
 
 /// Aggiornamento restituito da un `ViewProvider` dopo un'azione.

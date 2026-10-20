@@ -37,6 +37,7 @@ import {
   setReloaderForTests,
   takeNoticeAfterReload,
   VAULT_RESTORED_NS,
+  WEB_OPEN_NS,
 } from "./intents";
 import { setPrimaryViews } from "./primary-views";
 import { EDITOR_ACTION_NS } from "../editors/core/editor-actions";
@@ -167,5 +168,17 @@ describe("una view aperta da un comando (OpenView)", () => {
     await applyIntent({ kind: "open_view", view: "outline", params: null });
     expect(layout.panes[layout.focus]!.tabs).toEqual([]);
     expect(notified).toEqual([[t("views.open_unavailable", { view: "outline" }), "guasto"]]);
+  });
+});
+
+describe("l'intento della pagina web", () => {
+  it("apre un indirizzo http(s) e rifiuta, dicendolo, ogni altro schema", async () => {
+    const opened = vi.spyOn(window, "open").mockImplementation(() => null);
+    await applyIntent({ kind: "custom", ns: WEB_OPEN_NS, payload: { url: "https://pub.example.org/s/blog/a.html" } });
+    expect(opened).toHaveBeenCalledWith("https://pub.example.org/s/blog/a.html", "_blank", "noopener,noreferrer");
+    await applyIntent({ kind: "custom", ns: WEB_OPEN_NS, payload: { url: "javascript:alert(1)" } });
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(notified).toEqual([[t("intent.web_open_refused"), "guasto"]]);
+    opened.mockRestore();
   });
 });

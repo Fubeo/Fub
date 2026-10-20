@@ -14,6 +14,7 @@ import { errorText } from "../host/errors";
 import { notify } from "./notify";
 import { openPrimaryView } from "./primary-views";
 import { writeClipboardText } from "../platform/clipboard";
+import { openWebLink } from "./web-viewer";
 
 /// Il namespace con cui `settings.export` consegna ciò che ha esportato
 /// (`fub_features::SETTINGS_NS`). Il comando non scrive un file e non può:
@@ -25,6 +26,11 @@ export const SETTINGS_EXPORT_NS = "settings.export";
 /// appunti (`fub_abi::ui::CLIPBOARD_TEXT_NS`, payload `{ text }`). Che venga
 /// soltanto dal core lo garantisce il kernel, prima che l'intento arrivi qui.
 export const CLIPBOARD_TEXT_NS = "fub.clipboard.text";
+
+/// Un comando del core chiede di aprire una pagina web
+/// (`fub_abi::ui::WEB_OPEN_NS`, payload `{ url }`): «Apri nel sito» della
+/// pubblicazione. Va dove va un link web di una nota.
+export const WEB_OPEN_NS = "fub.web.open";
 
 /// Il vault è stato sostituito da uno snapshot (`fub_abi::ui::VAULT_RESTORED_NS`):
 /// ogni buffer, sessione e vista in memoria è del contenuto di prima, e l'unica
@@ -91,6 +97,10 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
         await copyText(intent.payload);
         break;
       }
+      if (intent.ns === WEB_OPEN_NS) {
+        openPage(intent.payload);
+        break;
+      }
       if (intent.ns === EDITOR_ACTION_NS) {
         editorAction(intent.payload);
         break;
@@ -134,6 +144,16 @@ export async function applyIntent(intent: ShellIntent): Promise<void> {
       console.info(`Fub: intento ignorato (kind: ${(unknown as { kind: string }).kind}).`);
     }
   }
+}
+
+/// Solo `http(s)`: un altro schema non è una pagina, e non si apre.
+function openPage(payload: unknown): void {
+  const url = typeof payload === "object" && payload !== null ? (payload as { url?: unknown }).url : null;
+  if (typeof url !== "string" || !/^https?:\/\//i.test(url)) {
+    notify(t("intent.web_open_refused"), "guasto");
+    return;
+  }
+  openWebLink(url, false);
 }
 
 /// I segnalibri di un import da Obsidian. Un esito senza segnalibri (il file

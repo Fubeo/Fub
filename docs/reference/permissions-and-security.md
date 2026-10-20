@@ -118,8 +118,9 @@ la forma alla shell; i provider ancora differiti non creano un bypass.
 Alcuni intenti `Custom` fanno eseguire alla shell un'azione con un privilegio
 del processo: scrivere negli appunti (`fub.clipboard.text`,
 `settings.export`), ricaricare la finestra dopo un ripristino
-(`fub.vault.restored`) e modificare il testo della nota aperta come una
-battuta dell'utente (`fub.editor.action`). L'elenco è
+(`fub.vault.restored`), modificare il testo della nota aperta come una
+battuta dell'utente (`fub.editor.action`) e aprire una pagina web
+(`fub.web.open`, soltanto `http` e `https`). L'elenco è
 `fub_abi::ui::privileged_intent`. Il kernel
 accetta questi intenti soltanto da provider `Core`, sia come `ViewUpdate` di
 una view sia come `CommandEffect` di un comando, nel percorso sincrono e in

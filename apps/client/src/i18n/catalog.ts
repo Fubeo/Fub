@@ -1453,6 +1453,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "search.fault.negated_group": "Un gruppo fra parentesi non si può negare: nega i singoli termini",
 "search.fault.too_complex": "La ricerca ha troppe alternative dopo aver sciolto i gruppi",
 "vault.restored": "Vault ripristinato dallo snapshot. Lo stato precedente è nel backup scelto.",
+"intent.web_open_refused": "Indirizzo non aperto: non è una pagina web.",
 "clipboard.failed": "Non riesco a scrivere negli appunti: il sistema non lo consente.",
 "settings.exported_console": "Impostazioni esportate: sono nella console (appunti non disponibili).",
 
@@ -3604,6 +3605,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "search.fault.negated_group": "A parenthesized group cannot be negated: negate the single terms",
 "search.fault.too_complex": "The search has too many alternatives once groups are expanded",
 "vault.restored": "Vault restored from the snapshot. The previous state is in the chosen backup.",
+"intent.web_open_refused": "Address not opened: it is not a web page.",
 "clipboard.failed": "Cannot write to the clipboard: the system does not allow it.",
 "settings.exported_console": "Settings exported: they are in the console (clipboard unavailable).",
 
