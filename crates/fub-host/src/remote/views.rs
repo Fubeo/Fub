@@ -49,6 +49,10 @@ const T_ENTRY_DETAIL: &str = "entry.detail";
 const T_TRUNCATED: &str = "truncated";
 const T_LOG: &str = "log";
 const T_SKIPPED: &str = "skipped";
+const T_LOG_TITLE: &str = "log.title";
+/// Le specie di modifica che il server mette nel registro, ciascuna con la sua
+/// parola; una specie che questa versione non conosce si mostra com'è.
+const LOG_KINDS: [&str; 5] = ["create", "update", "delete", "tombstone", "rename"];
 const T_SKIPPED_ROW: &str = "skipped.row";
 const T_NO_CONFLICTS: &str = "no_conflicts";
 const T_NO_VERSIONS: &str = "no_versions";
@@ -86,6 +90,12 @@ pub fn catalog() -> Vec<StringCatalog> {
         .with(T_TRUNCATED, "Sul server ci sono altri file: l'elenco si ferma a 5000.")
         .with(T_LOG, "{kind} · {when}")
         .with(T_SKIPPED, "Restano fuori dalla sincronizzazione: {count}")
+        .with(T_LOG_TITLE, "Ultime modifiche nel vault, da tutti i dispositivi")
+        .with("log.kind.create", "creata · {when}")
+        .with("log.kind.update", "modificata · {when}")
+        .with("log.kind.delete", "eliminata · {when}")
+        .with("log.kind.tombstone", "eliminata · {when}")
+        .with("log.kind.rename", "rinominata · {when}")
         .with(T_SKIPPED_ROW, "supera i 7 MiB di una sola operazione")
         .with(T_NO_CONFLICTS, "Nessun conflitto.")
         .with(T_NO_VERSIONS, "Ancora nessuna versione sincronizzata.")
@@ -135,6 +145,15 @@ pub fn catalog() -> Vec<StringCatalog> {
         )
         .with(T_LOG, "{kind} · {when}")
         .with(T_SKIPPED, "Left out of sync: {count}")
+        .with(
+            T_LOG_TITLE,
+            "Latest changes in the vault, from every device",
+        )
+        .with("log.kind.create", "created · {when}")
+        .with("log.kind.update", "changed · {when}")
+        .with("log.kind.delete", "deleted · {when}")
+        .with("log.kind.tombstone", "deleted · {when}")
+        .with("log.kind.rename", "renamed · {when}")
         .with(T_SKIPPED_ROW, "exceeds the 7 MiB single-operation cap")
         .with(T_NO_CONFLICTS, "No conflicts.")
         .with(T_NO_VERSIONS, "No synced versions yet.")
@@ -500,21 +519,19 @@ fn status_tree(snap: &SyncSnapshot, faults: &[&'static str]) -> UiNode {
         ));
     }
     if !snap.log.is_empty() {
+        children.push(UiNode::text(Text::key(T_LOG_TITLE)));
         children.push(UiNode::list(
             snap.log
                 .iter()
                 .map(|row| {
-                    UiNode::list_item(
-                        Text::from(row.doc_id.clone()),
-                        Some(Text::message(
-                            T_LOG,
-                            vec![
-                                Arg::text("kind", row.kind.clone()),
-                                Arg::timestamp("when", row.ts_ms),
-                            ],
-                        )),
-                        None,
-                    )
+                    let when = Arg::timestamp("when", row.ts_ms);
+                    let line = match LOG_KINDS.iter().find(|kind| **kind == row.kind) {
+                        Some(kind) => Text::message(format!("log.kind.{kind}"), vec![when]),
+                        None => {
+                            Text::message(T_LOG, vec![Arg::text("kind", row.kind.clone()), when])
+                        }
+                    };
+                    UiNode::list_item(Text::from(row.doc_id.clone()), Some(line), None)
                 })
                 .collect::<Vec<_>>(),
         ));
@@ -755,6 +772,42 @@ mod tests {
             .map(|(title, _)| title.as_str())
             .collect();
         assert_eq!(skipped, ["Video/grande.mp4", "Archivio.zip"]);
+
+        let snap = SyncSnapshot {
+            replica_id: "replica".into(),
+            log: vec![
+                SyncLogRow {
+                    doc_id: "a.md".into(),
+                    kind: "update".into(),
+                    ts_ms: 1,
+                },
+                SyncLogRow {
+                    doc_id: "b.md".into(),
+                    kind: "nuova".into(),
+                    ts_ms: 2,
+                },
+            ],
+            ..serde_json::from_value(serde_json::json!({})).unwrap()
+        };
+        let mut found = Vec::new();
+        items(&status_tree(&snap, &[]), &mut found);
+        let keys: Vec<(&str, &str)> = found
+            .iter()
+            .filter_map(|(title, subtitle)| {
+                Some((
+                    title.as_str(),
+                    subtitle.as_ref()?.as_message()?.key.as_str(),
+                ))
+            })
+            .collect();
+        assert_eq!(keys, [("a.md", "log.kind.update"), ("b.md", T_LOG)]);
+        let it = catalog().into_iter().find(|c| c.locale == "it").unwrap();
+        for kind in LOG_KINDS {
+            assert!(
+                it.entries.contains_key(&format!("log.kind.{kind}")),
+                "{kind}"
+            );
+        }
 
         let old: SyncSnapshot =
             serde_json::from_value(serde_json::json!({"replica_id": "r"})).unwrap();
