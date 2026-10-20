@@ -132,3 +132,32 @@ it("«Colori scuri» inverte le pagine e torna indietro", async () => {
   expect(page.style.filter).toBe("");
   life.close();
 });
+
+it("«Miniature» apre la colonna delle pagine, che segna quella davanti e ci porta", async () => {
+  const life = new Lifetime();
+  const view = mountPdfView(descriptor, new Uint8Array([1]), {
+    loader: async () => ({ ...fake(undefined), renderThumbnail: async () => {} }),
+  }, life);
+  await settle();
+  const button = [...view.element.querySelectorAll("button")].find((b) => b.textContent === t("media.pdf.thumbnails"))!;
+  expect(button.hidden).toBe(false);
+  const column = view.element.querySelector<HTMLElement>("nav.media-pdf-thumbs")!;
+  expect(column.hidden).toBe(true);
+  button.click();
+  expect(column.hidden).toBe(false);
+  const items = [...column.querySelectorAll("button")];
+  expect(items.map((b) => b.getAttribute("aria-label"))).toEqual([1, 2, 3].map((page) => t("media.pdf.page_number", { page })));
+  expect(items[0]!.getAttribute("aria-current")).toBe("page");
+  items[2]!.click();
+  await settle();
+  expect(view.element.querySelector("[role=status]")!.textContent).toBe(t("media.pdf.page", { page: 3, count: 3 }));
+  expect(items.map((b) => b.getAttribute("aria-current"))).toEqual([null, null, "page"]);
+  life.close();
+
+  // Un motore senza miniature non offre il bottone.
+  const bare = new Lifetime();
+  const plain = mountPdfView(descriptor, new Uint8Array([1]), { loader: async () => fake(undefined) }, bare);
+  await settle();
+  expect([...plain.element.querySelectorAll("button")].find((b) => b.textContent === t("media.pdf.thumbnails"))!.hidden).toBe(true);
+  bare.close();
+});

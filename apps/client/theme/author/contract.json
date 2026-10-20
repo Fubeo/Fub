@@ -840,6 +840,8 @@
     "media-pdf-toolbar",
     "media-pdf-page",
     "media-pdf-spread",
+    "media-pdf-body",
+    "media-pdf-thumbs",
     "media-audio",
     "media-video",
     "media-error",
@@ -3187,7 +3189,9 @@
         "media-pdf",
         "media-pdf-toolbar",
         "media-pdf-page",
-        "media-pdf-spread"
+        "media-pdf-spread",
+        "media-pdf-body",
+        "media-pdf-thumbs"
       ],
       "states": [
         "rest",
@@ -5227,7 +5231,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1079,
+    "hooks": 1081,
     "state_names": 7,
     "assigned_states": 625,
     "components": 185,

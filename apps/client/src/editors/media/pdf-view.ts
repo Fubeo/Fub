@@ -65,6 +65,11 @@ export interface PdfEngine {
   outline?(): Promise<PdfOutlineItem[]>;
   search(needle: string, limit?: number): Promise<PdfSearchHit[]>;
   renderPage(index: number, canvas: HTMLCanvasElement, scale?: number): Promise<void>;
+  /**
+   * Una miniatura della pagina `index` (da 0), larga `width` pixel CSS. Non
+   * interrompe la resa della pagina. Facoltativa: senza, niente miniature.
+   */
+  renderThumbnail?(index: number, canvas: HTMLCanvasElement, width: number): Promise<void>;
   /** La misura della pagina `index` (da 0) in punti, girata come la si legge. */
   pageSize(index: number): Promise<readonly [number, number]>;
   /**
@@ -135,6 +140,7 @@ export function makePdfJsLoader(
     let destroyed = false;
     let activeRender: { cancel(): void } | null = null;
     let renderGeneration = 0;
+    const thumbnails = new Set<{ cancel(): void }>();
     // La pagina di una destinazione: per nome o già scritta, il cui primo
     // elemento è il riferimento alla pagina. Una che non si risolve non porta
     // da nessuna parte, e la voce resta senza pagina.
@@ -207,6 +213,29 @@ export function makePdfJsLoader(
           if (activeRender === task) activeRender = null;
         }
       },
+      async renderThumbnail(index, canvas, width) {
+        if (destroyed || index < 0 || index >= document.numPages) throw new Error("PDF page is unavailable");
+        const page = await document.getPage(index + 1);
+        if (destroyed) return;
+        const ratio = globalThis.devicePixelRatio || 1;
+        const natural = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale: natural.width > 0 ? (width / natural.width) * ratio : ratio });
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${viewport.height / ratio}px`;
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("PDF canvas is unavailable");
+        const task = page.render({ canvas, canvasContext: context, viewport });
+        thumbnails.add(task);
+        try {
+          await task.promise;
+        } catch (error) {
+          if (!destroyed) throw error;
+        } finally {
+          thumbnails.delete(task);
+        }
+      },
       async pageSize(index) {
         if (destroyed || index < 0 || index >= document.numPages) throw new Error("PDF page is unavailable");
         const viewport = (await document.getPage(index + 1)).getViewport({ scale: 1 });
@@ -241,6 +270,7 @@ export function makePdfJsLoader(
         destroyed = true;
         renderGeneration++;
         activeRender?.cancel();
+        for (const task of thumbnails) task.cancel();
         void document.destroy();
       },
     };
@@ -286,8 +316,16 @@ export interface PdfView {
 /// Lo spazio fra le due pagine affiancate, in pixel CSS: lo stesso del foglio.
 const SPREAD_GAP = 16;
 /// Il filtro dei colori scuri, sul canvas: non passa dal tema, che non
-/// conosce `invert()`.
-const DARK_FILTER = "invert(1) hue-rotate(180deg)";
+/// conosce `invert()`. Un'inversione non piena lascia il fondo grigio scuro,
+/// non nero.
+const DARK_FILTER = "invert(0.9) hue-rotate(180deg)";
+/// La larghezza di una miniatura, in pixel CSS.
+const PDF_THUMB_WIDTH = 96;
+/// Oltre, le miniature non si fanno: un PDF di diecimila pagine si percorre
+/// col numero e col sommario.
+export const PDF_THUMB_LIMIT = 2000;
+/// Senza `IntersectionObserver`, le prime che si disegnano subito.
+const PDF_THUMB_EAGER = 24;
 
 export function mountPdfView(
   descriptor: ResourceDescriptor,
@@ -317,7 +355,15 @@ export function mountPdfView(
   const viewer = document.createElement("div");
   viewer.className = "media-pdf-page";
   viewer.append(canvas, facing);
-  root.append(toolbar, status, viewer);
+  // Le miniature, a lato del piano: si disegnano quando entrano in vista.
+  const thumbs = document.createElement("nav");
+  thumbs.className = "media-pdf-thumbs";
+  thumbs.setAttribute("aria-label", t("media.pdf.thumbnails"));
+  thumbs.hidden = true;
+  const body = document.createElement("div");
+  body.className = "media-pdf-body";
+  body.append(thumbs, viewer);
+  root.append(toolbar, status, body);
 
   let engine: PdfEngine | null = null;
   let page = options.initialPage ?? 1;
@@ -328,6 +374,7 @@ export function mountPdfView(
   let fitWidth = 0;
   /// Due pagine affiancate, come un libro aperto: la dispari a sinistra.
   let spread = false;
+  let dark = false;
 
   /// La larghezza utile del piano, senza il suo margine interno.
   function available(): number {
@@ -366,6 +413,7 @@ export function mountPdfView(
     status.textContent = second
       ? t("media.pdf.pages", { first: clamped, last: second, count: engine.pageCount })
       : t("media.pdf.page", { page: clamped, count: engine.pageCount });
+    markThumbs(clamped, second);
     fitWidth = available();
     viewer.classList.toggle("media-pdf-spread", second !== null);
     facing.hidden = second === null;
@@ -464,10 +512,78 @@ export function mountPdfView(
   darkButton.textContent = t("media.pdf.dark");
   darkButton.setAttribute("aria-pressed", "false");
   life.listen(darkButton, "click", () => {
-    const dark = darkButton.getAttribute("aria-pressed") !== "true";
+    dark = !dark;
     darkButton.setAttribute("aria-pressed", String(dark));
-    for (const target of [canvas, facing]) target.style.filter = dark ? DARK_FILTER : "";
+    for (const target of [canvas, facing, ...thumbs.querySelectorAll("canvas")]) target.style.filter = dark ? DARK_FILTER : "";
   });
+  const thumbsButton = document.createElement("button");
+  thumbsButton.type = "button";
+  thumbsButton.textContent = t("media.pdf.thumbnails");
+  thumbsButton.setAttribute("aria-pressed", "false");
+  thumbsButton.hidden = true;
+  life.listen(thumbsButton, "click", () => {
+    const open = thumbs.hidden;
+    thumbs.hidden = !open;
+    thumbsButton.setAttribute("aria-pressed", String(open));
+    // Il piano si stringe: la pagina adattata la segue dal `ResizeObserver`.
+    if (open && engine) buildThumbs(engine);
+  });
+
+  let observer: IntersectionObserver | null = null;
+  life.add(() => observer?.disconnect());
+  let painting: Promise<void> = Promise.resolve();
+
+  /// Le miniature si fanno una volta, al primo «Miniature»; si disegnano una
+  /// alla volta, perché non tolgano tempo alla pagina.
+  function buildThumbs(loaded: PdfEngine): void {
+    if (thumbs.childElementCount > 0 || !loaded.renderThumbnail) return;
+    const draw = (index: number, target: HTMLCanvasElement) => {
+      painting = painting
+        .then(() => (destroyed || engine !== loaded ? undefined : loaded.renderThumbnail!(index, target, PDF_THUMB_WIDTH)))
+        // Una miniatura che non si disegna resta un foglio bianco col numero.
+        .catch(() => {});
+    };
+    const count = Math.min(loaded.pageCount, PDF_THUMB_LIMIT);
+    if (typeof IntersectionObserver !== "undefined") {
+      observer = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          observer?.unobserve(entry.target);
+          const index = Number((entry.target as HTMLElement).dataset.page) - 1;
+          const target = entry.target.querySelector("canvas");
+          if (target) draw(index, target);
+        }
+      }, { root: thumbs, rootMargin: "200px 0px" });
+    }
+    for (let index = 0; index < count; index++) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.dataset.page = String(index + 1);
+      item.setAttribute("aria-label", t("media.pdf.page_number", { page: index + 1 }));
+      const sheet = document.createElement("canvas");
+      if (dark) sheet.style.filter = DARK_FILTER;
+      const label = document.createElement("span");
+      label.textContent = String(index + 1);
+      label.setAttribute("aria-hidden", "true");
+      item.append(sheet, label);
+      life.listen(item, "click", () => void show(index + 1).catch(showFailed));
+      thumbs.append(item);
+      if (observer) observer.observe(item);
+      else if (index < PDF_THUMB_EAGER) draw(index, sheet);
+    }
+    markThumbs(page, spread && page < loaded.pageCount ? page + 1 : null);
+  }
+
+  /// La miniatura della pagina davanti (e della sua compagna) si segna, e si
+  /// porta in vista.
+  function markThumbs(first: number, second: number | null): void {
+    for (const item of thumbs.children) {
+      const n = Number((item as HTMLElement).dataset.page);
+      if (n === first || n === second) item.setAttribute("aria-current", "page");
+      else item.removeAttribute("aria-current");
+    }
+    if (!thumbs.hidden) thumbs.children[first - 1]?.scrollIntoView?.({ block: "nearest" });
+  }
   // Il piano cambia larghezza (la finestra, una barra laterale): la pagina
   // adattata si ridisegna, ma non per il pixel che la barra di scorrimento
   // sposta.
@@ -479,7 +595,7 @@ export function mountPdfView(
     resize.observe(viewer);
   }
   life.add(() => resize?.disconnect());
-  toolbar.append(prev, next, contents, search, fitButton, spreadButton, darkButton);
+  toolbar.append(prev, next, thumbsButton, contents, search, fitButton, spreadButton, darkButton);
   if (options.onAnnotate) {
     const annotate = document.createElement("button");
     annotate.type = "button";
@@ -523,6 +639,7 @@ export function mountPdfView(
         }
         void show(page).catch(() => fallback(`PDF ${descriptor.id} failed to render page ${page}.`));
         void showOutline(loaded);
+        thumbsButton.hidden = !loaded.renderThumbnail;
       })
       .catch((error) => {
         if (!destroyed) fallback(`PDF ${descriptor.id} could not be opened: ${errorText(error)}`);
