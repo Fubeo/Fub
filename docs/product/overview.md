@@ -106,6 +106,9 @@ Rust, con fallback sugli input grezzi quando non è disponibile.
   `fub.template`): un mese per volta, settimane col numero ISO e primo giorno
   dal locale; un giorno apre o crea la sua giornaliera con `note.daily`, e
   quello che l'ha già è in evidenza;
+- nel pannello delle proprietà una data porta nei due versi: «Nota del giorno»
+  apre la giornaliera, «Stesso giorno» elenca le altre note che hanno quel
+  giorno in una proprietà qualsiasi, anche con l'ora o dentro un elenco;
 - Graph View resa dalla shell.
 
 ### Estensibilità

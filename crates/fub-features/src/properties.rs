@@ -125,6 +125,18 @@ const DAILY_COMMAND: &str = "note.daily";
 const DAILY_LABEL: &str = "daily_label";
 const E_DAILY: &str = "e_daily";
 const E_DAILY_OFF: &str = "e_daily_off";
+/// Le altre note dello stesso giorno: il verso che manca a `note.daily`, da una
+/// giornaliera (che ha la sua `date`) o da qualunque nota con una data. Il
+/// giorno aperto vive nello stato della view, e la lista si ricalcola a ogni
+/// resa: è la stessa lettura dell'indice che fa la vista globale.
+const SAME_DAY: &str = "same_day";
+const SAME_DAY_STATE: &str = "property.same_day";
+const SAME_DAY_LABEL: &str = "same_day_label";
+const SAME_DAY_TITLE: &str = "same_day_title";
+const SAME_DAY_NONE: &str = "same_day_none";
+const SAME_DAY_MORE: &str = "same_day_more";
+/// Quante note dello stesso giorno si mostrano; le altre si contano.
+const SAME_DAY_ROWS: usize = 50;
 /// Una nota con la chiave al singolare e al plurale insieme: la conversione
 /// non sceglie per l'utente.
 const E_BOTH_FORMS: &str = "e_both_forms";
@@ -151,6 +163,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(U_REMOVE, "Annulla: togli «{key}» da {doc}")
             .with(FAILED, "Non ho aggiornato le proprietà: {reason}")
             .with(DAILY_LABEL, "Nota del giorno")
+            .with(SAME_DAY_LABEL, "Stesso giorno")
+            .with(SAME_DAY_TITLE, "Altre note del {date}")
+            .with(SAME_DAY_NONE, "Nessun'altra nota ha la data {date}.")
+            .with(SAME_DAY_MORE, "e altre {count}")
             .with(E_DAILY, "Non ho aperto la nota del {date}: {reason}")
             .with(
                 E_DAILY_OFF,
@@ -326,6 +342,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(U_REMOVE, "Undo: remove «{key}» from {doc}")
             .with(FAILED, "Could not update properties: {reason}")
             .with(DAILY_LABEL, "Daily note")
+            .with(SAME_DAY_LABEL, "Same day")
+            .with(SAME_DAY_TITLE, "Other notes on {date}")
+            .with(SAME_DAY_NONE, "No other note has the date {date}.")
+            .with(SAME_DAY_MORE, "and {count} more")
             .with(E_DAILY, "Could not open the note for {date}: {reason}")
             .with(
                 E_DAILY_OFF,
@@ -603,6 +623,27 @@ impl ViewProvider for PropertiesView {
                 };
                 open_daily(host, date)
             }
+            SAME_DAY => {
+                let Some(date) = action.payload.get(VALUE).and_then(|v| v.as_str()) else {
+                    return Ok(ViewUpdate::None);
+                };
+                // Lo stesso pulsante apre e chiude.
+                let open = host.view_state(SAME_DAY_STATE)?;
+                let next = (open.as_ref().and_then(|v| v.as_str()) != Some(date))
+                    .then(|| serde_json::json!(date));
+                host.set_view_state(SAME_DAY_STATE, next)?;
+                Ok(ViewUpdate::Replace {
+                    root: tree(host, None)?,
+                })
+            }
+            OPEN => {
+                let Some(doc) = action.payload.get(DOC).and_then(|v| v.as_str()) else {
+                    return Ok(ViewUpdate::None);
+                };
+                Ok(ViewUpdate::Navigate {
+                    doc_id: doc.to_string(),
+                })
+            }
             _ => Ok(ViewUpdate::None),
         }
     }
@@ -720,14 +761,21 @@ fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError
     let props = model
         .frontmatter
         .properties_with_types(&date_formats(host), &property_types(host));
+    let same_day = host
+        .view_state(SAME_DAY_STATE)?
+        .and_then(|v| v.as_str().map(str::to_string))
+        .filter(|day| props.iter().any(|(_, v)| has_day(v, day)));
     if props.is_empty() {
         children.push(UiNode::empty_state(Text::key(EMPTY_NO_PROPS)));
     } else {
         children.extend(
             props
                 .iter()
-                .map(|(k, v)| row(&doc, k, v, model.frontmatter.get(k))),
+                .map(|(k, v)| row(&doc, k, v, model.frontmatter.get(k), same_day.as_deref())),
         );
+    }
+    if let Some(day) = &same_day {
+        children.push(same_day_list(host, &doc, day)?);
     }
     children.push(add_form(&doc));
     Ok(UiNode::column(1, children))
@@ -947,7 +995,93 @@ fn date_formats(host: &dyn ReadApi) -> DateFormats {
     }
 }
 
-fn row(doc: &DocId, key: &str, value: &PropertyValue, raw: Option<&serde_json::Value>) -> UiNode {
+/// Il giorno scritto di una data, `AAAA-MM-GG`: ora e fuso non lo spostano,
+/// perché è il giorno che l'utente ha scritto quello che cerca.
+fn day_of(date: &fub_abi::model::PropertyDate) -> String {
+    format!("{:04}-{:02}-{:02}", date.year, date.month, date.day)
+}
+
+/// Il valore porta questo giorno, da solo o dentro un elenco?
+fn has_day(value: &PropertyValue, day: &str) -> bool {
+    match value {
+        PropertyValue::Date(date) => day_of(date) == day,
+        PropertyValue::List(items) => items
+            .iter()
+            .any(|item| matches!(item, PropertyScalar::Date(date) if day_of(date) == day)),
+        _ => false,
+    }
+}
+
+/// Le altre note che hanno, in una proprietà qualsiasi, una data di quel
+/// giorno. Le chiavi non si sanno prima (`date`, `created`, `scadenza`…): si
+/// leggono le proprietà dall'indice, come fa la vista globale, e si guarda il
+/// valore già tipato.
+fn same_day_list(host: &dyn ReadApi, doc: &DocId, day: &str) -> Result<UiNode, PluginError> {
+    let documents = host
+        .query_index(IndexQuery::Documents {
+            matching: QueryExpr::all(),
+            sort: None,
+            select: PropertySelect::All,
+            page: None,
+            excerpts: Excerpts::Omit,
+        })?
+        .documents()?;
+    let mut others: Vec<DocId> = documents
+        .items
+        .into_iter()
+        .filter(|m| &m.doc != doc && m.properties.iter().any(|p| has_day(&p.value, day)))
+        .map(|m| m.doc)
+        .collect();
+    others.sort();
+    let date = Arg::text("date", day);
+    if others.is_empty() {
+        return Ok(
+            UiNode::empty_state(Text::message(SAME_DAY_NONE, vec![date])).with_key(SAME_DAY),
+        );
+    }
+    let hidden = others.len().saturating_sub(SAME_DAY_ROWS);
+    let items: Vec<UiNode> = others
+        .iter()
+        .take(SAME_DAY_ROWS)
+        .map(|other| {
+            UiNode::list_item(
+                Text::from(other.as_str().to_string()),
+                None,
+                Some(ActionRef::with(
+                    OPEN,
+                    serde_json::json!({ DOC: other.as_str() }),
+                )),
+            )
+            .with_key(other.as_str())
+        })
+        .collect();
+    let mut entries = vec![
+        UiNode::text(Text::message(SAME_DAY_TITLE, vec![date])),
+        UiNode::list(items),
+    ];
+    if hidden > 0 {
+        entries.push(UiNode::text(Text::message(
+            SAME_DAY_MORE,
+            vec![Arg::int("count", i64::try_from(hidden).unwrap_or(i64::MAX))],
+        )));
+    }
+    Ok(UiNode::keyed(
+        SAME_DAY,
+        UiKind::Stack {
+            dir: fub_abi::ui::Axis::Column,
+            gap: 1,
+            children: entries,
+        },
+    ))
+}
+
+fn row(
+    doc: &DocId,
+    key: &str,
+    value: &PropertyValue,
+    raw: Option<&serde_json::Value>,
+    same_day: Option<&str>,
+) -> UiNode {
     let payload = serde_json::json!({ KEY: key, DOC: doc.as_str() });
     let source_only = matches!(value, PropertyValue::Unknown(_) | PropertyValue::Empty)
         || matches!(value, PropertyValue::List(items) if items.iter().any(|v|
@@ -974,15 +1108,20 @@ fn row(doc: &DocId, key: &str, value: &PropertyValue, raw: Option<&serde_json::V
         controls.push(source_button(doc));
     } else {
         if let PropertyValue::Date(date) = value {
+            let day = day_of(date);
             controls.push(UiNode::button(
                 Text::key(DAILY_LABEL),
                 Intent::Neutral,
-                ActionRef::with(
-                    DAILY,
-                    serde_json::json!({
-                        VALUE: format!("{:04}-{:02}-{:02}", date.year, date.month, date.day)
-                    }),
-                ),
+                ActionRef::with(DAILY, serde_json::json!({ VALUE: day })),
+            ));
+            controls.push(UiNode::button(
+                Text::key(SAME_DAY_LABEL),
+                if same_day == Some(day.as_str()) {
+                    Intent::Primary
+                } else {
+                    Intent::Neutral
+                },
+                ActionRef::with(SAME_DAY, serde_json::json!({ VALUE: day })),
             ));
         }
         controls.push(UiNode::button(

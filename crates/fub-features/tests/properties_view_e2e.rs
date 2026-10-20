@@ -754,6 +754,112 @@ fn without_templates_the_daily_button_says_why() {
     assert!(!vault.root.join("Daily").exists());
 }
 
+/// Dalla data di una nota (la `date` di una giornaliera, o qualunque altra) alle
+/// altre note di quel giorno: qualsiasi chiave, anche con l'ora o dentro un
+/// elenco; lo stesso pulsante chiude la lista, e una nota senza quel giorno
+/// non la mostra.
+#[test]
+fn the_same_day_button_lists_the_other_notes_with_that_date() {
+    let vault = Vault::new();
+    vault.put("Diario.md", "---\ndate: 2024-03-05\n---\n");
+    vault.put("Riunione.md", "---\ncreata: 2024-03-05T10:00+02:00\n---\n");
+    vault.put("Viaggio.md", "---\ngiorni: [2024-03-05, 2024-04-01]\n---\n");
+    vault.put("Dopo.md", "---\ndate: 2024-03-06\n---\n");
+    vault.put("Nuda.md", "Niente frontmatter.\n");
+    let mut ws = vault.open();
+    open_notes(&ws, "Diario.md");
+    let press = |ws: &mut Workspace| {
+        let update = ws
+            .view_action(
+                &instance(),
+                UiAction::new("same_day")
+                    .with_payload(serde_json::json!({ "value": "2024-03-05" })),
+            )
+            .unwrap();
+        let fub_abi::ui::ViewUpdate::Replace { root } = update else {
+            panic!("{update:?}");
+        };
+        serde_json::to_string(&root).unwrap()
+    };
+    let shown = press(&mut ws);
+    assert!(shown.contains("Altre note del 2024-03-05"), "{shown}");
+    assert!(
+        shown.contains("Riunione.md") && shown.contains("Viaggio.md"),
+        "{shown}"
+    );
+    assert!(
+        !shown.contains("Dopo.md") && !shown.contains("Nuda.md"),
+        "{shown}"
+    );
+    assert!(
+        !shown.contains("\"key\":\"Diario.md\""),
+        "la nota stessa non c'è: {shown}"
+    );
+    let navigate = ws
+        .view_action(
+            &instance(),
+            UiAction::new("open").with_payload(serde_json::json!({ "doc": "Riunione.md" })),
+        )
+        .unwrap();
+    assert_eq!(
+        navigate,
+        fub_abi::ui::ViewUpdate::Navigate {
+            doc_id: "Riunione.md".into()
+        }
+    );
+    open_notes(&ws, "Dopo.md");
+    let elsewhere = serde_json::to_string(&ws.render_view(&instance()).unwrap()).unwrap();
+    assert!(!elsewhere.contains("Riunione.md"), "{elsewhere}");
+    open_notes(&ws, "Diario.md");
+    let closed = press(&mut ws);
+    assert!(!closed.contains("Riunione.md"), "{closed}");
+}
+
+/// Un giorno che nessun'altra nota ha lo dice, invece di una lista vuota.
+#[test]
+fn the_same_day_list_says_when_no_other_note_has_the_day() {
+    let vault = Vault::new();
+    vault.put("Sola.md", "---\ndate: 2024-03-05\n---\n");
+    let mut ws = vault.open();
+    open_notes(&ws, "Sola.md");
+    let update = ws
+        .view_action(
+            &instance(),
+            UiAction::new("same_day").with_payload(serde_json::json!({ "value": "2024-03-05" })),
+        )
+        .unwrap();
+    let shown = serde_json::to_string(&update).unwrap();
+    assert!(
+        shown.contains("Nessun'altra nota ha la data 2024-03-05."),
+        "{shown}"
+    );
+}
+
+/// Oltre la cinquantesima le note dello stesso giorno si contano, non si
+/// elencano: il pannello resta leggibile.
+#[test]
+fn the_same_day_list_counts_what_it_does_not_show() {
+    let vault = Vault::new();
+    vault.put("Oggi.md", "---\ndate: 2024-03-05\n---\n");
+    for n in 0..53 {
+        vault.put(&format!("n{n:02}.md"), "---\ndate: 2024-03-05\n---\n");
+    }
+    let mut ws = vault.open();
+    open_notes(&ws, "Oggi.md");
+    let update = ws
+        .view_action(
+            &instance(),
+            UiAction::new("same_day").with_payload(serde_json::json!({ "value": "2024-03-05" })),
+        )
+        .unwrap();
+    let shown = serde_json::to_string(&update).unwrap();
+    assert!(
+        shown.contains("n49.md") && !shown.contains("n50.md"),
+        "{shown}"
+    );
+    assert!(shown.contains("e altre 3"), "{shown}");
+}
+
 #[test]
 fn deleting_a_key_from_the_vault_previews_applies_and_undoes() {
     let vault = Vault::new();
