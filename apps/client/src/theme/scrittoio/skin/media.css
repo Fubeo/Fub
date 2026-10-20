@@ -440,6 +440,20 @@
   border-radius: var(--radius-pill);
   font-size: var(--text-sm);
 }
+/* Il sommario è un elenco a tendina, in misura di pillola come il campo. */
+.media-pdf-toolbar > select {
+  flex: 0 1 12rem;
+  min-width: 6rem;
+  height: 28px;
+  margin: 0 var(--space-2);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+}
+.media-pdf-toolbar > button[aria-pressed="true"] {
+  background: var(--overlay-active);
+  color: var(--text);
+}
 .media-pdf > [role="status"] {
   margin: var(--space-4) var(--space-5) 0;
   color: var(--muted);

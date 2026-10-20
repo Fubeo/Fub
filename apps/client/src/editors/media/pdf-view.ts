@@ -28,8 +28,41 @@ export interface PdfArea {
   readonly height: number;
 }
 
+/** Una voce del sommario del PDF: il titolo, la pagina (da 1) e le figlie. */
+export interface PdfOutlineItem {
+  readonly title: string;
+  /** `null` se la destinazione non porta a una pagina di questo PDF. */
+  readonly page: number | null;
+  readonly items: readonly PdfOutlineItem[];
+}
+
+/** Una voce del sommario come si mostra in fila: titolo, pagina e profondità. */
+export interface PdfOutlineRow {
+  readonly title: string;
+  readonly page: number;
+  readonly depth: number;
+}
+
+/** Quante voci del sommario si mostrano al più. */
+export const PDF_OUTLINE_LIMIT = 500;
+
+/**
+ * Il sommario in fila, nell'ordine di lettura: le voci senza pagina restano
+ * fuori, le loro figlie no.
+ */
+export function outlineRows(items: readonly PdfOutlineItem[], depth = 0, out: PdfOutlineRow[] = []): PdfOutlineRow[] {
+  for (const item of items) {
+    if (out.length >= PDF_OUTLINE_LIMIT) break;
+    if (item.page !== null) out.push({ title: item.title.trim() || "—", page: item.page, depth });
+    outlineRows(item.items, depth + 1, out);
+  }
+  return out;
+}
+
 export interface PdfEngine {
   readonly pageCount: number;
+  /** Il sommario, vuoto se il PDF non ne ha. Facoltativo: un motore senza non ne offre. */
+  outline?(): Promise<PdfOutlineItem[]>;
   search(needle: string, limit?: number): Promise<PdfSearchHit[]>;
   renderPage(index: number, canvas: HTMLCanvasElement, scale?: number): Promise<void>;
   /** La misura della pagina `index` (da 0) in punti, girata come la si legge. */
@@ -61,9 +94,19 @@ export interface PdfJsModule {
         };
       }>;
       destroy(): Promise<void>;
+      getOutline?(): Promise<PdfJsOutline[] | null>;
+      getDestination?(id: string): Promise<unknown[] | null>;
+      getPageIndex?(ref: unknown): Promise<number>;
     }>;
     destroy(): Promise<void>;
   };
+}
+
+/** Una voce del sommario come la dà pdf.js. */
+interface PdfJsOutline {
+  title?: string;
+  dest?: unknown;
+  items?: PdfJsOutline[];
 }
 
 export function makePdfJsLoader(
@@ -92,8 +135,40 @@ export function makePdfJsLoader(
     let destroyed = false;
     let activeRender: { cancel(): void } | null = null;
     let renderGeneration = 0;
+    // La pagina di una destinazione: per nome o già scritta, il cui primo
+    // elemento è il riferimento alla pagina. Una che non si risolve non porta
+    // da nessuna parte, e la voce resta senza pagina.
+    const pageOf = async (dest: unknown): Promise<number | null> => {
+      try {
+        const explicit = typeof dest === "string" ? await document.getDestination?.(dest) : dest;
+        if (!Array.isArray(explicit) || explicit.length === 0 || !document.getPageIndex) return null;
+        const target = explicit[0];
+        const index = typeof target === "number" ? target : await document.getPageIndex(target);
+        return Number.isInteger(index) && index >= 0 && index < document.numPages ? index + 1 : null;
+      } catch {
+        return null;
+      }
+    };
+    const outlineOf = async (items: readonly PdfJsOutline[], budget: { left: number }): Promise<PdfOutlineItem[]> => {
+      const out: PdfOutlineItem[] = [];
+      for (const item of items) {
+        if (destroyed || budget.left <= 0) break;
+        budget.left--;
+        out.push({
+          title: typeof item.title === "string" ? item.title : "",
+          page: await pageOf(item.dest),
+          items: await outlineOf(Array.isArray(item.items) ? item.items : [], budget),
+        });
+      }
+      return out;
+    };
     return {
       pageCount: document.numPages,
+      async outline() {
+        if (destroyed || !document.getOutline) return [];
+        const items = await document.getOutline();
+        return Array.isArray(items) ? outlineOf(items, { left: PDF_OUTLINE_LIMIT }) : [];
+      },
       async search(needle, limit = 20) {
         if (destroyed || !needle.trim()) return [];
         const hits: PdfSearchHit[] = [];
@@ -238,13 +313,38 @@ export function mountPdfView(
   let engine: PdfEngine | null = null;
   let page = options.initialPage ?? 1;
   let destroyed = false;
+  /// «Adatta alla larghezza»: la pagina prende la larghezza del piano invece
+  /// della sua misura in punti.
+  let fit = false;
+  let fitWidth = 0;
+
+  /// La larghezza utile del piano, senza il suo margine interno.
+  function available(): number {
+    const style = getComputedStyle(viewer);
+    return viewer.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+  }
 
   async function show(idx: number): Promise<void> {
     if (!engine || destroyed) return;
     const clamped = Math.min(Math.max(1, idx), engine.pageCount || 1);
     page = clamped;
     status.textContent = t("media.pdf.page", { page: clamped, count: engine.pageCount });
-    await engine.renderPage(clamped - 1, canvas, devicePixelRatio || 1);
+    const ratio = devicePixelRatio || 1;
+    if (!fit) {
+      await engine.renderPage(clamped - 1, canvas, ratio);
+      return;
+    }
+    const [width, height] = await engine.pageSize(clamped - 1);
+    fitWidth = available();
+    const zoom = width > 0 && fitWidth > 0 ? fitWidth / width : 1;
+    await engine.renderPage(clamped - 1, canvas, ratio * zoom);
+    if (destroyed || !fit || page !== clamped) return;
+    canvas.style.width = `${width * zoom}px`;
+    canvas.style.height = `${height * zoom}px`;
+  }
+
+  function showFailed(error: unknown): void {
+    if (!destroyed) status.textContent = t("media.pdf.page_failed", { reason: errorText(error) });
   }
 
   function invokeAction(action: () => void | Promise<void>): void {
@@ -295,7 +395,37 @@ export function mountPdfView(
       if (!destroyed) status.textContent = t("media.pdf.search_failed", { reason: errorText(error) });
     });
   });
-  toolbar.append(prev, next, search);
+  // Il sommario, se il PDF ne ha uno: un elenco che porta alla pagina.
+  const contents = document.createElement("select");
+  contents.className = "media-pdf-outline";
+  contents.setAttribute("aria-label", t("media.pdf.outline"));
+  contents.hidden = true;
+  life.listen(contents, "change", () => {
+    const target = Number(contents.value);
+    contents.selectedIndex = 0;
+    if (Number.isInteger(target) && target > 0) void show(target).catch(showFailed);
+  });
+  const fitButton = document.createElement("button");
+  fitButton.type = "button";
+  fitButton.textContent = t("media.pdf.fit_width");
+  fitButton.setAttribute("aria-pressed", "false");
+  life.listen(fitButton, "click", () => {
+    fit = !fit;
+    fitButton.setAttribute("aria-pressed", String(fit));
+    void show(page).catch(showFailed);
+  });
+  // Il piano cambia larghezza (la finestra, una barra laterale): la pagina
+  // adattata si ridisegna, ma non per il pixel che la barra di scorrimento
+  // sposta.
+  let resize: ResizeObserver | null = null;
+  if (typeof ResizeObserver !== "undefined") {
+    resize = new ResizeObserver(() => {
+      if (fit && Math.abs(available() - fitWidth) > 16) void show(page).catch(showFailed);
+    });
+    resize.observe(viewer);
+  }
+  life.add(() => resize?.disconnect());
+  toolbar.append(prev, next, contents, search, fitButton);
   if (options.onAnnotate) {
     const annotate = document.createElement("button");
     annotate.type = "button";
@@ -338,10 +468,32 @@ export function mountPdfView(
           return;
         }
         void show(page).catch(() => fallback(`PDF ${descriptor.id} failed to render page ${page}.`));
+        void showOutline(loaded);
       })
       .catch((error) => {
         if (!destroyed) fallback(`PDF ${descriptor.id} could not be opened: ${errorText(error)}`);
       });
+  }
+
+  async function showOutline(loaded: PdfEngine): Promise<void> {
+    let rows: PdfOutlineRow[];
+    try {
+      rows = outlineRows((await loaded.outline?.()) ?? []);
+    } catch {
+      // Un sommario rotto non ferma la lettura: l'elenco resta nascosto.
+      return;
+    }
+    if (destroyed || engine !== loaded || rows.length === 0) return;
+    const head = document.createElement("option");
+    head.value = "";
+    head.textContent = t("media.pdf.outline");
+    contents.replaceChildren(head, ...rows.map((row) => {
+      const item = document.createElement("option");
+      item.value = String(row.page);
+      item.textContent = `${"\u00a0\u00a0".repeat(row.depth)}${row.title} · ${row.page}`;
+      return item;
+    }));
+    contents.hidden = false;
   }
 
   life.add(() => {
