@@ -1109,8 +1109,10 @@ async function init(): Promise<Teardown> {
   else await synchronize();
   if (!alive()) return teardown;
   // Senza un vault iniziale l'avvio finisce nella scelta, che aspetta chi
-  // sceglie: non c'è niente di lento da dire.
-  if (initial) {
+  // sceglie: non c'è niente di lento da dire. Nemmeno sotto il server di
+  // sviluppo, che trasforma i moduli alla prima richiesta: lì la pagina è
+  // lenta per lui, non per chi userà l'app.
+  if (initial && !import.meta.env.DEV) {
     clock.mark("vault");
     reportSlowStartup(clock.times());
   }

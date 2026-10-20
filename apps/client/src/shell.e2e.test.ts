@@ -437,15 +437,29 @@ describe("il pannello delle impostazioni", () => {
 describe("vita della finestra", () => {
   it("un avvio lento lo dice, col tratto più lungo, e i tempi si copiano", async () => {
     // L'orologio fermo a venti secondi: la pagina sembra averli spesi tutti.
+    // Fuori dal server di sviluppo, dove l'avviso vale.
+    const now = vi.spyOn(performance, "now").mockReturnValue(20_000);
+    vi.stubEnv("DEV", false);
+    try {
+      await start(VAULT);
+    } finally {
+      now.mockRestore();
+      vi.unstubAllEnvs();
+    }
+    const toast = [...document.querySelectorAll(".toast")].find((each) => each.textContent?.includes("20,0 s"));
+    expect(toast?.textContent).toContain("il caricamento della pagina");
+    expect(toast?.querySelector("button")?.textContent).toContain("Copia i tempi");
+  });
+
+  it("sotto il server di sviluppo un avvio lento non si dice: è lento lui", async () => {
     const now = vi.spyOn(performance, "now").mockReturnValue(20_000);
     try {
       await start(VAULT);
     } finally {
       now.mockRestore();
     }
-    const toast = [...document.querySelectorAll(".toast")].find((each) => each.textContent?.includes("20,0 s"));
-    expect(toast?.textContent).toContain("il caricamento della pagina");
-    expect(toast?.querySelector("button")?.textContent).toContain("Copia i tempi");
+    const toasts = [...document.querySelectorAll(".toast")].map((each) => each.textContent ?? "");
+    expect(toasts.some((text) => text.includes("20,0 s"))).toBe(false);
   });
 
   it("smette i gesti quando si smonta e non duplica al rimontaggio", async () => {
