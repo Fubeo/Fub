@@ -1406,6 +1406,10 @@ const OWN_LIST_FIELDS = new Map<string, () => Promise<OwnListField>>([
     "uri.allowed",
     () => import("../ui/uri-allowed-field").then(({ uriAllowedField, describeUriAllowed }) => ({ field: uriAllowedField, describe: describeUriAllowed })),
   ],
+  [
+    "sync.exclude",
+    () => import("../ui/sync-exclude-field").then(({ syncExcludeField, describeSyncExclude }) => ({ field: syncExcludeField, describe: describeSyncExclude })),
+  ],
 ]);
 const ownListFields = new Map<string, OwnListField>();
 
