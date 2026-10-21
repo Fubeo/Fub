@@ -16,7 +16,25 @@ programma = "examples/genera_corpus.rs"
 licenza = "MIT OR Apache-2.0"
 matrice = "Word moderno"
 esercita = "stili, elenco puntato, tabella con celle unite in larghezza e in altezza, intestazione con PAGE, nota a piè di pagina, due sezioni di cui una orizzontale"
+atteso = "sola lettura: codec, finché il motore perde w:lang w:eastAsia, il rientro dello stile di tabella e w:fldSimple"
+
+[[file]]
+path = "docx/senza-perdite.docx"
+origine = "costruito a mano da ECMA-376"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Word moderno"
+esercita = "lo stesso documento di stili-elenchi-tabelle senza ciò che il motore di oggi perde (lingua dell'Asia orientale negli stili, rientro dello stile di tabella, w:fldSimple): le modifiche standard su un docx modificabile"
 atteso = "modificabile"
+
+[[file]]
+path = "docx/revisioni-senza-perdite.docx"
+origine = "costruito a mano da ECMA-376"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Revisioni"
+esercita = "le revisioni di revisioni-testo con gli stili che il motore di oggi conserva"
+atteso = "modificabile, con le revisioni mostrate"
 
 [[file]]
 path = "docx/revisioni-testo.docx"

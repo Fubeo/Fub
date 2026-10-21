@@ -1,0 +1,63 @@
+{
+  "file": "docx/revisioni-senza-perdite.docx",
+  "sha256": "37308db1b72307064c3f4f99324d3a3b4a655cd192dff4aef882c3d68cad08a8",
+  "open": {
+    "readonly": null,
+    "projection": "8c85c74b37440497fb977cb61d5b34f106c7957557f5f2812dc02294c191d9c0",
+    "blocks": 5,
+    "comments": 0
+  },
+  "preservation": [
+    "differenze all'apertura: 0"
+  ],
+  "model": {
+    "outline": [
+      "1 Bozza con revisioni"
+    ],
+    "links": [],
+    "text": "26b2decc92cc2374222e36ac375bf2425372b7006f7b78cc4cbae711fba64253",
+    "words": 16
+  },
+  "export": {
+    "html": [
+      "la copia HTML non porta: 3 parole su 16, 17 caratteri in grassetto, 4 revisioni tracciate"
+    ],
+    "txt": [
+      "la copia Testo semplice non porta: 3 parole su 16, 1 titolo, 17 caratteri in grassetto, 4 revisioni tracciate"
+    ],
+    "latex": [
+      "la copia LaTeX non porta: 3 parole su 16, 17 caratteri in grassetto, 4 revisioni tracciate"
+    ],
+    "rtf": [
+      "la copia RTF non porta: 17 caratteri in grassetto"
+    ],
+    "odt": [
+      "la copia OpenDocument non porta: 17 caratteri in grassetto"
+    ],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E5": "n/a"
+  }
+}

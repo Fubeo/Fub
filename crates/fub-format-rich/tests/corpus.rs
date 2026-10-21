@@ -129,7 +129,7 @@ fn readonly_of(readonly: Option<fub_format_rich::ReadOnly>) -> Value {
 }
 
 /// La proiezione senza ciò che una rilettura rinumera o risolve: i dati
-/// opachi (`k`) portano i numeri delle parti e gli id che il codec dà agli
+/// opachi (`k`, e `sect` per la fine di una sezione) portano i numeri delle parti e gli id che il codec dà agli
 /// oggetti nuovi; l'aspetto del carattere (`f`), lo stile di corpo (`s`), la
 /// lingua e la galleria degli stili sono suggerimenti di resa che il codec
 /// risolve per un paragrafo nuovo. Restano testo, ruoli, enfasi, link,
@@ -138,7 +138,7 @@ fn visible(projection: &Projection) -> Value {
     fn strip(value: &mut Value) {
         match value {
             Value::Object(map) => {
-                for key in ["k", "readonly", "f", "s", "lang", "styles"] {
+                for key in ["k", "sect", "readonly", "f", "s", "lang", "styles"] {
                     map.remove(key);
                 }
                 map.values_mut().for_each(strip);

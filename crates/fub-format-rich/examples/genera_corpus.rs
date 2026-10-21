@@ -33,7 +33,12 @@ fn main() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/corpus");
     let files: Vec<(&str, Vec<u8>)> = vec![
         ("docx/stili-elenchi-tabelle.docx", stili_elenchi_tabelle()),
+        ("docx/senza-perdite.docx", senza_perdite()),
         ("docx/revisioni-testo.docx", revisioni_testo()),
+        (
+            "docx/revisioni-senza-perdite.docx",
+            revisioni_senza_perdite(),
+        ),
         ("docx/revisioni-formato.docx", revisioni_formato()),
         ("docx/commenti.docx", commenti()),
         ("docx/oggetti.docx", oggetti()),
@@ -199,11 +204,20 @@ fn styled(style: &str, text: &str) -> String {
 
 const SECT: &str = r#"<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1417" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>"#;
 
-fn styles() -> String {
-    story(
+/// Gli stili come li scrive Word. Con `lossless` mancano la lingua
+/// dell'Asia orientale dei valori predefiniti e il rientro dello stile di
+/// tabella, che il motore di oggi perde: quei file misurano le modifiche.
+fn styles(lossless: bool) -> String {
+    let xml = story(
         "styles",
         r#"<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="MS Mincho" w:cs="Arial"/><w:sz w:val="22"/><w:lang w:val="it-IT" w:eastAsia="ja-JP" w:bidi="ar-SA"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="720"/></w:pPr></w:style><w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:name w:val="Default Paragraph Font"/></w:style><w:style w:type="character" w:styleId="FootnoteReference"><w:name w:val="footnote reference"/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style><w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/><w:tblPr><w:tblInd w:w="0" w:type="dxa"/><w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>"#,
-    )
+    );
+    match lossless {
+        true => xml
+            .replace(r#" w:eastAsia="ja-JP""#, "")
+            .replace(r#"<w:tblInd w:w="0" w:type="dxa"/>"#, ""),
+        false => xml,
+    }
 }
 
 fn settings(extra: &str) -> String {
@@ -217,12 +231,16 @@ fn settings(extra: &str) -> String {
 
 /// Il pacchetto di un documento con gli stili e le impostazioni.
 fn with_styles(body: &str, settings_extra: &str) -> Package {
+    with_styles_of(body, settings_extra, false)
+}
+
+fn with_styles_of(body: &str, settings_extra: &str, lossless: bool) -> Package {
     let mut package = Package::new(&document(body));
     package
         .part(
             "word/styles.xml",
             Some(&format!("{WML}.styles+xml")),
-            styles(),
+            styles(lossless),
         )
         .rel("word/document.xml", "rIdStyles", "styles", "styles.xml")
         .part(
@@ -245,6 +263,17 @@ fn with_styles(body: &str, settings_extra: &str) -> Package {
 /// in altezza, un'intestazione con il numero di pagina, una nota e due
 /// sezioni, la seconda orizzontale.
 fn stili_elenchi_tabelle() -> Vec<u8> {
+    word_moderno(false)
+}
+
+/// Lo stesso documento senza ciò che il motore di oggi perde: gli stili di
+/// [`styles`] con `lossless`, e il numero di pagina come campo complesso
+/// invece di `w:fldSimple`.
+fn senza_perdite() -> Vec<u8> {
+    word_moderno(true)
+}
+
+fn word_moderno(lossless: bool) -> Vec<u8> {
     let item = |text: &str| {
         format!(
             r#"<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>{text}</w:t></w:r></w:p>"#
@@ -288,17 +317,24 @@ fn stili_elenchi_tabelle() -> Vec<u8> {
         "numbering",
         r#"<w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="hybridMultilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>"#,
     );
+    let field = match lossless {
+        true => {
+            r#"<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>"#
+        }
+        false => r#"<w:fldSimple w:instr=" PAGE "><w:r><w:t>1</w:t></w:r></w:fldSimple>"#,
+    };
     let header = story(
         "hdr",
-        r#"<w:p><w:r><w:t xml:space="preserve">Pagina </w:t></w:r><w:fldSimple w:instr=" PAGE "><w:r><w:t>1</w:t></w:r></w:fldSimple></w:p>"#,
+        &format!(r#"<w:p><w:r><w:t xml:space="preserve">Pagina </w:t></w:r>{field}</w:p>"#),
     );
     let footnotes = story(
         "footnotes",
         r#"<w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote><w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote><w:footnote w:id="1"><w:p><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> Il testo della nota.</w:t></w:r></w:p></w:footnote>"#,
     );
-    let mut package = with_styles(
+    let mut package = with_styles_of(
         &body,
         r#"<w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr>"#,
+        lossless,
     );
     package
         .part(
@@ -335,6 +371,15 @@ fn stili_elenchi_tabelle() -> Vec<u8> {
 /// Revisioni del testo nel corpo: un inserimento, un'eliminazione e uno
 /// spostamento, con la registrazione attiva.
 fn revisioni_testo() -> Vec<u8> {
+    revisioni(false)
+}
+
+/// Le stesse revisioni con gli stili che il motore di oggi conserva.
+fn revisioni_senza_perdite() -> Vec<u8> {
+    revisioni(true)
+}
+
+fn revisioni(lossless: bool) -> Vec<u8> {
     let body = [
         styled("Heading1", "Bozza con revisioni"),
         r#"<w:p><w:r><w:t xml:space="preserve">Il testo </w:t></w:r><w:ins w:id="1" w:author="Ada Rossi" w:date="2026-10-01T09:00:00Z"><w:r><w:t xml:space="preserve">aggiunto </w:t></w:r></w:ins><w:del w:id="2" w:author="Bea Neri" w:date="2026-10-01T09:05:00Z"><w:r><w:delText xml:space="preserve">tolto </w:delText></w:r></w:del><w:r><w:t>resta.</w:t></w:r></w:p>"#.to_string(),
@@ -344,7 +389,7 @@ fn revisioni_testo() -> Vec<u8> {
         SECT.to_string(),
     ]
     .concat();
-    with_styles(&body, "<w:trackRevisions/>").bytes()
+    with_styles_of(&body, "<w:trackRevisions/>", lossless).bytes()
 }
 
 /// Una modifica di formato tracciata (`w:rPrChange`), che la superficie non
