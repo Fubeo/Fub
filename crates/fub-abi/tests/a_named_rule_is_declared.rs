@@ -491,6 +491,51 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-format-rich/src/canonical.rs::value",
+            (
+                Family::AsciiCase,
+                "scrive in maiuscolo un valore di attributo già controllato come sei cifre \
+                 esadecimali, un colore OOXML, per confrontare due documenti a meno della \
+                 forma: l'alfabeto è ASCII per costruzione. Non è un nome.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/inventory.rs::class_of",
+            (
+                Family::AsciiCase,
+                "classifica il tipo di contenuto di una parte del pacchetto: un tipo MIME, che \
+                 è ASCII e insensibile al caso per definizione (RFC 2045). Non tocca nomi \
+                 scritti dall'utente.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/inventory.rs::read",
+            (
+                Family::AsciiCase,
+                "trova due voci dello ZIP con lo stesso nome di parte: i nomi di parte OPC si \
+                 confrontano senza distinguere le maiuscole ASCII (ECMA-376 parte 2), e un \
+                 pacchetto che ne ha due è ambiguo. È la regola del formato, non un nome di \
+                 file del vault.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/inventory.rs::resolve",
+            (
+                Family::AsciiCase,
+                "come `read`: risolve la destinazione di una relazione nel nome di parte con \
+                 cui la si cerca, nella stessa forma minuscola ASCII dei nomi di parte OPC.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/inventory.rs::read_rels",
+            (
+                Family::AsciiCase,
+                "riconosce il valore `External` dell'attributo `TargetMode` di una relazione: \
+                 una parola chiave ASCII del formato, letta senza distinguere le maiuscole come \
+                 fa Word. Non tocca nomi scritti dall'utente.",
+            ),
+        ),
+        (
             "crates/fub-app/src/live.rs::pc_name",
             (
                 Family::AsciiCase,
