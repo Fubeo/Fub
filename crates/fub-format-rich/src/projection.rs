@@ -48,6 +48,11 @@ pub struct Projection {
     /// Perché il documento non si modifica, quando non si modifica.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub readonly: Option<crate::ReadOnly>,
+    /// I blocchi, per indice in `blocks`, che si mostrano e non si modificano:
+    /// il codec non li riscriverebbe identici, e un salvataggio che li tocca
+    /// non si fa. Il resto del documento si modifica.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub locked: Vec<u32>,
     /// Registra le modifiche: ciò che si scrive diventa una revisione
     /// tracciata, e la shell la scrive come tale.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -703,6 +708,7 @@ pub(crate) fn project(document: &Document) -> Result<Projection, RichError> {
         version: VERSION,
         opaque_schema: Some(OPAQUE_SCHEMA),
         readonly: None,
+        locked: Vec::new(),
         track: document.settings.track_changes,
         lang: document.styles.default_chr.lang.clone(),
         f: base(&document.styles, None),

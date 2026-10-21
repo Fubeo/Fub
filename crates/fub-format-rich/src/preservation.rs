@@ -36,6 +36,7 @@ use std::sync::{Arc, Mutex};
 use wordcraft_doc::{Block, Document, Part, PartKind};
 
 use crate::fidelity::{each_paragraph, shown};
+use crate::flow;
 use crate::inventory::{
     self, equal_differences, inventory, open_differences, Counts, Difference, Inventory,
     InventoryError, Key, DOCUMENT,
@@ -59,30 +60,129 @@ fn findings(differences: Vec<Difference>) -> Result<(), Finding> {
 
 /// La prova a vuoto di un file che la regola all'apertura ha accettato: il suo
 /// inventario, che ogni salvataggio sulla stessa base confronta con i byte
-/// nuovi.
+/// nuovi, e ciò che la regola ha misurato blocco per blocco.
 #[derive(Debug)]
 pub(crate) struct Baseline {
     dry: Inventory,
+    /// Il corpo si legge come flusso ([`crate::flow`]) nel file e nella prova
+    /// a vuoto, con i blocchi del modello: si innesta e si controllano i
+    /// blocchi toccati.
+    pub flow: bool,
+    /// I blocchi del file che il codec non riscrive identici: un salvataggio
+    /// che li tocca non si fa.
+    pub locked: BTreeSet<usize>,
+    /// Il codec riscrive il pacchetto intero senza perdite: un salvataggio
+    /// può riscriverlo tutto, quando l'innesto non basta.
+    pub whole: bool,
 }
 
-/// La regola all'apertura, sui byte del file e su quelli della prova a vuoto.
-pub(crate) fn check_open(original: &[u8], dry: &[u8]) -> Result<Baseline, Finding> {
-    let original = inventory(original).map_err(Finding::Unreadable)?;
-    let dry = inventory(dry).map_err(Finding::Unreadable)?;
-    findings(open_differences(&original, &dry))?;
-    Ok(Baseline { dry })
+/// La regola all'apertura, sui byte del file e su quelli della prova a vuoto
+/// del documento letto, che ha `blocks` blocchi nel corpo.
+///
+/// Quando il corpo si legge come flusso, la regola giudica ogni blocco da sé:
+/// un blocco che il codec perderebbe resta chiuso ([`Baseline::locked`]) e il
+/// resto si scrive per innesto. Una perdita fuori dal corpo vieta soltanto la
+/// scrittura intera ([`Baseline::whole`]). Senza flusso vale la regola
+/// dell'inventario, per tutto il pacchetto.
+pub(crate) fn check_open(original: &[u8], dry: &[u8], blocks: usize) -> Result<Baseline, Finding> {
+    let o_inventory = inventory(original).map_err(Finding::Unreadable)?;
+    let d_inventory = inventory(dry).map_err(Finding::Unreadable)?;
+    let differences = open_differences(&o_inventory, &d_inventory);
+    let Some(locked) = flow_losses(original, dry, blocks) else {
+        findings(differences)?;
+        return Ok(Baseline {
+            dry: d_inventory,
+            flow: false,
+            locked: BTreeSet::new(),
+            whole: true,
+        });
+    };
+    let whole = differences.is_empty() && locked.is_empty();
+    Ok(Baseline {
+        dry: d_inventory,
+        flow: true,
+        locked,
+        whole,
+    })
 }
 
-/// La regola a ogni salvataggio. `baseline` è la prova a vuoto di `base`,
-/// `new` sono i byte che il codec ha scritto per `wanted`.
+/// I blocchi che la prova a vuoto non porta interi, se i due corpi si leggono
+/// come flusso con i blocchi del modello.
+fn flow_losses(original: &[u8], dry: &[u8], blocks: usize) -> Option<BTreeSet<usize>> {
+    let o = flow::main_of(original, &inventory::LIMITS).ok()?;
+    let d = flow::main_of(dry, &inventory::LIMITS).ok()?;
+    if o.scan.blocks.len() != blocks || d.scan.blocks.len() != blocks {
+        return None;
+    }
+    Some(
+        o.scan
+            .blocks
+            .iter()
+            .zip(&d.scan.blocks)
+            .enumerate()
+            .filter(|(_, (before, after))| {
+                let r = flow::carries(before, after);
+                if let Err(e) = &r { if std::env::var("FLOW_DEBUG").is_ok() { eprintln!("FLOWDBG {e}"); } }
+                r.is_err()
+            })
+            .map(|(at, _)| at)
+            .collect(),
+    )
+}
+
+/// La regola sui blocchi toccati, sul flusso: per ogni tratto fra due blocchi
+/// non toccati, i blocchi del file `o` e quelli scritti `n` per il documento
+/// voluto. Ciò che la proiezione non porta deve restare, e nessun segno
+/// invisibile sparire da solo ([`flow::keeps`]). Dà il primo blocco del file
+/// del tratto che perde.
+pub(crate) fn check_touched(
+    o: &flow::Scan,
+    n: &flow::Scan,
+    pairs: &[(usize, usize)],
+) -> Result<(), (usize, String)> {
+    let mut previous = (0usize, 0usize);
+    let ends = pairs
+        .iter()
+        .map(|&(b, w)| (b, w, true))
+        .chain(std::iter::once((o.blocks.len(), n.blocks.len(), false)));
+    for (b, w, _) in ends {
+        let (from_b, from_w) = previous;
+        if b > from_b {
+            let before: Vec<flow::Token> = o.blocks[from_b..b].iter().flatten().cloned().collect();
+            let after: Vec<flow::Token> = n.blocks[from_w..w].iter().flatten().cloned().collect();
+            flow::keeps(&before, &after).map_err(|why| (from_b, why))?;
+        }
+        previous = (b + 1, w + 1);
+    }
+    Ok(())
+}
+
+/// I blocchi della base che il documento voluto non tiene uguali.
+pub(crate) fn touched_blocks(base: &Document, pairs: &[(usize, usize)]) -> Vec<usize> {
+    let kept: BTreeSet<usize> = pairs.iter().map(|(b, _)| *b).collect();
+    (0..base.body.len()).filter(|b| !kept.contains(b)).collect()
+}
+
+/// Se un salvataggio con queste coppie cambia soltanto il corpo del documento
+/// principale: allora si può innestare.
+pub(crate) fn body_only(base: &Document, wanted: &Document, pairs: &[(usize, usize)]) -> bool {
+    touched_regions(base, wanted, pairs)
+        .into_iter()
+        .all(|region| region == "document→")
+}
+
+/// La regola della scrittura intera. `baseline` è la prova a vuoto di
+/// `base`, `new` sono i byte che il codec ha scritto per `wanted`, `pairs` i
+/// blocchi che l'utente non ha toccato.
 pub(crate) fn check_save(
     baseline: &Baseline,
     new: &[u8],
     base: &Document,
     wanted: &Document,
+    pairs: &[(usize, usize)],
 ) -> Result<(), Finding> {
     let new = inventory(new).map_err(Finding::Unreadable)?;
-    findings(save_differences(&baseline.dry, &new, base, wanted))
+    findings(save_differences(&baseline.dry, &new, base, wanted, pairs))
 }
 
 /// Quante prove a vuoto si ricordano.
@@ -126,14 +226,14 @@ fn save_differences(
     new: &Inventory,
     base: &Document,
     wanted: &Document,
+    pairs: &[(usize, usize)],
 ) -> Vec<Difference> {
     let mut out = Vec::new();
 
     // I blocchi del corpo che l'utente non ha toccato: uguali uno a uno.
-    let pairs = untouched_blocks(base, wanted);
     let aligned = dry.body.len() == base.body.len() && new.body.len() == wanted.body.len();
     if aligned {
-        for (b, w) in &pairs {
+        for (b, w) in pairs {
             out.extend(equal_differences(
                 &dry.body[*b],
                 &new.body[*w],
@@ -153,7 +253,7 @@ fn save_differences(
     }
 
     // Le classi di parti fuori dal corpo il cui dato non è cambiato.
-    let touched = touched_regions(base, wanted, &pairs);
+    let touched = touched_regions(base, wanted, pairs);
     let (dry_rest, new_rest) = (dry.outside_body(), new.outside_body());
     let regions: BTreeSet<String> = dry_rest
         .keys()
@@ -332,7 +432,8 @@ fn shown_stories(document: &Document, block: &Block) -> Vec<u32> {
 
 /// Lo stesso blocco nei due modelli, con le stesse storie che mostra.
 fn same_block(base: &Document, b: &Block, wanted: &Document, w: &Block) -> bool {
-    if b != w {
+    // Il voluto riprende di solito il blocco della base, nello stesso `Arc`.
+    if !std::ptr::eq(b, w) && b != w {
         return false;
     }
     shown_stories(base, b)
@@ -340,56 +441,51 @@ fn same_block(base: &Document, b: &Block, wanted: &Document, w: &Block) -> bool 
         .all(|id| base.parts.get(&id) == wanted.parts.get(&id))
 }
 
-/// Oltre questa misura il tratto centrale non si allinea, e conta come
-/// toccato: il confronto resta lineare sui documenti grandi.
-const MAX_ALIGN: usize = 4096;
+/// Un blocco come elemento da allineare: uguale a un altro se è lo stesso
+/// blocco con le stesse storie ([`same_block`]), con un'impronta del testo.
+struct Aligned<'a> {
+    document: &'a Document,
+    block: &'a Arc<Block>,
+    hash: u64,
+}
+
+impl PartialEq for Aligned<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash
+            && same_block(self.document, self.block, other.document, other.block)
+    }
+}
+
+impl Eq for Aligned<'_> {}
+
+impl std::hash::Hash for Aligned<'_> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.hash.hash(state);
+    }
+}
+
+fn aligned(document: &Document) -> Vec<Aligned<'_>> {
+    use std::hash::{Hash, Hasher};
+    document
+        .body
+        .iter()
+        .map(|block| {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            each_paragraph(block, &mut |paragraph| paragraph.text.hash(&mut hasher));
+            Aligned {
+                document,
+                block,
+                hash: hasher.finish(),
+            }
+        })
+        .collect()
+}
 
 /// Le coppie (blocco della base, blocco voluto) che l'utente non ha toccato,
-/// nell'ordine: il prefisso e il suffisso comuni, poi la sottosequenza comune
-/// più lunga del tratto centrale.
+/// nell'ordine: una sottosequenza comune ([`crate::diff::common`]), lineare
+/// nella memoria anche sui documenti grandi.
 pub(crate) fn untouched_blocks(base: &Document, wanted: &Document) -> Vec<(usize, usize)> {
-    let (b, w) = (&base.body, &wanted.body);
-    let eq = |i: usize, j: usize| same_block(base, &b[i], wanted, &w[j]);
-    let mut prefix = 0;
-    while prefix < b.len() && prefix < w.len() && eq(prefix, prefix) {
-        prefix += 1;
-    }
-    let mut suffix = 0;
-    while suffix < b.len() - prefix
-        && suffix < w.len() - prefix
-        && eq(b.len() - 1 - suffix, w.len() - 1 - suffix)
-    {
-        suffix += 1;
-    }
-    let mut out: Vec<(usize, usize)> = (0..prefix).map(|i| (i, i)).collect();
-    let (bm, wm) = (b.len() - prefix - suffix, w.len() - prefix - suffix);
-    if bm > 0 && wm > 0 && bm <= MAX_ALIGN && wm <= MAX_ALIGN {
-        // La tabella della sottosequenza comune, dal fondo.
-        let mut table = vec![vec![0u32; wm + 1]; bm + 1];
-        for i in (0..bm).rev() {
-            for j in (0..wm).rev() {
-                table[i][j] = if eq(prefix + i, prefix + j) {
-                    table[i + 1][j + 1] + 1
-                } else {
-                    table[i + 1][j].max(table[i][j + 1])
-                };
-            }
-        }
-        let (mut i, mut j) = (0, 0);
-        while i < bm && j < wm {
-            if eq(prefix + i, prefix + j) {
-                out.push((prefix + i, prefix + j));
-                i += 1;
-                j += 1;
-            } else if table[i + 1][j] >= table[i][j + 1] {
-                i += 1;
-            } else {
-                j += 1;
-            }
-        }
-    }
-    out.extend((0..suffix).map(|k| (b.len() - suffix + k, w.len() - suffix + k)));
-    out
+    crate::diff::common(&aligned(base), &aligned(wanted))
 }
 
 /// Il resoconto di misura di un `.docx`: ciò che una prova a vuoto del codec
@@ -508,10 +604,10 @@ mod tests {
         ]);
         let base = Codec::Docx.read(&file).unwrap();
         let dry = Codec::Docx.write(&base).unwrap();
-        assert_eq!(
-            check_open(&file, &dry).map(|_| ()),
-            Ok(()),
-            "la scena deve aprirsi modificabile"
+        let opened = check_open(&file, &dry, base.body.len()).expect("scena aperta");
+        assert!(
+            opened.flow && opened.whole && opened.locked.is_empty(),
+            "la scena deve aprirsi modificabile: {opened:?}"
         );
         let mut wanted = base.clone();
         let last = wanted.body.len() - 1;
@@ -527,13 +623,20 @@ mod tests {
     fn baseline(dry: &[u8]) -> Baseline {
         Baseline {
             dry: inventory(dry).unwrap(),
+            flow: true,
+            locked: BTreeSet::new(),
+            whole: true,
         }
+    }
+
+    fn save(base: &Document, wanted: &Document, dry: &[u8], new: &[u8]) -> Result<(), Finding> {
+        check_save(&baseline(dry), new, base, wanted, &untouched_blocks(base, wanted))
     }
 
     #[test]
     fn i_byte_del_codec_passano() {
         let (base, wanted, dry, new) = scene();
-        assert_eq!(check_save(&baseline(&dry), &new, &base, &wanted), Ok(()));
+        assert_eq!(save(&base, &wanted, &dry, &new), Ok(()));
     }
 
     /// Un elemento che il modello non possiede, sparito da un blocco che
@@ -551,7 +654,7 @@ mod tests {
             },
             &[],
         );
-        let Err(Finding::Differences(found)) = check_save(&baseline(&dry), &new, &base, &wanted)
+        let Err(Finding::Differences(found)) = save(&base, &wanted, &dry, &new)
         else {
             panic!("la perdita è passata")
         };
@@ -578,9 +681,11 @@ mod tests {
             |xml| xml.replace(&image, "media/altra.png"),
             &[("word/media/altra.png", b"\x89PNG\r\n\x1a\n due")],
         );
-        let Err(Finding::Differences(found)) = check_open(&dry, &wrong).map(|_| ()) else {
-            panic!("la relazione sbagliata è passata")
-        };
+        // Il paragrafo della foto non si riscrive, e il pacchetto nemmeno.
+        let opened = check_open(&dry, &wrong, 3).unwrap();
+        assert_eq!(opened.locked, BTreeSet::from([1]), "{opened:?}");
+        assert!(!opened.whole);
+        let found = open_differences(&inventory(&dry).unwrap(), &inventory(&wrong).unwrap());
         assert!(
             found.iter().any(|d| d.key.contains("relationship")),
             "{found:?}"
@@ -603,7 +708,7 @@ mod tests {
             },
             &[("word/media/copia.png", PNG)],
         );
-        let Err(Finding::Differences(found)) = check_save(&baseline(&dry), &new, &base, &wanted)
+        let Err(Finding::Differences(found)) = save(&base, &wanted, &dry, &new)
         else {
             panic!("la copia doppia è passata")
         };
@@ -622,9 +727,10 @@ mod tests {
         let (base, wanted, file, dry, new) = scene_with_file();
         let other = |xml: &str| xml.replace(r#"w:edGrp="everyone""#, r#"w:edGrp="editors""#);
         let changed = rewrite(&dry, "word/document.xml", other, &[]);
-        let Err(Finding::Differences(found)) = check_open(&file, &changed).map(|_| ()) else {
-            panic!("il valore cambiato è passato all'apertura")
-        };
+        let opened = check_open(&file, &changed, base.body.len()).unwrap();
+        assert_eq!(opened.locked, BTreeSet::from([0]), "{opened:?}");
+        assert!(!opened.whole);
+        let found = open_differences(&inventory(&file).unwrap(), &inventory(&changed).unwrap());
         assert!(
             found
                 .iter()
@@ -632,7 +738,7 @@ mod tests {
             "{found:?}"
         );
         let new = rewrite(&new, "word/document.xml", other, &[]);
-        let Err(Finding::Differences(found)) = check_save(&baseline(&dry), &new, &base, &wanted)
+        let Err(Finding::Differences(found)) = save(&base, &wanted, &dry, &new)
         else {
             panic!("il valore cambiato è passato al salvataggio")
         };
@@ -649,7 +755,7 @@ mod tests {
             |xml| xml.replace(">Primo<", ">Prima<"),
             &[],
         );
-        let Err(Finding::Differences(found)) = check_save(&baseline(&dry), &new, &base, &wanted)
+        let Err(Finding::Differences(found)) = save(&base, &wanted, &dry, &new)
         else {
             panic!("il testo cambiato è passato")
         };
@@ -666,7 +772,7 @@ mod tests {
     #[test]
     fn la_prova_a_vuoto_si_ricorda_per_contenuto() {
         let (_, _, file, dry, _) = scene_with_file();
-        let accepted = Arc::new(check_open(&file, &dry).unwrap());
+        let accepted = Arc::new(check_open(&file, &dry, 3).unwrap());
         remember(key(&file), Arc::clone(&accepted));
         let found = remembered(&key(&file)).expect("ricordata");
         assert!(Arc::ptr_eq(&found, &accepted));

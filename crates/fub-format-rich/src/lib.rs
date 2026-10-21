@@ -35,9 +35,12 @@ use wordcraft_doc::Document;
 
 mod blob;
 mod canonical;
+mod diff;
+mod flow;
 pub mod export;
 mod fidelity;
 mod fresh;
+mod graft;
 mod inventory;
 mod model;
 mod odt;
@@ -222,6 +225,11 @@ pub enum RichError {
     /// Il documento da scrivere non si rilegge uguale: non si scrive.
     #[error("rich document would not read back as written")]
     Fidelity,
+    /// Il salvataggio tocca un punto che il codec non riscrive senza perdere
+    /// qualcosa: un blocco del corpo, per indice, o (`None`) una parte fuori
+    /// dal corpo. Senza quella modifica il resto si salva.
+    #[error("rich save touches what the codec cannot rewrite: block {0:?}")]
+    Locked(Option<usize>),
 }
 
 impl From<RichError> for FormatError {

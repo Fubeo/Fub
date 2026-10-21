@@ -203,14 +203,14 @@ pub(crate) const PACKAGE: &str = "package";
 /// La classe del documento principale.
 pub(crate) const DOCUMENT: &str = "document";
 
-const NS_RELATIONSHIPS: &str =
+pub(crate) const NS_RELATIONSHIPS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-const NS_W: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-const NS_W14: &str = "http://schemas.microsoft.com/office/word/2010/wordml";
-const NS_W15: &str = "http://schemas.microsoft.com/office/word/2012/wordml";
-const NS_W16CID: &str = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
-const NS_M: &str = "http://schemas.openxmlformats.org/officeDocument/2006/math";
-const NS_MC: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+pub(crate) const NS_W: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+pub(crate) const NS_W14: &str = "http://schemas.microsoft.com/office/word/2010/wordml";
+pub(crate) const NS_W15: &str = "http://schemas.microsoft.com/office/word/2012/wordml";
+pub(crate) const NS_W16CID: &str = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
+pub(crate) const NS_M: &str = "http://schemas.openxmlformats.org/officeDocument/2006/math";
+pub(crate) const NS_MC: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 const NS_EXTENDED: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
 const WML: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.";
@@ -286,10 +286,12 @@ impl Inventory {
 }
 
 /// Le parti di uno zip, lette nei limiti.
-struct Zip {
+pub(crate) struct Zip {
     /// Per nome in minuscolo, senza la barra iniziale: in OPC i nomi delle
     /// parti non distinguono maiuscole e minuscole.
-    parts: BTreeMap<String, Vec<u8>>,
+    pub parts: BTreeMap<String, Vec<u8>>,
+    /// Il nome di ogni voce come lo zip lo scrive, nell'ordine dello zip.
+    pub names: Vec<String>,
 }
 
 fn zip_error(error: impl fmt::Display) -> InventoryError {
@@ -297,7 +299,7 @@ fn zip_error(error: impl fmt::Display) -> InventoryError {
 }
 
 impl Zip {
-    fn read(bytes: &[u8], limits: &Limits) -> Result<Zip, InventoryError> {
+    pub(crate) fn read(bytes: &[u8], limits: &Limits) -> Result<Zip, InventoryError> {
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(zip_error)?;
         if archive.len() > limits.entries {
             return Err(InventoryError::Limit("zip entries"));
@@ -313,6 +315,7 @@ impl Zip {
             }
         }
         let mut parts = BTreeMap::new();
+        let mut names = Vec::new();
         let mut total = 0u64;
         for index in 0..archive.len() {
             let mut file = archive.by_index(index).map_err(zip_error)?;
@@ -340,8 +343,9 @@ impl Zip {
             if parts.insert(key, out).is_some() {
                 return Err(InventoryError::Zip(format!("duplicate entry {name}")));
             }
+            names.push(name);
         }
-        Ok(Zip { parts })
+        Ok(Zip { parts, names })
     }
 }
 
@@ -417,13 +421,13 @@ fn central_names(bytes: &[u8], limits: &Limits) -> Result<Vec<String>, Inventory
 }
 
 /// I tipi di contenuto del pacchetto (`[Content_Types].xml`).
-struct ContentTypes {
-    defaults: BTreeMap<String, String>,
-    overrides: BTreeMap<String, String>,
+pub(crate) struct ContentTypes {
+    pub defaults: BTreeMap<String, String>,
+    pub overrides: BTreeMap<String, String>,
 }
 
 impl ContentTypes {
-    fn read(zip: &Zip, limits: &Limits) -> Result<ContentTypes, InventoryError> {
+    pub(crate) fn read(zip: &Zip, limits: &Limits) -> Result<ContentTypes, InventoryError> {
         let bytes = zip
             .parts
             .get("[content_types].xml")
@@ -458,7 +462,7 @@ impl ContentTypes {
         Ok(types)
     }
 
-    fn of(&self, part: &str) -> String {
+    pub(crate) fn of(&self, part: &str) -> String {
         if let Some(ct) = self.overrides.get(part) {
             return ct.clone();
         }
@@ -468,14 +472,15 @@ impl ContentTypes {
 }
 
 /// Una relazione letta da una parte `.rels`.
-struct Relationship {
-    id: String,
-    kind: String,
-    target: String,
-    external: bool,
+#[derive(Clone, Debug)]
+pub(crate) struct Relationship {
+    pub id: String,
+    pub kind: String,
+    pub target: String,
+    pub external: bool,
 }
 
-fn rels_of(part: &str) -> String {
+pub(crate) fn rels_of(part: &str) -> String {
     match part.rsplit_once('/') {
         Some((dir, file)) => format!("{dir}/_rels/{file}.rels"),
         None if part.is_empty() => "_rels/.rels".into(),
@@ -484,7 +489,7 @@ fn rels_of(part: &str) -> String {
 }
 
 /// La parte che una destinazione relativa nomina, dalla cartella della sorgente.
-fn resolve(source: &str, target: &str) -> String {
+pub(crate) fn resolve(source: &str, target: &str) -> String {
     let target = target.split('#').next().unwrap_or_default();
     let mut path: Vec<&str> = if target.starts_with('/') {
         Vec::new()
@@ -506,7 +511,11 @@ fn resolve(source: &str, target: &str) -> String {
     path.join("/").to_ascii_lowercase()
 }
 
-fn read_rels(zip: &Zip, part: &str, limits: &Limits) -> Result<Vec<Relationship>, InventoryError> {
+pub(crate) fn read_rels(
+    zip: &Zip,
+    part: &str,
+    limits: &Limits,
+) -> Result<Vec<Relationship>, InventoryError> {
     let name = rels_of(part);
     let Some(bytes) = zip.parts.get(&name) else {
         return Ok(Vec::new());
@@ -536,6 +545,44 @@ pub(crate) fn sha256(bytes: &[u8]) -> String {
     out
 }
 
+/// La destinazione di una relazione di `source` come la chiave la scrive:
+/// l'URL se è esterna, la classe se è una parte che il codec riscrive,
+/// l'impronta del contenuto se è una parte da copiare.
+pub(crate) fn target_of(
+    zip: &Zip,
+    types: &ContentTypes,
+    source: &str,
+    rel: &Relationship,
+) -> String {
+    if rel.external {
+        return format!("url:{}", rel.target);
+    }
+    let path = resolve(source, &rel.target);
+    match zip.parts.get(&path) {
+        None => format!("missing:{path}"),
+        Some(bytes) => match class_of(&types.of(&path)) {
+            Some(class) => format!("class:{class}"),
+            None => format!("sha256:{}", sha256(bytes)),
+        },
+    }
+}
+
+/// Le relazioni di `part` per id, descritte come le scrive la chiave di un
+/// riferimento: tipo e destinazione.
+pub(crate) fn described(
+    zip: &Zip,
+    types: &ContentTypes,
+    part: &str,
+    rels: &[Relationship],
+) -> BTreeMap<String, String> {
+    rels.iter()
+        .map(|rel| {
+            let target = target_of(zip, types, part, rel);
+            (rel.id.clone(), format!("{} → {target}", rel.kind))
+        })
+        .collect()
+}
+
 /// L'inventario di un pacchetto `.docx`.
 pub(crate) fn inventory(bytes: &[u8]) -> Result<Inventory, InventoryError> {
     inventory_with(bytes, &LIMITS)
@@ -561,24 +608,13 @@ pub(crate) fn inventory_with(bytes: &[u8], limits: &Limits) -> Result<Inventory,
         // La destinazione di ogni relazione, come la chiave la scrive.
         let mut targets = Vec::with_capacity(rels.len());
         for rel in &rels {
-            let target = if rel.external {
-                format!("url:{}", rel.target)
-            } else {
+            if !rel.external {
                 let path = resolve(&part, &rel.target);
-                match zip.parts.get(&path) {
-                    None => format!("missing:{path}"),
-                    Some(bytes) => {
-                        if seen.insert(path.clone()) {
-                            todo.push(path.clone());
-                        }
-                        match class_of(&types.of(&path)) {
-                            Some(class) => format!("class:{class}"),
-                            None => format!("sha256:{}", sha256(bytes)),
-                        }
-                    }
+                if zip.parts.contains_key(&path) && seen.insert(path.clone()) {
+                    todo.push(path);
                 }
-            };
-            targets.push(target);
+            }
+            targets.push(target_of(&zip, &types, &part, rel));
         }
         let by_id: BTreeMap<&str, String> = rels
             .iter()
@@ -700,9 +736,9 @@ const PARAGRAPH_TEXT: &[(&str, &str)] = &[(NS_W, "t"), (NS_W, "delText"), (NS_M,
 const INSTRUCTIONS: &[(&str, &str)] = &[(NS_W, "instrText"), (NS_W, "delInstrText")];
 /// I contenitori di blocchi trasparenti: i loro figli sono blocchi del
 /// modello, e le loro proprietà vanno con il primo.
-const WRAPPERS: &[&str] = &["customXml", "smartTag", "ins", "moveTo"];
+pub(crate) const WRAPPERS: &[&str] = &["customXml", "smartTag", "ins", "moveTo"];
 /// I segni fra due blocchi, che il modello mette nel paragrafo che segue.
-const MARKERS: &[&str] = &[
+pub(crate) const MARKERS: &[&str] = &[
     "bookmarkStart",
     "bookmarkEnd",
     "commentRangeStart",
@@ -1304,7 +1340,7 @@ pub(crate) const NORMALIZATIONS: &[Normalization] = &[
 ];
 
 /// La normalizzazione che salta questo elemento, se c'è.
-fn skipped_element(ns: &str, name: &str) -> Option<&'static str> {
+pub(crate) fn skipped_element(ns: &str, name: &str) -> Option<&'static str> {
     NORMALIZATIONS.iter().find_map(|n| match n.skip {
         Skip::Elements { ns: n_ns, names } if ns == n_ns && names.contains(&name) => Some(n.what),
         _ => None,
@@ -1318,7 +1354,7 @@ fn integer(value: &str) -> bool {
 
 /// La normalizzazione che toglie il numero al valore di questo attributo di
 /// `element`, se c'è, con il valore che resta.
-fn renumbered(element: &str, ns: &str, name: &str, value: &str) -> Option<(&'static str, String)> {
+pub(crate) fn renumbered(element: &str, ns: &str, name: &str, value: &str) -> Option<(&'static str, String)> {
     NORMALIZATIONS.iter().find_map(|n| match n.skip {
         Skip::Number {
             ns: n_ns,
@@ -1342,7 +1378,7 @@ fn renumbered(element: &str, ns: &str, name: &str, value: &str) -> Option<(&'sta
 }
 
 /// La normalizzazione che salta questo attributo, se c'è.
-fn skipped_attribute(ns: &str, name: &str) -> Option<&'static str> {
+pub(crate) fn skipped_attribute(ns: &str, name: &str) -> Option<&'static str> {
     NORMALIZATIONS.iter().find_map(|n| match n.skip {
         Skip::Attributes { ns: n_ns, prefix } if n_ns.contains(&ns) && name.starts_with(prefix) => {
             Some(n.what)
