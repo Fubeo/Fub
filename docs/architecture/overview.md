@@ -113,8 +113,9 @@ flowchart TD
 I crate di WordCraft vendorizzati in `vendor/wordcraft/` sono codice di terzi:
 li usano soltanto il correttore della feature `proof` e `fub-format-rich` (più
 i test di `fub-host`, che scrivono `.odt` con l'esportatore), e nessuno di loro
-dipende da Fub. Il secondo blocco è lo stesso grafo, confrontato
-con lo stesso test.
+dipende da Fub. Hanno un workspace loro, fuori da quello di Fub, e Fub li
+prende come dipendenze a percorso. Il secondo blocco è lo stesso grafo,
+confrontato con lo stesso test.
 
 ```mermaid
 flowchart LR

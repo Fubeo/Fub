@@ -1,31 +1,16 @@
-# Copia vendorizzata di `crates/proof/Cargo.toml` di WordCraft (vedi
-# ../../UPSTREAM.md). Le sole differenze dall'originale sono qui: i campi che
-# là ereditava dal workspace di WordCraft sono scritti per esteso, e i lint
-# sono quelli dell'upstream, non quelli di Fub, perché il sorgente resta
-# identico all'upstream e si aggiorna per copia.
 [package]
 name = "wordcraft-proof"
-version = "0.7.0"
-edition = "2024"
-license = "MIT OR Apache-2.0"
-# WordCraft dichiara 1.95 per il proprio workspace; questo crate compila e
-# passa i propri test con 1.89, il toolchain di Fub.
-rust-version = "1.89"
-repository = "https://github.com/storytold/wordcraft"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 description = "WordCraft proofing per language: spelling, suggestions, grammar checks and hyphenation for English (public-domain word list) and Polish (installed Hunspell dictionary, TeX patterns)"
-publish = false
 
-[lints.rust]
-unsafe_code = "forbid"
-# Codice di terzi: gli avvisi li corregge l'upstream, non una copia.
-warnings = "allow"
-
-[lints.clippy]
-all = "allow"
+[lints]
+workspace = true
 
 [dependencies]
 log = { workspace = true }
-miniz_oxide = { workspace = true }
+miniz_oxide = "0.8"
 
 [dev-dependencies]
 proptest = { workspace = true }

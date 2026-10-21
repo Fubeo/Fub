@@ -1,34 +1,18 @@
-# Copia vendorizzata di `crates/docbin/Cargo.toml` di WordCraft (vedi
-# ../../UPSTREAM.md). I campi che là ereditava dal workspace di WordCraft sono
-# scritti per esteso, con le stesse versioni; i lint sono quelli dell'upstream,
-# non quelli di Fub, perché il sorgente resta quello dell'upstream.
 [package]
 name = "wordcraft-docbin"
-version = "0.7.0"
-edition = "2024"
-license = "MIT OR Apache-2.0"
-# WordCraft dichiara 1.95 per il proprio workspace; questo crate compila e
-# passa i propri test con 1.89, il toolchain di Fub.
-rust-version = "1.89"
-repository = "https://github.com/storytold/wordcraft"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 description = "WordCraft reader for the Word 97-2003 binary file format (.doc, [MS-DOC])"
-publish = false
 
-[lints.rust]
-unsafe_code = "forbid"
-# Codice di terzi: gli avvisi li corregge l'upstream, non una copia.
-warnings = "allow"
-
-[lints.clippy]
-all = "allow"
+[lints]
+workspace = true
 
 [dependencies]
 wordcraft-doc = { workspace = true }
 wordcraft-geom = { workspace = true }
 cfb = { workspace = true }
-# Come in `wordcraft-formats`: png e bmp, i formati che il lettore scrive e
-# converte (una bitmap OfficeArt diventa PNG).
-image = { workspace = true, features = ["png", "bmp"] }
+image = { workspace = true }
 miniz_oxide = { workspace = true }
 sha1 = { workspace = true }
 thiserror = { workspace = true }

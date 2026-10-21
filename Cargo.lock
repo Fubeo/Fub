@@ -392,15 +392,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bit-set"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56d87354e4229f54a44f7bf2435906a4656dba36026ab6eaca629a2c436a691c"
-dependencies = [
- "bit-vec 0.10.1",
-]
-
-[[package]]
 name = "bit-vec"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -412,16 +403,6 @@ version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b71798fca2c1fe1086445a7258a4bc81e6e49dcd24c8d0dd9a1e57395b603f51"
 dependencies = [
- "serde",
-]
-
-[[package]]
-name = "bit-vec"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5727b15fa97d4f4fee0a3b7c3d550ed0269f54329207b86388de918604e31269"
-dependencies = [
- "borsh",
  "serde",
 ]
 
@@ -521,30 +502,6 @@ dependencies = [
  "quote",
  "rustversion",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "borsh"
-version = "1.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "553c5d846a6ba5150c65e3b1b8ec073bcf1abc20f9b7220de384a4443ea4e20a"
-dependencies = [
- "borsh-derive",
- "bytes",
- "cfg_aliases",
-]
-
-[[package]]
-name = "borsh-derive"
-version = "1.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12cdfe656708a01f89b451a7d36466e6fe6c414de0aa18fc54f864f6f9ca9f56"
-dependencies = [
- "once_cell",
- "proc-macro-crate 3.5.0",
- "proc-macro2",
- "quote",
- "syn 3.0.3",
 ]
 
 [[package]]
@@ -1049,12 +1006,6 @@ dependencies = [
  "core-foundation",
  "libc",
 ]
-
-[[package]]
-name = "core_detect"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f8f80099a98041a3d1622845c271458a2d73e688351bf3cb999266764b81d48"
 
 [[package]]
 name = "core_maths"
@@ -1594,7 +1545,7 @@ version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "521e380c0c8afb8d9a1e83a1822ee03556fc3e3e7dbc1fd30be14e37f9cb3f89"
 dependencies = [
- "bit-set 0.8.0",
+ "bit-set",
  "cssparser",
  "foldhash 0.2.0",
  "html5ever",
@@ -1826,7 +1777,7 @@ version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "998b056554fbe42e03ae0e152895cd1a7e1002aec800fdc6635d20270260c46f"
 dependencies = [
- "bit-set 0.8.0",
+ "bit-set",
  "regex-automata",
  "regex-syntax",
 ]
@@ -2607,9 +2558,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 5.3.0",
  "wasip2",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -3256,7 +3209,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "525e9ff3e1a4be2fbea1fdf0e98686a6d98b4d8f937e1bf7402245af1909e8c3"
 dependencies = [
  "byteorder-lite",
- "quick-error 2.0.1",
+ "quick-error",
 ]
 
 [[package]]
@@ -4761,26 +4714,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proptest"
-version = "1.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8530004ccb15eae51c7e40009fbe317f341f804db54dc033eec1c50be28cfa0"
-dependencies = [
- "bit-set 0.11.1",
- "bit-vec 0.10.1",
- "bitflags 2.13.1",
- "chacha20",
- "core_detect",
- "num-traits",
- "rand",
- "rand_xorshift",
- "regex-syntax",
- "rusty-fork",
- "tempfile",
- "unarray",
-]
-
-[[package]]
 name = "pulley-interpreter"
 version = "36.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4814,12 +4747,6 @@ name = "qrcode"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
-
-[[package]]
-name = "quick-error"
-version = "1.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
 name = "quick-error"
@@ -4873,15 +4800,6 @@ name = "rand_core"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
-
-[[package]]
-name = "rand_xorshift"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60aa6af80be32871323012e02e6e65f8a7cc7890931ae421d217ad8fe0df2ccf"
-dependencies = [
- "rand_core",
-]
 
 [[package]]
 name = "rangemap"
@@ -5292,18 +5210,6 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
-
-[[package]]
-name = "rusty-fork"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc6bf79ff24e648f6da1f8d1f011e9cac26491b619e6b9280f2b47f1774e6ee2"
-dependencies = [
- "fnv",
- "quick-error 1.2.3",
- "tempfile",
- "wait-timeout",
-]
 
 [[package]]
 name = "rustybuzz"
@@ -7098,12 +7004,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "unarray"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
-
-[[package]]
 name = "unic-char-property"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7392,15 +7292,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb067e4cbd1ff067d1df46c9194b5de0e98efd2810bbc95c5d5e5f25a3231150"
 dependencies = [
  "cc",
- "libc",
-]
-
-[[package]]
-name = "wait-timeout"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
-dependencies = [
  "libc",
 ]
 
@@ -8460,7 +8351,6 @@ dependencies = [
 name = "wordcraft-doc"
 version = "0.7.0"
 dependencies = [
- "proptest",
  "serde",
  "serde_json",
  "thiserror 2.0.19",
@@ -8476,8 +8366,6 @@ dependencies = [
  "image",
  "log",
  "miniz_oxide",
- "proptest",
- "serde_json",
  "sha1",
  "thiserror 2.0.19",
  "wordcraft-doc",
@@ -8493,9 +8381,7 @@ dependencies = [
  "cfb 0.15.0",
  "getrandom 0.3.4",
  "hmac",
- "image",
  "log",
- "proptest",
  "quick-xml",
  "sha1",
  "sha2 0.11.0",
@@ -8514,8 +8400,8 @@ dependencies = [
  "chardetng",
  "encoding_rs",
  "image",
+ "js-sys",
  "log",
- "proptest",
  "quick-xml",
  "wordcraft-doc",
  "wordcraft-geom",
@@ -8535,7 +8421,6 @@ version = "0.7.0"
 dependencies = [
  "log",
  "miniz_oxide",
- "proptest",
 ]
 
 [[package]]

@@ -6,7 +6,7 @@
 //! like every WordCraft parser, is lenient by design (unknown structures are skipped, bad numbers
 //! fall back to defaults) and bounded (stream sizes, piece counts and property counts are
 //! capped), so hostile input yields an error or a best-effort document, never a panic.
-#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 mod crypt;
 mod drawing;

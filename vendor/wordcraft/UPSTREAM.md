@@ -2,7 +2,7 @@
 
 Questa cartella contiene codice e dati di
 [WordCraft](https://github.com/storytold/wordcraft), copiati con le poche
-modifiche al sorgente elencate qui sotto. Fub non dipende da WordCraft via Git:
+modifiche elencate qui sotto. Fub non dipende da WordCraft via Git:
 `deny.toml` ammette soltanto crates.io, e i crate non sono pubblicati là.
 
 Sei crate: il correttore (`proof`) e, per i documenti di videoscrittura, il
@@ -20,94 +20,96 @@ altri formati di testo (`formats`: OpenDocument, RTF e gli altri).
 
 | Percorso qui | Percorso upstream | Modifiche |
 |---|---|---|
-| `crates/proof/src/` | `crates/proof/src/` | due, sotto |
-| `crates/proof/Cargo.toml` | `crates/proof/Cargo.toml` | manifest, sotto |
-| `crates/geom/` | `crates/geom/` | `src/lib.rs` (la condizione sui test), manifest |
-| `crates/doc/` | `crates/doc/` | `src/lib.rs` (la condizione sui test), manifest |
-| `crates/docx/` | `crates/docx/` | `src/lib.rs` (la condizione sui test e due esportazioni), `src/package.rs` e sei file di `tests/` per `zip` 9, `src/write/settings_merge.rs` e `src/write/mod.rs` (una verifica in più), manifest |
-| `crates/docbin/` | `crates/docbin/` | `src/lib.rs` (la condizione sui test), `src/fmt.rs` (un `let` irrefutabile), manifest |
-| `crates/formats/` | `crates/formats/` | `src/lib.rs` (la condizione sui test), un test di `src/odt.rs` per `zip` 9, manifest |
+| `crates/proof/` | `crates/proof/` | nessuna |
+| `crates/geom/` | `crates/geom/` | nessuna |
+| `crates/doc/` | `crates/doc/` | nessuna |
+| `crates/docx/` | `crates/docx/` | `src/package.rs` e sei file di `tests/` per `zip` 9; `src/write/settings_merge.rs`, `src/write/mod.rs` e `src/lib.rs` per una verifica in più |
+| `crates/docbin/` | `crates/docbin/` | nessuna |
+| `crates/formats/` | `crates/formats/` | un test di `src/odt.rs` per `zip` 9 |
 | `assets/hyphenation/` | `assets/hyphenation/` | nessuna |
 | `assets/spelling/` | `assets/spelling/` | nessuna |
 | `rustfmt.toml` | `rustfmt.toml` | nessuna |
 | `NOTICE` | `NOTICE` | elenca soltanto il materiale di terzi che questa copia porta |
 
-Le modifiche al sorgente servono a passare
-`cargo clippy --workspace --all-targets -- -D warnings` della CI di Fub, dove
-`-D warnings` sulla riga di comando vince sui `[lints]` del manifest, e
-`cargo deny check`; una sola aggiunge una funzione, ed è l'ultima della lista:
+I manifest dei crate sono quelli dell'upstream. Ereditano versione, edizione,
+licenza, lint e dipendenze da `Cargo.toml` di questa cartella, che è di Fub e
+non dell'upstream: un workspace con i sei crate, fuori da quello di Fub
+(`exclude` nel `Cargo.toml` radice), con il suo `Cargo.lock`. Fub prende i sei
+crate come dipendenze a percorso, con il proprio lock; i test dell'upstream
+girano qui, anche in CI:
 
-- `src/lib.rs` di ogni crate: il `#![deny(clippy::unwrap_used, …)]` dell'upstream diventa
-  `#![cfg_attr(not(test), deny(…))]`. Il codice di libreria resta vietato come
-  nell'upstream; i test dell'upstream usano `unwrap()` e senza la condizione non
-  compilano sotto `--all-targets`;
-- `src/ru/mod.rs`: nel ramo `[prefix, rest]` di una parola col trattino, la
-  variabile mai letta `rest` diventa `_`. Il comportamento non cambia;
-- `docbin/src/fmt.rs`: nel ramo `C_CR`, la catena
-  `if let [r, g, b, ..] = … && let (r, g, b) = (*r, *g, *b)` ha un secondo
-  `let` che corrisponde sempre, e Rust 1.89 lo rifiuta con `-D warnings`
-  (`irrefutable_let_patterns`); i tre byte si dereferenziano nel corpo. Il
-  comportamento non cambia;
-- `docx/src/package.rs`: l'upstream usa `zip` 3, che ha tre avvisi di sicurezza
+```text
+cargo test --manifest-path vendor/wordcraft/Cargo.toml --workspace --locked
+```
+
+Fuori dal workspace di Fub, i crate non passano dal suo
+`cargo clippy --workspace --all-targets -- -D warnings`: i lint del workspace
+di questa cartella permettono gli avvisi, che corregge l'upstream e non una
+copia, e vietano soltanto `unsafe`. Con la 1.89 di Fub i crate compilano e i
+loro test passano.
+
+Le patch di `patches/`, una per ragione:
+
+- `0001-notice-del-materiale-copiato`: il `NOTICE` elenca soltanto il
+  materiale di terzi che questa copia porta;
+- `0002-zip-9`: l'upstream usa `zip` 3, che ha tre avvisi di sicurezza
   (RUSTSEC-2026-0367, -0368, -0369) corretti in `zip` 9. In `zip` 9 il nome di
-  una voce dell'archivio è un `Result`: una voce dal nome illeggibile si salta
-  con un avviso nel log, come l'upstream fa già con una voce illeggibile;
-- `formats/src/odt.rs`, test `pictures_over_the_budget_are_not_inflated`: con
-  `zip` 9 una voce che si espande oltre la misura dichiarata si ferma a quella
-  misura e fallisce il controllo, quindi è rifiutata senza consumare il budget
-  invece di esaurirlo. Il test verifica ancora che sia rifiutata e che nessuna
-  voce superi il budget, non più che il budget si esaurisca;
-- `docx/tests/*.rs`: per la stessa ragione `f.name()` diventa
-  `f.name().unwrap()` nei sei file di test che leggono l'archivio;
-- `docx/src/write/settings_merge.rs`: la funzione nuova `kept_unowned`, con il
-  suo test, dice se una parte `settings.xml` scritta conserva, byte per byte,
-  ogni figlio di `w:settings` che il modello non tiene e che `merge` dichiara
-  di conservare. La esportano `src/write/mod.rs` e `src/lib.rs` come
-  `settings_kept_unowned`, insieme alla chiave `SETTINGS_ORIG` della copia
-  originale. Serve a `fub-format-rich`, che rifiuta di scrivere un documento
-  che perderebbe impostazioni in silenzio; il resto del codec non cambia.
+  una voce dell'archivio è un `Result`: in `docx/src/package.rs` una voce dal
+  nome illeggibile si salta con un avviso nel log, come l'upstream fa già con
+  una voce illeggibile, e nei sei file di `docx/tests/` che leggono l'archivio
+  `f.name()` diventa `f.name().unwrap()`. In `formats/src/odt.rs`, test
+  `pictures_over_the_budget_are_not_inflated`, una voce che si espande oltre la
+  misura dichiarata si ferma a quella misura e fallisce il controllo, quindi è
+  rifiutata senza consumare il budget invece di esaurirlo: il test verifica
+  ancora che sia rifiutata e che nessuna voce superi il budget, non più che il
+  budget si esaurisca;
+- `0003-settings-kept-unowned`: la funzione nuova `kept_unowned` di
+  `docx/src/write/settings_merge.rs`, con il suo test, dice se una parte
+  `settings.xml` scritta conserva, byte per byte, ogni figlio di `w:settings`
+  che il modello non tiene e che `merge` dichiara di conservare. La esportano
+  `src/write/mod.rs` e `src/lib.rs` come `settings_kept_unowned`, insieme alla
+  chiave `SETTINGS_ORIG` della copia originale. Serve a `fub-format-rich`, che
+  rifiuta di scrivere un documento che perderebbe impostazioni in silenzio; il
+  resto del codec non cambia. È proposta all'upstream.
 
-I manifest scrivono per esteso i campi che l'upstream eredita dal suo
-workspace, tengono i lint dell'upstream e dichiarano `rust-version = "1.89"`,
-quella di Fub: i crate compilano e passano i test con la 1.89. Le dipendenze
-che Fub ha già, o che più crate copiati condividono, prendono la versione dal
-`[workspace.dependencies]` di Fub, come chiede `check-cargo-versions.mjs`.
-Rispetto all'upstream:
+Le dipendenze del workspace di questa cartella hanno, per quelle in comune con
+Fub, la stessa versione del `[workspace.dependencies]` di Fub, perché il grafo
+dei due workspace sia lo stesso (lo controlla `vendor.mjs check`). Rispetto
+all'upstream:
 
 - `zip` passa da 3 a 9.0.5, per gli avvisi qui sopra;
 - `serde_json` non accende `float_roundtrip`: le feature si unificano in tutto
-  il workspace, e la libreria lo usa solo per leggere un colore, senza numeri
-  in virgola mobile;
-- in `docx` `image`, che serve solo ai test, accende soltanto `png`, l'unico
-  formato che i test scrivono; in `formats` e `docbin` accende `png` e `bmp`,
-  i due decodificatori senza dipendenze in più. L'upstream accende anche
-  `jpeg`, `webp`, `gif` e `tiff`: senza, un'immagine di quei formati si legge
-  lo stesso, ma senza la misura in pixel, e l'export RTF di WordCraft non la
-  ricodifica in PNG. Un oggetto prende in Fub la misura che il documento gli
-  dà; una copia RTF esportata porta un'immagine di quei formati senza la
-  misura in pixel;
-- `js-sys`, che `formats` prende soltanto per `wasm32`, non c'è;
-- manca la dipendenza di `getrandom` per `wasm32`: Fub compila questi crate
-  soltanto per il desktop.
+  il grafo di Fub, e la libreria lo usa solo per leggere un colore, senza
+  numeri in virgola mobile;
+- `image` accende soltanto `png` e `bmp`, i due decodificatori senza
+  dipendenze in più. L'upstream accende anche `jpeg`, `webp`, `gif` e `tiff`:
+  senza, un'immagine di quei formati si legge lo stesso, ma senza la misura in
+  pixel, e l'export RTF di WordCraft non la ricodifica in PNG. Un oggetto
+  prende in Fub la misura che il documento gli dà; una copia RTF esportata
+  porta un'immagine di quei formati senza la misura in pixel.
+
+Le dipendenze che i manifest dichiarano soltanto per `wasm32` (`js-sys` di
+`formats`, la feature `wasm_js` di `getrandom` in `docx`) restano: compaiono
+negli archi del `Cargo.lock` di Fub, ma il desktop non le compila.
 
 `formats` porta una sola dipendenza nuova per Fub, `chardetng` (rilevamento
 della codifica di un testo, `MIT OR Apache-2.0`, dello stesso autore di
-`encoding_rs`); le altre sono già nell'albero.
+`encoding_rs`); le altre sono già nell'albero. `proptest`, `log`, `sha1` e
+`miniz_oxide` sono definite soltanto nel workspace di questa cartella, perché
+Fub non le nomina; `proptest` serve solo ai test dell'upstream.
 
 Le dipendenze crittografiche del codec (`aes`, `sha1`, `sha2`, `hmac`, `cfb`,
-`zeroize`) servono ad aprire e scrivere documenti protetti da password e restano
-alle versioni dell'upstream; `sha2` e `zeroize` le prende dal workspace, che le
-condivide con i disegni e con la sessione live. `tauri-codegen` e `infer` ne tirano versioni più vecchie
-solo in fase di compilazione di `fub-app`: `cargo deny` le segnala come doppie,
-con la politica `warn` di Fub.
+`zeroize`) servono ad aprire e scrivere documenti protetti da password e
+restano alle versioni dell'upstream; `sha2` e `zeroize` sono le stesse dei
+disegni e della sessione live. `tauri-codegen` e `infer` ne tirano versioni più
+vecchie solo in fase di compilazione di `fub-app`: `cargo deny` le segnala come
+doppie, con la politica `warn` di Fub. Le righe `wordcraft-*` dei due
+workspace portano la versione accanto al percorso, perché `cargo deny` non
+consideri jolly una dipendenza fra crate pubblicabili.
 
-Un aggiornamento che porta avvisi nuovi fa fallire clippy nella CI: è il punto
-in cui leggerli, non un controllo da spegnere.
-
-`rustfmt.toml` sta qui perché `cargo fmt --all --check` di Fub formatti questi
-file con le regole dell'upstream, non con quelle di Fub. La struttura delle
-cartelle è la stessa dell'upstream, così gli `include_bytes!` del crate
-(`../../../assets/…`) restano validi senza toccarli.
+`rustfmt.toml` sta qui per chi formatta questi file con le regole
+dell'upstream. La struttura delle cartelle è la stessa dell'upstream, così gli
+`include_bytes!` del crate (`../../../assets/…`) restano validi senza toccarli.
 
 ## Dati inclusi e licenze
 
@@ -147,16 +149,17 @@ node tools/vendor-wordcraft/vendor.mjs verify-upstream
 
 `update` estrae i percorsi gestiti, applica le patch (si ferma su quella che
 non si applica, senza scrivere niente), stampa le dipendenze aggiunte o tolte
-dai manifest dell'upstream, scrive `upstream.lock` e aggiorna la `version`
-delle righe `wordcraft-*` del `Cargo.toml` di Fub. `check`, in CI, toglie la
-pila intera in ordine inverso da una copia e ritrova le impronte
-dell'upstream. Una modifica nuova si aggiunge come patch in `patches/` e si
-riesegue `update` con lo stesso commit.
+dai manifest dell'upstream, controlla che ogni dipendenza ereditata sia
+definita nel workspace di questa cartella, scrive `upstream.lock` e aggiorna la
+`version` del workspace di questa cartella e delle righe `wordcraft-*` dei due
+`Cargo.toml`. `check`, in CI, toglie la pila intera in ordine inverso da una
+copia e ritrova le impronte dell'upstream. Una modifica nuova si aggiunge come
+patch in `patches/` e si riesegue `update` con lo stesso commit.
 
-Dopo un aggiornamento: `cargo test -p wordcraft-proof -p wordcraft-geom
--p wordcraft-doc -p wordcraft-docx -p wordcraft-docbin -p wordcraft-formats
--p fub-format-rich`, il corpus di `fub-format-rich`, i test di `fub-features`
-con la feature `proof` e `cargo deny check`.
+Dopo un aggiornamento: i test qui sopra, con il `Cargo.lock` di questa
+cartella aggiornato (`cargo update --manifest-path vendor/wordcraft/Cargo.toml
+--workspace`), quelli di `fub-format-rich` con il suo corpus, quelli di
+`fub-features` con la feature `proof` e `cargo deny check`.
 
 Una correzione che serve a Fub va proposta all'upstream; finché non entra,
 resta una patch.

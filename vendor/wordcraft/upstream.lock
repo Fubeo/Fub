@@ -12,28 +12,12 @@ path = "patches/0001-notice-del-materiale-copiato.patch"
 sha256 = "sha256:572d09277230eed1b520dd0257f63fc91f40e2bc8b6158edb98b952d99ac3bc1"
 
 [[patch]]
-path = "patches/0002-manifesti-per-il-workspace-di-fub.patch"
-sha256 = "sha256:4e05986d58c784205fa092c38c9080a1b1485a0563696dae90d4975baeb02e42"
-
-[[patch]]
-path = "patches/0003-lint-dei-test.patch"
-sha256 = "sha256:142152674d3ccc89777e676014cf57f6845f1d7270f02abd4eb98445c8f61143"
-
-[[patch]]
-path = "patches/0004-ru-variabile-non-letta.patch"
-sha256 = "sha256:9a0d7cbe2647bec70ae237df696b9095e413fbae8bda009070ccc7b831ffed45"
-
-[[patch]]
-path = "patches/0005-docbin-let-irrefutabile.patch"
-sha256 = "sha256:4dae50acadf4310710be9f7c2de9d0fb85ee0b495d3dcd36ce83f76ec23ede16"
-
-[[patch]]
-path = "patches/0006-zip-9.patch"
+path = "patches/0002-zip-9.patch"
 sha256 = "sha256:a2d4a66ce3ed28c76d0407d91af5482a85b0b9114d6f102418cdcb0e4aab8833"
 
 [[patch]]
-path = "patches/0007-settings-kept-unowned.patch"
-sha256 = "sha256:ad191e9cac96af971620690d1ef21f6e75a75ed5ad485d0b3167a03fcce72d0e"
+path = "patches/0003-settings-kept-unowned.patch"
+sha256 = "sha256:3838a6a4c5f4776ba777e34efab9386287ce445fc2572b1f1f86831b011f0221"
 
 [[file]]
 path = "LICENSE-APACHE"
@@ -79,7 +63,6 @@ upstream = "sha256:12ca009a9b4d4b62a0f6d561f0a17d9b5aab2d6794c77d42cdf139a9831e9
 [[file]]
 path = "crates/doc/Cargo.toml"
 upstream = "sha256:78b50197fdc1fcd990b35a9df00d8931e0dd85045a2db33eaa2954f2029bec65"
-result = "sha256:d54a8d4d092645fe7ca7a29bed76c7253a3c6b64c91881ad262ae72cf3d010c7"
 
 [[file]]
 path = "crates/doc/src/bidi.rs"
@@ -140,7 +123,6 @@ upstream = "sha256:9f2f3de7a5581fc5170970ab5259aa8faeceb9a7b0c94c2ef285230a785f1
 [[file]]
 path = "crates/doc/src/lib.rs"
 upstream = "sha256:4ff05e5eee3618c98358c96028966d6a99cf18746f65eaebcd91b1ff1b9cd9cb"
-result = "sha256:2b05455a734cd9adbae3d927c4b0f8e39df6657003dc8d2c5ff61165191fd81d"
 
 [[file]]
 path = "crates/doc/src/link.rs"
@@ -221,7 +203,6 @@ upstream = "sha256:9fe2f9dafd98b819ec186df079d65ddf3b599affbadc9b9b11602b3dfcdd6
 [[file]]
 path = "crates/docbin/Cargo.toml"
 upstream = "sha256:d99efb824f2bdb8a12cb90de59a5d897f261cd5b78c372876ab62181ebf35d3b"
-result = "sha256:5c04a957f6926408322b92302f10e1eec2d2ed40b8c17dca568f0a545308b047"
 
 [[file]]
 path = "crates/docbin/src/crypt.rs"
@@ -242,12 +223,10 @@ upstream = "sha256:bde2ef699dd5d9aac663219ae64937220529e3ba9588a2b544e05317d987c
 [[file]]
 path = "crates/docbin/src/fmt.rs"
 upstream = "sha256:99048afecda65c4f8bd85f0613a3dddd6f6e341887067c5b8352a09f5c069978"
-result = "sha256:4f5fd6297fd5493b1d6e8b3aeff47a123e4a9d1e5e64cbbe8c10b6abe00c3c1c"
 
 [[file]]
 path = "crates/docbin/src/lib.rs"
 upstream = "sha256:850707e975d48b9c9eadc95331749e491d87921a9e3525ed836b1090aca950ff"
-result = "sha256:0c694bc6cafa864c8d88d281887fa35dc466cf4ab865944990c37012c4deb4b1"
 
 [[file]]
 path = "crates/docbin/src/list.rs"
@@ -308,7 +287,6 @@ upstream = "sha256:a08cdbf1566c3d2ab4acd6e4b0f99f0e7909f355121f2fe9bb724f2ad7822
 [[file]]
 path = "crates/docx/Cargo.toml"
 upstream = "sha256:882ad4a8fe465339a83e4a0c467fdfe18d7313b783dd69366fe832be0cc5e1ba"
-result = "sha256:42fd6b9dbca4aa3848c157cdc9efe1fa45450a37f4794f8dde60ba3b24e82ab0"
 
 [[file]]
 path = "crates/docx/src/chart_spec.rs"
@@ -333,7 +311,7 @@ upstream = "sha256:d55e26a084143b07ca87679def9f6961074770394a400e11c6419936e2e17
 [[file]]
 path = "crates/docx/src/lib.rs"
 upstream = "sha256:e99ae7d7edee65c7bea5cbd221b7bea53f8a8a49a2bf57e1dd3dfd634454da94"
-result = "sha256:8ae097867d6c001c1f645e1ae981ab0c6acc80f66a22e5d48d127f6b712eb7f1"
+result = "sha256:393eb09d30886b7d6529d424f34c25a1f68efb41126af35ee2c04cd26106d6fc"
 
 [[file]]
 path = "crates/docx/src/package.rs"
@@ -543,7 +521,6 @@ upstream = "sha256:14e9e2aecaf5192def964d615077602f630f797fc55d4b791c99951acd304
 [[file]]
 path = "crates/formats/Cargo.toml"
 upstream = "sha256:4f8cd1d2b8e3a80b5eb9ebffc639f421b900769e10bce2686e39defd27930f3e"
-result = "sha256:5ad9d3bfc26ee6945227eb694194c9988a42ee5efcb9f59dc10c42f0872ee232"
 
 [[file]]
 path = "crates/formats/src/comments.rs"
@@ -560,7 +537,6 @@ upstream = "sha256:f6039a36508ba2ee7cd05f8cac6e39fbaf1d01e890e5553689a7c989ddda6
 [[file]]
 path = "crates/formats/src/lib.rs"
 upstream = "sha256:5e9ca56facc3ecd9f83b24e0dbcf7d3029a430ef9cd67630ba2fa20a0e8f4b94"
-result = "sha256:328a331ba6a13ffa41b29dc9b9a5c75bcc509cc301809ca97fd71d74cb55a66e"
 
 [[file]]
 path = "crates/formats/src/markdown.rs"
@@ -602,12 +578,10 @@ upstream = "sha256:42802ec9e736f07eca83b3838cc290156ec00416dc47e72d588803b3834b8
 [[file]]
 path = "crates/geom/Cargo.toml"
 upstream = "sha256:4e5dc9e7dbd5dd17ca82b9cd18b0e8f2297ad02faee5508c6c6f7feb6dcc5f85"
-result = "sha256:a4295e70ac392af292ba4f7ac986b2e67e6f6a9ec7925d77f267a09d6d76bf9d"
 
 [[file]]
 path = "crates/geom/src/lib.rs"
 upstream = "sha256:501de22079308d3db4d1b7d4f32256fdbecf8a656e1b2290a56d9fd7bf7dbb04"
-result = "sha256:2d3883d0409ac9efe4d8ee2733165a050ffd453da508a6c19ccdcaa83c5ac5a3"
 
 [[file]]
 path = "crates/geom/src/region.rs"
@@ -616,7 +590,6 @@ upstream = "sha256:67c2e8e854848473ebb305edd4d9b36383f16df20def10274470c034cf362
 [[file]]
 path = "crates/proof/Cargo.toml"
 upstream = "sha256:8dce5ad4aa4ffe4db325a3d38bd2761423823dbf501dbb09f0181d5e5bfd854c"
-result = "sha256:53841638fe56110c329687b28a17e88537840898e5ba6f69d21d129eb11f9d29"
 
 [[file]]
 path = "crates/proof/src/affix.rs"
@@ -693,7 +666,6 @@ upstream = "sha256:a6bbb6db83a4e29df38f07fbb0956f29bbf382ab8016b5f1dec6c6259183f
 [[file]]
 path = "crates/proof/src/lib.rs"
 upstream = "sha256:fd142eb1d72a07001ec588d613ae87fb2a989966d31070ad86de804f26a7f88f"
-result = "sha256:e2a0d2e551de90e446bca6dcb5d9980cf04f2e3ca583b875e8dba42e8883d6cb"
 
 [[file]]
 path = "crates/proof/src/patterns.rs"
@@ -746,7 +718,6 @@ upstream = "sha256:4175cf7cb67ea6e41bb5ca2d990b7a00ab5de286dd5da26b1b2d58f32267c
 [[file]]
 path = "crates/proof/src/ru/mod.rs"
 upstream = "sha256:cd77a14e831da970ec672375a09903eea399e3bc7b1e68ec75606beecae0dfab"
-result = "sha256:0077802e82a41d3e7ffffd06d42565c5a07f6bd2d9c3edb35bdba45f891220c8"
 
 [[file]]
 path = "crates/proof/src/ru/suggest.rs"

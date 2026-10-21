@@ -9,6 +9,9 @@
 # Il test di `fub-wasm-host` invece compila dentro `CARGO_TARGET_TMPDIR`, che
 # sta già sotto `/target`.
 /esempi/*/target
+# `vendor/wordcraft` ha un workspace suo per i test dell'upstream: chi li
+# lancia a mano senza `CARGO_TARGET_DIR` riempie questa cartella.
+/vendor/wordcraft/target
 **/*.rs.bk
 
 # Node / client

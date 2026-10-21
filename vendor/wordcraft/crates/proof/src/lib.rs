@@ -37,7 +37,7 @@
 //!   Bulgarian syllable rules, Russian word-division rules, heuristic.
 //!
 //! [`check_text`] checks a paragraph whose runs are in different languages.
-#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 pub mod affix;
 pub mod bg;

@@ -7,7 +7,7 @@
 //! [`model::from_doc`] convert to and from the full [`Document`]. All parsers are written from
 //! the public specifications, are lenient by design and never panic on hostile input: nesting is
 //! depth-limited and sizes are capped.
-#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 pub mod comments;
 pub mod html;

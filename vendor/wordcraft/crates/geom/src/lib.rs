@@ -4,7 +4,7 @@
 //! twentieths of a point (twips) for most lengths, half-points for font sizes, eighths of a point
 //! for borders and English Metric Units (EMU, 914 400 per inch) for drawings. The conversions live
 //! here so every crate agrees on them.
-#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 use serde::{Deserialize, Serialize};
 

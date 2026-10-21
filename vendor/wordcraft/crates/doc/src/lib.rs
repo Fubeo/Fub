@@ -8,7 +8,7 @@
 //!
 //! Positions ([`Pos`]) name a story, a [`Path`] to a paragraph and a byte offset in it. Paths
 //! compare in document order.
-#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 pub mod bidi;
 pub mod chart;

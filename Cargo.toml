@@ -32,15 +32,6 @@ members = [
     # passo — «una cartella in `crates/` che nessun membro dichiara»: adesso la
     # cartella c'è, e la riga con lei.
     "crates/fub-wasm-host",
-    # Codice di WordCraft copiato, con le poche modifiche al sorgente elencate
-    # in vendor/wordcraft/UPSTREAM.md: sta fuori da `crates/` perché non è
-    # codice di Fub, e i guard sui commenti e sugli errori non lo leggono.
-    "vendor/wordcraft/crates/geom",
-    "vendor/wordcraft/crates/doc",
-    "vendor/wordcraft/crates/docx",
-    "vendor/wordcraft/crates/docbin",
-    "vendor/wordcraft/crates/formats",
-    "vendor/wordcraft/crates/proof",
 ]
 # Il varco di `tools/varco-wasm` è fuori di proposito, non per dimenticanza: è
 # il contratto generato e compilato a `wasm32-unknown-unknown`, cioè un
@@ -69,6 +60,10 @@ exclude = [
     "esempi/event-handler-wasm",
     "esempi/index-provider-wasm",
     "esempi/legacy-format-0_1",
+    # La copia di WordCraft ha un workspace suo (vendor/wordcraft/UPSTREAM.md):
+    # è codice di terzi, con i manifest dell'upstream, e i lint e i guard di
+    # Fub non lo leggono. Fub ne prende i crate come dipendenze a percorso.
+    "vendor/wordcraft",
 ]
 
 [workspace.package]
@@ -159,7 +154,8 @@ fub-scene = { path = "crates/fub-scene", version = "0.1.0" }
 fub-format-svg = { path = "crates/fub-format-svg", version = "0.1.0" }
 fub-format-rich = { path = "crates/fub-format-rich", version = "0.1.0" }
 fub-importers = { path = "crates/fub-importers", version = "0.1.0" }
-# Il correttore di WordCraft, vendorizzato (vendor/wordcraft/UPSTREAM.md).
+# Il correttore di WordCraft, vendorizzato (vendor/wordcraft/UPSTREAM.md). La
+# `version` la scrive `tools/vendor-wordcraft/vendor.mjs update`.
 wordcraft-proof = { path = "vendor/wordcraft/crates/proof", version = "0.7.0" }
 # Il modello e il codec DOCX di WordCraft, vendorizzati con il correttore.
 wordcraft-geom = { path = "vendor/wordcraft/crates/geom", version = "0.7.0" }
@@ -168,16 +164,13 @@ wordcraft-docx = { path = "vendor/wordcraft/crates/docx", version = "0.7.0" }
 # I lettori di WordCraft per OpenDocument, RTF e Word 97-2003.
 wordcraft-formats = { path = "vendor/wordcraft/crates/formats", version = "0.7.0" }
 wordcraft-docbin = { path = "vendor/wordcraft/crates/docbin", version = "0.7.0" }
-# Le dipendenze di WordCraft condivise fra più crate vendorizzati. `image`
+# Le dipendenze che Fub ha in comune con la copia di WordCraft: le versioni
+# sono le stesse di vendor/wordcraft/Cargo.toml (`vendor.mjs check`). `image`
 # non accende niente qui: ogni crate dice quali decodificatori vuole.
-log = "0.4"
-proptest = "1"
 zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 cfb = "0.15"
-sha1 = "0.11"
 # Anche dei disegni di `fub-features`: l'impronta dei PDF annotati e dei caratteri.
 sha2 = "0.11"
-miniz_oxide = "0.8"
 image = { version = "0.25.10", default-features = false }
 # Il YAML del frontmatter. Era scritta a mano in due crate con la stessa
 # versione, ed è la coppia che `check-cargo-versioni.mjs` esiste per

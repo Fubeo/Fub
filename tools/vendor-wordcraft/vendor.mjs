@@ -272,11 +272,30 @@ function checkManifests(dir) {
   return problems;
 }
 
-/// Le versioni delle righe `wordcraft-*` nel `Cargo.toml` di Fub.
-const WORDCRAFT_LINE = /^(wordcraft-[a-z]+ = \{ path = "vendor\/wordcraft\/crates\/[a-z]+", version = ")([^"]+)(" \})$/gm;
+/// Le righe che portano la versione dell'upstream: le `wordcraft-*` del
+/// `Cargo.toml` di Fub e, in quello di `vendor/`, le stesse righe e la versione
+/// di `[workspace.package]`. Una dipendenza a percorso senza versione è un
+/// carattere jolly per `cargo deny`.
+const VERSION_LINES = [
+  ["Cargo.toml", /^(wordcraft-[a-z]+ = \{ path = "vendor\/wordcraft\/crates\/[a-z]+", version = ")([^"]+)(" \})$/gm],
+  ["vendor/wordcraft/Cargo.toml", /^(wordcraft-[a-z]+ = \{ path = "crates\/[a-z]+", version = ")([^"]+)(" \})$/gm],
+  ["vendor/wordcraft/Cargo.toml", /^(\[workspace\.package\][^[]*?\nversion = ")([^"]+)(")$/gm],
+];
 
-function fubVersions() {
-  return [...fs.readFileSync(path.join(ROOT, "Cargo.toml"), "utf8").matchAll(WORDCRAFT_LINE)].map((m) => m[2]);
+/// Per ogni regola, il file e le versioni che vi trova.
+function versionLines() {
+  return VERSION_LINES.map(([rel, line]) => {
+    const file = path.join(ROOT, rel);
+    const text = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+    return { rel, versions: [...text.matchAll(line)].map((m) => m[2]) };
+  });
+}
+
+function writeVersions(version) {
+  for (const [rel, line] of VERSION_LINES) {
+    const file = path.join(ROOT, rel);
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(line, `$1${version}$3`));
+  }
 }
 
 // --- comandi --------------------------------------------------------------------
@@ -328,10 +347,12 @@ function check({ quiet = false } = {}) {
     problems.push(error.message);
   }
 
-  for (const version of fubVersions()) {
-    if (version !== lock.version) problems.push(`Cargo.toml di Fub: wordcraft-* a ${version}, il lock dice ${lock.version}`);
+  for (const { rel, versions } of versionLines()) {
+    for (const version of versions) {
+      if (version !== lock.version) problems.push(`${rel}: wordcraft a ${version}, il lock dice ${lock.version}`);
+    }
+    if (versions.length === 0) problems.push(`${rel}: nessuna riga con la versione di wordcraft riconosciuta`);
   }
-  if (fubVersions().length === 0) problems.push("Cargo.toml di Fub: nessuna riga wordcraft-* riconosciuta");
   problems.push(...checkManifests(VENDOR));
 
   if (problems.length > 0) {
@@ -347,13 +368,30 @@ function check({ quiet = false } = {}) {
 /// Il repository dell'upstream, quando il lock non c'è ancora.
 const REPOSITORY = "https://github.com/storytold/wordcraft";
 
+/// Che la copia abbia ancora le impronte del lock: nessun file cambiato,
+/// tolto o aggiunto a mano. Le patch possono essere cambiate.
+function untouched(lock) {
+  const now = hashes(VENDOR);
+  const problems = [];
+  for (const entry of lock.file) {
+    const wanted = entry.result ?? entry.upstream;
+    if (wanted === ABSENT ? now.has(entry.path) : now.get(entry.path) !== wanted) problems.push(entry.path);
+  }
+  for (const rel of now.keys()) if (!lock.file.some((f) => f.path === rel)) problems.push(rel);
+  if (problems.length > 0) {
+    fail(`la copia è cambiata fuori dalle patch, update non la sovrascrive:\n- ${problems.join("\n- ")}`);
+  }
+}
+
 function update(rev, source) {
   // La prima volta non c'è un lock: la copia di prima è quella fatta a mano, e
   // il diff di git dice se il risultato la riproduce.
-  const previous = fs.existsSync(LOCK)
-    ? check({ quiet: true })
-    : { lock: { repository: REPOSITORY, mirror: "", rev: "", file: [] }, upstream: tempdir("none") };
-  const repo = repository(source ?? previous.lock.repository, rev);
+  const old = fs.existsSync(LOCK) ? readLock() : { repository: REPOSITORY, mirror: "", rev: "", file: [] };
+  if (old.rev) untouched(old);
+  const repo = repository(source ?? old.repository, rev);
+  // L'upstream di prima si rilegge alla sua revisione: la pila di patch può
+  // essere cambiata da allora.
+  const previous = { lock: old, upstream: old.rev ? extract(repo, old.rev).dir : tempdir("none") };
   const { dir, date, version } = extract(repo, rev);
 
   // Il risultato si costruisce a parte; la copia si sostituisce alla fine.
@@ -397,8 +435,7 @@ function update(rev, source) {
   for (const managed of MANAGED) fs.rmSync(path.join(VENDOR, managed), { recursive: true, force: true });
   copyManaged(result, VENDOR);
   writeLock(lock);
-  const cargo = path.join(ROOT, "Cargo.toml");
-  fs.writeFileSync(cargo, fs.readFileSync(cargo, "utf8").replace(WORDCRAFT_LINE, `$1${version}$3`));
+  writeVersions(version);
   for (const d of [dir, result, previous.upstream]) fs.rmSync(d, { recursive: true, force: true });
 
   const changed = lock.file.filter((f) => previous.lock.file.find((p) => p.path === f.path)?.upstream !== f.upstream);

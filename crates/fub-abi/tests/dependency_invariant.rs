@@ -309,6 +309,17 @@ impl<'a> Graph<'a> {
             })
             .collect()
     }
+
+    /// I crate i cui `Cargo.toml` stanno in questa repository: i membri e le
+    /// dipendenze a percorso fuori dal workspace, come i crate di WordCraft in
+    /// `vendor/wordcraft/`, che hanno un workspace loro.
+    fn local(&self) -> BTreeSet<&'a str> {
+        arr(self.metadata, "packages")
+            .iter()
+            .filter(|p| p.get("source").is_none_or(Value::is_null))
+            .map(|p| str_of(p, "name"))
+            .collect()
+    }
 }
 
 #[test]
@@ -876,7 +887,7 @@ fn read_block(block: &[&str]) -> Diagram {
 fn the_diagram_declares_the_real_dependencies() {
     let metadata = metadata();
     let graph = Graph::new(&metadata);
-    let members = graph.members();
+    let members = graph.local();
 
     let doc = concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -886,12 +897,13 @@ fn the_diagram_declares_the_real_dependencies() {
         .unwrap_or_else(|and| panic!("{DIAGRAM_DOC} non si legge: {and}"));
     let drawn = read_diagram(&source);
 
-    // 1. I riquadri sono i crate del workspace, tutti e soli.
+    // 1. I riquadri sono i crate della repository, tutti e soli: i membri e i
+    // crate copiati in `vendor/`.
     let real_crates: BTreeSet<String> = members.iter().map(|n| n.to_string()).collect();
     let ghosts: Vec<&String> = drawn.crates.difference(&real_crates).collect();
     assert!(
         ghosts.is_empty(),
-        "il diagramma in {DIAGRAM_DOC} disegna {ghosts:?}, che non sono crate del\n\
+        "il diagramma in {DIAGRAM_DOC} disegna {ghosts:?}, che non sono crate della\n\
          workspace. Se sono previsti ma non scritti, vanno nel primo disegno del\n\
          documento, tratteggiati, non in questo — questo è la fotografia."
     );

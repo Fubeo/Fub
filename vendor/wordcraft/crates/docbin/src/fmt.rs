@@ -152,8 +152,10 @@ pub(crate) fn apply_char(p: &mut CharProps, prl: &Prl, base: &CharProps, fonts: 
         }
         C_CR => {
             // COLORREF 0x00BBGGRR, stored little-endian: operand bytes are R, G, B.
-            if let [r, g, b, ..] = prl.operand {
-                p.color = Some(TextColor::Rgb(Rgb(*r, *g, *b)));
+            if let [r, g, b, ..] = prl.operand
+                && let (r, g, b) = (*r, *g, *b)
+            {
+                p.color = Some(TextColor::Rgb(Rgb(r, g, b)));
             }
         }
         C_HPS => {
