@@ -163,3 +163,6 @@ cartella aggiornato (`cargo update --manifest-path vendor/wordcraft/Cargo.toml
 
 Una correzione che serve a Fub va proposta all'upstream; finché non entra,
 resta una patch.
+
+Il perché di questa forma, e quando passare a una dipendenza Git o da
+crates.io, è nell'[ADR 0213](../../docs/decisions/0213-provenienza-dei-motori-esterni.md).

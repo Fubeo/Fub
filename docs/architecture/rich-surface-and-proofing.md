@@ -224,3 +224,7 @@ chiude il client. Le porte (`editors/core/proof-ports.ts`) le compone
 - `apps/client/src/editors/core/proof.ts` e `proof-ports.ts`;
 - `apps/client/src/editors/text/profiles/markdown/proof.ts`;
 - `crates/fub-features/src/proof.rs` e `crates/fub-format-rich/`.
+
+Il perché della garanzia sul pacchetto è nell'[ADR
+0212](../decisions/0212-preservazione-misurata-sul-pacchetto.md), quello della
+copia di WordCraft nell'[ADR 0213](../decisions/0213-provenienza-dei-motori-esterni.md).

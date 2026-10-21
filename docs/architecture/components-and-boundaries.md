@@ -50,7 +50,9 @@ La figura mostra il verso concettuale. I manifest sono la fonte esatta e i guard
 del repository verificano le eccezioni.
 
 Il codice copiato da WordCraft (`vendor/wordcraft/`) non dipende da Fub, e lo
-raggiungono soltanto due crate, ciascuno dietro la propria feature:
+raggiungono soltanto due crate, ciascuno dietro la propria feature. La copia è
+l'upstream più le patch, in un workspace suo; la provenienza e i proprietari
+sono decisi nell'[ADR 0213](../decisions/0213-provenienza-dei-motori-esterni.md):
 
 ```mermaid
 flowchart LR
@@ -85,7 +87,7 @@ flowchart LR
 | `fub-importers` | import ed export ufficiali e comandi di conversione | kernel, Tauri |
 | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
 | `wordcraft-proof` | correttore di WordCraft vendorizzato in `vendor/wordcraft/`, usato soltanto dalla feature `proof` | dipendenze da Fub |
-| `wordcraft-doc`, `-docx`, `-geom` | modello del documento, codec DOCX e unità di misura di WordCraft, vendorizzati in `vendor/wordcraft/`, usati soltanto da `fub-format-rich` | dipendenze da Fub |
+| `wordcraft-doc`, `-docx`, `-docbin`, `-formats`, `-geom` | modello del documento, codec DOCX, lettore di Word 97-2003, importatori ed esportatori e unità di misura di WordCraft, vendorizzati in `vendor/wordcraft/`, usati soltanto da `fub-format-rich` | dipendenze da Fub |
 | `fub-wasm-host` | Wasmtime, binding, traduzione, store e lifecycle dei plugin installati | policy duplicata |
 | `fub-cli` | automazione locale sopra `Host`, senza Tauri | un secondo coordinatore di job o di scrittura |
 | `fub-services` | servizio self-hostable separato per account, sync e publish | kernel, host, app |

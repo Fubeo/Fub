@@ -44,3 +44,5 @@ Nuove decisioni usano il [template](template.md).
 | [0209 — I documenti di videoscrittura si modificano come proiezione](0209-videoscrittura-come-proiezione.md) | accolta | contratto | — |
 | [0210 — Un OpenDocument si scrive con un codec di Fub che conserva l'XML](0210-opendocument-con-un-codec-di-fub.md) | accolta | storage | — |
 | [0211 — HTML, testo, LaTeX e Word XML sono copie esportate, con la perdita misurata](0211-copie-esportate-con-la-perdita-misurata.md) | accolta | contratto | — |
+| [0212 — La preservazione di un `.docx` si misura sul pacchetto, e la garanzia è di Fub](0212-preservazione-misurata-sul-pacchetto.md) | accolta | storage | — |
+| [0213 — I motori esterni sono una copia derivata, con proprietari e aggiornamenti decisi](0213-provenienza-dei-motori-esterni.md) | accolta | sicurezza | — |

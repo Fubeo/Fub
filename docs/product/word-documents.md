@@ -250,5 +250,6 @@ Il disegno del confine è in
 [Superficie ricca e correttore](../architecture/rich-surface-and-proofing.md#documenti-di-videoscrittura-la-superficie-ricca),
 la forma alle porte nel [contratto IPC](../reference/ipc-contract.md#documenti-di-videoscrittura)
 e il perché nelle decisioni [0209](../decisions/0209-videoscrittura-come-proiezione.md),
-[0210](../decisions/0210-opendocument-con-un-codec-di-fub.md) e
-[0211](../decisions/0211-copie-esportate-con-la-perdita-misurata.md).
+[0210](../decisions/0210-opendocument-con-un-codec-di-fub.md),
+[0211](../decisions/0211-copie-esportate-con-la-perdita-misurata.md) e
+[0212](../decisions/0212-preservazione-misurata-sul-pacchetto.md).
