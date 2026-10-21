@@ -259,6 +259,16 @@ impl Zip {
         if archive.len() > limits.entries {
             return Err(InventoryError::Limit("zip entries"));
         }
+        // `zip` indicizza le voci per nome e di due omonime ne tiene una:
+        // quale valga dipenderebbe dal lettore, quindi si contano le voci
+        // della directory centrale.
+        let listed = central_names(bytes, limits)?;
+        let mut seen = BTreeSet::new();
+        for name in &listed {
+            if !seen.insert(name.trim_start_matches('/').to_ascii_lowercase()) {
+                return Err(InventoryError::Zip(format!("duplicate entry {name}")));
+            }
+        }
         let mut parts = BTreeMap::new();
         let mut total = 0u64;
         for index in 0..archive.len() {
@@ -290,6 +300,77 @@ impl Zip {
         }
         Ok(Zip { parts })
     }
+}
+
+fn le16(bytes: &[u8], at: usize) -> Option<u64> {
+    Some(u16::from_le_bytes(bytes.get(at..at + 2)?.try_into().ok()?).into())
+}
+
+fn le32(bytes: &[u8], at: usize) -> Option<u64> {
+    Some(u32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?).into())
+}
+
+fn le64(bytes: &[u8], at: usize) -> Option<u64> {
+    Some(u64::from_le_bytes(bytes.get(at..at + 8)?.try_into().ok()?))
+}
+
+/// I nomi della directory centrale, nell'ordine, letti dai byte senza
+/// passare dall'indice di `zip` (APPNOTE 4.3.12, 4.3.14–16).
+fn central_names(bytes: &[u8], limits: &Limits) -> Result<Vec<String>, InventoryError> {
+    let broken = |what: &str| InventoryError::Zip(format!("central directory: {what}"));
+    // La fine della directory centrale sta negli ultimi 22 + 65 535 byte.
+    let floor = bytes.len().saturating_sub(22 + 0xffff);
+    let eocd = (floor..=bytes.len().saturating_sub(22))
+        .rev()
+        .find(|at| bytes[*at..].starts_with(&[0x50, 0x4b, 0x05, 0x06]))
+        .ok_or_else(|| broken("no end record"))?;
+    let mut count = le16(bytes, eocd + 10).ok_or_else(|| broken("short end record"))?;
+    let mut offset = le32(bytes, eocd + 16).ok_or_else(|| broken("short end record"))?;
+    if count == 0xffff || offset == 0xffff_ffff {
+        // ZIP64: il localizzatore precede la fine classica.
+        let locator = eocd
+            .checked_sub(20)
+            .filter(|at| bytes[*at..].starts_with(&[0x50, 0x4b, 0x06, 0x07]))
+            .ok_or_else(|| broken("no zip64 locator"))?;
+        let record =
+            le64(bytes, locator + 8).ok_or_else(|| broken("short zip64 locator"))? as usize;
+        if !bytes
+            .get(record..)
+            .is_some_and(|b| b.starts_with(&[0x50, 0x4b, 0x06, 0x06]))
+        {
+            return Err(broken("no zip64 end record"));
+        }
+        count = le64(bytes, record + 32).ok_or_else(|| broken("short zip64 end record"))?;
+        offset = le64(bytes, record + 48).ok_or_else(|| broken("short zip64 end record"))?;
+    }
+    if count > limits.entries as u64 {
+        return Err(InventoryError::Limit("zip entries"));
+    }
+    let mut at = usize::try_from(offset).map_err(|_| broken("offset"))?;
+    let mut names = Vec::new();
+    for _ in 0..count {
+        if !bytes
+            .get(at..)
+            .is_some_and(|b| b.starts_with(&[0x50, 0x4b, 0x01, 0x02]))
+        {
+            return Err(broken("entry signature"));
+        }
+        let lengths = (
+            le16(bytes, at + 28),
+            le16(bytes, at + 30),
+            le16(bytes, at + 32),
+        );
+        let (Some(name), Some(extra), Some(comment)) = lengths else {
+            return Err(broken("short entry"));
+        };
+        let (name, extra, comment) = (name as usize, extra as usize, comment as usize);
+        let raw = bytes
+            .get(at + 46..at + 46 + name)
+            .ok_or_else(|| broken("short entry"))?;
+        names.push(String::from_utf8_lossy(raw).into_owned());
+        at += 46 + name + extra + comment;
+    }
+    Ok(names)
 }
 
 /// I tipi di contenuto del pacchetto (`[Content_Types].xml`).
@@ -972,6 +1053,17 @@ mod tests {
         let ok = format!(r#"<w:document {W}><w:body><w:p/></w:body></w:document>"#);
         let ok = inventory(&docx(&ok, &rels(""), &[])).unwrap();
         assert!(!open_differences(&ok, &a).is_empty());
+    }
+
+    /// Due voci con lo stesso nome, che l'indice di `zip` riduce a una: il
+    /// file del corpus è scritto a mano proprio per questo.
+    #[test]
+    fn due_voci_omonime_sono_un_errore() {
+        let bytes = include_bytes!("../tests/corpus/docx/ostile-voci-duplicate.docx");
+        assert!(matches!(
+            inventory(bytes),
+            Err(InventoryError::Zip(message)) if message.contains("duplicate entry word/document.xml")
+        ));
     }
 
     #[test]

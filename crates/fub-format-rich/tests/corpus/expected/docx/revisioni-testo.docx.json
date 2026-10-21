@@ -1,0 +1,51 @@
+{
+  "file": "docx/revisioni-testo.docx",
+  "sha256": "953a80df19a5e8026ec747412fe523d46d6bc47288c8631c38575407d02c78ce",
+  "open": {
+    "readonly": "codec",
+    "projection": "4013551768d341c6ed862fae068bb2fcfc2a93f5b3f66a4fd89b1e6568df7f00",
+    "blocks": 5,
+    "comments": 0
+  },
+  "preservation": [
+    "differenze all'apertura: 4",
+    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w: 1 → 0"
+  ],
+  "model": {
+    "outline": [
+      "1 Bozza con revisioni"
+    ],
+    "links": [],
+    "text": "26b2decc92cc2374222e36ac375bf2425372b7006f7b78cc4cbae711fba64253",
+    "words": 16
+  },
+  "export": {
+    "html": [
+      "la copia HTML non porta: 3 parole su 16, 17 caratteri in grassetto, 4 revisioni tracciate"
+    ],
+    "txt": [
+      "la copia Testo semplice non porta: 3 parole su 16, 1 titolo, 17 caratteri in grassetto, 4 revisioni tracciate"
+    ],
+    "latex": [
+      "la copia LaTeX non porta: 3 parole su 16, 17 caratteri in grassetto, 4 revisioni tracciate"
+    ],
+    "rtf": [
+      "la copia RTF non porta: 17 caratteri in grassetto"
+    ],
+    "odt": [
+      "la copia OpenDocument non porta: 17 caratteri in grassetto"
+    ],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly"
+  }
+}

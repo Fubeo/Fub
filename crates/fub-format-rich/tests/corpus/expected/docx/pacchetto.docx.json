@@ -1,0 +1,44 @@
+{
+  "file": "docx/pacchetto.docx",
+  "sha256": "50b36eec66e72cbb5068788957cb61c3ffd058f5baf6db73ecabc2f61617f92e",
+  "open": {
+    "readonly": "codec",
+    "projection": "226139128dd1f861a69c9a9bc07457fb4f46b281c913b8b42ccdd36d068ac613",
+    "blocks": 1,
+    "comments": 0
+  },
+  "preservation": [
+    "differenze all'apertura: 5",
+    "  extended-properties: <{http://schemas.openxmlformats.org/officeDocument/2006/extended-properties}Pages>: 1 → 0",
+    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w: 1 → 0"
+  ],
+  "model": {
+    "outline": [],
+    "links": [
+      "Url(\"https://example.org/prova\")"
+    ],
+    "text": "467f68c9484cd387257e3bb9af3233f4d49ca22e97c9666e09418a99c2285033",
+    "words": 3
+  },
+  "export": {
+    "html": [],
+    "txt": [
+      "la copia Testo semplice non porta: 1 link"
+    ],
+    "latex": [],
+    "rtf": [],
+    "odt": [],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly"
+  }
+}

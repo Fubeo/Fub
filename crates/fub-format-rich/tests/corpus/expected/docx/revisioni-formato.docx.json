@@ -1,0 +1,49 @@
+{
+  "file": "docx/revisioni-formato.docx",
+  "sha256": "bc5cb0c4f496b7271a100b536567caeca45fa579505ad6c7753e055f467833ff",
+  "open": {
+    "readonly": "revisions",
+    "projection": "0c7df1a765ae5d7c542743756fd177f11fe78321167d812d250f32b396cf9d48",
+    "blocks": 2,
+    "comments": 0
+  },
+  "preservation": [
+    "differenze all'apertura: 4",
+    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w: 1 → 0"
+  ],
+  "model": {
+    "outline": [],
+    "links": [],
+    "text": "201660e77d5847ec24bcf8dc25b80e75e56c6de23bcec5273be8902f96807859",
+    "words": 5
+  },
+  "export": {
+    "html": [
+      "la copia HTML non porta: 1 revisione tracciata"
+    ],
+    "txt": [
+      "la copia Testo semplice non porta: 19 caratteri in grassetto, 1 revisione tracciata"
+    ],
+    "latex": [
+      "la copia LaTeX non porta: 1 revisione tracciata"
+    ],
+    "rtf": [
+      "la copia RTF non porta: 1 revisione tracciata"
+    ],
+    "odt": [
+      "la copia OpenDocument non porta: 1 revisione tracciata"
+    ],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly"
+  }
+}

@@ -1,0 +1,190 @@
+# Il corpus dei documenti di videoscrittura: una voce per file.
+#
+# Ogni file è costruito apposta da `examples/genera_corpus.rs` a partire dalle
+# specifiche, con autori e testi di prova. Nessuno è prodotto da Word,
+# LibreOffice, Google Docs o da altri generatori: le righe della matrice che li
+# chiedono (`matrice`) restano scoperte finché qualcuno non aggiunge quei file
+# (vedi `README.md`).
+#
+# Chiavi: path, origine, programma, licenza (CC0-1.0 o MIT OR Apache-2.0),
+# matrice (la riga della matrice del piano), esercita, atteso.
+
+[[file]]
+path = "docx/stili-elenchi-tabelle.docx"
+origine = "costruito a mano da ECMA-376"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Word moderno"
+esercita = "stili, elenco puntato, tabella con celle unite in larghezza e in altezza, intestazione con PAGE, nota a piè di pagina, due sezioni di cui una orizzontale"
+atteso = "modificabile"
+
+[[file]]
+path = "docx/revisioni-testo.docx"
+origine = "costruito a mano da ECMA-376"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Revisioni"
+esercita = "inserimento, eliminazione e spostamento tracciati nel corpo, registrazione attiva"
+atteso = "modificabile, con le revisioni mostrate"
+
+[[file]]
+path = "docx/revisioni-formato.docx"
+origine = "costruito a mano da ECMA-376"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Revisioni"
+esercita = "modifica di formato tracciata (w:rPrChange)"
+atteso = "sola lettura: revisions"
+
+[[file]]
+path = "docx/commenti.docx"
+origine = "costruito a mano da ECMA-376 e MS-DOCX"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Commenti"
+esercita = "commenti con una risposta e uno risolto, commentsExtended e commentsIds"
+atteso = "modificabile"
+
+[[file]]
+path = "docx/oggetti.docx"
+origine = "costruito a mano da ECMA-376"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Oggetti"
+esercita = "immagine in riga e ancorata, casella di testo DrawingML con ripiego VML, equazione OMML"
+atteso = "modificabile"
+
+[[file]]
+path = "docx/altchunk.docx"
+origine = "costruito a mano da ECMA-376"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Contenuto importato"
+esercita = "w:altChunk verso una parte HTML"
+atteso = "sola lettura: codec"
+
+[[file]]
+path = "docx/scritture.docx"
+origine = "costruito a mano da ECMA-376"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Scritture"
+esercita = "eastAsianLayout, ruby, ebraico e arabo da destra a sinistra, sezione con testo verticale"
+atteso = "da misurare: il motore di oggi perde eastAsianLayout"
+
+[[file]]
+path = "docx/controlli.docx"
+origine = "costruito a mano da ECMA-376"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Controlli"
+esercita = "content control di blocco con due paragrafi, content control in riga, campo di modulo legacy FORMTEXT"
+atteso = "modificabile"
+
+[[file]]
+path = "docx/pacchetto.docx"
+origine = "costruito a mano da ECMA-376"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Pacchetto"
+esercita = "proprietà principali, estese e personalizzate, parte custom XML con le sue proprietà, collegamento esterno"
+atteso = "modificabile"
+
+[[file]]
+path = "docx/protetto.docx"
+origine = "costruito a mano da ECMA-376"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Protezione"
+esercita = "documentProtection in sola lettura"
+atteso = "sola lettura: protected"
+
+[[file]]
+path = "docx/ostile-troncato.docx"
+origine = "metà dei byte di stili-elenchi-tabelle.docx"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Ostili"
+esercita = "ZIP troncato"
+atteso = "errore del codec"
+
+[[file]]
+path = "docx/ostile-voci-duplicate.docx"
+origine = "ZIP scritto a mano"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Ostili"
+esercita = "due voci word/document.xml con testi diversi"
+atteso = "errore del codec"
+
+[[file]]
+path = "docx/ostile-xml-malformato.docx"
+origine = "costruito a mano"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Ostili"
+esercita = "document.xml con un elemento non chiuso"
+atteso = "errore del codec"
+
+[[file]]
+path = "docx/ostile-profondo.docx"
+origine = "costruito a mano"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Ostili"
+esercita = "2048 content control annidati"
+atteso = "errore o sola lettura, senza panic"
+
+[[file]]
+path = "docx/ostile-dimensione-falsa.docx"
+origine = "costruito a mano"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Ostili"
+esercita = "una parte che si decomprime a 32 MiB mentre lo ZIP dichiara 64 byte"
+atteso = "un esito o un errore, senza fidarsi della dimensione dichiarata"
+
+[[file]]
+path = "odt/semplice.odt"
+origine = "costruito a mano da ODF 1.3"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "OpenDocument"
+esercita = "titolo, nota, stile automatico, tabella, sezione"
+atteso = "modificabile"
+
+[[file]]
+path = "rtf/semplice.rtf"
+origine = "scritto a mano da RTF 1.9"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "RTF"
+esercita = "titolo, enfasi, colore, caratteri accentati in cp1252"
+atteso = "sola lettura: import"
+
+[[file]]
+path = "rtf/tabella.rtf"
+origine = "scritto a mano da RTF 1.9"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "RTF"
+esercita = "tabella di due righe"
+atteso = "sola lettura: import"
+
+[[file]]
+path = "doc/semplice.doc"
+origine = "costruito a mano da MS-DOC"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Word 97-2003"
+esercita = "FIB minima, un pezzo di testo UTF-16, tabella dei pezzi"
+atteso = "sola lettura: import"
+
+[[file]]
+path = "doc/cifrato.doc"
+origine = "costruito a mano da MS-OFFCRYPTO"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Word 97-2003"
+esercita = "contenitore OLE con EncryptionInfo ed EncryptedPackage"
+atteso = "errore: encrypted"

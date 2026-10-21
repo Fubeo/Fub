@@ -1,0 +1,8 @@
+{
+  "file": "doc/cifrato.doc",
+  "sha256": "92de935e53e5bc0c8cb4fedfe918ef806b33fc338bd0f827f46a463365a9fad8",
+  "open": {
+    "error": "encrypted",
+    "message": "rich document is encrypted"
+  }
+}

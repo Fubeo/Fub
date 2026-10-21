@@ -1,0 +1,46 @@
+{
+  "file": "docx/scritture.docx",
+  "sha256": "fb3a81f11a5b00f3a34d68592e94a2c0d1513a901931eea8f25277fa88d0d215",
+  "open": {
+    "readonly": "codec",
+    "projection": "f43ce6ef213a9c3832d5c07abd353d16eba1fe798cec06169882e475639e6dde",
+    "blocks": 4,
+    "comments": 0
+  },
+  "preservation": [
+    "differenze all'apertura: 11",
+    "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsianLayout>: 1 → 0",
+    "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang>: 3 → 2",
+    "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts>: 1 → 0",
+    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
+    "  document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsianLayout @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}combine: 1 → 0",
+    "  document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsianLayout @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}id: 1 → 0",
+    "  document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia: 1 → 0",
+    "  document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hint: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w: 1 → 0"
+  ],
+  "model": {
+    "outline": [],
+    "links": [],
+    "text": "68757b8eb605f99ec06830dafb174da2bbc3b72d42f747e9b6ef3e3afe34ed18",
+    "words": 6
+  },
+  "export": {
+    "html": [],
+    "txt": [],
+    "latex": [],
+    "rtf": [],
+    "odt": [],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly"
+  }
+}

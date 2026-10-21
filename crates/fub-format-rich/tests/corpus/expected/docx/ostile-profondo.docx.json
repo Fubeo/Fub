@@ -1,0 +1,8 @@
+{
+  "file": "docx/ostile-profondo.docx",
+  "sha256": "332625ce01b2a40ecc4b34b71e42a2a5cba443fa861c552384c6bc1876499c4f",
+  "open": {
+    "error": "codec",
+    "message": "rich codec: limit exceeded: XML nesting too deep"
+  }
+}

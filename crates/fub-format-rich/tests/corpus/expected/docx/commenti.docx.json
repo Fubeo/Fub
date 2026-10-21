@@ -1,0 +1,51 @@
+{
+  "file": "docx/commenti.docx",
+  "sha256": "7845e03dad2457342ce1f4b6e4b6d94fbb273c3c9b1b54d21f1034e3dc91560c",
+  "open": {
+    "readonly": "codec",
+    "projection": "9676a74af774e16ebbabcb458f41799124fd17766a5b4107ea4fad54c6832476",
+    "blocks": 2,
+    "comments": 3
+  },
+  "preservation": [
+    "differenze all'apertura: 6",
+    "  comments: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}annotationRef>: 3 → 0",
+    "  comments: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}r>: 6 → 3",
+    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w: 1 → 0"
+  ],
+  "model": {
+    "outline": [],
+    "links": [],
+    "text": "ff423c4d89728ef7739e8f2f219aae6a7f0db1a34f93ab99e0eeccc28183c858",
+    "words": 7
+  },
+  "export": {
+    "html": [
+      "la copia HTML non porta: 3 commenti"
+    ],
+    "txt": [
+      "la copia Testo semplice non porta: 3 commenti"
+    ],
+    "latex": [
+      "la copia LaTeX non porta: 3 commenti"
+    ],
+    "rtf": [
+      "la copia RTF non porta: 3 commenti"
+    ],
+    "odt": [
+      "la copia OpenDocument non porta: 3 commenti"
+    ],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly"
+  }
+}

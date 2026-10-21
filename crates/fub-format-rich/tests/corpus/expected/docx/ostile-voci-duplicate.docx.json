@@ -1,0 +1,35 @@
+{
+  "file": "docx/ostile-voci-duplicate.docx",
+  "sha256": "95103d6f590ef4e908fbcc6e7b0ce20d70a265a7dffffe2b0a25ca6abde0a4b4",
+  "open": {
+    "readonly": "codec",
+    "projection": "37fa44b3a0ae63220a8adfb296ae129eb20e3bc3f9c588e4dce2a22573cb3b60",
+    "blocks": 1,
+    "comments": 0
+  },
+  "preservation": [
+    "rich codec: inventory: zip: duplicate entry word/document.xml"
+  ],
+  "model": {
+    "outline": [],
+    "links": [],
+    "text": "7916a79b5a422b93d0e6f33a120b59e0896dc161ba34142391707e918a7bf55f",
+    "words": 3
+  },
+  "export": {
+    "html": [],
+    "txt": [],
+    "latex": [],
+    "rtf": [],
+    "odt": [],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly"
+  }
+}

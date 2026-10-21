@@ -1,0 +1,35 @@
+{
+  "file": "docx/ostile-dimensione-falsa.docx",
+  "sha256": "e8b3848fd75260064e391824cf5afd389f9e05f75fa12b8347380fdfbd71b673",
+  "open": {
+    "readonly": "codec",
+    "projection": "2d82d8ea22f32a77d6b7a630dde017408912428510e2a99863550c99bb83b752",
+    "blocks": 1,
+    "comments": 0
+  },
+  "preservation": [
+    "rich codec: inventory: zip: File is larger than its declared uncompressed size"
+  ],
+  "model": {
+    "outline": [],
+    "links": [],
+    "text": "1d07a3dd810dc3ac8715abfb5c5f3031530172ba311c21c838b1cf769e890723",
+    "words": 3
+  },
+  "export": {
+    "html": [],
+    "txt": [],
+    "latex": [],
+    "rtf": [],
+    "odt": [],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly"
+  }
+}

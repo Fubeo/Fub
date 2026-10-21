@@ -1,0 +1,8 @@
+{
+  "file": "docx/ostile-troncato.docx",
+  "sha256": "b6bfa76ff7b5d5ebb71d137a9754dd79f18c3919001909f9abca314a19a72bef",
+  "open": {
+    "error": "codec",
+    "message": "rich codec: not a valid zip package: invalid Zip archive: Could not find EOCD"
+  }
+}

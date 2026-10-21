@@ -1,0 +1,54 @@
+{
+  "file": "docx/stili-elenchi-tabelle.docx",
+  "sha256": "c72ad55224f314f336eb42ca2fc6c4ab7ac7686f3e3b6e55879809116bf16e6b",
+  "open": {
+    "readonly": "codec",
+    "projection": "8ef0e40d49444fbadfa2e79ed7a156ace6daca133a014cd0d91b1df39ff62d5b",
+    "blocks": 8,
+    "comments": 0
+  },
+  "preservation": [
+    "differenze all'apertura: 6",
+    "  header: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fldSimple>: 1 → 0",
+    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
+    "  header: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}fldSimple @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}instr: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w: 1 → 0"
+  ],
+  "model": {
+    "outline": [
+      "1 Relazione di prova",
+      "2 Una sezione orizzontale"
+    ],
+    "links": [],
+    "text": "90a814e05cf3e73699918d776dc440f2cf22caa7945ab6e419f57d036959f331",
+    "words": 34
+  },
+  "export": {
+    "html": [
+      "la copia HTML non porta: 15 caratteri in grassetto su 37, 1 nota a piè di pagina, 1 intestazione o piè di pagina, 1 campo"
+    ],
+    "txt": [
+      "la copia Testo semplice non porta: 2 titoli, 2 voci d'elenco, 1 tabella, 37 caratteri in grassetto, 1 nota a piè di pagina, 1 intestazione o piè di pagina, 1 campo"
+    ],
+    "latex": [
+      "la copia LaTeX non porta: 37 caratteri in grassetto, 1 nota a piè di pagina, 1 intestazione o piè di pagina, 1 campo"
+    ],
+    "rtf": [
+      "la copia RTF non porta: 15 caratteri in grassetto su 37, 1 nota a piè di pagina, 1 intestazione o piè di pagina, 1 campo"
+    ],
+    "odt": [
+      "la copia OpenDocument non porta: 37 caratteri in grassetto, 1 nota a piè di pagina, 1 intestazione o piè di pagina, 1 campo"
+    ],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly"
+  }
+}

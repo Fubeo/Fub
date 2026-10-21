@@ -39,3 +39,11 @@ apps/client/src/__fixtures__/ink-shapes/sintetico-*.svg linguist-generated
 # toglie il dubbio a un PDF che per caso non avesse un byte nullo.
 crates/fub-features/fonts/*.ttf -text
 crates/fub-features/tests/baselines/draw/* -text
+
+# I file del corpus dei documenti di videoscrittura (`fub-format-rich`, test
+# `corpus`) sono byte con la loro impronta nei risultati attesi: anche un RTF
+# resta com'è.
+crates/fub-format-rich/tests/corpus/docx/** -text
+crates/fub-format-rich/tests/corpus/odt/** -text
+crates/fub-format-rich/tests/corpus/rtf/** -text
+crates/fub-format-rich/tests/corpus/doc/** -text

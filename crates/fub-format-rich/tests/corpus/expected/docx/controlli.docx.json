@@ -1,0 +1,49 @@
+{
+  "file": "docx/controlli.docx",
+  "sha256": "1be323709ba4c37d9cd6e4dbd3c8f21d652c39f0c36e9dc4fe6421a3a91f9393",
+  "open": {
+    "readonly": "codec",
+    "projection": "a7a604c3496d98318e266d0d3935247f36da461540683ba7ecc82bd837559c16",
+    "blocks": 5,
+    "comments": 0
+  },
+  "preservation": [
+    "differenze all'apertura: 4",
+    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w: 1 → 0"
+  ],
+  "model": {
+    "outline": [],
+    "links": [],
+    "text": "79ae8c3b3291a60366bd24a0be67246b5d2fd1bd0f61581bce7cd46138996544",
+    "words": 15
+  },
+  "export": {
+    "html": [
+      "la copia HTML non porta: 1 campo"
+    ],
+    "txt": [
+      "la copia Testo semplice non porta: 1 campo"
+    ],
+    "latex": [
+      "la copia LaTeX non porta: 1 campo"
+    ],
+    "rtf": [
+      "la copia RTF non porta: 1 campo"
+    ],
+    "odt": [
+      "la copia OpenDocument non porta: 1 campo"
+    ],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly"
+  }
+}

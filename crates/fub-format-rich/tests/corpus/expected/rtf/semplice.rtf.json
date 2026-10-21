@@ -1,0 +1,46 @@
+{
+  "file": "rtf/semplice.rtf",
+  "sha256": "73b19d01d64d5c64ef6a6cfa79dd2e8f44492d2535cd65b28659a8e5b081d910",
+  "open": {
+    "readonly": "import",
+    "projection": "5e52eb5021a99f2421877c511136c1981249d79930189e603286db147a04caac",
+    "blocks": 3,
+    "comments": 0
+  },
+  "model": {
+    "outline": [],
+    "links": [],
+    "text": "07e92c5fab6afc796210b59fa96eeae00ea8386158a9a4815a5c4340e709ddfb",
+    "words": 16
+  },
+  "export": {
+    "html": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ],
+    "txt": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia Testo semplice non porta: 23 caratteri in grassetto, 7 caratteri in corsivo"
+    ],
+    "latex": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia LaTeX non porta: 1 parola su 16"
+    ],
+    "rtf": {
+      "error": "invalid arguments: nothing to export as RTF: no selected document is a word-processing document in another format"
+    },
+    "odt": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ],
+    "wordxml": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ]
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly"
+  }
+}

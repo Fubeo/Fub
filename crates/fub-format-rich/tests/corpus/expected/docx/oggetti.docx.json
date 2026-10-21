@@ -1,0 +1,63 @@
+{
+  "file": "docx/oggetti.docx",
+  "sha256": "4402bd92ff40071e3fbabf96e84c58ae5badbc96f82374417c105ce92a193021",
+  "open": {
+    "readonly": "codec",
+    "projection": "d7883bf2e12c7a2f03f6f7b487bc44f3afaa50f35988ff0d24a56c09973f3346",
+    "blocks": 4,
+    "comments": 0
+  },
+  "preservation": [
+    "differenze all'apertura: 18",
+    "  document: <{http://schemas.openxmlformats.org/markup-compatibility/2006}AlternateContent>: 1 → 0",
+    "  document: <{http://schemas.openxmlformats.org/markup-compatibility/2006}Choice>: 1 → 0",
+    "  document: <{http://schemas.openxmlformats.org/markup-compatibility/2006}Fallback>: 1 → 0",
+    "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p>: 6 → 5",
+    "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}pict>: 1 → 0",
+    "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}r>: 8 → 7",
+    "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t>: 5 → 4",
+    "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}txbxContent>: 2 → 1",
+    "  document: <{urn:schemas-microsoft-com:vml}shape>: 1 → 0",
+    "  document: <{urn:schemas-microsoft-com:vml}textbox>: 1 → 0",
+    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
+    "  document: {http://schemas.openxmlformats.org/markup-compatibility/2006}Choice @{}Requires: 1 → 0",
+    "  document: {urn:schemas-microsoft-com:vml}shape @{}id: 1 → 0",
+    "  document: {urn:schemas-microsoft-com:vml}shape @{}style: 1 → 0",
+    "  document: {urn:schemas-microsoft-com:vml}shape @{}type: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type: 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w: 1 → 0"
+  ],
+  "model": {
+    "outline": [],
+    "links": [],
+    "text": "daf41ed03de65f984b9d8bfed1c1ec5790f5af865095524a45144ba0cb41bff4",
+    "words": 6
+  },
+  "export": {
+    "html": [
+      "la copia HTML non porta: 1 forma o casella di testo"
+    ],
+    "txt": [
+      "la copia Testo semplice non porta: 2 immagini, 1 forma o casella di testo, 1 equazione"
+    ],
+    "latex": [
+      "la copia LaTeX non porta: 2 immagini, 1 forma o casella di testo"
+    ],
+    "rtf": [
+      "la copia RTF non porta: 1 forma o casella di testo, 1 equazione"
+    ],
+    "odt": [
+      "la copia OpenDocument non porta: 1 forma o casella di testo, 1 equazione"
+    ],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly"
+  }
+}

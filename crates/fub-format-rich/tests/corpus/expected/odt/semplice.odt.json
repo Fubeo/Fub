@@ -1,0 +1,62 @@
+{
+  "file": "odt/semplice.odt",
+  "sha256": "c6d46f25a8dda1f39411b763fd20c684c294dbae0fe38feef4a2271a987fbb8c",
+  "open": {
+    "readonly": null,
+    "projection": "b166214f6cdade3ce949a5e664266b907218f19f3dbe7b98cd6de4fa8c4c8379",
+    "blocks": 5,
+    "comments": 0
+  },
+  "model": {
+    "outline": [
+      "1 Verbale di prova"
+    ],
+    "links": [],
+    "text": "0733ddc89fb8425648a88a835248767953c3cd8cfdc5c9ef1d142547ebb5db8c",
+    "words": 15
+  },
+  "export": {
+    "html": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ],
+    "txt": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia Testo semplice non porta: 1 titolo, 1 tabella, 12 caratteri in grassetto"
+    ],
+    "latex": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ],
+    "rtf": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ],
+    "odt": {
+      "error": "invalid arguments: nothing to export as OpenDocument: no selected document is a word-processing document in another format"
+    },
+    "wordxml": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ]
+  },
+  "edits": {
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "error": "codec",
+      "message": "rich codec: odt: comments are not written"
+    },
+    "E5": "n/a"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "file": "docx/ostile-xml-malformato.docx",
+  "sha256": "dc8efe579587e1b6f7ae1db6f564aa0c132908ade2436977284562b192b3f89b",
+  "open": {
+    "readonly": "codec",
+    "projection": "36749c88092364f8730bc720ba5c9ba47fa5dae0099f458a2161fadeef524b7b",
+    "blocks": 2,
+    "comments": 0
+  },
+  "preservation": [
+    "rich codec: inventory: xml of word/document.xml: ill-formed document: expected `</w:t>`, but `</w:body>` was found"
+  ],
+  "model": {
+    "outline": [],
+    "links": [],
+    "text": "5482b4b54621e38af2fa3e3c4b1d17560f4eda43ef1b173f18bb04a15ae9dded",
+    "words": 4
+  },
+  "export": {
+    "html": [],
+    "txt": [],
+    "latex": [],
+    "rtf": [],
+    "odt": [],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly"
+  }
+}
