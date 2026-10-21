@@ -37,8 +37,10 @@ mod blob;
 pub mod export;
 mod fidelity;
 mod fresh;
+mod inventory;
 mod model;
 mod odt;
+pub mod preservation;
 pub mod projection;
 mod running;
 pub mod session;
@@ -142,9 +144,11 @@ impl Codec {
         }
     }
 
-    /// Se il documento letto descrive tutto il file. Il codec Word lo dimostra
-    /// a ogni apertura rileggendo (vedi [`session`]); un importatore non lo
-    /// promette mai.
+    /// Se il codec *può* riscrivere il file senza perderne niente. Non è una
+    /// garanzia: il codec Word lo dimostra file per file, a ogni apertura e a
+    /// ogni salvataggio, rileggendo il modello e misurando i byte del
+    /// pacchetto con il controllo di Fub ([`preservation`], vedi [`session`]);
+    /// un importatore non lo promette mai.
     pub fn lossless(self) -> bool {
         matches!(self, Codec::Docx)
     }

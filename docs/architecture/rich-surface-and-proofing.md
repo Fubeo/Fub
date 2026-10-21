@@ -58,7 +58,19 @@ l'IPC.
   di un paragrafo di corpo (`s`). Il carattere del documento (`f` in testa)
   e la galleria degli stili (`styles`) sono suggerimenti di resa che il
   ritorno ignora. `BlockWriter` riscrive
-  soltanto i blocchi cambiati. Il filtro di ciò che si incolla
+  soltanto i blocchi cambiati. Per un `.docx` la rilettura del modello non
+  basta, perché un lettore non vede ciò che lui stesso salta: il controllo di
+  Fub (`fub-format-rich/src/preservation.rs`, sull'inventario di
+  `inventory.rs`) conta elementi e attributi per nome espanso e classe di
+  parte, relazioni con la loro destinazione e parti copiate per impronta
+  sha256. All'apertura la prova a vuoto del codec non deve perdere niente del
+  file, altrimenti `codec`; a ogni salvataggio i blocchi del corpo che il
+  modello voluto ha uguali alla base (allineati per prefisso, suffisso e
+  sottosequenza comune; i figli di un content control di blocco contano uno
+  per uno) e le parti il cui dato non è cambiato devono uscire uguali alla
+  prova a vuoto della base, senza parti copiate in più e senza riferimenti
+  pendenti nuovi. Vede ciò che sparisce, non un valore che cambia; l'esempio
+  `misura` del crate stampa il resoconto per un file. Il filtro di ciò che si incolla
   (`editors/rich/paste.ts`) toglie i `k` che il documento non ha e i link non
   web; allineamento e disposizione di un paragrafo incollato restano.
 - `editors/rich/commands.ts` esegue le azioni dell'editor con gli id della

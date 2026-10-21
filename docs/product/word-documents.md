@@ -130,9 +130,16 @@ Un documento si apre **soltanto in lettura**, con il motivo in testa, quando
 ha modifiche di formato tracciate o revisioni fuori dal corpo (note,
 intestazioni, piè di pagina, commenti, caselle di testo), è protetto,
 oppure quando la
-superficie o il codec non saprebbero riscriverlo identico. Un documento cifrato
-o più grande di 256 MiB non si apre. Un salvataggio che non si rilegge uguale a
-ciò che si voleva scrivere non scrive, e il testo resta nel buffer.
+superficie o il codec non saprebbero riscriverlo identico. Per un `.docx` lo
+si misura sui byte del pacchetto, non soltanto sul modello: all'apertura Fub
+confronta il file con una riscrittura a vuoto del codec, e se questa perde un
+elemento, un attributo, una relazione o una parte copiata (per esempio un
+contenuto importato con `w:altChunk`) il documento si apre in sola lettura
+(motivo `codec`). Un documento cifrato o più grande di 256 MiB non si apre.
+Un salvataggio che non si rilegge uguale a ciò che si voleva scrivere non
+scrive, e il testo resta nel buffer; lo stesso vale per un salvataggio che
+cambierebbe un blocco o una parte che l'utente non ha toccato, che
+duplicherebbe un'immagine o lascerebbe un riferimento senza relazione.
 
 Limiti attuali:
 

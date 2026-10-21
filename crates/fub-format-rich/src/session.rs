@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use wordcraft_doc::{Document, RevisionKind};
 
 use crate::fidelity::{reads_back, revisions_outside_body, same};
+use crate::preservation;
 use crate::projection::{self, Projection};
 use crate::unproject::unproject;
 use crate::{Codec, RichError};
@@ -43,7 +44,10 @@ pub enum ReadOnly {
     Protected,
     /// Non torna identico dalla proiezione.
     Projection,
-    /// Non si rilegge identico dopo una scrittura del codec.
+    /// Il codec non lo riscriverebbe identico: il modello non si rilegge
+    /// uguale, oppure la prova a vuoto perde o aggiunge qualcosa nei byte del
+    /// pacchetto (un elemento, un attributo, una relazione, una parte copiata;
+    /// vedi [`crate::preservation`]).
     Codec,
     /// È stato letto da un importatore che non riporta il file intero.
     Import,
@@ -77,7 +81,7 @@ pub fn open(codec: Codec, bytes: &[u8]) -> Result<Opened, RichError> {
     let readonly = match policy(&normal) {
         Some(reason) => Some(reason),
         None if !codec.lossless() => Some(ReadOnly::Import),
-        None => fidelity(codec, &projection, &normal)?,
+        None => fidelity(codec, bytes, &projection, &normal)?,
     };
     projection.readonly = readonly;
     Ok(Opened {
@@ -115,6 +119,16 @@ pub fn save(codec: Codec, current: &[u8], json: &str) -> Result<Saved, RichError
     }
     let bytes = codec.write(&wanted)?;
     if !reads_back(&wanted, &normalized(&codec.read(&bytes)?)) {
+        return Err(RichError::Fidelity);
+    }
+    // I controlli di Fub sui byte: il file da sovrascrivere deve essere quello
+    // che il codec sa riscrivere, e i byte nuovi devono lasciare identico ciò
+    // che l'utente non ha toccato.
+    let dry = codec.write(&base)?;
+    if preservation::check_open(current, &dry).is_err() {
+        return Err(RichError::ReadOnly(ReadOnly::Codec));
+    }
+    if preservation::check_save(&dry, &bytes, &base, &wanted).is_err() {
         return Err(RichError::Fidelity);
     }
     Ok(Saved::Bytes(bytes))
@@ -159,6 +173,7 @@ fn policy(document: &Document) -> Option<ReadOnly> {
 /// della shell.
 fn fidelity(
     codec: Codec,
+    original: &[u8],
     projection: &Projection,
     document: &Document,
 ) -> Result<Option<ReadOnly>, RichError> {
@@ -166,11 +181,16 @@ fn fidelity(
     if unproject(&wire, document).ok().as_ref() != Some(document) {
         return Ok(Some(ReadOnly::Projection));
     }
-    let reread = codec
-        .write(document)
-        .and_then(|bytes| codec.read(&bytes))
-        .map(|d| normalized(&d));
+    let Ok(written) = codec.write(document) else {
+        return Ok(Some(ReadOnly::Codec));
+    };
+    let reread = codec.read(&written).map(|d| normalized(&d));
     if !reread.is_ok_and(|reread| reads_back(document, &reread)) {
+        return Ok(Some(ReadOnly::Codec));
+    }
+    // Il modello torna uguale; i byte devono dire che il modello descrive il
+    // file: ciò che il lettore ha saltato manca dalla prova a vuoto.
+    if preservation::check_open(original, &written).is_err() {
         return Ok(Some(ReadOnly::Codec));
     }
     Ok(None)

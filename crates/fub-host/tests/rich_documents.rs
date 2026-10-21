@@ -603,3 +603,79 @@ fn spento_il_bundle_il_comando_e_le_destinazioni_spariscono() {
         .unwrap();
     assert_eq!(texts(&Projection::from_json(&text).unwrap()), ["Word."]);
 }
+
+/// Il pacchetto `bytes` con queste voci in più.
+fn with_entries(bytes: &[u8], extra: &[(&str, &[u8])]) -> Vec<u8> {
+    use std::io::{Read, Write};
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for index in 0..archive.len() {
+        let mut file = archive.by_index(index).unwrap();
+        let entry = file.name().unwrap().to_string();
+        let mut old = Vec::new();
+        file.read_to_end(&mut old).unwrap();
+        writer
+            .start_file(entry.as_str(), zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(&old).unwrap();
+    }
+    for (name, data) in extra {
+        writer
+            .start_file(*name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        writer.write_all(data).unwrap();
+    }
+    writer.finish().unwrap().into_inner()
+}
+
+/// Un contenuto importato da un'altra parte (`w:altChunk`) che il codec
+/// salterebbe: il controllo dei byte di Fub apre il documento in sola lettura
+/// con il motivo `codec`, e la scrittura è rifiutata anche a chi toglie il
+/// motivo dalla proiezione.
+#[test]
+fn un_docx_che_il_codec_perderebbe_si_legge_e_non_si_scrive() {
+    let vault = Vault::with_docx(&["Primo.", "Secondo."]);
+    let bytes = vault.on_disk();
+    let document = String::from_utf8(part(&bytes, "word/document.xml"))
+        .unwrap()
+        .replacen("</w:p>", r#"</w:p><w:altChunk r:id="rIdChunk"/>"#, 1);
+    // Il prefisso `r:` è dichiarato: il documento è ben formato, e la sola
+    // lettura viene dal contenuto che il codec salterebbe.
+    assert!(document.contains("altChunk") && document.contains("xmlns:r="));
+    let rels = String::from_utf8(part(&bytes, "word/_rels/document.xml.rels"))
+        .unwrap()
+        .replacen(
+            "</Relationships>",
+            r#"<Relationship Id="rIdChunk" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk" Target="chunk.html"/></Relationships>"#,
+            1,
+        );
+    let bytes = with_part(&bytes, "word/document.xml", document.as_bytes());
+    let bytes = with_part(&bytes, "word/_rels/document.xml.rels", rels.as_bytes());
+    let bytes = with_entries(
+        &bytes,
+        &[(
+            "word/chunk.html",
+            b"<html><body><p>Importato</p></body></html>",
+        )],
+    );
+    std::fs::write(vault.root.join("Lettera.docx"), &bytes).unwrap();
+    vault.host.wait_indexed(None).expect("indexed");
+
+    let (text, revision, _) = vault
+        .host
+        .read_document_with_format(None, &lettera())
+        .unwrap();
+    let mut projection = Projection::from_json(&text).unwrap();
+    assert_eq!(projection.readonly, Some(fub_format_rich::ReadOnly::Codec));
+
+    projection.readonly = None;
+    projection.blocks.push(paragraph("Aggiunto."));
+    let result = vault.host.write_document(
+        None,
+        &lettera(),
+        &projection.to_json().unwrap(),
+        WriteBase::DescendsFrom(revision),
+    );
+    assert_eq!(denied(result), "host.rich.readonly.codec");
+    assert_eq!(vault.on_disk(), bytes);
+}
