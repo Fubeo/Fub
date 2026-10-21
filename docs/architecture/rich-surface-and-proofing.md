@@ -110,7 +110,14 @@ l'IPC.
   che non si legge come flusso con i blocchi del modello apre in sola
   lettura. La prova a vuoto accettata si ricorda per l'impronta dei byte del file (il
   writer è deterministico, e il banco del corpus lo prova): il salvataggio
-  dopo l'apertura degli stessi byte non la rifà. Quando fuori dal corpo
+  dopo l'apertura degli stessi byte non la rifà. Se ne ricordano al più
+  otto, e quelle prima dell'ultima entro un peso di circa 350 MB: un documento
+  da centomila paragrafi ne tiene da solo più di 400 MB. Le misure che non si
+  parlano (i due inventari e i due flussi, la proiezione e la rilettura del
+  codec, l'innesto e la sua rilettura) corrono su due thread (`parallel.rs`);
+  all'apertura i byte si misurano soltanto dopo che la proiezione e la
+  rilettura hanno lasciato la memoria. Un documento da centomila paragrafi apre in meno di cinque secondi con un
+  picco di circa 1,3 GB, quasi tutto del modello del codec. Quando fuori dal corpo
   niente è cambiato, il salvataggio è un **innesto** (`graft.rs`,
   [0215](../decisions/0215-salvataggio-docx-per-innesto.md)): il file
   com'era, con le sole unità toccate del corpo prese dai byte del codec e i

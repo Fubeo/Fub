@@ -748,6 +748,8 @@ fn il_writer_è_deterministico() {
 /// ```text
 /// cargo test -p fub-format-rich --release --test corpus -- --ignored --nocapture tempi
 /// ```
+///
+/// `FUB_TEMPI_PARAGRAFI` dice quanti paragrafi ha il file grande (tremila).
 #[test]
 #[ignore]
 fn tempi() {
@@ -758,7 +760,14 @@ fn tempi() {
             (entry.path, bytes)
         })
         .collect();
-    files.push(("docx/grande-3000-paragrafi.docx".into(), large()));
+    let paragraphs = std::env::var("FUB_TEMPI_PARAGRAFI")
+        .ok()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(3000);
+    files.push((
+        format!("docx/grande-{paragraphs}-paragrafi.docx"),
+        large(paragraphs),
+    ));
     for (path, bytes) in files {
         let codec = codec_of(&path);
         let start = Instant::now();
@@ -794,9 +803,9 @@ fn tempi() {
     }
 }
 
-/// Un `.docx` grande: i paragrafi di `segni-di-word.docx` ripetuti fino a tremila,
-/// scritti dal salvataggio.
-fn large() -> Vec<u8> {
+/// Un `.docx` grande: i paragrafi di `segni-di-word.docx` ripetuti fino a
+/// `paragraphs`, scritti dal salvataggio.
+fn large(paragraphs: usize) -> Vec<u8> {
     let base = std::fs::read(corpus().join("docx/segni-di-word.docx")).unwrap();
     let opened = open(Codec::Docx, &base).unwrap();
     let mut projection = Projection::from_json(&opened.projection).unwrap();
@@ -812,7 +821,7 @@ fn large() -> Vec<u8> {
             _ => None,
         })
         .collect();
-    while projection.blocks.len() < 3000 {
+    while projection.blocks.len() < paragraphs {
         projection.blocks.extend(body.iter().cloned());
     }
     match save(Codec::Docx, &base, &projection.to_json().unwrap()).unwrap() {

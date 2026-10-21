@@ -49,9 +49,11 @@
 //! un limite superato, uno zip illeggibile o un XML malformato sono un
 //! [`InventoryError`], e chi chiama fallisce chiuso.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
+use std::fmt::Write as _;
 use std::io::{Cursor, Read};
+use std::sync::Arc;
 
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::ResolveResult;
@@ -107,34 +109,62 @@ impl fmt::Display for InventoryError {
     }
 }
 
+/// Un nome di una chiave. Un documento grande ripete pochi nomi milioni di
+/// volte: le chiavi li condividono ([`Names`]).
+pub(crate) type Name = Arc<str>;
+
+/// I nomi già visti da un inventario.
+#[derive(Default)]
+struct Names {
+    seen: HashSet<Name>,
+    buf: String,
+}
+
+impl Names {
+    fn get(&mut self, name: &str) -> Name {
+        if let Some(seen) = self.seen.get(name) {
+            return Arc::clone(seen);
+        }
+        let name: Name = Arc::from(name);
+        self.seen.insert(Arc::clone(&name));
+        name
+    }
+
+    /// Il nome espanso `{ns}name`.
+    fn expanded(&mut self, ns: &str, name: &str) -> Name {
+        let mut buf = std::mem::take(&mut self.buf);
+        buf.clear();
+        let _ = write!(buf, "{{{ns}}}{name}");
+        let out = self.get(&buf);
+        self.buf = buf;
+        out
+    }
+}
+
 /// Una cosa che il pacchetto contiene, e che si conta.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum Key {
     /// Un elemento, per classe della parte e nome espanso.
-    Element {
-        class: String,
-        ns: String,
-        name: String,
-    },
+    Element { class: Name, ns: Name, name: Name },
     /// Un attributo, per classe, elemento che lo porta, nome espanso e valore
     /// canonico ([`crate::canonical`]). Il valore di un riferimento a una
     /// relazione (`r:id`, `r:embed`) è la relazione stessa, tipo e
     /// destinazione: un codec che rinumera gli id non cambia la chiave, uno
     /// che punta altrove sì.
     Attribute {
-        class: String,
-        element: String,
-        ns: String,
-        name: String,
-        value: String,
+        class: Name,
+        element: Name,
+        ns: Name,
+        name: Name,
+        value: Name,
     },
     /// Il testo di un paragrafo (`w:p`, i soli `w:t`, `w:delText`, `m:t` e le
     /// istruzioni dei campi), o di un altro elemento che ne ha, per impronta.
     /// Il paragrafo e non il run: il codec unisce i run uguali.
     Text {
-        class: String,
-        element: String,
-        sha256: String,
+        class: Name,
+        element: Name,
+        sha256: Name,
     },
     /// Una relazione, per classe della sorgente, tipo e destinazione.
     Relationship {
@@ -272,6 +302,11 @@ pub(crate) struct Inventory {
 }
 
 impl Inventory {
+    /// Quante chiavi tiene, corpo compreso.
+    pub fn entries(&self) -> usize {
+        self.all.len() + self.body.iter().map(BTreeMap::len).sum::<usize>()
+    }
+
     /// Le chiavi del pacchetto fuori dal corpo del documento principale.
     pub fn outside_body(&self) -> Counts {
         let mut out = self.all.clone();
@@ -719,6 +754,26 @@ fn namespace(result: &ResolveResult<'_>) -> String {
     }
 }
 
+/// Lo spazio dei nomi di [`namespace`], fra i nomi già visti.
+fn namespace_in(names: &mut Names, result: &ResolveResult<'_>) -> Name {
+    match result {
+        ResolveResult::Bound(ns) => match std::str::from_utf8(ns.as_ref()) {
+            Ok(ns) => names.get(ns),
+            Err(_) => names.get(&namespace(result)),
+        },
+        ResolveResult::Unbound => names.get(""),
+        ResolveResult::Unknown(_) => names.get(&namespace(result)),
+    }
+}
+
+/// Il nome locale, fra i nomi già visti.
+fn local_in(names: &mut Names, local: &[u8]) -> Name {
+    match std::str::from_utf8(local) {
+        Ok(local) => names.get(local),
+        Err(_) => names.get(&String::from_utf8_lossy(local)),
+    }
+}
+
 /// Dove [`count_xml`] mette i conteggi di un elemento.
 #[derive(Clone, Copy)]
 enum Target {
@@ -755,8 +810,8 @@ pub(crate) const MARKERS: &[&str] = &[
 
 /// Un elemento aperto.
 struct Open {
-    ns: String,
-    name: String,
+    ns: Name,
+    name: Name,
     /// Il suo testo diretto.
     text: String,
     /// Una normalizzazione lo salta: il suo testo non conta.
@@ -803,7 +858,9 @@ fn count_xml(
     context: &Context<'_>,
     elements: &mut u64,
 ) -> Result<Parsed, InventoryError> {
-    let (part, class, limits) = (context.part, context.class, context.limits);
+    let (part, limits) = (context.part, context.limits);
+    let mut names = Names::default();
+    let class = names.get(context.class);
     let mut reader = NsReader::from_reader(bytes);
     reader.config_mut().check_end_names = true;
     let mut parsed = Parsed {
@@ -838,8 +895,8 @@ fn count_xml(
             .read_event_into(&mut buf)
             .map_err(|error| xml_error(part, error))?;
         let (start, empty) = match &event {
-            Event::Start(start) => (Some(start.clone().into_owned()), false),
-            Event::Empty(start) => (Some(start.clone().into_owned()), true),
+            Event::Start(start) => (Some(start), false),
+            Event::Empty(start) => (Some(start), true),
             Event::Text(text) => {
                 let text = text
                     .xml_content(quick_xml::XmlVersion::Implicit1_0)
@@ -889,7 +946,7 @@ fn count_xml(
                         put(&mut parsed, &mut pending, target, key);
                     }
                 }
-                let pair = (open.ns.as_str(), open.name.as_str());
+                let pair = (&*open.ns, &*open.name);
                 if context.main
                     && pair == (NS_W, "body")
                     && stack.len() == 1
@@ -902,14 +959,14 @@ fn count_xml(
                     parsed.body.push(Counts::new());
                     for key in [
                         Key::Element {
-                            class: class.to_string(),
-                            ns: NS_W.into(),
-                            name: "p".into(),
+                            class: Arc::clone(&class),
+                            ns: names.get(NS_W),
+                            name: names.get("p"),
                         },
                         Key::Text {
-                            class: class.to_string(),
-                            element: format!("{{{NS_W}}}p"),
-                            sha256: sha256("\u{0}".as_bytes()),
+                            class: Arc::clone(&class),
+                            element: names.expanded(NS_W, "p"),
+                            sha256: sha256("\u{0}".as_bytes()).into(),
                         },
                     ] {
                         put(&mut parsed, &mut pending, Target::Block, key);
@@ -936,17 +993,17 @@ fn count_xml(
                         paragraph.instructions.split_whitespace().collect();
                     let content = format!("{}\u{0}{}", paragraph.text, instructions.join(" "));
                     let key = Key::Text {
-                        class: class.to_string(),
-                        element: format!("{{{}}}{}", open.ns, open.name),
-                        sha256: sha256(content.as_bytes()),
+                        class: Arc::clone(&class),
+                        element: names.expanded(&open.ns, &open.name),
+                        sha256: sha256(content.as_bytes()).into(),
                     };
                     put(&mut parsed, &mut pending, target, key);
                 } else if !open.skipped && !open.text.trim().is_empty() {
                     let value = crate::canonical::value(&open.ns, &open.text);
                     let key = Key::Text {
-                        class: class.to_string(),
-                        element: format!("{{{}}}{}", open.ns, open.name),
-                        sha256: sha256(value.as_bytes()),
+                        class: Arc::clone(&class),
+                        element: names.expanded(&open.ns, &open.name),
+                        sha256: sha256(value.as_bytes()).into(),
                     };
                     put(&mut parsed, &mut pending, target, key);
                 }
@@ -991,16 +1048,16 @@ fn count_xml(
                 root = true;
             }
             let (ns, local) = reader.resolver().resolve_element(start.name());
-            let ns = namespace(&ns);
-            let mut name = String::from_utf8_lossy(local.as_ref()).into_owned();
-            let w = ns == NS_W;
+            let ns = namespace_in(&mut names, &ns);
+            let mut name = local_in(&mut names, local.as_ref());
+            let w = &*ns == NS_W;
             if let Some((what, left)) = stack
                 .last()
-                .filter(|parent| w && parent.ns == NS_W)
+                .filter(|parent| w && &*parent.ns == NS_W)
                 .and_then(|parent| side_element(&parent.name, &name))
             {
                 *parsed.normalized.entry(what).or_default() += 1;
-                name = left.to_string();
+                name = names.get(left);
             }
             let mut attributes = Vec::new();
             for attr in start.attributes() {
@@ -1011,15 +1068,14 @@ fn count_xml(
                 }
                 let (attr_ns, attr_local) = reader.resolver().resolve_attribute(qname);
                 let (attr_ns, attr_name) = (
-                    namespace(&attr_ns),
-                    String::from_utf8_lossy(attr_local.as_ref()).into_owned(),
+                    namespace_in(&mut names, &attr_ns),
+                    local_in(&mut names, attr_local.as_ref()),
                 );
                 let value = attr
                     .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                     .map_err(|error| xml_error(part, error))?
                     .into_owned();
-                if attr_ns == NS_MC && matches!(attr_name.as_str(), "Ignorable" | "MustUnderstand")
-                {
+                if &*attr_ns == NS_MC && matches!(&*attr_name, "Ignorable" | "MustUnderstand") {
                     // Un elenco di prefissi: conta lo spazio dei nomi di
                     // ognuno, perché il prefisso può cambiare e l'elenco può
                     // crescere senza perdita.
@@ -1036,7 +1092,7 @@ fn count_xml(
                     side_attribute(w, &name, &attr_ns, &attr_name, &value)
                 {
                     *parsed.normalized.entry(what).or_default() += 1;
-                    attributes.push((attr_ns, attr_name, value));
+                    attributes.push((attr_ns, names.get(&attr_name), value));
                     continue;
                 }
                 attributes.push((attr_ns, attr_name, value));
@@ -1057,17 +1113,17 @@ fn count_xml(
                 for (attr_ns, attr_name, value) in attributes {
                     if let Some(what) = skipped_attribute(&attr_ns, &attr_name) {
                         *parsed.normalized.entry(what).or_default() += 1;
-                    } else if attr_ns == NS_W && attr_name == "instr" {
+                    } else if &*attr_ns == NS_W && &*attr_name == "instr" {
                         paragraph.instructions.push_str(&value);
                         paragraph.instructions.push(' ');
                     } else {
                         let value = crate::canonical::value(&attr_ns, &value);
                         let key = Key::Attribute {
-                            class: class.to_string(),
-                            element: format!("{{{NS_W}}}fldChar"),
-                            ns: attr_ns,
-                            name: attr_name,
-                            value,
+                            class: Arc::clone(&class),
+                            element: names.expanded(NS_W, "fldChar"),
+                            ns: names.get(&attr_ns),
+                            name: names.get(&attr_name),
+                            value: names.get(&value),
                         };
                         put(&mut parsed, &mut pending, target, key);
                     }
@@ -1086,7 +1142,7 @@ fn count_xml(
                 buf.clear();
                 continue;
             }
-            if w && name == "p" && !empty {
+            if w && &*name == "p" && !empty {
                 paragraphs.push(Paragraph {
                     level,
                     text: String::new(),
@@ -1099,11 +1155,11 @@ fn count_xml(
             // è un blocco: resta con il resto del documento.
             let top = context.main
                 && level == 2
-                && stack[1].ns == NS_W
-                && stack[1].name == "body"
-                && stack[0].name == "document";
+                && &*stack[1].ns == NS_W
+                && &*stack[1].name == "body"
+                && &*stack[0].name == "document";
             if top || block_levels.last() == Some(&level) {
-                if w && name == "sdt" {
+                if w && &*name == "sdt" {
                     // Un content control di blocco (un sommario, un campo di
                     // un modulo) raggruppa più blocchi del modello: i blocchi
                     // sono i figli del suo `w:sdtContent`, e l'involucro va
@@ -1112,7 +1168,7 @@ fn count_xml(
                     if !empty {
                         sdt_levels.push(level);
                     }
-                } else if w && WRAPPERS.contains(&name.as_str()) {
+                } else if w && WRAPPERS.contains(&&*name) {
                     // Lo stesso per un contenitore trasparente: i suoi figli
                     // sono blocchi.
                     target = Target::Pending;
@@ -1121,40 +1177,40 @@ fn count_xml(
                         block_levels.push(level + 1);
                     }
                 } else if w
-                    && (MARKERS.contains(&name.as_str())
-                        || (!top && matches!(name.as_str(), "customXmlPr" | "smartTagPr")))
+                    && (MARKERS.contains(&&*name)
+                        || (!top && matches!(&*name, "customXmlPr" | "smartTagPr")))
                 {
                     target = Target::Pending;
-                } else if top && w && name == "sectPr" {
+                } else if top && w && &*name == "sectPr" {
                     target = Target::Outside;
                 } else {
                     parsed.body.push(std::mem::take(&mut pending));
                     target = Target::Block;
                 }
-                if top && !(w && (MARKERS.contains(&name.as_str()) || name == "sectPr")) {
-                    table = w && name == "tbl";
+                if top && !(w && (MARKERS.contains(&&*name) || &*name == "sectPr")) {
+                    table = w && &*name == "tbl";
                 }
             } else if level > 0 && sdt_levels.last() == Some(&(level - 1)) {
-                if w && name == "sdtContent" {
+                if w && &*name == "sdtContent" {
                     target = Target::Pending;
                     if !empty {
                         block_levels.push(level + 1);
                     }
-                } else if w && name == "sdtEndPr" && !parsed.body.is_empty() {
+                } else if w && &*name == "sdtEndPr" && !parsed.body.is_empty() {
                     target = Target::Block;
                 } else {
                     target = Target::Pending;
                 }
             }
-            let element = format!("{{{ns}}}{name}");
-            if w && name == "rPr" && !empty && level > 0 {
+            let element = names.expanded(&ns, &name);
+            if w && &*name == "rPr" && !empty && level > 0 {
                 let parent = &stack[level - 1];
-                if parent.ns == NS_W && parent.name == "r" {
+                if &*parent.ns == NS_W && &*parent.name == "r" {
                     run_props = Some(level);
                 }
             }
             let run_shape = paragraphs.last().is_some()
-                && ((w && RUN_SHAPE.contains(&name.as_str())) || run_props.is_some());
+                && ((w && RUN_SHAPE.contains(&&*name)) || run_props.is_some());
             let mut emit = |parsed: &mut Parsed, pending: &mut Counts, key: Key| match paragraphs
                 .last_mut()
                 .filter(|_| run_shape)
@@ -1173,9 +1229,9 @@ fn count_xml(
                     .all(|(attr_ns, attr_name, _)| skipped_attribute(attr_ns, attr_name).is_some())
             });
             let key = Key::Element {
-                class: class.to_string(),
-                ns,
-                name,
+                class: Arc::clone(&class),
+                ns: names.get(&ns),
+                name: names.get(&name),
             };
             match bare {
                 None => {
@@ -1207,7 +1263,7 @@ fn count_xml(
                 {
                     *parsed.normalized.entry(what).or_default() += 1;
                     kept
-                } else if attr_ns == NS_RELATIONSHIPS {
+                } else if &*attr_ns == NS_RELATIONSHIPS {
                     let described = context
                         .rels
                         .get(value.as_str())
@@ -1219,11 +1275,11 @@ fn count_xml(
                     crate::canonical::value(&attr_ns, &value)
                 };
                 let key = Key::Attribute {
-                    class: class.to_string(),
-                    element: element.clone(),
-                    ns: attr_ns,
-                    name: attr_name,
-                    value,
+                    class: Arc::clone(&class),
+                    element: Arc::clone(&element),
+                    ns: names.get(&attr_ns),
+                    name: names.get(&attr_name),
+                    value: names.get(&value),
                 };
                 emit(&mut parsed, &mut pending, key);
             }

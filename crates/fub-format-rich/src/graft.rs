@@ -54,6 +54,7 @@ use crate::flow::{Main, ScanError};
 use crate::inventory::{
     class_of, read_rels, resolve, sha256, Limits, NS_RELATIONSHIPS, NS_W, NS_W14,
 };
+use crate::parallel;
 
 /// Perché l'innesto non si fa: il salvataggio passa alla scrittura intera.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1444,17 +1445,34 @@ pub(crate) fn graft(
         .map(|at| &o_xml[o.scan.units[at].bytes.clone()])
         .collect();
     closed_moves(&replaced, &o_scope)?;
-    let mut para_ids = HashSet::new();
-    for piece in pieces {
-        if let Piece::Kept(at) = piece {
-            para_ids.extend(para_ids_of(
-                &o_xml[o.scan.units[*at].bytes.clone()],
-                &o_scope,
-            )?);
-        }
-    }
-    let o_ids = ids_of(o_xml, limits)?;
-    let n_ids = ids_of(n_xml, limits)?;
+    // Le letture dei due documenti non si parlano: insieme.
+    let ((para_ids, (o_ids, n_ids)), (o_identity, n_identity)) = parallel::join(
+        || {
+            parallel::join(
+                || -> Result<HashSet<_>, GraftError> {
+                    let mut para_ids = HashSet::new();
+                    for piece in pieces {
+                        if let Piece::Kept(at) = piece {
+                            para_ids.extend(para_ids_of(
+                                &o_xml[o.scan.units[*at].bytes.clone()],
+                                &o_scope,
+                            )?);
+                        }
+                    }
+                    Ok(para_ids)
+                },
+                || parallel::join(|| ids_of(o_xml, limits), || ids_of(n_xml, limits)),
+            )
+        },
+        || {
+            parallel::join(
+                || Identity::of(o, o_xml, base),
+                || Identity::of(n, n_xml, wanted),
+            )
+        },
+    );
+    let (para_ids, o_ids, n_ids) = (para_ids?, o_ids?, n_ids?);
+    let (o_identity, n_identity) = (o_identity?, n_identity?);
     // Un numero nuovo non deve ripetere quello di una revisione o di un
     // segnalibro delle altre storie: intestazioni, note, commenti.
     let mut next_id = o_ids.max_id;
@@ -1474,8 +1492,8 @@ pub(crate) fn graft(
         next_drawing: o_ids.max_drawing,
         o_ids,
         n_ids,
-        o_identity: Identity::of(o, o_xml, base)?,
-        n_identity: Identity::of(n, n_xml, wanted)?,
+        o_identity,
+        n_identity,
         para_ids,
         next_para: 0,
         rels: HashMap::new(),

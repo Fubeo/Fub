@@ -51,6 +51,7 @@ use crate::inventory::{
     self, equal_differences, inventory, open_differences, Counts, Difference, Inventory,
     InventoryError, Key, DOCUMENT,
 };
+use crate::parallel;
 
 /// Perché un controllo non passa.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -78,6 +79,8 @@ fn findings(differences: Vec<Difference>) -> Result<(), Finding> {
 /// e ciò che la prova a vuoto non porta.
 #[derive(Debug)]
 pub(crate) struct Baseline {
+    /// L'inventario del file: un innesto si misura contro di lui.
+    original: Inventory,
     dry: Inventory,
     file: Vec<Vec<Token>>,
     /// I blocchi del corpo che la prova a vuoto non porta interi: restano i
@@ -86,6 +89,15 @@ pub(crate) struct Baseline {
     /// La prova a vuoto porta tutto il pacchetto: un salvataggio può
     /// riscriverlo intero. Altrimenti si scrive soltanto per innesto.
     pub whole: bool,
+}
+
+impl Baseline {
+    /// Quanto la prova pesa in memoria, in voci: i segni del flusso del file e
+    /// le chiavi dei due inventari. Un documento grande ne ha milioni.
+    pub(crate) fn weight(&self) -> usize {
+        let tokens: usize = self.file.iter().map(Vec::len).sum();
+        tokens + self.original.entries() + self.dry.entries()
+    }
 }
 
 /// La regola all'apertura, sui byte del file e su quelli della prova a vuoto
@@ -100,10 +112,15 @@ pub(crate) struct Baseline {
 /// scrittura intera ([`Baseline::whole`]). Fallisce soltanto un pacchetto che
 /// non si misura blocco per blocco.
 pub(crate) fn check_open(original: &[u8], dry: &[u8], blocks: usize) -> Result<Baseline, Finding> {
-    let o_inventory = inventory(original).map_err(Finding::Unreadable)?;
-    let d_inventory = inventory(dry).map_err(Finding::Unreadable)?;
-    let file = body_flow(original, blocks)?.scan.blocks;
-    let written = body_flow(dry, blocks)?.scan.blocks;
+    // Le quattro misure non si parlano: insieme.
+    let ((o_inventory, d_inventory), (file, written)) = parallel::join(
+        || parallel::join(|| inventory(original), || inventory(dry)),
+        || parallel::join(|| body_flow(original, blocks), || body_flow(dry, blocks)),
+    );
+    let o_inventory = o_inventory.map_err(Finding::Unreadable)?;
+    let d_inventory = d_inventory.map_err(Finding::Unreadable)?;
+    let file = file?.scan.blocks;
+    let written = written?.scan.blocks;
     let Some(losses) = inventory::open_losses(&o_inventory, &d_inventory) else {
         return Err(Finding::Differences(open_differences(
             &o_inventory,
@@ -122,6 +139,7 @@ pub(crate) fn check_open(original: &[u8], dry: &[u8], blocks: usize) -> Result<B
         .collect();
     let whole = losses.outside.is_empty() && locked.is_empty();
     Ok(Baseline {
+        original: o_inventory,
         dry: d_inventory,
         file,
         locked,
@@ -227,18 +245,21 @@ pub(crate) fn check_save(
 }
 
 /// La regola su un innesto ([`crate::graft`]): la stessa del salvataggio,
-/// con il file al posto della prova a vuoto, perché ciò che l'innesto non
-/// tocca sono i byte del file.
+/// con il file (l'inventario che `baseline` ne tiene) al posto della prova a
+/// vuoto, perché ciò che l'innesto non tocca sono i byte del file.
 pub(crate) fn check_graft(
     baseline: &Baseline,
-    original: &[u8],
     grafted: &[u8],
     base: &Document,
     wanted: &Document,
     pairs: &[(usize, usize)],
 ) -> Result<(), Finding> {
-    let before = inventory(original).map_err(Finding::Unreadable)?;
-    let after = inventory(grafted).map_err(Finding::Unreadable)?;
+    let (after, written) = parallel::join(
+        || inventory(grafted),
+        || body_flow(grafted, wanted.body.len()),
+    );
+    let before = &baseline.original;
+    let after = after.map_err(Finding::Unreadable)?;
     // La radice dichiara ignorabili gli spazi dei nomi che le unità scritte
     // usano: un'aggiunta lì è dell'innesto.
     let ignorable = format!(
@@ -246,12 +267,12 @@ pub(crate) fn check_graft(
         inventory::NS_W,
         inventory::NS_MC
     );
-    let differences = save_differences(&before, &after, base, wanted, pairs)
+    let differences = save_differences(before, &after, base, wanted, pairs)
         .into_iter()
         .filter(|d| !(d.after > d.before && d.key.starts_with(&ignorable)))
         .collect();
     findings(differences)?;
-    let written = body_flow(grafted, wanted.body.len())?;
+    let written = written?;
     check_flow(&baseline.file, &written.scan.blocks, pairs).map_err(Finding::Flow)
 }
 
@@ -265,6 +286,12 @@ pub(crate) fn body_only(base: &Document, wanted: &Document, pairs: &[(usize, usi
 
 /// Quante prove a vuoto si ricordano.
 const REMEMBERED: usize = 8;
+
+/// Quanto pesano al più, in voci ([`Baseline::weight`]), le prove che si
+/// ricordano oltre all'ultima: circa 350 MB. Un documento da centomila
+/// paragrafi ne pesa da solo più di quattro milioni; l'ultima prova si
+/// ricorda comunque, perché è quella che il salvataggio cerca.
+const REMEMBERED_WEIGHT: usize = 4_000_000;
 
 /// Le ultime prove a vuoto accettate, per impronta dei byte del file. Il
 /// writer è deterministico (lo prova il banco del corpus), quindi gli stessi
@@ -293,10 +320,25 @@ pub(crate) fn remember(key: String, baseline: Arc<Baseline>) {
         return;
     };
     baselines.retain(|(k, _)| *k != key);
-    if baselines.len() == REMEMBERED {
-        baselines.pop_front();
-    }
     baselines.push_back((key, baseline));
+    let weights: Vec<usize> = baselines.iter().map(|(_, b)| b.weight()).collect();
+    baselines.drain(..forgotten(&weights));
+}
+
+/// Quante prove, dalle più vecchie, si dimenticano, dati i pesi dalla più
+/// vecchia all'ultima: al più [`REMEMBERED`], e quelle prima dell'ultima
+/// entro [`REMEMBERED_WEIGHT`].
+fn forgotten(weights: &[usize]) -> usize {
+    let Some((_, older)) = weights.split_last() else {
+        return 0;
+    };
+    let mut weight: usize = older.iter().sum();
+    let mut out = 0;
+    while out < older.len() && (weights.len() - out > REMEMBERED || weight > REMEMBERED_WEIGHT) {
+        weight -= older[out];
+        out += 1;
+    }
+    out
 }
 
 /// Le differenze fra la base `dry` (la prova a vuoto, o il file per un
@@ -953,6 +995,20 @@ mod tests {
         let mut other = file.clone();
         other.push(0);
         assert!(remembered(&key(&other)).is_none());
+    }
+
+    /// Si ricordano al più otto prove, e quelle prima dell'ultima entro un
+    /// peso: l'ultima resta anche se da sola pesa di più.
+    #[test]
+    fn le_prove_ricordate_hanno_un_numero_e_un_peso() {
+        assert_eq!(forgotten(&[]), 0);
+        assert_eq!(forgotten(&[1; REMEMBERED]), 0);
+        assert_eq!(forgotten(&[1; REMEMBERED + 1]), 1);
+        assert_eq!(forgotten(&[1, 2 * REMEMBERED_WEIGHT]), 0);
+        assert_eq!(forgotten(&[REMEMBERED_WEIGHT, 1, 1]), 1);
+        assert_eq!(forgotten(&[REMEMBERED_WEIGHT - 2, 1, 1]), 0);
+        assert_eq!(forgotten(&[3, REMEMBERED_WEIGHT, 1]), 1);
+        assert_eq!(forgotten(&[1, 2 * REMEMBERED_WEIGHT, 1]), 2);
     }
 
     /// Un content control di blocco: i suoi paragrafi sono blocchi uno per uno,

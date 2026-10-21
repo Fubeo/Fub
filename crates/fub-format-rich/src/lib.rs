@@ -44,6 +44,7 @@ mod graft;
 mod inventory;
 mod model;
 mod odt;
+mod parallel;
 pub mod preservation;
 pub mod projection;
 mod running;
