@@ -250,3 +250,44 @@ describe("contenuto Markdown reso", () => {
     expect(images[1]?.hasAttribute("height")).toBe(false);
   });
 });
+
+describe("note, immagini, codice e HTML in riga", () => {
+  it("una definizione ripetuta non ripete l'id, una non richiamata non è una nota (D07, D23)", () => {
+    const root = content("Testo[^a]\n\n[^a]: Prima\n\n[^a]: Seconda\n\n[^b]: Mai richiamata\n");
+    expect(Array.from(root.querySelectorAll(".block-footnote-definition"), (note) => [note.id.replace(/^.*(?=fn-)/, ""), note.textContent?.trim()]))
+      .toEqual([["fn-1", "1. Prima ↩"]]);
+    expect(root.textContent).not.toContain("Seconda");
+    expect(root.textContent).not.toContain("Mai richiamata");
+    expect(renderMarkdown("Testo[^b]\n\n[^a]: x\n\n[^b]: y\n").html).toContain(">1. ");
+  });
+
+  it("l'alt di un'immagine è il testo che l'etichetta mostra (D17)", () => {
+    const alt = (markdown: string) => content(markdown).querySelector("img")?.getAttribute("alt");
+    expect(alt("![**gatto** `nero` \\* &amp; [link](x)](g.png)")).toBe("gatto nero * & link");
+    expect(alt("![](g.png)")).toBe("");
+  });
+
+  it("il codice in riga toglie uno spazio ASCII per lato, non un NBSP (D19)", () => {
+    expect(content("`   `").querySelector("code")?.textContent).toBe(" ");
+    expect(content("`  `").querySelector("code")?.textContent).toBe("  ");
+    expect(content("`` ` ``").querySelector("code")?.textContent).toBe("`");
+  });
+
+  it("una nota in riga può andare a capo (D27)", () => {
+    const notes = content("Prima ^[nota *su*\ndue righe] dopo ^[altra].").querySelectorAll("sup.footnote-inline");
+    expect(Array.from(notes, (note) => note.textContent?.replace(/\s+/g, " "))).toEqual(["nota su due righe", "altra"]);
+    expect(notes[0]!.querySelector("em")?.textContent).toBe("su");
+  });
+
+  it("l'HTML di testo comune si vede reso, il resto resta testo (L01)", () => {
+    const root = content("Premi <kbd>Ctrl</kbd>, H<sub>2</sub>O, x<SUP>2</SUP><br>e <em>aperto\n\n<b>no</b> <span class=\"x\">no</span>\n");
+    expect(root.querySelector("kbd")?.textContent).toBe("Ctrl");
+    expect(root.querySelector("sub")?.textContent).toBe("2");
+    expect(root.querySelector("sup")?.textContent).toBe("2");
+    expect(root.querySelector("br")).not.toBeNull();
+    expect(root.querySelector("em")).toBeNull();
+    expect(root.textContent).toContain("<em>aperto");
+    expect(root.textContent).toContain("<b>no</b>");
+    expect(root.querySelector("span.x")).toBeNull();
+  });
+});

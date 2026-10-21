@@ -27,8 +27,9 @@ import {
   wikilink,
   type FoundWikilink,
 } from "../../../../rules/syntax";
-import { findTrailingAnchor, frontmatterRange, paragraphMathBlock, renderMarkdownState } from "./render";
-import type { MarkdownBlock, MarkdownDocument, MountMarkdown } from "./render-types";
+import { findTrailingAnchor, frontmatterRange, linkReferences, paragraphMathBlock, renderMarkdownState } from "./render";
+import { decodeDestination, normalizeLabel } from "./link-syntax";
+import type { MarkdownBlock, MarkdownDocument, MarkdownLinkDefinition, MountMarkdown } from "./render-types";
 import { mountMarkdown } from "./mount";
 import { mountMathBlocks } from "./math";
 import { isVaultPath } from "./media";
@@ -39,6 +40,7 @@ import {
   footnoteStands,
   FOOTNOTE_REFERENCE,
   imageHtml,
+  visibleText,
   isMathContainer,
   nativeCuts,
   nativeInlines,
@@ -270,24 +272,34 @@ export function computeDecorations(
     if (from < a) out.push({ from: from, to: a, kind });
   };
 
-  // L'HTML di un'immagine `![alt](path "titolo")` scritta su una riga, se la
-  // destinazione è un path del vault; `null` altrimenti.
+  // L'HTML di un'immagine `![alt](path "titolo")` o `![alt][ref]` scritta su
+  // una riga, se la destinazione è un path del vault; `null` altrimenti. Un
+  // riferimento si risolve con le definizioni della Lettura, lette una volta
+  // sola e soltanto quando serve (L02).
+  let references: ReadonlyMap<string, MarkdownLinkDefinition> | null = null;
   const inlineImage = (node: SyntaxNode): string | null => {
     if (doc.lineAt(node.from).number !== doc.lineAt(node.to).number) return null;
     const marks = node.getChildren("LinkMark");
     const opener = marks[0];
     const closer = marks.find((mark) => doc.sliceString(mark.from, mark.from + 1) === "]");
+    if (!opener || !closer) return null;
     const url = node.getChild("URL");
-    if (!opener || !closer || !url) return null;
-    let href = doc.sliceString(url.from, url.to);
-    if (href.length >= 2 && href.startsWith("<") && href.endsWith(">")) href = href.slice(1, -1);
-    if (!isVaultPath(href)) return null;
     const title = node.getChild("LinkTitle");
-    return imageHtml(
-      doc.sliceString(opener.to, closer.from),
-      href,
-      title ? doc.sliceString(title.from + 1, title.to - 1) : undefined,
-    );
+    let href: string;
+    let caption: string | undefined;
+    if (marks.some((mark) => mark.from > closer.from && doc.sliceString(mark.from, mark.from + 1) === "(")) {
+      if (!url) return null;
+      href = decodeDestination(doc.sliceString(url.from, url.to));
+      caption = title ? doc.sliceString(title.from + 1, title.to - 1) : undefined;
+    } else {
+      const reference = node.getChild("LinkLabel");
+      const label = (reference ? doc.sliceString(reference.from + 1, reference.to - 1) : "") || doc.sliceString(opener.to, closer.from);
+      const definition = (references ??= linkReferences(state)).get(normalizeLabel(label));
+      if (!definition) return null;
+      ({ href, title: caption } = definition);
+    }
+    if (!isVaultPath(href)) return null;
+    return imageHtml(visibleText(doc, node), href, caption);
   };
 
   syntaxTree(state).iterate({

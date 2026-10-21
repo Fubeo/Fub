@@ -2,11 +2,11 @@ import { syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
 import type { SyntaxNode, Tree } from "@lezer/common";
 import type { SyntaxForm } from "../../../../host/contract";
-import { declaredFences, wikilink } from "../../../../rules/syntax";
+import { declaredFences } from "../../../../rules/syntax";
 import { normalizeLineBreaks } from "../../../../rules/offsets";
 import { taskChecked } from "../../../../rules/mirrored";
 import { FOOTNOTE_DEFINITION, markdownGrammar } from "./grammar";
-import { decodeDestination, decodeEntities } from "./link-syntax";
+import { decodeDestination } from "./link-syntax";
 import {
   escapeHtml,
   mathBlock,
@@ -14,6 +14,7 @@ import {
   normalizeLabel,
   renderInline,
   sourceAttributes,
+  visibleText,
   type ContainerMath,
 } from "./render-inline";
 import type {
@@ -152,60 +153,6 @@ function rawHtmlBlock(source: string, from: number, to: number): string {
   return `<div class="block-html block-html-allowed"${mdAttrs(from, to)} data-md-raw-html="${escapeHtml(raw)}"><pre>${escapeHtml(raw)}</pre></div>`;
 }
 
-/// I nodi di un titolo che non si vedono: marcatori, destinazioni e HTML.
-const HIDDEN_INLINE: Record<string, true> = {
-  HeaderMark: true, EmphasisMark: true, CodeMark: true, LinkMark: true, URL: true, LinkTitle: true,
-  LinkLabel: true, StrikethroughMark: true, SubscriptMark: true, SuperscriptMark: true, HTMLTag: true,
-  Comment: true, ProcessingInstruction: true, QuoteMark: true,
-};
-
-/// Il testo che un titolo mostra, da cui il core ricava lo slug
-/// (`parse.rs`, il testo degli inline): l'etichetta di un link e non la sua
-/// destinazione, il contenuto del codice, gli escape e le entità risolti,
-/// l'alias di un wikilink o il suo bersaglio. Prima lo slug nasceva dalla
-/// sintassi, e `# [Guida](https://x)` aveva un'ancora che nessun `#guida`
-/// trovava (D03).
-export function headingVisibleText(source: string, heading: SyntaxNode): string {
-  const links = wikilink(source.slice(heading.from, heading.to))
-    .map((found) => ({ from: heading.from + found.from, to: heading.from + found.to, text: found.alias ?? found.target }));
-  const pieces: { at: number; text: string }[] = links.map((found) => ({ at: found.from, text: found.text }));
-  const inLink = (at: number) => links.some((found) => found.from <= at && at < found.to);
-  const plain = (from: number, to: number) => {
-    let start = from;
-    for (const found of links) {
-      if (found.to <= start || found.from >= to) continue;
-      if (found.from > start) pieces.push({ at: start, text: source.slice(start, found.from) });
-      start = Math.max(start, found.to);
-    }
-    if (start < to) pieces.push({ at: start, text: source.slice(start, to) });
-  };
-  const walk = (node: SyntaxNode) => {
-    let pos = node.from;
-    for (let child = node.firstChild; child; child = child.nextSibling) {
-      if (child.from > pos) plain(pos, child.from);
-      pos = Math.max(pos, child.to);
-      if (HIDDEN_INLINE[child.name]) continue;
-      if (child.name === "InlineCode") {
-        const marks = child.getChildren("CodeMark");
-        let value = source.slice(marks[0]?.to ?? child.from, marks[marks.length - 1]?.from ?? child.to).replace(/\n/g, " ");
-        if (value.startsWith(" ") && value.endsWith(" ") && /\S/.test(value)) value = value.slice(1, -1);
-        if (!inLink(child.from)) pieces.push({ at: child.from, text: value });
-      } else if (child.name === "Escape") {
-        if (!inLink(child.from)) pieces.push({ at: child.from, text: source.slice(child.from + 1, child.to) });
-      } else if (child.name === "Entity") {
-        if (!inLink(child.from)) pieces.push({ at: child.from, text: decodeEntities(source.slice(child.from, child.to)) });
-      } else if (child.name === "Link" && /^\[\^[^\]\r\n]+\]$/.test(source.slice(child.from, child.to))) {
-        // Il richiamo di una nota non è testo del titolo.
-      } else {
-        walk(child);
-      }
-    }
-    if (pos < node.to) plain(pos, node.to);
-  };
-  walk(heading);
-  return pieces.sort((a, b) => a.at - b.at).map((piece) => piece.text).join("").trim();
-}
-
 interface FootnoteDef {
   readonly labelNorm: string;
   readonly from: number;
@@ -265,7 +212,7 @@ function collectDefinitions(source: string, tree: Tree): Collected {
         headingIds.set(node.from, anchor.raw);
         slugs.next(canonical);
       } else {
-        const slug = headingSlug(headingVisibleText(source, node));
+        const slug = headingSlug(visibleText(source, node));
         if (slug !== "") headingIds.set(node.from, slugs.next(slug));
       }
     } else if (name === "LinkReference") {
@@ -310,17 +257,18 @@ function collectDefinitions(source: string, tree: Tree): Collected {
   const top = tree.topNode;
   for (let child = top.firstChild; child; child = child.nextSibling) visit(child, false);
 
+  // Una nota ha un numero se il testo la richiama, nell'ordine dei richiami,
+  // come per il core: una definizione che nessuno richiama resta nella
+  // sorgente ma non è una nota della resa (D23).
   const defKeys = new Set(defs.map((d) => d.labelNorm));
   const numbers = new Map<string, number>();
   let next = 1;
   for (const key of refOrder) {
     if (defKeys.has(key) && !numbers.has(key)) numbers.set(key, next++);
   }
-  for (const def of defs) {
-    if (!numbers.has(def.labelNorm)) numbers.set(def.labelNorm, next++);
-  }
   const footnotes = new Map<string, MarkdownFootnote>();
   for (const def of defs) {
+    if (!numbers.has(def.labelNorm)) continue;
     const offsets = (refOffsets.get(def.labelNorm) ?? []).slice().sort((a, b) => a - b);
     const ordinals = new Map<number, number>();
     offsets.forEach((offset, index) => ordinals.set(offset, index + 1));
@@ -728,16 +676,21 @@ function renderFootnoteDefNode(node: SyntaxNode, aux: RenderAux): string {
   if (!match) return `<p${mdAttrs(node.from, node.to)}>${renderInline(aux.ctx, node.from, node.to, node)}</p>`;
   const key = normalizeLabel(match[1]!);
   const footnote = aux.ctx.footnotes.get(key);
-  const number = footnote?.number ?? 0;
+  // Si mostra soltanto la definizione che vale: la prima con quell'etichetta,
+  // e richiamata. Una seconda `[^a]:` non ripete `fn-1` (D07), una che nessuno
+  // richiama non diventa una nota numerata (D23); tutte e due restano nella
+  // sorgente, che la Live mostra come testo.
+  if (!footnote || footnote.from !== node.from) return "";
+  const number = footnote.number;
   let contentFrom = node.from + match[0].length;
   while (source[contentFrom] === " " || source[contentFrom] === "\t") contentFrom++;
   const inner = contentFrom < node.to ? renderInline(aux.ctx, contentFrom, node.to, node) : "";
-  const total = footnote?.references.size ?? 0;
+  const total = footnote.references.size;
   let backlinks = "";
   for (let occurrence = 1; occurrence <= total; occurrence++) {
     backlinks += `<a href="#fnref-${number}-${occurrence}" data-md-anchor="fnref-${number}-${occurrence}" class="footnote-backref">↩</a>`;
   }
-  return `<div class="block-footnote-definition"${idAttr(number === 0 ? null : `fn-${number}`)}${mdAttrs(node.from, node.to)}>${number ? `${number}. ` : ""}${inner} ${backlinks}</div>`;
+  return `<div class="block-footnote-definition"${idAttr(`fn-${number}`)}${mdAttrs(node.from, node.to)}>${number}. ${inner} ${backlinks}</div>`;
 }
 
 interface BlockRecord {

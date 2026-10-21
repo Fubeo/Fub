@@ -1,7 +1,7 @@
 import type { SyntaxNode } from "@lezer/common";
 import { inlineDelimiters, scanTags, textSpans, wikilink, type FoundWikilink } from "../../../../rules/syntax";
 import { markdownGrammar } from "./grammar";
-import { decodeDestination, normalizeLabel } from "./link-syntax";
+import { decodeDestination, decodeEntities, normalizeLabel } from "./link-syntax";
 import type { MarkdownRenderContext } from "./render-types";
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -19,6 +19,25 @@ const INLINE_TAGS: Record<string, string> = {
 const INLINE_MARKS: Record<string, true> = {
   EmphasisMark: true, StrikethroughMark: true, SubscriptMark: true, SuperscriptMark: true,
 };
+/// I tag HTML in riga che la resa lascia passare: quelli di testo che il
+/// sanitizzatore ammette, nudi, senza attributi. `Premi <kbd>Ctrl</kbd>` mostra
+/// un tasto e non i segni del tag (L01); ogni altro tag resta testo, e il
+/// sanitizzatore decide comunque l'ultima parola sul DOM.
+const INLINE_HTML = /^<(\/?)(em|strong|del|ins|mark|sub|sup|small|abbr|kbd|samp|var|code|span)>$|^<br\s*\/?>$/i;
+/// Il tag ha il suo compagno fra i fratelli dello stesso contenitore? Un `<em>`
+/// lasciato aperto il parser HTML lo riaprirebbe nei paragrafi seguenti.
+function pairedTag(source: string, node: SyntaxNode, name: string, closing: boolean): boolean {
+  let depth = 0;
+  for (let other = closing ? node.prevSibling : node.nextSibling; other; other = closing ? other.prevSibling : other.nextSibling) {
+    if (other.name !== "HTMLTag") continue;
+    const tag = INLINE_HTML.exec(source.slice(other.from, other.to));
+    if (!tag?.[2] || tag[2].toLowerCase() !== name) continue;
+    if ((tag[1] === "/") === closing) depth++;
+    else if (depth-- === 0) return true;
+  }
+  return false;
+}
+
 const LITERAL_NODES: Record<string, true> = {
   InlineCode: true, Autolink: true, HTMLTag: true, Comment: true, ProcessingInstruction: true, Escape: true,
 };
@@ -395,6 +414,61 @@ export function scanInlineFootnotes(value: string): InlineFootnote[] {
   return found;
 }
 
+/// I nodi inline che non si vedono: marcatori, destinazioni e HTML.
+const HIDDEN_INLINE: Record<string, true> = {
+  HeaderMark: true, EmphasisMark: true, CodeMark: true, LinkMark: true, URL: true, LinkTitle: true,
+  LinkLabel: true, StrikethroughMark: true, SubscriptMark: true, SuperscriptMark: true, HTMLTag: true,
+  Comment: true, ProcessingInstruction: true, QuoteMark: true,
+};
+
+/// Il testo che un nodo inline mostra, come il testo degli inline del core
+/// (`parse.rs`): l'etichetta di un link e non la sua destinazione, il
+/// contenuto del codice, gli escape e le entità risolti, l'alias di un
+/// wikilink o il suo bersaglio. Ne nascono lo slug di un titolo, che prima
+/// veniva dalla sintassi e dava a `# [Guida](https://x)` un'ancora che nessun
+/// `#guida` trovava (D03), e l'`alt` di un'immagine, che teneva `**` (D17).
+export function visibleText(text: string | { sliceString(from: number, to: number): string }, container: SyntaxNode): string {
+  const slice = (from: number, to: number) => (typeof text === "string" ? text.slice(from, to) : text.sliceString(from, to));
+  const links = wikilink(slice(container.from, container.to))
+    .map((found) => ({ from: container.from + found.from, to: container.from + found.to, text: found.alias ?? found.target }));
+  const pieces: { at: number; text: string }[] = links.map((found) => ({ at: found.from, text: found.text }));
+  const inLink = (at: number) => links.some((found) => found.from <= at && at < found.to);
+  const plain = (from: number, to: number) => {
+    let start = from;
+    for (const found of links) {
+      if (found.to <= start || found.from >= to) continue;
+      if (found.from > start) pieces.push({ at: start, text: slice(start, found.from) });
+      start = Math.max(start, found.to);
+    }
+    if (start < to) pieces.push({ at: start, text: slice(start, to) });
+  };
+  const walk = (node: SyntaxNode) => {
+    let pos = node.from;
+    for (let child = node.firstChild; child; child = child.nextSibling) {
+      if (child.from > pos) plain(pos, child.from);
+      pos = Math.max(pos, child.to);
+      if (HIDDEN_INLINE[child.name]) continue;
+      if (child.name === "InlineCode") {
+        const marks = child.getChildren("CodeMark");
+        let value = slice(marks[0]?.to ?? child.from, marks[marks.length - 1]?.from ?? child.to).replace(/\n/g, " ");
+        if (value.startsWith(" ") && value.endsWith(" ") && /[^ ]/.test(value)) value = value.slice(1, -1);
+        if (!inLink(child.from)) pieces.push({ at: child.from, text: value });
+      } else if (child.name === "Escape") {
+        if (!inLink(child.from)) pieces.push({ at: child.from, text: slice(child.from + 1, child.to) });
+      } else if (child.name === "Entity") {
+        if (!inLink(child.from)) pieces.push({ at: child.from, text: decodeEntities(slice(child.from, child.to)) });
+      } else if (child.name === "Link" && /^\[\^[^\]\r\n]+\]$/.test(slice(child.from, child.to))) {
+        // Il richiamo di una nota non è testo.
+      } else {
+        walk(child);
+      }
+    }
+    if (pos < node.to) plain(pos, node.to);
+  };
+  walk(container);
+  return pieces.sort((a, b) => a.at - b.at).map((piece) => piece.text).join("").trim();
+}
+
 /// Dove porta un link o un'immagine: la destinazione scritta o quella della
 /// sua definizione. Senza nessuna delle due `[x]` è testo, anche per comrak.
 /// `[x]()` ha una destinazione, vuota: Lezer non le dà un nodo `URL`, ma la
@@ -457,12 +531,19 @@ function renderNode(context: MarkdownRenderContext, node: SyntaxNode): string {
     let from = marks[0]?.to ?? node.from;
     let to = marks[marks.length - 1]?.from ?? node.to;
     let value = source.slice(from, to).replace(/\n/g, " ");
-    if (value.startsWith(" ") && value.endsWith(" ") && /\S/.test(value)) {
+    // Si toglie uno spazio ASCII per lato se il contenuto non è fatto solo di
+    // spazi ASCII: un NBSP è contenuto, non spazio (D19).
+    if (value.startsWith(" ") && value.endsWith(" ") && /[^ ]/.test(value)) {
       from++;
       to--;
       value = value.slice(1, -1);
     }
     return `<code${sourceAttributes(from, to)}>${escapeHtml(value)}</code>`;
+  }
+  if (node.name === "HTMLTag") {
+    const tag = INLINE_HTML.exec(raw);
+    if (tag && !tag[2]) return "<br>";
+    if (tag && pairedTag(source, node, tag[2]!.toLowerCase(), tag[1] === "/")) return `<${tag[1]}${tag[2]!.toLowerCase()}>`;
   }
   if (node.name === "Escape") return text(context, node.from + 1, node.to);
   if (node.name === "Entity") return `<span${attrs}>${raw}</span>`;
@@ -484,9 +565,8 @@ function renderNode(context: MarkdownRenderContext, node: SyntaxNode): string {
     const target = linkTarget(context, node);
     if (!target) return text(context, node.from, node.to);
     const { labelFrom, labelTo, href, caption } = target;
-    const label = source.slice(labelFrom, labelTo);
     const titleAttr = caption === undefined ? "" : ` title="${attribute(caption)}"`;
-    if (node.name === "Image") return imageHtml(label, href, caption, attrs);
+    if (node.name === "Image") return imageHtml(visibleText(source, node), href, caption, attrs);
     const internal = href !== "" && !href.startsWith("#") && !/^[a-z][\w+.-]*:/i.test(href);
     const anchor = href.startsWith("#") ? ` data-md-anchor="${attribute(href.slice(1))}"` : "";
     return `<a href="${attribute(href)}"${internal ? ` class="internal-path" data-path="${attribute(href)}"` : ""}${anchor}${titleAttr}${attrs}>${renderInline(context, labelFrom, labelTo, node)}</a>`;
@@ -543,26 +623,31 @@ export function renderInline(context: MarkdownRenderContext, from: number, to: n
   const cuts = nativeCuts(natives);
   // Il contenuto di un evidenziato (`plain`) è per il provider il testo di un
   // nodo suo, dove nessun'altra regola entra.
+  // Una nota in riga si cerca nel contenitore intero, non riga per riga: può
+  // aprire su una riga e chiudere sulla seguente, come per comrak (D27).
+  const notes: InlineFootnote[] = [];
+  if (!plain) {
+    for (const note of scanInlineFootnotes(context.source.slice(from, to))) {
+      const start = from + note.from, end = from + note.to;
+      if (!footnoteStands({ from: start, to: end }, natives)) continue;
+      notes.push({ from: start, to: end, contentFrom: from + note.contentFrom, contentTo: from + note.contentTo });
+      pieces.push({
+        from: start,
+        to: end,
+        priority: 3,
+        html: () => `<sup class="footnote-inline"${sourceAttributes(start, end)}>${renderInline(context, from + note.contentFrom, from + note.contentTo, root)}</sup>`,
+      });
+    }
+  }
   let lineFrom = plain ? to : from;
   while (lineFrom < to) {
     const newline = context.source.indexOf("\n", lineFrom);
     const lineTo = newline < 0 ? to : Math.min(to, newline);
     const row = context.source.slice(lineFrom, lineTo);
     const base = lineFrom;
-    const rowCuts = cuts.filter((cut) => cut.from < lineTo && lineFrom < cut.to)
-      .map((cut) => ({ from: cut.from - base, to: cut.to - base }));
+    const rowCuts = [...cuts, ...notes].filter((cut) => cut.from < lineTo && lineFrom < cut.to)
+      .map((cut) => ({ from: Math.max(0, cut.from - base), to: Math.min(row.length, cut.to - base) }));
     const wikiRanges: Array<{ from: number; to: number }> = [];
-    for (const note of scanInlineFootnotes(row)) {
-      const start = base + note.from, end = base + note.to;
-      if (!footnoteStands({ from: start, to: end }, natives)) continue;
-      rowCuts.push(note);
-      pieces.push({
-        from: start,
-        to: end,
-        priority: 3,
-        html: () => `<sup class="footnote-inline"${sourceAttributes(start, end)}>${renderInline(context, base + note.contentFrom, base + note.contentTo, root)}</sup>`,
-      });
-    }
     for (const link of wikilink(row)) {
       const start = base + link.from, end = base + link.to;
       if (!free(start, end) || inFormula(start)) continue;
