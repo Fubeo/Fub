@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../../i18n/strings";
+import { declareClipboard } from "../../../../platform/clipboard";
 import { closeContextMenu } from "../../../../ui/menu";
 import { TableGrid, type TableGridHost } from "./table-grid";
 import type { TableData } from "./table-model";
@@ -220,6 +221,49 @@ describe("la griglia", () => {
     item.click();
     expect(writes[0]!.rows).toHaveLength(4);
     expect(writes[0]!.rows[2]).toEqual(["", ""]);
+  });
+
+  it("taglia dal menu svuota le celle che ha copiato, anche se la selezione si sposta prima degli appunti", async () => {
+    let release: () => void = () => {};
+    const copied: string[] = [];
+    const undeclare = declareClipboard((text) => {
+      copied.push(text);
+      return new Promise<void>((resolve) => (release = resolve));
+    });
+    try {
+      const { grid, cell, writes } = mount(ROWS);
+      grid.focus({ row: 1, col: 0 });
+      mouse(cell(1, 0), "contextmenu", { button: 2 });
+      [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")]
+        .find((button) => button.textContent?.startsWith(t("table.menu.cut")))!.click();
+      grid.focus({ row: 2, col: 1 });
+      release();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(copied).toEqual(["Ada\n"]);
+      expect(writes.at(-1)!.rows).toEqual([["Nome", "Voto"], ["", "10"], ["Bea", "9"]]);
+    } finally {
+      undeclare();
+    }
+  });
+
+  it("taglia dal menu non svuota niente se la tabella è cambiata prima degli appunti", async () => {
+    let release: () => void = () => {};
+    const undeclare = declareClipboard(() => new Promise<void>((resolve) => (release = resolve)));
+    try {
+      const { grid, cell, writes } = mount(ROWS);
+      grid.focus({ row: 1, col: 0 });
+      mouse(cell(1, 0), "contextmenu", { button: 2 });
+      [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")]
+        .find((button) => button.textContent?.startsWith(t("table.menu.cut")))!.click();
+      grid.update({ rows: [["Nome", "Voto"], ["Cleo", "8"]], aligns: [null, null] });
+      release();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writes).toHaveLength(0);
+    } finally {
+      undeclare();
+    }
   });
 
   it("in sola lettura si seleziona e si copia, ma non si scrive", () => {

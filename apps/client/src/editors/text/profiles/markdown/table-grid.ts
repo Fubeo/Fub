@@ -865,14 +865,20 @@ export class TableGrid implements TableGridActions {
     if (cut && !this.#host.readOnly()) this.#commit(clearRange(this.#data, this.#range()));
   }
 
+  /// Copia e taglio dal menu: gli appunti rispondono dopo, e intanto la
+  /// selezione può spostarsi o la tabella cambiare. Il taglio svuota le celle
+  /// copiate, quelle catturate all'inizio del gesto, e soltanto se la tabella
+  /// è ancora quella da cui le ha copiate; altrimenti resta una copia.
   async #copyToClipboard(cut: boolean): Promise<void> {
-    const text = rangeTsv(this.#data, this.#range());
+    const data = this.#data;
+    const range = this.#range();
     try {
-      await writeClipboardText(text);
+      await writeClipboardText(rangeTsv(data, range));
     } catch {
       return;
     }
-    if (cut && !this.#host.readOnly()) this.#commit(clearRange(this.#data, this.#range()));
+    if (!cut || this.#life.closed || this.#data !== data || this.#host.readOnly()) return;
+    this.#commit(clearRange(data, range));
   }
 
   #paste(event: ClipboardEvent): void {
