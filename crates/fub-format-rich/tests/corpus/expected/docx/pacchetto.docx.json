@@ -1,19 +1,15 @@
 {
   "file": "docx/pacchetto.docx",
-  "sha256": "50b36eec66e72cbb5068788957cb61c3ffd058f5baf6db73ecabc2f61617f92e",
+  "sha256": "65aeb1340bef7006873385687f79195bbc6f02ec33094cc8504ecd5c7709b4e8",
   "open": {
     "readonly": null,
-    "projection": "388439b93911d0dd37b1f115f98015b52e351cc857147b9f9070d9508a9b27c4",
+    "projection": "7583a5f7af7691071c33315c8f24756cbb5bf2992b7cf74b8e8b750a0ed69183",
     "blocks": 1,
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 4",
-    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
-    "blocchi chiusi: {}; scrittura intera: false",
+    "differenze all'apertura: 0",
+    "blocchi chiusi: {}; scrittura intera: true",
     "normalizzazione «statistiche di app.xml»: 2 nel file, 3 nella prova a vuoto"
   ],
   "model": {
@@ -52,10 +48,16 @@
       "reopened": "same"
     },
     "E4": {
-      "error": "locked",
-      "message": "rich document has closed parts: block None"
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
     },
     "E5": "n/a",
-    "E6": "n/a"
+    "E6": "n/a",
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "different"
+    }
   }
 }

@@ -207,20 +207,40 @@ fn libreoffice_agrees(original: &[u8], out: &[u8], touched: usize) {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("prima.docx"), original).unwrap();
     std::fs::write(dir.join("dopo.docx"), out).unwrap();
-    let status = std::process::Command::new(soffice)
-        .arg("--headless")
-        .arg(format!(
-            "-env:UserInstallation=file://{}",
-            dir.join("profilo").display()
-        ))
-        .args(["--convert-to", "txt:Text", "--outdir"])
-        .arg(&dir)
-        .args([dir.join("prima.docx"), dir.join("dopo.docx")])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .unwrap();
-    assert!(status.success(), "LibreOffice: {status}");
+    // Prima in OpenDocument, poi in testo: LibreOffice 25.8 non finisce mai
+    // di scrivere in testo un .docx che chiude il corpo con una tabella, e
+    // riempie il disco; dal suo .odt lo scrive.
+    let convert = |to: &str, inputs: [std::path::PathBuf; 2]| {
+        let mut child = std::process::Command::new(&soffice)
+            .arg("--headless")
+            .arg(format!(
+                "-env:UserInstallation=file://{}",
+                dir.join("profilo").display()
+            ))
+            .args(["--convert-to", to, "--outdir"])
+            .arg(&dir)
+            .args(inputs)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let start = std::time::Instant::now();
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            if start.elapsed() > std::time::Duration::from_secs(120) {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = std::fs::remove_dir_all(&dir);
+                panic!("LibreOffice non ha finito in due minuti ({to})");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        };
+        assert!(status.success(), "LibreOffice: {status}");
+    };
+    convert("odt", [dir.join("prima.docx"), dir.join("dopo.docx")]);
+    convert("txt:Text", [dir.join("prima.odt"), dir.join("dopo.odt")]);
     let lines = |name: &str| -> Vec<String> {
         let text = std::fs::read_to_string(dir.join(name))
             .unwrap_or_else(|error| panic!("LibreOffice non ha letto {name}: {error}"));
@@ -809,4 +829,43 @@ fn un_blocco_chiuso_resta_i_byte_del_file() {
     let mut page = p.clone();
     page.page.as_mut().expect("la pagina").left += 36.0;
     assert_eq!(locked_error(&page), RichError::Locked(None));
+}
+
+/// Un corpo che finisce con una tabella: il modello la fa seguire da un
+/// paragrafo vuoto, che il file non ha. Finché nessuno lo tocca il file resta
+/// senza; scritto, entra dopo la tabella.
+#[test]
+fn il_paragrafo_dopo_la_tabella_finale_si_scrive_soltanto_se_si_tocca() {
+    let table = r#"<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>cella</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"#;
+    let file = package("", &format!("{}{table}", para("Prima")), &[]);
+    let p = projection(&file);
+    assert_eq!(p.blocks.len(), 3);
+    assert!(matches!(&p.blocks[2], Block::Para(para) if para.c.is_empty()));
+
+    let mut first = p.clone();
+    append(&mut first, 0, " e poi cambiato");
+    let out = saved(&file, &first);
+    assert_eq!(grafted(&file, &out).len(), 1);
+    let children = body_children(&main_part(&out));
+    // L'ultimo figlio prima della sezione finale.
+    assert!(
+        children[children.len() - 2].starts_with("<w:tbl"),
+        "{children:#?}"
+    );
+
+    let mut last = p.clone();
+    para_mut(&mut last, 2).c.push(Inline::Text {
+        x: "In fondo, cambiato".into(),
+        k: None,
+        m: Vec::new(),
+        href: None,
+        f: Look::default(),
+        ins: None,
+        del: None,
+    });
+    let out = saved(&file, &last);
+    let rest = grafted(&file, &out);
+    assert_eq!(rest.len(), 1, "{rest:#?}");
+    assert!(rest[0].contains("In fondo, cambiato"), "{rest:#?}");
+    assert_eq!(texts(&projection(&out)), texts(&last));
 }

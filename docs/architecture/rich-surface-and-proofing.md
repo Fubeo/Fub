@@ -122,7 +122,15 @@ l'IPC.
   ragione) non si contano: gli `w:rsid*`, `w:proofErr`,
   `w:lastRenderedPageBreak`, gli `w14:paraId`/`w14:textId` e i loro rimandi
   nei commenti, le statistiche di `app.xml`, il numero (non la presenza) di
-  `w:id` e degli `id` dei disegni, il numero dei nomi «Picture N».
+  `w:id` e degli `id` dei disegni, il numero dei nomi «Picture N», i
+  contenitori di proprietà vuoti (`w:rPr`, `w:pPr`, `w:trPr`, `w:tcPr` senza
+  attributi né figli, che LibreOffice scrive). Tre forme si contano come
+  quelle che il codec scrive: i lati di ISO 29500 (`w:start`, `w:end`,
+  `jc="start"`) come `left` e `right`, un `w:fldSimple` come il
+  campo complesso, e un corpo che finisce con una tabella come se avesse il
+  paragrafo vuoto che il modello le mette dopo, un blocco senza byte che
+  l'innesto scrive soltanto se lo si tocca. Una parte di WordprocessingML
+  senza `+xml` nel tipo (le impostazioni della stampante) si copia.
   L'esempio `misura` del crate stampa il resoconto per un file. Il filtro di ciò che si incolla
   (`editors/rich/paste.ts`) toglie i `k` che il documento non ha e i link non
   web; allineamento e disposizione di un paragrafo incollato restano.

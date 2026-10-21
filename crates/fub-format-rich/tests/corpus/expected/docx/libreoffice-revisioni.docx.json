@@ -1,0 +1,90 @@
+{
+  "file": "docx/libreoffice-revisioni.docx",
+  "sha256": "617ce535ab4a84792624c7bc8d7ec9b235a83e7f75609e86f6a8d66bf57e2976",
+  "open": {
+    "readonly": null,
+    "projection": "be964ad4a6d45632ead580cdb8f6c81e37063b7b230475e32bbcda4853d42df0",
+    "blocks": 2,
+    "comments": 0
+  },
+  "preservation": [
+    "differenze all'apertura: 23",
+    "  core-properties: <{http://purl.org/dc/elements/1.1/}creator>: 1 → 0",
+    "  core-properties: <{http://purl.org/dc/elements/1.1/}description>: 1 → 0",
+    "  core-properties: <{http://purl.org/dc/elements/1.1/}language>: 1 → 0",
+    "  core-properties: <{http://purl.org/dc/elements/1.1/}subject>: 1 → 0",
+    "  core-properties: <{http://purl.org/dc/elements/1.1/}title>: 1 → 0",
+    "  core-properties: <{http://schemas.openxmlformats.org/package/2006/metadata/core-properties}lastModifiedBy>: 1 → 0",
+    "  core-properties: <{http://schemas.openxmlformats.org/package/2006/metadata/core-properties}revision>: 1 → 0",
+    "  settings: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}autoHyphenation @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val=\"1\": 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}keepNext @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val=\"1\": 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"zh-CN\": 2 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}suppressAutoHyphens @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val=\"1\": 1 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}clrScheme @{}name=\"LibreOffice\": 1 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}cs @{}charset=\"1\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}cs @{}pitchFamily=\"0\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}cs @{}typeface=\"DejaVu Sans\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}ea @{}charset=\"1\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}ea @{}pitchFamily=\"0\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}ea @{}typeface=\"DejaVu Sans\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}latin @{}charset=\"1\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}latin @{}pitchFamily=\"0\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}ln @{}w=\"6350\": 3 → 1",
+    "  core-properties: text of {http://purl.org/dc/elements/1.1/}language 5c49f88dafe6: 1 → 0",
+    "  core-properties: text of {http://schemas.openxmlformats.org/package/2006/metadata/core-properties}revision 5feceb66ffc8: 1 → 0",
+    "blocchi chiusi: {}; scrittura intera: false",
+    "normalizzazione «w:id»: 2 nel file, 2 nella prova a vuoto",
+    "normalizzazione «start e end»: 2 nel file, 0 nella prova a vuoto",
+    "normalizzazione «proprietà vuote»: 9 nel file, 0 nella prova a vuoto",
+    "normalizzazione «statistiche di app.xml»: 3 nel file, 3 nella prova a vuoto"
+  ],
+  "model": {
+    "outline": [],
+    "links": [],
+    "text": "7c718f7325abfc5f51176134e601e23438631d69a59003a2b08db078df513aad",
+    "words": 9
+  },
+  "export": {
+    "html": [
+      "la copia HTML non porta: 1 parola su 9, 2 revisioni tracciate"
+    ],
+    "txt": [
+      "la copia Testo semplice non porta: 1 parola su 9, 2 revisioni tracciate"
+    ],
+    "latex": [
+      "la copia LaTeX non porta: 1 parola su 9, 2 revisioni tracciate"
+    ],
+    "rtf": [],
+    "odt": [],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "error": "locked",
+      "message": "rich document has closed parts: block None"
+    },
+    "E5": "n/a",
+    "E6": "n/a",
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "different"
+    }
+  }
+}

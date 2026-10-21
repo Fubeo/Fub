@@ -1,0 +1,71 @@
+{
+  "file": "docx/falsi-allarmi.docx",
+  "sha256": "8a5b53dcd3b99cc9ffa2e7af0647a5e0ab3e907ebebb1b9d28eb7750126cb62c",
+  "open": {
+    "readonly": null,
+    "projection": "85bd6bad739c2e88c25cb7a27e81724539d7501fc90f94688b153a748249b691",
+    "blocks": 4,
+    "comments": 0
+  },
+  "preservation": [
+    "differenze all'apertura: 0",
+    "blocchi chiusi: {}; scrittura intera: true",
+    "normalizzazione «paragrafo dopo la tabella finale»: 1 nel file, 0 nella prova a vuoto",
+    "normalizzazione «w:fldSimple»: 1 nel file, 0 nella prova a vuoto",
+    "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
+  ],
+  "model": {
+    "outline": [],
+    "links": [],
+    "text": "8ccc5d7e81d50962085e8468f6838da74c53fbadec2b134b686407735b442a02",
+    "words": 8
+  },
+  "export": {
+    "html": [
+      "la copia HTML non porta: 2 campi"
+    ],
+    "txt": [
+      "la copia Testo semplice non porta: 1 tabella, 2 campi"
+    ],
+    "latex": [
+      "la copia LaTeX non porta: 2 campi"
+    ],
+    "rtf": [
+      "la copia RTF non porta: 2 campi"
+    ],
+    "odt": [
+      "la copia OpenDocument non porta: 2 campi"
+    ],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E5": "n/a",
+    "E6": "n/a",
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    }
+  }
+}

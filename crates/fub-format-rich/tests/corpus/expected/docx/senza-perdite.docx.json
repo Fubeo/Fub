@@ -67,6 +67,11 @@
       "readonly": null,
       "reopened": "same"
     },
-    "E6": "n/a"
+    "E6": "n/a",
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "different"
+    }
   }
 }

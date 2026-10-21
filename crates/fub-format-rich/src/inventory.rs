@@ -229,7 +229,9 @@ pub(crate) fn class_of(content_type: &str) -> Option<String> {
         return Some(DOCUMENT.into());
     }
     if let Some(rest) = content_type.strip_prefix(WML) {
-        return Some(rest.trim_end_matches("+xml").to_string());
+        // Un tipo senza `+xml` non è XML: le impostazioni della stampante, un
+        // documento incorporato. Il codec lo copia.
+        return rest.strip_suffix("+xml").map(str::to_string);
     }
     let regenerated = [
         (
@@ -759,6 +761,9 @@ struct Open {
     text: String,
     /// Una normalizzazione lo salta: il suo testo non conta.
     skipped: bool,
+    /// Un contenitore di proprietà ancora senza figli: la sua chiave conta
+    /// soltanto al primo figlio.
+    deferred: Option<Key>,
 }
 
 /// Gli elementi della forma dei run. Il codec unisce i run uguali e le loro
@@ -824,6 +829,10 @@ fn count_xml(
     let mut pending = Counts::new();
     // La profondità delle proprietà del run aperto, `w:r/w:rPr`.
     let mut run_props: Option<usize> = None;
+    // L'ultimo blocco del corpo è una tabella.
+    let mut table = false;
+    // Quanti elementi aperti hanno la chiave rinviata (`Open::deferred`).
+    let mut deferred = 0usize;
     loop {
         let event = reader
             .read_event_into(&mut buf)
@@ -866,10 +875,46 @@ fn count_xml(
                 (None, false)
             }
             Event::End(_) => {
-                let Some(open) = stack.pop() else {
+                let Some(mut open) = stack.pop() else {
                     return Err(xml_error(part, "unbalanced end"));
                 };
+                if let Some(key) = open.deferred.take() {
+                    deferred -= 1;
+                    if open.text.trim().is_empty() {
+                        if let Some(what) = empty_properties(&open.ns, &open.name) {
+                            *parsed.normalized.entry(what).or_default() += 1;
+                        }
+                    } else {
+                        // Un testo lo riempie: conta, con il testo.
+                        put(&mut parsed, &mut pending, target, key);
+                    }
+                }
                 let pair = (open.ns.as_str(), open.name.as_str());
+                if context.main
+                    && pair == (NS_W, "body")
+                    && stack.len() == 1
+                    && table
+                    && pending.is_empty()
+                {
+                    // Il paragrafo vuoto che il modello mette dopo una tabella
+                    // finale: un blocco, come nella prova a vuoto.
+                    *parsed.normalized.entry(TRAILING_PARAGRAPH).or_default() += 1;
+                    parsed.body.push(Counts::new());
+                    for key in [
+                        Key::Element {
+                            class: class.to_string(),
+                            ns: NS_W.into(),
+                            name: "p".into(),
+                        },
+                        Key::Text {
+                            class: class.to_string(),
+                            element: format!("{{{NS_W}}}p"),
+                            sha256: sha256("\u{0}".as_bytes()),
+                        },
+                    ] {
+                        put(&mut parsed, &mut pending, Target::Block, key);
+                    }
+                }
                 let inside = paragraphs.last_mut().filter(|p| p.level < stack.len());
                 if PARAGRAPH_TEXT.contains(&pair) && inside.is_some() {
                     if let Some(paragraph) = inside {
@@ -947,8 +992,16 @@ fn count_xml(
             }
             let (ns, local) = reader.resolver().resolve_element(start.name());
             let ns = namespace(&ns);
-            let name = String::from_utf8_lossy(local.as_ref()).into_owned();
+            let mut name = String::from_utf8_lossy(local.as_ref()).into_owned();
             let w = ns == NS_W;
+            if let Some((what, left)) = stack
+                .last()
+                .filter(|parent| w && parent.ns == NS_W)
+                .and_then(|parent| side_element(&parent.name, &name))
+            {
+                *parsed.normalized.entry(what).or_default() += 1;
+                name = left.to_string();
+            }
             let mut attributes = Vec::new();
             for attr in start.attributes() {
                 let attr = attr.map_err(|error| xml_error(part, error))?;
@@ -979,6 +1032,13 @@ fn count_xml(
                     }
                     continue;
                 }
+                if let Some((what, attr_name, value)) =
+                    side_attribute(w, &name, &attr_ns, &attr_name, &value)
+                {
+                    *parsed.normalized.entry(what).or_default() += 1;
+                    attributes.push((attr_ns, attr_name, value));
+                    continue;
+                }
                 attributes.push((attr_ns, attr_name, value));
             }
             let level = stack.len();
@@ -988,7 +1048,35 @@ fn count_xml(
                     name: name.clone(),
                     text: String::new(),
                     skipped: false,
+                    deferred: None,
                 });
+            }
+            if let (Some(what), Some(paragraph)) = (simple_field(&ns, &name), paragraphs.last_mut())
+            {
+                *parsed.normalized.entry(what).or_default() += 1;
+                for (attr_ns, attr_name, value) in attributes {
+                    if let Some(what) = skipped_attribute(&attr_ns, &attr_name) {
+                        *parsed.normalized.entry(what).or_default() += 1;
+                    } else if attr_ns == NS_W && attr_name == "instr" {
+                        paragraph.instructions.push_str(&value);
+                        paragraph.instructions.push(' ');
+                    } else {
+                        let value = crate::canonical::value(&attr_ns, &value);
+                        let key = Key::Attribute {
+                            class: class.to_string(),
+                            element: format!("{{{NS_W}}}fldChar"),
+                            ns: attr_ns,
+                            name: attr_name,
+                            value,
+                        };
+                        put(&mut parsed, &mut pending, target, key);
+                    }
+                }
+                if let (false, Some(open)) = (empty, stack.last_mut()) {
+                    open.skipped = true;
+                }
+                buf.clear();
+                continue;
             }
             if let Some(what) = skipped_element(&ns, &name) {
                 *parsed.normalized.entry(what).or_default() += 1;
@@ -1043,6 +1131,9 @@ fn count_xml(
                     parsed.body.push(std::mem::take(&mut pending));
                     target = Target::Block;
                 }
+                if top && !(w && (MARKERS.contains(&name.as_str()) || name == "sectPr")) {
+                    table = w && name == "tbl";
+                }
             } else if level > 0 && sdt_levels.last() == Some(&(level - 1)) {
                 if w && name == "sdtContent" {
                     target = Target::Pending;
@@ -1073,15 +1164,39 @@ fn count_xml(
                 }
                 None => put(parsed, pending, target, key),
             };
-            emit(
-                &mut parsed,
-                &mut pending,
-                Key::Element {
-                    class: class.to_string(),
-                    ns,
-                    name,
-                },
-            );
+            // Un contenitore di proprietà vuoto non conta: la sua chiave
+            // aspetta il primo figlio, e con lei quelle dei contenitori vuoti
+            // che lo contengono.
+            let bare = empty_properties(&ns, &name).filter(|_| {
+                attributes
+                    .iter()
+                    .all(|(attr_ns, attr_name, _)| skipped_attribute(attr_ns, attr_name).is_some())
+            });
+            let key = Key::Element {
+                class: class.to_string(),
+                ns,
+                name,
+            };
+            match bare {
+                None => {
+                    if deferred > 0 {
+                        for open in &mut stack[..level] {
+                            if let Some(key) = open.deferred.take() {
+                                emit(&mut parsed, &mut pending, key);
+                                deferred -= 1;
+                            }
+                        }
+                    }
+                    emit(&mut parsed, &mut pending, key);
+                }
+                Some(what) if empty => *parsed.normalized.entry(what).or_default() += 1,
+                Some(_) => {
+                    if let Some(open) = stack.last_mut() {
+                        open.deferred = Some(key);
+                        deferred += 1;
+                    }
+                }
+            }
             for (attr_ns, attr_name, value) in attributes {
                 if let Some(what) = skipped_attribute(&attr_ns, &attr_name) {
                     *parsed.normalized.entry(what).or_default() += 1;
@@ -1220,7 +1335,36 @@ pub(crate) enum Skip {
         name: &'static str,
         stem: &'static str,
     },
+    /// La forma semplice di un campo (`w:fldSimple`), che conta come la forma
+    /// complessa in cui il codec la riscrive: l'istruzione va con quelle del
+    /// paragrafo, gli altri attributi con l'inizio del campo (`w:fldChar`), i
+    /// figli (il risultato) contano come sempre.
+    Field {
+        ns: &'static str,
+        name: &'static str,
+    },
+    /// Il paragrafo vuoto dopo una tabella che chiude il corpo: nel file si
+    /// conta come se ci fosse.
+    TrailingParagraph,
+    /// I nomi dei lati di ISO 29500 (`start`, `end`), che contano come i nomi
+    /// che il codec scrive (`left`, `right`): gli elementi di questi
+    /// contenitori, gli attributi di questi elementi, il valore `w:val` di
+    /// questi altri.
+    Sides {
+        boxes: &'static [&'static str],
+        attributes: &'static [&'static str],
+        values: &'static [&'static str],
+    },
+    /// Questi contenitori di proprietà quando sono vuoti, senza attributi né
+    /// figli: non contano. Con un figlio contano come sempre.
+    EmptyProperties {
+        ns: &'static str,
+        names: &'static [&'static str],
+    },
 }
+
+/// Il nome della normalizzazione del paragrafo dopo una tabella finale.
+pub(crate) const TRAILING_PARAGRAPH: &str = "paragrafo dopo la tabella finale";
 
 /// Una differenza che il codec produce senza perdere niente, con la ragione e
 /// il test che lo dimostra. Una voce entra soltanto se Word stesso la
@@ -1276,6 +1420,50 @@ pub(crate) const NORMALIZATIONS: &[Normalization] = &[
         skip: Skip::Attributes {
             ns: &[NS_W],
             prefix: "rsid",
+        },
+    },
+    Normalization {
+        what: TRAILING_PARAGRAPH,
+        why: "un corpo che finisce con una tabella: Word la fa sempre seguire \
+              da un paragrafo, e il modello anche; il paragrafo vuoto in più \
+              è un blocco anche nel file, e l'innesto non lo scrive finché \
+              nessuno lo tocca",
+        skip: Skip::TrailingParagraph,
+    },
+    Normalization {
+        what: "start e end",
+        why: "i nomi dei lati di ISO 29500 (`w:start`, `w:end`, `w:startChars`, \
+              `jc=\"start\"`), che LibreOffice scrive: Word li legge come \
+              `left` e `right`, che in un paragrafo da destra a sinistra \
+              indicano già l'inizio e la fine, e il codec li riscrive così. Il \
+              valore resta, e conta",
+        skip: Skip::Sides {
+            boxes: &["tblCellMar", "tcMar", "tblBorders", "tcBorders", "pBdr"],
+            attributes: &["ind"],
+            values: &["jc", "lvlJc", "tab"],
+        },
+    },
+    Normalization {
+        what: "proprietà vuote",
+        why: "un contenitore di proprietà senza attributi né figli (`<w:rPr/>`, \
+              `<w:pPr></w:pPr>`) dice soltanto che non c'è niente da dire: il \
+              run, il paragrafo, la riga o la cella hanno le proprietà che \
+              avrebbero senza. LibreOffice li scrive, il codec no. \
+              `w:sectPr` e `w:tblPr` non ci sono: la loro assenza conta",
+        skip: Skip::EmptyProperties {
+            ns: NS_W,
+            names: &["rPr", "pPr", "trPr", "tcPr"],
+        },
+    },
+    Normalization {
+        what: "w:fldSimple",
+        why: "un campo scritto nella forma semplice: il codec lo riscrive nella \
+              forma complessa (inizio, istruzione, separatore, risultato, fine), \
+              che Word legge e scrive allo stesso modo; l'istruzione, gli \
+              attributi e il risultato contano ancora",
+        skip: Skip::Field {
+            ns: NS_W,
+            name: "fldSimple",
         },
     },
     Normalization {
@@ -1338,6 +1526,80 @@ pub(crate) const NORMALIZATIONS: &[Normalization] = &[
         },
     },
 ];
+
+/// La normalizzazione che conta questo elemento come un campo complesso, se
+/// c'è.
+pub(crate) fn simple_field(ns: &str, name: &str) -> Option<&'static str> {
+    NORMALIZATIONS.iter().find_map(|n| match n.skip {
+        Skip::Field {
+            ns: n_ns,
+            name: n_name,
+        } if ns == n_ns && name == n_name => Some(n.what),
+        _ => None,
+    })
+}
+
+/// Il nome che il codec scrive per un lato di ISO 29500.
+fn side(name: &str) -> Option<&'static str> {
+    match name {
+        "start" => Some("left"),
+        "end" => Some("right"),
+        "startChars" => Some("leftChars"),
+        "endChars" => Some("rightChars"),
+        _ => None,
+    }
+}
+
+/// Il nome con cui conta l'elemento `name` di WordprocessingML dentro
+/// `parent`, con la normalizzazione, se è un lato.
+pub(crate) fn side_element(parent: &str, name: &str) -> Option<(&'static str, &'static str)> {
+    NORMALIZATIONS.iter().find_map(|n| match n.skip {
+        Skip::Sides { boxes, .. } if boxes.contains(&parent) && matches!(name, "start" | "end") => {
+            side(name).map(|left| (n.what, left))
+        }
+        _ => None,
+    })
+}
+
+/// Il nome e il valore con cui conta un attributo dell'elemento `element` di
+/// WordprocessingML (`w`), con la normalizzazione, se nomina un lato.
+pub(crate) fn side_attribute(
+    w: bool,
+    element: &str,
+    ns: &str,
+    name: &str,
+    value: &str,
+) -> Option<(&'static str, String, String)> {
+    if !w || ns != NS_W {
+        return None;
+    }
+    NORMALIZATIONS.iter().find_map(|n| match n.skip {
+        Skip::Sides {
+            attributes, values, ..
+        } => {
+            if attributes.contains(&element) {
+                side(name).map(|left| (n.what, left.to_string(), value.to_string()))
+            } else if values.contains(&element) && name == "val" && matches!(value, "start" | "end")
+            {
+                side(value).map(|left| (n.what, name.to_string(), left.to_string()))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    })
+}
+
+/// La normalizzazione che non conta questo contenitore di proprietà quando è
+/// vuoto, se c'è.
+pub(crate) fn empty_properties(ns: &str, name: &str) -> Option<&'static str> {
+    NORMALIZATIONS.iter().find_map(|n| match n.skip {
+        Skip::EmptyProperties { ns: n_ns, names } if ns == n_ns && names.contains(&name) => {
+            Some(n.what)
+        }
+        _ => None,
+    })
+}
 
 /// La normalizzazione che salta questo elemento, se c'è.
 pub(crate) fn skipped_element(ns: &str, name: &str) -> Option<&'static str> {
@@ -1541,6 +1803,123 @@ mod tests {
             r#"<w:document {W} xmlns:w14="{NS_W14}"><w:body>{body}<w:sectPr/></w:body></w:document>"#
         );
         inventory(&docx(&document, &rels(""), &[])).unwrap()
+    }
+
+    #[test]
+    fn un_tipo_senza_xml_si_copia() {
+        assert_eq!(class_of(&format!("{WML}printerSettings")), None);
+        assert_eq!(class_of(&format!("{WML}document")), None);
+        assert_eq!(
+            class_of(&format!("{WML}header+xml")).as_deref(),
+            Some("header")
+        );
+    }
+
+    #[test]
+    fn il_paragrafo_dopo_una_tabella_finale_conta_come_nella_prova_a_vuoto() {
+        let table =
+            r#"<w:tbl><w:tr><w:tc><w:p><w:r><w:t>cella</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"#;
+        let file = body_of(table);
+        let dry = body_of(&format!("{table}<w:p></w:p>"));
+        assert_eq!(file.normalized.get(TRAILING_PARAGRAPH), Some(&1));
+        assert_eq!(file.body.len(), 2);
+        assert_eq!(open_differences(&file, &dry), Vec::new());
+        // Non dopo un paragrafo, né dopo una tabella seguita da un segno.
+        assert_eq!(
+            body_of(&format!("{table}<w:p/>"))
+                .normalized
+                .get(TRAILING_PARAGRAPH),
+            None
+        );
+        let marked = body_of(&format!(
+            r#"{table}<w:bookmarkStart w:id="0" w:name="x"/><w:bookmarkEnd w:id="0"/>"#
+        ));
+        assert_eq!(marked.normalized.get(TRAILING_PARAGRAPH), None);
+    }
+
+    #[test]
+    fn un_campo_semplice_conta_come_il_campo_complesso_che_il_codec_scrive() {
+        let simple = body_of(
+            r#"<w:p><w:fldSimple w:instr=" PAGE  \* MERGEFORMAT " w:dirty="1"><w:r><w:t>3</w:t></w:r></w:fldSimple></w:p>"#,
+        );
+        let complex = |instr: &str, result: &str| {
+            body_of(&format!(
+                r#"<w:p><w:r><w:fldChar w:fldCharType="begin" w:dirty="1"/></w:r><w:r><w:instrText xml:space="preserve">{instr}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>{result}</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>"#
+            ))
+        };
+        assert_eq!(simple.normalized.get("w:fldSimple"), Some(&1));
+        let same = complex(" PAGE \\* MERGEFORMAT ", "3");
+        assert_eq!(open_differences(&simple, &same), Vec::new());
+        // L'istruzione, il risultato e gli altri attributi contano ancora.
+        for (instr, result) in [(" NUMPAGES ", "3"), (" PAGE \\* MERGEFORMAT ", "4")] {
+            assert_ne!(
+                open_differences(&simple, &complex(instr, result)),
+                Vec::new(),
+                "{instr} {result}"
+            );
+        }
+        let undirty = body_of(
+            r#"<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> PAGE \* MERGEFORMAT </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>3</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>"#,
+        );
+        assert_ne!(open_differences(&simple, &undirty), Vec::new());
+    }
+
+    #[test]
+    fn un_contenitore_di_proprietà_vuoto_non_conta_e_uno_pieno_sì() {
+        let empty = body_of(
+            r#"<w:p><w:pPr><w:rPr></w:rPr></w:pPr><w:r><w:rPr/><w:t>Testo</w:t></w:r></w:p><w:tbl><w:tr><w:trPr w:rsidR="00AA11BB"></w:trPr><w:tc><w:tcPr/><w:p/></w:tc></w:tr></w:tbl>"#,
+        );
+        let plain = body_of(
+            r#"<w:p><w:r><w:t>Testo</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"#,
+        );
+        assert_eq!(empty.normalized.get("proprietà vuote"), Some(&5));
+        assert_eq!(open_differences(&empty, &plain), Vec::new());
+        assert_eq!(empty.body, plain.body);
+        // Il contenitore di un contenitore con un figlio conta, tutti e due.
+        let full = body_of(
+            r#"<w:p><w:pPr><w:rPr><w:b/></w:rPr></w:pPr><w:r><w:t>Testo</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"#,
+        );
+        assert_eq!(full.normalized.get("proprietà vuote"), None);
+        let differences: Vec<String> = open_differences(&full, &plain)
+            .into_iter()
+            .map(|d| d.key)
+            .collect();
+        for name in ["}pPr", "}rPr", "}b"] {
+            assert!(
+                differences.iter().any(|d| d.contains(name)),
+                "{name}: {differences:?}"
+            );
+        }
+        // Un attributo che conta lo fa contare.
+        let marked = body_of(
+            r#"<w:p><w:pPr w:foo="1"/><w:r><w:t>Testo</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"#,
+        );
+        assert_ne!(open_differences(&marked, &plain), Vec::new());
+        // Una `w:tblPr` vuota conta.
+        let table = body_of(
+            r#"<w:p><w:r><w:t>Testo</w:t></w:r></w:p><w:tbl><w:tblPr/><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"#,
+        );
+        assert_ne!(open_differences(&table, &plain), Vec::new());
+    }
+
+    #[test]
+    fn i_lati_di_iso_29500_contano_come_left_e_right() {
+        let iso = body_of(
+            r#"<w:p><w:pPr><w:jc w:val="start"/><w:ind w:start="340" w:hanging="0"/><w:tabs><w:tab w:val="end" w:pos="9000"/></w:tabs></w:pPr><w:r><w:t>Testo</w:t></w:r></w:p><w:tbl><w:tblPr><w:tblCellMar><w:start w:w="55" w:type="dxa"/><w:end w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"#,
+        );
+        let transitional = |indent: &str| {
+            body_of(&format!(
+                r#"<w:p><w:pPr><w:jc w:val="left"/><w:ind w:left="{indent}" w:hanging="0"/><w:tabs><w:tab w:val="right" w:pos="9000"/></w:tabs></w:pPr><w:r><w:t>Testo</w:t></w:r></w:p><w:tbl><w:tblPr><w:tblCellMar><w:left w:w="55" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"#
+            ))
+        };
+        assert_eq!(iso.normalized.get("start e end"), Some(&5));
+        assert_eq!(open_differences(&iso, &transitional("340")), Vec::new());
+        // Il valore conta ancora.
+        assert_ne!(open_differences(&iso, &transitional("0")), Vec::new());
+        // Fuori dai contenitori dei lati `w:start` resta sé stesso: il primo
+        // numero di un elenco.
+        let start = body_of(r#"<w:p><w:pPr><w:start w:val="3"/></w:pPr></w:p>"#);
+        assert_eq!(start.normalized.get("start e end"), None);
     }
 
     #[test]

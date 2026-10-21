@@ -1,6 +1,6 @@
 {
   "file": "docx/scritture.docx",
-  "sha256": "fb3a81f11a5b00f3a34d68592e94a2c0d1513a901931eea8f25277fa88d0d215",
+  "sha256": "303073df7cdc6c96069068c306f379ec2a68e92d53209cc23d5228b35651aa39",
   "open": {
     "readonly": null,
     "projection": "73eb099b8fc6f42368a8c520aae20cf6b2afc19629b85b4a965bf2555df3a150",
@@ -8,15 +8,11 @@
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 12",
+    "differenze all'apertura: 8",
     "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang>: 3 → 2",
     "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts>: 1 → 0",
-    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
     "  document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
     "  document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hint=\"eastAsia\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
     "  block 0: document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang>: 1 → 0",
     "  block 0: document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts>: 1 → 0",
     "  block 0: document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
@@ -64,6 +60,10 @@
     "E6": {
       "error": "locked",
       "message": "rich document has closed parts: block Some(0)"
+    },
+    "E7": {
+      "error": "fidelity",
+      "message": "rich document would not read back as written"
     }
   }
 }

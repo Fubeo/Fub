@@ -48,8 +48,9 @@ use quick_xml::name::ResolveResult;
 use quick_xml::NsReader;
 
 use crate::inventory::{
-    described, read_rels, renumbered, resolve, skipped_attribute, skipped_element, ContentTypes,
-    InventoryError, Limits, Relationship, Zip, MARKERS, NS_MC, NS_RELATIONSHIPS, NS_W, WRAPPERS,
+    described, empty_properties, read_rels, renumbered, resolve, side_attribute, side_element,
+    skipped_attribute, skipped_element, ContentTypes, InventoryError, Limits, Relationship, Zip,
+    MARKERS, NS_MC, NS_RELATIONSHIPS, NS_W, WRAPPERS,
 };
 
 /// Le voci di una proprietà o di un contesto, ordinate: tutte, e quelle che
@@ -556,6 +557,12 @@ impl<'a> Scanner<'a> {
             if skipped_attribute(&attr.ns, &attr.local).is_some() {
                 continue;
             }
+            if let Some((_, local, value)) =
+                side_attribute(el.ns == NS_W, &el.local, &attr.ns, &attr.local, &attr.value)
+            {
+                out.push((qualified(&attr.ns, &local), value));
+                continue;
+            }
             if attr.ns == NS_MC
                 || (attr.ns == "http://www.w3.org/XML/1998/namespace" && attr.local == "space")
             {
@@ -592,23 +599,33 @@ impl<'a> Scanner<'a> {
             return Ok(node);
         }
         loop {
-            match self.next()? {
-                Ev::Start(child) => {
-                    let skip = skipped_element(&child.ns, &child.local).is_some();
-                    let child = self.capture(child, false)?;
-                    if !skip {
-                        node.children.push(child);
-                    }
+            let (mut child, child_empty) = match self.next()? {
+                Ev::Start(child) => (child, false),
+                Ev::Empty(child) => (child, true),
+                Ev::Text(text) => {
+                    node.text.push_str(&text);
+                    continue;
                 }
-                Ev::Empty(child) => {
-                    if skipped_element(&child.ns, &child.local).is_none() {
-                        let child = self.capture(child, true)?;
-                        node.children.push(child);
-                    }
-                }
-                Ev::Text(text) => node.text.push_str(&text),
                 Ev::End => return Ok(node),
                 Ev::Eof => return Err(xml_error("unclosed element")),
+            };
+            // Le normalizzazioni dell'inventario: un lato di ISO 29500 con
+            // il nome che il codec scrive, un contenitore di proprietà vuoto
+            // come se non ci fosse.
+            if let Some((_, left)) =
+                side_element(&el.local, &child.local).filter(|_| el.ns == NS_W && child.ns == NS_W)
+            {
+                child.local = left.to_string();
+            }
+            let skip = skipped_element(&child.ns, &child.local).is_some();
+            let properties = empty_properties(&child.ns, &child.local).is_some();
+            let child = self.capture(child, child_empty)?;
+            let bare = properties
+                && child.attrs.is_empty()
+                && child.children.is_empty()
+                && child.text.trim().is_empty();
+            if !skip && !bare {
+                node.children.push(child);
             }
         }
     }
@@ -684,6 +701,8 @@ impl<'a> Scanner<'a> {
         let mut sect: Option<Range<usize>> = None;
         // Un segno dopo l'ultima unità.
         let mut trailing = false;
+        // L'ultimo blocco è una tabella.
+        let mut table = false;
         let end = loop {
             let at = self.position();
             let (el, empty) = match self.next()? {
@@ -703,6 +722,9 @@ impl<'a> Scanner<'a> {
                 continue;
             }
             let marker = el.ns == NS_W && MARKERS.contains(&el.local.as_str());
+            if !marker {
+                table = el.is_w("tbl");
+            }
             self.block_level(el, empty)?;
             if marker {
                 trailing = true;
@@ -738,6 +760,17 @@ impl<'a> Scanner<'a> {
                 }),
                 _ => return Err(ScanError::Shape("markers after the last block")),
             }
+        } else if table {
+            // Un corpo che finisce con una tabella: il modello, come Word, la
+            // fa seguire da un paragrafo vuoto. Qui è un blocco senza byte,
+            // che l'innesto lascia com'è se nessuno lo tocca
+            // (`inventory::TRAILING_PARAGRAPH`).
+            units.push(Unit {
+                bytes: unit_start..unit_start,
+                blocks: self.blocks.len()..self.blocks.len() + 1,
+            });
+            self.blocks
+                .push(vec![Token::Para(Arc::new(Sig::of(Vec::new())))]);
         }
         Ok(Scan {
             root,
@@ -1599,6 +1632,21 @@ mod tests {
         assert!(carries(&before, &wider).is_err());
         assert!(carries(&wider, &before).is_err());
         assert!(carries(&before, &moved).is_err());
+    }
+
+    #[test]
+    fn dopo_una_tabella_finale_c_è_un_paragrafo_senza_byte() {
+        let table = "<w:tbl><w:tr><w:tc><w:p><w:r><w:t>c</w:t></w:r></w:p></w:tc></w:tr></w:tbl>";
+        let xml =
+            format!(r#"<w:document {W}><w:body><w:p/>{table}<w:sectPr/></w:body></w:document>"#);
+        let scan = scan(xml.as_bytes(), &BTreeMap::new(), &crate::inventory::LIMITS).unwrap();
+        assert_eq!(scan.blocks.len(), 3);
+        assert_eq!(text(&scan.blocks[2]), "¶");
+        let last = scan.units.last().unwrap();
+        assert_eq!((last.bytes.len(), last.blocks.clone()), (0, 2..3));
+        assert_eq!(last.bytes.start, scan.sect.start);
+        // Dopo un paragrafo, niente.
+        assert_eq!(blocks(&format!("{table}<w:p/>")).len(), 2);
     }
 
     #[test]

@@ -1,0 +1,113 @@
+{
+  "file": "docx/libreoffice.docx",
+  "sha256": "3dba4d1e409c0f6df90cdfc321fea0714d6640633ad0bf1ec015eecc0a8aa40f",
+  "open": {
+    "readonly": null,
+    "projection": "8b7fa5e127a6c54445b820c2d0fe0b6d75b3ac444f2f75d19e5d19c6fc38692c",
+    "blocks": 8,
+    "comments": 1
+  },
+  "preservation": [
+    "differenze all'apertura: 28",
+    "  comments: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}annotationRef>: 1 → 0",
+    "  core-properties: <{http://purl.org/dc/elements/1.1/}description>: 1 → 0",
+    "  core-properties: <{http://purl.org/dc/elements/1.1/}language>: 1 → 0",
+    "  core-properties: <{http://purl.org/dc/elements/1.1/}subject>: 1 → 0",
+    "  core-properties: <{http://schemas.openxmlformats.org/package/2006/metadata/core-properties}lastModifiedBy>: 1 → 0",
+    "  core-properties: <{http://schemas.openxmlformats.org/package/2006/metadata/core-properties}revision>: 1 → 0",
+    "  comments: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}comment @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}initials=\"\": 1 → 0",
+    "  comments: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"en-US\": 1 → 0",
+    "  document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}ind @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hanging=\"0\": 2 → 0",
+    "  numbering: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hint=\"default\": 1 → 0",
+    "  settings: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}autoHyphenation @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val=\"1\": 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}keepNext @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val=\"1\": 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"zh-CN\": 4 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}suppressAutoHyphens @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val=\"1\": 1 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}clrScheme @{}name=\"LibreOffice\": 1 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}cs @{}charset=\"1\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}cs @{}pitchFamily=\"0\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}cs @{}typeface=\"DejaVu Sans\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}ea @{}charset=\"1\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}ea @{}pitchFamily=\"0\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}ea @{}typeface=\"DejaVu Sans\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}latin @{}charset=\"1\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}latin @{}pitchFamily=\"0\": 2 → 0",
+    "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}ln @{}w=\"6350\": 3 → 1",
+    "  core-properties: text of {http://purl.org/dc/elements/1.1/}language 5c49f88dafe6: 1 → 0",
+    "  core-properties: text of {http://schemas.openxmlformats.org/package/2006/metadata/core-properties}revision 5feceb66ffc8: 1 → 0",
+    "  block 0: document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}ind @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hanging=\"0\": 1 → 0",
+    "  block 3: document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}ind @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hanging=\"0\": 1 → 0",
+    "blocchi chiusi: {0, 3}; scrittura intera: false",
+    "normalizzazione «w:id»: 8 nel file, 9 nella prova a vuoto",
+    "normalizzazione «start e end»: 54 nel file, 0 nella prova a vuoto",
+    "normalizzazione «proprietà vuote»: 38 nel file, 0 nella prova a vuoto",
+    "normalizzazione «statistiche di app.xml»: 3 nel file, 3 nella prova a vuoto",
+    "normalizzazione «paraId»: 0 nel file, 3 nella prova a vuoto",
+    "normalizzazione «w14:textId»: 0 nel file, 1 nella prova a vuoto"
+  ],
+  "model": {
+    "outline": [
+      "1 Un documento di LibreOffice",
+      "2 Un elenco e una tabella"
+    ],
+    "links": [
+      "Url(\"https://example.org/\")"
+    ],
+    "text": "9987fcf566a87c316e00eb9da45ff506e25a4426923901cfad73918c90d5080b",
+    "words": 33
+  },
+  "export": {
+    "html": [
+      "la copia HTML non porta: 2 titoli, 33 caratteri in grassetto su 52, 1 nota a piè di pagina, 1 commento"
+    ],
+    "txt": [
+      "la copia Testo semplice non porta: 2 titoli, 2 voci d'elenco, 1 tabella, 1 link, 52 caratteri in grassetto, 7 caratteri in corsivo, 1 nota a piè di pagina, 1 commento"
+    ],
+    "latex": [
+      "la copia LaTeX non porta: 2 titoli, 43 caratteri in grassetto su 52, 1 nota a piè di pagina, 1 commento"
+    ],
+    "rtf": [
+      "la copia RTF non porta: 33 caratteri in grassetto su 52, 1 nota a piè di pagina, 1 commento"
+    ],
+    "odt": [
+      "la copia OpenDocument non porta: 43 caratteri in grassetto su 52, 1 nota a piè di pagina, 1 commento"
+    ],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "error": "locked",
+      "message": "rich document has closed parts: block None"
+    },
+    "E5": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E6": {
+      "error": "locked",
+      "message": "rich document has closed parts: block Some(0)"
+    },
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "different"
+    }
+  }
+}

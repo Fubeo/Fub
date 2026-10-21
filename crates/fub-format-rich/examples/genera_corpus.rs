@@ -48,6 +48,7 @@ fn main() {
         ("docx/controlli.docx", controlli()),
         ("docx/pacchetto.docx", pacchetto()),
         ("docx/protetto.docx", protetto()),
+        ("docx/falsi-allarmi.docx", falsi_allarmi()),
         ("docx/ostile-troncato.docx", troncato()),
         ("docx/ostile-voci-duplicate.docx", voci_duplicate()),
         ("docx/ostile-xml-malformato.docx", xml_malformato()),
@@ -230,9 +231,12 @@ fn settings(extra: &str) -> String {
     )
 }
 
-/// Il pacchetto di un documento con gli stili e le impostazioni.
+/// Il pacchetto di un documento con gli stili e le impostazioni. Gli stili
+/// sono quelli che il motore di oggi conserva: ogni file misura ciò che
+/// esercita, e le perdite degli stili le misurano `stili-elenchi-tabelle` e
+/// `revisioni-testo`.
 fn with_styles(body: &str, settings_extra: &str) -> Package {
-    with_styles_of(body, settings_extra, false)
+    with_styles_of(body, settings_extra, true)
 }
 
 fn with_styles_of(body: &str, settings_extra: &str, lossless: bool) -> Package {
@@ -267,9 +271,9 @@ fn stili_elenchi_tabelle() -> Vec<u8> {
     word_moderno(false)
 }
 
-/// Lo stesso documento senza ciò che il motore di oggi perde: gli stili di
-/// [`styles`] con `lossless`, e il numero di pagina come campo complesso
-/// invece di `w:fldSimple`.
+/// Lo stesso documento senza ciò che il motore di oggi perde, gli stili di
+/// [`styles`] con `lossless`, e con il numero di pagina come campo complesso
+/// invece di `w:fldSimple`: le due forme del campo sono misurate tutte e due.
 fn senza_perdite() -> Vec<u8> {
     word_moderno(true)
 }
@@ -637,6 +641,36 @@ fn protetto() -> Vec<u8> {
         r#"<w:documentProtection w:edit="readOnly" w:enforcement="1"/>"#,
     )
     .bytes()
+}
+
+/// Ciò che il codec riscrive in un'altra forma senza perdere niente, e che
+/// la misura non deve scambiare per una perdita: un campo semplice
+/// (`w:fldSimple`), che diventa complesso; l'istruzione di un campo complesso
+/// spezzata su più run; le impostazioni della stampante, una parte binaria
+/// che si copia; un corpo che finisce con una tabella, dopo la quale il
+/// modello mette un paragrafo vuoto.
+fn falsi_allarmi() -> Vec<u8> {
+    let body = [
+        r#"<w:p><w:r><w:t xml:space="preserve">Pagine: </w:t></w:r><w:fldSimple w:instr=" NUMPAGES  \* MERGEFORMAT "><w:r><w:t>1</w:t></w:r></w:fldSimple><w:r><w:t>.</w:t></w:r></w:p>"#.to_string(),
+        r#"<w:p><w:r><w:t xml:space="preserve">Data: </w:t></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> DATE </w:instrText></w:r><w:r><w:instrText xml:space="preserve">\@ "d MMMM yyyy" </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>21 ottobre 2026</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>"#.to_string(),
+        r#"<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Voce</w:t></w:r></w:p></w:tc><w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>Valore</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"#.to_string(),
+        SECT.to_string(),
+    ]
+    .concat();
+    let mut package = with_styles_of(&body, "", true);
+    package
+        .part(
+            "word/printerSettings/printerSettings1.bin",
+            Some(&format!("{WML}.printerSettings")),
+            b"\x00\x04Stampante del corpus\x00\x00\x01\x00",
+        )
+        .rel(
+            "word/document.xml",
+            "rIdPrinter",
+            "printerSettings",
+            "printerSettings/printerSettings1.bin",
+        );
+    package.bytes()
 }
 
 // --- Ostili -------------------------------------------------------------

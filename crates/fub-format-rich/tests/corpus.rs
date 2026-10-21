@@ -1,5 +1,5 @@
 //! **Il banco del corpus.** Ogni file di `tests/corpus/` passa dall'apertura,
-//! dalle esportazioni e dalle modifiche standard della shell (E0–E6); l'esito
+//! dalle esportazioni e dalle modifiche standard della shell (E0–E7); l'esito
 //! si confronta con `tests/corpus/expected/<file>.json`.
 //!
 //! I risultati attesi committati sono il comportamento del motore di oggi: in
@@ -78,6 +78,40 @@ fn manifest() -> Vec<Entry> {
             entry.path = value.to_string();
         }
         entry.fields.insert(key, value.to_string());
+    }
+    out
+}
+
+/// L'esito dell'apertura in una riga, come lo scrive `atteso` nel
+/// manifesto: `modificabile`, `solo il corpo` (con `body_only`), seguiti da
+/// `, blocchi chiusi: <indici>` se ce ne sono; `sola lettura: <ragione>`;
+/// `errore: <specie>`.
+fn esito(codec: Codec, bytes: &[u8]) -> String {
+    let opened = match open(codec, bytes) {
+        Ok(opened) => opened,
+        Err(error) => return format!("errore: {}", error_of(&error)["error"].as_str().unwrap()),
+    };
+    if let Some(reason) = opened.readonly {
+        return format!(
+            "sola lettura: {}",
+            readonly_of(Some(reason)).as_str().unwrap()
+        );
+    }
+    let projection: Value = serde_json::from_str(&opened.projection).unwrap();
+    let mut out = match projection["body_only"].as_bool() == Some(true) {
+        true => "solo il corpo".to_string(),
+        false => "modificabile".to_string(),
+    };
+    let locked: Vec<String> = projection["blocks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .filter(|(_, block)| block["locked"].as_bool() == Some(true))
+        .map(|(at, _)| at.to_string())
+        .collect();
+    if !locked.is_empty() {
+        out.push_str(&format!(", blocchi chiusi: {}", locked.join(" ")));
     }
     out
 }
@@ -392,6 +426,15 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
             })?;
             table.rows.pop();
         }
+        // Scrivere nell'ultimo paragrafo del corpo: dopo una tabella finale è
+        // il paragrafo vuoto che il modello aggiunge.
+        "E7" => {
+            let para = p.blocks.iter_mut().rev().find_map(|block| match block {
+                Block::Para(para) if !para.locked => Some(para),
+                _ => None,
+            })?;
+            para.c.push(text_inline(" In fondo."));
+        }
         // Ciò che la shell non fa: cambiare un blocco chiuso.
         "E6" => {
             let (b, i) = first_text(&mut p, true)?;
@@ -402,7 +445,7 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
     Some(p)
 }
 
-const EDITS: [&str; 7] = ["E0", "E1", "E2", "E3", "E4", "E5", "E6"];
+const EDITS: [&str; 8] = ["E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7"];
 
 /// Salva una modifica, riapre i byte e confronta la proiezione riaperta con
 /// quella voluta, a meno dei dati opachi.
@@ -517,6 +560,26 @@ fn il_manifesto_descrive_ogni_file_e_nient_altro() {
         .map(|name| std::fs::metadata(corpus().join(name)).unwrap().len())
         .sum();
     assert!(total <= 15 * 1024 * 1024, "corpus di {total} byte");
+}
+
+/// L'esito che il manifesto dichiara è quello dell'apertura: chi cambia il
+/// motore o la misura e cambia un esito lo vede qui, con la ragione
+/// (`perché`) da riscrivere. Ogni esito che non è `modificabile` dice perché.
+#[test]
+fn l_esito_dichiarato_è_quello_dell_apertura() {
+    let mut failures = Vec::new();
+    for entry in manifest() {
+        let bytes = std::fs::read(corpus().join(&entry.path)).unwrap();
+        let got = esito(codec_of(&entry.path), &bytes);
+        let wanted = &entry.fields["atteso"];
+        if &got != wanted {
+            failures.push(format!("{}: atteso «{wanted}», aperto «{got}»", entry.path));
+        }
+        if got != "modificabile" && !entry.fields.contains_key("perché") {
+            failures.push(format!("{}: «{got}» senza `perché`", entry.path));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 #[test]

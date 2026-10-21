@@ -65,6 +65,11 @@
       "message": "rich document has closed parts: block None"
     },
     "E5": "n/a",
-    "E6": "n/a"
+    "E6": "n/a",
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    }
   }
 }
