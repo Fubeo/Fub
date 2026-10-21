@@ -125,6 +125,13 @@ describe("righe e colonne", () => {
     const numbers: TableData = { rows: [["n"], ["10"], ["9"], ["1"]], aligns: [null] };
     expect(sortRows(numbers, 0, 1).rows).toEqual([["n"], ["1"], ["9"], ["10"]]);
     expect(sortRows(numbers, 0, -1).rows).toEqual([["n"], ["10"], ["9"], ["1"]]);
+    const column = (values: string[]): TableData => ({ rows: [["n"], ...values.map((value) => [value])], aligns: [null] });
+    const sorted = (values: string[], direction: 1 | -1 = 1) => sortRows(column(values), 0, direction).rows.slice(1).map((row) => row[0]);
+    expect(sorted(["1.2", "1.11", "2"])).toEqual(["1.11", "1.2", "2"]);
+    expect(sorted(["-1", "-10", "-2"])).toEqual(["-10", "-2", "-1"]);
+    expect(sorted(["1,2", "1,11", "2"])).toEqual(["1,11", "1,2", "2"]);
+    expect(sorted(["b", "", "3", "a10", "a9", "-0.5"])).toEqual(["-0.5", "3", "a9", "a10", "b", ""]);
+    expect(sorted(["b", "", "3", "a10", "a9", "-0.5"], -1)).toEqual(["b", "a10", "a9", "3", "-0.5", ""]);
   });
 });
 
@@ -168,6 +175,31 @@ describe("la formattazione delle celle", () => {
     const bold = toggleWrap(data, range, "**");
     expect(bold.rows).toEqual([["**a**", "**b**", ""]]);
     expect(toggleWrap(bold, range, "**").rows).toEqual([["a", "b", ""]]);
+  });
+
+  it("più tratti formattati nella cella non sono un tratto solo (D04)", () => {
+    expect(isWrapped("**uno** e **due**", "**", "**")).toBe(false);
+    expect(isWrapped("*uno* e *due*", "*", "*")).toBe(false);
+    expect(isWrapped("~~a~~ e ~~b~~", "~~", "~~")).toBe(false);
+    expect(isWrapped("*a **b** c*", "*", "*")).toBe(true);
+    expect(isWrapped("***a***", "**", "**")).toBe(true);
+    expect(isWrapped("**a \\*\\* b**", "**", "**")).toBe(true);
+    expect(isWrapped("**a `**` b**", "**", "**")).toBe(true);
+    const data: TableData = { rows: [["**uno** e **due**", "*uno* e *due*"]], aligns: [null, null] };
+    const range = { top: 0, left: 0, bottom: 0, right: 1 };
+    expect(clearFormatting(data, range).rows).toEqual(data.rows);
+    expect(toggleWrap(data, { ...range, right: 0 }, "**").rows[0]![0]).toBe("****uno** e **due****");
+  });
+
+  it("il codice nella cella usa i backtick che servono al contenuto (D05)", () => {
+    const data: TableData = { rows: [["a`b", "`x", "a ``b`` c", " y "]], aligns: [null, null, null, null] };
+    const range = { top: 0, left: 0, bottom: 0, right: 3 };
+    const code = toggleWrap(data, range, "`");
+    expect(code.rows).toEqual([["``a`b``", "`` `x ``", "```a ``b`` c```", "`  y  `"]]);
+    expect(code.rows[0]!.every((cell) => isWrapped(cell, "`", "`"))).toBe(true);
+    expect(toggleWrap(code, range, "`").rows).toEqual(data.rows);
+    expect(clearFormatting(code, range).rows).toEqual(data.rows);
+    expect(isWrapped("`a` e `b`", "`", "`")).toBe(false);
   });
 
   it("cancellare la formattazione toglie i marcatori che avvolgono la cella", () => {

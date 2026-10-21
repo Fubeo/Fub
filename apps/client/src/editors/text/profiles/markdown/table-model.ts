@@ -319,15 +319,32 @@ export function moveColumns(data: TableData, from: number, to: number, delta: -1
   return { rows: mutable(data).map(shift), aligns: shift([...data.aligns]) };
 }
 
-/// Ordina il corpo secondo una colonna: numeri come numeri, a parità
-/// l'ordine di prima.
+/// Il valore di una cella che è un numero: segno, cifre e al più un
+/// separatore decimale, punto o virgola. `null` se la cella è altro.
+function cellNumber(text: string): number | null {
+  const match = /^([-+−]?)(\d+)(?:[.,](\d+))?$/u.exec(text.trim());
+  if (!match) return null;
+  const value = Number(`${match[2]}.${match[3] ?? "0"}`);
+  return match[1] === "-" || match[1] === "−" ? -value : value;
+}
+
+/// Ordina il corpo secondo una colonna. I numeri si confrontano come valori
+/// (`-10 < -2 < 1,11 < 1.2`), e vengono prima del testo, che si confronta in
+/// ordine naturale; le celle vuote restano in fondo in tutte e due le
+/// direzioni. A parità, l'ordine di prima (D08).
 export function sortRows(data: TableData, col: number, direction: 1 | -1): TableData {
   const [header, ...body] = mutable(data);
+  const rank = (text: string) => (text.trim() === "" ? 2 : cellNumber(text) === null ? 1 : 0);
   const ordered = body
-    .map((row, index) => ({ row, index }))
-    .sort((a, b) =>
-      direction * (a.row[col] ?? "").localeCompare(b.row[col] ?? "", undefined, { numeric: true }) || a.index - b.index
-    )
+    .map((row, index) => ({ row, index, text: row[col] ?? "" }))
+    .sort((a, b) => {
+      const ra = rank(a.text), rb = rank(b.text);
+      if (ra !== rb) return ra === 2 || rb === 2 ? ra - rb : direction * (ra - rb);
+      const order = ra === 0
+        ? cellNumber(a.text)! - cellNumber(b.text)!
+        : a.text.localeCompare(b.text, undefined, { numeric: true });
+      return direction * order || a.index - b.index;
+    })
     .map(({ row }) => row);
   return { rows: header ? [header, ...ordered] : ordered, aligns: data.aligns };
 }
@@ -411,12 +428,95 @@ function run(text: string, char: string, fromEnd: boolean): number {
   return count;
 }
 
-/// La cella è avvolta per intero dai marcatori? Il corsivo `*` si distingue
-/// dal grassetto `**` per la parità della corsa, come nei comandi del profilo.
+/// Il testo con gli escape e il codice inline spenti: i marcatori che restano
+/// sono quelli che formattano.
+function bareMarkers(text: string): string {
+  let out = "";
+  for (let i = 0; i < text.length; ) {
+    if (text[i] === "\\" && i + 1 < text.length) {
+      out += "  ";
+      i += 2;
+    } else if (text[i] === "`") {
+      const length = run(text.slice(i), "`", false);
+      const close = codeClose(text, i + length, length);
+      const to = close === -1 ? i + length : close + length;
+      out += close === -1 ? text.slice(i, to) : " ".repeat(to - i);
+      i = to;
+    } else {
+      out += text[i];
+      i++;
+    }
+  }
+  return out;
+}
+
+/// Dove comincia la corsa di `length` backtick che chiude un codice inline.
+function codeClose(text: string, from: number, length: number): number {
+  for (let i = from; i < text.length; ) {
+    if (text[i] !== "`") {
+      i++;
+      continue;
+    }
+    const found = run(text.slice(i), "`", false);
+    if (found === length) return i;
+    i += found;
+  }
+  return -1;
+}
+
+/// Le corse di un carattere in un testo, come lunghezze.
+function runsOf(text: string, char: string): number[] {
+  const runs: number[] = [];
+  for (let i = 0; i < text.length; ) {
+    if (text[i] !== char) {
+      i++;
+      continue;
+    }
+    const length = run(text.slice(i), char, false);
+    runs.push(length);
+    i += length;
+  }
+  return runs;
+}
+
+/// La cella è un codice inline solo, da un capo all'altro?
+function isCode(text: string): boolean {
+  const length = run(text, "`", false);
+  if (length === 0 || length * 2 >= text.length + 1) return false;
+  return codeClose(text, length, length) === text.length - length;
+}
+
+/// Un codice inline che mostra `text`: la corsa di backtick più lunga di
+/// quelle dentro, e uno spazio ai bordi se il contenuto comincia o finisce con
+/// un backtick o con uno spazio, che il parser altrimenti mangerebbe (D05).
+function wrapCode(text: string): string {
+  const fence = "`".repeat(Math.max(0, ...runsOf(text, "`")) + 1);
+  const pad = /^[` ]|[` ]$/.test(text) && /[^ ]/.test(text) ? " " : "";
+  return `${fence}${pad}${text}${pad}${fence}`;
+}
+
+function unwrapCode(text: string): string {
+  const length = run(text, "`", false);
+  const inner = text.slice(length, text.length - length);
+  return inner.length >= 2 && inner.startsWith(" ") && inner.endsWith(" ") && /[^ ]/.test(inner) ? inner.slice(1, -1) : inner;
+}
+
+/// La cella è avvolta per intero dai marcatori, e da un tratto solo? Il
+/// corsivo `*` si distingue dal grassetto `**` per la parità della corsa, come
+/// nei comandi del profilo; `**uno** e **due**` sono due tratti, non uno che
+/// va dalla prima all'ultima coppia (D04).
 export function isWrapped(text: string, open: string, close: string): boolean {
+  if (open === "`" && close === "`") return isCode(text);
   if (text.length < open.length + close.length || !text.startsWith(open) || !text.endsWith(close)) return false;
-  if (open === "*" && close === "*") return run(text, "*", false) % 2 === 1 && run(text, "*", true) % 2 === 1;
-  return true;
+  const inner = bareMarkers(text.slice(open.length, text.length - close.length));
+  if (open === close && /^(.)\1?$/u.test(open) && (open[0] === "*" || open[0] === "_")) {
+    const runs = runsOf(inner, open[0]);
+    if (open.length === 1) {
+      return run(text, open, false) % 2 === 1 && run(text, open, true) % 2 === 1 && runs.every((length) => length % 2 === 0);
+    }
+    return runs.every((length) => length < 2);
+  }
+  return !inner.includes(close);
 }
 
 /// Le celle non vuote del rettangolo sono tutte avvolte?
@@ -433,14 +533,19 @@ export function rangeWrapped(data: TableData, range: GridRange, open: string, cl
   return any;
 }
 
+function unwrap(text: string, open: string, close: string): string {
+  return open === "`" && close === "`" ? unwrapCode(text) : text.slice(open.length, text.length - close.length);
+}
+
 /// Mette o toglie un marcatore alle celle non vuote del rettangolo: se sono
 /// già tutte avvolte si tolgono, altrimenti si avvolgono quelle che non lo sono.
 export function toggleWrap(data: TableData, range: GridRange, open: string, close = open): TableData {
-  const unwrap = rangeWrapped(data, range, open, close);
+  const unwrapping = rangeWrapped(data, range, open, close);
   return mapRange(data, range, (text) => {
     if (text === "") return text;
-    if (unwrap) return text.slice(open.length, text.length - close.length);
-    return isWrapped(text, open, close) ? text : `${open}${text}${close}`;
+    if (unwrapping) return unwrap(text, open, close);
+    if (isWrapped(text, open, close)) return text;
+    return open === "`" && close === "`" ? wrapCode(text) : `${open}${text}${close}`;
   });
 }
 
@@ -456,7 +561,7 @@ export function clearFormatting(data: TableData, range: GridRange): TableData {
       changed = false;
       for (const [open, close] of WRAPPERS) {
         if (isWrapped(current, open, close)) {
-          current = current.slice(open.length, current.length - close.length);
+          current = unwrap(current, open, close);
           changed = true;
         }
       }
