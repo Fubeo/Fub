@@ -38,6 +38,7 @@ mod canonical;
 mod diff;
 pub mod export;
 mod fidelity;
+mod flow;
 mod fresh;
 mod inventory;
 mod model;

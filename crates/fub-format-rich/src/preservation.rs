@@ -15,7 +15,14 @@
 //!   deve uscire identico: ogni blocco del corpo che il modello voluto ha uguale
 //!   alla base, con le note e le caselle che mostra, e ogni classe di parti il
 //!   cui dato nel modello non è cambiato. Ciò che l'utente ha toccato lo
-//!   verifica già la rilettura del modello ([`crate::fidelity::reads_back`]).
+//!   verifica la rilettura del modello ([`crate::fidelity::reads_back`]), a
+//!   meno di ciò che il modello non dice: quello lo verifica il flusso.
+//!
+//! L'inventario conta; il flusso ([`crate::flow`]) dice dove. In entrambi i
+//! momenti ogni blocco si confronta anche come flusso: all'apertura la prova
+//! a vuoto porta il flusso di ogni blocco del file, al salvataggio un blocco
+//! non toccato porta quello del file, e nei blocchi toccati resta ciò che la
+//! proiezione non porta ([`crate::flow::keeps`]).
 //!
 //! In più, al salvataggio: nessuna parte da copiare compare in più copie di
 //! quante ne chiedano il modello voluto o la base, e nessun riferimento a una
@@ -36,6 +43,7 @@ use std::sync::{Arc, Mutex};
 use wordcraft_doc::{Block, Document, Part, PartKind};
 
 use crate::fidelity::{each_paragraph, shown};
+use crate::flow::{self, Token};
 use crate::inventory::{
     self, equal_differences, inventory, open_differences, Counts, Difference, Inventory,
     InventoryError, Key, DOCUMENT,
@@ -48,6 +56,10 @@ pub(crate) enum Finding {
     Unreadable(InventoryError),
     /// Il codec perderebbe o aggiungerebbe queste chiavi.
     Differences(Vec<Difference>),
+    /// Il corpo non si legge come flusso con i blocchi del modello, o un
+    /// blocco perde nel flusso ciò che l'inventario non vede: un segno
+    /// spostato, una proprietà passata a un altro carattere.
+    Flow(String),
 }
 
 fn findings(differences: Vec<Difference>) -> Result<(), Finding> {
@@ -59,18 +71,73 @@ fn findings(differences: Vec<Difference>) -> Result<(), Finding> {
 
 /// La prova a vuoto di un file che la regola all'apertura ha accettato: il suo
 /// inventario, che ogni salvataggio sulla stessa base confronta con i byte
-/// nuovi.
+/// nuovi, e il flusso dei blocchi del file, che ogni salvataggio deve
+/// portare.
 #[derive(Debug)]
 pub(crate) struct Baseline {
     dry: Inventory,
+    file: Vec<Vec<Token>>,
 }
 
-/// La regola all'apertura, sui byte del file e su quelli della prova a vuoto.
-pub(crate) fn check_open(original: &[u8], dry: &[u8]) -> Result<Baseline, Finding> {
-    let original = inventory(original).map_err(Finding::Unreadable)?;
-    let dry = inventory(dry).map_err(Finding::Unreadable)?;
-    findings(open_differences(&original, &dry))?;
-    Ok(Baseline { dry })
+/// La regola all'apertura, sui byte del file e su quelli della prova a vuoto
+/// del documento letto, che ha `blocks` blocchi nel corpo. Oltre
+/// all'inventario, la prova a vuoto porta il flusso di ogni blocco
+/// ([`flow::carries`]): un segno o una proprietà spostati lasciano gli stessi
+/// conteggi.
+pub(crate) fn check_open(original: &[u8], dry: &[u8], blocks: usize) -> Result<Baseline, Finding> {
+    let o_inventory = inventory(original).map_err(Finding::Unreadable)?;
+    let d_inventory = inventory(dry).map_err(Finding::Unreadable)?;
+    findings(open_differences(&o_inventory, &d_inventory))?;
+    let file = body_flow(original, blocks)?;
+    let written = body_flow(dry, blocks)?;
+    for (at, (before, after)) in file.iter().zip(&written).enumerate() {
+        flow::carries(before, after).map_err(|why| Finding::Flow(format!("block {at}: {why}")))?;
+    }
+    Ok(Baseline {
+        dry: d_inventory,
+        file,
+    })
+}
+
+/// Il flusso dei blocchi del corpo, che devono essere i `blocks` del modello.
+fn body_flow(bytes: &[u8], blocks: usize) -> Result<Vec<Vec<Token>>, Finding> {
+    let scan = flow::main_of(bytes, &inventory::LIMITS)
+        .map_err(|error| Finding::Flow(error.to_string()))?;
+    if scan.blocks.len() != blocks {
+        return Err(Finding::Flow(format!(
+            "body blocks: {blocks} in the model, {} in the flow",
+            scan.blocks.len()
+        )));
+    }
+    Ok(scan.blocks)
+}
+
+/// La regola sul flusso al salvataggio, fra i blocchi del file e quelli
+/// scritti, con le coppie dei blocchi non toccati: un blocco non toccato
+/// porta tutto il suo flusso, e ogni tratto toccato fra due blocchi non
+/// toccati tiene ciò che la proiezione non porta ([`flow::keeps`]).
+fn check_flow(
+    file: &[Vec<Token>],
+    written: &[Vec<Token>],
+    pairs: &[(usize, usize)],
+) -> Result<(), String> {
+    let mut from = (0usize, 0usize);
+    let ends = pairs
+        .iter()
+        .copied()
+        .chain(std::iter::once((file.len(), written.len())));
+    for (b, w) in ends {
+        if b > from.0 {
+            let before: Vec<Token> = file[from.0..b].iter().flatten().cloned().collect();
+            let after: Vec<Token> = written[from.1..w].iter().flatten().cloned().collect();
+            flow::keeps(&before, &after).map_err(|why| format!("blocks {}..{b}: {why}", from.0))?;
+        }
+        if b < file.len() {
+            flow::carries(&file[b], &written[w]).map_err(|why| format!("block {b}: {why}"))?;
+        }
+        from = (b + 1, w + 1);
+    }
+    Ok(())
 }
 
 /// La regola a ogni salvataggio. `baseline` è la prova a vuoto di `base`,
@@ -81,8 +148,17 @@ pub(crate) fn check_save(
     base: &Document,
     wanted: &Document,
 ) -> Result<(), Finding> {
-    let new = inventory(new).map_err(Finding::Unreadable)?;
-    findings(save_differences(&baseline.dry, &new, base, wanted))
+    let pairs = untouched_blocks(base, wanted);
+    let inventoried = inventory(new).map_err(Finding::Unreadable)?;
+    findings(save_differences(
+        &baseline.dry,
+        &inventoried,
+        base,
+        wanted,
+        &pairs,
+    ))?;
+    let written = body_flow(new, wanted.body.len())?;
+    check_flow(&baseline.file, &written, &pairs).map_err(Finding::Flow)
 }
 
 /// Quante prove a vuoto si ricordano.
@@ -126,14 +202,14 @@ fn save_differences(
     new: &Inventory,
     base: &Document,
     wanted: &Document,
+    pairs: &[(usize, usize)],
 ) -> Vec<Difference> {
     let mut out = Vec::new();
 
     // I blocchi del corpo che l'utente non ha toccato: uguali uno a uno.
-    let pairs = untouched_blocks(base, wanted);
     let aligned = dry.body.len() == base.body.len() && new.body.len() == wanted.body.len();
     if aligned {
-        for (b, w) in &pairs {
+        for (b, w) in pairs {
             out.extend(equal_differences(
                 &dry.body[*b],
                 &new.body[*w],
@@ -153,7 +229,7 @@ fn save_differences(
     }
 
     // Le classi di parti fuori dal corpo il cui dato non è cambiato.
-    let touched = touched_regions(base, wanted, &pairs);
+    let touched = touched_regions(base, wanted, pairs);
     let (dry_rest, new_rest) = (dry.outside_body(), new.outside_body());
     let regions: BTreeSet<String> = dry_rest
         .keys()
@@ -505,7 +581,7 @@ mod tests {
         let base = Codec::Docx.read(&file).unwrap();
         let dry = Codec::Docx.write(&base).unwrap();
         assert_eq!(
-            check_open(&file, &dry).map(|_| ()),
+            check_open(&file, &dry, base.body.len()).map(|_| ()),
             Ok(()),
             "la scena deve aprirsi modificabile"
         );
@@ -520,10 +596,10 @@ mod tests {
         (base, wanted, file, dry, new)
     }
 
+    /// La base accettata di un file che è la prova a vuoto della scena, con i
+    /// suoi tre blocchi.
     fn baseline(dry: &[u8]) -> Baseline {
-        Baseline {
-            dry: inventory(dry).unwrap(),
-        }
+        check_open(dry, dry, 3).expect("la prova a vuoto si accetta")
     }
 
     #[test]
@@ -574,7 +650,7 @@ mod tests {
             |xml| xml.replace(&image, "media/altra.png"),
             &[("word/media/altra.png", b"\x89PNG\r\n\x1a\n due")],
         );
-        let Err(Finding::Differences(found)) = check_open(&dry, &wrong).map(|_| ()) else {
+        let Err(Finding::Differences(found)) = check_open(&dry, &wrong, 3).map(|_| ()) else {
             panic!("la relazione sbagliata è passata")
         };
         assert!(
@@ -618,7 +694,7 @@ mod tests {
         let (base, wanted, file, dry, new) = scene_with_file();
         let other = |xml: &str| xml.replace(r#"w:edGrp="everyone""#, r#"w:edGrp="editors""#);
         let changed = rewrite(&dry, "word/document.xml", other, &[]);
-        let Err(Finding::Differences(found)) = check_open(&file, &changed).map(|_| ()) else {
+        let Err(Finding::Differences(found)) = check_open(&file, &changed, 3).map(|_| ()) else {
             panic!("il valore cambiato è passato all'apertura")
         };
         assert!(
@@ -657,12 +733,71 @@ mod tests {
         );
     }
 
+    /// Il segno del primo paragrafo, spostato dopo il suo testo: gli stessi
+    /// conteggi, un altro posto. Non passa né all'apertura né in un blocco
+    /// non toccato.
+    #[test]
+    fn un_segno_spostato_nel_paragrafo_non_passa() {
+        let (base, wanted, file, dry, new) = scene_with_file();
+        let moved = |xml: &str| {
+            let start = xml.find("<w:permStart").expect("permStart scritto");
+            let end = start + xml[start..].find("/>").unwrap() + 2;
+            let mark = &xml[start..end];
+            let rest = format!("{}{}", &xml[..start], &xml[end..]);
+            let after = rest.find("</w:r>").unwrap() + "</w:r>".len();
+            format!("{}{mark}{}", &rest[..after], &rest[after..])
+        };
+        let changed = rewrite(&dry, "word/document.xml", moved, &[]);
+        let Err(Finding::Flow(why)) = check_open(&file, &changed, 3).map(|_| ()) else {
+            panic!("il segno spostato è passato all'apertura")
+        };
+        assert!(
+            why.starts_with("block 0") && why.contains("permStart"),
+            "{why}"
+        );
+        let new = rewrite(&new, "word/document.xml", moved, &[]);
+        let Err(Finding::Flow(why)) = check_save(&baseline(&dry), &new, &base, &wanted) else {
+            panic!("il segno spostato è passato al salvataggio")
+        };
+        assert!(why.starts_with("block 0"), "{why}");
+    }
+
+    /// Nel paragrafo che l'utente ha cambiato, ciò che la proiezione non
+    /// porta resta: la lingua dell'Asia orientale sparita dal suo testo non
+    /// passa, il testo nuovo sì.
+    #[test]
+    fn nel_paragrafo_toccato_resta_ciò_che_la_proiezione_non_porta() {
+        let (base, wanted, dry, new) = scene();
+        let lang = r#"<w:rPr><w:lang w:eastAsia="ja-JP"/></w:rPr>"#;
+        let with_lang = |xml: &str| {
+            let at = xml
+                .rmatch_indices("<w:t")
+                .find(|(at, _)| matches!(xml.as_bytes()[at + 4], b'>' | b' '))
+                .expect("ultimo testo")
+                .0;
+            format!("{}{lang}{}", &xml[..at], &xml[at..])
+        };
+        // Il file ha la lingua sul testo dell'ultimo paragrafo; i byte nuovi
+        // di quel paragrafo, cambiato, non l'hanno.
+        let file = rewrite(&dry, "word/document.xml", with_lang, &[]);
+        let accepted = check_open(&file, &file, 3).expect("il file si accetta");
+        let Err(Finding::Flow(why)) = check_save(&accepted, &new, &base, &wanted) else {
+            panic!("la lingua persa è passata")
+        };
+        assert!(
+            why.starts_with("blocks 2..3") && why.contains("w:lang"),
+            "{why}"
+        );
+        let kept = rewrite(&new, "word/document.xml", with_lang, &[]);
+        assert_eq!(check_save(&accepted, &kept, &base, &wanted), Ok(()));
+    }
+
     /// La prova a vuoto accettata si ricorda per l'impronta dei byte: altri
     /// byte non la trovano.
     #[test]
     fn la_prova_a_vuoto_si_ricorda_per_contenuto() {
         let (_, _, file, dry, _) = scene_with_file();
-        let accepted = Arc::new(check_open(&file, &dry).unwrap());
+        let accepted = Arc::new(check_open(&file, &dry, 3).unwrap());
         remember(key(&file), Arc::clone(&accepted));
         let found = remembered(&key(&file)).expect("ricordata");
         assert!(Arc::ptr_eq(&found, &accepted));

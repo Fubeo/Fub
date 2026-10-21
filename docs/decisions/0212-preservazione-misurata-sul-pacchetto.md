@@ -37,8 +37,12 @@ perdere un campo nel salvataggio senza che nessuno lo vedesse.
   (motivo `codec`).
 - **A ogni salvataggio** i blocchi e le parti che l'utente non ha toccato
   escono identici alla riscrittura a vuoto della base; ciò che ha toccato lo
-  verifica la rilettura del modello della 0209. Un salvataggio che non passa
-  non scrive, e il testo resta nel buffer.
+  verifica la rilettura del modello della 0209, e nei blocchi toccati resta
+  ciò che la proiezione non porta. Un salvataggio che non passa non scrive,
+  e il testo resta nel buffer.
+- Dentro un blocco conta anche **dove**: il controllo legge il corpo come
+  flusso di caratteri e oggetti con le loro proprietà, e un segno o una
+  proprietà spostati sono una perdita come un elemento sparito.
 - I dati opachi hanno uno schema (`OPAQUE_SCHEMA`), che la proiezione v2
   dichiara (`opaque_schema`). Uno schema più nuovo di quello che Fub sa
   leggere si rifiuta con un errore tipizzato e la bozza resta; un dato che,

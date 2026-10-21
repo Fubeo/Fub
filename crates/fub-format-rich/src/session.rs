@@ -132,7 +132,7 @@ pub fn save(codec: Codec, current: &[u8], json: &str) -> Result<Saved, RichError
         Some(baseline) => baseline,
         None => {
             let dry = codec.write(&base)?;
-            let Ok(baseline) = preservation::check_open(current, &dry) else {
+            let Ok(baseline) = preservation::check_open(current, &dry, base.body.len()) else {
                 return Err(RichError::ReadOnly(ReadOnly::Codec));
             };
             let baseline = Arc::new(baseline);
@@ -202,7 +202,7 @@ fn fidelity(
     }
     // Il modello torna uguale; i byte devono dire che il modello descrive il
     // file: ciò che il lettore ha saltato manca dalla prova a vuoto.
-    let Ok(baseline) = preservation::check_open(original, &written) else {
+    let Ok(baseline) = preservation::check_open(original, &written, document.body.len()) else {
         return Ok(Some(ReadOnly::Codec));
     };
     preservation::remember(preservation::key(original), Arc::new(baseline));

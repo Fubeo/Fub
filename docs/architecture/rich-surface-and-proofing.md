@@ -79,8 +79,17 @@ l'IPC.
   content control di blocco o di un contenitore trasparente contano uno per
   uno, e un segnalibro fra due blocchi va con il blocco che segue) e le parti
   il cui dato non è cambiato devono uscire uguali alla prova a vuoto della
-  base, senza parti copiate in più e senza riferimenti pendenti nuovi. La
-  prova a vuoto accettata si ricorda per l'impronta dei byte del file (il
+  base, senza parti copiate in più e senza riferimenti pendenti nuovi.
+  L'inventario conta e non dice dove: il **flusso** (`flow.rs`) legge ogni
+  blocco del corpo come sequenza di caratteri, oggetti e strutture, ciascuno
+  con le proprietà che lo riguardano, senza i run. All'apertura la prova a
+  vuoto porta il flusso di ogni blocco nello stesso ordine (un segnalibro
+  spostato di un carattere è una perdita); a ogni salvataggio un blocco non
+  toccato porta quello del file, e nei blocchi toccati ogni carattere,
+  oggetto e paragrafo che resta tiene le voci che la proiezione non porta
+  (la lingua o la disposizione dell'Asia orientale di un tratto). Un corpo
+  che non si legge come flusso con i blocchi del modello apre in sola
+  lettura. La prova a vuoto accettata si ricorda per l'impronta dei byte del file (il
   writer è deterministico, e il banco del corpus lo prova): il salvataggio
   dopo l'apertura degli stessi byte non la rifà. Le normalizzazioni
   dichiarate (`NORMALIZATIONS` in `inventory.rs`, ciascuna con la sua
