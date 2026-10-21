@@ -274,6 +274,13 @@ passa dalle stesse porte dei documenti, senza una porta in più:
 - `save_draft` conserva la proiezione come testo del buffer, come per ogni
   altro documento.
 
+`read_document` e `write_document` girano fuori dal thread principale
+dell'app, per ogni formato: aprire e salvare un `.docx` legge, proietta e
+misura il pacchetto, e la finestra non si ferma ad aspettarli. L'ordine delle
+scritture di un documento lo tiene la `DocumentSession` della shell, che le
+accoda, e una lettura superata la scarta. Le bozze (`save_draft`,
+`discard_draft`) restano sul thread principale, nell'ordine in cui arrivano.
+
 Un tratto, un oggetto e un paragrafo (per il suo segno di fine) portano
 `ins` e `del` quando sono una revisione tracciata: `{"by", "at", "mv"}`,
 autore, data e nome dello spostamento, ciascuno assente se vuoto. Due

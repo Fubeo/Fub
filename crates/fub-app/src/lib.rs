@@ -465,24 +465,46 @@ pub struct DocumentSource {
     pub source_kind: SourceKind,
 }
 
+/// Il lavoro di un comando sui documenti fuori dal thread principale: aprire
+/// o salvare un `.docx` grande legge, proietta e misura il pacchetto, e sul
+/// thread principale fermerebbe la finestra. L'ordine fra le scritture di un
+/// documento lo tiene chi le manda, la `DocumentSession` con la sua coda; una
+/// lettura superata la scarta la sessione. Le bozze restano sul thread
+/// principale: sono testo senza codec, e due bozze dello stesso documento
+/// devono arrivare nell'ordine in cui la shell le manda.
+async fn off_main<T, F>(app: AppHandle, work: F) -> Result<T, PluginError>
+where
+    T: Send + 'static,
+    F: FnOnce(&Host) -> Result<T, PluginError> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || work(&app.state::<Host>()))
+        .await
+        .map_err(|error| {
+            PluginError::Internal(format!("document operation did not complete: {error}").into())
+        })?
+}
+
 #[tauri::command]
-fn read_document(
-    host: State<Host>,
+async fn read_document(
+    app: AppHandle,
     id: String,
     vault: Option<String>,
 ) -> Result<DocumentSource, PluginError> {
     let id = doc_id(&id)?;
-    let (text, revision, format) = host.read_document_with_format(vault.as_deref(), &id)?;
-    let format_id = format.as_ref().map(|known| known.descriptor.id.clone());
-    let source_kind = format
-        .map(|known| known.descriptor.source)
-        .unwrap_or(SourceKind::Text);
-    Ok(DocumentSource {
-        text,
-        revision: revision.0,
-        format_id,
-        source_kind,
+    off_main(app, move |host| {
+        let (text, revision, format) = host.read_document_with_format(vault.as_deref(), &id)?;
+        let format_id = format.as_ref().map(|known| known.descriptor.id.clone());
+        let source_kind = format
+            .map(|known| known.descriptor.source)
+            .unwrap_or(SourceKind::Text);
+        Ok(DocumentSource {
+            text,
+            revision: revision.0,
+            format_id,
+            source_kind,
+        })
     })
+    .await
 }
 
 /// Apre un lease sui byte di una risorsa. Il label e l'origin provengono dalla
@@ -734,15 +756,19 @@ fn close_grid(
 /// default voleva dire «sovrascrivi comunque»: la guardia si perdeva
 /// **omettendola**, che è il modo in cui una guardia non protegge nessuno.
 #[tauri::command]
-fn write_document(
-    host: State<Host>,
+async fn write_document(
+    app: AppHandle,
     id: String,
     source: String,
     base: WriteBase,
     vault: Option<String>,
 ) -> Result<String, PluginError> {
-    host.write_document(vault.as_deref(), &doc_id(&id)?, &source, base)
-        .map(|revision| revision.0)
+    let id = doc_id(&id)?;
+    off_main(app, move |host| {
+        host.write_document(vault.as_deref(), &id, &source, base)
+            .map(|revision| revision.0)
+    })
+    .await
 }
 
 /// **Scrive la bozza di un documento** (§15.2): ciò che c'è nel buffer adesso.
