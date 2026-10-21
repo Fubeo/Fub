@@ -584,9 +584,15 @@ impl Lcg {
 
 /// Mutazioni deterministiche di ogni file: troncamenti in punti fissi e byte
 /// cambiati. `open` dà un esito o un errore, senza panic, entro un tempo.
+/// `CORPUS_MUTATIONS=<n>` fa `n` giri di byte cambiati invece di 8, per la
+/// prova lunga di un aggiornamento del motore.
 #[test]
 fn le_mutazioni_non_fanno_panic() {
     const LIMIT: Duration = Duration::from_secs(20);
+    let rounds: u32 = std::env::var("CORPUS_MUTATIONS")
+        .ok()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(8);
     let mut failures = Vec::new();
     for entry in manifest() {
         let codec = codec_of(&entry.path);
@@ -597,9 +603,9 @@ fn le_mutazioni_non_fanno_panic() {
             let at = bytes.len() * cut / 10;
             mutants.push((format!("troncato a {at}"), bytes[..at].to_vec()));
         }
-        for n in 0..8 {
+        for n in 0..rounds {
             let mut changed = bytes.clone();
-            for _ in 0..=n {
+            for _ in 0..=n % 8 {
                 let at = rng.next() as usize % changed.len();
                 changed[at] ^= (rng.next() as u8) | 1;
             }
