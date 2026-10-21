@@ -452,7 +452,18 @@ fn load_shares(sync_dir: &Path) -> Result<SyncShares, String> {
     else {
         return Ok(SyncShares::default());
     };
-    serde_json::from_slice(&bytes).map_err(|e| format!("shares parse: {e}"))
+    let mut shares: SyncShares =
+        serde_json::from_slice(&bytes).map_err(|e| format!("shares parse: {e}"))?;
+    // A registry written before digests held usable invite bearers: convert
+    // and rewrite it the first time it is read.
+    let mut legacy = false;
+    for stored in &mut shares.invites {
+        legacy |= stored.invite.seal_legacy();
+    }
+    if legacy {
+        save_shares(sync_dir, &shares)?;
+    }
+    Ok(shares)
 }
 
 fn save_shares(sync_dir: &Path, shares: &SyncShares) -> Result<(), String> {
@@ -1885,6 +1896,9 @@ fn handle_invite(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> H
         code: Option<String>,
         #[serde(default)]
         wrapped_vdk: Option<crate::crypto::WrappedVdk>,
+        /// Binds the invite to one account: nobody else can accept it.
+        #[serde(default)]
+        invitee: Option<String>,
     }
     let req: InviteReq = match serde_json::from_slice(body) {
         Ok(r) => r,
@@ -1941,12 +1955,13 @@ fn handle_invite(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> H
     if pending >= MAX_PENDING_INVITES {
         return HttpResponse::err(429, "too many pending invites");
     }
-    let invite = match acl::new_invite(&resource, req.role, ttl) {
+    let (mut invite, token) = match acl::new_invite(&resource, req.role, ttl) {
         Ok(i) => i,
         Err(e) => return HttpResponse::err(500, &e),
     };
+    invite.invitee = req.invitee;
     let reply = serde_json::json!({
-        "token_b64": invite.token_b64,
+        "token_b64": token,
         "resource": invite.resource,
         "role": invite.role,
         "expires_ms": invite.expires_ms,
@@ -1985,7 +2000,7 @@ fn handle_invite_accept(state: &mut ServiceState, auth: Option<&str>, body: &[u8
     let pos = shares
         .invites
         .iter()
-        .position(|s| s.invite.token_b64 == req.token_b64 && !s.invite.accepted);
+        .position(|s| s.invite.matches(&req.token_b64) && !s.invite.accepted);
     let pos = match pos {
         Some(p) => p,
         None => return HttpResponse::err(404, "invite not found"),
@@ -1996,20 +2011,25 @@ fn handle_invite_accept(state: &mut ServiceState, auth: Option<&str>, body: &[u8
     if shares.invites[pos].key_epoch != shares.key_epochs.get(vault).copied().unwrap_or(0) {
         return HttpResponse::err(410, "invite key epoch expired; request a new invite");
     }
-    {
-        let stored = &mut shares.invites[pos];
-        let acl = state.acl_mut(&stored.invite.resource.clone());
-        if let Err(e) = acl::accept_invite(&mut stored.invite, acl, &account) {
-            return HttpResponse::err(410, &e);
-        }
+    // STR-03: the grant is staged on a copy of the ACL, made durable, and
+    // only then published to the live map. A failed save answers 500 and
+    // leaves the invitee exactly as unauthorized as before.
+    let mut staged = state
+        .acls
+        .get(&resource)
+        .cloned()
+        .unwrap_or_else(|| ShareAcl::new(&resource));
+    if let Err(e) = acl::accept_invite(&mut shares.invites[pos].invite, &mut staged, &account) {
+        return HttpResponse::err(410, &e);
     }
-    // Mirror the grant durably so restarts keep it.
-    for (resource, live) in &state.acls {
-        shares.grants.insert(resource.clone(), live.clone());
+    for (res, live) in &state.acls {
+        shares.grants.insert(res.clone(), live.clone());
     }
+    shares.grants.insert(resource.clone(), staged.clone());
     if let Err(e) = save_shares(&dir, &shares) {
         return HttpResponse::err(500, &e);
     }
+    state.acls.insert(resource.clone(), staged);
     HttpResponse::json(
         200,
         &serde_json::json!({
@@ -2060,9 +2080,14 @@ fn handle_revoke(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> H
         Err(e) => return HttpResponse::err(500, &e),
     };
     merge_grants(state, &shares);
-    let live = state.acl_mut(&resource);
-    match acl::check_revoke(live, &account, &req.account_id) {
-        Ok(()) => live.revoke(&req.account_id),
+    // Staged like an accept: the live ACL changes only after the save.
+    let mut staged = state
+        .acls
+        .get(&resource)
+        .cloned()
+        .unwrap_or_else(|| ShareAcl::new(&resource));
+    match acl::check_revoke(&staged, &account, &req.account_id) {
+        Ok(()) => staged.revoke(&req.account_id),
         Err(acl::RevokeDenied::LastOwner) => {
             return HttpResponse::err(409, "cannot revoke the last owner")
         }
@@ -2073,9 +2098,11 @@ fn handle_revoke(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> H
     for (res, live) in &state.acls {
         shares.grants.insert(res.clone(), live.clone());
     }
+    shares.grants.insert(resource.clone(), staged.clone());
     if let Err(e) = save_shares(&dir, &shares) {
         return HttpResponse::err(500, &e);
     }
+    state.acls.insert(resource.clone(), staged);
     // Revocation removes FUTURE access only: copies the revoked account
     // already downloaded survive. There is no remote wipe, by design.
     HttpResponse::json(

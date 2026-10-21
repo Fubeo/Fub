@@ -774,11 +774,11 @@ fn pending_invites_are_bounded() {
             400
         );
     }
+    let mut first_token = None;
     for _ in 0..sync::MAX_PENDING_INVITES {
-        assert_eq!(
-            call(&mut state, "/v1/sync/invite", &owner, invite(60_000.into())).0,
-            201
-        );
+        let (status, body) = call(&mut state, "/v1/sync/invite", &owner, invite(60_000.into()));
+        assert_eq!(status, 201);
+        first_token.get_or_insert(body["token_b64"].clone());
     }
     assert_eq!(
         call(&mut state, "/v1/sync/invite", &owner, invite(60_000.into())).0,
@@ -786,11 +786,13 @@ fn pending_invites_are_bounded() {
     );
     // Un invito accettato libera il suo posto.
     let (_, guest) = member(&mut state, "bound-guest");
-    let shares: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(fub_services::schema::sync_dir(&dir).join("shares.json")).unwrap(),
-    )
-    .unwrap();
-    let token = shares["invites"][0]["invite"]["token_b64"].clone();
+    let shares =
+        std::fs::read_to_string(fub_services::schema::sync_dir(&dir).join("shares.json")).unwrap();
+    let token = first_token.unwrap();
+    assert!(
+        !shares.contains(token.as_str().unwrap()),
+        "shares.json keeps the invite digest, never the bearer"
+    );
     let (status, body) = call(
         &mut state,
         "/v1/sync/invite/accept",
@@ -1714,4 +1716,110 @@ fn the_vault_quota_counts_history_and_every_replica_queue() {
         last
     );
     std::fs::remove_dir_all(dir).unwrap();
+}
+
+/// STR-03: an accept whose `shares.json` write fails answers 500 and grants
+/// nothing, neither in memory nor after a restart.
+#[cfg(unix)]
+#[test]
+fn a_failed_accept_leaves_the_invitee_unauthorized() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = temp_data_dir("accept-fault");
+    let mut state = open_state(&dir);
+    let (_, owner) = member(&mut state, "fault-owner");
+    let (_, guest) = member(&mut state, "fault-guest");
+    let (status, body) = call(
+        &mut state,
+        "/v1/sync/invite",
+        &owner,
+        serde_json::json!({ "vault_id": VAULT, "role": "writer" }),
+    );
+    assert_eq!(status, 201, "{body}");
+    let token = body["token_b64"].clone();
+
+    let sync_dir = fub_services::schema::sync_dir(&dir);
+    std::fs::set_permissions(&sync_dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let probe = sync_dir.join(".probe");
+    let writable = std::fs::write(&probe, b"").is_ok();
+    let _ = std::fs::remove_file(&probe);
+    let accepted = call(
+        &mut state,
+        "/v1/sync/invite/accept",
+        &guest,
+        serde_json::json!({ "token_b64": token }),
+    );
+    std::fs::set_permissions(&sync_dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    if writable {
+        // Root traverses read-only directories: nothing to prove here.
+        return;
+    }
+    assert_eq!(accepted.0, 500, "{:?}", accepted.1);
+
+    let mut g = Replica::new("fault-guest-dev");
+    let op = g.op("notes/fault.md", OpKind::Create, "should not land");
+    let req = sync::PushRequest {
+        protocol: Some("fub-sync/1".to_string()),
+        replica_id: g.id.clone(),
+        ops: vec![op],
+    };
+    let resp = sync::handle(
+        &mut state,
+        "POST",
+        "/v1/sync/push",
+        Some(&guest),
+        &serde_json::to_vec(&req).unwrap(),
+    );
+    assert_eq!(
+        resp.status, 403,
+        "the failed accept granted nothing in memory"
+    );
+    drop(state);
+    let mut state = open_state(&dir);
+    let resp = sync::handle(
+        &mut state,
+        "POST",
+        "/v1/sync/push",
+        Some(&guest),
+        &serde_json::to_vec(&req).unwrap(),
+    );
+    assert_eq!(resp.status, 403, "nor on disk");
+    // The invite is still pending and can be accepted once the disk is back.
+    let (status, body) = call(
+        &mut state,
+        "/v1/sync/invite/accept",
+        &guest,
+        serde_json::json!({ "token_b64": token }),
+    );
+    assert_eq!(status, 200, "{body}");
+}
+
+#[test]
+fn an_invite_bound_to_an_account_refuses_everyone_else() {
+    let dir = temp_data_dir("bound-invite");
+    let mut state = open_state(&dir);
+    let (_, owner) = member(&mut state, "bound-owner");
+    let (bob, bob_auth) = member(&mut state, "bound-bob");
+    let (_, mallory) = member(&mut state, "bound-mallory");
+    let (status, body) = call(
+        &mut state,
+        "/v1/sync/invite",
+        &owner,
+        serde_json::json!({ "vault_id": VAULT, "role": "reader", "invitee": bob }),
+    );
+    assert_eq!(status, 201, "{body}");
+    let token = body["token_b64"].clone();
+    let stolen = call(
+        &mut state,
+        "/v1/sync/invite/accept",
+        &mallory,
+        serde_json::json!({ "token_b64": token }),
+    );
+    assert_eq!(stolen.0, 410, "{:?}", stolen.1);
+    let (status, body) = call(
+        &mut state,
+        "/v1/sync/invite/accept",
+        &bob_auth,
+        serde_json::json!({ "token_b64": token }),
+    );
+    assert_eq!(status, 200, "{body}");
 }

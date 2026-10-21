@@ -42,9 +42,20 @@ pub struct Grant {
 }
 
 /// Invito pendente con token opaco e scadenza.
+///
+/// Il registro conserva il digest del token ([`crate::auth::token_digest`]),
+/// mai il bearer: chi legge `shares.json` non può accettare l'invito al posto
+/// dell'invitato (STR-01). `token_b64` resta soltanto per leggere i registri
+/// di prima, che [`Invite::seal_legacy`] converte.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Invite {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub token_b64: String,
+    #[serde(default)]
+    pub digest_b64: String,
+    /// L'unico account che può accettare, quando chi invita lo nomina.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invitee: Option<String>,
     pub resource: String,
     pub role: Role,
     pub created_ms: u64,
@@ -128,8 +139,9 @@ pub fn check(acl: &ShareAcl, account_id: &str, need: Role) -> Result<(), String>
 }
 
 impl Invite {
-    /// Nuovo invito con scadenza (default 7 giorni).
-    pub fn new_invite(resource: &str, role: Role, ttl_ms: u64) -> Result<Self, String> {
+    /// Nuovo invito con scadenza (default 7 giorni). Torna l'invito da
+    /// persistere e il token da consegnare, che il registro non conserva.
+    pub fn new_invite(resource: &str, role: Role, ttl_ms: u64) -> Result<(Self, String), String> {
         use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64U;
         use base64::Engine;
         use ring::rand::{SecureRandom, SystemRandom};
@@ -138,14 +150,44 @@ impl Invite {
         rng.fill(&mut raw)
             .map_err(|_| "rng unavailable".to_string())?;
         let now = now_ms();
-        Ok(Self {
-            token_b64: B64U.encode(raw),
-            resource: resource.to_string(),
-            role,
-            created_ms: now,
-            expires_ms: now.saturating_add(ttl_ms),
-            accepted: false,
-        })
+        let token = B64U.encode(raw);
+        Ok((
+            Self {
+                token_b64: String::new(),
+                digest_b64: crate::auth::token_digest(&token),
+                invitee: None,
+                resource: resource.to_string(),
+                role,
+                created_ms: now,
+                expires_ms: now.saturating_add(ttl_ms),
+                accepted: false,
+            },
+            token,
+        ))
+    }
+
+    /// `true` se `token` è il bearer di questo invito (confronto in tempo
+    /// costante sul digest).
+    pub fn matches(&self, token: &str) -> bool {
+        use subtle::ConstantTimeEq;
+        let expected = if self.digest_b64.is_empty() {
+            crate::auth::token_digest(&self.token_b64)
+        } else {
+            self.digest_b64.clone()
+        };
+        let given = crate::auth::token_digest(token);
+        bool::from(given.as_bytes().ct_eq(expected.as_bytes()))
+    }
+
+    /// Converte un invito di un registro di prima (bearer in chiaro) nel suo
+    /// digest. `true` se c'era qualcosa da convertire.
+    pub fn seal_legacy(&mut self) -> bool {
+        if self.token_b64.is_empty() {
+            return false;
+        }
+        self.digest_b64 = crate::auth::token_digest(&self.token_b64);
+        self.token_b64.clear();
+        true
     }
 
     /// Accetta l'invito: marca usato e concede il ruolo sull'ACL.
@@ -159,6 +201,13 @@ impl Invite {
         if acl.resource != self.resource {
             return Err("invite resource mismatch".to_string());
         }
+        if self
+            .invitee
+            .as_deref()
+            .is_some_and(|invitee| invitee != account_id)
+        {
+            return Err("invite is bound to another account".to_string());
+        }
         self.accepted = true;
         acl.grant(account_id, self.role);
         Ok(())
@@ -166,7 +215,7 @@ impl Invite {
 }
 
 /// Alias con firma attesa dai discendenti.
-pub fn new_invite(resource: &str, role: Role, ttl_ms: u64) -> Result<Invite, String> {
+pub fn new_invite(resource: &str, role: Role, ttl_ms: u64) -> Result<(Invite, String), String> {
     Invite::new_invite(resource, role, ttl_ms)
 }
 
@@ -230,7 +279,22 @@ mod tests {
 
     #[test]
     fn an_endless_invite_does_not_wrap_into_the_past() {
-        let invite = new_invite("vault:v", Role::Reader, u64::MAX).unwrap();
+        let (invite, _) = new_invite("vault:v", Role::Reader, u64::MAX).unwrap();
         assert_eq!(invite.expires_ms, u64::MAX);
+    }
+
+    #[test]
+    fn an_invite_keeps_only_the_digest_and_honours_its_invitee() {
+        let (mut invite, token) = new_invite("vault:v", Role::Reader, 60_000).unwrap();
+        let persisted = serde_json::to_string(&invite).unwrap();
+        assert!(!persisted.contains(&token));
+        assert!(invite.matches(&token));
+        assert!(!invite.matches("altro"));
+        invite.invitee = Some("bob".to_string());
+        let mut acl = ShareAcl::new("vault:v");
+        assert!(invite.accept_invite(&mut acl, "mallory").is_err());
+        assert_eq!(acl.role_of("mallory"), None);
+        invite.accept_invite(&mut acl, "bob").unwrap();
+        assert_eq!(acl.role_of("bob"), Some(Role::Reader));
     }
 }
