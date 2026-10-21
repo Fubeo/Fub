@@ -1165,7 +1165,12 @@ mod sync_http_tests {
         assert_eq!(restore.0, 200, "{restore:?}");
         assert_eq!(restore.1["requires_fresh_push"], true);
 
-        let wrapped = fub_services::crypto::wrap_vdk(&[7; 32], &[9; 32]).unwrap();
+        let wrapped = fub_services::crypto::wrap_vdk_with_kek(
+            &[7; 32],
+            &[9; 32],
+            fub_services::crypto::KdfParams::fresh().unwrap(),
+        )
+        .unwrap();
         let stored = request(
             &state,
             &dir.0,

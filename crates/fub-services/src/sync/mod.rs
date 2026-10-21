@@ -2498,7 +2498,12 @@ mod authenticated_version_tests {
             404
         );
 
-        let old = crate::crypto::wrap_vdk(&KEY, &KEY).unwrap();
+        let old = crate::crypto::wrap_vdk_with_kek(
+            &KEY,
+            &KEY,
+            crate::crypto::KdfParams::fresh().unwrap(),
+        )
+        .unwrap();
         let old_body = serde_json::json!({ "vault_id": VAULT, "wrapped": old });
         let response = handle(
             &mut state,
@@ -2519,7 +2524,12 @@ mod authenticated_version_tests {
         assert_eq!(response.status, 200);
         let stored: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
         assert_eq!(stored["wrapped"], old_body["wrapped"]);
-        let next = crate::crypto::wrap_vdk(&KEY, &[44; 32]).unwrap();
+        let next = crate::crypto::wrap_vdk_with_kek(
+            &KEY,
+            &[44; 32],
+            crate::crypto::KdfParams::fresh().unwrap(),
+        )
+        .unwrap();
         let next_body = serde_json::json!({ "vault_id": VAULT, "wrapped": next });
         assert_eq!(
             handle(

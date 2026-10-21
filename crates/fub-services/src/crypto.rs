@@ -8,7 +8,7 @@
 //! - Confronti di segreti in tempo costante (`subtle::ConstantTimeEq`).
 //! - La password account NON deriva mai la chiave dati: la chiave vault (VDK,
 //!   32 B casuali) è avvolta esplicitamente da una KEK fornita dall'utente
-//!   ([`wrap_vdk`]/[`unwrap_vdk`]); recupero/rotazione/revoca espliciti.
+//!   ([`wrap_vdk`]/[`unwrap_vdk`], parametri KDF dentro la busta); recupero/rotazione/revoca espliciti.
 //! - Hash legacy esistenti non usati come primitive: vietato dal contratto.
 
 use base64::engine::general_purpose::STANDARD as B64;
@@ -273,17 +273,34 @@ pub fn aad_verify(
     let aad = canonical_aad_json(envelope);
     open(key32, &aad, nonce_b64, ciphertext_b64)
 }
-/// Avvolge la VDK (32 B casuali) con una KEK fornita dall'utente.
+/// Avvolge la VDK (32 B casuali) con una passphrase vault fornita dall'utente.
 ///
-/// La KEK arriva da una passphrase vault **distinta** dalla password account
-/// (mai riuso automatico): chi chiama deriva con [`derive_kek`] da parametri
-/// separati. Torna JSON persistibile `{kdf, nonce_b64, wrap_b64}`.
-pub fn wrap_vdk(vdk: &[u8; VDK_LEN], kek: &[u8; 32]) -> Result<WrappedVdk, String> {
+/// La passphrase è **distinta** dalla password account (mai riuso
+/// automatico). I parametri KDF nascono qui, derivano la KEK e viaggiano nella
+/// busta: chi la riapre ha bisogno soltanto della passphrase e di ciò che è
+/// stato serializzato. Torna JSON persistibile `{kdf, nonce_b64, wrap_b64}`.
+pub fn wrap_vdk(vdk: &[u8; VDK_LEN], passphrase: &str) -> Result<WrappedVdk, String> {
     let params = KdfParams::fresh()?;
-    let mut key = [0u8; 32];
-    key.copy_from_slice(kek);
-    let aad = format!("fub-vdk-wrap|v{}", KDF_VERSION);
-    let (nonce_b64, wrap_b64) = seal(&key, &aad, vdk)?;
+    let kek = derive_kek(passphrase, &params)?;
+    wrap_vdk_with_kek(vdk, &kek, params)
+}
+
+/// Riapre una busta di [`wrap_vdk`]: la KEK si ricava dai parametri persistiti.
+pub fn unwrap_vdk(wrapped: &WrappedVdk, passphrase: &str) -> Result<[u8; VDK_LEN], String> {
+    let kek = derive_kek(passphrase, &wrapped.kdf)?;
+    unwrap_vdk_with_kek(wrapped, &kek)
+}
+
+/// Avvolge con una KEK già derivata. I `params` sono **quelli** con cui
+/// `kek` è stata derivata: viaggiano insieme perché la busta non dichiari
+/// mai un sale estraneo alla chiave che l'ha cifrata.
+pub fn wrap_vdk_with_kek(
+    vdk: &[u8; VDK_LEN],
+    kek: &[u8; 32],
+    params: KdfParams,
+) -> Result<WrappedVdk, String> {
+    let aad = format!("fub-vdk-wrap|v{}", params.ver.min(KDF_VERSION));
+    let (nonce_b64, wrap_b64) = seal(kek, &aad, vdk)?;
     Ok(WrappedVdk {
         kdf: params,
         nonce_b64,
@@ -291,13 +308,11 @@ pub fn wrap_vdk(vdk: &[u8; VDK_LEN], kek: &[u8; 32]) -> Result<WrappedVdk, Strin
     })
 }
 
-/// Scarta la VDK avvolta (rotazione/revoca del wrap; le copie già scaricate
-/// da altri restano — documentato, P16.8).
-pub fn unwrap_vdk(wrapped: &WrappedVdk, kek: &[u8; 32]) -> Result<[u8; VDK_LEN], String> {
-    let mut key = [0u8; 32];
-    key.copy_from_slice(kek);
+/// Scarta la VDK avvolta con una KEK già derivata (rotazione/revoca del wrap;
+/// le copie già scaricate da altri restano — documentato, P16.8).
+pub fn unwrap_vdk_with_kek(wrapped: &WrappedVdk, kek: &[u8; 32]) -> Result<[u8; VDK_LEN], String> {
     let aad = format!("fub-vdk-wrap|v{}", wrapped.kdf.ver.min(KDF_VERSION));
-    let plain = open(&key, &aad, &wrapped.nonce_b64, &wrapped.wrap_b64)?;
+    let plain = open(kek, &aad, &wrapped.nonce_b64, &wrapped.wrap_b64)?;
     plain.try_into().map_err(|_| "bad vdk length".to_string())
 }
 

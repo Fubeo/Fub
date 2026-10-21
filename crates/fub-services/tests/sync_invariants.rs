@@ -900,25 +900,45 @@ fn stale_key_epoch_holds_never_applies() {
 fn vault_key_wrap_rotation_roundtrip() {
     // VDK random 32 B, wrapped explicitly by a user-supplied vault
     // passphrase via a SEPARATE PBKDF2 (never the account password).
-    use fub_services::crypto::{derive_kek, unwrap_vdk, wrap_vdk, KdfParams};
+    use fub_services::crypto::{
+        derive_kek, unwrap_vdk, unwrap_vdk_with_kek, wrap_vdk, KdfParams, WrappedVdk,
+    };
     use ring::rand::{SecureRandom, SystemRandom};
     let rng = SystemRandom::new();
     let mut vdk = [0u8; 32];
     rng.fill(&mut vdk).expect("rng");
-    let params = KdfParams::fresh().unwrap();
-    let kek = derive_kek("vault passphrase, typed by the user", &params).unwrap();
-    let wrapped = wrap_vdk(&vdk, &kek).unwrap();
-    assert_eq!(unwrap_vdk(&wrapped, &kek).unwrap(), vdk);
+    let wrapped = wrap_vdk(&vdk, "vault passphrase, typed by the user").unwrap();
+    // Recovery uses only what was serialized: passphrase + persisted params.
+    let persisted: WrappedVdk =
+        serde_json::from_slice(&serde_json::to_vec(&wrapped).unwrap()).unwrap();
+    let recovered_kek = derive_kek("vault passphrase, typed by the user", &persisted.kdf).unwrap();
+    assert_eq!(
+        unwrap_vdk_with_kek(&persisted, &recovered_kek).unwrap(),
+        vdk
+    );
+    assert_eq!(
+        unwrap_vdk(&persisted, "vault passphrase, typed by the user").unwrap(),
+        vdk
+    );
     // Rotation: a new passphrase wraps the SAME vdk; old envelope still
-    // unwraps with the old kek (already-downloaded copies survive).
-    let params2 = KdfParams::fresh().unwrap();
-    let kek2 = derive_kek("a different vault passphrase", &params2).unwrap();
-    let wrapped2 = wrap_vdk(&vdk, &kek2).unwrap();
-    assert_eq!(unwrap_vdk(&wrapped2, &kek2).unwrap(), vdk);
-    assert_eq!(unwrap_vdk(&wrapped, &kek).unwrap(), vdk);
-    // Wrong passphrase fails (constant-time compare inside).
-    let wrong = derive_kek("wrong passphrase", &params).unwrap();
-    assert!(unwrap_vdk(&wrapped, &wrong).is_err());
+    // unwraps with the old passphrase (already-downloaded copies survive).
+    let wrapped2 = wrap_vdk(&vdk, "a different vault passphrase").unwrap();
+    assert_eq!(
+        unwrap_vdk(&wrapped2, "a different vault passphrase").unwrap(),
+        vdk
+    );
+    assert_eq!(
+        unwrap_vdk(&wrapped, "vault passphrase, typed by the user").unwrap(),
+        vdk
+    );
+    // Wrong passphrase fails, and so does a KEK derived from other params.
+    assert!(unwrap_vdk(&wrapped, "wrong passphrase").is_err());
+    let other = derive_kek(
+        "vault passphrase, typed by the user",
+        &KdfParams::fresh().unwrap(),
+    )
+    .unwrap();
+    assert!(unwrap_vdk_with_kek(&wrapped, &other).is_err());
 
     // Server stores the envelope opaquely through the vault-key endpoints.
     let dir = temp_data_dir("vaultkey");
@@ -953,13 +973,13 @@ fn vault_key_wrap_rotation_roundtrip() {
 
 #[test]
 fn owner_epoch_rotation_blocks_stale_writes_and_new_devices_skip_old_ciphertext() {
-    use fub_services::crypto::{derive_kek, wrap_vdk, KdfParams};
+    use fub_services::crypto::{derive_kek, wrap_vdk_with_kek, KdfParams};
     let dir = temp_data_dir("owner-epoch");
     let mut state = open_state(&dir);
     let auth = auth_for(&mut state, "epoch-owner");
     let params = KdfParams::fresh().unwrap();
     let kek = derive_kek("separate vault passphrase", &params).unwrap();
-    let first = wrap_vdk(&[3u8; 32], &kek).unwrap();
+    let first = wrap_vdk_with_kek(&[3u8; 32], &kek, params.clone()).unwrap();
     let initial = sync::handle(
         &mut state,
         "POST",
@@ -983,7 +1003,7 @@ fn owner_epoch_rotation_blocks_stale_writes_and_new_devices_skip_old_ciphertext(
     );
     assert_eq!(fetched.status, 200);
     let fetched: serde_json::Value = serde_json::from_slice(&fetched.body).unwrap();
-    let second = wrap_vdk(&[4u8; 32], &kek).unwrap();
+    let second = wrap_vdk_with_kek(&[4u8; 32], &kek, params.clone()).unwrap();
     let rotated = sync::handle(
         &mut state,
         "POST",
