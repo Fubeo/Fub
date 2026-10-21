@@ -34,4 +34,4 @@ wit-parser = { version = "0.254", default-features = false, features = ["std"] }
 # garantisce solo l'esaustività, non l'ordine: il test parsa i sorgenti degli
 # enum e deriva l'ordine atteso dalla dichiarazione Rust — un riordino è rosso
 # da entrambi i lati.
-syn = { version = "2", default-features = false, features = ["full", "parsing"] }
+syn = { workspace = true, features = ["full", "parsing"] }

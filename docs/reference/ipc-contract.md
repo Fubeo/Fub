@@ -338,8 +338,9 @@ riporta il file intero. Un file nuovo `rtf` o `doc` non si crea
 `opaque_schema`, subito dopo `version`, è lo schema dei dati opachi (`k` e
 `sect`, JSON del modello del motore in base64), che si incrementa quando
 cambia la loro forma serializzata: lo schema 2 aggiunge all'1 il campo
-facoltativo `eastAsianLayout` delle proprietà del carattere, e il codec legge
-ogni schema fino al suo. La versione 2 ha le chiavi della 3 senza `locked`
+facoltativo `eastAsianLayout` delle proprietà del carattere. Il codec legge
+gli schemi che elenca, ciascuno con la sua regola: lo 0, l'1 e il 2,
+perché i primi due hanno la forma del 2 senza quel campo. La versione 2 ha le chiavi della 3 senza `locked`
 e `body_only`; la 1, quella delle bozze di prima, quelle della 2 senza
 `opaque_schema`, e i dati dello schema 0. La shell legge le tre versioni,
 ciascuna con il suo elenco chiuso di chiavi, e
@@ -347,7 +348,8 @@ ricopia versione e schema come li ha ricevuti. Il codec legge formato,
 versione e schema prima del resto, e rifiuta una versione futura
 (`host.rich.version`) e uno schema che non legge, scritto da un Fub più nuovo
 (`host.rich.opaque_schema`), anche quando portano campi che non conosce; un dato opaco che, decodificato e
-riscritto, perderebbe un campo è una proiezione malformata.
+riscritto, perderebbe un campo è una proiezione malformata, anche quando il
+campo sconosciuto vale `null`, `[]` o `{}`.
 
 Gli errori del codec arrivano tipizzati con chiave di catalogo `host.rich.*`.
 La forma della proiezione è di `crates/fub-format-rich/src/projection.rs`; la

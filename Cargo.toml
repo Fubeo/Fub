@@ -79,6 +79,11 @@ serde = { version = "1", features = ["derive"] }
 # chiavi del file dell'utente — riscriverlo non deve riordinarle (fedeltà).
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_ignored = "0.1.14"
+# Soltanto per i test che leggono sorgenti Rust (`fub-abi`, l'ordine dei casi
+# di un variant; `fub-format-rich`, la superficie serde dei dati opachi): ogni
+# crate accende le feature che gli servono.
+syn = { version = "2", default-features = false }
+quote = { version = "1", default-features = false }
 thiserror = "2"
 regex = "1"
 camino = { version = "1", features = ["serde1"] }

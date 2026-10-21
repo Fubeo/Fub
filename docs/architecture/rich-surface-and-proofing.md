@@ -43,7 +43,9 @@ l'IPC.
   (`fub-format-rich/src/blob.rs`) rifiuta uno schema più nuovo e, a ogni
   lettura, un dato che decodificato e riscritto non contiene più tutto ciò
   che diceva, invece di perderne un campo. `tests/opaque_schema.rs` tiene la
-  forma dei dati del corpus e chiede di incrementare lo schema quando cambia. Una tabella, una riga o una
+  superficie serde dei tipi che quei dati codificano, letta dai sorgenti, e
+  quando cambia chiede di incrementare lo schema, di dire come si legge
+  quello di prima e di scriverne la bozza. Una tabella, una riga o una
   cella nuova non ha `k`: il formato la scrive con le sue proprietà
   predefinite (la griglia di Word, le colonne e un bordo in ODF), e una riga
   che ProseMirror crea riparando una tabella esistente prende il `k` della

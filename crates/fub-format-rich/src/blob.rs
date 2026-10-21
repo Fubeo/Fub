@@ -18,8 +18,10 @@
 //! nuovo può rileggere. La loro grammatica ha un numero, [`OPAQUE_SCHEMA`],
 //! che la proiezione dichiara (`opaque_schema`); e ogni lettura controlla che
 //! il dato decodificato, riscritto, contenga ancora tutto ciò che il testo
-//! diceva ([`contains`]): un campo che serde ignorerebbe perché sconosciuto
-//! rifiuta il dato invece di sparire in silenzio.
+//! diceva ([`gaps`]): un campo che serde ignorerebbe perché sconosciuto
+//! rifiuta il dato invece di sparire in silenzio, anche quando vale `null`,
+//! `[]` o `{}` e anche dentro un enum con il tag interno, dove serde non dice
+//! che cosa ignora.
 
 use base64::engine::general_purpose::STANDARD_NO_PAD;
 use base64::Engine;
@@ -41,11 +43,17 @@ use crate::RichError;
 pub const OPAQUE_SCHEMA: u32 = 2;
 
 /// Se questo Fub legge i dati opachi dello schema `schema`. Ogni schema
-/// precedente si legge così com'è: il 2 aggiunge all'1 soltanto un campo
-/// facoltativo, che in un dato dell'1 manca e vale assente. Uno schema più
-/// vecchio con una forma diversa avrà la sua migrazione esplicita, qui.
+/// precedente ha qui il suo braccio, con il perché: alzare [`OPAQUE_SCHEMA`]
+/// lascia fuori lo schema che era corrente, finché qualcuno non dice come si
+/// legge (`tests/opaque_schema.rs` lo pretende, con la sua bozza).
 pub(crate) fn readable(schema: u32) -> bool {
-    schema <= OPAQUE_SCHEMA
+    match schema {
+        // Lo 0 e l'1 hanno la forma del 2 senza `eastAsianLayout`, che è
+        // facoltativo: in un loro dato manca e vale assente.
+        0 | 1 => true,
+        OPAQUE_SCHEMA => true,
+        _ => false,
+    }
 }
 
 pub(crate) fn encode<T: Serialize>(value: &T) -> Result<String, RichError> {
@@ -60,34 +68,65 @@ pub(crate) fn decode<T: DeserializeOwned + Serialize>(blob: &str) -> Result<T, R
         .decode(blob)
         .map_err(|error| malformed(&error))?;
     let value: T = serde_json::from_slice(&json).map_err(|error| malformed(&error))?;
-    // I due lati passano dal testo: un `f32` portato in `Value` senza testo
-    // diventerebbe un altro numero.
     let written: Value = serde_json::from_slice(&json).map_err(|error| malformed(&error))?;
-    let again = serde_json::to_vec(&value).map_err(|error| malformed(&error))?;
-    let again: Value = serde_json::from_slice(&again).map_err(|error| malformed(&error))?;
-    if !contains(&again, &written) {
+    let again = rewritten(&value).map_err(|error| malformed(&error))?;
+    let mut missing = Vec::new();
+    if !gaps(&again, &written, "", &mut missing) {
         return Err(malformed(&"a field would be lost"));
     }
+    // Una chiave vuota che la riscrittura omette è un campo che il tipo
+    // conosce e non scrive quando è vuoto, oppure un campo che non conosce.
+    // Lo dice il tipo stesso: con un altro valore, un campo conosciuto cambia
+    // il dato o non si legge più; uno sconosciuto resta ignorato.
+    for pointer in missing {
+        let mut probe = written.clone();
+        if let Some(slot) = probe.pointer_mut(&pointer) {
+            *slot = Value::Bool(true);
+        }
+        let ignored = serde_json::from_value::<T>(probe)
+            .ok()
+            .and_then(|other| rewritten(&other).ok())
+            .is_some_and(|other| other == again);
+        if ignored {
+            return Err(malformed(&format!("unknown field {pointer}")));
+        }
+    }
     Ok(value)
+}
+
+/// Il dato riscritto, passando dal testo: un `f32` portato in `Value` senza
+/// testo diventerebbe un altro numero.
+fn rewritten<T: Serialize>(value: &T) -> serde_json::Result<Value> {
+    serde_json::from_slice(&serde_json::to_vec(value)?)
 }
 
 /// Se `whole` contiene `part`: ogni chiave di un oggetto di `part` c'è in
 /// `whole` con un valore che la contiene, gli array hanno la stessa lunghezza
 /// e si confrontano elemento per elemento, il resto è uguale. «Contenuto» e
 /// non «uguale»: un campo che il tipo scrive in più con il suo valore
-/// predefinito non è una perdita. Per lo stesso motivo una chiave di `part`
-/// che vale `null`, `[]` o `{}` può mancare in `whole`: il tipo la omette
-/// quando è vuota, e non porta niente.
-pub(crate) fn contains(whole: &Value, part: &Value) -> bool {
+/// predefinito non è una perdita. Una chiave di `part` che vale `null`, `[]` o
+/// `{}` e manca in `whole` non decide da sola: finisce in `missing`, come
+/// puntatore JSON, e la decide [`decode`].
+pub(crate) fn gaps(whole: &Value, part: &Value, at: &str, missing: &mut Vec<String>) -> bool {
     match (whole, part) {
-        (Value::Object(whole), Value::Object(part)) => {
-            part.iter().all(|(key, value)| match whole.get(key) {
-                Some(w) => contains(w, value),
-                None => empty(value),
-            })
-        }
+        (Value::Object(whole), Value::Object(part)) => part.iter().all(|(key, value)| {
+            let at = format!("{at}/{}", key.replace('~', "~0").replace('/', "~1"));
+            match whole.get(key) {
+                Some(w) => gaps(w, value, &at, missing),
+                None if empty(value) => {
+                    missing.push(at);
+                    true
+                }
+                None => false,
+            }
+        }),
         (Value::Array(whole), Value::Array(part)) => {
-            whole.len() == part.len() && whole.iter().zip(part).all(|(w, p)| contains(w, p))
+            whole.len() == part.len()
+                && whole
+                    .iter()
+                    .zip(part)
+                    .enumerate()
+                    .all(|(i, (w, p))| gaps(w, p, &format!("{at}/{i}"), missing))
         }
         (whole, part) => whole == part,
     }
@@ -140,20 +179,64 @@ mod tests {
     #[test]
     fn il_contenimento_guarda_chiavi_e_array() {
         use serde_json::json;
-        assert!(contains(
-            &json!({"a": 1, "b": [1, {"c": 2, "d": 3}]}),
-            &json!({"b": [1, {"c": 2}]})
+        let contains = |whole: &Value, part: &Value| {
+            let mut missing = Vec::new();
+            gaps(whole, part, "", &mut missing).then_some(missing)
+        };
+        assert_eq!(
+            contains(
+                &json!({"a": 1, "b": [1, {"c": 2, "d": 3}]}),
+                &json!({"b": [1, {"c": 2}]})
+            ),
+            Some(vec![])
+        );
+        assert_eq!(contains(&json!({"a": 1}), &json!({"a": 2})), None);
+        assert_eq!(contains(&json!({"a": [1, 2]}), &json!({"a": [1]})), None);
+        // Una chiave vuota che manca resta da decidere, una con un valore no.
+        assert_eq!(
+            contains(
+                &json!({"a": 1, "e": [{}]}),
+                &json!({"b": null, "c/d": [], "e": [{"f": {}}]})
+            ),
+            Some(vec!["/b".into(), "/c~1d".into(), "/e/0/f".into()])
+        );
+        assert_eq!(contains(&json!({"a": 1}), &json!({"b": false})), None);
+        assert_eq!(contains(&json!({"a": 1}), &json!({"b": [0]})), None);
+        assert_eq!(contains(&json!(0.1), &json!(0.1)), Some(vec![]));
+    }
+
+    #[test]
+    fn un_campo_conosciuto_vuoto_si_legge_e_uno_sconosciuto_no() {
+        use wordcraft_doc::InlineObject;
+        let read = |json: &str| decode::<InlineObject>(&STANDARD_NO_PAD.encode(json));
+        let image = r#""type":"image","media":"m","w":1.0,"h":2.0"#;
+        // Il tipo omette `ole` quando manca: scritto `null`, non porta niente.
+        let ole = read(&format!("{{{image},\"ole\":null}}"));
+        assert!(ole.is_ok(), "{ole:?}");
+        // Un campo sconosciuto vuoto, che serde ignorerebbe senza dirlo
+        // perché il tag dell'enum è interno.
+        for unknown in [r#""nuovo":{}"#, r#""nuovo":[]"#, r#""nuovo":null"#] {
+            assert!(
+                matches!(
+                    read(&format!("{{{image},{unknown}}}")),
+                    Err(RichError::Malformed(_))
+                ),
+                "{unknown}"
+            );
+        }
+        // E più in fondo, dentro un campo conosciuto.
+        let float = r#""float":{"wrap":"inline","nuovo":{}}"#;
+        assert!(serde_json::from_str::<InlineObject>(&format!("{{{image},{float}}}")).is_ok());
+        assert!(matches!(
+            read(&format!("{{{image},{float}}}")),
+            Err(RichError::Malformed(_))
         ));
-        assert!(!contains(&json!({"a": 1}), &json!({"a": 2})));
-        assert!(!contains(&json!({"a": [1, 2]}), &json!({"a": [1]})));
-        // Una chiave vuota può mancare, una con un valore no.
-        assert!(contains(
-            &json!({"a": 1}),
-            &json!({"b": null, "c": [], "d": {}})
+        let props = |json: &str| decode::<CharProps>(&STANDARD_NO_PAD.encode(json));
+        assert!(props(r#"{"font":null,"size":10.0}"#).is_ok());
+        assert!(matches!(
+            props(r#"{"size":10.0,"nuovo":{}}"#),
+            Err(RichError::Malformed(_))
         ));
-        assert!(!contains(&json!({"a": 1}), &json!({"b": false})));
-        assert!(!contains(&json!({"a": 1}), &json!({"b": [0]})));
-        assert!(contains(&json!(0.1), &json!(0.1)));
     }
 
     #[test]

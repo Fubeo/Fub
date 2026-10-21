@@ -1,682 +1,1763 @@
 {
   "opaque_schema": 2,
-  "defaults": {
-    "CharProps": {},
-    "ParaProps": {},
-    "SectionProps": {
-      "start": "string",
-      "pageW": "number",
-      "pageH": "number",
-      "landscape": "bool",
-      "marginTop": "number",
-      "marginBottom": "number",
-      "marginLeft": "number",
-      "marginRight": "number",
-      "header": "number",
-      "footer": "number",
-      "gutter": "number",
-      "columns": {
-        "count": "number",
-        "space": "number",
-        "separator": "bool",
-        "widths": []
-      },
-      "headers": {
-        "default": "null",
-        "first": "null",
-        "even": "null"
-      },
-      "footers": {
-        "default": "null",
-        "first": "null",
-        "even": "null"
-      },
-      "titlePage": "bool",
-      "pageNumStart": "null",
-      "pageNumFormat": "string",
-      "lineNumbers": "null",
-      "valign": "string",
-      "pageBorders": "null",
-      "rtl": "bool",
-      "docGrid": "null"
-    },
-    "Comment": {
-      "author": "string",
-      "initials": "string",
-      "date": "string",
-      "parent": "null",
-      "resolved": "bool",
-      "part": "number"
-    }
-  },
-  "corpus": {
-    "doc": {
-      "text.k": [
-        {}
-      ]
-    },
-    "docx": {
-      "atom.k": [
-        {
-          "props": {
-            "style": "string"
-          },
-          "object": {
-            "type": "string",
-            "kind": "string",
-            "id": "number",
-            "custom": "string"
-          },
-          "parts": {
-            "1": {
-              "kind": "string",
-              "blocks": [
-                {
-                  "kind": "string",
-                  "text": "string",
-                  "runs": [
-                    {
-                      "len": "number",
-                      "props": {
-                        "style": "string"
-                      }
-                    },
-                    {
-                      "len": "number"
-                    }
-                  ],
-                  "objects": [
-                    {
-                      "type": "string",
-                      "kind": "string",
-                      "id": "number",
-                      "custom": "string"
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        {
-          "props": {},
-          "object": {
-            "type": "string",
-            "base": "string",
-            "ruby": "string",
-            "align": "string",
-            "size": "number",
-            "raise": "number",
-            "base_size": "number",
-            "lang": "string"
-          }
-        },
-        {
-          "props": {},
-          "object": {
-            "type": "string",
-            "control": {
-              "id": "number",
-              "tag": "string",
-              "title": "string",
-              "lock": "string",
-              "placeholder": "string",
-              "showingPlaceholder": "bool",
-              "temporary": "bool",
-              "kind": {
-                "type": "string",
-                "multiLine": "bool"
-              },
-              "placeholderText": "string",
-              "block": "bool"
-            }
-          }
-        },
-        {
-          "props": {},
-          "object": {
-            "type": "string",
-            "control": {
-              "id": "number",
-              "tag": "string",
-              "title": "string",
-              "lock": "string",
-              "placeholder": "string",
-              "showingPlaceholder": "bool",
-              "temporary": "bool",
-              "kind": {
-                "type": "string"
-              },
-              "placeholderText": "string",
-              "block": "bool"
-            }
-          }
-        },
-        {
-          "props": {},
-          "object": {
-            "type": "string",
-            "id": "number"
-          }
-        },
-        {
-          "props": {},
-          "object": {
-            "type": "string",
-            "instr": "string",
-            "result": "string",
-            "locked": "bool",
-            "form": "string"
-          }
-        },
-        {
-          "props": {},
-          "object": {
-            "type": "string",
-            "kind": "string",
-            "w": "number",
-            "h": "number",
-            "fill": "null",
-            "stroke": "null",
-            "stroke_width": "number",
-            "float": {
-              "wrap": "string",
-              "hRel": "string",
-              "vRel": "string",
-              "x": "number",
-              "y": "number",
-              "dist": "number",
-              "distTop": "number",
-              "distBottom": "number",
-              "effect": [
-                "number"
-              ]
-            },
-            "story": "number"
-          },
-          "parts": {
-            "1": {
-              "kind": "string",
-              "blocks": [
-                {
-                  "kind": "string",
-                  "text": "string",
-                  "runs": [
-                    {
-                      "len": "number"
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        {
-          "props": {},
-          "object": {
-            "type": "string",
-            "linear": "string",
-            "display": "bool",
-            "math": {
-              "nodes": [
-                {
-                  "t": "string",
-                  "text": "string"
-                }
-              ],
-              "omml": "string"
-            }
-          }
-        },
-        {
-          "props": {},
-          "object": {
-            "type": "string",
-            "media": "string",
-            "w": "number",
-            "h": "number",
-            "alt": "string",
-            "float": {
-              "wrap": "string",
-              "hRel": "string",
-              "vRel": "string",
-              "x": "number",
-              "y": "number",
-              "dist": "number",
-              "distTop": "number",
-              "distBottom": "number",
-              "effect": [
-                "number"
-              ]
-            },
-            "crop": [
-              "number"
-            ]
-          }
-        },
-        {
-          "props": {},
-          "object": {
-            "type": "string",
-            "name": "string"
-          }
-        },
-        {
-          "props": {},
-          "object": {
-            "type": "string"
-          }
-        }
-      ],
-      "cells.k": [
-        {
-          "props": {
-            "width": "number",
-            "span": "number",
-            "vmerge": "string",
-            "shading": "null",
-            "borders": "null",
-            "margins": "null",
-            "textDirection": "string",
-            "noWrap": "bool"
-          },
-          "blocks": []
-        }
-      ],
-      "comments.k": [
-        {
-          "comment": {
-            "author": "string",
-            "initials": "string",
-            "date": "string",
-            "parent": "null",
-            "resolved": "bool",
-            "part": "number",
-            "durableId": "string"
-          },
-          "parts": {
-            "1": {
-              "kind": "string",
-              "blocks": [
-                {
-                  "kind": "string",
-                  "text": "string",
-                  "runs": [
-                    {
-                      "len": "number"
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        {
-          "comment": {
-            "author": "string",
-            "initials": "string",
-            "date": "string",
-            "parent": "null",
-            "resolved": "bool",
-            "part": "number",
-            "durableId": "string"
-          },
-          "parts": {
-            "3": {
-              "kind": "string",
-              "blocks": [
-                {
-                  "kind": "string",
-                  "text": "string",
-                  "runs": [
-                    {
-                      "len": "number"
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        {
-          "comment": {
-            "author": "string",
-            "initials": "string",
-            "date": "string",
-            "parent": "number",
-            "resolved": "bool",
-            "part": "number",
-            "durableId": "string"
-          },
-          "parts": {
-            "2": {
-              "kind": "string",
-              "blocks": [
-                {
-                  "kind": "string",
-                  "text": "string",
-                  "runs": [
-                    {
-                      "len": "number"
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        }
-      ],
-      "para.k": [
-        {
-          "props": {
-            "align": "string",
-            "bidi": "bool"
-          },
-          "mark": {}
-        },
-        {
-          "props": {
-            "bidi": "bool"
-          },
-          "mark": {}
-        },
-        {
-          "props": {
-            "style": "string",
-            "numbering": {
-              "num": "number",
-              "level": "number"
-            }
-          },
-          "mark": {}
-        },
-        {
-          "props": {
-            "style": "string"
-          },
-          "mark": {}
-        }
-      ],
-      "para.sect": [
-        {
-          "section": {
-            "start": "string",
-            "pageW": "number",
-            "pageH": "number",
-            "landscape": "bool",
-            "marginTop": "number",
-            "marginBottom": "number",
-            "marginLeft": "number",
-            "marginRight": "number",
-            "header": "number",
-            "footer": "number",
-            "gutter": "number",
-            "columns": {
-              "count": "number",
-              "space": "number",
-              "separator": "bool",
-              "widths": []
-            },
-            "headers": {
-              "default": "number",
-              "first": "null",
-              "even": "null"
-            },
-            "footers": {
-              "default": "null",
-              "first": "null",
-              "even": "null"
-            },
-            "titlePage": "bool",
-            "pageNumStart": "null",
-            "pageNumFormat": "string",
-            "lineNumbers": "null",
-            "valign": "string",
-            "pageBorders": "null",
-            "rtl": "bool",
-            "docGrid": "null"
-          },
-          "parts": {
-            "2": {
-              "kind": "string",
-              "blocks": [
-                {
-                  "kind": "string",
-                  "text": "string",
-                  "runs": [
-                    {
-                      "len": "number"
-                    }
-                  ],
-                  "objects": [
-                    {
-                      "type": "string",
-                      "instr": "string",
-                      "result": "string",
-                      "locked": "bool"
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        }
-      ],
-      "rows.k": [
-        {
-          "props": {
-            "height": "null",
-            "heightRule": "string",
-            "header": "bool",
-            "cantSplit": "bool"
-          },
-          "cells": []
-        }
-      ],
-      "table.k": [
-        {
-          "props": {
-            "style": "string",
-            "width": "null",
-            "widthPct": "null",
-            "align": "null",
-            "indent": "null",
-            "borders": {
-              "top": {
-                "style": "string",
-                "width": "number",
-                "color": "null",
-                "space": "number"
-              },
-              "left": "null",
-              "bottom": {
-                "style": "string",
-                "width": "number",
-                "color": "null",
-                "space": "number"
-              },
-              "right": "null",
-              "between": {
-                "style": "string",
-                "width": "number",
-                "color": "null",
-                "space": "number"
-              },
-              "inside_v": "null"
-            },
-            "cellMargins": "null",
-            "fixed": "bool",
-            "look": {
-              "headerRow": "bool",
-              "totalRow": "bool",
-              "bandedRows": "bool",
-              "firstColumn": "bool",
-              "lastColumn": "bool",
-              "bandedColumns": "bool"
-            },
-            "shading": "null",
-            "caption": "null"
-          },
-          "grid": [
-            "number"
-          ],
-          "rows": []
-        }
-      ],
-      "text.k": [
-        {
-          "bold": "bool",
-          "fmtChange": {
-            "rev": "number",
-            "old": {}
-          }
-        },
-        {
-          "del": "number"
-        },
-        {
-          "eastAsianLayout": {
-            "id": "number",
-            "combine": "bool"
-          }
-        },
-        {
-          "ins": "number"
-        },
-        {
-          "link": "string"
-        },
-        {
-          "rtl": "bool",
-          "langBidi": "string"
-        },
-        {
-          "size": "number",
-          "color": {
-            "Rgb": [
-              "number"
-            ]
-          }
-        },
-        {}
-      ]
-    },
-    "odt": {
-      "atom.k": [
-        {
-          "xml": "string"
-        }
-      ],
-      "cells.k": [
-        {
-          "open": "string"
-        }
-      ],
-      "para.k": [
-        {
-          "tag": "string"
-        }
-      ],
-      "rows.k": [
-        {
-          "open": "string",
-          "header": "bool"
-        }
-      ],
-      "table.k": [
-        {
-          "open": "string",
-          "head": "string",
-          "rows": "bool"
-        }
-      ]
-    },
-    "rtf": {
-      "cells.k": [
-        {
-          "props": {
-            "width": "number",
-            "span": "number",
-            "vmerge": "string",
-            "shading": "null",
-            "borders": "null",
-            "margins": "null",
-            "textDirection": "string",
-            "noWrap": "bool"
-          },
-          "blocks": []
-        }
-      ],
-      "para.k": [
-        {
-          "props": {
-            "spaceBefore": "number",
-            "spaceAfter": "number"
-          },
-          "mark": {}
-        }
-      ],
-      "rows.k": [
-        {
-          "props": {
-            "height": "null",
-            "heightRule": "string",
-            "header": "bool",
-            "cantSplit": "bool"
-          },
-          "cells": []
-        }
-      ],
-      "table.k": [
-        {
-          "props": {
-            "style": "null",
-            "width": "null",
-            "widthPct": "null",
-            "align": "null",
-            "indent": "null",
-            "borders": "null",
-            "cellMargins": "null",
-            "fixed": "bool",
-            "look": {
-              "headerRow": "bool",
-              "totalRow": "bool",
-              "bandedRows": "bool",
-              "firstColumn": "bool",
-              "lastColumn": "bool",
-              "bandedColumns": "bool"
-            },
-            "shading": "null",
-            "caption": "null"
-          },
-          "grid": [
-            "number"
-          ],
-          "rows": []
-        }
-      ],
-      "text.k": [
-        {
-          "size": "number",
-          "bold": "bool"
-        },
-        {
-          "size": "number",
-          "color": {
-            "Rgb": [
-              "number"
-            ]
-          }
-        },
-        {
-          "size": "number",
-          "italic": "bool"
-        },
-        {
-          "size": "number"
-        },
-        {}
-      ]
-    }
+  "surface": {
+    "fub-format-rich/odt/keys.rs::AtomKey": [
+      "struct AtomKey",
+      "# [serde (default , skip_serializing_if = \"Vec::is_empty\")] wrap : Vec < String >",
+      "xml : String"
+    ],
+    "fub-format-rich/odt/keys.rs::CellKey": [
+      "struct CellKey",
+      "open : String",
+      "# [serde (default , skip_serializing_if = \"String::is_empty\")] tail : String"
+    ],
+    "fub-format-rich/odt/keys.rs::Level": [
+      "struct Level",
+      "list : String",
+      "item : String",
+      "open : bool"
+    ],
+    "fub-format-rich/odt/keys.rs::ParaKey": [
+      "struct ParaKey",
+      "tag : String",
+      "# [serde (default , skip_serializing_if = \"Vec::is_empty\")] list : Vec < Level >"
+    ],
+    "fub-format-rich/odt/keys.rs::RowKey": [
+      "struct RowKey",
+      "open : String",
+      "# [serde (default)] header : bool",
+      "# [serde (default , skip_serializing_if = \"String::is_empty\")] lead : String"
+    ],
+    "fub-format-rich/odt/keys.rs::RunKey": [
+      "struct RunKey",
+      "wrap : Vec < String >"
+    ],
+    "fub-format-rich/odt/keys.rs::TableKey": [
+      "struct TableKey",
+      "open : String",
+      "head : String",
+      "rows : bool"
+    ],
+    "fub-format-rich/projection.rs::AtomKeep": [
+      "struct AtomKeep",
+      "props : CharProps",
+      "object : InlineObject",
+      "# [serde (default , skip_serializing_if = \"BTreeMap::is_empty\")] parts : BTreeMap < u32 , Part >"
+    ],
+    "fub-format-rich/projection.rs::CommentKeep": [
+      "struct CommentKeep",
+      "comment : Comment",
+      "# [serde (default , skip_serializing_if = \"BTreeMap::is_empty\")] parts : BTreeMap < u32 , Part >"
+    ],
+    "fub-format-rich/projection.rs::ParaKeep": [
+      "struct ParaKeep",
+      "# [serde (default)] props : ParaProps",
+      "# [serde (default)] mark : CharProps"
+    ],
+    "fub-format-rich/projection.rs::SectKeep": [
+      "# [serde (deny_unknown_fields)] struct SectKeep",
+      "section : SectionProps",
+      "# [serde (default , skip_serializing_if = \"BTreeMap::is_empty\")] parts : BTreeMap < u32 , Part >"
+    ],
+    "wordcraft-doc/chart.rs::ChartSeries": [
+      "# [serde (rename_all = \"camelCase\")] struct ChartSeries",
+      "name : String",
+      "# [serde (default)] values : Vec < Option < f64 > >"
+    ],
+    "wordcraft-doc/chart.rs::ChartSpec": [
+      "# [serde (rename_all = \"camelCase\")] struct ChartSpec",
+      "# [serde (rename = \"type\")] kind : ChartType",
+      "# [serde (default)] categories : Vec < String >",
+      "# [serde (default)] series : Vec < ChartSeries >",
+      "# [serde (default)] title : Option < String >",
+      "# [serde (default)] legend : Option < LegendPos >",
+      "# [serde (default)] data_labels : bool"
+    ],
+    "wordcraft-doc/chart.rs::ChartType": [
+      "# [serde (rename_all = \"camelCase\")] enum ChartType",
+      "# [default] Column",
+      "ColumnStacked",
+      "Bar",
+      "BarStacked",
+      "Line",
+      "Area",
+      "Pie",
+      "Doughnut",
+      "Scatter"
+    ],
+    "wordcraft-doc/chart.rs::LegendPos": [
+      "# [serde (rename_all = \"camelCase\")] enum LegendPos",
+      "Right",
+      "Left",
+      "Top",
+      "# [default] Bottom"
+    ],
+    "wordcraft-doc/connector.rs::ConnEnd": [
+      "# [serde (rename_all = \"camelCase\")] struct ConnEnd",
+      "id : u32",
+      "site : u32"
+    ],
+    "wordcraft-doc/connector.rs::ShapeExtra": [
+      "# [serde (default , rename_all = \"camelCase\")] struct ShapeExtra",
+      "# [serde (skip_serializing_if = \"is_zero\")] id : u32",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] warp : Option < TextWarp >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] start : Option < ConnEnd >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] end : Option < ConnEnd >",
+      "# [serde (skip_serializing_if = \"is_false\")] arrow_start : bool",
+      "# [serde (skip_serializing_if = \"is_false\")] arrow_end : bool",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] corner : Option < u32 >",
+      "# [serde (skip_serializing_if = \"crate::line_dash::LineDash::is_solid\")] dash : crate :: line_dash :: LineDash"
+    ],
+    "wordcraft-doc/connector.rs::ShapeExtra::is_empty": [
+      "pub fn is_empty (& self) -> bool { * self == ShapeExtra :: default () }"
+    ],
+    "wordcraft-doc/connector.rs::fn is_false": [
+      "fn is_false (v : & bool) -> bool { ! * v }"
+    ],
+    "wordcraft-doc/connector.rs::fn is_zero": [
+      "fn is_zero (v : & u32) -> bool { * v == 0 }"
+    ],
+    "wordcraft-doc/control.rs::ContentControl": [
+      "# [serde (default , rename_all = \"camelCase\")] struct ContentControl",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] id : Option < i64 >",
+      "tag : String",
+      "title : String",
+      "lock : ControlLock",
+      "placeholder : String",
+      "showing_placeholder : bool",
+      "temporary : bool",
+      "kind : ControlKind",
+      "placeholder_text : String",
+      "block : bool",
+      "# [serde (skip_serializing_if = \"String::is_empty\")] rpr_xml : String",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] run_props : Option < crate :: props :: CharProps >",
+      "# [serde (skip_serializing_if = \"Vec::is_empty\")] extra : Vec < String >",
+      "# [serde (skip_serializing_if = \"String::is_empty\")] end_pr_xml : String"
+    ],
+    "wordcraft-doc/control.rs::ControlKind": [
+      "# [serde (tag = \"type\" , rename_all = \"camelCase\")] enum ControlKind",
+      "# [default] RichText",
+      "# [serde (rename_all = \"camelCase\")] Text { # [serde (default)] multi_line : bool , }",
+      "# [serde (rename_all = \"camelCase\")] CheckBox { checked : bool , checked_char : char , checked_font : String , unchecked_char : char , unchecked_font : String }",
+      "# [serde (rename_all = \"camelCase\")] ComboBox { items : Vec < ListItem > , # [serde (default)] last_value : String , }",
+      "# [serde (rename_all = \"camelCase\")] DropDown { items : Vec < ListItem > , # [serde (default)] last_value : String , }",
+      "# [serde (rename_all = \"camelCase\")] Date { # [serde (default)] full_date : String , # [serde (default)] format : String , # [serde (default)] lid : String , # [serde (default)] calendar : String , # [serde (default)] store_as : String , }",
+      "Picture",
+      "# [serde (rename_all = \"camelCase\")] Gallery { # [serde (default)] list : bool , # [serde (default)] gallery : String , # [serde (default)] category : String , # [serde (default)] unique : bool , }",
+      "# [serde (rename_all = \"camelCase\")] RepeatingSection { # [serde (default)] title : String , # [serde (default)] no_insert_delete : bool , }",
+      "RepeatingSectionItem"
+    ],
+    "wordcraft-doc/control.rs::ControlLock": [
+      "# [serde (rename_all = \"camelCase\")] enum ControlLock",
+      "# [default] Unlocked",
+      "SdtLocked",
+      "ContentLocked",
+      "SdtContentLocked"
+    ],
+    "wordcraft-doc/control.rs::ControlWrap": [
+      "# [serde (default , rename_all = \"camelCase\")] struct ControlWrap",
+      "open : Vec < ContentControl >",
+      "close : u32"
+    ],
+    "wordcraft-doc/control.rs::ControlWrap::is_empty": [
+      "pub fn is_empty (& self) -> bool { self . open . is_empty () && self . close == 0 }"
+    ],
+    "wordcraft-doc/control.rs::ListItem": [
+      "# [serde (default , rename_all = \"camelCase\")] struct ListItem",
+      "display : String",
+      "value : String"
+    ],
+    "wordcraft-doc/edit.rs::Fragment": [
+      "struct Fragment",
+      "blocks : Vec < Block >",
+      "# [serde (default , skip_serializing_if = \"BTreeMap::is_empty\")] parts : BTreeMap < u32 , Part >"
+    ],
+    "wordcraft-doc/effects.rs::Glow": [
+      "# [serde (rename_all = \"camelCase\" , default)] struct Glow",
+      "color : Rgb",
+      "size : f32",
+      "transparency : f32"
+    ],
+    "wordcraft-doc/effects.rs::Shadow": [
+      "# [serde (rename_all = \"camelCase\" , default)] struct Shadow",
+      "color : Rgb",
+      "transparency : f32",
+      "blur : f32",
+      "distance : f32",
+      "angle : f32",
+      "rot_with_shape : bool"
+    ],
+    "wordcraft-doc/effects.rs::ShapeEffects": [
+      "# [serde (rename_all = \"camelCase\")] struct ShapeEffects",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] shadow : Option < Shadow >",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] glow : Option < Glow >",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] soft_edge : Option < f32 >"
+    ],
+    "wordcraft-doc/effects.rs::ShapeEffects::is_empty": [
+      "pub fn is_empty (& self) -> bool { self . shadow . is_none () && self . glow . is_none () && self . soft_edge . is_none () }"
+    ],
+    "wordcraft-doc/effects.rs::impl Default for Glow": [
+      "impl Default for Glow { fn default () -> Self { Glow { color : Rgb (0x15 , 0x60 , 0x82) , size : 5.0 , transparency : 60.0 } } }"
+    ],
+    "wordcraft-doc/effects.rs::impl Default for Shadow": [
+      "impl Default for Shadow { fn default () -> Self { Shadow { color : Rgb :: BLACK , transparency : 60.0 , blur : 4.0 , distance : 3.0 , angle : 45.0 , rot_with_shape : false } } }"
+    ],
+    "wordcraft-doc/freeform.rs::FreePath": [
+      "# [serde (default , rename_all = \"camelCase\")] struct FreePath",
+      "pts : Vec < [f32 ; 2] >",
+      "closed : bool"
+    ],
+    "wordcraft-doc/freeform.rs::Freeform": [
+      "# [serde (default , rename_all = \"camelCase\")] struct Freeform",
+      "w : f32",
+      "h : f32",
+      "paths : Vec < FreePath >",
+      "alpha : f32",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] ink : Option < InkTool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] order : Option < u32 >"
+    ],
+    "wordcraft-doc/freeform.rs::InkTool": [
+      "# [serde (rename_all = \"camelCase\")] enum InkTool",
+      "# [default] Pen",
+      "Pencil",
+      "Highlighter"
+    ],
+    "wordcraft-doc/freeform.rs::impl Default for Freeform": [
+      "impl Default for Freeform { fn default () -> Self { Freeform { w : 0.0 , h : 0.0 , paths : Vec :: new () , alpha : 1.0 , ink : None , order : None } } }"
+    ],
+    "wordcraft-doc/graphic.rs::Embedded": [
+      "struct Embedded",
+      "xml : String",
+      "refs : Vec < EmbeddedRef >"
+    ],
+    "wordcraft-doc/graphic.rs::EmbeddedRef": [
+      "struct EmbeddedRef",
+      "id : String",
+      "kind : String",
+      "target : String",
+      "external : bool"
+    ],
+    "wordcraft-doc/graphic.rs::Graphic": [
+      "# [serde (rename_all = \"camelCase\")] struct Graphic",
+      "kind : GraphicKind",
+      "# [serde (default)] items : Vec < GraphicItem >",
+      "# [serde (default)] w : f32",
+      "# [serde (default)] h : f32",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] source : Option < std :: sync :: Arc < Embedded > >",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] smart_art : Option < std :: sync :: Arc < crate :: smart_art :: SmartArtSpec > >",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] chart : Option < std :: sync :: Arc < crate :: chart :: ChartSpec > >"
+    ],
+    "wordcraft-doc/graphic.rs::GraphicItem": [
+      "# [serde (tag = \"type\" , rename_all = \"camelCase\")] enum GraphicItem",
+      "Shape { rect : [f32 ; 4] , kind : ShapeKind , fill : Option < Rgb > , stroke : Option < Rgb > , # [serde (default)] stroke_width : f32 , }",
+      "Path { segs : Vec < PathSeg > , fill : Option < Rgb > , stroke : Option < Rgb > , # [serde (default)] stroke_width : f32 , }",
+      "Text { rect : [f32 ; 4] , text : String , size : f32 , color : Rgb , # [serde (default)] bold : bool , # [serde (default)] align : TextAlign , # [serde (default)] font : Option < String > , }",
+      "Image { rect : [f32 ; 4] , media : String }"
+    ],
+    "wordcraft-doc/graphic.rs::GraphicKind": [
+      "# [serde (rename_all = \"camelCase\")] enum GraphicKind",
+      "# [default] Chart",
+      "Diagram",
+      "Ink"
+    ],
+    "wordcraft-doc/graphic.rs::PathSeg": [
+      "# [serde (rename_all = \"camelCase\")] enum PathSeg",
+      "Move (f32 , f32)",
+      "Line (f32 , f32)",
+      "Cubic (f32 , f32 , f32 , f32 , f32 , f32)",
+      "Close"
+    ],
+    "wordcraft-doc/graphic.rs::TextAlign": [
+      "# [serde (rename_all = \"camelCase\")] enum TextAlign",
+      "Left",
+      "# [default] Center",
+      "Right"
+    ],
+    "wordcraft-doc/lib.rs::Block": [
+      "# [serde (tag = \"kind\" , rename_all = \"camelCase\")] enum Block",
+      "Para (Paragraph)",
+      "Table (Table)"
+    ],
+    "wordcraft-doc/lib.rs::BuildingBlock": [
+      "# [serde (default , rename_all = \"camelCase\")] struct BuildingBlock",
+      "name : String",
+      "gallery : String",
+      "category : String",
+      "# [serde (skip_serializing_if = \"String::is_empty\")] description : String",
+      "# [serde (skip_serializing_if = \"String::is_empty\")] guid : String",
+      "# [serde (skip_serializing_if = \"String::is_empty\")] style : String",
+      "# [serde (skip_serializing_if = \"Vec::is_empty\")] types : Vec < String >",
+      "# [serde (skip_serializing_if = \"Vec::is_empty\")] behaviors : Vec < String >",
+      "blocks : Blocks"
+    ],
+    "wordcraft-doc/lib.rs::Comment": [
+      "# [serde (default , rename_all = \"camelCase\")] struct Comment",
+      "author : String",
+      "initials : String",
+      "date : String",
+      "parent : Option < u32 >",
+      "resolved : bool",
+      "part : u32",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] durable_id : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] date_utc : Option < String >"
+    ],
+    "wordcraft-doc/lib.rs::CoreProps": [
+      "# [serde (default , rename_all = \"camelCase\")] struct CoreProps",
+      "title : String",
+      "subject : String",
+      "creator : String",
+      "keywords : String",
+      "description : String",
+      "category : String",
+      "last_modified_by : String",
+      "created : String",
+      "modified : String",
+      "revision : u32"
+    ],
+    "wordcraft-doc/lib.rs::CustomProp": [
+      "# [serde (default , rename_all = \"camelCase\")] struct CustomProp",
+      "name : String",
+      "kind : String",
+      "value : String"
+    ],
+    "wordcraft-doc/lib.rs::Document": [
+      "# [serde (default , rename_all = \"camelCase\")] struct Document",
+      "body : Blocks",
+      "last_section : SectionProps",
+      "parts : BTreeMap < u32 , Part >",
+      "styles : StyleSheet",
+      "numbering : Numbering",
+      "comments : BTreeMap < u32 , Comment >",
+      "revisions : Vec < Revision >",
+      "settings : Settings",
+      "core : CoreProps",
+      "sources : Vec < Source >",
+      "custom_props : Vec < CustomProp >",
+      "# [serde (skip_serializing_if = \"NoteSeparators::is_empty\")] footnote_separators : NoteSeparators",
+      "# [serde (skip_serializing_if = \"NoteSeparators::is_empty\")] endnote_separators : NoteSeparators",
+      "# [serde (skip_serializing_if = \"BTreeMap::is_empty\")] media : BTreeMap < String , Arc < Vec < u8 > > >",
+      "# [serde (skip_serializing_if = \"BTreeMap::is_empty\")] passthrough : BTreeMap < String , Arc < Vec < u8 > > >",
+      "# [serde (skip_serializing_if = \"Vec::is_empty\")] glossary : Vec < BuildingBlock >"
+    ],
+    "wordcraft-doc/lib.rs::NoteSeparators": [
+      "# [serde (default , rename_all = \"camelCase\")] struct NoteSeparators",
+      "separator : Option < Blocks >",
+      "continuation_separator : Option < Blocks >",
+      "continuation_notice : Option < Blocks >"
+    ],
+    "wordcraft-doc/lib.rs::NoteSeparators::is_empty": [
+      "pub fn is_empty (& self) -> bool { self . separator . is_none () && self . continuation_separator . is_none () && self . continuation_notice . is_none () }"
+    ],
+    "wordcraft-doc/lib.rs::PagePicture": [
+      "# [serde (default)] struct PagePicture",
+      "media : String",
+      "fill_type : String",
+      "title : String"
+    ],
+    "wordcraft-doc/lib.rs::Part": [
+      "struct Part",
+      "kind : PartKind",
+      "blocks : Blocks",
+      "# [serde (default , skip_serializing_if = \"TextBody::is_default\")] body : TextBody"
+    ],
+    "wordcraft-doc/lib.rs::PartKind": [
+      "# [serde (rename_all = \"camelCase\")] enum PartKind",
+      "# [default] Header",
+      "Footer",
+      "Footnote",
+      "Endnote",
+      "Comment",
+      "TextBox"
+    ],
+    "wordcraft-doc/lib.rs::Path": [
+      "struct Path",
+      "Vec < u32 >"
+    ],
+    "wordcraft-doc/lib.rs::Pos": [
+      "struct Pos",
+      "story : StoryRef",
+      "path : Path",
+      "off : usize"
+    ],
+    "wordcraft-doc/lib.rs::Revision": [
+      "# [serde (default)] struct Revision",
+      "kind : RevisionKind",
+      "author : String",
+      "date : String",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] move_name : Option < String >"
+    ],
+    "wordcraft-doc/lib.rs::RevisionKind": [
+      "# [serde (rename_all = \"camelCase\")] enum RevisionKind",
+      "# [default] Insert",
+      "Delete",
+      "Format"
+    ],
+    "wordcraft-doc/lib.rs::Settings": [
+      "# [serde (default , rename_all = \"camelCase\")] struct Settings",
+      "track_changes : bool",
+      "track_moves : bool",
+      "default_tab : f32",
+      "even_odd_headers : bool",
+      "mirror_margins : bool",
+      "auto_hyphenation : bool",
+      "hyphenation_zone : f32",
+      "hyphenate_caps : bool",
+      "consecutive_hyphen_limit : u32",
+      "page_color : Option < Rgb >",
+      "page_picture : Option < PagePicture >",
+      "watermark : Option < Watermark >",
+      "major_font : String",
+      "minor_font : String",
+      "theme_colors : Vec < Rgb >",
+      "theme_name : String",
+      "footnote_format : section :: NumFormat",
+      "endnote_format : section :: NumFormat",
+      "# [serde (skip_serializing_if = \"section::NoteProps::is_empty\")] footnote_pr : section :: NoteProps",
+      "# [serde (skip_serializing_if = \"section::NoteProps::is_empty\")] endnote_pr : section :: NoteProps",
+      "protection : Option < String >",
+      "# [serde (skip_serializing_if = \"std::ops::Not::not\")] protect_formatting : bool",
+      "# [serde (skip_serializing_if = \"Vec::is_empty\")] protect_hash : Vec < (String , String) >",
+      "compat_mode : u32",
+      "# [serde (default , skip_serializing_if = \"Vec::is_empty\")] roman_fonts : Vec < String >",
+      "# [serde (default , skip_serializing_if = \"std::ops::Not::not\")] sum_paragraph_spacing : bool",
+      "allow_space_of_same_style_in_table : bool",
+      "grid_h : f32",
+      "grid_v : f32",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] math : Option < math :: MathProps >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] bib_style : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] attached_template : Option < String >",
+      "link_styles : bool",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] zoom : Option < Zoom >",
+      "# [serde (skip_serializing_if = \"std::ops::Not::not\")] remove_personal_info : bool",
+      "# [serde (skip_serializing_if = \"std::ops::Not::not\")] remove_date_time : bool"
+    ],
+    "wordcraft-doc/lib.rs::Source": [
+      "# [serde (default , rename_all = \"camelCase\")] struct Source",
+      "tag : String",
+      "kind : String",
+      "author : String",
+      "title : String",
+      "year : String",
+      "publisher : String",
+      "city : String",
+      "journal : String",
+      "volume : String",
+      "pages : String",
+      "url : String",
+      "editor : String",
+      "edition : String",
+      "issue : String",
+      "month : String",
+      "day : String",
+      "accessed : String",
+      "doi : String"
+    ],
+    "wordcraft-doc/lib.rs::StoryRef": [
+      "# [serde (rename_all = \"camelCase\")] enum StoryRef",
+      "# [default] Body",
+      "Part (u32)"
+    ],
+    "wordcraft-doc/lib.rs::TextBody": [
+      "# [serde (default , rename_all = \"camelCase\")] struct TextBody",
+      "vert : props :: TextVert",
+      "anchor : props :: VAlign",
+      "next : Option < u32 >",
+      "inset : Option < [u32 ; 4] >",
+      "auto_fit : bool",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] auto_color : Option < props :: Rgb >"
+    ],
+    "wordcraft-doc/lib.rs::TextBody::is_default": [
+      "pub fn is_default (& self) -> bool { * self == TextBody :: default () }"
+    ],
+    "wordcraft-doc/lib.rs::Watermark": [
+      "# [serde (default)] struct Watermark",
+      "text : String",
+      "font : String",
+      "color : Rgb",
+      "diagonal : bool",
+      "semitransparent : bool"
+    ],
+    "wordcraft-doc/lib.rs::Zoom": [
+      "# [serde (rename_all = \"camelCase\")] struct Zoom",
+      "percent : u32",
+      "fit : Option < ZoomFit >"
+    ],
+    "wordcraft-doc/lib.rs::ZoomFit": [
+      "# [serde (rename_all = \"camelCase\")] enum ZoomFit",
+      "OnePage",
+      "PageWidth",
+      "TextWidth"
+    ],
+    "wordcraft-doc/lib.rs::impl Default for Document": [
+      "impl Default for Document { fn default () -> Self { Document :: new () } }"
+    ],
+    "wordcraft-doc/lib.rs::impl Default for Settings": [
+      "impl Default for Settings { fn default () -> Self { Settings { track_changes : false , track_moves : true , default_tab : 36.0 , even_odd_headers : false , mirror_margins : false , auto_hyphenation : false , hyphenation_zone : DEFAULT_HYPHENATION_ZONE , hyphenate_caps : true , consecutive_hyphen_limit : 0 , page_color : None , page_picture : None , watermark : None , major_font : styles :: HEADING_FONT . into () , minor_font : styles :: BODY_FONT . into () , theme_colors : THEME_COLORS . to_vec () , theme_name : \"Craft\" . into () , footnote_format : section :: NumFormat :: Decimal , endnote_format : section :: NumFormat :: LowerRoman , footnote_pr : section :: NoteProps :: default () , endnote_pr : section :: NoteProps :: default () , protection : None , protect_formatting : false , protect_hash : Vec :: new () , compat_mode : COMPAT_MODE_CURRENT , roman_fonts : Vec :: new () , sum_paragraph_spacing : false , allow_space_of_same_style_in_table : false , grid_h : DEFAULT_GRID , grid_v : DEFAULT_GRID , math : None , bib_style : None , attached_template : None , link_styles : false , zoom : None , remove_personal_info : false , remove_date_time : false , } } }"
+    ],
+    "wordcraft-doc/lib.rs::impl Default for Watermark": [
+      "impl Default for Watermark { fn default () -> Self { Watermark { text : \"DRAFT\" . into () , font : styles :: BODY_FONT . into () , color : Rgb (0xC0 , 0xC0 , 0xC0) , diagonal : true , semitransparent : true } } }"
+    ],
+    "wordcraft-doc/lib.rs::type Blocks": [
+      "pub type Blocks = Vec < Arc < Block > > ;"
+    ],
+    "wordcraft-doc/lib.rs::type Result": [
+      "pub type Result < T > = std :: result :: Result < T , DocError > ;"
+    ],
+    "wordcraft-doc/line_dash.rs::LineDash": [
+      "# [serde (rename_all = \"camelCase\")] enum LineDash",
+      "# [default] Solid",
+      "Dot",
+      "Dash",
+      "LongDash",
+      "DashDot",
+      "LongDashDot",
+      "LongDashDotDot",
+      "SystemDash",
+      "SystemDot",
+      "SystemDashDot",
+      "SystemDashDotDot",
+      "Custom (Vec < (u32 , u32) >)"
+    ],
+    "wordcraft-doc/line_dash.rs::LineDash::is_solid": [
+      "pub fn is_solid (& self) -> bool { * self == Self :: Solid }"
+    ],
+    "wordcraft-doc/math.rs::BrkBin": [
+      "# [serde (rename_all = \"camelCase\")] enum BrkBin",
+      "# [default] Before",
+      "After",
+      "Repeat"
+    ],
+    "wordcraft-doc/math.rs::BrkBinSub": [
+      "# [serde (rename_all = \"camelCase\")] enum BrkBinSub",
+      "# [default] MinusMinus",
+      "MinusPlus",
+      "PlusMinus"
+    ],
+    "wordcraft-doc/math.rs::ColJc": [
+      "# [serde (rename_all = \"camelCase\")] enum ColJc",
+      "# [default] Center",
+      "Left",
+      "Right"
+    ],
+    "wordcraft-doc/math.rs::FracKind": [
+      "# [serde (rename_all = \"camelCase\")] enum FracKind",
+      "# [default] Bar",
+      "Skewed",
+      "Linear",
+      "NoBar"
+    ],
+    "wordcraft-doc/math.rs::LimLoc": [
+      "# [serde (rename_all = \"camelCase\")] enum LimLoc",
+      "UndOvr",
+      "SubSup"
+    ],
+    "wordcraft-doc/math.rs::MNode": [
+      "# [serde (tag = \"t\" , rename_all = \"camelCase\")] enum MNode",
+      "Run (MRun)",
+      "Frac { # [serde (default)] kind : FracKind , num : Arg , den : Arg , }",
+      "Script { kind : ScriptKind , base : Arg , # [serde (default)] sub : Arg , # [serde (default)] sup : Arg , }",
+      "Rad { # [serde (default)] deg : Arg , # [serde (default)] deg_hide : bool , e : Arg , }",
+      "Nary { chr : char , # [serde (default)] lim_loc : Option < LimLoc > , # [serde (default)] grow : bool , # [serde (default)] sub_hide : bool , # [serde (default)] sup_hide : bool , # [serde (default)] sub : Arg , # [serde (default)] sup : Arg , e : Arg , }",
+      "Delim { beg : Option < char > , end : Option < char > , # [serde (default)] sep : Option < char > , # [serde (default = \"yes\")] grow : bool , # [serde (default)] shp_match : bool , elems : Vec < Arg > , }",
+      "Func { name : Arg , e : Arg , }",
+      "Lim { upper : bool , e : Arg , lim : Arg , }",
+      "Acc { chr : char , e : Arg , }",
+      "Bar { top : bool , e : Arg , }",
+      "BorderBox { # [serde (default)] hide : [bool ; 4] , # [serde (default)] strike : [bool ; 4] , e : Arg , }",
+      "Boxed { e : Arg , }",
+      "GroupChr { chr : char , top : bool , e : Arg , }",
+      "EqArr { rows : Vec < Arg > , }",
+      "Matrix { rows : Vec < Vec < Arg > > , # [serde (default)] col_jc : Vec < ColJc > , }",
+      "Phant { # [serde (default = \"yes\")] show : bool , # [serde (default)] zero_wid : bool , # [serde (default)] zero_asc : bool , # [serde (default)] zero_desc : bool , e : Arg , }"
+    ],
+    "wordcraft-doc/math.rs::MRun": [
+      "struct MRun",
+      "text : String",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] sty : Option < MSty >",
+      "# [serde (default , skip_serializing_if = \"is_default\")] scr : MScr",
+      "# [serde (default , skip_serializing_if = \"is_default\")] nor : bool",
+      "# [serde (default , skip_serializing_if = \"is_default\")] lit : bool",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] size : Option < f32 >",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] color : Option < Rgb >",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] font : Option < String >",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] brk : Option < u8 >"
+    ],
+    "wordcraft-doc/math.rs::MScr": [
+      "# [serde (rename_all = \"camelCase\")] enum MScr",
+      "# [default] Roman",
+      "Script",
+      "Fraktur",
+      "DoubleStruck",
+      "SansSerif",
+      "Monospace"
+    ],
+    "wordcraft-doc/math.rs::MSty": [
+      "# [serde (rename_all = \"camelCase\")] enum MSty",
+      "Plain",
+      "Bold",
+      "Italic",
+      "BoldItalic"
+    ],
+    "wordcraft-doc/math.rs::Math": [
+      "struct Math",
+      "# [serde (default , skip_serializing_if = \"Vec::is_empty\")] nodes : Arg",
+      "# [serde (default , skip_serializing_if = \"String::is_empty\")] omml : String",
+      "# [serde (default , skip_serializing_if = \"is_default\")] jc : MathJc",
+      "# [serde (default , skip_serializing_if = \"is_default\")] linear : bool"
+    ],
+    "wordcraft-doc/math.rs::Math::is_empty": [
+      "pub fn is_empty (& self) -> bool { self . nodes . is_empty () }"
+    ],
+    "wordcraft-doc/math.rs::MathJc": [
+      "# [serde (rename_all = \"camelCase\")] enum MathJc",
+      "# [default] CenterGroup",
+      "Center",
+      "Left",
+      "Right"
+    ],
+    "wordcraft-doc/math.rs::MathProps": [
+      "# [serde (default , rename_all = \"camelCase\")] struct MathProps",
+      "brk_bin : BrkBin",
+      "brk_bin_sub : BrkBinSub",
+      "wrap_indent : f32",
+      "wrap_right : bool"
+    ],
+    "wordcraft-doc/math.rs::ScriptKind": [
+      "# [serde (rename_all = \"camelCase\")] enum ScriptKind",
+      "Sup",
+      "Sub",
+      "SubSup",
+      "Pre"
+    ],
+    "wordcraft-doc/math.rs::fn is_default": [
+      "fn is_default < T : Default + PartialEq > (v : & T) -> bool { * v == T :: default () }"
+    ],
+    "wordcraft-doc/math.rs::fn yes": [
+      "fn yes () -> bool { true }"
+    ],
+    "wordcraft-doc/math.rs::impl Default for MathProps": [
+      "impl Default for MathProps { fn default () -> Self { MathProps { brk_bin : BrkBin :: Before , brk_bin_sub : BrkBinSub :: MinusMinus , wrap_indent : DEFAULT_WRAP_INDENT , wrap_right : false } } }"
+    ],
+    "wordcraft-doc/math.rs::type Arg": [
+      "pub type Arg = Vec < MNode > ;"
+    ],
+    "wordcraft-doc/math_edit.rs::MathPos": [
+      "struct MathPos",
+      "# [serde (default)] path : Vec < (usize , usize) >",
+      "# [serde (default)] off : usize"
+    ],
+    "wordcraft-doc/numbering.rs::AbstractNum": [
+      "# [serde (default)] struct AbstractNum",
+      "id : u32",
+      "name : Option < String >",
+      "levels : Vec < Level >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] nsid : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] tmpl : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] multi_level_type : Option < String >"
+    ],
+    "wordcraft-doc/numbering.rs::Level": [
+      "# [serde (default , rename_all = \"camelCase\")] struct Level",
+      "start : u32",
+      "format : NumFormat",
+      "text : String",
+      "align : Align",
+      "indent : f32",
+      "hanging : f32",
+      "suffix : LevelSuffix",
+      "chr : CharProps",
+      "restart : bool",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] restart_after : Option < u8 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] tab : Option < f32 >",
+      "legal : bool",
+      "style : Option < String >"
+    ],
+    "wordcraft-doc/numbering.rs::LevelSuffix": [
+      "# [serde (rename_all = \"camelCase\")] enum LevelSuffix",
+      "# [default] Tab",
+      "Space",
+      "Nothing"
+    ],
+    "wordcraft-doc/numbering.rs::ListKind": [
+      "# [serde (rename_all = \"camelCase\")] enum ListKind",
+      "Bullet",
+      "BulletChar (char)",
+      "Numbered",
+      "NumberedParen",
+      "Outline",
+      "UpperLetter",
+      "LowerLetter",
+      "LowerLetterDot",
+      "LowerRoman",
+      "Legal"
+    ],
+    "wordcraft-doc/numbering.rs::Num": [
+      "# [serde (default , rename_all = \"camelCase\")] struct Num",
+      "id : u32",
+      "abstract_id : u32",
+      "start_overrides : Vec < (u8 , u32) >",
+      "# [serde (skip_serializing_if = \"Vec::is_empty\")] level_overrides : Vec < (u8 , Level) >"
+    ],
+    "wordcraft-doc/numbering.rs::Numbering": [
+      "# [serde (default)] struct Numbering",
+      "abstracts : Vec < AbstractNum >",
+      "nums : Vec < Num >"
+    ],
+    "wordcraft-doc/numbering.rs::impl Default for Level": [
+      "impl Default for Level { fn default () -> Self { Level { start : 1 , format : NumFormat :: Decimal , text : \"%1.\" . into () , align : Align :: Left , indent : 36.0 , hanging : 18.0 , suffix : LevelSuffix :: Tab , chr : CharProps :: default () , restart : true , restart_after : None , tab : None , legal : false , style : None , } } }"
+    ],
+    "wordcraft-doc/para.rs::AltText": [
+      "# [serde (default , rename_all = \"camelCase\")] struct AltText",
+      "# [serde (skip_serializing_if = \"String::is_empty\")] text : String",
+      "# [serde (skip_serializing_if = \"String::is_empty\")] title : String",
+      "# [serde (skip_serializing_if = \"is_false\")] decorative : bool"
+    ],
+    "wordcraft-doc/para.rs::AltText::is_empty": [
+      "pub fn is_empty (& self) -> bool { self . text . is_empty () && self . title . is_empty () && ! self . decorative }"
+    ],
+    "wordcraft-doc/para.rs::Anchor": [
+      "# [serde (rename_all = \"camelCase\")] enum Anchor",
+      "# [default] Column",
+      "Margin",
+      "Page",
+      "Paragraph",
+      "LeftMargin",
+      "RightMargin",
+      "TopMargin",
+      "BottomMargin",
+      "InsideMargin",
+      "OutsideMargin",
+      "Character",
+      "Line"
+    ],
+    "wordcraft-doc/para.rs::CanvasStyle": [
+      "# [serde (default , rename_all = \"camelCase\")] struct CanvasStyle",
+      "fill : Option < crate :: props :: Rgb >",
+      "stroke : Option < crate :: props :: Rgb >",
+      "stroke_width : f32"
+    ],
+    "wordcraft-doc/para.rs::Float": [
+      "# [serde (default , rename_all = \"camelCase\")] struct Float",
+      "wrap : Wrap",
+      "# [serde (skip_serializing_if = \"WrapText::is_both\")] wrap_text : WrapText",
+      "h_rel : Anchor",
+      "v_rel : Anchor",
+      "x : f32",
+      "y : f32",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] h_align : Option < FloatAlign >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] v_align : Option < FloatAlign >",
+      "dist : f32",
+      "dist_top : f32",
+      "dist_bottom : f32",
+      "effect : [f32 ; 4]",
+      "# [serde (skip_serializing_if = \"is_zero\")] rot : f32",
+      "# [serde (skip_serializing_if = \"is_false\")] flip_h : bool",
+      "# [serde (skip_serializing_if = \"is_false\")] flip_v : bool",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] wrap_polygon : Option < std :: sync :: Arc < crate :: wrap :: WrapPolygon > >",
+      "# [serde (skip_serializing_if = \"AltText::is_empty\")] alt : AltText",
+      "# [serde (skip_serializing_if = \"is_false\")] hidden : bool",
+      "# [serde (skip_serializing_if = \"is_false\")] outside_cell : bool"
+    ],
+    "wordcraft-doc/para.rs::FloatAlign": [
+      "# [serde (rename_all = \"camelCase\")] enum FloatAlign",
+      "Start",
+      "Center",
+      "End",
+      "Inside",
+      "Outside"
+    ],
+    "wordcraft-doc/para.rs::GroupChild": [
+      "# [serde (rename_all = \"camelCase\")] struct GroupChild",
+      "x : f32",
+      "y : f32",
+      "obj : InlineObject"
+    ],
+    "wordcraft-doc/para.rs::InlineObject": [
+      "# [serde (tag = \"type\" , rename_all = \"camelCase\")] enum InlineObject",
+      "Image { media : String , w : f32 , h : f32 , # [serde (default)] alt : String , # [serde (default)] float : Float , # [serde (default)] crop : [f32 ; 4] , # [serde (default , skip_serializing_if = \"Option::is_none\")] ole : Option < std :: sync :: Arc < crate :: graphic :: Embedded > > , }",
+      "Graphic { w : f32 , h : f32 , # [serde (default)] alt : String , # [serde (default)] float : Float , graphic : std :: sync :: Arc < crate :: graphic :: Graphic > , }",
+      "Shape { kind : ShapeKind , w : f32 , h : f32 , fill : Option < crate :: props :: Rgb > , stroke : Option < crate :: props :: Rgb > , # [serde (default)] stroke_width : f32 , # [serde (default)] float : Float , # [serde (default)] story : Option < u32 > , # [serde (default , skip_serializing_if = \"Option::is_none\")] freeform : Option < std :: sync :: Arc < crate :: freeform :: Freeform > > , # [serde (default , skip_serializing_if = \"crate::effects::ShapeEffects::is_empty\")] effects : crate :: effects :: ShapeEffects , # [serde (default , skip_serializing_if = \"crate::connector::ShapeExtra::is_empty\")] extra : crate :: connector :: ShapeExtra , }",
+      "Group { w : f32 , h : f32 , # [serde (default)] float : Float , ch_w : f32 , ch_h : f32 , children : Vec < GroupChild > , # [serde (default , skip_serializing_if = \"Option::is_none\")] canvas : Option < CanvasStyle > , }",
+      "Field { instr : String , # [serde (default)] result : String , # [serde (default)] locked : bool , # [serde (default , skip_serializing_if = \"std::ops::Not::not\")] dirty : bool , # [serde (default , skip_serializing_if = \"std::ops::Not::not\")] code : bool , # [serde (default , skip_serializing_if = \"String::is_empty\")] form : String , }",
+      "FieldStart { instr : String , # [serde (default)] locked : bool , # [serde (default , skip_serializing_if = \"std::ops::Not::not\")] dirty : bool , }",
+      "FieldEnd",
+      "ControlStart { control : Box < crate :: control :: ContentControl > , }",
+      "ControlEnd",
+      "NoteRef { kind : NoteKind , id : u32 , # [serde (default)] custom : String , }",
+      "BookmarkStart { name : String , }",
+      "BookmarkEnd { name : String , }",
+      "CommentStart { id : u32 , }",
+      "CommentEnd { id : u32 , }",
+      "PermStart { id : u32 , # [serde (default , skip_serializing_if = \"String::is_empty\")] group : String , # [serde (default , skip_serializing_if = \"String::is_empty\")] editor : String , }",
+      "PermEnd { id : u32 , }",
+      "Equation { linear : String , # [serde (default)] display : bool , # [serde (default , skip_serializing_if = \"crate::math::Math::is_empty\")] math : crate :: math :: Math , }",
+      "Ruby { base : String , ruby : String , # [serde (default)] align : RubyAlign , size : f32 , raise : f32 , # [serde (default)] base_size : f32 , # [serde (default , skip_serializing_if = \"String::is_empty\")] lang : String , # [serde (default , skip_serializing_if = \"CharProps::is_empty\")] props : Box < CharProps > , }",
+      "PositionalTab { # [serde (default)] align : PTabAlign , # [serde (default)] relative_to : PTabBase , # [serde (default)] leader : crate :: props :: TabLeader , }",
+      "Opaque { format : String , xml : String , # [serde (default)] text : String , }"
+    ],
+    "wordcraft-doc/para.rs::NoteKind": [
+      "# [serde (rename_all = \"camelCase\")] enum NoteKind",
+      "# [default] Footnote",
+      "Endnote"
+    ],
+    "wordcraft-doc/para.rs::PTabAlign": [
+      "# [serde (rename_all = \"camelCase\")] enum PTabAlign",
+      "# [default] Left",
+      "Center",
+      "Right"
+    ],
+    "wordcraft-doc/para.rs::PTabBase": [
+      "# [serde (rename_all = \"camelCase\")] enum PTabBase",
+      "# [default] Margin",
+      "Indent"
+    ],
+    "wordcraft-doc/para.rs::Paragraph": [
+      "struct Paragraph",
+      "text : String",
+      "runs : Vec < Run >",
+      "# [serde (default , skip_serializing_if = \"ParaProps::is_empty\")] props : ParaProps",
+      "# [serde (default , skip_serializing_if = \"CharProps::is_empty\")] mark : CharProps",
+      "# [serde (default , skip_serializing_if = \"Vec::is_empty\")] objects : Vec < InlineObject >",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] section : Option < Box < SectionProps > >",
+      "# [serde (skip , default = \"next_rev\")] rev : u64"
+    ],
+    "wordcraft-doc/para.rs::RubyAlign": [
+      "# [serde (rename_all = \"camelCase\")] enum RubyAlign",
+      "# [default] Center",
+      "DistributeLetter",
+      "DistributeSpace",
+      "Left",
+      "Right",
+      "RightVertical"
+    ],
+    "wordcraft-doc/para.rs::Run": [
+      "struct Run",
+      "len : usize",
+      "# [serde (default , skip_serializing_if = \"CharProps::is_empty\")] props : CharProps"
+    ],
+    "wordcraft-doc/para.rs::ShapeKind": [
+      "# [serde (rename_all = \"camelCase\")] enum ShapeKind",
+      "# [default] Rectangle",
+      "RoundedRectangle",
+      "Ellipse",
+      "FlowchartOr",
+      "Triangle",
+      "RightTriangle",
+      "Diamond",
+      "Line",
+      "Arrow",
+      "Star",
+      "Heart",
+      "TextBox",
+      "Freeform",
+      "StraightConnector",
+      "ElbowConnector",
+      "CurvedConnector"
+    ],
+    "wordcraft-doc/para.rs::Wrap": [
+      "# [serde (rename_all = \"camelCase\")] enum Wrap",
+      "# [default] Inline",
+      "Square",
+      "Tight",
+      "Through",
+      "TopAndBottom",
+      "BehindText",
+      "InFrontOfText"
+    ],
+    "wordcraft-doc/para.rs::WrapText": [
+      "# [serde (rename_all = \"camelCase\")] enum WrapText",
+      "# [default] BothSides",
+      "Left",
+      "Right",
+      "Largest"
+    ],
+    "wordcraft-doc/para.rs::WrapText::is_both": [
+      "pub fn is_both (& self) -> bool { * self == WrapText :: BothSides }"
+    ],
+    "wordcraft-doc/para.rs::fn is_false": [
+      "fn is_false (v : & bool) -> bool { ! * v }"
+    ],
+    "wordcraft-doc/para.rs::fn is_zero": [
+      "fn is_zero (v : & f32) -> bool { * v == 0.0 }"
+    ],
+    "wordcraft-doc/para.rs::fn next_rev": [
+      "pub fn next_rev () -> u64 { REV . fetch_add (1 , Ordering :: Relaxed) }"
+    ],
+    "wordcraft-doc/para.rs::impl Default for Paragraph": [
+      "impl Default for Paragraph { fn default () -> Self { Paragraph :: new () } }"
+    ],
+    "wordcraft-doc/props.rs::Align": [
+      "# [serde (rename_all = \"camelCase\")] enum Align",
+      "# [default] Left",
+      "Center",
+      "Right",
+      "Justify",
+      "Distribute"
+    ],
+    "wordcraft-doc/props.rs::Border": [
+      "# [serde (default)] struct Border",
+      "style : BorderStyle",
+      "width : f32",
+      "color : Option < Rgb >",
+      "space : f32"
+    ],
+    "wordcraft-doc/props.rs::BorderStyle": [
+      "# [serde (rename_all = \"camelCase\")] enum BorderStyle",
+      "# [default] None",
+      "Single",
+      "Double",
+      "Dotted",
+      "Dashed",
+      "Thick",
+      "Triple",
+      "DotDash",
+      "Wave"
+    ],
+    "wordcraft-doc/props.rs::Borders": [
+      "# [serde (default)] struct Borders",
+      "top : Option < Border >",
+      "left : Option < Border >",
+      "bottom : Option < Border >",
+      "right : Option < Border >",
+      "between : Option < Border >",
+      "inside_v : Option < Border >"
+    ],
+    "wordcraft-doc/props.rs::CellProps": [
+      "# [serde (default , rename_all = \"camelCase\")] struct CellProps",
+      "width : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] width_pct : Option < f32 >",
+      "span : u32",
+      "vmerge : VMerge",
+      "shading : Option < Rgb >",
+      "borders : Option < Borders >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] valign : Option < VAlign >",
+      "margins : Option < [f32 ; 4] >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] partial_margins : Option < [Option < f32 > ; 4] >",
+      "text_direction : TextDirection",
+      "# [serde (skip_serializing_if = \"std::ops::Not::not\")] text_direction_set : bool",
+      "no_wrap : bool",
+      "# [serde (skip_serializing_if = \"std::ops::Not::not\")] hide_mark : bool",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] fmt_change : Option < Box < PropChange < CellProps > > >"
+    ],
+    "wordcraft-doc/props.rs::CharProps": [
+      "# [serde (default , rename_all = \"camelCase\")] struct CharProps",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] style : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] font : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] sym_font : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] size : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] bold : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] italic : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] underline : Option < Underline >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] underline_color : Option < Rgb >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] strike : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] double_strike : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] color : Option < TextColor >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] highlight : Option < Highlight >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] shading : Option < Rgb >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] border : Option < Border >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] vert_align : Option < VertAlign >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] caps : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] small_caps : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] hidden : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] spacing : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] scale : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] position : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] kern : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] ligatures : Option < Ligatures >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] outline : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] shadow : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] emboss : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] engrave : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] text_effects : Option < Box < crate :: wordart :: TextEffects > >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] lang : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] no_proof : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] rtl : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] cs : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] font_cs : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] font_ea : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] size_cs : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] bold_cs : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] italic_cs : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] lang_bidi : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] east_asian_layout : Option < EastAsianLayout >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] link : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] ins : Option < u32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] del : Option < u32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] fmt_change : Option < Box < PropChange < CharProps > > >"
+    ],
+    "wordcraft-doc/props.rs::CharProps::is_empty": [
+      "pub fn is_empty (& self) -> bool { * self == CharProps :: default () }"
+    ],
+    "wordcraft-doc/props.rs::CombineBrackets": [
+      "# [serde (rename_all = \"camelCase\")] enum CombineBrackets",
+      "None",
+      "Round",
+      "Square",
+      "Angle",
+      "Curly"
+    ],
+    "wordcraft-doc/props.rs::EastAsianLayout": [
+      "# [serde (default , rename_all = \"camelCase\")] struct EastAsianLayout",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] id : Option < i32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] combine : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] combine_brackets : Option < CombineBrackets >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] vert : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] vert_compress : Option < bool >"
+    ],
+    "wordcraft-doc/props.rs::HeightRule": [
+      "# [serde (rename_all = \"camelCase\")] enum HeightRule",
+      "# [default] Auto",
+      "AtLeast",
+      "Exact"
+    ],
+    "wordcraft-doc/props.rs::Highlight": [
+      "# [serde (rename_all = \"camelCase\")] enum Highlight",
+      "# [default] None",
+      "Yellow",
+      "BrightGreen",
+      "Turquoise",
+      "Pink",
+      "Blue",
+      "Red",
+      "DarkBlue",
+      "Teal",
+      "Green",
+      "Violet",
+      "DarkRed",
+      "DarkYellow",
+      "Gray50",
+      "Gray25",
+      "Black",
+      "White"
+    ],
+    "wordcraft-doc/props.rs::Ligatures": [
+      "# [serde (default , rename_all = \"camelCase\")] struct Ligatures",
+      "standard : bool",
+      "contextual : bool",
+      "historical : bool",
+      "discretional : bool"
+    ],
+    "wordcraft-doc/props.rs::LineSpacing": [
+      "# [serde (rename_all = \"camelCase\" , tag = \"rule\" , content = \"value\")] enum LineSpacing",
+      "Multiple (f32)",
+      "AtLeast (f32)",
+      "Exactly (f32)"
+    ],
+    "wordcraft-doc/props.rs::NumChange": [
+      "# [serde (default , rename_all = \"camelCase\")] struct NumChange",
+      "rev : u32",
+      "original : String"
+    ],
+    "wordcraft-doc/props.rs::NumRef": [
+      "struct NumRef",
+      "num : u32",
+      "level : u8"
+    ],
+    "wordcraft-doc/props.rs::ParaProps": [
+      "# [serde (default , rename_all = \"camelCase\")] struct ParaProps",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] style : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] align : Option < Align >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] indent_left : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] indent_right : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] indent_first : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] indent_left_chars : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] indent_right_chars : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] indent_first_chars : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] space_before : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] space_after : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] space_before_auto : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] space_after_auto : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] line_spacing : Option < LineSpacing >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] contextual_spacing : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] mirror_indents : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] keep_next : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] keep_lines : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] page_break_before : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] widow_control : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] outline_level : Option < u8 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] numbering : Option < NumRef >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] tabs : Option < Vec < TabStop > >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] shading : Option < Rgb >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] borders : Option < Borders >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] suppress_hyphens : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] suppress_line_numbers : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] bidi : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] drop_cap : Option < u8 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] drop_cap_margin : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] drop_cap_distance : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] drop_cap_font : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] frame : Option < TextFrame >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] kinsoku : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] word_wrap : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] overflow_punct : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] top_line_punct : Option < bool >",
+      "# [serde (rename = \"autoSpaceDE\" , skip_serializing_if = \"Option::is_none\")] auto_space_de : Option < bool >",
+      "# [serde (rename = \"autoSpaceDN\" , skip_serializing_if = \"Option::is_none\")] auto_space_dn : Option < bool >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] num_change : Option < Box < NumChange > >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] fmt_change : Option < Box < PropChange < ParaProps > > >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] snap_to_grid : Option < bool >"
+    ],
+    "wordcraft-doc/props.rs::ParaProps::is_empty": [
+      "pub fn is_empty (& self) -> bool { * self == ParaProps :: default () }"
+    ],
+    "wordcraft-doc/props.rs::PropChange": [
+      "# [serde (rename_all = \"camelCase\")] struct PropChange< T >",
+      "rev : u32",
+      "old : T"
+    ],
+    "wordcraft-doc/props.rs::Rgb": [
+      "struct Rgb",
+      "u8",
+      "u8",
+      "u8"
+    ],
+    "wordcraft-doc/props.rs::RowProps": [
+      "# [serde (default , rename_all = \"camelCase\")] struct RowProps",
+      "height : Option < f32 >",
+      "height_rule : HeightRule",
+      "header : bool",
+      "cant_split : bool",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] exceptions : Option < Box < TableProps > >",
+      "# [serde (skip_serializing_if = \"is_zero\")] grid_before : u32",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] w_before : Option < f32 >",
+      "# [serde (skip_serializing_if = \"is_zero\")] grid_after : u32",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] w_after : Option < f32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] fmt_change : Option < Box < PropChange < RowProps > > >"
+    ],
+    "wordcraft-doc/props.rs::TabAlign": [
+      "# [serde (rename_all = \"camelCase\")] enum TabAlign",
+      "# [default] Left",
+      "Center",
+      "Right",
+      "Decimal",
+      "Bar",
+      "Clear"
+    ],
+    "wordcraft-doc/props.rs::TabLeader": [
+      "# [serde (rename_all = \"camelCase\")] enum TabLeader",
+      "# [default] None",
+      "Dot",
+      "Hyphen",
+      "Underscore",
+      "MiddleDot"
+    ],
+    "wordcraft-doc/props.rs::TabStop": [
+      "struct TabStop",
+      "pos : f32",
+      "# [serde (default)] align : TabAlign",
+      "# [serde (default)] leader : TabLeader"
+    ],
+    "wordcraft-doc/props.rs::TableFloat": [
+      "# [serde (default , rename_all = \"camelCase\")] struct TableFloat",
+      "h_rel : crate :: para :: Anchor",
+      "v_rel : crate :: para :: Anchor",
+      "x : f32",
+      "y : f32",
+      "h_align : Option < crate :: para :: FloatAlign >",
+      "v_align : Option < crate :: para :: FloatAlign >",
+      "dist : [f32 ; 4]",
+      "overlap : bool"
+    ],
+    "wordcraft-doc/props.rs::TableLook": [
+      "# [serde (default , rename_all = \"camelCase\")] struct TableLook",
+      "header_row : bool",
+      "total_row : bool",
+      "banded_rows : bool",
+      "first_column : bool",
+      "last_column : bool",
+      "banded_columns : bool"
+    ],
+    "wordcraft-doc/props.rs::TableProps": [
+      "# [serde (default , rename_all = \"camelCase\")] struct TableProps",
+      "style : Option < String >",
+      "width : Option < f32 >",
+      "width_pct : Option < f32 >",
+      "align : Option < Align >",
+      "indent : Option < f32 >",
+      "borders : Option < Borders >",
+      "cell_margins : Option < [f32 ; 4] >",
+      "fixed : bool",
+      "look : TableLook",
+      "shading : Option < Rgb >",
+      "caption : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] description : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] float : Option < TableFloat >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] fmt_change : Option < Box < PropChange < TableProps > > >",
+      "# [serde (skip_serializing_if = \"std::ops::Not::not\")] bidi_visual : bool"
+    ],
+    "wordcraft-doc/props.rs::TextColor": [
+      "enum TextColor",
+      "# [default] Auto",
+      "Rgb (Rgb)"
+    ],
+    "wordcraft-doc/props.rs::TextDirection": [
+      "# [serde (rename_all = \"camelCase\")] enum TextDirection",
+      "# [default] Horizontal",
+      "Down",
+      "Up"
+    ],
+    "wordcraft-doc/props.rs::TextFrame": [
+      "# [serde (default , rename_all = \"camelCase\")] struct TextFrame",
+      "w : Option < f32 >",
+      "h : Option < f32 >",
+      "h_exact : bool",
+      "x : f32",
+      "y : f32",
+      "x_align : Option < String >",
+      "y_align : Option < String >",
+      "h_anchor : String",
+      "v_anchor : String",
+      "wrap : String",
+      "h_space : f32",
+      "v_space : f32"
+    ],
+    "wordcraft-doc/props.rs::TextVert": [
+      "# [serde (rename_all = \"camelCase\")] enum TextVert",
+      "# [default] Horz",
+      "Vert",
+      "Vert270",
+      "Stacked"
+    ],
+    "wordcraft-doc/props.rs::Underline": [
+      "# [serde (rename_all = \"camelCase\")] enum Underline",
+      "# [default] None",
+      "Single",
+      "Words",
+      "Double",
+      "Thick",
+      "Dotted",
+      "Dash",
+      "DotDash",
+      "DotDotDash",
+      "Wave",
+      "DoubleWave"
+    ],
+    "wordcraft-doc/props.rs::VAlign": [
+      "# [serde (rename_all = \"camelCase\")] enum VAlign",
+      "# [default] Top",
+      "Center",
+      "Bottom"
+    ],
+    "wordcraft-doc/props.rs::VMerge": [
+      "# [serde (rename_all = \"camelCase\")] enum VMerge",
+      "# [default] None",
+      "Restart",
+      "Continue"
+    ],
+    "wordcraft-doc/props.rs::VertAlign": [
+      "# [serde (rename_all = \"camelCase\")] enum VertAlign",
+      "# [default] Baseline",
+      "Superscript",
+      "Subscript"
+    ],
+    "wordcraft-doc/props.rs::fn is_zero": [
+      "fn is_zero (v : & u32) -> bool { * v == 0 }"
+    ],
+    "wordcraft-doc/props.rs::impl Default for LineSpacing": [
+      "impl Default for LineSpacing { fn default () -> Self { LineSpacing :: Multiple (1.0) } }"
+    ],
+    "wordcraft-doc/props.rs::impl Default for TableLook": [
+      "impl Default for TableLook { fn default () -> Self { TableLook { header_row : true , total_row : false , banded_rows : true , first_column : true , last_column : false , banded_columns : false } } }"
+    ],
+    "wordcraft-doc/props.rs::impl Deserialize for Rgb": [
+      "impl < 'de > Deserialize < 'de > for Rgb { fn deserialize < D : serde :: Deserializer < 'de > > (d : D) -> Result < Self , D :: Error > { use serde :: de :: { Error , SeqAccess , Unexpected , Visitor } ; struct V ; impl < 'de > Visitor < 'de > for V { type Value = Rgb ; fn expecting (& self , f : & mut std :: fmt :: Formatter) -> std :: fmt :: Result { f . write_str (\"`[r, g, b]`, `RRGGBB` or `#RRGGBB`\") } fn visit_str < E : Error > (self , s : & str) -> Result < Rgb , E > { Rgb :: parse (s) . ok_or_else (| | E :: invalid_value (Unexpected :: Str (s) , & self)) } fn visit_seq < A : SeqAccess < 'de > > (self , mut a : A) -> Result < Rgb , A :: Error > { let mut c = [0u8 ; 3] ; for (i , x) in c . iter_mut () . enumerate () { * x = a . next_element () ? . ok_or_else (| | A :: Error :: invalid_length (i , & self)) ? ; } if a . next_element :: < serde :: de :: IgnoredAny > () ? . is_some () { return Err (A :: Error :: invalid_length (4 , & self)) ; } Ok (Rgb (c [0] , c [1] , c [2])) } } d . deserialize_any (V) } }"
+    ],
+    "wordcraft-doc/props.rs::impl Deserialize for TextColor": [
+      "impl < 'de > Deserialize < 'de > for TextColor { fn deserialize < D : serde :: Deserializer < 'de > > (d : D) -> Result < Self , D :: Error > { use serde :: de :: { Error , Unexpected } ; # [derive (Deserialize)] enum Written { Auto , Rgb (Rgb) , } match serde_json :: Value :: deserialize (d) ? { serde_json :: Value :: String (s) => { TextColor :: parse (& s) . ok_or_else (| | D :: Error :: invalid_value (Unexpected :: Str (& s) , & \"`auto`, `RRGGBB` or `#RRGGBB`\")) } v => Ok (match serde_json :: from_value (v) . map_err (D :: Error :: custom) ? { Written :: Auto => TextColor :: Auto , Written :: Rgb (c) => TextColor :: Rgb (c) , }) , } } }"
+    ],
+    "wordcraft-doc/resolve.rs::ResolvedChar": [
+      "# [serde (rename_all = \"camelCase\")] struct ResolvedChar",
+      "font : String",
+      "size : f32",
+      "bold : bool",
+      "italic : bool",
+      "underline : Underline",
+      "underline_color : Option < Rgb >",
+      "strike : bool",
+      "double_strike : bool",
+      "color : TextColor",
+      "highlight : Option < Rgb >",
+      "shading : Option < Rgb >",
+      "border : Option < Border >",
+      "vert_align : VertAlign",
+      "caps : bool",
+      "small_caps : bool",
+      "hidden : bool",
+      "spacing : f32",
+      "scale : f32",
+      "position : f32",
+      "# [serde (default)] kern : f32",
+      "# [serde (default)] ligatures : Option < crate :: props :: Ligatures >",
+      "outline : bool",
+      "shadow : bool",
+      "emboss : bool",
+      "engrave : bool",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] text_effects : Option < Box < crate :: wordart :: TextEffects > >",
+      "link : Option < String >",
+      "ins : Option < u32 >",
+      "del : Option < u32 >",
+      "fmt : Option < u32 >",
+      "no_proof : bool",
+      "lang : Option < String >",
+      "rtl : bool",
+      "cs : bool",
+      "font_cs : String",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] font_ea : Option < String >",
+      "size_cs : f32",
+      "bold_cs : bool",
+      "italic_cs : bool"
+    ],
+    "wordcraft-doc/resolve.rs::ResolvedPara": [
+      "# [serde (rename_all = \"camelCase\")] struct ResolvedPara",
+      "style : String",
+      "align : Align",
+      "indent_left : f32",
+      "indent_right : f32",
+      "indent_first : f32",
+      "space_before : f32",
+      "space_after : f32",
+      "# [serde (default)] before_auto : bool",
+      "# [serde (default)] after_auto : bool",
+      "line_spacing : LineSpacing",
+      "contextual_spacing : bool",
+      "mirror_indents : bool",
+      "keep_next : bool",
+      "keep_lines : bool",
+      "page_break_before : bool",
+      "widow_control : bool",
+      "outline_level : Option < u8 >",
+      "numbering : Option < NumRef >",
+      "tabs : Vec < TabStop >",
+      "shading : Option < Rgb >",
+      "borders : Option < Borders >",
+      "bidi : bool",
+      "drop_cap : u8",
+      "# [serde (default)] drop_cap_margin : bool",
+      "# [serde (default)] drop_cap_distance : f32",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] drop_cap_font : Option < String >",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] frame : Option < crate :: props :: TextFrame >",
+      "suppress_hyphens : bool",
+      "suppress_line_numbers : bool",
+      "kinsoku : bool",
+      "word_wrap : bool",
+      "overflow_punct : bool",
+      "top_line_punct : bool",
+      "auto_space_de : bool",
+      "auto_space_dn : bool",
+      "snap_to_grid : bool",
+      "# [serde (default)] indent_chars : [f32 ; 3]"
+    ],
+    "wordcraft-doc/section.rs::Columns": [
+      "# [serde (default , rename_all = \"camelCase\")] struct Columns",
+      "count : u32",
+      "space : f32",
+      "separator : bool",
+      "widths : Vec < (f32 , f32) >"
+    ],
+    "wordcraft-doc/section.rs::DocGrid": [
+      "# [serde (default , rename_all = \"camelCase\")] struct DocGrid",
+      "# [serde (rename = \"type\")] kind : DocGridType",
+      "line_pitch : f32",
+      "char_space : i32"
+    ],
+    "wordcraft-doc/section.rs::DocGridType": [
+      "# [serde (rename_all = \"camelCase\")] enum DocGridType",
+      "# [default] Default",
+      "Lines",
+      "LinesAndChars",
+      "SnapToChars"
+    ],
+    "wordcraft-doc/section.rs::HeaderSet": [
+      "# [serde (default)] struct HeaderSet",
+      "default : Option < u32 >",
+      "first : Option < u32 >",
+      "even : Option < u32 >"
+    ],
+    "wordcraft-doc/section.rs::LineNumberRestart": [
+      "# [serde (rename_all = \"camelCase\")] enum LineNumberRestart",
+      "# [default] Page",
+      "Section",
+      "Continuous"
+    ],
+    "wordcraft-doc/section.rs::LineNumbering": [
+      "# [serde (default , rename_all = \"camelCase\")] struct LineNumbering",
+      "count_by : u32",
+      "start : u32",
+      "distance : f32",
+      "restart : LineNumberRestart"
+    ],
+    "wordcraft-doc/section.rs::NoteOptions": [
+      "# [serde (rename_all = \"camelCase\")] struct NoteOptions",
+      "pos : NotePos",
+      "num_fmt : NumFormat",
+      "num_start : u32",
+      "num_restart : NoteRestart"
+    ],
+    "wordcraft-doc/section.rs::NotePos": [
+      "# [serde (rename_all = \"camelCase\")] enum NotePos",
+      "# [default] PageBottom",
+      "BeneathText",
+      "SectEnd",
+      "DocEnd"
+    ],
+    "wordcraft-doc/section.rs::NoteProps": [
+      "# [serde (default , rename_all = \"camelCase\")] struct NoteProps",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] pos : Option < NotePos >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] num_fmt : Option < NumFormat >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] num_start : Option < u32 >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] num_restart : Option < NoteRestart >"
+    ],
+    "wordcraft-doc/section.rs::NoteProps::is_empty": [
+      "pub fn is_empty (& self) -> bool { * self == NoteProps :: default () }"
+    ],
+    "wordcraft-doc/section.rs::NoteRestart": [
+      "# [serde (rename_all = \"camelCase\")] enum NoteRestart",
+      "# [default] Continuous",
+      "EachSect",
+      "EachPage"
+    ],
+    "wordcraft-doc/section.rs::NumFormat": [
+      "# [serde (rename_all = \"camelCase\")] enum NumFormat",
+      "# [default] Decimal",
+      "UpperRoman",
+      "LowerRoman",
+      "UpperLetter",
+      "LowerLetter",
+      "Ordinal",
+      "CardinalText",
+      "OrdinalText",
+      "DecimalZero",
+      "Bullet",
+      "None",
+      "Hex",
+      "Chicago",
+      "IdeographDigital",
+      "JapaneseCounting",
+      "Aiueo",
+      "Iroha",
+      "DecimalFullWidth",
+      "DecimalHalfWidth",
+      "JapaneseLegal",
+      "JapaneseDigitalTenThousand",
+      "DecimalEnclosedCircle",
+      "DecimalFullWidth2",
+      "AiueoFullWidth",
+      "IrohaFullWidth",
+      "Ganada",
+      "Chosung",
+      "DecimalEnclosedFullstop",
+      "DecimalEnclosedParen",
+      "DecimalEnclosedCircleChinese",
+      "IdeographEnclosedCircle",
+      "IdeographTraditional",
+      "IdeographZodiac",
+      "IdeographZodiacTraditional",
+      "TaiwaneseCounting",
+      "IdeographLegalTraditional",
+      "TaiwaneseCountingThousand",
+      "TaiwaneseDigital",
+      "ChineseCounting",
+      "ChineseLegalSimplified",
+      "ChineseCountingThousand",
+      "KoreanDigital",
+      "KoreanCounting",
+      "KoreanLegal",
+      "KoreanDigital2",
+      "VietnameseCounting",
+      "RussianLower",
+      "RussianUpper",
+      "NumberInDash",
+      "Hebrew1",
+      "Hebrew2",
+      "ArabicAlpha",
+      "ArabicAbjad",
+      "HindiVowels",
+      "HindiConsonants",
+      "HindiNumbers",
+      "HindiCounting",
+      "ThaiLetters",
+      "ThaiNumbers",
+      "ThaiCounting",
+      "BahtText",
+      "DollarText"
+    ],
+    "wordcraft-doc/section.rs::PageVAlign": [
+      "# [serde (rename_all = \"camelCase\")] enum PageVAlign",
+      "# [default] Top",
+      "Center",
+      "# [serde (alias = \"both\" , alias = \"justified\")] Justify",
+      "Bottom"
+    ],
+    "wordcraft-doc/section.rs::SectionProps": [
+      "# [serde (default , rename_all = \"camelCase\")] struct SectionProps",
+      "start : SectionStart",
+      "page_w : f32",
+      "page_h : f32",
+      "landscape : bool",
+      "margin_top : f32",
+      "margin_bottom : f32",
+      "margin_left : f32",
+      "margin_right : f32",
+      "header : f32",
+      "footer : f32",
+      "gutter : f32",
+      "columns : Columns",
+      "headers : HeaderSet",
+      "footers : HeaderSet",
+      "title_page : bool",
+      "page_num_start : Option < u32 >",
+      "page_num_format : NumFormat",
+      "# [serde (skip_serializing_if = \"std::ops::Not::not\")] page_num_set : bool",
+      "line_numbers : Option < LineNumbering >",
+      "valign : PageVAlign",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] form_prot : Option < bool >",
+      "page_borders : Option < Borders >",
+      "rtl : bool",
+      "# [serde (skip_serializing_if = \"is_horizontal\")] text_direction : crate :: props :: TextDirection",
+      "# [serde (skip_serializing_if = \"std::ops::Not::not\")] text_direction_set : bool",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] fmt_change : Option < Box < crate :: props :: PropChange < SectionProps > > >",
+      "doc_grid : Option < DocGrid >",
+      "# [serde (skip_serializing_if = \"NoteProps::is_empty\")] footnote_pr : NoteProps",
+      "# [serde (skip_serializing_if = \"NoteProps::is_empty\")] endnote_pr : NoteProps"
+    ],
+    "wordcraft-doc/section.rs::SectionStart": [
+      "# [serde (rename_all = \"camelCase\")] enum SectionStart",
+      "# [default] NextPage",
+      "Continuous",
+      "EvenPage",
+      "OddPage",
+      "NextColumn"
+    ],
+    "wordcraft-doc/section.rs::fn is_horizontal": [
+      "fn is_horizontal (d : & crate :: props :: TextDirection) -> bool { ! d . is_turned () }"
+    ],
+    "wordcraft-doc/section.rs::impl Default for Columns": [
+      "impl Default for Columns { fn default () -> Self { Columns { count : 1 , space : 36.0 , separator : false , widths : Vec :: new () } } }"
+    ],
+    "wordcraft-doc/section.rs::impl Default for DocGrid": [
+      "impl Default for DocGrid { fn default () -> Self { DocGrid { kind : DocGridType :: Default , line_pitch : 18.0 , char_space : 0 } } }"
+    ],
+    "wordcraft-doc/section.rs::impl Default for LineNumbering": [
+      "impl Default for LineNumbering { fn default () -> Self { LineNumbering { count_by : 1 , start : 1 , distance : 0.0 , restart : LineNumberRestart :: Page } } }"
+    ],
+    "wordcraft-doc/section.rs::impl Default for SectionProps": [
+      "impl Default for SectionProps { fn default () -> Self { SectionProps { start : SectionStart :: NextPage , page_w : 612.0 , page_h : 792.0 , landscape : false , margin_top : 72.0 , margin_bottom : 72.0 , margin_left : 72.0 , margin_right : 72.0 , header : 36.0 , footer : 36.0 , gutter : 0.0 , columns : Columns :: default () , headers : HeaderSet :: default () , footers : HeaderSet :: default () , title_page : false , page_num_start : None , page_num_format : NumFormat :: Decimal , page_num_set : false , line_numbers : None , valign : PageVAlign :: Top , form_prot : None , page_borders : None , rtl : false , text_direction : crate :: props :: TextDirection :: Horizontal , text_direction_set : false , fmt_change : None , doc_grid : None , footnote_pr : NoteProps :: default () , endnote_pr : NoteProps :: default () , } } }"
+    ],
+    "wordcraft-doc/smart_art.rs::SmartArtColors": [
+      "# [serde (rename_all = \"camelCase\")] enum SmartArtColors",
+      "# [default] Accent1",
+      "Accent2",
+      "Accent3",
+      "Accent4",
+      "Accent5",
+      "Accent6",
+      "Colorful"
+    ],
+    "wordcraft-doc/smart_art.rs::SmartArtItem": [
+      "# [serde (rename_all = \"camelCase\")] struct SmartArtItem",
+      "text : String",
+      "# [serde (default)] level : u8"
+    ],
+    "wordcraft-doc/smart_art.rs::SmartArtLayout": [
+      "# [serde (rename_all = \"camelCase\")] enum SmartArtLayout",
+      "# [default] BasicList",
+      "Process",
+      "Cycle",
+      "Hierarchy",
+      "Pyramid",
+      "Radial",
+      "Matrix",
+      "Venn"
+    ],
+    "wordcraft-doc/smart_art.rs::SmartArtSpec": [
+      "# [serde (rename_all = \"camelCase\")] struct SmartArtSpec",
+      "layout : SmartArtLayout",
+      "# [serde (default)] items : Vec < SmartArtItem >",
+      "# [serde (default)] colors : SmartArtColors"
+    ],
+    "wordcraft-doc/styles.rs::PartFormat": [
+      "# [serde (default , rename_all = \"camelCase\")] struct PartFormat",
+      "chr : CharProps",
+      "fill : Option < Rgb >",
+      "borders : Option < Borders >",
+      "align : Option < Align >",
+      "v_align : Option < VAlign >"
+    ],
+    "wordcraft-doc/styles.rs::Style": [
+      "# [serde (default , rename_all = \"camelCase\")] struct Style",
+      "id : String",
+      "name : String",
+      "kind : StyleKind",
+      "based_on : Option < String >",
+      "next : Option < String >",
+      "linked : Option < String >",
+      "para : ParaProps",
+      "chr : CharProps",
+      "priority : Option < u32 >",
+      "quick : bool",
+      "hidden : bool",
+      "builtin : bool",
+      "# [serde (skip_serializing_if = \"std::ops::Not::not\")] locked : bool",
+      "# [serde (skip_serializing_if = \"std::ops::Not::not\")] default : bool",
+      "table : Option < TableStyleParts >"
+    ],
+    "wordcraft-doc/styles.rs::StyleKind": [
+      "# [serde (rename_all = \"camelCase\")] enum StyleKind",
+      "# [default] Paragraph",
+      "Character",
+      "Table",
+      "Numbering"
+    ],
+    "wordcraft-doc/styles.rs::StyleSheet": [
+      "# [serde (default , rename_all = \"camelCase\")] struct StyleSheet",
+      "default_chr : CharProps",
+      "default_para : ParaProps",
+      "default_para_present : bool",
+      "styles : Vec < Style >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] latent_styles : Option < String >"
+    ],
+    "wordcraft-doc/styles.rs::TablePart": [
+      "# [serde (rename_all = \"camelCase\")] enum TablePart",
+      "WholeTable",
+      "FirstRow",
+      "LastRow",
+      "FirstCol",
+      "LastCol",
+      "Band1Vert",
+      "Band2Vert",
+      "Band1Horz",
+      "Band2Horz",
+      "NeCell",
+      "NwCell",
+      "SeCell",
+      "SwCell"
+    ],
+    "wordcraft-doc/styles.rs::TableStyleParts": [
+      "# [serde (default , rename_all = \"camelCase\")] struct TableStyleParts",
+      "borders : Option < Borders >",
+      "fill : Option < Rgb >",
+      "cell_margins : Option < [f32 ; 4] >",
+      "header_fill : Option < Rgb >",
+      "header_chr : CharProps",
+      "header_borders : Option < Borders >",
+      "band_fill : Option < Rgb >",
+      "band_chr : CharProps",
+      "band_borders : Option < Borders >",
+      "band_size : Option < u32 >",
+      "first_col_chr : CharProps",
+      "total_chr : CharProps",
+      "total_border_top : Option < Border >",
+      "first_col_fill : Option < Rgb >",
+      "first_col_borders : Option < Borders >",
+      "last_col_fill : Option < Rgb >",
+      "last_col_chr : CharProps",
+      "last_col_borders : Option < Borders >",
+      "total_fill : Option < Rgb >",
+      "total_borders : Option < Borders >",
+      "col_band_fill : Option < Rgb >",
+      "col_band_chr : CharProps",
+      "col_band_borders : Option < Borders >",
+      "# [serde (skip_serializing_if = \"BTreeMap::is_empty\")] regions : BTreeMap < TablePart , PartFormat >"
+    ],
+    "wordcraft-doc/styles.rs::impl Default for StyleSheet": [
+      "impl Default for StyleSheet { fn default () -> Self { StyleSheet :: builtin () } }"
+    ],
+    "wordcraft-doc/table.rs::Cell": [
+      "struct Cell",
+      "# [serde (default)] props : CellProps",
+      "blocks : Blocks",
+      "# [serde (default , skip_serializing_if = \"ControlWrap::is_empty\")] controls : ControlWrap"
+    ],
+    "wordcraft-doc/table.rs::Row": [
+      "struct Row",
+      "# [serde (default)] props : RowProps",
+      "cells : Vec < Cell >",
+      "# [serde (default , skip_serializing_if = \"ControlWrap::is_empty\")] controls : ControlWrap"
+    ],
+    "wordcraft-doc/table.rs::Table": [
+      "struct Table",
+      "# [serde (default)] props : TableProps",
+      "grid : Vec < f32 >",
+      "rows : Vec < Row >",
+      "# [serde (default , skip_serializing_if = \"ControlWrap::is_empty\")] controls : ControlWrap"
+    ],
+    "wordcraft-doc/wordart.rs::GradStop": [
+      "# [serde (rename_all = \"camelCase\")] struct GradStop",
+      "pos : f32",
+      "color : Rgb",
+      "# [serde (default)] transparency : f32"
+    ],
+    "wordcraft-doc/wordart.rs::Reflection": [
+      "# [serde (default , rename_all = \"camelCase\")] struct Reflection",
+      "transparency : f32",
+      "size : f32",
+      "distance : f32",
+      "blur : f32"
+    ],
+    "wordcraft-doc/wordart.rs::TextEffects": [
+      "# [serde (default , rename_all = \"camelCase\")] struct TextEffects",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] fill : Option < TextFill >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] outline : Option < TextOutline >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] shadow : Option < Shadow >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] glow : Option < Glow >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] reflection : Option < Reflection >"
+    ],
+    "wordcraft-doc/wordart.rs::TextFill": [
+      "# [serde (tag = \"type\" , rename_all = \"camelCase\")] enum TextFill",
+      "None",
+      "Solid { color : Rgb , # [serde (default)] transparency : f32 , }",
+      "Gradient { stops : Vec < GradStop > , # [serde (default)] angle : f32 , }"
+    ],
+    "wordcraft-doc/wordart.rs::TextOutline": [
+      "# [serde (default , rename_all = \"camelCase\")] struct TextOutline",
+      "color : Option < Rgb >",
+      "width : f32",
+      "transparency : f32"
+    ],
+    "wordcraft-doc/wordart.rs::TextWarp": [
+      "# [serde (rename_all = \"camelCase\")] struct TextWarp",
+      "preset : String",
+      "# [serde (default , skip_serializing_if = \"Vec::is_empty\")] adj : Vec < (String , i64) >"
+    ],
+    "wordcraft-doc/wordart.rs::impl Default for Reflection": [
+      "impl Default for Reflection { fn default () -> Self { Reflection { transparency : 50.0 , size : 50.0 , distance : 0.0 , blur : 0.5 } } }"
+    ],
+    "wordcraft-doc/wordart.rs::impl Default for TextOutline": [
+      "impl Default for TextOutline { fn default () -> Self { TextOutline { color : Some (Rgb :: BLACK) , width : 0.75 , transparency : 0.0 } } }"
+    ],
+    "wordcraft-doc/wrap.rs::WrapPolygon": [
+      "# [serde (default , rename_all = \"camelCase\")] struct WrapPolygon",
+      "edited : bool",
+      "points : Vec < [i32 ; 2] >"
+    ],
+    "wordcraft-geom/lib.rs::Point": [
+      "struct Point",
+      "x : f32",
+      "y : f32"
+    ],
+    "wordcraft-geom/lib.rs::Rect": [
+      "struct Rect",
+      "x : f32",
+      "y : f32",
+      "w : f32",
+      "h : f32"
+    ],
+    "wordcraft-geom/lib.rs::Unit": [
+      "# [serde (rename_all = \"lowercase\")] enum Unit",
+      "# [default] Inches",
+      "Centimeters",
+      "Millimeters",
+      "Points",
+      "Picas"
+    ],
+    "wordcraft-geom/region.rs::Region": [
+      "struct Region",
+      "language : String",
+      "territory : String",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] letter : Option < bool >",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] inches : Option < bool >"
+    ],
+    "wordcraft-geom/region.rs::impl Default for Region": [
+      "impl Default for Region { fn default () -> Self { Region { language : \"en\" . into () , territory : \"US\" . into () , letter : None , inches : None } } }"
+    ]
   }
 }

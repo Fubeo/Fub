@@ -24,5 +24,9 @@ zip = { workspace = true }
 
 [dev-dependencies]
 cfb = { workspace = true }
+# `tests/opaque_schema.rs` legge la superficie serde dei tipi dei dati opachi
+# dai sorgenti, invece di vederla soltanto nei documenti del corpus.
+quote = { workspace = true }
+syn = { workspace = true, features = ["full", "parsing", "printing", "clone-impls"] }
 fub-sdk = { workspace = true }
 wordcraft-geom = { workspace = true }
