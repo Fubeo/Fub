@@ -18,6 +18,7 @@ members = [
     "crates/fub-scene",
     "crates/fub-format-svg",
     "crates/fub-format-rich",
+    "crates/fub-format-xlsx",
     "crates/fub-importers",
     "crates/fub-features",
     "crates/fub-host",
@@ -64,6 +65,8 @@ exclude = [
     # è codice di terzi, con i manifest dell'upstream, e i lint e i guard di
     # Fub non lo leggono. Fub ne prende i crate come dipendenze a percorso.
     "vendor/wordcraft",
+    # La copia di GridCraft, con la stessa forma (vendor/gridcraft/UPSTREAM.md).
+    "vendor/gridcraft",
 ]
 
 [workspace.package]
@@ -153,9 +156,10 @@ fub-ink = { path = "crates/fub-ink", version = "0.1.0" }
 fub-scene = { path = "crates/fub-scene", version = "0.1.0" }
 fub-format-svg = { path = "crates/fub-format-svg", version = "0.1.0" }
 fub-format-rich = { path = "crates/fub-format-rich", version = "0.1.0" }
+fub-format-xlsx = { path = "crates/fub-format-xlsx", version = "0.1.0" }
 fub-importers = { path = "crates/fub-importers", version = "0.1.0" }
 # Il correttore di WordCraft, vendorizzato (vendor/wordcraft/UPSTREAM.md). La
-# `version` la scrive `tools/vendor-wordcraft/vendor.mjs update`.
+# `version` la scrive `tools/vendor-craft/vendor.mjs update`.
 wordcraft-proof = { path = "vendor/wordcraft/crates/proof", version = "0.9.0" }
 # Il modello e il codec DOCX di WordCraft, vendorizzati con il correttore.
 wordcraft-geom = { path = "vendor/wordcraft/crates/geom", version = "0.9.0" }
@@ -164,6 +168,15 @@ wordcraft-docx = { path = "vendor/wordcraft/crates/docx", version = "0.9.0" }
 # I lettori di WordCraft per OpenDocument, RTF e Word 97-2003.
 wordcraft-formats = { path = "vendor/wordcraft/crates/formats", version = "0.9.0" }
 wordcraft-docbin = { path = "vendor/wordcraft/crates/docbin", version = "0.9.0" }
+# Il modello del foglio di calcolo, le formule, il calcolo, i formati numerici
+# e il codec XLSX di GridCraft, vendorizzati (vendor/gridcraft/UPSTREAM.md).
+gridcraft-core = { path = "vendor/gridcraft/crates/core", version = "0.9.0" }
+gridcraft-formula = { path = "vendor/gridcraft/crates/formula", version = "0.9.0" }
+gridcraft-functions = { path = "vendor/gridcraft/crates/functions", version = "0.9.0" }
+gridcraft-numfmt = { path = "vendor/gridcraft/crates/numfmt", version = "0.9.0" }
+gridcraft-model = { path = "vendor/gridcraft/crates/model", version = "0.9.0" }
+gridcraft-calc = { path = "vendor/gridcraft/crates/calc", version = "0.9.0" }
+gridcraft-xlsx = { path = "vendor/gridcraft/crates/xlsx", version = "0.9.0" }
 # Le dipendenze che Fub ha in comune con la copia di WordCraft: le versioni
 # sono le stesse di vendor/wordcraft/Cargo.toml (`vendor.mjs check`). `image`
 # non accende niente qui: ogni crate dice quali decodificatori vuole.
