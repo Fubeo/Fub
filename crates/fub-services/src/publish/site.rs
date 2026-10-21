@@ -241,10 +241,17 @@ pub fn save_record(data_dir: &Path, record: &SiteRecord) -> Result<(), SiteError
 fn atomic_write_file(dir: &Path, name: &str, bytes: &[u8]) -> Result<(), SiteError> {
     use std::io::Write as _;
     let tmp = dir.join(format!(".{name}.tmp-{}", unique_suffix()));
-    let mut file = fs::File::create(&tmp).map_err(SiteError::Io)?;
-    file.write_all(bytes).map_err(SiteError::Io)?;
-    file.sync_all().map_err(SiteError::Io)?;
-    fs::rename(&tmp, dir.join(name)).map_err(SiteError::Io)?;
+    let written = (|| {
+        let mut file = crate::schema::create_private(&tmp)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&tmp, dir.join(name))
+    })();
+    if written.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    written.map_err(SiteError::Io)?;
     sync_dir(dir)
 }
 

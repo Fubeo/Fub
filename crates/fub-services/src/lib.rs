@@ -18,6 +18,7 @@
 //!   route tipizzate, `GET /v1/hello`.
 //! - [`crypto`]: AEAD AES-256-GCM via `ring`, KDF PBKDF2 versionata, wrap della
 //!   chiave vault (VDK) — MAI derivata dalla password account.
+//! - [`lease`]: lock esclusivo e confine owner-only della data dir.
 //! - [`server`]: stato del servizio, risposte HTTP tipizzate, bearer helper.
 //!
 //! I discendenti possiedono `sync/` (P16) e `publish/` (P17) e chiamano questi
@@ -41,6 +42,7 @@
 pub mod acl;
 pub mod auth;
 pub mod crypto;
+pub mod lease;
 pub mod mfa;
 pub mod routing;
 pub mod schema;

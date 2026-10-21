@@ -798,6 +798,7 @@ fn admin_grant_password_and_revoke_survive_restart_without_url_credentials() {
     assert_eq!(record.owner, alice);
     assert!(record.password_hash.is_some());
     assert_eq!(record.tls.unwrap().path_prefix, "/notes/");
+    drop(state);
     let mut reopened = ServiceState::open(Some(data.clone())).unwrap();
     let (manifest, pages) = manifest_v1();
     let dry = serde_json::json!({ "protocol": "fub-publish/1", "site_id": "blog", "manifest": manifest, "vault": [] });

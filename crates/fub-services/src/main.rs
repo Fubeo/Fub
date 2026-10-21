@@ -1319,6 +1319,9 @@ mod sync_http_tests {
         let (status, body) = mfa(&state, json!({ "code": code(now) }));
         assert_eq!(status, 200, "{body}");
 
+        // Il riavvio vero: il primo processo lascia la data dir prima che il
+        // secondo la apra (il lease è esclusivo).
+        drop(state);
         let restarted = Arc::new(Mutex::new(ServiceState::open(Some(dir.0.clone())).unwrap()));
         let (status, body) = login(&restarted, None);
         assert_eq!(

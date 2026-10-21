@@ -100,9 +100,17 @@ pub struct Account {
 }
 
 /// Sessione opaca (token 32 B casuali, scadenza 30 giorni).
+///
+/// Il registro conserva soltanto il digest SHA-256 del bearer (STR-01): chi
+/// legge `accounts.json` non ottiene una sessione utilizzabile. `token_b64` è
+/// il campo dei registri scritti prima, che [`AccountStore::load`] converte in
+/// digest e non riscrive mai più.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SessionToken {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub token_b64: String,
+    #[serde(default)]
+    pub digest_b64: String,
     pub account_id: String,
     pub created_ms: u64,
     pub expires_ms: u64,
@@ -113,13 +121,23 @@ pub struct SessionToken {
 pub struct AccountStore {
     pub accounts: BTreeMap<String, Account>,
     pub by_name: BTreeMap<String, String>,
+    /// Sessioni per digest del bearer ([`token_digest`]), mai per bearer.
     pub sessions: BTreeMap<String, SessionToken>,
     #[serde(skip)]
     pub path: PathBuf,
 }
 
+/// Il digest con cui il registro conosce un bearer: SHA-256 in base64url.
+pub fn token_digest(token: &str) -> String {
+    B64U.encode(ring::digest::digest(
+        &ring::digest::SHA256,
+        token.as_bytes(),
+    ))
+}
+
 impl AccountStore {
-    /// Carica (o crea vuoto) dalla data dir.
+    /// Carica (o crea vuoto) dalla data dir. Un registro con bearer in chiaro
+    /// (scritto prima dei digest) si converte e si riscrive subito.
     pub fn load(data_dir: &Path) -> Result<Self, String> {
         let path = accounts_path(data_dir);
         let Some(bytes) = read_if_present(&path).map_err(|e| format!("accounts read: {e}"))? else {
@@ -131,7 +149,35 @@ impl AccountStore {
         let mut store: AccountStore =
             serde_json::from_slice(&bytes).map_err(|e| format!("accounts parse: {e}"))?;
         store.path = path;
+        let legacy = store.sessions.values().any(|s| !s.token_b64.is_empty());
+        if legacy {
+            store.sessions = std::mem::take(&mut store.sessions)
+                .into_values()
+                .map(|mut session| {
+                    if !session.token_b64.is_empty() {
+                        session.digest_b64 = token_digest(&session.token_b64);
+                        session.token_b64.clear();
+                    }
+                    (session.digest_b64.clone(), session)
+                })
+                .collect();
+            store.save()?;
+        }
         Ok(store)
+    }
+
+    /// Applica `change` a una copia, la rende durevole e soltanto allora la
+    /// sostituisce allo stato vivo (STR-03). Se la scrittura fallisce lo stato
+    /// in memoria resta quello di prima: un errore non concede niente.
+    fn commit<T>(
+        &mut self,
+        change: impl FnOnce(&mut Self) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mut next = self.clone();
+        let out = change(&mut next)?;
+        next.save()?;
+        *self = next;
+        Ok(out)
     }
 
     fn save(&self) -> Result<(), String> {
@@ -181,24 +227,8 @@ impl AccountStore {
         if self.by_name.contains_key(&name) {
             return Err("account exists".to_string());
         }
-        let id = crate::schema::new_id();
         let pw = Self::hash_password(password)?;
-        let now = now_ms();
-        self.accounts.insert(
-            id.clone(),
-            Account {
-                id: id.clone(),
-                name: name.clone(),
-                pw,
-                devices: Vec::new(),
-                created_ms: now,
-                deleted: false,
-                totp: TotpState::default(),
-            },
-        );
-        self.by_name.insert(name, id.clone());
-        self.save()?;
-        Ok(id)
+        self.insert_prepared(&name, pw)
     }
 
     /// Inserisce un account con hash già calcolato (fuori dal lock): il
@@ -214,21 +244,22 @@ impl AccountStore {
         }
         let id = crate::schema::new_id();
         let now = now_ms();
-        self.accounts.insert(
-            id.clone(),
-            Account {
-                id: id.clone(),
-                name: name.clone(),
-                pw,
-                devices: Vec::new(),
-                created_ms: now,
-                deleted: false,
-                totp: TotpState::default(),
-            },
-        );
-        self.by_name.insert(name, id.clone());
-        self.save()?;
-        Ok(id)
+        self.commit(|next| {
+            next.accounts.insert(
+                id.clone(),
+                Account {
+                    id: id.clone(),
+                    name: name.clone(),
+                    pw,
+                    devices: Vec::new(),
+                    created_ms: now,
+                    deleted: false,
+                    totp: TotpState::default(),
+                },
+            );
+            next.by_name.insert(name, id.clone());
+            Ok(id)
+        })
     }
 
     /// Snapshot del solo hash per il calcolo PBKDF2 fuori dal lock globale:
@@ -286,32 +317,36 @@ impl AccountStore {
             return Err("unknown account".to_string());
         }
         let token = Self::random_token()?;
+        let digest = token_digest(&token);
         let now = now_ms();
-        // Una sessione scaduta non vale più niente: si toglie quando se ne
-        // emette una nuova, o il registro crescerebbe di un token per login.
-        self.sessions.retain(|_, session| session.expires_ms >= now);
-        let mut own: Vec<(u64, String)> = self
-            .sessions
-            .values()
-            .filter(|session| session.account_id == account_id)
-            .map(|session| (session.created_ms, session.token_b64.clone()))
-            .collect();
-        if own.len() >= MAX_SESSIONS_PER_ACCOUNT {
-            own.sort_unstable();
-            for (_, oldest) in &own[..=own.len() - MAX_SESSIONS_PER_ACCOUNT] {
-                self.sessions.remove(oldest);
+        self.commit(|next| {
+            // Una sessione scaduta non vale più niente: si toglie quando se ne
+            // emette una nuova, o il registro crescerebbe di un token per login.
+            next.sessions.retain(|_, session| session.expires_ms >= now);
+            let mut own: Vec<(u64, String)> = next
+                .sessions
+                .iter()
+                .filter(|(_, session)| session.account_id == account_id)
+                .map(|(key, session)| (session.created_ms, key.clone()))
+                .collect();
+            if own.len() >= MAX_SESSIONS_PER_ACCOUNT {
+                own.sort_unstable();
+                for (_, oldest) in &own[..=own.len() - MAX_SESSIONS_PER_ACCOUNT] {
+                    next.sessions.remove(oldest);
+                }
             }
-        }
-        self.sessions.insert(
-            token.clone(),
-            SessionToken {
-                token_b64: token.clone(),
-                account_id: account_id.to_string(),
-                created_ms: now,
-                expires_ms: now + 30 * 24 * 3600 * 1000,
-            },
-        );
-        self.save()?;
+            next.sessions.insert(
+                digest.clone(),
+                SessionToken {
+                    token_b64: String::new(),
+                    digest_b64: digest,
+                    account_id: account_id.to_string(),
+                    created_ms: now,
+                    expires_ms: now + 30 * 24 * 3600 * 1000,
+                },
+            );
+            Ok(())
+        })?;
         Ok(token)
     }
 
@@ -327,7 +362,10 @@ impl AccountStore {
         if token.is_empty() {
             return Err(TokenRejection::Missing);
         }
-        let sess = self.sessions.get(token).ok_or(TokenRejection::Bad)?;
+        let sess = self
+            .sessions
+            .get(&token_digest(token))
+            .ok_or(TokenRejection::Bad)?;
         if now_ms() > sess.expires_ms {
             return Err(TokenRejection::Expired);
         }
@@ -357,48 +395,44 @@ impl AccountStore {
         account_id: &str,
         change: impl FnOnce(&mut TotpState),
     ) -> Result<(), String> {
-        let account = self
-            .accounts
-            .get_mut(account_id)
-            .ok_or_else(|| "unknown account".to_string())?;
-        let previous = account.totp.clone();
-        change(&mut account.totp);
-        if let Err(error) = self.save() {
-            if let Some(account) = self.accounts.get_mut(account_id) {
-                account.totp = previous;
-            }
-            return Err(error);
-        }
-        Ok(())
+        self.commit(|next| {
+            let account = next
+                .accounts
+                .get_mut(account_id)
+                .ok_or_else(|| "unknown account".to_string())?;
+            change(&mut account.totp);
+            Ok(())
+        })
     }
 
     /// Registra un dispositivo per l'account.
     pub fn register_device(&mut self, account_id: &str, name: &str) -> Result<Device, String> {
-        let acc = self
-            .accounts
-            .get_mut(account_id)
-            .ok_or_else(|| "unknown account".to_string())?;
         let dev = Device {
             id: crate::schema::new_id(),
             name: name.chars().take(128).collect(),
             created_ms: now_ms(),
         };
-        acc.devices.push(dev.clone());
-        self.save()?;
-        Ok(dev)
+        self.commit(|next| {
+            next.accounts
+                .get_mut(account_id)
+                .ok_or_else(|| "unknown account".to_string())?
+                .devices
+                .push(dev.clone());
+            Ok(dev)
+        })
     }
 
     /// Cancellazione remota (P16.3): revoca le sessioni, marca eliminato.
     /// La copia locale del vault resta al suo posto (mai cancellata da qui).
     pub fn delete_account(&mut self, account_id: &str) -> Result<(), String> {
-        let acc = self
-            .accounts
-            .get_mut(account_id)
-            .ok_or_else(|| "unknown account".to_string())?;
-        acc.deleted = true;
-        self.sessions.retain(|_, s| s.account_id != account_id);
-        self.save()?;
-        Ok(())
+        self.commit(|next| {
+            next.accounts
+                .get_mut(account_id)
+                .ok_or_else(|| "unknown account".to_string())?
+                .deleted = true;
+            next.sessions.retain(|_, s| s.account_id != account_id);
+            Ok(())
+        })
     }
 }
 
@@ -415,9 +449,13 @@ mod tests {
             .create_account("scadenze", "correct-horse-99")
             .unwrap();
         let old = store.issue_session_token(&account).unwrap();
-        store.sessions.get_mut(&old).unwrap().expires_ms = 0;
+        store
+            .sessions
+            .get_mut(&token_digest(&old))
+            .unwrap()
+            .expires_ms = 0;
         let new = store.issue_session_token(&account).unwrap();
-        assert!(!store.sessions.contains_key(&old));
+        assert!(!store.sessions.contains_key(&token_digest(&old)));
         assert_eq!(
             store.verify_session_token(Some(&format!("Bearer {new}"))),
             Ok(account)
@@ -434,7 +472,11 @@ mod tests {
         let other = store.create_account("altro", "correct-horse-99").unwrap();
         let kept = store.issue_session_token(&other).unwrap();
         let first = store.issue_session_token(&account).unwrap();
-        store.sessions.get_mut(&first).unwrap().created_ms = 0;
+        store
+            .sessions
+            .get_mut(&token_digest(&first))
+            .unwrap()
+            .created_ms = 0;
         for _ in 0..MAX_SESSIONS_PER_ACCOUNT {
             store.issue_session_token(&account).unwrap();
         }
@@ -444,7 +486,10 @@ mod tests {
             .filter(|session| session.account_id == account)
             .count();
         assert_eq!(own, MAX_SESSIONS_PER_ACCOUNT);
-        assert!(!store.sessions.contains_key(&first), "the oldest goes");
+        assert!(
+            !store.sessions.contains_key(&token_digest(&first)),
+            "the oldest goes"
+        );
         assert_eq!(
             store.verify_session_token(Some(&format!("Bearer {kept}"))),
             Ok(other),
@@ -475,6 +520,75 @@ mod tests {
             assert!(loaded.is_err(), "{:?}", loaded.map(|s| s.accounts.len()));
         }
         assert_eq!(AccountStore::load(&dir).unwrap().accounts.len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_registry_keeps_digests_and_converts_legacy_bearers() {
+        let dir = std::env::temp_dir().join(format!("fub-services-auth-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut store = AccountStore::load(&dir).unwrap();
+        let account = store.create_account("digest", "correct-horse-99").unwrap();
+        let token = store.issue_session_token(&account).unwrap();
+        let on_disk = std::fs::read_to_string(accounts_path(&dir)).unwrap();
+        assert!(
+            !on_disk.contains(&token),
+            "the bearer never reaches the disk"
+        );
+
+        // Un registro di prima: il bearer in chiaro come chiave e campo.
+        let mut legacy: serde_json::Value = serde_json::from_str(&on_disk).unwrap();
+        let old = "vecchio-bearer-in-chiaro";
+        legacy["sessions"] = serde_json::json!({ old: {
+            "token_b64": old, "account_id": account,
+            "created_ms": 1, "expires_ms": u64::MAX,
+        }});
+        std::fs::write(accounts_path(&dir), serde_json::to_vec(&legacy).unwrap()).unwrap();
+        let store = AccountStore::load(&dir).unwrap();
+        assert_eq!(
+            store.verify_session_token(Some(&format!("Bearer {old}"))),
+            Ok(account)
+        );
+        let migrated = std::fs::read_to_string(accounts_path(&dir)).unwrap();
+        assert!(
+            !migrated.contains(old),
+            "the migration rewrites the registry"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// STR-03: ogni mutatore pubblica soltanto ciò che è durevole. Con il
+    /// registro non scrivibile, l'errore lascia la memoria uguale al disco.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_save_leaves_memory_equal_to_the_reloaded_registry() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("fub-services-auth-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut store = AccountStore::load(&dir).unwrap();
+        let account = store.create_account("fermo", "correct-horse-99").unwrap();
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+        let probe = dir.join(".probe");
+        let writable = std::fs::write(&probe, b"").is_ok();
+        let _ = std::fs::remove_file(&probe);
+        if !writable {
+            let before = serde_json::to_value(&store).unwrap();
+            assert!(store.issue_session_token(&account).is_err());
+            assert!(store.register_device(&account, "telefono").is_err());
+            assert!(store.delete_account(&account).is_err());
+            assert!(store
+                .update_totp(&account, |t| *t = TotpState::default())
+                .is_err());
+            let pw = AccountStore::prepare_hash("correct-horse-99").unwrap();
+            assert!(store.insert_prepared("nuovo", pw).is_err());
+            assert_eq!(serde_json::to_value(&store).unwrap(), before);
+        }
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let reloaded = AccountStore::load(&dir).unwrap();
+        assert_eq!(
+            serde_json::to_value(&reloaded).unwrap(),
+            serde_json::to_value(&store).unwrap()
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

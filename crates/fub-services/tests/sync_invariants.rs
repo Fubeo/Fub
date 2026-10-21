@@ -824,6 +824,7 @@ fn invite_step_up_survives_a_restart() {
         .unwrap();
     let invite = |code: Option<&str>| serde_json::json!({ "vault_id": VAULT, "role": "reader", "code": code });
 
+    drop(state);
     let mut state = open_state(&dir);
     let (status, body) = call(&mut state, "/v1/sync/invite", &owner, invite(None));
     assert_eq!(
@@ -835,6 +836,7 @@ fn invite_step_up_survives_a_restart() {
     let (status, body) = call(&mut state, "/v1/sync/invite", &owner, invite(Some(&code)));
     assert_eq!(status, 201, "{body}");
 
+    drop(state);
     let mut state = open_state(&dir);
     assert_eq!(
         call(&mut state, "/v1/sync/invite", &owner, invite(Some(&code))).0,

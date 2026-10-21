@@ -80,6 +80,8 @@ impl HttpResponse {
 
 /// Stato condiviso del servizio (un'istanza per processo binario).
 pub struct ServiceState {
+    /// Il lock esclusivo della data dir: vive quanto lo stato (STR-02).
+    pub lease: crate::lease::DataDirLease,
     pub data_dir: PathBuf,
     pub config: ServicesConfig,
     pub accounts: AccountStore,
@@ -95,10 +97,12 @@ pub struct ServiceState {
 }
 
 impl ServiceState {
-    /// Apre/crea la data dir e carica config + account.
+    /// Apre/crea la data dir e carica config + account. Il lease esclusivo
+    /// si prende prima di leggere qualunque registro: un secondo processo
+    /// sulla stessa cartella fallisce qui, anche con un bind diverso.
     pub fn open(dir: Option<PathBuf>) -> Result<Self, String> {
         let data_dir = dir.unwrap_or_else(data_dir);
-        std::fs::create_dir_all(&data_dir).map_err(|e| format!("data dir: {e}"))?;
+        let lease = crate::lease::acquire(&data_dir)?;
         let config = {
             let path = config_path(&data_dir);
             match crate::schema::read_if_present(&path).map_err(|e| format!("config read: {e}"))? {
@@ -110,6 +114,7 @@ impl ServiceState {
         };
         let accounts = AccountStore::load(&data_dir)?;
         Ok(Self {
+            lease,
             data_dir,
             config,
             accounts,
