@@ -329,6 +329,31 @@ pub fn handle_site_admin(
     auth: Option<&str>,
     body: &[u8],
 ) -> HttpResponse {
+    handle_site_admin_prehashed(state, auth, body, None)
+}
+
+/// La password nuova di un sito, se il corpo ne porta una: chi serve HTTP la
+/// legge per calcolarne l'hash **fuori** dal lock globale (STR-05) e passa il
+/// risultato a [`handle_site_admin_prehashed`].
+pub fn site_admin_password(body: &[u8]) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct Peek {
+        password: Option<String>,
+    }
+    serde_json::from_slice::<Peek>(body)
+        .ok()
+        .and_then(|peek| peek.password)
+        .filter(|password| password.len() <= 1024)
+}
+
+/// Come [`handle_site_admin`], con l'hash della password già calcolato dal
+/// chiamante fuori dal lock (`None`: lo calcola qui, come prima).
+pub fn handle_site_admin_prehashed(
+    state: &mut ServiceState,
+    auth: Option<&str>,
+    body: &[u8],
+    prehashed: Option<Result<String, guard::GuardError>>,
+) -> HttpResponse {
     let account = match account_of(state, auth) {
         Ok(id) => id,
         Err(r) => return r,
@@ -360,10 +385,12 @@ pub fn handle_site_admin(
         return HttpResponse::err(413, "site quota exceeded");
     }
     let password_hash = match request.password {
-        Some(password) if password.len() <= 1024 => match guard::hash_site_password(&password) {
-            Ok(hash) => Some(hash),
-            Err(_) => return HttpResponse::err(400, "invalid site password"),
-        },
+        Some(password) if password.len() <= 1024 => {
+            match prehashed.unwrap_or_else(|| guard::hash_site_password(&password)) {
+                Ok(hash) => Some(hash),
+                Err(_) => return HttpResponse::err(400, "invalid site password"),
+            }
+        }
         Some(_) => return HttpResponse::err(413, "site password too long"),
         None => None,
     };
@@ -541,27 +568,43 @@ fn handle_dry_run(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> 
 }
 
 fn handle_commit(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> HttpResponse {
-    let account = match account_of(state, auth) {
-        Ok(id) => id,
+    let plan = match plan_commit(state, auth, body) {
+        Ok(plan) => plan,
         Err(r) => return r,
     };
-    let request: manifest::CommitRequest = match serde_json::from_slice(body) {
-        Ok(r) => r,
-        Err(_) => return HttpResponse::err(400, "bad commit body"),
-    };
-    if let Err(r) = check_wire_protocol(&request.protocol) {
-        return r;
-    }
+    let outcome = run_commit(&plan);
+    finish_commit(state, plan, outcome)
+}
+
+/// Un commit autorizzato e pronto a scrivere: tutto ciò che serve a
+/// [`run_commit`] senza toccare lo stato condiviso.
+pub struct CommitPlan {
+    account: String,
+    request: manifest::CommitRequest,
+    data_dir: std::path::PathBuf,
+    quota: site::SiteQuota,
+    max_sites: usize,
+    site_count: usize,
+    is_new: bool,
+}
+
+/// Prima metà del commit, sotto il lock globale e breve: parsing,
+/// autorizzazione, quota e creazione del record di un sito nuovo.
+pub fn plan_commit(
+    state: &mut ServiceState,
+    auth: Option<&str>,
+    body: &[u8],
+) -> Result<CommitPlan, HttpResponse> {
+    let account = account_of(state, auth)?;
+    let request: manifest::CommitRequest =
+        serde_json::from_slice(body).map_err(|_| HttpResponse::err(400, "bad commit body"))?;
+    check_wire_protocol(&request.protocol)?;
     if request.site_id != request.manifest.site_id {
-        return HttpResponse::err(400, "site id mismatch");
+        return Err(HttpResponse::err(400, "site id mismatch"));
     }
-    if let Err(r) = authorize_publish(state, &request.site_id, &account) {
-        return r;
-    }
+    authorize_publish(state, &request.site_id, &account)?;
     let site_id = request.manifest.site_id.clone();
-    if let Err(response) = crate::site_isolation::preflight_commit(&state.data_dir, body) {
-        return response;
-    }
+    crate::site_isolation::preflight_commit(&state.data_dir, body)?;
     let is_new = site::load_record(&state.data_dir, &site_id).is_err();
     let site_count = count_owned_sites(&state.data_dir, &account);
     let max_sites = state.config.quotas.max_sites as usize;
@@ -569,29 +612,54 @@ fn handle_commit(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> H
         // La quota si controlla prima di creare il record: un record creato
         // e poi rifiutato renderebbe il sito "esistente" al tentativo dopo.
         if site_count >= max_sites {
-            return HttpResponse::err(413, "site quota exceeded");
+            return Err(HttpResponse::err(413, "site quota exceeded"));
         }
         // First commit creates the site with the committer as owner.
         // A lost race (record appeared meanwhile) falls through to commit.
         match site::create_site(&state.data_dir, &site_id, &account, None) {
             Ok(_) | Err(site::SiteError::AlreadyExists(_)) => {}
-            Err(e) => return site_err(e),
+            Err(e) => return Err(site_err(e)),
         }
     }
     let quotas = &state.config.quotas;
-    let quota = site::SiteQuota {
-        max_asset_bytes: quotas.max_asset_bytes,
-        max_site_bytes: quotas.max_vault_bytes,
-    };
-    match site::commit_site(
-        &state.data_dir,
-        &request,
-        &request.excluded_private,
-        quota,
+    Ok(CommitPlan {
+        account,
+        request,
+        data_dir: state.data_dir.clone(),
+        quota: site::SiteQuota {
+            max_asset_bytes: quotas.max_asset_bytes,
+            max_site_bytes: quotas.max_vault_bytes,
+        },
         max_sites,
         site_count,
         is_new,
-    ) {
+    })
+}
+
+/// La metà pesante — staging, scrittura delle superfici, copia, fsync e
+/// rename — senza lo stato condiviso: chi serve HTTP la esegue tenendo
+/// soltanto il lock del sito, e gli altri tenant non aspettano.
+pub fn run_commit(plan: &CommitPlan) -> Result<(site::SiteRecord, u64), site::SiteError> {
+    site::commit_site(
+        &plan.data_dir,
+        &plan.request,
+        &plan.request.excluded_private,
+        plan.quota,
+        plan.max_sites,
+        plan.site_count,
+        plan.is_new,
+    )
+}
+
+/// Ultima metà, di nuovo sotto il lock globale e breve: proprietario e grant.
+pub fn finish_commit(
+    state: &mut ServiceState,
+    plan: CommitPlan,
+    outcome: Result<(site::SiteRecord, u64), site::SiteError>,
+) -> HttpResponse {
+    let account = plan.account;
+    let site_id = plan.request.manifest.site_id;
+    match outcome {
         Err(e) => site_err(e),
         Ok((mut record, version)) => {
             if record.owner.is_empty() {
@@ -606,6 +674,19 @@ fn handle_commit(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> H
             HttpResponse::json(200, &manifest::CommitResponse { site_id, version })
         }
     }
+}
+
+/// Il `site_id` di un corpo publish, letto senza validare il resto: serve a
+/// prendere il lock del sito prima di quello globale.
+pub fn peek_site_id(body: &[u8]) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct Peek {
+        site_id: Option<String>,
+    }
+    serde_json::from_slice::<Peek>(body)
+        .ok()
+        .and_then(|peek| peek.site_id)
+        .filter(|id| manifest::check_site_id(id).is_ok())
 }
 
 fn handle_unpublish(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> HttpResponse {

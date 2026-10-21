@@ -78,6 +78,20 @@ impl HttpResponse {
     }
 }
 
+/// Un lock per sito (STR-05): commit, rollback, unpublish, amministrazione e
+/// riparazione di `live` dello stesso sito si serializzano qui, e il lavoro
+/// pesante non tiene il lock globale. Ordine fisso: prima il sito, poi lo
+/// stato globale, mai il contrario.
+#[derive(Debug, Default)]
+pub struct SiteLocks(parking_lot::Mutex<BTreeMap<String, std::sync::Arc<parking_lot::Mutex<()>>>>);
+
+impl SiteLocks {
+    /// Il lock di `site_id` (creato al primo uso).
+    pub fn of(&self, site_id: &str) -> std::sync::Arc<parking_lot::Mutex<()>> {
+        std::sync::Arc::clone(self.0.lock().entry(site_id.to_string()).or_default())
+    }
+}
+
 /// Stato condiviso del servizio (un'istanza per processo binario).
 pub struct ServiceState {
     /// Il lock esclusivo della data dir: vive quanto lo stato (STR-02).
@@ -96,6 +110,8 @@ pub struct ServiceState {
     pub acls: BTreeMap<String, crate::acl::ShareAcl>,
     /// Limiti di frequenza e semaforo KDF: si clonano fuori dal lock.
     pub abuse: std::sync::Arc<crate::abuse::Abuse>,
+    /// Lock per sito, da prendere **prima** del lock globale.
+    pub site_locks: std::sync::Arc<SiteLocks>,
 }
 
 impl ServiceState {
@@ -124,6 +140,7 @@ impl ServiceState {
             totp_attempts: crate::mfa::LoginRateLimit::new(),
             acls: BTreeMap::new(),
             abuse: std::sync::Arc::default(),
+            site_locks: std::sync::Arc::default(),
         })
     }
 

@@ -499,7 +499,20 @@ fn dispatch(parsed: Parsed, state: &Arc<Mutex<ServiceState>>, data_dir: &Path) -
             let mut state = state.lock();
             fub_services::sync::handle(&mut state, &parsed.method, &parsed.path, auth, &parsed.body)
         }
-        Route::PublishDryRun | Route::PublishUnpublish | Route::PublishRollback => {
+        Route::PublishDryRun => {
+            let mut state = state.lock();
+            fub_services::publish::handle(
+                &mut state,
+                &parsed.method,
+                &parsed.path,
+                auth,
+                &parsed.body,
+            )
+        }
+        Route::PublishUnpublish | Route::PublishRollback => {
+            // Prima il lock del sito, poi quello globale (ordine fisso).
+            let site = site_lock(state, &parsed.body);
+            let _site = site.as_ref().map(|lock| lock.lock());
             let mut state = state.lock();
             fub_services::publish::handle(
                 &mut state,
@@ -514,14 +527,7 @@ fn dispatch(parsed: Parsed, state: &Arc<Mutex<ServiceState>>, data_dir: &Path) -
             if let Err(r) = fub_services::site_isolation::preflight_commit(data_dir, &parsed.body) {
                 r
             } else {
-                let mut state = state.lock();
-                fub_services::publish::handle(
-                    &mut state,
-                    &parsed.method,
-                    &parsed.path,
-                    auth,
-                    &parsed.body,
-                )
+                handle_commit(state, auth, &parsed.body)
             }
         }
         Route::PublishStatus => {
@@ -535,8 +541,7 @@ fn dispatch(parsed: Parsed, state: &Arc<Mutex<ServiceState>>, data_dir: &Path) -
             )
         }
         Route::PublishSiteAdmin => {
-            let mut state = state.lock();
-            fub_services::publish::handle_site_admin(&mut state, auth, &parsed.body)
+            handle_site_admin(state, &kdf_caller(state, &parsed), auth, &parsed.body)
         }
         Route::PublishIsolation => handle_isolation(state, data_dir, auth, &parsed.body),
         Route::StaticSite { site, rest } => handle_static(
@@ -557,6 +562,64 @@ fn dispatch(parsed: Parsed, state: &Arc<Mutex<ServiceState>>, data_dir: &Path) -
         fub_services::server::log_line(&parsed.method, &parsed.path, response.status)
     );
     response
+}
+
+/// Il lock del sito nominato dal corpo, se ne nomina uno valido.
+fn site_lock(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> Option<Arc<Mutex<()>>> {
+    let site_id = fub_services::publish::peek_site_id(body)?;
+    let locks = Arc::clone(&state.lock().site_locks);
+    Some(locks.of(&site_id))
+}
+
+/// Commit in tre tempi (STR-05): autorizzazione e quota sotto il lock
+/// globale breve; staging, scrittura, copia, fsync e rename tenendo soltanto
+/// il lock del sito; proprietario e grant di nuovo sotto il lock globale
+/// breve. Un publish grande non ferma sync, login né gli altri siti.
+fn handle_commit(
+    state: &Arc<Mutex<ServiceState>>,
+    auth: Option<&str>,
+    body: &[u8],
+) -> HttpResponse {
+    let site = site_lock(state, body);
+    let _site = site.as_ref().map(|lock| lock.lock());
+    let plan = {
+        let mut state = state.lock();
+        match fub_services::publish::plan_commit(&mut state, auth, body) {
+            Err(r) => return r,
+            Ok(plan) => plan,
+        }
+    };
+    let outcome = fub_services::publish::run_commit(&plan);
+    let mut state = state.lock();
+    fub_services::publish::finish_commit(&mut state, plan, outcome)
+}
+
+/// Amministrazione del sito con la PBKDF2 della password nuova fuori dal lock
+/// globale: prima il bearer (lock breve), poi la KDF dietro i limiti, infine
+/// lock del sito e lock globale per applicare.
+fn handle_site_admin(
+    state: &Arc<Mutex<ServiceState>>,
+    caller: &KdfCaller,
+    auth: Option<&str>,
+    body: &[u8],
+) -> HttpResponse {
+    let prehashed = match fub_services::publish::site_admin_password(body) {
+        None => None,
+        Some(password) => {
+            if let Err(r) = state.lock().bearer(auth) {
+                return r;
+            }
+            let _permit = match caller.enter() {
+                Err(r) => return r,
+                Ok(permit) => permit,
+            };
+            Some(fub_services::publish::guard::hash_site_password(&password))
+        }
+    };
+    let site = site_lock(state, body);
+    let _site = site.as_ref().map(|lock| lock.lock());
+    let mut state = state.lock();
+    fub_services::publish::handle_site_admin_prehashed(&mut state, auth, body, prehashed)
 }
 
 /// Register con KDF fuori dal lock: validazione + hash sul worker, solo
@@ -942,9 +1005,11 @@ fn handle_static(
         clean
     };
     // Riparare `live` scrive l'albero del sito: lo fa soltanto chi tiene il
-    // lock, come commit, rollback e unpublish. La lettura non ne ha bisogno.
+    // lock del sito, come commit, rollback e unpublish. La lettura non ne ha
+    // bisogno, e nessuno dei due tocca il lock globale.
     if site_api::live_needs_repair(data_dir, site_id) {
-        let _state = state.lock();
+        let site = Arc::clone(&state.lock().site_locks).of(site_id);
+        let _site = site.lock();
         if site_api::recover_interrupted_commit(data_dir, site_id).is_err() {
             return HttpResponse::err(404, "static not found");
         }
@@ -1297,6 +1362,75 @@ mod sync_http_tests {
             "{}",
             String::from_utf8_lossy(&bytes)
         );
+    }
+
+    /// STR-05: un commit che aspetta (o lavora) sul proprio sito non tiene il
+    /// lock globale. Con il lock di `blog` occupato, come durante uno
+    /// staging lento, un altro account fa login e sync subito.
+    #[test]
+    fn a_stalled_publish_does_not_stop_other_tenants() {
+        let dir = TempDir::new();
+        let state = Arc::new(Mutex::new(ServiceState::open(Some(dir.0.clone())).unwrap()));
+        let (publisher, other) = {
+            let mut state = state.lock();
+            let a = state
+                .accounts
+                .create_account("editore", "correct-horse-99")
+                .unwrap();
+            let b = state
+                .accounts
+                .create_account("lettore", "correct-horse-99")
+                .unwrap();
+            (
+                format!("Bearer {}", state.accounts.issue_session_token(&a).unwrap()),
+                format!("Bearer {}", state.accounts.issue_session_token(&b).unwrap()),
+            )
+        };
+        let blog = Arc::clone(&state.lock().site_locks).of("blog");
+        let held = blog.lock();
+        let committing = {
+            let state = Arc::clone(&state);
+            let dir = dir.0.clone();
+            std::thread::spawn(move || {
+                let body = json!({ "protocol": "fub-publish/1", "site_id": "blog",
+                    "manifest": { "site_id": "blog" }, "pages": [], "assets": [] });
+                request(
+                    &state,
+                    &dir,
+                    "POST",
+                    "/v1/publish/commit",
+                    Some(&publisher),
+                    body,
+                )
+            })
+        };
+        std::thread::sleep(Duration::from_millis(50));
+        let started = Instant::now();
+        let (status, body) = request(
+            &state,
+            &dir.0,
+            "POST",
+            "/v1/account/login",
+            None,
+            json!({ "name": "lettore", "password": "correct-horse-99" }),
+        );
+        assert_eq!(status, 200, "{body}");
+        let (status, _) = request(
+            &state,
+            &dir.0,
+            "GET",
+            "/v1/sync/status?vault_id=v",
+            Some(&other),
+            json!(null),
+        );
+        assert_ne!(status, 500);
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(
+            !committing.is_finished(),
+            "the commit is still waiting on its site"
+        );
+        drop(held);
+        committing.join().unwrap();
     }
 
     #[test]
