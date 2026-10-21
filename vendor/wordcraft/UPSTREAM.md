@@ -30,6 +30,7 @@ altri formati di testo (`formats`: OpenDocument, RTF e gli altri).
 | `assets/hyphenation/` | `assets/hyphenation/` | nessuna |
 | `assets/spelling/` | `assets/spelling/` | nessuna |
 | `rustfmt.toml` | `rustfmt.toml` | nessuna |
+| `NOTICE` | `NOTICE` | elenca soltanto il materiale di terzi che questa copia porta |
 
 Le modifiche al sorgente servono a passare
 `cargo clippy --workspace --all-targets -- -D warnings` della CI di Fub, dove
@@ -134,15 +135,28 @@ segni d'ortografia ma conserva le regole grammaticali.
 
 ## Aggiornare
 
-1. scegli un commit dell'upstream e confronta `crates/` e `assets/` con
-   questa copia;
-2. copia i file cambiati e riapplica le modifiche elencate qui sopra, se
-   l'upstream non le contiene già;
-3. riporta nel `Cargo.toml` qui le dipendenze nuove dell'upstream;
-4. aggiorna commit e impronte in questa pagina;
-5. esegui `cargo test -p wordcraft-proof -p wordcraft-geom -p wordcraft-doc
-   -p wordcraft-docx -p wordcraft-docbin -p wordcraft-formats -p fub-format-rich`, i test di `fub-features` con la
-   feature `proof` e `cargo deny check`.
+La copia è derivata: l'upstream al commit di `upstream.lock` più le patch di
+`patches/`, in ordine. Le modifiche elencate sopra sono quelle patch, una per
+ragione; nessun file si modifica a mano.
 
-Una correzione che serve a Fub va proposta all'upstream; finché non entra, va
-elencata nella tabella delle modifiche qui sopra.
+```text
+node tools/vendor-wordcraft/vendor.mjs update --rev <sha> [--source <clone o URL>]
+node tools/vendor-wordcraft/vendor.mjs check
+node tools/vendor-wordcraft/vendor.mjs verify-upstream
+```
+
+`update` estrae i percorsi gestiti, applica le patch (si ferma su quella che
+non si applica, senza scrivere niente), stampa le dipendenze aggiunte o tolte
+dai manifest dell'upstream, scrive `upstream.lock` e aggiorna la `version`
+delle righe `wordcraft-*` del `Cargo.toml` di Fub. `check`, in CI, toglie la
+pila intera in ordine inverso da una copia e ritrova le impronte
+dell'upstream. Una modifica nuova si aggiunge come patch in `patches/` e si
+riesegue `update` con lo stesso commit.
+
+Dopo un aggiornamento: `cargo test -p wordcraft-proof -p wordcraft-geom
+-p wordcraft-doc -p wordcraft-docx -p wordcraft-docbin -p wordcraft-formats
+-p fub-format-rich`, il corpus di `fub-format-rich`, i test di `fub-features`
+con la feature `proof` e `cargo deny check`.
+
+Una correzione che serve a Fub va proposta all'upstream; finché non entra,
+resta una patch.

@@ -1,0 +1,81 @@
+Fub: il deny di clippy sul codice di libreria non vale per i test dell'upstream,
+che usano unwrap() e sotto --all-targets non compilerebbero con -D warnings.
+
+diff --git a/crates/doc/src/lib.rs b/crates/doc/src/lib.rs
+index 797d6c3..dd90bf8 100644
+--- a/crates/doc/src/lib.rs
++++ b/crates/doc/src/lib.rs
+@@ -8,7 +8,7 @@
+ //!
+ //! Positions ([`Pos`]) name a story, a [`Path`] to a paragraph and a byte offset in it. Paths
+ //! compare in document order.
+-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
++#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+ 
+ pub mod bidi;
+ pub mod chart;
+diff --git a/crates/docbin/src/lib.rs b/crates/docbin/src/lib.rs
+index 9a40c22..ff3bdbb 100644
+--- a/crates/docbin/src/lib.rs
++++ b/crates/docbin/src/lib.rs
+@@ -6,7 +6,7 @@
+ //! like every WordCraft parser, is lenient by design (unknown structures are skipped, bad numbers
+ //! fall back to defaults) and bounded (stream sizes, piece counts and property counts are
+ //! capped), so hostile input yields an error or a best-effort document, never a panic.
+-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
++#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+ 
+ mod crypt;
+ mod drawing;
+diff --git a/crates/docx/src/lib.rs b/crates/docx/src/lib.rs
+index ba43216..bbac99a 100644
+--- a/crates/docx/src/lib.rs
++++ b/crates/docx/src/lib.rs
+@@ -5,7 +5,7 @@
+ //! markup is skipped, bad numbers fall back to defaults) and bounded (zip entry sizes, total
+ //! decompressed size, XML depth and element counts are capped), so hostile input yields an
+ //! error or a best-effort document, never a panic.
+-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
++#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+ 
+ mod chart_spec;
+ mod crypt;
+diff --git a/crates/formats/src/lib.rs b/crates/formats/src/lib.rs
+index 6678b5c..deddbf5 100644
+--- a/crates/formats/src/lib.rs
++++ b/crates/formats/src/lib.rs
+@@ -7,7 +7,7 @@
+ //! [`model::from_doc`] convert to and from the full [`Document`]. All parsers are written from
+ //! the public specifications, are lenient by design and never panic on hostile input: nesting is
+ //! depth-limited and sizes are capped.
+-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
++#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+ 
+ pub mod comments;
+ pub mod html;
+diff --git a/crates/geom/src/lib.rs b/crates/geom/src/lib.rs
+index 8673b70..aa4f3c4 100644
+--- a/crates/geom/src/lib.rs
++++ b/crates/geom/src/lib.rs
+@@ -4,7 +4,7 @@
+ //! twentieths of a point (twips) for most lengths, half-points for font sizes, eighths of a point
+ //! for borders and English Metric Units (EMU, 914 400 per inch) for drawings. The conversions live
+ //! here so every crate agrees on them.
+-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
++#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+ 
+ use serde::{Deserialize, Serialize};
+ 
+diff --git a/crates/proof/src/lib.rs b/crates/proof/src/lib.rs
+index 114097d..e561dcb 100644
+--- a/crates/proof/src/lib.rs
++++ b/crates/proof/src/lib.rs
+@@ -37,7 +37,7 @@
+ //!   Bulgarian syllable rules, Russian word-division rules, heuristic.
+ //!
+ //! [`check_text`] checks a paragraph whose runs are in different languages.
+-#![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
++#![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
+ 
+ pub mod affix;
+ pub mod bg;
