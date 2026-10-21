@@ -196,6 +196,9 @@ pub fn corpus() -> Vec<Case> {
             "x $a [[b]] c$ e ![[d]] $e ![[f]]$\n\nla $g\n[[h]] #i$ fine\n\n[[j $k]] l$\n",
         ),
         case("definition list", "Termine\n\n: la definizione\n"),
+        // La forma stretta, senza riga vuota: stava fra le [`divergenti`] perché
+        // il termine aveva uno span di un byte.
+        case("definition list stretta", "Termine\n: la definizione\n"),
         case("html a blocco", "<div>blocco</div>\n"),
         case("html inline", "un <b>grassetto</b> inline\n"),
         case("commento html", "<!-- un commento -->\n"),
@@ -345,22 +348,6 @@ pub fn divergent() -> Vec<Case> {
         case(
             "uno slug vuoto è un'ancora che il contratto rifiuterebbe",
             "#\n",
-        ),
-        case(
-            "l'alt di un'immagine non entra nel testo indicizzato",
-            "![una didascalia](f.png)\n",
-        ),
-        case(
-            "la sintassi grezza di un embed entra nel testo indicizzato",
-            "![[Nota]]\n",
-        ),
-        case(
-            "il termine di una definition list stretta ha uno span di un byte",
-            "Termine\n: la definizione\n",
-        ),
-        case(
-            "e la forma larga della stessa definition list ce l'ha giusto",
-            "Termine\n\n: la definizione\n",
         ),
         case(
             "un cr nudo dentro una riga di tabella la spezza in due righe",

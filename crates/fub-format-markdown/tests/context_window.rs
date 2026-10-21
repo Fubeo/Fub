@@ -63,11 +63,13 @@ fn short_block_context_is_the_block() {
 
 /// Il ripiego testuale degli embed misura la posizione sul testo decodificato:
 /// markup e caratteri multibyte precedenti non possono produrre un indice interno
-/// al carattere.
+/// al carattere. Nel testo l'embed è ciò che si legge, non la sua sintassi.
 #[test]
 fn an_embed_after_multibyte_text_has_valid_context() {
     let source = "A🎉 [[Altra]], ![[Nota]] dopo";
     let doc = parse(source);
     let link = doc.links.iter().find(|link| link.embed).unwrap();
-    assert_eq!(link.context.as_deref(), Some("A🎉 Altra, ![[Nota]] dopo"));
+    assert_eq!(link.context.as_deref(), Some("A🎉 Altra, Nota dopo"));
+    let aliased = parse("x ![[Nota#Sez|la sezione]] y");
+    assert_eq!(aliased.text.trim(), "x la sezione y");
 }

@@ -813,7 +813,12 @@ fn convert_block<'a>(
             } else {
                 custom_kind::DEFINITION_DESCRIPTION
             };
-            let blocks = convert_block_children(node, source, offsets, ctx, acc, down);
+            let mut blocks = convert_block_children(node, source, offsets, ctx, acc, down);
+            let span = if matches!(value, NodeValue::DescriptionTerm) {
+                term_span(node, source, offsets, span, &mut blocks)
+            } else {
+                span
+            };
             Some(custom(kind, serde_json::Value::Null, blocks, span))
         }
         NodeValue::HtmlBlock(h) => {
@@ -845,6 +850,39 @@ fn convert_block<'a>(
             }
         }
     }
+}
+
+/// Lo span del termine di una definition list, che nella forma stretta
+/// (`Termine\n: definizione`, senza riga vuota) comrak chiude dopo il primo
+/// byte: il termine va fino alla definizione che lo segue, righe vuote in coda
+/// escluse. Lo stesso confine vale per i paragrafi del termine che cominciano
+/// dove comincia lui, che portavano lo stesso span di un byte.
+fn term_span<'a>(
+    node: &'a AstNode<'a>,
+    source: &str,
+    offsets: &Offsets<'_>,
+    span: Span,
+    blocks: &mut [Block],
+) -> Span {
+    let Some(next) = node.next_sibling() else {
+        return span;
+    };
+    let until = span_of(next, offsets).start;
+    let Some(between) = source.get(span.start..until) else {
+        return span;
+    };
+    let end = span.start + between.trim_end().len();
+    if end <= span.end {
+        return span;
+    }
+    for block in blocks.iter_mut() {
+        if let Block::Paragraph { span: inner, .. } = block {
+            if inner.start == span.start && inner.end < end {
+                inner.end = end;
+            }
+        }
+    }
+    Span::new(span.start, end)
 }
 
 fn custom(kind: &str, attrs: serde_json::Value, blocks: Vec<Block>, span: Span) -> Block {
@@ -1123,7 +1161,7 @@ fn convert_inlines<'a>(
                         let head = decode_segment(source, &slice[..cut], span.start);
                         let mut inside = Vec::new();
                         let head_slice = &slice[..cut];
-                        push_text_features(
+                        let projected = push_text_features(
                             source,
                             head_slice,
                             &head,
@@ -1133,18 +1171,20 @@ fn convert_inlines<'a>(
                             acc,
                             &mut inside,
                         );
+                        let head_len = project(text_out, text_base, head.len(), projected);
                         let tail = &slice[cut..];
                         let decoded = decode_segment(source, tail, close);
-                        push_text_features(
+                        let projected = push_text_features(
                             source,
                             tail,
                             &decoded,
                             close,
-                            text_base + head.len(),
+                            text_base + head_len,
                             ctx,
                             acc,
                             &mut out,
                         );
+                        project(text_out, text_base + head_len, decoded.len(), projected);
                         continue;
                     }
                     if ctx.enabled(syntax::FOOTNOTES) {
@@ -1153,23 +1193,25 @@ fn convert_inlines<'a>(
                         {
                             let head_slice = &slice[..open];
                             let head = decode_segment(source, head_slice, span.start);
-                            push_text_features(
+                            let projected = push_text_features(
                                 source, head_slice, &head, span.start, text_base, ctx, acc,
                                 &mut out,
                             );
+                            let head_len = project(text_out, text_base, head.len(), projected);
                             let rest = &slice[open..];
                             let decoded = decode_segment(source, rest, span.start + open);
                             let mut inside = Vec::new();
-                            push_text_features(
+                            let projected = push_text_features(
                                 source,
                                 rest,
                                 &decoded,
                                 span.start + open,
-                                text_base + head.len(),
+                                text_base + head_len,
                                 ctx,
                                 acc,
                                 &mut inside,
                             );
+                            project(text_out, text_base + head_len, decoded.len(), projected);
                             let start = span.start + open;
                             let body = &source[start + 2..close - 1];
                             out.push(Inline::Custom {
@@ -1207,7 +1249,10 @@ fn convert_inlines<'a>(
                     }
                     continue;
                 };
-                push_text_features(source, slice, &s, span.start, text_base, ctx, acc, &mut out);
+                let projected = push_text_features(
+                    source, slice, &s, span.start, text_base, ctx, acc, &mut out,
+                );
+                project(text_out, text_base, s.len(), projected);
             }
             NodeValue::SoftBreak => {
                 // Un a-capo morbido: la riga continua, e nella resa è uno
@@ -1361,11 +1406,11 @@ fn convert_inlines<'a>(
                 // in `links` nessun riferimento ad allegato veniva aggiornato al
                 // rename, né risultava fra gli orfani (13.1): non perché il path
                 // non fosse un arco, ma perché quell'arco non veniva raccolto.
-                // L'`alt` non entra nel testo del blocco — è una divergenza
-                // dichiarata del corpus — quindi la posizione del link nel
-                // testo è vuota, e la finestra si centra sul punto in cui
-                // l'immagine sta.
+                // L'`alt` entra nel testo del blocco come l'etichetta di un
+                // link: è testo che l'autore ha scritto, e chi cerca la
+                // didascalia la trova. La posizione del link nel testo è la sua.
                 let start = text_out.len();
+                text_out.push_str(&label_text);
                 push_link(
                     acc,
                     &mut out,
@@ -1493,7 +1538,7 @@ fn push_text_features(
     ctx: &ParseContext,
     acc: &mut Acc,
     out: &mut Vec<Inline>,
-) {
+) -> Option<String> {
     let embeds = if ctx.enabled(syntax::WIKILINKS) {
         find_embeds(slice)
     } else {
@@ -1511,10 +1556,13 @@ fn push_text_features(
         } else if !decoded.is_empty() {
             out.push(Inline::Text(decoded.to_string()));
         }
-        return;
+        return None;
     }
     let mut cursor = 0;
     let mut in_text = text_base;
+    // Il testo del blocco porta di un embed ciò che si legge, non la sintassi:
+    // l'alias o il bersaglio, come per un `[[…]]`. Prima ci restava `![[`.
+    let mut projected = String::new();
     for (parentheses, inner) in embeds {
         // Il `!` lo aggiunge allo span [`embed_before`], che è la stessa
         // funzione da cui passa il ramo comrak: qui `find_embeds` consegna le
@@ -1526,6 +1574,7 @@ fn push_text_features(
         let start = abs.start - base;
         if start > cursor {
             let seg = &slice[cursor..start];
+            projected.push_str(&decode_segment(source, seg, base + cursor));
             in_text += push_plain_or_tags(source, seg, base + cursor, ctx, acc, out);
         }
         let parsed = scan::parse_wikilink_inner(&inner);
@@ -1537,8 +1586,11 @@ fn push_text_features(
         // L'alias di un embed è dell'autore quanto quello di un link, e finché
         // questa strada passava `None` senza guardarlo un `![[Nota|Alias]]`
         // rientrava dal giro come `![[Nota]]`.
+        let shown = parsed
+            .alias
+            .clone()
+            .unwrap_or_else(|| inner.split('|').next().unwrap_or_default().to_string());
         let label = parsed.alias.map(|a| vec![Inline::Text(a)]);
-        let written = decode_segment(source, &slice[start..abs.end - base], abs.start).len();
         push_link(
             acc,
             out,
@@ -1546,14 +1598,30 @@ fn push_text_features(
             label,
             embed,
             abs,
-            in_text..in_text + written,
+            in_text..in_text + shown.len(),
         );
-        in_text += written;
+        in_text += shown.len();
+        projected.push_str(&shown);
         cursor = abs.end - base;
     }
     if cursor < slice.len() {
         let seg = &slice[cursor..];
+        projected.push_str(&decode_segment(source, seg, base + cursor));
         push_plain_or_tags(source, seg, base + cursor, ctx, acc, out);
+    }
+    Some(projected)
+}
+
+/// Mette nel testo del blocco, al posto del segmento decodificato lungo `len`
+/// che comincia in `at`, la sua proiezione, se ne ha una. Torna la lunghezza
+/// che il segmento ha adesso.
+fn project(text_out: &mut String, at: usize, len: usize, projected: Option<String>) -> usize {
+    match projected {
+        Some(text) if text_out.get(at..at + len).is_some() => {
+            text_out.replace_range(at..at + len, &text);
+            text.len()
+        }
+        _ => len,
     }
 }
 

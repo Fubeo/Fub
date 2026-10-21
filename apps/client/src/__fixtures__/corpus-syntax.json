@@ -669,6 +669,14 @@
     "math": []
   },
   {
+    "name": "definition list stretta",
+    "source": "Termine\n: la definizione\n",
+    "tag": [],
+    "wikilink": [],
+    "task": [],
+    "math": []
+  },
+  {
     "name": "html a blocco",
     "source": "<div>blocco</div>\n",
     "tag": [],

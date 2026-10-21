@@ -601,59 +601,6 @@ fn declared_divergences() -> Vec<(&'static str, Reason, fn(&DocumentModel, &str)
             |d, _| d.body.first().map(Block::anchor) == Some(Some("")),
         ),
         (
-            "l'alt di un'immagine non entra nel testo indicizzato",
-            Reason::RepresentedButUnreachable,
-            // La negazione da sola è vera su ogni documento che non dice
-            // «didascalia», cioè su tutti tranne uno: la divergenza è che la parola
-            // **c'è nel file** e non nel testo che si indicizza.
-            |d, src| src.contains("didascalia") && !d.text.contains("didascalia"),
-        ),
-        (
-            "la sintassi grezza di un embed entra nel testo indicizzato",
-            Reason::RepresentedButUnreachable,
-            |d, _| d.text.contains("![["),
-        ),
-        (
-            // Non è markdown ostile: è la forma «stretta» della definition list,
-            // quella senza riga vuota fra il termine e la definizione. Il termine
-            // ha uno span di **un byte** — il primo carattere — quindi non è
-            // indirizzabile, un embed del termine ritaglia una lettera, e un tag
-            // scritto nel termine esce dallo span del blocco che lo contiene. È
-            // il caso che ha costretto a distinguere le due pretese di
-            // `conformance::Claim`: la coerenza non si può pretendere su
-            // qualunque ingresso finché questo non è riparato.
-            "il termine di una definition list stretta ha uno span di un byte",
-            Reason::DependsOnBytes,
-            |d, _| {
-                fn first_term(b: &[Block]) -> Option<Span> {
-                    b.iter().find_map(|b| match b {
-                        Block::Custom {
-                            custom_kind,
-                            blocks,
-                            span,
-                            ..
-                        } if custom_kind == "definition-term" => {
-                            Some(blocks.first().map(Block::span).unwrap_or(*span))
-                        }
-                        Block::Custom { blocks, .. } => first_term(blocks),
-                        _ => None,
-                    })
-                }
-                first_term(&d.body) == Some(Span::new(0, 1))
-            },
-        ),
-        (
-            // La forma **larga** invece è giusta, e sta accanto alla stretta
-            // perché è ciò che rende la stretta un difetto e non una scelta.
-            "e la forma larga della stessa definition list ce l'ha giusto",
-            Reason::DependsOnBytes,
-            |d, _| {
-                d.body.first().is_some_and(|b| {
-                    matches!(b, Block::Custom { custom_kind, .. } if custom_kind == "definition-list")
-                })
-            },
-        ),
-        (
             // Il `\r` nudo **dentro** una riga di tabella la spezza in due (in
             // CommonMark il CR solitario è un terminatore), e la tabella guadagna
             // una riga che nel file non c'è: una riga di dati diventa due, e la
@@ -685,17 +632,16 @@ fn the_divergences_are_the_declared_ones() {
     let declared = declared_divergences();
     let sources = divergent();
     assert!(
-        declared.len() >= 6,
+        declared.len() >= 2,
         "l'elenco delle divergenze si è svuotato: {} righe. Se sono\n\
          state riparate è una bella notizia e va scritta dove la riparazione sta\n\
          — e allora si abbassa questo numero **nello stesso commit**, che è ciò\n\
          che lo tiene una soglia e non un desiderio; se è l'elenco che si è\n\
          rotto, questo file ha smesso di presidiare la cosa per cui esiste.\n\
-         L'ultima scesa: l'ancora esplicita di un heading è diventata\n\
-         raggiungibile dall'albero — `Block::Heading.explicit_anchor` porta\n\
-         l'id scritto, com'è scritto, e `serialize` lo riscrive — e la sua\n\
-         sorgente («heading con ancora esplicita», `## Titolo ^Mio-ID`) sta\n\
-         adesso nel corpus curato, dove le proprietà la pretendono.",
+         L'ultima scesa: l'alt delle immagini e ciò che si legge di un embed\n\
+         sono entrati nel testo indicizzato, e il termine di una definition\n\
+         list stretta ha lo span della sua riga; la definition list stretta\n\
+         sta adesso nel corpus curato, dove le proprietà la pretendono.",
         declared.len()
     );
 
@@ -877,9 +823,8 @@ fn no_divergence_is_true_on_an_arbitrary_document() {
 /// # La pretesa è «se il blocco ha dell'altro», e va detto perché
 ///
 /// Non «ogni link ha un contesto»: esiste un blocco che di testo non ne ha —
-/// `![alt](f.png)` da solo in un paragrafo, dove l'alt non entra nel testo
-/// indicizzato (è una divergenza dichiarata qui accanto) — e lì il contesto non
-/// c'è, perché non c'è. La condizione si legge dalla **sorgente**, non dal
+/// `![](f.png)` da solo in un paragrafo, un'immagine senza alt — e lì il
+/// contesto non c'è, perché non c'è. La condizione si legge dalla **sorgente**, non dal
 /// modello: il blocco, tolti i byte dei suoi link, deve avere ancora qualcosa
 /// da dire. Ricostruire il testo del blocco dal modello sarebbe stata una
 /// seconda implementazione di `convert_inlines`, cioè un presidio che si rompe
