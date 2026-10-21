@@ -1191,7 +1191,22 @@ fn una_proiezione_malformata_è_rifiutata_con_la_sua_specie() {
         save(Codec::Docx, &file, &value.to_string()),
         Err(RichError::Version(3))
     );
+    // Un Fub più nuovo aggiunge campi: la versione si legge prima del resto.
+    value["campo_futuro"] = true.into();
+    value["blocks"][0]["nuovo"] = 1.into();
+    assert_eq!(
+        save(Codec::Docx, &file, &value.to_string()),
+        Err(RichError::Version(3))
+    );
     value["version"] = 2.into();
+    value["opaque_schema"] = 999.into();
+    assert_eq!(
+        save(Codec::Docx, &file, &value.to_string()),
+        Err(RichError::OpaqueSchema(999))
+    );
+    value["opaque_schema"] = OPAQUE_SCHEMA.into();
+    value.as_object_mut().unwrap().remove("campo_futuro");
+    value["blocks"][0].as_object_mut().unwrap().remove("nuovo");
     value["inatteso"] = true.into();
     assert!(matches!(
         save(Codec::Docx, &file, &value.to_string()),

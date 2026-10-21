@@ -330,9 +330,10 @@ facoltativo `eastAsianLayout` delle proprietà del carattere, e il codec legge
 ogni schema fino al suo. La versione 1, quella delle bozze di
 prima, ha le stesse chiavi senza `opaque_schema` e i dati dello schema 0. La
 shell legge le due versioni, ciascuna con il suo elenco chiuso di chiavi, e
-ricopia versione e schema come li ha ricevuti. Il codec rifiuta una versione
-futura (`host.rich.version`) e uno schema che non legge, scritto da un Fub
-più nuovo (`host.rich.opaque_schema`); un dato opaco che, decodificato e
+ricopia versione e schema come li ha ricevuti. Il codec legge formato,
+versione e schema prima del resto, e rifiuta una versione futura
+(`host.rich.version`) e uno schema che non legge, scritto da un Fub più nuovo
+(`host.rich.opaque_schema`), anche quando portano campi che non conosce; un dato opaco che, decodificato e
 riscritto, perderebbe un campo è una proiezione malformata.
 
 Gli errori del codec arrivano tipizzati con chiave di catalogo `host.rich.*`.

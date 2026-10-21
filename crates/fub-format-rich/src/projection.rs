@@ -659,16 +659,26 @@ impl SectKeep {
 
 impl Projection {
     /// Legge una proiezione dal JSON della shell.
+    ///
+    /// Il formato, la versione e lo schema dei dati opachi si leggono prima
+    /// del resto: una proiezione di un Fub più nuovo, con campi che questo non
+    /// conosce, è una versione o uno schema non supportati
+    /// ([`RichError::Version`], [`RichError::OpaqueSchema`]), non una
+    /// proiezione malformata.
     pub fn from_json(json: &str) -> Result<Projection, RichError> {
-        let projection: Projection =
-            serde_json::from_str(json).map_err(|error| RichError::Malformed(error.to_string()))?;
-        if projection.format != FORMAT {
-            return Err(RichError::Malformed(format!(
-                "format {:?}",
-                projection.format
-            )));
+        #[derive(Deserialize)]
+        struct Head {
+            format: String,
+            version: u32,
+            #[serde(default)]
+            opaque_schema: Option<u32>,
         }
-        let schema = match (projection.version, projection.opaque_schema) {
+        let head: Head =
+            serde_json::from_str(json).map_err(|error| RichError::Malformed(error.to_string()))?;
+        if head.format != FORMAT {
+            return Err(RichError::Malformed(format!("format {:?}", head.format)));
+        }
+        let schema = match (head.version, head.opaque_schema) {
             (1, None) => 0,
             (1, Some(_)) => return Err(RichError::Malformed("opaque_schema in version 1".into())),
             (2, Some(schema)) => schema,
@@ -678,7 +688,7 @@ impl Projection {
         if !blob::readable(schema) {
             return Err(RichError::OpaqueSchema(schema));
         }
-        Ok(projection)
+        serde_json::from_str(json).map_err(|error| RichError::Malformed(error.to_string()))
     }
 
     /// Lo schema dei dati opachi di una proiezione già letta.
