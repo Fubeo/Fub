@@ -25,6 +25,17 @@ l'IPC.
   accordi, mostra il motivo di una sola lettura o di un testo illeggibile.
   Il motore (`editors/rich/engine.ts`, ProseMirror) è un chunk caricato con un
   import dinamico; una superficie smontata prima che arrivi non monta niente.
+- `editors/rich/closed.ts` tiene fuori dal buffer ciò che il formato
+  rifiuterebbe al salvataggio (`host.rich.locked.*`). Un blocco chiuso
+  (`locked`) si disegna segnato, senza cursore (`contenteditable="false"`), e
+  ogni transazione dell'utente che lo cambia, lo toglie o ne scambia l'ordine
+  con un altro chiuso non entra; spostarlo intero sì. Con `body_only` non
+  entra nemmeno ciò che tocca la pagina dell'ultima sezione, le intestazioni
+  e i piè di pagina, i commenti, la registrazione, l'insieme delle note o una
+  specie di elenco che il documento non ha. Le azioni che scriverebbero
+  qualcosa di tutto questo si spengono (`RichEngine.allows`), e l'avviso
+  della superficie dice perché. Ciò che arriva da un altro riquadro o dal disco
+  entra com'è.
 - `editors/rich/schema.ts` traduce la proiezione in un documento ProseMirror
   e ritorno. Ogni nodo porta con sé il proprio `k`, i dati originali opachi
   che la shell non legge e copia così come sono. Il loro schema lo dichiara la

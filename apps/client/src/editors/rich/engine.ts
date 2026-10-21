@@ -14,6 +14,8 @@
 //
 // Mentre il documento registra le modifiche, ogni transazione dell'utente
 // passa da `track.ts` prima di applicarsi: ciò che non si registra non entra.
+// Allo stesso modo non entra ciò che cambia un blocco chiuso o, in un
+// documento che si scrive soltanto nel corpo, ciò che sta fuori (`closed.ts`).
 import { baseKeymap, chainCommands } from "prosemirror-commands";
 import { history, isHistoryTransaction, redo, undo, undoDepth } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
@@ -45,6 +47,7 @@ import { richProof } from "./proof";
 import { commentPlugin, commentsOf } from "./comments";
 import { findPlugin, revisionPlugin, showMatches, type FindQuery } from "./review";
 import { BlockWriter, richSchema, toDoc } from "./schema";
+import { closedBlocks, keepsOutside } from "./closed";
 import { deleteChar, reviewAuthor, trackable, trackTransaction, tracking } from "./track";
 
 export { mountStrip } from "./strip";
@@ -81,6 +84,11 @@ export class RichEngine {
   /// nessuno lo cambia, poi quello riscritto.
   #source = "";
   #intake: Intake = { kind: "invalid", reason: "" };
+  /// I blocchi chiusi della proiezione letta, come li scrive la proiezione.
+  #closed: readonly string[] = [];
+  /// L'ultima transazione dell'utente non è entrata: cambiava ciò che non si
+  /// scrive.
+  #refused = false;
   #shellReadOnly = false;
   #destroyed = false;
   /// «Copia formato»: l'aspetto preso, che va sulla prossima selezione finita.
@@ -267,6 +275,7 @@ export class RichEngine {
         styles: projection.styles,
       };
       this.#intake = { kind: "ok", readonly: projection.readonly ?? null };
+      this.#closed = closedBlocks(projection.blocks);
       // Un aggiornamento da fuori aggiunge ciò che porta: quello che l'utente
       // ha tagliato prima resta noto, e si può incollare.
       const doc = toDoc(projection);
@@ -274,6 +283,7 @@ export class RichEngine {
       return projection;
     } catch (error) {
       this.#head = { version: this.#head.version, opaque_schema: this.#head.opaque_schema };
+      this.#closed = [];
       this.#intake = { kind: "invalid", reason: error instanceof Error ? error.message : String(error) };
       return null;
     }
@@ -293,15 +303,22 @@ export class RichEngine {
       tr = tracked;
     }
     const state = before.apply(tr);
+    const user = tr.docChanged && !tr.getMeta(SYNC);
+    const blocks = user ? this.#admitted(before.doc, state.doc) : null;
+    if (user && !blocks) {
+      this.#refused = true;
+      this.#notify();
+      return;
+    }
     this.#view.updateState(state);
-    if (tr.docChanged && !tr.getMeta(SYNC)) {
+    if (blocks) {
       // Ciò che il documento ha, l'ha avuto: un taglia e incolla lo ritrova.
       collectKeys(state.doc, this.#known);
       const previous = this.#source;
       this.#source = writeHead({ ...this.#head, track: tracking(state.doc), page: (state.doc.attrs.page as Page | null) ?? undefined,
           header: (state.doc.attrs.header as RunningText | null) ?? undefined,
           footer: (state.doc.attrs.footer as RunningText | null) ?? undefined,
-          comments: commentsOf(state.doc) }) + this.#writer.write(state.doc).join(",") + "]}";
+          comments: commentsOf(state.doc) }) + blocks.join(",") + "]}";
       if (this.#source !== previous) {
         this.#options.onChange({
           text: this.#source,
@@ -317,6 +334,40 @@ export class RichEngine {
       this.#notify();
     }
     if (tr.selectionSet && !tr.docChanged) this.#paint();
+  }
+
+  /// I blocchi di `after` in JSON, se `after` tiene ciò che non si scrive:
+  /// i blocchi chiusi uguali e in ordine e, quando il documento si scrive
+  /// soltanto nel corpo, ciò che `before` aveva fuori.
+  #admitted(before: PmNode, after: PmNode): string[] | null {
+    const closed: string[] = [];
+    const blocks = this.#writer.write(after, closed);
+    if (closed.length !== this.#closed.length || closed.some((block, i) => block !== this.#closed[i])) return null;
+    if (this.bodyOnly() && !keepsOutside(before, after)) return null;
+    return blocks;
+  }
+
+  /// Il documento si scrive soltanto nel corpo: il formato non riscriverebbe
+  /// senza perdite qualcosa fuori, o un blocco chiuso.
+  bodyOnly(): boolean {
+    return this.#head.body_only === true;
+  }
+
+  /// Il documento ha blocchi chiusi.
+  hasClosed(): boolean {
+    return this.#closed.length > 0;
+  }
+
+  /// `command` si può eseguire e ciò che scrive entra: per chi mostra
+  /// un'azione che il catalogo non ha.
+  allows(command: Command): boolean {
+    if (!this.editable()) return false;
+    let admitted = true;
+    const state = this.#view.state;
+    const runs = command(state, (tr) => {
+      if (tr.docChanged) admitted &&= this.#admitted(state.doc, state.apply(tr).doc) !== null;
+    }, this.#view);
+    return runs && admitted;
   }
 
   /// Dà l'aspetto preso alla selezione, se ce n'è una finita.
@@ -383,7 +434,8 @@ export class RichEngine {
   /// (non da un modulo che resta aperto).
   apply(command: Command, focus = true): boolean {
     if (!this.editable()) return false;
-    const done = command(this.#view.state, (tr) => this.#view.dispatch(tr), this.#view);
+    this.#refused = false;
+    const done = command(this.#view.state, (tr) => this.#view.dispatch(tr), this.#view) && !this.#refused;
     if (done && focus) this.#view.focus();
     return done;
   }
@@ -402,7 +454,8 @@ export class RichEngine {
     const action = RICH_ACTIONS.get(id);
     if (!action || !this.editable()) return false;
     if (ASK_ACTIONS.has(id)) return action.run(this.#view.state) && this.#ask(id);
-    const done = action.run(this.#view.state, (tr) => this.#view.dispatch(tr), this.#view);
+    this.#refused = false;
+    const done = action.run(this.#view.state, (tr) => this.#view.dispatch(tr), this.#view) && !this.#refused;
     if (done) this.#view.focus();
     return done;
   }
@@ -410,13 +463,17 @@ export class RichEngine {
   actionState(id: string): { enabled: boolean; active: boolean | null } {
     if (!this.editable()) return { enabled: false, active: null };
     const state = richActionState(id, this.#view.state);
-    // Mentre si registra, un'azione che non si registra non si offre.
-    if (state.enabled && this.tracking() && !ASK_ACTIONS.has(id)) {
-      let recorded = true;
-      RICH_ACTIONS.get(id)!.run(this.#view.state, (tr) => {
-        recorded = trackable(tr);
+    // Mentre si registra, un'azione che non si registra non si offre; né
+    // un'azione che cambia ciò che non si scrive.
+    const guarded = this.hasClosed() || this.bodyOnly();
+    if (state.enabled && (this.tracking() || guarded) && !ASK_ACTIONS.has(id)) {
+      let offered = true;
+      const before = this.#view.state;
+      RICH_ACTIONS.get(id)!.run(before, (tr) => {
+        if (this.tracking()) offered &&= trackable(tr);
+        if (guarded && tr.docChanged) offered &&= this.#admitted(before.doc, before.apply(tr).doc) !== null;
       });
-      if (!recorded) return { ...state, enabled: false };
+      if (!offered) return { ...state, enabled: false };
     }
     return state;
   }

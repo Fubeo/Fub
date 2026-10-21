@@ -1060,5 +1060,11 @@ mod tests {
         assert_eq!(anchors(&locked, &[1, 3], &base, &copied), Ok(vec![(0, 1)]));
         let pairs = untouched_blocks(&base, &copied, &[(0, 1)]);
         assert_eq!(pairs, vec![(0, 1), (1, 2)]);
+        // Due blocchi chiusi scambiati non si ritrovano in ordine: la
+        // superficie non lascia fare lo scambio, e il formato lo dice.
+        let both = body(&["uno", "due"]);
+        let swapped = body(&["due", "uno"]);
+        let locked = BTreeSet::from([0, 1]);
+        assert!(anchors(&locked, &[0, 1], &both, &swapped).is_err());
     }
 }

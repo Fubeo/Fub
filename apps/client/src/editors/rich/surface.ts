@@ -202,7 +202,12 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     let text = failed ? t("rich.unavailable") : "";
     if (intake?.kind === "invalid") text = t("rich.invalid");
     else if (intake?.kind === "ok" && intake.readonly) text = t(READ_ONLY_KEYS[intake.readonly]);
-    else if (engine?.editable() && engine.tracking()) text = t("rich.track.notice");
+    else if (engine?.editable()) {
+      // Ciò che il formato non riscriverebbe resta com'è: lo si dice prima
+      // della registrazione, che vale per il resto.
+      const closed = engine.hasClosed() ? t("rich.locked.notice") : engine.bodyOnly() ? t("rich.body_only.notice") : "";
+      text = [closed, engine.tracking() ? t("rich.track.notice") : ""].filter(Boolean).join(" ");
+    }
     notice.textContent = text;
     notice.hidden = text === "";
     root.dataset.readonly = String(!(engine?.editable() ?? false));

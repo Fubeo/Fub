@@ -19,6 +19,7 @@ import { errorText } from "../../host/errors";
 import { onLanguage, t, type Key } from "../../i18n/strings";
 import {
   FONT_SIZES,
+  insertBreak,
   insertImage,
   insertNote,
   insertTable,
@@ -749,13 +750,16 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
           item.append(answer);
           said.focus();
         });
-        reply.disabled = !media.review;
+        // I commenti stanno fuori dal corpo: dove si scrive soltanto quello,
+        // si leggono e non si cambiano.
+        reply.disabled = !media.review || engine.bodyOnly();
         const resolve = action(comment.done ? "rich.comment.reopen" : "rich.comment.resolve", () => {
           done(engine.apply(resolveComment(id, !comment.done), false));
         });
         const remove = action("rich.comment.delete", () => {
           done(engine.apply(deleteComment(id), false));
         });
+        resolve.disabled = remove.disabled = engine.bodyOnly();
         actions.append(go, reply, resolve, remove);
         item.append(actions);
       }
@@ -770,9 +774,15 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
         for (const [id, place] of anchorsOf(state.doc)) if (place.start !== undefined && place.end !== undefined) out.add(id);
         return out;
       });
-      const can = media.review === true && engine.read(canComment);
+      const can = media.review === true && !engine.bodyOnly() && engine.read(canComment);
       text.disabled = !can;
-      hint.textContent = media.review ? (can ? "" : t("rich.comment.need_selection")) : t("rich.comment.unsupported");
+      hint.textContent = !media.review
+        ? t("rich.comment.unsupported")
+        : engine.bodyOnly()
+          ? t("rich.comment.body_only")
+          : can
+            ? ""
+            : t("rich.comment.need_selection");
       list.replaceChildren();
       const ids = new Set(all.map((c) => c.id));
       for (const comment of all) {
@@ -1502,16 +1512,22 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     find.disabled = !engine.actionState(FIND_ACTION).enabled;
     pageBreak.disabled = !engine.actionState("rich.break.page").enabled;
     columnBreak.disabled = !engine.actionState("rich.break.column").enabled;
-    table.disabled = !engine.editable() || !engine.read(insertTable(1, 1));
-    image.disabled = note.disabled = !engine.read(insertNote("·", false));
+    table.disabled = !engine.allows(insertTable(1, 1));
+    // Un'immagine entra dove entra un oggetto, e non in un blocco chiuso;
+    // una nota sta anche fuori dal corpo.
+    image.disabled = !engine.read(insertNote("·", false)) || !engine.allows(insertBreak("\n"));
+    note.disabled = !engine.allows(insertNote("·", false));
     merge.disabled = !engine.actionState("rich.table.merge").enabled;
     split.disabled = !engine.actionState("rich.table.split").enabled;
     comments.hidden = !media.review && engine.read((state) => commentsOf(state.doc).length === 0);
     track.hidden = !media.review && !engine.tracking();
+    track.disabled = !engine.allows(setTracking(!engine.tracking()));
     setPressed(track, engine.tracking());
     layout.hidden = engine.read(pageAt) === null;
     for (const control of [font, size, style, colorButton, highlightButton, painter, spacing, pageButton, runningButton, tocButton]) control.disabled = !free;
-    if (free) tocButton.disabled = !engine.read(insertToc(""));
+    if (free) tocButton.disabled = !engine.allows(insertToc(""));
+    // La pagina, le intestazioni e i piè di pagina stanno fuori dal corpo.
+    if (engine.bodyOnly()) pageButton.disabled = runningButton.disabled = true;
     if (!free) table.disabled = true;
     const tracked = engine.read(goToRevision(1));
     for (const control of revisionButtons) {

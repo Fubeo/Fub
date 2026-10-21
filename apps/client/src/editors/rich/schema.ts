@@ -178,7 +178,14 @@ const para: NodeSpec = {
       attrs["data-list"] = role.ordered ? "ordered" : "bullet";
     }
     if (node.attrs.k) attrs["data-rich-k"] = node.attrs.k as string;
-    if (node.attrs.locked) attrs["data-rich-locked"] = "";
+    // Un blocco chiuso non prende il cursore: ciò che vi si scrivesse non
+    // entrerebbe, e la battuta rifiutata non deve finire altrove.
+    if (node.attrs.locked) {
+      attrs.class += " rich-locked";
+      attrs["data-rich-locked"] = "";
+      attrs.contenteditable = "false";
+      attrs.title = t("rich.locked");
+    }
     const style: string[] = [];
     if (node.attrs.align) {
       attrs["data-rich-align"] = node.attrs.align as string;
@@ -278,7 +285,11 @@ const nodes: Record<string, NodeSpec> = {
     parseDOM: [{ tag: "table[data-rich-k]", getAttrs: keyOf }],
     toDOM: (node) => [
       "table",
-      { class: "rich-table", "data-rich-k": (node.attrs.k as string | null) ?? "", ...(node.attrs.locked ? { "data-rich-locked": "" } : {}) },
+      {
+        class: node.attrs.locked ? "rich-table rich-locked" : "rich-table",
+        "data-rich-k": (node.attrs.k as string | null) ?? "",
+        ...(node.attrs.locked ? { "data-rich-locked": "", contenteditable: "false", title: t("rich.locked") } : {}),
+      },
       ["tbody", 0],
     ],
   },
@@ -865,7 +876,9 @@ function tableOf(table: PmNode): Block {
 export class BlockWriter {
   readonly #cache = new WeakMap<PmNode, { readonly sect: PmNode | null; readonly json: string }>();
 
-  write(doc: PmNode): string[] {
+  /// I blocchi del documento in JSON; quelli chiusi anche in `closed`, se
+  /// c'è.
+  write(doc: PmNode, closed?: string[]): string[] {
     const out: string[] = [];
     const children: PmNode[] = [];
     doc.forEach((child) => children.push(child));
@@ -882,6 +895,7 @@ export class BlockWriter {
         this.#cache.set(child, { sect, json });
         out.push(json);
       }
+      if (closed && child.attrs.locked === true) closed.push(out[out.length - 1]!);
       if (sect) i += 1;
     }
     return out;

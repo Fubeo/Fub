@@ -6277,6 +6277,14 @@ kbd,
 .rich-table {
   margin-block: 0 var(--space-4);
 }
+/* Un blocco che il formato non riscriverebbe senza perdite: si legge e non si
+   cambia. Il fondo e il filo tratteggiato non toccano la sua disposizione. */
+.rich-locked {
+  background: var(--doc-fill);
+  outline: 1px dashed var(--doc-rule);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
 .rich-cell {
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--doc-rule-soft);
