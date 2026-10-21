@@ -78,7 +78,23 @@ function toggleWrap(open: string, close: string = open): StateCommand {
             backward ? EditorSelection.range(to, from) : EditorSelection.range(from, to);
           let { from, to } = range;
           let hadWord = from !== to;
-          if (from === to) {
+          if (from !== to) {
+            // Gli spazi ai bordi della selezione restano fuori dai marcatori:
+            // `**parola **` non è grassetto, e `* parola*` a inizio riga è una
+            // voce di lista. Una selezione di soli spazi non ha niente da
+            // formattare e riceve la coppia vuota alla fine.
+            const text = state.sliceDoc(from, to);
+            const lead = text.length - text.trimStart().length;
+            const trail = text.length - text.trimEnd().length;
+            if (lead === text.length) {
+              from = to;
+              hadWord = false;
+            } else {
+              from += lead;
+              to -= trail;
+            }
+          }
+          if (from === to && range.empty) {
             if (
               from >= open.length &&
               state.sliceDoc(from - open.length, from) === open &&
@@ -261,6 +277,12 @@ export const smartListEnter: StateCommand = ({ state, dispatch }) => {
     for (let n = line.number; n <= state.doc.lines; n++) {
       const row = n === line.number ? line : state.doc.line(n);
       const entry = n === line.number ? item : listItem(row.text);
+      // Una lista larga continua oltre le righe vuote, e la voce oltre le sue
+      // righe rientrate: si cercano le voci sorelle, non soltanto la riga dopo.
+      const body = row.text.slice(item.quote.length);
+      if (row.text.startsWith(item.quote) && (!entry || entry.kind === "quote") && !emptied.has(n)) {
+        if (body.trim() === "" || /^\s*/.exec(body)![0].length > item.indent.length) continue;
+      }
       if (!entry || entry.quote !== item.quote || emptied.has(n)) break;
       if (entry.indent.length > item.indent.length) continue;
       if (entry.indent.length < item.indent.length || entry.kind !== "ordered") break;
@@ -285,7 +307,14 @@ export const smartListEnter: StateCommand = ({ state, dispatch }) => {
     const { line, item } = owned[index];
     if (emptied.has(line.number)) {
       if (!removed.has(line.number)) {
-        edits.push({ from: line.from + item.quote.length, to: line.to });
+        // Una citazione vuota scende di un livello (`> > ` → `> `, `> ` → la
+        // riga nuda): il contenuto da togliere non c'è, il marcatore sì.
+        if (item.kind === "quote") {
+          const outer = item.quote.replace(/\s*>\s?$/, "");
+          edits.push({ from: line.from, to: line.to, insert: outer === "" ? "" : `${outer} ` });
+        } else {
+          edits.push({ from: line.from + item.quote.length, to: line.to });
+        }
         removed.add(line.number);
       }
       continue;
@@ -731,18 +760,25 @@ const autoPair = EditorView.inputHandler.of((view, from, to, text) => {
 
 // ── Il pacchetto ─────────────────────────────────────────────────────────────
 
+/// Un gesto di prosa: dentro il codice il testo è letterale, e l'accordo passa
+/// la mano come il pulsante della stessa azione, che lì è spento
+/// (`markdownActionState`). Il Tab nel codice rientra il codice, non la voce.
+export function prose(command: StateCommand): StateCommand {
+  return (target) => !isStrictlyInsideCode(target.state, target.state.selection.main.head) && command(target);
+}
+
 /// Gli accordi specifici del profilo Markdown, senza quelli della meccanica
 /// condivisa.
 const markdownKeymapPrefix: KeyBinding[] = [
-  { key: "Mod-b", run: toggleBold },
-  { key: "Mod-i", run: toggleItalic },
-  { key: "Mod-Shift-x", run: toggleStrikethrough },
+  { key: "Mod-b", run: prose(toggleBold) },
+  { key: "Mod-i", run: prose(toggleItalic) },
+  { key: "Mod-Shift-x", run: prose(toggleStrikethrough) },
   { key: "Mod-`", run: toggleInlineCode },
-  { key: "Mod-k", run: toggleWikilink },
+  { key: "Mod-k", run: prose(toggleWikilink) },
   { key: "Enter", run: smartListEnter },
-  { key: "Mod-Enter", run: toggleCheckbox },
-  { key: "Tab", run: indentListItem },
-  { key: "Shift-Tab", run: dedentListItem },
+  { key: "Mod-Enter", run: prose(toggleCheckbox) },
+  { key: "Tab", run: prose(indentListItem) },
+  { key: "Shift-Tab", run: prose(dedentListItem) },
   // Prima di `Alt-↑/↓` delle righe: sulla chiave di una proprietà si sposta
   // la voce intera, altrove passa la mano.
   { key: "Mod-;", run: addProperty },
@@ -751,8 +787,8 @@ const markdownKeymapPrefix: KeyBinding[] = [
 ];
 
 const markdownKeymapSuffix: KeyBinding[] = [
-  { key: "Mod-Shift-8", run: toggleBulletList },
-  { key: "Mod-Shift-7", run: toggleOrderedList },
+  { key: "Mod-Shift-8", run: prose(toggleBulletList) },
+  { key: "Mod-Shift-7", run: prose(toggleOrderedList) },
   { key: "Mod-Alt-ArrowUp", run: moveTableRow(-1) },
   { key: "Mod-Alt-ArrowDown", run: moveTableRow(1) },
   { key: "Mod-Alt-Shift-ArrowUp", run: insertTableRow("before") },

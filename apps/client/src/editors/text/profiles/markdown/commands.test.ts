@@ -15,6 +15,7 @@ import {
   sortTableRows,
   sortTableColumns,
   indentListItem,
+  markdownKeymap,
   smartListEnter,
   toggleBold,
   toggleBulletList,
@@ -82,6 +83,21 @@ function runReadOnly(cmd: StateCommand, spec: string): { handled: boolean; out: 
 }
 
 describe("formattazione inline", () => {
+  it("gli spazi ai bordi della selezione restano fuori dai marcatori", () => {
+    expect(run(toggleBold, "‹parola ›x").out).toBe("**‹parola›** x");
+    expect(run(toggleItalic, "‹ parola›").out).toBe(" *‹parola›*");
+    expect(run(toggleBold, "a‹  ›b").out).toBe("a  **|**b");
+    expect(run(toggleBold, "‹**parola** ›").out).toBe("‹parola› ");
+  });
+
+  it("nel codice gli accordi di prosa passano la mano", () => {
+    const bold = markdownKeymap.find((binding) => binding.key === "Mod-b")!.run!;
+    const bullet = markdownKeymap.find((binding) => binding.key === "Mod-Shift-8")!.run!;
+    expect(run(bold, "```js\nconst ‹x› = 1\n```").handled).toBe(false);
+    expect(run(bullet, "```\nr|iga\n```").handled).toBe(false);
+    expect(run(bold, "testo ‹x›").out).toBe("testo **‹x›**");
+  });
+
   it("avvolge la selezione", () => {
     expect(run(toggleBold, "ciao ‹mondo›").out).toBe("ciao **‹mondo›**");
   });
@@ -200,14 +216,26 @@ describe("smartListEnter", () => {
   });
 
   it("la rinumerazione scavalca le sottoliste e si ferma a fine lista", () => {
-    expect(run(smartListEnter, "1. a|\n   1. x\n2. b\n\n5. altra").out).toBe(
-      "1. a\n2. |\n   1. x\n3. b\n\n5. altra",
+    expect(run(smartListEnter, "1. a|\n   1. x\n2. b\n\nTesto\n\n5. altra").out).toBe(
+      "1. a\n2. |\n   1. x\n3. b\n\nTesto\n\n5. altra",
     );
+  });
+
+  it("la rinumerazione segue le voci sorelle oltre righe vuote e continuazioni", () => {
+    expect(run(smartListEnter, "1. a|\n\n2. b").out).toBe("1. a\n2. |\n\n3. b");
+    expect(run(smartListEnter, "1. a|\n   segue\n2. b\n\n\n3. c").out).toBe("1. a\n2. |\n   segue\n3. b\n\n\n4. c");
   });
 
   it("todo: la voce nuova nasce non spuntata", () => {
     expect(run(smartListEnter, "- [x] fatto|").out).toBe("- [x] fatto\n- [ ] |");
     expect(run(smartListEnter, "1. [x] fatto|").out).toBe("1. [x] fatto\n2. [ ] |");
+  });
+
+  it("una citazione vuota scende di un livello invece di restare ferma", () => {
+    expect(run(smartListEnter, "> |").out).toBe("|");
+    expect(run(smartListEnter, "> testo\n>\n> |").out).toBe("> testo\n>\n|");
+    expect(run(smartListEnter, "> > |").out).toBe("> |");
+    expect(run(smartListEnter, ">|").out).toBe("|");
   });
 
   it("citazioni: continua il >", () => {

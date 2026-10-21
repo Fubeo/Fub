@@ -54,6 +54,16 @@ function stateAt(id: string, spec: string) {
 }
 
 describe("titoli e paragrafo", () => {
+  it("un titolo Setext diventa ATX o paragrafo senza lasciare la sottolineatura", () => {
+    expect(run("markdown.heading.2", "Tito|lo\n======")).toBe("## Tito|lo");
+    expect(run("markdown.paragraph", "Tito|lo\n======")).toBe("Tito|lo");
+    expect(run("markdown.paragraph", "Titolo\n---|---")).toBe("Titolo|");
+    expect(run("markdown.heading.1", "Due| righe\ndi titolo\n---")).toBe("# Due| righe di titolo");
+    expect(stateAt("markdown.heading.1", "Tito|lo\n===").active).toBe(true);
+    expect(stateAt("markdown.heading.2", "Tito|lo\n---").active).toBe(true);
+    expect(run("markdown.heading.1", "Tito|lo\n===")).toBe("Tito|lo");
+  });
+
   it("fanno della riga un titolo, col cursore dove si stava scrivendo", () => {
     expect(run("markdown.heading.2", "Ciao| mondo")).toBe("## Ciao| mondo");
     expect(run("markdown.heading.1", "|")).toBe("# |");
@@ -151,6 +161,20 @@ describe("collegamenti e rimandi", () => {
     expect(stateAt("markdown.footnote.delete", "Testo| [^1]").enabled).toBe(false);
     expect(stateAt("markdown.footnote.delete", "Testo [^1|]").enabled).toBe(true);
   });
+
+  it("eliminare una nota lascia com'è il codice e il testo con escape", () => {
+    expect(run("markdown.footnote.delete", "Testo[^a|]\n\n`[^a]`\n\n[^a]: vera\n")).toBe("Testo|\n\n`[^a]`\n");
+    expect(run("markdown.footnote.delete", "Testo[^a|] e \\[^a]\n\n```\n[^a]\n[^a]: finta\n```\n\n[^a]: vera\n"))
+      .toBe("Testo| e \\[^a]\n\n```\n[^a]\n[^a]: finta\n```\n");
+    expect(stateAt("markdown.footnote.delete", "Testo `[^a|]`\n\n[^a]: x").enabled).toBe(false);
+    expect(stateAt("markdown.footnote.delete", "Testo \\[^a|]\n\n[^a]: x").enabled).toBe(false);
+  });
+
+  it("eliminare una nota toglie anche i blocchi rientrati che la continuano dopo una riga vuota", () => {
+    expect(run("markdown.footnote.delete", "Testo[^a|]\n\n[^a]: primo\n\n    secondo\n")).toBe("Testo|\n");
+    expect(run("markdown.footnote.delete", "Testo[^a|]\n\n[^a]: primo\n\n    secondo\n\nDopo.\n"))
+      .toBe("Testo|\n\nDopo.\n");
+  });
 });
 
 describe("liste", () => {
@@ -210,6 +234,16 @@ describe("blocchi", () => {
     expect(stateAt("markdown.mathblock", "$$\nx|\n$$").active).toBe(true);
     expect(stateAt("markdown.mathblock", "$$\na\n$$\n\ntesto|").active).toBe(false);
     expect(run("markdown.mathblock", "$$\nx|\n$$")).toBe("x|");
+  });
+
+  it("il blocco di formula accoppia i `$$` in ordine, attraversa le righe vuote e ignora il codice", () => {
+    expect(run("markdown.mathblock", "$$\na\n\nb|\n$$")).toBe("a\n\nb|");
+    expect(stateAt("markdown.mathblock", "$$\na\n$$\ntesto| esterno\n$$\nb\n$$").active).toBe(false);
+    expect(run("markdown.mathblock", "$$\na\n$$\ntesto| esterno\n$$\nb\n$$"))
+      .toBe("$$\na\n$$\n$$\ntesto| esterno\n$$\n$$\nb\n$$");
+    expect(stateAt("markdown.mathblock", "```text\n$$\nx|\n$$\n```").active).toBe(false);
+    expect(run("markdown.mathblock", "```text\n$$\nx|\n$$\n```")).toBe("```text\n$$\nx|\n$$\n```");
+    expect(run("markdown.mathblock", "$$\nb\n$|$")).toBe("b|");
   });
 
   it("la linea sta su righe sue, con una riga vuota sopra", () => {

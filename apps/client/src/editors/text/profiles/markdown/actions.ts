@@ -34,6 +34,7 @@ import {
   insertTableRow,
   moveTableColumn,
   moveTableRow,
+  prose,
   selectedLines,
   sortTableRows,
   toggleBold,
@@ -135,6 +136,51 @@ function headingLevel(text: string): number {
   return ATX.exec(text.slice(contentStart(text)))?.[1].length ?? 0;
 }
 
+/// Il titolo Setext (`Titolo` sopra `===` o `---`) di cui `line` fa parte,
+/// sottolineatura compresa: le righe del testo, la sottolineatura e il livello.
+interface Setext {
+  readonly first: Line;
+  readonly underline: Line;
+  readonly level: number;
+}
+
+function setextAt(state: EditorState, line: Line): Setext | null {
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(line.from + contentStart(line.text), 1); node; node = node.parent) {
+    if (node.name !== "SetextHeading1" && node.name !== "SetextHeading2") continue;
+    const first = state.doc.lineAt(node.from);
+    const underline = state.doc.lineAt(node.to);
+    if (underline.number === first.number) return null;
+    return { first, underline, level: node.name === "SetextHeading1" ? 1 : 2 };
+  }
+  return null;
+}
+
+/// Il livello del titolo della riga, ATX o Setext; `0` se non lo è.
+function lineHeading(state: EditorState, line: Line): number {
+  return setextAt(state, line)?.level ?? headingLevel(line.text);
+}
+
+/// Riscrive un titolo Setext al livello dato: un titolo ATX su una riga sola
+/// (le righe del testo si uniscono con uno spazio), o il paragrafo senza la
+/// sottolineatura. Il prefisso di citazione o di voce della prima riga resta.
+function rewriteSetext(state: EditorState, setext: Setext, level: number): ChangeSpec[] {
+  const doc = state.doc;
+  const last = doc.line(setext.underline.number - 1);
+  const specs: ChangeSpec[] = [{ from: last.to, to: setext.underline.to }];
+  if (level === 0) return specs;
+  // Modifiche piccole invece di una riscrittura: il cursore resta nel testo.
+  const indent = (line: Line) => {
+    const start = contentStart(line.text);
+    return start + /^[ \t]*/.exec(line.text.slice(start))![0].length;
+  };
+  specs.push({ from: setext.first.from + contentStart(setext.first.text), to: setext.first.from + indent(setext.first), insert: `${"#".repeat(level)} ` });
+  for (let n = setext.first.number + 1; n < setext.underline.number; n++) {
+    const line = doc.line(n);
+    specs.push({ from: doc.line(n - 1).to, to: line.from + indent(line), insert: " " });
+  }
+  return specs;
+}
+
 /// Le righe su cui agisce un'azione di riga: quelle della selezione, senza le
 /// vuote quando sono più d'una (un titolo su una riga vuota è un titolo da
 /// scrivere; dieci righe vuote in una selezione no) e senza il codice.
@@ -180,9 +226,17 @@ function setHeading(level: number): StateCommand {
     if (state.readOnly) return false;
     const lines = proseLines(state);
     if (lines.length === 0) return false;
-    const next = level > 0 && lines.every((line) => headingLevel(line.text) === level) ? 0 : level;
+    const next = level > 0 && lines.every((line) => lineHeading(state, line) === level) ? 0 : level;
     const specs: ChangeSpec[] = [];
+    const rewritten = new Set<number>();
     for (const line of lines) {
+      const setext = setextAt(state, line);
+      if (setext) {
+        if (rewritten.has(setext.first.number)) continue;
+        rewritten.add(setext.first.number);
+        if (setext.level !== next) specs.push(...rewriteSetext(state, setext, next));
+        continue;
+      }
       const start = contentStart(line.text);
       const match = ATX.exec(line.text.slice(start));
       const from = line.from + start;
@@ -198,7 +252,7 @@ function headingActive(level: number): (state: EditorState) => boolean {
   return (state) => {
     const line = state.doc.lineAt(state.selection.main.head);
     if (isStrictlyInsideCode(state, line.from)) return false;
-    return headingLevel(line.text) === level;
+    return lineHeading(state, line) === level;
   };
 }
 
@@ -374,30 +428,30 @@ function enclosingCodeFence(state: EditorState): Fence | null {
 }
 
 const MATH_FENCE = /^\s*\$\$\s*$/;
-/// Quante righe si guardano sopra e sotto per trovare i `$$` di un blocco di
-/// formula: il parser non lo conosce, e leggere il documento intero a ogni
-/// movimento del cursore sarebbe il costo sbagliato per un pulsante.
-const MATH_SCAN_LINES = 200;
 
+/// Il blocco di formula `$$` … `$$` che contiene il cursore. Le righe di soli
+/// `$$` fuori dal codice si accoppiano in ordine dall'inizio del documento,
+/// come le scrive chi le apre e le chiude: una chiusura non è mai l'apertura
+/// del blocco seguente, il testo fra due blocchi non sta in nessuno dei due, e
+/// le righe vuote nel corpo non lo spezzano. Un `$$` letterale in un recinto
+/// di codice non conta.
 function enclosingMathFence(state: EditorState): Fence | null {
-  const here = state.doc.lineAt(state.selection.main.head);
+  const doc = state.doc;
+  const here = doc.lineAt(state.selection.main.head).number;
   let open: Line | null = null;
-  for (let n = here.number; n >= Math.max(1, here.number - MATH_SCAN_LINES); n--) {
-    const line = state.doc.line(n);
-    if (MATH_FENCE.test(line.text)) {
+  let n = 0;
+  for (const text of doc.iterLines()) {
+    n += 1;
+    if (open === null && n > here) return null;
+    if (!text.includes("$$") || !MATH_FENCE.test(text)) continue;
+    const line = doc.line(n);
+    if (isStrictlyInsideCode(state, line.from + 1) || isStrictlyInsideCode(state, line.from)) continue;
+    if (open === null) {
       open = line;
-      break;
+      continue;
     }
-    if (n !== here.number && line.text.trim() === "") return null;
-  }
-  if (!open) return null;
-  const limit = Math.min(state.doc.lines, here.number + MATH_SCAN_LINES);
-  for (let n = open.number + 1; n <= limit; n++) {
-    const line = state.doc.line(n);
-    if (MATH_FENCE.test(line.text)) {
-      // Il cursore sulla riga di chiusura sta ancora nel blocco; oltre, no.
-      return here.number <= n ? { open, close: line } : null;
-    }
+    if (open.number <= here && here <= n) return { open, close: line };
+    open = null;
   }
   return null;
 }
@@ -464,7 +518,8 @@ function backtickFence(content: string): string {
 }
 
 const toggleCodeBlock = toggleFence(backtickFence, enclosingCodeFence);
-const toggleMathBlock = toggleFence(() => "$$", enclosingMathFence);
+/// Nel codice i `$$` sono testo: il blocco di formula non li tocca.
+const toggleMathBlock = prose(toggleFence(() => "$$", enclosingMathFence));
 
 // ── Inserimenti ──────────────────────────────────────────────────────────────
 
@@ -599,18 +654,49 @@ const insertFootnote: StateCommand = ({ state, dispatch }) => {
 };
 
 const FOOTNOTE_DEFINITION = /^\[\^([^\]\s]+)\]:/;
+const FOOTNOTE_REFERENCE = /\[\^([^\]\s]+)\]/g;
+
+/// Un `[^…]` che comincia a `from` della riga è sintassi: non sta nel codice
+/// (in riga o recintato) e la sua parentesi non segue un backslash. Il testo
+/// letterale non è un richiamo, e un comando che li toglie non lo tocca.
+function syntaxAt(state: EditorState, line: Line, at: number): boolean {
+  let slashes = 0;
+  while (at - slashes - 1 >= 0 && line.text[at - slashes - 1] === "\\") slashes++;
+  return slashes % 2 === 0 && !isStrictlyInsideCode(state, line.from + at + 1);
+}
+
+/// La definizione `[^id]: …` che apre la riga, se è sintassi.
+function definitionOn(state: EditorState, line: Line): string | null {
+  const match = FOOTNOTE_DEFINITION.exec(line.text);
+  return match && syntaxAt(state, line, 0) ? match[1]! : null;
+}
 
 /// La nota a piè di pagina sotto `pos`: il richiamo `[^id]` che lo contiene
 /// (i bordi compresi), o la riga della definizione `[^id]: …`.
 export function footnoteAt(state: EditorState, pos: number): string | null {
   const line = state.doc.lineAt(pos);
-  const definition = FOOTNOTE_DEFINITION.exec(line.text);
-  if (definition) return definition[1]!;
-  for (const match of line.text.matchAll(/\[\^([^\]\s]+)\]/g)) {
+  const definition = definitionOn(state, line);
+  if (definition !== null) return definition;
+  for (const match of line.text.matchAll(FOOTNOTE_REFERENCE)) {
     const from = line.from + match.index;
-    if (pos >= from && pos <= from + match[0].length) return match[1]!;
+    if (pos >= from && pos <= from + match[0].length && syntaxAt(state, line, match.index)) return match[1]!;
   }
   return null;
+}
+
+/// L'ultima riga della definizione che comincia su `line`: le righe rientrate
+/// che la seguono, e dopo righe vuote i blocchi rientrati di quattro spazi (o
+/// una tabulazione) che continuano la stessa nota, come li legge il provider.
+function definitionEnd(doc: EditorState["doc"], line: Line): Line {
+  let last = line;
+  for (let n = line.number + 1; n <= doc.lines; n++) {
+    const next = doc.line(n);
+    if (next.text.trim() === "") continue;
+    const continues = n === last.number + 1 ? /^(\t| {2,})/ : /^(\t| {4})/;
+    if (!continues.test(next.text)) break;
+    last = next;
+  }
+  return last;
 }
 
 /// Toglie la nota a piè di pagina sotto `pos`: ogni suo richiamo e la sua
@@ -623,19 +709,17 @@ export function deleteFootnoteAt(pos: number): StateCommand {
     const id = footnoteAt(state, pos);
     if (id === null) return false;
     const doc = state.doc;
-    const reference = `[^${id}]`;
     const changes: { from: number; to: number; insert?: string }[] = [];
     for (let n = 1; n <= doc.lines; n++) {
       const line = doc.line(n);
-      if (FOOTNOTE_DEFINITION.exec(line.text)?.[1] === id) {
-        let last = line;
-        while (last.number < doc.lines) {
-          const next = doc.line(last.number + 1);
-          if (next.text.trim() === "" || !/^(\t| {2,})/.test(next.text)) break;
-          last = next;
-        }
+      if (definitionOn(state, line) === id) {
+        const last = definitionEnd(doc, line);
         let from = line.from;
-        let to = last.number < doc.lines ? last.to + 1 : last.to;
+        // Le righe vuote dopo la nota se ne vanno con lei: quella prima resta
+        // a separare ciò che la circondava.
+        let end = last;
+        while (end.number < doc.lines && doc.line(end.number + 1).text.trim() === "") end = doc.line(end.number + 1);
+        let to = end.number < doc.lines ? end.to + 1 : end.to;
         let insert = "";
         if (doc.sliceString(to).trim() === "") {
           let before = line.number - 1;
@@ -648,8 +732,9 @@ export function deleteFootnoteAt(pos: number): StateCommand {
         n = last.number;
         continue;
       }
-      for (let at = line.text.indexOf(reference); at >= 0; at = line.text.indexOf(reference, at + reference.length)) {
-        changes.push({ from: line.from + at, to: line.from + at + reference.length });
+      for (const match of line.text.matchAll(FOOTNOTE_REFERENCE)) {
+        if (match[1] !== id || !syntaxAt(state, line, match.index)) continue;
+        changes.push({ from: line.from + match.index, to: line.from + match.index + match[0].length });
       }
     }
     dispatch(state.update({ changes, scrollIntoView: true, userEvent: "delete" }));
