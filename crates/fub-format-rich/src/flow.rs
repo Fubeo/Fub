@@ -49,7 +49,7 @@ use quick_xml::NsReader;
 
 use crate::inventory::{
     described, read_rels, renumbered, resolve, skipped_attribute, skipped_element, ContentTypes,
-    InventoryError, Limits, Zip, MARKERS, NS_MC, NS_RELATIONSHIPS, NS_W, WRAPPERS,
+    InventoryError, Limits, Relationship, Zip, MARKERS, NS_MC, NS_RELATIONSHIPS, NS_W, WRAPPERS,
 };
 
 /// Le voci di una proprietà o di un contesto, ordinate: tutte, e quelle che
@@ -179,6 +179,12 @@ pub(crate) struct Unit {
 /// Il corpo del documento principale, letto.
 #[derive(Debug)]
 pub(crate) struct Scan {
+    /// Il tag di apertura di `w:document`, con le dichiarazioni degli spazi
+    /// dei nomi.
+    pub root: Range<usize>,
+    /// Dove finisce l'apertura di `w:body`: i byte prima sono il prologo.
+    pub head: usize,
+    pub units: Vec<Unit>,
     /// La sezione finale, `w:sectPr` figlio di `w:body`; vuota, alla fine del
     /// corpo, se non c'è.
     pub sect: Range<usize>,
@@ -626,24 +632,28 @@ impl<'a> Scanner<'a> {
 
     fn document(&mut self, len: usize) -> Result<Scan, ScanError> {
         // L'elemento radice.
-        loop {
+        let root = loop {
             match self.next()? {
-                Ev::Start(el) if el.is_w("document") => break,
+                Ev::Start(el) if el.is_w("document") => break el,
                 Ev::Start(_) | Ev::Empty(_) => return Err(ScanError::Shape("root")),
                 Ev::Eof => return Err(xml_error("no root element")),
                 _ => {}
             }
-        }
+        };
+        let root = root.start..self.position();
         let mut scan = None;
         loop {
             match self.next()? {
                 Ev::Start(el) if el.is_w("body") && scan.is_none() => {
-                    scan = Some(self.body()?);
+                    scan = Some(self.body(root.clone())?);
                 }
                 Ev::Start(_) => self.skip(false)?,
                 Ev::Empty(el) if el.is_w("body") && scan.is_none() => {
                     let head = self.position();
                     scan = Some(Scan {
+                        root: root.clone(),
+                        head,
+                        units: Vec::new(),
                         sect: head..head,
                         blocks: Vec::new(),
                     });
@@ -667,7 +677,7 @@ impl<'a> Scanner<'a> {
         Ok(scan)
     }
 
-    fn body(&mut self) -> Result<Scan, ScanError> {
+    fn body(&mut self, root: Range<usize>) -> Result<Scan, ScanError> {
         let head = self.position();
         let mut units: Vec<Unit> = Vec::new();
         let (mut unit_start, mut unit_block) = (head, 0usize);
@@ -730,6 +740,9 @@ impl<'a> Scanner<'a> {
             }
         }
         Ok(Scan {
+            root,
+            head,
+            units,
             sect,
             blocks: std::mem::take(&mut self.blocks),
         })
@@ -1397,11 +1410,21 @@ enum Piece {
     Instr(String),
 }
 
+/// Il documento principale di un pacchetto: la parte, i suoi byte letti e il
+/// suo corpo come flusso.
+pub(crate) struct Main {
+    pub zip: Zip,
+    pub types: ContentTypes,
+    pub part: String,
+    pub rels: Vec<Relationship>,
+    pub scan: Scan,
+}
+
 const OFFICE_DOCUMENT: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
 
-/// Legge il corpo del documento principale di un pacchetto.
-pub(crate) fn main_of(bytes: &[u8], limits: &Limits) -> Result<Scan, ScanError> {
+/// Legge il pacchetto e il corpo del suo documento principale.
+pub(crate) fn main_of(bytes: &[u8], limits: &Limits) -> Result<Main, ScanError> {
     let zip = Zip::read(bytes, limits)?;
     let types = ContentTypes::read(&zip, limits)?;
     let root = read_rels(&zip, "", limits)?;
@@ -1416,7 +1439,14 @@ pub(crate) fn main_of(bytes: &[u8], limits: &Limits) -> Result<Scan, ScanError> 
         .ok_or(ScanError::Shape("no main document"))?;
     let rels = read_rels(&zip, &part, limits)?;
     let by_id = described(&zip, &types, &part, &rels);
-    scan(xml, &by_id, limits)
+    let scan = scan(xml, &by_id, limits)?;
+    Ok(Main {
+        zip,
+        types,
+        part,
+        rels,
+        scan,
+    })
 }
 
 /// Le voci di `before` che `after` non ha; le due liste sono ordinate.
@@ -1642,6 +1672,35 @@ mod tests {
         );
     }
 
+    #[test]
+    fn le_unità_coprono_il_corpo() {
+        let body = concat!(
+            r#"<w:bookmarkStart w:id="1" w:name="a"/><w:p><w:r><w:t>uno</w:t></w:r></w:p>"#,
+            r#"<w:sdt><w:sdtContent><w:p/><w:p/></w:sdtContent></w:sdt>"#,
+            r#"<w:p/><w:bookmarkEnd w:id="1"/>"#,
+            r#"<w:sectPr><w:pgSz w:w="11906"/></w:sectPr>"#,
+        );
+        let xml = format!(r#"<w:document {W}><w:body>{body}</w:body></w:document>"#);
+        let scan = scan(xml.as_bytes(), &BTreeMap::new(), &crate::inventory::LIMITS).unwrap();
+        let pieces: Vec<&str> = scan.units.iter().map(|u| &xml[u.bytes.clone()]).collect();
+        assert_eq!(
+            pieces,
+            vec![
+                r#"<w:bookmarkStart w:id="1" w:name="a"/><w:p><w:r><w:t>uno</w:t></w:r></w:p>"#,
+                r#"<w:sdt><w:sdtContent><w:p/><w:p/></w:sdtContent></w:sdt>"#,
+                r#"<w:p/><w:bookmarkEnd w:id="1"/>"#,
+            ]
+        );
+        let blocks: Vec<_> = scan.units.iter().map(|u| u.blocks.clone()).collect();
+        assert_eq!(blocks, vec![0..1, 1..3, 3..4]);
+        assert_eq!(
+            &xml[scan.sect.clone()],
+            r#"<w:sectPr><w:pgSz w:w="11906"/></w:sectPr>"#
+        );
+        assert_eq!(&xml[..scan.head], &xml[..xml.find("<w:body>").unwrap() + 8]);
+        assert!(xml[scan.root.clone()].starts_with("<w:document "));
+    }
+
     /// Il resoconto sul corpus: `cargo test -p fub-format-rich --lib
     /// flow::tests::corpus -- --ignored --nocapture`.
     #[test]
@@ -1676,10 +1735,14 @@ mod tests {
                     continue;
                 }
             };
-            let (ob, db, mb) = (o.blocks.len(), d.blocks.len(), document.body.len());
+            let (ob, db, mb) = (
+                o.scan.blocks.len(),
+                d.scan.blocks.len(),
+                document.body.len(),
+            );
             let mut lossy = Vec::new();
             if ob == db {
-                for (at, (b, a)) in o.blocks.iter().zip(&d.blocks).enumerate() {
+                for (at, (b, a)) in o.scan.blocks.iter().zip(&d.scan.blocks).enumerate() {
                     if let Err(why) = carries(b, a) {
                         lossy.push(format!("{at}: {why}"));
                     }
@@ -1690,7 +1753,7 @@ mod tests {
                 println!("    {line}");
             }
             if ob == db && std::env::var("FLOW_DETAIL").is_ok() {
-                for (b, a) in o.blocks.iter().zip(&d.blocks) {
+                for (b, a) in o.scan.blocks.iter().zip(&d.scan.blocks) {
                     let objs = |t: &[Token]| -> Vec<Arc<Obj>> {
                         t.iter()
                             .filter_map(|t| match t {

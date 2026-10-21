@@ -91,7 +91,14 @@ l'IPC.
   che non si legge come flusso con i blocchi del modello apre in sola
   lettura. La prova a vuoto accettata si ricorda per l'impronta dei byte del file (il
   writer è deterministico, e il banco del corpus lo prova): il salvataggio
-  dopo l'apertura degli stessi byte non la rifà. Le normalizzazioni
+  dopo l'apertura degli stessi byte non la rifà. Quando fuori dal corpo
+  niente è cambiato, il salvataggio è un **innesto** (`graft.rs`,
+  [0215](../decisions/0215-salvataggio-docx-per-innesto.md)): il file
+  com'era, con le sole unità toccate del corpo prese dai byte del codec e i
+  loro riferimenti riportati a quelli del file (relazioni; segnalibri per
+  nome; commenti, note e permessi per identità; numeri unici nuovi). Si
+  rilegge e si controlla contro il file come i byte del codec, e ciò che non
+  sa trattare ripiega sulla scrittura intera. Le normalizzazioni
   dichiarate (`NORMALIZATIONS` in `inventory.rs`, ciascuna con la sua
   ragione) non si contano: gli `w:rsid*`, `w:proofErr`,
   `w:lastRenderedPageBreak`, gli `w14:paraId`/`w14:textId` e i loro rimandi

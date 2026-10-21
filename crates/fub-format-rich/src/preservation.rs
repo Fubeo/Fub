@@ -88,8 +88,8 @@ pub(crate) fn check_open(original: &[u8], dry: &[u8], blocks: usize) -> Result<B
     let o_inventory = inventory(original).map_err(Finding::Unreadable)?;
     let d_inventory = inventory(dry).map_err(Finding::Unreadable)?;
     findings(open_differences(&o_inventory, &d_inventory))?;
-    let file = body_flow(original, blocks)?;
-    let written = body_flow(dry, blocks)?;
+    let file = body_flow(original, blocks)?.scan.blocks;
+    let written = body_flow(dry, blocks)?.scan.blocks;
     for (at, (before, after)) in file.iter().zip(&written).enumerate() {
         flow::carries(before, after).map_err(|why| Finding::Flow(format!("block {at}: {why}")))?;
     }
@@ -99,17 +99,18 @@ pub(crate) fn check_open(original: &[u8], dry: &[u8], blocks: usize) -> Result<B
     })
 }
 
-/// Il flusso dei blocchi del corpo, che devono essere i `blocks` del modello.
-fn body_flow(bytes: &[u8], blocks: usize) -> Result<Vec<Vec<Token>>, Finding> {
-    let scan = flow::main_of(bytes, &inventory::LIMITS)
+/// Il pacchetto con il flusso del corpo, i cui blocchi devono essere i
+/// `blocks` del modello.
+fn body_flow(bytes: &[u8], blocks: usize) -> Result<flow::Main, Finding> {
+    let main = flow::main_of(bytes, &inventory::LIMITS)
         .map_err(|error| Finding::Flow(error.to_string()))?;
-    if scan.blocks.len() != blocks {
+    if main.scan.blocks.len() != blocks {
         return Err(Finding::Flow(format!(
             "body blocks: {blocks} in the model, {} in the flow",
-            scan.blocks.len()
+            main.scan.blocks.len()
         )));
     }
-    Ok(scan.blocks)
+    Ok(main)
 }
 
 /// La regola sul flusso al salvataggio, fra i blocchi del file e quelli
@@ -141,24 +142,64 @@ fn check_flow(
 }
 
 /// La regola a ogni salvataggio. `baseline` è la prova a vuoto di `base`,
-/// `new` sono i byte che il codec ha scritto per `wanted`.
+/// `new` sono i byte che il codec ha scritto per `wanted`, `pairs` i blocchi
+/// che l'utente non ha toccato ([`untouched_blocks`]). Dà i byte nuovi letti,
+/// per l'innesto.
 pub(crate) fn check_save(
     baseline: &Baseline,
     new: &[u8],
     base: &Document,
     wanted: &Document,
-) -> Result<(), Finding> {
-    let pairs = untouched_blocks(base, wanted);
+    pairs: &[(usize, usize)],
+) -> Result<flow::Main, Finding> {
     let inventoried = inventory(new).map_err(Finding::Unreadable)?;
     findings(save_differences(
         &baseline.dry,
         &inventoried,
         base,
         wanted,
-        &pairs,
+        pairs,
     ))?;
     let written = body_flow(new, wanted.body.len())?;
-    check_flow(&baseline.file, &written, &pairs).map_err(Finding::Flow)
+    check_flow(&baseline.file, &written.scan.blocks, pairs).map_err(Finding::Flow)?;
+    Ok(written)
+}
+
+/// La regola su un innesto ([`crate::graft`]): la stessa del salvataggio,
+/// con il file al posto della prova a vuoto, perché ciò che l'innesto non
+/// tocca sono i byte del file.
+pub(crate) fn check_graft(
+    baseline: &Baseline,
+    original: &[u8],
+    grafted: &[u8],
+    base: &Document,
+    wanted: &Document,
+    pairs: &[(usize, usize)],
+) -> Result<(), Finding> {
+    let before = inventory(original).map_err(Finding::Unreadable)?;
+    let after = inventory(grafted).map_err(Finding::Unreadable)?;
+    // La radice dichiara ignorabili gli spazi dei nomi che le unità scritte
+    // usano: un'aggiunta lì è dell'innesto.
+    let ignorable = format!(
+        "{DOCUMENT}: {{{}}}document @{{{}}}Ignorable=",
+        inventory::NS_W,
+        inventory::NS_MC
+    );
+    let differences = save_differences(&before, &after, base, wanted, pairs)
+        .into_iter()
+        .filter(|d| !(d.after > d.before && d.key.starts_with(&ignorable)))
+        .collect();
+    findings(differences)?;
+    let written = body_flow(grafted, wanted.body.len())?;
+    check_flow(&baseline.file, &written.scan.blocks, pairs).map_err(Finding::Flow)
+}
+
+/// Se un salvataggio con queste coppie cambia soltanto il corpo del documento
+/// principale e le sue relazioni: allora si può innestare.
+pub(crate) fn body_only(base: &Document, wanted: &Document, pairs: &[(usize, usize)]) -> bool {
+    touched_regions(base, wanted, pairs)
+        .into_iter()
+        .all(|region| region == "document→")
 }
 
 /// Quante prove a vuoto si ricordano.
@@ -197,6 +238,8 @@ pub(crate) fn remember(key: String, baseline: Arc<Baseline>) {
     baselines.push_back((key, baseline));
 }
 
+/// Le differenze fra la base `dry` (la prova a vuoto, o il file per un
+/// innesto) e i byte nuovi `new`, per il salvataggio di `wanted` su `base`.
 fn save_differences(
     dry: &Inventory,
     new: &Inventory,
@@ -596,6 +639,15 @@ mod tests {
         (base, wanted, file, dry, new)
     }
 
+    fn save(
+        baseline: &Baseline,
+        new: &[u8],
+        base: &Document,
+        wanted: &Document,
+    ) -> Result<(), Finding> {
+        check_save(baseline, new, base, wanted, &untouched_blocks(base, wanted)).map(|_| ())
+    }
+
     /// La base accettata di un file che è la prova a vuoto della scena, con i
     /// suoi tre blocchi.
     fn baseline(dry: &[u8]) -> Baseline {
@@ -605,7 +657,7 @@ mod tests {
     #[test]
     fn i_byte_del_codec_passano() {
         let (base, wanted, dry, new) = scene();
-        assert_eq!(check_save(&baseline(&dry), &new, &base, &wanted), Ok(()));
+        assert_eq!(save(&baseline(&dry), &new, &base, &wanted), Ok(()));
     }
 
     /// Un elemento che il modello non possiede, sparito da un blocco che
@@ -623,8 +675,7 @@ mod tests {
             },
             &[],
         );
-        let Err(Finding::Differences(found)) = check_save(&baseline(&dry), &new, &base, &wanted)
-        else {
+        let Err(Finding::Differences(found)) = save(&baseline(&dry), &new, &base, &wanted) else {
             panic!("la perdita è passata")
         };
         assert!(
@@ -675,8 +726,7 @@ mod tests {
             },
             &[("word/media/copia.png", PNG)],
         );
-        let Err(Finding::Differences(found)) = check_save(&baseline(&dry), &new, &base, &wanted)
-        else {
+        let Err(Finding::Differences(found)) = save(&baseline(&dry), &new, &base, &wanted) else {
             panic!("la copia doppia è passata")
         };
         assert!(
@@ -704,8 +754,7 @@ mod tests {
             "{found:?}"
         );
         let new = rewrite(&new, "word/document.xml", other, &[]);
-        let Err(Finding::Differences(found)) = check_save(&baseline(&dry), &new, &base, &wanted)
-        else {
+        let Err(Finding::Differences(found)) = save(&baseline(&dry), &new, &base, &wanted) else {
             panic!("il valore cambiato è passato al salvataggio")
         };
         assert!(found.iter().any(|d| d.key.contains("block 0")), "{found:?}");
@@ -721,8 +770,7 @@ mod tests {
             |xml| xml.replace(">Primo<", ">Prima<"),
             &[],
         );
-        let Err(Finding::Differences(found)) = check_save(&baseline(&dry), &new, &base, &wanted)
-        else {
+        let Err(Finding::Differences(found)) = save(&baseline(&dry), &new, &base, &wanted) else {
             panic!("il testo cambiato è passato")
         };
         assert!(
@@ -756,7 +804,7 @@ mod tests {
             "{why}"
         );
         let new = rewrite(&new, "word/document.xml", moved, &[]);
-        let Err(Finding::Flow(why)) = check_save(&baseline(&dry), &new, &base, &wanted) else {
+        let Err(Finding::Flow(why)) = save(&baseline(&dry), &new, &base, &wanted) else {
             panic!("il segno spostato è passato al salvataggio")
         };
         assert!(why.starts_with("block 0"), "{why}");
@@ -781,7 +829,7 @@ mod tests {
         // di quel paragrafo, cambiato, non l'hanno.
         let file = rewrite(&dry, "word/document.xml", with_lang, &[]);
         let accepted = check_open(&file, &file, 3).expect("il file si accetta");
-        let Err(Finding::Flow(why)) = check_save(&accepted, &new, &base, &wanted) else {
+        let Err(Finding::Flow(why)) = save(&accepted, &new, &base, &wanted) else {
             panic!("la lingua persa è passata")
         };
         assert!(
@@ -789,7 +837,7 @@ mod tests {
             "{why}"
         );
         let kept = rewrite(&new, "word/document.xml", with_lang, &[]);
-        assert_eq!(check_save(&accepted, &kept, &base, &wanted), Ok(()));
+        assert_eq!(save(&accepted, &kept, &base, &wanted), Ok(()));
     }
 
     /// La prova a vuoto accettata si ricorda per l'impronta dei byte: altri

@@ -46,3 +46,4 @@ Nuove decisioni usano il [template](template.md).
 | [0211 — HTML, testo, LaTeX e Word XML sono copie esportate, con la perdita misurata](0211-copie-esportate-con-la-perdita-misurata.md) | accolta | contratto | — |
 | [0212 — La preservazione di un `.docx` si misura sul pacchetto, e la garanzia è di Fub](0212-preservazione-misurata-sul-pacchetto.md) | accolta | storage | — |
 | [0213 — I motori esterni sono una copia derivata, con proprietari e aggiornamenti decisi](0213-provenienza-dei-motori-esterni.md) | accolta | sicurezza | — |
+| [0215 — Un salvataggio che tocca soltanto il corpo di un `.docx` è un innesto nel file com'era](0215-salvataggio-docx-per-innesto.md) | accolta | storage | — |

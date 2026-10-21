@@ -290,6 +290,8 @@ pub(crate) struct Zip {
     /// Per nome in minuscolo, senza la barra iniziale: in OPC i nomi delle
     /// parti non distinguono maiuscole e minuscole.
     pub parts: BTreeMap<String, Vec<u8>>,
+    /// Il nome di ogni voce come lo zip lo scrive, nell'ordine dello zip.
+    pub names: Vec<String>,
 }
 
 fn zip_error(error: impl fmt::Display) -> InventoryError {
@@ -313,6 +315,7 @@ impl Zip {
             }
         }
         let mut parts = BTreeMap::new();
+        let mut names = Vec::new();
         let mut total = 0u64;
         for index in 0..archive.len() {
             let mut file = archive.by_index(index).map_err(zip_error)?;
@@ -340,8 +343,9 @@ impl Zip {
             if parts.insert(key, out).is_some() {
                 return Err(InventoryError::Zip(format!("duplicate entry {name}")));
             }
+            names.push(name);
         }
-        Ok(Zip { parts })
+        Ok(Zip { parts, names })
     }
 }
 

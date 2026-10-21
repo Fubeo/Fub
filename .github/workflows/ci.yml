@@ -167,6 +167,23 @@ jobs:
           CARGO_TARGET_DIR: target/wordcraft
         run: cargo test --manifest-path vendor/wordcraft/Cargo.toml --workspace --locked --no-fail-fast
 
+  libreoffice:
+    name: i docx innestati, riletti da LibreOffice
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: LibreOffice senza interfaccia
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer-nogui
+      - name: un salvataggio innestato si legge come il file di partenza
+        env:
+          FUB_SOFFICE: soffice
+        run: cargo test -p fub-format-rich --test graft -- --nocapture
+
   docs:
     name: documentazione canonica
     if: github.event_name != 'schedule'

@@ -140,10 +140,46 @@ pub fn save(codec: Codec, current: &[u8], json: &str) -> Result<Saved, RichError
             baseline
         }
     };
-    if preservation::check_save(&baseline, &bytes, &base, &wanted).is_err() {
+    let pairs = preservation::untouched_blocks(&base, &wanted);
+    let Ok(written) = preservation::check_save(&baseline, &bytes, &base, &wanted, &pairs) else {
         return Err(RichError::Fidelity);
+    };
+    // Quando fuori dal corpo niente è cambiato, il file nuovo è un innesto:
+    // il file com'era, con le unità toccate prese dai byte del codec. Se
+    // l'innesto non si fa, i byte del codec sono già controllati.
+    if preservation::body_only(&base, &wanted, &pairs) {
+        if let Some(grafted) = grafted(codec, current, &written, &base, &wanted, &pairs, &baseline)
+        {
+            return Ok(Saved::Bytes(grafted));
+        }
     }
     Ok(Saved::Bytes(bytes))
+}
+
+/// L'innesto del salvataggio ([`crate::graft`]), riletto e controllato come i
+/// byte del codec; `None` se non si fa.
+fn grafted(
+    codec: Codec,
+    current: &[u8],
+    written: &crate::flow::Main,
+    base: &Document,
+    wanted: &Document,
+    pairs: &[(usize, usize)],
+    baseline: &preservation::Baseline,
+) -> Option<Vec<u8>> {
+    let limits = &crate::inventory::LIMITS;
+    let file = crate::flow::main_of(current, limits).ok()?;
+    if file.scan.blocks.len() != base.body.len() {
+        return None;
+    }
+    let pieces = crate::graft::plan(&file, written, pairs).ok()?;
+    let out = crate::graft::graft(current, &file, written, base, wanted, &pieces, limits).ok()?;
+    let read = codec.read(&out).ok()?;
+    if !reads_back(wanted, &normalized(&read)) {
+        return None;
+    }
+    preservation::check_graft(baseline, current, &out, base, wanted, pairs).ok()?;
+    Some(out)
 }
 
 /// I byte di un documento vuoto: la base di chi scrive una proiezione in un
