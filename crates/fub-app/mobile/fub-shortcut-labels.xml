@@ -4,4 +4,5 @@
     <string name="fub_shortcut_daily">Giornaliera</string>
     <string name="fub_shortcut_search">Cerca</string>
     <string name="fub_shortcut_switcher">Vai alla nota</string>
+    <string name="fub_widget_desc">Nuova nota, giornaliera, ricerca e cambio nota con un tocco</string>
 </resources>
