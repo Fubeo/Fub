@@ -34,6 +34,9 @@ import {
 export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onOpenWikilink: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
   readonly onOpenPath: (path: string, from?: string) => void | Promise<void>;
+  /// Scarica nel vault un'immagine remota di una nota, col consenso
+  /// dell'utente: il link relativo del file, o `null` se ha detto di no.
+  readonly onImportRemoteImage?: (url: string, from: string) => Promise<string | null>;
   readonly onOpenDocument: (doc: string) => void | Promise<void>;
   readonly onSearchTag: (tag: string) => void;
   readonly completions: CompletionSources;
@@ -202,6 +205,7 @@ export function createDocumentSurfaceRegistry(
             onSelectionChange: () => options.onSelectionChange(context.paneId),
             onOpenWikilink: options.onOpenWikilink,
             onOpenPath: options.onOpenPath,
+            onImportRemoteImage: options.onImportRemoteImage,
             onSearchTag: options.onSearchTag,
             completions: options.completions,
             slash: options.slash,

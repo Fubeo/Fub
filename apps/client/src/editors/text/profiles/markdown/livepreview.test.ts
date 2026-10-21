@@ -529,7 +529,10 @@ describe("immagini in mezzo al testo", () => {
   });
 
   it("gli URL, i riferimenti e le destinazioni fra `<…>` seguono la regola del vault", () => {
-    expect(ofKind(decorate("x ![a](https://e.test/a.png) y"), "image")).toEqual([]);
+    // Un'immagine remota diventa il segnaposto della Lettura, che non la
+    // carica (L04); un altro schema resta sorgente.
+    expect(ofKind(decorate("x ![a](https://e.test/a.png) y"), "image").map((d) => d.data))
+      .toEqual(['<img src="https://e.test/a.png" alt="a">']);
     expect(ofKind(decorate("x ![a](data:image/png;base64,AA) y"), "image")).toEqual([]);
     // Un riferimento si risolve come in Lettura (L02), e la destinazione
     // della definizione segue la stessa regola.
@@ -537,7 +540,8 @@ describe("immagini in mezzo al testo", () => {
       .toEqual(['<img src="a.png" alt="a" title="t">']);
     expect(ofKind(decorate("x ![porto] y\n\n[Porto]: <foto/porto.png>"), "image").map((d) => d.data))
       .toEqual(['<img src="foto/porto.png" alt="porto">']);
-    expect(ofKind(decorate("x ![a][ref] y\n\n[ref]: https://e.test/a.png"), "image")).toEqual([]);
+    expect(ofKind(decorate("x ![a][ref] y\n\n[ref]: https://e.test/a.png"), "image").map((d) => d.data))
+      .toEqual(['<img src="https://e.test/a.png" alt="a">']);
     expect(ofKind(decorate("x ![a][nessuno] y"), "image")).toEqual([]);
     expect(ofKind(decorate("x ![**gatto**](g.png) y"), "image").map((d) => d.data))
       .toEqual(['<img src="g.png" alt="gatto">']);

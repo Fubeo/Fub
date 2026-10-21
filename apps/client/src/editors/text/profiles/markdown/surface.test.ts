@@ -147,6 +147,51 @@ describe("la superficie Markdown", () => {
     expect(ed.buffer.getDoc()).toBe("- [ ] da fare\n");
     ed.destroy();
   });
+  it("un'immagine remota si scarica col gesto della Lettura e la nota punta al file (L04)", async () => {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const asked: Array<[string, string]> = [];
+    const ed = mountMarkdownSurface({ paneId: "riquadro", documentId: "notes/current.md", parent }, {
+      onChange: () => {},
+      onSelectionChange: () => {},
+      onOpenWikilink: () => {},
+      onOpenPath: () => {},
+      onImportRemoteImage: async (url, from) => {
+        asked.push([url, from]);
+        return "../attachments/a.png";
+      },
+      onSearchTag: () => {},
+      completions: { searchNotes: async () => [], listTags: async () => [] },
+    });
+    ed.buffer.setDoc("![gatto](https://e.it/a.png)\n");
+    ed.setMode("reading");
+    const button = parent.querySelector<HTMLButtonElement>(":scope > .pane-preview .image-remote-load");
+    expect(button).not.toBeNull();
+    button!.click();
+    await vi.waitFor(() => expect(ed.buffer.getDoc()).toBe("![gatto](../attachments/a.png)\n"));
+    expect(asked).toEqual([["https://e.it/a.png", "notes/current.md"]]);
+    expect(ed.undo()).toBe(true);
+    expect(ed.buffer.getDoc()).toBe("![gatto](https://e.it/a.png)\n");
+    ed.destroy();
+    parent.remove();
+  });
+
+  it("lo scorrimento si dice in coordinate della sorgente, e quello seguito non si ridice (L03)", () => {
+    const { ed, reading } = editor();
+    ed.buffer.setDoc("# Uno\n\ntesto\n\n# Due\n");
+    ed.setMode("reading");
+    const heard: number[] = [];
+    const stop = ed.scrollLink.onScroll(() => heard.push(heard.length));
+    reading().dispatchEvent(new Event("scroll"));
+    expect(heard).toEqual([0]);
+    ed.scrollLink.follow({ offset: 7, top: 0 });
+    reading().dispatchEvent(new Event("scroll"));
+    expect(heard).toEqual([0]);
+    stop();
+    ed.destroy();
+    expect(ed.scrollLink.point()).toBeNull();
+  });
+
   it("apre slash da /, filtra il registro e invoca con la selezione del buffer dopo il flush", async () => {
     const previousDoc = state.currentDoc;
     state.currentDoc = "notes/current.md";

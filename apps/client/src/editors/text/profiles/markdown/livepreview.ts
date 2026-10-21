@@ -273,7 +273,8 @@ export function computeDecorations(
   };
 
   // L'HTML di un'immagine `![alt](path "titolo")` o `![alt][ref]` scritta su
-  // una riga, se la destinazione è un path del vault; `null` altrimenti. Un
+  // una riga, se la destinazione è un path del vault o un indirizzo web;
+  // `null` altrimenti. Un
   // riferimento si risolve con le definizioni della Lettura, lette una volta
   // sola e soltanto quando serve (L02).
   let references: ReadonlyMap<string, MarkdownLinkDefinition> | null = null;
@@ -298,7 +299,9 @@ export function computeDecorations(
       if (!definition) return null;
       ({ href, title: caption } = definition);
     }
-    if (!isVaultPath(href)) return null;
+    // Un'immagine remota si vede come in Lettura: un segnaposto che non la
+    // carica e offre di scaricarla nel vault (L04).
+    if (!isVaultPath(href) && !/^https?:\/\//i.test(href)) return null;
     return imageHtml(visibleText(doc, node), href, caption);
   };
 
@@ -424,8 +427,9 @@ export function computeDecorations(
 
         case "Image": {
           // Un'immagine del vault fuori dalla riga attiva si vede come in
-          // Lettura: stesso HTML, stessa idratazione. Restano sorgente le
-          // destinazioni per riferimento, gli URL e le immagini su più righe.
+          // Lettura: stesso HTML, stessa idratazione; una remota, col suo
+          // segnaposto. Restano sorgente gli altri schemi e le immagini su più
+          // righe.
           const html = active(node.from) ? null : inlineImage(node.node);
           if (html === null) return;
           exclusions.push({ from: node.from, to: node.to });

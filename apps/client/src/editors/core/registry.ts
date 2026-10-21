@@ -259,7 +259,32 @@ export interface EditorSurface {
    * there is nothing to link to, or when the id cannot be written now.
    */
   anchorHere?(): SurfaceAnchor | null;
+  /**
+   * The scroll position in document terms, for panes that scroll together
+   * (two linked panes on the same document, Source beside Reading). Without
+   * it the pane scrolls on its own.
+   */
+  readonly scrollLink?: SurfaceScrollLink;
   destroy(): void;
+}
+
+/**
+ * Where a surface is scrolled, in the coordinates every mode of the same
+ * document shares: the source offset (UTF-16, LF-normalized) of the first
+ * visible block, and that block's distance in pixels from the top.
+ */
+export interface SurfaceScrollPoint {
+  readonly offset: number;
+  readonly top: number;
+}
+
+export interface SurfaceScrollLink {
+  /** The first visible block, or `null` when nothing is laid out. */
+  point(): SurfaceScrollPoint | null;
+  /** Scrolls to `point` without telling this surface's own listeners. */
+  follow(point: SurfaceScrollPoint): void;
+  /** Called when the user scrolls the surface; returns the disposer. */
+  onScroll(listener: () => void): () => void;
 }
 
 /** A surface that edits the document text: what a text-backed format mounts. */

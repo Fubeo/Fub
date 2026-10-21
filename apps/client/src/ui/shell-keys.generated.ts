@@ -63,6 +63,7 @@ export const SHELL_KEYS = {
   "shell.pane.forward": "Alt-ArrowRight",
   "shell.pane.link": null,
   "shell.pane.unlink": null,
+  "shell.pane.reading.beside": null,
   "shell.bookmarks.toggle": null,
   "shell.bookmarks.save": null,
   "shell.bookmarks.open": null,

@@ -32,6 +32,7 @@ import type {
   SurfaceAnchor,
   SurfacePoint,
   SurfaceReference,
+  SurfaceScrollLink,
 } from "../../../core/registry";
 import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine, type CursorContext } from "../../engine";
@@ -39,7 +40,7 @@ import type { CompletionSources } from "./completions";
 import { createMarkdownProfile } from "./profile";
 import { anchorAtCursor, writeAnchor } from "./anchor-link";
 import type { TableGridActions } from "./table-grid";
-import { deleteFootnoteAt, footnoteAt, MARKDOWN_ACTIONS, markdownActionState } from "./actions";
+import { deleteFootnoteAt, footnoteAt, MARKDOWN_ACTIONS, markdownActionState, relinkImage } from "./actions";
 import { showContextMenu } from "../../../../ui/menu";
 import { foldAll, unfoldAll } from "@codemirror/language";
 import { foldLess, foldMore, toggleFold } from "../../fold-levels";
@@ -79,6 +80,10 @@ export interface MarkdownSurfaceOptions {
   /// Click su un wikilink nella resa.
   onOpenWikilink(page: string, heading: string | null, block: string | null): void | Promise<void>;
   onOpenPath(path: string, from?: string): void | Promise<void>;
+  /// Scarica nel vault l'immagine remota `url` per la nota `from`, dopo aver
+  /// chiesto il consenso: il link relativo del file salvato, o `null` se
+  /// l'utente non ha voluto. Senza, le immagini remote restano segnaposti.
+  onImportRemoteImage?(url: string, from: string): Promise<string | null>;
   /// Click su un `#tag` nella resa.
   onSearchTag(tag: string): void;
   /// Sorgenti per i completamenti del profilo Markdown.
@@ -105,6 +110,7 @@ export interface MarkdownSurface extends BufferedSurface {
   setSyntaxForms(forms: readonly SyntaxForm[]): void;
   insertReferences(references: readonly SurfaceReference[], at?: SurfacePoint): boolean;
   anchorHere(): SurfaceAnchor | null;
+  readonly scrollLink: SurfaceScrollLink;
   mountPresentation(host: HTMLElement): () => void;
   readonly editorActions: SurfaceEditorActions;
   undo(): boolean;
@@ -152,6 +158,9 @@ export function cursorIsLiteral(cursor: Pick<CursorContext, "nodes" | "lineBefor
 /// La finestra in cui la lettura raccoglie le modifiche arrivate da un altro
 /// riquadro prima di ridisegnarsi.
 const READING_SYNC_MS = 120;
+/// Quanto un riquadro che ha seguito lo scorrimento di un altro tace: copre
+/// lo scorrimento in due tempi del motore (il blocco, poi il pixel).
+const FOLLOW_QUIET_MS = 150;
 const STRICT_LINE_BREAKS_KEY = "editor.strict-line-breaks";
 const RTL_KEY = "editor.rtl";
 
@@ -198,6 +207,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         searchTag: opts.onSearchTag,
         toggleTask: readOnly ? undefined : actions.toggleTask,
         editFence: readOnly ? undefined : actions.editFence,
+        importRemoteImage: readOnly ? undefined : importRemoteImage,
       }),
     },
     completions: opts.completions,
@@ -416,6 +426,51 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     reading.focus({ preventScroll: true });
   }
 
+  /// Scarica un'immagine remota nel vault e riscrive la nota verso il file:
+  /// il consenso e il deposito sono della shell, la riscrittura è una battuta
+  /// di questa superficie.
+  async function importRemoteImage(url: string): Promise<void> {
+    const download = opts.onImportRemoteImage;
+    if (readOnly || !download) return;
+    try {
+      const link = await download(url, resources?.documentId ?? documentId);
+      if (link === null || life.closed || readOnly) return;
+      engine.runCommand(relinkImage(url, link));
+    } catch (error) {
+      if (!life.closed) notify(t("markdown.image_remote_failed", { reason: errorText(error) }), "guasto");
+    }
+  }
+
+  /// Lo scorrimento di questo riquadro nelle coordinate della sorgente, per
+  /// un riquadro collegato sullo stesso documento (L03): il blocco in cima e
+  /// la sua distanza, presi dalla Lettura o dal motore secondo il modo. Lo
+  /// scorrimento che arriva da un altro riquadro non si ridice: per un attimo
+  /// questo riquadro non avvisa, così due riquadri non si rincorrono.
+  let followedUntil = 0;
+  const scrollLink: SurfaceScrollLink = {
+    point: () => {
+      if (life.closed) return null;
+      if (mode !== "reading") return engine.getScrollAnchor();
+      const anchor = captureReadingAnchor();
+      return anchor ? { offset: anchor.from, top: anchor.top } : null;
+    },
+    follow: (point) => {
+      if (life.closed) return;
+      followedUntil = performance.now() + FOLLOW_QUIET_MS;
+      if (mode === "reading") scrollReadingTo(point.offset, point.top);
+      else engine.restoreScrollAnchor(point);
+    },
+    onScroll: (listener) => {
+      const scrolled = () => {
+        if (performance.now() >= followedUntil) listener();
+      };
+      const own = openLifetime();
+      own.listen(reading, "scroll", scrolled, { passive: true });
+      own.add(engine.listenScroll(scrolled));
+      return () => own.close();
+    },
+  };
+
   /// Le opzioni con cui si monta ogni resa di questo documento. L'id si legge
   /// a ogni richiesta: una rinomina lo cambia mentre la resa è montata.
   function renderedOptions(toggleTask?: (sourceOffset: number) => void): MarkdownMountOptions {
@@ -426,6 +481,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       openPath: opts.onOpenPath,
       searchTag: opts.onSearchTag,
       toggleTask,
+      importRemoteImage: toggleTask ? importRemoteImage : undefined,
     };
   }
 
@@ -662,6 +718,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       if (found.insert && (!editable() || !engine.runCommand(writeAnchor(found)))) return null;
       return found.anchor;
     },
+    scrollLink,
     destroy: () => {
       actionListeners.clear();
       closeSlashPalette(parent);

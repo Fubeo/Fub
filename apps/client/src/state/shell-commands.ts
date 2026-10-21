@@ -205,6 +205,15 @@ export function mountShellOwnerCommands(): void {
     },
   });
   registerShellCommand({
+    id: "shell.pane.reading.beside",
+    title: "commands.pane.reading_beside",
+    description: "commands.pane.reading_beside.desc",
+    layer: "pane",
+    run: () => {
+      void import("./document-controller").then(({ showReadingBeside }) => showReadingBeside());
+    },
+  });
+  registerShellCommand({
     id: "shell.bookmarks.toggle",
     title: "commands.bookmarks.toggle",
     description: "commands.bookmarks.toggle.desc",

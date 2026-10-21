@@ -48,7 +48,7 @@ import {
   toggleStrikethrough,
   toggleWikilink,
 } from "./commands";
-import { escapeLinkLabel, linkDestination } from "./link-syntax";
+import { decodeDestination, escapeLinkLabel, linkDestination, normalizeLabel } from "./link-syntax";
 
 export interface MarkdownAction {
   readonly run: StateCommand;
@@ -744,6 +744,57 @@ export function deleteFootnoteAt(pos: number): StateCommand {
 }
 
 const deleteFootnote: StateCommand = (target) => deleteFootnoteAt(target.state.selection.main.head)(target);
+
+// ── Immagini remote ──────────────────────────────────────────────────────────
+
+/// Riscrive verso `link` ogni immagine che nomina `url`: la destinazione in
+/// riga e la definizione di un riferimento che soltanto immagini usano. L'alt,
+/// il titolo e i link verso la stessa pagina restano. È il seguito di
+/// «Scarica nel vault» (L04): il file c'è, e la nota smette di chiederlo alla
+/// rete. Una battuta sola, annullabile.
+export function relinkImage(url: string, link: string): StateCommand {
+  return ({ state, dispatch }) => {
+    if (state.readOnly) return false;
+    const destination = linkDestination(link);
+    const changes: { from: number; to: number; insert: string }[] = [];
+    const imageLabels = new Set<string>();
+    const linkLabels = new Set<string>();
+    const definitions: { label: string; from: number; to: number }[] = [];
+    const names = (target: SyntaxNode | null) => target !== null && decodeDestination(state.sliceDoc(target.from, target.to)) === url;
+    syntaxTree(state).iterate({
+      enter(node) {
+        if (node.name === "LinkReference") {
+          const label = node.node.getChild("LinkLabel");
+          const target = node.node.getChild("URL");
+          if (label && target && names(target)) {
+            definitions.push({ label: normalizeLabel(state.sliceDoc(label.from + 1, label.to - 1)), from: target.from, to: target.to });
+          }
+          return false;
+        }
+        if (node.name !== "Image" && node.name !== "Link") return;
+        const marks = node.node.getChildren("LinkMark");
+        const closer = marks.find((mark) => state.sliceDoc(mark.from, mark.from + 1) === "]");
+        if (!marks[0] || !closer) return;
+        if (marks.some((mark) => mark.from > closer.from && state.sliceDoc(mark.from, mark.from + 1) === "(")) {
+          const target = node.node.getChild("URL");
+          if (node.name === "Image" && target && names(target)) changes.push({ from: target.from, to: target.to, insert: destination });
+          return;
+        }
+        const reference = node.node.getChild("LinkLabel");
+        const label = (reference ? state.sliceDoc(reference.from + 1, reference.to - 1) : "") || state.sliceDoc(marks[0].to, closer.from);
+        (node.name === "Image" ? imageLabels : linkLabels).add(normalizeLabel(label));
+      },
+    });
+    for (const definition of definitions) {
+      if (imageLabels.has(definition.label) && !linkLabels.has(definition.label)) {
+        changes.push({ from: definition.from, to: definition.to, insert: destination });
+      }
+    }
+    if (!changes.length) return false;
+    dispatch(state.update({ changes, userEvent: "input" }));
+    return true;
+  };
+}
 
 // ── Pulizia ──────────────────────────────────────────────────────────────────
 

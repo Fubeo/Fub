@@ -87,8 +87,8 @@ describe("cosa entra nella webview", () => {
     expect(isAllowedResource("")).toBe(false);
     // Lo stesso URL come LINK è lecito: è l'utente a decidere se seguirlo.
     expect(isAllowedLink("https://tracker.invalid/pixel.gif")).toBe(true);
-    // E con il consenso esplicito (5.3, 23.2) la risorsa remota passerà: il
-    // parametro esiste già, ciò che manca è dove l'utente lo esprime (§11.1).
+    // Il consenso esplicito (5.3, 23.2) non passa da qui: la resa offre di
+    // scaricare l'immagine nel vault, e il `src` remoto resta comunque fuori.
     expect(isAllowedResource("https://esempio.invalid/foto.png", true)).toBe(true);
   });
 

@@ -163,6 +163,7 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.pane.forward", Some("Alt-ArrowRight")),
     ("shell.pane.link", None),
     ("shell.pane.unlink", None),
+    ("shell.pane.reading.beside", None),
     ("shell.bookmarks.toggle", None),
     ("shell.bookmarks.save", None),
     ("shell.bookmarks.open", None),

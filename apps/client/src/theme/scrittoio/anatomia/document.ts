@@ -16,7 +16,7 @@ export const DOCUMENT: PartAnatomy = {
     { name: "document-task", states: [S("rest"), S("hover"), S("selected"), S("focused"), S("disabled")], hooks: ["task", "cm-fub-checkbox", "cm-fub-done"] },
     { name: "document-code", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["cm-fub-code-line", "cm-fub-codeblock", "markdown-code-copy"] },
     { name: "document-table", states: SELECTABLE, hooks: ["cm-md-grid-block", "cm-md-grid", "cm-md-grid-corner", "cm-md-grid-letter", "cm-md-grid-rowhead", "cm-md-grid-cell", "cm-md-grid-head", "cm-md-grid-adders", "cm-md-grid-add", "is-selected", "is-active"] },
-    { name: "document-figure", states: REST, hooks: ["cm-fub-hr", "math-block", "katex-display", "image-missing"] },
+    { name: "document-figure", states: REST, hooks: ["cm-fub-hr", "math-block", "katex-display", "image-missing", "image-remote", "image-remote-load"] },
     { name: "document-embed", states: REST, hooks: ["embed", "embed-cycle", "embed-too-deep", "embed-media"] },
     { name: "document-diagram", states: INTERACTIVE, hooks: ["mermaid-diagram", "mermaid-bar", "mermaid-action", "mermaid-swatches"] },
     { name: "document-properties", states: REST, hooks: ["cm-fub-frontmatter", "block-frontmatter-unparsed", "block-footnote-definition"] },

@@ -442,6 +442,8 @@
     "math-block",
     "katex-display",
     "image-missing",
+    "image-remote",
+    "image-remote-load",
     "embed",
     "embed-cycle",
     "embed-too-deep",
@@ -2435,7 +2437,9 @@
         "cm-fub-hr",
         "math-block",
         "katex-display",
-        "image-missing"
+        "image-missing",
+        "image-remote",
+        "image-remote-load"
       ],
       "states": [
         "rest"
@@ -5257,7 +5261,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1094,
+    "hooks": 1096,
     "state_names": 7,
     "assigned_states": 625,
     "components": 185,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { EditorSelection, EditorState, type Transaction } from "@codemirror/state";
-import { MARKDOWN_ACTIONS, markdownActionState } from "./actions";
+import { MARKDOWN_ACTIONS, markdownActionState, relinkImage } from "./actions";
 import { markdownKeymap } from "./commands";
 import { t } from "../../../../i18n/strings";
 
@@ -300,5 +300,31 @@ describe("il catalogo", () => {
       entry.run({ state, dispatch: () => { wrote = true; } });
       expect(wrote, id).toBe(false);
     }
+  });
+});
+
+describe("un'immagine remota scaricata nel vault (L04)", () => {
+  function relink(doc: string, url: string, link: string): string | null {
+    let out: string | null = null;
+    relinkImage(url, link)({
+      state: mk(doc),
+      dispatch: (transaction: Transaction) => { out = transaction.state.doc.toString(); },
+    });
+    return out;
+  }
+  const url = "https://e.it/a.png";
+
+  it("riscrive le destinazioni in riga e lascia alt, titolo e link", () => {
+    expect(relink(`![un *gatto*](${url} "t") e [la pagina](${url}) e ![](<${url}>)`, url, "attachments/a%201.png"))
+      .toBe('![un *gatto*](attachments/a%201.png "t") e [la pagina](https://e.it/a.png) e ![](attachments/a%201.png)');
+  });
+
+  it("riscrive la definizione soltanto se la usano solo immagini", () => {
+    expect(relink(`![a][r]\n\n[r]: ${url}\n`, url, "a.png")).toBe("![a][r]\n\n[r]: a.png\n");
+    expect(relink(`![a][r] e [b][R]\n\n[r]: ${url}\n`, url, "a.png")).toBeNull();
+  });
+
+  it("non scrive niente se l'indirizzo non c'è più", () => {
+    expect(relink("![a](https://e.it/b.png)", url, "a.png")).toBeNull();
   });
 });

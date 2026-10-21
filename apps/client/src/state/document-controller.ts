@@ -42,10 +42,12 @@ import {
   type SurfaceAnchor,
   type SurfaceReference,
   type SurfaceRequest,
+  type SurfaceScrollLink,
 } from "../editors/core/registry";
 import { modeForContext, offersContext, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
 import { draggedEntries, ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../ui/drag-types";
 import { pageName } from "../rules/organizer";
+import { folderForNote } from "../rules/mirrored";
 import { looksLikeWebShortcut, webShortcut } from "../rules/web-shortcut";
 import { declaredFences } from "../rules/syntax";
 import { pdfIdWithoutFragment } from "../editors/media/pdf-view";
@@ -418,6 +420,32 @@ async function attachmentDeposit(doc: string): Promise<AttachmentDeposit> {
   };
 }
 
+/// Un'immagine remota di `doc` scaricata fra i suoi allegati, dopo il «sì»
+/// dell'utente: la chiede l'host, che accetta soltanto `https` e il sito che
+/// la domanda nomina, e il link che torna è relativo alla nota (L04). La
+/// webview non la chiede mai alla rete.
+async function importRemoteImage(url: string, doc: string): Promise<string | null> {
+  let site: string;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password) throw new Error(url);
+    site = parsed.hostname;
+  } catch {
+    throw new Error(t("markdown.image_remote_not_https", { url }));
+  }
+  const vault = openVaultRoot();
+  const deposit = await attachmentDeposit(doc);
+  const folder = folderForNote(deposit.folder, doc);
+  if (folder === "") throw new Error(t("markdown.image_remote_root"));
+  const yes = await confirm(t("markdown.image_remote_confirm", { site, url }), {
+    title: t("markdown.image_remote_title"),
+    okLabel: t("markdown.image_remote_load"),
+  });
+  if (!yes) return null;
+  const receipt = await api.viewerSave(url, "", [site], folder, vault);
+  return relativeUrl(doc, receipt.id);
+}
+
 /** File/folder entries are expanded before the first asynchronous deposit. */
 async function droppedFiles(data: DataTransfer): Promise<readonly File[]> {
   const entries = Array.from(data.items, (item) => item.kind === "file" ? item.webkitGetAsEntry?.() : null)
@@ -681,6 +709,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   // vi si cliccano tornano qui, dove ci sono i riquadri e la ricerca.
   setDocumentWindowNavigation({ navigate: followRemote });
   lifetime.add(() => setDocumentWindowNavigation(null));
+  lifetime.add(() => scrollLinks.close());
   // Il giro di Ctrl+Tab finisce quando si lascia il modificatore.
   lifetime.listen(document, "keyup", (event) => {
     if (event.key === "Control" || event.key === "Meta") recentRound = null;
@@ -702,6 +731,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       await openDocument(target.doc);
       if (target.at) await reveal(target.doc, { span: target.at.span });
     },
+    onImportRemoteImage: importRemoteImage,
     onCreateCanvasNote: createCanvasNote,
     onPickCanvasFile: pickCanvasFile,
     onPickDrawingLink: pickDrawingLink,
@@ -1351,6 +1381,70 @@ export function linkCurrentPane(linked: boolean): void {
   void synchronize();
 }
 
+/// La Lettura accanto al testo (L03): il riquadro col fuoco resta nel modo in
+/// cui si scrive (la Sorgente, se era in Lettura), quello nuovo a destra
+/// mostra la Lettura dello stesso documento, e i due si collegano: scorrono
+/// insieme (`linkScrolls`) e seguono le stesse aperture. Il collegamento è
+/// quello che il riquadro aveva già, se ne aveva uno.
+export async function showReadingBeside(): Promise<void> {
+  const id = layout.focus;
+  const r = panes.get(id);
+  const doc = activeDoc(id);
+  const surface = r?.surface;
+  const reading = surface?.modes.find((mode) => mode.contextMode === "reading");
+  const current = selectedMode(r);
+  const writing = current && current.contextMode !== "reading"
+    ? current
+    : surface?.modes.find((mode) => mode.contextMode === "source") ?? surface?.modes.find((mode) => mode.contextMode !== "reading");
+  if (!surface?.scrollLink || !doc || !reading || !writing) {
+    notify(t("commands.pane.reading_beside.unavailable"), "info");
+    return;
+  }
+  if (current?.id !== writing.id) await setMode(writing.id);
+  const link = paneState(id)?.link ?? "linked";
+  const added = split(id, "row");
+  if (!added) return;
+  setPaneMode(added, surface.family, reading.id);
+  setPaneLink(id, link);
+  setPaneLink(added, link);
+  openIn(added, doc);
+  focusPane(id);
+  await synchronize();
+  const point = surface.scrollLink.point();
+  if (point) panes.get(added)?.surface?.scrollLink?.follow(point);
+}
+
+/// Gli ascolti che fanno scorrere insieme i riquadri collegati che mostrano
+/// lo stesso documento: rifatti a ogni disegno, perché a ogni disegno possono
+/// cambiare collegamenti, documenti e superfici. Il punto passa nelle
+/// coordinate della sorgente, quindi Sorgente, Live e Lettura si seguono
+/// anche con altezze diverse.
+let scrollLinks = openLifetime();
+
+function linkScrolls(): void {
+  scrollLinks.close();
+  const life = scrollLinks = openLifetime();
+  const groups = new Map<string, SurfaceScrollLink[]>();
+  for (const id of layoutPanes()) {
+    const r = panes.get(id);
+    const name = paneState(id)?.link;
+    const link = r?.surface?.scrollLink;
+    if (!name || !link || r?.shown?.k !== "doc") continue;
+    const key = JSON.stringify([name, r.shown.doc]);
+    groups.set(key, [...(groups.get(key) ?? []), link]);
+  }
+  for (const members of groups.values()) {
+    if (members.length < 2) continue;
+    for (const member of members) {
+      life.add(member.onScroll(() => {
+        const point = member.point();
+        if (!point) return;
+        for (const other of members) if (other !== member) other.follow(point);
+      }));
+    }
+  }
+}
+
 /// Una linguetta è stata chiusa: si lascia andare ciò che teneva in vita.
 ///
 /// Le due specie di linguetta hanno due cose diverse da rilasciare, e nessuna delle
@@ -1477,6 +1571,7 @@ async function render(): Promise<void> {
     view.drawConflict(r, activeDoc(id));
   }
   view.drawSave();
+  linkScrolls();
   if (state.currentDoc !== active) {
     state.currentDoc = active;
     emit("active-doc", active);

@@ -30,7 +30,8 @@ riapre la nota. Le scorciatoie seguono il riquadro attivo. La modalità delle
 note in una finestra nuova viene da `editor.default-mode`; un riquadro diviso
 eredita quelle del riquadro da cui nasce. I divisori fra riquadri si trascinano,
 si spostano con le frecce e tornano a parti uguali con un doppio clic; le
-proporzioni restano nel layout finché la fila non cambia.
+proporzioni restano nel layout finché la fila non cambia. **Affianca la
+Lettura** apre la Lettura in un riquadro collegato che scorre con la sorgente.
 
 Il tema di serie è quieto: neutri caldi, una carta antracite al buio e avorio in
 luce (mai il nero o il bianco puri), e un accento salvia desaturato per focus e
@@ -154,8 +155,8 @@ modale su fondo scuro: rotella, pizzico, `+` e `−` ingrandiscono, `0` adatta,
 `1` mostra le dimensioni reali, trascinamento e frecce spostano, `R` ruota di
 90°, `Esc` chiude. In Live un'immagine del vault dentro una riga (un'immagine
 Markdown su una riga sola, o `![[foto.png|120]]`) si mostra quando il cursore è
-fuori dalla riga; un clic torna alla sorgente, `Mod`-clic apre la lightbox. URL
-remoti, `data:` e immagini per riferimento restano sorgente.
+fuori dalla riga; un clic torna alla sorgente, `Mod`-clic apre la lightbox.
+`data:` resta sorgente; una remota è un [segnaposto](../reference/permissions-and-security.md#immagini-remote).
 
 In Live i callout diventano un blocco reso quando il cursore è fuori, e i
 recinti con info string dichiarata (Mermaid, formule) si comportano allo stesso
@@ -282,8 +283,7 @@ il browser, o il [visore web](../reference/permissions-and-security.md#visore-we
 
 La UI dichiarativa di un plugin WASM passa da `UiNode::validate_untrusted()`
 prima di raggiungere la shell; `Html` e `WebView` sono rifiutati per
-`Trust::Community`. Il percorso consegnato attraversa `ViewProvider` e la
-validazione non fidata prima di raggiungere la shell.
+`Trust::Community`, e il percorso consegnato passa da `ViewProvider`.
 
 ## Superfici condivise
 

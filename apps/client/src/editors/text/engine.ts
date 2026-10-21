@@ -682,6 +682,15 @@ export class TextEngine {
     return { offset: block.from, top: this.view.documentTop + block.top - top };
   }
 
+  /// Ascolta lo scorrimento della vista, senza esporre `EditorView`: il
+  /// disposer toglie l'ascolto, e dopo `destroy` non c'è niente da ascoltare.
+  public listenScroll(listener: () => void): () => void {
+    if (this.disposed) return () => {};
+    const scroller = this.view.scrollDOM;
+    scroller.addEventListener("scroll", listener, { passive: true });
+    return () => scroller.removeEventListener("scroll", listener);
+  }
+
   /// Rimette la vista sull'ancoraggio: solo scorrimento, mai selezione o testo.
   public restoreScrollAnchor(anchor: ScrollAnchor): void {
     if (this.disposed || !Number.isSafeInteger(anchor.offset) || !Number.isFinite(anchor.top)) return;

@@ -10,9 +10,11 @@ import {
   hydrateVaultMedia,
   scenePlaceholder,
   showEmbeddedDrawing,
+  showRemoteImages,
   vaultImageSource,
   type MediaPort,
 } from "./media";
+import { setSanitizedHtml } from "../../../../ui/sanitize";
 
 function port(files: Record<string, string>, delay?: Promise<void>, names: Record<string, string> = {}) {
   const opened: string[] = [];
@@ -475,5 +477,51 @@ describe("i disegni dentro una nota", () => {
       '<figcaption><img src=x onerror="alert(1)">Ciclo<script>alert(2)</script></figcaption>',
     ));
     expect(hostile).toEqual({ doc: ACQUA, name: "Ciclo" });
+  });
+});
+
+describe("le immagini remote (L04)", () => {
+  function rendered(html: string): HTMLElement {
+    const container = document.createElement("div");
+    setSanitizedHtml(container, html);
+    return container;
+  }
+
+  it("non partono: l'indirizzo resta inerte e il segnaposto dice da dove verrebbero", () => {
+    const container = rendered('<p><img src="https://e.it/a.png" alt="gatto"> <img src="//t.invalid/p.gif"></p>');
+    const [remote, relative] = Array.from(container.querySelectorAll("img"));
+    expect(remote!.hasAttribute("src")).toBe(false);
+    expect(remote!.dataset.remoteSrc).toBe("https://e.it/a.png");
+    expect(relative!.hasAttribute("data-remote-src")).toBe(false);
+    const life = openLifetime();
+    showRemoteImages(container, life);
+    const box = container.querySelector<HTMLElement>(".image-remote")!;
+    expect(box.textContent).toBe("gatto · e.it");
+    expect(box.querySelector("button")).toBeNull();
+    expect(remote!.hidden).toBe(true);
+    life.close();
+  });
+
+  it("si scaricano soltanto col gesto, una volta per clic", async () => {
+    const container = rendered('<img src="https://e.it/a.png">');
+    const life = openLifetime();
+    const asked: string[] = [];
+    let finish!: () => void;
+    showRemoteImages(container, life, (url) => {
+      asked.push(url);
+      return new Promise<void>((resolve) => { finish = resolve; });
+    });
+    showRemoteImages(container, life, async () => { throw new Error("una seconda volta"); });
+    const buttons = container.querySelectorAll<HTMLButtonElement>(".image-remote-load");
+    expect(buttons).toHaveLength(1);
+    expect(asked).toEqual([]);
+    buttons[0]!.click();
+    expect(asked).toEqual(["https://e.it/a.png"]);
+    expect(buttons[0]!.disabled).toBe(true);
+    finish();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(buttons[0]!.disabled).toBe(false);
+    life.close();
   });
 });

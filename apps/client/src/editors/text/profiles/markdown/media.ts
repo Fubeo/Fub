@@ -27,7 +27,7 @@ import { pageName } from "../../../../rules/mirrored";
 import { parseWikilinkInner } from "../../../../rules/syntax";
 import type { Lifetime } from "../../../../ui/lifetime";
 import type { Expected } from "../../../../ui/race";
-import { sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
+import { REMOTE_SRC_ATTRIBUTE, sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
 
 /// Ciò che serve a idratare, iniettabile nei banchi.
 export interface MediaPort {
@@ -235,6 +235,53 @@ function showMissingImage(img: HTMLImageElement, path: string): void {
   box.textContent = alt ? `${alt} · ${path}` : path;
   img.hidden = true;
   img.after(box);
+}
+
+/// Le immagini remote che il sanitizzatore ha fermato: al loro posto il testo
+/// alternativo, il sito da cui verrebbero e, dove la nota si può scrivere, il
+/// gesto «Scarica nel vault». Nessuna richiesta parte da qui: `load` chiede
+/// l'immagine all'host e ne scrive il file, e la nota si ridisegna col link
+/// nuovo (L04). Senza `load` resta il segnaposto, che dice perché non si vede.
+export function showRemoteImages(container: HTMLElement, life: Lifetime, load?: (url: string) => Promise<void>): void {
+  for (const img of container.querySelectorAll<HTMLImageElement>(`img[${REMOTE_SRC_ATTRIBUTE}]`)) {
+    if (img.dataset.remoteShown || img.closest("[data-ui-slot]")) continue;
+    img.dataset.remoteShown = "true";
+    const url = img.getAttribute(REMOTE_SRC_ATTRIBUTE)!;
+    const alt = img.getAttribute("alt")?.trim() ?? "";
+    let site = url;
+    try {
+      site = new URL(url).hostname || url;
+    } catch {
+      // Un indirizzo che non si legge si mostra com'è scritto.
+    }
+    const box = document.createElement("span");
+    box.className = "image-missing image-remote";
+    box.dataset.remoteSrc = url;
+    const label = document.createElement("span");
+    label.setAttribute("role", "img");
+    label.setAttribute("aria-label", t("markdown.image_remote", { name: alt || url, site }));
+    label.textContent = alt ? `${alt} · ${site}` : site;
+    label.title = url;
+    box.append(label);
+    if (load) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "image-remote-load";
+      button.textContent = t("markdown.image_remote_load");
+      button.setAttribute("aria-label", t("markdown.image_remote_load_named", { site }));
+      life.listen(button, "click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        button.disabled = true;
+        void load(url).finally(() => {
+          if (!life.closed) button.disabled = false;
+        });
+      });
+      box.append(button);
+    }
+    img.hidden = true;
+    img.after(box);
+  }
 }
 
 /// Il media di un embed risolto al posto del suo segnaposto: `<img>`,

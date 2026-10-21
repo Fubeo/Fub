@@ -8,7 +8,7 @@ import { mountMermaidBlocks } from "../../../../ui/mermaid";
 import type { DiagramLight } from "../../../../ui/mermaid-styles";
 import { mountMathBlocks } from "./math";
 import { claimQueryBlocks, fillQueryBlock } from "./query-block";
-import { hydrateVaultMedia, scenePlaceholder, showEmbeddedDrawing, vaultImageSource } from "./media";
+import { hydrateVaultMedia, scenePlaceholder, showEmbeddedDrawing, showRemoteImages, vaultImageSource } from "./media";
 import { openLightbox } from "../../../../ui/lightbox";
 import { mediaKindOfId, mimeOfId } from "../../../media/media-types";
 import type { MarkdownResources, NativeMarkdownContent } from "../../../../ui/markdown-resources";
@@ -36,6 +36,12 @@ export interface MarkdownMountOptions {
   readonly openSource?: (sourceOffset: number) => void;
   /** Rewrites part of a fenced block (a diagram's own style) in the buffer. */
   readonly editFence?: FenceEdit;
+  /**
+   * Downloads a remote image to the vault and relinks it in the buffer: the
+   * explicit gesture that a blocked remote image offers. Without it, the image
+   * only says why it is not shown.
+   */
+  readonly importRemoteImage?: (url: string) => Promise<void>;
   /**
    * The fence infos the vault declares, for HTML from a renderer that does not
    * mark them (the host's): without it a `mermaid` fence stays code.
@@ -287,6 +293,7 @@ function enhanceContent(
   wireContent(container, options, life);
   wireFootnotePreviews(container, life);
   wireImageMenu(container, life);
+  showRemoteImages(container, life, options.importRemoteImage);
   life.add(highlightMarkdownCode(container));
 }
 
@@ -474,6 +481,7 @@ async function hydrateEmbeds(
       toggleTask: undefined,
       openSource: undefined,
       editFence: undefined,
+      importRemoteImage: undefined,
       navigateFragment: undefined,
       openWikilink: (page, heading, block) => options.openWikilink?.(page || content.doc_id, heading, block),
       openPath: (path, from = content.doc_id) => options.openPath?.(path, from),

@@ -134,6 +134,20 @@ La Content Security Policy impedisce script remoti, iframe e oggetti non
 previsti. Il rendering non deve creare HTML attivo da una stringa del vault o
 del plugin senza sanitizzazione e una decisione esplicita.
 
+### Immagini remote
+
+Un'immagine con un indirizzo remoto non si carica mai da sola: il sanitizzatore
+toglie il `src` e lascia l'indirizzo inerte in `data-remote-src`, e Live e
+Lettura mostrano un segnaposto con il testo alternativo e il sito. Il pulsante
+**Scarica nel vault** chiede conferma nominando sito e indirizzo; poi l'host
+scarica l'immagine con `viewer_save`, soltanto `https`, senza credenziali né
+redirect, entro il limite delle risorse in linea, nella cartella degli allegati
+(`files.attachment-folder`). La nota riscrive la destinazione verso il file con
+una modifica annullabile; una definizione di riferimento cambia soltanto se la
+usano solo immagini. La webview non chiede mai l'immagine alla rete. Una nota
+nella radice con una cartella relativa alla nota (`./`) non ha dove scaricarla
+e lo dice.
+
 ## Visore web
 
 Una pagina web non entra mai nella webview della shell. Si apre nella finestra

@@ -40,9 +40,11 @@
 // ## Cosa NON fa
 //
 // Non decide *cosa è lecito mostrare*: decide cosa è lecito **eseguire e
-// caricare**. Il consenso esplicito per il contenuto remoto (5.3, 23.2) è una
-// decisione di prodotto che non ha ancora dove essere espressa, e vive col §11.1
-// insieme alle altre impostazioni; finché non c'è, il default è **no**.
+// caricare**. Il contenuto remoto non si carica mai da qui (5.3, 23.2): il
+// default è **no**, e un'immagine remota lascia il suo indirizzo inerte in
+// `data-remote-src`. Il consenso si esprime un'immagine alla volta, col gesto
+// «Scarica nel vault» della resa, che la chiede all'host e la riscrive come
+// file del vault: la webview non la chiede mai alla rete.
 
 /// Gli elementi che il rendering di un documento può produrre. Chiuso di
 /// proposito: ciò che non è qui non si disegna, e aggiungerne uno è una riga che
@@ -249,6 +251,8 @@ export function isAllowedLink(value: string): boolean {
 /// Dove il sanitizzatore lascia il `src` di un'immagine del vault, in attesa
 /// che la resa lo risolva e lo serva da `fub-asset:`.
 export const VAULT_SRC_ATTRIBUTE = "data-vault-src";
+/// Dove resta, inerte, l'indirizzo di un'immagine remota che non si carica.
+export const REMOTE_SRC_ATTRIBUTE = "data-remote-src";
 
 export function isAllowedResource(value: string, remoteAllowed = false): boolean {
   const v = value.trim();
@@ -360,7 +364,13 @@ function sanitizeNode(node: Node): Node | null {
     if (!allowedAttribute(tag, name)) continue;
     if (name === "style" && !isAllowedStyle(attr.value)) continue;
     if (name === "href" && !isAllowedLink(attr.value)) continue;
-    if (name === "src" && !isAllowedResource(attr.value)) continue;
+    if (name === "src" && !isAllowedResource(attr.value)) {
+      // Un'immagine remota non parte, ma non sparisce in silenzio: l'indirizzo
+      // resta inerte in `data-remote-src`, dove la resa può offrire di
+      // scaricarla nel vault con un gesto esplicito (L04).
+      if (tag === "img" && isAllowedResource(attr.value, true)) newItem.setAttribute(REMOTE_SRC_ATTRIBUTE, attr.value.trim());
+      continue;
+    }
     // Un `src` sopravvissuto è un path del vault (i remoti sono già fuori), e un
     // path del vault non è un URL della webview: messo come `src` su un
     // elemento creato nel documento farebbe partire subito una richiesta verso
