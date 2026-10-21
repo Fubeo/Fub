@@ -20,6 +20,7 @@ import { settings } from "../../../../host/query";
 import { onEvent } from "../../../../state/kernel";
 import { openLifetime } from "../../../../ui/lifetime";
 import { notify } from "../../../../ui/notify";
+import { errorText } from "../../../../host/errors";
 import { writeClipboardText } from "../../../../platform/clipboard";
 import { closeSlashPalette, openSlashPalette } from "../../../../ui/palette";
 import type {
@@ -172,6 +173,15 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     callbacks: {
       openWikilink,
       searchTag: opts.onSearchTag,
+      // Come in Lettura: il percorso si risolve rispetto a questo documento,
+      // e un documento che non c'è lo dice invece di tacere.
+      openPath: (path) => {
+        void Promise.resolve()
+          .then(() => opts.onOpenPath(path, resources?.documentId ?? documentId))
+          .catch((error: unknown) => {
+            if (!life.closed) notify(t("preview.open_failed", { page: path, reason: errorText(error) }), "guasto");
+          });
+      },
       tableGrid: {
         active: (grid) => {
           tableGrid = grid;

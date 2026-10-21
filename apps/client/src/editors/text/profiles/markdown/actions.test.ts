@@ -135,6 +135,12 @@ describe("collegamenti e rimandi", () => {
     expect(run("markdown.link", "|")).toBe("[|]()");
   });
 
+  it("un link protegge le parentesi dell'etichetta e quelle dell'indirizzo (D02, D25)", () => {
+    expect(run("markdown.link", "‹a[b›")).toBe("[a\\[b](|)");
+    expect(run("markdown.link", "‹https://example.com/a)›")).toBe("[|](https://example.com/a%29)");
+    expect(run("markdown.image", "‹x]›")).toBe("![x\\]](|)");
+  });
+
   it("dentro un link lo toglie, e resta il testo", () => {
     expect(stateAt("markdown.link", "[te|sto](https://x.y)").active).toBe(true);
     expect(run("markdown.link", "[te|sto](https://x.y)")).toBe("‹testo›");

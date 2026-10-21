@@ -4,6 +4,7 @@ import { EditorView, ViewPlugin, keymap, type Command } from "@codemirror/view";
 import type TurndownService from "turndown";
 import { inContentSpace, sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
 import { readClipboard } from "../../../../platform/clipboard";
+import { escapeLinkLabel, linkDestination } from "./link-syntax";
 
 const markdownSource = /(?:^|\n)[ \t]{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+[.)]\s|```|~~~)|\[[^\]\n]+\]\([^\n)]+\)|\*{1,2}[^*\n]+\*{1,2}|_{1,2}[^_\n]+_{1,2}|`[^`\n]+`/u;
 const contentAnchorPrefix = `#${inContentSpace("")}`;
@@ -231,7 +232,7 @@ function linkOverSelection(view: EditorView, data: DataTransfer): string | null 
   const { from, to } = ranges[0]!;
   const text = view.state.sliceDoc(from, to);
   if (text.includes("\n") || PASTED_URL.test(text.trim()) || isStrictlyInsideCode(view.state, from)) return null;
-  return `[${text}](${url.replace(/[()]/gu, (c) => (c === "(" ? "%28" : "%29"))})`;
+  return `[${escapeLinkLabel(text)}](${linkDestination(url)})`;
 }
 
 const pasteHandler = EditorView.domEventHandlers({

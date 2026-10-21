@@ -51,6 +51,7 @@ import {
   type TableAlign,
   type TableData,
 } from "./table-model";
+import { escapeLinkLabel, linkDestination } from "./link-syntax";
 
 /// Ciò che la griglia chiede all'editor che la ospita.
 export interface TableGridHost {
@@ -327,7 +328,7 @@ export class TableGrid implements TableGridActions {
     const { row, col } = this.#focus;
     const text = this.#data.rows[row]?.[col] ?? "";
     const url = /^(?:[a-z][a-z0-9+.-]*:\/\/|www\.|mailto:)\S+$/i.test(text.trim());
-    const value = url ? `[](${text.trim()})` : `[${text}]()`;
+    const value = url ? `[](${linkDestination(text.trim())})` : `[${escapeLinkLabel(text)}]()`;
     this.#beginEditing({ row, col }, "edit", value, url ? 1 : value.length - 1);
   }
 

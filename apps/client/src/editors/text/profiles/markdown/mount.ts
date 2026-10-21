@@ -18,10 +18,11 @@ import { mountTree, unmountTree } from "../../../../ui/node";
 import { notify } from "../../../../ui/notify";
 import { attachTooltip } from "../../../../ui/tooltip";
 import { Race, type Expected } from "../../../../ui/race";
-import { external, hasScheme, isAllowedLink, sanitizeMarkdownHtml, setSanitizedHtml } from "../../../../ui/sanitize";
+import { isAllowedLink, sanitizeMarkdownHtml, setSanitizedHtml } from "../../../../ui/sanitize";
 import { clipboardSupports, writeClipboardData, writeClipboardText } from "../../../../platform/clipboard";
 import { showContextMenu } from "../../../../ui/menu";
 import { openWebLink } from "../../../../ui/web-viewer";
+import { routeHref } from "./link-syntax";
 
 export interface MarkdownMountOptions {
   readonly documentId?: string;
@@ -253,19 +254,11 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
     // visore, con l'Alt per forzarlo), un altro schema al sistema, uno
     // relativo è un documento del vault.
     event.preventDefault();
-    if (/^https?:/i.test(href)) openWebLink(href, event.altKey);
-    else if (hasScheme(href) || external(href)) window.open(href, "_blank", "noopener,noreferrer");
-    else openPath(safeDecode(href));
+    const route = routeHref(href);
+    if (route.kind === "web") openWebLink(href, event.altKey);
+    else if (route.kind === "path") openPath(route.path);
+    else window.open(href, "_blank", "noopener,noreferrer");
   });
-}
-
-/// Un `href` relativo arriva codificato (`Nota%20uno.md`), un path del vault no.
-function safeDecode(href: string): string {
-  try {
-    return decodeURI(href);
-  } catch {
-    return href;
-  }
 }
 
 function enhanceContent(

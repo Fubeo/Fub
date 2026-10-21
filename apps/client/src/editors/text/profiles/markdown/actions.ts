@@ -48,6 +48,7 @@ import {
   toggleStrikethrough,
   toggleWikilink,
 } from "./commands";
+import { escapeLinkLabel, linkDestination } from "./link-syntax";
 
 export interface MarkdownAction {
   readonly run: StateCommand;
@@ -617,7 +618,7 @@ function wrapLink(prefix: string): StateCommand {
     }
     const text = state.sliceDoc(from, to);
     const url = /^(?:[a-z][a-z0-9+.-]*:\/\/|www\.|mailto:)\S+$/i.test(text.trim());
-    const insert = url ? `${prefix}[](${text.trim()})` : `${prefix}[${text}]()`;
+    const insert = url ? `${prefix}[](${linkDestination(text.trim())})` : `${prefix}[${escapeLinkLabel(text)}]()`;
     const cursor = url ? from + prefix.length + 1 : from + insert.length - 1;
     dispatch(state.update({
       changes: { from, to, insert },

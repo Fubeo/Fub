@@ -25,6 +25,17 @@ describe("linkAt", () => {
     expect(linkAt(state("vai su https://c.it/p."), 12)).toEqual({ kind: "url", href: "https://c.it/p" });
   });
 
+  it("legge parentesi bilanciate, riferimenti e destinazioni fra parentesi angolari (D14)", () => {
+    expect(linkAt(state("[wiki](https://en.wikipedia.org/wiki/Function_(mathematics))"), 2))
+      .toEqual({ kind: "url", href: "https://en.wikipedia.org/wiki/Function_(mathematics)" });
+    expect(linkAt(state("[Guida][g]\n\n[g]: https://example.com"), 2)).toEqual({ kind: "url", href: "https://example.com" });
+    expect(linkAt(state("[g]\n\n[G]: <https://example.com/b> \"t\""), 1)).toEqual({ kind: "url", href: "https://example.com/b" });
+    expect(linkAt(state("[Documento](<La mia nota.md>)"), 3)).toEqual({ kind: "url", href: "La mia nota.md" });
+    expect(linkAt(state("![alt](img/a\\(1\\).png \"t\")"), 3)).toEqual({ kind: "url", href: "img/a(1).png" });
+    expect(linkAt(state("[senza][nessuno]"), 2)).toBeNull();
+    expect(linkAt(state("nota[^1]\n\n[^1]: testo"), 6)).toBeNull();
+  });
+
   it("dentro il codice non c'è link da aprire", () => {
     expect(linkAt(state("`[[Nota]]`"), 4)).toBeNull();
     expect(linkAt(state("```\nhttps://a.it\n```"), 8)).toBeNull();
@@ -36,8 +47,9 @@ describe("Alt-Invio", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const openWikilink = vi.fn();
+    const openPath = vi.fn();
     const profile = createMarkdownProfile({
-      callbacks: { openWikilink, searchTag: () => {} },
+      callbacks: { openWikilink, searchTag: () => {}, openPath },
       completions: { searchNotes: async () => [], listTags: async () => [] },
     });
     const engine = createTextEngine(host, {
@@ -50,7 +62,7 @@ describe("Alt-Invio", () => {
     view.dispatch({ selection: { anchor: cursor } });
     const press = () =>
       runScopeHandlers(view, new KeyboardEvent("keydown", { key: "Enter", altKey: true }), "editor");
-    return { view, openWikilink, press, dispose: () => { engine.destroy(); host.remove(); } };
+    return { view, openWikilink, openPath, press, dispose: () => { engine.destroy(); host.remove(); } };
   }
 
   it("apre il wikilink con il punto che nomina", () => {
@@ -72,6 +84,23 @@ describe("Alt-Invio", () => {
     bad.press();
     expect(open).not.toHaveBeenCalled();
     bad.dispose();
+    open.mockRestore();
+  });
+
+  it("un'ancora porta il cursore al titolo, un percorso relativo apre il documento (D15)", () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const anchor = editor("[Vai](#seconda-parte)\n\n# Prima\n\n# Seconda parte\n", 2);
+    expect(anchor.press()).toBe(true);
+    expect(anchor.view.state.selection.main.head).toBe(anchor.view.state.doc.toString().indexOf("# Seconda"));
+    anchor.dispose();
+    const missing = editor("[Vai](#altrove)\n\n# Prima\n", 2);
+    expect(missing.press()).toBe(false);
+    missing.dispose();
+    const relative = editor("[Capitolo](../capitoli/Uno%20due.md)", 2);
+    expect(relative.press()).toBe(true);
+    expect(relative.openPath).toHaveBeenCalledWith("../capitoli/Uno due.md");
+    relative.dispose();
+    expect(open).not.toHaveBeenCalled();
     open.mockRestore();
   });
 

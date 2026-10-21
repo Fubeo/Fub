@@ -1,6 +1,7 @@
 import type { SyntaxNode } from "@lezer/common";
 import { inlineDelimiters, scanTags, textSpans, wikilink, type FoundWikilink } from "../../../../rules/syntax";
 import { markdownGrammar } from "./grammar";
+import { decodeDestination, normalizeLabel } from "./link-syntax";
 import type { MarkdownRenderContext } from "./render-types";
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -10,9 +11,7 @@ export function escapeHtml(value: string): string {
 export function sourceAttributes(from: number, to: number): string {
   return ` data-md-from="${from}" data-md-to="${to}"`;
 }
-export function normalizeLabel(value: string): string {
-  return value.trim().replace(/\s+/g, " ").normalize("NFC").toLowerCase();
-}
+export { normalizeLabel };
 
 const INLINE_TAGS: Record<string, string> = {
   Emphasis: "em", StrongEmphasis: "strong", Strikethrough: "del", Subscript: "sub", Superscript: "sup",
@@ -398,6 +397,9 @@ export function scanInlineFootnotes(value: string): InlineFootnote[] {
 
 /// Dove porta un link o un'immagine: la destinazione scritta o quella della
 /// sua definizione. Senza nessuna delle due `[x]` è testo, anche per comrak.
+/// `[x]()` ha una destinazione, vuota: Lezer non le dà un nodo `URL`, ma la
+/// `(` dopo l'etichetta dice che il link è inline, e una definizione omonima
+/// non lo riguarda (D22).
 function linkTarget(
   context: MarkdownRenderContext,
   node: SyntaxNode,
@@ -411,11 +413,13 @@ function linkTarget(
   const url = node.getChild("URL");
   const title = node.getChild("LinkTitle");
   const reference = node.getChild("LinkLabel");
-  const definition = context.references.get(normalizeLabel(reference
+  const inline = marks.some((mark) => mark.from > closer.from && source[mark.from] === "(");
+  const definition = inline ? undefined : context.references.get(normalizeLabel(reference
     ? source.slice(reference.from + 1, reference.to - 1) || label : label));
-  let href = url ? source.slice(url.from, url.to) : definition?.href;
+  const href = inline
+    ? url ? decodeDestination(source.slice(url.from, url.to)) : ""
+    : definition?.href;
   if (href === undefined) return null;
-  if (href.startsWith("<") && href.endsWith(">")) href = href.slice(1, -1);
   const caption = title ? source.slice(title.from + 1, title.to - 1) : definition?.title;
   return { labelFrom: opener.to, labelTo: closer.from, href, caption };
 }

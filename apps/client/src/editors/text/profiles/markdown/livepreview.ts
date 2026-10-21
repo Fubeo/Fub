@@ -64,6 +64,9 @@ export interface LivePreviewCallbacks {
   openWikilink(page: string, heading: string | null, block: string | null): void;
   /// Click semplice su un tag: riceve il nome senza `#` (es. "area/lavoro").
   searchTag(tag: string): void;
+  /// `Alt-Invio` su un link relativo: il percorso, ancora codificato come
+  /// path del vault, da risolvere rispetto al documento aperto.
+  openPath?(path: string): void;
   mountRendered?: MountMarkdown;
   /// La griglia delle tabelle che ha il fuoco: chi monta l'editor la usa per
   /// la barra di formattazione. Assente, le griglie funzionano lo stesso.

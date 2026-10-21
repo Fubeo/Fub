@@ -2,10 +2,11 @@ import { syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
 import type { SyntaxNode, Tree } from "@lezer/common";
 import type { SyntaxForm } from "../../../../host/contract";
-import { declaredFences } from "../../../../rules/syntax";
+import { declaredFences, wikilink } from "../../../../rules/syntax";
 import { normalizeLineBreaks } from "../../../../rules/offsets";
 import { taskChecked } from "../../../../rules/mirrored";
 import { FOOTNOTE_DEFINITION, markdownGrammar } from "./grammar";
+import { decodeDestination, decodeEntities } from "./link-syntax";
 import {
   escapeHtml,
   mathBlock,
@@ -151,6 +152,60 @@ function rawHtmlBlock(source: string, from: number, to: number): string {
   return `<div class="block-html block-html-allowed"${mdAttrs(from, to)} data-md-raw-html="${escapeHtml(raw)}"><pre>${escapeHtml(raw)}</pre></div>`;
 }
 
+/// I nodi di un titolo che non si vedono: marcatori, destinazioni e HTML.
+const HIDDEN_INLINE: Record<string, true> = {
+  HeaderMark: true, EmphasisMark: true, CodeMark: true, LinkMark: true, URL: true, LinkTitle: true,
+  LinkLabel: true, StrikethroughMark: true, SubscriptMark: true, SuperscriptMark: true, HTMLTag: true,
+  Comment: true, ProcessingInstruction: true, QuoteMark: true,
+};
+
+/// Il testo che un titolo mostra, da cui il core ricava lo slug
+/// (`parse.rs`, il testo degli inline): l'etichetta di un link e non la sua
+/// destinazione, il contenuto del codice, gli escape e le entità risolti,
+/// l'alias di un wikilink o il suo bersaglio. Prima lo slug nasceva dalla
+/// sintassi, e `# [Guida](https://x)` aveva un'ancora che nessun `#guida`
+/// trovava (D03).
+export function headingVisibleText(source: string, heading: SyntaxNode): string {
+  const links = wikilink(source.slice(heading.from, heading.to))
+    .map((found) => ({ from: heading.from + found.from, to: heading.from + found.to, text: found.alias ?? found.target }));
+  const pieces: { at: number; text: string }[] = links.map((found) => ({ at: found.from, text: found.text }));
+  const inLink = (at: number) => links.some((found) => found.from <= at && at < found.to);
+  const plain = (from: number, to: number) => {
+    let start = from;
+    for (const found of links) {
+      if (found.to <= start || found.from >= to) continue;
+      if (found.from > start) pieces.push({ at: start, text: source.slice(start, found.from) });
+      start = Math.max(start, found.to);
+    }
+    if (start < to) pieces.push({ at: start, text: source.slice(start, to) });
+  };
+  const walk = (node: SyntaxNode) => {
+    let pos = node.from;
+    for (let child = node.firstChild; child; child = child.nextSibling) {
+      if (child.from > pos) plain(pos, child.from);
+      pos = Math.max(pos, child.to);
+      if (HIDDEN_INLINE[child.name]) continue;
+      if (child.name === "InlineCode") {
+        const marks = child.getChildren("CodeMark");
+        let value = source.slice(marks[0]?.to ?? child.from, marks[marks.length - 1]?.from ?? child.to).replace(/\n/g, " ");
+        if (value.startsWith(" ") && value.endsWith(" ") && /\S/.test(value)) value = value.slice(1, -1);
+        if (!inLink(child.from)) pieces.push({ at: child.from, text: value });
+      } else if (child.name === "Escape") {
+        if (!inLink(child.from)) pieces.push({ at: child.from, text: source.slice(child.from + 1, child.to) });
+      } else if (child.name === "Entity") {
+        if (!inLink(child.from)) pieces.push({ at: child.from, text: decodeEntities(source.slice(child.from, child.to)) });
+      } else if (child.name === "Link" && /^\[\^[^\]\r\n]+\]$/.test(source.slice(child.from, child.to))) {
+        // Il richiamo di una nota non è testo del titolo.
+      } else {
+        walk(child);
+      }
+    }
+    if (pos < node.to) plain(pos, node.to);
+  };
+  walk(heading);
+  return pieces.sort((a, b) => a.at - b.at).map((piece) => piece.text).join("").trim();
+}
+
 interface FootnoteDef {
   readonly labelNorm: string;
   readonly from: number;
@@ -210,13 +265,7 @@ function collectDefinitions(source: string, tree: Tree): Collected {
         headingIds.set(node.from, anchor.raw);
         slugs.next(canonical);
       } else {
-        let title = slice;
-        if (name.startsWith("ATX")) {
-          title = title.replace(/^#{1,6}[ \t]*/, "").replace(/[ \t]+#+[ \t]*$/, "");
-        } else {
-          title = title.replace(/\n[ \t]*[=\-]+[ \t]*$/, "");
-        }
-        const slug = headingSlug(title.trim());
+        const slug = headingSlug(headingVisibleText(source, node));
         if (slug !== "") headingIds.set(node.from, slugs.next(slug));
       }
     } else if (name === "LinkReference") {
@@ -226,8 +275,7 @@ function collectDefinitions(source: string, tree: Tree): Collected {
         const rawLabel = source.slice(labelNode.from + 1, labelNode.to - 1);
         const key = normalizeLabel(rawLabel);
         if (key !== "" && !references.has(key)) {
-          let href = source.slice(urlNode.from, urlNode.to);
-          if (href.length >= 2 && href.startsWith("<") && href.endsWith(">")) href = href.slice(1, -1);
+          const href = decodeDestination(source.slice(urlNode.from, urlNode.to));
           const titleNode = node.getChild("LinkTitle");
           const title = titleNode ? stripDelimiters(source.slice(titleNode.from, titleNode.to)) : undefined;
           references.set(key, title === undefined ? { href } : { href, title });
@@ -1004,10 +1052,23 @@ export function renderMarkdown(source: string, forms?: readonly SyntaxForm[]): M
 }
 
 export function renderMarkdownState(state: EditorState, forms?: readonly SyntaxForm[]): MarkdownDocument {
+  const { source, tree } = stateTree(state);
+  return buildDocument(source, tree, forms);
+}
+
+/// Le definizioni dei link di uno stato, per chiave normalizzata: quelle che
+/// la resa usa, lette senza rendere il documento.
+export function linkReferences(state: EditorState): ReadonlyMap<string, MarkdownLinkDefinition> {
+  const { source, tree } = stateTree(state);
+  return collectDefinitions(source, tree).references;
+}
+
+/// L'albero di CodeMirror quando copre tutto il documento, altrimenti uno nuovo.
+function stateTree(state: EditorState): { source: string; tree: Tree } {
   const source = state.doc.toString();
   let tree = syntaxTree(state);
   if (tree.length !== source.length || tree.topNode.name !== "Document") {
     tree = markdownGrammar.parser.parse(source);
   }
-  return buildDocument(source, tree, forms);
+  return { source, tree };
 }

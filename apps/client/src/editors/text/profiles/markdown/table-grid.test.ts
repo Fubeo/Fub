@@ -288,6 +288,16 @@ describe("le azioni della barra sulla griglia", () => {
     expect(grid.actionState("markdown.bold").active).toBe(true);
   });
 
+  it("il link della cella protegge le parentesi di etichetta e indirizzo (D02, D25)", () => {
+    const { grid, cell } = mount([["Nome", "Sito"], ["a[b", "https://example.com/a)"]]);
+    grid.focus({ row: 1, col: 0 });
+    expect(grid.runAction("markdown.link")).toBe(true);
+    expect(cell(1, 0).querySelector("input")!.value).toBe("[a\\[b]()");
+    grid.focus({ row: 1, col: 1 });
+    expect(grid.runAction("markdown.link")).toBe(true);
+    expect(cell(1, 1).querySelector("input")!.value).toBe("[](https://example.com/a%29)");
+  });
+
   it("le operazioni di tabella valgono dove hanno senso, le altre sono spente", () => {
     const { grid } = mount(ROWS);
     grid.focus({ row: 1, col: 0 });
