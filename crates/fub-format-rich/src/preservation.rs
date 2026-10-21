@@ -21,9 +21,17 @@
 //! quante ne chiedano il modello voluto o la base, e nessun riferimento a una
 //! relazione resta senza la sua relazione.
 //!
-//! È un rilevatore a conteggi: vede ciò che sparisce, non un valore che cambia.
+//! L'inventario conta anche i valori, in forma canonica, e il testo di ogni
+//! paragrafo: un valore cambiato non passa come uno sparito. Le
+//! normalizzazioni dichiarate in [`crate::inventory`] sono i soli segni che
+//! non si contano, ciascuna con la sua ragione ([`normalizations`]).
+//!
+//! La prova a vuoto accettata all'apertura si ricorda per l'impronta dei byte
+//! del file (`remember`, `remembered`): il writer è deterministico, e il
+//! salvataggio dopo un'apertura degli stessi byte non rifà la prova.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::{Arc, Mutex};
 
 use wordcraft_doc::{Block, Document, Part, PartKind};
 
@@ -49,24 +57,68 @@ fn findings(differences: Vec<Difference>) -> Result<(), Finding> {
     }
 }
 
-/// La regola all'apertura, sui byte del file e su quelli della prova a vuoto.
-pub(crate) fn check_open(original: &[u8], dry: &[u8]) -> Result<(), Finding> {
-    let original = inventory(original).map_err(Finding::Unreadable)?;
-    let dry = inventory(dry).map_err(Finding::Unreadable)?;
-    findings(open_differences(&original, &dry))
+/// La prova a vuoto di un file che la regola all'apertura ha accettato: il suo
+/// inventario, che ogni salvataggio sulla stessa base confronta con i byte
+/// nuovi.
+#[derive(Debug)]
+pub(crate) struct Baseline {
+    dry: Inventory,
 }
 
-/// La regola a ogni salvataggio. `dry` è la prova a vuoto di `base`, `new` sono
-/// i byte che il codec ha scritto per `wanted`.
+/// La regola all'apertura, sui byte del file e su quelli della prova a vuoto.
+pub(crate) fn check_open(original: &[u8], dry: &[u8]) -> Result<Baseline, Finding> {
+    let original = inventory(original).map_err(Finding::Unreadable)?;
+    let dry = inventory(dry).map_err(Finding::Unreadable)?;
+    findings(open_differences(&original, &dry))?;
+    Ok(Baseline { dry })
+}
+
+/// La regola a ogni salvataggio. `baseline` è la prova a vuoto di `base`,
+/// `new` sono i byte che il codec ha scritto per `wanted`.
 pub(crate) fn check_save(
-    dry: &[u8],
+    baseline: &Baseline,
     new: &[u8],
     base: &Document,
     wanted: &Document,
 ) -> Result<(), Finding> {
-    let dry = inventory(dry).map_err(Finding::Unreadable)?;
     let new = inventory(new).map_err(Finding::Unreadable)?;
-    findings(save_differences(&dry, &new, base, wanted))
+    findings(save_differences(&baseline.dry, &new, base, wanted))
+}
+
+/// Quante prove a vuoto si ricordano.
+const REMEMBERED: usize = 8;
+
+/// Le ultime prove a vuoto accettate, per impronta dei byte del file. Il
+/// writer è deterministico (lo prova il banco del corpus), quindi gli stessi
+/// byte danno la stessa prova: l'impronta fa da revisione, e una base cambiata
+/// ha un'impronta nuova. Il salvataggio, che di solito segue l'apertura degli
+/// stessi byte, non riscrive né reinventaria la base.
+static BASELINES: Mutex<VecDeque<(String, Arc<Baseline>)>> = Mutex::new(VecDeque::new());
+
+/// La chiave con cui una base si ricorda.
+pub(crate) fn key(bytes: &[u8]) -> String {
+    inventory::sha256(bytes)
+}
+
+/// La prova a vuoto accettata per questi byte, se si ricorda.
+pub(crate) fn remembered(key: &str) -> Option<Arc<Baseline>> {
+    let baselines = BASELINES.lock().ok()?;
+    baselines
+        .iter()
+        .find(|(k, _)| k == key)
+        .map(|(_, baseline)| Arc::clone(baseline))
+}
+
+/// Ricorda la prova a vuoto accettata per questi byte.
+pub(crate) fn remember(key: String, baseline: Arc<Baseline>) {
+    let Ok(mut baselines) = BASELINES.lock() else {
+        return;
+    };
+    baselines.retain(|(k, _)| *k != key);
+    if baselines.len() == REMEMBERED {
+        baselines.pop_front();
+    }
+    baselines.push_back((key, baseline));
 }
 
 fn save_differences(
@@ -358,22 +410,28 @@ pub fn report(bytes: &[u8]) -> Result<String, crate::RichError> {
         let _ = writeln!(out, "  {difference}");
     }
     for normalization in inventory::NORMALIZATIONS {
-        let applied: Vec<&Key> = original
-            .all
-            .keys()
-            .chain(written.all.keys())
-            .filter(|key| (normalization.matches)(key))
-            .collect();
-        if !applied.is_empty() {
+        let count = |inventory: &Inventory| {
+            inventory
+                .normalized
+                .get(normalization.what)
+                .copied()
+                .unwrap_or(0)
+        };
+        let (before, after) = (count(&original), count(&written));
+        if before + after > 0 {
             let _ = writeln!(
                 out,
-                "normalizzazione «{}»: {} chiavi",
-                normalization.what,
-                applied.len()
+                "normalizzazione «{}»: {before} nel file, {after} nella prova a vuoto",
+                normalization.what
             );
         }
     }
     Ok(out)
+}
+
+/// Le normalizzazioni dichiarate, con la ragione di ciascuna.
+pub fn normalizations() -> impl Iterator<Item = (&'static str, &'static str)> {
+    inventory::NORMALIZATIONS.iter().map(|n| (n.what, n.why))
 }
 
 #[cfg(test)]
@@ -386,7 +444,7 @@ mod tests {
     const W: &str = r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships""#;
     const CT: &str = r#"<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#;
     const ROOT: &str = r#"<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#;
-    const IMAGE: &str = r#"<w:p><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="9525" cy="9525"/><wp:docPr id="1" name="Foto"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="1" name="a.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdImg"/></pic:blipFill><pic:spPr/></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"#;
+    const IMAGE: &str = r#"<w:p><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="9525" cy="9525"/><wp:docPr id="1" name="Picture 1"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="1" name="a.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdImg"/></pic:blipFill><pic:spPr/></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"#;
     const PNG: &[u8] = b"\x89PNG\r\n\x1a\n uno";
 
     fn entries(bytes: &[u8]) -> Vec<(String, Vec<u8>)> {
@@ -429,6 +487,11 @@ mod tests {
     /// paragrafo da modificare; la base, il voluto con l'ultimo paragrafo
     /// cambiato, la prova a vuoto della base e i byte del voluto.
     fn scene() -> (Document, Document, Vec<u8>, Vec<u8>) {
+        let (base, wanted, _, dry, new) = scene_with_file();
+        (base, wanted, dry, new)
+    }
+
+    fn scene_with_file() -> (Document, Document, Vec<u8>, Vec<u8>, Vec<u8>) {
         let document = format!(
             r#"<w:document {W}><w:body><w:p><w:permStart w:id="7" w:edGrp="everyone"/><w:r><w:t>Primo</w:t></w:r><w:permEnd w:id="7"/></w:p>{IMAGE}<w:p><w:r><w:t>Ultimo</w:t></w:r></w:p><w:sectPr/></w:body></w:document>"#
         );
@@ -446,7 +509,7 @@ mod tests {
         let base = Codec::Docx.read(&file).unwrap();
         let dry = Codec::Docx.write(&base).unwrap();
         assert_eq!(
-            check_open(&file, &dry),
+            check_open(&file, &dry).map(|_| ()),
             Ok(()),
             "la scena deve aprirsi modificabile"
         );
@@ -458,13 +521,19 @@ mod tests {
         };
         paragraph.text.push_str(" cambiato");
         let new = Codec::Docx.write(&wanted).unwrap();
-        (base, wanted, dry, new)
+        (base, wanted, file, dry, new)
+    }
+
+    fn baseline(dry: &[u8]) -> Baseline {
+        Baseline {
+            dry: inventory(dry).unwrap(),
+        }
     }
 
     #[test]
     fn i_byte_del_codec_passano() {
         let (base, wanted, dry, new) = scene();
-        assert_eq!(check_save(&dry, &new, &base, &wanted), Ok(()));
+        assert_eq!(check_save(&baseline(&dry), &new, &base, &wanted), Ok(()));
     }
 
     /// Un elemento che il modello non possiede, sparito da un blocco che
@@ -482,7 +551,8 @@ mod tests {
             },
             &[],
         );
-        let Err(Finding::Differences(found)) = check_save(&dry, &new, &base, &wanted) else {
+        let Err(Finding::Differences(found)) = check_save(&baseline(&dry), &new, &base, &wanted)
+        else {
             panic!("la perdita è passata")
         };
         assert!(
@@ -508,7 +578,7 @@ mod tests {
             |xml| xml.replace(&image, "media/altra.png"),
             &[("word/media/altra.png", b"\x89PNG\r\n\x1a\n due")],
         );
-        let Err(Finding::Differences(found)) = check_open(&dry, &wrong) else {
+        let Err(Finding::Differences(found)) = check_open(&dry, &wrong).map(|_| ()) else {
             panic!("la relazione sbagliata è passata")
         };
         assert!(
@@ -533,7 +603,8 @@ mod tests {
             },
             &[("word/media/copia.png", PNG)],
         );
-        let Err(Finding::Differences(found)) = check_save(&dry, &new, &base, &wanted) else {
+        let Err(Finding::Differences(found)) = check_save(&baseline(&dry), &new, &base, &wanted)
+        else {
             panic!("la copia doppia è passata")
         };
         assert!(
@@ -542,6 +613,66 @@ mod tests {
                 .any(|d| d.key.starts_with("part ") && d.after == 2),
             "{found:?}"
         );
+    }
+
+    /// Un valore cambiato con gli stessi conteggi (`foo="A"` che diventa
+    /// `foo="B"`): all'apertura e in un blocco non toccato.
+    #[test]
+    fn un_valore_cambiato_non_passa() {
+        let (base, wanted, file, dry, new) = scene_with_file();
+        let other = |xml: &str| xml.replace(r#"w:edGrp="everyone""#, r#"w:edGrp="editors""#);
+        let changed = rewrite(&dry, "word/document.xml", other, &[]);
+        let Err(Finding::Differences(found)) = check_open(&file, &changed).map(|_| ()) else {
+            panic!("il valore cambiato è passato all'apertura")
+        };
+        assert!(
+            found
+                .iter()
+                .any(|d| d.key.contains("block 0") && d.key.contains(r#"edGrp="everyone""#)),
+            "{found:?}"
+        );
+        let new = rewrite(&new, "word/document.xml", other, &[]);
+        let Err(Finding::Differences(found)) = check_save(&baseline(&dry), &new, &base, &wanted)
+        else {
+            panic!("il valore cambiato è passato al salvataggio")
+        };
+        assert!(found.iter().any(|d| d.key.contains("block 0")), "{found:?}");
+    }
+
+    /// Il testo di un paragrafo che l'utente non ha toccato.
+    #[test]
+    fn il_testo_di_un_blocco_non_toccato_non_cambia() {
+        let (base, wanted, dry, new) = scene();
+        let new = rewrite(
+            &new,
+            "word/document.xml",
+            |xml| xml.replace(">Primo<", ">Prima<"),
+            &[],
+        );
+        let Err(Finding::Differences(found)) = check_save(&baseline(&dry), &new, &base, &wanted)
+        else {
+            panic!("il testo cambiato è passato")
+        };
+        assert!(
+            found
+                .iter()
+                .any(|d| d.key.contains("block 0") && d.key.contains("text of")),
+            "{found:?}"
+        );
+    }
+
+    /// La prova a vuoto accettata si ricorda per l'impronta dei byte: altri
+    /// byte non la trovano.
+    #[test]
+    fn la_prova_a_vuoto_si_ricorda_per_contenuto() {
+        let (_, _, file, dry, _) = scene_with_file();
+        let accepted = Arc::new(check_open(&file, &dry).unwrap());
+        remember(key(&file), Arc::clone(&accepted));
+        let found = remembered(&key(&file)).expect("ricordata");
+        assert!(Arc::ptr_eq(&found, &accepted));
+        let mut other = file.clone();
+        other.push(0);
+        assert!(remembered(&key(&other)).is_none());
     }
 
     /// Un content control di blocco: i suoi paragrafi sono blocchi uno per uno,

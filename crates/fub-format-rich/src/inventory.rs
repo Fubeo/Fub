@@ -10,7 +10,11 @@
 //!
 //! - ogni elemento e ogni attributo, per nome espanso (lo spazio dei nomi più il
 //!   nome locale: il prefisso può cambiare senza perdita) e per **classe** della
-//!   parte;
+//!   parte; l'attributo con il suo valore in forma canonica
+//!   ([`crate::canonical`]), e un riferimento a una relazione (`r:id`) con la
+//!   relazione che nomina, non con il suo id;
+//! - il testo: di ogni paragrafo l'impronta dei suoi `w:t`, `w:delText`, `m:t`
+//!   e delle istruzioni di campo, degli altri elementi il valore canonico;
 //! - ogni relazione, con il suo tipo e la sua destinazione: l'URL se è esterna,
 //!   l'impronta del contenuto se la parte puntata si copia così com'è, la
 //!   classe se è una parte che il codec riscrive;
@@ -30,7 +34,16 @@
 //!
 //! Il corpo del documento principale ha in più un inventario per ogni figlio di
 //! `w:body`: il salvataggio pretende che i blocchi che l'utente non ha toccato
-//! restino identici (vedi [`crate::preservation`]).
+//! restino identici (vedi [`crate::preservation`]). Un contenitore trasparente
+//! (`w:customXml`, `w:smartTag`, `w:ins`, `w:moveTo`) conta i suoi figli come
+//! blocchi, e un segno fra due blocchi (un segnalibro, l'inizio di un
+//! commento, un permesso) va con il blocco che segue. Dentro un paragrafo la
+//! forma dei run e le loro proprietà contano una volta: il codec unisce i run
+//! uguali, e il testo del paragrafo resta nell'impronta.
+//!
+//! Le [`NORMALIZATIONS`] sono i soli segni che non si contano: quelli che Word
+//! rigenera a ogni salvataggio e i numeri che il codec riassegna. Ciascuna
+//! dice che cosa salta e perché, e il resoconto ne dà i totali.
 //!
 //! Lo zip e l'XML hanno limiti propri, dello stesso ordine di quelli del codec:
 //! un limite superato, uno zip illeggibile o un XML malformato sono un
@@ -103,12 +116,25 @@ pub(crate) enum Key {
         ns: String,
         name: String,
     },
-    /// Un attributo, per classe, elemento che lo porta e nome espanso.
+    /// Un attributo, per classe, elemento che lo porta, nome espanso e valore
+    /// canonico ([`crate::canonical`]). Il valore di un riferimento a una
+    /// relazione (`r:id`, `r:embed`) è la relazione stessa, tipo e
+    /// destinazione: un codec che rinumera gli id non cambia la chiave, uno
+    /// che punta altrove sì.
     Attribute {
         class: String,
         element: String,
         ns: String,
         name: String,
+        value: String,
+    },
+    /// Il testo di un paragrafo (`w:p`, i soli `w:t`, `w:delText`, `m:t` e le
+    /// istruzioni dei campi), o di un altro elemento che ne ha, per impronta.
+    /// Il paragrafo e non il run: il codec unisce i run uguali.
+    Text {
+        class: String,
+        element: String,
+        sha256: String,
     },
     /// Una relazione, per classe della sorgente, tipo e destinazione.
     Relationship {
@@ -128,7 +154,9 @@ impl Key {
     /// relazione.
     pub fn class(&self) -> &str {
         match self {
-            Key::Element { class, .. } | Key::Attribute { class, .. } => class,
+            Key::Element { class, .. } | Key::Attribute { class, .. } | Key::Text { class, .. } => {
+                class
+            }
             Key::Relationship { source, .. } => source,
             Key::Part { .. } => COPIED,
         }
@@ -144,7 +172,13 @@ impl fmt::Display for Key {
                 element,
                 ns,
                 name,
-            } => write!(f, "{class}: {element} @{{{ns}}}{name}"),
+                value,
+            } => write!(f, "{class}: {element} @{{{ns}}}{name}={value:?}"),
+            Key::Text {
+                class,
+                element,
+                sha256,
+            } => write!(f, "{class}: text of {element} {}", &sha256[..12]),
             Key::Relationship {
                 source,
                 kind,
@@ -172,6 +206,13 @@ pub(crate) const DOCUMENT: &str = "document";
 const NS_RELATIONSHIPS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const NS_W: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const NS_W14: &str = "http://schemas.microsoft.com/office/word/2010/wordml";
+const NS_W15: &str = "http://schemas.microsoft.com/office/word/2012/wordml";
+const NS_W16CID: &str = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
+const NS_M: &str = "http://schemas.openxmlformats.org/officeDocument/2006/math";
+const NS_MC: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+const NS_EXTENDED: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
 const WML: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.";
 
 /// La classe di una parte dal suo tipo di contenuto: `None` se il codec la
@@ -224,6 +265,8 @@ pub(crate) struct Inventory {
     /// I riferimenti a una relazione (`r:id`, `r:embed`…) che la propria parte
     /// non ha, per parte e valore.
     pub dangling: BTreeSet<String>,
+    /// Quante volte ogni normalizzazione dichiarata ha saltato qualcosa.
+    pub normalized: BTreeMap<&'static str, u64>,
 }
 
 impl Inventory {
@@ -515,37 +558,9 @@ pub(crate) fn inventory_with(bytes: &[u8], limits: &Limits) -> Result<Inventory,
             class_of(&types.of(&part)).unwrap_or_else(|| COPIED.into())
         };
         let rels = read_rels(&zip, &part, limits)?;
-        let ids: BTreeSet<&str> = rels.iter().map(|r| r.id.as_str()).collect();
-
-        if !part.is_empty() {
-            let bytes = zip.parts.get(&part).map(Vec::as_slice).unwrap_or_default();
-            match class_of(&types.of(&part)) {
-                Some(class) => {
-                    let main = class == DOCUMENT && inventory.body.is_empty();
-                    let parsed = count_xml(bytes, &part, &class, main, limits, &mut elements)?;
-                    add(&mut inventory.all, &parsed.all);
-                    if main {
-                        inventory.body = parsed.body;
-                    }
-                    for value in parsed.references {
-                        if !ids.contains(value.as_str()) {
-                            inventory.dangling.insert(format!("{class}: {value}"));
-                        }
-                    }
-                }
-                None => {
-                    *inventory
-                        .all
-                        .entry(Key::Part {
-                            content_type: types.of(&part),
-                            sha256: sha256(bytes),
-                        })
-                        .or_default() += 1;
-                }
-            }
-        }
-
-        for rel in rels {
+        // La destinazione di ogni relazione, come la chiave la scrive.
+        let mut targets = Vec::with_capacity(rels.len());
+        for rel in &rels {
             let target = if rel.external {
                 format!("url:{}", rel.target)
             } else {
@@ -563,6 +578,53 @@ pub(crate) fn inventory_with(bytes: &[u8], limits: &Limits) -> Result<Inventory,
                     }
                 }
             };
+            targets.push(target);
+        }
+        let by_id: BTreeMap<&str, String> = rels
+            .iter()
+            .zip(&targets)
+            .map(|(rel, target)| (rel.id.as_str(), format!("{} → {target}", rel.kind)))
+            .collect();
+
+        if !part.is_empty() {
+            let bytes = zip.parts.get(&part).map(Vec::as_slice).unwrap_or_default();
+            match class_of(&types.of(&part)) {
+                Some(class) => {
+                    let main = class == DOCUMENT && inventory.body.is_empty();
+                    let context = Context {
+                        part: &part,
+                        class: &class,
+                        main,
+                        rels: &by_id,
+                        limits,
+                    };
+                    let parsed = count_xml(bytes, &context, &mut elements)?;
+                    add(&mut inventory.all, &parsed.all);
+                    if main {
+                        inventory.body = parsed.body;
+                    }
+                    for (what, n) in parsed.normalized {
+                        *inventory.normalized.entry(what).or_default() += n;
+                    }
+                    for value in parsed.references {
+                        if !by_id.contains_key(value.as_str()) {
+                            inventory.dangling.insert(format!("{class}: {value}"));
+                        }
+                    }
+                }
+                None => {
+                    *inventory
+                        .all
+                        .entry(Key::Part {
+                            content_type: types.of(&part),
+                            sha256: sha256(bytes),
+                        })
+                        .or_default() += 1;
+                }
+            }
+        }
+
+        for (rel, target) in rels.into_iter().zip(targets) {
             *inventory
                 .all
                 .entry(Key::Relationship {
@@ -587,6 +649,19 @@ struct Parsed {
     body: Vec<Counts>,
     /// I valori degli attributi nello spazio dei nomi delle relazioni.
     references: Vec<String>,
+    /// Quante volte ogni normalizzazione ha saltato qualcosa.
+    normalized: BTreeMap<&'static str, u64>,
+}
+
+/// Ciò che [`count_xml`] sa della parte che conta.
+struct Context<'a> {
+    part: &'a str,
+    class: &'a str,
+    /// Il documento principale: si tiene a parte ogni blocco del corpo.
+    main: bool,
+    /// Le relazioni della parte per id, come la chiave le scrive.
+    rels: &'a BTreeMap<&'a str, String>,
+    limits: &'a Limits,
 }
 
 fn xml_error(part: &str, error: impl fmt::Display) -> InventoryError {
@@ -613,40 +688,106 @@ enum Target {
     Outside,
     /// L'ultimo blocco del corpo.
     Block,
-    /// L'involucro di un content control, che va con il blocco che segue.
+    /// Ciò che va con il blocco che segue: l'involucro di un content control,
+    /// un segnalibro fra due blocchi.
     Pending,
 }
 
-/// Conta elementi e attributi di una parte XML riscritta dal codec. Con `main`,
-/// tiene a parte ogni blocco del corpo: i figli di `w:body` e, dentro un
-/// content control di blocco, i figli del suo `w:sdtContent`.
+/// Gli elementi il cui testo è il testo del paragrafo che li contiene.
+const PARAGRAPH_TEXT: &[(&str, &str)] = &[(NS_W, "t"), (NS_W, "delText"), (NS_M, "t")];
+/// Le istruzioni dei campi: il codec può spezzarle o unirle in un altro modo,
+/// e contano a meno degli spazi.
+const INSTRUCTIONS: &[(&str, &str)] = &[(NS_W, "instrText"), (NS_W, "delInstrText")];
+/// I contenitori di blocchi trasparenti: i loro figli sono blocchi del
+/// modello, e le loro proprietà vanno con il primo.
+const WRAPPERS: &[&str] = &["customXml", "smartTag", "ins", "moveTo"];
+/// I segni fra due blocchi, che il modello mette nel paragrafo che segue.
+const MARKERS: &[&str] = &[
+    "bookmarkStart",
+    "bookmarkEnd",
+    "commentRangeStart",
+    "commentRangeEnd",
+    "permStart",
+    "permEnd",
+    "moveFromRangeStart",
+    "moveFromRangeEnd",
+    "moveToRangeStart",
+    "moveToRangeEnd",
+];
+
+/// Un elemento aperto.
+struct Open {
+    ns: String,
+    name: String,
+    /// Il suo testo diretto.
+    text: String,
+    /// Una normalizzazione lo salta: il suo testo non conta.
+    skipped: bool,
+}
+
+/// Gli elementi della forma dei run. Il codec unisce i run uguali e le loro
+/// istruzioni: dentro un paragrafo questi elementi, le proprietà dei run e i
+/// loro attributi contano una volta sola, e il testo conta con l'impronta del
+/// paragrafo.
+const RUN_SHAPE: &[&str] = &["r", "t", "delText", "instrText", "delInstrText"];
+
+/// Un paragrafo aperto: la profondità del suo `w:p`, il testo, le istruzioni
+/// e le chiavi della forma dei suoi run.
+struct Paragraph {
+    level: usize,
+    text: String,
+    instructions: String,
+    runs: BTreeSet<Key>,
+}
+
+fn put(parsed: &mut Parsed, pending: &mut Counts, target: Target, key: Key) {
+    match target {
+        Target::Block => {
+            if let Some(region) = parsed.body.last_mut() {
+                *region.entry(key.clone()).or_default() += 1;
+            }
+        }
+        Target::Pending => *pending.entry(key.clone()).or_default() += 1,
+        Target::Outside => {}
+    }
+    *parsed.all.entry(key).or_default() += 1;
+}
+
+/// Conta elementi, attributi e testi di una parte XML riscritta dal codec.
+/// Con `main`, tiene a parte ogni blocco del corpo: i figli di `w:body` e,
+/// dentro un content control di blocco o un contenitore trasparente, i suoi
+/// blocchi.
 fn count_xml(
     bytes: &[u8],
-    part: &str,
-    class: &str,
-    main: bool,
-    limits: &Limits,
+    context: &Context<'_>,
     elements: &mut u64,
 ) -> Result<Parsed, InventoryError> {
+    let (part, class, limits) = (context.part, context.class, context.limits);
     let mut reader = NsReader::from_reader(bytes);
     reader.config_mut().check_end_names = true;
     let mut parsed = Parsed {
         all: Counts::new(),
         body: Vec::new(),
         references: Vec::new(),
+        normalized: BTreeMap::new(),
     };
-    // La pila dei nomi espansi aperti.
-    let mut stack: Vec<(String, String)> = Vec::new();
+    // Gli elementi aperti.
+    let mut stack: Vec<Open> = Vec::new();
+    let mut paragraphs: Vec<Paragraph> = Vec::new();
     let mut buf = Vec::new();
     let mut root = false;
     // Dove vanno i conteggi dell'elemento corrente e dei suoi discendenti.
     let mut target = Target::Outside;
     // Le profondità i cui figli sono blocchi, dentro `w:sdtContent` di un
-    // content control di blocco; e le profondità dei content control aperti.
+    // content control di blocco o dentro un contenitore trasparente; e le
+    // profondità dei content control e dei contenitori aperti.
     let mut block_levels: Vec<usize> = Vec::new();
     let mut sdt_levels: Vec<usize> = Vec::new();
+    let mut wrapper_levels: Vec<usize> = Vec::new();
     // L'involucro di un content control prima del suo primo blocco.
     let mut pending = Counts::new();
+    // La profondità delle proprietà del run aperto, `w:r/w:rPr`.
+    let mut run_props: Option<usize> = None;
     loop {
         let event = reader
             .read_event_into(&mut buf)
@@ -654,8 +795,83 @@ fn count_xml(
         let (start, empty) = match &event {
             Event::Start(start) => (Some(start.clone().into_owned()), false),
             Event::Empty(start) => (Some(start.clone().into_owned()), true),
+            Event::Text(text) => {
+                let text = text
+                    .xml_content(quick_xml::XmlVersion::Implicit1_0)
+                    .map_err(|error| xml_error(part, error))?;
+                if let Some(open) = stack.last_mut() {
+                    open.text.push_str(&text);
+                }
+                (None, false)
+            }
+            Event::CData(text) => {
+                let text = text.decode().map_err(|error| xml_error(part, error))?;
+                if let Some(open) = stack.last_mut() {
+                    open.text.push_str(&text);
+                }
+                (None, false)
+            }
+            Event::GeneralRef(reference) => {
+                let resolved = match reference
+                    .resolve_char_ref()
+                    .map_err(|error| xml_error(part, error))?
+                {
+                    Some(ch) => ch.to_string(),
+                    None => {
+                        let name = reference.decode().map_err(|error| xml_error(part, error))?;
+                        quick_xml::escape::resolve_xml_entity(&name)
+                            .ok_or_else(|| xml_error(part, format!("unknown entity &{name};")))?
+                            .to_string()
+                    }
+                };
+                if let Some(open) = stack.last_mut() {
+                    open.text.push_str(&resolved);
+                }
+                (None, false)
+            }
             Event::End(_) => {
-                stack.pop();
+                let Some(open) = stack.pop() else {
+                    return Err(xml_error(part, "unbalanced end"));
+                };
+                let pair = (open.ns.as_str(), open.name.as_str());
+                let inside = paragraphs.last_mut().filter(|p| p.level < stack.len());
+                if PARAGRAPH_TEXT.contains(&pair) && inside.is_some() {
+                    if let Some(paragraph) = inside {
+                        paragraph.text.push_str(&open.text);
+                    }
+                } else if INSTRUCTIONS.contains(&pair) && inside.is_some() {
+                    if let Some(paragraph) = inside {
+                        paragraph.instructions.push_str(&open.text);
+                        paragraph.instructions.push(' ');
+                    }
+                } else if pair == (NS_W, "p")
+                    && paragraphs.last().is_some_and(|p| p.level == stack.len())
+                {
+                    let paragraph = paragraphs.pop().unwrap_or_else(|| unreachable!());
+                    for key in paragraph.runs {
+                        put(&mut parsed, &mut pending, target, key);
+                    }
+                    let instructions: Vec<&str> =
+                        paragraph.instructions.split_whitespace().collect();
+                    let content = format!("{}\u{0}{}", paragraph.text, instructions.join(" "));
+                    let key = Key::Text {
+                        class: class.to_string(),
+                        element: format!("{{{}}}{}", open.ns, open.name),
+                        sha256: sha256(content.as_bytes()),
+                    };
+                    put(&mut parsed, &mut pending, target, key);
+                } else if !open.skipped && !open.text.trim().is_empty() {
+                    let value = crate::canonical::value(&open.ns, &open.text);
+                    let key = Key::Text {
+                        class: class.to_string(),
+                        element: format!("{{{}}}{}", open.ns, open.name),
+                        sha256: sha256(value.as_bytes()),
+                    };
+                    put(&mut parsed, &mut pending, target, key);
+                }
+                if run_props == Some(stack.len()) {
+                    run_props = None;
+                }
                 while block_levels
                     .last()
                     .is_some_and(|level| *level > stack.len())
@@ -665,6 +881,13 @@ fn count_xml(
                 while sdt_levels.last().is_some_and(|level| *level >= stack.len()) {
                     sdt_levels.pop();
                     // Un involucro senza blocchi resta con il resto del documento.
+                    pending.clear();
+                }
+                while wrapper_levels
+                    .last()
+                    .is_some_and(|level| *level >= stack.len())
+                {
+                    wrapper_levels.pop();
                     pending.clear();
                 }
                 (None, false)
@@ -689,16 +912,72 @@ fn count_xml(
             let (ns, local) = reader.resolver().resolve_element(start.name());
             let ns = namespace(&ns);
             let name = String::from_utf8_lossy(local.as_ref()).into_owned();
+            let w = ns == NS_W;
+            let mut attributes = Vec::new();
+            for attr in start.attributes() {
+                let attr = attr.map_err(|error| xml_error(part, error))?;
+                let qname = attr.key;
+                if qname.as_namespace_binding().is_some() {
+                    continue;
+                }
+                let (attr_ns, attr_local) = reader.resolver().resolve_attribute(qname);
+                let (attr_ns, attr_name) = (
+                    namespace(&attr_ns),
+                    String::from_utf8_lossy(attr_local.as_ref()).into_owned(),
+                );
+                let value = attr
+                    .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                    .map_err(|error| xml_error(part, error))?
+                    .into_owned();
+                if attr_ns == NS_MC && matches!(attr_name.as_str(), "Ignorable" | "MustUnderstand")
+                {
+                    // Un elenco di prefissi: conta lo spazio dei nomi di
+                    // ognuno, perché il prefisso può cambiare e l'elenco può
+                    // crescere senza perdita.
+                    for prefix in value.split_whitespace() {
+                        let probe = format!("{prefix}:x");
+                        let (ns, _) = reader
+                            .resolver()
+                            .resolve_element(quick_xml::name::QName(probe.as_bytes()));
+                        attributes.push((attr_ns.clone(), attr_name.clone(), namespace(&ns)));
+                    }
+                    continue;
+                }
+                attributes.push((attr_ns, attr_name, value));
+            }
+            let level = stack.len();
+            if !empty {
+                stack.push(Open {
+                    ns: ns.clone(),
+                    name: name.clone(),
+                    text: String::new(),
+                    skipped: false,
+                });
+            }
+            if let Some(what) = skipped_element(&ns, &name) {
+                *parsed.normalized.entry(what).or_default() += 1;
+                if let (false, Some(open)) = (empty, stack.last_mut()) {
+                    open.skipped = true;
+                }
+                buf.clear();
+                continue;
+            }
+            if w && name == "p" && !empty {
+                paragraphs.push(Paragraph {
+                    level,
+                    text: String::new(),
+                    instructions: String::new(),
+                    runs: BTreeSet::new(),
+                });
+            }
             // Un figlio di `w:body`: document (0) → body (1) → blocco (2).
             // L'ultima `w:sectPr`, la sezione che nessun paragrafo chiude, non
             // è un blocco: resta con il resto del documento.
-            let level = stack.len();
-            let top = main
+            let top = context.main
                 && level == 2
-                && stack[1].0 == NS_W
-                && stack[1].1 == "body"
-                && stack[0].1 == "document";
-            let w = ns == NS_W;
+                && stack[1].ns == NS_W
+                && stack[1].name == "body"
+                && stack[0].name == "document";
             if top || block_levels.last() == Some(&level) {
                 if w && name == "sdt" {
                     // Un content control di blocco (un sommario, un campo di
@@ -709,6 +988,19 @@ fn count_xml(
                     if !empty {
                         sdt_levels.push(level);
                     }
+                } else if w && WRAPPERS.contains(&name.as_str()) {
+                    // Lo stesso per un contenitore trasparente: i suoi figli
+                    // sono blocchi.
+                    target = Target::Pending;
+                    if !empty {
+                        wrapper_levels.push(level);
+                        block_levels.push(level + 1);
+                    }
+                } else if w
+                    && (MARKERS.contains(&name.as_str())
+                        || (!top && matches!(name.as_str(), "customXmlPr" | "smartTagPr")))
+                {
+                    target = Target::Pending;
                 } else if top && w && name == "sectPr" {
                     target = Target::Outside;
                 } else {
@@ -727,46 +1019,62 @@ fn count_xml(
                     target = Target::Pending;
                 }
             }
-            let mut keys = vec![Key::Element {
-                class: class.to_string(),
-                ns: ns.clone(),
-                name: name.clone(),
-            }];
-            for attr in start.attributes() {
-                let attr = attr.map_err(|error| xml_error(part, error))?;
-                let qname = attr.key;
-                if qname.as_namespace_binding().is_some() {
+            let element = format!("{{{ns}}}{name}");
+            if w && name == "rPr" && !empty && level > 0 {
+                let parent = &stack[level - 1];
+                if parent.ns == NS_W && parent.name == "r" {
+                    run_props = Some(level);
+                }
+            }
+            let run_shape = paragraphs.last().is_some()
+                && ((w && RUN_SHAPE.contains(&name.as_str())) || run_props.is_some());
+            let mut emit = |parsed: &mut Parsed, pending: &mut Counts, key: Key| match paragraphs
+                .last_mut()
+                .filter(|_| run_shape)
+            {
+                Some(paragraph) => {
+                    paragraph.runs.insert(key);
+                }
+                None => put(parsed, pending, target, key),
+            };
+            emit(
+                &mut parsed,
+                &mut pending,
+                Key::Element {
+                    class: class.to_string(),
+                    ns,
+                    name,
+                },
+            );
+            for (attr_ns, attr_name, value) in attributes {
+                if let Some(what) = skipped_attribute(&attr_ns, &attr_name) {
+                    *parsed.normalized.entry(what).or_default() += 1;
                     continue;
                 }
-                let (attr_ns, attr_local) = reader.resolver().resolve_attribute(qname);
-                let attr_ns = namespace(&attr_ns);
-                if attr_ns == NS_RELATIONSHIPS {
-                    let value = attr
-                        .normalized_value(quick_xml::XmlVersion::Implicit1_0)
-                        .map_err(|error| xml_error(part, error))?;
-                    parsed.references.push(value.into_owned());
-                }
-                keys.push(Key::Attribute {
+                let value = if let Some((what, kept)) =
+                    renumbered(&element, &attr_ns, &attr_name, &value)
+                {
+                    *parsed.normalized.entry(what).or_default() += 1;
+                    kept
+                } else if attr_ns == NS_RELATIONSHIPS {
+                    let described = context
+                        .rels
+                        .get(value.as_str())
+                        .cloned()
+                        .unwrap_or_else(|| "dangling".into());
+                    parsed.references.push(value);
+                    described
+                } else {
+                    crate::canonical::value(&attr_ns, &value)
+                };
+                let key = Key::Attribute {
                     class: class.to_string(),
-                    element: format!("{{{ns}}}{name}"),
+                    element: element.clone(),
                     ns: attr_ns,
-                    name: String::from_utf8_lossy(attr_local.as_ref()).into_owned(),
-                });
-            }
-            for key in keys {
-                match target {
-                    Target::Block => {
-                        if let Some(region) = parsed.body.last_mut() {
-                            *region.entry(key.clone()).or_default() += 1;
-                        }
-                    }
-                    Target::Pending => *pending.entry(key.clone()).or_default() += 1,
-                    Target::Outside => {}
-                }
-                *parsed.all.entry(key).or_default() += 1;
-            }
-            if !empty {
-                stack.push((ns, name));
+                    name: attr_name,
+                    value,
+                };
+                emit(&mut parsed, &mut pending, key);
             }
         }
         buf.clear();
@@ -850,45 +1158,220 @@ impl fmt::Display for Difference {
     }
 }
 
+/// Ciò che una normalizzazione salta, ai due lati del confronto.
+pub(crate) enum Skip {
+    /// Gli elementi con questi nomi, con i loro attributi e il loro testo;
+    /// non gli elementi che contengono, che contano.
+    Elements {
+        ns: &'static str,
+        names: &'static [&'static str],
+    },
+    /// Gli attributi di questi spazi dei nomi il cui nome locale comincia
+    /// così.
+    Attributes {
+        ns: &'static [&'static str],
+        prefix: &'static str,
+    },
+    /// Il valore intero di questo attributo: l'attributo conta, il numero no.
+    Number {
+        ns: &'static str,
+        name: &'static str,
+    },
+    /// Il numero in fondo al valore `stem` seguito da un intero di questo
+    /// attributo di questo elemento (`{ns}element`).
+    Numbered {
+        element: &'static str,
+        name: &'static str,
+        stem: &'static str,
+    },
+}
+
 /// Una differenza che il codec produce senza perdere niente, con la ragione e
 /// il test che lo dimostra. Una voce entra soltanto se Word stesso la
 /// rigenera, se perderla non cambia contenuto, aspetto o comportamento, e se un
 /// test lo prova.
 pub(crate) struct Normalization {
     pub what: &'static str,
-    pub matches: fn(&Key) -> bool,
+    /// Perché perderla non perde niente.
+    pub why: &'static str,
+    pub skip: Skip,
 }
 
-/// Le normalizzazioni dichiarate. Vuota finché il corpus non ne dimostra una.
-pub(crate) const NORMALIZATIONS: &[Normalization] = &[];
+/// Le normalizzazioni dichiarate. I test sono
+/// `le_normalizzazioni_saltano_soltanto_ciò_che_dichiarano` qui sotto e il file
+/// `docx/segni-di-word.docx` del corpus, che le porta tutte e si apre
+/// modificabile.
+pub(crate) const NORMALIZATIONS: &[Normalization] = &[
+    Normalization {
+        what: "w:id",
+        why: "il numero che appaia due segni dentro il pacchetto (inizio e fine \
+              di un segnalibro, di un commento, di un permesso; una nota e il suo \
+              richiamo; una revisione): Word li rinumera a ogni salvataggio, e \
+              l'appaiamento lo prova la rilettura del modello",
+        skip: Skip::Number {
+            ns: NS_W,
+            name: "id",
+        },
+    },
+    Normalization {
+        what: "id dei disegni",
+        why: "il numero di un disegno o di una forma (`wp:docPr`, `pic:cNvPr`), \
+              unico nel documento: Word lo rinumera quando serve, e nessuna \
+              parte lo nomina",
+        skip: Skip::Number { ns: "", name: "id" },
+    },
+    Normalization {
+        what: "nomi numerati delle immagini",
+        why: "«Picture N» è il nome che Word dà a un'immagine inserita senza \
+              nome, e che il codec ricava dall'id del disegno: si rinumera con \
+              l'id. Un altro nome conta per intero",
+        skip: Skip::Numbered {
+            element:
+                "{http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}docPr",
+            name: "name",
+            stem: "Picture ",
+        },
+    },
+    Normalization {
+        what: "w:rsid*",
+        why: "gli identificativi delle sessioni di modifica servono soltanto a \
+              Confronta e Combina; Word ne aggiunge di nuovi a ogni salvataggio e, \
+              con l'opzione «Memorizza numero casuale» spenta, li scrive senza",
+        skip: Skip::Attributes {
+            ns: &[NS_W],
+            prefix: "rsid",
+        },
+    },
+    Normalization {
+        what: "w:proofErr",
+        why: "segna dove il controllo ortografico di Word aveva trovato un \
+              errore; Word lo ricalcola dal testo",
+        skip: Skip::Elements {
+            ns: NS_W,
+            names: &["proofErr"],
+        },
+    },
+    Normalization {
+        what: "w:lastRenderedPageBreak",
+        why: "dove cadeva una pagina nell'ultima impaginazione di Word: una \
+              cache, che Word ricalcola",
+        skip: Skip::Elements {
+            ns: NS_W,
+            names: &["lastRenderedPageBreak"],
+        },
+    },
+    Normalization {
+        what: "statistiche di app.xml",
+        why: "il programma che ha salvato il file, la sua versione e i conteggi \
+              (pagine, parole, caratteri, righe, paragrafi, minuti di modifica): \
+              descrivono l'ultimo salvataggio, e Word li ricalcola a ogni \
+              salvataggio",
+        skip: Skip::Elements {
+            ns: NS_EXTENDED,
+            names: &[
+                "Application",
+                "AppVersion",
+                "Pages",
+                "Words",
+                "Characters",
+                "CharactersWithSpaces",
+                "Lines",
+                "Paragraphs",
+                "TotalTime",
+            ],
+        },
+    },
+    Normalization {
+        what: "paraId",
+        why: "l'identificativo di un paragrafo (`w14:paraId`) e i rimandi a quelli \
+              dei commenti (`w15:paraId`, `w15:paraIdParent`, `w16cid:paraId`): \
+              Word li rigenera, e il codec li rinumera insieme; la risposta a un \
+              commento la prova la rilettura del modello",
+        skip: Skip::Attributes {
+            ns: &[NS_W14, NS_W15, NS_W16CID],
+            prefix: "paraId",
+        },
+    },
+    Normalization {
+        what: "w14:textId",
+        why: "l'impronta di una versione del testo di un paragrafo, che Word \
+              rigenera e nessuna parte nomina",
+        skip: Skip::Attributes {
+            ns: &[NS_W14],
+            prefix: "textId",
+        },
+    },
+];
 
-fn normalized(key: &Key) -> bool {
-    NORMALIZATIONS.iter().any(|n| (n.matches)(key))
+/// La normalizzazione che salta questo elemento, se c'è.
+fn skipped_element(ns: &str, name: &str) -> Option<&'static str> {
+    NORMALIZATIONS.iter().find_map(|n| match n.skip {
+        Skip::Elements { ns: n_ns, names } if ns == n_ns && names.contains(&name) => Some(n.what),
+        _ => None,
+    })
+}
+
+fn integer(value: &str) -> bool {
+    let digits = value.strip_prefix('-').unwrap_or(value);
+    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// La normalizzazione che toglie il numero al valore di questo attributo di
+/// `element`, se c'è, con il valore che resta.
+fn renumbered(element: &str, ns: &str, name: &str, value: &str) -> Option<(&'static str, String)> {
+    NORMALIZATIONS.iter().find_map(|n| match n.skip {
+        Skip::Number {
+            ns: n_ns,
+            name: n_name,
+        } if ns == n_ns && name == n_name && integer(value.trim()) => {
+            Some((n.what, "#".to_string()))
+        }
+        Skip::Numbered {
+            element: n_element,
+            name: n_name,
+            stem,
+        } if ns.is_empty()
+            && element == n_element
+            && name == n_name
+            && value.strip_prefix(stem).is_some_and(integer) =>
+        {
+            Some((n.what, format!("{stem}#")))
+        }
+        _ => None,
+    })
+}
+
+/// La normalizzazione che salta questo attributo, se c'è.
+fn skipped_attribute(ns: &str, name: &str) -> Option<&'static str> {
+    NORMALIZATIONS.iter().find_map(|n| match n.skip {
+        Skip::Attributes { ns: n_ns, prefix } if n_ns.contains(&ns) && name.starts_with(prefix) => {
+            Some(n.what)
+        }
+        _ => None,
+    })
 }
 
 /// La regola all'apertura: `original` sono i byte del file, `dry` quelli di una
 /// prova a vuoto del codec (scrivere il documento letto, senza modificarlo).
 ///
-/// Nessuna chiave può diminuire, salvo le normalizzazioni dichiarate. Nelle
-/// classi riscritte un aumento è ammesso (il codec aggiunge valori
-/// predefiniti); fra le parti copiate anche un aumento è una differenza.
+/// Nessuna chiave può diminuire: le normalizzazioni dichiarate non si contano
+/// nemmeno. Nelle classi riscritte un aumento è ammesso (il codec aggiunge
+/// valori predefiniti); fra le parti copiate anche un aumento è una
+/// differenza. La stessa regola vale blocco per blocco del corpo: senza
+/// modifiche il modello tiene i blocchi nello stesso ordine, e una differenza
+/// dice quale blocco perderebbe che cosa.
 pub(crate) fn open_differences(original: &Inventory, dry: &Inventory) -> Vec<Difference> {
-    let mut out = Vec::new();
-    let keys: BTreeSet<&Key> = original.all.keys().chain(dry.all.keys()).collect();
-    for key in keys {
-        if normalized(key) {
-            continue;
+    let mut out = losses(&original.all, &dry.all, "");
+    if original.body.len() == dry.body.len() {
+        for (at, (before, after)) in original.body.iter().zip(&dry.body).enumerate() {
+            out.extend(losses(before, after, &format!("block {at}: ")));
         }
-        let before = original.all.get(key).copied().unwrap_or(0);
-        let after = dry.all.get(key).copied().unwrap_or(0);
-        let copied = matches!(key, Key::Part { .. });
-        if after < before || (copied && after > before) {
-            out.push(Difference {
-                key: key.to_string(),
-                before,
-                after,
-            });
-        }
+    } else {
+        out.push(Difference {
+            key: "body blocks".into(),
+            before: original.body.len() as u64,
+            after: dry.body.len() as u64,
+        });
     }
     for dangling in dry.dangling.difference(&original.dangling) {
         out.push(Difference {
@@ -900,11 +1383,27 @@ pub(crate) fn open_differences(original: &Inventory, dry: &Inventory) -> Vec<Dif
     out
 }
 
+/// Le chiavi che diminuiscono, e le parti copiate che cambiano numero.
+fn losses(before: &Counts, after: &Counts, at: &str) -> Vec<Difference> {
+    let keys: BTreeSet<&Key> = before.keys().chain(after.keys()).collect();
+    keys.into_iter()
+        .filter_map(|key| {
+            let b = before.get(key).copied().unwrap_or(0);
+            let a = after.get(key).copied().unwrap_or(0);
+            let copied = matches!(key, Key::Part { .. });
+            (a < b || (copied && a > b)).then(|| Difference {
+                key: format!("{at}{key}"),
+                before: b,
+                after: a,
+            })
+        })
+        .collect()
+}
+
 /// Le differenze fra due insiemi di conteggi che devono essere uguali.
 pub(crate) fn equal_differences(before: &Counts, after: &Counts, at: &str) -> Vec<Difference> {
     let keys: BTreeSet<&Key> = before.keys().chain(after.keys()).collect();
     keys.into_iter()
-        .filter(|key| !normalized(key))
         .filter_map(|key| {
             let b = before.get(key).copied().unwrap_or(0);
             let a = after.get(key).copied().unwrap_or(0);
@@ -959,6 +1458,100 @@ mod tests {
             ns: NS_W.into(),
             name: name.into(),
         }
+    }
+
+    /// L'inventario del documento con questo corpo.
+    fn body_of(body: &str) -> Inventory {
+        let document = format!(
+            r#"<w:document {W} xmlns:w14="{NS_W14}"><w:body>{body}<w:sectPr/></w:body></w:document>"#
+        );
+        inventory(&docx(&document, &rels(""), &[])).unwrap()
+    }
+
+    #[test]
+    fn le_normalizzazioni_saltano_soltanto_ciò_che_dichiarano() {
+        let marked = body_of(
+            r#"<w:p w:rsidR="00AA11BB" w14:paraId="1A2B3C4D" w14:textId="0F0F0F0F"><w:proofErr w:type="spellStart"/><w:r w:rsidRPr="00CC22DD"><w:lastRenderedPageBreak/><w:t>Testo</w:t></w:r><w:proofErr w:type="spellEnd"/><w:bookmarkStart w:id="5" w:name="Segno"/><w:bookmarkEnd w:id="5"/></w:p>"#,
+        );
+        let plain = body_of(
+            r#"<w:p><w:r><w:t>Testo</w:t></w:r><w:bookmarkStart w:id="0" w:name="Segno"/><w:bookmarkEnd w:id="0"/></w:p>"#,
+        );
+        assert_eq!(marked.all, plain.all);
+        assert_eq!(marked.body, plain.body);
+        assert_eq!(marked.normalized.get("w:rsid*"), Some(&2));
+        assert_eq!(marked.normalized.get("w:proofErr"), Some(&2));
+        assert_eq!(marked.normalized.get("w:lastRenderedPageBreak"), Some(&1));
+        assert_eq!(marked.normalized.get("paraId"), Some(&1));
+        assert_eq!(marked.normalized.get("w14:textId"), Some(&1));
+        assert_eq!(marked.normalized.get("w:id"), Some(&2));
+
+        // Ciò che non è dichiarato conta ancora: il contenuto di un elemento
+        // saltato, un altro attributo dello stesso spazio dei nomi, il nome
+        // del segnalibro, un id che non è un numero.
+        for other in [
+            r#"<w:p><w:proofErr w:type="spellStart"><w:smartTagPr/></w:proofErr><w:r><w:t>Testo</w:t></w:r><w:bookmarkStart w:id="0" w:name="Segno"/><w:bookmarkEnd w:id="0"/></w:p>"#,
+            r#"<w:p w14:noSpellErr="1"><w:r><w:t>Testo</w:t></w:r><w:bookmarkStart w:id="0" w:name="Segno"/><w:bookmarkEnd w:id="0"/></w:p>"#,
+            r#"<w:p><w:r><w:t>Testo</w:t></w:r><w:bookmarkStart w:id="0" w:name="Altro"/><w:bookmarkEnd w:id="0"/></w:p>"#,
+            r#"<w:p><w:r><w:t>Testo</w:t></w:r><w:bookmarkStart w:id="a" w:name="Segno"/><w:bookmarkEnd w:id="0"/></w:p>"#,
+        ] {
+            assert_ne!(body_of(other).all, plain.all, "{other}");
+        }
+    }
+
+    #[test]
+    fn i_run_uniti_dal_codec_sono_lo_stesso_paragrafo_e_il_testo_conta() {
+        let split = body_of(
+            r#"<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Due </w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>run</w:t></w:r></w:p>"#,
+        );
+        let joined = body_of(
+            r#"<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Due run</w:t></w:r></w:p>"#,
+        );
+        assert_eq!(split.all, joined.all);
+        // Un altro testo, o la proprietà che sparisce dal paragrafo, no.
+        let other = body_of(
+            r#"<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Due Run</w:t></w:r></w:p>"#,
+        );
+        assert_ne!(other.all, joined.all);
+        let plain = body_of(r#"<w:p><w:r><w:t xml:space="preserve">Due run</w:t></w:r></w:p>"#);
+        assert_ne!(plain.all, joined.all);
+        // Le entità sono il carattere che nominano.
+        let entity = body_of(
+            r#"<w:p><w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Due&#32;r&#x75;n</w:t></w:r></w:p>"#,
+        );
+        assert_eq!(entity.all, joined.all);
+    }
+
+    #[test]
+    fn i_valori_si_confrontano_in_forma_canonica() {
+        let lower = body_of(
+            r#"<w:p><w:pPr><w:keepNext w:val="true"/></w:pPr><w:r><w:rPr><w:color w:val="c00000"/></w:rPr><w:t>x</w:t></w:r></w:p>"#,
+        );
+        let upper = body_of(
+            r#"<w:p><w:pPr><w:keepNext w:val="1"/></w:pPr><w:r><w:rPr><w:color w:val="C00000"/></w:rPr><w:t>x</w:t></w:r></w:p>"#,
+        );
+        assert_eq!(lower.all, upper.all);
+        let other = body_of(
+            r#"<w:p><w:pPr><w:keepNext w:val="1"/></w:pPr><w:r><w:rPr><w:color w:val="C00001"/></w:rPr><w:t>x</w:t></w:r></w:p>"#,
+        );
+        assert_ne!(other.all, upper.all);
+    }
+
+    #[test]
+    fn un_riferimento_vale_per_la_relazione_che_nomina() {
+        let linked = |id: &str, target: &str| {
+            let document = format!(
+                r#"<w:document {W}><w:body><w:p><w:hyperlink r:id="{id}"><w:r><w:t>x</w:t></w:r></w:hyperlink></w:p></w:body></w:document>"#
+            );
+            let link = format!(
+                r#"<Relationship Id="{id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="{target}" TargetMode="External"/>"#
+            );
+            inventory(&docx(&document, &rels(&link), &[])).unwrap()
+        };
+        let first = linked("rId1", "https://a.example");
+        // Un altro id per la stessa relazione è la stessa chiave; un'altra
+        // destinazione cambia anche il blocco che la nomina.
+        assert_eq!(first.all, linked("rId7", "https://a.example").all);
+        assert_ne!(first.body, linked("rId7", "https://b.example").body);
     }
 
     #[test]

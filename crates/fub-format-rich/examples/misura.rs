@@ -28,6 +28,11 @@ fn main() -> std::process::ExitCode {
             }
         }
     }
+    println!();
+    println!("normalizzazioni dichiarate:");
+    for (what, why) in fub_format_rich::preservation::normalizations() {
+        println!("  «{what}»: {why}");
+    }
     match failed {
         true => std::process::ExitCode::FAILURE,
         false => std::process::ExitCode::SUCCESS,

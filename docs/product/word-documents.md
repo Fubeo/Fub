@@ -132,10 +132,14 @@ intestazioni, piè di pagina, commenti, caselle di testo), è protetto,
 oppure quando la
 superficie o il codec non saprebbero riscriverlo identico. Per un `.docx` lo
 si misura sui byte del pacchetto, non soltanto sul modello: all'apertura Fub
-confronta il file con una riscrittura a vuoto del codec, e se questa perde un
-elemento, un attributo, una relazione o una parte copiata (per esempio un
-contenuto importato con `w:altChunk`) il documento si apre in sola lettura
-(motivo `codec`). Un documento cifrato o più grande di 256 MiB non si apre.
+confronta il file con una riscrittura a vuoto del codec, e se questa perde o
+cambia un elemento, un attributo o il suo valore, il testo di un paragrafo,
+una relazione o una parte copiata (per esempio un contenuto importato con
+`w:altChunk`, o il nome che Word ha dato a un'immagine) il documento si apre
+in sola lettura (motivo `codec`). Non contano i segni che Word stesso
+rigenera a ogni salvataggio: le sessioni di modifica (`rsid`), gli errori di
+ortografia segnati, l'ultima impaginazione, gli identificativi dei paragrafi,
+le statistiche del file e la numerazione degli id. Un documento cifrato o più grande di 256 MiB non si apre.
 Un salvataggio che non si rilegge uguale a ciò che si voleva scrivere non
 scrive, e il testo resta nel buffer; lo stesso vale per un salvataggio che
 cambierebbe un blocco o una parte che l'utente non ha toccato, che

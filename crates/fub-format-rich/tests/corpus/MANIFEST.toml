@@ -28,6 +28,15 @@ esercita = "lo stesso documento di stili-elenchi-tabelle senza ciò che il motor
 atteso = "modificabile"
 
 [[file]]
+path = "docx/segni-di-word.docx"
+origine = "costruito a mano da ECMA-376"
+programma = "examples/genera_corpus.rs"
+licenza = "MIT OR Apache-2.0"
+matrice = "Word moderno"
+esercita = "i segni che Word rigenera a ogni salvataggio (w:rsid*, w:proofErr, w:lastRenderedPageBreak, w14:paraId e w14:textId, le statistiche di app.xml), il segnalibro _GoBack, un segnalibro fra due paragrafi, un colore in minuscolo: le normalizzazioni dichiarate"
+atteso = "modificabile"
+
+[[file]]
 path = "docx/revisioni-senza-perdite.docx"
 origine = "costruito a mano da ECMA-376"
 programma = "examples/genera_corpus.rs"

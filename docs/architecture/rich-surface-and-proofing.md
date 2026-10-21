@@ -62,15 +62,28 @@ l'IPC.
   basta, perché un lettore non vede ciò che lui stesso salta: il controllo di
   Fub (`fub-format-rich/src/preservation.rs`, sull'inventario di
   `inventory.rs`) conta elementi e attributi per nome espanso e classe di
-  parte, relazioni con la loro destinazione e parti copiate per impronta
-  sha256. All'apertura la prova a vuoto del codec non deve perdere niente del
-  file, altrimenti `codec`; a ogni salvataggio i blocchi del corpo che il
-  modello voluto ha uguali alla base (allineati per prefisso, suffisso e
-  sottosequenza comune; i figli di un content control di blocco contano uno
-  per uno) e le parti il cui dato non è cambiato devono uscire uguali alla
-  prova a vuoto della base, senza parti copiate in più e senza riferimenti
-  pendenti nuovi. Vede ciò che sparisce, non un valore che cambia; l'esempio
-  `misura` del crate stampa il resoconto per un file. Il filtro di ciò che si incolla
+  parte, con il **valore** in forma canonica (`canonical.rs`: booleani,
+  colori, numeri, misure, percentuali), il testo di ogni paragrafo per
+  impronta, le relazioni con la loro destinazione (un `r:id` vale la
+  relazione che nomina) e le parti copiate per impronta sha256. Dentro un
+  paragrafo la forma dei run conta una volta, perché il codec unisce i run
+  uguali. All'apertura la prova a vuoto del codec non deve perdere niente del
+  file, nel totale e blocco per blocco del corpo, altrimenti `codec`; a ogni
+  salvataggio i blocchi del corpo che il modello voluto ha uguali alla base
+  (allineati per prefisso, suffisso e sottosequenza comune; i figli di un
+  content control di blocco o di un contenitore trasparente contano uno per
+  uno, e un segnalibro fra due blocchi va con il blocco che segue) e le parti
+  il cui dato non è cambiato devono uscire uguali alla prova a vuoto della
+  base, senza parti copiate in più e senza riferimenti pendenti nuovi. La
+  prova a vuoto accettata si ricorda per l'impronta dei byte del file (il
+  writer è deterministico, e il banco del corpus lo prova): il salvataggio
+  dopo l'apertura degli stessi byte non la rifà. Le normalizzazioni
+  dichiarate (`NORMALIZATIONS` in `inventory.rs`, ciascuna con la sua
+  ragione) non si contano: gli `w:rsid*`, `w:proofErr`,
+  `w:lastRenderedPageBreak`, gli `w14:paraId`/`w14:textId` e i loro rimandi
+  nei commenti, le statistiche di `app.xml`, il numero (non la presenza) di
+  `w:id` e degli `id` dei disegni, il numero dei nomi «Picture N».
+  L'esempio `misura` del crate stampa il resoconto per un file. Il filtro di ciò che si incolla
   (`editors/rich/paste.ts`) toglie i `k` che il documento non ha e i link non
   web; allineamento e disposizione di un paragrafo incollato restano.
 - `editors/rich/commands.ts` esegue le azioni dell'editor con gli id della

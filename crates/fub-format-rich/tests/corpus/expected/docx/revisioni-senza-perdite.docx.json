@@ -8,7 +8,9 @@
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 0"
+    "differenze all'apertura: 0",
+    "normalizzazione «w:id»: 8 nel file, 8 nella prova a vuoto",
+    "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
   ],
   "model": {
     "outline": [

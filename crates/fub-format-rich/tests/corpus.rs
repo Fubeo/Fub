@@ -624,6 +624,43 @@ fn le_mutazioni_non_fanno_panic() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
+/// Il writer è deterministico: lo stesso modello dà gli stessi byte, due volte
+/// di fila e dopo un `clone`. Il salvataggio confronta i blocchi non toccati con
+/// la prova a vuoto della base, e la prova regge soltanto così.
+#[test]
+fn il_writer_è_deterministico() {
+    for entry in manifest() {
+        let codec = codec_of(&entry.path);
+        if codec != Codec::Docx {
+            continue;
+        }
+        let bytes = std::fs::read(corpus().join(&entry.path)).unwrap();
+        let Ok(document) = codec.read(&bytes) else {
+            continue;
+        };
+        let Ok(first) = codec.write(&document) else {
+            continue;
+        };
+        assert_eq!(
+            codec.write(&document).ok().as_ref(),
+            Some(&first),
+            "{}: due scritture diverse",
+            entry.path
+        );
+        assert_eq!(
+            codec.write(&document.clone()).ok().as_ref(),
+            Some(&first),
+            "{}: la copia scrive diverso",
+            entry.path
+        );
+        // E il modello riletto, se torna uguale, scrive gli stessi byte.
+        let reread = codec.read(&first).unwrap();
+        if reread == document {
+            assert_eq!(codec.write(&reread).unwrap(), first, "{}", entry.path);
+        }
+    }
+}
+
 /// I tempi di apertura e di salvataggio (E3) di ogni file, in un resoconto:
 /// non fanno parte dei risultati attesi, che devono restare deterministici.
 ///
@@ -633,9 +670,16 @@ fn le_mutazioni_non_fanno_panic() {
 #[test]
 #[ignore]
 fn tempi() {
-    for entry in manifest() {
-        let codec = codec_of(&entry.path);
-        let bytes = std::fs::read(corpus().join(&entry.path)).unwrap();
+    let mut files: Vec<(String, Vec<u8>)> = manifest()
+        .into_iter()
+        .map(|entry| {
+            let bytes = std::fs::read(corpus().join(&entry.path)).unwrap();
+            (entry.path, bytes)
+        })
+        .collect();
+    files.push(("docx/grande-3000-paragrafi.docx".into(), large()));
+    for (path, bytes) in files {
+        let codec = codec_of(&path);
         let start = Instant::now();
         let opened = open(codec, &bytes);
         let opening = start.elapsed();
@@ -646,11 +690,52 @@ fn tempi() {
             let _ = save(codec, &bytes, &wanted);
             Some(start.elapsed())
         });
+        // Quanto costa la sola misura dei byte: il resoconto legge, scrive e
+        // inventaria due volte; il codec da solo legge e scrive.
+        let measure = (codec == Codec::Docx)
+            .then(|| {
+                let start = Instant::now();
+                let document = codec.read(&bytes).ok()?;
+                codec.write(&document).ok()?;
+                let codec_only = start.elapsed();
+                let start = Instant::now();
+                fub_format_rich::preservation::report(&bytes).ok()?;
+                Some(start.elapsed().saturating_sub(codec_only))
+            })
+            .flatten();
         println!(
-            "{:<40} apertura {:>10.2?}  salvataggio {}",
-            entry.path,
+            "{:<40} apertura {:>10.2?}  salvataggio {}  inventari {}",
+            path,
             opening,
-            saving.map_or("—".to_string(), |t| format!("{t:>10.2?}"))
+            saving.map_or("—".to_string(), |t| format!("{t:>10.2?}")),
+            measure.map_or("—".to_string(), |t| format!("{t:>10.2?}"))
         );
+    }
+}
+
+/// Un `.docx` grande: i paragrafi di `segni-di-word.docx` ripetuti fino a tremila,
+/// scritti dal salvataggio.
+fn large() -> Vec<u8> {
+    let base = std::fs::read(corpus().join("docx/segni-di-word.docx")).unwrap();
+    let opened = open(Codec::Docx, &base).unwrap();
+    let mut projection = Projection::from_json(&opened.projection).unwrap();
+    let body: Vec<Block> = projection
+        .blocks
+        .iter()
+        .filter_map(|block| match block {
+            Block::Para(para) if para.role == Role::Body => {
+                let mut para = para.clone();
+                para.k = None;
+                Some(Block::Para(para))
+            }
+            _ => None,
+        })
+        .collect();
+    while projection.blocks.len() < 3000 {
+        projection.blocks.extend(body.iter().cloned());
+    }
+    match save(Codec::Docx, &base, &projection.to_json().unwrap()).unwrap() {
+        Saved::Bytes(bytes) => bytes,
+        Saved::Unchanged => unreachable!(),
     }
 }

@@ -34,6 +34,7 @@ fn main() {
     let files: Vec<(&str, Vec<u8>)> = vec![
         ("docx/stili-elenchi-tabelle.docx", stili_elenchi_tabelle()),
         ("docx/senza-perdite.docx", senza_perdite()),
+        ("docx/segni-di-word.docx", segni_di_word()),
         ("docx/revisioni-testo.docx", revisioni_testo()),
         (
             "docx/revisioni-senza-perdite.docx",
@@ -273,6 +274,36 @@ fn senza_perdite() -> Vec<u8> {
     word_moderno(true)
 }
 
+/// I segni che Word lascia in ogni file e che rigenera a ogni salvataggio, su
+/// un documento che il motore di oggi riscrive senza perdite: gli `rsid`, gli
+/// errori di ortografia segnati, l'ultima impaginazione, gli id dei
+/// paragrafi, le statistiche di `app.xml`. Si apre modificabile soltanto
+/// grazie alle normalizzazioni dichiarate. Il segnalibro `_GoBack` c'è perché
+/// Word lo scrive sempre: il motore lo conserva, e non serve normalizzarlo.
+fn segni_di_word() -> Vec<u8> {
+    let body = [
+        r#"<w:p w:rsidR="00A1B2C3" w:rsidRDefault="00A1B2C3" w:rsidP="00D4E5F6" w14:paraId="1F2E3D4C" w14:textId="77AA88BB"><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r w:rsidRPr="00D4E5F6"><w:t>Segni di Word</w:t></w:r></w:p>"#,
+        r#"<w:p w:rsidR="00A1B2C3" w:rsidRDefault="00D4E5F6" w14:paraId="2A3B4C5D" w14:textId="11223344"><w:r><w:t xml:space="preserve">Una parola </w:t></w:r><w:proofErr w:type="spellStart"/><w:r><w:t>sbagliatta</w:t></w:r><w:proofErr w:type="spellEnd"/><w:r><w:t xml:space="preserve"> e un </w:t></w:r><w:r><w:rPr><w:color w:val="c00000"/><w:sz w:val="24"/></w:rPr><w:t>colore</w:t></w:r><w:r><w:t>.</w:t></w:r></w:p>"#,
+        r#"<w:bookmarkStart w:id="0" w:name="Segno"/><w:p w:rsidR="00D4E5F6" w:rsidRDefault="00D4E5F6"><w:r><w:lastRenderedPageBreak/><w:t>Una pagina nuova cominciava qui.</w:t></w:r><w:bookmarkEnd w:id="0"/></w:p>"#,
+        r#"<w:p w:rsidR="00D4E5F6" w:rsidRDefault="00D4E5F6"><w:r><w:t>L'ultima modifica.</w:t></w:r><w:bookmarkStart w:id="1" w:name="_GoBack"/><w:bookmarkEnd w:id="1"/></w:p>"#,
+        r#"<w:sectPr w:rsidR="00A1B2C3"><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1417" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>"#,
+    ]
+    .concat();
+    let mut package = with_styles_of(
+        &body,
+        r#"<w:rsids><w:rsidRoot w:val="00A1B2C3"/><w:rsid w:val="00A1B2C3"/><w:rsid w:val="00D4E5F6"/></w:rsids>"#,
+        true,
+    );
+    package
+        .part(
+            "docProps/app.xml",
+            Some("application/vnd.openxmlformats-officedocument.extended-properties+xml"),
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Template>Normal.dotm</Template><TotalTime>3</TotalTime><Pages>2</Pages><Words>17</Words><Characters>98</Characters><Application>Microsoft Office Word</Application><DocSecurity>0</DocSecurity><Lines>1</Lines><Paragraphs>4</Paragraphs><ScaleCrop>false</ScaleCrop><Company></Company><LinksUpToDate>false</LinksUpToDate><CharactersWithSpaces>114</CharactersWithSpaces><SharedDoc>false</SharedDoc><HyperlinksChanged>false</HyperlinksChanged><AppVersion>16.0000</AppVersion></Properties>"#,
+        )
+        .rel("", "rId3", "extended-properties", "docProps/app.xml");
+    package.bytes()
+}
+
 fn word_moderno(lossless: bool) -> Vec<u8> {
     let item = |text: &str| {
         format!(
@@ -481,7 +512,7 @@ fn oggetti() -> Vec<u8> {
         r#"<w:p><w:r><w:drawing><wp:anchor distT="0" distB="0" distL="114300" distR="114300" simplePos="0" relativeHeight="2" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:posOffset>0</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:extent cx="914400" cy="914400"/><wp:wrapSquare wrapText="bothSides"/><wp:docPr id="2" name="Immagine 2"/>{}</wp:anchor></w:drawing></w:r><w:r><w:t>Ancorata.</w:t></w:r></w:p>"#,
         picture(2, "rIdImg")
     );
-    let textbox = r##"<w:p><w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing><wp:inline><wp:extent cx="1828800" cy="457200"/><wp:docPr id="3" name="Casella 3"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr txBox="1"/><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1828800" cy="457200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>Testo nella casella.</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></mc:Choice><mc:Fallback><w:pict><v:shape id="Casella3" type="#_x0000_t202" style="width:144pt;height:36pt"><v:textbox><w:txbxContent><w:p><w:r><w:t>Testo nella casella.</w:t></w:r></w:p></w:txbxContent></v:textbox></v:shape></w:pict></mc:Fallback></mc:AlternateContent></w:r></w:p>""##;
+    let textbox = r##"<w:p><w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing><wp:inline><wp:extent cx="1828800" cy="457200"/><wp:docPr id="3" name="Casella 3"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr txBox="1"/><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1828800" cy="457200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>Testo nella casella.</w:t></w:r></w:p></w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></mc:Choice><mc:Fallback><w:pict><v:shape id="Casella3" type="#_x0000_t202" style="width:144pt;height:36pt"><v:textbox><w:txbxContent><w:p><w:r><w:t>Testo nella casella.</w:t></w:r></w:p></w:txbxContent></v:textbox></v:shape></w:pict></mc:Fallback></mc:AlternateContent></w:r></w:p>"##;
     let equation = r#"<w:p><w:r><w:t xml:space="preserve">Una formula: </w:t></w:r><m:oMath><m:r><m:t>a</m:t></m:r><m:r><m:t>+</m:t></m:r><m:r><m:t>b</m:t></m:r></m:oMath></w:p>"#;
     let body = [
         inline,

@@ -18,6 +18,8 @@
 //! descrivono il documento voluto non si scrive niente, e chi scrive tiene il
 //! proprio buffer.
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 use wordcraft_doc::{Document, RevisionKind};
 
@@ -123,12 +125,22 @@ pub fn save(codec: Codec, current: &[u8], json: &str) -> Result<Saved, RichError
     }
     // I controlli di Fub sui byte: il file da sovrascrivere deve essere quello
     // che il codec sa riscrivere, e i byte nuovi devono lasciare identico ciò
-    // che l'utente non ha toccato.
-    let dry = codec.write(&base)?;
-    if preservation::check_open(current, &dry).is_err() {
-        return Err(RichError::ReadOnly(ReadOnly::Codec));
-    }
-    if preservation::check_save(&dry, &bytes, &base, &wanted).is_err() {
+    // che l'utente non ha toccato. La prova a vuoto della base l'ha già fatta,
+    // di solito, l'apertura degli stessi byte.
+    let key = preservation::key(current);
+    let baseline = match preservation::remembered(&key) {
+        Some(baseline) => baseline,
+        None => {
+            let dry = codec.write(&base)?;
+            let Ok(baseline) = preservation::check_open(current, &dry) else {
+                return Err(RichError::ReadOnly(ReadOnly::Codec));
+            };
+            let baseline = Arc::new(baseline);
+            preservation::remember(key, Arc::clone(&baseline));
+            baseline
+        }
+    };
+    if preservation::check_save(&baseline, &bytes, &base, &wanted).is_err() {
         return Err(RichError::Fidelity);
     }
     Ok(Saved::Bytes(bytes))
@@ -190,8 +202,9 @@ fn fidelity(
     }
     // Il modello torna uguale; i byte devono dire che il modello descrive il
     // file: ciò che il lettore ha saltato manca dalla prova a vuoto.
-    if preservation::check_open(original, &written).is_err() {
+    let Ok(baseline) = preservation::check_open(original, &written) else {
         return Ok(Some(ReadOnly::Codec));
-    }
+    };
+    preservation::remember(preservation::key(original), Arc::new(baseline));
     Ok(None)
 }

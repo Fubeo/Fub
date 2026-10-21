@@ -8,15 +8,17 @@
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 8",
+    "differenze all'apertura: 9",
     "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}altChunk>: 1 → 0",
     "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
-    "  document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}altChunk @{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id: 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia: 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type: 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w: 1 → 0",
+    "  document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}altChunk @{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk → sha256:5dcd893e3e6b6cdf79d080aecffe79821b7887f37c3f1789cb9f42cfe95d3899\": 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
+    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
     "  document: relationship http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk → sha256:5dcd893e3e6b6cdf79d080aecffe79821b7887f37c3f1789cb9f42cfe95d3899: 1 → 0",
-    "  part text/html 5dcd893e3e6b6cdf79d080aecffe79821b7887f37c3f1789cb9f42cfe95d3899: 1 → 0"
+    "  part text/html 5dcd893e3e6b6cdf79d080aecffe79821b7887f37c3f1789cb9f42cfe95d3899: 1 → 0",
+    "  body blocks: 3 → 2",
+    "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
   ],
   "model": {
     "outline": [],

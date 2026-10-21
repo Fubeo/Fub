@@ -1,0 +1,70 @@
+{
+  "file": "docx/segni-di-word.docx",
+  "sha256": "b5600140e3fe20ac469b6d22fb52b6101439ac29e6d1ab4d96ffc01dc393fa12",
+  "open": {
+    "readonly": null,
+    "projection": "50602a552ad5c24e6c08894e12645e9dc0ed697702fdcfd21372ee4e442baa15",
+    "blocks": 4,
+    "comments": 0
+  },
+  "preservation": [
+    "differenze all'apertura: 0",
+    "normalizzazione «w:id»: 4 nel file, 4 nella prova a vuoto",
+    "normalizzazione «w:rsid*»: 11 nel file, 0 nella prova a vuoto",
+    "normalizzazione «w:proofErr»: 2 nel file, 0 nella prova a vuoto",
+    "normalizzazione «w:lastRenderedPageBreak»: 1 nel file, 0 nella prova a vuoto",
+    "normalizzazione «statistiche di app.xml»: 9 nel file, 3 nella prova a vuoto",
+    "normalizzazione «paraId»: 2 nel file, 0 nella prova a vuoto",
+    "normalizzazione «w14:textId»: 2 nel file, 0 nella prova a vuoto"
+  ],
+  "model": {
+    "outline": [
+      "1 Segni di Word"
+    ],
+    "links": [],
+    "text": "e8d258be3ae531b7673fc2d3a46b654c9161a65e1a31cba315f23537be2328aa",
+    "words": 16
+  },
+  "export": {
+    "html": [
+      "la copia HTML non porta: 11 caratteri in grassetto, 1 segnalibro su 2"
+    ],
+    "txt": [
+      "la copia Testo semplice non porta: 1 titolo, 11 caratteri in grassetto, 2 segnalibri"
+    ],
+    "latex": [
+      "la copia LaTeX non porta: 11 caratteri in grassetto, 1 segnalibro su 2"
+    ],
+    "rtf": [
+      "la copia RTF non porta: 11 caratteri in grassetto, 1 segnalibro su 2"
+    ],
+    "odt": [
+      "la copia OpenDocument non porta: 11 caratteri in grassetto, 1 segnalibro su 2"
+    ],
+    "wordxml": []
+  },
+  "edits": {
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E5": "n/a"
+  }
+}

@@ -34,6 +34,7 @@ use fub_abi::{
 use wordcraft_doc::Document;
 
 mod blob;
+mod canonical;
 pub mod export;
 mod fidelity;
 mod fresh;
