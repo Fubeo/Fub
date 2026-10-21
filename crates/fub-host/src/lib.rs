@@ -131,6 +131,7 @@ pub mod waits;
 mod wall;
 mod watcher;
 pub mod web_clip;
+mod workbook;
 extern crate self as fub_host;
 pub use custody::Custody;
 #[cfg(feature = "notify-watcher")]

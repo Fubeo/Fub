@@ -19,10 +19,10 @@ Il core non dipende dal formato, dal toolkit desktop o dal motore WASM.
 
 ## Dipendenze del workspace Rust
 
-I due diagrammi seguenti sono, insieme, la fotografia completa delle
+I tre diagrammi seguenti sono, insieme, la fotografia completa delle
 dipendenze dichiarate fra i crate del workspace. Le frecce continue indicano
 dipendenze normali; quelle tratteggiate esistono soltanto in
-`[dev-dependencies]`. Un test confronta l'unione dei due blocchi con
+`[dev-dependencies]`. Un test confronta l'unione dei blocchi con
 `cargo metadata`, quindi un crate o un arco non può restare fuori senza far
 fallire la CI.
 
@@ -146,6 +146,54 @@ flowchart LR
     wdocbin --> wgeom
     wformats --> wdoc
     wformats --> wgeom
+```
+
+I crate di GridCraft in `vendor/gridcraft/` sono codice di terzi allo stesso
+modo, con un workspace loro: li usa soltanto `fub-format-xlsx`, che legge le
+cartelle di Excel in sola lettura per l'host (feature `xlsx`), e nessuno di
+loro dipende da Fub. Il terzo blocco è il seguito dello stesso grafo, con
+l'adattatore e i crate di Fub da cui dipende.
+
+```mermaid
+flowchart LR
+    %% @grafo-dipendenze
+    %% Il seguito del grafo: fub-format-xlsx e i crate di GridCraft.
+
+    host["fub-host"]
+    abi["fub-abi"]
+    markdown["fub-format-markdown"]
+    sdk["fub-sdk"]
+    xlsx["fub-format-xlsx"]
+    gcore["gridcraft-core"]
+    gformula["gridcraft-formula"]
+    gfunctions["gridcraft-functions"]
+    gnumfmt["gridcraft-numfmt"]
+    gmodel["gridcraft-model"]
+    gcalc["gridcraft-calc"]
+    gxlsx["gridcraft-xlsx"]
+
+    host --> xlsx
+    xlsx --> abi
+    xlsx --> markdown
+    xlsx -.-> sdk
+    xlsx --> gcalc
+    xlsx --> gcore
+    xlsx --> gmodel
+    xlsx --> gnumfmt
+    xlsx --> gxlsx
+    gcalc --> gcore
+    gcalc --> gformula
+    gcalc --> gfunctions
+    gcalc --> gmodel
+    gcalc --> gnumfmt
+    gformula --> gcore
+    gfunctions --> gcore
+    gmodel --> gcore
+    gmodel --> gformula
+    gnumfmt --> gcore
+    gxlsx --> gcore
+    gxlsx --> gformula
+    gxlsx --> gmodel
 ```
 
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso

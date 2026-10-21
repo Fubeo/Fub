@@ -3367,33 +3367,43 @@ impl Host {
     }
     /// Sorgente, revisione e formato dalla stessa fotografia del workspace.
     ///
-    /// Per un documento di videoscrittura la sorgente è la sua proiezione e la
-    /// revisione è quella dei byte del file ([`crate::rich`]): i byte si
-    /// leggono nella fotografia, la proiezione si calcola fuori.
+    /// Per un documento di videoscrittura o una cartella di Excel la sorgente
+    /// è la sua proiezione e la revisione è quella dei byte del file
+    /// ([`crate::rich`], [`crate::workbook`]): i byte si leggono nella
+    /// fotografia, la proiezione si calcola fuori.
     pub fn read_document_with_format(
         &self,
         vault: Option<&str>,
         id: &DocId,
     ) -> Result<(String, Revision, Option<DocumentFormat>), PluginError> {
+        enum Read {
+            Source(String),
+            Rich(crate::rich::Codec, Vec<u8>),
+            Workbook(Vec<u8>),
+        }
         let (read, format) = self.read_workspace(vault, |workspace| {
             let format = workspace.format_of(id);
+            let bytes = || workspace.read_source_bytes(id).map_err(PluginError::from);
             let read = match crate::rich::codec(format.as_ref()) {
-                Some(codec) => {
-                    let bytes = workspace.read_source_bytes(id).map_err(PluginError::from)?;
-                    Err((codec, bytes))
-                }
-                None => Ok(workspace.read_source(id).map_err(PluginError::from)?),
+                Some(codec) => Read::Rich(codec, bytes()?),
+                None if crate::workbook::is_workbook(format.as_ref()) => Read::Workbook(bytes()?),
+                None => Read::Source(workspace.read_source(id).map_err(PluginError::from)?),
             };
             Ok((read, format))
         })?;
         match read {
-            Ok(source) => {
+            Read::Source(source) => {
                 let revision = Revision::of(&source);
                 Ok((source, revision, format))
             }
-            Err((codec, bytes)) => {
+            Read::Rich(codec, bytes) => {
                 let revision = Revision::of_bytes(&bytes);
                 let projection = crate::rich::open(codec, id, &bytes)?;
+                Ok((projection, revision, format))
+            }
+            Read::Workbook(bytes) => {
+                let revision = Revision::of_bytes(&bytes);
+                let projection = crate::workbook::open(id, &bytes)?;
                 Ok((projection, revision, format))
             }
         }
@@ -3643,9 +3653,14 @@ impl Host {
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
         let _turn = workspace.write_turn();
-        let codec = crate::rich::codec(workspace.read()?.format_of(id).as_ref());
-        if let Some(codec) = codec {
+        let format = workspace.read()?.format_of(id);
+        if let Some(codec) = crate::rich::codec(format.as_ref()) {
             return self.write_rich_in(&workspace, codec, id, source, base);
+        }
+        // Una cartella si legge e non si scrive: la sua proiezione non torna
+        // ai byte, e il testo non è il file.
+        if crate::workbook::is_workbook(format.as_ref()) {
+            return Err(crate::workbook::read_only(id));
         }
         let prepared = {
             let ws = workspace.read()?;
