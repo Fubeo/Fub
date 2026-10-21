@@ -50,6 +50,7 @@ import type {
   UiNode,
   ViewSpec,
 } from "../src/host/contract";
+import { inShellLanguage } from "./fake-english";
 import { BOARDS_DOC, boardsFixture, type BoardsFixture } from "./boards-fixture";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
@@ -1162,14 +1163,28 @@ if (ON_SHELL) {
 
 const behind = host.module.api;
 
+/// Le specie di query che rispondono testo dell'host: le altre portano il
+/// vault, che non si traduce.
+const HOST_TEXT: ReadonlySet<IndexQuery["kind"]> = new Set(["settings", "jobs"]);
+
+/// L'albero di una view della scenografia, nella lingua della shell. La
+/// struttura no: le sue voci sono i titoli della nota.
+function treeOf(view: string): UiNode | undefined {
+  const tree = TREES[view];
+  return tree && view !== "outline" ? inShellLanguage(tree) : tree;
+}
+
 export const api: typeof host.module.api = {
   ...behind,
-  queryIndex: (q) => {
+  queryIndex: async (q) => {
     const response = RESPONSES[q.kind];
-    return response ? Promise.resolve(response(q)) : behind.queryIndex(q);
+    const result = response ? response(q) : await behind.queryIndex(q);
+    return HOST_TEXT.has(q.kind) ? inShellLanguage(result) : result;
   },
+  listViews: async (vault) => inShellLanguage(await behind.listViews(vault)),
+  listCommands: async (vault) => inShellLanguage(await behind.listCommands(vault)),
   renderView: (view, instance, params) => {
-    const tree = TREES[view];
+    const tree = treeOf(view);
     return tree ? Promise.resolve(tree) : behind.renderView(view, instance, params);
   },
   // Un'azione di una view della scenografia non fa niente e **lo dice
@@ -1177,11 +1192,11 @@ export const api: typeof host.module.api = {
   // accetta, e non un `throw` — un click di troppo durante una scena non deve
   // far morire una foto.
   viewAction: (view, instance, params, action, payload, fields) => {
-    const tree = TREES[view];
+    const tree = treeOf(view);
     if (!tree) return behind.viewAction(view, instance, params, action, payload, fields);
     return Promise.resolve({ kind: "replace" as const, root: tree });
   },
-  listBundles: () => Promise.resolve(BUNDLE),
+  listBundles: () => Promise.resolve(inShellLanguage(BUNDLE)),
   knownVaults: () => Promise.resolve(KNOWN_VAULTS),
 };
 
