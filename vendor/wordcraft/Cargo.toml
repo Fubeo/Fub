@@ -20,7 +20,7 @@ members = [
 ]
 
 [workspace.package]
-# La versione dell'upstream: `tools/vendor-wordcraft/vendor.mjs` la riporta qui,
+# La versione dell'upstream: `tools/vendor-craft/vendor.mjs` la riporta qui,
 # nelle righe `wordcraft-*` qui sotto e in quelle del Cargo.toml di Fub.
 version = "0.9.0"
 edition = "2024"

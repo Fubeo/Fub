@@ -33,10 +33,12 @@ jobs:
         run: cargo test -p fub-abi --test dependency_invariant
       - name: la shell raggiunge il workspace solo dalle porte strette dell'host
         run: node .github/scripts/check-host-workspace-boundary.mjs
-      - name: soltanto gli adattatori nominano WordCraft nei sorgenti
-        run: node .github/scripts/check-wordcraft-boundary.mjs
+      - name: soltanto gli adattatori nominano WordCraft e GridCraft nei sorgenti
+        run: node .github/scripts/check-engine-boundary.mjs
       - name: la copia di WordCraft è l'upstream del lock più le patch di vendor/wordcraft/patches
-        run: node tools/vendor-wordcraft/vendor.mjs check
+        run: node tools/vendor-craft/vendor.mjs wordcraft check
+      - name: la copia di GridCraft è l'upstream del lock più le patch di vendor/gridcraft/patches
+        run: node tools/vendor-craft/vendor.mjs gridcraft check
       - name: gli errori letterali non crescono
         run: node .github/scripts/check-error-literals.mjs
       - name: il lettore dei commenti di Rust distingue la prosa da stringhe e caratteri
@@ -166,6 +168,11 @@ jobs:
         env:
           CARGO_TARGET_DIR: target/wordcraft
         run: cargo test --manifest-path vendor/wordcraft/Cargo.toml --workspace --locked --no-fail-fast
+      - name: i test dei motori di GridCraft, nel workspace loro e con il loro lock
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          CARGO_TARGET_DIR: target/gridcraft
+        run: cargo test --manifest-path vendor/gridcraft/Cargo.toml --workspace --locked --no-fail-fast
 
   docs:
     name: documentazione canonica
