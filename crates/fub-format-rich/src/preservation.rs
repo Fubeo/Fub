@@ -4,9 +4,12 @@
 //! Il controllo misura i byte con [`crate::inventory`] in due momenti:
 //!
 //! - **all'apertura**, sui byte del file e su quelli di una prova a vuoto del
-//!   codec (scrivere il documento letto senza modificarlo): ciò che il codec
-//!   perderebbe da solo apre il documento in sola lettura
-//!   ([`ReadOnly::Codec`](crate::ReadOnly::Codec));
+//!   codec (scrivere il documento letto senza modificarlo): un blocco del
+//!   corpo che il codec perderebbe da solo resta chiuso, e ciò che perderebbe
+//!   fuori dal corpo vieta la scrittura intera, perché l'innesto
+//!   ([`crate::graft`]) tiene l'uno e l'altro com'erano nel file. Si apre in
+//!   sola lettura ([`ReadOnly::Codec`](crate::ReadOnly::Codec)) soltanto un
+//!   pacchetto che non si misura blocco per blocco;
 //! - **a ogni salvataggio**, sui byte nuovi e su quelli della prova a vuoto
 //!   della base. La prova all'apertura dimostra che il codec conserva il
 //!   documento *così com'è*; una modifica cambia il modello, e il codec ha rami
@@ -71,12 +74,18 @@ fn findings(differences: Vec<Difference>) -> Result<(), Finding> {
 
 /// La prova a vuoto di un file che la regola all'apertura ha accettato: il suo
 /// inventario, che ogni salvataggio sulla stessa base confronta con i byte
-/// nuovi, e il flusso dei blocchi del file, che ogni salvataggio deve
-/// portare.
+/// nuovi, il flusso dei blocchi del file, che ogni salvataggio deve portare,
+/// e ciò che la prova a vuoto non porta.
 #[derive(Debug)]
 pub(crate) struct Baseline {
     dry: Inventory,
     file: Vec<Vec<Token>>,
+    /// I blocchi del corpo che la prova a vuoto non porta interi: restano i
+    /// byte del file, e un salvataggio che li tocca non si fa.
+    pub locked: BTreeSet<usize>,
+    /// La prova a vuoto porta tutto il pacchetto: un salvataggio può
+    /// riscriverlo intero. Altrimenti si scrive soltanto per innesto.
+    pub whole: bool,
 }
 
 /// La regola all'apertura, sui byte del file e su quelli della prova a vuoto
@@ -84,19 +93,65 @@ pub(crate) struct Baseline {
 /// all'inventario, la prova a vuoto porta il flusso di ogni blocco
 /// ([`flow::carries`]): un segno o una proprietà spostati lasciano gli stessi
 /// conteggi.
+///
+/// La regola giudica ogni blocco da sé: un blocco che la prova a vuoto
+/// perderebbe resta chiuso ([`Baseline::locked`]), perché l'innesto lo tiene
+/// com'è nel file. Ciò che si perderebbe fuori dal corpo vieta soltanto la
+/// scrittura intera ([`Baseline::whole`]). Fallisce soltanto un pacchetto che
+/// non si misura blocco per blocco.
 pub(crate) fn check_open(original: &[u8], dry: &[u8], blocks: usize) -> Result<Baseline, Finding> {
     let o_inventory = inventory(original).map_err(Finding::Unreadable)?;
     let d_inventory = inventory(dry).map_err(Finding::Unreadable)?;
-    findings(open_differences(&o_inventory, &d_inventory))?;
     let file = body_flow(original, blocks)?.scan.blocks;
     let written = body_flow(dry, blocks)?.scan.blocks;
-    for (at, (before, after)) in file.iter().zip(&written).enumerate() {
-        flow::carries(before, after).map_err(|why| Finding::Flow(format!("block {at}: {why}")))?;
-    }
+    let Some(losses) = inventory::open_losses(&o_inventory, &d_inventory) else {
+        return Err(Finding::Differences(open_differences(
+            &o_inventory,
+            &d_inventory,
+        )));
+    };
+    let locked: BTreeSet<usize> = file
+        .iter()
+        .zip(&written)
+        .zip(&losses.blocks)
+        .enumerate()
+        .filter(|(_, ((before, after), lost))| {
+            !lost.is_empty() || flow::carries(before, after).is_err()
+        })
+        .map(|(at, _)| at)
+        .collect();
+    let whole = losses.outside.is_empty() && locked.is_empty();
     Ok(Baseline {
         dry: d_inventory,
         file,
+        locked,
+        whole,
     })
+}
+
+/// I blocchi chiusi della base ritrovati nel documento voluto: nell'ordine,
+/// ciascuno al primo dei blocchi che la proiezione segna chiusi (`marked`,
+/// indici del voluto) che gli è uguale. Un blocco copiato porta il segno
+/// anche nella copia: la prima uguale tiene i byte del file, e le altre sono
+/// blocchi nuovi. Uguale vuol dire come per
+/// l'allineamento, con le storie che il blocco mostra ([`same_block`]). Dà il
+/// primo blocco chiuso che il voluto ha tolto o cambiato.
+pub(crate) fn anchors(
+    locked: &BTreeSet<usize>,
+    marked: &[usize],
+    base: &Document,
+    wanted: &Document,
+) -> Result<Vec<(usize, usize)>, usize> {
+    let mut marked = marked.iter().copied();
+    locked
+        .iter()
+        .map(|&b| {
+            marked
+                .find(|&w| same_block(base, &base.body[b], wanted, &wanted.body[w]))
+                .map(|w| (b, w))
+                .ok_or(b)
+        })
+        .collect()
 }
 
 /// Il pacchetto con il flusso del corpo, i cui blocchi devono essere i
@@ -141,17 +196,25 @@ fn check_flow(
     Ok(())
 }
 
-/// La regola a ogni salvataggio. `baseline` è la prova a vuoto di `base`,
-/// `new` sono i byte che il codec ha scritto per `wanted`, `pairs` i blocchi
-/// che l'utente non ha toccato ([`untouched_blocks`]). Dà i byte nuovi letti,
-/// per l'innesto.
+/// I byte che il codec ha scritto per `wanted`, letti come flusso: le unità
+/// da innestare, e il flusso che il salvataggio controlla.
+pub(crate) fn written(new: &[u8], wanted: &Document) -> Result<flow::Main, Finding> {
+    body_flow(new, wanted.body.len())
+}
+
+/// La regola della scrittura intera. `baseline` è la prova a vuoto di
+/// `base`, `new` sono i byte che il codec ha scritto per `wanted`, letti come
+/// flusso in `written`, `pairs` i blocchi che l'utente non ha toccato
+/// ([`untouched_blocks`]). Una base che si scrive soltanto per innesto
+/// ([`Baseline::whole`]) non si riscrive intera: lo dice il chiamante, prima.
 pub(crate) fn check_save(
     baseline: &Baseline,
     new: &[u8],
+    written: &flow::Main,
     base: &Document,
     wanted: &Document,
     pairs: &[(usize, usize)],
-) -> Result<flow::Main, Finding> {
+) -> Result<(), Finding> {
     let inventoried = inventory(new).map_err(Finding::Unreadable)?;
     findings(save_differences(
         &baseline.dry,
@@ -160,9 +223,7 @@ pub(crate) fn check_save(
         wanted,
         pairs,
     ))?;
-    let written = body_flow(new, wanted.body.len())?;
-    check_flow(&baseline.file, &written.scan.blocks, pairs).map_err(Finding::Flow)?;
-    Ok(written)
+    check_flow(&baseline.file, &written.scan.blocks, pairs).map_err(Finding::Flow)
 }
 
 /// La regola su un innesto ([`crate::graft`]): la stessa del salvataggio,
@@ -502,9 +563,30 @@ fn aligned(document: &Document) -> Vec<Aligned<'_>> {
 
 /// Le coppie (blocco della base, blocco voluto) che l'utente non ha toccato,
 /// nell'ordine: una sottosequenza comune ([`crate::diff::common`]), lineare
-/// nella memoria anche sui documenti grandi.
-pub(crate) fn untouched_blocks(base: &Document, wanted: &Document) -> Vec<(usize, usize)> {
-    crate::diff::common(&aligned(base), &aligned(wanted))
+/// nella memoria anche sui documenti grandi. Le coppie `anchors` (i blocchi
+/// chiusi, [`anchors`]) ci sono di sicuro, e il resto si allinea fra l'una e
+/// l'altra.
+pub(crate) fn untouched_blocks(
+    base: &Document,
+    wanted: &Document,
+    anchors: &[(usize, usize)],
+) -> Vec<(usize, usize)> {
+    let (b, w) = (aligned(base), aligned(wanted));
+    let mut out = Vec::new();
+    let mut from = (0usize, 0usize);
+    let ends = anchors
+        .iter()
+        .copied()
+        .chain(std::iter::once((b.len(), w.len())));
+    for (to_b, to_w) in ends {
+        let between = crate::diff::common(&b[from.0..to_b], &w[from.1..to_w]);
+        out.extend(between.into_iter().map(|(x, y)| (x + from.0, y + from.1)));
+        if to_b < b.len() {
+            out.push((to_b, to_w));
+        }
+        from = (to_b + 1, to_w + 1);
+    }
+    out
 }
 
 /// Il resoconto di misura di un `.docx`: ciò che una prova a vuoto del codec
@@ -523,6 +605,18 @@ pub fn report(bytes: &[u8]) -> Result<String, crate::RichError> {
     let _ = writeln!(out, "differenze all'apertura: {}", differences.len());
     for difference in &differences {
         let _ = writeln!(out, "  {difference}");
+    }
+    match check_open(bytes, &dry, document.body.len()) {
+        Ok(baseline) => {
+            let _ = writeln!(
+                out,
+                "blocchi chiusi: {:?}; scrittura intera: {}",
+                baseline.locked, baseline.whole
+            );
+        }
+        Err(finding) => {
+            let _ = writeln!(out, "non si misura blocco per blocco: {finding:?}");
+        }
     }
     for normalization in inventory::NORMALIZATIONS {
         let count = |inventory: &Inventory| {
@@ -645,7 +739,9 @@ mod tests {
         base: &Document,
         wanted: &Document,
     ) -> Result<(), Finding> {
-        check_save(baseline, new, base, wanted, &untouched_blocks(base, wanted)).map(|_| ())
+        let written = written(new, wanted)?;
+        let pairs = untouched_blocks(base, wanted, &[]);
+        check_save(baseline, new, &written, base, wanted, &pairs)
     }
 
     /// La base accettata di un file che è la prova a vuoto della scena, con i
@@ -688,7 +784,7 @@ mod tests {
 
     /// La relazione della foto che punta a una parte con altri byte.
     #[test]
-    fn una_relazione_verso_la_parte_sbagliata_non_passa() {
+    fn una_relazione_verso_la_parte_sbagliata_vieta_la_scrittura_intera() {
         let (_, _, dry, _) = scene();
         let image = entries(&dry)
             .into_iter()
@@ -701,9 +797,10 @@ mod tests {
             |xml| xml.replace(&image, "media/altra.png"),
             &[("word/media/altra.png", b"\x89PNG\r\n\x1a\n due")],
         );
-        let Err(Finding::Differences(found)) = check_open(&dry, &wrong, 3).map(|_| ()) else {
-            panic!("la relazione sbagliata è passata")
-        };
+        let baseline = check_open(&dry, &wrong, 3).expect("si misura");
+        assert!(!baseline.whole, "la relazione sbagliata è passata");
+        let losses = inventory::open_losses(&inventory(&dry).unwrap(), &inventory(&wrong).unwrap());
+        let found = losses.expect("gli stessi blocchi").outside;
         assert!(
             found.iter().any(|d| d.key.contains("relationship")),
             "{found:?}"
@@ -740,13 +837,16 @@ mod tests {
     /// Un valore cambiato con gli stessi conteggi (`foo="A"` che diventa
     /// `foo="B"`): all'apertura e in un blocco non toccato.
     #[test]
-    fn un_valore_cambiato_non_passa() {
+    fn un_valore_cambiato_chiude_il_blocco_e_non_passa_al_salvataggio() {
         let (base, wanted, file, dry, new) = scene_with_file();
         let other = |xml: &str| xml.replace(r#"w:edGrp="everyone""#, r#"w:edGrp="editors""#);
         let changed = rewrite(&dry, "word/document.xml", other, &[]);
-        let Err(Finding::Differences(found)) = check_open(&file, &changed, 3).map(|_| ()) else {
-            panic!("il valore cambiato è passato all'apertura")
-        };
+        let opened = check_open(&file, &changed, 3).expect("si misura");
+        assert_eq!(opened.locked, BTreeSet::from([0]), "all'apertura");
+        assert!(!opened.whole);
+        let losses =
+            inventory::open_losses(&inventory(&file).unwrap(), &inventory(&changed).unwrap());
+        let found = &losses.expect("gli stessi blocchi").blocks[0];
         assert!(
             found
                 .iter()
@@ -785,7 +885,7 @@ mod tests {
     /// conteggi, un altro posto. Non passa né all'apertura né in un blocco
     /// non toccato.
     #[test]
-    fn un_segno_spostato_nel_paragrafo_non_passa() {
+    fn un_segno_spostato_nel_paragrafo_chiude_il_blocco_e_non_passa_al_salvataggio() {
         let (base, wanted, file, dry, new) = scene_with_file();
         let moved = |xml: &str| {
             let start = xml.find("<w:permStart").expect("permStart scritto");
@@ -796,12 +896,13 @@ mod tests {
             format!("{}{mark}{}", &rest[..after], &rest[after..])
         };
         let changed = rewrite(&dry, "word/document.xml", moved, &[]);
-        let Err(Finding::Flow(why)) = check_open(&file, &changed, 3).map(|_| ()) else {
-            panic!("il segno spostato è passato all'apertura")
-        };
-        assert!(
-            why.starts_with("block 0") && why.contains("permStart"),
-            "{why}"
+        let opened = check_open(&file, &changed, 3).expect("si misura");
+        assert_eq!(opened.locked, BTreeSet::from([0]), "all'apertura");
+        assert_eq!(
+            inventory::open_losses(&inventory(&file).unwrap(), &inventory(&changed).unwrap())
+                .map(|losses| losses.blocks[0].len()),
+            Some(0),
+            "gli stessi conteggi: lo dice soltanto il flusso"
         );
         let new = rewrite(&new, "word/document.xml", moved, &[]);
         let Err(Finding::Flow(why)) = save(&baseline(&dry), &new, &base, &wanted) else {
@@ -908,11 +1009,56 @@ mod tests {
         }
         wanted.body.remove(7_777);
         wanted.body[42] = para("paragrafo 42");
-        let pairs = untouched_blocks(&base, &wanted);
+        let pairs = untouched_blocks(&base, &wanted, &[]);
         assert_eq!(pairs.len(), 10_000 - 10 - 1);
         assert!(pairs.windows(2).all(|w| w[0].0 < w[1].0 && w[0].1 < w[1].1));
         assert!(pairs.iter().all(|(b, w)| base.body[*b] == wanted.body[*w]));
         assert!(pairs.contains(&(42, 42)));
         assert!(pairs.contains(&(9_999, 9_998)));
+    }
+
+    fn body(texts: &[&str]) -> Document {
+        let mut document = Document::new();
+        document.body = texts
+            .iter()
+            .map(|text| {
+                let mut paragraph = wordcraft_doc::Paragraph::new();
+                paragraph.text = text.to_string();
+                wordcraft_doc::para_block(paragraph)
+            })
+            .collect();
+        document
+    }
+
+    /// Due paragrafi uguali, il secondo chiuso: l'utente toglie il primo. Il
+    /// segno della proiezione dice quale resta, e l'allineamento lo tiene.
+    #[test]
+    fn un_blocco_chiuso_si_ritrova_dove_la_proiezione_lo_segna() {
+        let base = body(&["uguale", "uguale", "fine"]);
+        let wanted = body(&["uguale", "fine"]);
+        let locked = BTreeSet::from([1]);
+        let anchors = anchors(&locked, &[0], &base, &wanted);
+        assert_eq!(anchors, Ok(vec![(1, 0)]));
+        assert_eq!(
+            untouched_blocks(&base, &wanted, &anchors.unwrap()),
+            vec![(1, 0), (2, 1)]
+        );
+    }
+
+    /// Un blocco chiuso tolto, cambiato o senza il segno non si ritrova; una
+    /// copia segnata si salta.
+    #[test]
+    fn un_blocco_chiuso_tolto_o_cambiato_si_dice() {
+        let base = body(&["chiuso", "libero"]);
+        let locked = BTreeSet::from([0]);
+        let removed = body(&["libero"]);
+        assert_eq!(anchors(&locked, &[], &base, &removed), Err(0));
+        let changed = body(&["chiuso!", "libero"]);
+        assert_eq!(anchors(&locked, &[0], &base, &changed), Err(0));
+        assert_eq!(anchors(&locked, &[], &base, &base), Err(0));
+        let copied = body(&["libero", "chiuso", "libero", "chiuso"]);
+        assert_eq!(anchors(&locked, &[1, 3], &base, &copied), Ok(vec![(0, 1)]));
+        let pairs = untouched_blocks(&base, &copied, &[(0, 1)]);
+        assert_eq!(pairs, vec![(0, 1), (1, 2)]);
     }
 }

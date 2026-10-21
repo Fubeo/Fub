@@ -70,6 +70,7 @@ fn docx(paragraphs: &[&str]) -> Vec<u8> {
 fn paragraph(text: &str) -> Block {
     Block::Para(fub_format_rich::projection::Para {
         role: Role::Body,
+        locked: false,
         align: None,
         k: None,
         sect: None,
@@ -718,4 +719,65 @@ fn un_docx_che_il_codec_perderebbe_si_legge_e_non_si_scrive() {
     );
     assert_eq!(denied(result), "host.rich.readonly.codec");
     assert_eq!(vault.on_disk(), bytes);
+}
+
+/// Un paragrafo che il codec perderebbe (storytold/wordcraft#3457) resta
+/// chiuso: cambiarlo si rifiuta con il suo numero e il file resta; cambiare un
+/// altro paragrafo si salva, e il chiuso resta i suoi byte.
+#[test]
+fn un_paragrafo_chiuso_non_si_scrive_e_gli_altri_sì() {
+    let vault = Vault::with_docx(&["Primo", "Secondo"]);
+    let document = String::from_utf8(part(&vault.on_disk(), "word/document.xml")).unwrap();
+    let closed = r#"<w:p><w:r><w:rPr><w:lang w:val="it-IT" w:eastAsia="ja-JP"/></w:rPr><w:t>Chiuso</w:t></w:r></w:p>"#;
+    let at = document.find("<w:body>").unwrap() + "<w:body>".len();
+    let document = format!("{}{closed}{}", &document[..at], &document[at..]);
+    let bytes = with_part(&vault.on_disk(), "word/document.xml", document.as_bytes());
+    std::fs::write(vault.root.join("Lettera.docx"), &bytes).unwrap();
+    vault.host.wait_indexed(None).expect("indexed");
+
+    let (text, revision, _) = vault
+        .host
+        .read_document_with_format(None, &lettera())
+        .unwrap();
+    let projection = Projection::from_json(&text).unwrap();
+    assert_eq!(projection.readonly, None);
+    assert!(projection.body_only);
+    assert!(matches!(&projection.blocks[0], Block::Para(para) if para.locked));
+
+    let mut changed = projection.clone();
+    changed.blocks[0] = paragraph("Chiuso e cambiato");
+    let result = vault.host.write_document(
+        None,
+        &lettera(),
+        &changed.to_json().unwrap(),
+        WriteBase::DescendsFrom(revision.clone()),
+    );
+    let Err(PluginError::PermissionDenied(fub_abi::Text::Message(message))) = result else {
+        panic!("{result:?}")
+    };
+    assert_eq!(message.key, "host.rich.locked.block");
+    assert!(message
+        .args
+        .contains(&fub_abi::text::Arg::text("block", "1")));
+    assert_eq!(vault.on_disk(), bytes);
+
+    let mut other = projection.clone();
+    other.blocks[2] = paragraph("Secondo e cambiato");
+    vault
+        .host
+        .write_document(
+            None,
+            &lettera(),
+            &other.to_json().unwrap(),
+            WriteBase::DescendsFrom(revision),
+        )
+        .expect("si salva per innesto");
+    let saved = String::from_utf8(part(&vault.on_disk(), "word/document.xml")).unwrap();
+    assert!(saved.contains(closed), "{saved}");
+    let (text, _, _) = vault
+        .host
+        .read_document_with_format(None, &lettera())
+        .unwrap();
+    let reread = Projection::from_json(&text).unwrap();
+    assert_eq!(texts(&reread), ["Chiuso", "Primo", "Secondo e cambiato"]);
 }

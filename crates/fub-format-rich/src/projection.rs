@@ -33,8 +33,10 @@ use crate::{blob, running, stories};
 
 /// Il nome del formato della proiezione.
 pub const FORMAT: &str = "fub-rich";
-/// La versione che questo crate scrive. Legge anche la 1.
-pub const VERSION: u32 = 2;
+/// La versione che questo crate scrive. Legge anche la 1 e la 2: la 3
+/// aggiunge alla 2 i segni di ciò che il codec non riscriverebbe senza
+/// perdite (`locked`, `body_only`), che il ritorno non legge.
+pub const VERSION: u32 = 3;
 pub use crate::blob::OPAQUE_SCHEMA;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -42,12 +44,17 @@ pub use crate::blob::OPAQUE_SCHEMA;
 pub struct Projection {
     pub format: String,
     pub version: u32,
-    /// Lo schema dei dati opachi: c'è nella versione 2, non nella 1.
+    /// Lo schema dei dati opachi: c'è dalla versione 2, non nella 1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opaque_schema: Option<u32>,
     /// Perché il documento non si modifica, quando non si modifica.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub readonly: Option<crate::ReadOnly>,
+    /// Il codec non riscriverebbe senza perdite qualcosa fuori dal corpo: si
+    /// salvano soltanto i paragrafi e le tabelle del corpo, e il resto si
+    /// legge.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub body_only: bool,
     /// Registra le modifiche: ciò che si scrive diventa una revisione
     /// tracciata, e la shell la scrive come tale.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -274,6 +281,10 @@ pub enum Block {
 #[serde(deny_unknown_fields)]
 pub struct Para {
     pub role: Role,
+    /// Il codec non riscriverebbe il blocco senza perdite: resta i byte del
+    /// file, e la shell non lo modifica ([`crate::preservation`]).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
     /// L'allineamento risolto, stile compreso; assente a sinistra.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub align: Option<Align>,
@@ -579,6 +590,9 @@ impl AtomKind {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Table {
+    /// Come [`Para::locked`].
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
     /// La tabella senza righe, opaca. Assente in una tabella nuova, che il
     /// formato scrive con le sue proprietà predefinite.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -658,6 +672,36 @@ impl SectKeep {
 }
 
 impl Projection {
+    /// Segna ciò che il codec non riscriverebbe senza perdite: i blocchi
+    /// `locked` del corpo e, se il pacchetto non si riscrive intero
+    /// (`whole`), tutto ciò che sta fuori dal corpo ([`Projection::body_only`]).
+    /// Il ritorno non legge i segni: il salvataggio li ricava di nuovo dai
+    /// byte del file.
+    pub(crate) fn close(&mut self, locked: &BTreeSet<usize>, whole: bool) {
+        for &at in locked {
+            match self.blocks.get_mut(at) {
+                Some(Block::Para(para)) => para.locked = true,
+                Some(Block::Table(table)) => table.locked = true,
+                None => {}
+            }
+        }
+        self.body_only = !whole;
+    }
+
+    /// Gli indici dei blocchi che la proiezione segna chiusi.
+    pub(crate) fn locked(&self) -> Vec<usize> {
+        let locked = |block: &Block| match block {
+            Block::Para(para) => para.locked,
+            Block::Table(table) => table.locked,
+        };
+        self.blocks
+            .iter()
+            .enumerate()
+            .filter(|(_, block)| locked(block))
+            .map(|(at, _)| at)
+            .collect()
+    }
+
     /// Legge una proiezione dal JSON della shell.
     ///
     /// Il formato, la versione e lo schema dei dati opachi si leggono prima
@@ -681,8 +725,8 @@ impl Projection {
         let schema = match (head.version, head.opaque_schema) {
             (1, None) => 0,
             (1, Some(_)) => return Err(RichError::Malformed("opaque_schema in version 1".into())),
-            (2, Some(schema)) => schema,
-            (2, None) => return Err(RichError::Malformed("missing opaque_schema".into())),
+            (2 | 3, Some(schema)) => schema,
+            (2 | 3, None) => return Err(RichError::Malformed("missing opaque_schema".into())),
             (version, _) => return Err(RichError::Version(version)),
         };
         if !blob::readable(schema) {
@@ -713,6 +757,7 @@ pub(crate) fn project(document: &Document) -> Result<Projection, RichError> {
         version: VERSION,
         opaque_schema: Some(OPAQUE_SCHEMA),
         readonly: None,
+        body_only: false,
         track: document.settings.track_changes,
         lang: document.styles.default_chr.lang.clone(),
         f: base(&document.styles, None),
@@ -871,6 +916,7 @@ fn table(document: &Document, table: &WcTable) -> Result<Table, RichError> {
         })
         .collect::<Result<_, RichError>>()?;
     Ok(Table {
+        locked: false,
         k: Some(blob::encode(&bare)?),
         rows,
     })
@@ -914,6 +960,7 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
     let role = role(document, &paragraph.props);
     Ok(Para {
         role,
+        locked: false,
         align: align(styles, &paragraph.props),
         k: if empty {
             None

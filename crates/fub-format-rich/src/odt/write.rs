@@ -1587,6 +1587,7 @@ impl<'a> Writer<'a> {
         out.push_str(&format!("</{}>", name_of(&plan.tag)));
         let style = plan.style.as_deref();
         Ok(Para {
+            locked: false,
             role: para.role,
             align: self.styles.align(style),
             k: None,
@@ -1800,6 +1801,7 @@ impl<'a> Writer<'a> {
         }
         out.push_str("</table:table>");
         Ok(Table {
+            locked: false,
             k: table.k.clone(),
             rows,
         })

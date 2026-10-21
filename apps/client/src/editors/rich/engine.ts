@@ -75,8 +75,8 @@ export class RichEngine {
   readonly #proofClient: ProofClient | null;
   /// L'intestazione dell'ultima proiezione letta. Versione e schema si
   /// ricopiano come sono arrivati; prima di ogni lettura non si scrive niente
-  /// che un formato accetti, ma la forma resta quella della versione 2.
-  #head: Pick<Projection, "version" | "opaque_schema" | "readonly" | "lang" | "f" | "styles"> = { version: 2 };
+  /// che un formato accetti, ma la forma resta quella della versione 3.
+  #head: Pick<Projection, "version" | "opaque_schema" | "readonly" | "body_only" | "lang" | "f" | "styles"> = { version: 3 };
   /// Il testo del buffer come lo tiene il motore: quello ricevuto finché
   /// nessuno lo cambia, poi quello riscritto.
   #source = "";
@@ -261,6 +261,7 @@ export class RichEngine {
         version: projection.version,
         opaque_schema: projection.opaque_schema,
         readonly: projection.readonly,
+        body_only: projection.body_only,
         lang: projection.lang,
         f: projection.f,
         styles: projection.styles,

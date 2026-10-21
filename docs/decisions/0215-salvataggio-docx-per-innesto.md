@@ -50,6 +50,16 @@ mano.
 - **Il resto non cambia.** Un salvataggio che tocca intestazioni, note,
   commenti, stili, numerazione o impostazioni resta una scrittura intera,
   finché un caso reale non mostra come innestare anche quelle parti.
+- **Ciò che il codec perderebbe si chiude, non chiude il file.** All'apertura
+  la prova a vuoto si misura blocco per blocco del corpo e fuori dal corpo.
+  Un blocco che perderebbe qualcosa porta `locked` nella proiezione
+  (versione 3) e resta i byte del file: la shell lo mostra e non lo cambia,
+  il codec rifiuta di toglierlo o cambiarlo e lo ritrova, spostato intero,
+  come il primo blocco segnato uguale. Una perdita fuori dal corpo, o un
+  blocco chiuso, porta `body_only`: la scrittura intera non si fa, e un
+  salvataggio che non è un innesto viene rifiutato con un errore tipizzato
+  (`Locked`). Soltanto un corpo che non si misura per blocchi apre ancora in
+  sola lettura.
 
 ## Conseguenze
 
@@ -62,6 +72,9 @@ mano.
 - I dati che Word rigenera (statistiche, `rsid`) non cambiano dove l'utente
   non ha scritto.
 
+- Un documento con una parte che il codec non tiene (una lingua dell'Asia
+  orientale, wordcraft#3457) si scrive lo stesso dove quella parte non c'è.
+
 ### Negative
 
 - Due strade di scrittura, con una regola su quale si prende; i controlli
@@ -70,6 +83,8 @@ mano.
   l'innesto e lo rilegge.
 - Le statistiche di `app.xml` e i segni di Word del file restano quelli di
   prima: Word li aggiorna al suo prossimo salvataggio.
+- In un documento con blocchi chiusi o `body_only` la pagina, le
+  intestazioni, i commenti e le note non si cambiano da Fub.
 
 ## Alternative scartate
 
@@ -77,6 +92,12 @@ mano.
 
 Era il comportamento di prima. È più semplice e i controlli della 0212 la
 rendono sicura, ma ogni salvataggio cambia tutto il pacchetto.
+
+### Aprire in sola lettura il documento che il codec perderebbe
+
+Era la regola della 0212. Protegge il file, ma un solo tratto con una lingua
+che il codec non tiene rendeva illeggibile per la scrittura un documento
+intero: con l'innesto il blocco resta i suoi byte, e il resto si scrive.
 
 ### Innestare per contenuto
 
@@ -88,7 +109,14 @@ Riconoscere una nota o un commento dal suo testo fallisce con due note uguali
 - `crates/fub-format-rich/tests/graft.rs`: i documenti modificabili del
   corpus, un elenco, un paragrafo diviso, un segnalibro, un commento e un
   permesso a cavallo di due paragrafi, tre note uguali, uno spazio dei nomi
-  ignorabile, un'immagine nuova e uno spostamento a cavallo che ripiega;
+  ignorabile, un'immagine nuova, uno spostamento a cavallo che ripiega e un
+  blocco chiuso che resta i suoi byte, si sposta e non si cambia;
 - lo stesso file, con `FUB_SOFFICE`, fa rileggere a LibreOffice ogni file
   innestato accanto a quello di partenza (il job `libreoffice` della CI);
-- i test di `crates/fub-format-rich/src/flow.rs` sulle unità del corpo.
+- i test di `crates/fub-format-rich/src/flow.rs` sulle unità del corpo, e
+  quelli di `preservation.rs` sui blocchi chiusi;
+- `crates/fub-format-rich/tests/corpus.rs`: la modifica E6 cambia un blocco
+  chiuso; `crates/fub-host/tests/rich_documents.rs`: l'errore arriva alla
+  porta con il numero del blocco;
+- `apps/client/src/__fixtures__/rich-closed.json`: la shell riscrive
+  identici i segni della versione 3.

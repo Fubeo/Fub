@@ -1,7 +1,7 @@
 # Corpus dei documenti di videoscrittura
 
 I file su cui gira il banco `tests/corpus.rs`: apertura, esportazioni e
-modifiche standard (E0–E5) di ogni file, confrontate con i risultati attesi in
+modifiche standard (E0–E6) di ogni file, confrontate con i risultati attesi in
 `expected/`. Il banco gira dentro `cargo test --workspace`.
 
 ## Regole

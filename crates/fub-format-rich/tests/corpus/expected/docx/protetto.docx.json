@@ -3,7 +3,7 @@
   "sha256": "db6a6a053e06c17d3bc89137031e7bb6019baad2f08edaa0bd9f31855cd484c4",
   "open": {
     "readonly": "protected",
-    "projection": "7ebcc6e56f95fc07f5cb831752cf8eda1b70c92c6fd9a9b448f39b216d328be4",
+    "projection": "26e46fa42919e1ccbe8b33521dc842a7bbd3813abb74646c62b5381d47d53a35",
     "blocks": 1,
     "comments": 0
   },
@@ -13,6 +13,7 @@
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
+    "blocchi chiusi: {}; scrittura intera: false",
     "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
   ],
   "model": {
@@ -35,6 +36,7 @@
     "E2": "readonly",
     "E3": "readonly",
     "E4": "readonly",
-    "E5": "readonly"
+    "E5": "readonly",
+    "E6": "readonly"
   }
 }

@@ -2,8 +2,8 @@
   "file": "docx/scritture.docx",
   "sha256": "fb3a81f11a5b00f3a34d68592e94a2c0d1513a901931eea8f25277fa88d0d215",
   "open": {
-    "readonly": "codec",
-    "projection": "8d955ca9779b10ce78d75b2e07f400a42bbc4402b05c400ff36e34f7e9b1a1ca",
+    "readonly": null,
+    "projection": "73eb099b8fc6f42368a8c520aae20cf6b2afc19629b85b4a965bf2555df3a150",
     "blocks": 4,
     "comments": 0
   },
@@ -21,6 +21,7 @@
     "  block 0: document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts>: 1 → 0",
     "  block 0: document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
     "  block 0: document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hint=\"eastAsia\": 1 → 0",
+    "blocchi chiusi: {0}; scrittura intera: false",
     "normalizzazione «w:id»: 1 nel file, 1 nella prova a vuoto",
     "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
   ],
@@ -39,11 +40,30 @@
     "wordxml": []
   },
   "edits": {
-    "E0": "readonly",
-    "E1": "readonly",
-    "E2": "readonly",
-    "E3": "readonly",
-    "E4": "readonly",
-    "E5": "readonly"
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "error": "locked",
+      "message": "rich document has closed parts: block None"
+    },
+    "E5": "n/a",
+    "E6": {
+      "error": "locked",
+      "message": "rich document has closed parts: block Some(0)"
+    }
   }
 }

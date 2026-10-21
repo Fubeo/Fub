@@ -482,6 +482,7 @@ fn le_celle_si_scrivono_e_la_tabella_resta() {
 /// testo della cella in ogni cella.
 fn new_table(rows: usize, cols: usize) -> Block {
     Block::Table(Table {
+        locked: false,
         k: None,
         rows: (0..rows)
             .map(|r| Row {
@@ -494,6 +495,7 @@ fn new_table(rows: usize, cols: usize) -> Block {
                             ins: None,
                             del: None,
                             role: Role::Body,
+                            locked: false,
                             align: None,
                             k: None,
                             sect: None,
@@ -1249,19 +1251,19 @@ fn una_proiezione_malformata_è_rifiutata_con_la_sua_specie() {
     let file = bytes(&sample());
     let opened = open(Codec::Docx, &file).unwrap();
     let mut value: serde_json::Value = serde_json::from_str(&opened.projection).unwrap();
-    value["version"] = 3.into();
+    value["version"] = 4.into();
     assert_eq!(
         save(Codec::Docx, &file, &value.to_string()),
-        Err(RichError::Version(3))
+        Err(RichError::Version(4))
     );
     // Un Fub più nuovo aggiunge campi: la versione si legge prima del resto.
     value["campo_futuro"] = true.into();
     value["blocks"][0]["nuovo"] = 1.into();
     assert_eq!(
         save(Codec::Docx, &file, &value.to_string()),
-        Err(RichError::Version(3))
+        Err(RichError::Version(4))
     );
-    value["version"] = 2.into();
+    value["version"] = 3.into();
     value["opaque_schema"] = 999.into();
     assert_eq!(
         save(Codec::Docx, &file, &value.to_string()),
@@ -1292,7 +1294,7 @@ fn la_proiezione_dichiara_lo_schema_dei_dati_opachi() {
     let file = bytes(&sample());
     let opened = open(Codec::Docx, &file).unwrap();
     let mut value: serde_json::Value = serde_json::from_str(&opened.projection).unwrap();
-    assert_eq!(value["version"], 2);
+    assert_eq!(value["version"], fub_format_rich::projection::VERSION);
     assert_eq!(value["opaque_schema"], OPAQUE_SCHEMA);
     let edited = |value: &serde_json::Value| {
         let mut p = Projection::from_json(&value.to_string()).unwrap();
@@ -1306,6 +1308,12 @@ fn la_proiezione_dichiara_lo_schema_dei_dati_opachi() {
         save(Codec::Docx, &file, &edited(&value)),
         Ok(Saved::Bytes(_))
     ));
+    // Una bozza di versione 2, di prima dei segni della 3, si salva.
+    value["version"] = 2.into();
+    assert!(matches!(
+        save(Codec::Docx, &file, &edited(&value)),
+        Ok(Saved::Bytes(_))
+    ));
 
     // Uno schema più nuovo non si legge, nemmeno in parte.
     value["opaque_schema"] = (OPAQUE_SCHEMA + 1).into();
@@ -1313,7 +1321,7 @@ fn la_proiezione_dichiara_lo_schema_dei_dati_opachi() {
         save(Codec::Docx, &file, &value.to_string()),
         Err(RichError::OpaqueSchema(OPAQUE_SCHEMA + 1))
     );
-    // La versione 2 senza lo schema è malformata.
+    // Una versione con lo schema, senza lo schema, è malformata.
     value.as_object_mut().unwrap().remove("opaque_schema");
     assert!(matches!(
         save(Codec::Docx, &file, &value.to_string()),

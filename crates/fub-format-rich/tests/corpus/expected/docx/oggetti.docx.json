@@ -2,8 +2,8 @@
   "file": "docx/oggetti.docx",
   "sha256": "5f37c0b95a839984a9c04cf694769ee3977bab21833db17d11e76abe3ee24fdd",
   "open": {
-    "readonly": "codec",
-    "projection": "18ade1cf1674892e27649e3282ead86d42d6d63452e5afa1e90fe2566a29d470",
+    "readonly": null,
+    "projection": "36e5096658d6ad8e3eaf08990396e8d710a6f27d23f5e7c047b6c10f6ed44b44",
     "blocks": 4,
     "comments": 0
   },
@@ -54,6 +54,7 @@
     "  block 2: document: {urn:schemas-microsoft-com:vml}shape @{}style=\"width:144pt;height:36pt\": 1 → 0",
     "  block 2: document: {urn:schemas-microsoft-com:vml}shape @{}type=\"#_x0000_t202\": 1 → 0",
     "  block 2: document: text of {http://schemas.openxmlformats.org/wordprocessingml/2006/main}p bfc6183b402a: 2 → 1",
+    "blocchi chiusi: {0, 1, 2}; scrittura intera: false",
     "normalizzazione «id dei disegni»: 5 nel file, 5 nella prova a vuoto",
     "normalizzazione «nomi numerati delle immagini»: 0 nel file, 2 nella prova a vuoto",
     "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
@@ -83,11 +84,30 @@
     "wordxml": []
   },
   "edits": {
-    "E0": "readonly",
-    "E1": "readonly",
-    "E2": "readonly",
-    "E3": "readonly",
-    "E4": "readonly",
-    "E5": "readonly"
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "error": "locked",
+      "message": "rich document has closed parts: block None"
+    },
+    "E5": "n/a",
+    "E6": {
+      "error": "locked",
+      "message": "rich document has closed parts: block Some(0)"
+    }
   }
 }

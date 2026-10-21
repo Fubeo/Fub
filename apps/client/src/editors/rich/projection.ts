@@ -1,4 +1,4 @@
-// La proiezione modificabile dei documenti di videoscrittura, versioni 1 e 2:
+// La proiezione modificabile dei documenti di videoscrittura, versioni 1, 2 e 3:
 // il testo che il buffer della sessione porta per uno di quei documenti.
 //
 // La forma la possiede `fub-format-rich` (`crates/fub-format-rich/src/projection.rs`):
@@ -22,13 +22,15 @@
 // vuoti), così un blocco non toccato si riscrive com'era arrivato.
 //
 // La versione 2 dichiara lo schema dei dati opachi (`opaque_schema`), la 1
-// (le bozze di prima) no. La shell ricopia versione e schema come li ha
-// ricevuti e non li cambia mai: non può dichiarare uno schema per dati opachi
-// scritti con un altro. Quale schema si legga lo decide il formato.
+// (le bozze di prima) no. La 3 aggiunge i segni di ciò che il formato non
+// riscriverebbe senza perdite: `locked` su un blocco del corpo, `body_only`
+// sul documento. La shell ricopia versione e schema come li ha ricevuti e non
+// li cambia mai: non può dichiarare uno schema per dati opachi scritti con un
+// altro. Quale schema si legga lo decide il formato.
 
 export const PROJECTION_FORMAT = "fub-rich";
 /// Le versioni che la shell legge, ciascuna con le sue chiavi.
-export const PROJECTION_VERSIONS = [1, 2] as const;
+export const PROJECTION_VERSIONS = [1, 2, 3] as const;
 export type ProjectionVersion = (typeof PROJECTION_VERSIONS)[number];
 
 export type ReadOnlyReason = "revisions" | "track_changes" | "protected" | "projection" | "codec" | "import";
@@ -165,6 +167,9 @@ export type Inline = TextInline | AtomInline;
 export interface Para {
   readonly t: "para";
   readonly role: Role;
+  /// Il formato non riscriverebbe il blocco senza perdite: si mostra e non si
+  /// cambia (versione 3). Lo porta soltanto un blocco del corpo.
+  readonly locked?: boolean;
   readonly align?: Align;
   readonly k?: string;
   readonly sect?: string;
@@ -202,6 +207,8 @@ export interface Row {
 
 export interface Table {
   readonly t: "table";
+  /// Come `Para.locked`.
+  readonly locked?: boolean;
   readonly k?: string;
   readonly rows: readonly Row[];
 }
@@ -225,9 +232,12 @@ export interface CommentView {
 export interface Projection {
   readonly format: typeof PROJECTION_FORMAT;
   readonly version: ProjectionVersion;
-  /// Lo schema dei dati opachi: c'è nella versione 2, non nella 1.
+  /// Lo schema dei dati opachi: c'è dalla versione 2, non nella 1.
   readonly opaque_schema?: number;
   readonly readonly?: ReadOnlyReason;
+  /// Il formato non riscriverebbe senza perdite qualcosa fuori dal corpo: si
+  /// salvano soltanto i paragrafi e le tabelle del corpo (versione 3).
+  readonly body_only?: boolean;
   /// Registra le modifiche: ciò che si scrive diventa una revisione tracciata.
   readonly track?: boolean;
   readonly lang?: string;
@@ -580,10 +590,16 @@ export function writePage(page: Page): string {
   return `{${fields.join(",")}}`;
 }
 
-function readBlock(value: unknown, where: string): Block {
+function readLocked(block: Json, version: ProjectionVersion, where: string): { locked?: true } {
+  if (block.locked === undefined) return {};
+  if (version < 3 || typeof block.locked !== "boolean") throw new ProjectionError(`${where}.locked: atteso un sì o un no`);
+  return block.locked ? { locked: true } : {};
+}
+
+function readBlock(value: unknown, version: ProjectionVersion, where: string): Block {
   const block = record(value, where);
   if (block.t === "para") {
-    closed(block, ["t", "role", "align", "k", "sect", "page", "header", "footer", "p", "s", "f", "ins", "del", "c"], where);
+    closed(block, ["t", "role", "locked", "align", "k", "sect", "page", "header", "footer", "p", "s", "f", "ins", "del", "c"], where);
     const align = block.align;
     if (align !== undefined && !["left", "center", "right", "justify"].includes(align as string)) {
       throw new ProjectionError(`${where}: allineamento sconosciuto`);
@@ -592,6 +608,7 @@ function readBlock(value: unknown, where: string): Block {
     return {
       t: "para",
       role: readRole(block.role, `${where}.role`),
+      ...readLocked(block, version, where),
       ...(align !== undefined ? { align: align as Align } : {}),
       ...(block.k !== undefined ? { k: text(block.k, `${where}.k`) } : {}),
       ...(block.sect !== undefined ? { sect: text(block.sect, `${where}.sect`) } : {}),
@@ -606,7 +623,7 @@ function readBlock(value: unknown, where: string): Block {
     };
   }
   if (block.t === "table") {
-    closed(block, ["t", "k", "rows"], where);
+    closed(block, ["t", "locked", "k", "rows"], where);
     const rows = list(block.rows, `${where}.rows`).map((value, r) => {
       const row = record(value, `${where}.rows[${r}]`);
       closed(row, ["k", "cells"], `${where}.rows[${r}]`);
@@ -619,12 +636,12 @@ function readBlock(value: unknown, where: string): Block {
         return {
           ...(cell.k !== undefined ? { k: text(cell.k, `${at}.k`) } : {}),
           ...(span !== undefined && span > 1 ? { span } : {}),
-          blocks: list(cell.blocks, `${at}.blocks`).map((b, i) => readBlock(b, `${at}.blocks[${i}]`)),
+          blocks: list(cell.blocks, `${at}.blocks`).map((b, i) => readBlock(b, version, `${at}.blocks[${i}]`)),
         };
       });
       return { ...(row.k !== undefined ? { k: text(row.k, `${where}.rows[${r}].k`) } : {}), cells };
     });
-    return { t: "table", ...(block.k !== undefined ? { k: text(block.k, `${where}.k`) } : {}), rows };
+    return { t: "table", ...readLocked(block, version, where), ...(block.k !== undefined ? { k: text(block.k, `${where}.k`) } : {}), rows };
   }
   throw new ProjectionError(`${where}: blocco sconosciuto`);
 }
@@ -640,14 +657,20 @@ export function parseProjection(source: string): Projection {
   }
   const root = record(value, "proiezione");
   if (root.format !== PROJECTION_FORMAT) throw new ProjectionError("formato sconosciuto");
-  const version = root.version;
-  if (version !== 1 && version !== 2) throw new ProjectionError(`versione ${String(version)}`);
-  const keys = ["format", "version", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"];
-  closed(root, version === 2 ? ["format", "version", "opaque_schema", ...keys.slice(2)] : keys, "proiezione");
+  const version = root.version as ProjectionVersion;
+  if (!PROJECTION_VERSIONS.includes(version)) throw new ProjectionError(`versione ${String(version)}`);
+  // Le chiavi di ogni versione, nell'ordine di serde.
+  const keys = {
+    1: ["format", "version", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"],
+    2: ["format", "version", "opaque_schema", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"],
+    3: ["format", "version", "opaque_schema", "readonly", "body_only", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"],
+  }[version];
+  closed(root, keys, "proiezione");
   const schema = root.opaque_schema;
-  if (version === 2 && !(typeof schema === "number" && Number.isSafeInteger(schema) && schema >= 0)) {
+  if (version >= 2 && !(typeof schema === "number" && Number.isSafeInteger(schema) && schema >= 0)) {
     throw new ProjectionError("opaque_schema: atteso un intero");
   }
+  if (root.body_only !== undefined && typeof root.body_only !== "boolean") throw new ProjectionError("body_only: atteso un sì o no");
   const readonly = root.readonly;
   if (readonly !== undefined && !(READ_ONLY_REASONS as readonly unknown[]).includes(readonly)) {
     throw new ProjectionError("motivo di sola lettura sconosciuto");
@@ -656,8 +679,9 @@ export function parseProjection(source: string): Projection {
   return {
     format: PROJECTION_FORMAT,
     version,
-    ...(version === 2 ? { opaque_schema: schema as number } : {}),
+    ...(version >= 2 ? { opaque_schema: schema as number } : {}),
     ...(readonly !== undefined ? { readonly: readonly as ReadOnlyReason } : {}),
+    ...(root.body_only === true ? { body_only: true } : {}),
     ...(root.track === true ? { track: true } : {}),
     ...(root.lang !== undefined ? { lang: text(root.lang, "lang") } : {}),
     ...withLook(readLook(root.f, "f")),
@@ -666,7 +690,7 @@ export function parseProjection(source: string): Projection {
     ...(root.header !== undefined ? { header: readRunning(root.header, "header") } : {}),
     ...(root.footer !== undefined ? { footer: readRunning(root.footer, "footer") } : {}),
     ...(root.comments !== undefined ? { comments: list(root.comments, "comments").map((c, i) => readComment(c, `comments[${i}]`)) } : {}),
-    blocks: list(root.blocks, "blocks").map((b, i) => readBlock(b, `blocks[${i}]`)),
+    blocks: list(root.blocks, "blocks").map((b, i) => readBlock(b, version, `blocks[${i}]`)),
   };
 }
 
@@ -782,6 +806,7 @@ function writeInline(inline: Inline): string {
 export function writeBlock(block: Block): string {
   if (block.t === "para") {
     let out = `{"t":"para","role":${writeRole(block.role)}`;
+    if (block.locked) out += `,"locked":true`;
     if (block.align !== undefined) out += `,"align":"${block.align}"`;
     if (block.k !== undefined) out += `,"k":${JSON.stringify(block.k)}`;
     if (block.sect !== undefined) out += `,"sect":${JSON.stringify(block.sect)}`;
@@ -804,14 +829,15 @@ export function writeBlock(block: Block): string {
     });
     return `{${key(row.k, ",")}"cells":[${cells.join(",")}]}`;
   });
-  return `{"t":"table",${key(block.k, ",")}"rows":[${rows.join(",")}]}`;
+  return `{"t":"table",${block.locked ? `"locked":true,` : ""}${key(block.k, ",")}"rows":[${rows.join(",")}]}`;
 }
 
 /// L'intestazione della proiezione fino all'elenco dei blocchi escluso.
-export function writeHead(projection: Pick<Projection, "version" | "opaque_schema" | "readonly" | "track" | "lang" | "f" | "styles" | "page" | "header" | "footer" | "comments">): string {
+export function writeHead(projection: Pick<Projection, "version" | "opaque_schema" | "readonly" | "body_only" | "track" | "lang" | "f" | "styles" | "page" | "header" | "footer" | "comments">): string {
   let out = `{"format":"${PROJECTION_FORMAT}","version":${projection.version}`;
   if (projection.opaque_schema !== undefined) out += `,"opaque_schema":${projection.opaque_schema}`;
   if (projection.readonly !== undefined) out += `,"readonly":"${projection.readonly}"`;
+  if (projection.body_only) out += `,"body_only":true`;
   if (projection.track) out += `,"track":true`;
   if (projection.lang !== undefined) out += `,"lang":${JSON.stringify(projection.lang)}`;
   out += writeLook(projection.f);

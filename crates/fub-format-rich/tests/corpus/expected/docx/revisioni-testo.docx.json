@@ -2,8 +2,8 @@
   "file": "docx/revisioni-testo.docx",
   "sha256": "953a80df19a5e8026ec747412fe523d46d6bc47288c8631c38575407d02c78ce",
   "open": {
-    "readonly": "codec",
-    "projection": "f367ef1fec6397633eccab04ff6342cc4c86b245a9b3a1904cc6e0b7b67aa01a",
+    "readonly": null,
+    "projection": "cba49e184a24f7324bbcedb517e9e486922549ccc2c9841908a6f10d6b88b0fb",
     "blocks": 5,
     "comments": 0
   },
@@ -13,6 +13,7 @@
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
+    "blocchi chiusi: {}; scrittura intera: false",
     "normalizzazione «w:id»: 8 nel file, 8 nella prova a vuoto",
     "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
   ],
@@ -43,11 +44,27 @@
     "wordxml": []
   },
   "edits": {
-    "E0": "readonly",
-    "E1": "readonly",
-    "E2": "readonly",
-    "E3": "readonly",
-    "E4": "readonly",
-    "E5": "readonly"
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "error": "locked",
+      "message": "rich document has closed parts: block None"
+    },
+    "E5": "n/a",
+    "E6": "n/a"
   }
 }

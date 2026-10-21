@@ -72,8 +72,14 @@ l'IPC.
   impronta, le relazioni con la loro destinazione (un `r:id` vale la
   relazione che nomina) e le parti copiate per impronta sha256. Dentro un
   paragrafo la forma dei run conta una volta, perché il codec unisce i run
-  uguali. All'apertura la prova a vuoto del codec non deve perdere niente del
-  file, nel totale e blocco per blocco del corpo, altrimenti `codec`; a ogni
+  uguali. All'apertura la prova a vuoto del codec si misura fuori dal corpo e
+  blocco per blocco del corpo: un blocco che perderebbe qualcosa si
+  **chiude** (`locked` nella proiezione) e resta i byte del file; una perdita
+  fuori dal corpo, o un blocco chiuso, vieta la scrittura intera
+  (`body_only`), e si salva soltanto per innesto. Un blocco chiuso si
+  ritrova nel documento voluto, in ordine, come il primo blocco segnato
+  uguale a quello del file; toglierlo o cambiarlo è un errore `Locked`. Un
+  corpo che non si misura per blocchi apre in sola lettura (`codec`); a ogni
   salvataggio i blocchi del corpo che il modello voluto ha uguali alla base
   (allineati per prefisso, suffisso e sottosequenza comune; i figli di un
   content control di blocco o di un contenitore trasparente contano uno per

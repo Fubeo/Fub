@@ -404,12 +404,18 @@ fn una_tabella_nuova_si_scrive_con_le_colonne_e_il_bordo() {
             ],
         },
     ];
-    projection
-        .blocks
-        .insert(1, Block::Table(Table { k: None, rows }));
+    projection.blocks.insert(
+        1,
+        Block::Table(Table {
+            locked: false,
+            k: None,
+            rows,
+        }),
+    );
     projection.blocks.insert(
         2,
         Block::Table(Table {
+            locked: false,
             k: None,
             rows: vec![Row {
                 k: None,

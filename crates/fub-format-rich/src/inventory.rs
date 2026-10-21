@@ -1424,6 +1424,40 @@ pub(crate) fn open_differences(original: &Inventory, dry: &Inventory) -> Vec<Dif
     out
 }
 
+/// Le differenze della regola all'apertura ([`open_differences`]), divise fra
+/// i blocchi del corpo e il resto del pacchetto.
+pub(crate) struct Losses {
+    /// Fuori dal corpo del documento principale, con i riferimenti che
+    /// resterebbero senza la loro relazione.
+    pub outside: Vec<Difference>,
+    /// Blocco per blocco del corpo, nell'ordine.
+    pub blocks: Vec<Vec<Difference>>,
+}
+
+/// La regola all'apertura divisa per luogo: `None` se la prova a vuoto non ha
+/// i blocchi del file.
+pub(crate) fn open_losses(original: &Inventory, dry: &Inventory) -> Option<Losses> {
+    if original.body.len() != dry.body.len() {
+        return None;
+    }
+    let mut outside = losses(&original.outside_body(), &dry.outside_body(), "");
+    for dangling in dry.dangling.difference(&original.dangling) {
+        outside.push(Difference {
+            key: format!("dangling reference {dangling}"),
+            before: 0,
+            after: 1,
+        });
+    }
+    let blocks = original
+        .body
+        .iter()
+        .zip(&dry.body)
+        .enumerate()
+        .map(|(at, (before, after))| losses(before, after, &format!("block {at}: ")))
+        .collect();
+    Some(Losses { outside, blocks })
+}
+
 /// Le chiavi che diminuiscono, e le parti copiate che cambiano numero.
 fn losses(before: &Counts, after: &Counts, at: &str) -> Vec<Difference> {
     let keys: BTreeSet<&Key> = before.keys().chain(after.keys()).collect();

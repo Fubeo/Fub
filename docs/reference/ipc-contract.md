@@ -263,7 +263,7 @@ Un documento di un formato di `fub-format-rich` (`docx`, `odt`, `rtf` e
 passa dalle stesse porte dei documenti, senza una porta in più:
 
 - `read_document` restituisce in `text` la **proiezione** del file: JSON
-  chiuso e versionato (`"format": "fub-rich"`, `"version": 2`,
+  chiuso e versionato (`"format": "fub-rich"`, `"version": 3`,
   `"opaque_schema": N`), con `format_id` `"docx"` e `source_kind` `"bytes"`.
   `revision` è quella dei byte del file, non del testo restituito;
 - `write_document` riceve una proiezione in `source` e la `base` letta
@@ -316,6 +316,18 @@ dopo `end`, è un sommario dei titoli fino al livello N (1–9): il codec Word
 lo scrive come campo `TOC` da ricalcolare all'apertura, e rifiuta un `toc`
 fuori da 1–9 o su un'altra specie; il codec ODT lo rifiuta.
 
+Un blocco del corpo (paragrafo o tabella, non i blocchi dentro una cella)
+che il codec non riscriverebbe senza perdite porta `"locked": true`, subito
+dopo `role` nel paragrafo e dopo `t` nella tabella: il salvataggio lo lascia
+i byte del file. Toglierlo, cambiarlo o togliergli il segno viene rifiutato
+(`host.rich.locked.block`, con il numero del blocco da 1); spostarlo intero
+si può. `"body_only": true`, fra `readonly` e `track`, dice che il codec non
+riscriverebbe senza perdite qualcosa fuori dal corpo, o che un blocco è
+chiuso: si salvano soltanto i blocchi del corpo, per innesto, e un
+salvataggio che tocca altro (pagina, intestazioni, commenti, note) o che
+l'innesto non sa trattare viene rifiutato (`host.rich.locked.outside`).
+Entrambi sono assenti quando sono falsi.
+
 Un documento che il codec o la proiezione non riportano identico si apre con
 `"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
 `projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo
@@ -327,9 +339,10 @@ riporta il file intero. Un file nuovo `rtf` o `doc` non si crea
 `sect`, JSON del modello del motore in base64), che si incrementa quando
 cambia la loro forma serializzata: lo schema 2 aggiunge all'1 il campo
 facoltativo `eastAsianLayout` delle proprietà del carattere, e il codec legge
-ogni schema fino al suo. La versione 1, quella delle bozze di
-prima, ha le stesse chiavi senza `opaque_schema` e i dati dello schema 0. La
-shell legge le due versioni, ciascuna con il suo elenco chiuso di chiavi, e
+ogni schema fino al suo. La versione 2 ha le chiavi della 3 senza `locked`
+e `body_only`; la 1, quella delle bozze di prima, quelle della 2 senza
+`opaque_schema`, e i dati dello schema 0. La shell legge le tre versioni,
+ciascuna con il suo elenco chiuso di chiavi, e
 ricopia versione e schema come li ha ricevuti. Il codec legge formato,
 versione e schema prima del resto, e rifiuta una versione futura
 (`host.rich.version`) e uno schema che non legge, scritto da un Fub più nuovo
@@ -339,7 +352,8 @@ riscritto, perderebbe un campo è una proiezione malformata.
 Gli errori del codec arrivano tipizzati con chiave di catalogo `host.rich.*`.
 La forma della proiezione è di `crates/fub-format-rich/src/projection.rs`; la
 fixture `apps/client/src/__fixtures__/rich-projection.json` la lega alla
-shell nei due versi (`crates/fub-format-rich/tests/ts_projection.rs`).
+shell nei due versi, e `rich-closed.json` ne porta i blocchi chiusi
+(`crates/fub-format-rich/tests/ts_projection.rs`).
 
 ## Percorsi
 

@@ -436,6 +436,7 @@ impl Reader<'_> {
         };
         let role = role(self.styles, &key);
         Ok(Para {
+            locked: false,
             role,
             align: self.styles.align(style),
             k: Some(blob::encode(&key)?),
@@ -507,6 +508,7 @@ impl Reader<'_> {
             rows: movable,
         };
         Ok(Table {
+            locked: false,
             k: Some(blob::encode(&key)?),
             rows,
         })

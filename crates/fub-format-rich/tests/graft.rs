@@ -10,7 +10,7 @@ use std::io::{Cursor, Read, Write};
 use base64::Engine;
 use common::PNG;
 use fub_format_rich::projection::{AtomKind, Block, Inline, Look, Para, Projection};
-use fub_format_rich::{open, save, Codec, Saved};
+use fub_format_rich::{open, save, Codec, RichError, Saved};
 use quick_xml::events::Event;
 use quick_xml::name::ResolveResult;
 use quick_xml::NsReader;
@@ -347,8 +347,9 @@ fn i_documenti_del_corpus_si_salvano_per_innesto() {
             continue;
         }
         let mut p = Projection::from_json(&opened.projection).unwrap();
+        // Il primo paragrafo con un testo che la shell lascia cambiare.
         let Some(index) = p.blocks.iter().position(|block| {
-            matches!(block, Block::Para(para) if para.c.iter().any(|i| matches!(i, Inline::Text { x, .. } if !x.trim().is_empty())))
+            matches!(block, Block::Para(para) if !para.locked && para.c.iter().any(|i| matches!(i, Inline::Text { x, .. } if !x.trim().is_empty())))
         }) else {
             continue;
         };
@@ -377,7 +378,7 @@ fn i_documenti_del_corpus_si_salvano_per_innesto() {
         );
         tried += 1;
     }
-    assert!(tried >= 3, "soltanto {tried} documenti modificabili");
+    assert!(tried >= 10, "soltanto {tried} documenti modificabili");
 }
 
 /// Un elenco toccato tiene il suo `w:numId`, anche quando il file non conta
@@ -740,4 +741,72 @@ fn i_numeri_nuovi_non_ripetono_quelli_delle_altre_storie() {
     assert_eq!(ids.len(), 1, "{}", rest[0]);
     let id: u64 = ids[0].parse().unwrap();
     assert!(id > 50, "{}", rest[0]);
+}
+
+/// Un paragrafo che il codec non riscriverebbe uguale (la lingua dell'Asia
+/// orientale di un carattere, storytold/wordcraft#3457) resta chiuso: si
+/// salvano gli altri, e lui resta i byte del file.
+#[test]
+fn un_blocco_chiuso_resta_i_byte_del_file() {
+    let closed = r#"<w:p><w:r><w:rPr><w:lang w:val="it-IT" w:eastAsia="ja-JP"/></w:rPr><w:t>chiuso</w:t></w:r></w:p>"#;
+    let file = package(
+        "",
+        &format!("{closed}{}{}", para("Primo"), para("Secondo")),
+        &[],
+    );
+    let opened = open(Codec::Docx, &file).unwrap();
+    assert_eq!(opened.readonly, None);
+    let p = Projection::from_json(&opened.projection).unwrap();
+    let locked: Vec<bool> = p
+        .blocks
+        .iter()
+        .map(|block| matches!(block, Block::Para(para) if para.locked))
+        .collect();
+    assert_eq!(locked, [true, false, false]);
+    assert!(p.body_only, "un blocco chiuso vieta la scrittura intera");
+
+    // Un altro paragrafo si salva per innesto.
+    let mut edited = p.clone();
+    append(&mut edited, 2, " cambiato");
+    let out = saved(&file, &edited);
+    let rest = grafted(&file, &out);
+    assert_eq!(rest.len(), 1, "{rest:#?}");
+    assert!(body_children(&main_part(&out)).contains(&closed.to_string()));
+    let reopened = projection(&out);
+    assert_eq!(texts(&reopened), ["chiuso", "Primo", "Secondo cambiato"]);
+    assert!(matches!(&reopened.blocks[0], Block::Para(para) if para.locked));
+
+    // Toglierlo, tenerlo senza il segno o cambiarlo non si fa.
+    let locked_error = |projection: &Projection| {
+        save(Codec::Docx, &file, &projection.to_json().unwrap()).unwrap_err()
+    };
+    let mut removed = p.clone();
+    removed.blocks.remove(0);
+    assert_eq!(locked_error(&removed), RichError::Locked(Some(0)));
+    let mut unmarked = p.clone();
+    para_mut(&mut unmarked, 0).locked = false;
+    append(&mut unmarked, 1, " cambiato");
+    assert_eq!(locked_error(&unmarked), RichError::Locked(Some(0)));
+    let mut changed = p.clone();
+    append(&mut changed, 0, " cambiato");
+    assert_eq!(locked_error(&changed), RichError::Locked(Some(0)));
+
+    // Spostato in fondo, resta i suoi byte.
+    let mut moved = p.clone();
+    let block = moved.blocks.remove(0);
+    moved.blocks.push(block);
+    let out = saved(&file, &moved);
+    let children = body_children(&main_part(&out));
+    assert_eq!(
+        children[children.len() - 2],
+        closed,
+        "prima della sezione finale"
+    );
+    assert_eq!(texts(&projection(&out)), ["Primo", "Secondo", "chiuso"]);
+
+    // Ciò che sta fuori dal corpo non si riscrive: la pagina dell'ultima
+    // sezione è del documento intero.
+    let mut page = p.clone();
+    page.page.as_mut().expect("la pagina").left += 36.0;
+    assert_eq!(locked_error(&page), RichError::Locked(None));
 }

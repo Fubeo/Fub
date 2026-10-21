@@ -1,5 +1,5 @@
 //! **Il banco del corpus.** Ogni file di `tests/corpus/` passa dall'apertura,
-//! dalle esportazioni e dalle modifiche standard della shell (E0–E5); l'esito
+//! dalle esportazioni e dalle modifiche standard della shell (E0–E6); l'esito
 //! si confronta con `tests/corpus/expected/<file>.json`.
 //!
 //! I risultati attesi committati sono il comportamento del motore di oggi: in
@@ -119,6 +119,7 @@ fn error_of(error: &RichError) -> Value {
         RichError::NoWriter(_) => "no_writer",
         RichError::ReadOnly(_) => "readonly",
         RichError::Fidelity => "fidelity",
+        RichError::Locked(_) => "locked",
         _ => "other",
     };
     json!({ "error": kind, "message": error.to_string() })
@@ -244,11 +245,16 @@ fn marker(id: u32, end: bool) -> Inline {
 
 /// Il primo paragrafo del corpo con un testo di almeno due caratteri, e
 /// l'indice di quel testo.
-fn first_text(projection: &mut Projection) -> Option<(usize, usize)> {
+/// Il primo tratto di testo di un paragrafo del corpo, aperto (`locked`
+/// falso) o chiuso: la shell modifica soltanto i primi.
+fn first_text(projection: &mut Projection, locked: bool) -> Option<(usize, usize)> {
     projection.blocks.iter().enumerate().find_map(|(b, block)| {
         let Block::Para(para) = block else {
             return None;
         };
+        if para.locked != locked {
+            return None;
+        }
         para.c
             .iter()
             .position(|inline| match inline {
@@ -276,7 +282,7 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
     match name {
         "E0" => {}
         "E1" => {
-            let (b, i) = first_text(&mut p)?;
+            let (b, i) = first_text(&mut p, false)?;
             let x = text_mut(&mut p, b, i);
             let start = x.len() - x.trim_start().len();
             let end = x[start..]
@@ -285,7 +291,7 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
             x.replace_range(start..end, "Cambiato");
         }
         "E2" => {
-            let (b, i) = first_text(&mut p)?;
+            let (b, i) = first_text(&mut p, false)?;
             let Block::Para(para) = &p.blocks[b] else {
                 unreachable!()
             };
@@ -319,6 +325,7 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
         }
         "E3" => p.blocks.push(Block::Para(Para {
             role: Role::Body,
+            locked: false,
             align: None,
             k: None,
             sect: None,
@@ -333,7 +340,7 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
             c: vec![text_inline("Un paragrafo aggiunto in fondo.")],
         })),
         "E4" => {
-            let (b, i) = first_text(&mut p)?;
+            let (b, i) = first_text(&mut p, false)?;
             let id = p.comments.iter().map(|c| c.id).max().map_or(1, |m| m + 1);
             let Block::Para(para) = &mut p.blocks[b] else {
                 unreachable!()
@@ -385,12 +392,17 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
             })?;
             table.rows.pop();
         }
+        // Ciò che la shell non fa: cambiare un blocco chiuso.
+        "E6" => {
+            let (b, i) = first_text(&mut p, true)?;
+            text_mut(&mut p, b, i).push_str(" cambiato");
+        }
         _ => unreachable!(),
     }
     Some(p)
 }
 
-const EDITS: [&str; 6] = ["E0", "E1", "E2", "E3", "E4", "E5"];
+const EDITS: [&str; 7] = ["E0", "E1", "E2", "E3", "E4", "E5", "E6"];
 
 /// Salva una modifica, riapre i byte e confronta la proiezione riaperta con
 /// quella voluta, a meno dei dati opachi.

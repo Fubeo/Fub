@@ -199,11 +199,15 @@ fn il_golden_ha_lo_schema_corrente() {
     }
 }
 
-/// Il primo tratto di testo della proiezione, per una modifica minima.
+/// Il primo tratto di testo di un paragrafo non chiuso, per una modifica
+/// minima.
 fn touch(projection: &mut Projection) -> bool {
     use fub_format_rich::projection::Block;
     for block in &mut projection.blocks {
         if let Block::Para(para) = block {
+            if para.locked {
+                continue;
+            }
             for inline in &mut para.c {
                 if let Inline::Text { x, .. } = inline {
                     x.push_str(" (toccato)");
@@ -254,7 +258,10 @@ fn a_draft_of_schema_saves(schema: u32, version: u32) {
         panic!("la bozza cambia il documento");
     };
     let reopened = Projection::from_json(&open(Codec::Docx, &out).unwrap().projection).unwrap();
-    assert_eq!((reopened.version, reopened.schema()), (2, OPAQUE_SCHEMA));
+    assert_eq!(
+        (reopened.version, reopened.schema()),
+        (fub_format_rich::projection::VERSION, OPAQUE_SCHEMA)
+    );
     // La bozza si rilegge com'era voluta, a parte la versione.
     let mut migrated = wanted.clone();
     migrated.version = reopened.version;

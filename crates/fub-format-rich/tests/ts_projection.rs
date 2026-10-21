@@ -11,6 +11,10 @@
 //!   di partenza: ciò che la superficie scrive, il codec lo accetta e lo
 //!   rilegge com'era voluto.
 //!
+//! - `rich-closed.json` è la proiezione di un `.docx` con un paragrafo e una
+//!   tabella che il codec perderebbe, quindi chiusi: la shell la riscrive
+//!   identica, segni compresi. La scrive questo file con `UPDATE_MIRROR=1`.
+//!
 //! Rigenerare la prima rende stantia la seconda: il test della shell lo dice.
 
 mod common;
@@ -155,6 +159,79 @@ fn la_fixture_della_shell_è_la_proiezione_del_codec() {
         "la fixture della shell è stantia: rigenerala con \
          `UPDATE_MIRROR=1 cargo test -p fub-format-rich --test ts_projection`, \
          poi rigenera `rich-edited.json` dalla shell"
+    );
+}
+
+/// Un `.docx` scritto a mano: un paragrafo e una tabella con la lingua
+/// dell'Asia orientale, che il codec non tiene (wordcraft#3457), fra due
+/// paragrafi che tiene.
+fn closed_docx() -> Vec<u8> {
+    use std::io::Write;
+    let lost =
+        r#"<w:r><w:rPr><w:lang w:val="it-IT" w:eastAsia="ja-JP"/></w:rPr><w:t>chiuso</w:t></w:r>"#;
+    let body = format!(
+        "<w:p><w:r><w:t>Aperto</w:t></w:r></w:p>\
+         <w:p>{lost}</w:p>\
+         <w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"2000\"/></w:tblGrid>\
+         <w:tr><w:tc><w:p>{lost}</w:p></w:tc></w:tr></w:tbl>\
+         <w:p><w:r><w:t>Ancora aperto</w:t></w:r></w:p><w:sectPr/>"
+    );
+    let entries = [
+        (
+            "[Content_Types].xml",
+            r#"<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#.to_string(),
+        ),
+        (
+            "_rels/.rels",
+            r#"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#.to_string(),
+        ),
+        (
+            "word/document.xml",
+            format!(
+                r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>{body}</w:body></w:document>"#
+            ),
+        ),
+    ];
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for (name, xml) in entries {
+        zip.start_file(name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(xml.as_bytes()).unwrap();
+    }
+    zip.finish().unwrap().into_inner()
+}
+
+#[test]
+fn la_fixture_dei_blocchi_chiusi_è_la_proiezione_del_codec() {
+    let opened = open(Codec::Docx, &closed_docx()).unwrap();
+    assert_eq!(
+        opened.readonly, None,
+        "i blocchi chiusi non chiudono il file"
+    );
+    let p = Projection::from_json(&opened.projection).unwrap();
+    let locked: Vec<bool> = p
+        .blocks
+        .iter()
+        .map(|block| match block {
+            Block::Para(para) => para.locked,
+            Block::Table(table) => table.locked,
+        })
+        .collect();
+    assert_eq!(locked, [false, true, true, false]);
+    assert!(p.body_only);
+    let path = fixture("rich-closed.json");
+    if std::env::var_os("UPDATE_MIRROR").is_some() {
+        let mut out =
+            serde_json::to_string_pretty(&json!({ "source": opened.projection })).unwrap();
+        out.push('\n');
+        std::fs::write(&path, out).expect("scrive la fixture");
+        return;
+    }
+    assert_eq!(
+        source_of("rich-closed.json"),
+        opened.projection,
+        "la fixture dei blocchi chiusi è stantia: rigenerala con \
+         `UPDATE_MIRROR=1 cargo test -p fub-format-rich --test ts_projection`"
     );
 }
 

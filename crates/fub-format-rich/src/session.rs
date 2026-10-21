@@ -10,13 +10,18 @@
 //! la proiezione deve tornare al documento identico, e il documento deve
 //! rileggersi identico dopo una scrittura del codec. Se uno dei due fallisce,
 //! la proiezione esce lo stesso, con [`ReadOnly`]: si legge, non si scrive.
+//! Ciò che la prova a vuoto perderebbe nei byte non chiude tutto il
+//! documento: un blocco del corpo esce `locked`, e ciò che sta fuori dal
+//! corpo dà `body_only` ([`crate::preservation`]).
 //!
 //! L'OpenDocument fa eccezione: apre e salva con il codec di Fub (`odt`), che
 //! lavora sull'XML del file e fa le proprie prove, con le stesse specie.
 //!
 //! **Salvare** rilegge sempre ciò che sta per scrivere: se i byte nuovi non
 //! descrivono il documento voluto non si scrive niente, e chi scrive tiene il
-//! proprio buffer.
+//! proprio buffer. Un salvataggio che tocca soltanto il corpo innesta le
+//! unità toccate nel file com'era ([`crate::graft`]); uno che toccherebbe ciò
+//! che è chiuso non si fa ([`RichError::Locked`]).
 
 use std::sync::Arc;
 
@@ -47,9 +52,10 @@ pub enum ReadOnly {
     /// Non torna identico dalla proiezione.
     Projection,
     /// Il codec non lo riscriverebbe identico: il modello non si rilegge
-    /// uguale, oppure la prova a vuoto perde o aggiunge qualcosa nei byte del
-    /// pacchetto (un elemento, un attributo, una relazione, una parte copiata;
-    /// vedi [`crate::preservation`]).
+    /// uguale, oppure i byte del pacchetto non si misurano blocco per blocco
+    /// del corpo (vedi [`crate::preservation`]). Ciò che la prova a vuoto
+    /// perderebbe in un pacchetto che si misura chiude soltanto il blocco, o
+    /// ciò che sta fuori dal corpo.
     Codec,
     /// È stato letto da un importatore che non riporta il file intero.
     Import,
@@ -83,7 +89,13 @@ pub fn open(codec: Codec, bytes: &[u8]) -> Result<Opened, RichError> {
     let readonly = match policy(&normal) {
         Some(reason) => Some(reason),
         None if !codec.lossless() => Some(ReadOnly::Import),
-        None => fidelity(codec, bytes, &projection, &normal)?,
+        None => match fidelity(codec, bytes, &projection, &normal)? {
+            Ok(baseline) => {
+                projection.close(&baseline.locked, baseline.whole);
+                None
+            }
+            Err(reason) => Some(reason),
+        },
     };
     projection.readonly = readonly;
     Ok(Opened {
@@ -140,18 +152,29 @@ pub fn save(codec: Codec, current: &[u8], json: &str) -> Result<Saved, RichError
             baseline
         }
     };
-    let pairs = preservation::untouched_blocks(&base, &wanted);
-    let Ok(written) = preservation::check_save(&baseline, &bytes, &base, &wanted, &pairs) else {
+    // I blocchi chiusi restano i byte del file: il voluto li deve avere
+    // uguali, dove la proiezione li segna.
+    let anchors = preservation::anchors(&baseline.locked, &projection.locked(), &base, &wanted)
+        .map_err(|at| RichError::Locked(Some(at)))?;
+    let pairs = preservation::untouched_blocks(&base, &wanted, &anchors);
+    let Ok(written) = preservation::written(&bytes, &wanted) else {
         return Err(RichError::Fidelity);
     };
     // Quando fuori dal corpo niente è cambiato, il file nuovo è un innesto:
-    // il file com'era, con le unità toccate prese dai byte del codec. Se
-    // l'innesto non si fa, i byte del codec sono già controllati.
+    // il file com'era, con le unità toccate prese dai byte del codec, che ha
+    // i suoi controlli. Altrimenti si riscrive tutto, se il codec lo sa fare
+    // senza perdite.
     if preservation::body_only(&base, &wanted, &pairs) {
         if let Some(grafted) = grafted(codec, current, &written, &base, &wanted, &pairs, &baseline)
         {
             return Ok(Saved::Bytes(grafted));
         }
+    }
+    if !baseline.whole {
+        return Err(RichError::Locked(None));
+    }
+    if preservation::check_save(&baseline, &bytes, &written, &base, &wanted, &pairs).is_err() {
+        return Err(RichError::Fidelity);
     }
     Ok(Saved::Bytes(bytes))
 }
@@ -218,29 +241,31 @@ fn policy(document: &Document) -> Option<ReadOnly> {
 }
 
 /// Le due andate e ritorni. La proiezione passa dal JSON, come farà quella
-/// della shell.
+/// della shell. Dà la prova a vuoto accettata, con ciò che resta chiuso.
 fn fidelity(
     codec: Codec,
     original: &[u8],
     projection: &Projection,
     document: &Document,
-) -> Result<Option<ReadOnly>, RichError> {
+) -> Result<Result<Arc<preservation::Baseline>, ReadOnly>, RichError> {
     let wire = Projection::from_json(&projection.to_json()?)?;
     if unproject(&wire, document).ok().as_ref() != Some(document) {
-        return Ok(Some(ReadOnly::Projection));
+        return Ok(Err(ReadOnly::Projection));
     }
     let Ok(written) = codec.write(document) else {
-        return Ok(Some(ReadOnly::Codec));
+        return Ok(Err(ReadOnly::Codec));
     };
     let reread = codec.read(&written).map(|d| normalized(&d));
     if !reread.is_ok_and(|reread| reads_back(document, &reread)) {
-        return Ok(Some(ReadOnly::Codec));
+        return Ok(Err(ReadOnly::Codec));
     }
     // Il modello torna uguale; i byte devono dire che il modello descrive il
-    // file: ciò che il lettore ha saltato manca dalla prova a vuoto.
+    // file: ciò che il lettore ha saltato manca dalla prova a vuoto, e resta
+    // chiuso dove si trova.
     let Ok(baseline) = preservation::check_open(original, &written, document.body.len()) else {
-        return Ok(Some(ReadOnly::Codec));
+        return Ok(Err(ReadOnly::Codec));
     };
-    preservation::remember(preservation::key(original), Arc::new(baseline));
-    Ok(None)
+    let baseline = Arc::new(baseline);
+    preservation::remember(preservation::key(original), Arc::clone(&baseline));
+    Ok(Ok(baseline))
 }
