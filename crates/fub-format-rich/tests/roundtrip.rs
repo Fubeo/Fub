@@ -7,7 +7,7 @@ use base64::Engine;
 use common::{bytes, sample, styled, text, PNG};
 use fub_format_rich::projection::{
     Align, AtomKind, Block, Cell, Inline, Layout, Line, Look, Mark, Page, PageField, Para, Piece,
-    Projection, Role, Row, RunningText, Table,
+    Projection, Role, Row, RunningText, Table, OPAQUE_SCHEMA,
 };
 use fub_format_rich::{open, save, Codec, ReadOnly, RichError, Saved};
 use wordcraft_doc::para::NoteKind;
@@ -1186,12 +1186,12 @@ fn una_proiezione_malformata_è_rifiutata_con_la_sua_specie() {
     let file = bytes(&sample());
     let opened = open(Codec::Docx, &file).unwrap();
     let mut value: serde_json::Value = serde_json::from_str(&opened.projection).unwrap();
-    value["version"] = 2.into();
+    value["version"] = 3.into();
     assert_eq!(
         save(Codec::Docx, &file, &value.to_string()),
-        Err(RichError::Version(2))
+        Err(RichError::Version(3))
     );
-    value["version"] = 1.into();
+    value["version"] = 2.into();
     value["inatteso"] = true.into();
     assert!(matches!(
         save(Codec::Docx, &file, &value.to_string()),
@@ -1205,6 +1205,54 @@ fn una_proiezione_malformata_è_rifiutata_con_la_sua_specie() {
     x.push('\u{FFFC}');
     assert!(matches!(
         save(Codec::Docx, &file, &p.to_json().unwrap()),
+        Err(RichError::Malformed(_))
+    ));
+}
+
+#[test]
+fn la_proiezione_dichiara_lo_schema_dei_dati_opachi() {
+    let file = bytes(&sample());
+    let opened = open(Codec::Docx, &file).unwrap();
+    let mut value: serde_json::Value = serde_json::from_str(&opened.projection).unwrap();
+    assert_eq!(value["version"], 2);
+    assert_eq!(value["opaque_schema"], OPAQUE_SCHEMA);
+    let edited = |value: &serde_json::Value| {
+        let mut p = Projection::from_json(&value.to_string()).unwrap();
+        let Inline::Text { x, .. } = &mut para_mut(&mut p, 1).c[0] else {
+            panic!()
+        };
+        x.push_str(" e ancora");
+        p.to_json().unwrap()
+    };
+    assert!(matches!(
+        save(Codec::Docx, &file, &edited(&value)),
+        Ok(Saved::Bytes(_))
+    ));
+
+    // Uno schema più nuovo non si legge, nemmeno in parte.
+    value["opaque_schema"] = (OPAQUE_SCHEMA + 1).into();
+    assert_eq!(
+        save(Codec::Docx, &file, &value.to_string()),
+        Err(RichError::OpaqueSchema(OPAQUE_SCHEMA + 1))
+    );
+    // La versione 2 senza lo schema è malformata.
+    value.as_object_mut().unwrap().remove("opaque_schema");
+    assert!(matches!(
+        save(Codec::Docx, &file, &value.to_string()),
+        Err(RichError::Malformed(_))
+    ));
+    // La versione 1, quella delle bozze di prima, ha lo schema 0 e si salva.
+    value["version"] = 1.into();
+    let v1 = Projection::from_json(&value.to_string()).unwrap();
+    assert_eq!(v1.schema(), 0);
+    assert!(matches!(
+        save(Codec::Docx, &file, &edited(&value)),
+        Ok(Saved::Bytes(_))
+    ));
+    // Ma non dichiara uno schema.
+    value["opaque_schema"] = 0.into();
+    assert!(matches!(
+        save(Codec::Docx, &file, &value.to_string()),
         Err(RichError::Malformed(_))
     ));
 }

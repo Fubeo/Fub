@@ -1,0 +1,676 @@
+{
+  "opaque_schema": 1,
+  "defaults": {
+    "CharProps": {},
+    "ParaProps": {},
+    "SectionProps": {
+      "start": "string",
+      "pageW": "number",
+      "pageH": "number",
+      "landscape": "bool",
+      "marginTop": "number",
+      "marginBottom": "number",
+      "marginLeft": "number",
+      "marginRight": "number",
+      "header": "number",
+      "footer": "number",
+      "gutter": "number",
+      "columns": {
+        "count": "number",
+        "space": "number",
+        "separator": "bool",
+        "widths": []
+      },
+      "headers": {
+        "default": "null",
+        "first": "null",
+        "even": "null"
+      },
+      "footers": {
+        "default": "null",
+        "first": "null",
+        "even": "null"
+      },
+      "titlePage": "bool",
+      "pageNumStart": "null",
+      "pageNumFormat": "string",
+      "lineNumbers": "null",
+      "valign": "string",
+      "pageBorders": "null",
+      "rtl": "bool",
+      "docGrid": "null"
+    },
+    "Comment": {
+      "author": "string",
+      "initials": "string",
+      "date": "string",
+      "parent": "null",
+      "resolved": "bool",
+      "part": "number"
+    }
+  },
+  "corpus": {
+    "doc": {
+      "text.k": [
+        {}
+      ]
+    },
+    "docx": {
+      "atom.k": [
+        {
+          "props": {
+            "style": "string"
+          },
+          "object": {
+            "type": "string",
+            "kind": "string",
+            "id": "number",
+            "custom": "string"
+          },
+          "parts": {
+            "1": {
+              "kind": "string",
+              "blocks": [
+                {
+                  "kind": "string",
+                  "text": "string",
+                  "runs": [
+                    {
+                      "len": "number",
+                      "props": {
+                        "style": "string"
+                      }
+                    },
+                    {
+                      "len": "number"
+                    }
+                  ],
+                  "objects": [
+                    {
+                      "type": "string",
+                      "kind": "string",
+                      "id": "number",
+                      "custom": "string"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "props": {},
+          "object": {
+            "type": "string",
+            "base": "string",
+            "ruby": "string",
+            "align": "string",
+            "size": "number",
+            "raise": "number",
+            "base_size": "number",
+            "lang": "string"
+          }
+        },
+        {
+          "props": {},
+          "object": {
+            "type": "string",
+            "control": {
+              "id": "number",
+              "tag": "string",
+              "title": "string",
+              "lock": "string",
+              "placeholder": "string",
+              "showingPlaceholder": "bool",
+              "temporary": "bool",
+              "kind": {
+                "type": "string",
+                "multiLine": "bool"
+              },
+              "placeholderText": "string",
+              "block": "bool"
+            }
+          }
+        },
+        {
+          "props": {},
+          "object": {
+            "type": "string",
+            "control": {
+              "id": "number",
+              "tag": "string",
+              "title": "string",
+              "lock": "string",
+              "placeholder": "string",
+              "showingPlaceholder": "bool",
+              "temporary": "bool",
+              "kind": {
+                "type": "string"
+              },
+              "placeholderText": "string",
+              "block": "bool"
+            }
+          }
+        },
+        {
+          "props": {},
+          "object": {
+            "type": "string",
+            "id": "number"
+          }
+        },
+        {
+          "props": {},
+          "object": {
+            "type": "string",
+            "instr": "string",
+            "result": "string",
+            "locked": "bool",
+            "form": "string"
+          }
+        },
+        {
+          "props": {},
+          "object": {
+            "type": "string",
+            "kind": "string",
+            "w": "number",
+            "h": "number",
+            "fill": "null",
+            "stroke": "null",
+            "stroke_width": "number",
+            "float": {
+              "wrap": "string",
+              "hRel": "string",
+              "vRel": "string",
+              "x": "number",
+              "y": "number",
+              "dist": "number",
+              "distTop": "number",
+              "distBottom": "number",
+              "effect": [
+                "number"
+              ]
+            },
+            "story": "number"
+          },
+          "parts": {
+            "1": {
+              "kind": "string",
+              "blocks": [
+                {
+                  "kind": "string",
+                  "text": "string",
+                  "runs": [
+                    {
+                      "len": "number"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "props": {},
+          "object": {
+            "type": "string",
+            "linear": "string",
+            "display": "bool",
+            "math": {
+              "nodes": [
+                {
+                  "t": "string",
+                  "text": "string"
+                }
+              ],
+              "omml": "string"
+            }
+          }
+        },
+        {
+          "props": {},
+          "object": {
+            "type": "string",
+            "media": "string",
+            "w": "number",
+            "h": "number",
+            "alt": "string",
+            "float": {
+              "wrap": "string",
+              "hRel": "string",
+              "vRel": "string",
+              "x": "number",
+              "y": "number",
+              "dist": "number",
+              "distTop": "number",
+              "distBottom": "number",
+              "effect": [
+                "number"
+              ]
+            },
+            "crop": [
+              "number"
+            ]
+          }
+        },
+        {
+          "props": {},
+          "object": {
+            "type": "string",
+            "name": "string"
+          }
+        },
+        {
+          "props": {},
+          "object": {
+            "type": "string"
+          }
+        }
+      ],
+      "cells.k": [
+        {
+          "props": {
+            "width": "number",
+            "span": "number",
+            "vmerge": "string",
+            "shading": "null",
+            "borders": "null",
+            "margins": "null",
+            "textDirection": "string",
+            "noWrap": "bool"
+          },
+          "blocks": []
+        }
+      ],
+      "comments.k": [
+        {
+          "comment": {
+            "author": "string",
+            "initials": "string",
+            "date": "string",
+            "parent": "null",
+            "resolved": "bool",
+            "part": "number",
+            "durableId": "string"
+          },
+          "parts": {
+            "1": {
+              "kind": "string",
+              "blocks": [
+                {
+                  "kind": "string",
+                  "text": "string",
+                  "runs": [
+                    {
+                      "len": "number"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "comment": {
+            "author": "string",
+            "initials": "string",
+            "date": "string",
+            "parent": "null",
+            "resolved": "bool",
+            "part": "number",
+            "durableId": "string"
+          },
+          "parts": {
+            "3": {
+              "kind": "string",
+              "blocks": [
+                {
+                  "kind": "string",
+                  "text": "string",
+                  "runs": [
+                    {
+                      "len": "number"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "comment": {
+            "author": "string",
+            "initials": "string",
+            "date": "string",
+            "parent": "number",
+            "resolved": "bool",
+            "part": "number",
+            "durableId": "string"
+          },
+          "parts": {
+            "2": {
+              "kind": "string",
+              "blocks": [
+                {
+                  "kind": "string",
+                  "text": "string",
+                  "runs": [
+                    {
+                      "len": "number"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "para.k": [
+        {
+          "props": {
+            "align": "string",
+            "bidi": "bool"
+          },
+          "mark": {}
+        },
+        {
+          "props": {
+            "bidi": "bool"
+          },
+          "mark": {}
+        },
+        {
+          "props": {
+            "style": "string",
+            "numbering": {
+              "num": "number",
+              "level": "number"
+            }
+          },
+          "mark": {}
+        },
+        {
+          "props": {
+            "style": "string"
+          },
+          "mark": {}
+        }
+      ],
+      "para.sect": [
+        {
+          "section": {
+            "start": "string",
+            "pageW": "number",
+            "pageH": "number",
+            "landscape": "bool",
+            "marginTop": "number",
+            "marginBottom": "number",
+            "marginLeft": "number",
+            "marginRight": "number",
+            "header": "number",
+            "footer": "number",
+            "gutter": "number",
+            "columns": {
+              "count": "number",
+              "space": "number",
+              "separator": "bool",
+              "widths": []
+            },
+            "headers": {
+              "default": "number",
+              "first": "null",
+              "even": "null"
+            },
+            "footers": {
+              "default": "null",
+              "first": "null",
+              "even": "null"
+            },
+            "titlePage": "bool",
+            "pageNumStart": "null",
+            "pageNumFormat": "string",
+            "lineNumbers": "null",
+            "valign": "string",
+            "pageBorders": "null",
+            "rtl": "bool",
+            "docGrid": "null"
+          },
+          "parts": {
+            "2": {
+              "kind": "string",
+              "blocks": [
+                {
+                  "kind": "string",
+                  "text": "string",
+                  "runs": [
+                    {
+                      "len": "number"
+                    }
+                  ],
+                  "objects": [
+                    {
+                      "type": "string",
+                      "instr": "string",
+                      "result": "string",
+                      "locked": "bool"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "rows.k": [
+        {
+          "props": {
+            "height": "null",
+            "heightRule": "string",
+            "header": "bool",
+            "cantSplit": "bool"
+          },
+          "cells": []
+        }
+      ],
+      "table.k": [
+        {
+          "props": {
+            "style": "string",
+            "width": "null",
+            "widthPct": "null",
+            "align": "null",
+            "indent": "null",
+            "borders": {
+              "top": {
+                "style": "string",
+                "width": "number",
+                "color": "null",
+                "space": "number"
+              },
+              "left": "null",
+              "bottom": {
+                "style": "string",
+                "width": "number",
+                "color": "null",
+                "space": "number"
+              },
+              "right": "null",
+              "between": {
+                "style": "string",
+                "width": "number",
+                "color": "null",
+                "space": "number"
+              },
+              "inside_v": "null"
+            },
+            "cellMargins": "null",
+            "fixed": "bool",
+            "look": {
+              "headerRow": "bool",
+              "totalRow": "bool",
+              "bandedRows": "bool",
+              "firstColumn": "bool",
+              "lastColumn": "bool",
+              "bandedColumns": "bool"
+            },
+            "shading": "null",
+            "caption": "null"
+          },
+          "grid": [
+            "number"
+          ],
+          "rows": []
+        }
+      ],
+      "text.k": [
+        {
+          "bold": "bool",
+          "fmtChange": {
+            "rev": "number",
+            "old": {}
+          }
+        },
+        {
+          "del": "number"
+        },
+        {
+          "ins": "number"
+        },
+        {
+          "link": "string"
+        },
+        {
+          "rtl": "bool",
+          "langBidi": "string"
+        },
+        {
+          "size": "number",
+          "color": {
+            "Rgb": [
+              "number"
+            ]
+          }
+        },
+        {}
+      ]
+    },
+    "odt": {
+      "atom.k": [
+        {
+          "xml": "string"
+        }
+      ],
+      "cells.k": [
+        {
+          "open": "string"
+        }
+      ],
+      "para.k": [
+        {
+          "tag": "string"
+        }
+      ],
+      "rows.k": [
+        {
+          "open": "string",
+          "header": "bool"
+        }
+      ],
+      "table.k": [
+        {
+          "open": "string",
+          "head": "string",
+          "rows": "bool"
+        }
+      ]
+    },
+    "rtf": {
+      "cells.k": [
+        {
+          "props": {
+            "width": "number",
+            "span": "number",
+            "vmerge": "string",
+            "shading": "null",
+            "borders": "null",
+            "margins": "null",
+            "textDirection": "string",
+            "noWrap": "bool"
+          },
+          "blocks": []
+        }
+      ],
+      "para.k": [
+        {
+          "props": {
+            "spaceBefore": "number",
+            "spaceAfter": "number"
+          },
+          "mark": {}
+        }
+      ],
+      "rows.k": [
+        {
+          "props": {
+            "height": "null",
+            "heightRule": "string",
+            "header": "bool",
+            "cantSplit": "bool"
+          },
+          "cells": []
+        }
+      ],
+      "table.k": [
+        {
+          "props": {
+            "style": "null",
+            "width": "null",
+            "widthPct": "null",
+            "align": "null",
+            "indent": "null",
+            "borders": "null",
+            "cellMargins": "null",
+            "fixed": "bool",
+            "look": {
+              "headerRow": "bool",
+              "totalRow": "bool",
+              "bandedRows": "bool",
+              "firstColumn": "bool",
+              "lastColumn": "bool",
+              "bandedColumns": "bool"
+            },
+            "shading": "null",
+            "caption": "null"
+          },
+          "grid": [
+            "number"
+          ],
+          "rows": []
+        }
+      ],
+      "text.k": [
+        {
+          "size": "number",
+          "bold": "bool"
+        },
+        {
+          "size": "number",
+          "color": {
+            "Rgb": [
+              "number"
+            ]
+          }
+        },
+        {
+          "size": "number",
+          "italic": "bool"
+        },
+        {
+          "size": "number"
+        },
+        {}
+      ]
+    }
+  }
+}

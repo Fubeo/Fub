@@ -1,5 +1,5 @@
-// La proiezione modificabile dei documenti di videoscrittura, versione 1: il
-// testo che il buffer della sessione porta per uno di quei documenti.
+// La proiezione modificabile dei documenti di videoscrittura, versioni 1 e 2:
+// il testo che il buffer della sessione porta per uno di quei documenti.
 //
 // La forma la possiede `fub-format-rich` (`crates/fub-format-rich/src/projection.rs`):
 // qui c'è il suo specchio, senza ProseMirror, perché leggerla e riscriverla
@@ -20,9 +20,16 @@
 //
 // La scrittura segue l'ordine e le omissioni di serde (campi assenti quando
 // vuoti), così un blocco non toccato si riscrive com'era arrivato.
+//
+// La versione 2 dichiara lo schema dei dati opachi (`opaque_schema`), la 1
+// (le bozze di prima) no. La shell ricopia versione e schema come li ha
+// ricevuti e non li cambia mai: non può dichiarare uno schema per dati opachi
+// scritti con un altro. Quale schema si legga lo decide il formato.
 
 export const PROJECTION_FORMAT = "fub-rich";
-export const PROJECTION_VERSION = 1;
+/// Le versioni che la shell legge, ciascuna con le sue chiavi.
+export const PROJECTION_VERSIONS = [1, 2] as const;
+export type ProjectionVersion = (typeof PROJECTION_VERSIONS)[number];
 
 export type ReadOnlyReason = "revisions" | "track_changes" | "protected" | "projection" | "codec" | "import";
 export const READ_ONLY_REASONS: readonly ReadOnlyReason[] = [
@@ -217,7 +224,9 @@ export interface CommentView {
 
 export interface Projection {
   readonly format: typeof PROJECTION_FORMAT;
-  readonly version: typeof PROJECTION_VERSION;
+  readonly version: ProjectionVersion;
+  /// Lo schema dei dati opachi: c'è nella versione 2, non nella 1.
+  readonly opaque_schema?: number;
   readonly readonly?: ReadOnlyReason;
   /// Registra le modifiche: ciò che si scrive diventa una revisione tracciata.
   readonly track?: boolean;
@@ -631,8 +640,14 @@ export function parseProjection(source: string): Projection {
   }
   const root = record(value, "proiezione");
   if (root.format !== PROJECTION_FORMAT) throw new ProjectionError("formato sconosciuto");
-  if (root.version !== PROJECTION_VERSION) throw new ProjectionError(`versione ${String(root.version)}`);
-  closed(root, ["format", "version", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"], "proiezione");
+  const version = root.version;
+  if (version !== 1 && version !== 2) throw new ProjectionError(`versione ${String(version)}`);
+  const keys = ["format", "version", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"];
+  closed(root, version === 2 ? ["format", "version", "opaque_schema", ...keys.slice(2)] : keys, "proiezione");
+  const schema = root.opaque_schema;
+  if (version === 2 && !(typeof schema === "number" && Number.isSafeInteger(schema) && schema >= 0)) {
+    throw new ProjectionError("opaque_schema: atteso un intero");
+  }
   const readonly = root.readonly;
   if (readonly !== undefined && !(READ_ONLY_REASONS as readonly unknown[]).includes(readonly)) {
     throw new ProjectionError("motivo di sola lettura sconosciuto");
@@ -640,7 +655,8 @@ export function parseProjection(source: string): Projection {
   if (root.track !== undefined && typeof root.track !== "boolean") throw new ProjectionError("track: atteso un sì o no");
   return {
     format: PROJECTION_FORMAT,
-    version: PROJECTION_VERSION,
+    version,
+    ...(version === 2 ? { opaque_schema: schema as number } : {}),
     ...(readonly !== undefined ? { readonly: readonly as ReadOnlyReason } : {}),
     ...(root.track === true ? { track: true } : {}),
     ...(root.lang !== undefined ? { lang: text(root.lang, "lang") } : {}),
@@ -792,8 +808,9 @@ export function writeBlock(block: Block): string {
 }
 
 /// L'intestazione della proiezione fino all'elenco dei blocchi escluso.
-export function writeHead(projection: Pick<Projection, "readonly" | "track" | "lang" | "f" | "styles" | "page" | "header" | "footer" | "comments">): string {
-  let out = `{"format":"${PROJECTION_FORMAT}","version":${PROJECTION_VERSION}`;
+export function writeHead(projection: Pick<Projection, "version" | "opaque_schema" | "readonly" | "track" | "lang" | "f" | "styles" | "page" | "header" | "footer" | "comments">): string {
+  let out = `{"format":"${PROJECTION_FORMAT}","version":${projection.version}`;
+  if (projection.opaque_schema !== undefined) out += `,"opaque_schema":${projection.opaque_schema}`;
   if (projection.readonly !== undefined) out += `,"readonly":"${projection.readonly}"`;
   if (projection.track) out += `,"track":true`;
   if (projection.lang !== undefined) out += `,"lang":${JSON.stringify(projection.lang)}`;

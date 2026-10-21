@@ -57,6 +57,39 @@ describe("la proiezione del codec", () => {
     expect(writeProjection(projection)).toBe(SOURCE);
   });
 
+  it("ricopia versione e schema dei dati opachi come li ha ricevuti", () => {
+    const projection = parseProjection(SOURCE);
+    expect([projection.version, projection.opaque_schema]).toEqual([2, 1]);
+    // Una bozza di versione 1, di prima dello schema, resta di versione 1.
+    const v1 = SOURCE.replace(`"version":2,"opaque_schema":1,`, `"version":1,`);
+    expect(v1).not.toBe(SOURCE);
+    expect(writeProjection(parseProjection(v1))).toBe(v1);
+    // Uno schema che la shell non conosce lo decide il formato: si ricopia.
+    const later = SOURCE.replace(`"opaque_schema":1`, `"opaque_schema":7`);
+    expect(writeProjection(parseProjection(later))).toBe(later);
+    const changes: EditorChange[] = [];
+    const e = engine(changes);
+    e.setDoc(v1);
+    e.select(find(e.state.doc, "Fine."));
+    e.dispatch(e.state.tr.insertText("!"));
+    expect(changes.length).toBeGreaterThan(0);
+    const written = JSON.parse(changes[changes.length - 1]!.text) as Record<string, unknown>;
+    expect([written.version, "opaque_schema" in written]).toEqual([1, false]);
+  });
+
+  it("rifiuta una versione futura e le chiavi dell'altra versione", () => {
+    for (const bad of [
+      SOURCE.replace(`"version":2`, `"version":3`),
+      SOURCE.replace(`"version":2,"opaque_schema":1,`, `"version":2,`),
+      SOURCE.replace(`"version":2,`, `"version":1,`),
+      SOURCE.replace(`"opaque_schema":1`, `"opaque_schema":-1`),
+      SOURCE.replace(`"opaque_schema":1`, `"opaque_schema":"1"`),
+    ]) {
+      expect(bad).not.toBe(SOURCE);
+      expect(() => parseProjection(bad)).toThrow();
+    }
+  });
+
   it("passa dal documento ProseMirror e torna identica", () => {
     const projection = parseProjection(SOURCE);
     const blocks = new BlockWriter().write(toDoc(projection));

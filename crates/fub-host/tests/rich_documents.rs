@@ -240,6 +240,46 @@ fn un_contenuto_rotto_è_rifiutato_con_la_sua_specie_e_il_file_resta() {
 }
 
 #[test]
+fn una_bozza_di_uno_schema_futuro_non_si_salva_e_resta() {
+    let vault = Vault::with_docx(&["Intatto."]);
+    let before = vault.on_disk();
+    let (text, revision, _) = vault
+        .host
+        .read_document_with_format(None, &lettera())
+        .unwrap();
+    // Una bozza scritta da un Fub più nuovo: dati opachi di uno schema che
+    // questo non legge.
+    let mut draft: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(
+        draft["opaque_schema"],
+        fub_format_rich::projection::OPAQUE_SCHEMA
+    );
+    draft["opaque_schema"] = 99.into();
+    let draft = draft.to_string();
+    vault
+        .host
+        .save_draft(None, &lettera(), &draft, Some(revision.clone()))
+        .unwrap();
+
+    let result =
+        vault
+            .host
+            .write_document(None, &lettera(), &draft, WriteBase::DescendsFrom(revision));
+    let Err(PluginError::BadArgs(fub_abi::Text::Message(message))) = result else {
+        panic!("{result:?}")
+    };
+    assert_eq!(message.key, "host.rich.opaque_schema");
+    assert_eq!(vault.on_disk(), before);
+    // La bozza resta dov'è, con i suoi dati.
+    let drafts = fub_kernel::drafts::drafts_dir(&vault.root);
+    let kept = std::fs::read_dir(&drafts)
+        .unwrap()
+        .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap_or_default())
+        .any(|content| content.contains("opaque_schema") && content.contains("99"));
+    assert!(kept, "la bozza in {drafts} c'è ancora");
+}
+
+#[test]
 fn un_documento_nuovo_nasce_dalla_sua_proiezione() {
     let vault = Vault::with_docx(&["Esiste."]);
     let nuova = DocId::new("Nuova.docx");

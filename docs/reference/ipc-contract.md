@@ -263,9 +263,9 @@ Un documento di un formato di `fub-format-rich` (`docx`, `odt`, `rtf` e
 passa dalle stesse porte dei documenti, senza una porta in più:
 
 - `read_document` restituisce in `text` la **proiezione** del file: JSON
-  chiuso e versionato (`"format": "fub-rich"`, `"version": 1`), con
-  `format_id` `"docx"` e `source_kind` `"bytes"`. `revision` è quella dei
-  byte del file, non del testo restituito;
+  chiuso e versionato (`"format": "fub-rich"`, `"version": 2`,
+  `"opaque_schema": N`), con `format_id` `"docx"` e `source_kind` `"bytes"`.
+  `revision` è quella dei byte del file, non del testo restituito;
 - `write_document` riceve una proiezione in `source` e la `base` letta
   insieme a essa. L'host riparte dai byte del file a quella revisione, salva
   con il codec e scrive con il CAS della stessa revisione. Una proiezione che
@@ -323,6 +323,16 @@ motivo. `import` è il motivo di ogni documento `rtf` e `doc`, e di un `odt`
 che il codec OpenDocument non sa rappresentare: lo legge un importatore che non
 riporta il file intero. Un file nuovo `rtf` o `doc` non si crea
 (`host.rich.no_writer`); un `odt` sì.
+`opaque_schema`, subito dopo `version`, è lo schema dei dati opachi (`k` e
+`sect`, JSON del modello del motore in base64), che si incrementa quando
+cambia la loro forma serializzata. La versione 1, quella delle bozze di
+prima, ha le stesse chiavi senza `opaque_schema` e i dati dello schema 0. La
+shell legge le due versioni, ciascuna con il suo elenco chiuso di chiavi, e
+ricopia versione e schema come li ha ricevuti. Il codec rifiuta una versione
+futura (`host.rich.version`) e uno schema che non legge, scritto da un Fub
+più nuovo (`host.rich.opaque_schema`); un dato opaco che, decodificato e
+riscritto, perderebbe un campo è una proiezione malformata.
+
 Gli errori del codec arrivano tipizzati con chiave di catalogo `host.rich.*`.
 La forma della proiezione è di `crates/fub-format-rich/src/projection.rs`; la
 fixture `apps/client/src/__fixtures__/rich-projection.json` la lega alla

@@ -33,7 +33,8 @@ use self::read::Body;
 use self::styles::Styles;
 use self::xml::Tree;
 use crate::projection::{
-    self, Align, Block, Inline, Layout, Look, Mark, Projection, Role, FORMAT, VERSION,
+    self, Align, Block, Inline, Layout, Look, Mark, Projection, Role, FORMAT, OPAQUE_SCHEMA,
+    VERSION,
 };
 use crate::session::{Opened, Saved};
 use crate::{ReadOnly, RichError};
@@ -90,6 +91,7 @@ pub(crate) fn open(bytes: &[u8]) -> Result<Opened, RichError> {
     let projection = Projection {
         format: FORMAT.to_string(),
         version: VERSION,
+        opaque_schema: Some(OPAQUE_SCHEMA),
         readonly,
         lang: doc.styles.lang.clone(),
         f: doc.styles.text(None, &[]).base(),

@@ -1,4 +1,4 @@
-//! La proiezione modificabile, versione 1: il documento come lo vede e lo
+//! La proiezione modificabile, versione 2: il documento come lo vede e lo
 //! scrive la superficie ricca della shell.
 //!
 //! È JSON chiuso (`deny_unknown_fields`) e versionato. Mostra in chiaro ciò che
@@ -11,6 +11,12 @@
 //! Il testo di un tratto è quello del modello di WordCraft: `\n` è un a-capo
 //! nel paragrafo, `\t` una tabulazione, U+000C un salto pagina e U+000E un
 //! salto colonna. U+FFFC non compare mai nel testo: un oggetto è un [`Inline::Atom`].
+//!
+//! La versione 2 dichiara lo schema dei dati opachi (`opaque_schema`, vedi
+//! [`OPAQUE_SCHEMA`]); la versione 1, quella delle bozze di prima, ha le
+//! stesse chiavi senza lo schema, e i suoi dati opachi sono dello schema 0.
+//! Ciò che l'host produce è sempre la versione 2 con lo schema corrente; ciò
+//! che la shell rimanda ha la versione e lo schema che aveva ricevuto.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -27,14 +33,18 @@ use crate::{blob, running, stories};
 
 /// Il nome del formato della proiezione.
 pub const FORMAT: &str = "fub-rich";
-/// La versione che questo crate scrive e legge.
-pub const VERSION: u32 = 1;
+/// La versione che questo crate scrive. Legge anche la 1.
+pub const VERSION: u32 = 2;
+pub use crate::blob::OPAQUE_SCHEMA;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Projection {
     pub format: String,
     pub version: u32,
+    /// Lo schema dei dati opachi: c'è nella versione 2, non nella 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opaque_schema: Option<u32>,
     /// Perché il documento non si modifica, quando non si modifica.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub readonly: Option<crate::ReadOnly>,
@@ -658,10 +668,22 @@ impl Projection {
                 projection.format
             )));
         }
-        if projection.version != VERSION {
-            return Err(RichError::Version(projection.version));
+        let schema = match (projection.version, projection.opaque_schema) {
+            (1, None) => 0,
+            (1, Some(_)) => return Err(RichError::Malformed("opaque_schema in version 1".into())),
+            (2, Some(schema)) => schema,
+            (2, None) => return Err(RichError::Malformed("missing opaque_schema".into())),
+            (version, _) => return Err(RichError::Version(version)),
+        };
+        if !blob::readable(schema) {
+            return Err(RichError::OpaqueSchema(schema));
         }
         Ok(projection)
+    }
+
+    /// Lo schema dei dati opachi di una proiezione già letta.
+    pub fn schema(&self) -> u32 {
+        self.opaque_schema.unwrap_or(0)
     }
 
     pub fn to_json(&self) -> Result<String, RichError> {
@@ -679,6 +701,7 @@ pub(crate) fn project(document: &Document) -> Result<Projection, RichError> {
     Ok(Projection {
         format: FORMAT.to_string(),
         version: VERSION,
+        opaque_schema: Some(OPAQUE_SCHEMA),
         readonly: None,
         track: document.settings.track_changes,
         lang: document.styles.default_chr.lang.clone(),

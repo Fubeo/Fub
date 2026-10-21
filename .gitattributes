@@ -47,3 +47,6 @@ crates/fub-format-rich/tests/corpus/docx/** -text
 crates/fub-format-rich/tests/corpus/odt/** -text
 crates/fub-format-rich/tests/corpus/rtf/** -text
 crates/fub-format-rich/tests/corpus/doc/** -text
+# Le fixture delle bozze di uno schema dei dati opachi precedente: byte di
+# partenza su cui la bozza si salva.
+crates/fub-format-rich/tests/fixtures/opaque/**/*.docx -text

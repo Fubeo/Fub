@@ -202,6 +202,10 @@ pub enum RichError {
     /// La proiezione dichiara un formato o una versione che qui non si legge.
     #[error("rich projection version {0} is not supported")]
     Version(u32),
+    /// I dati opachi della proiezione sono di uno schema che questo Fub non
+    /// legge: li ha scritti un Fub più nuovo.
+    #[error("rich opaque data schema {0} is not supported")]
+    OpaqueSchema(u32),
     /// Il documento sul disco si apre soltanto in lettura.
     #[error("rich document is read-only: {0:?}")]
     ReadOnly(ReadOnly),

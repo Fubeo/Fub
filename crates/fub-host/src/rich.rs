@@ -175,6 +175,10 @@ fn plugin_error(doc: &DocId, error: fub_format_rich::RichError) -> PluginError {
             "host.rich.version",
             vec![doc_arg(), Arg::text("version", version.to_string())],
         )),
+        RichError::OpaqueSchema(schema) => PluginError::BadArgs(Text::message(
+            "host.rich.opaque_schema",
+            vec![doc_arg(), Arg::text("schema", schema.to_string())],
+        )),
         RichError::Missing(what) => PluginError::BadArgs(Text::message(
             "host.rich.missing",
             vec![doc_arg(), Arg::text("what", what)],

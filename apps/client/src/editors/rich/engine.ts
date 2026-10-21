@@ -73,7 +73,10 @@ export class RichEngine {
   /// sostituisci): la striscia.
   readonly #asks = new Map<string, Set<() => void>>();
   readonly #proofClient: ProofClient | null;
-  #head: Pick<Projection, "readonly" | "lang" | "f" | "styles"> = {};
+  /// L'intestazione dell'ultima proiezione letta. Versione e schema si
+  /// ricopiano come sono arrivati; prima di ogni lettura non si scrive niente
+  /// che un formato accetti, ma la forma resta quella della versione 2.
+  #head: Pick<Projection, "version" | "opaque_schema" | "readonly" | "lang" | "f" | "styles"> = { version: 2 };
   /// Il testo del buffer come lo tiene il motore: quello ricevuto finché
   /// nessuno lo cambia, poi quello riscritto.
   #source = "";
@@ -254,7 +257,14 @@ export class RichEngine {
   #read(source: string): Projection | null {
     try {
       const projection = parseProjection(source);
-      this.#head = { readonly: projection.readonly, lang: projection.lang, f: projection.f, styles: projection.styles };
+      this.#head = {
+        version: projection.version,
+        opaque_schema: projection.opaque_schema,
+        readonly: projection.readonly,
+        lang: projection.lang,
+        f: projection.f,
+        styles: projection.styles,
+      };
       this.#intake = { kind: "ok", readonly: projection.readonly ?? null };
       // Un aggiornamento da fuori aggiunge ciò che porta: quello che l'utente
       // ha tagliato prima resta noto, e si può incollare.
@@ -262,7 +272,7 @@ export class RichEngine {
       collectKeys(doc, this.#known);
       return projection;
     } catch (error) {
-      this.#head = {};
+      this.#head = { version: this.#head.version, opaque_schema: this.#head.opaque_schema };
       this.#intake = { kind: "invalid", reason: error instanceof Error ? error.message : String(error) };
       return null;
     }

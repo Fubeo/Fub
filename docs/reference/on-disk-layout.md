@@ -429,6 +429,9 @@ offre al recupero e non si perde: lo scarto dopo un salvataggio la lascia al
 suo posto, e il salvataggio di una nuova bozza dello stesso documento la sposta
 prima sotto un nome di recupero (`<stelo>~recovery.<estensione>`) con i byte
 intatti.
+Una bozza di videoscrittura con dati opachi di uno schema che questo Fub non
+legge ([`opaque_schema`](ipc-contract.md#documenti-di-videoscrittura)) non si
+salva (`host.rich.opaque_schema`) e resta dov'è.
 
 ## Scrittura
 
