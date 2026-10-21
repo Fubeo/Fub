@@ -753,30 +753,16 @@ fn handle_isolation(
             Ok(account) => account,
         }
     };
-    // Autorizzazione: owner sempre, altrimenti grant Admin (lock breve, mai KDF).
+    // Autorizzazione: la stessa regola di ogni amministrazione del sito
+    // (`publish::authorize_administer`, lock breve, mai KDF). Un sito che non
+    // c'è, un record illeggibile o corrotto negano: niente sidecar per un
+    // `site_id` che nessuno possiede ancora.
     {
         let state = state.lock();
-        let resource = format!("site:{}", parsed.site_id);
-        let authorized = match fub_services::publish::site::load_record(data_dir, &parsed.site_id) {
-            Ok(record) => {
-                if record.owner == account {
-                    true
-                } else if record.revoked.iter().any(|r| r == &account) {
-                    false
-                } else {
-                    match state.acls.get(&resource) {
-                        Some(acl) => {
-                            fub_services::acl::check(acl, &account, fub_services::acl::Role::Admin)
-                                .is_ok()
-                        }
-                        None => false,
-                    }
-                }
-            }
-            Err(_) => true,
-        };
-        if !authorized {
-            return HttpResponse::err(403, "forbidden");
+        if let Err(response) =
+            fub_services::publish::authorize_administer(&state, &parsed.site_id, &account)
+        {
+            return response;
         }
     }
     match fub_services::site_isolation::save_mode(
@@ -1050,6 +1036,79 @@ mod sync_http_tests {
         let mut wire = header.into_bytes();
         wire.extend_from_slice(&body);
         exchange(state, dir, &wire)
+    }
+
+    /// STR-06: l'isolamento si configura con la regola di ogni altra
+    /// amministrazione del sito. Sito assente o record corrotto negano senza
+    /// scrivere; un Admin persistito nel record passa prima e dopo il riavvio.
+    #[test]
+    fn isolation_denies_missing_or_corrupt_sites_and_honours_persisted_admins() {
+        use fub_services::acl::Role;
+        use fub_services::publish::site;
+        let dir = TempDir::new();
+        let state = Arc::new(Mutex::new(ServiceState::open(Some(dir.0.clone())).unwrap()));
+        let bearer = |state: &Arc<Mutex<ServiceState>>, name: &str| {
+            let mut state = state.lock();
+            let id = state
+                .accounts
+                .create_account(name, "correct-horse-99")
+                .unwrap();
+            let token = state.accounts.issue_session_token(&id).unwrap();
+            (id, format!("Bearer {token}"))
+        };
+        let (alice, _) = bearer(&state, "alice");
+        let (bob, bob_auth) = bearer(&state, "bob");
+        let (_, mallory) = bearer(&state, "mallory");
+        let isolate = |state: &Arc<Mutex<ServiceState>>, auth: &str, site: &str| {
+            request(
+                state,
+                &dir.0,
+                "POST",
+                "/v1/publish/isolation",
+                Some(auth),
+                json!({ "site_id": site, "mode": "isolated-origin", "origin": "evil.test" }),
+            )
+        };
+
+        let (status, body) = isolate(&state, &mallory, "futuro");
+        assert_ne!(status, 200, "{body}");
+        assert!(
+            !dir.0.join("sites/futuro").exists(),
+            "nothing is pre-seeded"
+        );
+
+        std::fs::create_dir_all(dir.0.join("sites/rotto")).unwrap();
+        std::fs::write(dir.0.join("sites/rotto/record.json"), b"{ not json").unwrap();
+        let (status, body) = isolate(&state, &mallory, "rotto");
+        assert_ne!(status, 200, "{body}");
+        assert!(!dir.0.join("sites/rotto/isolation.json").exists());
+
+        let mut record = site::create_site(&dir.0, "blog", &alice, None).unwrap();
+        record.collaborator_roles.insert(bob.clone(), Role::Admin);
+        site::save_record(&dir.0, &record).unwrap();
+        assert_eq!(isolate(&state, &bob_auth, "blog").0, 200);
+        assert_eq!(isolate(&state, &mallory, "blog").0, 403);
+        drop(state);
+        let state = Arc::new(Mutex::new(ServiceState::open(Some(dir.0.clone())).unwrap()));
+        assert_eq!(
+            isolate(&state, &bob_auth, "blog").0,
+            200,
+            "the role survives a restart"
+        );
+    }
+
+    #[test]
+    fn a_new_site_drops_an_orphan_isolation_sidecar() {
+        use fub_services::publish::site;
+        let dir = TempDir::new();
+        std::fs::create_dir_all(dir.0.join("sites/nuovo")).unwrap();
+        std::fs::write(
+            dir.0.join("sites/nuovo/isolation.json"),
+            br#"{"mode":"isolated-origin","origin":"evil.test"}"#,
+        )
+        .unwrap();
+        site::create_site(&dir.0, "nuovo", "owner", None).unwrap();
+        assert!(!dir.0.join("sites/nuovo/isolation.json").exists());
     }
 
     #[test]

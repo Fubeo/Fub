@@ -211,7 +211,10 @@ fn authorize_publish(
 
 /// Administer capability (unpublish, password/domain, revoke): owner always,
 /// otherwise an `Admin` grant. New sites have nothing to administer.
-fn authorize_administer(
+/// L'unica regola di amministrazione di un sito: proprietario, collaboratore
+/// Admin del record, o grant Admin dell'ACL viva. Ogni errore di lettura del
+/// record — assente, corrotto, schema ignoto, I/O — nega.
+pub fn authorize_administer(
     state: &ServiceState,
     site_id: &str,
     account: &str,

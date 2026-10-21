@@ -61,7 +61,8 @@ impl Default for IsolationConfig {
     }
 }
 
-fn sidecar_path(data_dir: &Path, site_id: &str) -> PathBuf {
+/// Il sidecar di un sito: un sito nuovo lo toglie se lo trova orfano.
+pub fn sidecar_path(data_dir: &Path, site_id: &str) -> PathBuf {
     data_dir.join("sites").join(site_id).join("isolation.json")
 }
 
@@ -107,12 +108,12 @@ pub fn save_mode(
         }
         _ => None,
     };
+    // Il sidecar accompagna un sito che esiste: senza record non si crea
+    // niente, o un `site_id` libero nascerebbe già configurato da altri.
+    crate::publish::site::load_record(data_dir, site_id).map_err(|e| format!("site: {e}"))?;
     let config = IsolationConfig { mode, origin };
     let bytes = serde_json::to_vec_pretty(&config).map_err(|e| format!("encode: {e}"))?;
     let path = sidecar_path(data_dir, site_id);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("mkdir: {e}"))?;
-    }
     crate::schema::atomic_write(&path, &bytes).map_err(|e| format!("write: {e}"))?;
     Ok(config)
 }

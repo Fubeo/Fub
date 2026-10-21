@@ -291,6 +291,12 @@ pub fn create_site(
     {
         return Err(SiteError::BadPath(site_id.to_string()));
     }
+    // Una configurazione d'isolamento senza record non l'ha scelta nessun
+    // proprietario: il sito nuovo nasce col default (deny), non con lei.
+    match fs::remove_file(crate::site_isolation::sidecar_path(data_dir, site_id)) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(SiteError::Io(e)),
+        _ => {}
+    }
     fs::create_dir_all(dir.join("versions")).map_err(SiteError::Io)?;
     let record = SiteRecord {
         schema_version: 1,
