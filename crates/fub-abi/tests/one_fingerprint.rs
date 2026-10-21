@@ -65,7 +65,17 @@ const THE_FINGERPRINT: &str = "crates/fub-abi/src/edit.rs";
 
 /// Le cartelle in cui non si entra. `legacy_tests` è sotto `src/`, ma il modulo
 /// che lo dichiara è `#[cfg(test)]`, quindi non è sorgente di produzione.
-const EXCLUDED: &[&str] = &["target", "node_modules", ".git", ".fub", "legacy_tests"];
+/// `vendor` è codice di terzi, copiato dall'upstream e mai modificato a mano
+/// (`vendor/wordcraft/UPSTREAM.md`): le sue impronte sono del motore, non di
+/// Fub, e non finiscono negli archivi che Fub rilegge con la propria.
+const EXCLUDED: &[&str] = &[
+    "target",
+    "node_modules",
+    ".git",
+    ".fub",
+    "legacy_tests",
+    "vendor",
+];
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
