@@ -78,17 +78,37 @@ impl HttpResponse {
     }
 }
 
-/// Un lock per sito (STR-05): commit, rollback, unpublish, amministrazione e
-/// riparazione di `live` dello stesso sito si serializzano qui, e il lavoro
-/// pesante non tiene il lock globale. Ordine fisso: prima il sito, poi lo
-/// stato globale, mai il contrario.
+/// Un lock per risorsa (STR-05), sito o vault: commit, rollback, unpublish,
+/// amministrazione e riparazione di `live` dello stesso sito, o il lavoro sui
+/// file dello stesso vault, si serializzano qui, e il lavoro pesante non tiene
+/// il lock globale. Ordine fisso: prima la risorsa, poi lo stato globale, mai
+/// il contrario.
 #[derive(Debug, Default)]
-pub struct SiteLocks(parking_lot::Mutex<BTreeMap<String, std::sync::Arc<parking_lot::Mutex<()>>>>);
+pub struct ResourceLocks(
+    parking_lot::Mutex<BTreeMap<String, std::sync::Arc<parking_lot::Mutex<()>>>>,
+);
 
-impl SiteLocks {
-    /// Il lock di `site_id` (creato al primo uso).
-    pub fn of(&self, site_id: &str) -> std::sync::Arc<parking_lot::Mutex<()>> {
-        std::sync::Arc::clone(self.0.lock().entry(site_id.to_string()).or_default())
+/// Oltre questa soglia la mappa lascia andare i lock che nessuno tiene: l'id
+/// arriva da chi chiama, anche prima dell'autenticazione.
+const IDLE_LOCKS: usize = 1_024;
+
+impl ResourceLocks {
+    /// Il lock di `id` (creato al primo uso).
+    pub fn of(&self, id: &str) -> std::sync::Arc<parking_lot::Mutex<()>> {
+        let mut locks = self.0.lock();
+        if locks.len() >= IDLE_LOCKS && !locks.contains_key(id) {
+            locks.retain(|_, lock| std::sync::Arc::strong_count(lock) > 1);
+        }
+        std::sync::Arc::clone(locks.entry(id.to_string()).or_default())
+    }
+
+    /// Quanti lock la mappa conserva.
+    pub fn len(&self) -> usize {
+        self.0.lock().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -111,7 +131,9 @@ pub struct ServiceState {
     /// Limiti di frequenza e semaforo KDF: si clonano fuori dal lock.
     pub abuse: std::sync::Arc<crate::abuse::Abuse>,
     /// Lock per sito, da prendere **prima** del lock globale.
-    pub site_locks: std::sync::Arc<SiteLocks>,
+    pub site_locks: std::sync::Arc<ResourceLocks>,
+    /// Lock per vault, da prendere **prima** del lock globale.
+    pub vault_locks: std::sync::Arc<ResourceLocks>,
 }
 
 impl ServiceState {
@@ -141,6 +163,7 @@ impl ServiceState {
             acls: BTreeMap::new(),
             abuse: std::sync::Arc::default(),
             site_locks: std::sync::Arc::default(),
+            vault_locks: std::sync::Arc::default(),
         })
     }
 
@@ -192,4 +215,21 @@ pub struct Credentials {
 
 pub fn parse_credentials(body: &[u8]) -> Result<Credentials, HttpResponse> {
     serde_json::from_slice(body).map_err(|_| HttpResponse::err(400, "bad credentials body"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ResourceLocks;
+
+    #[test]
+    fn idle_locks_do_not_pile_up_but_held_ones_stay() {
+        let locks = ResourceLocks::default();
+        let held = locks.of("tenuto");
+        let _guard = held.lock();
+        for i in 0..5_000 {
+            drop(locks.of(&format!("vault-{i}")));
+        }
+        assert!(locks.len() <= super::IDLE_LOCKS + 1, "{}", locks.len());
+        assert!(std::sync::Arc::ptr_eq(&held, &locks.of("tenuto")));
+    }
 }

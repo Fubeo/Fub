@@ -877,7 +877,9 @@ fn fold_op(state: &mut SyncState, op: &SyncOp, now_ms: u64, lww_count: &mut usiz
 // ---------------------------------------------------------------------------
 
 /// Entry point for the parent router: full path (`/v1/sync/push`, ...),
-/// `auth` is the raw `Authorization` header value (or None).
+/// `auth` is the raw `Authorization` header value (or None). Ammissione e
+/// lavoro sul vault di seguito, con lo stato in mano: il binario usa invece
+/// [`admit`] e [`VaultWork::run`] con lock distinti.
 pub fn handle(
     state: &mut ServiceState,
     method: &str,
@@ -885,22 +887,163 @@ pub fn handle(
     auth: Option<&str>,
     body: &[u8],
 ) -> HttpResponse {
-    let (_, query) = split_query(path);
-    match crate::routing::route(method, path) {
-        crate::routing::Route::SyncPush => handle_push(state, auth, body),
-        crate::routing::Route::SyncPull => handle_pull(state, auth, body),
-        crate::routing::Route::SyncAck => handle_ack(state, auth, body),
-        crate::routing::Route::SyncStatus => handle_status(state, auth, &query),
-        crate::routing::Route::SyncVersions => handle_versions(state, auth, &query),
-        crate::routing::Route::SyncTrash => handle_trash(state, auth, body),
-        crate::routing::Route::SyncRestore => handle_restore(state, auth, body),
-        crate::routing::Route::SyncInvite => handle_invite(state, auth, body),
-        crate::routing::Route::SyncInviteAccept => handle_invite_accept(state, auth, body),
-        crate::routing::Route::SyncRevoke => handle_revoke(state, auth, body),
-        crate::routing::Route::SyncVaultKeyStore => handle_vault_key_store(state, auth, body),
-        crate::routing::Route::SyncVaultKeyGet => handle_vault_key_get(state, auth, &query),
-        _ => HttpResponse::err(404, "unknown sync route"),
+    match admit(state, method, path, auth, body) {
+        Admission::Done(response) => response,
+        Admission::Vault(work) => work.run(),
     }
+}
+
+/// L'esito della parte di una richiesta sync che chiede lo stato globale.
+pub enum Admission {
+    /// La richiesta è già risposta (errore, o rotta che non tocca i file di
+    /// un vault).
+    Done(HttpResponse),
+    /// Autorizzata: resta il lavoro sui file del vault.
+    Vault(Box<VaultWork>),
+}
+
+/// Il lavoro di una richiesta già autorizzata sui file di un vault (code,
+/// ripiegamento, salvataggi). Non tocca lo stato globale: gira sotto il solo
+/// lock del vault, così un vault lento non ferma gli altri (STR-05).
+pub struct VaultWork {
+    vault_id: String,
+    scope: VaultScope,
+    job: VaultJob,
+}
+
+/// Ciò che il lavoro sul vault legge dello stato, copiato all'ammissione.
+struct VaultScope {
+    account: String,
+    dir: PathBuf,
+    sync_dir: PathBuf,
+    quotas: schema::ServiceQuotas,
+}
+
+enum VaultJob {
+    Push(PushRequest),
+    Pull(PullRequest),
+    Ack(AckRequest),
+    Status {
+        replica_id: String,
+    },
+    Versions {
+        doc_id: String,
+    },
+    Trash {
+        doc_id: String,
+    },
+    Restore {
+        doc_id: String,
+        version: Option<u64>,
+    },
+}
+
+impl VaultWork {
+    /// Il vault di cui serve il lock.
+    pub fn vault_id(&self) -> &str {
+        &self.vault_id
+    }
+
+    pub fn run(self) -> HttpResponse {
+        let scope = &self.scope;
+        match self.job {
+            VaultJob::Push(req) => run_push(scope, req),
+            VaultJob::Pull(req) => run_pull(scope, req),
+            VaultJob::Ack(req) => run_ack(scope, req),
+            VaultJob::Status { replica_id } => run_status(scope, replica_id),
+            VaultJob::Versions { doc_id } => run_versions(scope, doc_id),
+            VaultJob::Trash { doc_id } => run_trash(scope, doc_id),
+            VaultJob::Restore { doc_id, version } => run_restore(scope, doc_id, version),
+        }
+    }
+}
+
+/// La parte di una richiesta sync che chiede lo stato globale: sessione,
+/// ACL, rivendicazione del vault. Le rotte di inviti, revoche e chiavi si
+/// risolvono qui per intero.
+pub fn admit(
+    state: &mut ServiceState,
+    method: &str,
+    path: &str,
+    auth: Option<&str>,
+    body: &[u8],
+) -> Admission {
+    let (_, query) = split_query(path);
+    let admitted = match crate::routing::route(method, path) {
+        crate::routing::Route::SyncPush => admit_push(state, auth, body),
+        crate::routing::Route::SyncPull => admit_pull(state, auth, body),
+        crate::routing::Route::SyncAck => admit_ack(state, auth, body),
+        crate::routing::Route::SyncStatus => admit_status(state, auth, &query),
+        crate::routing::Route::SyncVersions => admit_versions(state, auth, &query),
+        crate::routing::Route::SyncTrash => admit_trash(state, auth, body),
+        crate::routing::Route::SyncRestore => admit_restore(state, auth, body),
+        crate::routing::Route::SyncInvite => Err(handle_invite(state, auth, body)),
+        crate::routing::Route::SyncInviteAccept => Err(handle_invite_accept(state, auth, body)),
+        crate::routing::Route::SyncRevoke => Err(handle_revoke(state, auth, body)),
+        crate::routing::Route::SyncVaultKeyStore => Err(handle_vault_key_store(state, auth, body)),
+        crate::routing::Route::SyncVaultKeyGet => Err(handle_vault_key_get(state, auth, &query)),
+        _ => Err(HttpResponse::err(404, "unknown sync route")),
+    };
+    match admitted {
+        Ok(work) => Admission::Vault(Box::new(work)),
+        Err(response) => Admission::Done(response),
+    }
+}
+
+/// Il vault che una richiesta sync tocca, letto senza lock prima di prendere
+/// quello del vault: lo stesso valore che l'ammissione ricaverà, o `None` se
+/// la rotta non ne nomina uno (accettare un invito). Un corpo illeggibile
+/// torna `None`: l'ammissione lo rifiuta comunque.
+pub fn vault_of_request(method: &str, path: &str, body: &[u8]) -> Option<String> {
+    use crate::routing::Route;
+    let (_, query) = split_query(path);
+    let from_query = || query_get(&query, "vault_id").map(str::to_string);
+    let json = || serde_json::from_slice::<serde_json::Value>(body).ok();
+    let field = |value: &serde_json::Value, key: &str| {
+        value.get(key).and_then(|v| v.as_str()).map(str::to_string)
+    };
+    match crate::routing::route(method, path) {
+        Route::SyncStatus | Route::SyncVersions | Route::SyncVaultKeyGet => from_query(),
+        Route::SyncPush => {
+            let body = json()?;
+            let first = body
+                .get("ops")?
+                .as_array()?
+                .iter()
+                .filter_map(|op| op.get("vault_id")?.as_str())
+                .find(|id| !id.trim().is_empty())
+                .map(str::to_string);
+            Some(first.unwrap_or_else(|| "default".to_string()))
+        }
+        Route::SyncAck => {
+            let body = json()?;
+            Some(field(&body, "vault_id").unwrap_or_else(default_vault_scope))
+        }
+        Route::SyncPull | Route::SyncTrash | Route::SyncRestore | Route::SyncVaultKeyStore => {
+            field(&json()?, "vault_id")
+        }
+        Route::SyncInvite | Route::SyncRevoke => {
+            let body = json()?;
+            match field(&body, "resource") {
+                Some(resource) => resource.strip_prefix("vault:").map(str::to_string),
+                None => Some(field(&body, "vault_id").unwrap_or_else(|| "default".to_string())),
+            }
+        }
+        _ => None,
+    }
+}
+
+fn scope_of(
+    state: &ServiceState,
+    account: String,
+    vault_id: &str,
+) -> Result<VaultScope, HttpResponse> {
+    Ok(VaultScope {
+        dir: vault_dir_of(state, vault_id)?,
+        sync_dir: sync_dir_of(state),
+        quotas: state.config.quotas.clone(),
+        account,
+    })
 }
 
 fn split_query(path: &str) -> (&str, Vec<(String, String)>) {
@@ -1131,23 +1274,20 @@ fn already_folded(state: &SyncState, op: &SyncOp) -> bool {
             .is_some_and(|chain| chain.iter().any(|version| version.op_id == op.op_id))
 }
 
-fn handle_push(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> HttpResponse {
-    let account = match account_of(state, auth) {
-        Ok(id) => id,
-        Err(r) => return r,
-    };
-    let req: PushRequest = match serde_json::from_slice(body) {
-        Ok(r) => r,
-        Err(_) => return HttpResponse::err(400, "bad push body"),
-    };
+fn admit_push(
+    state: &mut ServiceState,
+    auth: Option<&str>,
+    body: &[u8],
+) -> Result<VaultWork, HttpResponse> {
+    let account = account_of(state, auth)?;
+    let req: PushRequest =
+        serde_json::from_slice(body).map_err(|_| HttpResponse::err(400, "bad push body"))?;
     if !valid_replica_id(&req.replica_id) {
-        return HttpResponse::err(400, "invalid replica_id");
+        return Err(HttpResponse::err(400, "invalid replica_id"));
     }
-    if let Err(r) = check_wire_protocol(&req.protocol) {
-        return r;
-    }
+    check_wire_protocol(&req.protocol)?;
     if req.ops.len() > PUSH_MAX_OPS {
-        return HttpResponse::err(413, "push too large");
+        return Err(HttpResponse::err(413, "push too large"));
     }
     // Vault scope for ACL: per-op `vault_id` (canonical envelope). Mixed-vault
     // batches are rejected hard: one push = one vault.
@@ -1158,26 +1298,29 @@ fn handle_push(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> Htt
         }
     }
     if vault_ids.len() > 1 {
-        return HttpResponse::err(400, "mixed vault batch");
+        return Err(HttpResponse::err(400, "mixed vault batch"));
     }
     let vault_id = vault_ids
         .into_iter()
         .next()
         .unwrap_or_else(|| "default".to_string());
     let resource = vault_resource(&vault_id);
-    if let Err(r) = authorize(state, &resource, &account, Role::Writer) {
-        return r;
-    }
-    let dir = match vault_dir_of(state, &vault_id) {
-        Ok(dir) => dir,
-        Err(response) => return response,
-    };
+    authorize(state, &resource, &account, Role::Writer)?;
+    Ok(VaultWork {
+        scope: scope_of(state, account, &vault_id)?,
+        vault_id,
+        job: VaultJob::Push(req),
+    })
+}
+
+fn run_push(scope: &VaultScope, req: PushRequest) -> HttpResponse {
+    let dir = &scope.dir;
     let now = schema::now_ms();
-    let mut folded = match load_folded(&dir) {
+    let mut folded = match load_folded(dir) {
         Ok(folded) => folded,
         Err(response) => return response,
     };
-    let shares = match load_shares(&sync_dir_of(state)) {
+    let shares = match load_shares(&scope.sync_dir) {
         Ok(shares) => shares,
         Err(e) => return HttpResponse::err(500, &e),
     };
@@ -1201,7 +1344,7 @@ fn handle_push(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> Htt
     // seen are skipped by dedup below). Queue corruption surfaces as
     // RecoveryNeeded (500 + explicit code), never skip-and-current.
     let mut lww_count: usize = 0;
-    match queue::load_ops(&dir, &req.replica_id) {
+    match queue::load_ops(dir, &req.replica_id) {
         Err(queue::QueueError::RecoveryNeeded {
             quarantined,
             preserved,
@@ -1318,15 +1461,15 @@ fn handle_push(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> Htt
         // fold above already added this batch), every replica queue and the
         // batch about to join one. Old history yields first; what is left
         // is refused before anything is written.
-        let budget = state.config.quotas.max_vault_bytes;
+        let budget = scope.quotas.max_vault_bytes;
         if budget > 0 {
-            let queued = queue::vault_queue_bytes(&dir).saturating_add(batch_bytes);
+            let queued = queue::vault_queue_bytes(dir).saturating_add(batch_bytes);
             let stored = versions::fit_history(&mut folded, budget.saturating_sub(queued));
             if stored.saturating_add(queued) > budget {
                 return HttpResponse::err(413, "vault quota exceeded");
             }
         }
-        if let Err(e) = queue::append_lines(&dir, &req.replica_id, &lines) {
+        if let Err(e) = queue::append_lines(dir, &req.replica_id, &lines) {
             match e {
                 queue::QueueError::QueueFull { pending } => {
                     return HttpResponse::json(
@@ -1360,13 +1503,13 @@ fn handle_push(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> Htt
         eprintln!("{}", crate::server::log_line("POST", "/v1/sync/push", 200));
     }
     cap_seen(&mut folded);
-    versions::prune_retention(&mut folded, now, state.config.quotas.retention_days);
-    if let Err(e) = versions::save(&dir, &folded) {
+    versions::prune_retention(&mut folded, now, scope.quotas.retention_days);
+    if let Err(e) = versions::save(dir, &folded) {
         return HttpResponse::err(500, &e);
     }
     // Backpressure, never silent drop: a full authority queue reports
     // QueueFull so the caller resyncs explicitly instead of reading current.
-    match queue::enforce_cap(&dir, &req.replica_id, &state.config.quotas, now) {
+    match queue::enforce_cap(dir, &req.replica_id, &scope.quotas, now) {
         Err(queue::QueueError::QueueFull { pending }) => {
             return HttpResponse::json(
                 507,
@@ -1437,33 +1580,36 @@ fn op_from_version(v: &DocVersion) -> Result<SyncOp, String> {
     Ok(op)
 }
 
-fn handle_pull(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> HttpResponse {
-    let account = match account_of(state, auth) {
-        Ok(id) => id,
-        Err(r) => return r,
-    };
-    let req: PullRequest = match serde_json::from_slice(body) {
-        Ok(r) => r,
-        Err(_) => return HttpResponse::err(400, "bad pull body"),
-    };
+fn admit_pull(
+    state: &mut ServiceState,
+    auth: Option<&str>,
+    body: &[u8],
+) -> Result<VaultWork, HttpResponse> {
+    let account = account_of(state, auth)?;
+    let req: PullRequest =
+        serde_json::from_slice(body).map_err(|_| HttpResponse::err(400, "bad pull body"))?;
     if !valid_replica_id(&req.replica_id) {
-        return HttpResponse::err(400, "invalid replica_id");
+        return Err(HttpResponse::err(400, "invalid replica_id"));
     }
     if req.vault_id.trim().is_empty() {
-        return HttpResponse::err(400, "missing vault_id");
+        return Err(HttpResponse::err(400, "missing vault_id"));
     }
-    if let Err(r) = check_wire_protocol(&req.protocol) {
-        return r;
-    }
+    check_wire_protocol(&req.protocol)?;
     let resource = vault_resource(&req.vault_id);
-    if let Err(r) = check_role(state, &resource, &account, Role::Reader) {
-        return r;
-    }
-    let folded = match vault_dir_of(state, &req.vault_id).and_then(|dir| load_folded(&dir)) {
+    check_role(state, &resource, &account, Role::Reader)?;
+    Ok(VaultWork {
+        scope: scope_of(state, account, &req.vault_id)?,
+        vault_id: req.vault_id.clone(),
+        job: VaultJob::Pull(req),
+    })
+}
+
+fn run_pull(scope: &VaultScope, req: PullRequest) -> HttpResponse {
+    let folded = match load_folded(&scope.dir) {
         Ok(folded) => folded,
         Err(response) => return response,
     };
-    let shares = match load_shares(&sync_dir_of(state)) {
+    let shares = match load_shares(&scope.sync_dir) {
         Ok(shares) => shares,
         Err(e) => return HttpResponse::err(500, &e),
     };
@@ -1537,30 +1683,31 @@ fn handle_pull(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> Htt
     )
 }
 
-fn handle_ack(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> HttpResponse {
-    let account = match account_of(state, auth) {
-        Ok(id) => id,
-        Err(r) => return r,
-    };
-    let req: AckRequest = match serde_json::from_slice(body) {
-        Ok(r) => r,
-        Err(_) => return HttpResponse::err(400, "bad ack body"),
-    };
+fn admit_ack(
+    state: &mut ServiceState,
+    auth: Option<&str>,
+    body: &[u8],
+) -> Result<VaultWork, HttpResponse> {
+    let account = account_of(state, auth)?;
+    let req: AckRequest =
+        serde_json::from_slice(body).map_err(|_| HttpResponse::err(400, "bad ack body"))?;
     if !valid_replica_id(&req.replica_id) {
-        return HttpResponse::err(400, "invalid replica_id");
+        return Err(HttpResponse::err(400, "invalid replica_id"));
     }
     if req.vault_id.trim().is_empty() {
-        return HttpResponse::err(400, "missing vault_id");
+        return Err(HttpResponse::err(400, "missing vault_id"));
     }
     let resource = vault_resource(&req.vault_id);
-    if let Err(r) = check_role(state, &resource, &account, Role::Reader) {
-        return r;
-    }
-    let dir = match vault_dir_of(state, &req.vault_id) {
-        Ok(dir) => dir,
-        Err(response) => return response,
-    };
-    match queue::ack_ops(&dir, &req.replica_id, &req.ack) {
+    check_role(state, &resource, &account, Role::Reader)?;
+    Ok(VaultWork {
+        scope: scope_of(state, account, &req.vault_id)?,
+        vault_id: req.vault_id.clone(),
+        job: VaultJob::Ack(req),
+    })
+}
+
+fn run_ack(scope: &VaultScope, req: AckRequest) -> HttpResponse {
+    match queue::ack_ops(&scope.dir, &req.replica_id, &req.ack) {
         Err(queue::QueueError::RecoveryNeeded {
             quarantined,
             preserved,
@@ -1587,36 +1734,36 @@ fn handle_ack(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> Http
     }
 }
 
-fn handle_status(
+fn admit_status(
     state: &mut ServiceState,
     auth: Option<&str>,
     query: &[(String, String)],
-) -> HttpResponse {
-    let account = match account_of(state, auth) {
-        Ok(id) => id,
-        Err(r) => return r,
-    };
+) -> Result<VaultWork, HttpResponse> {
+    let account = account_of(state, auth)?;
     let vault_id = query_get(query, "vault_id").unwrap_or("");
     if vault_id.is_empty() {
-        return HttpResponse::err(400, "missing vault_id");
+        return Err(HttpResponse::err(400, "missing vault_id"));
     }
     let resource = vault_resource(vault_id);
-    if let Err(r) = check_role(state, &resource, &account, Role::Reader) {
-        return r;
-    }
+    check_role(state, &resource, &account, Role::Reader)?;
     let replica_id = query_get(query, "replica_id").unwrap_or("").to_string();
     if !valid_replica_id(&replica_id) {
-        return HttpResponse::err(400, "invalid replica_id");
+        return Err(HttpResponse::err(400, "invalid replica_id"));
     }
-    let dir = match vault_dir_of(state, vault_id) {
-        Ok(dir) => dir,
-        Err(response) => return response,
-    };
-    let folded = match load_folded(&dir) {
+    Ok(VaultWork {
+        scope: scope_of(state, account, vault_id)?,
+        vault_id: vault_id.to_string(),
+        job: VaultJob::Status { replica_id },
+    })
+}
+
+fn run_status(scope: &VaultScope, replica_id: String) -> HttpResponse {
+    let dir = &scope.dir;
+    let folded = match load_folded(dir) {
         Ok(folded) => folded,
         Err(response) => return response,
     };
-    let pending = match queue::load_ops(&dir, &replica_id) {
+    let pending = match queue::load_ops(dir, &replica_id) {
         Ok(ops) => ops.len(),
         Err(_) => return HttpResponse::err(500, "sync queue recovery needed"),
     };
@@ -1666,33 +1813,36 @@ fn handle_status(
 
 /// Version chain per doc for the UI (`syncVersionRow` serde names exactly:
 /// `doc_id, version, hash, ts_ms, vv_text`).
-fn handle_versions(
+fn admit_versions(
     state: &mut ServiceState,
     auth: Option<&str>,
     query: &[(String, String)],
-) -> HttpResponse {
-    let account = match account_of(state, auth) {
-        Ok(id) => id,
-        Err(r) => return r,
-    };
+) -> Result<VaultWork, HttpResponse> {
+    let account = account_of(state, auth)?;
     let vault_id = query_get(query, "vault_id").unwrap_or("");
     if vault_id.is_empty() {
-        return HttpResponse::err(400, "missing vault_id");
+        return Err(HttpResponse::err(400, "missing vault_id"));
     }
     let resource = vault_resource(vault_id);
-    if let Err(r) = check_role(state, &resource, &account, Role::Reader) {
-        return r;
-    }
+    check_role(state, &resource, &account, Role::Reader)?;
     let Some(doc_id) = query_get(query, "doc_id").filter(|id| !id.is_empty()) else {
-        return HttpResponse::err(400, "missing doc_id");
+        return Err(HttpResponse::err(400, "missing doc_id"));
     };
     let Some(doc_id) = decode_query_value(doc_id) else {
-        return HttpResponse::err(400, "bad encoded doc_id");
+        return Err(HttpResponse::err(400, "bad encoded doc_id"));
     };
     if doc_id.is_empty() {
-        return HttpResponse::err(400, "missing doc_id");
+        return Err(HttpResponse::err(400, "missing doc_id"));
     }
-    let folded = match vault_dir_of(state, vault_id).and_then(|dir| load_folded(&dir)) {
+    Ok(VaultWork {
+        scope: scope_of(state, account, vault_id)?,
+        vault_id: vault_id.to_string(),
+        job: VaultJob::Versions { doc_id },
+    })
+}
+
+fn run_versions(scope: &VaultScope, doc_id: String) -> HttpResponse {
+    let folded = match load_folded(&scope.dir) {
         Ok(folded) => folded,
         Err(response) => return response,
     };
@@ -1725,39 +1875,41 @@ fn handle_versions(
     )
 }
 
-fn handle_trash(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> HttpResponse {
-    let account = match account_of(state, auth) {
-        Ok(id) => id,
-        Err(r) => return r,
-    };
+fn admit_trash(
+    state: &mut ServiceState,
+    auth: Option<&str>,
+    body: &[u8],
+) -> Result<VaultWork, HttpResponse> {
+    let account = account_of(state, auth)?;
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct TrashReq {
         doc_id: String,
         vault_id: String,
     }
-    let req: TrashReq = match serde_json::from_slice(body) {
-        Ok(r) => r,
-        Err(_) => return HttpResponse::err(400, "bad trash body"),
-    };
+    let req: TrashReq =
+        serde_json::from_slice(body).map_err(|_| HttpResponse::err(400, "bad trash body"))?;
     if req.vault_id.trim().is_empty() {
-        return HttpResponse::err(400, "missing vault_id");
+        return Err(HttpResponse::err(400, "missing vault_id"));
     }
     let resource = vault_resource(&req.vault_id);
-    if let Err(r) = authorize(state, &resource, &account, Role::Writer) {
-        return r;
-    }
-    let dir = match vault_dir_of(state, &req.vault_id) {
-        Ok(dir) => dir,
-        Err(response) => return response,
-    };
-    let mut folded = match load_folded(&dir) {
+    authorize(state, &resource, &account, Role::Writer)?;
+    Ok(VaultWork {
+        scope: scope_of(state, account, &req.vault_id)?,
+        vault_id: req.vault_id,
+        job: VaultJob::Trash { doc_id: req.doc_id },
+    })
+}
+
+fn run_trash(scope: &VaultScope, doc_id: String) -> HttpResponse {
+    let dir = &scope.dir;
+    let mut folded = match load_folded(dir) {
         Ok(folded) => folded,
         Err(response) => return response,
     };
     if folded
         .versions
-        .get(&req.doc_id)
+        .get(&doc_id)
         .is_none_or(|chain| chain.is_empty())
     {
         return HttpResponse::err(409, "trash requires a version chain");
@@ -1767,18 +1919,19 @@ fn handle_trash(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> Ht
     // restore is still a new write, never an old vector replayed.
     let mut vv = folded.server_vv.clone();
     vv_inc(&mut vv, "server");
-    move_to_trash(&mut folded, &req.doc_id, vv, &account, now);
-    if let Err(e) = versions::save(&dir, &folded) {
+    move_to_trash(&mut folded, &doc_id, vv, &scope.account, now);
+    if let Err(e) = versions::save(dir, &folded) {
         return HttpResponse::err(500, &e);
     }
-    HttpResponse::json(200, &serde_json::json!({ "trashed": req.doc_id }))
+    HttpResponse::json(200, &serde_json::json!({ "trashed": doc_id }))
 }
 
-fn handle_restore(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> HttpResponse {
-    let account = match account_of(state, auth) {
-        Ok(id) => id,
-        Err(r) => return r,
-    };
+fn admit_restore(
+    state: &mut ServiceState,
+    auth: Option<&str>,
+    body: &[u8],
+) -> Result<VaultWork, HttpResponse> {
+    let account = account_of(state, auth)?;
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct RestoreReq {
@@ -1787,41 +1940,45 @@ fn handle_restore(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> 
         #[serde(default)]
         version: Option<String>,
     }
-    let req: RestoreReq = match serde_json::from_slice(body) {
-        Ok(r) => r,
-        Err(_) => return HttpResponse::err(400, "bad restore body"),
-    };
+    let req: RestoreReq =
+        serde_json::from_slice(body).map_err(|_| HttpResponse::err(400, "bad restore body"))?;
     if req.vault_id.trim().is_empty() {
-        return HttpResponse::err(400, "missing vault_id");
+        return Err(HttpResponse::err(400, "missing vault_id"));
     }
-    let requested_version = match req.version.as_deref() {
+    let version = match req.version.as_deref() {
         Some(raw) => match raw.parse::<u64>() {
             Ok(version) if version > 0 && raw == version.to_string() => Some(version),
-            _ => return HttpResponse::err(400, "bad restore version"),
+            _ => return Err(HttpResponse::err(400, "bad restore version")),
         },
         None => None,
     };
     let resource = vault_resource(&req.vault_id);
-    if let Err(r) = authorize(state, &resource, &account, Role::Writer) {
-        return r;
-    }
-    let dir = match vault_dir_of(state, &req.vault_id) {
-        Ok(dir) => dir,
-        Err(response) => return response,
-    };
-    let mut folded = match load_folded(&dir) {
+    authorize(state, &resource, &account, Role::Writer)?;
+    Ok(VaultWork {
+        scope: scope_of(state, account, &req.vault_id)?,
+        vault_id: req.vault_id,
+        job: VaultJob::Restore {
+            doc_id: req.doc_id,
+            version,
+        },
+    })
+}
+
+fn run_restore(scope: &VaultScope, doc_id: String, requested_version: Option<u64>) -> HttpResponse {
+    let dir = &scope.dir;
+    let mut folded = match load_folded(dir) {
         Ok(folded) => folded,
         Err(response) => return response,
     };
     if folded
         .versions
-        .get(&req.doc_id)
+        .get(&doc_id)
         .is_none_or(|chain| chain.is_empty())
     {
         return HttpResponse::err(409, "restore requires a version chain");
     }
     if let Some(version) = requested_version {
-        let Some(source) = folded.versions.get(&req.doc_id).and_then(|chain| {
+        let Some(source) = folded.versions.get(&doc_id).and_then(|chain| {
             chain
                 .iter()
                 .find(|entry| entry.version == version && !entry.deleted)
@@ -1837,37 +1994,37 @@ fn handle_restore(state: &mut ServiceState, auth: Option<&str>, body: &[u8]) -> 
         return HttpResponse::json(
             200,
             &serde_json::json!({
-                "restored": req.doc_id, "version": version.to_string(),
+                "restored": doc_id, "version": version.to_string(),
                 "source_op": op, "requires_fresh_push": true,
             }),
         );
     }
-    let Some(trash) = folded.trash.get(&req.doc_id) else {
+    let Some(trash) = folded.trash.get(&doc_id) else {
         return HttpResponse::err(404, "not in trash");
     };
     let Some(source) = trash.last_version.and_then(|version| {
         folded
             .versions
-            .get(&req.doc_id)?
+            .get(&doc_id)?
             .iter()
             .find(|v| v.version == version && !v.deleted)
     }) else {
         return HttpResponse::err(409, "restore source version expired; trash left intact");
     };
     let source_op_id = source.op_id.clone();
-    match restore_from_trash(&mut folded, &req.doc_id) {
+    match restore_from_trash(&mut folded, &doc_id) {
         Err(e) => HttpResponse::err(404, &e),
         Ok(version) => {
             // A replica is not a backup: restore only drops the trash marker.
             // The client must push a FRESH op with a bumped counter carrying
             // the restored bytes; the old vector is never replayed.
-            if let Err(e) = versions::save(&dir, &folded) {
+            if let Err(e) = versions::save(dir, &folded) {
                 return HttpResponse::err(500, &e);
             }
             HttpResponse::json(
                 200,
                 &serde_json::json!({
-                    "restored": req.doc_id,
+                    "restored": doc_id,
                     "last_version": version.map(|n| n.to_string()),
                     "source_op_id": source_op_id,
                     "requires_fresh_push": true,
@@ -2987,6 +3144,49 @@ mod authenticated_version_tests {
         assert_eq!(chain(&folded, "notes/plain.md"), vec![4]);
         assert_eq!(chain(&folded, "notes/conflict.md"), vec![1, 2, 3]);
         assert_eq!(chain(&folded, "notes/trashed.md"), vec![2, 3]);
+    }
+}
+
+#[cfg(test)]
+mod vault_scope_tests {
+    use super::vault_of_request;
+
+    /// Il lock si prende sul vault che l'ammissione ricaverà dalla stessa
+    /// richiesta.
+    #[test]
+    fn the_vault_lock_follows_the_vault_the_request_names() {
+        let of = |method, path, body: &str| vault_of_request(method, path, body.as_bytes());
+        assert_eq!(
+            of("GET", "/v1/sync/status?vault_id=v&replica_id=r", "").as_deref(),
+            Some("v")
+        );
+        assert_eq!(
+            of("POST", "/v1/sync/pull", r#"{"vault_id":"v"}"#).as_deref(),
+            Some("v")
+        );
+        assert_eq!(of("POST", "/v1/sync/ack", "{}").as_deref(), Some("default"));
+        assert_eq!(
+            of(
+                "POST",
+                "/v1/sync/push",
+                r#"{"ops":[{"vault_id":""},{"vault_id":"w"}]}"#
+            )
+            .as_deref(),
+            Some("w")
+        );
+        assert_eq!(
+            of("POST", "/v1/sync/push", r#"{"ops":[]}"#).as_deref(),
+            Some("default")
+        );
+        assert_eq!(
+            of("POST", "/v1/sync/revoke", r#"{"resource":"vault:x"}"#).as_deref(),
+            Some("x")
+        );
+        assert_eq!(
+            of("POST", "/v1/sync/invite", r#"{"resource":"site:s"}"#),
+            None
+        );
+        assert_eq!(of("POST", "/v1/sync/pull", "non json"), None);
     }
 }
 

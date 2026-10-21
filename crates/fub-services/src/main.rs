@@ -18,12 +18,15 @@
 //! - PBKDF2 (210k round) MAI sotto il lock globale: register/login calcolano
 //!   l'hash fuori dal lock (snapshot + `insert_prepared`/`check_hash`);
 //!   la password dei siti è verificata fuori dal lock (record da fs);
+//! - un lock per sito e uno per vault, presi prima di quello globale: staging,
+//!   copia, code e fsync tengono soltanto il proprio, e il lock globale resta
+//!   a sessioni, ACL e registri (STR-05);
 //! - commit con custom JS senza isolamento = 422 (preflight fail-closed);
 //!   serve-time con header sandbox / gate isolated-origin (vedi
 //!   [`fub_services::site_isolation`]).
 //!
 //! Rotte servite qui: `GET /v1/hello`, account, MFA, isolamento siti.
-//! `/v1/sync/*` va a `sync::handle`, `/v1/publish/*` agli handler owner,
+//! `/v1/sync/*` va a `sync::admit` e `VaultWork::run`, `/v1/publish/*` agli handler owner,
 //! e `GET /s/*` al servizio statico (record da fs, gate fuori dal lock).
 //!
 //! Uso:
@@ -495,10 +498,7 @@ fn dispatch(parsed: Parsed, state: &Arc<Mutex<ServiceState>>, data_dir: &Path) -
         | Route::SyncInviteAccept
         | Route::SyncRevoke
         | Route::SyncVaultKeyStore
-        | Route::SyncVaultKeyGet => {
-            let mut state = state.lock();
-            fub_services::sync::handle(&mut state, &parsed.method, &parsed.path, auth, &parsed.body)
-        }
+        | Route::SyncVaultKeyGet => handle_sync(state, &parsed, auth),
         Route::PublishDryRun => {
             let mut state = state.lock();
             fub_services::publish::handle(
@@ -565,6 +565,39 @@ fn dispatch(parsed: Parsed, state: &Arc<Mutex<ServiceState>>, data_dir: &Path) -
 }
 
 /// Il lock del sito nominato dal corpo, se ne nomina uno valido.
+/// Sync in due tempi (STR-05): sessione e ACL sotto il lock globale breve,
+/// poi code, ripiegamento e fsync tenendo soltanto il lock del vault. Il lock
+/// del vault si prende per primo e copre anche revoche e chiavi dello stesso
+/// vault, così il lavoro autorizzato non scavalca una revoca.
+fn handle_sync(
+    state: &Arc<Mutex<ServiceState>>,
+    parsed: &Parsed,
+    auth: Option<&str>,
+) -> HttpResponse {
+    let vault = fub_services::sync::vault_of_request(&parsed.method, &parsed.path, &parsed.body)
+        .map(|vault_id| {
+            let locks = Arc::clone(&state.lock().vault_locks);
+            (locks.of(&vault_id), vault_id)
+        });
+    let _vault = vault.as_ref().map(|(lock, _)| lock.lock());
+    let admission = {
+        let mut state = state.lock();
+        fub_services::sync::admit(&mut state, &parsed.method, &parsed.path, auth, &parsed.body)
+    };
+    match admission {
+        fub_services::sync::Admission::Done(response) => response,
+        // Il vault ammesso è quello di cui si tiene il lock, o niente lavoro.
+        fub_services::sync::Admission::Vault(work)
+            if vault.as_ref().is_some_and(|(_, id)| id == work.vault_id()) =>
+        {
+            work.run()
+        }
+        fub_services::sync::Admission::Vault(_) => {
+            HttpResponse::err(400, "ambiguous sync vault scope")
+        }
+    }
+}
+
 fn site_lock(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> Option<Arc<Mutex<()>>> {
     let site_id = fub_services::publish::peek_site_id(body)?;
     let locks = Arc::clone(&state.lock().site_locks);
@@ -1367,6 +1400,95 @@ mod sync_http_tests {
     /// STR-05: un commit che aspetta (o lavora) sul proprio sito non tiene il
     /// lock globale. Con il lock di `blog` occupato, come durante uno
     /// staging lento, un altro account fa login e sync subito.
+    #[test]
+    fn a_stalled_vault_does_not_stop_other_vaults_or_logins() {
+        let dir = TempDir::new();
+        let state = Arc::new(Mutex::new(ServiceState::open(Some(dir.0.clone())).unwrap()));
+        let (slow, other) = {
+            let mut state = state.lock();
+            let a = state
+                .accounts
+                .create_account("lento", "correct-horse-99")
+                .unwrap();
+            let b = state
+                .accounts
+                .create_account("altro", "correct-horse-99")
+                .unwrap();
+            (
+                format!("Bearer {}", state.accounts.issue_session_token(&a).unwrap()),
+                format!("Bearer {}", state.accounts.issue_session_token(&b).unwrap()),
+            )
+        };
+        let stalled = Arc::clone(&state.lock().vault_locks).of("fermo");
+        let held = stalled.lock();
+        let waiting = {
+            let state = Arc::clone(&state);
+            let dir = dir.0.clone();
+            std::thread::spawn(move || {
+                request(
+                    &state,
+                    &dir,
+                    "GET",
+                    "/v1/sync/status?vault_id=fermo&replica_id=r1",
+                    Some(&slow),
+                    json!(null),
+                )
+            })
+        };
+        std::thread::sleep(Duration::from_millis(50));
+        let started = Instant::now();
+        let (status, body) = request(
+            &state,
+            &dir.0,
+            "POST",
+            "/v1/account/login",
+            None,
+            json!({ "name": "altro", "password": "correct-horse-99" }),
+        );
+        assert_eq!(status, 200, "{body}");
+        let (status, body) = request(
+            &state,
+            &dir.0,
+            "GET",
+            "/v1/sync/status?vault_id=libero&replica_id=r2",
+            Some(&other),
+            json!(null),
+        );
+        assert_eq!(status, 200, "{body}");
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(!waiting.is_finished(), "the stalled vault still waits");
+        drop(held);
+        let (status, body) = waiting.join().unwrap();
+        assert_eq!(status, 200, "{body}");
+    }
+
+    #[test]
+    fn admitted_vault_work_runs_without_the_global_state() {
+        let dir = TempDir::new();
+        let state = Arc::new(Mutex::new(ServiceState::open(Some(dir.0.clone())).unwrap()));
+        let token = {
+            let mut state = state.lock();
+            let a = state
+                .accounts
+                .create_account("solo", "correct-horse-99")
+                .unwrap();
+            format!("Bearer {}", state.accounts.issue_session_token(&a).unwrap())
+        };
+        let admission = fub_services::sync::admit(
+            &mut state.lock(),
+            "GET",
+            "/v1/sync/status?vault_id=v&replica_id=r",
+            Some(&token),
+            b"",
+        );
+        let fub_services::sync::Admission::Vault(work) = admission else {
+            panic!("status is vault work");
+        };
+        assert_eq!(work.vault_id(), "v");
+        let _global = state.lock();
+        assert_eq!(work.run().status, 200);
+    }
+
     #[test]
     fn a_stalled_publish_does_not_stop_other_tenants() {
         let dir = TempDir::new();
