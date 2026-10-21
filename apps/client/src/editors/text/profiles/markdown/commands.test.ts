@@ -91,8 +91,8 @@ describe("formattazione inline", () => {
   });
 
   it("nel codice gli accordi di prosa passano la mano", () => {
-    const bold = markdownKeymap.find((binding) => binding.key === "Mod-b")!.run!;
-    const bullet = markdownKeymap.find((binding) => binding.key === "Mod-Shift-8")!.run!;
+    const bold = markdownKeymap.find((binding) => binding.key === "Mod-b")!.run as StateCommand;
+    const bullet = markdownKeymap.find((binding) => binding.key === "Mod-Shift-8")!.run as StateCommand;
     expect(run(bold, "```js\nconst ‹x› = 1\n```").handled).toBe(false);
     expect(run(bullet, "```\nr|iga\n```").handled).toBe(false);
     expect(run(bold, "testo ‹x›").out).toBe("testo **‹x›**");

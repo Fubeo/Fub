@@ -241,7 +241,7 @@ describe("la griglia", () => {
       await Promise.resolve();
       await Promise.resolve();
       expect(copied).toEqual(["Ada\n"]);
-      expect(writes.at(-1)!.rows).toEqual([["Nome", "Voto"], ["", "10"], ["Bea", "9"]]);
+      expect(writes[writes.length - 1]!.rows).toEqual([["Nome", "Voto"], ["", "10"], ["Bea", "9"]]);
     } finally {
       undeclare();
     }
