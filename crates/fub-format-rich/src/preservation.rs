@@ -332,7 +332,8 @@ fn shown_stories(document: &Document, block: &Block) -> Vec<u32> {
 
 /// Lo stesso blocco nei due modelli, con le stesse storie che mostra.
 fn same_block(base: &Document, b: &Block, wanted: &Document, w: &Block) -> bool {
-    if b != w {
+    // Il voluto riprende di solito il blocco della base, nello stesso `Arc`.
+    if !std::ptr::eq(b, w) && b != w {
         return false;
     }
     shown_stories(base, b)
@@ -340,56 +341,51 @@ fn same_block(base: &Document, b: &Block, wanted: &Document, w: &Block) -> bool 
         .all(|id| base.parts.get(&id) == wanted.parts.get(&id))
 }
 
-/// Oltre questa misura il tratto centrale non si allinea, e conta come
-/// toccato: il confronto resta lineare sui documenti grandi.
-const MAX_ALIGN: usize = 4096;
+/// Un blocco come elemento da allineare: uguale a un altro se è lo stesso
+/// blocco con le stesse storie ([`same_block`]), con un'impronta del testo.
+struct Aligned<'a> {
+    document: &'a Document,
+    block: &'a Arc<Block>,
+    hash: u64,
+}
+
+impl PartialEq for Aligned<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash
+            && same_block(self.document, self.block, other.document, other.block)
+    }
+}
+
+impl Eq for Aligned<'_> {}
+
+impl std::hash::Hash for Aligned<'_> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.hash.hash(state);
+    }
+}
+
+fn aligned(document: &Document) -> Vec<Aligned<'_>> {
+    use std::hash::{Hash, Hasher};
+    document
+        .body
+        .iter()
+        .map(|block| {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            each_paragraph(block, &mut |paragraph| paragraph.text.hash(&mut hasher));
+            Aligned {
+                document,
+                block,
+                hash: hasher.finish(),
+            }
+        })
+        .collect()
+}
 
 /// Le coppie (blocco della base, blocco voluto) che l'utente non ha toccato,
-/// nell'ordine: il prefisso e il suffisso comuni, poi la sottosequenza comune
-/// più lunga del tratto centrale.
+/// nell'ordine: una sottosequenza comune ([`crate::diff::common`]), lineare
+/// nella memoria anche sui documenti grandi.
 pub(crate) fn untouched_blocks(base: &Document, wanted: &Document) -> Vec<(usize, usize)> {
-    let (b, w) = (&base.body, &wanted.body);
-    let eq = |i: usize, j: usize| same_block(base, &b[i], wanted, &w[j]);
-    let mut prefix = 0;
-    while prefix < b.len() && prefix < w.len() && eq(prefix, prefix) {
-        prefix += 1;
-    }
-    let mut suffix = 0;
-    while suffix < b.len() - prefix
-        && suffix < w.len() - prefix
-        && eq(b.len() - 1 - suffix, w.len() - 1 - suffix)
-    {
-        suffix += 1;
-    }
-    let mut out: Vec<(usize, usize)> = (0..prefix).map(|i| (i, i)).collect();
-    let (bm, wm) = (b.len() - prefix - suffix, w.len() - prefix - suffix);
-    if bm > 0 && wm > 0 && bm <= MAX_ALIGN && wm <= MAX_ALIGN {
-        // La tabella della sottosequenza comune, dal fondo.
-        let mut table = vec![vec![0u32; wm + 1]; bm + 1];
-        for i in (0..bm).rev() {
-            for j in (0..wm).rev() {
-                table[i][j] = if eq(prefix + i, prefix + j) {
-                    table[i + 1][j + 1] + 1
-                } else {
-                    table[i + 1][j].max(table[i][j + 1])
-                };
-            }
-        }
-        let (mut i, mut j) = (0, 0);
-        while i < bm && j < wm {
-            if eq(prefix + i, prefix + j) {
-                out.push((prefix + i, prefix + j));
-                i += 1;
-                j += 1;
-            } else if table[i + 1][j] >= table[i][j + 1] {
-                i += 1;
-            } else {
-                j += 1;
-            }
-        }
-    }
-    out.extend((0..suffix).map(|k| (b.len() - suffix + k, w.len() - suffix + k)));
-    out
+    crate::diff::common(&aligned(base), &aligned(wanted))
 }
 
 /// Il resoconto di misura di un `.docx`: ciò che una prova a vuoto del codec
@@ -705,5 +701,35 @@ mod tests {
             "l'involucro va con il primo blocco"
         );
         assert_eq!(found.body[2].get(&sdt), None);
+    }
+
+    /// Oltre il vecchio tetto di 4096 blocchi i blocchi non toccati si
+    /// allineano lo stesso, anche con molte modifiche sparse e con i
+    /// paragrafi spostati, e un paragrafo uguale ma ricopiato vale come
+    /// uguale.
+    #[test]
+    fn i_blocchi_non_toccati_si_allineano_anche_nei_documenti_grandi() {
+        let para = |text: &str| {
+            let mut paragraph = wordcraft_doc::Paragraph::new();
+            paragraph.text = text.to_string();
+            wordcraft_doc::para_block(paragraph)
+        };
+        let mut base = Document::new();
+        base.body = (0..10_000)
+            .map(|i| para(&format!("paragrafo {}", i % 97)))
+            .collect();
+        let mut wanted = base.clone();
+        // Ogni millesimo blocco cambia, uno sparisce, uno è una copia nuova.
+        for at in (500..10_000).step_by(1000) {
+            wanted.body[at] = para("cambiato");
+        }
+        wanted.body.remove(7_777);
+        wanted.body[42] = para("paragrafo 42");
+        let pairs = untouched_blocks(&base, &wanted);
+        assert_eq!(pairs.len(), 10_000 - 10 - 1);
+        assert!(pairs.windows(2).all(|w| w[0].0 < w[1].0 && w[0].1 < w[1].1));
+        assert!(pairs.iter().all(|(b, w)| base.body[*b] == wanted.body[*w]));
+        assert!(pairs.contains(&(42, 42)));
+        assert!(pairs.contains(&(9_999, 9_998)));
     }
 }

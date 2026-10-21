@@ -35,6 +35,7 @@ use wordcraft_doc::Document;
 
 mod blob;
 mod canonical;
+mod diff;
 pub mod export;
 mod fidelity;
 mod fresh;
