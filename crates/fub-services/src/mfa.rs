@@ -112,6 +112,10 @@ pub fn verify(record: &mut TotpRecord, code: &str, at_ms: u64) -> Result<bool, S
 /// Sotto questa soglia la mappa dei fallimenti non si pota: poche chiavi
 /// costano meno di una scansione.
 const PRUNE_FLOOR: usize = 1024;
+/// Chiavi ricordate al massimo, anche dentro la finestra: oltre, un nome nuovo
+/// non si ricorda (lo ferma il limite globale di [`crate::abuse`]) e la
+/// memoria resta limitata qualunque sia la pioggia di nomi.
+pub const MAX_KEYS: usize = 65_536;
 
 /// Rate limiting login: 5 fallimenti / 5 minuti per chiave (il nome
 /// dell'account, o la chiave di un passo MFA).
@@ -150,7 +154,9 @@ impl LoginRateLimit {
                         .retain(|_, (_, first)| at_ms.saturating_sub(*first) < WINDOW_MS);
                     self.prune_at = (self.fails.len() * 2).max(PRUNE_FLOOR);
                 }
-                self.fails.insert(key.to_string(), (1, at_ms));
+                if self.fails.len() < MAX_KEYS {
+                    self.fails.insert(key.to_string(), (1, at_ms));
+                }
             }
         }
     }

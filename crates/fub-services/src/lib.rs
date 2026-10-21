@@ -11,6 +11,8 @@
 //! - [`auth`]: account, password (PBKDF2 versionato), session token opachi,
 //!   dispositivi, cancellazione account (conserva la copia locale).
 //! - [`mfa`]: TOTP RFC6238 con anti-replay e rate limiting sui login.
+//! - [`abuse`]: token bucket per origine e globale, semaforo delle KDF,
+//!   politica dei proxy fidati.
 //! - [`acl`]: ruoli Owner/Admin/Writer/Reader, share ACL, inviti con scadenza.
 //! - [`schema`]: quote/retention/regioni, config, helper fs (id, clock, atomic
 //!   write, directory), separazione device-vs-condiviso.
@@ -39,6 +41,7 @@
 //! env-file (`FUB_SERVICES_TOKEN_FILE`) o stdin dal client; qui i log
 //! redigono sempre (`server::redact`).
 
+pub mod abuse;
 pub mod acl;
 pub mod auth;
 pub mod crypto;

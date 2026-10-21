@@ -175,6 +175,8 @@ struct Parsed {
     headers: Vec<(String, String)>,
     req_host: Option<String>,
     body: Vec<u8>,
+    /// L'IP del peer TCP: l'origine dei limiti per chi non è autenticato.
+    peer: Option<std::net::IpAddr>,
 }
 
 /// Legge e valida testata+corpo con `httparse`. Errori = risposta immediata.
@@ -343,6 +345,7 @@ fn read_request(stream: &mut TcpStream, accepted: Instant) -> Result<Parsed, Htt
         headers: header_list,
         req_host,
         body,
+        peer: stream.peer_addr().ok().map(|addr| addr.ip()),
     })
 }
 
@@ -442,13 +445,41 @@ fn respond(stream: &mut TcpStream, response: &HttpResponse, extra: &[(&str, &str
     let _ = stream.flush();
 }
 
+/// Chi paga una KDF senza essere autenticato: i presìdi del processo e
+/// l'origine della richiesta secondo la politica dei proxy fidati (lock breve).
+fn kdf_caller(state: &Arc<Mutex<ServiceState>>, parsed: &Parsed) -> KdfCaller {
+    let state = state.lock();
+    KdfCaller {
+        abuse: Arc::clone(&state.abuse),
+        origin: fub_services::abuse::client_origin(
+            parsed.peer,
+            header_get(&parsed.headers, "x-forwarded-for"),
+            &state.config.trusted_proxies,
+        ),
+    }
+}
+
+struct KdfCaller {
+    abuse: Arc<fub_services::abuse::Abuse>,
+    origin: String,
+}
+
+impl KdfCaller {
+    /// Gettone e posto nel semaforo prima della KDF, o la risposta che rifiuta.
+    fn enter(&self) -> Result<fub_services::abuse::KdfPermit<'_>, HttpResponse> {
+        self.abuse
+            .enter(&self.origin, fub_services::schema::now_ms())
+            .map_err(|refusal| HttpResponse::err(refusal.status(), refusal.code()))
+    }
+}
+
 fn dispatch(parsed: Parsed, state: &Arc<Mutex<ServiceState>>, data_dir: &Path) -> HttpResponse {
     let route = fub_services::routing::route(&parsed.method, &parsed.path);
     let auth = header_get(&parsed.headers, "authorization");
     let response = match route {
         Route::Hello => HttpResponse::json(200, &Hello::current()),
-        Route::AccountRegister => handle_register(state, &parsed.body),
-        Route::AccountLogin => handle_login(state, &parsed.body),
+        Route::AccountRegister => handle_register(state, &kdf_caller(state, &parsed), &parsed.body),
+        Route::AccountLogin => handle_login(state, &kdf_caller(state, &parsed), &parsed.body),
         Route::MfaVerify => {
             let mut state = state.lock();
             handle_mfa(&mut state, auth, &parsed.body)
@@ -510,6 +541,7 @@ fn dispatch(parsed: Parsed, state: &Arc<Mutex<ServiceState>>, data_dir: &Path) -
         Route::PublishIsolation => handle_isolation(state, data_dir, auth, &parsed.body),
         Route::StaticSite { site, rest } => handle_static(
             state,
+            &kdf_caller(state, &parsed),
             data_dir,
             auth,
             &site,
@@ -529,7 +561,11 @@ fn dispatch(parsed: Parsed, state: &Arc<Mutex<ServiceState>>, data_dir: &Path) -
 
 /// Register con KDF fuori dal lock: validazione + hash sul worker, solo
 /// lookup/inserimento sotto lock breve.
-fn handle_register(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> HttpResponse {
+fn handle_register(
+    state: &Arc<Mutex<ServiceState>>,
+    caller: &KdfCaller,
+    body: &[u8],
+) -> HttpResponse {
     let creds = match parse_credentials(body) {
         Err(r) => return r,
         Ok(creds) => creds,
@@ -543,17 +579,31 @@ fn handle_register(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> HttpRespons
     }
     {
         let state = state.lock();
+        if let Err(r) = registration_open(&state) {
+            return r;
+        }
         if state.accounts.by_name.contains_key(&name) {
             return HttpResponse::err(409, "account exists");
         }
     }
-    // 210k round PBKDF2 senza lock: sync/publish non si fermano.
-    let pw = match AccountStore::prepare_hash(&creds.password) {
-        Err(e) => return HttpResponse::err(500, &e),
-        Ok(pw) => pw,
+    // 210k round PBKDF2 senza lock: sync/publish non si fermano. Prima i
+    // limiti per origine e globale, poi un posto fra le KDF concorrenti.
+    let pw = {
+        let _permit = match caller.enter() {
+            Err(r) => return r,
+            Ok(permit) => permit,
+        };
+        match AccountStore::prepare_hash(&creds.password) {
+            Err(e) => return HttpResponse::err(500, &e),
+            Ok(pw) => pw,
+        }
     };
     let mut state = state.lock();
-    // Un register concorrente può aver preso il nome mentre girava la KDF.
+    // Un register concorrente può aver preso il nome (o l'ultimo posto)
+    // mentre girava la KDF.
+    if let Err(r) = registration_open(&state) {
+        return r;
+    }
     if state.accounts.by_name.contains_key(&name) {
         return HttpResponse::err(409, "account exists");
     }
@@ -570,9 +620,22 @@ fn handle_register(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> HttpRespons
     }
 }
 
+/// La politica di registrazione e il tetto globale degli account (STR-04).
+/// `closed` lascia passare soltanto il primo account di una data dir vuota.
+fn registration_open(state: &ServiceState) -> Result<(), HttpResponse> {
+    let count = state.accounts.accounts.len();
+    if state.config.registration == fub_services::schema::Registration::Closed && count > 0 {
+        return Err(HttpResponse::err(403, "registration closed"));
+    }
+    if count >= state.config.quotas.max_accounts as usize {
+        return Err(HttpResponse::err(403, "account quota exceeded"));
+    }
+    Ok(())
+}
+
 /// Login con KDF fuori dal lock: snapshot hash sotto lock breve, verifica
 /// fuori, emissione token sotto lock breve. MFA (HMAC veloce) sotto lock.
-fn handle_login(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> HttpResponse {
+fn handle_login(state: &Arc<Mutex<ServiceState>>, caller: &KdfCaller, body: &[u8]) -> HttpResponse {
     #[derive(serde::Deserialize)]
     struct Login {
         name: String,
@@ -590,6 +653,12 @@ fn handle_login(state: &Arc<Mutex<ServiceState>>, body: &[u8]) -> HttpResponse {
         return HttpResponse::err(401, "bad credentials");
     }
     let now = fub_services::schema::now_ms();
+    // Il limite per nome lo sceglie chi chiama: davanti c'è quello per origine
+    // e globale, che nessun nome nuovo azzera, e il semaforo delle KDF.
+    let _permit = match caller.enter() {
+        Err(r) => return r,
+        Ok(permit) => permit,
+    };
     let snapshot = {
         let mut state = state.lock();
         if state.logins.blocked(&key, now) {
@@ -785,6 +854,7 @@ fn handle_isolation(
 #[allow(clippy::too_many_arguments)]
 fn handle_static(
     state: &Arc<Mutex<ServiceState>>,
+    caller: &KdfCaller,
     data_dir: &Path,
     auth: Option<&str>,
     site_id: &str,
@@ -820,7 +890,17 @@ fn handle_static(
             }
         }
     }
-    let gate = site_api::check_password_gate(&record, site_password);
+    // Una password presentata a un sito protetto costa una PBKDF2: passa dai
+    // limiti per origine e globale e dal semaforo, come il login.
+    let gate = if record.password_hash.is_some() && site_password.is_some() {
+        let _permit = match caller.enter() {
+            Err(r) => return r,
+            Ok(permit) => permit,
+        };
+        site_api::check_password_gate(&record, site_password)
+    } else {
+        site_api::check_password_gate(&record, None)
+    };
     match gate {
         site_api::PasswordGate::Public => {}
         site_api::PasswordGate::Locked { password_ok: true } => {}
@@ -1109,6 +1189,114 @@ mod sync_http_tests {
         .unwrap();
         site::create_site(&dir.0, "nuovo", "owner", None).unwrap();
         assert!(!dir.0.join("sites/nuovo/isolation.json").exists());
+    }
+
+    /// STR-04: nomi sempre nuovi non azzerano il limite. Dopo la raffica
+    /// dell'origine il login risponde 429 senza calcolare una KDF, e le
+    /// richieste autenticate restano servite.
+    #[test]
+    fn random_login_names_run_out_of_the_origin_budget_before_any_kdf() {
+        let dir = TempDir::new();
+        let state = Arc::new(Mutex::new(ServiceState::open(Some(dir.0.clone())).unwrap()));
+        let bearer = {
+            let mut state = state.lock();
+            let id = state
+                .accounts
+                .create_account("legit", "correct-horse-99")
+                .unwrap();
+            format!(
+                "Bearer {}",
+                state.accounts.issue_session_token(&id).unwrap()
+            )
+        };
+        // La raffica è già stata spesa da questa origine (lo stesso conto di
+        // trenta login falliti), senza aspettare trenta KDF.
+        {
+            let state = state.lock();
+            let mut buckets = state.abuse.buckets.lock();
+            let now = fub_services::schema::now_ms();
+            while buckets.admit("127.0.0.1", now) {}
+        }
+        let (status, body) = request(
+            &state,
+            &dir.0,
+            "POST",
+            "/v1/account/login",
+            None,
+            json!({ "name": "nome-sempre-nuovo", "password": "qualunque-123" }),
+        );
+        assert_eq!(
+            (status, body["error"].as_str()),
+            (429, Some("rate limited"))
+        );
+        let (status, _) = request(
+            &state,
+            &dir.0,
+            "POST",
+            "/v1/account/register",
+            None,
+            json!({ "name": "altro-nome", "password": "correct-horse-99" }),
+        );
+        assert_eq!(status, 429);
+        assert_eq!(state.lock().abuse.kdf.busy(), 0);
+        let (status, _) = request(
+            &state,
+            &dir.0,
+            "GET",
+            "/v1/sync/status?vault_id=v",
+            Some(&bearer),
+            json!(null),
+        );
+        assert_ne!(status, 429, "authenticated routes are not throttled");
+    }
+
+    #[test]
+    fn registration_obeys_the_policy_and_the_global_account_cap() {
+        let dir = TempDir::new();
+        let state = Arc::new(Mutex::new(ServiceState::open(Some(dir.0.clone())).unwrap()));
+        state.lock().config.registration = fub_services::schema::Registration::Closed;
+        let register = |name: &str| {
+            request(
+                &state,
+                &dir.0,
+                "POST",
+                "/v1/account/register",
+                None,
+                json!({ "name": name, "password": "correct-horse-99" }),
+            )
+        };
+        assert_eq!(register("admin").0, 201, "the first account bootstraps");
+        assert_eq!(register("secondo").1["error"], "registration closed");
+        {
+            let mut state = state.lock();
+            state.config.registration = fub_services::schema::Registration::Open;
+            state.config.quotas.max_accounts = 2;
+        }
+        assert_eq!(register("secondo").0, 201);
+        assert_eq!(register("terzo").1["error"], "account quota exceeded");
+    }
+
+    #[test]
+    fn a_site_password_attempt_spends_the_origin_budget() {
+        use fub_services::publish::site;
+        let dir = TempDir::new();
+        let state = Arc::new(Mutex::new(ServiceState::open(Some(dir.0.clone())).unwrap()));
+        let hash = fub_services::publish::guard::hash_site_password("site-secret").unwrap();
+        site::create_site(&dir.0, "chiuso", "owner", Some(hash)).unwrap();
+        {
+            let state = state.lock();
+            let mut buckets = state.abuse.buckets.lock();
+            let now = fub_services::schema::now_ms();
+            while buckets.admit("127.0.0.1", now) {}
+        }
+        let wire =
+            b"GET /s/chiuso/ HTTP/1.1\r\nHost: localhost\r\nx-fub-site-password: tentativo\r\n\r\n";
+        let bytes = exchange_raw(&state, &dir.0, wire);
+        assert!(
+            bytes.starts_with(b"HTTP/1.1 429"),
+            "{}",
+            String::from_utf8_lossy(&bytes)
+        );
     }
 
     #[test]

@@ -39,6 +39,12 @@ pub struct ServiceQuotas {
     /// nei `services.json` scritti prima che esistesse.
     #[serde(default = "default_max_vaults")]
     pub max_vaults: u16,
+    /// Account registrabili in tutto (default 1000). Le quote per account
+    /// moltiplicate per questo numero sono il tetto dello storage totale:
+    /// senza, registrare nuove identità azzerava ogni quota. Manca nei
+    /// `services.json` scritti prima che esistesse.
+    #[serde(default = "default_max_accounts")]
+    pub max_accounts: u32,
     /// Giorni di conservazione di tombstone/versioni/cestino (default 30).
     pub retention_days: u32,
     /// Regioni dichiarate. Solo `local` senza deployment reale.
@@ -52,6 +58,7 @@ impl Default for ServiceQuotas {
             max_asset_bytes: 64 * 1024 * 1024,
             max_sites: 16,
             max_vaults: default_max_vaults(),
+            max_accounts: default_max_accounts(),
             retention_days: 30,
             regions: vec!["local".to_string()],
         }
@@ -60,6 +67,22 @@ impl Default for ServiceQuotas {
 
 fn default_max_vaults() -> u16 {
     16
+}
+
+fn default_max_accounts() -> u32 {
+    1000
+}
+
+/// Chi può registrarsi con `POST /v1/account/register`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Registration {
+    /// Chiunque, entro `max_accounts` e i limiti di frequenza.
+    #[default]
+    Open,
+    /// Nessuno, tranne il primo account di una data dir vuota (bootstrap
+    /// dell'amministratore): gli altri si creano a mano o riaprendo.
+    Closed,
 }
 
 fn default_loopback() -> bool {
@@ -75,6 +98,13 @@ pub struct ServicesConfig {
     /// TLS terminato davanti (blocco esterno documentato in lib.rs).
     #[serde(default = "default_loopback")]
     pub allow_loopback_http: bool,
+    /// Politica di registrazione (default `open`).
+    #[serde(default)]
+    pub registration: Registration,
+    /// IP dei reverse proxy di cui si accetta `X-Forwarded-For` per i limiti
+    /// per origine. Vuoto: conta soltanto il peer TCP.
+    #[serde(default)]
+    pub trusted_proxies: Vec<String>,
 }
 
 impl Default for ServicesConfig {
@@ -82,6 +112,8 @@ impl Default for ServicesConfig {
         Self {
             quotas: ServiceQuotas::default(),
             allow_loopback_http: true,
+            registration: Registration::default(),
+            trusted_proxies: Vec::new(),
         }
     }
 }

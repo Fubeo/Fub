@@ -94,6 +94,8 @@ pub struct ServiceState {
     pub totp_attempts: crate::mfa::LoginRateLimit,
     /// ACL per risorsa (`vault:<id>`, `site:<id>`).
     pub acls: BTreeMap<String, crate::acl::ShareAcl>,
+    /// Limiti di frequenza e semaforo KDF: si clonano fuori dal lock.
+    pub abuse: std::sync::Arc<crate::abuse::Abuse>,
 }
 
 impl ServiceState {
@@ -121,6 +123,7 @@ impl ServiceState {
             logins: crate::mfa::LoginRateLimit::new(),
             totp_attempts: crate::mfa::LoginRateLimit::new(),
             acls: BTreeMap::new(),
+            abuse: std::sync::Arc::default(),
         })
     }
 
