@@ -33,6 +33,8 @@ jobs:
         run: cargo test -p fub-abi --test dependency_invariant
       - name: la shell raggiunge il workspace solo dalle porte strette dell'host
         run: node .github/scripts/check-host-workspace-boundary.mjs
+      - name: soltanto gli adattatori nominano WordCraft nei sorgenti
+        run: node .github/scripts/check-wordcraft-boundary.mjs
       - name: gli errori letterali non crescono
         run: node .github/scripts/check-error-literals.mjs
       - name: il lettore dei commenti di Rust distingue la prosa da stringhe e caratteri

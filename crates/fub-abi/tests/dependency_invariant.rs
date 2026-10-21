@@ -1084,3 +1084,142 @@ fn the_diagram_parser_refuses_what_it_cannot_read() {
         "```mermaid\n    %% @grafo-dipendenze\n    a[\"x\"]\n    a ==>|\"parla con\"| a\n```\n",
     );
 }
+
+/// Chi può dichiarare un crate di WordCraft, quale e di che genere: `None` è
+/// la dipendenza normale, `Some("dev")` quella di prova. Il motore entra in Fub
+/// da due adattatori soltanto, e un terzo è una decisione da prendere qui (vedi
+/// ../../../docs/decisions/0213-provenienza-dei-motori-esterni.md).
+const WORDCRAFT_OWNERS: &[(&str, &str, Option<&str>)] = &[
+    ("fub-format-rich", "wordcraft-doc", None),
+    ("fub-format-rich", "wordcraft-docx", None),
+    ("fub-format-rich", "wordcraft-formats", None),
+    ("fub-format-rich", "wordcraft-docbin", None),
+    ("fub-format-rich", "wordcraft-geom", Some("dev")),
+    ("fub-features", "wordcraft-proof", None),
+    ("fub-host", "wordcraft-formats", Some("dev")),
+];
+
+/// I crate che non devono vedere WordCraft nemmeno attraverso qualcun altro: il
+/// contratto, il core e ciò che un guest importa.
+const WORDCRAFT_FREE: &[&str] = &["fub-abi", "fub-kernel", "fub-sdk"];
+
+/// I crate di WordCraft fra le dipendenze dichiarate di un membro, con il genere.
+fn wordcraft_declared<'a>(
+    graph: &Graph<'a>,
+    member: &str,
+) -> Vec<(&'a str, Option<&'a str>, bool)> {
+    let pkg = arr(graph.metadata, "packages")
+        .iter()
+        .find(|p| str_of(p, "name") == member)
+        .unwrap_or_else(|| panic!("`{member}` non è nel workspace"));
+    arr(pkg, "dependencies")
+        .iter()
+        .filter(|d| in_families(str_of(d, "name"), &["wordcraft"]))
+        .map(|d| {
+            (
+                str_of(d, "name"),
+                d.get("kind").and_then(Value::as_str),
+                d.get("optional").and_then(Value::as_bool).unwrap_or(false),
+            )
+        })
+        .collect()
+}
+
+/// I proprietari di WordCraft (F4 di `piano_motori_craft.md`): il motore cambia
+/// in fretta, e ogni crate che lo nomina è un posto in più da correggere a ogni
+/// aggiornamento. Si guardano **tutti** i membri, e tutti i generi di
+/// dipendenza: anche un test che costruisce un `wordcraft_doc::Document` lega
+/// quel crate al motore.
+#[test]
+fn only_the_adapters_name_wordcraft() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+
+    let mut guilty = Vec::new();
+    for member in graph.members() {
+        // I crate del motore si nominano fra loro: non sono adattatori.
+        if in_families(member, &["wordcraft"]) {
+            continue;
+        }
+        for (name, kind, _) in wordcraft_declared(&graph, member) {
+            let allowed = WORDCRAFT_OWNERS
+                .iter()
+                .any(|(m, n, k)| *m == member && *n == name && *k == kind);
+            if !allowed {
+                guilty.push(format!("{member} → {name} ({})", kind.unwrap_or("normale")));
+            }
+        }
+    }
+    assert!(
+        guilty.is_empty(),
+        "{guilty:?}: dipendenze da WordCraft fuori dall'elenco dei proprietari.\n\
+         Il motore entra da `fub-format-rich` (documenti) e da `fub-features`\n\
+         (correttore, feature `proof`). Un altro crate passa da quegli\n\
+         adattatori; se davvero serve, è una decisione da prendere aggiornando\n\
+         `WORDCRAFT_OWNERS` qui e l'ADR 0213, con chi possiede `fub-format-rich`."
+    );
+
+    for (member, name, kind) in WORDCRAFT_OWNERS {
+        assert!(
+            wordcraft_declared(&graph, member)
+                .iter()
+                .any(|(n, k, _)| n == name && k == kind),
+            "`WORDCRAFT_OWNERS` elenca {member} → {name}, che non c'è più: \
+             togli la riga, l'elenco descrive il presente."
+        );
+    }
+}
+
+#[test]
+fn the_core_does_not_reach_wordcraft() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+
+    for member in WORDCRAFT_FREE {
+        let reached: Vec<&str> = graph
+            .closure(member)
+            .into_iter()
+            .filter(|n| in_families(n, &["wordcraft"]))
+            .collect();
+        assert!(
+            reached.is_empty(),
+            "`{member}` raggiunge {reached:?} fra le dipendenze normali: il\n\
+             contratto, il core e l'SDK non conoscono il motore dei documenti."
+        );
+    }
+}
+
+/// Il correttore resta una feature: una build di `fub-features` senza `proof`
+/// non contiene WordCraft.
+#[test]
+fn the_proofing_engine_stays_optional() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+
+    let declared = wordcraft_declared(&graph, "fub-features");
+    assert!(
+        !declared.is_empty() && declared.iter().all(|(_, _, optional)| *optional),
+        "{declared:?}: in `fub-features` ogni crate di WordCraft è opzionale,\n\
+         acceso soltanto dalla feature `proof`."
+    );
+    let features = arr(&metadata, "packages")
+        .iter()
+        .find(|p| str_of(p, "name") == "fub-features")
+        .and_then(|p| p.get("features"))
+        .and_then(Value::as_object)
+        .expect("`fub-features` senza feature");
+    for (feature, enables) in features {
+        let names: Vec<&str> = enables
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .collect();
+        let pulls = names.iter().any(|e| e.starts_with("dep:wordcraft"));
+        assert!(
+            feature == "proof" || !pulls,
+            "la feature `{feature}` di `fub-features` accende WordCraft ({names:?}):\n\
+             soltanto `proof` lo fa."
+        );
+    }
+}
