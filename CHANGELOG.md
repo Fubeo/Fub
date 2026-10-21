@@ -84,6 +84,11 @@ la sezione seguente raccoglie le modifiche per la prima versione.
   nella barra della finestra;
 - caricamento del motore del grafo su richiesta e bundle separati per runtime,
   con limiti vincolanti sulla dimensione del JavaScript.
+- motore dei documenti di videoscrittura e del correttore aggiornato a
+  WordCraft 0.9: un `.docx` con la disposizione dell'Asia orientale
+  (`w:eastAsianLayout`) la conserva, la copia RTF porta le revisioni tracciate
+  e il correttore corregge una nota o un documento in indonesiano (`lang`
+  `id`), con l'ortografia quando sulla macchina c'è il dizionario `id_ID`;
 
 ### Corretto
 

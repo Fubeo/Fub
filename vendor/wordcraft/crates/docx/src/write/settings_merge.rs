@@ -21,6 +21,7 @@ const OWNED: &[&str] = &[
     "w:attachedTemplate",
     "w:linkStyles",
     "w:trackRevisions",
+    "w:doNotTrackMoves",
     "w:documentProtection",
     "w:defaultTabStop",
     "w:autoHyphenation",
@@ -222,9 +223,15 @@ fn merge_compat(orig: &str, generated: &str) -> Option<String> {
     match (mode(orig), mode(generated)) {
         (Some((a, b)), Some((c, d))) => Some(format!("{}{}{}", orig.get(..a)?, generated.get(c..d)?, orig.get(b..)?)),
         (None, Some((c, d))) => {
-            // No mode in the original: add the generated one before `</w:compat>`.
-            let close = orig.rfind("</w:compat>")?;
-            Some(format!("{}{}{}", orig.get(..close)?, generated.get(c..d)?, orig.get(close..)?))
+            // No mode in the original: add the generated one before `</w:compat>`, or expand a self-closing `<w:compat/>`.
+            if let Some(close) = orig.rfind("</w:compat>") {
+                Some(format!("{}{}{}", orig.get(..close)?, generated.get(c..d)?, orig.get(close..)?))
+            } else if let Some(slash) = orig.rfind("/>") {
+                let open = orig.get(..slash)?.trim_end();
+                Some(format!("{open}>{}</w:compat>", generated.get(c..d)?))
+            } else {
+                None
+            }
         }
         _ => Some(orig.to_string()),
     }
@@ -310,10 +317,11 @@ pub fn merge(original: &[u8], generated: &[u8]) -> Option<Vec<u8>> {
 
 /// Did `written` (a settings part) keep everything of `original` the model doesn't hold? Every
 /// child [`merge`] keeps byte for byte must be there byte for byte, and `w:compat` must be the
-/// original's but for its compatibility mode. False when a child went (one referring to a
-/// relationship, or all of them when the merge fell back) or `written` can't be scanned; true
-/// for an `original` [`has_unowned`] wouldn't keep. A check for callers that refuse to lose
-/// settings silently; added in Fub's vendored copy (`vendor/wordcraft/UPSTREAM.md`).
+/// original's but for its compatibility mode (a self-closing `<w:compat/>` the merge expanded to
+/// hold the mode counts as kept). False when a child went (one referring to a relationship, or
+/// all of them when the merge fell back) or `written` can't be scanned; true for an `original`
+/// [`has_unowned`] wouldn't keep. A check for callers that refuse to lose settings silently;
+/// added in Fub's vendored copy (`vendor/wordcraft/UPSTREAM.md`).
 pub fn kept_unowned(original: &[u8], written: &[u8]) -> bool {
     if !has_unowned(original) {
         return true;
@@ -324,11 +332,20 @@ pub fn kept_unowned(original: &[u8], written: &[u8]) -> bool {
     };
     let text = |xml: &str, k: &Child| xml.get(k.start..k.end).map(str::to_string);
     let without_mode = |c: &str| -> String {
-        let Some(at) = c.find("w:name=\"compatibilityMode\"") else { return c.to_string() };
-        let (Some(start), Some(len)) = (c.get(..at).and_then(|h| h.rfind('<')), c.get(at..).and_then(|t| t.find('>'))) else {
-            return c.to_string();
+        let c = match c.find("w:name=\"compatibilityMode\"") {
+            Some(at) => match (c.get(..at).and_then(|h| h.rfind('<')), c.get(at..).and_then(|t| t.find('>'))) {
+                (Some(start), Some(len)) => format!("{}{}", c.get(..start).unwrap_or(""), c.get(at + len + 1..).unwrap_or("")),
+                _ => c.to_string(),
+            },
+            None => c.to_string(),
         };
-        format!("{}{}", c.get(..start).unwrap_or(""), c.get(at + len + 1..).unwrap_or(""))
+        // An empty block reads the same self-closing or not.
+        let open = match c.find('>') {
+            Some(gt) if c.get(gt + 1..) == Some("</w:compat>") => c.get(..gt),
+            Some(_) if c.ends_with("/>") => c.get(..c.len() - 2),
+            _ => None,
+        };
+        open.map_or(c.clone(), |o| format!("{}/>", o.trim_end()))
     };
     let mut used = vec![false; w_kids.len()];
     for k in &o_kids {
@@ -388,6 +405,14 @@ mod tests {
     }
 
     #[test]
+    fn a_self_closing_compat_block_gets_the_generated_mode() {
+        let orig = r#"<w:settings xmlns:w="w" xmlns:m="m" xmlns:r="r"><w:compat/><w:rsids><w:rsidRoot w:val="00112233"/></w:rsids></w:settings>"#;
+        let out = String::from_utf8(merge(orig.as_bytes(), GEN.as_bytes()).unwrap()).unwrap();
+        assert!(out.contains("<w:compat><w:compatSetting") && out.contains("</w:compat>"), "{out}");
+        assert!(out.contains("<w:rsidRoot w:val=\"00112233\"/>"), "{out}");
+    }
+
+    #[test]
     fn kept_unowned_sees_a_lost_or_changed_child() {
         let orig = r#"<w:settings xmlns:w="w" xmlns:m="m" xmlns:r="r"><w:zoom w:percent="90"/><w:rsids><w:rsidRoot w:val="1"/></w:rsids><w:defaultTabStop w:val="708"/><w:compat><w:useFELayout/><w:compatSetting w:name="compatibilityMode" w:uri="u" w:val="14"/></w:compat></w:settings>"#;
         let merged = merge(orig.as_bytes(), GEN.as_bytes()).unwrap();
@@ -402,5 +427,15 @@ mod tests {
         assert!(!kept_unowned(mail.as_bytes(), &merge(mail.as_bytes(), GEN.as_bytes()).unwrap()));
         assert!(!kept_unowned(orig.as_bytes(), &[0xff]));
         assert!(kept_unowned(GEN.as_bytes(), b""));
+    }
+
+    #[test]
+    fn kept_unowned_takes_an_expanded_self_closing_compat_block() {
+        let orig = r#"<w:settings xmlns:w="w" xmlns:m="m" xmlns:r="r"><w:compat/><w:rsids><w:rsidRoot w:val="00112233"/></w:rsids></w:settings>"#;
+        let merged = merge(orig.as_bytes(), GEN.as_bytes()).unwrap();
+        assert!(kept_unowned(orig.as_bytes(), &merged), "{}", String::from_utf8_lossy(&merged));
+        // An option added to the block is a change, not the mode.
+        let added = String::from_utf8(merged).unwrap().replace("<w:compat>", "<w:compat><w:useFELayout/>");
+        assert!(!kept_unowned(orig.as_bytes(), added.as_bytes()));
     }
 }

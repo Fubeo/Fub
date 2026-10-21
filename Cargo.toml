@@ -156,14 +156,14 @@ fub-format-rich = { path = "crates/fub-format-rich", version = "0.1.0" }
 fub-importers = { path = "crates/fub-importers", version = "0.1.0" }
 # Il correttore di WordCraft, vendorizzato (vendor/wordcraft/UPSTREAM.md). La
 # `version` la scrive `tools/vendor-wordcraft/vendor.mjs update`.
-wordcraft-proof = { path = "vendor/wordcraft/crates/proof", version = "0.7.0" }
+wordcraft-proof = { path = "vendor/wordcraft/crates/proof", version = "0.9.0" }
 # Il modello e il codec DOCX di WordCraft, vendorizzati con il correttore.
-wordcraft-geom = { path = "vendor/wordcraft/crates/geom", version = "0.7.0" }
-wordcraft-doc = { path = "vendor/wordcraft/crates/doc", version = "0.7.0" }
-wordcraft-docx = { path = "vendor/wordcraft/crates/docx", version = "0.7.0" }
+wordcraft-geom = { path = "vendor/wordcraft/crates/geom", version = "0.9.0" }
+wordcraft-doc = { path = "vendor/wordcraft/crates/doc", version = "0.9.0" }
+wordcraft-docx = { path = "vendor/wordcraft/crates/docx", version = "0.9.0" }
 # I lettori di WordCraft per OpenDocument, RTF e Word 97-2003.
-wordcraft-formats = { path = "vendor/wordcraft/crates/formats", version = "0.7.0" }
-wordcraft-docbin = { path = "vendor/wordcraft/crates/docbin", version = "0.7.0" }
+wordcraft-formats = { path = "vendor/wordcraft/crates/formats", version = "0.9.0" }
+wordcraft-docbin = { path = "vendor/wordcraft/crates/docbin", version = "0.9.0" }
 # Le dipendenze che Fub ha in comune con la copia di WordCraft: le versioni
 # sono le stesse di vendor/wordcraft/Cargo.toml (`vendor.mjs check`). `image`
 # non accende niente qui: ogni crate dice quali decodificatori vuole.

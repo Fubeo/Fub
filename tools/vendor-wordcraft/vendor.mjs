@@ -4,7 +4,7 @@
 // `upstream.lock` ne tiene la provenienza e le impronte di ogni file, prima e
 // dopo le patch.
 //
-//   node tools/vendor-wordcraft/vendor.mjs update --rev <sha> [--source <percorso o URL>]
+//   node tools/vendor-wordcraft/vendor.mjs update --rev <sha> [--tag <tag>] [--source <percorso o URL>]
 //   node tools/vendor-wordcraft/vendor.mjs check
 //   node tools/vendor-wordcraft/vendor.mjs verify-upstream [--source <percorso o URL>]
 //
@@ -13,7 +13,10 @@
 // `check` (senza rete, in CI) toglie l'intera pila in ordine inverso da una
 // copia temporanea e ritrova le impronte dell'upstream: una modifica a mano
 // che non sta in una patch lo fa fallire. `verify-upstream` (con rete)
-// riscarica la revisione e ne confronta le impronte con il lock.
+// riscarica la revisione e ne confronta le impronte con il lock. Il `--tag`
+// di `update` si scrive nel lock soltanto se nell'upstream punta proprio a
+// `--rev`, e `verify-upstream` lo ricontrolla: un tag si può spostare, lo SHA
+// no.
 //
 // Niente dipendenze npm, come i guard di `.github/scripts/`: usa `git` e
 // `tar` del sistema.
@@ -383,12 +386,14 @@ function untouched(lock) {
   }
 }
 
-function update(rev, source) {
+function update(rev, source, tag) {
   // La prima volta non c'è un lock: la copia di prima è quella fatta a mano, e
   // il diff di git dice se il risultato la riproduce.
   const old = fs.existsSync(LOCK) ? readLock() : { repository: REPOSITORY, mirror: "", rev: "", file: [] };
   if (old.rev) untouched(old);
   const repo = repository(source ?? old.repository, rev);
+  const moved = tag ? tagged(repo, tag, rev) : null;
+  if (moved) fail(moved);
   // L'upstream di prima si rilegge alla sua revisione: la pila di patch può
   // essere cambiata da allora.
   const previous = { lock: old, upstream: old.rev ? extract(repo, old.rev).dir : tempdir("none") };
@@ -420,7 +425,7 @@ function update(rev, source) {
     repository: previous.lock.repository,
     mirror: previous.lock.mirror ?? "",
     rev,
-    tag: "",
+    tag: tag ?? "",
     date,
     version,
     patch: patchFiles().map((p) => ({ path: p, sha256: sha256(fs.readFileSync(path.join(VENDOR, p))) })),
@@ -449,12 +454,23 @@ function update(rev, source) {
   console.log("passi successivi: cargo test del workspace e dei motori, il corpus, cargo deny check (vedi vendor/wordcraft/UPSTREAM.md).");
 }
 
+/// Il tag `tag` dell'upstream punta a `rev`.
+function tagged(repo, tag, rev) {
+  const at = spawnSync("git", ["rev-parse", "--verify", "--quiet", `refs/tags/${tag}^{commit}`], { cwd: repo, encoding: "utf8" });
+  if (at.status !== 0) return `il tag ${tag} non c'è nell'upstream`;
+  if (at.stdout.trim() !== rev) return `il tag ${tag} punta a ${at.stdout.trim().slice(0, 12)}, non a ${rev.slice(0, 12)}`;
+  return null;
+}
+
 function verifyUpstream(source) {
   const local = check({ quiet: true });
   const sources = [source ?? local.lock.repository, ...(source || !local.lock.mirror ? [] : [local.lock.mirror])];
   for (const from of sources) {
-    const { dir } = extract(repository(from, local.lock.rev), local.lock.rev);
+    const repo = repository(from, local.lock.rev);
+    const { dir } = extract(repo, local.lock.rev);
     const problems = [];
+    const moved = local.lock.tag ? tagged(repo, local.lock.tag, local.lock.rev) : null;
+    if (moved) problems.push(moved);
     const upstream = hashes(dir);
     for (const entry of local.lock.file) {
       if (entry.upstream === ABSENT ? upstream.has(entry.path) : upstream.get(entry.path) !== entry.upstream) {
@@ -492,11 +508,11 @@ try {
     fs.rmSync(check().upstream, { recursive: true, force: true });
   } else if (command === "update") {
     const rev = option(args, "--rev") ?? fail("update vuole --rev <sha>");
-    update(rev, option(args, "--source"));
+    update(rev, option(args, "--source"), option(args, "--tag"));
   } else if (command === "verify-upstream") {
     verifyUpstream(option(args, "--source"));
   } else {
-    fail("uso: vendor.mjs update --rev <sha> [--source <percorso o URL>] | check | verify-upstream [--source <percorso o URL>]");
+    fail("uso: vendor.mjs update --rev <sha> [--tag <tag>] [--source <percorso o URL>] | check | verify-upstream [--source <percorso o URL>]");
   }
 } catch (error) {
   done();

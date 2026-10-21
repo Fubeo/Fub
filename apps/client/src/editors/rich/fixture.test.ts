@@ -20,6 +20,7 @@ import { insertToc } from "./toc";
 import { setReviewAuthor, setTracking } from "./track";
 
 const SOURCE = projectionFixture.source;
+const SCHEMA = (JSON.parse(SOURCE) as { opaque_schema: number }).opaque_schema;
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -59,13 +60,15 @@ describe("la proiezione del codec", () => {
 
   it("ricopia versione e schema dei dati opachi come li ha ricevuti", () => {
     const projection = parseProjection(SOURCE);
-    expect([projection.version, projection.opaque_schema]).toEqual([2, 1]);
+    // Lo schema è quello che il formato scrive: lo si legge dalla fixture.
+    expect(Number.isInteger(SCHEMA)).toBe(true);
+    expect([projection.version, projection.opaque_schema]).toEqual([2, SCHEMA]);
     // Una bozza di versione 1, di prima dello schema, resta di versione 1.
-    const v1 = SOURCE.replace(`"version":2,"opaque_schema":1,`, `"version":1,`);
+    const v1 = SOURCE.replace(`"version":2,"opaque_schema":${SCHEMA},`, `"version":1,`);
     expect(v1).not.toBe(SOURCE);
     expect(writeProjection(parseProjection(v1))).toBe(v1);
     // Uno schema che la shell non conosce lo decide il formato: si ricopia.
-    const later = SOURCE.replace(`"opaque_schema":1`, `"opaque_schema":7`);
+    const later = SOURCE.replace(`"opaque_schema":${SCHEMA}`, `"opaque_schema":7`);
     expect(writeProjection(parseProjection(later))).toBe(later);
     const changes: EditorChange[] = [];
     const e = engine(changes);
@@ -80,10 +83,10 @@ describe("la proiezione del codec", () => {
   it("rifiuta una versione futura e le chiavi dell'altra versione", () => {
     for (const bad of [
       SOURCE.replace(`"version":2`, `"version":3`),
-      SOURCE.replace(`"version":2,"opaque_schema":1,`, `"version":2,`),
+      SOURCE.replace(`"version":2,"opaque_schema":${SCHEMA},`, `"version":2,`),
       SOURCE.replace(`"version":2,`, `"version":1,`),
-      SOURCE.replace(`"opaque_schema":1`, `"opaque_schema":-1`),
-      SOURCE.replace(`"opaque_schema":1`, `"opaque_schema":"1"`),
+      SOURCE.replace(`"opaque_schema":${SCHEMA}`, `"opaque_schema":-1`),
+      SOURCE.replace(`"opaque_schema":${SCHEMA}`, `"opaque_schema":"1"`),
     ]) {
       expect(bad).not.toBe(SOURCE);
       expect(() => parseProjection(bad)).toThrow();

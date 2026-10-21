@@ -234,6 +234,7 @@ impl ProofIndex {
             ProofLang::Hr => hunspell(wordcraft_proof::hr::has_dictionary, "hr_HR"),
             ProofLang::Ru => hunspell(wordcraft_proof::ru::has_dictionary, "ru_RU"),
             ProofLang::Tr => hunspell(wordcraft_proof::tr::has_dictionary, "tr_TR"),
+            ProofLang::Id => hunspell(wordcraft_proof::id::has_dictionary, "id_ID"),
             ProofLang::Bg | ProofLang::Other => (false, None),
         };
         LanguageSupport {
@@ -295,6 +296,9 @@ impl ProofIndex {
                     &[(0..segment.len(), lang)],
                     &opts,
                     options.grammar,
+                    // La domanda non dice se un segmento è una voce d'elenco:
+                    // la maiuscola della prima parola si chiede sempre.
+                    false,
                 )
             } else if options.grammar {
                 // Senza dizionario non si chiama l'ortografia: oltre a non
@@ -821,6 +825,23 @@ mod tests {
         let found = spans(segment, issues);
         assert!(found.iter().any(|s| s.contains("pò")), "{found:?}");
         assert!(found.iter().any(|s| s.contains("qual'è")), "{found:?}");
+    }
+
+    /// L'indonesiano non è fra le scelte dell'impostazione, ma una nota che lo
+    /// dichiara si corregge: con le sue regole e, senza `id_ID`, senza
+    /// ortografia.
+    #[test]
+    fn indonesian_without_a_dictionary_keeps_the_grammar_and_names_what_is_missing() {
+        let index = ProofIndex::bundled_only();
+        let segment = "Anak anak ,  sekolah.";
+        let result = check(&index, "id-ID", &[segment]);
+        assert_eq!(result.language.code, "id");
+        assert!(!result.language.spelling);
+        assert!(result.language.grammar);
+        assert_eq!(result.language.missing_dictionary, Some("id_ID"));
+        let issues = &result.segments[0];
+        assert!(!issues.is_empty());
+        assert!(issues.iter().all(|i| i.kind == ProofIssueKind::Grammar));
     }
 
     #[test]

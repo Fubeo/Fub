@@ -38,6 +38,9 @@ restano le regole grammaticali della lingua: parole ripetute, spazi doppi,
 punteggiatura e confusioni frequenti come «un pò» o «qual'è». Altre
 impostazioni spengono la grammatica e fanno contare come corrette le parole in
 maiuscolo o con cifre.
+L'indonesiano non è fra le scelte dell'impostazione, ma una nota o un
+documento che lo dichiara (`lang: id`) si corregge come le altre lingue, con
+il dizionario `id_ID`.
 
 Il correttore è il plugin ufficiale `fub.proof` («Proofing»). Spento dal
 pannello dei componenti, la nota si scrive come prima e non ha segni. Il

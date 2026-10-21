@@ -32,14 +32,20 @@ use crate::RichError;
 /// Lo schema dei dati opachi che questo Fub scrive. Si incrementa quando
 /// cambia la forma serializzata di uno dei tipi che vi si codificano (i tipi
 /// del modello di WordCraft e i `*Keep`/`*Key` di Fub); lo tiene d'occhio
-/// `tests/opaque_schema.rs`. Lo schema 0 è quello implicito della proiezione
-/// di versione 1, e ha la stessa forma dello schema 1.
-pub const OPAQUE_SCHEMA: u32 = 1;
+/// `tests/opaque_schema.rs`. Gli schemi:
+///
+/// - 0: quello implicito della proiezione di versione 1, con la forma dell'1;
+/// - 1: il primo dichiarato (WordCraft 0.7);
+/// - 2: le proprietà del carattere hanno in più `eastAsianLayout` (WordCraft
+///   0.9), facoltativo.
+pub const OPAQUE_SCHEMA: u32 = 2;
 
-/// Se questo Fub legge i dati opachi dello schema `schema`. Uno schema più
+/// Se questo Fub legge i dati opachi dello schema `schema`. Ogni schema
+/// precedente si legge così com'è: il 2 aggiunge all'1 soltanto un campo
+/// facoltativo, che in un dato dell'1 manca e vale assente. Uno schema più
 /// vecchio con una forma diversa avrà la sua migrazione esplicita, qui.
 pub(crate) fn readable(schema: u32) -> bool {
-    schema == 0 || schema == OPAQUE_SCHEMA
+    schema <= OPAQUE_SCHEMA
 }
 
 pub(crate) fn encode<T: Serialize>(value: &T) -> Result<String, RichError> {

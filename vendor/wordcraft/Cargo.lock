@@ -758,7 +758,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys",
@@ -831,6 +831,12 @@ name = "unarray"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
+
+[[package]]
+name = "unicode-bidi"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
 
 [[package]]
 name = "unicode-ident"
@@ -1017,7 +1023,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wordcraft-doc"
-version = "0.7.0"
+version = "0.9.0"
 dependencies = [
  "proptest",
  "serde",
@@ -1029,7 +1035,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-docbin"
-version = "0.7.0"
+version = "0.9.0"
 dependencies = [
  "cfb",
  "image",
@@ -1045,7 +1051,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-docx"
-version = "0.7.0"
+version = "0.9.0"
 dependencies = [
  "aes",
  "base64",
@@ -1059,6 +1065,7 @@ dependencies = [
  "sha1",
  "sha2",
  "thiserror",
+ "unicode-bidi",
  "wordcraft-doc",
  "wordcraft-geom",
  "zeroize",
@@ -1067,7 +1074,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-formats"
-version = "0.7.0"
+version = "0.9.0"
 dependencies = [
  "cfb",
  "chardetng",
@@ -1084,14 +1091,14 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-geom"
-version = "0.7.0"
+version = "0.9.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "wordcraft-proof"
-version = "0.7.0"
+version = "0.9.0"
 dependencies = [
  "log",
  "miniz_oxide",

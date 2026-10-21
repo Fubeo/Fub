@@ -3,10 +3,10 @@ Fub: zip 9 al posto di zip 3 (RUSTSEC-2026-0367, -0368, -0369). Il nome di una v
 sull'immagine oltre il budget verifica il rifiuto, non l'esaurimento del budget.
 
 diff --git a/crates/docx/src/package.rs b/crates/docx/src/package.rs
-index 1423f07..00af4b3 100644
+index debef3c..457a084 100644
 --- a/crates/docx/src/package.rs
 +++ b/crates/docx/src/package.rs
-@@ -182,7 +182,13 @@ impl Package {
+@@ -216,7 +216,13 @@ impl Package {
              if f.is_dir() {
                  continue;
              }
@@ -35,10 +35,10 @@ index 53c1f0c..27f11c6 100644
          f.read_to_end(&mut bytes).unwrap();
          assert!(parts.insert(name, bytes).is_none(), "duplicate ZIP entry");
 diff --git a/crates/docx/tests/fixtures.rs b/crates/docx/tests/fixtures.rs
-index 2c36a3b..56701ec 100644
+index 64e0438..87d58d0 100644
 --- a/crates/docx/tests/fixtures.rs
 +++ b/crates/docx/tests/fixtures.rs
-@@ -1105,7 +1105,7 @@ fn unzip(bytes: &[u8]) -> std::collections::BTreeMap<String, Vec<u8>> {
+@@ -1373,7 +1373,7 @@ fn unzip(bytes: &[u8]) -> std::collections::BTreeMap<String, Vec<u8>> {
          let mut f = z.by_index(i).unwrap();
          let mut b = Vec::new();
          f.read_to_end(&mut b).unwrap();
@@ -47,7 +47,7 @@ index 2c36a3b..56701ec 100644
      }
      out
  }
-@@ -1789,7 +1789,7 @@ fn includepicture_keeps_its_embedded_picture() {
+@@ -2074,7 +2074,7 @@ fn includepicture_keeps_its_embedded_picture() {
                  let mut f = z.by_index(i).unwrap();
                  let mut v = Vec::new();
                  std::io::Read::read_to_end(&mut f, &mut v).unwrap();
@@ -56,7 +56,7 @@ index 2c36a3b..56701ec 100644
              }
              entries.push(("word/media/picture.png".into(), png.to_vec()));
              zip(&entries.iter().map(|(n, v)| (n.as_str(), v.as_slice())).collect::<Vec<_>>())
-@@ -2789,14 +2789,14 @@ fn hyperlink_with_empty_target_is_no_link() {
+@@ -3345,14 +3345,14 @@ fn hyperlink_with_empty_target_is_no_link() {
              let mut f = zr.by_index(i).unwrap();
              let mut buf = Vec::new();
              std::io::Read::read_to_end(&mut f, &mut buf).unwrap();
@@ -73,6 +73,19 @@ index 2c36a3b..56701ec 100644
          }
          let refs: Vec<(&str, &[u8])> = entries.iter().map(|(n, b)| (n.as_str(), b.as_slice())).collect();
          zip(&refs)
+diff --git a/crates/docx/tests/glossary.rs b/crates/docx/tests/glossary.rs
+index 36906ce..b850e25 100644
+--- a/crates/docx/tests/glossary.rs
++++ b/crates/docx/tests/glossary.rs
+@@ -29,7 +29,7 @@ fn unzip(bytes: &[u8]) -> BTreeMap<String, Vec<u8>> {
+         let mut f = z.by_index(i).unwrap();
+         let mut b = Vec::new();
+         f.read_to_end(&mut b).unwrap();
+-        assert!(out.insert(f.name().to_string(), b).is_none(), "duplicate part {}", f.name());
++        assert!(out.insert(f.name().unwrap().to_string(), b).is_none(), "duplicate part {}", f.name().unwrap());
+     }
+     out
+ }
 diff --git a/crates/docx/tests/passthrough.rs b/crates/docx/tests/passthrough.rs
 index b9ed500..6de414b 100644
 --- a/crates/docx/tests/passthrough.rs
@@ -100,10 +113,10 @@ index cb345ef..7565863 100644
      }
      parts
 diff --git a/crates/docx/tests/roundtrip.rs b/crates/docx/tests/roundtrip.rs
-index 6d3a9f8..57a1bc8 100644
+index 430713b..7424ffd 100644
 --- a/crates/docx/tests/roundtrip.rs
 +++ b/crates/docx/tests/roundtrip.rs
-@@ -2575,7 +2575,7 @@ fn replace_part(zip_bytes: &[u8], name: &str, data: &[u8]) -> Vec<u8> {
+@@ -2614,7 +2614,7 @@ fn replace_part(zip_bytes: &[u8], name: &str, data: &[u8]) -> Vec<u8> {
      let mut out = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
      for i in 0..src.len() {
          let mut f = src.by_index(i).unwrap();
@@ -113,7 +126,7 @@ index 6d3a9f8..57a1bc8 100644
          if n == name {
              std::io::Write::write_all(&mut out, data).unwrap();
 diff --git a/crates/docx/tests/settings_merge.rs b/crates/docx/tests/settings_merge.rs
-index 875a4f3..09dc2f9 100644
+index c725b5c..a98dc82 100644
 --- a/crates/docx/tests/settings_merge.rs
 +++ b/crates/docx/tests/settings_merge.rs
 @@ -26,7 +26,7 @@ fn unzip(bytes: &[u8]) -> BTreeMap<String, Vec<u8>> {
@@ -126,10 +139,10 @@ index 875a4f3..09dc2f9 100644
      out
  }
 diff --git a/crates/formats/src/odt.rs b/crates/formats/src/odt.rs
-index da43860..cc22ae0 100644
+index 2df9d45..8b0b0d1 100644
 --- a/crates/formats/src/odt.rs
 +++ b/crates/formats/src/odt.rs
-@@ -2422,14 +2422,15 @@ mod tests {
+@@ -2637,14 +2637,15 @@ mod tests {
          assert_eq!(pics.get(&mut z, "big.png"), None);
          assert_eq!(pics.room, 1000);
          assert_eq!(pics.get(&mut z, "ok.png").map(|d| d.len()), Some(300));

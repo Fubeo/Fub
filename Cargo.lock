@@ -8349,7 +8349,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-doc"
-version = "0.7.0"
+version = "0.9.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -8360,7 +8360,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-docbin"
-version = "0.7.0"
+version = "0.9.0"
 dependencies = [
  "cfb 0.15.0",
  "image",
@@ -8374,7 +8374,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-docx"
-version = "0.7.0"
+version = "0.9.0"
 dependencies = [
  "aes",
  "base64 0.22.1",
@@ -8386,6 +8386,7 @@ dependencies = [
  "sha1",
  "sha2 0.11.0",
  "thiserror 2.0.19",
+ "unicode-bidi",
  "wordcraft-doc",
  "wordcraft-geom",
  "zeroize",
@@ -8394,7 +8395,7 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-formats"
-version = "0.7.0"
+version = "0.9.0"
 dependencies = [
  "cfb 0.15.0",
  "chardetng",
@@ -8410,14 +8411,14 @@ dependencies = [
 
 [[package]]
 name = "wordcraft-geom"
-version = "0.7.0"
+version = "0.9.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "wordcraft-proof"
-version = "0.7.0"
+version = "0.9.0"
 dependencies = [
  "log",
  "miniz_oxide",

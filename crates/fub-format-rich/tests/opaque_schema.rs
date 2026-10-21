@@ -15,7 +15,9 @@
 //!   proiezione del corpus che si modifica passa il controllo di
 //!   contenimento, perché un salvataggio li decodifica tutti.
 //! - `una_bozza_dello_schema_0_si_salva`: una proiezione di versione 1, come
-//!   le bozze di prima della versione 2, si salva sui suoi byte.
+//!   le bozze di prima della versione 2, si salva sui suoi byte;
+//!   `una_bozza_dello_schema_1_si_salva`: lo stesso per una proiezione dello
+//!   schema 1, di prima di WordCraft 0.9.
 
 mod common;
 
@@ -232,11 +234,22 @@ fn ogni_dato_opaco_del_corpus_si_rilegge() {
 
 #[test]
 fn una_bozza_dello_schema_0_si_salva() {
-    let dir = here().join("tests/fixtures/opaque/schema-0");
+    a_draft_of_schema_saves(0, 1);
+}
+
+#[test]
+fn una_bozza_dello_schema_1_si_salva() {
+    a_draft_of_schema_saves(1, 2);
+}
+
+/// La bozza di `tests/fixtures/opaque/schema-<schema>/`, una proiezione di
+/// versione `version`, si salva e si rilegge com'era voluta.
+fn a_draft_of_schema_saves(schema: u32, version: u32) {
+    let dir = here().join(format!("tests/fixtures/opaque/schema-{schema}"));
     let base = std::fs::read(dir.join("base.docx")).unwrap();
     let draft = std::fs::read_to_string(dir.join("projection.json")).unwrap();
     let wanted = Projection::from_json(&draft).unwrap();
-    assert_eq!((wanted.version, wanted.schema()), (1, 0));
+    assert_eq!((wanted.version, wanted.schema()), (version, schema));
     let Saved::Bytes(out) = save(Codec::Docx, &base, &draft).unwrap() else {
         panic!("la bozza cambia il documento");
     };
@@ -269,20 +282,31 @@ fn texts(projection: &Projection) -> Vec<String> {
         .collect()
 }
 
-/// Scrive la fixture dello schema 0, una volta: il documento d'esempio e una
-/// sua proiezione di versione 1 con una modifica, come una bozza di prima.
+/// Scrive le fixture degli schemi precedenti, una volta: il documento
+/// d'esempio e una sua proiezione con una modifica, come una bozza di prima.
+/// Il documento d'esempio non porta i campi che gli schemi successivi
+/// aggiungono, quindi i suoi dati opachi hanno la forma di quegli schemi.
 #[test]
 #[ignore]
-fn genera_la_fixture_dello_schema_0() {
-    let dir = here().join("tests/fixtures/opaque/schema-0");
-    std::fs::create_dir_all(&dir).unwrap();
-    let base = common::bytes(&common::sample());
-    let opened = open(Codec::Docx, &base).unwrap();
-    let mut projection = Projection::from_json(&opened.projection).unwrap();
-    assert!(touch(&mut projection));
-    let mut value: Value = serde_json::from_str(&projection.to_json().unwrap()).unwrap();
-    value["version"] = 1.into();
-    value.as_object_mut().unwrap().remove("opaque_schema");
-    std::fs::write(dir.join("base.docx"), &base).unwrap();
-    std::fs::write(dir.join("projection.json"), value.to_string() + "\n").unwrap();
+fn genera_le_fixture_degli_schemi_precedenti() {
+    for schema in [0u32, 1] {
+        let dir = here().join(format!("tests/fixtures/opaque/schema-{schema}"));
+        if dir.join("projection.json").exists() {
+            continue;
+        }
+        std::fs::create_dir_all(&dir).unwrap();
+        let base = common::bytes(&common::sample());
+        let opened = open(Codec::Docx, &base).unwrap();
+        let mut projection = Projection::from_json(&opened.projection).unwrap();
+        assert!(touch(&mut projection));
+        let mut value: Value = serde_json::from_str(&projection.to_json().unwrap()).unwrap();
+        if schema == 0 {
+            value["version"] = 1.into();
+            value.as_object_mut().unwrap().remove("opaque_schema");
+        } else {
+            value["opaque_schema"] = schema.into();
+        }
+        std::fs::write(dir.join("base.docx"), &base).unwrap();
+        std::fs::write(dir.join("projection.json"), value.to_string() + "\n").unwrap();
+    }
 }

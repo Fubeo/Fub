@@ -1,5 +1,5 @@
 {
-  "opaque_schema": 1,
+  "opaque_schema": 2,
   "defaults": {
     "CharProps": {},
     "ParaProps": {},
@@ -533,6 +533,12 @@
         },
         {
           "del": "number"
+        },
+        {
+          "eastAsianLayout": {
+            "id": "number",
+            "combine": "bool"
+          }
         },
         {
           "ins": "number"
