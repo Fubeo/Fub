@@ -37,6 +37,8 @@ jobs:
         run: node .github/scripts/check-error-literals.mjs
       - name: il lettore dei commenti di Rust distingue la prosa da stringhe e caratteri
         run: node .github/scripts/check-rust-comments.mjs --self-test
+      - name: il cancello del rilascio rifiuta CI incomplete e canali stabili senza firme
+        run: node .github/scripts/check-release-gate.mjs --self-test
       - name: i commenti di Rust restano attaccati a ciò che descrivono
         run: node .github/scripts/check-rust-comments.mjs
       - name: aggiungi il bersaglio del confine

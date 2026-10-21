@@ -133,12 +133,26 @@ workflow di rilascio con il tag che lo ha avviato.
 
 [`release.yml`](../../.github/workflows/release.yml) parte da un tag `v*`:
 
-1. controlla le versioni e crea la release **bozza**, se non esiste;
-2. su Linux (Ubuntu 22.04), Windows e macOS esegue `npm ci` e
+1. passa dal cancello
+   ([`check-release-gate.mjs`](../../.github/scripts/check-release-gate.mjs)):
+   il commit del tag deve avere una corsa di `ci.yml` completa e verde in ogni
+   job (la corsa settimanale non conta), e un tag del canale stabile deve avere
+   i segreti di firma;
+2. controlla le versioni e crea la release **bozza**, se non esiste; si ferma
+   se la release è già pubblicata;
+3. su Linux (Ubuntu 22.04), Windows e macOS esegue `npm ci` e
    `cargo tauri build --config crates/fub-app/tauri.conf.json`;
-3. raccoglie `.deb`, `.rpm`, `.AppImage`, `.dmg`, `.msi` e `-setup.exe`,
-   ciascuno con un file `.sha256` accanto;
-4. li carica come artefatti della corsa e nella release bozza.
+4. raccoglie `.deb`, `.rpm`, `.AppImage`, `.dmg`, `.msi` e `-setup.exe`,
+   ciascuno con un file `.sha256` accanto, e ne attesta la provenienza
+   (Sigstore, legata a commit e workflow);
+5. li carica come artefatti della corsa e nella release bozza, senza mai
+   sostituire un asset che c'è già;
+6. riscarica la bozza e, per ogni installer, controlla digest e attestazione
+   con `gh attestation verify`, firmata da `release.yml` sul commit del tag.
+
+Il tag va spinto dopo che la CI del suo commit è finita: se la corsa manca o è
+ancora in corso il cancello ferma il rilascio, e basta rilanciare il workflow.
+Per rifare un installer lo si toglie a mano dalla bozza.
 
 Avviato a mano (`workflow_dispatch`) costruisce gli stessi artefatti senza
 toccare le release.
@@ -152,11 +166,19 @@ della corsa. Su iOS compila soltanto `fub-app` per il dispositivo: il progetto
 Xcode chiede i target Share e Widget creati a mano e una firma. Non è un
 controllo richiesto.
 
-La firma è facoltativa. Il `.dmg` è firmato e notarizzato soltanto se il
-repository ha i segreti `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`,
-`APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` e `APPLE_TEAM_ID`.
-Gli installer Windows e Linux non sono firmati, e le note della release lo
-dicono.
+La firma dipende dal canale:
+
+- un tag stabile (`vX.Y.Z`) richiede i segreti `APPLE_CERTIFICATE`,
+  `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
+  `APPLE_PASSWORD` e `APPLE_TEAM_ID` (firma e notarizzazione del `.dmg`) e
+  `WINDOWS_CERTIFICATE` (PFX in base64) con `WINDOWS_CERTIFICATE_PASSWORD`
+  (Authenticode di `.msi` e `-setup.exe`); senza, il cancello ferma la corsa;
+- una prerelease (`vX.Y.Z-rc.1`) firma con i segreti che trova e può uscire
+  senza.
+
+Gli installer Linux non hanno una firma del formato: li autentica
+l'attestazione di provenienza, come ogni altro installer.
+Per verificarne uno: `gh attestation verify <file> --repo Fubeo/Fub`.
 
 ### Versione visibile e aggiornamenti
 

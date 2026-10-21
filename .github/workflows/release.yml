@@ -1,14 +1,17 @@
 name: Rilascio
 
 # Un tag `vX.Y.Z` costruisce gli installer desktop sulle tre piattaforme e li
-# carica, con il loro SHA-256, in una release **bozza**: la pubblica una
-# persona, dopo averli provati (docs/development/versioning-and-releases.md).
-# `workflow_dispatch` costruisce gli stessi installer senza release, come
-# artefatti della corsa.
+# carica, con il loro SHA-256 e un'attestazione di provenienza, in una release
+# **bozza**: la pubblica una persona, dopo averli provati
+# (docs/development/versioning-and-releases.md). `workflow_dispatch`
+# costruisce gli stessi installer senza release, come artefatti della corsa.
 #
-# La firma è facoltativa e passa soltanto dai segreti: senza `APPLE_*` il
-# `.dmg` non è firmato né notarizzato, e gli installer Windows e Linux non lo
-# sono mai. Le note della release lo dicono.
+# Il cancello (`check-release-gate.mjs`) viene prima di ogni build: il commit
+# deve avere una corsa di CI verde e completa, e un tag del canale stabile
+# (`vX.Y.Z` senza suffisso) deve avere i segreti di firma Apple e Windows.
+# Una prerelease (`vX.Y.Z-rc.1`) può uscire senza firme, e le note lo dicono.
+# Ogni installer, su ogni piattaforma, ha un'attestazione Sigstore legata a
+# commit e workflow, che `gh attestation verify` controlla.
 
 on:
   push:
@@ -23,10 +26,11 @@ env:
 
 jobs:
   prepare:
-    name: versione e release bozza
+    name: cancello, versione e release bozza
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
@@ -39,15 +43,39 @@ jobs:
           else
             node .github/scripts/check-release-version.mjs
           fi
+      - name: il commit ha passato la CI per intero
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/check-release-gate.mjs ci "$GITHUB_SHA"
+      - name: il canale stabile ha le firme che promette
+        if: github.ref_type == 'tag'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: node .github/scripts/check-release-gate.mjs signing "$GITHUB_REF_NAME"
+      # Una release già pubblicata è immutabile: la corsa si ferma invece di
+      # toccarne gli asset.
       - name: release bozza, se non c'è già
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+          if draft=$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$draft" != true ]; then
+              echo "la release $GITHUB_REF_NAME è già pubblicata: i suoi asset non si sostituiscono"
+              exit 1
+            fi
+          else
             gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
               --title "Fub ${GITHUB_REF_NAME#v}" --generate-notes \
-              --notes "Gli installer Windows e Linux non sono firmati; il .dmg lo è soltanto se la corsa aveva i segreti Apple. Ogni file ha accanto il suo .sha256."
+              --notes "Ogni installer ha accanto il suo .sha256 e un'attestazione di provenienza: \`gh attestation verify <file> --repo $GITHUB_REPOSITORY\`. Le prerelease possono non essere firmate."
           fi
 
   build:
@@ -56,6 +84,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -99,8 +129,38 @@ jobs:
                       APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
             if [ -n "${!name}" ]; then echo "$name=${!name}" >> "$GITHUB_ENV"; fi
           done
+      # Authenticode: il certificato (PFX in base64) entra nell'archivio
+      # dell'utente del runner e Tauri firma con la sua impronta. Senza segreto
+      # non si firma; il cancello ha già fermato un tag stabile.
+      - name: la firma Windows, soltanto se il segreto c'è
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE) { exit 0 }
+          $pfx = Join-Path $env:RUNNER_TEMP "fub-signing.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item $pfx
+          $config = @{ bundle = @{ windows = @{
+            certificateThumbprint = $cert.Thumbprint
+            digestAlgorithm = "sha256"
+            timestampUrl = "http://timestamp.digicert.com"
+          } } } | ConvertTo-Json -Depth 4 -Compress
+          $path = Join-Path $env:RUNNER_TEMP "fub-signing.json"
+          Set-Content -Path $path -Value $config
+          "FUB_SIGNING_CONFIG=$path" | Out-File -FilePath $env:GITHUB_ENV -Append
       - name: Costruisci gli installer
-        run: cargo tauri build --config crates/fub-app/tauri.conf.json
+        shell: bash
+        run: |
+          if [ -n "${FUB_SIGNING_CONFIG:-}" ]; then
+            cargo tauri build --config crates/fub-app/tauri.conf.json --config "$FUB_SIGNING_CONFIG"
+          else
+            cargo tauri build --config crates/fub-app/tauri.conf.json
+          fi
       - name: Raccogli gli installer con il loro SHA-256
         shell: bash
         run: |
@@ -115,14 +175,55 @@ jobs:
             if command -v sha256sum >/dev/null; then sha256sum "$file" > "$file.sha256";
             else shasum -a 256 "$file" > "$file.sha256"; fi
           done
+      # La provenienza lega ogni installer al commit e a questo workflow con un
+      # certificato Sigstore: il checksum da solo non dice chi l'ha prodotto.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: github.ref_type == 'tag'
+        with:
+          subject-path: |
+            dist-release/*.deb
+            dist-release/*.rpm
+            dist-release/*.AppImage
+            dist-release/*.dmg
+            dist-release/*.msi
+            dist-release/*-setup.exe
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: installer-${{ matrix.os }}
           path: dist-release/
           if-no-files-found: error
+      # Niente `--clobber`: un asset che c'è già non si sostituisce, nemmeno da
+      # una corsa ripetuta. Per rifare un installer si toglie a mano dalla bozza.
       - name: Carica nella release bozza
         if: github.ref_type == 'tag'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" dist-release/* --clobber
+        run: gh release upload "$GITHUB_REF_NAME" dist-release/*
+
+  verify:
+    name: verifica di ciò che la bozza contiene
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - name: digest, provenienza e commit di ogni installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir assets && cd assets
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"
+          count=0
+          for sum in *.sha256; do
+            file="${sum%.sha256}"
+            sha256sum --check "$sum"
+            gh attestation verify "$file" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-digest "$GITHUB_SHA"
+            count=$((count + 1))
+          done
+          [ "$count" -gt 0 ] || { echo "la bozza non ha installer"; exit 1; }
+          echo "$count installer verificati"
