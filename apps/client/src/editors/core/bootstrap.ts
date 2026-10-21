@@ -275,12 +275,16 @@ export function createDocumentSurfaceRegistry(
     owner: "fub.shell.grid",
     family: "grid",
     defaultProfile: "sheet",
-    formats: { fubsheet: "sheet" },
+    // Una cartella di Excel si legge nella stessa griglia, dalla sua
+    // proiezione e in sola lettura (`editors/grid/workbook.ts`).
+    profiles: ["sheet", "workbook"],
+    formats: { fubsheet: "sheet", xlsx: "workbook" },
     factory: {
       mount(profile, context) {
-        if (profile !== "sheet") throw new Error(`grid surface profile ${profile} is not registered`);
+        if (profile !== "sheet" && profile !== "workbook") throw new Error(`grid surface profile ${profile} is not registered`);
         const engine = new GridEngine(context.parent, {
           surfaceId: context.paneId,
+          profile,
           formatId: context.formatId,
           revision: context.revision,
           onChange: (change) => options.onChange(context.paneId, change),

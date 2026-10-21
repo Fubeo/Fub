@@ -6,6 +6,7 @@ import { parseWorkbook } from "./model";
 import { commitGridPatches, inputPatch, isGridOperation, type GridCellPatch } from "./operation";
 import type { GridWindow } from "../../host/contract";
 import { GridEngine, type GridChange, type GridHost } from "./engine";
+import xlsxFixture from "../../__fixtures__/xlsx-projection.json";
 
 function workbook(rows = 100, columns = 50): string {
   return JSON.stringify({
@@ -1036,4 +1037,129 @@ describe("GridEngine", () => {
     current.engine.destroy();
   });
 
+});
+
+describe("GridEngine con una cartella di Excel", () => {
+  function workbookMounted(grid?: GridHost, source = xlsxFixture.source) {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const changes: GridChange[] = [];
+    let selections = 0;
+    const engine = new GridEngine(host, {
+      surfaceId: "xlsx",
+      profile: "workbook",
+      formatId: "xlsx",
+      revision: "rev-1",
+      onChange: (change) => changes.push(change),
+      onSelectionChange: () => { selections += 1; },
+      grid,
+    });
+    const viewport = host.querySelector<HTMLElement>(".grid-viewport")!;
+    Object.defineProperties(viewport, {
+      clientWidth: { configurable: true, value: 900 },
+      clientHeight: { configurable: true, value: 400 },
+    });
+    engine.setDoc(source);
+    const cell = (row: number, column: number) =>
+      host.querySelector<HTMLElement>(`.grid-cell[data-row="${row}"][data-column="${column}"]`);
+    return { engine, host, viewport, changes, cell, selections: () => selections };
+  }
+
+  it("mostra i valori del file senza aprire il protocollo dei fogli", () => {
+    const grid = protocolHost(workbook());
+    const { engine, host, cell } = workbookMounted(grid);
+    expect(grid.calls).toEqual([]);
+    expect(host.querySelector<HTMLElement>(".grid-surface")!.dataset.gridProfile).toBe("workbook");
+    expect(cell(0, 0)?.textContent).toBe("Voce");
+    expect(cell(0, 0)?.style.fontWeight).toBe("700");
+    expect(cell(0, 0)?.style.textAlign).toBe("center");
+    expect(cell(1, 2)?.textContent).toBe("50.00%");
+    expect(cell(3, 2)?.textContent).toBe("#DIV/0!");
+    expect(cell(3, 1)?.style.backgroundColor).not.toBe("");
+    // La colonna D e la riga 6 sono nascoste nel file.
+    expect(cell(0, 3)).toBeNull();
+    expect(cell(5, 5)).toBeNull();
+    // Le celle versate dalla matrice le ha calcolate Fub, e lo dicono.
+    expect(cell(4, 5)?.classList.contains("derived")).toBe(true);
+    expect(cell(4, 5)?.title).not.toBe("");
+    expect(cell(3, 5)?.classList.contains("derived")).toBe(false);
+    engine.destroy();
+  });
+
+  it("è in sola lettura qualunque cosa chieda la shell, e lo dice", () => {
+    const { engine, host, viewport, changes } = workbookMounted();
+    const surface = host.querySelector<HTMLElement>(".grid-surface")!;
+    expect(surface.dataset.readOnly).toBe("true");
+    engine.setReadOnly(false);
+    expect(surface.dataset.readOnly).toBe("true");
+    const notice = host.querySelector<HTMLElement>(".grid-notice")!;
+    expect(notice.hidden).toBe(false);
+    expect(notice.getAttribute("role")).toBe("status");
+    expect(notice.textContent).not.toBe("");
+
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+    expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(true);
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", { value: { getData: () => "a\tb" } });
+    viewport.dispatchEvent(paste);
+    expect(changes).toEqual([]);
+    expect(engine.getDoc()).toBe(xlsxFixture.source);
+    expect(engine.undo()).toBe(false);
+    engine.destroy();
+  });
+
+  it("la barra mostra la formula, la copia e il contesto i valori mostrati", () => {
+    const { engine, host, viewport } = workbookMounted();
+    const formula = findTextEditorOrThrow(host.querySelector<HTMLElement>(".grid-formula-editor")!);
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(formula.state.doc.toString()).toBe("=B3/B4");
+    expect(engine.selectedText()).toEqual({ primary: "-15.00%", secondary: [] });
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+    expect(formula.state.doc.toString()).toBe("50.00%");
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", shiftKey: true, bubbles: true }));
+    let copied = "";
+    const copy = new Event("copy", { bubbles: true, cancelable: true });
+    Object.defineProperty(copy, "clipboardData", { value: { setData: (_type: string, text: string) => { copied = text; } } });
+    viewport.dispatchEvent(copy);
+    expect(copied).toBe("50.00%\n-15.00%\n");
+    engine.destroy();
+  });
+
+  it("passa da un foglio all'altro con le schede, e le toglie al teardown", () => {
+    const { engine, host, cell, selections } = workbookMounted();
+    const tabs = [...host.querySelectorAll<HTMLButtonElement>(".grid-sheets [role=tab]")];
+    // Il foglio nascosto non ha una scheda.
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Conti", "Note"]);
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
+    tabs[1].click();
+    expect(tabs[1].getAttribute("aria-selected")).toBe("true");
+    expect(cell(0, 0)?.textContent).toBe("Una nota");
+    expect(selections()).toBe(1);
+    // Rileggere lo stesso documento resta sul foglio scelto.
+    engine.syncDoc(xlsxFixture.source);
+    expect(cell(0, 0)?.textContent).toBe("Una nota");
+    engine.destroy();
+    expect(host.querySelector(".grid-sheets")).toBeNull();
+  });
+
+  it("un foglio solo non ha schede", () => {
+    const one = JSON.parse(xlsxFixture.source);
+    one.sheets = [one.sheets[1]];
+    one.active = 0;
+    const { engine, host } = workbookMounted(undefined, JSON.stringify(one));
+    expect(host.querySelector<HTMLElement>(".grid-sheets")!.hidden).toBe(true);
+    expect(host.querySelector(".grid-sheets [role=tab]")).toBeNull();
+    engine.destroy();
+  });
+
+  it("una proiezione illeggibile si rifiuta come un foglio illeggibile", () => {
+    const { engine } = workbookMounted();
+    expect(() => engine.setDoc("{\"version\":2}")).toThrow(RangeError);
+    engine.destroy();
+  });
 });

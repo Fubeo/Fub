@@ -11,7 +11,7 @@ export const EDITORS: PartAnatomy = {
     { name: "text-editor-search", states: SELECTABLE, hooks: ["cm-panels", "cm-panels-top", "cm-panels-bottom", "cm-panel", "cm-search", "cm-textfield", "cm-button", "cm-searchMatch", "cm-searchMatch-selected"] },
     { name: "text-editor-tooltip", states: [S("rest"), S("selected")], hooks: ["cm-tooltip", "cm-tooltip-arrow", "cm-tooltip-autocomplete", "cm-completionMatchedText", "cm-completionDetail", "cm-completionInfo"] },
     { name: "surface-fallback", states: [S("rest"), S("focused")], hooks: ["document-surface-error", "document-surface-viewer", "media-surface"] },
-    { name: "grid-surface", states: SELECTABLE, hooks: ["grid-surface", "grid-formula-bar", "grid-cell-name", "grid-formula-editor", "grid-viewport", "grid-cell", "grid-header", "grid-corner", "grid-cell-editor", "selected", "active"] },
+    { name: "grid-surface", states: SELECTABLE, hooks: ["grid-surface", "grid-formula-bar", "grid-cell-name", "grid-formula-editor", "grid-viewport", "grid-cell", "grid-header", "grid-corner", "grid-cell-editor", "grid-notice", "grid-sheets", "derived", "selected", "active"] },
     { name: "base-surface", states: INTERACTIVE, hooks: ["base-surface", "base-toolbar", "base-status", "base-body", "base-summaries"] },
     { name: "base-table", states: [S("rest"), S("hover"), S("focused")], hooks: ["base-table", "base-cell", "base-cell-error"] },
     { name: "base-cards", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["base-cards", "base-list", "base-card", "base-field"] },
