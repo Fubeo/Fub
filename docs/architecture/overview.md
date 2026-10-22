@@ -166,28 +166,19 @@ flowchart LR
     xlsx["fub-format-xlsx"]
     gcore["gridcraft-core"]
     gformula["gridcraft-formula"]
-    gfunctions["gridcraft-functions"]
     gnumfmt["gridcraft-numfmt"]
     gmodel["gridcraft-model"]
-    gcalc["gridcraft-calc"]
     gxlsx["gridcraft-xlsx"]
 
     host --> xlsx
     xlsx --> abi
     xlsx --> markdown
     xlsx -.-> sdk
-    xlsx --> gcalc
     xlsx --> gcore
     xlsx --> gmodel
     xlsx --> gnumfmt
     xlsx --> gxlsx
-    gcalc --> gcore
-    gcalc --> gformula
-    gcalc --> gfunctions
-    gcalc --> gmodel
-    gcalc --> gnumfmt
     gformula --> gcore
-    gfunctions --> gcore
     gmodel --> gcore
     gmodel --> gformula
     gnumfmt --> gcore

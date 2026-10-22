@@ -39,7 +39,9 @@ Prima di impegnarsi, il motore è stato provato sui punti che decidono:
   crate del dominio (`core`, `formula`, `functions`, `numfmt`, `model`,
   `calc`, `xlsx`), copiati in `vendor/gridcraft/` come vuole la
   [0213](0213-provenienza-dei-motori-esterni.md), con un solo proprietario:
-  `fub-format-xlsx`. La facciata, l'interfaccia, i grafici, il PDF e il server
+  `fub-format-xlsx`. La sola lettura usa `core`, `model`, `numfmt` e `xlsx`;
+  `calc` e `functions` sono copiati per la modifica, e li provano soltanto i
+  test della copia. La facciata, l'interfaccia, i grafici, il PDF e il server
   MCP dell'upstream non entrano.
 - **Un solo motore per tipo di documento.** `.xlsx` → GridCraft; `.fubsheet` →
   il motore di `fub-format-sheet`, finché esiste. `.fubsheet` diventa un
@@ -55,21 +57,23 @@ Prima di impegnarsi, il motore è stato provato sui punti che decidono:
   rifiuta sempre: il codec riscriverebbe il file dal suo modello, e ciò che
   quel modello non conosce andrebbe perso. La proiezione dice cosa non mostra
   e cosa non fa (macro, collegamenti esterni, parti non disegnate, avvisi della
-  lettura, celle oltre il limite).
+  lettura, formule senza valore, celle oltre i limiti).
 - **Il contratto `grid` non cambia.** La sola lettura non ha patch da
   applicare né finestre da chiedere: un protocollo a byte, una versione 2 del
   contratto o una porta nuova sarebbero forme pubbliche senza un caso che le
   dimostri. Quando una cartella diventerà modificabile, il modo di
   modificarla si decide con quel caso davanti.
-- **I valori sono quelli del file.** Il calcolo gira soltanto per i valori che
-  il file non dà alla shell: le celle versate dalle matrici, i cui valori in
-  cache il lettore scarta, e le formule salvate senza valore. Si calcolano su
-  una copia della cartella, e la proiezione le segna come derivate; la shell
-  le distingue e lo dice. Ogni altro valore è quello che il file ha salvato.
-- **Il codice di terzi non blocca l'host.** Il codec e il calcolo girano fuori
-  dal lucchetto del workspace, in un thread con uno stack loro, con un limite
-  sul file (256 MiB) e sulla proiezione (16 MiB); un loro panic diventa un
-  errore tipizzato.
+- **I valori sono quelli del file, e niente si ricalcola.** Ogni valore è
+  quello che il file ha salvato, comprese le celle versate dalle matrici: la
+  patch `0003` di `vendor/gridcraft` le tiene nella mappa dei valori versati
+  invece di scartarle (storytold/gridcraft#2137). Una formula salvata senza
+  valore mostra la formula e una cella vuota, e la proiezione lo dice. Così
+  aprire una cartella costa la sua lettura, qualunque formula contenga.
+- **Il codice di terzi non blocca l'host.** Il codec gira fuori dal lucchetto
+  del workspace, in un thread con uno stack suo, con un limite sul file
+  (256 MiB) e sulla proiezione: 16 MiB e 262.144 righe e colonne in tutto,
+  perché la griglia tiene una voce per ognuna. Un suo panic diventa un errore
+  tipizzato.
 - **Ciò che vive nella facciata si chiede all'upstream.** Finché le operazioni
   strutturali, la formattazione condizionale, le tabelle e le pivot restano in
   `engine`, la modifica di una cartella non le usa.
@@ -114,13 +118,25 @@ passa dalle porte che ci sono, come la videoscrittura.
 
 Mostrerebbe valori che il file non ha, diversi da quelli di Excel ogni volta
 che una funzione volatile, un collegamento esterno o una differenza del motore
-li cambia. Si calcola soltanto ciò che il file non dà, e lo si dice.
+li cambia.
+
+### Ricalcolare soltanto ciò che il file non dà
+
+Le celle versate e le formule senza valore si calcolerebbero su una copia
+della cartella. Il calcolo non ha limiti di tempo né di memoria: una formula
+come `SEQUENCE` su tutto il foglio, in un file di pochi kilobyte, chiede
+gigabyte; i valori casuali cambiano, una catena lunga dà `#CIRC!` dove Excel
+non lo dà, e le celle versate che il motore non sa riprodurre (una funzione
+che non conosce, un collegamento esterno) sparirebbero senza avviso. Tenere i
+valori del file non costa niente e non sbaglia.
 
 ## Verifica
 
 - `crates/fub-format-xlsx/tests/`: la proiezione (valori, formati, aspetto,
-  celle derivate, avvisi, limiti, file cifrati e non di Excel, una catena
-  lunga di formule) e il provider di formato;
+  valori versati del file, formule senza valore, avvisi, limiti di byte e di
+  righe e colonne, file cifrati e non di Excel, formule che il calcolo non
+  saprebbe fermare) e il provider di formato; `tests/tempi.rs` misura i file
+  di una cartella;
 - `crates/fub-host/tests/xlsx_workbooks.rs`: la lettura, la scrittura
   rifiutata con il file intatto e gli errori tipizzati;
 - `crates/fub-format-xlsx/tests/ts_projection.rs` e la fixture
