@@ -1,19 +1,21 @@
 //! Le cartelle di lavoro di Excel — `.xlsx`, `.xlsm`, `.xltx`, `.xltm` — lette
-//! in **sola lettura** con il codec e il modello di GridCraft
-//! (`vendor/gridcraft`).
+//! con il codec e il modello di GridCraft (`vendor/gridcraft`), e modificate
+//! nei soli valori con un innesto sui byte del file.
 //!
-//! Il crate possiede due cose, e l'host le compone senza possederle:
+//! Il crate possiede tre cose, e l'host le compone senza possederle:
 //!
 //! - il **provider di formato**, [`XlsxProvider`]: un formato a byte che dà al
 //!   kernel il modello comune (un titolo per foglio, un'anteprima in tabella e
 //!   il testo delle celle) per la ricerca, l'outline e l'anteprima;
 //! - la **proiezione** ([`projection`]): la cartella come JSON chiuso e
 //!   versionato che la superficie della griglia mostra senza aprire il
-//!   protocollo dei fogli, con i valori già formattati.
+//!   protocollo dei fogli, con i valori già formattati;
+//! - l'**innesto** ([`graft`]): i byte della cartella con alcuni valori
+//!   cambiati, e ogni altro byte com'era. L'input di una cella ([`input`]) e i
+//!   suoi blocchi ([`locks`]) sono le regole che lo precedono.
 //!
-//! Il file non si scrive da qui: il codec di GridCraft lo riscriverebbe dal
-//! suo modello, e ciò che quel modello non conosce andrebbe perso. Una
-//! cartella si apre per leggerla, e la proiezione dice che cosa non mostra.
+//! Il codec di GridCraft non scrive mai il file: lo riscriverebbe dal suo
+//! modello, e ciò che quel modello non conosce andrebbe perso.
 //!
 //! I valori sono quelli che il file ha salvato, e niente si ricalcola: aprire
 //! una cartella costa la sua lettura, qualunque formula contenga, e un valore
@@ -35,8 +37,13 @@ use fub_abi::{
 use gridcraft_model::Workbook;
 use gridcraft_xlsx::{Format, ReadReport};
 
+pub mod graft;
+pub mod input;
+pub mod locks;
 mod model;
+mod package;
 pub mod projection;
+mod sheet_xml;
 
 /// L'id del formato.
 pub const FORMAT_ID: &str = "xlsx";
