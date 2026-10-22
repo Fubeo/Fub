@@ -152,6 +152,8 @@ export interface GridFake {
 export interface GridBytesFake {
   surface: GridSurfaceSpec;
   session: GridBytesSession;
+  /// Le finestre per revisione: dopo un commit il finto dà quelle della sua
+  /// revisione, se le ha, e altrimenti quelle della sessione.
   windows: GridBytesWindow[];
   commits?: GridCommit[];
 }
@@ -352,8 +354,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
   let gridCommit = 0;
   const gridBytes = options.gridBytes;
   const gridBytesInstances = new Map<string, GridBytesSession>();
+  const gridBytesKey = (revision: string, sheet: string, row: number, column: number) =>
+    `${revision}\u0000${sheet}\u0000${row}\u0000${column}`;
   const gridBytesWindows = new Map(
-    (gridBytes?.windows ?? []).map((window) => [`${gridBytes?.session.instance}\u0000${window.sheet}\u0000${window.row_start}\u0000${window.column_start}`, window]),
+    (gridBytes?.windows ?? []).map((window) => [gridBytesKey(window.revision, window.sheet, window.row_start, window.column_start), window]),
   );
   let gridBytesCommit = 0;
   const docs = new Map<string, Document>();
@@ -1274,10 +1278,12 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const doc = docs.get(id);
         if (!doc) return gate("readDocument", named([id], vault), Promise.reject(new Error(`«${id}» non c'è`)));
         return gate("readDocument", named([id], vault), Promise.resolve({
-          text: doc.text,
+          // Una cartella si apre col giornale vuoto: i byte sono suoi.
+          text: formatOf(id) === "xlsx" ? "" : doc.text,
           revision: doc.revision,
           format_id: formatOf(id),
           source_kind: sourceKindOf(id),
+          text_kind: formatOf(id) === "xlsx" ? "grid_journal" : "source",
         }));
       },
       resourceOpen: (id, vault) => gate("resourceOpen", [id, vault], Promise.resolve().then((): ResourceDescriptor => {
@@ -1401,7 +1407,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
       })),
       gridBytesWindow: (_surface, instance, request) => gate("gridBytesWindow", [instance, request], Promise.resolve().then(() => {
         if (!gridBytesInstances.has(instance)) throw new Error("host fake: grid session closed");
-        const window = gridBytesWindows.get(`${instance}\u0000${request.sheet}\u0000${request.row_start}\u0000${request.column_start}`);
+        const window = gridBytesWindows.get(gridBytesKey(request.revision, request.sheet, request.row_start, request.column_start))
+          ?? gridBytesWindows.get(gridBytesKey(gridBytes!.session.revision, request.sheet, request.row_start, request.column_start));
         if (!window) throw new Error("host fake: grid window unavailable");
         return { ...window, revision: request.revision };
       })),
@@ -1433,12 +1440,21 @@ export function createFakeHost(options: Options = {}): FakeHost {
           const unserved: PluginError = { kind: "unserved", message: `host fake: nessun formato serve «${id}»` };
           return gate("writeDocument", named([id, source, base], vault), Promise.reject(unserved));
         }
-        // Una cartella si legge e non si scrive, come nell'host.
-        if (formatOf(id) === "xlsx") {
-          const readOnly: PluginError = { kind: "permission_denied", message: `host fake: «${id}» è una cartella di Excel, in sola lettura` };
-          return gate("writeDocument", named([id, source, base], vault), Promise.reject(readOnly));
-        }
         const before = docs.get(id);
+        // Il testo di una cartella è il giornale delle celle (ADR 0216):
+        // l'host lo innesta nei byte, e il documento che resta ha il giornale
+        // vuoto e una revisione nuova. Il finto non ha byte da innestare, e
+        // tiene quelli che aveva.
+        if (formatOf(id) === "xlsx") {
+          if (!before || (base.kind === "descends_from" && before.revision !== base.value)) {
+            const conflict: PluginError = { kind: "conflict", message: `host fake: «${id}» è cambiato sotto` };
+            return gate("writeDocument", named([id, source, base], vault), Promise.reject(conflict));
+          }
+          revision += 1;
+          const rev = `r${revision}`;
+          docs.set(id, { ...before, text: "", revision: rev });
+          return gate("writeDocument", named([id, source, base], vault), Promise.resolve(rev));
+        }
         if (base.kind === "descends_from" && before && before.revision !== base.value) {
           const conflict: PluginError = {
             kind: "conflict",
