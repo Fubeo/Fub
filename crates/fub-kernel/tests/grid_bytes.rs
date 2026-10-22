@@ -172,7 +172,7 @@ fn una_registrazione_dichiara_soltanto_la_versione_2() {
     struct Mixed(Bytes);
     impl GridBytesProvider for Mixed {
         fn surfaces(&self) -> Vec<GridSurfaceSpec> {
-            let mut vecchia = GridSurfaceSpec::bytes("vecchia.sheet", "fubsheet");
+            let mut vecchia = GridSurfaceSpec::bytes("vecchia.grid", "xlsx");
             vecchia.protocol_version = 1;
             vec![vecchia]
         }

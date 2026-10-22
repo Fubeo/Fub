@@ -76,8 +76,7 @@ possono attraversare il runtime WASM quando la relativa interfaccia è servita.
 
 - editor CodeMirror per Markdown e plain text;
 - cartella di Excel `.xlsx` in una griglia virtualizzata, con tastiera,
-  selezione, schede dei fogli e formula bar; un vecchio `.fubsheet` si legge e
-  si converte in `.xlsx`;
+  selezione, schede dei fogli e formula bar;
 - sorgente, live preview e lettura per Markdown;
 - frontmatter;
 - wikilink, tag, heading, task, tabelle, callout ed embed supportati dal

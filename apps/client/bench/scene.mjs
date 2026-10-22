@@ -282,15 +282,6 @@ export const SCENE = onPage("shell", [
     prepare: async () => {},
   },
   {
-    id: "grid-retired",
-    title: "Un foglio .fubsheet, che si converte in una cartella di Excel",
-    prepare: async (page) => {
-      await openFolder(page, "Dati");
-      await page.click('#file-list .tree-row.note[data-path="Dati/Budget.fubsheet"]');
-      await page.waitForSelector(".grid-retired button");
-    },
-  },
-  {
     id: "grid-workbook",
     title: "Grid v2: una cartella di Excel sui suoi byte",
     query: "workbook=1",

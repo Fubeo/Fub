@@ -188,7 +188,7 @@ pub fn doc_kind_for(doc_id: &str) -> DocKind {
     match name.rsplit_once('.').map(|(_, ext)| ext) {
         Some("canvas") => DocKind::Canvas,
         Some("base") => DocKind::Views,
-        Some("md" | "markdown" | "txt" | "fubsheet") => DocKind::Text,
+        Some("md" | "markdown" | "txt") => DocKind::Text,
         _ => DocKind::Other,
     }
 }
@@ -242,7 +242,6 @@ mod unit {
     fn the_family_follows_the_real_extension() {
         assert_eq!(doc_kind_for("Lavagna.canvas"), DocKind::Canvas);
         assert_eq!(doc_kind_for("Progetti.base"), DocKind::Views);
-        assert_eq!(doc_kind_for("Conti.fubsheet"), DocKind::Text);
         assert_eq!(doc_kind_for("Interviews/a.md"), DocKind::Text);
         assert_eq!(doc_kind_for("foto/Gatto.PNG"), DocKind::Binary);
         assert_eq!(doc_kind_for("LICENSE"), DocKind::Other);

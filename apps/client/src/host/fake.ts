@@ -420,7 +420,6 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// o `null`: allora nessun provider serve il file e `write_document` lo
   /// rifiuta (`unserved`), come nel kernel.
   function formatOf(id: string): string | null {
-    if (id.endsWith(".fubsheet")) return "fubsheet";
     if (id.endsWith(".canvas")) return "canvas";
     if (id.endsWith(".base")) return "base";
     if (id.endsWith(".md") || id.endsWith(".markdown")) return "markdown";
@@ -1253,7 +1252,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       configHealth: () => gate("configHealth", [], Promise.reject(new Error("host fake: configurazione di macchina non disponibile"))),
       recoverConfig: (path, action) => gate("recoverConfig", [path, action], Promise.reject(new Error("host fake: recovery senza disco"))),
       openVault: (path) => {
-        const extensions = ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", ...XLSX_FAKE_EXTENSIONS, "fubsheet", "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : [])];
+        const extensions = ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", ...XLSX_FAKE_EXTENSIONS, "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : [])];
         const info: VaultInfo = { root: path, extensions, plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },

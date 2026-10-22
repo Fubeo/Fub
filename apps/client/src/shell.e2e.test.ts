@@ -3161,18 +3161,6 @@ describe("i riquadri dopo un'attesa", () => {
   });
 });
 
-/// Un foglio minimo che la superficie a griglia accetta.
-const SHEET = JSON.stringify({
-  version: 1,
-  sheets: [{
-    id: "main",
-    name: "Main",
-    rows: [{ id: "r0", hidden: false }],
-    columns: [{ id: "c0", hidden: false }],
-    cells: [{ row: "r0", column: "c0", input: "1" }],
-  }],
-});
-
 /// Una tela con due carte: la seconda lontana dalla prima.
 const BOARD = JSON.stringify({
   nodes: [
@@ -3225,15 +3213,15 @@ describe("portare a schermo un punto", () => {
   });
 
   it("una superficie che non sa portarci lo dice, invece di non fare niente", async () => {
-    await start({ ...VAULT, "conti.fubsheet": SHEET });
+    await start({ ...VAULT, "foto.png": "png" });
     const { applyIntent } = await import("./ui/intents");
     const { t } = await import("./i18n/strings");
 
-    await applyIntent({ kind: "reveal", doc: "conti.fubsheet", span: { start: 3, end: 3 } });
+    await applyIntent({ kind: "reveal", doc: "foto.png", span: { start: 3, end: 3 } });
     await settle();
 
-    expect(panes()[0]!.querySelector(".grid-retired"), "il foglio è aperto").not.toBeNull();
-    expect(toast()).toContain(t("document.reveal_unavailable", { doc: "conti" }));
+    expect(panes()[0]!.querySelector(".media-surface"), "l'immagine è aperta").not.toBeNull();
+    expect(toast()).toContain(t("document.reveal_unavailable", { doc: "foto" }));
   });
 
   it("sulla tela il punto è la carta che lo contiene", async () => {
@@ -3251,7 +3239,7 @@ describe("portare a schermo un punto", () => {
   });
 
   it("il menu del riquadro offre ciò che la superficie dichiara di saper fare", async () => {
-    await start({ ...VAULT, "lavagna.canvas": BOARD, "conti.fubsheet": SHEET });
+    await start({ ...VAULT, "lavagna.canvas": BOARD });
     const { openDocument } = await import("./panels/document");
     const { t } = await import("./i18n/strings");
     const { closeContextMenu } = await import("./ui/menu");
@@ -3273,9 +3261,6 @@ describe("portare a schermo un punto", () => {
     // La tela si stampa dal suo provider; non ha una resa da presentare né
     // una sintassi in cui scrivere un rimando.
     expect(await offered(), "la tela").toEqual([t("pane.print")]);
-    await openDocument("conti.fubsheet");
-    await settle();
-    expect(await offered(), "il foglio da convertire, che non ha un provider di stampa").toEqual([]);
   });
 
   it("la stampa salva prima ciò che il buffer ha, e su afterprint non lascia niente", async () => {
@@ -3360,9 +3345,9 @@ describe("la modalità di ogni famiglia di superfici", () => {
   });
 
   // Il contratto non nomina le modalità di una superficie: dice che vista è.
-  // La tela e il foglio si scrivono attraverso una resa, non sul sorgente.
+  // La tela si scrive attraverso una resa, non sul sorgente.
   it("il contesto pubblicato dice che vista è, non una modalità Markdown", async () => {
-    const host = await start({ ...VAULT, "lavagna.canvas": BOARD, "conti.fubsheet": SHEET });
+    const host = await start({ ...VAULT, "lavagna.canvas": BOARD });
     const { openDocument } = await import("./panels/document");
     const published = () => {
       const calls = host.atGate("setActiveContext");
@@ -3374,10 +3359,6 @@ describe("la modalità di ogni famiglia di superfici", () => {
     expect(published()).toMatchObject({ doc: "lavagna.canvas", mode: "live_preview" });
     await choose("source");
     expect(published()).toMatchObject({ doc: "lavagna.canvas", mode: "source" });
-
-    await openDocument("conti.fubsheet");
-    await settle();
-    expect(published()).toMatchObject({ doc: "conti.fubsheet", mode: "live_preview" });
 
     await openDocument("Benvenuto.md");
     await settle();

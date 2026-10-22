@@ -90,7 +90,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     // allora li dichiarano i loro provider come gli altri; `xlsx`, `xlsm`,
     // `xltx` e `xltm` con le cartelle di Excel (feature `xlsx`). L'anagrafe le
     // dà in ordine alfabetico.
-    let mut extensions = vec!["base", "canvas", "fubsheet", "markdown", "md"];
+    let mut extensions = vec!["base", "canvas", "markdown", "md"];
     #[cfg(feature = "draw")]
     extensions.extend(["fubann", "svg"]);
     if cfg!(feature = "rich") {

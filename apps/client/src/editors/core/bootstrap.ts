@@ -8,7 +8,6 @@ import { onEvent } from "../../state/kernel";
 import { PROOF_NS, type ProofPorts } from "./proof-ports";
 import { currentTheme } from "../../theme/theme";
 import { GridEngine } from "../grid/engine";
-import { mountRetiredSheet, RETIRED_PROFILE } from "../grid/retired";
 import { mountBaseSurface } from "../base/surface";
 import { BASE_OWNER, BASE_PROFILE, BASE_FORMAT } from "../base/data";
 import { createTextEngine } from "../text/engine";
@@ -43,9 +42,6 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly completions: CompletionSources;
   readonly slash?: EditorSlashHost;
   readonly gridHost?: GridHost;
-  /// Avvia un comando come la palette, con i parametri già noti: il foglio
-  /// `.fubsheet` chiede così la sua conversione.
-  readonly onRunCommand?: (id: string, prefill: Readonly<Record<string, string>>) => void;
   /// La revisione dei byte da cui il testo della sessione di `doc` discende
   /// adesso: una cartella di Excel ci apre il suo giornale.
   readonly documentBase?: (doc: string) => string | null;
@@ -282,16 +278,12 @@ export function createDocumentSurfaceRegistry(
     owner: "fub.shell.grid",
     family: "grid",
     defaultProfile: "workbook",
-    // Una cartella di Excel si apre sui suoi byte con la versione 2 del
-    // protocollo (`editors/grid/workbook.ts`); un `.fubsheet` non si modifica
-    // più, e la sua superficie offre di convertirlo (ADR 0218).
-    profiles: ["workbook", RETIRED_PROFILE],
-    formats: { xlsx: "workbook", fubsheet: RETIRED_PROFILE },
+    // Una cartella di Excel si apre sui suoi byte con il protocollo a byte
+    // (`editors/grid/workbook.ts`).
+    profiles: ["workbook"],
+    formats: { xlsx: "workbook" },
     factory: {
       mount(profile, context) {
-        if (profile === RETIRED_PROFILE) {
-          return mountRetiredSheet(context, GRID_MODES, { runCommand: options.onRunCommand });
-        }
         if (profile !== "workbook") throw new Error(`grid surface profile ${profile} is not registered`);
         const engine = new GridEngine(context.parent, {
           surfaceId: context.paneId,

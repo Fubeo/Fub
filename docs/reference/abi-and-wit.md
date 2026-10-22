@@ -92,8 +92,8 @@ host implica accesso diretto a filesystem, rete o orologio.
 La famiglia `grid` è il contratto strutturato a finestre. Il binding negozia
 prima `family = "grid"` e `protocol_version`; famiglia, versione ABI e
 versione del formato restano indipendenti. L'unica versione servita è la 2:
-la 1, su un sorgente di testo, è uscita dal contratto con il `.fubsheet`
-([ADR 0218](../decisions/0218-il-fubsheet-si-converte-e-grid-1-esce.md)), e
+la 1, su un sorgente di testo, è uscita dal contratto
+([ADR 0218](../decisions/0218-via-il-fubsheet-e-la-versione-1-di-grid.md)), e
 l'interfaccia WIT `grid` tiene soltanto i tipi comuni. Una shell che non
 conosce la coppia esatta non invoca il provider: conserva gli altri binding e
 dice che il foglio non si apre.

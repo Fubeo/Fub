@@ -3145,8 +3145,7 @@ interface edit {
 
 /// Le forme comuni della famiglia grid, che `grid-bytes` usa. La shell
 /// possiede rendering, input e clipboard; il provider possiede lettura, valori
-/// e scrittura. Non ha funzioni: la versione 1, che apriva un sorgente di
-/// testo, è stata tolta con il formato `.fubsheet` (ADR 0218).
+/// e scrittura. Non ha funzioni: le usa il protocollo a byte.
 interface grid {
     use edit.{revision};
 

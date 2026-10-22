@@ -74,8 +74,7 @@ impl PreparedRegistration {
     }
 
     /// Calls `surfaces` exactly once, without borrowing a workspace. Every
-    /// surface it declares must speak the byte protocol, version 2: the text
-    /// one, version 1, was removed with the `.fubsheet` format.
+    /// surface it declares must speak the byte protocol, version 2.
     pub fn grid_bytes(
         provider: Box<dyn GridBytesProvider>,
     ) -> std::result::Result<Self, PluginError> {

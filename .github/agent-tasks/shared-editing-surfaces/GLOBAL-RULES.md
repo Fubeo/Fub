@@ -14,7 +14,7 @@ Queste regole valgono per tutti i task, salvo una eccezione esplicita nel file d
 - `TextEngine` non deve conoscere Markdown, wikilink, tag, live preview o `SyntaxForm`.
 - `MarkdownProfile` deve conservare integralmente il comportamento osservabile corrente.
 - `PlainTextProfile` e `FormulaProfile` devono usare realmente lo stesso `TextEngine`, non una copia o un fake del core.
-- Non anticipare `DocumentSession`, `DocumentSurfaceRegistry`, modalità generiche, `.fubsheet`, `GridEngine` o pubblicazione di protocollo.
+- Non anticipare `DocumentSession`, `DocumentSurfaceRegistry`, modalità generiche, `GridEngine` o pubblicazione di protocollo.
 
 ## GLOBAL-FORBIDDEN
 

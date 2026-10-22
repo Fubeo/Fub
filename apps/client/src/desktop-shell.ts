@@ -771,9 +771,9 @@ async function init(): Promise<Teardown> {
     searchTag: (tag) => searchFor(/[\s"()[\]]/.test(tag) ? `tag:"${tag.replace(/"/g, "")}"` : `tag:${tag}`),
     // Un pulsante della barra che non è un'azione dell'editor si esegue come
     // lo eseguirebbe la tastiera: stessa voce, stessa palette per i parametri.
-    runCommand: (id, prefill) => {
+    runCommand: (id) => {
       const entry = allCommands().find((e) => e.id === id);
-      if (entry) startCommand(entry, paletteHost, prefill);
+      if (entry) startCommand(entry, paletteHost);
     },
   });
 

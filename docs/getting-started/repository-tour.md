@@ -56,7 +56,6 @@ Fub/
 | `fub-format-base` | provider `.base`: viste YAML sulle proprietà delle note |
 | `fub-format-canvas` | provider JSON Canvas (`.canvas`) |
 | `fub-format-rich` | documenti di videoscrittura (`.docx`, `.odt`, `.rtf`, `.doc`) |
-| `fub-format-sheet` | lettore dei vecchi fogli `.fubsheet`, per la conversione in `.xlsx` |
 | `fub-format-svg` | provider delle scene di FubDraw (`.svg`) |
 | `fub-features` | feature ufficiali dietro feature Cargo |
 | `fub-importers` | import ed export ufficiali (HTML, CSV, ZIP, ENEX, PDF, connettori) |

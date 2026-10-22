@@ -1153,8 +1153,8 @@ export interface LiveStopReport {
 // Dati strutturati a finestre per la famiglia grid. La shell possiede
 // rendering, input e clipboard; il provider possiede la lettura del file e
 // l'innesto delle celle. Nessun DOM, callback o oggetto CodeMirror attraversa
-// questo contratto. La versione 1, sul testo di un `.fubsheet`, non c'è più
-// (ADR 0218): le forme qui sotto sono quelle che la versione 2 riusa.
+// questo contratto. Le forme qui sotto sono quelle che il protocollo a byte
+// riusa.
 export const GRID_FAMILY = "grid";
 
 export interface GridSurfaceSpec {

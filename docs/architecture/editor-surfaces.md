@@ -365,12 +365,6 @@ la sessione non si apre o una finestra fallisce, la superficie dichiara
 `data-grid-protocol="unavailable"`, lo dice nell'avviso e non scrive; il
 linguaggio delle formule non si duplica in TypeScript.
 
-Il profilo `retired` mostra un `.fubsheet`, che Fub non modifica più
-(`apps/client/src/editors/grid/retired.ts`): una frase e il comando
-`xlsx.convert` con il documento già scelto. Il buffer resta il testo del file,
-e niente lo cambia
-([ADR 0218](../decisions/0218-il-fubsheet-si-converte-e-grid-1-esce.md)).
-
 La shell non riceve DOM, callback JavaScript o oggetti CodeMirror: possiede
 rendering, input, clipboard, selezione e stato visuale, mentre il provider
 possiede lettura, formule, blocchi e innesto. Limiti, coordinate, fallback e

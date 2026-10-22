@@ -4,9 +4,7 @@
 //!
 //! Il provider non disegna: risponde per finestre e applica patch a coordinate
 //! stabili. DOM, CodeMirror e stato visuale restano nella shell. L'unico
-//! protocollo è quello a byte, in [`crate::grid_bytes`]: la versione 1, che
-//! apriva un sorgente di testo tenuto tutto dalla shell, è stata tolta con il
-//! formato `.fubsheet` (ADR 0218).
+//! protocollo è quello a byte, in [`crate::grid_bytes`].
 
 use serde::{Deserialize, Serialize};
 

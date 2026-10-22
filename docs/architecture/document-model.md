@@ -3,8 +3,7 @@
 > **Domanda:** come rappresenta Fub documenti di formati diversi senza perdere
 > la sorgente?
 > **Fonti autorevoli:** `crates/fub-abi/src/model.rs`,
-> `crates/fub-abi/src/arena.rs`, `crates/fub-abi/src/format.rs`,
-> `crates/fub-format-sheet/src/lib.rs`.
+> `crates/fub-abi/src/arena.rs`, `crates/fub-abi/src/format.rs`.
 
 ## In breve
 
@@ -135,26 +134,6 @@ modifica dalla sorgente. Chi interroga, ordina, conta faccette o mostra colonne
 usa la stessa proiezione tipizzata; assente, `null` e lista vuota restano casi
 distinti.
 
-## Foglio `.fubsheet`
-
-Il `.fubsheet` è il vecchio foglio di Fub, un JSON con identità stabili di
-righe e colonne, e Fub non lo modifica più. Nel kernel è un formato **di sola
-sorgente** (`FormatRegistry::register_source`): il registro lo conosce senza
-parser, `read_document` ne dà il testo, e `write_document` lo rifiuta con
-`NoProvider`, come ogni estensione che ha un descrittore e nessun provider.
-Il file si sposta, si rinomina e va nel cestino come gli altri.
-
-La shell lo mostra con il profilo `retired` della famiglia `grid`: una frase e
-il comando `xlsx.convert`, che scrive accanto una cartella di Excel nuova e la
-apre. `fub-format-sheet` resta il lettore del formato per quel comando:
-modello, formule e valutatore. Le righe e le colonne diventano posizioni
-nell'ordine del foglio, le formule si scrivono nella sintassi di Excel dallo
-stesso albero con cui Fub le valuta (`fub_format_sheet::excel_formula`), e i
-loro valori li calcola GridCraft. La copia si rilegge e si confronta con il
-foglio: ciò che non porta, i fogli rinominati, le formule rimaste testo e le
-celle con un valore diverso da quello di Fub sono gli avvisi del comando
-([ADR 0218](../decisions/0218-il-fubsheet-si-converte-e-grid-1-esce.md)).
-
 ## Cartella di Excel `.xlsx`
 
 Un `.xlsx` si apre nella famiglia `grid` con la versione 2 del protocollo, su
@@ -224,10 +203,7 @@ albero malformato.
 - `crates/fub-format-markdown/src/parse.rs`
 - `crates/fub-format-markdown/src/render.rs`
 - `crates/fub-format-markdown/src/serialize.rs`
-- `crates/fub-format-sheet/src/lib.rs`
 - `crates/fub-format-xlsx/src/grid.rs`
 - `crates/fub-format-xlsx/src/graft.rs`
-- `crates/fub-format-xlsx/src/fubsheet.rs`
-- `crates/fub-format-xlsx/src/convert.rs`
 - `apps/client/src/editors/grid/workbook.ts`
 - `crates/fub-format-svg/src/parse.rs`

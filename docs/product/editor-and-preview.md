@@ -18,8 +18,7 @@ Markdown. Un file `.svg` si apre come testo in **Sorgente**, **Diviso**
 [disegno](drawing.md) con la feature `draw` dell'host. L'anteprima si ridisegna
 dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
 l'ultima buona, attenuata, sotto il motivo con riga e colonna. I documenti
-`.xlsx` usano invece la famiglia Grid, e un vecchio `.fubsheet` vi mostra
-soltanto l'invito a convertirlo in `.xlsx`. Il commutatore nella barra di
+`.xlsx` usano invece la famiglia Grid. Il commutatore nella barra di
 ciascun riquadro legge la dichiarazione della propria superficie; con una sola
 modalità non mostra un selettore né offre i comandi di modalità, che trovano la
 modalità per ruolo (Live, sulla tela, riporta alle carte). Il riquadro ricorda
@@ -414,10 +413,6 @@ versione 2) porta finestre, patch e giornale fra la shell e un provider nativo
 o WASM; famiglia, versione e fallback sono negoziati prima dell'invocazione.
 Limiti, coordinate e invalidazione sono normati in [ABI e
 WIT](../reference/abi-and-wit.md).
-
-Un vecchio `.fubsheet` non si modifica più: la superficie dice che va
-convertito e offre **Converti in Excel**, che scrive la cartella accanto al
-file ([import ed export](import-and-export.md#un-foglio-in-excel)).
 
 ## Dove si trova
 

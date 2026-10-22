@@ -52,11 +52,6 @@ cella porta `GridValue`, il testo formattato, blocco, `stale` e `conflict`. Il
 commit è un `GridCommit` il cui `edit` è il diff del testo del giornale, da
 applicare al buffer della sessione documento.
 
-Un `.fubsheet` non ha porte sue: `read_document` ne dà il testo, e
-`write_document` lo rifiuta con `Unserved`, perché il formato è di sola
-lettura. Il comando `xlsx.convert` lo converte in una cartella di Excel
-([ADR 0218](../decisions/0218-il-fubsheet-si-converte-e-grid-1-esce.md)).
-
 ## Limiti e semantica Grid
 
 Le coordinate sono `SheetId + RowId + ColumnId`; una sessione apre la

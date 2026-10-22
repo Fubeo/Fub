@@ -90,7 +90,7 @@ devono comunque usare tipi ed errori condivisi.
 prima dell'apertura del `Workspace`. L'host registra i provider prima di
 costruire il workspace; le risorse preparate restano vive per la sessione e
 vengono rilasciate anche in caso di rollback. I formati di serie (Markdown,
-Canvas, Base e la sorgente di sola lettura `.fubsheet`) si registrano per primi: un provider
+Canvas e Base) si registrano per primi: un provider
 esterno che rivendica un'estensione già presa è rifiutato da solo, con una
 diagnostica di apertura che nomina chi la tiene, e il vault si apre lo stesso.
 

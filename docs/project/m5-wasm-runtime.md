@@ -124,7 +124,7 @@ oltre ai casi esercitati.
 azioni `Replace`/`Patch`, validazione non fidata e teardown. Il provider Grid
 è consegnato in ABI/WIT, nativo e con proxy WASM: negozia famiglia/versione,
 finestre, patch, invalidazioni, fallback e ownership senza chiamate al
-provider sotto il lock. Dall'[ADR 0218](../decisions/0218-il-fubsheet-si-converte-e-grid-1-esce.md)
+provider sotto il lock. Dall'[ADR 0218](../decisions/0218-via-il-fubsheet-e-la-versione-1-di-grid.md)
 è servita soltanto la versione 2, sui byte (`GridBytesProvider`).
 
 `IndexProvider` e `EventHandler` inbound restano deferred: non vengono

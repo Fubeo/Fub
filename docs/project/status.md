@@ -46,9 +46,8 @@ la catena di fallback.
 Grid (versione 2, a byte) usa lo stesso contratto per provider nativo e WASM. Il guard
 `public_surface_family_delivery` rende incompleta una nuova famiglia ABI finché
 non esistono insieme shell, fallback, mirror TypeScript, provider nativo e
-percorso WASM. Le scene visuali `grid-workbook` e `grid-retired` esercitano
-la cartella di Excel e il `.fubsheet` da convertire attraverso la shell e il
-fake IPC tipizzato.
+percorso WASM. La scena visuale `grid-workbook` esercita la cartella di Excel
+attraverso la shell e il fake IPC tipizzato.
 
 Le invarianti permanenti vivono in
 [Superfici dell'editor](../architecture/editor-surfaces.md),

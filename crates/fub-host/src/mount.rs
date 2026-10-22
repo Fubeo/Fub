@@ -10,7 +10,6 @@ use std::sync::Arc;
 #[cfg(feature = "versioning")]
 use crate::custody::Custody;
 use camino::Utf8Path;
-use fub_abi::format::FormatDescriptor;
 use fub_abi::settings::SettingSpec;
 use fub_abi::text::StringCatalog;
 use fub_abi::traits::HostNetwork;
@@ -298,18 +297,6 @@ pub(crate) fn mount_with_formats(
             ));
         }
     }
-    // Un vecchio `.fubsheet` resta nel vault e si legge, perché si converta in
-    // una cartella di Excel; nessuno lo apre più come griglia (ADR 0218).
-    if let Err(error) = formats.register_source(FormatDescriptor::text(
-        fub_format_sheet::FORMAT_ID,
-        "Fub Sheet",
-        &["fubsheet"],
-    )) {
-        return Err(mount_error_with_resource_disposal(
-            format!("source format conflict: {error}"),
-            format_resources.take().unwrap_or_default(),
-        ));
-    }
     // Un provider esterno che rivendica un'estensione già presa è rifiutato da
     // solo: il vault si apre coi formati che aveva, e il rifiuto resta nella
     // diagnostica di apertura invece di far cadere l'intero vault.
@@ -401,21 +388,14 @@ pub(crate) fn mount_with_formats(
         ),
     ));
 
-    // La griglia delle cartelle di Excel, sui byte del file, e la conversione
-    // di un `.fubsheet`: senza la feature una cartella non si apre e il foglio
-    // non si converte.
+    // La griglia delle cartelle di Excel, sui byte del file: senza la feature
+    // una cartella non si apre.
     #[cfg(feature = "xlsx")]
-    bundles.push(Arc::new(
-        CoreBundle::new(
-            crate::workbook::WORKBOOK_ID,
-            "Excel workbooks",
-            crate::workbook::register,
-        )
-        .speaking(
-            crate::settings::CORE_DEFAULT_LOCALE,
-            fub_format_xlsx::convert::catalog(),
-        ),
-    ));
+    bundles.push(Arc::new(CoreBundle::new(
+        crate::workbook::WORKBOOK_ID,
+        "Excel workbooks",
+        crate::workbook::register,
+    )));
 
     // Ogni feature ufficiale si monta con lo stesso ciclo: ciò che registra, le
     // impostazioni, i servizi forniti e richiesti e il collegamento che solo

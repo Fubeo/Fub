@@ -13,7 +13,7 @@
 //! Ownership: Markdown stays `fub-format-markdown`; `.base` stays
 //! `fub-format-base` (DataViewsOwner); `.canvas` stays `fub-format-canvas`
 //! (CanvasOwner); print/clipboard/media plumbing stays MediaOwner. This crate
-//! never writes `*.base` / `*.canvas` / `*.fubsheet` itself: CSV rows that
+//! never writes `*.base` / `*.canvas` itself: CSV rows that
 //! look tabular arrive as notes plus a `convertible_to_base` manifest flag,
 //! and archives containing those formats keep them verbatim. No new ABI/WIT
 //! families, no new shell families, no new format ids.
