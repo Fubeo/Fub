@@ -154,7 +154,12 @@ impl Package<'_> {
         let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
         for (name, bytes) in files {
             writer
-                .start_file(name, zip::write::SimpleFileOptions::default())
+                // Unix anche su Windows: le revisioni delle fixture non
+                // dipendono dalla macchina.
+                .start_file(
+                    name,
+                    zip::write::SimpleFileOptions::default().system(zip::System::Unix),
+                )
                 .unwrap();
             writer.write_all(&bytes).unwrap();
         }

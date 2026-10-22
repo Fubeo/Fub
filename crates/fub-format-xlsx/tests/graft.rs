@@ -338,6 +338,35 @@ fn il_prefisso_del_foglio_resta_quello_del_file() {
     assert_eq!(value(&grafted.bytes, "B1"), Value::text("b"));
 }
 
+#[test]
+fn la_voce_innestata_tiene_il_sistema_e_gli_attributi_del_file() {
+    use std::io::Write;
+    // Una cartella scritta su Windows: senza copiarli, il crate scriverebbe il
+    // sistema e gli attributi della macchina che innesta.
+    let original = one_sheet(BODY);
+    let mut archive = zip::ZipArchive::new(Cursor::new(&original)).unwrap();
+    let mut out = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    for index in 0..archive.len() {
+        let mut file = archive.by_index(index).unwrap();
+        let entry = file.name().unwrap().to_string();
+        let mut content = Vec::new();
+        file.read_to_end(&mut content).unwrap();
+        let options = zip::write::SimpleFileOptions::default()
+            .system(zip::System::Dos)
+            .external_attributes(0x20);
+        out.start_file(entry.as_str(), options).unwrap();
+        out.write_all(&content).unwrap();
+    }
+    let dos = out.finish().unwrap().into_inner();
+    let grafted = run(&dos, &[edit("A1", number(42.0))], false).unwrap();
+    let mut archive = zip::ZipArchive::new(Cursor::new(&grafted.bytes)).unwrap();
+    let file = archive.by_name("xl/worksheets/sheet1.xml").unwrap();
+    assert_eq!(
+        (file.system(), file.external_attributes()),
+        (zip::System::Dos, 0x20)
+    );
+}
+
 fn rewrite_part(bytes: &[u8], name: &str, xml: &str) -> Vec<u8> {
     use std::io::Write;
     let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();

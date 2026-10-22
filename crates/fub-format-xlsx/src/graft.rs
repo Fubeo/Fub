@@ -902,9 +902,14 @@ fn rezip(
         }
         match replaced.remove(&key) {
             Some(bytes) => {
+                // Il sistema e gli attributi sono quelli della voce del file:
+                // senza, il crate scrive quelli della macchina, e lo stesso
+                // innesto darebbe byte diversi su Windows.
                 let mut options = zip::write::SimpleFileOptions::default()
                     .compression_method(zip::CompressionMethod::Deflated)
-                    .compression_level(Some(6));
+                    .compression_level(Some(6))
+                    .system(file.system())
+                    .external_attributes(file.external_attributes());
                 if let Some(time) = file.last_modified() {
                     options = options.last_modified_time(time);
                 }
