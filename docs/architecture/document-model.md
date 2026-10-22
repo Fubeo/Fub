@@ -142,6 +142,13 @@ Una griglia non viene forzata nell'albero di `DocumentModel`.
 versione, proprietà, ordine, dimensioni, input e stile. Le celle usano identità
 stabili composte da sheet, riga e colonna; A1 dipende dall'ordine corrente.
 
+Nel kernel il formato è **di sola sorgente**
+(`FormatRegistry::register_source`): il registro lo conosce senza parser, e
+`write_document` lo scrive senza modello, con la stessa guardia sulla base di
+ogni testo. La scrittura aggiorna l'anagrafe e non emette `DocumentChanged`,
+come il file opaco della via a byte. Un'estensione che nessuno dichiara resta
+senza provider.
+
 Formula AST, valori, dipendenze, cache, A1 ed errori sono derivati e non
 persistiti. Outline, ricerca e proprietà sono proiezioni comuni del workbook,
 non campi aggiunti al modello dei blocchi. Il formato JSON v1 rifiuta campi

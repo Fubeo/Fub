@@ -460,6 +460,18 @@ impl DocumentStore {
         extension_of(id).is_some_and(|ext| self.registry.provider_for_ext(&ext).is_some())
     }
 
+    /// L'id è di un formato testuale **di sola sorgente** (`register_source`)?
+    /// Il suo editor ne possiede il modello, e nessun parser lo legge.
+    pub(crate) fn is_text_source_only(&self, id: &DocId) -> bool {
+        extension_of(id).is_some_and(|ext| {
+            self.registry.provider_arc_for_ext(&ext).is_none()
+                && self
+                    .registry
+                    .descriptor_for_ext(&ext)
+                    .is_some_and(|descriptor| descriptor.source == SourceKind::Text)
+        })
+    }
+
     /// Risolve il parser senza eseguire callback. Il descriptor viene dalla
     /// cache del registro, le regole sono una fotografia condivisa.
     pub(crate) fn prepare_parse(&self, id: &DocId) -> Result<PreparedParse> {
