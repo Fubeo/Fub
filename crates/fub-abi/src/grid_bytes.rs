@@ -7,7 +7,7 @@
 //! vede mai i byte. Il testo della `DocumentSession` è il [`GridJournal`]: le
 //! celle cambiate rispetto ai byte sul disco, con l'input che hanno nel file e
 //! quello nuovo. Salvare è dell'host: rilegge i byte, riapre il provider, gli
-//! applica il giornale e scrive ciò che [`GridBytesProvider::serialize`] dà.
+//! applica il giornale e scrive ciò che [`GridBytesProvider::bytes_to_write`] dà.
 //!
 //! Il giornale ha una sola forma canonica, e la regola vive qui; la shell ne
 //! ha il mirror (`apps/client/src/state/grid-journal.ts`), legato da una
@@ -28,8 +28,9 @@ use crate::grid::{
 
 /// La versione del protocollo `grid` a byte.
 pub const GRID_BYTES_PROTOCOL_VERSION: u32 = 2;
-/// La sorgente a byte più grande che l'host passa a un provider.
-pub const MAX_GRID_BYTES_SOURCE: usize = 64 * 1024 * 1024;
+/// La sorgente a byte più grande che l'host passa a un provider: quella di
+/// un documento a byte.
+pub const MAX_GRID_BYTES_SOURCE: usize = 256 * 1024 * 1024;
 /// La versione della forma del giornale.
 pub const GRID_JOURNAL_VERSION: u32 = 1;
 /// Le voci di un giornale: quante ne porta un'operazione.
@@ -77,7 +78,8 @@ struct JournalWire {
 }
 
 /// Come una voce sta rispetto all'input che la cella ha adesso.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum GridJournalMatch {
     /// La cella ha ancora l'input di prima: la voce si applica.
     Pending,
@@ -302,10 +304,15 @@ pub struct GridBytesSession {
     pub instance: String,
     pub revision: Revision,
     pub sheets: Vec<GridSheet>,
+    /// Il foglio che la sorgente apre per primo.
+    pub active: String,
+    /// I fogli che la sorgente nasconde: la shell non li mostra fra le
+    /// schede finché l'utente non li chiede.
+    pub hidden: Vec<String>,
     pub notices: Vec<GridNotice>,
     /// Le voci del giornale che i byte non confermano: la cella ha un terzo
-    /// input. La finestra mostra il valore del giornale; il salvataggio le
-    /// rifiuta.
+    /// input, perché qualcun altro l'ha cambiata. La finestra mostra il
+    /// valore del giornale e lo segna; il salvataggio scrive quello.
     pub conflicts: Vec<GridCellKey>,
 }
 
@@ -313,6 +320,10 @@ impl GridBytesSession {
     pub fn validate(&self) -> Result<(), PluginError> {
         if self.instance.is_empty() || self.revision.0.is_empty() {
             return Err(bad("grid session has an empty identity"));
+        }
+        let named = |id: &String| self.sheets.iter().any(|sheet| &sheet.id == id);
+        if !named(&self.active) || !self.hidden.iter().all(named) {
+            return Err(bad("grid session names a sheet it does not have"));
         }
         if self.sheets.len() > MAX_GRID_SESSION_SHEETS
             || self.notices.len() > MAX_GRID_NOTICES
@@ -357,7 +368,8 @@ pub enum GridValue {
 /// Una cella della finestra. `display` è il valore già formattato dal
 /// provider; `lock` è il perché la cella non si modifica, in un codice chiuso;
 /// `stale` dice che il valore è quello del file e una cella da cui dipende è
-/// cambiata.
+/// cambiata; `conflict` che la cella è nel giornale e i byte hanno un terzo
+/// input.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GridBytesCell {
     pub key: GridCellKey,
@@ -367,6 +379,7 @@ pub struct GridBytesCell {
     pub display: String,
     pub lock: Option<String>,
     pub stale: bool,
+    pub conflict: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -438,7 +451,7 @@ impl GridSurfaceSpec {
 /// `apply` ha la richiesta della versione 1, e il suo [`GridCommit`] porta
 /// la modifica **del giornale**: `edit` è il diff fra il testo del giornale
 /// prima e dopo, che la shell applica al buffer della `DocumentSession` come
-/// ogni altro diff. `serialize` la chiama soltanto l'host, per salvare.
+/// ogni altro diff. `bytes_to_write` la chiama soltanto l'host, per salvare.
 pub trait GridBytesProvider: Send + Sync {
     fn surfaces(&self) -> Vec<GridSurfaceSpec>;
     /// Apre `source` alla sua revisione e vi applica `journal`.
@@ -459,9 +472,17 @@ pub trait GridBytesProvider: Send + Sync {
         instance: &str,
         request: GridApplyRequest,
     ) -> Result<GridCommit, PluginError>;
-    /// I byte della sessione alla revisione `expected`. Una voce in conflitto
-    /// è un [`PluginError::Conflict`].
-    fn serialize(&mut self, instance: &str, expected: Revision) -> Result<Vec<u8>, PluginError>;
+    /// I byte della sessione alla revisione `expected`: quelli della sorgente
+    /// con il giornale applicato. Una voce già applicata non cambia niente;
+    /// una in conflitto scrive il suo input, perché l'host apre la sessione
+    /// sui byte che l'utente ha visto. Una voce che i byte non possono
+    /// ricevere (il foglio non c'è più, la cella è bloccata) è un errore, e
+    /// niente si scrive.
+    fn bytes_to_write(
+        &mut self,
+        instance: &str,
+        expected: Revision,
+    ) -> Result<Vec<u8>, PluginError>;
     fn close(&mut self, instance: &str) -> Result<(), PluginError>;
     /// Distrugge tutte le istanze prima che il corpo del plugin venga disattivato.
     fn shutdown(&mut self) -> Result<(), PluginError>;

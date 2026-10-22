@@ -2182,6 +2182,7 @@ dependencies = [
  "fub-abi",
  "fub-format-markdown",
  "fub-sdk",
+ "gridcraft-calc",
  "gridcraft-core",
  "gridcraft-model",
  "gridcraft-numfmt",
@@ -2725,6 +2726,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "gridcraft-calc"
+version = "0.9.0"
+dependencies = [
+ "gridcraft-core",
+ "gridcraft-formula",
+ "gridcraft-functions",
+ "gridcraft-model",
+ "gridcraft-numfmt",
+ "log",
+]
+
+[[package]]
 name = "gridcraft-core"
 version = "0.9.0"
 dependencies = [
@@ -2740,6 +2753,14 @@ dependencies = [
  "gridcraft-core",
  "serde",
  "thiserror 2.0.19",
+]
+
+[[package]]
+name = "gridcraft-functions"
+version = "0.9.0"
+dependencies = [
+ "gridcraft-core",
+ "regex",
 ]
 
 [[package]]

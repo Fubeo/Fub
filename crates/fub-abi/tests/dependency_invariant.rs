@@ -1119,6 +1119,7 @@ const WORDCRAFT_FREE: &[&str] = &["fub-abi", "fub-kernel", "fub-sdk"];
 /// foglio di calcolo entra da un adattatore soltanto, che legge le cartelle di
 /// Excel (vedi ../../../docs/decisions/0214-gridcraft-motore-del-foglio-di-calcolo.md).
 const GRIDCRAFT_OWNERS: &[(&str, &str, Option<&str>)] = &[
+    ("fub-format-xlsx", "gridcraft-calc", None),
     ("fub-format-xlsx", "gridcraft-core", None),
     ("fub-format-xlsx", "gridcraft-model", None),
     ("fub-format-xlsx", "gridcraft-numfmt", None),

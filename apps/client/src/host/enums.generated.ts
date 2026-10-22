@@ -84,6 +84,8 @@ export type GridFormulaError =
 
 export type GridHorizontalAlign = "start" | "center" | "end";
 
+export type GridJournalMatch = "pending" | "applied" | "conflict";
+
 export type HealthCheck =
   | "broken_links"
   | "orphan_documents"
