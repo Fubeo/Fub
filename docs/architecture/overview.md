@@ -150,7 +150,9 @@ modo, con un workspace loro: li usa soltanto `fub-format-xlsx`, che legge le
 cartelle di Excel per l'host (feature `xlsx`) e ne innesta i valori cambiati
 sui byte del file, e nessuno di loro dipende da Fub. Di `gridcraft-calc`
 l'adattatore usa soltanto il grafo delle dipendenze fra le formule, per dire
-quali valori del file una modifica rende vecchi: niente si ricalcola. Il terzo blocco è il seguito dello stesso grafo, con
+quali valori del file una modifica rende vecchi: niente si ricalcola.
+`gridcraft-engine`, la facciata dei comandi di GridCraft, è vendorizzato con
+`gridcraft-chart` e `gridcraft-pdf` per la modifica delle cartelle. Il terzo blocco è il seguito dello stesso grafo, con
 l'adattatore e i crate di Fub da cui dipende.
 
 ```mermaid
@@ -164,11 +166,14 @@ flowchart LR
     sdk["fub-sdk"]
     xlsx["fub-format-xlsx"]
     gcalc["gridcraft-calc"]
+    gchart["gridcraft-chart"]
     gcore["gridcraft-core"]
+    gengine["gridcraft-engine"]
     gformula["gridcraft-formula"]
     gfunctions["gridcraft-functions"]
     gnumfmt["gridcraft-numfmt"]
     gmodel["gridcraft-model"]
+    gpdf["gridcraft-pdf"]
     gxlsx["gridcraft-xlsx"]
 
     host --> xlsx
@@ -185,6 +190,19 @@ flowchart LR
     gcalc --> gfunctions
     gcalc --> gmodel
     gcalc --> gnumfmt
+    gchart --> gcalc
+    gchart --> gcore
+    gchart --> gmodel
+    gchart --> gnumfmt
+    gengine --> gcalc
+    gengine --> gchart
+    gengine --> gcore
+    gengine --> gformula
+    gengine --> gfunctions
+    gengine --> gmodel
+    gengine --> gnumfmt
+    gengine --> gpdf
+    gengine --> gxlsx
     gformula --> gcore
     gfunctions --> gcore
     gmodel --> gcore
