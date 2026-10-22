@@ -2347,6 +2347,7 @@ dependencies = [
  "fub-format-sheet",
  "fub-host",
  "fub-kernel",
+ "fub-sdk",
  "fub-testkit",
  "ring",
  "serde",

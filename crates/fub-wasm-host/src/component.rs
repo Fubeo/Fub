@@ -62,7 +62,10 @@ use fub_abi::traits::{
     ViewInterests, ViewProvider, ViewSpec,
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
-use fub_abi::{FormatError, PluginError, Revision};
+use fub_abi::{
+    FormatError, GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal, PluginError,
+    Revision, MAX_GRID_BYTES_SOURCE,
+};
 use fub_host::registry::{Bundle, BundleMount, Registrar, RegistrationReport};
 use fub_kernel::Trust;
 use wasmtime::component::types::ComponentItem;
@@ -76,6 +79,7 @@ use crate::contract::exports::fub::abi::format as w_format;
 use crate::contract::exports::fub::abi::format_edits as w_format_edits;
 use crate::contract::exports::fub::abi::format_links as w_format_links;
 use crate::contract::exports::fub::abi::grid as w_grid;
+use crate::contract::exports::fub::abi::grid_bytes as w_grid_bytes;
 use crate::contract::exports::fub::abi::index as w_index;
 use crate::contract::exports::fub::abi::plugin as w_plugin;
 use crate::contract::exports::fub::abi::view as w_view;
@@ -112,6 +116,8 @@ const VIEW_INTERFACE: &str = "fub:abi/view";
 const VIEW_EXPORT: &str = "fub:abi/view@0.2.0";
 const GRID_INTERFACE: &str = "fub:abi/grid";
 const GRID_EXPORT: &str = "fub:abi/grid@0.2.0";
+const GRID_BYTES_INTERFACE: &str = "fub:abi/grid-bytes";
+const GRID_BYTES_EXPORT: &str = "fub:abi/grid-bytes@0.2.0";
 const INDEX_INTERFACE: &str = "fub:abi/index";
 const INDEX_EXPORT: &str = "fub:abi/index@0.2.0";
 const EVENT_HANDLER_INTERFACE: &str = "fub:abi/event-handler";
@@ -234,6 +240,7 @@ pub struct Component {
     format_links_indices: Option<w_format_links::GuestIndices>,
     format_edits_indices: Option<w_format_edits::GuestIndices>,
     grid_indices: Option<w_grid::GuestIndices>,
+    grid_bytes_indices: Option<w_grid_bytes::GuestIndices>,
     view_indices: Option<w_view::GuestIndices>,
     index_indices: Option<w_index::GuestIndices>,
     event_handler_indices: Option<w_event_handler::GuestIndices>,
@@ -369,6 +376,15 @@ impl Component {
             GRID_EXPORT,
         )
         .is_some();
+        let grid_bytes_export_present = select_supported_export(
+            component
+                .component_type()
+                .exports(&engine)
+                .map(|(name, _)| name),
+            GRID_BYTES_INTERFACE,
+            GRID_BYTES_EXPORT,
+        )
+        .is_some();
         let command_export_present = select_supported_export(
             component
                 .component_type()
@@ -393,6 +409,9 @@ impl Component {
         })?;
         let grid_indices =
             resolve_format_indices(grid_export_present, || w_grid::GuestIndices::new(&pre))?;
+        let grid_bytes_indices = resolve_format_indices(grid_bytes_export_present, || {
+            w_grid_bytes::GuestIndices::new(&pre)
+        })?;
         let view_indices =
             resolve_format_indices(view_export_present, || w_view::GuestIndices::new(&pre))?;
         let index_indices =
@@ -408,6 +427,7 @@ impl Component {
             format_links_indices,
             format_edits_indices,
             grid_indices,
+            grid_bytes_indices,
             view_indices,
             index_indices,
             event_handler_indices,
@@ -465,6 +485,14 @@ impl Component {
             ),
             None => None,
         };
+        let grid_bytes = match &self.grid_bytes_indices {
+            Some(indices) => Some(
+                indices
+                    .load(&mut store, &instance)
+                    .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?,
+            ),
+            None => None,
+        };
         let view = match &self.view_indices {
             Some(indices) => Some(
                 indices
@@ -498,6 +526,7 @@ impl Component {
                 format_links,
                 format_edits,
                 grid,
+                grid_bytes,
                 view,
                 index,
                 event_handler,
@@ -600,6 +629,7 @@ pub(crate) struct Interfaces {
     pub(crate) format_links: Option<w_format_links::Guest>,
     pub(crate) format_edits: Option<w_format_edits::Guest>,
     grid: Option<w_grid::Guest>,
+    grid_bytes: Option<w_grid_bytes::Guest>,
     view: Option<w_view::Guest>,
     pub(crate) index: Option<w_index::Guest>,
     pub(crate) event_handler: Option<w_event_handler::Guest>,
@@ -647,6 +677,21 @@ fn grid_call<R>(
         .grid
         .as_ref()
         .ok_or_else(|| PluginError::Internal("il componente non esporta `fub:abi/grid`".into()))?;
+    crate::limits::renew(&mut *store);
+    call(grid, store)
+}
+
+fn grid_bytes_call<R>(
+    inner: &Mutex<Instance>,
+    call: impl FnOnce(&w_grid_bytes::Guest, &mut Store<State>) -> Result<R, PluginError>,
+) -> Result<R, PluginError> {
+    let _guard = enter_instance(instance_identity(inner))
+        .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
+    let mut inner = inner.lock_instance().map_err(PluginError::from)?;
+    let Instance { store, interfaces } = &mut *inner;
+    let grid = interfaces.grid_bytes.as_ref().ok_or_else(|| {
+        PluginError::Internal("il componente non esporta `fub:abi/grid-bytes`".into())
+    })?;
     crate::limits::renew(&mut *store);
     call(grid, store)
 }
@@ -971,6 +1016,109 @@ impl GridProvider for WasmGridProvider {
 
     fn shutdown(&mut self) -> Result<(), PluginError> {
         grid_call(&self.inner, |grid, store| {
+            grid.call_shutdown(store)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })
+    }
+}
+
+/// Proxy `GridBytesProvider` sopra la stessa istanza del `WasmPlugin` montato.
+///
+/// Controlla ciò che il componente risponde quanto basta a non consegnare una
+/// forma impossibile; il confronto con la richiesta lo fa il registro del
+/// kernel, che chiama questo provider come uno nativo.
+pub struct WasmGridBytesProvider {
+    inner: Arc<Mutex<Instance>>,
+    specs: Vec<GridSurfaceSpec>,
+}
+
+impl GridBytesProvider for WasmGridBytesProvider {
+    fn surfaces(&self) -> Vec<GridSurfaceSpec> {
+        self.specs.clone()
+    }
+
+    fn open(
+        &mut self,
+        surface: &str,
+        source: &[u8],
+        revision: Revision,
+        journal: &GridJournal,
+    ) -> Result<GridBytesSession, PluginError> {
+        if source.len() > MAX_GRID_BYTES_SOURCE {
+            return Err(PluginError::BadArgs(
+                "grid source exceeds byte limit".into(),
+            ));
+        }
+        if Revision::of_bytes(source) != revision {
+            return Err(PluginError::Conflict(
+                "grid source does not match its declared revision".into(),
+            ));
+        }
+        journal.validate()?;
+        let revision_wit = tr::to_grid_revision(&revision);
+        let journal = journal.to_text();
+        let session = grid_bytes_call(&self.inner, |grid, store| {
+            grid.call_open(store, surface, source, &revision_wit, &journal)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })?;
+        tr::from_grid_bytes_session(session).map_err(grid_response_error)
+    }
+
+    fn window(
+        &mut self,
+        instance: &str,
+        request: GridWindowRequest,
+    ) -> Result<GridBytesWindow, PluginError> {
+        request.validate()?;
+        let request_wit = tr::to_grid_window_request(&request);
+        let window = grid_bytes_call(&self.inner, |grid, store| {
+            grid.call_window(store, instance, &request_wit)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })?;
+        tr::from_grid_bytes_window(window).map_err(grid_response_error)
+    }
+
+    fn apply(
+        &mut self,
+        instance: &str,
+        request: GridApplyRequest,
+    ) -> Result<GridCommit, PluginError> {
+        request.validate()?;
+        let request_wit = tr::to_grid_apply_request(&request);
+        let commit = grid_bytes_call(&self.inner, |grid, store| {
+            grid.call_apply(store, instance, &request_wit)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })?;
+        tr::from_grid_commit(commit).map_err(grid_response_error)
+    }
+
+    fn bytes_to_write(
+        &mut self,
+        instance: &str,
+        expected: Revision,
+    ) -> Result<Vec<u8>, PluginError> {
+        let expected_wit = tr::to_grid_revision(&expected);
+        grid_bytes_call(&self.inner, |grid, store| {
+            grid.call_bytes_to_write(store, instance, &expected_wit)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })
+    }
+
+    fn close(&mut self, instance: &str) -> Result<(), PluginError> {
+        grid_bytes_call(&self.inner, |grid, store| {
+            grid.call_close(store, instance)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })
+    }
+
+    fn shutdown(&mut self) -> Result<(), PluginError> {
+        grid_bytes_call(&self.inner, |grid, store| {
             grid.call_shutdown(store)
                 .map_err(failure)?
                 .map_err(tr::from_error)
@@ -1314,6 +1462,27 @@ impl WasmBundle {
         Ok(supported)
     }
 
+    fn declared_grid_bytes(inner: &Mutex<Instance>) -> Result<Vec<GridSurfaceSpec>, String> {
+        let mut instance = inner.lock_instance().map_err(|why| why.to_string())?;
+        let Instance { store, interfaces } = &mut *instance;
+        let Some(grid) = interfaces.grid_bytes.as_ref() else {
+            return Ok(Vec::new());
+        };
+        crate::limits::renew(&mut *store);
+        let surfaces = grid.call_surfaces(&mut *store).map_err(|error| {
+            format!("grid a byte non dichiarate: il componente è caduto: {error:#}")
+        })?;
+        let mut supported = Vec::new();
+        for surface in surfaces {
+            if let Some(surface) = tr::from_optional_grid_bytes_surface(surface)
+                .map_err(|error| format!("grid a byte non traducibili: {error}"))?
+            {
+                supported.push(surface);
+            }
+        }
+        Ok(supported)
+    }
+
     fn instantiate_plugin(&self) -> Box<dyn Plugin> {
         match self.component.instantiate() {
             Ok(instance) => Box::new(WasmPlugin {
@@ -1383,6 +1552,21 @@ impl WasmBundle {
         Self::grid_provider_from_inner(Arc::new(Mutex::new(instance)))
     }
 
+    /// Prepara il provider grid della versione 2, se il componente lo esporta.
+    pub fn grid_bytes_provider(&self) -> Result<Option<Box<dyn GridBytesProvider>>, PluginError> {
+        let instance = self
+            .component
+            .instantiate()
+            .map_err(|error| PluginError::Internal(error.to_string().into()))?;
+        let inner = Arc::new(Mutex::new(instance));
+        let specs = Self::declared_grid_bytes(&inner)
+            .map_err(|error| PluginError::Internal(error.into()))?;
+        if specs.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(Box::new(WasmGridBytesProvider { inner, specs })))
+    }
+
     pub(crate) fn prepare_opening(self) -> WasmOpeningBundle {
         let instance = self
             .component
@@ -1428,6 +1612,10 @@ fn bundle_mount(
             Ok(specs) => specs,
             Err(error) => return RegistrationReport::failed(error),
         };
+        let grid_bytes_specs = match WasmBundle::declared_grid_bytes(&inner) {
+            Ok(specs) => specs,
+            Err(error) => return RegistrationReport::failed(error),
+        };
         // Inbound declarations run here — after `Plugin::activate`, on the
         // same thread that registers — so a trapped component fails with the
         // declaration error, not a poisoned-instance activation error.
@@ -1446,6 +1634,15 @@ fn bundle_mount(
             };
             if let Err(error) = registrar.register_grid_provider(Box::new(provider)) {
                 return RegistrationReport::failed(format!("grid non registrato: {error}"));
+            }
+        }
+        if !grid_bytes_specs.is_empty() {
+            let provider = WasmGridBytesProvider {
+                inner: Arc::clone(&inner),
+                specs: grid_bytes_specs,
+            };
+            if let Err(error) = registrar.register_grid_bytes_provider(Box::new(provider)) {
+                return RegistrationReport::failed(format!("grid a byte non registrato: {error}"));
             }
         }
         if !command_specs.is_empty() {

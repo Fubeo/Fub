@@ -38,7 +38,7 @@ use fub_abi::PluginError;
 // esattamente lo scambio che questo modulo esiste per non fare.
 use crate::contract::exports::fub::abi::{
     command as w_command, format as x_format, format_links as x_links, grid as w_grid,
-    plugin as w_plugin, view as w_view,
+    grid_bytes as w_grid_bytes, plugin as w_plugin, view as w_view,
 };
 // I tipi che l'interfaccia esportata `use`a da altre — `model.{span}`,
 // `edit.{edit-request}`, `text.{text}` — restano invece gli stessi delle
@@ -955,6 +955,90 @@ pub(crate) fn from_optional_grid_surface(
         return Ok(None);
     }
     from_grid_surface(surface).map(Some)
+}
+
+/// Come [`from_optional_grid_surface`], per l'interfaccia `grid-bytes`: ciò
+/// che non è della versione 2 non si serve da lì.
+pub(crate) fn from_optional_grid_bytes_surface(
+    surface: w_grid::GridSurfaceSpec,
+) -> Result<Option<fub_abi::grid::GridSurfaceSpec>, PluginError> {
+    if surface.family != fub_abi::grid::GRID_FAMILY
+        || surface.protocol_version != fub_abi::GRID_BYTES_PROTOCOL_VERSION
+    {
+        return Ok(None);
+    }
+    let surface = fub_abi::grid::GridSurfaceSpec {
+        id: surface.id,
+        format: surface.format,
+        family: surface.family,
+        protocol_version: surface.protocol_version,
+    };
+    surface.validate()?;
+    Ok(Some(surface))
+}
+
+pub(crate) fn from_grid_bytes_session(
+    session: w_grid_bytes::GridBytesSession,
+) -> Result<fub_abi::GridBytesSession, PluginError> {
+    let session = fub_abi::GridBytesSession {
+        instance: session.instance,
+        revision: from_grid_revision(session.revision),
+        sheets: session.sheets.into_iter().map(from_grid_sheet).collect(),
+        active: session.active,
+        hidden: session.hidden,
+        notices: session
+            .notices
+            .into_iter()
+            .map(|notice| fub_abi::GridNotice {
+                code: notice.code,
+                count: notice.count,
+            })
+            .collect(),
+        conflicts: session.conflicts.into_iter().map(from_grid_key).collect(),
+    };
+    session.validate()?;
+    Ok(session)
+}
+
+fn from_grid_bytes_value(value: w_grid_bytes::GridValue) -> fub_abi::GridValue {
+    match value {
+        w_grid_bytes::GridValue::Blank => fub_abi::GridValue::Blank,
+        w_grid_bytes::GridValue::Number(value) => fub_abi::GridValue::Number(value),
+        w_grid_bytes::GridValue::Text(value) => fub_abi::GridValue::Text(value),
+        w_grid_bytes::GridValue::Boolean(value) => fub_abi::GridValue::Boolean(value),
+        w_grid_bytes::GridValue::Error(value) => fub_abi::GridValue::Error(value),
+    }
+}
+
+fn from_grid_bytes_cell(cell: w_grid_bytes::GridBytesCell) -> fub_abi::GridBytesCell {
+    fub_abi::GridBytesCell {
+        key: from_grid_key(cell.key),
+        input: cell.input,
+        style: from_grid_style(cell.style),
+        value: from_grid_bytes_value(cell.value),
+        display: cell.display,
+        lock: cell.lock,
+        stale: cell.stale,
+        conflict: cell.conflict,
+    }
+}
+
+pub(crate) fn from_grid_bytes_window(
+    window: w_grid_bytes::GridBytesWindow,
+) -> Result<fub_abi::GridBytesWindow, PluginError> {
+    let window = fub_abi::GridBytesWindow {
+        revision: from_grid_revision(window.revision),
+        sheet: window.sheet,
+        row_start: window.row_start,
+        column_start: window.column_start,
+        total_rows: window.total_rows,
+        total_columns: window.total_columns,
+        rows: window.rows.into_iter().map(from_grid_row).collect(),
+        columns: window.columns.into_iter().map(from_grid_column).collect(),
+        cells: window.cells.into_iter().map(from_grid_bytes_cell).collect(),
+    };
+    window.validate()?;
+    Ok(window)
 }
 
 fn from_grid_revision(revision: String) -> fub_abi::Revision {
