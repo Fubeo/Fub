@@ -1,6 +1,7 @@
-//! Grid v2 end-to-end: a real component serves `grid-bytes`, and the host
+//! Grid end-to-end: a real component serves `grid-bytes`, and the host
 //! opens it on a document's bytes through the same registry and checks as a
-//! native provider.
+//! native provider. A family it does not know is an optional binding, and a
+//! malformed answer or a trap stays an error.
 
 mod common;
 
@@ -18,7 +19,12 @@ const SURFACE: &str = "example.grid:lines";
 const SOURCE: &[u8] = b"uno\ndue\ntre";
 
 fn provider() -> Box<dyn GridBytesProvider> {
-    WasmBundle::from_file(&common::grid(), Trust::Community)
+    provider_with("")
+}
+
+fn provider_with(feature: &str) -> Box<dyn GridBytesProvider> {
+    let wasm = common::component("grid-wasm", "grid_wasm", feature);
+    WasmBundle::from_file(&wasm, Trust::Community)
         .expect("grid component loads")
         .grid_bytes_provider()
         .expect("grid-bytes declared")
@@ -140,11 +146,6 @@ fn a_mounted_component_serves_the_host_bytes_port() {
         .find(|surface| surface.id == SURFACE)
         .expect("the v2 surface is registered");
     assert_eq!(surface.protocol_version, 2);
-    // The v1 port does not call a v2 surface.
-    assert!(matches!(
-        host.grid_open(None, SURFACE, "x", Revision::of("x")),
-        Err(PluginError::Unserved(_))
-    ));
 
     let doc = DocId::new("note.md");
     let (_, revision) = host.read_document(None, &doc).unwrap();
@@ -187,4 +188,57 @@ fn the_component_follows_the_shared_v2_lifecycle() {
             saved_matches: |saved| saved == b"UNO\ndue\ntre",
         },
     );
+}
+
+#[test]
+fn unknown_grid_family_is_an_optional_binding_and_traps_stay_errors() {
+    let wasm = common::component("grid-wasm", "grid_wasm", "incompatible-grid");
+    let bundle = WasmBundle::from_file(&wasm, Trust::Community).expect("component loads");
+    assert!(bundle
+        .grid_bytes_provider()
+        .expect("unknown grid family is ignored")
+        .is_none());
+
+    // The proxy only refuses impossible shapes: the answer for another sheet
+    // is caught by the kernel registry, as for a native provider.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8 path");
+    std::fs::write(root.join("note.md"), SOURCE).expect("seed vault");
+    let host = Host::without_watcher().with_job_threads(1);
+    host.open(&root).expect("vault opens");
+    let wasm = common::component("grid-wasm", "grid_wasm", "malformed-window");
+    let bundle = WasmBundle::from_file(&wasm, Trust::Community).expect("component loads");
+    host.mount_bundle(None, Arc::new(bundle))
+        .expect("grid bundle mounts");
+    let doc = DocId::new("note.md");
+    let session = host
+        .grid_bytes_open(None, SURFACE, &doc, "", Revision::of_bytes(SOURCE))
+        .expect("open before the malformed answer");
+    let error = host
+        .grid_bytes_window(
+            None,
+            SURFACE,
+            &session.instance,
+            window(1, &session.revision),
+        )
+        .expect_err("an answer for another sheet is rejected");
+    assert!(error
+        .to_string()
+        .contains("malformed grid provider response"));
+    assert!(host
+        .unmount_bundle(None, "example.grid")
+        .expect("teardown after a malformed answer")
+        .is_empty());
+    assert!(host.close().is_empty());
+
+    let base = Revision::of_bytes(SOURCE);
+    let mut trapped = provider_with("trap-on-window");
+    let opened = trapped
+        .open(SURFACE, SOURCE, base, &GridJournal::new())
+        .expect("open before the trap");
+    let error = trapped
+        .window(&opened.instance, window(1, &opened.revision))
+        .expect_err("a guest trap is a provider error");
+    assert!(error.to_string().contains("componente è caduto"));
+    let _ = trapped.shutdown();
 }

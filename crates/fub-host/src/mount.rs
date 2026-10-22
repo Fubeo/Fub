@@ -298,6 +298,8 @@ pub(crate) fn mount_with_formats(
             ));
         }
     }
+    // Un vecchio `.fubsheet` resta nel vault e si legge, perché si converta in
+    // una cartella di Excel; nessuno lo apre più come griglia (ADR 0218).
     if let Err(error) = formats.register_source(FormatDescriptor::text(
         fub_format_sheet::FORMAT_ID,
         "Fub Sheet",
@@ -382,27 +384,6 @@ pub(crate) fn mount_with_formats(
             secrets: Arc::new(crate::connector_tokens::MachineTokens::new(config_root)),
         }),
         Arc::new(crate::theme::ThemeBundle::series()),
-        Arc::new(CoreBundle::new(
-            fub_format_sheet::index::SHEET_ID,
-            "Fub Sheet",
-            |registrar| {
-                let mut errors = match registrar.register_grid_provider(Box::new(
-                    fub_format_sheet::grid::SheetGridProvider::new(),
-                )) {
-                    Ok(()) => Vec::new(),
-                    Err(error) => vec![format!("sheet grid NOT registered: {error}")],
-                };
-                match registrar
-                    .register_index_provider(Box::new(fub_format_sheet::index::SheetIndex))
-                {
-                    Ok(()) => errors,
-                    Err(error) => {
-                        errors.push(format!("sheet index NOT registered: {error}"));
-                        errors
-                    }
-                }
-            },
-        )),
     ];
 
     // Le copie dei documenti di videoscrittura: l'esportatore e il comando
@@ -420,9 +401,9 @@ pub(crate) fn mount_with_formats(
         ),
     ));
 
-    // La griglia delle cartelle di Excel, sui byte del file, e la copia in
-    // Excel di un `.fubsheet`: senza la feature una cartella non si apre e la
-    // copia non c'è.
+    // La griglia delle cartelle di Excel, sui byte del file, e la conversione
+    // di un `.fubsheet`: senza la feature una cartella non si apre e il foglio
+    // non si converte.
     #[cfg(feature = "xlsx")]
     bundles.push(Arc::new(
         CoreBundle::new(
@@ -432,7 +413,7 @@ pub(crate) fn mount_with_formats(
         )
         .speaking(
             crate::settings::CORE_DEFAULT_LOCALE,
-            fub_format_xlsx::export::catalog(),
+            fub_format_xlsx::convert::catalog(),
         ),
     ));
 

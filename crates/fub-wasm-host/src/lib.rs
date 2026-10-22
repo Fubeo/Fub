@@ -46,8 +46,8 @@ mod served_convert;
 mod translate;
 mod ui;
 pub use component::{
-    Component, LoadError, WasmBundle, WasmCommandProvider, WasmGridBytesProvider, WasmGridProvider,
-    WasmPlugin, WasmViewProvider,
+    Component, LoadError, WasmBundle, WasmCommandProvider, WasmGridBytesProvider, WasmPlugin,
+    WasmViewProvider,
 };
 pub use discovery::{discover, DiscoveredPlugin};
 

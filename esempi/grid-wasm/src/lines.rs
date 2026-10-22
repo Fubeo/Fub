@@ -6,6 +6,10 @@
 //! The surface declares the `markdown` format because it is the line-based
 //! format every vault has. It exists to prove the `grid-bytes` crossing, not
 //! to edit notes.
+//!
+//! Three test features break the component on purpose: `incompatible-grid`
+//! declares a family the host does not know, `trap-on-window` traps and
+//! `malformed-window` answers for another sheet.
 
 use std::collections::HashMap;
 
@@ -13,7 +17,7 @@ use fub_abi::edit::Revision;
 use fub_abi::grid::GridCellKey as AbiKey;
 use fub_abi::{grid_bytes_revision, grid_journal_match, GridJournal, GridJournalMatch};
 
-use crate::exports::fub::abi::grid::{
+use crate::fub::abi::grid::{
     GridApplyRequest, GridCellKey, GridCellStyle, GridColumn, GridCommit, GridInvalidation,
     GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindowRequest,
 };
@@ -124,8 +128,16 @@ impl GridBytesGuest for Component {
         vec![GridSurfaceSpec {
             id: SURFACE_ID.to_owned(),
             format: "markdown".to_owned(),
-            family: "grid".to_owned(),
-            protocol_version: fub_abi::GRID_BYTES_PROTOCOL_VERSION,
+            family: if cfg!(feature = "incompatible-grid") {
+                "future-grid".to_owned()
+            } else {
+                "grid".to_owned()
+            },
+            protocol_version: if cfg!(feature = "incompatible-grid") {
+                99
+            } else {
+                fub_abi::GRID_BYTES_PROTOCOL_VERSION
+            },
         }]
     }
 
@@ -135,6 +147,9 @@ impl GridBytesGuest for Component {
         revision: String,
         journal: String,
     ) -> Result<GridBytesSession, PluginError> {
+        if cfg!(feature = "incompatible-grid") {
+            panic!("incompatible grid open must not be called");
+        }
         if surface != SURFACE_ID {
             return Err(not_found(format!("grid surface `{surface}`")));
         }
@@ -180,6 +195,9 @@ impl GridBytesGuest for Component {
         instance: String,
         request: GridWindowRequest,
     ) -> Result<GridBytesWindow, PluginError> {
+        if cfg!(feature = "trap-on-window") {
+            panic!("grid window trap requested by test component");
+        }
         let lines = session(&instance)?;
         if request.revision != lines.revision().0 {
             return Err(conflict("stale grid revision"));
@@ -240,9 +258,14 @@ impl GridBytesGuest for Component {
                 })
                 .collect()
         };
+        let sheet = if cfg!(feature = "malformed-window") {
+            "wrong-sheet".to_owned()
+        } else {
+            request.sheet
+        };
         Ok(GridBytesWindow {
             revision: request.revision,
-            sheet: request.sheet,
+            sheet,
             row_start: request.row_start,
             column_start: request.column_start,
             total_rows: lines.rows(),

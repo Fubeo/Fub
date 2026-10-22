@@ -12,9 +12,9 @@
 //!   ha visto, attraverso il provider registrato, e scrive con il CAS della
 //!   stessa revisione. Un giornale vuoto non scrive niente.
 //!
-//! La **copia in Excel** di un `.fubsheet` passa invece dalla porta di export
-//! del contratto: il bundle [`WORKBOOK_ID`] registra l'esportatore e il
-//! comando «Esporta una copia in Excel» di `fub-format-xlsx`.
+//! Un `.fubsheet` non si modifica più (ADR 0218): il bundle [`WORKBOOK_ID`]
+//! registra il comando «Converti in Excel» di `fub-format-xlsx`, che scrive
+//! accanto al foglio una cartella nuova.
 //!
 //! Il codec gira fuori dal lucchetto del workspace: si leggono i byte, si
 //! rilascia, si chiama il provider. Senza la feature `xlsx` nessun formato è di
@@ -40,8 +40,8 @@ pub(crate) fn providers() -> Vec<Box<dyn FormatProvider>> {
 pub(crate) const WORKBOOK_ID: &str = "fub.xlsx";
 
 /// Registra la superficie della griglia delle cartelle, la stessa che la
-/// shell apre e che il salvataggio usa per l'innesto, e la copia in Excel di
-/// un `.fubsheet` con il comando che la chiede.
+/// shell apre e che il salvataggio usa per l'innesto, e il comando che
+/// converte un `.fubsheet` in una cartella di Excel.
 #[cfg(feature = "xlsx")]
 pub(crate) fn register(registrar: &mut crate::registry::Registrar<'_>) -> Vec<String> {
     let mut failures = Vec::new();
@@ -51,14 +51,9 @@ pub(crate) fn register(registrar: &mut crate::registry::Registrar<'_>) -> Vec<St
         failures.push(format!("workbook grid NOT registered: {error}"));
     }
     if let Err(error) =
-        registrar.register_export_provider(fub_format_xlsx::export::XlsxExport::boxed())
+        registrar.register_command_provider(fub_format_xlsx::convert::XlsxCommands::boxed())
     {
-        failures.push(format!("Excel copy NOT registered: {error}"));
-    }
-    if let Err(error) =
-        registrar.register_command_provider(fub_format_xlsx::export::XlsxCommands::boxed())
-    {
-        failures.push(format!("Excel copy command NOT registered: {error}"));
+        failures.push(format!("Excel conversion NOT registered: {error}"));
     }
     failures
 }

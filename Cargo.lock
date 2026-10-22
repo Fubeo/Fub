@@ -2158,7 +2158,6 @@ dependencies = [
 name = "fub-format-sheet"
 version = "0.1.0"
 dependencies = [
- "fub-abi",
  "serde",
  "serde_json",
  "thiserror 2.0.19",
@@ -2344,7 +2343,6 @@ dependencies = [
  "camino",
  "cap-std",
  "fub-abi",
- "fub-format-sheet",
  "fub-host",
  "fub-kernel",
  "fub-sdk",

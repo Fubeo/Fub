@@ -4,10 +4,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Versioned textual .fubsheet workbook format with stable row and column identities."
+description = "Reader of the retired .fubsheet workbook format, for its conversion to Excel."
 
 [dependencies]
-fub-abi = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

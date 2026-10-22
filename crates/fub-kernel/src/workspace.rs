@@ -50,7 +50,7 @@
 
 mod registration;
 pub use registration::{
-    PreparedGridBytesCall, PreparedGridCall, PreparedIndexRegistration, PreparedPluginDeactivation,
+    PreparedGridBytesCall, PreparedIndexRegistration, PreparedPluginDeactivation,
     PreparedRegistration, RegistrationPermit,
 };
 mod lifecycle;
@@ -6550,6 +6550,13 @@ impl Workspace {
         let path = self.docs.vault.path_for(&id)?;
         let parser = match self.docs.prepare_parse(&id) {
             Ok(parser) => Some(parser),
+            // Un formato di sola sorgente è un documento senza parser, non un
+            // file opaco: non si scrive né come testo né come byte (ADR 0218).
+            Err(KernelError::NoProvider(ext))
+                if self.docs.registry.descriptor_for_ext(&ext).is_some() =>
+            {
+                return Err(KernelError::NoProvider(ext));
+            }
             Err(KernelError::NoProvider(_)) => None,
             Err(error) => return Err(error),
         };

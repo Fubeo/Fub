@@ -1,11 +1,11 @@
-//! Formato testuale e versionato per workbook `.fubsheet`.
+//! Il lettore dei vecchi workbook `.fubsheet`.
 //!
-//! Questo crate possiede il modello persistito, le proiezioni e le sessioni derivate,
-//! e gli adapter che le espongono ai registri: il provider grid in [`grid`] e la
-//! route di valutazione in [`index`]. L'host li monta senza possederli.
-//! Valori, AST delle formule, dipendenze, cache ed errori sono dati derivati e
-//! non entrano nel file. Il workbook resta intenzionalmente separato da
-//! `DocumentModel`: una griglia non è un albero Markdown travestito.
+//! Il formato è ritirato (ADR 0218): un `.fubsheet` si apre in sola lettura e
+//! si converte in una cartella di Excel accanto a sé. Questo crate tiene ciò
+//! che la conversione legge: il modello persistito, la sua validazione, la
+//! valutazione delle formule e la loro scrittura nella sintassi di Excel
+//! (`crates/fub-format-xlsx/src/fubsheet.rs`). Non ha più provider grid né
+//! route di query.
 
 use std::collections::{HashMap, HashSet};
 
@@ -14,9 +14,6 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 
 mod formula;
-pub mod grid;
-pub mod index;
-pub mod session;
 
 pub use formula::{
     excel_formula, CellDependency, CellRange, CellValue, EvaluatedCell, FormulaErrorCode,

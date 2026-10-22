@@ -37,9 +37,12 @@ use fub_abi::PluginError;
 // l'host *implementa* viaggiano in versi opposti, e confonderli sarebbe
 // esattamente lo scambio che questo modulo esiste per non fare.
 use crate::contract::exports::fub::abi::{
-    command as w_command, format as x_format, format_links as x_links, grid as w_grid,
-    grid_bytes as w_grid_bytes, plugin as w_plugin, view as w_view,
+    command as w_command, format as x_format, format_links as x_links, grid_bytes as w_grid_bytes,
+    plugin as w_plugin, view as w_view,
 };
+// Le forme comuni della famiglia grid non sono esportate: `grid-bytes` le
+// `use`a, e il mondo le importa.
+use crate::contract::fub::abi::grid as w_grid;
 // I tipi che l'interfaccia esportata `use`a da altre — `model.{span}`,
 // `edit.{edit-request}`, `text.{text}` — restano invece gli stessi delle
 // importate: la duplicazione qui sopra riguarda i tipi che un'interfaccia
@@ -924,41 +927,9 @@ fn from_context_mask(m: Vec<w_session::ContextKind>) -> fub_abi::session::Contex
 // Grid provider
 // ---------------------------------------------------------------------------
 
-pub(crate) fn from_grid_surface(
-    surface: w_grid::GridSurfaceSpec,
-) -> Result<fub_abi::grid::GridSurfaceSpec, PluginError> {
-    let surface = fub_abi::grid::GridSurfaceSpec {
-        id: surface.id,
-        format: surface.format,
-        family: surface.family,
-        protocol_version: surface.protocol_version,
-    };
-    surface.validate()?;
-    if surface.family != fub_abi::grid::GRID_FAMILY
-        || surface.protocol_version != fub_abi::grid::GRID_PROTOCOL_VERSION
-    {
-        return Err(PluginError::BadArgs(
-            "unsupported grid family or protocol version".into(),
-        ));
-    }
-    Ok(surface)
-}
-/// Translate a declared binding while treating a family/protocol we do not
-/// understand as an optional capability.  Identity validation remains strict
-/// for the supported Grid v1 surface.
-pub(crate) fn from_optional_grid_surface(
-    surface: w_grid::GridSurfaceSpec,
-) -> Result<Option<fub_abi::grid::GridSurfaceSpec>, PluginError> {
-    if surface.family != fub_abi::grid::GRID_FAMILY
-        || surface.protocol_version != fub_abi::grid::GRID_PROTOCOL_VERSION
-    {
-        return Ok(None);
-    }
-    from_grid_surface(surface).map(Some)
-}
-
-/// Come [`from_optional_grid_surface`], per l'interfaccia `grid-bytes`: ciò
-/// che non è della versione 2 non si serve da lì.
+/// Traduce una superficie dichiarata, e tratta una famiglia o un protocollo
+/// che non conosce come una capacità facoltativa: ciò che non è della
+/// versione 2 non si serve. L'identità resta controllata con rigore.
 pub(crate) fn from_optional_grid_bytes_surface(
     surface: w_grid::GridSurfaceSpec,
 ) -> Result<Option<fub_abi::grid::GridSurfaceSpec>, PluginError> {
@@ -1058,18 +1029,6 @@ fn from_grid_sheet(sheet: w_grid::GridSheet) -> fub_abi::grid::GridSheet {
     }
 }
 
-pub(crate) fn from_grid_session(
-    session: w_grid::GridSession,
-) -> Result<fub_abi::grid::GridSession, PluginError> {
-    let session = fub_abi::grid::GridSession {
-        instance: session.instance,
-        revision: from_grid_revision(session.revision),
-        sheets: session.sheets.into_iter().map(from_grid_sheet).collect(),
-    };
-    session.validate()?;
-    Ok(session)
-}
-
 fn from_grid_key(key: w_grid::GridCellKey) -> fub_abi::grid::GridCellKey {
     fub_abi::grid::GridCellKey {
         sheet: key.sheet,
@@ -1107,30 +1066,6 @@ fn from_grid_style(style: w_grid::GridCellStyle) -> fub_abi::grid::GridCellStyle
     }
 }
 
-fn from_grid_formula_error(error: w_grid::GridFormulaError) -> fub_abi::grid::GridFormulaError {
-    match error {
-        w_grid::GridFormulaError::Parse => fub_abi::grid::GridFormulaError::Parse,
-        w_grid::GridFormulaError::Ref => fub_abi::grid::GridFormulaError::Ref,
-        w_grid::GridFormulaError::Name => fub_abi::grid::GridFormulaError::Name,
-        w_grid::GridFormulaError::Value => fub_abi::grid::GridFormulaError::Value,
-        w_grid::GridFormulaError::DivZero => fub_abi::grid::GridFormulaError::DivZero,
-        w_grid::GridFormulaError::Num => fub_abi::grid::GridFormulaError::Num,
-        w_grid::GridFormulaError::Cycle => fub_abi::grid::GridFormulaError::Cycle,
-    }
-}
-
-fn from_grid_value(value: w_grid::GridCellValue) -> fub_abi::grid::GridCellValue {
-    match value {
-        w_grid::GridCellValue::Blank => fub_abi::grid::GridCellValue::Blank,
-        w_grid::GridCellValue::Number(value) => fub_abi::grid::GridCellValue::Number(value),
-        w_grid::GridCellValue::Text(value) => fub_abi::grid::GridCellValue::Text(value),
-        w_grid::GridCellValue::Boolean(value) => fub_abi::grid::GridCellValue::Boolean(value),
-        w_grid::GridCellValue::Error(error) => {
-            fub_abi::grid::GridCellValue::Error(from_grid_formula_error(error))
-        }
-    }
-}
-
 fn from_grid_row(row: w_grid::GridRow) -> fub_abi::grid::GridRow {
     fub_abi::grid::GridRow {
         id: row.id,
@@ -1147,33 +1082,6 @@ fn from_grid_column(column: w_grid::GridColumn) -> fub_abi::grid::GridColumn {
         width: column.width,
         hidden: column.hidden,
     }
-}
-
-fn from_grid_cell(cell: w_grid::GridCell) -> fub_abi::grid::GridCell {
-    fub_abi::grid::GridCell {
-        key: from_grid_key(cell.key),
-        input: cell.input,
-        style: from_grid_style(cell.style),
-        value: from_grid_value(cell.value),
-    }
-}
-
-pub(crate) fn from_grid_window(
-    window: w_grid::GridWindow,
-) -> Result<fub_abi::grid::GridWindow, PluginError> {
-    let window = fub_abi::grid::GridWindow {
-        revision: from_grid_revision(window.revision),
-        sheet: window.sheet,
-        row_start: window.row_start,
-        column_start: window.column_start,
-        total_rows: window.total_rows,
-        total_columns: window.total_columns,
-        rows: window.rows.into_iter().map(from_grid_row).collect(),
-        columns: window.columns.into_iter().map(from_grid_column).collect(),
-        cells: window.cells.into_iter().map(from_grid_cell).collect(),
-    };
-    window.validate()?;
-    Ok(window)
 }
 
 pub(crate) fn to_grid_window_request(

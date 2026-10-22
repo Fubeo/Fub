@@ -1150,71 +1150,18 @@ export interface LiveStopReport {
   pending: LivePendingCommit[];
 }
 
-export interface SheetCellKey {
-  sheet: string;
-  row: string;
-  column: string;
-}
-
-export type SheetFormulaError =
-  | "parse"
-  | "ref"
-  | "name"
-  | "value"
-  | "div_zero"
-  | "num"
-  | "cycle";
-
-export type SheetCellValue =
-  | { kind: "blank" }
-  | { kind: "number"; value: number }
-  | { kind: "text"; value: string }
-  | { kind: "boolean"; value: boolean }
-  | { kind: "error"; value: SheetFormulaError };
-
-export interface SheetEvaluatedCell extends SheetCellKey {
-  value: SheetCellValue;
-}
-
-// Un rettangolo per angoli sullo stesso foglio, posizioni vuote comprese.
-export interface SheetCellRange {
-  sheet: string;
-  start_row: string;
-  start_column: string;
-  end_row: string;
-  end_column: string;
-}
-
-export interface SheetCellDependency {
-  cell: SheetCellKey;
-  // Celle nominate una per una; gli intervalli restano rettangoli, e il
-  // campo manca quando la formula non ne nomina.
-  depends_on: SheetCellKey[];
-  depends_on_ranges?: SheetCellRange[];
-}
-
-export interface SheetEvaluation {
-  cells: SheetEvaluatedCell[];
-  dependencies: SheetCellDependency[];
-}
 // Dati strutturati a finestre per la famiglia grid. La shell possiede
-// rendering, input e clipboard; il provider possiede parsing, formule e
-// serializzazione. Nessun DOM, callback o oggetto CodeMirror attraversa questo
-// contratto.
+// rendering, input e clipboard; il provider possiede la lettura del file e
+// l'innesto delle celle. Nessun DOM, callback o oggetto CodeMirror attraversa
+// questo contratto. La versione 1, sul testo di un `.fubsheet`, non c'è più
+// (ADR 0218): le forme qui sotto sono quelle che la versione 2 riusa.
 export const GRID_FAMILY = "grid";
-export const GRID_PROTOCOL_VERSION = 1;
 
 export interface GridSurfaceSpec {
   id: string;
   format: string;
   family: string;
   protocol_version: number;
-}
-
-export interface GridSession {
-  instance: string;
-  revision: string;
-  sheets: GridSheet[];
 }
 
 export interface GridSheet {
@@ -1238,7 +1185,11 @@ export interface GridColumn {
   hidden: boolean;
 }
 
-export type GridCellKey = SheetCellKey;
+export interface GridCellKey {
+  sheet: string;
+  row: string;
+  column: string;
+}
 
 export interface GridCellStyle {
   bold: boolean;
@@ -1247,17 +1198,6 @@ export interface GridCellStyle {
   fill_color: string | null;
   horizontal: "start" | "center" | "end" | null;
   number_format: string | null;
-}
-
-export type GridFormulaError = SheetFormulaError;
-
-export type GridCellValue = SheetCellValue;
-
-export interface GridCell {
-  key: GridCellKey;
-  input: string;
-  style: GridCellStyle;
-  value: GridCellValue;
 }
 
 export interface GridWindowRequest {
@@ -1269,19 +1209,7 @@ export interface GridWindowRequest {
   column_count: number;
 }
 
-export interface GridWindow {
-  revision: string;
-  sheet: string;
-  row_start: number;
-  column_start: number;
-  total_rows: number;
-  total_columns: number;
-  rows: GridRow[];
-  columns: GridColumn[];
-  cells: GridCell[];
-}
-
-/** Patch atomica input-only: lo stile resta intatto e il valore si ricalcola. */
+/** Patch atomica input-only: lo stile resta intatto. */
 export interface GridCellPatch {
   cell: GridCellKey;
   before: string | null;
@@ -1294,7 +1222,7 @@ export interface GridApplyRequest {
 }
 
 export type GridInvalidation =
-  | { kind: "cells"; cells: SheetCellKey[] }
+  | { kind: "cells"; cells: GridCellKey[] }
   | { kind: "all" };
 
 export interface GridSourceEdit {
@@ -1312,8 +1240,8 @@ export interface GridCommit {
 
 // La versione 2 della griglia (ADR 0216, `fub_abi::grid_bytes`): la superficie
 // si apre sui byte del documento, che legge l'host, e il testo della
-// `DocumentSession` è il **giornale** delle celle cambiate. `apply` ha la
-// richiesta della versione 1 e il suo `GridCommit.edit` è il diff del giornale.
+// `DocumentSession` è il **giornale** delle celle cambiate. Il
+// `GridCommit.edit` di `apply` è il diff del giornale.
 export const GRID_BYTES_PROTOCOL_VERSION = 2;
 
 /** Un avviso della sorgente, in un codice chiuso del provider. */

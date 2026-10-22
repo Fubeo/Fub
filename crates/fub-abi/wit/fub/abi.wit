@@ -3143,11 +3143,12 @@ interface edit {
     }
 }
 
-/// Dati strutturati a finestre per superfici grid. La shell possiede rendering,
-/// input e clipboard; il provider possiede parsing, formule e serializzazione.
+/// Le forme comuni della famiglia grid, che `grid-bytes` usa. La shell
+/// possiede rendering, input e clipboard; il provider possiede lettura, valori
+/// e scrittura. Non ha funzioni: la versione 1, che apriva un sorgente di
+/// testo, è stata tolta con il formato `.fubsheet` (ADR 0218).
 interface grid {
     use edit.{revision};
-    use errors.{plugin-error};
 
     /// Binding dichiarato dal provider: il formato sceglie una famiglia e una
     /// versione di protocollo, mai una versione simile per tentativi.
@@ -3156,12 +3157,6 @@ interface grid {
         format: string,
         family: string,
         protocol-version: u32,
-    }
-
-    record grid-session {
-        instance: string,
-        revision: revision,
-        sheets: list<grid-sheet>,
     }
 
     record grid-sheet {
@@ -3206,32 +3201,6 @@ interface grid {
         number-format: option<string>,
     }
 
-    enum grid-formula-error {
-        parse,
-        ref,
-        name,
-        value,
-        div-zero,
-        num,
-        cycle,
-    }
-
-    variant grid-cell-value {
-        blank,
-        number(f64),
-        text(string),
-        boolean(bool),
-        error(grid-formula-error),
-    }
-
-    /// `input` e `style` sono persistiti; `value` è derivato dal provider.
-    record grid-cell {
-        key: grid-cell-key,
-        input: string,
-        style: grid-cell-style,
-        value: grid-cell-value,
-    }
-
     record grid-window-request {
         revision: revision,
         sheet: string,
@@ -3241,20 +3210,6 @@ interface grid {
         column-count: u32,
     }
 
-    record grid-window {
-        revision: revision,
-        sheet: string,
-        row-start: u32,
-        column-start: u32,
-        total-rows: u32,
-        total-columns: u32,
-        rows: list<grid-row>,
-        columns: list<grid-column>,
-        cells: list<grid-cell>,
-    }
-
-    /// Patch atomica input-only: lo stile resta intatto e il valore viene
-    /// ricalcolato dal provider.
     record grid-cell-patch {
         cell: grid-cell-key,
         before: option<string>,
@@ -3284,14 +3239,6 @@ interface grid {
         edit: grid-source-edit,
         invalidation: grid-invalidation,
     }
-
-    surfaces: func() -> list<grid-surface-spec>;
-    open: func(surface: string, source: string, revision: revision) -> result<grid-session, plugin-error>;
-    window: func(instance: string, request: grid-window-request) -> result<grid-window, plugin-error>;
-    apply: func(instance: string, request: grid-apply-request) -> result<grid-commit, plugin-error>;
-    reload: func(instance: string, expected: revision, source: string, revision: revision) -> result<grid-session, plugin-error>;
-    close: func(instance: string) -> result<_, plugin-error>;
-    shutdown: func() -> result<_, plugin-error>;
 }
 
 /// La versione 2 della famiglia grid (`GridBytesProvider`): la sorgente è a
@@ -4572,7 +4519,6 @@ world plugin-world {
 
     export plugin;
     export format;
-    export grid;
     export grid-bytes;
     /// I due innesti del §3.1 e del §3.2: chi aggiunge la sintassi, e chi
     /// disegna il blocco che ne esce. Sono esportati separatamente da `format`

@@ -71,10 +71,12 @@ impl FormatRegistry {
         Ok(())
     }
 
-    /// Registers a document source whose editor owns its model.
+    /// Registers a read-only document source.
     ///
-    /// Source-only formats participate in discovery, source-kind selection and
-    /// surface routing, but deliberately have no `DocumentModel` parser.
+    /// Source-only formats participate in discovery, listing and reading, but
+    /// deliberately have no `DocumentModel` parser, so nothing writes them:
+    /// neither as text nor as raw bytes. A retired format stays visible this
+    /// way until its files are converted (ADR 0218).
     pub fn register_source(
         &mut self,
         descriptor: FormatDescriptor,

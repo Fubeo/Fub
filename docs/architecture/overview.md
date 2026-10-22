@@ -82,7 +82,6 @@ flowchart TD
     features --> scene
     markdown --> abi
     markdown --> sdk
-    sheet --> abi
     svg --> abi
     svg --> scene
     scene --> ink
@@ -102,7 +101,6 @@ flowchart TD
     kernel -.-> testkit
     host -.-> sdk
     host -.-> testkit
-    wasmhost -.-> sheet
     wasmhost -.-> testkit
     wasmhost -.-> sdk
     importers -.-> markdown
@@ -155,8 +153,8 @@ cartelle di Excel per l'host (feature `xlsx`) e ne innesta i valori cambiati
 sui byte del file, e nessuno di loro dipende da Fub. Di `gridcraft-calc`
 l'adattatore usa soltanto il grafo delle dipendenze fra le formule, per dire
 quali valori del file una modifica rende vecchi: niente si ricalcola. Il
-calcolo intero serve soltanto alla copia esplicita di un `.fubsheet` in una
-cartella nuova, per scriverne i valori. Il terzo blocco è il seguito dello stesso grafo, con
+calcolo intero serve soltanto alla conversione esplicita di un `.fubsheet`
+in una cartella nuova, per scriverne i valori. Il terzo blocco è il seguito dello stesso grafo, con
 l'adattatore e i crate di Fub da cui dipende.
 
 ```mermaid

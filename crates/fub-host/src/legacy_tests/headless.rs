@@ -153,7 +153,6 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
         "fub.queries",
         "fub.search",
         "fub.serie",
-        "fub.sheet",
         "fub.stats",
         "fub.sync",
         "fub.tags",

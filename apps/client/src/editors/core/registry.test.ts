@@ -127,8 +127,10 @@ describe("DocumentSurfaceRegistry", () => {
     ).toMatchObject({ family: "text", profile: "markdown" });
   });
 
-  it("routes the fubsheet format to the grid sheet surface", async () => {
+  it("routes a workbook to the grid, and a retired fubsheet to its conversion", async () => {
+    const onRunCommand = vi.fn();
     const registry = createDocumentSurfaceRegistry({
+      onRunCommand,
       onChange: vi.fn(),
       onSelectionChange: vi.fn(),
       onOpenWikilink: vi.fn(),
@@ -141,11 +143,24 @@ describe("DocumentSurfaceRegistry", () => {
       },
     });
 
+    // Un `.fubsheet` non si modifica più: la superficie offre di convertirlo.
     expect(registry.resolve({ formatId: "fubsheet", sourceKind: "text" })).toMatchObject({
       owner: "fub.shell.grid",
       family: "grid",
-      profile: "sheet",
+      profile: "retired",
     });
+    const sheetParent = document.createElement("div");
+    const sheet = registry.mount(
+      { formatId: "fubsheet", sourceKind: "text", documentId: "budget.fubsheet" },
+      { paneId: "budget", documentId: "budget.fubsheet", parent: sheetParent },
+    );
+    sheet.buffer!.setDoc('{"version":1,"sheets":[]}');
+    expect(sheet.buffer!.getDoc()).toBe('{"version":1,"sheets":[]}');
+    expect(sheetParent.querySelector(".grid-retired-message")?.textContent).not.toBe("");
+    sheetParent.querySelector<HTMLButtonElement>(".grid-retired button")!.click();
+    expect(onRunCommand).toHaveBeenCalledWith("xlsx.convert", { doc: "budget.fubsheet" });
+    sheet.destroy();
+    expect(sheetParent.querySelector(".grid-retired")).toBeNull();
     // Una cartella di Excel arriva a byte, e la griglia la apre sulla
     // versione 2 del protocollo: senza un host che la serva lo dice.
     expect(registry.resolve({ formatId: "xlsx", sourceKind: "bytes", documentId: "conti.xlsx" })).toMatchObject({

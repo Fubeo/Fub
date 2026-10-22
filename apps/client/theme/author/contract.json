@@ -498,6 +498,8 @@
     "document-surface-error",
     "document-surface-viewer",
     "media-surface",
+    "grid-retired",
+    "grid-retired-message",
     "grid-surface",
     "grid-formula-bar",
     "grid-cell-name",
@@ -2626,7 +2628,9 @@
       "hooks": [
         "document-surface-error",
         "document-surface-viewer",
-        "media-surface"
+        "media-surface",
+        "grid-retired",
+        "grid-retired-message"
       ],
       "states": [
         "rest",
@@ -5269,7 +5273,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1100,
+    "hooks": 1102,
     "state_names": 7,
     "assigned_states": 625,
     "components": 185,

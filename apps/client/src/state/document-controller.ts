@@ -150,8 +150,9 @@ export interface DocumentDeps {
   /// importassero a vicenda sarebbe un ciclo.
   searchTag(tag: string): void;
   /// Esegue un comando come la tastiera e la palette: per i pulsanti della
-  /// barra di formattazione che non sono azioni dell'editor.
-  runCommand(id: string): void;
+  /// barra di formattazione che non sono azioni dell'editor, e per quelli di
+  /// una superficie, con i parametri che lei sa già.
+  runCommand(id: string, prefill?: Readonly<Record<string, string>>): void;
 }
 
 /// I tre elementi di un riquadro che il controller tiene. Glieli dà la vista
@@ -725,6 +726,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     onOpenWikilink: (page, heading, block) =>
       openWikilink(page, heading ?? undefined, block ?? undefined),
     onOpenDocument: (doc) => openDocument(doc),
+    onRunCommand: (id, prefill) => deps.runCommand(id, prefill),
     onOpenPath: async (path, from) => {
       const target = await resolvedReference({ kind: "path", value: path }, from ?? activeDoc() ?? undefined);
       if (!target) throw new Error(t("preview.target_missing"));

@@ -15,7 +15,7 @@ flowchart LR
     TESTKIT --> ABI
     MARKDOWN["fub-format-markdown"] --> ABI
     MARKDOWN --> SDK
-    SHEET["fub-format-sheet"] --> ABI
+    SHEET["fub-format-sheet"]
     CANVAS["fub-format-canvas"] --> ABI
     CANVAS --> MARKDOWN
     BASE["fub-format-base"] --> ABI
@@ -74,6 +74,7 @@ solo proprietario, `fub-format-xlsx`, che l'host accende con la feature
 flowchart LR
     HOST["fub-host"] -. "feature xlsx" .-> XLSX["fub-format-xlsx"]
     XLSX --> ABI["fub-abi"]
+    XLSX --> SHEET["fub-format-sheet"]
     XLSX --> GXLSX["gridcraft-xlsx"]
     GXLSX --> GMODEL["gridcraft-model"]
 ```
@@ -89,7 +90,7 @@ flowchart LR
 | `fub-sdk` | API comoda per autori e host in memoria | composition root dell'app |
 | `fub-testkit` | fixture e integrazione host/kernel | dipendenze di produzione |
 | `fub-format-markdown` | parse, render, serialize e transfer Markdown | risoluzione dei path del vault |
-| `fub-format-sheet` | workbook persistito, valutatore, sessioni derivate, provider grid e route di valutazione | host, storage, Tauri, Wasmtime |
+| `fub-format-sheet` | lettore del vecchio `.fubsheet` per la conversione in Excel: modello, formule nella sintassi di Excel e valutatore | contratto, provider, host, storage, Tauri, Wasmtime |
 | `fub-format-canvas` | JSON Canvas: modello con i campi ignoti conservati, `DocumentModel`, HTML statico e riscrittura dei link; il Markdown delle card lo analizza e lo disegna il provider Markdown | host, storage, Tauri, Wasmtime |
 | `fub-format-base` | definizioni `.base`: modello YAML persistito, limiti e valutatore di formule | selezione delle righe, che resta del core (`query_index`) |
 | `fub-ink` | il nucleo dell'inchiostro, puro: campione del puntatore, ruoli (il palmo), curva della pressione, inclinazione, stabilizzatore e ciclo di vita del tratto, come riduttore di campioni in effetti; è la copia che fa fede del nucleo TypeScript di `apps/client/src/ink/` | DOM, Tauri, kernel, formati su disco, strumenti o interfaccia di un prodotto |
@@ -97,7 +98,7 @@ flowchart LR
 | `fub-scene` | lettura dei disegni di FubDraw secondo il [formato della scena](../reference/scene-format.md), e delle annotazioni PDF secondo il [loro formato](../reference/annotation-format.md): classificazione, inchiostro, indice e diagnostica | `fub-abi`, host, qualunque I/O |
 | `fub-format-svg` | i formati `svg` e `fubann`: modello per l'indice, segnaposto HTML o elenco delle annotazioni, documento nuovo e riscrittura dei riferimenti | disegno della scena, che resta della shell; verifica del PDF annotato |
 | `fub-format-rich` | documenti di videoscrittura (`.docx`, `.odt`, `.rtf`, `.doc`): codec, provider a byte, proiezione modificabile senza perdite silenziose e copie esportate con la perdita misurata; l'HTML lo disegna il provider Markdown dal modello comune | host, storage, Tauri, Wasmtime, superficie della shell |
-| `fub-format-xlsx` | cartelle di Excel: provider a byte, superficie `grid` della versione 2 sui byte con i valori del file senza ricalcolo, i blocchi e gli avvisi di ciò che non mostra, l'innesto dei valori cambiati a livello di riga, e la copia esportata di un `.fubsheet` in una cartella nuova con la perdita misurata | codec di GridCraft per scrivere una cartella che esiste, ricalcolo di una cartella aperta, host, storage, Tauri, superficie della shell |
+| `fub-format-xlsx` | cartelle di Excel: provider a byte, superficie `grid` della versione 2 sui byte con i valori del file senza ricalcolo, i blocchi e gli avvisi di ciò che non mostra, l'innesto dei valori cambiati a livello di riga, e la conversione di un `.fubsheet` in una cartella nuova accanto a lui, con la perdita misurata | codec di GridCraft per scrivere una cartella che esiste, ricalcolo di una cartella aperta, host, storage, Tauri, superficie della shell |
 | `fub-importers` | import ed export ufficiali e comandi di conversione | kernel, Tauri |
 | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
 | `wordcraft-proof` | correttore di WordCraft vendorizzato in `vendor/wordcraft/`, usato soltanto dalla feature `proof` | dipendenze da Fub |

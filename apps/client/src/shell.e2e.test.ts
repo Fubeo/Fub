@@ -3110,10 +3110,10 @@ describe("i riquadri dopo un'attesa", () => {
     expect(errorSurfaces()).toHaveLength(0);
   });
 
-  it("uno sheet rotto mostra la superficie d'errore, non un riquadro vuoto", async () => {
-    await start({ ...VAULT, "conti.fubsheet": "{rotto" });
+  it("un canvas rotto all'apertura mostra la superficie d'errore, non un riquadro vuoto", async () => {
+    await start({ ...VAULT, "lavagna.canvas": "{rotto" });
     const { openDocument } = await import("./panels/document");
-    await openDocument("conti.fubsheet");
+    await openDocument("lavagna.canvas");
     await settle();
 
     expect(errorSurfaces()).toHaveLength(1);
@@ -3121,7 +3121,7 @@ describe("i riquadri dopo un'attesa", () => {
   });
 
   it("un riquadro che non si monta non ferma l'altro", async () => {
-    await start({ ...VAULT, "conti.fubsheet": "{rotto" });
+    await start({ ...VAULT, "lavagna.canvas": "{rotto" });
     await splitRight();
     await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
     await settle();
@@ -3130,7 +3130,7 @@ describe("i riquadri dopo un'attesa", () => {
     const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
 
     panes()[0]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-    await openDocument("conti.fubsheet");
+    await openDocument("lavagna.canvas");
     await waitFor("il primo riquadro mostra l'errore", () => errorSurfaces().length === 1);
 
     panes()[1]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -3232,7 +3232,7 @@ describe("portare a schermo un punto", () => {
     await applyIntent({ kind: "reveal", doc: "conti.fubsheet", span: { start: 3, end: 3 } });
     await settle();
 
-    expect(panes()[0]!.querySelector("[data-surface-mode='sheet']"), "lo sheet è aperto").not.toBeNull();
+    expect(panes()[0]!.querySelector(".grid-retired"), "il foglio è aperto").not.toBeNull();
     expect(toast()).toContain(t("document.reveal_unavailable", { doc: "conti" }));
   });
 
@@ -3275,7 +3275,7 @@ describe("portare a schermo un punto", () => {
     expect(await offered(), "la tela").toEqual([t("pane.print")]);
     await openDocument("conti.fubsheet");
     await settle();
-    expect(await offered(), "lo sheet, che non ha un provider di stampa").toEqual([]);
+    expect(await offered(), "il foglio da convertire, che non ha un provider di stampa").toEqual([]);
   });
 
   it("la stampa salva prima ciò che il buffer ha, e su afterprint non lascia niente", async () => {

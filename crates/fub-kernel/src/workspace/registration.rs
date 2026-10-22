@@ -8,8 +8,7 @@
 use super::*;
 use fub_abi::custom::{CustomRendererSpec, SyntaxRuleSpec};
 use fub_abi::grid::{
-    validate_grid_source, GridApplyRequest, GridCommit, GridInvalidation, GridProvider,
-    GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
+    GridApplyRequest, GridCommit, GridInvalidation, GridSurfaceSpec, GridWindowRequest,
 };
 use fub_abi::{
     grid_bytes_revision, Arg, GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal,
@@ -74,23 +73,9 @@ impl PreparedRegistration {
         Ok(Self::new(Declaration::Views(specs, provider)))
     }
 
-    /// Calls `surfaces` exactly once, without borrowing a workspace.
-    pub fn grid(provider: Box<dyn GridProvider>) -> std::result::Result<Self, PluginError> {
-        let (specs, provider) = capture(provider, |provider| provider.surfaces())?;
-        if specs.is_empty() {
-            return Err(no_grid_surface());
-        }
-        for spec in &specs {
-            spec.validate()?;
-        }
-        Ok(Self::new(Declaration::Grid(
-            specs,
-            GridBackend::Text(provider),
-        )))
-    }
-
-    /// Come [`PreparedRegistration::grid`], per un provider della versione 2:
-    /// ogni superficie che dichiara deve essere della versione 2.
+    /// Calls `surfaces` exactly once, without borrowing a workspace. Every
+    /// surface it declares must speak the byte protocol, version 2: the text
+    /// one, version 1, was removed with the `.fubsheet` format.
     pub fn grid_bytes(
         provider: Box<dyn GridBytesProvider>,
     ) -> std::result::Result<Self, PluginError> {
@@ -107,10 +92,7 @@ impl PreparedRegistration {
                 )));
             }
         }
-        Ok(Self::new(Declaration::Grid(
-            specs,
-            GridBackend::Bytes(provider),
-        )))
+        Ok(Self::new(Declaration::Grid(specs, provider)))
     }
 
     /// Calls `targets` exactly once, without borrowing a workspace.
@@ -148,89 +130,9 @@ impl PreparedRegistration {
     }
 }
 
-/// A provider borrowed without retaining the workspace custody guard.
-pub struct PreparedGridCall {
-    provider: SharedGrid,
-}
-
-impl PreparedGridCall {
-    fn invoke<R>(
-        &self,
-        operation: &'static str,
-        call: impl FnOnce(&mut dyn GridProvider) -> std::result::Result<R, PluginError>,
-    ) -> std::result::Result<R, PluginError> {
-        crate::safety::external(
-            operation,
-            |message| PluginError::Internal(message.into()),
-            || match &mut *self.provider.write() {
-                GridBackend::Text(provider) => call(provider.as_mut()),
-                GridBackend::Bytes(_) => Err(unserved_protocol()),
-            },
-        )
-    }
-
-    pub fn open(
-        &self,
-        surface: &str,
-        source: &str,
-        revision: Revision,
-    ) -> std::result::Result<GridSession, PluginError> {
-        validate_grid_source(source)?;
-        let session = self.invoke("grid open", |provider| {
-            provider.open(surface, source, revision.clone())
-        })?;
-        validate_grid_session_response(&session, Some(&revision), "open")?;
-        Ok(session)
-    }
-
-    pub fn window(
-        &self,
-        instance: &str,
-        request: GridWindowRequest,
-    ) -> std::result::Result<GridWindow, PluginError> {
-        request.validate()?;
-        let window = self.invoke("grid window", |provider| {
-            provider.window(instance, request.clone())
-        })?;
-        validate_grid_window_response(&window, &request)?;
-        Ok(window)
-    }
-
-    pub fn apply(
-        &self,
-        instance: &str,
-        request: GridApplyRequest,
-    ) -> std::result::Result<GridCommit, PluginError> {
-        request.validate()?;
-        let commit = self.invoke("grid apply", |provider| {
-            provider.apply(instance, request.clone())
-        })?;
-        validate_grid_commit_response(&commit, &request)?;
-        Ok(commit)
-    }
-
-    pub fn reload(
-        &self,
-        instance: &str,
-        expected: Revision,
-        source: &str,
-        revision: Revision,
-    ) -> std::result::Result<GridSession, PluginError> {
-        validate_grid_source(source)?;
-        let session = self.invoke("grid reload", |provider| {
-            provider.reload(instance, expected, source, revision.clone())
-        })?;
-        validate_grid_session_response(&session, Some(&revision), "reload")?;
-        Ok(session)
-    }
-
-    pub fn close(&self, instance: &str) -> std::result::Result<(), PluginError> {
-        self.invoke("grid close", |provider| provider.close(instance))
-    }
-}
-/// Un provider grid della versione 2, preso senza tenere la custodia del
-/// workspace. Le risposte si controllano come quelle della versione 1; in più
-/// la revisione della sessione è quella dei byte con il giornale.
+/// Un provider grid, preso senza tenere la custodia del workspace. Le
+/// risposte si controllano prima di uscire, e la revisione della sessione è
+/// quella dei byte con il giornale.
 pub struct PreparedGridBytesCall {
     provider: SharedGrid,
 }
@@ -244,10 +146,7 @@ impl PreparedGridBytesCall {
         crate::safety::external(
             operation,
             |message| PluginError::Internal(message.into()),
-            || match &mut *self.provider.write() {
-                GridBackend::Bytes(provider) => call(provider.as_mut()),
-                GridBackend::Text(_) => Err(unserved_protocol()),
-            },
+            || call(self.provider.write().as_mut()),
         )
     }
 
@@ -325,49 +224,12 @@ impl PreparedGridBytesCall {
     }
 }
 
-fn unserved_protocol() -> PluginError {
-    PluginError::Unserved(Text::key("host.grid.protocol"))
-}
-
 fn no_grid_surface() -> PluginError {
     PluginError::BadArgs(Text::key("host.grid.no_surface"))
 }
 
 fn provider_response(message: impl std::fmt::Display) -> PluginError {
     PluginError::Internal(format!("malformed grid provider response: {message}").into())
-}
-
-fn validate_grid_session_response(
-    session: &GridSession,
-    expected: Option<&Revision>,
-    operation: &str,
-) -> std::result::Result<(), PluginError> {
-    session.validate().map_err(provider_response)?;
-    if expected.is_some_and(|revision| revision != &session.revision) {
-        return Err(provider_response(format!(
-            "grid {operation} returned an unexpected revision"
-        )));
-    }
-    Ok(())
-}
-
-fn validate_grid_window_response(
-    window: &GridWindow,
-    request: &GridWindowRequest,
-) -> std::result::Result<(), PluginError> {
-    window.validate().map_err(provider_response)?;
-    validate_window_shape(
-        WindowShape {
-            revision: &window.revision,
-            sheet: &window.sheet,
-            row_start: window.row_start,
-            column_start: window.column_start,
-            rows: &window.rows,
-            columns: &window.columns,
-        },
-        window.cells.iter().map(|cell| &cell.key),
-        request,
-    )
 }
 
 fn validate_grid_bytes_window_response(
@@ -389,8 +251,8 @@ fn validate_grid_bytes_window_response(
     )
 }
 
-/// Ciò che le due versioni della finestra hanno in comune: gli assi e le
-/// coordinate delle celle, da confrontare con la richiesta.
+/// Gli assi e le coordinate delle celle di una finestra, da confrontare con
+/// la richiesta.
 struct WindowShape<'a> {
     revision: &'a Revision,
     sheet: &'a str,
@@ -520,32 +382,18 @@ impl Workspace {
             .collect()
     }
 
-    pub fn prepare_grid_call(
-        &self,
-        surface: &str,
-    ) -> std::result::Result<PreparedGridCall, PluginError> {
-        Ok(PreparedGridCall {
-            provider: self.grid_backend(surface, fub_abi::grid::GRID_PROTOCOL_VERSION)?,
-        })
-    }
-
-    /// Come [`Workspace::prepare_grid_call`], per una superficie della
-    /// versione 2.
+    /// Il provider della superficie `surface`, da chiamare senza la custodia.
     pub fn prepare_grid_bytes_call(
         &self,
         surface: &str,
     ) -> std::result::Result<PreparedGridBytesCall, PluginError> {
         Ok(PreparedGridBytesCall {
-            provider: self.grid_backend(surface, GRID_BYTES_PROTOCOL_VERSION)?,
+            provider: self.grid_backend(surface)?,
         })
     }
 
-    /// La superficie con quel protocollo, se c'è e se il suo provider lo parla.
-    fn grid_backend(
-        &self,
-        surface: &str,
-        protocol_version: u32,
-    ) -> std::result::Result<SharedGrid, PluginError> {
+    /// La superficie, se c'è e se parla il protocollo a byte.
+    fn grid_backend(&self, surface: &str) -> std::result::Result<SharedGrid, PluginError> {
         let registered = self
             .providers
             .grids
@@ -559,12 +407,8 @@ impl Workspace {
             .iter()
             .find(|spec| spec.id == surface)
             .expect("surface found above");
-        // Il protocollo del backend è scritto alla registrazione: leggerlo dal
-        // lucchetto del provider aspetterebbe, sotto la custodia, una
-        // chiamata in corso.
         if spec.family != fub_abi::grid::GRID_FAMILY
-            || spec.protocol_version != protocol_version
-            || registered.protocol_version != protocol_version
+            || spec.protocol_version != GRID_BYTES_PROTOCOL_VERSION
         {
             return Err(PluginError::Unserved(
                 format!("grid surface `{surface}` uses unsupported family/version").into(),
@@ -751,10 +595,6 @@ impl Workspace {
             Declaration::Grid(specs, provider) => self.providers.grids.push(RegisteredGrid {
                 id: plugin.to_owned(),
                 specs,
-                protocol_version: match provider {
-                    GridBackend::Text(_) => fub_abi::grid::GRID_PROTOCOL_VERSION,
-                    GridBackend::Bytes(_) => GRID_BYTES_PROTOCOL_VERSION,
-                },
                 provider: Arc::new(SharedShelter::new(provider)),
             }),
             Declaration::Export(_, provider) => self

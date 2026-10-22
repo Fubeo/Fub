@@ -7,10 +7,10 @@ use fub_kernel::{FormatRegistry, Workspace};
 struct TempDir(Utf8PathBuf);
 
 impl TempDir {
-    fn new() -> Self {
+    fn new(name: &str) -> Self {
         let path = Utf8PathBuf::from_path_buf(std::env::temp_dir())
             .expect("temp dir UTF-8")
-            .join(format!("fub-source-only-{}", std::process::id()));
+            .join(format!("fub-source-only-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).expect("create temp vault");
         Self(path)
@@ -25,7 +25,7 @@ impl Drop for TempDir {
 
 #[test]
 fn source_only_files_are_discovered_and_synced_without_parsing_document_models() {
-    let vault = TempDir::new();
+    let vault = TempDir::new("sync");
     let path = vault.0.join("budget.fubsheet");
     std::fs::write(&path, "first").expect("write source-only document");
 
@@ -71,4 +71,32 @@ fn source_only_files_are_discovered_and_synced_without_parsing_document_models()
     assert_eq!(entries.items.len(), 1);
     assert_eq!(entries.items[0].id, id);
     assert_eq!(workspace.read_source(&id).unwrap(), "second");
+}
+
+#[test]
+fn a_source_only_document_is_written_neither_as_text_nor_as_bytes() {
+    let vault = TempDir::new("write");
+    let path = vault.0.join("old.fubsheet");
+    std::fs::write(&path, "kept").expect("write source-only document");
+    let mut registry = FormatRegistry::new();
+    registry
+        .register_source(FormatDescriptor::text(
+            "fubsheet",
+            "Fub Sheet",
+            &["fubsheet"],
+        ))
+        .expect("register source-only format");
+    let mut workspace = Workspace::new(&vault.0, registry).expect("open vault");
+    workspace.reindex().expect("initial source-only stat");
+
+    let id = DocId::new("old.fubsheet");
+    let text = workspace.write_document(&id, "lost", fub_abi::edit::WriteBase::Dictated);
+    assert!(text.is_err(), "{text:?}");
+    let current = fub_abi::edit::Revision::of_bytes(b"kept");
+    let bytes = workspace.write_document_bytes(&id, b"lost", Some(current));
+    assert!(bytes.is_err(), "{bytes:?}");
+    let created = workspace.write_document_bytes(&DocId::new("new.fubsheet"), b"born", None);
+    assert!(created.is_err(), "{created:?}");
+    assert_eq!(std::fs::read(&path).unwrap(), b"kept");
+    assert!(!vault.0.join("new.fubsheet").exists());
 }

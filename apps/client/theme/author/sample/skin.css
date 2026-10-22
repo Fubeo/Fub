@@ -5391,7 +5391,8 @@ kbd,
    grafite al centro della carta, col suo segno sopra. Sobria — non è colpa di
    chi legge. */
 .document-surface-error,
-.document-surface-viewer:not(.media-surface) {
+.document-surface-viewer:not(.media-surface),
+.grid-retired {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -5426,8 +5427,16 @@ kbd,
   content: "?";
 }
 .document-surface-error:focus-visible,
-.document-surface-viewer:not(.media-surface):focus-visible {
+.document-surface-viewer:not(.media-surface):focus-visible,
+.grid-retired:focus-visible {
   outline-offset: calc(var(--focus-ring-width) * -2);
+}
+
+/* Un foglio `.fubsheet`, che non si modifica più: la frase e, sotto, il
+   comando che lo converte in una cartella di Excel. */
+.grid-retired-message {
+  max-width: 46ch;
+  margin: 0;
 }
 
 /* ── Il foglio di calcolo ────────────────────────────────────────────────── */

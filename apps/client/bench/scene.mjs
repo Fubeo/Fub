@@ -282,17 +282,12 @@ export const SCENE = onPage("shell", [
     prepare: async () => {},
   },
   {
-    id: "grid-sheet",
-    title: "Grid v1: workbook .fubsheet",
+    id: "grid-retired",
+    title: "Un foglio .fubsheet, che si converte in una cartella di Excel",
     prepare: async (page) => {
       await openFolder(page, "Dati");
       await page.click('#file-list .tree-row.note[data-path="Dati/Budget.fubsheet"]');
-      await page.waitForSelector('.grid-surface[data-grid-protocol="v1"]');
-      await page.waitForFunction(() => {
-        const grid = document.querySelector(".grid-surface");
-        return grid?.getAttribute("data-grid-protocol") === "v1"
-          && (grid?.querySelectorAll('[role="gridcell"]').length ?? 0) > 0;
-      });
+      await page.waitForSelector(".grid-retired button");
     },
   },
   {
