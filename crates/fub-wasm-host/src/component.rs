@@ -63,8 +63,8 @@ use fub_abi::traits::{
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::{
-    FormatError, GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal, PluginError,
-    Revision, MAX_GRID_BYTES_SOURCE,
+    Arg, FormatError, GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal,
+    PluginError, Revision, Text, MAX_GRID_BYTES_SOURCE,
 };
 use fub_host::registry::{Bundle, BundleMount, Registrar, RegistrationReport};
 use fub_kernel::Trust;
@@ -645,8 +645,7 @@ pub(crate) fn call<R>(
     host: &mut dyn HostApi,
     call: impl FnOnce(&Interfaces, &mut Store<State>) -> Result<R, PluginError>,
 ) -> Result<R, PluginError> {
-    let _guard = enter_instance(instance_identity(inner))
-        .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
+    let _guard = enter_instance(instance_identity(inner)).map_err(|_| reentrant())?;
     let mut inner = inner.lock_instance().map_err(PluginError::from)?;
     let Instance { store, interfaces } = &mut *inner;
     let interfaces = &*interfaces;
@@ -658,8 +657,7 @@ fn call_read<R>(
     host: &dyn ReadApi,
     call: impl FnOnce(&Interfaces, &mut Store<State>) -> Result<R, PluginError>,
 ) -> Result<R, PluginError> {
-    let _guard = enter_instance(instance_identity(inner))
-        .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
+    let _guard = enter_instance(instance_identity(inner)).map_err(|_| reentrant())?;
     let mut inner = inner.lock_instance().map_err(PluginError::from)?;
     let Instance { store, interfaces } = &mut *inner;
     let interfaces = &*interfaces;
@@ -669,14 +667,13 @@ fn grid_call<R>(
     inner: &Mutex<Instance>,
     call: impl FnOnce(&w_grid::Guest, &mut Store<State>) -> Result<R, PluginError>,
 ) -> Result<R, PluginError> {
-    let _guard = enter_instance(instance_identity(inner))
-        .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
+    let _guard = enter_instance(instance_identity(inner)).map_err(|_| reentrant())?;
     let mut inner = inner.lock_instance().map_err(PluginError::from)?;
     let Instance { store, interfaces } = &mut *inner;
     let grid = interfaces
         .grid
         .as_ref()
-        .ok_or_else(|| PluginError::Internal("il componente non esporta `fub:abi/grid`".into()))?;
+        .ok_or_else(|| missing_export("fub:abi/grid"))?;
     crate::limits::renew(&mut *store);
     call(grid, store)
 }
@@ -685,15 +682,33 @@ fn grid_bytes_call<R>(
     inner: &Mutex<Instance>,
     call: impl FnOnce(&w_grid_bytes::Guest, &mut Store<State>) -> Result<R, PluginError>,
 ) -> Result<R, PluginError> {
-    let _guard = enter_instance(instance_identity(inner))
-        .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
+    let _guard = enter_instance(instance_identity(inner)).map_err(|_| reentrant())?;
     let mut inner = inner.lock_instance().map_err(PluginError::from)?;
     let Instance { store, interfaces } = &mut *inner;
-    let grid = interfaces.grid_bytes.as_ref().ok_or_else(|| {
-        PluginError::Internal("il componente non esporta `fub:abi/grid-bytes`".into())
-    })?;
+    let grid = interfaces
+        .grid_bytes
+        .as_ref()
+        .ok_or_else(|| missing_export("fub:abi/grid-bytes"))?;
     crate::limits::renew(&mut *store);
     call(grid, store)
+}
+
+/// Un componente richiamato mentre è già al lavoro.
+fn reentrant() -> PluginError {
+    PluginError::Internal(Text::key("host.wasm.reentrant"))
+}
+
+/// Una sorgente che non ha la revisione con cui arriva.
+fn source_revision() -> PluginError {
+    PluginError::Conflict(Text::key("host.grid.source_revision"))
+}
+
+/// Un componente che non esporta l'interfaccia che la chiamata serve.
+fn missing_export(interface: &str) -> PluginError {
+    PluginError::Internal(Text::message(
+        "host.wasm.missing_export",
+        vec![Arg::text("interface", interface)],
+    ))
 }
 
 pub(crate) fn failure(error: wasmtime::Error) -> PluginError {
@@ -932,9 +947,7 @@ impl GridProvider for WasmGridProvider {
     ) -> Result<GridSession, PluginError> {
         validate_grid_source(source)?;
         if Revision::of(source) != revision {
-            return Err(PluginError::Conflict(
-                "grid source does not match its declared revision".into(),
-            ));
+            return Err(source_revision());
         }
         let revision_wit = tr::to_grid_revision(&revision);
         let session = grid_call(&self.inner, |grid, store| {
@@ -990,9 +1003,7 @@ impl GridProvider for WasmGridProvider {
     ) -> Result<GridSession, PluginError> {
         validate_grid_source(source)?;
         if Revision::of(source) != revision {
-            return Err(PluginError::Conflict(
-                "grid source does not match its declared revision".into(),
-            ));
+            return Err(source_revision());
         }
         let expected_wit = tr::to_grid_revision(&expected);
         let revision_wit = tr::to_grid_revision(&revision);
@@ -1046,14 +1057,13 @@ impl GridBytesProvider for WasmGridBytesProvider {
         journal: &GridJournal,
     ) -> Result<GridBytesSession, PluginError> {
         if source.len() > MAX_GRID_BYTES_SOURCE {
-            return Err(PluginError::BadArgs(
-                "grid source exceeds byte limit".into(),
-            ));
+            return Err(PluginError::BadArgs(Text::message(
+                "host.grid.source_too_large",
+                vec![Arg::text("bytes", source.len().to_string())],
+            )));
         }
         if Revision::of_bytes(source) != revision {
-            return Err(PluginError::Conflict(
-                "grid source does not match its declared revision".into(),
-            ));
+            return Err(source_revision());
         }
         journal.validate()?;
         let revision_wit = tr::to_grid_revision(&revision);
@@ -1292,13 +1302,13 @@ pub struct WasmViewProvider {
 impl WasmViewProvider {
     fn try_interests(&self, instance: &ViewInstance) -> Result<ViewInterests, PluginError> {
         let wit_instance = tr::to_view_instance(instance)?;
-        let _guard = enter_instance(instance_identity(&self.inner))
-            .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
+        let _guard = enter_instance(instance_identity(&self.inner)).map_err(|_| reentrant())?;
         let mut locked = self.inner.lock_instance().map_err(PluginError::from)?;
         let Instance { store, interfaces } = &mut *locked;
-        let view = interfaces.view.as_ref().ok_or_else(|| {
-            PluginError::Internal("il componente non esporta `fub:abi/view`".into())
-        })?;
+        let view = interfaces
+            .view
+            .as_ref()
+            .ok_or_else(|| missing_export("fub:abi/view"))?;
         crate::limits::renew(&mut *store);
         let interests = view
             .call_interests(&mut *store, &wit_instance)
