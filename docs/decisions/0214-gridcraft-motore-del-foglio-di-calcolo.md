@@ -4,7 +4,7 @@
 - **Data:** 2026-10-21
 - **Ambito:** contratto
 - **Sostituisce:** —
-- **Sostituita da:** —
+- **Sostituita da:** 0216, per l'apertura della cartella come proiezione
 
 ## Contesto
 

@@ -115,6 +115,38 @@ sicurezza. `query_index` resta il canale read-only per dati indicizzati e per
 la query privata di valutazione `.fubsheet`; non è il percorso delle finestre,
 delle patch o del lifecycle Grid.
 
+### Versione 2: una sorgente a byte
+
+La versione 2 (`protocol_version = 2`, `fub_abi::grid_bytes`, interfaccia WIT
+`grid-bytes`) apre una sorgente **a byte** che resta nella custodia dell'host:
+la shell non vede mai i byte. Il trait `GridBytesProvider` ha `surfaces`,
+`open`, `window`, `apply`, `bytes_to_write`, `close` e `shutdown`; nativo e
+WASM lo implementano con gli stessi tipi, limiti, errori e lifecycle.
+
+- `open(surface, source, revision, journal)` riceve i byte, la loro
+  revisione e il **giornale** delle celle cambiate (`GridJournal`), e dà un
+  `GridBytesSession`: fogli, foglio attivo, fogli nascosti, avvisi in codici
+  chiusi (`GridNotice`) e voci del giornale in conflitto con i byte.
+- `window` dà un `GridBytesWindow`: ogni cella porta l'input, lo stile, il
+  valore (`GridValue`), il testo formattato dal provider, il codice del
+  blocco (`lock`), `stale` (il valore del file non segue una cella cambiata)
+  e `conflict`.
+- `apply` riceve le patch della versione 1; il `GridCommit` porta il diff del
+  **testo del giornale**, e l'invalidazione.
+- `bytes_to_write(instance, expected)` dà i byte con il giornale innestato. La
+  chiama soltanto l'host, per salvare.
+
+Il giornale ha una sola forma canonica, il cui testo vuoto è il giornale
+vuoto: JSON `{"version": 1, "cells": [...]}`, voci `{"sheet", "row",
+"column", "before", "after"}` in ordine di chiave confrontata come byte, id
+di ASCII stampabile fino a 64 byte, nessuna chiave due volte e nessuna voce
+con `after` uguale a `before`. `GridJournal::rebase` lo riporta sui byte di un
+salvataggio; la shell ne ha il mirror, legato dalla fixture
+`GridJournalRebase`. La sorgente arriva fino a 256 MiB
+(`MAX_GRID_BYTES_SOURCE`); il giornale ha i limiti di un'operazione (16.384
+voci, 4 MiB di input); una sessione porta al più 64 avvisi. Il perché è
+nell'[ADR 0216](../decisions/0216-protocollo-grid-2-sorgente-a-byte.md).
+
 ## Errori
 
 `PluginError` conserva una specie e un messaggio. Le famiglie comprendono

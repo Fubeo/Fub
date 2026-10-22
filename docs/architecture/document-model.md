@@ -156,26 +156,33 @@ usa l'input persistito come fallback.
 
 ## Cartella di Excel `.xlsx`
 
-Un `.xlsx` si apre nella famiglia `grid` con il profilo `workbook`, senza il
-protocollo a finestre. `crates/fub-format-xlsx` legge la cartella con il codec
-di GridCraft e `read_document` dà in `text` la sua proiezione JSON, chiusa e
-versionata (`crates/fub-format-xlsx/src/projection.rs`): i fogli visibili e
-nascosti, le dimensioni di righe e colonne, e per ogni cella il valore già
-scritto nel formato numerico del file, la formula e l'aspetto. I valori sono
-quelli salvati nel file, comprese le celle versate dalle matrici, e niente si
-ricalcola: una formula senza valore salvato resta vuota, e la proiezione lo
-dice. La proiezione ha due limiti, 16 MiB e 262.144 righe e colonne in tutto,
-perché la griglia tiene una voce per ogni riga e colonna.
+Un `.xlsx` si apre nella famiglia `grid` con la versione 2 del protocollo, su
+una sorgente a byte che resta nell'host. Il testo della sua `DocumentSession`
+non è il file ma il **giornale** delle celle cambiate (`text_kind`
+`grid_journal`): `read_document` dà il giornale vuoto con la revisione dei
+byte, e la griglia apre la superficie `fub.grid.xlsx` sui byte con quel
+giornale. `crates/fub-format-xlsx/src/grid.rs` legge la cartella con il
+codec di GridCraft e dà le finestre che la shell mostra: per ogni cella
+l'input, il valore già scritto nel formato numerico del file, l'aspetto, il
+blocco e lo stato. I valori sono quelli salvati nel file, comprese le celle
+versate dalle matrici, e niente si ricalcola: una formula che legge una cella
+cambiata tiene il valore del file, segnato come vecchio.
 
-`apps/client/src/editors/grid/workbook.ts` legge la proiezione con lo stesso
-rigore del codec: campi sconosciuti, colori che non sono `#RRGGBB`, celle
-ripetute o fuori dal foglio la rendono illeggibile. `GridEngine` la mostra in
-sola lettura qualunque cosa chieda la sessione, con le schede dei fogli
-visibili, la formula nella barra e un avviso per ciò che la griglia non
-mostra: macro, collegamenti esterni, parti non disegnate, avvisi della
-lettura, formule senza valore e fogli troncati. `write_document` rifiuta
-sempre la cartella, con `host.xlsx.readonly`, e `resource_write` la crea ma
-non la copre. Il perché è nell'[ADR
+`apps/client/src/editors/grid/workbook.ts` controlla sessioni e finestre con
+lo stesso rigore della versione 1 e le trasforma nel modello che
+`GridEngine` disegna, con le schede dei fogli visibili, la formula nella barra
+e un avviso per ciò che la griglia non mostra o non ricalcola. Modificare una
+cella scrive una voce del giornale; si scrivono soltanto valori costanti, e le
+celle bloccate (matrici, formule condivise, tabelle, celle unite, pivot, fogli
+protetti) lo dicono già nella finestra.
+
+Salvare è dell'host: `write_document` del giornale rilegge i byte alla base,
+innesta le voci a livello di riga (il resto del file resta byte per byte),
+rilegge il risultato e lo scrive con il CAS. Il giornale salvato si ribasa
+nella `DocumentSession`; `resource_write` crea una cartella ma non la copre.
+Il perché è nell'[ADR
+0216](../decisions/0216-protocollo-grid-2-sorgente-a-byte.md), che sostituisce
+la proiezione dell'[ADR
 0214](../decisions/0214-gridcraft-motore-del-foglio-di-calcolo.md); la forma
 del documento nel [contratto IPC](../reference/ipc-contract.md).
 
@@ -206,7 +213,7 @@ albero malformato.
 - un nuovo campo pubblico rispetta l'additività del WIT;
 - una regola comune vive nel contratto, non in due provider;
 - un workbook a celle conserva autorità e identità fuori da `DocumentModel`;
-- una cartella di Excel arriva alla shell come proiezione e il file non si riscrive.
+- i byte di una cartella di Excel restano all'host, e il file cambia soltanto per innesto delle celle cambiate.
 
 ## Dove si trova
 
@@ -217,6 +224,7 @@ albero malformato.
 - `crates/fub-format-markdown/src/render.rs`
 - `crates/fub-format-markdown/src/serialize.rs`
 - `crates/fub-format-sheet/src/lib.rs`
-- `crates/fub-format-xlsx/src/projection.rs`
+- `crates/fub-format-xlsx/src/grid.rs`
+- `crates/fub-format-xlsx/src/graft.rs`
 - `apps/client/src/editors/grid/workbook.ts`
 - `crates/fub-format-svg/src/parse.rs`
