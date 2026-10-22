@@ -104,6 +104,7 @@ flowchart TD
     host -.-> testkit
     wasmhost -.-> sheet
     wasmhost -.-> testkit
+    wasmhost -.-> sdk
     importers -.-> markdown
     importers -.-> sdk
     svg -.-> sdk
