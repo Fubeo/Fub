@@ -337,3 +337,19 @@ fn una_sorgente_che_non_e_la_sua_revisione_non_si_apre() {
     provider.close(&session.instance).unwrap();
     assert!(provider.close(&session.instance).is_err());
 }
+
+#[test]
+fn la_superficie_segue_il_lifecycle_condiviso_della_versione_2() {
+    let bytes = one_sheet(BODY);
+    fub_sdk::testing::conformance::a_grid_bytes_provider_supports_the_lifecycle(
+        &mut XlsxGridProvider::new(),
+        fub_sdk::testing::conformance::GridBytesLifecycleFixture {
+            surface: XLSX_GRID_SURFACE,
+            source: &bytes,
+            cell: key("A1"),
+            input: "1",
+            replacement: "4",
+            saved_matches: |saved| value(saved, "A1") == Value::Number(4.0),
+        },
+    );
+}
