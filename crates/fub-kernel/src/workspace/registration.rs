@@ -12,8 +12,8 @@ use fub_abi::grid::{
     GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
 };
 use fub_abi::{
-    grid_bytes_revision, GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal,
-    PluginError, Revision, GRID_BYTES_PROTOCOL_VERSION, MAX_GRID_BYTES_SOURCE,
+    grid_bytes_revision, Arg, GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal,
+    PluginError, Revision, Text, GRID_BYTES_PROTOCOL_VERSION, MAX_GRID_BYTES_SOURCE,
 };
 
 use crate::providers::{GridBackend, SharedGrid};
@@ -78,9 +78,7 @@ impl PreparedRegistration {
     pub fn grid(provider: Box<dyn GridProvider>) -> std::result::Result<Self, PluginError> {
         let (specs, provider) = capture(provider, |provider| provider.surfaces())?;
         if specs.is_empty() {
-            return Err(PluginError::BadArgs(
-                "a grid provider must declare at least one surface".into(),
-            ));
+            return Err(no_grid_surface());
         }
         for spec in &specs {
             spec.validate()?;
@@ -98,16 +96,15 @@ impl PreparedRegistration {
     ) -> std::result::Result<Self, PluginError> {
         let (specs, provider) = capture(provider, |provider| provider.surfaces())?;
         if specs.is_empty() {
-            return Err(PluginError::BadArgs(
-                "a grid provider must declare at least one surface".into(),
-            ));
+            return Err(no_grid_surface());
         }
         for spec in &specs {
             spec.validate()?;
             if spec.protocol_version != GRID_BYTES_PROTOCOL_VERSION {
-                return Err(PluginError::BadArgs(
-                    format!("grid surface `{}` is not a byte surface", spec.id).into(),
-                ));
+                return Err(PluginError::BadArgs(Text::message(
+                    "host.grid.not_bytes",
+                    vec![Arg::text("surface", spec.id.as_str())],
+                )));
             }
         }
         Ok(Self::new(Declaration::Grid(
@@ -262,9 +259,10 @@ impl PreparedGridBytesCall {
         journal: &GridJournal,
     ) -> std::result::Result<GridBytesSession, PluginError> {
         if source.len() > MAX_GRID_BYTES_SOURCE {
-            return Err(PluginError::BadArgs(
-                "grid source exceeds byte limit".into(),
-            ));
+            return Err(PluginError::BadArgs(Text::message(
+                "host.grid.source_too_large",
+                vec![Arg::text("bytes", source.len().to_string())],
+            )));
         }
         journal.validate()?;
         let expected = grid_bytes_revision(&revision, &journal.to_text());
@@ -328,7 +326,11 @@ impl PreparedGridBytesCall {
 }
 
 fn unserved_protocol() -> PluginError {
-    PluginError::Unserved("grid surface uses another protocol version".into())
+    PluginError::Unserved(Text::key("host.grid.protocol"))
+}
+
+fn no_grid_surface() -> PluginError {
+    PluginError::BadArgs(Text::key("host.grid.no_surface"))
 }
 
 fn provider_response(message: impl std::fmt::Display) -> PluginError {
