@@ -28,6 +28,7 @@ use fub_host::support::{
     ConfigFileKind, ConfigReport, ConfigStatus, DemoOpened, DiagnosticSummary, ExportConsent,
     MachineSummary, RecoverAction, RecoverOutcome, SupportPreview, VaultSummary,
 };
+use fub_host::DocumentText;
 use fub_kernel::{
     PluginInfo, Registration, RegistrationKind, RenderedDocument, RenderedPart, Trust,
 };
@@ -139,12 +140,24 @@ fn expected() -> Value {
             roots: vec!["/vault".into(), "/altro".into()],
             current: Some("/vault".into()),
         })],
-        "DocumentSource": [to_value(DocumentSource {
-            text: "# Nota".into(),
-            revision: "sha256:abc".into(),
-            format_id: Some("markdown".into()),
-            source_kind: SourceKind::Text,
-        })],
+        // Una nota e una cartella di Excel: il testo della seconda è il suo
+        // giornale, vuoto finché non si cambia una cella.
+        "DocumentSource": [
+            to_value(DocumentSource {
+                text: "# Nota".into(),
+                revision: "sha256:abc".into(),
+                format_id: Some("markdown".into()),
+                source_kind: SourceKind::Text,
+                text_kind: DocumentText::Source,
+            }),
+            to_value(DocumentSource {
+                text: String::new(),
+                revision: "sha256:def".into(),
+                format_id: Some("xlsx".into()),
+                source_kind: SourceKind::Bytes,
+                text_kind: DocumentText::GridJournal,
+            }),
+        ],
         // I componenti che questo host sa montare (§11.1): il campione ne ha
         // uno acceso e uno spento, perché con uno solo il record non direbbe
         // ciò per cui esiste — che «spento» è uno stato, non un'assenza.

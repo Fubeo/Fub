@@ -860,6 +860,7 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     revision: true,
     format_id: true,
     source_kind: true,
+    text_kind: true,
   }),
   BundleInfo: keysOf<BundleInfo>({
     id: true,

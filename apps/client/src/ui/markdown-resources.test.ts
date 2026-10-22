@@ -29,7 +29,7 @@ function apiFor(text: string): DocumentSessionApi {
       text,
       revision: "rev-1",
       format_id: "markdown",
-      source_kind: "text",
+      source_kind: "text", text_kind: "source",
     })),
     writeDocument: vi.fn(async () => "rev-2"),
     resourceWrite: vi.fn(async () => ({ revision: "rev-2" })),

@@ -3592,9 +3592,13 @@ impl Host {
                 .map(|spec| spec.format);
             let format = ws.format_of(doc).map(|known| known.descriptor.id);
             if declared.is_none() || declared != format {
-                return Err(PluginError::BadArgs(
-                    format!("grid surface `{surface}` does not open `{doc}`").into(),
-                ));
+                return Err(PluginError::BadArgs(Text::message(
+                    "host.grid.surface_format",
+                    vec![
+                        Arg::text("surface", surface),
+                        Arg::text("doc", doc.as_str()),
+                    ],
+                )));
             }
             (
                 ws.read_source_bytes(doc).map_err(PluginError::from)?,
@@ -4776,6 +4780,28 @@ fn root_forms(root: &Utf8Path) -> Vec<Utf8PathBuf> {
 pub fn doc_id(raw: &str) -> Result<DocId, PluginError> {
     fub_kernel::valid_doc_id(raw).map_err(PluginError::from)
 }
+
+/// Che cosa la shell tiene come testo di un documento: il sorgente che la
+/// porta di scrittura riceve, o il giornale delle celle di una cartella di
+/// Excel, i cui byte restano all'host (ADR 0216). Dopo un salvataggio il testo
+/// pulito di un giornale è vuoto: le sue voci sono nei byte.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DocumentText {
+    Source,
+    GridJournal,
+}
+
+/// Il testo di un documento del formato `format`, come lo legge
+/// [`Host::read_document_with_format`].
+pub fn document_text(format: Option<&DocumentFormat>) -> DocumentText {
+    if crate::workbook::is_workbook(format) {
+        DocumentText::GridJournal
+    } else {
+        DocumentText::Source
+    }
+}
+
 #[cfg(test)]
 mod opening_publication_tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
