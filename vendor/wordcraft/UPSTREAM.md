@@ -137,6 +137,17 @@ I dizionari Hunspell (`it_IT`, `pl_PL`, `pt_BR`, `ru_RU`, `cs_CZ`, `hr_HR`,
 GPL. Il crate li legge dal sistema quando ci sono; senza, la lingua non ha
 segni d'ortografia ma conserva le regole grammaticali.
 
+## Segnalazioni aperte all'upstream
+
+Le perdite del codec che il corpus di `fub-format-rich` conosce e che spettano a
+WordCraft. Quando una si chiude, l'aggiornamento della copia cambia gli
+`expected` del corpus (`UPDATE_CORPUS=1`) e il `perché` del `MANIFEST`.
+
+| Segnalazione | Cosa si perde al salvataggio |
+| --- | --- |
+| [storytold/wordcraft#3457](https://github.com/storytold/wordcraft/issues/3457) | `w:lang/@w:eastAsia` |
+| [storytold/wordcraft#3541](https://github.com/storytold/wordcraft/issues/3541) | il tema rigenerato, `tblInd` degli stili di tabella, `w:rFonts/@w:hint`, `w:annotationRef` e `w:initials` vuoto dei commenti, `dc:language` e `cp:contentStatus` |
+
 ## Aggiornare
 
 La copia è derivata: l'upstream al commit di `upstream.lock` più le patch di
