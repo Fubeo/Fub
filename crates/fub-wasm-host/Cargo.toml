@@ -47,5 +47,6 @@ wasmtime = { workspace = true }
 
 [dev-dependencies]
 fub-format-sheet.workspace = true
+fub-sdk.workspace = true
 fub-testkit.workspace = true
 tempfile.workspace = true
