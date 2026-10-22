@@ -2186,6 +2186,7 @@ dependencies = [
  "gridcraft-model",
  "gridcraft-numfmt",
  "gridcraft-xlsx",
+ "quick-xml",
  "serde",
  "serde_json",
  "thiserror 2.0.19",
