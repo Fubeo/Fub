@@ -509,7 +509,6 @@
     "grid-cell-editor",
     "grid-notice",
     "grid-sheets",
-    "derived",
     "selected",
     "active",
     "base-surface",
@@ -2647,7 +2646,6 @@
         "grid-cell-editor",
         "grid-notice",
         "grid-sheets",
-        "derived",
         "selected",
         "active"
       ],
@@ -5267,7 +5265,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1099,
+    "hooks": 1098,
     "state_names": 7,
     "assigned_states": 625,
     "components": 185,

@@ -23,8 +23,8 @@ fn client(path: &str) -> PathBuf {
 }
 
 /// Una cartella di due fogli visibili e uno nascosto: valori di ogni tipo con i
-/// loro formati, l'aspetto, una matrice dinamica versata, una cella unita,
-/// colonne e righe con le loro dimensioni.
+/// loro formati, l'aspetto, una matrice dinamica versata, una formula senza
+/// valore salvato, una cella unita, colonne e righe con le loro dimensioni.
 fn workbook() -> Vec<u8> {
     let conti = r#"<sheetFormatPr defaultRowHeight="15"/><cols><col min="1" max="1" width="20" customWidth="1"/><col min="4" max="4" width="9" hidden="1"/></cols><sheetData>
 <row r="1"><c r="A1" s="3" t="inlineStr"><is><t>Voce</t></is></c><c r="B1" s="3" t="inlineStr"><is><t>Importo</t></is></c><c r="C1" s="3" t="inlineStr"><is><t>Quota</t></is></c></row>
@@ -34,7 +34,7 @@ fn workbook() -> Vec<u8> {
 <row r="5"><c r="F5"><v>2</v></c></row>
 <row r="6" hidden="1"><c r="F6"><v>3</v></c></row>
 </sheetData><mergeCells count="1"><mergeCell ref="G1:H1"/></mergeCells>"#;
-    let note = r#"<sheetData><row r="1"><c r="A1" s="7" t="inlineStr"><is><t>Una nota</t></is></c></row></sheetData>"#;
+    let note = r#"<sheetData><row r="1"><c r="A1" s="7" t="inlineStr"><is><t>Una nota</t></is></c><c r="B1"><f>A1&amp;"!"</f></c></row></sheetData>"#;
     let segreto = r#"<sheetData><row r="1"><c r="A1"><v>42</v></c></row></sheetData>"#;
     Package {
         sheets: vec![
@@ -80,7 +80,7 @@ fn every_notice_kind() -> Vec<NoticeKind> {
         NoticeKind::ExternalLinks,
         NoticeKind::Incomplete,
         NoticeKind::NotShown,
-        NoticeKind::Recalculated,
+        NoticeKind::Uncomputed,
         NoticeKind::Truncated,
     ];
     for kind in all {
@@ -89,7 +89,7 @@ fn every_notice_kind() -> Vec<NoticeKind> {
             | NoticeKind::ExternalLinks
             | NoticeKind::Incomplete
             | NoticeKind::NotShown
-            | NoticeKind::Recalculated
+            | NoticeKind::Uncomputed
             | NoticeKind::Truncated => {}
         }
     }

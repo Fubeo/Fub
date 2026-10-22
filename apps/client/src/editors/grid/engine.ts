@@ -768,7 +768,7 @@ export class GridEngine {
         case "truncated": if (notice.detail) truncated.push(notice.detail); break;
         case "macros": lines.push(t("grid.workbook.macros")); break;
         case "external_links": lines.push(t("grid.workbook.external_links")); break;
-        case "recalculated": lines.push(t("grid.workbook.recalculated")); break;
+        case "uncomputed": lines.push(t("grid.workbook.uncomputed")); break;
       }
     }
     const list = (items: readonly string[]) => new Intl.ListFormat(resolvedLanguage(), { type: "conjunction" }).format(items);
@@ -958,10 +958,6 @@ export class GridEngine {
           ? this.#values.get(key(sheet.id, persisted.row, persisted.column))
           : undefined;
         element.textContent = displayValue(value, persisted?.input ?? "");
-        if (this.#view && this.#workbookCell(position)?.derived) {
-          element.classList.add("derived");
-          element.title = t("grid.workbook.derived");
-        }
         this.#place(element, ROW_HEADER_WIDTH + this.#columns.offsets[column], 0, this.#columns.sizes[column], this.#rows.sizes[row]);
         rowElement.append(element);
       }

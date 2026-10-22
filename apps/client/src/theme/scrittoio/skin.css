@@ -5506,10 +5506,6 @@ kbd,
   color: var(--text);
   font-size: var(--text-sm);
 }
-.grid-cell.derived {
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
-}
 /* Le schede dei fogli stanno sotto la griglia, come nei fogli di calcolo. */
 .grid-sheets {
   border-top: 1px solid var(--border);

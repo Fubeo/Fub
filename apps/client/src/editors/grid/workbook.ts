@@ -23,7 +23,7 @@ import {
 } from "./model";
 
 /// I tipi di avviso, nell'ordine del codec.
-export const WORKBOOK_NOTICES = ["macros", "external_links", "incomplete", "not_shown", "recalculated", "truncated"] as const;
+export const WORKBOOK_NOTICES = ["macros", "external_links", "incomplete", "not_shown", "uncomputed", "truncated"] as const;
 /// Le parti di una cartella che la griglia non disegna, nell'ordine del codec.
 export const WORKBOOK_NOT_SHOWN = ["merges", "charts", "images", "shapes", "comments", "conditional_formats", "sparklines"] as const;
 
@@ -41,8 +41,6 @@ export interface WorkbookCell {
   readonly cell: GridCell;
   /// Il testo della barra, `=…` o `{=…}`.
   readonly formula?: string;
-  /// Il valore non è del file: l'ha calcolato Fub.
-  readonly derived: boolean;
 }
 
 export interface WorkbookSheet {
@@ -64,6 +62,9 @@ const VERSION = 1;
 const MAX_SOURCE_BYTES = 16 * 1024 * 1024;
 const MAX_ROWS = 1_048_576;
 const MAX_COLUMNS = 16_384;
+/// Le righe e le colonne di tutti i fogli insieme, come `MAX_LINES` del codec:
+/// ognuna è una voce del foglio.
+const MAX_LINES = 262_144;
 /// Le misure di Excel sono per il suo carattere a 11 punti; la griglia usa
 /// quello dell'interfaccia, più grande. La riga di serie di Excel (20 px)
 /// diventa così quella del foglio di Fub (28 px), e il resto in proporzione.
@@ -223,7 +224,7 @@ function parseSheet(value: unknown, at: number): ParsedSheet {
   for (const [position, entry] of array(raw.cells, `celle del ${label}`).entries()) {
     const cellLabel = `cella ${position + 1} del ${label}`;
     const cell = record(entry, cellLabel);
-    exactKeys(cell, ["row", "col", "formula", "value", "style", "derived"], cellLabel);
+    exactKeys(cell, ["row", "col", "formula", "value", "style"], cellLabel);
     const row = index(cell.row, rowCount, cellLabel);
     const column = index(cell.col, columnCount, cellLabel);
     const key = cellKey({ row, column });
@@ -238,11 +239,7 @@ function parseSheet(value: unknown, at: number): ParsedSheet {
       ...(style && Object.keys(style).length ? { style } : {}),
     };
     list.push(grid);
-    cells.set(key, {
-      cell: grid,
-      ...(formula === undefined ? {} : { formula }),
-      derived: flag(cell.derived, `origine della ${cellLabel}`),
-    });
+    cells.set(key, { cell: grid, ...(formula === undefined ? {} : { formula }) });
   }
   return {
     name,
@@ -261,7 +258,14 @@ export function parseWorkbookProjection(source: string): WorkbookView {
   const root = record(JSON.parse(source), "proiezione");
   exactKeys(root, ["version", "active", "notices", "sheets"], "proiezione");
   if (root.version !== VERSION) throw new RangeError(`versione della proiezione non supportata: ${String(root.version)}`);
-  const parsed = array(root.sheets, "fogli").map(parseSheet);
+  const sheets = array(root.sheets, "fogli");
+  let lines = 0;
+  for (const [at, sheet] of sheets.entries()) {
+    const raw = record(sheet, `foglio ${at + 1}`);
+    lines += count(raw.row_count, MAX_ROWS, `righe del foglio ${at + 1}`) + count(raw.column_count, MAX_COLUMNS, `colonne del foglio ${at + 1}`);
+  }
+  if (lines > MAX_LINES) throw new RangeError(`proiezione con ${lines} righe e colonne, oltre il limite di ${MAX_LINES}`);
+  const parsed = sheets.map(parseSheet);
   const active = parsed.length ? index(root.active, parsed.length, "foglio attivo") : 0;
   const names = new Set(parsed.map((sheet) => sheet.name));
   if (names.size !== parsed.length) throw new TypeError("nomi dei fogli ripetuti");

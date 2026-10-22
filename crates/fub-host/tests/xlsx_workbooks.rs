@@ -91,7 +91,7 @@ fn xlsx(sheet_data: &str) -> Vec<u8> {
 
 fn conti() -> Vec<u8> {
     xlsx(
-        r#"<row r="1"><c r="A1" t="inlineStr"><is><t>Affitto</t></is></c><c r="B1"><v>800</v></c></row><row r="2"><c r="A2" cm="1"><f t="array" ref="A2:A3">_xlfn.SEQUENCE(2)</f><v>1</v></c></row>"#,
+        r#"<row r="1"><c r="A1" t="inlineStr"><is><t>Affitto</t></is></c><c r="B1"><v>800</v></c></row><row r="2"><c r="A2" cm="1"><f t="array" ref="A2:A3">_xlfn.SEQUENCE(2)</f><v>1</v></c></row><row r="3"><c r="A3"><v>2</v></c></row>"#,
     )
 }
 
@@ -115,25 +115,19 @@ fn si_legge_come_proiezione_con_la_revisione_dei_byte() {
                 cell.row,
                 cell.col,
                 cell.value.as_ref().unwrap().text.as_str(),
-                cell.derived,
             )
         })
         .collect();
     assert_eq!(
         shown,
-        [
-            (0, 0, "Affitto", false),
-            (0, 1, "800", false),
-            (1, 0, "1", false),
-            (2, 0, "2", true)
-        ]
+        [(0, 0, "Affitto"), (0, 1, "800"), (1, 0, "1"), (2, 0, "2")]
     );
-    // Le celle versate sono calcolate da Fub, e la proiezione lo dice (con
-    // l'avviso della lettura sugli stili, che questa cartella non ha).
-    assert!(projection
+    // La cella versata ha il valore del file: niente si ricalcola, e niente
+    // manca.
+    assert!(!projection
         .notices
         .iter()
-        .any(|notice| notice.kind == NoticeKind::Recalculated));
+        .any(|notice| notice.kind == NoticeKind::Uncomputed));
     // Il kernel indicizza lo stesso file con il provider a byte.
     let model = format!(
         "{:?}",
@@ -181,6 +175,12 @@ fn una_cartella_non_si_scrive_e_il_file_resta() {
         "{created:?}"
     );
     assert!(!vault.root.join("Nuova.xlsx").exists());
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Nota.md")).unwrap(),
+        "# Nota\n"
+    );
+}
+
 #[test]
 fn i_byte_della_shell_non_coprono_una_cartella_ma_ne_creano_una() {
     let vault = Vault::with(&[("Conti.xlsx", &conti())]);
@@ -205,12 +205,6 @@ fn i_byte_della_shell_non_coprono_una_cartella_ma_ne_creano_una() {
         .unwrap();
     assert_eq!(created.revision, Revision::of_bytes(&before));
     assert_eq!(vault.on_disk("Copia.xlsx"), before);
-}
-
-    assert_eq!(
-        std::fs::read_to_string(vault.root.join("Nota.md")).unwrap(),
-        "# Nota\n"
-    );
 }
 
 #[test]

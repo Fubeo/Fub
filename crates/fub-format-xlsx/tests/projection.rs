@@ -1,12 +1,13 @@
 //! La proiezione di una cartella: i valori del file formattati come li mostra
-//! Excel, le celle versate ricalcolate e segnate, l'aspetto che la griglia
-//! disegna, e gli avvisi per ciò che non si vede o non si esegue.
+//! Excel, anche quelli versati dalle matrici, senza ricalcolare niente,
+//! l'aspetto che la griglia disegna, gli avvisi per ciò che non si vede o non
+//! si esegue, e i limiti di byte e di righe e colonne.
 
 mod common;
 
 use common::{one_sheet, sheet, Package};
 use fub_format_xlsx::projection::{
-    classify, Cell, Horizontal, Notice, NoticeKind, Projection, Style, ValueKind,
+    classify, Cell, Horizontal, Notice, NoticeKind, Projection, Style, ValueKind, MAX_LINES,
 };
 use fub_format_xlsx::{open, XlsxError, MAX_PROJECTION_BYTES};
 
@@ -51,7 +52,6 @@ fn i_valori_sono_quelli_del_file_con_il_loro_formato() {
     let formula = cell(&p, 0, 1, 3);
     assert_eq!(formula.formula.as_deref(), Some("=B1*2"));
     assert_eq!(shown(&p, 1, 3), (ValueKind::Number, "99"));
-    assert!(!formula.derived);
     assert!(p.notices.is_empty(), "{:?}", p.notices);
     // Gli assi arrivano fino all'ultima cella mostrata.
     assert_eq!((p.sheets[0].row_count, p.sheets[0].column_count), (2, 4));
@@ -113,34 +113,44 @@ fn l_aspetto_segue_il_file_e_il_tema_della_shell() {
 }
 
 #[test]
-fn le_celle_versate_si_ricalcolano_e_si_segnano() {
-    // Una matrice dinamica (`cm`) e una legacy, con i valori versati in cache
-    // che il lettore scarta; una formula salvata senza valore.
+fn le_celle_versate_hanno_i_valori_del_file_e_niente_si_ricalcola() {
+    // Una matrice dinamica (`cm`) e una legacy, con i valori versati in cache;
+    // una formula salvata senza valore; un valore casuale salvato.
     let p = project(&one_sheet(
         r#"<sheetData>
-<row r="1"><c r="A1" cm="1"><f t="array" ref="A1:A3">_xlfn.SEQUENCE(3)</f><v>1</v></c><c r="B1"><f t="array" ref="B1:B2">C1:C2*10</f><v>10</v></c><c r="C1"><v>1</v></c><c r="D1"><f>C1+C2</f></c></row>
-<row r="2"><c r="A2"><v>2</v></c><c r="B2"><v>20</v></c><c r="C2"><v>2</v></c></row>
-<row r="3"><c r="A3"><v>3</v></c></row>
+<row r="1"><c r="A1" cm="1"><f t="array" ref="A1:A3">_xlfn.SEQUENCE(3)</f><v>1</v></c><c r="B1"><f t="array" ref="B1:B2">C1:C2*10</f><v>10</v></c><c r="C1"><v>1</v></c><c r="D1"><f>C1+C2</f></c><c r="E1"><f>RAND()</f><v>0.25</v></c></row>
+<row r="2"><c r="A2"><v>7</v></c><c r="B2"><v>20</v></c><c r="C2"><v>2</v></c></row>
+<row r="3"><c r="A3"><v>9</v></c></row>
 </sheetData>"#,
     ));
-    // L'ancora resta quella del file.
     let anchor = cell(&p, 0, 0, 0);
     assert_eq!(anchor.formula.as_deref(), Some("=SEQUENCE(3)"));
-    assert!(!anchor.derived);
-    for (row, text) in [(1, "2"), (2, "3")] {
+    // I valori versati sono quelli salvati, anche se la formula darebbe 2 e 3.
+    for (row, text) in [(1, "7"), (2, "9")] {
         let spilled = cell(&p, 0, row, 0);
-        assert!(spilled.derived, "A{}", row + 1);
         assert!(spilled.formula.is_none());
-        assert_eq!(spilled.value.as_ref().unwrap().text, text);
+        assert_eq!(spilled.value.as_ref().unwrap().text, text, "A{}", row + 1);
     }
     assert_eq!(cell(&p, 0, 0, 1).formula.as_deref(), Some("{=C1:C2*10}"));
-    let legacy = cell(&p, 0, 1, 1);
-    assert!(legacy.derived);
-    assert_eq!(legacy.value.as_ref().unwrap().text, "20");
+    assert_eq!(cell(&p, 0, 1, 1).value.as_ref().unwrap().text, "20");
     let unsaved = cell(&p, 0, 0, 3);
-    assert!(unsaved.derived);
-    assert_eq!(unsaved.value.as_ref().unwrap().text, "3");
-    assert_eq!(kinds(&p), [NoticeKind::Recalculated]);
+    assert_eq!(unsaved.formula.as_deref(), Some("=C1+C2"));
+    assert!(unsaved.value.is_none());
+    assert_eq!(shown(&p, 0, 4), (ValueKind::Number, "0.25"));
+    assert_eq!(kinds(&p), [NoticeKind::Uncomputed]);
+}
+
+#[test]
+fn una_formula_che_il_calcolo_non_saprebbe_fermare_si_apre_subito() {
+    // Pochi byte che, ricalcolati, verserebbero tutto il foglio.
+    let started = std::time::Instant::now();
+    let p = project(&one_sheet(
+        r#"<sheetData><row r="1"><c r="A1" cm="1"><f t="array" ref="A1">_xlfn.SEQUENCE(1048576,16384)</f></c><c r="B1"><f>B1+1</f></c></row></sheetData>"#,
+    ));
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    assert!(cell(&p, 0, 0, 0).value.is_none());
+    assert_eq!((p.sheets[0].row_count, p.sheets[0].column_count), (1, 2));
+    assert_eq!(kinds(&p), [NoticeKind::Uncomputed]);
 }
 
 #[test]
@@ -189,7 +199,6 @@ fn le_macro_e_i_collegamenti_esterni_si_dicono() {
     assert_eq!(kinds(&p), [NoticeKind::Macros, NoticeKind::ExternalLinks]);
     // Il valore resta quello salvato: il collegamento non si segue.
     assert_eq!(shown(&p, 0, 0).1, "7");
-    assert!(!cell(&p, 0, 0, 0).derived);
 }
 
 #[test]
@@ -341,21 +350,83 @@ fn la_proiezione_è_deterministica() {
 }
 
 #[test]
-fn una_catena_lunga_di_formule_non_ferma_l_host() {
-    // Il calcolo scende ricorsivamente lungo le dipendenze: una catena di
-    // formule salvate senza valore la percorre tutta, nello stack del thread
-    // della lettura.
+fn una_catena_lunga_di_formule_si_legge_senza_calcolarla() {
     let rows = 5000;
     let mut body = String::from(r#"<sheetData><row r="1"><c r="A1"><v>1</v></c></row>"#);
     for row in 2..=rows {
         body.push_str(&format!(
-            r#"<row r="{row}"><c r="A{row}"><f>A{}+1</f></c></row>"#,
+            r#"<row r="{row}"><c r="A{row}"><f>A{}+1</f><v>{row}</v></c></row>"#,
             row - 1
         ));
     }
     body.push_str("</sheetData>");
     let p = project(&one_sheet(&body));
-    let last = cell(&p, 0, rows - 1, 0);
-    assert!(last.derived);
-    assert!(last.value.is_some());
+    assert_eq!(shown(&p, rows - 1, 0), (ValueKind::Number, "5000"));
+    assert!(p.notices.is_empty());
+}
+
+#[test]
+fn una_cella_in_fondo_al_foglio_non_porta_un_milione_di_righe() {
+    // Ogni foglio ha una cella nell'ultima riga e nell'ultima colonna di
+    // Excel: la griglia terrebbe una voce per ogni riga e colonna.
+    let far = r#"<sheetData><row r="1"><c r="A1"><v>1</v></c></row><row r="1048576"><c r="XFD1048576"><v>2</v></c></row></sheetData>"#;
+    let bytes = Package {
+        sheets: vec![sheet("Uno", far), sheet("Due", far), sheet("Tre", far)],
+        ..Package::default()
+    }
+    .bytes();
+    let p = project(&bytes);
+    let lines: u32 = p
+        .sheets
+        .iter()
+        .map(|sheet| sheet.row_count + sheet.column_count)
+        .sum();
+    assert!(lines <= MAX_LINES, "{lines} righe e colonne");
+    for sheet in &p.sheets {
+        assert_eq!(sheet.cells[0].value.as_ref().unwrap().text, "1");
+        assert!(sheet
+            .cells
+            .iter()
+            .all(|cell| cell.row < sheet.row_count && cell.col < sheet.column_count));
+    }
+    assert_eq!(
+        p.notices,
+        // Gli avvisi sono in ordine, e i fogli per nome.
+        ["Due", "Tre", "Uno"].map(|name| Notice {
+            kind: NoticeKind::Truncated,
+            detail: Some(name.into())
+        })
+    );
+}
+
+#[test]
+fn una_cella_senza_niente_da_mostrare_non_allarga_il_foglio() {
+    // Uno stile senza riempimento, in fondo al foglio, non si vede.
+    let p = project(&one_sheet(
+        r#"<sheetData><row r="1"><c r="A1"><v>1</v></c></row><row r="900000"><c r="Z900000" s="3"/></row></sheetData>"#,
+    ));
+    assert_eq!((p.sheets[0].row_count, p.sheets[0].column_count), (1, 1));
+    assert!(p.notices.is_empty());
+}
+
+#[test]
+fn le_righe_con_un_altezza_loro_contano_nel_limite() {
+    // Ogni riga ha un'altezza sua, e le celle da sole riempiono la proiezione:
+    // le righe, contate dopo, la porterebbero oltre il limite.
+    let rows = 120_000;
+    let text = "x".repeat(150);
+    let mut body = String::from("<sheetData>");
+    for row in 1..=rows {
+        body.push_str(&format!(
+            r#"<row r="{row}" ht="17.25" customHeight="1" hidden="1"><c r="A{row}" t="inlineStr"><is><t>{text}</t></is></c></row>"#
+        ));
+    }
+    body.push_str("</sheetData>");
+    let json = open(&one_sheet(&body)).expect("si apre lo stesso");
+    assert!(json.len() <= MAX_PROJECTION_BYTES);
+    let p = Projection::from_json(&json).unwrap();
+    let sheet = &p.sheets[0];
+    assert!(sheet.rows.len() <= sheet.row_count as usize);
+    assert_eq!(sheet.rows.last().unwrap().index, sheet.row_count - 1);
+    assert_eq!(kinds(&p), [NoticeKind::Truncated]);
 }

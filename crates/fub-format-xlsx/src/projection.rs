@@ -16,8 +16,18 @@
 //!   colori, allineamento);
 //! - gli avvisi: le macro che non si eseguono, i collegamenti ad altre
 //!   cartelle che non si aggiornano, ciò che la lettura ha lasciato indietro,
-//!   ciò che la griglia non mostra, i valori ricalcolati e le celle che non
-//!   entrano nel limite.
+//!   ciò che la griglia non mostra, le formule senza un valore salvato e le
+//!   celle che non entrano nei limiti.
+//!
+//! Nessun valore si calcola: ogni valore è quello che il file ha salvato,
+//! comprese le celle versate dalle matrici. Una formula senza valore salvato
+//! mostra la formula e una cella vuota.
+//!
+//! Due limiti tengono la proiezione piccola per la shell, che la legge in una
+//! volta: i byte ([`MAX_PROJECTION_BYTES`]) e le righe e colonne di tutti i
+//! fogli insieme ([`MAX_LINES`]), perché la griglia tiene una voce per ogni
+//! riga e colonna fino all'ultima cella. I fogli li prendono in ordine, e
+//! quello dove una cella resta fuori lo dice.
 //!
 //! I colori seguono il tema chiaro e scuro della shell: il testo «automatico»
 //! (o il nero del tema) su una cella senza riempimento non porta un colore, e
@@ -26,7 +36,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use gridcraft_calc::Calc;
 use gridcraft_core::{CellRef, Value as GcValue};
 use gridcraft_model::style::{Color, HAlign, PatternType, Style as GcStyle};
 use gridcraft_model::{Sheet as GcSheet, Visibility, Workbook};
@@ -39,8 +48,19 @@ use crate::{XlsxError, MAX_PROJECTION_BYTES};
 /// La versione dello schema.
 pub const VERSION: u32 = 1;
 
+/// Le righe e le colonne di tutti i fogli insieme: la griglia ne tiene una
+/// voce ciascuna, e un foglio che arriva all'ultima cella di Excel ne
+/// avrebbe più di un milione.
+pub const MAX_LINES: u32 = 262_144;
+/// Le colonne che un foglio prende al più dalle righe e colonne che restano:
+/// le righe, che sono di più, si prendono il resto.
+const COLUMN_SHARE: u32 = 4;
+
 /// Lo spazio che la proiezione tiene per gli avvisi aggiunti dopo le celle.
 const NOTICE_HEADROOM: usize = 64 * 1024;
+/// Lo spazio di un foglio senza le righe, le colonne e le celle: il nome è a
+/// parte.
+const SHEET_OVERHEAD: usize = 256;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -75,9 +95,10 @@ pub enum NoticeKind {
     Incomplete,
     /// La griglia non mostra una parte della cartella.
     NotShown,
-    /// Alcuni valori non sono del file: li ha calcolati Fub.
-    Recalculated,
-    /// Le celle oltre il limite della proiezione non ci sono.
+    /// Alcune formule non hanno un valore salvato nel file: Fub non le
+    /// calcola, e la cella resta vuota.
+    Uncomputed,
+    /// Le celle oltre i limiti della proiezione non ci sono.
     Truncated,
 }
 
@@ -176,9 +197,6 @@ pub struct Cell {
     pub value: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<Style>,
-    /// Il valore non è nel file: l'ha calcolato Fub.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub derived: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -262,20 +280,20 @@ pub fn project(workbook: &Workbook, report: &ReadReport) -> Projection {
         }
     }
 
-    let derived = derived_values(workbook, &mut notices);
-    let mut budget = MAX_PROJECTION_BYTES - NOTICE_HEADROOM;
+    let mut budget = Budget {
+        bytes: MAX_PROJECTION_BYTES - NOTICE_HEADROOM,
+        lines: MAX_LINES,
+    };
     let mut sheets = Vec::with_capacity(workbook.sheets.len());
-    for (index, sheet) in workbook.sheets.iter().enumerate() {
-        let empty = BTreeMap::new();
-        let derived = derived.get(index).unwrap_or(&empty);
-        let (projected, truncated) = project_sheet(workbook, sheet, derived, &mut budget);
-        if truncated {
+    for sheet in &workbook.sheets {
+        let projected = project_sheet(workbook, sheet, &mut budget);
+        if projected.truncated {
             notices.insert((NoticeKind::Truncated, Some(sheet.name.clone())));
         }
-        sheets.push(projected);
-    }
-    if derived.iter().any(|cells| !cells.is_empty()) {
-        notices.insert((NoticeKind::Recalculated, None));
+        if projected.uncomputed {
+            notices.insert((NoticeKind::Uncomputed, None));
+        }
+        sheets.push(projected.sheet);
     }
     Projection {
         version: VERSION,
@@ -302,109 +320,36 @@ pub fn classify(warning: &str) -> NoticeKind {
     }
 }
 
-/// I valori che il file non ha e che le formule danno: le celle versate dalle
-/// matrici, che il lettore scarta, e le formule salvate senza un valore. Il
-/// calcolo gira su una copia; ogni altro valore resta quello del file.
-fn derived_values(
-    workbook: &Workbook,
-    notices: &mut BTreeSet<(NoticeKind, Option<String>)>,
-) -> Vec<BTreeMap<CellRef, GcValue>> {
-    let has_formulas = workbook
-        .sheets
-        .iter()
-        .any(|sheet| sheet.cells.iter().any(|(_, cell)| cell.formula.is_some()));
-    if !has_formulas {
-        return Vec::new();
-    }
-    let mut copy = workbook.clone();
-    let recalculated = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        Calc::new().recalc_all(&mut copy);
-    }));
-    if let Err(panic) = recalculated {
-        notices.insert((
-            NoticeKind::Incomplete,
-            Some(format!(
-                "array results could not be recalculated: {}",
-                crate::panic_message(panic.as_ref())
-            )),
-        ));
-        return Vec::new();
-    }
-    workbook
-        .sheets
-        .iter()
-        .zip(&copy.sheets)
-        .map(|(original, computed)| {
-            let mut cells = BTreeMap::new();
-            for (at, value) in &computed.spill {
-                if original.value(*at).is_empty() && !value.is_empty() {
-                    cells.insert(*at, value.clone());
-                }
-            }
-            for (at, cell) in original.cells.iter() {
-                if cell.formula.is_some() && cell.value.is_empty() {
-                    let value = computed.value(at);
-                    if !value.is_empty() {
-                        cells.insert(at, value);
-                    }
-                }
-            }
-            cells
-        })
-        .collect()
+/// Ciò che resta da spendere ai fogli che seguono.
+struct Budget {
+    bytes: usize,
+    lines: u32,
 }
 
-/// Un foglio, con le celle che entrano in `budget` byte. Dice se si è fermato
-/// prima della fine.
-fn project_sheet(
-    workbook: &Workbook,
-    sheet: &GcSheet,
-    derived: &BTreeMap<CellRef, GcValue>,
-    budget: &mut usize,
-) -> (Sheet, bool) {
-    let mut cells = Vec::new();
-    let mut truncated = false;
-    let mut stored = sheet.cells.iter().peekable();
-    let mut computed = derived.iter().peekable();
-    loop {
-        // Le celle del file e quelle calcolate, insieme in ordine di riga e
-        // di colonna; una cella calcolata vuota nel file ha il valore nuovo.
-        let order = |at: &CellRef| (at.row, at.col);
-        let next = match (stored.peek(), computed.peek()) {
-            (None, None) => break,
-            (Some((at, _)), Some((other, _))) if order(other) < order(at) => {
-                let (at, value) = computed.next().expect("peeked");
-                project_cell(workbook, sheet, *at, None, Some(value))
-            }
-            (Some((at, _)), Some((other, _))) if order(other) == order(at) => {
-                let (at, cell) = stored.next().expect("peeked");
-                let (_, value) = computed.next().expect("peeked");
-                project_cell(workbook, sheet, at, Some(cell), Some(value))
-            }
-            (Some(_), _) => {
-                let (at, cell) = stored.next().expect("peeked");
-                project_cell(workbook, sheet, at, Some(cell), None)
-            }
-            (None, Some(_)) => {
-                let (at, value) = computed.next().expect("peeked");
-                project_cell(workbook, sheet, *at, None, Some(value))
-            }
-        };
-        let Some(cell) = next else { continue };
-        let size = serde_json::to_vec(&cell).map_or(usize::MAX, |json| json.len() + 1);
-        if size > *budget {
-            truncated = true;
-            break;
-        }
-        *budget -= size;
-        cells.push(cell);
-    }
+/// Un foglio proiettato, con ciò che gli avvisi devono dire.
+struct Projected {
+    sheet: Sheet,
+    /// Una cella non c'è: è fuori dalle righe e colonne o dai byte rimasti.
+    truncated: bool,
+    /// Una formula non ha un valore salvato.
+    uncomputed: bool,
+}
 
-    let row_count = cells.iter().map(|cell| cell.row + 1).max().unwrap_or(1);
-    let column_count = cells.iter().map(|cell| cell.col + 1).max().unwrap_or(1);
+/// Un foglio, con le righe, le colonne e le celle che entrano in `budget`.
+fn project_sheet(workbook: &Workbook, sheet: &GcSheet, budget: &mut Budget) -> Projected {
+    // Fin dove arriva ciò che il foglio mostra.
+    let (mut rows, mut columns) = (0u32, 0u32);
+    for (at, cell, value) in entries(sheet) {
+        if shows(workbook, sheet, at, cell, value) {
+            rows = rows.max(at.row + 1);
+            columns = columns.max(at.col + 1);
+        }
+    }
+    let columns = columns.min(budget.lines / COLUMN_SHARE).max(1);
+    let rows = rows.min(budget.lines.saturating_sub(columns)).max(1);
+    let mut truncated = false;
     let lines = |map: &BTreeMap<u32, gridcraft_model::LineInfo>, count: u32| -> Vec<Line> {
         map.range(..count)
-            .filter(|(_, info)| info.size.is_some() || info.hidden)
             .map(|(index, info)| Line {
                 index: *index,
                 size: info.size.filter(|size| size.is_finite() && *size > 0.0),
@@ -413,18 +358,149 @@ fn project_sheet(
             .filter(|line| line.size.is_some() || line.hidden)
             .collect()
     };
-    let projected = Sheet {
-        name: sheet.name.clone(),
-        hidden: sheet.visibility != Visibility::Visible,
-        row_count,
-        column_count,
-        row_height: positive(sheet.default_row_height, 20.0),
-        column_width: positive(sheet.default_col_width, 64.0),
-        rows: lines(&sheet.rows, row_count),
-        columns: lines(&sheet.cols, column_count),
-        cells,
-    };
-    (projected, truncated)
+    // Le righe e le colonne con una misura loro si pagano prima delle celle,
+    // le colonne per prime: una che non entra ferma il foglio prima di lei.
+    let mut room = budget
+        .bytes
+        .saturating_sub(SHEET_OVERHEAD + json_len(&sheet.name));
+    let mut column_lines = lines(&sheet.cols, columns);
+    let columns = paid(&mut column_lines, columns, &mut room, &mut truncated);
+    let mut row_lines = lines(&sheet.rows, rows);
+    let rows = paid(&mut row_lines, rows, &mut room, &mut truncated);
+    budget.bytes = room;
+
+    let mut cells = Vec::new();
+    let mut uncomputed = false;
+    for (at, cell, value) in entries(sheet) {
+        if !shows(workbook, sheet, at, cell, value) {
+            continue;
+        }
+        if at.row >= rows || at.col >= columns {
+            truncated = true;
+            continue;
+        }
+        let cell = project_cell(
+            workbook,
+            sheet,
+            at,
+            cell,
+            value.cloned().unwrap_or(GcValue::Empty),
+        );
+        uncomputed |= cell.formula.is_some() && cell.value.is_none();
+        let size = json_len(&cell) + 1;
+        if size > budget.bytes {
+            truncated = true;
+            break;
+        }
+        budget.bytes -= size;
+        cells.push(cell);
+    }
+
+    let row_count = cells.iter().map(|cell| cell.row + 1).max().unwrap_or(1);
+    let column_count = cells.iter().map(|cell| cell.col + 1).max().unwrap_or(1);
+    budget.lines = budget.lines.saturating_sub(row_count + column_count);
+    // Le linee oltre l'ultima cella non vanno nella proiezione, e il loro
+    // spazio torna ai fogli che seguono.
+    for (lines, count) in [
+        (&mut row_lines, row_count),
+        (&mut column_lines, column_count),
+    ] {
+        let kept = lines.partition_point(|line| line.index < count);
+        budget.bytes += lines[kept..]
+            .iter()
+            .map(|line| json_len(line) + 1)
+            .sum::<usize>();
+        lines.truncate(kept);
+    }
+    Projected {
+        sheet: Sheet {
+            name: sheet.name.clone(),
+            hidden: sheet.visibility != Visibility::Visible,
+            row_count,
+            column_count,
+            row_height: positive(sheet.default_row_height, 20.0),
+            column_width: positive(sheet.default_col_width, 64.0),
+            rows: row_lines,
+            columns: column_lines,
+            cells,
+        },
+        truncated,
+        uncomputed,
+    }
+}
+
+/// Le celle del foglio e i valori versati dalle matrici, che il lettore tiene
+/// a parte, insieme in ordine di riga e di colonna, ciascuna con il valore
+/// che mostra.
+fn entries(
+    sheet: &GcSheet,
+) -> impl Iterator<Item = (CellRef, Option<&gridcraft_model::Cell>, Option<&GcValue>)> {
+    let order = |at: &CellRef| (at.row, at.col);
+    let mut stored = sheet.cells.iter().peekable();
+    let mut spilled = sheet.spill.iter().peekable();
+    std::iter::from_fn(move || {
+        let take_spilled = match (stored.peek(), spilled.peek()) {
+            (None, None) => return None,
+            (Some((at, _)), Some((other, _))) => {
+                if order(other) == order(at) {
+                    // La cella del file vince: il valore versato non si vede.
+                    spilled.next();
+                    false
+                } else {
+                    order(other) < order(at)
+                }
+            }
+            (None, Some(_)) => true,
+            (Some(_), None) => false,
+        };
+        Some(if take_spilled {
+            let (at, value) = spilled.next().expect("peeked");
+            (*at, None, Some(value))
+        } else {
+            let (at, cell) = stored.next().expect("peeked");
+            (at, Some(cell), sheet.value_ref(at))
+        })
+    })
+}
+
+/// Se una cella ha qualcosa da far vedere: una formula, un valore o un
+/// riempimento. Le altre non vanno nella proiezione.
+fn shows(
+    workbook: &Workbook,
+    sheet: &GcSheet,
+    at: CellRef,
+    cell: Option<&gridcraft_model::Cell>,
+    value: Option<&GcValue>,
+) -> bool {
+    if cell.is_some_and(|cell| cell.formula.is_some())
+        || value.is_some_and(|value| !value.is_empty())
+    {
+        return true;
+    }
+    let style = workbook.styles.get(sheet.style_id(at));
+    style.fill.pattern == PatternType::Solid && style.fill.fg.hex(&workbook.theme).is_some()
+}
+
+/// Paga le `lines` di un asse da `room`, in ordine. La prima che non entra
+/// ferma l'asse prima di lei, insieme alle linee che seguono: il conto che
+/// resta è quello delle linee pagate.
+fn paid(lines: &mut Vec<Line>, count: u32, room: &mut usize, truncated: &mut bool) -> u32 {
+    for (at, line) in lines.iter().enumerate() {
+        let size = json_len(line) + 1;
+        if size > *room {
+            let end = line.index.max(1);
+            lines.truncate(at);
+            *truncated = true;
+            return end;
+        }
+        *room -= size;
+    }
+    count
+}
+
+/// Quanti byte pesa `value` nel JSON della proiezione.
+fn json_len(value: &impl Serialize) -> usize {
+    serde_json::to_vec(value).map_or(usize::MAX / 2, |json| json.len())
 }
 
 fn positive(size: f32, fallback: f32) -> f32 {
@@ -435,23 +511,17 @@ fn positive(size: f32, fallback: f32) -> f32 {
     }
 }
 
-/// Una cella da mostrare, o `None` se non ha niente da far vedere: né
-/// formula, né valore, né riempimento.
+/// Una cella da mostrare, che [`shows`] ha scelto.
 fn project_cell(
     workbook: &Workbook,
     sheet: &GcSheet,
     at: CellRef,
     stored: Option<&gridcraft_model::Cell>,
-    computed: Option<&GcValue>,
-) -> Option<Cell> {
+    value: GcValue,
+) -> Cell {
     let formula = stored
         .filter(|cell| cell.formula.is_some())
         .map(|cell| cell.bar_text());
-    let (value, derived) = match (stored.map(|cell| &cell.value), computed) {
-        (Some(value), _) if !value.is_empty() => (value.clone(), false),
-        (_, Some(value)) => (value.clone(), true),
-        _ => (GcValue::Empty, false),
-    };
     let style = workbook.styles.get(sheet.style_id(at));
     let formatted = format_value(
         &value,
@@ -477,17 +547,13 @@ fn project_cell(
         text: formatted.text.clone(),
     });
     let style = cell_style(workbook, style, kind, formatted.numeric, formatted.color);
-    if formula.is_none() && value.is_none() && style.fill_color.is_none() {
-        return None;
-    }
-    Some(Cell {
+    Cell {
         row: at.row,
         col: at.col,
         formula,
         value,
         style: (style != Style::default()).then_some(style),
-        derived,
-    })
+    }
 }
 
 fn cell_style(

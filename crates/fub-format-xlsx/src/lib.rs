@@ -1,5 +1,5 @@
 //! Le cartelle di lavoro di Excel — `.xlsx`, `.xlsm`, `.xltx`, `.xltm` — lette
-//! in **sola lettura** con il codec, il modello e il calcolo di GridCraft
+//! in **sola lettura** con il codec e il modello di GridCraft
 //! (`vendor/gridcraft`).
 //!
 //! Il crate possiede due cose, e l'host le compone senza possederle:
@@ -15,11 +15,12 @@
 //! suo modello, e ciò che quel modello non conosce andrebbe perso. Una
 //! cartella si apre per leggerla, e la proiezione dice che cosa non mostra.
 //!
-//! I valori sono quelli che il file ha salvato. Il lettore di GridCraft scarta
-//! di proposito i valori in cache delle celle versate dalle matrici (dinamiche
-//! e legacy), perché le formule le riempiano di nuovo: soltanto quelle celle,
-//! e le formule salvate senza valore, si ricalcolano su una copia della
-//! cartella, e la proiezione le segna come derivate.
+//! I valori sono quelli che il file ha salvato, e niente si ricalcola: aprire
+//! una cartella costa la sua lettura, qualunque formula contenga, e un valore
+//! casuale o di oggi resta quello del file. Le celle versate dalle matrici
+//! hanno il valore che il file ha salvato (la patch `0003` di
+//! `vendor/gridcraft`); una formula salvata senza valore resta vuota, e la
+//! proiezione lo dice.
 //!
 //! Il codec gira in un thread suo con uno stack grande, e un suo panic diventa
 //! un errore: una formula annidata a fondo non abbatte l'host.
@@ -47,8 +48,8 @@ pub const MAX_SOURCE_BYTES: usize = 256 * 1024 * 1024;
 /// La proiezione più grande che la superficie della griglia legge: oltre, le
 /// celle che restano non entrano, e la proiezione lo dice.
 pub const MAX_PROJECTION_BYTES: usize = 16 * 1024 * 1024;
-/// Lo stack del thread che legge e ricalcola: il parser e il calcolo di
-/// GridCraft scendono ricorsivamente nelle formule.
+/// Lo stack del thread che legge: il parser delle formule di GridCraft scende
+/// ricorsivamente nelle espressioni.
 const STACK_BYTES: usize = 64 * 1024 * 1024;
 
 /// Perché una cartella non si legge.
@@ -67,7 +68,7 @@ pub enum XlsxError {
     /// Il codec rifiuta il pacchetto.
     #[error("workbook cannot be read: {0}")]
     Codec(String),
-    /// Il codec o il calcolo si sono fermati con un panic.
+    /// Il codec si è fermato con un panic.
     #[error("workbook reader stopped: {0}")]
     Crashed(String),
 }

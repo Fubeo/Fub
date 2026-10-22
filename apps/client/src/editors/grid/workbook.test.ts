@@ -19,7 +19,7 @@ describe("la proiezione di una cartella di Excel", () => {
     // Il foglio nascosto non è fra quelli da mostrare.
     expect(view.workbook.sheets.map((sheet) => sheet.name)).toEqual(["Conti", "Note"]);
     expect(view.active).toBe(0);
-    expect(view.notices).toEqual([{ kind: "not_shown", detail: "merges" }, { kind: "recalculated" }]);
+    expect(view.notices).toEqual([{ kind: "not_shown", detail: "merges" }, { kind: "uncomputed" }]);
 
     const conti = view.workbook.sheets[0];
     expect(conti.rows.map((row) => row.id)).toEqual(["1", "2", "3", "4", "5", "6"]);
@@ -38,11 +38,13 @@ describe("la proiezione di una cartella di Excel", () => {
       style: { bold: true, italic: true, text_color: "#FF0000", horizontal: "center" },
     });
     expect(cell(1, 2)?.cell.input).toBe("50.00%");
-    expect(cell(2, 2)).toMatchObject({ formula: "=B3/B4", derived: false, cell: { input: "-15.00%" } });
+    expect(cell(2, 2)).toMatchObject({ formula: "=B3/B4", cell: { input: "-15.00%" } });
     expect(cell(3, 1)?.cell.style).toEqual({ text_color: "#000000", fill_color: "#FFFF00", horizontal: "end" });
     expect(cell(3, 2)?.cell.input).toBe("#DIV/0!");
-    expect(cell(4, 5)).toMatchObject({ derived: true, cell: { input: "2" } });
-    expect(cell(0, 1)?.derived).toBe(false);
+    // La cella versata dalla matrice ha il valore del file, senza formula.
+    expect(cell(4, 5)).toEqual({ cell: { row: "5", column: "F", input: "2", style: { horizontal: "end" } } });
+    // La formula senza valore salvato ha la cella vuota.
+    expect(view.sheets[1].cells.get(cellKey({ row: 0, column: 1 }))).toEqual({ cell: { row: "1", column: "B" }, formula: "=A1&\"!\"" });
     // Le celle sono anche nella lista del foglio, per chi le cerca lì.
     expect(conti.cells).toHaveLength(view.sheets[0].cells.size);
   });
@@ -67,6 +69,8 @@ describe("la proiezione di una cartella di Excel", () => {
     expect(parsed((root) => { root.sheets[0].cells[0].value.kind = "date"; })).toThrow(/sconosciuto/u);
     expect(parsed((root) => { root.sheets[0].rows[0].size = 0; })).toThrow(/dimensione/u);
     expect(parsed((root) => { root.sheets[0].row_count = 1_048_577; })).toThrow(/righe/u);
+    // Ogni riga e colonna è una voce: tutti i fogli insieme ne hanno un tetto.
+    expect(parsed((root) => { root.sheets[0].row_count = 200_000; root.sheets[1].row_count = 62_200; })).toThrow(/oltre il limite di 262144/u);
     expect(parsed((root) => { root.sheets[1].name = "Conti"; })).toThrow(/ripetuti/u);
     expect(parsed((root) => { root.active = 3; })).toThrow(/foglio attivo/u);
     expect(() => parseWorkbookProjection("x".repeat(16 * 1024 * 1024 + 1))).toThrow(RangeError);

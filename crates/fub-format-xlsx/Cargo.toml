@@ -4,14 +4,13 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Cartelle di lavoro di Excel (.xlsx, .xlsm, .xltx, .xltm) in sola lettura con il modello, il calcolo e il codec di GridCraft: FormatProvider a byte e proiezione per la superficie della griglia."
+description = "Cartelle di lavoro di Excel (.xlsx, .xlsm, .xltx, .xltm) in sola lettura con il modello e il codec di GridCraft: FormatProvider a byte e proiezione per la superficie della griglia."
 
 [dependencies]
 fub-abi = { workspace = true }
 fub-format-markdown = { workspace = true }
 gridcraft-core = { workspace = true }
 gridcraft-model = { workspace = true }
-gridcraft-calc = { workspace = true }
 gridcraft-numfmt = { workspace = true }
 gridcraft-xlsx = { workspace = true }
 serde = { workspace = true }

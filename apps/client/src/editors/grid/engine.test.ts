@@ -1079,10 +1079,8 @@ describe("GridEngine con una cartella di Excel", () => {
     // La colonna D e la riga 6 sono nascoste nel file.
     expect(cell(0, 3)).toBeNull();
     expect(cell(5, 5)).toBeNull();
-    // Le celle versate dalla matrice le ha calcolate Fub, e lo dicono.
-    expect(cell(4, 5)?.classList.contains("derived")).toBe(true);
-    expect(cell(4, 5)?.title).not.toBe("");
-    expect(cell(3, 5)?.classList.contains("derived")).toBe(false);
+    // Le celle versate dalla matrice hanno i valori del file.
+    expect(cell(4, 5)?.textContent).toBe("2");
     engine.destroy();
   });
 
