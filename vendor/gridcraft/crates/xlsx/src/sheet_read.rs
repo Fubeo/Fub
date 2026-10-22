@@ -1,6 +1,7 @@
 //! Reading worksheet parts.
 
-use std::collections::HashMap;
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, BinaryHeap, HashMap};
 use std::sync::Arc;
 
 use gridcraft_core::date::{serial_from_ymd, time_fraction};
@@ -31,13 +32,51 @@ struct RowState {
     next_row: u32,
     shared: HashMap<u32, Shared>,
     /// Dynamic-array spill ranges and legacy array ranges: cached values inside them (other than
-    /// the anchor) are not stored, so the formula can fill them again.
-    dynamic: Vec<RangeRef>,
+    /// the anchor) are not stored in the cells, so the formula can fill them again; they go to the
+    /// sheet's spill map, so the values the file saved stay visible until a recalculation.
+    arrays: ArrayRanges,
+    /// The spill range of each dynamic-array anchor, as the file saved it.
+    spills: Vec<(CellRef, RangeRef)>,
     dropped: u64,
     rows: u64,
 }
 
 const MAX_HYPERLINK_CELLS: u64 = 10_000;
+
+/// The array ranges the reader has met, indexed so that a cell finds the one containing it without
+/// scanning them all: rows arrive in order, so a range is dropped once the reader is past its last
+/// row, and the open ones are keyed by first column.
+#[derive(Default)]
+struct ArrayRanges {
+    open: BTreeMap<(u32, u64), RangeRef>,
+    /// The open ranges by last row, to drop them in order.
+    ends: BinaryHeap<Reverse<(u32, u32, u64)>>,
+    next: u64,
+}
+
+impl ArrayRanges {
+    fn push(&mut self, range: RangeRef) {
+        let key = (range.start.col, self.next);
+        self.next += 1;
+        self.ends.push(Reverse((range.end.row, key.0, key.1)));
+        self.open.insert(key, range);
+    }
+
+    /// The range that contains `pos`, when `pos` is not its anchor. In a valid file array ranges
+    /// do not overlap, so among the open ranges the one that starts closest at or before the
+    /// column of `pos` is the only candidate.
+    fn containing(&mut self, pos: CellRef) -> Option<RangeRef> {
+        while let Some(Reverse((end, col, n))) = self.ends.peek().copied() {
+            if end >= pos.row {
+                break;
+            }
+            self.ends.pop();
+            self.open.remove(&(col, n));
+        }
+        let range = self.open.range(..=(pos.col, u64::MAX)).rev().map(|(_, r)| *r).find(|r| r.start.row <= pos.row)?;
+        (range.contains(pos) && range.start != pos).then_some(range)
+    }
+}
 
 pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoError> {
     let bytes = cx.pkg.read(part)?.ok_or_else(|| IoError::Format(format!("missing part {part}")))?;
@@ -55,6 +94,7 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
             El::default()
         }
     };
+    sheet.spill_ranges.extend(st.spills.drain(..));
     if st.dropped > 0 {
         cx.warn(format!("sheet \"{name}\": {} cells or rows outside the 1,048,576 × 16,384 grid were dropped", st.dropped));
     }
@@ -451,7 +491,14 @@ fn read_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: &El, pos
     }
     let dynamic = c.attr("cm").is_some();
     let formula = c.child("f").and_then(|f| read_formula(cx, st, f, pos, dynamic));
-    let value = if formula.is_none() && st.dynamic.iter().any(|r| r.contains(pos) && r.start != pos) { Value::Empty } else { value };
+    let value = if formula.is_none() && st.arrays.containing(pos).is_some() {
+        if !value.is_empty() {
+            sheet.spill.insert(pos, value);
+        }
+        Value::Empty
+    } else {
+        value
+    };
     sheet.cells.set(pos, Cell { value, formula: formula.map(Arc::new), style });
 }
 
@@ -487,9 +534,13 @@ fn read_formula(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, dynam
             let mut fm = Formula::new(text);
             let range = f.attr("ref").and_then(RangeRef::parse).unwrap_or(RangeRef::cell(pos));
             if !range.is_single() {
-                st.dynamic.push(range);
+                st.arrays.push(range);
             }
-            if !dynamic {
+            if dynamic {
+                if !range.is_single() {
+                    st.spills.push((pos, range));
+                }
+            } else {
                 fm.array = Some(range);
             }
             Some(fm)

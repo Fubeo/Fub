@@ -9,7 +9,9 @@ Sette crate, i crate del dominio del foglio di calcolo: i tipi comuni
 (`core`), il parser delle formule (`formula`), le funzioni (`functions`), i
 formati numerici (`numfmt`), il modello della cartella (`model`), il calcolo
 (`calc`) e i codec dei file (`xlsx`). Li usa soltanto `fub-format-xlsx`, che
-legge le cartelle di Excel in sola lettura. La facciata dell'upstream
+legge le cartelle di Excel in sola lettura senza ricalcolarle: dipende da
+`core`, `model`, `numfmt` e `xlsx`, e `calc` e `functions` restano per la
+modifica. La facciata dell'upstream
 (`engine`, con sessione, comandi e cronologia), l'interfaccia (`ui-egui`), i
 grafici (`chart`), il PDF (`pdf`) e il server MCP (`mcp`) non sono copiati.
 
@@ -64,7 +66,18 @@ Le patch di `patches/`, una per ragione:
   `functions/src/engineering.rs`, che qui ha lo stesso valore scritto per
   esteso; in `xlsx/src/ods.rs` un `r.as_ref()` che la 1.89 non sa inferire
   (E0308) diventa `&*r`. Il codice è lo stesso sul `main` dell'upstream, e la
-  dichiarazione va corretta là.
+  dichiarazione va corretta là;
+- `0003-valori-delle-matrici`: il lettore scarta i valori che il file ha
+  salvato nelle celle versate da una matrice, dinamica o legacy, perché la
+  formula le riempia di nuovo (storytold/gridcraft#2137, accanto a
+  storytold/gridcraft#2048), e per ritrovarli bisogna ricalcolare la cartella.
+  In `xlsx/src/sheet_read.rs` quei valori vanno nella mappa `spill` del foglio,
+  che `Sheet::value` legge già e che il ricalcolo svuota, e l'area versata di
+  una matrice dinamica va in `spill_ranges`, che la scrittura usa per il
+  `ref`. La ricerca della matrice che contiene una cella non scorre più tutte
+  le matrici lette: con molte matrici la lettura era quadratica (120.000
+  matrici in 4 s). In `xlsx/src/tests/fixtures.rs` il test dice che i valori
+  restano visibili.
 
 Le dipendenze del workspace di questa cartella hanno, per quelle in comune con
 Fub, la stessa versione del `[workspace.dependencies]` di Fub, perché il grafo

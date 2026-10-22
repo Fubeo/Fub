@@ -15,6 +15,10 @@ sha256 = "sha256:414595d0e2c9405d1022a64b046b17afb44a4fc3701358928abc979023b880e
 path = "patches/0002-rust-1-89.patch"
 sha256 = "sha256:8fad50da440194af56e70cfbaad949fa15884853a3d81f632231b12d04d0cc98"
 
+[[patch]]
+path = "patches/0003-valori-delle-matrici.patch"
+sha256 = "sha256:ef9ca6c35202af5534448a56ed7f3e7bf8bf3f846580ea9c1bbe27acf9e41e07"
+
 [[file]]
 path = "LICENSE-APACHE"
 upstream = "sha256:0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
@@ -345,6 +349,7 @@ upstream = "sha256:e0bebe5d47528b39e000276099c4992d4d264fe336dc842a9c3412fd57adf
 [[file]]
 path = "crates/xlsx/src/sheet_read.rs"
 upstream = "sha256:6ebf10ff69f437296822f7a14cf171b697493e0a4a89602179c7c0acc5623930"
+result = "sha256:8453c3711bb6b1d9bc32a81a071187ac4ea98f36c80d32ca170423e549fd495a"
 
 [[file]]
 path = "crates/xlsx/src/sheet_write.rs"
@@ -381,7 +386,7 @@ upstream = "sha256:a02fbd48c1774485369808aefdbef9e1b0e2e65bc14120fccefd251202ae8
 [[file]]
 path = "crates/xlsx/src/tests/fixtures.rs"
 upstream = "sha256:b6969b2a0450f63f099df768890feaba3e789fea72e0ed9bffb7c20e4f57c584"
-result = "sha256:f2874b22a6d0ead09861fb7cb63869941a165ba6de0bf74f6ae49ba4091ba0ec"
+result = "sha256:80da70609824df1381c3f0eb934027c9156892203bc24798324f02e6cf4e4ccf"
 
 [[file]]
 path = "crates/xlsx/src/tests/ink_roundtrip.rs"
