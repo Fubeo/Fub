@@ -239,6 +239,12 @@ impl GridJournal {
         Ok(())
     }
 
+    /// Toglie la voce di `key`: la cella torna all'input che ha nei byte.
+    /// Dice se c'era.
+    pub fn forget(&mut self, key: &GridCellKey) -> bool {
+        self.cells.remove(key).is_some()
+    }
+
     /// Il giornale riportato sui byte che il salvataggio di `saved` ha
     /// scritto: per ogni cella, l'input che il disco ha adesso è il `before`,
     /// e quello che `self` vuole è l'`after`. Le voci salvate e non più toccate
