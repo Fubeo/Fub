@@ -39,6 +39,20 @@ pub enum Lock {
 }
 
 impl Lock {
+    /// Ogni blocco, una volta.
+    pub const ALL: [Lock; 10] = [
+        Lock::Array,
+        Lock::Spill,
+        Lock::SharedFormula,
+        Lock::DataTable,
+        Lock::TableHeader,
+        Lock::TableTotals,
+        Lock::Merged,
+        Lock::Pivot,
+        Lock::RichValue,
+        Lock::Protected,
+    ];
+
     /// Il codice stabile del blocco.
     pub fn code(self) -> &'static str {
         match self {
@@ -138,6 +152,20 @@ impl SheetLocks {
                 .collect();
         }
         locks
+    }
+
+    /// Le celle di `range` bloccate da un'area (una matrice, un'area
+    /// versata, una tabella, una pivot, delle celle unite), anche vuote: la
+    /// finestra le mostra col loro blocco, così la shell non ci scrive. Le
+    /// celle bloccate una per una hanno già un contenuto, e quelle di un
+    /// foglio protetto si dicono all'`apply`.
+    pub fn area_cells(&self, range: RangeRef) -> impl Iterator<Item = CellRef> + '_ {
+        self.areas.iter().flat_map(move |&(area, lock)| {
+            let rows = area.start.row.max(range.start.row)..=area.end.row.min(range.end.row);
+            let columns = area.start.col.max(range.start.col)..=area.end.col.min(range.end.col);
+            rows.flat_map(move |row| columns.clone().map(move |col| CellRef::new(row, col)))
+                .filter(move |&cell| !(lock == Lock::Merged && cell == area.start))
+        })
     }
 
     /// Il blocco di una cella, se ne ha uno.

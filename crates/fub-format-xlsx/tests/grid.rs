@@ -142,6 +142,13 @@ fn la_sessione_mostra_i_fogli_e_i_valori_del_file() {
     assert!(!b2.stale && b2.lock.is_none());
     assert_eq!(find(&cells, "A3").value, GridValue::Text("tre".into()));
     assert_eq!(find(&cells, "C1").lock, None);
+    // D1 è vuota e unita a C1: la finestra la porta col suo blocco, perché la
+    // shell non ci scriva.
+    let d1 = find(&cells, "D1");
+    assert_eq!(
+        (d1.input.as_str(), d1.lock.as_deref()),
+        ("", Some("merged"))
+    );
 }
 
 #[test]
@@ -194,6 +201,38 @@ fn una_modifica_entra_nel_giornale_e_segna_le_formule_che_la_leggono() {
     assert_eq!(back.revision, session.revision);
     let cells = window(&mut provider, &session, &back.revision);
     assert!(!find(&cells, "B2").stale);
+
+    // Sopra una formula si scrive un valore, e annullarlo riscrive la
+    // formula del file: l'unica che si può scrivere, perché toglie la voce.
+    let over = apply(
+        &mut provider,
+        &session,
+        &back.revision,
+        vec![patch("B2", "9")],
+    )
+    .unwrap();
+    assert!(GridJournal::parse(&over.edit.inserted)
+        .unwrap()
+        .get(&key("B2"))
+        .is_some());
+    let undone = apply(
+        &mut provider,
+        &session,
+        &over.revision,
+        vec![patch("B2", "=A2*2")],
+    )
+    .unwrap();
+    assert_eq!(undone.edit.inserted, "");
+    assert_eq!(undone.revision, session.revision);
+    assert!(matches!(
+        apply(
+            &mut provider,
+            &session,
+            &undone.revision,
+            vec![patch("B2", "=A2*3")]
+        ),
+        Err(PluginError::BadArgs(_))
+    ));
 }
 
 #[test]

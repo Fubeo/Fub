@@ -119,9 +119,10 @@ I tre comandi fanno ciò che fanno per WordCraft
 aggiornamento: i test qui sopra, con il `Cargo.lock` di questa cartella
 aggiornato (`cargo update --manifest-path vendor/gridcraft/Cargo.toml
 --workspace`), quelli di `fub-format-xlsx` e di `fub-host` (test
-`xlsx_workbooks`) e `cargo deny check`. Se la proiezione cambia, la fixture
-della griglia si rigenera con `UPDATE_MIRROR=1 cargo test -p fub-format-xlsx
---test ts_projection`, e il suo diff dice cosa vede di diverso la shell.
+`xlsx_workbooks`) e `cargo deny check`. Se ciò che la griglia mostra cambia,
+la fixture della griglia si rigenera con `UPDATE_MIRROR=1 cargo test -p
+fub-format-xlsx --test ts_grid`, e il suo diff dice cosa vede di diverso la
+shell.
 
 Una correzione che serve a Fub va proposta all'upstream; finché non entra,
 resta una patch.

@@ -19,22 +19,21 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use fub_abi::{
     grid_bytes_revision, grid_journal_match, GridApplyRequest, GridBytesCell, GridBytesProvider,
-    GridBytesSession, GridBytesWindow, GridCellKey, GridCellStyle, GridColumn, GridCommit,
-    GridHorizontalAlign, GridInvalidation, GridJournal, GridJournalMatch, GridNotice, GridRow,
-    GridSheet, GridSourceEdit, GridSurfaceSpec, GridValue, GridWindowRequest, PluginError,
-    Revision, MAX_GRID_BYTES_SOURCE, MAX_GRID_INVALIDATED_CELLS, MAX_GRID_SESSION_COLUMNS,
-    MAX_GRID_SESSION_ROWS,
+    GridBytesSession, GridBytesWindow, GridCellKey, GridColumn, GridCommit, GridInvalidation,
+    GridJournal, GridJournalMatch, GridNotice, GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec,
+    GridValue, GridWindowRequest, PluginError, Revision, MAX_GRID_BYTES_SOURCE,
+    MAX_GRID_INVALIDATED_CELLS, MAX_GRID_SESSION_COLUMNS, MAX_GRID_SESSION_ROWS,
 };
 use gridcraft_calc::recalc::{Calc, Key};
 use gridcraft_core::{CellRef, RangeRef, Value as GcValue};
 use gridcraft_model::{Sheet, Visibility, Workbook};
 use gridcraft_numfmt::{format_value, NumberFormat};
 
+use crate::display::{self, NotShown, Warning};
 use crate::graft::{graft, CellEdit, GraftError};
 use crate::input::{self, InputError, NewValue};
 use crate::locks::SheetLocks;
 use crate::package::Package;
-use crate::projection::{self, Horizontal, NotShown, NoticeKind, ValueKind};
 use crate::{guarded, sheet_xml, XlsxError, FORMAT_ID};
 
 /// L'id della superficie.
@@ -51,7 +50,7 @@ const MIN_COLUMNS: u32 = 26;
 const MAX_STALE: usize = 1_000_000;
 
 /// Il codice di blocco di un foglio che l'innesto non tratta.
-const SHEET_SHAPE_LOCK: &str = "sheet-shape";
+pub const SHEET_SHAPE_LOCK: &str = "sheet-shape";
 
 fn bad(message: impl Into<String>) -> PluginError {
     PluginError::BadArgs(message.into().into())
@@ -491,6 +490,19 @@ impl Instance {
             .min(total_columns);
         let row_start = request.row_start.min(row_end);
         let column_start = request.column_start.min(column_end);
+        let range = (row_start < row_end && column_start < column_end).then(|| {
+            RangeRef::new(
+                CellRef::new(row_start, column_start),
+                CellRef::new(row_end - 1, column_end - 1),
+            )
+        });
+        let area_locked: Vec<CellRef> = match (range, self.editable) {
+            (Some(range), true) => match self.shape(sheet) {
+                Shape::Locks(locks) => locks.area_cells(range).collect(),
+                Shape::Unsupported => Vec::new(),
+            },
+            _ => Vec::new(),
+        };
         let model = &self.workbook.sheets[sheet];
         let rows = (row_start..row_end)
             .map(|index| {
@@ -524,11 +536,8 @@ impl Instance {
             .collect();
 
         let mut positions = BTreeSet::new();
-        if row_start < row_end && column_start < column_end {
-            let range = RangeRef::new(
-                CellRef::new(row_start, column_start),
-                CellRef::new(row_end - 1, column_end - 1),
-            );
+        if let Some(range) = range {
+            positions.extend(area_locked.iter().map(|at| (at.row, at.col)));
             positions.extend(
                 model
                     .cells
@@ -596,24 +605,10 @@ impl Instance {
             &NumberFormat::parse_cached(style.num_fmt.as_str()),
             workbook.date_system,
         );
-        let kind = value_kind(&value);
-        let projected =
-            projection::cell_style(workbook, style, kind, formatted.numeric, formatted.color);
         GridBytesCell {
             key,
             input,
-            style: GridCellStyle {
-                bold: projected.bold,
-                italic: projected.italic,
-                text_color: projected.text_color,
-                fill_color: projected.fill_color,
-                horizontal: projected.horizontal.map(|horizontal| match horizontal {
-                    Horizontal::Start => GridHorizontalAlign::Start,
-                    Horizontal::Center => GridHorizontalAlign::Center,
-                    Horizontal::End => GridHorizontalAlign::End,
-                }),
-                number_format: None,
-            },
+            style: display::cell_style(workbook, style, &value, formatted.numeric, formatted.color),
             value: grid_value(&value),
             display: formatted.text,
             lock,
@@ -649,6 +644,16 @@ impl Instance {
                     "grid patch preimage does not match".into(),
                 ));
             }
+            let disk = self.disk_input(sheet, cell);
+            // Tornare all'input dei byte toglie la voce, anche quando è una
+            // formula, che altrimenti non si scrive: è l'annulla di chi ha
+            // scritto sopra una formula.
+            if patch.after == disk {
+                if journal.forget(&patch.cell) {
+                    changed.push(patch.cell.clone());
+                }
+                continue;
+            }
             let value = input::parse(&patch.after).map_err(|error| match error {
                 InputError::Formula => bad("formulas cannot be written to a workbook"),
                 InputError::TooLong => bad("grid cell text is too long"),
@@ -657,7 +662,7 @@ impl Instance {
             if after == shown {
                 continue;
             }
-            journal.record(patch.cell.clone(), self.disk_input(sheet, cell), after)?;
+            journal.record(patch.cell.clone(), disk, after)?;
             changed.push(patch.cell.clone());
         }
         let before_text = self.journal.to_text();
@@ -761,8 +766,8 @@ fn index(id: &str, prefix: char, limit: u32) -> Option<u32> {
 /// un margine per scrivere.
 fn extent(workbook: &Workbook, sheet: &Sheet) -> (u32, u32) {
     let (mut rows, mut columns) = (0u32, 0u32);
-    for (at, cell, value) in projection::entries(sheet) {
-        if projection::shows(workbook, sheet, at, cell, value) {
+    for (at, cell, value) in display::entries(sheet) {
+        if display::shows(workbook, sheet, at, cell, value) {
             rows = rows.max(at.row + 1);
             columns = columns.max(at.col + 1);
         }
@@ -791,10 +796,10 @@ fn notices(workbook: &Workbook, report: &gridcraft_xlsx::ReadReport) -> Vec<Grid
         add("macros");
     }
     for warning in &report.warnings {
-        match projection::classify(warning) {
-            NoticeKind::Macros => {}
-            NoticeKind::ExternalLinks => add("external-links"),
-            _ => add("incomplete"),
+        match display::classify(warning) {
+            Warning::Macros => {}
+            Warning::ExternalLinks => add("external-links"),
+            Warning::Incomplete => add("incomplete"),
         }
     }
     for part in NotShown::ALL {
@@ -894,17 +899,6 @@ fn new_value(value: &NewValue) -> GcValue {
         NewValue::Text(text) => GcValue::Text(text.as_str().into()),
         NewValue::Bool(flag) => GcValue::Bool(*flag),
         NewValue::Error(error) => GcValue::Error(*error),
-    }
-}
-
-fn value_kind(value: &GcValue) -> Option<ValueKind> {
-    match value {
-        GcValue::Empty => None,
-        GcValue::Number(_) => Some(ValueKind::Number),
-        GcValue::Text(_) => Some(ValueKind::Text),
-        GcValue::Bool(_) => Some(ValueKind::Boolean),
-        GcValue::Error(_) => Some(ValueKind::Error),
-        GcValue::Array(array) => array.data.first().and_then(value_kind),
     }
 }
 
