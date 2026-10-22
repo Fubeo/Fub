@@ -184,3 +184,19 @@ L'opzione `frontmatter` (predefinita `true`) tiene o toglie i metadati.
 - Il documento unico non può contenere allegati: ogni allegato citato è un
   avviso nel rapporto, col documento che lo cita.
 
+## Un foglio in Excel
+
+**Esporta una copia in Excel** (`xlsx.export-copy`, dalla palette) scrive il
+foglio in una cartella di Excel nuova, con fogli, valori, formule, stili,
+dimensioni e righe e colonne nascoste. Il `.fubsheet` non si tocca: la copia
+arriva nell'attività e si salva dove si vuole. Le formule passano nella
+sintassi di Excel, e Excel le ricalcola all'apertura.
+
+Accanto alla copia l'attività dice **cosa cambia**: un foglio con un nome che
+Excel non ammette prende un nome nuovo, anche nelle formule; una formula che
+Excel non sa leggere resta testo; una cella che in Excel vale diverso da ciò
+che Fub mostra (una funzione che Fub non ha, un confronto fra testi che Excel
+fa senza maiuscole) si nomina con i due valori. Ciò che la copia non porta si
+conta, e le proprietà del foglio non entrano in una cartella. Righe e colonne
+diventano posizioni, quindi un link a una cella del `.fubsheet` non punta alla
+copia.

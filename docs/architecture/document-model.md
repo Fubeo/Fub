@@ -154,6 +154,16 @@ intervalli, riferimenti cross-sheet e le funzioni `SUM`, `AVERAGE`, `MIN`,
 client non replica questa semantica: chiede il risultato Rust dopo il commit e
 usa l'input persistito come fallback.
 
+Un `.fubsheet` si **esporta** in una cartella di Excel nuova
+(`crates/fub-format-xlsx/src/fubsheet.rs`, destinazione `xlsx.copy`): le righe
+e le colonne diventano posizioni nell'ordine del foglio, le formule si
+scrivono nella sintassi di Excel dallo stesso albero con cui Fub le valuta
+(`fub_format_sheet::excel_formula`), e i loro valori li calcola GridCraft.
+La copia si rilegge e si confronta con il foglio: ciò che non porta, i fogli
+rinominati, le formule rimaste testo e le celle con un valore diverso da
+quello di Fub sono avvisi nel rapporto dell'export
+([ADR 0217](../decisions/0217-copia-in-excel-di-un-fubsheet.md)).
+
 ## Cartella di Excel `.xlsx`
 
 Un `.xlsx` si apre nella famiglia `grid` con la versione 2 del protocollo, su
@@ -226,5 +236,6 @@ albero malformato.
 - `crates/fub-format-sheet/src/lib.rs`
 - `crates/fub-format-xlsx/src/grid.rs`
 - `crates/fub-format-xlsx/src/graft.rs`
+- `crates/fub-format-xlsx/src/fubsheet.rs`
 - `apps/client/src/editors/grid/workbook.ts`
 - `crates/fub-format-svg/src/parse.rs`
