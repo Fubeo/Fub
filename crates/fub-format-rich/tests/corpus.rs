@@ -15,6 +15,7 @@
 //! `tempi`, con `--ignored`).
 
 use std::collections::BTreeMap;
+use std::io::{Cursor, Read, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -657,10 +658,12 @@ impl Lcg {
     }
 }
 
-/// Mutazioni deterministiche di ogni file: troncamenti in punti fissi e byte
-/// cambiati. `open` dà un esito o un errore, senza panic, entro un tempo.
-/// `CORPUS_MUTATIONS=<n>` fa `n` giri di byte cambiati invece di 8, per la
-/// prova lunga di un aggiornamento del motore.
+/// Mutazioni deterministiche di ogni file: troncamenti in punti fissi, byte
+/// cambiati e, in un pacchetto, mutazioni dentro l'XML ([`xml_mutants`]).
+/// `open` dà un esito o un errore, senza panic, entro un tempo, e un
+/// documento che si apre si salva o si rifiuta. `CORPUS_MUTATIONS=<n>` fa `n`
+/// giri di ciascuna mutazione invece di 8, per la prova lunga di un
+/// aggiornamento del motore.
 #[test]
 fn le_mutazioni_non_fanno_panic() {
     const LIMIT: Duration = Duration::from_secs(20);
@@ -669,6 +672,7 @@ fn le_mutazioni_non_fanno_panic() {
         .and_then(|n| n.parse().ok())
         .unwrap_or(8);
     let mut failures = Vec::new();
+    let mut xml_opened = 0;
     for entry in manifest() {
         let codec = codec_of(&entry.path);
         let bytes = std::fs::read(corpus().join(&entry.path)).unwrap();
@@ -686,23 +690,202 @@ fn le_mutazioni_non_fanno_panic() {
             }
             mutants.push((format!("{} byte cambiati, giro {n}", n + 1), changed));
         }
-        for (what, mutant) in mutants {
+        let xml = xml_mutants(&bytes, &mut rng, rounds);
+        let all = mutants
+            .into_iter()
+            .map(|mutant| (mutant, false))
+            .chain(xml.into_iter().map(|mutant| (mutant, true)));
+        for ((what, mutant), in_xml) in all {
             let start = Instant::now();
             let result = std::panic::catch_unwind(|| {
-                if let Ok(opened) = open(codec, &mutant) {
+                let opened = open(codec, &mutant).ok();
+                if let Some(opened) = &opened {
                     // Un documento che si apre si salva anche, o lo rifiuta.
                     let _ = save(codec, &mutant, &opened.projection);
                 }
+                opened.is_some()
             });
             let took = start.elapsed();
-            if result.is_err() {
-                failures.push(format!("{}: panic con {what}", entry.path));
-            } else if took > LIMIT {
-                failures.push(format!("{}: {took:?} con {what}", entry.path));
+            match result {
+                Err(_) => failures.push(format!("{}: panic con {what}", entry.path)),
+                Ok(_) if took > LIMIT => {
+                    failures.push(format!("{}: {took:?} con {what}", entry.path))
+                }
+                Ok(opened) => xml_opened += usize::from(opened && in_xml),
             }
         }
     }
+    // Le mutazioni dentro l'XML arrivano al modello: qualcuna si apre.
+    assert!(xml_opened > 0, "nessuna mutazione dell'XML si apre");
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// Valori di attributo che un lettore non si aspetta.
+const STRANGE: &[&str] = &[
+    "",
+    "-1",
+    "0",
+    "4294967296",
+    "99999999999999999999999",
+    "NaN",
+    "1e308",
+    "x",
+    "auto",
+    "💥",
+];
+
+/// Mutazioni dentro l'XML di un pacchetto. Un byte cambiato di solito rompe
+/// lo ZIP e si ferma lì; queste arrivano al lettore e al modello. Ogni giro
+/// cambia una parte XML (la principale un giro su due): un valore di
+/// attributo strano, un tag tolto, ripetuto, rinominato o spostato, un
+/// elemento sconosciuto.
+fn xml_mutants(bytes: &[u8], rng: &mut Lcg, rounds: u32) -> Vec<(String, Vec<u8>)> {
+    let Ok(mut archive) = zip::ZipArchive::new(Cursor::new(bytes)) else {
+        return Vec::new();
+    };
+    let mut parts = Vec::new();
+    for i in 0..archive.len() {
+        let Ok(mut file) = archive.by_index(i) else {
+            return Vec::new();
+        };
+        let Ok(name) = file.name().map(|name| name.to_string()) else {
+            return Vec::new();
+        };
+        let mut data = Vec::new();
+        if file.read_to_end(&mut data).is_err() {
+            return Vec::new();
+        }
+        parts.push((name, data));
+    }
+    let xml: Vec<usize> = (0..parts.len())
+        .filter(|&i| {
+            let (name, data) = &parts[i];
+            (name.ends_with(".xml") || name.ends_with(".rels")) && std::str::from_utf8(data).is_ok()
+        })
+        .collect();
+    let main = xml
+        .iter()
+        .copied()
+        .find(|&i| parts[i].0 == "word/document.xml" || parts[i].0 == "content.xml");
+    let mut out = Vec::new();
+    for n in 0..rounds {
+        let at = match main {
+            Some(main) if n % 2 == 0 => main,
+            _ if xml.is_empty() => break,
+            _ => xml[rng.next() as usize % xml.len()],
+        };
+        let text = std::str::from_utf8(&parts[at].1).unwrap();
+        let tags = tags_of(text);
+        if tags.is_empty() {
+            continue;
+        }
+        let pick = |rng: &mut Lcg| tags[rng.next() as usize % tags.len()].clone();
+        let tag = pick(rng);
+        let (what, changed) = match rng.next() % 6 {
+            0 => {
+                let quotes: Vec<usize> = text[tag.clone()]
+                    .match_indices("=\"")
+                    .map(|(i, _)| tag.start + i + 2)
+                    .collect();
+                let Some(&from) = quotes.get(rng.next() as usize % quotes.len().max(1)) else {
+                    continue;
+                };
+                let to = from + text[from..].find('"').unwrap_or(0);
+                let value = STRANGE[rng.next() as usize % STRANGE.len()];
+                (
+                    "valore strano",
+                    format!("{}{value}{}", &text[..from], &text[to..]),
+                )
+            }
+            1 => (
+                "tag tolto",
+                format!("{}{}", &text[..tag.start], &text[tag.end..]),
+            ),
+            2 => (
+                "tag ripetuto",
+                format!(
+                    "{}{}{}",
+                    &text[..tag.end],
+                    &text[tag.clone()],
+                    &text[tag.end..]
+                ),
+            ),
+            3 => {
+                let start = tag.start + 1 + usize::from(text[tag.start + 1..].starts_with('/'));
+                let end = start
+                    + text[start..tag.end]
+                        .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
+                        .unwrap_or(0);
+                (
+                    "tag rinominato",
+                    format!("{}z{}", &text[..end], &text[end..]),
+                )
+            }
+            4 => {
+                let name = &text[tag.start + 1..];
+                let name = name.trim_start_matches('/');
+                let prefix = name
+                    .split(':')
+                    .next()
+                    .filter(|p| name.contains(':') && !p.contains(' '));
+                let unknown = match prefix {
+                    Some(prefix) => format!("<{prefix}:zz {prefix}:val=\"1\"/>"),
+                    None => "<zz val=\"1\"/>".to_string(),
+                };
+                (
+                    "elemento sconosciuto",
+                    format!("{}{unknown}{}", &text[..tag.end], &text[tag.end..]),
+                )
+            }
+            _ => {
+                let to = pick(rng);
+                let moved = &text[tag.clone()];
+                let without = format!("{}{}", &text[..tag.start], &text[tag.end..]);
+                let at = if to.start >= tag.start {
+                    to.end - moved.len()
+                } else {
+                    to.end
+                };
+                (
+                    "tag spostato",
+                    format!("{}{moved}{}", &without[..at], &without[at..]),
+                )
+            }
+        };
+        let mut mutated = parts.clone();
+        mutated[at].1 = changed.into_bytes();
+        out.push((
+            format!("{what} in {}, giro {n}", parts[at].0),
+            rezip(&mutated),
+        ));
+    }
+    out
+}
+
+/// Gli intervalli dei tag di un testo XML, senza dichiarazioni e commenti.
+fn tags_of(text: &str) -> Vec<std::ops::Range<usize>> {
+    let mut out = Vec::new();
+    let mut from = 0;
+    while let Some(open) = text[from..].find('<').map(|i| from + i) {
+        let Some(close) = text[open..].find('>').map(|i| open + i + 1) else {
+            break;
+        };
+        if !matches!(text.as_bytes().get(open + 1), Some(b'?' | b'!')) {
+            out.push(open..close);
+        }
+        from = close;
+    }
+    out
+}
+
+fn rezip(parts: &[(String, Vec<u8>)]) -> Vec<u8> {
+    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    for (name, data) in parts {
+        zip.start_file(name.as_str(), zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(data).unwrap();
+    }
+    zip.finish().unwrap().into_inner()
 }
 
 /// Il writer è deterministico: lo stesso modello dà gli stessi byte, due volte

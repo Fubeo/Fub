@@ -37,9 +37,13 @@ ne spiega ogni riga.
 
 Altri tre test usano gli stessi file: `l_esito_dichiarato_è_quello_dell_apertura`
 (il campo `atteso` del manifesto è l'esito vero dell'apertura, e ogni esito che
-non è `modificabile` dice `perché`), `le_mutazioni_non_fanno_panic` (tredici
-mutazioni deterministiche per file, senza panic ed entro un tempo) e `tempi`
-(ignorato, da lanciare con `--release -- --ignored --nocapture tempi`).
+non è `modificabile` dice `perché`), `le_mutazioni_non_fanno_panic` (mutazioni
+deterministiche per file: cinque troncamenti, otto giri di byte cambiati e,
+in un pacchetto, otto mutazioni dentro l'XML, come valori di attributo strani
+e tag tolti, ripetuti, rinominati o spostati; aprire e salvare non fa panic ed
+entro un tempo, e qualche mutazione dell'XML si apre davvero) e `tempi`
+(ignorato, da lanciare con `--release -- --ignored --nocapture tempi`;
+`FUB_TEMPI_PARAGRAFI` sceglie la grandezza del file grande).
 
 ## Rifare i file
 
