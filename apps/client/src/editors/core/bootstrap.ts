@@ -42,6 +42,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly completions: CompletionSources;
   readonly slash?: EditorSlashHost;
   readonly gridHost?: GridHost;
+  /// La revisione dei byte da cui il testo della sessione di `doc` discende
+  /// adesso: una cartella di Excel ci apre il suo giornale.
+  readonly documentBase?: (doc: string) => string | null;
   readonly media?: MediaSurfaceDeps;
   readonly canvasMedia?: CanvasMediaPort;
   readonly canvasAttachments?: CanvasAttachmentPort;
@@ -275,8 +278,8 @@ export function createDocumentSurfaceRegistry(
     owner: "fub.shell.grid",
     family: "grid",
     defaultProfile: "sheet",
-    // Una cartella di Excel si legge nella stessa griglia, dalla sua
-    // proiezione e in sola lettura (`editors/grid/workbook.ts`).
+    // Una cartella di Excel si apre nella stessa griglia, sui suoi byte con
+    // la versione 2 del protocollo (`editors/grid/workbook.ts`).
     profiles: ["sheet", "workbook"],
     formats: { fubsheet: "sheet", xlsx: "workbook" },
     factory: {
@@ -287,6 +290,8 @@ export function createDocumentSurfaceRegistry(
           profile,
           formatId: context.formatId,
           revision: context.revision,
+          documentId: context.documentId,
+          base: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
           onChange: (change) => options.onChange(context.paneId, change),
           onSelectionChange: () => options.onSelectionChange(context.paneId),
           grid: options.gridHost,

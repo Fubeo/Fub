@@ -296,6 +296,20 @@ export const SCENE = onPage("shell", [
     },
   },
   {
+    id: "grid-workbook",
+    title: "Grid v2: una cartella di Excel sui suoi byte",
+    query: "workbook=1",
+    prepare: async (page) => {
+      await openFolder(page, "Dati");
+      await page.click('#file-list .tree-row[data-path="Dati/Conti.xlsx"]');
+      await page.waitForFunction(() => {
+        const grid = document.querySelector(".grid-surface");
+        return grid?.getAttribute("data-grid-protocol") === "v2"
+          && (grid?.querySelectorAll('[role="gridcell"]').length ?? 0) > 0;
+      });
+    },
+  },
+  {
     id: "nota-tre-modi",
     title: "La stessa nota in Sorgente, Live e Lettura: tre fogli affiancati",
     prepare: async (page) => {
