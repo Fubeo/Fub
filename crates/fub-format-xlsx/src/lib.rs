@@ -113,8 +113,9 @@ pub fn open(bytes: &[u8]) -> Result<String, XlsxError> {
     })
 }
 
-/// Il contenuto prima del codec: le dimensioni e la firma.
-fn check(bytes: &[u8]) -> Result<(), XlsxError> {
+/// Il contenuto prima del codec: le dimensioni e la firma. Non legge il
+/// pacchetto: dice soltanto se il codec ha qualcosa da leggere.
+pub fn check(bytes: &[u8]) -> Result<(), XlsxError> {
     if bytes.len() > MAX_SOURCE_BYTES {
         return Err(XlsxError::TooLarge(bytes.len()));
     }

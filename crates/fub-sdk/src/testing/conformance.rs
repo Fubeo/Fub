@@ -52,7 +52,10 @@ use fub_abi::model::{
     LinkTarget, Span, Tag,
 };
 use fub_abi::traits::{EventHandler, IndexProvider, IndexQuery, ReadApi, ViewProvider};
-use fub_abi::FormatProvider;
+use fub_abi::{
+    grid_bytes_revision, FormatProvider, GridBytesProvider, GridJournal, PluginError,
+    GRID_BYTES_PROTOCOL_VERSION,
+};
 
 use crate::testing::MemoryHost;
 
@@ -1524,6 +1527,187 @@ pub fn a_grid_supports_the_lifecycle(
                         column_count: 1,
                     },
                 )
+                .is_err(),
+            "shutdown must retire every grid instance"
+        );
+    }
+}
+
+/// Caso minimo della suite condivisa del protocollo grid sui byte.
+pub struct GridBytesLifecycleFixture<'a> {
+    pub surface: &'a str,
+    /// I byte della sorgente, come li legge l'host.
+    pub source: &'a [u8],
+    /// Una cella che si può scrivere, con l'input che ha nei byte.
+    pub cell: GridCellKey,
+    pub input: &'a str,
+    /// L'input da scrivere, nella forma canonica del provider.
+    pub replacement: &'a str,
+    /// Se i byte salvati hanno la cella con il nuovo input.
+    pub saved_matches: fn(&[u8]) -> bool,
+}
+
+/// Verifica lo stesso lifecycle osservabile della versione 2 per provider
+/// nativi e WASM: dichiarazione stabile, apertura con il giornale, finestra,
+/// commit che è il diff del giornale, revisione dei byte e del giornale,
+/// innesto idempotente, conflitti, close e shutdown.
+pub fn a_grid_bytes_provider_supports_the_lifecycle(
+    provider: &mut dyn GridBytesProvider,
+    fixture: GridBytesLifecycleFixture<'_>,
+) {
+    let first = provider.surfaces();
+    assert_eq!(first, provider.surfaces(), "grid surfaces must be stable");
+    let surface = first
+        .iter()
+        .find(|surface| surface.id == fixture.surface)
+        .expect("fixture surface must be declared");
+    assert_eq!(surface.family, "grid");
+    assert_eq!(surface.protocol_version, GRID_BYTES_PROTOCOL_VERSION);
+
+    let base = Revision::of_bytes(fixture.source);
+    let session = provider
+        .open(
+            fixture.surface,
+            fixture.source,
+            base.clone(),
+            &GridJournal::new(),
+        )
+        .expect("grid opens on the bytes");
+    assert_eq!(
+        session.revision,
+        grid_bytes_revision(&base, ""),
+        "the session revision is the bytes and the empty journal"
+    );
+    assert!(session.conflicts.is_empty());
+    let request = |revision: &Revision| GridWindowRequest {
+        revision: revision.clone(),
+        sheet: fixture.cell.sheet.clone(),
+        row_start: 0,
+        row_count: 1,
+        column_start: 0,
+        column_count: 1,
+    };
+    let input = |provider: &mut dyn GridBytesProvider, instance: &str, revision: &Revision| {
+        provider
+            .window(instance, request(revision))
+            .expect("window")
+            .cells
+            .into_iter()
+            .find(|cell| cell.key == fixture.cell)
+            .expect("fixture cell is visible")
+    };
+    assert_eq!(
+        input(provider, &session.instance, &session.revision).input,
+        fixture.input
+    );
+
+    let commit = provider
+        .apply(
+            &session.instance,
+            GridApplyRequest {
+                revision: session.revision.clone(),
+                patches: vec![GridCellPatch {
+                    cell: fixture.cell.clone(),
+                    before: Some(fixture.input.to_owned()),
+                    after: fixture.replacement.to_owned(),
+                }],
+            },
+        )
+        .expect("guarded grid commit");
+    assert_eq!((commit.edit.from, commit.edit.to), (0, 0));
+    assert_eq!(commit.edit.deleted, "");
+    let text = commit.edit.inserted.clone();
+    let journal = GridJournal::parse(&text).expect("the commit writes a canonical journal");
+    assert_eq!(
+        journal.get(&fixture.cell),
+        Some((fixture.input, fixture.replacement)),
+        "the journal keeps the bytes' input and the new one"
+    );
+    assert_eq!(commit.revision, grid_bytes_revision(&base, &text));
+    if let GridInvalidation::Cells(cells) = &commit.invalidation {
+        assert!(cells.contains(&fixture.cell));
+    }
+    let changed = input(provider, &session.instance, &commit.revision);
+    assert_eq!(changed.input, fixture.replacement);
+    assert!(!changed.conflict);
+    assert!(
+        matches!(
+            provider.window(&session.instance, request(&session.revision)),
+            Err(PluginError::Conflict(_))
+        ),
+        "a window on the old revision is a conflict"
+    );
+    assert!(
+        matches!(
+            provider.bytes_to_write(&session.instance, session.revision.clone()),
+            Err(PluginError::Conflict(_))
+        ),
+        "bytes on the old revision are a conflict"
+    );
+    let saved = provider
+        .bytes_to_write(&session.instance, commit.revision.clone())
+        .expect("the journal grafts");
+    assert!(
+        (fixture.saved_matches)(&saved),
+        "the saved bytes hold the new input"
+    );
+
+    // Il giornale che la sessione del documento conserva riapre lo stesso
+    // stato (una bozza ripresa), e sui byte salvati è già applicato.
+    let restored = provider
+        .open(fixture.surface, fixture.source, base, &journal)
+        .expect("the journal reopens");
+    assert_eq!(restored.revision, commit.revision);
+    assert_eq!(
+        input(provider, &restored.instance, &restored.revision).input,
+        fixture.replacement
+    );
+    let after = Revision::of_bytes(&saved);
+    let applied = provider
+        .open(fixture.surface, &saved, after.clone(), &journal)
+        .expect("the journal opens on the saved bytes");
+    assert!(applied.conflicts.is_empty());
+    assert_eq!(
+        provider
+            .bytes_to_write(&applied.instance, applied.revision.clone())
+            .expect("an applied journal grafts nothing"),
+        saved
+    );
+
+    // Un giornale che i byte non confermano è un conflitto, e mostra il suo
+    // input.
+    let mut stale = GridJournal::new();
+    stale
+        .record(
+            fixture.cell.clone(),
+            format!("{}~", fixture.input),
+            fixture.replacement.to_owned(),
+        )
+        .expect("a one-entry journal");
+    let conflicted = provider
+        .open(
+            fixture.surface,
+            fixture.source,
+            Revision::of_bytes(fixture.source),
+            &stale,
+        )
+        .expect("a stale journal opens");
+    assert_eq!(conflicted.conflicts, vec![fixture.cell.clone()]);
+    let cell = input(provider, &conflicted.instance, &conflicted.revision);
+    assert!(cell.conflict && cell.input == fixture.replacement);
+
+    provider.close(&session.instance).expect("grid closes");
+    assert!(
+        provider
+            .window(&session.instance, request(&commit.revision))
+            .is_err(),
+        "closed grid instance must not remain callable"
+    );
+    provider.shutdown().expect("grid shuts down");
+    for instance in [restored.instance, applied.instance, conflicted.instance] {
+        assert!(
+            provider
+                .bytes_to_write(&instance, commit.revision.clone())
                 .is_err(),
             "shutdown must retire every grid instance"
         );
