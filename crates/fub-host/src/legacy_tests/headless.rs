@@ -127,6 +127,11 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
         plugins.retain(|id| *id != "fub.rich");
         assert!(info.plugins.iter().any(|p| p.id == "fub.rich"));
     }
+    // La griglia delle cartelle di Excel viene col loro codec.
+    if cfg!(feature = "xlsx") {
+        plugins.retain(|id| *id != "fub.xlsx");
+        assert!(info.plugins.iter().any(|p| p.id == "fub.xlsx"));
+    }
     #[cfg_attr(not(feature = "draw"), allow(unused_mut))]
     let mut expected = vec![
         "fub.backlinks",

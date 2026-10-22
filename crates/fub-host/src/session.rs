@@ -56,7 +56,7 @@ use fub_abi::session::ViewContext;
 use fub_abi::text::{Arg, Text};
 use fub_abi::traits::{JobId, JobSpec, ViewInstance, ViewSpec};
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
-use fub_abi::{Actor, Notice, PluginError};
+use fub_abi::{Actor, GridBytesSession, GridBytesWindow, GridJournal, Notice, PluginError};
 #[cfg(feature = "versioning")]
 use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
 use fub_kernel::host::authorize_path;
@@ -3367,10 +3367,10 @@ impl Host {
     }
     /// Sorgente, revisione e formato dalla stessa fotografia del workspace.
     ///
-    /// Per un documento di videoscrittura o una cartella di Excel la sorgente
-    /// è la sua proiezione e la revisione è quella dei byte del file
-    /// ([`crate::rich`], [`crate::workbook`]): i byte si leggono nella
-    /// fotografia, la proiezione si calcola fuori.
+    /// Per un documento di videoscrittura la sorgente è la sua proiezione, per
+    /// una cartella di Excel il suo giornale vuoto; la revisione è quella dei
+    /// byte del file ([`crate::rich`], [`crate::workbook`]): i byte si leggono
+    /// nella fotografia, la proiezione si calcola fuori.
     pub fn read_document_with_format(
         &self,
         vault: Option<&str>,
@@ -3401,10 +3401,11 @@ impl Host {
                 let projection = crate::rich::open(codec, id, &bytes)?;
                 Ok((projection, revision, format))
             }
+            // Il testo di una cartella è il suo giornale, vuoto finché la shell
+            // non cambia una cella: i valori li dà la griglia, sui byte.
             Read::Workbook(bytes) => {
-                let revision = Revision::of_bytes(&bytes);
-                let projection = crate::workbook::open(id, &bytes)?;
-                Ok((projection, revision, format))
+                crate::workbook::check(id, &bytes)?;
+                Ok((String::new(), Revision::of_bytes(&bytes), format))
             }
         }
     }
@@ -3550,6 +3551,96 @@ impl Host {
         self.with_grid(vault, surface, |provider| provider.close(instance))
     }
 
+    fn with_grid_bytes<R>(
+        &self,
+        vault: Option<&str>,
+        surface: &str,
+        call: impl FnOnce(&fub_kernel::workspace::PreparedGridBytesCall) -> Result<R, PluginError>,
+    ) -> Result<R, PluginError> {
+        let workspace = self.session_workspace(vault)?;
+        let prepared = {
+            let workspace = workspace.read()?;
+            workspace.prepare_grid_bytes_call(surface)?
+        };
+        call(&prepared)
+    }
+
+    /// Apre la superficie `surface` della versione 2 sui byte di `doc`, con il
+    /// giornale `journal` della sua `DocumentSession`.
+    ///
+    /// I byte li legge l'host, non la shell: la revisione `base` è quella su
+    /// cui la sessione del documento ha il giornale, e byte diversi sono un
+    /// conflitto da ricaricare. La superficie apre soltanto un documento del
+    /// formato che dichiara.
+    pub fn grid_bytes_open(
+        &self,
+        vault: Option<&str>,
+        surface: &str,
+        doc: &DocId,
+        journal: &str,
+        base: Revision,
+    ) -> Result<GridBytesSession, PluginError> {
+        let journal = GridJournal::parse(journal)?;
+        let workspace = self.session_workspace(vault)?;
+        let (bytes, prepared) = {
+            let ws = workspace.read()?;
+            let prepared = ws.prepare_grid_bytes_call(surface)?;
+            let declared = ws
+                .grid_surfaces()
+                .into_iter()
+                .find(|spec| spec.id == surface)
+                .map(|spec| spec.format);
+            let format = ws.format_of(doc).map(|known| known.descriptor.id);
+            if declared.is_none() || declared != format {
+                return Err(PluginError::BadArgs(
+                    format!("grid surface `{surface}` does not open `{doc}`").into(),
+                ));
+            }
+            (
+                ws.read_source_bytes(doc).map_err(PluginError::from)?,
+                prepared,
+            )
+        };
+        let revision = Revision::of_bytes(&bytes);
+        if revision != base {
+            return Err(PluginError::from(fub_kernel::KernelError::Stale(
+                doc.to_string(),
+            )));
+        }
+        prepared.open(surface, &bytes, revision, &journal)
+    }
+
+    pub fn grid_bytes_window(
+        &self,
+        vault: Option<&str>,
+        surface: &str,
+        instance: &str,
+        request: GridWindowRequest,
+    ) -> Result<GridBytesWindow, PluginError> {
+        self.with_grid_bytes(vault, surface, |provider| {
+            provider.window(instance, request)
+        })
+    }
+
+    pub fn grid_bytes_apply(
+        &self,
+        vault: Option<&str>,
+        surface: &str,
+        instance: &str,
+        request: GridApplyRequest,
+    ) -> Result<GridCommit, PluginError> {
+        self.with_grid_bytes(vault, surface, |provider| provider.apply(instance, request))
+    }
+
+    pub fn grid_bytes_close(
+        &self,
+        vault: Option<&str>,
+        surface: &str,
+        instance: &str,
+    ) -> Result<(), PluginError> {
+        self.with_grid_bytes(vault, surface, |provider| provider.close(instance))
+    }
+
     pub fn write_document(
         &self,
         vault: Option<&str>,
@@ -3611,6 +3702,63 @@ impl Host {
         Self::write_bytes_in(workspace, id, &bytes, revision)
     }
 
+    /// Scrive il giornale `source` di una cartella di Excel.
+    ///
+    /// Come per la videoscrittura, tutto dentro il turno di scrittura: i byte
+    /// su cui la shell ha lavorato si leggono e si confrontano con la base, il
+    /// provider della griglia registrato innesta il giornale fuori dal
+    /// lucchetto, e i byte nuovi passano dal CAS della stessa revisione. Una
+    /// voce in conflitto scrive il suo input: la base dice che la shell l'ha
+    /// mostrata su questi byte. Un giornale vuoto, o tutto già applicato, non
+    /// scrive niente.
+    fn write_workbook_in(
+        &self,
+        workspace: &Custody<Workspace>,
+        id: &DocId,
+        source: &str,
+        base: WriteBase,
+    ) -> Result<Revision, PluginError> {
+        let _turn = workspace.write_turn();
+        let journal = crate::workbook::journal(id, source)?;
+        let surface = crate::workbook::surface(id)?;
+        let (current, call) = {
+            let ws = workspace.read()?;
+            let current =
+                fub_kernel::error::optional(ws.read_source_bytes(id)).map_err(PluginError::from)?;
+            let call = if journal.is_empty() {
+                None
+            } else {
+                Some(ws.prepare_grid_bytes_call(surface)?)
+            };
+            (current, call)
+        };
+        let Some(current) = current else {
+            return Err(crate::workbook::missing(id));
+        };
+        let revision = Revision::of_bytes(&current);
+        if let Some(want) = base.expected() {
+            if want != &revision {
+                return Err(PluginError::from(fub_kernel::KernelError::Stale(
+                    id.to_string(),
+                )));
+            }
+        }
+        let Some(call) = call else {
+            return Ok(revision);
+        };
+        crate::workbook::check(id, &current)?;
+        let session = call.open(surface, &current, revision.clone(), &journal)?;
+        let bytes = call.bytes_to_write(&session.instance, session.revision);
+        // L'istanza serviva soltanto a questo salvataggio: si chiude anche
+        // quando l'innesto fallisce, e un errore di chiusura non cambia l'esito.
+        let _ = call.close(&session.instance);
+        let bytes = bytes?;
+        if bytes == current {
+            return Ok(revision);
+        }
+        Self::write_bytes_in(workspace, id, &bytes, Some(revision))
+    }
+
     /// [`Host::write_document_bytes`] sul workspace già risolto.
     fn write_bytes_in(
         workspace: &Custody<Workspace>,
@@ -3657,10 +3805,9 @@ impl Host {
         if let Some(codec) = crate::rich::codec(format.as_ref()) {
             return self.write_rich_in(&workspace, codec, id, source, base);
         }
-        // Una cartella si legge e non si scrive: la sua proiezione non torna
-        // ai byte, e il testo non è il file.
+        // Il testo di una cartella è il suo giornale, e scriverlo è innestarlo.
         if crate::workbook::is_workbook(format.as_ref()) {
-            return Err(crate::workbook::read_only(id));
+            return self.write_workbook_in(&workspace, id, source, base);
         }
         let prepared = {
             let ws = workspace.read()?;
