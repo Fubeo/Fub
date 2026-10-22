@@ -223,6 +223,19 @@ pub fn graft(
     })
 }
 
+/// I byte di una cartella con `fullCalcOnLoad` nel calcolo: Excel ricalcola
+/// tutto quando la apre. Ogni altra voce dello zip resta com'è.
+pub(crate) fn recalc_on_open(bytes: &[u8]) -> Result<Vec<u8>, GraftError> {
+    let mut package = Package::open(bytes)?;
+    let workbook = package.workbook_part()?;
+    let xml = package
+        .read(&workbook)?
+        .ok_or_else(|| GraftError::Package(format!("{workbook} is missing")))?;
+    let replaced = HashMap::from([(normalize(&workbook), full_calc_on_load(&xml)?)]);
+    drop(package);
+    rezip(bytes, replaced, &BTreeSet::new())
+}
+
 /// Un pezzo del foglio da sostituire: `start..end` diventa `bytes`.
 struct Splice {
     start: usize,

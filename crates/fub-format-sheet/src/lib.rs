@@ -19,7 +19,8 @@ pub mod index;
 pub mod session;
 
 pub use formula::{
-    CellDependency, CellRange, CellValue, EvaluatedCell, FormulaErrorCode, WorkbookEvaluation,
+    excel_formula, CellDependency, CellRange, CellValue, EvaluatedCell, FormulaErrorCode,
+    WorkbookEvaluation,
 };
 
 pub const FORMAT_ID: &str = "fubsheet";
@@ -329,7 +330,7 @@ pub struct Cell {
     pub style: CellStyle,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CellStyle {
     #[serde(default)]
@@ -352,7 +353,7 @@ impl CellStyle {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HorizontalAlign {
     Start,

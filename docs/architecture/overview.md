@@ -154,7 +154,9 @@ modo, con un workspace loro: li usa soltanto `fub-format-xlsx`, che legge le
 cartelle di Excel per l'host (feature `xlsx`) e ne innesta i valori cambiati
 sui byte del file, e nessuno di loro dipende da Fub. Di `gridcraft-calc`
 l'adattatore usa soltanto il grafo delle dipendenze fra le formule, per dire
-quali valori del file una modifica rende vecchi: niente si ricalcola. Il terzo blocco è il seguito dello stesso grafo, con
+quali valori del file una modifica rende vecchi: niente si ricalcola. Il
+calcolo intero serve soltanto alla copia esplicita di un `.fubsheet` in una
+cartella nuova, per scriverne i valori. Il terzo blocco è il seguito dello stesso grafo, con
 l'adattatore e i crate di Fub da cui dipende.
 
 ```mermaid
@@ -165,6 +167,7 @@ flowchart LR
     host["fub-host"]
     abi["fub-abi"]
     markdown["fub-format-markdown"]
+    sheet["fub-format-sheet"]
     sdk["fub-sdk"]
     xlsx["fub-format-xlsx"]
     gcalc["gridcraft-calc"]
@@ -178,6 +181,7 @@ flowchart LR
     host --> xlsx
     xlsx --> abi
     xlsx --> markdown
+    xlsx --> sheet
     xlsx -.-> sdk
     xlsx --> gcalc
     xlsx --> gcore

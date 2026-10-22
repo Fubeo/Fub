@@ -659,6 +659,41 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-format-sheet/src/formula.rs::node",
+            (
+                Family::AsciiCase,
+                "scrive in maiuscolo il nome di una funzione per la copia in Excel: il nome \
+                 viene dalla grammatica delle formule, che accetta soltanto identificatori \
+                 ASCII, e Excel salva le funzioni in maiuscolo.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/fubsheet.rs::constant",
+            (
+                Family::AsciiCase,
+                "riconosce `TRUE` e `FALSE` nell'input di una cella del `.fubsheet` per la \
+                 copia in Excel, come `input.rs::parse`: il vocabolario è chiuso e ASCII.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/fubsheet.rs::excel_names",
+            (
+                Family::ContextualCase,
+                "dà ai fogli della copia in Excel nomi che Excel non confonde: Excel confronta \
+                 i nomi dei fogli senza maiuscole anche fuori dall'ASCII (`Città` e `CITTÀ` \
+                 sono lo stesso foglio), e un nome nuovo deve essere diverso in quel senso. \
+                 Non è un nome del vault.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/fubsheet.rs::is_excel_name",
+            (
+                Family::AsciiCase,
+                "rifiuta il nome di foglio `History`, che Excel riserva con qualunque \
+                 maiuscola: è una parola sola e ASCII.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/rules/media.rs::kind_of",
             (
                 Family::AsciiCase,

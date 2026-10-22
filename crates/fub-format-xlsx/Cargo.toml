@@ -9,16 +9,17 @@ description = "Cartelle di lavoro di Excel (.xlsx, .xlsm, .xltx, .xltm) con il m
 [dependencies]
 fub-abi = { workspace = true }
 fub-format-markdown = { workspace = true }
+fub-format-sheet = { workspace = true }
 gridcraft-calc = { workspace = true }
 gridcraft-core = { workspace = true }
 gridcraft-model = { workspace = true }
 gridcraft-numfmt = { workspace = true }
 gridcraft-xlsx = { workspace = true }
 quick-xml = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 zip = { workspace = true }
 
 [dev-dependencies]
 cfb = { workspace = true }
 fub-sdk = { workspace = true }
-serde_json = { workspace = true }

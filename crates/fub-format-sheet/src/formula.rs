@@ -1312,6 +1312,181 @@ fn reference(sheet: Option<String>, address: &str) -> Result<Reference, ()> {
     })
 }
 
+/// Le righe e le colonne che un riferimento di Excel può nominare.
+const EXCEL_ROWS: usize = 1_048_576;
+const EXCEL_COLUMNS: usize = 16_384;
+/// I caratteri di un testo fra virgolette dentro una formula di Excel.
+const EXCEL_TEXT_CHARS: usize = 255;
+/// I caratteri di una formula di Excel, senza l'`=`.
+const EXCEL_FORMULA_CHARS: usize = 8_192;
+/// Gli argomenti di una funzione di Excel.
+const EXCEL_ARGUMENTS: usize = 255;
+
+/// La formula di `input` nella sintassi di Excel, senza l'`=`: lo stesso
+/// albero che valuta questo crate, con le parentesi che servono perché Excel
+/// lo legga uguale. Excel lega gli operatori a sinistra anche nella potenza,
+/// quindi `2^3^2` diventa `2^(3^2)`.
+///
+/// `sheet` dà il nome di Excel di un foglio nominato dalla formula, o `None`
+/// se il foglio non c'è: lì, come per un intervallo fra due fogli diversi o
+/// un indirizzo oltre la griglia di Excel, la formula scrive `#REF!`, che vale
+/// ciò che vale qui.
+///
+/// `None` se `input` non è una formula, non si legge, o Excel non la può
+/// scrivere: un testo oltre 255 caratteri, più di 255 argomenti, una formula
+/// oltre 8.192 caratteri.
+pub fn excel_formula(input: &str, sheet: impl Fn(&str) -> Option<String>) -> Option<String> {
+    let ast = Parser::parse(input.strip_prefix('=')?).ok()?;
+    let mut out = String::new();
+    ExcelPrinter { sheet: &sheet }.node(&ast, &mut out).ok()?;
+    (out.chars().count() <= EXCEL_FORMULA_CHARS).then_some(out)
+}
+
+struct ExcelPrinter<'a> {
+    sheet: &'a dyn Fn(&str) -> Option<String>,
+}
+
+/// Quanto lega un nodo per Excel: i confronti meno di tutti, poi somma,
+/// prodotto, potenza, i segni; numeri, riferimenti e chiamate non si
+/// spezzano.
+fn excel_binding(ast: &Ast) -> usize {
+    match ast {
+        Ast::Binary(operator, _, _) => match operator {
+            Binary::Add | Binary::Subtract => ADDITIVE,
+            Binary::Multiply | Binary::Divide => MULTIPLICATIVE,
+            Binary::Power => POWER,
+            _ => COMPARISON,
+        },
+        Ast::Unary(_, _) => POWER + 1,
+        _ => POWER + 2,
+    }
+}
+
+impl ExcelPrinter<'_> {
+    /// `ast` dove serve un nodo che leghi almeno `min`: altrimenti fra
+    /// parentesi.
+    fn bound(&self, ast: &Ast, min: usize, out: &mut String) -> Result<(), ()> {
+        if excel_binding(ast) < min {
+            out.push('(');
+            self.node(ast, out)?;
+            out.push(')');
+            Ok(())
+        } else {
+            self.node(ast, out)
+        }
+    }
+
+    fn node(&self, ast: &Ast, out: &mut String) -> Result<(), ()> {
+        match ast {
+            Ast::Number(value) if value.is_finite() => out.push_str(&value.to_string()),
+            Ast::Number(_) => out.push_str("#NUM!"),
+            Ast::Text(value) => {
+                if value.chars().count() > EXCEL_TEXT_CHARS {
+                    return Err(());
+                }
+                out.push('"');
+                out.push_str(&value.replace('"', "\"\""));
+                out.push('"');
+            }
+            Ast::Boolean(value) => out.push_str(if *value { "TRUE" } else { "FALSE" }),
+            Ast::Reference(reference) => match self.sheet_of(reference.sheet.as_deref()) {
+                Some(prefix) if within_excel(reference) => {
+                    out.push_str(&prefix);
+                    push_a1(reference, out);
+                }
+                _ => out.push_str("#REF!"),
+            },
+            Ast::Range(start, end) => {
+                let same = match (&start.sheet, &end.sheet) {
+                    (_, None) => true,
+                    (Some(start), Some(end)) => start == end,
+                    (None, Some(_)) => false,
+                };
+                match self.sheet_of(start.sheet.as_deref()) {
+                    Some(prefix) if same && within_excel(start) && within_excel(end) => {
+                        out.push_str(&prefix);
+                        push_a1(start, out);
+                        out.push(':');
+                        push_a1(end, out);
+                    }
+                    _ => out.push_str("#REF!"),
+                }
+            }
+            Ast::Unary(operator, value) => {
+                out.push(match operator {
+                    Unary::Plus => '+',
+                    Unary::Minus => '-',
+                });
+                self.bound(value, POWER + 1, out)?;
+            }
+            Ast::Binary(operator, left, right) => {
+                let binding = excel_binding(ast);
+                self.bound(left, binding, out)?;
+                out.push_str(match operator {
+                    Binary::Add => "+",
+                    Binary::Subtract => "-",
+                    Binary::Multiply => "*",
+                    Binary::Divide => "/",
+                    Binary::Power => "^",
+                    Binary::Equal => "=",
+                    Binary::NotEqual => "<>",
+                    Binary::Less => "<",
+                    Binary::LessEqual => "<=",
+                    Binary::Greater => ">",
+                    Binary::GreaterEqual => ">=",
+                });
+                // A destra un operatore dello stesso legame va fra parentesi:
+                // Excel legherebbe a sinistra.
+                self.bound(right, binding + 1, out)?;
+            }
+            Ast::Call(name, arguments) => {
+                if arguments.len() > EXCEL_ARGUMENTS {
+                    return Err(());
+                }
+                out.push_str(&name.to_ascii_uppercase());
+                out.push('(');
+                for (index, argument) in arguments.iter().enumerate() {
+                    if index > 0 {
+                        out.push(',');
+                    }
+                    self.node(argument, out)?;
+                }
+                out.push(')');
+            }
+        }
+        Ok(())
+    }
+
+    /// Il prefisso del foglio (`'Nome'!`), vuoto per il foglio della cella;
+    /// `None` se il foglio non c'è.
+    fn sheet_of(&self, name: Option<&str>) -> Option<String> {
+        match name {
+            None => Some(String::new()),
+            Some(name) => {
+                let excel = (self.sheet)(name)?;
+                Some(format!("'{}'!", excel.replace('\'', "''")))
+            }
+        }
+    }
+}
+
+fn within_excel(reference: &Reference) -> bool {
+    reference.row < EXCEL_ROWS && reference.column < EXCEL_COLUMNS
+}
+
+fn push_a1(reference: &Reference, out: &mut String) {
+    let mut letters = Vec::new();
+    let mut column = reference.column + 1;
+    while column > 0 {
+        column -= 1;
+        letters.push(b'A' + (column % 26) as u8);
+        column /= 26;
+    }
+    letters.reverse();
+    out.push_str(std::str::from_utf8(&letters).unwrap_or_default());
+    out.push_str(&(reference.row + 1).to_string());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1773,5 +1948,76 @@ mod tests {
         let source = workbook.serialize().unwrap();
         let value: serde_json::Value = serde_json::from_str(&source).unwrap();
         assert!(value.get("dependencies").is_none());
+    }
+
+    #[test]
+    fn excel_reads_the_same_tree() {
+        let same = |name: &str| Some(name.to_owned());
+        let cases = [
+            ("=sum(A1:B2; 'Foglio 2'!C3)*2", "SUM(A1:B2,'Foglio 2'!C3)*2"),
+            ("=Dati!A1+1", "'Dati'!A1+1"),
+            ("=2^3^2", "2^(3^2)"),
+            ("=(2^3)^2", "2^3^2"),
+            ("=-2^2", "-2^2"),
+            ("=-(2^2)", "-(2^2)"),
+            ("=(1+2)*3", "(1+2)*3"),
+            ("=1-(2-3)", "1-(2-3)"),
+            ("=1-2-3", "1-2-3"),
+            ("=1<2=true", "1<2=TRUE"),
+            ("=1<(2=3)", "1<(2=3)"),
+            ("=--A1", "--A1"),
+            ("=\"a\"\"b\"", "\"a\"\"b\""),
+            ("=if(a1>0, 0.5, \"no\")", "IF(A1>0,0.5,\"no\")"),
+            ("=1e3", "1000"),
+            ("=AA10", "AA10"),
+        ];
+        for (input, excel) in cases {
+            assert_eq!(
+                excel_formula(input, same).as_deref(),
+                Some(excel),
+                "{input}"
+            );
+        }
+    }
+
+    #[test]
+    fn excel_writes_ref_where_the_formula_has_no_target() {
+        let known = |name: &str| (name == "Dati").then(|| "Dati 1".to_owned());
+        assert_eq!(
+            excel_formula("=Altro!A1+Dati!B2", known).as_deref(),
+            Some("#REF!+'Dati 1'!B2")
+        );
+        assert_eq!(
+            excel_formula("=SUM(Dati!A1:Altro!A2)", known).as_deref(),
+            Some("SUM(#REF!)")
+        );
+        assert_eq!(
+            excel_formula("=SUM(A1:Dati!A2)", known).as_deref(),
+            Some("SUM(#REF!)")
+        );
+        assert_eq!(excel_formula("=XFE1", known).as_deref(), Some("#REF!"));
+        assert_eq!(excel_formula("=A1048577", known).as_deref(), Some("#REF!"));
+        assert_eq!(
+            excel_formula("=XFD1048576", known).as_deref(),
+            Some("XFD1048576")
+        );
+        assert_eq!(
+            excel_formula("='It''s'!A1", |_| Some("It's".into())).as_deref(),
+            Some("'It''s'!A1")
+        );
+    }
+
+    #[test]
+    fn excel_has_no_formula_for_what_it_cannot_write() {
+        let same = |name: &str| Some(name.to_owned());
+        assert_eq!(excel_formula("12", same), None);
+        assert_eq!(excel_formula("=SUM(", same), None);
+        assert_eq!(excel_formula("=$A$1", same), None);
+        let long = format!("=\"{}\"", "x".repeat(256));
+        assert_eq!(excel_formula(&long, same), None);
+        let fits = format!("=\"{}\"", "è".repeat(255));
+        assert!(excel_formula(&fits, same).is_some());
+        let many = format!("=SUM({})", vec!["1"; 256].join(","));
+        assert_eq!(excel_formula(&many, same), None);
     }
 }
