@@ -1,11 +1,14 @@
 //! La versione 2 della famiglia `grid`: una sorgente **a byte** che resta
-//! nella custodia dell'host, e una modifica che è un **giornale di celle**.
+//! nella custodia dell'host, e una modifica che è un **giornale**.
 //!
-//! Una cartella di Excel è a byte, e può essere grande: la shell apre una sessione per documento, legge le finestre che mostra e non
-//! vede mai i byte. Il testo della `DocumentSession` è il [`GridJournal`]: le
-//! celle cambiate rispetto ai byte sul disco, con l'input che hanno nel file e
-//! quello nuovo. Salvare è dell'host: rilegge i byte, riapre il provider, gli
-//! applica il giornale e scrive ciò che [`GridBytesProvider::bytes_to_write`] dà.
+//! Una cartella di Excel è a byte, e può essere grande: la shell apre una
+//! sessione per documento, legge le finestre che mostra e non vede mai i byte.
+//! Il testo della `DocumentSession` è il [`GridJournal`], in una di due forme:
+//! le celle cambiate rispetto ai byte sul disco, con l'input che hanno nel file
+//! e quello nuovo (versione 1, ADR 0216), oppure i comandi dati sui byte, in
+//! ordine (versione 2, ADR 0219). Salvare è dell'host: rilegge i byte, riapre
+//! il provider, gli applica il giornale e scrive ciò che
+//! [`GridBytesProvider::bytes_to_write`] dà.
 //!
 //! Il giornale ha una sola forma canonica, e la regola vive qui; la shell ne
 //! ha il mirror (`apps/client/src/state/grid-journal.ts`), legato da una
@@ -29,8 +32,18 @@ pub const GRID_BYTES_PROTOCOL_VERSION: u32 = 2;
 /// La sorgente a byte più grande che l'host passa a un provider: quella di
 /// un documento a byte.
 pub const MAX_GRID_BYTES_SOURCE: usize = 256 * 1024 * 1024;
-/// La versione della forma del giornale.
+/// La versione della forma del giornale di celle.
 pub const GRID_JOURNAL_VERSION: u32 = 1;
+/// La versione della forma del giornale di comandi.
+pub const GRID_COMMAND_JOURNAL_VERSION: u32 = 2;
+/// I comandi di un giornale.
+pub const MAX_GRID_JOURNAL_COMMANDS: usize = 16_384;
+/// I parametri di un comando, come testo JSON.
+pub const MAX_GRID_COMMAND_PARAMS_BYTES: usize = 64 * 1024;
+/// La selezione di un comando, in riferimenti A1.
+pub const MAX_GRID_SELECTION_BYTES: usize = 4 * 1024;
+/// Il testo di un giornale di comandi.
+pub const MAX_GRID_COMMAND_JOURNAL_BYTES: usize = 16 * 1024 * 1024;
 /// Le voci di un giornale: quante ne porta un'operazione.
 pub const MAX_GRID_JOURNAL_ENTRIES: usize = MAX_GRID_PATCHES;
 /// Gli input di un giornale, `before` e `after` insieme.
@@ -75,6 +88,63 @@ struct JournalWire {
     cells: Vec<GridJournalEntry>,
 }
 
+/// Un comando del giornale: l'id del comando del provider, i parametri come
+/// testo di un oggetto JSON, e la selezione su cui è stato dato. La selezione
+/// è il foglio (il suo id), gli intervalli in riferimenti A1 separati da
+/// virgola e la cella attiva. Il giornale porta il testo dei parametri così
+/// com'è: nessuno lo riscrive, e due lati che lo copiano danno gli stessi
+/// byte.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GridCommand {
+    pub id: String,
+    pub params: String,
+    pub sheet: String,
+    pub selection: String,
+    pub active: String,
+}
+
+fn valid_reference(text: &str) -> bool {
+    !text.is_empty()
+        && text.len() <= MAX_GRID_SELECTION_BYTES
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b':' | b',' | b'$'))
+}
+
+impl GridCommand {
+    pub fn validate(&self) -> Result<(), PluginError> {
+        if !valid_id(&self.id) || !valid_id(&self.sheet) {
+            return Err(bad("grid command has an invalid id"));
+        }
+        if !valid_reference(&self.selection)
+            || !valid_reference(&self.active)
+            || self.active.contains([':', ','])
+        {
+            return Err(bad("grid command has an invalid selection"));
+        }
+        if self.params.len() > MAX_GRID_COMMAND_PARAMS_BYTES {
+            return Err(bad("grid command parameters exceed byte limit"));
+        }
+        match serde_json::from_str::<serde_json::Value>(&self.params) {
+            Ok(serde_json::Value::Object(_)) => Ok(()),
+            _ => Err(bad("grid command parameters are not a JSON object")),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CommandJournalWire {
+    version: u32,
+    commands: Vec<GridCommand>,
+}
+
+#[derive(Deserialize)]
+struct VersionProbe {
+    version: u32,
+}
+
 /// Come una voce sta rispetto all'input che la cella ha adesso.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -87,17 +157,26 @@ pub enum GridJournalMatch {
     Conflict,
 }
 
-/// Il giornale delle celle cambiate, in forma canonica.
+/// Il giornale di una sessione a byte, in forma canonica.
 ///
-/// Il testo vuoto è il giornale vuoto. Altrimenti è JSON chiuso:
-/// `{"version":1,"cells":[{"sheet","row","column","before","after"}]}`, con
-/// le voci in ordine di chiave (`sheet`, `row`, `column`, confrontate come
-/// byte), nessuna chiave due volte e nessuna voce con `after` uguale a
-/// `before`. Un testo che non è in questa forma non si legge: due testi
-/// diversi non sono mai lo stesso giornale.
+/// Il testo vuoto è il giornale vuoto. Altrimenti è JSON chiuso, in una di
+/// due forme, mai insieme:
+///
+/// - **di celle** (versione 1):
+///   `{"version":1,"cells":[{"sheet","row","column","before","after"}]}`, con
+///   le voci in ordine di chiave (`sheet`, `row`, `column`, confrontate come
+///   byte), nessuna chiave due volte e nessuna voce con `after` uguale a
+///   `before`;
+/// - **di comandi** (versione 2):
+///   `{"version":2,"commands":[{"id","params","sheet","selection","active"}]}`,
+///   i comandi nell'ordine in cui si applicano, almeno uno.
+///
+/// Un testo che non è in una di queste forme non si legge: due testi diversi
+/// non sono mai lo stesso giornale.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GridJournal {
     cells: BTreeMap<GridCellKey, (String, String)>,
+    commands: Vec<GridCommand>,
 }
 
 impl GridJournal {
@@ -106,11 +185,38 @@ impl GridJournal {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.cells.is_empty()
+        self.cells.is_empty() && self.commands.is_empty()
     }
 
+    /// Le voci di un giornale di celle, o i comandi di uno di comandi.
     pub fn len(&self) -> usize {
-        self.cells.len()
+        self.cells.len() + self.commands.len()
+    }
+
+    /// I comandi, nell'ordine in cui si applicano: vuoto per un giornale di
+    /// celle.
+    pub fn commands(&self) -> &[GridCommand] {
+        &self.commands
+    }
+
+    /// Aggiunge un comando in coda. Un giornale di celle non ne prende; oltre
+    /// i limiti il giornale resta com'era.
+    pub fn push_command(&mut self, command: GridCommand) -> Result<(), PluginError> {
+        if !self.cells.is_empty() {
+            return Err(bad("a cell journal does not take commands"));
+        }
+        command.validate()?;
+        self.commands.push(command);
+        if let Err(error) = self.validate() {
+            self.commands.pop();
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// Toglie l'ultimo comando, e lo dà.
+    pub fn pop_command(&mut self) -> Option<GridCommand> {
+        self.commands.pop()
     }
 
     /// Le voci, in ordine di chiave: la cella, l'input di prima, quello nuovo.
@@ -132,14 +238,40 @@ impl GridJournal {
         if text.is_empty() {
             return Ok(Self::new());
         }
+        if text.len() > MAX_GRID_COMMAND_JOURNAL_BYTES {
+            return Err(bad("grid journal exceeds byte limit"));
+        }
+        let probe: VersionProbe =
+            serde_json::from_str(text).map_err(|_| bad("grid journal is not valid JSON"))?;
+        let journal = match probe.version {
+            GRID_JOURNAL_VERSION => Self::parse_cells(text)?,
+            GRID_COMMAND_JOURNAL_VERSION => {
+                let wire: CommandJournalWire = serde_json::from_str(text)
+                    .map_err(|_| bad("grid journal is not valid JSON"))?;
+                if wire.commands.is_empty() {
+                    return Err(bad("grid journal is not in canonical form"));
+                }
+                let journal = Self {
+                    cells: BTreeMap::new(),
+                    commands: wire.commands,
+                };
+                journal.validate()?;
+                journal
+            }
+            _ => return Err(bad("grid journal has an unknown version")),
+        };
+        if journal.to_text() != text {
+            return Err(bad("grid journal is not in canonical form"));
+        }
+        Ok(journal)
+    }
+
+    fn parse_cells(text: &str) -> Result<Self, PluginError> {
         if text.len() > MAX_GRID_JOURNAL_INPUT_BYTES + MAX_GRID_JOURNAL_ENTRIES * 512 {
             return Err(bad("grid journal exceeds byte limit"));
         }
         let wire: JournalWire =
             serde_json::from_str(text).map_err(|_| bad("grid journal is not valid JSON"))?;
-        if wire.version != GRID_JOURNAL_VERSION {
-            return Err(bad("grid journal has an unknown version"));
-        }
         let mut journal = Self::new();
         for entry in wire.cells {
             let key = GridCellKey {
@@ -156,14 +288,18 @@ impl GridJournal {
             }
         }
         journal.validate()?;
-        if journal.to_text() != text {
-            return Err(bad("grid journal is not in canonical form"));
-        }
         Ok(journal)
     }
 
     /// Il testo canonico.
     pub fn to_text(&self) -> String {
+        if !self.commands.is_empty() {
+            let wire = CommandJournalWire {
+                version: GRID_COMMAND_JOURNAL_VERSION,
+                commands: self.commands.clone(),
+            };
+            return serde_json::to_string(&wire).expect("a journal always serializes");
+        }
         if self.cells.is_empty() {
             return String::new();
         }
@@ -186,6 +322,31 @@ impl GridJournal {
 
     /// I limiti e la forma delle voci.
     pub fn validate(&self) -> Result<(), PluginError> {
+        if !self.commands.is_empty() {
+            if !self.cells.is_empty() {
+                return Err(bad("grid journal mixes cells and commands"));
+            }
+            if self.commands.len() > MAX_GRID_JOURNAL_COMMANDS {
+                return Err(bad("grid journal exceeds command limit"));
+            }
+            let mut bytes = 0usize;
+            for command in &self.commands {
+                command.validate()?;
+                bytes = bytes.saturating_add(
+                    command.id.len()
+                        + command.params.len()
+                        + command.sheet.len()
+                        + command.selection.len()
+                        + command.active.len(),
+                );
+            }
+            // Il testo porta i parametri come stringhe JSON, con le virgolette
+            // scritte due volte: il conto resta sotto il limite del testo.
+            if bytes.saturating_mul(2) > MAX_GRID_COMMAND_JOURNAL_BYTES {
+                return Err(bad("grid journal exceeds byte limit"));
+            }
+            return Ok(());
+        }
         if self.cells.len() > MAX_GRID_JOURNAL_ENTRIES {
             return Err(bad("grid journal exceeds entry limit"));
         }
@@ -214,6 +375,9 @@ impl GridJournal {
         before: String,
         after: String,
     ) -> Result<(), PluginError> {
+        if !self.commands.is_empty() {
+            return Err(bad("a command journal does not take cell entries"));
+        }
         if !valid_key(&key) {
             return Err(bad("grid journal has an invalid cell id"));
         }
@@ -244,11 +408,32 @@ impl GridJournal {
     }
 
     /// Il giornale riportato sui byte che il salvataggio di `saved` ha
-    /// scritto: per ogni cella, l'input che il disco ha adesso è il `before`,
-    /// e quello che `self` vuole è l'`after`. Le voci salvate e non più toccate
-    /// escono; una cella tornata al suo input durante il salvataggio entra,
-    /// per riportarlo sul disco.
+    /// scritto.
+    ///
+    /// Di celle: per ogni cella, l'input che il disco ha adesso è il
+    /// `before`, e quello che `self` vuole è l'`after`. Le voci salvate e non
+    /// più toccate escono; una cella tornata al suo input durante il
+    /// salvataggio entra, per riportarlo sul disco.
+    ///
+    /// Di comandi: escono i comandi che `self` ha in comune con `saved`
+    /// dall'inizio, e restano quelli dopo. I comandi salvati che `self` non
+    /// ha più (annullati durante il salvataggio) restano nei byte: li conta
+    /// [`GridJournal::reverted_by`].
+    ///
+    /// Un giornale di comandi nato da uno di celle (il provider converte le
+    /// voci in comandi) resta com'è sopra il salvataggio di celle: le voci
+    /// convertite rimettono input che i byte hanno già.
     pub fn rebase(&self, saved: &GridJournal) -> GridJournal {
+        if !self.commands.is_empty() || !saved.commands.is_empty() {
+            if saved.commands.is_empty() || self.commands.is_empty() && !self.cells.is_empty() {
+                return self.clone();
+            }
+            let common = common_prefix(&self.commands, &saved.commands);
+            return GridJournal {
+                cells: BTreeMap::new(),
+                commands: self.commands[common..].to_vec(),
+            };
+        }
         let mut out = GridJournal::new();
         let keys: std::collections::BTreeSet<&GridCellKey> =
             self.cells.keys().chain(saved.cells.keys()).collect();
@@ -270,6 +455,19 @@ impl GridJournal {
         }
         out
     }
+
+    /// I comandi che il salvataggio di `saved` ha scritto e che `self` non ha
+    /// più: [`GridJournal::rebase`] non li toglie dai byte.
+    pub fn reverted_by(&self, saved: &GridJournal) -> usize {
+        saved.commands.len() - common_prefix(&self.commands, &saved.commands)
+    }
+}
+
+fn common_prefix(left: &[GridCommand], right: &[GridCommand]) -> usize {
+    left.iter()
+        .zip(right)
+        .take_while(|(left, right)| left == right)
+        .count()
 }
 
 /// Come una voce `before → after` sta rispetto all'input `current` della
@@ -581,6 +779,100 @@ mod tests {
         assert_eq!(rebased.get(&b), Some(("y", "x")));
         assert_eq!(rebased.get(&c), Some(("", "z")));
         assert!(saved.rebase(&saved).is_empty());
+    }
+
+    fn command(id: &str, params: &str) -> GridCommand {
+        GridCommand {
+            id: id.into(),
+            params: params.into(),
+            sheet: "s1".into(),
+            selection: "A1:B2".into(),
+            active: "A1".into(),
+        }
+    }
+
+    #[test]
+    fn il_giornale_di_comandi_ha_una_sola_forma() {
+        let mut journal = GridJournal::new();
+        journal.push_command(command("home.bold", "{}")).unwrap();
+        journal
+            .push_command(command("cell.set", r#"{"input":"=A2+1"}"#))
+            .unwrap();
+        let text = journal.to_text();
+        assert_eq!(
+            text,
+            r#"{"version":2,"commands":[{"id":"home.bold","params":"{}","sheet":"s1","selection":"A1:B2","active":"A1"},{"id":"cell.set","params":"{\"input\":\"=A2+1\"}","sheet":"s1","selection":"A1:B2","active":"A1"}]}"#
+        );
+        assert_eq!(GridJournal::parse(&text).unwrap(), journal);
+        assert_eq!(journal.len(), 2);
+        assert_eq!(journal.commands()[1].id, "cell.set");
+        for wrong in [
+            r#"{"version":2,"commands":[]}"#,
+            r#"{"version":3,"commands":[]}"#,
+            r#"{"commands":[{"id":"a","params":"{}","sheet":"s","selection":"A1","active":"A1"}],"version":2}"#,
+            r#"{"version":2,"commands":[{"id":"a","params":"[]","sheet":"s","selection":"A1","active":"A1"}]}"#,
+            r#"{"version":2,"commands":[{"id":"a","params":"{}","sheet":"s","selection":"A1","active":"A1:B2"}]}"#,
+            r#"{"version":2,"commands":[{"id":"a","params":"{}","sheet":"s","selection":"A 1","active":"A1"}]}"#,
+            r#"{"version":2,"commands":[{"id":"a","params":"{}","sheet":"s","selection":"A1","active":"A1","x":1}]}"#,
+            r#"{"version":2,"commands":[{"id":"a","params":"{}","sheet":"s","selection":"A1","active":"A1"}],"cells":[]}"#,
+        ] {
+            assert!(GridJournal::parse(wrong).is_err(), "{wrong}");
+        }
+        assert_eq!(journal.pop_command().unwrap().id, "cell.set");
+        assert_eq!(journal.len(), 1);
+    }
+
+    #[test]
+    fn celle_e_comandi_non_stanno_insieme() {
+        let mut cells = GridJournal::new();
+        cells
+            .record(key("s", "r", "c"), "1".into(), "2".into())
+            .unwrap();
+        assert!(cells.push_command(command("home.bold", "{}")).is_err());
+        assert_eq!(cells.len(), 1);
+        let mut commands = GridJournal::new();
+        commands.push_command(command("home.bold", "{}")).unwrap();
+        assert!(commands
+            .record(key("s", "r", "c"), "1".into(), "2".into())
+            .is_err());
+        assert_eq!(commands.len(), 1);
+    }
+
+    #[test]
+    fn un_comando_oltre_i_limiti_non_entra() {
+        let mut journal = GridJournal::new();
+        let big = format!(r#"{{"x":"{}"}}"#, "a".repeat(MAX_GRID_COMMAND_PARAMS_BYTES));
+        assert!(journal.push_command(command("cell.set", &big)).is_err());
+        assert!(journal.push_command(command("", "{}")).is_err());
+        assert!(journal.push_command(command("cell.set", "nope")).is_err());
+        assert!(journal.is_empty());
+    }
+
+    #[test]
+    fn il_giornale_di_comandi_si_ribasa_sul_prefisso_salvato() {
+        let mut saved = GridJournal::new();
+        saved.push_command(command("home.bold", "{}")).unwrap();
+        saved.push_command(command("home.italic", "{}")).unwrap();
+        // Durante il salvataggio un comando si aggiunge.
+        let mut now = saved.clone();
+        now.push_command(command("home.underline", "{}")).unwrap();
+        let rebased = now.rebase(&saved);
+        assert_eq!(rebased.len(), 1);
+        assert_eq!(rebased.commands()[0].id, "home.underline");
+        assert_eq!(now.reverted_by(&saved), 0);
+        assert!(saved.rebase(&saved).is_empty());
+        // Durante il salvataggio l'ultimo comando si annulla: resta nei byte.
+        let mut undone = saved.clone();
+        undone.pop_command();
+        assert!(undone.rebase(&saved).is_empty());
+        assert_eq!(undone.reverted_by(&saved), 1);
+        // Un giornale di comandi sopra un salvataggio di celle resta com'è.
+        let mut cells = GridJournal::new();
+        cells
+            .record(key("s", "r", "c"), "1".into(), "2".into())
+            .unwrap();
+        assert_eq!(now.rebase(&cells), now);
+        assert_eq!(cells.rebase(&saved), cells);
     }
 
     #[test]

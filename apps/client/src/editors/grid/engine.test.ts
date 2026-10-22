@@ -784,7 +784,7 @@ describe("GridEngine con una cartella di Excel", () => {
     // con una seconda modifica. Il giornale va alla sessione all'invio.
     expect(changes).toHaveLength(1);
     expect(changes[0].origin).toBe("input");
-    expect(engine.getDoc()).toBe(gridJournalText({ entries: [{ sheet: "s1", row: "r1", column: "c1", before: "800", after: "9" }] }));
+    expect(engine.getDoc()).toBe(gridJournalText({ entries: [{ sheet: "s1", row: "r1", column: "c1", before: "800", after: "9" }], commands: [] }));
     expect(cell(1, 1)?.textContent).toBe("9");
     await settle();
     expect(grid.applied[0]).toEqual({
@@ -810,7 +810,7 @@ describe("GridEngine con una cartella di Excel", () => {
     // Annullare riporta i byte: il giornale si svuota.
     expect(engine.undo()).toBe(true);
     expect(changes[changes.length - 1]?.origin).toBe("undo");
-    expect(engine.getDoc()).toBe(gridJournalText({ entries: [{ sheet: "s1", row: "r1", column: "c1", before: "800", after: "9" }] }));
+    expect(engine.getDoc()).toBe(gridJournalText({ entries: [{ sheet: "s1", row: "r1", column: "c1", before: "800", after: "9" }], commands: [] }));
     expect(engine.undo()).toBe(true);
     expect(engine.getDoc()).toBe("");
     await settle();
@@ -818,7 +818,7 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(cell(1, 1)?.textContent).toBe("800");
     expect(engine.redo()).toBe(true);
     await settle();
-    expect(grid.journal()).toBe(gridJournalText({ entries: [{ sheet: "s1", row: "r1", column: "c1", before: "800", after: "9" }] }));
+    expect(grid.journal()).toBe(gridJournalText({ entries: [{ sheet: "s1", row: "r1", column: "c1", before: "800", after: "9" }], commands: [] }));
     engine.destroy();
   });
 

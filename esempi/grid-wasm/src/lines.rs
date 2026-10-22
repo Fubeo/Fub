@@ -17,13 +17,13 @@ use fub_abi::edit::Revision;
 use fub_abi::grid::GridCellKey as AbiKey;
 use fub_abi::{grid_bytes_revision, grid_journal_match, GridJournal, GridJournalMatch};
 
-use crate::fub::abi::grid::{
-    GridApplyRequest, GridCellKey, GridCellStyle, GridColumn, GridCommit, GridInvalidation,
-    GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindowRequest,
-};
 use crate::exports::fub::abi::grid_bytes::{
     GridBytesCell, GridBytesSession, GridBytesWindow, GridNotice, GridValue,
     Guest as GridBytesGuest,
+};
+use crate::fub::abi::grid::{
+    GridApplyRequest, GridCellKey, GridCellStyle, GridColumn, GridCommit, GridInvalidation,
+    GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindowRequest,
 };
 use crate::{bad, conflict, not_found, Component, PluginError};
 
@@ -159,6 +159,11 @@ impl GridBytesGuest for Component {
         }
         let text = String::from_utf8(source).map_err(|_| bad("the source is not UTF-8"))?;
         let journal = GridJournal::parse(&journal).map_err(|_| bad("malformed journal"))?;
+        // L'esempio non serve comandi: un giornale di comandi non si legge
+        // come vuoto.
+        if !journal.commands().is_empty() {
+            return Err(bad("the journal carries commands"));
+        }
         if journal.entries().any(|(key, _, _)| row_of(key).is_none()) {
             return Err(bad("the journal names a cell outside the lines"));
         }

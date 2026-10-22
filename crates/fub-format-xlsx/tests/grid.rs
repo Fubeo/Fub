@@ -7,8 +7,8 @@ mod common;
 use common::{one_sheet, sheet, Package};
 use fub_abi::{
     grid_bytes_revision, GridApplyRequest, GridBytesCell, GridBytesProvider, GridBytesSession,
-    GridCellKey, GridCellPatch, GridInvalidation, GridJournal, GridValue, GridWindowRequest,
-    PluginError, Revision,
+    GridCellKey, GridCellPatch, GridCommand, GridInvalidation, GridJournal, GridValue,
+    GridWindowRequest, PluginError, Revision,
 };
 use fub_format_xlsx::grid::{XlsxGridProvider, XLSX_GRID_SURFACE};
 use gridcraft_core::{CellRef, Value};
@@ -348,6 +348,31 @@ fn una_cella_cambiata_sul_disco_e_un_conflitto_che_il_salvataggio_scrive() {
         .bytes_to_write(&session.instance, session.revision.clone())
         .unwrap();
     assert_eq!(value(&saved, "A1"), Value::Number(3.0));
+}
+
+#[test]
+fn un_giornale_di_comandi_non_si_apre_come_vuoto() {
+    let bytes = one_sheet(BODY);
+    let mut journal = GridJournal::new();
+    journal
+        .push_command(GridCommand {
+            id: "home.bold".into(),
+            params: "{}".into(),
+            sheet: "s1".into(),
+            selection: "A1".into(),
+            active: "A1".into(),
+        })
+        .unwrap();
+    let mut provider = XlsxGridProvider::new();
+    assert!(matches!(
+        provider.open(
+            XLSX_GRID_SURFACE,
+            &bytes,
+            Revision::of_bytes(&bytes),
+            &journal
+        ),
+        Err(PluginError::BadArgs(_))
+    ));
 }
 
 #[test]

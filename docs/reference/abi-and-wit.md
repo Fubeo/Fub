@@ -146,6 +146,18 @@ salvataggio; la shell ne ha il mirror, legato dalla fixture
 voci, 4 MiB di input); una sessione porta al più 64 avvisi. Il perché è
 nell'[ADR 0216](../decisions/0216-protocollo-grid-2-sorgente-a-byte.md).
 
+`GridJournal` legge e scrive anche una seconda forma, mai insieme alla prima:
+il **giornale di comandi**, `{"version": 2, "commands": [...]}`, con almeno un
+comando `{"id", "params", "sheet", "selection", "active"}` (`GridCommand`) in
+ordine di applicazione. `params` è il testo di un oggetto JSON fino a 64 KiB,
+portato com'è; la selezione è in riferimenti A1 separati da virgola, la cella
+attiva è un riferimento solo. Fino a 16.384 comandi e 16 MiB di testo. Il
+rebase toglie i comandi in comune con il salvataggio dall'inizio, e
+`reverted_by` conta quelli salvati che il giornale non ha più. Nessun provider
+serve ancora questa forma: è il primo passo dell'[ADR
+0219](../decisions/0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md),
+in proposta.
+
 ## Errori
 
 `PluginError` conserva una specie e un messaggio. Le famiglie comprendono

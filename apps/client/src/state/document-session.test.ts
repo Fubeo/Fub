@@ -1488,7 +1488,7 @@ describe("il vault delle sessioni (FUB-001)", () => {
 describe("il giornale di una cartella di Excel", () => {
   let api: DocumentSessionApi;
   const journal = (...cells: Array<[row: string, before: string, after: string]>) =>
-    gridJournalText({ entries: cells.map(([row, before, after]) => ({ sheet: "s1", row, column: "c1", before, after })) });
+    gridJournalText({ entries: cells.map(([row, before, after]) => ({ sheet: "s1", row, column: "c1", before, after })), commands: [] });
 
   beforeEach(() => {
     api = fakeApi();

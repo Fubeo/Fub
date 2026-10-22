@@ -65,7 +65,8 @@ use fub_abi::ui::{
     UiNode, UiOption, UiValue, ViewUpdate,
 };
 use fub_abi::{
-    GridBytesCell, GridBytesSession, GridBytesWindow, GridJournal, GridNotice, GridValue,
+    GridBytesCell, GridBytesSession, GridBytesWindow, GridCommand, GridJournal, GridNotice,
+    GridValue,
 };
 use fub_features::VersionRef;
 use fub_kernel::{TrashEntry, MAIN_PANE};
@@ -1355,6 +1356,21 @@ fn grid_journal_samples() -> Vec<Value> {
         }
         journal
     };
+    let commands = |commands: &[(&str, &str)]| {
+        let mut journal = GridJournal::new();
+        for (id, params) in commands {
+            journal
+                .push_command(GridCommand {
+                    id: (*id).into(),
+                    params: (*params).into(),
+                    sheet: "s1".into(),
+                    selection: "A1:B2,$D$4".into(),
+                    active: "A1".into(),
+                })
+                .unwrap();
+        }
+        journal
+    };
     // Il salvataggio ha scritto `saved`; nel frattempo la shell è andata
     // avanti fino a `current`.
     let cases = [
@@ -1376,6 +1392,26 @@ fn grid_journal_samples() -> Vec<Value> {
         // Una cella tornata al suo input durante il salvataggio rientra, per
         // riportarlo sul disco.
         (journal(&[]), journal(&[(key("r0", "c0"), "1", "2")])),
+        // Di comandi: esce il prefisso salvato, resta ciò che segue; i
+        // parametri restano il testo che erano, con virgolette e accenti.
+        (
+            commands(&[
+                ("home.bold", "{}"),
+                ("cell.set", r#"{"input":"=\"è\"&A2"}"#),
+            ]),
+            commands(&[("home.bold", "{}")]),
+        ),
+        // L'ultimo comando salvato si è annullato durante il salvataggio:
+        // resta nei byte, e lo si conta.
+        (
+            commands(&[("home.bold", "{}")]),
+            commands(&[("home.bold", "{}"), ("home.italic", "{}")]),
+        ),
+        // Un giornale di comandi sopra un salvataggio di celle resta com'è.
+        (
+            commands(&[("cell.set", r#"{"input":"2"}"#)]),
+            journal(&[(key("r0", "c0"), "1", "2")]),
+        ),
     ];
     cases
         .iter()
@@ -1384,6 +1420,7 @@ fn grid_journal_samples() -> Vec<Value> {
                 "current": current.to_text(),
                 "saved": saved.to_text(),
                 "rebased": current.rebase(saved).to_text(),
+                "reverted": current.reverted_by(saved),
             })
         })
         .collect()

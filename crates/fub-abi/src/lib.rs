@@ -112,9 +112,11 @@ pub use grid::{
 };
 pub use grid_bytes::{
     grid_bytes_revision, grid_journal_match, GridBytesCell, GridBytesProvider, GridBytesSession,
-    GridBytesWindow, GridJournal, GridJournalEntry, GridJournalMatch, GridNotice, GridValue,
-    GRID_BYTES_PROTOCOL_VERSION, GRID_JOURNAL_VERSION, MAX_GRID_BYTES_SOURCE, MAX_GRID_ID_BYTES,
-    MAX_GRID_JOURNAL_ENTRIES, MAX_GRID_JOURNAL_INPUT_BYTES, MAX_GRID_NOTICES,
+    GridBytesWindow, GridCommand, GridJournal, GridJournalEntry, GridJournalMatch, GridNotice,
+    GridValue, GRID_BYTES_PROTOCOL_VERSION, GRID_COMMAND_JOURNAL_VERSION, GRID_JOURNAL_VERSION,
+    MAX_GRID_BYTES_SOURCE, MAX_GRID_COMMAND_JOURNAL_BYTES, MAX_GRID_COMMAND_PARAMS_BYTES,
+    MAX_GRID_ID_BYTES, MAX_GRID_JOURNAL_COMMANDS, MAX_GRID_JOURNAL_ENTRIES,
+    MAX_GRID_JOURNAL_INPUT_BYTES, MAX_GRID_NOTICES, MAX_GRID_SELECTION_BYTES,
 };
 pub use locale::{HourCycle, Locale, Weekday};
 pub use model::Payload;
