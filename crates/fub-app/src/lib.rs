@@ -43,7 +43,7 @@ use fub_abi::theme::ThemeLight;
 use fub_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fub_abi::{GridBytesSession, GridBytesWindow, Notice, PluginError};
-use fub_host::{doc_id, Delivery, EventSink, Host};
+use fub_host::{doc_id, document_text, Delivery, DocumentText, EventSink, Host};
 use fub_wasm_host::catalog::{CatalogEntry, CatalogError, CatalogTrust, SignedFeed};
 use fub_wasm_host::installed::Consent;
 use fub_wasm_host::managed::{InstalledOperation, InstalledPluginManager, InstalledShutdown};
@@ -463,6 +463,9 @@ pub struct DocumentSource {
     pub revision: String,
     pub format_id: Option<String>,
     pub source_kind: SourceKind,
+    /// `grid_journal` per una cartella di Excel: il testo è il giornale delle
+    /// celle cambiate, e i byte si leggono soltanto dalla griglia.
+    pub text_kind: DocumentText,
 }
 
 #[tauri::command]
@@ -474,6 +477,7 @@ fn read_document(
     let id = doc_id(&id)?;
     let (text, revision, format) = host.read_document_with_format(vault.as_deref(), &id)?;
     let format_id = format.as_ref().map(|known| known.descriptor.id.clone());
+    let text_kind = document_text(format.as_ref());
     let source_kind = format
         .map(|known| known.descriptor.source)
         .unwrap_or(SourceKind::Text);
@@ -482,6 +486,7 @@ fn read_document(
         revision: revision.0,
         format_id,
         source_kind,
+        text_kind,
     })
 }
 

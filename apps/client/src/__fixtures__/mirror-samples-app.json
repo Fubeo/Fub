@@ -110,7 +110,15 @@
       "text": "# Nota",
       "revision": "sha256:abc",
       "format_id": "markdown",
-      "source_kind": "text"
+      "source_kind": "text",
+      "text_kind": "source"
+    },
+    {
+      "text": "",
+      "revision": "sha256:def",
+      "format_id": "xlsx",
+      "source_kind": "bytes",
+      "text_kind": "grid_journal"
     }
   ],
   "BundleInfo": [

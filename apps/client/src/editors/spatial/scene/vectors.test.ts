@@ -64,7 +64,7 @@ function applied(outcome: Outcome): Applied {
 /// Una collezione di sessioni che legge `text` per ogni documento.
 function sessionsWith(text: string): DocumentSessionCollection {
   const api: DocumentSessionApi = {
-    readDocument: vi.fn(async (): Promise<DocumentSource> => ({ text, revision: "rev-1", format_id: "svg", source_kind: "text" })),
+    readDocument: vi.fn(async (): Promise<DocumentSource> => ({ text, revision: "rev-1", format_id: "svg", source_kind: "text", text_kind: "source" })),
     writeDocument: vi.fn(async () => "rev-2"),
     resourceWrite: vi.fn(async () => ({ revision: "rev-byte" })),
     saveDraft: vi.fn(async () => {}),

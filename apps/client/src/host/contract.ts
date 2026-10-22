@@ -912,11 +912,17 @@ export const MAIN_PANE = "main";
 // il kernel deriva le impronte — ed è esattamente ciò che ha costretto la
 // [0088](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md) a
 // lasciare `DraftInfo.base` a `null`.
+/// Che cosa è il testo di un documento: il sorgente che `write_document`
+/// riceve, o il giornale delle celle di una cartella di Excel, i cui byte
+/// restano all'host (ADR 0216). Rispecchia `fub_host::DocumentText`.
+export type DocumentText = "source" | "grid_journal";
+
 export interface DocumentSource {
   text: string;
   revision: string;
   format_id: string | null;
   source_kind: SourceKind;
+  text_kind: DocumentText;
 }
 
 /** Specie dei byte aperti dal resource host; rispecchia `ResourceKind`. */
