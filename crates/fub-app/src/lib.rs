@@ -42,7 +42,7 @@ use fub_abi::settings::{SettingScope, SettingValue};
 use fub_abi::theme::ThemeLight;
 use fub_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
-use fub_abi::{Notice, PluginError};
+use fub_abi::{GridBytesSession, GridBytesWindow, Notice, PluginError};
 use fub_host::{doc_id, Delivery, EventSink, Host};
 use fub_wasm_host::catalog::{CatalogEntry, CatalogError, CatalogTrust, SignedFeed};
 use fub_wasm_host::installed::Consent;
@@ -723,6 +723,55 @@ fn close_grid(
     vault: Option<String>,
 ) -> Result<(), PluginError> {
     host.grid_close(vault.as_deref(), &surface, &instance)
+}
+
+/// Apre una superficie grid della versione 2 sui byte di un documento. La
+/// shell non porta i byte: manda il diario delle celle cambiate (il testo
+/// della sessione documento) e la revisione dei byte da cui parte; l'host li
+/// legge e rifiuta con `Conflict` se nel frattempo sono cambiati.
+#[tauri::command]
+fn open_grid_bytes(
+    host: State<Host>,
+    surface: String,
+    doc: String,
+    journal: String,
+    base: String,
+    vault: Option<String>,
+) -> Result<GridBytesSession, PluginError> {
+    let doc = doc_id(&doc)?;
+    host.grid_bytes_open(vault.as_deref(), &surface, &doc, &journal, Revision(base))
+}
+
+#[tauri::command]
+fn grid_bytes_window(
+    host: State<Host>,
+    surface: String,
+    instance: String,
+    request: GridWindowRequest,
+    vault: Option<String>,
+) -> Result<GridBytesWindow, PluginError> {
+    host.grid_bytes_window(vault.as_deref(), &surface, &instance, request)
+}
+
+#[tauri::command]
+fn apply_grid_bytes(
+    host: State<Host>,
+    surface: String,
+    instance: String,
+    request: GridApplyRequest,
+    vault: Option<String>,
+) -> Result<GridCommit, PluginError> {
+    host.grid_bytes_apply(vault.as_deref(), &surface, &instance, request)
+}
+
+#[tauri::command]
+fn close_grid_bytes(
+    host: State<Host>,
+    surface: String,
+    instance: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    host.grid_bytes_close(vault.as_deref(), &surface, &instance)
 }
 
 /// **Scrive un documento intero** dichiarando da cosa parte (§18.1, §23.11).
@@ -2628,6 +2677,10 @@ pub fn run() {
             apply_grid,
             reload_grid,
             close_grid,
+            open_grid_bytes,
+            grid_bytes_window,
+            apply_grid_bytes,
+            close_grid_bytes,
             write_document,
             save_draft,
             list_bundles,

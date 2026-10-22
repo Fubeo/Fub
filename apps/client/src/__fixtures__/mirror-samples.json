@@ -1,4 +1,326 @@
 {
+  "GridNotice": [
+    {
+      "code": "macros",
+      "count": 1
+    }
+  ],
+  "GridBytesSession": [
+    {
+      "instance": "xlsx-1",
+      "revision": "sha256:c64a4543ce76fcbcade5797b53bedc08e6d81e9e031a72380c03a07cb788efce",
+      "sheets": [
+        {
+          "id": "s1",
+          "name": "Conti",
+          "row_count": 100,
+          "column_count": 26
+        }
+      ],
+      "active": "s1",
+      "hidden": [
+        "s1"
+      ],
+      "notices": [
+        {
+          "code": "uncomputed",
+          "count": 2
+        }
+      ],
+      "conflicts": [
+        {
+          "sheet": "s1",
+          "row": "r0",
+          "column": "c0"
+        }
+      ]
+    }
+  ],
+  "GridBytesWindow": [
+    {
+      "revision": "sha256:c64a4543ce76fcbcade5797b53bedc08e6d81e9e031a72380c03a07cb788efce",
+      "sheet": "s1",
+      "row_start": 0,
+      "column_start": 0,
+      "total_rows": 100,
+      "total_columns": 26,
+      "rows": [
+        {
+          "id": "r0",
+          "index": 0,
+          "height": null,
+          "hidden": false
+        }
+      ],
+      "columns": [
+        {
+          "id": "c0",
+          "index": 0,
+          "width": 64.0,
+          "hidden": true
+        }
+      ],
+      "cells": [
+        {
+          "key": {
+            "sheet": "s1",
+            "row": "r0",
+            "column": "c0"
+          },
+          "input": "=A1*2",
+          "style": {
+            "bold": false,
+            "italic": true,
+            "text_color": null,
+            "fill_color": "#ffeeaa",
+            "horizontal": null,
+            "number_format": "0.00%"
+          },
+          "value": {
+            "kind": "blank"
+          },
+          "display": "25.00%",
+          "lock": null,
+          "stale": false,
+          "conflict": false
+        },
+        {
+          "key": {
+            "sheet": "s1",
+            "row": "r1",
+            "column": "c0"
+          },
+          "input": "=A1*2",
+          "style": {
+            "bold": false,
+            "italic": true,
+            "text_color": null,
+            "fill_color": "#ffeeaa",
+            "horizontal": null,
+            "number_format": "0.00%"
+          },
+          "value": {
+            "kind": "number",
+            "value": 0.25
+          },
+          "display": "25.00%",
+          "lock": "spill",
+          "stale": false,
+          "conflict": false
+        },
+        {
+          "key": {
+            "sheet": "s1",
+            "row": "r2",
+            "column": "c0"
+          },
+          "input": "=A1*2",
+          "style": {
+            "bold": false,
+            "italic": true,
+            "text_color": null,
+            "fill_color": "#ffeeaa",
+            "horizontal": null,
+            "number_format": "0.00%"
+          },
+          "value": {
+            "kind": "text",
+            "value": "tre"
+          },
+          "display": "25.00%",
+          "lock": null,
+          "stale": true,
+          "conflict": false
+        },
+        {
+          "key": {
+            "sheet": "s1",
+            "row": "r3",
+            "column": "c0"
+          },
+          "input": "=A1*2",
+          "style": {
+            "bold": false,
+            "italic": true,
+            "text_color": null,
+            "fill_color": "#ffeeaa",
+            "horizontal": null,
+            "number_format": "0.00%"
+          },
+          "value": {
+            "kind": "boolean",
+            "value": true
+          },
+          "display": "25.00%",
+          "lock": null,
+          "stale": false,
+          "conflict": true
+        },
+        {
+          "key": {
+            "sheet": "s1",
+            "row": "r4",
+            "column": "c0"
+          },
+          "input": "=A1*2",
+          "style": {
+            "bold": false,
+            "italic": true,
+            "text_color": null,
+            "fill_color": "#ffeeaa",
+            "horizontal": null,
+            "number_format": "0.00%"
+          },
+          "value": {
+            "kind": "error",
+            "value": "#N/A"
+          },
+          "display": "25.00%",
+          "lock": null,
+          "stale": false,
+          "conflict": false
+        }
+      ]
+    }
+  ],
+  "GridBytesCell": [
+    {
+      "key": {
+        "sheet": "s1",
+        "row": "r0",
+        "column": "c0"
+      },
+      "input": "=A1*2",
+      "style": {
+        "bold": false,
+        "italic": true,
+        "text_color": null,
+        "fill_color": "#ffeeaa",
+        "horizontal": null,
+        "number_format": "0.00%"
+      },
+      "value": {
+        "kind": "blank"
+      },
+      "display": "25.00%",
+      "lock": null,
+      "stale": false,
+      "conflict": false
+    },
+    {
+      "key": {
+        "sheet": "s1",
+        "row": "r1",
+        "column": "c0"
+      },
+      "input": "=A1*2",
+      "style": {
+        "bold": false,
+        "italic": true,
+        "text_color": null,
+        "fill_color": "#ffeeaa",
+        "horizontal": null,
+        "number_format": "0.00%"
+      },
+      "value": {
+        "kind": "number",
+        "value": 0.25
+      },
+      "display": "25.00%",
+      "lock": "spill",
+      "stale": false,
+      "conflict": false
+    },
+    {
+      "key": {
+        "sheet": "s1",
+        "row": "r2",
+        "column": "c0"
+      },
+      "input": "=A1*2",
+      "style": {
+        "bold": false,
+        "italic": true,
+        "text_color": null,
+        "fill_color": "#ffeeaa",
+        "horizontal": null,
+        "number_format": "0.00%"
+      },
+      "value": {
+        "kind": "text",
+        "value": "tre"
+      },
+      "display": "25.00%",
+      "lock": null,
+      "stale": true,
+      "conflict": false
+    },
+    {
+      "key": {
+        "sheet": "s1",
+        "row": "r3",
+        "column": "c0"
+      },
+      "input": "=A1*2",
+      "style": {
+        "bold": false,
+        "italic": true,
+        "text_color": null,
+        "fill_color": "#ffeeaa",
+        "horizontal": null,
+        "number_format": "0.00%"
+      },
+      "value": {
+        "kind": "boolean",
+        "value": true
+      },
+      "display": "25.00%",
+      "lock": null,
+      "stale": false,
+      "conflict": true
+    },
+    {
+      "key": {
+        "sheet": "s1",
+        "row": "r4",
+        "column": "c0"
+      },
+      "input": "=A1*2",
+      "style": {
+        "bold": false,
+        "italic": true,
+        "text_color": null,
+        "fill_color": "#ffeeaa",
+        "horizontal": null,
+        "number_format": "0.00%"
+      },
+      "value": {
+        "kind": "error",
+        "value": "#N/A"
+      },
+      "display": "25.00%",
+      "lock": null,
+      "stale": false,
+      "conflict": false
+    }
+  ],
+  "GridJournalRebase": [
+    {
+      "current": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"2\"}]}",
+      "saved": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"2\"}]}",
+      "rebased": ""
+    },
+    {
+      "current": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"3\"},{\"sheet\":\"s1\",\"row\":\"r10\",\"column\":\"c1\",\"before\":\"\",\"after\":\"x\"},{\"sheet\":\"s1\",\"row\":\"r2\",\"column\":\"c0\",\"before\":\"\\\"virgolette\\\" e \\\\ e \\n\",\"after\":\"è\\u001f\"}]}",
+      "saved": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"2\"}]}",
+      "rebased": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"2\",\"after\":\"3\"},{\"sheet\":\"s1\",\"row\":\"r10\",\"column\":\"c1\",\"before\":\"\",\"after\":\"x\"},{\"sheet\":\"s1\",\"row\":\"r2\",\"column\":\"c0\",\"before\":\"\\\"virgolette\\\" e \\\\ e \\n\",\"after\":\"è\\u001f\"}]}"
+    },
+    {
+      "current": "",
+      "saved": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"2\"}]}",
+      "rebased": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"2\",\"after\":\"1\"}]}"
+    }
+  ],
   "GridSurfaceSpec": [
     {
       "id": "sheet",
