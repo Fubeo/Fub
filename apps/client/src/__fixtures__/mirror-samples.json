@@ -308,17 +308,38 @@
     {
       "current": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"2\"}]}",
       "saved": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"2\"}]}",
-      "rebased": ""
+      "rebased": "",
+      "reverted": 0
     },
     {
       "current": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"3\"},{\"sheet\":\"s1\",\"row\":\"r10\",\"column\":\"c1\",\"before\":\"\",\"after\":\"x\"},{\"sheet\":\"s1\",\"row\":\"r2\",\"column\":\"c0\",\"before\":\"\\\"virgolette\\\" e \\\\ e \\n\",\"after\":\"è\\u001f\"}]}",
       "saved": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"2\"}]}",
-      "rebased": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"2\",\"after\":\"3\"},{\"sheet\":\"s1\",\"row\":\"r10\",\"column\":\"c1\",\"before\":\"\",\"after\":\"x\"},{\"sheet\":\"s1\",\"row\":\"r2\",\"column\":\"c0\",\"before\":\"\\\"virgolette\\\" e \\\\ e \\n\",\"after\":\"è\\u001f\"}]}"
+      "rebased": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"2\",\"after\":\"3\"},{\"sheet\":\"s1\",\"row\":\"r10\",\"column\":\"c1\",\"before\":\"\",\"after\":\"x\"},{\"sheet\":\"s1\",\"row\":\"r2\",\"column\":\"c0\",\"before\":\"\\\"virgolette\\\" e \\\\ e \\n\",\"after\":\"è\\u001f\"}]}",
+      "reverted": 0
     },
     {
       "current": "",
       "saved": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"2\"}]}",
-      "rebased": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"2\",\"after\":\"1\"}]}"
+      "rebased": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"2\",\"after\":\"1\"}]}",
+      "reverted": 0
+    },
+    {
+      "current": "{\"version\":2,\"commands\":[{\"id\":\"home.bold\",\"params\":\"{}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"},{\"id\":\"cell.set\",\"params\":\"{\\\"input\\\":\\\"=\\\\\\\"è\\\\\\\"&A2\\\"}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"}]}",
+      "saved": "{\"version\":2,\"commands\":[{\"id\":\"home.bold\",\"params\":\"{}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"}]}",
+      "rebased": "{\"version\":2,\"commands\":[{\"id\":\"cell.set\",\"params\":\"{\\\"input\\\":\\\"=\\\\\\\"è\\\\\\\"&A2\\\"}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"}]}",
+      "reverted": 0
+    },
+    {
+      "current": "{\"version\":2,\"commands\":[{\"id\":\"home.bold\",\"params\":\"{}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"}]}",
+      "saved": "{\"version\":2,\"commands\":[{\"id\":\"home.bold\",\"params\":\"{}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"},{\"id\":\"home.italic\",\"params\":\"{}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"}]}",
+      "rebased": "",
+      "reverted": 1
+    },
+    {
+      "current": "{\"version\":2,\"commands\":[{\"id\":\"cell.set\",\"params\":\"{\\\"input\\\":\\\"2\\\"}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"}]}",
+      "saved": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"2\"}]}",
+      "rebased": "{\"version\":2,\"commands\":[{\"id\":\"cell.set\",\"params\":\"{\\\"input\\\":\\\"2\\\"}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"}]}",
+      "reverted": 0
     }
   ],
   "GridSurfaceSpec": [

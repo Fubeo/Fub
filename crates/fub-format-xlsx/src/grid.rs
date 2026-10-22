@@ -388,6 +388,11 @@ impl Instance {
     /// Il giornale nuovo, con le voci lette contro il file e le formule non
     /// aggiornate.
     fn set_journal(&mut self, journal: GridJournal) -> Result<(), PluginError> {
+        // I comandi sono dell'ADR 0219, non ancora serviti: un giornale di
+        // comandi letto come vuoto perderebbe ciò che porta.
+        if !journal.commands().is_empty() {
+            return Err(bad("grid journal commands are not served"));
+        }
         let mut entries = BTreeMap::new();
         for (key, before, after) in journal.entries() {
             let value = input::parse(after).map_err(|error| match error {

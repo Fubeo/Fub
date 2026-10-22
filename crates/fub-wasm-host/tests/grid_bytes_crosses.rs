@@ -10,7 +10,9 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use fub_abi::grid::{GridApplyRequest, GridCellKey, GridCellPatch, GridWindowRequest};
 use fub_abi::model::DocId;
-use fub_abi::{grid_bytes_revision, GridBytesProvider, GridJournal, PluginError, Revision};
+use fub_abi::{
+    grid_bytes_revision, GridBytesProvider, GridCommand, GridJournal, PluginError, Revision,
+};
 use fub_host::Host;
 use fub_kernel::Trust;
 use fub_wasm_host::WasmBundle;
@@ -65,6 +67,22 @@ fn the_journal_crosses_the_component_and_the_bytes_come_back_grafted() {
         .expect("opens on the bytes");
     assert_eq!(session.revision, grid_bytes_revision(&revision, ""));
     assert_eq!(session.notices[0].code, "lines");
+    // L'esempio non serve comandi: un giornale di comandi è un rifiuto
+    // tipizzato, non un giornale vuoto.
+    let mut commands = GridJournal::new();
+    commands
+        .push_command(GridCommand {
+            id: "home.bold".into(),
+            params: "{}".into(),
+            sheet: "lines".into(),
+            selection: "A1".into(),
+            active: "A1".into(),
+        })
+        .unwrap();
+    assert!(matches!(
+        grid.open(SURFACE, SOURCE, revision.clone(), &commands),
+        Err(PluginError::BadArgs(_))
+    ));
 
     let cells = grid
         .window(&session.instance, window(4, &session.revision))
