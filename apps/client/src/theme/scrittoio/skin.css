@@ -5496,6 +5496,22 @@ kbd,
   background: var(--bg-elev);
   box-shadow: var(--shadow-2);
 }
+/* Una cartella di Excel si legge soltanto: l'avviso lo dice sopra la barra,
+   come per i documenti di videoscrittura. Un valore che il file non salva ha
+   un filo a puntini sotto, che resta anche sul colore della cella. */
+.grid-notice {
+  padding: var(--space-3) var(--space-9);
+  background: var(--info-wash);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+/* Le schede dei fogli stanno sotto la griglia, come nei fogli di calcolo. */
+.grid-sheets {
+  border-top: 1px solid var(--border);
+  background: var(--sheet-2);
+  padding: 0 var(--space-4);
+}
 
 /* ── Il canvas ───────────────────────────────────────────────────────────── */
 

@@ -154,6 +154,31 @@ intervalli, riferimenti cross-sheet e le funzioni `SUM`, `AVERAGE`, `MIN`,
 client non replica questa semantica: chiede il risultato Rust dopo il commit e
 usa l'input persistito come fallback.
 
+## Cartella di Excel `.xlsx`
+
+Un `.xlsx` si apre nella famiglia `grid` con il profilo `workbook`, senza il
+protocollo a finestre. `crates/fub-format-xlsx` legge la cartella con il codec
+di GridCraft e `read_document` dà in `text` la sua proiezione JSON, chiusa e
+versionata (`crates/fub-format-xlsx/src/projection.rs`): i fogli visibili e
+nascosti, le dimensioni di righe e colonne, e per ogni cella il valore già
+scritto nel formato numerico del file, la formula e l'aspetto. I valori sono
+quelli salvati nel file, comprese le celle versate dalle matrici, e niente si
+ricalcola: una formula senza valore salvato resta vuota, e la proiezione lo
+dice. La proiezione ha due limiti, 16 MiB e 262.144 righe e colonne in tutto,
+perché la griglia tiene una voce per ogni riga e colonna.
+
+`apps/client/src/editors/grid/workbook.ts` legge la proiezione con lo stesso
+rigore del codec: campi sconosciuti, colori che non sono `#RRGGBB`, celle
+ripetute o fuori dal foglio la rendono illeggibile. `GridEngine` la mostra in
+sola lettura qualunque cosa chieda la sessione, con le schede dei fogli
+visibili, la formula nella barra e un avviso per ciò che la griglia non
+mostra: macro, collegamenti esterni, parti non disegnate, avvisi della
+lettura, formule senza valore e fogli troncati. `write_document` rifiuta
+sempre la cartella, con `host.xlsx.readonly`, e `resource_write` la crea ma
+non la copre. Il perché è nell'[ADR
+0214](../decisions/0214-gridcraft-motore-del-foglio-di-calcolo.md); la forma
+del documento nel [contratto IPC](../reference/ipc-contract.md).
+
 ## Arena al confine WASM
 
 WIT non ammette tipi ricorsivi. Gli alberi `Block`, `Inline` e `UiNode`
@@ -180,7 +205,8 @@ albero malformato.
 - gli alberi ricorsivi hanno una sola conversione al confine;
 - un nuovo campo pubblico rispetta l'additività del WIT;
 - una regola comune vive nel contratto, non in due provider;
-- un workbook a celle conserva autorità e identità fuori da `DocumentModel`.
+- un workbook a celle conserva autorità e identità fuori da `DocumentModel`;
+- una cartella di Excel arriva alla shell come proiezione e il file non si riscrive.
 
 ## Dove si trova
 
@@ -191,4 +217,6 @@ albero malformato.
 - `crates/fub-format-markdown/src/render.rs`
 - `crates/fub-format-markdown/src/serialize.rs`
 - `crates/fub-format-sheet/src/lib.rs`
+- `crates/fub-format-xlsx/src/projection.rs`
+- `apps/client/src/editors/grid/workbook.ts`
 - `crates/fub-format-svg/src/parse.rs`

@@ -1,0 +1,106 @@
+diff --git a/crates/xlsx/src/package.rs b/crates/xlsx/src/package.rs
+index 9a28999..85c6a4c 100644
+--- a/crates/xlsx/src/package.rs
++++ b/crates/xlsx/src/package.rs
+@@ -45,8 +45,12 @@ impl<'a> Package<'a> {
+         }
+         let mut names = HashMap::new();
+         for i in 0..zip.len() {
+-            if let Some(n) = zip.name_for_index(i) {
+-                names.entry(normalize(n)).or_insert(i);
++            match zip.name_for_index(i) {
++                Some(Ok(n)) => {
++                    names.entry(normalize(&n)).or_insert(i);
++                }
++                Some(Err(e)) => return Err(IoError::Zip(e.to_string())),
++                None => {}
+             }
+         }
+         Ok(Package { zip, names, total: 0 })
+diff --git a/crates/xlsx/src/tests/fixtures.rs b/crates/xlsx/src/tests/fixtures.rs
+index 39ea309..6141af3 100644
+--- a/crates/xlsx/src/tests/fixtures.rs
++++ b/crates/xlsx/src/tests/fixtures.rs
+@@ -372,7 +372,7 @@ fn drawing_with_picture_and_chart() {
+             let mut f = z.by_index(i).unwrap();
+             let mut d = vec![];
+             std::io::Read::read_to_end(&mut f, &mut d).unwrap();
+-            parts.push((f.name().to_string(), d));
++            parts.push((f.name().unwrap().to_string(), d));
+         }
+         parts.push(("xl/media/image1.png".into(), png.to_vec()));
+         let refs: Vec<(&str, &[u8])> = parts.iter().map(|(n, d)| (n.as_str(), d.as_slice())).collect();
+diff --git a/crates/xlsx/src/tests/malformed.rs b/crates/xlsx/src/tests/malformed.rs
+index d029aca..d1f243b 100644
+--- a/crates/xlsx/src/tests/malformed.rs
++++ b/crates/xlsx/src/tests/malformed.rs
+@@ -140,7 +140,7 @@ fn hostile_threaded_comments_persons_and_note_vml() {
+         let mut f = z.by_index(i).unwrap();
+         let mut d = vec![];
+         std::io::Read::read_to_end(&mut f, &mut d).unwrap();
+-        parts.push((f.name().to_string(), d));
++        parts.push((f.name().unwrap().to_string(), d));
+     }
+     let ns = r#"xmlns="http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments""#;
+     let deep = "<v:group>".repeat(300) + &"</v:group>".repeat(300);
+diff --git a/crates/xlsx/src/tests/passthrough_tests.rs b/crates/xlsx/src/tests/passthrough_tests.rs
+index eff8370..e1b68f5 100644
+--- a/crates/xlsx/src/tests/passthrough_tests.rs
++++ b/crates/xlsx/src/tests/passthrough_tests.rs
+@@ -129,7 +129,7 @@ impl Unpacked {
+             let mut f = z.by_index(i).unwrap();
+             let mut v = vec![];
+             f.read_to_end(&mut v).unwrap();
+-            parts.insert(f.name().to_string(), v);
++            parts.insert(f.name().unwrap().to_string(), v);
+         }
+         Unpacked { parts }
+     }
+diff --git a/crates/xlsx/src/tests/pivot_tests.rs b/crates/xlsx/src/tests/pivot_tests.rs
+index 9ec1f68..fba21af 100644
+--- a/crates/xlsx/src/tests/pivot_tests.rs
++++ b/crates/xlsx/src/tests/pivot_tests.rs
+@@ -205,7 +205,7 @@ fn unzip(bytes: &[u8]) -> HashMap<String, Vec<u8>> {
+         let mut f = z.by_index(i).unwrap();
+         let mut b = Vec::new();
+         f.read_to_end(&mut b).unwrap();
+-        m.insert(f.name().to_string(), b);
++        m.insert(f.name().unwrap().to_string(), b);
+     }
+     m
+ }
+diff --git a/crates/xlsx/src/tests/roundtrip.rs b/crates/xlsx/src/tests/roundtrip.rs
+index 7c7c190..69218d7 100644
+--- a/crates/xlsx/src/tests/roundtrip.rs
++++ b/crates/xlsx/src/tests/roundtrip.rs
+@@ -563,7 +563,7 @@ fn full_roundtrip() {
+ fn package_structure() {
+     let bytes = write_xlsx(&sample()).unwrap();
+     let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+-    let names: Vec<String> = (0..z.len()).map(|i| z.name_for_index(i).unwrap().to_string()).collect();
++    let names: Vec<String> = (0..z.len()).map(|i| z.name_for_index(i).unwrap().unwrap().to_string()).collect();
+     assert_eq!(names[0], "[Content_Types].xml");
+     for n in [
+         "_rels/.rels",
+@@ -743,7 +743,7 @@ fn vba_project_roundtrip() {
+     assert_eq!(write_xlsx(&wb).unwrap(), bytes, "output is deterministic");
+ 
+     let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes.clone())).unwrap();
+-    let names: Vec<String> = (0..z.len()).map(|i| z.name_for_index(i).unwrap().to_string()).collect();
++    let names: Vec<String> = (0..z.len()).map(|i| z.name_for_index(i).unwrap().unwrap().to_string()).collect();
+     assert!(names.iter().any(|x| x == "xl/vbaProject.bin"), "missing vbaProject.bin");
+     let mut bin = vec![];
+     z.by_name("xl/vbaProject.bin").unwrap().read_to_end(&mut bin).unwrap();
+diff --git a/crates/xlsx/src/tests/trendline_roundtrip.rs b/crates/xlsx/src/tests/trendline_roundtrip.rs
+index d954c9b..b3259fd 100644
+--- a/crates/xlsx/src/tests/trendline_roundtrip.rs
++++ b/crates/xlsx/src/tests/trendline_roundtrip.rs
+@@ -104,7 +104,7 @@ fn every_trendline_kind_round_trips_in_every_chart_group() {
+ fn chart_parts(bytes: &[u8]) -> Vec<String> {
+     let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec())).unwrap();
+     let mut names: Vec<String> =
+-        (0..z.len()).map(|i| z.name_for_index(i).unwrap().to_string()).filter(|n| n.starts_with("xl/charts/chart")).collect();
++        (0..z.len()).map(|i| z.name_for_index(i).unwrap().unwrap().to_string()).filter(|n| n.starts_with("xl/charts/chart")).collect();
+     names.sort();
+     names
+         .iter()

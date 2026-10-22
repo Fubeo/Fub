@@ -10,7 +10,9 @@ import type {
 } from "../../host/contract";
 import { operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import type { Theme } from "../../theme/theme";
-import { t, onLanguage } from "../../i18n/strings";
+import { t, onLanguage, resolvedLanguage, type Key } from "../../i18n/strings";
+import { createTabs, type TabsHandle } from "../../kit";
+import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { createTextEngine, type TextEngine } from "../text/engine";
 import { createFormulaProfile } from "../text/profiles/formula";
 import {
@@ -37,6 +39,13 @@ import {
   type GridCellPatch,
   type GridOperation,
 } from "./operation";
+import {
+  cellKey,
+  parseWorkbookProjection,
+  type WorkbookCell,
+  type WorkbookNotShown,
+  type WorkbookView,
+} from "./workbook";
 
 /// Oltre queste celle un intervallo non viaggia nel contesto: rifarne il
 /// testo a ogni movimento della selezione costerebbe quanto copiarlo.
@@ -55,6 +64,17 @@ export const MAX_GRID_SESSION_ROWS = 1_048_576;
 export const MAX_GRID_SESSION_COLUMNS = 16_384;
 export const MAX_GRID_SESSION_WINDOWS = 256;
 export const MAX_GRID_INVALIDATED_CELLS = 32_768;
+/// Quanti avvisi della lettura di una cartella si mostrano per intero.
+const INCOMPLETE_SHOWN = 3;
+const NOT_SHOWN_KEYS: Readonly<Record<WorkbookNotShown, Key>> = {
+  merges: "grid.workbook.part.merges",
+  charts: "grid.workbook.part.charts",
+  images: "grid.workbook.part.images",
+  shapes: "grid.workbook.part.shapes",
+  comments: "grid.workbook.part.comments",
+  conditional_formats: "grid.workbook.part.conditional_formats",
+  sparklines: "grid.workbook.part.sparklines",
+};
 
 export interface GridHost {
   readonly listGridSurfaces: () => Promise<readonly GridSurfaceSpec[]>;
@@ -78,6 +98,12 @@ export interface GridChange {
 
 export interface GridEngineOptions {
   readonly surfaceId: string;
+  /**
+   * `sheet` (di serie) è il foglio di Fub, che si scrive; `workbook` è la
+   * proiezione di una cartella di Excel ([`parseWorkbookProjection`]), che
+   * si legge soltanto e non apre il protocollo dei fogli.
+   */
+  readonly profile?: "sheet" | "workbook";
   readonly formatId?: string | null;
   readonly revision?: string;
   readonly onChange: (change: GridChange) => void;
@@ -381,6 +407,8 @@ export class GridEngine {
   readonly #canvas: HTMLElement;
   readonly #corner: HTMLElement;
   readonly #cellEditorHost: HTMLElement;
+  readonly #notice: HTMLElement;
+  readonly #sheetBar: HTMLElement;
   readonly #formulaEditor: TextEngine;
   readonly #cellEditor: TextEngine;
   readonly #options: GridEngineOptions;
@@ -388,6 +416,9 @@ export class GridEngine {
   readonly #abort = new AbortController();
   #workbook: GridWorkbook | null = null;
   #sourceWorkbook: GridWorkbook | null = null;
+  /// La cartella di Excel che il profilo `workbook` mostra.
+  #view: WorkbookView | null = null;
+  #sheetTabs: { readonly handle: TabsHandle; readonly names: string; readonly lifetime: Lifetime } | null = null;
   #sheetIndex = 0;
   #source = "";
   #revision = "";
@@ -403,6 +434,8 @@ export class GridEngine {
   #columns: AxisLayout = { offsets: [0], sizes: [], total: 0 };
   #editing: EditingState | null = null;
   #readOnly = false;
+  /// Il profilo `workbook` non si scrive mai, qualunque cosa chieda la shell.
+  readonly #intrinsicReadOnly: boolean;
   #destroyed = false;
   #providerCommitTail: Promise<void> = Promise.resolve();
   /// Il sorgente come lo tiene il provider, dopo l'ultima risposta: il diff di
@@ -419,8 +452,16 @@ export class GridEngine {
   constructor(parent: HTMLElement, options: GridEngineOptions) {
     const signal = this.#abort.signal;
     this.#options = options;
+    this.#intrinsicReadOnly = options.profile === "workbook";
     this.#root = document.createElement("div");
     this.#root.className = "grid-surface";
+    this.#notice = document.createElement("p");
+    this.#notice.className = "grid-notice";
+    this.#notice.setAttribute("role", "status");
+    this.#notice.hidden = true;
+    this.#sheetBar = document.createElement("div");
+    this.#sheetBar.className = "grid-sheets";
+    this.#sheetBar.hidden = true;
 
     const formula = document.createElement("div");
     formula.className = "grid-formula-bar";
@@ -447,10 +488,15 @@ export class GridEngine {
     this.#cellEditorHost.setAttribute("aria-hidden", "true");
     this.#canvas.append(this.#cellEditorHost);
     this.#viewport.append(this.#canvas);
-    this.#root.append(formula, this.#viewport);
+    this.#root.append(this.#notice, formula, this.#viewport, this.#sheetBar);
     parent.replaceChildren(this.#root);
     this.#stopLanguage = onLanguage(() => {
       this.#viewport.setAttribute("aria-label", t("grid.surface"));
+      if (this.#view) {
+        this.#showNotice();
+        this.#sheetBar.querySelector(".kit-tabs")?.setAttribute("aria-label", t("grid.workbook.sheets"));
+        this.#render();
+      }
     });
 
     const formulaProfile = createFormulaProfile({
@@ -479,6 +525,7 @@ export class GridEngine {
       field: true,
       extensions: () => cellProfile.extensions(),
     });
+    if (this.#intrinsicReadOnly) this.setReadOnly(false);
 
     this.#viewport.addEventListener("scroll", () => {
       this.#render();
@@ -500,6 +547,10 @@ export class GridEngine {
   }
   setDoc(source: string): void {
     if (this.#destroyed) return;
+    if (this.#intrinsicReadOnly) {
+      this.#setProjection(source, true);
+      return;
+    }
     this.#protocolGeneration++;
     const previousInstance = this.#instance;
     const previousSurface = this.#surface;
@@ -529,6 +580,10 @@ export class GridEngine {
     if (this.#destroyed) return;
     const source = typeof update === "string" ? update : update.text;
     const operation = typeof update === "string" ? null : update.operation;
+    if (this.#intrinsicReadOnly) {
+      this.#setProjection(source, false);
+      return;
+    }
     if (this.#provider) {
       this.#source = source;
       this.#sourceWorkbook = null;
@@ -590,10 +645,11 @@ export class GridEngine {
     const range = normalizedSelection(this.#selection);
     const cells = (range.rowEnd - range.rowStart + 1) * (range.columnEnd - range.columnStart + 1);
     if (cells > SELECTED_TEXT_CELLS) return null;
-    return { primary: selectionText(this.#sheet(), this.#selection), secondary: [] };
+    return { primary: selectionText(this.#sheet(), this.#selection, (position) => this.#cellAt(position)), secondary: [] };
   }
 
-  setReadOnly(readOnly: boolean): void {
+  setReadOnly(requested: boolean): void {
+    const readOnly = requested || this.#intrinsicReadOnly;
     this.#readOnly = readOnly;
     this.#formulaEditor.setReadOnly(readOnly);
     this.#cellEditor.setReadOnly(readOnly);
@@ -643,6 +699,8 @@ export class GridEngine {
     }
     this.#instance = null;
     this.#surface = null;
+    this.#sheetTabs?.lifetime.close();
+    this.#sheetTabs = null;
     this.#formulaEditor.destroy();
     this.#cellEditor.destroy();
     this.#root.remove();
@@ -650,6 +708,124 @@ export class GridEngine {
 
   #sheet(): GridSheet {
     return this.#workbook?.sheets[this.#sheetIndex] ?? EMPTY_SHEET;
+  }
+
+  /// La cella in `position` del foglio mostrato. Una cartella ha le sue celle
+  /// indicizzate: cercarle in lista a ogni cella disegnata costerebbe quanto
+  /// il foglio intero.
+  #cellAt(position: GridPosition): GridCell | undefined {
+    return this.#view ? this.#workbookCell(position)?.cell : cellAt(this.#sheet(), position);
+  }
+
+  #workbookCell(position: GridPosition): WorkbookCell | undefined {
+    return this.#view?.sheets[this.#sheetIndex]?.cells.get(cellKey(position));
+  }
+
+  /// Mostra la proiezione `source`. `reset` è un documento nuovo: si parte dal
+  /// foglio attivo nel file, in alto a sinistra; altrimenti è lo stesso
+  /// documento riletto, e foglio e selezione restano dove sono.
+  #setProjection(source: string, reset: boolean): void {
+    const view = parseWorkbookProjection(source);
+    const previous = this.#workbook?.sheets[this.#sheetIndex]?.id;
+    this.#source = source;
+    this.#revision = this.#options.revision ?? "";
+    this.#view = view;
+    this.#workbook = view.workbook;
+    this.#sourceWorkbook = null;
+    const kept = reset ? -1 : view.workbook.sheets.findIndex((sheet) => sheet.id === previous);
+    this.#sheetIndex = kept >= 0 ? kept : view.active;
+    if (reset || kept < 0) this.#selection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
+    this.#root.dataset.gridProfile = "workbook";
+    this.#showNotice();
+    this.#showSheetTabs();
+    this.#showSheet(reset || kept < 0);
+  }
+
+  /// Ridisegna il foglio `#sheetIndex`; `top` lo riporta in cima.
+  #showSheet(top: boolean): void {
+    this.#selection = this.#clampedSelection(this.#selection);
+    this.#rebuildLayout();
+    this.#selection = this.#visibleSelection(this.#selection);
+    if (top) {
+      this.#viewport.scrollTop = 0;
+      this.#viewport.scrollLeft = 0;
+    }
+    this.#syncFormulaBar();
+    this.#render();
+  }
+
+  #showNotice(): void {
+    const view = this.#view;
+    if (!view) return;
+    const lines = [t("grid.workbook.readonly")];
+    const parts: WorkbookNotShown[] = [];
+    const incomplete: string[] = [];
+    const truncated: string[] = [];
+    for (const notice of view.notices) {
+      switch (notice.kind) {
+        case "not_shown": parts.push(notice.detail as WorkbookNotShown); break;
+        case "incomplete": if (notice.detail) incomplete.push(notice.detail); break;
+        case "truncated": if (notice.detail) truncated.push(notice.detail); break;
+        case "macros": lines.push(t("grid.workbook.macros")); break;
+        case "external_links": lines.push(t("grid.workbook.external_links")); break;
+        case "uncomputed": lines.push(t("grid.workbook.uncomputed")); break;
+      }
+    }
+    const list = (items: readonly string[]) => new Intl.ListFormat(resolvedLanguage(), { type: "conjunction" }).format(items);
+    if (parts.length) lines.push(t("grid.workbook.not_shown", { parts: list(parts.map((part) => t(NOT_SHOWN_KEYS[part]))) }));
+    if (truncated.length) lines.push(t("grid.workbook.truncated", { sheets: list(truncated.map((name) => t("grid.workbook.sheet_name", { name }))) }));
+    if (incomplete.length) {
+      // Gli avvisi della lettura sono di GridCraft, in inglese: se ne mostrano
+      // pochi, e quanti restano.
+      const shown = incomplete.slice(0, INCOMPLETE_SHOWN).join("; ");
+      lines.push(incomplete.length > INCOMPLETE_SHOWN
+        ? t("grid.workbook.incomplete_more", { details: shown, more: String(incomplete.length - INCOMPLETE_SHOWN) })
+        : t("grid.workbook.incomplete", { details: shown }));
+    }
+    this.#notice.textContent = lines.join(" ");
+    this.#notice.hidden = false;
+  }
+
+  /// Le schede dei fogli, quando ce n'è più di uno da mostrare. Si rifanno
+  /// soltanto se i fogli cambiano.
+  #showSheetTabs(): void {
+    const sheets = this.#workbook?.sheets ?? [];
+    const names = JSON.stringify(sheets.map((sheet) => [sheet.id, sheet.name]));
+    if (sheets.length < 2) {
+      this.#sheetTabs?.lifetime.close();
+      this.#sheetTabs = null;
+      this.#sheetBar.replaceChildren();
+      this.#sheetBar.hidden = true;
+      return;
+    }
+    const selected = sheets[this.#sheetIndex]?.id;
+    if (this.#sheetTabs?.names === names) {
+      if (selected !== undefined) this.#sheetTabs.handle.select(selected);
+      return;
+    }
+    this.#sheetTabs?.lifetime.close();
+    const lifetime = openLifetime();
+    const tablist = document.createElement("div");
+    this.#sheetBar.replaceChildren(tablist);
+    this.#sheetBar.hidden = false;
+    const handle = createTabs({
+      tablist,
+      tabs: sheets.map((sheet) => ({ id: sheet.id, label: sheet.name })),
+      selected,
+      label: t("grid.workbook.sheets"),
+      lifetime,
+      onSelect: (id) => {
+        const index = this.#workbook?.sheets.findIndex((sheet) => sheet.id === id) ?? -1;
+        if (index < 0 || index === this.#sheetIndex) return;
+        this.#finishEditing(false, "input", false);
+        this.#sheetIndex = index;
+        this.#selection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
+        this.#showSheet(true);
+        this.#options.onSelectionChange();
+      },
+    });
+    lifetime.add(() => tablist.remove());
+    this.#sheetTabs = { handle, names, lifetime };
   }
 
   #rebuildLayout(): void {
@@ -760,7 +936,7 @@ export class GridEngine {
       for (const column of renderedColumns) {
         if (this.#columns.sizes[column] === 0) continue;
         const position = { row, column };
-        const persisted = cellAt(sheet, position);
+        const persisted = this.#cellAt(position);
         const element = document.createElement("div");
         element.className = "grid-cell";
         element.dataset.row = String(row);
@@ -851,7 +1027,9 @@ export class GridEngine {
 
   #syncFormulaBar(): void {
     if (!this.#workbook) return;
-    this.#formulaEditor.setDoc(cellAt(this.#sheet(), this.#selection.focus)?.input ?? "");
+    const focus = this.#selection.focus;
+    const shown = this.#view ? this.#workbookCell(focus) : undefined;
+    this.#formulaEditor.setDoc(shown?.formula ?? this.#cellAt(focus)?.input ?? "");
   }
 
   #select(position: GridPosition, extend: boolean): void {
@@ -1015,7 +1193,7 @@ export class GridEngine {
 
   #beginEditing(owner: "cell" | "formula", position: GridPosition, initial?: string): void {
     if (this.#readOnly || !this.#workbook || !this.#isVisiblePosition(position)) return;
-    const current = cellAt(this.#sheet(), position)?.input ?? "";
+    const current = this.#cellAt(position)?.input ?? "";
     if (this.#editing && (!samePosition(this.#editing.position, position) || this.#editing.owner !== owner)) {
       this.#finishEditing(true, "input", false);
     }
@@ -1130,7 +1308,7 @@ export class GridEngine {
   #copy(event: ClipboardEvent): void {
     if (!event.clipboardData) return;
     event.preventDefault();
-    event.clipboardData.setData("text/plain", selectionTsv(this.#sheet(), this.#selection));
+    event.clipboardData.setData("text/plain", selectionTsv(this.#sheet(), this.#selection, (position) => this.#cellAt(position)));
   }
 
   #cut(event: ClipboardEvent): void {

@@ -128,6 +128,9 @@ interface Lease {
 const CHUNK_MAX = 64 * 1024;
 /// I formati di `fub-format-rich` con la feature `rich` dell'host.
 const RICH_FAKE_FORMATS: ReadonlySet<string> = new Set(["docx", "odt", "rtf", "doc"]);
+/// Le estensioni delle cartelle di `fub-format-xlsx`, con la feature `xlsx`
+/// dell'host: la shell ne riceve la proiezione, e non le scrive.
+const XLSX_FAKE_EXTENSIONS = ["xlsx", "xlsm", "xltx", "xltm"] as const;
 
 /// Una voce del cestino finto.
 interface Trashed {
@@ -421,6 +424,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (id.endsWith(".odt")) return "odt";
     if (id.endsWith(".rtf")) return "rtf";
     if (id.endsWith(".doc") || id.endsWith(".dot")) return "doc";
+    if (XLSX_FAKE_EXTENSIONS.some((extension) => id.toLowerCase().endsWith(`.${extension}`))) return "xlsx";
     return null;
   }
 
@@ -428,7 +432,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// provider lo vuole a byte, e la shell ne riceve la proiezione
   /// (`fub-format-rich`).
   function sourceKindOf(id: string): "text" | "bytes" {
-    return RICH_FAKE_FORMATS.has(formatOf(id) ?? "") ? "bytes" : "text";
+    const format = formatOf(id) ?? "";
+    return RICH_FAKE_FORMATS.has(format) || format === "xlsx" ? "bytes" : "text";
   }
 
   /// Registra la chiamata e restituisce ciò che la porta risponde.
@@ -1242,7 +1247,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       configHealth: () => gate("configHealth", [], Promise.reject(new Error("host fake: configurazione di macchina non disponibile"))),
       recoverConfig: (path, action) => gate("recoverConfig", [path, action], Promise.reject(new Error("host fake: recovery senza disco"))),
       openVault: (path) => {
-        const extensions = ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", "fubsheet", "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : [])];
+        const extensions = ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", ...XLSX_FAKE_EXTENSIONS, "fubsheet", "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : [])];
         const info: VaultInfo = { root: path, extensions, plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
@@ -1371,6 +1376,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
         if (formatOf(id) === null) {
           const unserved: PluginError = { kind: "unserved", message: `host fake: nessun formato serve «${id}»` };
           return gate("writeDocument", named([id, source, base], vault), Promise.reject(unserved));
+        }
+        // Una cartella si legge e non si scrive, come nell'host.
+        if (formatOf(id) === "xlsx") {
+          const readOnly: PluginError = { kind: "permission_denied", message: `host fake: «${id}» è una cartella di Excel, in sola lettura` };
+          return gate("writeDocument", named([id, source, base], vault), Promise.reject(readOnly));
         }
         const before = docs.get(id);
         if (base.kind === "descends_from" && before && before.revision !== base.value) {

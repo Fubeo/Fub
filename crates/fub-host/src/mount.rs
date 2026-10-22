@@ -286,7 +286,11 @@ pub(crate) fn mount_with_formats(
     // feature un `.fubann` è un file di specie sconosciuta.
     #[cfg(feature = "draw")]
     builtin.push(fub_format_svg::FubannProvider::boxed());
-    for provider in builtin.into_iter().chain(crate::rich::providers()) {
+    for provider in builtin
+        .into_iter()
+        .chain(crate::rich::providers())
+        .chain(crate::workbook::providers())
+    {
         if let Err(error) = formats.register(provider) {
             return Err(mount_error_with_resource_disposal(
                 format!("format provider conflict: {error}"),

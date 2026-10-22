@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-// La copia di WordCraft in `vendor/wordcraft/` è derivata: l'upstream a uno
-// SHA preciso più le patch di Fub in `vendor/wordcraft/patches/`, in ordine.
-// `upstream.lock` ne tiene la provenienza e le impronte di ogni file, prima e
-// dopo le patch.
+// La copia di un motore Craft in `vendor/<motore>/` è derivata: l'upstream a
+// uno SHA preciso più le patch di Fub in `vendor/<motore>/patches/`, in
+// ordine. `upstream.lock` ne tiene la provenienza e le impronte di ogni file,
+// prima e dopo le patch. I motori e i loro percorsi sono in `motori.mjs`.
 //
-//   node tools/vendor-wordcraft/vendor.mjs update --rev <sha> [--tag <tag>] [--source <percorso o URL>]
-//   node tools/vendor-wordcraft/vendor.mjs check
-//   node tools/vendor-wordcraft/vendor.mjs verify-upstream [--source <percorso o URL>]
+//   node tools/vendor-craft/vendor.mjs <motore> update --rev <sha> [--tag <tag>] [--source <percorso o URL>]
+//   node tools/vendor-craft/vendor.mjs [<motore>] check
+//   node tools/vendor-craft/vendor.mjs <motore> verify-upstream [--source <percorso o URL>]
+//
+// `check` senza motore li controlla tutti.
 //
 // `update` estrae dall'upstream soltanto i percorsi gestiti, applica la pila
 // di patch e sostituisce la copia soltanto se tutti i passi riescono.
@@ -28,28 +30,34 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const VENDOR = path.join(ROOT, "vendor/wordcraft");
-const LOCK = path.join(VENDOR, "upstream.lock");
-const PATCHES = path.join(VENDOR, "patches");
+import { MOTORI } from "./motori.mjs";
 
-/// I percorsi che vengono dall'upstream; il resto di `vendor/wordcraft/`
-/// (`UPSTREAM.md`, `upstream.lock`, `patches/`) è di Fub.
-const MANAGED = [
-  "crates/geom",
-  "crates/doc",
-  "crates/docx",
-  "crates/docbin",
-  "crates/formats",
-  "crates/proof",
-  "assets/hyphenation",
-  "assets/spelling",
-  "LICENSE-MIT",
-  "LICENSE-APACHE",
-  "NOTICE",
-  "rustfmt.toml",
-];
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const ABSENT = "none";
+
+// Il motore su cui si lavora, fissato da `scegli` prima di ogni comando.
+/// L'id del motore (`wordcraft`), il suo nome (`WordCraft`) e il repository.
+let ID;
+let NOME;
+let REPOSITORY;
+let VENDOR;
+let LOCK;
+let PATCHES;
+/// I percorsi che vengono dall'upstream; il resto di `vendor/<motore>/`
+/// (`UPSTREAM.md`, `upstream.lock`, `patches/`) è di Fub.
+let MANAGED;
+
+function scegli(id) {
+  const motore = MOTORI[id];
+  if (!motore) fail(`motore sconosciuto: ${id} (motori: ${Object.keys(MOTORI).join(", ")})`);
+  ID = id;
+  NOME = motore.nome;
+  REPOSITORY = motore.repository;
+  VENDOR = path.join(ROOT, "vendor", id);
+  LOCK = path.join(VENDOR, "upstream.lock");
+  PATCHES = path.join(VENDOR, "patches");
+  MANAGED = motore.gestiti;
+}
 
 class Failure extends Error {}
 
@@ -134,7 +142,7 @@ function writeLock(lock) {
     (f) => `[[file]]\npath = "${f.path}"\nupstream = "${f.upstream}"\n` + (f.result ? `result = "${f.result}"\n` : ""),
   );
   const text = [
-    "# La provenienza della copia di WordCraft, per `tools/vendor-wordcraft/vendor.mjs`.",
+    `# La provenienza della copia di ${NOME}, per \`tools/vendor-craft/vendor.mjs\`.`,
     "# Non si modifica a mano: la scrive `update`. Un tag è informativo, lo SHA no.",
     head,
     "",
@@ -245,7 +253,7 @@ function workspaceDependencies(text) {
   return out;
 }
 
-/// Il workspace a cui i sei crate appartengono: quello di `vendor/` se c'è,
+/// Il workspace a cui i crate del motore appartengono: quello di `vendor/` se c'è,
 /// altrimenti quello di Fub.
 function owningWorkspace() {
   const own = path.join(VENDOR, "Cargo.toml");
@@ -268,26 +276,28 @@ function checkManifests(dir) {
     const fub = workspaceDependencies(fs.readFileSync(path.join(ROOT, "Cargo.toml"), "utf8"));
     for (const [name, version] of defined) {
       if (fub.has(name) && version && fub.get(name) && fub.get(name) !== version) {
-        problems.push(`${name}: ${version} in vendor/wordcraft, ${fub.get(name)} in Fub`);
+        problems.push(`${name}: ${version} in vendor/${ID}, ${fub.get(name)} in Fub`);
       }
     }
   }
   return problems;
 }
 
-/// Le righe che portano la versione dell'upstream: le `wordcraft-*` del
-/// `Cargo.toml` di Fub e, in quello di `vendor/`, le stesse righe e la versione
-/// di `[workspace.package]`. Una dipendenza a percorso senza versione è un
-/// carattere jolly per `cargo deny`.
-const VERSION_LINES = [
-  ["Cargo.toml", /^(wordcraft-[a-z]+ = \{ path = "vendor\/wordcraft\/crates\/[a-z]+", version = ")([^"]+)(" \})$/gm],
-  ["vendor/wordcraft/Cargo.toml", /^(wordcraft-[a-z]+ = \{ path = "crates\/[a-z]+", version = ")([^"]+)(" \})$/gm],
-  ["vendor/wordcraft/Cargo.toml", /^(\[workspace\.package\][^[]*?\nversion = ")([^"]+)(")$/gm],
-];
+/// Le righe che portano la versione dell'upstream: le `<motore>-*` del
+/// `Cargo.toml` di Fub e, in quello di `vendor/<motore>/`, le stesse righe e la
+/// versione di `[workspace.package]`. Una dipendenza a percorso senza versione
+/// è un carattere jolly per `cargo deny`.
+function versionRules() {
+  return [
+    ["Cargo.toml", new RegExp(`^(${ID}-[a-z]+ = \\{ path = "vendor\\/${ID}\\/crates\\/[a-z]+", version = ")([^"]+)(" \\})$`, "gm")],
+    [`vendor/${ID}/Cargo.toml`, new RegExp(`^(${ID}-[a-z]+ = \\{ path = "crates\\/[a-z]+", version = ")([^"]+)(" \\})$`, "gm")],
+    [`vendor/${ID}/Cargo.toml`, /^(\[workspace\.package\][^[]*?\nversion = ")([^"]+)(")$/gm],
+  ];
+}
 
 /// Per ogni regola, il file e le versioni che vi trova.
 function versionLines() {
-  return VERSION_LINES.map(([rel, line]) => {
+  return versionRules().map(([rel, line]) => {
     const file = path.join(ROOT, rel);
     const text = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
     return { rel, versions: [...text.matchAll(line)].map((m) => m[2]) };
@@ -295,7 +305,7 @@ function versionLines() {
 }
 
 function writeVersions(version) {
-  for (const [rel, line] of VERSION_LINES) {
+  for (const [rel, line] of versionRules()) {
     const file = path.join(ROOT, rel);
     fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(line, `$1${version}$3`));
   }
@@ -352,24 +362,21 @@ function check({ quiet = false } = {}) {
 
   for (const { rel, versions } of versionLines()) {
     for (const version of versions) {
-      if (version !== lock.version) problems.push(`${rel}: wordcraft a ${version}, il lock dice ${lock.version}`);
+      if (version !== lock.version) problems.push(`${rel}: ${ID} a ${version}, il lock dice ${lock.version}`);
     }
-    if (versions.length === 0) problems.push(`${rel}: nessuna riga con la versione di wordcraft riconosciuta`);
+    if (versions.length === 0) problems.push(`${rel}: nessuna riga con la versione di ${ID} riconosciuta`);
   }
   problems.push(...checkManifests(VENDOR));
 
   if (problems.length > 0) {
     fs.rmSync(dir, { recursive: true, force: true });
-    fail(`la copia di WordCraft non è l'upstream ${lock.rev.slice(0, 12)} più le patch:\n- ${problems.join("\n- ")}`);
+    fail(`la copia di ${NOME} non è l'upstream ${lock.rev.slice(0, 12)} più le patch:\n- ${problems.join("\n- ")}`);
   }
   if (!quiet) {
-    console.log(`vendor/wordcraft: upstream ${lock.rev.slice(0, 12)} più ${lock.patch.length} patch, ${listed.size} file verificati.`);
+    console.log(`vendor/${ID}: upstream ${lock.rev.slice(0, 12)} più ${lock.patch.length} patch, ${listed.size} file verificati.`);
   }
   return { lock, upstream: dir };
 }
-
-/// Il repository dell'upstream, quando il lock non c'è ancora.
-const REPOSITORY = "https://github.com/storytold/wordcraft";
 
 /// Che la copia abbia ancora le impronte del lock: nessun file cambiato,
 /// tolto o aggiunto a mano. Le patch possono essere cambiate.
@@ -389,6 +396,7 @@ function untouched(lock) {
 function update(rev, source, tag) {
   // La prima volta non c'è un lock: la copia di prima è quella fatta a mano, e
   // il diff di git dice se il risultato la riproduce.
+  // Senza lock, il repository dell'upstream è quello di `motori.mjs`.
   const old = fs.existsSync(LOCK) ? readLock() : { repository: REPOSITORY, mirror: "", rev: "", file: [] };
   if (old.rev) untouched(old);
   const repo = repository(source ?? old.repository, rev);
@@ -413,8 +421,8 @@ function update(rev, source, tag) {
     const after = dependencies(fs.readFileSync(path.join(dir, rel), "utf8"));
     const old = before.get(rel) ?? new Set();
     const crate = rel.split("/")[1];
-    for (const dep of after) if (!old.has(dep)) changes.push(`wordcraft-${crate}: + ${dep}`);
-    for (const dep of old) if (!after.has(dep)) changes.push(`wordcraft-${crate}: - ${dep}`);
+    for (const dep of after) if (!old.has(dep)) changes.push(`${ID}-${crate}: + ${dep}`);
+    for (const dep of old) if (!after.has(dep)) changes.push(`${ID}-${crate}: - ${dep}`);
   }
   const problems = checkManifests(result);
   if (problems.length > 0) fail(`le dipendenze non tornano:\n- ${problems.join("\n- ")}`);
@@ -445,13 +453,13 @@ function update(rev, source, tag) {
 
   const changed = lock.file.filter((f) => previous.lock.file.find((p) => p.path === f.path)?.upstream !== f.upstream);
   const from = previous.lock.rev ? previous.lock.rev.slice(0, 12) : "la copia senza lock";
-  console.log(`vendor/wordcraft: da ${from} a ${rev.slice(0, 12)} (${date}, ${version}).`);
+  console.log(`vendor/${ID}: da ${from} a ${rev.slice(0, 12)} (${date}, ${version}).`);
   console.log(`file dell'upstream cambiati: ${changed.length}; patch applicate: ${lock.patch.length}.`);
   if (changes.length > 0) {
     console.log("dipendenze da rivedere (licenza, avvisi):");
     for (const c of changes) console.log(`  ${c}`);
   }
-  console.log("passi successivi: cargo test del workspace e dei motori, il corpus, cargo deny check (vedi vendor/wordcraft/UPSTREAM.md).");
+  console.log(`passi successivi: cargo test del workspace e dei motori, il corpus, cargo deny check (vedi vendor/${ID}/UPSTREAM.md).`);
 }
 
 /// Il tag `tag` dell'upstream punta a `rev`.
@@ -502,8 +510,23 @@ function option(args, name) {
   return args[at + 1];
 }
 
+const USO =
+  "uso: vendor.mjs <motore> update --rev <sha> [--tag <tag>] [--source <percorso o URL>] | [<motore>] check | <motore> verify-upstream [--source <percorso o URL>]";
+
 try {
-  const [command, ...args] = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  if (argv[0] === "check" && argv.length === 1) {
+    // Tutti i motori, uno dopo l'altro: il primo che non torna ferma.
+    for (const id of Object.keys(MOTORI)) {
+      scegli(id);
+      fs.rmSync(check().upstream, { recursive: true, force: true });
+    }
+    done();
+    process.exit(0);
+  }
+  const [id, command, ...args] = argv;
+  if (!id) fail(USO);
+  scegli(id);
   if (command === "check") {
     fs.rmSync(check().upstream, { recursive: true, force: true });
   } else if (command === "update") {
@@ -512,7 +535,7 @@ try {
   } else if (command === "verify-upstream") {
     verifyUpstream(option(args, "--source"));
   } else {
-    fail("uso: vendor.mjs update --rev <sha> [--tag <tag>] [--source <percorso o URL>] | check | verify-upstream [--source <percorso o URL>]");
+    fail(USO);
   }
 } catch (error) {
   done();

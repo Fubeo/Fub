@@ -5,6 +5,7 @@ import type { EditorSurface, SurfaceFamily, SurfaceFactory } from "./registry";
 import { DocumentSurfaceRegistry, SurfaceRegistrationConflict } from "./registry";
 import { forwardNotice } from "../../state/kernel";
 import { mountStrings } from "../../i18n/strings";
+import xlsxFixture from "../../__fixtures__/xlsx-projection.json";
 
 const localeState = vi.hoisted(() => ({ value: "it" }));
 vi.mock("../../host/query", () => ({
@@ -146,6 +147,22 @@ describe("DocumentSurfaceRegistry", () => {
       family: "grid",
       profile: "sheet",
     });
+    // Una cartella di Excel arriva a byte, e la griglia ne legge la proiezione.
+    expect(registry.resolve({ formatId: "xlsx", sourceKind: "bytes", documentId: "conti.xlsx" })).toMatchObject({
+      owner: "fub.shell.grid",
+      family: "grid",
+      profile: "workbook",
+    });
+    const parent = document.createElement("div");
+    const surface = registry.mount(
+      { formatId: "xlsx", sourceKind: "bytes", documentId: "conti.xlsx" },
+      { paneId: "conti", documentId: "conti.xlsx", parent },
+    );
+    surface.buffer!.setDoc(xlsxFixture.source);
+    expect(parent.querySelector(".grid-cell")?.textContent).toBe("Voce");
+    expect(parent.querySelector<HTMLElement>(".grid-surface")?.dataset.readOnly).toBe("true");
+    surface.destroy();
+    expect(parent.querySelector(".grid-surface")).toBeNull();
   });
 
   it("selects canvas and local media profiles without a network fallback", () => {
@@ -212,6 +229,8 @@ describe("DocumentSurfaceRegistry", () => {
         { buffer: true, reveal: true, references: false, presentation: false, printable: false }],
       // Lo sheet non ha un provider che lo stampi (`RenderPrint` → `NoProvider`).
       [{ formatId: "fubsheet", sourceKind: "text" }, "budget.fubsheet",
+        { buffer: true, reveal: false, references: false, presentation: false, printable: false }],
+      [{ formatId: "xlsx", sourceKind: "bytes" }, "conti.xlsx",
         { buffer: true, reveal: false, references: false, presentation: false, printable: false }],
       [{ formatId: "canvas", sourceKind: "text" }, "board.canvas",
         { buffer: true, reveal: true, references: false, presentation: false, printable: true }],

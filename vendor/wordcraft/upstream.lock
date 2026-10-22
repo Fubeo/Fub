@@ -1,4 +1,4 @@
-# La provenienza della copia di WordCraft, per `tools/vendor-wordcraft/vendor.mjs`.
+# La provenienza della copia di WordCraft, per `tools/vendor-craft/vendor.mjs`.
 # Non si modifica a mano: la scrive `update`. Un tag è informativo, lo SHA no.
 repository = "https://github.com/storytold/wordcraft"
 mirror = ""

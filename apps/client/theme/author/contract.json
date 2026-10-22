@@ -507,6 +507,8 @@
     "grid-header",
     "grid-corner",
     "grid-cell-editor",
+    "grid-notice",
+    "grid-sheets",
     "selected",
     "active",
     "base-surface",
@@ -2642,6 +2644,8 @@
         "grid-header",
         "grid-corner",
         "grid-cell-editor",
+        "grid-notice",
+        "grid-sheets",
         "selected",
         "active"
       ],
@@ -5261,7 +5265,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1096,
+    "hooks": 1098,
     "state_names": 7,
     "assigned_states": 625,
     "components": 185,

@@ -1393,6 +1393,14 @@ body {
   overflow: hidden;
 }
 
+.grid-notice { flex: none; margin: 0; }
+
+.grid-sheets {
+  flex: none;
+  min-width: 0;
+  overflow-x: auto;
+}
+
 /* L'ospite del canvas riempie il foglio: senza un'altezza sua la tela, che è
    alta quanto lui, sarebbe alta zero. */
 .canvas-surface-host {

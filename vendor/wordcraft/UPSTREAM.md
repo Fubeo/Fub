@@ -144,9 +144,9 @@ La copia è derivata: l'upstream al commit di `upstream.lock` più le patch di
 ragione; nessun file si modifica a mano.
 
 ```text
-node tools/vendor-wordcraft/vendor.mjs update --rev <sha> [--tag <tag>] [--source <clone o URL>]
-node tools/vendor-wordcraft/vendor.mjs check
-node tools/vendor-wordcraft/vendor.mjs verify-upstream
+node tools/vendor-craft/vendor.mjs wordcraft update --rev <sha> [--tag <tag>] [--source <clone o URL>]
+node tools/vendor-craft/vendor.mjs wordcraft check
+node tools/vendor-craft/vendor.mjs wordcraft verify-upstream
 ```
 
 `update` estrae i percorsi gestiti (con `--tag`, controlla che il tag
