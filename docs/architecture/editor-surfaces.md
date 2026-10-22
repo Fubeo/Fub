@@ -341,73 +341,41 @@ di un gesto, cioè frecce, `Spazio`, `Invio`, `?` e `Tab` con una selezione, e
 li consuma; gli accordi che non usa, come `Mod-E`, arrivano alla shell
 (`apps/client/src/editors/spatial/tools/editor/keys.ts`).
 
-### Workbook e vertical slice della griglia
+### La griglia
 
-`crates/fub-format-sheet` possiede il formato testuale `.fubsheet` v1 e il
-valutatore autorevole. `Workbook` conserva soltanto dati persistenti: versione,
-proprietà, ordine, dimensioni, input e stile. `SheetId + RowId + ColumnId`
-identifica una cella; A1, AST, valori, dipendenze, cache, errori, outline,
-ricerca e proprietà comuni sono proiezioni calcolate.
-
-Il formato è registrato nel kernel come sorgente conosciuta senza adattarlo a
-`DocumentModel`: discovery, sincronizzazione e indicizzazione conservano
-l'entry, mentre nessun parser di blocchi viene inventato. `GridEngine` analizza
-lo stesso JSON strict nel client, virtualizza righe e colonne e produce
-`GridOperation` con coordinate stabili, preimmagini e patch inverse.
-`DocumentSession` valida e diffonde l'operazione tipizzata prima della scrittura
-guardata; i reload full-text restano il fallback autorevole.
+La famiglia `grid` ha due profili. `workbook` apre una cartella di Excel con
+la versione 2 del protocollo: la sorgente a byte resta nell'host, e il testo
+della `DocumentSession` è il **giornale** delle celle cambiate. `GridEngine`
+(`apps/client/src/editors/grid/engine.ts`) sceglie la prima superficie
+dichiarata con famiglia, versione e formato giusti, apre una sessione sul
+giornale e sulla revisione dei byte, e chiede soltanto le finestre che lo
+schermo mostra, al massimo 256 righe per 128 colonne l'una. Righe e colonne
+sono virtualizzate; le coordinate stabili `SheetId + RowId + ColumnId`
+vengono dalle finestre.
 
 Editor in-cell e formula bar usano due istanze di `TextEngine` con
-`FormulaProfile`, ma nessuna battuta attraversa IPC. Il pilot read-only
-`fub.sheet` passa dalla route `query_index` in
-`crates/fub-format-sheet/src/index.rs`; il mirror TypeScript di
-`SheetEvaluation` è in `apps/client/src/host/contract.ts`. Il provider nativo
-usa `Workbook::parse()` e `Workbook::evaluate()`. La richiesta privata ha
-specie `evaluate`, versione intera e campi chiusi; il risultato conserva valori
-ed errori formula tipizzati. La sorgente è limitata a 16 MiB e la risposta JSON,
-envelope compreso, a 8 MiB.
+`FormulaProfile`, e nessuna battuta attraversa IPC. Un commit scrive le voci
+nel giornale, lo pubblica subito alla sessione e lo consegna al provider, che
+controlla le preimmagini sulla revisione, rifiuta le celle bloccate e risponde
+con le celle da rileggere. Le modifiche in coda partono una dopo l'altra, e
+l'undo è locale alla superficie. Un giornale cambiato altrove (un altro
+riquadro, un salvataggio, una ricarica) riapre la sessione, chiude la
+precedente e annulla la bozza aperta. Se non c'è una superficie compatibile,
+la sessione non si apre o una finestra fallisce, la superficie dichiara
+`data-grid-protocol="unavailable"`, lo dice nell'avviso e non scrive; il
+linguaggio delle formule non si duplica in TypeScript.
 
-Il bundle `fub.sheet` possiede la route nel registro. Disabilitarlo ritira il
-pilot e rende la query `Unserved`; questo percorso resta distinto dalla famiglia
-Grid. `GridEngine` usa infatti il `GridHost` tipizzato per negoziare il
-protocollo a finestre. Se il provider Grid non è disponibile o una finestra
-fallisce, la superficie dichiara `data-grid-protocol="fallback"` e mostra gli
-input grezzi senza duplicare il linguaggio formule in TypeScript.
+Il profilo `retired` mostra un `.fubsheet`, che Fub non modifica più
+(`apps/client/src/editors/grid/retired.ts`): una frase e il comando
+`xlsx.convert` con il documento già scelto. Il buffer resta il testo del file,
+e niente lo cambia
+([ADR 0218](../decisions/0218-il-fubsheet-si-converte-e-grid-1-esce.md)).
 
-`crates/fub-format-sheet/src/session.rs` possiede il motore derivato. Apertura e
-reload costruiscono una sola valutazione e gli indici delle coordinate; le
-letture successive restituiscono soltanto la finestra richiesta. Il commit
-interno riceve fino a 16.384 patch e 4 MiB complessivi di preimmagini e nuovi
-input. Valida revisione, coordinate, duplicati e tutte le preimmagini prima di
-mutare; un errore lascia sorgente, revisione, valori e indici precedenti.
-
-Un commit riuscito serializza il workbook autorevole una volta, rivalida la
-sessione e restituisce un diff testuale con offset in byte UTF-8 e preimmagine.
-Il diff non spezza caratteri multibyte né la coppia `\r\n`. La risposta viene
-misurata, escaping JSON compreso, entro 8 MiB usando fette prese in prestito:
-`deleted` e `inserted` vengono allocati soltanto dopo il controllo. La prima
-canonicalizzazione di una sorgente non canonica può quindi fallire in modo
-esplicito senza sostituire la sessione.
-
-L'invalidazione include le coordinate modificate e le dipendenti transitive del
-nuovo workbook, comprese formule che puntavano a celle prima assenti. Un
-intervallo resta un rettangolo di posizioni, vuote comprese, e non viene
-elencato cella per cella: la valutazione visita soltanto le celle persistite,
-quindi memoria e tempo seguono le celle, non l'area. Fino a 32.768 coordinate
-restituisce l'elenco ordinato; oltre la soglia, o quando i confronti fra celle
-in coda e intervalli superano il budget, restituisce `all`. L'adapter `fub-host::sheet` conserva la derivazione comune
-`Revision::of` ed espone la stessa semantica nativa. Il crate formato non
-dipende dall'host ed è compilabile per WASM.
-
-Questi tipi attraversano ora il contratto Rust↔WIT↔TypeScript e le porte IPC
-tipizzate della famiglia Grid. La shell non riceve DOM, callback JavaScript o
-oggetti CodeMirror: possiede rendering, input, clipboard, selezione e stato
-visuale, mentre il provider possiede parsing, formule e dipendenze.
-`query_index` resta read-only e ospita il pilot `fub.sheet`; non è il percorso
-delle finestre, patch, invalidazioni o lifecycle Grid, che passano da `GridHost`.
-Limiti, coordinate, fallback, diff UTF-8 e parità nativo/WASM sono normati in
-[ABI e WIT](../reference/abi-and-wit.md) e nel [contratto
-IPC](../reference/ipc-contract.md). Nessuna battuta genera IPC o WASM.
+La shell non riceve DOM, callback JavaScript o oggetti CodeMirror: possiede
+rendering, input, clipboard, selezione e stato visuale, mentre il provider
+possiede lettura, formule, blocchi e innesto. Limiti, coordinate, fallback e
+parità nativo/WASM sono normati in [ABI e WIT](../reference/abi-and-wit.md) e
+nel [contratto IPC](../reference/ipc-contract.md).
 
 ## Confine CodeMirror
 
@@ -445,5 +413,7 @@ mantiene CodeMirror un servizio della shell testuale.
 - `apps/client/src/editors/spatial/lazy.ts`
 - `apps/client/src/state/layout.ts`
 - `apps/client/src/editors/grid/engine.ts`
+- `apps/client/src/editors/grid/workbook.ts`
+- `apps/client/src/editors/grid/retired.ts`
 - `apps/client/src/editors/core/text-operation.ts`
 - `apps/client/src/state/document-session.ts`

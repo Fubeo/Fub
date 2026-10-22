@@ -4,7 +4,7 @@
 - **Data:** 2026-09-15
 - **Ambito:** contratto
 - **Sostituisce:** —
-- **Sostituita da:** —
+- **Sostituita da:** 0218, per la versione 1 del protocollo `grid`
 
 ## Contesto
 

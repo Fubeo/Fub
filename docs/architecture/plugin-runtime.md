@@ -29,7 +29,7 @@ volta. La porta copre comandi, view, import, export, handler, sintassi e
 renderer.
 La famiglia Grid usa la stessa cattura preparata: `surfaces()` viene chiamata
 fuori da `Custody<Workspace>`, il commit pubblica soltanto la dichiarazione
-verificata e `open/window/apply/reload/close/shutdown` passano da un token
+verificata e `open/window/apply/close/shutdown` passano da un token
 detached. Nessuna chiamata al provider Grid o al guest WASM vive sotto il lock;
 il risultato viene finalizzato dopo la riconvalida di workspace, owner e
 generazione. Il binding espone famiglia/versione e il registro conserva
@@ -90,7 +90,7 @@ devono comunque usare tipi ed errori condivisi.
 prima dell'apertura del `Workspace`. L'host registra i provider prima di
 costruire il workspace; le risorse preparate restano vive per la sessione e
 vengono rilasciate anche in caso di rollback. I formati di serie (Markdown,
-Canvas, Base e la sorgente `.fubsheet`) si registrano per primi: un provider
+Canvas, Base e la sorgente di sola lettura `.fubsheet`) si registrano per primi: un provider
 esterno che rivendica un'estensione già presa è rifiutato da solo, con una
 diagnostica di apertura che nomina chi la tiene, e il vault si apre lo stesso.
 
@@ -414,7 +414,7 @@ Schema, atomicità e rimozione sono descritti nel
 | `CommandProvider` | presente |
 | `FormatProvider` | presente: parse/render/serialize e validazione |
 | `ViewProvider` | presente: spec/interests/render/`Replace`/`Patch` |
-| `GridProvider` | presente: ABI/WIT v1, nativo/WASM, finestre e patch |
+| `GridBytesProvider` | presente: protocollo `grid` 2, nativo/WASM, finestre, giornale e innesto |
 | lettura modello | presente |
 | eventi host | presente |
 | timeout e memoria | presenti |

@@ -31,65 +31,44 @@ test usano un fake.
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
 
-## Valutazione del foglio pilota
+## La griglia
 
-La shell usa `IndexQuery::Custom` con namespace `fub.sheet` soltanto per la
-valutazione read-only della vertical slice, non per il protocollo Grid a
-finestre. Il payload privato è `{kind: "evaluate", version: 1, source: string}`:
-versioni, specie o campi sconosciuti sono `BadArgs`. La risposta è
-`IndexResult::Custom` con la forma `SheetEvaluation` del mirror TypeScript. Ogni
-dipendenza elenca in `depends_on` le celle nominate una per una e, in
-`depends_on_ranges`, gli intervalli come rettangoli per angoli; il secondo campo
-manca quando la formula non nomina intervalli.
+La famiglia Grid usa porte strettamente tipate, con i record `Grid*` del
+mirror: `list_grid_surfaces` elenca i binding, e una superficie con
+`protocol_version` 2 si apre sui byte di un documento con `open_grid_bytes`,
+`grid_bytes_window`, `apply_grid_bytes` e `close_grid_bytes`. La shell
+negozia famiglia, versione e formato prima di aprire; un binding sconosciuto
+o incompatibile non viene chiamato e la superficie dice che il foglio non si
+apre. `query_index` non applica patch e non possiede lifecycle.
 
-`query_index` non applica patch e non possiede lifecycle: resta una porta di
-sola lettura. La famiglia Grid usa invece le porte strettamente tipate
-`list_grid_surfaces`, `open_grid`, `grid_window`, `apply_grid`, `reload_grid` e
-`close_grid`, con i record `Grid*` del mirror. La shell negozia famiglia e
-versione prima di `open_grid`; un binding sconosciuto o incompatibile non viene
-chiamato e attiva il fallback registrato.
+`open_grid_bytes` riceve `surface`, `doc`, `journal` e `base`: la shell non
+trasporta i byte, ma il giornale canonico delle celle cambiate (il testo
+della sessione documento) e la revisione dei byte da cui parte. L'host legge
+il documento, controlla che il formato sia quello della superficie (`BadArgs`
+altrimenti) e risponde `Conflict` se i byte non sono più quelli di `base`. La
+sessione è un `GridBytesSession` (fogli, foglio attivo, fogli nascosti, avvisi
+`GridNotice` e celle in conflitto); la finestra è un `GridBytesWindow`, la cui
+cella porta `GridValue`, il testo formattato, blocco, `stale` e `conflict`. Il
+commit è un `GridCommit` il cui `edit` è il diff del testo del giornale, da
+applicare al buffer della sessione documento.
 
-Una superficie con `protocol_version` 2 si apre sui byte di un documento e usa
-le porte `open_grid_bytes`, `grid_bytes_window`, `apply_grid_bytes` e
-`close_grid_bytes`; le porte della versione 1 la rifiutano con `Unserved`, e
-viceversa. `open_grid_bytes` riceve `surface`, `doc`, `journal` e `base`: la
-shell non trasporta i byte, ma il giornale canonico delle celle cambiate (il
-testo della sessione documento) e la revisione dei byte da cui parte. L'host
-legge il documento, controlla che il formato sia quello della superficie
-(`BadArgs` altrimenti) e risponde `Conflict` se i byte non sono più quelli di
-`base`. La sessione è un `GridBytesSession` (fogli, foglio attivo, fogli
-nascosti, avvisi `GridNotice` e celle in conflitto); la finestra è un
-`GridBytesWindow`, la cui cella porta `GridValue`, il testo formattato,
-blocco, `stale` e `conflict`. Il commit è un `GridCommit` il cui `edit` è il
-diff del testo del giornale, da applicare al buffer della sessione documento.
-
-Il provider verifica il limite sorgente di 16 MiB e misura la risposta JSON,
-compreso l'envelope, entro 8 MiB prima di materializzare il valore JSON.
-Disabilitare il bundle ritira la route di valutazione: la query restituisce
-`Unserved` e la shell usa il fallback agli input grezzi. Le finestre, patch,
-invalidazioni e il diff UTF-8 seguono i limiti del contratto ABI/WIT e non
-trasportano DOM, CodeMirror, callback JavaScript o una battuta.
-Il payload non è il percorso Grid pubblico a finestre.
-
-Le fonti sono `crates/fub-format-sheet/src/index.rs` e il mirror TypeScript in
-`apps/client/src/host/contract.ts`. La fixture
-`apps/client/src/__fixtures__/sheet-query.json` è generata e verificata dal test
-Rust [`crates/fub-host/tests/sheet_query.rs`](../../crates/fub-host/tests/sheet_query.rs);
-non è un percorso di esecuzione del fake host e nessun interprete formule vive
-nel fake host.
+Un `.fubsheet` non ha porte sue: `read_document` ne dà il testo, e
+`write_document` lo rifiuta con `Unserved`, perché il formato è di sola
+lettura. Il comando `xlsx.convert` lo converte in una cartella di Excel
+([ADR 0218](../decisions/0218-il-fubsheet-si-converte-e-grid-1-esce.md)).
 
 ## Limiti e semantica Grid
 
-Le coordinate sono `SheetId + RowId + ColumnId`; una sessione apre o ricarica
-la sorgente completa (massimo 16 MiB), mentre le letture successive sono
-finestre fino a 256×128 e 32.768 coordinate. Un commit accetta 16.384 patch e
+Le coordinate sono `SheetId + RowId + ColumnId`; una sessione apre la
+sorgente nell'host, e le letture sono finestre fino a 256×128 e 32.768
+coordinate. Un commit accetta 16.384 patch e
 4 MiB di preimmagini e nuovi input; la risposta, envelope compreso, è al
-massimo 8 MiB. L'invalidazione restituisce coordinate modificate e dipendenti
-fino a 32.768 elementi, poi `all`. Il diff conseguente usa offset in byte UTF-8.
+massimo 8 MiB. L'invalidazione restituisce le coordinate da rileggere fino a
+32.768 elementi, poi `all`. Il diff del giornale usa offset in byte UTF-8.
 
 Il registro conserva ownership e disposer per ogni binding. L'unload ritira il
 binding, distrugge le istanze e soltanto dopo rilascia il provider. Nessuna
-battuta attraversa IPC: la shell pubblica una sola operazione al commit.
+battuta attraversa IPC: la shell consegna una sola richiesta al commit.
 Provider nativo e proxy WASM devono osservare la stessa famiglia/versione,
 limiti, fallback ed errori.
 

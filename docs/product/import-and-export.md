@@ -186,17 +186,19 @@ L'opzione `frontmatter` (predefinita `true`) tiene o toglie i metadati.
 
 ## Un foglio in Excel
 
-**Esporta una copia in Excel** (`xlsx.export-copy`, dalla palette) scrive il
-foglio in una cartella di Excel nuova, con fogli, valori, formule, stili,
-dimensioni e righe e colonne nascoste. Il `.fubsheet` non si tocca: la copia
-arriva nell'attività e si salva dove si vuole. Le formule passano nella
-sintassi di Excel, e Excel le ricalcola all'apertura.
+Un `.fubsheet` non si modifica più: aperto, dice che va convertito e offre il
+pulsante **Converti in Excel**, lo stesso comando della palette
+(`xlsx.convert`). La conversione scrive accanto al foglio una cartella di Excel
+nuova, con un nome libero (`Bilancio.xlsx`, poi `Bilancio 1.xlsx`), e la apre.
+Porta fogli, valori, formule, stili, dimensioni e righe e colonne nascoste. Il
+`.fubsheet` resta dov'è e va nel cestino soltanto se lo si chiede. Le formule
+passano nella sintassi di Excel, e Excel le ricalcola all'apertura.
 
-Accanto alla copia l'attività dice **cosa cambia**: un foglio con un nome che
-Excel non ammette prende un nome nuovo, anche nelle formule; una formula che
-Excel non sa leggere resta testo; una cella che in Excel vale diverso da ciò
-che Fub mostra (una funzione che Fub non ha, un confronto fra testi che Excel
-fa senza maiuscole) si nomina con i due valori. Ciò che la copia non porta si
+L'esito dice **cosa cambia**: un foglio con un nome che Excel non ammette
+prende un nome nuovo, anche nelle formule; una formula che Excel non sa
+leggere resta testo; una cella che in Excel vale diverso da ciò che Fub
+mostrava (una funzione che Fub non ha, un confronto fra testi che Excel fa
+senza maiuscole) si nomina con i due valori. Ciò che la copia non porta si
 conta, e le proprietà del foglio non entrano in una cartella. Righe e colonne
 diventano posizioni, quindi un link a una cella del `.fubsheet` non punta alla
-copia.
+copia. Il perché è nell'[ADR 0218](../decisions/0218-il-fubsheet-si-converte-e-grid-1-esce.md).

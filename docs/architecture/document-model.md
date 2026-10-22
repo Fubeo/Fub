@@ -135,34 +135,25 @@ modifica dalla sorgente. Chi interroga, ordina, conta faccette o mostra colonne
 usa la stessa proiezione tipizzata; assente, `null` e lista vuota restano casi
 distinti.
 
-## Workbook `.fubsheet`
+## Foglio `.fubsheet`
 
-Una griglia non viene forzata nell'albero di `DocumentModel`.
-`fub-format-sheet::Workbook` è un modello autorevole separato: conserva
-versione, proprietà, ordine, dimensioni, input e stile. Le celle usano identità
-stabili composte da sheet, riga e colonna; A1 dipende dall'ordine corrente.
+Il `.fubsheet` è il vecchio foglio di Fub, un JSON con identità stabili di
+righe e colonne, e Fub non lo modifica più. Nel kernel è un formato **di sola
+sorgente** (`FormatRegistry::register_source`): il registro lo conosce senza
+parser, `read_document` ne dà il testo, e `write_document` lo rifiuta con
+`NoProvider`, come ogni estensione che ha un descrittore e nessun provider.
+Il file si sposta, si rinomina e va nel cestino come gli altri.
 
-Formula AST, valori, dipendenze, cache, A1 ed errori sono derivati e non
-persistiti. Outline, ricerca e proprietà sono proiezioni comuni del workbook,
-non campi aggiunti al modello dei blocchi. Il formato JSON v1 rifiuta campi
-sconosciuti, versioni future, coordinate ambigue o mancanti e input oltre i
-limiti dichiarati, evitando una riscrittura con perdita silenziosa.
-
-`Workbook::evaluate()` interpreta operatori, stringhe, booleani, riferimenti,
-intervalli, riferimenti cross-sheet e le funzioni `SUM`, `AVERAGE`, `MIN`,
-`MAX` e `IF`. Gli errori sono valori tipizzati e i cicli vengono rilevati. Il
-client non replica questa semantica: chiede il risultato Rust dopo il commit e
-usa l'input persistito come fallback.
-
-Un `.fubsheet` si **esporta** in una cartella di Excel nuova
-(`crates/fub-format-xlsx/src/fubsheet.rs`, destinazione `xlsx.copy`): le righe
-e le colonne diventano posizioni nell'ordine del foglio, le formule si
-scrivono nella sintassi di Excel dallo stesso albero con cui Fub le valuta
-(`fub_format_sheet::excel_formula`), e i loro valori li calcola GridCraft.
-La copia si rilegge e si confronta con il foglio: ciò che non porta, i fogli
-rinominati, le formule rimaste testo e le celle con un valore diverso da
-quello di Fub sono avvisi nel rapporto dell'export
-([ADR 0217](../decisions/0217-copia-in-excel-di-un-fubsheet.md)).
+La shell lo mostra con il profilo `retired` della famiglia `grid`: una frase e
+il comando `xlsx.convert`, che scrive accanto una cartella di Excel nuova e la
+apre. `fub-format-sheet` resta il lettore del formato per quel comando:
+modello, formule e valutatore. Le righe e le colonne diventano posizioni
+nell'ordine del foglio, le formule si scrivono nella sintassi di Excel dallo
+stesso albero con cui Fub le valuta (`fub_format_sheet::excel_formula`), e i
+loro valori li calcola GridCraft. La copia si rilegge e si confronta con il
+foglio: ciò che non porta, i fogli rinominati, le formule rimaste testo e le
+celle con un valore diverso da quello di Fub sono gli avvisi del comando
+([ADR 0218](../decisions/0218-il-fubsheet-si-converte-e-grid-1-esce.md)).
 
 ## Cartella di Excel `.xlsx`
 
@@ -178,8 +169,8 @@ blocco e lo stato. I valori sono quelli salvati nel file, comprese le celle
 versate dalle matrici, e niente si ricalcola: una formula che legge una cella
 cambiata tiene il valore del file, segnato come vecchio.
 
-`apps/client/src/editors/grid/workbook.ts` controlla sessioni e finestre con
-lo stesso rigore della versione 1 e le trasforma nel modello che
+`apps/client/src/editors/grid/workbook.ts` controlla sessioni e finestre
+campo per campo e le trasforma nel modello che
 `GridEngine` disegna, con le schede dei fogli visibili, la formula nella barra
 e un avviso per ciò che la griglia non mostra o non ricalcola. Modificare una
 cella scrive una voce del giornale; si scrivono soltanto valori costanti, e le
@@ -237,5 +228,6 @@ albero malformato.
 - `crates/fub-format-xlsx/src/grid.rs`
 - `crates/fub-format-xlsx/src/graft.rs`
 - `crates/fub-format-xlsx/src/fubsheet.rs`
+- `crates/fub-format-xlsx/src/convert.rs`
 - `apps/client/src/editors/grid/workbook.ts`
 - `crates/fub-format-svg/src/parse.rs`

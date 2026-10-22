@@ -62,8 +62,8 @@ In `main` sono consegnati:
 
 - caricamento e istanziazione di un componente;
 - manifest e lifecycle `Plugin`;
-- `CommandProvider`, `FormatProvider`, `ViewProvider` e `GridProvider` nei
-  casi esercitati;
+- `CommandProvider`, `FormatProvider`, `ViewProvider` e `GridBytesProvider`
+  nei casi esercitati;
 - `IndexProvider` ed `EventHandler` inbound reali, con feed, query, flush,
   close, `up_to_date`, reconcile e consegna delle notifiche nello stesso
   registro del nativo;

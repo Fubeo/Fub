@@ -1,10 +1,10 @@
 # 0217 — Un `.fubsheet` si copia in una cartella di Excel nuova, calcolata da GridCraft e misurata
 
-- **Stato:** accolta
+- **Stato:** sostituita
 - **Data:** 2026-10-22
 - **Ambito:** contratto
 - **Sostituisce:** —
-- **Sostituita da:** —
+- **Sostituita da:** 0218
 
 ## Contesto
 

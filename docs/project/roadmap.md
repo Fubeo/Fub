@@ -25,10 +25,11 @@ Command/Format/View/Grid nei percorsi esercitati. #8 e #10 sono chiuse.
 `IndexProvider` e `EventHandler` inbound non vengono promessi: il lavoro
 futuro è tracciato in #57. Le quote assolute CPU/RAM di processo sono #58.
 
-### Superfici condivise e Grid v1
+### Superfici condivise e Grid
 
-`DocumentSession`, `DocumentSurfaceRegistry`, `.fubsheet`, `GridEngine` e
-Grid v1 sono in `main`. I guard rendono meccaniche due invarianti: ogni binding
+`DocumentSession`, `DocumentSurfaceRegistry`, `GridEngine` e Grid a byte
+(versione 2) sono in `main`; il `.fubsheet` si legge e si converte in `.xlsx`.
+I guard rendono meccaniche due invarianti: ogni binding
 usa profili registrati; ogni famiglia pubblica ha shell, fallback, mirror,
 nativo e WASM. La scena Grid è certificata in entrambe le luci e il TODO
 operativo è stato rimosso dopo il trasferimento delle invarianti.

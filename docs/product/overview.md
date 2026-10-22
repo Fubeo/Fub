@@ -75,8 +75,9 @@ possono attraversare il runtime WASM quando la relativa interfaccia è servita.
 ### Scrittura
 
 - editor CodeMirror per Markdown e plain text;
-- griglia `.fubsheet` virtualizzata con tastiera, selezione, editor in-cell,
-  formula bar, TSV e undo dedicato;
+- cartella di Excel `.xlsx` in una griglia virtualizzata, con tastiera,
+  selezione, schede dei fogli e formula bar; un vecchio `.fubsheet` si legge e
+  si converte in `.xlsx`;
 - sorgente, live preview e lettura per Markdown;
 - frontmatter;
 - wikilink, tag, heading, task, tabelle, callout ed embed supportati dal
@@ -91,10 +92,10 @@ possono attraversare il runtime WASM quando la relativa interfaccia è servita.
 - sincronizzazione fra più riquadri dello stesso documento nella stessa
   sessione locale.
 
-La shell monta Markdown, plain text e `.fubsheet` attraverso
+La shell monta Markdown, plain text e la cartella di Excel attraverso
 `DocumentSurfaceRegistry`. I profili testuali condividono `TextEngine`; la
-griglia incorpora `FormulaProfile` e delega il calcolo autorevole al motore
-Rust, con fallback sugli input grezzi quando non è disponibile.
+griglia mostra i valori salvati nel file e lascia il motore a GridCraft, in
+Rust.
 
 ### Navigazione e conoscenza
 

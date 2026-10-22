@@ -30,7 +30,7 @@ Sono presenti:
 - vault local-first, revisioni, bozze, cestino e versioning;
 - ricerca, link, Graph View, editor e anteprima;
 - `DocumentSession` condivisa e `DocumentSurfaceRegistry`;
-- formato `.fubsheet`, `GridEngine` e protocollo Grid a finestre/patch;
+- cartella di Excel, `GridEngine` e protocollo Grid a byte con finestre e patch;
 - finestra Scrittoio, con la serie di serie `theme-2`;
 - temi installabili con contratto `theme-1` o `theme-2`; la shell veste soltanto `theme-2`;
 - runtime WASM, capability, UI non fidata e percorso prodotto installato;
@@ -43,11 +43,12 @@ famiglia registra i profili che può montare; binding di formato/specie e
 override non possono inventare profili. Un override non servito prosegue lungo
 la catena di fallback.
 
-Grid v1 usa lo stesso contratto per provider nativo e WASM. Il guard
+Grid (versione 2, a byte) usa lo stesso contratto per provider nativo e WASM. Il guard
 `public_surface_family_delivery` rende incompleta una nuova famiglia ABI finché
 non esistono insieme shell, fallback, mirror TypeScript, provider nativo e
-percorso WASM. La scena visuale `grid-sheet` esercita il cliente `.fubsheet`
-reale attraverso la shell e il fake IPC tipizzato.
+percorso WASM. Le scene visuali `grid-workbook` e `grid-retired` esercitano
+la cartella di Excel e il `.fubsheet` da convertire attraverso la shell e il
+fake IPC tipizzato.
 
 Le invarianti permanenti vivono in
 [Superfici dell'editor](../architecture/editor-surfaces.md),
@@ -59,7 +60,7 @@ Le invarianti permanenti vivono in
 
 M5 è consegnata. Il percorso prodotto distingue installazione, dati persistenti,
 consenso, scelta `enabled` e istanza montata. `CommandProvider`,
-`FormatProvider`, `ViewProvider`, `GridProvider` e, in ingresso,
+`FormatProvider`, `ViewProvider`, `GridBytesProvider` e, in ingresso,
 `IndexProvider` ed `EventHandler` (`WASM-002`, #57) attraversano i percorsi
 esercitati nativo/WASM.
 
