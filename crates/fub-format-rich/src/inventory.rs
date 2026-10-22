@@ -1088,11 +1088,13 @@ fn count_xml(
                     }
                     continue;
                 }
-                if let Some((what, attr_name, value)) =
-                    side_attribute(w, &name, &attr_ns, &attr_name, &value)
+                if let Some((what, equivalent)) =
+                    equivalent_attribute(w, &name, &attr_ns, &attr_name, &value)
                 {
                     *parsed.normalized.entry(what).or_default() += 1;
-                    attributes.push((attr_ns, names.get(&attr_name), value));
+                    if let Some((attr_name, value)) = equivalent {
+                        attributes.push((attr_ns, names.get(&attr_name), value));
+                    }
                     continue;
                 }
                 attributes.push((attr_ns, attr_name, value));
@@ -1417,6 +1419,12 @@ pub(crate) enum Skip {
         ns: &'static str,
         names: &'static [&'static str],
     },
+    /// Il `w:val` vero (`true`, `1`, `on`) di questi interruttori di
+    /// WordprocessingML (`CT_OnOff`): conta come la sua assenza.
+    ImplicitTrue { elements: &'static [&'static str] },
+    /// Lo sporgente nullo (`w:hanging="0"`) di `w:ind`: conta come la prima
+    /// riga nulla (`w:firstLine="0"`).
+    ZeroHanging,
 }
 
 /// Il nome della normalizzazione del paragrafo dopo una tabella finale.
@@ -1433,10 +1441,11 @@ pub(crate) struct Normalization {
     pub skip: Skip,
 }
 
-/// Le normalizzazioni dichiarate. I test sono
-/// `le_normalizzazioni_saltano_soltanto_ciò_che_dichiarano` qui sotto e il file
-/// `docx/segni-di-word.docx` del corpus, che le porta tutte e si apre
-/// modificabile.
+/// Le normalizzazioni dichiarate. Ciascuna ha il suo test qui sotto (il primo è
+/// `le_normalizzazioni_saltano_soltanto_ciò_che_dichiarano`), e i file del
+/// corpus le portano: `docx/segni-di-word.docx` i segni di Word, e si apre
+/// modificabile; `docx/falsi-allarmi.docx` e `docx/libreoffice.docx` le forme
+/// della norma e di LibreOffice.
 pub(crate) const NORMALIZATIONS: &[Normalization] = &[
     Normalization {
         what: "w:id",
@@ -1510,6 +1519,23 @@ pub(crate) const NORMALIZATIONS: &[Normalization] = &[
             ns: NS_W,
             names: &["rPr", "pPr", "trPr", "tcPr"],
         },
+    },
+    Normalization {
+        what: "vero implicito",
+        why: "un interruttore di WordprocessingML (`CT_OnOff`) senza `w:val` è \
+              acceso: `<w:keepNext w:val=\"true\"/>`, che LibreOffice scrive, \
+              e `<w:keepNext/>`, che scrive il codec, dicono la stessa cosa. Un \
+              valore spento conta, e un `w:val` di un altro elemento anche",
+        skip: Skip::ImplicitTrue { elements: ON_OFF },
+    },
+    Normalization {
+        what: "sporgente nullo",
+        why: "un rientro della prima riga nullo, scritto come sporgente \
+              (`w:hanging=\"0\"`, come fa LibreOffice) o come prima riga \
+              (`w:firstLine=\"0\"`, come fa il codec): nei due casi la prima \
+              riga non sporge e non rientra, e annulla quello dello stile. Uno \
+              sporgente non nullo conta",
+        skip: Skip::ZeroHanging,
     },
     Normalization {
         what: "w:fldSimple",
@@ -1617,18 +1643,160 @@ pub(crate) fn side_element(parent: &str, name: &str) -> Option<(&'static str, &'
     })
 }
 
-/// Il nome e il valore con cui conta un attributo dell'elemento `element` di
-/// WordprocessingML (`w`), con la normalizzazione, se nomina un lato.
-pub(crate) fn side_attribute(
+/// Gli interruttori di WordprocessingML (`CT_OnOff` di ECMA-376): un `w:val`
+/// che manca vale vero.
+const ON_OFF: &[&str] = &[
+    // Il carattere.
+    "b",
+    "bCs",
+    "i",
+    "iCs",
+    "caps",
+    "smallCaps",
+    "strike",
+    "dstrike",
+    "outline",
+    "shadow",
+    "emboss",
+    "imprint",
+    "noProof",
+    "snapToGrid",
+    "vanish",
+    "webHidden",
+    "rtl",
+    "cs",
+    "specVanish",
+    "oMath",
+    // Il paragrafo.
+    "keepNext",
+    "keepLines",
+    "pageBreakBefore",
+    "widowControl",
+    "suppressLineNumbers",
+    "suppressAutoHyphens",
+    "kinsoku",
+    "wordWrap",
+    "overflowPunct",
+    "topLinePunct",
+    "autoSpaceDE",
+    "autoSpaceDN",
+    "bidi",
+    "adjustRightInd",
+    "contextualSpacing",
+    "mirrorIndents",
+    "suppressOverlap",
+    // La sezione, la tabella, la riga, la cella.
+    "titlePg",
+    "noEndnote",
+    "rtlGutter",
+    "formProt",
+    "bidiVisual",
+    "cantSplit",
+    "tblHeader",
+    "hidden",
+    "noWrap",
+    "tcFitText",
+    "hideMark",
+    // Lo stile, la numerazione, il controllo del contenuto.
+    "semiHidden",
+    "unhideWhenUsed",
+    "qFormat",
+    "locked",
+    "autoRedefine",
+    "personal",
+    "personalCompose",
+    "personalReply",
+    "isLgl",
+    "temporary",
+    "showingPlcHdr",
+    // Le impostazioni.
+    "autoHyphenation",
+    "doNotHyphenateCaps",
+    "evenAndOddHeaders",
+    "mirrorMargins",
+    "gutterAtTop",
+    "trackRevisions",
+    "doNotTrackMoves",
+    "doNotTrackFormatting",
+    "updateFields",
+    "embedTrueTypeFonts",
+    "embedSystemFonts",
+    "saveSubsetFonts",
+    "hideSpellingErrors",
+    "hideGrammaticalErrors",
+    "bordersDoNotSurroundHeader",
+    "bordersDoNotSurroundFooter",
+    "alignBordersAndEdges",
+    "linkStyles",
+    "removePersonalInformation",
+    "removeDateAndTime",
+    "doNotShadeFormData",
+    "printTwoOnOne",
+    "bookFoldPrinting",
+    "bookFoldRevPrinting",
+    "strictFirstAndLastChars",
+    "noPunctuationKerning",
+    "savePreviewPicture",
+    "doNotIncludeSubdocsInStats",
+    "doNotAutoCompressPictures",
+    "styleLockTheme",
+    "styleLockQFSet",
+    "formsDesign",
+    "autoFormatOverride",
+    "displayBackgroundShape",
+    "doNotDisplayPageBoundaries",
+    "printFormsData",
+    "saveFormsData",
+    "printPostScriptOverText",
+    "printFractionalCharacterWidth",
+    "showEnvelope",
+    "alwaysShowPlaceholderText",
+    "alwaysMergeEmptyNamespace",
+    "forceUpgrade",
+];
+
+/// Come conta un attributo dell'elemento `element` di WordprocessingML (`w`)
+/// per una normalizzazione: con il nome e il valore dati, o (`None`) per
+/// niente. `None` fuori se l'attributo conta com'è.
+pub(crate) fn equivalent_attribute(
     w: bool,
     element: &str,
     ns: &str,
     name: &str,
     value: &str,
-) -> Option<(&'static str, String, String)> {
+) -> Option<(&'static str, Option<(String, String)>)> {
     if !w || ns != NS_W {
         return None;
     }
+    if let Some((what, name, value)) = side_attribute(element, name, value) {
+        return Some((what, Some((name, value))));
+    }
+    NORMALIZATIONS.iter().find_map(|n| match n.skip {
+        Skip::ImplicitTrue { elements }
+            if name == "val"
+                && elements.contains(&element)
+                && matches!(value.trim(), "true" | "1" | "on") =>
+        {
+            Some((n.what, None))
+        }
+        Skip::ZeroHanging
+            if element == "ind"
+                && name == "hanging"
+                && crate::canonical::value(NS_W, value) == "0" =>
+        {
+            Some((n.what, Some(("firstLine".to_string(), value.to_string()))))
+        }
+        _ => None,
+    })
+}
+
+/// Il nome e il valore con cui conta un attributo dell'elemento `element` di
+/// WordprocessingML, con la normalizzazione, se nomina un lato.
+fn side_attribute(
+    element: &str,
+    name: &str,
+    value: &str,
+) -> Option<(&'static str, String, String)> {
     NORMALIZATIONS.iter().find_map(|n| match n.skip {
         Skip::Sides {
             attributes, values, ..
@@ -1976,6 +2144,41 @@ mod tests {
         // numero di un elenco.
         let start = body_of(r#"<w:p><w:pPr><w:start w:val="3"/></w:pPr></w:p>"#);
         assert_eq!(start.normalized.get("start e end"), None);
+    }
+
+    #[test]
+    fn un_interruttore_acceso_e_uno_sporgente_nullo_contano_come_li_scrive_il_codec() {
+        let libreoffice = body_of(
+            r#"<w:p><w:pPr><w:keepNext w:val="true"/><w:ind w:left="0" w:hanging="0"/></w:pPr><w:r><w:rPr><w:b w:val="1"/><w:i w:val="on"/></w:rPr><w:t>Testo</w:t></w:r></w:p>"#,
+        );
+        let codec = body_of(
+            r#"<w:p><w:pPr><w:keepNext/><w:ind w:left="0" w:firstLine="0"/></w:pPr><w:r><w:rPr><w:b/><w:i/></w:rPr><w:t>Testo</w:t></w:r></w:p>"#,
+        );
+        assert_eq!(libreoffice.normalized.get("vero implicito"), Some(&3));
+        assert_eq!(libreoffice.normalized.get("sporgente nullo"), Some(&1));
+        assert_eq!(open_differences(&libreoffice, &codec), Vec::new());
+        // Un interruttore spento, uno sporgente non nullo e il `w:val` di un
+        // elemento che non è un interruttore contano.
+        for (file, written) in [
+            (
+                r#"<w:p><w:pPr><w:keepNext w:val="false"/></w:pPr></w:p>"#,
+                r#"<w:p><w:pPr><w:keepNext/></w:pPr></w:p>"#,
+            ),
+            (
+                r#"<w:p><w:pPr><w:ind w:hanging="360"/></w:pPr></w:p>"#,
+                r#"<w:p><w:pPr><w:ind w:firstLine="360"/></w:pPr></w:p>"#,
+            ),
+            (
+                r#"<w:p><w:pPr><w:ilvl w:val="1"/></w:pPr></w:p>"#,
+                r#"<w:p><w:pPr><w:ilvl/></w:pPr></w:p>"#,
+            ),
+        ] {
+            assert_ne!(
+                open_differences(&body_of(file), &body_of(written)),
+                Vec::new(),
+                "{file}"
+            );
+        }
     }
 
     #[test]

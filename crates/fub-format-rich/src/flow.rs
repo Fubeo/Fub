@@ -48,9 +48,9 @@ use quick_xml::name::ResolveResult;
 use quick_xml::NsReader;
 
 use crate::inventory::{
-    described, empty_properties, read_rels, renumbered, resolve, side_attribute, side_element,
-    skipped_attribute, skipped_element, ContentTypes, InventoryError, Limits, Relationship, Zip,
-    MARKERS, NS_MC, NS_RELATIONSHIPS, NS_W, WRAPPERS,
+    described, empty_properties, equivalent_attribute, read_rels, renumbered, resolve,
+    side_element, skipped_attribute, skipped_element, ContentTypes, InventoryError, Limits,
+    Relationship, Zip, MARKERS, NS_MC, NS_RELATIONSHIPS, NS_W, WRAPPERS,
 };
 
 /// Le voci di una proprietà o di un contesto, ordinate: tutte, e quelle che
@@ -557,10 +557,12 @@ impl<'a> Scanner<'a> {
             if skipped_attribute(&attr.ns, &attr.local).is_some() {
                 continue;
             }
-            if let Some((_, local, value)) =
-                side_attribute(el.ns == NS_W, &el.local, &attr.ns, &attr.local, &attr.value)
+            if let Some((_, equivalent)) =
+                equivalent_attribute(el.ns == NS_W, &el.local, &attr.ns, &attr.local, &attr.value)
             {
-                out.push((qualified(&attr.ns, &local), value));
+                if let Some((local, value)) = equivalent {
+                    out.push((qualified(&attr.ns, &local), value));
+                }
                 continue;
             }
             if attr.ns == NS_MC

@@ -8,7 +8,7 @@
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 23",
+    "differenze all'apertura: 20",
     "  core-properties: <{http://purl.org/dc/elements/1.1/}creator>: 1 → 0",
     "  core-properties: <{http://purl.org/dc/elements/1.1/}description>: 1 → 0",
     "  core-properties: <{http://purl.org/dc/elements/1.1/}language>: 1 → 0",
@@ -16,10 +16,7 @@
     "  core-properties: <{http://purl.org/dc/elements/1.1/}title>: 1 → 0",
     "  core-properties: <{http://schemas.openxmlformats.org/package/2006/metadata/core-properties}lastModifiedBy>: 1 → 0",
     "  core-properties: <{http://schemas.openxmlformats.org/package/2006/metadata/core-properties}revision>: 1 → 0",
-    "  settings: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}autoHyphenation @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val=\"1\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}keepNext @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val=\"1\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"zh-CN\": 2 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}suppressAutoHyphens @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val=\"1\": 1 → 0",
     "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}clrScheme @{}name=\"LibreOffice\": 1 → 0",
     "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}cs @{}charset=\"1\": 2 → 0",
     "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}cs @{}pitchFamily=\"0\": 2 → 0",
@@ -36,6 +33,7 @@
     "normalizzazione «w:id»: 2 nel file, 2 nella prova a vuoto",
     "normalizzazione «start e end»: 2 nel file, 0 nella prova a vuoto",
     "normalizzazione «proprietà vuote»: 9 nel file, 0 nella prova a vuoto",
+    "normalizzazione «vero implicito»: 3 nel file, 0 nella prova a vuoto",
     "normalizzazione «statistiche di app.xml»: 3 nel file, 3 nella prova a vuoto"
   ],
   "model": {

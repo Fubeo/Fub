@@ -15,6 +15,7 @@
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
     "blocchi chiusi: {}; scrittura intera: false",
     "normalizzazione «w:id»: 6 nel file, 6 nella prova a vuoto",
+    "normalizzazione «sporgente nullo»: 0 nel file, 8 nella prova a vuoto",
     "normalizzazione «w:fldSimple»: 1 nel file, 0 nella prova a vuoto",
     "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
   ],

@@ -140,8 +140,10 @@ contano i segni che Word stesso rigenera a ogni salvataggio: le sessioni di
 modifica (`rsid`), gli errori di ortografia segnati, l'ultima impaginazione,
 gli identificativi dei paragrafi, le statistiche del file e la numerazione
 degli id; né le forme che la norma considera uguali, come un contenitore di
-proprietà vuoto, `start` ed `end` al posto di `left` e `right`, un campo
-semplice o il paragrafo che chiude il corpo dopo una tabella.
+proprietà vuoto, `start` ed `end` al posto di `left` e `right`, un
+interruttore acceso scritto con `w:val="true"` o senza, un rientro sporgente
+nullo al posto di una prima riga nulla, un campo semplice o il paragrafo che
+chiude il corpo dopo una tabella.
 
 Ciò che si perderebbe non chiude per forza tutto il documento:
 
