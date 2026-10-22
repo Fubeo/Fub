@@ -36,7 +36,7 @@
 // fuori (il perché sta in `host/fake.ts`). E non è un presidio di layout: in
 // `happy-dom` non c'è né CSS né misura, quindi si asserisce su *cosa* c'è e
 // mai su *dove*.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   appendToTextEditor as typeInEditor,
   mountedTextEditors as editorViews,
@@ -325,6 +325,14 @@ beforeEach(() => {
   activeStop = null;
   document.body.innerHTML = "";
   localStorage.clear();
+});
+
+// L'ultimo montaggio del file non ha un `beforeEach` dopo di sé: il suo
+// risponditore si ferma qui, prima che l'ambiente se ne vada.
+afterAll(() => {
+  activeStop?.();
+  activeStop = null;
+  stopAnswering();
 });
 
 describe("la menubar applicativa", () => {
