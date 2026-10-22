@@ -5,15 +5,13 @@ Questa cartella contiene codice di
 modifiche elencate qui sotto. Fub non dipende da GridCraft via Git:
 `deny.toml` ammette soltanto crates.io, e i crate non sono pubblicati là.
 
-Sette crate, i crate del dominio del foglio di calcolo: i tipi comuni
+Dieci crate: quelli del dominio del foglio di calcolo, cioè i tipi comuni
 (`core`), il parser delle formule (`formula`), le funzioni (`functions`), i
 formati numerici (`numfmt`), il modello della cartella (`model`), il calcolo
-(`calc`) e i codec dei file (`xlsx`). Li usa soltanto `fub-format-xlsx`, che
-legge le cartelle di Excel in sola lettura senza ricalcolarle: dipende da
-`core`, `model`, `numfmt` e `xlsx`, e `calc` e `functions` restano per la
-modifica. La facciata dell'upstream
-(`engine`, con sessione, comandi e cronologia), l'interfaccia (`ui-egui`), i
-grafici (`chart`), il PDF (`pdf`) e il server MCP (`mcp`) non sono copiati.
+(`calc`) e i codec dei file (`xlsx`); i grafici (`chart`) e lo scrittore di
+PDF (`pdf`); e la facciata (`engine`), con la sessione, i comandi della barra
+multifunzione e la cronologia. Li usa soltanto `fub-format-xlsx`.
+L'interfaccia (`ui-egui`) e il server MCP (`mcp`) non sono copiati.
 
 ## Riferimento
 
@@ -32,12 +30,15 @@ grafici (`chart`), il PDF (`pdf`) e il server MCP (`mcp`) non sono copiati.
 | `crates/model/` | `crates/model/` | nessuna |
 | `crates/calc/` | `crates/calc/` | nessuna |
 | `crates/xlsx/` | `crates/xlsx/` | `src/package.rs` e sei file di `src/tests/` per `zip` 9; `src/ods.rs` per Rust 1.89 |
+| `crates/chart/` | `crates/chart/` | nessuna |
+| `crates/pdf/` | `crates/pdf/` | nessuna |
+| `crates/engine/` | `crates/engine/` | `src/lib.rs` e `src/tests.rs`, per aprire senza ricalcolo |
 | `rustfmt.toml` | `rustfmt.toml` | nessuna |
 | `NOTICE` | `NOTICE` | nessuna |
 
 I manifest dei crate sono quelli dell'upstream. Ereditano versione, edizione,
 licenza, lint e dipendenze da `Cargo.toml` di questa cartella, che è di Fub e
-non dell'upstream: un workspace con i sette crate, fuori da quello di Fub
+non dell'upstream: un workspace con i dieci crate, fuori da quello di Fub
 (`exclude` nel `Cargo.toml` radice), con il suo `Cargo.lock`. Fub prende i
 crate come dipendenze a percorso, con il proprio lock; i test dell'upstream
 girano qui, anche in CI:
@@ -77,7 +78,13 @@ Le patch di `patches/`, una per ragione:
   `ref`. La ricerca della matrice che contiene una cella non scorre più tutte
   le matrici lette: con molte matrici la lettura era quadratica (120.000
   matrici in 4 s). In `xlsx/src/tests/fixtures.rs` il test dice che i valori
-  restano visibili.
+  restano visibili;
+- `0004-apertura-senza-ricalcolo`: `DocState::new` ricalcola tutta la
+  cartella, e i valori salvati nel file cambiano anche dove nessuno ha
+  modificato niente (funzioni volatili, funzioni che GridCraft non ha, cicli).
+  `DocState::from_saved` costruisce il grafo delle dipendenze senza valutare,
+  così ogni valore resta quello del file finché una modifica non lo
+  raggiunge. In `engine/src/tests.rs` il test lo dice.
 
 Le dipendenze del workspace di questa cartella hanno, per quelle in comune con
 Fub, la stessa versione del `[workspace.dependencies]` di Fub, perché il grafo
@@ -88,8 +95,9 @@ all'upstream:
 - `serde_json` non accende `float_roundtrip`: serve soltanto ai test
   dell'upstream, e le feature si unificano in tutto il grafo di Fub.
 
-I sette crate non portano nessuna libreria nuova nell'albero di Fub: ogni loro
-dipendenza c'è già. Le righe `gridcraft-*` dei due workspace portano la
+I dieci crate non portano nessuna libreria nuova nell'albero di Fub: ogni loro
+dipendenza c'è già, compresa `image` (con i decodificatori PNG e JPEG) di
+`engine`. Le righe `gridcraft-*` dei due workspace portano la
 versione accanto al percorso, perché `cargo deny` non consideri jolly una
 dipendenza fra crate pubblicabili.
 
