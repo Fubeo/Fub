@@ -3294,6 +3294,72 @@ interface grid {
     shutdown: func() -> result<_, plugin-error>;
 }
 
+/// La versione 2 della famiglia grid (`GridBytesProvider`): la sorgente è a
+/// byte e resta nella custodia dell'host, la modifica è un giornale di celle.
+/// Il giornale attraversa il confine come il suo testo canonico, e le finestre
+/// portano il valore già formattato, il blocco e lo stato della cella.
+interface grid-bytes {
+    use edit.{revision};
+    use errors.{plugin-error};
+    use grid.{grid-surface-spec, grid-sheet, grid-row, grid-column, grid-cell-key, grid-cell-style, grid-window-request, grid-apply-request, grid-commit};
+
+    /// Un avviso della sorgente in un codice chiuso del provider.
+    record grid-notice {
+        code: string,
+        count: u32,
+    }
+
+    record grid-bytes-session {
+        instance: string,
+        revision: revision,
+        sheets: list<grid-sheet>,
+        active: string,
+        hidden: list<string>,
+        notices: list<grid-notice>,
+        conflicts: list<grid-cell-key>,
+    }
+
+    /// Un errore porta il suo testo: ogni formato ha i suoi.
+    variant grid-value {
+        blank,
+        number(f64),
+        text(string),
+        boolean(bool),
+        error(string),
+    }
+
+    record grid-bytes-cell {
+        key: grid-cell-key,
+        input: string,
+        style: grid-cell-style,
+        value: grid-value,
+        display: string,
+        lock: option<string>,
+        stale: bool,
+        conflict: bool,
+    }
+
+    record grid-bytes-window {
+        revision: revision,
+        sheet: string,
+        row-start: u32,
+        column-start: u32,
+        total-rows: u32,
+        total-columns: u32,
+        rows: list<grid-row>,
+        columns: list<grid-column>,
+        cells: list<grid-bytes-cell>,
+    }
+
+    surfaces: func() -> list<grid-surface-spec>;
+    open: func(surface: string, source: list<u8>, revision: revision, journal: string) -> result<grid-bytes-session, plugin-error>;
+    window: func(instance: string, request: grid-window-request) -> result<grid-bytes-window, plugin-error>;
+    apply: func(instance: string, request: grid-apply-request) -> result<grid-commit, plugin-error>;
+    bytes-to-write: func(instance: string, expected: revision) -> result<list<u8>, plugin-error>;
+    close: func(instance: string) -> result<_, plugin-error>;
+    shutdown: func() -> result<_, plugin-error>;
+}
+
 /// View dichiarative (`ViewProvider`).
 interface view {
     use ui.{ui-tree, ui-action, view-update};
@@ -4507,6 +4573,7 @@ world plugin-world {
     export plugin;
     export format;
     export grid;
+    export grid-bytes;
     /// I due innesti del §3.1 e del §3.2: chi aggiunge la sintassi, e chi
     /// disegna il blocco che ne esce. Sono esportati separatamente da `format`
     /// perché un plugin può implementarne uno senza implementare l'altro — ed è
