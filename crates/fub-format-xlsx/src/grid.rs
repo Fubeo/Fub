@@ -351,6 +351,7 @@ impl Instance {
                 .filter(|(_, entry)| entry.state == GridJournalMatch::Conflict)
                 .map(|(key, _)| key.clone())
                 .collect(),
+            commands: Vec::new(),
         };
         summary.validate()?;
         Ok(summary)

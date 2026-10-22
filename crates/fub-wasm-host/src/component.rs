@@ -59,8 +59,9 @@ use fub_abi::traits::{
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::{
-    Arg, FormatError, GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal,
-    PluginError, Revision, Text, MAX_GRID_BYTES_SOURCE,
+    Arg, FormatError, GridBytesProvider, GridBytesSession, GridBytesWindow, GridCommandOutcome,
+    GridCommandRequest, GridCommandState, GridJournal, GridSelection, PluginError, Revision, Text,
+    MAX_GRID_BYTES_SOURCE,
 };
 use fub_host::registry::{Bundle, BundleMount, Registrar, RegistrationReport};
 use fub_kernel::Trust;
@@ -841,6 +842,36 @@ impl GridBytesProvider for WasmGridBytesProvider {
                 .map_err(tr::from_error)
         })?;
         tr::from_grid_commit(commit).map_err(grid_response_error)
+    }
+
+    fn commands(
+        &mut self,
+        instance: &str,
+        selection: GridSelection,
+    ) -> Result<Vec<GridCommandState>, PluginError> {
+        selection.validate()?;
+        let selection_wit = tr::to_grid_selection(&selection);
+        let commands = grid_bytes_call(&self.inner, |grid, store| {
+            grid.call_commands(store, instance, &selection_wit)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })?;
+        tr::from_grid_catalog(commands).map_err(grid_response_error)
+    }
+
+    fn command(
+        &mut self,
+        instance: &str,
+        request: GridCommandRequest,
+    ) -> Result<GridCommandOutcome, PluginError> {
+        request.validate()?;
+        let request_wit = tr::to_grid_command_request(&request);
+        let outcome = grid_bytes_call(&self.inner, |grid, store| {
+            grid.call_command(store, instance, &request_wit)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })?;
+        tr::from_grid_command_outcome(outcome).map_err(grid_response_error)
     }
 
     fn bytes_to_write(

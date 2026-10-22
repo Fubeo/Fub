@@ -65,7 +65,8 @@ use fub_abi::ui::{
     UiNode, UiOption, UiValue, ViewUpdate,
 };
 use fub_abi::{
-    GridBytesCell, GridBytesSession, GridBytesWindow, GridCommand, GridJournal, GridNotice,
+    GridBytesCell, GridBytesSession, GridBytesWindow, GridCommand, GridCommandOutcome,
+    GridCommandRequest, GridCommandState, GridDialog, GridJournal, GridNotice, GridSelection,
     GridValue,
 };
 use fub_features::VersionRef;
@@ -1305,6 +1306,7 @@ fn grid_bytes_samples() -> (Value, Value, Value, Vec<Value>) {
             count: 2,
         }],
         conflicts: vec![key.clone()],
+        commands: grid_catalog(),
     };
     let window = GridBytesWindow {
         revision: Revision::of("rev-2"),
@@ -1336,6 +1338,69 @@ fn grid_bytes_samples() -> (Value, Value, Value, Vec<Value>) {
         to_value(window),
         cells.into_iter().map(to_value).collect(),
     )
+}
+
+/// Un catalogo con un comando acceso e uno spento, con il perché.
+fn grid_catalog() -> Vec<GridCommandState> {
+    vec![
+        GridCommandState {
+            id: "home.bold".into(),
+            enabled: true,
+            reason: None,
+        },
+        GridCommandState {
+            id: "home.mergeCenter".into(),
+            enabled: false,
+            reason: Some("the selection is a single cell".into()),
+        },
+    ]
+}
+
+/// La richiesta di un comando e l'esito, con il risultato e una finestra di
+/// dialogo chiesta.
+fn grid_command_samples() -> (Value, Value, Value) {
+    let selection = GridSelection {
+        sheet: "s1".into(),
+        selection: "A1:B2,$D$4".into(),
+        active: "A1".into(),
+    };
+    let request = GridCommandRequest {
+        revision: Revision::of("rev-2"),
+        command: GridCommand {
+            id: "edit.copy".into(),
+            params: r#"{"html":true}"#.into(),
+            sheet: selection.sheet.clone(),
+            selection: selection.selection.clone(),
+            active: selection.active.clone(),
+        },
+    };
+    let outcome = GridCommandOutcome {
+        commit: GridCommit {
+            revision: Revision::of("rev-2"),
+            edit: GridSourceEdit {
+                from: 0,
+                to: 0,
+                deleted: String::new(),
+                inserted: String::new(),
+            },
+            invalidation: GridInvalidation::Cells(Vec::new()),
+        },
+        sheets: vec![GridSheet {
+            id: "s1".into(),
+            name: "Conti".into(),
+            row_count: 100,
+            column_count: 26,
+        }],
+        hidden: Vec::new(),
+        selection: selection.clone(),
+        result: Some(r#"{"range":"A1:B2","text":"1\t2"}"#.into()),
+        dialog: Some(GridDialog {
+            id: "pasteSpecial".into(),
+            params: "{}".into(),
+        }),
+        commands: grid_catalog(),
+    };
+    (to_value(selection), to_value(request), to_value(outcome))
 }
 
 /// I giornali della versione 2 e i loro rebase, scritti dal Rust: la shell
@@ -1434,7 +1499,12 @@ fn expected() -> Value {
     let grid = grid_samples();
     let (grid_notice, grid_bytes_session, grid_bytes_window, grid_bytes_cells) =
         grid_bytes_samples();
+    let (grid_selection, grid_command_request, grid_command_outcome) = grid_command_samples();
     json!({
+        "GridSelection": [grid_selection],
+        "GridCommandState": grid_catalog().into_iter().map(to_value).collect::<Vec<_>>(),
+        "GridCommandRequest": [grid_command_request],
+        "GridCommandOutcome": [grid_command_outcome],
         "GridNotice": [grid_notice],
         "GridBytesSession": [grid_bytes_session],
         "GridBytesWindow": [grid_bytes_window],

@@ -408,6 +408,8 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("open_grid_bytes", Why::Grid),
     ("grid_bytes_window", Why::Grid),
     ("apply_grid_bytes", Why::Grid),
+    ("grid_bytes_commands", Why::Grid),
+    ("grid_bytes_command", Why::Grid),
     ("close_grid_bytes", Why::Grid),
     // --- la sessione live (0205): un servizio dell'app, con il suo canale ---
     //
@@ -990,6 +992,8 @@ fn grid_surface_uses_only_named_typed_ports() {
         "open_grid_bytes",
         "grid_bytes_window",
         "apply_grid_bytes",
+        "grid_bytes_commands",
+        "grid_bytes_command",
         "close_grid_bytes",
     ];
     let app = include_str!("../src/lib.rs");

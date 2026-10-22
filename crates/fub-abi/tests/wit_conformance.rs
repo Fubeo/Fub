@@ -84,8 +84,9 @@ use fub_abi::grid::{
     GridWindowRequest,
 };
 use fub_abi::grid_bytes::{
-    GridBytesCell, GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal, GridNotice,
-    GridValue,
+    GridBytesCell, GridBytesProvider, GridBytesSession, GridBytesWindow, GridCommand,
+    GridCommandOutcome, GridCommandRequest, GridCommandState, GridDialog, GridJournal, GridNotice,
+    GridSelection, GridValue,
 };
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{
@@ -382,6 +383,12 @@ wit_kebab! {
     GridValue,
     GridBytesCell,
     GridBytesWindow,
+    GridSelection,
+    GridCommandState,
+    GridCommand,
+    GridCommandRequest,
+    GridDialog,
+    GridCommandOutcome,
     // La mappa con namespace: al confine è una lista di coppie, perché WIT non
     // ha mappe. È lo stesso tipo in tutte e quattro le sedi del §3.5 — e che
     // sia lo STESSO è metà della risposta.
@@ -3767,6 +3774,7 @@ fn conform(source: &str) -> Result<(), String> {
         hidden,
         notices,
         conflicts,
+        commands,
     } = GridBytesSession {
         instance: String::new(),
         revision: Revision::of(""),
@@ -3775,6 +3783,7 @@ fn conform(source: &str) -> Result<(), String> {
         hidden: Vec::new(),
         notices: Vec::new(),
         conflicts: Vec::new(),
+        commands: Vec::new(),
     };
     contract.record(
         "grid-bytes-session",
@@ -3786,6 +3795,128 @@ fn conform(source: &str) -> Result<(), String> {
             ("hidden", wit(&hidden)),
             ("notices", wit(&notices)),
             ("conflicts", wit(&conflicts)),
+            ("commands", wit(&commands)),
+        ],
+    );
+
+    let GridSelection {
+        sheet,
+        selection,
+        active,
+    } = GridSelection {
+        sheet: String::new(),
+        selection: String::new(),
+        active: String::new(),
+    };
+    contract.record(
+        "grid-selection",
+        &[
+            ("sheet", wit(&sheet)),
+            ("selection", wit(&selection)),
+            ("active", wit(&active)),
+        ],
+    );
+
+    let GridCommandState {
+        id,
+        enabled,
+        reason,
+    } = GridCommandState {
+        id: String::new(),
+        enabled: false,
+        reason: None,
+    };
+    contract.record(
+        "grid-command-state",
+        &[
+            ("id", wit(&id)),
+            ("enabled", wit(&enabled)),
+            ("reason", wit(&reason)),
+        ],
+    );
+
+    let grid_command = GridCommand {
+        id: String::new(),
+        params: String::new(),
+        sheet: String::new(),
+        selection: String::new(),
+        active: String::new(),
+    };
+    {
+        let GridCommand {
+            id,
+            params,
+            sheet,
+            selection,
+            active,
+        } = &grid_command;
+        contract.record(
+            "grid-command",
+            &[
+                ("id", wit(id)),
+                ("params", wit(params)),
+                ("sheet", wit(sheet)),
+                ("selection", wit(selection)),
+                ("active", wit(active)),
+            ],
+        );
+    }
+
+    let GridCommandRequest { revision, command } = GridCommandRequest {
+        revision: Revision::of(""),
+        command: grid_command,
+    };
+    contract.record(
+        "grid-command-request",
+        &[("revision", wit(&revision)), ("command", wit(&command))],
+    );
+
+    let GridDialog { id, params } = GridDialog {
+        id: String::new(),
+        params: String::new(),
+    };
+    contract.record("grid-dialog", &[("id", wit(&id)), ("params", wit(&params))]);
+
+    let GridCommandOutcome {
+        commit,
+        sheets,
+        hidden,
+        selection,
+        result,
+        dialog,
+        commands,
+    } = GridCommandOutcome {
+        commit: GridCommit {
+            revision: Revision::of(""),
+            edit: GridSourceEdit {
+                from: 0,
+                to: 0,
+                deleted: String::new(),
+                inserted: String::new(),
+            },
+            invalidation: GridInvalidation::All,
+        },
+        sheets: Vec::new(),
+        hidden: Vec::new(),
+        selection: GridSelection {
+            sheet: String::new(),
+            selection: String::new(),
+            active: String::new(),
+        },
+        result: None,
+        dialog: None,
+        commands: Vec::new(),
+    };
+    contract.record(
+        "grid-command-outcome",
+        &[
+            ("commit", wit(&commit)),
+            ("sheets", wit(&sheets)),
+            ("hidden", wit(&hidden)),
+            ("selection", wit(&selection)),
+            ("result", wit(&result)),
+            ("dialog", wit(&dialog)),
+            ("commands", wit(&commands)),
         ],
     );
 
@@ -5593,6 +5724,28 @@ fn conform(source: &str) -> Result<(), String> {
                 &'static str,
                 GridApplyRequest,
             ) -> Result<GridCommit, PluginError>,
+        &["instance", "request"],
+    );
+    contract.method(
+        "grid-bytes",
+        "commands",
+        <dyn GridBytesProvider>::commands
+            as fn(
+                &'static mut dyn GridBytesProvider,
+                &'static str,
+                GridSelection,
+            ) -> Result<Vec<GridCommandState>, PluginError>,
+        &["instance", "selection"],
+    );
+    contract.method(
+        "grid-bytes",
+        "command",
+        <dyn GridBytesProvider>::command
+            as fn(
+                &'static mut dyn GridBytesProvider,
+                &'static str,
+                GridCommandRequest,
+            ) -> Result<GridCommandOutcome, PluginError>,
         &["instance", "request"],
     );
     contract.method(

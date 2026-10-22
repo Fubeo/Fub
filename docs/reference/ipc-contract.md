@@ -36,7 +36,8 @@ aggiunge una porta soltanto per evitare di usare il proprio registro.
 La famiglia Grid usa porte strettamente tipate, con i record `Grid*` del
 mirror: `list_grid_surfaces` elenca i binding, e una superficie con
 `protocol_version` 2 si apre sui byte di un documento con `open_grid_bytes`,
-`grid_bytes_window`, `apply_grid_bytes` e `close_grid_bytes`. La shell
+`grid_bytes_window`, `apply_grid_bytes`, `grid_bytes_commands`,
+`grid_bytes_command` e `close_grid_bytes`. La shell
 negozia famiglia, versione e formato prima di aprire; un binding sconosciuto
 o incompatibile non viene chiamato e la superficie dice che il foglio non si
 apre. `query_index` non applica patch e non possiede lifecycle.
@@ -51,6 +52,20 @@ sessione è un `GridBytesSession` (fogli, foglio attivo, fogli nascosti, avvisi
 cella porta `GridValue`, il testo formattato, blocco, `stale` e `conflict`. Il
 commit è un `GridCommit` il cui `edit` è il diff del testo del giornale, da
 applicare al buffer della sessione documento.
+
+La sessione porta anche il catalogo dei comandi che serve
+(`GridCommandState`: id, acceso, perché è spento). `grid_bytes_commands`
+riceve una `GridSelection` (foglio, intervalli A1, cella attiva) e ridà il
+catalogo su quella selezione; `grid_bytes_command` riceve un
+`GridCommandRequest` (la revisione e un `GridCommand` con i parametri come
+testo di un oggetto JSON) e ridà un `GridCommandOutcome`: il commit del
+giornale, che resta alla revisione se il comando non cambia la cartella, i
+fogli, la selezione nuova, il risultato come testo JSON, la finestra di
+dialogo chiesta e il catalogo aggiornato. Un comando che il provider non
+serve, spento o con parametri che non tornano è `BadArgs`. Nessun provider
+serve ancora comandi: il catalogo è vuoto
+([ADR 0219](../decisions/0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md),
+in proposta).
 
 ## Limiti e semantica Grid
 

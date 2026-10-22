@@ -11,7 +11,8 @@ use camino::Utf8PathBuf;
 use fub_abi::grid::{GridApplyRequest, GridCellKey, GridCellPatch, GridWindowRequest};
 use fub_abi::model::DocId;
 use fub_abi::{
-    grid_bytes_revision, GridBytesProvider, GridCommand, GridJournal, PluginError, Revision,
+    grid_bytes_revision, GridBytesProvider, GridCommand, GridCommandRequest, GridJournal,
+    GridSelection, PluginError, Revision,
 };
 use fub_host::Host;
 use fub_kernel::Trust;
@@ -83,6 +84,36 @@ fn the_journal_crosses_the_component_and_the_bytes_come_back_grafted() {
         grid.open(SURFACE, SOURCE, revision.clone(), &commands),
         Err(PluginError::BadArgs(_))
     ));
+
+    // Il catalogo dell'esempio è vuoto, e un comando è un rifiuto tipizzato
+    // con la sessione che resta com'era.
+    assert!(session.commands.is_empty());
+    let selection = GridSelection {
+        sheet: "lines".into(),
+        selection: "A1".into(),
+        active: "A1".into(),
+    };
+    assert_eq!(
+        grid.commands(&session.instance, selection.clone()).unwrap(),
+        Vec::new()
+    );
+    assert!(matches!(
+        grid.command(
+            &session.instance,
+            GridCommandRequest {
+                revision: session.revision.clone(),
+                command: GridCommand {
+                    id: "home.bold".into(),
+                    params: "{}".into(),
+                    sheet: selection.sheet.clone(),
+                    selection: selection.selection.clone(),
+                    active: selection.active.clone(),
+                },
+            },
+        ),
+        Err(PluginError::BadArgs(_))
+    ));
+    assert!(grid.commands("nessuna", selection).is_err());
 
     let cells = grid
         .window(&session.instance, window(4, &session.revision))

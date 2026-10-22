@@ -44,6 +44,12 @@ pub const MAX_GRID_COMMAND_PARAMS_BYTES: usize = 64 * 1024;
 pub const MAX_GRID_SELECTION_BYTES: usize = 4 * 1024;
 /// Il testo di un giornale di comandi.
 pub const MAX_GRID_COMMAND_JOURNAL_BYTES: usize = 16 * 1024 * 1024;
+/// I comandi del catalogo di una sessione.
+pub const MAX_GRID_CATALOG_COMMANDS: usize = 1_024;
+/// Il risultato di un comando, come testo JSON.
+pub const MAX_GRID_COMMAND_RESULT_BYTES: usize = 1024 * 1024;
+/// Il motivo per cui un comando è spento.
+pub const MAX_GRID_COMMAND_REASON_BYTES: usize = 1024;
 /// Le voci di un giornale: quante ne porta un'operazione.
 pub const MAX_GRID_JOURNAL_ENTRIES: usize = MAX_GRID_PATCHES;
 /// Gli input di un giornale, `before` e `after` insieme.
@@ -113,8 +119,42 @@ fn valid_reference(text: &str) -> bool {
 }
 
 impl GridCommand {
+    /// La selezione su cui il comando è stato dato.
+    pub fn selection(&self) -> GridSelection {
+        GridSelection {
+            sheet: self.sheet.clone(),
+            selection: self.selection.clone(),
+            active: self.active.clone(),
+        }
+    }
+
     pub fn validate(&self) -> Result<(), PluginError> {
-        if !valid_id(&self.id) || !valid_id(&self.sheet) {
+        if !valid_id(&self.id) {
+            return Err(bad("grid command has an invalid id"));
+        }
+        self.selection().validate()?;
+        if self.params.len() > MAX_GRID_COMMAND_PARAMS_BYTES {
+            return Err(bad("grid command parameters exceed byte limit"));
+        }
+        if !json_object(&self.params, MAX_GRID_COMMAND_PARAMS_BYTES) {
+            return Err(bad("grid command parameters are not a JSON object"));
+        }
+        Ok(())
+    }
+}
+
+/// Dove sta la selezione: il foglio (il suo id), gli intervalli in
+/// riferimenti A1 separati da virgola e la cella attiva.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridSelection {
+    pub sheet: String,
+    pub selection: String,
+    pub active: String,
+}
+
+impl GridSelection {
+    pub fn validate(&self) -> Result<(), PluginError> {
+        if !valid_id(&self.sheet) {
             return Err(bad("grid command has an invalid id"));
         }
         if !valid_reference(&self.selection)
@@ -123,14 +163,136 @@ impl GridCommand {
         {
             return Err(bad("grid command has an invalid selection"));
         }
-        if self.params.len() > MAX_GRID_COMMAND_PARAMS_BYTES {
-            return Err(bad("grid command parameters exceed byte limit"));
+        Ok(())
+    }
+}
+
+/// Un comando del catalogo di una sessione, con lo stato che ha sulla
+/// selezione: spento, porta il perché nel testo del provider.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridCommandState {
+    pub id: String,
+    pub enabled: bool,
+    pub reason: Option<String>,
+}
+
+/// Il catalogo di una sessione: id unici, il perché soltanto per un comando
+/// spento.
+pub fn validate_grid_catalog(commands: &[GridCommandState]) -> Result<(), PluginError> {
+    if commands.len() > MAX_GRID_CATALOG_COMMANDS {
+        return Err(bad("grid catalog exceeds its limits"));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for command in commands {
+        if !valid_id(&command.id) || !seen.insert(command.id.as_str()) {
+            return Err(bad("grid catalog has an invalid or repeated id"));
         }
-        match serde_json::from_str::<serde_json::Value>(&self.params) {
-            Ok(serde_json::Value::Object(_)) => Ok(()),
-            _ => Err(bad("grid command parameters are not a JSON object")),
+        let reason = command.reason.as_deref();
+        if command.enabled && reason.is_some()
+            || reason.is_some_and(|reason| reason.len() > MAX_GRID_COMMAND_REASON_BYTES)
+        {
+            return Err(bad("grid catalog has an invalid reason"));
         }
     }
+    Ok(())
+}
+
+/// Un comando da dare alla sessione alla sua revisione.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridCommandRequest {
+    pub revision: Revision,
+    pub command: GridCommand,
+}
+
+impl GridCommandRequest {
+    pub fn validate(&self) -> Result<(), PluginError> {
+        if self.revision.0.is_empty() {
+            return Err(bad("grid command has an empty revision"));
+        }
+        self.command.validate()
+    }
+}
+
+/// Una finestra di dialogo che un comando chiede alla shell, con i parametri
+/// come testo di un oggetto JSON: la shell la apre se la conosce, e la sua
+/// risposta è un altro comando.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridDialog {
+    pub id: String,
+    pub params: String,
+}
+
+/// L'esito di un comando: il commit del giornale (vuoto se il comando non
+/// cambia la cartella), i fogli dopo il comando, la selezione nuova, il
+/// risultato come testo JSON, la finestra di dialogo chiesta e il catalogo
+/// sulla selezione nuova.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridCommandOutcome {
+    pub commit: GridCommit,
+    pub sheets: Vec<GridSheet>,
+    pub hidden: Vec<String>,
+    pub selection: GridSelection,
+    pub result: Option<String>,
+    pub dialog: Option<GridDialog>,
+    pub commands: Vec<GridCommandState>,
+}
+
+fn json_object(text: &str, limit: usize) -> bool {
+    text.len() <= limit
+        && matches!(
+            serde_json::from_str::<serde_json::Value>(text),
+            Ok(serde_json::Value::Object(_))
+        )
+}
+
+impl GridCommandOutcome {
+    pub fn validate(&self) -> Result<(), PluginError> {
+        self.commit.validate()?;
+        self.selection.validate()?;
+        validate_sheets(&self.sheets)?;
+        let named = |id: &String| self.sheets.iter().any(|sheet| &sheet.id == id);
+        if !named(&self.selection.sheet) || !self.hidden.iter().all(named) {
+            return Err(bad("grid outcome names a sheet it does not have"));
+        }
+        if self
+            .result
+            .as_deref()
+            .is_some_and(|result| !json_object(result, MAX_GRID_COMMAND_RESULT_BYTES))
+        {
+            return Err(bad(
+                "grid command result is not a JSON object within limits",
+            ));
+        }
+        if let Some(dialog) = &self.dialog {
+            if !valid_id(&dialog.id) || !json_object(&dialog.params, MAX_GRID_COMMAND_PARAMS_BYTES)
+            {
+                return Err(bad("grid command dialog is invalid"));
+            }
+        }
+        validate_grid_catalog(&self.commands)?;
+        let encoded = serde_json::to_vec(self)
+            .map_err(|error| PluginError::Internal(error.to_string().into()))?;
+        if encoded.len() > MAX_GRID_RESPONSE_BYTES {
+            return Err(bad("grid outcome exceeds byte limit"));
+        }
+        Ok(())
+    }
+}
+
+fn validate_sheets(sheets: &[GridSheet]) -> Result<(), PluginError> {
+    if sheets.is_empty() || sheets.len() > MAX_GRID_SESSION_SHEETS {
+        return Err(bad("grid session exceeds its limits"));
+    }
+    for sheet in sheets {
+        if !valid_id(&sheet.id) || sheet.name.is_empty() {
+            return Err(bad("grid session has an empty identity"));
+        }
+        if sheet.row_count > MAX_GRID_SESSION_ROWS || sheet.column_count > MAX_GRID_SESSION_COLUMNS
+        {
+            return Err(bad("grid session axes exceed limits"));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Serialize, Deserialize)]
@@ -516,6 +678,10 @@ pub struct GridBytesSession {
     /// input, perché qualcun altro l'ha cambiata. La finestra mostra il
     /// valore del giornale e lo segna; il salvataggio scrive quello.
     pub conflicts: Vec<GridCellKey>,
+    /// I comandi che la sessione serve, con lo stato sulla selezione
+    /// iniziale (la cella `A1` del foglio attivo): vuoto per un provider che
+    /// modifica soltanto con le patch.
+    pub commands: Vec<GridCommandState>,
 }
 
 impl GridBytesSession {
@@ -533,16 +699,8 @@ impl GridBytesSession {
         {
             return Err(bad("grid session exceeds its limits"));
         }
-        for sheet in &self.sheets {
-            if !valid_id(&sheet.id) || sheet.name.is_empty() {
-                return Err(bad("grid session has an empty identity"));
-            }
-            if sheet.row_count > MAX_GRID_SESSION_ROWS
-                || sheet.column_count > MAX_GRID_SESSION_COLUMNS
-            {
-                return Err(bad("grid session axes exceed limits"));
-            }
-        }
+        validate_sheets(&self.sheets)?;
+        validate_grid_catalog(&self.commands)?;
         if self.notices.iter().any(|notice| !valid_id(&notice.code)) {
             return Err(bad("grid notice has an invalid code"));
         }
@@ -674,6 +832,30 @@ pub trait GridBytesProvider: Send + Sync {
         instance: &str,
         request: GridApplyRequest,
     ) -> Result<GridCommit, PluginError>;
+    /// Il catalogo sulla selezione `selection`. Un provider che modifica
+    /// soltanto con le patch lo dà vuoto.
+    fn commands(
+        &mut self,
+        instance: &str,
+        selection: GridSelection,
+    ) -> Result<Vec<GridCommandState>, PluginError> {
+        let _ = (instance, selection);
+        Ok(Vec::new())
+    }
+    /// Dà un comando del catalogo alla revisione della richiesta. Il commit
+    /// porta il diff del giornale, che da un giornale di celle diventa di
+    /// comandi; un comando che non c'è, spento o con parametri che non
+    /// tornano è `BadArgs`, e la sessione resta com'era.
+    fn command(
+        &mut self,
+        instance: &str,
+        request: GridCommandRequest,
+    ) -> Result<GridCommandOutcome, PluginError> {
+        let _ = instance;
+        Err(PluginError::BadArgs(
+            format!("grid command `{}` is not served", request.command.id).into(),
+        ))
+    }
     /// I byte della sessione alla revisione `expected`: quelli della sorgente
     /// con il giornale applicato. Una voce già applicata non cambia niente;
     /// una in conflitto scrive il suo input, perché l'host apre la sessione

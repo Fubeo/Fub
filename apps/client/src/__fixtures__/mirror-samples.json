@@ -1,4 +1,83 @@
 {
+  "GridSelection": [
+    {
+      "sheet": "s1",
+      "selection": "A1:B2,$D$4",
+      "active": "A1"
+    }
+  ],
+  "GridCommandState": [
+    {
+      "id": "home.bold",
+      "enabled": true,
+      "reason": null
+    },
+    {
+      "id": "home.mergeCenter",
+      "enabled": false,
+      "reason": "the selection is a single cell"
+    }
+  ],
+  "GridCommandRequest": [
+    {
+      "revision": "sha256:c64a4543ce76fcbcade5797b53bedc08e6d81e9e031a72380c03a07cb788efce",
+      "command": {
+        "id": "edit.copy",
+        "params": "{\"html\":true}",
+        "sheet": "s1",
+        "selection": "A1:B2,$D$4",
+        "active": "A1"
+      }
+    }
+  ],
+  "GridCommandOutcome": [
+    {
+      "commit": {
+        "revision": "sha256:c64a4543ce76fcbcade5797b53bedc08e6d81e9e031a72380c03a07cb788efce",
+        "edit": {
+          "from": 0,
+          "to": 0,
+          "deleted": "",
+          "inserted": ""
+        },
+        "invalidation": {
+          "kind": "cells",
+          "cells": []
+        }
+      },
+      "sheets": [
+        {
+          "id": "s1",
+          "name": "Conti",
+          "row_count": 100,
+          "column_count": 26
+        }
+      ],
+      "hidden": [],
+      "selection": {
+        "sheet": "s1",
+        "selection": "A1:B2,$D$4",
+        "active": "A1"
+      },
+      "result": "{\"range\":\"A1:B2\",\"text\":\"1\\t2\"}",
+      "dialog": {
+        "id": "pasteSpecial",
+        "params": "{}"
+      },
+      "commands": [
+        {
+          "id": "home.bold",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.mergeCenter",
+          "enabled": false,
+          "reason": "the selection is a single cell"
+        }
+      ]
+    }
+  ],
   "GridNotice": [
     {
       "code": "macros",
@@ -32,6 +111,18 @@
           "sheet": "s1",
           "row": "r0",
           "column": "c0"
+        }
+      ],
+      "commands": [
+        {
+          "id": "home.bold",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.mergeCenter",
+          "enabled": false,
+          "reason": "the selection is a single cell"
         }
       ]
     }

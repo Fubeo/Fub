@@ -3241,7 +3241,8 @@ interface grid {
 }
 
 /// La versione 2 della famiglia grid (`GridBytesProvider`): la sorgente è a
-/// byte e resta nella custodia dell'host, la modifica è un giornale di celle.
+/// byte e resta nella custodia dell'host, la modifica è un giornale di celle
+/// o di comandi del catalogo della sessione (ADR 0219).
 /// Il giornale attraversa il confine come il suo testo canonico, e le finestre
 /// portano il valore già formattato, il blocco e lo stato della cella.
 interface grid-bytes {
@@ -3263,6 +3264,51 @@ interface grid-bytes {
         hidden: list<string>,
         notices: list<grid-notice>,
         conflicts: list<grid-cell-key>,
+        commands: list<grid-command-state>,
+    }
+
+    /// Il foglio, gli intervalli A1 separati da virgola e la cella attiva.
+    record grid-selection {
+        sheet: string,
+        selection: string,
+        active: string,
+    }
+
+    /// Un comando del catalogo; spento, porta il perché.
+    record grid-command-state {
+        id: string,
+        enabled: bool,
+        reason: option<string>,
+    }
+
+    /// Un comando del giornale: i parametri sono il testo di un oggetto JSON.
+    record grid-command {
+        id: string,
+        params: string,
+        sheet: string,
+        selection: string,
+        active: string,
+    }
+
+    record grid-command-request {
+        revision: revision,
+        command: grid-command,
+    }
+
+    /// Una finestra di dialogo che il comando chiede alla shell.
+    record grid-dialog {
+        id: string,
+        params: string,
+    }
+
+    record grid-command-outcome {
+        commit: grid-commit,
+        sheets: list<grid-sheet>,
+        hidden: list<string>,
+        selection: grid-selection,
+        %result: option<string>,
+        dialog: option<grid-dialog>,
+        commands: list<grid-command-state>,
     }
 
     /// Un errore porta il suo testo: ogni formato ha i suoi.
@@ -3301,6 +3347,8 @@ interface grid-bytes {
     open: func(surface: string, source: list<u8>, revision: revision, journal: string) -> result<grid-bytes-session, plugin-error>;
     window: func(instance: string, request: grid-window-request) -> result<grid-bytes-window, plugin-error>;
     apply: func(instance: string, request: grid-apply-request) -> result<grid-commit, plugin-error>;
+    commands: func(instance: string, selection: grid-selection) -> result<list<grid-command-state>, plugin-error>;
+    command: func(instance: string, request: grid-command-request) -> result<grid-command-outcome, plugin-error>;
     bytes-to-write: func(instance: string, expected: revision) -> result<list<u8>, plugin-error>;
     close: func(instance: string) -> result<_, plugin-error>;
     shutdown: func() -> result<_, plugin-error>;

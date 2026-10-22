@@ -132,6 +132,15 @@ WASM lo implementano con gli stessi tipi, limiti, errori e lifecycle.
   e `conflict`.
 - `apply` riceve le patch di `GridApplyRequest`; il `GridCommit` porta il diff del
   **testo del giornale**, e l'invalidazione.
+- `commands(instance, selection)` dà il catalogo (`GridCommandState`, fino a
+  1.024 comandi con id unici; il perché, fino a 1 KiB, soltanto per un comando
+  spento) sulla `GridSelection`. Di serie è vuoto.
+- `command(instance, request)` dà un comando del catalogo e ridà un
+  `GridCommandOutcome`: il `GridCommit` del giornale, i fogli, la selezione
+  nuova, il risultato (un oggetto JSON fino a 1 MiB), la `GridDialog` chiesta
+  e il catalogo. L'host controlla che la revisione vada avanti se e soltanto
+  se il diff non è vuoto. Di serie è `BadArgs`; l'esempio `esempi/grid-wasm`
+  dà il catalogo vuoto e rifiuta ogni comando.
 - `bytes_to_write(instance, expected)` dà i byte con il giornale innestato. La
   chiama soltanto l'host, per salvare.
 
