@@ -567,3 +567,15 @@ fn libreoffice_rilegge_la_cartella_innestata() {
     assert_eq!(other_before, "101,fermo\n");
     assert_eq!(other_after, "101,7\n");
 }
+
+#[test]
+fn un_attributo_fra_apici_resta_i_suoi_byte() {
+    let original = one_sheet(
+        r#"<sheetData><row r="1" spans="1:1" xmlns:x="urn:prova" x:nota='dice "ciao"'><c r="A1"><v>1</v></c></row></sheetData>"#,
+    );
+    let grafted = run(&original, &[edit("C1", number(3.0))], false).unwrap();
+    let xml = sheet_xml(&grafted.bytes);
+    assert!(xml.contains(r#"x:nota='dice "ciao"'"#), "{xml}");
+    assert!(!xml.contains("spans="), "{xml}");
+    assert_eq!(value(&grafted.bytes, "C1"), Value::Number(3.0));
+}

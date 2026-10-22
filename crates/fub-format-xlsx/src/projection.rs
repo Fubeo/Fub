@@ -137,7 +137,7 @@ impl NotShown {
         }
     }
 
-    fn present(self, sheet: &GcSheet) -> bool {
+    pub(crate) fn present(self, sheet: &GcSheet) -> bool {
         match self {
             NotShown::Merges => !sheet.merges.is_empty(),
             NotShown::Charts => !sheet.charts.is_empty(),
@@ -432,7 +432,7 @@ fn project_sheet(workbook: &Workbook, sheet: &GcSheet, budget: &mut Budget) -> P
 /// Le celle del foglio e i valori versati dalle matrici, che il lettore tiene
 /// a parte, insieme in ordine di riga e di colonna, ciascuna con il valore
 /// che mostra.
-fn entries(
+pub(crate) fn entries(
     sheet: &GcSheet,
 ) -> impl Iterator<Item = (CellRef, Option<&gridcraft_model::Cell>, Option<&GcValue>)> {
     let order = |at: &CellRef| (at.row, at.col);
@@ -465,7 +465,7 @@ fn entries(
 
 /// Se una cella ha qualcosa da far vedere: una formula, un valore o un
 /// riempimento. Le altre non vanno nella proiezione.
-fn shows(
+pub(crate) fn shows(
     workbook: &Workbook,
     sheet: &GcSheet,
     at: CellRef,
@@ -556,7 +556,7 @@ fn project_cell(
     }
 }
 
-fn cell_style(
+pub(crate) fn cell_style(
     workbook: &Workbook,
     style: &GcStyle,
     kind: Option<ValueKind>,

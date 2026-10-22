@@ -623,6 +623,42 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-format-xlsx/src/input.rs::parse",
+            (
+                Family::AsciiCase,
+                "riconosce l'input `TRUE` e `FALSE` di una cella, le due costanti logiche di \
+                 Excel: il vocabolario è chiuso e ASCII, come quello di `formula.rs`, e una \
+                 piegatura Unicode attribuirebbe equivalenze che il formato non conosce.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/package.rs::normalize",
+            (
+                Family::AsciiCase,
+                "confronta i nomi delle parti di un pacchetto OPC, che la specifica (ECMA-376 \
+                 parte 2, §9.1.1.4) dichiara uguali a meno delle maiuscole ASCII: non sono nomi \
+                 del vault ma nomi dentro uno zip, e il lettore di GridCraft li confronta così.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/package.rs::rels",
+            (
+                Family::AsciiCase,
+                "legge `TargetMode=\"External\"` di una relazione OPC: un valore di un \
+                 vocabolario chiuso dello schema, che i produttori scrivono con maiuscole \
+                 diverse e che nessuna piegatura Unicode renderebbe più vero.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/package.rs::split_dir",
+            (
+                Family::FolderBoundary,
+                "divide il nome di una parte del pacchetto nella sua cartella e nel suo file, \
+                 per trovarne le relazioni (`_rels/<file>.rels`): il `/` iniziale di un nome \
+                 OPC è la radice del pacchetto, non un path del vault.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/rules/media.rs::kind_of",
             (
                 Family::AsciiCase,

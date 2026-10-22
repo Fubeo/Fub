@@ -38,6 +38,7 @@ use gridcraft_model::Workbook;
 use gridcraft_xlsx::{Format, ReadReport};
 
 pub mod graft;
+pub mod grid;
 pub mod input;
 pub mod locks;
 mod model;
@@ -130,7 +131,9 @@ fn check(bytes: &[u8]) -> Result<(), XlsxError> {
 
 /// Esegue `work` in un thread con [`STACK_BYTES`] di stack, e ne fa un errore
 /// se si ferma con un panic.
-fn guarded<T: Send>(work: impl FnOnce() -> Result<T, XlsxError> + Send) -> Result<T, XlsxError> {
+pub(crate) fn guarded<T: Send>(
+    work: impl FnOnce() -> Result<T, XlsxError> + Send,
+) -> Result<T, XlsxError> {
     std::thread::scope(|scope| {
         let thread = std::thread::Builder::new()
             .name("fub-xlsx".into())

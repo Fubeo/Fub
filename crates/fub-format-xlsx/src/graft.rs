@@ -289,17 +289,16 @@ fn retag(
         if drop.contains(&key) || first.iter().any(|(name, _)| name.as_bytes() == key) {
             continue;
         }
+        // Il valore resta i byte del file. Un valore con `"` veniva fra
+        // apici, e non può contenerne uno: torna fra apici.
+        let value = attribute.value.as_ref();
+        let quote = if value.contains(&b'"') { b'\'' } else { b'"' };
         out.push(b' ');
         out.extend_from_slice(key);
-        out.extend_from_slice(b"=\"");
-        for &byte in attribute.value.as_ref() {
-            if byte == b'"' {
-                out.extend_from_slice(b"&quot;");
-            } else {
-                out.push(byte);
-            }
-        }
-        out.push(b'"');
+        out.push(b'=');
+        out.push(quote);
+        out.extend_from_slice(value);
+        out.push(quote);
     }
     out.extend_from_slice(if close.unwrap_or(empty) { b"/>" } else { b">" });
     Ok(out)
