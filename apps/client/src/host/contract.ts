@@ -1304,6 +1304,66 @@ export interface GridCommit {
   invalidation: GridInvalidation;
 }
 
+// La versione 2 della griglia (ADR 0216, `fub_abi::grid_bytes`): la superficie
+// si apre sui byte del documento, che legge l'host, e il testo della
+// `DocumentSession` è il **giornale** delle celle cambiate. `apply` ha la
+// richiesta della versione 1 e il suo `GridCommit.edit` è il diff del giornale.
+export const GRID_BYTES_PROTOCOL_VERSION = 2;
+
+/** Un avviso della sorgente, in un codice chiuso del provider. */
+export interface GridNotice {
+  code: string;
+  count: number;
+}
+
+export interface GridBytesSession {
+  instance: string;
+  revision: string;
+  sheets: GridSheet[];
+  /** Il foglio che la sorgente apre per primo. */
+  active: string;
+  /** I fogli che la sorgente nasconde. */
+  hidden: string[];
+  notices: GridNotice[];
+  /** Le voci del giornale che i byte non confermano. */
+  conflicts: GridCellKey[];
+}
+
+/** Un errore porta il suo testo (`#N/A`, `#DIV/0!`): ogni formato ha i suoi. */
+export type GridValue =
+  | { kind: "blank" }
+  | { kind: "number"; value: number }
+  | { kind: "text"; value: string }
+  | { kind: "boolean"; value: boolean }
+  | { kind: "error"; value: string };
+
+export interface GridBytesCell {
+  key: GridCellKey;
+  input: string;
+  style: GridCellStyle;
+  value: GridValue;
+  /** Il valore già formattato dal provider. */
+  display: string;
+  /** Perché la cella non si modifica, in un codice chiuso del provider. */
+  lock: string | null;
+  /** Il valore è quello del file, e una cella da cui dipende è cambiata. */
+  stale: boolean;
+  /** La cella è nel giornale e i byte hanno un terzo input. */
+  conflict: boolean;
+}
+
+export interface GridBytesWindow {
+  revision: string;
+  sheet: string;
+  row_start: number;
+  column_start: number;
+  total_rows: number;
+  total_columns: number;
+  rows: GridRow[];
+  columns: GridColumn[];
+  cells: GridBytesCell[];
+}
+
 // **Da cosa parte** una scrittura intera (rispecchia `fub_abi::edit::WriteBase`).
 // Tag adiacente (`kind` + `value`) come `LinkTarget`: un caso porta uno scalare
 // e l'altro niente.

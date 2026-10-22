@@ -47,6 +47,8 @@ import type {
   DraftInfo,
   DocumentWindowEvent,
   DocumentWindowRequest,
+  GridBytesSession,
+  GridBytesWindow,
   GridCommit,
   GridSession,
   GridSurfaceSpec,
@@ -145,6 +147,15 @@ export interface GridFake {
   commits?: GridCommit[];
 }
 
+/// Una superficie della versione 2: si apre sui byte di un documento del
+/// vault, e le finestre portano valore, blocco e conflitto di ogni cella.
+export interface GridBytesFake {
+  surface: GridSurfaceSpec;
+  session: GridBytesSession;
+  windows: GridBytesWindow[];
+  commits?: GridCommit[];
+}
+
 export interface Options {
   /// I file del vault: path → testo. Le cartelle si deducono dai path, come
   /// sul disco.
@@ -168,6 +179,7 @@ export interface Options {
   installedPlugins?: InstalledPluginInfo[];
   installablePlugins?: Record<string, InstalledPluginInfo>;
   grid?: GridFake;
+  gridBytes?: GridBytesFake;
   /// Provider finti per le query custom, indicizzati dal namespace.
   customQueries?: Record<string, (query: unknown) => unknown>;
   /// I vault che la macchina ricorda (i recenti). `forgetVault` li toglie.
@@ -338,6 +350,12 @@ export function createFakeHost(options: Options = {}): FakeHost {
     (grid?.windows ?? []).map((window) => [`${grid?.session.instance}\u0000${window.sheet}\u0000${window.row_start}\u0000${window.column_start}`, window]),
   );
   let gridCommit = 0;
+  const gridBytes = options.gridBytes;
+  const gridBytesInstances = new Map<string, GridBytesSession>();
+  const gridBytesWindows = new Map(
+    (gridBytes?.windows ?? []).map((window) => [`${gridBytes?.session.instance}\u0000${window.sheet}\u0000${window.row_start}\u0000${window.column_start}`, window]),
+  );
+  let gridBytesCommit = 0;
   const docs = new Map<string, Document>();
   let known = [...(options.knownVaults ?? [])];
   const trash = new Map<string, Trashed>();
@@ -1332,7 +1350,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
         options.revealInSystem
           ? gate("revealInSystem", [path, open], options.revealInSystem(path, open))
           : unavailable("revealInSystem", [path, open]),
-      listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve(grid ? [grid.surface] : [])),
+      listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve([
+        ...(grid ? [grid.surface] : []),
+        ...(gridBytes ? [gridBytes.surface] : []),
+      ])),
       openGrid: (surface, source, revision) => gate("openGrid", [surface, source, revision], Promise.resolve().then(() => {
         if (!grid || surface !== grid.surface.id) throw new Error("host fake: la famiglia grid non è montata");
         const session = { ...grid.session, revision: revision || grid.session.revision };
@@ -1361,6 +1382,41 @@ export function createFakeHost(options: Options = {}): FakeHost {
       })),
       closeGrid: (_surface, instance) => gate("closeGrid", [instance], Promise.resolve().then(() => {
         gridInstances.delete(instance);
+      })),
+      // L'host legge i byte da sé: il finto controlla soltanto che il
+      // documento ci sia e che la revisione da cui la shell parte sia ancora
+      // la sua: altrimenti `conflict`, come l'host.
+      openGridBytes: (surface, doc, journal, base) => gate("openGridBytes", [surface, doc, journal, base], Promise.resolve().then(() => {
+        if (!gridBytes || surface !== gridBytes.surface.id) {
+          throw { kind: "unserved", message: "host fake: la superficie a byte non è montata" } satisfies PluginError;
+        }
+        const known = docs.get(doc);
+        if (!known) throw { kind: "not_found", message: `host fake: «${doc}» non c'è` } satisfies PluginError;
+        if (known.revision !== base) {
+          throw { kind: "conflict", message: `host fake: «${doc}» è cambiato sotto` } satisfies PluginError;
+        }
+        const session = { ...gridBytes.session };
+        gridBytesInstances.set(session.instance, session);
+        return session;
+      })),
+      gridBytesWindow: (_surface, instance, request) => gate("gridBytesWindow", [instance, request], Promise.resolve().then(() => {
+        if (!gridBytesInstances.has(instance)) throw new Error("host fake: grid session closed");
+        const window = gridBytesWindows.get(`${instance}\u0000${request.sheet}\u0000${request.row_start}\u0000${request.column_start}`);
+        if (!window) throw new Error("host fake: grid window unavailable");
+        return { ...window, revision: request.revision };
+      })),
+      applyGridBytes: (_surface, instance, request) => gate("applyGridBytes", [instance, request], Promise.resolve().then(() => {
+        const session = gridBytesInstances.get(instance);
+        if (!session) throw new Error("host fake: grid session closed");
+        const commit = gridBytes?.commits?.[gridBytesCommit++];
+        if (!commit) throw new Error("host fake: grid commit unavailable");
+        gridBytesInstances.set(instance, { ...session, revision: commit.revision });
+        return commit;
+      })),
+      closeGridBytes: (_surface, instance) => gate("closeGridBytes", [instance], Promise.resolve().then(() => {
+        if (!gridBytesInstances.delete(instance)) {
+          throw { kind: "not_found", message: "host fake: grid session closed" } satisfies PluginError;
+        }
       })),
       writeDocument: (id, source, base, vault) => {
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre

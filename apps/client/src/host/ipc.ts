@@ -20,6 +20,8 @@ import type {
   DocumentWindowRequest,
   FieldValue,
   GridApplyRequest,
+  GridBytesSession,
+  GridBytesWindow,
   GridCommit,
   GridSession,
   GridSurfaceSpec,
@@ -233,6 +235,17 @@ export const api = {
     invoke<GridSession>("reload_grid", { surface, instance, source, revision }),
   closeGrid: (surface: string, instance: string) =>
     invoke<void>("close_grid", { surface, instance }),
+  // La versione 2 della famiglia: la shell manda il diario delle celle e la
+  // revisione dei byte da cui parte, non i byte. L'host li legge, e un
+  // `PluginError` `conflict` vuol dire che il file non è più quello.
+  openGridBytes: (surface: string, doc: string, journal: string, base: string) =>
+    invoke<GridBytesSession>("open_grid_bytes", { surface, doc, journal, base }),
+  gridBytesWindow: (surface: string, instance: string, request: GridWindowRequest) =>
+    invoke<GridBytesWindow>("grid_bytes_window", { surface, instance, request }),
+  applyGridBytes: (surface: string, instance: string, request: GridApplyRequest) =>
+    invoke<GridCommit>("apply_grid_bytes", { surface, instance, request }),
+  closeGridBytes: (surface: string, instance: string) =>
+    invoke<void>("close_grid_bytes", { surface, instance }),
   // `base` dice **da cosa si parte**, e non ha un default (§23.11, decisione
   // 0092): `descends_from` = «scrivi solo se il file è ancora quello», e un
   // `PluginError` di specie `conflict` vuol dire che non lo era e che **non è

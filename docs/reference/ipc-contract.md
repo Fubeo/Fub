@@ -49,6 +49,19 @@ sola lettura. La famiglia Grid usa invece le porte strettamente tipate
 versione prima di `open_grid`; un binding sconosciuto o incompatibile non viene
 chiamato e attiva il fallback registrato.
 
+Una superficie con `protocol_version` 2 si apre sui byte di un documento e usa
+le porte `open_grid_bytes`, `grid_bytes_window`, `apply_grid_bytes` e
+`close_grid_bytes`; le porte della versione 1 la rifiutano con `Unserved`, e
+viceversa. `open_grid_bytes` riceve `surface`, `doc`, `journal` e `base`: la
+shell non trasporta i byte, ma il diario canonico delle celle cambiate (il
+testo della sessione documento) e la revisione dei byte da cui parte. L'host
+legge il documento, controlla che il formato sia quello della superficie
+(`BadArgs` altrimenti) e risponde `Conflict` se i byte non sono più quelli di
+`base`. La sessione è un `GridBytesSession` (fogli, foglio attivo, fogli
+nascosti, avvisi `GridNotice` e celle in conflitto); la finestra è un
+`GridBytesWindow`, la cui cella porta `GridValue`, blocco, `stale` e
+`conflict`. Il commit è un `GridCommit` che sostituisce il diario intero.
+
 Il provider verifica il limite sorgente di 16 MiB e misura la risposta JSON,
 compreso l'envelope, entro 8 MiB prima di materializzare il valore JSON.
 Disabilitare il bundle ritira la route di valutazione: la query restituisce
