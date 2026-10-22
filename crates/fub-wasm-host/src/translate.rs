@@ -966,9 +966,81 @@ pub(crate) fn from_grid_bytes_session(
             })
             .collect(),
         conflicts: session.conflicts.into_iter().map(from_grid_key).collect(),
+        commands: session
+            .commands
+            .into_iter()
+            .map(from_grid_command_state)
+            .collect(),
     };
     session.validate()?;
     Ok(session)
+}
+
+fn from_grid_command_state(state: w_grid_bytes::GridCommandState) -> fub_abi::GridCommandState {
+    fub_abi::GridCommandState {
+        id: state.id,
+        enabled: state.enabled,
+        reason: state.reason,
+    }
+}
+
+pub(crate) fn to_grid_selection(selection: &fub_abi::GridSelection) -> w_grid_bytes::GridSelection {
+    w_grid_bytes::GridSelection {
+        sheet: selection.sheet.clone(),
+        selection: selection.selection.clone(),
+        active: selection.active.clone(),
+    }
+}
+
+pub(crate) fn to_grid_command_request(
+    request: &fub_abi::GridCommandRequest,
+) -> w_grid_bytes::GridCommandRequest {
+    let command = &request.command;
+    w_grid_bytes::GridCommandRequest {
+        revision: to_grid_revision(&request.revision),
+        command: w_grid_bytes::GridCommand {
+            id: command.id.clone(),
+            params: command.params.clone(),
+            sheet: command.sheet.clone(),
+            selection: command.selection.clone(),
+            active: command.active.clone(),
+        },
+    }
+}
+
+pub(crate) fn from_grid_catalog(
+    commands: Vec<w_grid_bytes::GridCommandState>,
+) -> Result<Vec<fub_abi::GridCommandState>, PluginError> {
+    let commands: Vec<_> = commands.into_iter().map(from_grid_command_state).collect();
+    fub_abi::validate_grid_catalog(&commands)?;
+    Ok(commands)
+}
+
+pub(crate) fn from_grid_command_outcome(
+    outcome: w_grid_bytes::GridCommandOutcome,
+) -> Result<fub_abi::GridCommandOutcome, PluginError> {
+    let outcome = fub_abi::GridCommandOutcome {
+        commit: from_grid_commit(outcome.commit)?,
+        sheets: outcome.sheets.into_iter().map(from_grid_sheet).collect(),
+        hidden: outcome.hidden,
+        selection: fub_abi::GridSelection {
+            sheet: outcome.selection.sheet,
+            selection: outcome.selection.selection,
+            active: outcome.selection.active,
+        },
+        result: outcome.result,
+        dialog: outcome.dialog.map(|dialog| fub_abi::GridDialog {
+            id: dialog.id,
+            params: dialog.params,
+        }),
+        commands: outcome
+            .commands
+            .into_iter()
+            .map(from_grid_command_state)
+            .collect(),
+    };
+    outcome.validate()?;
+    Ok(outcome)
 }
 
 fn from_grid_bytes_value(value: w_grid_bytes::GridValue) -> fub_abi::GridValue {

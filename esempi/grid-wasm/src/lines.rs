@@ -18,8 +18,8 @@ use fub_abi::grid::GridCellKey as AbiKey;
 use fub_abi::{grid_bytes_revision, grid_journal_match, GridJournal, GridJournalMatch};
 
 use crate::exports::fub::abi::grid_bytes::{
-    GridBytesCell, GridBytesSession, GridBytesWindow, GridNotice, GridValue,
-    Guest as GridBytesGuest,
+    GridBytesCell, GridBytesSession, GridBytesWindow, GridCommandOutcome, GridCommandRequest,
+    GridCommandState, GridNotice, GridSelection, GridValue, Guest as GridBytesGuest,
 };
 use crate::fub::abi::grid::{
     GridApplyRequest, GridCellKey, GridCellStyle, GridColumn, GridCommit, GridInvalidation,
@@ -191,6 +191,7 @@ impl GridBytesGuest for Component {
                 count: lines.lines.len() as u32,
             }],
             conflicts: lines.conflicts(),
+            commands: Vec::new(),
         };
         state.sessions.insert(instance, lines);
         Ok(result)
@@ -326,6 +327,26 @@ impl GridBytesGuest for Component {
             },
             invalidation: GridInvalidation::Cells(changed),
         })
+    }
+
+    /// L'esempio modifica soltanto con le patch: il catalogo è vuoto.
+    fn commands(
+        instance: String,
+        _selection: GridSelection,
+    ) -> Result<Vec<GridCommandState>, PluginError> {
+        session(&instance)?;
+        Ok(Vec::new())
+    }
+
+    fn command(
+        instance: String,
+        request: GridCommandRequest,
+    ) -> Result<GridCommandOutcome, PluginError> {
+        session(&instance)?;
+        Err(bad(format!(
+            "grid command `{}` is not served",
+            request.command.id
+        )))
     }
 
     fn bytes_to_write(instance: String, expected: String) -> Result<Vec<u8>, PluginError> {

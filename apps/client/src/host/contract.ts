@@ -1261,6 +1261,61 @@ export interface GridBytesSession {
   notices: GridNotice[];
   /** Le voci del giornale che i byte non confermano. */
   conflicts: GridCellKey[];
+  /** I comandi che la sessione serve (ADR 0219): vuoto per un provider che modifica soltanto con le patch. */
+  commands: GridCommandState[];
+}
+
+/** Il foglio, gli intervalli A1 separati da virgola e la cella attiva. */
+export interface GridSelection {
+  sheet: string;
+  selection: string;
+  active: string;
+}
+
+/** Un comando del catalogo; spento, porta il perché nel testo del provider. */
+export interface GridCommandState {
+  id: string;
+  enabled: boolean;
+  reason: string | null;
+}
+
+/**
+ * Un comando del giornale (`GridCommand`): l'id del comando del provider, i
+ * parametri come testo di un oggetto JSON e la selezione su cui è stato dato.
+ */
+export interface GridCommand {
+  id: string;
+  params: string;
+  sheet: string;
+  selection: string;
+  active: string;
+}
+
+/** Un comando da dare alla sessione alla sua revisione. */
+export interface GridCommandRequest {
+  revision: string;
+  command: GridCommand;
+}
+
+/** Una finestra di dialogo che il comando chiede alla shell, con i parametri come testo JSON. */
+export interface GridDialog {
+  id: string;
+  params: string;
+}
+
+/**
+ * L'esito di un comando: `commit.edit` è il diff del giornale (vuoto se la
+ * cartella non cambia), poi i fogli, la selezione nuova, il risultato come
+ * testo JSON, la finestra chiesta e il catalogo sulla selezione nuova.
+ */
+export interface GridCommandOutcome {
+  commit: GridCommit;
+  sheets: GridSheet[];
+  hidden: string[];
+  selection: GridSelection;
+  result: string | null;
+  dialog: GridDialog | null;
+  commands: GridCommandState[];
 }
 
 /** Un errore porta il suo testo (`#N/A`, `#DIV/0!`): ogni formato ha i suoi. */

@@ -40,7 +40,10 @@ use fub_abi::settings::{SettingScope, SettingValue};
 use fub_abi::theme::ThemeLight;
 use fub_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
-use fub_abi::{GridBytesSession, GridBytesWindow, Notice, PluginError};
+use fub_abi::{
+    GridBytesSession, GridBytesWindow, GridCommandOutcome, GridCommandRequest, GridCommandState,
+    GridSelection, Notice, PluginError,
+};
 use fub_host::{doc_id, document_text, Delivery, DocumentText, EventSink, Host};
 use fub_wasm_host::catalog::{CatalogEntry, CatalogError, CatalogTrust, SignedFeed};
 use fub_wasm_host::installed::Consent;
@@ -703,6 +706,30 @@ fn apply_grid_bytes(
     vault: Option<String>,
 ) -> Result<GridCommit, PluginError> {
     host.grid_bytes_apply(vault.as_deref(), &surface, &instance, request)
+}
+
+/// Il catalogo dei comandi di una sessione grid sulla selezione.
+#[tauri::command]
+fn grid_bytes_commands(
+    host: State<Host>,
+    surface: String,
+    instance: String,
+    selection: GridSelection,
+    vault: Option<String>,
+) -> Result<Vec<GridCommandState>, PluginError> {
+    host.grid_bytes_commands(vault.as_deref(), &surface, &instance, selection)
+}
+
+/// Un comando del catalogo (ADR 0219): l'esito porta il diff del giornale.
+#[tauri::command]
+fn grid_bytes_command(
+    host: State<Host>,
+    surface: String,
+    instance: String,
+    request: GridCommandRequest,
+    vault: Option<String>,
+) -> Result<GridCommandOutcome, PluginError> {
+    host.grid_bytes_command(vault.as_deref(), &surface, &instance, request)
 }
 
 #[tauri::command]
@@ -2616,6 +2643,8 @@ pub fn run() {
             open_grid_bytes,
             grid_bytes_window,
             apply_grid_bytes,
+            grid_bytes_commands,
+            grid_bytes_command,
             close_grid_bytes,
             write_document,
             save_draft,

@@ -43,7 +43,8 @@
         "count": 1
       }
     ],
-    "conflicts": []
+    "conflicts": [],
+    "commands": []
   },
   "windows": [
     {
@@ -3434,7 +3435,8 @@
           "row": "r1",
           "column": "c1"
         }
-      ]
+      ],
+      "commands": []
     },
     "window": {
       "revision": "sha256:fecef535bd6d2387a3210507249adfb5fdcf5d6d33c21c7904af7a161f3fb3a0",
