@@ -16,6 +16,7 @@ use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::model::DocId;
 use fub_abi::PluginError;
 use fub_format_xlsx::projection::{NoticeKind, Projection};
+use fub_host::resources::ResourceWrite;
 use fub_host::Host;
 
 struct Vault {
@@ -180,6 +181,32 @@ fn una_cartella_non_si_scrive_e_il_file_resta() {
         "{created:?}"
     );
     assert!(!vault.root.join("Nuova.xlsx").exists());
+#[test]
+fn i_byte_della_shell_non_coprono_una_cartella_ma_ne_creano_una() {
+    let vault = Vault::with(&[("Conti.xlsx", &conti())]);
+    let id = DocId::new("Conti.xlsx");
+    let before = vault.on_disk("Conti.xlsx");
+    let revision = Revision::of_bytes(&before);
+    let written = vault
+        .host
+        .resource_write(None, &id, b"{\"version\":1}", Some(revision));
+    let Err(PluginError::PermissionDenied(message)) = &written else {
+        panic!("{written:?}");
+    };
+    assert_eq!(
+        message.as_message().map(|m| m.key.as_str()),
+        Some("host.xlsx.readonly")
+    );
+    assert_eq!(vault.on_disk("Conti.xlsx"), before);
+    // Una cartella nuova, scaricata o incollata, si deposita come ogni file.
+    let created = vault
+        .host
+        .resource_write(None, &DocId::new("Copia.xlsx"), &before, None)
+        .unwrap();
+    assert_eq!(created.revision, Revision::of_bytes(&before));
+    assert_eq!(vault.on_disk("Copia.xlsx"), before);
+}
+
     assert_eq!(
         std::fs::read_to_string(vault.root.join("Nota.md")).unwrap(),
         "# Nota\n"

@@ -4514,6 +4514,14 @@ impl crate::resources::ResourceWrite for Host {
         expected: Option<Revision>,
     ) -> Result<crate::resources::ResourceWriteReceipt, PluginError> {
         let id = doc_id(id.as_str())?;
+        // La shell scrive una cartella di Excel soltanto creandola: coprirne
+        // una con dei byte suoi aggirerebbe la sola lettura.
+        if expected.is_some() {
+            let format = self.read_workspace(vault, |workspace| Ok(workspace.format_of(&id)))?;
+            if crate::workbook::is_workbook(format.as_ref()) {
+                return Err(crate::workbook::read_only(&id));
+            }
+        }
         let revision = self.write_document_bytes(vault, &id, bytes, expected)?;
         Ok(crate::resources::ResourceWriteReceipt { id, revision })
     }
