@@ -6,9 +6,13 @@ use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
 use fub_abi::edit::Revision;
-use fub_abi::grid::{GridApplyRequest, GridCommit, GridSheet, GridSurfaceSpec, GridWindowRequest};
+use fub_abi::grid::{
+    GridApplyRequest, GridCommit, GridInvalidation, GridSheet, GridSourceEdit, GridSurfaceSpec,
+    GridWindowRequest,
+};
 use fub_abi::{
-    grid_bytes_revision, GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal,
+    grid_bytes_revision, GridBytesProvider, GridBytesSession, GridBytesWindow, GridCommand,
+    GridCommandOutcome, GridCommandRequest, GridCommandState, GridJournal, GridSelection,
     PluginError,
 };
 use fub_kernel::workspace::PreparedRegistration;
@@ -41,6 +45,8 @@ struct Bytes {
     calls: Arc<Mutex<Calls>>,
     revision: Option<Revision>,
     written: Vec<u8>,
+    outcome: Option<GridCommandOutcome>,
+    catalog: Vec<GridCommandState>,
 }
 
 impl Bytes {
@@ -49,6 +55,8 @@ impl Bytes {
             calls: Arc::clone(calls),
             revision: None,
             written: b"PK".to_vec(),
+            outcome: None,
+            catalog: Vec::new(),
         }
     }
 }
@@ -82,6 +90,7 @@ impl GridBytesProvider for Bytes {
             hidden: Vec::new(),
             notices: Vec::new(),
             conflicts: Vec::new(),
+            commands: Vec::new(),
         })
     }
 
@@ -99,6 +108,24 @@ impl GridBytesProvider for Bytes {
         _request: GridApplyRequest,
     ) -> Result<GridCommit, PluginError> {
         Err(PluginError::NotFound("modifica non implementata".into()))
+    }
+
+    fn commands(
+        &mut self,
+        _instance: &str,
+        _selection: GridSelection,
+    ) -> Result<Vec<GridCommandState>, PluginError> {
+        Ok(self.catalog.clone())
+    }
+
+    fn command(
+        &mut self,
+        _instance: &str,
+        _request: GridCommandRequest,
+    ) -> Result<GridCommandOutcome, PluginError> {
+        self.outcome
+            .clone()
+            .ok_or_else(|| PluginError::BadArgs("comando non servito".into()))
     }
 
     fn bytes_to_write(
@@ -255,4 +282,119 @@ fn le_risposte_malformate_non_arrivano_a_chi_chiama() {
         Err(PluginError::BadArgs(_))
     ));
     assert_eq!(calls.lock().unwrap().opened, opened);
+}
+
+fn selection() -> GridSelection {
+    GridSelection {
+        sheet: "s1".into(),
+        selection: "A1".into(),
+        active: "A1".into(),
+    }
+}
+
+fn outcome(revision: &str, inserted: &str) -> GridCommandOutcome {
+    GridCommandOutcome {
+        commit: GridCommit {
+            revision: Revision(revision.into()),
+            edit: GridSourceEdit {
+                from: 0,
+                to: 0,
+                deleted: String::new(),
+                inserted: inserted.into(),
+            },
+            invalidation: GridInvalidation::All,
+        },
+        sheets: vec![GridSheet {
+            id: "s1".into(),
+            name: "Foglio".into(),
+            row_count: 1,
+            column_count: 1,
+        }],
+        hidden: Vec::new(),
+        selection: selection(),
+        result: None,
+        dialog: None,
+        commands: Vec::new(),
+    }
+}
+
+fn request(id: &str) -> GridCommandRequest {
+    GridCommandRequest {
+        revision: Revision("r1".into()),
+        command: GridCommand {
+            id: id.into(),
+            params: "{}".into(),
+            sheet: "s1".into(),
+            selection: "A1".into(),
+            active: "A1".into(),
+        },
+    }
+}
+
+#[test]
+fn un_comando_porta_avanti_la_revisione_soltanto_se_cambia_il_giornale() {
+    let calls = Arc::new(Mutex::new(Calls::default()));
+    let call = |outcome: Option<GridCommandOutcome>, catalog: Vec<GridCommandState>| {
+        let (dir, mut ws) = workspace();
+        let mut provider = Bytes::new(&calls);
+        provider.outcome = outcome;
+        provider.catalog = catalog;
+        register(
+            &mut ws,
+            PreparedRegistration::grid_bytes(Box::new(provider)).expect("valid"),
+        );
+        (
+            dir,
+            ws.prepare_grid_bytes_call("prova.bytes").expect("served"),
+        )
+    };
+    // Un comando che non cambia la cartella resta alla revisione; uno che la
+    // cambia va avanti.
+    let (_a, same) = call(Some(outcome("r1", "")), Vec::new());
+    assert!(same.command("uno", request("edit.copy")).is_ok());
+    let (_b, moved) = call(Some(outcome("r2", "x")), Vec::new());
+    assert!(moved.command("uno", request("home.bold")).is_ok());
+    // Una revisione che non segue il diff è una risposta malformata.
+    let (_c, stuck) = call(Some(outcome("r1", "x")), Vec::new());
+    assert!(matches!(
+        stuck.command("uno", request("home.bold")),
+        Err(PluginError::Internal(_))
+    ));
+    let (_d, jumped) = call(Some(outcome("r2", "")), Vec::new());
+    assert!(matches!(
+        jumped.command("uno", request("edit.copy")),
+        Err(PluginError::Internal(_))
+    ));
+    // Una richiesta malformata non arriva al provider; un comando non servito
+    // resta il rifiuto del provider.
+    let mut bad = request("home.bold");
+    bad.command.params = "[]".into();
+    assert!(matches!(
+        same.command("uno", bad),
+        Err(PluginError::BadArgs(_))
+    ));
+    let (_e, unserved) = call(None, Vec::new());
+    assert!(matches!(
+        unserved.command("uno", request("home.bold")),
+        Err(PluginError::BadArgs(_))
+    ));
+    // Un catalogo con un id due volte, o un perché su un comando acceso, non
+    // esce.
+    let state = |id: &str, enabled: bool, reason: Option<&str>| GridCommandState {
+        id: id.into(),
+        enabled,
+        reason: reason.map(str::to_owned),
+    };
+    let (_f, twice) = call(None, vec![state("a", true, None), state("a", true, None)]);
+    assert!(matches!(
+        twice.commands("uno", selection()),
+        Err(PluginError::Internal(_))
+    ));
+    let (_g, reasoned) = call(None, vec![state("a", true, Some("perché"))]);
+    assert!(matches!(
+        reasoned.commands("uno", selection()),
+        Err(PluginError::Internal(_))
+    ));
+    let (_h, fine) = call(None, vec![state("a", false, Some("perché"))]);
+    assert_eq!(fine.commands("uno", selection()).unwrap().len(), 1);
 }

@@ -111,12 +111,15 @@ pub use grid::{
     MAX_GRID_SESSION_WINDOWS, MAX_GRID_WINDOW_CELLS, MAX_GRID_WINDOW_COLUMNS, MAX_GRID_WINDOW_ROWS,
 };
 pub use grid_bytes::{
-    grid_bytes_revision, grid_journal_match, GridBytesCell, GridBytesProvider, GridBytesSession,
-    GridBytesWindow, GridCommand, GridJournal, GridJournalEntry, GridJournalMatch, GridNotice,
-    GridValue, GRID_BYTES_PROTOCOL_VERSION, GRID_COMMAND_JOURNAL_VERSION, GRID_JOURNAL_VERSION,
-    MAX_GRID_BYTES_SOURCE, MAX_GRID_COMMAND_JOURNAL_BYTES, MAX_GRID_COMMAND_PARAMS_BYTES,
-    MAX_GRID_ID_BYTES, MAX_GRID_JOURNAL_COMMANDS, MAX_GRID_JOURNAL_ENTRIES,
-    MAX_GRID_JOURNAL_INPUT_BYTES, MAX_GRID_NOTICES, MAX_GRID_SELECTION_BYTES,
+    grid_bytes_revision, grid_journal_match, validate_grid_catalog, GridBytesCell,
+    GridBytesProvider, GridBytesSession, GridBytesWindow, GridCommand, GridCommandOutcome,
+    GridCommandRequest, GridCommandState, GridDialog, GridJournal, GridJournalEntry,
+    GridJournalMatch, GridNotice, GridSelection, GridValue, GRID_BYTES_PROTOCOL_VERSION,
+    GRID_COMMAND_JOURNAL_VERSION, GRID_JOURNAL_VERSION, MAX_GRID_BYTES_SOURCE,
+    MAX_GRID_CATALOG_COMMANDS, MAX_GRID_COMMAND_JOURNAL_BYTES, MAX_GRID_COMMAND_PARAMS_BYTES,
+    MAX_GRID_COMMAND_REASON_BYTES, MAX_GRID_COMMAND_RESULT_BYTES, MAX_GRID_ID_BYTES,
+    MAX_GRID_JOURNAL_COMMANDS, MAX_GRID_JOURNAL_ENTRIES, MAX_GRID_JOURNAL_INPUT_BYTES,
+    MAX_GRID_NOTICES, MAX_GRID_SELECTION_BYTES,
 };
 pub use locale::{HourCycle, Locale, Weekday};
 pub use model::Payload;

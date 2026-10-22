@@ -69,11 +69,14 @@ del file.
 La versione 2 della famiglia `grid` cresce, senza toccare un WIT congelato:
 
 - la sessione porta il **catalogo** dei comandi serviti, con lo stato acceso
-  o spento e il motivo;
-- `apply` riceve, accanto alle patch, una **richiesta di comando**: l'id, i
+  o spento e il motivo, e `commands` lo ridà su una selezione;
+- `command`, accanto ad `apply`, riceve una **richiesta di comando**: l'id, i
   parametri come oggetto JSON (fino a 64 KiB) e la selezione; l'esito porta il
-  diff del giornale, l'invalidazione, la selezione nuova, il risultato del
-  comando (per esempio il testo copiato) e il catalogo aggiornato;
+  diff del giornale con l'invalidazione, i fogli, la selezione nuova, il
+  risultato del comando (per esempio il testo copiato), la finestra di dialogo
+  che il comando chiede e il catalogo aggiornato. Lo stato premuto di un
+  comando (grassetto, allineamento) la shell lo legge dallo stile della cella
+  attiva, non dal catalogo;
 - la finestra porta lo stile completo della cella, le unioni, la
   formattazione condizionale già risolta, i commenti e i collegamenti; il
   foglio porta i riquadri bloccati, la griglia, le intestazioni, lo zoom e
@@ -142,6 +145,8 @@ che il codec non conserva non si modificherebbe affatto.
   comandi, i limiti, celle e comandi mai insieme, il rebase sul prefisso
   salvato; il mirror `apps/client/src/state/grid-journal.ts` con la fixture
   `GridJournalRebase`;
+- `crates/fub-kernel/tests/grid_bytes.rs`: un catalogo malformato e una
+  revisione che non segue il diff non escono dall'host;
 - `vendor/gridcraft/crates/engine/src/tests.rs`: una cartella aperta senza
   ricalcolo tiene i valori del file finché una modifica non li raggiunge;
 - i test di `fub-format-xlsx` sul giornale di comandi, sul sottoinsieme

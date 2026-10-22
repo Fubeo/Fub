@@ -85,6 +85,7 @@ function bytesHost(plan: Plan = {}) {
         hidden: [],
         notices: [],
         conflicts: [],
+        commands: [],
       };
     },
     gridBytesWindow: async (_surface, instance, request) => {
@@ -142,6 +143,10 @@ function bytesHost(plan: Plan = {}) {
         edit: { from: 0, to: new TextEncoder().encode(deleted).length, deleted, inserted: journal },
         invalidation: { kind: "cells", cells: [...request.patches.map((patch) => patch.cell), ...(plan.invalidated ?? [])] },
       };
+    },
+    gridBytesCommands: async () => [],
+    gridBytesCommand: async (_surface, _instance, request) => {
+      throw { kind: "bad_args", message: `grid command \`${request.command.id}\` is not served` } satisfies PluginError;
     },
     closeGridBytes: async (_surface, instance) => {
       calls.push("close");
@@ -682,6 +687,10 @@ function workbookHost(options: { readonly base?: () => string } = {}) {
         invalidation: { kind: "cells", cells: request.patches.map((patch) => patch.cell) },
       };
       return commit;
+    },
+    gridBytesCommands: async () => [],
+    gridBytesCommand: async (_surface, _instance, request) => {
+      throw { kind: "bad_args", message: `grid command \`${request.command.id}\` is not served` } satisfies PluginError;
     },
     closeGridBytes: async (_surface, instance) => {
       calls.push("close");

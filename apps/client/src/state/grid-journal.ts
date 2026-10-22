@@ -15,7 +15,9 @@
 // JSON che nessuno riscrive. Gli id sono ASCII stampabile, così l'ordine di
 // JavaScript è quello di Rust, e `JSON.stringify` scrive gli stessi byte di
 // `serde_json`.
-import type { GridCellKey } from "../host/contract";
+import type { GridCellKey, GridCommand } from "../host/contract";
+
+export type { GridCommand };
 
 export const GRID_JOURNAL_VERSION = 1;
 export const GRID_COMMAND_JOURNAL_VERSION = 2;
@@ -42,18 +44,6 @@ export interface GridJournalEntry {
   /// L'input che la cella ha nei byte su cui il giornale si applica.
   readonly before: string;
   readonly after: string;
-}
-
-/// Un comando del giornale, come `GridCommand`: l'id del comando del
-/// provider, i parametri come testo di un oggetto JSON e la selezione su cui è
-/// stato dato (il foglio, gli intervalli A1 separati da virgola, la cella
-/// attiva).
-export interface GridCommand {
-  readonly id: string;
-  readonly params: string;
-  readonly sheet: string;
-  readonly selection: string;
-  readonly active: string;
 }
 
 /// Un giornale valido: le voci in ordine di chiave, oppure i comandi in

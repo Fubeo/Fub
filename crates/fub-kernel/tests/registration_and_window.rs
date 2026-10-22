@@ -147,6 +147,7 @@ impl GridBytesProvider for OwnedGrid {
             hidden: Vec::new(),
             notices: Vec::new(),
             conflicts: Vec::new(),
+            commands: Vec::new(),
         })
     }
 

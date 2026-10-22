@@ -5,7 +5,11 @@ import type {
   GridBytesWindow,
   GridCellPatch as GridRequestPatch,
   GridCellStyle as GridBytesStyle,
+  GridCommandOutcome,
+  GridCommandRequest,
+  GridCommandState,
   GridCommit,
+  GridSelection as GridCommandSelection,
   GridSurfaceSpec,
   GridWindowRequest,
 } from "../../host/contract";
@@ -135,6 +139,8 @@ export interface GridHost {
   readonly openGridBytes: (surface: string, doc: string, journal: string, base: string) => Promise<GridBytesSession>;
   readonly gridBytesWindow: (surface: string, instance: string, request: GridWindowRequest) => Promise<GridBytesWindow>;
   readonly applyGridBytes: (surface: string, instance: string, request: GridApplyRequest) => Promise<GridCommit>;
+  readonly gridBytesCommands: (surface: string, instance: string, selection: GridCommandSelection) => Promise<readonly GridCommandState[]>;
+  readonly gridBytesCommand: (surface: string, instance: string, request: GridCommandRequest) => Promise<GridCommandOutcome>;
   readonly closeGridBytes: (surface: string, instance: string) => Promise<void>;
 }
 

@@ -49,6 +49,7 @@ import type {
   DocumentWindowRequest,
   GridBytesSession,
   GridBytesWindow,
+  GridCommandOutcome,
   GridCommit,
   GridSurfaceSpec,
   IndexQuery,
@@ -147,6 +148,9 @@ export interface GridBytesFake {
   /// revisione, se le ha, e altrimenti quelle della sessione.
   windows: GridBytesWindow[];
   commits?: GridCommit[];
+  /// Gli esiti dei comandi, in ordine: senza, il finto rifiuta ogni comando
+  /// come un provider che modifica soltanto con le patch.
+  outcomes?: GridCommandOutcome[];
 }
 
 export interface Options {
@@ -344,6 +348,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
     (gridBytes?.windows ?? []).map((window) => [gridBytesKey(window.revision, window.sheet, window.row_start, window.column_start), window]),
   );
   let gridBytesCommit = 0;
+  let gridBytesOutcome = 0;
   const docs = new Map<string, Document>();
   let known = [...(options.knownVaults ?? [])];
   const trash = new Map<string, Trashed>();
@@ -1370,6 +1375,27 @@ export function createFakeHost(options: Options = {}): FakeHost {
         if (!commit) throw new Error("host fake: grid commit unavailable");
         gridBytesInstances.set(instance, { ...session, revision: commit.revision });
         return commit;
+      })),
+      gridBytesCommands: (_surface, instance, selection) => gate("gridBytesCommands", [instance, selection], Promise.resolve().then(() => {
+        const session = gridBytesInstances.get(instance);
+        if (!session) throw new Error("host fake: grid session closed");
+        return session.commands;
+      })),
+      gridBytesCommand: (_surface, instance, request) => gate("gridBytesCommand", [instance, request], Promise.resolve().then(() => {
+        const session = gridBytesInstances.get(instance);
+        if (!session) throw new Error("host fake: grid session closed");
+        const outcome = gridBytes?.outcomes?.[gridBytesOutcome++];
+        if (!outcome) {
+          throw { kind: "bad_args", message: `host fake: grid command \`${request.command.id}\` is not served` } satisfies PluginError;
+        }
+        gridBytesInstances.set(instance, {
+          ...session,
+          revision: outcome.commit.revision,
+          sheets: outcome.sheets,
+          hidden: outcome.hidden,
+          commands: outcome.commands,
+        });
+        return outcome;
       })),
       closeGridBytes: (_surface, instance) => gate("closeGridBytes", [instance], Promise.resolve().then(() => {
         if (!gridBytesInstances.delete(instance)) {
