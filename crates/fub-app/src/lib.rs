@@ -479,9 +479,7 @@ where
 {
     tauri::async_runtime::spawn_blocking(move || work(&app.state::<Host>()))
         .await
-        .map_err(|error| {
-            PluginError::Internal(format!("document operation did not complete: {error}").into())
-        })?
+        .map_err(|error| unfinished("document", error))?
 }
 
 #[tauri::command]
