@@ -386,3 +386,134 @@ fn una_cartella_cifrata_o_un_file_che_non_lo_è_si_dicono() {
         Some("host.xlsx.encrypted")
     );
 }
+
+/// Un `.fubsheet` di un foglio: un numero, una formula che lo legge e una
+/// funzione che Fub non ha.
+const BILANCIO: &str = r#"{"version":1,"sheets":[{"id":"a","name":"Conti","rows":[{"id":"x"},{"id":"y"}],"columns":[{"id":"p"},{"id":"q"}],"cells":[{"row":"x","column":"p","input":"Entrate"},{"row":"x","column":"q","input":"800"},{"row":"y","column":"q","input":"=B1*2"},{"row":"y","column":"p","input":"=CONCAT(\"a\";\"b\")"}]}]}"#;
+
+/// L'esito del prossimo job di trasferimento finito.
+fn transfer_done(events: &fub_kernel::bus::Subscription) -> Result<serde_json::Value, PluginError> {
+    loop {
+        let notice = events
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .expect("the job ends");
+        if let fub_abi::Event::JobDone { job, result, .. } = notice.event {
+            if job == "import.transfer" {
+                return result;
+            }
+        }
+    }
+}
+
+#[test]
+fn la_copia_in_excel_di_un_fubsheet_si_apre_nella_griglia_e_il_foglio_resta() {
+    let vault = Vault::with(&[("Bilancio.fubsheet", BILANCIO.as_bytes())]);
+    let events = vault.host.subscribe(None).unwrap();
+    let outcome = vault
+        .host
+        .invoke_user_command(
+            None,
+            "xlsx.export-copy",
+            serde_json::json!({"doc": "Bilancio.fubsheet"}),
+            fub_abi::InvokeMode::Apply,
+        )
+        .expect("the command queues the export");
+    assert!(
+        format!("{:?}", outcome.notify).contains("export.run queued"),
+        "{outcome:?}"
+    );
+    let report: fub_abi::transfer::ExportReport =
+        serde_json::from_value(transfer_done(&events).expect("the export runs")).unwrap();
+    assert_eq!(report.artifacts.len(), 1);
+    let artifact = &report.artifacts[0];
+    assert_eq!(artifact.path, "Bilancio.xlsx");
+    assert_eq!(artifact.media_type, fub_format_xlsx::export::MEDIA_TYPE);
+    // La funzione che Fub non ha è l'unico avviso, con la cella.
+    let warnings: Vec<&str> = report
+        .log
+        .iter()
+        .filter(|note| note.level == fub_abi::transfer::NoteLevel::Warning)
+        .map(|note| note.message.as_str())
+        .collect();
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(warnings[0].contains("Conti!A2"), "{warnings:?}");
+    assert!(report
+        .log
+        .iter()
+        .all(|note| note.entry.as_deref() == Some("Bilancio.fubsheet")));
+    assert_eq!(vault.on_disk("Bilancio.fubsheet"), BILANCIO.as_bytes());
+
+    // La copia posata nel vault è una cartella come le altre.
+    std::fs::write(
+        vault.root.join("Bilancio.xlsx"),
+        artifact.as_bytes().unwrap(),
+    )
+    .unwrap();
+    vault.host.wait_indexed(None).expect("indexed");
+    let cells = on_disk_cells(&vault, &DocId::new("Bilancio.xlsx"));
+    let b2 = cell(&cells, 1, 1);
+    assert_eq!(
+        (b2.input.as_str(), &b2.value),
+        ("=B1*2", &GridValue::Number(1600.0))
+    );
+    assert_eq!(cell(&cells, 0, 0).value, GridValue::Text("Entrate".into()));
+}
+
+#[test]
+fn una_nota_o_una_cartella_non_si_copiano_in_excel() {
+    let vault = Vault::with(&[("Conti.xlsx", &conti())]);
+    for doc in ["Nota.md", "Conti.xlsx"] {
+        let refused = vault.host.invoke_user_command(
+            None,
+            "xlsx.export-copy",
+            serde_json::json!({ "doc": doc }),
+            fub_abi::InvokeMode::Apply,
+        );
+        assert!(
+            matches!(refused, Err(PluginError::BadArgs(_))),
+            "{doc}: {refused:?}"
+        );
+    }
+}
+
+#[test]
+fn spento_il_bundle_la_copia_in_excel_sparisce() {
+    let vault = Vault::with(&[("Bilancio.fubsheet", BILANCIO.as_bytes())]);
+    let commands = |vault: &Vault| -> Vec<String> {
+        vault
+            .host
+            .commands(None)
+            .unwrap()
+            .into_iter()
+            .map(|spec| spec.id)
+            .filter(|id| id == "xlsx.export-copy")
+            .collect()
+    };
+    assert_eq!(commands(&vault), ["xlsx.export-copy"]);
+    let errors = vault
+        .host
+        .set_plugin_enabled(None, "fub.xlsx", false)
+        .expect("the bundle unmounts");
+    assert!(errors.is_empty(), "{errors:?}");
+    assert!(commands(&vault).is_empty());
+    let request = fub_abi::transfer::ExportRequest::new(
+        fub_format_xlsx::export::TARGET,
+        fub_abi::transfer::ExportSelection::Documents(vec![DocId::new("Bilancio.fubsheet")]),
+    );
+    let refused = vault.host.invoke_user_command(
+        None,
+        "export.run",
+        serde_json::json!({"request_json": serde_json::to_string(&request).unwrap()}),
+        fub_abi::InvokeMode::DryRun,
+    );
+    assert!(
+        matches!(refused, Err(PluginError::BadArgs(_))),
+        "{refused:?}"
+    );
+    // Il foglio si apre come prima: il formato non è del bundle.
+    let (text, _) = vault
+        .host
+        .read_document(None, &DocId::new("Bilancio.fubsheet"))
+        .unwrap();
+    assert_eq!(text, BILANCIO);
+}
