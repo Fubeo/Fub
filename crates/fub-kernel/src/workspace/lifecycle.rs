@@ -2,7 +2,7 @@
 
 use super::*;
 
-type RetiredGridProvider = Arc<SharedShelter<Box<dyn fub_abi::grid::GridProvider>>>;
+type RetiredGridProvider = crate::providers::SharedGrid;
 
 /// Provider già ritirati dal kernel. Il proprietario li distrugge fuori guard;
 /// un disposer difettoso non impedisce il rilascio degli altri.
