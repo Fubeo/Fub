@@ -64,7 +64,7 @@ import {
   type GridRange,
 } from "./merges";
 import { hasBorders, horizontalOf, iconOf, paintBorders, paintCell, spills } from "./paint";
-import { currencyFormat, shortcutCommand } from "./shortcuts";
+import { currencyFormat, shortcutCommand, shortcutDialog } from "./shortcuts";
 import {
   cellKey,
   decimalSeparator,
@@ -103,7 +103,14 @@ const NOT_SHOWN_KEYS: Readonly<Record<string, Key>> = {
 /// Il comando con cui una formula, o un input, entra in una sessione a comandi.
 const SET_VALUES = "range.setValues";
 /// I comandi del catalogo che soltanto leggono, e che `query` può chiedere.
-const QUERIES: ReadonlySet<string> = new Set(["formulas.functions", "formulas.recentlyUsed"]);
+const QUERIES: ReadonlySet<string> = new Set([
+  "formulas.functions",
+  "formulas.recentlyUsed",
+  "formulas.nameManager",
+  "formulas.evaluate",
+  "cell.get",
+  "home.manageRules",
+]);
 const UNDO = "edit.undo";
 const REDO = "edit.redo";
 /// Perché una cella non si modifica, per codice di blocco.
@@ -200,6 +207,12 @@ export interface GridChange {
   readonly operation: TextOperation;
   readonly origin: EditorChangeOrigin;
 }
+
+/// Come è andato un comando dato con `GridEngine.run`: il risultato come
+/// testo JSON, o la ragione del rifiuto (`null`: non è arrivato).
+export type GridRun =
+  | { readonly ok: true; readonly result: string | null }
+  | { readonly ok: false; readonly error: string | null };
 
 /**
  * La griglia di una cartella di Excel: il testo della sessione è il giornale
@@ -562,7 +575,11 @@ export class GridEngine {
   }
 
   focus(): void {
-    if (!this.#destroyed) this.#viewport.focus();
+    if (this.#destroyed) return;
+    // Una cella aperta (Inserisci funzione l'ha appena cominciata) tiene il
+    // fuoco nel suo campo: la griglia lo prenderebbe chiudendola.
+    if (this.#editing) (this.#editing.owner === "cell" ? this.#cellEditor : this.#formulaEditor).focus();
+    else this.#viewport.focus();
   }
 
   /** Il testo della selezione da leggere ([`selectionText`]), o `null` oltre il tetto. */
@@ -721,6 +738,51 @@ export class GridEngine {
     return true;
   }
 
+  /// Dà il comando `id` come `command`, e rende come è andato: il risultato
+  /// del provider, o la ragione per cui non l'ha dato. Per le finestre di
+  /// dialogo, che dicono il rifiuto dentro di sé e non in un avviso della
+  /// griglia. `error: null` vuol dire che il comando non è arrivato: la
+  /// cartella è cambiata sotto, o la griglia è stata smontata.
+  run(id: string, params = "{}"): Promise<GridRun> {
+    const state = this.#commands.find((command) => command.id === id);
+    if (!this.#bytes || this.#readOnly || !state) return Promise.resolve({ ok: false, error: null });
+    if (!state.enabled) return Promise.resolve({ ok: false, error: state.reason ?? null });
+    this.#finishEditing(true, "input", false);
+    return new Promise((resolve) => this.#give(id, params, false, resolve));
+  }
+
+  /// Chiede alla shell la finestra `id` (`onDialog`), come la chiederebbe
+  /// un comando: per le finestre che nessun comando del catalogo apre da sé.
+  openDialog(id: string, params = "{}"): boolean {
+    if (!this.commandable() || !this.#options.onDialog) return false;
+    this.#finishEditing(true, "input", false);
+    this.#options.onDialog({ id, params });
+    return true;
+  }
+
+  /// La selezione come la scrive una formula: il nome del foglio,
+  /// l'intervallo e la cella attiva in A1.
+  selectionRefs(): { readonly sheet: string; readonly range: string; readonly active: string } {
+    return {
+      sheet: this.#sheet().name,
+      range: rangeA1(this.#selectedRange()),
+      active: cellA1(this.#selection.focus),
+    };
+  }
+
+  /// I nomi dei fogli della cartella, nell'ordine.
+  sheetNames(): readonly string[] {
+    return this.#shownSession?.sheets.map((sheet) => sheet.name) ?? [];
+  }
+
+  /// L'altezza della riga o la larghezza della colonna `index` del foglio
+  /// mostrato, nei pixel della cartella; `null` se non è letta.
+  lineSize(axis: "row" | "column", index: number): number | null {
+    const sheet = this.#sheet();
+    const size = axis === "row" ? sheet.rows[index]?.height : sheet.columns[index]?.width;
+    return typeof size === "number" && Number.isFinite(size) && size > 0 ? size : null;
+  }
+
   /// Annulla o ripeti del documento, nella sessione a comandi.
   #documentHistory(id: typeof UNDO | typeof REDO): boolean {
     if (!this.#bytes || this.#readOnly || !this.#serves(id)) return false;
@@ -731,7 +793,7 @@ export class GridEngine {
 
   /// Mette in coda il comando `id`: da qui annulla e ripeti sono del
   /// provider, anche prima che risponda.
-  #give(id: string, params: string, history: boolean): void {
+  #give(id: string, params: string, history: boolean, done?: (run: GridRun) => void): void {
     const selection = this.#commandSelection();
     const command: GridCommand = { id, params, ...selection };
     this.#undo = [];
@@ -740,16 +802,31 @@ export class GridEngine {
     const epoch = this.#bytesEpoch;
     const edits = this.#editEpoch;
     const ticket = ++this.#bytesTickets;
+    let settled = false;
+    const finish = (run: GridRun): void => {
+      if (settled) return;
+      settled = true;
+      done?.(run);
+    };
     this.#enqueueProtocol(async () => {
       try {
-        await this.#giveNow(command, history, epoch, edits, ticket);
+        await this.#giveNow(command, history, epoch, edits, ticket, done ? finish : undefined);
       } finally {
         if (epoch === this.#bytesEpoch) this.#pendingCommandMode = Math.max(0, this.#pendingCommandMode - 1);
+        finish({ ok: false, error: null });
       }
     });
   }
 
-  async #giveNow(command: GridCommand, history: boolean, epoch: number, edits: number, ticket: number): Promise<void> {
+  /// Con `done`, il rifiuto va a chi aspetta invece che nell'avviso.
+  async #giveNow(
+    command: GridCommand,
+    history: boolean,
+    epoch: number,
+    edits: number,
+    ticket: number,
+    done?: (run: GridRun) => void,
+  ): Promise<void> {
     const host = this.#options.grid;
     const state = this.#bytes;
     const current = () => !this.#destroyed && epoch === this.#bytesEpoch && edits === this.#editEpoch && this.#bytes === state;
@@ -774,6 +851,10 @@ export class GridEngine {
       if (!current()) return;
       // Niente da annullare o da ripetere non è un errore da dire.
       if (history && isErrorKind(error, "bad_args")) return;
+      if (done) {
+        done({ ok: false, error: errorText(error) });
+        return;
+      }
       this.#refuse(t("grid.workbook.command_failed", { error: errorText(error) }));
       // La transazione del provider non ha cambiato niente: le celle
       // mostrate in anticipo dalle modifiche in coda restano le sue.
@@ -787,6 +868,7 @@ export class GridEngine {
     const last = ticket === this.#bytesTickets;
     if (last) this.#publishJournal(this.#confirmedJournal, "input");
     if (last) this.#adoptSelection(outcome.selection);
+    done?.({ ok: true, result: outcome.result });
     if (outcome.dialog) this.#options.onDialog?.(outcome.dialog);
     if (outcome.commit.edit.from === outcome.commit.edit.to && !outcome.commit.edit.inserted) {
       this.#showView(this.#sheet().id, false);
@@ -2087,14 +2169,21 @@ export class GridEngine {
     }
     if (this.#commands.length && !this.#readOnly) {
       const range = this.#selectedRange();
-      const shortcut = shortcutCommand(event, {
+      const context = {
         wholeRows: range.columnStart === this.#edgeVisible("column", false) && range.columnEnd === this.#edgeVisible("column", true),
         wholeColumns: range.rowStart === this.#edgeVisible("row", false) && range.rowEnd === this.#edgeVisible("row", true),
         currency: currencyFormat(resolvedLanguage()),
-      });
+      };
+      const shortcut = shortcutCommand(event, context);
       if (shortcut) {
         event.preventDefault();
         this.command(shortcut.id, shortcut.params);
+        return;
+      }
+      const asked = this.#options.onDialog ? shortcutDialog(event, context) : null;
+      if (asked) {
+        event.preventDefault();
+        this.openDialog(asked.dialog, asked.params);
         return;
       }
     }

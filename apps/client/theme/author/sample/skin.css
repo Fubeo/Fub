@@ -5771,6 +5771,176 @@ kbd,
   font-size: var(--text-xs);
 }
 
+/* Le finestre del foglio: i campi stretti come nelle finestre di Excel, le
+   sezioni con un filo, gli elenchi su un fondo loro. */
+.grid-dialog,
+.grid-dialog-form,
+.grid-dialog-fields {
+  gap: var(--space-4);
+}
+.grid-dialog-section {
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+.grid-dialog-legend {
+  padding: 0 var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.grid-dialog-choices {
+  gap: var(--space-2);
+}
+.grid-dialog-field {
+  column-gap: var(--space-5);
+  row-gap: var(--space-3);
+}
+.grid-dialog-label {
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.grid-dialog-check,
+.grid-dialog-choice {
+  gap: var(--space-3);
+  min-height: 24px;
+}
+.grid-dialog-check input,
+.grid-dialog-choice input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+.grid-dialog-check:has(> input:disabled),
+.grid-dialog-choice:has(> input:disabled) {
+  opacity: 0.5;
+}
+.grid-dialog-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.grid-dialog-error {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--danger-wash);
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+.grid-dialog-toolbar {
+  gap: var(--space-3);
+}
+.grid-dialog-results {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+}
+.grid-dialog-names-head,
+.grid-dialog-names-row {
+  column-gap: var(--space-4);
+}
+.grid-dialog-names-head {
+  padding: 0 var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+}
+.grid-dialog-signature {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.grid-dialog-color-button {
+  gap: var(--space-3);
+  min-height: var(--control-h);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.grid-dialog-color-button:hover,
+.grid-dialog-color-button[aria-expanded="true"] {
+  border-color: var(--border-strong);
+}
+.grid-dialog-color-chip {
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+}
+.grid-dialog-color-chip--auto {
+  border-style: dashed;
+}
+.grid-dialog-palette {
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  font-size: var(--text-sm);
+}
+.grid-dialog-palette-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+}
+.grid-dialog-palette-grid {
+  gap: 2px;
+}
+.grid-dialog-palette-auto {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.grid-dialog-palette-auto:hover,
+.grid-dialog-palette-auto[aria-pressed="true"] {
+  background: var(--bg-hover);
+}
+.grid-dialog-swatch {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.grid-dialog-swatch[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.grid-dialog-swatch:hover,
+.grid-dialog-swatch:focus-visible,
+.grid-dialog-palette-auto:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+/* L'esempio e le anteprime sono un pezzo di foglio: carta bianca come nella
+   cartella, anche col buio, perché i colori sono quelli del file. */
+.grid-dialog-sample-text,
+.grid-dialog-preview-text,
+.grid-dialog-border-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: #ffffff;
+  color: #000000;
+}
+.grid-dialog-sample-text,
+.grid-dialog-preview-text {
+  padding: var(--space-3) var(--space-4);
+}
+.grid-dialog-border-preview {
+  padding: var(--space-6);
+}
+.grid-dialog-border-cell {
+  font-size: var(--text-sm);
+}
+
 /* ── Il canvas ───────────────────────────────────────────────────────────── */
 
 /* La lavagna è carta: i nodi sono schede posate sopra, staccate da un filo e

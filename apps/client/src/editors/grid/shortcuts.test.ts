@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { currencyFormat, shortcutCommand, type ShortcutContext } from "./shortcuts";
+import { currencyFormat, shortcutCommand, shortcutDialog, type ShortcutContext } from "./shortcuts";
 
 const CELL: ShortcutContext = { wholeRows: false, wholeColumns: false, currency: currencyFormat("it-IT") };
 
@@ -46,5 +46,23 @@ describe("scorciatoie di Excel", () => {
     // Ctrl+Maiusc+«-» è togliere i bordi, non le righe.
     expect(shortcutCommand(key("Minus", { ctrlKey: true, shiftKey: true }), { ...CELL, wholeRows: true }))
       .toEqual({ id: "home.borders", params: JSON.stringify({ preset: "none" }) });
+  });
+
+  it("le scorciatoie delle finestre di Excel chiedono la loro finestra", () => {
+    const asked = (code: string, init: KeyboardEventInit = {}) => shortcutDialog(key(code, init), CELL);
+    expect(asked("Digit1", { ctrlKey: true })).toEqual({ dialog: "formatCells", params: "{}" });
+    expect(asked("KeyF", { ctrlKey: true, shiftKey: true })).toEqual({ dialog: "formatCells", params: JSON.stringify({ tab: "font" }) });
+    expect(asked("KeyH", { metaKey: true })).toEqual({ dialog: "find", params: JSON.stringify({ replace: true }) });
+    expect(asked("F5")).toEqual({ dialog: "goTo", params: "{}" });
+    expect(asked("F3", { shiftKey: true })).toEqual({ dialog: "insertFunction", params: "{}" });
+    expect(asked("F2")).toBeNull();
+    expect(asked("KeyB", { ctrlKey: true })).toBeNull();
+    expect(asked("Digit1", { ctrlKey: true, altKey: true })).toBeNull();
+  });
+
+  it("Ctrl+«+» e Ctrl+«-» su un intervallo chiedono come spostare le celle", () => {
+    expect(shortcutDialog(key("Equal", { ctrlKey: true, shiftKey: true }), CELL)).toEqual({ dialog: "insertCells", params: "{}" });
+    expect(shortcutDialog(key("Minus", { ctrlKey: true }), CELL)).toEqual({ dialog: "deleteCells", params: "{}" });
+    expect(shortcutDialog(key("Minus", { ctrlKey: true }), { ...CELL, wholeRows: true })).toBeNull();
   });
 });

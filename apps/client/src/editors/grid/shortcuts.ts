@@ -3,8 +3,8 @@
 // Si leggono dal tasto fisico (`KeyboardEvent.code`), come fa Excel: su una
 // tastiera italiana Ctrl+Maiusc+5 è la percentuale anche se il tasto scrive
 // «%» soltanto con Maiusc. Annulla, ripeti, gli appunti e lo spostamento
-// restano della griglia; le scorciatoie che in Excel aprono una finestra di
-// dialogo arrivano con le finestre.
+// restano della griglia. Le scorciatoie che in Excel aprono una finestra di
+// dialogo la chiedono alla shell (`shortcutDialog`).
 
 export interface ShortcutCommand {
   readonly id: string;
@@ -59,6 +59,54 @@ const CONTROL_SHIFT: Readonly<Record<string, ShortcutCommand>> = {
   Digit0: plain("home.unhideColumns"),
   KeyL: plain("data.filter"),
 };
+
+/// Una finestra di dialogo da chiedere, con i parametri come testo JSON.
+export interface ShortcutDialog {
+  readonly dialog: string;
+  readonly params: string;
+}
+
+const dialog = (name: string, params: Readonly<Record<string, unknown>> = {}): ShortcutDialog => ({
+  dialog: name,
+  params: JSON.stringify(params),
+});
+
+/// Con Ctrl (o Cmd) e senza Maiusc.
+const CONTROL_DIALOGS: Readonly<Record<string, ShortcutDialog>> = {
+  Digit1: dialog("formatCells"),
+  KeyF: dialog("find"),
+  KeyH: dialog("find", { replace: true }),
+  KeyG: dialog("goTo"),
+  KeyK: dialog("insertLink"),
+  F3: dialog("nameManager"),
+};
+
+/// Con Ctrl (o Cmd) e Maiusc: la scheda Carattere di Formato celle.
+const CONTROL_SHIFT_DIALOGS: Readonly<Record<string, ShortcutDialog>> = {
+  KeyF: dialog("formatCells", { tab: "font" }),
+  KeyP: dialog("formatCells", { tab: "font" }),
+};
+
+/// La finestra della scorciatoia di `event`, o `null`. Ctrl+«+» e Ctrl+«-»
+/// su un intervallo che non prende righe o colonne intere chiedono come
+/// spostare le celle, come in Excel.
+export function shortcutDialog(event: KeyboardEvent, context: ShortcutContext): ShortcutDialog | null {
+  const control = event.ctrlKey || event.metaKey;
+  if (event.altKey) return null;
+  if (!control) {
+    if (event.code === "F5" && !event.shiftKey) return dialog("goTo");
+    if (event.code === "F3" && event.shiftKey) return dialog("insertFunction");
+    if (event.code === "F2" && event.shiftKey) return dialog("note");
+    return null;
+  }
+  const plus = event.code === "NumpadAdd" || (event.shiftKey && event.code === "Equal");
+  const minus = event.code === "NumpadSubtract" || (!event.shiftKey && event.code === "Minus");
+  if (plus || minus) {
+    if (context.wholeRows || context.wholeColumns) return null;
+    return dialog(plus ? "insertCells" : "deleteCells");
+  }
+  return (event.shiftKey ? CONTROL_SHIFT_DIALOGS : CONTROL_DIALOGS)[event.code] ?? null;
+}
 
 /// Il comando della scorciatoia di `event`, o `null`.
 export function shortcutCommand(event: KeyboardEvent, context: ShortcutContext): ShortcutCommand | null {

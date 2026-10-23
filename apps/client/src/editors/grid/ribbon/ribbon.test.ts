@@ -27,6 +27,7 @@ interface Fake {
   engine: RibbonEngine;
   root: HTMLElement;
   calls: [string, unknown][];
+  dialogs: [string, unknown][];
   written: string[];
   focused: number;
   commands: GridCommandState[];
@@ -45,6 +46,7 @@ function fake(): Fake {
   const state: Fake = {
     root,
     calls: [],
+    dialogs: [],
     written: [],
     focused: 0,
     commands: fixture.session.commands.map((command) => ({ ...command })),
@@ -68,6 +70,10 @@ function fake(): Fake {
     selection: () => ({ focus: state.focus }),
     command: (id, params = "{}") => {
       state.calls.push([id, JSON.parse(params)]);
+      return true;
+    },
+    openDialog: (id, params = "{}") => {
+      state.dialogs.push([id, JSON.parse(params)]);
       return true;
     },
     query: async (id) => (id in state.queries ? JSON.stringify(state.queries[id]) : null),
@@ -188,6 +194,23 @@ describe("la barra multifunzione", () => {
     expect(last()).toEqual(["home.fillColor", { color: { theme: 4, tint: 0.4 } }]);
     control("Colore riempimento").click();
     expect(last()).toEqual(["home.fillColor", { color: { theme: 4, tint: 0.4 } }]);
+  });
+
+  it("apre le finestre invece di dare il comando", () => {
+    control("Tipi di bordo").click();
+    menuItem("Altri bordi…")!.click();
+    expect(f.dialogs).toEqual([["formatCells", { tab: "border" }]]);
+    tab("Dati").click();
+    control("Convalida dati").click();
+    expect(f.dialogs[f.dialogs.length - 1]).toEqual(["dataValidation", {}]);
+    expect(f.calls.some(([id]) => id === "data.validation" || id === "home.formatCells")).toBe(false);
+  });
+
+  it("spegne la finestra con il suo comando", () => {
+    f.commands = f.commands.map((command) => (command.id === "data.sort" ? { ...command, enabled: false, reason: "Il foglio è protetto." } : command));
+    ribbon.refresh();
+    tab("Dati").click();
+    expect((control("Ordina") as HTMLButtonElement).disabled || control("Ordina").getAttribute("aria-disabled") === "true").toBe(true);
   });
 
   it("cambia il carattere dall'elenco", () => {
