@@ -32,7 +32,7 @@ L'interfaccia (`ui-egui`) e il server MCP (`mcp`) non sono copiati.
 | `crates/xlsx/` | `crates/xlsx/` | `src/package.rs` e nove file di `src/tests/` per `zip` 9; `src/ods.rs` per Rust 1.89; `src/sheet_read.rs` e `src/tests/fixtures.rs` per i valori delle matrici; `src/read.rs`, `src/passthrough.rs`, `src/write.rs` e `src/tests/sheet_names.rs` per il `sheetId` del file |
 | `crates/chart/` | `crates/chart/` | nessuna |
 | `crates/pdf/` | `crates/pdf/` | nessuna |
-| `crates/engine/` | `crates/engine/` | `src/lib.rs` e `src/tests.rs`, per aprire senza ricalcolo; `tests/chart_workbook_names.rs` per `zip` 9 |
+| `crates/engine/` | `crates/engine/` | `src/lib.rs` e `src/tests.rs`, per aprire senza ricalcolo; `src/lib.rs` e `src/chart_svg.rs` per l'SVG degli oggetti; `tests/chart_workbook_names.rs` per `zip` 9 |
 | `rustfmt.toml` | `rustfmt.toml` | nessuna |
 | `NOTICE` | `NOTICE` | nessuna |
 
@@ -134,6 +134,10 @@ Le patch di `patches/`, una per ragione:
   nomina parti del pacchetto: uno che le nomina (le cache dei filtri, per
   esempio) si perde con un avviso, perché le parti si rinumerano. In
   `xlsx/src/tests/source_forms.rs` e `passthrough_tests.rs` i test lo dicono.
+- `0009-svg-degli-oggetti`: Fub disegna i grafici e i grafici sparkline di
+  una cartella come li disegna il salvataggio come pagina web, con le
+  primitive di `chart`. In `engine/src/lib.rs` il modulo `chart_svg` diventa
+  pubblico, e con lui `chart_svg` e `prims_svg`; il codice non cambia.
 
 Le dipendenze del workspace di questa cartella hanno, per quelle in comune con
 Fub, la stessa versione del `[workspace.dependencies]` di Fub, perché il grafo

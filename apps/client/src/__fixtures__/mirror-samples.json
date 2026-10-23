@@ -421,6 +421,85 @@
           "filter_button": true,
           "style": "TableStyleMedium2"
         }
+      ],
+      "objects": [
+        {
+          "kind": "chart",
+          "id": 1,
+          "row": 2,
+          "column": 1,
+          "dx": 4.0,
+          "dy": 0.0,
+          "width": 320.0,
+          "height": 200.0,
+          "alt": "Vendite",
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+          "media": null,
+          "shape": null,
+          "missing": null
+        },
+        {
+          "kind": "image",
+          "id": 2,
+          "row": 0,
+          "column": 3,
+          "dx": 0.0,
+          "dy": 0.0,
+          "width": 48.0,
+          "height": 48.0,
+          "alt": "Il logo",
+          "svg": null,
+          "media": {
+            "mime": "image/png",
+            "key": "0123456789abcdef0123456789abcdef",
+            "data": "iVBORw0KGgo="
+          },
+          "shape": null,
+          "missing": null
+        },
+        {
+          "kind": "shape",
+          "id": 3,
+          "row": 5,
+          "column": 0,
+          "dx": 0.0,
+          "dy": 2.5,
+          "width": 120.0,
+          "height": 40.0,
+          "alt": "",
+          "svg": null,
+          "media": null,
+          "shape": {
+            "kind": "text_box",
+            "fill": "#4472C4",
+            "line": null,
+            "text": "Totale",
+            "font": "Calibri",
+            "font_size": 11.0,
+            "bold": true,
+            "italic": false,
+            "text_color": "#000000",
+            "align": "left",
+            "anchor": "top",
+            "right_to_left": false
+          },
+          "missing": null
+        },
+        {
+          "kind": "image",
+          "id": 4,
+          "row": 8,
+          "column": 0,
+          "dx": 0.0,
+          "dy": 0.0,
+          "width": 64.0,
+          "height": 64.0,
+          "alt": "",
+          "svg": null,
+          "media": null,
+          "shape": null,
+          "missing": "unsupported"
+        }
       ]
     }
   ],
@@ -664,7 +743,8 @@
       "row_start": 0,
       "row_count": 1,
       "column_start": 0,
-      "column_count": 1
+      "column_count": 1,
+      "known_media": []
     }
   ],
   "GridCellPatch": [

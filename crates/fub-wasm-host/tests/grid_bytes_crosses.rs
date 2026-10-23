@@ -50,6 +50,7 @@ fn window(row_count: u32, revision: &Revision) -> GridWindowRequest {
         row_count,
         column_start: 0,
         column_count: 1,
+        known_media: Vec::new(),
     }
 }
 

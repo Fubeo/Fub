@@ -41,6 +41,7 @@ impl Opened {
                     row_count: rows.1,
                     column_start: columns.0,
                     column_count: columns.1,
+                    known_media: Vec::new(),
                 },
             )
             .expect("window")

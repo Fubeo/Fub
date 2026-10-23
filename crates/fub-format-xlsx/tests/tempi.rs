@@ -43,6 +43,7 @@ fn tempi() {
                         row_count: 50,
                         column_start: 0,
                         column_count: 20,
+                        known_media: Vec::new(),
                     },
                 )
             })

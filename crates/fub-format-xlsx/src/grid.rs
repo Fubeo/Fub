@@ -52,6 +52,7 @@ use crate::display::{self, NotShown, Warning};
 use crate::graft::{graft, CellEdit, GraftError};
 use crate::input::{self, InputError, NewValue};
 use crate::locks::SheetLocks;
+use crate::objects;
 use crate::package::Package;
 use crate::{guarded, sheet_xml, XlsxError, FORMAT_ID};
 
@@ -973,6 +974,10 @@ impl Instance {
                 .take(MAX_GRID_WINDOW_TABLES)
                 .collect()
         });
+        let known: HashSet<&str> = request.known_media.iter().map(String::as_str).collect();
+        let objects = range.map_or_else(Vec::new, |range| {
+            objects::objects(shown, sheet, range, (total_rows, total_columns), &known)
+        });
         let mut styles = Styles::default();
         let mut cells = Vec::with_capacity(positions.len());
         for (row, col) in positions {
@@ -992,6 +997,7 @@ impl Instance {
             merges,
             view,
             tables,
+            objects,
         })
     }
 

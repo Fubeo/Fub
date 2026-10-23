@@ -23,39 +23,26 @@ use gridcraft_model::style::{
 use gridcraft_model::{Sheet as GcSheet, Workbook};
 use gridcraft_numfmt::FormatColor;
 
-/// Le parti di una cartella che la griglia non disegna. Le unioni, le note e
-/// la formattazione condizionale arrivano nella finestra, e si disegnano.
+/// Le parti di una cartella che la griglia non disegna. Le unioni, le note, la
+/// formattazione condizionale e gli oggetti (grafici, grafici sparkline,
+/// immagini e forme) arrivano nella finestra, e si disegnano.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NotShown {
-    Charts,
-    Images,
-    Shapes,
-    Sparklines,
+    Slicers,
 }
 
 impl NotShown {
-    pub const ALL: [NotShown; 4] = [
-        NotShown::Charts,
-        NotShown::Images,
-        NotShown::Shapes,
-        NotShown::Sparklines,
-    ];
+    pub const ALL: [NotShown; 1] = [NotShown::Slicers];
 
     pub fn id(self) -> &'static str {
         match self {
-            NotShown::Charts => "charts",
-            NotShown::Images => "images",
-            NotShown::Shapes => "shapes",
-            NotShown::Sparklines => "sparklines",
+            NotShown::Slicers => "slicers",
         }
     }
 
     pub(crate) fn present(self, sheet: &GcSheet) -> bool {
         match self {
-            NotShown::Charts => !sheet.charts.is_empty(),
-            NotShown::Images => !sheet.images.is_empty() || !sheet.cell_pictures.is_empty(),
-            NotShown::Shapes => !sheet.shapes.is_empty() || !sheet.slicers.is_empty(),
-            NotShown::Sparklines => !sheet.sparklines.is_empty(),
+            NotShown::Slicers => !sheet.slicers.is_empty(),
         }
     }
 }

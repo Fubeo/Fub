@@ -101,7 +101,27 @@ export type GridHorizontalAlign =
 
 export type GridJournalMatch = "pending" | "applied" | "conflict";
 
+export type GridObjectKind = "chart" | "sparkline" | "image" | "cell_picture" | "shape";
+
+export type GridObjectMissing = "too_large" | "unsupported";
+
 export type GridScript = "superscript" | "subscript";
+
+export type GridShapeAlign = "left" | "center" | "right";
+
+export type GridShapeAnchor = "top" | "middle" | "bottom";
+
+export type GridShapeKind =
+  | "rectangle"
+  | "rounded_rectangle"
+  | "ellipse"
+  | "triangle"
+  | "line"
+  | "arrow"
+  | "text_box"
+  | "icon"
+  | "ink"
+;
 
 export type GridUnderline = "single" | "double" | "single_accounting" | "double_accounting";
 

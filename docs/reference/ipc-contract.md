@@ -60,7 +60,15 @@ rotazione), le unioni e le tabelle che la toccano (`GridMerge`, `GridTable`
 con le opzioni e il nome dello stile) e la vista del foglio (`GridSheetView`:
 riquadri bloccati, griglia, intestazioni, zoom, da destra a sinistra, la
 modalità `GridViewMode`, le formule mostrate, la protezione, griglia e
-intestazioni in stampa). Il
+intestazioni in stampa). La finestra porta anche gli oggetti che la toccano,
+nell'ordine in cui si disegnano (`GridObject`: tipo `GridObjectKind`, id,
+cella dell'angolo, scarto e misura in pixel a zoom 100, testo alternativo):
+un grafico o un grafico sparkline con il suo disegno in SVG, un'immagine con
+i suoi byte (`GridMedia`: tipo, impronta `key` e base64), una forma con il
+suo aspetto (`GridShape`), che disegna la shell; `missing` dice perché un
+oggetto non porta ciò che mostra (`too_large`, `unsupported`). La richiesta
+della finestra elenca in `known_media` le impronte che la shell ha già: di
+quelle immagini la finestra porta la chiave senza i byte. Il
 commit è un `GridCommit` il cui `edit` è il diff del testo del giornale, da
 applicare al buffer della sessione documento.
 
@@ -93,7 +101,11 @@ coordinate. Un commit accetta 16.384 patch e
 massimo 8 MiB. L'invalidazione restituisce le coordinate da rileggere fino a
 32.768 elementi, poi `all`. Il diff del giornale usa offset in byte UTF-8.
 Una finestra porta fino a 1.024 tabelle; il libro fino a 4.096 nomi; un nome
-di tabella, di stile o definito è al massimo di 255 byte.
+di tabella, di stile o definito è al massimo di 255 byte. Una finestra porta
+fino a 1.024 oggetti; il disegno di un grafico è al massimo di 1 MiB, i byte
+di un'immagine di 3 MiB in base64 (soltanto PNG, JPEG, GIF, BMP, WebP e SVG),
+il testo di una forma di 64 KiB; la richiesta elenca fino a 256 impronte di
+64 byte al più.
 
 Il registro conserva ownership e disposer per ogni binding. L'unload ritira il
 binding, distrugge le istanze e soltanto dopo rilascia il provider. Nessuna
@@ -409,11 +421,10 @@ Nella finestra:
   prende il colore della shell.
 
 Gli avvisi della sessione sono `macros`, `external-links`, `incomplete` (la
-lettura ha lasciato indietro qualcosa), `not-shown-charts`,
-`not-shown-images`, `not-shown-shapes`, `not-shown-sparklines` e `uncomputed`
+lettura ha lasciato indietro qualcosa), `not-shown-slicers` e `uncomputed`
 (formule senza valore salvato), ciascuno con il suo conteggio. Le unioni, le
-note e la formattazione condizionale arrivano nella finestra, e non sono
-avvisi.
+note, la formattazione condizionale e gli oggetti (grafici, grafici
+sparkline, immagini e forme) arrivano nella finestra, e non sono avvisi.
 
 Gli errori arrivano tipizzati con chiave di catalogo `host.xlsx.*`: una
 cartella cifrata (`encrypted`), un file oltre 256 MiB (`too_large`), un

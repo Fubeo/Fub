@@ -1,5 +1,5 @@
 {
-  "document_revision": "sha256:5d535f5cbba9df4dd6e88d65a00861722e4d454c8fa971ceb453c2c27bb78444",
+  "document_revision": "sha256:3d78f4ee5b43b35417e48a0c57c5ec52d0a4ce5d6e47666397bb3e7b0e08b404",
   "surface": {
     "id": "fub.grid.xlsx",
     "format": "xlsx",
@@ -8,7 +8,7 @@
   },
   "session": {
     "instance": "xlsx-1",
-    "revision": "sha256:895584820e6df4e271dba3748d3d8c0084239266bbc37ed47ccbcfbc7a09282a",
+    "revision": "sha256:27e326cc3ca324fe506a005d0d92e391590e3b26ac49c8f78a1bd4b78c1f5962",
     "sheets": [
       {
         "id": "s1",
@@ -1571,7 +1571,7 @@
   },
   "windows": [
     {
-      "revision": "sha256:895584820e6df4e271dba3748d3d8c0084239266bbc37ed47ccbcfbc7a09282a",
+      "revision": "sha256:27e326cc3ca324fe506a005d0d92e391590e3b26ac49c8f78a1bd4b78c1f5962",
       "sheet": "s1",
       "row_start": 0,
       "column_start": 0,
@@ -2957,10 +2957,74 @@
         "print_gridlines": false,
         "print_headings": false
       },
-      "tables": []
+      "tables": [],
+      "objects": [
+        {
+          "kind": "image",
+          "id": 1,
+          "row": 1,
+          "column": 9,
+          "dx": 0.0,
+          "dy": 0.0,
+          "width": 128.0,
+          "height": 72.0,
+          "alt": "Il sole",
+          "svg": null,
+          "media": {
+            "mime": "image/png",
+            "key": "85212decbb7febba4ccf43d5b43d5baf",
+            "data": "iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAIAAADZF8uwAAAALUlEQVR42mPYcv0DQcRAsqJPM/XgCLsiZBVo6hhwqUBWNzCKiHI4sUFAaYgDALeJPdjKdhNUAAAAAElFTkSuQmCC"
+          },
+          "shape": null,
+          "missing": null
+        },
+        {
+          "kind": "shape",
+          "id": 2,
+          "row": 5,
+          "column": 9,
+          "dx": 0.0,
+          "dy": 0.0,
+          "width": 192.0,
+          "height": 40.0,
+          "alt": "",
+          "svg": null,
+          "media": null,
+          "shape": {
+            "kind": "text_box",
+            "fill": "#FFF2CC",
+            "line": "#BF9000",
+            "text": "Conti di casa",
+            "font": null,
+            "font_size": 11.0,
+            "bold": true,
+            "italic": false,
+            "text_color": "#000000",
+            "align": "center",
+            "anchor": "middle",
+            "right_to_left": false
+          },
+          "missing": null
+        },
+        {
+          "kind": "chart",
+          "id": 3,
+          "row": 9,
+          "column": 9,
+          "dx": 0.0,
+          "dy": 0.0,
+          "width": 384.0,
+          "height": 260.0,
+          "alt": "Importi",
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"384\" height=\"260\" viewBox=\"0 0 384 260\" font-family=\"Helvetica,Arial,sans-serif\" style=\"\"><rect x=\"0\" y=\"0\" width=\"384\" height=\"260\" fill=\"#ffffff\" stroke=\"#d9d9d9\" stroke-width=\"1\"/><text x=\"192\" y=\"20.92\" font-size=\"14\" text-anchor=\"middle\" fill=\"#595959\">Importi</text><text x=\"32.02\" y=\"236.55\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">-200</text><text x=\"32.02\" y=\"204.07\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">0</text><text x=\"32.02\" y=\"171.58\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">200</text><text x=\"32.02\" y=\"139.1\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">400</text><text x=\"32.02\" y=\"106.62\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">600</text><text x=\"32.02\" y=\"74.13\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">800</text><text x=\"32.02\" y=\"41.65\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">1000</text><polyline points=\"36.02,200.92 370,200.92\" fill=\"none\" stroke=\"#bfbfbf\" stroke-width=\"0.75\"/><text x=\"119.51\" y=\"243.42\" font-size=\"9\" text-anchor=\"middle\" fill=\"#595959\">Affitto</text><text x=\"286.5\" y=\"243.42\" font-size=\"9\" text-anchor=\"middle\" fill=\"#595959\">Spesa</text><rect x=\"86.11\" y=\"70.98\" width=\"66.8\" height=\"129.93\" fill=\"#156082\"/><rect x=\"253.11\" y=\"200.92\" width=\"66.8\" height=\"19.49\" fill=\"#156082\"/></svg>",
+          "media": null,
+          "shape": null,
+          "missing": null
+        }
+      ]
     },
     {
-      "revision": "sha256:895584820e6df4e271dba3748d3d8c0084239266bbc37ed47ccbcfbc7a09282a",
+      "revision": "sha256:27e326cc3ca324fe506a005d0d92e391590e3b26ac49c8f78a1bd4b78c1f5962",
       "sheet": "s2",
       "row_start": 0,
       "column_start": 0,
@@ -3843,12 +3907,13 @@
         "print_gridlines": false,
         "print_headings": false
       },
-      "tables": []
+      "tables": [],
+      "objects": []
     }
   ],
   "edit": {
     "request": {
-      "revision": "sha256:895584820e6df4e271dba3748d3d8c0084239266bbc37ed47ccbcfbc7a09282a",
+      "revision": "sha256:27e326cc3ca324fe506a005d0d92e391590e3b26ac49c8f78a1bd4b78c1f5962",
       "patches": [
         {
           "cell": {
@@ -3862,7 +3927,7 @@
       ]
     },
     "commit": {
-      "revision": "sha256:b2e778fb5d983ea4c2ceb8fe72203f810abccc562cf02e559d7707005225617b",
+      "revision": "sha256:0577eea2c63dab3a0987c3bce97e88ed6c4fb981c75ce058f9618a4d2e2c5487",
       "edit": {
         "from": 0,
         "to": 0,
@@ -3891,7 +3956,7 @@
       }
     },
     "window": {
-      "revision": "sha256:b2e778fb5d983ea4c2ceb8fe72203f810abccc562cf02e559d7707005225617b",
+      "revision": "sha256:0577eea2c63dab3a0987c3bce97e88ed6c4fb981c75ce058f9618a4d2e2c5487",
       "sheet": "s1",
       "row_start": 0,
       "column_start": 0,
@@ -5277,14 +5342,78 @@
         "print_gridlines": false,
         "print_headings": false
       },
-      "tables": []
+      "tables": [],
+      "objects": [
+        {
+          "kind": "image",
+          "id": 1,
+          "row": 1,
+          "column": 9,
+          "dx": 0.0,
+          "dy": 0.0,
+          "width": 128.0,
+          "height": 72.0,
+          "alt": "Il sole",
+          "svg": null,
+          "media": {
+            "mime": "image/png",
+            "key": "85212decbb7febba4ccf43d5b43d5baf",
+            "data": "iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAIAAADZF8uwAAAALUlEQVR42mPYcv0DQcRAsqJPM/XgCLsiZBVo6hhwqUBWNzCKiHI4sUFAaYgDALeJPdjKdhNUAAAAAElFTkSuQmCC"
+          },
+          "shape": null,
+          "missing": null
+        },
+        {
+          "kind": "shape",
+          "id": 2,
+          "row": 5,
+          "column": 9,
+          "dx": 0.0,
+          "dy": 0.0,
+          "width": 192.0,
+          "height": 40.0,
+          "alt": "",
+          "svg": null,
+          "media": null,
+          "shape": {
+            "kind": "text_box",
+            "fill": "#FFF2CC",
+            "line": "#BF9000",
+            "text": "Conti di casa",
+            "font": null,
+            "font_size": 11.0,
+            "bold": true,
+            "italic": false,
+            "text_color": "#000000",
+            "align": "center",
+            "anchor": "middle",
+            "right_to_left": false
+          },
+          "missing": null
+        },
+        {
+          "kind": "chart",
+          "id": 3,
+          "row": 9,
+          "column": 9,
+          "dx": 0.0,
+          "dy": 0.0,
+          "width": 384.0,
+          "height": 260.0,
+          "alt": "Importi",
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"384\" height=\"260\" viewBox=\"0 0 384 260\" font-family=\"Helvetica,Arial,sans-serif\" style=\"\"><rect x=\"0\" y=\"0\" width=\"384\" height=\"260\" fill=\"#ffffff\" stroke=\"#d9d9d9\" stroke-width=\"1\"/><text x=\"192\" y=\"20.92\" font-size=\"14\" text-anchor=\"middle\" fill=\"#595959\">Importi</text><text x=\"32.02\" y=\"236.55\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">-200</text><text x=\"32.02\" y=\"204.07\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">0</text><text x=\"32.02\" y=\"171.58\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">200</text><text x=\"32.02\" y=\"139.1\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">400</text><text x=\"32.02\" y=\"106.62\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">600</text><text x=\"32.02\" y=\"74.13\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">800</text><text x=\"32.02\" y=\"41.65\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">1000</text><polyline points=\"36.02,200.92 370,200.92\" fill=\"none\" stroke=\"#bfbfbf\" stroke-width=\"0.75\"/><text x=\"119.51\" y=\"243.42\" font-size=\"9\" text-anchor=\"middle\" fill=\"#595959\">Affitto</text><text x=\"286.5\" y=\"243.42\" font-size=\"9\" text-anchor=\"middle\" fill=\"#595959\">Spesa</text><rect x=\"86.11\" y=\"70.98\" width=\"66.8\" height=\"129.93\" fill=\"#156082\"/><rect x=\"253.11\" y=\"200.92\" width=\"66.8\" height=\"19.49\" fill=\"#156082\"/></svg>",
+          "media": null,
+          "shape": null,
+          "missing": null
+        }
+      ]
     }
   },
   "conflict": {
     "journal": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r1\",\"column\":\"c1\",\"before\":\"700\",\"after\":\"900\"}]}",
     "session": {
       "instance": "xlsx-2",
-      "revision": "sha256:fecef535bd6d2387a3210507249adfb5fdcf5d6d33c21c7904af7a161f3fb3a0",
+      "revision": "sha256:71325671df7c9965ef064138cff6a1aad04cf762ff8194662d5d31a726b76f2c",
       "sheets": [
         {
           "id": "s1",
@@ -6852,7 +6981,7 @@
       }
     },
     "window": {
-      "revision": "sha256:fecef535bd6d2387a3210507249adfb5fdcf5d6d33c21c7904af7a161f3fb3a0",
+      "revision": "sha256:71325671df7c9965ef064138cff6a1aad04cf762ff8194662d5d31a726b76f2c",
       "sheet": "s1",
       "row_start": 0,
       "column_start": 0,
@@ -8238,7 +8367,71 @@
         "print_gridlines": false,
         "print_headings": false
       },
-      "tables": []
+      "tables": [],
+      "objects": [
+        {
+          "kind": "image",
+          "id": 1,
+          "row": 1,
+          "column": 9,
+          "dx": 0.0,
+          "dy": 0.0,
+          "width": 128.0,
+          "height": 72.0,
+          "alt": "Il sole",
+          "svg": null,
+          "media": {
+            "mime": "image/png",
+            "key": "85212decbb7febba4ccf43d5b43d5baf",
+            "data": "iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAIAAADZF8uwAAAALUlEQVR42mPYcv0DQcRAsqJPM/XgCLsiZBVo6hhwqUBWNzCKiHI4sUFAaYgDALeJPdjKdhNUAAAAAElFTkSuQmCC"
+          },
+          "shape": null,
+          "missing": null
+        },
+        {
+          "kind": "shape",
+          "id": 2,
+          "row": 5,
+          "column": 9,
+          "dx": 0.0,
+          "dy": 0.0,
+          "width": 192.0,
+          "height": 40.0,
+          "alt": "",
+          "svg": null,
+          "media": null,
+          "shape": {
+            "kind": "text_box",
+            "fill": "#FFF2CC",
+            "line": "#BF9000",
+            "text": "Conti di casa",
+            "font": null,
+            "font_size": 11.0,
+            "bold": true,
+            "italic": false,
+            "text_color": "#000000",
+            "align": "center",
+            "anchor": "middle",
+            "right_to_left": false
+          },
+          "missing": null
+        },
+        {
+          "kind": "chart",
+          "id": 3,
+          "row": 9,
+          "column": 9,
+          "dx": 0.0,
+          "dy": 0.0,
+          "width": 384.0,
+          "height": 260.0,
+          "alt": "Importi",
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"384\" height=\"260\" viewBox=\"0 0 384 260\" font-family=\"Helvetica,Arial,sans-serif\" style=\"\"><rect x=\"0\" y=\"0\" width=\"384\" height=\"260\" fill=\"#ffffff\" stroke=\"#d9d9d9\" stroke-width=\"1\"/><text x=\"192\" y=\"20.92\" font-size=\"14\" text-anchor=\"middle\" fill=\"#595959\">Importi</text><text x=\"32.02\" y=\"236.55\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">-200</text><text x=\"32.02\" y=\"204.07\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">0</text><text x=\"32.02\" y=\"171.58\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">200</text><text x=\"32.02\" y=\"139.1\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">400</text><text x=\"32.02\" y=\"106.62\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">600</text><text x=\"32.02\" y=\"74.13\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">800</text><text x=\"32.02\" y=\"41.65\" font-size=\"9\" text-anchor=\"end\" fill=\"#595959\">1000</text><polyline points=\"36.02,200.92 370,200.92\" fill=\"none\" stroke=\"#bfbfbf\" stroke-width=\"0.75\"/><text x=\"119.51\" y=\"243.42\" font-size=\"9\" text-anchor=\"middle\" fill=\"#595959\">Affitto</text><text x=\"286.5\" y=\"243.42\" font-size=\"9\" text-anchor=\"middle\" fill=\"#595959\">Spesa</text><rect x=\"86.11\" y=\"70.98\" width=\"66.8\" height=\"129.93\" fill=\"#156082\"/><rect x=\"253.11\" y=\"200.92\" width=\"66.8\" height=\"19.49\" fill=\"#156082\"/></svg>",
+          "media": null,
+          "shape": null,
+          "missing": null
+        }
+      ]
     }
   }
 }

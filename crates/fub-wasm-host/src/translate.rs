@@ -1175,9 +1175,74 @@ pub(crate) fn from_grid_bytes_window(
                 style: table.style,
             })
             .collect(),
+        objects: window.objects.into_iter().map(from_grid_object).collect(),
     };
     window.validate()?;
     Ok(window)
+}
+
+fn from_grid_object(object: w_grid_bytes::GridObject) -> fub_abi::GridObject {
+    use fub_abi::{GridObjectKind as K, GridShapeKind as S};
+    use w_grid_bytes::{GridObjectKind as WK, GridShapeKind as WS};
+    fub_abi::GridObject {
+        kind: match object.kind {
+            WK::Chart => K::Chart,
+            WK::Sparkline => K::Sparkline,
+            WK::Image => K::Image,
+            WK::CellPicture => K::CellPicture,
+            WK::Shape => K::Shape,
+        },
+        id: object.id,
+        row: object.row,
+        column: object.column,
+        dx: object.dx,
+        dy: object.dy,
+        width: object.width,
+        height: object.height,
+        alt: object.alt,
+        svg: object.svg,
+        media: object.media.map(|media| fub_abi::GridMedia {
+            mime: media.mime,
+            key: media.key,
+            data: media.data,
+        }),
+        shape: object.shape.map(|shape| fub_abi::GridShape {
+            kind: match shape.kind {
+                WS::Rectangle => S::Rectangle,
+                WS::RoundedRectangle => S::RoundedRectangle,
+                WS::Ellipse => S::Ellipse,
+                WS::Triangle => S::Triangle,
+                WS::Line => S::Line,
+                WS::Arrow => S::Arrow,
+                WS::TextBox => S::TextBox,
+                WS::Icon => S::Icon,
+                WS::Ink => S::Ink,
+            },
+            fill: shape.fill,
+            line: shape.line,
+            text: shape.text,
+            font: shape.font,
+            font_size: shape.font_size,
+            bold: shape.bold,
+            italic: shape.italic,
+            text_color: shape.text_color,
+            align: match shape.align {
+                w_grid_bytes::GridShapeAlign::Left => fub_abi::GridShapeAlign::Left,
+                w_grid_bytes::GridShapeAlign::Center => fub_abi::GridShapeAlign::Center,
+                w_grid_bytes::GridShapeAlign::Right => fub_abi::GridShapeAlign::Right,
+            },
+            anchor: match shape.anchor {
+                w_grid_bytes::GridShapeAnchor::Top => fub_abi::GridShapeAnchor::Top,
+                w_grid_bytes::GridShapeAnchor::Middle => fub_abi::GridShapeAnchor::Middle,
+                w_grid_bytes::GridShapeAnchor::Bottom => fub_abi::GridShapeAnchor::Bottom,
+            },
+            right_to_left: shape.right_to_left,
+        }),
+        missing: object.missing.map(|missing| match missing {
+            w_grid_bytes::GridObjectMissing::TooLarge => fub_abi::GridObjectMissing::TooLarge,
+            w_grid_bytes::GridObjectMissing::Unsupported => fub_abi::GridObjectMissing::Unsupported,
+        }),
+    }
 }
 
 fn from_grid_revision(revision: String) -> fub_abi::Revision {
@@ -1327,6 +1392,7 @@ pub(crate) fn to_grid_window_request(
         row_count: request.row_count,
         column_start: request.column_start,
         column_count: request.column_count,
+        known_media: request.known_media.clone(),
     }
 }
 

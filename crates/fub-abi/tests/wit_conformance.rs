@@ -87,8 +87,10 @@ use fub_abi::grid::{
 use fub_abi::grid_bytes::{
     GridBook, GridBytesCell, GridBytesProvider, GridBytesSession, GridBytesWindow, GridCalculation,
     GridCommand, GridCommandOutcome, GridCommandRequest, GridCommandState, GridComment,
-    GridCommentReply, GridDataBar, GridDialog, GridIcon, GridJournal, GridLink, GridMerge,
-    GridNotice, GridSelection, GridSheetView, GridTable, GridValue, GridViewMode,
+    GridCommentReply, GridDataBar, GridDialog, GridIcon, GridJournal, GridLink, GridMedia,
+    GridMerge, GridNotice, GridObject, GridObjectKind, GridObjectMissing, GridSelection, GridShape,
+    GridShapeAlign, GridShapeAnchor, GridShapeKind, GridSheetView, GridTable, GridValue,
+    GridViewMode,
 };
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{
@@ -401,6 +403,14 @@ wit_kebab! {
     GridViewMode,
     GridSheetView,
     GridTable,
+    GridObjectKind,
+    GridShapeKind,
+    GridShapeAlign,
+    GridShapeAnchor,
+    GridShape,
+    GridMedia,
+    GridObjectMissing,
+    GridObject,
     GridBytesWindow,
     GridSelection,
     GridCommandState,
@@ -3724,6 +3734,7 @@ fn conform(source: &str) -> Result<(), String> {
         row_count,
         column_start,
         column_count,
+        known_media,
     } = GridWindowRequest {
         revision: Revision::of(""),
         sheet: String::new(),
@@ -3731,6 +3742,7 @@ fn conform(source: &str) -> Result<(), String> {
         row_count: 0,
         column_start: 0,
         column_count: 0,
+        known_media: Vec::new(),
     };
     contract.record(
         "grid-window-request",
@@ -3741,6 +3753,7 @@ fn conform(source: &str) -> Result<(), String> {
             ("row-count", wit(&row_count)),
             ("column-start", wit(&column_start)),
             ("column-count", wit(&column_count)),
+            ("known-media", wit(&known_media)),
         ],
     );
 
@@ -4265,6 +4278,120 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    for (name, rust) in [
+        ("grid-object-kind", "GridObjectKind"),
+        ("grid-shape-kind", "GridShapeKind"),
+        ("grid-shape-align", "GridShapeAlign"),
+        ("grid-shape-anchor", "GridShapeAnchor"),
+        ("grid-object-missing", "GridObjectMissing"),
+    ] {
+        contract.enumeration_from(name, ("grid_bytes.rs", rust));
+    }
+    let GridShape {
+        kind,
+        fill,
+        line,
+        text,
+        font,
+        font_size,
+        bold,
+        italic,
+        text_color,
+        align,
+        anchor,
+        right_to_left,
+    } = GridShape {
+        kind: GridShapeKind::Rectangle,
+        fill: None,
+        line: None,
+        text: String::new(),
+        font: None,
+        font_size: 0.0,
+        bold: false,
+        italic: false,
+        text_color: String::new(),
+        align: GridShapeAlign::Left,
+        anchor: GridShapeAnchor::Top,
+        right_to_left: false,
+    };
+    contract.record(
+        "grid-shape",
+        &[
+            ("kind", wit(&kind)),
+            ("fill", wit(&fill)),
+            ("line", wit(&line)),
+            ("text", wit(&text)),
+            ("font", wit(&font)),
+            ("font-size", wit(&font_size)),
+            ("bold", wit(&bold)),
+            ("italic", wit(&italic)),
+            ("text-color", wit(&text_color)),
+            ("align", wit(&align)),
+            ("anchor", wit(&anchor)),
+            ("right-to-left", wit(&right_to_left)),
+        ],
+    );
+    let GridMedia { mime, key, data } = GridMedia {
+        mime: String::new(),
+        key: String::new(),
+        data: None,
+    };
+    contract.record(
+        "grid-media",
+        &[
+            ("mime", wit(&mime)),
+            ("key", wit(&key)),
+            ("data", wit(&data)),
+        ],
+    );
+    let GridObject {
+        kind,
+        id,
+        row,
+        column,
+        dx,
+        dy,
+        width,
+        height,
+        alt,
+        svg,
+        media,
+        shape,
+        missing,
+    } = GridObject {
+        kind: GridObjectKind::Chart,
+        id: 0,
+        row: 0,
+        column: 0,
+        dx: 0.0,
+        dy: 0.0,
+        width: 0.0,
+        height: 0.0,
+        alt: String::new(),
+        svg: None,
+        media: None,
+        shape: None,
+        missing: None,
+    };
+    contract.record(
+        "grid-object",
+        &[
+            ("kind", wit(&kind)),
+            ("id", wit(&id)),
+            ("row", wit(&row)),
+            ("column", wit(&column)),
+            ("dx", wit(&dx)),
+            ("dy", wit(&dy)),
+            ("width", wit(&width)),
+            ("height", wit(&height)),
+            ("alt", wit(&alt)),
+            ("svg", wit(&svg)),
+            ("media", wit(&media)),
+            ("shape", wit(&shape)),
+            ("missing", wit(&missing)),
+        ],
+    );
+
     let GridBytesWindow {
         revision,
         sheet,
@@ -4279,6 +4406,7 @@ fn conform(source: &str) -> Result<(), String> {
         merges,
         view,
         tables,
+        objects,
     } = GridBytesWindow {
         revision: Revision::of(""),
         sheet: String::new(),
@@ -4293,6 +4421,7 @@ fn conform(source: &str) -> Result<(), String> {
         merges: Vec::new(),
         view: GridSheetView::default(),
         tables: Vec::new(),
+        objects: Vec::new(),
     };
     contract.record(
         "grid-bytes-window",
@@ -4310,6 +4439,7 @@ fn conform(source: &str) -> Result<(), String> {
             ("merges", wit(&merges)),
             ("view", wit(&view)),
             ("tables", wit(&tables)),
+            ("objects", wit(&objects)),
         ],
     );
 

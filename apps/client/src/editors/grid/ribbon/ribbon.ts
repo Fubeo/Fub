@@ -17,7 +17,7 @@
 // Quando la barra è stretta i gruppi si raccolgono da destra, ciascuno in un
 // pulsante che apre il suo contenuto in un riquadro.
 import { readResult } from "../dialogs/result";
-import type { GridBook, GridCellStyle, GridCommandState, GridSheetView, GridTable } from "../../../host/contract";
+import type { GridBook, GridCellStyle, GridCommandState, GridObject, GridSheetView, GridTable } from "../../../host/contract";
 import { createTabs, labelButton, openPopover, setPressed, type PopoverHandle, type TabsHandle } from "../../../kit";
 import { onLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
@@ -76,6 +76,8 @@ export interface RibbonEngine {
   hiddenSheets(): readonly { readonly id: string; readonly name: string }[];
   viewportSize(): { width: number; height: number };
   selection(): { readonly focus: { readonly row: number; readonly column: number } };
+  /// L'oggetto selezionato sul foglio, o `null` se la selezione è di celle.
+  selectedObject(): GridObject | null;
   command(id: string, params?: string): boolean;
   /// Apre la finestra `id` (`GridEngine.openDialog`).
   openDialog(id: string, params?: string): boolean;
@@ -159,6 +161,21 @@ function tableAt(tables: readonly GridTable[], at: { readonly row: number; reado
   );
 }
 
+/// Se una scheda contestuale ha il suo contesto: la tabella quando la
+/// selezione è di celle, il grafico o l'oggetto quando è selezionato.
+function contextShown(tab: RibbonTab, view: RibbonView): boolean {
+  switch (tab.contextual) {
+    case undefined:
+      return true;
+    case "table":
+      return view.table !== null && view.object === null;
+    case "chart":
+      return view.object?.kind === "chart";
+    case "object":
+      return view.object !== null && (view.object.kind === "chart" || view.object.kind === "image" || view.object.kind === "shape");
+  }
+}
+
 export function mountRibbon(engine: RibbonEngine): GridRibbon {
   const life = openLifetime();
   life.add(useRibbonIcons());
@@ -198,6 +215,7 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
       sheet: engine.sheetView(),
       book,
       table: tableAt(engine.tables(), engine.selection().focus),
+      object: engine.selectedObject(),
       theme: themeColors(book?.theme_colors),
       hidden: engine.hiddenSheets(),
       get viewport() {
@@ -450,7 +468,12 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     el.classList.add("grid-ribbon-split");
     let last: RibbonColor = control.initial;
     let view: RibbonView | null = null;
-    const main = button(control, () => t(control.label), () => give(control.id, { color: last }));
+    const paramsOf = (color: RibbonColor | "auto" | "none"): Params => {
+      const current = view ?? readView();
+      const value = control.hex && typeof color !== "string" ? resolve(color, current.theme) : color;
+      return { ...control.params?.(current), color: value };
+    };
+    const main = button(control, () => t(control.label), () => give(control.id, paramsOf(last)));
     const bar = document.createElement("span");
     bar.className = "grid-ribbon-color-bar";
     bar.setAttribute("aria-hidden", "true");
@@ -472,7 +495,7 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     const choose = (color: RibbonColor | "auto" | "none") => {
       if (color !== "auto" && color !== "none") last = color;
       paint();
-      give(control.id, { color });
+      give(control.id, paramsOf(color));
     };
     const open = () => openPalette(arrow, control, (view ?? readView()).theme, choose);
     life.listen(arrow, "click", open);
@@ -700,6 +723,7 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
 
   /// Se il catalogo serve il controllo.
   function visible(control: RibbonControl, view: RibbonView): boolean {
+    if (control.when && !control.when(view)) return false;
     if (control.kind !== "menu") return served(control.id);
     if (control.requires) return control.requires.every(served);
     const items = control.items(view);
@@ -1356,7 +1380,7 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
         group.element.hidden = !groupAny;
         any ||= groupAny;
       }
-      if (any && (!tab.spec.contextual || view.table !== null)) shown.push(tab);
+      if (any && contextShown(tab.spec, view)) shown.push(tab);
     }
     mountTabs(shown, false);
     for (const tab of tabs) tab.settle(null);

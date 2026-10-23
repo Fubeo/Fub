@@ -3273,6 +3273,9 @@ interface grid {
         row-count: u32,
         column-start: u32,
         column-count: u32,
+        /// Le chiavi delle immagini che la shell ha già: la finestra non ne
+        /// riporta i byte.
+        known-media: list<string>,
     }
 
     record grid-cell-patch {
@@ -3501,6 +3504,85 @@ interface grid-bytes {
         style: string,
     }
 
+    /// Che cosa è un oggetto del foglio.
+    enum grid-object-kind {
+        chart,
+        sparkline,
+        image,
+        cell-picture,
+        shape,
+    }
+
+    enum grid-shape-kind {
+        rectangle,
+        rounded-rectangle,
+        ellipse,
+        triangle,
+        line,
+        arrow,
+        text-box,
+        icon,
+        ink,
+    }
+
+    enum grid-shape-align {
+        left,
+        center,
+        right,
+    }
+
+    enum grid-shape-anchor {
+        top,
+        middle,
+        bottom,
+    }
+
+    /// Una forma con i colori risolti (`#RRGGBB`) e il testo.
+    record grid-shape {
+        kind: grid-shape-kind,
+        fill: option<string>,
+        line: option<string>,
+        text: string,
+        font: option<string>,
+        font-size: f32,
+        bold: bool,
+        italic: bool,
+        text-color: string,
+        align: grid-shape-align,
+        anchor: grid-shape-anchor,
+        right-to-left: bool,
+    }
+
+    /// I byte di un'immagine, in base64; mancano se la richiesta ha la chiave.
+    record grid-media {
+        mime: string,
+        key: string,
+        data: option<string>,
+    }
+
+    /// Perché un oggetto non porta ciò che mostra.
+    enum grid-object-missing {
+        too-large,
+        unsupported,
+    }
+
+    /// Un oggetto che tocca la finestra, ancorato a una cella, in pixel.
+    record grid-object {
+        kind: grid-object-kind,
+        id: u32,
+        row: u32,
+        column: u32,
+        dx: f32,
+        dy: f32,
+        width: f32,
+        height: f32,
+        alt: string,
+        svg: option<string>,
+        media: option<grid-media>,
+        shape: option<grid-shape>,
+        missing: option<grid-object-missing>,
+    }
+
     record grid-bytes-window {
         revision: revision,
         sheet: string,
@@ -3515,6 +3597,7 @@ interface grid-bytes {
         merges: list<grid-merge>,
         view: grid-sheet-view,
         tables: list<grid-table>,
+        objects: list<grid-object>,
     }
 
     surfaces: func() -> list<grid-surface-spec>;

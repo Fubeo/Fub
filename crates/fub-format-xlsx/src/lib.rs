@@ -49,6 +49,7 @@ pub mod input;
 mod inventory;
 pub mod locks;
 mod model;
+mod objects;
 mod package;
 mod sheet_xml;
 
