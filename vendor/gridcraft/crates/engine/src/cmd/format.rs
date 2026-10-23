@@ -967,6 +967,8 @@ fn cell_style(s: &mut Session, p: &Json) -> Result<Json> {
             .map(|(_, s)| s.clone())
             .or_else(|| builtin_cell_style(&name, &d.wb.theme));
     let Some(style) = style else { return Err(bad("home.cellStyle", format!("unknown cell style `{name}`"))) };
+    // A cell takes the name of a style the workbook has, so the file says which one it is.
+    let parent = d.wb.cell_styles.iter().find(|(n, _)| n.eq_ignore_ascii_case(&name)).map(|(n, _)| n.clone());
     // Number-format styles only change the number format.
     let only_fmt = matches!(name.as_str(), "Comma" | "Comma [0]" | "Currency" | "Currency [0]" | "Percent");
     apply_style(s, p, move |st| {
@@ -975,6 +977,7 @@ fn cell_style(s: &mut Session, p: &Json) -> Result<Json> {
         } else {
             let keep_fmt = st.num_fmt.clone();
             *st = style.clone();
+            st.parent = parent.clone();
             if style.num_fmt.as_str() == "General" {
                 st.num_fmt = keep_fmt;
             }

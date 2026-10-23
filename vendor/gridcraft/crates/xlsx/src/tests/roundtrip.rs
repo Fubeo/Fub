@@ -64,7 +64,7 @@ fn sample() -> Workbook {
     };
 
     let mut s = Sheet::new("Data & Stuff");
-    let set = |s: &mut Sheet, a: &str, v: Value, style: StyleId| s.cells.set(at(a), Cell { value: v, formula: None, style });
+    let set = |s: &mut Sheet, a: &str, v: Value, style: StyleId| s.cells.set(at(a), Cell { value: v, formula: None, style, rich: None });
     set(&mut s, "A1", Value::text("Region"), bold);
     set(&mut s, "B1", Value::text("Amount"), bold);
     set(&mut s, "C1", Value::text("  spaced\nline _x0041_ \u{1} "), StyleId::DEFAULT);
@@ -838,7 +838,7 @@ fn writing_repairs_invalid_models() {
         table_type: None,
         connection_id: None,
     });
-    s.cells.set(at("B2"), Cell { value: Value::Number(1.0), formula: None, style: StyleId(9999) });
+    s.cells.set(at("B2"), Cell { value: Value::Number(1.0), formula: None, style: StyleId(9999), rich: None });
     let (back, _) = read_xlsx(&write_xlsx(&wb).unwrap()).unwrap();
     let s = back.sheet(0).unwrap();
     assert_eq!(s.visibility, Visibility::Visible, "at least one sheet stays visible");
@@ -978,7 +978,8 @@ fn icon_sets_always_write_one_cfvo_per_icon() {
 }
 
 /// Files have no `@` operator: Excel writes `@x` as `_xlfn.SINGLE(x)` in a dynamic-array
-/// formula, and reads it back as `@x`.
+/// formula, and reads it back as `@x`. An `@` where a legacy formula intersects anyway is
+/// saved as a legacy formula instead.
 #[test]
 fn implicit_intersection_is_written_as_single() {
     let mut wb = Workbook::new();
@@ -986,17 +987,17 @@ fn implicit_intersection_is_written_as_single() {
     for (r, n) in [(0, 1.0), (1, 3.0), (2, 5.0)] {
         s.set_value(CellRef::new(r, 0), Value::Number(n));
     }
-    s.cells.set(at("D3"), Cell { value: Value::Number(10.0), ..Cell::formula(Formula::new("@A1:A3*2")) });
+    s.cells.set(at("D3"), Cell { value: Value::Number(10.0), ..Cell::formula(Formula::new("SUM(@A1:A3)*2")) });
     s.cells.set(at("D4"), Cell { value: Value::Number(2.0), ..Cell::formula(Formula::new("A1*2")) });
     let bytes = write_xlsx(&wb).unwrap();
     let (xml, metadata) = sheet1_xml(&bytes);
-    assert!(xml.contains("<c r=\"D3\" cm=\"1\"><f t=\"array\" ref=\"D3\">_xlfn.SINGLE(A1:A3)*2</f><v>10</v>"), "{xml}");
+    assert!(xml.contains("<c r=\"D3\" cm=\"1\"><f t=\"array\" ref=\"D3\">SUM(_xlfn.SINGLE(A1:A3))*2</f><v>10</v>"), "{xml}");
     assert!(xml.contains("<c r=\"D4\"><f>A1*2</f>"), "{xml}");
     assert!(!xml.contains('@'), "{xml}");
     assert!(metadata);
     let (back, _) = read_xlsx(&bytes).unwrap();
     let sh = back.sheet(0).unwrap();
-    assert_eq!(sh.cell(at("D3")).and_then(|c| c.formula.as_ref()).map(|f| f.text.as_str()), Some("@A1:A3*2"));
+    assert_eq!(sh.cell(at("D3")).and_then(|c| c.formula.as_ref()).map(|f| f.text.as_str()), Some("SUM(@A1:A3)*2"));
     assert_eq!(sh.cell(at("D3")).and_then(|c| c.formula.as_ref()).and_then(|f| f.array), None);
 }
 
@@ -1280,8 +1281,7 @@ fn fonts_without_charset_write_unchanged() {
     let saved = write_xlsx(&read_xlsx(&file).unwrap().0).unwrap();
     let mut pkg = Package::open(&saved).unwrap();
     let xml = String::from_utf8(pkg.read("xl/styles.xml").unwrap().unwrap()).unwrap();
-    assert!(xml.contains("<name val=\"Arial\"/><family val=\"2\"/>"), "{xml}");
-    assert!(!xml.contains("<charset"), "{xml}");
+    assert!(xml.contains("<font><name val=\"Arial\"/></font>"), "{xml}");
 }
 
 #[test]
@@ -1292,7 +1292,7 @@ fn out_of_range_family_is_ignored() {
     let saved = write_xlsx(&wb).unwrap();
     let mut pkg = Package::open(&saved).unwrap();
     let xml = String::from_utf8(pkg.read("xl/styles.xml").unwrap().unwrap()).unwrap();
-    assert!(xml.contains("<name val=\"Arial\"/><family val=\"2\"/>"), "{xml}");
+    assert!(xml.contains("<name val=\"Arial\"/>") && !xml.contains("<family"), "{xml}");
 
     let mut set_directly = wb.clone();
     let wide = set_directly.styles.derive(StyleId::DEFAULT, |st| st.font.family = Some(200));

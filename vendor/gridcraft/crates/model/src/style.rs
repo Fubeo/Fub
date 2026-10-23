@@ -190,7 +190,8 @@ pub struct Font {
     /// Windows character set the font was chosen for (178 = Arabic); kept so Excel substitutes a font for the same script.
     #[serde(default)]
     pub charset: Option<u8>,
-    /// Font family class (1 roman, 2 swiss, 3 modern…); `None` is swiss, the default.
+    /// Font family class (1 roman, 2 swiss, 3 modern…) as the file stated it; `None` when it did
+    /// not, and GridCraft then writes swiss, the default.
     #[serde(default)]
     pub family: Option<u8>,
 }
@@ -376,6 +377,13 @@ pub struct Style {
     /// Differential formats only.
     #[serde(default)]
     pub dxf_stated: DxfStated,
+    /// The cell's text was entered after an apostrophe (`quotePrefix`), as text that reads like
+    /// a number or a formula.
+    #[serde(default)]
+    pub quote_prefix: bool,
+    /// The named cell style (`Workbook::cell_styles`) the format is based on; `None` is Normal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
 }
 
 /// The parts a differential format states at a value its `Style` can't tell from unset: a dxf's

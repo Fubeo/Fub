@@ -2,9 +2,12 @@
 //! chart frames.
 
 use std::fmt::Write as _;
+use std::sync::Arc;
 
 use gridcraft_core::{CellRef, MAX_COLS, MAX_ROWS};
-use gridcraft_model::{Anchor, AnchorMode, Color, Image, Shape, ShapeFormat, ShapeKind, ShapeTextAlign, ShapeTextAnchor, Sheet, Theme};
+use gridcraft_model::{
+    Anchor, AnchorMode, Color, Image, PreservedSource, Shape, ShapeFormat, ShapeKind, ShapeTextAlign, ShapeTextAnchor, Sheet, Theme,
+};
 
 use crate::IoError;
 use crate::read::Ctx;
@@ -124,8 +127,17 @@ fn mime_for(name: &str) -> &'static str {
 pub fn read_drawing(cx: &mut Ctx<'_>, part: &str, sheet: &mut Sheet) -> Result<(), IoError> {
     let Some(x) = cx.optional_xml(part)? else { return Ok(()) };
     let rels = cx.pkg.rels(part)?;
+    // The part is kept as the file had it while every object in it is read into the model: its
+    // relationship ids, each to the picture or chart it shows.
+    let mut whole = sheet.images.is_empty() && sheet.charts.is_empty() && sheet.shapes.is_empty();
+    let mut ids = String::new();
+    let mut charts = Vec::new();
     for a in &x.children {
-        let Some(anchor) = read_anchor(a, sheet) else { continue };
+        let Some(anchor) = read_anchor(a, sheet) else {
+            whole &=
+                matches!(a.name.as_str(), "twoCellAnchor" | "oneCellAnchor" | "absoluteAnchor") && a.children.iter().all(|c| c.name == "clientData");
+            continue;
+        };
         // Objects in markup-compatibility blocks: the first choice (chartex frames), else the
         // fallback.
         let objs: Vec<&El> = a
@@ -156,6 +168,8 @@ pub fn read_drawing(cx: &mut Ctx<'_>, part: &str, sheet: &mut Sheet) -> Result<(
                     };
                     let alt = obj.path(&["nvPicPr", "cNvPr"]).and_then(|c| c.attr("descr")).unwrap_or("").to_string();
                     let id = cx.next_object_id();
+                    let _ = writeln!(ids, "image {} {rid}", sheet.images.len());
+                    whole &= !data.is_empty();
                     sheet.images.push(Image { id, anchor, data: data.into(), mime: mime_for(&target).to_string(), alt });
                 }
                 "graphicFrame" => {
@@ -170,27 +184,71 @@ pub fn read_drawing(cx: &mut Ctx<'_>, part: &str, sheet: &mut Sheet) -> Result<(
                                 Some(mut ch) => {
                                     ch.id = cx.next_object_id();
                                     ch.anchor = anchor;
+                                    let _ = writeln!(ids, "chart {} {rid}", sheet.charts.len());
+                                    whole &= !chartex;
+                                    if !chartex {
+                                        charts.push((sheet.charts.len(), target));
+                                    }
                                     sheet.charts.push(ch);
                                 }
-                                None => cx.warn(format!("chart {target} has no supported plot and was skipped")),
+                                None => {
+                                    whole = false;
+                                    cx.warn(format!("chart {target} has no supported plot and was skipped"));
+                                }
                             }
+                        } else {
+                            whole = false;
                         }
                     } else if uri.contains("chartex") || uri.contains("chartEx") {
+                        whole = false;
                         cx.warn("a histogram, waterfall, treemap… chart without its chart part was skipped");
                     } else {
+                        whole = false;
                         cx.warn("an embedded object (SmartArt, OLE…) was skipped");
                     }
                 }
-                "sp" | "cxnSp" => {
-                    if let Some(s) = read_shape(obj, anchor) {
+                "sp" | "cxnSp" => match read_shape(obj, anchor) {
+                    Some(s) => {
                         let id = cx.next_object_id();
                         sheet.shapes.push(Shape { id, ..s });
                     }
+                    None => whole = false,
+                },
+                "grpSp" => {
+                    whole = false;
+                    cx.warn("grouped shapes are not supported and were skipped");
                 }
-                "grpSp" => cx.warn("grouped shapes are not supported and were skipped"),
                 _ => {}
             }
         }
+    }
+    // Classic charts as the file had them, while the chart is the one read: a part without
+    // relationships of its own but its style and colours.
+    for (i, target) in charts {
+        let Some(ch) = sheet.charts.get(i) else { continue };
+        let crels = cx.pkg.rels(&target)?;
+        if crels.iter().any(|r| r.external || !matches!(r.kind.as_str(), "chartStyle" | "chartColorStyle")) {
+            continue;
+        }
+        let Some(data) = cx.pkg.read(&target)? else { continue };
+        let model = crate::passthrough::chart_model(ch);
+        for r in &crels {
+            if let Some(d) = cx.pkg.read(&r.target)? {
+                cx.sources.push(PreservedSource { slot: format!("chart.{}", r.kind), model: model.clone(), data: Arc::from(d) });
+            }
+        }
+        cx.sources.push(PreservedSource { slot: "chart".into(), model, data: Arc::from(data) });
+    }
+    // Every relationship of the part goes to an object read; a picture link or hyperlink would not.
+    let used: Vec<&str> = ids.lines().filter_map(|l| l.rsplit(' ').next()).collect();
+    whole &= rels.iter().all(|r| used.contains(&r.id.as_str()));
+    if whole
+        && !ids.is_empty()
+        && let Some(data) = cx.pkg.read(part)?
+    {
+        let model = crate::passthrough::drawing_model(sheet);
+        cx.sources.push(PreservedSource { slot: "drawing.ids".into(), model: model.clone(), data: Arc::from(ids.into_bytes()) });
+        cx.sources.push(PreservedSource { slot: "drawing".into(), model, data: Arc::from(data) });
     }
     Ok(())
 }
