@@ -25,11 +25,11 @@ L'interfaccia (`ui-egui`) e il server MCP (`mcp`) non sono copiati.
 |---|---|---|
 | `crates/core/` | `crates/core/` | nessuna |
 | `crates/formula/` | `crates/formula/` | nessuna |
-| `crates/functions/` | `crates/functions/` | `0002` (`src/engineering.rs`) |
+| `crates/functions/` | `crates/functions/` | nessuna |
 | `crates/numfmt/` | `crates/numfmt/` | nessuna |
 | `crates/model/` | `crates/model/` | `0005` (`src/sheet.rs`, `src/preserved.rs`); `0007` (`src/cell.rs`, `src/lib.rs`, `src/preserved.rs`, `src/sheet.rs`, `src/style.rs`) |
 | `crates/calc/` | `crates/calc/` | nessuna |
-| `crates/xlsx/` | `crates/xlsx/` | `0001` (`src/package.rs` e nove file di `src/tests/`); `0002` (`src/ods.rs`); `0003` (`src/sheet_read.rs`); `0005` (`src/read.rs`, `src/passthrough.rs`, `src/write.rs`); `0006` (`src/array_formula.rs`, `src/fmla.rs`, `src/read.rs`, `src/sheet_write.rs`); `0007` (`src/array_formula.rs`, `src/csv.rs`, `src/drawing.rs`, `src/passthrough.rs`, `src/read.rs`, `src/sheet_read.rs`, `src/sheet_write.rs`, `src/styles.rs`, `src/write.rs`, `src/xls/mod.rs`, `src/xml.rs`); `0008` (`src/passthrough.rs`, `src/sheet_write.rs`); i test di `src/tests/` di ciascuna |
+| `crates/xlsx/` | `crates/xlsx/` | `0001` (`src/package.rs`, `src/ods.rs` e nove file di `src/tests/`); `0003` (`src/sheet_read.rs`); `0005` (`src/read.rs`, `src/passthrough.rs`, `src/write.rs`); `0006` (`src/array_formula.rs`, `src/fmla.rs`, `src/read.rs`, `src/sheet_write.rs`); `0007` (`src/array_formula.rs`, `src/csv.rs`, `src/drawing.rs`, `src/passthrough.rs`, `src/read.rs`, `src/sheet_read.rs`, `src/sheet_write.rs`, `src/styles.rs`, `src/write.rs`, `src/xls/mod.rs`, `src/xml.rs`); `0008` (`src/passthrough.rs`, `src/sheet_write.rs`); i test di `src/tests/` di ciascuna |
 | `crates/chart/` | `crates/chart/` | nessuna |
 | `crates/pdf/` | `crates/pdf/` | nessuna |
 | `crates/engine/` | `crates/engine/` | `0001` (`tests/chart_workbook_names.rs`); `0004` (`src/lib.rs`); `0007` (`src/cmd/` analysis, edit, extra, forecast, format, insert, solver e whatif, `src/fill.rs`, `src/io.rs`, `src/pivot.rs`); `0009` (`src/lib.rs`, `src/chart_svg.rs`); `0010` (`src/cmd/insert.rs`); `src/tests.rs` per `0004`, `0006`, `0007` e `0010` |
@@ -54,7 +54,7 @@ Fuori dal workspace di Fub, i crate non passano dal suo
 `cargo clippy --workspace --all-targets -- -D warnings`: i lint del workspace
 di questa cartella permettono gli avvisi, che corregge l'upstream e non una
 copia, e vietano soltanto `unsafe`; ogni crate dichiara già
-`forbid(unsafe_code)`. Con la 1.89 di Fub, e le patch qui sotto, i crate
+`forbid(unsafe_code)`. Con la 1.95 di Fub, e le patch qui sotto, i crate
 compilano e i loro test passano. Come nell'upstream, il profilo `dev` di
 questa cartella ha `opt-level = 1`: senza ottimizzazione l'analisi della
 catena di 4.096 operandi di `formula/tests/spanish_input.rs` esaurisce la
@@ -68,13 +68,9 @@ Le patch di `patches/`, una per ragione:
   con il nome di una voce illeggibile si rifiuta con l'errore dell'archivio, e
   la parte troppo grande con un nome illeggibile si dice senza nome; nei nove
   file di `xlsx/src/tests/` e nel test `engine/tests/chart_workbook_names.rs`
-  che leggono l'archivio `f.name()` diventa `f.name().unwrap()`;
-- `0002-rust-1-89`: l'upstream dichiara `rust-version = "1.90"` ma usa
-  `std::f64::consts::EULER_GAMMA`, stabile dalla 1.94, in
-  `functions/src/engineering.rs`, che qui ha lo stesso valore scritto per
-  esteso; in `xlsx/src/ods.rs` un `r.as_ref()` che la 1.89 non sa inferire
-  (E0308) diventa `&*r`. Il codice è lo stesso sul `main` dell'upstream, e la
-  dichiarazione va corretta là;
+  che leggono l'archivio `f.name()` diventa `f.name().unwrap()`. `zip` 9 porta
+  `typed-path`, che dà a `[u8]` un `AsRef` in più: in `xlsx/src/ods.rs` un
+  `r.as_ref()` non si inferisce più (E0308) e diventa `&*r`;
 - `0003-valori-delle-matrici`: il lettore scarta i valori che il file ha
   salvato nelle celle versate da una matrice, dinamica o legacy, perché la
   formula le riempia di nuovo (storytold/gridcraft#2137, accanto a
@@ -167,7 +163,6 @@ Ogni patch ha un tipo, che dice quando può uscire dalla pila:
 | Patch | Tipo | Il test di Fub che ne dipende | Upstream | Quando cade |
 |---|---|---|---|---|
 | `0001-zip-9` | TEMPORARY-COMPAT | `cargo deny check` (gli avvisi di `zip` 3) | da proporre: passare a `zip` 9 | quando l'upstream usa `zip` ≥ 9 |
-| `0002-rust-1-89` | TEMPORARY-COMPAT | la compilazione con la 1.89 di `rust-toolchain.toml` | da proporre: `rust-version` vera, o la costante scritta | quando Fub passa alla 1.94, o l'upstream non usa più `EULER_GAMMA` |
 | `0003-valori-delle-matrici` | UPSTREAM-BUGFIX | `display.rs`: `le_celle_versate_hanno_i_valori_del_file_e_niente_si_ricalcola` | storytold/gridcraft#2137, accanto a #2048 | quando #2137 entra |
 | `0004-apertura-senza-ricalcolo` | UPSTREAM-API | `fub-format-xlsx` chiama `DocState::from_saved`; `commands.rs`: `un_comando_non_ricalcola_le_formule_che_non_tocca` | da proporre: `DocState::from_saved` (o un'opzione di apertura) | quando l'upstream apre senza ricalcolare |
 | `0005-sheetid-del-file` | UPSTREAM-BUGFIX | `fub-format-xlsx` legge `Sheet::file_id`; `commands.rs`: `i_fogli_nuovi_hanno_id_che_il_giornale_ritrova`; l'inventario, che riconosce i fogli dal `sheetId` | da proporre | quando lo scrittore tiene il `sheetId` letto |

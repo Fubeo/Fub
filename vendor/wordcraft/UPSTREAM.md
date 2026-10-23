@@ -45,7 +45,7 @@ cargo test --manifest-path vendor/wordcraft/Cargo.toml --workspace --locked
 Fuori dal workspace di Fub, i crate non passano dal suo
 `cargo clippy --workspace --all-targets -- -D warnings`: i lint del workspace
 di questa cartella permettono gli avvisi, che corregge l'upstream e non una
-copia, e vietano soltanto `unsafe`. Con la 1.89 di Fub i crate compilano e i
+copia, e vietano soltanto `unsafe`. Con la 1.95 di Fub i crate compilano e i
 loro test passano.
 
 Le patch di `patches/`, una per ragione:
