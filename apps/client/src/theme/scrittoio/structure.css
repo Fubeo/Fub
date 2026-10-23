@@ -1449,6 +1449,54 @@ body {
   pointer-events: none;
 }
 
+/* La scheda di una nota o di un commento: il thread scorre, i gesti restano
+   sotto. */
+.grid-comment-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+}
+.grid-comment-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.grid-comment-thread {
+  max-height: min(240px, 40vh);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+.grid-comment-post {
+  display: flex;
+  flex-direction: column;
+}
+.grid-comment-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.grid-comment-reply {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.grid-comment-field {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+}
+.grid-comment-actions {
+  display: flex;
+  flex-wrap: wrap;
+}
+.grid-comment-error {
+  margin: 0;
+}
+.grid-comment-error[hidden] { display: none; }
+
 /* Gli oggetti del foglio galleggiano sopra le celle e passano sotto le
    intestazioni e le righe bloccate, come in Excel. Quelli nella cella (un
    grafico sparkline, un'immagine nella cella) lasciano il clic alla cella. */

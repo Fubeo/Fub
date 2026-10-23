@@ -1,13 +1,17 @@
 // Le finestre di una cella: la nota, il commento e il collegamento
 // ipertestuale. Partono da ciò che la cella ha già (`cell.get`), così
-// «Modifica» e «Nuovo» sono la stessa finestra.
-import type { DialogBuilder, DialogContext } from "./host";
-import { formDialog } from "./form";
+// «Modifica» e «Nuovo» sono la stessa finestra, e danno i comandi sulla cella
+// che hanno letto.
+import type { DialogBuilder, DialogContext, SpecAction } from "./host";
+import { formDialog, formHandle } from "./form";
 import { t } from "./strings";
 
 interface CellComment {
+  readonly author?: unknown;
   readonly text?: unknown;
   readonly threaded?: unknown;
+  readonly resolved?: unknown;
+  /// Le risposte come le scrive GridCraft: `[autore, testo]`.
   readonly replies?: unknown;
 }
 
@@ -17,6 +21,7 @@ interface CellLink {
 }
 
 interface CellInfo {
+  readonly cell?: unknown;
   readonly text?: unknown;
   readonly comment?: CellComment | null;
   readonly hyperlink?: CellLink | null;
@@ -29,36 +34,73 @@ async function cellInfo(context: DialogContext): Promise<CellInfo> {
 
 const string = (value: unknown): string => (typeof value === "string" ? value : "");
 
-/// La nota (`threaded` falso) o il commento della cella attiva.
+/// Le risposte di un thread, `autore: testo`.
+function replyLines(comment: CellComment): string[] {
+  if (!Array.isArray(comment.replies)) return [];
+  return comment.replies.map((reply: unknown) => {
+    const [author, text] = Array.isArray(reply) ? reply : [];
+    return string(author) ? `${string(author)}: ${string(text)}` : string(text);
+  });
+}
+
+/// La nota (`threaded` falso) o il commento della cella attiva. Una cella che
+/// ne ha già uno apre quello, del suo tipo: scriverne uno dell'altro tipo
+/// sopra lo cancellerebbe, risposte comprese, e in Excel «Nuova nota» non si
+/// dà su un commento. Del commento la finestra mostra il thread, e con lo
+/// stesso OK cambia il testo, risponde e lo risolve o riapre: ciascuna è un
+/// comando suo, nell'ordine, e soltanto se è cambiata.
 function annotation(threaded: boolean): DialogBuilder {
   return async (context) => {
-    const existing = (await cellInfo(context)).comment ?? null;
-    // Una nota e un commento sono due cose: chi apre la nota di una cella che
-    // ha un commento ne scrive una nuova al suo posto, come in Excel.
-    const same = existing !== null && (existing.threaded === true) === threaded;
-    const replies = same && Array.isArray(existing.replies) ? existing.replies.length : 0;
-    const title = threaded
-      ? t(same ? "grid.dialog.comment.edit" : "grid.dialog.comment.new")
-      : t(same ? "grid.dialog.note.edit" : "grid.dialog.note.new");
-    return formDialog(context, {
+    const info = await cellInfo(context);
+    const existing = info.comment ?? null;
+    const thread = existing ? existing.threaded === true : threaded;
+    const cell = string(info.cell) || context.engine.selectionRefs().active;
+    const text = existing ? string(existing.text) : "";
+    const resolved = existing?.resolved === true;
+    const replies = existing ? replyLines(existing) : [];
+    const canReply = thread && existing !== null && context.serves("review.replyComment");
+    const canResolve = thread && existing !== null && context.serves("review.resolveComment");
+    const title = thread
+      ? t(existing ? "grid.dialog.comment.edit" : "grid.dialog.comment.new")
+      : t(existing ? "grid.dialog.note.edit" : "grid.dialog.note.new");
+    const handle = formHandle(context, {
       title,
-      values: { text: same ? string(existing.text) : "" },
-      command: threaded ? "review.newComment" : "review.newNote",
+      values: { text, reply: "", resolved },
+      command: thread ? "review.newComment" : "review.newNote",
       fields: () => [
-        { kind: "area", key: "text", label: t(threaded ? "grid.dialog.comment.label" : "grid.dialog.note.label"), rows: 5 },
-        ...(replies ? [{ kind: "note" as const, text: t("grid.dialog.comment.replies", { count: replies }) }] : []),
+        ...(existing && string(existing.author)
+          ? [{ kind: "note" as const, text: t("grid.dialog.comment.author", { author: string(existing.author) }) }]
+          : []),
+        { kind: "area", key: "text", label: t(thread ? "grid.dialog.comment.label" : "grid.dialog.note.label"), rows: 5 },
+        ...(replies.length
+          ? [{ kind: "section" as const, label: t("grid.dialog.comment.thread"), fields: replies.map((line) => ({ kind: "note" as const, text: line })) }]
+          : []),
+        ...(canReply ? [{ kind: "area" as const, key: "reply", label: t("grid.dialog.comment.reply"), rows: 2 }] : []),
+        ...(canResolve ? [{ kind: "check" as const, key: "resolved", label: t("grid.dialog.comment.resolved") }] : []),
       ],
-      extra: existing
-        ? [
-            {
-              id: "delete",
-              label: t("grid.dialog.comment.delete"),
-              kind: "danger",
-              run: () => context.give("review.deleteComment", {}),
-            },
-          ]
-        : [],
     });
+    const values = handle.values;
+    const ok: SpecAction = {
+      id: "ok",
+      label: t("grid.dialog.ok"),
+      kind: "primary",
+      run: async () => {
+        const steps: [string, Record<string, unknown>][] = [];
+        const written = String(values.text ?? "");
+        if (!existing || written !== text) steps.push([thread ? "review.newComment" : "review.newNote", { cell, text: written }]);
+        const reply = String(values.reply ?? "").trim();
+        if (canReply && reply) steps.push(["review.replyComment", { cell, text: reply }]);
+        if (canResolve && (values.resolved === true) !== resolved) steps.push(["review.resolveComment", { cell, resolved: values.resolved === true }]);
+        for (const [id, params] of steps) {
+          if (!(await context.give(id, params))) return false;
+        }
+        return true;
+      },
+    };
+    const extra: SpecAction[] = existing
+      ? [{ id: "delete", label: t("grid.dialog.comment.delete"), kind: "danger", run: () => context.give("review.deleteComment", { cell }) }]
+      : [];
+    return { ...handle.spec, actions: [...extra, { id: "cancel", label: t("grid.dialog.cancel") }, ok] };
   };
 }
 

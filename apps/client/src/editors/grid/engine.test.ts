@@ -20,6 +20,7 @@ import {
   type PluginError,
 } from "../../host/contract";
 import { resolvedLanguage, t } from "../../i18n/strings";
+import { HOVER_OPEN_DELAY_MS } from "../../kit";
 import { gridJournalText, parseGridJournal, recordGridJournal, type GridJournal } from "../../state/grid-journal";
 import { GridEngine, type GridChange, type GridEngineOptions, type GridHost } from "./engine";
 import { cellA1, parseCellA1 } from "./merges";
@@ -1202,7 +1203,11 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(text.style.textDecorationLine).toBe("underline line-through");
     expect(text.style.textDecorationStyle).toBe("double");
     expect(affitto.querySelector(".grid-comment-mark.threaded")).not.toBeNull();
-    expect(affitto.title).toBe("Ada: Da rivedere\nBea: Fatto");
+    // Il thread non sta più nel `title`: lo dice la cella a chi non vede, e lo
+    // mostra la scheda al passaggio.
+    expect(affitto.title).toBe("");
+    expect(affitto.dataset.comment).toBe("thread");
+    expect(affitto.getAttribute("aria-description")).toBe("Commento: Ada: Da rivedere. Bea: Fatto");
     const border = [...host.querySelectorAll<HTMLElement>(".grid-border")]
       .find((element) => element.style.borderTop.includes("#112233") || element.style.borderTop.includes("rgb(17, 34, 51)"))!;
     expect(border).toBeDefined();
@@ -1217,6 +1222,82 @@ describe("GridEngine con una cartella di Excel", () => {
     // Un numero senza allineamento del file va a destra.
     expect(cell(2, 1)!.style.textAlign).toBe("end");
     expect(cell(2, 1)!.title).toBe("https://example.org");
+    engine.destroy();
+  });
+
+  it("mostra il thread di un commento al passaggio, e i suoi gesti valgono per quella cella", async () => {
+    const grid = workbookHost({
+      window: (window) => {
+        if (window.sheet !== "s1") return;
+        const affitto = window.cells.find((cell) => cell.key.row === "r1" && cell.key.column === "c0")!;
+        affitto.comment = { author: "Ada", text: "Da rivedere", threaded: true, resolved: false, replies: [{ author: "Bea", text: "Fatto" }] };
+        const nota = window.cells.find((cell) => cell.key.row === "r2" && cell.key.column === "c0")!;
+        nota.comment = { author: "", text: "Promemoria", threaded: false, resolved: false, replies: [] };
+      },
+    });
+    const opened: string[] = [];
+    const { engine, cell, go } = await workbookMounted(grid, "", undefined, { onDialog: (dialog) => opened.push(dialog.id) });
+    go(2, 1);
+    const hover = async (target: HTMLElement) => {
+      target.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "mouse" }));
+      await new Promise((resolve) => setTimeout(resolve, HOVER_OPEN_DELAY_MS + 30));
+      await settle();
+      return document.body.querySelector<HTMLElement>(".grid-comment-card");
+    };
+    const card = (await hover(cell(1, 0)!))!;
+    expect(card).not.toBeNull();
+    expect(card.closest("[role=region]")?.getAttribute("aria-label")).toBe("Commento in A2");
+    expect([...card.querySelectorAll(".grid-comment-post")].map((post) => post.textContent)).toEqual(["AdaDa rivedere", "BeaFatto"]);
+    const field = card.querySelector<HTMLTextAreaElement>(".grid-comment-field")!;
+    expect(document.body.querySelector(`label[for="${field.id}"]`)?.textContent).toBe(t("grid.comment.reply_field"));
+    field.value = "Ricontrollato";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await settle();
+    // La risposta va alla cella indicata, non alla cella attiva (B3).
+    const reply = grid.given.find((request) => request.command.id === "review.replyComment")!;
+    expect(JSON.parse(reply.command.params)).toEqual({ cell: "A2", text: "Ricontrollato" });
+    expect(reply.command.active).toBe("B3");
+    expect(document.body.querySelector(".grid-comment-card")).toBeNull();
+
+    const resolve = (await hover(cell(1, 0)!))!;
+    const labels = [...resolve.querySelectorAll<HTMLButtonElement>(".grid-comment-action")].map((button) => button.textContent);
+    expect(labels).toEqual([t("grid.comment.reply"), t("grid.comment.resolve"), t("grid.comment.edit"), t("grid.comment.delete")]);
+    [...resolve.querySelectorAll<HTMLButtonElement>(".grid-comment-action")].find((button) => button.textContent === t("grid.comment.resolve"))!.click();
+    await settle();
+    const resolved = grid.given.find((request) => request.command.id === "review.resolveComment")!;
+    expect(JSON.parse(resolved.command.params)).toEqual({ cell: "A2", resolved: true });
+
+    // La nota: niente risposta, e Modifica seleziona la cella e apre la sua finestra.
+    const note = (await hover(cell(2, 0)!))!;
+    expect(note.querySelector(".grid-comment-field")).toBeNull();
+    expect(note.closest("[role=region]")?.getAttribute("aria-label")).toBe("Nota in A3");
+    [...note.querySelectorAll<HTMLButtonElement>(".grid-comment-action")].find((button) => button.textContent === t("grid.comment.edit"))!.click();
+    await settle();
+    expect(opened).toEqual(["note"]);
+    expect(engine.selectionRefs().active).toBe("A3");
+    engine.destroy();
+    expect(document.body.querySelector(".grid-comment-card")).toBeNull();
+  });
+
+  it("in sola lettura la scheda mostra soltanto il thread", async () => {
+    const grid = workbookHost({
+      window: (window) => {
+        if (window.sheet !== "s1") return;
+        const affitto = window.cells.find((cell) => cell.key.row === "r1" && cell.key.column === "c0")!;
+        affitto.comment = { author: "Ada", text: "Da rivedere", threaded: true, resolved: true, replies: [] };
+      },
+    });
+    const { engine, cell } = await workbookMounted(grid);
+    engine.setReadOnly(true);
+    await settle();
+    expect(cell(1, 0)!.getAttribute("aria-description")).toBe("Commento risolto: Ada: Da rivedere");
+    expect(cell(1, 0)!.querySelector(".grid-comment-mark.resolved")).not.toBeNull();
+    cell(1, 0)!.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "mouse" }));
+    await new Promise((resolve) => setTimeout(resolve, HOVER_OPEN_DELAY_MS + 30));
+    await settle();
+    const card = document.body.querySelector<HTMLElement>(".grid-comment-card")!;
+    expect(card.querySelector(".grid-comment-resolved")?.textContent).toBe(t("grid.comment.resolved"));
+    expect(card.querySelector(".grid-comment-field, .grid-comment-action")).toBeNull();
     engine.destroy();
   });
 

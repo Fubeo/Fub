@@ -384,9 +384,11 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     const el = wrap(control);
     let view: RibbonView | null = null;
     const press = button(control, () => t(control.label), () => {
-      const params = typeof control.params === "function" ? control.params(view ?? readView()) : control.params;
+      const now = view ?? readView();
+      const params = typeof control.params === "function" ? control.params(now) : control.params;
+      const dialog = typeof control.dialog === "function" ? control.dialog(now) : control.dialog;
       if (control.shell) shellAction(control.shell);
-      else if (control.dialog) ask(control.dialog, params);
+      else if (dialog) ask(dialog, params);
       else give(control.id, params);
     });
     el.append(press);

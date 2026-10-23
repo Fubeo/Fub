@@ -253,6 +253,91 @@ describe("le finestre dei fogli", () => {
     expect(document.querySelectorAll(".kit-dialog").length).toBe(1);
   });
 
+  it("Modifica commento tiene il thread: cambia il testo, risponde e risolve sulla cella letta", async () => {
+    const state = fake();
+    state.answers["cell.get"] = {
+      cell: "C4",
+      comment: { author: "Ada", text: "Da rivedere", threaded: true, resolved: false, visible: false, replies: [["Bea", "Fatto"]] },
+    };
+    const dialogs = mount(state);
+    dialogs.open({ id: "comment", params: "{}" });
+    await settle();
+    expect(dialogs.current()?.textContent).toContain("Bea: Fatto");
+    const text = control<HTMLTextAreaElement>(dialogs, "text");
+    expect(text.value).toBe("Da rivedere");
+    text.value = "Rivisto";
+    text.dispatchEvent(new Event("input"));
+    const reply = control<HTMLTextAreaElement>(dialogs, "reply");
+    reply.value = "  Grazie ";
+    reply.dispatchEvent(new Event("input"));
+    const resolved = control<HTMLInputElement>(dialogs, "resolved");
+    resolved.checked = true;
+    resolved.dispatchEvent(new Event("change"));
+    press(dialogs, "ok");
+    await settle();
+    expect(state.runs).toEqual([
+      ["review.newComment", { cell: "C4", text: "Rivisto" }],
+      ["review.replyComment", { cell: "C4", text: "Grazie" }],
+      ["review.resolveComment", { cell: "C4", resolved: true }],
+    ]);
+    expect(dialogs.current()).toBeNull();
+  });
+
+  it("Modifica commento senza cambiamenti non dà comandi, ed Elimina toglie quello della cella", async () => {
+    const state = fake();
+    state.answers["cell.get"] = { cell: "C4", comment: { author: "Ada", text: "Da rivedere", threaded: true, resolved: false, replies: [] } };
+    const dialogs = mount(state);
+    dialogs.open({ id: "comment", params: "{}" });
+    await settle();
+    press(dialogs, "ok");
+    await settle();
+    expect(state.runs).toEqual([]);
+    dialogs.open({ id: "comment", params: "{}" });
+    await settle();
+    press(dialogs, "delete");
+    await settle();
+    expect(state.runs).toEqual([["review.deleteComment", { cell: "C4" }]]);
+  });
+
+  it("Nuova nota su un commento apre il commento, e non lo sostituisce", async () => {
+    const state = fake();
+    state.answers["cell.get"] = { cell: "C4", comment: { author: "Ada", text: "Da rivedere", threaded: true, resolved: false, replies: [["Bea", "Fatto"]] } };
+    const dialogs = mount(state);
+    dialogs.open({ id: "note", params: "{}" });
+    await settle();
+    expect(dialogs.current()?.textContent).toContain(t("grid.dialog.comment.edit"));
+    const text = control<HTMLTextAreaElement>(dialogs, "text");
+    text.value = "Altro";
+    text.dispatchEvent(new Event("input"));
+    press(dialogs, "ok");
+    await settle();
+    expect(state.runs).toEqual([["review.newComment", { cell: "C4", text: "Altro" }]]);
+  });
+
+  it("Rimuovi protezione prova senza password e la chiede soltanto se serve", async () => {
+    const state = fake();
+    const dialogs = mount(state);
+    dialogs.open({ id: "unprotectSheet", params: "{}" });
+    await settle();
+    expect(state.runs).toEqual([["review.unprotectSheet", {}]]);
+    expect(dialogs.current()).toBeNull();
+    expect(state.focused).toBe(1);
+
+    state.refuse = "Serve la password.";
+    dialogs.open({ id: "unprotectWorkbook", params: "{}" });
+    await settle();
+    const password = control<HTMLInputElement>(dialogs, "password");
+    password.value = "segreta";
+    password.dispatchEvent(new Event("input"));
+    press(dialogs, "ok");
+    await settle();
+    expect(state.runs.slice(1)).toEqual([
+      ["review.protectWorkbook", { on: false }],
+      ["review.protectWorkbook", { on: false, password: "segreta" }],
+    ]);
+    expect(dialogs.current()).toBeNull();
+  });
+
   it("si smonta senza lasciare finestre", async () => {
     const state = fake();
     const dialogs = mount(state);
