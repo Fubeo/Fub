@@ -233,15 +233,22 @@ fn una_modifica_entra_nel_giornale_e_segna_le_formule_che_la_leggono() {
     .unwrap();
     assert_eq!(undone.edit.inserted, "");
     assert_eq!(undone.revision, session.revision);
-    assert!(matches!(
-        apply(
-            &mut provider,
-            &session,
-            &undone.revision,
-            vec![patch("B2", "=A2*3")]
-        ),
-        Err(PluginError::BadArgs(_))
-    ));
+    // Una formula nuova entra come comando (ADR 0219), e il giornale non è
+    // più di celle.
+    let formula = apply(
+        &mut provider,
+        &session,
+        &undone.revision,
+        vec![patch("B2", "=A2*3")],
+    )
+    .unwrap();
+    assert_eq!(
+        GridJournal::parse(&formula.edit.inserted)
+            .unwrap()
+            .commands()
+            .len(),
+        1
+    );
 }
 
 #[test]
@@ -250,7 +257,12 @@ fn le_modifiche_che_non_si_scrivono_si_rifiutano() {
     let (mut provider, session) = open(&bytes, &GridJournal::new());
     let revision = &session.revision;
     assert!(matches!(
-        apply(&mut provider, &session, revision, vec![patch("A1", "=B1")]),
+        apply(
+            &mut provider,
+            &session,
+            revision,
+            vec![patch("A1", "=SUM(")]
+        ),
         Err(PluginError::BadArgs(_))
     ));
     assert!(matches!(

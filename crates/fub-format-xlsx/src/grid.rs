@@ -1007,7 +1007,7 @@ impl Instance {
         if request.revision != self.revision {
             return Err(stale_revision());
         }
-        if self.commanding {
+        if self.commanding || self.writes_formula(request) {
             return self.apply_commands(request);
         }
         let mut journal = self.journal.clone();
@@ -1326,10 +1326,24 @@ impl Instance {
         })
     }
 
+    /// Se una patch scrive una formula nuova: entra soltanto come comando, e
+    /// la sessione passa alla modalità a comandi. Tornare alla formula dei
+    /// byte resta una voce che esce dal giornale di celle.
+    fn writes_formula(&self, request: &GridApplyRequest) -> bool {
+        self.blocked().is_none()
+            && request.patches.iter().any(|patch| {
+                patch.after.starts_with('=')
+                    && self
+                        .place(&patch.cell)
+                        .is_some_and(|(sheet, cell)| self.disk_input(sheet, cell) != patch.after)
+            })
+    }
+
     /// Le patch in modalità a comandi: ognuna è l'input della sua cella.
     fn apply_commands(&mut self, request: &GridApplyRequest) -> Result<GridCommit, PluginError> {
         let before = self.journal.to_text();
         self.transaction(|this| {
+            this.enter()?;
             for patch in &request.patches {
                 let (sheet, cell) = this
                     .place(&patch.cell)

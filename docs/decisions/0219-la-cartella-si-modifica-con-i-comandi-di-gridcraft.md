@@ -54,9 +54,9 @@ del file.
   base, ognuno con l'id, i parametri e la selezione su cui è stato dato. I
   parametri sono il testo di un oggetto JSON, che nessun lato riscrive.
 - Una sessione resta un giornale di celle della 0216 finché non riceve il
-  primo comando: allora ogni voce, e da lì ogni input, entra nel giornale
-  come `range.setValues` su una cella, con la regola di Fub (una formula
-  comincia con `=`, un testo resta testo). Un comando che non cambia la
+  primo comando o la prima formula da scrivere: allora ogni voce, e da lì
+  ogni input, entra nel giornale come `range.setValues` su una cella, con
+  la regola di Fub (una formula comincia con `=`, un testo resta testo). Un comando che non cambia la
   cartella non entra nel giornale, e non porta la sessione a comandi.
 - Il provider rifà il giornale sulla base all'apertura e tiene la sessione
   della facciata; un comando che non si rifà, o che non cambia più la
