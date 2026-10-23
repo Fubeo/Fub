@@ -35,8 +35,13 @@ import type {
   SurfaceScrollLink,
 } from "../../../core/registry";
 import type { EditorChange } from "../../../core/text-operation";
-import { createTextEngine, type CursorContext } from "../../engine";
+import { createTextEngine } from "../../engine";
 import type { CompletionSources } from "./completions";
+import { cursorIsLiteral, runSlashAction, type SlashMenuSource } from "./slash";
+import type { SlashMenuHost } from "../../../core/editor-menu";
+import { iconEl } from "../../../../ui/icons";
+
+export { cursorIsLiteral };
 import { createMarkdownProfile } from "./profile";
 import { anchorAtCursor, writeAnchor } from "./anchor-link";
 import type { TableGridActions } from "./table-grid";
@@ -72,6 +77,8 @@ export const MARKDOWN_MODES: readonly SurfaceMode[] = [
 /// Le sole capacità di shell necessarie alla palette slash.
 export type EditorSlashHost = Parameters<typeof openSlashPalette>[3] & {
   currentDoc(): string | null;
+  /// Il menu «/» nel testo: senza, il «/» senza selezione apre la palette.
+  menu?: SlashMenuHost;
 };
 
 export interface MarkdownSurfaceOptions {
@@ -146,17 +153,6 @@ export function slashOpensAt(lineBefore: string): boolean {
   return lineBefore === "" || /\s$/.test(lineBefore);
 }
 
-/// I nodi Markdown dentro cui una battuta resta testo: codice, formula, link,
-/// URL, HTML, commento e frontmatter.
-const LITERAL_NODE = /code|url|link|math|html|comment|frontmatter/i;
-
-/// Il cursore sta dove un carattere è testo letterale: dentro uno di quei
-/// nodi, o in un wikilink ancora da chiudere, che un nodo non ce l'ha ancora.
-export function cursorIsLiteral(cursor: Pick<CursorContext, "nodes" | "lineBefore">): boolean {
-  if (cursor.nodes.some((name) => LITERAL_NODE.test(name))) return true;
-  return cursor.lineBefore.lastIndexOf("[[") > cursor.lineBefore.lastIndexOf("]]");
-}
-
 /// La finestra in cui la lettura raccoglie le modifiche arrivate da un altro
 /// riquadro prima di ridisegnarsi.
 const READING_SYNC_MS = 120;
@@ -180,6 +176,22 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// La griglia di tabella che ha il fuoco: le azioni della barra agiscono
   /// sulle sue celle invece che sul cursore del testo.
   let tableGrid: TableGridActions | null = null;
+  // Il menu «/» nel testo: le voci le dà la shell, la superficie le esegue.
+  // Spento (`editor.slash`), in lettura, in sola lettura o su un documento
+  // che non è più quello del riquadro, non ha voci e il «/» resta testo.
+  const slashHost = opts.slash?.menu;
+  const slashMenu: SlashMenuSource | undefined = slashHost && {
+    entries: (query) =>
+      !slashHost.enabled() || readOnly || mode === "reading" || opts.slash?.currentDoc() !== documentId
+        ? []
+        : slashHost.entries(query, (id) => editorActions.has(id) && editorActions.state(id).enabled),
+    choose: (view, entry, from, to) => {
+      if (entry.action) runSlashAction(view, entry.id, from, to);
+      else view.dispatch({ changes: { from, to }, userEvent: "input.complete" });
+      slashHost.chosen(entry, parent, engine.anchorBox());
+    },
+    icon: (name) => iconEl(name),
+  };
   const profile = createMarkdownProfile({
     callbacks: {
       openWikilink,
@@ -212,7 +224,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         importRemoteImage: readOnly ? undefined : importRemoteImage,
       }),
     },
-    completions: opts.completions,
+    completions: slashMenu ? { ...opts.completions, slash: slashMenu } : opts.completions,
   });
   let mode: MarkdownMode = "live_preview";
   let forms: readonly SyntaxForm[] | undefined;
@@ -265,6 +277,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     // una selezione oppure a inizio parola, fuori da codice e link.
     const cursor = engine.cursorContext();
     if (cursor.empty && (cursorIsLiteral(cursor) || !slashOpensAt(cursor.lineBefore))) return;
+    // Senza selezione il «/» si scrive, e il menu nel testo lo prende da lì;
+    // spento, resta testo. La palette resta per la selezione.
+    if (cursor.empty && slash.menu) return;
     event.preventDefault();
     event.stopPropagation();
     const text = engine.getDoc();

@@ -365,6 +365,12 @@ export function paletteHistoryForTest(): PaletteHistory {
   return paletteHistory;
 }
 
+/// I comandi lanciati di recente, dal più recente: il menu «/» nel testo li
+/// mette in cima.
+export function recentCommands(): readonly string[] {
+  return paletteHistory.recent;
+}
+
 /// Ricorda un lancio riuscito: la cosa in cima, senza doppioni, al tetto.
 /// Pura la regola, impura la scrittura — come `rememberSearch`.
 export function rememberCommand(id: string): void {

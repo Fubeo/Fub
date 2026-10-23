@@ -188,6 +188,13 @@ const BUTTONS: &[Button] = &[
         "Turns the selection into a `[[…]]` link to another note.",
     ],
     [
+        "markdown.embed",
+        "Incorpora una nota",
+        "Incorpora nel testo un'altra nota, o un suo file, con `![[…]]`.",
+        "Embed a note",
+        "Embeds another note, or one of its files, in the text with `![[…]]`.",
+    ],
+    [
         "markdown.image",
         "Immagine",
         "Inserisce un'immagine, con la selezione come testo alternativo.",
@@ -272,6 +279,13 @@ const BUTTONS: &[Button] = &[
         "Racchiude le righe selezionate fra `$$`, o toglie il blocco.",
         "Math block",
         "Wraps the selected lines between `$$`, or removes the block.",
+    ],
+    [
+        "markdown.diagram",
+        "Diagramma",
+        "Inserisce un blocco `mermaid` e ne propone i modelli.",
+        "Diagram",
+        "Inserts a `mermaid` block and offers its templates.",
     ],
     [
         "markdown.rule",
@@ -396,6 +410,37 @@ const BUTTONS: &[Button] = &[
     ],
 ];
 
+/// Le azioni che stanno anche nel menu «/» del testo: ciò che si inserisce o
+/// che cambia il blocco della riga. Fuori la cronologia, i gesti sul
+/// carattere, le operazioni sulla tabella e sulle proprietà già scritte: un
+/// «/» si scrive dove si comincia qualcosa, non su una selezione.
+const SLASH: &[&str] = &[
+    "markdown.paragraph",
+    "markdown.heading.1",
+    "markdown.heading.2",
+    "markdown.heading.3",
+    "markdown.heading.4",
+    "markdown.heading.5",
+    "markdown.heading.6",
+    "markdown.quote",
+    "markdown.callout",
+    "markdown.list.bullet",
+    "markdown.list.ordered",
+    "markdown.list.task",
+    "markdown.table",
+    "markdown.rule",
+    "markdown.codeblock",
+    "markdown.mathblock",
+    "markdown.diagram",
+    "markdown.image",
+    "markdown.link",
+    "markdown.wikilink",
+    "markdown.embed",
+    "markdown.footnote",
+    "markdown.property.add",
+    "markdown.comment",
+];
+
 fn title_key(id: &str) -> String {
     format!("{id}.title")
 }
@@ -433,10 +478,15 @@ impl FormattingCommands {
 /// modifica è una battuta nella nota aperta, che la sessione salva come le
 /// altre.
 fn spec(id: &str) -> CommandSpec {
-    CommandSpec::new(id, Text::key(title_key(id)))
+    let spec = CommandSpec::new(id, Text::key(title_key(id)))
         .describing(Text::key(desc_key(id)))
         .with_scope(CommandScope::read_only())
-        .offered_in(CommandSurface::Toolbar)
+        .offered_in(CommandSurface::Toolbar);
+    if SLASH.contains(&id) {
+        spec.offered_in(CommandSurface::Slash)
+    } else {
+        spec
+    }
 }
 
 impl CommandProvider for FormattingCommands {
@@ -477,7 +527,12 @@ mod tests {
         let specs = FormattingCommands::specs();
         assert_eq!(specs.len(), BUTTONS.len());
         for spec in &specs {
-            assert_eq!(spec.surfaces, [CommandSurface::Toolbar], "{}", spec.id);
+            let expected: &[CommandSurface] = if SLASH.contains(&spec.id.as_str()) {
+                &[CommandSurface::Toolbar, CommandSurface::Slash]
+            } else {
+                &[CommandSurface::Toolbar]
+            };
+            assert_eq!(spec.surfaces, expected, "{}", spec.id);
             assert!(!spec.scope.writes, "{} non scrive nel vault", spec.id);
             assert!(spec.params.is_empty(), "{} non chiede niente", spec.id);
             assert!(spec.keybinding.is_none(), "{}: niente accordi", spec.id);
@@ -496,6 +551,27 @@ mod tests {
                 id.starts_with("markdown.") || id.starts_with("text."),
                 "{id} non è nel vocabolario delle azioni dell'editor"
             );
+        }
+    }
+
+    #[test]
+    fn the_slash_menu_offers_blocks_and_inserts_only() {
+        for id in SLASH {
+            assert!(
+                BUTTONS.iter().any(|[button, ..]| button == id),
+                "{id} nel «/» senza essere un pulsante"
+            );
+        }
+        for id in [
+            "text.undo",
+            "markdown.bold",
+            "markdown.clear",
+            "markdown.list.indent",
+            "markdown.table.row.after",
+            "markdown.property.up",
+            "markdown.footnote.delete",
+        ] {
+            assert!(!SLASH.contains(&id), "{id} non si scrive col «/»");
         }
     }
 

@@ -138,7 +138,8 @@ import { showActivity } from "../panels/activity";
 import { notify } from "../ui/notify";
 import { applyIntent } from "../ui/intents";
 import { slashContextDoc } from "./slash";
-import { openSlashPalette } from "../ui/palette";
+import { openSlashPalette, recentCommands, rememberCommand } from "../ui/palette";
+import { slashMenuEntries } from "../panels/slash-menu";
 import type { SelectionBox } from "../editors/core/editor-actions";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
 import { errorText } from "../host/errors";
@@ -793,6 +794,14 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       notify,
       flushPendingSave,
       publishContext,
+      menu: {
+        enabled: () => document.getElementById("app")?.dataset["slash"] !== "off",
+        entries: (query, has) => slashMenuEntries(state.commandSpecs, query, has, recentCommands()),
+        chosen: (entry, owner, anchor) => {
+          rememberCommand(entry.id);
+          if (!entry.action) runSlashCommand(owner, entry.id, "", anchor);
+        },
+      },
     },
     completions: {
       searchNotes: (prefix: string) =>

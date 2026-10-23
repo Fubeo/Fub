@@ -232,6 +232,8 @@ export const toggleInlineCode: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 export const toggleWikilink = toggleWrap("[[", "]]");
+/// L'incorporamento: un wikilink con il `!` davanti.
+export const toggleEmbed = toggleWrap("![[", "]]");
 /// I delimitatori dichiarati dalle regole ufficiali (`fub:highlight`,
 /// `fub:comments`) e il math in riga: stessa meccanica del grassetto.
 export const toggleHighlight = toggleWrap("==");

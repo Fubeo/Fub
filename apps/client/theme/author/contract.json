@@ -495,6 +495,8 @@
     "cm-completionMatchedText",
     "cm-completionDetail",
     "cm-completionInfo",
+    "cm-completionIcon-fub-slash",
+    "cm-fub-slash-icon",
     "document-surface-error",
     "document-surface-viewer",
     "media-surface",
@@ -2713,7 +2715,9 @@
         "cm-tooltip-autocomplete",
         "cm-completionMatchedText",
         "cm-completionDetail",
-        "cm-completionInfo"
+        "cm-completionInfo",
+        "cm-completionIcon-fub-slash",
+        "cm-fub-slash-icon"
       ],
       "states": [
         "rest",
@@ -5528,7 +5532,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1200,
+    "hooks": 1202,
     "state_names": 7,
     "assigned_states": 641,
     "components": 190,

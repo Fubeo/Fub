@@ -23,6 +23,8 @@
 // id che adesso non si risolve non si vede. Una voce scritta come oggetto porta
 // il suo nome e il suo gesto, con un id stabile per chi la cerca.
 
+import type { SelectionBox } from "./editor-actions";
+
 /// Che cosa sta sotto il puntatore: dice alla shell quali voci comuni hanno
 /// senso, e ai plugin su cosa agiscono.
 export type SurfaceMenuTargetKind =
@@ -117,4 +119,36 @@ export interface SurfaceMenu {
 /// un foglio): la monta nel contenitore e torna come smontarla.
 export interface SurfaceMiniBar {
   mount(host: HTMLElement): () => void;
+}
+
+/// Le sezioni del menu «/» nel testo, nell'ordine in cui si vedono.
+export type SlashSection = "recent" | "text" | "lists" | "insert" | "vault";
+
+/// Una voce del menu «/» nel testo, già filtrata e ordinata dalla shell
+/// (`panels/slash-menu.ts`): la superficie la disegna e, scelta, la esegue.
+export interface SlashMenuEntry {
+  readonly id: string;
+  readonly label: string;
+  readonly description: string;
+  /// Il nome di un'icona del repertorio, o `""`.
+  readonly icon: string;
+  /// A destra: la scorciatoia Markdown (`#`, `- [ ]`) o l'accordo.
+  readonly hint: string | null;
+  readonly section: SlashSection;
+  /// Un'azione dell'editor che la superficie esegue da sé; altrimenti un
+  /// comando del registro, che esegue la shell.
+  readonly action: boolean;
+}
+
+/// Ciò che la shell dà alla superficie per il menu «/» nel testo.
+export interface SlashMenuHost {
+  /// L'impostazione `editor.slash`: spenta, il «/» è testo.
+  enabled(): boolean;
+  /// Le voci per ciò che si è scritto dopo il «/». `has` dice quali azioni
+  /// dell'editor la superficie sa eseguire.
+  entries(query: string, has: (id: string) => boolean): readonly SlashMenuEntry[];
+  /// Una voce è stata scelta, e il «/query» è già sparito: la shell la
+  /// ricorda fra i recenti e, se è un comando, lo esegue accanto al cursore
+  /// (`anchor`) dell'editor che sta in `owner`.
+  chosen(entry: SlashMenuEntry, owner: HTMLElement, anchor: SelectionBox | null): void;
 }

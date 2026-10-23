@@ -120,12 +120,17 @@ export function composeEditorMenu(menu: SurfaceMenu, host: EditorMenuHost): Menu
   const vault: MenuItem[] = [];
   if (menu.commands) {
     const selection = host.selection();
-    const slash = slashCandidates([...host.specs()], selection).map((spec): MenuItem => ({
-      label: spec.title,
-      description: spec.description || undefined,
-      hint: displayBinding(commands.get(spec.id)?.binding ?? spec.keybinding) || undefined,
-      run: () => host.runSlash(spec.id),
-    }));
+    // Le azioni dell'editor offerte anche al «/» stanno già in Formato e
+    // Inserisci: qui i comandi del vault.
+    const actions = host.surface()?.editorActions;
+    const slash = slashCandidates([...host.specs()], selection)
+      .filter((spec) => !actions?.has(spec.id) && !ACTION_LOOKS[spec.id])
+      .map((spec): MenuItem => ({
+        label: spec.title,
+        description: spec.description || undefined,
+        hint: displayBinding(commands.get(spec.id)?.binding ?? spec.keybinding) || undefined,
+        run: () => host.runSlash(spec.id),
+      }));
     if (slash.length > 0) vault.push({ label: t("editor_menu.commands"), items: slash });
   }
   const note = menu.note;
