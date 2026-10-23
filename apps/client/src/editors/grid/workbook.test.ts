@@ -28,7 +28,7 @@ describe("una cartella di Excel sulla versione 2", () => {
     // Il foglio nascosto non è fra quelli da mostrare.
     expect(view.workbook.sheets.map((sheet) => sheet.name)).toEqual(["Conti", "Note"]);
     expect(view.active).toBe(0);
-    expect(view.notices).toEqual([{ code: "not-shown-merges", count: 1 }, { code: "uncomputed", count: 1 }]);
+    expect(view.notices).toEqual([{ code: "uncomputed", count: 1 }]);
 
     const conti = view.workbook.sheets[0];
     expect(conti.rows).toHaveLength(session.sheets[0].row_count);

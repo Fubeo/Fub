@@ -151,17 +151,25 @@ cambiata tiene il valore del file, segnato come vecchio.
 `apps/client/src/editors/grid/workbook.ts` controlla sessioni e finestre
 campo per campo e le trasforma nel modello che
 `GridEngine` disegna, con le schede dei fogli visibili, la formula nella barra
-e un avviso per ciò che la griglia non mostra o non ricalcola. Modificare una
-cella scrive una voce del giornale; si scrivono soltanto valori costanti, e le
-celle bloccate (matrici, formule condivise, tabelle, celle unite, pivot, fogli
-protetti) lo dicono già nella finestra.
+e un avviso per ciò che la griglia non mostra o non ricalcola. La griglia
+disegna lo stile risolto di ogni cella (carattere, bordi, allineamento,
+rotazione, barre e icone della formattazione condizionale), le celle unite, i
+commenti, il testo che passa nelle celle vuote accanto e la vista del foglio
+(riquadri bloccati, zoom, griglia e intestazioni). Modificare una costante
+scrive una voce del giornale; le celle bloccate (matrici, formule condivise,
+tabelle, celle unite, pivot, fogli protetti) lo dicono già nella finestra.
+Una formula, un comando del catalogo (anche dalle scorciatoie di Excel,
+`editors/grid/shortcuts.ts`) o un giornale che ha già comandi portano la
+sessione ai **comandi**: da lì il giornale lo scrive il provider, la griglia
+pubblica quello che lui conferma, e annulla e ripeti sono del documento
+(`edit.undo`, `edit.redo`).
 
 Salvare è dell'host: `write_document` del giornale rilegge i byte alla base,
 innesta le voci a livello di riga (il resto del file resta byte per byte),
 rilegge il risultato e lo scrive con il CAS. Un giornale di comandi
 (`fub-format-xlsx`, [ADR
 0219](../decisions/0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md),
-in proposta; la shell non lo scrive ancora) si rifà sui byte, e si salva per
+in proposta) si rifà sui byte, e si salva per
 innesto quando cambia soltanto l'input di costanti, altrimenti riscrivendo la
 cartella con il codec, se l'inventario del pacchetto dice che la riscrittura
 non perde niente. Il giornale salvato si ribasa

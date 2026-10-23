@@ -281,17 +281,11 @@ fn le_macro_e_i_collegamenti_esterni_si_dicono() {
 }
 
 #[test]
-fn ciò_che_la_griglia_non_disegna_si_dice() {
+fn le_unioni_e_la_formattazione_condizionale_si_disegnano_e_non_si_dicono() {
     let p = opened(&one_sheet(
         r#"<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData><mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells><conditionalFormatting sqref="A1"><cfRule type="cellIs" dxfId="0" priority="1" operator="greaterThan"><formula>0</formula></cfRule></conditionalFormatting>"#,
     ));
-    assert_eq!(
-        p.notices(),
-        [
-            ("not-shown-conditional-formats", 1),
-            ("not-shown-merges", 1)
-        ]
-    );
+    assert!(p.notices().is_empty(), "{:?}", p.notices());
 }
 
 #[test]

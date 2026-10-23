@@ -9,14 +9,20 @@ import {
   type GridBytesWindow,
   type GridCellKey,
   type GridCellStyle,
+  type GridCommand,
+  type GridCommandOutcome,
+  type GridCommandRequest,
+  type GridCommandState,
   type GridCommit,
+  type GridDialog,
   type GridSurfaceSpec,
   type GridWindowRequest,
   type PluginError,
 } from "../../host/contract";
 import { resolvedLanguage, t } from "../../i18n/strings";
-import { gridJournalText, parseGridJournal, recordGridJournal } from "../../state/grid-journal";
-import { GridEngine, type GridChange, type GridHost } from "./engine";
+import { gridJournalText, parseGridJournal, recordGridJournal, type GridJournal } from "../../state/grid-journal";
+import { GridEngine, type GridChange, type GridEngineOptions, type GridHost } from "./engine";
+import { cellA1, parseCellA1 } from "./merges";
 import { decimalSeparator, localInput } from "./workbook";
 import xlsx from "../../__fixtures__/xlsx-grid.json";
 
@@ -226,7 +232,11 @@ function settle(): Promise<void> {
 
 /** Conferma la cella attiva come se l'utente ci avesse scritto `text` e Invio. */
 function typeInActiveCell(host: HTMLElement, viewport: HTMLElement, text: string): void {
-  viewport.dispatchEvent(new KeyboardEvent("keydown", { key: text, bubbles: true }));
+  viewport.dispatchEvent(new KeyboardEvent("keydown", { key: text[0], bubbles: true }));
+  if (text.length > 1) {
+    const editor = findTextEditorOrThrow(host.querySelector<HTMLElement>(".grid-cell-editor")!);
+    editor.dispatch({ changes: { from: editor.state.doc.length, insert: text.slice(1) }, userEvent: "input" });
+  }
   host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
     .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
   viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
@@ -642,7 +652,33 @@ describe("GridEngine", () => {
   });
 });
 
-function workbookHost(options: { readonly base?: () => string } = {}) {
+/// Il valore che un comando d'input scrive, come input della cella.
+function inputOfValue(value: unknown): string {
+  return value === null ? "" : typeof value === "string" ? value : String(value);
+}
+
+/// Le celle che i comandi `range.setValues` del giornale scrivono, per foglio.
+function commandInputs(journal: GridJournal): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const command of journal.commands) {
+    if (command.id !== "range.setValues") continue;
+    const { range, values } = JSON.parse(command.params) as { range: string; values: unknown[][] };
+    const at = parseCellA1(range)!;
+    out.set(`${command.sheet}\u0000r${at.row}\u0000c${at.column}`, inputOfValue(values[0]![0]));
+  }
+  return out;
+}
+
+function workbookHost(options: {
+  readonly base?: () => string;
+  /// Se la sessione serve `range.setValues`: con `false` il catalogo non
+  /// riceve formule.
+  readonly serves?: boolean;
+  /// Cambia la finestra prima che arrivi alla griglia.
+  readonly window?: (window: GridBytesWindow) => void;
+  /// La finestra di dialogo che un comando chiede.
+  readonly dialog?: (command: GridCommand) => GridDialog | null;
+} = {}) {
   const calls: string[] = [];
   const opened: string[] = [];
   const closed: string[] = [];
@@ -653,10 +689,14 @@ function workbookHost(options: { readonly base?: () => string } = {}) {
   let journal = "";
   let instances = 0;
   const base = options.base ?? (() => xlsx.document_revision);
+  const given: GridCommandRequest[] = [];
+  const undone: GridCommand[] = [];
+  const catalog = (): GridCommandState[] => (structuredClone(xlsx.session.commands) as GridCommandState[])
+    .filter((command) => options.serves !== false || command.id !== "range.setValues");
   const sessionFor = (text: string): GridBytesSession => {
     if (text === xlsx.conflict.journal) return structuredClone(xlsx.conflict.session) as GridBytesSession;
     const session = structuredClone(xlsx.session) as GridBytesSession;
-    return { ...session, revision: text === "" ? session.revision : `rev:${text}` };
+    return { ...session, revision: text === "" ? session.revision : `rev:${text}`, commands: catalog() };
   };
   const diskOf = (sheet: string, row: string, column: string) => (xlsx.windows as GridBytesWindow[])
     .find((window) => window.sheet === sheet)?.cells
@@ -689,10 +729,18 @@ function workbookHost(options: { readonly base?: () => string } = {}) {
       }
       const window = structuredClone((xlsx.windows as GridBytesWindow[]).find((candidate) => candidate.sheet === request.sheet)!);
       window.revision = request.revision;
-      for (const entry of parseGridJournal(journal).entries.filter((candidate) => candidate.sheet === request.sheet)) {
-        const cell = window.cells.find((candidate) => candidate.key.row === entry.row && candidate.key.column === entry.column);
-        if (cell) Object.assign(cell, { input: entry.after, display: entry.after });
+      const parsed = parseGridJournal(journal);
+      const written = [
+        ...parsed.entries.map((entry) => [entry.sheet, entry.row, entry.column, entry.after] as const),
+        ...[...commandInputs(parsed)].map(([key, input]) => [...key.split("\u0000"), input] as [string, string, string, string]),
+      ];
+      for (const [sheet, row, column, input] of written.filter((candidate) => candidate[0] === request.sheet)) {
+        const cell = window.cells.find((candidate) => candidate.key.row === row && candidate.key.column === column);
+        const value = input === "" ? { kind: "blank" as const } : { kind: "text" as const, value: input };
+        if (cell) Object.assign(cell, { input, display: input, value });
+        else window.cells.push({ ...structuredClone(window.cells[0]!), key: { sheet, row, column }, input, display: input, value, style: 0 });
       }
+      options.window?.(window);
       return window;
     },
     applyGridBytes: async (_surface, _instance, request) => {
@@ -702,21 +750,82 @@ function workbookHost(options: { readonly base?: () => string } = {}) {
       if (failApply) throw failApply;
       if (request.revision !== revisionOf(journal)) throw { kind: "conflict", message: "stale grid revision" } satisfies PluginError;
       let next = parseGridJournal(journal);
-      for (const patch of request.patches) {
-        next = recordGridJournal(next, patch.cell, diskOf(patch.cell.sheet, patch.cell.row, patch.cell.column), patch.after);
+      // Come il provider: una formula nuova, o un giornale già a comandi,
+      // porta ogni cella dentro come `range.setValues`.
+      const commanding = next.commands.length > 0 || request.patches.some((patch) =>
+        patch.after.startsWith("=") && patch.after !== diskOf(patch.cell.sheet, patch.cell.row, patch.cell.column));
+      if (commanding) {
+        const input = (sheet: string, row: string, column: string, value: string): GridCommand => {
+          const at = cellA1({ row: Number(row.slice(1)), column: Number(column.slice(1)) });
+          return { id: "range.setValues", params: JSON.stringify({ range: at, values: [[value === "" ? null : value]] }), sheet, selection: at, active: at };
+        };
+        let commands = next.commands.length ? [...next.commands] : next.entries.map((entry) => input(entry.sheet, entry.row, entry.column, entry.after));
+        for (const patch of request.patches) commands = [...commands, input(patch.cell.sheet, patch.cell.row, patch.cell.column, patch.after)];
+        next = { entries: [], commands };
+        undone.length = 0;
+      } else {
+        for (const patch of request.patches) {
+          next = recordGridJournal(next, patch.cell, diskOf(patch.cell.sheet, patch.cell.row, patch.cell.column), patch.after);
+        }
       }
       const deleted = journal;
       journal = gridJournalText(next);
       const commit: GridCommit = {
         revision: revisionOf(journal),
         edit: { from: 0, to: new TextEncoder().encode(deleted).length, deleted, inserted: journal },
-        invalidation: { kind: "cells", cells: request.patches.map((patch) => patch.cell) },
+        invalidation: commanding ? { kind: "all" } : { kind: "cells", cells: request.patches.map((patch) => patch.cell) },
       };
       return commit;
     },
-    gridBytesCommands: async () => [],
+    gridBytesCommands: async () => {
+      calls.push("commands");
+      return catalog();
+    },
     gridBytesCommand: async (_surface, _instance, request) => {
-      throw { kind: "bad_args", message: `grid command \`${request.command.id}\` is not served` } satisfies PluginError;
+      calls.push(`command ${request.command.id}`);
+      given.push(structuredClone(request));
+      if (hold) await new Promise<void>((resolve) => answers.push(resolve));
+      if (request.revision !== revisionOf(journal)) throw { kind: "conflict", message: "stale grid revision" } satisfies PluginError;
+      if (!catalog().some((command) => command.id === request.command.id)) {
+        throw { kind: "bad_args", message: `grid command \`${request.command.id}\` is not served` } satisfies PluginError;
+      }
+      const current = parseGridJournal(journal);
+      let commands = [...current.commands];
+      if (request.command.id === "edit.undo") {
+        const last = commands.pop();
+        if (!last) throw { kind: "bad_args", message: "nothing to undo" } satisfies PluginError;
+        undone.push(last);
+      } else if (request.command.id === "edit.redo") {
+        const again = undone.pop();
+        if (!again) throw { kind: "bad_args", message: "nothing to redo" } satisfies PluginError;
+        commands.push(again);
+      } else {
+        commands = [
+          ...current.entries.map((entry) => {
+            const at = cellA1({ row: Number(entry.row.slice(1)), column: Number(entry.column.slice(1)) });
+            return { id: "range.setValues", params: JSON.stringify({ range: at, values: [[entry.after]] }), sheet: entry.sheet, selection: at, active: at };
+          }),
+          ...commands,
+          request.command,
+        ];
+        undone.length = 0;
+      }
+      const deleted = journal;
+      journal = gridJournalText({ entries: [], commands });
+      const outcome: GridCommandOutcome = {
+        commit: {
+          revision: revisionOf(journal),
+          edit: { from: 0, to: new TextEncoder().encode(deleted).length, deleted, inserted: journal },
+          invalidation: { kind: "all" },
+        },
+        sheets: structuredClone(xlsx.session.sheets),
+        hidden: structuredClone(xlsx.session.hidden),
+        selection: { sheet: request.command.sheet, selection: request.command.selection, active: request.command.active },
+        result: null,
+        dialog: options.dialog?.(request.command) ?? null,
+        commands: catalog(),
+      };
+      return outcome;
     },
     closeGridBytes: async (_surface, instance) => {
       calls.push("close");
@@ -729,6 +838,7 @@ function workbookHost(options: { readonly base?: () => string } = {}) {
     opened,
     closed,
     applied,
+    given,
     journal: () => journal,
     hold: (value: boolean) => { hold = value; },
     release: () => { for (const answer of answers.splice(0)) answer(); },
@@ -741,12 +851,14 @@ describe("GridEngine con una cartella di Excel", () => {
     grid: ReturnType<typeof workbookHost> | null = workbookHost(),
     journal = "",
     base?: () => string,
+    extra: Pick<GridEngineOptions, "onCommands" | "onDialog"> = {},
   ) {
     const host = document.createElement("div");
     document.body.append(host);
     const changes: GridChange[] = [];
     let selections = 0;
     const engine = new GridEngine(host, {
+      ...extra,
       surfaceId: "xlsx",
       formatId: "xlsx",
       revision: xlsx.document_revision,
@@ -871,7 +983,7 @@ describe("GridEngine con una cartella di Excel", () => {
     engine.destroy();
   });
 
-  it("non scrive le celle bloccate né le formule, e dice perché", async () => {
+  it("non scrive le celle bloccate, e dice perché", async () => {
     const grid = workbookHost();
     const { engine, host, viewport, changes, notice, go, formula } = await workbookMounted(grid);
     go(4, 5);
@@ -881,13 +993,6 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(locked).not.toBe("");
     viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
     expect(formula()).toBe("");
-
-    go(1, 0);
-    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "=", bubbles: true }));
-    host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
-      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
-    expect(notice().textContent).not.toBe(locked);
-    expect(changes).toEqual([]);
 
     // La selezione che prende una cella bloccata non si svuota.
     go(3, 5);
@@ -901,6 +1006,235 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(true);
     await settle();
     expect(grid.applied).toEqual([]);
+    engine.destroy();
+  });
+
+  it("una formula dove la sessione non serve i comandi non si scrive, e lo dice", async () => {
+    const grid = workbookHost({ serves: false });
+    const { engine, host, viewport, changes, notice, go } = await workbookMounted(grid);
+    go(1, 0);
+    typeInActiveCell(host, viewport, "=B2*2");
+    expect(notice().textContent).toContain(t("grid.workbook.formula"));
+    expect(changes).toEqual([]);
+    await settle();
+    expect(grid.applied).toEqual([]);
+    engine.destroy();
+  });
+
+  it("la prima formula porta la sessione ai comandi: il giornale lo scrive il provider", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, changes, cell, go } = await workbookMounted(grid);
+    go(1, 1);
+    typeInActiveCell(host, viewport, "7");
+    await settle();
+    expect(parseGridJournal(engine.getDoc()).entries).toHaveLength(1);
+    go(2, 1);
+    typeInActiveCell(host, viewport, "=B2*2");
+    // La griglia la mostra subito, ma il giornale aspetta il provider.
+    expect(cell(2, 1)?.textContent).toBe("=B2*2");
+    expect(parseGridJournal(engine.getDoc()).entries).toHaveLength(1);
+    await settle();
+    const journal = parseGridJournal(engine.getDoc());
+    expect(journal.entries).toEqual([]);
+    expect(journal.commands.map((command) => [command.id, command.selection])).toEqual([
+      ["range.setValues", "B2"],
+      ["range.setValues", "B3"],
+    ]);
+    expect(changes[changes.length - 1]?.text).toBe(grid.journal());
+
+    // Da qui annulla e ripeti sono del documento.
+    expect(engine.undo()).toBe(true);
+    await settle();
+    expect(grid.given.map((request) => request.command.id)).toEqual(["edit.undo"]);
+    expect(parseGridJournal(engine.getDoc()).commands).toHaveLength(1);
+    expect(engine.redo()).toBe(true);
+    await settle();
+    expect(parseGridJournal(engine.getDoc()).commands).toHaveLength(2);
+    // Niente da ripetere non è un errore da dire.
+    expect(engine.redo()).toBe(true);
+    await settle();
+    expect(host.querySelector<HTMLElement>(".grid-notice")!.textContent).not.toContain("nothing to redo");
+    engine.destroy();
+  });
+
+  it("un comando del catalogo va al provider sulla selezione, e la griglia adotta l'esito", async () => {
+    const grid = workbookHost({ dialog: (command) => command.id === "home.formatCells" ? { id: "formatCells", params: "{}" } : null });
+    const dialogs: GridDialog[] = [];
+    let catalogs = 0;
+    const { engine, viewport, changes, go } = await workbookMounted(grid, "", undefined, {
+      onCommands: () => { catalogs += 1; },
+      onDialog: (dialog) => dialogs.push(dialog),
+    });
+    expect(engine.commands().some((command) => command.id === "home.bold")).toBe(true);
+    const before = catalogs;
+    go(1, 1);
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", shiftKey: true, bubbles: true }));
+    await settle();
+    expect(catalogs).toBeGreaterThan(before);
+    expect(engine.command("home.bold")).toBe(true);
+    await settle();
+    expect(grid.given[0]?.command).toMatchObject({ id: "home.bold", params: "{}", sheet: "s1", selection: "B2:B3", active: "B3" });
+    expect(parseGridJournal(changes[changes.length - 1]!.text).commands.map((command) => command.id)).toEqual(["home.bold"]);
+    expect(engine.selection()).toMatchObject({ anchor: { row: 1, column: 1 }, focus: { row: 2, column: 1 } });
+
+    expect(engine.command("home.formatCells")).toBe(true);
+    await settle();
+    expect(dialogs).toEqual([{ id: "formatCells", params: "{}" }]);
+    // Un comando che il catalogo non serve non parte.
+    expect(engine.command("non.esiste")).toBe(false);
+    engine.setReadOnly(true);
+    expect(engine.command("home.bold")).toBe(false);
+    engine.destroy();
+  });
+
+  it("le scorciatoie di Excel danno i comandi del catalogo", async () => {
+    const grid = workbookHost();
+    const { engine, viewport, go } = await workbookMounted(grid);
+    go(1, 1);
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "b", code: "KeyB", ctrlKey: true, bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "%", code: "Digit5", ctrlKey: true, shiftKey: true, bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "=", code: "Equal", altKey: true, bubbles: true }));
+    // Ctrl+«-» su una cella sola chiede come, in Excel: qui non fa niente.
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "-", code: "Minus", ctrlKey: true, bubbles: true }));
+    await settle();
+    expect(grid.given.map((request) => request.command.id)).toEqual(["home.bold", "home.percent", "formulas.autoSum"]);
+    engine.destroy();
+  });
+
+  it("disegna un'unione come una cella sola, e la selezione e il cursore la prendono tutta", async () => {
+    const grid = workbookHost();
+    const { engine, viewport, cell, go } = await workbookMounted(grid);
+    const merged = cell(0, 6)!;
+    expect(merged.classList.contains("merged")).toBe(true);
+    expect(merged.getAttribute("aria-colspan")).toBe("2");
+    expect(merged.getAttribute("aria-rowspan")).toBe("1");
+    expect(cell(0, 7)).toBeNull();
+    expect(merged.style.width).toBe(`${Number.parseFloat(cell(0, 5)!.style.width) * 2}px`);
+
+    go(0, 6);
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    expect(engine.selection().focus).toEqual({ row: 0, column: 8 });
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    expect(engine.selection().focus).toEqual({ row: 0, column: 6 });
+    go(1, 5);
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", shiftKey: true, bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", shiftKey: true, bubbles: true }));
+    // L'intervallo F1:G2 tocca G1:H1, e la prende tutta.
+    expect(cell(1, 7)!.classList.contains("selected")).toBe(true);
+    expect(cell(0, 6)!.classList.contains("selected")).toBe(true);
+    engine.destroy();
+  });
+
+  it("blocca i riquadri, nasconde griglia e intestazioni e ingrandisce come dice la vista del foglio", async () => {
+    const grid = workbookHost({
+      window: (window) => {
+        if (window.sheet !== "s1") return;
+        window.view = { frozen_rows: 1, frozen_columns: 1, gridlines: false, headings: false, zoom: 150, right_to_left: false };
+      },
+    });
+    const { engine, host, viewport, cell } = await workbookMounted(grid);
+    const canvas = host.querySelector<HTMLElement>(".grid-canvas")!;
+    expect(canvas.style.fontSize).toBe("150.0%");
+    expect(viewport.classList.contains("no-gridlines")).toBe(true);
+    expect(host.querySelector(".grid-row-header")).toBeNull();
+    expect(host.querySelector(".grid-column-header")).toBeNull();
+    expect(host.querySelectorAll(".grid-freeze")).toHaveLength(2);
+    expect(cell(1, 0)!.classList.contains("frozen")).toBe(true);
+    expect(cell(1, 1)!.classList.contains("frozen")).toBe(false);
+    // Lo zoom allarga le colonne nella stessa misura.
+    expect(Number.parseFloat(cell(1, 1)!.style.width)).toBeGreaterThan(100);
+
+    // Scorrendo, la prima riga e la prima colonna restano.
+    viewport.scrollTop = 1500;
+    viewport.scrollLeft = 1500;
+    viewport.dispatchEvent(new Event("scroll"));
+    await settle();
+    expect(cell(0, 0)).not.toBeNull();
+    expect(cell(0, 1)).toBeNull();
+    expect(cell(1, 0)).toBeNull();
+    engine.destroy();
+  });
+
+  it("disegna lo stile, i bordi, le barre, le icone e i commenti delle celle", async () => {
+    const grid = workbookHost({
+      window: (window) => {
+        if (window.sheet !== "s1") return;
+        const style = window.styles.length;
+        window.styles = [...window.styles, {
+          ...window.styles[1]!,
+          font: "Cambria",
+          font_size: 22,
+          underline: "double",
+          strike: true,
+          vertical: "top",
+          wrap: true,
+          borders: {
+            top: { style: "thick", color: "#112233" },
+            right: null,
+            bottom: { style: "dashed", color: null },
+            left: null,
+            diagonal_down: { style: "thin", color: "#445566" },
+            diagonal_up: null,
+          },
+        }];
+        const affitto = window.cells.find((cell) => cell.key.row === "r1" && cell.key.column === "c0")!;
+        Object.assign(affitto, {
+          style,
+          comment: { author: "Ada", text: "Da rivedere", threaded: true, resolved: false, replies: [{ author: "Bea", text: "Fatto" }] },
+        });
+        const importo = window.cells.find((cell) => cell.key.row === "r1" && cell.key.column === "c1")!;
+        Object.assign(importo, { data_bar: { fraction: 0.5, color: "#638EC6", gradient: false }, icon: { set: "3Arrows", index: 2 } });
+        const spesa = window.cells.find((cell) => cell.key.row === "r2" && cell.key.column === "c1")!;
+        spesa.link = { target: "https://example.org", tooltip: null, external: true };
+      },
+    });
+    const { engine, host, cell } = await workbookMounted(grid);
+    const affitto = cell(1, 0)!;
+    expect(affitto.style.fontFamily).toContain("Cambria");
+    expect(affitto.style.fontSize).toBe("2em");
+    expect(affitto.style.alignContent).toBe("start");
+    expect(affitto.style.whiteSpace).toBe("pre-wrap");
+    const text = affitto.querySelector<HTMLElement>(".grid-cell-text")!;
+    expect(text.style.textDecorationLine).toBe("underline line-through");
+    expect(text.style.textDecorationStyle).toBe("double");
+    expect(affitto.querySelector(".grid-comment-mark.threaded")).not.toBeNull();
+    expect(affitto.title).toBe("Ada: Da rivedere\nBea: Fatto");
+    const border = [...host.querySelectorAll<HTMLElement>(".grid-border")]
+      .find((element) => element.style.borderTop.includes("#112233") || element.style.borderTop.includes("rgb(17, 34, 51)"))!;
+    expect(border).toBeDefined();
+    expect(border.style.borderBottom).toContain("dashed");
+    expect(border.style.backgroundImage).toContain("linear-gradient");
+
+    const importo = cell(1, 1)!;
+    const bar = importo.querySelector<HTMLElement>(".grid-data-bar")!;
+    expect(bar.getAttribute("aria-hidden")).toBe("true");
+    expect(bar.style.background.toLowerCase()).toMatch(/#638ec6|rgb\(99, 142, 198\)/u);
+    expect(importo.querySelector<HTMLElement>(".grid-icon")!.textContent).toBe("⬆");
+    // Un numero senza allineamento del file va a destra.
+    expect(cell(2, 1)!.style.textAlign).toBe("end");
+    expect(cell(2, 1)!.title).toBe("https://example.org");
+    engine.destroy();
+  });
+
+  it("un testo lungo passa nelle celle vuote accanto, fino alla prima piena", async () => {
+    const grid = workbookHost({
+      window: (window) => {
+        if (window.sheet !== "s1") return;
+        window.cells.push(
+          { ...structuredClone(window.cells[4]!), key: { sheet: "s1", row: "r7", column: "c0" }, input: "Un testo lungo che non sta", display: "Un testo lungo che non sta", value: { kind: "text", value: "Un testo lungo che non sta" } },
+          { ...structuredClone(window.cells[4]!), key: { sheet: "s1", row: "r7", column: "c3" }, input: "Fine", display: "Fine", value: { kind: "text", value: "Fine" } },
+          { ...structuredClone(window.cells[4]!), key: { sheet: "s1", row: "r8", column: "c0" }, style: window.styles.length, input: "A capo", display: "A capo", value: { kind: "text", value: "A capo" } },
+        );
+        window.styles = [...window.styles, { ...window.styles[1]!, wrap: true }];
+      },
+    });
+    const { engine, cell } = await workbookMounted(grid);
+    const long = cell(7, 0)!;
+    const width = Number.parseFloat(long.style.width);
+    expect(long.classList.contains("spill")).toBe(true);
+    const reach = Number.parseFloat(cell(1, 1)!.style.width) + Number.parseFloat(cell(1, 2)!.style.width);
+    expect(long.querySelector<HTMLElement>(".grid-cell-text")!.style.maxWidth).toBe(`calc(${width + reach}px - 0.9rem)`);
+    expect(cell(8, 0)!.classList.contains("spill")).toBe(false);
     engine.destroy();
   });
 
