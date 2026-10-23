@@ -205,7 +205,9 @@ pub(crate) fn differences(
     out
 }
 
-/// I segni che l'inventario non conta, e perché.
+/// I segni che l'inventario non conta, e perché. La tabella documenta le
+/// regole, che il codice applica una per una: niente la legge.
+#[allow(dead_code)]
 pub(crate) const NORMALIZATIONS: &[(&str, &str)] = &[
     (
         "catena di calcolo",
@@ -213,7 +215,7 @@ pub(crate) const NORMALIZATIONS: &[(&str, &str)] = &[
     ),
     (
         "stringhe condivise, stili e metadati",
-        "sharedStrings, styles e metadata non contano da sé: si risolvono nelle celle, nelle righe, nelle colonne e nelle regole che li nominano",
+        "sharedStrings, styles e metadata non contano da sé: si risolvono nelle celle, nelle righe, nelle colonne e nelle regole che li nominano; una cartella senza styles ha gli stili di una cartella nuova di Excel, con cui Excel la apre",
     ),
     (
         "formule condivise",
@@ -268,10 +270,18 @@ pub(crate) const NORMALIZATIONS: &[(&str, &str)] = &[
         "un booleano true o 1, un numero 1.0 o 1, e un attributo con il valore predefinito dello schema o assente sono lo stesso dato",
     ),
     (
+        "elementi vuoti",
+        "un elemento del documento o del foglio senza attributi né figli (<workbookProtection/>, <printOptions/>), e una proprietà vuota di <sheetPr>, valgono i predefiniti dello schema come un elemento assente",
+    ),
+    (
         "priorità delle regole",
         "la priority di una regola di formattazione condizionale conta come il suo posto fra le regole del foglio, perché un codec la rinumera",
     ),
 ];
+
+/// Gli stili di una cartella senza la parte degli stili: quelli con cui Excel
+/// la apre, gli stessi di una cartella nuova.
+const NEW_WORKBOOK_STYLES: &str = r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="1"><font><sz val="11"/><color theme="1"/><name val="Calibri"/><scheme val="minor"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"#;
 
 // --- XML -----------------------------------------------------------------------
 
@@ -589,6 +599,7 @@ fn default_of(element: &str, attr: &str) -> Option<&'static str> {
         ("pageSetup", "errors") => "displayed",
         ("pageSetup", "horizontalDpi" | "verticalDpi") => "600",
         ("pageSetup", "copies") => "1",
+        ("printOptions", "gridLinesSet") => "1",
         ("printOptions", _) => "0",
         ("headerFooter", "differentOddEven" | "differentFirst") => "0",
         ("headerFooter", "scaleWithDoc" | "alignWithMargins") => "1",
@@ -641,6 +652,15 @@ fn default_of(element: &str, attr: &str) -> Option<&'static str> {
         ("definedName", "function" | "vbProcedure" | "xlm" | "publishToServer") => "0",
         ("definedName", "workbookParameter") => "0",
         ("sheet", "state") => "visible",
+        ("workbookView", "showHorizontalScroll" | "showVerticalScroll" | "showSheetTabs")
+        | ("workbookView", "autoFilterDateGrouping") => "1",
+        ("workbookView", "visibility") => "visible",
+        ("workbookView", "minimized") => "0",
+        ("alignment", "horizontal") => "general",
+        ("alignment", "vertical") => "bottom",
+        ("alignment", "indent" | "relativeIndent" | "textRotation" | "readingOrder") => "0",
+        ("alignment", "wrapText" | "shrinkToFit" | "justifyLastLine") => "0",
+        ("protection", "locked") => "1",
         ("autoFilter", _) | ("filterColumn", "hiddenButton" | "showButton") => match attr {
             "showButton" => "1",
             "hiddenButton" => "0",
@@ -713,7 +733,13 @@ fn write_canonical(
     }
     out.push('>');
     for kid in &node.kids {
-        write_canonical(kid, resolve, out);
+        let mut text = String::new();
+        write_canonical(kid, resolve, &mut text);
+        // Le proprietà di un foglio senza attributi sono quelle predefinite.
+        if node.name == "sheetPr" && text == format!("<{}></>", kid.name) {
+            continue;
+        }
+        out.push_str(&text);
     }
     if !node.text.is_empty() {
         out.push_str(&format!("{:?}", node.text));
@@ -1398,7 +1424,16 @@ pub(crate) fn inventory(bytes: &[u8]) -> Result<Inventory, InventoryError> {
         parse(&bytes, &part, &mut reader.budget, None, &mut |_| Ok(())).map(Some)
     };
     let theme = xml(&mut reader, "theme")?;
-    let mut styles = xml(&mut reader, "styles")?;
+    let mut styles = match xml(&mut reader, "styles")? {
+        Some(styles) => Some(styles),
+        None => Some(parse(
+            NEW_WORKBOOK_STYLES.as_bytes(),
+            "styles",
+            &mut reader.budget,
+            None,
+            &mut |_| Ok(()),
+        )?),
+    };
     reader.colors = Colors::new(styles.as_ref(), theme.as_ref());
     if let Some(styles) = &mut styles {
         reader.colors.fix(styles, false);
@@ -1567,7 +1602,9 @@ pub(crate) fn inventory(bytes: &[u8]) -> Result<Inventory, InventoryError> {
             }
             name => {
                 let value = reader.canonical_with_rels(kid, &workbook_rels, &mut used, "")?;
-                out.add(Owner::Workbook, name, None, value);
+                if value != format!("<{name}></>") {
+                    out.add(Owner::Workbook, name, None, value);
+                }
             }
         }
     }
@@ -1984,7 +2021,9 @@ fn sheet(
             }
             name => {
                 let value = reader.canonical_with_rels(kid, &rels, &mut used, "")?;
-                out.add(owner, name, None, value);
+                if value != format!("<{name}></>") {
+                    out.add(owner, name, None, value);
+                }
             }
         }
     }
@@ -2047,8 +2086,7 @@ fn formula_text(
 }
 
 #[cfg(test)]
-#[path = "../tests/common/mod.rs"]
-mod common;
+use crate::common;
 
 #[cfg(test)]
 mod tests {
@@ -2248,6 +2286,27 @@ da rivedere</t></r></text></comment></commentList></comments>"#;
         assert_eq!(
             all_differences(&a, &wider),
             ["0 → 1: sheet 1 col (0,1): width=12"]
+        );
+    }
+
+    #[test]
+    fn gli_elementi_vuoti_valgono_i_predefiniti() {
+        let data = r#"<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>"#;
+        let empty =
+            format!(r#"<sheetPr><pageSetUpPr/></sheetPr>{data}<printOptions gridLinesSet="1"/>"#);
+        let a = common::one_sheet(data);
+        let b = common::Package {
+            sheets: vec![common::sheet("Foglio1", &empty)],
+            workbook_tail: "<workbookProtection/>",
+            ..common::Package::default()
+        }
+        .bytes();
+        assert_eq!(all_differences(&a, &b), Vec::<String>::new());
+        // La griglia stampata conta.
+        let printed = common::one_sheet(&format!(r#"{data}<printOptions gridLines="1"/>"#));
+        assert_eq!(
+            all_differences(&a, &printed),
+            [r#"0 → 1: sheet 1 printOptions: <printOptions gridLines="1"></>"#]
         );
     }
 

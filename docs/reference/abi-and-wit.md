@@ -147,8 +147,9 @@ WASM lo implementano con gli stessi tipi, limiti, errori e lifecycle.
   e il catalogo. L'host controlla che la revisione vada avanti se e soltanto
   se il diff non è vuoto. Di serie è `BadArgs`; l'esempio `esempi/grid-wasm`
   dà il catalogo vuoto e rifiuta ogni comando.
-- `bytes_to_write(instance, expected)` dà i byte con il giornale innestato. La
-  chiama soltanto l'host, per salvare.
+- `bytes_to_write(instance, expected)` dà i byte con il giornale innestato, o
+  la cartella riscritta quando il giornale di comandi cambia più dell'input.
+  La chiama soltanto l'host, per salvare.
 
 Il giornale ha una sola forma canonica, il cui testo vuoto è il giornale
 vuoto: JSON `{"version": 1, "cells": [...]}`, voci `{"sheet", "row",
@@ -168,8 +169,10 @@ ordine di applicazione. `params` è il testo di un oggetto JSON fino a 64 KiB,
 portato com'è; la selezione è in riferimenti A1 separati da virgola, la cella
 attiva è un riferimento solo. Fino a 16.384 comandi e 16 MiB di testo. Il
 rebase toglie i comandi in comune con il salvataggio dall'inizio, e
-`reverted_by` conta quelli salvati che il giornale non ha più. Nessun provider
-serve ancora questa forma: è il primo passo dell'[ADR
+`reverted_by` conta quelli salvati che il giornale non ha più. La serve il
+provider delle cartelle di Excel (`crates/fub-format-xlsx/src/commands.rs`),
+dal primo comando di una sessione: le voci del giornale di celle diventano
+allora comandi `range.setValues`. Il perché è nell'[ADR
 0219](../decisions/0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md),
 in proposta.
 

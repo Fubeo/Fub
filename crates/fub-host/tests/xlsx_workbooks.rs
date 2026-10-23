@@ -16,7 +16,7 @@ use camino::Utf8PathBuf;
 use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::grid::{GridApplyRequest, GridCellKey, GridCellPatch, GridWindowRequest};
 use fub_abi::model::DocId;
-use fub_abi::{GridBytesCell, GridJournal, GridValue, PluginError};
+use fub_abi::{GridBytesCell, GridCommand, GridJournal, GridValue, PluginError};
 use fub_format_xlsx::grid::XLSX_GRID_SURFACE;
 use fub_host::resources::ResourceWrite;
 use fub_host::Host;
@@ -269,6 +269,47 @@ fn la_griglia_si_apre_sui_byte_e_salvare_innesta_il_giornale() {
         Err(PluginError::Conflict(_))
     ));
     assert_eq!(vault.on_disk("Conti.xlsx"), after);
+}
+
+#[test]
+fn un_giornale_di_comandi_riscrive_la_cartella() {
+    let file = xlsx(r#"<row r="1"><c r="A1"><v>7</v></c><c r="B1"><f>A1*2</f><v>14</v></c></row>"#);
+    let vault = Vault::with(&[("Conti.xlsx", &file)]);
+    let id = DocId::new("Conti.xlsx");
+    let revision = Revision::of_bytes(&vault.on_disk("Conti.xlsx"));
+    let command = |id: &str, params: &str| GridCommand {
+        id: id.into(),
+        params: params.into(),
+        sheet: "s1".into(),
+        selection: "A1".into(),
+        active: "A1".into(),
+    };
+    let mut journal = GridJournal::new();
+    journal
+        .push_command(command("home.insertRows", "{}"))
+        .unwrap();
+    journal
+        .push_command(command(
+            "range.setValues",
+            r#"{"range":"A1","values":[["'testa"]]}"#,
+        ))
+        .unwrap();
+    vault
+        .host
+        .write_document(
+            None,
+            &id,
+            &journal.to_text(),
+            WriteBase::DescendsFrom(revision),
+        )
+        .unwrap();
+    // Il file riscritto si rilegge con la riga inserita e la formula
+    // spostata.
+    let cells = on_disk_cells(&vault, &id);
+    assert_eq!(cell(&cells, 0, 0).input, "testa");
+    assert_eq!(cell(&cells, 1, 0).value, GridValue::Number(7.0));
+    assert_eq!(cell(&cells, 1, 1).input, "=A2*2");
+    assert_eq!(cell(&cells, 1, 1).value, GridValue::Number(14.0));
 }
 
 #[test]

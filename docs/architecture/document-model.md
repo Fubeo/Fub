@@ -158,7 +158,13 @@ protetti) lo dicono già nella finestra.
 
 Salvare è dell'host: `write_document` del giornale rilegge i byte alla base,
 innesta le voci a livello di riga (il resto del file resta byte per byte),
-rilegge il risultato e lo scrive con il CAS. Il giornale salvato si ribasa
+rilegge il risultato e lo scrive con il CAS. Un giornale di comandi
+(`fub-format-xlsx`, [ADR
+0219](../decisions/0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md),
+in proposta; la shell non lo scrive ancora) si rifà sui byte, e si salva per
+innesto quando cambia soltanto l'input di costanti, altrimenti riscrivendo la
+cartella con il codec, se l'inventario del pacchetto dice che la riscrittura
+non perde niente. Il giornale salvato si ribasa
 nella `DocumentSession`; `resource_write` crea una cartella ma non la copre.
 Il perché è nell'[ADR
 0216](../decisions/0216-protocollo-grid-2-sorgente-a-byte.md), che sostituisce
@@ -193,7 +199,7 @@ albero malformato.
 - un nuovo campo pubblico rispetta l'additività del WIT;
 - una regola comune vive nel contratto, non in due provider;
 - un workbook a celle conserva autorità e identità fuori da `DocumentModel`;
-- i byte di una cartella di Excel restano all'host, e il file cambia soltanto per innesto delle celle cambiate.
+- i byte di una cartella di Excel restano all'host, e il file cambia soltanto dal giornale: per innesto delle celle cambiate, o con una riscrittura misurata che non perde niente.
 
 ## Dove si trova
 

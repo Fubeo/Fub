@@ -68,10 +68,12 @@ testo di un oggetto JSON) e ridà un `GridCommandOutcome`: il commit del
 giornale, che resta alla revisione se il comando non cambia la cartella, i
 fogli, la selezione nuova, il risultato come testo JSON, la finestra di
 dialogo chiesta e il catalogo aggiornato. Un comando che il provider non
-serve, spento o con parametri che non tornano è `BadArgs`. Nessun provider
-serve ancora comandi: il catalogo è vuoto
+serve, spento o con parametri che non tornano è `BadArgs`. Il provider delle
+cartelle di Excel serve un sottoinsieme del catalogo di GridCraft, più
+`edit.undo` ed `edit.redo` del documento
 ([ADR 0219](../decisions/0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md),
-in proposta).
+in proposta); su una cartella che la riscrittura perderebbe i comandi che la
+cambiano sono spenti, e darne uno è `PermissionDenied` con `xlsx.rewrite.loses`.
 
 ## Limiti e semantica Grid
 
@@ -364,14 +366,17 @@ porte, e il suo testo è il **giornale** delle celle cambiate (ADR 0216):
 - `write_document` riceve il giornale nella forma canonica (`BadArgs` con
   `host.xlsx.journal` altrimenti) e lo **innesta** nei byte alla revisione
   `base`, con il CAS della stessa revisione: il resto del file resta byte
-  per byte. Un giornale vuoto, o già tutto nei byte, non scrive niente; un
+  per byte. Un giornale di comandi che cambia più dell'input di costanti si
+  rifà sui byte, e la cartella si **riscrive** con il codec soltanto se la
+  misura dice che non perde niente (`PermissionDenied` con
+  `xlsx.rewrite.loses`, che nomina la perdita, altrimenti). Un giornale vuoto, o già tutto nei byte, non scrive niente; un
   giornale per un file che non c'è si rifiuta (`host.xlsx.missing`); una
   voce che i byte non possono ricevere si rifiuta con la sua specie
   (`PermissionDenied` per una cella bloccata, `Conflict` per un foglio che
   non c'è più, `BadArgs` per una formula), e il file resta com'era;
 - `resource_write` deposita una cartella nuova (`expected` nullo) come ogni
   file, e rifiuta di coprirne una che c'è (`host.xlsx.readonly`): una
-  cartella cambia soltanto per innesto.
+  cartella cambia soltanto dal giornale, con `write_document`.
 
 Nella finestra:
 

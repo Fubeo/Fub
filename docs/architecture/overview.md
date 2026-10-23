@@ -148,11 +148,14 @@ flowchart LR
 I crate di GridCraft in `vendor/gridcraft/` sono codice di terzi allo stesso
 modo, con un workspace loro: li usa soltanto `fub-format-xlsx`, che legge le
 cartelle di Excel per l'host (feature `xlsx`) e ne innesta i valori cambiati
-sui byte del file, e nessuno di loro dipende da Fub. Di `gridcraft-calc`
-l'adattatore usa soltanto il grafo delle dipendenze fra le formule, per dire
-quali valori del file una modifica rende vecchi: niente si ricalcola.
-`gridcraft-engine`, la facciata dei comandi di GridCraft, è vendorizzato con
-`gridcraft-chart` e `gridcraft-pdf` per la modifica delle cartelle. Il terzo blocco è il seguito dello stesso grafo, con
+sui byte del file, e nessuno di loro dipende da Fub. Finché una sessione ha
+soltanto celle cambiate, di `gridcraft-calc` l'adattatore usa il grafo delle
+dipendenze fra le formule, per dire quali valori del file una modifica rende
+vecchi: niente si ricalcola. Dal primo comando la sessione passa a
+`gridcraft-engine`, la facciata dei comandi di GridCraft (vendorizzata con
+`gridcraft-chart` e `gridcraft-pdf`), che ricalcola ciò che il comando
+raggiunge; il salvataggio resta l'innesto o riscrive la cartella con il codec
+dopo averla misurata. Il terzo blocco è il seguito dello stesso grafo, con
 l'adattatore e i crate di Fub da cui dipende.
 
 ```mermaid
