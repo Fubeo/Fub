@@ -21,20 +21,23 @@ L'interfaccia (`ui-egui`) e il server MCP (`mcp`) non sono copiati.
 
 ## Cosa è copiato
 
-| Percorso qui | Percorso upstream | Modifiche |
+| Percorso qui | Percorso upstream | Patch che lo toccano |
 |---|---|---|
 | `crates/core/` | `crates/core/` | nessuna |
 | `crates/formula/` | `crates/formula/` | nessuna |
-| `crates/functions/` | `crates/functions/` | `src/engineering.rs`, per Rust 1.89 |
+| `crates/functions/` | `crates/functions/` | `0002` (`src/engineering.rs`) |
 | `crates/numfmt/` | `crates/numfmt/` | nessuna |
-| `crates/model/` | `crates/model/` | `src/sheet.rs` e `src/preserved.rs`, per il `sheetId` del file |
+| `crates/model/` | `crates/model/` | `0005` (`src/sheet.rs`, `src/preserved.rs`); `0007` (`src/cell.rs`, `src/lib.rs`, `src/preserved.rs`, `src/sheet.rs`, `src/style.rs`) |
 | `crates/calc/` | `crates/calc/` | nessuna |
-| `crates/xlsx/` | `crates/xlsx/` | `src/package.rs` e nove file di `src/tests/` per `zip` 9; `src/ods.rs` per Rust 1.89; `src/sheet_read.rs` e `src/tests/fixtures.rs` per i valori delle matrici; `src/read.rs`, `src/passthrough.rs`, `src/write.rs` e `src/tests/sheet_names.rs` per il `sheetId` del file |
+| `crates/xlsx/` | `crates/xlsx/` | `0001` (`src/package.rs` e nove file di `src/tests/`); `0002` (`src/ods.rs`); `0003` (`src/sheet_read.rs`); `0005` (`src/read.rs`, `src/passthrough.rs`, `src/write.rs`); `0006` (`src/array_formula.rs`, `src/fmla.rs`, `src/read.rs`, `src/sheet_write.rs`); `0007` (`src/array_formula.rs`, `src/csv.rs`, `src/drawing.rs`, `src/passthrough.rs`, `src/read.rs`, `src/sheet_read.rs`, `src/sheet_write.rs`, `src/styles.rs`, `src/write.rs`, `src/xls/mod.rs`, `src/xml.rs`); `0008` (`src/passthrough.rs`, `src/sheet_write.rs`); i test di `src/tests/` di ciascuna |
 | `crates/chart/` | `crates/chart/` | nessuna |
 | `crates/pdf/` | `crates/pdf/` | nessuna |
-| `crates/engine/` | `crates/engine/` | `src/lib.rs` e `src/tests.rs`, per aprire senza ricalcolo; `src/lib.rs` e `src/chart_svg.rs` per l'SVG degli oggetti; `src/cmd/insert.rs` e `src/tests.rs` per modificare note e commenti; `tests/chart_workbook_names.rs` per `zip` 9 |
+| `crates/engine/` | `crates/engine/` | `0001` (`tests/chart_workbook_names.rs`); `0004` (`src/lib.rs`); `0007` (`src/cmd/` analysis, edit, extra, forecast, format, insert, solver e whatif, `src/fill.rs`, `src/io.rs`, `src/pivot.rs`); `0009` (`src/lib.rs`, `src/chart_svg.rs`); `0010` (`src/cmd/insert.rs`); `src/tests.rs` per `0004`, `0006`, `0007` e `0010` |
 | `rustfmt.toml` | `rustfmt.toml` | nessuna |
 | `NOTICE` | `NOTICE` | nessuna |
+
+L'elenco esatto dei file di ogni patch è nelle sue intestazioni `diff --git`,
+e `vendor.mjs gridcraft report` lo incrocia con ciò che l'upstream cambia.
 
 I manifest dei crate sono quelli dell'upstream. Ereditano versione, edizione,
 licenza, lint e dipendenze da `Cargo.toml` di questa cartella, che è di Fub e
@@ -146,6 +149,44 @@ Le patch di `patches/`, una per ragione:
   Modifica nota di Excel; una nota scritta su un commento lo sostituisce
   ancora. In `engine/src/tests.rs` il test lo dice.
 
+### Le patch per tipo
+
+Ogni patch ha un tipo, che dice quando può uscire dalla pila:
+
+- **TEMPORARY-COMPAT**: adatta l'upstream a un vincolo di Fub (una
+  dipendenza, la toolchain) e cade quando il vincolo cade o l'upstream lo
+  segue;
+- **UPSTREAM-BUGFIX**: corregge un comportamento dell'upstream che è un
+  difetto anche per l'upstream; va proposta là, e cade quando entra;
+- **UPSTREAM-API**: rende pubblico o aggiunge un punto d'ingresso che Fub
+  usa; va proposta là come API, e cade quando l'upstream ne ha una
+  equivalente;
+- **FUB-SPECIFIC**: un comportamento che serve soltanto a Fub. Nessuna patch
+  di questa pila lo è: ciò che è di Fub sta in `fub-format-xlsx`.
+
+| Patch | Tipo | Il test di Fub che ne dipende | Upstream | Quando cade |
+|---|---|---|---|---|
+| `0001-zip-9` | TEMPORARY-COMPAT | `cargo deny check` (gli avvisi di `zip` 3) | da proporre: passare a `zip` 9 | quando l'upstream usa `zip` ≥ 9 |
+| `0002-rust-1-89` | TEMPORARY-COMPAT | la compilazione con la 1.89 di `rust-toolchain.toml` | da proporre: `rust-version` vera, o la costante scritta | quando Fub passa alla 1.94, o l'upstream non usa più `EULER_GAMMA` |
+| `0003-valori-delle-matrici` | UPSTREAM-BUGFIX | `display.rs`: `le_celle_versate_hanno_i_valori_del_file_e_niente_si_ricalcola` | storytold/gridcraft#2137, accanto a #2048 | quando #2137 entra |
+| `0004-apertura-senza-ricalcolo` | UPSTREAM-API | `fub-format-xlsx` chiama `DocState::from_saved`; `commands.rs`: `un_comando_non_ricalcola_le_formule_che_non_tocca` | da proporre: `DocState::from_saved` (o un'opzione di apertura) | quando l'upstream apre senza ricalcolare |
+| `0005-sheetid-del-file` | UPSTREAM-BUGFIX | `fub-format-xlsx` legge `Sheet::file_id`; `commands.rs`: `i_fogli_nuovi_hanno_id_che_il_giornale_ritrova`; l'inventario, che riconosce i fogli dal `sheetId` | da proporre | quando lo scrittore tiene il `sheetId` letto |
+| `0006-intersezione-implicita` | UPSTREAM-BUGFIX | il corpus esterno (`tests/corpus.rs` con `FUB_XLSX_CORPUS`), le formule legacy; nessun test interno la isola | da proporre | quando il lettore distingue le formule senza `cm` |
+| `0007-forme-del-file` | UPSTREAM-BUGFIX | il corpus esterno (`tests/corpus.rs` con `FUB_XLSX_CORPUS`): le venti cartelle di POI restano modificabili; nessun test interno la isola | da proporre, divisa per oggetto (testo ricco, `x14`, VML, disegni, stili) | quando lo scrittore riusa le forme lette; è la patch più grande (3.200 righe) e la più costosa da tenere |
+| `0008-viste-ed-estensioni` | UPSTREAM-BUGFIX | `corpus.rs`: `ogni_cartella_del_corpus_ha_la_sua_classe` (la cartella `viste-di-libreoffice`, che senza la patch diventa preservabile) | da proporre | quando `<sheetView>` e gli `<ext>` del documento restano |
+| `0009-svg-degli-oggetti` | UPSTREAM-API | `objects.rs` chiama `chart_svg` e `prims_svg` | da proporre: `chart_svg` pubblico | quando il modulo è pubblico |
+| `0010-modifica-di-note-e-commenti` | UPSTREAM-BUGFIX | `commands.rs`: `modificare_un_commento_tiene_le_risposte` | da proporre | quando «Modifica commento» tiene il thread |
+
+Senza `0005` o `0009` `fub-format-xlsx` non compila, e senza `0008` o
+`0010` il test della tabella fallisce: lo si è provato togliendo ciascuna
+dalla pila. `0003`, `0004`, `0006` e `0007` non si tolgono da sole, perché
+le patch che le seguono ne hanno il contesto: `0006` chiede `0004` (soltanto
+nei test), `0007` chiede `0003` e `0006`, `0008` chiede `0007`. Le altre si
+applicano da sole su `v0.11.1`.
+
+Le patch da proporre non sono ancora issue né PR dell'upstream: aprirle è
+una scelta di chi mantiene Fub.
+
 Le dipendenze del workspace di questa cartella hanno, per quelle in comune con
 Fub, la stessa versione del `[workspace.dependencies]` di Fub, perché il grafo
 dei due workspace sia lo stesso (lo controlla `vendor.mjs check`). Rispetto
@@ -180,17 +221,39 @@ ragione; nessun file si modifica a mano.
 node tools/vendor-craft/vendor.mjs gridcraft update --rev <sha> [--tag <tag>] [--source <clone o URL>]
 node tools/vendor-craft/vendor.mjs gridcraft check
 node tools/vendor-craft/vendor.mjs gridcraft verify-upstream
+node tools/vendor-craft/vendor.mjs gridcraft report --rev <sha> [--source <clone o URL>]
+node tools/vendor-craft/vendor.mjs gridcraft gate
 ```
 
-I tre comandi fanno ciò che fanno per WordCraft
-([`vendor/wordcraft/UPSTREAM.md`](../wordcraft/UPSTREAM.md)). Dopo un
-aggiornamento: i test qui sopra, con il `Cargo.lock` di questa cartella
-aggiornato (`cargo update --manifest-path vendor/gridcraft/Cargo.toml
---workspace`), quelli di `fub-format-xlsx` e di `fub-host` (test
-`xlsx_workbooks`) e `cargo deny check`. Se ciò che la griglia mostra cambia,
-la fixture della griglia si rigenera con `UPDATE_MIRROR=1 cargo test -p
-fub-format-xlsx --test ts_grid`, e il suo diff dice cosa vede di diverso la
-shell.
+`update`, `check` e `verify-upstream` fanno ciò che fanno per WordCraft
+([`vendor/wordcraft/UPSTREAM.md`](../wordcraft/UPSTREAM.md)). Un
+aggiornamento va così:
+
+1. `report --rev <sha>` è l'aggiornamento a vuoto: per ogni patch dice se si
+   applica sulla pila, se l'upstream l'ha assorbita (si toglie al contrario
+   dai file nuovi: la patch esce, e la sua riga qui sopra con lei) o se va
+   rifatta, e quali dei file che tocca l'upstream ha cambiato; poi le
+   dipendenze dirette aggiunte e tolte, le versioni del workspace e la
+   `rust-version`. Non tocca la copia.
+2. `update --rev <sha>`, con il `Cargo.lock` di questa cartella aggiornato
+   (`cargo update --manifest-path vendor/gridcraft/Cargo.toml --workspace`).
+3. `gate` esegue le prove di `tools/vendor-craft/motori.mjs` e le riassume:
+   `check`, i test di GridCraft, quelli di `fub-format-xlsx` e di `fub-host`
+   (`xlsx_workbooks`), il confine del motore, gli invarianti di dipendenza e
+   `cargo deny check`. Con `FUB_XLSX_CORPUS=<cartella>` i test di
+   `fub-format-xlsx` classificano anche un corpus esterno.
+
+Nei test di `fub-format-xlsx` tre file dicono che cosa è cambiato per la
+shell, e un loro diff va guardato prima di rigenerarli:
+
+- `tests/fixtures/catalogo-servito.tsv`, i comandi che Fub serve con i loro
+  parametri (`UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --lib
+  catalogo_servito`). Il catalogo è un elenco di esclusioni: un comando nuovo
+  dell'upstream si serve da sé, e questo diff lo mostra;
+- la fixture della griglia (`UPDATE_MIRROR=1 cargo test -p fub-format-xlsx
+  --test ts_grid`), ciò che la griglia mostra;
+- `tests/corpus.rs`, la classe di ogni cartella del corpus (modificabile,
+  preservabile, rifiutata) e il punto fisso del salvataggio.
 
 Una correzione che serve a Fub va proposta all'upstream; finché non entra,
 resta una patch.
