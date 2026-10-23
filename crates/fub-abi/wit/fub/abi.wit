@@ -3330,13 +3330,16 @@ interface grid-bytes {
     }
 
     /// Ciò che vale per la cartella intera: i dodici colori del tema
-    /// (`#RRGGBB`, nell'ordine del file), i nomi definiti, il calcolo e la
-    /// struttura protetta.
+    /// (`#RRGGBB`, nell'ordine del file), i nomi definiti, il calcolo, la
+    /// struttura protetta e il carattere dello stile Normale (nome e punti),
+    /// che lo stile di una cella tace.
     record grid-book {
         theme-colors: list<string>,
         names: list<string>,
         calculation: grid-calculation,
         %protected: bool,
+        font: string,
+        font-size: f32,
     }
 
     record grid-bytes-session {

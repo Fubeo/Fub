@@ -1564,7 +1564,9 @@
       ],
       "names": [],
       "calculation": "automatic",
-      "protected": false
+      "protected": false,
+      "font": "Calibri",
+      "font_size": 11.0
     }
   },
   "windows": [
@@ -6844,7 +6846,9 @@
         ],
         "names": [],
         "calculation": "automatic",
-        "protected": false
+        "protected": false,
+        "font": "Calibri",
+        "font_size": 11.0
       }
     },
     "window": {

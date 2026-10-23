@@ -989,6 +989,8 @@ fn from_grid_book(book: w_grid_bytes::GridBook) -> fub_abi::GridBook {
             w_grid_bytes::GridCalculation::Manual => fub_abi::GridCalculation::Manual,
         },
         protected: book.protected,
+        font: book.font,
+        font_size: book.font_size,
     }
 }
 

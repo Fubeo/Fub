@@ -1324,14 +1324,18 @@ export const GRID_THEME_COLORS = 12;
 /**
  * Ciò che vale per tutta la cartella: i colori del tema in `#RRGGBB`, in
  * ordine (sfondo 1, testo 1, sfondo 2, testo 2, sei colori, collegamento,
- * collegamento visitato), i nomi definiti che l'utente vede, il calcolo e la
- * struttura protetta.
+ * collegamento visitato), i nomi definiti che l'utente vede, il calcolo, la
+ * struttura protetta e il carattere dello stile Normale, che lo stile di una
+ * cella tace.
  */
 export interface GridBook {
   theme_colors: string[];
   names: string[];
   calculation: GridCalculation;
   protected: boolean;
+  font: string;
+  /** In punti. */
+  font_size: number;
 }
 
 /** Il foglio, gli intervalli A1 separati da virgola e la cella attiva. */

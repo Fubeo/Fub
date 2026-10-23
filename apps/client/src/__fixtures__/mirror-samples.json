@@ -93,7 +93,9 @@
         ],
         "names": [],
         "calculation": "automatic",
-        "protected": false
+        "protected": false,
+        "font": "Calibri",
+        "font_size": 11.0
       }
     }
   ],
@@ -164,7 +166,9 @@
           "Totali"
         ],
         "calculation": "manual",
-        "protected": true
+        "protected": true,
+        "font": "Calibri",
+        "font_size": 11.0
       }
     }
   ],
