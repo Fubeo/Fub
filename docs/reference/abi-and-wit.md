@@ -126,10 +126,16 @@ WASM lo implementano con gli stessi tipi, limiti, errori e lifecycle.
   revisione e il **giornale** delle celle cambiate (`GridJournal`), e dà un
   `GridBytesSession`: fogli, foglio attivo, fogli nascosti, avvisi in codici
   chiusi (`GridNotice`) e voci del giornale in conflitto con i byte.
-- `window` dà un `GridBytesWindow`: ogni cella porta l'input, lo stile, il
-  valore (`GridValue`), il testo formattato dal provider, il codice del
-  blocco (`lock`), `stale` (il valore del file non segue una cella cambiata)
-  e `conflict`.
+- `window` dà un `GridBytesWindow`: ogni cella porta l'input, l'indice dello
+  stile, il valore (`GridValue`), il testo formattato dal provider, il codice
+  del blocco (`lock`), `stale` (il valore del file non segue una cella
+  cambiata), `conflict` e i segni già risolti: barra di dati, icona,
+  commento con le risposte e collegamento. La finestra porta gli stili
+  (`grid-cell-style`, non più delle celle), le unioni che la
+  toccano, mai di una cella sola, e la vista del foglio, con lo zoom da 10 a
+  400 e i riquadri bloccati dentro il foglio. Uno stile ha il carattere fino
+  a 256 byte, la dimensione fra 0 e 409 punti, colori fino a 32 byte e la
+  rotazione fra -90 e 90 gradi, o 255 per il testo in colonna.
 - `apply` riceve le patch di `GridApplyRequest`; il `GridCommit` porta il diff del
   **testo del giornale**, e l'invalidazione.
 - `commands(instance, selection)` dà il catalogo (`GridCommandState`, fino a

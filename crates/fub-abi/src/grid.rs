@@ -90,9 +90,79 @@ pub enum GridHorizontalAlign {
     Start,
     Center,
     End,
+    /// Ripete il testo fino a riempire la cella.
+    Fill,
+    Justify,
+    Distributed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridVerticalAlign {
+    Top,
+    Center,
+    Bottom,
+    Justify,
+    Distributed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridUnderline {
+    Single,
+    Double,
+    SingleAccounting,
+    DoubleAccounting,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridScript {
+    Superscript,
+    Subscript,
+}
+
+/// I tratti di un bordo, quelli di Excel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridBorderStyle {
+    Thin,
+    Medium,
+    Thick,
+    Dashed,
+    Dotted,
+    Double,
+    Hair,
+    MediumDashed,
+    DashDot,
+    MediumDashDot,
+    DashDotDot,
+    MediumDashDotDot,
+    SlantDashDot,
+}
+
+/// Un lato del bordo; `color` assente è il colore automatico.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridBorder {
+    pub style: GridBorderStyle,
+    pub color: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridBorders {
+    pub top: Option<GridBorder>,
+    pub right: Option<GridBorder>,
+    pub bottom: Option<GridBorder>,
+    pub left: Option<GridBorder>,
+    pub diagonal_down: Option<GridBorder>,
+    pub diagonal_up: Option<GridBorder>,
+}
+
+/// L'aspetto di una cella, già risolto dal provider: il tema, lo stile di
+/// una tabella e la formattazione condizionale sono dentro. Un campo assente
+/// è il valore di serie del formato (carattere, dimensione, allineamento
+/// verticale in basso).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct GridCellStyle {
     pub bold: bool,
     pub italic: bool,
@@ -100,6 +170,65 @@ pub struct GridCellStyle {
     pub fill_color: Option<String>,
     pub horizontal: Option<GridHorizontalAlign>,
     pub number_format: Option<String>,
+    pub font: Option<String>,
+    /// In punti.
+    pub font_size: Option<f32>,
+    pub underline: Option<GridUnderline>,
+    pub strike: bool,
+    pub script: Option<GridScript>,
+    pub vertical: Option<GridVerticalAlign>,
+    pub wrap: bool,
+    pub shrink: bool,
+    /// Livelli di rientro, come in Excel.
+    pub indent: u8,
+    /// Gradi in senso antiorario, da -90 a 90; 255 è il testo in colonna.
+    pub rotation: i16,
+    pub borders: GridBorders,
+}
+
+pub const GRID_STACKED_ROTATION: i16 = 255;
+pub const MAX_GRID_FONT_BYTES: usize = 256;
+pub const MAX_GRID_COLOR_BYTES: usize = 32;
+
+impl GridCellStyle {
+    pub fn validate(&self) -> Result<(), PluginError> {
+        let color = |value: &Option<String>| {
+            value
+                .as_ref()
+                .is_some_and(|c| c.len() > MAX_GRID_COLOR_BYTES)
+        };
+        let borders = &self.borders;
+        let border = |side: &Option<GridBorder>| side.as_ref().is_some_and(|b| color(&b.color));
+        if color(&self.text_color)
+            || color(&self.fill_color)
+            || [
+                &borders.top,
+                &borders.right,
+                &borders.bottom,
+                &borders.left,
+                &borders.diagonal_down,
+                &borders.diagonal_up,
+            ]
+            .into_iter()
+            .any(border)
+        {
+            return Err(PluginError::BadArgs("grid style color is too long".into()));
+        }
+        if self
+            .font
+            .as_ref()
+            .is_some_and(|font| font.is_empty() || font.len() > MAX_GRID_FONT_BYTES)
+            || self
+                .font_size
+                .is_some_and(|size| !size.is_finite() || size <= 0.0 || size > 409.0)
+            || !((-90..=90).contains(&self.rotation) || self.rotation == GRID_STACKED_ROTATION)
+        {
+            return Err(PluginError::BadArgs(
+                "grid style is outside its limits".into(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

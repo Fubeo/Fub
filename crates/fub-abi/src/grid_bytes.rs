@@ -730,18 +730,104 @@ pub enum GridValue {
 /// `stale` dice che il valore è quello del file e una cella da cui dipende è
 /// cambiata; `conflict` che la cella è nel giornale e i byte hanno un terzo
 /// input.
+///
+/// `style` è l'indice del suo aspetto negli `styles` della finestra. La
+/// formattazione condizionale arriva già risolta: lo stile lì, la barra dei
+/// dati e l'icona qui.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GridBytesCell {
     pub key: GridCellKey,
     pub input: String,
-    pub style: GridCellStyle,
+    pub style: u32,
     pub value: GridValue,
     pub display: String,
     pub lock: Option<String>,
     pub stale: bool,
     pub conflict: bool,
+    pub data_bar: Option<GridDataBar>,
+    pub icon: Option<GridIcon>,
+    pub comment: Option<GridComment>,
+    pub link: Option<GridLink>,
 }
 
+/// La barra dei dati: la frazione della larghezza della cella, da 0 a 1.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GridDataBar {
+    pub fraction: f32,
+    pub color: String,
+    pub gradient: bool,
+}
+
+/// L'icona di una serie (`3Arrows`, `5Rating`), dal basso: 0 è la più bassa.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridIcon {
+    pub set: String,
+    pub index: u32,
+}
+
+/// Una nota, o un commento con le sue risposte.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridComment {
+    pub author: String,
+    pub text: String,
+    pub threaded: bool,
+    pub resolved: bool,
+    pub replies: Vec<GridCommentReply>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridCommentReply {
+    pub author: String,
+    pub text: String,
+}
+
+/// Un collegamento: un indirizzo, o un punto della cartella (`Foglio2!A1`).
+/// `external` dice che porta fuori dalla cartella; la shell non lo segue da
+/// sola.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridLink {
+    pub target: String,
+    pub tooltip: Option<String>,
+    pub external: bool,
+}
+
+/// Un'unione di celle, a indici assoluti del foglio: la cella in alto a
+/// sinistra e quante righe e colonne copre.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridMerge {
+    pub row: u32,
+    pub column: u32,
+    pub rows: u32,
+    pub columns: u32,
+}
+
+/// La vista del foglio come la salva il file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridSheetView {
+    pub frozen_rows: u32,
+    pub frozen_columns: u32,
+    pub gridlines: bool,
+    pub headings: bool,
+    /// In percento, da 10 a 400.
+    pub zoom: u16,
+    pub right_to_left: bool,
+}
+
+impl Default for GridSheetView {
+    fn default() -> Self {
+        Self {
+            frozen_rows: 0,
+            frozen_columns: 0,
+            gridlines: true,
+            headings: true,
+            zoom: 100,
+            right_to_left: false,
+        }
+    }
+}
+
+/// Una finestra porta gli aspetti delle sue celle una volta sola, le unioni
+/// che la toccano, anche quelle che cominciano fuori, e la vista del foglio.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GridBytesWindow {
     pub revision: Revision,
@@ -753,6 +839,9 @@ pub struct GridBytesWindow {
     pub rows: Vec<GridRow>,
     pub columns: Vec<GridColumn>,
     pub cells: Vec<GridBytesCell>,
+    pub styles: Vec<GridCellStyle>,
+    pub merges: Vec<GridMerge>,
+    pub view: GridSheetView,
 }
 
 impl GridBytesWindow {
@@ -784,6 +873,58 @@ impl GridBytesWindow {
             .any(|cell| cell.lock.as_deref().is_some_and(|lock| !valid_id(lock)))
         {
             return Err(bad("grid cell has an invalid lock code"));
+        }
+        if self.styles.len() > self.cells.len().max(1) {
+            return Err(bad("grid window has more styles than cells"));
+        }
+        for style in &self.styles {
+            style.validate()?;
+        }
+        for cell in &self.cells {
+            if cell.style as usize >= self.styles.len() {
+                return Err(bad("grid cell names a style the window does not have"));
+            }
+            if cell
+                .data_bar
+                .as_ref()
+                .is_some_and(|bar| !(0.0..=1.0).contains(&bar.fraction) || bar.color.is_empty())
+                || cell.icon.as_ref().is_some_and(|icon| !valid_id(&icon.set))
+                || cell
+                    .link
+                    .as_ref()
+                    .is_some_and(|link| link.target.is_empty())
+            {
+                return Err(bad("grid cell has a malformed mark"));
+            }
+        }
+        if self.merges.len() > MAX_GRID_WINDOW_CELLS {
+            return Err(bad("grid window has too many merges"));
+        }
+        for merge in &self.merges {
+            let bottom = merge.row.checked_add(merge.rows);
+            let right = merge.column.checked_add(merge.columns);
+            let (Some(bottom), Some(right)) = (bottom, right) else {
+                return Err(bad("grid merge overflows"));
+            };
+            if merge.rows == 0
+                || merge.columns == 0
+                || (merge.rows == 1 && merge.columns == 1)
+                || bottom > self.total_rows
+                || right > self.total_columns
+                || bottom <= self.row_start
+                || merge.row >= row_end
+                || right <= self.column_start
+                || merge.column >= column_end
+            {
+                return Err(bad("grid merge lies outside the window"));
+            }
+        }
+        let view = &self.view;
+        if view.frozen_rows > self.total_rows
+            || view.frozen_columns > self.total_columns
+            || !(10..=400).contains(&view.zoom)
+        {
+            return Err(bad("grid sheet view is outside its limits"));
         }
         let encoded = serde_json::to_vec(self)
             .map_err(|error| PluginError::Internal(error.to_string().into()))?;
@@ -875,6 +1016,7 @@ pub trait GridBytesProvider: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::grid::{GridBorder, GridBorderStyle, GridBorders, GRID_STACKED_ROTATION};
 
     fn key(sheet: &str, row: &str, column: &str) -> GridCellKey {
         GridCellKey {
@@ -1055,6 +1197,150 @@ mod tests {
             .unwrap();
         assert_eq!(now.rebase(&cells), now);
         assert_eq!(cells.rebase(&saved), cells);
+    }
+
+    fn window() -> GridBytesWindow {
+        GridBytesWindow {
+            revision: Revision::of("r"),
+            sheet: "s".into(),
+            row_start: 10,
+            column_start: 2,
+            total_rows: 100,
+            total_columns: 20,
+            rows: (10..12)
+                .map(|index| GridRow {
+                    id: format!("r{index}"),
+                    index,
+                    height: None,
+                    hidden: false,
+                })
+                .collect(),
+            columns: (2..4)
+                .map(|index| GridColumn {
+                    id: format!("c{index}"),
+                    index,
+                    width: None,
+                    hidden: false,
+                })
+                .collect(),
+            cells: Vec::new(),
+            styles: vec![GridCellStyle::default()],
+            merges: Vec::new(),
+            view: GridSheetView::default(),
+        }
+    }
+
+    #[test]
+    fn una_finestra_porta_le_unioni_che_la_toccano_e_nessun_altra() {
+        let merge = |row, column, rows, columns| GridMerge {
+            row,
+            column,
+            rows,
+            columns,
+        };
+        let mut touching = window();
+        // Comincia sopra e a sinistra della finestra, e ci arriva dentro.
+        touching.merges = vec![merge(0, 0, 11, 3), merge(11, 3, 1, 5)];
+        touching.validate().unwrap();
+        for outside in [
+            merge(0, 0, 10, 3),
+            merge(12, 2, 2, 2),
+            merge(10, 4, 1, 2),
+            merge(10, 2, 1, 1),
+            merge(10, 2, 0, 2),
+            merge(99, 2, 2, 1),
+            merge(u32::MAX, 2, 2, 1),
+        ] {
+            let mut window = window();
+            window.merges = vec![outside];
+            assert!(window.validate().is_err(), "{outside:?}");
+        }
+    }
+
+    #[test]
+    fn lo_stile_e_la_vista_restano_nei_limiti() {
+        let cell = |style: u32| GridBytesCell {
+            key: key("s", "r10", "c2"),
+            input: String::new(),
+            style,
+            value: GridValue::Blank,
+            display: String::new(),
+            lock: None,
+            stale: false,
+            conflict: false,
+            data_bar: None,
+            icon: None,
+            comment: None,
+            link: None,
+        };
+        let mut good = window();
+        good.cells = vec![cell(0)];
+        good.styles = vec![
+            (GridCellStyle {
+                font: Some("Aptos Narrow".into()),
+                font_size: Some(10.5),
+                rotation: GRID_STACKED_ROTATION,
+                borders: GridBorders {
+                    bottom: Some(GridBorder {
+                        style: GridBorderStyle::Double,
+                        color: Some("#1F4E79".into()),
+                    }),
+                    ..GridBorders::default()
+                },
+                ..GridCellStyle::default()
+            }),
+        ];
+        good.validate().unwrap();
+        let mut missing = window();
+        missing.cells = vec![cell(1)];
+        assert!(missing.validate().is_err());
+        for style in [
+            GridCellStyle {
+                font_size: Some(f32::NAN),
+                ..GridCellStyle::default()
+            },
+            GridCellStyle {
+                font: Some(String::new()),
+                ..GridCellStyle::default()
+            },
+            GridCellStyle {
+                rotation: 91,
+                ..GridCellStyle::default()
+            },
+            GridCellStyle {
+                borders: GridBorders {
+                    left: Some(GridBorder {
+                        style: GridBorderStyle::Thin,
+                        color: Some("#".repeat(33)),
+                    }),
+                    ..GridBorders::default()
+                },
+                ..GridCellStyle::default()
+            },
+        ] {
+            let mut window = window();
+            window.cells = vec![cell(0)];
+            window.styles = vec![style];
+            assert!(window.validate().is_err());
+        }
+        let mut bar = window();
+        bar.cells = vec![GridBytesCell {
+            data_bar: Some(GridDataBar {
+                fraction: 1.5,
+                color: "#638EC6".into(),
+                gradient: true,
+            }),
+            ..cell(0)
+        }];
+        assert!(bar.validate().is_err());
+        let mut view = window();
+        view.view.zoom = 5;
+        assert!(view.validate().is_err());
+        view.view = GridSheetView {
+            frozen_rows: 101,
+            ..GridSheetView::default()
+        };
+        assert!(view.validate().is_err());
     }
 
     #[test]

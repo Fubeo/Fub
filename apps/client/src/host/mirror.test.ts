@@ -18,6 +18,8 @@ import type {
   EventMask,
   ExportReport,
   GridApplyRequest,
+  GridBorder,
+  GridBorders,
   GridBytesCell,
   GridBytesSession,
   GridBytesWindow,
@@ -28,11 +30,18 @@ import type {
   GridCommandOutcome,
   GridCommandRequest,
   GridCommandState,
+  GridComment,
+  GridCommentReply,
   GridCommit,
+  GridDataBar,
+  GridIcon,
+  GridLink,
+  GridMerge,
   GridNotice,
   GridRow,
   GridSelection,
   GridSheet,
+  GridSheetView,
   GridSourceEdit,
   GridSurfaceSpec,
   GridValue,
@@ -631,6 +640,17 @@ const RECORD_KEYS: Record<string, string[]> = {
     fill_color: true,
     horizontal: true,
     number_format: true,
+    font: true,
+    font_size: true,
+    underline: true,
+    strike: true,
+    script: true,
+    vertical: true,
+    wrap: true,
+    shrink: true,
+    indent: true,
+    rotation: true,
+    borders: true,
   }),
   GridWindowRequest: keysOf<GridWindowRequest>({
     revision: true,
@@ -669,6 +689,10 @@ const RECORD_KEYS: Record<string, string[]> = {
     lock: true,
     stale: true,
     conflict: true,
+    data_bar: true,
+    icon: true,
+    comment: true,
+    link: true,
   }),
   GridSelection: keysOf<GridSelection>({ sheet: true, selection: true, active: true }),
   GridCommandState: keysOf<GridCommandState>({ id: true, enabled: true, reason: true }),
@@ -692,6 +716,9 @@ const RECORD_KEYS: Record<string, string[]> = {
     rows: true,
     columns: true,
     cells: true,
+    styles: true,
+    merges: true,
+    view: true,
   }),
   Span: keysOf<Span>({ start: true, end: true }),
   VersionRef: keysOf<VersionRef>({ ts: true, hash: true, size: true }),
@@ -1420,6 +1447,44 @@ describe("mirror TS↔Rust", () => {
       "boolean",
       "string",
     ]);
+  });
+
+  // Le forme dentro una finestra non hanno un campione loro: si leggono dalla
+  // finestra del campione, che il test di Rust riempie di ogni segno.
+  it("la finestra porta stili, segni, unioni e vista con le chiavi del tipo TS", () => {
+    const sorted = (keys: string[]) => [...keys].sort();
+    const window = (fixture["GridBytesWindow"] as GridBytesWindow[])[0]!;
+    const styleKeys = RECORD_KEYS["GridCellStyle"]!;
+    expect(window.styles.length).toBeGreaterThan(1);
+    for (const style of window.styles) {
+      expect(Object.keys(style).sort()).toEqual(styleKeys);
+      expect(Object.keys(style.borders).sort())
+        .toEqual(sorted(keysOf<GridBorders>({ top: true, right: true, bottom: true, left: true, diagonal_down: true, diagonal_up: true })));
+    }
+    const sides = window.styles.flatMap((style) => Object.values(style.borders).filter((side): side is GridBorder => side !== null));
+    expect(sides.length).toBeGreaterThan(0);
+    for (const side of sides) expect(Object.keys(side).sort()).toEqual(sorted(keysOf<GridBorder>({ style: true, color: true })));
+    const marks = <T,>(pick: (cell: GridBytesCell) => T | null): T[] =>
+      window.cells.map(pick).filter((mark): mark is T => mark !== null);
+    const one = <T extends object>(found: T[], spec: Record<keyof T, true>) => {
+      expect(found.length, "il campione ha il segno").toBeGreaterThan(0);
+      for (const mark of found) expect(Object.keys(mark).sort()).toEqual(sorted(keysOf<T>(spec)));
+    };
+    one<GridDataBar>(marks((cell) => cell.data_bar), { fraction: true, color: true, gradient: true });
+    one<GridIcon>(marks((cell) => cell.icon), { set: true, index: true });
+    const comments = marks((cell) => cell.comment);
+    one<GridComment>(comments, { author: true, text: true, threaded: true, resolved: true, replies: true });
+    one<GridCommentReply>(comments.flatMap((comment) => comment.replies), { author: true, text: true });
+    one<GridLink>(marks((cell) => cell.link), { target: true, tooltip: true, external: true });
+    one<GridMerge>(window.merges, { row: true, column: true, rows: true, columns: true });
+    one<GridSheetView>([window.view], {
+      frozen_rows: true,
+      frozen_columns: true,
+      gridlines: true,
+      headings: true,
+      zoom: true,
+      right_to_left: true,
+    });
   });
 
   it("i record hanno esattamente le chiavi del tipo TS", () => {

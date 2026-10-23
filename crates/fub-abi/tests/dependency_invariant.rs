@@ -1121,6 +1121,7 @@ const WORDCRAFT_FREE: &[&str] = &["fub-abi", "fub-kernel", "fub-sdk"];
 const GRIDCRAFT_OWNERS: &[(&str, &str, Option<&str>)] = &[
     ("fub-format-xlsx", "gridcraft-calc", None),
     ("fub-format-xlsx", "gridcraft-core", None),
+    ("fub-format-xlsx", "gridcraft-engine", None),
     ("fub-format-xlsx", "gridcraft-model", None),
     ("fub-format-xlsx", "gridcraft-numfmt", None),
     ("fub-format-xlsx", "gridcraft-xlsx", None),

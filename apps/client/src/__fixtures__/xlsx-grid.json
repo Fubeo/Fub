@@ -858,14 +858,7 @@
             "column": "c0"
           },
           "input": "Voce",
-          "style": {
-            "bold": true,
-            "italic": true,
-            "text_color": "#FF0000",
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 0,
           "value": {
             "kind": "text",
             "value": "Voce"
@@ -873,7 +866,11 @@
           "display": "Voce",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -882,14 +879,7 @@
             "column": "c1"
           },
           "input": "Importo",
-          "style": {
-            "bold": true,
-            "italic": true,
-            "text_color": "#FF0000",
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 0,
           "value": {
             "kind": "text",
             "value": "Importo"
@@ -897,7 +887,11 @@
           "display": "Importo",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -906,14 +900,7 @@
             "column": "c2"
           },
           "input": "Quota",
-          "style": {
-            "bold": true,
-            "italic": true,
-            "text_color": "#FF0000",
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 0,
           "value": {
             "kind": "text",
             "value": "Quota"
@@ -921,7 +908,11 @@
           "display": "Quota",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -930,21 +921,18 @@
             "column": "c7"
           },
           "input": "",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": null,
-            "number_format": null
-          },
+          "style": 1,
           "value": {
             "kind": "blank"
           },
           "display": "",
           "lock": "merged",
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -953,14 +941,7 @@
             "column": "c0"
           },
           "input": "Affitto",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": null,
-            "number_format": null
-          },
+          "style": 1,
           "value": {
             "kind": "text",
             "value": "Affitto"
@@ -968,7 +949,11 @@
           "display": "Affitto",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -977,14 +962,7 @@
             "column": "c1"
           },
           "input": "800",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 800.0
@@ -992,7 +970,11 @@
           "display": "800",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -1001,14 +983,7 @@
             "column": "c2"
           },
           "input": "0.5",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 0.5
@@ -1016,7 +991,11 @@
           "display": "50.00%",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -1025,14 +1004,7 @@
             "column": "c4"
           },
           "input": "45000",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 45000.0
@@ -1040,7 +1012,11 @@
           "display": "2023-03-15",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -1049,14 +1025,7 @@
             "column": "c0"
           },
           "input": "Spesa",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": null,
-            "number_format": null
-          },
+          "style": 1,
           "value": {
             "kind": "text",
             "value": "Spesa"
@@ -1064,7 +1033,11 @@
           "display": "Spesa",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -1073,14 +1046,7 @@
             "column": "c1"
           },
           "input": "-120",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": "#FF0000",
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 3,
           "value": {
             "kind": "number",
             "value": -120.0
@@ -1088,7 +1054,11 @@
           "display": "-120",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -1097,14 +1067,7 @@
             "column": "c2"
           },
           "input": "=B3/B4",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": -0.15
@@ -1112,7 +1075,11 @@
           "display": "-15.00%",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -1121,14 +1088,7 @@
             "column": "c4"
           },
           "input": "TRUE",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 4,
           "value": {
             "kind": "boolean",
             "value": true
@@ -1136,7 +1096,11 @@
           "display": "TRUE",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -1145,14 +1109,7 @@
             "column": "c0"
           },
           "input": "Totale",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": "#000000",
-            "fill_color": "#FFFF00",
-            "horizontal": null,
-            "number_format": null
-          },
+          "style": 5,
           "value": {
             "kind": "text",
             "value": "Totale"
@@ -1160,7 +1117,11 @@
           "display": "Totale",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -1169,14 +1130,7 @@
             "column": "c1"
           },
           "input": "=SUM(B2:B3)",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": "#000000",
-            "fill_color": "#FFFF00",
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 6,
           "value": {
             "kind": "number",
             "value": 680.0
@@ -1184,7 +1138,11 @@
           "display": "680",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -1193,14 +1151,7 @@
             "column": "c2"
           },
           "input": "#DIV/0!",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 4,
           "value": {
             "kind": "error",
             "value": "#DIV/0!"
@@ -1208,7 +1159,11 @@
           "display": "#DIV/0!",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -1217,14 +1172,7 @@
             "column": "c5"
           },
           "input": "=SEQUENCE(3)",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 1.0
@@ -1232,7 +1180,11 @@
           "display": "1",
           "lock": "spill",
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -1241,14 +1193,7 @@
             "column": "c5"
           },
           "input": "",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 2.0
@@ -1256,7 +1201,11 @@
           "display": "2",
           "lock": "spill",
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -1265,14 +1214,7 @@
             "column": "c5"
           },
           "input": "",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 3.0
@@ -1280,9 +1222,213 @@
           "display": "3",
           "lock": "spill",
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         }
-      ]
+      ],
+      "styles": [
+        {
+          "bold": true,
+          "italic": true,
+          "text_color": "#FF0000",
+          "fill_color": null,
+          "horizontal": "center",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": null,
+          "fill_color": null,
+          "horizontal": null,
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": null,
+          "fill_color": null,
+          "horizontal": "end",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": "#FF0000",
+          "fill_color": null,
+          "horizontal": "end",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": null,
+          "fill_color": null,
+          "horizontal": "center",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": "#000000",
+          "fill_color": "#FFFF00",
+          "horizontal": null,
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": "#000000",
+          "fill_color": "#FFFF00",
+          "horizontal": "end",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        }
+      ],
+      "merges": [
+        {
+          "row": 0,
+          "column": 6,
+          "rows": 1,
+          "columns": 2
+        }
+      ],
+      "view": {
+        "frozen_rows": 0,
+        "frozen_columns": 0,
+        "gridlines": true,
+        "headings": true,
+        "zoom": 100,
+        "right_to_left": false
+      }
     },
     {
       "revision": "sha256:895584820e6df4e271dba3748d3d8c0084239266bbc37ed47ccbcfbc7a09282a",
@@ -2065,14 +2211,7 @@
             "column": "c0"
           },
           "input": "Una nota",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "start",
-            "number_format": null
-          },
+          "style": 0,
           "value": {
             "kind": "text",
             "value": "Una nota"
@@ -2080,7 +2219,11 @@
           "display": "Una nota",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -2089,23 +2232,83 @@
             "column": "c1"
           },
           "input": "=A1&\"!\"",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": null,
-            "number_format": null
-          },
+          "style": 1,
           "value": {
             "kind": "blank"
           },
           "display": "",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         }
-      ]
+      ],
+      "styles": [
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": null,
+          "fill_color": null,
+          "horizontal": "start",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": null,
+          "fill_color": null,
+          "horizontal": null,
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        }
+      ],
+      "merges": [],
+      "view": {
+        "frozen_rows": 0,
+        "frozen_columns": 0,
+        "gridlines": true,
+        "headings": true,
+        "zoom": 100,
+        "right_to_left": false
+      }
     }
   ],
   "edit": {
@@ -2963,14 +3166,7 @@
             "column": "c0"
           },
           "input": "Voce",
-          "style": {
-            "bold": true,
-            "italic": true,
-            "text_color": "#FF0000",
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 0,
           "value": {
             "kind": "text",
             "value": "Voce"
@@ -2978,7 +3174,11 @@
           "display": "Voce",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -2987,14 +3187,7 @@
             "column": "c1"
           },
           "input": "Importo",
-          "style": {
-            "bold": true,
-            "italic": true,
-            "text_color": "#FF0000",
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 0,
           "value": {
             "kind": "text",
             "value": "Importo"
@@ -3002,7 +3195,11 @@
           "display": "Importo",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3011,14 +3208,7 @@
             "column": "c2"
           },
           "input": "Quota",
-          "style": {
-            "bold": true,
-            "italic": true,
-            "text_color": "#FF0000",
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 0,
           "value": {
             "kind": "text",
             "value": "Quota"
@@ -3026,7 +3216,11 @@
           "display": "Quota",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3035,21 +3229,18 @@
             "column": "c7"
           },
           "input": "",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": null,
-            "number_format": null
-          },
+          "style": 1,
           "value": {
             "kind": "blank"
           },
           "display": "",
           "lock": "merged",
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3058,14 +3249,7 @@
             "column": "c0"
           },
           "input": "Affitto",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": null,
-            "number_format": null
-          },
+          "style": 1,
           "value": {
             "kind": "text",
             "value": "Affitto"
@@ -3073,7 +3257,11 @@
           "display": "Affitto",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3082,14 +3270,7 @@
             "column": "c1"
           },
           "input": "900",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 900.0
@@ -3097,7 +3278,11 @@
           "display": "900",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3106,14 +3291,7 @@
             "column": "c2"
           },
           "input": "0.5",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 0.5
@@ -3121,7 +3299,11 @@
           "display": "50.00%",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3130,14 +3312,7 @@
             "column": "c4"
           },
           "input": "45000",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 45000.0
@@ -3145,7 +3320,11 @@
           "display": "2023-03-15",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3154,14 +3333,7 @@
             "column": "c0"
           },
           "input": "Spesa",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": null,
-            "number_format": null
-          },
+          "style": 1,
           "value": {
             "kind": "text",
             "value": "Spesa"
@@ -3169,7 +3341,11 @@
           "display": "Spesa",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3178,14 +3354,7 @@
             "column": "c1"
           },
           "input": "-120",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": "#FF0000",
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 3,
           "value": {
             "kind": "number",
             "value": -120.0
@@ -3193,7 +3362,11 @@
           "display": "-120",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3202,14 +3375,7 @@
             "column": "c2"
           },
           "input": "=B3/B4",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": -0.15
@@ -3217,7 +3383,11 @@
           "display": "-15.00%",
           "lock": null,
           "stale": true,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3226,14 +3396,7 @@
             "column": "c4"
           },
           "input": "TRUE",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 4,
           "value": {
             "kind": "boolean",
             "value": true
@@ -3241,7 +3404,11 @@
           "display": "TRUE",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3250,14 +3417,7 @@
             "column": "c0"
           },
           "input": "Totale",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": "#000000",
-            "fill_color": "#FFFF00",
-            "horizontal": null,
-            "number_format": null
-          },
+          "style": 5,
           "value": {
             "kind": "text",
             "value": "Totale"
@@ -3265,7 +3425,11 @@
           "display": "Totale",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3274,14 +3438,7 @@
             "column": "c1"
           },
           "input": "=SUM(B2:B3)",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": "#000000",
-            "fill_color": "#FFFF00",
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 6,
           "value": {
             "kind": "number",
             "value": 680.0
@@ -3289,7 +3446,11 @@
           "display": "680",
           "lock": null,
           "stale": true,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3298,14 +3459,7 @@
             "column": "c2"
           },
           "input": "#DIV/0!",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 4,
           "value": {
             "kind": "error",
             "value": "#DIV/0!"
@@ -3313,7 +3467,11 @@
           "display": "#DIV/0!",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3322,14 +3480,7 @@
             "column": "c5"
           },
           "input": "=SEQUENCE(3)",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 1.0
@@ -3337,7 +3488,11 @@
           "display": "1",
           "lock": "spill",
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3346,14 +3501,7 @@
             "column": "c5"
           },
           "input": "",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 2.0
@@ -3361,7 +3509,11 @@
           "display": "2",
           "lock": "spill",
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -3370,14 +3522,7 @@
             "column": "c5"
           },
           "input": "",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 3.0
@@ -3385,9 +3530,213 @@
           "display": "3",
           "lock": "spill",
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         }
-      ]
+      ],
+      "styles": [
+        {
+          "bold": true,
+          "italic": true,
+          "text_color": "#FF0000",
+          "fill_color": null,
+          "horizontal": "center",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": null,
+          "fill_color": null,
+          "horizontal": null,
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": null,
+          "fill_color": null,
+          "horizontal": "end",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": "#FF0000",
+          "fill_color": null,
+          "horizontal": "end",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": null,
+          "fill_color": null,
+          "horizontal": "center",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": "#000000",
+          "fill_color": "#FFFF00",
+          "horizontal": null,
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": "#000000",
+          "fill_color": "#FFFF00",
+          "horizontal": "end",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        }
+      ],
+      "merges": [
+        {
+          "row": 0,
+          "column": 6,
+          "rows": 1,
+          "columns": 2
+        }
+      ],
+      "view": {
+        "frozen_rows": 0,
+        "frozen_columns": 0,
+        "gridlines": true,
+        "headings": true,
+        "zoom": 100,
+        "right_to_left": false
+      }
     }
   },
   "conflict": {
@@ -4249,14 +4598,7 @@
             "column": "c0"
           },
           "input": "Voce",
-          "style": {
-            "bold": true,
-            "italic": true,
-            "text_color": "#FF0000",
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 0,
           "value": {
             "kind": "text",
             "value": "Voce"
@@ -4264,7 +4606,11 @@
           "display": "Voce",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4273,14 +4619,7 @@
             "column": "c1"
           },
           "input": "Importo",
-          "style": {
-            "bold": true,
-            "italic": true,
-            "text_color": "#FF0000",
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 0,
           "value": {
             "kind": "text",
             "value": "Importo"
@@ -4288,7 +4627,11 @@
           "display": "Importo",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4297,14 +4640,7 @@
             "column": "c2"
           },
           "input": "Quota",
-          "style": {
-            "bold": true,
-            "italic": true,
-            "text_color": "#FF0000",
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 0,
           "value": {
             "kind": "text",
             "value": "Quota"
@@ -4312,7 +4648,11 @@
           "display": "Quota",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4321,21 +4661,18 @@
             "column": "c7"
           },
           "input": "",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": null,
-            "number_format": null
-          },
+          "style": 1,
           "value": {
             "kind": "blank"
           },
           "display": "",
           "lock": "merged",
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4344,14 +4681,7 @@
             "column": "c0"
           },
           "input": "Affitto",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": null,
-            "number_format": null
-          },
+          "style": 1,
           "value": {
             "kind": "text",
             "value": "Affitto"
@@ -4359,7 +4689,11 @@
           "display": "Affitto",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4368,14 +4702,7 @@
             "column": "c1"
           },
           "input": "900",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 900.0
@@ -4383,7 +4710,11 @@
           "display": "900",
           "lock": null,
           "stale": false,
-          "conflict": true
+          "conflict": true,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4392,14 +4723,7 @@
             "column": "c2"
           },
           "input": "0.5",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 0.5
@@ -4407,7 +4731,11 @@
           "display": "50.00%",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4416,14 +4744,7 @@
             "column": "c4"
           },
           "input": "45000",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 45000.0
@@ -4431,7 +4752,11 @@
           "display": "2023-03-15",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4440,14 +4765,7 @@
             "column": "c0"
           },
           "input": "Spesa",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": null,
-            "number_format": null
-          },
+          "style": 1,
           "value": {
             "kind": "text",
             "value": "Spesa"
@@ -4455,7 +4773,11 @@
           "display": "Spesa",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4464,14 +4786,7 @@
             "column": "c1"
           },
           "input": "-120",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": "#FF0000",
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 3,
           "value": {
             "kind": "number",
             "value": -120.0
@@ -4479,7 +4794,11 @@
           "display": "-120",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4488,14 +4807,7 @@
             "column": "c2"
           },
           "input": "=B3/B4",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": -0.15
@@ -4503,7 +4815,11 @@
           "display": "-15.00%",
           "lock": null,
           "stale": true,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4512,14 +4828,7 @@
             "column": "c4"
           },
           "input": "TRUE",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 4,
           "value": {
             "kind": "boolean",
             "value": true
@@ -4527,7 +4836,11 @@
           "display": "TRUE",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4536,14 +4849,7 @@
             "column": "c0"
           },
           "input": "Totale",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": "#000000",
-            "fill_color": "#FFFF00",
-            "horizontal": null,
-            "number_format": null
-          },
+          "style": 5,
           "value": {
             "kind": "text",
             "value": "Totale"
@@ -4551,7 +4857,11 @@
           "display": "Totale",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4560,14 +4870,7 @@
             "column": "c1"
           },
           "input": "=SUM(B2:B3)",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": "#000000",
-            "fill_color": "#FFFF00",
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 6,
           "value": {
             "kind": "number",
             "value": 680.0
@@ -4575,7 +4878,11 @@
           "display": "680",
           "lock": null,
           "stale": true,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4584,14 +4891,7 @@
             "column": "c2"
           },
           "input": "#DIV/0!",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": null
-          },
+          "style": 4,
           "value": {
             "kind": "error",
             "value": "#DIV/0!"
@@ -4599,7 +4899,11 @@
           "display": "#DIV/0!",
           "lock": null,
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4608,14 +4912,7 @@
             "column": "c5"
           },
           "input": "=SEQUENCE(3)",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 1.0
@@ -4623,7 +4920,11 @@
           "display": "1",
           "lock": "spill",
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4632,14 +4933,7 @@
             "column": "c5"
           },
           "input": "",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 2.0
@@ -4647,7 +4941,11 @@
           "display": "2",
           "lock": "spill",
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         },
         {
           "key": {
@@ -4656,14 +4954,7 @@
             "column": "c5"
           },
           "input": "",
-          "style": {
-            "bold": false,
-            "italic": false,
-            "text_color": null,
-            "fill_color": null,
-            "horizontal": "end",
-            "number_format": null
-          },
+          "style": 2,
           "value": {
             "kind": "number",
             "value": 3.0
@@ -4671,9 +4962,213 @@
           "display": "3",
           "lock": "spill",
           "stale": false,
-          "conflict": false
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
         }
-      ]
+      ],
+      "styles": [
+        {
+          "bold": true,
+          "italic": true,
+          "text_color": "#FF0000",
+          "fill_color": null,
+          "horizontal": "center",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": null,
+          "fill_color": null,
+          "horizontal": null,
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": null,
+          "fill_color": null,
+          "horizontal": "end",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": "#FF0000",
+          "fill_color": null,
+          "horizontal": "end",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": null,
+          "fill_color": null,
+          "horizontal": "center",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": "#000000",
+          "fill_color": "#FFFF00",
+          "horizontal": null,
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": "#000000",
+          "fill_color": "#FFFF00",
+          "horizontal": "end",
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        }
+      ],
+      "merges": [
+        {
+          "row": 0,
+          "column": 6,
+          "rows": 1,
+          "columns": 2
+        }
+      ],
+      "view": {
+        "frozen_rows": 0,
+        "frozen_columns": 0,
+        "gridlines": true,
+        "headings": true,
+        "zoom": 100,
+        "right_to_left": false
+      }
     }
   }
 }

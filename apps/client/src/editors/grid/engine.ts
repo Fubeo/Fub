@@ -108,6 +108,17 @@ const PLAIN_STYLE: GridBytesStyle = {
   fill_color: null,
   horizontal: null,
   number_format: null,
+  font: null,
+  font_size: null,
+  underline: null,
+  strike: false,
+  script: null,
+  vertical: null,
+  wrap: false,
+  shrink: false,
+  indent: 0,
+  rotation: 0,
+  borders: { top: null, right: null, bottom: null, left: null, diagonal_down: null, diagonal_up: null },
 };
 
 /// La sessione della versione 2 aperta su una cartella.
@@ -831,15 +842,25 @@ export class GridEngine {
     const same = (cell: GridBytesCell) => cell.key.row === key.row && cell.key.column === key.column;
     const previous = window.cells.find(same);
     const display = input.startsWith("'") ? input.slice(1) : localInput(input, this.#decimal);
+    // Una cella nuova prende lo stile di serie, che la finestra può non avere.
+    let style = previous?.style;
+    if (style === undefined) {
+      style = window.styles.length;
+      window.styles = [...window.styles, PLAIN_STYLE];
+    }
     window.cells = [...window.cells.filter((cell) => !same(cell)), {
       key: { sheet: key.sheet, row: key.row, column: key.column },
       input,
-      style: previous?.style ?? PLAIN_STYLE,
+      style,
       value: input ? { kind: "text", value: display } : { kind: "blank" },
       display,
       lock: null,
       stale: false,
       conflict: false,
+      data_bar: null,
+      icon: null,
+      comment: null,
+      link: null,
     }];
   }
 

@@ -19,13 +19,16 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use fub_abi::{
     grid_bytes_revision, grid_journal_match, GridApplyRequest, GridBytesCell, GridBytesProvider,
-    GridBytesSession, GridBytesWindow, GridCellKey, GridColumn, GridCommit, GridInvalidation,
-    GridJournal, GridJournalMatch, GridNotice, GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec,
-    GridValue, GridWindowRequest, PluginError, Revision, MAX_GRID_BYTES_SOURCE,
-    MAX_GRID_INVALIDATED_CELLS, MAX_GRID_SESSION_COLUMNS, MAX_GRID_SESSION_ROWS,
+    GridBytesSession, GridBytesWindow, GridCellKey, GridCellStyle, GridColumn, GridComment,
+    GridCommentReply, GridCommit, GridDataBar, GridIcon, GridInvalidation, GridJournal,
+    GridJournalMatch, GridLink, GridMerge, GridNotice, GridRow, GridSheet, GridSheetView,
+    GridSourceEdit, GridSurfaceSpec, GridValue, GridWindowRequest, PluginError, Revision,
+    MAX_GRID_BYTES_SOURCE, MAX_GRID_INVALIDATED_CELLS, MAX_GRID_SESSION_COLUMNS,
+    MAX_GRID_SESSION_ROWS,
 };
 use gridcraft_calc::recalc::{Calc, Key};
 use gridcraft_core::{CellRef, RangeRef, Value as GcValue};
+use gridcraft_engine::cf::CfCache;
 use gridcraft_model::{Sheet, Visibility, Workbook};
 use gridcraft_numfmt::{format_value, NumberFormat};
 
@@ -54,6 +57,25 @@ pub const SHEET_SHAPE_LOCK: &str = "sheet-shape";
 
 fn bad(message: impl Into<String>) -> PluginError {
     PluginError::BadArgs(message.into().into())
+}
+
+/// Gli aspetti di una finestra, ciascuno una volta.
+#[derive(Default)]
+struct Styles {
+    list: Vec<GridCellStyle>,
+    known: HashMap<String, u32>,
+}
+
+impl Styles {
+    fn index(&mut self, style: GridCellStyle) -> u32 {
+        // Lo stile ha un `f32` e non è `Hash`: la chiave è la sua forma
+        // serializzata, che è una sola.
+        let key = serde_json::to_string(&style).expect("a grid style serializes");
+        *self.known.entry(key).or_insert_with(|| {
+            self.list.push(style);
+            (self.list.len() - 1) as u32
+        })
+    }
 }
 
 fn stale_revision() -> PluginError {
@@ -566,9 +588,74 @@ impl Instance {
                     .map(|(_, cell)| (cell.row, cell.col)),
             );
         }
+        let mut cache = CfCache::new();
+        let mut decorated = Vec::new();
+        if let Some(range) = range {
+            positions.extend(
+                model
+                    .comments
+                    .keys()
+                    .chain(model.hyperlinks.keys())
+                    .filter(|at| range.contains(**at))
+                    .map(|at| (at.row, at.col)),
+            );
+            // Una cella vuota in una tabella o sotto una formattazione
+            // condizionale si vede soltanto se il suo aspetto dà qualcosa.
+            let areas = model
+                .tables
+                .iter()
+                .map(|table| table.range)
+                .chain(
+                    model
+                        .cond_formats
+                        .iter()
+                        .flat_map(|cf| cf.ranges.iter().copied()),
+                )
+                .filter_map(|area| area.intersection(&range));
+            let mut seen = HashSet::new();
+            for area in areas {
+                for at in area.iter() {
+                    if !positions.contains(&(at.row, at.col)) && seen.insert((at.row, at.col)) {
+                        let look = display::look(&self.workbook, sheet, model, at, &mut cache);
+                        if display::visible(&look) {
+                            decorated.push((at.row, at.col));
+                        }
+                    }
+                }
+            }
+        }
+        positions.extend(decorated);
+        let merges = range.map_or_else(Vec::new, |range| {
+            model
+                .merges
+                .iter()
+                .filter(|merge| merge.intersection(&range).is_some())
+                .filter(|merge| merge.start != merge.end)
+                .map(|merge| GridMerge {
+                    row: merge.start.row,
+                    column: merge.start.col,
+                    rows: merge.end.row - merge.start.row + 1,
+                    columns: merge.end.col - merge.start.col + 1,
+                })
+                .filter(|merge| {
+                    merge.row + merge.rows <= total_rows
+                        && merge.column + merge.columns <= total_columns
+                })
+                .collect()
+        });
+        let (frozen_rows, frozen_columns) = model.freeze.unwrap_or((0, 0));
+        let view = GridSheetView {
+            frozen_rows: frozen_rows.min(total_rows),
+            frozen_columns: frozen_columns.min(total_columns),
+            gridlines: model.show_gridlines,
+            headings: model.show_headings,
+            zoom: model.zoom.clamp(10, 400),
+            right_to_left: model.right_to_left,
+        };
+        let mut styles = Styles::default();
         let mut cells = Vec::with_capacity(positions.len());
         for (row, col) in positions {
-            cells.push(self.cell(sheet, CellRef::new(row, col)));
+            cells.push(self.cell(sheet, CellRef::new(row, col), &mut cache, &mut styles));
         }
         Ok(GridBytesWindow {
             revision: self.revision.clone(),
@@ -580,10 +667,19 @@ impl Instance {
             rows,
             columns,
             cells,
+            styles: styles.list,
+            merges,
+            view,
         })
     }
 
-    fn cell(&mut self, sheet: usize, at: CellRef) -> GridBytesCell {
+    fn cell(
+        &mut self,
+        sheet: usize,
+        at: CellRef,
+        cache: &mut CfCache,
+        styles: &mut Styles,
+    ) -> GridBytesCell {
         let key = self.key(sheet, at);
         let lock = self.lock(sheet, at);
         let workbook = &self.workbook;
@@ -605,21 +701,68 @@ impl Instance {
                 model.value_ref(at).cloned().unwrap_or(GcValue::Empty),
             ),
         };
-        let style = workbook.styles.get(model.style_id(at));
+        let look = display::look(workbook, sheet, model, at, cache);
         let formatted = format_value(
             &value,
-            &NumberFormat::parse_cached(style.num_fmt.as_str()),
+            &NumberFormat::parse_cached(look.style.num_fmt.as_str()),
             workbook.date_system,
         );
+        let style =
+            display::cell_style(workbook, &look, &value, formatted.numeric, formatted.color);
+        let cf = look.cf.as_ref();
         GridBytesCell {
             key,
             input,
-            style: display::cell_style(workbook, style, &value, formatted.numeric, formatted.color),
+            style: styles.index(style),
             value: grid_value(&value),
-            display: formatted.text,
+            display: if cf.is_some_and(|cf| cf.hide_value) {
+                String::new()
+            } else {
+                formatted.text
+            },
             lock,
             stale: entry.is_none() && self.stale.has(sheet, at),
             conflict: entry.is_some_and(|entry| entry.state == GridJournalMatch::Conflict),
+            data_bar: cf
+                .and_then(|cf| cf.bar)
+                .map(|(fraction, [r, g, b], gradient)| GridDataBar {
+                    fraction: if fraction.is_finite() {
+                        fraction.clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    },
+                    color: format!("#{r:02X}{g:02X}{b:02X}"),
+                    gradient,
+                }),
+            icon: cf
+                .and_then(|cf| cf.icon.as_ref())
+                .map(|(set, index)| GridIcon {
+                    set: set.clone(),
+                    index: u32::try_from(*index).unwrap_or(u32::MAX),
+                }),
+            comment: model.comments.get(&at).map(|comment| GridComment {
+                author: comment.author.clone(),
+                text: comment.text.clone(),
+                threaded: comment.threaded,
+                resolved: comment.resolved,
+                replies: comment
+                    .replies
+                    .iter()
+                    .map(|(author, text)| GridCommentReply {
+                        author: author.clone(),
+                        text: text.clone(),
+                    })
+                    .collect(),
+            }),
+            link: model
+                .hyperlinks
+                .get(&at)
+                .filter(|link| !link.target.is_empty())
+                .map(|link| GridLink {
+                    target: link.target.clone(),
+                    tooltip: link.tooltip.clone(),
+                    external: link.external,
+                }),
         }
     }
 

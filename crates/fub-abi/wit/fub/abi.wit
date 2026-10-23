@@ -3189,8 +3189,63 @@ interface grid {
         start,
         center,
         end,
+        fill,
+        justify,
+        distributed,
     }
 
+    enum grid-vertical-align {
+        top,
+        center,
+        bottom,
+        justify,
+        distributed,
+    }
+
+    enum grid-underline {
+        single,
+        double,
+        single-accounting,
+        double-accounting,
+    }
+
+    enum grid-script {
+        superscript,
+        subscript,
+    }
+
+    enum grid-border-style {
+        thin,
+        medium,
+        thick,
+        dashed,
+        dotted,
+        double,
+        hair,
+        medium-dashed,
+        dash-dot,
+        medium-dash-dot,
+        dash-dot-dot,
+        medium-dash-dot-dot,
+        slant-dash-dot,
+    }
+
+    record grid-border {
+        style: grid-border-style,
+        color: option<string>,
+    }
+
+    record grid-borders {
+        top: option<grid-border>,
+        right: option<grid-border>,
+        bottom: option<grid-border>,
+        left: option<grid-border>,
+        diagonal-down: option<grid-border>,
+        diagonal-up: option<grid-border>,
+    }
+
+    /// L'aspetto già risolto: tema, stile di tabella e formattazione
+    /// condizionale sono dentro.
     record grid-cell-style {
         bold: bool,
         italic: bool,
@@ -3198,6 +3253,17 @@ interface grid {
         fill-color: option<string>,
         horizontal: option<grid-horizontal-align>,
         number-format: option<string>,
+        font: option<string>,
+        font-size: option<f32>,
+        underline: option<grid-underline>,
+        strike: bool,
+        script: option<grid-script>,
+        vertical: option<grid-vertical-align>,
+        wrap: bool,
+        shrink: bool,
+        indent: u8,
+        rotation: s16,
+        borders: grid-borders,
     }
 
     record grid-window-request {
@@ -3320,15 +3386,68 @@ interface grid-bytes {
         error(string),
     }
 
+    record grid-data-bar {
+        fraction: f32,
+        color: string,
+        gradient: bool,
+    }
+
+    record grid-icon {
+        set: string,
+        index: u32,
+    }
+
+    record grid-comment-reply {
+        author: string,
+        text: string,
+    }
+
+    record grid-comment {
+        author: string,
+        text: string,
+        threaded: bool,
+        resolved: bool,
+        replies: list<grid-comment-reply>,
+    }
+
+    /// `external` porta fuori dalla cartella: la shell non lo segue da sola.
+    record grid-link {
+        target: string,
+        tooltip: option<string>,
+        external: bool,
+    }
+
+    /// `style` è l'indice del suo aspetto negli `styles` della finestra.
     record grid-bytes-cell {
         key: grid-cell-key,
         input: string,
-        style: grid-cell-style,
+        style: u32,
         value: grid-value,
         display: string,
         lock: option<string>,
         stale: bool,
         conflict: bool,
+        data-bar: option<grid-data-bar>,
+        icon: option<grid-icon>,
+        comment: option<grid-comment>,
+        link: option<grid-link>,
+    }
+
+    /// Un'unione a indici assoluti del foglio.
+    record grid-merge {
+        row: u32,
+        column: u32,
+        rows: u32,
+        columns: u32,
+    }
+
+    record grid-sheet-view {
+        frozen-rows: u32,
+        frozen-columns: u32,
+        gridlines: bool,
+        headings: bool,
+        zoom: u16,
+        right-to-left: bool,
     }
 
     record grid-bytes-window {
@@ -3341,6 +3460,9 @@ interface grid-bytes {
         rows: list<grid-row>,
         columns: list<grid-column>,
         cells: list<grid-bytes-cell>,
+        styles: list<grid-cell-style>,
+        merges: list<grid-merge>,
+        view: grid-sheet-view,
     }
 
     surfaces: func() -> list<grid-surface-spec>;
