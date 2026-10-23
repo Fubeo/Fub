@@ -48,14 +48,18 @@ della sessione documento) e la revisione dei byte da cui parte. L'host legge
 il documento, controlla che il formato sia quello della superficie (`BadArgs`
 altrimenti) e risponde `Conflict` se i byte non sono più quelli di `base`. La
 sessione è un `GridBytesSession` (fogli, foglio attivo, fogli nascosti, avvisi
-`GridNotice` e celle in conflitto); la finestra è un `GridBytesWindow`, la cui
+`GridNotice`, celle in conflitto e il libro `GridBook`: i dodici colori del
+tema in `#RRGGBB`, i nomi definiti visibili, il modo di calcolo
+`GridCalculation` e la struttura protetta); la finestra è un `GridBytesWindow`, la cui
 cella porta `GridValue`, il testo formattato, blocco, `stale`, `conflict`,
 l'indice del suo stile e i segni (barra di dati, icona, commento,
 collegamento). La finestra porta gli stili delle sue celle, ognuno una volta
 (`GridCellStyle`: carattere, colori, bordi, allineamenti, rientro, a capo,
-rotazione), le unioni che la toccano (`GridMerge`) e la vista del foglio
-(`GridSheetView`: riquadri bloccati, griglia, intestazioni, zoom, da destra a
-sinistra). Il
+rotazione), le unioni e le tabelle che la toccano (`GridMerge`, `GridTable`
+con le opzioni e il nome dello stile) e la vista del foglio (`GridSheetView`:
+riquadri bloccati, griglia, intestazioni, zoom, da destra a sinistra, la
+modalità `GridViewMode`, le formule mostrate, la protezione, griglia e
+intestazioni in stampa). Il
 commit è un `GridCommit` il cui `edit` è il diff del testo del giornale, da
 applicare al buffer della sessione documento.
 
@@ -67,7 +71,7 @@ catalogo su quella selezione; `grid_bytes_command` riceve un
 testo di un oggetto JSON) e ridà un `GridCommandOutcome`: il commit del
 giornale, che resta alla revisione se il comando non cambia la cartella, i
 fogli, la selezione nuova, il risultato come testo JSON, la finestra di
-dialogo chiesta e il catalogo aggiornato. Un comando che il provider non
+dialogo chiesta, il catalogo aggiornato e il libro. Un comando che il provider non
 serve, spento o con parametri che non tornano è `BadArgs`. Il provider delle
 cartelle di Excel serve un sottoinsieme del catalogo di GridCraft, più
 `edit.undo` ed `edit.redo` del documento
@@ -83,6 +87,8 @@ coordinate. Un commit accetta 16.384 patch e
 4 MiB di preimmagini e nuovi input; la risposta, envelope compreso, è al
 massimo 8 MiB. L'invalidazione restituisce le coordinate da rileggere fino a
 32.768 elementi, poi `all`. Il diff del giornale usa offset in byte UTF-8.
+Una finestra porta fino a 1.024 tabelle; il libro fino a 4.096 nomi; un nome
+di tabella, di stile o definito è al massimo di 255 byte.
 
 Il registro conserva ownership e disposer per ogni binding. L'unload ritira il
 binding, distrugge le istanze e soltanto dopo rilascia il provider. Nessuna

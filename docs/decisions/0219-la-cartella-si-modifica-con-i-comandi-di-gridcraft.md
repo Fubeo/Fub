@@ -87,10 +87,10 @@ La versione 2 della famiglia `grid` cresce, senza toccare un WIT congelato:
   che il comando chiede e il catalogo aggiornato. Lo stato premuto di un
   comando (grassetto, allineamento) la shell lo legge dallo stile della cella
   attiva, non dal catalogo;
-- la finestra porta lo stile completo della cella, le unioni, la
-  formattazione condizionale già risolta, i commenti e i collegamenti; il
-  foglio porta i riquadri bloccati, la griglia, le intestazioni, lo zoom e
-  gli oggetti, con i grafici già disegnati in SVG.
+- la finestra porta lo stile della cella risolto, le unioni, i commenti, i
+  collegamenti e le tabelle che la toccano; la vista del foglio porta anche
+  modalità, formule mostrate, protezione e stampa; sessione ed esito portano
+  il **libro** (tema, nomi, calcolo), da cui la barra legge lo stato.
 
 I parametri sono JSON e non un elenco tipizzato di Fub: il catalogo della
 facciata è il contratto, con id stabili, un proprietario (il provider), un

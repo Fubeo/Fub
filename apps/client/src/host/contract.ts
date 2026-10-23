@@ -28,10 +28,12 @@ import type {
   Excerpts,
   Gate,
   GridBorderStyle,
+  GridCalculation,
   GridHorizontalAlign,
   GridScript,
   GridUnderline,
   GridVerticalAlign,
+  GridViewMode,
   HourCycle,
   IndexingState,
   Intent,
@@ -1196,7 +1198,15 @@ export interface GridCellKey {
   column: string;
 }
 
-export type { GridBorderStyle, GridHorizontalAlign, GridScript, GridUnderline, GridVerticalAlign } from "./enums.generated";
+export type {
+  GridBorderStyle,
+  GridCalculation,
+  GridHorizontalAlign,
+  GridScript,
+  GridUnderline,
+  GridVerticalAlign,
+  GridViewMode,
+} from "./enums.generated";
 
 /** Un lato del bordo; `color` assente è il colore automatico. */
 export interface GridBorder {
@@ -1305,6 +1315,23 @@ export interface GridBytesSession {
   conflicts: GridCellKey[];
   /** I comandi che la sessione serve (ADR 0219): vuoto per un provider che modifica soltanto con le patch. */
   commands: GridCommandState[];
+  book: GridBook;
+}
+
+/** I colori del tema della cartella, sempre dodici (`GRID_THEME_COLORS`). */
+export const GRID_THEME_COLORS = 12;
+
+/**
+ * Ciò che vale per tutta la cartella: i colori del tema in `#RRGGBB`, in
+ * ordine (sfondo 1, testo 1, sfondo 2, testo 2, sei colori, collegamento,
+ * collegamento visitato), i nomi definiti che l'utente vede, il calcolo e la
+ * struttura protetta.
+ */
+export interface GridBook {
+  theme_colors: string[];
+  names: string[];
+  calculation: GridCalculation;
+  protected: boolean;
 }
 
 /** Il foglio, gli intervalli A1 separati da virgola e la cella attiva. */
@@ -1358,6 +1385,7 @@ export interface GridCommandOutcome {
   result: string | null;
   dialog: GridDialog | null;
   commands: GridCommandState[];
+  book: GridBook;
 }
 
 /** Un errore porta il suo testo (`#N/A`, `#DIV/0!`): ogni formato ha i suoi. */
@@ -1420,6 +1448,32 @@ export interface GridSheetView {
   /** Per cento, da 10 a 400. */
   zoom: number;
   right_to_left: boolean;
+  mode: GridViewMode;
+  /** Le celle mostrano le formule al posto dei valori. */
+  formulas: boolean;
+  /** Il foglio è protetto. */
+  protected: boolean;
+  /** La stampa porta la griglia e le intestazioni. */
+  print_gridlines: boolean;
+  print_headings: boolean;
+}
+
+/** Una tabella che tocca la finestra, in coordinate del foglio, con l'intestazione e i totali. */
+export interface GridTable {
+  name: string;
+  row: number;
+  column: number;
+  rows: number;
+  columns: number;
+  header_row: boolean;
+  totals_row: boolean;
+  banded_rows: boolean;
+  banded_columns: boolean;
+  first_column: boolean;
+  last_column: boolean;
+  filter_button: boolean;
+  /** Il nome dello stile (`TableStyleMedium2`), vuoto se la tabella non ne ha. */
+  style: string;
 }
 
 export interface GridBytesCell {
@@ -1456,6 +1510,7 @@ export interface GridBytesWindow {
   styles: GridCellStyle[];
   merges: GridMerge[];
   view: GridSheetView;
+  tables: GridTable[];
 }
 
 // **Da cosa parte** una scrittura intera (rispecchia `fub_abi::edit::WriteBase`).

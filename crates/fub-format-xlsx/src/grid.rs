@@ -28,19 +28,21 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 use fub_abi::{
-    grid_bytes_revision, grid_journal_match, Arg, GridApplyRequest, GridBytesCell,
-    GridBytesProvider, GridBytesSession, GridBytesWindow, GridCellKey, GridCellStyle, GridColumn,
-    GridCommand, GridCommandOutcome, GridCommandRequest, GridCommandState, GridComment,
-    GridCommentReply, GridCommit, GridDataBar, GridIcon, GridInvalidation, GridJournal,
-    GridJournalMatch, GridLink, GridMerge, GridNotice, GridRow, GridSelection, GridSheet,
-    GridSheetView, GridSourceEdit, GridSurfaceSpec, GridValue, GridWindowRequest, PluginError,
-    Revision, Text, MAX_GRID_BYTES_SOURCE, MAX_GRID_INVALIDATED_CELLS, MAX_GRID_SELECTION_BYTES,
-    MAX_GRID_SESSION_COLUMNS, MAX_GRID_SESSION_ROWS,
+    grid_bytes_revision, grid_journal_match, Arg, GridApplyRequest, GridBook, GridBytesCell,
+    GridBytesProvider, GridBytesSession, GridBytesWindow, GridCalculation, GridCellKey,
+    GridCellStyle, GridColumn, GridCommand, GridCommandOutcome, GridCommandRequest,
+    GridCommandState, GridComment, GridCommentReply, GridCommit, GridDataBar, GridIcon,
+    GridInvalidation, GridJournal, GridJournalMatch, GridLink, GridMerge, GridNotice, GridRow,
+    GridSelection, GridSheet, GridSheetView, GridSourceEdit, GridSurfaceSpec, GridTable, GridValue,
+    GridViewMode, GridWindowRequest, PluginError, Revision, Text, MAX_GRID_BOOK_NAMES,
+    MAX_GRID_BYTES_SOURCE, MAX_GRID_INVALIDATED_CELLS, MAX_GRID_NAME_BYTES,
+    MAX_GRID_SELECTION_BYTES, MAX_GRID_SESSION_COLUMNS, MAX_GRID_SESSION_ROWS,
+    MAX_GRID_WINDOW_TABLES,
 };
 use gridcraft_calc::recalc::{Calc, Key};
 use gridcraft_core::{CellRef, RangeRef, Value as GcValue};
 use gridcraft_engine::cf::CfCache;
-use gridcraft_model::{Sheet, Visibility, Workbook};
+use gridcraft_model::{CalcMode, Sheet, SheetViewMode, Visibility, Workbook};
 use gridcraft_numfmt::{format_value, NumberFormat};
 use serde_json::{json, Value as Json};
 
@@ -596,9 +598,42 @@ impl Instance {
                 .map(|(key, _)| key.clone())
                 .collect(),
             commands,
+            book: self.book(),
         };
         summary.validate()?;
         Ok(summary)
+    }
+
+    /// Ciò che vale per la cartella mostrata: il tema, i nomi che una formula
+    /// può usare, il calcolo e la struttura protetta.
+    fn book(&self) -> GridBook {
+        let shown = self.shown();
+        let names: BTreeSet<&str> = shown
+            .names
+            .iter()
+            .filter(|name| !name.hidden && !name.name.starts_with("_xlnm."))
+            .map(|name| name.name.as_str())
+            .filter(|name| !name.is_empty() && name.len() <= MAX_GRID_NAME_BYTES)
+            .collect();
+        GridBook {
+            theme_colors: shown
+                .theme
+                .colors
+                .iter()
+                .map(|color| format!("#{:06X}", color & 0x00FF_FFFF))
+                .collect(),
+            names: names
+                .into_iter()
+                .take(MAX_GRID_BOOK_NAMES)
+                .map(str::to_owned)
+                .collect(),
+            calculation: match shown.calc.mode {
+                CalcMode::Automatic => GridCalculation::Automatic,
+                CalcMode::AutomaticExceptTables => GridCalculation::AutomaticExceptTables,
+                CalcMode::Manual => GridCalculation::Manual,
+            },
+            protected: shown.protected_structure,
+        }
     }
 
     /// Il foglio e la cella di una chiave.
@@ -888,7 +923,48 @@ impl Instance {
             headings: model.show_headings,
             zoom: model.zoom.clamp(10, 400),
             right_to_left: model.right_to_left,
+            mode: match model.view {
+                SheetViewMode::Normal => GridViewMode::Normal,
+                SheetViewMode::PageLayout => GridViewMode::PageLayout,
+                SheetViewMode::PageBreakPreview => GridViewMode::PageBreakPreview,
+            },
+            formulas: model.show_formulas,
+            protected: model.is_protected(),
+            print_gridlines: model.print.gridlines,
+            print_headings: model.print.headings,
         };
+        let tables = range.map_or_else(Vec::new, |range| {
+            model
+                .tables
+                .iter()
+                .filter(|table| table.range.intersection(&range).is_some())
+                .filter(|table| !table.name.is_empty() && table.name.len() <= MAX_GRID_NAME_BYTES)
+                .map(|table| GridTable {
+                    name: table.name.clone(),
+                    row: table.range.start.row,
+                    column: table.range.start.col,
+                    rows: table.range.end.row - table.range.start.row + 1,
+                    columns: table.range.end.col - table.range.start.col + 1,
+                    header_row: table.header_row,
+                    totals_row: table.totals_row,
+                    banded_rows: table.banded_rows,
+                    banded_columns: table.banded_cols,
+                    first_column: table.first_col,
+                    last_column: table.last_col,
+                    filter_button: table.filter_button,
+                    style: if table.style.len() <= MAX_GRID_NAME_BYTES {
+                        table.style.clone()
+                    } else {
+                        String::new()
+                    },
+                })
+                .filter(|table| {
+                    table.row + table.rows <= total_rows
+                        && table.column + table.columns <= total_columns
+                })
+                .take(MAX_GRID_WINDOW_TABLES)
+                .collect()
+        });
         let mut styles = Styles::default();
         let mut cells = Vec::with_capacity(positions.len());
         for (row, col) in positions {
@@ -907,6 +983,7 @@ impl Instance {
             styles: styles.list,
             merges,
             view,
+            tables,
         })
     }
 
@@ -1187,6 +1264,7 @@ impl Instance {
             result: ran.result,
             dialog: ran.dialog,
             commands,
+            book: self.book(),
         })
     }
 
