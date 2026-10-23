@@ -83,7 +83,7 @@ fn prefix_params(e: Expr, scope: &[String]) -> Expr {
     }
 }
 
-fn expr_to_file(e: Expr) -> String {
+pub(crate) fn expr_to_file(e: Expr) -> String {
     let e = prefix_params(e, &[]);
     let e = e.map(&mut |x| match x {
         Expr::Call(name, args) => match crate::tables::file_function_name(&name) {

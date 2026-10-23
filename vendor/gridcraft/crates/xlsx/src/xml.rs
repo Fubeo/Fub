@@ -86,6 +86,31 @@ pub fn rich_text(e: &El) -> String {
     decode_xstring(&s)
 }
 
+/// Elements and attributes of a run's properties (`<rPr>`, CT_RPrElt).
+const RUN_ELEMENTS: &[&str] =
+    &["rPr", "rFont", "charset", "family", "b", "i", "strike", "outline", "shadow", "condense", "extend", "color", "sz", "u", "vertAlign", "scheme"];
+const RUN_ATTRS: &[&str] = &["val", "rgb", "theme", "tint", "indexed", "auto"];
+
+/// The formatted runs of a string item or inline string (`<r>` with `<rPr>`), written back as
+/// the file had them, when it has any; nothing for a plain string, or for runs with content
+/// GridCraft would not write as it read it. The runs spell [`rich_text`] of `e`.
+pub fn rich_runs(e: &El) -> Option<String> {
+    if !e.children.iter().any(|c| c.name == "r") || e.children.iter().any(|c| c.name == "t") {
+        return None;
+    }
+    let mut s = String::new();
+    for r in e.kids("r") {
+        s.push_str("<r>");
+        if let Some(p) = r.child("rPr") {
+            s.push_str(&plain_xml(p, RUN_ELEMENTS, RUN_ATTRS)?);
+        }
+        let text: String = r.kids("t").map(|t| t.text.as_str()).collect();
+        s.push_str(&t_el(&decode_xstring(&text)));
+        s.push_str("</r>");
+    }
+    Some(s)
+}
+
 /// The phonetic (furigana) data of a string item: its `<rPh>` runs in document order, and its
 /// `<phoneticPr>` when present.
 ///
@@ -302,6 +327,43 @@ pub fn parse_streaming(xml: &[u8], split: &[&str], cb: &mut dyn FnMut(El) -> Res
 
 // ---------------------------------------------------------------- writing helpers
 
+/// `e` written back as XML when every element in it is one of `names` and every attribute one
+/// of `attrs`: local names only, so nothing that needed a namespace prefix. Otherwise nothing.
+pub fn plain_xml(e: &El, names: &[&str], attrs: &[&str]) -> Option<String> {
+    let names: Vec<(&str, &str)> = names.iter().map(|n| (*n, "")).collect();
+    prefixed_xml(e, &names, attrs)
+}
+
+/// [`plain_xml`] with each element of `names` given with the prefix it is written with
+/// (`("cfRule", "x14:")`); the caller declares the prefixes.
+pub fn prefixed_xml(e: &El, names: &[(&str, &str)], attrs: &[&str]) -> Option<String> {
+    fn put(e: &El, names: &[(&str, &str)], attrs: &[&str], out: &mut String) -> Option<()> {
+        let (_, prefix) = names.iter().find(|(n, _)| *n == e.name)?;
+        let _ = write!(out, "<{prefix}{}", e.name);
+        for (k, v) in &e.attrs {
+            if !attrs.contains(&k.as_str()) {
+                return None;
+            }
+            let _ = write!(out, " {k}=\"{}\"", esc_attr(v));
+        }
+        let text = e.text.trim();
+        if e.children.is_empty() && text.is_empty() {
+            out.push_str("/>");
+            return Some(());
+        }
+        out.push('>');
+        out.push_str(&esc(text));
+        for c in &e.children {
+            put(c, names, attrs, out)?;
+        }
+        let _ = write!(out, "</{prefix}{}>", e.name);
+        Some(())
+    }
+    let mut out = String::new();
+    put(e, names, attrs, &mut out)?;
+    Some(out)
+}
+
 /// Escapes text content.
 pub fn esc(s: &str) -> String {
     let mut o = String::with_capacity(s.len());
@@ -416,16 +478,17 @@ pub fn t_el(s: &str) -> String {
     }
 }
 
-/// The contents of a shared string item (`<si>`): the base text, then — when the string has
+/// The contents of a shared string item (`<si>`): the base text (its formatted `runs` when it
+/// has them, see [`rich_runs`]), then — when the string has
 /// phonetic (furigana) data — its `<rPh sb="…" eb="…"><t>…</t></rPh>` runs in document order and
 /// its `<phoneticPr …/>`. Behaviour reference: ISO/IEC 29500-1 §18.4.8 `si` with §18.4.6 `rPh` and
-/// §18.4.7 `phoneticPr`. A string without phonetic data gives exactly [`t_el`]'s output.
+/// §18.4.7 `phoneticPr`. A plain string without phonetic data gives exactly [`t_el`]'s output.
 ///
 /// The runs and the properties are independent: `<phoneticPr>` is a valid child of `<si>` on its
 /// own (§18.4.8's `CT_SharedStringItem` allows it without any `rPh`), so a string whose runs were
 /// all dropped still keeps its settings.
-pub fn si_body(text: &str, phonetic: Option<&PhoneticString>) -> String {
-    let mut s = t_el(text);
+pub fn si_body(text: &str, runs: Option<&str>, phonetic: Option<&PhoneticString>) -> String {
+    let mut s = runs.map_or_else(|| t_el(text), str::to_string);
     let Some(p) = phonetic else { return s };
     // The model is public and restored from GridCraft JSON too, so the reader's checks are not the
     // only way data gets here: validate again and write only what the schema allows (§18.4.6: an
@@ -471,7 +534,7 @@ mod tests {
     #[test]
     fn si_without_phonetics_is_written_exactly_as_before() {
         for s in ["plain", " leading ", "a & <b>", "line\nbreak", "日本語", "x_x0041_"] {
-            assert_eq!(si_body(s, None), t_el(s));
+            assert_eq!(si_body(s, None, None), t_el(s));
         }
     }
 
@@ -501,22 +564,25 @@ mod tests {
             ],
             props: Some(PhoneticProps { font_id: 7, kind: Some("bogus".into()), alignment: Some("center".into()) }),
         };
-        let s = si_body(text, Some(&damaged));
+        let s = si_body(text, None, Some(&damaged));
         assert_eq!(s, "<t>課きく</t><rPh sb=\"1\" eb=\"3\"><t>く</t></rPh><phoneticPr fontId=\"7\" alignment=\"center\"/>");
         // With no run left, valid properties are still written: `<phoneticPr>` is a legal child of
         // `<si>` on its own, and Excel keeps the settings when the last reading is removed.
         let empty = PhoneticString { text: text.into(), runs: vec![], props: damaged.props.clone() };
-        assert_eq!(si_body(text, Some(&empty)), "<t>課きく</t><phoneticPr fontId=\"7\" alignment=\"center\"/>");
+        assert_eq!(si_body(text, None, Some(&empty)), "<t>課きく</t><phoneticPr fontId=\"7\" alignment=\"center\"/>");
         // With neither runs nor properties there is nothing to write.
         let none = PhoneticString { text: text.into(), runs: vec![], props: None };
-        assert_eq!(si_body(text, Some(&none)), t_el(text));
+        assert_eq!(si_body(text, None, Some(&none)), t_el(text));
         // A known kind is written; the schema default ("none") is not invented for a missing one.
         let known = PhoneticString {
             text: text.into(),
             runs: vec![PhoneticRun { start: 0, end: 1, text: "カ".into() }],
             props: Some(PhoneticProps { font_id: 1, kind: Some("Hiragana".into()), alignment: None }),
         };
-        assert_eq!(si_body(text, Some(&known)), "<t>課きく</t><rPh sb=\"0\" eb=\"1\"><t>カ</t></rPh><phoneticPr fontId=\"1\" type=\"Hiragana\"/>");
+        assert_eq!(
+            si_body(text, None, Some(&known)),
+            "<t>課きく</t><rPh sb=\"0\" eb=\"1\"><t>カ</t></rPh><phoneticPr fontId=\"1\" type=\"Hiragana\"/>"
+        );
     }
 
     #[test]

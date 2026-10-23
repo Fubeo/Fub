@@ -124,12 +124,12 @@ pub fn specs() -> Vec<CommandSpec> {
 pub(crate) fn input_to_cell(input: &str, sheet: usize, at: CellRef, wb: &mut gridcraft_model::Workbook) -> Result<Option<Cell>> {
     let style = wb.sheet(sheet).map(|sh| sh.style_id(at)).unwrap_or_default();
     if input.is_empty() {
-        let c = Cell { value: Value::Empty, formula: None, style };
+        let c = Cell { value: Value::Empty, formula: None, style, rich: None };
         return Ok(if c.is_blank() { None } else { Some(c) });
     }
     let fmt_is_text = wb.styles.get(style).num_fmt.as_str() == "@";
     if fmt_is_text {
-        return Ok(Some(Cell { value: Value::text(input), formula: None, style }));
+        return Ok(Some(Cell { value: Value::text(input), formula: None, style, rich: None }));
     }
     let is_formula = input.starts_with('=')
         || (input.len() > 1
@@ -187,7 +187,7 @@ pub(crate) fn input_to_cell(input: &str, sheet: usize, at: CellRef, wb: &mut gri
     if input.contains('\n') && !wb.styles.get(style).align.wrap {
         style = wb.styles.derive(style, |s| s.align.wrap = true);
     }
-    Ok(Some(Cell { value: parsed.value, formula: None, style }))
+    Ok(Some(Cell { value: parsed.value, formula: None, style, rich: None }))
 }
 
 /// Parses a formula as it is typed (without the `=`). Excel closes missing parentheses for you,
@@ -317,10 +317,14 @@ fn range_set_values(s: &mut Session, p: &Json) -> Result<Json> {
                         value: Value::number(n.as_f64().unwrap_or(0.0)),
                         formula: None,
                         style: cx.wb.sheet(sheet).map(|sh| sh.style_id(at)).unwrap_or_default(),
+                        rich: None,
                     }),
-                    Json::Bool(b) => {
-                        Some(Cell { value: Value::Bool(*b), formula: None, style: cx.wb.sheet(sheet).map(|sh| sh.style_id(at)).unwrap_or_default() })
-                    }
+                    Json::Bool(b) => Some(Cell {
+                        value: Value::Bool(*b),
+                        formula: None,
+                        style: cx.wb.sheet(sheet).map(|sh| sh.style_id(at)).unwrap_or_default(),
+                        rich: None,
+                    }),
                     _ => input_to_cell(&input, sheet, at, &mut cx.wb)?,
                 };
                 let sh = cx.sheet_mut(sheet)?;
@@ -773,7 +777,7 @@ fn slide_together(wb: &gridcraft_model::Workbook, sheet: usize, areas: &[RangeRe
         for c in cells {
             let Some(to) = c.offset(dr, dc) else { continue };
             let style = src.cell(c).map(|x| x.style).unwrap_or_default();
-            dst.set_cell(to, Cell { value: src.value(c), formula: None, style });
+            dst.set_cell(to, Cell { value: src.value(c), formula: None, style, rich: None });
             if let Some(picture) = src.cell_pictures.get(&c) {
                 dst.cell_pictures.insert(to, picture.clone());
             }

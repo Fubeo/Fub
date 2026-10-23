@@ -30,7 +30,9 @@ use std::fmt::Write as _;
 use std::path::{Component, Path};
 use std::sync::Arc;
 
-use gridcraft_model::{Preserved, PreservedPart, PreservedRel, PreservedSheet, PreservedXml, Sheet, Visibility, Workbook};
+use gridcraft_model::{
+    DocProps, Preserved, PreservedPart, PreservedRel, PreservedSheet, PreservedSource, PreservedXml, Sheet, Theme, Visibility, Workbook,
+};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::QName;
@@ -92,6 +94,77 @@ const FILE_VERSION_ATTRS: &[&str] = &["appName", "lastEdited", "lowestEdited", "
 /// The workbook extension listing the calculation features the saved values were computed with.
 const CALC_FEATURES_URI: &str = "{B58B0392-4F1F-4190-BB64-5DF3571DCE5F}";
 const NS_CALC_FEATURES: &str = "http://schemas.microsoft.com/office/spreadsheetml/2018/calcfeatures";
+/// Attributes of `<workbookPr>` GridCraft does not model (it writes `date1904` and `showObjects`).
+const WORKBOOK_PR_ATTRS: &[&str] = &[
+    "showBorderUnselectedTables",
+    "filterPrivacy",
+    "promptedSolutions",
+    "showInkAnnotation",
+    "backupFile",
+    "saveExternalLinkValues",
+    "updateLinks",
+    "codeName",
+    "hidePivotFieldList",
+    "showPivotChartFilter",
+    "allowRefreshQuery",
+    "publishItems",
+    "checkCompatibility",
+    "autoCompressPictures",
+    "refreshAllConnections",
+    "defaultThemeVersion",
+];
+/// Workbook elements GridCraft never reads, with their attributes (they have no children).
+const WORKBOOK_ELEMENTS: &[(&str, &[&str])] = &[
+    ("webPublishing", &["css", "thicket", "longFileNames", "vml", "allowPng", "targetScreenSize", "dpi", "codePage", "characterSet"]),
+    ("fileRecoveryPr", &["autoRecover", "crashSave", "dataExtractLoad", "repairLoad"]),
+];
+/// Attributes of `<sheetPr>` and its children GridCraft does not model (it writes `tabColor` and
+/// `fitToPage`).
+const SHEET_PR_ATTRS: &[&str] = &[
+    "syncHorizontal",
+    "syncVertical",
+    "syncRef",
+    "transitionEvaluation",
+    "transitionEntry",
+    "published",
+    "codeName",
+    "filterMode",
+    "enableFormatConditionsCalculation",
+];
+const OUTLINE_PR_ATTRS: &[&str] = &["applyStyles", "summaryBelow", "summaryRight", "showOutlineSymbols"];
+const PAGE_SETUP_PR_ATTRS: &[&str] = &["autoPageBreaks"];
+/// Attributes of `<sheetFormatPr>` GridCraft does not model.
+const SHEET_FORMAT_PR_ATTRS: &[&str] = &["baseColWidth", "zeroHeight", "thickTop", "thickBottom"];
+/// Attributes of `<pageSetup>` GridCraft does not model (it writes `paperSize`, `scale`,
+/// `fitToWidth`, `fitToHeight`, `orientation` and the printer settings' `r:id`).
+const PAGE_SETUP_ATTRS: &[&str] = &[
+    "paperHeight",
+    "paperWidth",
+    "firstPageNumber",
+    "pageOrder",
+    "usePrinterDefaults",
+    "blackAndWhite",
+    "draft",
+    "cellComments",
+    "useFirstPageNumber",
+    "errors",
+    "horizontalDpi",
+    "verticalDpi",
+    "copies",
+];
+const IGNORED_ERROR_ATTRS: &[&str] = &[
+    "sqref",
+    "evalError",
+    "twoDigitTextYear",
+    "numberStoredAsText",
+    "formula",
+    "formulaRange",
+    "unlockedFormula",
+    "emptyCellReference",
+    "listDataValidation",
+    "calculatedColumn",
+];
+
 /// Kept sheet elements, in schema order (all after `<legacyDrawing>`, before `<tableParts>`).
 const SHEET_SLOTS: &[&str] = &["legacyDrawingHF", "picture", "oleObjects", "controls"];
 
@@ -359,7 +432,15 @@ impl KeptReader {
     }
 
     /// Package-root and workbook-level content.
-    pub fn workbook(&mut self, cx: &mut Ctx<'_>, wb_part: &str, wb_xml: &xml::El, file_to_model: &[Option<usize>]) -> Option<Arc<Preserved>> {
+    pub fn workbook(
+        &mut self,
+        cx: &mut Ctx<'_>,
+        wb_part: &str,
+        wb_xml: &xml::El,
+        file_to_model: &[Option<usize>],
+        theme: &Theme,
+        props: &DocProps,
+    ) -> Option<Arc<Preserved>> {
         if !self.on {
             let wb_rels = raw_rels(cx, wb_part).unwrap_or_default();
             for (_, se) in chart_sheet_entries(wb_xml, &wb_rels, file_to_model) {
@@ -459,11 +540,53 @@ impl KeptReader {
             x.push_str("</xcalcf:calcFeatures></ext>");
             p.elements.push(PreservedXml { slot: "ext".into(), xml: x });
         }
+        // Source forms: unmodelled attributes and elements, and the theme and core properties
+        // parts as they were while the model still holds what was read from them.
+        if let Some(e) = wb_xml.child("workbookPr") {
+            push_source(&mut p.sources, "workbookPr", String::new(), attrs_of(e, WORKBOOK_PR_ATTRS));
+        }
+        for (name, attrs) in WORKBOOK_ELEMENTS {
+            if let Some(e) = wb_xml.child(name) {
+                push_source(&mut p.sources, name, String::new(), format!("<{name}{}/>", attrs_of(e, attrs)));
+            }
+        }
+        if let Some(r) = wb_rels.iter().find(|r| is_kind(r, &["theme"]) && !r.external)
+            && let Some(data) = self.source_part(cx, &r.target)
+        {
+            push_source(&mut p.sources, "theme", theme_model(theme), data);
+        }
+        if let Ok(root) = raw_rels(cx, "")
+            && let Some(r) = root.iter().find(|r| is_kind(r, &["core-properties"]) && !r.external)
+            && let Some(data) = self.source_part(cx, &r.target)
+        {
+            push_source(&mut p.sources, "core", core_model(props), data);
+        }
+        let styles = std::mem::take(&mut cx.style_sources);
+        let bytes = styles.iter().map(|s| s.data.len()).sum::<usize>();
+        if let Some(left) = self.budget.checked_sub(bytes) {
+            self.budget = left;
+            p.sources.extend(styles);
+        }
         (!p.is_empty()).then(|| Arc::new(p))
     }
 
-    /// Sheet-level content of the sheet part `part`.
+    /// A part GridCraft also writes from its model, kept as it is when it has no relationships of
+    /// its own and its XML reads; charged to the kept total.
+    fn source_part(&mut self, cx: &mut Ctx<'_>, part: &str) -> Option<Vec<u8>> {
+        if !raw_rels(cx, part).ok()?.is_empty() {
+            return None;
+        }
+        let limit = MAX_META.min(u64::try_from(self.budget).unwrap_or(u64::MAX));
+        let data = cx.pkg.read_limited(part, limit).ok()??;
+        xml::parse(&data).ok()?;
+        self.budget = self.budget.checked_sub(data.len())?;
+        Some(data)
+    }
+
+    /// Sheet-level content of the sheet part `part`, with the source forms the sheet reader left
+    /// in `cx`.
     pub fn sheet(&mut self, cx: &mut Ctx<'_>, part: &str, name: &str) -> Option<Arc<Preserved>> {
+        let sources = std::mem::take(&mut cx.sources);
         if !self.on {
             return None;
         }
@@ -486,6 +609,11 @@ impl KeptReader {
         let notes = rels.iter().filter(|r| is_kind(r, &["comments"])).count();
         if rels.iter().any(|r| is_kind(r, SHEET_ELEMENT_KINDS)) || vml_drawings > notes {
             self.sheet_elements(cx, part, name, &rels, &mut p, &mut seen);
+        }
+        let bytes = sources.iter().map(|s| s.data.len()).sum::<usize>();
+        if let Some(left) = self.budget.checked_sub(bytes) {
+            self.budget = left;
+            p.sources = sources;
         }
         (!p.is_empty()).then(|| Arc::new(p))
     }
@@ -593,6 +721,278 @@ impl KeptReader {
         self.keep(cx, &mut q, &roots, seen)?;
         let vml = PreservedPart { name: rel.target.clone(), content_type: CT_VML.into(), data: Arc::from(text.into_bytes()), rels: vrels };
         Ok((vml, q.parts))
+    }
+}
+
+/// The fingerprint [`PreservedSource::model`] holds of a model value.
+pub fn model_of(v: &impl std::fmt::Debug) -> String {
+    format!("{v:?}")
+}
+
+/// What the theme part was read into.
+pub fn theme_model(t: &Theme) -> String {
+    model_of(t)
+}
+
+/// What the core properties part was read into (the company is in the extended properties).
+pub fn core_model(p: &DocProps) -> String {
+    model_of(&[&p.title, &p.subject, &p.author, &p.keywords, &p.description])
+}
+
+fn push_source(sources: &mut Vec<PreservedSource>, slot: &str, model: String, data: impl Into<Vec<u8>>) {
+    let data = data.into();
+    if !data.is_empty() || !model.is_empty() {
+        sources.push(PreservedSource { slot: slot.into(), model, data: Arc::from(data) });
+    }
+}
+
+/// ` name="value"` for each of `names` (unprefixed attributes) that `e` has.
+pub(crate) fn attrs_of(e: &xml::El, names: &[&str]) -> String {
+    let mut s = String::new();
+    for n in names {
+        if let Some(v) = e.attr(n) {
+            let _ = write!(s, " {n}=\"{}\"", esc_attr(v));
+        }
+    }
+    s
+}
+
+/// The source forms of a sheet part GridCraft does not model: attributes of the elements it
+/// writes, and elements it never reads. `sheet` is the sheet as read from `root`.
+pub fn sheet_sources(root: &xml::El, sheet: &Sheet) -> Vec<PreservedSource> {
+    let mut out = Vec::new();
+    if let Some(e) = root.child("sheetPr") {
+        push_source(&mut out, "sheetPr", String::new(), attrs_of(e, SHEET_PR_ATTRS));
+        if let Some(o) = e.child("outlinePr") {
+            push_source(&mut out, "outlinePr", String::new(), attrs_of(o, OUTLINE_PR_ATTRS));
+        }
+        if let Some(o) = e.child("pageSetUpPr") {
+            push_source(&mut out, "pageSetUpPr", String::new(), attrs_of(o, PAGE_SETUP_PR_ATTRS));
+        }
+    }
+    if let Some(e) = root.child("sheetFormatPr") {
+        push_source(&mut out, "sheetFormatPr", String::new(), attrs_of(e, SHEET_FORMAT_PR_ATTRS));
+        let custom = if e.flag("customHeight", false) { "1" } else { "0" };
+        push_source(&mut out, "sheetFormatPr.customHeight", model_of(&sheet.default_row_height), custom);
+        // A default width GridCraft does not take (`0`, with every column hidden by default).
+        if let Some(w) = e.attr("defaultColWidth").filter(|w| w.trim().parse::<f64>().is_ok_and(|v| crate::tables::col_width_to_px(v) <= 0.0)) {
+            push_source(&mut out, "sheetFormatPr.defaultColWidth", model_of(&sheet.default_col_width), w.trim());
+        }
+        // A default width the file derives from `baseColWidth`.
+        if e.attr("defaultColWidth").is_none() {
+            push_source(&mut out, "sheetFormatPr.baseColWidth", model_of(&sheet.default_col_width), Vec::new());
+        }
+    }
+    // Split (not frozen) panes, while the view the file opened on is the one read.
+    if let Some(p) = root.path(&["sheetViews", "sheetView", "pane"])
+        && p.attr("state").is_none_or(|s| s == "split")
+    {
+        let model = model_of(&(sheet.freeze, sheet.view_top_left));
+        push_source(&mut out, "pane", model.clone(), format!("<pane{}/>", attrs_of(p, &["xSplit", "ySplit", "topLeftCell", "activePane", "state"])));
+        push_source(&mut out, "pane.active", model, p.attr("activePane").unwrap_or_default());
+    }
+    // Column widths as the file wrote them, for the pixels each was read into.
+    let widths = root.child("sheetFormatPr").and_then(|e| e.attr("defaultColWidth")).into_iter();
+    let widths = widths.chain(root.child("cols").into_iter().flat_map(|c| c.kids("col")).filter_map(|c| c.attr("width")));
+    let mut seen = HashSet::new();
+    for w in widths {
+        if let Ok(v) = w.trim().parse::<f64>()
+            && v.is_finite()
+            && v > 0.0
+            && seen.insert(w)
+        {
+            push_source(&mut out, "width", model_of(&crate::tables::col_width_to_px(v)), w.trim());
+        }
+    }
+    if let Some(e) = root.child("sheetCalcPr") {
+        push_source(&mut out, "sheetCalcPr", String::new(), format!("<sheetCalcPr{}/>", attrs_of(e, &["fullCalcOnLoad"])));
+    }
+    if let Some(e) = root.child("phoneticPr") {
+        push_source(&mut out, "phoneticPr", String::new(), format!("<phoneticPr{}/>", attrs_of(e, &["fontId", "type", "alignment"])));
+    }
+    const MARGINS: [&str; 6] = ["left", "right", "top", "bottom", "header", "footer"];
+    if let Some(e) = root.child("pageMargins")
+        && MARGINS.iter().all(|m| e.attr_f64(m).is_some_and(f64::is_finite))
+    {
+        // Margins to more digits than the model's `f32` keeps.
+        push_source(&mut out, "pageMargins", model_of(&sheet.print.margins), format!("<pageMargins{}/>", attrs_of(e, &MARGINS)));
+    }
+    if let Some(e) = root.child("pageSetup") {
+        push_source(&mut out, "pageSetup", String::new(), attrs_of(e, PAGE_SETUP_ATTRS));
+        // A paper size GridCraft has no name for, and an orientation the file leaves to the printer.
+        if let Some(id) = e.attr_u32("paperSize").filter(|id| crate::tables::paper_name(*id).is_none()) {
+            push_source(&mut out, "pageSetup.paperSize", model_of(&sheet.print.paper), id.to_string());
+        }
+        if sheet.print.fit_to.is_none() {
+            push_source(&mut out, "pageSetup.fit", model_of(&sheet.print.fit_to), attrs_of(e, &["fitToWidth", "fitToHeight"]));
+        }
+        if e.attr("orientation").is_none_or(|o| o == "default") {
+            push_source(&mut out, "pageSetup.orientation", model_of(&sheet.print.orientation), Vec::new());
+        }
+    }
+    if root.child("pageSetup").is_none() {
+        // A sheet that leaves the whole page setup to the printer.
+        push_source(&mut out, "pageSetup.absent", page_setup_model(&sheet.print), Vec::new());
+    }
+    // Excel 2010 conditional formats (rules only it has, data bar borders and axes), while the
+    // sheet's conditional formats are the ones read. GridCraft writes the file's priorities then.
+    let priorities: Vec<u32> = sheet.cond_formats.iter().map(|c| c.priority).collect();
+    let unique = priorities.iter().all(|p| *p > 0) && priorities.iter().collect::<HashSet<_>>().len() == priorities.len();
+    let x14 = root.child("extLst").into_iter().flat_map(|l| l.kids("ext")).find_map(|e| e.child("conditionalFormattings"));
+    if let Some(x) = x14.filter(|_| unique).and_then(|x| xml::prefixed_xml(x, X14_CF_ELEMENTS, X14_CF_ATTRS)) {
+        push_source(&mut out, "x14.conditionalFormattings", cond_formats_model(sheet), x);
+    }
+    if let Some(e) = root.child("ignoredErrors") {
+        let mut x = String::from("<ignoredErrors>");
+        for i in e.kids("ignoredError") {
+            let _ = write!(x, "<ignoredError{}/>", attrs_of(i, IGNORED_ERROR_ATTRS));
+        }
+        x.push_str("</ignoredErrors>");
+        push_source(&mut out, "ignoredErrors", String::new(), x);
+    }
+    out
+}
+
+/// What a note's `<text>` writes from its comment at `cell`, or at any cell.
+pub fn note_model(cell: Option<gridcraft_core::CellRef>, c: &gridcraft_model::Comment) -> String {
+    model_of(&(cell, &c.author, &c.text, &c.replies, c.threaded))
+}
+
+/// The Excel 2010 conditional format elements kept as the file had them, with their prefixes.
+const X14_CF_ELEMENTS: &[(&str, &str)] = &[
+    ("conditionalFormattings", "x14:"),
+    ("conditionalFormatting", "x14:"),
+    ("cfRule", "x14:"),
+    ("dataBar", "x14:"),
+    ("colorScale", "x14:"),
+    ("iconSet", "x14:"),
+    ("cfvo", "x14:"),
+    ("cfIcon", "x14:"),
+    ("color", "x14:"),
+    ("fillColor", "x14:"),
+    ("borderColor", "x14:"),
+    ("negativeFillColor", "x14:"),
+    ("negativeBorderColor", "x14:"),
+    ("axisColor", "x14:"),
+    ("f", "xm:"),
+    ("sqref", "xm:"),
+];
+const X14_CF_ATTRS: &[&str] = &[
+    "type",
+    "priority",
+    "id",
+    "operator",
+    "stopIfTrue",
+    "activePresent",
+    "text",
+    "rank",
+    "bottom",
+    "percent",
+    "aboveAverage",
+    "equalAverage",
+    "stdDev",
+    "minLength",
+    "maxLength",
+    "border",
+    "gradient",
+    "direction",
+    "negativeBarColorSameAsPositive",
+    "negativeBarBorderColorSameAsPositive",
+    "axisPosition",
+    "gte",
+    "iconSet",
+    "showValue",
+    "reverse",
+    "custom",
+    "iconId",
+    "rgb",
+    "theme",
+    "tint",
+    "indexed",
+    "auto",
+];
+
+/// What the conditional formats of `sheet` were read into, for their Excel 2010 form.
+pub fn cond_formats_model(sheet: &Sheet) -> String {
+    model_of(&sheet.cond_formats)
+}
+
+/// What the notes' VML drawing writes from the notes of `sheet`.
+pub fn notes_vml_model(sheet: &Sheet) -> String {
+    model_of(&sheet.comments.iter().map(|(cell, c)| (cell, c.visible, c.threaded, c.note_box)).collect::<Vec<_>>())
+}
+
+/// The notes' VML drawing as the file had it, while it holds the notes of `sheet` and numbers
+/// its shapes in the block `n` GridCraft gives them.
+pub fn notes_vml_source<'a>(sheet: &'a Sheet, n: u32) -> Option<&'a [u8]> {
+    let p = sheet.preserved.as_deref().filter(|p| p.vml.is_none())?;
+    let vml = source(Some(p), "vml.notes", &notes_vml_model(sheet))?;
+    let text = std::str::from_utf8(vml).ok()?;
+    let idmap = text.find("idmap")?;
+    let data = text.get(idmap..)?.split_once("data=\"")?.1.split('"').next()?;
+    (data.trim() == n.to_string()).then_some(vml)
+}
+
+/// What a chart part writes from `ch`.
+pub fn chart_model(ch: &gridcraft_model::Chart) -> String {
+    model_of(ch)
+}
+
+/// What the drawing part of `sheet` writes from its pictures, charts and shapes.
+pub fn drawing_model(sheet: &Sheet) -> String {
+    use std::hash::{Hash, Hasher};
+    let images: Vec<_> = sheet
+        .images
+        .iter()
+        .map(|i| {
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            i.data.hash(&mut h);
+            (i.id, &i.anchor, &i.mime, &i.alt, i.data.len(), h.finish())
+        })
+        .collect();
+    model_of(&(images, &sheet.charts, &sheet.shapes))
+}
+
+/// What a `<hyperlink>` writes from its link at `cell`, or at any cell.
+pub fn link_model(cell: Option<gridcraft_core::CellRef>, h: &gridcraft_model::Hyperlink) -> String {
+    model_of(&(cell, h))
+}
+
+/// What `<pageSetup>` writes from the print settings.
+pub fn page_setup_model(p: &gridcraft_model::features::PrintSettings) -> String {
+    model_of(&(&p.paper, p.scale, p.fit_to, &p.orientation))
+}
+
+/// A column width of `px` pixels as the file wrote it, or GridCraft's own.
+pub fn col_width(p: Option<&Preserved>, px: f32) -> String {
+    match source(p, "width", &model_of(&px)).and_then(|d| std::str::from_utf8(d).ok()) {
+        Some(w) => w.to_string(),
+        None => xml::num(crate::tables::px_to_col_width(px)),
+    }
+}
+
+/// The source form `slot` of `p` while the model holds `model` (see [`PreservedSource`]).
+pub fn source<'a>(p: Option<&'a Preserved>, slot: &str, model: &str) -> Option<&'a [u8]> {
+    p?.sources.iter().find(|s| s.slot == slot && s.model == model).map(|s| &*s.data)
+}
+
+/// The kept element `slot` of `p`, or nothing.
+pub fn source_xml<'a>(p: Option<&'a Preserved>, slot: &str) -> &'a str {
+    source(p, slot, "").and_then(|d| std::str::from_utf8(d).ok()).unwrap_or("")
+}
+
+/// Appends the kept attributes `slot` of `p` to the start tag `s` ends with, except those it
+/// already has (GridCraft's own value wins).
+pub fn push_attrs(s: &mut String, p: Option<&Preserved>, slot: &str) {
+    let kept = source_xml(p, slot);
+    let tag = s.rfind('<').unwrap_or(0);
+    let mut pieces = kept.split('"');
+    while let (Some(name), Some(value)) = (pieces.next(), pieces.next()) {
+        let name = name.trim().trim_end_matches('=');
+        if name.is_empty() || s.get(tag..).is_some_and(|t| t.contains(&format!(" {name}=\""))) {
+            continue;
+        }
+        let _ = write!(s, " {name}=\"{value}\"");
     }
 }
 
