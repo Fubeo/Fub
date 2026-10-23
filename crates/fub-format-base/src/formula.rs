@@ -1488,7 +1488,7 @@ fn call_known(name: &str, args: Vec<BaseValue>, ctx: &RowContext) -> Result<Base
             other => Err(EvalError::Value(format!("tags su {}", other.type_name()))),
         },
         "object" => {
-            if args.len() % 2 != 0 {
+            if !args.len().is_multiple_of(2) {
                 return Err(EvalError::Value("object vuole coppie chiave/valore".into()));
             }
             let mut out = BTreeMap::new();
