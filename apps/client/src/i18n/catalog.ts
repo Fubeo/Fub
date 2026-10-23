@@ -2525,7 +2525,9 @@ export const IT = { // --- la scocca -------------------------------------------
   "base_menu.cell.copy": "Copia il valore",
   "base_menu.cell.search": "Cerca questo valore",
   "base_menu.cell.clear": "Svuota la cella",
-  "base_menu.column.copy": "Copia la colonna"
+  "base_menu.column.copy": "Copia la colonna",
+  "media_menu.copy_embed": "Copia il link ![[ ]]",
+  "media_menu.pdf.quote": "Copia con la citazione"
 } as const;
 
 /// Una chiave del catalogo della shell.
@@ -4922,5 +4924,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "base_menu.cell.copy": "Copy value",
   "base_menu.cell.search": "Search for this value",
   "base_menu.cell.clear": "Clear cell",
-  "base_menu.column.copy": "Copy column"
+  "base_menu.column.copy": "Copy column",
+  "media_menu.copy_embed": "Copy ![[ ]] link",
+  "media_menu.pdf.quote": "Copy with citation"
 };
