@@ -35,7 +35,7 @@ diff --git a/crates/model/src/sheet.rs b/crates/model/src/sheet.rs
 diff --git a/crates/xlsx/src/passthrough.rs b/crates/xlsx/src/passthrough.rs
 --- a/crates/xlsx/src/passthrough.rs
 +++ b/crates/xlsx/src/passthrough.rs
-@@ -405,6 +405,7 @@ impl KeptReader {
+@@ -406,6 +406,7 @@ impl KeptReader {
                      },
                      rel_id: r.id.clone(),
                      before: worksheets,
@@ -43,7 +43,7 @@ diff --git a/crates/xlsx/src/passthrough.rs b/crates/xlsx/src/passthrough.rs
                  }),
                  Err(why) => cx.warn(format!("chart sheet \"{name}\" was dropped: {why}")),
              }
-@@ -933,6 +934,34 @@ pub struct KeptSheet {
+@@ -984,6 +985,34 @@ pub struct KeptSheet {
      name: String,
      visibility: Visibility,
      rid: String,
@@ -78,7 +78,7 @@ diff --git a/crates/xlsx/src/passthrough.rs b/crates/xlsx/src/passthrough.rs
  }
  
  /// The workbook's kept content as written.
-@@ -950,8 +979,8 @@ impl WorkbookKept {
+@@ -1001,8 +1030,8 @@ impl WorkbookKept {
      }
  
      /// The `<sheet>` entries of the chart sheets that go right before the model's sheet `i`
@@ -89,7 +89,7 @@ diff --git a/crates/xlsx/src/passthrough.rs b/crates/xlsx/src/passthrough.rs
          let mut x = String::new();
          for s in self.sheets.iter().filter(|s| if last { s.before >= i } else { s.before == i }) {
              let state = match s.visibility {
-@@ -960,10 +989,10 @@ impl WorkbookKept {
+@@ -1011,10 +1040,10 @@ impl WorkbookKept {
                  Visibility::VeryHidden => " state=\"veryHidden\"",
              };
              let name: String = s.name.chars().take(31).collect();
@@ -102,7 +102,7 @@ diff --git a/crates/xlsx/src/passthrough.rs b/crates/xlsx/src/passthrough.rs
      }
  }
  
-@@ -1083,7 +1112,15 @@ pub fn write_workbook(wb: &Workbook, wb_rels: &mut Rels, out: &mut Out) -> Workb
+@@ -1134,7 +1163,15 @@ pub fn write_workbook(wb: &Workbook, wb_rels: &mut Rels, out: &mut Out) -> Workb
          elements: p.elements.iter().filter(|e| e.slot == "externalReferences").filter_map(|e| remap(&e.xml, &ids)).collect(),
          sheets: live
              .iter()
@@ -122,7 +122,7 @@ diff --git a/crates/xlsx/src/passthrough.rs b/crates/xlsx/src/passthrough.rs
 diff --git a/crates/xlsx/src/read.rs b/crates/xlsx/src/read.rs
 --- a/crates/xlsx/src/read.rs
 +++ b/crates/xlsx/src/read.rs
-@@ -233,6 +233,7 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
+@@ -285,6 +285,7 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
              Err(e) => cx.warn(format!("PivotTables on sheet \"{name}\" could not be read: {e}")),
          }
          sheet.preserved = kept.sheet(&mut cx, &rel.target, &name);
@@ -154,7 +154,7 @@ diff --git a/crates/xlsx/src/tests/sheet_names.rs b/crates/xlsx/src/tests/sheet_
 diff --git a/crates/xlsx/src/write.rs b/crates/xlsx/src/write.rs
 --- a/crates/xlsx/src/write.rs
 +++ b/crates/xlsx/src/write.rs
-@@ -228,11 +228,9 @@ pub fn write_xlsx(wb: &Workbook, kind: XlsxKind) -> Result<Vec<u8>, IoError> {
+@@ -255,11 +255,9 @@ pub fn write_xlsx_named(wb: &Workbook, kind: XlsxKind, book_name: Option<&str>)
      let kept = crate::passthrough::write_workbook(wb, &mut wb_rels, &mut out);
      let mut pivots = crate::pivot::PivotWriter::default();
      let mut sheets_xml = String::new();
@@ -168,7 +168,7 @@ diff --git a/crates/xlsx/src/write.rs b/crates/xlsx/src/write.rs
          let (xml, mut rels) = crate::sheet_write::write_sheet(wb, i, i == active, &mut out);
          pivots.add_sheet(wb, i, &mut out, &mut rels);
          let name = format!("xl/worksheets/sheet{}.xml", i + 1);
-@@ -248,10 +246,10 @@ pub fn write_xlsx(wb: &Workbook, kind: XlsxKind) -> Result<Vec<u8>, IoError> {
+@@ -275,10 +273,10 @@ pub fn write_xlsx_named(wb: &Workbook, kind: XlsxKind, book_name: Option<&str>)
              Visibility::VeryHidden => " state=\"veryHidden\"",
          };
          let name: String = sheet.name.chars().take(31).collect();

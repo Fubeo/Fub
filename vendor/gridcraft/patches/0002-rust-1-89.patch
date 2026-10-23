@@ -1,5 +1,4 @@
 diff --git a/crates/functions/src/engineering.rs b/crates/functions/src/engineering.rs
-index f34ce99..49d6bb5 100644
 --- a/crates/functions/src/engineering.rs
 +++ b/crates/functions/src/engineering.rs
 @@ -841,7 +841,8 @@ fn hankel(n: u32, x: f64) -> Option<(f64, f64)> {
@@ -13,7 +12,6 @@ index f34ce99..49d6bb5 100644
  /// J_0..J_m(x) for 0 < x ≤ ~100 by Miller's backward recurrence, normalised with
  /// J_0 + 2ΣJ_{2k} = 1.
 diff --git a/crates/xlsx/src/ods.rs b/crates/xlsx/src/ods.rs
-index 8415ce3..3fb9add 100644
 --- a/crates/xlsx/src/ods.rs
 +++ b/crates/xlsx/src/ods.rs
 @@ -280,7 +280,7 @@ impl Import {
