@@ -49,7 +49,7 @@ quella di GridCraft.
      modello; e ciò che la lettura ha dichiarato perso (avvisi della lettura,
      parti non modellate e non portate) è una **perdita**. Con una perdita la
      riscrittura non copre il file: è un errore tipizzato che la shell dice,
-     con l'alternativa «Salva una copia» accanto (come `xlsx.convert`).
+     con l'alternativa «Salva una copia» accanto.
 5. **Il ricalcolo è incrementale.** Dopo un comando si ricalcolano le
    dipendenti delle celle cambiate (`Calc::cells_changed`) e le volatili, mai
    tutta la cartella; all'apertura niente.

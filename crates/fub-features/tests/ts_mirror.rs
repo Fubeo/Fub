@@ -36,9 +36,10 @@ use fub_abi::event::{
 };
 use fub_abi::gate::Gate;
 use fub_abi::grid::{
-    GridApplyRequest, GridCellKey, GridCellPatch, GridCellStyle, GridColumn, GridCommit,
-    GridHorizontalAlign, GridInvalidation, GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec,
-    GridWindowRequest,
+    GridApplyRequest, GridBorder, GridBorderStyle, GridBorders, GridCellKey, GridCellPatch,
+    GridCellStyle, GridColumn, GridCommit, GridHorizontalAlign, GridInvalidation, GridRow,
+    GridScript, GridSheet, GridSourceEdit, GridSurfaceSpec, GridUnderline, GridVerticalAlign,
+    GridWindowRequest, GRID_STACKED_ROTATION,
 };
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{DocId, LinkTarget, Span};
@@ -66,7 +67,8 @@ use fub_abi::ui::{
 };
 use fub_abi::{
     GridBytesCell, GridBytesSession, GridBytesWindow, GridCommand, GridCommandOutcome,
-    GridCommandRequest, GridCommandState, GridDialog, GridJournal, GridNotice, GridSelection,
+    GridCommandRequest, GridCommandState, GridComment, GridCommentReply, GridDataBar, GridDialog,
+    GridIcon, GridJournal, GridLink, GridMerge, GridNotice, GridSelection, GridSheetView,
     GridValue,
 };
 use fub_features::VersionRef;
@@ -1186,6 +1188,7 @@ fn grid_samples() -> Vec<Value> {
         fill_color: None,
         horizontal: Some(GridHorizontalAlign::Center),
         number_format: Some("0.00".into()),
+        ..GridCellStyle::default()
     };
     let revision = Revision::of("rev-1");
     vec![
@@ -1263,8 +1266,29 @@ fn grid_bytes_samples() -> (Value, Value, Value, Vec<Value>) {
         italic: true,
         text_color: None,
         fill_color: Some("#ffeeaa".into()),
-        horizontal: None,
+        horizontal: Some(GridHorizontalAlign::Distributed),
         number_format: Some("0.00%".into()),
+        font: Some("Aptos Narrow".into()),
+        font_size: Some(10.5),
+        underline: Some(GridUnderline::DoubleAccounting),
+        strike: true,
+        script: Some(GridScript::Superscript),
+        vertical: Some(GridVerticalAlign::Center),
+        wrap: true,
+        shrink: false,
+        indent: 2,
+        rotation: GRID_STACKED_ROTATION,
+        borders: GridBorders {
+            top: Some(GridBorder {
+                style: GridBorderStyle::MediumDashDotDot,
+                color: Some("#203040".into()),
+            }),
+            diagonal_up: Some(GridBorder {
+                style: GridBorderStyle::Hair,
+                color: None,
+            }),
+            ..GridBorders::default()
+        },
     };
     let values = vec![
         GridValue::Blank,
@@ -1282,12 +1306,36 @@ fn grid_bytes_samples() -> (Value, Value, Value, Vec<Value>) {
                 ..key.clone()
             },
             input: "=A1*2".into(),
-            style: style.clone(),
+            style: u32::from(the > 0),
             value,
             display: "25.00%".into(),
             lock: (the == 1).then(|| "spill".into()),
             stale: the == 2,
             conflict: the == 3,
+            data_bar: (the == 1).then(|| GridDataBar {
+                fraction: 0.25,
+                color: "#638ec6".into(),
+                gradient: true,
+            }),
+            icon: (the == 2).then(|| GridIcon {
+                set: "3Arrows".into(),
+                index: 1,
+            }),
+            comment: (the == 3).then(|| GridComment {
+                author: "Ada".into(),
+                text: "Da rivedere".into(),
+                threaded: true,
+                resolved: false,
+                replies: vec![GridCommentReply {
+                    author: "Bruno".into(),
+                    text: "Fatto".into(),
+                }],
+            }),
+            link: (the == 4).then(|| GridLink {
+                target: "Conti!A1".into(),
+                tooltip: Some("Torna su".into()),
+                external: false,
+            }),
         })
         .collect();
     let session = GridBytesSession {
@@ -1328,6 +1376,21 @@ fn grid_bytes_samples() -> (Value, Value, Value, Vec<Value>) {
             hidden: true,
         }],
         cells: cells.clone(),
+        styles: vec![GridCellStyle::default(), style],
+        merges: vec![GridMerge {
+            row: 0,
+            column: 0,
+            rows: 2,
+            columns: 1,
+        }],
+        view: GridSheetView {
+            frozen_rows: 1,
+            frozen_columns: 0,
+            gridlines: false,
+            headings: true,
+            zoom: 125,
+            right_to_left: false,
+        },
     };
     (
         to_value(GridNotice {

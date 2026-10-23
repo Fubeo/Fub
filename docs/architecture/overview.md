@@ -182,6 +182,7 @@ flowchart LR
     xlsx -.-> sdk
     xlsx --> gcalc
     xlsx --> gcore
+    xlsx --> gengine
     xlsx --> gmodel
     xlsx --> gnumfmt
     xlsx --> gxlsx

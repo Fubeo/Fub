@@ -72,9 +72,38 @@ export type Gate =
   | "index_query"
 ;
 
-export type GridHorizontalAlign = "start" | "center" | "end";
+export type GridBorderStyle =
+  | "thin"
+  | "medium"
+  | "thick"
+  | "dashed"
+  | "dotted"
+  | "double"
+  | "hair"
+  | "medium_dashed"
+  | "dash_dot"
+  | "medium_dash_dot"
+  | "dash_dot_dot"
+  | "medium_dash_dot_dot"
+  | "slant_dash_dot"
+;
+
+export type GridHorizontalAlign =
+  | "start"
+  | "center"
+  | "end"
+  | "fill"
+  | "justify"
+  | "distributed"
+;
 
 export type GridJournalMatch = "pending" | "applied" | "conflict";
+
+export type GridScript = "superscript" | "subscript";
+
+export type GridUnderline = "single" | "double" | "single_accounting" | "double_accounting";
+
+export type GridVerticalAlign = "top" | "center" | "bottom" | "justify" | "distributed";
 
 export type HealthCheck =
   | "broken_links"

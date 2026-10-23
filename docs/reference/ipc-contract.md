@@ -49,7 +49,13 @@ il documento, controlla che il formato sia quello della superficie (`BadArgs`
 altrimenti) e risponde `Conflict` se i byte non sono più quelli di `base`. La
 sessione è un `GridBytesSession` (fogli, foglio attivo, fogli nascosti, avvisi
 `GridNotice` e celle in conflitto); la finestra è un `GridBytesWindow`, la cui
-cella porta `GridValue`, il testo formattato, blocco, `stale` e `conflict`. Il
+cella porta `GridValue`, il testo formattato, blocco, `stale`, `conflict`,
+l'indice del suo stile e i segni (barra di dati, icona, commento,
+collegamento). La finestra porta gli stili delle sue celle, ognuno una volta
+(`GridCellStyle`: carattere, colori, bordi, allineamenti, rientro, a capo,
+rotazione), le unioni che la toccano (`GridMerge`) e la vista del foglio
+(`GridSheetView`: riquadri bloccati, griglia, intestazioni, zoom, da destra a
+sinistra). Il
 commit è un `GridCommit` il cui `edit` è il diff del testo del giornale, da
 applicare al buffer della sessione documento.
 

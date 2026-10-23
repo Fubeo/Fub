@@ -11,7 +11,14 @@
 //
 // Le forme si controllano strette come quelle della versione 1 (`engine.ts`):
 // una risposta fuori dai limiti o incoerente con la sessione non si disegna.
-import type { GridBytesCell, GridBytesSession, GridBytesWindow, GridNotice } from "../../host/contract";
+import type {
+  GridBytesCell,
+  GridBytesSession,
+  GridBytesWindow,
+  GridCellStyle as GridBytesStyle,
+  GridHorizontalAlign,
+  GridNotice,
+} from "../../host/contract";
 import type { GridCell, GridCellStyle, GridColumn, GridPosition, GridRow, GridSheet, GridWorkbook } from "./model";
 
 const MAX_SHEETS = 1_024;
@@ -128,6 +135,9 @@ export function validateBytesWindow(window: GridBytesWindow, session: GridBytesS
   ) {
     throw new Error("malformed grid bytes window");
   }
+  if (!Array.isArray(window.styles) || window.styles.length > Math.max(window.cells.length, 1) || !Array.isArray(window.merges)) {
+    throw new Error("malformed grid bytes window");
+  }
   const rows = new Set(window.rows.map((row) => row.id));
   const columns = new Set(window.columns.map((column) => column.id));
   for (const cell of window.cells) {
@@ -137,6 +147,9 @@ export function validateBytesWindow(window: GridBytesWindow, session: GridBytesS
       || !columns.has(cell.key.column)
       || typeof cell.input !== "string"
       || typeof cell.display !== "string"
+      || !Number.isInteger(cell.style)
+      || cell.style < 0
+      || cell.style >= window.styles.length
     ) {
       throw new Error("grid bytes window has a cell outside it");
     }
@@ -147,13 +160,25 @@ function size(value: number | null): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value * WORKBOOK_SCALE : undefined;
 }
 
-function style(cell: GridBytesCell): GridCellStyle | undefined {
+/// Gli allineamenti che la griglia non disegna ancora tornano al più vicino:
+/// riempi e giustifica partono dall'inizio, distribuito sta al centro.
+const HORIZONTAL: Record<GridHorizontalAlign, "start" | "center" | "end"> = {
+  start: "start",
+  center: "center",
+  end: "end",
+  fill: "start",
+  justify: "start",
+  distributed: "center",
+};
+
+function style(from: GridBytesStyle | undefined): GridCellStyle | undefined {
+  if (!from) return undefined;
   const out: GridCellStyle = {
-    ...(cell.style.bold ? { bold: true } : {}),
-    ...(cell.style.italic ? { italic: true } : {}),
-    ...(cell.style.text_color === null ? {} : { text_color: cell.style.text_color }),
-    ...(cell.style.fill_color === null ? {} : { fill_color: cell.style.fill_color }),
-    ...(cell.style.horizontal === null ? {} : { horizontal: cell.style.horizontal }),
+    ...(from.bold ? { bold: true } : {}),
+    ...(from.italic ? { italic: true } : {}),
+    ...(from.text_color === null ? {} : { text_color: from.text_color }),
+    ...(from.fill_color === null ? {} : { fill_color: from.fill_color }),
+    ...(from.horizontal === null ? {} : { horizontal: HORIZONTAL[from.horizontal] }),
   };
   return Object.keys(out).length ? out : undefined;
 }
@@ -195,7 +220,7 @@ export function workbookView(
       const columnIndex = new Map(window.columns.map((column) => [column.id, column.index] as const));
       for (const cell of window.cells) {
         const position = { row: rowIndex.get(cell.key.row)!, column: columnIndex.get(cell.key.column)! };
-        const cellStyle = style(cell);
+        const cellStyle = style(window.styles[cell.style]);
         const grid: GridCell = {
           row: cell.key.row,
           column: cell.key.column,

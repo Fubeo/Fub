@@ -1057,12 +1057,40 @@ fn from_grid_bytes_cell(cell: w_grid_bytes::GridBytesCell) -> fub_abi::GridBytes
     fub_abi::GridBytesCell {
         key: from_grid_key(cell.key),
         input: cell.input,
-        style: from_grid_style(cell.style),
+        style: cell.style,
         value: from_grid_bytes_value(cell.value),
         display: cell.display,
         lock: cell.lock,
         stale: cell.stale,
         conflict: cell.conflict,
+        data_bar: cell.data_bar.map(|bar| fub_abi::GridDataBar {
+            fraction: bar.fraction,
+            color: bar.color,
+            gradient: bar.gradient,
+        }),
+        icon: cell.icon.map(|icon| fub_abi::GridIcon {
+            set: icon.set,
+            index: icon.index,
+        }),
+        comment: cell.comment.map(|comment| fub_abi::GridComment {
+            author: comment.author,
+            text: comment.text,
+            threaded: comment.threaded,
+            resolved: comment.resolved,
+            replies: comment
+                .replies
+                .into_iter()
+                .map(|reply| fub_abi::GridCommentReply {
+                    author: reply.author,
+                    text: reply.text,
+                })
+                .collect(),
+        }),
+        link: cell.link.map(|link| fub_abi::GridLink {
+            target: link.target,
+            tooltip: link.tooltip,
+            external: link.external,
+        }),
     }
 }
 
@@ -1079,6 +1107,25 @@ pub(crate) fn from_grid_bytes_window(
         rows: window.rows.into_iter().map(from_grid_row).collect(),
         columns: window.columns.into_iter().map(from_grid_column).collect(),
         cells: window.cells.into_iter().map(from_grid_bytes_cell).collect(),
+        styles: window.styles.into_iter().map(from_grid_style).collect(),
+        merges: window
+            .merges
+            .into_iter()
+            .map(|merge| fub_abi::GridMerge {
+                row: merge.row,
+                column: merge.column,
+                rows: merge.rows,
+                columns: merge.columns,
+            })
+            .collect(),
+        view: fub_abi::GridSheetView {
+            frozen_rows: window.view.frozen_rows,
+            frozen_columns: window.view.frozen_columns,
+            gridlines: window.view.gridlines,
+            headings: window.view.headings,
+            zoom: window.view.zoom,
+            right_to_left: window.view.right_to_left,
+        },
     };
     window.validate()?;
     Ok(window)
@@ -1120,14 +1167,53 @@ fn to_grid_key(key: &fub_abi::grid::GridCellKey) -> w_grid::GridCellKey {
 fn from_grid_horizontal(
     horizontal: w_grid::GridHorizontalAlign,
 ) -> fub_abi::grid::GridHorizontalAlign {
+    use fub_abi::grid::GridHorizontalAlign as H;
     match horizontal {
-        w_grid::GridHorizontalAlign::Start => fub_abi::grid::GridHorizontalAlign::Start,
-        w_grid::GridHorizontalAlign::Center => fub_abi::grid::GridHorizontalAlign::Center,
-        w_grid::GridHorizontalAlign::End => fub_abi::grid::GridHorizontalAlign::End,
+        w_grid::GridHorizontalAlign::Start => H::Start,
+        w_grid::GridHorizontalAlign::Center => H::Center,
+        w_grid::GridHorizontalAlign::End => H::End,
+        w_grid::GridHorizontalAlign::Fill => H::Fill,
+        w_grid::GridHorizontalAlign::Justify => H::Justify,
+        w_grid::GridHorizontalAlign::Distributed => H::Distributed,
+    }
+}
+
+fn from_grid_vertical(vertical: w_grid::GridVerticalAlign) -> fub_abi::GridVerticalAlign {
+    use fub_abi::GridVerticalAlign as V;
+    match vertical {
+        w_grid::GridVerticalAlign::Top => V::Top,
+        w_grid::GridVerticalAlign::Center => V::Center,
+        w_grid::GridVerticalAlign::Bottom => V::Bottom,
+        w_grid::GridVerticalAlign::Justify => V::Justify,
+        w_grid::GridVerticalAlign::Distributed => V::Distributed,
+    }
+}
+
+fn from_grid_border(border: w_grid::GridBorder) -> fub_abi::GridBorder {
+    use fub_abi::GridBorderStyle as B;
+    use w_grid::GridBorderStyle as W;
+    fub_abi::GridBorder {
+        style: match border.style {
+            W::Thin => B::Thin,
+            W::Medium => B::Medium,
+            W::Thick => B::Thick,
+            W::Dashed => B::Dashed,
+            W::Dotted => B::Dotted,
+            W::Double => B::Double,
+            W::Hair => B::Hair,
+            W::MediumDashed => B::MediumDashed,
+            W::DashDot => B::DashDot,
+            W::MediumDashDot => B::MediumDashDot,
+            W::DashDotDot => B::DashDotDot,
+            W::MediumDashDotDot => B::MediumDashDotDot,
+            W::SlantDashDot => B::SlantDashDot,
+        },
+        color: border.color,
     }
 }
 
 fn from_grid_style(style: w_grid::GridCellStyle) -> fub_abi::grid::GridCellStyle {
+    let borders = style.borders;
     fub_abi::grid::GridCellStyle {
         bold: style.bold,
         italic: style.italic,
@@ -1135,6 +1221,32 @@ fn from_grid_style(style: w_grid::GridCellStyle) -> fub_abi::grid::GridCellStyle
         fill_color: style.fill_color,
         horizontal: style.horizontal.map(from_grid_horizontal),
         number_format: style.number_format,
+        font: style.font,
+        font_size: style.font_size,
+        underline: style.underline.map(|underline| match underline {
+            w_grid::GridUnderline::Single => fub_abi::GridUnderline::Single,
+            w_grid::GridUnderline::Double => fub_abi::GridUnderline::Double,
+            w_grid::GridUnderline::SingleAccounting => fub_abi::GridUnderline::SingleAccounting,
+            w_grid::GridUnderline::DoubleAccounting => fub_abi::GridUnderline::DoubleAccounting,
+        }),
+        strike: style.strike,
+        script: style.script.map(|script| match script {
+            w_grid::GridScript::Superscript => fub_abi::GridScript::Superscript,
+            w_grid::GridScript::Subscript => fub_abi::GridScript::Subscript,
+        }),
+        vertical: style.vertical.map(from_grid_vertical),
+        wrap: style.wrap,
+        shrink: style.shrink,
+        indent: style.indent,
+        rotation: style.rotation,
+        borders: fub_abi::GridBorders {
+            top: borders.top.map(from_grid_border),
+            right: borders.right.map(from_grid_border),
+            bottom: borders.bottom.map(from_grid_border),
+            left: borders.left.map(from_grid_border),
+            diagonal_down: borders.diagonal_down.map(from_grid_border),
+            diagonal_up: borders.diagonal_up.map(from_grid_border),
+        },
     }
 }
 

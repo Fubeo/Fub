@@ -8,6 +8,7 @@ import {
   type GridBytesSession,
   type GridBytesWindow,
   type GridCellKey,
+  type GridCellStyle,
   type GridCommit,
   type GridSurfaceSpec,
   type GridWindowRequest,
@@ -26,7 +27,25 @@ const SURFACE: GridSurfaceSpec = {
   protocol_version: GRID_BYTES_PROTOCOL_VERSION,
 };
 
-const PLAIN = { bold: false, italic: false, text_color: null, fill_color: null, horizontal: null, number_format: null };
+const PLAIN: GridCellStyle = {
+  bold: false,
+  italic: false,
+  text_color: null,
+  fill_color: null,
+  horizontal: null,
+  number_format: null,
+  font: null,
+  font_size: null,
+  underline: null,
+  strike: false,
+  script: null,
+  vertical: null,
+  wrap: false,
+  shrink: false,
+  indent: 0,
+  rotation: 0,
+  borders: { top: null, right: null, bottom: null, left: null, diagonal_down: null, diagonal_up: null },
+};
 
 interface Plan {
   readonly rows?: number;
@@ -102,12 +121,16 @@ function bytesHost(plan: Plan = {}) {
           cells.push({
             key: { sheet: "main", row: `r${row}`, column: `c${column}` },
             input,
-            style: PLAIN,
+            style: 0,
             value: Number.isFinite(number) ? { kind: "number", value: number } : { kind: "text", value: input },
             display: input,
             lock: null,
             stale: false,
             conflict: false,
+            data_bar: null,
+            icon: null,
+            comment: null,
+            link: null,
           });
         }
       }
@@ -127,6 +150,9 @@ function bytesHost(plan: Plan = {}) {
           return { id: `c${index}`, index, width: null, hidden: plan.hiddenColumns?.includes(index) ?? false };
         }),
         cells,
+        styles: [PLAIN],
+        merges: [],
+        view: { frozen_rows: 0, frozen_columns: 0, gridlines: true, headings: true, zoom: 100, right_to_left: false },
       };
     },
     applyGridBytes: async (_surface, _instance, request) => {

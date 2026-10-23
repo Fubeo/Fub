@@ -19,11 +19,11 @@ use fub_abi::{grid_bytes_revision, grid_journal_match, GridJournal, GridJournalM
 
 use crate::exports::fub::abi::grid_bytes::{
     GridBytesCell, GridBytesSession, GridBytesWindow, GridCommandOutcome, GridCommandRequest,
-    GridCommandState, GridNotice, GridSelection, GridValue, Guest as GridBytesGuest,
+    GridCommandState, GridNotice, GridSelection, GridSheetView, GridValue, Guest as GridBytesGuest,
 };
 use crate::fub::abi::grid::{
-    GridApplyRequest, GridCellKey, GridCellStyle, GridColumn, GridCommit, GridInvalidation,
-    GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindowRequest,
+    GridApplyRequest, GridBorders, GridCellKey, GridCellStyle, GridColumn, GridCommit,
+    GridInvalidation, GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindowRequest,
 };
 use crate::{bad, conflict, not_found, Component, PluginError};
 
@@ -120,6 +120,24 @@ fn plain() -> GridCellStyle {
         fill_color: None,
         horizontal: None,
         number_format: None,
+        font: None,
+        font_size: None,
+        underline: None,
+        strike: false,
+        script: None,
+        vertical: None,
+        wrap: false,
+        shrink: false,
+        indent: 0,
+        rotation: 0,
+        borders: GridBorders {
+            top: None,
+            right: None,
+            bottom: None,
+            left: None,
+            diagonal_down: None,
+            diagonal_up: None,
+        },
     }
 }
 
@@ -257,9 +275,13 @@ impl GridBytesGuest for Component {
                         display: input.clone(),
                         value: GridValue::Text(input.clone()),
                         input,
-                        style: plain(),
+                        style: 0,
                         lock: None,
                         stale: false,
+                        data_bar: None,
+                        icon: None,
+                        comment: None,
+                        link: None,
                     })
                 })
                 .collect()
@@ -279,6 +301,16 @@ impl GridBytesGuest for Component {
             rows,
             columns,
             cells,
+            styles: vec![plain()],
+            merges: Vec::new(),
+            view: GridSheetView {
+                frozen_rows: 0,
+                frozen_columns: 0,
+                gridlines: true,
+                headings: true,
+                zoom: 100,
+                right_to_left: false,
+            },
         })
     }
 

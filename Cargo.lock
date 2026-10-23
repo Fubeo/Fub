@@ -2174,6 +2174,7 @@ dependencies = [
  "fub-sdk",
  "gridcraft-calc",
  "gridcraft-core",
+ "gridcraft-engine",
  "gridcraft-model",
  "gridcraft-numfmt",
  "gridcraft-xlsx",
@@ -2726,11 +2727,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "gridcraft-chart"
+version = "0.9.0"
+dependencies = [
+ "gridcraft-calc",
+ "gridcraft-core",
+ "gridcraft-model",
+ "gridcraft-numfmt",
+ "serde",
+]
+
+[[package]]
 name = "gridcraft-core"
 version = "0.9.0"
 dependencies = [
  "js-sys",
  "serde",
+ "thiserror 2.0.19",
+]
+
+[[package]]
+name = "gridcraft-engine"
+version = "0.9.0"
+dependencies = [
+ "gridcraft-calc",
+ "gridcraft-chart",
+ "gridcraft-core",
+ "gridcraft-formula",
+ "gridcraft-functions",
+ "gridcraft-model",
+ "gridcraft-numfmt",
+ "gridcraft-pdf",
+ "gridcraft-xlsx",
+ "image",
+ "log",
+ "serde",
+ "serde_json",
  "thiserror 2.0.19",
 ]
 
@@ -2768,6 +2800,10 @@ version = "0.9.0"
 dependencies = [
  "gridcraft-core",
 ]
+
+[[package]]
+name = "gridcraft-pdf"
+version = "0.9.0"
 
 [[package]]
 name = "gridcraft-xlsx"
