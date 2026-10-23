@@ -9,6 +9,7 @@ import { onEvent } from "../../state/kernel";
 import { PROOF_NS, type ProofPorts } from "./proof-ports";
 import { currentTheme } from "../../theme/theme";
 import { GridEngine } from "../grid/engine";
+import { gridContextMenu, gridMiniBar, type GridMenuHost } from "../grid/menu";
 import { mountBaseSurface } from "../base/surface";
 import { BASE_OWNER, BASE_PROFILE, BASE_FORMAT } from "../base/data";
 import { createTextEngine } from "../text/engine";
@@ -344,6 +345,11 @@ export function createDocumentSurfaceRegistry(
           },
           () => {},
         );
+        const menuHost: GridMenuHost = {
+          engine,
+          ribbon: () => ribbon,
+          notify: options.slash ? (message) => options.slash!.notify(message) : undefined,
+        };
         return {
           family: "grid",
           profile,
@@ -363,6 +369,8 @@ export function createDocumentSurfaceRegistry(
           selectedText: () => engine.selectedText(),
           setReadOnly: (readOnly) => engine.setReadOnly(readOnly),
           setTheme: (theme) => engine.setTheme(theme),
+          contextMenu: (at) => gridContextMenu(menuHost, at),
+          miniBar: () => gridMiniBar(menuHost),
           destroy: () => {
             destroyed = true;
             ribbon?.destroy();

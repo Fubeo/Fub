@@ -40,8 +40,11 @@ import {
   type RibbonColor,
 } from "./palette";
 import { t, type RibbonKey } from "./strings";
+import { contextEntries, MINI_CONTROLS, type GridMenuTarget } from "./context";
+import type { SurfaceMenuItem } from "../../core/editor-menu";
 import {
   RIBBON_TABS,
+  groupControls,
   type ButtonControl,
   type CheckControl,
   type ColorControl,
@@ -95,6 +98,12 @@ export interface GridRibbon {
   /// Rilegge al prossimo fotogramma: per i richiami del motore, che arrivano
   /// a raffica.
   schedule(): void;
+  /// Le voci del menu del tasto destro su `target` (`context.ts`): quelle
+  /// che il catalogo serve adesso, vuote se non si danno comandi.
+  contextMenu(target: GridMenuTarget): SurfaceMenuItem[];
+  /// Monta la mini-barra in `host` e torna come toglierla. I suoi controlli
+  /// sono della barra e vivono con lei: smontarla li stacca soltanto.
+  mountMini(host: HTMLElement): () => void;
   destroy(): void;
 }
 
@@ -313,6 +322,100 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     };
     if (source instanceof Promise) source.then(show, () => show([]));
     else show(source);
+  }
+
+  // ── Il menu del tasto destro ──────────────────────────────────────────
+  /// Le voci di `entries` come le vuole il menu dell'editor. Un sottomenu
+  /// senza voci servite sparisce; uno che arriva dopo (una promessa) non c'è.
+  function surfaceItems(entries: readonly MenuEntry[]): SurfaceMenuItem[] {
+    const items: SurfaceMenuItem[] = [];
+    for (const entry of entries) {
+      if (entry.submenu) {
+        if (!(entry.requires ?? []).every(served)) continue;
+        const children = entry.submenu();
+        if (children instanceof Promise) continue;
+        const inner = surfaceItems(children);
+        if (inner.length) items.push({ id: `grid.menu.${text(entry.label)}`, label: text(entry.label), icon: entry.icon, items: inner });
+        continue;
+      }
+      if (!entry.id || !entryServed(entry)) continue;
+      const id = entry.id;
+      const state = stateOf(id);
+      const off = state !== undefined && !state.enabled;
+      items.push({
+        id,
+        label: text(entry.label),
+        icon: entry.icon,
+        enabled: !off,
+        description: off && state?.reason ? state.reason : entry.description,
+        checked: entry.checked,
+        run: () => {
+          if (entry.dialog) ask(entry.dialog, entry.params);
+          else give(id, entry.params);
+        },
+      });
+    }
+    return items;
+  }
+
+  function contextMenu(target: GridMenuTarget): SurfaceMenuItem[] {
+    if (life.closed || !engine.commandable()) return [];
+    states = new Map(engine.commands().map((state) => [state.id, state]));
+    return surfaceItems(contextEntries(target, readView()));
+  }
+
+  // ── La mini-barra ─────────────────────────────────────────────────────
+  // Si costruisce la prima volta che serve, con i controlli della scheda
+  // Home: gli stessi pulsanti, le stesse tendine, lo stesso stato.
+  let mini: { readonly element: HTMLElement; readonly items: readonly Item[] } | null = null;
+
+  function buildMini(): { readonly element: HTMLElement; readonly items: readonly Item[] } {
+    const element = document.createElement("div");
+    element.className = "grid-ribbon-mini";
+    element.setAttribute("role", "group");
+    const items: Item[] = [];
+    const home = RIBBON_TABS[0]!;
+    for (const id of MINI_CONTROLS) {
+      for (const spec of home.groups) {
+        const control = groupControls(spec).find((one) => (one.kind === "button" || one.kind === "select") && one.id === id);
+        if (!control) continue;
+        const one = item(control, spec);
+        items.push(one);
+        element.append(one.wrap);
+        break;
+      }
+    }
+    for (const control of element.querySelectorAll<HTMLElement>("button, select")) control.tabIndex = 0;
+    // Un gesto dalla mini-barra chiude il menu: le sue voci parlerebbero
+    // della cella com'era.
+    life.listen(element, "click", (event) => {
+      if ((event.target as Element | null)?.closest("button")) queueMicrotask(closeContextMenu);
+    });
+    life.listen(element, "change", () => queueMicrotask(closeContextMenu));
+    const name = () => element.setAttribute("aria-label", t("ribbon.context.mini"));
+    name();
+    relabels.push(name);
+    return { element, items };
+  }
+
+  function refreshMini(): void {
+    if (!mini) return;
+    states = new Map(engine.commands().map((state) => [state.id, state]));
+    const view = readView();
+    for (const one of mini.items) {
+      one.shown = visible(one.control, view);
+      one.wrap.hidden = !one.shown;
+      if (one.shown) one.update(view);
+    }
+  }
+
+  function mountMini(host: HTMLElement): () => void {
+    if (life.closed || !engine.commandable()) return () => {};
+    mini ??= buildMini();
+    refreshMini();
+    host.append(mini.element);
+    const element = mini.element;
+    return () => element.remove();
   }
 
   function closePopover(): void {
@@ -1395,6 +1498,7 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     }
     mountTabs(shown, false);
     for (const tab of tabs) tab.settle(null);
+    if (mini?.element.isConnected) refreshMini();
     scheduleFit();
   }
 
@@ -1432,9 +1536,13 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     element,
     refresh,
     schedule,
+    contextMenu,
+    mountMini,
     destroy() {
       closePopover();
       if (menuOpen) closeContextMenu();
+      mini?.element.remove();
+      mini = null;
       tabsLife?.close();
       tabsLife = null;
       life.close();

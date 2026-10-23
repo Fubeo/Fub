@@ -2504,7 +2504,8 @@ export const IT = { // --- la scocca -------------------------------------------
   "editor_menu.rich.align": "Allineamento",
   "editor_menu.rich.indent": "Rientro",
   "rich.bold": "Grassetto",
-  "rich.italic": "Corsivo"
+  "rich.italic": "Corsivo",
+  "grid.menu.copy_reference": "Copia il riferimento"
 } as const;
 
 /// Una chiave del catalogo della shell.
@@ -4880,5 +4881,6 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "editor_menu.rich.align": "Alignment",
   "editor_menu.rich.indent": "Indent",
   "rich.bold": "Bold",
-  "rich.italic": "Italic"
+  "rich.italic": "Italic",
+  "grid.menu.copy_reference": "Copy reference"
 };

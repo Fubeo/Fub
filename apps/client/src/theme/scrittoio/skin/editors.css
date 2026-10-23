@@ -699,6 +699,12 @@
 }
 .grid-ribbon-bold { font-weight: var(--weight-bold); }
 .grid-ribbon-italic { font-style: italic; }
+/* La mini-barra del menu: i controlli della scheda Home in una fila. */
+.grid-ribbon-mini {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
 .grid-ribbon-underline { text-decoration: underline; }
 .grid-ribbon-strike { text-decoration: line-through; }
 .grid-ribbon-color-bar {

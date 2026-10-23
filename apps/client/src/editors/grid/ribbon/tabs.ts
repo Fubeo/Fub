@@ -379,7 +379,7 @@ const style = (view: RibbonView) => view.style;
 const toggle = (on: boolean) => ({ on });
 
 /// La tabella della selezione, per i comandi della scheda Struttura tabella.
-const inTable = (view: RibbonView) => ({ table: view.table?.name ?? "" });
+export const inTable = (view: RibbonView) => ({ table: view.table?.name ?? "" });
 
 /// Le voci di un'opzione di stile della tabella.
 function tableOption(id: string, label: RibbonKey, keytip: string, read: (table: GridTable) => boolean): CheckControl {
@@ -809,7 +809,7 @@ const HOME: RibbonTab = {
 };
 
 /// I colori delle linguette dei fogli: quelli standard di Excel.
-const TAB_COLORS: readonly { readonly key: RibbonKey; readonly hex: string }[] = [
+export const TAB_COLORS: readonly { readonly key: RibbonKey; readonly hex: string }[] = [
   { key: "ribbon.color.dark_red", hex: "#C00000" },
   { key: "ribbon.color.red", hex: "#FF0000" },
   { key: "ribbon.color.orange", hex: "#FFC000" },
@@ -1020,7 +1020,7 @@ const OTHER_CHARTS: readonly ChartKind[] = [
 const theChart = (view: RibbonView): Params => (view.object?.kind === "chart" ? { chart: view.object.id } : {});
 
 /// L'oggetto selezionato, per `object.*` e `arrange.*`.
-const theObject = (view: RibbonView): Params => (view.object ? { kind: view.object.kind, id: view.object.id } : {});
+export const theObject = (view: RibbonView): Params => (view.object ? { kind: view.object.kind, id: view.object.id } : {});
 
 const chartSelected = (view: RibbonView) => view.object?.kind === "chart";
 const shapeSelected = (view: RibbonView) => view.object?.kind === "shape";

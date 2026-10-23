@@ -378,3 +378,42 @@ describe("la barra multifunzione", () => {
     ribbon = mountRibbon(f.engine);
   });
 });
+
+describe("il menu del tasto destro e la mini-barra", () => {
+  it("una cella offre ciò che il catalogo serve; una voce spenta dice perché, una non servita non c'è", () => {
+    f.commands = f.commands.map((command) => (command.id === "home.deleteCells" ? { ...command, enabled: false, reason: "foglio protetto" } : command));
+    f.commands = f.commands.filter((command) => command.id !== "insert.link");
+    const items = ribbon.contextMenu("cell");
+    const ids = items.map((item) => item.id);
+    expect(ids).toContain("home.formatCells");
+    expect(ids).not.toContain("insert.link");
+    const deleting = items.find((item) => item.id === "home.deleteCells")!;
+    expect(deleting).toMatchObject({ enabled: false, description: "foglio protetto" });
+    items.find((item) => item.id === "home.formatCells")!.run!();
+    expect(f.dialogs[f.dialogs.length - 1]).toEqual(["formatCells", {}]);
+  });
+
+  it("un sottomenu senza voci servite sparisce, e fuori dai comandi il menu è vuoto", () => {
+    f.commands = f.commands.filter((command) => !command.id.startsWith("data."));
+    const labels = ribbon.contextMenu("cell").map((item) => item.label);
+    expect(labels).not.toContain("Filtro");
+    expect(labels).not.toContain("Ordina");
+    f.on = false;
+    expect(ribbon.contextMenu("cell")).toEqual([]);
+  });
+
+  it("la mini-barra mostra i controlli della scheda Home e smontata si stacca soltanto", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const unmount = ribbon.mountMini(host);
+    const mini = host.querySelector<HTMLElement>(".grid-ribbon-mini")!;
+    expect(mini).not.toBeNull();
+    const bold = [...mini.querySelectorAll<HTMLButtonElement>("button")].find((el) => el.getAttribute("aria-label") === "Grassetto")!;
+    bold.click();
+    expect(last()).toEqual(["home.bold", {}]);
+    unmount();
+    expect(host.childElementCount).toBe(0);
+    ribbon.mountMini(host);
+    expect(host.querySelectorAll(".grid-ribbon-mini")).toHaveLength(1);
+  });
+});

@@ -542,6 +542,7 @@
     "threaded",
     "no-gridlines",
     "grid-ribbon",
+    "grid-ribbon-mini",
     "grid-ribbon-head",
     "grid-ribbon-tabs",
     "grid-ribbon-toggle",
@@ -2800,6 +2801,7 @@
       "part": "editors",
       "hooks": [
         "grid-ribbon",
+        "grid-ribbon-mini",
         "grid-ribbon-head",
         "grid-ribbon-tabs",
         "grid-ribbon-toggle",
@@ -5538,7 +5540,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1205,
+    "hooks": 1206,
     "state_names": 7,
     "assigned_states": 641,
     "components": 190,

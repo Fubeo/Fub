@@ -1515,6 +1515,37 @@ describe("GridEngine con una cartella di Excel", () => {
       engine.destroy();
     });
 
+    it("il tasto destro sceglie la cella fuori dalla selezione e lascia quella dentro, come Excel", async () => {
+      const { engine, viewport, cell } = await workbookMounted(workbookHost());
+      const pointing = vi.spyOn(document, "elementFromPoint");
+      const start = at(cell, 1, 1);
+      press(cell(1, 1)!, "pointerdown", start.x, start.y);
+      const end = at(cell, 3, 2);
+      press(viewport, "pointermove", end.x, end.y);
+      press(viewport, "pointerup", end.x, end.y);
+      // Dentro la selezione: resta com'è.
+      const inner = at(cell, 2, 2);
+      pointing.mockReturnValue(cell(2, 2));
+      expect(engine.pointAt(inner.x, inner.y)).toBe("cell");
+      expect(engine.selection()).toMatchObject({ anchor: { row: 1, column: 1 }, focus: { row: 3, column: 2 } });
+      // Fuori: la cella sola.
+      const outer = at(cell, 4, 4);
+      pointing.mockReturnValue(cell(4, 4));
+      expect(engine.pointAt(outer.x, outer.y)).toBe("cell");
+      expect(engine.selection()).toMatchObject({ anchor: { row: 4, column: 4 }, focus: { row: 4, column: 4 } });
+      // L'intestazione di una riga: la riga intera.
+      const row = at(cell, 2, 0);
+      pointing.mockReturnValue(viewport);
+      expect(engine.pointAt(10, row.y)).toBe("row");
+      expect(engine.selection().focus).toEqual({ row: 2, column: 0 });
+      expect(engine.selection().anchor.row).toBe(2);
+      // Fuori dalla griglia, niente.
+      pointing.mockReturnValue(document.body);
+      expect(engine.pointAt(1, 1)).toBeNull();
+      pointing.mockRestore();
+      engine.destroy();
+    });
+
     it("il quadratino tirato riempie con `edit.autoFill`, e con Ctrl nel modo alternato", async () => {
       const grid = workbookHost();
       const { engine, viewport, host, cell, go } = await workbookMounted(grid);
