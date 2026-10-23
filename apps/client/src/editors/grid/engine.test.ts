@@ -22,7 +22,7 @@ import {
 import { resolvedLanguage, t } from "../../i18n/strings";
 import { HOVER_OPEN_DELAY_MS } from "../../kit";
 import { gridJournalText, parseGridJournal, recordGridJournal, type GridJournal } from "../../state/grid-journal";
-import { GridEngine, type GridChange, type GridEngineOptions, type GridHost } from "./engine";
+import { fillTarget, GridEngine, type GridChange, type GridEngineOptions, type GridHost } from "./engine";
 import { cellA1, parseCellA1 } from "./merges";
 import { DEFAULT_SHEET_VIEW, decimalSeparator, localInput } from "./workbook";
 import xlsx from "../../__fixtures__/xlsx-grid.json";
@@ -682,6 +682,8 @@ function workbookHost(options: {
   readonly window?: (window: GridBytesWindow) => void;
   /// La finestra di dialogo che un comando chiede.
   readonly dialog?: (command: GridCommand) => GridDialog | null;
+  /// I comandi che il catalogo non serve.
+  readonly drop?: readonly string[];
 } = {}) {
   const calls: string[] = [];
   const opened: string[] = [];
@@ -696,7 +698,8 @@ function workbookHost(options: {
   const given: GridCommandRequest[] = [];
   const undone: GridCommand[] = [];
   const catalog = (): GridCommandState[] => (structuredClone(xlsx.session.commands) as GridCommandState[])
-    .filter((command) => options.serves !== false || command.id !== "range.setValues");
+    .filter((command) => options.serves !== false || command.id !== "range.setValues")
+    .filter((command) => !options.drop?.includes(command.id));
   const sessionFor = (text: string): GridBytesSession => {
     if (text === xlsx.conflict.journal) return structuredClone(xlsx.conflict.session) as GridBytesSession;
     const session = structuredClone(xlsx.session) as GridBytesSession;
@@ -850,6 +853,19 @@ function workbookHost(options: {
     failApply: (error: PluginError | null) => { failApply = error; },
   };
 }
+
+describe("fillTarget", () => {
+  const source = { rowStart: 1, rowEnd: 2, columnStart: 1, columnEnd: 1 };
+  it("estende lungo l'asse su cui il puntatore è uscito di più", () => {
+    expect(fillTarget(source, { row: 6, column: 3 })).toEqual({ ...source, rowEnd: 6 });
+    expect(fillTarget(source, { row: 3, column: 5 })).toEqual({ ...source, columnEnd: 5 });
+    expect(fillTarget(source, { row: 0, column: 1 })).toEqual({ ...source, rowStart: 0 });
+    expect(fillTarget(source, { row: 2, column: 0 })).toEqual({ ...source, columnStart: 0 });
+  });
+  it("dentro la sorgente non riempie", () => {
+    expect(fillTarget(source, { row: 2, column: 1 })).toBe(source);
+  });
+});
 
 describe("GridEngine con una cartella di Excel", () => {
   async function workbookMounted(
@@ -1443,6 +1459,137 @@ describe("GridEngine con una cartella di Excel", () => {
   });
   /// Una griglia larga abbastanza da mostrare il disegno di «Conti», che sta
   /// dalla colonna J in poi.
+  describe("i gesti del puntatore", () => {
+    const press = (target: EventTarget, type: string, x: number, y: number, extra: PointerEventInit = {}) =>
+      target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, button: 0, buttons: type === "pointerup" ? 0 : 1, clientX: x, clientY: y, ...extra }));
+    /// Il punto dentro un elemento: con la griglia a 0,0 dello schermo e niente
+    /// scorrimento, le coordinate della tela sono quelle dello schermo. Una
+    /// cella sta nella sua riga.
+    const inside = (element: HTMLElement) => {
+      const row = element.parentElement?.classList.contains("grid-row") ? parseFloat(element.parentElement.style.top) : 0;
+      return { x: parseFloat(element.style.left) + 3, y: row + parseFloat(element.style.top) + 3 };
+    };
+    const at = (cell: (row: number, column: number) => HTMLElement | null, row: number, column: number) => inside(cell(row, column)!);
+    const handle = (host: HTMLElement) => host.querySelector<HTMLElement>(".grid-fill-handle");
+
+    it("trascinando si seleziona un intervallo, anche quando la cattura manda i movimenti alla griglia", async () => {
+      const { engine, viewport, cell } = await workbookMounted(workbookHost());
+      const start = at(cell, 1, 1);
+      press(cell(1, 1)!, "pointerdown", start.x, start.y);
+      const end = at(cell, 3, 2);
+      press(viewport, "pointermove", end.x, end.y);
+      expect(engine.selection()).toMatchObject({ anchor: { row: 1, column: 1 }, focus: { row: 3, column: 2 } });
+      press(viewport, "pointerup", end.x, end.y);
+      // Dopo il rilascio il puntatore non trascina più.
+      const later = at(cell, 4, 4);
+      press(viewport, "pointermove", later.x, later.y, { buttons: 0 });
+      expect(engine.selection()).toMatchObject({ anchor: { row: 1, column: 1 }, focus: { row: 3, column: 2 } });
+      engine.destroy();
+    });
+
+    it("le intestazioni prendono la colonna o la riga intera, e l'angolo il foglio", async () => {
+      const { engine, viewport, cell } = await workbookMounted(workbookHost());
+      // La cella attiva (il fuoco) resta sulla prima riga o colonna.
+      const column = at(cell, 0, 2);
+      press(viewport, "pointerdown", column.x, 10);
+      expect(engine.selection().focus).toEqual({ row: 0, column: 2 });
+      expect(engine.selection().anchor.column).toBe(2);
+      expect(engine.selection().anchor.row).toBeGreaterThan(3);
+      const next = at(cell, 0, 4);
+      press(viewport, "pointermove", next.x, 10);
+      expect(engine.selection().focus).toEqual({ row: 0, column: 4 });
+      expect(engine.selection().anchor.column).toBe(2);
+      press(viewport, "pointerup", next.x, 10);
+
+      const row = at(cell, 2, 0);
+      press(viewport, "pointerdown", 10, row.y);
+      expect(engine.selection().focus).toEqual({ row: 2, column: 0 });
+      expect(engine.selection().anchor.row).toBe(2);
+      expect(engine.selection().anchor.column).toBeGreaterThan(4);
+      press(viewport, "pointerup", 10, row.y);
+
+      press(viewport, "pointerdown", 10, 10);
+      expect(engine.selection().focus).toEqual({ row: 0, column: 0 });
+      expect(engine.selection().anchor.row).toBeGreaterThan(3);
+      press(viewport, "pointerup", 10, 10);
+      engine.destroy();
+    });
+
+    it("il quadratino tirato riempie con `edit.autoFill`, e con Ctrl nel modo alternato", async () => {
+      const grid = workbookHost();
+      const { engine, viewport, host, cell, go } = await workbookMounted(grid);
+      go(1, 1);
+      await settle();
+      const grip = handle(host)!;
+      expect(grip).not.toBeNull();
+      expect(grip.getAttribute("aria-hidden")).toBe("true");
+      const start = inside(grip);
+      press(grip, "pointerdown", start.x, start.y);
+      const end = at(cell, 4, 1);
+      press(viewport, "pointermove", end.x, end.y);
+      const preview = host.querySelector<HTMLElement>(".grid-fill-preview")!;
+      expect(preview).not.toBeNull();
+      expect(viewport.classList.contains("filling")).toBe(true);
+      press(viewport, "pointerup", end.x, end.y);
+      await settle();
+      expect(grid.given.map((request) => request.command.id)).toEqual(["edit.autoFill"]);
+      expect(JSON.parse(grid.given[0].command.params)).toEqual({ source: "B2", target: "B2:B5" });
+      expect(viewport.classList.contains("filling")).toBe(false);
+      expect(engine.selection()).toMatchObject({ focus: { row: 1, column: 1 }, anchor: { row: 4, column: 1 } });
+
+      go(1, 2);
+      await settle();
+      const again = inside(handle(host)!);
+      press(handle(host)!, "pointerdown", again.x, again.y);
+      const side = at(cell, 1, 5);
+      press(viewport, "pointermove", side.x, side.y);
+      press(viewport, "pointerup", side.x, side.y, { ctrlKey: true });
+      await settle();
+      expect(JSON.parse(grid.given[1].command.params)).toEqual({ source: "C2", target: "C2:F2", mode: "alternate" });
+      engine.destroy();
+    });
+
+    it("rilasciato dentro la sorgente, o annullato, il quadratino non riempie", async () => {
+      const grid = workbookHost();
+      const { engine, viewport, host, cell, go } = await workbookMounted(grid);
+      go(1, 1);
+      await settle();
+      const start = inside(handle(host)!);
+      press(handle(host)!, "pointerdown", start.x, start.y);
+      press(viewport, "pointerup", start.x, start.y);
+      press(handle(host)!, "pointerdown", start.x, start.y);
+      const end = at(cell, 4, 1);
+      press(viewport, "pointermove", end.x, end.y);
+      press(viewport, "pointercancel", end.x, end.y);
+      await settle();
+      expect(grid.given).toEqual([]);
+      expect(host.querySelector(".grid-fill-preview")).toBeNull();
+      engine.destroy();
+    });
+
+    it("il doppio clic sul quadratino riempie in giù fin dove arriva la colonna accanto", async () => {
+      const grid = workbookHost();
+      const { engine, host, go } = await workbookMounted(grid);
+      go(1, 1);
+      await settle();
+      handle(host)!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      await settle();
+      expect(grid.given.map((request) => request.command.id)).toEqual(["edit.autoFill"]);
+      const params = JSON.parse(grid.given[0].command.params);
+      expect(params.source).toBe("B2");
+      expect(params.target).toMatch(/^B2:B\d+$/);
+      engine.destroy();
+    });
+
+    it("senza `edit.autoFill` nel catalogo non c'è il quadratino", async () => {
+      const { engine, host, go } = await workbookMounted(workbookHost({ drop: ["edit.autoFill"] }));
+      go(1, 1);
+      await settle();
+      expect(handle(host)).toBeNull();
+      engine.destroy();
+    });
+  });
+
   async function widened(viewport: HTMLElement) {
     Object.defineProperty(viewport, "clientWidth", { configurable: true, value: 3_000 });
     Object.defineProperty(viewport, "clientHeight", { configurable: true, value: 1_200 });

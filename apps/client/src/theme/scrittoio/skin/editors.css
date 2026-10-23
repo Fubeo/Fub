@@ -521,6 +521,15 @@
 .grid-cell.active {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
+/* Il quadratino all'angolo della selezione, e il riempimento tirato a
+   tratteggio come in Excel. */
+.grid-fill-handle {
+  border: 1px solid var(--sheet);
+  background: var(--accent);
+}
+.grid-fill-preview {
+  border: 2px dashed var(--accent);
+}
 .grid-cell-editor {
   border: 2px solid var(--accent);
   background: var(--bg-elev);

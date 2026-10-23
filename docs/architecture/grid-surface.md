@@ -40,6 +40,23 @@ possiede lettura, formule, blocchi e innesto. Limiti, coordinate, fallback e
 parità nativo/WASM sono normati in [ABI e WIT](../reference/abi-and-wit.md) e
 nel [contratto IPC](../reference/ipc-contract.md).
 
+## La selezione e il riempimento
+
+Il puntatore seleziona trascinando: da una cella un intervallo, da
+un'intestazione colonne o righe intere, dall'angolo il foglio; Maiuscolo
+estende dall'àncora. Fuori dal bordo la griglia scorre da sé, più svelta
+quanto più il puntatore è lontano. Con righe o colonne intere la cella
+attiva resta sulla prima colonna o sulla prima riga.
+
+In una cartella a comandi che serve `edit.autoFill` la selezione ha il
+quadratino di riempimento nell'angolo in basso a destra. Tirato fuori dalla
+selezione mostra il bersaglio lungo l'asse su cui il puntatore è uscito di
+più e, al rilascio, dà un solo `edit.autoFill` con sorgente e bersaglio
+(con Ctrl tenuto, nel modo alternato di Excel). Il doppio clic riempie in giù
+fin dove arriva la colonna accanto, nelle righe che la griglia ha letto. Le
+serie le calcola il provider; Ctrl+D e Ctrl+R restano i riempimenti da
+tastiera.
+
 ## La barra multifunzione
 
 Sopra la barra della formula di una cartella a comandi sta la barra

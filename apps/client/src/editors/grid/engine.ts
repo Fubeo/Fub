@@ -349,6 +349,34 @@ interface AxisLayout {
   readonly total: number;
 }
 
+/// Un gesto del puntatore sulle celle. `x` e `y` sono l'ultimo punto, per
+/// rifare il gesto quando la griglia scorre sotto un puntatore fermo.
+type CellDrag =
+  | { readonly kind: "cells" | "rows" | "columns"; readonly anchor: GridPosition; x: number; y: number }
+  | { readonly kind: "fill"; readonly source: GridRange; target: GridRange; x: number; y: number };
+
+/// Ogni quanto la griglia scorre mentre un gesto esce dal bordo, e di quanto
+/// al più per passo.
+const DRAG_SCROLL_MS = 30;
+const DRAG_SCROLL_MAX = 60;
+
+/// Il riempimento che il quadratino porta da `source` verso `position`: come
+/// in Excel, lungo l'asse su cui il puntatore è uscito di più, fino alla riga o
+/// alla colonna del puntatore. Dentro la sorgente non c'è riempimento.
+export function fillTarget(source: GridRange, position: GridPosition): GridRange {
+  const vertical = Math.max(position.row - source.rowEnd, source.rowStart - position.row, 0);
+  const horizontal = Math.max(position.column - source.columnEnd, source.columnStart - position.column, 0);
+  if (vertical === 0 && horizontal === 0) return source;
+  if (vertical >= horizontal) {
+    return position.row > source.rowEnd ? { ...source, rowEnd: position.row } : { ...source, rowStart: position.row };
+  }
+  return position.column > source.columnEnd ? { ...source, columnEnd: position.column } : { ...source, columnStart: position.column };
+}
+
+function sameRange(a: GridRange, b: GridRange): boolean {
+  return a.rowStart === b.rowStart && a.rowEnd === b.rowEnd && a.columnStart === b.columnStart && a.columnEnd === b.columnEnd;
+}
+
 interface EditingState {
   readonly position: GridPosition;
   readonly original: string;
@@ -525,7 +553,11 @@ export class GridEngine {
   #providerCommitTail: Promise<void> = Promise.resolve();
   #undo: GridCellPatch[][] = [];
   #redo: GridCellPatch[][] = [];
-  #pointerAnchor: GridPosition | null = null;
+  /// Il gesto del puntatore sulle celle: una selezione che si allarga
+  /// (celle, righe o colonne intere) o il quadratino di riempimento tirato.
+  #drag: CellDrag | null = null;
+  /// Lo scorrimento mentre il gesto esce dal bordo della griglia.
+  #dragScroll: ReturnType<typeof setInterval> | null = null;
   /// Il catalogo dei comandi sulla selezione, come il provider l'ha dato.
   #commands: GridCommandState[] = [];
   #commandsLoad: Promise<void> | null = null;
@@ -668,15 +700,23 @@ export class GridEngine {
     this.#viewport.addEventListener("pointerdown", grid((event) => this.#pointerDown(event)), { signal });
     this.#viewport.addEventListener("pointermove", grid((event) => this.#pointerMove(event)), { signal });
     this.#viewport.addEventListener("pointerup", (event) => {
-      this.#pointerAnchor = null;
+      this.#endDrag(true, event.ctrlKey || event.metaKey);
       this.#endObjectGesture(event, true);
     }, { signal });
-    this.#viewport.addEventListener("pointercancel", (event) => this.#endObjectGesture(event, false), { signal });
+    this.#viewport.addEventListener("pointercancel", (event) => {
+      this.#endDrag(false, false);
+      this.#endObjectGesture(event, false);
+    }, { signal });
+    this.#life.add(() => this.#stopDragScroll());
     this.#viewport.addEventListener("copy", grid((event) => this.#copy(event)), { signal });
     this.#viewport.addEventListener("cut", grid((event) => this.#cut(event)), { signal });
     this.#viewport.addEventListener("paste", grid((event) => this.#paste(event)), { signal });
     this.#viewport.addEventListener("dblclick", grid((event) => {
       if (event.target instanceof Element && event.target.closest(".grid-object-text-editor")) return;
+      if (event.target instanceof Element && event.target.closest(".grid-fill-handle")) {
+        this.#fillToNeighbour();
+        return;
+      }
       const object = event.target instanceof Element ? event.target.closest<HTMLElement>(".grid-object") : null;
       if (object) {
         if (object.dataset.object) this.#beginObjectText(object.dataset.object);
@@ -1900,9 +1940,11 @@ export class GridEngine {
     }
     rows.push(...this.#objectElements());
     rows.push(...this.#freezeLines());
+    rows.push(...this.#fillMarks(range));
+    this.#viewport.classList.toggle("filling", this.#drag?.kind === "fill");
 
     this.#detachCellEditor();
-    for (const row of this.#viewport.querySelectorAll<HTMLElement>(".grid-row, .grid-freeze, .grid-object")) row.remove();
+    for (const row of this.#viewport.querySelectorAll<HTMLElement>(".grid-row, .grid-freeze, .grid-object, .grid-fill-handle, .grid-fill-preview")) row.remove();
     this.#viewport.append(...rows);
     this.#fitCells(measures);
     const editing = this.#editing?.owner === "cell" ? this.#editing : null;
@@ -1929,6 +1971,45 @@ export class GridEngine {
     if (name) {
       name.textContent = this.#isVisiblePosition(this.#selection.focus) ? cellA1(this.#selection.focus) : "";
     }
+  }
+
+  /// Il quadratino di riempimento all'angolo della selezione e, mentre lo si
+  /// tira, il contorno di ciò che riempirà. Sono gesti del puntatore: dalla
+  /// tastiera gli stessi riempimenti sono Ctrl+D, Ctrl+R e Serie.
+  #fillMarks(range: GridRange): HTMLElement[] {
+    if (!this.#fillServed()) return [];
+    const drag = this.#drag?.kind === "fill" ? this.#drag : null;
+    const marks: HTMLElement[] = [];
+    if (drag && !sameRange(drag.source, drag.target)) {
+      const box = this.#rangeBox(drag.target);
+      if (box) {
+        const preview = document.createElement("div");
+        preview.className = "grid-fill-preview";
+        preview.setAttribute("aria-hidden", "true");
+        this.#place(preview, box.left, box.top, box.width, box.height);
+        marks.push(preview);
+      }
+    }
+    const box = this.#rangeBox(drag?.target ?? range);
+    if (box) {
+      const handle = document.createElement("div");
+      handle.className = "grid-fill-handle";
+      handle.setAttribute("aria-hidden", "true");
+      handle.title = t("grid.fill.handle");
+      this.#place(handle, box.left + box.width - 4, box.top + box.height - 4, 7, 7);
+      marks.push(handle);
+    }
+    return marks;
+  }
+
+  /// Il rettangolo di `range` nella griglia, come lo disegnano le celle.
+  #rangeBox(range: GridRange): { left: number; top: number; width: number; height: number } | null {
+    const frame = this.#frame;
+    const width = (this.#columns.offsets[range.columnEnd + 1] ?? 0) - (this.#columns.offsets[range.columnStart] ?? 0);
+    const height = (this.#rows.offsets[range.rowEnd + 1] ?? 0) - (this.#rows.offsets[range.rowStart] ?? 0);
+    if (!(width > 0 && height > 0)) return null;
+    const top = frame.columnHeader + this.#rows.offsets[range.rowStart] + (range.rowStart < frame.frozenRows ? this.#viewport.scrollTop : 0);
+    return { left: this.#columnLeft(range.columnStart), top, width, height };
   }
 
   /// La riga delle intestazioni di colonna, con l'angolo.
@@ -2941,16 +3022,41 @@ export class GridEngine {
   }
 
   #pointerDown(event: PointerEvent): void {
+    // Solo il tasto principale; un evento senza tasto vale come quello.
+    if (event.button > 0) return;
     const object = event.target instanceof Element ? event.target.closest<HTMLElement>(".grid-object") : null;
     if (object && this.#objectPointerDown(event, object)) return;
-    const position = this.#eventPosition(event);
-    if (!position) return;
+    const handle = event.target instanceof Element && event.target.closest(".grid-fill-handle");
+    if (handle && this.#fillServed()) {
+      event.preventDefault();
+      const source = this.#selectedRange();
+      this.#drag = { kind: "fill", source, target: source, x: event.clientX, y: event.clientY };
+      this.#viewport.setPointerCapture?.(event.pointerId);
+      this.#viewport.focus();
+      this.#render();
+      return;
+    }
+    // Su una cella vale la cella; fuori (le intestazioni non prendono il
+    // puntatore) vale il punto.
+    const cell = this.#eventPosition(event);
+    const hit = cell ?? this.#hit(event.clientX, event.clientY, false);
+    if (!hit) return;
     event.preventDefault();
     if (this.#selectedObject !== null) this.#selectObject(null);
-    this.#pointerAnchor = position;
-    this.#selection = event.shiftKey
-      ? { anchor: this.#selection.anchor, focus: position }
-      : { anchor: position, focus: position };
+    const sheet = this.#sheet();
+    const lastRow = Math.max(0, sheet.rows.length - 1);
+    const lastColumn = Math.max(0, sheet.columns.length - 1);
+    // Sull'intestazione di una colonna si prende la colonna intera, su quella
+    // di una riga la riga, sull'angolo il foglio, come in Excel.
+    const kind = hit.row === null && hit.column === null ? "all" : hit.row === null ? "columns" : hit.column === null ? "rows" : "cells";
+    if (kind === "all") {
+      this.#selection = { anchor: { row: lastRow, column: lastColumn }, focus: { row: 0, column: 0 } };
+    } else {
+      const position = this.#anchorOf({ row: hit.row ?? 0, column: hit.column ?? 0 });
+      const anchor = event.shiftKey ? this.#selection.anchor : position;
+      this.#drag = { kind, anchor, x: event.clientX, y: event.clientY };
+      this.#selection = this.#dragSelection(kind, anchor, position);
+    }
     this.#viewport.setPointerCapture?.(event.pointerId);
     this.#viewport.focus();
     this.#syncFormulaBar();
@@ -2963,12 +3069,183 @@ export class GridEngine {
       this.#objectPointerMove(event, this.#objectGesture);
       return;
     }
-    if (!this.#pointerAnchor || event.buttons === 0) return;
-    const position = this.#eventPosition(event);
-    if (!position) return;
-    this.#selection = { anchor: this.#pointerAnchor, focus: position };
+    const drag = this.#drag;
+    if (!drag) return;
+    if (event.buttons === 0) {
+      this.#endDrag(false, false);
+      return;
+    }
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    this.#dragTo(drag);
+    this.#dragScrollIfOutside(drag);
+  }
+
+  /// Porta il gesto al punto `drag.x`, `drag.y`: fuori dalla griglia vale il
+  /// bordo, perché il gesto continua mentre la griglia scorre.
+  #dragTo(drag: CellDrag): void {
+    const hit = this.#hit(drag.x, drag.y, true);
+    if (!hit) return;
+    const position = { row: hit.row ?? 0, column: hit.column ?? 0 };
+    if (drag.kind === "fill") {
+      const target = fillTarget(drag.source, position);
+      if (sameRange(target, drag.target)) return;
+      drag.target = target;
+      this.#render();
+      return;
+    }
+    const next = this.#dragSelection(drag.kind, drag.anchor, position);
+    if (samePosition(next.focus, this.#selection.focus) && samePosition(next.anchor, this.#selection.anchor)) return;
+    this.#selection = next;
+    this.#syncFormulaBar();
     this.#render();
     this.#selectionChanged();
+  }
+
+  /// La selezione di un gesto da `anchor` a `position`: righe e colonne
+  /// intere vanno da un capo all'altro del foglio, con la cella attiva (il
+  /// fuoco) sulla prima colonna o sulla prima riga, come in Excel.
+  #dragSelection(kind: "cells" | "rows" | "columns", anchor: GridPosition, position: GridPosition): GridSelection {
+    const sheet = this.#sheet();
+    const lastRow = Math.max(0, sheet.rows.length - 1);
+    const lastColumn = Math.max(0, sheet.columns.length - 1);
+    if (kind === "rows") {
+      return { anchor: { row: anchor.row, column: lastColumn }, focus: { row: position.row, column: 0 } };
+    }
+    if (kind === "columns") {
+      return { anchor: { row: lastRow, column: anchor.column }, focus: { row: 0, column: position.column } };
+    }
+    return { anchor, focus: position };
+  }
+
+  /// Fuori dal bordo la griglia scorre da sé verso il puntatore, più svelta
+  /// quanto più è lontano, finché il gesto finisce o il puntatore rientra.
+  #dragScrollIfOutside(drag: CellDrag): void {
+    const step = this.#dragScrollStep(drag);
+    if (!step) {
+      this.#stopDragScroll();
+      return;
+    }
+    if (this.#dragScroll !== null) return;
+    this.#dragScroll = setInterval(() => {
+      const current = this.#drag;
+      const next = current ? this.#dragScrollStep(current) : null;
+      if (!current || !next) {
+        this.#stopDragScroll();
+        return;
+      }
+      this.#viewport.scrollBy(next.x, next.y);
+      this.#dragTo(current);
+    }, DRAG_SCROLL_MS);
+  }
+
+  #dragScrollStep(drag: CellDrag): { x: number; y: number } | null {
+    const rect = this.#viewport.getBoundingClientRect();
+    const frame = this.#frame;
+    const left = rect.left + this.#viewport.clientLeft + frame.rowHeader;
+    const top = rect.top + this.#viewport.clientTop + frame.columnHeader;
+    const right = rect.left + this.#viewport.clientLeft + this.#viewport.clientWidth;
+    const bottom = rect.top + this.#viewport.clientTop + this.#viewport.clientHeight;
+    const speed = (distance: number) => Math.min(DRAG_SCROLL_MAX, Math.max(4, Math.round(distance / 2)));
+    // Righe intere non scorrono di lato, colonne intere non scorrono in giù.
+    const x = drag.kind === "rows" ? 0 : drag.x > right ? speed(drag.x - right) : drag.x < left ? -speed(left - drag.x) : 0;
+    const y = drag.kind === "columns" ? 0 : drag.y > bottom ? speed(drag.y - bottom) : drag.y < top ? -speed(top - drag.y) : 0;
+    return x === 0 && y === 0 ? null : { x, y };
+  }
+
+  #stopDragScroll(): void {
+    if (this.#dragScroll === null) return;
+    clearInterval(this.#dragScroll);
+    this.#dragScroll = null;
+  }
+
+  /// Chiude il gesto. Il riempimento tirato fuori dalla sorgente dà
+  /// `edit.autoFill`; con Ctrl tirato, il modo alternato di Excel (un numero
+  /// solo conta, una serie si copia).
+  #endDrag(commit: boolean, alternate: boolean): void {
+    const drag = this.#drag;
+    this.#stopDragScroll();
+    if (!drag) return;
+    this.#drag = null;
+    if (drag.kind !== "fill") return;
+    if (commit && !sameRange(drag.source, drag.target)) this.#autoFill(drag.source, drag.target, alternate);
+    else this.#render();
+  }
+
+  #autoFill(source: GridRange, target: GridRange, alternate: boolean): void {
+    // La cella attiva resta al primo angolo, il riempimento è selezionato.
+    this.#selection = {
+      anchor: { row: target.rowEnd, column: target.columnEnd },
+      focus: { row: target.rowStart, column: target.columnStart },
+    };
+    this.#syncFormulaBar();
+    this.#render();
+    this.#selectionChanged();
+    const params: Record<string, string> = { source: rangeA1(source), target: rangeA1(target) };
+    if (alternate) params.mode = "alternate";
+    this.command("edit.autoFill", JSON.stringify(params));
+  }
+
+  /// Il doppio clic sul quadratino, come in Excel: riempie in giù fin dove
+  /// arriva la colonna accanto (quella a sinistra, o se è vuota quella a
+  /// destra), nelle righe che la griglia ha letto.
+  #fillToNeighbour(): void {
+    if (!this.#fillServed()) return;
+    const source = this.#selectedRange();
+    const filled = (column: number, row: number) => column >= 0 && (this.#workbookCell({ row, column })?.cell.input ?? "") !== "";
+    const reach = (column: number): number => {
+      let row = source.rowEnd;
+      while (row + 1 < this.#sheet().rows.length && filled(column, row + 1)) row += 1;
+      return row;
+    };
+    const last = Math.max(reach(source.columnStart - 1), reach(source.columnEnd + 1));
+    if (last <= source.rowEnd) return;
+    this.#autoFill(source, { ...source, rowEnd: last }, false);
+  }
+
+  /// Se il quadratino di riempimento si può tirare: una sessione a comandi che
+  /// serve `edit.autoFill`, nessuna cella aperta, nessun oggetto scelto.
+  #fillServed(): boolean {
+    return this.commandable() && this.#serves("edit.autoFill") && !this.#editing && this.#selectedObject === null;
+  }
+
+  /// La cella che comanda in `position`: l'angolo dell'unione che la copre.
+  #anchorOf(position: GridPosition): GridPosition {
+    const clamped = this.#clampedPosition(position);
+    const merge = mergeAt(this.#merges(), clamped);
+    return merge ? { row: merge.row, column: merge.column } : clamped;
+  }
+
+  /// La riga e la colonna sotto il punto `x`, `y` dello schermo; `null` dove
+  /// c'è un'intestazione (la riga sull'intestazione delle colonne, la colonna
+  /// su quella delle righe). Fuori dalla griglia, o sulle sue barre di
+  /// scorrimento, niente; con `clampToGrid` vale il bordo più vicino, e le
+  /// intestazioni contano come la prima riga o colonna che si vede.
+  #hit(x: number, y: number, clampToGrid: boolean): { row: number | null; column: number | null } | null {
+    const frame = this.#frame;
+    const rect = this.#viewport.getBoundingClientRect();
+    let px = x - rect.left - this.#viewport.clientLeft;
+    let py = y - rect.top - this.#viewport.clientTop;
+    const width = this.#viewport.clientWidth;
+    const height = this.#viewport.clientHeight;
+    if (clampToGrid) {
+      px = Math.min(Math.max(px, frame.rowHeader), width - 1);
+      py = Math.min(Math.max(py, frame.columnHeader), height - 1);
+    } else if (px < 0 || py < 0 || px >= width || py >= height) {
+      return null;
+    }
+    const axis = (point: number, header: number, frozen: number, scroll: number, layout: AxisLayout): number | null => {
+      if (point < header) return null;
+      const inside = point - header;
+      const offset = inside < frozen ? inside : inside + scroll;
+      if (!layout.sizes.length || offset >= layout.total) return clampToGrid ? Math.max(0, layout.sizes.length - 1) : null;
+      return indexAt(layout, offset);
+    };
+    const column = axis(px, frame.rowHeader, frame.frozenWidth, this.#viewport.scrollLeft, this.#columns);
+    const row = axis(py, frame.columnHeader, frame.frozenHeight, this.#viewport.scrollTop, this.#rows);
+    // Oltre l'ultima riga o colonna del foglio non c'è niente da prendere.
+    if (!clampToGrid && ((px >= frame.rowHeader && column === null) || (py >= frame.columnHeader && row === null))) return null;
+    return { row, column };
   }
 
   #eventPosition(event: Event): GridPosition | null {
