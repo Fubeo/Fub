@@ -36,9 +36,10 @@ use fub_abi::event::{
 };
 use fub_abi::gate::Gate;
 use fub_abi::grid::{
-    GridApplyRequest, GridCellKey, GridCellPatch, GridCellStyle, GridColumn, GridCommit,
-    GridHorizontalAlign, GridInvalidation, GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec,
-    GridWindowRequest,
+    GridApplyRequest, GridBorder, GridBorderStyle, GridBorders, GridCellKey, GridCellPatch,
+    GridCellStyle, GridColumn, GridCommit, GridHorizontalAlign, GridInvalidation, GridRow,
+    GridScript, GridSheet, GridSourceEdit, GridSurfaceSpec, GridUnderline, GridVerticalAlign,
+    GridWindowRequest, GRID_STACKED_ROTATION,
 };
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{DocId, LinkTarget, Span};
@@ -65,7 +66,11 @@ use fub_abi::ui::{
     UiNode, UiOption, UiValue, ViewUpdate,
 };
 use fub_abi::{
-    GridBytesCell, GridBytesSession, GridBytesWindow, GridJournal, GridNotice, GridValue,
+    GridBook, GridBytesCell, GridBytesSession, GridBytesWindow, GridCalculation, GridCommand,
+    GridCommandOutcome, GridCommandRequest, GridCommandState, GridComment, GridCommentReply,
+    GridDataBar, GridDialog, GridIcon, GridJournal, GridLink, GridMedia, GridMerge, GridNotice,
+    GridObject, GridObjectKind, GridObjectMissing, GridSelection, GridShape, GridShapeAlign,
+    GridShapeAnchor, GridShapeKind, GridSheetView, GridTable, GridValue, GridViewMode,
 };
 use fub_features::VersionRef;
 use fub_kernel::{TrashEntry, MAIN_PANE};
@@ -1184,6 +1189,7 @@ fn grid_samples() -> Vec<Value> {
         fill_color: None,
         horizontal: Some(GridHorizontalAlign::Center),
         number_format: Some("0.00".into()),
+        ..GridCellStyle::default()
     };
     let revision = Revision::of("rev-1");
     vec![
@@ -1215,6 +1221,7 @@ fn grid_samples() -> Vec<Value> {
             row_count: 1,
             column_start: 0,
             column_count: 1,
+            known_media: Vec::new(),
         }),
         to_value(GridCellPatch {
             cell: key.clone(),
@@ -1261,8 +1268,29 @@ fn grid_bytes_samples() -> (Value, Value, Value, Vec<Value>) {
         italic: true,
         text_color: None,
         fill_color: Some("#ffeeaa".into()),
-        horizontal: None,
+        horizontal: Some(GridHorizontalAlign::Distributed),
         number_format: Some("0.00%".into()),
+        font: Some("Aptos Narrow".into()),
+        font_size: Some(10.5),
+        underline: Some(GridUnderline::DoubleAccounting),
+        strike: true,
+        script: Some(GridScript::Superscript),
+        vertical: Some(GridVerticalAlign::Center),
+        wrap: true,
+        shrink: false,
+        indent: 2,
+        rotation: GRID_STACKED_ROTATION,
+        borders: GridBorders {
+            top: Some(GridBorder {
+                style: GridBorderStyle::MediumDashDotDot,
+                color: Some("#203040".into()),
+            }),
+            diagonal_up: Some(GridBorder {
+                style: GridBorderStyle::Hair,
+                color: None,
+            }),
+            ..GridBorders::default()
+        },
     };
     let values = vec![
         GridValue::Blank,
@@ -1280,12 +1308,36 @@ fn grid_bytes_samples() -> (Value, Value, Value, Vec<Value>) {
                 ..key.clone()
             },
             input: "=A1*2".into(),
-            style: style.clone(),
+            style: u32::from(the > 0),
             value,
             display: "25.00%".into(),
             lock: (the == 1).then(|| "spill".into()),
             stale: the == 2,
             conflict: the == 3,
+            data_bar: (the == 1).then(|| GridDataBar {
+                fraction: 0.25,
+                color: "#638ec6".into(),
+                gradient: true,
+            }),
+            icon: (the == 2).then(|| GridIcon {
+                set: "3Arrows".into(),
+                index: 1,
+            }),
+            comment: (the == 3).then(|| GridComment {
+                author: "Ada".into(),
+                text: "Da rivedere".into(),
+                threaded: true,
+                resolved: false,
+                replies: vec![GridCommentReply {
+                    author: "Bruno".into(),
+                    text: "Fatto".into(),
+                }],
+            }),
+            link: (the == 4).then(|| GridLink {
+                target: "Conti!A1".into(),
+                tooltip: Some("Torna su".into()),
+                external: false,
+            }),
         })
         .collect();
     let session = GridBytesSession {
@@ -1304,6 +1356,13 @@ fn grid_bytes_samples() -> (Value, Value, Value, Vec<Value>) {
             count: 2,
         }],
         conflicts: vec![key.clone()],
+        commands: grid_catalog(),
+        book: GridBook {
+            names: vec!["Aliquota".into(), "Totali".into()],
+            calculation: GridCalculation::Manual,
+            protected: true,
+            ..GridBook::default()
+        },
     };
     let window = GridBytesWindow {
         revision: Revision::of("rev-2"),
@@ -1325,7 +1384,124 @@ fn grid_bytes_samples() -> (Value, Value, Value, Vec<Value>) {
             hidden: true,
         }],
         cells: cells.clone(),
+        styles: vec![GridCellStyle::default(), style],
+        merges: vec![GridMerge {
+            row: 0,
+            column: 0,
+            rows: 2,
+            columns: 1,
+        }],
+        view: GridSheetView {
+            frozen_rows: 1,
+            frozen_columns: 0,
+            gridlines: false,
+            headings: true,
+            zoom: 125,
+            right_to_left: false,
+            mode: GridViewMode::PageLayout,
+            formulas: true,
+            protected: true,
+            print_gridlines: true,
+            print_headings: false,
+        },
+        tables: vec![GridTable {
+            name: "Spese".into(),
+            row: 0,
+            column: 0,
+            rows: 3,
+            columns: 2,
+            header_row: true,
+            totals_row: false,
+            banded_rows: true,
+            banded_columns: false,
+            first_column: false,
+            last_column: true,
+            filter_button: true,
+            style: "TableStyleMedium2".into(),
+        }],
+        objects: vec![
+            GridObject {
+                kind: GridObjectKind::Chart,
+                id: 1,
+                row: 2,
+                column: 1,
+                dx: 4.0,
+                dy: 0.0,
+                width: 320.0,
+                height: 200.0,
+                alt: "Vendite".into(),
+                svg: Some("<svg xmlns=\"http://www.w3.org/2000/svg\"/>".into()),
+                media: None,
+                shape: None,
+                missing: None,
+            },
+            GridObject {
+                kind: GridObjectKind::Image,
+                id: 2,
+                row: 0,
+                column: 3,
+                dx: 0.0,
+                dy: 0.0,
+                width: 48.0,
+                height: 48.0,
+                alt: "Il logo".into(),
+                svg: None,
+                media: Some(GridMedia {
+                    mime: "image/png".into(),
+                    key: "0123456789abcdef0123456789abcdef".into(),
+                    data: Some("iVBORw0KGgo=".into()),
+                }),
+                shape: None,
+                missing: None,
+            },
+            GridObject {
+                kind: GridObjectKind::Shape,
+                id: 3,
+                row: 5,
+                column: 0,
+                dx: 0.0,
+                dy: 2.5,
+                width: 120.0,
+                height: 40.0,
+                alt: String::new(),
+                svg: None,
+                media: None,
+                shape: Some(GridShape {
+                    kind: GridShapeKind::TextBox,
+                    fill: Some("#4472C4".into()),
+                    line: None,
+                    text: "Totale".into(),
+                    font: Some("Calibri".into()),
+                    font_size: 11.0,
+                    bold: true,
+                    italic: false,
+                    text_color: "#000000".into(),
+                    align: GridShapeAlign::Left,
+                    anchor: GridShapeAnchor::Top,
+                    right_to_left: false,
+                }),
+                missing: None,
+            },
+            GridObject {
+                kind: GridObjectKind::Image,
+                id: 4,
+                row: 8,
+                column: 0,
+                dx: 0.0,
+                dy: 0.0,
+                width: 64.0,
+                height: 64.0,
+                alt: String::new(),
+                svg: None,
+                media: None,
+                shape: None,
+                missing: Some(GridObjectMissing::Unsupported),
+            },
+        ],
     };
+    window
+        .validate()
+        .expect("la finestra del campione è valida");
     (
         to_value(GridNotice {
             code: "macros".into(),
@@ -1335,6 +1511,70 @@ fn grid_bytes_samples() -> (Value, Value, Value, Vec<Value>) {
         to_value(window),
         cells.into_iter().map(to_value).collect(),
     )
+}
+
+/// Un catalogo con un comando acceso e uno spento, con il perché.
+fn grid_catalog() -> Vec<GridCommandState> {
+    vec![
+        GridCommandState {
+            id: "home.bold".into(),
+            enabled: true,
+            reason: None,
+        },
+        GridCommandState {
+            id: "home.mergeCenter".into(),
+            enabled: false,
+            reason: Some("the selection is a single cell".into()),
+        },
+    ]
+}
+
+/// La richiesta di un comando e l'esito, con il risultato e una finestra di
+/// dialogo chiesta.
+fn grid_command_samples() -> (Value, Value, Value) {
+    let selection = GridSelection {
+        sheet: "s1".into(),
+        selection: "A1:B2,$D$4".into(),
+        active: "A1".into(),
+    };
+    let request = GridCommandRequest {
+        revision: Revision::of("rev-2"),
+        command: GridCommand {
+            id: "edit.copy".into(),
+            params: r#"{"html":true}"#.into(),
+            sheet: selection.sheet.clone(),
+            selection: selection.selection.clone(),
+            active: selection.active.clone(),
+        },
+    };
+    let outcome = GridCommandOutcome {
+        commit: GridCommit {
+            revision: Revision::of("rev-2"),
+            edit: GridSourceEdit {
+                from: 0,
+                to: 0,
+                deleted: String::new(),
+                inserted: String::new(),
+            },
+            invalidation: GridInvalidation::Cells(Vec::new()),
+        },
+        sheets: vec![GridSheet {
+            id: "s1".into(),
+            name: "Conti".into(),
+            row_count: 100,
+            column_count: 26,
+        }],
+        hidden: Vec::new(),
+        selection: selection.clone(),
+        result: Some(r#"{"range":"A1:B2","text":"1\t2"}"#.into()),
+        dialog: Some(GridDialog {
+            id: "pasteSpecial".into(),
+            params: "{}".into(),
+        }),
+        commands: grid_catalog(),
+        book: GridBook::default(),
+    };
+    (to_value(selection), to_value(request), to_value(outcome))
 }
 
 /// I giornali della versione 2 e i loro rebase, scritti dal Rust: la shell
@@ -1351,6 +1591,21 @@ fn grid_journal_samples() -> Vec<Value> {
         for (key, before, after) in entries {
             journal
                 .record(key.clone(), (*before).into(), (*after).into())
+                .unwrap();
+        }
+        journal
+    };
+    let commands = |commands: &[(&str, &str)]| {
+        let mut journal = GridJournal::new();
+        for (id, params) in commands {
+            journal
+                .push_command(GridCommand {
+                    id: (*id).into(),
+                    params: (*params).into(),
+                    sheet: "s1".into(),
+                    selection: "A1:B2,$D$4".into(),
+                    active: "A1".into(),
+                })
                 .unwrap();
         }
         journal
@@ -1376,6 +1631,26 @@ fn grid_journal_samples() -> Vec<Value> {
         // Una cella tornata al suo input durante il salvataggio rientra, per
         // riportarlo sul disco.
         (journal(&[]), journal(&[(key("r0", "c0"), "1", "2")])),
+        // Di comandi: esce il prefisso salvato, resta ciò che segue; i
+        // parametri restano il testo che erano, con virgolette e accenti.
+        (
+            commands(&[
+                ("home.bold", "{}"),
+                ("cell.set", r#"{"input":"=\"è\"&A2"}"#),
+            ]),
+            commands(&[("home.bold", "{}")]),
+        ),
+        // L'ultimo comando salvato si è annullato durante il salvataggio:
+        // resta nei byte, e lo si conta.
+        (
+            commands(&[("home.bold", "{}")]),
+            commands(&[("home.bold", "{}"), ("home.italic", "{}")]),
+        ),
+        // Un giornale di comandi sopra un salvataggio di celle resta com'è.
+        (
+            commands(&[("cell.set", r#"{"input":"2"}"#)]),
+            journal(&[(key("r0", "c0"), "1", "2")]),
+        ),
     ];
     cases
         .iter()
@@ -1384,6 +1659,7 @@ fn grid_journal_samples() -> Vec<Value> {
                 "current": current.to_text(),
                 "saved": saved.to_text(),
                 "rebased": current.rebase(saved).to_text(),
+                "reverted": current.reverted_by(saved),
             })
         })
         .collect()
@@ -1397,7 +1673,12 @@ fn expected() -> Value {
     let grid = grid_samples();
     let (grid_notice, grid_bytes_session, grid_bytes_window, grid_bytes_cells) =
         grid_bytes_samples();
+    let (grid_selection, grid_command_request, grid_command_outcome) = grid_command_samples();
     json!({
+        "GridSelection": [grid_selection],
+        "GridCommandState": grid_catalog().into_iter().map(to_value).collect::<Vec<_>>(),
+        "GridCommandRequest": [grid_command_request],
+        "GridCommandOutcome": [grid_command_outcome],
         "GridNotice": [grid_notice],
         "GridBytesSession": [grid_bytes_session],
         "GridBytesWindow": [grid_bytes_window],

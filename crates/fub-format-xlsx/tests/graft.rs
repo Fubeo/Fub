@@ -6,7 +6,7 @@ mod common;
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read};
 
-use common::{one_sheet, sheet, Package};
+use common::{one_sheet, sheet, soffice, Package};
 use fub_format_xlsx::graft::{graft, CellEdit, GraftError, Grafted};
 use fub_format_xlsx::input::NewValue;
 use fub_format_xlsx::locks::Lock;
@@ -509,42 +509,6 @@ fn i_fogli_non_toccati_restano_i_loro_byte() {
     let read = fub_format_xlsx::read(&grafted.bytes).unwrap().workbook;
     assert_eq!(read.sheets[1].value(cell("B1")), Value::Number(8.0));
     assert_eq!(read.sheets[0].value(cell("B1")), Value::Number(2.0));
-}
-
-/// Esegue LibreOffice (`FUB_SOFFICE`) su `inputs`, con un profilo suo e un
-/// limite di due minuti.
-fn soffice(
-    soffice: &std::ffi::OsStr,
-    dir: &std::path::Path,
-    to: &str,
-    inputs: &[std::path::PathBuf],
-) {
-    let mut child = std::process::Command::new(soffice)
-        .arg("--headless")
-        .arg(format!(
-            "-env:UserInstallation=file://{}",
-            dir.join("profilo").display()
-        ))
-        .args(["--convert-to", to, "--outdir"])
-        .arg(dir)
-        .args(inputs)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .unwrap();
-    let start = std::time::Instant::now();
-    let status = loop {
-        if let Some(status) = child.try_wait().unwrap() {
-            break status;
-        }
-        if start.elapsed() > std::time::Duration::from_secs(120) {
-            let _ = child.kill();
-            let _ = child.wait();
-            panic!("LibreOffice non ha finito in due minuti ({to})");
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    };
-    assert!(status.success(), "LibreOffice: {status}");
 }
 
 /// Con `FUB_SOFFICE`, il percorso di `soffice`: una cartella scritta da

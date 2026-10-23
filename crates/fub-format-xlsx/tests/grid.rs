@@ -7,8 +7,8 @@ mod common;
 use common::{one_sheet, sheet, Package};
 use fub_abi::{
     grid_bytes_revision, GridApplyRequest, GridBytesCell, GridBytesProvider, GridBytesSession,
-    GridCellKey, GridCellPatch, GridInvalidation, GridJournal, GridValue, GridWindowRequest,
-    PluginError, Revision,
+    GridBytesWindow, GridCellKey, GridCellPatch, GridInvalidation, GridJournal, GridValue,
+    GridWindowRequest, PluginError, Revision,
 };
 use fub_format_xlsx::grid::{XlsxGridProvider, XLSX_GRID_SURFACE};
 use gridcraft_core::{CellRef, Value};
@@ -37,6 +37,14 @@ fn window(
     session: &GridBytesSession,
     revision: &Revision,
 ) -> Vec<GridBytesCell> {
+    whole_window(provider, session, revision).cells
+}
+
+fn whole_window(
+    provider: &mut XlsxGridProvider,
+    session: &GridBytesSession,
+    revision: &Revision,
+) -> GridBytesWindow {
     provider
         .window(
             &session.instance,
@@ -47,10 +55,10 @@ fn window(
                 row_count: 10,
                 column_start: 0,
                 column_count: 6,
+                known_media: Vec::new(),
             },
         )
         .unwrap()
-        .cells
 }
 
 fn find<'a>(cells: &'a [GridBytesCell], a1: &str) -> &'a GridBytesCell {
@@ -131,10 +139,12 @@ fn la_sessione_mostra_i_fogli_e_i_valori_del_file() {
     assert!(session.conflicts.is_empty());
     assert!(session.sheets[0].row_count >= 100 && session.sheets[0].column_count >= 26);
 
-    let cells = window(&mut provider, &session, &session.revision);
+    let whole = whole_window(&mut provider, &session, &session.revision);
+    let cells = whole.cells.clone();
     let a1 = find(&cells, "A1");
     assert_eq!((a1.input.as_str(), a1.display.as_str()), ("1", "1"));
-    assert!(a1.style.bold && a1.style.italic);
+    let a1_style = &whole.styles[a1.style as usize];
+    assert!(a1_style.bold && a1_style.italic);
     assert_eq!(find(&cells, "A2").display, "50.00%");
     let b2 = find(&cells, "B2");
     assert_eq!(b2.input, "=A2*2");
@@ -224,15 +234,22 @@ fn una_modifica_entra_nel_giornale_e_segna_le_formule_che_la_leggono() {
     .unwrap();
     assert_eq!(undone.edit.inserted, "");
     assert_eq!(undone.revision, session.revision);
-    assert!(matches!(
-        apply(
-            &mut provider,
-            &session,
-            &undone.revision,
-            vec![patch("B2", "=A2*3")]
-        ),
-        Err(PluginError::BadArgs(_))
-    ));
+    // Una formula nuova entra come comando (ADR 0219), e il giornale non è
+    // più di celle.
+    let formula = apply(
+        &mut provider,
+        &session,
+        &undone.revision,
+        vec![patch("B2", "=A2*3")],
+    )
+    .unwrap();
+    assert_eq!(
+        GridJournal::parse(&formula.edit.inserted)
+            .unwrap()
+            .commands()
+            .len(),
+        1
+    );
 }
 
 #[test]
@@ -241,7 +258,12 @@ fn le_modifiche_che_non_si_scrivono_si_rifiutano() {
     let (mut provider, session) = open(&bytes, &GridJournal::new());
     let revision = &session.revision;
     assert!(matches!(
-        apply(&mut provider, &session, revision, vec![patch("A1", "=B1")]),
+        apply(
+            &mut provider,
+            &session,
+            revision,
+            vec![patch("A1", "=SUM(")]
+        ),
         Err(PluginError::BadArgs(_))
     ));
     assert!(matches!(

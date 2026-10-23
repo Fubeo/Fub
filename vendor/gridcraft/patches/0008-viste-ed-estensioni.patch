@@ -1,0 +1,207 @@
+diff --git a/crates/xlsx/src/passthrough.rs b/crates/xlsx/src/passthrough.rs
+--- a/crates/xlsx/src/passthrough.rs
++++ b/crates/xlsx/src/passthrough.rs
+@@ -133,6 +133,17 @@ const SHEET_PR_ATTRS: &[&str] = &[
+ ];
+ const OUTLINE_PR_ATTRS: &[&str] = &["applyStyles", "summaryBelow", "summaryRight", "showOutlineSymbols"];
+ const PAGE_SETUP_PR_ATTRS: &[&str] = &["autoPageBreaks"];
++/// Attributes of `<sheetView>` GridCraft does not model (it writes `zoomScaleNormal` as the zoom).
++const SHEET_VIEW_ATTRS: &[&str] = &[
++    "windowProtection",
++    "showOutlineSymbols",
++    "defaultGridColor",
++    "showRuler",
++    "showWhiteSpace",
++    "colorId",
++    "zoomScalePageLayoutView",
++    "zoomScaleSheetLayoutView",
++];
+ /// Attributes of `<sheetFormatPr>` GridCraft does not model.
+ const SHEET_FORMAT_PR_ATTRS: &[&str] = &["baseColWidth", "zeroHeight", "thickTop", "thickBottom"];
+ /// Attributes of `<pageSetup>` GridCraft does not model (it writes `paperSize`, `scale`,
+@@ -540,6 +551,19 @@ impl KeptReader {
+             x.push_str("</xcalcf:calcFeatures></ext>");
+             p.elements.push(PreservedXml { slot: "ext".into(), xml: x });
+         }
++        // Other extensions as the file wrote them, unless they refer to parts of the package.
++        if let Ok(Some(bytes)) = cx.pkg.read(wb_part) {
++            for (uri, x) in scan_exts(&bytes).unwrap_or_default() {
++                if uri.eq_ignore_ascii_case(CALC_FEATURES_URI) {
++                    continue;
++                }
++                if x.len() > MAX_FRAGMENT || map_rel_ids(&x, &mut |_| None).is_none() {
++                    cx.warn(format!("workbook extension {uri} was dropped: it refers to parts of the package"));
++                    continue;
++                }
++                p.elements.push(PreservedXml { slot: "ext".into(), xml: x });
++            }
++        }
+         // Source forms: unmodelled attributes and elements, and the theme and core properties
+         // parts as they were while the model still holds what was read from them.
+         if let Some(e) = wb_xml.child("workbookPr") {
+@@ -783,6 +807,13 @@ pub fn sheet_sources(root: &xml::El, sheet: &Sheet) -> Vec<PreservedSource> {
+             push_source(&mut out, "sheetFormatPr.baseColWidth", model_of(&sheet.default_col_width), Vec::new());
+         }
+     }
++    if let Some(v) = root.path(&["sheetViews", "sheetView"]) {
++        push_source(&mut out, "sheetView", String::new(), attrs_of(v, SHEET_VIEW_ATTRS));
++        // The normal view's zoom, while the zoom is the one read.
++        if let Some(z) = v.attr("zoomScaleNormal") {
++            push_source(&mut out, "sheetView.zoomScaleNormal", model_of(&sheet.zoom), z);
++        }
++    }
+     // Split (not frozen) panes, while the view the file opened on is the one read.
+     if let Some(p) = root.path(&["sheetViews", "sheetView", "pane"])
+         && p.attr("state").is_none_or(|s| s == "split")
+@@ -1069,6 +1100,59 @@ fn scan_sheet(bytes: &[u8]) -> Option<SheetScan> {
+     Some(out)
+ }
+ 
++/// The `<ext>` elements of the root's `<extLst>`, each with its `uri` and its XML with the
++/// namespace declarations it needs. `None` when the XML is damaged.
++fn scan_exts(bytes: &[u8]) -> Option<Vec<(String, String)>> {
++    let data = xml::to_utf8(bytes);
++    let text = std::str::from_utf8(&data).ok()?;
++    let mut reader = Reader::from_str(text);
++    let mut decls: Vec<(String, String)> = vec![];
++    let mut out = vec![];
++    let mut depth = 0usize;
++    let mut in_list = false;
++    loop {
++        let start = usize::try_from(reader.buffer_position()).ok()?;
++        match reader.read_event().ok()? {
++            Event::Eof => break,
++            Event::Start(e) if depth == 0 => {
++                depth = 1;
++                for a in e.attributes().with_checks(false).flatten() {
++                    if let Some(p) = a.key.as_ref().strip_prefix(b"xmlns:")
++                        && let (Ok(p), Ok(v)) = (std::str::from_utf8(p), std::str::from_utf8(&a.value))
++                        && !v.contains('"')
++                    {
++                        decls.push((p.to_string(), v.to_string()));
++                    }
++                }
++            }
++            Event::Start(e) if !in_list && e.local_name().as_ref() == b"extLst" => in_list = true,
++            Event::Start(e) => {
++                let uri = in_list.then(|| uri_of(&e)).flatten();
++                reader.read_to_end(e.name()).ok()?;
++                let end = usize::try_from(reader.buffer_position()).ok()?;
++                if let Some(uri) = uri.filter(|_| e.local_name().as_ref() == b"ext") {
++                    out.push((uri, with_decls(text.get(start..end)?, &decls)));
++                }
++            }
++            Event::Empty(e) if in_list && e.local_name().as_ref() == b"ext" => {
++                if let Some(uri) = uri_of(&e) {
++                    let end = usize::try_from(reader.buffer_position()).ok()?;
++                    out.push((uri, with_decls(text.get(start..end)?, &decls)));
++                }
++            }
++            Event::End(_) if in_list => in_list = false,
++            Event::End(_) => break,
++            _ => {}
++        }
++    }
++    Some(out)
++}
++
++/// The `uri` attribute of an element.
++fn uri_of(e: &BytesStart<'_>) -> Option<String> {
++    e.attributes().with_checks(false).flatten().find(|a| a.key.as_ref() == b"uri").and_then(|a| String::from_utf8(a.value.to_vec()).ok())
++}
++
+ /// The `r:id` of an element (an `id` attribute with a namespace prefix).
+ fn rel_id_attr(e: &BytesStart<'_>) -> Option<String> {
+     e.attributes()
+diff --git a/crates/xlsx/src/sheet_write.rs b/crates/xlsx/src/sheet_write.rs
+--- a/crates/xlsx/src/sheet_write.rs
++++ b/crates/xlsx/src/sheet_write.rs
+@@ -199,12 +199,24 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+     if sheet.view != gridcraft_model::SheetViewMode::Normal {
+         let _ = write!(s, " view=\"{}\"", sheet.view.as_str());
+     }
+-    if sheet.zoom != 100 && (10..=400).contains(&sheet.zoom) {
+-        let _ = write!(s, " zoomScale=\"{0}\" zoomScaleNormal=\"{0}\"", sheet.zoom);
++    let zoomed = sheet.zoom != 100 && (10..=400).contains(&sheet.zoom);
++    if zoomed {
++        let _ = write!(s, " zoomScale=\"{}\"", sheet.zoom);
++    }
++    let normal = crate::passthrough::source(source, "sheetView.zoomScaleNormal", &crate::passthrough::model_of(&sheet.zoom));
++    match normal.and_then(|d| std::str::from_utf8(d).ok()) {
++        Some(z) => {
++            let _ = write!(s, " zoomScaleNormal=\"{}\"", crate::xml::esc_attr(z));
++        }
++        None if zoomed => {
++            let _ = write!(s, " zoomScaleNormal=\"{}\"", sheet.zoom);
++        }
++        None => {}
+     }
+     if sheet.view_top_left != CellRef::default() && sheet.freeze.is_none() {
+         let _ = write!(s, " topLeftCell=\"{}\"", sheet.view_top_left.a1());
+     }
++    crate::passthrough::push_attrs(&mut s, source, "sheetView");
+     s.push_str(" workbookViewId=\"0\">");
+     let active = sheet.view_active.a1();
+     match sheet.freeze {
+diff --git a/crates/xlsx/src/tests/passthrough_tests.rs b/crates/xlsx/src/tests/passthrough_tests.rs
+--- a/crates/xlsx/src/tests/passthrough_tests.rs
++++ b/crates/xlsx/src/tests/passthrough_tests.rs
+@@ -792,8 +792,11 @@ fn file_version_and_calc_features_survive_a_save() {
+     // Excel trusts the saved cell values only when workbook.xml carries both <fileVersion> and the
+     // calcFeatures extension; without them it recalculates everything on open (#799).
+     let calc_features = r#"<ext uri="{B58B0392-4F1F-4190-BB64-5DF3571DCE5F}" xmlns:xcalcf="http://schemas.microsoft.com/office/spreadsheetml/2018/calcfeatures"><xcalcf:calcFeatures><xcalcf:feature name="microsoft.com:RD"/><xcalcf:feature name="microsoft.com:Single"/><xcalcf:feature name="microsoft.com:FV"/><xcalcf:feature name="microsoft.com:CNMTM"/><xcalcf:feature name="microsoft.com:LET_WF"/><xcalcf:feature name="microsoft.com:ARRAYTEXT_WF"/></xcalcf:calcFeatures></ext>"#;
++    // Extensions GridCraft does not read are kept as they were, unless they refer to parts.
++    let lo = r#"<ext uri="{7626C862-2A13-11E5-B345-FEFF819CDC9F}" xmlns:loext="http://schemas.libreoffice.org/"><loext:extCalcPr stringRefSyntax="CalcA1ExcelA1"/></ext>"#;
++    let slicers = r#"<ext uri="{BBE1A952-AA13-448e-AADC-164F8A28A991}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:slicerCaches><x14:slicerCache r:id="rId9"/></x14:slicerCaches></ext>"#;
+     let workbook = format!(
+-        r#"<?xml version="1.0"?><workbook xmlns="{NS_MAIN}" xmlns:r="{NS_R}"><fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="11008"/><workbookPr/><sheets><sheet name="A" sheetId="1" r:id="rId1"/></sheets><calcPr calcId="191029"/><extLst><ext uri="{{140A7094-0E35-4892-8432-C4D2E57EDEB5}}" xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main"><x15:workbookPr chartTrackingRefBase="1"/></ext>{calc_features}</extLst></workbook>"#
++        r#"<?xml version="1.0"?><workbook xmlns="{NS_MAIN}" xmlns:r="{NS_R}"><fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="11008"/><workbookPr/><sheets><sheet name="A" sheetId="1" r:id="rId1"/></sheets><calcPr calcId="191029"/><extLst><ext uri="{{140A7094-0E35-4892-8432-C4D2E57EDEB5}}" xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main"><x15:workbookPr chartTrackingRefBase="1"/></ext>{calc_features}{lo}{slicers}</extLst></workbook>"#
+     );
+     let sheet = format!(
+         r#"<?xml version="1.0"?><worksheet xmlns="{NS_MAIN}"><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>A1*2</f><v>2</v></c></row></sheetData></worksheet>"#
+@@ -817,7 +820,16 @@ fn file_version_and_calc_features_survive_a_save() {
+         assert_eq!(root.children.first().map(|e| e.name.as_str()), Some("fileVersion"), "{text}");
+         assert_eq!(root.children.last().map(|e| e.name.as_str()), Some("extLst"), "{text}");
+         assert!(text.contains(r#"<fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="11008"/>"#), "{text}");
+-        assert!(text.contains(&format!("<extLst>{calc_features}</extLst>")), "{text}");
++        assert!(text.contains(&format!("<extLst>{calc_features}<ext ")), "{text}");
++        assert!(
++            text.contains(
++                r#"xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main"><x15:workbookPr chartTrackingRefBase="1"/></ext>"#
++            ),
++            "{text}"
++        );
++        assert!(text.contains(r#"xmlns:loext="http://schemas.libreoffice.org/"><loext:extCalcPr stringRefSyntax="CalcA1ExcelA1"/></ext>"#), "{text}");
++        assert_eq!(text.matches("<ext ").count(), 3, "{text}");
++        assert!(!text.contains("slicerCache"), "{text}");
+     }
+ 
+     // A workbook that had neither gets a <fileVersion> naming GridCraft (#1699), kept on the next
+diff --git a/crates/xlsx/src/tests/source_forms.rs b/crates/xlsx/src/tests/source_forms.rs
+--- a/crates/xlsx/src/tests/source_forms.rs
++++ b/crates/xlsx/src/tests/source_forms.rs
+@@ -198,6 +198,24 @@ fn a_split_view_and_unused_fit_counts_stay_as_the_file_had_them() {
+     assert!(!out.contains("16230") && out.contains(r#"state="frozen""#), "{out}");
+ }
+ 
++#[test]
++fn the_view_keeps_the_zooms_and_settings_gridcraft_does_not_model() {
++    let sheet = SHEET.replace(
++        "<sheetFormatPr",
++        r#"<sheetViews><sheetView showOutlineSymbols="0" zoomScale="150" zoomScaleNormal="100" zoomScalePageLayoutView="60" workbookViewId="0"/></sheetViews><sheetFormatPr"#,
++    );
++    let (mut wb, _) = read_xlsx(&source_with(&sheet)).unwrap();
++    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(
++        out.contains(r#"<sheetView tabSelected="1" zoomScale="150" zoomScaleNormal="100" showOutlineSymbols="0" zoomScalePageLayoutView="60" workbookViewId="0">"#),
++        "{out}"
++    );
++    // A new zoom is also the normal view's.
++    wb.sheet_mut(0).unwrap().zoom = 80;
++    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(out.contains(r#"zoomScale="80" zoomScaleNormal="80" showOutlineSymbols="0" zoomScalePageLayoutView="60""#), "{out}");
++}
++
+ #[test]
+ fn a_formula_keeps_the_spelling_of_the_file_while_it_is_the_same_formula() {
+     let sheet = SHEET.replace(

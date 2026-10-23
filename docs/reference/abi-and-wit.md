@@ -126,14 +126,30 @@ WASM lo implementano con gli stessi tipi, limiti, errori e lifecycle.
   revisione e il **giornale** delle celle cambiate (`GridJournal`), e dà un
   `GridBytesSession`: fogli, foglio attivo, fogli nascosti, avvisi in codici
   chiusi (`GridNotice`) e voci del giornale in conflitto con i byte.
-- `window` dà un `GridBytesWindow`: ogni cella porta l'input, lo stile, il
-  valore (`GridValue`), il testo formattato dal provider, il codice del
-  blocco (`lock`), `stale` (il valore del file non segue una cella cambiata)
-  e `conflict`.
+- `window` dà un `GridBytesWindow`: ogni cella porta l'input, l'indice dello
+  stile, il valore (`GridValue`), il testo formattato dal provider, il codice
+  del blocco (`lock`), `stale` (il valore del file non segue una cella
+  cambiata), `conflict` e i segni già risolti: barra di dati, icona,
+  commento con le risposte e collegamento. La finestra porta gli stili
+  (`grid-cell-style`, non più delle celle), le unioni che la
+  toccano, mai di una cella sola, e la vista del foglio, con lo zoom da 10 a
+  400 e i riquadri bloccati dentro il foglio. Uno stile ha il carattere fino
+  a 256 byte, la dimensione fra 0 e 409 punti, colori fino a 32 byte e la
+  rotazione fra -90 e 90 gradi, o 255 per il testo in colonna.
 - `apply` riceve le patch di `GridApplyRequest`; il `GridCommit` porta il diff del
   **testo del giornale**, e l'invalidazione.
-- `bytes_to_write(instance, expected)` dà i byte con il giornale innestato. La
-  chiama soltanto l'host, per salvare.
+- `commands(instance, selection)` dà il catalogo (`GridCommandState`, fino a
+  1.024 comandi con id unici; il perché, fino a 1 KiB, soltanto per un comando
+  spento) sulla `GridSelection`. Di serie è vuoto.
+- `command(instance, request)` dà un comando del catalogo e ridà un
+  `GridCommandOutcome`: il `GridCommit` del giornale, i fogli, la selezione
+  nuova, il risultato (un oggetto JSON fino a 1 MiB), la `GridDialog` chiesta
+  e il catalogo. L'host controlla che la revisione vada avanti se e soltanto
+  se il diff non è vuoto. Di serie è `BadArgs`; l'esempio `esempi/grid-wasm`
+  dà il catalogo vuoto e rifiuta ogni comando.
+- `bytes_to_write(instance, expected)` dà i byte con il giornale innestato, o
+  la cartella riscritta quando il giornale di comandi cambia più dell'input.
+  La chiama soltanto l'host, per salvare.
 
 Il giornale ha una sola forma canonica, il cui testo vuoto è il giornale
 vuoto: JSON `{"version": 1, "cells": [...]}`, voci `{"sheet", "row",
@@ -145,6 +161,20 @@ salvataggio; la shell ne ha il mirror, legato dalla fixture
 (`MAX_GRID_BYTES_SOURCE`); il giornale ha i limiti di un'operazione (16.384
 voci, 4 MiB di input); una sessione porta al più 64 avvisi. Il perché è
 nell'[ADR 0216](../decisions/0216-protocollo-grid-2-sorgente-a-byte.md).
+
+`GridJournal` legge e scrive anche una seconda forma, mai insieme alla prima:
+il **giornale di comandi**, `{"version": 2, "commands": [...]}`, con almeno un
+comando `{"id", "params", "sheet", "selection", "active"}` (`GridCommand`) in
+ordine di applicazione. `params` è il testo di un oggetto JSON fino a 64 KiB,
+portato com'è; la selezione è in riferimenti A1 separati da virgola, la cella
+attiva è un riferimento solo. Fino a 16.384 comandi e 16 MiB di testo. Il
+rebase toglie i comandi in comune con il salvataggio dall'inizio, e
+`reverted_by` conta quelli salvati che il giornale non ha più. La serve il
+provider delle cartelle di Excel (`crates/fub-format-xlsx/src/commands.rs`),
+dal primo comando di una sessione: le voci del giornale di celle diventano
+allora comandi `range.setValues`. Il perché è nell'[ADR
+0219](../decisions/0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md),
+in proposta.
 
 ## Errori
 

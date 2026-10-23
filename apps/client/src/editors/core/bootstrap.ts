@@ -3,6 +3,7 @@ import type { CompletionSources } from "../text/profiles/markdown/completions";
 import { api } from "../../host/ipc";
 import { openVaultRoot, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
+import type { GridDialogs, GridRibbon } from "../grid/ribbon/ribbon";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { onEvent } from "../../state/kernel";
 import { PROOF_NS, type ProofPorts } from "./proof-ports";
@@ -23,11 +24,12 @@ import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
 import type { VaultFontPort } from "../spatial/fonts/vault";
 import type { SymbolLibraryPort } from "../spatial/tools/symbol-libraries";
-import type { SyntaxForm } from "../../host/contract";
+import type { GridDialog, SyntaxForm } from "../../host/contract";
 import {
   DocumentSurfaceRegistry,
   type EditorSurface,
   type SurfaceCallbacks,
+  type SurfaceExport,
   type SurfaceMountContext,
 } from "./registry";
 
@@ -42,6 +44,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly completions: CompletionSources;
   readonly slash?: EditorSlashHost;
   readonly gridHost?: GridHost;
+  /// Un export registrato del documento `doc`, chiesto da dentro la
+  /// superficie come dal menu del riquadro: se si può adesso, e come.
+  readonly exportDocument?: { available(): boolean; run(doc: string, chosen: SurfaceExport): void };
   /// La revisione dei byte da cui il testo della sessione di `doc` discende
   /// adesso: una cartella di Excel ci apre il suo giornale.
   readonly documentBase?: (doc: string) => string | null;
@@ -101,6 +106,17 @@ const PLAIN_TEXT_MODES = [
 const GRID_MODES = [
   { id: "sheet", label: () => t("mode.sheet"), presentation: "surface", contextMode: "live_preview" },
 ] as const;
+
+/// La stampa in PDF di una cartella, con l'export dell'host (`xlsx.copy.pdf`):
+/// la barra dei fogli la chiede come il menu del riquadro.
+const GRID_EXPORTS: readonly SurfaceExport[] = [
+  {
+    target: "xlsx.copy.pdf",
+    label: () => t("grid.export.pdf"),
+    detail: () => t("grid.export.pdf.desc"),
+    options: () => ({ sheets: "all" }),
+  },
+];
 
 const VIEWER_MODES = [
   { id: "view", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading" },
@@ -285,6 +301,14 @@ export function createDocumentSurfaceRegistry(
     factory: {
       mount(profile, context) {
         if (profile !== "workbook") throw new Error(`grid surface profile ${profile} is not registered`);
+        // La barra multifunzione e le finestre arrivano con un `import()`: chi
+        // non apre una cartella di Excel non le scarica. La barra si aggiorna
+        // con i richiami del motore, al più una volta per fotogramma; una
+        // finestra chiesta prima che arrivino aspetta e si apre con loro.
+        let ribbon: GridRibbon | null = null;
+        let dialogs: GridDialogs | null = null;
+        let waiting: GridDialog | null = null;
+        let destroyed = false;
         const engine = new GridEngine(context.parent, {
           surfaceId: context.paneId,
           formatId: context.formatId,
@@ -292,15 +316,40 @@ export function createDocumentSurfaceRegistry(
           documentId: context.documentId,
           base: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
           onChange: (change) => options.onChange(context.paneId, change),
-          onSelectionChange: () => options.onSelectionChange(context.paneId),
+          onSelectionChange: () => {
+            options.onSelectionChange(context.paneId);
+            ribbon?.schedule();
+          },
+          onCommands: () => ribbon?.schedule(),
+          onView: () => ribbon?.schedule(),
+          onDialog: (dialog) => {
+            if (dialogs) dialogs.open(dialog);
+            else waiting = dialog;
+          },
           grid: options.gridHost,
           theme: currentTheme(),
+          pdf: options.media?.pdfLoader ?? loadPdf,
+          exportPdf: options.exportDocument && {
+            available: () => options.exportDocument!.available(),
+            run: () => options.exportDocument!.run(context.documentId, GRID_EXPORTS[0]!),
+          },
         });
+        void import("../grid/ribbon/ribbon").then(
+          ({ mountRibbon, mountGridDialogs }) => {
+            if (destroyed) return;
+            ribbon = mountRibbon(engine);
+            dialogs = mountGridDialogs(engine);
+            if (waiting) dialogs.open(waiting);
+            waiting = null;
+          },
+          () => {},
+        );
         return {
           family: "grid",
           profile,
           surfaceId: context.paneId,
           modes: GRID_MODES,
+          exports: GRID_EXPORTS,
           setMode(mode) {
             requireMode(GRID_MODES, mode);
             context.parent.dataset.surfaceMode = mode;
@@ -314,7 +363,15 @@ export function createDocumentSurfaceRegistry(
           selectedText: () => engine.selectedText(),
           setReadOnly: (readOnly) => engine.setReadOnly(readOnly),
           setTheme: (theme) => engine.setTheme(theme),
-          destroy: () => engine.destroy(),
+          destroy: () => {
+            destroyed = true;
+            ribbon?.destroy();
+            ribbon = null;
+            dialogs?.destroy();
+            dialogs = null;
+            waiting = null;
+            engine.destroy();
+          },
         };
       },
     },

@@ -9,8 +9,8 @@ use gridcraft_core::{CellError, CellRef, DateSystem, MAX_COLS, MAX_ROWS, RangeRe
 use gridcraft_formula::Expr;
 use gridcraft_model::{
     AutoFilter, Cell, CfOperator, CfRule, CfValueKind, Comment, CondFormat, EditRange, ErrorStyle, FilterCriterion, Formula, Hyperlink, LineInfo,
-    Orientation, PasswordHash, Sheet, SheetProtection, Sparkline, SparklineKind, Table, TableColumn, TotalsFn, Validation, ValidationKind,
-    XmlColumnPr,
+    NoteBox, NoteCorner, Orientation, PasswordHash, Sheet, SheetProtection, Sparkline, SparklineKind, Table, TableColumn, TotalsFn, Validation,
+    ValidationKind, XmlColumnPr,
 };
 
 use crate::IoError;
@@ -39,9 +39,12 @@ struct RowState {
     spills: Vec<(CellRef, RangeRef)>,
     dropped: u64,
     rows: u64,
+    /// Formula texts whose file spelling is already kept (see `read_formula_text`).
+    spellings: std::collections::HashSet<String>,
 }
 
 const MAX_HYPERLINK_CELLS: u64 = 10_000;
+const MAX_COLUMN_ASSIGNMENTS: u64 = 1_000_000;
 
 /// The array ranges the reader has met, indexed so that a cell finds the one containing it without
 /// scanning them all: rows arrive in order, so a range is dropped once the reader is past its last
@@ -83,6 +86,7 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
     let rels = cx.pkg.rels(part)?;
     let mut sheet = Sheet::new(name);
     let mut st = RowState::default();
+    cx.sources.clear();
     let res = xml::parse_streaming(&bytes, &["row"], &mut |row| {
         read_row(cx, &mut sheet, &mut st, &row);
         Ok(())
@@ -101,6 +105,7 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
     drop(bytes);
 
     let mut fit_to_page = false;
+    let mut column_assignments_left = MAX_COLUMN_ASSIGNMENTS;
     cx.cf_ext_ids.clear();
     for e in &root.children {
         match e.name.as_str() {
@@ -128,7 +133,7 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
                     sheet.default_col_width = px as f32;
                 }
             }
-            "cols" => read_cols(cx, e, &mut sheet),
+            "cols" => read_cols(cx, e, &mut sheet, &mut column_assignments_left)?,
             "mergeCells" => {
                 for m in e.kids("mergeCell") {
                     if let Some(r) = m.attr("ref").and_then(RangeRef::parse)
@@ -240,9 +245,10 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
         }
     }
     // Comments are related to the sheet without an element in it.
+    let mut note_runs = Vec::new();
     for rel in rels.iter().filter(|r| r.kind == "comments") {
         if let Some(x) = cx.optional_xml(&rel.target)? {
-            read_comments(&x, &mut sheet);
+            note_runs.extend(read_comments(&x, &mut sheet));
         }
     }
     for rel in rels.iter().filter(|r| r.kind == "threadedComment") {
@@ -250,13 +256,47 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
             read_threaded(cx, &x, &mut sheet);
         }
     }
-    // Which notes are displayed lives in the VML shapes (`<x:Visible/>`). Best effort: the VML is
-    // only read for that flag, so a part that doesn't parse is skipped without a warning.
+    // Which notes are displayed (`<x:Visible/>`) and where their boxes sit live in the VML shapes.
+    // Best effort: the VML is only read for those, so a part that doesn't parse is skipped without
+    // a warning.
+    let mut notes_vml = None;
     if !sheet.comments.is_empty() {
         for rel in rels.iter().filter(|r| r.kind == "vmlDrawing") {
             if let Ok(Some(x)) = cx.pkg.read_xml(&rel.target) {
-                read_note_visibility(&x, &mut sheet, 0);
+                read_note_shapes(&x, &mut sheet, 0);
+                // A drawing of notes alone, without parts of its own, is kept as the file had it.
+                let (dir, file) = crate::package::split_dir(&rel.target);
+                let own_rels = format!("{dir}/_rels/{file}.rels");
+                if notes_vml.is_none() && only_notes(&x, 0) && matches!(cx.pkg.read(own_rels.trim_start_matches('/')), Ok(None)) {
+                    notes_vml = cx.pkg.read(&rel.target).ok().flatten();
+                }
             }
+        }
+    }
+    let forms = crate::passthrough::sheet_sources(&root, &sheet);
+    cx.sources.extend(forms);
+    if let Some(vml) = notes_vml {
+        let model = crate::passthrough::notes_vml_model(&sheet);
+        cx.sources.push(gridcraft_model::PreservedSource { slot: "vml.notes".into(), model, data: std::sync::Arc::from(vml) });
+    }
+    // Which data bar rules the file links to their Excel 2010 rule, for its kept form.
+    if !cx.cf_ext_ids.is_empty() {
+        let ids: String = cx.cf_ext_ids.iter().map(|(id, n)| format!("{n} {id}\n")).collect();
+        let model = crate::passthrough::cond_formats_model(&sheet);
+        cx.sources.push(gridcraft_model::PreservedSource { slot: "x14.cf.ids".into(), model, data: std::sync::Arc::from(ids.into_bytes()) });
+    }
+    // A note's formatted text, for the note as it was read (a threaded comment replaces it): at
+    // its cell, and wherever rows or columns move it while no other note reads the same.
+    let mut moved: HashMap<String, Option<String>> = HashMap::new();
+    for (cell, runs) in note_runs {
+        let Some(c) = sheet.comments.get(&cell) else { continue };
+        let model = crate::passthrough::note_model(Some(cell), c);
+        cx.sources.push(gridcraft_model::PreservedSource { slot: "note.text".into(), model, data: std::sync::Arc::from(runs.as_bytes()) });
+        moved.entry(crate::passthrough::note_model(None, c)).and_modify(|r| *r = r.take().filter(|r| *r == runs)).or_insert(Some(runs));
+    }
+    for (model, runs) in moved {
+        if let Some(runs) = runs {
+            cx.sources.push(gridcraft_model::PreservedSource { slot: "note.text".into(), model, data: std::sync::Arc::from(runs.into_bytes()) });
         }
     }
     Ok(sheet)
@@ -340,7 +380,7 @@ fn read_views(e: &El, sheet: &mut Sheet) {
     }
 }
 
-fn read_cols(cx: &Ctx<'_>, e: &El, sheet: &mut Sheet) {
+fn read_cols(cx: &Ctx<'_>, e: &El, sheet: &mut Sheet, remaining: &mut u64) -> Result<(), IoError> {
     for c in e.kids("col") {
         let (Some(min), Some(max)) = (c.attr_u32("min"), c.attr_u32("max")) else { continue };
         if min == 0 || min > MAX_COLS || max < min {
@@ -364,14 +404,20 @@ fn read_cols(cx: &Ctx<'_>, e: &El, sheet: &mut Sheet) {
                 info.style = Some(id);
             }
         }
-        // A width equal to the default with nothing else set is noise.
-        if info == LineInfo::default() || (info.size == Some(sheet.default_col_width) && LineInfo { size: None, ..info } == LineInfo::default()) {
+        // A custom width equal to the default still pins the column (Standard Width leaves it alone).
+        if info == LineInfo::default() {
             continue;
         }
+        // Overlapping declarations repeat work even when the final map stays small.
+        // Charge the clipped span before expansion, sharing the budget across <cols> blocks.
+        *remaining = remaining
+            .checked_sub(u64::from(max - min + 1))
+            .ok_or_else(|| IoError::TooLarge(format!("sheet \"{}\": more than {MAX_COLUMN_ASSIGNMENTS} expanded column assignments", sheet.name)))?;
         for col in (min - 1)..max {
             sheet.cols.insert(col, info);
         }
     }
+    Ok(())
 }
 
 fn read_row(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, row: &El) {
@@ -432,10 +478,14 @@ fn read_row(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, row: &El) {
 fn read_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: &El, pos: CellRef) {
     let style = cx.style(c.attr_u32("s"));
     let v = c.child("v").map(|v| v.text.as_str());
+    let mut rich = None;
     let value = match c.attr("t").unwrap_or("n") {
         "s" => match v.and_then(|v| v.trim().parse::<usize>().ok()) {
             Some(i) => match cx.sst.get(i) {
-                Some(s) => Value::Text(s.clone()),
+                Some(s) => {
+                    rich = cx.sst_runs.get(&i).cloned();
+                    Value::Text(s.clone())
+                }
                 None => {
                     cx.warn("some cells refer to missing shared strings");
                     Value::Empty
@@ -444,9 +494,14 @@ fn read_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: &El, pos
             None => Value::Empty,
         },
         "str" => v.map(|v| Value::text(xml::decode_xstring(v))).unwrap_or(Value::Empty),
-        "inlineStr" => {
-            c.child("is").map(|is| Value::text(xml::rich_text(is))).or_else(|| v.map(|v| Value::text(xml::decode_xstring(v)))).unwrap_or(Value::Empty)
-        }
+        "inlineStr" => match c.child("is") {
+            Some(is) => {
+                let text: Arc<str> = Arc::from(xml::rich_text(is));
+                rich = xml::rich_runs(is).map(|x| Arc::new(gridcraft_model::RichRuns { text: text.clone(), xml: Arc::from(x) }));
+                Value::Text(text)
+            }
+            None => v.map(|v| Value::text(xml::decode_xstring(v))).unwrap_or(Value::Empty),
+        },
         "b" => v.map(|v| Value::Bool(matches!(v.trim(), "1" | "true" | "TRUE"))).unwrap_or(Value::Empty),
         "e" => v.map(|v| Value::Error(CellError::parse(v.trim()).unwrap_or(CellError::Value))).unwrap_or(Value::Empty),
         "d" => match v.and_then(|v| parse_iso_datetime(v.trim(), cx.date_system)) {
@@ -499,11 +554,27 @@ fn read_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: &El, pos
     } else {
         value
     };
-    sheet.cells.set(pos, Cell { value, formula: formula.map(Arc::new), style });
+    let rich = rich.filter(|_| formula.is_none());
+    sheet.cells.set(pos, Cell { value, formula: formula.map(Arc::new), style, rich });
 }
 
 fn read_formula(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, dynamic: bool) -> Option<Formula> {
+    // Keep the file's dynamic-array mark, so saving never turns the formula into a legacy one.
+    read_formula_text(cx, st, f, pos, dynamic).map(|fm| Formula { dynamic, ..fm })
+}
+
+fn read_formula_text(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, dynamic: bool) -> Option<Formula> {
     let model = from_file(f.text.trim());
+    // The file's own spelling (spaces, case, line breaks) of a formula GridCraft writes otherwise,
+    // for the text it would write.
+    let written = crate::fmla::text_to_file(&model);
+    if !model.is_empty() && written != f.text.trim() && st.spellings.insert(written.clone()) {
+        cx.sources.push(gridcraft_model::PreservedSource {
+            slot: "formula".into(),
+            model: written,
+            data: std::sync::Arc::from(f.text.trim().as_bytes()),
+        });
+    }
     let text = model.as_str();
     match f.attr("t").unwrap_or("normal") {
         "shared" => {
@@ -770,6 +841,9 @@ fn read_validation(v: &El) -> Option<Validation> {
 
 fn read_hyperlinks(cx: &mut Ctx<'_>, name: &str, e: &El, rels: &[Rel], sheet: &mut Sheet) {
     let mut cells = 0u64;
+    // The text a link displays, which GridCraft does not model: for the link at its cells, and
+    // for the same link anywhere while no other link to it displays something else.
+    let mut moved: HashMap<String, Option<String>> = HashMap::new();
     for h in e.kids("hyperlink") {
         let Some(range) = h.attr("ref").and_then(RangeRef::parse) else { continue };
         let mut target = h.attr("id").and_then(|id| rels.iter().find(|r| r.id == id)).map(|r| r.target.clone()).unwrap_or_default();
@@ -786,13 +860,30 @@ fn read_hyperlinks(cx: &mut Ctx<'_>, name: &str, e: &El, rels: &[Rel], sheet: &m
             continue;
         }
         let link = Hyperlink { target, tooltip: h.attr("tooltip").map(str::to_string), external };
+        let display = h.attr("display");
+        if let Some(d) = display {
+            moved.entry(crate::passthrough::link_model(None, &link)).and_modify(|r| *r = r.take().filter(|r| r == d)).or_insert(Some(d.to_string()));
+        }
         for c in range.iter() {
             if cells >= MAX_HYPERLINK_CELLS {
                 cx.warn(format!("sheet \"{name}\": hyperlinks past the first {MAX_HYPERLINK_CELLS} cells were dropped"));
                 return;
             }
             cells += 1;
+            if let Some(d) = display {
+                let model = crate::passthrough::link_model(Some(c), &link);
+                cx.sources.push(gridcraft_model::PreservedSource {
+                    slot: "hyperlink.display".into(),
+                    model,
+                    data: std::sync::Arc::from(d.as_bytes()),
+                });
+            }
             sheet.hyperlinks.insert(c, link.clone());
+        }
+    }
+    for (model, display) in moved {
+        if let Some(d) = display {
+            cx.sources.push(gridcraft_model::PreservedSource { slot: "hyperlink.display".into(), model, data: std::sync::Arc::from(d.into_bytes()) });
         }
     }
 }
@@ -920,11 +1011,16 @@ pub fn read_table(cx: &mut Ctx<'_>, x: &El) -> Option<Table> {
     })
 }
 
-fn read_comments(x: &El, sheet: &mut Sheet) {
+/// Reads the notes into `sheet`, and gives the `<text>` of those written in formatted runs.
+fn read_comments(x: &El, sheet: &mut Sheet) -> Vec<(CellRef, String)> {
+    let mut runs = Vec::new();
     let authors: Vec<String> = x.child("authors").map(|a| a.kids("author").map(|a| a.text.clone()).collect()).unwrap_or_default();
-    let Some(list) = x.child("commentList") else { return };
+    let Some(list) = x.child("commentList") else { return runs };
     for c in list.kids("comment") {
         let Some(cell) = c.attr("ref").and_then(CellRef::parse) else { continue };
+        if let Some(r) = c.child("text").and_then(xml::rich_runs) {
+            runs.push((cell, r));
+        }
         let author = c.attr_u32("authorId").and_then(|i| authors.get(i as usize)).cloned().unwrap_or_default();
         let mut text = c.child("text").map(xml::rich_text).unwrap_or_default();
         // Excel starts a note with a bold "Author:" line.
@@ -933,32 +1029,73 @@ fn read_comments(x: &El, sheet: &mut Sheet) {
         {
             text = rest.strip_prefix('\n').unwrap_or(rest).to_string();
         }
-        sheet.comments.insert(cell, Comment { author, text, replies: vec![], threaded: false, resolved: false, visible: false, dates: vec![] });
+        sheet
+            .comments
+            .insert(cell, Comment { author, text, replies: vec![], threaded: false, resolved: false, visible: false, dates: vec![], note_box: None });
     }
+    runs
 }
 
-/// Marks the notes whose VML shape carries `<x:Visible/>` as shown. Shapes may sit in groups.
-fn read_note_visibility(x: &El, sheet: &mut Sheet, depth: usize) {
+/// Reads the notes' VML shapes: a shape carrying `<x:Visible/>` marks its note as shown, and its
+/// `<x:Anchor>` and style size become the note's box. Shapes may sit in groups.
+fn read_note_shapes(x: &El, sheet: &mut Sheet, depth: usize) {
     if depth > xml::MAX_DEPTH {
         return;
     }
     for e in &x.children {
         if e.name != "shape" {
-            read_note_visibility(e, sheet, depth + 1);
+            read_note_shapes(e, sheet, depth + 1);
             continue;
         }
         let Some(cd) = e.child("ClientData").filter(|cd| cd.attr("ObjectType") == Some("Note")) else { continue };
-        if cd.child("Visible").is_none() {
-            continue;
-        }
         let num = |k: &str| cd.child(k).and_then(|v| v.text.trim().parse::<u32>().ok());
-        if let (Some(row), Some(col)) = (num("Row"), num("Column"))
-            && let Some(c) = sheet.comments.get_mut(&CellRef::new(row, col))
-            && !c.threaded
-        {
+        let (Some(row), Some(col)) = (num("Row"), num("Column")) else { continue };
+        let cell = CellRef::new(row, col);
+        let Some(c) = sheet.comments.get_mut(&cell) else { continue };
+        if cd.child("Visible").is_some() && !c.threaded {
             c.visible = true;
         }
+        if let Some(anchor) = cd.child("Anchor") {
+            c.note_box = note_box(&anchor.text, e.attr("style").unwrap_or(""), cell).filter(|b| *b != crate::sheet_write::DEFAULT_NOTE_BOX);
+        }
     }
+}
+
+/// Whether every shape of a VML drawing is a note's.
+fn only_notes(x: &El, depth: usize) -> bool {
+    depth <= xml::MAX_DEPTH
+        && x.children.iter().all(|e| match e.name.as_str() {
+            "shape" => e.child("ClientData").is_some_and(|cd| cd.attr("ObjectType") == Some("Note")),
+            "shapetype" | "shapelayout" => true,
+            "group" => only_notes(e, depth + 1),
+            _ => false,
+        })
+}
+
+/// A note's box from its VML `<x:Anchor>` (`LeftColumn, LeftOffset, TopRow, TopOffset,
+/// RightColumn, RightOffset, BottomRow, BottomOffset`; offsets in pixels) and its shape's style,
+/// the corners made relative to the note's `cell`. `None` when the anchor isn't eight in-sheet
+/// numbers.
+fn note_box(anchor: &str, style: &str, cell: CellRef) -> Option<NoteBox> {
+    let v: Vec<u32> = anchor.split(',').map(|p| p.trim().parse::<u32>().ok()).collect::<Option<_>>()?;
+    let [c1, dx1, r1, dy1, c2, dx2, r2, dy2] = <[u32; 8]>::try_from(v).ok()?;
+    if c1.max(c2) >= MAX_COLS || r1.max(r2) >= MAX_ROWS {
+        return None;
+    }
+    let corner = |c: u32, dx: u32, r: u32, dy: u32| NoteCorner {
+        col: i64::from(c) - i64::from(cell.col),
+        col_px: dx,
+        row: i64::from(r) - i64::from(cell.row),
+        row_px: dy,
+    };
+    let pt = |key: &str| {
+        style
+            .split(';')
+            .filter_map(|d| d.split_once(':'))
+            .find(|(k, _)| k.trim().eq_ignore_ascii_case(key))
+            .and_then(|(_, v)| v.trim().strip_suffix("pt")?.trim().parse::<f64>().ok().filter(|n| n.is_finite() && *n > 0.0 && *n < 1e6))
+    };
+    Some(NoteBox { from: corner(c1, dx1, r1, dy1), to: corner(c2, dx2, r2, dy2), size_pt: pt("width").zip(pt("height")) })
 }
 
 fn read_threaded(cx: &Ctx<'_>, x: &El, sheet: &mut Sheet) {
@@ -976,9 +1113,10 @@ fn read_threaded(cx: &Ctx<'_>, x: &El, sheet: &mut Sheet) {
                     by_id.insert(id.to_string(), cell);
                 }
                 let dates = if date.is_empty() { vec![] } else { vec![date] };
-                sheet
-                    .comments
-                    .insert(cell, Comment { author, text, replies: vec![], threaded: true, resolved: t.flag("done", false), visible: false, dates });
+                sheet.comments.insert(
+                    cell,
+                    Comment { author, text, replies: vec![], threaded: true, resolved: t.flag("done", false), visible: false, dates, note_box: None },
+                );
             }
         }
     }

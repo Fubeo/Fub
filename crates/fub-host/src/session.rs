@@ -54,7 +54,10 @@ use fub_abi::session::ViewContext;
 use fub_abi::text::{Arg, Text};
 use fub_abi::traits::{JobId, JobSpec, ViewInstance, ViewSpec};
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
-use fub_abi::{Actor, GridBytesSession, GridBytesWindow, GridJournal, Notice, PluginError};
+use fub_abi::{
+    Actor, GridBytesSession, GridBytesWindow, GridCommandOutcome, GridCommandRequest,
+    GridCommandState, GridJournal, GridSelection, Notice, PluginError,
+};
 #[cfg(feature = "versioning")]
 use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
 use fub_kernel::host::authorize_path;
@@ -3561,6 +3564,33 @@ impl Host {
         request: GridApplyRequest,
     ) -> Result<GridCommit, PluginError> {
         self.with_grid_bytes(vault, surface, |provider| provider.apply(instance, request))
+    }
+
+    pub fn grid_bytes_commands(
+        &self,
+        vault: Option<&str>,
+        surface: &str,
+        instance: &str,
+        selection: GridSelection,
+    ) -> Result<Vec<GridCommandState>, PluginError> {
+        self.with_grid_bytes(vault, surface, |provider| {
+            provider.commands(instance, selection)
+        })
+    }
+
+    /// Dà un comando del catalogo alla sessione grid `instance`. L'esito
+    /// porta il diff del giornale, che la shell applica al buffer della
+    /// `DocumentSession` come quello di `grid_bytes_apply`.
+    pub fn grid_bytes_command(
+        &self,
+        vault: Option<&str>,
+        surface: &str,
+        instance: &str,
+        request: GridCommandRequest,
+    ) -> Result<GridCommandOutcome, PluginError> {
+        self.with_grid_bytes(vault, surface, |provider| {
+            provider.command(instance, request)
+        })
     }
 
     pub fn grid_bytes_close(

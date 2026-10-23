@@ -410,3 +410,63 @@ describe("il movimento", () => {
     dialog.close("no");
   });
 });
+
+describe("la conferma", () => {
+  it("un no tiene aperto il dialogo, un sì lo chiude con l'azione", async () => {
+    const asked: Answer[] = [];
+    let allow = false;
+    const dialog = open({
+      confirm: (value) => {
+        asked.push(value);
+        return allow;
+      },
+    });
+    action(dialog.element, "yes").click();
+    expect(dialog.element.isConnected).toBe(true);
+    allow = true;
+    action(dialog.element, "yes").click();
+    expect(asked).toEqual(["yes", "yes"]);
+    await expect(dialog.result).resolves.toBe("yes");
+  });
+
+  it("una risposta in viaggio occupa il dialogo e non lascia premere due volte", async () => {
+    let answer!: (yes: boolean) => void;
+    const confirm = vi.fn(() => new Promise<boolean>((done) => (answer = done)));
+    const dialog = open({ confirm });
+    action(dialog.element, "yes").click();
+    expect(dialog.element.getAttribute("aria-busy")).toBe("true");
+    action(dialog.element, "no").click();
+    expect(confirm).toHaveBeenCalledTimes(1);
+    answer(false);
+    await Promise.resolve();
+    expect(dialog.element.hasAttribute("aria-busy")).toBe(false);
+    expect(dialog.element.isConnected).toBe(true);
+    action(dialog.element, "no").click();
+    answer(true);
+    await expect(dialog.result).resolves.toBe("no");
+  });
+
+  it("Esc non chiede", async () => {
+    const confirm = vi.fn(() => false);
+    const dialog = open({ confirm });
+    press(dialog.element, "Escape");
+    await expect(dialog.result).resolves.toBe("dismissed");
+    expect(confirm).not.toHaveBeenCalled();
+  });
+});
+
+describe("il modulo", () => {
+  it("Invio in un campo preme l'azione di `submit`, non in una casella", async () => {
+    const body = document.createElement("div");
+    const input = document.createElement("input");
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    body.append(input, check);
+    const dialog = open({ body, submit: "yes", className: "prova" });
+    expect(dialog.element.classList.contains("prova")).toBe(true);
+    check.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(dialog.element.isConnected).toBe(true);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await expect(dialog.result).resolves.toBe("yes");
+  });
+});

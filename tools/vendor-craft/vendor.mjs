@@ -7,8 +7,20 @@
 //   node tools/vendor-craft/vendor.mjs <motore> update --rev <sha> [--tag <tag>] [--source <percorso o URL>]
 //   node tools/vendor-craft/vendor.mjs [<motore>] check
 //   node tools/vendor-craft/vendor.mjs <motore> verify-upstream [--source <percorso o URL>]
+//   node tools/vendor-craft/vendor.mjs <motore> report --rev <sha> [--source <percorso o URL>]
+//   node tools/vendor-craft/vendor.mjs <motore> gate
 //
 // `check` senza motore li controlla tutti.
+//
+// `report` è l'aggiornamento a vuoto: non tocca la copia, e dice che cosa
+// `update --rev <sha>` troverebbe. Per ogni patch: se si applica sulla pila,
+// se da sola, se l'upstream l'ha già assorbita (si toglie al contrario dai
+// file nuovi), e quali dei file che tocca l'upstream ha cambiato. Poi le
+// dipendenze aggiunte e tolte, le versioni del workspace e la `rust-version`.
+// `gate` esegue, dopo un `update`, le prove che `motori.mjs` elenca per il
+// motore (i test del motore e dell'adattatore, il catalogo servito, il
+// corpus, i mirror, `cargo deny`) e le riassume in una tabella; non si ferma
+// alla prima che fallisce.
 //
 // `update` estrae dall'upstream soltanto i percorsi gestiti, applica la pila
 // di patch e sostituisce la copia soltanto se tutti i passi riescono.
@@ -412,18 +424,7 @@ function update(rev, source, tag) {
   copyManaged(dir, result);
   applyStack(result, patchFiles());
 
-  const before = new Map();
-  for (const rel of managedFiles(previous.upstream).filter((f) => f.endsWith("/Cargo.toml"))) {
-    before.set(rel, dependencies(fs.readFileSync(path.join(previous.upstream, rel), "utf8")));
-  }
-  const changes = [];
-  for (const rel of managedFiles(dir).filter((f) => f.endsWith("/Cargo.toml"))) {
-    const after = dependencies(fs.readFileSync(path.join(dir, rel), "utf8"));
-    const old = before.get(rel) ?? new Set();
-    const crate = rel.split("/")[1];
-    for (const dep of after) if (!old.has(dep)) changes.push(`${ID}-${crate}: + ${dep}`);
-    for (const dep of old) if (!after.has(dep)) changes.push(`${ID}-${crate}: - ${dep}`);
-  }
+  const changes = dependencyChanges(previous.upstream, dir);
   const problems = checkManifests(result);
   if (problems.length > 0) fail(`le dipendenze non tornano:\n- ${problems.join("\n- ")}`);
 
@@ -460,6 +461,131 @@ function update(rev, source, tag) {
     for (const c of changes) console.log(`  ${c}`);
   }
   console.log(`passi successivi: cargo test del workspace e dei motori, il corpus, cargo deny check (vedi vendor/${ID}/UPSTREAM.md).`);
+}
+
+/// Le dipendenze dirette che i crate gestiti aggiungono o tolgono fra due
+/// estrazioni dell'upstream.
+function dependencyChanges(beforeDir, afterDir) {
+  const before = new Map();
+  for (const rel of managedFiles(beforeDir).filter((f) => f.endsWith("/Cargo.toml"))) {
+    before.set(rel, dependencies(fs.readFileSync(path.join(beforeDir, rel), "utf8")));
+  }
+  const changes = [];
+  for (const rel of managedFiles(afterDir).filter((f) => f.endsWith("/Cargo.toml"))) {
+    const after = dependencies(fs.readFileSync(path.join(afterDir, rel), "utf8"));
+    const old = before.get(rel) ?? new Set();
+    const crate = rel.split("/")[1];
+    for (const dep of after) if (!old.has(dep)) changes.push(`${ID}-${crate}: + ${dep}`);
+    for (const dep of old) if (!after.has(dep)) changes.push(`${ID}-${crate}: - ${dep}`);
+  }
+  return changes;
+}
+
+/// I file che una patch tocca, dalle sue intestazioni `diff --git`.
+function touchedBy(patch) {
+  const text = fs.readFileSync(path.join(VENDOR, patch), "utf8");
+  const out = new Set();
+  for (const m of text.matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)) {
+    out.add(m[1]);
+    out.add(m[2]);
+  }
+  return [...out].sort();
+}
+
+/// `git apply --check` di `patch` in `dir`, al contrario con `reverse`.
+function applies(dir, patch, reverse = false) {
+  const args = ["apply", "--check", "--whitespace=nowarn", ...(reverse ? ["-R"] : []), path.join(VENDOR, patch)];
+  const run = spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+  return { ok: run.status === 0, why: run.stderr.trim().split("\n")[0] ?? "" };
+}
+
+/// La `rust-version` e le dipendenze del workspace del Cargo.toml radice
+/// dell'upstream a `rev`.
+function upstreamWorkspace(repo, rev) {
+  const manifest = git(["-C", repo, "show", `${rev}:Cargo.toml`]).toString();
+  return {
+    rust: /\nrust-version = "([^"]+)"/.exec(manifest)?.[1] ?? "?",
+    dependencies: workspaceDependencies(manifest),
+  };
+}
+
+function report(rev, source) {
+  const lock = readLock();
+  const repo = repository(source ?? lock.repository, rev);
+  const previous = extract(repo, lock.rev);
+  const next = extract(repo, rev);
+  const before = hashes(previous.dir);
+  const after = hashes(next.dir);
+  const changedUpstream = new Set(
+    [...new Set([...before.keys(), ...after.keys()])].filter((rel) => before.get(rel) !== after.get(rel)),
+  );
+  console.log(`vendor/${ID}: da ${lock.rev.slice(0, 12)} (${lock.version}) a ${rev.slice(0, 12)} (${next.date}, ${next.version}), a vuoto.`);
+  console.log(`file gestiti che l'upstream cambia: ${changedUpstream.size}.`);
+
+  // Ogni patch da sola sui file nuovi, e la pila nell'ordine: una patch che
+  // non si applica si salta, e le successive si provano lo stesso.
+  git(["init", "-q"], { cwd: next.dir });
+  const stack = tempdir("pila");
+  copyManaged(next.dir, stack);
+  git(["init", "-q"], { cwd: stack });
+  const rows = [];
+  let failing = 0;
+  let absorbedCount = 0;
+  for (const patch of patchFiles()) {
+    const alone = applies(next.dir, patch);
+    const absorbed = !alone.ok && applies(next.dir, patch, true).ok;
+    const inStack = applies(stack, patch);
+    if (inStack.ok) git(["apply", "--whitespace=nowarn", path.join(VENDOR, patch)], { cwd: stack });
+    const touched = touchedBy(patch).filter((rel) => changedUpstream.has(rel));
+    let state;
+    if (inStack.ok) state = "si applica";
+    else if (absorbed) state = "assorbita dall'upstream: si può togliere";
+    else if (alone.ok) state = "si applica da sola, non sulla pila";
+    else state = `non si applica: ${inStack.why}`;
+    if (!inStack.ok && absorbed) absorbedCount += 1;
+    else if (!inStack.ok) failing += 1;
+    rows.push({ patch, state, touched });
+  }
+  for (const { patch, state, touched } of rows) {
+    console.log(`  ${patch}: ${state}`);
+    if (touched.length > 0) console.log(`    file che l'upstream ha cambiato: ${touched.join(", ")}`);
+  }
+  fs.rmSync(path.join(stack, ".git"), { recursive: true, force: true });
+  const problems = failing + absorbedCount === 0 ? checkManifests(stack) : [];
+  for (const p of problems) console.log(`  manifest: ${p}`);
+
+  const changes = dependencyChanges(previous.dir, next.dir);
+  console.log(changes.length > 0 ? "dipendenze da rivedere (licenza, avvisi):" : "dipendenze dirette: invariate.");
+  for (const c of changes) console.log(`  ${c}`);
+  const was = upstreamWorkspace(repo, lock.rev);
+  const now = upstreamWorkspace(repo, rev);
+  if (was.rust !== now.rust) console.log(`rust-version dell'upstream: ${was.rust} → ${now.rust} (Fub resta su quella di rust-toolchain.toml).`);
+  for (const name of new Set([...was.dependencies.keys(), ...now.dependencies.keys()])) {
+    const [a, b] = [was.dependencies.get(name), now.dependencies.get(name)];
+    if (a !== b) console.log(`  workspace: ${name} ${a ?? "-"} → ${b ?? "-"}`);
+  }
+  for (const d of [previous.dir, next.dir, stack]) fs.rmSync(d, { recursive: true, force: true });
+  const ready = failing + absorbedCount === 0 && problems.length === 0;
+  if (ready) console.log(`la pila si applica: \`update --rev ${rev}\`, poi \`${ID} gate\`.`);
+  if (absorbedCount > 0) console.log(`${absorbedCount} patch da togliere (e da togliere da UPSTREAM.md) prima di \`update\`.`);
+  if (failing > 0) console.log(`${failing} patch da rifare sui file nuovi prima di \`update\` (vedi vendor/${ID}/UPSTREAM.md).`);
+  return ready;
+}
+
+/// Le prove di `motori.mjs` per il motore, una dopo l'altra.
+function gate() {
+  const steps = MOTORI[ID].gate ?? [];
+  if (steps.length === 0) fail(`motori.mjs non elenca le prove di ${ID}`);
+  const results = [];
+  for (const [label, command, ...args] of steps) {
+    console.log(`\n== ${label}: ${command} ${args.join(" ")}`);
+    const started = Date.now();
+    const run = spawnSync(command, args, { cwd: ROOT, stdio: "inherit" });
+    results.push({ label, ok: run.status === 0, seconds: Math.round((Date.now() - started) / 1000) });
+  }
+  console.log(`\nprove di ${NOME}:`);
+  for (const { label, ok, seconds } of results) console.log(`  ${ok ? "ok    " : "FALLITA"} ${label} (${seconds} s)`);
+  return results.every((r) => r.ok);
 }
 
 /// Il tag `tag` dell'upstream punta a `rev`.
@@ -511,7 +637,7 @@ function option(args, name) {
 }
 
 const USO =
-  "uso: vendor.mjs <motore> update --rev <sha> [--tag <tag>] [--source <percorso o URL>] | [<motore>] check | <motore> verify-upstream [--source <percorso o URL>]";
+  "uso: vendor.mjs <motore> update --rev <sha> [--tag <tag>] [--source <percorso o URL>] | [<motore>] check | <motore> verify-upstream [--source <percorso o URL>] | <motore> report --rev <sha> [--source <percorso o URL>] | <motore> gate";
 
 try {
   const argv = process.argv.slice(2);
@@ -534,6 +660,11 @@ try {
     update(rev, option(args, "--source"), option(args, "--tag"));
   } else if (command === "verify-upstream") {
     verifyUpstream(option(args, "--source"));
+  } else if (command === "report") {
+    const rev = option(args, "--rev") ?? fail("report vuole --rev <sha>");
+    if (!report(rev, option(args, "--source"))) process.exitCode = 1;
+  } else if (command === "gate") {
+    if (!gate()) process.exitCode = 1;
   } else {
     fail(USO);
   }

@@ -23,7 +23,7 @@
 //! importatore ([`Codec::lossless`] falso) parte già da meno del file: anche
 //! questo lo dice il rapporto.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use fub_abi::command::{
@@ -31,11 +31,10 @@ use fub_abi::command::{
     ParamSpec,
 };
 use fub_abi::model::DocId;
-use fub_abi::rules::path::strip_ext;
 use fub_abi::text::{StringCatalog, Text};
 use fub_abi::traits::{CommandProvider, HostApi, ReadApi, VaultRead};
 use fub_abi::transfer::{
-    artifact_key, ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportSelection,
+    copy_names, ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportSelection,
     ExportTarget, TransferNote,
 };
 use fub_abi::PluginError;
@@ -246,7 +245,7 @@ impl ExportProvider for RichExport {
             ));
         }
         let ids: Vec<DocId> = chosen.iter().map(|(doc, _)| doc.clone()).collect();
-        for ((doc, codec), name) in chosen.iter().zip(copy_names(&ids, target)) {
+        for ((doc, codec), name) in chosen.iter().zip(copy_names(&ids, target.extension())) {
             let entry = doc.to_string();
             let document = match host
                 .read_document_bytes(doc)
@@ -304,37 +303,6 @@ pub fn codec_of<H: VaultRead + ?Sized>(host: &H, doc: &DocId) -> Option<Codec> {
 
 fn read_error(doc: &DocId, error: crate::RichError) -> PluginError {
     PluginError::BadArgs(format!("`{doc}` cannot be read: {error}").into())
-}
-
-/// Il nome della copia di ciascun documento, uno per documento e mai lo
-/// stesso: il documento senza estensione, con quella della destinazione. Due
-/// documenti che differiscono soltanto per l'estensione (`Lettera.docx` e
-/// `Lettera.odt`) la tengono entrambi, e ciò che collide ancora prende un
-/// numero (`<nome> 1`, `<nome> 2`, …). Lo stesso nome è quello di
-/// [`artifact_key`], con cui il sink rifiuterebbe il secondo.
-fn copy_names(docs: &[DocId], target: Target) -> Vec<String> {
-    let ext = target.extension();
-    let stem_key = |doc: &DocId| artifact_key(&strip_ext(doc.as_str()));
-    let mut stems: BTreeMap<String, usize> = BTreeMap::new();
-    for doc in docs {
-        *stems.entry(stem_key(doc)).or_default() += 1;
-    }
-    let mut taken = BTreeSet::new();
-    docs.iter()
-        .map(|doc| {
-            let base = match stems[&stem_key(doc)] {
-                1 => strip_ext(doc.as_str()),
-                _ => doc.to_string(),
-            };
-            (0u32..)
-                .map(|n| match n {
-                    0 => format!("{base}.{ext}"),
-                    n => format!("{base} {n}.{ext}"),
-                })
-                .find(|name| taken.insert(artifact_key(name)))
-                .expect("la sequenza dei candidati è infinita")
-        })
-        .collect()
 }
 
 /// Gli avvisi su ciò che la copia non porta.

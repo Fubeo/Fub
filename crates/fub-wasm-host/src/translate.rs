@@ -966,9 +966,100 @@ pub(crate) fn from_grid_bytes_session(
             })
             .collect(),
         conflicts: session.conflicts.into_iter().map(from_grid_key).collect(),
+        commands: session
+            .commands
+            .into_iter()
+            .map(from_grid_command_state)
+            .collect(),
+        book: from_grid_book(session.book),
     };
     session.validate()?;
     Ok(session)
+}
+
+fn from_grid_book(book: w_grid_bytes::GridBook) -> fub_abi::GridBook {
+    fub_abi::GridBook {
+        theme_colors: book.theme_colors,
+        names: book.names,
+        calculation: match book.calculation {
+            w_grid_bytes::GridCalculation::Automatic => fub_abi::GridCalculation::Automatic,
+            w_grid_bytes::GridCalculation::AutomaticExceptTables => {
+                fub_abi::GridCalculation::AutomaticExceptTables
+            }
+            w_grid_bytes::GridCalculation::Manual => fub_abi::GridCalculation::Manual,
+        },
+        protected: book.protected,
+        font: book.font,
+        font_size: book.font_size,
+    }
+}
+
+fn from_grid_command_state(state: w_grid_bytes::GridCommandState) -> fub_abi::GridCommandState {
+    fub_abi::GridCommandState {
+        id: state.id,
+        enabled: state.enabled,
+        reason: state.reason,
+    }
+}
+
+pub(crate) fn to_grid_selection(selection: &fub_abi::GridSelection) -> w_grid_bytes::GridSelection {
+    w_grid_bytes::GridSelection {
+        sheet: selection.sheet.clone(),
+        selection: selection.selection.clone(),
+        active: selection.active.clone(),
+    }
+}
+
+pub(crate) fn to_grid_command_request(
+    request: &fub_abi::GridCommandRequest,
+) -> w_grid_bytes::GridCommandRequest {
+    let command = &request.command;
+    w_grid_bytes::GridCommandRequest {
+        revision: to_grid_revision(&request.revision),
+        command: w_grid_bytes::GridCommand {
+            id: command.id.clone(),
+            params: command.params.clone(),
+            sheet: command.sheet.clone(),
+            selection: command.selection.clone(),
+            active: command.active.clone(),
+        },
+    }
+}
+
+pub(crate) fn from_grid_catalog(
+    commands: Vec<w_grid_bytes::GridCommandState>,
+) -> Result<Vec<fub_abi::GridCommandState>, PluginError> {
+    let commands: Vec<_> = commands.into_iter().map(from_grid_command_state).collect();
+    fub_abi::validate_grid_catalog(&commands)?;
+    Ok(commands)
+}
+
+pub(crate) fn from_grid_command_outcome(
+    outcome: w_grid_bytes::GridCommandOutcome,
+) -> Result<fub_abi::GridCommandOutcome, PluginError> {
+    let outcome = fub_abi::GridCommandOutcome {
+        commit: from_grid_commit(outcome.commit)?,
+        sheets: outcome.sheets.into_iter().map(from_grid_sheet).collect(),
+        hidden: outcome.hidden,
+        selection: fub_abi::GridSelection {
+            sheet: outcome.selection.sheet,
+            selection: outcome.selection.selection,
+            active: outcome.selection.active,
+        },
+        result: outcome.result,
+        dialog: outcome.dialog.map(|dialog| fub_abi::GridDialog {
+            id: dialog.id,
+            params: dialog.params,
+        }),
+        commands: outcome
+            .commands
+            .into_iter()
+            .map(from_grid_command_state)
+            .collect(),
+        book: from_grid_book(outcome.book),
+    };
+    outcome.validate()?;
+    Ok(outcome)
 }
 
 fn from_grid_bytes_value(value: w_grid_bytes::GridValue) -> fub_abi::GridValue {
@@ -985,12 +1076,40 @@ fn from_grid_bytes_cell(cell: w_grid_bytes::GridBytesCell) -> fub_abi::GridBytes
     fub_abi::GridBytesCell {
         key: from_grid_key(cell.key),
         input: cell.input,
-        style: from_grid_style(cell.style),
+        style: cell.style,
         value: from_grid_bytes_value(cell.value),
         display: cell.display,
         lock: cell.lock,
         stale: cell.stale,
         conflict: cell.conflict,
+        data_bar: cell.data_bar.map(|bar| fub_abi::GridDataBar {
+            fraction: bar.fraction,
+            color: bar.color,
+            gradient: bar.gradient,
+        }),
+        icon: cell.icon.map(|icon| fub_abi::GridIcon {
+            set: icon.set,
+            index: icon.index,
+        }),
+        comment: cell.comment.map(|comment| fub_abi::GridComment {
+            author: comment.author,
+            text: comment.text,
+            threaded: comment.threaded,
+            resolved: comment.resolved,
+            replies: comment
+                .replies
+                .into_iter()
+                .map(|reply| fub_abi::GridCommentReply {
+                    author: reply.author,
+                    text: reply.text,
+                })
+                .collect(),
+        }),
+        link: cell.link.map(|link| fub_abi::GridLink {
+            target: link.target,
+            tooltip: link.tooltip,
+            external: link.external,
+        }),
     }
 }
 
@@ -1007,9 +1126,123 @@ pub(crate) fn from_grid_bytes_window(
         rows: window.rows.into_iter().map(from_grid_row).collect(),
         columns: window.columns.into_iter().map(from_grid_column).collect(),
         cells: window.cells.into_iter().map(from_grid_bytes_cell).collect(),
+        styles: window.styles.into_iter().map(from_grid_style).collect(),
+        merges: window
+            .merges
+            .into_iter()
+            .map(|merge| fub_abi::GridMerge {
+                row: merge.row,
+                column: merge.column,
+                rows: merge.rows,
+                columns: merge.columns,
+            })
+            .collect(),
+        view: fub_abi::GridSheetView {
+            frozen_rows: window.view.frozen_rows,
+            frozen_columns: window.view.frozen_columns,
+            gridlines: window.view.gridlines,
+            headings: window.view.headings,
+            zoom: window.view.zoom,
+            right_to_left: window.view.right_to_left,
+            mode: match window.view.mode {
+                w_grid_bytes::GridViewMode::Normal => fub_abi::GridViewMode::Normal,
+                w_grid_bytes::GridViewMode::PageLayout => fub_abi::GridViewMode::PageLayout,
+                w_grid_bytes::GridViewMode::PageBreakPreview => {
+                    fub_abi::GridViewMode::PageBreakPreview
+                }
+            },
+            formulas: window.view.formulas,
+            protected: window.view.protected,
+            print_gridlines: window.view.print_gridlines,
+            print_headings: window.view.print_headings,
+        },
+        tables: window
+            .tables
+            .into_iter()
+            .map(|table| fub_abi::GridTable {
+                name: table.name,
+                row: table.row,
+                column: table.column,
+                rows: table.rows,
+                columns: table.columns,
+                header_row: table.header_row,
+                totals_row: table.totals_row,
+                banded_rows: table.banded_rows,
+                banded_columns: table.banded_columns,
+                first_column: table.first_column,
+                last_column: table.last_column,
+                filter_button: table.filter_button,
+                style: table.style,
+            })
+            .collect(),
+        objects: window.objects.into_iter().map(from_grid_object).collect(),
     };
     window.validate()?;
     Ok(window)
+}
+
+fn from_grid_object(object: w_grid_bytes::GridObject) -> fub_abi::GridObject {
+    use fub_abi::{GridObjectKind as K, GridShapeKind as S};
+    use w_grid_bytes::{GridObjectKind as WK, GridShapeKind as WS};
+    fub_abi::GridObject {
+        kind: match object.kind {
+            WK::Chart => K::Chart,
+            WK::Sparkline => K::Sparkline,
+            WK::Image => K::Image,
+            WK::CellPicture => K::CellPicture,
+            WK::Shape => K::Shape,
+        },
+        id: object.id,
+        row: object.row,
+        column: object.column,
+        dx: object.dx,
+        dy: object.dy,
+        width: object.width,
+        height: object.height,
+        alt: object.alt,
+        svg: object.svg,
+        media: object.media.map(|media| fub_abi::GridMedia {
+            mime: media.mime,
+            key: media.key,
+            data: media.data,
+        }),
+        shape: object.shape.map(|shape| fub_abi::GridShape {
+            kind: match shape.kind {
+                WS::Rectangle => S::Rectangle,
+                WS::RoundedRectangle => S::RoundedRectangle,
+                WS::Ellipse => S::Ellipse,
+                WS::Triangle => S::Triangle,
+                WS::Line => S::Line,
+                WS::Arrow => S::Arrow,
+                WS::TextBox => S::TextBox,
+                WS::Icon => S::Icon,
+                WS::Ink => S::Ink,
+            },
+            fill: shape.fill,
+            line: shape.line,
+            text: shape.text,
+            font: shape.font,
+            font_size: shape.font_size,
+            bold: shape.bold,
+            italic: shape.italic,
+            text_color: shape.text_color,
+            align: match shape.align {
+                w_grid_bytes::GridShapeAlign::Left => fub_abi::GridShapeAlign::Left,
+                w_grid_bytes::GridShapeAlign::Center => fub_abi::GridShapeAlign::Center,
+                w_grid_bytes::GridShapeAlign::Right => fub_abi::GridShapeAlign::Right,
+            },
+            anchor: match shape.anchor {
+                w_grid_bytes::GridShapeAnchor::Top => fub_abi::GridShapeAnchor::Top,
+                w_grid_bytes::GridShapeAnchor::Middle => fub_abi::GridShapeAnchor::Middle,
+                w_grid_bytes::GridShapeAnchor::Bottom => fub_abi::GridShapeAnchor::Bottom,
+            },
+            right_to_left: shape.right_to_left,
+        }),
+        missing: object.missing.map(|missing| match missing {
+            w_grid_bytes::GridObjectMissing::TooLarge => fub_abi::GridObjectMissing::TooLarge,
+            w_grid_bytes::GridObjectMissing::Unsupported => fub_abi::GridObjectMissing::Unsupported,
+        }),
+    }
 }
 
 fn from_grid_revision(revision: String) -> fub_abi::Revision {
@@ -1048,14 +1281,53 @@ fn to_grid_key(key: &fub_abi::grid::GridCellKey) -> w_grid::GridCellKey {
 fn from_grid_horizontal(
     horizontal: w_grid::GridHorizontalAlign,
 ) -> fub_abi::grid::GridHorizontalAlign {
+    use fub_abi::grid::GridHorizontalAlign as H;
     match horizontal {
-        w_grid::GridHorizontalAlign::Start => fub_abi::grid::GridHorizontalAlign::Start,
-        w_grid::GridHorizontalAlign::Center => fub_abi::grid::GridHorizontalAlign::Center,
-        w_grid::GridHorizontalAlign::End => fub_abi::grid::GridHorizontalAlign::End,
+        w_grid::GridHorizontalAlign::Start => H::Start,
+        w_grid::GridHorizontalAlign::Center => H::Center,
+        w_grid::GridHorizontalAlign::End => H::End,
+        w_grid::GridHorizontalAlign::Fill => H::Fill,
+        w_grid::GridHorizontalAlign::Justify => H::Justify,
+        w_grid::GridHorizontalAlign::Distributed => H::Distributed,
+    }
+}
+
+fn from_grid_vertical(vertical: w_grid::GridVerticalAlign) -> fub_abi::GridVerticalAlign {
+    use fub_abi::GridVerticalAlign as V;
+    match vertical {
+        w_grid::GridVerticalAlign::Top => V::Top,
+        w_grid::GridVerticalAlign::Center => V::Center,
+        w_grid::GridVerticalAlign::Bottom => V::Bottom,
+        w_grid::GridVerticalAlign::Justify => V::Justify,
+        w_grid::GridVerticalAlign::Distributed => V::Distributed,
+    }
+}
+
+fn from_grid_border(border: w_grid::GridBorder) -> fub_abi::GridBorder {
+    use fub_abi::GridBorderStyle as B;
+    use w_grid::GridBorderStyle as W;
+    fub_abi::GridBorder {
+        style: match border.style {
+            W::Thin => B::Thin,
+            W::Medium => B::Medium,
+            W::Thick => B::Thick,
+            W::Dashed => B::Dashed,
+            W::Dotted => B::Dotted,
+            W::Double => B::Double,
+            W::Hair => B::Hair,
+            W::MediumDashed => B::MediumDashed,
+            W::DashDot => B::DashDot,
+            W::MediumDashDot => B::MediumDashDot,
+            W::DashDotDot => B::DashDotDot,
+            W::MediumDashDotDot => B::MediumDashDotDot,
+            W::SlantDashDot => B::SlantDashDot,
+        },
+        color: border.color,
     }
 }
 
 fn from_grid_style(style: w_grid::GridCellStyle) -> fub_abi::grid::GridCellStyle {
+    let borders = style.borders;
     fub_abi::grid::GridCellStyle {
         bold: style.bold,
         italic: style.italic,
@@ -1063,6 +1335,32 @@ fn from_grid_style(style: w_grid::GridCellStyle) -> fub_abi::grid::GridCellStyle
         fill_color: style.fill_color,
         horizontal: style.horizontal.map(from_grid_horizontal),
         number_format: style.number_format,
+        font: style.font,
+        font_size: style.font_size,
+        underline: style.underline.map(|underline| match underline {
+            w_grid::GridUnderline::Single => fub_abi::GridUnderline::Single,
+            w_grid::GridUnderline::Double => fub_abi::GridUnderline::Double,
+            w_grid::GridUnderline::SingleAccounting => fub_abi::GridUnderline::SingleAccounting,
+            w_grid::GridUnderline::DoubleAccounting => fub_abi::GridUnderline::DoubleAccounting,
+        }),
+        strike: style.strike,
+        script: style.script.map(|script| match script {
+            w_grid::GridScript::Superscript => fub_abi::GridScript::Superscript,
+            w_grid::GridScript::Subscript => fub_abi::GridScript::Subscript,
+        }),
+        vertical: style.vertical.map(from_grid_vertical),
+        wrap: style.wrap,
+        shrink: style.shrink,
+        indent: style.indent,
+        rotation: style.rotation,
+        borders: fub_abi::GridBorders {
+            top: borders.top.map(from_grid_border),
+            right: borders.right.map(from_grid_border),
+            bottom: borders.bottom.map(from_grid_border),
+            left: borders.left.map(from_grid_border),
+            diagonal_down: borders.diagonal_down.map(from_grid_border),
+            diagonal_up: borders.diagonal_up.map(from_grid_border),
+        },
     }
 }
 
@@ -1094,6 +1392,7 @@ pub(crate) fn to_grid_window_request(
         row_count: request.row_count,
         column_start: request.column_start,
         column_count: request.column_count,
+        known_media: request.known_media.clone(),
     }
 }
 

@@ -1,18 +1,18 @@
 //! Writing worksheet parts and the parts they own (tables, comments, drawings, charts).
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write as _;
 
-use gridcraft_core::{CellError, CellRef, RangeRef, Value};
+use gridcraft_core::{CellError, CellRef, MAX_COLS, MAX_ROWS, RangeRef, Value};
 use gridcraft_model::{
-    Cell, CfOperator, CfRule, CfValueKind, Color, CondFormat, ErrorStyle, FilterCriterion, LineInfo, Orientation, Sheet, SparklineKind, Style, Table,
-    TotalsFn, Validation, ValidationKind, Workbook, default_icon_thresholds, icon_count,
+    Cell, CfOperator, CfRule, CfValueKind, Color, CondFormat, ErrorStyle, FilterCriterion, LineInfo, NoteBox, NoteCorner, Orientation, Sheet,
+    SparklineKind, Style, Table, TotalsFn, Validation, ValidationKind, Workbook, default_icon_thresholds, icon_count,
 };
 
 use crate::drawing::{Obj, image_content_type, image_ext};
 use crate::fmla::text_to_file;
 use crate::styles::{color_attrs, dxf_id};
-use crate::tables::{paper_id, px_to_col_width, px_to_pt};
+use crate::tables::{paper_id, px_to_pt};
 use crate::write::{
     CT_CHART, CT_COMMENTS, CT_DRAWING, CT_TABLE, CT_THREADED_COMMENTS, NS_MAIN, NS_REL, NS_THREADED, Out, REL_THREADED_COMMENT, Rels, XML_DECL,
 };
@@ -76,10 +76,34 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
     let nstyles = wb.styles.len() as u32;
     let sid = |s: gridcraft_model::StyleId| if s.0 < nstyles { s.0 } else { 0 };
 
+    // A table's dropdown filter is kept in `sheet.autofilter`, not in `Table::filter` (the
+    // engine's only live filter state, which the reader also fills). Where the two coincide,
+    // fold the sheet filter's criteria into the table so they reach the file: the stored
+    // `colId` offsets are relative to the range's first column, and both ranges start at the
+    // same column, so they carry over verbatim. A filter that only partially covers a table
+    // has nowhere valid to go, so it keeps being suppressed below.
+    let folded: Vec<Table> = match &sheet.autofilter {
+        Some(af) if !af.criteria.is_empty() => sheet
+            .tables
+            .iter()
+            .cloned()
+            .map(|mut t| {
+                if t.header_row
+                    && t.filter_button
+                    && t.filter.is_empty()
+                    && t.range.contains_range(&af.range)
+                    && t.range.start.col == af.range.start.col
+                {
+                    t.filter = af.criteria.clone();
+                }
+                t
+            })
+            .collect(),
+        _ => sheet.tables.clone(),
+    };
     // Table header cells must hold the column names.
     let mut overrides: BTreeMap<CellRef, String> = BTreeMap::new();
-    let tables: Vec<(&Table, Vec<String>)> = sheet
-        .tables
+    let tables: Vec<(&Table, Vec<String>)> = folded
         .iter()
         .filter(|t| t.range.height() > t.header_row as u32 + t.totals_row as u32 || (t.header_row && t.range.height() > t.totals_row as u32))
         .map(|t| (t, table_columns(t)))
@@ -114,13 +138,34 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
     let mut s = format!("{XML_DECL}<worksheet xmlns=\"{NS_MAIN}\" xmlns:r=\"{NS_REL}\">");
     // sheetPr
     let fit = sheet.print.fit_to.is_some();
-    if sheet.tab_color.is_some() || fit {
-        s.push_str("<sheetPr>");
+    let source = sheet.preserved.as_deref();
+    // Formulas as the file spelled them, for the text GridCraft writes.
+    let spellings: HashMap<&str, &str> = source
+        .iter()
+        .flat_map(|p| &p.sources)
+        .filter(|f| f.slot == "formula")
+        .filter_map(|f| Some((f.model.as_str(), std::str::from_utf8(&f.data).ok()?)))
+        .collect();
+    let kept = |slot: &str| !crate::passthrough::source_xml(source, slot).is_empty();
+    if sheet.tab_color.is_some() || fit || kept("sheetPr") || kept("outlinePr") || kept("pageSetUpPr") {
+        s.push_str("<sheetPr");
+        crate::passthrough::push_attrs(&mut s, source, "sheetPr");
+        s.push('>');
         if let Some(c) = &sheet.tab_color {
             let _ = write!(s, "<tabColor {}/>", color_attrs(c));
         }
-        if fit {
-            s.push_str("<pageSetUpPr fitToPage=\"1\"/>");
+        if kept("outlinePr") {
+            s.push_str("<outlinePr");
+            crate::passthrough::push_attrs(&mut s, source, "outlinePr");
+            s.push_str("/>");
+        }
+        if fit || kept("pageSetUpPr") {
+            s.push_str("<pageSetUpPr");
+            if fit {
+                s.push_str(" fitToPage=\"1\"");
+            }
+            crate::passthrough::push_attrs(&mut s, source, "pageSetUpPr");
+            s.push_str("/>");
         }
         s.push_str("</sheetPr>");
     }
@@ -154,12 +199,24 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
     if sheet.view != gridcraft_model::SheetViewMode::Normal {
         let _ = write!(s, " view=\"{}\"", sheet.view.as_str());
     }
-    if sheet.zoom != 100 && (10..=400).contains(&sheet.zoom) {
-        let _ = write!(s, " zoomScale=\"{0}\" zoomScaleNormal=\"{0}\"", sheet.zoom);
+    let zoomed = sheet.zoom != 100 && (10..=400).contains(&sheet.zoom);
+    if zoomed {
+        let _ = write!(s, " zoomScale=\"{}\"", sheet.zoom);
+    }
+    let normal = crate::passthrough::source(source, "sheetView.zoomScaleNormal", &crate::passthrough::model_of(&sheet.zoom));
+    match normal.and_then(|d| std::str::from_utf8(d).ok()) {
+        Some(z) => {
+            let _ = write!(s, " zoomScaleNormal=\"{}\"", crate::xml::esc_attr(z));
+        }
+        None if zoomed => {
+            let _ = write!(s, " zoomScaleNormal=\"{}\"", sheet.zoom);
+        }
+        None => {}
     }
     if sheet.view_top_left != CellRef::default() && sheet.freeze.is_none() {
         let _ = write!(s, " topLeftCell=\"{}\"", sheet.view_top_left.a1());
     }
+    crate::passthrough::push_attrs(&mut s, source, "sheetView");
     s.push_str(" workbookViewId=\"0\">");
     let active = sheet.view_active.a1();
     match sheet.freeze {
@@ -188,7 +245,18 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
             let _ = write!(s, "<selection pane=\"{pane}\" activeCell=\"{active}\" sqref=\"{active}\"/>");
         }
         _ => {
-            let _ = write!(s, "<selection activeCell=\"{active}\" sqref=\"{active}\"/>");
+            let model = crate::passthrough::model_of(&(sheet.freeze, sheet.view_top_left));
+            let split = crate::passthrough::source(source, "pane", &model).and_then(|d| std::str::from_utf8(d).ok());
+            let pane = crate::passthrough::source(source, "pane.active", &model).and_then(|d| std::str::from_utf8(d).ok());
+            s.push_str(split.unwrap_or_default());
+            match pane.filter(|p| !p.is_empty() && split.is_some()) {
+                Some(pane) => {
+                    let _ = write!(s, "<selection pane=\"{}\" activeCell=\"{active}\" sqref=\"{active}\"/>", crate::xml::esc_attr(pane));
+                }
+                None => {
+                    let _ = write!(s, "<selection activeCell=\"{active}\" sqref=\"{active}\"/>");
+                }
+            }
         }
     }
     s.push_str("</sheetView></sheetViews>");
@@ -197,11 +265,20 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
     let max_row_outline = sheet.rows.values().map(|r| r.outline).max().unwrap_or(0);
     let max_col_outline = sheet.cols.values().map(|r| r.outline).max().unwrap_or(0);
     s.push_str("<sheetFormatPr");
-    if (sheet.default_col_width - gridcraft_model::DEFAULT_COL_WIDTH).abs() > 0.01 {
-        let _ = write!(s, " defaultColWidth=\"{}\"", num(px_to_col_width(sheet.default_col_width)));
+    let derived = crate::passthrough::source(source, "sheetFormatPr.baseColWidth", &crate::passthrough::model_of(&sheet.default_col_width)).is_some();
+    let unread = crate::passthrough::source(source, "sheetFormatPr.defaultColWidth", &crate::passthrough::model_of(&sheet.default_col_width));
+    if let Some(w) = unread.and_then(|w| std::str::from_utf8(w).ok()) {
+        let _ = write!(s, " defaultColWidth=\"{}\"", esc_attr(w));
+    } else if (sheet.default_col_width - gridcraft_model::DEFAULT_COL_WIDTH).abs() > 0.01 && !derived {
+        let _ = write!(s, " defaultColWidth=\"{}\"", crate::passthrough::col_width(source, sheet.default_col_width));
     }
     let _ = write!(s, " defaultRowHeight=\"{}\"", num(px_to_pt(sheet.default_row_height)));
-    if (sheet.default_row_height - gridcraft_model::DEFAULT_ROW_HEIGHT).abs() > 0.01 {
+    // The file's own flag while the default height is the one read.
+    let custom = match crate::passthrough::source(source, "sheetFormatPr.customHeight", &crate::passthrough::model_of(&sheet.default_row_height)) {
+        Some(flag) => flag == b"1",
+        None => (sheet.default_row_height - gridcraft_model::DEFAULT_ROW_HEIGHT).abs() > 0.01,
+    };
+    if custom {
         s.push_str(" customHeight=\"1\"");
     }
     if max_row_outline > 0 {
@@ -210,6 +287,7 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
     if max_col_outline > 0 {
         let _ = write!(s, " outlineLevelCol=\"{max_col_outline}\"");
     }
+    crate::passthrough::push_attrs(&mut s, source, "sheetFormatPr");
     s.push_str("/>");
 
     // cols: runs of identical settings.
@@ -219,7 +297,7 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
         let flush = |s: &mut String, r: (u32, u32, LineInfo)| {
             let (a, b, i) = r;
             let w = i.size.unwrap_or(sheet.default_col_width);
-            let _ = write!(s, "<col min=\"{}\" max=\"{}\" width=\"{}\"", a + 1, b + 1, num(px_to_col_width(w)));
+            let _ = write!(s, "<col min=\"{}\" max=\"{}\" width=\"{}\"", a + 1, b + 1, crate::passthrough::col_width(source, w));
             if let Some(st) = i.style {
                 let _ = write!(s, " style=\"{}\"", sid(st));
             }
@@ -299,15 +377,27 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
             let cell = sheet.cells.get(*c);
             let ov = overrides.get(c);
             let ex = extra.get(c);
+            // A formula whose `@` all stand where Excel intersects a legacy formula anyway is
+            // saved as one, without them: Excel reads it back the same, and so does every
+            // version before dynamic arrays.
+            let formula = cell.and_then(|x| x.formula.as_deref());
+            let legacy = match (dynamic.get(c), formula) {
+                (None, Some(f)) => crate::array_formula::legacy_form(wb, si, *c, f).or_else(|| {
+                    let read = !f.dynamic && f.array.is_none() && crate::passthrough::source(source, "formula.legacy", &f.text).is_some();
+                    read.then(|| f.expr_arc().map(|e| e.as_ref().clone())).flatten()
+                }),
+                _ => None,
+            };
             let array = dynamic.get(c).copied().or_else(|| {
-                let f = cell?.formula.as_ref()?;
-                (f.array.is_none() && crate::array_formula::needs_array(wb, si, *c, f)).then_some(RangeRef::cell(*c))
+                let f = formula?;
+                (legacy.is_none() && f.array.is_none() && crate::array_formula::needs_array(wb, si, *c, f)).then_some(RangeRef::cell(*c))
             });
-            write_cell(&mut s, *c, cell, sheet.cell_pictures.get(c), ov, ex, array.as_ref(), &sid, out);
+            write_cell(&mut s, *c, cell, sheet.cell_pictures.get(c), ov, ex, array.as_ref(), legacy, &spellings, &sid, out);
         }
         s.push_str("</row>");
     }
     s.push_str("</sheetData>");
+    s.push_str(crate::passthrough::source_xml(source, "sheetCalcPr"));
 
     // sheetProtection
     if let Some(p) = &sheet.protection {
@@ -353,13 +443,26 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
         }
         s.push_str("</mergeCells>");
     }
-    // Conditional formats, priorities renumbered 1..n in priority order.
+    s.push_str(crate::passthrough::source_xml(source, "phoneticPr"));
+    // Conditional formats, priorities renumbered 1..n in priority order; the file's own, and its
+    // Excel 2010 rules, while the conditional formats are the ones read.
+    let cf_model = crate::passthrough::cond_formats_model(sheet);
+    let x14_cf = crate::passthrough::source(source, "x14.conditionalFormattings", &cf_model).and_then(|d| std::str::from_utf8(d).ok());
+    let x14_ids: HashMap<usize, &str> = match x14_cf.and(crate::passthrough::source(source, "x14.cf.ids", &cf_model)) {
+        Some(ids) => std::str::from_utf8(ids)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| l.split_once(' '))
+            .filter_map(|(n, id)| Some((n.parse().ok()?, id)))
+            .collect(),
+        None => HashMap::new(),
+    };
     let mut order: Vec<usize> = (0..sheet.cond_formats.len()).collect();
     order.sort_by_key(|&i| sheet.cond_formats.get(i).map(|c| c.priority).unwrap_or(0));
     let mut prio = vec![0u32; sheet.cond_formats.len()];
     for (rank, &i) in order.iter().enumerate() {
         if let Some(p) = prio.get_mut(i) {
-            *p = rank as u32 + 1;
+            *p = if x14_cf.is_some() { sheet.cond_formats[i].priority } else { rank as u32 + 1 };
         }
     }
     for (i, cf) in sheet.cond_formats.iter().enumerate() {
@@ -370,7 +473,7 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
             s,
             "<conditionalFormatting sqref=\"{}\">{}</conditionalFormatting>",
             sqref(&cf.ranges),
-            cf_rule_xml(cf, prio.get(i).copied().unwrap_or(1), out)
+            cf_rule_xml(cf, prio.get(i).copied().unwrap_or(1), x14_ids.get(&i).copied(), out)
         );
     }
     let vals: Vec<&Validation> = sheet.validations.iter().filter(|v| !v.ranges.is_empty()).collect();
@@ -396,6 +499,8 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
                 || t.starts_with("\\\\")
                 || t.to_ascii_lowercase().starts_with("file:");
             let _ = write!(s, "<hyperlink ref=\"{}\"", c.a1());
+            let kept = |at| crate::passthrough::source(source, "hyperlink.display", &crate::passthrough::link_model(at, h));
+            let display = kept(Some(*c)).or_else(|| kept(None)).and_then(|d| std::str::from_utf8(d).ok());
             if external {
                 let (url, loc) = match t.split_once('#') {
                     Some((u, l)) if !u.is_empty() => (u, Some(l)),
@@ -406,8 +511,12 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
                 if let Some(l) = loc {
                     let _ = write!(s, " location=\"{}\"", esc_attr(l));
                 }
+                if let Some(d) = display {
+                    let _ = write!(s, " display=\"{}\"", esc_attr(d));
+                }
             } else {
-                let _ = write!(s, " location=\"{}\" display=\"{}\"", esc_attr(t.trim_start_matches('#')), esc_attr(t.trim_start_matches('#')));
+                let location = t.trim_start_matches('#');
+                let _ = write!(s, " location=\"{}\" display=\"{}\"", esc_attr(location), esc_attr(display.unwrap_or(location)));
             }
             if let Some(tt) = &h.tooltip {
                 let _ = write!(s, " tooltip=\"{}\"", esc_attr(tt));
@@ -429,26 +538,63 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
     }
     // Unmodelled content kept from the source file (printer settings, controls, OLE objects…).
     let kept = crate::passthrough::SheetKept::write(sheet, &mut rels, out);
-    let m = |i: usize| num(p.margins.get(i).copied().unwrap_or(0.75) as f64);
-    let _ =
-        write!(s, "<pageMargins left=\"{}\" right=\"{}\" top=\"{}\" bottom=\"{}\" header=\"{}\" footer=\"{}\"/>", m(0), m(1), m(2), m(3), m(4), m(5));
-    s.push_str("<pageSetup");
+    // The shortest decimal that reads back as the stored `f32` (`0.3`, not `0.30000001192092896`).
+    let m = |i: usize| {
+        let v = p.margins.get(i).copied().unwrap_or(0.75);
+        num(v.to_string().parse::<f64>().unwrap_or(f64::from(v)))
+    };
+    match crate::passthrough::source(source, "pageMargins", &crate::passthrough::model_of(&p.margins)).and_then(|d| std::str::from_utf8(d).ok()) {
+        Some(kept) => s.push_str(kept),
+        None => {
+            let _ = write!(
+                s,
+                "<pageMargins left=\"{}\" right=\"{}\" top=\"{}\" bottom=\"{}\" header=\"{}\" footer=\"{}\"/>",
+                m(0),
+                m(1),
+                m(2),
+                m(3),
+                m(4),
+                m(5)
+            );
+        }
+    }
+    use crate::passthrough::model_of;
+    let no_page_setup =
+        kept.page_setup_id().is_none() && crate::passthrough::source(source, "pageSetup.absent", &crate::passthrough::page_setup_model(p)).is_some();
+    let mut ps = String::from("<pageSetup");
     if let Some(id) = paper_id(&p.paper)
         && id != 1
     {
-        let _ = write!(s, " paperSize=\"{id}\"");
+        let _ = write!(ps, " paperSize=\"{id}\"");
+    } else if let Some(id) = crate::passthrough::source(source, "pageSetup.paperSize", &model_of(&p.paper)).and_then(|d| std::str::from_utf8(d).ok())
+    {
+        // A paper size GridCraft has no name for, while the paper is the one read.
+        let _ = write!(ps, " paperSize=\"{id}\"");
     }
     if p.scale != 100 && (10..=400).contains(&p.scale) {
-        let _ = write!(s, " scale=\"{}\"", p.scale);
+        let _ = write!(ps, " scale=\"{}\"", p.scale);
     }
     if let Some((w, h)) = p.fit_to {
-        let _ = write!(s, " fitToWidth=\"{w}\" fitToHeight=\"{h}\"");
+        let _ = write!(ps, " fitToWidth=\"{w}\" fitToHeight=\"{h}\"");
+    } else {
+        // Fit counts the file states without fitting to them.
+        ps.push_str(
+            crate::passthrough::source(source, "pageSetup.fit", &model_of(&p.fit_to)).and_then(|d| std::str::from_utf8(d).ok()).unwrap_or_default(),
+        );
     }
-    let _ = write!(s, " orientation=\"{}\"", if p.orientation == Orientation::Landscape { "landscape" } else { "portrait" });
+    // A file that leaves the orientation to the printer keeps doing so while it is the one read.
+    if crate::passthrough::source(source, "pageSetup.orientation", &model_of(&p.orientation)).is_none() {
+        let _ = write!(ps, " orientation=\"{}\"", if p.orientation == Orientation::Landscape { "landscape" } else { "portrait" });
+    }
     if let Some(id) = kept.page_setup_id() {
-        let _ = write!(s, " r:id=\"{id}\"");
+        let _ = write!(ps, " r:id=\"{id}\"");
     }
-    s.push_str("/>");
+    crate::passthrough::push_attrs(&mut ps, source, "pageSetup");
+    ps.push_str("/>");
+    // A file with no page setup keeps having none while the settings it would write are the ones read.
+    if !no_page_setup {
+        s.push_str(&ps);
+    }
     if p.has_header_footer() || p.different_first || p.different_odd_even || !p.hf_scale_with_doc || !p.hf_align_with_margins {
         s.push_str("<headerFooter");
         for (attr, on, default) in [
@@ -487,6 +633,7 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
             let _ = write!(s, "</{tag}>");
         }
     }
+    s.push_str(crate::passthrough::source_xml(source, "ignoredErrors"));
 
     // Drawing: pictures, charts, shapes.
     if !sheet.images.is_empty() || !sheet.charts.is_empty() || !sheet.shapes.is_empty() {
@@ -494,19 +641,20 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
         let dn = out.drawings;
         let mut drels = Rels::default();
         let mut objs: Vec<Obj<'_>> = vec![];
-        for img in &sheet.images {
+        // The new relationship id of each picture and chart, for the drawing as the file had it.
+        let mut new_ids: HashMap<(&str, usize), String> = HashMap::new();
+        for (i, img) in sheet.images.iter().enumerate() {
             if img.data.is_empty() {
                 continue;
             }
-            out.images += 1;
             let ext = image_ext(&img.mime, &img.data);
-            let name = format!("xl/media/image{}.{ext}", out.images);
             out.default_type(ext, image_content_type(ext));
-            out.part(&name, None, img.data.clone());
-            let rid = drels.add("image", &format!("../media/image{}.{ext}", out.images));
+            let file = out.image_part(ext, &img.data);
+            let rid = drels.add("image", &format!("../media/{file}"));
+            new_ids.insert(("image", i), rid.clone());
             objs.push(Obj::Image(img, rid));
         }
-        for ch in &sheet.charts {
+        for (i, ch) in sheet.charts.iter().enumerate() {
             out.charts += 1;
             let rid = if crate::chartex::is_chartex(ch.kind) {
                 let n = out.charts;
@@ -521,16 +669,53 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
                 out.part(&format!("xl/charts/_rels/chartEx{n}.xml.rels"), None, crels.xml().into_bytes());
                 drels.add_uri(crate::chartex::REL_CHARTEX, &format!("../charts/chartEx{n}.xml"))
             } else {
-                let name = format!("xl/charts/chart{}.xml", out.charts);
-                out.part(&name, Some(CT_CHART), crate::chart::write_chart(wb, si, ch).into_bytes());
-                drels.add("chart", &format!("../charts/chart{}.xml", out.charts))
+                let n = out.charts;
+                let model = crate::passthrough::chart_model(ch);
+                let kept = |slot: &str| crate::passthrough::source(source, slot, &model);
+                let xml = match kept("chart") {
+                    Some(x) => x.to_vec(),
+                    None => crate::chart::write_chart(wb, si, ch, &out.book_name).into_bytes(),
+                };
+                out.part(&format!("xl/charts/chart{n}.xml"), Some(CT_CHART), xml);
+                // The style and colours of a chart kept as it was.
+                if kept("chart").is_some() {
+                    let mut crels = Rels::default();
+                    if let Some(style) = kept("chart.chartStyle") {
+                        out.part(&format!("xl/charts/style{n}.xml"), Some(crate::chartex::CT_STYLE), style.to_vec());
+                        crels.add_uri(crate::chartex::REL_STYLE, &format!("style{n}.xml"));
+                    }
+                    if let Some(colors) = kept("chart.chartColorStyle") {
+                        out.part(&format!("xl/charts/colors{n}.xml"), Some(crate::chartex::CT_COLORS), colors.to_vec());
+                        crels.add_uri(crate::chartex::REL_COLORS, &format!("colors{n}.xml"));
+                    }
+                    if !crels.is_empty() {
+                        out.part(&format!("xl/charts/_rels/chart{n}.xml.rels"), None, crels.xml().into_bytes());
+                    }
+                }
+                drels.add("chart", &format!("../charts/chart{n}.xml"))
             };
+            new_ids.insert(("chart", i), rid.clone());
             objs.push(Obj::Chart(ch, rid));
         }
         for sh in &sheet.shapes {
             objs.push(Obj::Shape(sh));
         }
-        out.part(&format!("xl/drawings/drawing{dn}.xml"), Some(CT_DRAWING), crate::drawing::write_drawing(sheet, &wb.theme, &objs).into_bytes());
+        let model = crate::passthrough::drawing_model(sheet);
+        let kept = crate::passthrough::source(source, "drawing", &model).and_then(|x| std::str::from_utf8(x).ok());
+        let old_ids = crate::passthrough::source(source, "drawing.ids", &model).and_then(|x| std::str::from_utf8(x).ok());
+        let map: HashMap<&str, &String> = old_ids
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| {
+                let mut w = l.split(' ');
+                let (kind, i, old) = (w.next()?, w.next()?.parse::<usize>().ok()?, w.next()?);
+                Some((old, new_ids.get(&(kind, i))?))
+            })
+            .collect();
+        let xml = kept
+            .and_then(|x| crate::passthrough::map_rel_ids(x, &mut |id| map.get(id).map(|n| n.to_string())))
+            .unwrap_or_else(|| crate::drawing::write_drawing(sheet, &wb.theme, &objs));
+        out.part(&format!("xl/drawings/drawing{dn}.xml"), Some(CT_DRAWING), xml.into_bytes());
         if !drels.is_empty() {
             out.part(&format!("xl/drawings/_rels/drawing{dn}.xml.rels"), None, drels.xml().into_bytes());
         }
@@ -551,8 +736,12 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
         }
         out.default_type("vml", "application/vnd.openxmlformats-officedocument.vmlDrawing");
         let vml_name = format!("xl/drawings/vmlDrawing{n}.vml");
-        let vml = kept.notes_vml(vml_xml(sheet, n), &vml_name, out);
-        out.part(&vml_name, None, vml.into_bytes());
+        let block = out.kept.notes_block(n);
+        let vml = match crate::passthrough::notes_vml_source(sheet, block) {
+            Some(vml) => vml.to_vec(),
+            None => kept.notes_vml(vml_xml(sheet, block), &vml_name, out).into_bytes(),
+        };
+        out.part(&vml_name, None, vml);
         rels.add("comments", &format!("../comments{n}.xml"));
         let rid = rels.add("vmlDrawing", &format!("../drawings/vmlDrawing{n}.vml"));
         let _ = write!(s, "<legacyDrawing r:id=\"{rid}\"/>");
@@ -584,14 +773,13 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
         .filter(|(_, cf)| !cf.ranges.is_empty() && matches!(cf.rule, CfRule::DataBar { gradient: false, .. }))
         .map(|(i, cf)| (cf, prio.get(i).copied().unwrap_or(1)))
         .collect();
-    if !solid_bars.is_empty() || !sheet.sparklines.is_empty() {
+    if !solid_bars.is_empty() || x14_cf.is_some() || !sheet.sparklines.is_empty() {
         s.push_str("<extLst>");
     }
-    if !solid_bars.is_empty() {
-        let _ = write!(
-            s,
-            "<ext uri=\"{{78C0D931-6437-407d-A8A1-0F90B4350D7D}}\" xmlns:x14=\"{X14_NS}\" xmlns:xm=\"{XM_NS}\"><x14:conditionalFormattings>"
-        );
+    if let Some(x) = x14_cf {
+        let _ = write!(s, "<ext uri=\"{X14_CF_URI}\" xmlns:x14=\"{X14_NS}\" xmlns:xm=\"{XM_NS}\">{x}</ext>");
+    } else if !solid_bars.is_empty() {
+        let _ = write!(s, "<ext uri=\"{X14_CF_URI}\" xmlns:x14=\"{X14_NS}\" xmlns:xm=\"{XM_NS}\"><x14:conditionalFormattings>");
         for (cf, p) in &solid_bars {
             if let CfRule::DataBar { min, max, .. } = &cf.rule {
                 let (id, lo, hi) = (solid_bar_id(*p), x14_cfvo(min), x14_cfvo(max));
@@ -622,7 +810,7 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
         }
         s.push_str("</x14:sparklineGroups></ext>");
     }
-    if !solid_bars.is_empty() || !sheet.sparklines.is_empty() {
+    if !solid_bars.is_empty() || x14_cf.is_some() || !sheet.sparklines.is_empty() {
         s.push_str("</extLst>");
     }
     s.push_str("</worksheet>");
@@ -637,6 +825,8 @@ fn write_cell(
     ov: Option<&String>,
     extra: Option<&Value>,
     dynamic: Option<&RangeRef>,
+    legacy: Option<gridcraft_formula::Expr>,
+    spellings: &HashMap<&str, &str>,
     sid: &dyn Fn(gridcraft_model::StyleId) -> u32,
     out: &mut Out,
 ) {
@@ -667,6 +857,10 @@ fn write_cell(
         Value::Error(CellError::Spill | CellError::Calc) => Value::Error(CellError::Value),
         v => v,
     };
+    // A formula read with dynamic-array metadata keeps it, even where the shape analysis would
+    // not need it: Excel decided the formula is evaluated as an array.
+    let own = formula.filter(|f| f.dynamic && f.array.is_none()).map(|_| RangeRef::cell(c));
+    let dynamic = dynamic.or(own.as_ref());
     // A non-spilling formula may still need array evaluation to avoid implicit intersection.
     if dynamic.is_some() && formula.is_some_and(|f| f.array.is_none()) {
         s.push_str(" cm=\"1\"");
@@ -681,7 +875,11 @@ fn write_cell(
         };
         s.push_str(t);
         s.push('>');
-        let text = esc(&crate::fmla::to_file(f));
+        let text = match legacy {
+            Some(e) => crate::fmla::expr_to_file(e),
+            None => crate::fmla::to_file(f),
+        };
+        let text = esc(spellings.get(text.as_str()).copied().unwrap_or(&text));
         match (f.array, dynamic) {
             (Some(r), _) => {
                 let _ = write!(s, "<f t=\"array\" ref=\"{}\">{text}</f>", r.a1());
@@ -717,7 +915,9 @@ fn write_cell(
             let _ = write!(s, "><v>{}</v></c>", num(*n));
         }
         Value::Text(t) => {
-            let i = out.sst.index(t);
+            // The runs of the text the cell holds, never of a value written in its place.
+            let runs = cell.filter(|_| ov.is_none() && extra.is_none()).and_then(Cell::rich_runs);
+            let i = out.sst.index_runs(t, runs.map(|r| &r.xml));
             let _ = write!(s, " t=\"s\"><v>{i}</v></c>");
         }
         Value::Bool(b) => {
@@ -746,15 +946,17 @@ fn quote(t: &str) -> String {
 
 const X14_NS: &str = "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main";
 const XM_NS: &str = "http://schemas.microsoft.com/office/excel/2006/main";
+/// The worksheet extension of Excel 2010 conditional formats.
+const X14_CF_URI: &str = "{78C0D931-6437-407d-A8EE-F0AAD7539E65}";
 
 /// The id linking a solid data bar's `cfRule` to its x14 extension; unique per sheet because priorities are.
 fn solid_bar_id(priority: u32) -> String {
     format!("{{00000000-0000-0000-0000-{priority:012}}}")
 }
 
-/// The `cfRule` extension that points a solid data bar at its x14 rule.
-fn solid_bar_ext(priority: u32) -> String {
-    let id = solid_bar_id(priority);
+/// The `cfRule` extension that points a data bar at its x14 rule `id`.
+fn solid_bar_ext(id: &str) -> String {
+    let id = esc(id);
     format!("<extLst><ext uri=\"{{B025F937-C7B1-47D3-B67F-A62EFF666E3E}}\" xmlns:x14=\"{X14_NS}\"><x14:id>{id}</x14:id></ext></extLst>")
 }
 
@@ -771,7 +973,8 @@ fn x14_cfvo(v: &CfValueKind) -> String {
     format!("<x14:cfvo type=\"{ty}\"><xm:f>{}</xm:f></x14:cfvo>", esc(&val))
 }
 
-fn cf_rule_xml(cf: &CondFormat, priority: u32, out: &mut Out) -> String {
+/// `ext_id` is the file's link from a data bar to its kept x14 rule.
+fn cf_rule_xml(cf: &CondFormat, priority: u32, ext_id: Option<&str>, out: &mut Out) -> String {
     let tl = cf.ranges.first().map(|r| r.start.a1()).unwrap_or_else(|| "A1".into());
     let stop = if cf.stop_if_true { " stopIfTrue=\"1\"" } else { "" };
     let mut dxf = |st: &Style| dxf_id(&mut out.dxfs, st);
@@ -872,7 +1075,11 @@ fn cf_rule_xml(cf: &CondFormat, priority: u32, out: &mut Out) -> String {
             cfvo_xml(min),
             cfvo_xml(max),
             if *color == Color::Auto { "rgb=\"FF638EC6\"".to_string() } else { color_attrs(color) },
-            if *gradient { String::new() } else { solid_bar_ext(priority) }
+            match ext_id {
+                Some(id) => solid_bar_ext(id),
+                None if *gradient => String::new(),
+                None => solid_bar_ext(&solid_bar_id(priority)),
+            }
         ),
         CfRule::IconSet { set, thresholds, reverse, show_value } => {
             let mut b = format!("<iconSet iconSet=\"{}\"", esc_attr(set));
@@ -1162,7 +1369,12 @@ fn comments_xml(sheet: &Sheet, ids: &BTreeMap<CellRef, Vec<String>>) -> String {
             Some(id) => format!(" shapeId=\"0\" xr:uid=\"{id}\""),
             None => String::new(),
         };
-        let _ = write!(s, "<comment ref=\"{}\" authorId=\"{aid}\"{link}><text><r>{}</r></text></comment>", cell.a1(), crate::xml::t_el(&text));
+        let source = |at| crate::passthrough::source(sheet.preserved.as_deref(), "note.text", &crate::passthrough::note_model(at, c));
+        let body = match source(Some(*cell)).or_else(|| source(None)) {
+            Some(runs) => String::from_utf8_lossy(runs).into_owned(),
+            None => format!("<r>{}</r>", crate::xml::t_el(&text)),
+        };
+        let _ = write!(s, "<comment ref=\"{}\" authorId=\"{aid}\"{link}><text>{body}</text></comment>", cell.a1());
     }
     s.push_str("</commentList></comments>");
     s
@@ -1260,6 +1472,24 @@ fn protected_ranges_xml(sheet: &Sheet) -> String {
     if s.is_empty() { s } else { format!("<protectedRanges>{s}</protectedRanges>") }
 }
 
+/// The box a note made here gets: two columns right of its cell, four rows tall, 108 x 59.25 pt.
+/// A box read from a file that equals it is kept as `None`, so a note's model survives a save.
+pub(crate) const DEFAULT_NOTE_BOX: NoteBox = NoteBox {
+    from: NoteCorner { col: 1, col_px: 15, row: 0, row_px: 2 },
+    to: NoteCorner { col: 3, col_px: 15, row: 4, row_px: 16 },
+    size_pt: Some(DEFAULT_NOTE_SIZE_PT),
+};
+const DEFAULT_NOTE_SIZE_PT: (f64, f64) = (108.0, 59.25);
+
+/// A note box's `<x:Anchor>` text and its width and height in points: the box read from the file
+/// or [`DEFAULT_NOTE_BOX`], its corners moved with the note's `cell` and kept on the sheet.
+fn note_anchor(cell: CellRef, b: Option<&NoteBox>) -> (String, (f64, f64)) {
+    let b = b.unwrap_or(&DEFAULT_NOTE_BOX);
+    let at = |base: u32, d: i64, max: u32| (i64::from(base) + d).clamp(0, i64::from(max) - 1);
+    let corner = |k: &NoteCorner| format!("{}, {}, {}, {}", at(cell.col, k.col, MAX_COLS), k.col_px, at(cell.row, k.row, MAX_ROWS), k.row_px);
+    (format!("{}, {}", corner(&b.from), corner(&b.to)), b.size_pt.unwrap_or(DEFAULT_NOTE_SIZE_PT))
+}
+
 /// Legacy VML shapes Excel uses to display notes.
 fn vml_xml(sheet: &Sheet, n: u32) -> String {
     let mut s = format!(
@@ -1268,14 +1498,13 @@ fn vml_xml(sheet: &Sheet, n: u32) -> String {
     for (i, (cell, c)) in sheet.comments.iter().enumerate() {
         let id = n as u64 * 1024 + 1 + i as u64;
         let vis = if c.visible { "visible" } else { "hidden" };
+        let (anchor, (w, h)) = note_anchor(*cell, c.note_box.as_ref());
         let _ = write!(
             s,
-            "<v:shape id=\"_x0000_s{id}\" type=\"#_x0000_t202\" style=\"position:absolute;margin-left:59.25pt;margin-top:1.5pt;width:108pt;height:59.25pt;z-index:{};visibility:{vis}\" fillcolor=\"#ffffe1\" o:insetmode=\"auto\"><v:fill color2=\"#ffffe1\"/><v:shadow on=\"t\" color=\"black\" obscured=\"t\"/><v:path o:connecttype=\"none\"/><v:textbox style=\"mso-direction-alt:auto\"><div style=\"text-align:left\"></div></v:textbox><x:ClientData ObjectType=\"Note\"><x:MoveWithCells/><x:SizeWithCells/><x:Anchor>{}, 15, {}, 2, {}, 15, {}, 16</x:Anchor><x:AutoFill>False</x:AutoFill><x:Row>{}</x:Row><x:Column>{}</x:Column>{}</x:ClientData></v:shape>",
+            "<v:shape id=\"_x0000_s{id}\" type=\"#_x0000_t202\" style=\"position:absolute;margin-left:59.25pt;margin-top:1.5pt;width:{}pt;height:{}pt;z-index:{};visibility:{vis}\" fillcolor=\"#ffffe1\" o:insetmode=\"auto\"><v:fill color2=\"#ffffe1\"/><v:shadow on=\"t\" color=\"black\" obscured=\"t\"/><v:path o:connecttype=\"none\"/><v:textbox style=\"mso-direction-alt:auto\"><div style=\"text-align:left\"></div></v:textbox><x:ClientData ObjectType=\"Note\"><x:MoveWithCells/><x:SizeWithCells/><x:Anchor>{anchor}</x:Anchor><x:AutoFill>False</x:AutoFill><x:Row>{}</x:Row><x:Column>{}</x:Column>{}</x:ClientData></v:shape>",
+            num(w),
+            num(h),
             i + 1,
-            cell.col + 1,
-            cell.row,
-            cell.col + 3,
-            cell.row + 4,
             cell.row,
             cell.col,
             if c.visible { "<x:Visible/>" } else { "" }

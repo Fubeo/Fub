@@ -148,9 +148,15 @@ flowchart LR
 I crate di GridCraft in `vendor/gridcraft/` sono codice di terzi allo stesso
 modo, con un workspace loro: li usa soltanto `fub-format-xlsx`, che legge le
 cartelle di Excel per l'host (feature `xlsx`) e ne innesta i valori cambiati
-sui byte del file, e nessuno di loro dipende da Fub. Di `gridcraft-calc`
-l'adattatore usa soltanto il grafo delle dipendenze fra le formule, per dire
-quali valori del file una modifica rende vecchi: niente si ricalcola. Il terzo blocco è il seguito dello stesso grafo, con
+sui byte del file, e nessuno di loro dipende da Fub. Finché una sessione ha
+soltanto celle cambiate, di `gridcraft-calc` l'adattatore usa il grafo delle
+dipendenze fra le formule, per dire quali valori del file una modifica rende
+vecchi: niente si ricalcola. Dal primo comando la sessione passa a
+`gridcraft-engine`, la facciata dei comandi di GridCraft (vendorizzata con
+`gridcraft-chart` e `gridcraft-pdf`), che ricalcola ciò che il comando
+raggiunge; il salvataggio resta l'innesto o riscrive la cartella con il codec
+dopo averla misurata. Da `gridcraft-chart` l'adattatore prende anche il
+disegno in SVG dei grafici, che porta alla shell con le finestre. Il terzo blocco è il seguito dello stesso grafo, con
 l'adattatore e i crate di Fub da cui dipende.
 
 ```mermaid
@@ -164,11 +170,14 @@ flowchart LR
     sdk["fub-sdk"]
     xlsx["fub-format-xlsx"]
     gcalc["gridcraft-calc"]
+    gchart["gridcraft-chart"]
     gcore["gridcraft-core"]
+    gengine["gridcraft-engine"]
     gformula["gridcraft-formula"]
     gfunctions["gridcraft-functions"]
     gnumfmt["gridcraft-numfmt"]
     gmodel["gridcraft-model"]
+    gpdf["gridcraft-pdf"]
     gxlsx["gridcraft-xlsx"]
 
     host --> xlsx
@@ -176,7 +185,9 @@ flowchart LR
     xlsx --> markdown
     xlsx -.-> sdk
     xlsx --> gcalc
+    xlsx --> gchart
     xlsx --> gcore
+    xlsx --> gengine
     xlsx --> gmodel
     xlsx --> gnumfmt
     xlsx --> gxlsx
@@ -185,6 +196,19 @@ flowchart LR
     gcalc --> gfunctions
     gcalc --> gmodel
     gcalc --> gnumfmt
+    gchart --> gcalc
+    gchart --> gcore
+    gchart --> gmodel
+    gchart --> gnumfmt
+    gengine --> gcalc
+    gengine --> gchart
+    gengine --> gcore
+    gengine --> gformula
+    gengine --> gfunctions
+    gengine --> gmodel
+    gengine --> gnumfmt
+    gengine --> gpdf
+    gengine --> gxlsx
     gformula --> gcore
     gfunctions --> gcore
     gmodel --> gcore

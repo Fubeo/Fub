@@ -630,6 +630,57 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-format-xlsx/src/inventory.rs::cell_ref",
+            (
+                Family::AsciiCase,
+                "legge le lettere della colonna di un riferimento A1 dentro l'inventario di una cartella: \
+                 un vocabolario ASCII che Excel accetta in maiuscolo e in minuscolo, come \
+                 `formula.rs`.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/inventory.rs::digits",
+            (
+                Family::AsciiCase,
+                "sposta le colonne di una formula condivisa per contarla espansa: le lettere di un \
+                 riferimento A1 sono ASCII e Excel le confronta senza maiuscole, come `cell_ref`.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/inventory.rs::new",
+            (
+                Family::AsciiCase,
+                "riconosce il nero `000000` di un colore del tema: cifre esadecimali, che lo schema \
+                 di DrawingML scrive in maiuscolo o in minuscolo con lo stesso valore.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/inventory.rs::rgb",
+            (
+                Family::AsciiCase,
+                "porta un colore `rgb` di SpreadsheetML in forma canonica: cifre esadecimali, uguali \
+                 a meno delle maiuscole ASCII, come il nero del tema in `new`.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/inventory.rs::sheet",
+            (
+                Family::AsciiCase,
+                "conta le unioni e le convalide di un foglio per i loro riferimenti A1, che Excel \
+                 legge senza maiuscole: le lettere di colonna sono ASCII, come in `cell_ref`.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/objects.rs::media",
+            (
+                Family::AsciiCase,
+                "porta il tipo di un'immagine della cartella in forma canonica prima di \
+                 confrontarlo con l'elenco chiuso dei tipi che la shell disegna: i tipi MIME sono \
+                 token ASCII e la specifica (RFC 2045, §5.1) li dichiara uguali a meno delle \
+                 maiuscole.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/rules/media.rs::kind_of",
             (
                 Family::AsciiCase,

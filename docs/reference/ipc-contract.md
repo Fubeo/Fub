@@ -36,7 +36,8 @@ aggiunge una porta soltanto per evitare di usare il proprio registro.
 La famiglia Grid usa porte strettamente tipate, con i record `Grid*` del
 mirror: `list_grid_surfaces` elenca i binding, e una superficie con
 `protocol_version` 2 si apre sui byte di un documento con `open_grid_bytes`,
-`grid_bytes_window`, `apply_grid_bytes` e `close_grid_bytes`. La shell
+`grid_bytes_window`, `apply_grid_bytes`, `grid_bytes_commands`,
+`grid_bytes_command` e `close_grid_bytes`. La shell
 negozia famiglia, versione e formato prima di aprire; un binding sconosciuto
 o incompatibile non viene chiamato e la superficie dice che il foglio non si
 apre. `query_index` non applica patch e non possiede lifecycle.
@@ -47,10 +48,49 @@ della sessione documento) e la revisione dei byte da cui parte. L'host legge
 il documento, controlla che il formato sia quello della superficie (`BadArgs`
 altrimenti) e risponde `Conflict` se i byte non sono più quelli di `base`. La
 sessione è un `GridBytesSession` (fogli, foglio attivo, fogli nascosti, avvisi
-`GridNotice` e celle in conflitto); la finestra è un `GridBytesWindow`, la cui
-cella porta `GridValue`, il testo formattato, blocco, `stale` e `conflict`. Il
+`GridNotice`, celle in conflitto e il libro `GridBook`: i dodici colori del
+tema in `#RRGGBB`, i nomi definiti visibili, il modo di calcolo
+`GridCalculation`, la struttura protetta e il carattere dello stile Normale,
+nome e punti, che lo stile di una cella tace); la finestra è un `GridBytesWindow`, la cui
+cella porta `GridValue`, il testo formattato, blocco, `stale`, `conflict`,
+l'indice del suo stile e i segni (barra di dati, icona, commento,
+collegamento). La finestra porta gli stili delle sue celle, ognuno una volta
+(`GridCellStyle`: carattere, colori, bordi, allineamenti, rientro, a capo,
+rotazione), le unioni e le tabelle che la toccano (`GridMerge`, `GridTable`
+con le opzioni e il nome dello stile) e la vista del foglio (`GridSheetView`:
+riquadri bloccati, griglia, intestazioni, zoom, da destra a sinistra, la
+modalità `GridViewMode`, le formule mostrate, la protezione, griglia e
+intestazioni in stampa). La finestra porta anche gli oggetti che la toccano,
+nell'ordine in cui si disegnano (`GridObject`: tipo `GridObjectKind`, id,
+cella dell'angolo, scarto e misura in pixel a zoom 100, testo alternativo):
+un grafico o un grafico sparkline con il suo disegno in SVG, un'immagine con
+i suoi byte (`GridMedia`: tipo, impronta `key` e base64), una forma con il
+suo aspetto (`GridShape`), che disegna la shell; `missing` dice perché un
+oggetto non porta ciò che mostra (`too_large`, `unsupported`). La richiesta
+della finestra elenca in `known_media` le impronte che la shell ha già: di
+quelle immagini la finestra porta la chiave senza i byte. Il
 commit è un `GridCommit` il cui `edit` è il diff del testo del giornale, da
 applicare al buffer della sessione documento.
+
+La sessione porta anche il catalogo dei comandi che serve
+(`GridCommandState`: id, acceso, perché è spento). `grid_bytes_commands`
+riceve una `GridSelection` (foglio, intervalli A1, cella attiva) e ridà il
+catalogo su quella selezione; `grid_bytes_command` riceve un
+`GridCommandRequest` (la revisione e un `GridCommand` con i parametri come
+testo di un oggetto JSON) e ridà un `GridCommandOutcome`: il commit del
+giornale, che resta alla revisione se il comando non cambia la cartella, i
+fogli, la selezione nuova, il risultato come testo JSON, la finestra di
+dialogo chiesta, il catalogo aggiornato e il libro. Il risultato è sempre un
+oggetto: un valore che non lo è sta sotto `value`, i messaggi del comando
+sotto `messages`. I parametri della finestra chiesta portano anche ciò che la
+finestra mostra all'apertura e che la shell non legge da sé (la regola di
+convalida della cella attiva per `dataValidation`). Un comando che il provider non
+serve, spento o con parametri che non tornano è `BadArgs`. Il provider delle
+cartelle di Excel serve un sottoinsieme del catalogo di GridCraft, più
+`edit.undo` ed `edit.redo` del documento
+([ADR 0219](../decisions/0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md),
+in proposta); su una cartella che la riscrittura perderebbe i comandi che la
+cambiano sono spenti, e darne uno è `PermissionDenied` con `xlsx.rewrite.loses`.
 
 ## Limiti e semantica Grid
 
@@ -60,6 +100,12 @@ coordinate. Un commit accetta 16.384 patch e
 4 MiB di preimmagini e nuovi input; la risposta, envelope compreso, è al
 massimo 8 MiB. L'invalidazione restituisce le coordinate da rileggere fino a
 32.768 elementi, poi `all`. Il diff del giornale usa offset in byte UTF-8.
+Una finestra porta fino a 1.024 tabelle; il libro fino a 4.096 nomi; un nome
+di tabella, di stile o definito è al massimo di 255 byte. Una finestra porta
+fino a 1.024 oggetti; il disegno di un grafico è al massimo di 1 MiB, i byte
+di un'immagine di 3 MiB in base64 (soltanto PNG, JPEG, GIF, BMP, WebP e SVG),
+il testo di una forma di 64 KiB; la richiesta elenca fino a 256 impronte di
+64 byte al più.
 
 Il registro conserva ownership e disposer per ogni binding. L'unload ritira il
 binding, distrugge le istanze e soltanto dopo rilascia il provider. Nessuna
@@ -343,21 +389,27 @@ porte, e il suo testo è il **giornale** delle celle cambiate (ADR 0216):
 - `write_document` riceve il giornale nella forma canonica (`BadArgs` con
   `host.xlsx.journal` altrimenti) e lo **innesta** nei byte alla revisione
   `base`, con il CAS della stessa revisione: il resto del file resta byte
-  per byte. Un giornale vuoto, o già tutto nei byte, non scrive niente; un
+  per byte. Un giornale di comandi che cambia più dell'input di costanti si
+  rifà sui byte, e la cartella si **riscrive** con il codec soltanto se la
+  misura dice che non perde niente (`PermissionDenied` con
+  `xlsx.rewrite.loses`, che nomina la perdita, altrimenti). Un giornale vuoto, o già tutto nei byte, non scrive niente; un
   giornale per un file che non c'è si rifiuta (`host.xlsx.missing`); una
   voce che i byte non possono ricevere si rifiuta con la sua specie
   (`PermissionDenied` per una cella bloccata, `Conflict` per un foglio che
-  non c'è più, `BadArgs` per una formula), e il file resta com'era;
+  non c'è più, `BadArgs` per una formula in una voce di cella: una formula
+  entra soltanto come comando), e il file resta com'era;
 - `resource_write` deposita una cartella nuova (`expected` nullo) come ogni
   file, e rifiuta di coprirne una che c'è (`host.xlsx.readonly`): una
-  cartella cambia soltanto per innesto.
+  cartella cambia soltanto dal giornale, con `write_document`.
 
 Nella finestra:
 
 - i valori sono quelli che il file ha salvato, comprese le celle versate
   dalle matrici: niente si ricalcola. `display` è il valore nel formato
   numerico della cella, e `input` ciò che la barra mostra e la cella riceve
-  (`=…` per una formula, che non si scrive);
+  (`=…` per una formula). `apply_grid_bytes` con la prima formula da
+  scrivere porta la sessione ai comandi: la formula entra come
+  `range.setValues`, e il commit riscrive il giornale;
 - `lock` è uno fra `array`, `spill`, `shared-formula`, `data-table`,
   `table-header`, `table-totals`, `merged`, `pivot`, `rich-value`,
   `protected` e `sheet-shape` (il foglio ha una forma che l'innesto non sa
@@ -369,11 +421,10 @@ Nella finestra:
   prende il colore della shell.
 
 Gli avvisi della sessione sono `macros`, `external-links`, `incomplete` (la
-lettura ha lasciato indietro qualcosa), `not-shown-merges`,
-`not-shown-charts`, `not-shown-images`, `not-shown-shapes`,
-`not-shown-comments`, `not-shown-conditional-formats`,
-`not-shown-sparklines` e `uncomputed` (formule senza valore salvato), ciascuno
-con il suo conteggio.
+lettura ha lasciato indietro qualcosa), `not-shown-slicers` e `uncomputed`
+(formule senza valore salvato), ciascuno con il suo conteggio. Le unioni, le
+note, la formattazione condizionale e gli oggetti (grafici, grafici
+sparkline, immagini e forme) arrivano nella finestra, e non sono avvisi.
 
 Gli errori arrivano tipizzati con chiave di catalogo `host.xlsx.*`: una
 cartella cifrata (`encrypted`), un file oltre 256 MiB (`too_large`), un
