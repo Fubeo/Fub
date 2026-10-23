@@ -1459,6 +1459,22 @@ fn formatting_and_styles() {
 }
 
 #[test]
+fn a_named_style_applied_to_a_cell_is_saved_as_its_style() {
+    let mut s = s();
+    s.execute("selection.set", json!({"range": "A1"})).unwrap();
+    s.execute("home.bold", json!({})).unwrap();
+    s.execute("home.newCellStyle", json!({"name": "Titolo", "fromCell": "A1"})).unwrap();
+    s.execute("home.cellStyle", json!({"range": "C3", "name": "Titolo"})).unwrap();
+    let b64 = s.execute("file.saveBytes", json!({"format": "xlsx"})).unwrap()["base64"].as_str().unwrap().to_string();
+    s.execute("file.open", json!({"name": "x.xlsx", "base64": b64})).unwrap();
+    let wb = &s.doc().unwrap().wb;
+    let sh = wb.active().unwrap();
+    assert_eq!(wb.styles.get(sh.style_id(CellRef::new(2, 2))).parent.as_deref(), Some("Titolo"));
+    assert_eq!(wb.styles.get(sh.style_id(CellRef::new(0, 0))).parent, None);
+    assert!(wb.cell_styles.iter().any(|(n, st)| n == "Titolo" && st.font.bold && st.parent.is_none()));
+}
+
+#[test]
 fn spill_references_roundtrip_through_xlsx() {
     let mut s = s();
     s.execute("cell.set", json!({"cell": "B1", "input": "=SEQUENCE(4)"})).unwrap();
@@ -4606,4 +4622,24 @@ fn a_saved_workbook_keeps_its_values_until_an_edit_reaches_them() {
     saved.execute("cell.set", json!({"cell": "A1", "input": "3"})).unwrap();
     assert_eq!(v(&saved, "B1"), Value::Number(6.0));
     assert_eq!(v(&saved, "C1"), Value::Number(7.0));
+}
+
+/// Excel evaluates a formula saved without dynamic-array metadata with implicit intersection:
+/// once an edit reaches it, it gives one value and never spills.
+#[test]
+fn a_legacy_formula_intersects_after_an_edit() {
+    let mut s = s();
+    s.execute("range.setValues", json!({"range": "A1", "values": [[1], [2], [3]]})).unwrap();
+    s.execute("cell.set", json!({"cell": "C2", "input": "10"})).unwrap();
+    s.execute("cell.set", json!({"cell": "E2", "input": "=C2+@A1:A3"})).unwrap();
+    let bytes = gridcraft_xlsx::write_xlsx(&s.doc().unwrap().wb).unwrap();
+    let (wb, _) = gridcraft_xlsx::read_xlsx(&bytes).unwrap();
+    let f = wb.sheet(0).unwrap().cell(CellRef::parse("E2").unwrap()).and_then(|c| c.formula.clone()).unwrap();
+    assert_eq!(f.text, "C2+@A1:A3");
+    assert!(!f.dynamic, "saved as a legacy formula");
+    let mut saved = Session::new();
+    saved.add_document(crate::DocState::from_saved(wb, None, "saved".into()));
+    saved.execute("cell.set", json!({"cell": "A2", "input": "5"})).unwrap();
+    assert_eq!(v(&saved, "E2"), Value::Number(15.0));
+    assert_eq!(v(&saved, "E3"), Value::Empty, "no spill");
 }

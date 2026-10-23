@@ -413,7 +413,8 @@ fn damaged_kept_content_is_dropped_without_failing_the_read() {
     names.sort();
     assert_eq!(names, ["customXml/item1.xml", "customXml/itemProps1.xml"]);
     assert!(p.elements.is_empty());
-    assert!(wb.sheet(0).unwrap().preserved.is_none());
+    // Only the source forms of what the sheet reader models stay (the page setup's orientation).
+    assert!(wb.sheet(0).unwrap().preserved.as_deref().is_none_or(|p| p.parts.is_empty() && p.elements.is_empty() && p.vml.is_none()));
     let u = Unpacked::new(&write_xlsx(&wb).unwrap());
     u.assert_valid();
     assert!(!u.text("xl/workbook.xml").contains("externalReferences"));

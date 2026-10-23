@@ -1,0 +1,3224 @@
+diff --git a/crates/engine/src/cmd/analysis.rs b/crates/engine/src/cmd/analysis.rs
+--- a/crates/engine/src/cmd/analysis.rs
++++ b/crates/engine/src/cmd/analysis.rs
+@@ -1124,13 +1124,13 @@ fn write_report(s: &mut Session, p: &Json, tool: &str, g: Grid) -> Result<Json>
+         let sh = cx.sheet_mut(si)?;
+         for c in &occupied {
+             let style = sh.style_id(*c);
+-            sh.set_cell(*c, Cell { value: Value::Empty, formula: None, style });
++            sh.set_cell(*c, Cell { value: Value::Empty, formula: None, style, rich: None });
+         }
+         let mut touched = occupied.clone();
+         for ((r, c), v) in &g.cells {
+             let cell = CellRef::new(at.row + r, at.col + c);
+             let style = pct_styles.get(&cell).copied().unwrap_or_else(|| sh.style_id(cell));
+-            sh.set_cell(cell, Cell { value: v.clone(), formula: None, style });
++            sh.set_cell(cell, Cell { value: v.clone(), formula: None, style, rich: None });
+             touched.push(cell);
+         }
+         for c in touched {
+diff --git a/crates/engine/src/cmd/edit.rs b/crates/engine/src/cmd/edit.rs
+--- a/crates/engine/src/cmd/edit.rs
++++ b/crates/engine/src/cmd/edit.rs
+@@ -124,12 +124,12 @@ pub fn specs() -> Vec<CommandSpec> {
+ pub(crate) fn input_to_cell(input: &str, sheet: usize, at: CellRef, wb: &mut gridcraft_model::Workbook) -> Result<Option<Cell>> {
+     let style = wb.sheet(sheet).map(|sh| sh.style_id(at)).unwrap_or_default();
+     if input.is_empty() {
+-        let c = Cell { value: Value::Empty, formula: None, style };
++        let c = Cell { value: Value::Empty, formula: None, style, rich: None };
+         return Ok(if c.is_blank() { None } else { Some(c) });
+     }
+     let fmt_is_text = wb.styles.get(style).num_fmt.as_str() == "@";
+     if fmt_is_text {
+-        return Ok(Some(Cell { value: Value::text(input), formula: None, style }));
++        return Ok(Some(Cell { value: Value::text(input), formula: None, style, rich: None }));
+     }
+     let is_formula = input.starts_with('=')
+         || (input.len() > 1
+@@ -187,7 +187,7 @@ pub(crate) fn input_to_cell(input: &str, sheet: usize, at: CellRef, wb: &mut gri
+     if input.contains('\n') && !wb.styles.get(style).align.wrap {
+         style = wb.styles.derive(style, |s| s.align.wrap = true);
+     }
+-    Ok(Some(Cell { value: parsed.value, formula: None, style }))
++    Ok(Some(Cell { value: parsed.value, formula: None, style, rich: None }))
+ }
+ 
+ /// Parses a formula as it is typed (without the `=`). Excel closes missing parentheses for you,
+@@ -317,10 +317,14 @@ fn range_set_values(s: &mut Session, p: &Json) -> Result<Json> {
+                         value: Value::number(n.as_f64().unwrap_or(0.0)),
+                         formula: None,
+                         style: cx.wb.sheet(sheet).map(|sh| sh.style_id(at)).unwrap_or_default(),
++                        rich: None,
++                    }),
++                    Json::Bool(b) => Some(Cell {
++                        value: Value::Bool(*b),
++                        formula: None,
++                        style: cx.wb.sheet(sheet).map(|sh| sh.style_id(at)).unwrap_or_default(),
++                        rich: None,
+                     }),
+-                    Json::Bool(b) => {
+-                        Some(Cell { value: Value::Bool(*b), formula: None, style: cx.wb.sheet(sheet).map(|sh| sh.style_id(at)).unwrap_or_default() })
+-                    }
+                     _ => input_to_cell(&input, sheet, at, &mut cx.wb)?,
+                 };
+                 let sh = cx.sheet_mut(sheet)?;
+@@ -773,7 +777,7 @@ fn slide_together(wb: &gridcraft_model::Workbook, sheet: usize, areas: &[RangeRe
+         for c in cells {
+             let Some(to) = c.offset(dr, dc) else { continue };
+             let style = src.cell(c).map(|x| x.style).unwrap_or_default();
+-            dst.set_cell(to, Cell { value: src.value(c), formula: None, style });
++            dst.set_cell(to, Cell { value: src.value(c), formula: None, style, rich: None });
+             if let Some(picture) = src.cell_pictures.get(&c) {
+                 dst.cell_pictures.insert(to, picture.clone());
+             }
+diff --git a/crates/engine/src/cmd/extra.rs b/crates/engine/src/cmd/extra.rs
+--- a/crates/engine/src/cmd/extra.rs
++++ b/crates/engine/src/cmd/extra.rs
+@@ -1218,7 +1218,7 @@ fn new_cell_style(s: &mut Session, p: &Json) -> Result<Json> {
+     let d = s.doc()?;
+     let sh = d.wb.active().ok_or(EngineError::NoDocument)?;
+     let c = cell_param(s, p, "fromCell")?.unwrap_or(d.selection.active);
+-    let style = d.wb.styles.get(sh.style_id(c)).clone();
++    let style = Style { parent: None, ..d.wb.styles.get(sh.style_id(c)).clone() };
+     edit(s, |cx| {
+         cx.wb.cell_styles.retain(|(n, _)| !n.eq_ignore_ascii_case(&name));
+         cx.wb.cell_styles.push((name.clone(), style.clone()));
+diff --git a/crates/engine/src/cmd/forecast.rs b/crates/engine/src/cmd/forecast.rs
+--- a/crates/engine/src/cmd/forecast.rs
++++ b/crates/engine/src/cmd/forecast.rs
+@@ -315,7 +315,7 @@ fn forecast_sheet(s: &mut Session, p: &Json) -> Result<Json> {
+         let vstyle = cx.wb.styles.derive(StyleId::DEFAULT, |st| st.num_fmt = vfmt.clone());
+         let mut sheet = Sheet::new(sheet_name.clone());
+         let put = |sheet: &mut Sheet, row: u32, col: u32, v: Value, style: StyleId| {
+-            sheet.set_cell(CellRef::new(row, col), Cell { value: v, formula: None, style });
++            sheet.set_cell(CellRef::new(row, col), Cell { value: v, formula: None, style, rich: None });
+         };
+         let formula = |sheet: &mut Sheet, row: u32, col: u32, text: String, style: StyleId| {
+             let mut cell = Cell::formula(Formula::new(&text));
+diff --git a/crates/engine/src/cmd/format.rs b/crates/engine/src/cmd/format.rs
+--- a/crates/engine/src/cmd/format.rs
++++ b/crates/engine/src/cmd/format.rs
+@@ -967,6 +967,8 @@ fn cell_style(s: &mut Session, p: &Json) -> Result<Json> {
+             .map(|(_, s)| s.clone())
+             .or_else(|| builtin_cell_style(&name, &d.wb.theme));
+     let Some(style) = style else { return Err(bad("home.cellStyle", format!("unknown cell style `{name}`"))) };
++    // A cell takes the name of a style the workbook has, so the file says which one it is.
++    let parent = d.wb.cell_styles.iter().find(|(n, _)| n.eq_ignore_ascii_case(&name)).map(|(n, _)| n.clone());
+     // Number-format styles only change the number format.
+     let only_fmt = matches!(name.as_str(), "Comma" | "Comma [0]" | "Currency" | "Currency [0]" | "Percent");
+     apply_style(s, p, move |st| {
+@@ -975,6 +977,7 @@ fn cell_style(s: &mut Session, p: &Json) -> Result<Json> {
+         } else {
+             let keep_fmt = st.num_fmt.clone();
+             *st = style.clone();
++            st.parent = parent.clone();
+             if style.num_fmt.as_str() == "General" {
+                 st.num_fmt = keep_fmt;
+             }
+diff --git a/crates/engine/src/cmd/insert.rs b/crates/engine/src/cmd/insert.rs
+--- a/crates/engine/src/cmd/insert.rs
++++ b/crates/engine/src/cmd/insert.rs
+@@ -430,7 +430,10 @@ fn write_totals(sh: &mut Sheet, ti: usize) {
+         let c = CellRef::new(row, t.range.start.col + i as u32);
+         if let Some(code) = col.totals.subtotal_code() {
+             let f = format!("=SUBTOTAL({code},{}[{}])", t.name, col.name);
+-            sh.set_cell(c, Cell { formula: Some(std::sync::Arc::new(Formula::new(&f))), value: gridcraft_core::Value::Empty, style: sh.style_id(c) });
++            sh.set_cell(
++                c,
++                Cell { formula: Some(std::sync::Arc::new(Formula::new(&f))), value: gridcraft_core::Value::Empty, style: sh.style_id(c), rich: None },
++            );
+         } else if let Some(l) = &col.totals_label {
+             sh.set_value(c, gridcraft_core::Value::text(l.as_str()));
+         } else {
+@@ -1244,7 +1247,7 @@ fn insert_link(s: &mut Session, p: &Json) -> Result<Json> {
+         });
+         let sh = cx.sheet_mut(sheet)?;
+         if let Some(t) = text.clone().or_else(|| sh.value(at).is_empty().then(|| target.clone())) {
+-            sh.set_cell(at, Cell { value: gridcraft_core::Value::text(t.as_str()), formula: None, style: link_style });
++            sh.set_cell(at, Cell { value: gridcraft_core::Value::text(t.as_str()), formula: None, style: link_style, rich: None });
+         } else {
+             sh.set_style(at, link_style);
+         }
+diff --git a/crates/engine/src/cmd/solver.rs b/crates/engine/src/cmd/solver.rs
+--- a/crates/engine/src/cmd/solver.rs
++++ b/crates/engine/src/cmd/solver.rs
+@@ -1899,7 +1899,7 @@ fn write_reports(cx: &mut Ctx, at: usize, built: Vec<(String, Lines)>) -> Vec<St
+         let mut sheet = Sheet::new(name);
+         for (r, c, v, b) in lines {
+             let style = if b { bold } else { gridcraft_model::StyleId::DEFAULT };
+-            sheet.set_cell(CellRef::new(r, c), Cell { value: v, formula: None, style });
++            sheet.set_cell(CellRef::new(r, c), Cell { value: v, formula: None, style, rich: None });
+         }
+         for (c, w) in [(0u32, 14.0f32), (1, 110.0), (2, 140.0), (3, 120.0), (4, 120.0), (5, 120.0), (6, 120.0), (7, 120.0)] {
+             sheet.cols.insert(c, gridcraft_model::LineInfo { size: Some(w), ..Default::default() });
+@@ -2101,7 +2101,7 @@ fn run(s: &mut Session, p: &Json) -> Result<Json> {
+                 let sh = cx.sheet_mut(sheet)?;
+                 for (c, v) in model.vars.iter().zip(x) {
+                     let style = sh.style_id(*c);
+-                    sh.set_cell(*c, Cell { value: Value::number(*v), formula: None, style });
++                    sh.set_cell(*c, Cell { value: Value::number(*v), formula: None, style, rich: None });
+                 }
+                 for c in &model.vars {
+                     cx.touch(sheet + count, *c);
+diff --git a/crates/engine/src/cmd/whatif.rs b/crates/engine/src/cmd/whatif.rs
+--- a/crates/engine/src/cmd/whatif.rs
++++ b/crates/engine/src/cmd/whatif.rs
+@@ -201,7 +201,7 @@ impl Trial {
+         for (si, c, v) in sets {
+             if let Some(sh) = wb.sheet_mut(*si) {
+                 let style = sh.style_id(*c);
+-                sh.set_cell(*c, Cell { value: v.clone(), formula: None, style });
++                sh.set_cell(*c, Cell { value: v.clone(), formula: None, style, rich: None });
+                 keys.push((*si, *c));
+             }
+         }
+@@ -330,7 +330,7 @@ fn goal_seek(s: &mut Session, p: &Json) -> Result<Json> {
+     edit(s, |cx| {
+         let sh = cx.sheet_mut(csi)?;
+         let style = sh.style_id(chg);
+-        sh.set_cell(chg, Cell { value: Value::number(r.x), formula: None, style });
++        sh.set_cell(chg, Cell { value: Value::number(r.x), formula: None, style, rich: None });
+         cx.touch(csi, chg);
+         Ok(())
+     })?;
+@@ -493,7 +493,7 @@ fn scenario_show(s: &mut Session, p: &Json) -> Result<Json> {
+             let cell = match v.as_f64() {
+                 Some(n) => {
+                     let style = cx.wb.sheet(si).map(|sh| sh.style_id(*c)).unwrap_or_default();
+-                    Some(Cell { value: Value::Number(n), formula: None, style })
++                    Some(Cell { value: Value::Number(n), formula: None, style, rich: None })
+                 }
+                 None => super::edit::input_to_cell(&super::edit::json_to_input(v), si, *c, &mut cx.wb)?,
+             };
+@@ -578,7 +578,7 @@ fn scenario_summary(s: &mut Session, p: &Json) -> Result<Json> {
+         let bold = cx.wb.styles.derive(StyleId::DEFAULT, |st| st.font.bold = true);
+         let mut sheet = Sheet::new(name.clone());
+         let put = |sheet: &mut Sheet, row: u32, col: u32, v: Value, style: StyleId| {
+-            sheet.set_cell(CellRef::new(row, col), Cell { value: v, formula: None, style });
++            sheet.set_cell(CellRef::new(row, col), Cell { value: v, formula: None, style, rich: None });
+         };
+         put(&mut sheet, 1, 1, Value::text("Scenario Summary"), bold);
+         put(&mut sheet, 2, 2, Value::text("Current Values:"), bold);
+@@ -701,7 +701,7 @@ fn data_table(s: &mut Session, p: &Json) -> Result<Json> {
+         for (c, v) in out {
+             let sh = cx.sheet_mut(si)?;
+             let style = sh.style_id(c);
+-            sh.set_cell(c, Cell { value: v, formula: None, style });
++            sh.set_cell(c, Cell { value: v, formula: None, style, rich: None });
+             cx.touch(si, c);
+         }
+         Ok(())
+@@ -895,7 +895,7 @@ fn advanced_filter(s: &mut Session, p: &Json) -> Result<Json> {
+                     // The full output footprint was checked above.
+                     let to = CellRef::new(dest.row + i as u32, dest.col + c - list.start.col);
+                     let style = sh.style_id(src);
+-                    (to, Cell { value: sh.value(src), formula: None, style })
++                    (to, Cell { value: sh.value(src), formula: None, style, rich: None })
+                 })
+             })
+             .collect();
+@@ -1122,7 +1122,7 @@ fn consolidate(s: &mut Session, p: &Json) -> Result<Json> {
+             if v.is_empty() && style == StyleId::DEFAULT {
+                 sh.remove_cell(c);
+             } else {
+-                sh.set_cell(c, Cell { value: v, formula: None, style });
++                sh.set_cell(c, Cell { value: v, formula: None, style, rich: None });
+             }
+             cx.touch(dsi, c);
+         }
+diff --git a/crates/engine/src/fill.rs b/crates/engine/src/fill.rs
+--- a/crates/engine/src/fill.rs
++++ b/crates/engine/src/fill.rs
+@@ -448,7 +448,7 @@ pub fn series(cx: &mut Ctx, sheet: usize, r: RangeRef, rows: bool, kind: &str, s
+                 break;
+             }
+             let c = if rows { CellRef::new(lane, r.start.col + i) } else { CellRef::new(r.start.row + i, lane) };
+-            writes.push((c, Cell { value: Value::number(round15(v)), formula: None, style }));
++            writes.push((c, Cell { value: Value::number(round15(v)), formula: None, style, rich: None }));
+         }
+     }
+     let sh = cx.sheet_mut(sheet)?;
+@@ -507,7 +507,7 @@ pub fn flash_fill(cx: &mut Ctx, sheet: usize, at: CellRef) -> Result<usize> {
+     }
+     let sh = cx.sheet_mut(sheet)?;
+     for (c, out) in &writes {
+-        sh.set_cell(*c, Cell { value: Value::text(out.as_str()), formula: None, style });
++        sh.set_cell(*c, Cell { value: Value::text(out.as_str()), formula: None, style, rich: None });
+     }
+     for (c, _) in writes {
+         cx.touch(sheet, c);
+diff --git a/crates/engine/src/io.rs b/crates/engine/src/io.rs
+--- a/crates/engine/src/io.rs
++++ b/crates/engine/src/io.rs
+@@ -1074,17 +1074,17 @@ mod tests {
+             (styled("yyyy-mm-dd"), styled("$#,##0.00"), styled("0.0%"), styled("# ?/?"), styled("@"), styled("0.00"), styled("#,##0"));
+         let sh = wb.sheet_mut(0).unwrap();
+         let cells = [
+-            ("A1", Cell { value: Value::Number(46023.0), formula: None, style: date }),
+-            ("B1", Cell { value: Value::Number(1234.5), formula: None, style: money }),
+-            ("C1", Cell { value: Value::Number(0.125), formula: None, style: pct }),
+-            ("D1", Cell { value: Value::Number(1.5), formula: None, style: frac }),
+-            ("E1", Cell { value: Value::text("007"), formula: None, style: text }),
+-            ("F1", Cell { value: Value::Error(CellError::NA), formula: None, style: money }),
+-            ("G1", Cell { value: Value::Bool(true), formula: None, style: StyleId::DEFAULT }),
++            ("A1", Cell { value: Value::Number(46023.0), formula: None, style: date, rich: None }),
++            ("B1", Cell { value: Value::Number(1234.5), formula: None, style: money, rich: None }),
++            ("C1", Cell { value: Value::Number(0.125), formula: None, style: pct, rich: None }),
++            ("D1", Cell { value: Value::Number(1.5), formula: None, style: frac, rich: None }),
++            ("E1", Cell { value: Value::text("007"), formula: None, style: text, rich: None }),
++            ("F1", Cell { value: Value::Error(CellError::NA), formula: None, style: money, rich: None }),
++            ("G1", Cell { value: Value::Bool(true), formula: None, style: StyleId::DEFAULT, rich: None }),
+             ("A2", Cell { value: Value::Number(46024.0), style: date, ..Cell::formula(Formula::new("A1+1")) }),
+-            ("B2", Cell { value: Value::Number(12345678.9), formula: None, style: fixed }),
+-            ("C2", Cell { value: Value::Number(-0.25), formula: None, style: StyleId::DEFAULT }),
+-            ("D2", Cell { value: Value::Number(1234567.0), formula: None, style: thousands }),
++            ("B2", Cell { value: Value::Number(12345678.9), formula: None, style: fixed, rich: None }),
++            ("C2", Cell { value: Value::Number(-0.25), formula: None, style: StyleId::DEFAULT, rich: None }),
++            ("D2", Cell { value: Value::Number(1234567.0), formula: None, style: thousands, rich: None }),
+         ];
+         for (a, c) in cells {
+             sh.set_cell(CellRef::parse(a).unwrap(), c);
+diff --git a/crates/engine/src/pivot.rs b/crates/engine/src/pivot.rs
+--- a/crates/engine/src/pivot.rs
++++ b/crates/engine/src/pivot.rs
+@@ -1440,7 +1440,10 @@ pub fn refresh(wb: &mut Workbook, sheet: usize, idx: usize, replace: bool) -> Re
+             if oc.value.is_empty() && id == StyleId::default() {
+                 continue;
+             }
+-            cells.push((CellRef::new(origin.row + ri as u32, origin.col + ci as u32), Cell { value: oc.value.clone(), formula: None, style: id }));
++            cells.push((
++                CellRef::new(origin.row + ri as u32, origin.col + ci as u32),
++                Cell { value: oc.value.clone(), formula: None, style: id, rich: None },
++            ));
+         }
+     }
+     // Column widths that fit the labels.
+diff --git a/crates/engine/src/tests.rs b/crates/engine/src/tests.rs
+--- a/crates/engine/src/tests.rs
++++ b/crates/engine/src/tests.rs
+@@ -1458,6 +1458,22 @@ fn formatting_and_styles() {
+     s.execute("home.cellStyle", json!({"range": "D1", "name": "Good"})).unwrap();
+ }
+ 
++#[test]
++fn a_named_style_applied_to_a_cell_is_saved_as_its_style() {
++    let mut s = s();
++    s.execute("selection.set", json!({"range": "A1"})).unwrap();
++    s.execute("home.bold", json!({})).unwrap();
++    s.execute("home.newCellStyle", json!({"name": "Titolo", "fromCell": "A1"})).unwrap();
++    s.execute("home.cellStyle", json!({"range": "C3", "name": "Titolo"})).unwrap();
++    let b64 = s.execute("file.saveBytes", json!({"format": "xlsx"})).unwrap()["base64"].as_str().unwrap().to_string();
++    s.execute("file.open", json!({"name": "x.xlsx", "base64": b64})).unwrap();
++    let wb = &s.doc().unwrap().wb;
++    let sh = wb.active().unwrap();
++    assert_eq!(wb.styles.get(sh.style_id(CellRef::new(2, 2))).parent.as_deref(), Some("Titolo"));
++    assert_eq!(wb.styles.get(sh.style_id(CellRef::new(0, 0))).parent, None);
++    assert!(wb.cell_styles.iter().any(|(n, st)| n == "Titolo" && st.font.bold && st.parent.is_none()));
++}
++
+ #[test]
+ fn spill_references_roundtrip_through_xlsx() {
+     let mut s = s();
+diff --git a/crates/model/src/cell.rs b/crates/model/src/cell.rs
+--- a/crates/model/src/cell.rs
++++ b/crates/model/src/cell.rs
+@@ -58,25 +58,42 @@ pub struct CellPicture {
+     pub alt: String,
+ }
+ 
++/// Formatted runs of a constant text as the file wrote them: the `<r>` runs of its string, with
++/// `text` the plain text they spell.
++#[derive(Clone, Debug, PartialEq, Eq, Hash)]
++pub struct RichRuns {
++    pub text: Arc<str>,
++    pub xml: Arc<str>,
++}
++
+ #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+ pub struct Cell {
+     /// Constant value, or the cached result of the formula.
+     pub value: Value,
+     pub formula: Option<Arc<Formula>>,
+     pub style: StyleId,
++    /// The runs of a constant text read from a file; they count only while `value` is still the
++    /// text they spell.
++    #[serde(skip)]
++    pub rich: Option<Arc<RichRuns>>,
+ }
+ 
+ impl Cell {
+     pub fn value(v: Value) -> Cell {
+-        Cell { value: v, formula: None, style: StyleId::DEFAULT }
++        Cell { value: v, formula: None, style: StyleId::DEFAULT, rich: None }
+     }
+     pub fn formula(f: Formula) -> Cell {
+-        Cell { value: Value::Empty, formula: Some(Arc::new(f)), style: StyleId::DEFAULT }
++        Cell { value: Value::Empty, formula: Some(Arc::new(f)), style: StyleId::DEFAULT, rich: None }
+     }
+     /// No value, no formula and the default style: storing it is pointless.
+     pub fn is_blank(&self) -> bool {
+         self.value.is_empty() && self.formula.is_none() && self.style == StyleId::DEFAULT
+     }
++    /// The runs of the cell's text, while it is still the text they spell.
++    pub fn rich_runs(&self) -> Option<&RichRuns> {
++        let r = self.rich.as_deref()?;
++        (self.formula.is_none() && matches!(&self.value, Value::Text(t) if **t == *r.text)).then_some(r)
++    }
+     /// What the formula bar shows.
+     pub fn input_text(&self) -> String {
+         if let Some(f) = &self.formula {
+diff --git a/crates/model/src/lib.rs b/crates/model/src/lib.rs
+--- a/crates/model/src/lib.rs
++++ b/crates/model/src/lib.rs
+@@ -15,10 +15,10 @@ pub mod store;
+ pub mod style;
+ pub mod workbook;
+ 
+-pub use cell::{Cell, CellPicture, Formula};
++pub use cell::{Cell, CellPicture, Formula, RichRuns};
+ pub use features::*;
+ pub use password::PasswordHash;
+-pub use preserved::{Preserved, PreservedPart, PreservedRel, PreservedSheet, PreservedXml};
++pub use preserved::{Preserved, PreservedPart, PreservedRel, PreservedSheet, PreservedSource, PreservedXml};
+ pub use sheet::{DEFAULT_COL_WIDTH, DEFAULT_ROW_HEIGHT, LineIndex, Sheet, SheetViewMode, Visibility, points_to_chars};
+ pub use store::CellStore;
+ pub use style::{
+diff --git a/crates/model/src/preserved.rs b/crates/model/src/preserved.rs
+--- a/crates/model/src/preserved.rs
++++ b/crates/model/src/preserved.rs
+@@ -45,6 +45,21 @@ pub struct PreservedXml {
+     pub xml: String,
+ }
+ 
++/// The source form of content GridCraft models and writes itself: the theme part as it was, the
++/// attributes of an element it writes that it does not model (`workbookPr`'s `codeName`), an
++/// element it never reads (`phoneticPr`). Written back instead of GridCraft's own form while the
++/// model still holds what was read from it, so an open and save keeps the file as it was.
++#[derive(Clone, Debug, Default, PartialEq, Eq)]
++pub struct PreservedSource {
++    /// What it is (`theme`, `workbookPr`, `pageSetup`…).
++    pub slot: String,
++    /// What the model held right after reading it, as the file-format crate fingerprints it;
++    /// empty for content the model has no counterpart for, which is always written back.
++    pub model: String,
++    /// The bytes: a part, an XML element, or attributes (` codeName="Sheet1"`).
++    pub data: Arc<[u8]>,
++}
++
+ /// A chart sheet (a sheet that holds one chart and no cells) kept as it was in the source file. Its
+ /// part, drawing, chart, style and colour parts are in [`Preserved::parts`]; the workbook
+ /// relationship to it is in [`Preserved::rels`].
+@@ -77,6 +92,8 @@ pub struct Preserved {
+     pub vml: Option<PreservedPart>,
+     /// Chart sheets, in file order (workbook owner only).
+     pub sheets: Vec<PreservedSheet>,
++    /// Source forms of modelled content.
++    pub sources: Vec<PreservedSource>,
+ }
+ 
+ impl Preserved {
+@@ -87,9 +104,11 @@ impl Preserved {
+             && self.elements.is_empty()
+             && self.vml.is_none()
+             && self.sheets.is_empty()
++            && self.sources.is_empty()
+     }
+     /// Total bytes held.
+     pub fn byte_len(&self) -> usize {
+-        self.parts.iter().chain(self.vml.iter()).fold(0usize, |n, p| n.saturating_add(p.data.len()))
++        let parts = self.parts.iter().chain(self.vml.iter()).fold(0usize, |n, p| n.saturating_add(p.data.len()));
++        self.sources.iter().fold(parts, |n, s| n.saturating_add(s.data.len()))
+     }
+ }
+diff --git a/crates/model/src/sheet.rs b/crates/model/src/sheet.rs
+--- a/crates/model/src/sheet.rs
++++ b/crates/model/src/sheet.rs
+@@ -238,7 +238,7 @@ impl Sheet {
+     }
+     pub fn set_value(&mut self, c: CellRef, v: Value) {
+         let style = self.style_id(c);
+-        self.set_cell(c, Cell { value: v, formula: None, style });
++        self.set_cell(c, Cell { value: v, formula: None, style, rich: None });
+     }
+     /// Replaces content, removing any picture at this address. Style-only edits use set_style.
+     pub fn set_cell(&mut self, c: CellRef, cell: Cell) {
+@@ -257,7 +257,7 @@ impl Sheet {
+     /// Pictures retain a scalar fallback for calculation and unsupported consumers.
+     pub fn set_picture(&mut self, c: CellRef, picture: Arc<CellPicture>) {
+         let style = self.style_id(c);
+-        self.cells.set(c, Cell { value: Value::Error(gridcraft_core::CellError::Value), formula: None, style });
++        self.cells.set(c, Cell { value: Value::Error(gridcraft_core::CellError::Value), formula: None, style, rich: None });
+         self.cell_pictures.insert(c, picture);
+     }
+     pub fn input_text(&self, c: CellRef) -> String {
+diff --git a/crates/model/src/style.rs b/crates/model/src/style.rs
+--- a/crates/model/src/style.rs
++++ b/crates/model/src/style.rs
+@@ -190,7 +190,8 @@ pub struct Font {
+     /// Windows character set the font was chosen for (178 = Arabic); kept so Excel substitutes a font for the same script.
+     #[serde(default)]
+     pub charset: Option<u8>,
+-    /// Font family class (1 roman, 2 swiss, 3 modern…); `None` is swiss, the default.
++    /// Font family class (1 roman, 2 swiss, 3 modern…) as the file stated it; `None` when it did
++    /// not, and GridCraft then writes swiss, the default.
+     #[serde(default)]
+     pub family: Option<u8>,
+ }
+@@ -376,6 +377,13 @@ pub struct Style {
+     /// Differential formats only.
+     #[serde(default)]
+     pub dxf_stated: DxfStated,
++    /// The cell's text was entered after an apostrophe (`quotePrefix`), as text that reads like
++    /// a number or a formula.
++    #[serde(default)]
++    pub quote_prefix: bool,
++    /// The named cell style (`Workbook::cell_styles`) the format is based on; `None` is Normal.
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub parent: Option<String>,
+ }
+ 
+ /// The parts a differential format states at a value its `Style` can't tell from unset: a dxf's
+diff --git a/crates/xlsx/src/array_formula.rs b/crates/xlsx/src/array_formula.rs
+--- a/crates/xlsx/src/array_formula.rs
++++ b/crates/xlsx/src/array_formula.rs
+@@ -69,8 +69,11 @@ pub(crate) fn lift_legacy(wb: &Workbook, sheet: usize, at: CellRef, expr: &Expr)
+ }
+ 
+ /// Lifts every formula of `wb` read without dynamic-array metadata (see [`lift_legacy`]).
++/// A formula the analysis cannot finish stays as the file wrote it, and is saved back the same
++/// way, without dynamic-array metadata (the `formula.legacy` source of its sheet).
+ pub(crate) fn lift_legacy_formulas(wb: &mut Workbook) {
+     for si in 0..wb.sheets.len() {
++        let mut unsure = std::collections::BTreeSet::new();
+         let fixed: Vec<_> = wb.sheets[si]
+             .cells
+             .iter()
+@@ -80,14 +83,27 @@ pub(crate) fn lift_legacy_formulas(wb: &mut Workbook) {
+                     return None;
+                 }
+                 let e = f.expr_arc()?;
+-                let lifted = lift_legacy(wb, si, c, &e)?;
++                let Some(lifted) = lift_legacy(wb, si, c, &e) else {
++                    unsure.insert(f.text.clone());
++                    return None;
++                };
+                 (lifted != *e).then(|| (c, Formula::from_expr(lifted)))
+             })
+             .collect();
+-        if fixed.is_empty() {
++        if fixed.is_empty() && unsure.is_empty() {
+             continue;
+         }
+         let sheet = std::sync::Arc::make_mut(&mut wb.sheets[si]);
++        if !unsure.is_empty() {
++            let p = std::sync::Arc::make_mut(sheet.preserved.get_or_insert_with(Default::default));
++            for text in unsure {
++                p.sources.push(gridcraft_model::PreservedSource {
++                    slot: "formula.legacy".into(),
++                    model: text,
++                    data: std::sync::Arc::from(Vec::new()),
++                });
++            }
++        }
+         for (c, f) in fixed {
+             if let Some(cell) = sheet.cells.get_mut(c) {
+                 cell.formula = Some(std::sync::Arc::new(f));
+diff --git a/crates/xlsx/src/csv.rs b/crates/xlsx/src/csv.rs
+--- a/crates/xlsx/src/csv.rs
++++ b/crates/xlsx/src/csv.rs
+@@ -288,7 +288,7 @@ pub fn read_csv(bytes: &[u8], opts: &CsvOptions) -> Result<Workbook, IoError> {
+                     },
+                     None => StyleId::DEFAULT,
+                 };
+-                Cell { value: p.value, formula: None, style }
++                Cell { value: p.value, formula: None, style, rich: None }
+             } else {
+                 Cell::value(Value::Text(Arc::from(f)))
+             };
+diff --git a/crates/xlsx/src/drawing.rs b/crates/xlsx/src/drawing.rs
+--- a/crates/xlsx/src/drawing.rs
++++ b/crates/xlsx/src/drawing.rs
+@@ -2,9 +2,12 @@
+ //! chart frames.
+ 
+ use std::fmt::Write as _;
++use std::sync::Arc;
+ 
+ use gridcraft_core::{CellRef, MAX_COLS, MAX_ROWS};
+-use gridcraft_model::{Anchor, AnchorMode, Color, Image, Shape, ShapeFormat, ShapeKind, ShapeTextAlign, ShapeTextAnchor, Sheet, Theme};
++use gridcraft_model::{
++    Anchor, AnchorMode, Color, Image, PreservedSource, Shape, ShapeFormat, ShapeKind, ShapeTextAlign, ShapeTextAnchor, Sheet, Theme,
++};
+ 
+ use crate::IoError;
+ use crate::read::Ctx;
+@@ -124,8 +127,17 @@ fn mime_for(name: &str) -> &'static str {
+ pub fn read_drawing(cx: &mut Ctx<'_>, part: &str, sheet: &mut Sheet) -> Result<(), IoError> {
+     let Some(x) = cx.optional_xml(part)? else { return Ok(()) };
+     let rels = cx.pkg.rels(part)?;
++    // The part is kept as the file had it while every object in it is read into the model: its
++    // relationship ids, each to the picture or chart it shows.
++    let mut whole = sheet.images.is_empty() && sheet.charts.is_empty() && sheet.shapes.is_empty();
++    let mut ids = String::new();
++    let mut charts = Vec::new();
+     for a in &x.children {
+-        let Some(anchor) = read_anchor(a, sheet) else { continue };
++        let Some(anchor) = read_anchor(a, sheet) else {
++            whole &=
++                matches!(a.name.as_str(), "twoCellAnchor" | "oneCellAnchor" | "absoluteAnchor") && a.children.iter().all(|c| c.name == "clientData");
++            continue;
++        };
+         // Objects in markup-compatibility blocks: the first choice (chartex frames), else the
+         // fallback.
+         let objs: Vec<&El> = a
+@@ -156,6 +168,8 @@ pub fn read_drawing(cx: &mut Ctx<'_>, part: &str, sheet: &mut Sheet) -> Result<(
+                     };
+                     let alt = obj.path(&["nvPicPr", "cNvPr"]).and_then(|c| c.attr("descr")).unwrap_or("").to_string();
+                     let id = cx.next_object_id();
++                    let _ = writeln!(ids, "image {} {rid}", sheet.images.len());
++                    whole &= !data.is_empty();
+                     sheet.images.push(Image { id, anchor, data: data.into(), mime: mime_for(&target).to_string(), alt });
+                 }
+                 "graphicFrame" => {
+@@ -170,28 +184,72 @@ pub fn read_drawing(cx: &mut Ctx<'_>, part: &str, sheet: &mut Sheet) -> Result<(
+                                 Some(mut ch) => {
+                                     ch.id = cx.next_object_id();
+                                     ch.anchor = anchor;
++                                    let _ = writeln!(ids, "chart {} {rid}", sheet.charts.len());
++                                    whole &= !chartex;
++                                    if !chartex {
++                                        charts.push((sheet.charts.len(), target));
++                                    }
+                                     sheet.charts.push(ch);
+                                 }
+-                                None => cx.warn(format!("chart {target} has no supported plot and was skipped")),
++                                None => {
++                                    whole = false;
++                                    cx.warn(format!("chart {target} has no supported plot and was skipped"));
++                                }
+                             }
++                        } else {
++                            whole = false;
+                         }
+                     } else if uri.contains("chartex") || uri.contains("chartEx") {
++                        whole = false;
+                         cx.warn("a histogram, waterfall, treemap… chart without its chart part was skipped");
+                     } else {
++                        whole = false;
+                         cx.warn("an embedded object (SmartArt, OLE…) was skipped");
+                     }
+                 }
+-                "sp" | "cxnSp" => {
+-                    if let Some(s) = read_shape(obj, anchor) {
++                "sp" | "cxnSp" => match read_shape(obj, anchor) {
++                    Some(s) => {
+                         let id = cx.next_object_id();
+                         sheet.shapes.push(Shape { id, ..s });
+                     }
++                    None => whole = false,
++                },
++                "grpSp" => {
++                    whole = false;
++                    cx.warn("grouped shapes are not supported and were skipped");
+                 }
+-                "grpSp" => cx.warn("grouped shapes are not supported and were skipped"),
+                 _ => {}
+             }
+         }
+     }
++    // Classic charts as the file had them, while the chart is the one read: a part without
++    // relationships of its own but its style and colours.
++    for (i, target) in charts {
++        let Some(ch) = sheet.charts.get(i) else { continue };
++        let crels = cx.pkg.rels(&target)?;
++        if crels.iter().any(|r| r.external || !matches!(r.kind.as_str(), "chartStyle" | "chartColorStyle")) {
++            continue;
++        }
++        let Some(data) = cx.pkg.read(&target)? else { continue };
++        let model = crate::passthrough::chart_model(ch);
++        for r in &crels {
++            if let Some(d) = cx.pkg.read(&r.target)? {
++                cx.sources.push(PreservedSource { slot: format!("chart.{}", r.kind), model: model.clone(), data: Arc::from(d) });
++            }
++        }
++        cx.sources.push(PreservedSource { slot: "chart".into(), model, data: Arc::from(data) });
++    }
++    // Every relationship of the part goes to an object read; a picture link or hyperlink would not.
++    let used: Vec<&str> = ids.lines().filter_map(|l| l.rsplit(' ').next()).collect();
++    whole &= rels.iter().all(|r| used.contains(&r.id.as_str()));
++    if whole
++        && !ids.is_empty()
++        && let Some(data) = cx.pkg.read(part)?
++    {
++        let model = crate::passthrough::drawing_model(sheet);
++        cx.sources.push(PreservedSource { slot: "drawing.ids".into(), model: model.clone(), data: Arc::from(ids.into_bytes()) });
++        cx.sources.push(PreservedSource { slot: "drawing".into(), model, data: Arc::from(data) });
++    }
+     Ok(())
+ }
+ 
+diff --git a/crates/xlsx/src/passthrough.rs b/crates/xlsx/src/passthrough.rs
+--- a/crates/xlsx/src/passthrough.rs
++++ b/crates/xlsx/src/passthrough.rs
+@@ -30,7 +30,9 @@ use std::fmt::Write as _;
+ use std::path::{Component, Path};
+ use std::sync::Arc;
+ 
+-use gridcraft_model::{Preserved, PreservedPart, PreservedRel, PreservedSheet, PreservedXml, Sheet, Visibility, Workbook};
++use gridcraft_model::{
++    DocProps, Preserved, PreservedPart, PreservedRel, PreservedSheet, PreservedSource, PreservedXml, Sheet, Theme, Visibility, Workbook,
++};
+ use quick_xml::events::attributes::Attribute;
+ use quick_xml::events::{BytesStart, Event};
+ use quick_xml::name::QName;
+@@ -92,6 +94,77 @@ const FILE_VERSION_ATTRS: &[&str] = &["appName", "lastEdited", "lowestEdited", "
+ /// The workbook extension listing the calculation features the saved values were computed with.
+ const CALC_FEATURES_URI: &str = "{B58B0392-4F1F-4190-BB64-5DF3571DCE5F}";
+ const NS_CALC_FEATURES: &str = "http://schemas.microsoft.com/office/spreadsheetml/2018/calcfeatures";
++/// Attributes of `<workbookPr>` GridCraft does not model (it writes `date1904` and `showObjects`).
++const WORKBOOK_PR_ATTRS: &[&str] = &[
++    "showBorderUnselectedTables",
++    "filterPrivacy",
++    "promptedSolutions",
++    "showInkAnnotation",
++    "backupFile",
++    "saveExternalLinkValues",
++    "updateLinks",
++    "codeName",
++    "hidePivotFieldList",
++    "showPivotChartFilter",
++    "allowRefreshQuery",
++    "publishItems",
++    "checkCompatibility",
++    "autoCompressPictures",
++    "refreshAllConnections",
++    "defaultThemeVersion",
++];
++/// Workbook elements GridCraft never reads, with their attributes (they have no children).
++const WORKBOOK_ELEMENTS: &[(&str, &[&str])] = &[
++    ("webPublishing", &["css", "thicket", "longFileNames", "vml", "allowPng", "targetScreenSize", "dpi", "codePage", "characterSet"]),
++    ("fileRecoveryPr", &["autoRecover", "crashSave", "dataExtractLoad", "repairLoad"]),
++];
++/// Attributes of `<sheetPr>` and its children GridCraft does not model (it writes `tabColor` and
++/// `fitToPage`).
++const SHEET_PR_ATTRS: &[&str] = &[
++    "syncHorizontal",
++    "syncVertical",
++    "syncRef",
++    "transitionEvaluation",
++    "transitionEntry",
++    "published",
++    "codeName",
++    "filterMode",
++    "enableFormatConditionsCalculation",
++];
++const OUTLINE_PR_ATTRS: &[&str] = &["applyStyles", "summaryBelow", "summaryRight", "showOutlineSymbols"];
++const PAGE_SETUP_PR_ATTRS: &[&str] = &["autoPageBreaks"];
++/// Attributes of `<sheetFormatPr>` GridCraft does not model.
++const SHEET_FORMAT_PR_ATTRS: &[&str] = &["baseColWidth", "zeroHeight", "thickTop", "thickBottom"];
++/// Attributes of `<pageSetup>` GridCraft does not model (it writes `paperSize`, `scale`,
++/// `fitToWidth`, `fitToHeight`, `orientation` and the printer settings' `r:id`).
++const PAGE_SETUP_ATTRS: &[&str] = &[
++    "paperHeight",
++    "paperWidth",
++    "firstPageNumber",
++    "pageOrder",
++    "usePrinterDefaults",
++    "blackAndWhite",
++    "draft",
++    "cellComments",
++    "useFirstPageNumber",
++    "errors",
++    "horizontalDpi",
++    "verticalDpi",
++    "copies",
++];
++const IGNORED_ERROR_ATTRS: &[&str] = &[
++    "sqref",
++    "evalError",
++    "twoDigitTextYear",
++    "numberStoredAsText",
++    "formula",
++    "formulaRange",
++    "unlockedFormula",
++    "emptyCellReference",
++    "listDataValidation",
++    "calculatedColumn",
++];
++
+ /// Kept sheet elements, in schema order (all after `<legacyDrawing>`, before `<tableParts>`).
+ const SHEET_SLOTS: &[&str] = &["legacyDrawingHF", "picture", "oleObjects", "controls"];
+ 
+@@ -359,7 +432,15 @@ impl KeptReader {
+     }
+ 
+     /// Package-root and workbook-level content.
+-    pub fn workbook(&mut self, cx: &mut Ctx<'_>, wb_part: &str, wb_xml: &xml::El, file_to_model: &[Option<usize>]) -> Option<Arc<Preserved>> {
++    pub fn workbook(
++        &mut self,
++        cx: &mut Ctx<'_>,
++        wb_part: &str,
++        wb_xml: &xml::El,
++        file_to_model: &[Option<usize>],
++        theme: &Theme,
++        props: &DocProps,
++    ) -> Option<Arc<Preserved>> {
+         if !self.on {
+             let wb_rels = raw_rels(cx, wb_part).unwrap_or_default();
+             for (_, se) in chart_sheet_entries(wb_xml, &wb_rels, file_to_model) {
+@@ -459,11 +540,53 @@ impl KeptReader {
+             x.push_str("</xcalcf:calcFeatures></ext>");
+             p.elements.push(PreservedXml { slot: "ext".into(), xml: x });
+         }
++        // Source forms: unmodelled attributes and elements, and the theme and core properties
++        // parts as they were while the model still holds what was read from them.
++        if let Some(e) = wb_xml.child("workbookPr") {
++            push_source(&mut p.sources, "workbookPr", String::new(), attrs_of(e, WORKBOOK_PR_ATTRS));
++        }
++        for (name, attrs) in WORKBOOK_ELEMENTS {
++            if let Some(e) = wb_xml.child(name) {
++                push_source(&mut p.sources, name, String::new(), format!("<{name}{}/>", attrs_of(e, attrs)));
++            }
++        }
++        if let Some(r) = wb_rels.iter().find(|r| is_kind(r, &["theme"]) && !r.external)
++            && let Some(data) = self.source_part(cx, &r.target)
++        {
++            push_source(&mut p.sources, "theme", theme_model(theme), data);
++        }
++        if let Ok(root) = raw_rels(cx, "")
++            && let Some(r) = root.iter().find(|r| is_kind(r, &["core-properties"]) && !r.external)
++            && let Some(data) = self.source_part(cx, &r.target)
++        {
++            push_source(&mut p.sources, "core", core_model(props), data);
++        }
++        let styles = std::mem::take(&mut cx.style_sources);
++        let bytes = styles.iter().map(|s| s.data.len()).sum::<usize>();
++        if let Some(left) = self.budget.checked_sub(bytes) {
++            self.budget = left;
++            p.sources.extend(styles);
++        }
+         (!p.is_empty()).then(|| Arc::new(p))
+     }
+ 
+-    /// Sheet-level content of the sheet part `part`.
++    /// A part GridCraft also writes from its model, kept as it is when it has no relationships of
++    /// its own and its XML reads; charged to the kept total.
++    fn source_part(&mut self, cx: &mut Ctx<'_>, part: &str) -> Option<Vec<u8>> {
++        if !raw_rels(cx, part).ok()?.is_empty() {
++            return None;
++        }
++        let limit = MAX_META.min(u64::try_from(self.budget).unwrap_or(u64::MAX));
++        let data = cx.pkg.read_limited(part, limit).ok()??;
++        xml::parse(&data).ok()?;
++        self.budget = self.budget.checked_sub(data.len())?;
++        Some(data)
++    }
++
++    /// Sheet-level content of the sheet part `part`, with the source forms the sheet reader left
++    /// in `cx`.
+     pub fn sheet(&mut self, cx: &mut Ctx<'_>, part: &str, name: &str) -> Option<Arc<Preserved>> {
++        let sources = std::mem::take(&mut cx.sources);
+         if !self.on {
+             return None;
+         }
+@@ -487,6 +610,11 @@ impl KeptReader {
+         if rels.iter().any(|r| is_kind(r, SHEET_ELEMENT_KINDS)) || vml_drawings > notes {
+             self.sheet_elements(cx, part, name, &rels, &mut p, &mut seen);
+         }
++        let bytes = sources.iter().map(|s| s.data.len()).sum::<usize>();
++        if let Some(left) = self.budget.checked_sub(bytes) {
++            self.budget = left;
++            p.sources = sources;
++        }
+         (!p.is_empty()).then(|| Arc::new(p))
+     }
+ 
+@@ -596,6 +724,278 @@ impl KeptReader {
+     }
+ }
+ 
++/// The fingerprint [`PreservedSource::model`] holds of a model value.
++pub fn model_of(v: &impl std::fmt::Debug) -> String {
++    format!("{v:?}")
++}
++
++/// What the theme part was read into.
++pub fn theme_model(t: &Theme) -> String {
++    model_of(t)
++}
++
++/// What the core properties part was read into (the company is in the extended properties).
++pub fn core_model(p: &DocProps) -> String {
++    model_of(&[&p.title, &p.subject, &p.author, &p.keywords, &p.description])
++}
++
++fn push_source(sources: &mut Vec<PreservedSource>, slot: &str, model: String, data: impl Into<Vec<u8>>) {
++    let data = data.into();
++    if !data.is_empty() || !model.is_empty() {
++        sources.push(PreservedSource { slot: slot.into(), model, data: Arc::from(data) });
++    }
++}
++
++/// ` name="value"` for each of `names` (unprefixed attributes) that `e` has.
++pub(crate) fn attrs_of(e: &xml::El, names: &[&str]) -> String {
++    let mut s = String::new();
++    for n in names {
++        if let Some(v) = e.attr(n) {
++            let _ = write!(s, " {n}=\"{}\"", esc_attr(v));
++        }
++    }
++    s
++}
++
++/// The source forms of a sheet part GridCraft does not model: attributes of the elements it
++/// writes, and elements it never reads. `sheet` is the sheet as read from `root`.
++pub fn sheet_sources(root: &xml::El, sheet: &Sheet) -> Vec<PreservedSource> {
++    let mut out = Vec::new();
++    if let Some(e) = root.child("sheetPr") {
++        push_source(&mut out, "sheetPr", String::new(), attrs_of(e, SHEET_PR_ATTRS));
++        if let Some(o) = e.child("outlinePr") {
++            push_source(&mut out, "outlinePr", String::new(), attrs_of(o, OUTLINE_PR_ATTRS));
++        }
++        if let Some(o) = e.child("pageSetUpPr") {
++            push_source(&mut out, "pageSetUpPr", String::new(), attrs_of(o, PAGE_SETUP_PR_ATTRS));
++        }
++    }
++    if let Some(e) = root.child("sheetFormatPr") {
++        push_source(&mut out, "sheetFormatPr", String::new(), attrs_of(e, SHEET_FORMAT_PR_ATTRS));
++        let custom = if e.flag("customHeight", false) { "1" } else { "0" };
++        push_source(&mut out, "sheetFormatPr.customHeight", model_of(&sheet.default_row_height), custom);
++        // A default width GridCraft does not take (`0`, with every column hidden by default).
++        if let Some(w) = e.attr("defaultColWidth").filter(|w| w.trim().parse::<f64>().is_ok_and(|v| crate::tables::col_width_to_px(v) <= 0.0)) {
++            push_source(&mut out, "sheetFormatPr.defaultColWidth", model_of(&sheet.default_col_width), w.trim());
++        }
++        // A default width the file derives from `baseColWidth`.
++        if e.attr("defaultColWidth").is_none() {
++            push_source(&mut out, "sheetFormatPr.baseColWidth", model_of(&sheet.default_col_width), Vec::new());
++        }
++    }
++    // Split (not frozen) panes, while the view the file opened on is the one read.
++    if let Some(p) = root.path(&["sheetViews", "sheetView", "pane"])
++        && p.attr("state").is_none_or(|s| s == "split")
++    {
++        let model = model_of(&(sheet.freeze, sheet.view_top_left));
++        push_source(&mut out, "pane", model.clone(), format!("<pane{}/>", attrs_of(p, &["xSplit", "ySplit", "topLeftCell", "activePane", "state"])));
++        push_source(&mut out, "pane.active", model, p.attr("activePane").unwrap_or_default());
++    }
++    // Column widths as the file wrote them, for the pixels each was read into.
++    let widths = root.child("sheetFormatPr").and_then(|e| e.attr("defaultColWidth")).into_iter();
++    let widths = widths.chain(root.child("cols").into_iter().flat_map(|c| c.kids("col")).filter_map(|c| c.attr("width")));
++    let mut seen = HashSet::new();
++    for w in widths {
++        if let Ok(v) = w.trim().parse::<f64>()
++            && v.is_finite()
++            && v > 0.0
++            && seen.insert(w)
++        {
++            push_source(&mut out, "width", model_of(&crate::tables::col_width_to_px(v)), w.trim());
++        }
++    }
++    if let Some(e) = root.child("sheetCalcPr") {
++        push_source(&mut out, "sheetCalcPr", String::new(), format!("<sheetCalcPr{}/>", attrs_of(e, &["fullCalcOnLoad"])));
++    }
++    if let Some(e) = root.child("phoneticPr") {
++        push_source(&mut out, "phoneticPr", String::new(), format!("<phoneticPr{}/>", attrs_of(e, &["fontId", "type", "alignment"])));
++    }
++    const MARGINS: [&str; 6] = ["left", "right", "top", "bottom", "header", "footer"];
++    if let Some(e) = root.child("pageMargins")
++        && MARGINS.iter().all(|m| e.attr_f64(m).is_some_and(f64::is_finite))
++    {
++        // Margins to more digits than the model's `f32` keeps.
++        push_source(&mut out, "pageMargins", model_of(&sheet.print.margins), format!("<pageMargins{}/>", attrs_of(e, &MARGINS)));
++    }
++    if let Some(e) = root.child("pageSetup") {
++        push_source(&mut out, "pageSetup", String::new(), attrs_of(e, PAGE_SETUP_ATTRS));
++        // A paper size GridCraft has no name for, and an orientation the file leaves to the printer.
++        if let Some(id) = e.attr_u32("paperSize").filter(|id| crate::tables::paper_name(*id).is_none()) {
++            push_source(&mut out, "pageSetup.paperSize", model_of(&sheet.print.paper), id.to_string());
++        }
++        if sheet.print.fit_to.is_none() {
++            push_source(&mut out, "pageSetup.fit", model_of(&sheet.print.fit_to), attrs_of(e, &["fitToWidth", "fitToHeight"]));
++        }
++        if e.attr("orientation").is_none_or(|o| o == "default") {
++            push_source(&mut out, "pageSetup.orientation", model_of(&sheet.print.orientation), Vec::new());
++        }
++    }
++    if root.child("pageSetup").is_none() {
++        // A sheet that leaves the whole page setup to the printer.
++        push_source(&mut out, "pageSetup.absent", page_setup_model(&sheet.print), Vec::new());
++    }
++    // Excel 2010 conditional formats (rules only it has, data bar borders and axes), while the
++    // sheet's conditional formats are the ones read. GridCraft writes the file's priorities then.
++    let priorities: Vec<u32> = sheet.cond_formats.iter().map(|c| c.priority).collect();
++    let unique = priorities.iter().all(|p| *p > 0) && priorities.iter().collect::<HashSet<_>>().len() == priorities.len();
++    let x14 = root.child("extLst").into_iter().flat_map(|l| l.kids("ext")).find_map(|e| e.child("conditionalFormattings"));
++    if let Some(x) = x14.filter(|_| unique).and_then(|x| xml::prefixed_xml(x, X14_CF_ELEMENTS, X14_CF_ATTRS)) {
++        push_source(&mut out, "x14.conditionalFormattings", cond_formats_model(sheet), x);
++    }
++    if let Some(e) = root.child("ignoredErrors") {
++        let mut x = String::from("<ignoredErrors>");
++        for i in e.kids("ignoredError") {
++            let _ = write!(x, "<ignoredError{}/>", attrs_of(i, IGNORED_ERROR_ATTRS));
++        }
++        x.push_str("</ignoredErrors>");
++        push_source(&mut out, "ignoredErrors", String::new(), x);
++    }
++    out
++}
++
++/// What a note's `<text>` writes from its comment at `cell`, or at any cell.
++pub fn note_model(cell: Option<gridcraft_core::CellRef>, c: &gridcraft_model::Comment) -> String {
++    model_of(&(cell, &c.author, &c.text, &c.replies, c.threaded))
++}
++
++/// The Excel 2010 conditional format elements kept as the file had them, with their prefixes.
++const X14_CF_ELEMENTS: &[(&str, &str)] = &[
++    ("conditionalFormattings", "x14:"),
++    ("conditionalFormatting", "x14:"),
++    ("cfRule", "x14:"),
++    ("dataBar", "x14:"),
++    ("colorScale", "x14:"),
++    ("iconSet", "x14:"),
++    ("cfvo", "x14:"),
++    ("cfIcon", "x14:"),
++    ("color", "x14:"),
++    ("fillColor", "x14:"),
++    ("borderColor", "x14:"),
++    ("negativeFillColor", "x14:"),
++    ("negativeBorderColor", "x14:"),
++    ("axisColor", "x14:"),
++    ("f", "xm:"),
++    ("sqref", "xm:"),
++];
++const X14_CF_ATTRS: &[&str] = &[
++    "type",
++    "priority",
++    "id",
++    "operator",
++    "stopIfTrue",
++    "activePresent",
++    "text",
++    "rank",
++    "bottom",
++    "percent",
++    "aboveAverage",
++    "equalAverage",
++    "stdDev",
++    "minLength",
++    "maxLength",
++    "border",
++    "gradient",
++    "direction",
++    "negativeBarColorSameAsPositive",
++    "negativeBarBorderColorSameAsPositive",
++    "axisPosition",
++    "gte",
++    "iconSet",
++    "showValue",
++    "reverse",
++    "custom",
++    "iconId",
++    "rgb",
++    "theme",
++    "tint",
++    "indexed",
++    "auto",
++];
++
++/// What the conditional formats of `sheet` were read into, for their Excel 2010 form.
++pub fn cond_formats_model(sheet: &Sheet) -> String {
++    model_of(&sheet.cond_formats)
++}
++
++/// What the notes' VML drawing writes from the notes of `sheet`.
++pub fn notes_vml_model(sheet: &Sheet) -> String {
++    model_of(&sheet.comments.iter().map(|(cell, c)| (cell, c.visible, c.threaded, c.note_box)).collect::<Vec<_>>())
++}
++
++/// The notes' VML drawing as the file had it, while it holds the notes of `sheet` and numbers
++/// its shapes in the block `n` GridCraft gives them.
++pub fn notes_vml_source<'a>(sheet: &'a Sheet, n: u32) -> Option<&'a [u8]> {
++    let p = sheet.preserved.as_deref().filter(|p| p.vml.is_none())?;
++    let vml = source(Some(p), "vml.notes", &notes_vml_model(sheet))?;
++    let text = std::str::from_utf8(vml).ok()?;
++    let idmap = text.find("idmap")?;
++    let data = text.get(idmap..)?.split_once("data=\"")?.1.split('"').next()?;
++    (data.trim() == n.to_string()).then_some(vml)
++}
++
++/// What a chart part writes from `ch`.
++pub fn chart_model(ch: &gridcraft_model::Chart) -> String {
++    model_of(ch)
++}
++
++/// What the drawing part of `sheet` writes from its pictures, charts and shapes.
++pub fn drawing_model(sheet: &Sheet) -> String {
++    use std::hash::{Hash, Hasher};
++    let images: Vec<_> = sheet
++        .images
++        .iter()
++        .map(|i| {
++            let mut h = std::collections::hash_map::DefaultHasher::new();
++            i.data.hash(&mut h);
++            (i.id, &i.anchor, &i.mime, &i.alt, i.data.len(), h.finish())
++        })
++        .collect();
++    model_of(&(images, &sheet.charts, &sheet.shapes))
++}
++
++/// What a `<hyperlink>` writes from its link at `cell`, or at any cell.
++pub fn link_model(cell: Option<gridcraft_core::CellRef>, h: &gridcraft_model::Hyperlink) -> String {
++    model_of(&(cell, h))
++}
++
++/// What `<pageSetup>` writes from the print settings.
++pub fn page_setup_model(p: &gridcraft_model::features::PrintSettings) -> String {
++    model_of(&(&p.paper, p.scale, p.fit_to, &p.orientation))
++}
++
++/// A column width of `px` pixels as the file wrote it, or GridCraft's own.
++pub fn col_width(p: Option<&Preserved>, px: f32) -> String {
++    match source(p, "width", &model_of(&px)).and_then(|d| std::str::from_utf8(d).ok()) {
++        Some(w) => w.to_string(),
++        None => xml::num(crate::tables::px_to_col_width(px)),
++    }
++}
++
++/// The source form `slot` of `p` while the model holds `model` (see [`PreservedSource`]).
++pub fn source<'a>(p: Option<&'a Preserved>, slot: &str, model: &str) -> Option<&'a [u8]> {
++    p?.sources.iter().find(|s| s.slot == slot && s.model == model).map(|s| &*s.data)
++}
++
++/// The kept element `slot` of `p`, or nothing.
++pub fn source_xml<'a>(p: Option<&'a Preserved>, slot: &str) -> &'a str {
++    source(p, slot, "").and_then(|d| std::str::from_utf8(d).ok()).unwrap_or("")
++}
++
++/// Appends the kept attributes `slot` of `p` to the start tag `s` ends with, except those it
++/// already has (GridCraft's own value wins).
++pub fn push_attrs(s: &mut String, p: Option<&Preserved>, slot: &str) {
++    let kept = source_xml(p, slot);
++    let tag = s.rfind('<').unwrap_or(0);
++    let mut pieces = kept.split('"');
++    while let (Some(name), Some(value)) = (pieces.next(), pieces.next()) {
++        let name = name.trim().trim_end_matches('=');
++        if name.is_empty() || s.get(tag..).is_some_and(|t| t.contains(&format!(" {name}=\""))) {
++            continue;
++        }
++        let _ = write!(s, " {name}=\"{value}\"");
++    }
++}
++
+ /// What a sheet part holds for pass-through.
+ struct SheetScan {
+     /// (slot, XML with the namespace declarations it needs).
+diff --git a/crates/xlsx/src/read.rs b/crates/xlsx/src/read.rs
+--- a/crates/xlsx/src/read.rs
++++ b/crates/xlsx/src/read.rs
+@@ -15,6 +15,8 @@ pub struct Ctx<'a> {
+     pub pkg: Package<'a>,
+     pub report: ReadReport,
+     pub sst: Vec<Arc<str>>,
++    /// The formatted runs of the shared strings that have them, by index.
++    pub sst_runs: std::collections::HashMap<usize, Arc<gridcraft_model::RichRuns>>,
+     /// Phonetic (furigana) data of the shared strings, one entry per base text.
+     pub phonetics: Vec<PhoneticString>,
+     /// Cell format index → model style.
+@@ -32,6 +34,10 @@ pub struct Ctx<'a> {
+     pub cell_pictures: Vec<Option<Arc<CellPicture>>>,
+     /// x14 conditional-format ids of the current sheet's data bars, with the index of the rule in `cond_formats`.
+     pub cf_ext_ids: Vec<(String, usize)>,
++    /// Source forms of the sheet just read, for its kept content (see `passthrough::sheet_sources`).
++    pub sources: Vec<gridcraft_model::PreservedSource>,
++    /// Source forms of the styles part (see `styles::style_sources`).
++    pub style_sources: Vec<gridcraft_model::PreservedSource>,
+ }
+ 
+ impl Ctx<'_> {
+@@ -102,6 +108,7 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
+         pkg,
+         report: ReadReport::default(),
+         sst: vec![],
++        sst_runs: Default::default(),
+         phonetics: vec![],
+         xf_map: vec![],
+         dxfs: vec![],
+@@ -113,6 +120,8 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
+         num_fmts: Default::default(),
+         cell_pictures: vec![],
+         cf_ext_ids: vec![],
++        sources: vec![],
++        style_sources: vec![],
+     };
+     let root_rels = cx.pkg.rels("")?;
+     let wb_part = find_rel(&root_rels, "officeDocument").map(|r| r.target.clone()).unwrap_or_else(|| "xl/workbook.xml".into());
+@@ -150,9 +159,11 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
+     {
+         checkboxes = crate::feature_bags::checkbox_complements(&x);
+     }
++    let mut styles_xml = None;
+     if let Some(r) = find_rel(&wb_rels, "styles").cloned() {
+         if let Some(x) = cx.optional_xml(&r.target)? {
+-            let StylesIn { xfs, dxfs, palette, named, num_fmts } = read_styles(&x, &checkboxes);
++            let StylesIn { xfs, dxfs, palette, named, num_fmts, sources } = read_styles(&x, &checkboxes);
++            cx.style_sources = sources;
+             cx.num_fmts = num_fmts;
+             // Cell format 0 is the Normal cell format: everything on it (font, number format,
+             // fill, borders, alignment, protection) is what a cell without its own format shows
+@@ -164,6 +175,7 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
+             cx.dxfs = dxfs;
+             cx.palette = palette;
+             wb.cell_styles = named;
++            styles_xml = Some(x);
+         }
+     } else {
+         cx.warn("no styles part");
+@@ -173,12 +185,16 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
+     {
+         wb.theme = crate::theme::read_theme(&x);
+     }
++    if let Some(x) = styles_xml {
++        cx.style_sources.extend(crate::styles::style_sources(&x, &cx.palette, &wb.theme));
++    }
+     // Shared strings, streamed item by item. Phonetic (furigana) runs are kept next to the text
+     // they annotate, so an open + save does not delete them.
+     if let Some(r) = find_rel(&wb_rels, "sharedStrings").cloned() {
+         match cx.pkg.read(&r.target)? {
+             Some(b) => {
+                 let mut sst = Vec::new();
++                let mut sst_runs = std::collections::HashMap::new();
+                 let mut phonetics = Vec::new();
+                 let mut dropped = 0usize;
+                 let res = xml::parse_streaming(&b, &["si"], &mut |si| {
+@@ -189,7 +205,11 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
+                     if !runs.is_empty() || props.is_some() {
+                         phonetics.push(PhoneticString { text: text.clone(), runs, props });
+                     }
+-                    sst.push(Arc::from(text));
++                    let text: Arc<str> = Arc::from(text);
++                    if let Some(xml) = xml::rich_runs(&si) {
++                        sst_runs.insert(sst.len(), Arc::new(gridcraft_model::RichRuns { text: text.clone(), xml: Arc::from(xml) }));
++                    }
++                    sst.push(text);
+                     Ok(())
+                 });
+                 if let Err(e) = res {
+@@ -199,6 +219,7 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
+                     cx.warn(format!("shared strings: {dropped} phonetic runs were dropped (bad sb/eb or no reading)"));
+                 }
+                 cx.sst = sst;
++                cx.sst_runs = sst_runs;
+                 cx.keep_phonetics(phonetics);
+             }
+             None => cx.warn(format!("missing part {}", r.target)),
+@@ -392,7 +413,7 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
+             Err(e) => cx.warn(format!("macros (VBA project) could not be read and were dropped: {e}")),
+         }
+     }
+-    wb.preserved = kept.workbook(&mut cx, &wb_part, &wb_xml, &file_to_model);
++    wb.preserved = kept.workbook(&mut cx, &wb_part, &wb_xml, &file_to_model, &wb.theme, &wb.props);
+     // Calls of LAMBDA names are spelled like the names (the parser upper-cases them).
+     wb.apply_name_call_case();
+     // Excel evaluates a formula saved without dynamic-array metadata with implicit
+diff --git a/crates/xlsx/src/sheet_read.rs b/crates/xlsx/src/sheet_read.rs
+--- a/crates/xlsx/src/sheet_read.rs
++++ b/crates/xlsx/src/sheet_read.rs
+@@ -39,6 +39,8 @@ struct RowState {
+     spills: Vec<(CellRef, RangeRef)>,
+     dropped: u64,
+     rows: u64,
++    /// Formula texts whose file spelling is already kept (see `read_formula_text`).
++    spellings: std::collections::HashSet<String>,
+ }
+ 
+ const MAX_HYPERLINK_CELLS: u64 = 10_000;
+@@ -84,6 +86,7 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
+     let rels = cx.pkg.rels(part)?;
+     let mut sheet = Sheet::new(name);
+     let mut st = RowState::default();
++    cx.sources.clear();
+     let res = xml::parse_streaming(&bytes, &["row"], &mut |row| {
+         read_row(cx, &mut sheet, &mut st, &row);
+         Ok(())
+@@ -242,9 +245,10 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
+         }
+     }
+     // Comments are related to the sheet without an element in it.
++    let mut note_runs = Vec::new();
+     for rel in rels.iter().filter(|r| r.kind == "comments") {
+         if let Some(x) = cx.optional_xml(&rel.target)? {
+-            read_comments(&x, &mut sheet);
++            note_runs.extend(read_comments(&x, &mut sheet));
+         }
+     }
+     for rel in rels.iter().filter(|r| r.kind == "threadedComment") {
+@@ -255,13 +259,46 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
+     // Which notes are displayed (`<x:Visible/>`) and where their boxes sit live in the VML shapes.
+     // Best effort: the VML is only read for those, so a part that doesn't parse is skipped without
+     // a warning.
++    let mut notes_vml = None;
+     if !sheet.comments.is_empty() {
+         for rel in rels.iter().filter(|r| r.kind == "vmlDrawing") {
+             if let Ok(Some(x)) = cx.pkg.read_xml(&rel.target) {
+                 read_note_shapes(&x, &mut sheet, 0);
++                // A drawing of notes alone, without parts of its own, is kept as the file had it.
++                let (dir, file) = crate::package::split_dir(&rel.target);
++                let own_rels = format!("{dir}/_rels/{file}.rels");
++                if notes_vml.is_none() && only_notes(&x, 0) && matches!(cx.pkg.read(own_rels.trim_start_matches('/')), Ok(None)) {
++                    notes_vml = cx.pkg.read(&rel.target).ok().flatten();
++                }
+             }
+         }
+     }
++    let forms = crate::passthrough::sheet_sources(&root, &sheet);
++    cx.sources.extend(forms);
++    if let Some(vml) = notes_vml {
++        let model = crate::passthrough::notes_vml_model(&sheet);
++        cx.sources.push(gridcraft_model::PreservedSource { slot: "vml.notes".into(), model, data: std::sync::Arc::from(vml) });
++    }
++    // Which data bar rules the file links to their Excel 2010 rule, for its kept form.
++    if !cx.cf_ext_ids.is_empty() {
++        let ids: String = cx.cf_ext_ids.iter().map(|(id, n)| format!("{n} {id}\n")).collect();
++        let model = crate::passthrough::cond_formats_model(&sheet);
++        cx.sources.push(gridcraft_model::PreservedSource { slot: "x14.cf.ids".into(), model, data: std::sync::Arc::from(ids.into_bytes()) });
++    }
++    // A note's formatted text, for the note as it was read (a threaded comment replaces it): at
++    // its cell, and wherever rows or columns move it while no other note reads the same.
++    let mut moved: HashMap<String, Option<String>> = HashMap::new();
++    for (cell, runs) in note_runs {
++        let Some(c) = sheet.comments.get(&cell) else { continue };
++        let model = crate::passthrough::note_model(Some(cell), c);
++        cx.sources.push(gridcraft_model::PreservedSource { slot: "note.text".into(), model, data: std::sync::Arc::from(runs.as_bytes()) });
++        moved.entry(crate::passthrough::note_model(None, c)).and_modify(|r| *r = r.take().filter(|r| *r == runs)).or_insert(Some(runs));
++    }
++    for (model, runs) in moved {
++        if let Some(runs) = runs {
++            cx.sources.push(gridcraft_model::PreservedSource { slot: "note.text".into(), model, data: std::sync::Arc::from(runs.into_bytes()) });
++        }
++    }
+     Ok(sheet)
+ }
+ 
+@@ -441,10 +478,14 @@ fn read_row(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, row: &El) {
+ fn read_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: &El, pos: CellRef) {
+     let style = cx.style(c.attr_u32("s"));
+     let v = c.child("v").map(|v| v.text.as_str());
++    let mut rich = None;
+     let value = match c.attr("t").unwrap_or("n") {
+         "s" => match v.and_then(|v| v.trim().parse::<usize>().ok()) {
+             Some(i) => match cx.sst.get(i) {
+-                Some(s) => Value::Text(s.clone()),
++                Some(s) => {
++                    rich = cx.sst_runs.get(&i).cloned();
++                    Value::Text(s.clone())
++                }
+                 None => {
+                     cx.warn("some cells refer to missing shared strings");
+                     Value::Empty
+@@ -453,9 +494,14 @@ fn read_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: &El, pos
+             None => Value::Empty,
+         },
+         "str" => v.map(|v| Value::text(xml::decode_xstring(v))).unwrap_or(Value::Empty),
+-        "inlineStr" => {
+-            c.child("is").map(|is| Value::text(xml::rich_text(is))).or_else(|| v.map(|v| Value::text(xml::decode_xstring(v)))).unwrap_or(Value::Empty)
+-        }
++        "inlineStr" => match c.child("is") {
++            Some(is) => {
++                let text: Arc<str> = Arc::from(xml::rich_text(is));
++                rich = xml::rich_runs(is).map(|x| Arc::new(gridcraft_model::RichRuns { text: text.clone(), xml: Arc::from(x) }));
++                Value::Text(text)
++            }
++            None => v.map(|v| Value::text(xml::decode_xstring(v))).unwrap_or(Value::Empty),
++        },
+         "b" => v.map(|v| Value::Bool(matches!(v.trim(), "1" | "true" | "TRUE"))).unwrap_or(Value::Empty),
+         "e" => v.map(|v| Value::Error(CellError::parse(v.trim()).unwrap_or(CellError::Value))).unwrap_or(Value::Empty),
+         "d" => match v.and_then(|v| parse_iso_datetime(v.trim(), cx.date_system)) {
+@@ -508,7 +554,8 @@ fn read_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: &El, pos
+     } else {
+         value
+     };
+-    sheet.cells.set(pos, Cell { value, formula: formula.map(Arc::new), style });
++    let rich = rich.filter(|_| formula.is_none());
++    sheet.cells.set(pos, Cell { value, formula: formula.map(Arc::new), style, rich });
+ }
+ 
+ fn read_formula(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, dynamic: bool) -> Option<Formula> {
+@@ -518,6 +565,16 @@ fn read_formula(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, dynam
+ 
+ fn read_formula_text(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, dynamic: bool) -> Option<Formula> {
+     let model = from_file(f.text.trim());
++    // The file's own spelling (spaces, case, line breaks) of a formula GridCraft writes otherwise,
++    // for the text it would write.
++    let written = crate::fmla::text_to_file(&model);
++    if !model.is_empty() && written != f.text.trim() && st.spellings.insert(written.clone()) {
++        cx.sources.push(gridcraft_model::PreservedSource {
++            slot: "formula".into(),
++            model: written,
++            data: std::sync::Arc::from(f.text.trim().as_bytes()),
++        });
++    }
+     let text = model.as_str();
+     match f.attr("t").unwrap_or("normal") {
+         "shared" => {
+@@ -784,6 +841,9 @@ fn read_validation(v: &El) -> Option<Validation> {
+ 
+ fn read_hyperlinks(cx: &mut Ctx<'_>, name: &str, e: &El, rels: &[Rel], sheet: &mut Sheet) {
+     let mut cells = 0u64;
++    // The text a link displays, which GridCraft does not model: for the link at its cells, and
++    // for the same link anywhere while no other link to it displays something else.
++    let mut moved: HashMap<String, Option<String>> = HashMap::new();
+     for h in e.kids("hyperlink") {
+         let Some(range) = h.attr("ref").and_then(RangeRef::parse) else { continue };
+         let mut target = h.attr("id").and_then(|id| rels.iter().find(|r| r.id == id)).map(|r| r.target.clone()).unwrap_or_default();
+@@ -800,15 +860,32 @@ fn read_hyperlinks(cx: &mut Ctx<'_>, name: &str, e: &El, rels: &[Rel], sheet: &m
+             continue;
+         }
+         let link = Hyperlink { target, tooltip: h.attr("tooltip").map(str::to_string), external };
++        let display = h.attr("display");
++        if let Some(d) = display {
++            moved.entry(crate::passthrough::link_model(None, &link)).and_modify(|r| *r = r.take().filter(|r| r == d)).or_insert(Some(d.to_string()));
++        }
+         for c in range.iter() {
+             if cells >= MAX_HYPERLINK_CELLS {
+                 cx.warn(format!("sheet \"{name}\": hyperlinks past the first {MAX_HYPERLINK_CELLS} cells were dropped"));
+                 return;
+             }
+             cells += 1;
++            if let Some(d) = display {
++                let model = crate::passthrough::link_model(Some(c), &link);
++                cx.sources.push(gridcraft_model::PreservedSource {
++                    slot: "hyperlink.display".into(),
++                    model,
++                    data: std::sync::Arc::from(d.as_bytes()),
++                });
++            }
+             sheet.hyperlinks.insert(c, link.clone());
+         }
+     }
++    for (model, display) in moved {
++        if let Some(d) = display {
++            cx.sources.push(gridcraft_model::PreservedSource { slot: "hyperlink.display".into(), model, data: std::sync::Arc::from(d.into_bytes()) });
++        }
++    }
+ }
+ 
+ fn filter_op(s: Option<&str>) -> &'static str {
+@@ -934,11 +1011,16 @@ pub fn read_table(cx: &mut Ctx<'_>, x: &El) -> Option<Table> {
+     })
+ }
+ 
+-fn read_comments(x: &El, sheet: &mut Sheet) {
++/// Reads the notes into `sheet`, and gives the `<text>` of those written in formatted runs.
++fn read_comments(x: &El, sheet: &mut Sheet) -> Vec<(CellRef, String)> {
++    let mut runs = Vec::new();
+     let authors: Vec<String> = x.child("authors").map(|a| a.kids("author").map(|a| a.text.clone()).collect()).unwrap_or_default();
+-    let Some(list) = x.child("commentList") else { return };
++    let Some(list) = x.child("commentList") else { return runs };
+     for c in list.kids("comment") {
+         let Some(cell) = c.attr("ref").and_then(CellRef::parse) else { continue };
++        if let Some(r) = c.child("text").and_then(xml::rich_runs) {
++            runs.push((cell, r));
++        }
+         let author = c.attr_u32("authorId").and_then(|i| authors.get(i as usize)).cloned().unwrap_or_default();
+         let mut text = c.child("text").map(xml::rich_text).unwrap_or_default();
+         // Excel starts a note with a bold "Author:" line.
+@@ -951,6 +1033,7 @@ fn read_comments(x: &El, sheet: &mut Sheet) {
+             .comments
+             .insert(cell, Comment { author, text, replies: vec![], threaded: false, resolved: false, visible: false, dates: vec![], note_box: None });
+     }
++    runs
+ }
+ 
+ /// Reads the notes' VML shapes: a shape carrying `<x:Visible/>` marks its note as shown, and its
+@@ -978,6 +1061,17 @@ fn read_note_shapes(x: &El, sheet: &mut Sheet, depth: usize) {
+     }
+ }
+ 
++/// Whether every shape of a VML drawing is a note's.
++fn only_notes(x: &El, depth: usize) -> bool {
++    depth <= xml::MAX_DEPTH
++        && x.children.iter().all(|e| match e.name.as_str() {
++            "shape" => e.child("ClientData").is_some_and(|cd| cd.attr("ObjectType") == Some("Note")),
++            "shapetype" | "shapelayout" => true,
++            "group" => only_notes(e, depth + 1),
++            _ => false,
++        })
++}
++
+ /// A note's box from its VML `<x:Anchor>` (`LeftColumn, LeftOffset, TopRow, TopOffset,
+ /// RightColumn, RightOffset, BottomRow, BottomOffset`; offsets in pixels) and its shape's style,
+ /// the corners made relative to the note's `cell`. `None` when the anchor isn't eight in-sheet
+diff --git a/crates/xlsx/src/sheet_write.rs b/crates/xlsx/src/sheet_write.rs
+--- a/crates/xlsx/src/sheet_write.rs
++++ b/crates/xlsx/src/sheet_write.rs
+@@ -1,6 +1,6 @@
+ //! Writing worksheet parts and the parts they own (tables, comments, drawings, charts).
+ 
+-use std::collections::{BTreeMap, BTreeSet, HashSet};
++use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+ use std::fmt::Write as _;
+ 
+ use gridcraft_core::{CellError, CellRef, MAX_COLS, MAX_ROWS, RangeRef, Value};
+@@ -12,7 +12,7 @@ use gridcraft_model::{
+ use crate::drawing::{Obj, image_content_type, image_ext};
+ use crate::fmla::text_to_file;
+ use crate::styles::{color_attrs, dxf_id};
+-use crate::tables::{paper_id, px_to_col_width, px_to_pt};
++use crate::tables::{paper_id, px_to_pt};
+ use crate::write::{
+     CT_CHART, CT_COMMENTS, CT_DRAWING, CT_TABLE, CT_THREADED_COMMENTS, NS_MAIN, NS_REL, NS_THREADED, Out, REL_THREADED_COMMENT, Rels, XML_DECL,
+ };
+@@ -138,13 +138,34 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+     let mut s = format!("{XML_DECL}<worksheet xmlns=\"{NS_MAIN}\" xmlns:r=\"{NS_REL}\">");
+     // sheetPr
+     let fit = sheet.print.fit_to.is_some();
+-    if sheet.tab_color.is_some() || fit {
+-        s.push_str("<sheetPr>");
++    let source = sheet.preserved.as_deref();
++    // Formulas as the file spelled them, for the text GridCraft writes.
++    let spellings: HashMap<&str, &str> = source
++        .iter()
++        .flat_map(|p| &p.sources)
++        .filter(|f| f.slot == "formula")
++        .filter_map(|f| Some((f.model.as_str(), std::str::from_utf8(&f.data).ok()?)))
++        .collect();
++    let kept = |slot: &str| !crate::passthrough::source_xml(source, slot).is_empty();
++    if sheet.tab_color.is_some() || fit || kept("sheetPr") || kept("outlinePr") || kept("pageSetUpPr") {
++        s.push_str("<sheetPr");
++        crate::passthrough::push_attrs(&mut s, source, "sheetPr");
++        s.push('>');
+         if let Some(c) = &sheet.tab_color {
+             let _ = write!(s, "<tabColor {}/>", color_attrs(c));
+         }
+-        if fit {
+-            s.push_str("<pageSetUpPr fitToPage=\"1\"/>");
++        if kept("outlinePr") {
++            s.push_str("<outlinePr");
++            crate::passthrough::push_attrs(&mut s, source, "outlinePr");
++            s.push_str("/>");
++        }
++        if fit || kept("pageSetUpPr") {
++            s.push_str("<pageSetUpPr");
++            if fit {
++                s.push_str(" fitToPage=\"1\"");
++            }
++            crate::passthrough::push_attrs(&mut s, source, "pageSetUpPr");
++            s.push_str("/>");
+         }
+         s.push_str("</sheetPr>");
+     }
+@@ -212,7 +233,18 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+             let _ = write!(s, "<selection pane=\"{pane}\" activeCell=\"{active}\" sqref=\"{active}\"/>");
+         }
+         _ => {
+-            let _ = write!(s, "<selection activeCell=\"{active}\" sqref=\"{active}\"/>");
++            let model = crate::passthrough::model_of(&(sheet.freeze, sheet.view_top_left));
++            let split = crate::passthrough::source(source, "pane", &model).and_then(|d| std::str::from_utf8(d).ok());
++            let pane = crate::passthrough::source(source, "pane.active", &model).and_then(|d| std::str::from_utf8(d).ok());
++            s.push_str(split.unwrap_or_default());
++            match pane.filter(|p| !p.is_empty() && split.is_some()) {
++                Some(pane) => {
++                    let _ = write!(s, "<selection pane=\"{}\" activeCell=\"{active}\" sqref=\"{active}\"/>", crate::xml::esc_attr(pane));
++                }
++                None => {
++                    let _ = write!(s, "<selection activeCell=\"{active}\" sqref=\"{active}\"/>");
++                }
++            }
+         }
+     }
+     s.push_str("</sheetView></sheetViews>");
+@@ -221,11 +253,20 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+     let max_row_outline = sheet.rows.values().map(|r| r.outline).max().unwrap_or(0);
+     let max_col_outline = sheet.cols.values().map(|r| r.outline).max().unwrap_or(0);
+     s.push_str("<sheetFormatPr");
+-    if (sheet.default_col_width - gridcraft_model::DEFAULT_COL_WIDTH).abs() > 0.01 {
+-        let _ = write!(s, " defaultColWidth=\"{}\"", num(px_to_col_width(sheet.default_col_width)));
++    let derived = crate::passthrough::source(source, "sheetFormatPr.baseColWidth", &crate::passthrough::model_of(&sheet.default_col_width)).is_some();
++    let unread = crate::passthrough::source(source, "sheetFormatPr.defaultColWidth", &crate::passthrough::model_of(&sheet.default_col_width));
++    if let Some(w) = unread.and_then(|w| std::str::from_utf8(w).ok()) {
++        let _ = write!(s, " defaultColWidth=\"{}\"", esc_attr(w));
++    } else if (sheet.default_col_width - gridcraft_model::DEFAULT_COL_WIDTH).abs() > 0.01 && !derived {
++        let _ = write!(s, " defaultColWidth=\"{}\"", crate::passthrough::col_width(source, sheet.default_col_width));
+     }
+     let _ = write!(s, " defaultRowHeight=\"{}\"", num(px_to_pt(sheet.default_row_height)));
+-    if (sheet.default_row_height - gridcraft_model::DEFAULT_ROW_HEIGHT).abs() > 0.01 {
++    // The file's own flag while the default height is the one read.
++    let custom = match crate::passthrough::source(source, "sheetFormatPr.customHeight", &crate::passthrough::model_of(&sheet.default_row_height)) {
++        Some(flag) => flag == b"1",
++        None => (sheet.default_row_height - gridcraft_model::DEFAULT_ROW_HEIGHT).abs() > 0.01,
++    };
++    if custom {
+         s.push_str(" customHeight=\"1\"");
+     }
+     if max_row_outline > 0 {
+@@ -234,6 +275,7 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+     if max_col_outline > 0 {
+         let _ = write!(s, " outlineLevelCol=\"{max_col_outline}\"");
+     }
++    crate::passthrough::push_attrs(&mut s, source, "sheetFormatPr");
+     s.push_str("/>");
+ 
+     // cols: runs of identical settings.
+@@ -243,7 +285,7 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+         let flush = |s: &mut String, r: (u32, u32, LineInfo)| {
+             let (a, b, i) = r;
+             let w = i.size.unwrap_or(sheet.default_col_width);
+-            let _ = write!(s, "<col min=\"{}\" max=\"{}\" width=\"{}\"", a + 1, b + 1, num(px_to_col_width(w)));
++            let _ = write!(s, "<col min=\"{}\" max=\"{}\" width=\"{}\"", a + 1, b + 1, crate::passthrough::col_width(source, w));
+             if let Some(st) = i.style {
+                 let _ = write!(s, " style=\"{}\"", sid(st));
+             }
+@@ -328,18 +370,22 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+             // version before dynamic arrays.
+             let formula = cell.and_then(|x| x.formula.as_deref());
+             let legacy = match (dynamic.get(c), formula) {
+-                (None, Some(f)) => crate::array_formula::legacy_form(wb, si, *c, f),
++                (None, Some(f)) => crate::array_formula::legacy_form(wb, si, *c, f).or_else(|| {
++                    let read = !f.dynamic && f.array.is_none() && crate::passthrough::source(source, "formula.legacy", &f.text).is_some();
++                    read.then(|| f.expr_arc().map(|e| e.as_ref().clone())).flatten()
++                }),
+                 _ => None,
+             };
+             let array = dynamic.get(c).copied().or_else(|| {
+                 let f = formula?;
+                 (legacy.is_none() && f.array.is_none() && crate::array_formula::needs_array(wb, si, *c, f)).then_some(RangeRef::cell(*c))
+             });
+-            write_cell(&mut s, *c, cell, sheet.cell_pictures.get(c), ov, ex, array.as_ref(), legacy, &sid, out);
++            write_cell(&mut s, *c, cell, sheet.cell_pictures.get(c), ov, ex, array.as_ref(), legacy, &spellings, &sid, out);
+         }
+         s.push_str("</row>");
+     }
+     s.push_str("</sheetData>");
++    s.push_str(crate::passthrough::source_xml(source, "sheetCalcPr"));
+ 
+     // sheetProtection
+     if let Some(p) = &sheet.protection {
+@@ -385,13 +431,26 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+         }
+         s.push_str("</mergeCells>");
+     }
+-    // Conditional formats, priorities renumbered 1..n in priority order.
++    s.push_str(crate::passthrough::source_xml(source, "phoneticPr"));
++    // Conditional formats, priorities renumbered 1..n in priority order; the file's own, and its
++    // Excel 2010 rules, while the conditional formats are the ones read.
++    let cf_model = crate::passthrough::cond_formats_model(sheet);
++    let x14_cf = crate::passthrough::source(source, "x14.conditionalFormattings", &cf_model).and_then(|d| std::str::from_utf8(d).ok());
++    let x14_ids: HashMap<usize, &str> = match x14_cf.and(crate::passthrough::source(source, "x14.cf.ids", &cf_model)) {
++        Some(ids) => std::str::from_utf8(ids)
++            .unwrap_or_default()
++            .lines()
++            .filter_map(|l| l.split_once(' '))
++            .filter_map(|(n, id)| Some((n.parse().ok()?, id)))
++            .collect(),
++        None => HashMap::new(),
++    };
+     let mut order: Vec<usize> = (0..sheet.cond_formats.len()).collect();
+     order.sort_by_key(|&i| sheet.cond_formats.get(i).map(|c| c.priority).unwrap_or(0));
+     let mut prio = vec![0u32; sheet.cond_formats.len()];
+     for (rank, &i) in order.iter().enumerate() {
+         if let Some(p) = prio.get_mut(i) {
+-            *p = rank as u32 + 1;
++            *p = if x14_cf.is_some() { sheet.cond_formats[i].priority } else { rank as u32 + 1 };
+         }
+     }
+     for (i, cf) in sheet.cond_formats.iter().enumerate() {
+@@ -402,7 +461,7 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+             s,
+             "<conditionalFormatting sqref=\"{}\">{}</conditionalFormatting>",
+             sqref(&cf.ranges),
+-            cf_rule_xml(cf, prio.get(i).copied().unwrap_or(1), out)
++            cf_rule_xml(cf, prio.get(i).copied().unwrap_or(1), x14_ids.get(&i).copied(), out)
+         );
+     }
+     let vals: Vec<&Validation> = sheet.validations.iter().filter(|v| !v.ranges.is_empty()).collect();
+@@ -428,6 +487,8 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+                 || t.starts_with("\\\\")
+                 || t.to_ascii_lowercase().starts_with("file:");
+             let _ = write!(s, "<hyperlink ref=\"{}\"", c.a1());
++            let kept = |at| crate::passthrough::source(source, "hyperlink.display", &crate::passthrough::link_model(at, h));
++            let display = kept(Some(*c)).or_else(|| kept(None)).and_then(|d| std::str::from_utf8(d).ok());
+             if external {
+                 let (url, loc) = match t.split_once('#') {
+                     Some((u, l)) if !u.is_empty() => (u, Some(l)),
+@@ -438,8 +499,12 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+                 if let Some(l) = loc {
+                     let _ = write!(s, " location=\"{}\"", esc_attr(l));
+                 }
++                if let Some(d) = display {
++                    let _ = write!(s, " display=\"{}\"", esc_attr(d));
++                }
+             } else {
+-                let _ = write!(s, " location=\"{}\" display=\"{}\"", esc_attr(t.trim_start_matches('#')), esc_attr(t.trim_start_matches('#')));
++                let location = t.trim_start_matches('#');
++                let _ = write!(s, " location=\"{}\" display=\"{}\"", esc_attr(location), esc_attr(display.unwrap_or(location)));
+             }
+             if let Some(tt) = &h.tooltip {
+                 let _ = write!(s, " tooltip=\"{}\"", esc_attr(tt));
+@@ -461,26 +526,63 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+     }
+     // Unmodelled content kept from the source file (printer settings, controls, OLE objects…).
+     let kept = crate::passthrough::SheetKept::write(sheet, &mut rels, out);
+-    let m = |i: usize| num(p.margins.get(i).copied().unwrap_or(0.75) as f64);
+-    let _ =
+-        write!(s, "<pageMargins left=\"{}\" right=\"{}\" top=\"{}\" bottom=\"{}\" header=\"{}\" footer=\"{}\"/>", m(0), m(1), m(2), m(3), m(4), m(5));
+-    s.push_str("<pageSetup");
++    // The shortest decimal that reads back as the stored `f32` (`0.3`, not `0.30000001192092896`).
++    let m = |i: usize| {
++        let v = p.margins.get(i).copied().unwrap_or(0.75);
++        num(v.to_string().parse::<f64>().unwrap_or(f64::from(v)))
++    };
++    match crate::passthrough::source(source, "pageMargins", &crate::passthrough::model_of(&p.margins)).and_then(|d| std::str::from_utf8(d).ok()) {
++        Some(kept) => s.push_str(kept),
++        None => {
++            let _ = write!(
++                s,
++                "<pageMargins left=\"{}\" right=\"{}\" top=\"{}\" bottom=\"{}\" header=\"{}\" footer=\"{}\"/>",
++                m(0),
++                m(1),
++                m(2),
++                m(3),
++                m(4),
++                m(5)
++            );
++        }
++    }
++    use crate::passthrough::model_of;
++    let no_page_setup =
++        kept.page_setup_id().is_none() && crate::passthrough::source(source, "pageSetup.absent", &crate::passthrough::page_setup_model(p)).is_some();
++    let mut ps = String::from("<pageSetup");
+     if let Some(id) = paper_id(&p.paper)
+         && id != 1
+     {
+-        let _ = write!(s, " paperSize=\"{id}\"");
++        let _ = write!(ps, " paperSize=\"{id}\"");
++    } else if let Some(id) = crate::passthrough::source(source, "pageSetup.paperSize", &model_of(&p.paper)).and_then(|d| std::str::from_utf8(d).ok())
++    {
++        // A paper size GridCraft has no name for, while the paper is the one read.
++        let _ = write!(ps, " paperSize=\"{id}\"");
+     }
+     if p.scale != 100 && (10..=400).contains(&p.scale) {
+-        let _ = write!(s, " scale=\"{}\"", p.scale);
++        let _ = write!(ps, " scale=\"{}\"", p.scale);
+     }
+     if let Some((w, h)) = p.fit_to {
+-        let _ = write!(s, " fitToWidth=\"{w}\" fitToHeight=\"{h}\"");
++        let _ = write!(ps, " fitToWidth=\"{w}\" fitToHeight=\"{h}\"");
++    } else {
++        // Fit counts the file states without fitting to them.
++        ps.push_str(
++            crate::passthrough::source(source, "pageSetup.fit", &model_of(&p.fit_to)).and_then(|d| std::str::from_utf8(d).ok()).unwrap_or_default(),
++        );
++    }
++    // A file that leaves the orientation to the printer keeps doing so while it is the one read.
++    if crate::passthrough::source(source, "pageSetup.orientation", &model_of(&p.orientation)).is_none() {
++        let _ = write!(ps, " orientation=\"{}\"", if p.orientation == Orientation::Landscape { "landscape" } else { "portrait" });
+     }
+-    let _ = write!(s, " orientation=\"{}\"", if p.orientation == Orientation::Landscape { "landscape" } else { "portrait" });
+     if let Some(id) = kept.page_setup_id() {
+-        let _ = write!(s, " r:id=\"{id}\"");
++        let _ = write!(ps, " r:id=\"{id}\"");
++    }
++    crate::passthrough::push_attrs(&mut ps, source, "pageSetup");
++    ps.push_str("/>");
++    // A file with no page setup keeps having none while the settings it would write are the ones read.
++    if !no_page_setup {
++        s.push_str(&ps);
+     }
+-    s.push_str("/>");
+     if p.has_header_footer() || p.different_first || p.different_odd_even || !p.hf_scale_with_doc || !p.hf_align_with_margins {
+         s.push_str("<headerFooter");
+         for (attr, on, default) in [
+@@ -519,6 +621,7 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+             let _ = write!(s, "</{tag}>");
+         }
+     }
++    s.push_str(crate::passthrough::source_xml(source, "ignoredErrors"));
+ 
+     // Drawing: pictures, charts, shapes.
+     if !sheet.images.is_empty() || !sheet.charts.is_empty() || !sheet.shapes.is_empty() {
+@@ -526,7 +629,9 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+         let dn = out.drawings;
+         let mut drels = Rels::default();
+         let mut objs: Vec<Obj<'_>> = vec![];
+-        for img in &sheet.images {
++        // The new relationship id of each picture and chart, for the drawing as the file had it.
++        let mut new_ids: HashMap<(&str, usize), String> = HashMap::new();
++        for (i, img) in sheet.images.iter().enumerate() {
+             if img.data.is_empty() {
+                 continue;
+             }
+@@ -534,9 +639,10 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+             out.default_type(ext, image_content_type(ext));
+             let file = out.image_part(ext, &img.data);
+             let rid = drels.add("image", &format!("../media/{file}"));
++            new_ids.insert(("image", i), rid.clone());
+             objs.push(Obj::Image(img, rid));
+         }
+-        for ch in &sheet.charts {
++        for (i, ch) in sheet.charts.iter().enumerate() {
+             out.charts += 1;
+             let rid = if crate::chartex::is_chartex(ch.kind) {
+                 let n = out.charts;
+@@ -551,16 +657,53 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+                 out.part(&format!("xl/charts/_rels/chartEx{n}.xml.rels"), None, crels.xml().into_bytes());
+                 drels.add_uri(crate::chartex::REL_CHARTEX, &format!("../charts/chartEx{n}.xml"))
+             } else {
+-                let name = format!("xl/charts/chart{}.xml", out.charts);
+-                out.part(&name, Some(CT_CHART), crate::chart::write_chart(wb, si, ch, &out.book_name).into_bytes());
+-                drels.add("chart", &format!("../charts/chart{}.xml", out.charts))
++                let n = out.charts;
++                let model = crate::passthrough::chart_model(ch);
++                let kept = |slot: &str| crate::passthrough::source(source, slot, &model);
++                let xml = match kept("chart") {
++                    Some(x) => x.to_vec(),
++                    None => crate::chart::write_chart(wb, si, ch, &out.book_name).into_bytes(),
++                };
++                out.part(&format!("xl/charts/chart{n}.xml"), Some(CT_CHART), xml);
++                // The style and colours of a chart kept as it was.
++                if kept("chart").is_some() {
++                    let mut crels = Rels::default();
++                    if let Some(style) = kept("chart.chartStyle") {
++                        out.part(&format!("xl/charts/style{n}.xml"), Some(crate::chartex::CT_STYLE), style.to_vec());
++                        crels.add_uri(crate::chartex::REL_STYLE, &format!("style{n}.xml"));
++                    }
++                    if let Some(colors) = kept("chart.chartColorStyle") {
++                        out.part(&format!("xl/charts/colors{n}.xml"), Some(crate::chartex::CT_COLORS), colors.to_vec());
++                        crels.add_uri(crate::chartex::REL_COLORS, &format!("colors{n}.xml"));
++                    }
++                    if !crels.is_empty() {
++                        out.part(&format!("xl/charts/_rels/chart{n}.xml.rels"), None, crels.xml().into_bytes());
++                    }
++                }
++                drels.add("chart", &format!("../charts/chart{n}.xml"))
+             };
++            new_ids.insert(("chart", i), rid.clone());
+             objs.push(Obj::Chart(ch, rid));
+         }
+         for sh in &sheet.shapes {
+             objs.push(Obj::Shape(sh));
+         }
+-        out.part(&format!("xl/drawings/drawing{dn}.xml"), Some(CT_DRAWING), crate::drawing::write_drawing(sheet, &wb.theme, &objs).into_bytes());
++        let model = crate::passthrough::drawing_model(sheet);
++        let kept = crate::passthrough::source(source, "drawing", &model).and_then(|x| std::str::from_utf8(x).ok());
++        let old_ids = crate::passthrough::source(source, "drawing.ids", &model).and_then(|x| std::str::from_utf8(x).ok());
++        let map: HashMap<&str, &String> = old_ids
++            .unwrap_or_default()
++            .lines()
++            .filter_map(|l| {
++                let mut w = l.split(' ');
++                let (kind, i, old) = (w.next()?, w.next()?.parse::<usize>().ok()?, w.next()?);
++                Some((old, new_ids.get(&(kind, i))?))
++            })
++            .collect();
++        let xml = kept
++            .and_then(|x| crate::passthrough::map_rel_ids(x, &mut |id| map.get(id).map(|n| n.to_string())))
++            .unwrap_or_else(|| crate::drawing::write_drawing(sheet, &wb.theme, &objs));
++        out.part(&format!("xl/drawings/drawing{dn}.xml"), Some(CT_DRAWING), xml.into_bytes());
+         if !drels.is_empty() {
+             out.part(&format!("xl/drawings/_rels/drawing{dn}.xml.rels"), None, drels.xml().into_bytes());
+         }
+@@ -581,8 +724,12 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+         }
+         out.default_type("vml", "application/vnd.openxmlformats-officedocument.vmlDrawing");
+         let vml_name = format!("xl/drawings/vmlDrawing{n}.vml");
+-        let vml = kept.notes_vml(vml_xml(sheet, out.kept.notes_block(n)), &vml_name, out);
+-        out.part(&vml_name, None, vml.into_bytes());
++        let block = out.kept.notes_block(n);
++        let vml = match crate::passthrough::notes_vml_source(sheet, block) {
++            Some(vml) => vml.to_vec(),
++            None => kept.notes_vml(vml_xml(sheet, block), &vml_name, out).into_bytes(),
++        };
++        out.part(&vml_name, None, vml);
+         rels.add("comments", &format!("../comments{n}.xml"));
+         let rid = rels.add("vmlDrawing", &format!("../drawings/vmlDrawing{n}.vml"));
+         let _ = write!(s, "<legacyDrawing r:id=\"{rid}\"/>");
+@@ -614,14 +761,13 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+         .filter(|(_, cf)| !cf.ranges.is_empty() && matches!(cf.rule, CfRule::DataBar { gradient: false, .. }))
+         .map(|(i, cf)| (cf, prio.get(i).copied().unwrap_or(1)))
+         .collect();
+-    if !solid_bars.is_empty() || !sheet.sparklines.is_empty() {
++    if !solid_bars.is_empty() || x14_cf.is_some() || !sheet.sparklines.is_empty() {
+         s.push_str("<extLst>");
+     }
+-    if !solid_bars.is_empty() {
+-        let _ = write!(
+-            s,
+-            "<ext uri=\"{{78C0D931-6437-407d-A8A1-0F90B4350D7D}}\" xmlns:x14=\"{X14_NS}\" xmlns:xm=\"{XM_NS}\"><x14:conditionalFormattings>"
+-        );
++    if let Some(x) = x14_cf {
++        let _ = write!(s, "<ext uri=\"{X14_CF_URI}\" xmlns:x14=\"{X14_NS}\" xmlns:xm=\"{XM_NS}\">{x}</ext>");
++    } else if !solid_bars.is_empty() {
++        let _ = write!(s, "<ext uri=\"{X14_CF_URI}\" xmlns:x14=\"{X14_NS}\" xmlns:xm=\"{XM_NS}\"><x14:conditionalFormattings>");
+         for (cf, p) in &solid_bars {
+             if let CfRule::DataBar { min, max, .. } = &cf.rule {
+                 let (id, lo, hi) = (solid_bar_id(*p), x14_cfvo(min), x14_cfvo(max));
+@@ -652,7 +798,7 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
+         }
+         s.push_str("</x14:sparklineGroups></ext>");
+     }
+-    if !solid_bars.is_empty() || !sheet.sparklines.is_empty() {
++    if !solid_bars.is_empty() || x14_cf.is_some() || !sheet.sparklines.is_empty() {
+         s.push_str("</extLst>");
+     }
+     s.push_str("</worksheet>");
+@@ -668,6 +814,7 @@ fn write_cell(
+     extra: Option<&Value>,
+     dynamic: Option<&RangeRef>,
+     legacy: Option<gridcraft_formula::Expr>,
++    spellings: &HashMap<&str, &str>,
+     sid: &dyn Fn(gridcraft_model::StyleId) -> u32,
+     out: &mut Out,
+ ) {
+@@ -716,10 +863,11 @@ fn write_cell(
+         };
+         s.push_str(t);
+         s.push('>');
+-        let text = esc(&match legacy {
++        let text = match legacy {
+             Some(e) => crate::fmla::expr_to_file(e),
+             None => crate::fmla::to_file(f),
+-        });
++        };
++        let text = esc(spellings.get(text.as_str()).copied().unwrap_or(&text));
+         match (f.array, dynamic) {
+             (Some(r), _) => {
+                 let _ = write!(s, "<f t=\"array\" ref=\"{}\">{text}</f>", r.a1());
+@@ -755,7 +903,9 @@ fn write_cell(
+             let _ = write!(s, "><v>{}</v></c>", num(*n));
+         }
+         Value::Text(t) => {
+-            let i = out.sst.index(t);
++            // The runs of the text the cell holds, never of a value written in its place.
++            let runs = cell.filter(|_| ov.is_none() && extra.is_none()).and_then(Cell::rich_runs);
++            let i = out.sst.index_runs(t, runs.map(|r| &r.xml));
+             let _ = write!(s, " t=\"s\"><v>{i}</v></c>");
+         }
+         Value::Bool(b) => {
+@@ -784,15 +934,17 @@ fn quote(t: &str) -> String {
+ 
+ const X14_NS: &str = "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main";
+ const XM_NS: &str = "http://schemas.microsoft.com/office/excel/2006/main";
++/// The worksheet extension of Excel 2010 conditional formats.
++const X14_CF_URI: &str = "{78C0D931-6437-407d-A8EE-F0AAD7539E65}";
+ 
+ /// The id linking a solid data bar's `cfRule` to its x14 extension; unique per sheet because priorities are.
+ fn solid_bar_id(priority: u32) -> String {
+     format!("{{00000000-0000-0000-0000-{priority:012}}}")
+ }
+ 
+-/// The `cfRule` extension that points a solid data bar at its x14 rule.
+-fn solid_bar_ext(priority: u32) -> String {
+-    let id = solid_bar_id(priority);
++/// The `cfRule` extension that points a data bar at its x14 rule `id`.
++fn solid_bar_ext(id: &str) -> String {
++    let id = esc(id);
+     format!("<extLst><ext uri=\"{{B025F937-C7B1-47D3-B67F-A62EFF666E3E}}\" xmlns:x14=\"{X14_NS}\"><x14:id>{id}</x14:id></ext></extLst>")
+ }
+ 
+@@ -809,7 +961,8 @@ fn x14_cfvo(v: &CfValueKind) -> String {
+     format!("<x14:cfvo type=\"{ty}\"><xm:f>{}</xm:f></x14:cfvo>", esc(&val))
+ }
+ 
+-fn cf_rule_xml(cf: &CondFormat, priority: u32, out: &mut Out) -> String {
++/// `ext_id` is the file's link from a data bar to its kept x14 rule.
++fn cf_rule_xml(cf: &CondFormat, priority: u32, ext_id: Option<&str>, out: &mut Out) -> String {
+     let tl = cf.ranges.first().map(|r| r.start.a1()).unwrap_or_else(|| "A1".into());
+     let stop = if cf.stop_if_true { " stopIfTrue=\"1\"" } else { "" };
+     let mut dxf = |st: &Style| dxf_id(&mut out.dxfs, st);
+@@ -910,7 +1063,11 @@ fn cf_rule_xml(cf: &CondFormat, priority: u32, out: &mut Out) -> String {
+             cfvo_xml(min),
+             cfvo_xml(max),
+             if *color == Color::Auto { "rgb=\"FF638EC6\"".to_string() } else { color_attrs(color) },
+-            if *gradient { String::new() } else { solid_bar_ext(priority) }
++            match ext_id {
++                Some(id) => solid_bar_ext(id),
++                None if *gradient => String::new(),
++                None => solid_bar_ext(&solid_bar_id(priority)),
++            }
+         ),
+         CfRule::IconSet { set, thresholds, reverse, show_value } => {
+             let mut b = format!("<iconSet iconSet=\"{}\"", esc_attr(set));
+@@ -1200,7 +1357,12 @@ fn comments_xml(sheet: &Sheet, ids: &BTreeMap<CellRef, Vec<String>>) -> String {
+             Some(id) => format!(" shapeId=\"0\" xr:uid=\"{id}\""),
+             None => String::new(),
+         };
+-        let _ = write!(s, "<comment ref=\"{}\" authorId=\"{aid}\"{link}><text><r>{}</r></text></comment>", cell.a1(), crate::xml::t_el(&text));
++        let source = |at| crate::passthrough::source(sheet.preserved.as_deref(), "note.text", &crate::passthrough::note_model(at, c));
++        let body = match source(Some(*cell)).or_else(|| source(None)) {
++            Some(runs) => String::from_utf8_lossy(runs).into_owned(),
++            None => format!("<r>{}</r>", crate::xml::t_el(&text)),
++        };
++        let _ = write!(s, "<comment ref=\"{}\" authorId=\"{aid}\"{link}><text>{body}</text></comment>", cell.a1());
+     }
+     s.push_str("</commentList></comments>");
+     s
+diff --git a/crates/xlsx/src/styles.rs b/crates/xlsx/src/styles.rs
+--- a/crates/xlsx/src/styles.rs
++++ b/crates/xlsx/src/styles.rs
+@@ -4,9 +4,12 @@
+ use std::collections::HashMap;
+ use std::fmt::Write as _;
+ 
++use std::sync::Arc;
++
+ use gridcraft_model::style::{DxfStated, Protection};
+ use gridcraft_model::{
+-    Alignment, BorderLine, BorderStyle, Borders, Color, Fill, Font, HAlign, NumFmt, PatternType, Style, Underline, VAlign, VertAlign, Workbook,
++    Alignment, BorderLine, BorderStyle, Borders, Color, Fill, Font, HAlign, NumFmt, PatternType, PreservedSource, Style, Theme, Underline, VAlign,
++    VertAlign, Workbook,
+ };
+ 
+ use crate::tables::{INDEXED, builtin_format, builtin_id};
+@@ -26,6 +29,8 @@ pub struct StylesIn {
+     pub named: Vec<(String, Style)>,
+     /// Custom number formats (`numFmts`) by id.
+     pub num_fmts: HashMap<u32, String>,
++    /// Source forms of the cell formats and cell styles (see [`xf_sources`]).
++    pub sources: Vec<PreservedSource>,
+ }
+ 
+ pub fn read_color(e: &El, palette: &[u32]) -> Color {
+@@ -57,7 +62,6 @@ fn bool_prop(e: &El, name: &str) -> bool {
+     e.child(name).is_some_and(|c| c.flag("val", true))
+ }
+ 
+-const DEFAULT_FONT_FAMILY: u8 = 2;
+ const MAX_FONT_FAMILY: u8 = 14;
+ 
+ pub fn read_font(e: &El, palette: &[u32]) -> Font {
+@@ -88,11 +92,7 @@ pub fn read_font(e: &El, palette: &[u32]) -> Font {
+         };
+     }
+     f.charset = e.child("charset").and_then(|c| c.attr_u32("val")).and_then(|v| u8::try_from(v).ok());
+-    f.family = e
+-        .child("family")
+-        .and_then(|c| c.attr_u32("val"))
+-        .and_then(|v| u8::try_from(v).ok())
+-        .filter(|v| *v <= MAX_FONT_FAMILY && *v != DEFAULT_FONT_FAMILY);
++    f.family = e.child("family").and_then(|c| c.attr_u32("val")).and_then(|v| u8::try_from(v).ok()).filter(|v| *v <= MAX_FONT_FAMILY);
+     f.color = opt_color(e.child("color"), palette);
+     // Text 1 (dk1) is what "automatic" font colour means in practice.
+     if f.color == Color::Theme(1, 0) {
+@@ -307,9 +307,170 @@ fn read_xf(xf: &El, fonts: &[Font], fills: &[Fill], borders: &[Borders], fmts: &
+     if let Some(p) = xf.child("protection") {
+         s.protection = read_protection(p);
+     }
++    s.quote_prefix = xf.flag("quotePrefix", false);
+     s
+ }
+ 
++/// A differential format (`<dxf>`), which states only what it changes.
++fn read_dxf(x: &El, palette: &[u32], fmts: &HashMap<u32, String>) -> Style {
++    let mut s = Style::default();
++    if let Some(e) = x.child("font") {
++        let f = read_font(e, palette);
++        // Differential fonts rarely name a face; unless stated, keep the default face and size.
++        let has_size = e.child("sz").and_then(|n| n.attr_f64("val")).is_some();
++        let has_name = e.child("name").and_then(|n| n.attr("val")).is_some();
++        let name = if has_name { f.name.clone() } else { s.font.name.clone() };
++        let size = if has_size { f.size } else { s.font.size };
++        let def = Font::default();
++        let st = &mut s.dxf_stated;
++        st.bold = e.child("b").is_some() && !f.bold;
++        st.italic = e.child("i").is_some() && !f.italic;
++        st.strike = e.child("strike").is_some() && !f.strike;
++        st.underline = e.child("u").is_some() && f.underline == Underline::None;
++        st.size = has_size && size == def.size;
++        st.name = has_name && name == def.name;
++        st.scheme = e.child_val("scheme").map(str::to_string);
++        s.font = Font { name, size, ..f };
++    }
++    if let Some(n) = x.child("numFmt") {
++        if let Some(code) = n.attr("formatCode") {
++            s.num_fmt = NumFmt::new(code);
++        } else if let Some(id) = n.attr_u32("numFmtId") {
++            s.num_fmt = num_fmt_code(id, fmts);
++        }
++    }
++    if let Some(f) = x.child("fill") {
++        s.fill = read_fill(f, palette, true);
++    }
++    if let Some(b) = x.child("border") {
++        s.borders = read_border(b, palette);
++    }
++    if let Some(a) = x.child("alignment") {
++        s.align = read_alignment(a);
++    }
++    if let Some(p) = x.child("protection") {
++        s.protection = read_protection(p);
++        s.dxf_stated.protection = s.protection == Protection::default();
++    }
++    s
++}
++
++/// Elements and attributes of the font, fill, border and differential-format records of the
++/// styles part, the ones [`style_sources`] writes back as the file had them.
++const STYLE_ELEMENTS: &[&str] = &[
++    "font",
++    "b",
++    "i",
++    "strike",
++    "condense",
++    "extend",
++    "outline",
++    "shadow",
++    "u",
++    "vertAlign",
++    "sz",
++    "color",
++    "name",
++    "family",
++    "charset",
++    "scheme",
++    "fill",
++    "patternFill",
++    "gradientFill",
++    "fgColor",
++    "bgColor",
++    "stop",
++    "border",
++    "left",
++    "right",
++    "top",
++    "bottom",
++    "diagonal",
++    "vertical",
++    "horizontal",
++    "start",
++    "end",
++    "dxf",
++    "alignment",
++    "protection",
++];
++const STYLE_ATTRS: &[&str] = &[
++    "val",
++    "rgb",
++    "theme",
++    "tint",
++    "indexed",
++    "auto",
++    "patternType",
++    "type",
++    "degree",
++    "left",
++    "right",
++    "top",
++    "bottom",
++    "position",
++    "style",
++    "diagonalUp",
++    "diagonalDown",
++    "outline",
++    "horizontal",
++    "vertical",
++    "textRotation",
++    "wrapText",
++    "indent",
++    "relativeIndent",
++    "justifyLastLine",
++    "shrinkToFit",
++    "readingOrder",
++    "locked",
++    "hidden",
++];
++
++/// Whether a record of the styles part holds only values the schema allows where GridCraft
++/// reads past a wrong one (a font family above 14, a tint outside -1..=1): such a record is
++/// written in GridCraft's form.
++fn valid_record(e: &El) -> bool {
++    let family = e.name != "family" || e.attr_u32("val").is_some_and(|v| v <= u32::from(MAX_FONT_FAMILY));
++    let tint = e.attr("tint").is_none_or(|_| e.attr_f64("tint").is_some_and(|t| (-1.0..=1.0).contains(&t)));
++    family && tint && e.children.iter().all(valid_record)
++}
++
++/// What a font of the styles part is written from: the font, and the theme fonts a `<scheme>`
++/// in it follows.
++pub fn font_model(f: &Font, theme: &Theme) -> String {
++    crate::passthrough::model_of(&(f, &theme.major_font, &theme.minor_font))
++}
++
++/// The source forms of the styles part: each font, fill, border and differential format as the
++/// file wrote it (tints to the last digit, a family or scheme the model folds), for the model it
++/// was read into. A differential format with a number format is left to GridCraft, which numbers
++/// the formats.
++pub fn style_sources(root: &El, palette: &[u32], theme: &Theme) -> Vec<PreservedSource> {
++    let mut out = Vec::new();
++    let mut seen = std::collections::HashSet::new();
++    let mut push = |slot: &str, model: String, e: &El| {
++        if valid_record(e)
++            && let Some(xml) = crate::xml::plain_xml(e, STYLE_ELEMENTS, STYLE_ATTRS)
++            && seen.insert((slot.to_string(), model.clone()))
++        {
++            out.push(PreservedSource { slot: slot.into(), model, data: Arc::from(xml.into_bytes()) });
++        }
++    };
++    for e in root.child("fonts").into_iter().flat_map(|f| f.kids("font")) {
++        push("font", font_model(&read_font(e, palette), theme), e);
++    }
++    for e in root.child("fills").into_iter().flat_map(|f| f.kids("fill")) {
++        push("fill", crate::passthrough::model_of(&read_fill(e, palette, false)), e);
++    }
++    for e in root.child("borders").into_iter().flat_map(|f| f.kids("border")) {
++        push("border", crate::passthrough::model_of(&read_border(e, palette)), e);
++    }
++    for e in root.child("dxfs").into_iter().flat_map(|f| f.kids("dxf")).filter(|e| e.child("numFmt").is_none()) {
++        push("dxf", crate::passthrough::model_of(&read_dxf(e, palette, &HashMap::new())), e);
++    }
++    out
++}
++
+ /// `checkboxes`: for each `xfComplement` index, whether it is a checkbox (see
+ /// [`crate::feature_bags::checkbox_complements`]); empty when the file has no feature property bags.
+ pub fn read_styles(root: &El, checkboxes: &[bool]) -> StylesIn {
+@@ -337,70 +498,63 @@ pub fn read_styles(root: &El, checkboxes: &[bool]) -> StylesIn {
+     let fonts: Vec<Font> = root.child("fonts").map(|f| f.kids("font").map(|e| read_font(e, &palette)).collect()).unwrap_or_default();
+     let fills: Vec<Fill> = root.child("fills").map(|f| f.kids("fill").map(|e| read_fill(e, &palette, false)).collect()).unwrap_or_default();
+     let borders: Vec<Borders> = root.child("borders").map(|f| f.kids("border").map(|e| read_border(e, &palette)).collect()).unwrap_or_default();
+-    let xfs =
++    let mut xfs: Vec<Style> =
+         root.child("cellXfs").map(|x| x.kids("xf").map(|xf| read_xf(xf, &fonts, &fills, &borders, &fmts, checkboxes)).collect()).unwrap_or_default();
+     let style_xfs: Vec<Style> =
+         root.child("cellStyleXfs").map(|x| x.kids("xf").map(|xf| read_xf(xf, &fonts, &fills, &borders, &fmts, &[])).collect()).unwrap_or_default();
+     let mut named = Vec::new();
++    // Named style of each `cellStyleXfs` entry, for the cell formats based on it.
++    let mut parents = HashMap::new();
+     if let Some(cs) = root.child("cellStyles") {
+         for c in cs.kids("cellStyle") {
+-            if let (Some(name), Some(s)) = (c.attr("name"), c.attr_u32("xfId").and_then(|i| style_xfs.get(i as usize)))
++            if let (Some(name), Some(i)) = (c.attr("name"), c.attr_u32("xfId"))
++                && let Some(s) = style_xfs.get(i as usize)
+                 && name != "Normal"
+             {
+                 named.push((name.to_string(), s.clone()));
++                parents.entry(i).or_insert(name);
+             }
+         }
+     }
+-    let dxfs = root
+-        .child("dxfs")
+-        .map(|d| {
+-            d.kids("dxf")
+-                .map(|x| {
+-                    let mut s = Style::default();
+-                    if let Some(e) = x.child("font") {
+-                        let f = read_font(e, &palette);
+-                        // Differential fonts rarely name a face; unless stated, keep the default face and size.
+-                        let has_size = e.child("sz").and_then(|n| n.attr_f64("val")).is_some();
+-                        let has_name = e.child("name").and_then(|n| n.attr("val")).is_some();
+-                        let name = if has_name { f.name.clone() } else { s.font.name.clone() };
+-                        let size = if has_size { f.size } else { s.font.size };
+-                        let def = Font::default();
+-                        let st = &mut s.dxf_stated;
+-                        st.bold = e.child("b").is_some() && !f.bold;
+-                        st.italic = e.child("i").is_some() && !f.italic;
+-                        st.strike = e.child("strike").is_some() && !f.strike;
+-                        st.underline = e.child("u").is_some() && f.underline == Underline::None;
+-                        st.size = has_size && size == def.size;
+-                        st.name = has_name && name == def.name;
+-                        st.scheme = e.child_val("scheme").map(str::to_string);
+-                        s.font = Font { name, size, ..f };
+-                    }
+-                    if let Some(n) = x.child("numFmt") {
+-                        if let Some(code) = n.attr("formatCode") {
+-                            s.num_fmt = NumFmt::new(code);
+-                        } else if let Some(id) = n.attr_u32("numFmtId") {
+-                            s.num_fmt = num_fmt_code(id, &fmts);
+-                        }
+-                    }
+-                    if let Some(f) = x.child("fill") {
+-                        s.fill = read_fill(f, &palette, true);
+-                    }
+-                    if let Some(b) = x.child("border") {
+-                        s.borders = read_border(b, &palette);
+-                    }
+-                    if let Some(a) = x.child("alignment") {
+-                        s.align = read_alignment(a);
+-                    }
+-                    if let Some(p) = x.child("protection") {
+-                        s.protection = read_protection(p);
+-                        s.dxf_stated.protection = s.protection == Protection::default();
+-                    }
+-                    s
+-                })
+-                .collect()
+-        })
+-        .unwrap_or_default();
+-    StylesIn { xfs, dxfs, palette, named, num_fmts: fmts }
++    for (st, xf) in xfs.iter_mut().zip(root.child("cellXfs").into_iter().flat_map(|x| x.kids("xf"))).skip(1) {
++        st.parent = xf.attr_u32("xfId").filter(|i| *i != 0).and_then(|i| parents.get(&i)).map(|n| n.to_string());
++    }
++    let dxfs = root.child("dxfs").map(|d| d.kids("dxf").map(|x| read_dxf(x, &palette, &fmts)).collect()).unwrap_or_default();
++    let sources = xf_sources(root, &xfs, &named);
++    StylesIn { xfs, dxfs, palette, named, num_fmts: fmts, sources }
++}
++
++/// Attributes of a cell format the model has no field for.
++const XF_ATTRS: &[&str] = &["pivotButton"];
++/// Attributes of a cell style besides its name and format.
++const CELL_STYLE_ATTRS: &[&str] = &["builtinId", "iLevel", "hidden", "customBuiltin"];
++
++/// What a named style is written from: its name and its format.
++pub fn cell_style_model(name: &str, st: &Style) -> String {
++    format!("{name}\n{}", crate::passthrough::model_of(st))
++}
++
++/// The source forms of the cell formats and cell styles: the attributes of a cell format
++/// without a model field, for the style it was read into, and which built-in style each named
++/// style is, while it keeps its name and format.
++fn xf_sources(root: &El, xfs: &[Style], named: &[(String, Style)]) -> Vec<PreservedSource> {
++    let mut out = Vec::new();
++    let mut seen = std::collections::HashSet::new();
++    let mut push = |slot: &str, model: String, data: String| {
++        if (slot == "cellStyle" || !data.is_empty()) && seen.insert((slot.to_string(), model.clone())) {
++            out.push(PreservedSource { slot: slot.into(), model, data: Arc::from(data.into_bytes()) });
++        }
++    };
++    for c in root.child("cellStyles").into_iter().flat_map(|c| c.kids("cellStyle")) {
++        let Some(name) = c.attr("name") else { continue };
++        if let Some((_, st)) = named.iter().find(|(n, _)| n == name) {
++            push("cellStyle", cell_style_model(name, st), crate::passthrough::attrs_of(c, CELL_STYLE_ATTRS));
++        }
++    }
++    for (xf, st) in root.child("cellXfs").into_iter().flat_map(|x| x.kids("xf")).zip(xfs).skip(1) {
++        push("xf", crate::passthrough::model_of(st), crate::passthrough::attrs_of(xf, XF_ATTRS));
++    }
++    out
+ }
+ 
+ // ---------------------------------------------------------------- writing
+@@ -454,8 +608,11 @@ fn font_xml(f: &Font, dxf: Option<&DxfStated>, minor: bool) -> String {
+         s.push_str("<color theme=\"1\"/>");
+     }
+     if dxf.is_none() {
+-        let family = f.family.filter(|v| *v <= MAX_FONT_FAMILY).unwrap_or(DEFAULT_FONT_FAMILY);
+-        let _ = write!(s, "<name val=\"{}\"/><family val=\"{family}\"/>", esc_attr(&f.name));
++        let _ = write!(s, "<name val=\"{}\"/>", esc_attr(&f.name));
++        // A family only where one was stated: Excel reads a font without one as it was.
++        if let Some(family) = f.family.filter(|v| *v <= MAX_FONT_FAMILY) {
++            let _ = write!(s, "<family val=\"{family}\"/>");
++        }
+         if let Some(charset) = f.charset {
+             let _ = write!(s, "<charset val=\"{charset}\"/>");
+         }
+@@ -618,6 +775,15 @@ impl NumFmts {
+ /// `extra_fmts` are number formats used outside cell styles (PivotTable value fields); the
+ /// returned map gives the id of every custom format written.
+ pub fn write_styles(wb: &Workbook, dxfs: &[Style], extra_fmts: &[String]) -> (String, HashMap<String, u32>) {
++    use crate::passthrough::model_of;
++    // The records as the file wrote them, while the model holds what was read from them.
++    let forms: HashMap<(&str, String), &str> = wb
++        .preserved
++        .iter()
++        .flat_map(|p| &p.sources)
++        .filter(|f| matches!(f.slot.as_str(), "font" | "fill" | "border" | "dxf" | "xf" | "cellStyle"))
++        .filter_map(|f| Some(((f.slot.as_str(), f.model.clone()), std::str::from_utf8(&f.data).ok()?)))
++        .collect();
+     let mut nf = NumFmts { custom: vec![], map: HashMap::new() };
+     let mut fonts: Vec<Font> = vec![];
+     let mut font_map = HashMap::new();
+@@ -628,6 +794,9 @@ pub fn write_styles(wb: &Workbook, dxfs: &[Style], extra_fmts: &[String]) -> (St
+     // The default style's font is font 0.
+     intern(&mut fonts, &mut font_map, &wb.styles.get(gridcraft_model::StyleId::DEFAULT).font);
+ 
++    // The named styles, numbered as `cellStyleXfs` below writes them.
++    let named_ids: HashMap<&str, usize> =
++        wb.cell_styles.iter().map(|(n, _)| n.as_str()).filter(|n| !n.is_empty() && *n != "Normal").enumerate().map(|(i, n)| (n, i + 1)).collect();
+     let mut xfs = String::new();
+     let mut count = 0;
+     for (_, st) in wb.styles.iter() {
+@@ -637,7 +806,15 @@ pub fn write_styles(wb: &Workbook, dxfs: &[Style], extra_fmts: &[String]) -> (St
+         // A checkbox is General plus the feature-property-bag complement (see `feature_bags`).
+         let checkbox = st.num_fmt.as_str() == "checkbox";
+         let fmt = if checkbox { 0 } else { nf.id(st.num_fmt.as_str()) };
+-        let _ = write!(xfs, "<xf numFmtId=\"{fmt}\" fontId=\"{font}\" fillId=\"{fill}\" borderId=\"{border}\" xfId=\"0\"");
++        let model = model_of(st);
++        let parent = st.parent.as_deref().and_then(|n| named_ids.get(n)).copied().unwrap_or(0);
++        let _ = write!(xfs, "<xf numFmtId=\"{fmt}\" fontId=\"{font}\" fillId=\"{fill}\" borderId=\"{border}\" xfId=\"{parent}\"");
++        if st.quote_prefix {
++            xfs.push_str(" quotePrefix=\"1\"");
++        }
++        if let Some(attrs) = forms.get(&("xf", model)) {
++            xfs.push_str(attrs);
++        }
+         if fmt != 0 {
+             xfs.push_str(" applyNumberFormat=\"1\"");
+         }
+@@ -692,12 +869,17 @@ pub fn write_styles(wb: &Workbook, dxfs: &[Style], extra_fmts: &[String]) -> (St
+         } else {
+             let _ = write!(style_xfs, ">{}{}</xf>", al.unwrap_or_default(), pr.unwrap_or_default());
+         }
+-        let _ = write!(cell_styles, "<cellStyle name=\"{}\" xfId=\"{named}\" customBuiltin=\"1\"/>", esc_attr(name));
++        let kept = forms.get(&("cellStyle", cell_style_model(name, st))).copied().unwrap_or(" customBuiltin=\"1\"");
++        let _ = write!(cell_styles, "<cellStyle name=\"{}\" xfId=\"{named}\"{kept}/>", esc_attr(name));
+         named += 1;
+     }
+ 
+     let mut dx = String::new();
+     for d in dxfs {
++        if let Some(x) = forms.get(&("dxf", model_of(d))) {
++            dx.push_str(x);
++            continue;
++        }
+         dx.push_str("<dxf>");
+         let def = Style::default();
+         let st = &d.dxf_stated;
+@@ -753,16 +935,25 @@ pub fn write_styles(wb: &Workbook, dxfs: &[Style], extra_fmts: &[String]) -> (St
+     }
+     let _ = write!(s, "<fonts count=\"{}\">", fonts.len());
+     for (i, f) in fonts.iter().enumerate() {
+-        // A Normal font in the theme's body face follows the theme, as Excel writes it (#805).
+-        s.push_str(&font_xml(f, None, i == 0 && f.name == wb.theme.minor_font));
++        match forms.get(&("font", font_model(f, &wb.theme))) {
++            Some(x) => s.push_str(x),
++            // A Normal font in the theme's body face follows the theme, as Excel writes it (#805).
++            None => s.push_str(&font_xml(f, None, i == 0 && f.name == wb.theme.minor_font)),
++        }
+     }
+     let _ = write!(s, "</fonts><fills count=\"{}\">", fills.len());
+     for f in &fills {
+-        s.push_str(&fill_xml(f, false));
++        match forms.get(&("fill", model_of(f))) {
++            Some(x) => s.push_str(x),
++            None => s.push_str(&fill_xml(f, false)),
++        }
+     }
+     let _ = write!(s, "</fills><borders count=\"{}\">", borders.len());
+     for b in &borders {
+-        s.push_str(&border_xml(b));
++        match forms.get(&("border", model_of(b))) {
++            Some(x) => s.push_str(x),
++            None => s.push_str(&border_xml(b)),
++        }
+     }
+     let _ = write!(s, "</borders><cellStyleXfs count=\"{named}\">{style_xfs}</cellStyleXfs>");
+     let _ = write!(s, "<cellXfs count=\"{count}\">{xfs}</cellXfs>");
+diff --git a/crates/xlsx/src/tests/legacy_formulas.rs b/crates/xlsx/src/tests/legacy_formulas.rs
+--- a/crates/xlsx/src/tests/legacy_formulas.rs
++++ b/crates/xlsx/src/tests/legacy_formulas.rs
+@@ -117,3 +117,14 @@ fn only_intersections_a_legacy_formula_makes_are_saved_as_legacy() {
+     assert_eq!(written("D4"), (true, "SUMPRODUCT(_xlfn.SINGLE(A1:A3))".to_string()));
+ }
+ 
++/// A legacy formula the analysis cannot read in dynamic-array terms is saved as the file had it.
++#[test]
++fn a_legacy_formula_not_understood_is_saved_as_it_was() {
++    let body = r#"<sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>BESSELJ(A1:A3,1)</f><v>0.4</v></c></row></sheetData>"#;
++    let (wb, _) = read_xlsx(&super::minimal(body, &[], "", "")).unwrap();
++    assert_eq!(formula_text(&wb, "B1"), "BESSELJ(A1:A3,1)");
++    let bytes = write_xlsx(&wb).unwrap();
++    let sheet = Package::open(&bytes).unwrap().read_xml("xl/worksheets/sheet1.xml").unwrap().unwrap();
++    assert_eq!(cell(&sheet, "B1").attr("cm"), None);
++    assert_eq!(cell(&sheet, "B1").child("f").unwrap().text, "BESSELJ(A1:A3,1)");
++}
+diff --git a/crates/xlsx/src/tests/mod.rs b/crates/xlsx/src/tests/mod.rs
+--- a/crates/xlsx/src/tests/mod.rs
++++ b/crates/xlsx/src/tests/mod.rs
+@@ -25,6 +25,7 @@ mod shape_text_rtl;
+ mod shared_media;
+ mod sheet_names;
+ mod smooth_roundtrip;
++mod source_forms;
+ mod trendline_roundtrip;
+ mod xls_tests;
+ mod xlsb_tests;
+diff --git a/crates/xlsx/src/tests/note_box.rs b/crates/xlsx/src/tests/note_box.rs
+--- a/crates/xlsx/src/tests/note_box.rs
++++ b/crates/xlsx/src/tests/note_box.rs
+@@ -52,7 +52,13 @@ fn a_notes_box_is_read_relative_to_its_cell() {
+ 
+ #[test]
+ fn an_unedited_notes_box_is_saved_where_and_as_big_as_it_was() {
+-    let (wb, _) = read_xlsx(&package()).unwrap();
++    let (mut wb, _) = read_xlsx(&package()).unwrap();
++    // The drawing of notes alone is the file's own.
++    assert_eq!(written_vml(&write_xlsx(&wb).unwrap()), VML);
++    // GridCraft's, without it.
++    if let Some(p) = wb.sheet_mut(0).unwrap().preserved.as_mut() {
++        std::sync::Arc::make_mut(p).sources.retain(|s| s.slot != "vml.notes");
++    }
+     let vml = written_vml(&write_xlsx(&wb).unwrap());
+     assert!(vml.contains("<x:Anchor>1, 10, 0, 2, 5, 32, 5, 8</x:Anchor>"), "{vml}");
+     assert!(vml.contains("width:224.25pt;height:89.25pt"), "{vml}");
+diff --git a/crates/xlsx/src/tests/passthrough_tests.rs b/crates/xlsx/src/tests/passthrough_tests.rs
+--- a/crates/xlsx/src/tests/passthrough_tests.rs
++++ b/crates/xlsx/src/tests/passthrough_tests.rs
+@@ -413,7 +413,8 @@ fn damaged_kept_content_is_dropped_without_failing_the_read() {
+     names.sort();
+     assert_eq!(names, ["customXml/item1.xml", "customXml/itemProps1.xml"]);
+     assert!(p.elements.is_empty());
+-    assert!(wb.sheet(0).unwrap().preserved.is_none());
++    // Only the source forms of what the sheet reader models stay (the page setup's orientation).
++    assert!(wb.sheet(0).unwrap().preserved.as_deref().is_none_or(|p| p.parts.is_empty() && p.elements.is_empty() && p.vml.is_none()));
+     let u = Unpacked::new(&write_xlsx(&wb).unwrap());
+     u.assert_valid();
+     assert!(!u.text("xl/workbook.xml").contains("externalReferences"));
+diff --git a/crates/xlsx/src/tests/phonetic_tests.rs b/crates/xlsx/src/tests/phonetic_tests.rs
+--- a/crates/xlsx/src/tests/phonetic_tests.rs
++++ b/crates/xlsx/src/tests/phonetic_tests.rs
+@@ -33,7 +33,7 @@ fn part(bytes: &[u8], name: &str) -> String {
+ }
+ 
+ fn text_cell(sheet: &mut gridcraft_model::Sheet, a: &str, text: &str) {
+-    sheet.cells.set(at(a), Cell { value: Value::text(text), formula: None, style: StyleId::DEFAULT });
++    sheet.cells.set(at(a), Cell { value: Value::text(text), formula: None, style: StyleId::DEFAULT, rich: None });
+ }
+ 
+ #[test]
+diff --git a/crates/xlsx/src/tests/pivot_tests.rs b/crates/xlsx/src/tests/pivot_tests.rs
+--- a/crates/xlsx/src/tests/pivot_tests.rs
++++ b/crates/xlsx/src/tests/pivot_tests.rs
+@@ -52,7 +52,7 @@ fn workbook() -> Workbook {
+         let r = r as u32 + 1;
+         data.cells.set(CellRef::new(r, 0), Cell::value(Value::text(*a)));
+         data.cells.set(CellRef::new(r, 1), Cell::value(Value::text(*b)));
+-        data.cells.set(CellRef::new(r, 2), Cell { value: Value::number(*d), formula: None, style: date_style });
++        data.cells.set(CellRef::new(r, 2), Cell { value: Value::number(*d), formula: None, style: date_style, rich: None });
+         data.cells.set(CellRef::new(r, 3), Cell::value(Value::number(*u)));
+         data.cells.set(CellRef::new(r, 4), Cell::value(Value::number(*s)));
+         data.cells.set(CellRef::new(r, 5), Cell::value(Value::text(*ch)));
+diff --git a/crates/xlsx/src/tests/roundtrip.rs b/crates/xlsx/src/tests/roundtrip.rs
+--- a/crates/xlsx/src/tests/roundtrip.rs
++++ b/crates/xlsx/src/tests/roundtrip.rs
+@@ -64,7 +64,7 @@ fn sample() -> Workbook {
+     };
+ 
+     let mut s = Sheet::new("Data & Stuff");
+-    let set = |s: &mut Sheet, a: &str, v: Value, style: StyleId| s.cells.set(at(a), Cell { value: v, formula: None, style });
++    let set = |s: &mut Sheet, a: &str, v: Value, style: StyleId| s.cells.set(at(a), Cell { value: v, formula: None, style, rich: None });
+     set(&mut s, "A1", Value::text("Region"), bold);
+     set(&mut s, "B1", Value::text("Amount"), bold);
+     set(&mut s, "C1", Value::text("  spaced\nline _x0041_ \u{1} "), StyleId::DEFAULT);
+@@ -838,7 +838,7 @@ fn writing_repairs_invalid_models() {
+         table_type: None,
+         connection_id: None,
+     });
+-    s.cells.set(at("B2"), Cell { value: Value::Number(1.0), formula: None, style: StyleId(9999) });
++    s.cells.set(at("B2"), Cell { value: Value::Number(1.0), formula: None, style: StyleId(9999), rich: None });
+     let (back, _) = read_xlsx(&write_xlsx(&wb).unwrap()).unwrap();
+     let s = back.sheet(0).unwrap();
+     assert_eq!(s.visibility, Visibility::Visible, "at least one sheet stays visible");
+@@ -1281,8 +1281,7 @@ fn fonts_without_charset_write_unchanged() {
+     let saved = write_xlsx(&read_xlsx(&file).unwrap().0).unwrap();
+     let mut pkg = Package::open(&saved).unwrap();
+     let xml = String::from_utf8(pkg.read("xl/styles.xml").unwrap().unwrap()).unwrap();
+-    assert!(xml.contains("<name val=\"Arial\"/><family val=\"2\"/>"), "{xml}");
+-    assert!(!xml.contains("<charset"), "{xml}");
++    assert!(xml.contains("<font><name val=\"Arial\"/></font>"), "{xml}");
+ }
+ 
+ #[test]
+@@ -1293,7 +1292,7 @@ fn out_of_range_family_is_ignored() {
+     let saved = write_xlsx(&wb).unwrap();
+     let mut pkg = Package::open(&saved).unwrap();
+     let xml = String::from_utf8(pkg.read("xl/styles.xml").unwrap().unwrap()).unwrap();
+-    assert!(xml.contains("<name val=\"Arial\"/><family val=\"2\"/>"), "{xml}");
++    assert!(xml.contains("<name val=\"Arial\"/>") && !xml.contains("<family"), "{xml}");
+ 
+     let mut set_directly = wb.clone();
+     let wide = set_directly.styles.derive(StyleId::DEFAULT, |st| st.font.family = Some(200));
+diff --git a/crates/xlsx/src/tests/source_forms.rs b/crates/xlsx/src/tests/source_forms.rs
+new file mode 100644
+--- /dev/null
++++ b/crates/xlsx/src/tests/source_forms.rs
+@@ -0,0 +1,418 @@
++//! What GridCraft writes from its model keeps the file's own form while the model still holds
++//! what was read: unmodelled attributes, elements it never reads, the theme and the core
++//! properties as they were.
++
++use gridcraft_model::{Orientation, Workbook};
++
++use crate::package::Package;
++use crate::{read_xlsx, write_xlsx};
++
++const THEME: &str = r#"<?xml version="1.0"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Ufficio"><a:themeElements><a:clrScheme name="Ufficio"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="44546A"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2><a:accent1><a:srgbClr val="4472C4"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2><a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4><a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme><a:fontScheme name="Ufficio"><a:majorFont><a:latin typeface="Calibri Light"/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/></a:minorFont></a:fontScheme></a:themeElements></a:theme>"#;
++const CORE: &str = r#"<?xml version="1.0"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Bilancio</dc:title><cp:lastModifiedBy>Anna</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">2024-01-02T03:04:05Z</dcterms:created></cp:coreProperties>"#;
++const SHEET: &str = r#"<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:xr="http://schemas.microsoft.com/office/spreadsheetml/2014/revision"><sheetPr codeName="Foglio1" filterMode="0"><outlinePr summaryBelow="0"/><pageSetUpPr autoPageBreaks="0"/></sheetPr><sheetFormatPr baseColWidth="10" defaultRowHeight="14.4" x14ac:dyDescent="0.3" xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac"/><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData><mergeCells count="1"><mergeCell ref="B2:C3"/></mergeCells><phoneticPr fontId="1" type="noConversion"/><pageMargins left="0.3" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/><pageSetup paperSize="256" horizontalDpi="300" verticalDpi="300" copies="2"/><ignoredErrors><ignoredError sqref="A1" numberStoredAsText="1" xr:uid="x"/></ignoredErrors></worksheet>"#;
++
++fn source() -> Vec<u8> {
++    source_with(SHEET)
++}
++
++fn source_with(sheet: &str) -> Vec<u8> {
++    let types = r#"<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/xl/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>"#;
++    let root = r#"<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>"#;
++    let wb = r#"<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><workbookPr codeName="QuestaCartella" defaultThemeVersion="166925" filterPrivacy="1"/><sheets><sheet name="Dati" sheetId="1" r:id="rId1"/></sheets><webPublishing codePage="1252"/></workbook>"#;
++    let rels = r#"<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/></Relationships>"#;
++    super::make_zip(&[
++        ("[Content_Types].xml", types.as_bytes()),
++        ("_rels/.rels", root.as_bytes()),
++        ("docProps/core.xml", CORE.as_bytes()),
++        ("xl/workbook.xml", wb.as_bytes()),
++        ("xl/_rels/workbook.xml.rels", rels.as_bytes()),
++        ("xl/theme/theme1.xml", THEME.as_bytes()),
++        ("xl/worksheets/sheet1.xml", sheet.as_bytes()),
++    ])
++}
++
++fn part(bytes: &[u8], name: &str) -> String {
++    let mut pkg = Package::open(bytes).unwrap();
++    String::from_utf8(pkg.read(name).unwrap().unwrap()).unwrap()
++}
++
++fn saved(wb: &Workbook) -> Vec<u8> {
++    let bytes = write_xlsx(wb).unwrap();
++    // Every part GridCraft writes stays well-formed XML, without an attribute twice.
++    let mut pkg = Package::open(&bytes).unwrap();
++    for name in ["xl/workbook.xml", "xl/worksheets/sheet1.xml"] {
++        let text = String::from_utf8(pkg.read(name).unwrap().unwrap()).unwrap();
++        let mut reader = quick_xml::Reader::from_str(&text);
++        loop {
++            match reader.read_event().unwrap() {
++                quick_xml::events::Event::Eof => break,
++                quick_xml::events::Event::Start(e) | quick_xml::events::Event::Empty(e) => {
++                    for a in e.attributes() {
++                        a.unwrap_or_else(|err| panic!("{name}: {err}: {text}"));
++                    }
++                }
++                _ => {}
++            }
++        }
++    }
++    bytes
++}
++
++#[test]
++fn an_open_and_save_keeps_the_forms_of_the_file() {
++    let (wb, report) = read_xlsx(&source()).unwrap();
++    assert_eq!(report.warnings, ["no styles part"]);
++    let bytes = saved(&wb);
++    assert_eq!(part(&bytes, "xl/theme/theme1.xml"), THEME);
++    assert_eq!(part(&bytes, "docProps/core.xml"), CORE);
++    let book = part(&bytes, "xl/workbook.xml");
++    assert!(book.contains(r#"<workbookPr filterPrivacy="1" codeName="QuestaCartella" defaultThemeVersion="166925"/>"#), "{book}");
++    assert!(book.contains(r#"<webPublishing codePage="1252"/>"#), "{book}");
++    let sheet = part(&bytes, "xl/worksheets/sheet1.xml");
++    for kept in [
++        r#"<sheetPr codeName="Foglio1" filterMode="0"><outlinePr summaryBelow="0"/><pageSetUpPr autoPageBreaks="0"/></sheetPr>"#,
++        r#"<sheetFormatPr defaultRowHeight="14.4" baseColWidth="10"/>"#,
++        r#"</mergeCells><phoneticPr fontId="1" type="noConversion"/>"#,
++        r#"<pageMargins left="0.3" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>"#,
++        r#"<pageSetup paperSize="256" horizontalDpi="300" verticalDpi="300" copies="2"/>"#,
++        r#"<ignoredErrors><ignoredError sqref="A1" numberStoredAsText="1"/></ignoredErrors>"#,
++    ] {
++        assert!(sheet.contains(kept), "{kept} in {sheet}");
++    }
++    // And again from GridCraft's own file.
++    let (back, _) = read_xlsx(&bytes).unwrap();
++    assert_eq!(part(&saved(&back), "xl/worksheets/sheet1.xml"), sheet);
++}
++
++#[test]
++fn a_change_to_the_model_writes_gridcraft_own_form() {
++    let (mut wb, _) = read_xlsx(&source()).unwrap();
++    wb.theme.colors[4] = 0x112233;
++    wb.props.title = "Altro".into();
++    let s = wb.sheet_mut(0).unwrap();
++    s.print.orientation = Orientation::Landscape;
++    s.print.paper = "A4".into();
++    s.default_row_height = 30.0;
++    let bytes = saved(&wb);
++    assert!(part(&bytes, "xl/theme/theme1.xml").contains("112233"));
++    let core = part(&bytes, "docProps/core.xml");
++    assert!(core.contains("<dc:title>Altro</dc:title>") && !core.contains("lastModifiedBy"), "{core}");
++    let sheet = part(&bytes, "xl/worksheets/sheet1.xml");
++    assert!(sheet.contains(r#"<pageSetup paperSize="9" orientation="landscape" horizontalDpi="300" verticalDpi="300" copies="2"/>"#), "{sheet}");
++    assert!(sheet.contains(r#"customHeight="1""#), "{sheet}");
++}
++
++#[test]
++fn a_sheet_without_a_page_setup_keeps_having_none_until_one_is_chosen() {
++    let bare = SHEET.replace(r#"<pageSetup paperSize="256" horizontalDpi="300" verticalDpi="300" copies="2"/>"#, "");
++    let (mut wb, _) = read_xlsx(&source_with(&bare)).unwrap();
++    let sheet = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(!sheet.contains("<pageSetup"), "{sheet}");
++    wb.sheet_mut(0).unwrap().print.orientation = Orientation::Landscape;
++    let sheet = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(sheet.contains(r#"<pageSetup orientation="landscape"/>"#), "{sheet}");
++}
++
++fn styles_of(wb: &Workbook) -> String {
++    part(&write_xlsx(wb).unwrap(), "xl/styles.xml")
++}
++
++#[test]
++fn style_records_keep_the_form_of_the_file_until_their_model_changes() {
++    let font = r#"<font><sz val="11"/><color theme="4" tint="-0.249977111117893"/><name val="Calibri Light"/><scheme val="major"/></font>"#;
++    let fill = r#"<fill><patternFill patternType="solid"><fgColor theme="6" tint="-0.499984740745262"/><bgColor indexed="64"/></patternFill></fill>"#;
++    let styles = format!(
++        r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font>{font}</fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>{fill}</fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"#
++    );
++    let rels = r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>"#;
++    let file = super::minimal(r#"<sheetData><row r="1"><c r="A1" s="1"><v>1</v></c></row></sheetData>"#, &[("xl/styles.xml", &styles)], rels, "");
++    let (mut wb, _) = read_xlsx(&file).unwrap();
++    let out = styles_of(&wb);
++    assert!(out.contains(font) && out.contains(fill), "{out}");
++    // A changed record is written in GridCraft's own form; the others stay as they were.
++    let a1 = gridcraft_core::CellRef::new(0, 0);
++    let s = wb.sheet(0).unwrap().style_id(a1);
++    let bold = wb.styles.derive(s, |st| st.font.bold = true);
++    wb.sheet_mut(0).unwrap().set_style(a1, bold);
++    let out = styles_of(&wb);
++    assert!(out.contains(r#"<font><b/><sz val="11"/><color theme="4" tint="-0.25"/><name val="Calibri Light"/>"#) && out.contains(fill), "{out}");
++}
++
++#[test]
++fn a_stated_swiss_family_is_not_the_same_font_as_none() {
++    let styles = r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="10"/><name val="Arial"/></font><font><sz val="10"/><name val="Arial"/><family val="2"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>"#;
++    let rels = r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>"#;
++    let file = super::minimal(r#"<sheetData><row r="1"><c r="A1" s="1"><v>1</v></c></row></sheetData>"#, &[("xl/styles.xml", styles)], rels, "");
++    let (wb, _) = read_xlsx(&file).unwrap();
++    let a1 = wb.sheet(0).unwrap().style_id(gridcraft_core::CellRef::new(0, 0));
++    assert_eq!(wb.styles.get(a1).font.family, Some(2));
++    let out = styles_of(&wb);
++    assert!(out.contains(r#"<fonts count="2"><font><sz val="10"/><name val="Arial"/></font><font><sz val="10"/><name val="Arial"/><family val="2"/></font></fonts>"#), "{out}");
++}
++
++#[test]
++fn a_cell_format_keeps_its_named_style_and_its_quote_prefix() {
++    let styles = r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><u/><sz val="11"/><color theme="10"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" quotePrefix="1"/></cellXfs><cellStyles count="2"><cellStyle name="Collegamento" xfId="1" builtinId="8"/><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>"#;
++    let rels = r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>"#;
++    let cells = r#"<sheetData><row r="1"><c r="A1" s="1" t="inlineStr"><is><t>link</t></is></c><c r="B1" s="2" t="inlineStr"><is><t>=1</t></is></c></row></sheetData>"#;
++    let (wb, _) = read_xlsx(&super::minimal(cells, &[("xl/styles.xml", styles)], rels, "")).unwrap();
++    let out = styles_of(&wb);
++    assert!(out.contains(r#"<cellStyle name="Collegamento" xfId="1" builtinId="8"/>"#), "{out}");
++    assert!(out.contains(r#"fontId="1" fillId="0" borderId="0" xfId="1""#), "{out}");
++    assert!(out.contains(r#"xfId="0" quotePrefix="1"/>"#), "{out}");
++}
++
++#[test]
++fn column_widths_keep_the_digits_of_the_file() {
++    let sheet = SHEET.replace(
++        r#"<sheetData>"#,
++        r#"<cols><col min="1" max="1" width="40" customWidth="1"/><col min="2" max="3" width="20.5703125" customWidth="1"/></cols><sheetData>"#,
++    );
++    let (mut wb, _) = read_xlsx(&source_with(&sheet)).unwrap();
++    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(out.contains(r#"<col min="1" max="1" width="40" customWidth="1"/><col min="2" max="3" width="20.5703125" customWidth="1"/>"#), "{out}");
++    // A width changed to one the file never had is GridCraft's.
++    wb.sheet_mut(0).unwrap().cols.get_mut(&0).unwrap().size = Some(100.0);
++    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(out.contains(r#"<col min="1" max="1" width="14.28125" customWidth="1"/>"#), "{out}");
++}
++
++#[test]
++fn a_split_view_and_unused_fit_counts_stay_as_the_file_had_them() {
++    let sheet = SHEET
++        .replace(
++            "<sheetFormatPr",
++            r#"<sheetViews><sheetView workbookViewId="0"><pane xSplit="16230" ySplit="3840" topLeftCell="AQ1000" activePane="bottomRight"/><selection pane="bottomRight" activeCell="B2" sqref="B2"/></sheetView></sheetViews><sheetFormatPr"#,
++        )
++        .replace(r#"<pageSetup paperSize="256""#, r#"<pageSetup paperSize="256" fitToHeight="0""#);
++    let (mut wb, _) = read_xlsx(&source_with(&sheet)).unwrap();
++    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(
++        out.contains(r#"<pane xSplit="16230" ySplit="3840" topLeftCell="AQ1000" activePane="bottomRight"/><selection pane="bottomRight" activeCell="B2" sqref="B2"/>"#),
++        "{out}"
++    );
++    assert!(out.contains(r#"<pageSetup paperSize="256" fitToHeight="0""#), "{out}");
++    // Freezing panes replaces the split.
++    wb.sheet_mut(0).unwrap().freeze = Some((1, 0));
++    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(!out.contains("16230") && out.contains(r#"state="frozen""#), "{out}");
++}
++
++#[test]
++fn a_formula_keeps_the_spelling_of_the_file_while_it_is_the_same_formula() {
++    let sheet = SHEET.replace(
++        r#"<c r="A1"><v>1</v></c>"#,
++        r#"<c r="A1"><v>1</v></c><c r="B1"><f>SUM( A1 , 2 )</f><v>3</v></c><c r="C1"><f>_xlfn.XLOOKUP(A1, A1:A3,B1:B3)</f><v>3</v></c>"#,
++    );
++    let (mut wb, _) = read_xlsx(&source_with(&sheet)).unwrap();
++    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(out.contains("<f>SUM( A1 , 2 )</f>") && out.contains("<f>_xlfn.XLOOKUP(A1, A1:A3,B1:B3)</f>"), "{out}");
++    let formula = Some(std::sync::Arc::new(gridcraft_model::Formula::new("SUM(A1,3)")));
++    let cell = gridcraft_model::Cell { value: gridcraft_core::Value::Number(4.0), formula, style: gridcraft_model::StyleId::DEFAULT, rich: None };
++    wb.sheet_mut(0).unwrap().set_cell(gridcraft_core::CellRef::new(0, 1), cell);
++    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(out.contains("<f>SUM(A1,3)</f>"), "{out}");
++}
++
++#[test]
++fn margins_keep_their_digits_until_they_change() {
++    let sheet = SHEET.replace(r#"header="0.3" footer="0.3""#, r#"header="0.31496062992125984" footer="0.3""#);
++    let (mut wb, _) = read_xlsx(&source_with(&sheet)).unwrap();
++    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(out.contains(r#"header="0.31496062992125984" footer="0.3"/>"#), "{out}");
++    wb.sheet_mut(0).unwrap().print.margins[0] = 1.0;
++    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(out.contains(r#"<pageMargins left="1" right="0.7" top="0.75" bottom="0.75" header="0.31496063" footer="0.3"/>"#), "{out}");
++}
++
++#[test]
++fn formatted_runs_of_a_text_stay_until_the_text_changes() {
++    let sst = r#"<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="2" uniqueCount="2"><si><r><rPr><b/><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t>Uno</t></r><r><t xml:space="preserve"> due</t></r></si><si><t>Tre</t></si></sst>"#;
++    let rels = r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>"#;
++    let body = r#"<sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="inlineStr"><is><r><rPr><i/></rPr><t>Quattro</t></r></is></c></row></sheetData>"#;
++    let (mut wb, _) = read_xlsx(&super::minimal(body, &[("xl/sharedStrings.xml", sst)], rels, "")).unwrap();
++    let a1 = gridcraft_core::CellRef::new(0, 0);
++    assert_eq!(wb.sheet(0).unwrap().cell(a1).unwrap().value, gridcraft_core::Value::Text("Uno due".into()));
++    let out = part(&write_xlsx(&wb).unwrap(), "xl/sharedStrings.xml");
++    let runs = r#"<si><r><rPr><b/><sz val="11"/><color theme="1"/><rFont val="Calibri"/><family val="2"/><scheme val="minor"/></rPr><t>Uno</t></r><r><t xml:space="preserve"> due</t></r></si>"#;
++    assert!(out.contains(runs), "{out}");
++    assert!(out.contains("<si><t>Tre</t></si>") && out.contains(r#"<r><rPr><i/></rPr><t>Quattro</t></r>"#), "{out}");
++    wb.sheet_mut(0).unwrap().set_value(a1, gridcraft_core::Value::Text("Cinque".into()));
++    let out = part(&write_xlsx(&wb).unwrap(), "xl/sharedStrings.xml");
++    assert!(!out.contains("<b/>") && out.contains("<si><t>Cinque</t></si>"), "{out}");
++}
++
++#[test]
++fn a_note_keeps_its_formatted_text_until_it_changes() {
++    let rels = r#"<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/></Relationships>"#;
++    let runs = r#"<r><rPr><b/><sz val="9"/><color indexed="81"/><rFont val="Tahoma"/><family val="2"/></rPr><t>Anna:</t></r><r><rPr><sz val="9"/><color indexed="81"/><rFont val="Tahoma"/><family val="2"/></rPr><t xml:space="preserve">
++da rivedere</t></r>"#;
++    let comments = format!(
++        r#"<?xml version="1.0"?><comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><authors><author>Anna</author></authors><commentList><comment ref="A1" authorId="0"><text>{runs}</text></comment></commentList></comments>"#
++    );
++    let body = r#"<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>"#;
++    let (mut wb, _) =
++        read_xlsx(&super::minimal(body, &[("xl/worksheets/_rels/sheet1.xml.rels", rels), ("xl/comments1.xml", &comments)], "", "")).unwrap();
++    let a1 = gridcraft_core::CellRef::new(0, 0);
++    assert_eq!(wb.sheet(0).unwrap().comments[&a1].text, "da rivedere");
++    let out = part(&write_xlsx(&wb).unwrap(), "xl/comments1.xml");
++    assert!(out.contains(&format!("<text>{runs}</text>")), "{out}");
++    // A note moved by an inserted row is the same note.
++    let note = wb.sheet_mut(0).unwrap().comments.remove(&a1).unwrap();
++    wb.sheet_mut(0).unwrap().comments.insert(gridcraft_core::CellRef::new(1, 0), note.clone());
++    let out = part(&write_xlsx(&wb).unwrap(), "xl/comments1.xml");
++    assert!(out.contains(&format!(r#"<comment ref="A2" authorId="0"><text>{runs}</text>"#)), "{out}");
++    wb.sheet_mut(0).unwrap().comments.clear();
++    wb.sheet_mut(0).unwrap().comments.insert(a1, note);
++    wb.sheet_mut(0).unwrap().comments.get_mut(&a1).unwrap().text = "fatto".into();
++    let out = part(&write_xlsx(&wb).unwrap(), "xl/comments1.xml");
++    assert!(out.contains("<text><r><t>fatto</t></r></text>"), "{out}");
++}
++
++#[test]
++fn a_link_keeps_the_text_it_displays_and_a_zero_default_width_stays() {
++    let sheet = SHEET
++        .replace(r#"<sheetFormatPr baseColWidth="10""#, r#"<sheetFormatPr baseColWidth="10" defaultColWidth="0" zeroHeight="1""#)
++        .replace("</mergeCells>", r#"</mergeCells><hyperlinks><hyperlink ref="A1" location="Dati!B2" display="Vai al totale"/><hyperlink ref="A2" location="Dati!B2" display="Totale"/><hyperlink ref="A3" location="Dati!C3"/></hyperlinks>"#);
++    let (mut wb, _) = read_xlsx(&source_with(&sheet)).unwrap();
++    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(out.contains(r#" defaultColWidth="0""#), "{out}");
++    for kept in [
++        r#"<hyperlink ref="A1" location="Dati!B2" display="Vai al totale"/>"#,
++        r#"<hyperlink ref="A2" location="Dati!B2" display="Totale"/>"#,
++        r#"<hyperlink ref="A3" location="Dati!C3" display="Dati!C3"/>"#,
++    ] {
++        assert!(out.contains(kept), "{kept} in {out}");
++    }
++    // A link moved to another cell keeps its text only while no other link to it reads differently.
++    let links = &mut wb.sheet_mut(0).unwrap().hyperlinks;
++    let a3 = links.remove(&gridcraft_core::CellRef::new(2, 0)).unwrap();
++    links.insert(gridcraft_core::CellRef::new(3, 0), a3);
++    let a1 = links.remove(&gridcraft_core::CellRef::new(0, 0)).unwrap();
++    links.insert(gridcraft_core::CellRef::new(4, 0), a1);
++    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(out.contains(r#"<hyperlink ref="A4" location="Dati!C3" display="Dati!C3"/>"#), "{out}");
++    assert!(out.contains(r#"<hyperlink ref="A5" location="Dati!B2" display="Dati!B2"/>"#), "{out}");
++}
++
++#[test]
++fn excel_2010_conditional_formats_stay_while_the_rules_are_the_ones_read() {
++    let cf = r#"<conditionalFormatting sqref="A1:A9"><cfRule type="dataBar" priority="3"><dataBar><cfvo type="min"/><cfvo type="max"/><color rgb="FF63C384"/></dataBar><extLst><ext uri="{B025F937-C7B1-47D3-B67F-A62EFF666E3E}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:id>{9B4F274F-F774-40EE-9C50-A8B810847010}</x14:id></ext></extLst></cfRule></conditionalFormatting><conditionalFormatting sqref="B1:B9"><cfRule type="cellIs" priority="2" operator="greaterThan"><formula>0</formula></cfRule></conditionalFormatting>"#;
++    let x14 = r#"<x14:conditionalFormattings><x14:conditionalFormatting><x14:cfRule type="dataBar" id="{9B4F274F-F774-40EE-9C50-A8B810847010}"><x14:dataBar minLength="0" maxLength="100" border="1" negativeBarBorderColorSameAsPositive="0"><x14:cfvo type="autoMin"/><x14:cfvo type="autoMax"/><x14:borderColor rgb="FF63C384"/><x14:negativeFillColor rgb="FFFF0000"/><x14:axisColor rgb="FF000000"/></x14:dataBar></x14:cfRule><xm:sqref>A1:A9</xm:sqref></x14:conditionalFormatting><x14:conditionalFormatting><x14:cfRule type="iconSet" priority="1" id="{23404A22-2791-4FFE-B3BF-645D3DA783FE}"><x14:iconSet iconSet="3Stars"><x14:cfvo type="percent"><xm:f>0</xm:f></x14:cfvo><x14:cfvo type="percent"><xm:f>33</xm:f></x14:cfvo><x14:cfvo type="percent"><xm:f>67</xm:f></x14:cfvo></x14:iconSet></x14:cfRule><xm:sqref>C1:C9</xm:sqref></x14:conditionalFormatting></x14:conditionalFormattings>"#;
++    let ext = format!(
++        r#"<extLst><ext uri="{{78C0D931-6437-407d-A8EE-F0AAD7539E65}}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main" xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">{x14}</ext></extLst>"#
++    );
++    let sheet =
++        SHEET.replace(r#"type="noConversion"/>"#, &format!(r#"type="noConversion"/>{cf}"#)).replace("</worksheet>", &format!("{ext}</worksheet>"));
++    let (mut wb, _) = read_xlsx(&source_with(&sheet)).unwrap();
++    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    for kept in [
++        r#"<cfRule type="dataBar" priority="3">"#,
++        r#"<x14:id>{9B4F274F-F774-40EE-9C50-A8B810847010}</x14:id>"#,
++        r#"priority="2" operator="greaterThan""#,
++        x14,
++        r#"<ext uri="{78C0D931-6437-407d-A8EE-F0AAD7539E65}""#,
++    ] {
++        assert!(out.contains(kept), "{kept} in {out}");
++    }
++    // A rule changed: GridCraft's own form, which has no rules only Excel 2010 has.
++    wb.sheet_mut(0).unwrap().cond_formats.remove(1);
++    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
++    assert!(!out.contains("3Stars") && out.contains(r#"<cfRule type="dataBar" priority="1">"#), "{out}");
++}
++
++#[test]
++fn the_drawing_of_the_notes_stays_while_the_notes_sit_where_they_were() {
++    let rels = r#"<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="../comments1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing" Target="../drawings/vmlDrawing1.vml"/></Relationships>"#;
++    let comments = r#"<?xml version="1.0"?><comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><authors><author>Anna</author></authors><commentList><comment ref="B2" authorId="0"><text><t>nota</t></text></comment></commentList></comments>"#;
++    let vml = "<xml xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:x=\"urn:schemas-microsoft-com:office:excel\">\n <o:shapelayout v:ext=\"edit\">\n  <o:idmap v:ext=\"edit\" data=\"1\"/>\n </o:shapelayout><v:shapetype id=\"_x0000_t202\" coordsize=\"21600,21600\" o:spt=\"202\" path=\"m,l,21600r21600,l21600,xe\"><v:stroke joinstyle=\"miter\"/></v:shapetype>\n <v:shape id=\"_x0000_s1025\" type=\"#_x0000_t202\" style=\"position:absolute;margin-left:107.25pt;width:96pt;height:55.5pt;z-index:1;visibility:hidden;mso-wrap-style:tight\" fillcolor=\"infoBackground [80]\"><x:ClientData ObjectType=\"Note\"><x:Row>1</x:Row><x:Column>1</x:Column></x:ClientData></v:shape></xml>";
++    let body = r#"<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData><legacyDrawing r:id="rId2"/>"#;
++    let parts = [("xl/worksheets/_rels/sheet1.xml.rels", rels), ("xl/comments1.xml", comments), ("xl/drawings/vmlDrawing1.vml", vml)];
++    let (mut wb, _) = read_xlsx(&super::minimal(body, &parts, "", "")).unwrap();
++    assert_eq!(part(&write_xlsx(&wb).unwrap(), "xl/drawings/vmlDrawing1.vml"), vml);
++    // The text of a note is not in its drawing.
++    let b2 = gridcraft_core::CellRef::new(1, 1);
++    wb.sheet_mut(0).unwrap().comments.get_mut(&b2).unwrap().text = "altra".into();
++    assert_eq!(part(&write_xlsx(&wb).unwrap(), "xl/drawings/vmlDrawing1.vml"), vml);
++    let note = wb.sheet_mut(0).unwrap().comments.remove(&b2).unwrap();
++    wb.sheet_mut(0).unwrap().comments.insert(gridcraft_core::CellRef::new(2, 1), note);
++    let out = part(&write_xlsx(&wb).unwrap(), "xl/drawings/vmlDrawing1.vml");
++    assert!(out.contains("<x:Row>2</x:Row>") && !out.contains("infoBackground"), "{out}");
++}
++
++/// Each part of `bytes`, with `edit` applied to its text.
++fn edited(bytes: &[u8], edit: &dyn Fn(&str, String) -> String) -> Vec<u8> {
++    use std::io::Read as _;
++    let mut z = zip::ZipArchive::new(std::io::Cursor::new(bytes.to_vec())).unwrap();
++    let mut parts = Vec::new();
++    for i in 0..z.len() {
++        let mut f = z.by_index(i).unwrap();
++        let mut data = Vec::new();
++        f.read_to_end(&mut data).unwrap();
++        let name = f.name().unwrap().to_string();
++        let data = match String::from_utf8(data) {
++            Ok(text) => edit(&name, text).into_bytes(),
++            Err(e) => e.into_bytes(),
++        };
++        parts.push((name, data));
++    }
++    let parts: Vec<(&str, &[u8])> = parts.iter().map(|(n, d)| (n.as_str(), d.as_slice())).collect();
++    super::make_zip(&parts)
++}
++
++#[test]
++fn a_drawing_and_its_charts_stay_as_the_file_had_them_while_their_objects_do() {
++    use gridcraft_model::{Anchor, Chart, ChartKind, Image, LegendPos, Series, Sheet};
++    let mut s = Sheet::new("Dati");
++    s.set_value(gridcraft_core::CellRef::new(0, 0), gridcraft_core::Value::Number(1.0));
++    let anchor = Anchor { cell: gridcraft_core::CellRef::new(0, 2), width: 300.0, height: 200.0, ..Anchor::default() };
++    let png = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0];
++    s.images.push(Image { id: 1, anchor, data: std::sync::Arc::new(png), mime: "image/png".into(), alt: "logo".into() });
++    let series = Series {
++        name: None,
++        categories: None,
++        values: "Dati!$A$1:$A$1".into(),
++        bubble_sizes: None,
++        color: None,
++        secondary: false,
++        kind: None,
++        smooth: false,
++        trendlines: Vec::new(),
++        quartiles: Default::default(),
++    };
++    s.charts.push(Chart {
++        id: 2,
++        kind: ChartKind::Line,
++        anchor,
++        title: None,
++        series: vec![series],
++        legend: LegendPos::Bottom,
++        data_labels: false,
++        gridlines: true,
++        style: 2,
++        x_title: None,
++        y_title: None,
++        source: None,
++        by_rows: false,
++        pivot: None,
++    });
++    let own = write_xlsx(&Workbook { sheets: vec![std::sync::Arc::new(s)], ..Workbook::default() }).unwrap();
++    // What Excel writes and GridCraft does not.
++    let file = edited(&own, &|name, text| match name {
++        "xl/charts/chart1.xml" => text.replacen("<c:roundedCorners", r#"<c:lang val="it-IT"/><c:roundedCorners"#, 1),
++        "xl/drawings/drawing1.xml" => text.replace("<xdr:clientData/>", r#"<xdr:clientData fLocksWithSheet="0"/>"#),
++        _ => text,
++    });
++    let chart = part(&file, "xl/charts/chart1.xml");
++    let drawing = part(&file, "xl/drawings/drawing1.xml");
++    assert!(chart.contains("c:lang") && drawing.contains("fLocksWithSheet"), "{drawing}");
++    let (mut wb, _) = read_xlsx(&file).unwrap();
++    let out = write_xlsx(&wb).unwrap();
++    assert_eq!(part(&out, "xl/charts/chart1.xml"), chart);
++    assert!(part(&out, "xl/drawings/drawing1.xml").contains("fLocksWithSheet"));
++    // A chart changed is written by GridCraft, and the drawing that holds it too.
++    std::sync::Arc::make_mut(&mut wb.sheets[0]).charts[0].gridlines = false;
++    let out = write_xlsx(&wb).unwrap();
++    assert!(!part(&out, "xl/charts/chart1.xml").contains("c:lang"));
++    assert!(!part(&out, "xl/drawings/drawing1.xml").contains("fLocksWithSheet"));
++}
+diff --git a/crates/xlsx/src/write.rs b/crates/xlsx/src/write.rs
+--- a/crates/xlsx/src/write.rs
++++ b/crates/xlsx/src/write.rs
+@@ -2,6 +2,7 @@
+ 
+ use std::collections::{BTreeMap, HashMap};
+ use std::fmt::Write as _;
++use std::sync::Arc;
+ 
+ use gridcraft_core::RangeRef;
+ use gridcraft_formula::quote_sheet;
+@@ -86,20 +87,23 @@ impl Rels {
+ /// Shared string table being built.
+ #[derive(Default)]
+ pub struct Sst {
+-    list: Vec<String>,
+-    map: HashMap<String, u32>,
++    /// Each string with its formatted runs, if any.
++    list: Vec<(String, Option<Arc<str>>)>,
++    map: HashMap<(String, Option<Arc<str>>), u32>,
+     pub count: u64,
+ }
+ 
+ impl Sst {
+-    pub fn index(&mut self, s: &str) -> u32 {
++    /// The index of `s` written as the formatted `runs` (see `xml::rich_runs`).
++    pub fn index_runs(&mut self, s: &str, runs: Option<&Arc<str>>) -> u32 {
+         self.count += 1;
+-        if let Some(&i) = self.map.get(s) {
++        let key = (s.to_string(), runs.cloned());
++        if let Some(&i) = self.map.get(&key) {
+             return i;
+         }
+         let i = self.list.len() as u32;
+-        self.list.push(s.to_string());
+-        self.map.insert(s.to_string(), i);
++        self.list.push(key.clone());
++        self.map.insert(key, i);
+         i
+     }
+ }
+@@ -352,6 +356,8 @@ pub fn write_xlsx_named(wb: &Workbook, kind: XlsxKind, book_name: Option<&str>)
+     if wb.date_system == gridcraft_core::DateSystem::D1904 {
+         w.push_str(" date1904=\"1\"");
+     }
++    let kept_source = wb.preserved.as_deref();
++    crate::passthrough::push_attrs(&mut w, kept_source, "workbookPr");
+     w.push_str("/>");
+     if wb.protected_structure {
+         let pw = wb.structure_password.as_ref().map(|h| crate::sheet_write::password_attrs(h, "workbook")).unwrap_or_default();
+@@ -388,6 +394,9 @@ pub fn write_xlsx_named(wb: &Workbook, kind: XlsxKind, book_name: Option<&str>)
+     }
+     w.push_str("/>");
+     w.push_str(&pivots.workbook_xml(&mut wb_rels));
++    for slot in ["webPublishing", "fileRecoveryPr"] {
++        w.push_str(crate::passthrough::source_xml(kept_source, slot));
++    }
+     let exts = crate::passthrough::workbook_elements(wb, "ext");
+     if !exts.is_empty() {
+         let _ = write!(w, "<extLst>{exts}</extLst>");
+@@ -407,15 +416,18 @@ pub fn write_xlsx_named(wb: &Workbook, kind: XlsxKind, book_name: Option<&str>)
+     out.part(
+         "xl/theme/theme1.xml",
+         Some("application/vnd.openxmlformats-officedocument.theme+xml"),
+-        crate::theme::write_theme(&wb.theme).into_bytes(),
++        match crate::passthrough::source(kept_source, "theme", &crate::passthrough::theme_model(&wb.theme)) {
++            Some(theme) => theme.to_vec(),
++            None => crate::theme::write_theme(&wb.theme).into_bytes(),
++        },
+     );
+     wb_rels.add("theme", "theme/theme1.xml");
+     // Phonetic (furigana) data is kept per string text: the table below holds each text once, so
+     // the runs of the entry with that text are written next to it (`Workbook::phonetics`).
+     let phonetics: HashMap<&str, &PhoneticString> = wb.phonetics.iter().map(|p| (p.text.as_str(), p)).collect();
+     let mut sst = format!("{XML_DECL}<sst xmlns=\"{NS_MAIN}\" count=\"{}\" uniqueCount=\"{}\">", out.sst.count, out.sst.list.len());
+-    for t in &out.sst.list {
+-        let _ = write!(sst, "<si>{}</si>", crate::xml::si_body(t, phonetics.get(t.as_str()).copied()));
++    for (t, runs) in &out.sst.list {
++        let _ = write!(sst, "<si>{}</si>", crate::xml::si_body(t, runs.as_deref(), phonetics.get(t.as_str()).copied()));
+     }
+     sst.push_str("</sst>");
+     out.part("xl/sharedStrings.xml", Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"), sst.into_bytes());
+@@ -465,7 +477,11 @@ pub fn write_xlsx_named(wb: &Workbook, kind: XlsxKind, book_name: Option<&str>)
+         }
+     }
+     core.push_str("</cp:coreProperties>");
+-    out.part("docProps/core.xml", Some("application/vnd.openxmlformats-package.core-properties+xml"), core.into_bytes());
++    let core = match crate::passthrough::source(kept_source, "core", &crate::passthrough::core_model(p)) {
++        Some(kept) => kept.to_vec(),
++        None => core.into_bytes(),
++    };
++    out.part("docProps/core.xml", Some("application/vnd.openxmlformats-package.core-properties+xml"), core);
+     let mut app = String::from(XML_DECL);
+     app.push_str("<Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\" xmlns:vt=\"http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes\"><Application>GridCraft</Application>");
+     if !p.company.is_empty() {
+diff --git a/crates/xlsx/src/xls/mod.rs b/crates/xlsx/src/xls/mod.rs
+--- a/crates/xlsx/src/xls/mod.rs
++++ b/crates/xlsx/src/xls/mod.rs
+@@ -446,7 +446,7 @@ impl SheetState<'_> {
+             return Ok(Some(pos));
+         }
+         budget.cell()?;
+-        self.sheet.cells.set(pos, Cell { value, formula: None, style });
++        self.sheet.cells.set(pos, Cell { value, formula: None, style, rich: None });
+         Ok(Some(pos))
+     }
+ 
+@@ -464,7 +464,7 @@ impl SheetState<'_> {
+                 if let Some(cell) = self.sheet.cells.get_mut(pos) {
+                     cell.formula = Some(Arc::new(f));
+                 } else {
+-                    self.sheet.cells.set(pos, Cell { value: Value::Empty, formula: Some(Arc::new(f)), style: StyleId::DEFAULT });
++                    self.sheet.cells.set(pos, Cell { value: Value::Empty, formula: Some(Arc::new(f)), style: StyleId::DEFAULT, rich: None });
+                 }
+             }
+             Err(Unsupported(why)) => self.unsupported(why),
+@@ -551,7 +551,7 @@ fn worksheet(
+         let filled = st.sheet.cell(p.anchor).and_then(|c| c.formula.as_ref()).and_then(|f| f.array).is_some_and(|r| r.contains(p.pos));
+         if p.pos != p.anchor && filled {
+             let style = st.sheet.style_id(p.pos);
+-            st.sheet.cells.set(p.pos, Cell { value: Value::Empty, formula: None, style });
++            st.sheet.cells.set(p.pos, Cell { value: Value::Empty, formula: None, style, rich: None });
+         }
+     }
+     if st.dropped > 0 {
+@@ -638,7 +638,7 @@ fn sheet_record(rec: &Record<'_>, st: &mut SheetState<'_>, budget: &mut Budget,
+                 if let Some(cell) = st.sheet.cells.get_mut(pos) {
+                     cell.value = Value::from(s);
+                 } else {
+-                    st.sheet.cells.set(pos, Cell { value: Value::from(s), formula: None, style });
++                    st.sheet.cells.set(pos, Cell { value: Value::from(s), formula: None, style, rich: None });
+                 }
+             }
+         }
+@@ -793,7 +793,7 @@ fn formula_cell(c: &mut Cursor<'_, '_>, st: &mut SheetState<'_>, budget: &mut Bu
+     let Some(pos) = st.pos(r, col) else { return Ok(()) };
+     budget.cell()?;
+     let style = st.style(x);
+-    st.sheet.cells.set(pos, Cell { value, formula: None, style });
++    st.sheet.cells.set(pos, Cell { value, formula: None, style, rich: None });
+     st.last_formula = Some(pos);
+     if string_result {
+         st.pending_string = Some((pos, style));
+diff --git a/crates/xlsx/src/xml.rs b/crates/xlsx/src/xml.rs
+--- a/crates/xlsx/src/xml.rs
++++ b/crates/xlsx/src/xml.rs
+@@ -86,6 +86,31 @@ pub fn rich_text(e: &El) -> String {
+     decode_xstring(&s)
+ }
+ 
++/// Elements and attributes of a run's properties (`<rPr>`, CT_RPrElt).
++const RUN_ELEMENTS: &[&str] =
++    &["rPr", "rFont", "charset", "family", "b", "i", "strike", "outline", "shadow", "condense", "extend", "color", "sz", "u", "vertAlign", "scheme"];
++const RUN_ATTRS: &[&str] = &["val", "rgb", "theme", "tint", "indexed", "auto"];
++
++/// The formatted runs of a string item or inline string (`<r>` with `<rPr>`), written back as
++/// the file had them, when it has any; nothing for a plain string, or for runs with content
++/// GridCraft would not write as it read it. The runs spell [`rich_text`] of `e`.
++pub fn rich_runs(e: &El) -> Option<String> {
++    if !e.children.iter().any(|c| c.name == "r") || e.children.iter().any(|c| c.name == "t") {
++        return None;
++    }
++    let mut s = String::new();
++    for r in e.kids("r") {
++        s.push_str("<r>");
++        if let Some(p) = r.child("rPr") {
++            s.push_str(&plain_xml(p, RUN_ELEMENTS, RUN_ATTRS)?);
++        }
++        let text: String = r.kids("t").map(|t| t.text.as_str()).collect();
++        s.push_str(&t_el(&decode_xstring(&text)));
++        s.push_str("</r>");
++    }
++    Some(s)
++}
++
+ /// The phonetic (furigana) data of a string item: its `<rPh>` runs in document order, and its
+ /// `<phoneticPr>` when present.
+ ///
+@@ -302,6 +327,43 @@ pub fn parse_streaming(xml: &[u8], split: &[&str], cb: &mut dyn FnMut(El) -> Res
+ 
+ // ---------------------------------------------------------------- writing helpers
+ 
++/// `e` written back as XML when every element in it is one of `names` and every attribute one
++/// of `attrs`: local names only, so nothing that needed a namespace prefix. Otherwise nothing.
++pub fn plain_xml(e: &El, names: &[&str], attrs: &[&str]) -> Option<String> {
++    let names: Vec<(&str, &str)> = names.iter().map(|n| (*n, "")).collect();
++    prefixed_xml(e, &names, attrs)
++}
++
++/// [`plain_xml`] with each element of `names` given with the prefix it is written with
++/// (`("cfRule", "x14:")`); the caller declares the prefixes.
++pub fn prefixed_xml(e: &El, names: &[(&str, &str)], attrs: &[&str]) -> Option<String> {
++    fn put(e: &El, names: &[(&str, &str)], attrs: &[&str], out: &mut String) -> Option<()> {
++        let (_, prefix) = names.iter().find(|(n, _)| *n == e.name)?;
++        let _ = write!(out, "<{prefix}{}", e.name);
++        for (k, v) in &e.attrs {
++            if !attrs.contains(&k.as_str()) {
++                return None;
++            }
++            let _ = write!(out, " {k}=\"{}\"", esc_attr(v));
++        }
++        let text = e.text.trim();
++        if e.children.is_empty() && text.is_empty() {
++            out.push_str("/>");
++            return Some(());
++        }
++        out.push('>');
++        out.push_str(&esc(text));
++        for c in &e.children {
++            put(c, names, attrs, out)?;
++        }
++        let _ = write!(out, "</{prefix}{}>", e.name);
++        Some(())
++    }
++    let mut out = String::new();
++    put(e, names, attrs, &mut out)?;
++    Some(out)
++}
++
+ /// Escapes text content.
+ pub fn esc(s: &str) -> String {
+     let mut o = String::with_capacity(s.len());
+@@ -416,16 +478,17 @@ pub fn t_el(s: &str) -> String {
+     }
+ }
+ 
+-/// The contents of a shared string item (`<si>`): the base text, then — when the string has
++/// The contents of a shared string item (`<si>`): the base text (its formatted `runs` when it
++/// has them, see [`rich_runs`]), then — when the string has
+ /// phonetic (furigana) data — its `<rPh sb="…" eb="…"><t>…</t></rPh>` runs in document order and
+ /// its `<phoneticPr …/>`. Behaviour reference: ISO/IEC 29500-1 §18.4.8 `si` with §18.4.6 `rPh` and
+-/// §18.4.7 `phoneticPr`. A string without phonetic data gives exactly [`t_el`]'s output.
++/// §18.4.7 `phoneticPr`. A plain string without phonetic data gives exactly [`t_el`]'s output.
+ ///
+ /// The runs and the properties are independent: `<phoneticPr>` is a valid child of `<si>` on its
+ /// own (§18.4.8's `CT_SharedStringItem` allows it without any `rPh`), so a string whose runs were
+ /// all dropped still keeps its settings.
+-pub fn si_body(text: &str, phonetic: Option<&PhoneticString>) -> String {
+-    let mut s = t_el(text);
++pub fn si_body(text: &str, runs: Option<&str>, phonetic: Option<&PhoneticString>) -> String {
++    let mut s = runs.map_or_else(|| t_el(text), str::to_string);
+     let Some(p) = phonetic else { return s };
+     // The model is public and restored from GridCraft JSON too, so the reader's checks are not the
+     // only way data gets here: validate again and write only what the schema allows (§18.4.6: an
+@@ -471,7 +534,7 @@ mod tests {
+     #[test]
+     fn si_without_phonetics_is_written_exactly_as_before() {
+         for s in ["plain", " leading ", "a & <b>", "line\nbreak", "日本語", "x_x0041_"] {
+-            assert_eq!(si_body(s, None), t_el(s));
++            assert_eq!(si_body(s, None, None), t_el(s));
+         }
+     }
+ 
+@@ -501,22 +564,25 @@ mod tests {
+             ],
+             props: Some(PhoneticProps { font_id: 7, kind: Some("bogus".into()), alignment: Some("center".into()) }),
+         };
+-        let s = si_body(text, Some(&damaged));
++        let s = si_body(text, None, Some(&damaged));
+         assert_eq!(s, "<t>課きく</t><rPh sb=\"1\" eb=\"3\"><t>く</t></rPh><phoneticPr fontId=\"7\" alignment=\"center\"/>");
+         // With no run left, valid properties are still written: `<phoneticPr>` is a legal child of
+         // `<si>` on its own, and Excel keeps the settings when the last reading is removed.
+         let empty = PhoneticString { text: text.into(), runs: vec![], props: damaged.props.clone() };
+-        assert_eq!(si_body(text, Some(&empty)), "<t>課きく</t><phoneticPr fontId=\"7\" alignment=\"center\"/>");
++        assert_eq!(si_body(text, None, Some(&empty)), "<t>課きく</t><phoneticPr fontId=\"7\" alignment=\"center\"/>");
+         // With neither runs nor properties there is nothing to write.
+         let none = PhoneticString { text: text.into(), runs: vec![], props: None };
+-        assert_eq!(si_body(text, Some(&none)), t_el(text));
++        assert_eq!(si_body(text, None, Some(&none)), t_el(text));
+         // A known kind is written; the schema default ("none") is not invented for a missing one.
+         let known = PhoneticString {
+             text: text.into(),
+             runs: vec![PhoneticRun { start: 0, end: 1, text: "カ".into() }],
+             props: Some(PhoneticProps { font_id: 1, kind: Some("Hiragana".into()), alignment: None }),
+         };
+-        assert_eq!(si_body(text, Some(&known)), "<t>課きく</t><rPh sb=\"0\" eb=\"1\"><t>カ</t></rPh><phoneticPr fontId=\"1\" type=\"Hiragana\"/>");
++        assert_eq!(
++            si_body(text, None, Some(&known)),
++            "<t>課きく</t><rPh sb=\"0\" eb=\"1\"><t>カ</t></rPh><phoneticPr fontId=\"1\" type=\"Hiragana\"/>"
++        );
+     }
+ 
+     #[test]

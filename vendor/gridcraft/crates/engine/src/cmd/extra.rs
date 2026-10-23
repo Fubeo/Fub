@@ -1218,7 +1218,7 @@ fn new_cell_style(s: &mut Session, p: &Json) -> Result<Json> {
     let d = s.doc()?;
     let sh = d.wb.active().ok_or(EngineError::NoDocument)?;
     let c = cell_param(s, p, "fromCell")?.unwrap_or(d.selection.active);
-    let style = d.wb.styles.get(sh.style_id(c)).clone();
+    let style = Style { parent: None, ..d.wb.styles.get(sh.style_id(c)).clone() };
     edit(s, |cx| {
         cx.wb.cell_styles.retain(|(n, _)| !n.eq_ignore_ascii_case(&name));
         cx.wb.cell_styles.push((name.clone(), style.clone()));

@@ -97,7 +97,32 @@ Le patch di `patches/`, una per ragione:
   `sheetId` letto (`Sheet::file_id`, `PreservedSheet::sheet_id`, fuori dal
   JSON) e lo scrittore lo riscrive; un foglio nuovo, o copiato da un altro con
   lo stesso id, prende il primo id che nessun foglio chiede. In
-  `xlsx/src/tests/sheet_names.rs` il test lo dice.
+  `xlsx/src/tests/sheet_names.rs` il test lo dice;
+- `0006-intersezione-implicita`: una formula salvata senza i metadati delle
+  matrici dinamiche (un file di Excel 2016 o precedente, o una cella senza
+  `cm`) Excel la valuta con l'intersezione implicita, mentre GridCraft la
+  legge come una formula dinamica: `C7+G7:J7` versa una matrice dove il file
+  aveva un valore solo. In `xlsx/src/array_formula.rs` il lettore la porta
+  nella forma con `@` (`C7+@G7:J7`) dove Excel interseca, seguendo i
+  parametri delle funzioni che prendono un valore solo, e la lascia com'è
+  quando l'analisi non sa concludere; lo scrittore riscrive senza `@` ciò che
+  Excel rilegge allo stesso modo. In `xlsx/src/tests/legacy_formulas.rs` e
+  `engine/src/tests.rs` i test lo dicono;
+- `0007-forme-del-file`: una cartella riscritta senza modifiche cambia ciò che
+  il modello non distingue: il testo formattato di una cella e di una nota,
+  il testo mostrato di un collegamento, le regole di Excel 2010
+  (`x14:conditionalFormattings`, con l'URI giusto
+  `{78C0D931-6437-407d-A8EE-F0AAD7539E65}` al posto di quello che l'upstream
+  scrive), il disegno VML delle note, i disegni e i grafici, gli stili, la
+  larghezza predefinita zero e le formule legacy che lo `0006` non porta. Il
+  modello tiene la forma letta accanto all'oggetto che la produce
+  (`Cell::rich`, le sorgenti di `Preserved`/`PreservedSheet` con il modello
+  da cui vengono), e lo scrittore la riusa finché quell'oggetto è lo stesso;
+  un oggetto cambiato si scrive nella forma di GridCraft. In
+  `xlsx/src/tests/source_forms.rs`, `note_box.rs` e `legacy_formulas.rs` i
+  test lo dicono, e con queste patch le venti cartelle del corpus di Apache
+  POI riscritte senza modifiche hanno lo stesso inventario
+  (`crates/fub-format-xlsx/src/inventory.rs`).
 
 Le dipendenze del workspace di questa cartella hanno, per quelle in comune con
 Fub, la stessa versione del `[workspace.dependencies]` di Fub, perché il grafo

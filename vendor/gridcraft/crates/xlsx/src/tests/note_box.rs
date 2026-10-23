@@ -52,7 +52,13 @@ fn a_notes_box_is_read_relative_to_its_cell() {
 
 #[test]
 fn an_unedited_notes_box_is_saved_where_and_as_big_as_it_was() {
-    let (wb, _) = read_xlsx(&package()).unwrap();
+    let (mut wb, _) = read_xlsx(&package()).unwrap();
+    // The drawing of notes alone is the file's own.
+    assert_eq!(written_vml(&write_xlsx(&wb).unwrap()), VML);
+    // GridCraft's, without it.
+    if let Some(p) = wb.sheet_mut(0).unwrap().preserved.as_mut() {
+        std::sync::Arc::make_mut(p).sources.retain(|s| s.slot != "vml.notes");
+    }
     let vml = written_vml(&write_xlsx(&wb).unwrap());
     assert!(vml.contains("<x:Anchor>1, 10, 0, 2, 5, 32, 5, 8</x:Anchor>"), "{vml}");
     assert!(vml.contains("width:224.25pt;height:89.25pt"), "{vml}");

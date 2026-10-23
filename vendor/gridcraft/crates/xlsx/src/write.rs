@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
+use std::sync::Arc;
 
 use gridcraft_core::RangeRef;
 use gridcraft_formula::quote_sheet;
@@ -86,20 +87,23 @@ impl Rels {
 /// Shared string table being built.
 #[derive(Default)]
 pub struct Sst {
-    list: Vec<String>,
-    map: HashMap<String, u32>,
+    /// Each string with its formatted runs, if any.
+    list: Vec<(String, Option<Arc<str>>)>,
+    map: HashMap<(String, Option<Arc<str>>), u32>,
     pub count: u64,
 }
 
 impl Sst {
-    pub fn index(&mut self, s: &str) -> u32 {
+    /// The index of `s` written as the formatted `runs` (see `xml::rich_runs`).
+    pub fn index_runs(&mut self, s: &str, runs: Option<&Arc<str>>) -> u32 {
         self.count += 1;
-        if let Some(&i) = self.map.get(s) {
+        let key = (s.to_string(), runs.cloned());
+        if let Some(&i) = self.map.get(&key) {
             return i;
         }
         let i = self.list.len() as u32;
-        self.list.push(s.to_string());
-        self.map.insert(s.to_string(), i);
+        self.list.push(key.clone());
+        self.map.insert(key, i);
         i
     }
 }
@@ -352,6 +356,8 @@ pub fn write_xlsx_named(wb: &Workbook, kind: XlsxKind, book_name: Option<&str>) 
     if wb.date_system == gridcraft_core::DateSystem::D1904 {
         w.push_str(" date1904=\"1\"");
     }
+    let kept_source = wb.preserved.as_deref();
+    crate::passthrough::push_attrs(&mut w, kept_source, "workbookPr");
     w.push_str("/>");
     if wb.protected_structure {
         let pw = wb.structure_password.as_ref().map(|h| crate::sheet_write::password_attrs(h, "workbook")).unwrap_or_default();
@@ -388,6 +394,9 @@ pub fn write_xlsx_named(wb: &Workbook, kind: XlsxKind, book_name: Option<&str>) 
     }
     w.push_str("/>");
     w.push_str(&pivots.workbook_xml(&mut wb_rels));
+    for slot in ["webPublishing", "fileRecoveryPr"] {
+        w.push_str(crate::passthrough::source_xml(kept_source, slot));
+    }
     let exts = crate::passthrough::workbook_elements(wb, "ext");
     if !exts.is_empty() {
         let _ = write!(w, "<extLst>{exts}</extLst>");
@@ -407,15 +416,18 @@ pub fn write_xlsx_named(wb: &Workbook, kind: XlsxKind, book_name: Option<&str>) 
     out.part(
         "xl/theme/theme1.xml",
         Some("application/vnd.openxmlformats-officedocument.theme+xml"),
-        crate::theme::write_theme(&wb.theme).into_bytes(),
+        match crate::passthrough::source(kept_source, "theme", &crate::passthrough::theme_model(&wb.theme)) {
+            Some(theme) => theme.to_vec(),
+            None => crate::theme::write_theme(&wb.theme).into_bytes(),
+        },
     );
     wb_rels.add("theme", "theme/theme1.xml");
     // Phonetic (furigana) data is kept per string text: the table below holds each text once, so
     // the runs of the entry with that text are written next to it (`Workbook::phonetics`).
     let phonetics: HashMap<&str, &PhoneticString> = wb.phonetics.iter().map(|p| (p.text.as_str(), p)).collect();
     let mut sst = format!("{XML_DECL}<sst xmlns=\"{NS_MAIN}\" count=\"{}\" uniqueCount=\"{}\">", out.sst.count, out.sst.list.len());
-    for t in &out.sst.list {
-        let _ = write!(sst, "<si>{}</si>", crate::xml::si_body(t, phonetics.get(t.as_str()).copied()));
+    for (t, runs) in &out.sst.list {
+        let _ = write!(sst, "<si>{}</si>", crate::xml::si_body(t, runs.as_deref(), phonetics.get(t.as_str()).copied()));
     }
     sst.push_str("</sst>");
     out.part("xl/sharedStrings.xml", Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"), sst.into_bytes());
@@ -465,7 +477,11 @@ pub fn write_xlsx_named(wb: &Workbook, kind: XlsxKind, book_name: Option<&str>) 
         }
     }
     core.push_str("</cp:coreProperties>");
-    out.part("docProps/core.xml", Some("application/vnd.openxmlformats-package.core-properties+xml"), core.into_bytes());
+    let core = match crate::passthrough::source(kept_source, "core", &crate::passthrough::core_model(p)) {
+        Some(kept) => kept.to_vec(),
+        None => core.into_bytes(),
+    };
+    out.part("docProps/core.xml", Some("application/vnd.openxmlformats-package.core-properties+xml"), core);
     let mut app = String::from(XML_DECL);
     app.push_str("<Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\" xmlns:vt=\"http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes\"><Application>GridCraft</Application>");
     if !p.company.is_empty() {

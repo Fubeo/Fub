@@ -58,24 +58,41 @@ pub struct CellPicture {
     pub alt: String,
 }
 
+/// Formatted runs of a constant text as the file wrote them: the `<r>` runs of its string, with
+/// `text` the plain text they spell.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct RichRuns {
+    pub text: Arc<str>,
+    pub xml: Arc<str>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Cell {
     /// Constant value, or the cached result of the formula.
     pub value: Value,
     pub formula: Option<Arc<Formula>>,
     pub style: StyleId,
+    /// The runs of a constant text read from a file; they count only while `value` is still the
+    /// text they spell.
+    #[serde(skip)]
+    pub rich: Option<Arc<RichRuns>>,
 }
 
 impl Cell {
     pub fn value(v: Value) -> Cell {
-        Cell { value: v, formula: None, style: StyleId::DEFAULT }
+        Cell { value: v, formula: None, style: StyleId::DEFAULT, rich: None }
     }
     pub fn formula(f: Formula) -> Cell {
-        Cell { value: Value::Empty, formula: Some(Arc::new(f)), style: StyleId::DEFAULT }
+        Cell { value: Value::Empty, formula: Some(Arc::new(f)), style: StyleId::DEFAULT, rich: None }
     }
     /// No value, no formula and the default style: storing it is pointless.
     pub fn is_blank(&self) -> bool {
         self.value.is_empty() && self.formula.is_none() && self.style == StyleId::DEFAULT
+    }
+    /// The runs of the cell's text, while it is still the text they spell.
+    pub fn rich_runs(&self) -> Option<&RichRuns> {
+        let r = self.rich.as_deref()?;
+        (self.formula.is_none() && matches!(&self.value, Value::Text(t) if **t == *r.text)).then_some(r)
     }
     /// What the formula bar shows.
     pub fn input_text(&self) -> String {
