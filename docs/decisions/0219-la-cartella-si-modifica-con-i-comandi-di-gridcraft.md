@@ -90,7 +90,7 @@ La versione 2 della famiglia `grid` cresce, senza toccare un WIT congelato:
 - la finestra porta lo stile della cella risolto, le unioni, i commenti, i
   collegamenti e le tabelle che la toccano; la vista del foglio porta anche
   modalità, formule mostrate, protezione e stampa; sessione ed esito portano
-  il **libro** (tema, nomi, calcolo), da cui la barra legge lo stato.
+  il **libro** (tema, nomi, calcolo, carattere Normale) per la barra.
 
 I parametri sono JSON e non un elenco tipizzato di Fub: il catalogo della
 facciata è il contratto, con id stabili, un proprietario (il provider), un
