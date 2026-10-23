@@ -38,9 +38,14 @@ del file.
   ricalcolano le celle che il comando cambia e le loro dipendenti.
 - **Fub espone un sottoinsieme dichiarato** del catalogo della facciata. Non
   entrano i comandi che leggono o scrivono file per percorso (`file.*`,
-  immagini da percorso), che eseguono codice (`automate.*`), che aprono la
-  rete o collegamenti esterni, né quelli dell'interfaccia di GridCraft (tema,
-  lingua, finestre). Il salvataggio, l'export e la stampa sono di Fub.
+  tranne `file.properties`, che cambia la cartella), che eseguono codice
+  (`automate.*`), che aprono un collegamento, né quelli dell'interfaccia di
+  GridCraft (`app.*`, `window.*`, le finestre e gli strumenti di `view.*` e
+  `draw.*`). Non entrano nemmeno i comandi che leggono o cambiano uno stato
+  fuori dalla cartella, che rifare il giornale non ritroverebbe: gli
+  appunti (`edit.copy`, `edit.cut`, `edit.paste`, `edit.pasteSpecial`), il
+  pennello del formato, il dizionario. La cronologia (`history.*`) è del
+  documento. Il salvataggio, l'export e la stampa sono di Fub.
 
 ### Il giornale è di comandi
 
@@ -48,11 +53,16 @@ del file.
   nella **versione 2**: l'elenco ordinato dei comandi applicati ai byte della
   base, ognuno con l'id, i parametri e la selezione su cui è stato dato. I
   parametri sono il testo di un oggetto JSON, che nessun lato riscrive.
-- Il giornale di celle della 0216 si legge ancora: ogni voce diventa un
-  `cell.set` sulla stessa base.
+- Una sessione resta un giornale di celle della 0216 finché non riceve il
+  primo comando: allora ogni voce, e da lì ogni input, entra nel giornale
+  come `range.setValues` su una cella, con la regola di Fub (una formula
+  comincia con `=`, un testo resta testo). Un comando che non cambia la
+  cartella non entra nel giornale, e non porta la sessione a comandi.
 - Il provider rifà il giornale sulla base all'apertura e tiene la sessione
-  della facciata; un giornale che cresce si applica in coda, uno che torna
-  indietro torna con la cronologia della facciata.
+  della facciata; un comando che non si rifà, o che non cambia più la
+  cartella, è un conflitto. Un giornale che cresce si applica in coda, uno
+  che torna indietro torna allo stato tenuto prima dell'ultimo comando (fino
+  a cento), o si rifà dalla base.
 - **Annulla e ripeti sono del documento**: annulla toglie l'ultimo comando
   dal giornale, ripeti lo rimette da una pila della sessione del provider, e
   valgono per tutti i riquadri del documento. La pila di ripeti non è nel
@@ -90,17 +100,24 @@ la facciata non documenta.
 
 ### Il salvataggio sceglie la via meno invasiva
 
-- Se i comandi cambiano soltanto l'input di celle che l'innesto sa scrivere,
-  il salvataggio resta l'**innesto a righe** della 0216, con le formule.
+- Se i comandi cambiano soltanto l'input di celle che l'innesto sa scrivere
+  (costanti in celle non bloccate) e, oltre a quelle, soltanto valori
+  calcolati, il salvataggio resta l'**innesto a righe** della 0216.
 - Altrimenti la cartella si **riscrive con il codec** di GridCraft, che porta
   così com'è ciò che non modella. Prima di coprire il file, la riscrittura si
   **misura** con un inventario del pacchetto che Fub calcola da sé, come per
   i documenti di Word: all'apertura su una prova a vuoto, a ogni salvataggio
-  sui byte nuovi. Ciò che la riscrittura perderebbe è un errore tipizzato: il
-  file resta com'era e la shell offre di salvare una copia accanto, con le
-  perdite dette.
-- Una cartella che la prova a vuoto non conserva si modifica soltanto con i
-  comandi che l'innesto sa scrivere, e la barra lo dice.
+  sui byte nuovi. Ciò che la riscrittura perderebbe è un errore tipizzato
+  (`PermissionDenied` con il testo `xlsx.rewrite.loses`, che nomina la
+  perdita): il file resta com'era e la shell offre di salvare una copia
+  accanto, con le perdite dette.
+- L'inventario non conta ciò che non cambia il contenuto (catena di calcolo,
+  conteggi, id delle relazioni, valori predefiniti dello schema): ogni regola
+  è in `NORMALIZATIONS` di `crates/fub-format-xlsx/src/inventory.rs`.
+- Una cartella che la prova a vuoto non conserva si modifica soltanto con
+  l'input di costanti che l'innesto sa scrivere: i comandi che cambiano la
+  cartella sono spenti nel catalogo con il motivo, e una formula o una cella
+  bloccata si rifiutano.
 
 ## Conseguenze
 
@@ -149,11 +166,14 @@ che il codec non conserva non si modificherebbe affatto.
   revisione che non segue il diff non escono dall'host;
 - `vendor/gridcraft/crates/engine/src/tests.rs`: una cartella aperta senza
   ricalcolo tiene i valori del file finché una modifica non li raggiunge;
-- `crates/fub-format-xlsx/src/inventory.rs`: una cartella riscritta senza
-  modifiche, con regole di Excel 2010, note, collegamenti, testo formattato,
-  un grafico e un'immagine, non perde niente; una perdita si conta; ciò che
-  Excel ricava da sé (catena di calcolo, conteggi, dimensione) non si conta;
-- i test di `fub-format-xlsx` sul giornale di comandi, sul sottoinsieme
-  esposto e sulla scelta fra innesto e riscrittura misurata;
+- `crates/fub-format-xlsx/src/inventory.rs`: una riscrittura senza modifiche
+  non perde niente, una perdita si conta, ciò che Excel ricava non si conta;
+- `crates/fub-format-xlsx/tests/commands.rs`: sottoinsieme servito, giornale
+  rifatto all'apertura e conflitto, annulla e ripeti, input come comando,
+  rifiuti, innesto e riscrittura, cartella che la riscrittura perderebbe e,
+  con `FUB_SOFFICE`, una cartella di LibreOffice modificata che LibreOffice
+  rilegge; `crates/fub-host/tests/xlsx_workbooks.rs` salva un giornale di
+  comandi attraverso l'host. Il corpus di Apache POI e quella cartella,
+  riscritti senza modifiche, non perdono niente (patch `0008` di GridCraft);
 - la conformità nativo e WASM della versione 2 con il catalogo vuoto
   dell'esempio `esempi/grid-wasm`.

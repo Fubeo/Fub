@@ -9,6 +9,14 @@
 //! Salvare è l'innesto ([`crate::graft`]): i byte del file con le celle del
 //! giornale cambiate, e ogni altro byte com'era.
 //!
+//! Dal primo comando della barra la sessione è **a comandi**
+//! ([`crate::commands`], ADR 0219): il giornale porta i comandi, la facciata
+//! di GridCraft li applica alla cartella del file, e le finestre mostrano la
+//! cartella che ne esce. L'input delle celle diventa un comando anch'esso.
+//! Salvare resta l'innesto finché i comandi scrivono soltanto valori che
+//! l'innesto sa scrivere; altrimenti la cartella si riscrive con il codec,
+//! se la riscrittura misurata non perde niente.
+//!
 //! Gli id sono stabili e senza stato: un foglio è `s` più il suo `sheetId`,
 //! che non cambia quando il foglio cambia nome o posto; una riga è `r` più il
 //! suo indice da 0, una colonna `c` più il suo. Il giornale sopravvive così a
@@ -17,21 +25,26 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
+use std::sync::Arc;
+
 use fub_abi::{
-    grid_bytes_revision, grid_journal_match, GridApplyRequest, GridBytesCell, GridBytesProvider,
-    GridBytesSession, GridBytesWindow, GridCellKey, GridCellStyle, GridColumn, GridComment,
+    grid_bytes_revision, grid_journal_match, Arg, GridApplyRequest, GridBytesCell,
+    GridBytesProvider, GridBytesSession, GridBytesWindow, GridCellKey, GridCellStyle, GridColumn,
+    GridCommand, GridCommandOutcome, GridCommandRequest, GridCommandState, GridComment,
     GridCommentReply, GridCommit, GridDataBar, GridIcon, GridInvalidation, GridJournal,
-    GridJournalMatch, GridLink, GridMerge, GridNotice, GridRow, GridSheet, GridSheetView,
-    GridSourceEdit, GridSurfaceSpec, GridValue, GridWindowRequest, PluginError, Revision,
-    MAX_GRID_BYTES_SOURCE, MAX_GRID_INVALIDATED_CELLS, MAX_GRID_SESSION_COLUMNS,
-    MAX_GRID_SESSION_ROWS,
+    GridJournalMatch, GridLink, GridMerge, GridNotice, GridRow, GridSelection, GridSheet,
+    GridSheetView, GridSourceEdit, GridSurfaceSpec, GridValue, GridWindowRequest, PluginError,
+    Revision, Text, MAX_GRID_BYTES_SOURCE, MAX_GRID_INVALIDATED_CELLS, MAX_GRID_SELECTION_BYTES,
+    MAX_GRID_SESSION_COLUMNS, MAX_GRID_SESSION_ROWS,
 };
 use gridcraft_calc::recalc::{Calc, Key};
 use gridcraft_core::{CellRef, RangeRef, Value as GcValue};
 use gridcraft_engine::cf::CfCache;
 use gridcraft_model::{Sheet, Visibility, Workbook};
 use gridcraft_numfmt::{format_value, NumberFormat};
+use serde_json::{json, Value as Json};
 
+use crate::commands::{self, Facade, Ran, Rewrite, REDO, UNDO};
 use crate::display::{self, NotShown, Warning};
 use crate::graft::{graft, CellEdit, GraftError};
 use crate::input::{self, InputError, NewValue};
@@ -90,6 +103,14 @@ fn xlsx_error(error: XlsxError) -> PluginError {
     }
 }
 
+/// Il rifiuto di una riscrittura che perderebbe qualcosa del file.
+fn loses(why: String) -> PluginError {
+    PluginError::PermissionDenied(Text::message(
+        "xlsx.rewrite.loses",
+        vec![Arg::text("why", why)],
+    ))
+}
+
 fn graft_error(error: GraftError) -> PluginError {
     match error {
         GraftError::Locked { .. } => PluginError::PermissionDenied(error.to_string().into()),
@@ -100,13 +121,21 @@ fn graft_error(error: GraftError) -> PluginError {
     }
 }
 
-/// Un foglio della sessione.
+/// Un foglio della sessione, come la griglia lo mostra.
+#[derive(Clone)]
 struct SheetInfo {
     id: String,
-    /// La parte del foglio, quando il pacchetto e il modello si corrispondono.
-    part: Option<String>,
     rows: u32,
     columns: u32,
+    /// Il foglio su cui righe e colonne sono state contate, in modalità a
+    /// comandi.
+    counted: Option<Arc<Sheet>>,
+}
+
+/// Un foglio del file, per l'innesto.
+struct FileSheet {
+    /// La parte del foglio, quando il pacchetto e il modello si corrispondono.
+    part: Option<String>,
     /// I blocchi, letti alla prima finestra o modifica del foglio.
     shape: Option<Shape>,
 }
@@ -165,7 +194,9 @@ impl Stale {
 struct Instance {
     bytes: Vec<u8>,
     source: Revision,
+    /// La cartella del file: l'innesto e i blocchi la leggono.
     workbook: Workbook,
+    files: Vec<FileSheet>,
     sheets: Vec<SheetInfo>,
     ids: HashMap<String, usize>,
     /// Le celle si modificano: il pacchetto e il modello si corrispondono.
@@ -176,6 +207,13 @@ struct Instance {
     deps: Option<Deps>,
     stale: Stale,
     revision: Revision,
+    /// Il giornale è di comandi: le finestre mostrano la cartella della
+    /// facciata.
+    commanding: bool,
+    /// La facciata: dal primo catalogo o dal primo comando.
+    facade: Option<Facade>,
+    /// La riscrittura della cartella, misurata alla prima domanda.
+    rewrite: Rewrite,
 }
 
 /// Il provider della griglia per le cartelle di Excel.
@@ -264,6 +302,30 @@ impl GridBytesProvider for XlsxGridProvider {
         Ok(commit)
     }
 
+    fn commands(
+        &mut self,
+        instance: &str,
+        selection: GridSelection,
+    ) -> Result<Vec<GridCommandState>, PluginError> {
+        selection.validate()?;
+        let instance = self.instance(instance)?;
+        // Il catalogo spegne ciò che la riscrittura perderebbe: la misura si
+        // fa alla prima domanda, non all'apertura.
+        instance.measured();
+        Ok(instance.catalog(&selection))
+    }
+
+    fn command(
+        &mut self,
+        instance: &str,
+        request: GridCommandRequest,
+    ) -> Result<GridCommandOutcome, PluginError> {
+        request.validate()?;
+        let outcome = self.instance(instance)?.command(&request)?;
+        outcome.validate()?;
+        Ok(outcome)
+    }
+
     fn bytes_to_write(
         &mut self,
         instance: &str,
@@ -298,6 +360,7 @@ impl Instance {
         });
         let editable = parts.is_some();
         let mut sheets = Vec::with_capacity(workbook.sheets.len());
+        let mut files = Vec::with_capacity(workbook.sheets.len());
         for (index, sheet) in workbook.sheets.iter().enumerate() {
             let (id, part) = match &parts {
                 Some(parts) => (
@@ -309,11 +372,11 @@ impl Instance {
             let (rows, columns) = extent(&workbook, sheet);
             sheets.push(SheetInfo {
                 id,
-                part,
                 rows,
                 columns,
-                shape: None,
+                counted: None,
             });
+            files.push(FileSheet { part, shape: None });
         }
         let ids = sheets
             .iter()
@@ -326,6 +389,7 @@ impl Instance {
             bytes,
             source,
             workbook,
+            files,
             sheets,
             ids,
             editable,
@@ -335,37 +399,195 @@ impl Instance {
             deps: None,
             stale: Stale::None,
             revision,
+            commanding: false,
+            facade: None,
+            rewrite: Rewrite::Unknown,
         })
     }
 
-    fn summary(&self, instance: &str) -> Result<GridBytesSession, PluginError> {
+    /// La cartella che la griglia mostra: quella del file, o quella della
+    /// facciata in modalità a comandi.
+    fn shown(&self) -> &Workbook {
+        match (&self.facade, self.commanding) {
+            (Some(facade), true) => facade.workbook(),
+            _ => &self.workbook,
+        }
+    }
+
+    fn facade(&mut self) -> &mut Facade {
+        let workbook = &self.workbook;
+        self.facade.get_or_insert_with(|| Facade::new(workbook))
+    }
+
+    /// La riscrittura misurata.
+    fn measured(&mut self) -> &Rewrite {
+        if self.rewrite == Rewrite::Unknown {
+            self.rewrite = commands::measure(&self.bytes, &self.workbook);
+        }
+        &self.rewrite
+    }
+
+    /// Il perché la cartella non prende comandi: i suoi fogli non hanno id
+    /// stabili.
+    fn blocked(&self) -> Option<&'static str> {
+        (!self.editable).then_some("the workbook's sheets have no unique ids")
+    }
+
+    /// Il catalogo sulla selezione `at`.
+    fn catalog(&mut self, at: &GridSelection) -> Vec<GridCommandState> {
+        let blocked = self.blocked();
+        let edits = blocked.map(str::to_owned).or_else(|| match &self.rewrite {
+            Rewrite::Loses(why) => Some(why.clone()),
+            _ => None,
+        });
+        let undo = self.commanding && !self.journal.commands().is_empty();
+        let mut catalog = self.facade().catalog(at, edits.as_deref(), blocked, undo);
+        // Senza id stabili dei fogli la facciata non si apre affatto.
+        if let Some(why) = blocked {
+            for command in &mut catalog {
+                command.enabled = false;
+                command.reason = Some(why.to_owned());
+            }
+        }
+        catalog
+    }
+
+    /// La selezione della facciata, come la griglia la nomina.
+    fn selection(&self) -> GridSelection {
+        let shown = self.shown();
+        let sheet = shown.active_sheet.min(self.sheets.len().saturating_sub(1));
+        let (selection, active) = match (&self.facade, self.commanding) {
+            (Some(facade), true) => (facade.selection().a1(), facade.selection().active.a1()),
+            _ => ("A1".to_owned(), "A1".to_owned()),
+        };
+        // Una selezione di troppe aree non entra nel contratto: resta la
+        // cella attiva.
+        let selection = if selection.len() > MAX_GRID_SELECTION_BYTES {
+            active.clone()
+        } else {
+            selection
+        };
+        GridSelection {
+            sheet: self.sheets[sheet].id.clone(),
+            selection,
+            active,
+        }
+    }
+
+    /// I fogli della cartella mostrata, contati di nuovo dove sono cambiati.
+    fn count_sheets(&mut self) {
+        let Some(facade) = self.facade.as_ref().filter(|_| self.commanding) else {
+            return;
+        };
+        let shown = facade.workbook().clone();
+        let mut old: HashMap<String, SheetInfo> = std::mem::take(&mut self.sheets)
+            .into_iter()
+            .map(|info| (info.id.clone(), info))
+            .collect();
+        self.sheets = shown
+            .sheets
+            .iter()
+            .map(|sheet| {
+                let id = format!("s{}", sheet.file_id);
+                match old.remove(&id) {
+                    Some(info)
+                        if info
+                            .counted
+                            .as_ref()
+                            .is_some_and(|counted| Arc::ptr_eq(counted, sheet)) =>
+                    {
+                        info
+                    }
+                    previous => {
+                        let (rows, columns) = extent(&shown, sheet);
+                        let (rows, columns) = previous.map_or((rows, columns), |info| {
+                            (rows.max(info.rows), columns.max(info.columns))
+                        });
+                        SheetInfo {
+                            id,
+                            rows,
+                            columns,
+                            counted: Some(sheet.clone()),
+                        }
+                    }
+                }
+            })
+            .collect();
+        self.ids = self
+            .sheets
+            .iter()
+            .enumerate()
+            .map(|(index, sheet)| (sheet.id.clone(), index))
+            .collect();
+    }
+
+    /// L'indice nel file del foglio `id`.
+    fn file_index(&self, id: &str) -> Option<usize> {
+        if !self.editable {
+            return self.ids.get(id).copied().filter(|_| !self.commanding);
+        }
+        self.workbook
+            .sheets
+            .iter()
+            .position(|sheet| id.strip_prefix('s') == Some(sheet.file_id.to_string().as_str()))
+    }
+
+    /// Il foglio del file i cui blocchi valgono per il foglio mostrato
+    /// `sheet`: in modalità a comandi soltanto quando il salvataggio sarà un
+    /// innesto per forza.
+    fn locks_of(&self, sheet: usize) -> Option<usize> {
+        if !self.commanding {
+            return Some(sheet);
+        }
+        match self.rewrite {
+            Rewrite::Loses(_) => self.file_index(&self.sheets[sheet].id),
+            _ => None,
+        }
+    }
+
+    /// I fogli mostrati e quelli nascosti.
+    fn sheet_list(&self) -> (Vec<GridSheet>, Vec<String>) {
+        let shown = self.shown();
+        let sheets = self
+            .sheets
+            .iter()
+            .zip(&shown.sheets)
+            .map(|(info, sheet)| GridSheet {
+                id: info.id.clone(),
+                name: sheet.name.clone(),
+                row_count: info.rows,
+                column_count: info.columns,
+            })
+            .collect();
+        let hidden = self
+            .sheets
+            .iter()
+            .zip(&shown.sheets)
+            .filter(|(_, sheet)| sheet.visibility != Visibility::Visible)
+            .map(|(info, _)| info.id.clone())
+            .collect();
+        (sheets, hidden)
+    }
+
+    fn summary(&mut self, instance: &str) -> Result<GridBytesSession, PluginError> {
+        let (sheets, hidden) = self.sheet_list();
+        let active = self.sheets[self
+            .shown()
+            .active_sheet
+            .min(self.sheets.len().saturating_sub(1))]
+        .id
+        .clone();
+        let commands = self.catalog(&GridSelection {
+            sheet: active.clone(),
+            selection: "A1".into(),
+            active: "A1".into(),
+        });
         let summary = GridBytesSession {
             instance: instance.to_owned(),
             revision: self.revision.clone(),
-            sheets: self
-                .sheets
-                .iter()
-                .zip(&self.workbook.sheets)
-                .map(|(info, sheet)| GridSheet {
-                    id: info.id.clone(),
-                    name: sheet.name.clone(),
-                    row_count: info.rows,
-                    column_count: info.columns,
-                })
-                .collect(),
-            active: self.sheets[self
-                .workbook
-                .active_sheet
-                .min(self.sheets.len().saturating_sub(1))]
-            .id
-            .clone(),
-            hidden: self
-                .sheets
-                .iter()
-                .zip(&self.workbook.sheets)
-                .filter(|(_, sheet)| sheet.visibility != Visibility::Visible)
-                .map(|(info, _)| info.id.clone())
-                .collect(),
+            sheets,
+            active,
+            hidden,
             notices: self.notices.clone(),
             conflicts: self
                 .entries
@@ -373,7 +595,7 @@ impl Instance {
                 .filter(|(_, entry)| entry.state == GridJournalMatch::Conflict)
                 .map(|(key, _)| key.clone())
                 .collect(),
-            commands: Vec::new(),
+            commands,
         };
         summary.validate()?;
         Ok(summary)
@@ -395,9 +617,10 @@ impl Instance {
         }
     }
 
-    /// L'input che la cella ha nel file.
+    /// L'input che la cella ha nel file, o nella cartella della facciata in
+    /// modalità a comandi.
     fn disk_input(&self, sheet: usize, cell: CellRef) -> String {
-        let Some(stored) = self.workbook.sheets[sheet].cell(cell) else {
+        let Some(stored) = self.shown().sheets[sheet].cell(cell) else {
             return String::new();
         };
         if stored.formula.is_some() {
@@ -411,10 +634,8 @@ impl Instance {
     /// Il giornale nuovo, con le voci lette contro il file e le formule non
     /// aggiornate.
     fn set_journal(&mut self, journal: GridJournal) -> Result<(), PluginError> {
-        // I comandi sono dell'ADR 0219, non ancora serviti: un giornale di
-        // comandi letto come vuoto perderebbe ciò che porta.
         if !journal.commands().is_empty() {
-            return Err(bad("grid journal commands are not served"));
+            return self.replay(journal);
         }
         let mut entries = BTreeMap::new();
         for (key, before, after) in journal.entries() {
@@ -463,17 +684,31 @@ impl Instance {
         Ok(())
     }
 
-    /// I blocchi di un foglio.
+    /// Il giornale di comandi `journal`, rifatto sulla cartella del file.
+    fn replay(&mut self, journal: GridJournal) -> Result<(), PluginError> {
+        let mut facade = Facade::new(&self.workbook);
+        facade.replay(journal.commands())?;
+        self.facade = Some(facade);
+        self.commanding = true;
+        self.entries.clear();
+        self.stale = Stale::None;
+        self.revision = grid_bytes_revision(&self.source, &journal.to_text());
+        self.journal = journal;
+        self.count_sheets();
+        Ok(())
+    }
+
+    /// I blocchi di un foglio del file.
     fn shape(&mut self, sheet: usize) -> &Shape {
-        if self.sheets[sheet].shape.is_none() {
+        if self.files[sheet].shape.is_none() {
             let shape = self.read_shape(sheet).unwrap_or(Shape::Unsupported);
-            self.sheets[sheet].shape = Some(shape);
+            self.files[sheet].shape = Some(shape);
         }
-        self.sheets[sheet].shape.as_ref().expect("set above")
+        self.files[sheet].shape.as_ref().expect("set above")
     }
 
     fn read_shape(&self, sheet: usize) -> Option<Shape> {
-        let part = self.sheets[sheet].part.as_ref()?;
+        let part = self.files[sheet].part.as_ref()?;
         let xml = Package::open(&self.bytes).ok()?.read(part).ok()??;
         let layout = sheet_xml::scan(&xml, &BTreeSet::new()).ok()?;
         if !layout.facts.ordered {
@@ -486,13 +721,13 @@ impl Instance {
         ))))
     }
 
-    /// Il codice di blocco di una cella.
+    /// Il codice di blocco di una cella di un foglio del file.
     fn lock(&mut self, sheet: usize, cell: CellRef) -> Option<String> {
         if !self.editable {
             return Some(SHEET_SHAPE_LOCK.to_owned());
         }
         self.shape(sheet);
-        match self.sheets[sheet].shape.as_ref().expect("read above") {
+        match self.files[sheet].shape.as_ref().expect("read above") {
             Shape::Unsupported => Some(SHEET_SHAPE_LOCK.to_owned()),
             Shape::Locks(locks) => locks
                 .at(&self.workbook.sheets[sheet], cell)
@@ -524,14 +759,16 @@ impl Instance {
                 CellRef::new(row_end - 1, column_end - 1),
             )
         });
-        let area_locked: Vec<CellRef> = match (range, self.editable) {
-            (Some(range), true) => match self.shape(sheet) {
+        let file = self.locks_of(sheet).filter(|_| self.editable);
+        let area_locked: Vec<CellRef> = match (range, file) {
+            (Some(range), Some(file)) => match self.shape(file) {
                 Shape::Locks(locks) => locks.area_cells(range).collect(),
                 Shape::Unsupported => Vec::new(),
             },
             _ => Vec::new(),
         };
-        let model = &self.workbook.sheets[sheet];
+        let shown = self.shown();
+        let model = &shown.sheets[sheet];
         let rows = (row_start..row_end)
             .map(|index| {
                 let line = model.rows.get(&index);
@@ -616,7 +853,7 @@ impl Instance {
             for area in areas {
                 for at in area.iter() {
                     if !positions.contains(&(at.row, at.col)) && seen.insert((at.row, at.col)) {
-                        let look = display::look(&self.workbook, sheet, model, at, &mut cache);
+                        let look = display::look(shown, sheet, model, at, &mut cache);
                         if display::visible(&look) {
                             decorated.push((at.row, at.col));
                         }
@@ -681,8 +918,8 @@ impl Instance {
         styles: &mut Styles,
     ) -> GridBytesCell {
         let key = self.key(sheet, at);
-        let lock = self.lock(sheet, at);
-        let workbook = &self.workbook;
+        let lock = self.locks_of(sheet).and_then(|file| self.lock(file, at));
+        let workbook = self.shown();
         let model = &workbook.sheets[sheet];
         let entry = self
             .entries
@@ -769,6 +1006,9 @@ impl Instance {
     fn apply(&mut self, request: &GridApplyRequest) -> Result<GridCommit, PluginError> {
         if request.revision != self.revision {
             return Err(stale_revision());
+        }
+        if self.commanding {
+            return self.apply_commands(request);
         }
         let mut journal = self.journal.clone();
         let mut changed = Vec::new();
@@ -858,6 +1098,9 @@ impl Instance {
         if *expected != self.revision {
             return Err(stale_revision());
         }
+        if self.commanding {
+            return self.write_commands();
+        }
         let mut edits = Vec::new();
         for (key, entry) in &self.entries {
             if entry.state == GridJournalMatch::Applied {
@@ -882,20 +1125,412 @@ impl Instance {
                 ));
             }
         }
-        let recalc = match &self.deps {
-            Some(deps) => {
-                !deps.dynamic.is_empty()
-                    || edits.iter().any(|edit| {
-                        let mut out = Vec::new();
-                        deps.calc.graph.dependents(edit.sheet, edit.cell, &mut out);
-                        !out.is_empty()
-                    })
-            }
-            None => true,
-        };
-        graft(&self.bytes, &self.workbook, &edits, recalc)
+        self.graft(&edits)
+    }
+
+    /// L'innesto di `edits` nei byte del file. Il file si ricalcola
+    /// all'apertura quando una formula legge una cella cambiata.
+    fn graft(&mut self, edits: &[CellEdit]) -> Result<Vec<u8>, PluginError> {
+        if self.deps.is_none() {
+            self.deps = Some(deps(&self.workbook).map_err(xlsx_error)?);
+        }
+        let deps = self.deps.as_ref().expect("read above");
+        let recalc = !deps.dynamic.is_empty()
+            || edits.iter().any(|edit| {
+                let mut out = Vec::new();
+                deps.calc.graph.dependents(edit.sheet, edit.cell, &mut out);
+                !out.is_empty()
+            });
+        graft(&self.bytes, &self.workbook, edits, recalc)
             .map(|grafted| grafted.bytes)
             .map_err(graft_error)
+    }
+
+    /// Un comando della barra, o annulla e ripeti del documento.
+    fn command(&mut self, request: &GridCommandRequest) -> Result<GridCommandOutcome, PluginError> {
+        if request.revision != self.revision {
+            return Err(stale_revision());
+        }
+        let command = &request.command;
+        let before = self.journal.to_text();
+        let was = self.commanding;
+        let (ran, selection) = self.transaction(|this| {
+            let ran = match command.id.as_str() {
+                UNDO => this.undo()?,
+                REDO => this.redo()?,
+                _ => {
+                    this.enter()?;
+                    this.give(command)?
+                }
+            };
+            // Un comando che non cambia la cartella non porta la sessione
+            // nella modalità a comandi.
+            let keep = was || ran.changed;
+            Ok(((ran, this.selection()), keep))
+        })?;
+        let after = self.journal.to_text();
+        let (sheets, hidden) = self.sheet_list();
+        let commands = self.catalog(&selection);
+        Ok(GridCommandOutcome {
+            commit: GridCommit {
+                revision: self.revision.clone(),
+                edit: text_diff(&before, &after),
+                invalidation: if before == after {
+                    GridInvalidation::Cells(Vec::new())
+                } else {
+                    GridInvalidation::All
+                },
+            },
+            sheets,
+            hidden,
+            selection,
+            result: ran.result,
+            dialog: ran.dialog,
+            commands,
+        })
+    }
+
+    /// Fa `work`; se fallisce, o se chiede di non tenere ciò che ha fatto, la
+    /// sessione torna com'era.
+    fn transaction<T>(
+        &mut self,
+        work: impl FnOnce(&mut Self) -> Result<(T, bool), PluginError>,
+    ) -> Result<T, PluginError> {
+        let journal = self.journal.clone();
+        let revision = self.revision.clone();
+        let commanding = self.commanding;
+        let sheets = self.sheets.clone();
+        let ids = self.ids.clone();
+        let checkpoint = self.facade().checkpoint();
+        let outcome = work(self);
+        if let Ok((value, true)) = outcome {
+            return Ok(value);
+        }
+        self.facade().rollback(checkpoint);
+        self.sheets = sheets;
+        self.ids = ids;
+        self.revision = revision;
+        if commanding {
+            self.journal = journal;
+        } else {
+            self.commanding = false;
+            self.set_journal(journal)?;
+        }
+        outcome.map(|(value, _)| value)
+    }
+
+    /// Porta la sessione nella modalità a comandi: ogni voce del giornale di
+    /// celle diventa l'input della sua cella.
+    fn enter(&mut self) -> Result<(), PluginError> {
+        if self.commanding {
+            return Ok(());
+        }
+        if let Some(why) = self.blocked() {
+            return Err(bad(why));
+        }
+        let mut converted = Vec::new();
+        for (key, entry) in &self.entries {
+            if entry.state == GridJournalMatch::Applied {
+                continue;
+            }
+            let (sheet, cell) = entry.place.ok_or_else(|| {
+                PluginError::Conflict(format!("grid sheet `{}` is gone", key.sheet).into())
+            })?;
+            let value = self.input_json(sheet, cell, &entry.value);
+            converted.push(commands::input_command(&key.sheet, cell, value));
+        }
+        let mut journal = GridJournal::new();
+        for command in &converted {
+            journal.push_command(command.clone())?;
+        }
+        self.facade().replay(&converted)?;
+        self.commanding = true;
+        self.entries.clear();
+        self.stale = Stale::None;
+        self.revision = grid_bytes_revision(&self.source, &journal.to_text());
+        self.journal = journal;
+        self.count_sheets();
+        Ok(())
+    }
+
+    /// Dà un comando nella modalità a comandi, e lo mette nel giornale se
+    /// cambia la cartella.
+    fn give(&mut self, command: &GridCommand) -> Result<Ran, PluginError> {
+        if !commands::served(&command.id) {
+            return Err(bad(format!("grid command `{}` is not served", command.id)));
+        }
+        match commands::input_cell(command) {
+            Some((cell, value)) => self.check_input(&command.sheet, cell, &value)?,
+            None if commands::edits(&command.id) => {
+                if let Rewrite::Loses(why) = self.measured() {
+                    return Err(loses(why.clone()));
+                }
+            }
+            None => {}
+        }
+        let ran = self.facade().run(command)?;
+        if ran.changed {
+            self.journal.push_command(command.clone())?;
+            // Un comando che cambia ciò che l'innesto non scrive (uno stile
+            // nato dall'input, un ricalcolo) chiede la riscrittura: si misura
+            // adesso, e non al salvataggio.
+            if self.rewrite != Rewrite::Kept && self.graft_edits().is_none() {
+                if let Rewrite::Loses(why) = self.measured() {
+                    return Err(loses(why.clone()));
+                }
+            }
+            self.revision = grid_bytes_revision(&self.source, &self.journal.to_text());
+            self.count_sheets();
+        }
+        Ok(ran)
+    }
+
+    /// Annulla l'ultimo comando del giornale.
+    fn undo(&mut self) -> Result<Ran, PluginError> {
+        if !self.commanding || self.journal.commands().is_empty() {
+            return Err(bad("nothing to undo"));
+        }
+        let Instance {
+            facade,
+            workbook,
+            journal,
+            ..
+        } = self;
+        facade
+            .as_mut()
+            .expect("a command journal has its facade")
+            .undo(workbook, journal.commands())?;
+        journal.pop_command();
+        self.revision = grid_bytes_revision(&self.source, &self.journal.to_text());
+        self.count_sheets();
+        Ok(Ran {
+            changed: true,
+            result: None,
+            dialog: None,
+        })
+    }
+
+    /// Ripete l'ultimo comando annullato.
+    fn redo(&mut self) -> Result<Ran, PluginError> {
+        if !self.commanding {
+            return Err(bad("nothing to redo"));
+        }
+        let command = self.facade().redo()?;
+        self.journal.push_command(command)?;
+        self.revision = grid_bytes_revision(&self.source, &self.journal.to_text());
+        self.count_sheets();
+        Ok(Ran {
+            changed: true,
+            result: None,
+            dialog: None,
+        })
+    }
+
+    /// Le patch in modalità a comandi: ognuna è l'input della sua cella.
+    fn apply_commands(&mut self, request: &GridApplyRequest) -> Result<GridCommit, PluginError> {
+        let before = self.journal.to_text();
+        self.transaction(|this| {
+            for patch in &request.patches {
+                let (sheet, cell) = this
+                    .place(&patch.cell)
+                    .filter(|(sheet, cell)| {
+                        cell.row < this.sheets[*sheet].rows
+                            && cell.col < this.sheets[*sheet].columns
+                    })
+                    .ok_or_else(|| bad("grid patch names a cell the session does not have"))?;
+                let shown = this.disk_input(sheet, cell);
+                if patch.before.as_ref().is_some_and(|before| *before != shown) {
+                    return Err(PluginError::Conflict(
+                        "grid patch preimage does not match".into(),
+                    ));
+                }
+                if patch.after == shown {
+                    continue;
+                }
+                let value = this.input_value(sheet, cell, &patch.after)?;
+                this.give(&commands::input_command(&patch.cell.sheet, cell, value))?;
+            }
+            Ok(((), true))
+        })?;
+        let after = self.journal.to_text();
+        Ok(GridCommit {
+            revision: self.revision.clone(),
+            edit: text_diff(&before, &after),
+            invalidation: if before == after {
+                GridInvalidation::Cells(Vec::new())
+            } else {
+                GridInvalidation::All
+            },
+        })
+    }
+
+    /// Il valore con cui l'input `input` entra nella cella: la regola di Fub
+    /// per le costanti, e una formula com'è scritta.
+    fn input_value(&self, sheet: usize, cell: CellRef, input: &str) -> Result<Json, PluginError> {
+        if input.starts_with('=') {
+            return Ok(Json::String(input.to_owned()));
+        }
+        let value = input::parse(input).map_err(|error| match error {
+            InputError::Formula => bad("formulas start with `=`"),
+            InputError::TooLong => bad("grid cell text is too long"),
+        })?;
+        Ok(self.input_json(sheet, cell, &value))
+    }
+
+    /// Un valore costante come la facciata lo legge senza indovinare: un
+    /// testo tiene l'apostrofo, tranne dove la cella è in formato testo e lo
+    /// terrebbe come carattere.
+    fn input_json(&self, sheet: usize, cell: CellRef, value: &NewValue) -> Json {
+        match value {
+            NewValue::Blank => Json::Null,
+            NewValue::Number(number) => json!(number),
+            NewValue::Bool(flag) => json!(flag),
+            NewValue::Error(error) => json!(error.as_str()),
+            NewValue::Text(text) => {
+                let shown = self.shown();
+                let style = shown.sheets[sheet].style_id(cell);
+                if shown.styles.get(style).num_fmt.as_str() == "@" {
+                    json!(text)
+                } else {
+                    json!(format!("'{text}"))
+                }
+            }
+        }
+    }
+
+    /// L'input di una cella che soltanto l'innesto può salvare, quando la
+    /// riscrittura perderebbe qualcosa: niente formule, niente celle che
+    /// l'innesto non scrive.
+    fn check_input(&mut self, sheet: &str, cell: CellRef, value: &Json) -> Result<(), PluginError> {
+        let formula = value.as_str().is_some_and(|text| text.starts_with('='));
+        let lock = match self.file_index(sheet) {
+            Some(file) => self.lock(file, cell),
+            None => None,
+        };
+        if !formula && lock.is_none() {
+            return Ok(());
+        }
+        if let Rewrite::Loses(why) = self.measured().clone() {
+            if let Some(lock) = lock {
+                return Err(PluginError::PermissionDenied(
+                    format!("grid cell is locked ({lock})").into(),
+                ));
+            }
+            return Err(bad(format!(
+                "formulas cannot be written to this workbook: {why}"
+            )));
+        }
+        Ok(())
+    }
+
+    /// Gli input da innestare, quando i comandi del giornale scrivono
+    /// soltanto costanti in celle e nient'altro della cartella cambia oltre
+    /// ai valori calcolati.
+    fn graft_edits(&self) -> Option<Vec<CellEdit>> {
+        let shown = self.shown();
+        let base = &self.workbook;
+        if shown.sheets.len() != base.sheets.len() || !commands::same_book(shown, base) {
+            return None;
+        }
+        let mut touched: HashMap<usize, BTreeSet<(u32, u32)>> = HashMap::new();
+        for command in self.journal.commands() {
+            let (cell, _) = commands::input_cell(command)?;
+            let index = self.file_index(&command.sheet)?;
+            touched
+                .entry(index)
+                .or_default()
+                .insert((cell.row, cell.col));
+        }
+        let empty = BTreeSet::new();
+        let mut edits = Vec::new();
+        for (index, (now, was)) in shown.sheets.iter().zip(&base.sheets).enumerate() {
+            if now.file_id != was.file_id {
+                return None;
+            }
+            if Arc::ptr_eq(now, was) {
+                continue;
+            }
+            if !commands::same_sheet_but_cells(now, was) {
+                return None;
+            }
+            let cells = touched.get(&index).unwrap_or(&empty);
+            for (at, cell) in now.cells.iter() {
+                if cells.contains(&(at.row, at.col)) {
+                    if cell.formula.is_some() || cell.style != was.style_id(at) {
+                        return None;
+                    }
+                    continue;
+                }
+                let old = was.cell(at)?;
+                if old.formula != cell.formula
+                    || old.style != cell.style
+                    || cell.formula.is_none() && (old.value != cell.value || old.rich != cell.rich)
+                {
+                    return None;
+                }
+            }
+            if was
+                .cells
+                .iter()
+                .any(|(at, _)| now.cell(at).is_none() && !cells.contains(&(at.row, at.col)))
+            {
+                return None;
+            }
+            for &(row, col) in cells {
+                let at = CellRef::new(row, col);
+                let value = match now.cell(at) {
+                    Some(cell) => input::constant(&cell.value)?,
+                    None => NewValue::Blank,
+                };
+                let same = match was.cell(at) {
+                    Some(old) => {
+                        old.formula.is_none()
+                            && input::constant(&old.value).as_ref() == Some(&value)
+                    }
+                    None => value == NewValue::Blank,
+                };
+                if !same {
+                    edits.push(CellEdit {
+                        sheet: index,
+                        cell: at,
+                        value,
+                    });
+                }
+            }
+        }
+        Some(edits)
+    }
+
+    /// I byte della modalità a comandi: l'innesto quando basta, altrimenti la
+    /// riscrittura, se la misura non perde niente.
+    fn write_commands(&mut self) -> Result<Vec<u8>, PluginError> {
+        if self.journal.is_empty() {
+            return Ok(self.bytes.clone());
+        }
+        let mut locked = None;
+        if let Some(edits) = self.graft_edits() {
+            if edits.is_empty() {
+                return Ok(self.bytes.clone());
+            }
+            locked = edits
+                .iter()
+                .find_map(|edit| self.lock(edit.sheet, edit.cell));
+            if locked.is_none() {
+                return self.graft(&edits);
+            }
+        }
+        if let Rewrite::Loses(why) = self.measured().clone() {
+            return Err(match locked {
+                Some(lock) => {
+                    PluginError::PermissionDenied(format!("grid cell is locked ({lock})").into())
+                }
+                None => loses(why),
+            });
+        }
+        let bytes =
+            commands::write(self.shown(), commands::kind_of(&self.bytes)).map_err(xlsx_error)?;
+        commands::verify(&bytes).map_err(loses)?;
+        Ok(bytes)
     }
 }
 
