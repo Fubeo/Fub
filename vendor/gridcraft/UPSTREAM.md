@@ -16,7 +16,7 @@ L'interfaccia (`ui-egui`) e il server MCP (`mcp`) non sono copiati.
 ## Riferimento
 
 - repository: `https://github.com/storytold/gridcraft`
-- commit: `a2cc4b42cac6e2c41bae71fba4607300755a0b47` (tag `v0.9.0`, 2026-10-19)
+- commit: `ac8da7d49cbeb4be6aa1ad5869f3d29fe2da8cd9` (tag `v0.11.1`, 2026-10-22)
 - licenza del codice: `MIT OR Apache-2.0` (`LICENSE-MIT`, `LICENSE-APACHE`)
 
 ## Cosa è copiato
@@ -29,10 +29,10 @@ L'interfaccia (`ui-egui`) e il server MCP (`mcp`) non sono copiati.
 | `crates/numfmt/` | `crates/numfmt/` | nessuna |
 | `crates/model/` | `crates/model/` | `src/sheet.rs` e `src/preserved.rs`, per il `sheetId` del file |
 | `crates/calc/` | `crates/calc/` | nessuna |
-| `crates/xlsx/` | `crates/xlsx/` | `src/package.rs` e sei file di `src/tests/` per `zip` 9; `src/ods.rs` per Rust 1.89; `src/sheet_read.rs` e `src/tests/fixtures.rs` per i valori delle matrici; `src/read.rs`, `src/passthrough.rs`, `src/write.rs` e `src/tests/sheet_names.rs` per il `sheetId` del file |
+| `crates/xlsx/` | `crates/xlsx/` | `src/package.rs` e nove file di `src/tests/` per `zip` 9; `src/ods.rs` per Rust 1.89; `src/sheet_read.rs` e `src/tests/fixtures.rs` per i valori delle matrici; `src/read.rs`, `src/passthrough.rs`, `src/write.rs` e `src/tests/sheet_names.rs` per il `sheetId` del file |
 | `crates/chart/` | `crates/chart/` | nessuna |
 | `crates/pdf/` | `crates/pdf/` | nessuna |
-| `crates/engine/` | `crates/engine/` | `src/lib.rs` e `src/tests.rs`, per aprire senza ricalcolo |
+| `crates/engine/` | `crates/engine/` | `src/lib.rs` e `src/tests.rs`, per aprire senza ricalcolo; `tests/chart_workbook_names.rs` per `zip` 9 |
 | `rustfmt.toml` | `rustfmt.toml` | nessuna |
 | `NOTICE` | `NOTICE` | nessuna |
 
@@ -52,7 +52,10 @@ Fuori dal workspace di Fub, i crate non passano dal suo
 di questa cartella permettono gli avvisi, che corregge l'upstream e non una
 copia, e vietano soltanto `unsafe`; ogni crate dichiara già
 `forbid(unsafe_code)`. Con la 1.89 di Fub, e le patch qui sotto, i crate
-compilano e i loro test passano.
+compilano e i loro test passano. Come nell'upstream, il profilo `dev` di
+questa cartella ha `opt-level = 1`: senza ottimizzazione l'analisi della
+catena di 4.096 operandi di `formula/tests/spanish_input.rs` esaurisce la
+pila di un thread di test.
 
 Le patch di `patches/`, una per ragione:
 
@@ -60,8 +63,9 @@ Le patch di `patches/`, una per ragione:
   (RUSTSEC-2026-0367, -0368, -0369) corretti in `zip` 9. In `zip` 9 il nome di
   una voce dell'archivio è un `Result`: in `xlsx/src/package.rs` un pacchetto
   con il nome di una voce illeggibile si rifiuta con l'errore dell'archivio, e
-  nei sei file di `xlsx/src/tests/` che leggono l'archivio `f.name()` diventa
-  `f.name().unwrap()`;
+  la parte troppo grande con un nome illeggibile si dice senza nome; nei nove
+  file di `xlsx/src/tests/` e nel test `engine/tests/chart_workbook_names.rs`
+  che leggono l'archivio `f.name()` diventa `f.name().unwrap()`;
 - `0002-rust-1-89`: l'upstream dichiara `rust-version = "1.90"` ma usa
   `std::f64::consts::EULER_GAMMA`, stabile dalla 1.94, in
   `functions/src/engineering.rs`, che qui ha lo stesso valore scritto per
