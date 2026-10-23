@@ -19,7 +19,8 @@ use fub_abi::{grid_bytes_revision, grid_journal_match, GridJournal, GridJournalM
 
 use crate::exports::fub::abi::grid_bytes::{
     GridBytesCell, GridBytesSession, GridBytesWindow, GridCommandOutcome, GridCommandRequest,
-    GridCommandState, GridNotice, GridSelection, GridSheetView, GridValue, Guest as GridBytesGuest,
+    GridBook, GridCalculation, GridCommandState, GridNotice, GridSelection, GridSheetView,
+    GridValue, GridViewMode, Guest as GridBytesGuest,
 };
 use crate::fub::abi::grid::{
     GridApplyRequest, GridBorders, GridCellKey, GridCellStyle, GridColumn, GridCommit,
@@ -210,6 +211,7 @@ impl GridBytesGuest for Component {
             }],
             conflicts: lines.conflicts(),
             commands: Vec::new(),
+            book: office_book(),
         };
         state.sessions.insert(instance, lines);
         Ok(result)
@@ -310,7 +312,13 @@ impl GridBytesGuest for Component {
                 headings: true,
                 zoom: 100,
                 right_to_left: false,
+                mode: GridViewMode::Normal,
+                formulas: false,
+                protected: false,
+                print_gridlines: false,
+                print_headings: false,
             },
+            tables: Vec::new(),
         })
     }
 
@@ -408,5 +416,20 @@ impl GridBytesGuest for Component {
     fn shutdown() -> Result<(), PluginError> {
         state().sessions.clear();
         Ok(())
+    }
+}
+
+/// Le righe di testo non hanno un tema: quello di Office.
+fn office_book() -> GridBook {
+    GridBook {
+        theme_colors: [
+            "#FFFFFF", "#000000", "#E7E6E6", "#44546A", "#4472C4", "#ED7D31", "#A5A5A5",
+            "#FFC000", "#5B9BD5", "#70AD47", "#0563C1", "#954F72",
+        ]
+        .map(str::to_owned)
+        .to_vec(),
+        names: Vec::new(),
+        calculation: GridCalculation::Automatic,
+        protected: false,
     }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../../__fixtures__/xlsx-grid.json";
-import type { GridBytesSession, GridBytesWindow } from "../../host/contract";
+import type { GridBytesSession, GridBytesWindow, GridTable } from "../../host/contract";
 import {
   cellKey,
   decimalSeparator,
@@ -20,6 +20,22 @@ function copy<T>(value: T): T {
 
 const session = fixture.session as GridBytesSession;
 const windows = fixture.windows as GridBytesWindow[];
+
+const TABLE: GridTable = {
+  name: "Spese",
+  row: 0,
+  column: 0,
+  rows: 2,
+  columns: 2,
+  header_row: true,
+  totals_row: false,
+  banded_rows: true,
+  banded_columns: false,
+  first_column: false,
+  last_column: false,
+  filter_button: true,
+  style: "TableStyleMedium2",
+};
 
 describe("una cartella di Excel sulla versione 2", () => {
   it("disegna i fogli visibili della sessione, con le misure e le celle delle finestre", () => {
@@ -89,6 +105,10 @@ describe("una cartella di Excel sulla versione 2", () => {
       (value) => { value.sheets[1].id = "s1"; },
       (value) => { value.sheets[0].row_count = -1; },
       (value) => { value.notices = [{ code: "", count: 1 }]; },
+      (value) => { value.book.theme_colors.pop(); },
+      (value) => { value.book.theme_colors[0] = "white"; },
+      (value) => { value.book.names = [""]; },
+      (value) => { value.book.calculation = "sometimes" as never; },
     ];
     for (const change of sessions) {
       const value = copy(session);
@@ -101,12 +121,27 @@ describe("una cartella di Excel sulla versione 2", () => {
       (value) => { value.rows[1].index = 7; },
       (value) => { value.cells[0].key.row = "r999"; },
       (value) => { value.cells[0].key.sheet = "s2"; },
+      (value) => { value.view.mode = "outline" as never; },
+      (value) => { value.tables = [{ ...TABLE, name: "" }]; },
+      (value) => { value.tables = [{ ...TABLE, rows: 0 }]; },
+      (value) => { value.tables = [{ ...TABLE, row: value.total_rows }]; },
     ];
     for (const change of windowChanges) {
       const value = copy(windows[0]);
       change(value);
       expect(() => validateBytesWindow(value, session)).toThrow();
     }
+  });
+
+  it("tiene ogni tabella una volta, anche se più finestre la toccano", () => {
+    const first = copy(windows[0]);
+    const second = copy(windows[0]);
+    first.tables = [TABLE];
+    second.tables = [{ ...TABLE, totals_row: true }];
+    for (const window of [first, second]) validateBytesWindow(window, session);
+    const view = workbookView(session, [first, second], null);
+    expect(view.sheets[0].tables).toEqual([{ ...TABLE, totals_row: true }]);
+    expect(view.sheets[1].tables).toEqual([]);
   });
 
   it("le chiavi delle celle tornano posizioni", () => {

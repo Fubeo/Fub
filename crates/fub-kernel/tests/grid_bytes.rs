@@ -11,9 +11,9 @@ use fub_abi::grid::{
     GridWindowRequest,
 };
 use fub_abi::{
-    grid_bytes_revision, GridBytesProvider, GridBytesSession, GridBytesWindow, GridCommand,
-    GridCommandOutcome, GridCommandRequest, GridCommandState, GridJournal, GridSelection,
-    PluginError,
+    grid_bytes_revision, GridBook, GridBytesProvider, GridBytesSession, GridBytesWindow,
+    GridCommand, GridCommandOutcome, GridCommandRequest, GridCommandState, GridJournal,
+    GridSelection, PluginError,
 };
 use fub_kernel::workspace::PreparedRegistration;
 use fub_kernel::{FormatRegistry, Workspace};
@@ -91,6 +91,7 @@ impl GridBytesProvider for Bytes {
             notices: Vec::new(),
             conflicts: Vec::new(),
             commands: Vec::new(),
+            book: GridBook::default(),
         })
     }
 
@@ -315,6 +316,7 @@ fn outcome(revision: &str, inserted: &str) -> GridCommandOutcome {
         result: None,
         dialog: None,
         commands: Vec::new(),
+        book: GridBook::default(),
     }
 }
 

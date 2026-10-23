@@ -23,7 +23,7 @@ import { resolvedLanguage, t } from "../../i18n/strings";
 import { gridJournalText, parseGridJournal, recordGridJournal, type GridJournal } from "../../state/grid-journal";
 import { GridEngine, type GridChange, type GridEngineOptions, type GridHost } from "./engine";
 import { cellA1, parseCellA1 } from "./merges";
-import { decimalSeparator, localInput } from "./workbook";
+import { DEFAULT_SHEET_VIEW, decimalSeparator, localInput } from "./workbook";
 import xlsx from "../../__fixtures__/xlsx-grid.json";
 
 const SURFACE: GridSurfaceSpec = {
@@ -111,6 +111,7 @@ function bytesHost(plan: Plan = {}) {
         notices: [],
         conflicts: [],
         commands: [],
+        book: structuredClone(xlsx.session.book) as GridBytesSession["book"],
       };
     },
     gridBytesWindow: async (_surface, instance, request) => {
@@ -158,7 +159,8 @@ function bytesHost(plan: Plan = {}) {
         cells,
         styles: [PLAIN],
         merges: [],
-        view: { frozen_rows: 0, frozen_columns: 0, gridlines: true, headings: true, zoom: 100, right_to_left: false },
+        view: { ...DEFAULT_SHEET_VIEW },
+        tables: [],
       };
     },
     applyGridBytes: async (_surface, _instance, request) => {
@@ -824,6 +826,7 @@ function workbookHost(options: {
         result: null,
         dialog: options.dialog?.(request.command) ?? null,
         commands: catalog(),
+        book: structuredClone(xlsx.session.book) as GridBytesSession["book"],
       };
       return outcome;
     },
@@ -1129,7 +1132,7 @@ describe("GridEngine con una cartella di Excel", () => {
     const grid = workbookHost({
       window: (window) => {
         if (window.sheet !== "s1") return;
-        window.view = { frozen_rows: 1, frozen_columns: 1, gridlines: false, headings: false, zoom: 150, right_to_left: false };
+        window.view = { ...DEFAULT_SHEET_VIEW, frozen_rows: 1, frozen_columns: 1, gridlines: false, headings: false, zoom: 150 };
       },
     });
     const { engine, host, viewport, cell } = await workbookMounted(grid);

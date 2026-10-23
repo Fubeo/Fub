@@ -971,9 +971,25 @@ pub(crate) fn from_grid_bytes_session(
             .into_iter()
             .map(from_grid_command_state)
             .collect(),
+        book: from_grid_book(session.book),
     };
     session.validate()?;
     Ok(session)
+}
+
+fn from_grid_book(book: w_grid_bytes::GridBook) -> fub_abi::GridBook {
+    fub_abi::GridBook {
+        theme_colors: book.theme_colors,
+        names: book.names,
+        calculation: match book.calculation {
+            w_grid_bytes::GridCalculation::Automatic => fub_abi::GridCalculation::Automatic,
+            w_grid_bytes::GridCalculation::AutomaticExceptTables => {
+                fub_abi::GridCalculation::AutomaticExceptTables
+            }
+            w_grid_bytes::GridCalculation::Manual => fub_abi::GridCalculation::Manual,
+        },
+        protected: book.protected,
+    }
 }
 
 fn from_grid_command_state(state: w_grid_bytes::GridCommandState) -> fub_abi::GridCommandState {
@@ -1038,6 +1054,7 @@ pub(crate) fn from_grid_command_outcome(
             .into_iter()
             .map(from_grid_command_state)
             .collect(),
+        book: from_grid_book(outcome.book),
     };
     outcome.validate()?;
     Ok(outcome)
@@ -1125,7 +1142,37 @@ pub(crate) fn from_grid_bytes_window(
             headings: window.view.headings,
             zoom: window.view.zoom,
             right_to_left: window.view.right_to_left,
+            mode: match window.view.mode {
+                w_grid_bytes::GridViewMode::Normal => fub_abi::GridViewMode::Normal,
+                w_grid_bytes::GridViewMode::PageLayout => fub_abi::GridViewMode::PageLayout,
+                w_grid_bytes::GridViewMode::PageBreakPreview => {
+                    fub_abi::GridViewMode::PageBreakPreview
+                }
+            },
+            formulas: window.view.formulas,
+            protected: window.view.protected,
+            print_gridlines: window.view.print_gridlines,
+            print_headings: window.view.print_headings,
         },
+        tables: window
+            .tables
+            .into_iter()
+            .map(|table| fub_abi::GridTable {
+                name: table.name,
+                row: table.row,
+                column: table.column,
+                rows: table.rows,
+                columns: table.columns,
+                header_row: table.header_row,
+                totals_row: table.totals_row,
+                banded_rows: table.banded_rows,
+                banded_columns: table.banded_columns,
+                first_column: table.first_column,
+                last_column: table.last_column,
+                filter_button: table.filter_button,
+                style: table.style,
+            })
+            .collect(),
     };
     window.validate()?;
     Ok(window)
