@@ -53,6 +53,7 @@ import { setTooltip } from "../ui/tooltip";
 import { tabIndexForKey } from "../ui/tab-keys";
 import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-bar";
 import { createSelectionBubble, type SelectionBubble } from "./selection-bubble";
+import { bubbleWanted, miniBarMode, mountMiniBar } from "./mini-bar";
 import { openEditorMenu, type EditorMenuHost } from "./editor-menu";
 import { platformSupports } from "../platform/capabilities";
 import { writeClipboardText } from "../platform/clipboard";
@@ -416,7 +417,7 @@ function createPane(id: string): PaneElements {
   const formatBar = createFormatBar(barHost);
   const selectionBubble: SelectionBubble = createSelectionBubble({
     ...barHost,
-    barOff: () => document.getElementById("app")?.hasAttribute("data-formatbar-off") === true,
+    wanted: () => bubbleWanted(miniBarMode(), document.getElementById("app")?.hasAttribute("data-formatbar-off") === true),
     active: () => root.contains(document.activeElement) || selectionBubble.element.contains(document.activeElement),
   });
   root.append(tabsShell, toolbarEl, formatBar.element, conflictEl, noticeEl, contentEl);
@@ -434,6 +435,7 @@ function createPane(id: string): PaneElements {
       runSlashCommand(contentEl, command, selectedText(), barHost.surface()?.editorActions?.selectionBox?.() ?? null),
     runCommand: (command) => deps.runCommand(command),
     focusPane: () => focusPane(id),
+    miniBar: () => mountMiniBar(barHost, state.commandSpecs, barHost.surface()?.miniBar?.() ?? null),
   };
   contentEl.addEventListener("contextmenu", (event) => {
     if (event.defaultPrevented || event.shiftKey) return;

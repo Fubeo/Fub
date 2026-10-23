@@ -184,6 +184,14 @@ pub const EDITOR_INDENT: &str = "editor.indent";
 /// proprietà, `hidden` lo riduce a una riga che si apre, `source` lo lascia
 /// YAML. Il default è quello di prima che fosse una scelta.
 pub const EDITOR_PROPERTIES: &str = "editor.properties";
+/// Quando compare la mini-barra di formattazione accanto al puntatore:
+/// `auto` col tasto destro e, a barra del foglio spenta, sul testo scelto;
+/// `always` anche sul testo scelto a barra accesa; `menu` soltanto col tasto
+/// destro; `off` mai.
+pub const EDITOR_MINIBAR: &str = "editor.minibar";
+/// Il «/» a inizio riga o dopo uno spazio apre il menu dei blocchi e dei
+/// comandi, filtrato da ciò che si scrive dopo. Spento, il «/» resta testo.
+pub const EDITOR_SLASH: &str = "editor.slash";
 /// In che modalità si apre un riquadro nuovo: `source`, `live_preview` o
 /// `reading`, gli id delle modalità della superficie testuale.
 pub const EDITOR_DEFAULT_MODE: &str = "editor.default-mode";
@@ -623,6 +631,24 @@ fn editor_settings() -> Vec<SettingSpec> {
             UiOption::new("source", Text::key(C_EDITOR_PROPERTIES_SOURCE)),
         ],
     ));
+    settings.push(choice(
+        EDITOR_MINIBAR,
+        C_EDITOR_MINIBAR,
+        C_EDITOR_MINIBAR_DESC,
+        "auto",
+        vec![
+            UiOption::new("auto", Text::key(C_EDITOR_MINIBAR_AUTO)),
+            UiOption::new("always", Text::key(C_EDITOR_MINIBAR_ALWAYS)),
+            UiOption::new("menu", Text::key(C_EDITOR_MINIBAR_MENU)),
+            UiOption::new("off", Text::key(C_EDITOR_MINIBAR_OFF)),
+        ],
+    ));
+    settings.push(
+        SettingSpec::toggle(EDITOR_SLASH, Text::key(C_EDITOR_SLASH), true)
+            .describing(Text::key(C_EDITOR_SLASH_DESC))
+            .grouped(Text::key(C_GROUP_EDITOR))
+            .for_machine(),
+    );
     settings.push(
         SettingSpec::toggle(EDITOR_VIM, Text::key(C_EDITOR_VIM), false)
             .describing(Text::key(C_EDITOR_VIM_DESC))
@@ -1190,6 +1216,14 @@ const C_EDITOR_PROPERTIES_DESC: &str = "core.editor.properties.desc";
 const C_EDITOR_PROPERTIES_VISIBLE: &str = "core.editor.properties.visible";
 const C_EDITOR_PROPERTIES_HIDDEN: &str = "core.editor.properties.hidden";
 const C_EDITOR_PROPERTIES_SOURCE: &str = "core.editor.properties.source";
+const C_EDITOR_MINIBAR: &str = "core.editor.minibar";
+const C_EDITOR_MINIBAR_DESC: &str = "core.editor.minibar.desc";
+const C_EDITOR_MINIBAR_AUTO: &str = "core.editor.minibar.auto";
+const C_EDITOR_MINIBAR_ALWAYS: &str = "core.editor.minibar.always";
+const C_EDITOR_MINIBAR_MENU: &str = "core.editor.minibar.menu";
+const C_EDITOR_MINIBAR_OFF: &str = "core.editor.minibar.off";
+const C_EDITOR_SLASH: &str = "core.editor.slash";
+const C_EDITOR_SLASH_DESC: &str = "core.editor.slash.desc";
 const C_EDITOR_DEFAULT_MODE: &str = "core.editor.default_mode";
 const C_EDITOR_DEFAULT_MODE_DESC: &str = "core.editor.default_mode.desc";
 const C_MODE_SOURCE: &str = "core.mode.source";
@@ -1703,6 +1737,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_PROPERTIES_VISIBLE, "Visibili")
         .with(C_EDITOR_PROPERTIES_HIDDEN, "Nascoste")
         .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
+        .with(C_EDITOR_MINIBAR, "Mini-barra di formattazione")
+        .with(C_EDITOR_MINIBAR_DESC, "I gesti di formattazione accanto al puntatore: sopra il menu del tasto destro e, se si vuole, sul testo scelto.")
+        .with(C_EDITOR_MINIBAR_AUTO, "Col tasto destro, e sul testo scelto a barra spenta")
+        .with(C_EDITOR_MINIBAR_ALWAYS, "Col tasto destro e su ogni testo scelto")
+        .with(C_EDITOR_MINIBAR_MENU, "Soltanto col tasto destro")
+        .with(C_EDITOR_MINIBAR_OFF, "Mai")
+        .with(C_EDITOR_SLASH, "Menu «/» nel testo")
+        .with(C_EDITOR_SLASH_DESC, "Un «/» a inizio riga o dopo uno spazio apre i blocchi e i comandi, filtrati da ciò che si scrive dopo. Esc lo lascia come testo.")
         .with(C_EDITOR_DEFAULT_MODE, "Modalità iniziale")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "La modalità di una finestra nuova o di un vault aperto per la prima volta. Un riquadro diviso eredita quella del riquadro da cui nasce, e ognuno ricorda la sua.")
         .with(C_MODE_SOURCE, "Sorgente")
@@ -2192,6 +2234,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_PROPERTIES_VISIBLE, "Visible")
         .with(C_EDITOR_PROPERTIES_HIDDEN, "Hidden")
         .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
+        .with(C_EDITOR_MINIBAR, "Formatting mini toolbar")
+        .with(C_EDITOR_MINIBAR_DESC, "Formatting gestures next to the pointer: above the right-click menu and, if you like, on selected text.")
+        .with(C_EDITOR_MINIBAR_AUTO, "On right-click, and on selected text with the bar off")
+        .with(C_EDITOR_MINIBAR_ALWAYS, "On right-click and on any selected text")
+        .with(C_EDITOR_MINIBAR_MENU, "Only on right-click")
+        .with(C_EDITOR_MINIBAR_OFF, "Never")
+        .with(C_EDITOR_SLASH, "«/» menu in the text")
+        .with(C_EDITOR_SLASH_DESC, "A «/» at the start of a line or after a space opens blocks and commands, filtered by what you type next. Esc leaves it as text.")
         .with(C_EDITOR_DEFAULT_MODE, "Initial mode")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "The mode of a new window or of a vault opened for the first time. A split pane inherits the mode of the pane it comes from, and each pane remembers its own.")
         .with(C_MODE_SOURCE, "Source")
