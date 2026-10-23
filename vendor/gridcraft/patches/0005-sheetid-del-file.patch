@@ -1,0 +1,183 @@
+diff --git a/crates/model/src/preserved.rs b/crates/model/src/preserved.rs
+--- a/crates/model/src/preserved.rs
++++ b/crates/model/src/preserved.rs
+@@ -56,6 +56,8 @@ pub struct PreservedSheet {
+     pub rel_id: String,
+     /// How many worksheets come before it: its position among the model's sheets.
+     pub before: usize,
++    /// Its `sheetId` in the source file.
++    pub sheet_id: u32,
+ }
+ 
+ /// Unmodelled content kept for one owner (the workbook, which also holds package-root content,
+diff --git a/crates/model/src/sheet.rs b/crates/model/src/sheet.rs
+--- a/crates/model/src/sheet.rs
++++ b/crates/model/src/sheet.rs
+@@ -52,6 +52,10 @@ impl SheetViewMode {
+ #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+ pub struct Sheet {
+     pub name: String,
++    /// The `sheetId` the file gave the sheet, written back on save so that what refers to the
++    /// sheet by its id keeps finding it; 0 for a sheet the file did not have. Not in JSON.
++    #[serde(skip)]
++    pub file_id: u32,
+     pub cells: CellStore,
+     /// Static pictures are sparse rich content. Ordinary cells carry no picture pointer.
+     #[serde(default, skip_serializing_if = "BTreeMap::is_empty", with = "picture_map")]
+@@ -127,6 +131,7 @@ impl Sheet {
+     pub fn new(name: impl Into<String>) -> Sheet {
+         Sheet {
+             name: name.into(),
++            file_id: 0,
+             cells: CellStore::new(),
+             cell_pictures: BTreeMap::new(),
+             spill: BTreeMap::new(),
+diff --git a/crates/xlsx/src/passthrough.rs b/crates/xlsx/src/passthrough.rs
+--- a/crates/xlsx/src/passthrough.rs
++++ b/crates/xlsx/src/passthrough.rs
+@@ -405,6 +405,7 @@ impl KeptReader {
+                     },
+                     rel_id: r.id.clone(),
+                     before: worksheets,
++                    sheet_id: se.attr_u32("sheetId").unwrap_or(0),
+                 }),
+                 Err(why) => cx.warn(format!("chart sheet \"{name}\" was dropped: {why}")),
+             }
+@@ -933,6 +934,34 @@ pub struct KeptSheet {
+     name: String,
+     visibility: Visibility,
+     rid: String,
++    sheet_id: u32,
++}
++
++/// The `sheetId`s of the written sheets: each keeps the one the file gave it, unless another
++/// sheet took it first (a copied sheet) or it has none (a new sheet), and those get the next id
++/// that no sheet asks for.
++pub struct SheetIds {
++    wanted: HashSet<u32>,
++    given: HashSet<u32>,
++    next: u32,
++}
++
++impl SheetIds {
++    pub fn new(wb: &Workbook, kept: &WorkbookKept) -> SheetIds {
++        let wanted: HashSet<u32> = wb.sheets.iter().map(|s| s.file_id).chain(kept.sheets.iter().map(|s| s.sheet_id)).filter(|&id| id != 0).collect();
++        SheetIds { wanted, given: HashSet::new(), next: 1 }
++    }
++
++    pub fn take(&mut self, wanted: u32) -> u32 {
++        if wanted != 0 && self.given.insert(wanted) {
++            return wanted;
++        }
++        while self.wanted.contains(&self.next) || self.given.contains(&self.next) {
++            self.next += 1;
++        }
++        self.given.insert(self.next);
++        self.next
++    }
+ }
+ 
+ /// The workbook's kept content as written.
+@@ -950,8 +979,8 @@ impl WorkbookKept {
+     }
+ 
+     /// The `<sheet>` entries of the chart sheets that go right before the model's sheet `i`
+-    /// (`i` = the number of sheets for those that come last); `id` numbers them from `first_id`.
+-    pub fn sheet_entries(&self, i: usize, last: bool, mut id: usize) -> (String, usize) {
++    /// (`i` = the number of sheets for those that come last), with their ids from `ids`.
++    pub fn sheet_entries(&self, i: usize, last: bool, ids: &mut SheetIds) -> String {
+         let mut x = String::new();
+         for s in self.sheets.iter().filter(|s| if last { s.before >= i } else { s.before == i }) {
+             let state = match s.visibility {
+@@ -960,10 +989,10 @@ impl WorkbookKept {
+                 Visibility::VeryHidden => " state=\"veryHidden\"",
+             };
+             let name: String = s.name.chars().take(31).collect();
++            let id = ids.take(s.sheet_id);
+             let _ = write!(x, "<sheet name=\"{}\" sheetId=\"{id}\"{state} r:id=\"{}\"/>", esc_attr(&name), esc_attr(&s.rid));
+-            id += 1;
+         }
+-        (x, id)
++        x
+     }
+ }
+ 
+@@ -1083,7 +1112,15 @@ pub fn write_workbook(wb: &Workbook, wb_rels: &mut Rels, out: &mut Out) -> Workb
+         elements: p.elements.iter().filter(|e| e.slot == "externalReferences").filter_map(|e| remap(&e.xml, &ids)).collect(),
+         sheets: live
+             .iter()
+-            .filter_map(|s| Some(KeptSheet { before: s.before, name: s.name.clone(), visibility: s.visibility, rid: ids.get(&s.rel_id)?.clone() }))
++            .filter_map(|s| {
++                Some(KeptSheet {
++                    before: s.before,
++                    name: s.name.clone(),
++                    visibility: s.visibility,
++                    rid: ids.get(&s.rel_id)?.clone(),
++                    sheet_id: s.sheet_id,
++                })
++            })
+             .collect(),
+     }
+ }
+diff --git a/crates/xlsx/src/read.rs b/crates/xlsx/src/read.rs
+--- a/crates/xlsx/src/read.rs
++++ b/crates/xlsx/src/read.rs
+@@ -233,6 +233,7 @@ pub fn read_xlsx(bytes: &[u8]) -> Result<(Workbook, ReadReport), IoError> {
+             Err(e) => cx.warn(format!("PivotTables on sheet \"{name}\" could not be read: {e}")),
+         }
+         sheet.preserved = kept.sheet(&mut cx, &rel.target, &name);
++        sheet.file_id = se.attr_u32("sheetId").unwrap_or(0);
+         sheet.visibility = match se.attr("state") {
+             Some("hidden") => Visibility::Hidden,
+             Some("veryHidden") => Visibility::VeryHidden,
+diff --git a/crates/xlsx/src/tests/sheet_names.rs b/crates/xlsx/src/tests/sheet_names.rs
+--- a/crates/xlsx/src/tests/sheet_names.rs
++++ b/crates/xlsx/src/tests/sheet_names.rs
+@@ -21,3 +21,17 @@ fn unrepresentable_sheet_names_are_refused() {
+     }
+     assert!(write_xlsx(&book(&["Data", "Other"])).is_ok());
+ }
++
++/// A saved sheet keeps its `sheetId`; a copied or new sheet gets one no other sheet asks for.
++#[test]
++fn sheet_ids_survive_a_save() {
++    let mut wb = book(&["A", "B", "C", "D"]);
++    for (sheet, id) in wb.sheets.iter_mut().zip([3, 7, 0, 3]) {
++        Arc::make_mut(sheet).file_id = id;
++    }
++    let (read, _) = crate::read_xlsx(&write_xlsx(&wb).unwrap()).unwrap();
++    let ids: Vec<u32> = read.sheets.iter().map(|s| s.file_id).collect();
++    assert_eq!(ids, [3, 7, 1, 2]);
++    let (again, _) = crate::read_xlsx(&write_xlsx(&read).unwrap()).unwrap();
++    assert_eq!(again.sheets.iter().map(|s| s.file_id).collect::<Vec<_>>(), ids);
++}
+diff --git a/crates/xlsx/src/write.rs b/crates/xlsx/src/write.rs
+--- a/crates/xlsx/src/write.rs
++++ b/crates/xlsx/src/write.rs
+@@ -228,11 +228,9 @@ pub fn write_xlsx(wb: &Workbook, kind: XlsxKind) -> Result<Vec<u8>, IoError> {
+     let kept = crate::passthrough::write_workbook(wb, &mut wb_rels, &mut out);
+     let mut pivots = crate::pivot::PivotWriter::default();
+     let mut sheets_xml = String::new();
+-    let mut sheet_id = 1usize;
++    let mut ids = crate::passthrough::SheetIds::new(wb, &kept);
+     for (i, sheet) in wb.sheets.iter().enumerate() {
+-        let (before, next) = kept.sheet_entries(i, false, sheet_id);
+-        sheets_xml.push_str(&before);
+-        sheet_id = next;
++        sheets_xml.push_str(&kept.sheet_entries(i, false, &mut ids));
+         let (xml, mut rels) = crate::sheet_write::write_sheet(wb, i, i == active, &mut out);
+         pivots.add_sheet(wb, i, &mut out, &mut rels);
+         let name = format!("xl/worksheets/sheet{}.xml", i + 1);
+@@ -248,10 +246,10 @@ pub fn write_xlsx(wb: &Workbook, kind: XlsxKind) -> Result<Vec<u8>, IoError> {
+             Visibility::VeryHidden => " state=\"veryHidden\"",
+         };
+         let name: String = sheet.name.chars().take(31).collect();
++        let sheet_id = ids.take(sheet.file_id);
+         let _ = write!(sheets_xml, "<sheet name=\"{}\" sheetId=\"{sheet_id}\"{state} r:id=\"{rid}\"/>", esc_attr(&name));
+-        sheet_id += 1;
+     }
+-    sheets_xml.push_str(&kept.sheet_entries(wb.sheets.len(), true, sheet_id).0);
++    sheets_xml.push_str(&kept.sheet_entries(wb.sheets.len(), true, &mut ids));
+ 
+     // Defined names, then print areas and titles.
+     let mut names = String::new();

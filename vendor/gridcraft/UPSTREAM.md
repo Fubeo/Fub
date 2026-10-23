@@ -27,9 +27,9 @@ L'interfaccia (`ui-egui`) e il server MCP (`mcp`) non sono copiati.
 | `crates/formula/` | `crates/formula/` | nessuna |
 | `crates/functions/` | `crates/functions/` | `src/engineering.rs`, per Rust 1.89 |
 | `crates/numfmt/` | `crates/numfmt/` | nessuna |
-| `crates/model/` | `crates/model/` | nessuna |
+| `crates/model/` | `crates/model/` | `src/sheet.rs` e `src/preserved.rs`, per il `sheetId` del file |
 | `crates/calc/` | `crates/calc/` | nessuna |
-| `crates/xlsx/` | `crates/xlsx/` | `src/package.rs` e sei file di `src/tests/` per `zip` 9; `src/ods.rs` per Rust 1.89 |
+| `crates/xlsx/` | `crates/xlsx/` | `src/package.rs` e sei file di `src/tests/` per `zip` 9; `src/ods.rs` per Rust 1.89; `src/sheet_read.rs` e `src/tests/fixtures.rs` per i valori delle matrici; `src/read.rs`, `src/passthrough.rs`, `src/write.rs` e `src/tests/sheet_names.rs` per il `sheetId` del file |
 | `crates/chart/` | `crates/chart/` | nessuna |
 | `crates/pdf/` | `crates/pdf/` | nessuna |
 | `crates/engine/` | `crates/engine/` | `src/lib.rs` e `src/tests.rs`, per aprire senza ricalcolo |
@@ -84,7 +84,16 @@ Le patch di `patches/`, una per ragione:
   modificato niente (funzioni volatili, funzioni che GridCraft non ha, cicli).
   `DocState::from_saved` costruisce il grafo delle dipendenze senza valutare,
   così ogni valore resta quello del file finché una modifica non lo
-  raggiunge. In `engine/src/tests.rs` il test lo dice.
+  raggiunge. In `engine/src/tests.rs` il test lo dice;
+- `0005-sheetid-del-file`: lo scrittore numera i `sheetId` da 1 nell'ordine
+  dei fogli, e una cartella riscritta cambia l'id di un foglio che non è il
+  primo di una serie senza buchi. Ciò che riconosce un foglio dal suo id
+  (le parti che il codec porta così come sono, e per Fub i comandi del
+  giornale dati dopo un salvataggio) lo perderebbe. Il modello tiene il
+  `sheetId` letto (`Sheet::file_id`, `PreservedSheet::sheet_id`, fuori dal
+  JSON) e lo scrittore lo riscrive; un foglio nuovo, o copiato da un altro con
+  lo stesso id, prende il primo id che nessun foglio chiede. In
+  `xlsx/src/tests/sheet_names.rs` il test lo dice.
 
 Le dipendenze del workspace di questa cartella hanno, per quelle in comune con
 Fub, la stessa versione del `[workspace.dependencies]` di Fub, perché il grafo
