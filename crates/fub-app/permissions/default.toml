@@ -31,6 +31,8 @@ commands.allow = [
   "open_grid_bytes",
   "grid_bytes_window",
   "apply_grid_bytes",
+  "grid_bytes_commands",
+  "grid_bytes_command",
   "close_grid_bytes",
   "live_start",
   "live_pairing",
