@@ -30,7 +30,12 @@ import type {
   GridBorderStyle,
   GridCalculation,
   GridHorizontalAlign,
+  GridObjectKind,
+  GridObjectMissing,
   GridScript,
+  GridShapeAlign,
+  GridShapeAnchor,
+  GridShapeKind,
   GridUnderline,
   GridVerticalAlign,
   GridViewMode,
@@ -1202,7 +1207,12 @@ export type {
   GridBorderStyle,
   GridCalculation,
   GridHorizontalAlign,
+  GridObjectKind,
+  GridObjectMissing,
   GridScript,
+  GridShapeAlign,
+  GridShapeAnchor,
+  GridShapeKind,
   GridUnderline,
   GridVerticalAlign,
   GridViewMode,
@@ -1259,7 +1269,14 @@ export interface GridWindowRequest {
   row_count: number;
   column_start: number;
   column_count: number;
+  /** Le chiavi delle immagini che la shell ha già: i loro byte non tornano. */
+  known_media: string[];
 }
+
+/** Le chiavi d'immagine che una richiesta di finestra porta, al più (`MAX_GRID_KNOWN_MEDIA`). */
+export const MAX_GRID_KNOWN_MEDIA = 256;
+/** La misura di una chiave d'immagine (`MAX_GRID_MEDIA_KEY_BYTES`). */
+export const MAX_GRID_MEDIA_KEY_BYTES = 64;
 
 /** Patch atomica input-only: lo stile resta intatto. */
 export interface GridCellPatch {
@@ -1480,6 +1497,81 @@ export interface GridTable {
   style: string;
 }
 
+/**
+ * Una forma come la shell la disegna: i colori risolti (`#RRGGBB`, `null` per
+ * niente), il testo e il suo aspetto, con i predefiniti già scelti. Per
+ * un'icona il testo è il nome; per un tratto a mano libera i punti
+ * `x,y;x,y;…` in pixel dall'angolo dell'oggetto.
+ */
+export interface GridShape {
+  kind: GridShapeKind;
+  fill: string | null;
+  line: string | null;
+  text: string;
+  font: string | null;
+  /** In punti. */
+  font_size: number;
+  bold: boolean;
+  italic: boolean;
+  text_color: string;
+  align: GridShapeAlign;
+  anchor: GridShapeAnchor;
+  right_to_left: boolean;
+}
+
+/**
+ * I byte di un'immagine. `key` è la loro impronta: la stessa immagine ha la
+ * stessa chiave in ogni finestra, e `data` (base64) è `null` quando la
+ * richiesta dice di averla già o quando la finestra non ha più posto.
+ */
+export interface GridMedia {
+  mime: string;
+  key: string;
+  data: string | null;
+}
+
+/**
+ * Un oggetto del foglio che tocca la finestra: la cella dell'angolo in alto a
+ * sinistra, lo scarto da lei e la misura in pixel a zoom 100. Un grafico porta
+ * il suo disegno (`svg`), un'immagine i suoi byte, una forma il suo aspetto;
+ * `missing` dice perché non porta niente. Gli oggetti vengono nell'ordine in
+ * cui si disegnano.
+ */
+export interface GridObject {
+  kind: GridObjectKind;
+  /** L'id del file per grafici, immagini e forme; per gli altri il posto nel foglio. */
+  id: number;
+  row: number;
+  column: number;
+  dx: number;
+  dy: number;
+  width: number;
+  height: number;
+  alt: string;
+  svg: string | null;
+  media: GridMedia | null;
+  shape: GridShape | null;
+  missing: GridObjectMissing | null;
+}
+
+/** Gli oggetti di una finestra, al più (`MAX_GRID_WINDOW_OBJECTS`). */
+export const MAX_GRID_WINDOW_OBJECTS = 1024;
+/** Il disegno di un grafico, al più (`MAX_GRID_OBJECT_SVG_BYTES`). */
+export const MAX_GRID_OBJECT_SVG_BYTES = 1024 * 1024;
+/** I byte di un'immagine in base64, al più (`MAX_GRID_MEDIA_BYTES`). */
+export const MAX_GRID_MEDIA_BYTES = 3 * 1024 * 1024;
+/** Il testo di una forma, al più (`MAX_GRID_SHAPE_TEXT_BYTES`). */
+export const MAX_GRID_SHAPE_TEXT_BYTES = 64 * 1024;
+/** I tipi d'immagine che una finestra porta (`GRID_MEDIA_TYPES`). */
+export const GRID_MEDIA_TYPES: readonly string[] = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/bmp",
+  "image/webp",
+  "image/svg+xml",
+];
+
 export interface GridBytesCell {
   key: GridCellKey;
   input: string;
@@ -1515,6 +1607,8 @@ export interface GridBytesWindow {
   merges: GridMerge[];
   view: GridSheetView;
   tables: GridTable[];
+  /** Gli oggetti che toccano la finestra, anche quelli ancorati fuori. */
+  objects: GridObject[];
 }
 
 // **Da cosa parte** una scrittura intera (rispecchia `fub_abi::edit::WriteBase`).

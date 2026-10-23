@@ -1120,6 +1120,7 @@ const WORDCRAFT_FREE: &[&str] = &["fub-abi", "fub-kernel", "fub-sdk"];
 /// Excel (vedi ../../../docs/decisions/0214-gridcraft-motore-del-foglio-di-calcolo.md).
 const GRIDCRAFT_OWNERS: &[(&str, &str, Option<&str>)] = &[
     ("fub-format-xlsx", "gridcraft-calc", None),
+    ("fub-format-xlsx", "gridcraft-chart", None),
     ("fub-format-xlsx", "gridcraft-core", None),
     ("fub-format-xlsx", "gridcraft-engine", None),
     ("fub-format-xlsx", "gridcraft-model", None),

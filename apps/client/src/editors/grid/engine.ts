@@ -13,6 +13,7 @@ import type {
   GridDialog,
   GridBook,
   GridMerge,
+  GridObject,
   GridSelection as GridCommandSelection,
   GridSheetView,
   GridTable,
@@ -63,6 +64,7 @@ import {
   rangeA1,
   type GridRange,
 } from "./merges";
+import { drawObject, GridMediaCache, objectLabel } from "./objects";
 import { hasBorders, horizontalOf, iconOf, paintBorders, paintCell, spills } from "./paint";
 import { currencyFormat, shortcutCommand, shortcutDialog } from "./shortcuts";
 import {
@@ -72,9 +74,11 @@ import {
   keyPosition,
   fileInput,
   localInput,
+  objectKey,
   validateBytesSession,
   validateBytesWindow,
   workbookView,
+  WORKBOOK_SCALE,
   type WorkbookCell,
   type WorkbookView,
 } from "./workbook";
@@ -95,10 +99,7 @@ export const MAX_GRID_SESSION_WINDOWS = 256;
 /// Le parti di una cartella che la griglia non disegna, per codice d'avviso
 /// di `fub-format-xlsx` (`not-shown-…`).
 const NOT_SHOWN_KEYS: Readonly<Record<string, Key>> = {
-  "not-shown-charts": "grid.workbook.part.charts",
-  "not-shown-images": "grid.workbook.part.images",
-  "not-shown-shapes": "grid.workbook.part.shapes",
-  "not-shown-sparklines": "grid.workbook.part.sparklines",
+  "not-shown-slicers": "grid.workbook.part.slicers",
 };
 /// Il comando con cui una formula, o un input, entra in una sessione a comandi.
 const SET_VALUES = "range.setValues";
@@ -161,6 +162,93 @@ interface SheetFrame {
   readonly frozenColumns: number;
   readonly frozenHeight: number;
   readonly frozenWidth: number;
+}
+
+/// Gli oggetti che si spostano e si misurano: quelli che galleggiano sulle
+/// celle, con il nome del tipo che i comandi di GridCraft vogliono.
+const MOVABLE: Readonly<Partial<Record<GridObject["kind"], string>>> = { chart: "chart", image: "image", shape: "shape" };
+/// Le maniglie di un oggetto selezionato: dove stanno e che lati muovono.
+const HANDLES: readonly { readonly id: string; readonly x: number; readonly y: number }[] = [
+  { id: "nw", x: 0, y: 0 }, { id: "n", x: 0.5, y: 0 }, { id: "ne", x: 1, y: 0 },
+  { id: "e", x: 1, y: 0.5 }, { id: "se", x: 1, y: 1 }, { id: "s", x: 0.5, y: 1 },
+  { id: "sw", x: 0, y: 1 }, { id: "w", x: 0, y: 0.5 },
+];
+/// Sotto questa distanza in pixel un clic su un oggetto non lo sposta.
+const DRAG_SLOP = 3;
+/// Gli oggetti che l'elenco per chi non vede nomina, al più.
+const SUMMARY_OBJECTS = 50;
+
+/// Un rettangolo sullo schermo, nelle coordinate del canvas.
+interface ObjectRect {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/// Lo spostamento, o la misura, di un oggetto con il puntatore.
+interface ObjectGesture {
+  readonly key: string;
+  /// La maniglia presa, o `null` per spostare l'oggetto intero.
+  readonly handle: string | null;
+  readonly pointer: number;
+  readonly x: number;
+  readonly y: number;
+  readonly from: ObjectRect;
+  to: ObjectRect;
+  moved: boolean;
+}
+
+/// Il rettangolo `from` con la maniglia `handle` tirata di `dx`×`dy`, o
+/// spostato intero se non c'è maniglia. Un lato non passa l'altro, e con
+/// `keepRatio` un angolo tiene le proporzioni.
+export function gestureRect(from: ObjectRect, handle: string | null, dx: number, dy: number, keepRatio: boolean): ObjectRect {
+  if (handle === null) return { ...from, left: from.left + dx, top: from.top + dy };
+  let left = from.left;
+  let top = from.top;
+  let right = from.left + from.width;
+  let bottom = from.top + from.height;
+  if (handle.includes("w")) left = Math.min(left + dx, right - 1);
+  if (handle.includes("e")) right = Math.max(right + dx, left + 1);
+  if (handle.includes("n")) top = Math.min(top + dy, bottom - 1);
+  if (handle.includes("s")) bottom = Math.max(bottom + dy, top + 1);
+  if (keepRatio && handle.length === 2 && from.width > 0 && from.height > 0) {
+    const ratio = from.width / from.height;
+    let width = right - left;
+    let height = bottom - top;
+    if (width / height > ratio) width = height * ratio;
+    else height = width / ratio;
+    if (handle.includes("w")) left = right - width;
+    else right = left + width;
+    if (handle.includes("n")) top = bottom - height;
+    else bottom = top + height;
+  }
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+/// La chiave dell'oggetto che un comando di inserimento dice di aver fatto
+/// (`{"chart": 3}`), o `null`.
+function insertedObject(result: string | null): string | null {
+  if (result === null) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(result);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== "object") return null;
+  for (const kind of ["chart", "image", "shape"] as const) {
+    const id = (value as Record<string, unknown>)[kind];
+    if (typeof id === "number" && Number.isInteger(id) && id >= 0) return `${kind}:${id}`;
+  }
+  return null;
+}
+
+/// L'oggetto sta dove stava: la stessa cella, lo stesso scarto e la stessa
+/// misura.
+function sameObjectPlace(left: GridObject, right: GridObject): boolean {
+  return left.row === right.row && left.column === right.column && left.dx === right.dx
+    && left.dy === right.dy && left.width === right.width && left.height === right.height;
 }
 
 /// La sessione della versione 2 aperta su una cartella.
@@ -442,6 +530,24 @@ export class GridEngine {
   };
   /// La famiglia di caratteri della griglia, per un carattere del file che manca.
   #fallbackFont: string | null = null;
+  /// Le immagini lette, per impronta: restano fra una finestra e l'altra, e
+  /// l'host non le rimanda.
+  readonly #media = new GridMediaCache();
+  /// Le finestre lette hanno portato immagini nuove: quelle a cui ne
+  /// mancano si possono richiedere.
+  #mediaAdded = false;
+  /// L'elenco degli oggetti del foglio, per chi non li vede.
+  readonly #objectsSummary: HTMLElement;
+  /// L'oggetto selezionato (`objectKey`): la tastiera è sua finché c'è.
+  #selectedObject: string | null = null;
+  #objectGesture: ObjectGesture | null = null;
+  /// Dove un oggetto spostato si mostra finché la finestra riletta non lo
+  /// porta lì: vale finché l'oggetto è ancora quello di prima.
+  #placed: { readonly key: string; readonly before: GridObject; readonly rect: ObjectRect } | null = null;
+  /// Il testo di una casella di testo che si scrive.
+  #objectText: { readonly key: string; readonly field: HTMLTextAreaElement; readonly original: string } | null = null;
+  /// Ciò che si dice a chi non vede quando un oggetto si seleziona.
+  readonly #objectsAnnounce: HTMLElement;
 
   constructor(parent: HTMLElement, options: GridEngineOptions) {
     const signal = this.#abort.signal;
@@ -483,7 +589,13 @@ export class GridEngine {
     this.#cellEditorHost.setAttribute("aria-hidden", "true");
     this.#canvas.append(this.#cellEditorHost);
     this.#viewport.append(this.#canvas);
-    this.#root.append(this.#ribbonHost, this.#notice, formula, this.#viewport, this.#sheetBar);
+    this.#objectsSummary = document.createElement("p");
+    this.#objectsSummary.className = "grid-objects-summary sr-only";
+    this.#objectsSummary.id = `grid-${options.surfaceId}-objects`;
+    this.#objectsAnnounce = document.createElement("p");
+    this.#objectsAnnounce.className = "grid-objects-announce sr-only";
+    this.#objectsAnnounce.setAttribute("role", "status");
+    this.#root.append(this.#ribbonHost, this.#notice, formula, this.#viewport, this.#objectsSummary, this.#objectsAnnounce, this.#sheetBar);
     parent.replaceChildren(this.#root);
     this.#stopLanguage = onLanguage(() => {
       this.#viewport.setAttribute("aria-label", t("grid.surface"));
@@ -536,11 +648,21 @@ export class GridEngine {
     this.#viewport.addEventListener("keydown", grid((event) => this.#keydown(event)), { signal });
     this.#viewport.addEventListener("pointerdown", grid((event) => this.#pointerDown(event)), { signal });
     this.#viewport.addEventListener("pointermove", grid((event) => this.#pointerMove(event)), { signal });
-    this.#viewport.addEventListener("pointerup", () => { this.#pointerAnchor = null; }, { signal });
+    this.#viewport.addEventListener("pointerup", (event) => {
+      this.#pointerAnchor = null;
+      this.#endObjectGesture(event, true);
+    }, { signal });
+    this.#viewport.addEventListener("pointercancel", (event) => this.#endObjectGesture(event, false), { signal });
     this.#viewport.addEventListener("copy", grid((event) => this.#copy(event)), { signal });
     this.#viewport.addEventListener("cut", grid((event) => this.#cut(event)), { signal });
     this.#viewport.addEventListener("paste", grid((event) => this.#paste(event)), { signal });
     this.#viewport.addEventListener("dblclick", grid((event) => {
+      if (event.target instanceof Element && event.target.closest(".grid-object-text-editor")) return;
+      const object = event.target instanceof Element ? event.target.closest<HTMLElement>(".grid-object") : null;
+      if (object) {
+        if (object.dataset.object) this.#beginObjectText(object.dataset.object);
+        return;
+      }
       const position = this.#eventPosition(event);
       if (position) this.#beginEditing("cell", position);
     }), { signal });
@@ -649,6 +771,11 @@ export class GridEngine {
   /// La vista del foglio mostrato.
   sheetView(): GridSheetView {
     return this.#sheetView();
+  }
+
+  /// L'oggetto selezionato, per le schede che lo cambiano.
+  selectedObject(): GridObject | null {
+    return this.#objects().find((object) => objectKey(object) === this.#selectedObject) ?? null;
   }
 
   /// Le tabelle lette del foglio mostrato.
@@ -868,6 +995,8 @@ export class GridEngine {
     const last = ticket === this.#bytesTickets;
     if (last) this.#publishJournal(this.#confirmedJournal, "input");
     if (last) this.#adoptSelection(outcome.selection);
+    // Un oggetto appena inserito resta selezionato, come in Excel.
+    const inserted = last && command.id.startsWith("insert.") ? insertedObject(outcome.result) : null;
     done?.({ ok: true, result: outcome.result });
     if (outcome.dialog) this.#options.onDialog?.(outcome.dialog);
     if (outcome.commit.edit.from === outcome.commit.edit.to && !outcome.commit.edit.inserted) {
@@ -875,6 +1004,7 @@ export class GridEngine {
       return;
     }
     await this.#refreshBytes(state, epoch);
+    if (inserted && current() && this.#objectByKey(inserted)) this.#selectObject(inserted);
   }
 
   /// La selezione che un comando ha lasciato: il foglio, l'intervallo che
@@ -957,6 +1087,7 @@ export class GridEngine {
     this.#sheetTabs = null;
     this.#formulaEditor.destroy();
     this.#cellEditor.destroy();
+    this.#media.clear();
     this.#root.remove();
   }
 
@@ -1048,6 +1179,7 @@ export class GridEngine {
       this.#bytesMessage = null;
       this.#root.dataset.gridProtocol = "v2";
       this.#showView(sheet.id, top);
+      this.#followMedia();
     } catch (error) {
       if (this.#destroyed || epoch !== this.#bytesEpoch) return;
       this.#openFailed(journal, isErrorKind(error, "conflict")
@@ -1141,6 +1273,7 @@ export class GridEngine {
           row_count: Math.min(GRID_WINDOW_ROWS, sheet.row_count - row),
           column_start: column,
           column_count: Math.min(GRID_WINDOW_COLUMNS, sheet.column_count - column),
+          known_media: this.#media.known(),
         });
       }
     }
@@ -1148,6 +1281,7 @@ export class GridEngine {
     return Promise.all(requests.map(async (request) => {
       const window = await host.gridBytesWindow(state.surface, state.instance, request);
       validateBytesWindow(window, session);
+      if (this.#media.remember(window.objects)) this.#mediaAdded = true;
       return window;
     }));
   }
@@ -1186,6 +1320,7 @@ export class GridEngine {
         if (!current() || !fresh.length) return;
         this.#windows = keptWindows(this.#windows, fresh, revision);
         this.#showView(this.#sheet().id, false);
+        this.#followMedia();
       } catch (error) {
         if (!current()) return;
         this.#refuse(t("grid.workbook.read_failed", { error: errorText(error) }));
@@ -1209,10 +1344,26 @@ export class GridEngine {
       if (this.#destroyed || epoch !== this.#bytesEpoch || this.#bytes !== state || state.session.revision !== revision) return;
       this.#windows = keptWindows(this.#windows, fresh, revision);
       this.#showView(this.#sheet().id, false);
+      this.#followMedia();
     } catch (error) {
       if (this.#destroyed || epoch !== this.#bytesEpoch || this.#bytes !== state || state.session.revision !== revision) return;
       this.#refuse(t("grid.workbook.read_failed", { error: errorText(error) }));
     }
+  }
+
+  /// Una finestra a cui l'host non ha dato i byte di un'immagine, perché
+  /// non ci stavano, si richiede: adesso la shell ha le immagini delle altre,
+  /// e l'host le salta. Soltanto dopo una lettura che ne ha portate di
+  /// nuove, così la richiesta finisce.
+  #followMedia(): void {
+    const added = this.#mediaAdded;
+    this.#mediaAdded = false;
+    if (!added) return;
+    const sheet = this.#sheet().id;
+    const short = this.#windows.filter((window) => window.sheet === sheet && this.#media.missing(window.objects));
+    if (!short.length) return;
+    this.#windows = this.#windows.filter((window) => !short.includes(window));
+    void this.#loadViewport();
   }
 
   #refuse(message: string): void {
@@ -1536,6 +1687,8 @@ export class GridEngine {
   #showSheetAt(index: number): void {
     if (index === this.#sheetIndex) return;
     this.#finishEditing(false, "input", false);
+    this.#finishObjectText(false);
+    this.#selectedObject = null;
     this.#sheetIndex = index;
     this.#selection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
     this.#showSheet(true);
@@ -1687,10 +1840,11 @@ export class GridEngine {
       rowElement.append(...borders);
       rows.push(rowElement);
     }
+    rows.push(...this.#objectElements());
     rows.push(...this.#freezeLines());
 
     this.#detachCellEditor();
-    for (const row of this.#viewport.querySelectorAll<HTMLElement>(".grid-row, .grid-freeze")) row.remove();
+    for (const row of this.#viewport.querySelectorAll<HTMLElement>(".grid-row, .grid-freeze, .grid-object")) row.remove();
     this.#viewport.append(...rows);
     this.#fitCells(measures);
     const editing = this.#editing?.owner === "cell" ? this.#editing : null;
@@ -1769,6 +1923,323 @@ export class GridEngine {
       lines.push(line);
     }
     return lines;
+  }
+
+  /// Gli oggetti letti del foglio mostrato, nell'ordine in cui si disegnano.
+  #objects(): readonly GridObject[] {
+    return this.#view?.sheets[this.#sheetIndex]?.objects ?? [];
+  }
+
+  #objectByKey(key: string | null): GridObject | undefined {
+    return key === null ? undefined : this.#objects().find((object) => objectKey(object) === key);
+  }
+
+  /// Dove l'oggetto sta sul canvas: la sua cella e lo scarto da lei, nei
+  /// pixel del file portati a quelli dello schermo. Un grafico sparkline e
+  /// un'immagine nella cella prendono la misura della cella di Fub.
+  #objectRect(object: GridObject): ObjectRect | null {
+    const rows = this.#rows;
+    const columns = this.#columns;
+    if (object.row >= rows.sizes.length || object.column >= columns.sizes.length) return null;
+    const placed = this.#placed;
+    if (placed && placed.key === objectKey(object)) {
+      if (sameObjectPlace(placed.before, object)) return placed.rect;
+      this.#placed = null;
+    }
+    const frame = this.#frame;
+    const scale = WORKBOOK_SCALE * frame.zoom;
+    const left = this.#columnLeft(object.column);
+    const top = frame.columnHeader + rows.offsets[object.row] + (object.row < frame.frozenRows ? this.#viewport.scrollTop : 0);
+    if (object.kind === "sparkline" || object.kind === "cell_picture") {
+      const merge = mergeAt(this.#merges(), { row: object.row, column: object.column });
+      const lastRow = merge ? merge.row + merge.rows - 1 : object.row;
+      const lastColumn = merge ? merge.column + merge.columns - 1 : object.column;
+      return {
+        left,
+        top,
+        width: columns.offsets[lastColumn + 1] - columns.offsets[object.column],
+        height: rows.offsets[lastRow + 1] - rows.offsets[object.row],
+      };
+    }
+    return { left: left + object.dx * scale, top: top + object.dy * scale, width: object.width * scale, height: object.height * scale };
+  }
+
+  /// Gli oggetti che si vedono, sopra le celle.
+  #objectElements(): HTMLElement[] {
+    const objects = this.#objects();
+    this.#showObjectsSummary(objects);
+    if (this.#selectedObject !== null && !this.#objectByKey(this.#selectedObject)) {
+      this.#selectedObject = null;
+      this.#finishObjectText(false);
+    }
+    const left = this.#viewport.scrollLeft;
+    const top = this.#viewport.scrollTop;
+    const right = left + this.#viewport.clientWidth;
+    const bottom = top + this.#viewport.clientHeight;
+    const out: HTMLElement[] = [];
+    for (const object of objects) {
+      const key = objectKey(object);
+      const rect = this.#objectGesture?.key === key ? this.#objectGesture.to : this.#objectRect(object);
+      if (!rect || rect.left > right || rect.left + rect.width < left || rect.top > bottom || rect.top + rect.height < top) continue;
+      const element = document.createElement("div");
+      element.className = MOVABLE[object.kind] ? "grid-object movable" : "grid-object in-cell";
+      element.dataset.object = key;
+      element.setAttribute("aria-hidden", "true");
+      element.title = objectLabel(object);
+      if (key === this.#selectedObject) element.classList.add("selected");
+      if (object.row < this.#frame.frozenRows || object.column < this.#frame.frozenColumns) element.classList.add("frozen");
+      this.#place(element, rect.left, rect.top, Math.max(rect.width, 1), Math.max(rect.height, 1));
+      this.#drawObjectInto(element, object, rect);
+      out.push(element);
+    }
+    return out;
+  }
+
+  /// Il contenuto dell'oggetto a misura di `rect`, con le maniglie se è
+  /// selezionato e si può cambiare, e il campo del suo testo se si scrive.
+  #drawObjectInto(element: HTMLElement, object: GridObject, rect: ObjectRect): void {
+    const key = objectKey(object);
+    element.replaceChildren(drawObject(object, rect.width, rect.height, WORKBOOK_SCALE * this.#frame.zoom, this.#media, this.#gridFont()));
+    if (key !== this.#selectedObject) return;
+    if (this.#objectText?.key === key) {
+      element.append(this.#objectText.field);
+      return;
+    }
+    if (!this.commandable()) return;
+    for (const handle of HANDLES) {
+      const grip = document.createElement("div");
+      grip.className = `grid-object-handle ${handle.id}`;
+      grip.dataset.handle = handle.id;
+      grip.style.left = `${handle.x * 100}%`;
+      grip.style.top = `${handle.y * 100}%`;
+      element.append(grip);
+    }
+  }
+
+  /// L'elenco degli oggetti, che la griglia nomina come sua descrizione.
+  #showObjectsSummary(objects: readonly GridObject[]): void {
+    const names = objects.filter((object) => MOVABLE[object.kind]).slice(0, SUMMARY_OBJECTS).map(objectLabel);
+    const text = names.length ? t("grid.objects.summary", { list: names.join(", ") }) : "";
+    if (this.#objectsSummary.textContent !== text) this.#objectsSummary.textContent = text;
+    if (text) this.#viewport.setAttribute("aria-describedby", this.#objectsSummary.id);
+    else this.#viewport.removeAttribute("aria-describedby");
+  }
+
+  /// Seleziona l'oggetto `key`, o torna alle celle con `null`.
+  #selectObject(key: string | null): void {
+    if (this.#selectedObject === key) return;
+    this.#finishObjectText(true);
+    this.#selectedObject = key;
+    const object = this.#objectByKey(key);
+    this.#objectsAnnounce.textContent = object ? t("grid.object.selected", { name: objectLabel(object) }) : "";
+    if (object) {
+      const rect = this.#objectRect(object);
+      if (rect) this.#revealRect(rect);
+    }
+    this.#render();
+    this.#options.onSelectionChange();
+  }
+
+  /// Scorre perché l'angolo dell'oggetto si veda.
+  #revealRect(rect: ObjectRect): void {
+    const frame = this.#frame;
+    const viewport = this.#viewport;
+    const before = { x: frame.rowHeader + frame.frozenWidth, y: frame.columnHeader + frame.frozenHeight };
+    if (rect.left < viewport.scrollLeft + before.x || rect.left > viewport.scrollLeft + viewport.clientWidth) {
+      viewport.scrollLeft = Math.max(0, rect.left - before.x);
+    }
+    if (rect.top < viewport.scrollTop + before.y || rect.top > viewport.scrollTop + viewport.clientHeight) {
+      viewport.scrollTop = Math.max(0, rect.top - before.y);
+    }
+  }
+
+  /// Il passo di Tab fra gli oggetti che si spostano.
+  #stepObject(step: 1 | -1): void {
+    const keys = this.#objects().filter((object) => MOVABLE[object.kind]).map(objectKey);
+    if (!keys.length) return;
+    const at = this.#selectedObject === null ? -1 : keys.indexOf(this.#selectedObject);
+    const next = at < 0 ? (step > 0 ? 0 : keys.length - 1) : (at + step + keys.length) % keys.length;
+    this.#selectObject(keys[next] ?? null);
+  }
+
+  /// I tasti di un oggetto selezionato. Vero se il tasto è suo.
+  #objectKeydown(event: KeyboardEvent): boolean {
+    const object = this.#objectByKey(this.#selectedObject);
+    if (!object) return false;
+    const kind = MOVABLE[object.kind];
+    switch (event.key) {
+      case "Escape":
+        this.#selectObject(null);
+        return true;
+      case "Tab":
+        this.#stepObject(event.shiftKey ? -1 : 1);
+        return true;
+      case "Delete":
+      case "Backspace":
+        if (kind && this.commandable()) {
+          this.#selectObject(null);
+          this.command("object.delete", JSON.stringify({ kind, id: object.id }));
+        }
+        return true;
+      case "Enter":
+      case "F2":
+        this.#beginObjectText(objectKey(object));
+        return true;
+      case "ArrowUp":
+      case "ArrowDown":
+      case "ArrowLeft":
+      case "ArrowRight": {
+        const rect = this.#objectRect(object);
+        if (!kind || !rect || !this.commandable()) return true;
+        const step = (event.shiftKey ? 10 : 1) * WORKBOOK_SCALE * this.#frame.zoom;
+        const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+        const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+        this.#placeObject(objectKey(object), gestureRect(rect, null, dx, dy, false));
+        return true;
+      }
+      default:
+        // Le altre battute non aprono la cella sotto l'oggetto.
+        return !(event.ctrlKey || event.metaKey || event.altKey);
+    }
+  }
+
+  /// Prende l'oggetto sotto il puntatore: lo seleziona e comincia a
+  /// spostarlo, o a misurarlo se ha preso una maniglia. Falso se l'oggetto
+  /// non si prende, e il clic va alla cella.
+  #objectPointerDown(event: PointerEvent, element: HTMLElement): boolean {
+    const key = element.dataset.object ?? null;
+    const object = this.#objectByKey(key);
+    if (!key || !object || !MOVABLE[object.kind]) return false;
+    if (event.target instanceof Element && event.target.closest(".grid-object-text-editor")) return true;
+    event.preventDefault();
+    this.#finishEditing(true, "input", false);
+    this.#viewport.focus();
+    this.#selectObject(key);
+    const rect = this.#objectRect(object);
+    if (!rect || !this.commandable() || event.button !== 0) return true;
+    const handle = event.target instanceof Element ? event.target.closest<HTMLElement>(".grid-object-handle")?.dataset.handle ?? null : null;
+    this.#objectGesture = { key, handle, pointer: event.pointerId, x: event.clientX, y: event.clientY, from: rect, to: rect, moved: false };
+    this.#viewport.setPointerCapture?.(event.pointerId);
+    return true;
+  }
+
+  #objectPointerMove(event: PointerEvent, gesture: ObjectGesture): void {
+    if (event.pointerId !== gesture.pointer) return;
+    const dx = event.clientX - gesture.x;
+    const dy = event.clientY - gesture.y;
+    if (!gesture.moved && Math.hypot(dx, dy) < DRAG_SLOP) return;
+    gesture.moved = true;
+    gesture.to = gestureRect(gesture.from, gesture.handle, dx, dy, event.shiftKey);
+    const object = this.#objectByKey(gesture.key);
+    const element = [...this.#viewport.querySelectorAll<HTMLElement>(".grid-object")].find((candidate) => candidate.dataset.object === gesture.key);
+    if (!object || !element) return;
+    const rect = gesture.to;
+    this.#place(element, rect.left, rect.top, Math.max(rect.width, 1), Math.max(rect.height, 1));
+    this.#drawObjectInto(element, object, rect);
+  }
+
+  #endObjectGesture(event: PointerEvent, commit: boolean): void {
+    const gesture = this.#objectGesture;
+    if (!gesture || event.pointerId !== gesture.pointer) return;
+    this.#objectGesture = null;
+    if (commit && gesture.moved) this.#placeObject(gesture.key, gesture.to);
+    else this.#render();
+  }
+
+  /// Ancora l'oggetto a `rect`: la cella sotto il suo angolo in alto a
+  /// sinistra e lo scarto da lei, con la misura, nei pixel del file. Si
+  /// mostra lì subito; se il comando non entra, torna dov'era.
+  #placeObject(key: string, rect: ObjectRect): void {
+    const object = this.#objectByKey(key);
+    const kind = object ? MOVABLE[object.kind] : undefined;
+    if (!object || !kind) return;
+    const frame = this.#frame;
+    const scale = WORKBOOK_SCALE * frame.zoom;
+    // Sopra le righe o le colonne bloccate un punto del canvas sta fermo con
+    // lo scorrimento.
+    const screenX = rect.left - this.#viewport.scrollLeft - frame.rowHeader;
+    const screenY = rect.top - this.#viewport.scrollTop - frame.columnHeader;
+    const x = Math.max(0, frame.frozenColumns > 0 && screenX < frame.frozenWidth ? screenX : rect.left - frame.rowHeader);
+    const y = Math.max(0, frame.frozenRows > 0 && screenY < frame.frozenHeight ? screenY : rect.top - frame.columnHeader);
+    // Sulla stessa linea di una riga o di una colonna nascosta l'ancora resta
+    // quella del file.
+    const near = (sizes: AxisLayout, at: number, own: number) => {
+      const index = indexAt(sizes, at);
+      return own < sizes.sizes.length && sizes.offsets[own] === sizes.offsets[index] ? own : index;
+    };
+    const column = near(this.#columns, x, object.column);
+    const row = near(this.#rows, y, object.row);
+    if (column < 0 || row < 0) return;
+    const round = (value: number) => Math.round(value * 100) / 100;
+    const params = {
+      kind,
+      id: object.id,
+      at: cellA1({ row, column }),
+      dx: round((x - this.#columns.offsets[column]) / scale),
+      dy: round((y - this.#rows.offsets[row]) / scale),
+      width: round(rect.width / scale),
+      height: round(rect.height / scale),
+    };
+    const placed = { key, before: object, rect: { ...rect, left: frame.rowHeader + x, top: frame.columnHeader + y } };
+    this.#placed = placed;
+    this.#render();
+    void this.run("object.move", JSON.stringify(params)).then((run) => {
+      if (run.ok || this.#placed !== placed) return;
+      this.#placed = null;
+      if (run.error) this.#refuse(t("grid.workbook.command_failed", { error: run.error }));
+      this.#render();
+    });
+  }
+
+  /// Apre il testo di una forma sul posto: Invio con Ctrl, o uscire, lo
+  /// scrive; Esc lo lascia com'era.
+  #beginObjectText(key: string): void {
+    const object = this.#objectByKey(key);
+    if (!object?.shape || object.shape.kind !== "text_box" || !this.commandable()) return;
+    if (this.#objectText?.key === key) {
+      this.#objectText.field.focus();
+      return;
+    }
+    this.#finishObjectText(true);
+    this.#selectedObject = key;
+    const field = document.createElement("textarea");
+    field.className = "grid-object-text-editor";
+    field.value = object.shape.text;
+    field.setAttribute("aria-label", objectLabel(object));
+    field.style.fontSize = `${(object.shape.font_size * (96 / 72) * WORKBOOK_SCALE * this.#frame.zoom).toFixed(2)}px`;
+    field.addEventListener("keydown", (event) => {
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.#finishObjectText(false);
+        this.#viewport.focus();
+      } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        this.#finishObjectText(true);
+        this.#viewport.focus();
+      }
+    }, { signal: this.#abort.signal });
+    field.addEventListener("blur", () => queueMicrotask(() => {
+      if (this.#objectText?.field === field) this.#finishObjectText(true);
+    }), { signal: this.#abort.signal });
+    for (const type of ["pointerdown", "copy", "cut", "paste"] as const) {
+      field.addEventListener(type, (event) => event.stopPropagation(), { signal: this.#abort.signal });
+    }
+    this.#objectText = { key, field, original: object.shape.text };
+    this.#render();
+    field.focus();
+  }
+
+  #finishObjectText(commit: boolean): void {
+    const editing = this.#objectText;
+    if (!editing) return;
+    this.#objectText = null;
+    editing.field.remove();
+    const object = this.#objectByKey(editing.key);
+    if (commit && object && editing.field.value !== editing.original) {
+      this.command("shape.setText", JSON.stringify({ id: object.id, text: editing.field.value }));
+    }
+    this.#render();
   }
 
   /// L'elemento della cella in `position`, disegnato nella riga `hostRow`
@@ -2167,6 +2638,16 @@ export class GridEngine {
       this.redo();
       return;
     }
+    if (this.#objectKeydown(event)) {
+      event.preventDefault();
+      return;
+    }
+    // Ctrl+Alt+5, come in Excel: dalle celle al primo oggetto del foglio.
+    if (modifier && event.altKey && event.code === "Digit5") {
+      event.preventDefault();
+      this.#stepObject(1);
+      return;
+    }
     if (this.#commands.length && !this.#readOnly) {
       const range = this.#selectedRange();
       const context = {
@@ -2392,9 +2873,12 @@ export class GridEngine {
   }
 
   #pointerDown(event: PointerEvent): void {
+    const object = event.target instanceof Element ? event.target.closest<HTMLElement>(".grid-object") : null;
+    if (object && this.#objectPointerDown(event, object)) return;
     const position = this.#eventPosition(event);
     if (!position) return;
     event.preventDefault();
+    if (this.#selectedObject !== null) this.#selectObject(null);
     this.#pointerAnchor = position;
     this.#selection = event.shiftKey
       ? { anchor: this.#selection.anchor, focus: position }
@@ -2407,6 +2891,10 @@ export class GridEngine {
   }
 
   #pointerMove(event: PointerEvent): void {
+    if (this.#objectGesture) {
+      this.#objectPointerMove(event, this.#objectGesture);
+      return;
+    }
     if (!this.#pointerAnchor || event.buttons === 0) return;
     const position = this.#eventPosition(event);
     if (!position) return;

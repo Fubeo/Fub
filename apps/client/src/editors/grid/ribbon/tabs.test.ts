@@ -35,6 +35,7 @@ const VIEW: RibbonView = {
   },
   book: { theme_colors: [], names: ["Totale"], calculation: "automatic", protected: false, font: "Calibri", font_size: 11 },
   table: null,
+  object: null,
   theme: [],
   hidden: [{ id: "s2", name: "Nascosto" }],
   viewport: { width: 800, height: 600 },

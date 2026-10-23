@@ -8,8 +8,10 @@ description = "Cartelle di lavoro di Excel (.xlsx, .xlsm, .xltx, .xltm) con il m
 
 [dependencies]
 fub-abi = { workspace = true }
+base64 = { workspace = true }
 fub-format-markdown = { workspace = true }
 gridcraft-calc = { workspace = true }
+gridcraft-chart = { workspace = true }
 gridcraft-core = { workspace = true }
 gridcraft-engine = { workspace = true }
 gridcraft-model = { workspace = true }

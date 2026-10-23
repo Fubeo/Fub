@@ -1449,6 +1449,121 @@ body {
   pointer-events: none;
 }
 
+/* Gli oggetti del foglio galleggiano sopra le celle e passano sotto le
+   intestazioni e le righe bloccate, come in Excel. Quelli nella cella (un
+   grafico sparkline, un'immagine nella cella) lasciano il clic alla cella. */
+.grid-object {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+}
+
+.grid-object.frozen {
+  z-index: 6;
+}
+
+.grid-object.in-cell {
+  pointer-events: none;
+}
+
+.grid-object.movable {
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.grid-object-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.grid-object.in-cell .grid-object-image {
+  object-fit: contain;
+}
+
+.grid-object-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 0.25rem;
+  overflow: hidden;
+  text-align: center;
+}
+
+.grid-object-shape {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.grid-object-figure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.grid-object-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+  line-height: 1.2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.grid-object-handle {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+}
+
+.grid-object-handle.nw,
+.grid-object-handle.se {
+  cursor: nwse-resize;
+}
+
+.grid-object-handle.ne,
+.grid-object-handle.sw {
+  cursor: nesw-resize;
+}
+
+.grid-object-handle.n,
+.grid-object-handle.s {
+  cursor: ns-resize;
+}
+
+.grid-object-handle.e,
+.grid-object-handle.w {
+  cursor: ew-resize;
+}
+
+.grid-object-text-editor {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  resize: none;
+  cursor: text;
+}
+
 .grid-header {
   display: flex;
   align-items: center;

@@ -55,6 +55,7 @@ fn whole_window(
                 row_count: 10,
                 column_start: 0,
                 column_count: 6,
+                known_media: Vec::new(),
             },
         )
         .unwrap()
