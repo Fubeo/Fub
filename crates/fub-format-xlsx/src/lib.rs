@@ -38,6 +38,7 @@ use gridcraft_model::Workbook;
 use gridcraft_xlsx::{Format, ReadReport};
 
 mod commands;
+pub mod export;
 // Le cartelle di prova dei test d'integrazione, anche per quelli interni.
 #[cfg(test)]
 #[path = "../tests/common/mod.rs"]

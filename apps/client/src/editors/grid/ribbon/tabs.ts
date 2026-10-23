@@ -86,6 +86,10 @@ export interface ButtonControl extends Base {
   readonly params?: Params | ((view: RibbonView) => Params);
   /// Apre questa finestra con `params` invece di dare il comando `id`.
   readonly dialog?: string;
+  /// Chiede alla shell un'azione sua invece di dare il comando `id`, che
+  /// resta la condizione perché il pulsante si veda: l'esportazione in PDF è
+  /// un comando dell'host, non della cartella.
+  readonly shell?: "exportPdf";
   readonly pressed?: (view: RibbonView) => boolean;
 }
 
@@ -1216,6 +1220,27 @@ const PAGE_LAYOUT: RibbonTab = {
             { label: "ribbon.page.breaks.reset", id: "pageLayout.breaks", params: { reset: true } },
           ],
         },
+        {
+          kind: "button",
+          id: "pageLayout.pageSetup",
+          dialog: "pageSetup",
+          params: { page: "sheet" },
+          label: "ribbon.page.print_titles",
+          keytip: "I",
+          icon: "gr-print-titles",
+          size: "large",
+        },
+      ],
+    },
+    {
+      id: "print",
+      label: "ribbon.group.print",
+      icon: "gr-print-preview",
+      keytip: "ZS",
+      columns: [
+        { kind: "button", id: "file.printPreview", dialog: "printPreview", label: "ribbon.page.preview", keytip: "AP", icon: "gr-print-preview", size: "large" },
+        { kind: "button", id: "file.exportPdf", shell: "exportPdf", label: "ribbon.page.export_pdf", keytip: "E", icon: "gr-pdf", size: "large" },
+        { kind: "button", id: "pageLayout.pageSetup", dialog: "pageSetup", label: "ribbon.page.setup", keytip: "SP", icon: "gr-page-setup", size: "large" },
       ],
     },
     {

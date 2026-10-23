@@ -13,6 +13,7 @@
 import type { GridBook, GridCellStyle, GridCommandState, GridDialog, GridSheetView, GridTable } from "../../../host/contract";
 import { openDialog, type DialogActionKind, type DialogHandle } from "../../../kit";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import type { PdfEngineLoader } from "../../media/pdf-view";
 import type { GridRun } from "../engine";
 import { DIALOGS } from "./catalog";
 import { readResult } from "./result";
@@ -40,6 +41,11 @@ export interface DialogEngine {
   lineSize(axis: "row" | "column", index: number): number | null;
   writeFormula(text: string): boolean;
   focus(): void;
+  /// Il lettore dei PDF della shell, per l'anteprima di stampa; `null` se
+  /// la shell non ne ha uno.
+  pdfLoader?(): PdfEngineLoader | null;
+  /// L'esportazione in PDF della cartella, se la shell la offre adesso.
+  pdfExport?(): (() => void) | null;
 }
 
 /// Un'azione della finestra. Senza `run` la chiude e basta (Annulla, Chiudi).
