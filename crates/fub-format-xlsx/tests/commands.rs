@@ -849,3 +849,48 @@ fn la_barra_legge_vista_tabelle_e_libro_dopo_i_comandi() {
     assert!(view.formulas && !view.gridlines && view.protected);
     assert_eq!(view.mode, GridViewMode::PageLayout);
 }
+
+#[test]
+fn la_finestra_della_convalida_arriva_con_la_regola_della_cella() {
+    let bytes = one_sheet(BODY);
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let ruled = give(
+        &mut provider,
+        &session.instance,
+        &session.revision,
+        command(
+            "data.validation",
+            r#"{"type":"whole","operator":"between","formula1":"1","formula2":"10","errorStyle":"warning","errorMessage":"da 1 a 10"}"#,
+            "A1:A2",
+        ),
+    )
+    .unwrap();
+    assert!(ruled.dialog.is_none());
+    let asked = give(
+        &mut provider,
+        &session.instance,
+        &ruled.commit.revision,
+        command("data.validation", "{}", "A2"),
+    )
+    .unwrap();
+    assert_eq!(asked.commit.revision, ruled.commit.revision);
+    let dialog = asked.dialog.unwrap();
+    assert_eq!(dialog.id, "dataValidation");
+    let params: serde_json::Value = serde_json::from_str(&dialog.params).unwrap();
+    assert_eq!(params["rule"]["type"], "whole");
+    assert_eq!(params["rule"]["operator"], "between");
+    assert_eq!(params["rule"]["formula1"], "1");
+    assert_eq!(params["rule"]["formula2"], "10");
+    assert_eq!(params["rule"]["errorStyle"], "warning");
+    assert_eq!(params["rule"]["errorMessage"], "da 1 a 10");
+
+    // Una cella senza regola apre la finestra vuota.
+    let empty = give(
+        &mut provider,
+        &session.instance,
+        &ruled.commit.revision,
+        command("data.validation", "{}", "C3"),
+    )
+    .unwrap();
+    assert_eq!(empty.dialog.unwrap().params, "{}");
+}

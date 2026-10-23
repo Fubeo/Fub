@@ -391,6 +391,16 @@ la barra è stretta i pulsanti piccoli perdono il nome, poi i gruppi si
 raccolgono da destra in un pulsante che li apre in un riquadro. Il testo
 della barra è in un catalogo suo (`strings.ts`), in italiano e in inglese.
 
+### Le finestre dei fogli
+
+Le finestre della cartella (`apps/client/src/editors/grid/dialogs/`, elencate
+in `catalog.ts`) si aprono da un controllo della barra, spento con il comando
+che la finestra darebbe, o dall'esito di un comando che chiede una finestra
+(`GridDialog`). Ognuna legge con le letture del provider (`cell.get`,
+`formulas.nameManager`…) e, confermata, dà un solo comando del catalogo; un
+rifiuto resta scritto nella finestra aperta. Formato celle dà soltanto ciò
+che è cambiato, e l'esempio del formato lo calcola il provider con `TEXT`.
+
 ## Confine CodeMirror
 
 Gli import `@codemirror/*` della shell sono confinati a
@@ -430,6 +440,8 @@ mantiene CodeMirror un servizio della shell testuale.
 - `apps/client/src/editors/grid/workbook.ts`
 - `apps/client/src/editors/grid/ribbon/ribbon.ts`
 - `apps/client/src/editors/grid/ribbon/tabs.ts`
+- `apps/client/src/editors/grid/dialogs/host.ts`
+- `apps/client/src/editors/grid/dialogs/catalog.ts`
 - `apps/client/src/editors/grid/retired.ts`
 - `apps/client/src/editors/core/text-operation.ts`
 - `apps/client/src/state/document-session.ts`

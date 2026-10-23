@@ -3,7 +3,7 @@ import type { CompletionSources } from "../text/profiles/markdown/completions";
 import { api } from "../../host/ipc";
 import { openVaultRoot, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
-import type { GridRibbon } from "../grid/ribbon/ribbon";
+import type { GridDialogs, GridRibbon } from "../grid/ribbon/ribbon";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { onEvent } from "../../state/kernel";
 import { PROOF_NS, type ProofPorts } from "./proof-ports";
@@ -24,7 +24,7 @@ import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
 import type { VaultFontPort } from "../spatial/fonts/vault";
 import type { SymbolLibraryPort } from "../spatial/tools/symbol-libraries";
-import type { SyntaxForm } from "../../host/contract";
+import type { GridDialog, SyntaxForm } from "../../host/contract";
 import {
   DocumentSurfaceRegistry,
   type EditorSurface,
@@ -286,10 +286,13 @@ export function createDocumentSurfaceRegistry(
     factory: {
       mount(profile, context) {
         if (profile !== "workbook") throw new Error(`grid surface profile ${profile} is not registered`);
-        // La barra multifunzione arriva con un `import()`: chi non apre una
-        // cartella di Excel non la scarica. Si aggiorna con i richiami del
-        // motore, al più una volta per fotogramma.
+        // La barra multifunzione e le finestre arrivano con un `import()`: chi
+        // non apre una cartella di Excel non le scarica. La barra si aggiorna
+        // con i richiami del motore, al più una volta per fotogramma; una
+        // finestra chiesta prima che arrivino aspetta e si apre con loro.
         let ribbon: GridRibbon | null = null;
+        let dialogs: GridDialogs | null = null;
+        let waiting: GridDialog | null = null;
         let destroyed = false;
         const engine = new GridEngine(context.parent, {
           surfaceId: context.paneId,
@@ -304,12 +307,20 @@ export function createDocumentSurfaceRegistry(
           },
           onCommands: () => ribbon?.schedule(),
           onView: () => ribbon?.schedule(),
+          onDialog: (dialog) => {
+            if (dialogs) dialogs.open(dialog);
+            else waiting = dialog;
+          },
           grid: options.gridHost,
           theme: currentTheme(),
         });
         void import("../grid/ribbon/ribbon").then(
-          ({ mountRibbon }) => {
-            if (!destroyed) ribbon = mountRibbon(engine);
+          ({ mountRibbon, mountGridDialogs }) => {
+            if (destroyed) return;
+            ribbon = mountRibbon(engine);
+            dialogs = mountGridDialogs(engine);
+            if (waiting) dialogs.open(waiting);
+            waiting = null;
           },
           () => {},
         );
@@ -335,6 +346,9 @@ export function createDocumentSurfaceRegistry(
             destroyed = true;
             ribbon?.destroy();
             ribbon = null;
+            dialogs?.destroy();
+            dialogs = null;
+            waiting = null;
             engine.destroy();
           },
         };

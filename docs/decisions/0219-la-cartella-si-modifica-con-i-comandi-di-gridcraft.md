@@ -83,10 +83,9 @@ La versione 2 della famiglia `grid` cresce, senza toccare un WIT congelato:
 - `command`, accanto ad `apply`, riceve una **richiesta di comando**: l'id, i
   parametri come oggetto JSON (fino a 64 KiB) e la selezione; l'esito porta il
   diff del giornale con l'invalidazione, i fogli, la selezione nuova, il
-  risultato del comando (per esempio il testo copiato), la finestra di dialogo
-  che il comando chiede e il catalogo aggiornato. Lo stato premuto di un
-  comando (grassetto, allineamento) la shell lo legge dallo stile della cella
-  attiva, non dal catalogo;
+  risultato del comando (per esempio il testo copiato), la finestra che il
+  comando chiede con ciò che mostra all'apertura, e il catalogo aggiornato. Lo
+  stato premuto (grassetto) la shell lo legge dallo stile della cella attiva;
 - la finestra porta lo stile della cella risolto, le unioni, i commenti, i
   collegamenti e le tabelle che la toccano; la vista del foglio porta anche
   modalità, formule mostrate, protezione e stampa; sessione ed esito portano
@@ -172,7 +171,8 @@ che il codec non conserva non si modificherebbe affatto.
   rifatto all'apertura e conflitto, annulla e ripeti, input come comando,
   rifiuti, innesto e riscrittura, cartella che la riscrittura perderebbe e,
   con `FUB_SOFFICE`, una cartella di LibreOffice modificata che LibreOffice
-  rilegge; `crates/fub-host/tests/xlsx_workbooks.rs` salva un giornale di
+  rilegge, la convalida che arriva con la regola della cella;
+  `crates/fub-host/tests/xlsx_workbooks.rs` salva un giornale di
   comandi attraverso l'host. Il corpus di Apache POI e quella cartella,
   riscritti senza modifiche, non perdono niente (patch `0008` di GridCraft);
 - la conformità nativo e WASM della versione 2 con il catalogo vuoto

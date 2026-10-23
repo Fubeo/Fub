@@ -4,14 +4,14 @@
 //
 // È una dichiarazione e non disegna niente: la disegna `ribbon.ts`. Un
 // controllo si vede se il catalogo della sessione serve il suo comando, e si
-// spegne con la ragione del provider quando il comando è spento. I comandi che
-// chiedono una finestra (Formato celle…, Ordina…, Convalida dati…) arrivano
-// con le finestre di dialogo; qui ci sono soltanto quelli che si danno con
-// parametri fissi o scelti da un menu.
+// spegne con la ragione del provider quando il comando è spento. Un controllo
+// con `dialog` apre una finestra (`dialogs/`), che raccoglie i parametri e dà
+// il comando `id`: il comando resta quello che lo fa vedere e spegnere.
 //
 // I nomi che il provider conosce (gli stili, i temi, i formati) restano quelli
 // del file, in inglese: sono valori, non testo. Si traduce ciò che si legge.
 import type { GridBook, GridCellStyle, GridSheetView, GridTable } from "../../../host/contract";
+import { resultList } from "../dialogs/result";
 import type { RibbonKey } from "./strings";
 
 /// I parametri di un comando, che diventano il suo testo JSON.
@@ -38,12 +38,14 @@ export interface RibbonView {
   query(id: string, params: Params): Promise<unknown>;
 }
 
-/// Una voce di menu: un comando con i suoi parametri, una formula da
-/// cominciare, o un menu più in là.
+/// Una voce di menu: un comando con i suoi parametri, una finestra, una
+/// formula da cominciare, o un menu più in là.
 export interface MenuEntry {
   readonly label: Text;
   readonly id?: string;
   readonly params?: Params;
+  /// Apre questa finestra con `params` invece di dare il comando `id`.
+  readonly dialog?: string;
   /// Scrive nella cella `=` e questo testo invece di dare un comando.
   readonly write?: string;
   /// Un menu che si apre al posto di questo, con i comandi che lo fanno vedere.
@@ -77,6 +79,8 @@ export interface ButtonControl extends Base {
   readonly kind: "button";
   readonly id: string;
   readonly params?: Params | ((view: RibbonView) => Params);
+  /// Apre questa finestra con `params` invece di dare il comando `id`.
+  readonly dialog?: string;
   readonly pressed?: (view: RibbonView) => boolean;
 }
 
@@ -332,8 +336,8 @@ const RECENT = "formulas.recentlyUsed";
 /// Le voci di una categoria di funzioni: il nome, e la firma sotto. Una
 /// voce comincia la formula nella cella attiva.
 async function functionEntries(view: RibbonView, category: string): Promise<readonly MenuEntry[]> {
-  const list = await view.query(FUNCTIONS, { category });
-  if (!Array.isArray(list)) return [];
+  const list = resultList(await view.query(FUNCTIONS, { category }));
+  if (!list) return [];
   return list.flatMap((item): MenuEntry[] => {
     const name = (item as { name?: unknown }).name;
     if (typeof name !== "string" || name === "") return [];
@@ -344,8 +348,8 @@ async function functionEntries(view: RibbonView, category: string): Promise<read
 
 /// Le funzioni usate di recente nella cartella.
 async function recentEntries(view: RibbonView): Promise<readonly MenuEntry[]> {
-  const list = await view.query(RECENT, {});
-  if (!Array.isArray(list)) return [];
+  const list = resultList(await view.query(RECENT, {}));
+  if (!list) return [];
   return list.filter((name): name is string => typeof name === "string" && name !== "").map((name) => ({ label: { raw: name }, write: `${name}(` }));
 }
 
@@ -462,6 +466,7 @@ const HOME: RibbonTab = {
                   { label: "ribbon.borders.top_bottom", id: "home.borders", params: { preset: "topBottom" }, icon: "gr-border-top-bottom" },
                   { label: "ribbon.borders.top_thick_bottom", id: "home.borders", params: { preset: "topThickBottom" }, icon: "gr-border-top-bottom" },
                   { label: "ribbon.borders.top_double_bottom", id: "home.borders", params: { preset: "topDoubleBottom" }, icon: "gr-border-top-bottom" },
+                  { label: "ribbon.borders.more", id: "home.formatCells", dialog: "formatCells", params: { tab: "border" }, separator: true },
                 ],
               },
               { kind: "color", id: "home.fillColor", label: "ribbon.fill", keytip: "H", icon: "gr-fill", empty: { value: "none", label: "ribbon.fill.none" }, initial: "#FFFF00" },
@@ -505,6 +510,7 @@ const HOME: RibbonTab = {
                     entry("ribbon.orientation.up", "up", "gr-orientation-up", 90),
                     entry("ribbon.orientation.down", "down", "gr-orientation-down", -90),
                     { ...entry("ribbon.orientation.horizontal", 0, "gr-align-left", 0), separator: true },
+                    { label: "ribbon.orientation.format", id: "home.formatCells", dialog: "formatCells", params: { tab: "alignment" }, separator: true },
                   ];
                 },
               },
@@ -564,7 +570,10 @@ const HOME: RibbonTab = {
                 menuLabel: "ribbon.accounting.menu",
                 keytip: "AN",
                 icon: "gr-accounting",
-                menu: () => ACCOUNTING.map(({ key, code }) => ({ label: key, id: "home.numberFormat", params: { code } })),
+                menu: () => [
+                  ...ACCOUNTING.map(({ key, code }): MenuEntry => ({ label: key, id: "home.numberFormat", params: { code } })),
+                  { label: "ribbon.accounting.more", id: "home.formatCells", dialog: "formatCells", params: { tab: "number" }, separator: true },
+                ],
               },
               { kind: "button", id: "home.percent", label: "ribbon.percent", keytip: "P", glyph: "%" },
               { kind: "button", id: "home.comma", label: "ribbon.comma", keytip: "K", glyph: "000" },
@@ -628,6 +637,7 @@ const HOME: RibbonTab = {
             { label: "ribbon.cells.insert.columns", id: "home.insertColumns", icon: "gr-insert-column" },
             { label: "ribbon.cells.insert.down", id: "home.insertCells", params: { shift: "down" }, separator: true },
             { label: "ribbon.cells.insert.right", id: "home.insertCells", params: { shift: "right" } },
+            { label: "ribbon.cells.insert.cells", id: "home.insertCells", dialog: "insertCells" },
             { label: "ribbon.cells.insert.sheet", id: "home.insertSheet", icon: "gr-sheet", separator: true },
           ],
         },
@@ -642,6 +652,7 @@ const HOME: RibbonTab = {
             { label: "ribbon.cells.delete.columns", id: "home.deleteColumns", icon: "gr-delete-column" },
             { label: "ribbon.cells.delete.up", id: "home.deleteCells", params: { shift: "up" }, separator: true },
             { label: "ribbon.cells.delete.left", id: "home.deleteCells", params: { shift: "left" } },
+            { label: "ribbon.cells.delete.cells", id: "home.deleteCells", dialog: "deleteCells" },
             { label: "ribbon.cells.delete.sheet", id: "home.deleteSheet", icon: "gr-sheet", separator: true },
           ],
         },
@@ -652,8 +663,11 @@ const HOME: RibbonTab = {
           icon: "gr-format",
           size: "large",
           items: (view) => [
+            { label: "ribbon.cells.format.row_height", id: "home.rowHeight", dialog: "rowHeight" },
             { label: "ribbon.cells.format.autofit_rows", id: "home.autofitRowHeight" },
+            { label: "ribbon.cells.format.column_width", id: "home.columnWidth", dialog: "columnWidth" },
             { label: "ribbon.cells.format.autofit_columns", id: "home.autofitColumnWidth" },
+            { label: "ribbon.cells.format.default_width", id: "home.defaultWidth", dialog: "defaultWidth" },
             { label: "ribbon.cells.format.hide_rows", id: "home.hideRows", separator: true },
             { label: "ribbon.cells.format.hide_columns", id: "home.hideColumns" },
             { label: "ribbon.cells.format.unhide_rows", id: "home.unhideRows" },
@@ -672,7 +686,11 @@ const HOME: RibbonTab = {
                 ...TAB_COLORS.map(({ key, hex }) => ({ label: key, id: "sheet.tabColor", params: { color: hex }, swatches: [hex] })),
               ],
             },
-            { label: "ribbon.cells.format.lock", id: "home.lockCell", separator: true },
+            { label: "ribbon.cells.format.rename_sheet", id: "sheet.rename", dialog: "renameSheet", separator: true },
+            { label: "ribbon.cells.format.move_sheet", id: "sheet.move", dialog: "moveSheet" },
+            { label: "ribbon.cells.format.protect_sheet", id: "review.protectSheet", dialog: "protectSheet", separator: true },
+            { label: "ribbon.cells.format.lock", id: "home.lockCell" },
+            { label: "ribbon.cells.format.cells", id: "home.formatCells", dialog: "formatCells", icon: "gr-format" },
           ],
         },
       ],
@@ -709,7 +727,8 @@ const HOME: RibbonTab = {
                   { label: "ribbon.fill_menu.right", id: "edit.fillRight", icon: "gr-arrow-right" },
                   { label: "ribbon.fill_menu.up", id: "edit.fillUp", icon: "gr-arrow-up" },
                   { label: "ribbon.fill_menu.left", id: "edit.fillLeft", icon: "gr-arrow-left" },
-                  { label: "ribbon.fill_menu.flash", id: "edit.flashFill", icon: "gr-flash", separator: true },
+                  { label: "ribbon.fill_menu.series", id: "edit.fillSeries", dialog: "series", separator: true },
+                  { label: "ribbon.fill_menu.flash", id: "edit.flashFill", icon: "gr-flash" },
                 ],
               },
             ],
@@ -740,6 +759,7 @@ const HOME: RibbonTab = {
           items: () => [
             { label: "ribbon.sort.ascending", id: "data.sortAscending", icon: "gr-sort-asc" },
             { label: "ribbon.sort.descending", id: "data.sortDescending", icon: "gr-sort-desc" },
+            { label: "ribbon.sort.custom", id: "data.sort", dialog: "sort", icon: "gr-sort" },
             { label: "ribbon.filter", id: "data.filter", icon: "gr-filter", separator: true },
             { label: "ribbon.filter.clear", id: "data.clearFilter", icon: "gr-filter-clear" },
             { label: "ribbon.filter.reapply", id: "data.reapply", icon: "gr-reapply" },
@@ -752,7 +772,11 @@ const HOME: RibbonTab = {
           icon: "gr-find",
           size: "large",
           items: () => [
-            { label: "ribbon.select.formulas", id: "edit.goToSpecial", params: { kind: "formulas" } },
+            { label: "ribbon.find", id: "edit.find", dialog: "find", icon: "gr-find" },
+            { label: "ribbon.replace", id: "edit.replace", dialog: "find", params: { replace: true } },
+            { label: "ribbon.go_to", id: "edit.goTo", dialog: "goTo" },
+            { label: "ribbon.go_to_special", id: "edit.goToSpecial", dialog: "goToSpecial" },
+            { label: "ribbon.select.formulas", id: "edit.goToSpecial", params: { kind: "formulas" }, separator: true },
             { label: "ribbon.select.comments", id: "edit.goToSpecial", params: { kind: "comments" } },
             { label: "ribbon.select.conditional", id: "edit.goToSpecial", params: { kind: "conditionalFormats" } },
             { label: "ribbon.select.constants", id: "edit.goToSpecial", params: { kind: "constants" } },
@@ -795,20 +819,32 @@ function autoSumMenu(): readonly MenuEntry[] {
 const CF = "home.conditionalFormat";
 const rule = (value: Params): Params => ({ rule: value });
 
-/// La formattazione condizionale: le regole che si danno senza una finestra.
-/// Le regole con un valore da scrivere (Maggiore di…, Testo che contiene…)
-/// arrivano con le finestre di dialogo.
+/// Una regola rapida, chiesta dalla sua finestra (`cfQuick`).
+const quick = (label: RibbonKey, params: Params, separator = false): MenuEntry => ({ label, id: CF, dialog: "cfQuick", params, separator });
+
+/// La formattazione condizionale: le regole con un valore da scrivere
+/// (Maggiore di…, Primi 10…) aprono la loro finestra; quelle senza si danno
+/// subito.
 function conditionalMenu(): readonly MenuEntry[] {
+  const more: MenuEntry = { label: "ribbon.cf.more_rules", id: CF, dialog: "newFormattingRule", separator: true };
   return [
     {
       label: "ribbon.cf.highlight",
       requires: [CF],
       icon: "gr-cf",
       submenu: () => [
-        { label: "ribbon.cf.duplicate", id: CF, params: rule({ type: "duplicate", preset: "lightRedFillDarkRedText" }) },
+        quick("ribbon.cf.greater", { type: "cellIs", operator: "greater" }),
+        quick("ribbon.cf.less", { type: "cellIs", operator: "less" }),
+        quick("ribbon.cf.between", { type: "cellIs", operator: "between" }),
+        quick("ribbon.cf.equal", { type: "cellIs", operator: "equal" }),
+        quick("ribbon.cf.text", { type: "containsText" }),
+        quick("ribbon.cf.date", { type: "timePeriod" }),
+        quick("ribbon.cf.duplicates", { type: "duplicate" }),
+        { label: "ribbon.cf.duplicate", id: CF, params: rule({ type: "duplicate", preset: "lightRedFillDarkRedText" }), separator: true },
         { label: "ribbon.cf.unique", id: CF, params: rule({ type: "unique", preset: "lightRedFillDarkRedText" }) },
         { label: "ribbon.cf.blanks", id: CF, params: rule({ type: "blanks", preset: "yellowFill" }) },
         { label: "ribbon.cf.errors", id: CF, params: rule({ type: "errors", preset: "lightRedFillDarkRedText" }) },
+        more,
       ],
     },
     {
@@ -816,12 +852,13 @@ function conditionalMenu(): readonly MenuEntry[] {
       requires: [CF],
       icon: "gr-cf-top",
       submenu: () => [
-        { label: "ribbon.cf.top10", id: CF, params: rule({ type: "top10", rank: 10 }) },
-        { label: "ribbon.cf.top10_percent", id: CF, params: rule({ type: "top10", rank: 10, percent: true }) },
-        { label: "ribbon.cf.bottom10", id: CF, params: rule({ type: "top10", rank: 10, bottom: true }) },
-        { label: "ribbon.cf.bottom10_percent", id: CF, params: rule({ type: "top10", rank: 10, bottom: true, percent: true }) },
-        { label: "ribbon.cf.above_average", id: CF, params: rule({ type: "aboveAverage" }), separator: true },
-        { label: "ribbon.cf.below_average", id: CF, params: rule({ type: "aboveAverage", below: true }) },
+        quick("ribbon.cf.top10", { type: "top10", rank: 10 }),
+        quick("ribbon.cf.top10_percent", { type: "top10", rank: 10, percent: true }),
+        quick("ribbon.cf.bottom10", { type: "top10", rank: 10, bottom: true }),
+        quick("ribbon.cf.bottom10_percent", { type: "top10", rank: 10, bottom: true, percent: true }),
+        quick("ribbon.cf.above_average", { type: "aboveAverage" }, true),
+        quick("ribbon.cf.below_average", { type: "aboveAverage", below: true }),
+        more,
       ],
     },
     {
@@ -853,6 +890,8 @@ function conditionalMenu(): readonly MenuEntry[] {
         { label: "ribbon.cf.clear.sheet", id: "home.clearRules", params: { sheet: true } },
       ],
     },
+    { label: "ribbon.cf.new_rule", id: CF, dialog: "newFormattingRule", separator: true },
+    { label: "ribbon.cf.manage", id: "home.manageRules", dialog: "manageRules" },
   ];
 }
 
@@ -919,6 +958,13 @@ const INSERT: RibbonTab = {
           items: () => SYMBOLS.map((char) => ({ label: { raw: char }, id: "insert.symbol", params: { char } })),
         },
       ],
+    },
+    {
+      id: "links",
+      label: "ribbon.group.links",
+      icon: "gr-link",
+      keytip: "ZL",
+      columns: [{ kind: "button", id: "insert.link", dialog: "insertLink", label: "ribbon.insert.link", keytip: "I", icon: "gr-link", size: "large" }],
     },
   ],
 };
@@ -1044,6 +1090,7 @@ const FORMULAS: RibbonTab = {
       icon: "gr-function",
       keytip: "ZL",
       columns: [
+        { kind: "button", id: "formulas.insertFunction", dialog: "insertFunction", label: "ribbon.formulas.insert_function", keytip: "F", glyph: "fx", size: "large" },
         { kind: "split", id: "formulas.autoSum", label: "ribbon.autosum", menuLabel: "ribbon.autosum.menu", keytip: "U", glyph: "Σ", size: "large", menu: () => autoSumMenu() },
         { kind: "menu", label: "ribbon.formulas.recent", keytip: "R", icon: "gr-recent", size: "large", requires: [RECENT], items: (view) => recentEntries(view) },
         functionMenu("ribbon.formulas.financial", "gr-financial", "I", FUNCTION_CATEGORIES.financial),
@@ -1070,8 +1117,10 @@ const FORMULAS: RibbonTab = {
       icon: "gr-name",
       keytip: "ZD",
       columns: [
+        { kind: "button", id: "formulas.nameManager", dialog: "nameManager", label: "ribbon.formulas.name_manager", keytip: "N", icon: "gr-name", size: "large" },
         {
           rows: [
+            [{ kind: "button", id: "formulas.defineName", dialog: "defineName", label: "ribbon.formulas.define_name", keytip: "A", icon: "gr-name", labelled: true }],
             [
               {
                 kind: "menu",
@@ -1161,11 +1210,13 @@ const DATA: RibbonTab = {
             [{ kind: "button", id: "data.sortDescending", label: "ribbon.sort.descending", keytip: "SD", icon: "gr-sort-desc" }],
           ],
         },
+        { kind: "button", id: "data.sort", dialog: "sort", label: "ribbon.data.sort", keytip: "SS", icon: "gr-sort", size: "large" },
         { kind: "button", id: "data.filter", label: "ribbon.filter", keytip: "T", icon: "gr-filter", size: "large" },
         {
           rows: [
             [{ kind: "button", id: "data.clearFilter", label: "ribbon.filter.clear", keytip: "C", icon: "gr-filter-clear", labelled: true }],
             [{ kind: "button", id: "data.reapply", label: "ribbon.filter.reapply", keytip: "Y", icon: "gr-reapply", labelled: true }],
+            [{ kind: "button", id: "data.advancedFilter", dialog: "advancedFilter", label: "ribbon.data.advanced", keytip: "Q", icon: "gr-filter-advanced", labelled: true }],
           ],
         },
       ],
@@ -1175,7 +1226,28 @@ const DATA: RibbonTab = {
       label: "ribbon.group.data_tools",
       icon: "gr-flash",
       keytip: "ZD",
-      columns: [{ kind: "button", id: "data.flashFill", label: "ribbon.fill_menu.flash", keytip: "FF", icon: "gr-flash", size: "large" }],
+      columns: [
+        { kind: "button", id: "data.textToColumns", dialog: "textToColumns", label: "ribbon.data.text_to_columns", keytip: "E", icon: "gr-text-columns", size: "large" },
+        { kind: "button", id: "data.flashFill", label: "ribbon.fill_menu.flash", keytip: "FF", icon: "gr-flash", size: "large" },
+        { kind: "button", id: "data.removeDuplicates", dialog: "removeDuplicates", label: "ribbon.data.remove_duplicates", keytip: "M", icon: "gr-duplicates", size: "large" },
+        { kind: "button", id: "data.validation", dialog: "dataValidation", label: "ribbon.data.validation", keytip: "V", icon: "gr-validation", size: "large" },
+      ],
+    },
+    {
+      id: "forecast",
+      label: "ribbon.group.forecast",
+      icon: "gr-what-if",
+      keytip: "ZF",
+      columns: [
+        {
+          kind: "menu",
+          label: "ribbon.data.what_if",
+          keytip: "W",
+          icon: "gr-what-if",
+          size: "large",
+          items: () => [{ label: "ribbon.data.goal_seek", id: "data.goalSeek", dialog: "goalSeek" }],
+        },
+      ],
     },
     {
       id: "outline",
@@ -1215,6 +1287,7 @@ const DATA: RibbonTab = {
             [{ kind: "button", id: "data.hideDetail", label: "ribbon.outline.hide", keytip: "H", icon: "gr-minus", labelled: true }],
           ],
         },
+        { kind: "button", id: "data.subtotal", dialog: "subtotal", label: "ribbon.data.subtotal", keytip: "B", icon: "gr-subtotal", size: "large" },
       ],
     },
   ],
@@ -1233,6 +1306,7 @@ const REVIEW: RibbonTab = {
       icon: "gr-comment",
       keytip: "ZC",
       columns: [
+        { kind: "button", id: "review.newComment", dialog: "comment", label: "ribbon.review.new_comment", keytip: "C", icon: "gr-comment-new", size: "large" },
         { kind: "button", id: "review.deleteComment", label: "ribbon.review.delete", keytip: "D", icon: "gr-comment-delete", size: "large" },
         {
           rows: [
@@ -1255,7 +1329,8 @@ const REVIEW: RibbonTab = {
           icon: "gr-note",
           size: "large",
           items: () => [
-            { label: "ribbon.review.notes.show", id: "review.showNote" },
+            { label: "ribbon.review.notes.new", id: "review.newNote", dialog: "note" },
+            { label: "ribbon.review.notes.show", id: "review.showNote", separator: true },
             { label: "ribbon.review.notes.convert", id: "review.convertToComments", separator: true },
           ],
         },
@@ -1267,6 +1342,7 @@ const REVIEW: RibbonTab = {
       icon: "gr-lock",
       keytip: "ZP",
       columns: [
+        { kind: "button", id: "review.protectSheet", dialog: "protectSheet", label: "ribbon.review.protect_sheet", keytip: "PP", icon: "gr-lock", size: "large" },
         { kind: "button", id: "review.unprotectSheet", label: "ribbon.review.unprotect_sheet", keytip: "PS", icon: "gr-unlock", size: "large" },
         {
           kind: "button",
@@ -1330,14 +1406,16 @@ const VIEW: RibbonTab = {
           keytip: "Q",
           icon: "gr-zoom",
           size: "large",
-          items: (view) =>
-            ZOOMS.map((percent) => ({
+          items: (view) => [
+            ...ZOOMS.map((percent): MenuEntry => ({
               label: { raw: `${percent}%` },
               id: "view.zoom",
               params: { percent },
               choice: "radio",
               checked: view.sheet.zoom === percent,
             })),
+            { label: "ribbon.view.zoom_dialog", id: "view.zoom", dialog: "zoom", separator: true },
+          ],
         },
         { kind: "button", id: "view.zoom100", label: "ribbon.view.zoom100", keytip: "J", icon: "gr-zoom-100", size: "large" },
         {
@@ -1402,6 +1480,7 @@ const TABLE_DESIGN: RibbonTab = {
           value: (view) => view.table?.name ?? "",
           params: (name, view) => ({ ...inTable(view), name }),
         },
+        { kind: "button", id: "table.resize", dialog: "tableResize", label: "ribbon.table.resize", keytip: "E", icon: "gr-resize", labelled: true },
       ],
     },
     {
