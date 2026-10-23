@@ -1571,6 +1571,24 @@ body {
   pointer-events: none;
 }
 
+/* Il quadratino di riempimento sta sopra le celle che scorrono e sotto le
+   righe bloccate; il contorno del riempimento tirato non prende il puntatore. */
+.grid-fill-handle,
+.grid-fill-preview {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+}
+
+.grid-fill-handle,
+.grid-viewport.filling {
+  cursor: crosshair;
+}
+
+.grid-fill-preview {
+  pointer-events: none;
+}
+
 .grid-object-handle {
   position: absolute;
   z-index: 1;
