@@ -16,7 +16,10 @@ import type { EditorChange } from "../core/text-operation";
 import type { ProofPorts } from "../core/proof-ports";
 import { onLanguage, t, type Key } from "../../i18n/strings";
 import type { RichEngine } from "./engine";
-import type { RichStrip } from "./strip";
+import type { mountStrip, RichStrip, RichStripGroup } from "./strip";
+import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem, SurfaceMiniBar } from "../core/editor-menu";
+import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
+import { closeContextMenu } from "../../ui/menu";
 import type { ReadOnlyReason } from "./projection";
 import type { DrawingImagePort } from "../canvas/surface";
 import { relativeRef } from "../../rules/mirrored";
@@ -187,6 +190,9 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
 
   let engine: RichEngine | null = null;
   let strip: RichStrip | null = null;
+  // La striscia arriva col motore: la mini-barra la prende da lì.
+  let miniStrip: typeof mountStrip | null = null;
+  let miniGroups: readonly RichStripGroup[] = [];
   let pending: string | null = null;
   let readOnly = false;
   let closed = false;
@@ -224,8 +230,10 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
 
   const load = callbacks.loadEngine ?? (() => import("./engine"));
   load().then(
-    ({ RichEngine, mountStrip }) => {
+    ({ RichEngine, mountStrip, RICH_MINI_GROUPS }) => {
       if (closed) return;
+      miniStrip = mountStrip;
+      miniGroups = RICH_MINI_GROUPS;
       page.removeAttribute("aria-busy");
       engine = new RichEngine(page, {
         label: () => t("rich.label"),
@@ -278,6 +286,176 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    selectionBox: () => (editable() ? engine?.selectionBox() ?? null : null),
+  };
+
+  const tell = (message: string) => callbacks.proof?.notify?.(message);
+
+  /// Una voce per un'azione del motore, col nome della striscia: le azioni
+  /// `rich.*` non le dichiara un comando, e la striscia le mostra comunque.
+  const action = (id: string, icon?: string): SurfaceMenuItem => {
+    const state = editorActions.state(id);
+    return {
+      id,
+      label: t(id as Key),
+      icon,
+      chord: RICH_CHORDS[id] ?? null,
+      enabled: state.enabled,
+      ...(state.active === null ? {} : { checked: state.active }),
+      run: () => void editorActions.run(id),
+    };
+  };
+
+  const copy = (text: string) =>
+    void writeClipboardText(text).then(
+      () => tell(t("editor_menu.copied")),
+      () => tell(t("editor_menu.copy_failed")),
+    );
+
+  /// Copia la selezione come Mod-c, HTML compreso dove gli appunti lo
+  /// accettano; con «Taglia» la toglie soltanto dopo averla scritta.
+  const copySelection = (cut: boolean): void => {
+    const content = engine?.clipboardContent();
+    if (!content) return;
+    const write = clipboardSupports("text/html")
+      ? writeClipboardData({
+          "text/plain": new Blob([content.text], { type: "text/plain" }),
+          "text/html": new Blob([content.html], { type: "text/html" }),
+        })
+      : writeClipboardText(content.text);
+    void write.then(
+      () => {
+        if (cut && !closed) engine?.deleteSelection();
+      },
+      () => tell(t("editor_menu.copy_failed")),
+    );
+  };
+
+  /// Incolla dagli appunti, per lo stesso filtro dell'incolla del browser.
+  const pasteClipboard = (plain: boolean): void => {
+    void readClipboard().then(async (entries) => {
+      let text: string | null = null;
+      let html: string | null = null;
+      for (const entry of entries) {
+        if (text === null && entry.types.includes("text/plain")) text = await (await entry.getType("text/plain")).text();
+        if (!plain && html === null && entry.types.includes("text/html")) html = await (await entry.getType("text/html")).text();
+      }
+      if (closed || (text === null && html === null)) return;
+      engine?.pasteContent(text ?? "", plain ? null : html);
+    }).catch(() => tell(t("editor_menu.paste_failed")));
+  };
+
+  /// Il menu del tasto destro: ciò che sta al cursore (un link, una
+  /// revisione, una tabella), gli appunti, il carattere e il paragrafo,
+  /// cosa inserire, trova e sostituisci. Le parole segnate dal correttore
+  /// hanno il loro menu (`proof.ts`), che ferma questo.
+  function contextMenu(at: { x: number; y: number } | null): SurfaceMenu | null {
+    if (!engine) return null;
+    if (at) {
+      const element = document.elementFromPoint(at.x, at.y);
+      if (!element || !page.contains(element)) return null;
+      if (engine.pointAt(at.x, at.y) === null) return null;
+    }
+    const writable = editable();
+    const hasSelection = engine.selectedText() !== null;
+    const target = engine.menuTarget();
+    const context: SurfaceMenuEntry[] = [];
+    if (target.href !== null) {
+      const href = target.href;
+      context.push(
+        { id: "rich.link.copy", label: t("editor_menu.link.copy_url"), run: () => copy(href) },
+        { ...action("rich.link"), label: t("editor_menu.rich.link_edit") },
+        action("rich.link.remove"),
+      );
+    }
+    if (target.revision) context.push(action("rich.rev.accept"), action("rich.rev.reject"), action("rich.rev.next"), action("rich.rev.previous"));
+    if (target.table) {
+      context.push({
+        id: "rich.table.menu",
+        label: t("editor_menu.table"),
+        icon: "fmt-table",
+        items: [
+          "markdown.table.row.before",
+          "markdown.table.row.after",
+          "markdown.table.row.delete",
+          "markdown.table.column.before",
+          "markdown.table.column.after",
+          "markdown.table.column.delete",
+          action("rich.table.merge"),
+          action("rich.table.split"),
+        ],
+      });
+    }
+    const box = engine.selectionBox();
+    return {
+      target: { kind: target.href !== null ? "link" : target.table ? "table" : hasSelection ? "selection" : "text" },
+      at: box ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined,
+      context,
+      clipboard: {
+        offers: { cut: writable && hasSelection, copy: hasSelection, paste: writable, "paste-plain": writable, "select-all": true },
+        run(op) {
+          if (op === "select-all") engine?.selectAll();
+          else if (op === "paste" || op === "paste-plain") pasteClipboard(op === "paste-plain");
+          else copySelection(op === "cut");
+        },
+      },
+      format: writable
+        ? [
+            "markdown.bold",
+            "markdown.italic",
+            action("rich.underline"),
+            "markdown.strikethrough",
+            action("rich.superscript"),
+            action("rich.subscript"),
+            action("rich.caps"),
+            action("rich.small_caps"),
+            "markdown.clear",
+          ]
+        : [],
+      transform: writable
+        ? ["markdown.paragraph", "markdown.heading.1", "markdown.heading.2", "markdown.heading.3", "markdown.quote", "markdown.list.bullet", "markdown.list.ordered"]
+        : [],
+      edit: writable
+        ? [
+            {
+              id: "rich.align.menu",
+              label: t("editor_menu.rich.align"),
+              items: [action("rich.align.left"), action("rich.align.center"), action("rich.align.right"), action("rich.align.justify")],
+            },
+            {
+              id: "rich.indent.menu",
+              label: t("editor_menu.rich.indent"),
+              items: [action("rich.indent.increase"), action("rich.indent.decrease")],
+            },
+          ]
+        : [],
+      insert: writable
+        ? [action("rich.link"), "markdown.table", action("rich.break.page"), action("rich.break.column"), action("rich.comment")]
+        : [],
+      tail: [action("rich.find")],
+      miniBar: writable,
+    };
+  }
+
+  /// La mini-barra: la striscia ristretta al carattere e all'enfasi. Un
+  /// gesto chiude il menu, che parlerebbe dello stato di prima.
+  const miniBar: SurfaceMiniBar = {
+    mount(host) {
+      if (!engine || !miniStrip) return () => {};
+      const mini = miniStrip(engine, (id) => RICH_CHORDS[id] ?? null, {}, { only: miniGroups });
+      // Un pulsante agisce subito; una tendina, quando cambia.
+      const done = (event: Event) => {
+        if (event.type === "change" || (event.target as Element | null)?.closest("button")) queueMicrotask(closeContextMenu);
+      };
+      mini.element.addEventListener("click", done);
+      mini.element.addEventListener("change", done);
+      host.append(mini.element);
+      return () => {
+        mini.element.removeEventListener("click", done);
+        mini.element.removeEventListener("change", done);
+        mini.destroy();
+      };
+    },
   };
 
   return {
@@ -318,6 +496,8 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       root.dataset.theme = theme;
     },
     editorActions,
+    contextMenu,
+    miniBar: () => (editable() ? miniBar : null),
     destroy() {
       if (closed) return;
       closed = true;

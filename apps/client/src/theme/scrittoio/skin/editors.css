@@ -1635,6 +1635,19 @@
 .rich-strip-underline {
   text-decoration: underline;
 }
+.rich-strip-bold {
+  font-weight: 700;
+}
+.rich-strip-italic {
+  font-style: italic;
+}
+/* La mini-barra del menu: la stessa striscia, senza la riga del foglio. */
+.rich-strip-mini {
+  flex-wrap: nowrap;
+  padding: 0;
+  border-bottom: none;
+  background: transparent;
+}
 .rich-strip-marker {
   font-style: italic;
 }

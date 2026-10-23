@@ -82,6 +82,28 @@ export interface RichMedia {
   readonly review?: boolean;
 }
 
+/// I gruppi della striscia, nell'ordine in cui si vedono. `emphasis`
+/// (grassetto, corsivo, sottolineato) c'è soltanto quando lo si chiede: nella
+/// striscia intera quei gesti stanno nella barra di formattazione.
+export type RichStripGroup = "type" | "emphasis" | "toggles" | "colors" | "tools" | "paragraph" | "insert" | "layout" | "review";
+
+/// La mini-barra del menu, come la Mini Toolbar di Word: il carattere, la
+/// dimensione, l'enfasi e «Copia formato». Senza i comandi che aprono un
+/// modulo: il menu si chiude al primo gesto e lo porterebbe con sé.
+export const RICH_MINI_GROUPS: readonly RichStripGroup[] = ["type", "emphasis", "tools"];
+
+export interface RichStripOptions {
+  /// Soltanto questi gruppi; senza, la striscia intera.
+  readonly only?: readonly RichStripGroup[];
+}
+
+/// Il grassetto, il corsivo e il sottolineato della mini-barra.
+const EMPHASES: readonly { id: string; label: Key; glyph: string; className: string }[] = [
+  { id: "markdown.bold", label: "rich.bold", glyph: "B", className: "rich-strip-bold" },
+  { id: "markdown.italic", label: "rich.italic", glyph: "I", className: "rich-strip-italic" },
+  { id: "rich.underline", label: "rich.underline", glyph: "U", className: "rich-strip-underline" },
+];
+
 /// La colonna del testo di una pagina Letter con i margini di Word, in punti:
 /// un'immagine nuova più grande si riduce a starci, come la riduce Word.
 const TEXT_WIDTH_PT = 468;
@@ -231,20 +253,29 @@ function icon(paths: readonly string[]): SVGElement {
   return svg;
 }
 
-export function mountStrip(engine: RichEngine, chord: (id: string) => string | null, media: RichMedia = {}): RichStrip {
+export function mountStrip(
+  engine: RichEngine,
+  chord: (id: string) => string | null,
+  media: RichMedia = {},
+  stripOptions: RichStripOptions = {},
+): RichStrip {
   const life = openLifetime();
   const element = document.createElement("div");
-  element.className = "rich-strip";
+  element.className = stripOptions.only ? "rich-strip rich-strip-mini" : "rich-strip";
   element.setAttribute("role", "toolbar");
   element.setAttribute("aria-orientation", "horizontal");
   const prefix = `rich-strip-${(ids += 1)}`;
   let popover: PopoverHandle | null = null;
   const relabel: (() => void)[] = [];
 
-  function group(): HTMLElement {
+  const shown = (name: RichStripGroup): boolean => (stripOptions.only ? stripOptions.only.includes(name) : name !== "emphasis");
+
+  /// Un gruppo della striscia. Uno che non si mostra resta fuori dal
+  /// documento: i suoi controlli esistono e si aggiornano, nessuno li vede.
+  function group(name: RichStripGroup): HTMLElement {
     const el = document.createElement("div");
     el.className = "rich-strip-group";
-    element.append(el);
+    if (shown(name)) element.append(el);
     return el;
   }
 
@@ -285,7 +316,7 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   }
 
   // ── Tipo e dimensione ─────────────────────────────────────────────────
-  const type = group();
+  const type = group("type");
   const font = select("rich-strip-font", "rich.font", (value) => {
     if (value) engine.apply(setFont(value));
   });
@@ -300,8 +331,20 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   shrink.textContent = "A⁻";
   type.append(grow, shrink);
 
+  // ── Enfasi (soltanto nella mini-barra) ────────────────────────────────
+  const emphasis = group("emphasis");
+  const emphasisButtons = (shown("emphasis") ? EMPHASES : []).map((spec) => {
+    const control = button(() => t(spec.label), spec.id, () => engine.run(spec.id));
+    control.textContent = spec.glyph;
+    control.classList.add(spec.className);
+    control.dataset.action = spec.id;
+    setPressed(control, false);
+    emphasis.append(control);
+    return { spec, control };
+  });
+
   // ── Gesti che commutano ───────────────────────────────────────────────
-  const toggles = group();
+  const toggles = group("toggles");
   const toggleButtons = TOGGLES.map((spec) => {
     const control = button(() => t(spec.label), spec.id, () => engine.run(spec.id));
     control.textContent = spec.glyph;
@@ -315,7 +358,7 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   });
 
   // ── Colori ────────────────────────────────────────────────────────────
-  const colors = group();
+  const colors = group("colors");
   const colorButton = button(() => t("rich.color"), null, (anchor) => openColors(anchor, "color"));
   const colorBar = document.createElement("span");
   colorBar.className = "rich-strip-bar";
@@ -330,7 +373,7 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   colors.append(colorButton, highlightButton);
 
   // ── Copia formato ─────────────────────────────────────────────────────
-  const tools = group();
+  const tools = group("tools");
   const painter = button(() => t("rich.painter"), null, () => engine.togglePainter());
   // Il pennello.
   painter.append(icon(["M5 3h12v6H5z", "M17 6h2v5h-8v3", "M10 14h2v7h-2z"]));
@@ -339,7 +382,7 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   tools.append(painter);
 
   // ── Il paragrafo ──────────────────────────────────────────────────────
-  const paragraph = group();
+  const paragraph = group("paragraph");
   const style = select("rich-strip-style", "rich.style", (value) => {
     const pick = stylePick(value);
     if (pick) engine.apply(setStyle(pick, engine.documentLook()));
@@ -364,7 +407,7 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   paragraph.append(dedent, indent, spacing);
 
   // ── Inserisci ─────────────────────────────────────────────────────────
-  const insert = group();
+  const insert = group("insert");
   const link = button(() => t("rich.link"), "rich.link", () => engine.run("rich.link"));
   link.append(icon(["M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1", "M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"]));
   link.dataset.action = "rich.link";
@@ -387,11 +430,13 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   note.append(icon(["M5 4h14v10l-5 6H5z", "M14 20v-6h5", "M8 8h8", "M8 11h5"]));
   note.setAttribute("aria-haspopup", "dialog");
   insert.append(link, table, merge, split, image, note, pageBreak, columnBreak);
-  life.add(engine.onAsk(LINK_ACTION, () => openLink(link)));
+  // Chi chiede un link, una ricerca o un commento lo chiede alla striscia
+  // che ne mostra il pulsante: la mini-barra non risponde al posto suo.
+  if (shown("insert")) life.add(engine.onAsk(LINK_ACTION, () => openLink(link)));
 
   // ── Pagina ────────────────────────────────────────────────────────────
   // Soltanto in un formato che ha una pagina (il docx, non l'odt).
-  const layout = group();
+  const layout = group("layout");
   const pageButton = button(() => t("rich.page"), null, (anchor) => openPage(anchor));
   pageButton.append(icon(["M6 3h9l4 4v14H6z", "M14 3v5h5", "M9 12h7", "M9 15h7", "M9 18h4"]));
   pageButton.setAttribute("aria-haspopup", "dialog");
@@ -403,7 +448,7 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   layout.append(pageButton, runningButton, tocButton);
 
   // ── Revisione ─────────────────────────────────────────────────────────
-  const review = group();
+  const review = group("review");
   const find = button(() => t("rich.find"), FIND_ACTION, () => engine.run(FIND_ACTION));
   find.append(icon(["M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z", "M15.5 15.5 20 20"]));
   find.setAttribute("aria-haspopup", "dialog");
@@ -417,8 +462,10 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   track.append(icon(["M4 20h4L19 9l-4-4L4 16z", "M13 7l4 4", "M14 20h6"]));
   track.setAttribute("aria-haspopup", "dialog");
   review.append(find, count, comments, track);
-  life.add(engine.onAsk(FIND_ACTION, () => openFind(find)));
-  life.add(engine.onAsk(COMMENT_ACTION, () => openComments(comments, true)));
+  if (shown("review")) {
+    life.add(engine.onAsk(FIND_ACTION, () => openFind(find)));
+    life.add(engine.onAsk(COMMENT_ACTION, () => openComments(comments, true)));
+  }
   // Le revisioni tracciate: si vedono soltanto in un documento che ne ha.
   const revisionButtons = REVISION_BUTTONS.map((spec) => {
     const control = button(() => t(spec.id as Key), spec.id, () => engine.run(spec.id));
@@ -1482,7 +1529,7 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     options(font, fonts, look.font, (v) => v);
     const sizes = [...new Set([...FONT_SIZES, ...(look.size !== null ? [look.size] : [])])].sort((a, b) => a - b);
     options(size, sizes.map(String), look.size === null ? null : String(look.size), (v) => v);
-    for (const { spec, control } of toggleButtons) {
+    for (const { spec, control } of [...emphasisButtons, ...toggleButtons]) {
       const state = engine.actionState(spec.id);
       control.disabled = !state.enabled;
       setPressed(control, state.active === true);

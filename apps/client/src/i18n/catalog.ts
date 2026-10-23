@@ -2499,7 +2499,12 @@ export const IT = { // --- la scocca -------------------------------------------
   "slash_menu.section.text": "Testo",
   "slash_menu.section.lists": "Elenchi",
   "slash_menu.section.insert": "Inserisci",
-  "slash_menu.section.vault": "Dal vault"
+  "slash_menu.section.vault": "Dal vault",
+  "editor_menu.rich.link_edit": "Modifica il link",
+  "editor_menu.rich.align": "Allineamento",
+  "editor_menu.rich.indent": "Rientro",
+  "rich.bold": "Grassetto",
+  "rich.italic": "Corsivo"
 } as const;
 
 /// Una chiave del catalogo della shell.
@@ -4870,5 +4875,10 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "slash_menu.section.text": "Text",
   "slash_menu.section.lists": "Lists",
   "slash_menu.section.insert": "Insert",
-  "slash_menu.section.vault": "From the vault"
+  "slash_menu.section.vault": "From the vault",
+  "editor_menu.rich.link_edit": "Edit link",
+  "editor_menu.rich.align": "Alignment",
+  "editor_menu.rich.indent": "Indent",
+  "rich.bold": "Bold",
+  "rich.italic": "Italic"
 };
