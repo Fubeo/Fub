@@ -66,8 +66,9 @@ Le finestre della cartella (`apps/client/src/editors/grid/dialogs/`, elencate
 in `catalog.ts`) si aprono da un controllo della barra, spento con il comando
 che la finestra darebbe, o dall'esito di un comando che chiede una finestra
 (`GridDialog`). Ognuna legge con le letture del provider (`cell.get`,
-`formulas.nameManager`…) e, confermata, dà un solo comando del catalogo; un
-rifiuto resta scritto nella finestra aperta. Formato celle dà soltanto ciò
+`formulas.nameManager`…) e, confermata, dà un solo comando del catalogo
+(la finestra di un commento uno per ciò che è cambiato); un rifiuto resta
+scritto nella finestra aperta. Formato celle dà soltanto ciò
 che è cambiato, e l'esempio del formato lo calcola il provider con `TEXT`.
 
 ## Gli oggetti dei fogli
@@ -91,6 +92,25 @@ l'uscita scrivono ed Esc lascia. Lo spostamento si mostra subito e diventa un
 solo comando `object.move` (cella dell'angolo, scarto e misura nei pixel del
 file); se il comando non entra l'oggetto torna dov'era. Con un oggetto
 selezionato la barra mostra le schede contestuali del grafico e della forma.
+
+## La revisione
+
+Una cella con una nota o un commento ha il segno nell'angolo (spento per un
+thread risolto) e, al passaggio del puntatore, la scheda di
+`apps/client/src/editors/grid/comment-card.ts`: il thread con gli autori e,
+se la griglia accetta comandi, Rispondi, Risolvi o Riapri, Modifica,
+Mostra/Nascondi per una nota ed Elimina. Ogni gesto è un comando del catalogo
+(`review.*`) con la cella nei parametri, perché vale per la cella indicata e
+non per quella attiva. A chi usa la tastiera il thread lo dice la cella attiva
+(`aria-description`), e Maiusc+F2 apre la finestra della nota o del commento,
+che mostra le risposte e con lo stesso OK cambia il testo, risponde e risolve.
+Una finestra aperta su una cella che ha già l'altro tipo apre quello: una nota
+scritta su un commento lo sostituirebbe. Modificare il testo tiene le
+risposte, lo stato e la casella della nota (GridCraft, patch 0010).
+
+Proteggi foglio e Proteggi cartella chiedono la password due volte; Rimuovi
+protezione, e Proteggi cartella su una cartella protetta, provano senza
+password e la chiedono soltanto se il provider ne vuole una.
 
 ## La stampa
 
@@ -117,11 +137,14 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 - `apps/client/src/editors/grid/engine.ts`
 - `apps/client/src/editors/grid/workbook.ts`
 - `apps/client/src/editors/grid/objects.ts`
+- `apps/client/src/editors/grid/comment-card.ts`
 - `apps/client/src/editors/grid/ribbon/ribbon.ts`
 - `apps/client/src/editors/grid/ribbon/tabs.ts`
 - `apps/client/src/editors/grid/dialogs/host.ts`
 - `apps/client/src/editors/grid/dialogs/catalog.ts`
 - `apps/client/src/editors/grid/dialogs/page.ts`
+- `apps/client/src/editors/grid/dialogs/notes.ts`
+- `apps/client/src/editors/grid/dialogs/protect.ts`
 - `crates/fub-format-xlsx/src/grid.rs`
 - `crates/fub-format-xlsx/src/export.rs`
 - `crates/fub-format-xlsx/src/objects.rs`

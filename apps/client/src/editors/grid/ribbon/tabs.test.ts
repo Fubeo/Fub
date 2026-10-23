@@ -86,12 +86,27 @@ describe("le schede della barra", () => {
   });
 
   it("aprono soltanto finestre che le finestre conoscono", () => {
+    // Una finestra che dipende dallo stato si chiede in tutti e due gli stati.
+    const locked: RibbonView = { ...VIEW, book: { ...VIEW.book!, protected: true } };
     const asked = [
-      ...controls.flatMap((control) => (control.kind === "button" && control.dialog ? [control.dialog] : [])),
+      ...controls.flatMap((control) => {
+        if (control.kind !== "button" || !control.dialog) return [];
+        return typeof control.dialog === "function" ? [control.dialog(VIEW), control.dialog(locked)] : [control.dialog];
+      }),
       ...controls.flatMap((control) => controlEntries(control).flatMap((entry) => (entry.dialog ? [entry.dialog] : []))),
     ];
     expect(asked.length).toBeGreaterThan(30);
     for (const dialog of asked) expect(DIALOGS[dialog], `la finestra ${dialog} manca`).toBeDefined();
+  });
+
+  it("proteggono la cartella con la finestra che serve allo stato", () => {
+    const protect = controls.find((control) => control.kind === "button" && control.id === "review.protectWorkbook");
+    expect(protect?.kind).toBe("button");
+    if (protect?.kind !== "button" || typeof protect.dialog !== "function") throw new Error("Proteggi cartella non chiede una finestra");
+    expect(protect.dialog(VIEW)).toBe("protectWorkbook");
+    expect(protect.dialog({ ...VIEW, book: { ...VIEW.book!, protected: true } })).toBe("unprotectWorkbook");
+    const unprotect = controls.find((control) => control.kind === "button" && control.id === "review.unprotectSheet");
+    expect(unprotect?.kind === "button" && unprotect.dialog).toBe("unprotectSheet");
   });
 
   it("chiedono il comando di un menu le cui voci arrivano dopo", () => {

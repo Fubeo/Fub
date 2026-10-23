@@ -65,6 +65,7 @@ import {
   rangeA1,
   type GridRange,
 } from "./merges";
+import { attachCommentCards, commentDescription } from "./comment-card";
 import { drawObject, GridMediaCache, objectLabel } from "./objects";
 import { hasBorders, horizontalOf, iconOf, paintBorders, paintCell, spills } from "./paint";
 import { currencyFormat, shortcutCommand, shortcutDialog } from "./shortcuts";
@@ -563,6 +564,9 @@ export class GridEngine {
   #objectText: { readonly key: string; readonly field: HTMLTextAreaElement; readonly original: string } | null = null;
   /// Ciò che si dice a chi non vede quando un oggetto si seleziona.
   readonly #objectsAnnounce: HTMLElement;
+  /// Ciò che vive quanto la griglia e si toglie con una vita: la scheda delle
+  /// note e dei commenti.
+  readonly #life: Lifetime = openLifetime();
 
   constructor(parent: HTMLElement, options: GridEngineOptions) {
     const signal = this.#abort.signal;
@@ -683,6 +687,28 @@ export class GridEngine {
     }), { signal });
     this.#formulaHost.addEventListener("focusin", () => this.#beginEditing("formula", this.#selection.focus), { signal });
     this.#formulaHost.addEventListener("focusout", () => this.#commitAfterBlur("formula"), { signal });
+    attachCommentCards({
+      root: this.#viewport,
+      lifetime: this.#life,
+      comment: (cell) => {
+        const position = this.#positionOf(cell);
+        return position ? this.#workbookCell(position)?.bytes?.comment ?? null : null;
+      },
+      address: (cell) => {
+        const position = this.#positionOf(cell);
+        return position ? cellA1(position) : "";
+      },
+      serves: (id) => this.commandable() && this.#commands.some((command) => command.id === id && command.enabled),
+      run: (id, params) => this.run(id, JSON.stringify(params)),
+      edit: (cell) => {
+        const position = this.#positionOf(cell);
+        if (!position) return;
+        this.#select(position, false);
+        this.focus();
+        const threaded = cell.dataset.comment === "thread";
+        this.openDialog(threaded ? "comment" : "note", JSON.stringify({ threaded }));
+      },
+    });
   }
   setDoc(source: string): void {
     if (this.#destroyed) return;
@@ -1119,6 +1145,7 @@ export class GridEngine {
     this.#formulaEditor.destroy();
     this.#cellEditor.destroy();
     this.#media.clear();
+    this.#life.close();
     this.#root.remove();
   }
 
@@ -2339,12 +2366,15 @@ export class GridEngine {
     }
     element.append(text);
     if (bytes?.comment) {
+      // Il thread lo mostra la scheda al passaggio (`comment-card.ts`), e a
+      // chi non vede lo dice la cella quando diventa attiva.
       const mark = document.createElement("span");
       mark.className = bytes.comment.threaded ? "grid-comment-mark threaded" : "grid-comment-mark";
+      if (bytes.comment.threaded && bytes.comment.resolved) mark.classList.add("resolved");
       mark.setAttribute("aria-hidden", "true");
       element.append(mark);
-      const thread = [bytes.comment, ...bytes.comment.replies].map((note) => note.author ? `${note.author}: ${note.text}` : note.text);
-      element.title = thread.join("\n");
+      element.dataset.comment = bytes.comment.threaded ? "thread" : "note";
+      element.setAttribute("aria-description", commentDescription(bytes.comment));
     } else if (bytes?.link) {
       element.title = bytes.link.tooltip ?? bytes.link.target;
     }
@@ -2462,6 +2492,13 @@ export class GridEngine {
 
   #detachCellEditor(): void {
     if (this.#cellEditorHost.parentElement !== this.#canvas) this.#canvas.append(this.#cellEditorHost);
+  }
+
+  /// La cella che l'elemento disegna, dai suoi `data-row`/`data-column`.
+  #positionOf(cell: HTMLElement): GridPosition | null {
+    const row = Number(cell.dataset.row);
+    const column = Number(cell.dataset.column);
+    return Number.isInteger(row) && Number.isInteger(column) ? { row, column } : null;
   }
 
   #cellId(position: GridPosition): string {

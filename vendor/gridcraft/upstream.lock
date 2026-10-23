@@ -43,6 +43,10 @@ sha256 = "sha256:ce23e0341a173f180e624c73c1ed8ada671df5c6a9a67b0b6ca4be9bc3dcc74
 path = "patches/0009-svg-degli-oggetti.patch"
 sha256 = "sha256:b544dc3a95400ca0f8e02f77cc16c81e1f8771cfc5fb399bf6c36c0099a5d6ec"
 
+[[patch]]
+path = "patches/0010-modifica-di-note-e-commenti.patch"
+sha256 = "sha256:5228ac08563618dc7bc58500d3ee64da5ba4d3d46c4246162d2ec56787010b79"
+
 [[file]]
 path = "LICENSE-APACHE"
 upstream = "sha256:0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
@@ -216,7 +220,7 @@ upstream = "sha256:9d829369593a394fe0bfee64d8cfafd6898a18ff6089fcfaa5efc4dd3aaee
 [[file]]
 path = "crates/engine/src/cmd/insert.rs"
 upstream = "sha256:a27e8318ab194f5431e76a60e53d8055e92a8edd4db5ad29e0e2ebb153e8eb90"
-result = "sha256:2d1f6928fea8be62f699502ae35abe9e9e89f3e27ab76b67d5976a767b3bb814"
+result = "sha256:c83e1f2b0a05b0fb8e0383da01bfc3df958cb992370f25f5e62891722b9e2ecf"
 
 [[file]]
 path = "crates/engine/src/cmd/inspect.rs"
@@ -319,7 +323,7 @@ upstream = "sha256:cef99c655829725036d15191d6a1d7099ee7a2e5905311e6a6820e3269d17
 [[file]]
 path = "crates/engine/src/tests.rs"
 upstream = "sha256:27dc31170fa41f0280740741bf62f3d6c0d0284bc398b897fef895c1c69e0757"
-result = "sha256:c105dfff62b5b75245d114bc3b1afefd1e12c3c831c217cc2d9c1d228c074007"
+result = "sha256:1dd5a84c2c68740eca3c1e6b5d9c38d463eac9326ee0ab1114091c7dd32c5f86"
 
 [[file]]
 path = "crates/engine/tests/autofit_filter_buttons.rs"
