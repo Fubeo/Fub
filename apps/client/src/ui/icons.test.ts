@@ -77,6 +77,9 @@ describe("il costrutto delle icone", () => {
       // L'host finto risponde con il QR che l'host vero disegna per la
       // sessione live: un dato della porta, non chrome della shell.
       .filter(([path]) => !path.endsWith("/host/fake.ts"))
+      // La finestra di una cartella porta i grafici come SVG del motore:
+      // `workbook.ts` ne controlla la forma, è un dato del documento.
+      .filter(([path]) => !path.endsWith("/editors/grid/workbook.ts"))
       .filter(([, text]) => /<svg\b/i.test(text))
       .map(([path]) => path);
     expect(offenders, `SVG fuori dal modulo icone: ${offenders.join(", ")}`).toEqual([]);
