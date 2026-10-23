@@ -35,10 +35,6 @@
     ],
     "notices": [
       {
-        "code": "not-shown-merges",
-        "count": 1
-      },
-      {
         "code": "uncomputed",
         "count": 1
       }
@@ -5275,10 +5271,6 @@
         "s3"
       ],
       "notices": [
-        {
-          "code": "not-shown-merges",
-          "count": 1
-        },
         {
           "code": "uncomputed",
           "count": 1

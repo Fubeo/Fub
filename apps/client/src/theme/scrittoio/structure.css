@@ -1368,9 +1368,85 @@ body {
 }
 
 .grid-cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
   padding: 0.3rem 0.45rem;
   white-space: nowrap;
+}
+
+/* Il testo sta sopra la barra di dati, e si taglia dove la cella finisce.
+   Un testo che passa nelle celle vuote accanto è largo quanto serve, fino
+   al limite che la griglia gli dà. */
+.grid-cell-text {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.grid-cell.spill {
+  overflow: visible;
+  z-index: 1;
+}
+
+.grid-cell.spill > .grid-cell-text {
+  width: max-content;
+}
+
+/* Righe e colonne bloccate restano ferme sopra quelle che scorrono; i fili
+   del blocco stanno sopra tutte. */
+.grid-row.frozen {
+  z-index: 6;
+}
+
+.grid-cell.frozen,
+.grid-border.frozen {
+  z-index: 2;
+}
+
+.grid-column-header.frozen {
+  z-index: 4;
+}
+
+.grid-freeze {
+  position: absolute;
+  z-index: 7;
+  pointer-events: none;
+}
+
+/* I bordi del file stanno sui fili della griglia, in un riquadro sopra la
+   cella. */
+.grid-border {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.grid-data-bar {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 2px;
+  pointer-events: none;
+}
+
+.grid-icon {
+  position: absolute;
+  bottom: 0.3rem;
+  left: 0.25rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.grid-comment-mark {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 7px 7px 0;
+  pointer-events: none;
 }
 
 .grid-header {

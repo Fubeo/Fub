@@ -17,7 +17,9 @@ import type {
   GridBytesWindow,
   GridCellStyle as GridBytesStyle,
   GridHorizontalAlign,
+  GridMerge,
   GridNotice,
+  GridSheetView,
 } from "../../host/contract";
 import type { GridCell, GridCellStyle, GridColumn, GridPosition, GridRow, GridSheet, GridWorkbook } from "./model";
 
@@ -39,11 +41,27 @@ export interface WorkbookCell {
   /// La cella come la dà il provider: l'input da scrivere, il blocco, il
   /// valore del file non ricalcolato, il conflitto.
   readonly bytes: GridBytesCell;
+  /// L'aspetto intero della cella, come la finestra lo dà.
+  readonly style: GridBytesStyle | undefined;
 }
 
 export interface WorkbookSheet {
   readonly cells: ReadonlyMap<number, WorkbookCell>;
+  /// Le unioni che le finestre lette toccano, ognuna una volta.
+  readonly merges: readonly GridMerge[];
+  /// Come il foglio si guarda; quello di serie finché nessuna finestra è letta.
+  readonly view: GridSheetView;
 }
+
+/// La vista di un foglio di cui non si è letta ancora nessuna finestra.
+export const DEFAULT_SHEET_VIEW: GridSheetView = {
+  frozen_rows: 0,
+  frozen_columns: 0,
+  gridlines: true,
+  headings: true,
+  zoom: 100,
+  right_to_left: false,
+};
 
 export interface WorkbookView {
   /// I fogli visibili, nell'ordine della sessione.
@@ -87,6 +105,11 @@ export function validateBytesSession(session: GridBytesSession): void {
     || !Array.isArray(session.notices)
     || session.notices.length > MAX_NOTICES
     || !Array.isArray(session.conflicts)
+    || !Array.isArray(session.commands)
+    || session.commands.some((command) =>
+      !id(command?.id)
+      || typeof command.enabled !== "boolean"
+      || (command.reason !== null && typeof command.reason !== "string"))
   ) {
     throw new Error("malformed grid bytes session");
   }
@@ -138,6 +161,35 @@ export function validateBytesWindow(window: GridBytesWindow, session: GridBytesS
   if (!Array.isArray(window.styles) || window.styles.length > Math.max(window.cells.length, 1) || !Array.isArray(window.merges)) {
     throw new Error("malformed grid bytes window");
   }
+  for (const merge of window.merges) {
+    if (
+      !count(merge.row, MAX_ROWS)
+      || !count(merge.column, MAX_COLUMNS)
+      || !count(merge.rows, MAX_ROWS)
+      || !count(merge.columns, MAX_COLUMNS)
+      || merge.rows === 0
+      || merge.columns === 0
+      || merge.rows * merge.columns < 2
+      || merge.row + merge.rows > sheet.row_count
+      || merge.column + merge.columns > sheet.column_count
+    ) {
+      throw new Error("malformed grid bytes merge");
+    }
+  }
+  const view = window.view;
+  if (
+    !view
+    || !count(view.frozen_rows, sheet.row_count)
+    || !count(view.frozen_columns, sheet.column_count)
+    || typeof view.gridlines !== "boolean"
+    || typeof view.headings !== "boolean"
+    || typeof view.right_to_left !== "boolean"
+    || !Number.isInteger(view.zoom)
+    || view.zoom < 10
+    || view.zoom > 400
+  ) {
+    throw new Error("malformed grid bytes view");
+  }
   const rows = new Set(window.rows.map((row) => row.id));
   const columns = new Set(window.columns.map((column) => column.id));
   for (const cell of window.cells) {
@@ -183,6 +235,10 @@ function style(from: GridBytesStyle | undefined): GridCellStyle | undefined {
   return Object.keys(out).length ? out : undefined;
 }
 
+function earlierIndex(previous: WorkbookView, sheet: string): number {
+  return previous.workbook.sheets.findIndex((candidate) => candidate.id === sheet);
+}
+
 /// La cartella da disegnare: i fogli visibili della sessione, con le righe,
 /// le colonne e le celle delle finestre lette. Una riga che nessuna finestra
 /// ha portato tiene la misura che aveva in `previous`, o quella di serie.
@@ -215,12 +271,15 @@ export function workbookView(
     });
     const map = new Map<number, WorkbookCell>();
     const list: GridCell[] = [];
+    const merges = new Map<string, GridMerge>();
     for (const window of own) {
+      for (const merge of window.merges) merges.set(`${merge.row}:${merge.column}`, merge);
       const rowIndex = new Map(window.rows.map((row) => [row.id, row.index] as const));
       const columnIndex = new Map(window.columns.map((column) => [column.id, column.index] as const));
       for (const cell of window.cells) {
         const position = { row: rowIndex.get(cell.key.row)!, column: columnIndex.get(cell.key.column)! };
-        const cellStyle = style(window.styles[cell.style]);
+        const full = window.styles[cell.style];
+        const cellStyle = style(full);
         const grid: GridCell = {
           row: cell.key.row,
           column: cell.key.column,
@@ -228,7 +287,7 @@ export function workbookView(
           ...(cellStyle ? { style: cellStyle } : {}),
         };
         list.push(grid);
-        map.set(cellKey(position), { cell: grid, bytes: cell });
+        map.set(cellKey(position), { cell: grid, bytes: cell, style: full });
       }
     }
     sheets.push({
@@ -238,7 +297,11 @@ export function workbookView(
       columns,
       ...(list.length ? { cells: list } : {}),
     });
-    cells.push({ cells: map });
+    cells.push({
+      cells: map,
+      merges: [...merges.values()],
+      view: own[own.length - 1]?.view ?? previous?.sheets[earlierIndex(previous, sessionSheet.id)]?.view ?? DEFAULT_SHEET_VIEW,
+    });
   }
   return {
     workbook: { version: 1, sheets },
