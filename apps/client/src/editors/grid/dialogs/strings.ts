@@ -97,7 +97,10 @@ const IT = {
   "grid.dialog.comment.new": "Nuovo commento",
   "grid.dialog.comment.edit": "Modifica commento",
   "grid.dialog.comment.label": "Commento:",
-  "grid.dialog.comment.replies": "{count} risposte restano nel thread.",
+  "grid.dialog.comment.author": "Di {author}",
+  "grid.dialog.comment.thread": "Risposte",
+  "grid.dialog.comment.reply": "Rispondi:",
+  "grid.dialog.comment.resolved": "Thread risolto",
   "grid.dialog.comment.delete": "Elimina",
 
   "grid.dialog.link.title": "Inserisci collegamento ipertestuale",
@@ -691,7 +694,10 @@ const EN: Record<DialogKey, string> = {
   "grid.dialog.comment.new": "New Comment",
   "grid.dialog.comment.edit": "Edit Comment",
   "grid.dialog.comment.label": "Comment:",
-  "grid.dialog.comment.replies": "{count} replies stay in the thread.",
+  "grid.dialog.comment.author": "By {author}",
+  "grid.dialog.comment.thread": "Replies",
+  "grid.dialog.comment.reply": "Reply:",
+  "grid.dialog.comment.resolved": "Thread resolved",
   "grid.dialog.comment.delete": "Delete",
 
   "grid.dialog.link.title": "Insert Hyperlink",

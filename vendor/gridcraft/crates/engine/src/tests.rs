@@ -3655,6 +3655,35 @@ fn notes_comments_and_links_survive_a_json_save() {
     assert_eq!(after.cells, before.cells);
 }
 
+/// Writing a note or a comment on a cell that has one of the same kind edits its text: the
+/// replies, the resolved state, the dates and the note's box stay. `comment` replaced the whole
+/// thread, so editing a comment dropped its replies.
+#[test]
+fn editing_a_note_or_a_comment_keeps_its_thread() {
+    let mut s = s();
+    s.execute("review.newComment", json!({"cell": "B2", "text": "first", "author": "Ada"})).unwrap();
+    s.execute("review.replyComment", json!({"cell": "B2", "text": "reply", "author": "Bob"})).unwrap();
+    s.execute("review.resolveComment", json!({"cell": "B2", "resolved": true})).unwrap();
+    s.execute("review.newComment", json!({"cell": "B2", "text": "edited"})).unwrap();
+    s.execute("review.newNote", json!({"cell": "A1", "text": "note", "author": "Ada"})).unwrap();
+    s.execute("review.showNote", json!({"cell": "A1"})).unwrap();
+    s.execute("review.newNote", json!({"cell": "A1", "text": "changed"})).unwrap();
+    let d = s.doc().unwrap();
+    let sh = d.wb.active().unwrap();
+    let thread = &sh.comments[&CellRef::parse("B2").unwrap()];
+    assert_eq!((thread.author.as_str(), thread.text.as_str()), ("Ada", "edited"));
+    assert_eq!(thread.replies, vec![("Bob".to_string(), "reply".to_string())]);
+    assert!(thread.resolved && thread.threaded);
+    let note = &sh.comments[&CellRef::parse("A1").unwrap()];
+    assert_eq!((note.author.as_str(), note.text.as_str()), ("Ada", "changed"));
+    assert!(note.visible && !note.threaded);
+    // A note written over a comment replaces it.
+    s.execute("review.newNote", json!({"cell": "B2", "text": "plain"})).unwrap();
+    let d = s.doc().unwrap();
+    let replaced = &d.wb.active().unwrap().comments[&CellRef::parse("B2").unwrap()];
+    assert!(!replaced.threaded && replaced.replies.is_empty());
+}
+
 /// A cut moves the block's notes, hyperlinks and merged areas with it. The source's cells and
 /// pictures were removed but the block's merges and notes were not, so one merged block became
 /// two (an empty one left at the old place) and a note ended up on both the old and the new

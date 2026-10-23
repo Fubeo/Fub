@@ -32,7 +32,7 @@ L'interfaccia (`ui-egui`) e il server MCP (`mcp`) non sono copiati.
 | `crates/xlsx/` | `crates/xlsx/` | `src/package.rs` e nove file di `src/tests/` per `zip` 9; `src/ods.rs` per Rust 1.89; `src/sheet_read.rs` e `src/tests/fixtures.rs` per i valori delle matrici; `src/read.rs`, `src/passthrough.rs`, `src/write.rs` e `src/tests/sheet_names.rs` per il `sheetId` del file |
 | `crates/chart/` | `crates/chart/` | nessuna |
 | `crates/pdf/` | `crates/pdf/` | nessuna |
-| `crates/engine/` | `crates/engine/` | `src/lib.rs` e `src/tests.rs`, per aprire senza ricalcolo; `src/lib.rs` e `src/chart_svg.rs` per l'SVG degli oggetti; `tests/chart_workbook_names.rs` per `zip` 9 |
+| `crates/engine/` | `crates/engine/` | `src/lib.rs` e `src/tests.rs`, per aprire senza ricalcolo; `src/lib.rs` e `src/chart_svg.rs` per l'SVG degli oggetti; `src/cmd/insert.rs` e `src/tests.rs` per modificare note e commenti; `tests/chart_workbook_names.rs` per `zip` 9 |
 | `rustfmt.toml` | `rustfmt.toml` | nessuna |
 | `NOTICE` | `NOTICE` | nessuna |
 
@@ -137,7 +137,14 @@ Le patch di `patches/`, una per ragione:
 - `0009-svg-degli-oggetti`: Fub disegna i grafici e i grafici sparkline di
   una cartella come li disegna il salvataggio come pagina web, con le
   primitive di `chart`. In `engine/src/lib.rs` il modulo `chart_svg` diventa
-  pubblico, e con lui `chart_svg` e `prims_svg`; il codice non cambia.
+  pubblico, e con lui `chart_svg` e `prims_svg`; il codice non cambia;
+- `0010-modifica-di-note-e-commenti`: scrivere una nota, o un commento, su
+  una cella che ne ha già uno dello stesso tipo ne sostituiva tutto il thread:
+  «Modifica commento» perdeva le risposte, lo stato risolto e le date, e
+  «Modifica nota» la casella letta dal file. In `engine/src/cmd/insert.rs` ora
+  cambia soltanto il testo (e l'autore, se il comando lo nomina), come fa
+  Modifica nota di Excel; una nota scritta su un commento lo sostituisce
+  ancora. In `engine/src/tests.rs` il test lo dice.
 
 Le dipendenze del workspace di questa cartella hanno, per quelle in comune con
 Fub, la stessa versione del `[workspace.dependencies]` di Fub, perché il grafo

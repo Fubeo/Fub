@@ -84,8 +84,10 @@ export interface ButtonControl extends Base {
   readonly kind: "button";
   readonly id: string;
   readonly params?: Params | ((view: RibbonView) => Params);
-  /// Apre questa finestra con `params` invece di dare il comando `id`.
-  readonly dialog?: string;
+  /// Apre questa finestra con `params` invece di dare il comando `id`; la
+  /// finestra può dipendere dallo stato («Proteggi cartella» o la sua
+  /// rimozione).
+  readonly dialog?: string | ((view: RibbonView) => string);
   /// Chiede alla shell un'azione sua invece di dare il comando `id`, che
   /// resta la condizione perché il pulsante si veda: l'esportazione in PDF è
   /// un comando dell'host, non della cartella.
@@ -1532,7 +1534,7 @@ const REVIEW: RibbonTab = {
       keytip: "ZP",
       columns: [
         { kind: "button", id: "review.protectSheet", dialog: "protectSheet", label: "ribbon.review.protect_sheet", keytip: "PP", icon: "gr-lock", size: "large" },
-        { kind: "button", id: "review.unprotectSheet", label: "ribbon.review.unprotect_sheet", keytip: "PS", icon: "gr-unlock", size: "large" },
+        { kind: "button", id: "review.unprotectSheet", dialog: "unprotectSheet", label: "ribbon.review.unprotect_sheet", keytip: "PS", icon: "gr-unlock", size: "large" },
         {
           kind: "button",
           id: "review.protectWorkbook",
@@ -1540,7 +1542,9 @@ const REVIEW: RibbonTab = {
           keytip: "PW",
           icon: "gr-lock",
           size: "large",
-          params: (view) => ({ on: !(view.book?.protected ?? false) }),
+          // Protetta, la stessa finestra la toglie, e chiede la password
+          // soltanto se ce n'è una.
+          dialog: (view) => (view.book?.protected === true ? "unprotectWorkbook" : "protectWorkbook"),
           pressed: (view) => view.book?.protected === true,
         },
       ],
