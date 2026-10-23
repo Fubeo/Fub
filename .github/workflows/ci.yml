@@ -39,6 +39,8 @@ jobs:
         run: node tools/vendor-craft/vendor.mjs wordcraft check
       - name: la copia di GridCraft è l'upstream del lock più le patch di vendor/gridcraft/patches
         run: node tools/vendor-craft/vendor.mjs gridcraft check
+      - name: le patch dei motori si portano a tre vie (upstream finto, senza rete)
+        run: node tools/vendor-craft/vendor.mjs self-test
       - name: gli errori letterali non crescono
         run: node .github/scripts/check-error-literals.mjs
       - name: il lettore dei commenti di Rust distingue la prosa da stringhe e caratteri

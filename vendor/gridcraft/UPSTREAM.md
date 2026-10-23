@@ -225,13 +225,19 @@ node tools/vendor-craft/vendor.mjs gridcraft gate
 aggiornamento va così:
 
 1. `report --rev <sha>` è l'aggiornamento a vuoto: per ogni patch dice se si
-   applica sulla pila, se l'upstream l'ha assorbita (si toglie al contrario
-   dai file nuovi: la patch esce, e la sua riga qui sopra con lei) o se va
-   rifatta, e quali dei file che tocca l'upstream ha cambiato; poi le
-   dipendenze dirette aggiunte e tolte, le versioni del workspace e la
-   `rust-version`. Non tocca la copia.
+   applica così com'è, se si rifà a tre vie sui file nuovi (e quale sua parte
+   cade perché l'upstream ha tolto il file), se l'upstream l'ha assorbita (la
+   patch esce, e la sua riga qui sopra con lei) o se ha un conflitto vero, e
+   quali dei file che tocca l'upstream ha cambiato; poi le dipendenze dirette
+   aggiunte e tolte, quelle da Git, le versioni del workspace, la
+   `rust-version` se supera quella di Fub e i file `osservati` di
+   `motori.mjs` che l'upstream ha cambiato (la barra dei fogli in TS ricopia
+   `ui-egui/src/ribbon.rs`, che non si copia). Non tocca la copia.
 2. `update --rev <sha>`, con il `Cargo.lock` di questa cartella aggiornato
    (`cargo update --manifest-path vendor/gridcraft/Cargo.toml --workspace`).
+   Le patch rifatte a tre vie si riscrivono in `patches/` da sole; su un
+   conflitto vero `update` si ferma senza scrivere niente, e la patch si
+   rifà a mano.
 3. `gate` esegue le prove di `tools/vendor-craft/motori.mjs` e le riassume:
    `check`, i test di GridCraft, quelli di `fub-format-xlsx` e di `fub-host`
    (`xlsx_workbooks`), il confine del motore, gli invarianti di dipendenza e
