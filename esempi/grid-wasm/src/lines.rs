@@ -431,5 +431,7 @@ fn office_book() -> GridBook {
         names: Vec::new(),
         calculation: GridCalculation::Automatic,
         protected: false,
+        font: "Calibri".to_owned(),
+        font_size: 11.0,
     }
 }

@@ -3847,6 +3847,8 @@ fn conform(source: &str) -> Result<(), String> {
         names,
         calculation,
         protected,
+        font,
+        font_size,
     } = GridBook::default();
     contract.record(
         "grid-book",
@@ -3855,6 +3857,8 @@ fn conform(source: &str) -> Result<(), String> {
             ("names", wit(&names)),
             ("calculation", wit(&calculation)),
             ("protected", wit(&protected)),
+            ("font", wit(&font)),
+            ("font-size", wit(&font_size)),
         ],
     );
 

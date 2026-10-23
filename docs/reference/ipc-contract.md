@@ -50,7 +50,8 @@ altrimenti) e risponde `Conflict` se i byte non sono più quelli di `base`. La
 sessione è un `GridBytesSession` (fogli, foglio attivo, fogli nascosti, avvisi
 `GridNotice`, celle in conflitto e il libro `GridBook`: i dodici colori del
 tema in `#RRGGBB`, i nomi definiti visibili, il modo di calcolo
-`GridCalculation` e la struttura protetta); la finestra è un `GridBytesWindow`, la cui
+`GridCalculation`, la struttura protetta e il carattere dello stile Normale,
+nome e punti, che lo stile di una cella tace); la finestra è un `GridBytesWindow`, la cui
 cella porta `GridValue`, il testo formattato, blocco, `stale`, `conflict`,
 l'indice del suo stile e i segni (barra di dati, icona, commento,
 collegamento). La finestra porta gli stili delle sue celle, ognuno una volta

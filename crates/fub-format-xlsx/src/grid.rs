@@ -35,13 +35,14 @@ use fub_abi::{
     GridInvalidation, GridJournal, GridJournalMatch, GridLink, GridMerge, GridNotice, GridRow,
     GridSelection, GridSheet, GridSheetView, GridSourceEdit, GridSurfaceSpec, GridTable, GridValue,
     GridViewMode, GridWindowRequest, PluginError, Revision, Text, MAX_GRID_BOOK_NAMES,
-    MAX_GRID_BYTES_SOURCE, MAX_GRID_INVALIDATED_CELLS, MAX_GRID_NAME_BYTES,
+    MAX_GRID_BYTES_SOURCE, MAX_GRID_FONT_BYTES, MAX_GRID_INVALIDATED_CELLS, MAX_GRID_NAME_BYTES,
     MAX_GRID_SELECTION_BYTES, MAX_GRID_SESSION_COLUMNS, MAX_GRID_SESSION_ROWS,
     MAX_GRID_WINDOW_TABLES,
 };
 use gridcraft_calc::recalc::{Calc, Key};
 use gridcraft_core::{CellRef, RangeRef, Value as GcValue};
 use gridcraft_engine::cf::CfCache;
+use gridcraft_model::style::StyleId;
 use gridcraft_model::{CalcMode, Sheet, SheetViewMode, Visibility, Workbook};
 use gridcraft_numfmt::{format_value, NumberFormat};
 use serde_json::{json, Value as Json};
@@ -608,6 +609,7 @@ impl Instance {
     /// può usare, il calcolo e la struttura protetta.
     fn book(&self) -> GridBook {
         let shown = self.shown();
+        let normal = &shown.styles.get(StyleId::DEFAULT).font;
         let names: BTreeSet<&str> = shown
             .names
             .iter()
@@ -633,6 +635,12 @@ impl Instance {
                 CalcMode::Manual => GridCalculation::Manual,
             },
             protected: shown.protected_structure,
+            font: book_font(&normal.name),
+            font_size: if normal.size.is_finite() && normal.size > 0.0 {
+                normal.size.min(409.0)
+            } else {
+                GridBook::default().font_size
+            },
         }
     }
 
@@ -1627,6 +1635,16 @@ impl Instance {
 }
 
 /// `r12` → 12, entro `limit`; niente zeri in testa.
+/// Il nome del carattere Normale, o quello di serie se il file non ne dà
+/// uno che il contratto porta.
+fn book_font(name: &str) -> String {
+    if name.is_empty() || name.len() > MAX_GRID_FONT_BYTES {
+        GridBook::default().font
+    } else {
+        name.to_owned()
+    }
+}
+
 fn index(id: &str, prefix: char, limit: u32) -> Option<u32> {
     let digits = id.strip_prefix(prefix)?;
     if digits.is_empty()

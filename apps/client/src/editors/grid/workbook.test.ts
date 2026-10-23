@@ -109,6 +109,8 @@ describe("una cartella di Excel sulla versione 2", () => {
       (value) => { value.book.theme_colors[0] = "white"; },
       (value) => { value.book.names = [""]; },
       (value) => { value.book.calculation = "sometimes" as never; },
+      (value) => { value.book.font = ""; },
+      (value) => { value.book.font_size = 0; },
     ];
     for (const change of sessions) {
       const value = copy(session);

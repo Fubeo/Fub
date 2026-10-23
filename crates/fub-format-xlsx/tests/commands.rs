@@ -777,6 +777,11 @@ fn la_barra_legge_vista_tabelle_e_libro_dopo_i_comandi() {
     assert_eq!(session.book.theme_colors.len(), fub_abi::GRID_THEME_COLORS);
     assert!(session.book.names.is_empty());
     assert_eq!(session.book.calculation, GridCalculation::Automatic);
+    // Il carattere dello stile Normale, che lo stile di una cella tace.
+    assert_eq!(
+        (session.book.font.as_str(), session.book.font_size),
+        ("Calibri", 11.0)
+    );
     let mut revision = session.revision.clone();
     let mut last = None;
     for (id, params, at) in [
