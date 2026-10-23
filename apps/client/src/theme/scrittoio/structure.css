@@ -1477,6 +1477,167 @@ body {
   overflow-x: auto;
 }
 
+/* La barra multifunzione del foglio (`editors/grid/ribbon/`): la fila delle
+   schede, poi i gruppi di una scheda in una striscia d'altezza fissa. Un
+   gruppo che non ci sta si raccoglie nel suo pulsante (`data-collapsed`); le
+   lettere di Excel sono distintivi posati sopra i controlli. */
+.grid-ribbon-host { flex: none; min-width: 0; }
+.grid-ribbon {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.grid-ribbon-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.grid-ribbon-tabs {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+.grid-ribbon-tabs .kit-tab,
+.grid-ribbon-item,
+.grid-ribbon-group {
+  position: relative;
+}
+.grid-ribbon-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+.grid-ribbon-toggle svg { width: 16px; height: 16px; }
+.grid-ribbon-panel { min-width: 0; }
+.grid-ribbon-toolbar {
+  display: flex;
+  align-items: stretch;
+  height: 102px;
+  min-width: 0;
+  overflow: hidden;
+}
+.grid-ribbon-group {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+}
+.grid-ribbon-group-body {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+}
+.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-body,
+.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-label {
+  display: none;
+}
+.grid-ribbon-group-label {
+  flex: none;
+  white-space: nowrap;
+  text-align: center;
+}
+.grid-ribbon-stack {
+  display: flex;
+  flex-direction: column;
+}
+.grid-ribbon-row,
+.grid-ribbon-item,
+.grid-ribbon-field,
+.grid-ribbon-check,
+.grid-ribbon-chevron {
+  display: inline-flex;
+  align-items: center;
+}
+.grid-ribbon-row { display: flex; }
+.grid-ribbon-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+.grid-ribbon-small {
+  min-width: 24px;
+  height: 24px;
+}
+.grid-ribbon-small svg { flex: none; width: 16px; height: 16px; }
+.grid-ribbon-large {
+  flex-direction: column;
+  justify-content: flex-start;
+  min-width: 44px;
+  max-width: 96px;
+  height: 76px;
+}
+.grid-ribbon-large svg { flex: none; width: 26px; height: 26px; }
+/* Il nome di un pulsante grande sta in due righe al più, sopra il nome del
+   gruppo. */
+.grid-ribbon-large .grid-ribbon-label {
+  max-height: 2.5em;
+  overflow: hidden;
+  white-space: normal;
+  text-align: center;
+}
+.grid-ribbon-large .grid-ribbon-chevron svg,
+.grid-ribbon-chevron svg { width: 10px; height: 10px; }
+.grid-ribbon-split-large { flex-direction: column; }
+.grid-ribbon-split-large > .grid-ribbon-large { height: 58px; }
+.grid-ribbon-split-large > .grid-ribbon-arrow { align-self: stretch; height: 18px; }
+.grid-ribbon-arrow { min-width: 14px; }
+.grid-ribbon-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+}
+.grid-ribbon-color-bar {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 2px;
+  height: 3px;
+}
+.grid-ribbon-panel[data-compact="true"] .grid-ribbon-small .grid-ribbon-label { display: none; }
+.grid-ribbon-keytip {
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  z-index: var(--z-menu);
+  transform: translateX(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.grid-ribbon-popup-group { display: flex; }
+.grid-ribbon-palette,
+.grid-ribbon-gallery {
+  display: flex;
+  flex-direction: column;
+}
+.grid-ribbon-gallery { max-height: 60vh; overflow-y: auto; }
+.grid-ribbon-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 18px);
+}
+.grid-ribbon-swatch { width: 18px; height: 18px; padding: 0; }
+.grid-ribbon-gallery-grid { display: grid; }
+.grid-ribbon-gallery-table .grid-ribbon-gallery-grid { grid-template-columns: repeat(7, 64px); }
+.grid-ribbon-gallery-cell .grid-ribbon-gallery-grid { grid-template-columns: repeat(4, 108px); }
+.grid-ribbon-gallery-item { display: flex; justify-content: center; padding: 3px; }
+.grid-ribbon-table-preview {
+  display: grid;
+  grid-template-columns: repeat(3, 18px);
+}
+.grid-ribbon-table-preview > span { height: 9px; }
+.grid-ribbon-cell-sample {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 /* L'ospite del canvas riempie il foglio: senza un'altezza sua la tela, che è
    alta quanto lui, sarebbe alta zero. */
 .canvas-surface-host {

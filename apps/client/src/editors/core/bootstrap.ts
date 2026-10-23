@@ -3,6 +3,7 @@ import type { CompletionSources } from "../text/profiles/markdown/completions";
 import { api } from "../../host/ipc";
 import { openVaultRoot, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
+import type { GridRibbon } from "../grid/ribbon/ribbon";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { onEvent } from "../../state/kernel";
 import { PROOF_NS, type ProofPorts } from "./proof-ports";
@@ -285,6 +286,11 @@ export function createDocumentSurfaceRegistry(
     factory: {
       mount(profile, context) {
         if (profile !== "workbook") throw new Error(`grid surface profile ${profile} is not registered`);
+        // La barra multifunzione arriva con un `import()`: chi non apre una
+        // cartella di Excel non la scarica. Si aggiorna con i richiami del
+        // motore, al più una volta per fotogramma.
+        let ribbon: GridRibbon | null = null;
+        let destroyed = false;
         const engine = new GridEngine(context.parent, {
           surfaceId: context.paneId,
           formatId: context.formatId,
@@ -292,10 +298,21 @@ export function createDocumentSurfaceRegistry(
           documentId: context.documentId,
           base: () => options.documentBase?.(context.documentId) ?? context.revision ?? null,
           onChange: (change) => options.onChange(context.paneId, change),
-          onSelectionChange: () => options.onSelectionChange(context.paneId),
+          onSelectionChange: () => {
+            options.onSelectionChange(context.paneId);
+            ribbon?.schedule();
+          },
+          onCommands: () => ribbon?.schedule(),
+          onView: () => ribbon?.schedule(),
           grid: options.gridHost,
           theme: currentTheme(),
         });
+        void import("../grid/ribbon/ribbon").then(
+          ({ mountRibbon }) => {
+            if (!destroyed) ribbon = mountRibbon(engine);
+          },
+          () => {},
+        );
         return {
           family: "grid",
           profile,
@@ -314,7 +331,12 @@ export function createDocumentSurfaceRegistry(
           selectedText: () => engine.selectedText(),
           setReadOnly: (readOnly) => engine.setReadOnly(readOnly),
           setTheme: (theme) => engine.setTheme(theme),
-          destroy: () => engine.destroy(),
+          destroy: () => {
+            destroyed = true;
+            ribbon?.destroy();
+            ribbon = null;
+            engine.destroy();
+          },
         };
       },
     },

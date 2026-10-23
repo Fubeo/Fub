@@ -102,6 +102,8 @@ const NOT_SHOWN_KEYS: Readonly<Record<string, Key>> = {
 };
 /// Il comando con cui una formula, o un input, entra in una sessione a comandi.
 const SET_VALUES = "range.setValues";
+/// I comandi del catalogo che soltanto leggono, e che `query` può chiedere.
+const QUERIES: ReadonlySet<string> = new Set(["formulas.functions", "formulas.recentlyUsed"]);
 const UNDO = "edit.undo";
 const REDO = "edit.redo";
 /// Perché una cella non si modifica, per codice di blocco.
@@ -640,6 +642,69 @@ export class GridEngine {
   /// Ciò che vale per la cartella; `null` finché nessuna sessione è mostrata.
   book(): GridBook | null {
     return this.#shownSession?.book ?? null;
+  }
+
+  /// I fogli nascosti della cartella, per scoprirli.
+  hiddenSheets(): readonly { id: string; name: string }[] {
+    const session = this.#shownSession;
+    if (!session) return [];
+    return session.sheets
+      .filter((sheet) => session.hidden.includes(sheet.id))
+      .map((sheet) => ({ id: sheet.id, name: sheet.name }));
+  }
+
+  /// Se i comandi si possono dare adesso: una sessione che ne serve, e un
+  /// documento che si modifica.
+  commandable(): boolean {
+    return !this.#destroyed && this.#bytes !== null && !this.#readOnly && this.#commands.length > 0;
+  }
+
+  /// La misura della parte della griglia che si vede, in pixel CSS.
+  viewportSize(): { width: number; height: number } {
+    return { width: this.#viewport.clientWidth, height: this.#viewport.clientHeight };
+  }
+
+  /// Scrive `text` dove si sta scrivendo una cella, al cursore; senza una
+  /// cella aperta, apre la cella attiva con `=` e `text`: una funzione da
+  /// cominciare (`SOMMA(`) o un nome definito.
+  writeFormula(text: string): boolean {
+    if (this.#destroyed || this.#readOnly || !this.#workbook) return false;
+    if (this.#editing) {
+      const editor = this.#editing.owner === "cell" ? this.#cellEditor : this.#formulaEditor;
+      const written = editor.insertAtCursor(text);
+      editor.focus();
+      return written;
+    }
+    this.#beginEditing("cell", this.#selection.focus, `=${text}`);
+    if (!this.#editing) return false;
+    this.#cellEditor.focus();
+    return true;
+  }
+
+  /// Chiede al provider un comando che soltanto legge, come l'elenco delle
+  /// funzioni: il risultato come testo JSON, o `null` se non arriva. La
+  /// cartella, la selezione e la cronologia restano come sono.
+  query(id: string, params = "{}"): Promise<string | null> {
+    if (!QUERIES.has(id) || !this.#bytes || !this.#serves(id)) return Promise.resolve(null);
+    const command: GridCommand = { id, params, ...this.#commandSelection() };
+    const epoch = this.#bytesEpoch;
+    return new Promise((resolve) => {
+      this.#enqueueProtocol(async () => {
+        const host = this.#options.grid;
+        const state = this.#bytes;
+        if (!host || !state || this.#destroyed || epoch !== this.#bytesEpoch) {
+          resolve(null);
+          return;
+        }
+        try {
+          const outcome = await host.gridBytesCommand(state.surface, state.instance, { revision: state.session.revision, command });
+          const edit = outcome.commit.edit;
+          resolve(edit.from === edit.to && !edit.inserted ? outcome.result : null);
+        } catch {
+          resolve(null);
+        }
+      });
+    });
   }
 
   /// Dà il comando `id` del catalogo sulla selezione, con i parametri come
