@@ -29,6 +29,7 @@ import {
   DocumentSurfaceRegistry,
   type EditorSurface,
   type SurfaceCallbacks,
+  type SurfaceExport,
   type SurfaceMountContext,
 } from "./registry";
 
@@ -43,6 +44,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly completions: CompletionSources;
   readonly slash?: EditorSlashHost;
   readonly gridHost?: GridHost;
+  /// Un export registrato del documento `doc`, chiesto da dentro la
+  /// superficie come dal menu del riquadro: se si può adesso, e come.
+  readonly exportDocument?: { available(): boolean; run(doc: string, chosen: SurfaceExport): void };
   /// La revisione dei byte da cui il testo della sessione di `doc` discende
   /// adesso: una cartella di Excel ci apre il suo giornale.
   readonly documentBase?: (doc: string) => string | null;
@@ -102,6 +106,17 @@ const PLAIN_TEXT_MODES = [
 const GRID_MODES = [
   { id: "sheet", label: () => t("mode.sheet"), presentation: "surface", contextMode: "live_preview" },
 ] as const;
+
+/// La stampa in PDF di una cartella, con l'export dell'host (`xlsx.copy.pdf`):
+/// la barra dei fogli la chiede come il menu del riquadro.
+const GRID_EXPORTS: readonly SurfaceExport[] = [
+  {
+    target: "xlsx.copy.pdf",
+    label: () => t("grid.export.pdf"),
+    detail: () => t("grid.export.pdf.desc"),
+    options: () => ({ sheets: "all" }),
+  },
+];
 
 const VIEWER_MODES = [
   { id: "view", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading" },
@@ -313,6 +328,11 @@ export function createDocumentSurfaceRegistry(
           },
           grid: options.gridHost,
           theme: currentTheme(),
+          pdf: options.media?.pdfLoader ?? loadPdf,
+          exportPdf: options.exportDocument && {
+            available: () => options.exportDocument!.available(),
+            run: () => options.exportDocument!.run(context.documentId, GRID_EXPORTS[0]!),
+          },
         });
         void import("../grid/ribbon/ribbon").then(
           ({ mountRibbon, mountGridDialogs }) => {
@@ -329,6 +349,7 @@ export function createDocumentSurfaceRegistry(
           profile,
           surfaceId: context.paneId,
           modes: GRID_MODES,
+          exports: GRID_EXPORTS,
           setMode(mode) {
             requireMode(GRID_MODES, mode);
             context.parent.dataset.surfaceMode = mode;

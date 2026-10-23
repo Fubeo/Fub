@@ -430,3 +430,103 @@ fn una_cartella_cifrata_o_un_file_che_non_lo_è_si_dicono() {
         Some("host.xlsx.encrypted")
     );
 }
+
+/// L'esito del prossimo job di trasferimento finito.
+fn transfer_done(events: &fub_kernel::bus::Subscription) -> Result<serde_json::Value, PluginError> {
+    loop {
+        let notice = events
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .expect("the job ends");
+        if let fub_abi::Event::JobDone { job, result, .. } = notice.event {
+            if job == "import.transfer" {
+                return result;
+            }
+        }
+    }
+}
+
+#[test]
+fn esportare_in_pdf_accoda_l_export_e_la_cartella_resta() {
+    let vault = Vault::with(&[("Conti.xlsx", &conti())]);
+    let before = vault.on_disk("Conti.xlsx");
+    let events = vault.host.subscribe(None).unwrap();
+    vault
+        .host
+        .invoke_user_command(
+            None,
+            "xlsx.export-pdf",
+            serde_json::json!({"doc": "Conti.xlsx", "sheets": "all"}),
+            fub_abi::InvokeMode::Apply,
+        )
+        .expect("the command queues the export");
+    let report: fub_abi::transfer::ExportReport =
+        serde_json::from_value(transfer_done(&events).expect("the export runs")).unwrap();
+    assert_eq!(report.artifacts.len(), 1);
+    assert_eq!(report.artifacts[0].path, "Conti.pdf");
+    assert_eq!(report.artifacts[0].media_type, "application/pdf");
+    assert!(report.artifacts[0]
+        .as_bytes()
+        .unwrap()
+        .starts_with(b"%PDF-"));
+    assert!(report
+        .log
+        .iter()
+        .all(|note| note.entry.as_deref() == Some("Conti.xlsx")));
+    assert_eq!(vault.on_disk("Conti.xlsx"), before);
+}
+
+#[test]
+fn una_nota_non_si_esporta_in_pdf_come_cartella() {
+    let vault = Vault::with(&[("Conti.xlsx", &conti())]);
+    let refused = vault.host.invoke_user_command(
+        None,
+        "xlsx.export-pdf",
+        serde_json::json!({"doc": "Nota.md"}),
+        fub_abi::InvokeMode::Apply,
+    );
+    assert!(
+        matches!(refused, Err(PluginError::BadArgs(_))),
+        "{refused:?}"
+    );
+}
+
+#[test]
+fn spento_il_bundle_l_export_in_pdf_sparisce() {
+    let vault = Vault::with(&[("Conti.xlsx", &conti())]);
+    let listed = |vault: &Vault| {
+        vault
+            .host
+            .commands(None)
+            .unwrap()
+            .into_iter()
+            .any(|spec| spec.id == "xlsx.export-pdf")
+    };
+    assert!(listed(&vault));
+    let errors = vault
+        .host
+        .set_plugin_enabled(None, "fub.xlsx", false)
+        .expect("the bundle unmounts");
+    assert!(errors.is_empty(), "{errors:?}");
+    assert!(!listed(&vault));
+    let request = fub_abi::transfer::ExportRequest::new(
+        "xlsx.copy.pdf",
+        fub_abi::transfer::ExportSelection::Documents(vec![DocId::new("Conti.xlsx")]),
+    );
+    let refused = vault.host.invoke_user_command(
+        None,
+        "export.run",
+        serde_json::json!({"request_json": serde_json::to_string(&request).unwrap()}),
+        fub_abi::InvokeMode::DryRun,
+    );
+    assert!(
+        matches!(refused, Err(PluginError::BadArgs(_))),
+        "{refused:?}"
+    );
+    // Riacceso, torna.
+    let errors = vault
+        .host
+        .set_plugin_enabled(None, "fub.xlsx", true)
+        .expect("the bundle mounts");
+    assert!(errors.is_empty(), "{errors:?}");
+    assert!(listed(&vault));
+}

@@ -92,6 +92,26 @@ solo comando `object.move` (cella dell'angolo, scarto e misura nei pixel del
 file); se il comando non entra l'oggetto torna dov'era. Con un oggetto
 selezionato la barra mostra le schede contestuali del grafico e della forma.
 
+## La stampa
+
+Le impostazioni di pagina sono del provider: la scheda Layout di pagina dà i
+comandi di GridCraft (`pageLayout.*`), e Imposta pagina
+(`dialogs/page.ts`) legge `pageLayout.pageSetup` dato senza parametri, che non
+cambia niente, e scrive le quattro schede di Excel con un solo comando; i
+margini si mostrano in centimetri, e uno non toccato torna in pollici con il
+valore del file. L'anteprima di stampa legge `file.printPreview` (le pagine) e
+`file.exportPdf` senza percorso (il PDF in base64), due comandi che il
+provider serve anche se GridCraft li mette nel gruppo File e che non entrano
+nel giornale; la finestra disegna una pagina alla volta con il lettore dei PDF
+della shell, intera o con lo zoom. Un PDF oltre 1 MiB di risultato non
+arriva: la finestra lo dice e lascia l'esportazione.
+
+L'esportazione in PDF è l'export dell'host `xlsx.copy.pdf`
+(`crates/fub-format-xlsx/src/export.rs`, bundle `fub.xlsx`), che la
+superficie dichiara fra i suoi export: il pulsante della barra e il menu del
+riquadro salvano, chiedono `export.run` e aprono il centro attività. Stampa i
+byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
+
 ## Dove si trova
 
 - `apps/client/src/editors/grid/engine.ts`
@@ -101,5 +121,7 @@ selezionato la barra mostra le schede contestuali del grafico e della forma.
 - `apps/client/src/editors/grid/ribbon/tabs.ts`
 - `apps/client/src/editors/grid/dialogs/host.ts`
 - `apps/client/src/editors/grid/dialogs/catalog.ts`
+- `apps/client/src/editors/grid/dialogs/page.ts`
 - `crates/fub-format-xlsx/src/grid.rs`
+- `crates/fub-format-xlsx/src/export.rs`
 - `crates/fub-format-xlsx/src/objects.rs`

@@ -37,6 +37,9 @@ interface Fake {
   object: GridObject | null;
   on: boolean;
   queries: Record<string, unknown>;
+  /// Se la shell offre l'esportazione in PDF, e quante volte è stata chiesta.
+  pdf: boolean;
+  exported: number;
 }
 
 function fake(): Fake {
@@ -57,6 +60,8 @@ function fake(): Fake {
     object: null,
     on: true,
     queries: {},
+    pdf: false,
+    exported: 0,
     engine: null as unknown as RibbonEngine,
   };
   state.engine = {
@@ -87,6 +92,7 @@ function fake(): Fake {
     focus: () => {
       state.focused += 1;
     },
+    pdfExport: () => (state.pdf ? () => void (state.exported += 1) : null),
   };
   return state;
 }
@@ -269,6 +275,22 @@ describe("la barra multifunzione", () => {
     control("Convalida dati").click();
     expect(f.dialogs[f.dialogs.length - 1]).toEqual(["dataValidation", {}]);
     expect(f.calls.some(([id]) => id === "data.validation" || id === "home.formatCells")).toBe(false);
+  });
+
+  it("stampa dalla scheda Layout di pagina", () => {
+    tab("Layout di pagina").click();
+    control("Stampa titoli").click();
+    expect(f.dialogs[f.dialogs.length - 1]).toEqual(["pageSetup", { page: "sheet" }]);
+    control("Anteprima di stampa").click();
+    expect(f.dialogs[f.dialogs.length - 1]).toEqual(["printPreview", {}]);
+    // L'esportazione è della shell: senza, il pulsante non c'è.
+    expect(control("Esporta in PDF").closest("[hidden]")).not.toBeNull();
+    f.pdf = true;
+    ribbon.refresh();
+    expect(control("Esporta in PDF").closest("[hidden]")).toBeNull();
+    control("Esporta in PDF").click();
+    expect(f.exported).toBe(1);
+    expect(f.calls.some(([id]) => id.startsWith("file."))).toBe(false);
   });
 
   it("spegne la finestra con il suo comando", () => {

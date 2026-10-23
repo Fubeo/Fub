@@ -764,6 +764,19 @@
 .grid-dialog-toolbar {
   gap: var(--space-3);
 }
+.grid-preview-stage {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+}
+.grid-preview-page {
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-1);
+}
+.grid-dialog-preview .grid-dialog-toolbar {
+  align-items: center;
+}
 .grid-dialog-results {
   border: 1px solid var(--border);
   border-radius: var(--radius-control);

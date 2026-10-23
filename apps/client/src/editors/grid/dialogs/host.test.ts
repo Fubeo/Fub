@@ -127,7 +127,7 @@ describe("le finestre dei fogli", () => {
   it("non apre una finestra che non conosce", () => {
     const state = fake();
     const dialogs = mount(state);
-    expect(dialogs.open({ id: "pageSetup", params: "{}" })).toBe(false);
+    expect(dialogs.open({ id: "openFile", params: "{}" })).toBe(false);
     expect(dialogs.current()).toBeNull();
   });
 

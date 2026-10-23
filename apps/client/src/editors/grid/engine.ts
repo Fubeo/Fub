@@ -32,6 +32,7 @@ import {
   type GridJournal,
 } from "../../state/grid-journal";
 import type { Theme } from "../../theme/theme";
+import type { PdfEngineLoader } from "../media/pdf-view";
 import { t, onLanguage, plural, resolvedLanguage, type Key } from "../../i18n/strings";
 import { createTabs, type TabsHandle } from "../../kit";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
@@ -111,7 +112,15 @@ const QUERIES: ReadonlySet<string> = new Set([
   "formulas.evaluate",
   "cell.get",
   "home.manageRules",
+  // Senza parametri, Imposta pagina rende le impostazioni del foglio e non
+  // cambia niente (`query` lo chiede soltanto così).
+  "pageLayout.pageSetup",
+  // L'anteprima e il PDF senza percorso leggono la cartella com'è adesso.
+  "file.printPreview",
+  "file.exportPdf",
 ]);
+/// I comandi di `QUERIES` che leggono soltanto senza parametri.
+const READ_WITHOUT_PARAMS: ReadonlySet<string> = new Set(["pageLayout.pageSetup"]);
 const UNDO = "edit.undo";
 const REDO = "edit.redo";
 /// Perché una cella non si modifica, per codice di blocco.
@@ -326,6 +335,12 @@ export interface GridEngineOptions {
   readonly onView?: () => void;
   readonly grid?: GridHost;
   readonly theme?: Theme;
+  /// Il lettore dei PDF della shell: l'anteprima di stampa ci disegna le
+  /// pagine.
+  readonly pdf?: PdfEngineLoader;
+  /// L'esportazione in PDF della cartella, con l'export dell'host: se si può
+  /// adesso, e come si chiede.
+  readonly exportPdf?: { readonly available: () => boolean; readonly run: () => void };
 }
 interface AxisLayout {
   readonly offsets: number[];
@@ -773,6 +788,21 @@ export class GridEngine {
     return this.#sheetView();
   }
 
+  /// Il lettore dei PDF per l'anteprima di stampa, se la shell ne ha uno.
+  pdfLoader(): PdfEngineLoader | null {
+    return this.#options.pdf ?? null;
+  }
+
+  /// L'esportazione in PDF, se la shell la offre adesso.
+  pdfExport(): (() => void) | null {
+    const exporting = this.#options.exportPdf;
+    if (!exporting || !this.#bytes || !exporting.available()) return null;
+    return () => {
+      this.#finishEditing(true, "input", false);
+      exporting.run();
+    };
+  }
+
   /// L'oggetto selezionato, per le schede che lo cambiano.
   selectedObject(): GridObject | null {
     return this.#objects().find((object) => objectKey(object) === this.#selectedObject) ?? null;
@@ -830,6 +860,7 @@ export class GridEngine {
   /// cartella, la selezione e la cronologia restano come sono.
   query(id: string, params = "{}"): Promise<string | null> {
     if (!QUERIES.has(id) || !this.#bytes || !this.#serves(id)) return Promise.resolve(null);
+    if (READ_WITHOUT_PARAMS.has(id) && params.trim() !== "{}") return Promise.resolve(null);
     const command: GridCommand = { id, params, ...this.#commandSelection() };
     const epoch = this.#bytesEpoch;
     return new Promise((resolve) => {

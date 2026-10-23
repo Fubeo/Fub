@@ -1542,6 +1542,16 @@
         "reason": null
       },
       {
+        "id": "file.exportPdf",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "file.printPreview",
+        "enabled": true,
+        "reason": null
+      },
+      {
         "id": "pageLayout.pageSetup",
         "enabled": true,
         "reason": null
@@ -6949,6 +6959,16 @@
         },
         {
           "id": "data.analysisToolPak",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "file.exportPdf",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "file.printPreview",
           "enabled": true,
           "reason": null
         },

@@ -78,6 +78,8 @@ export interface RibbonEngine {
   selection(): { readonly focus: { readonly row: number; readonly column: number } };
   /// L'oggetto selezionato sul foglio, o `null` se la selezione è di celle.
   selectedObject(): GridObject | null;
+  /// L'esportazione in PDF della cartella, se la shell la offre adesso.
+  pdfExport?(): (() => void) | null;
   command(id: string, params?: string): boolean;
   /// Apre la finestra `id` (`GridEngine.openDialog`).
   openDialog(id: string, params?: string): boolean;
@@ -230,6 +232,11 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     engine.command(id, JSON.stringify(params ?? {}));
   }
 
+  function shellAction(action: NonNullable<ButtonControl["shell"]>): void {
+    closePopover();
+    if (action === "exportPdf") engine.pdfExport?.()?.();
+  }
+
   function ask(dialog: string, params: Params | null | undefined): void {
     closePopover();
     engine.openDialog(dialog, JSON.stringify(params ?? {}));
@@ -378,7 +385,8 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     let view: RibbonView | null = null;
     const press = button(control, () => t(control.label), () => {
       const params = typeof control.params === "function" ? control.params(view ?? readView()) : control.params;
-      if (control.dialog) ask(control.dialog, params);
+      if (control.shell) shellAction(control.shell);
+      else if (control.dialog) ask(control.dialog, params);
       else give(control.id, params);
     });
     el.append(press);
@@ -724,6 +732,7 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
   /// Se il catalogo serve il controllo.
   function visible(control: RibbonControl, view: RibbonView): boolean {
     if (control.when && !control.when(view)) return false;
+    if (control.kind === "button" && control.shell === "exportPdf" && !engine.pdfExport?.()) return false;
     if (control.kind !== "menu") return served(control.id);
     if (control.requires) return control.requires.every(served);
     const items = control.items(view);
