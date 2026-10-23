@@ -44,7 +44,1513 @@
       }
     ],
     "conflicts": [],
-    "commands": []
+    "commands": [
+      {
+        "id": "file.properties",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "cell.set",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "range.setValues",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "range.fill",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "selection.set",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "selection.move",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "selection.next",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.selectAll",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "selection.currentRegion",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "selection.row",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "selection.column",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.goTo",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.goToSpecial",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.undo",
+        "enabled": false,
+        "reason": "nothing to undo"
+      },
+      {
+        "id": "edit.redo",
+        "enabled": false,
+        "reason": "nothing to redo"
+      },
+      {
+        "id": "edit.clearAll",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.clearFormats",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.clearContents",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.clearComments",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.clearHyperlinks",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.fillDown",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.fillRight",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.fillUp",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.fillLeft",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.autoFill",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.fillSeries",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.flashFill",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.find",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "edit.replace",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.bold",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.italic",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.underline",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.doubleUnderline",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.strikethrough",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.superscript",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.subscript",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.fontName",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.fontSize",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.increaseFontSize",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.decreaseFontSize",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.fontColor",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.fillColor",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.borders",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.formatCells",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.alignLeft",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.alignCenter",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.alignRight",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.justify",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.alignTop",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.alignMiddle",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.alignBottom",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.wrapText",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.shrinkToFit",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.increaseIndent",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.decreaseIndent",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.orientation",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.mergeCenter",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.mergeAcross",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.mergeCells",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.unmergeCells",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.numberFormat",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.accounting",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.percent",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.comma",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.increaseDecimal",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.decreaseDecimal",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.cellStyle",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.rowHeight",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.columnWidth",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.autofitRowHeight",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.autofitColumnWidth",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.defaultWidth",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.hideRows",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.hideColumns",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.unhideRows",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.unhideColumns",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.lockCell",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.insertRows",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.insertColumns",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.deleteRows",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.deleteColumns",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "sheet.moveColumns",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.insertCells",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.insertCopiedCells",
+        "enabled": false,
+        "reason": "the clipboard is empty"
+      },
+      {
+        "id": "home.deleteCells",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.insertSheet",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.deleteSheet",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "sheet.rename",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "sheet.move",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "sheet.tabColor",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "sheet.hide",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "sheet.unhide",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "sheet.activate",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "sheet.next",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "sheet.previous",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.table",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.formatAsTable",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "table.totalRow",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "table.bandedRows",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "table.bandedColumns",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "table.headerRow",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "table.firstColumn",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "table.lastColumn",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "table.style",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "table.rename",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "table.convertToRange",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "table.totalFunction",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.chart",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.recommendedCharts",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.chartRecommendations",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "chart.set",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "chart.switchRowColumn",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "chart.delete",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.sparkline",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.picture",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.shape",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.icons",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.textBox",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "shape.setText",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "object.delete",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "object.move",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "object.setAnchorMode",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.link",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.newNote",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.newComment",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.replyComment",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.resolveComment",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.deleteComment",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.showNote",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.symbol",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.conditionalFormat",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.clearRules",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.manageRules",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.sortAscending",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.sortDescending",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.sort",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.filter",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.filterBy",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.clearFilter",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.reapply",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.removeDuplicates",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.textToColumns",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.validation",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.validate",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.circleInvalid",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.group",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.ungroup",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.hideDetail",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.showDetail",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.showLevels",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.subtotal",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.flashFill",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.autoSum",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.insertFunction",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.functions",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.defineName",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.deleteName",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.nameManager",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.createFromSelection",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.tracePrecedents",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.traceDependents",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.selectPrecedents",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.selectDependents",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.removeArrows",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.showFormulas",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.convertToNumber",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.errorChecking",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.evaluateFormula",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.evaluate",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.calculateNow",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.calculateSheet",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.calculationOptions",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.protectSheet",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.unprotectSheet",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.protectWorkbook",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.workbookStatistics",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.allowEditRanges",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.checkAccessibility",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.previousComment",
+        "enabled": false,
+        "reason": "there are no comments in this workbook"
+      },
+      {
+        "id": "review.nextComment",
+        "enabled": false,
+        "reason": "there are no comments in this workbook"
+      },
+      {
+        "id": "review.convertToComments",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.freezePanes",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.freezeTopRow",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.freezeFirstColumn",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.unfreezePanes",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.gridlines",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.headings",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.showZeros",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.showObjects",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.rightToLeft",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.zoom",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.zoom100",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.zoomToSelection",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.orientation",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.size",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.margins",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.printArea",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.printTitles",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.scaleToFit",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.printGridlines",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.printHeadings",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.breaks",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.headerFooter",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.theme",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "document.inspect",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "sheet.read",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "cell.get",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "selection.stats",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "chart.addElement",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "chart.quickLayout",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "chart.changeColors",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "chart.selectData",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "chart.changeType",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "chart.move",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "chart.formatSelection",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "chart.shapeFill",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "chart.shapeOutline",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "arrange.bringForward",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "arrange.sendBackward",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "arrange.selectionPane",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "arrange.align",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "arrange.group",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "arrange.rotate",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.normal",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.pageLayout",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.pageBreakPreview",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.customViews",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "view.split",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "table.resize",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "table.removeDuplicates",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.fromTextCsv",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.getData",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.fromTableRange",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.checkbox",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "cell.toggleCheckbox",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.themeColors",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.themeFonts",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.themeEffects",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.background",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.drawBorder",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "home.newCellStyle",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.recentlyUsed",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.financial",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.logical",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.text",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.dateTime",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.lookupReference",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.mathTrig",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.moreFunctions",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.useInFormula",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "formulas.watchWindow",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "draw.stroke",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "draw.inkToShape",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.spelling",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.changeSpelling",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "review.thesaurus",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.solver",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.solverReport",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.pivotTable",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.recommendedPivotTables",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "table.summarizePivot",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.calculatedField",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.pivotChart",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.fields",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.fieldList",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.list",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.addField",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.removeField",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.moveField",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.valueSettings",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.filter",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.sort",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.group",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.collapse",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.layout",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.grandTotals",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.subtotals",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.reportLayout",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.style",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.refresh",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.refreshAll",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.changeSource",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pivot.delete",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "insert.slicer",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "table.insertSlicer",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "slicer.toggle",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "slicer.selectAll",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "slicer.clear",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "slicer.delete",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.goalSeek",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.scenarioManager",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.scenarioAdd",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.scenarioShow",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.scenarioDelete",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.scenarioSummary",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.dataTable",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.advancedFilter",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.consolidate",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.forecastSheet",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "data.analysisToolPak",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "pageLayout.pageSetup",
+        "enabled": true,
+        "reason": null
+      }
+    ]
   },
   "windows": [
     {
@@ -3785,7 +5291,1513 @@
           "column": "c1"
         }
       ],
-      "commands": []
+      "commands": [
+        {
+          "id": "file.properties",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "cell.set",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "range.setValues",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "range.fill",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "selection.set",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "selection.move",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "selection.next",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.selectAll",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "selection.currentRegion",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "selection.row",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "selection.column",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.goTo",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.goToSpecial",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.undo",
+          "enabled": false,
+          "reason": "nothing to undo"
+        },
+        {
+          "id": "edit.redo",
+          "enabled": false,
+          "reason": "nothing to redo"
+        },
+        {
+          "id": "edit.clearAll",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.clearFormats",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.clearContents",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.clearComments",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.clearHyperlinks",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.fillDown",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.fillRight",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.fillUp",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.fillLeft",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.autoFill",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.fillSeries",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.flashFill",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.find",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "edit.replace",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.bold",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.italic",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.underline",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.doubleUnderline",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.strikethrough",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.superscript",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.subscript",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.fontName",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.fontSize",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.increaseFontSize",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.decreaseFontSize",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.fontColor",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.fillColor",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.borders",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.formatCells",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.alignLeft",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.alignCenter",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.alignRight",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.justify",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.alignTop",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.alignMiddle",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.alignBottom",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.wrapText",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.shrinkToFit",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.increaseIndent",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.decreaseIndent",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.orientation",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.mergeCenter",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.mergeAcross",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.mergeCells",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.unmergeCells",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.numberFormat",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.accounting",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.percent",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.comma",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.increaseDecimal",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.decreaseDecimal",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.cellStyle",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.rowHeight",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.columnWidth",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.autofitRowHeight",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.autofitColumnWidth",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.defaultWidth",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.hideRows",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.hideColumns",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.unhideRows",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.unhideColumns",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.lockCell",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.insertRows",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.insertColumns",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.deleteRows",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.deleteColumns",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "sheet.moveColumns",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.insertCells",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.insertCopiedCells",
+          "enabled": false,
+          "reason": "the clipboard is empty"
+        },
+        {
+          "id": "home.deleteCells",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.insertSheet",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.deleteSheet",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "sheet.rename",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "sheet.move",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "sheet.tabColor",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "sheet.hide",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "sheet.unhide",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "sheet.activate",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "sheet.next",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "sheet.previous",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.table",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.formatAsTable",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "table.totalRow",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "table.bandedRows",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "table.bandedColumns",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "table.headerRow",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "table.firstColumn",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "table.lastColumn",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "table.style",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "table.rename",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "table.convertToRange",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "table.totalFunction",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.chart",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.recommendedCharts",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.chartRecommendations",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "chart.set",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "chart.switchRowColumn",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "chart.delete",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.sparkline",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.picture",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.shape",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.icons",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.textBox",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "shape.setText",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "object.delete",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "object.move",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "object.setAnchorMode",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.link",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.newNote",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.newComment",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.replyComment",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.resolveComment",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.deleteComment",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.showNote",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.symbol",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.conditionalFormat",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.clearRules",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.manageRules",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.sortAscending",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.sortDescending",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.sort",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.filter",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.filterBy",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.clearFilter",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.reapply",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.removeDuplicates",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.textToColumns",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.validation",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.validate",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.circleInvalid",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.group",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.ungroup",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.hideDetail",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.showDetail",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.showLevels",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.subtotal",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.flashFill",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.autoSum",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.insertFunction",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.functions",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.defineName",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.deleteName",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.nameManager",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.createFromSelection",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.tracePrecedents",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.traceDependents",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.selectPrecedents",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.selectDependents",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.removeArrows",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.showFormulas",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.convertToNumber",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.errorChecking",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.evaluateFormula",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.evaluate",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.calculateNow",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.calculateSheet",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.calculationOptions",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.protectSheet",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.unprotectSheet",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.protectWorkbook",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.workbookStatistics",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.allowEditRanges",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.checkAccessibility",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.previousComment",
+          "enabled": false,
+          "reason": "there are no comments in this workbook"
+        },
+        {
+          "id": "review.nextComment",
+          "enabled": false,
+          "reason": "there are no comments in this workbook"
+        },
+        {
+          "id": "review.convertToComments",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.freezePanes",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.freezeTopRow",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.freezeFirstColumn",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.unfreezePanes",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.gridlines",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.headings",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.showZeros",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.showObjects",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.rightToLeft",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.zoom",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.zoom100",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.zoomToSelection",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.orientation",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.size",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.margins",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.printArea",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.printTitles",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.scaleToFit",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.printGridlines",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.printHeadings",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.breaks",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.headerFooter",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.theme",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "document.inspect",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "sheet.read",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "cell.get",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "selection.stats",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "chart.addElement",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "chart.quickLayout",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "chart.changeColors",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "chart.selectData",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "chart.changeType",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "chart.move",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "chart.formatSelection",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "chart.shapeFill",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "chart.shapeOutline",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "arrange.bringForward",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "arrange.sendBackward",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "arrange.selectionPane",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "arrange.align",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "arrange.group",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "arrange.rotate",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.normal",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.pageLayout",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.pageBreakPreview",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.customViews",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "view.split",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "table.resize",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "table.removeDuplicates",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.fromTextCsv",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.getData",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.fromTableRange",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.checkbox",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "cell.toggleCheckbox",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.themeColors",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.themeFonts",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.themeEffects",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.background",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.drawBorder",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.newCellStyle",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.recentlyUsed",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.financial",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.logical",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.text",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.dateTime",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.lookupReference",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.mathTrig",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.moreFunctions",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.useInFormula",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "formulas.watchWindow",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "draw.stroke",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "draw.inkToShape",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.spelling",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.changeSpelling",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "review.thesaurus",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.solver",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.solverReport",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.pivotTable",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.recommendedPivotTables",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "table.summarizePivot",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.calculatedField",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.pivotChart",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.fields",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.fieldList",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.list",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.addField",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.removeField",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.moveField",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.valueSettings",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.filter",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.sort",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.group",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.collapse",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.layout",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.grandTotals",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.subtotals",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.reportLayout",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.style",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.refresh",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.refreshAll",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.changeSource",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pivot.delete",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "insert.slicer",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "table.insertSlicer",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "slicer.toggle",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "slicer.selectAll",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "slicer.clear",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "slicer.delete",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.goalSeek",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.scenarioManager",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.scenarioAdd",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.scenarioShow",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.scenarioDelete",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.scenarioSummary",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.dataTable",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.advancedFilter",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.consolidate",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.forecastSheet",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "data.analysisToolPak",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "pageLayout.pageSetup",
+          "enabled": true,
+          "reason": null
+        }
+      ]
     },
     "window": {
       "revision": "sha256:fecef535bd6d2387a3210507249adfb5fdcf5d6d33c21c7904af7a161f3fb3a0",
