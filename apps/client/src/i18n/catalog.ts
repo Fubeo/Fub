@@ -2505,7 +2505,20 @@ export const IT = { // --- la scocca -------------------------------------------
   "editor_menu.rich.indent": "Rientro",
   "rich.bold": "Grassetto",
   "rich.italic": "Corsivo",
-  "grid.menu.copy_reference": "Copia il riferimento"
+  "grid.menu.copy_reference": "Copia il riferimento",
+  "canvas_menu.color": "Colore",
+  "canvas_menu.color.1": "Rosso",
+  "canvas_menu.color.2": "Arancione",
+  "canvas_menu.color.3": "Giallo",
+  "canvas_menu.color.4": "Verde",
+  "canvas_menu.color.5": "Azzurro",
+  "canvas_menu.color.6": "Viola",
+  "canvas_menu.edit": "Modifica il testo",
+  "canvas_menu.open": "Apri il file",
+  "canvas_menu.order": "Ordine",
+  "canvas_menu.align": "Allinea e distribuisci",
+  "canvas_menu.reverse": "Inverti la direzione",
+  "canvas_menu.add_here": "Aggiungi qui"
 } as const;
 
 /// Una chiave del catalogo della shell.
@@ -4882,5 +4895,18 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "editor_menu.rich.indent": "Indent",
   "rich.bold": "Bold",
   "rich.italic": "Italic",
-  "grid.menu.copy_reference": "Copy reference"
+  "grid.menu.copy_reference": "Copy reference",
+  "canvas_menu.color": "Color",
+  "canvas_menu.color.1": "Red",
+  "canvas_menu.color.2": "Orange",
+  "canvas_menu.color.3": "Yellow",
+  "canvas_menu.color.4": "Green",
+  "canvas_menu.color.5": "Cyan",
+  "canvas_menu.color.6": "Purple",
+  "canvas_menu.edit": "Edit text",
+  "canvas_menu.open": "Open file",
+  "canvas_menu.order": "Order",
+  "canvas_menu.align": "Align and distribute",
+  "canvas_menu.reverse": "Reverse direction",
+  "canvas_menu.add_here": "Add here"
 };

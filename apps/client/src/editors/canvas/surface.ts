@@ -213,6 +213,7 @@ export function mountCanvasSurface(
     reveal: ({ span }) => mode === "canvas" && engine.revealSource(span.start),
     // Le carte scelte, col loro testo; il sorgente grezzo non seleziona niente.
     selectedText: () => mode === "canvas" ? engine.selectedText() : null,
+    contextMenu: (at) => mode === "canvas" ? engine.contextMenu(at) : null,
     // La stampa la disegna il provider del canvas (`render_html`).
     printable: true,
     setReadOnly: (readOnly: boolean): void => engine.setReadOnly(readOnly),

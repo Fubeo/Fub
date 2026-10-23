@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { SurfaceMenuItem } from "../core/editor-menu";
 import { renderMarkdown } from "../text/profiles/markdown/render";
 import { mountMarkdown } from "../text/profiles/markdown/mount";
 import { CanvasEngine, type CanvasChange, type CanvasEngineOptions } from "./engine";
@@ -64,6 +65,31 @@ afterEach(() => {
 });
 
 describe("CanvasEngine", () => {
+  it("il tasto destro: su una scheda la sceglie e offre i suoi gesti, sul vuoto aggiunge lì", () => {
+    const { engine, host, changes, opened } = mounted();
+    const pointing = vi.spyOn(document, "elementFromPoint");
+    pointing.mockReturnValue(host.querySelector('.canvas-node[data-node="f"]'));
+    const menu = engine.contextMenu({ x: 10, y: 10 })!;
+    expect(menu.target).toEqual({ kind: "node", ref: "f" });
+    expect(host.querySelector('.canvas-node[data-node="f"]')!.classList.contains("selected")).toBe(true);
+    const items = menu.context as readonly SurfaceMenuItem[];
+    expect(items.map((item) => item.id)).toEqual(["canvas.open", "canvas.color", "canvas.duplicate", "canvas.order", "canvas.fit_selection", "canvas.delete"]);
+    items[0]!.run!();
+    expect(opened).toContainEqual({ path: "/allegati/foto.png" });
+    (items[1]!.items as readonly SurfaceMenuItem[]).find((item) => item.id === "canvas.color.4")!.run!();
+    expect(parseCanvas(changes[changes.length - 1]!.text).nodes.find((node) => node.id === "f")!.color).toBe("4");
+
+    pointing.mockReturnValue(host.querySelector(".canvas-viewport"));
+    const empty = engine.contextMenu({ x: 300, y: 300 })!;
+    pointing.mockRestore();
+    expect(empty.target.kind).toBe("empty");
+    const add = (empty.context as readonly SurfaceMenuItem[]).find((item) => item.id === "canvas.add")!;
+    const before = parseCanvas(engine.getDoc()).nodes.length;
+    (add.items as readonly SurfaceMenuItem[]).find((item) => item.id === "canvas.add.text")!.run!();
+    expect(parseCanvas(engine.getDoc()).nodes.length).toBe(before + 1);
+    engine.destroy();
+  });
+
   it("monta card testo/file/gruppi/web, archi e seleziona", () => {
     const { engine, host } = mounted();
     expect(host.querySelectorAll(".canvas-node").length).toBe(4);
