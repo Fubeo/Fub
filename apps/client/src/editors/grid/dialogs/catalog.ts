@@ -9,6 +9,7 @@ import { FUNCTION_DIALOGS } from "./function";
 import type { DialogBuilder } from "./host";
 import { NAME_DIALOGS } from "./names";
 import { NOTE_DIALOGS } from "./notes";
+import { PAGE_DIALOGS } from "./page";
 import { PROTECT_DIALOGS } from "./protect";
 import { RULE_DIALOGS } from "./rules";
 import { SORT_DIALOGS } from "./sort";
@@ -26,4 +27,5 @@ export const DIALOGS: Readonly<Record<string, DialogBuilder>> = {
   ...VALIDATION_DIALOGS,
   ...FUNCTION_DIALOGS,
   ...FORMAT_DIALOGS,
+  ...PAGE_DIALOGS,
 };

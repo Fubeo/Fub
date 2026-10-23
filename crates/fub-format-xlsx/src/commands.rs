@@ -76,8 +76,9 @@ const NOT_SERVED: &[&str] = &[
     "data.queriesConnections",
 ];
 /// I comandi dei gruppi esclusi che restano: le proprietà del documento sono
-/// nella cartella.
-const SERVED_ANYWAY: &[&str] = &["file.properties"];
+/// nella cartella, e l'anteprima di stampa e il PDF senza percorso leggono la
+/// cartella com'è adesso senza cambiarla né scrivere sul disco.
+const SERVED_ANYWAY: &[&str] = &["file.properties", "file.printPreview", "file.exportPdf"];
 /// Gli stati di prima che si tengono: oltre, annullare rifà il giornale
 /// dalla base.
 const UNDO_SNAPSHOTS: usize = 100;

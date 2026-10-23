@@ -1,5 +1,5 @@
-//! Le cartelle di Excel composte dall'host: se ne cambiano i valori delle
-//! celle, e il resto del file resta byte per byte (ADR 0216).
+//! Le cartelle di Excel composte dall'host: si modificano con il giornale della
+//! sessione (ADR 0216, ADR 0219) e si stampano in PDF con l'export del bundle.
 //!
 //! `fub-format-xlsx` possiede il codec, la superficie della griglia sui byte e
 //! l'innesto; il kernel conosce soltanto il formato a byte. L'host li compone
@@ -36,7 +36,8 @@ pub(crate) fn providers() -> Vec<Box<dyn FormatProvider>> {
 pub(crate) const WORKBOOK_ID: &str = "fub.xlsx";
 
 /// Registra la superficie della griglia delle cartelle, la stessa che la
-/// shell apre e che il salvataggio usa per l'innesto.
+/// shell apre e che il salvataggio usa per l'innesto, e l'export in PDF con il
+/// suo comando.
 #[cfg(feature = "xlsx")]
 pub(crate) fn register(registrar: &mut crate::registry::Registrar<'_>) -> Vec<String> {
     let mut failures = Vec::new();
@@ -44,6 +45,16 @@ pub(crate) fn register(registrar: &mut crate::registry::Registrar<'_>) -> Vec<St
         .register_grid_bytes_provider(Box::new(fub_format_xlsx::grid::XlsxGridProvider::new()))
     {
         failures.push(format!("workbook grid NOT registered: {error}"));
+    }
+    if let Err(error) =
+        registrar.register_export_provider(fub_format_xlsx::export::XlsxExport::boxed())
+    {
+        failures.push(format!("workbook export not registered: {error}"));
+    }
+    if let Err(error) =
+        registrar.register_command_provider(fub_format_xlsx::export::XlsxCommands::boxed())
+    {
+        failures.push(format!("workbook commands not registered: {error}"));
     }
     failures
 }
