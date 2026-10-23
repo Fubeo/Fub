@@ -22,9 +22,10 @@ use crate::edit::{Revision, RevisionHasher};
 use crate::error::PluginError;
 use crate::grid::{
     GridApplyRequest, GridCellKey, GridCellStyle, GridColumn, GridCommit, GridRow, GridSheet,
-    GridSurfaceSpec, GridWindowRequest, GRID_FAMILY, MAX_GRID_PATCHES, MAX_GRID_PATCH_INPUT_BYTES,
-    MAX_GRID_RESPONSE_BYTES, MAX_GRID_SESSION_COLUMNS, MAX_GRID_SESSION_ROWS,
-    MAX_GRID_SESSION_SHEETS, MAX_GRID_WINDOW_CELLS, MAX_GRID_WINDOW_COLUMNS, MAX_GRID_WINDOW_ROWS,
+    GridSurfaceSpec, GridWindowRequest, GRID_FAMILY, MAX_GRID_FONT_BYTES, MAX_GRID_PATCHES,
+    MAX_GRID_PATCH_INPUT_BYTES, MAX_GRID_RESPONSE_BYTES, MAX_GRID_SESSION_COLUMNS,
+    MAX_GRID_SESSION_ROWS, MAX_GRID_SESSION_SHEETS, MAX_GRID_WINDOW_CELLS, MAX_GRID_WINDOW_COLUMNS,
+    MAX_GRID_WINDOW_ROWS,
 };
 
 /// La versione del protocollo `grid` a byte.
@@ -226,7 +227,7 @@ pub struct GridDialog {
 /// cambia la cartella), i fogli dopo il comando, la selezione nuova, il
 /// risultato come testo JSON, la finestra di dialogo chiesta e il catalogo
 /// sulla selezione nuova.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GridCommandOutcome {
     pub commit: GridCommit,
     pub sheets: Vec<GridSheet>,
@@ -665,7 +666,7 @@ pub struct GridNotice {
     pub count: u32,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GridBytesSession {
     pub instance: String,
     pub revision: Revision,
@@ -896,14 +897,18 @@ pub const MAX_GRID_NAME_BYTES: usize = 255;
 pub const MAX_GRID_WINDOW_TABLES: usize = 1_024;
 
 /// Ciò che vale per la cartella intera: i colori del tema (`#RRGGBB`), i
-/// nomi definiti, il modo del calcolo e se la struttura è protetta. Lo
-/// danno la sessione e l'esito di ogni comando.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// nomi definiti, il modo del calcolo, se la struttura è protetta e il
+/// carattere dello stile Normale, che lo stile di una cella tace. Lo danno la
+/// sessione e l'esito di ogni comando.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GridBook {
     pub theme_colors: Vec<String>,
     pub names: Vec<String>,
     pub calculation: GridCalculation,
     pub protected: bool,
+    pub font: String,
+    /// In punti.
+    pub font_size: f32,
 }
 
 impl Default for GridBook {
@@ -919,6 +924,8 @@ impl Default for GridBook {
             names: Vec::new(),
             calculation: GridCalculation::Automatic,
             protected: false,
+            font: "Calibri".to_owned(),
+            font_size: 11.0,
         }
     }
 }
@@ -943,6 +950,12 @@ impl GridBook {
                 .any(|name| name.is_empty() || name.len() > MAX_GRID_NAME_BYTES)
         {
             return Err(bad("grid book names exceed their limits"));
+        }
+        if self.font.is_empty() || self.font.len() > MAX_GRID_FONT_BYTES {
+            return Err(bad("grid book font name exceeds its limits"));
+        }
+        if !self.font_size.is_finite() || self.font_size <= 0.0 || self.font_size > 409.0 {
+            return Err(bad("grid book font size is out of range"));
         }
         Ok(())
     }
@@ -1460,6 +1473,22 @@ mod tests {
             ..GridBook::default()
         };
         assert!(many.validate().is_err());
+        for font in [String::new(), "x".repeat(MAX_GRID_FONT_BYTES + 1)] {
+            assert!(GridBook {
+                font,
+                ..GridBook::default()
+            }
+            .validate()
+            .is_err());
+        }
+        for font_size in [0.0, -1.0, 410.0, f32::NAN, f32::INFINITY] {
+            assert!(GridBook {
+                font_size,
+                ..GridBook::default()
+            }
+            .validate()
+            .is_err());
+        }
     }
 
     #[test]

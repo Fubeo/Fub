@@ -33,6 +33,7 @@ const MAX_WINDOW_COLUMNS = 128;
 const MAX_NOTICES = 64;
 const MAX_BOOK_NAMES = 4_096;
 const MAX_NAME_BYTES = 255;
+const MAX_FONT_BYTES = 256;
 const MAX_WINDOW_TABLES = 1_024;
 const VIEW_MODES: ReadonlySet<string> = new Set(["normal", "page_layout", "page_break_preview"]);
 const CALCULATIONS: ReadonlySet<string> = new Set(["automatic", "automatic_except_tables", "manual"]);
@@ -168,6 +169,13 @@ export function validateBook(book: GridBytesSession["book"]): void {
     || !book.names.every(bookName)
     || !CALCULATIONS.has(book.calculation)
     || typeof book.protected !== "boolean"
+    || typeof book.font !== "string"
+    || book.font === ""
+    || new TextEncoder().encode(book.font).length > MAX_FONT_BYTES
+    || typeof book.font_size !== "number"
+    || !Number.isFinite(book.font_size)
+    || book.font_size <= 0
+    || book.font_size > 409
   ) {
     throw new Error("malformed grid book");
   }

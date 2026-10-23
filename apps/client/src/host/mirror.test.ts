@@ -1511,7 +1511,7 @@ describe("mirror TS↔Rust", () => {
       style: true,
     });
     const session = (fixture["GridBytesSession"] as GridBytesSession[])[0]!;
-    one<GridBook>([session.book], { theme_colors: true, names: true, calculation: true, protected: true });
+    one<GridBook>([session.book], { theme_colors: true, names: true, calculation: true, protected: true, font: true, font_size: true });
     expect(session.book.theme_colors).toHaveLength(GRID_THEME_COLORS);
   });
 
