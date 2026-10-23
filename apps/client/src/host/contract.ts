@@ -27,6 +27,11 @@ import type {
   EntryKind,
   Excerpts,
   Gate,
+  GridBorderStyle,
+  GridHorizontalAlign,
+  GridScript,
+  GridUnderline,
+  GridVerticalAlign,
   HourCycle,
   IndexingState,
   Intent,
@@ -1191,14 +1196,51 @@ export interface GridCellKey {
   column: string;
 }
 
+export type { GridBorderStyle, GridHorizontalAlign, GridScript, GridUnderline, GridVerticalAlign } from "./enums.generated";
+
+/** Un lato del bordo; `color` assente è il colore automatico. */
+export interface GridBorder {
+  style: GridBorderStyle;
+  color: string | null;
+}
+
+export interface GridBorders {
+  top: GridBorder | null;
+  right: GridBorder | null;
+  bottom: GridBorder | null;
+  left: GridBorder | null;
+  diagonal_down: GridBorder | null;
+  diagonal_up: GridBorder | null;
+}
+
+/** L'aspetto di una cella, già risolto dal provider: tema, stile della
+ *  tabella e formattazione condizionale sono dentro. Un campo assente è il
+ *  valore di serie del formato. */
 export interface GridCellStyle {
   bold: boolean;
   italic: boolean;
   text_color: string | null;
   fill_color: string | null;
-  horizontal: "start" | "center" | "end" | null;
+  horizontal: GridHorizontalAlign | null;
   number_format: string | null;
+  font: string | null;
+  /** In punti. */
+  font_size: number | null;
+  underline: GridUnderline | null;
+  strike: boolean;
+  script: GridScript | null;
+  vertical: GridVerticalAlign | null;
+  wrap: boolean;
+  shrink: boolean;
+  /** Livelli di rientro, come in Excel. */
+  indent: number;
+  /** Gradi in senso antiorario, da -90 a 90; 255 è il testo in colonna. */
+  rotation: number;
+  borders: GridBorders;
 }
+
+/** La rotazione del testo in colonna (`GRID_STACKED_ROTATION`). */
+export const GRID_STACKED_ROTATION = 255;
 
 export interface GridWindowRequest {
   revision: string;
@@ -1326,10 +1368,65 @@ export type GridValue =
   | { kind: "boolean"; value: boolean }
   | { kind: "error"; value: string };
 
+/** La barra di dati della formattazione condizionale, già risolta. */
+export interface GridDataBar {
+  /** La parte della cella che la barra riempie, da 0 a 1. */
+  fraction: number;
+  color: string;
+  gradient: boolean;
+}
+
+/** L'icona di un insieme della formattazione condizionale. */
+export interface GridIcon {
+  set: string;
+  index: number;
+}
+
+export interface GridCommentReply {
+  author: string;
+  text: string;
+}
+
+/** Una nota o un commento in thread, con le risposte. */
+export interface GridComment {
+  author: string;
+  text: string;
+  threaded: boolean;
+  resolved: boolean;
+  replies: GridCommentReply[];
+}
+
+/** Un collegamento: un riferimento nella cartella, o fuori se `external`. */
+export interface GridLink {
+  target: string;
+  tooltip: string | null;
+  external: boolean;
+}
+
+/** Un'unione di celle che tocca la finestra, in coordinate del foglio. */
+export interface GridMerge {
+  row: number;
+  column: number;
+  rows: number;
+  columns: number;
+}
+
+/** Come il foglio si guarda: riquadri bloccati, griglia, intestazioni, zoom. */
+export interface GridSheetView {
+  frozen_rows: number;
+  frozen_columns: number;
+  gridlines: boolean;
+  headings: boolean;
+  /** Per cento, da 10 a 400. */
+  zoom: number;
+  right_to_left: boolean;
+}
+
 export interface GridBytesCell {
   key: GridCellKey;
   input: string;
-  style: GridCellStyle;
+  /** L'indice dello stile in `GridBytesWindow.styles`. */
+  style: number;
   value: GridValue;
   /** Il valore già formattato dal provider. */
   display: string;
@@ -1339,6 +1436,10 @@ export interface GridBytesCell {
   stale: boolean;
   /** La cella è nel giornale e i byte hanno un terzo input. */
   conflict: boolean;
+  data_bar: GridDataBar | null;
+  icon: GridIcon | null;
+  comment: GridComment | null;
+  link: GridLink | null;
 }
 
 export interface GridBytesWindow {
@@ -1351,6 +1452,10 @@ export interface GridBytesWindow {
   rows: GridRow[];
   columns: GridColumn[];
   cells: GridBytesCell[];
+  /** Gli stili delle celle, ognuno una volta. */
+  styles: GridCellStyle[];
+  merges: GridMerge[];
+  view: GridSheetView;
 }
 
 // **Da cosa parte** una scrittura intera (rispecchia `fub_abi::edit::WriteBase`).

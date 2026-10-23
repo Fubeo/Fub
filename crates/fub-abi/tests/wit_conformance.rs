@@ -79,14 +79,16 @@ use fub_abi::format::{
 };
 use fub_abi::gate::Gate;
 use fub_abi::grid::{
-    GridApplyRequest, GridCellKey, GridCellPatch, GridCellStyle, GridColumn, GridCommit,
-    GridHorizontalAlign, GridInvalidation, GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec,
+    GridApplyRequest, GridBorder, GridBorderStyle, GridBorders, GridCellKey, GridCellPatch,
+    GridCellStyle, GridColumn, GridCommit, GridHorizontalAlign, GridInvalidation, GridRow,
+    GridScript, GridSheet, GridSourceEdit, GridSurfaceSpec, GridUnderline, GridVerticalAlign,
     GridWindowRequest,
 };
 use fub_abi::grid_bytes::{
     GridBytesCell, GridBytesProvider, GridBytesSession, GridBytesWindow, GridCommand,
-    GridCommandOutcome, GridCommandRequest, GridCommandState, GridDialog, GridJournal, GridNotice,
-    GridSelection, GridValue,
+    GridCommandOutcome, GridCommandRequest, GridCommandState, GridComment, GridCommentReply,
+    GridDataBar, GridDialog, GridIcon, GridJournal, GridLink, GridMerge, GridNotice, GridSelection,
+    GridSheetView, GridValue,
 };
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{
@@ -371,6 +373,12 @@ wit_kebab! {
     GridColumn,
     GridCellKey,
     GridHorizontalAlign,
+    GridVerticalAlign,
+    GridUnderline,
+    GridScript,
+    GridBorderStyle,
+    GridBorder,
+    GridBorders,
     GridCellStyle,
     GridWindowRequest,
     GridCellPatch,
@@ -381,7 +389,14 @@ wit_kebab! {
     GridNotice,
     GridBytesSession,
     GridValue,
+    GridDataBar,
+    GridIcon,
+    GridCommentReply,
+    GridComment,
+    GridLink,
     GridBytesCell,
+    GridMerge,
+    GridSheetView,
     GridBytesWindow,
     GridSelection,
     GridCommandState,
@@ -3623,6 +3638,40 @@ fn conform(source: &str) -> Result<(), String> {
     );
     contract.enumeration_from("grid-horizontal-align", ("grid.rs", "GridHorizontalAlign"));
 
+    contract.enumeration_from("grid-vertical-align", ("grid.rs", "GridVerticalAlign"));
+    contract.enumeration_from("grid-underline", ("grid.rs", "GridUnderline"));
+    contract.enumeration_from("grid-script", ("grid.rs", "GridScript"));
+    contract.enumeration_from("grid-border-style", ("grid.rs", "GridBorderStyle"));
+
+    let GridBorder { style, color } = GridBorder {
+        style: GridBorderStyle::Thin,
+        color: None,
+    };
+    contract.record(
+        "grid-border",
+        &[("style", wit(&style)), ("color", wit(&color))],
+    );
+
+    let GridBorders {
+        top,
+        right,
+        bottom,
+        left,
+        diagonal_down,
+        diagonal_up,
+    } = GridBorders::default();
+    contract.record(
+        "grid-borders",
+        &[
+            ("top", wit(&top)),
+            ("right", wit(&right)),
+            ("bottom", wit(&bottom)),
+            ("left", wit(&left)),
+            ("diagonal-down", wit(&diagonal_down)),
+            ("diagonal-up", wit(&diagonal_up)),
+        ],
+    );
+
     let GridCellStyle {
         bold,
         italic,
@@ -3630,6 +3679,17 @@ fn conform(source: &str) -> Result<(), String> {
         fill_color,
         horizontal,
         number_format,
+        font,
+        font_size,
+        underline,
+        strike,
+        script,
+        vertical,
+        wrap,
+        shrink,
+        indent,
+        rotation,
+        borders,
     } = GridCellStyle::default();
     contract.record(
         "grid-cell-style",
@@ -3640,6 +3700,17 @@ fn conform(source: &str) -> Result<(), String> {
             ("fill-color", wit(&fill_color)),
             ("horizontal", wit(&horizontal)),
             ("number-format", wit(&number_format)),
+            ("font", wit(&font)),
+            ("font-size", wit(&font_size)),
+            ("underline", wit(&underline)),
+            ("strike", wit(&strike)),
+            ("script", wit(&script)),
+            ("vertical", wit(&vertical)),
+            ("wrap", wit(&wrap)),
+            ("shrink", wit(&shrink)),
+            ("indent", wit(&indent)),
+            ("rotation", wit(&rotation)),
+            ("borders", wit(&borders)),
         ],
     );
     let GridWindowRequest {
@@ -3939,6 +4010,81 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    let GridDataBar {
+        fraction,
+        color,
+        gradient,
+    } = GridDataBar {
+        fraction: 0.0,
+        color: String::new(),
+        gradient: false,
+    };
+    contract.record(
+        "grid-data-bar",
+        &[
+            ("fraction", wit(&fraction)),
+            ("color", wit(&color)),
+            ("gradient", wit(&gradient)),
+        ],
+    );
+
+    let GridIcon { set, index } = GridIcon {
+        set: String::new(),
+        index: 0,
+    };
+    contract.record("grid-icon", &[("set", wit(&set)), ("index", wit(&index))]);
+
+    let GridCommentReply { author, text } = GridCommentReply {
+        author: String::new(),
+        text: String::new(),
+    };
+    contract.record(
+        "grid-comment-reply",
+        &[("author", wit(&author)), ("text", wit(&text))],
+    );
+
+    let GridComment {
+        author,
+        text,
+        threaded,
+        resolved,
+        replies,
+    } = GridComment {
+        author: String::new(),
+        text: String::new(),
+        threaded: false,
+        resolved: false,
+        replies: Vec::new(),
+    };
+    contract.record(
+        "grid-comment",
+        &[
+            ("author", wit(&author)),
+            ("text", wit(&text)),
+            ("threaded", wit(&threaded)),
+            ("resolved", wit(&resolved)),
+            ("replies", wit(&replies)),
+        ],
+    );
+
+    let GridLink {
+        target,
+        tooltip,
+        external,
+    } = GridLink {
+        target: String::new(),
+        tooltip: None,
+        external: false,
+    };
+    contract.record(
+        "grid-link",
+        &[
+            ("target", wit(&target)),
+            ("tooltip", wit(&tooltip)),
+            ("external", wit(&external)),
+        ],
+    );
+
     let GridBytesCell {
         key,
         input,
@@ -3948,6 +4094,10 @@ fn conform(source: &str) -> Result<(), String> {
         lock,
         stale,
         conflict,
+        data_bar,
+        icon,
+        comment,
+        link,
     } = GridBytesCell {
         key: GridCellKey {
             sheet: String::new(),
@@ -3955,12 +4105,16 @@ fn conform(source: &str) -> Result<(), String> {
             column: String::new(),
         },
         input: String::new(),
-        style: GridCellStyle::default(),
+        style: 0,
         value: GridValue::Blank,
         display: String::new(),
         lock: None,
         stale: false,
         conflict: false,
+        data_bar: None,
+        icon: None,
+        comment: None,
+        link: None,
     };
     contract.record(
         "grid-bytes-cell",
@@ -3973,6 +4127,51 @@ fn conform(source: &str) -> Result<(), String> {
             ("lock", wit(&lock)),
             ("stale", wit(&stale)),
             ("conflict", wit(&conflict)),
+            ("data-bar", wit(&data_bar)),
+            ("icon", wit(&icon)),
+            ("comment", wit(&comment)),
+            ("link", wit(&link)),
+        ],
+    );
+
+    let GridMerge {
+        row,
+        column,
+        rows,
+        columns,
+    } = GridMerge {
+        row: 0,
+        column: 0,
+        rows: 0,
+        columns: 0,
+    };
+    contract.record(
+        "grid-merge",
+        &[
+            ("row", wit(&row)),
+            ("column", wit(&column)),
+            ("rows", wit(&rows)),
+            ("columns", wit(&columns)),
+        ],
+    );
+
+    let GridSheetView {
+        frozen_rows,
+        frozen_columns,
+        gridlines,
+        headings,
+        zoom,
+        right_to_left,
+    } = GridSheetView::default();
+    contract.record(
+        "grid-sheet-view",
+        &[
+            ("frozen-rows", wit(&frozen_rows)),
+            ("frozen-columns", wit(&frozen_columns)),
+            ("gridlines", wit(&gridlines)),
+            ("headings", wit(&headings)),
+            ("zoom", wit(&zoom)),
+            ("right-to-left", wit(&right_to_left)),
         ],
     );
 
@@ -3986,6 +4185,9 @@ fn conform(source: &str) -> Result<(), String> {
         rows,
         columns,
         cells,
+        styles,
+        merges,
+        view,
     } = GridBytesWindow {
         revision: Revision::of(""),
         sheet: String::new(),
@@ -3996,6 +4198,9 @@ fn conform(source: &str) -> Result<(), String> {
         rows: Vec::new(),
         columns: Vec::new(),
         cells: Vec::new(),
+        styles: Vec::new(),
+        merges: Vec::new(),
+        view: GridSheetView::default(),
     };
     contract.record(
         "grid-bytes-window",
@@ -4009,6 +4214,9 @@ fn conform(source: &str) -> Result<(), String> {
             ("rows", wit(&rows)),
             ("columns", wit(&columns)),
             ("cells", wit(&cells)),
+            ("styles", wit(&styles)),
+            ("merges", wit(&merges)),
+            ("view", wit(&view)),
         ],
     );
 
