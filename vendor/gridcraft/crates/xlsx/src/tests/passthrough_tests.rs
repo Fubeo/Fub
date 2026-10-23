@@ -792,8 +792,11 @@ fn file_version_and_calc_features_survive_a_save() {
     // Excel trusts the saved cell values only when workbook.xml carries both <fileVersion> and the
     // calcFeatures extension; without them it recalculates everything on open (#799).
     let calc_features = r#"<ext uri="{B58B0392-4F1F-4190-BB64-5DF3571DCE5F}" xmlns:xcalcf="http://schemas.microsoft.com/office/spreadsheetml/2018/calcfeatures"><xcalcf:calcFeatures><xcalcf:feature name="microsoft.com:RD"/><xcalcf:feature name="microsoft.com:Single"/><xcalcf:feature name="microsoft.com:FV"/><xcalcf:feature name="microsoft.com:CNMTM"/><xcalcf:feature name="microsoft.com:LET_WF"/><xcalcf:feature name="microsoft.com:ARRAYTEXT_WF"/></xcalcf:calcFeatures></ext>"#;
+    // Extensions GridCraft does not read are kept as they were, unless they refer to parts.
+    let lo = r#"<ext uri="{7626C862-2A13-11E5-B345-FEFF819CDC9F}" xmlns:loext="http://schemas.libreoffice.org/"><loext:extCalcPr stringRefSyntax="CalcA1ExcelA1"/></ext>"#;
+    let slicers = r#"<ext uri="{BBE1A952-AA13-448e-AADC-164F8A28A991}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:slicerCaches><x14:slicerCache r:id="rId9"/></x14:slicerCaches></ext>"#;
     let workbook = format!(
-        r#"<?xml version="1.0"?><workbook xmlns="{NS_MAIN}" xmlns:r="{NS_R}"><fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="11008"/><workbookPr/><sheets><sheet name="A" sheetId="1" r:id="rId1"/></sheets><calcPr calcId="191029"/><extLst><ext uri="{{140A7094-0E35-4892-8432-C4D2E57EDEB5}}" xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main"><x15:workbookPr chartTrackingRefBase="1"/></ext>{calc_features}</extLst></workbook>"#
+        r#"<?xml version="1.0"?><workbook xmlns="{NS_MAIN}" xmlns:r="{NS_R}"><fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="11008"/><workbookPr/><sheets><sheet name="A" sheetId="1" r:id="rId1"/></sheets><calcPr calcId="191029"/><extLst><ext uri="{{140A7094-0E35-4892-8432-C4D2E57EDEB5}}" xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main"><x15:workbookPr chartTrackingRefBase="1"/></ext>{calc_features}{lo}{slicers}</extLst></workbook>"#
     );
     let sheet = format!(
         r#"<?xml version="1.0"?><worksheet xmlns="{NS_MAIN}"><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>A1*2</f><v>2</v></c></row></sheetData></worksheet>"#
@@ -817,7 +820,16 @@ fn file_version_and_calc_features_survive_a_save() {
         assert_eq!(root.children.first().map(|e| e.name.as_str()), Some("fileVersion"), "{text}");
         assert_eq!(root.children.last().map(|e| e.name.as_str()), Some("extLst"), "{text}");
         assert!(text.contains(r#"<fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="11008"/>"#), "{text}");
-        assert!(text.contains(&format!("<extLst>{calc_features}</extLst>")), "{text}");
+        assert!(text.contains(&format!("<extLst>{calc_features}<ext ")), "{text}");
+        assert!(
+            text.contains(
+                r#"xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main"><x15:workbookPr chartTrackingRefBase="1"/></ext>"#
+            ),
+            "{text}"
+        );
+        assert!(text.contains(r#"xmlns:loext="http://schemas.libreoffice.org/"><loext:extCalcPr stringRefSyntax="CalcA1ExcelA1"/></ext>"#), "{text}");
+        assert_eq!(text.matches("<ext ").count(), 3, "{text}");
+        assert!(!text.contains("slicerCache"), "{text}");
     }
 
     // A workbook that had neither gets a <fileVersion> naming GridCraft (#1699), kept on the next

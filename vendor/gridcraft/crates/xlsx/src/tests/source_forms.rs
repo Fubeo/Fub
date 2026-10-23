@@ -199,6 +199,24 @@ fn a_split_view_and_unused_fit_counts_stay_as_the_file_had_them() {
 }
 
 #[test]
+fn the_view_keeps_the_zooms_and_settings_gridcraft_does_not_model() {
+    let sheet = SHEET.replace(
+        "<sheetFormatPr",
+        r#"<sheetViews><sheetView showOutlineSymbols="0" zoomScale="150" zoomScaleNormal="100" zoomScalePageLayoutView="60" workbookViewId="0"/></sheetViews><sheetFormatPr"#,
+    );
+    let (mut wb, _) = read_xlsx(&source_with(&sheet)).unwrap();
+    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
+    assert!(
+        out.contains(r#"<sheetView tabSelected="1" zoomScale="150" zoomScaleNormal="100" showOutlineSymbols="0" zoomScalePageLayoutView="60" workbookViewId="0">"#),
+        "{out}"
+    );
+    // A new zoom is also the normal view's.
+    wb.sheet_mut(0).unwrap().zoom = 80;
+    let out = part(&saved(&wb), "xl/worksheets/sheet1.xml");
+    assert!(out.contains(r#"zoomScale="80" zoomScaleNormal="80" showOutlineSymbols="0" zoomScalePageLayoutView="60""#), "{out}");
+}
+
+#[test]
 fn a_formula_keeps_the_spelling_of_the_file_while_it_is_the_same_formula() {
     let sheet = SHEET.replace(
         r#"<c r="A1"><v>1</v></c>"#,
