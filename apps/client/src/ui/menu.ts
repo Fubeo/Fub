@@ -40,6 +40,9 @@ export interface MenuItem {
   /// (`checkbox`), con il suo stato in `checked`.
   choice?: "radio" | "checkbox";
   checked?: boolean;
+  /// La voce apre un altro menu al posto di questo: la freccia lo dice a chi
+  /// guarda, `aria-haspopup` a chi ascolta.
+  submenu?: boolean;
   run: () => void;
 }
 
@@ -166,6 +169,14 @@ export function showContextMenu(
       hint.textContent = item.hint;
       b.append(hint);
       b.setAttribute("aria-keyshortcuts", item.hint);
+    }
+    if (item.submenu) {
+      const more = document.createElement("span");
+      more.className = "menu-hint";
+      more.setAttribute("aria-hidden", "true");
+      more.textContent = "›";
+      b.append(more);
+      b.setAttribute("aria-haspopup", "menu");
     }
     if (item.danger) b.className = "danger";
     if (item.disabled) {
