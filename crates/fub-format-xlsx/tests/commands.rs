@@ -394,6 +394,66 @@ fn l_input_delle_celle_diventa_un_comando() {
 }
 
 #[test]
+fn una_formula_scritta_porta_la_sessione_ai_comandi() {
+    let bytes = one_sheet(BODY);
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let typed = apply(
+        &mut provider,
+        &session.instance,
+        &session.revision,
+        &[("A2", "5")],
+    )
+    .unwrap();
+    // Una formula nuova entra come comando, e la voce di prima con lei.
+    let formula = apply(
+        &mut provider,
+        &session.instance,
+        &typed.revision,
+        &[("C1", "=A1+A2")],
+    )
+    .unwrap();
+    let journal = journal_of(&after(&typed.edit.inserted, &formula.edit));
+    let ids: Vec<&str> = journal.commands().iter().map(|c| c.id.as_str()).collect();
+    assert_eq!(ids, ["range.setValues", "range.setValues"]);
+    assert_eq!(formula.invalidation, GridInvalidation::All);
+    let shown = cells(&mut provider, &session.instance, &formula.revision, "s1");
+    assert_eq!(input(&shown, "s1", "C1"), "=A1+A2");
+    assert_eq!(display(&shown, "s1", "C1"), "6");
+
+    // Riscrivere la formula del file resta nel giornale di celle: è
+    // l'annulla di chi ci aveva scritto sopra.
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let over = apply(
+        &mut provider,
+        &session.instance,
+        &session.revision,
+        &[("B1", "7")],
+    )
+    .unwrap();
+    let back = apply(
+        &mut provider,
+        &session.instance,
+        &over.revision,
+        &[("B1", "=A1*10")],
+    )
+    .unwrap();
+    assert!(GridJournal::parse(&after(&over.edit.inserted, &back.edit))
+        .unwrap()
+        .is_empty());
+
+    // Una formula che non si scrive lascia il giornale di celle com'era.
+    assert!(apply(
+        &mut provider,
+        &session.instance,
+        &back.revision,
+        &[("C2", "=SUM(")]
+    )
+    .is_err());
+    let shown = cells(&mut provider, &session.instance, &back.revision, "s1");
+    assert_eq!(input(&shown, "s1", "C2"), "");
+}
+
+#[test]
 fn i_comandi_che_fub_non_serve_si_rifiutano() {
     let bytes = one_sheet(BODY);
     let (mut provider, session) = open(&bytes, &GridJournal::new());
