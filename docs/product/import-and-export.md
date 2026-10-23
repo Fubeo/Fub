@@ -183,4 +183,3 @@ L'opzione `frontmatter` (predefinita `true`) tiene o toglie i metadati.
   JSON o YAML fra le note.
 - Il documento unico non può contenere allegati: ogni allegato citato è un
   avviso nel rapporto, col documento che lo cita.
-

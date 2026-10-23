@@ -27,8 +27,10 @@ decisione deliberata e richiede aggiornamento di manifest, CI e guide.
 
 ## Versione ABI
 
-Il contratto corrente è `fub:abi@0.2.0`. La linea `0.2` conserva Grid v1 e
-aggiunge soltanto forme additive per le capacità consegnate; le versioni dei
+Il contratto corrente è `fub:abi@0.2.0`. La linea `0.2` aggiunge soltanto
+forme additive per le capacità consegnate (fra queste Grid a byte, la versione
+2; la versione 1 non è in nessuno snapshot congelato ed è uscita con
+l'[ADR 0218](../decisions/0218-via-il-fubsheet-e-la-versione-1-di-grid.md)); le versioni dei
 protocolli di superficie restano indipendenti da ABI e formati.
 
 La regola di caricamento:

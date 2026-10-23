@@ -122,12 +122,12 @@ export function formatBytes(bytes: number): string {
 }
 
 /// Il MIME dedotto dal nome, o `null` quando non si sa (risposta onesta).
-/// I documenti (`md`, `markdown`, `fubsheet`, `base`, `canvas`) non sono
+/// I documenti (`md`, `markdown`, `base`, `canvas`) non sono
 /// risorse: tornano `null` come `mime_of` torna `None` per le note.
 export function mimeOfId(id: string): string | null {
   const ext = extOf(id);
   if (!ext) return null;
-  if (ext === "md" || ext === "markdown" || ext === "fubsheet" || ext === "base" || ext === "canvas") {
+  if (ext === "md" || ext === "markdown" || ext === "base" || ext === "canvas") {
     return null;
   }
   return mimeForExt(ext);

@@ -34,8 +34,8 @@ la sezione seguente raccoglie le modifiche per la prima versione.
   conversioni di BOM o terminatori di riga;
 - comandi, query, view ed eventi attraverso registri generici;
 - feature ufficiali abilitate con feature Cargo indipendenti;
-- contratto WIT `fub:abi@0.2.0` con snapshot congelati e famiglia Grid v1
-  verificata su provider nativo e proxy WASM;
+- contratto WIT `fub:abi@0.2.0` con snapshot congelati e famiglia Grid a byte
+  (versione 2) verificata su provider nativo e proxy WASM;
 - provider WASM inbound reali di indice ed eventi, con feed, query, flush,
   close, `up_to_date`, reconcile e consegna notifiche nello stesso registro
   del nativo;

@@ -89,33 +89,32 @@ host implica accesso diretto a filesystem, rete o orologio.
 
 ## Famiglia `grid`
 
-La famiglia `grid` è il primo contratto strutturato a finestre. Il binding
-negozia prima `family = "grid"` e `protocol_version = 1`; famiglia, versione
-ABI e versione del formato `.fubsheet` restano indipendenti. Una shell che non
-conosce la coppia esatta non invoca il provider: conserva gli altri binding,
-mostra un notice e usa il fallback registrato (testo UTF-8, viewer per byte o
-errore esplicito).
+La famiglia `grid` è il contratto strutturato a finestre. Il binding negozia
+prima `family = "grid"` e `protocol_version`; famiglia, versione ABI e
+versione del formato restano indipendenti. L'unica versione servita è la 2:
+la 1, su un sorgente di testo, è uscita dal contratto
+([ADR 0218](../decisions/0218-via-il-fubsheet-e-la-versione-1-di-grid.md)), e
+l'interfaccia WIT `grid` tiene soltanto i tipi comuni. Una shell che non
+conosce la coppia esatta non invoca il provider: conserva gli altri binding e
+dice che il foglio non si apre.
 
-Le coordinate pubbliche sono sempre `SheetId + RowId + ColumnId`. L'apertura e
-il reload accettano la sorgente completa fino a 16 MiB; le finestre rispettano
-256 righe, 128 colonne e 32.768 coordinate. Un'operazione accetta al massimo
-16.384 patch e 4 MiB complessivi di preimmagini e nuovi input. Risposta e
-envelope JSON sono limitati a 8 MiB. L'invalidazione elenca coordinate
-modificate e dipendenti fino a 32.768 elementi; oltre usa `all`.
+Le coordinate pubbliche sono sempre `SheetId + RowId + ColumnId`. Le finestre
+rispettano 256 righe, 128 colonne e 32.768 coordinate. Un'operazione accetta
+al massimo 16.384 patch e 4 MiB complessivi di preimmagini e nuovi input.
+Risposta e envelope JSON sono limitati a 8 MiB. L'invalidazione elenca le
+coordinate da rileggere fino a 32.768 elementi; oltre usa `all`.
 
 Le patch sono input-only con preimmagine; il provider resta l'autorità per
-stile, formule, valori e dipendenze. Il commit restituisce un diff conseguente
-con offset in byte UTF-8, senza spezzare caratteri multibyte o `\r\n`.
-Provider nativo e proxy WASM usano gli stessi tipi, limiti, errori e lifecycle.
-DOM, oggetti CodeMirror e callback JavaScript non compaiono in Rust, WIT o
-mirror TypeScript; il testo resta locale e nessuna battuta genera IPC o WASM.
+stile, formule, valori e dipendenze. Provider nativo e proxy WASM usano gli
+stessi tipi, limiti, errori e lifecycle. DOM, oggetti CodeMirror e callback
+JavaScript non compaiono in Rust, WIT o mirror TypeScript; il testo resta
+locale e nessuna battuta genera IPC o WASM.
 
 La famiglia è una porta tipizzata del contratto, non una capability di
-sicurezza. `query_index` resta il canale read-only per dati indicizzati e per
-la query privata di valutazione `.fubsheet`; non è il percorso delle finestre,
-delle patch o del lifecycle Grid.
+sicurezza. `query_index` resta il canale read-only per dati indicizzati; non è
+il percorso delle finestre, delle patch o del lifecycle Grid.
 
-### Versione 2: una sorgente a byte
+### Una sorgente a byte
 
 La versione 2 (`protocol_version = 2`, `fub_abi::grid_bytes`, interfaccia WIT
 `grid-bytes`) apre una sorgente **a byte** che resta nella custodia dell'host:
@@ -131,7 +130,7 @@ WASM lo implementano con gli stessi tipi, limiti, errori e lifecycle.
   valore (`GridValue`), il testo formattato dal provider, il codice del
   blocco (`lock`), `stale` (il valore del file non segue una cella cambiata)
   e `conflict`.
-- `apply` riceve le patch della versione 1; il `GridCommit` porta il diff del
+- `apply` riceve le patch di `GridApplyRequest`; il `GridCommit` porta il diff del
   **testo del giornale**, e l'invalidazione.
 - `bytes_to_write(instance, expected)` dà i byte con il giornale innestato. La
   chiama soltanto l'host, per salvare.

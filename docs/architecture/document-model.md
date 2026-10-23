@@ -3,8 +3,7 @@
 > **Domanda:** come rappresenta Fub documenti di formati diversi senza perdere
 > la sorgente?
 > **Fonti autorevoli:** `crates/fub-abi/src/model.rs`,
-> `crates/fub-abi/src/arena.rs`, `crates/fub-abi/src/format.rs`,
-> `crates/fub-format-sheet/src/lib.rs`.
+> `crates/fub-abi/src/arena.rs`, `crates/fub-abi/src/format.rs`.
 
 ## In breve
 
@@ -135,25 +134,6 @@ modifica dalla sorgente. Chi interroga, ordina, conta faccette o mostra colonne
 usa la stessa proiezione tipizzata; assente, `null` e lista vuota restano casi
 distinti.
 
-## Workbook `.fubsheet`
-
-Una griglia non viene forzata nell'albero di `DocumentModel`.
-`fub-format-sheet::Workbook` è un modello autorevole separato: conserva
-versione, proprietà, ordine, dimensioni, input e stile. Le celle usano identità
-stabili composte da sheet, riga e colonna; A1 dipende dall'ordine corrente.
-
-Formula AST, valori, dipendenze, cache, A1 ed errori sono derivati e non
-persistiti. Outline, ricerca e proprietà sono proiezioni comuni del workbook,
-non campi aggiunti al modello dei blocchi. Il formato JSON v1 rifiuta campi
-sconosciuti, versioni future, coordinate ambigue o mancanti e input oltre i
-limiti dichiarati, evitando una riscrittura con perdita silenziosa.
-
-`Workbook::evaluate()` interpreta operatori, stringhe, booleani, riferimenti,
-intervalli, riferimenti cross-sheet e le funzioni `SUM`, `AVERAGE`, `MIN`,
-`MAX` e `IF`. Gli errori sono valori tipizzati e i cicli vengono rilevati. Il
-client non replica questa semantica: chiede il risultato Rust dopo il commit e
-usa l'input persistito come fallback.
-
 ## Cartella di Excel `.xlsx`
 
 Un `.xlsx` si apre nella famiglia `grid` con la versione 2 del protocollo, su
@@ -168,8 +148,8 @@ blocco e lo stato. I valori sono quelli salvati nel file, comprese le celle
 versate dalle matrici, e niente si ricalcola: una formula che legge una cella
 cambiata tiene il valore del file, segnato come vecchio.
 
-`apps/client/src/editors/grid/workbook.ts` controlla sessioni e finestre con
-lo stesso rigore della versione 1 e le trasforma nel modello che
+`apps/client/src/editors/grid/workbook.ts` controlla sessioni e finestre
+campo per campo e le trasforma nel modello che
 `GridEngine` disegna, con le schede dei fogli visibili, la formula nella barra
 e un avviso per ciò che la griglia non mostra o non ricalcola. Modificare una
 cella scrive una voce del giornale; si scrivono soltanto valori costanti, e le
@@ -223,7 +203,6 @@ albero malformato.
 - `crates/fub-format-markdown/src/parse.rs`
 - `crates/fub-format-markdown/src/render.rs`
 - `crates/fub-format-markdown/src/serialize.rs`
-- `crates/fub-format-sheet/src/lib.rs`
 - `crates/fub-format-xlsx/src/grid.rs`
 - `crates/fub-format-xlsx/src/graft.rs`
 - `apps/client/src/editors/grid/workbook.ts`

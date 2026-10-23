@@ -6,7 +6,7 @@
 //! the matching inner provider (Markdown stays first: `.md` entries import
 //! through `fub.markdown`'s own semantics only when this bundle runs inside
 //! the real workspace dispatch — here they convert losslessly to the same
-//! bytes with provenance frontmatter). `.base`/`.canvas`/`.fubsheet` entries
+//! bytes with provenance frontmatter). `.base`/`.canvas` entries
 //! retain their extension and exact UTF-8 contents for format owners; binary
 //! or invalid UTF-8 entries fail explicitly rather than being replaced.
 //!
@@ -673,7 +673,6 @@ fn is_text_ext(ext: &str) -> bool {
             | "toml"
             | "base"
             | "canvas"
-            | "fubsheet"
     )
 }
 

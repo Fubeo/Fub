@@ -35,7 +35,6 @@ flowchart TD
     host["fub-host"]
     features["fub-features"]
     markdown["fub-format-markdown"]
-    sheet["fub-format-sheet"]
     base["fub-format-base"]
     canvas["fub-format-canvas"]
     svg["fub-format-svg"]
@@ -64,7 +63,6 @@ flowchart TD
     host --> importers
     host --> markdown
     host --> rich
-    host --> sheet
     host --> svg
     host --> kernel
     cli --> abi
@@ -82,7 +80,6 @@ flowchart TD
     features --> scene
     markdown --> abi
     markdown --> sdk
-    sheet --> abi
     svg --> abi
     svg --> scene
     scene --> ink
@@ -102,7 +99,6 @@ flowchart TD
     kernel -.-> testkit
     host -.-> sdk
     host -.-> testkit
-    wasmhost -.-> sheet
     wasmhost -.-> testkit
     wasmhost -.-> sdk
     importers -.-> markdown

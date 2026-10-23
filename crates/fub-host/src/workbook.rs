@@ -35,16 +35,17 @@ pub(crate) fn providers() -> Vec<Box<dyn FormatProvider>> {
 #[cfg(feature = "xlsx")]
 pub(crate) const WORKBOOK_ID: &str = "fub.xlsx";
 
-/// Registra la superficie della griglia delle cartelle: la stessa che la
+/// Registra la superficie della griglia delle cartelle, la stessa che la
 /// shell apre e che il salvataggio usa per l'innesto.
 #[cfg(feature = "xlsx")]
 pub(crate) fn register(registrar: &mut crate::registry::Registrar<'_>) -> Vec<String> {
-    match registrar
+    let mut failures = Vec::new();
+    if let Err(error) = registrar
         .register_grid_bytes_provider(Box::new(fub_format_xlsx::grid::XlsxGridProvider::new()))
     {
-        Ok(()) => Vec::new(),
-        Err(error) => vec![format!("workbook grid NOT registered: {error}")],
+        failures.push(format!("workbook grid NOT registered: {error}"));
     }
+    failures
 }
 
 /// Se il documento è una cartella di Excel.

@@ -79,9 +79,8 @@ use fub_abi::format::{
 };
 use fub_abi::gate::Gate;
 use fub_abi::grid::{
-    GridApplyRequest, GridCell, GridCellKey, GridCellPatch, GridCellStyle, GridCellValue,
-    GridColumn, GridCommit, GridFormulaError, GridHorizontalAlign, GridInvalidation, GridProvider,
-    GridRow, GridSession, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindow,
+    GridApplyRequest, GridCellKey, GridCellPatch, GridCellStyle, GridColumn, GridCommit,
+    GridHorizontalAlign, GridInvalidation, GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec,
     GridWindowRequest,
 };
 use fub_abi::grid_bytes::{
@@ -267,7 +266,6 @@ wit_type! {
     dyn ArtifactSink => SINK,
     dyn FormatProvider => SELF,
     dyn CommandProvider => SELF,
-    dyn GridProvider => SELF,
     dyn GridBytesProvider => SELF,
     dyn ViewProvider => SELF,
     dyn IndexProvider => SELF,
@@ -367,18 +365,13 @@ wit_kebab! {
     LinkInsert,
 
     GridSurfaceSpec,
-    GridSession,
     GridSheet,
     GridRow,
     GridColumn,
     GridCellKey,
     GridHorizontalAlign,
     GridCellStyle,
-    GridFormulaError,
-    GridCellValue,
-    GridCell,
     GridWindowRequest,
-    GridWindow,
     GridCellPatch,
     GridApplyRequest,
     GridInvalidation,
@@ -3534,7 +3527,7 @@ fn conform(source: &str) -> Result<(), String> {
         format,
         family,
         protocol_version,
-    } = GridSurfaceSpec::new("", "");
+    } = GridSurfaceSpec::bytes("", "");
     contract.record(
         "grid-surface-spec",
         &[
@@ -3542,24 +3535,6 @@ fn conform(source: &str) -> Result<(), String> {
             ("format", wit(&format)),
             ("family", wit(&family)),
             ("protocol-version", wit(&protocol_version)),
-        ],
-    );
-
-    let GridSession {
-        instance,
-        revision,
-        sheets,
-    } = GridSession {
-        instance: String::new(),
-        revision: Revision::of(""),
-        sheets: Vec::new(),
-    };
-    contract.record(
-        "grid-session",
-        &[
-            ("instance", wit(&instance)),
-            ("revision", wit(&revision)),
-            ("sheets", wit(&sheets)),
         ],
     );
 
@@ -3660,52 +3635,6 @@ fn conform(source: &str) -> Result<(), String> {
             ("number-format", wit(&number_format)),
         ],
     );
-    contract.enumeration_from("grid-formula-error", ("grid.rs", "GridFormulaError"));
-
-    let grid_value_case = |value: &GridCellValue| match value {
-        GridCellValue::Blank => case("blank"),
-        GridCellValue::Number(value) => case_ty("number", wit(value)),
-        GridCellValue::Text(value) => case_ty("text", wit(value)),
-        GridCellValue::Boolean(value) => case_ty("boolean", wit(value)),
-        GridCellValue::Error(error) => case_ty("error", wit(error)),
-    };
-    contract.variant_src(
-        "grid-cell-value",
-        ("grid.rs", "GridCellValue"),
-        &[
-            grid_value_case(&GridCellValue::Blank),
-            grid_value_case(&GridCellValue::Number(0.0)),
-            grid_value_case(&GridCellValue::Text(String::new())),
-            grid_value_case(&GridCellValue::Boolean(false)),
-            grid_value_case(&GridCellValue::Error(GridFormulaError::Parse)),
-        ],
-    );
-
-    let GridCell {
-        key,
-        input,
-        style,
-        value,
-    } = GridCell {
-        key: GridCellKey {
-            sheet: String::new(),
-            row: String::new(),
-            column: String::new(),
-        },
-        input: String::new(),
-        style: GridCellStyle::default(),
-        value: GridCellValue::Blank,
-    };
-    contract.record(
-        "grid-cell",
-        &[
-            ("key", wit(&key)),
-            ("input", wit(&input)),
-            ("style", wit(&style)),
-            ("value", wit(&value)),
-        ],
-    );
-
     let GridWindowRequest {
         revision,
         sheet,
@@ -3730,42 +3659,6 @@ fn conform(source: &str) -> Result<(), String> {
             ("row-count", wit(&row_count)),
             ("column-start", wit(&column_start)),
             ("column-count", wit(&column_count)),
-        ],
-    );
-
-    let GridWindow {
-        revision,
-        sheet,
-        row_start,
-        column_start,
-        total_rows,
-        total_columns,
-        rows,
-        columns,
-        cells,
-    } = GridWindow {
-        revision: Revision::of(""),
-        sheet: String::new(),
-        row_start: 0,
-        column_start: 0,
-        total_rows: 0,
-        total_columns: 0,
-        rows: Vec::new(),
-        columns: Vec::new(),
-        cells: Vec::new(),
-    };
-    contract.record(
-        "grid-window",
-        &[
-            ("revision", wit(&revision)),
-            ("sheet", wit(&sheet)),
-            ("row-start", wit(&row_start)),
-            ("column-start", wit(&column_start)),
-            ("total-rows", wit(&total_rows)),
-            ("total-columns", wit(&total_columns)),
-            ("rows", wit(&rows)),
-            ("columns", wit(&columns)),
-            ("cells", wit(&cells)),
         ],
     );
 
@@ -5578,6 +5471,7 @@ fn conform(source: &str) -> Result<(), String> {
     contract.types_only("transfer");
     contract.types_only("settings");
     contract.types_only("organization");
+    contract.types_only("grid");
 
     contract.method(
         "format",
@@ -5657,74 +5551,6 @@ fn conform(source: &str) -> Result<(), String> {
                 bool,
             ) -> Result<Option<Vec<TextEdit>>, FormatError>,
         &["source", "marker", "done"],
-    );
-
-    contract.method(
-        "grid",
-        "surfaces",
-        <dyn GridProvider>::surfaces as fn(&'static dyn GridProvider) -> Vec<GridSurfaceSpec>,
-        &[],
-    );
-    contract.method(
-        "grid",
-        "open",
-        <dyn GridProvider>::open
-            as fn(
-                &'static mut dyn GridProvider,
-                &'static str,
-                &'static str,
-                Revision,
-            ) -> Result<GridSession, PluginError>,
-        &["surface", "source", "revision"],
-    );
-    contract.method(
-        "grid",
-        "window",
-        <dyn GridProvider>::window
-            as fn(
-                &'static mut dyn GridProvider,
-                &'static str,
-                GridWindowRequest,
-            ) -> Result<GridWindow, PluginError>,
-        &["instance", "request"],
-    );
-    contract.method(
-        "grid",
-        "apply",
-        <dyn GridProvider>::apply
-            as fn(
-                &'static mut dyn GridProvider,
-                &'static str,
-                GridApplyRequest,
-            ) -> Result<GridCommit, PluginError>,
-        &["instance", "request"],
-    );
-    contract.method(
-        "grid",
-        "reload",
-        <dyn GridProvider>::reload
-            as fn(
-                &'static mut dyn GridProvider,
-                &'static str,
-                Revision,
-                &'static str,
-                Revision,
-            ) -> Result<GridSession, PluginError>,
-        &["instance", "expected", "source", "revision"],
-    );
-    contract.method(
-        "grid",
-        "close",
-        <dyn GridProvider>::close
-            as fn(&'static mut dyn GridProvider, &'static str) -> Result<(), PluginError>,
-        &["instance"],
-    );
-    contract.method(
-        "grid",
-        "shutdown",
-        <dyn GridProvider>::shutdown
-            as fn(&'static mut dyn GridProvider) -> Result<(), PluginError>,
-        &[],
     );
 
     contract.method(
@@ -6407,7 +6233,6 @@ fn conform(source: &str) -> Result<(), String> {
     let expected_exports: BTreeSet<String> = [
         "plugin",
         "format",
-        "grid",
         "grid-bytes",
         // I due innesti del §3.1 e del §3.2: separati da `format` perché un
         // plugin può implementarne uno senza l'altro — ed è esattamente ciò che

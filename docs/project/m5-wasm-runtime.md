@@ -121,10 +121,11 @@ recuperati come `FormatError`, ma non costituiscono un confronto di parità
 oltre ai casi esercitati.
 
 `ViewProvider` è consegnato con export WIT `view`, spec/interests/render,
-azioni `Replace`/`Patch`, validazione non fidata e teardown. `GridProvider` è
-consegnato con protocollo Grid v1 in ABI/WIT, provider nativo e proxy WASM:
-negozia famiglia/versione, finestre, patch, invalidazioni, fallback e
-ownership senza chiamate al provider sotto il lock.
+azioni `Replace`/`Patch`, validazione non fidata e teardown. Il provider Grid
+è consegnato in ABI/WIT, nativo e con proxy WASM: negozia famiglia/versione,
+finestre, patch, invalidazioni, fallback e ownership senza chiamate al
+provider sotto il lock. Dall'[ADR 0218](../decisions/0218-via-il-fubsheet-e-la-versione-1-di-grid.md)
+è servita soltanto la versione 2, sui byte (`GridBytesProvider`).
 
 `IndexProvider` e `EventHandler` inbound restano deferred: non vengono
 promessi senza una route e un componente che provino feed/query/flush/close o
@@ -189,7 +190,7 @@ La [PR #53](https://github.com/Fubeo/Fub/pull/53) integra in `main` la consegna.
 
 In `main@7c263d…` M5 comprende:
 
-- `CommandProvider`, `FormatProvider`, `ViewProvider` e `GridProvider`
+- `CommandProvider`, `FormatProvider`, `ViewProvider` e il provider Grid
   nei percorsi nativi/WASM esercitati;
 - component model Wasmtime, manifest, ABI, capability, timeout, memoria, trap e
   output malformati gestiti al confine;
@@ -197,8 +198,9 @@ In `main@7c263d…` M5 comprende:
 - installazione da file, consenso, stato `enabled`, restart, teardown e
   rimozione da disabilitato;
 - rollback degli snapshot startup stantii e ownership delle risorse preparate;
-- Grid v1 in ABI/WIT, provider nativo, proxy WASM e client shell con
-  negoziazione, finestre, patch, invalidazioni e fallback;
+- Grid in ABI/WIT, provider nativo, proxy WASM e client shell con
+  negoziazione, finestre, patch, invalidazioni e fallback (oggi nella
+  versione 2, a byte);
 - esempi riproducibili, inclusi `format-wasm`, `view-wasm` e
   `grid-wasm`.
 

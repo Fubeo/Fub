@@ -36,9 +36,9 @@ use fub_abi::event::{
 };
 use fub_abi::gate::Gate;
 use fub_abi::grid::{
-    GridApplyRequest, GridCell, GridCellKey, GridCellPatch, GridCellStyle, GridCellValue,
-    GridColumn, GridCommit, GridFormulaError, GridHorizontalAlign, GridInvalidation, GridRow,
-    GridSession, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindow, GridWindowRequest,
+    GridApplyRequest, GridCellKey, GridCellPatch, GridCellStyle, GridColumn, GridCommit,
+    GridHorizontalAlign, GridInvalidation, GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec,
+    GridWindowRequest,
 };
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{DocId, LinkTarget, Span};
@@ -1186,44 +1186,8 @@ fn grid_samples() -> Vec<Value> {
         number_format: Some("0.00".into()),
     };
     let revision = Revision::of("rev-1");
-    let window = GridWindow {
-        revision: revision.clone(),
-        sheet: "sheet-1".into(),
-        row_start: 0,
-        column_start: 0,
-        total_rows: 4,
-        total_columns: 3,
-        rows: vec![GridRow {
-            id: "row-1".into(),
-            index: 0,
-            height: Some(24.0),
-            hidden: false,
-        }],
-        columns: vec![GridColumn {
-            id: "column-1".into(),
-            index: 0,
-            width: Some(120.0),
-            hidden: false,
-        }],
-        cells: vec![GridCell {
-            key: key.clone(),
-            input: "=1+1".into(),
-            style: style.clone(),
-            value: GridCellValue::Number(2.0),
-        }],
-    };
     vec![
-        to_value(GridSurfaceSpec::new("sheet", "fubsheet")),
-        to_value(GridSession {
-            instance: "grid-1".into(),
-            revision: revision.clone(),
-            sheets: vec![GridSheet {
-                id: "sheet-1".into(),
-                name: "Foglio 1".into(),
-                row_count: 4,
-                column_count: 3,
-            }],
-        }),
+        to_value(GridSurfaceSpec::bytes("workbook", "xlsx")),
         to_value(GridSheet {
             id: "sheet-1".into(),
             name: "Foglio 1".into(),
@@ -1244,19 +1208,6 @@ fn grid_samples() -> Vec<Value> {
         }),
         to_value(key.clone()),
         to_value(style),
-        to_value(GridCell {
-            key: key.clone(),
-            input: "=1+1".into(),
-            style: GridCellStyle {
-                bold: false,
-                italic: false,
-                text_color: None,
-                fill_color: None,
-                horizontal: None,
-                number_format: None,
-            },
-            value: GridCellValue::Error(GridFormulaError::Ref),
-        }),
         to_value(GridWindowRequest {
             revision: revision.clone(),
             sheet: "sheet-1".into(),
@@ -1265,7 +1216,6 @@ fn grid_samples() -> Vec<Value> {
             column_start: 0,
             column_count: 1,
         }),
-        to_value(window),
         to_value(GridCellPatch {
             cell: key.clone(),
             before: Some("=1+1".into()),
@@ -1454,19 +1404,16 @@ fn expected() -> Value {
         "GridBytesCell": grid_bytes_cells,
         "GridJournalRebase": grid_journal_samples(),
         "GridSurfaceSpec": [grid[0].clone()],
-        "GridSession": [grid[1].clone()],
-        "GridSheet": [grid[2].clone()],
-        "GridRow": [grid[3].clone()],
-        "GridColumn": [grid[4].clone()],
-        "GridCellKey": [grid[5].clone()],
-        "GridCellStyle": [grid[6].clone()],
-        "GridCell": [grid[7].clone()],
-        "GridWindowRequest": [grid[8].clone()],
-        "GridWindow": [grid[9].clone()],
-        "GridCellPatch": [grid[10].clone()],
-        "GridApplyRequest": [grid[11].clone()],
-        "GridSourceEdit": [grid[12].clone()],
-        "GridCommit": [grid[13].clone()],
+        "GridSheet": [grid[1].clone()],
+        "GridRow": [grid[2].clone()],
+        "GridColumn": [grid[3].clone()],
+        "GridCellKey": [grid[4].clone()],
+        "GridCellStyle": [grid[5].clone()],
+        "GridWindowRequest": [grid[6].clone()],
+        "GridCellPatch": [grid[7].clone()],
+        "GridApplyRequest": [grid[8].clone()],
+        "GridSourceEdit": [grid[9].clone()],
+        "GridCommit": [grid[10].clone()],
         "UiNode": ui_node_samples(),
         "ViewUpdate": view_update_samples(),
         "KernelEvent": event_samples(),

@@ -14,7 +14,6 @@ fub-abi = { workspace = true }
 # solo (§16.3).
 fub-features = { workspace = true }
 fub-format-markdown = { workspace = true }
-fub-format-sheet = { workspace = true }
 fub-format-canvas = { workspace = true }
 fub-format-base = { workspace = true }
 # Le scene di FubDraw (ADR 0203): i formati `svg` e `fubann`, le annotazioni

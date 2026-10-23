@@ -48,3 +48,4 @@ Nuove decisioni usano il [template](template.md).
 | [0213 — I motori esterni sono una copia derivata, con proprietari e aggiornamenti decisi](0213-provenienza-dei-motori-esterni.md) | accolta | sicurezza | — |
 | [0214 — GridCraft è il motore del foglio di calcolo, e una cartella di Excel si apre in sola lettura](0214-gridcraft-motore-del-foglio-di-calcolo.md) | accolta | contratto | — |
 | [0216 — Il protocollo `grid` 2 apre una sorgente a byte nella custodia dell'host, e la modifica è un giornale di celle](0216-protocollo-grid-2-sorgente-a-byte.md) | accolta | contratto | 0214 (in parte) |
+| [0218 — Il `.fubsheet` e la versione 1 di `grid` escono da Fub](0218-via-il-fubsheet-e-la-versione-1-di-grid.md) | accolta | contratto | 0201 (in parte) |
