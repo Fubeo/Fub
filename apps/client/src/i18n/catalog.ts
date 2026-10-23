@@ -2518,7 +2518,14 @@ export const IT = { // --- la scocca -------------------------------------------
   "canvas_menu.order": "Ordine",
   "canvas_menu.align": "Allinea e distribuisci",
   "canvas_menu.reverse": "Inverti la direzione",
-  "canvas_menu.add_here": "Aggiungi qui"
+  "canvas_menu.add_here": "Aggiungi qui",
+  "base_menu.open": "Apri la nota",
+  "base_menu.copy_link": "Copia il link [[ ]]",
+  "base_menu.row.copy": "Copia la riga",
+  "base_menu.cell.copy": "Copia il valore",
+  "base_menu.cell.search": "Cerca questo valore",
+  "base_menu.cell.clear": "Svuota la cella",
+  "base_menu.column.copy": "Copia la colonna"
 } as const;
 
 /// Una chiave del catalogo della shell.
@@ -4908,5 +4915,12 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "canvas_menu.order": "Order",
   "canvas_menu.align": "Align and distribute",
   "canvas_menu.reverse": "Reverse direction",
-  "canvas_menu.add_here": "Add here"
+  "canvas_menu.add_here": "Add here",
+  "base_menu.open": "Open note",
+  "base_menu.copy_link": "Copy [[ ]] link",
+  "base_menu.row.copy": "Copy row",
+  "base_menu.cell.copy": "Copy value",
+  "base_menu.cell.search": "Search for this value",
+  "base_menu.cell.clear": "Clear cell",
+  "base_menu.column.copy": "Copy column"
 };

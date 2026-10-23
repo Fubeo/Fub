@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IndexQuery, IndexResult } from "../../host/contract";
 import { forwardNotice } from "../../state/kernel";
+import type { SurfaceMenuItem } from "../core/editor-menu";
 import { mountBaseSurface } from "./surface";
 
 const count = 20_000;
@@ -210,6 +211,52 @@ describe("Base raggruppata", () => {
         section.querySelector<HTMLButtonElement>(".base-group-toggle")!.click();
         expect(host.querySelector('section.base-group[data-group="fatto"] .base-card')).toBeNull();
       } finally { done(); }
+    }
+  });
+});
+
+describe("il tasto destro nella base", () => {
+  it("su una cella offre il valore e la nota della riga; sull'intestazione la colonna", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const opened: string[] = [];
+    const invokeCommand = vi.fn(async () => ({}));
+    const surface = mountBaseSurface("base", { paneId: "base-menu", documentId: "views/all.base", parent: host }, {
+      queryIndex: query,
+      invokeCommand,
+      viewState: async () => null,
+      setViewState: async () => {},
+      onOpenDocument: (doc) => void opened.push(doc),
+    });
+    const pointing = vi.spyOn(document, "elementFromPoint");
+    try {
+      surface.buffer.setDoc("views:\n  - {name: Table, type: table}\n");
+      await vi.waitFor(() => expect(host.querySelector('[data-doc="00000.md"] .base-cell')).not.toBeNull());
+      pointing.mockReturnValue(host.querySelector('[data-doc="00000.md"] .base-cell input'));
+      const menu = surface.contextMenu!({ x: 1, y: 1 })!;
+      expect(menu.target).toEqual({ kind: "cell", ref: "status" });
+      expect(menu.note).toEqual({ kind: "note", id: "00000.md" });
+      const items = menu.context as readonly SurfaceMenuItem[];
+      expect(items.map((item) => item.id)).toEqual(["base.cell.copy", "base.cell.search", "base.cell.clear", "base.row.open", "base.row.copy_link", "base.row.copy"]);
+      items.find((item) => item.id === "base.row.open")!.run!();
+      expect(opened).toEqual(["00000.md"]);
+      items.find((item) => item.id === "base.cell.search")!.run!();
+      expect(host.querySelector<HTMLInputElement>(".base-search")!.value).toBe("ready");
+
+      pointing.mockReturnValue(host.querySelector('th[data-column="status"]'));
+      const column = surface.contextMenu!({ x: 1, y: 1 })!;
+      expect(column.target).toEqual({ kind: "column", ref: "status" });
+      expect((column.context as readonly SurfaceMenuItem[]).map((item) => item.id)).toEqual(["base.group.column", "base.column.copy"]);
+
+      surface.setReadOnly!(true);
+      pointing.mockReturnValue(host.querySelector('[data-doc="00000.md"] .base-cell'));
+      const locked = surface.contextMenu!({ x: 1, y: 1 })!;
+      expect((locked.context as readonly SurfaceMenuItem[]).find((item) => item.id === "base.cell.clear")!.enabled).toBe(false);
+      expect(invokeCommand).not.toHaveBeenCalled();
+    } finally {
+      pointing.mockRestore();
+      surface.destroy();
+      host.remove();
     }
   });
 });
