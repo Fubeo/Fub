@@ -149,6 +149,10 @@ che il codec non conserva non si modificherebbe affatto.
   revisione che non segue il diff non escono dall'host;
 - `vendor/gridcraft/crates/engine/src/tests.rs`: una cartella aperta senza
   ricalcolo tiene i valori del file finché una modifica non li raggiunge;
+- `crates/fub-format-xlsx/src/inventory.rs`: una cartella riscritta senza
+  modifiche, con regole di Excel 2010, note, collegamenti, testo formattato,
+  un grafico e un'immagine, non perde niente; una perdita si conta; ciò che
+  Excel ricava da sé (catena di calcolo, conteggi, dimensione) non si conta;
 - i test di `fub-format-xlsx` sul giornale di comandi, sul sottoinsieme
   esposto e sulla scelta fra innesto e riscrittura misurata;
 - la conformità nativo e WASM della versione 2 con il catalogo vuoto
