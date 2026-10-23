@@ -41,6 +41,9 @@ pub mod display;
 pub mod graft;
 pub mod grid;
 pub mod input;
+// La misura della riscrittura: la usa il salvataggio della modalità a comandi.
+#[allow(dead_code)]
+mod inventory;
 pub mod locks;
 mod model;
 mod package;
