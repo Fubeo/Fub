@@ -3322,6 +3322,23 @@ interface grid-bytes {
         count: u32,
     }
 
+    /// Quando la cartella si ricalcola.
+    enum grid-calculation {
+        automatic,
+        automatic-except-tables,
+        manual,
+    }
+
+    /// Ciò che vale per la cartella intera: i dodici colori del tema
+    /// (`#RRGGBB`, nell'ordine del file), i nomi definiti, il calcolo e la
+    /// struttura protetta.
+    record grid-book {
+        theme-colors: list<string>,
+        names: list<string>,
+        calculation: grid-calculation,
+        %protected: bool,
+    }
+
     record grid-bytes-session {
         instance: string,
         revision: revision,
@@ -3331,6 +3348,7 @@ interface grid-bytes {
         notices: list<grid-notice>,
         conflicts: list<grid-cell-key>,
         commands: list<grid-command-state>,
+        book: grid-book,
     }
 
     /// Il foglio, gli intervalli A1 separati da virgola e la cella attiva.
@@ -3375,6 +3393,7 @@ interface grid-bytes {
         %result: option<string>,
         dialog: option<grid-dialog>,
         commands: list<grid-command-state>,
+        book: grid-book,
     }
 
     /// Un errore porta il suo testo: ogni formato ha i suoi.
@@ -3441,6 +3460,13 @@ interface grid-bytes {
         columns: u32,
     }
 
+    /// Le celle, le pagine, o le interruzioni di pagina sopra le celle.
+    enum grid-view-mode {
+        normal,
+        page-layout,
+        page-break-preview,
+    }
+
     record grid-sheet-view {
         frozen-rows: u32,
         frozen-columns: u32,
@@ -3448,6 +3474,28 @@ interface grid-bytes {
         headings: bool,
         zoom: u16,
         right-to-left: bool,
+        mode: grid-view-mode,
+        formulas: bool,
+        %protected: bool,
+        print-gridlines: bool,
+        print-headings: bool,
+    }
+
+    /// Una tabella a indici assoluti, con l'intestazione e i totali.
+    record grid-table {
+        name: string,
+        row: u32,
+        column: u32,
+        rows: u32,
+        columns: u32,
+        header-row: bool,
+        totals-row: bool,
+        banded-rows: bool,
+        banded-columns: bool,
+        first-column: bool,
+        last-column: bool,
+        filter-button: bool,
+        style: string,
     }
 
     record grid-bytes-window {
@@ -3463,6 +3511,7 @@ interface grid-bytes {
         styles: list<grid-cell-style>,
         merges: list<grid-merge>,
         view: grid-sheet-view,
+        tables: list<grid-table>,
     }
 
     surfaces: func() -> list<grid-surface-spec>;

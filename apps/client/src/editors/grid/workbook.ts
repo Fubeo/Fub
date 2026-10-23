@@ -20,7 +20,9 @@ import type {
   GridMerge,
   GridNotice,
   GridSheetView,
+  GridTable,
 } from "../../host/contract";
+import { GRID_THEME_COLORS } from "../../host/contract";
 import type { GridCell, GridCellStyle, GridColumn, GridPosition, GridRow, GridSheet, GridWorkbook } from "./model";
 
 const MAX_SHEETS = 1_024;
@@ -29,6 +31,12 @@ const MAX_COLUMNS = 16_384;
 const MAX_WINDOW_ROWS = 256;
 const MAX_WINDOW_COLUMNS = 128;
 const MAX_NOTICES = 64;
+const MAX_BOOK_NAMES = 4_096;
+const MAX_NAME_BYTES = 255;
+const MAX_WINDOW_TABLES = 1_024;
+const VIEW_MODES: ReadonlySet<string> = new Set(["normal", "page_layout", "page_break_preview"]);
+const CALCULATIONS: ReadonlySet<string> = new Set(["automatic", "automatic_except_tables", "manual"]);
+const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/u;
 /// Le misure di Excel sono per il suo carattere a 11 punti; la griglia usa
 /// quello dell'interfaccia, più grande. La riga di serie di Excel (20 px)
 /// diventa così quella del foglio di Fub (28 px), e il resto in proporzione.
@@ -49,6 +57,8 @@ export interface WorkbookSheet {
   readonly cells: ReadonlyMap<number, WorkbookCell>;
   /// Le unioni che le finestre lette toccano, ognuna una volta.
   readonly merges: readonly GridMerge[];
+  /// Le tabelle che le finestre lette toccano, ognuna una volta.
+  readonly tables: readonly GridTable[];
   /// Come il foglio si guarda; quello di serie finché nessuna finestra è letta.
   readonly view: GridSheetView;
 }
@@ -61,6 +71,11 @@ export const DEFAULT_SHEET_VIEW: GridSheetView = {
   headings: true,
   zoom: 100,
   right_to_left: false,
+  mode: "normal",
+  formulas: false,
+  protected: false,
+  print_gridlines: false,
+  print_headings: false,
 };
 
 export interface WorkbookView {
@@ -92,6 +107,11 @@ function id(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
+/// Un nome della cartella: non vuoto e nei byte di `MAX_NAME_BYTES`.
+function bookName(value: unknown): value is string {
+  return id(value) && new TextEncoder().encode(value).length <= MAX_NAME_BYTES;
+}
+
 /// Controlla una sessione della versione 2; lancia se non si può disegnare.
 export function validateBytesSession(session: GridBytesSession): void {
   if (
@@ -113,6 +133,7 @@ export function validateBytesSession(session: GridBytesSession): void {
   ) {
     throw new Error("malformed grid bytes session");
   }
+  validateBook(session.book);
   const sheets = new Set<string>();
   for (const sheet of session.sheets) {
     if (
@@ -132,6 +153,23 @@ export function validateBytesSession(session: GridBytesSession): void {
   if (new Set(session.hidden).size >= session.sheets.length) throw new Error("grid bytes session hides every sheet");
   for (const notice of session.notices) {
     if (!id(notice.code) || !count(notice.count, 0xffff_ffff)) throw new Error("malformed grid notice");
+  }
+}
+
+/// Controlla ciò che vale per tutta la cartella (`GridBook`).
+export function validateBook(book: GridBytesSession["book"]): void {
+  if (
+    !book
+    || !Array.isArray(book.theme_colors)
+    || book.theme_colors.length !== GRID_THEME_COLORS
+    || book.theme_colors.some((color) => typeof color !== "string" || !HEX_COLOR.test(color))
+    || !Array.isArray(book.names)
+    || book.names.length > MAX_BOOK_NAMES
+    || !book.names.every(bookName)
+    || !CALCULATIONS.has(book.calculation)
+    || typeof book.protected !== "boolean"
+  ) {
+    throw new Error("malformed grid book");
   }
 }
 
@@ -176,6 +214,33 @@ export function validateBytesWindow(window: GridBytesWindow, session: GridBytesS
       throw new Error("malformed grid bytes merge");
     }
   }
+  if (!Array.isArray(window.tables) || window.tables.length > MAX_WINDOW_TABLES) throw new Error("malformed grid bytes window");
+  for (const table of window.tables) {
+    if (
+      !bookName(table.name)
+      || typeof table.style !== "string"
+      || new TextEncoder().encode(table.style).length > MAX_NAME_BYTES
+      || !count(table.row, MAX_ROWS)
+      || !count(table.column, MAX_COLUMNS)
+      || !count(table.rows, MAX_ROWS)
+      || !count(table.columns, MAX_COLUMNS)
+      || table.rows === 0
+      || table.columns === 0
+      || table.row + table.rows > sheet.row_count
+      || table.column + table.columns > sheet.column_count
+      || ![
+        table.header_row,
+        table.totals_row,
+        table.banded_rows,
+        table.banded_columns,
+        table.first_column,
+        table.last_column,
+        table.filter_button,
+      ].every((flag) => typeof flag === "boolean")
+    ) {
+      throw new Error("malformed grid bytes table");
+    }
+  }
   const view = window.view;
   if (
     !view
@@ -184,6 +249,11 @@ export function validateBytesWindow(window: GridBytesWindow, session: GridBytesS
     || typeof view.gridlines !== "boolean"
     || typeof view.headings !== "boolean"
     || typeof view.right_to_left !== "boolean"
+    || !VIEW_MODES.has(view.mode)
+    || typeof view.formulas !== "boolean"
+    || typeof view.protected !== "boolean"
+    || typeof view.print_gridlines !== "boolean"
+    || typeof view.print_headings !== "boolean"
     || !Number.isInteger(view.zoom)
     || view.zoom < 10
     || view.zoom > 400
@@ -272,8 +342,10 @@ export function workbookView(
     const map = new Map<number, WorkbookCell>();
     const list: GridCell[] = [];
     const merges = new Map<string, GridMerge>();
+    const tables = new Map<string, GridTable>();
     for (const window of own) {
       for (const merge of window.merges) merges.set(`${merge.row}:${merge.column}`, merge);
+      for (const table of window.tables) tables.set(table.name, table);
       const rowIndex = new Map(window.rows.map((row) => [row.id, row.index] as const));
       const columnIndex = new Map(window.columns.map((column) => [column.id, column.index] as const));
       for (const cell of window.cells) {
@@ -300,6 +372,7 @@ export function workbookView(
     cells.push({
       cells: map,
       merges: [...merges.values()],
+      tables: [...tables.values()],
       view: own[own.length - 1]?.view ?? previous?.sheets[earlierIndex(previous, sessionSheet.id)]?.view ?? DEFAULT_SHEET_VIEW,
     });
   }

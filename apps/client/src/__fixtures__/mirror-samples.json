@@ -75,7 +75,26 @@
           "enabled": false,
           "reason": "the selection is a single cell"
         }
-      ]
+      ],
+      "book": {
+        "theme_colors": [
+          "#FFFFFF",
+          "#000000",
+          "#E7E6E6",
+          "#44546A",
+          "#4472C4",
+          "#ED7D31",
+          "#A5A5A5",
+          "#FFC000",
+          "#5B9BD5",
+          "#70AD47",
+          "#0563C1",
+          "#954F72"
+        ],
+        "names": [],
+        "calculation": "automatic",
+        "protected": false
+      }
     }
   ],
   "GridNotice": [
@@ -124,7 +143,29 @@
           "enabled": false,
           "reason": "the selection is a single cell"
         }
-      ]
+      ],
+      "book": {
+        "theme_colors": [
+          "#FFFFFF",
+          "#000000",
+          "#E7E6E6",
+          "#44546A",
+          "#4472C4",
+          "#ED7D31",
+          "#A5A5A5",
+          "#FFC000",
+          "#5B9BD5",
+          "#70AD47",
+          "#0563C1",
+          "#954F72"
+        ],
+        "names": [
+          "Aliquota",
+          "Totali"
+        ],
+        "calculation": "manual",
+        "protected": true
+      }
     }
   ],
   "GridBytesWindow": [
@@ -353,8 +394,30 @@
         "gridlines": false,
         "headings": true,
         "zoom": 125,
-        "right_to_left": false
-      }
+        "right_to_left": false,
+        "mode": "page_layout",
+        "formulas": true,
+        "protected": true,
+        "print_gridlines": true,
+        "print_headings": false
+      },
+      "tables": [
+        {
+          "name": "Spese",
+          "row": 0,
+          "column": 0,
+          "rows": 3,
+          "columns": 2,
+          "header_row": true,
+          "totals_row": false,
+          "banded_rows": true,
+          "banded_columns": false,
+          "first_column": false,
+          "last_column": true,
+          "filter_button": true,
+          "style": "TableStyleMedium2"
+        }
+      ]
     }
   ],
   "GridBytesCell": [

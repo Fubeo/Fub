@@ -8,9 +8,10 @@ mod common;
 
 use common::{one_sheet, sheet, Package};
 use fub_abi::{
-    GridApplyRequest, GridBytesCell, GridBytesProvider, GridBytesSession, GridCellKey,
-    GridCellPatch, GridCommand, GridCommandOutcome, GridCommandRequest, GridCommandState,
-    GridInvalidation, GridJournal, GridSelection, GridWindowRequest, PluginError, Revision,
+    GridApplyRequest, GridBytesCell, GridBytesProvider, GridBytesSession, GridCalculation,
+    GridCellKey, GridCellPatch, GridCommand, GridCommandOutcome, GridCommandRequest,
+    GridCommandState, GridInvalidation, GridJournal, GridSelection, GridViewMode,
+    GridWindowRequest, PluginError, Revision,
 };
 use fub_format_xlsx::grid::{XlsxGridProvider, XLSX_GRID_SURFACE};
 use gridcraft_core::{CellRef, Value};
@@ -766,4 +767,80 @@ fn libreoffice_rilegge_la_cartella_riscritta() {
     let _ = std::fs::remove_dir_all(&dir);
     assert_eq!(data, "testa,,\n1,uno,unita\n2,due,\n3,30,\n");
     assert_eq!(other, "101,fermo\n");
+}
+
+#[test]
+fn la_barra_legge_vista_tabelle_e_libro_dopo_i_comandi() {
+    let bytes = one_sheet(BODY);
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    // Il tema di serie e niente nomi: la cartella del test non ne ha.
+    assert_eq!(session.book.theme_colors.len(), fub_abi::GRID_THEME_COLORS);
+    assert!(session.book.names.is_empty());
+    assert_eq!(session.book.calculation, GridCalculation::Automatic);
+    let mut revision = session.revision.clone();
+    let mut last = None;
+    for (id, params, at) in [
+        (
+            "insert.table",
+            r#"{"range":"A1:B3","style":"TableStyleLight9","name":"Spese"}"#,
+            "A1:B3",
+        ),
+        (
+            "formulas.defineName",
+            r#"{"name":"Aliquota","refersTo":"=0.2"}"#,
+            "A1",
+        ),
+        ("formulas.calculationOptions", r#"{"mode":"manual"}"#, "A1"),
+        ("formulas.showFormulas", r#"{"on":true}"#, "A1"),
+        ("view.gridlines", r#"{"on":false}"#, "A1"),
+        ("view.pageLayout", "{}", "A1"),
+        ("review.protectSheet", "{}", "A1"),
+    ] {
+        let outcome = give(
+            &mut provider,
+            &session.instance,
+            &revision,
+            command(id, params, at),
+        )
+        .unwrap_or_else(|error| panic!("{id}: {error:?}"));
+        revision = outcome.commit.revision.clone();
+        last = Some(outcome);
+    }
+    let book = last.unwrap().book;
+    assert_eq!(book.names, ["Aliquota"]);
+    assert_eq!(book.calculation, GridCalculation::Manual);
+    let window = provider
+        .window(
+            &session.instance,
+            GridWindowRequest {
+                revision,
+                sheet: "s1".into(),
+                row_start: 1,
+                row_count: 4,
+                column_start: 1,
+                column_count: 4,
+            },
+        )
+        .unwrap();
+    // La tabella comincia fuori dalla finestra e la tocca: c'è, intera. La
+    // prima riga è un numero, non un'intestazione: come in Excel, la tabella
+    // ne aggiunge una sopra, e copre quattro righe.
+    let table = &window.tables[..];
+    assert_eq!(table.len(), 1);
+    let table = &table[0];
+    assert_eq!(
+        (
+            table.name.as_str(),
+            table.row,
+            table.column,
+            table.rows,
+            table.columns
+        ),
+        ("Spese", 0, 0, 4, 2)
+    );
+    assert!(table.header_row && !table.totals_row);
+    assert_eq!(table.style, "TableStyleLight9");
+    let view = &window.view;
+    assert!(view.formulas && !view.gridlines && view.protected);
+    assert_eq!(view.mode, GridViewMode::PageLayout);
 }

@@ -123,6 +123,10 @@ pub use grid_bytes::{
     MAX_GRID_JOURNAL_COMMANDS, MAX_GRID_JOURNAL_ENTRIES, MAX_GRID_JOURNAL_INPUT_BYTES,
     MAX_GRID_NOTICES, MAX_GRID_SELECTION_BYTES,
 };
+pub use grid_bytes::{
+    GridBook, GridCalculation, GridTable, GridViewMode, GRID_THEME_COLORS, MAX_GRID_BOOK_NAMES,
+    MAX_GRID_NAME_BYTES, MAX_GRID_WINDOW_TABLES,
+};
 pub use locale::{HourCycle, Locale, Weekday};
 pub use model::Payload;
 pub use model::{

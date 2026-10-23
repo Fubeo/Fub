@@ -88,6 +88,8 @@ export type GridBorderStyle =
   | "slant_dash_dot"
 ;
 
+export type GridCalculation = "automatic" | "automatic_except_tables" | "manual";
+
 export type GridHorizontalAlign =
   | "start"
   | "center"
@@ -104,6 +106,8 @@ export type GridScript = "superscript" | "subscript";
 export type GridUnderline = "single" | "double" | "single_accounting" | "double_accounting";
 
 export type GridVerticalAlign = "top" | "center" | "bottom" | "justify" | "distributed";
+
+export type GridViewMode = "normal" | "page_layout" | "page_break_preview";
 
 export type HealthCheck =
   | "broken_links"

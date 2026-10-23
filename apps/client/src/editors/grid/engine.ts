@@ -11,9 +11,11 @@ import type {
   GridCommandState,
   GridCommit,
   GridDialog,
+  GridBook,
   GridMerge,
   GridSelection as GridCommandSelection,
   GridSheetView,
+  GridTable,
   GridSurfaceSpec,
   GridWindowRequest,
 } from "../../host/contract";
@@ -217,6 +219,8 @@ export interface GridEngineOptions {
   readonly onCommands?: () => void;
   /// Un comando chiede una finestra di dialogo alla shell.
   readonly onDialog?: (dialog: GridDialog) => void;
+  /// La cartella mostrata è cambiata: vista del foglio, tabelle o libro.
+  readonly onView?: () => void;
   readonly grid?: GridHost;
   readonly theme?: Theme;
 }
@@ -358,6 +362,7 @@ export class GridEngine {
   readonly #corner: HTMLElement;
   readonly #cellEditorHost: HTMLElement;
   readonly #notice: HTMLElement;
+  readonly #ribbonHost: HTMLElement;
   readonly #sheetBar: HTMLElement;
   readonly #formulaEditor: TextEngine;
   readonly #cellEditor: TextEngine;
@@ -432,6 +437,8 @@ export class GridEngine {
     this.#notice.className = "grid-notice";
     this.#notice.setAttribute("role", "status");
     this.#notice.hidden = true;
+    this.#ribbonHost = document.createElement("div");
+    this.#ribbonHost.className = "grid-ribbon-host";
     this.#sheetBar = document.createElement("div");
     this.#sheetBar.className = "grid-sheets";
     this.#sheetBar.hidden = true;
@@ -461,7 +468,7 @@ export class GridEngine {
     this.#cellEditorHost.setAttribute("aria-hidden", "true");
     this.#canvas.append(this.#cellEditorHost);
     this.#viewport.append(this.#canvas);
-    this.#root.append(this.#notice, formula, this.#viewport, this.#sheetBar);
+    this.#root.append(this.#ribbonHost, this.#notice, formula, this.#viewport, this.#sheetBar);
     parent.replaceChildren(this.#root);
     this.#stopLanguage = onLanguage(() => {
       this.#viewport.setAttribute("aria-label", t("grid.surface"));
@@ -615,6 +622,26 @@ export class GridEngine {
     return this.#workbookCell(this.#selection.focus)?.style;
   }
 
+  /// Dove la barra multifunzione si monta, sopra la barra della formula.
+  ribbonHost(): HTMLElement {
+    return this.#ribbonHost;
+  }
+
+  /// La vista del foglio mostrato.
+  sheetView(): GridSheetView {
+    return this.#sheetView();
+  }
+
+  /// Le tabelle lette del foglio mostrato.
+  tables(): readonly GridTable[] {
+    return this.#view?.sheets[this.#sheetIndex]?.tables ?? [];
+  }
+
+  /// Ciò che vale per la cartella; `null` finché nessuna sessione è mostrata.
+  book(): GridBook | null {
+    return this.#shownSession?.book ?? null;
+  }
+
   /// Dà il comando `id` del catalogo sulla selezione, con i parametri come
   /// testo di un oggetto JSON. Falso se il catalogo non lo serve acceso.
   command(id: string, params = "{}"): boolean {
@@ -674,6 +701,7 @@ export class GridEngine {
         hidden: outcome.hidden,
         active: outcome.selection.sheet,
         commands: outcome.commands,
+        book: outcome.book,
       };
       validateBytesSession(session);
       this.#confirm(applySourceEdit(this.#confirmedJournal, outcome.commit.edit));
@@ -990,6 +1018,7 @@ export class GridEngine {
     this.#showNotice();
     this.#showSheetTabs();
     this.#showSheet(top);
+    this.#options.onView?.();
   }
 
   #loadViewport(): Promise<void> {

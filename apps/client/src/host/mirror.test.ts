@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAIN_PANE } from "./contract";
+import { GRID_THEME_COLORS, MAIN_PANE } from "./contract";
 import type {
   BacklinkRef,
   BundleInfo,
@@ -36,12 +36,14 @@ import type {
   GridDataBar,
   GridIcon,
   GridLink,
+  GridBook,
   GridMerge,
   GridNotice,
   GridRow,
   GridSelection,
   GridSheet,
   GridSheetView,
+  GridTable,
   GridSourceEdit,
   GridSurfaceSpec,
   GridValue,
@@ -679,6 +681,7 @@ const RECORD_KEYS: Record<string, string[]> = {
     notices: true,
     conflicts: true,
     commands: true,
+    book: true,
   }),
   GridBytesCell: keysOf<GridBytesCell>({
     key: true,
@@ -705,6 +708,7 @@ const RECORD_KEYS: Record<string, string[]> = {
     result: true,
     dialog: true,
     commands: true,
+    book: true,
   }),
   GridBytesWindow: keysOf<GridBytesWindow>({
     revision: true,
@@ -719,6 +723,7 @@ const RECORD_KEYS: Record<string, string[]> = {
     styles: true,
     merges: true,
     view: true,
+    tables: true,
   }),
   Span: keysOf<Span>({ start: true, end: true }),
   VersionRef: keysOf<VersionRef>({ ts: true, hash: true, size: true }),
@@ -1484,7 +1489,30 @@ describe("mirror TS↔Rust", () => {
       headings: true,
       zoom: true,
       right_to_left: true,
+      mode: true,
+      formulas: true,
+      protected: true,
+      print_gridlines: true,
+      print_headings: true,
     });
+    one<GridTable>(window.tables, {
+      name: true,
+      row: true,
+      column: true,
+      rows: true,
+      columns: true,
+      header_row: true,
+      totals_row: true,
+      banded_rows: true,
+      banded_columns: true,
+      first_column: true,
+      last_column: true,
+      filter_button: true,
+      style: true,
+    });
+    const session = (fixture["GridBytesSession"] as GridBytesSession[])[0]!;
+    one<GridBook>([session.book], { theme_colors: true, names: true, calculation: true, protected: true });
+    expect(session.book.theme_colors).toHaveLength(GRID_THEME_COLORS);
   });
 
   it("i record hanno esattamente le chiavi del tipo TS", () => {

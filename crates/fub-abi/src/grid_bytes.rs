@@ -235,6 +235,7 @@ pub struct GridCommandOutcome {
     pub result: Option<String>,
     pub dialog: Option<GridDialog>,
     pub commands: Vec<GridCommandState>,
+    pub book: GridBook,
 }
 
 fn json_object(text: &str, limit: usize) -> bool {
@@ -270,6 +271,7 @@ impl GridCommandOutcome {
             }
         }
         validate_grid_catalog(&self.commands)?;
+        self.book.validate()?;
         let encoded = serde_json::to_vec(self)
             .map_err(|error| PluginError::Internal(error.to_string().into()))?;
         if encoded.len() > MAX_GRID_RESPONSE_BYTES {
@@ -682,6 +684,7 @@ pub struct GridBytesSession {
     /// iniziale (la cella `A1` del foglio attivo): vuoto per un provider che
     /// modifica soltanto con le patch.
     pub commands: Vec<GridCommandState>,
+    pub book: GridBook,
 }
 
 impl GridBytesSession {
@@ -701,6 +704,7 @@ impl GridBytesSession {
         }
         validate_sheets(&self.sheets)?;
         validate_grid_catalog(&self.commands)?;
+        self.book.validate()?;
         if self.notices.iter().any(|notice| !valid_id(&notice.code)) {
             return Err(bad("grid notice has an invalid code"));
         }
@@ -801,7 +805,19 @@ pub struct GridMerge {
     pub columns: u32,
 }
 
-/// La vista del foglio come la salva il file.
+/// Come il foglio si guarda: le celle, le pagine, o le interruzioni di
+/// pagina sopra le celle.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridViewMode {
+    #[default]
+    Normal,
+    PageLayout,
+    PageBreakPreview,
+}
+
+/// La vista del foglio come la salva il file, con ciò che la stampa ne
+/// prende: le opzioni che la barra mostra accese o spente.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GridSheetView {
     pub frozen_rows: u32,
@@ -811,6 +827,13 @@ pub struct GridSheetView {
     /// In percento, da 10 a 400.
     pub zoom: u16,
     pub right_to_left: bool,
+    pub mode: GridViewMode,
+    /// Le celle mostrano le formule invece dei valori.
+    pub formulas: bool,
+    /// Il foglio è protetto.
+    pub protected: bool,
+    pub print_gridlines: bool,
+    pub print_headings: bool,
 }
 
 impl Default for GridSheetView {
@@ -822,7 +845,106 @@ impl Default for GridSheetView {
             headings: true,
             zoom: 100,
             right_to_left: false,
+            mode: GridViewMode::Normal,
+            formulas: false,
+            protected: false,
+            print_gridlines: false,
+            print_headings: false,
         }
+    }
+}
+
+/// Una tabella del foglio, a indici assoluti: la cella in alto a sinistra,
+/// quante righe e colonne copre (con l'intestazione e i totali), le opzioni
+/// di stile e il nome dello stile (`TableStyleMedium2`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridTable {
+    pub name: String,
+    pub row: u32,
+    pub column: u32,
+    pub rows: u32,
+    pub columns: u32,
+    pub header_row: bool,
+    pub totals_row: bool,
+    pub banded_rows: bool,
+    pub banded_columns: bool,
+    pub first_column: bool,
+    pub last_column: bool,
+    pub filter_button: bool,
+    pub style: String,
+}
+
+/// Quando la cartella si ricalcola.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridCalculation {
+    #[default]
+    Automatic,
+    AutomaticExceptTables,
+    Manual,
+}
+
+/// I colori del tema di una cartella, nell'ordine del file: sfondo 1, testo
+/// 1, sfondo 2, testo 2, i sei colori principali, il collegamento e il
+/// collegamento visitato.
+pub const GRID_THEME_COLORS: usize = 12;
+/// I nomi definiti che una sessione porta, al più.
+pub const MAX_GRID_BOOK_NAMES: usize = 4_096;
+/// La misura di un nome definito o di una tabella (Excel ne tiene 255).
+pub const MAX_GRID_NAME_BYTES: usize = 255;
+/// Le tabelle che una finestra porta, al più.
+pub const MAX_GRID_WINDOW_TABLES: usize = 1_024;
+
+/// Ciò che vale per la cartella intera: i colori del tema (`#RRGGBB`), i
+/// nomi definiti, il modo del calcolo e se la struttura è protetta. Lo
+/// danno la sessione e l'esito di ogni comando.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridBook {
+    pub theme_colors: Vec<String>,
+    pub names: Vec<String>,
+    pub calculation: GridCalculation,
+    pub protected: bool,
+}
+
+impl Default for GridBook {
+    /// Il tema di Office.
+    fn default() -> Self {
+        Self {
+            theme_colors: [
+                "#FFFFFF", "#000000", "#E7E6E6", "#44546A", "#4472C4", "#ED7D31", "#A5A5A5",
+                "#FFC000", "#5B9BD5", "#70AD47", "#0563C1", "#954F72",
+            ]
+            .map(str::to_owned)
+            .to_vec(),
+            names: Vec::new(),
+            calculation: GridCalculation::Automatic,
+            protected: false,
+        }
+    }
+}
+
+fn hex_color(text: &str) -> bool {
+    text.len() == 7
+        && text.starts_with('#')
+        && text[1..].bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+impl GridBook {
+    pub fn validate(&self) -> Result<(), PluginError> {
+        if self.theme_colors.len() != GRID_THEME_COLORS
+            || !self.theme_colors.iter().all(|color| hex_color(color))
+        {
+            return Err(bad("grid book theme colors are malformed"));
+        }
+        if self.names.len() > MAX_GRID_BOOK_NAMES
+            || self
+                .names
+                .iter()
+                .any(|name| name.is_empty() || name.len() > MAX_GRID_NAME_BYTES)
+        {
+            return Err(bad("grid book names exceed their limits"));
+        }
+        Ok(())
     }
 }
 
@@ -842,6 +964,8 @@ pub struct GridBytesWindow {
     pub styles: Vec<GridCellStyle>,
     pub merges: Vec<GridMerge>,
     pub view: GridSheetView,
+    /// Le tabelle che toccano la finestra, anche quelle che cominciano fuori.
+    pub tables: Vec<GridTable>,
 }
 
 impl GridBytesWindow {
@@ -917,6 +1041,30 @@ impl GridBytesWindow {
                 || merge.column >= column_end
             {
                 return Err(bad("grid merge lies outside the window"));
+            }
+        }
+        if self.tables.len() > MAX_GRID_WINDOW_TABLES {
+            return Err(bad("grid window has too many tables"));
+        }
+        for table in &self.tables {
+            let bottom = table.row.checked_add(table.rows);
+            let right = table.column.checked_add(table.columns);
+            let (Some(bottom), Some(right)) = (bottom, right) else {
+                return Err(bad("grid table overflows"));
+            };
+            if table.name.is_empty()
+                || table.name.len() > MAX_GRID_NAME_BYTES
+                || table.style.len() > MAX_GRID_NAME_BYTES
+                || table.rows == 0
+                || table.columns == 0
+                || bottom > self.total_rows
+                || right > self.total_columns
+                || bottom <= self.row_start
+                || table.row >= row_end
+                || right <= self.column_start
+                || table.column >= column_end
+            {
+                return Err(bad("grid table lies outside the window"));
             }
         }
         let view = &self.view;
@@ -1227,6 +1375,7 @@ mod tests {
             styles: vec![GridCellStyle::default()],
             merges: Vec::new(),
             view: GridSheetView::default(),
+            tables: Vec::new(),
         }
     }
 
@@ -1255,6 +1404,62 @@ mod tests {
             window.merges = vec![outside];
             assert!(window.validate().is_err(), "{outside:?}");
         }
+    }
+
+    #[test]
+    fn una_finestra_porta_le_tabelle_che_la_toccano_con_un_nome() {
+        let table = |name: &str, row, column, rows, columns| GridTable {
+            name: name.into(),
+            row,
+            column,
+            rows,
+            columns,
+            header_row: true,
+            totals_row: false,
+            banded_rows: true,
+            banded_columns: false,
+            first_column: false,
+            last_column: false,
+            filter_button: true,
+            style: "TableStyleMedium2".into(),
+        };
+        let mut touching = window();
+        touching.tables = vec![table("Spese", 0, 0, 11, 3)];
+        touching.validate().unwrap();
+        for outside in [
+            table("Spese", 0, 0, 10, 3),
+            table("Spese", 12, 2, 2, 2),
+            table("", 10, 2, 2, 2),
+            table(&"x".repeat(MAX_GRID_NAME_BYTES + 1), 10, 2, 2, 2),
+            table("Spese", 10, 2, 0, 2),
+            table("Spese", 99, 2, 2, 1),
+            table("Spese", u32::MAX, 2, 2, 1),
+        ] {
+            let mut window = window();
+            window.tables = vec![outside.clone()];
+            assert!(window.validate().is_err(), "{outside:?}");
+        }
+    }
+
+    #[test]
+    fn il_libro_porta_dodici_colori_del_tema_e_nomi_nei_limiti() {
+        GridBook::default().validate().unwrap();
+        let mut short = GridBook::default();
+        short.theme_colors.pop();
+        assert!(short.validate().is_err());
+        let mut malformed = GridBook::default();
+        malformed.theme_colors[0] = "#FFF".into();
+        assert!(malformed.validate().is_err());
+        let unnamed = GridBook {
+            names: vec![String::new()],
+            ..GridBook::default()
+        };
+        assert!(unnamed.validate().is_err());
+        let many = GridBook {
+            names: (0..=MAX_GRID_BOOK_NAMES).map(|n| format!("n{n}")).collect(),
+            ..GridBook::default()
+        };
+        assert!(many.validate().is_err());
     }
 
     #[test]

@@ -1546,7 +1546,26 @@
         "enabled": true,
         "reason": null
       }
-    ]
+    ],
+    "book": {
+      "theme_colors": [
+        "#FFFFFF",
+        "#000000",
+        "#E8E8E8",
+        "#0E2841",
+        "#156082",
+        "#E97132",
+        "#196B24",
+        "#0F9ED5",
+        "#A02B93",
+        "#4EA72E",
+        "#467886",
+        "#96607D"
+      ],
+      "names": [],
+      "calculation": "automatic",
+      "protected": false
+    }
   },
   "windows": [
     {
@@ -2929,8 +2948,14 @@
         "gridlines": true,
         "headings": true,
         "zoom": 100,
-        "right_to_left": false
-      }
+        "right_to_left": false,
+        "mode": "normal",
+        "formulas": false,
+        "protected": false,
+        "print_gridlines": false,
+        "print_headings": false
+      },
+      "tables": []
     },
     {
       "revision": "sha256:895584820e6df4e271dba3748d3d8c0084239266bbc37ed47ccbcfbc7a09282a",
@@ -3809,8 +3834,14 @@
         "gridlines": true,
         "headings": true,
         "zoom": 100,
-        "right_to_left": false
-      }
+        "right_to_left": false,
+        "mode": "normal",
+        "formulas": false,
+        "protected": false,
+        "print_gridlines": false,
+        "print_headings": false
+      },
+      "tables": []
     }
   ],
   "edit": {
@@ -5237,8 +5268,14 @@
         "gridlines": true,
         "headings": true,
         "zoom": 100,
-        "right_to_left": false
-      }
+        "right_to_left": false,
+        "mode": "normal",
+        "formulas": false,
+        "protected": false,
+        "print_gridlines": false,
+        "print_headings": false
+      },
+      "tables": []
     }
   },
   "conflict": {
@@ -6789,7 +6826,26 @@
           "enabled": true,
           "reason": null
         }
-      ]
+      ],
+      "book": {
+        "theme_colors": [
+          "#FFFFFF",
+          "#000000",
+          "#E8E8E8",
+          "#0E2841",
+          "#156082",
+          "#E97132",
+          "#196B24",
+          "#0F9ED5",
+          "#A02B93",
+          "#4EA72E",
+          "#467886",
+          "#96607D"
+        ],
+        "names": [],
+        "calculation": "automatic",
+        "protected": false
+      }
     },
     "window": {
       "revision": "sha256:fecef535bd6d2387a3210507249adfb5fdcf5d6d33c21c7904af7a161f3fb3a0",
@@ -8171,8 +8227,14 @@
         "gridlines": true,
         "headings": true,
         "zoom": 100,
-        "right_to_left": false
-      }
+        "right_to_left": false,
+        "mode": "normal",
+        "formulas": false,
+        "protected": false,
+        "print_gridlines": false,
+        "print_headings": false
+      },
+      "tables": []
     }
   }
 }

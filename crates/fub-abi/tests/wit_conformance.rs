@@ -85,10 +85,10 @@ use fub_abi::grid::{
     GridWindowRequest,
 };
 use fub_abi::grid_bytes::{
-    GridBytesCell, GridBytesProvider, GridBytesSession, GridBytesWindow, GridCommand,
-    GridCommandOutcome, GridCommandRequest, GridCommandState, GridComment, GridCommentReply,
-    GridDataBar, GridDialog, GridIcon, GridJournal, GridLink, GridMerge, GridNotice, GridSelection,
-    GridSheetView, GridValue,
+    GridBook, GridBytesCell, GridBytesProvider, GridBytesSession, GridBytesWindow, GridCalculation,
+    GridCommand, GridCommandOutcome, GridCommandRequest, GridCommandState, GridComment,
+    GridCommentReply, GridDataBar, GridDialog, GridIcon, GridJournal, GridLink, GridMerge,
+    GridNotice, GridSelection, GridSheetView, GridTable, GridValue, GridViewMode,
 };
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{
@@ -387,6 +387,8 @@ wit_kebab! {
     GridSourceEdit,
     GridCommit,
     GridNotice,
+    GridCalculation,
+    GridBook,
     GridBytesSession,
     GridValue,
     GridDataBar,
@@ -396,7 +398,9 @@ wit_kebab! {
     GridLink,
     GridBytesCell,
     GridMerge,
+    GridViewMode,
     GridSheetView,
+    GridTable,
     GridBytesWindow,
     GridSelection,
     GridCommandState,
@@ -3837,6 +3841,23 @@ fn conform(source: &str) -> Result<(), String> {
         &[("code", wit(&code)), ("count", wit(&count))],
     );
 
+    contract.enumeration_from("grid-calculation", ("grid_bytes.rs", "GridCalculation"));
+    let GridBook {
+        theme_colors,
+        names,
+        calculation,
+        protected,
+    } = GridBook::default();
+    contract.record(
+        "grid-book",
+        &[
+            ("theme-colors", wit(&theme_colors)),
+            ("names", wit(&names)),
+            ("calculation", wit(&calculation)),
+            ("protected", wit(&protected)),
+        ],
+    );
+
     let GridBytesSession {
         instance,
         revision,
@@ -3846,6 +3867,7 @@ fn conform(source: &str) -> Result<(), String> {
         notices,
         conflicts,
         commands,
+        book,
     } = GridBytesSession {
         instance: String::new(),
         revision: Revision::of(""),
@@ -3855,6 +3877,7 @@ fn conform(source: &str) -> Result<(), String> {
         notices: Vec::new(),
         conflicts: Vec::new(),
         commands: Vec::new(),
+        book: GridBook::default(),
     };
     contract.record(
         "grid-bytes-session",
@@ -3867,6 +3890,7 @@ fn conform(source: &str) -> Result<(), String> {
             ("notices", wit(&notices)),
             ("conflicts", wit(&conflicts)),
             ("commands", wit(&commands)),
+            ("book", wit(&book)),
         ],
     );
 
@@ -3956,6 +3980,7 @@ fn conform(source: &str) -> Result<(), String> {
         result,
         dialog,
         commands,
+        book,
     } = GridCommandOutcome {
         commit: GridCommit {
             revision: Revision::of(""),
@@ -3977,6 +4002,7 @@ fn conform(source: &str) -> Result<(), String> {
         result: None,
         dialog: None,
         commands: Vec::new(),
+        book: GridBook::default(),
     };
     contract.record(
         "grid-command-outcome",
@@ -3988,6 +4014,7 @@ fn conform(source: &str) -> Result<(), String> {
             ("result", wit(&result)),
             ("dialog", wit(&dialog)),
             ("commands", wit(&commands)),
+            ("book", wit(&book)),
         ],
     );
 
@@ -4155,6 +4182,7 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    contract.enumeration_from("grid-view-mode", ("grid_bytes.rs", "GridViewMode"));
     let GridSheetView {
         frozen_rows,
         frozen_columns,
@@ -4162,6 +4190,11 @@ fn conform(source: &str) -> Result<(), String> {
         headings,
         zoom,
         right_to_left,
+        mode,
+        formulas,
+        protected,
+        print_gridlines,
+        print_headings,
     } = GridSheetView::default();
     contract.record(
         "grid-sheet-view",
@@ -4172,6 +4205,59 @@ fn conform(source: &str) -> Result<(), String> {
             ("headings", wit(&headings)),
             ("zoom", wit(&zoom)),
             ("right-to-left", wit(&right_to_left)),
+            ("mode", wit(&mode)),
+            ("formulas", wit(&formulas)),
+            ("protected", wit(&protected)),
+            ("print-gridlines", wit(&print_gridlines)),
+            ("print-headings", wit(&print_headings)),
+        ],
+    );
+
+    let GridTable {
+        name,
+        row,
+        column,
+        rows,
+        columns,
+        header_row,
+        totals_row,
+        banded_rows,
+        banded_columns,
+        first_column,
+        last_column,
+        filter_button,
+        style,
+    } = GridTable {
+        name: String::new(),
+        row: 0,
+        column: 0,
+        rows: 0,
+        columns: 0,
+        header_row: false,
+        totals_row: false,
+        banded_rows: false,
+        banded_columns: false,
+        first_column: false,
+        last_column: false,
+        filter_button: false,
+        style: String::new(),
+    };
+    contract.record(
+        "grid-table",
+        &[
+            ("name", wit(&name)),
+            ("row", wit(&row)),
+            ("column", wit(&column)),
+            ("rows", wit(&rows)),
+            ("columns", wit(&columns)),
+            ("header-row", wit(&header_row)),
+            ("totals-row", wit(&totals_row)),
+            ("banded-rows", wit(&banded_rows)),
+            ("banded-columns", wit(&banded_columns)),
+            ("first-column", wit(&first_column)),
+            ("last-column", wit(&last_column)),
+            ("filter-button", wit(&filter_button)),
+            ("style", wit(&style)),
         ],
     );
 
@@ -4188,6 +4274,7 @@ fn conform(source: &str) -> Result<(), String> {
         styles,
         merges,
         view,
+        tables,
     } = GridBytesWindow {
         revision: Revision::of(""),
         sheet: String::new(),
@@ -4201,6 +4288,7 @@ fn conform(source: &str) -> Result<(), String> {
         styles: Vec::new(),
         merges: Vec::new(),
         view: GridSheetView::default(),
+        tables: Vec::new(),
     };
     contract.record(
         "grid-bytes-window",
@@ -4217,6 +4305,7 @@ fn conform(source: &str) -> Result<(), String> {
             ("styles", wit(&styles)),
             ("merges", wit(&merges)),
             ("view", wit(&view)),
+            ("tables", wit(&tables)),
         ],
     );
 

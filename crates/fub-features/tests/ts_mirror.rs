@@ -66,10 +66,10 @@ use fub_abi::ui::{
     UiNode, UiOption, UiValue, ViewUpdate,
 };
 use fub_abi::{
-    GridBytesCell, GridBytesSession, GridBytesWindow, GridCommand, GridCommandOutcome,
-    GridCommandRequest, GridCommandState, GridComment, GridCommentReply, GridDataBar, GridDialog,
-    GridIcon, GridJournal, GridLink, GridMerge, GridNotice, GridSelection, GridSheetView,
-    GridValue,
+    GridBook, GridBytesCell, GridBytesSession, GridBytesWindow, GridCalculation, GridCommand,
+    GridCommandOutcome, GridCommandRequest, GridCommandState, GridComment, GridCommentReply,
+    GridDataBar, GridDialog, GridIcon, GridJournal, GridLink, GridMerge, GridNotice, GridSelection,
+    GridSheetView, GridTable, GridValue, GridViewMode,
 };
 use fub_features::VersionRef;
 use fub_kernel::{TrashEntry, MAIN_PANE};
@@ -1355,6 +1355,12 @@ fn grid_bytes_samples() -> (Value, Value, Value, Vec<Value>) {
         }],
         conflicts: vec![key.clone()],
         commands: grid_catalog(),
+        book: GridBook {
+            names: vec!["Aliquota".into(), "Totali".into()],
+            calculation: GridCalculation::Manual,
+            protected: true,
+            ..GridBook::default()
+        },
     };
     let window = GridBytesWindow {
         revision: Revision::of("rev-2"),
@@ -1390,7 +1396,27 @@ fn grid_bytes_samples() -> (Value, Value, Value, Vec<Value>) {
             headings: true,
             zoom: 125,
             right_to_left: false,
+            mode: GridViewMode::PageLayout,
+            formulas: true,
+            protected: true,
+            print_gridlines: true,
+            print_headings: false,
         },
+        tables: vec![GridTable {
+            name: "Spese".into(),
+            row: 0,
+            column: 0,
+            rows: 3,
+            columns: 2,
+            header_row: true,
+            totals_row: false,
+            banded_rows: true,
+            banded_columns: false,
+            first_column: false,
+            last_column: true,
+            filter_button: true,
+            style: "TableStyleMedium2".into(),
+        }],
     };
     (
         to_value(GridNotice {
@@ -1462,6 +1488,7 @@ fn grid_command_samples() -> (Value, Value, Value) {
             params: "{}".into(),
         }),
         commands: grid_catalog(),
+        book: GridBook::default(),
     };
     (to_value(selection), to_value(request), to_value(outcome))
 }
