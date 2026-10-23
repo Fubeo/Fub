@@ -190,3 +190,39 @@ pub fn encrypted() -> Vec<u8> {
     file.flush().unwrap();
     file.into_inner().into_inner()
 }
+
+/// Esegue LibreOffice (`FUB_SOFFICE`) su `inputs`, con un profilo suo e un
+/// limite di due minuti.
+pub fn soffice(
+    soffice: &std::ffi::OsStr,
+    dir: &std::path::Path,
+    to: &str,
+    inputs: &[std::path::PathBuf],
+) {
+    let mut child = std::process::Command::new(soffice)
+        .arg("--headless")
+        .arg(format!(
+            "-env:UserInstallation=file://{}",
+            dir.join("profilo").display()
+        ))
+        .args(["--convert-to", to, "--outdir"])
+        .arg(dir)
+        .args(inputs)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let start = std::time::Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if start.elapsed() > std::time::Duration::from_secs(120) {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("LibreOffice non ha finito in due minuti ({to})");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    };
+    assert!(status.success(), "LibreOffice: {status}");
+}
