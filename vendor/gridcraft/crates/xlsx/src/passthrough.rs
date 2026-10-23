@@ -133,6 +133,17 @@ const SHEET_PR_ATTRS: &[&str] = &[
 ];
 const OUTLINE_PR_ATTRS: &[&str] = &["applyStyles", "summaryBelow", "summaryRight", "showOutlineSymbols"];
 const PAGE_SETUP_PR_ATTRS: &[&str] = &["autoPageBreaks"];
+/// Attributes of `<sheetView>` GridCraft does not model (it writes `zoomScaleNormal` as the zoom).
+const SHEET_VIEW_ATTRS: &[&str] = &[
+    "windowProtection",
+    "showOutlineSymbols",
+    "defaultGridColor",
+    "showRuler",
+    "showWhiteSpace",
+    "colorId",
+    "zoomScalePageLayoutView",
+    "zoomScaleSheetLayoutView",
+];
 /// Attributes of `<sheetFormatPr>` GridCraft does not model.
 const SHEET_FORMAT_PR_ATTRS: &[&str] = &["baseColWidth", "zeroHeight", "thickTop", "thickBottom"];
 /// Attributes of `<pageSetup>` GridCraft does not model (it writes `paperSize`, `scale`,
@@ -540,6 +551,19 @@ impl KeptReader {
             x.push_str("</xcalcf:calcFeatures></ext>");
             p.elements.push(PreservedXml { slot: "ext".into(), xml: x });
         }
+        // Other extensions as the file wrote them, unless they refer to parts of the package.
+        if let Ok(Some(bytes)) = cx.pkg.read(wb_part) {
+            for (uri, x) in scan_exts(&bytes).unwrap_or_default() {
+                if uri.eq_ignore_ascii_case(CALC_FEATURES_URI) {
+                    continue;
+                }
+                if x.len() > MAX_FRAGMENT || map_rel_ids(&x, &mut |_| None).is_none() {
+                    cx.warn(format!("workbook extension {uri} was dropped: it refers to parts of the package"));
+                    continue;
+                }
+                p.elements.push(PreservedXml { slot: "ext".into(), xml: x });
+            }
+        }
         // Source forms: unmodelled attributes and elements, and the theme and core properties
         // parts as they were while the model still holds what was read from them.
         if let Some(e) = wb_xml.child("workbookPr") {
@@ -781,6 +805,13 @@ pub fn sheet_sources(root: &xml::El, sheet: &Sheet) -> Vec<PreservedSource> {
         // A default width the file derives from `baseColWidth`.
         if e.attr("defaultColWidth").is_none() {
             push_source(&mut out, "sheetFormatPr.baseColWidth", model_of(&sheet.default_col_width), Vec::new());
+        }
+    }
+    if let Some(v) = root.path(&["sheetViews", "sheetView"]) {
+        push_source(&mut out, "sheetView", String::new(), attrs_of(v, SHEET_VIEW_ATTRS));
+        // The normal view's zoom, while the zoom is the one read.
+        if let Some(z) = v.attr("zoomScaleNormal") {
+            push_source(&mut out, "sheetView.zoomScaleNormal", model_of(&sheet.zoom), z);
         }
     }
     // Split (not frozen) panes, while the view the file opened on is the one read.
@@ -1067,6 +1098,59 @@ fn scan_sheet(bytes: &[u8]) -> Option<SheetScan> {
         }
     }
     Some(out)
+}
+
+/// The `<ext>` elements of the root's `<extLst>`, each with its `uri` and its XML with the
+/// namespace declarations it needs. `None` when the XML is damaged.
+fn scan_exts(bytes: &[u8]) -> Option<Vec<(String, String)>> {
+    let data = xml::to_utf8(bytes);
+    let text = std::str::from_utf8(&data).ok()?;
+    let mut reader = Reader::from_str(text);
+    let mut decls: Vec<(String, String)> = vec![];
+    let mut out = vec![];
+    let mut depth = 0usize;
+    let mut in_list = false;
+    loop {
+        let start = usize::try_from(reader.buffer_position()).ok()?;
+        match reader.read_event().ok()? {
+            Event::Eof => break,
+            Event::Start(e) if depth == 0 => {
+                depth = 1;
+                for a in e.attributes().with_checks(false).flatten() {
+                    if let Some(p) = a.key.as_ref().strip_prefix(b"xmlns:")
+                        && let (Ok(p), Ok(v)) = (std::str::from_utf8(p), std::str::from_utf8(&a.value))
+                        && !v.contains('"')
+                    {
+                        decls.push((p.to_string(), v.to_string()));
+                    }
+                }
+            }
+            Event::Start(e) if !in_list && e.local_name().as_ref() == b"extLst" => in_list = true,
+            Event::Start(e) => {
+                let uri = in_list.then(|| uri_of(&e)).flatten();
+                reader.read_to_end(e.name()).ok()?;
+                let end = usize::try_from(reader.buffer_position()).ok()?;
+                if let Some(uri) = uri.filter(|_| e.local_name().as_ref() == b"ext") {
+                    out.push((uri, with_decls(text.get(start..end)?, &decls)));
+                }
+            }
+            Event::Empty(e) if in_list && e.local_name().as_ref() == b"ext" => {
+                if let Some(uri) = uri_of(&e) {
+                    let end = usize::try_from(reader.buffer_position()).ok()?;
+                    out.push((uri, with_decls(text.get(start..end)?, &decls)));
+                }
+            }
+            Event::End(_) if in_list => in_list = false,
+            Event::End(_) => break,
+            _ => {}
+        }
+    }
+    Some(out)
+}
+
+/// The `uri` attribute of an element.
+fn uri_of(e: &BytesStart<'_>) -> Option<String> {
+    e.attributes().with_checks(false).flatten().find(|a| a.key.as_ref() == b"uri").and_then(|a| String::from_utf8(a.value.to_vec()).ok())
 }
 
 /// The `r:id` of an element (an `id` attribute with a namespace prefix).

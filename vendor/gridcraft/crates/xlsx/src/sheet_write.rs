@@ -199,12 +199,24 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
     if sheet.view != gridcraft_model::SheetViewMode::Normal {
         let _ = write!(s, " view=\"{}\"", sheet.view.as_str());
     }
-    if sheet.zoom != 100 && (10..=400).contains(&sheet.zoom) {
-        let _ = write!(s, " zoomScale=\"{0}\" zoomScaleNormal=\"{0}\"", sheet.zoom);
+    let zoomed = sheet.zoom != 100 && (10..=400).contains(&sheet.zoom);
+    if zoomed {
+        let _ = write!(s, " zoomScale=\"{}\"", sheet.zoom);
+    }
+    let normal = crate::passthrough::source(source, "sheetView.zoomScaleNormal", &crate::passthrough::model_of(&sheet.zoom));
+    match normal.and_then(|d| std::str::from_utf8(d).ok()) {
+        Some(z) => {
+            let _ = write!(s, " zoomScaleNormal=\"{}\"", crate::xml::esc_attr(z));
+        }
+        None if zoomed => {
+            let _ = write!(s, " zoomScaleNormal=\"{}\"", sheet.zoom);
+        }
+        None => {}
     }
     if sheet.view_top_left != CellRef::default() && sheet.freeze.is_none() {
         let _ = write!(s, " topLeftCell=\"{}\"", sheet.view_top_left.a1());
     }
+    crate::passthrough::push_attrs(&mut s, source, "sheetView");
     s.push_str(" workbookViewId=\"0\">");
     let active = sheet.view_active.a1();
     match sheet.freeze {
