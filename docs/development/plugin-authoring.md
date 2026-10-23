@@ -77,9 +77,10 @@ non pubblica una sessione.
 `FormatProvider` è implementato per `parse`, `render_html` e `serialize`, con
 validazione del modello e errori tipizzati al confine. `ViewProvider` è
 implementato con spec/interests/render, azioni `Replace`/`Patch`, preflight UI
-non fidata e teardown. `GridProvider` è implementato nel protocollo Grid v1:
-provider nativo, proxy WASM, finestre, patch, invalidazioni, fallback e
-ownership sono esercitati dall'esempio `esempi/grid-wasm/`.
+non fidata e teardown. `GridBytesProvider` è implementato nella versione 2 del
+protocollo Grid, sui byte del documento: provider nativo, proxy WASM, finestre,
+patch, giornale, invalidazioni, fallback e ownership sono esercitati
+dall'esempio `esempi/grid-wasm/`.
 
 `IndexProvider` ed `EventHandler` inbound sono implementati: un componente
 reale possiede una route e prova feed/query/flush/close/`up_to_date`/reconcile
