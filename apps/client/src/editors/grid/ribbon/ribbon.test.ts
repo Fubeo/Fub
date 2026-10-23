@@ -4,7 +4,7 @@
 // quali comandi dà e con quali parametri, la tastiera di Excel, lo smontaggio.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fixture from "../../../__fixtures__/xlsx-grid.json";
-import type { GridCellStyle, GridCommandState, GridSheetView, GridTable } from "../../../host/contract";
+import type { GridBytesWindow, GridCellStyle, GridCommandState, GridObject, GridSheetView, GridTable } from "../../../host/contract";
 import { iconEl } from "../../../ui/icons";
 import { closeContextMenu } from "../../../ui/menu";
 import { mountRibbon, type GridRibbon, type RibbonEngine } from "./ribbon";
@@ -34,6 +34,7 @@ interface Fake {
   style: Partial<GridCellStyle> | undefined;
   tables: GridTable[];
   focus: { row: number; column: number };
+  object: GridObject | null;
   on: boolean;
   queries: Record<string, unknown>;
 }
@@ -53,6 +54,7 @@ function fake(): Fake {
     style: undefined,
     tables: [],
     focus: { row: 0, column: 0 },
+    object: null,
     on: true,
     queries: {},
     engine: null as unknown as RibbonEngine,
@@ -68,6 +70,7 @@ function fake(): Fake {
     hiddenSheets: () => [],
     viewportSize: () => ({ width: 800, height: 600 }),
     selection: () => ({ focus: state.focus }),
+    selectedObject: () => state.object,
     command: (id, params = "{}") => {
       state.calls.push([id, JSON.parse(params)]);
       return true;
@@ -176,6 +179,68 @@ describe("la barra multifunzione", () => {
     total.click();
     expect(last()).toEqual(["table.totalRow", { table: "Vendite", on: true }]);
     expect((control("Nome tabella") as HTMLInputElement).value).toBe("Vendite");
+  });
+
+  it("inserisce forme, grafici e caselle di testo", () => {
+    tab("Inserisci").click();
+    control("Forme").click();
+    menuItem("Ovale")!.click();
+    expect(last()).toEqual(["insert.shape", { kind: "ellipse" }]);
+    control("Colonne o barre").click();
+    menuItem("Barre in pila")!.click();
+    expect(last()).toEqual(["insert.chart", { type: "bar", subtype: "stacked" }]);
+    control("Grafici consigliati").click();
+    expect(last()).toEqual(["insert.recommendedCharts", {}]);
+    control("Casella di testo").click();
+    expect(last()).toEqual(["insert.textBox", {}]);
+  });
+
+  it("con un oggetto selezionato mostra le sue schede, e i comandi vanno a lui", () => {
+    const objects = (fixture.windows as GridBytesWindow[])[0].objects;
+    const chart = objects.find((object) => object.kind === "chart")!;
+    const shape = objects.find((object) => object.kind === "shape")!;
+    f.tables = [{
+      name: "Vendite", row: 0, column: 0, rows: 5, columns: 3, header_row: true, totals_row: false, banded_rows: true,
+      banded_columns: false, first_column: false, last_column: false, filter_button: true, style: "TableStyleMedium2",
+    }];
+    f.object = chart;
+    ribbon.refresh();
+    // Con un oggetto selezionato la tabella sotto non ha la sua scheda.
+    expect(tabNames()).toEqual(["Home", "Inserisci", "Layout di pagina", "Formule", "Dati", "Revisione", "Visualizza", "Struttura grafico", "Formato"]);
+    tab("Struttura grafico").click();
+    control("Scambia righe/colonne").click();
+    expect(last()).toEqual(["chart.switchRowColumn", { chart: chart.id }]);
+    control("Cambia tipo di grafico").click();
+    menuItem("Torta")!.click();
+    expect(last()).toEqual(["chart.changeType", { chart: chart.id, type: "pie" }]);
+    control("Aggiungi elemento grafico").click();
+    menuItem("Legenda in alto")!.click();
+    expect(last()).toEqual(["chart.set", { chart: chart.id, legend: "top" }]);
+    tab("Formato").click();
+    control("Riempimento forma").click();
+    expect(last()).toEqual(["chart.shapeFill", { chart: chart.id, color: "#4472C4" }]);
+    // Il contorno è delle forme: per un grafico non si vede.
+    expect(control("Contorno forma").closest("[hidden]")).not.toBeNull();
+
+    f.object = shape;
+    ribbon.refresh();
+    expect(tabNames()).not.toContain("Struttura grafico");
+    // Un colore del tema arriva come esadecimale: la forma non lo conosce.
+    control("Altri colori: Contorno forma").click();
+    [...document.querySelectorAll<HTMLButtonElement>(".grid-ribbon-swatch")]
+      .find((el) => el.getAttribute("aria-label") === "Colore 1")!.click();
+    const [id, params] = last() as [string, { kind: string; id: number; color: string }];
+    expect([id, params.kind, params.id]).toEqual(["chart.shapeOutline", "shape", shape.id]);
+    expect(params.color).toMatch(/^#[0-9A-Fa-f]{6}$/u);
+    control("Porta in primo piano").click();
+    expect(last()).toEqual(["arrange.bringForward", { kind: "shape", id: shape.id, toFront: true }]);
+    control("Elimina oggetto").click();
+    expect(last()).toEqual(["object.delete", { kind: "shape", id: shape.id }]);
+
+    f.object = null;
+    ribbon.refresh();
+    expect(tabNames()).toContain("Struttura tabella");
+    expect(tabNames()).not.toContain("Formato");
   });
 
   it("ripete l'ultimo bordo scelto", () => {

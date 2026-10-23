@@ -27,6 +27,10 @@ pub const MAX_GRID_SESSION_ROWS: u32 = 1_048_576;
 pub const MAX_GRID_SESSION_COLUMNS: u32 = 16_384;
 pub const MAX_GRID_SESSION_CELLS: u64 = 4_000_000;
 pub const MAX_GRID_SESSION_WINDOWS: usize = 256;
+/// Le immagini che una richiesta dice di avere già, al più, e la misura
+/// della chiave di una.
+pub const MAX_GRID_KNOWN_MEDIA: usize = 256;
+pub const MAX_GRID_MEDIA_KEY_BYTES: usize = 64;
 
 /// Binding dichiarato dal provider: il formato sceglie una famiglia e una
 /// versione di protocollo, mai una versione simile per tentativi.
@@ -239,6 +243,10 @@ pub struct GridWindowRequest {
     pub row_count: u32,
     pub column_start: u32,
     pub column_count: u32,
+    /// Le chiavi delle immagini che la shell ha già: la finestra non ne
+    /// riporta i byte.
+    #[serde(default)]
+    pub known_media: Vec<String>,
 }
 
 impl GridWindowRequest {
@@ -264,6 +272,16 @@ impl GridWindowRequest {
         if cells > MAX_GRID_WINDOW_CELLS {
             return Err(PluginError::BadArgs(
                 "grid window exceeds cell limit".into(),
+            ));
+        }
+        if self.known_media.len() > MAX_GRID_KNOWN_MEDIA
+            || self
+                .known_media
+                .iter()
+                .any(|key| key.is_empty() || key.len() > MAX_GRID_MEDIA_KEY_BYTES)
+        {
+            return Err(PluginError::BadArgs(
+                "grid window names too many known media".into(),
             ));
         }
         Ok(())
@@ -442,6 +460,7 @@ mod tests {
             row_count: rows,
             column_start: 0,
             column_count: columns,
+            known_media: Vec::new(),
         }
     }
 
@@ -461,6 +480,13 @@ mod tests {
         assert!(request(MAX_GRID_WINDOW_ROWS + 1, 1).validate().is_err());
         assert!(request(1, MAX_GRID_WINDOW_COLUMNS + 1).validate().is_err());
         assert!(request(0, 1).validate().is_err());
+        let mut known = request(1, 1);
+        known.known_media = vec!["a".repeat(MAX_GRID_MEDIA_KEY_BYTES); MAX_GRID_KNOWN_MEDIA];
+        assert!(known.validate().is_ok());
+        known.known_media.push("b".into());
+        assert!(known.validate().is_err());
+        known.known_media = vec![String::new()];
+        assert!(known.validate().is_err());
     }
 
     #[test]

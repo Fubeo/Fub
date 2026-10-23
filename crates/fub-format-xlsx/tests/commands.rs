@@ -80,6 +80,7 @@ fn cells(
                 row_count: 10,
                 column_start: 0,
                 column_count: 6,
+                known_media: Vec::new(),
             },
         )
         .unwrap()
@@ -824,6 +825,7 @@ fn la_barra_legge_vista_tabelle_e_libro_dopo_i_comandi() {
                 row_count: 4,
                 column_start: 1,
                 column_count: 4,
+                known_media: Vec::new(),
             },
         )
         .unwrap();

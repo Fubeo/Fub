@@ -2168,11 +2168,13 @@ dependencies = [
 name = "fub-format-xlsx"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "cfb 0.15.0",
  "fub-abi",
  "fub-format-markdown",
  "fub-sdk",
  "gridcraft-calc",
+ "gridcraft-chart",
  "gridcraft-core",
  "gridcraft-engine",
  "gridcraft-model",

@@ -671,6 +671,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-format-xlsx/src/objects.rs::media",
+            (
+                Family::AsciiCase,
+                "porta il tipo di un'immagine della cartella in forma canonica prima di \
+                 confrontarlo con l'elenco chiuso dei tipi che la shell disegna: i tipi MIME sono \
+                 token ASCII e la specifica (RFC 2045, §5.1) li dichiara uguali a meno delle \
+                 maiuscole.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/rules/media.rs::kind_of",
             (
                 Family::AsciiCase,

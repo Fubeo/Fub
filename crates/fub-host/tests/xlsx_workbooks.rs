@@ -128,6 +128,7 @@ fn on_disk_cells(vault: &Vault, id: &DocId) -> Vec<GridBytesCell> {
                 row_count: 3,
                 column_start: 0,
                 column_count: 2,
+                known_media: Vec::new(),
             },
         )
         .unwrap();

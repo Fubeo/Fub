@@ -10,7 +10,7 @@
 //
 // I nomi che il provider conosce (gli stili, i temi, i formati) restano quelli
 // del file, in inglese: sono valori, non testo. Si traduce ciò che si legge.
-import type { GridBook, GridCellStyle, GridSheetView, GridTable } from "../../../host/contract";
+import type { GridBook, GridCellStyle, GridObject, GridSheetView, GridTable } from "../../../host/contract";
 import { resultList } from "../dialogs/result";
 import type { RibbonKey } from "./strings";
 
@@ -29,6 +29,8 @@ export interface RibbonView {
   readonly book: GridBook | null;
   /// La tabella che contiene la cella attiva.
   readonly table: GridTable | null;
+  /// L'oggetto selezionato sul foglio: un grafico, un'immagine, una forma.
+  readonly object: GridObject | null;
   /// I dodici colori del tema della cartella.
   readonly theme: readonly string[];
   readonly hidden: readonly { readonly id: string; readonly name: string }[];
@@ -72,6 +74,9 @@ interface Base {
   readonly labelled?: boolean;
   /// Una classe in più sul controllo, per il segno («grassetto»).
   readonly className?: string;
+  /// Si vede soltanto se vale, oltre al catalogo: un controllo che serve a un
+  /// tipo di oggetto e non agli altri.
+  readonly when?: (view: RibbonView) => boolean;
 }
 
 /// Un pulsante che dà un comando; `pressed` lo fa interruttore.
@@ -111,6 +116,11 @@ export interface ColorControl extends Base {
   /// Il valore che toglie il colore, e come si chiama.
   readonly empty: { readonly value: "auto" | "none"; readonly label: RibbonKey };
   readonly initial: string;
+  /// I parametri oltre al colore: l'oggetto a cui va.
+  readonly params?: (view: RibbonView) => Params;
+  /// Il comando vuole un colore esadecimale, e un colore del tema si porta
+  /// al suo valore.
+  readonly hex?: boolean;
 }
 
 /// Un elenco a discesa nativo: il carattere, la dimensione, il formato.
@@ -177,8 +187,9 @@ export interface RibbonTab {
   readonly label: RibbonKey;
   readonly keytip: string;
   readonly groups: readonly RibbonGroup[];
-  /// Una scheda che c'è soltanto quando la selezione è in una tabella.
-  readonly contextual?: boolean;
+  /// Una scheda che c'è soltanto quando la selezione è in una tabella, o
+  /// quando è selezionato un grafico, o un oggetto qualsiasi.
+  readonly contextual?: "table" | "chart" | "object";
 }
 
 /// I controlli di una colonna, nell'ordine in cui si leggono.
@@ -924,6 +935,106 @@ const ICON_SETS: readonly { readonly key: RibbonKey; readonly set: string }[] = 
 
 // ── Inserisci ───────────────────────────────────────────────────────────
 
+/// Le forme del menu Forme, come le chiama `insert.shape`.
+const SHAPES: readonly { readonly kind: string; readonly key: RibbonKey; readonly icon: string }[] = [
+  { kind: "rectangle", key: "ribbon.shape.rectangle", icon: "gr-shape-rectangle" },
+  { kind: "roundedRectangle", key: "ribbon.shape.rounded_rectangle", icon: "gr-shape-rounded" },
+  { kind: "ellipse", key: "ribbon.shape.ellipse", icon: "gr-shape-ellipse" },
+  { kind: "triangle", key: "ribbon.shape.triangle", icon: "gr-shape-triangle" },
+  { kind: "line", key: "ribbon.shape.line", icon: "gr-shape-line" },
+  { kind: "arrow", key: "ribbon.shape.arrow", icon: "gr-arrow-right" },
+  { kind: "textBox", key: "ribbon.shape.text_box", icon: "gr-text-box" },
+];
+
+/// Le icone che `insert.icons` disegna.
+const ICON_NAMES: readonly { readonly name: string; readonly key: RibbonKey }[] = [
+  { name: "check", key: "ribbon.icon.check" },
+  { name: "chart", key: "ribbon.icon.chart" },
+  { name: "table", key: "ribbon.icon.table" },
+  { name: "sum", key: "ribbon.icon.sum" },
+  { name: "filter", key: "ribbon.icon.filter" },
+  { name: "lock", key: "ribbon.icon.lock" },
+  { name: "comment", key: "ribbon.icon.comment" },
+  { name: "picture", key: "ribbon.icon.picture" },
+  { name: "book", key: "ribbon.icon.book" },
+  { name: "folder", key: "ribbon.icon.folder" },
+  { name: "search", key: "ribbon.icon.search" },
+  { name: "calc", key: "ribbon.icon.calc" },
+];
+
+/// Un tipo di grafico, come lo chiamano `insert.chart` e `chart.changeType`.
+interface ChartKind {
+  readonly type: string;
+  readonly subtype?: string;
+  readonly key: RibbonKey;
+  readonly separator?: boolean;
+}
+
+const COLUMN_CHARTS: readonly ChartKind[] = [
+  { type: "column", subtype: "clustered", key: "ribbon.chart.column_clustered" },
+  { type: "column", subtype: "stacked", key: "ribbon.chart.column_stacked" },
+  { type: "column", subtype: "stacked100", key: "ribbon.chart.column_stacked100" },
+  { type: "bar", subtype: "clustered", key: "ribbon.chart.bar_clustered", separator: true },
+  { type: "bar", subtype: "stacked", key: "ribbon.chart.bar_stacked" },
+  { type: "bar", subtype: "stacked100", key: "ribbon.chart.bar_stacked100" },
+];
+
+const LINE_CHARTS: readonly ChartKind[] = [
+  { type: "line", key: "ribbon.chart.line" },
+  { type: "line", subtype: "markers", key: "ribbon.chart.line_markers" },
+  { type: "line", subtype: "stacked", key: "ribbon.chart.line_stacked" },
+  { type: "area", key: "ribbon.chart.area", separator: true },
+  { type: "area", subtype: "stacked", key: "ribbon.chart.area_stacked" },
+  { type: "area", subtype: "stacked100", key: "ribbon.chart.area_stacked100" },
+];
+
+const PIE_CHARTS: readonly ChartKind[] = [
+  { type: "pie", key: "ribbon.chart.pie" },
+  { type: "doughnut", key: "ribbon.chart.doughnut" },
+];
+
+const SCATTER_CHARTS: readonly ChartKind[] = [
+  { type: "scatter", key: "ribbon.chart.scatter" },
+  { type: "bubble", key: "ribbon.chart.bubble" },
+];
+
+const OTHER_CHARTS: readonly ChartKind[] = [
+  { type: "radar", key: "ribbon.chart.radar" },
+  { type: "combo", key: "ribbon.chart.combo" },
+  { type: "stock", key: "ribbon.chart.stock" },
+  { type: "histogram", key: "ribbon.chart.histogram", separator: true },
+  { type: "boxWhisker", key: "ribbon.chart.box_whisker" },
+  { type: "waterfall", key: "ribbon.chart.waterfall" },
+  { type: "funnel", key: "ribbon.chart.funnel" },
+  { type: "treemap", key: "ribbon.chart.treemap", separator: true },
+  { type: "sunburst", key: "ribbon.chart.sunburst" },
+];
+
+/// Il grafico selezionato, per i comandi `chart.*`.
+const theChart = (view: RibbonView): Params => (view.object?.kind === "chart" ? { chart: view.object.id } : {});
+
+/// L'oggetto selezionato, per `object.*` e `arrange.*`.
+const theObject = (view: RibbonView): Params => (view.object ? { kind: view.object.kind, id: view.object.id } : {});
+
+const chartSelected = (view: RibbonView) => view.object?.kind === "chart";
+const shapeSelected = (view: RibbonView) => view.object?.kind === "shape";
+
+/// Le voci dei tipi di grafico: `insert.chart` sulla selezione, o
+/// `chart.changeType` sul grafico selezionato.
+function chartEntries(id: string, kinds: readonly ChartKind[], view: RibbonView): readonly MenuEntry[] {
+  const target = id === "insert.chart" ? {} : theChart(view);
+  return kinds.map(({ type, subtype, key, separator }) => ({
+    label: key,
+    id,
+    params: { ...target, type, ...(subtype ? { subtype } : {}) },
+    separator,
+  }));
+}
+
+function chartMenu(id: string, label: RibbonKey, keytip: string, icon: string, kinds: readonly ChartKind[]): MenuControl {
+  return { kind: "menu", label, keytip, icon, labelled: true, items: (view) => chartEntries(id, kinds, view) };
+}
+
 const INSERT: RibbonTab = {
   id: "insert",
   label: "ribbon.tab.insert",
@@ -935,6 +1046,52 @@ const INSERT: RibbonTab = {
       icon: "gr-table",
       keytip: "ZT",
       columns: [{ kind: "button", id: "insert.table", label: "ribbon.insert.table", keytip: "T", icon: "gr-table", size: "large" }],
+    },
+    {
+      id: "illustrations",
+      label: "ribbon.group.illustrations",
+      icon: "gr-shapes",
+      keytip: "ZI",
+      columns: [
+        {
+          kind: "menu",
+          label: "ribbon.insert.shapes",
+          keytip: "SH",
+          icon: "gr-shapes",
+          size: "large",
+          items: () => SHAPES.map(({ kind, key, icon }) => ({ label: key, id: "insert.shape", params: { kind }, icon })),
+        },
+        {
+          kind: "menu",
+          label: "ribbon.insert.icons",
+          keytip: "Y1",
+          icon: "gr-icons",
+          size: "large",
+          items: () => ICON_NAMES.map(({ name, key }) => ({ label: key, id: "insert.icons", params: { name } })),
+        },
+      ],
+    },
+    {
+      id: "charts",
+      label: "ribbon.group.charts",
+      icon: "gr-chart-column",
+      keytip: "ZC",
+      columns: [
+        { kind: "button", id: "insert.recommendedCharts", label: "ribbon.insert.recommended_charts", keytip: "R", icon: "gr-chart-recommended", size: "large" },
+        {
+          rows: [
+            [chartMenu("insert.chart", "ribbon.chart.family.column", "C1", "gr-chart-column", COLUMN_CHARTS)],
+            [chartMenu("insert.chart", "ribbon.chart.family.line", "N", "gr-chart-line", LINE_CHARTS)],
+            [chartMenu("insert.chart", "ribbon.chart.family.pie", "Q", "gr-chart-pie", PIE_CHARTS)],
+          ],
+        },
+        {
+          rows: [
+            [chartMenu("insert.chart", "ribbon.chart.family.scatter", "D", "gr-chart-scatter", SCATTER_CHARTS)],
+            [chartMenu("insert.chart", "ribbon.chart.family.other", "A", "gr-chart-other", OTHER_CHARTS)],
+          ],
+        },
+      ],
     },
     {
       id: "controls",
@@ -965,6 +1122,13 @@ const INSERT: RibbonTab = {
       icon: "gr-link",
       keytip: "ZL",
       columns: [{ kind: "button", id: "insert.link", dialog: "insertLink", label: "ribbon.insert.link", keytip: "I", icon: "gr-link", size: "large" }],
+    },
+    {
+      id: "text",
+      label: "ribbon.group.text",
+      icon: "gr-text-box",
+      keytip: "ZX",
+      columns: [{ kind: "button", id: "insert.textBox", label: "ribbon.insert.text_box", keytip: "X", icon: "gr-text-box", size: "large" }],
     },
   ],
 };
@@ -1463,7 +1627,7 @@ const TABLE_DESIGN: RibbonTab = {
   id: "table",
   label: "ribbon.tab.table",
   keytip: "JT",
-  contextual: true,
+  contextual: "table",
   groups: [
     {
       id: "properties",
@@ -1537,8 +1701,190 @@ const TABLE_DESIGN: RibbonTab = {
   ],
 };
 
+// ── Struttura grafico ───────────────────────────────────────────────────
+
+/// Un elemento del grafico, acceso o spento.
+const chartElement = (key: RibbonKey, element: string, on: boolean, extra: Params = {}, separator = false) =>
+  (view: RibbonView): MenuEntry => ({ label: key, id: "chart.addElement", params: { ...theChart(view), element, on, ...extra }, separator });
+
+const CHART_DESIGN: RibbonTab = {
+  id: "chart",
+  label: "ribbon.tab.chart",
+  keytip: "JC",
+  contextual: "chart",
+  groups: [
+    {
+      id: "layouts",
+      label: "ribbon.group.chart_layouts",
+      icon: "gr-chart-element",
+      keytip: "ZL",
+      columns: [
+        {
+          kind: "menu",
+          label: "ribbon.chart.add_element",
+          keytip: "A",
+          icon: "gr-chart-element",
+          size: "large",
+          items: (view) => [
+            chartElement("ribbon.chart.element.title", "title", true)(view),
+            chartElement("ribbon.chart.element.no_title", "title", false)(view),
+            ...(["bottom", "top", "left", "right"] as const).map((position, at) => ({
+              label: `ribbon.chart.legend.${position}` as RibbonKey,
+              id: "chart.set",
+              params: { ...theChart(view), legend: position },
+              separator: at === 0,
+            })),
+            { label: "ribbon.chart.legend.none", id: "chart.set", params: { ...theChart(view), legend: "none" } },
+            chartElement("ribbon.chart.element.data_labels", "dataLabels", true, {}, true)(view),
+            chartElement("ribbon.chart.element.no_data_labels", "dataLabels", false)(view),
+            chartElement("ribbon.chart.element.gridlines", "gridlines", true, {}, true)(view),
+            chartElement("ribbon.chart.element.no_gridlines", "gridlines", false)(view),
+            chartElement("ribbon.chart.element.axis_titles", "axisTitles", true, {}, true)(view),
+            chartElement("ribbon.chart.element.no_axis_titles", "axisTitles", false)(view),
+            chartElement("ribbon.chart.element.trendline", "trendline", true, { type: "linear" }, true)(view),
+            chartElement("ribbon.chart.element.no_trendline", "trendline", false)(view),
+          ],
+        },
+        {
+          kind: "menu",
+          label: "ribbon.chart.quick_layout",
+          keytip: "L",
+          icon: "gr-chart-layout",
+          size: "large",
+          items: (view) => [1, 2, 3, 4, 5, 6].map((layout) => ({
+            label: { raw: `Layout ${layout}` },
+            id: "chart.quickLayout",
+            params: { ...theChart(view), layout },
+          })),
+        },
+      ],
+    },
+    {
+      id: "styles",
+      label: "ribbon.group.chart_styles",
+      icon: "gr-theme",
+      keytip: "ZS",
+      columns: [
+        {
+          kind: "menu",
+          label: "ribbon.chart.change_colors",
+          keytip: "H",
+          icon: "gr-theme",
+          size: "large",
+          items: (view) => [
+            { label: "ribbon.chart.colors.colorful", id: "chart.changeColors", params: { ...theChart(view), palette: "colorful" } },
+            { label: "ribbon.chart.colors.monochrome", id: "chart.changeColors", params: { ...theChart(view), palette: "monochrome" } },
+            ...[1, 2, 3, 4, 5, 6].map((n, at) => ({
+              label: `ribbon.chart.colors.accent${n}` as RibbonKey,
+              id: "chart.changeColors",
+              params: { ...theChart(view), palette: `accent${n}` },
+              separator: at === 0,
+            })),
+          ],
+        },
+      ],
+    },
+    {
+      id: "data",
+      label: "ribbon.group.chart_data",
+      icon: "gr-chart-switch",
+      keytip: "ZD",
+      columns: [
+        { kind: "button", id: "chart.switchRowColumn", label: "ribbon.chart.switch_row_column", keytip: "W", icon: "gr-chart-switch", size: "large", params: theChart },
+      ],
+    },
+    {
+      id: "type",
+      label: "ribbon.group.chart_type",
+      icon: "gr-chart-column",
+      keytip: "ZT",
+      columns: [
+        {
+          kind: "menu",
+          label: "ribbon.chart.change_type",
+          keytip: "C",
+          icon: "gr-chart-column",
+          size: "large",
+          items: (view) => [COLUMN_CHARTS, LINE_CHARTS, PIE_CHARTS, SCATTER_CHARTS, OTHER_CHARTS].flatMap((kinds, at) =>
+            chartEntries("chart.changeType", kinds, view).map((entry, index) => ({ ...entry, separator: entry.separator || (at > 0 && index === 0) }))),
+        },
+      ],
+    },
+  ],
+};
+
+// ── Formato dell'oggetto ────────────────────────────────────────────────
+
+const OBJECT_FORMAT: RibbonTab = {
+  id: "object",
+  label: "ribbon.tab.object",
+  keytip: "JA",
+  contextual: "object",
+  groups: [
+    {
+      id: "shape_styles",
+      label: "ribbon.group.shape_styles",
+      icon: "gr-fill",
+      keytip: "ZS",
+      columns: [
+        {
+          rows: [
+            [{
+              kind: "color",
+              id: "chart.shapeFill",
+              label: "ribbon.object.fill",
+              keytip: "SF",
+              icon: "gr-fill",
+              labelled: true,
+              empty: { value: "none", label: "ribbon.object.fill.none" },
+              initial: "#4472C4",
+              hex: true,
+              when: (view) => chartSelected(view) || shapeSelected(view),
+              params: (view) => (chartSelected(view) ? theChart(view) : { kind: "shape", id: view.object?.id }),
+            }],
+            [{
+              kind: "color",
+              id: "chart.shapeOutline",
+              label: "ribbon.object.outline",
+              keytip: "SO",
+              icon: "gr-shape-outline",
+              labelled: true,
+              empty: { value: "none", label: "ribbon.object.outline.none" },
+              initial: "#2F5597",
+              hex: true,
+              when: shapeSelected,
+              params: (view) => ({ kind: "shape", id: view.object?.id }),
+            }],
+          ],
+        },
+      ],
+    },
+    {
+      id: "arrange",
+      label: "ribbon.group.arrange",
+      icon: "gr-bring-forward",
+      keytip: "ZA",
+      columns: [
+        {
+          rows: [
+            [{ kind: "button", id: "arrange.bringForward", label: "ribbon.arrange.forward", keytip: "AF", icon: "gr-bring-forward", labelled: true, params: theObject }],
+            [{ kind: "button", id: "arrange.bringForward", label: "ribbon.arrange.front", keytip: "AT", icon: "gr-bring-front", labelled: true, params: (view) => ({ ...theObject(view), toFront: true }) }],
+          ],
+        },
+        {
+          rows: [
+            [{ kind: "button", id: "arrange.sendBackward", label: "ribbon.arrange.backward", keytip: "AE", icon: "gr-send-backward", labelled: true, params: theObject }],
+            [{ kind: "button", id: "arrange.sendBackward", label: "ribbon.arrange.back", keytip: "AB", icon: "gr-send-back", labelled: true, params: (view) => ({ ...theObject(view), toBack: true }) }],
+          ],
+        },
+        { kind: "button", id: "object.delete", label: "ribbon.object.delete", keytip: "D", icon: "gr-delete", size: "large", params: theObject },
+      ],
+    },
+  ],
+};
+
 /// Le schede, nell'ordine della barra.
-export const RIBBON_TABS: readonly RibbonTab[] = [HOME, INSERT, PAGE_LAYOUT, FORMULAS, DATA, REVIEW, VIEW, TABLE_DESIGN];
+export const RIBBON_TABS: readonly RibbonTab[] = [HOME, INSERT, PAGE_LAYOUT, FORMULAS, DATA, REVIEW, VIEW, TABLE_DESIGN, CHART_DESIGN, OBJECT_FORMAT];
 
 /// I comandi che un controllo dà o che lo fanno vedere, senza aprire i menu
 /// che arrivano dopo.

@@ -1430,6 +1430,7 @@ pub fn a_grid_bytes_provider_supports_the_lifecycle(
         row_count: 1,
         column_start: 0,
         column_count: 1,
+        known_media: Vec::new(),
     };
     let input = |provider: &mut dyn GridBytesProvider, instance: &str, revision: &Revision| {
         provider

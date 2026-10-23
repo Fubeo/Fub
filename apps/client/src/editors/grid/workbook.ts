@@ -19,10 +19,20 @@ import type {
   GridHorizontalAlign,
   GridMerge,
   GridNotice,
+  GridObject,
+  GridObjectKind,
   GridSheetView,
   GridTable,
 } from "../../host/contract";
-import { GRID_THEME_COLORS } from "../../host/contract";
+import {
+  GRID_MEDIA_TYPES,
+  GRID_THEME_COLORS,
+  MAX_GRID_MEDIA_BYTES,
+  MAX_GRID_MEDIA_KEY_BYTES,
+  MAX_GRID_OBJECT_SVG_BYTES,
+  MAX_GRID_SHAPE_TEXT_BYTES,
+  MAX_GRID_WINDOW_OBJECTS,
+} from "../../host/contract";
 import type { GridCell, GridCellStyle, GridColumn, GridPosition, GridRow, GridSheet, GridWorkbook } from "./model";
 
 const MAX_SHEETS = 1_024;
@@ -38,6 +48,23 @@ const MAX_WINDOW_TABLES = 1_024;
 const VIEW_MODES: ReadonlySet<string> = new Set(["normal", "page_layout", "page_break_preview"]);
 const CALCULATIONS: ReadonlySet<string> = new Set(["automatic", "automatic_except_tables", "manual"]);
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/u;
+const MEDIA_KEY = /^[0-9A-Za-z]+$/u;
+const BASE64 = /^[0-9A-Za-z+/=]*$/u;
+const OBJECT_KINDS: ReadonlySet<string> = new Set(["chart", "sparkline", "image", "cell_picture", "shape"]);
+const SHAPE_KINDS: ReadonlySet<string> = new Set([
+  "rectangle", "rounded_rectangle", "ellipse", "triangle", "line", "arrow", "text_box", "icon", "ink",
+]);
+const SHAPE_ALIGNS: ReadonlySet<string> = new Set(["left", "center", "right"]);
+const SHAPE_ANCHORS: ReadonlySet<string> = new Set(["top", "middle", "bottom"]);
+const MISSING: ReadonlySet<string> = new Set(["too_large", "unsupported"]);
+/// L'ordine in cui gli oggetti si disegnano, per tipo: quello del provider.
+const OBJECT_ORDER: Readonly<Record<GridObjectKind, number>> = {
+  cell_picture: 0,
+  sparkline: 1,
+  image: 2,
+  shape: 3,
+  chart: 4,
+};
 /// Le misure di Excel sono per il suo carattere a 11 punti; la griglia usa
 /// quello dell'interfaccia, più grande. La riga di serie di Excel (20 px)
 /// diventa così quella del foglio di Fub (28 px), e il resto in proporzione.
@@ -60,6 +87,9 @@ export interface WorkbookSheet {
   readonly merges: readonly GridMerge[];
   /// Le tabelle che le finestre lette toccano, ognuna una volta.
   readonly tables: readonly GridTable[];
+  /// Gli oggetti che le finestre lette toccano, ognuno una volta,
+  /// nell'ordine in cui si disegnano.
+  readonly objects: readonly GridObject[];
   /// Come il foglio si guarda; quello di serie finché nessuna finestra è letta.
   readonly view: GridSheetView;
 }
@@ -181,6 +211,91 @@ export function validateBook(book: GridBytesSession["book"]): void {
   }
 }
 
+function bytesOf(text: string): number {
+  return new TextEncoder().encode(text).length;
+}
+
+/// La chiave di un oggetto fra le finestre: il tipo e il suo id.
+export function objectKey(object: Pick<GridObject, "kind" | "id">): string {
+  return `${object.kind}:${object.id}`;
+}
+
+/// Controlla un oggetto della finestra, con le regole di
+/// `fub_abi::GridObject::validate`.
+function validateObject(object: GridObject, rows: number, columns: number): void {
+  const size = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1_000_000;
+  const offset = (value: unknown) => typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= 1_000_000;
+  if (
+    !object
+    || !OBJECT_KINDS.has(object.kind)
+    || !count(object.id, 0xffff_ffff)
+    || !count(object.row, rows - 1)
+    || !count(object.column, columns - 1)
+    || !offset(object.dx)
+    || !offset(object.dy)
+    || !size(object.width)
+    || !size(object.height)
+    || typeof object.alt !== "string"
+    || bytesOf(object.alt) > MAX_GRID_SHAPE_TEXT_BYTES
+    || (object.missing !== null && !MISSING.has(object.missing))
+  ) {
+    throw new Error("malformed grid object");
+  }
+  if (object.svg !== null && (typeof object.svg !== "string" || object.svg.length > MAX_GRID_OBJECT_SVG_BYTES || !object.svg.startsWith("<svg"))) {
+    throw new Error("malformed grid object drawing");
+  }
+  const media = object.media;
+  if (
+    media !== null
+    && (
+      !media
+      || !GRID_MEDIA_TYPES.includes(media.mime)
+      || typeof media.key !== "string"
+      || media.key.length === 0
+      || media.key.length > MAX_GRID_MEDIA_KEY_BYTES
+      || !MEDIA_KEY.test(media.key)
+      || (media.data !== null && (typeof media.data !== "string" || media.data.length > MAX_GRID_MEDIA_BYTES || !BASE64.test(media.data)))
+    )
+  ) {
+    throw new Error("malformed grid object media");
+  }
+  const shape = object.shape;
+  if (
+    shape !== null
+    && (
+      !shape
+      || !SHAPE_KINDS.has(shape.kind)
+      || (shape.fill !== null && !HEX_COLOR.test(shape.fill))
+      || (shape.line !== null && !HEX_COLOR.test(shape.line))
+      || typeof shape.text_color !== "string"
+      || !HEX_COLOR.test(shape.text_color)
+      || typeof shape.text !== "string"
+      || bytesOf(shape.text) > MAX_GRID_SHAPE_TEXT_BYTES
+      || (shape.font !== null && (typeof shape.font !== "string" || shape.font === "" || bytesOf(shape.font) > MAX_FONT_BYTES))
+      || typeof shape.font_size !== "number"
+      || !Number.isFinite(shape.font_size)
+      || shape.font_size <= 0
+      || shape.font_size > 4_000
+      || typeof shape.bold !== "boolean"
+      || typeof shape.italic !== "boolean"
+      || typeof shape.right_to_left !== "boolean"
+      || !SHAPE_ALIGNS.has(shape.align)
+      || !SHAPE_ANCHORS.has(shape.anchor)
+    )
+  ) {
+    throw new Error("malformed grid shape");
+  }
+  // Ogni oggetto porta ciò che il suo tipo mostra, o soltanto il perché
+  // manca; una forma non manca mai.
+  const carries = `${object.svg !== null}${media !== null}${shape !== null}`;
+  const wanted = object.missing !== null
+    ? (object.kind === "shape" ? null : "falsefalsefalse")
+    : object.kind === "chart" || object.kind === "sparkline"
+      ? "truefalsefalse"
+      : object.kind === "shape" ? "falsefalsetrue" : "falsetruefalse";
+  if (carries !== wanted) throw new Error("grid object carries the wrong drawing");
+}
+
 /// Controlla una finestra della sessione.
 export function validateBytesWindow(window: GridBytesWindow, session: GridBytesSession): void {
   const sheet = session.sheets.find((candidate) => candidate.id === window.sheet);
@@ -249,6 +364,8 @@ export function validateBytesWindow(window: GridBytesWindow, session: GridBytesS
       throw new Error("malformed grid bytes table");
     }
   }
+  if (!Array.isArray(window.objects) || window.objects.length > MAX_GRID_WINDOW_OBJECTS) throw new Error("malformed grid bytes window");
+  for (const object of window.objects) validateObject(object, sheet.row_count, sheet.column_count);
   const view = window.view;
   if (
     !view
@@ -351,9 +468,17 @@ export function workbookView(
     const list: GridCell[] = [];
     const merges = new Map<string, GridMerge>();
     const tables = new Map<string, GridTable>();
+    const objects = new Map<string, GridObject>();
     for (const window of own) {
       for (const merge of window.merges) merges.set(`${merge.row}:${merge.column}`, merge);
       for (const table of window.tables) tables.set(table.name, table);
+      for (const object of window.objects) {
+        // Un'immagine i cui byte una finestra non ha portato li prende da
+        // un'altra che li ha.
+        const key = objectKey(object);
+        const known = objects.get(key);
+        if (!known || (known.media?.data === null && object.media?.data !== null)) objects.set(key, object);
+      }
       const rowIndex = new Map(window.rows.map((row) => [row.id, row.index] as const));
       const columnIndex = new Map(window.columns.map((column) => [column.id, column.index] as const));
       for (const cell of window.cells) {
@@ -381,6 +506,7 @@ export function workbookView(
       cells: map,
       merges: [...merges.values()],
       tables: [...tables.values()],
+      objects: [...objects.values()].sort((left, right) => OBJECT_ORDER[left.kind] - OBJECT_ORDER[right.kind]),
       view: own[own.length - 1]?.view ?? previous?.sheets[earlierIndex(previous, sessionSheet.id)]?.view ?? DEFAULT_SHEET_VIEW,
     });
   }

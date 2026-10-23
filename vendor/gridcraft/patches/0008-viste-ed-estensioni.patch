@@ -53,7 +53,7 @@ diff --git a/crates/xlsx/src/passthrough.rs b/crates/xlsx/src/passthrough.rs
      // Split (not frozen) panes, while the view the file opened on is the one read.
      if let Some(p) = root.path(&["sheetViews", "sheetView", "pane"])
          && p.attr("state").is_none_or(|s| s == "split")
-@@ -1069,6 +1100,63 @@ fn scan_sheet(bytes: &[u8]) -> Option<SheetScan> {
+@@ -1069,6 +1100,59 @@ fn scan_sheet(bytes: &[u8]) -> Option<SheetScan> {
      Some(out)
  }
  
@@ -107,11 +107,7 @@ diff --git a/crates/xlsx/src/passthrough.rs b/crates/xlsx/src/passthrough.rs
 +
 +/// The `uri` attribute of an element.
 +fn uri_of(e: &BytesStart<'_>) -> Option<String> {
-+    e.attributes()
-+        .with_checks(false)
-+        .flatten()
-+        .find(|a| a.key.as_ref() == b"uri")
-+        .and_then(|a| String::from_utf8(a.value.to_vec()).ok())
++    e.attributes().with_checks(false).flatten().find(|a| a.key.as_ref() == b"uri").and_then(|a| String::from_utf8(a.value.to_vec()).ok())
 +}
 +
  /// The `r:id` of an element (an `id` attribute with a namespace prefix).
@@ -163,13 +159,18 @@ diff --git a/crates/xlsx/src/tests/passthrough_tests.rs b/crates/xlsx/src/tests/
      );
      let sheet = format!(
          r#"<?xml version="1.0"?><worksheet xmlns="{NS_MAIN}"><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>A1*2</f><v>2</v></c></row></sheetData></worksheet>"#
-@@ -817,7 +820,11 @@ fn file_version_and_calc_features_survive_a_save() {
+@@ -817,7 +820,16 @@ fn file_version_and_calc_features_survive_a_save() {
          assert_eq!(root.children.first().map(|e| e.name.as_str()), Some("fileVersion"), "{text}");
          assert_eq!(root.children.last().map(|e| e.name.as_str()), Some("extLst"), "{text}");
          assert!(text.contains(r#"<fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="11008"/>"#), "{text}");
 -        assert!(text.contains(&format!("<extLst>{calc_features}</extLst>")), "{text}");
 +        assert!(text.contains(&format!("<extLst>{calc_features}<ext ")), "{text}");
-+        assert!(text.contains(r#"xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main"><x15:workbookPr chartTrackingRefBase="1"/></ext>"#), "{text}");
++        assert!(
++            text.contains(
++                r#"xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main"><x15:workbookPr chartTrackingRefBase="1"/></ext>"#
++            ),
++            "{text}"
++        );
 +        assert!(text.contains(r#"xmlns:loext="http://schemas.libreoffice.org/"><loext:extCalcPr stringRefSyntax="CalcA1ExcelA1"/></ext>"#), "{text}");
 +        assert_eq!(text.matches("<ext ").count(), 3, "{text}");
 +        assert!(!text.contains("slicerCache"), "{text}");

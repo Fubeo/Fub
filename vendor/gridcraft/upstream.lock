@@ -37,7 +37,11 @@ sha256 = "sha256:a0176ce3d5f94bdb374c91918ceb089404d1ff9953ac6a4c6afc28e12e0cc22
 
 [[patch]]
 path = "patches/0008-viste-ed-estensioni.patch"
-sha256 = "sha256:15867157e653ecef7b9d72865edd6313651d3a5010c8f6e9a69efd140e1a9daf"
+sha256 = "sha256:ce23e0341a173f180e624c73c1ed8ada671df5c6a9a67b0b6ca4be9bc3dcc74d"
+
+[[patch]]
+path = "patches/0009-svg-degli-oggetti.patch"
+sha256 = "sha256:b544dc3a95400ca0f8e02f77cc16c81e1f8771cfc5fb399bf6c36c0099a5d6ec"
 
 [[file]]
 path = "LICENSE-APACHE"
@@ -162,6 +166,7 @@ upstream = "sha256:51bad2c5f85237398f7fd323acd34a4cb0217db4e64c23348af4e516afe97
 [[file]]
 path = "crates/engine/src/chart_svg.rs"
 upstream = "sha256:cf5d686cde00e3d17f0180bf7815b5912a1b7c515af882b0ce44d64bf689b316"
+result = "sha256:af1ac62568346417c36b698bdd2f84268190c07d8fd02021ec261057c750f3dc"
 
 [[file]]
 path = "crates/engine/src/clip_html.rs"
@@ -276,7 +281,7 @@ result = "sha256:0108833369a02048d1385b6a0500d8c34e3fc294d6cec414228ba457340669f
 [[file]]
 path = "crates/engine/src/lib.rs"
 upstream = "sha256:b41ebb2d7114756e6cc2e5ca68a91f2af01de3b1de426f83bf3135d810822966"
-result = "sha256:936df04379bef3ffd6a3af5169f3b6bfcef52d92e201b732ad638c2c49396590"
+result = "sha256:6e735d280025707bb43673bf489f09b2de032dd431106c3514198e3b26b87772"
 
 [[file]]
 path = "crates/engine/src/links.rs"
@@ -700,7 +705,7 @@ result = "sha256:28840681ebdb5aa3c2d084e8eb11e147b79f08c26da964899b5b80e3fc290c3
 [[file]]
 path = "crates/xlsx/src/passthrough.rs"
 upstream = "sha256:40cbd89364e3a06594fb29ac7899cc83333dd9c2c2610cc82dad6487e669630e"
-result = "sha256:fb79d2f99d5ff6d2d1f7fcc1966b0217fdfdddc27d5a780c57c7bfe1d4934934"
+result = "sha256:2c219b6aa66a3bf1f608704ff514a0297ba972772b22b6d4ce6d2d022a4e8eb1"
 
 [[file]]
 path = "crates/xlsx/src/pivot.rs"
@@ -815,7 +820,7 @@ upstream = "sha256:1873df6e1723b08bb5c5f240026ea117126e4aadf122b3227c5f36b406aa4
 [[file]]
 path = "crates/xlsx/src/tests/passthrough_tests.rs"
 upstream = "sha256:20724f5bbdd9e15a22d0e5ab6756e325dbe06352fb1009d1cb7898b692da10b7"
-result = "sha256:86e637fde3234a079dd1412a4f0bc74fbe6a80f1707b91778c82e7e9851d9396"
+result = "sha256:bf9f7b5604621d0f5b7c708999e7a30512e8fb2df66a844492eb096ecef4fe7a"
 
 [[file]]
 path = "crates/xlsx/src/tests/phonetic_tests.rs"

@@ -319,6 +319,7 @@ impl GridBytesGuest for Component {
                 print_headings: false,
             },
             tables: Vec::new(),
+            objects: Vec::new(),
         })
     }
 

@@ -961,6 +961,208 @@ impl GridBook {
     }
 }
 
+/// Che cosa è un oggetto del foglio. Grafici, immagini e forme galleggiano
+/// sulle celle; un grafico sparkline e un'immagine nella cella stanno nella
+/// loro cella.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridObjectKind {
+    Chart,
+    Sparkline,
+    Image,
+    CellPicture,
+    Shape,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridShapeKind {
+    Rectangle,
+    RoundedRectangle,
+    Ellipse,
+    Triangle,
+    Line,
+    Arrow,
+    TextBox,
+    /// Un'icona dell'insieme di GridCraft: il testo ne è il nome.
+    Icon,
+    /// Un tratto a mano libera: il testo sono i punti `x,y;x,y;…`, in pixel
+    /// dall'angolo dell'oggetto.
+    Ink,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridShapeAlign {
+    Left,
+    Center,
+    Right,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridShapeAnchor {
+    Top,
+    Middle,
+    Bottom,
+}
+
+/// Una forma come la shell la disegna: i colori risolti (`#RRGGBB`, nessuno
+/// per niente), il testo e il suo aspetto, con i predefiniti già scelti.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GridShape {
+    pub kind: GridShapeKind,
+    pub fill: Option<String>,
+    pub line: Option<String>,
+    pub text: String,
+    pub font: Option<String>,
+    /// In punti.
+    pub font_size: f32,
+    pub bold: bool,
+    pub italic: bool,
+    pub text_color: String,
+    pub align: GridShapeAlign,
+    pub anchor: GridShapeAnchor,
+    pub right_to_left: bool,
+}
+
+/// I byte di un'immagine. `key` è la loro impronta: la stessa immagine ha la
+/// stessa chiave in ogni finestra, e i byte (`data`, in base64) mancano
+/// quando la richiesta dice di averli già.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridMedia {
+    pub mime: String,
+    pub key: String,
+    pub data: Option<String>,
+}
+
+/// Perché un oggetto non porta ciò che mostra.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridObjectMissing {
+    /// Oltre la misura di un oggetto o della finestra.
+    TooLarge,
+    /// Un tipo d'immagine che la shell non mostra.
+    Unsupported,
+}
+
+/// Un oggetto del foglio che tocca la finestra: la cella dell'angolo in alto
+/// a sinistra, lo scarto da lei e la misura in pixel a zoom 100. Un grafico
+/// porta il suo disegno (`svg`), un'immagine i suoi byte, una forma il suo
+/// aspetto. Gli oggetti vengono nell'ordine in cui si disegnano.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GridObject {
+    pub kind: GridObjectKind,
+    /// L'id del file per grafici, immagini e forme; per gli altri il posto
+    /// nel foglio.
+    pub id: u32,
+    pub row: u32,
+    pub column: u32,
+    pub dx: f32,
+    pub dy: f32,
+    pub width: f32,
+    pub height: f32,
+    pub alt: String,
+    pub svg: Option<String>,
+    pub media: Option<GridMedia>,
+    pub shape: Option<GridShape>,
+    pub missing: Option<GridObjectMissing>,
+}
+
+/// Gli oggetti che una finestra porta, al più.
+pub const MAX_GRID_WINDOW_OBJECTS: usize = 1_024;
+/// Il disegno di un grafico, al più.
+pub const MAX_GRID_OBJECT_SVG_BYTES: usize = 1024 * 1024;
+/// I byte di un'immagine in base64, al più.
+pub const MAX_GRID_MEDIA_BYTES: usize = 3 * 1024 * 1024;
+/// Il testo di una forma, al più.
+pub const MAX_GRID_SHAPE_TEXT_BYTES: usize = 64 * 1024;
+/// I tipi d'immagine che una finestra porta.
+pub const GRID_MEDIA_TYPES: [&str; 6] = [
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/bmp",
+    "image/webp",
+    "image/svg+xml",
+];
+
+impl GridObject {
+    fn validate(&self, total_rows: u32, total_columns: u32) -> Result<(), PluginError> {
+        let size = |value: f32| value.is_finite() && (0.0..=1_000_000.0).contains(&value);
+        let offset = |value: f32| value.is_finite() && value.abs() <= 1_000_000.0;
+        if self.row >= total_rows
+            || self.column >= total_columns
+            || !offset(self.dx)
+            || !offset(self.dy)
+            || !size(self.width)
+            || !size(self.height)
+            || self.alt.len() > MAX_GRID_SHAPE_TEXT_BYTES
+        {
+            return Err(bad("grid object lies outside its limits"));
+        }
+        if self
+            .svg
+            .as_ref()
+            .is_some_and(|svg| svg.len() > MAX_GRID_OBJECT_SVG_BYTES || !svg.starts_with("<svg"))
+        {
+            return Err(bad("grid object drawing is malformed"));
+        }
+        if let Some(media) = &self.media {
+            if !GRID_MEDIA_TYPES.contains(&media.mime.as_str())
+                || media.key.is_empty()
+                || media.key.len() > crate::grid::MAX_GRID_MEDIA_KEY_BYTES
+                || !media.key.bytes().all(|byte| byte.is_ascii_alphanumeric())
+                || media.data.as_ref().is_some_and(|data| {
+                    data.len() > MAX_GRID_MEDIA_BYTES
+                        || !data
+                            .bytes()
+                            .all(|byte| byte.is_ascii_alphanumeric() || b"+/=".contains(&byte))
+                })
+            {
+                return Err(bad("grid object media is malformed"));
+            }
+        }
+        if let Some(shape) = &self.shape {
+            let color = |color: &Option<String>| color.as_deref().is_none_or(hex_color);
+            if !color(&shape.fill)
+                || !color(&shape.line)
+                || !hex_color(&shape.text_color)
+                || shape.text.len() > MAX_GRID_SHAPE_TEXT_BYTES
+                || shape
+                    .font
+                    .as_ref()
+                    .is_some_and(|font| font.is_empty() || font.len() > MAX_GRID_FONT_BYTES)
+                || !(shape.font_size.is_finite()
+                    && shape.font_size > 0.0
+                    && shape.font_size <= 4_000.0)
+            {
+                return Err(bad("grid shape is malformed"));
+            }
+        }
+        // Ogni oggetto porta ciò che il suo tipo mostra, o soltanto il perché
+        // manca; una forma non manca mai.
+        let carries = (
+            self.svg.is_some(),
+            self.media.is_some(),
+            self.shape.is_some(),
+        );
+        let wanted = match (self.kind, self.missing) {
+            (GridObjectKind::Shape, Some(_)) => None,
+            (_, Some(_)) => Some((false, false, false)),
+            (GridObjectKind::Chart | GridObjectKind::Sparkline, None) => Some((true, false, false)),
+            (GridObjectKind::Image | GridObjectKind::CellPicture, None) => {
+                Some((false, true, false))
+            }
+            (GridObjectKind::Shape, None) => Some((false, false, true)),
+        };
+        if wanted != Some(carries) {
+            return Err(bad("grid object carries the wrong drawing"));
+        }
+        Ok(())
+    }
+}
+
 /// Una finestra porta gli aspetti delle sue celle una volta sola, le unioni
 /// che la toccano, anche quelle che cominciano fuori, e la vista del foglio.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -979,6 +1181,8 @@ pub struct GridBytesWindow {
     pub view: GridSheetView,
     /// Le tabelle che toccano la finestra, anche quelle che cominciano fuori.
     pub tables: Vec<GridTable>,
+    /// Gli oggetti che toccano la finestra, anche quelli ancorati fuori.
+    pub objects: Vec<GridObject>,
 }
 
 impl GridBytesWindow {
@@ -1079,6 +1283,12 @@ impl GridBytesWindow {
             {
                 return Err(bad("grid table lies outside the window"));
             }
+        }
+        if self.objects.len() > MAX_GRID_WINDOW_OBJECTS {
+            return Err(bad("grid window has too many objects"));
+        }
+        for object in &self.objects {
+            object.validate(self.total_rows, self.total_columns)?;
         }
         let view = &self.view;
         if view.frozen_rows > self.total_rows
@@ -1389,6 +1599,126 @@ mod tests {
             merges: Vec::new(),
             view: GridSheetView::default(),
             tables: Vec::new(),
+            objects: Vec::new(),
+        }
+    }
+
+    fn object(kind: GridObjectKind) -> GridObject {
+        GridObject {
+            kind,
+            id: 1,
+            row: 0,
+            column: 0,
+            dx: 4.0,
+            dy: -2.0,
+            width: 320.0,
+            height: 200.0,
+            alt: String::new(),
+            svg: None,
+            media: None,
+            shape: None,
+            missing: None,
+        }
+    }
+
+    fn shape() -> GridShape {
+        GridShape {
+            kind: GridShapeKind::Rectangle,
+            fill: Some("#4472C4".into()),
+            line: None,
+            text: "Totale".into(),
+            font: None,
+            font_size: 11.0,
+            bold: false,
+            italic: false,
+            text_color: "#000000".into(),
+            align: GridShapeAlign::Center,
+            anchor: GridShapeAnchor::Middle,
+            right_to_left: false,
+        }
+    }
+
+    #[test]
+    fn un_oggetto_porta_cio_che_il_suo_tipo_mostra_o_il_perche_manca() {
+        let media = |data: Option<&str>| GridMedia {
+            mime: "image/png".into(),
+            key: "a1b2".into(),
+            data: data.map(str::to_owned),
+        };
+        let chart = GridObject {
+            svg: Some("<svg/>".into()),
+            ..object(GridObjectKind::Chart)
+        };
+        let image = GridObject {
+            media: Some(media(Some("iVBORw0K"))),
+            ..object(GridObjectKind::Image)
+        };
+        // La shell ha già i byte: l'immagine porta soltanto la chiave.
+        let known = GridObject {
+            media: Some(media(None)),
+            ..object(GridObjectKind::CellPicture)
+        };
+        let drawn = GridObject {
+            shape: Some(shape()),
+            ..object(GridObjectKind::Shape)
+        };
+        let large = GridObject {
+            missing: Some(GridObjectMissing::TooLarge),
+            ..object(GridObjectKind::Chart)
+        };
+        let mut good = window();
+        good.objects = vec![chart.clone(), image.clone(), known, drawn.clone(), large];
+        good.validate().unwrap();
+
+        let mut wrong_mime = image.clone();
+        wrong_mime.media.as_mut().unwrap().mime = "text/html".into();
+        let mut wrong_key = image.clone();
+        wrong_key.media.as_mut().unwrap().key = "../x".into();
+        let mut wrong_data = image.clone();
+        wrong_data.media.as_mut().unwrap().data = Some("<script>".into());
+        let mut wrong_color = drawn.clone();
+        wrong_color.shape.as_mut().unwrap().fill = Some("red".into());
+        for bad in [
+            GridObject {
+                svg: None,
+                ..chart.clone()
+            },
+            GridObject {
+                svg: Some("<html>".into()),
+                ..chart.clone()
+            },
+            GridObject {
+                shape: Some(shape()),
+                ..chart.clone()
+            },
+            GridObject {
+                missing: Some(GridObjectMissing::TooLarge),
+                ..chart.clone()
+            },
+            GridObject {
+                missing: Some(GridObjectMissing::Unsupported),
+                ..drawn.clone()
+            },
+            GridObject {
+                media: None,
+                ..image.clone()
+            },
+            GridObject {
+                row: 100,
+                ..chart.clone()
+            },
+            GridObject {
+                width: f32::NAN,
+                ..chart.clone()
+            },
+            wrong_mime,
+            wrong_key,
+            wrong_data,
+            wrong_color,
+        ] {
+            let mut window = window();
+            window.objects = vec![bad.clone()];
+            assert!(window.validate().is_err(), "{bad:?}");
         }
     }
 

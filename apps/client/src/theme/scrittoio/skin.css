@@ -5510,6 +5510,27 @@ kbd,
 .grid-comment-mark.threaded {
   border-color: transparent var(--accent) transparent transparent;
 }
+/* Un oggetto selezionato ha il filo d'accento e le maniglie tonde, come in
+   Excel; uno che Fub non mostra resta un riquadro tratteggiato col perché. */
+.grid-object.selected {
+  outline: 1px solid var(--accent);
+}
+.grid-object-handle {
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  background: var(--bg-elev);
+}
+.grid-object-missing {
+  border: 1px dashed var(--border);
+  background: var(--sheet-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.grid-object-text-editor {
+  border: 2px solid var(--accent);
+  background: var(--bg-elev);
+  color: var(--doc-fg);
+}
 /* Il velo è un'ombra interna e non un fondo: una cella può avere un colore
    suo, scritto dal foglio, e la selezione deve vedersi anche lì sopra. */
 .grid-cell.selected {
