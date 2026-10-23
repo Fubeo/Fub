@@ -37,6 +37,15 @@ export interface DialogOptions<T> {
   dismissValue: T;
   /// Chiuderla chiude il dialogo con `dismissValue`.
   lifetime: Lifetime;
+  /// Chiesto prima di chiudere con un'azione: falso tiene aperto il dialogo,
+  /// che dice da sé perché. Mentre una risposta asincrona è in viaggio il
+  /// dialogo è occupato e le azioni non rispondono. Esc, il velo e lo
+  /// smontaggio non chiedono.
+  confirm?: (value: T) => boolean | Promise<boolean>;
+  /// L'azione che Invio in un campo del corpo preme, come in un modulo.
+  submit?: string;
+  /// Una classe in più sulla superficie, per chi la veste.
+  className?: string;
 }
 
 export interface DialogHandle<T> {
@@ -63,7 +72,7 @@ export function openDialog<T>(options: DialogOptions<T>): DialogHandle<T> {
   const scrim = doc.createElement("div");
   scrim.className = "kit-dialog-scrim";
   const dialog = doc.createElement("div");
-  dialog.className = "kit-dialog";
+  dialog.className = options.className ? `kit-dialog ${options.className}` : "kit-dialog";
   dialog.setAttribute("role", "dialog");
   dialog.setAttribute("aria-modal", "true");
   dialog.tabIndex = -1;
@@ -115,13 +124,37 @@ export function openDialog<T>(options: DialogOptions<T>): DialogHandle<T> {
     resolve(value);
   };
 
+  let busy = false;
+  const occupied = (on: boolean): void => {
+    busy = on;
+    if (on) dialog.setAttribute("aria-busy", "true");
+    else dialog.removeAttribute("aria-busy");
+  };
+  const choose = (action: DialogAction<T>): void => {
+    if (settled || busy) return;
+    const answer = options.confirm ? options.confirm(action.value) : true;
+    if (answer === true) {
+      finish(action.value);
+      return;
+    }
+    if (answer === false) return;
+    occupied(true);
+    answer.then(
+      (yes) => {
+        occupied(false);
+        if (yes) finish(action.value);
+      },
+      () => occupied(false),
+    );
+  };
+
   const actions = doc.createElement("div");
   actions.className = "kit-dialog-actions";
   const buttons = options.actions.map((action) => {
     const button = textButton({
       label: action.label,
       kind: action.kind,
-      onPress: () => finish(action.value),
+      onPress: () => choose(action),
       lifetime: own,
     });
     button.dataset.action = action.id;
@@ -142,6 +175,18 @@ export function openDialog<T>(options: DialogOptions<T>): DialogHandle<T> {
     },
     { capture: true },
   );
+  const submit = options.actions.find((action) => action.id === options.submit);
+  if (body && submit) {
+    own.listen(body, "keydown", (event) => {
+      const target = event.target;
+      const field =
+        (target instanceof HTMLInputElement && !["button", "checkbox", "radio", "submit", "reset"].includes(target.type)) ||
+        target instanceof HTMLSelectElement;
+      if (event.key !== "Enter" || !field || event.defaultPrevented || event.isComposing || event.repeat) return;
+      event.preventDefault();
+      choose(submit);
+    });
+  }
   scrim.append(dialog);
   doc.body.append(scrim);
 

@@ -28,7 +28,7 @@ use gridcraft_core::CellRef;
 use gridcraft_engine::{
     command_specs, find_command, DocState, EngineError, Selection, Session, UiRequest,
 };
-use gridcraft_model::{Sheet, Workbook};
+use gridcraft_model::{CfOperator, ErrorStyle, Sheet, Validation, ValidationKind, Workbook};
 use gridcraft_xlsx::XlsxKind;
 use serde_json::{json, Value as Json};
 
@@ -392,7 +392,7 @@ impl Facade {
         let params = params_of(command)?;
         let previous = self.snapshot();
         let outcome = guarded(|| Ok(self.execute(command, params))).map_err(xlsx_error)?;
-        let requests = self.session.take_ui_requests();
+        let mut requests = self.session.take_ui_requests();
         let result = match outcome {
             Ok(result) => result,
             Err(error) => {
@@ -411,6 +411,7 @@ impl Facade {
             }
             self.redo.clear();
         }
+        self.fill_dialogs(&mut requests);
         Ok(Ran {
             changed,
             result: result_text(result, &requests),
@@ -433,6 +434,31 @@ impl Facade {
         doc.undo.clear();
         doc.redo.clear();
         outcome.map_err(engine_error)
+    }
+
+    /// Mette nella finestra chiesta ciò che mostra all'apertura e che la
+    /// shell non sa leggere da sé: la regola di convalida della cella attiva,
+    /// così OK senza cambiare niente la lascia com'è.
+    fn fill_dialogs(&self, requests: &mut [UiRequest]) {
+        for request in requests {
+            let UiRequest::Dialog(id, params) = request else {
+                continue;
+            };
+            if id != "dataValidation" {
+                continue;
+            }
+            let doc = self.doc();
+            let at = doc.selection.active;
+            let rule = doc.wb.active().and_then(|sheet| {
+                sheet
+                    .validations
+                    .iter()
+                    .find(|rule| rule.ranges.iter().any(|range| range.contains(at)))
+            });
+            if let (Some(rule), Json::Object(object)) = (rule, params) {
+                object.insert("rule".into(), validation_json(rule));
+            }
+        }
     }
 
     /// Dà un `sheetId` a ogni foglio che non ne ha uno suo: un foglio nuovo,
@@ -828,6 +854,48 @@ fn result_text(result: Json, requests: &[UiRequest]) -> Option<String> {
         return Some(json!({ "tooLarge": true }).to_string());
     }
     Some(text)
+}
+
+/// Una regola di convalida con i nomi dei parametri di `data.validation`.
+fn validation_json(rule: &Validation) -> Json {
+    let kind = match rule.kind {
+        ValidationKind::Any => "any",
+        ValidationKind::Whole => "whole",
+        ValidationKind::Decimal => "decimal",
+        ValidationKind::List => "list",
+        ValidationKind::Date => "date",
+        ValidationKind::Time => "time",
+        ValidationKind::TextLength => "textLength",
+        ValidationKind::Custom => "custom",
+    };
+    let operator = match rule.op {
+        CfOperator::Between => "between",
+        CfOperator::NotBetween => "notBetween",
+        CfOperator::Equal => "equal",
+        CfOperator::NotEqual => "notEqual",
+        CfOperator::Greater => "greater",
+        CfOperator::Less => "less",
+        CfOperator::GreaterOrEqual => "greaterOrEqual",
+        CfOperator::LessOrEqual => "lessOrEqual",
+    };
+    let style = match rule.error_style {
+        ErrorStyle::Stop => "stop",
+        ErrorStyle::Warning => "warning",
+        ErrorStyle::Information => "information",
+    };
+    json!({
+        "type": kind,
+        "operator": operator,
+        "formula1": rule.f1,
+        "formula2": rule.f2,
+        "ignoreBlank": rule.allow_blank,
+        "dropdown": rule.in_cell_dropdown,
+        "inputTitle": rule.input_title,
+        "inputMessage": rule.input_message,
+        "errorStyle": style,
+        "errorTitle": rule.error_title,
+        "errorMessage": rule.error_message,
+    })
 }
 
 /// La prima finestra di dialogo che il comando chiede.

@@ -72,7 +72,11 @@ catalogo su quella selezione; `grid_bytes_command` riceve un
 testo di un oggetto JSON) e ridà un `GridCommandOutcome`: il commit del
 giornale, che resta alla revisione se il comando non cambia la cartella, i
 fogli, la selezione nuova, il risultato come testo JSON, la finestra di
-dialogo chiesta, il catalogo aggiornato e il libro. Un comando che il provider non
+dialogo chiesta, il catalogo aggiornato e il libro. Il risultato è sempre un
+oggetto: un valore che non lo è sta sotto `value`, i messaggi del comando
+sotto `messages`. I parametri della finestra chiesta portano anche ciò che la
+finestra mostra all'apertura e che la shell non legge da sé (la regola di
+convalida della cella attiva per `dataValidation`). Un comando che il provider non
 serve, spento o con parametri che non tornano è `BadArgs`. Il provider delle
 cartelle di Excel serve un sottoinsieme del catalogo di GridCraft, più
 `edit.undo` ed `edit.redo` del documento

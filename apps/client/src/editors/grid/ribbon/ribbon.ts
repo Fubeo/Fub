@@ -16,6 +16,7 @@
 //
 // Quando la barra è stretta i gruppi si raccolgono da destra, ciascuno in un
 // pulsante che apre il suo contenuto in un riquadro.
+import { readResult } from "../dialogs/result";
 import type { GridBook, GridCellStyle, GridCommandState, GridSheetView, GridTable } from "../../../host/contract";
 import { createTabs, labelButton, openPopover, setPressed, type PopoverHandle, type TabsHandle } from "../../../kit";
 import { onLanguage } from "../../../i18n/strings";
@@ -60,6 +61,10 @@ import {
 } from "./tabs";
 
 /// Ciò che la barra chiede al motore della griglia.
+// Le finestre arrivano nello stesso pezzo della barra: si aprono soltanto da
+// una cartella di Excel, come lei.
+export { mountGridDialogs, type GridDialogs } from "../dialogs/host";
+
 export interface RibbonEngine {
   ribbonHost(): HTMLElement;
   commands(): readonly GridCommandState[];
@@ -72,6 +77,8 @@ export interface RibbonEngine {
   viewportSize(): { width: number; height: number };
   selection(): { readonly focus: { readonly row: number; readonly column: number } };
   command(id: string, params?: string): boolean;
+  /// Apre la finestra `id` (`GridEngine.openDialog`).
+  openDialog(id: string, params?: string): boolean;
   query(id: string, params?: string): Promise<string | null>;
   writeFormula(text: string): boolean;
   focus(): void;
@@ -196,21 +203,18 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
       get viewport() {
         return engine.viewportSize();
       },
-      query: async (id, params) => {
-        const result = await engine.query(id, JSON.stringify(params));
-        if (result === null) return null;
-        try {
-          return JSON.parse(result) as unknown;
-        } catch {
-          return null;
-        }
-      },
+      query: async (id, params) => readResult(await engine.query(id, JSON.stringify(params))),
     };
   }
 
   function give(id: string, params: Params | null | undefined): void {
     closePopover();
     engine.command(id, JSON.stringify(params ?? {}));
+  }
+
+  function ask(dialog: string, params: Params | null | undefined): void {
+    closePopover();
+    engine.openDialog(dialog, JSON.stringify(params ?? {}));
   }
 
   // ── I menu ────────────────────────────────────────────────────────────
@@ -255,7 +259,8 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     }
     if (!entry.id) return;
     chosen?.(entry);
-    give(entry.id, entry.params);
+    if (entry.dialog) ask(entry.dialog, entry.params);
+    else give(entry.id, entry.params);
   }
 
   /// Apre il menu `source` sotto `anchor`. Le voci che arrivano dopo (le
@@ -355,7 +360,8 @@ export function mountRibbon(engine: RibbonEngine): GridRibbon {
     let view: RibbonView | null = null;
     const press = button(control, () => t(control.label), () => {
       const params = typeof control.params === "function" ? control.params(view ?? readView()) : control.params;
-      give(control.id, params);
+      if (control.dialog) ask(control.dialog, params);
+      else give(control.id, params);
     });
     el.append(press);
     return {

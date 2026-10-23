@@ -1,8 +1,9 @@
 // Il presidio delle schede: ogni comando che la barra dà è nel catalogo del
-// provider, le lettere di una scheda non si confondono, e i formati dei
+// provider, ogni finestra che apre esiste, le lettere di una scheda non si confondono, e i formati dei
 // numeri si riconoscono come li riconosce Excel.
 import { describe, expect, it } from "vitest";
 import fixture from "../../../__fixtures__/xlsx-grid.json";
+import { DIALOGS } from "../dialogs/catalog";
 import { RIBBON_ICONS } from "./icons";
 import {
   RIBBON_TABS,
@@ -81,6 +82,15 @@ describe("le schede della barra", () => {
         for (const b of tips) if (a !== b) expect(b.startsWith(a), `${tab.id}: ${a} è l'inizio di ${b}`).toBe(false);
       }
     }
+  });
+
+  it("aprono soltanto finestre che le finestre conoscono", () => {
+    const asked = [
+      ...controls.flatMap((control) => (control.kind === "button" && control.dialog ? [control.dialog] : [])),
+      ...controls.flatMap((control) => controlEntries(control).flatMap((entry) => (entry.dialog ? [entry.dialog] : []))),
+    ];
+    expect(asked.length).toBeGreaterThan(30);
+    for (const dialog of asked) expect(DIALOGS[dialog], `la finestra ${dialog} manca`).toBeDefined();
   });
 
   it("chiedono il comando di un menu le cui voci arrivano dopo", () => {
