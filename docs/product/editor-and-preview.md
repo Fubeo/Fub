@@ -360,6 +360,9 @@ comando della palette, a cui si può assegnare una scorciatoia. Invocato dalla
 palette, il comando agisce nel riquadro col fuoco; se lì non c'è una nota
 Markdown in scrittura, un avviso lo dice.
 
+Il tasto destro, la mini-barra e il menu «/» nel testo sono descritti in
+[Tasto destro, mini-barra e «/»](editor-menus.md).
+
 ## Tabelle in Live
 
 In Live ogni tabella è una griglia da foglio di calcolo, anche col cursore

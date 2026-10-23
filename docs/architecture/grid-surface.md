@@ -77,6 +77,17 @@ la barra è stretta i pulsanti piccoli perdono il nome, poi i gruppi si
 raccolgono da destra in un pulsante che li apre in un riquadro. Il testo
 della barra è in un catalogo suo (`strings.ts`), in italiano e in inglese.
 
+Il tasto destro sceglie come Excel: fuori dalla selezione sceglie la cella,
+la riga o la colonna sotto il puntatore, dentro la lascia. `ribbon/context.ts`
+dichiara le voci per cella, intestazione di riga e di colonna, angolo,
+scheda del foglio e oggetto con gli stessi controlli di `tabs.ts`, e
+`GridRibbon.contextMenu` le dà al menu dell'editor (`editors/grid/menu.ts`),
+che aggiunge gli appunti in TSV e «Copia il riferimento». Una voce che il
+catalogo non serve non si vede. La mini-barra sopra il menu
+(`MINI_CONTROLS`) riusa i controlli della scheda Home: carattere,
+dimensione, grassetto, corsivo, percentuale, separatore delle migliaia e
+decimali. In sola lettura restano le voci che non scrivono.
+
 ## Le finestre dei fogli
 
 Le finestre della cartella (`apps/client/src/editors/grid/dialogs/`, elencate

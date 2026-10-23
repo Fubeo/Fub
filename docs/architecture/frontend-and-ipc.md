@@ -230,9 +230,26 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   ha un «Annulla» unico: l'annullamento del vault disfa l'ultima operazione, e
   le note tornano dal cestino una a una.
 - **Scrittura.** Con la barra di formattazione spenta
-  (`chrome.formatbar.visible`) compare la bolla di selezione; il menu «/» è
-  ancorato al cursore e passa per l'interfaccia della superficie testuale,
-  mai per oggetti CodeMirror. Sui collegamenti una scheda al passaggio mostra
+  (`chrome.formatbar.visible`) compare la mini-barra sulla selezione;
+  l'impostazione `editor.minibar` (`auto`, `always`, `menu`, `off`) dice se
+  compare anche col tasto destro e su ogni selezione. Il «/» a inizio riga o
+  dopo uno spazio apre nella nota il menu dei blocchi e dei comandi, filtrato
+  da ciò che si scrive dopo (`editor.slash` lo spegne); con una selezione il
+  menu «/» ha il suo campo. Entrambi passano per l'interfaccia della
+  superficie testuale, mai per oggetti CodeMirror.
+- **Tasto destro negli editor.** Un solo ascoltatore sul riquadro
+  (`panels/document.ts`) chiede alla superficie il suo `contextMenu(at)` e lo
+  compone in `panels/editor-menu.ts` con le stesse sezioni, nello stesso
+  ordine, in ogni editor: ciò che sta sotto il puntatore (prima le correzioni
+  del correttore), gli appunti, «Formato», «Trasforma in» e «Inserisci»,
+  «Comandi» (i comandi del registro dichiarati per il «/») con le voci dei
+  plugin per la nota o il file, e le utilità. Al primo livello stanno al più
+  dodici voci, il resto scende in «Altro». Un id d'azione o di comando prende
+  nome, icona, stato e accordo da chi lo dichiara, e senza dichiarazione non
+  si vede. Il menu si apre senza IPC; Maiusc+tasto destro e un evento già
+  gestito (la griglia delle tabelle, il disegno) lasciano passare il menu del
+  sistema o quello proprio; il tasto Menu e Maiusc+F10 lo aprono sotto il
+  cursore. Sui collegamenti una scheda al passaggio mostra
   la destinazione (`render_embed`) con apri, di fianco e nuova linguetta; un
   collegamento irrisolto offre «Crea». In Live le azioni della scheda non
   sono raggiungibili da tastiera.
