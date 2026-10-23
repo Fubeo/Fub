@@ -1042,6 +1042,10 @@
     "graph-list-more",
     "context-menu",
     "menu-separator",
+    "menu-group",
+    "context-submenu",
+    "menu-more",
+    "context-strip",
     "menu-label",
     "menu-hint",
     "menu-body",
@@ -3812,7 +3816,30 @@
       "part": "menus",
       "hooks": [
         "context-menu",
-        "menu-separator"
+        "menu-separator",
+        "menu-group"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "context-submenu",
+      "part": "menus",
+      "hooks": [
+        "context-submenu",
+        "menu-more"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "context-strip",
+      "part": "menus",
+      "hooks": [
+        "context-strip",
+        "format-bar"
       ],
       "states": [
         "rest"
@@ -5501,10 +5528,10 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1196,
+    "hooks": 1200,
     "state_names": 7,
-    "assigned_states": 639,
-    "components": 188,
+    "assigned_states": 641,
+    "components": 190,
     "preference_tokens": 123
   }
 }

@@ -25,7 +25,7 @@
 // [0112](../../../docs/decisions/0196-test-e-artefatti-generati.md)) e quindi non si può
 // guardare *dove* è finito il fuoco.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { closeContextMenu, pickIcon, showContextMenu } from "./menu";
+import { closeContextMenu, menuPointFor, pickIcon, showContextMenu } from "./menu";
 
 /** Un evento di mouse verosimile, che è tutto ciò che le due funzioni leggono. */
 function clickEvent(): MouseEvent {
@@ -422,5 +422,185 @@ describe("un menu aperto da un pulsante", () => {
     showContextMenu(clickEvent(), [{ label: "Una", run: () => {} }]);
     const menu = document.getElementById("context-menu")!;
     expect([menu.style.left, menu.style.top, menu.style.maxHeight]).toEqual(["10px", "10px", ""]);
+  });
+});
+
+describe("i sottomenu a cascata", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    document.body.replaceChildren();
+  });
+
+  afterEach(() => {
+    closeContextMenu();
+    vi.useRealTimers();
+  });
+
+  const press = (target: Element, key: string): KeyboardEvent => {
+    const e = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    target.dispatchEvent(e);
+    return e;
+  };
+
+  it("→ apre di lato col fuoco dentro, ← torna alla voce, e una scelta chiude tutto", async () => {
+    const run = vi.fn();
+    showContextMenu(clickEvent(), [
+      { label: "Prima", run: () => {} },
+      { label: "Formato", items: [{ label: "Grassetto", run }, { label: "Corsivo", run: () => {} }] },
+    ]);
+    const menu = document.getElementById("context-menu")!;
+    const parent = menu.querySelectorAll<HTMLButtonElement>("[role=menuitem]")[1]!;
+    expect(parent.getAttribute("aria-haspopup")).toBe("menu");
+    expect(parent.getAttribute("aria-expanded")).toBe("false");
+    parent.focus();
+    press(parent, "ArrowRight");
+    await vi.waitFor(() => expect(document.querySelector(".context-submenu")).not.toBeNull());
+    const sub = document.querySelector<HTMLElement>(".context-submenu")!;
+    expect(sub.getAttribute("aria-label")).toBe("Formato");
+    expect(parent.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(sub.querySelector("[role=menuitem]"));
+
+    press(document.activeElement!, "ArrowLeft");
+    expect(document.querySelector(".context-submenu")).toBeNull();
+    expect(document.activeElement).toBe(parent);
+    expect(document.getElementById("context-menu")).not.toBeNull();
+
+    parent.click();
+    await vi.waitFor(() => expect(document.querySelector(".context-submenu")).not.toBeNull());
+    document.querySelector<HTMLButtonElement>(".context-submenu [role=menuitem]")!.click();
+    expect(run).toHaveBeenCalledTimes(1);
+    vi.runAllTimers();
+    expect(document.getElementById("context-menu")).toBeNull();
+    expect(document.querySelector(".context-submenu")).toBeNull();
+  });
+
+  it("Escape nel sottomenu chiude solo lui, e il puntatore fermo lo apre dopo una pausa", async () => {
+    showContextMenu(clickEvent(), [
+      { label: "Altro", items: async () => [{ label: "Dentro", run: () => {} }] },
+      { label: "Fuori", run: () => {} },
+    ]);
+    const [parent, other] = document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]");
+    parent!.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    expect(document.querySelector(".context-submenu")).toBeNull();
+    await vi.advanceTimersByTimeAsync(260);
+    expect(document.querySelector(".context-submenu")).not.toBeNull();
+
+    press(document.querySelector(".context-submenu [role=menuitem]")!, "Escape");
+    expect(document.querySelector(".context-submenu")).toBeNull();
+    expect(document.getElementById("context-menu")).not.toBeNull();
+
+    parent!.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    await vi.advanceTimersByTimeAsync(260);
+    expect(document.querySelector(".context-submenu")).not.toBeNull();
+    other!.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    await vi.advanceTimersByTimeAsync(260);
+    expect(document.querySelector(".context-submenu")).toBeNull();
+  });
+
+  it("chiudere il menu chiude anche il sottomenu aperto", async () => {
+    showContextMenu(clickEvent(), [{ label: "Altro", items: [{ label: "Dentro", run: () => {} }] }]);
+    document.querySelector<HTMLButtonElement>("#context-menu [role=menuitem]")!.click();
+    await vi.waitFor(() => expect(document.querySelector(".context-submenu")).not.toBeNull());
+    closeContextMenu();
+    vi.runAllTimers();
+    expect(document.querySelector(".context-submenu")).toBeNull();
+    expect(tab().defaultPrevented).toBe(false);
+  });
+});
+
+describe("la ricerca per iniziale e i gruppi", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    document.body.replaceChildren();
+  });
+
+  afterEach(() => {
+    closeContextMenu();
+    vi.useRealTimers();
+  });
+
+  it("una lettera porta alla prossima voce che comincia così, accenti a parte", () => {
+    showContextMenu(clickEvent(), [
+      { label: "Taglia", run: () => {} },
+      { label: "Copia", run: () => {} },
+      { label: "Incolla", run: () => {} },
+      { label: "Cerca", run: () => {} },
+      { label: "È tutto", run: () => {} },
+    ]);
+    const items = [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")];
+    items[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
+    expect(document.activeElement).toBe(items[1]);
+    items[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true }));
+    expect(document.activeElement).toBe(items[3]);
+    items[3]!.dispatchEvent(new KeyboardEvent("keydown", { key: "e", bubbles: true }));
+    expect(document.activeElement).toBe(items[4]);
+  });
+
+  it("le voci con un gruppo stanno in un gruppo con nome, staccato da una riga", () => {
+    showContextMenu(clickEvent(), [
+      { label: "Taglia", group: "Appunti", run: () => {} },
+      { label: "Copia", group: "Appunti", run: () => {} },
+      { label: "Cerca", run: () => {} },
+    ]);
+    const group = document.querySelector("#context-menu [role=group]")!;
+    expect(group.getAttribute("aria-label")).toBe("Appunti");
+    expect(group.querySelectorAll("[role=menuitem]")).toHaveLength(2);
+    expect(document.querySelectorAll("#context-menu [role=separator]")).toHaveLength(1);
+  });
+});
+
+describe("la barra sopra il menu", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    document.body.replaceChildren();
+  });
+
+  afterEach(() => {
+    closeContextMenu();
+    vi.useRealTimers();
+  });
+
+  it("vive quanto il menu, Tab ci entra e ne esce, un click dentro non chiude", () => {
+    const unmount = vi.fn();
+    showContextMenu(
+      { x: 40, y: 200 },
+      [{ label: "Copia", run: () => {} }],
+      {
+        stripLabel: "Formato",
+        strip: (host) => {
+          for (const name of ["G", "C"]) {
+            const b = document.createElement("button");
+            b.textContent = name;
+            host.append(b);
+          }
+          return unmount;
+        },
+      },
+    );
+    const strip = document.querySelector<HTMLElement>(".context-strip")!;
+    expect(strip.getAttribute("role")).toBe("toolbar");
+    expect(strip.getAttribute("aria-label")).toBe("Formato");
+    const item = document.querySelector<HTMLButtonElement>("#context-menu [role=menuitem]")!;
+    expect(document.activeElement).toBe(item);
+    const [bold, italic] = strip.querySelectorAll("button");
+    expect(tab().defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(bold);
+    tab();
+    expect(document.activeElement).toBe(italic);
+    tab();
+    expect(document.activeElement).toBe(item);
+
+    vi.runAllTimers();
+    bold!.click();
+    expect(document.getElementById("context-menu")).not.toBeNull();
+    document.body.click();
+    vi.runAllTimers();
+    expect(document.getElementById("context-menu")).toBeNull();
+    expect(document.querySelector(".context-strip")).toBeNull();
+    expect(unmount).toHaveBeenCalledTimes(1);
+  });
+
+  it("menuPointFor apre sotto il riquadro, mai in 0,0", () => {
+    expect(menuPointFor({ left: 120.4, bottom: 300 })).toEqual({ x: 120, y: 304 });
   });
 });

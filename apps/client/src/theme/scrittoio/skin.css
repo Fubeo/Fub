@@ -11149,11 +11149,55 @@ h6.ui-heading {
   color: var(--danger);
 }
 
+/* **Il sottomenu a cascata** è lo stesso rialzo, accanto alla voce che lo
+   apre e un gradino sopra il menu. La sua voce porta la freccia in grafite,
+   come una scorciatoia: dice che c'è altro, non cosa. */
+.context-submenu {
+  z-index: calc(var(--z-menu) + 1);
+}
+.context-menu button[aria-expanded="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.context-menu .menu-more {
+  padding-left: var(--space-4);
+}
+
+/* Un gruppo con un nome è per chi ascolta: chi guarda vede le voci e il
+   filetto che le stacca, nient'altro. */
+.context-menu .menu-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* **La mini-barra** sopra il menu: lo stesso rialzo, largo quanto i suoi
+   controlli e alto quanto una riga della barra di formato. */
+.context-strip {
+  position: fixed;
+  z-index: var(--z-menu);
+  display: flex;
+  align-items: center;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-menu);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--text);
+}
+.context-strip .format-bar {
+  flex: 0 0 auto;
+  padding: 0;
+  overflow: visible;
+  box-shadow: none;
+}
+
 /* In colori forzati il rialzo non ha né fondo suo né ombra: il menu si stacca
    con un bordo, il filetto e la spunta prendono l'inchiostro del sistema. Le
    strisce di colore non si possono dipingere, e non tengono il posto. */
 @media (forced-colors: active) {
-  .context-menu {
+  .context-menu,
+  .context-strip {
     border: 1px solid CanvasText;
   }
   .context-menu .menu-separator {
