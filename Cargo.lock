@@ -2155,16 +2155,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fub-format-sheet"
-version = "0.1.0"
-dependencies = [
- "fub-abi",
- "serde",
- "serde_json",
- "thiserror 2.0.19",
-]
-
-[[package]]
 name = "fub-format-svg"
 version = "0.1.0"
 dependencies = [
@@ -2206,7 +2196,6 @@ dependencies = [
  "fub-format-canvas",
  "fub-format-markdown",
  "fub-format-rich",
- "fub-format-sheet",
  "fub-format-svg",
  "fub-format-xlsx",
  "fub-importers",
@@ -2343,7 +2332,6 @@ dependencies = [
  "camino",
  "cap-std",
  "fub-abi",
- "fub-format-sheet",
  "fub-host",
  "fub-kernel",
  "fub-sdk",

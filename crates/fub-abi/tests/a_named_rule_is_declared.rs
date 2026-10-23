@@ -193,16 +193,6 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-format-sheet/src/lib.rs::search",
-            (
-                Family::ContextualCase,
-                "cerca una sottostringa nel testo libero delle celle, non stabilisce l'identità \
-                 di un path: piega query e input perché la grafia dell'utente non deve cambiare \
-                 i risultati. Resta locale al formato perché restituisce coordinate stabili del \
-                 foglio, mentre le altre ricerche lavorano su proprietà o indici di documenti.",
-            ),
-        ),
-        (
             "crates/fub-features/src/tags.rs::matches_case_insensitive",
             (
                 Family::ContextualCase,
@@ -265,9 +255,8 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 Family::ContextualCase,
                 "l'identità di un'estensione nel registro è full-Unicode e non ASCII, e diverge \
                  apposta da `rules/media.rs`: qui l'estensione arriva dal **descrittore di un \
-                 provider**, che è testo di terzi, non dal nome di un file del vault. È la sola \
-                 piega di `register` e di `register_source`: un formato privo di parser \
-                 `DocumentModel` non può avere un'altra identità né un altro conflitto.",
+                 provider**, che è testo di terzi, non dal nome di un file del vault. È la piega \
+                 di `register`.",
             ),
         ),
         (
@@ -605,24 +594,6 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-format-sheet/src/formula.rs::matches_ignore_ascii_case",
-            (
-                Family::AsciiCase,
-                "confronta identificatori del linguaggio formule con il suo vocabolario chiuso \
-                 (`IF`, `SUM`, `TRUE`): la grammatica accetta token ASCII e una piegatura Unicode \
-                 attribuirebbe equivalenze che il formato non dichiara.",
-            ),
-        ),
-        (
-            "crates/fub-format-sheet/src/formula.rs::reference",
-            (
-                Family::AsciiCase,
-                "converte le lettere di una coordinata A1 dopo averle già limitate con \
-                 `is_ascii_alphabetic`: l'alfabeto delle colonne è A–Z per formato, quindi una \
-                 maiuscola Unicode non può identificare una colonna.",
-            ),
-        ),
-        (
             "crates/fub-format-xlsx/src/input.rs::parse",
             (
                 Family::AsciiCase,
@@ -895,8 +866,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             (
                 Family::ContextualCase,
                 "piega il filtro di ricerca della vista e le etichette diagnostiche dei riepiloghi \
-                 con `str::to_lowercase`: la query è testo libero dell'utente e deve comportarsi \
-                 come la ricerca del foglio (`format-sheet::search`), non come un vocabolario \
+                 con `str::to_lowercase`: la query è testo libero dell'utente, non un vocabolario \
                  chiuso. Diverge da `matches_case_insensitive` perché qui l'ago si piega una sola \
                  volta per tutte le righe, mentre là si piega a ogni confronto.",
             ),

@@ -58,7 +58,7 @@ fn every_public_surface_family_has_shell_fallback_mirror_native_and_wasm() {
             (
                 "fallback",
                 "apps/client/src/editors/grid/engine.ts",
-                "dataset.gridProtocol = \"fallback\"",
+                "dataset.gridProtocol = \"unavailable\"",
             ),
             (
                 "mirror",
@@ -67,13 +67,13 @@ fn every_public_surface_family_has_shell_fallback_mirror_native_and_wasm() {
             ),
             (
                 "native",
-                "crates/fub-format-sheet/src/grid.rs",
-                "impl fub_abi::grid::GridProvider for SheetGridProvider",
+                "crates/fub-format-xlsx/src/grid.rs",
+                "impl GridBytesProvider for XlsxGridProvider",
             ),
             (
                 "wasm",
-                "crates/fub-wasm-host/tests/grid_crosses.rs",
-                "native_and_wasm_grid_have_protocol_parity_and_clean_lifecycle",
+                "crates/fub-wasm-host/tests/grid_bytes_crosses.rs",
+                "the_component_follows_the_shared_v2_lifecycle",
             ),
         ],
     )]);

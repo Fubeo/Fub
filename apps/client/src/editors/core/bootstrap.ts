@@ -277,17 +277,16 @@ export function createDocumentSurfaceRegistry(
   registry.register({
     owner: "fub.shell.grid",
     family: "grid",
-    defaultProfile: "sheet",
-    // Una cartella di Excel si apre nella stessa griglia, sui suoi byte con
-    // la versione 2 del protocollo (`editors/grid/workbook.ts`).
-    profiles: ["sheet", "workbook"],
-    formats: { fubsheet: "sheet", xlsx: "workbook" },
+    defaultProfile: "workbook",
+    // Una cartella di Excel si apre sui suoi byte con il protocollo a byte
+    // (`editors/grid/workbook.ts`).
+    profiles: ["workbook"],
+    formats: { xlsx: "workbook" },
     factory: {
       mount(profile, context) {
-        if (profile !== "sheet" && profile !== "workbook") throw new Error(`grid surface profile ${profile} is not registered`);
+        if (profile !== "workbook") throw new Error(`grid surface profile ${profile} is not registered`);
         const engine = new GridEngine(context.parent, {
           surfaceId: context.paneId,
-          profile,
           formatId: context.formatId,
           revision: context.revision,
           documentId: context.documentId,

@@ -10,7 +10,6 @@ use std::sync::Arc;
 #[cfg(feature = "versioning")]
 use crate::custody::Custody;
 use camino::Utf8Path;
-use fub_abi::format::FormatDescriptor;
 use fub_abi::settings::SettingSpec;
 use fub_abi::text::StringCatalog;
 use fub_abi::traits::HostNetwork;
@@ -298,16 +297,6 @@ pub(crate) fn mount_with_formats(
             ));
         }
     }
-    if let Err(error) = formats.register_source(FormatDescriptor::text(
-        fub_format_sheet::FORMAT_ID,
-        "Fub Sheet",
-        &["fubsheet"],
-    )) {
-        return Err(mount_error_with_resource_disposal(
-            format!("source format conflict: {error}"),
-            format_resources.take().unwrap_or_default(),
-        ));
-    }
     // Un provider esterno che rivendica un'estensione già presa è rifiutato da
     // solo: il vault si apre coi formati che aveva, e il rifiuto resta nella
     // diagnostica di apertura invece di far cadere l'intero vault.
@@ -382,27 +371,6 @@ pub(crate) fn mount_with_formats(
             secrets: Arc::new(crate::connector_tokens::MachineTokens::new(config_root)),
         }),
         Arc::new(crate::theme::ThemeBundle::series()),
-        Arc::new(CoreBundle::new(
-            fub_format_sheet::index::SHEET_ID,
-            "Fub Sheet",
-            |registrar| {
-                let mut errors = match registrar.register_grid_provider(Box::new(
-                    fub_format_sheet::grid::SheetGridProvider::new(),
-                )) {
-                    Ok(()) => Vec::new(),
-                    Err(error) => vec![format!("sheet grid NOT registered: {error}")],
-                };
-                match registrar
-                    .register_index_provider(Box::new(fub_format_sheet::index::SheetIndex))
-                {
-                    Ok(()) => errors,
-                    Err(error) => {
-                        errors.push(format!("sheet index NOT registered: {error}"));
-                        errors
-                    }
-                }
-            },
-        )),
     ];
 
     // Le copie dei documenti di videoscrittura: l'esportatore e il comando

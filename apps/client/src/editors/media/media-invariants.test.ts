@@ -33,7 +33,6 @@ describe("le specie media vengono dal nome, come di la'", () => {
 
   it("i documenti non sono risorse e l'ignoto e' other", () => {
     expect(mediaKindOfId("nota.md")).toBe("other");
-    expect(mediaKindOfId("foglio.fubsheet")).toBe("other");
     expect(mediaKindOfId("vista.base")).toBe("other");
     expect(mediaKindOfId("lavagna.canvas")).toBe("other");
     expect(mediaKindOfId("dati.dat")).toBe("other");

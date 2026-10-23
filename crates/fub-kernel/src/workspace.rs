@@ -50,7 +50,7 @@
 
 mod registration;
 pub use registration::{
-    PreparedGridBytesCall, PreparedGridCall, PreparedIndexRegistration, PreparedPluginDeactivation,
+    PreparedGridBytesCall, PreparedIndexRegistration, PreparedPluginDeactivation,
     PreparedRegistration, RegistrationPermit,
 };
 mod lifecycle;

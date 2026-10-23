@@ -127,7 +127,7 @@ describe("DocumentSurfaceRegistry", () => {
     ).toMatchObject({ family: "text", profile: "markdown" });
   });
 
-  it("routes the fubsheet format to the grid sheet surface", async () => {
+  it("routes a workbook to the grid", async () => {
     const registry = createDocumentSurfaceRegistry({
       onChange: vi.fn(),
       onSelectionChange: vi.fn(),
@@ -141,13 +141,8 @@ describe("DocumentSurfaceRegistry", () => {
       },
     });
 
-    expect(registry.resolve({ formatId: "fubsheet", sourceKind: "text" })).toMatchObject({
-      owner: "fub.shell.grid",
-      family: "grid",
-      profile: "sheet",
-    });
     // Una cartella di Excel arriva a byte, e la griglia la apre sulla
-    // versione 2 del protocollo: senza un host che la serva lo dice.
+    // protocollo a byte: senza un host che la serva lo dice.
     expect(registry.resolve({ formatId: "xlsx", sourceKind: "bytes", documentId: "conti.xlsx" })).toMatchObject({
       owner: "fub.shell.grid",
       family: "grid",
@@ -228,9 +223,6 @@ describe("DocumentSurfaceRegistry", () => {
         { buffer: true, reveal: true, references: true, presentation: true, printable: true }],
       [{ formatId: null, sourceKind: "text" }, "notes.txt",
         { buffer: true, reveal: true, references: false, presentation: false, printable: false }],
-      // Lo sheet non ha un provider che lo stampi (`RenderPrint` → `NoProvider`).
-      [{ formatId: "fubsheet", sourceKind: "text" }, "budget.fubsheet",
-        { buffer: true, reveal: false, references: false, presentation: false, printable: false }],
       [{ formatId: "xlsx", sourceKind: "bytes" }, "conti.xlsx",
         { buffer: true, reveal: false, references: false, presentation: false, printable: false }],
       [{ formatId: "canvas", sourceKind: "text" }, "board.canvas",

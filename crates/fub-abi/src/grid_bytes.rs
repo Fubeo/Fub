@@ -1,9 +1,7 @@
 //! La versione 2 della famiglia `grid`: una sorgente **a byte** che resta
 //! nella custodia dell'host, e una modifica che è un **giornale di celle**.
 //!
-//! La versione 1 ([`crate::grid`]) apre un sorgente di testo, e la shell lo
-//! tiene tutto. Una cartella di Excel è a byte, e può essere grande: qui la
-//! shell apre una sessione per documento, legge le finestre che mostra e non
+//! Una cartella di Excel è a byte, e può essere grande: la shell apre una sessione per documento, legge le finestre che mostra e non
 //! vede mai i byte. Il testo della `DocumentSession` è il [`GridJournal`]: le
 //! celle cambiate rispetto ai byte sul disco, con l'input che hanno nel file e
 //! quello nuovo. Salvare è dell'host: rilegge i byte, riapre il provider, gli
@@ -454,7 +452,7 @@ impl GridSurfaceSpec {
 
 /// Provider di una superficie grid su una sorgente a byte.
 ///
-/// `apply` ha la richiesta della versione 1, e il suo [`GridCommit`] porta
+/// `apply` riceve le patch di [`GridApplyRequest`], e il suo [`GridCommit`] porta
 /// la modifica **del giornale**: `edit` è il diff fra il testo del giornale
 /// prima e dopo, che la shell applica al buffer della `DocumentSession` come
 /// ogni altro diff. `bytes_to_write` la chiama soltanto l'host, per salvare.

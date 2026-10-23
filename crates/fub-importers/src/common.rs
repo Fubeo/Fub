@@ -400,8 +400,8 @@ pub fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
 /// Fallback plain-text import: the contract's faithful minimum.
 ///
 /// Claims `.txt`/`.text` (and `text/plain` without an extension), never
-/// `.md`/`.markdown` (owned by `fub.markdown`), never `.base`/`.canvas`/
-/// `.fubsheet` (owned by their format crates: those fall back to source
+/// `.md`/`.markdown` (owned by `fub.markdown`), never `.base`/`.canvas`
+/// (owned by their format crates: those fall back to source
 /// text only through their own providers, never through a generic import).
 #[derive(Default)]
 pub struct TextImport;

@@ -103,14 +103,12 @@ pub use format::{
 };
 pub use gate::Gate;
 pub use grid::{
-    validate_grid_source, GridApplyRequest, GridCell, GridCellKey, GridCellPatch, GridCellStyle,
-    GridCellValue, GridColumn, GridCommit, GridFormulaError, GridHorizontalAlign, GridInvalidation,
-    GridProvider, GridRow, GridSession, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindow,
-    GridWindowRequest, GRID_FAMILY, GRID_PROTOCOL_VERSION, MAX_GRID_INVALIDATED_CELLS,
-    MAX_GRID_PATCHES, MAX_GRID_PATCH_INPUT_BYTES, MAX_GRID_RESPONSE_BYTES, MAX_GRID_SESSION_CELLS,
+    GridApplyRequest, GridCellKey, GridCellPatch, GridCellStyle, GridColumn, GridCommit,
+    GridHorizontalAlign, GridInvalidation, GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec,
+    GridWindowRequest, GRID_FAMILY, MAX_GRID_INVALIDATED_CELLS, MAX_GRID_PATCHES,
+    MAX_GRID_PATCH_INPUT_BYTES, MAX_GRID_RESPONSE_BYTES, MAX_GRID_SESSION_CELLS,
     MAX_GRID_SESSION_COLUMNS, MAX_GRID_SESSION_ROWS, MAX_GRID_SESSION_SHEETS,
-    MAX_GRID_SESSION_WINDOWS, MAX_GRID_SOURCE_BYTES, MAX_GRID_WINDOW_CELLS,
-    MAX_GRID_WINDOW_COLUMNS, MAX_GRID_WINDOW_ROWS,
+    MAX_GRID_SESSION_WINDOWS, MAX_GRID_WINDOW_CELLS, MAX_GRID_WINDOW_COLUMNS, MAX_GRID_WINDOW_ROWS,
 };
 pub use grid_bytes::{
     grid_bytes_revision, grid_journal_match, GridBytesCell, GridBytesProvider, GridBytesSession,
