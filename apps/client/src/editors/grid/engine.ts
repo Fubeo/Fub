@@ -1,5 +1,6 @@
 import type {
   GridApplyRequest,
+  GridCommand,
   GridBytesCell,
   GridBytesSession,
   GridBytesWindow,
@@ -9,7 +10,10 @@ import type {
   GridCommandRequest,
   GridCommandState,
   GridCommit,
+  GridDialog,
+  GridMerge,
   GridSelection as GridCommandSelection,
+  GridSheetView,
   GridSurfaceSpec,
   GridWindowRequest,
 } from "../../host/contract";
@@ -48,8 +52,21 @@ import {
   type GridCellPatch,
 } from "./operation";
 import {
+  cellA1,
+  expandToMerges,
+  mergeAt,
+  mergesIn,
+  parseCellA1,
+  parseRangeA1,
+  rangeA1,
+  type GridRange,
+} from "./merges";
+import { hasBorders, horizontalOf, iconOf, paintBorders, paintCell, spills } from "./paint";
+import { currencyFormat, shortcutCommand } from "./shortcuts";
+import {
   cellKey,
   decimalSeparator,
+  DEFAULT_SHEET_VIEW,
   keyPosition,
   fileInput,
   localInput,
@@ -76,14 +93,15 @@ export const MAX_GRID_SESSION_WINDOWS = 256;
 /// Le parti di una cartella che la griglia non disegna, per codice d'avviso
 /// di `fub-format-xlsx` (`not-shown-…`).
 const NOT_SHOWN_KEYS: Readonly<Record<string, Key>> = {
-  "not-shown-merges": "grid.workbook.part.merges",
   "not-shown-charts": "grid.workbook.part.charts",
   "not-shown-images": "grid.workbook.part.images",
   "not-shown-shapes": "grid.workbook.part.shapes",
-  "not-shown-comments": "grid.workbook.part.comments",
-  "not-shown-conditional-formats": "grid.workbook.part.conditional_formats",
   "not-shown-sparklines": "grid.workbook.part.sparklines",
 };
+/// Il comando con cui una formula, o un input, entra in una sessione a comandi.
+const SET_VALUES = "range.setValues";
+const UNDO = "edit.undo";
+const REDO = "edit.redo";
 /// Perché una cella non si modifica, per codice di blocco.
 const LOCK_KEYS: Readonly<Record<string, Key>> = {
   array: "grid.workbook.lock.array",
@@ -120,6 +138,19 @@ const PLAIN_STYLE: GridBytesStyle = {
   rotation: 0,
   borders: { top: null, right: null, bottom: null, left: null, diagonal_down: null, diagonal_up: null },
 };
+
+/// Il foglio con le misure in pixel della griglia: righe e colonne bloccate,
+/// intestazioni e zoom.
+interface SheetFrame {
+  readonly view: GridSheetView;
+  readonly zoom: number;
+  readonly rowHeader: number;
+  readonly columnHeader: number;
+  readonly frozenRows: number;
+  readonly frozenColumns: number;
+  readonly frozenHeight: number;
+  readonly frozenWidth: number;
+}
 
 /// La sessione della versione 2 aperta su una cartella.
 interface BytesState {
@@ -182,6 +213,10 @@ export interface GridEngineOptions {
   readonly base?: () => string | null;
   readonly onChange: (change: GridChange) => void;
   readonly onSelectionChange: () => void;
+  /// Il catalogo dei comandi è cambiato (`GridEngine.commands`).
+  readonly onCommands?: () => void;
+  /// Un comando chiede una finestra di dialogo alla shell.
+  readonly onDialog?: (dialog: GridDialog) => void;
   readonly grid?: GridHost;
   readonly theme?: Theme;
 }
@@ -198,7 +233,12 @@ interface EditingState {
   readonly owner: "cell" | "formula";
 }
 
-function axisLayout(entries: readonly { hidden: boolean; height?: number; width?: number }[], fallback: number, dimension: "height" | "width"): AxisLayout {
+function axisLayout(
+  entries: readonly { hidden: boolean; height?: number; width?: number }[],
+  fallback: number,
+  dimension: "height" | "width",
+  zoom = 1,
+): AxisLayout {
   const offsets = new Array<number>(entries.length + 1);
   const sizes = new Array<number>(entries.length);
   offsets[0] = 0;
@@ -206,9 +246,7 @@ function axisLayout(entries: readonly { hidden: boolean; height?: number; width?
     const declared = entries[index][dimension];
     const size = entries[index].hidden
       ? 0
-      : typeof declared === "number" && Number.isFinite(declared) && declared > 0
-        ? declared
-        : fallback;
+      : Math.round((typeof declared === "number" && Number.isFinite(declared) && declared > 0 ? declared : fallback) * zoom);
     sizes[index] = size;
     offsets[index + 1] = offsets[index] + size;
   }
@@ -364,6 +402,26 @@ export class GridEngine {
   #undo: GridCellPatch[][] = [];
   #redo: GridCellPatch[][] = [];
   #pointerAnchor: GridPosition | null = null;
+  /// Il catalogo dei comandi sulla selezione, come il provider l'ha dato.
+  #commands: GridCommandState[] = [];
+  #commandsLoad: Promise<void> | null = null;
+  #commandsQueued = false;
+  /// Il giornale confermato è di comandi: annulla e ripeti sono del provider.
+  #confirmedCommands = false;
+  /// Le richieste in coda che porteranno la sessione ai comandi.
+  #pendingCommandMode = 0;
+  #frame: SheetFrame = {
+    view: DEFAULT_SHEET_VIEW,
+    zoom: 1,
+    rowHeader: ROW_HEADER_WIDTH,
+    columnHeader: COLUMN_HEADER_HEIGHT,
+    frozenRows: 0,
+    frozenColumns: 0,
+    frozenHeight: 0,
+    frozenWidth: 0,
+  };
+  /// La famiglia di caratteri della griglia, per un carattere del file che manca.
+  #fallbackFont: string | null = null;
 
   constructor(parent: HTMLElement, options: GridEngineOptions) {
     const signal = this.#abort.signal;
@@ -523,6 +581,7 @@ export class GridEngine {
   }
 
   undo(): boolean {
+    if (this.#commandMode()) return this.#documentHistory(UNDO);
     const patches = this.#undo.pop();
     if (!patches) return false;
     if (!this.#commit(inverseGridPatches(patches), "undo", false)) {
@@ -534,6 +593,7 @@ export class GridEngine {
   }
 
   redo(): boolean {
+    if (this.#commandMode()) return this.#documentHistory(REDO);
     const patches = this.#redo.pop();
     if (!patches) return false;
     if (!this.#commit(patches, "redo", false)) {
@@ -542,6 +602,172 @@ export class GridEngine {
     }
     this.#undo.push(patches);
     return true;
+  }
+
+  /// Il catalogo dei comandi sulla selezione: vuoto se la sessione non ne
+  /// serve.
+  commands(): readonly GridCommandState[] {
+    return this.#commands;
+  }
+
+  /// Lo stile della cella attiva, per lo stato dei controlli della barra.
+  activeStyle(): GridBytesStyle | undefined {
+    return this.#workbookCell(this.#selection.focus)?.style;
+  }
+
+  /// Dà il comando `id` del catalogo sulla selezione, con i parametri come
+  /// testo di un oggetto JSON. Falso se il catalogo non lo serve acceso.
+  command(id: string, params = "{}"): boolean {
+    const state = this.#commands.find((command) => command.id === id);
+    if (!this.#bytes || this.#readOnly || !state) return false;
+    if (!state.enabled) {
+      if (state.reason) this.#refuse(t("grid.workbook.command_off", { reason: state.reason }));
+      return false;
+    }
+    this.#finishEditing(true, "input", false);
+    this.#give(id, params, false);
+    return true;
+  }
+
+  /// Annulla o ripeti del documento, nella sessione a comandi.
+  #documentHistory(id: typeof UNDO | typeof REDO): boolean {
+    if (!this.#bytes || this.#readOnly || !this.#serves(id)) return false;
+    this.#finishEditing(false, "input", false);
+    this.#give(id, "{}", true);
+    return true;
+  }
+
+  /// Mette in coda il comando `id`: da qui annulla e ripeti sono del
+  /// provider, anche prima che risponda.
+  #give(id: string, params: string, history: boolean): void {
+    const selection = this.#commandSelection();
+    const command: GridCommand = { id, params, ...selection };
+    this.#undo = [];
+    this.#redo = [];
+    this.#pendingCommandMode += 1;
+    const epoch = this.#bytesEpoch;
+    const edits = this.#editEpoch;
+    const ticket = ++this.#bytesTickets;
+    this.#enqueueProtocol(async () => {
+      try {
+        await this.#giveNow(command, history, epoch, edits, ticket);
+      } finally {
+        if (epoch === this.#bytesEpoch) this.#pendingCommandMode = Math.max(0, this.#pendingCommandMode - 1);
+      }
+    });
+  }
+
+  async #giveNow(command: GridCommand, history: boolean, epoch: number, edits: number, ticket: number): Promise<void> {
+    const host = this.#options.grid;
+    const state = this.#bytes;
+    const current = () => !this.#destroyed && epoch === this.#bytesEpoch && edits === this.#editEpoch && this.#bytes === state;
+    if (!host || !state || !current()) return;
+    let outcome: GridCommandOutcome;
+    let session: GridBytesSession;
+    try {
+      outcome = await host.gridBytesCommand(state.surface, state.instance, { revision: state.session.revision, command });
+      if (!current()) return;
+      session = {
+        ...state.session,
+        revision: outcome.commit.revision,
+        sheets: outcome.sheets,
+        hidden: outcome.hidden,
+        active: outcome.selection.sheet,
+        commands: outcome.commands,
+      };
+      validateBytesSession(session);
+      this.#confirm(applySourceEdit(this.#confirmedJournal, outcome.commit.edit));
+    } catch (error) {
+      if (!current()) return;
+      // Niente da annullare o da ripetere non è un errore da dire.
+      if (history && isErrorKind(error, "bad_args")) return;
+      this.#refuse(t("grid.workbook.command_failed", { error: errorText(error) }));
+      // La transazione del provider non ha cambiato niente: le celle
+      // mostrate in anticipo dalle modifiche in coda restano le sue.
+      return;
+    }
+    state.session = session;
+    this.#shownSession = session;
+    this.#commands = outcome.commands;
+    this.#bytesMessage = null;
+    this.#options.onCommands?.();
+    const last = ticket === this.#bytesTickets;
+    if (last) this.#publishJournal(this.#confirmedJournal, "input");
+    if (last) this.#adoptSelection(outcome.selection);
+    if (outcome.dialog) this.#options.onDialog?.(outcome.dialog);
+    if (outcome.commit.edit.from === outcome.commit.edit.to && !outcome.commit.edit.inserted) {
+      this.#showView(this.#sheet().id, false);
+      return;
+    }
+    await this.#refreshBytes(state, epoch);
+  }
+
+  /// La selezione che un comando ha lasciato: il foglio, l'intervallo che
+  /// contiene la cella attiva e la cella attiva, che resta il fuoco quando è
+  /// un angolo dell'intervallo.
+  #adoptSelection(selection: GridCommandSelection): void {
+    const index = this.#workbook?.sheets.findIndex((sheet) => sheet.id === selection.sheet) ?? -1;
+    const active = parseCellA1(selection.active);
+    if (index < 0 || !active) return;
+    const areas = selection.selection.split(",").map(parseRangeA1).filter((area): area is GridRange => area !== null);
+    const area = areas.find((candidate) =>
+      active.row >= candidate.rowStart && active.row <= candidate.rowEnd
+      && active.column >= candidate.columnStart && active.column <= candidate.columnEnd);
+    let next: GridSelection = { anchor: active, focus: active };
+    if (area) {
+      const row = active.row === area.rowStart ? area.rowEnd : area.rowStart;
+      const column = active.column === area.columnStart ? area.columnEnd : area.columnStart;
+      const corner = (active.row === area.rowStart || active.row === area.rowEnd)
+        && (active.column === area.columnStart || active.column === area.columnEnd);
+      next = corner
+        ? { anchor: { row, column }, focus: active }
+        : { anchor: { row: area.rowStart, column: area.columnStart }, focus: { row: area.rowEnd, column: area.columnEnd } };
+    }
+    const sameSheet = index === this.#sheetIndex;
+    if (sameSheet && samePosition(next.anchor, this.#selection.anchor) && samePosition(next.focus, this.#selection.focus)) return;
+    if (!sameSheet) {
+      this.#finishEditing(false, "input", false);
+      this.#sheetIndex = index;
+      this.#selection = next;
+      this.#showSheet(true);
+      this.#sheetTabs?.handle.select(selection.sheet);
+      void this.#loadViewport();
+    }
+    this.#selection = this.#clampedSelection(next);
+    this.#ensureVisible(this.#selection.focus);
+    if (!this.#editing) this.#syncFormulaBar();
+    this.#render();
+    this.#options.onSelectionChange();
+  }
+
+  /// Rilegge il catalogo sulla selezione, una richiesta alla volta: chi
+  /// arriva mentre una è in volo la rifà dopo.
+  #loadCommands(): Promise<void> {
+    const state = this.#bytes;
+    if (!state || !this.#commands.length || !this.#options.onCommands || this.#destroyed) return Promise.resolve();
+    if (this.#commandsLoad) {
+      this.#commandsQueued = true;
+      return this.#commandsLoad;
+    }
+    const epoch = this.#bytesEpoch;
+    const load = (async () => {
+      try {
+        const commands = await this.#options.grid!.gridBytesCommands(state.surface, state.instance, this.#commandSelection());
+        if (this.#destroyed || epoch !== this.#bytesEpoch || this.#bytes !== state) return;
+        this.#commands = [...commands];
+        this.#options.onCommands?.();
+      } catch {
+        // Un catalogo che non si rilegge resta quello di prima.
+      }
+    })().finally(() => {
+      this.#commandsLoad = null;
+      if (this.#commandsQueued) {
+        this.#commandsQueued = false;
+        void this.#loadCommands();
+      }
+    });
+    this.#commandsLoad = load;
+    return load;
   }
 
 
@@ -634,12 +860,15 @@ export class GridEngine {
       const state: BytesState = { surface: surface.id, instance: session.instance, session };
       const windows = await this.#readBytesWindows(state, sheet.id, !top, []);
       if (this.#destroyed || epoch !== this.#bytesEpoch) return;
+      this.#confirm(journal);
       opened = null;
       this.#bytes = state;
       this.#shownSession = session;
       this.#windows = windows;
       this.#bytesBase = base;
-      this.#confirmedJournal = journal;
+      this.#pendingCommandMode = 0;
+      this.#commands = session.commands;
+      this.#options.onCommands?.();
       this.#bytesConflicts = session.conflicts.length;
       this.#bytesMessage = null;
       this.#root.dataset.gridProtocol = "v2";
@@ -657,6 +886,8 @@ export class GridEngine {
 
   #openFailed(journal: string, message: string): void {
     this.#bytesMessage = message;
+    this.#commands = [];
+    this.#options.onCommands?.();
     this.#root.dataset.gridProtocol = "unavailable";
     // Una modifica scritta mentre si apriva non ha chi la controlli: il
     // giornale torna quello aperto.
@@ -693,26 +924,36 @@ export class GridEngine {
     const sheet = session.sheets.find((candidate) => candidate.id === sheetId);
     if (!host || !sheet) return [];
     const none: AxisLayout = { offsets: [], sizes: [], total: 0 };
+    const frame = layout ? this.#frame : null;
+    const zoom = frame?.zoom ?? 1;
     const rowRange = viewportRange(
       sheet.row_count,
       layout ? this.#rows : none,
       this.#viewport.scrollTop,
       this.#viewport.clientHeight,
-      COLUMN_HEADER_HEIGHT,
-      DEFAULT_ROW_HEIGHT,
+      frame?.columnHeader ?? COLUMN_HEADER_HEIGHT,
+      DEFAULT_ROW_HEIGHT * zoom,
     );
     const columnRange = viewportRange(
       sheet.column_count,
       layout ? this.#columns : none,
       this.#viewport.scrollLeft,
       this.#viewport.clientWidth,
-      ROW_HEADER_WIDTH,
-      DEFAULT_COLUMN_WIDTH,
+      frame?.rowHeader ?? ROW_HEADER_WIDTH,
+      DEFAULT_COLUMN_WIDTH * zoom,
     );
     if (!rowRange || !columnRange) return [];
+    // I blocchi dello schermo, e quelli delle righe e colonne bloccate, che
+    // si vedono anche quando lo schermo è lontano.
+    const blocks = (range: { start: number; end: number }, frozen: number, size: number): number[] => {
+      const out = new Set<number>();
+      for (let start = 0; start < frozen; start += size) out.add(start);
+      for (let start = Math.floor(range.start / size) * size; start <= range.end; start += size) out.add(start);
+      return [...out].sort((left, right) => left - right);
+    };
     const requests: GridWindowRequest[] = [];
-    for (let row = Math.floor(rowRange.start / GRID_WINDOW_ROWS) * GRID_WINDOW_ROWS; row <= rowRange.end; row += GRID_WINDOW_ROWS) {
-      for (let column = Math.floor(columnRange.start / GRID_WINDOW_COLUMNS) * GRID_WINDOW_COLUMNS; column <= columnRange.end; column += GRID_WINDOW_COLUMNS) {
+    for (const row of blocks(rowRange, frame?.frozenRows ?? 0, GRID_WINDOW_ROWS)) {
+      for (const column of blocks(columnRange, frame?.frozenColumns ?? 0, GRID_WINDOW_COLUMNS)) {
         if (kept.some((window) =>
           window.revision === session.revision
           && window.sheet === sheet.id
@@ -881,6 +1122,9 @@ export class GridEngine {
     const history: GridCellPatch[] = [];
     const disks: string[] = [];
     const written: CellWrite[] = [];
+    // Su una sessione a comandi il giornale lo scrive il provider: la griglia
+    // mostra subito le celle e pubblica il giornale che lui conferma.
+    let commanding = this.#commandMode();
     for (const write of writes) {
       const refusal = this.#writeRefusal(write.position);
       if (refusal) {
@@ -890,17 +1134,23 @@ export class GridEngine {
       const coordinate = coordinateAt(sheet, write.position)!;
       const current = this.#workbookCell(write.position)?.bytes.input ?? "";
       if (write.after === current) continue;
-      const entry = gridJournalEntry(journal, coordinate);
-      // Una formula si riscrive soltanto per tornare a quella del file.
-      if (write.after.startsWith("=") && entry?.before !== write.after) {
-        this.#refuse(t("grid.workbook.formula"));
-        return false;
+      const entry = commanding ? undefined : gridJournalEntry(journal, coordinate);
+      // Una formula entra come comando, dove la sessione ne serve; altrimenti
+      // si riscrive soltanto per tornare a quella del file.
+      if (write.after.startsWith("=") && (commanding || entry?.before !== write.after)) {
+        if (!this.#serves(SET_VALUES)) {
+          this.#refuse(t("grid.workbook.formula"));
+          return false;
+        }
+        commanding = true;
       }
-      try {
-        journal = recordGridJournal(journal, coordinate, current, write.after);
-      } catch {
-        this.#refuse(t("grid.workbook.too_many"));
-        return false;
+      if (!commanding) {
+        try {
+          journal = recordGridJournal(journal, coordinate, current, write.after);
+        } catch {
+          this.#refuse(t("grid.workbook.too_many"));
+          return false;
+        }
       }
       request.push({ cell: { ...coordinate }, before: current, after: write.after });
       history.push({ coordinate, before: { input: current }, after: { input: write.after } });
@@ -909,18 +1159,41 @@ export class GridEngine {
     }
     if (!request.length) return false;
     for (const write of written) this.#showWritten(write.position, write.after);
-    if (recordHistory) {
+    if (commanding) {
+      // Annulla e ripeti sono del documento, cioè del provider.
+      this.#undo = [];
+      this.#redo = [];
+      this.#pendingCommandMode += 1;
+    } else if (recordHistory) {
       this.#undo.push(history);
       this.#redo = [];
     }
     this.#bytesMessage = null;
     this.#showView(sheet.id, false);
-    this.#publishJournal(gridJournalText(journal), origin);
+    if (!commanding) this.#publishJournal(gridJournalText(journal), origin);
     const epoch = this.#bytesEpoch;
     const edits = this.#editEpoch;
     const ticket = ++this.#bytesTickets;
-    this.#enqueueProtocol(() => this.#applyBytes(request, history, disks, origin, epoch, edits, ticket));
+    this.#enqueueProtocol(() => this.#applyBytes(request, history, disks, origin, epoch, edits, ticket, commanding));
     return true;
+  }
+
+  /// Se la sessione è a comandi, o lo sarà quando la coda arriva al provider.
+  #commandMode(): boolean {
+    return this.#confirmedCommands || this.#pendingCommandMode > 0;
+  }
+
+  /// Se il catalogo serve il comando `id`.
+  #serves(id: string): boolean {
+    return this.#commands.some((command) => command.id === id);
+  }
+
+  /// Il giornale confermato è `text`.
+  #confirm(text: string): GridJournal {
+    const journal = parseGridJournal(text);
+    this.#confirmedJournal = text;
+    this.#confirmedCommands = journal.commands.length > 0;
+    return journal;
   }
 
   async #applyBytes(
@@ -931,6 +1204,24 @@ export class GridEngine {
     epoch: number,
     edits: number,
     ticket: number,
+    commanding: boolean,
+  ): Promise<void> {
+    try {
+      await this.#applyBytesNow(patches, history, disks, origin, epoch, edits, ticket, commanding);
+    } finally {
+      if (commanding && epoch === this.#bytesEpoch) this.#pendingCommandMode = Math.max(0, this.#pendingCommandMode - 1);
+    }
+  }
+
+  async #applyBytesNow(
+    patches: GridRequestPatch[],
+    history: GridCellPatch[],
+    disks: readonly string[],
+    origin: EditorChangeOrigin,
+    epoch: number,
+    edits: number,
+    ticket: number,
+    commanding: boolean,
   ): Promise<void> {
     const host = this.#options.grid;
     const state = this.#bytes;
@@ -941,9 +1232,7 @@ export class GridEngine {
     try {
       const commit = await host.applyGridBytes(state.surface, state.instance, { revision: state.session.revision, patches });
       if (!current()) return;
-      const text = applySourceEdit(this.#confirmedJournal, commit.edit);
-      confirmed = parseGridJournal(text);
-      this.#confirmedJournal = text;
+      confirmed = this.#confirm(applySourceEdit(this.#confirmedJournal, commit.edit));
       state.session = { ...state.session, revision: commit.revision };
     } catch (error) {
       if (!current()) return;
@@ -964,9 +1253,11 @@ export class GridEngine {
     }
     // La history tiene l'input che il provider ha scritto (`0.250` è `0.25`):
     // annullare parte da quello.
-    history.forEach((patch, index) => {
-      history[index] = { ...patch, after: { input: gridJournalEntry(confirmed, patch.coordinate)?.after ?? disks[index] } };
-    });
+    if (!commanding) {
+      history.forEach((patch, index) => {
+        history[index] = { ...patch, after: { input: gridJournalEntry(confirmed, patch.coordinate)?.after ?? disks[index] } };
+      });
+    }
     // Il giornale ottimistico si corregge soltanto quando non resta niente in
     // coda: prima, la conferma non contiene ancora le modifiche che seguono.
     if (ticket === this.#bytesTickets) this.#publishJournal(this.#confirmedJournal, origin);
@@ -1048,161 +1339,184 @@ export class GridEngine {
       lifetime,
       onSelect: (id) => {
         const index = this.#workbook?.sheets.findIndex((sheet) => sheet.id === id) ?? -1;
-        if (index < 0 || index === this.#sheetIndex) return;
-        this.#finishEditing(false, "input", false);
-        this.#sheetIndex = index;
-        this.#selection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
-        this.#showSheet(true);
-        void this.#loadViewport();
-        this.#options.onSelectionChange();
+        if (index >= 0) this.#showSheetAt(index);
       },
     });
     lifetime.add(() => tablist.remove());
     this.#sheetTabs = { handle, names, lifetime };
   }
 
+  /// La vista del foglio mostrato, come l'ultima finestra letta la dà.
+  #sheetView(): GridSheetView {
+    return this.#view?.sheets[this.#sheetIndex]?.view ?? DEFAULT_SHEET_VIEW;
+  }
+
+  /// Le unioni lette del foglio mostrato.
+  #merges(): readonly GridMerge[] {
+    return this.#view?.sheets[this.#sheetIndex]?.merges ?? [];
+  }
+
+  /// Mostra il foglio `index`, dalla sua prima cella.
+  #showSheetAt(index: number): void {
+    if (index === this.#sheetIndex) return;
+    this.#finishEditing(false, "input", false);
+    this.#sheetIndex = index;
+    this.#selection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
+    this.#showSheet(true);
+    this.#sheetTabs?.handle.select(this.#sheet().id);
+    void this.#loadViewport();
+    this.#selectionChanged();
+  }
+
+  #selectionChanged(): void {
+    this.#options.onSelectionChange();
+    void this.#loadCommands();
+  }
+
   #rebuildLayout(): void {
     const sheet = this.#sheet();
-    this.#rows = axisLayout(sheet.rows, DEFAULT_ROW_HEIGHT, "height");
-    this.#columns = axisLayout(sheet.columns, DEFAULT_COLUMN_WIDTH, "width");
-    this.#canvas.style.width = `${ROW_HEADER_WIDTH + this.#columns.total}px`;
-    this.#canvas.style.height = `${COLUMN_HEADER_HEIGHT + this.#rows.total}px`;
+    const view = this.#sheetView();
+    const zoom = view.zoom / 100;
+    this.#rows = axisLayout(sheet.rows, DEFAULT_ROW_HEIGHT, "height", zoom);
+    this.#columns = axisLayout(sheet.columns, DEFAULT_COLUMN_WIDTH, "width", zoom);
+    const frozenRows = Math.min(view.frozen_rows, this.#rows.sizes.length);
+    const frozenColumns = Math.min(view.frozen_columns, this.#columns.sizes.length);
+    this.#frame = {
+      view,
+      zoom,
+      rowHeader: view.headings ? Math.round(ROW_HEADER_WIDTH * zoom) : 0,
+      columnHeader: view.headings ? Math.round(COLUMN_HEADER_HEIGHT * zoom) : 0,
+      frozenRows,
+      frozenColumns,
+      frozenHeight: this.#rows.offsets[frozenRows] ?? 0,
+      frozenWidth: this.#columns.offsets[frozenColumns] ?? 0,
+    };
+    this.#canvas.style.width = `${this.#frame.rowHeader + this.#columns.total}px`;
+    this.#canvas.style.height = `${this.#frame.columnHeader + this.#rows.total}px`;
+    this.#canvas.style.fontSize = zoom === 1 ? "" : `${(zoom * 100).toFixed(1)}%`;
+    this.#viewport.classList.toggle("no-gridlines", !view.gridlines);
     this.#viewport.setAttribute("aria-rowcount", String(sheet.rows.length + 1));
     this.#viewport.setAttribute("aria-colcount", String(sheet.columns.length + 1));
   }
 
+  /// La famiglia di caratteri della griglia, letta una volta.
+  #gridFont(): string {
+    this.#fallbackFont ??= getComputedStyle(this.#viewport).fontFamily ?? "";
+    return this.#fallbackFont;
+  }
+
+  /// Le righe (o le colonne) da disegnare: quelle bloccate, quelle dello
+  /// schermo e quella della cella che si scrive.
+  #renderedIndices(layout: AxisLayout, frozen: number, frozenSize: number, scroll: number, extent: number, editing: number | null): number[] {
+    const window = boundedWindow(layout, scroll + frozenSize, Math.max(0, extent - frozenSize));
+    const out: number[] = [];
+    for (let index = 0; index < frozen; index += 1) out.push(index);
+    for (let index = Math.max(frozen, window.start); index <= window.end; index += 1) out.push(index);
+    if (editing !== null && editing >= 0 && editing < layout.sizes.length && !out.includes(editing)) {
+      out.push(editing);
+      out.sort((left, right) => left - right);
+    }
+    return out;
+  }
+
+  /// La sinistra di una colonna nel canvas: una colonna bloccata resta ferma.
+  #columnLeft(column: number): number {
+    const left = this.#frame.rowHeader + this.#columns.offsets[column];
+    return column < this.#frame.frozenColumns ? left + this.#viewport.scrollLeft : left;
+  }
+
   #render(): void {
     if (!this.#workbook) return;
-    const rowWindow = boundedWindow(
-      this.#rows,
-      Math.max(0, this.#viewport.scrollTop - COLUMN_HEADER_HEIGHT),
-      this.#viewport.clientHeight,
-    );
-    const columnWindow = boundedWindow(
-      this.#columns,
-      Math.max(0, this.#viewport.scrollLeft - ROW_HEADER_WIDTH),
-      this.#viewport.clientWidth,
-    );
-    const range = normalizedSelection(this.#selection);
+    const frame = this.#frame;
+    const scrollTop = this.#viewport.scrollTop;
+    const scrollLeft = this.#viewport.scrollLeft;
     const editingPosition = this.#editing?.owner === "cell" ? this.#editing.position : null;
-    const renderedRows: number[] = [];
-    for (let row = rowWindow.start; row <= rowWindow.end; row += 1) renderedRows.push(row);
-    if (
-      editingPosition
-      && editingPosition.row >= 0
-      && editingPosition.row < this.#rows.sizes.length
-      && (editingPosition.row < rowWindow.start || editingPosition.row > rowWindow.end)
-    ) {
-      renderedRows.push(editingPosition.row);
-      renderedRows.sort((left, right) => left - right);
-    }
-    const renderedColumns: number[] = [];
-    for (let column = columnWindow.start; column <= columnWindow.end; column += 1) renderedColumns.push(column);
-    if (
-      editingPosition
-      && editingPosition.column >= 0
-      && editingPosition.column < this.#columns.sizes.length
-      && (editingPosition.column < columnWindow.start || editingPosition.column > columnWindow.end)
-    ) {
-      renderedColumns.push(editingPosition.column);
-      renderedColumns.sort((left, right) => left - right);
+    const renderedRows = this.#renderedIndices(
+      this.#rows, frame.frozenRows, frame.frozenHeight, scrollTop,
+      this.#viewport.clientHeight - frame.columnHeader, editingPosition?.row ?? null,
+    );
+    const renderedColumns = this.#renderedIndices(
+      this.#columns, frame.frozenColumns, frame.frozenWidth, scrollLeft,
+      this.#viewport.clientWidth - frame.rowHeader, editingPosition?.column ?? null,
+    );
+    const range = this.#selectedRange();
+    const merges = this.#merges();
+    const firstRow = renderedRows[0] ?? 0;
+    const lastRow = renderedRows[renderedRows.length - 1] ?? -1;
+    const firstColumn = renderedColumns[0] ?? 0;
+    const lastColumn = renderedColumns[renderedColumns.length - 1] ?? -1;
+    // Le unioni sullo schermo: ognuna si disegna una volta, nella prima riga
+    // disegnata che copre, e le celle che copre non si disegnano.
+    const visibleMerges = mergesIn(merges, { rowStart: firstRow, rowEnd: lastRow, columnStart: firstColumn, columnEnd: lastColumn });
+    const covered = new Set<number>();
+    const anchorsByRow = new Map<number, GridMerge[]>();
+    for (const merge of visibleMerges) {
+      for (let row = Math.max(merge.row, firstRow); row <= Math.min(merge.row + merge.rows - 1, lastRow); row += 1) {
+        for (let column = Math.max(merge.column, firstColumn); column <= Math.min(merge.column + merge.columns - 1, lastColumn); column += 1) {
+          covered.add(cellKey({ row, column }));
+        }
+      }
+      const host = renderedRows.find((row) => row >= merge.row && this.#rows.sizes[row] > 0);
+      if (host !== undefined && host < merge.row + merge.rows) {
+        anchorsByRow.set(host, [...(anchorsByRow.get(host) ?? []), merge]);
+      }
     }
     const rows: HTMLElement[] = [];
+    const measures: HTMLElement[] = [];
 
-    const columnHeaderRow = document.createElement("div");
-    columnHeaderRow.className = "grid-row grid-column-header-row";
-    columnHeaderRow.setAttribute("role", "row");
-    columnHeaderRow.setAttribute("aria-rowindex", "1");
-    this.#place(
-      columnHeaderRow,
-      0,
-      this.#viewport.scrollTop,
-      ROW_HEADER_WIDTH + this.#columns.total,
-      COLUMN_HEADER_HEIGHT,
-    );
-    this.#corner.className = "grid-corner";
-    this.#corner.setAttribute("role", "presentation");
-    this.#corner.textContent = "";
-    this.#corner.style.pointerEvents = "none";
-    this.#place(this.#corner, this.#viewport.scrollLeft, 0, ROW_HEADER_WIDTH, COLUMN_HEADER_HEIGHT);
-    columnHeaderRow.append(this.#corner);
-    for (let column = columnWindow.start; column <= columnWindow.end; column += 1) {
-      if (this.#columns.sizes[column] === 0) continue;
-      const header = document.createElement("div");
-      header.className = "grid-header grid-column-header";
-      header.setAttribute("role", "columnheader");
-      header.setAttribute("aria-rowindex", "1");
-      header.setAttribute("aria-colindex", String(column + 2));
-      header.textContent = columnLabel(column);
-      header.style.pointerEvents = "none";
-      this.#place(header, ROW_HEADER_WIDTH + this.#columns.offsets[column], 0, this.#columns.sizes[column], COLUMN_HEADER_HEIGHT);
-      columnHeaderRow.append(header);
-    }
-    rows.push(columnHeaderRow);
-
+    if (frame.columnHeader > 0) rows.push(this.#columnHeaders(renderedColumns, range));
     for (const row of renderedRows) {
       if (this.#rows.sizes[row] === 0) continue;
+      const frozen = row < frame.frozenRows;
       const rowElement = document.createElement("div");
-      rowElement.className = "grid-row";
+      rowElement.className = frozen ? "grid-row frozen" : "grid-row";
       rowElement.dataset.row = String(row);
       rowElement.setAttribute("role", "row");
       rowElement.setAttribute("aria-rowindex", String(row + 2));
       this.#place(
         rowElement,
         0,
-        COLUMN_HEADER_HEIGHT + this.#rows.offsets[row],
-        ROW_HEADER_WIDTH + this.#columns.total,
+        frame.columnHeader + this.#rows.offsets[row] + (frozen ? scrollTop : 0),
+        frame.rowHeader + this.#columns.total,
         this.#rows.sizes[row],
       );
-
-      const header = document.createElement("div");
-      header.className = "grid-header grid-row-header";
-      header.setAttribute("role", "rowheader");
-      header.setAttribute("aria-rowindex", String(row + 2));
-      header.setAttribute("aria-colindex", "1");
-      header.textContent = String(row + 1);
-      header.style.pointerEvents = "none";
-      this.#place(header, this.#viewport.scrollLeft, 0, ROW_HEADER_WIDTH, this.#rows.sizes[row]);
-      rowElement.append(header);
-
-      for (const column of renderedColumns) {
-        if (this.#columns.sizes[column] === 0) continue;
-        const position = { row, column };
-        const persisted = this.#cellAt(position);
-        const element = document.createElement("div");
-        element.className = "grid-cell";
-        element.dataset.row = String(row);
-        element.dataset.column = String(column);
-        element.id = this.#cellId(position);
-        element.setAttribute("role", "gridcell");
-        element.setAttribute("aria-rowindex", String(row + 2));
-        element.setAttribute("aria-colindex", String(column + 2));
-        const selected = row >= range.rowStart && row <= range.rowEnd && column >= range.columnStart && column <= range.columnEnd;
-        element.setAttribute("aria-selected", String(selected));
-        if (selected) element.classList.add("selected");
-        if (samePosition(position, this.#selection.focus)) element.classList.add("active");
-        if (persisted?.style?.bold) element.style.fontWeight = "700";
-        if (persisted?.style?.italic) element.style.fontStyle = "italic";
-        if (persisted?.style?.text_color) element.style.color = persisted.style.text_color;
-        if (persisted?.style?.fill_color) element.style.backgroundColor = persisted.style.fill_color;
-        if (persisted?.style?.horizontal) element.style.textAlign = persisted.style.horizontal;
-        const bytes = this.#view ? this.#workbookCell(position)?.bytes : undefined;
-        if (bytes?.stale) element.classList.add("stale");
-        if (bytes?.conflict) {
-          element.classList.add("conflict");
-          element.setAttribute("aria-invalid", "true");
-        }
-        if (bytes?.lock) element.setAttribute("aria-readonly", "true");
-        element.textContent = persisted?.input ?? "";
-        this.#place(element, ROW_HEADER_WIDTH + this.#columns.offsets[column], 0, this.#columns.sizes[column], this.#rows.sizes[row]);
-        rowElement.append(element);
+      if (frame.rowHeader > 0) {
+        const header = document.createElement("div");
+        header.className = "grid-header grid-row-header";
+        if (row >= range.rowStart && row <= range.rowEnd) header.classList.add("selected");
+        header.setAttribute("role", "rowheader");
+        header.setAttribute("aria-rowindex", String(row + 2));
+        header.setAttribute("aria-colindex", "1");
+        header.textContent = String(row + 1);
+        header.style.pointerEvents = "none";
+        if (frame.zoom !== 1) header.style.fontSize = `calc(var(--text-sm) * ${frame.zoom})`;
+        this.#place(header, scrollLeft, 0, frame.rowHeader, this.#rows.sizes[row]);
+        rowElement.append(header);
       }
+      const borders: HTMLElement[] = [];
+      for (const column of renderedColumns) {
+        if (this.#columns.sizes[column] === 0 || covered.has(cellKey({ row, column }))) continue;
+        const element = this.#cellElement({ row, column }, range, null, row);
+        if (!element) continue;
+        rowElement.append(element.cell);
+        if (element.border) borders.push(element.border);
+        if (element.measure) measures.push(element.cell);
+      }
+      for (const merge of anchorsByRow.get(row) ?? []) {
+        const element = this.#cellElement({ row: merge.row, column: merge.column }, range, merge, row);
+        if (!element) continue;
+        rowElement.append(element.cell);
+        if (element.border) borders.push(element.border);
+      }
+      rowElement.append(...borders);
       rows.push(rowElement);
     }
+    rows.push(...this.#freezeLines());
 
     this.#detachCellEditor();
-    for (const row of this.#viewport.querySelectorAll<HTMLElement>(".grid-row")) row.remove();
+    for (const row of this.#viewport.querySelectorAll<HTMLElement>(".grid-row, .grid-freeze")) row.remove();
     this.#viewport.append(...rows);
+    this.#fitCells(measures);
     const editing = this.#editing?.owner === "cell" ? this.#editing : null;
     if (editing) {
       const cell = this.#findCell(editing.position);
@@ -1218,16 +1532,239 @@ export class GridEngine {
         this.#canvas.append(this.#cellEditorHost);
       }
     }
-    if (this.#isVisiblePosition(this.#selection.focus)) {
+    if (this.#isVisiblePosition(this.#selection.focus) && this.#findCell(this.#selection.focus)) {
       this.#viewport.setAttribute("aria-activedescendant", this.#cellId(this.#selection.focus));
     } else {
       this.#viewport.removeAttribute("aria-activedescendant");
     }
     const name = this.#root.querySelector<HTMLElement>(".grid-cell-name");
     if (name) {
-      name.textContent = this.#isVisiblePosition(this.#selection.focus)
-        ? `${columnLabel(this.#selection.focus.column)}${this.#selection.focus.row + 1}`
-        : "";
+      name.textContent = this.#isVisiblePosition(this.#selection.focus) ? cellA1(this.#selection.focus) : "";
+    }
+  }
+
+  /// La riga delle intestazioni di colonna, con l'angolo.
+  #columnHeaders(columns: readonly number[], range: GridRange): HTMLElement {
+    const frame = this.#frame;
+    const row = document.createElement("div");
+    row.className = "grid-row grid-column-header-row";
+    row.setAttribute("role", "row");
+    row.setAttribute("aria-rowindex", "1");
+    this.#place(row, 0, this.#viewport.scrollTop, frame.rowHeader + this.#columns.total, frame.columnHeader);
+    this.#corner.className = "grid-corner";
+    this.#corner.setAttribute("role", "presentation");
+    this.#corner.textContent = "";
+    this.#corner.style.pointerEvents = "none";
+    this.#place(this.#corner, this.#viewport.scrollLeft, 0, frame.rowHeader, frame.columnHeader);
+    row.append(this.#corner);
+    for (const column of columns) {
+      if (this.#columns.sizes[column] === 0) continue;
+      const header = document.createElement("div");
+      header.className = column < frame.frozenColumns ? "grid-header grid-column-header frozen" : "grid-header grid-column-header";
+      if (column >= range.columnStart && column <= range.columnEnd) header.classList.add("selected");
+      header.setAttribute("role", "columnheader");
+      header.setAttribute("aria-rowindex", "1");
+      header.setAttribute("aria-colindex", String(column + 2));
+      header.textContent = columnLabel(column);
+      header.style.pointerEvents = "none";
+      if (frame.zoom !== 1) header.style.fontSize = `calc(var(--text-sm) * ${frame.zoom})`;
+      this.#place(header, this.#columnLeft(column), 0, this.#columns.sizes[column], frame.columnHeader);
+      row.append(header);
+    }
+    return row;
+  }
+
+  /// I fili sotto le righe bloccate e a destra delle colonne bloccate.
+  #freezeLines(): HTMLElement[] {
+    const frame = this.#frame;
+    const lines: HTMLElement[] = [];
+    if (frame.frozenRows > 0) {
+      const line = document.createElement("div");
+      line.className = "grid-freeze grid-freeze-rows";
+      line.setAttribute("aria-hidden", "true");
+      this.#place(line, this.#viewport.scrollLeft, this.#viewport.scrollTop + frame.columnHeader + frame.frozenHeight - 1, this.#viewport.clientWidth, 1);
+      lines.push(line);
+    }
+    if (frame.frozenColumns > 0) {
+      const line = document.createElement("div");
+      line.className = "grid-freeze grid-freeze-columns";
+      line.setAttribute("aria-hidden", "true");
+      this.#place(line, this.#viewport.scrollLeft + frame.rowHeader + frame.frozenWidth - 1, this.#viewport.scrollTop, 1, this.#viewport.clientHeight);
+      lines.push(line);
+    }
+    return lines;
+  }
+
+  /// L'elemento della cella in `position`, disegnato nella riga `hostRow`
+  /// (un'unione può cominciare sopra la prima riga disegnata), con i suoi
+  /// bordi. `measure` chiede di misurarla dopo: si stringe, o è un numero
+  /// che potrebbe non entrare.
+  #cellElement(
+    position: GridPosition,
+    range: GridRange,
+    merge: GridMerge | null,
+    hostRow: number,
+  ): { cell: HTMLElement; border: HTMLElement | null; measure: boolean } | null {
+    const { row, column } = position;
+    const frame = this.#frame;
+    const workbookCell = this.#workbookCell(position);
+    const bytes = workbookCell?.bytes;
+    const style = workbookCell?.style;
+    const lastRow = merge ? merge.row + merge.rows - 1 : row;
+    const lastColumn = merge ? merge.column + merge.columns - 1 : column;
+    const width = this.#columns.offsets[lastColumn + 1] - this.#columns.offsets[column];
+    const height = this.#rows.offsets[lastRow + 1] - this.#rows.offsets[row];
+    if (width <= 0 || height <= 0) return null;
+    const frozenColumn = column < frame.frozenColumns;
+    const element = document.createElement("div");
+    element.className = frozenColumn ? "grid-cell frozen" : "grid-cell";
+    element.dataset.row = String(row);
+    element.dataset.column = String(column);
+    element.id = this.#cellId(position);
+    element.setAttribute("role", "gridcell");
+    element.setAttribute("aria-rowindex", String(row + 2));
+    element.setAttribute("aria-colindex", String(column + 2));
+    if (merge) {
+      element.classList.add("merged");
+      element.setAttribute("aria-rowspan", String(merge.rows));
+      element.setAttribute("aria-colspan", String(merge.columns));
+    }
+    const selected = row <= range.rowEnd && lastRow >= range.rowStart && column <= range.columnEnd && lastColumn >= range.columnStart;
+    element.setAttribute("aria-selected", String(selected));
+    if (selected) element.classList.add("selected");
+    if (samePosition(position, this.#selection.focus)) element.classList.add("active");
+    const text = document.createElement("span");
+    text.className = "grid-cell-text";
+    text.textContent = workbookCell?.cell.input ?? "";
+    paintCell(element, text, style, bytes, this.#gridFont());
+    if (bytes?.data_bar) {
+      const bar = document.createElement("div");
+      bar.className = "grid-data-bar";
+      bar.setAttribute("aria-hidden", "true");
+      bar.style.width = `calc((100% - 4px) * ${bytes.data_bar.fraction})`;
+      bar.style.background = bytes.data_bar.gradient
+        ? `linear-gradient(to right, ${bytes.data_bar.color}, color-mix(in srgb, ${bytes.data_bar.color} 15%, white))`
+        : bytes.data_bar.color;
+      element.append(bar);
+    }
+    if (bytes?.icon) {
+      const icon = iconOf(bytes.icon);
+      if (icon) {
+        const mark = document.createElement("span");
+        mark.className = "grid-icon";
+        mark.setAttribute("aria-hidden", "true");
+        mark.textContent = icon.glyph;
+        mark.style.color = icon.color;
+        element.append(mark);
+        if (horizontalOf(style, bytes.value) === "start") element.style.paddingInlineStart = "calc(0.45rem + 1.3em)";
+      }
+    }
+    element.append(text);
+    if (bytes?.comment) {
+      const mark = document.createElement("span");
+      mark.className = bytes.comment.threaded ? "grid-comment-mark threaded" : "grid-comment-mark";
+      mark.setAttribute("aria-hidden", "true");
+      element.append(mark);
+      const thread = [bytes.comment, ...bytes.comment.replies].map((note) => note.author ? `${note.author}: ${note.text}` : note.text);
+      element.title = thread.join("\n");
+    } else if (bytes?.link) {
+      element.title = bytes.link.tooltip ?? bytes.link.target;
+    }
+    if (bytes?.stale) element.classList.add("stale");
+    if (bytes?.conflict) {
+      element.classList.add("conflict");
+      element.setAttribute("aria-invalid", "true");
+    }
+    if (bytes?.lock) element.setAttribute("aria-readonly", "true");
+    // Un testo che non va a capo passa nelle celle vuote accanto, fino alla
+    // prima che ha un valore.
+    if (style?.shrink) element.dataset.shrink = "true";
+    let measure = Boolean(style?.shrink) || bytes?.value.kind === "number";
+    if (!merge && bytes && spills(style, bytes)) {
+      const reach = this.#spillReach(position, horizontalOf(style, bytes.value));
+      if (reach > 0) {
+        const align = horizontalOf(style, bytes.value);
+        element.classList.add("spill");
+        text.style.maxWidth = `calc(${width + reach}px - 0.9rem)`;
+        text.style.justifySelf = align === "end" ? "unsafe end" : align === "center" ? "unsafe center" : "start";
+        measure = false;
+      }
+    }
+    const top = this.#rows.offsets[row] - this.#rows.offsets[hostRow];
+    this.#place(element, this.#columnLeft(column), top, width, height);
+    let border: HTMLElement | null = null;
+    const borders = this.#cellBorders(position, lastRow, lastColumn);
+    if (borders) {
+      border = document.createElement("div");
+      border.className = frozenColumn ? "grid-border frozen" : "grid-border";
+      border.setAttribute("aria-hidden", "true");
+      paintBorders(border, borders);
+      this.#place(border, this.#columnLeft(column) - 1, top - 1, width + 1, height + 1);
+    }
+    return { cell: element, border, measure };
+  }
+
+  /// I bordi da disegnare attorno alla cella, o all'unione che finisce in
+  /// `lastRow` e `lastColumn`: sopra e a sinistra quelli della prima cella,
+  /// sotto e a destra quelli delle celle che stanno lì.
+  #cellBorders(position: GridPosition, lastRow: number, lastColumn: number) {
+    const own = this.#workbookCell(position)?.style?.borders;
+    if (lastRow === position.row && lastColumn === position.column) return hasBorders(own) ? own : null;
+    const right = this.#workbookCell({ row: position.row, column: lastColumn })?.style?.borders ?? own;
+    const bottom = this.#workbookCell({ row: lastRow, column: position.column })?.style?.borders ?? own;
+    const borders = {
+      top: own?.top ?? null,
+      left: own?.left ?? null,
+      right: right?.right ?? null,
+      bottom: bottom?.bottom ?? null,
+      diagonal_down: own?.diagonal_down ?? null,
+      diagonal_up: own?.diagonal_up ?? null,
+    };
+    return hasBorders(borders) ? borders : null;
+  }
+
+  /// Quanti pixel accanto il testo di `position` può prendere: le celle
+  /// vuote verso dove si allinea, fino alla prima con un valore, a
+  /// un'unione o al bordo delle colonne disegnabili.
+  #spillReach(position: GridPosition, align: "start" | "center" | "end" | "justify"): number {
+    const free = (step: 1 | -1): number => {
+      let reach = 0;
+      for (let column = position.column + step, seen = 0; column >= 0 && column < this.#columns.sizes.length && seen < 64; column += step, seen += 1) {
+        if (column < this.#frame.frozenColumns !== position.column < this.#frame.frozenColumns) break;
+        const at = { row: position.row, column };
+        if (this.#workbookCell(at)?.cell.input || mergeAt(this.#merges(), at)) break;
+        reach += this.#columns.sizes[column];
+      }
+      return reach;
+    };
+    switch (align) {
+      case "start": return free(1);
+      case "end": return free(-1);
+      case "center": return 2 * Math.min(free(1), free(-1));
+      default: return 0;
+    }
+  }
+
+  /// Misura le celle che si stringono e i numeri: un testo che si stringe
+  /// cala il carattere finché entra, un numero che non entra si mostra con
+  /// i cancelletti, come in Excel. Prima si legge tutto, poi si scrive.
+  #fitCells(cells: readonly HTMLElement[]): void {
+    const fits: { text: HTMLElement; shrink: boolean; ratio: number }[] = [];
+    for (const cell of cells) {
+      const text = cell.querySelector<HTMLElement>(".grid-cell-text");
+      if (!text) continue;
+      const computed = getComputedStyle(cell);
+      const room = cell.clientWidth - (parseFloat(computed.paddingLeft) || 0) - (parseFloat(computed.paddingRight) || 0);
+      const needed = text.scrollWidth;
+      if (room > 0 && needed > room) fits.push({ text, shrink: cell.style.whiteSpace !== "pre-wrap" && cell.dataset.shrink === "true", ratio: room / needed });
+    }
+    for (const { text, shrink, ratio } of fits) {
+      if (shrink) {
+        text.style.fontSize = `${Math.max(0.3, ratio).toFixed(3)}em`;
+      } else {
+        const length = text.textContent?.length ?? 0;
+        text.textContent = "#".repeat(Math.max(1, Math.floor(length * ratio)));
+      }
     }
   }
 
@@ -1260,15 +1797,31 @@ export class GridEngine {
     this.#formulaEditor.setDoc(localInput(bytes?.input ?? "", this.#decimal));
   }
 
+  /// La selezione da disegnare e da dare ai comandi: con le unioni intere.
+  #selectedRange(): GridRange {
+    return expandToMerges(normalizedSelection(this.#selection), this.#merges());
+  }
+
+  /// La selezione come la nomina un comando.
+  #commandSelection(): GridCommandSelection {
+    return {
+      sheet: this.#sheet().id,
+      selection: rangeA1(this.#selectedRange()),
+      active: cellA1(this.#selection.focus),
+    };
+  }
+
   #select(position: GridPosition, extend: boolean): void {
-    const focus = this.#clampedPosition(position);
+    const clamped = this.#clampedPosition(position);
+    const merge = mergeAt(this.#merges(), clamped);
+    const focus = merge && !extend ? { row: merge.row, column: merge.column } : clamped;
     this.#selection = extend
       ? { anchor: this.#selection.anchor, focus }
       : { anchor: focus, focus };
     if (!this.#editing) this.#syncFormulaBar();
     this.#ensureVisible(focus);
     this.#render();
-    this.#options.onSelectionChange();
+    this.#selectionChanged();
   }
 
   #clampedPosition(position: GridPosition): GridPosition {
@@ -1336,12 +1889,78 @@ export class GridEngine {
     return 0;
   }
 
+  /// Un passo del cursore. Da un'unione si parte dal suo bordo, e in
+  /// un'unione si arriva nella sua cella in alto a sinistra.
   #move(rowStep: number, columnStep: number, extend: boolean): void {
     const focus = this.#selection.focus;
+    const merge = mergeAt(this.#merges(), focus);
+    const row = merge && rowStep > 0 ? merge.row + merge.rows - 1 : focus.row;
+    const column = merge && columnStep > 0 ? merge.column + merge.columns - 1 : focus.column;
     this.#select({
-      row: rowStep === 0 ? focus.row : this.#nextVisible("row", focus.row, rowStep),
-      column: columnStep === 0 ? focus.column : this.#nextVisible("column", focus.column, columnStep),
+      row: rowStep === 0 ? focus.row : this.#nextVisible("row", row, rowStep),
+      column: columnStep === 0 ? focus.column : this.#nextVisible("column", column, columnStep),
     }, extend);
+  }
+
+  #filled(position: GridPosition): boolean {
+    return Boolean(this.#workbookCell(position)?.cell.input);
+  }
+
+  /// Ctrl+freccia: fino al bordo dei dati, come in Excel. Da una cella piena
+  /// accanto a un'altra piena si va all'ultima del blocco; altrimenti alla
+  /// prima piena, o al bordo del foglio. Contano le celle lette.
+  #jump(rowStep: -1 | 0 | 1, columnStep: -1 | 0 | 1, extend: boolean): void {
+    const axis = rowStep ? "row" : "column";
+    const step = rowStep || columnStep;
+    const at = (index: number): GridPosition => axis === "row"
+      ? { row: index, column: this.#selection.focus.column }
+      : { row: this.#selection.focus.row, column: index };
+    let index = axis === "row" ? this.#selection.focus.row : this.#selection.focus.column;
+    let next = this.#nextVisible(axis, index, step);
+    if (next === index) return;
+    if (this.#filled(at(index)) && this.#filled(at(next))) {
+      while (next !== index && this.#filled(at(next))) {
+        index = next;
+        next = this.#nextVisible(axis, index, step);
+      }
+    } else {
+      index = next;
+      while (!this.#filled(at(index))) {
+        next = this.#nextVisible(axis, index, step);
+        if (next === index) break;
+        index = next;
+      }
+    }
+    this.#select(at(index), extend);
+  }
+
+  /// Le righe di una pagina, per PagSu e PagGiù.
+  #pageRows(): number {
+    return Math.max(1, Math.floor((this.#viewport.clientHeight - this.#frame.columnHeader - this.#frame.frozenHeight) / (DEFAULT_ROW_HEIGHT * this.#frame.zoom)));
+  }
+
+  /// Seleziona le righe (o le colonne) intere della selezione.
+  #selectWhole(axis: "row" | "column"): void {
+    const range = this.#selectedRange();
+    this.#selection = axis === "row"
+      ? {
+        anchor: { row: range.rowStart, column: this.#edgeVisible("column", false) },
+        focus: { row: range.rowEnd, column: this.#edgeVisible("column", true) },
+      }
+      : {
+        anchor: { row: this.#edgeVisible("row", false), column: range.columnStart },
+        focus: { row: this.#edgeVisible("row", true), column: range.columnEnd },
+      };
+    this.#render();
+    this.#selectionChanged();
+  }
+
+  /// Passa al foglio visibile accanto: Ctrl+PagGiù e Ctrl+PagSu.
+  #stepSheet(step: -1 | 1): void {
+    const sheets = this.#workbook?.sheets ?? [];
+    const index = this.#sheetIndex + step;
+    if (index < 0 || index >= sheets.length) return;
+    this.#showSheetAt(index);
   }
 
   #tab(step: -1 | 1): boolean {
@@ -1372,20 +1991,42 @@ export class GridEngine {
       this.redo();
       return;
     }
+    if (this.#commands.length && !this.#readOnly) {
+      const range = this.#selectedRange();
+      const shortcut = shortcutCommand(event, {
+        wholeRows: range.columnStart === this.#edgeVisible("column", false) && range.columnEnd === this.#edgeVisible("column", true),
+        wholeColumns: range.rowStart === this.#edgeVisible("row", false) && range.rowEnd === this.#edgeVisible("row", true),
+        currency: currencyFormat(resolvedLanguage()),
+      });
+      if (shortcut) {
+        event.preventDefault();
+        this.command(shortcut.id, shortcut.params);
+        return;
+      }
+    }
+    if (modifier && (event.key === "PageDown" || event.key === "PageUp")) {
+      event.preventDefault();
+      this.#stepSheet(event.key === "PageDown" ? 1 : -1);
+      return;
+    }
+    if (event.key === " " && (event.shiftKey || modifier) && !event.altKey) {
+      event.preventDefault();
+      if (event.shiftKey && modifier) this.#selectAll();
+      else this.#selectWhole(event.shiftKey ? "row" : "column");
+      return;
+    }
+    if (modifier && event.key.startsWith("Arrow")) {
+      event.preventDefault();
+      const steps: Record<string, readonly [-1 | 0 | 1, -1 | 0 | 1]> = {
+        ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
+      };
+      const [rowStep, columnStep] = steps[event.key] ?? [0, 0];
+      if (rowStep || columnStep) this.#jump(rowStep, columnStep, event.shiftKey);
+      return;
+    }
     if (modifier && event.key.toLowerCase() === "a") {
       event.preventDefault();
-      this.#selection = {
-        anchor: {
-          row: this.#edgeVisible("row", false),
-          column: this.#edgeVisible("column", false),
-        },
-        focus: {
-          row: this.#edgeVisible("row", true),
-          column: this.#edgeVisible("column", true),
-        },
-      };
-      this.#render();
-      this.#options.onSelectionChange();
+      this.#selectAll();
       return;
     }
     const extend = event.shiftKey;
@@ -1405,8 +2046,8 @@ export class GridEngine {
         row: modifier ? this.#edgeVisible("row", true) : this.#selection.focus.row,
         column: this.#edgeVisible("column", true),
       }, extend); break;
-      case "PageUp": this.#move(-Math.max(1, Math.floor(this.#viewport.clientHeight / DEFAULT_ROW_HEIGHT)), 0, extend); break;
-      case "PageDown": this.#move(Math.max(1, Math.floor(this.#viewport.clientHeight / DEFAULT_ROW_HEIGHT)), 0, extend); break;
+      case "PageUp": this.#move(-this.#pageRows(), 0, extend); break;
+      case "PageDown": this.#move(this.#pageRows(), 0, extend); break;
       case "Delete":
       case "Backspace": this.#clearSelection(); break;
       default:
@@ -1417,6 +2058,21 @@ export class GridEngine {
         }
     }
     event.preventDefault();
+  }
+
+  #selectAll(): void {
+    this.#selection = {
+      anchor: {
+        row: this.#edgeVisible("row", false),
+        column: this.#edgeVisible("column", false),
+      },
+      focus: {
+        row: this.#edgeVisible("row", true),
+        column: this.#edgeVisible("column", true),
+      },
+    };
+    this.#render();
+    this.#selectionChanged();
   }
 
   #beginEditing(owner: "cell" | "formula", position: GridPosition, initial?: string): void {
@@ -1479,12 +2135,15 @@ export class GridEngine {
 
   #positionEditor(position: GridPosition): void {
     const inCell = this.#cellEditorHost.parentElement?.classList.contains("grid-cell") ?? false;
+    const merge = mergeAt(this.#merges(), position);
+    const lastRow = merge ? merge.row + merge.rows - 1 : position.row;
+    const lastColumn = merge ? merge.column + merge.columns - 1 : position.column;
     this.#place(
       this.#cellEditorHost,
-      inCell ? 0 : ROW_HEADER_WIDTH + this.#columns.offsets[position.column],
-      inCell ? 0 : COLUMN_HEADER_HEIGHT + this.#rows.offsets[position.row],
-      this.#columns.sizes[position.column],
-      this.#rows.sizes[position.row],
+      inCell ? 0 : this.#columnLeft(position.column),
+      inCell ? 0 : this.#frame.columnHeader + this.#rows.offsets[position.row],
+      this.#columns.offsets[lastColumn + 1] - this.#columns.offsets[position.column],
+      this.#rows.offsets[lastRow + 1] - this.#rows.offsets[position.row],
     );
   }
 
@@ -1561,7 +2220,7 @@ export class GridEngine {
     this.#viewport.focus();
     this.#syncFormulaBar();
     this.#render();
-    this.#options.onSelectionChange();
+    this.#selectionChanged();
   }
 
   #pointerMove(event: PointerEvent): void {
@@ -1570,7 +2229,7 @@ export class GridEngine {
     if (!position) return;
     this.#selection = { anchor: this.#pointerAnchor, focus: position };
     this.#render();
-    this.#options.onSelectionChange();
+    this.#selectionChanged();
   }
 
   #eventPosition(event: Event): GridPosition | null {
@@ -1581,15 +2240,27 @@ export class GridEngine {
     return Number.isInteger(row) && Number.isInteger(column) ? { row, column } : null;
   }
 
+  /// Scorre fino a `position`. Una riga o una colonna bloccata si vede
+  /// sempre; le altre devono uscire da sotto quelle bloccate.
   #ensureVisible(position: GridPosition): void {
-    const left = ROW_HEADER_WIDTH + this.#columns.offsets[position.column];
-    const right = left + this.#columns.sizes[position.column];
-    const top = COLUMN_HEADER_HEIGHT + this.#rows.offsets[position.row];
-    const bottom = top + this.#rows.sizes[position.row];
-    if (left < this.#viewport.scrollLeft + ROW_HEADER_WIDTH) this.#viewport.scrollLeft = Math.max(0, left - ROW_HEADER_WIDTH);
-    else if (right > this.#viewport.scrollLeft + this.#viewport.clientWidth) this.#viewport.scrollLeft = right - this.#viewport.clientWidth;
-    if (top < this.#viewport.scrollTop + COLUMN_HEADER_HEIGHT) this.#viewport.scrollTop = Math.max(0, top - COLUMN_HEADER_HEIGHT);
-    else if (bottom > this.#viewport.scrollTop + this.#viewport.clientHeight) this.#viewport.scrollTop = bottom - this.#viewport.clientHeight;
+    const frame = this.#frame;
+    const merge = mergeAt(this.#merges(), position);
+    const lastRow = merge ? merge.row + merge.rows - 1 : position.row;
+    const lastColumn = merge ? merge.column + merge.columns - 1 : position.column;
+    if (position.column >= frame.frozenColumns) {
+      const before = frame.rowHeader + frame.frozenWidth;
+      const left = frame.rowHeader + this.#columns.offsets[position.column];
+      const right = frame.rowHeader + this.#columns.offsets[lastColumn + 1];
+      if (left < this.#viewport.scrollLeft + before) this.#viewport.scrollLeft = Math.max(0, left - before);
+      else if (right > this.#viewport.scrollLeft + this.#viewport.clientWidth) this.#viewport.scrollLeft = Math.min(left - before, right - this.#viewport.clientWidth);
+    }
+    if (position.row >= frame.frozenRows) {
+      const before = frame.columnHeader + frame.frozenHeight;
+      const top = frame.columnHeader + this.#rows.offsets[position.row];
+      const bottom = frame.columnHeader + this.#rows.offsets[lastRow + 1];
+      if (top < this.#viewport.scrollTop + before) this.#viewport.scrollTop = Math.max(0, top - before);
+      else if (bottom > this.#viewport.scrollTop + this.#viewport.clientHeight) this.#viewport.scrollTop = Math.min(top - before, bottom - this.#viewport.clientHeight);
+    }
   }
 
   /// Le richieste che cambiano lo stato del provider, una dopo l'altra:

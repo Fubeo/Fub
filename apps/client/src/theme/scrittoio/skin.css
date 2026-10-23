@@ -5483,6 +5483,33 @@ kbd,
   font-variant-numeric: tabular-nums;
   line-height: var(--leading-tight);
 }
+/* Le intestazioni della selezione prendono l'accento, come nei fogli di
+   calcolo. */
+.grid-header.selected {
+  box-shadow: inset 0 0 0 999px var(--accent-veil);
+  color: var(--accent);
+}
+/* Un foglio senza griglia: i fili delle celle spariscono, i bordi del file
+   restano. */
+.grid-viewport.no-gridlines .grid-cell {
+  border-color: transparent;
+}
+/* Ciò che resta fermo ha la carta del foglio sotto, perché le celle che
+   scorrono gli passano dietro; il filo del blocco è quello di Excel. */
+.grid-cell.frozen {
+  background-color: var(--sheet);
+}
+.grid-freeze {
+  background: var(--muted);
+}
+/* Il segno di una nota nell'angolo, come in Excel: rosso per le note,
+   d'accento per i commenti in thread. */
+.grid-comment-mark {
+  border-color: transparent var(--danger) transparent transparent;
+}
+.grid-comment-mark.threaded {
+  border-color: transparent var(--accent) transparent transparent;
+}
 /* Il velo è un'ombra interna e non un fondo: una cella può avere un colore
    suo, scritto dal foglio, e la selezione deve vedersi anche lì sopra. */
 .grid-cell.selected {

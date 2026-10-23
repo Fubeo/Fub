@@ -373,7 +373,8 @@ porte, e il suo testo è il **giornale** delle celle cambiate (ADR 0216):
   giornale per un file che non c'è si rifiuta (`host.xlsx.missing`); una
   voce che i byte non possono ricevere si rifiuta con la sua specie
   (`PermissionDenied` per una cella bloccata, `Conflict` per un foglio che
-  non c'è più, `BadArgs` per una formula), e il file resta com'era;
+  non c'è più, `BadArgs` per una formula in una voce di cella: una formula
+  entra soltanto come comando), e il file resta com'era;
 - `resource_write` deposita una cartella nuova (`expected` nullo) come ogni
   file, e rifiuta di coprirne una che c'è (`host.xlsx.readonly`): una
   cartella cambia soltanto dal giornale, con `write_document`.
@@ -383,7 +384,9 @@ Nella finestra:
 - i valori sono quelli che il file ha salvato, comprese le celle versate
   dalle matrici: niente si ricalcola. `display` è il valore nel formato
   numerico della cella, e `input` ciò che la barra mostra e la cella riceve
-  (`=…` per una formula, che non si scrive);
+  (`=…` per una formula). `apply_grid_bytes` con la prima formula da
+  scrivere porta la sessione ai comandi: la formula entra come
+  `range.setValues`, e il commit riscrive il giornale;
 - `lock` è uno fra `array`, `spill`, `shared-formula`, `data-table`,
   `table-header`, `table-totals`, `merged`, `pivot`, `rich-value`,
   `protected` e `sheet-shape` (il foglio ha una forma che l'innesto non sa
@@ -395,11 +398,11 @@ Nella finestra:
   prende il colore della shell.
 
 Gli avvisi della sessione sono `macros`, `external-links`, `incomplete` (la
-lettura ha lasciato indietro qualcosa), `not-shown-merges`,
-`not-shown-charts`, `not-shown-images`, `not-shown-shapes`,
-`not-shown-comments`, `not-shown-conditional-formats`,
-`not-shown-sparklines` e `uncomputed` (formule senza valore salvato), ciascuno
-con il suo conteggio.
+lettura ha lasciato indietro qualcosa), `not-shown-charts`,
+`not-shown-images`, `not-shown-shapes`, `not-shown-sparklines` e `uncomputed`
+(formule senza valore salvato), ciascuno con il suo conteggio. Le unioni, le
+note e la formattazione condizionale arrivano nella finestra, e non sono
+avvisi.
 
 Gli errori arrivano tipizzati con chiave di catalogo `host.xlsx.*`: una
 cartella cifrata (`encrypted`), un file oltre 256 MiB (`too_large`), un
