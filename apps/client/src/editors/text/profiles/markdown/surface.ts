@@ -21,7 +21,7 @@ import { onEvent } from "../../../../state/kernel";
 import { openLifetime } from "../../../../ui/lifetime";
 import { notify } from "../../../../ui/notify";
 import { errorText } from "../../../../host/errors";
-import { writeClipboardText } from "../../../../platform/clipboard";
+import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../../../platform/clipboard";
 import { closeSlashPalette, openSlashPalette } from "../../../../ui/palette";
 import type {
   BufferedSurface,
@@ -41,7 +41,6 @@ import { createMarkdownProfile } from "./profile";
 import { anchorAtCursor, writeAnchor } from "./anchor-link";
 import type { TableGridActions } from "./table-grid";
 import { deleteFootnoteAt, footnoteAt, MARKDOWN_ACTIONS, markdownActionState, relinkImage } from "./actions";
-import { showContextMenu } from "../../../../ui/menu";
 import { foldAll, unfoldAll } from "@codemirror/language";
 import { foldLess, foldMore, toggleFold } from "../../fold-levels";
 import type { EditorView } from "@codemirror/view";
@@ -56,6 +55,9 @@ import { frontmatterRange, renderMarkdown } from "./render";
 import { addProperty, clearProperties } from "./properties";
 import { clipboardHtml } from "./copy-html";
 import type { ProofPorts } from "../../../core/proof-ports";
+import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../../../core/editor-menu";
+import { forEachDiagnostic } from "@codemirror/lint";
+import { codeBlockAt, headingAt, linkAt, listAt, tableRowAt, taskAt, type MarkdownLinkAt } from "./menu";
 
 /// Le tre viste esclusive sullo stesso buffer. `source` e `live_preview`
 /// scrivono nella stessa vista; `reading` la nasconde e mostra il reso.
@@ -223,25 +225,6 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const actionsChanged = () => {
     for (const listener of [...actionListeners]) listener();
   };
-  // Il tasto destro su un richiamo o sulla definizione di una nota a piè di
-  // pagina offre di eliminarla tutta; sulle proprietà rese, di aggiungerne
-  // una o di svuotarle; altrove resta il menu del sistema.
-  life.listen(parent, "contextmenu", (event) => {
-    if (readOnly || mode === "reading" || event.defaultPrevented) return;
-    if (!(event.target instanceof Element) || !event.target.closest(".cm-content")) return;
-    if (event.target.closest(".cm-fub-properties")) {
-      event.preventDefault();
-      showContextMenu(event, [
-        { label: t("editor.properties.add"), run: () => void engine.runCommand(addProperty) },
-        { label: t("editor.properties.clear"), run: () => void engine.runCommand(clearProperties) },
-      ]);
-      return;
-    }
-    const pos = engine.posAtPoint(event.clientX, event.clientY);
-    if (pos === null || engine.readState((state) => footnoteAt(state, pos)) === null) return;
-    event.preventDefault();
-    showContextMenu(event, [{ label: t("editor.footnote.delete"), run: () => void engine.runCommand(deleteFootnoteAt(pos)) }]);
-  });
   // Copiare o tagliare una selezione porta anche l'HTML, per incollare con la
   // formattazione fuori da Fub. Il testo si legge prima di CodeMirror, perché
   // un taglio lo toglie dal documento; l'HTML si aggiunge dopo, perché
@@ -623,6 +606,257 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     selectionBox: () => (editable() ? engine.selectionBox() : null),
   };
 
+
+  /// I gesti di formato del menu: gli stessi id della barra, divisi come in
+  /// un elaboratore di testi fra il carattere e il blocco.
+  const FORMAT_IDS = [
+    "markdown.bold", "markdown.italic", "markdown.strikethrough", "markdown.highlight",
+    "markdown.code", "markdown.math", "markdown.comment", "markdown.clear",
+  ];
+  const TRANSFORM_IDS = [
+    "markdown.paragraph", "markdown.heading.1", "markdown.heading.2", "markdown.heading.3",
+    "markdown.heading.4", "markdown.heading.5", "markdown.heading.6",
+    "markdown.list.bullet", "markdown.list.ordered", "markdown.list.task",
+    "markdown.quote", "markdown.callout", "markdown.codeblock",
+  ];
+  const INSERT_IDS = [
+    "markdown.table", "markdown.rule", "markdown.codeblock", "markdown.diagram", "markdown.mathblock",
+    "markdown.image", "markdown.link", "markdown.wikilink", "markdown.embed", "markdown.footnote",
+    "markdown.property.add",
+  ];
+  const TABLE_IDS = [
+    "markdown.table.row.before", "markdown.table.row.after", "markdown.table.row.up", "markdown.table.row.down",
+    "markdown.table.row.delete", "markdown.table.column.before", "markdown.table.column.after",
+    "markdown.table.column.left", "markdown.table.column.right", "markdown.table.column.delete",
+    "markdown.table.sort.ascending", "markdown.table.sort.descending",
+  ];
+
+  const copyText = (text: string, done: string): void => {
+    void writeClipboardText(text).then(
+      () => notify(done, "info"),
+      () => notify(t("editor_menu.copy_failed"), "guasto"),
+    );
+  };
+
+  /// Copia `text` con anche l'HTML dove gli appunti lo accettano, come Mod-c.
+  const copyRich = (text: string): Promise<void> => {
+    if (!clipboardSupports("text/html")) return writeClipboardText(text);
+    return writeClipboardData({
+      "text/plain": new Blob([text], { type: "text/plain" }),
+      "text/html": new Blob([clipboardHtml(text, forms)], { type: "text/html" }),
+    });
+  };
+
+  const selectedSource = (): string =>
+    engine.readState((state) =>
+      state.selection.ranges.filter((range) => !range.empty).map((range) => state.sliceDoc(range.from, range.to)).join(state.lineBreak),
+    );
+
+  /// Il testo di una resa senza i segni del Markdown, per «Copia come testo».
+  const plainText = (markdown: string): string => {
+    const html = renderMarkdown(normalizeLineBreaks(markdown), forms).html;
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    return (parsed.body.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
+  };
+
+  /// Incolla dagli appunti: tutti i tipi, o soltanto il testo.
+  const pasteFromClipboard = (plain: boolean): void => {
+    void readClipboard().then(async (entries) => {
+      let text: string | null = null;
+      let html: string | null = null;
+      for (const entry of entries) {
+        if (text === null && entry.types.includes("text/plain")) text = await (await entry.getType("text/plain")).text();
+        if (!plain && html === null && entry.types.includes("text/html")) html = await (await entry.getType("text/html")).text();
+      }
+      if (life.closed || (text === null && html === null)) return;
+      engine.paste(text ?? "", plain ? null : html);
+    }).catch(() => notify(t("editor_menu.paste_failed"), "guasto"));
+  };
+
+  const linkItems = (link: MarkdownLinkAt): SurfaceMenuItem[] => {
+    const items: SurfaceMenuItem[] = [];
+    const where = resources?.documentId ?? documentId;
+    if (link.kind === "wikilink") {
+      if (link.page !== "" || link.heading !== null || link.block !== null) {
+        items.push({
+          id: "markdown.link.open",
+          label: t("editor_menu.link.open"),
+          run: () => void openWikilink(link.page || where.replace(/\.md$/i, ""), link.heading, link.block),
+        });
+      }
+      const target = `${link.page}${link.heading ? `#${link.heading}` : ""}${link.block ? `#^${link.block}` : ""}`;
+      items.push({ id: "markdown.link.copy", label: t("editor_menu.link.copy_target"), run: () => copyText(target, t("editor_menu.copied")) });
+    } else {
+      const external = /^[a-z][a-z0-9+.-]*:/i.test(link.url);
+      if (!external) {
+        items.push({
+          id: "markdown.link.open",
+          label: t("editor_menu.link.open"),
+          run: () => void Promise.resolve(opts.onOpenPath(decodeURI(link.url), where)).catch(() => {}),
+        });
+      }
+      items.push({ id: "markdown.link.copy", label: t("editor_menu.link.copy_url"), run: () => copyText(link.url, t("editor_menu.copied")) });
+    }
+    if (!link.embed) {
+      items.push({
+        id: "markdown.link.remove",
+        label: t("editor_menu.link.remove"),
+        enabled: editable(),
+        run: () => void engine.applyUserEdit(link.from, link.to, link.text),
+      });
+    }
+    return items;
+  };
+
+  /// Il menu dove si scrive: Sorgente e Live.
+  function writingMenu(at: SurfacePoint | null): SurfaceMenu | null {
+    let pos = engine.readState((state) => state.selection.main.head);
+    if (at) {
+      const element = document.elementFromPoint(at.x, at.y);
+      if (!element || !parent.contains(element) || !element.closest(".cm-editor")) return null;
+      // Le proprietà rese hanno i loro gesti, e soltanto quelli.
+      if (element.closest(".cm-fub-properties")) {
+        return {
+          target: { kind: "properties" },
+          context: [
+            { id: "markdown.property.add", label: t("editor.properties.add"), enabled: editable(), run: () => void engine.runCommand(addProperty) },
+            { id: "markdown.property.clear", label: t("editor.properties.clear"), enabled: editable(), run: () => void engine.runCommand(clearProperties) },
+          ],
+        };
+      }
+      const point = engine.posAtPoint(at.x, at.y);
+      if (point !== null) {
+        // Il tasto destro dentro la selezione la lascia com'è; fuori porta il
+        // cursore lì, come il clic, perché le voci parlino di quel punto.
+        const inside = engine.readState((state) => state.selection.ranges.some((range) => !range.empty && range.from <= point && point <= range.to));
+        if (!inside) engine.placeCursor(point);
+        pos = inside ? pos : point;
+      }
+    }
+    const hasSelection = engine.readState((state) => state.selection.ranges.some((range) => !range.empty));
+    const writable = editable();
+    const context: SurfaceMenuEntry[] = [];
+    // Le correzioni del correttore, per prime.
+    engine.readState((state) => {
+      forEachDiagnostic(state, (diagnostic, from, to) => {
+        if (pos < from || pos > to) return;
+        for (const action of diagnostic.actions ?? []) {
+          context.push({
+            id: "proof.action",
+            label: action.name,
+            enabled: writable,
+            run: () => void engine.runViewCommand((view) => {
+              action.apply(view, from, to);
+              return true;
+            }),
+          });
+        }
+      });
+    });
+    const link = engine.readState((state) => linkAt(state, pos));
+    if (link) context.push(...linkItems(link));
+    const footnote = engine.readState((state) => footnoteAt(state, pos));
+    if (footnote !== null) {
+      context.push({ id: "markdown.footnote.delete", label: t("editor.footnote.delete"), enabled: writable, danger: true, run: () => void engine.runCommand(deleteFootnoteAt(pos)) });
+    }
+    const task = engine.readState((state) => taskAt(state, pos));
+    if (task) {
+      context.push({
+        id: "markdown.task.toggle",
+        label: t(task.checked ? "editor_menu.task.undone" : "editor_menu.task.done"),
+        enabled: writable,
+        run: () => void engine.applyUserEdit(task.symbol, task.symbol + 1, task.checked ? " " : "x"),
+      });
+    }
+    if (engine.readState((state) => listAt(state, pos))) context.push("markdown.list.indent", "markdown.list.dedent");
+    const code = engine.readState((state) => codeBlockAt(state, pos));
+    if (code) {
+      context.push({ id: "markdown.code.copy", label: t("editor_menu.code.copy"), run: () => copyText(code.code, t("editor_menu.copied")) });
+    }
+    if (mode === "source" && engine.readState((state) => tableRowAt(state, pos))) {
+      context.push({ id: "markdown.table.menu", label: t("editor_menu.table"), icon: "fmt-table", items: TABLE_IDS });
+    }
+    const kind = link ? "link" : code ? "code" : task || engine.readState((state) => listAt(state, pos)) ? "list"
+      : engine.readState((state) => headingAt(state, pos)) ? "heading" : hasSelection ? "selection" : "text";
+    const box = engine.anchorBox();
+    return {
+      target: { kind },
+      at: box ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined,
+      context,
+      clipboard: {
+        offers: { cut: writable && hasSelection, copy: hasSelection, paste: writable, "paste-plain": writable, "select-all": true },
+        run(op) {
+          if (op === "select-all") engine.selectAll();
+          else if (op === "paste" || op === "paste-plain") pasteFromClipboard(op === "paste-plain");
+          else {
+            const text = selectedSource();
+            void copyRich(text).then(
+              () => {
+                if (op === "cut" && !life.closed) engine.deleteSelection();
+              },
+              () => notify(t("editor_menu.copy_failed"), "guasto"),
+            );
+          }
+        },
+        copyAs: hasSelection
+          ? [
+              { id: "markdown.copy.markdown", label: t("editor_menu.copy_as.markdown"), run: () => copyText(selectedSource(), t("editor_menu.copied")) },
+              { id: "markdown.copy.html", label: t("editor_menu.copy_as.html"), run: () => copyText(clipboardHtml(selectedSource(), forms), t("editor_menu.copied")) },
+              { id: "markdown.copy.text", label: t("editor_menu.copy_as.text"), run: () => copyText(plainText(selectedSource()), t("editor_menu.copied")) },
+            ]
+          : [],
+      },
+      format: FORMAT_IDS,
+      transform: TRANSFORM_IDS,
+      insert: INSERT_IDS,
+      commands: writable,
+      miniBar: writable,
+    };
+  }
+
+  /// Il menu della Lettura: copiare, e tornare a scrivere da quel punto.
+  function readingMenu(at: SurfacePoint | null): SurfaceMenu | null {
+    const element = at ? document.elementFromPoint(at.x, at.y) : null;
+    if (at && (!element || !reading.contains(element))) return null;
+    const selection = window.getSelection();
+    const selected = selection && !selection.isCollapsed && selection.anchorNode && reading.contains(selection.anchorNode)
+      ? selection.toString() : "";
+    const source = element?.closest<HTMLElement>("[data-md-from]");
+    const from = source && !source.closest(".embed-loaded") && /^\d+$/.test(source.dataset.mdFrom ?? "")
+      ? Number(source.dataset.mdFrom) : null;
+    const context: SurfaceMenuEntry[] = [];
+    if (!readOnly) {
+      context.push({
+        id: "markdown.edit_here",
+        label: t("editor_menu.edit_here"),
+        run: () => {
+          if (from !== null) engine.placeCursor(from);
+        },
+        command: "shell.mode.reading",
+      });
+    }
+    return {
+      target: { kind: "page" },
+      context,
+      clipboard: {
+        offers: { copy: selected !== "", "select-all": true },
+        run(op) {
+          if (op === "copy") copyText(selected, t("editor_menu.copied"));
+          else if (op === "select-all") {
+            const range = document.createRange();
+            range.selectNodeContents(reading);
+            selection?.removeAllRanges();
+            selection?.addRange(range);
+          }
+        },
+        copyAs: [
+          { id: "markdown.copy.source", label: t("editor_menu.copy_as.source"), run: () => copyText(engine.getDoc(), t("mode.reading.source_copied")) },
+        ],
+      },
+      tail: ["shell.doc.export"],
+    };
+  }
+
   return {
     family: "text",
     profile: "markdown",
@@ -709,6 +943,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     },
     setTheme: (theme) => engine.setTheme(theme),
     editorActions,
+    contextMenu: (at) => {
+      if (life.closed) return null;
+      return mode === "reading" ? readingMenu(at) : writingMenu(at);
+    },
     anchorHere: () => {
       if (life.closed) return null;
       const found = engine.readState((state) => anchorAtCursor(state));
