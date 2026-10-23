@@ -122,7 +122,18 @@ Le patch di `patches/`, una per ragione:
   `xlsx/src/tests/source_forms.rs`, `note_box.rs` e `legacy_formulas.rs` i
   test lo dicono, e con queste patch le venti cartelle del corpus di Apache
   POI riscritte senza modifiche hanno lo stesso inventario
-  (`crates/fub-format-xlsx/src/inventory.rs`).
+  (`crates/fub-format-xlsx/src/inventory.rs`);
+- `0008-viste-ed-estensioni`: una cartella scritta da LibreOffice, riscritta
+  senza modifiche, perdeva gli attributi di `<sheetView>` che il modello non
+  ha (lo zoom del layout di pagina, `showOutlineSymbols`, `showRuler` e gli
+  altri di `SHEET_VIEW_ATTRS`), lo `zoomScaleNormal` del file, sostituito
+  dallo zoom, e le estensioni del documento che GridCraft non legge (l'upstream
+  tiene soltanto `calcFeatures`). Ora gli attributi restano come sorgenti di
+  `Preserved` (`zoomScaleNormal` finché lo zoom è quello letto), e un `<ext>`
+  del documento resta com'era, con le dichiarazioni che gli servono, quando non
+  nomina parti del pacchetto: uno che le nomina (le cache dei filtri, per
+  esempio) si perde con un avviso, perché le parti si rinumerano. In
+  `xlsx/src/tests/source_forms.rs` e `passthrough_tests.rs` i test lo dicono.
 
 Le dipendenze del workspace di questa cartella hanno, per quelle in comune con
 Fub, la stessa versione del `[workspace.dependencies]` di Fub, perché il grafo

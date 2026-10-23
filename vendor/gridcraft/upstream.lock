@@ -35,6 +35,10 @@ sha256 = "sha256:5119b563b7588f7e31277d9b84913d79a4f8b9bbb1cc0aa4f4283885aa51ae0
 path = "patches/0007-forme-del-file.patch"
 sha256 = "sha256:a0176ce3d5f94bdb374c91918ceb089404d1ff9953ac6a4c6afc28e12e0cc220"
 
+[[patch]]
+path = "patches/0008-viste-ed-estensioni.patch"
+sha256 = "sha256:15867157e653ecef7b9d72865edd6313651d3a5010c8f6e9a69efd140e1a9daf"
+
 [[file]]
 path = "LICENSE-APACHE"
 upstream = "sha256:0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
@@ -696,7 +700,7 @@ result = "sha256:28840681ebdb5aa3c2d084e8eb11e147b79f08c26da964899b5b80e3fc290c3
 [[file]]
 path = "crates/xlsx/src/passthrough.rs"
 upstream = "sha256:40cbd89364e3a06594fb29ac7899cc83333dd9c2c2610cc82dad6487e669630e"
-result = "sha256:d17a432d549881e898883b1bbe10fbe9430859bc72efea774a3ca53c1346141d"
+result = "sha256:fb79d2f99d5ff6d2d1f7fcc1966b0217fdfdddc27d5a780c57c7bfe1d4934934"
 
 [[file]]
 path = "crates/xlsx/src/pivot.rs"
@@ -719,7 +723,7 @@ result = "sha256:040a086c30c0ed739fedbc585443ea4a25de069a254fe71e60dc2576b136274
 [[file]]
 path = "crates/xlsx/src/sheet_write.rs"
 upstream = "sha256:4d5cfe1cc60b2df444665f58dabb9a596e4205906be158fbe754d50242c78bee"
-result = "sha256:30163e6c22105a51a4c633173d1012c4255da9d917010826d66f553cdc20a134"
+result = "sha256:bb47a702e6c30e88b4f05a5fc7cba1ab080f72b1b2d4f72cd594404088bb838f"
 
 [[file]]
 path = "crates/xlsx/src/styles.rs"
@@ -811,7 +815,7 @@ upstream = "sha256:1873df6e1723b08bb5c5f240026ea117126e4aadf122b3227c5f36b406aa4
 [[file]]
 path = "crates/xlsx/src/tests/passthrough_tests.rs"
 upstream = "sha256:20724f5bbdd9e15a22d0e5ab6756e325dbe06352fb1009d1cb7898b692da10b7"
-result = "sha256:b1f2c7953c3704bdc7078006a5ba8e8be9fe6e41c334c3c4d6e3e8d5533554dd"
+result = "sha256:86e637fde3234a079dd1412a4f0bc74fbe6a80f1707b91778c82e7e9851d9396"
 
 [[file]]
 path = "crates/xlsx/src/tests/phonetic_tests.rs"
@@ -853,7 +857,7 @@ upstream = "sha256:ec98cfda4c48151dd4b657e7d732411bf0e63836ba3bf6b2e0dc569685ca7
 [[file]]
 path = "crates/xlsx/src/tests/source_forms.rs"
 upstream = "none"
-result = "sha256:3396425f40dea688d4f6bec3dbe6f80f2c6c64830caf3d31806340fb29f8c440"
+result = "sha256:6f15e00cdf7d30a4faf253c7b64c704b0fca19c3f90130e5a3f1223aae1cde40"
 
 [[file]]
 path = "crates/xlsx/src/tests/trendline_roundtrip.rs"
