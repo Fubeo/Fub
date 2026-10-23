@@ -1,5 +1,4 @@
 diff --git a/crates/xlsx/src/sheet_read.rs b/crates/xlsx/src/sheet_read.rs
-index 0194d226..21a6fe60 100644
 --- a/crates/xlsx/src/sheet_read.rs
 +++ b/crates/xlsx/src/sheet_read.rs
 @@ -1,6 +1,7 @@
@@ -11,7 +10,7 @@ index 0194d226..21a6fe60 100644
  use std::sync::Arc;
  
  use gridcraft_core::date::{serial_from_ymd, time_fraction};
-@@ -31,14 +32,52 @@ struct RowState {
+@@ -31,8 +32,11 @@ struct RowState {
      next_row: u32,
      shared: HashMap<u32, Shared>,
      /// Dynamic-array spill ranges and legacy array ranges: cached values inside them (other than
@@ -25,8 +24,9 @@ index 0194d226..21a6fe60 100644
      dropped: u64,
      rows: u64,
  }
- 
+@@ -40,6 +44,41 @@ struct RowState {
  const MAX_HYPERLINK_CELLS: u64 = 10_000;
+ const MAX_COLUMN_ASSIGNMENTS: u64 = 1_000_000;
  
 +/// The array ranges the reader has met, indexed so that a cell finds the one containing it without
 +/// scanning them all: rows arrive in order, so a range is dropped once the reader is past its last
@@ -66,7 +66,7 @@ index 0194d226..21a6fe60 100644
  pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoError> {
      let bytes = cx.pkg.read(part)?.ok_or_else(|| IoError::Format(format!("missing part {part}")))?;
      let rels = cx.pkg.rels(part)?;
-@@ -55,6 +94,7 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
+@@ -56,6 +95,7 @@ pub fn read_sheet(cx: &mut Ctx<'_>, part: &str, name: &str) -> Result<Sheet, IoE
              El::default()
          }
      };
@@ -74,7 +74,7 @@ index 0194d226..21a6fe60 100644
      if st.dropped > 0 {
          cx.warn(format!("sheet \"{name}\": {} cells or rows outside the 1,048,576 × 16,384 grid were dropped", st.dropped));
      }
-@@ -451,7 +491,14 @@ fn read_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: &El, pos
+@@ -460,7 +500,14 @@ fn read_cell(cx: &mut Ctx<'_>, sheet: &mut Sheet, st: &mut RowState, c: &El, pos
      }
      let dynamic = c.attr("cm").is_some();
      let formula = c.child("f").and_then(|f| read_formula(cx, st, f, pos, dynamic));
@@ -90,7 +90,7 @@ index 0194d226..21a6fe60 100644
      sheet.cells.set(pos, Cell { value, formula: formula.map(Arc::new), style });
  }
  
-@@ -487,9 +534,13 @@ fn read_formula(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef, dynam
+@@ -501,9 +548,13 @@ fn read_formula_text(cx: &mut Ctx<'_>, st: &mut RowState, f: &El, pos: CellRef,
              let mut fm = Formula::new(text);
              let range = f.attr("ref").and_then(RangeRef::parse).unwrap_or(RangeRef::cell(pos));
              if !range.is_single() {
@@ -107,7 +107,6 @@ index 0194d226..21a6fe60 100644
              }
              Some(fm)
 diff --git a/crates/xlsx/src/tests/fixtures.rs b/crates/xlsx/src/tests/fixtures.rs
-index 6141af30..2fae22b9 100644
 --- a/crates/xlsx/src/tests/fixtures.rs
 +++ b/crates/xlsx/src/tests/fixtures.rs
 @@ -35,11 +35,14 @@ fn shared_formulas_and_value_types() {
