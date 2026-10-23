@@ -919,3 +919,84 @@ fn dialog_of(requests: &[UiRequest]) -> Option<GridDialog> {
         _ => None,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Il catalogo che Fub serve, con i parametri che la barra e le finestre
+    /// danno: un aggiornamento di GridCraft che aggiunge un comando, ne toglie
+    /// uno o ne cambia i parametri lo mostra nel diff di questo file, perché
+    /// nessun comando nuovo arrivi alla shell senza che qualcuno lo guardi. Si
+    /// rigenera con `UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --lib
+    /// catalogo_servito`.
+    #[test]
+    fn catalogo_servito() {
+        let mut text = String::from(
+            "# Il catalogo dei comandi di GridCraft che fub-format-xlsx serve:\n\
+             # id, se cambia la cartella, parametri. Generato da\n\
+             # `UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --lib catalogo_servito`.\n",
+        );
+        for spec in command_specs().iter().filter(|spec| served(spec.id)) {
+            let kind = if spec.undoable { "modifica" } else { "legge" };
+            text.push_str(&format!("{}\t{kind}\t{}\n", spec.id, spec.params));
+        }
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/catalogo-servito.tsv"
+        );
+        if std::env::var_os("UPDATE_MIRROR").is_some() {
+            std::fs::write(path, &text).unwrap();
+            return;
+        }
+        let saved = std::fs::read_to_string(path).unwrap_or_default();
+        assert!(
+            saved == text,
+            "il catalogo servito è cambiato: guardalo e rigeneralo con \
+             `UPDATE_MIRROR=1 cargo test -p fub-format-xlsx --lib catalogo_servito`"
+        );
+    }
+
+    /// Un comando servito non tocca il disco: la facciata legge e scrive
+    /// file soltanto attraverso un parametro `path`, che [`params_of`]
+    /// rifiuta. Se un aggiornamento di GridCraft nomina un file con un'altra
+    /// chiave, questo test lo dice prima che la chiave arrivi alla shell.
+    #[test]
+    fn nessun_comando_servito_nomina_un_file() {
+        const FILE_KEYS: &[&str] = &[
+            "file", "filename", "fileName", "dir", "folder", "url", "uri", "src",
+        ];
+        let key = |params: &str, name: &str| {
+            params.match_indices(name).any(|(at, _)| {
+                let before = params[..at].trim_end().chars().last();
+                let after = params[at + name.len()..].chars().next();
+                matches!(before, Some('{' | ',' | '|'))
+                    && matches!(after, Some('?' | ':' | ',' | '}' | ' '))
+            })
+        };
+        for spec in command_specs().iter().filter(|spec| served(spec.id)) {
+            for name in FILE_KEYS {
+                assert!(
+                    !key(spec.params, name),
+                    "`{}` names a file with `{name}`: {}",
+                    spec.id,
+                    spec.params
+                );
+            }
+            if key(spec.params, "path") {
+                let command = GridCommand {
+                    id: spec.id.into(),
+                    params: r#"{"path":"/etc/passwd"}"#.into(),
+                    sheet: "s1".into(),
+                    selection: "A1".into(),
+                    active: "A1".into(),
+                };
+                assert!(
+                    matches!(params_of(&command), Err(PluginError::BadArgs(_))),
+                    "{}",
+                    spec.id
+                );
+            }
+        }
+    }
+}

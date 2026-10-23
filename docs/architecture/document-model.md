@@ -174,6 +174,19 @@ innesto quando cambia soltanto l'input di costanti, altrimenti riscrivendo la
 cartella con il codec, se l'inventario del pacchetto dice che la riscrittura
 non perde niente. Il giornale salvato si ribasa
 nella `DocumentSession`; `resource_write` crea una cartella ma non la copre.
+
+Una cartella cade così in una di tre classi, che
+`crates/fub-format-xlsx/tests/corpus.rs` prova su un corpus scritto a mano e,
+con `FUB_XLSX_CORPUS`, su uno esterno: **modificabile** (i comandi si
+servono, e salvare due volte non cambia i byte), **preservabile** (la
+riscrittura perderebbe qualcosa: i comandi che la chiedono si rifiutano con
+il perché, l'input delle celle entra per innesto e le altre parti restano
+byte per byte), **rifiutata** (cifrata o illeggibile: non si apre). Le celle
+bloccate di un foglio protetto non prendono né comandi né input. Ciò che una riscrittura
+può non portare senza contare come perdita, ciascuno con la sua ragione, sono
+le `NORMALIZATIONS` di `inventory.rs` (la catena di calcolo, le dimensioni,
+gli stili che nessuna cella usa, il percorso del salvataggio).
+
 Il perché è nell'[ADR
 0216](../decisions/0216-protocollo-grid-2-sorgente-a-byte.md), che sostituisce
 la proiezione dell'[ADR
@@ -219,5 +232,7 @@ albero malformato.
 - `crates/fub-format-markdown/src/serialize.rs`
 - `crates/fub-format-xlsx/src/grid.rs`
 - `crates/fub-format-xlsx/src/graft.rs`
+- `crates/fub-format-xlsx/src/inventory.rs`
+- `crates/fub-format-xlsx/tests/corpus.rs`
 - `apps/client/src/editors/grid/workbook.ts`
 - `crates/fub-format-svg/src/parse.rs`

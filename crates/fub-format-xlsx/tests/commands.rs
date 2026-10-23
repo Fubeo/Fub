@@ -896,3 +896,92 @@ fn la_finestra_della_convalida_arriva_con_la_regola_della_cella() {
     .unwrap();
     assert_eq!(empty.dialog.unwrap().params, "{}");
 }
+
+/// Un comando che non tocca le formule non le ricalcola: la riscrittura tiene
+/// i valori salvati nel file, anche quelli che un calcolo cambierebbe (un
+/// valore vecchio, una funzione volatile), e una formula senza valore resta
+/// senza. Ricalcola soltanto ciò che legge una cella cambiata.
+#[test]
+fn un_comando_non_ricalcola_le_formule_che_non_tocca() {
+    const STALE: &str = r#"<dimension ref="A1:D1"/><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>A1*10</f><v>999</v></c><c r="C1"><f>NOW()</f><v>45000</v></c><c r="D1"><f>A1+1</f></c></row><row r="5"><c r="E5"><v>7</v></c></row></sheetData>"#;
+    let bytes = one_sheet(STALE);
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let shown = cells(&mut provider, &session.instance, &session.revision, "s1");
+    assert_eq!(display(&shown, "s1", "B1"), "999");
+    assert_eq!(display(&shown, "s1", "C1"), "45000");
+    assert_eq!(display(&shown, "s1", "D1"), "");
+
+    let bold = give(
+        &mut provider,
+        &session.instance,
+        &session.revision,
+        command("home.bold", r#"{"on":true}"#, "E5"),
+    )
+    .unwrap();
+    let shown = cells(
+        &mut provider,
+        &session.instance,
+        &bold.commit.revision,
+        "s1",
+    );
+    assert_eq!(display(&shown, "s1", "B1"), "999");
+    assert_eq!(display(&shown, "s1", "C1"), "45000");
+    assert_eq!(display(&shown, "s1", "D1"), "");
+    let written = provider
+        .bytes_to_write(&session.instance, bold.commit.revision.clone())
+        .unwrap();
+    assert_eq!(value(&written, 0, "B1"), Value::Number(999.0));
+    assert_eq!(value(&written, 0, "C1"), Value::Number(45000.0));
+    assert_eq!(value(&written, 0, "D1"), Value::Empty);
+
+    // Una cella letta da B1 cambia: B1 si ricalcola.
+    let typed = give(
+        &mut provider,
+        &session.instance,
+        &bold.commit.revision,
+        command("cell.set", r#"{"cell":"A1","input":"2"}"#, "A1"),
+    )
+    .unwrap();
+    let shown = cells(
+        &mut provider,
+        &session.instance,
+        &typed.commit.revision,
+        "s1",
+    );
+    assert_eq!(display(&shown, "s1", "B1"), "20");
+}
+
+/// Modificare un commento cambia il suo testo e tiene il thread: le risposte
+/// e lo stato risolto restano nel file salvato (patch `0010` di
+/// `vendor/gridcraft`).
+#[test]
+fn modificare_un_commento_tiene_le_risposte() {
+    let bytes = one_sheet(BODY);
+    let mut journal = GridJournal::new();
+    for (id, params) in [
+        (
+            "review.newComment",
+            r#"{"cell":"B2","text":"prima","author":"Ada"}"#,
+        ),
+        (
+            "review.replyComment",
+            r#"{"cell":"B2","text":"risposta","author":"Bob"}"#,
+        ),
+        ("review.resolveComment", r#"{"cell":"B2","resolved":true}"#),
+        ("review.newComment", r#"{"cell":"B2","text":"cambiato"}"#),
+    ] {
+        journal.push_command(command(id, params, "B2")).unwrap();
+    }
+    let (mut provider, session) = open(&bytes, &journal);
+    let written = provider
+        .bytes_to_write(&session.instance, session.revision.clone())
+        .unwrap();
+    let read = fub_format_xlsx::read(&written).unwrap();
+    let thread = &read.workbook.sheets[0].comments[&CellRef::parse("B2").unwrap()];
+    assert_eq!(
+        (thread.author.as_str(), thread.text.as_str()),
+        ("Ada", "cambiato")
+    );
+    assert_eq!(thread.replies, [("Bob".to_owned(), "risposta".to_owned())]);
+    assert!(thread.threaded && thread.resolved);
+}
