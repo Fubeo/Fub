@@ -25,8 +25,12 @@ modalità per ruolo (Live, sulla tela, riporta alle carte). Il riquadro ricorda
 la modalità scelta per ogni famiglia di superfici: una nota in Sorgente non fa
 aprire la tela seguente come JSON, e la tela non cambia la modalità in cui si
 riapre la nota. Le scorciatoie seguono il riquadro attivo. In un campo in cui
-si scrive, un accordo senza Mod (⌘ su Mac, Ctrl altrove) resta del campo:
-Alt+← muove il cursore lì e torna indietro fuori. La modalità delle
+si scrive, un accordo senza Ctrl e senza ⌘ resta del campo: Alt+← muove il
+cursore lì e torna indietro fuori. Una scorciatoia scrive `Mod` per ⌘ sul Mac
+e Ctrl altrove, e `Ctrl` per Control anche sul Mac: il giro delle schede in
+ordine d'uso è `Ctrl-Tab`, perché ⌘-Tab è del sistema. Fuori dal Mac `Ctrl-k`
+e `Mod-k` sono lo stesso tasto, e le impostazioni li segnalano come
+conflitto. La modalità delle
 note in una finestra nuova viene da `editor.default-mode`; un riquadro diviso
 eredita quelle del riquadro da cui nasce. I divisori fra riquadri si trascinano,
 si spostano con le frecce e tornano a parti uguali con un doppio clic; le

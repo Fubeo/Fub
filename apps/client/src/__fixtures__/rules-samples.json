@@ -3631,7 +3631,19 @@
       "out": "mod-="
     },
     {
-      "binding": "Ctrl-k",
+      "binding": "Ctrl-Tab",
+      "out": "ctrl-tab"
+    },
+    {
+      "binding": "Shift-Ctrl-Tab",
+      "out": "ctrl-shift-tab"
+    },
+    {
+      "binding": "Meta-k",
+      "out": null
+    },
+    {
+      "binding": "Mod-Ctrl-k",
       "out": null
     },
     {
@@ -3656,6 +3668,36 @@
     },
     {
       "binding": "   ",
+      "out": null
+    }
+  ],
+  "folded_chord": [
+    {
+      "binding": "Ctrl-Tab",
+      "out": "mod-tab"
+    },
+    {
+      "binding": "Mod-Tab",
+      "out": "mod-tab"
+    },
+    {
+      "binding": "Shift-Ctrl-Tab",
+      "out": "mod-shift-tab"
+    },
+    {
+      "binding": "Alt-Ctrl-k d",
+      "out": "alt-mod-k d"
+    },
+    {
+      "binding": "Mod-Shift-g",
+      "out": "mod-shift-g"
+    },
+    {
+      "binding": "Mod-Ctrl-k",
+      "out": null
+    },
+    {
+      "binding": "Meta-k",
       "out": null
     }
   ],

@@ -438,10 +438,16 @@ export interface KeyChord {
 //
 // **Un accordo, o più d'uno in sequenza** (§18.2), separati da uno spazio:
 // `Mod-Shift-f` è un gesto solo, `Mod-k d` sono due tasti premuti uno dopo
-// l'altro. `Mod` è Ctrl o Cmd, e i modificatori riconosciuti sono tre —
-// `Mod`, `Shift`, `Alt` — e nessun altro: un `Ctrl-k` scritto a mano nelle
-// impostazioni non è un accordo che questa shell onora, e viene **detto**
+// l'altro. `Mod` è Ctrl o Cmd, e i modificatori riconosciuti sono quattro —
+// `Mod`, `Ctrl`, `Shift`, `Alt` — e nessun altro: un `Meta-k` scritto a mano
+// nelle impostazioni non è un accordo che questa shell onora, e viene **detto**
 // invece che ignorato (`rejectedChords`).
+//
+// `Ctrl` è Control anche sul Mac, dove `Mod` è Cmd: serve agli accordi che lì
+// non possono stare su Cmd (`Cmd-Tab` è del sistema). Fuori dal Mac è lo stesso
+// tasto di `Mod`, e i conflitti si cercano sulla forma **piegata**
+// (`foldedChord`), dove `ctrl` diventa `mod`. La regola è
+// `fub_abi::rules::keys`, e il mirror delle regole la tiene uguale.
 //
 // # Perché il primo tasto porta un modificatore e il secondo no
 //
@@ -461,7 +467,7 @@ export interface KeyChord {
 // accettarlo.
 
 /// I modificatori che questa shell riconosce, e nessun altro.
-const MODIFIERS = ["mod", "shift", "alt"] as const;
+const MODIFIERS = ["mod", "ctrl", "shift", "alt"] as const;
 
 /// Un accordo solo: i modificatori e il tasto, già in forma confrontabile.
 export interface Chord {
@@ -470,6 +476,8 @@ export interface Chord {
   /// Ctrl o Cmd. Sono lo stesso modificatore per chi scrive un accordo, e due
   /// tasti diversi solo per chi ha comprato il computer.
   mod: boolean;
+  /// Control anche sul Mac; fuori dal Mac è lo stesso tasto di `mod`.
+  ctrl: boolean;
   shift: boolean;
   alt: boolean;
 }
@@ -491,20 +499,23 @@ export function parseChords(binding: string | null | undefined): Chord[] | null 
     const key = minus ? "-" : parts.pop();
     if (!key) return null;
     const mods = parts.map((p) => p.toLowerCase());
-    // Un modificatore che non esiste non si ignora: `Ctrl-k` sarebbe letto come
+    // Un modificatore che non esiste non si ignora: `Meta-k` sarebbe letto come
     // `k` nudo — cioè un tasto che risponde mentre si scrive — e chi l'ha
-    // scritto crederebbe di aver configurato Ctrl.
+    // scritto crederebbe di aver configurato Meta.
     if (mods.some((m) => !(MODIFIERS as readonly string[]).includes(m))) return null;
     if (new Set(mods).size !== mods.length) return null;
+    // `Mod-Ctrl-k`: fuori dal Mac è Ctrl tenuto due volte, cioè `Mod-k`.
+    if (mods.includes("mod") && mods.includes("ctrl")) return null;
     chords.push(sameKeyOnEveryLayout({
       key: key.toLowerCase(),
       mod: mods.includes("mod"),
+      ctrl: mods.includes("ctrl"),
       shift: mods.includes("shift"),
       alt: mods.includes("alt"),
     }));
   }
   const first = chords[0]!;
-  if (!first.mod && !first.shift && !first.alt) return null;
+  if (!first.mod && !first.ctrl && !first.shift && !first.alt) return null;
   return chords;
 }
 /// Quante alternative può portare una scorciatoia.
@@ -584,7 +595,18 @@ export function normalizeAlternatives(binding: string | null | undefined): strin
 }
 
 function equalChords(a: Chord, b: Chord): boolean {
-  return a.key === b.key && a.mod === b.mod && a.shift === b.shift && a.alt === b.alt;
+  return a.key === b.key && a.mod === b.mod && a.ctrl === b.ctrl && a.shift === b.shift && a.alt === b.alt;
+}
+
+/// L'accordo con `ctrl` letto come `mod`: com'è premuto fuori dal Mac.
+function fold(a: Chord): Chord {
+  return a.ctrl ? { ...a, mod: true, ctrl: false } : a;
+}
+
+/// L'accordo scritto com'è premuto su questa piattaforma: sul Mac `Ctrl` resta
+/// Control, altrove è il tasto di `Mod`.
+function onPlatform(a: Chord, platform: KeyboardPlatform): Chord {
+  return platform === "mac" ? a : fold(a);
 }
 
 /** "Mod" is Command on macOS, Control elsewhere; never silently treat Super
@@ -599,6 +621,7 @@ function pressedChord(e: KeyChord, platform: KeyboardPlatform = "any"): Chord {
   return sameKeyOnEveryLayout({
     key: e.key.toLowerCase(),
     mod: platform === "mac" ? e.metaKey : platform === "other" ? e.ctrlKey : e.ctrlKey || e.metaKey,
+    ctrl: platform === "mac" && e.ctrlKey,
     shift: e.shiftKey,
     alt: e.altKey,
   });
@@ -615,9 +638,15 @@ function sameKeyOnEveryLayout(chord: Chord): Chord {
 function canonicalChord(a: Chord): string {
   const mods: string[] = [];
   if (a.alt) mods.push("alt");
+  if (a.ctrl) mods.push("ctrl");
   if (a.mod) mods.push("mod");
   if (a.shift) mods.push("shift");
   return [...mods, a.key].join("-");
+}
+
+/// Le chiavi dei conflitti: la forma canonica di ogni accordo piegato.
+function foldedKey(chords: Chord[]): string {
+  return chords.map((a) => canonicalChord(fold(a))).join(" ");
 }
 
 /// Un accordo com'è scritto da chi lo dichiara: modificatori nell'ordine in cui
@@ -626,6 +655,7 @@ function canonicalChord(a: Chord): string {
 function write(a: Chord): string {
   const mods: string[] = [];
   if (a.mod) mods.push("Mod");
+  if (a.ctrl) mods.push("Ctrl");
   if (a.shift) mods.push("Shift");
   if (a.alt) mods.push("Alt");
   return [...mods, a.key.length === 1 ? a.key.toUpperCase() : a.key].join("-");
@@ -660,7 +690,8 @@ export function keyName(key: string): string {
 }
 
 /// Il nome che si legge di un modificatore da solo, tenuto mentre si fa
-/// altro: `Mod` è Ctrl, o ⌘ su macOS. `null` se `name` non è un modificatore.
+/// altro: `Mod` è Ctrl, o ⌘ su macOS, e `Ctrl` è ⌃ su macOS. `null` se `name`
+/// non è un modificatore.
 export function modifierName(
   name: string,
   platform: KeyboardPlatform = keyboardPlatform(globalThis.navigator?.platform ?? ""),
@@ -669,6 +700,8 @@ export function modifierName(
   switch (name.trim().toLowerCase()) {
     case "mod":
       return mac ? "⌘" : "Ctrl";
+    case "ctrl":
+      return mac ? "⌃" : "Ctrl";
     case "alt":
       return mac ? "⌥" : "Alt";
     case "shift":
@@ -692,6 +725,7 @@ export function displayBinding(
   return chords
     .map((chord) => {
       const parts: string[] = [];
+      if (chord.ctrl) parts.push(mac ? "⌃" : "Ctrl");
       if (chord.mod) parts.push(mac ? "⌘" : "Ctrl");
       if (chord.alt) parts.push(mac ? "⌥" : "Alt");
       if (chord.shift) parts.push(mac ? "⇧" : "Shift");
@@ -724,7 +758,8 @@ export function ariaBinding(
   if (!chords || chords.length !== 1) return "";
   const chord = chords[0]!;
   const parts: string[] = [];
-  if (chord.mod) parts.push(platform === "mac" ? "Meta" : "Control");
+  if (chord.ctrl || (chord.mod && platform !== "mac")) parts.push("Control");
+  else if (chord.mod) parts.push("Meta");
   if (chord.alt) parts.push("Alt");
   if (chord.shift) parts.push("Shift");
   parts.push(ARIA_KEYS[chord.key] ?? chord.key.charAt(0).toUpperCase() + chord.key.slice(1));
@@ -739,10 +774,10 @@ export function ariaBinding(
 export function matchesBinding(
   e: KeyChord, binding: string | null, platform: KeyboardPlatform = "any",
 ): boolean {
-  if ((platform === "mac" && e.ctrlKey) || (platform === "other" && e.metaKey)) return false;
+  if (platform === "other" && e.metaKey) return false;
   const alternatives = parseAlternatives(binding);
   return alternatives?.some((chords) =>
-    chords.length === 1 && equalChords(chords[0]!, pressedChord(e, platform))) ?? false;
+    chords.length === 1 && equalChords(onPlatform(chords[0]!, platform), pressedChord(e, platform))) ?? false;
 }
 
 /// Il comando il cui accordo efficace corrisponde, se ce n'è uno.
@@ -835,7 +870,7 @@ export function advance(
 ): ResultKeys {
   if (MODIFIER_KEYS.has(e.key.toLowerCase())) return { type: "passa" };
   if (waiting && e.key === "Escape") return { type: "annulla" };
-  if ((platform === "mac" && e.ctrlKey) || (platform === "other" && e.metaKey)) {
+  if (platform === "other" && e.metaKey) {
     return waiting ? { type: "annulla" } : { type: "passa" };
   }
 
@@ -844,7 +879,8 @@ export function advance(
   let longest: Chord[] | null = null;
 
   for (const entry of entries) {
-    for (const chords of parseAlternatives(entry.binding) ?? []) {
+    for (const written of parseAlternatives(entry.binding) ?? []) {
+      const chords = written.map((a) => onPlatform(a, platform));
       if (chords.length <= step) continue;
       if (waiting && !waiting.pressed.every((a, i) => equalChords(a, chords[i]!))) continue;
       if (!equalChords(chords[step]!, pressedKey)) continue;
@@ -866,12 +902,14 @@ export function advance(
 /// palette mostra l'accordo di ognuno, ma nessuno guarda venti righe per
 /// scoprire che due dicono `Mod-g`. Il confronto è sull'accordo **normalizzato**
 /// — i modificatori ordinati e minuscoli — o `Shift-Mod-g` e `Mod-Shift-g`
-/// sarebbero due accordi diversi per la tastiera e uguali per le dita.
+/// sarebbero due accordi diversi per la tastiera e uguali per le dita. Ed è
+/// sulla forma piegata: `Ctrl-Tab` e `Mod-Tab` sono lo stesso gesto fuori dal
+/// Mac.
 export function conflicts(entries: CommandEntry[]): CommandEntry[][] {
   const byChord = new Map<string, Map<string, CommandEntry>>();
   for (const entry of entries) {
     for (const chords of parseAlternatives(entry.binding) ?? []) {
-      const key = chords.map(canonicalChord).join(" ");
+      const key = foldedKey(chords);
       const group = byChord.get(key) ?? new Map<string, CommandEntry>();
       group.set(entry.id, entry);
       byChord.set(key, group);
@@ -887,6 +925,13 @@ export function conflicts(entries: CommandEntry[]): CommandEntry[][] {
 export function normalize(binding: string): string | null {
   const chords = parseChords(binding);
   return chords ? chords.map(canonicalChord).join(" ") : null;
+}
+
+/// La stessa forma canonica con `ctrl` letto come `mod`: la chiave con cui si
+/// cercano i conflitti. È `fub_abi::rules::keys::folded`.
+export function foldedChord(binding: string): string | null {
+  const chords = parseChords(binding);
+  return chords ? foldedKey(chords) : null;
 }
 
 /// Le scorciatoie rese **irraggiungibili** perché un'altra è un loro prefisso.
@@ -907,7 +952,7 @@ export function shadowedPrefixes(
       .filter((candidate) =>
         candidate.entry.id !== short.entry.id &&
         candidate.chords.length > short.chords.length &&
-        short.chords.every((a, i) => equalChords(a, candidate.chords[i]!)))
+        short.chords.every((a, i) => equalChords(fold(a), fold(candidate.chords[i]!))))
       .map((candidate) => candidate.entry);
     if (long.length > 0) result.push({ short: short.entry, long });
   }
@@ -917,7 +962,7 @@ export function shadowedPrefixes(
 /// Gli accordi che questa shell **non sa premere**, con chi li ha scritti.
 ///
 /// Esistono perché una scorciatoia è un'impostazione, cioè una stringa che
-/// l'utente scrive a mano, e `Ctrl-k` o `d` sono i due modi più facili di
+/// l'utente scrive a mano, e `Meta-k` o `d` sono i due modi più facili di
 /// sbagliarla. Prima di questa voce finivano in un `continue` dentro il conteggio
 /// dei conflitti: non erano un conflitto — vero — ma non erano nemmeno una
 /// scorciatoia, e nessuno lo diceva. Un valore scritto e ignorato in silenzio è
@@ -958,7 +1003,7 @@ export function keybindingIssues(entries: CommandEntry[], filter = ""): Keybindi
   const byChord = new Map<string, CommandEntry[]>();
   for (const entry of entries) {
     for (const chords of parseAlternatives(entry.binding) ?? []) {
-      const chord = chords.map(canonicalChord).join(" ");
+      const chord = foldedKey(chords);
       const group = byChord.get(chord) ?? [];
       if (!group.some((item) => item.id === entry.id)) group.push(entry);
       byChord.set(chord, group);

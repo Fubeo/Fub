@@ -26,7 +26,6 @@ import {
   keyboardPlatform,
   type Waiting,
   type CommandEntry,
-  type KeyboardPlatform,
 } from "./commands";
 
 /// Gli accordi già premuti, se una sequenza è cominciata.
@@ -49,7 +48,7 @@ export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry)
       return;
     }
     const platform = keyboardPlatform(navigator.platform);
-    if (waiting === null && yieldsToField(e, platform)) return;
+    if (waiting === null && yieldsToField(e)) return;
     const result = advance(allCommands(), waiting, e, platform);
     // L'unico esito che lascia passare il tasto. Gli altri tre sono gesti
     // dell'app, e un gesto dell'app non finisce anche dentro la nota.
@@ -83,16 +82,17 @@ function isTextField(target: EventTarget | null): boolean {
 }
 
 /// Un tasto dell'app non ruba un tasto di testo. Dentro un campo, un accordo
-/// senza Mod (⌘ su Mac, Ctrl altrove) resta del campo: Opzione+← è la parola
-/// precedente su Mac, Ctrl+A l'inizio della riga, Alt+← un salto in CodeMirror.
-/// Fuori dal campo lo stesso accordo torna dell'app (Alt+← va indietro).
+/// senza Ctrl e senza ⌘ resta del campo: Opzione+← è la parola precedente su
+/// Mac, Alt+← un salto in CodeMirror. Fuori dal campo lo stesso accordo torna
+/// dell'app (Alt+← va indietro). Un accordo con Control sul Mac è dell'app solo
+/// se l'app lo dichiara (`Ctrl-Tab`): Ctrl+A, l'inizio della riga, non lo
+/// dichiara nessuno e arriva al campo.
 ///
 /// I tasti funzione non scrivono e restano dell'app anche in un campo; il
 /// secondo tasto di una sequenza già cominciata è dell'app per definizione, e
 /// chi chiama lo lascia passare prima di arrivare qui.
-function yieldsToField(e: KeyboardEvent, platform: KeyboardPlatform): boolean {
-  const mod = platform === "mac" ? e.metaKey : e.ctrlKey;
-  if (mod || /^F\d{1,2}$/.test(e.key)) return false;
+function yieldsToField(e: KeyboardEvent): boolean {
+  if (e.ctrlKey || e.metaKey || /^F\d{1,2}$/.test(e.key)) return false;
   return isTextField(e.target);
 }
 
