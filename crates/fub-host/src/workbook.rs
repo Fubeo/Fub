@@ -1,20 +1,23 @@
-//! Le cartelle di Excel composte dall'host, in sola lettura.
+//! Le cartelle di Excel composte dall'host: se ne cambiano i valori delle
+//! celle, e il resto del file resta byte per byte (ADR 0216).
 //!
-//! `fub-format-xlsx` possiede il codec e la proiezione; il kernel conosce
-//! soltanto il formato a byte. L'host li compone alle due porte dei documenti
-//! della shell, come per la videoscrittura ([`crate::rich`]):
+//! `fub-format-xlsx` possiede il codec, la superficie della griglia sui byte e
+//! l'innesto; il kernel conosce soltanto il formato a byte. L'host li compone
+//! alle due porte dei documenti della shell:
 //!
-//! - **leggere** una cartella restituisce la sua proiezione come testo, con la
-//!   revisione dei byte del file;
-//! - **scriverla** si rifiuta: da qui una cartella non si salva, e il file
-//!   resta com'è.
+//! - **leggere** una cartella dà il testo di un giornale vuoto, con la
+//!   revisione dei byte del file: il testo della `DocumentSession` è il
+//!   giornale delle celle cambiate, e la griglia si apre sui byte;
+//! - **scriverla** con un giornale innesta le sue voci nei byte che la shell
+//!   ha visto, attraverso il provider registrato, e scrive con il CAS della
+//!   stessa revisione. Un giornale vuoto non scrive niente.
 //!
 //! Il codec gira fuori dal lucchetto del workspace: si leggono i byte, si
-//! rilascia, si proietta. Senza la feature `xlsx` nessun formato è di questi, e
-//! ogni funzione qui lo dice.
+//! rilascia, si chiama il provider. Senza la feature `xlsx` nessun formato è di
+//! questi, e ogni funzione qui lo dice.
 
 use fub_abi::format::{DocumentFormat, FormatProvider};
-use fub_abi::{Arg, DocId, PluginError, Text};
+use fub_abi::{Arg, DocId, GridJournal, PluginError, Text};
 
 /// I provider di formato da registrare al montaggio.
 pub(crate) fn providers() -> Vec<Box<dyn FormatProvider>> {
@@ -25,6 +28,22 @@ pub(crate) fn providers() -> Vec<Box<dyn FormatProvider>> {
     #[cfg(not(feature = "xlsx"))]
     {
         Vec::new()
+    }
+}
+
+/// Il bundle che registra la superficie della griglia sui byte.
+#[cfg(feature = "xlsx")]
+pub(crate) const WORKBOOK_ID: &str = "fub.xlsx";
+
+/// Registra la superficie della griglia delle cartelle: la stessa che la
+/// shell apre e che il salvataggio usa per l'innesto.
+#[cfg(feature = "xlsx")]
+pub(crate) fn register(registrar: &mut crate::registry::Registrar<'_>) -> Vec<String> {
+    match registrar
+        .register_grid_bytes_provider(Box::new(fub_format_xlsx::grid::XlsxGridProvider::new()))
+    {
+        Ok(()) => Vec::new(),
+        Err(error) => vec![format!("workbook grid NOT registered: {error}")],
     }
 }
 
@@ -41,11 +60,25 @@ pub(crate) fn is_workbook(format: Option<&DocumentFormat>) -> bool {
     }
 }
 
-/// La proiezione dei byte di `doc`.
-pub(crate) fn open(doc: &DocId, bytes: &[u8]) -> Result<String, PluginError> {
+/// La superficie della griglia sui byte delle cartelle.
+pub(crate) fn surface(doc: &DocId) -> Result<&'static str, PluginError> {
     #[cfg(feature = "xlsx")]
     {
-        fub_format_xlsx::open(bytes).map_err(|error| plugin_error(doc, error))
+        let _ = doc;
+        Ok(fub_format_xlsx::grid::XLSX_GRID_SURFACE)
+    }
+    #[cfg(not(feature = "xlsx"))]
+    {
+        Err(read_only(doc))
+    }
+}
+
+/// Il controllo dei byte di `doc` prima di darli alla griglia: le dimensioni e
+/// la firma, senza leggere il pacchetto.
+pub(crate) fn check(doc: &DocId, bytes: &[u8]) -> Result<(), PluginError> {
+    #[cfg(feature = "xlsx")]
+    {
+        fub_format_xlsx::check(bytes).map_err(|error| plugin_error(doc, error))
     }
     #[cfg(not(feature = "xlsx"))]
     {
@@ -54,10 +87,32 @@ pub(crate) fn open(doc: &DocId, bytes: &[u8]) -> Result<String, PluginError> {
     }
 }
 
-/// Il rifiuto di scrivere una cartella.
+/// Il giornale che la shell manda a salvare, nella sua forma canonica.
+pub(crate) fn journal(doc: &DocId, source: &str) -> Result<GridJournal, PluginError> {
+    GridJournal::parse(source).map_err(|error| {
+        PluginError::BadArgs(Text::message(
+            "host.xlsx.journal",
+            vec![
+                Arg::text("doc", doc.as_str()),
+                Arg::text("why", error.to_string()),
+            ],
+        ))
+    })
+}
+
+/// Il rifiuto di coprire una cartella con byte che non vengono dall'innesto.
 pub(crate) fn read_only(doc: &DocId) -> PluginError {
     PluginError::PermissionDenied(Text::message(
         "host.xlsx.readonly",
+        vec![Arg::text("doc", doc.as_str())],
+    ))
+}
+
+/// Il rifiuto di far nascere una cartella da un giornale: senza i byte non c'è
+/// niente in cui innestare.
+pub(crate) fn missing(doc: &DocId) -> PluginError {
+    PluginError::PermissionDenied(Text::message(
+        "host.xlsx.missing",
         vec![Arg::text("doc", doc.as_str())],
     ))
 }

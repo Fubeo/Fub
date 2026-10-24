@@ -152,6 +152,14 @@ impl Registrar<'_> {
         self.publish(PreparedRegistration::grid(provider).map_err(RegistryError::External)?)
     }
 
+    /// Un provider grid della versione 2, sui byte del documento.
+    pub fn register_grid_bytes_provider(
+        &mut self,
+        provider: Box<dyn fub_abi::GridBytesProvider>,
+    ) -> Result<(), RegistryError> {
+        self.publish(PreparedRegistration::grid_bytes(provider).map_err(RegistryError::External)?)
+    }
+
     pub fn register_event_handler(
         &mut self,
         provider: Box<dyn fub_abi::traits::EventHandler>,

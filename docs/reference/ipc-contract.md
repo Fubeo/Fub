@@ -49,6 +49,20 @@ sola lettura. La famiglia Grid usa invece le porte strettamente tipate
 versione prima di `open_grid`; un binding sconosciuto o incompatibile non viene
 chiamato e attiva il fallback registrato.
 
+Una superficie con `protocol_version` 2 si apre sui byte di un documento e usa
+le porte `open_grid_bytes`, `grid_bytes_window`, `apply_grid_bytes` e
+`close_grid_bytes`; le porte della versione 1 la rifiutano con `Unserved`, e
+viceversa. `open_grid_bytes` riceve `surface`, `doc`, `journal` e `base`: la
+shell non trasporta i byte, ma il giornale canonico delle celle cambiate (il
+testo della sessione documento) e la revisione dei byte da cui parte. L'host
+legge il documento, controlla che il formato sia quello della superficie
+(`BadArgs` altrimenti) e risponde `Conflict` se i byte non sono più quelli di
+`base`. La sessione è un `GridBytesSession` (fogli, foglio attivo, fogli
+nascosti, avvisi `GridNotice` e celle in conflitto); la finestra è un
+`GridBytesWindow`, la cui cella porta `GridValue`, il testo formattato,
+blocco, `stale` e `conflict`. Il commit è un `GridCommit` il cui `edit` è il
+diff del testo del giornale, da applicare al buffer della sessione documento.
+
 Il provider verifica il limite sorgente di 16 MiB e misura la risposta JSON,
 compreso l'envelope, entro 8 MiB prima di materializzare il valore JSON.
 Disabilitare il bundle ritira la route di valutazione: la query restituisce
@@ -344,54 +358,56 @@ shell nei due versi (`crates/fub-format-rich/tests/ts_projection.rs`).
 
 Una cartella di `fub-format-xlsx` (formato `xlsx`, per `.xlsx`, `.xlsm`,
 `.xltx` e `.xltm`, con la feature `xlsx` di `fub-host`) passa dalle stesse
-porte, in **sola lettura**:
+porte, e il suo testo è il **giornale** delle celle cambiate (ADR 0216):
 
-- `read_document` restituisce in `text` la **proiezione** della cartella, con
-  `format_id` `"xlsx"`, `source_kind` `"bytes"` e la `revision` dei byte del
-  file;
-- `write_document` si rifiuta sempre con `PermissionDenied`
-  (`host.xlsx.readonly`), anche per un file che non c'è, e il file resta
-  com'è;
+- `read_document` restituisce `text` vuoto (il giornale vuoto), con
+  `format_id` `"xlsx"`, `source_kind` `"bytes"`, `text_kind`
+  `"grid_journal"` e la `revision` dei byte del file. Ogni altro documento ha
+  `text_kind` `"source"`: il testo è il sorgente che `write_document` riceve;
+- la griglia si apre sui byte con `open_grid_bytes`, sulla superficie
+  `fub.grid.xlsx` della versione 2, e legge le finestre che mostra;
+- `write_document` riceve il giornale nella forma canonica (`BadArgs` con
+  `host.xlsx.journal` altrimenti) e lo **innesta** nei byte alla revisione
+  `base`, con il CAS della stessa revisione: il resto del file resta byte
+  per byte. Un giornale vuoto, o già tutto nei byte, non scrive niente; un
+  giornale per un file che non c'è si rifiuta (`host.xlsx.missing`); una
+  voce che i byte non possono ricevere si rifiuta con la sua specie
+  (`PermissionDenied` per una cella bloccata, `Conflict` per un foglio che
+  non c'è più, `BadArgs` per una formula), e il file resta com'era;
 - `resource_write` deposita una cartella nuova (`expected` nullo) come ogni
-  file, e rifiuta con lo stesso errore di coprirne una che c'è.
+  file, e rifiuta di coprirne una che c'è (`host.xlsx.readonly`): una
+  cartella cambia soltanto per innesto.
 
-La proiezione è JSON chiuso, `{"version": 1, "active", "notices", "sheets"}`:
+Nella finestra:
 
-- `active` è l'indice del foglio attivo nel file;
-- ogni foglio è `{"name", "hidden", "row_count", "column_count",
-  "row_height", "column_width", "rows", "columns", "cells"}`. Gli assi
-  arrivano fino all'ultima cella mostrata, e tutti i fogli insieme non
-  superano 262.144 righe e colonne; `row_height` e `column_width` sono
-  le dimensioni del foglio in pixel, e `rows` e `columns` elencano soltanto
-  le linee con una dimensione loro o nascoste, `{"index", "size", "hidden"}`
-  con l'indice da 0;
-- ogni cella è `{"row", "col", "formula", "value", "style"}`, con le
-  coordinate da 0. `formula` è il testo della barra (`=…`, o `{=…}` per una
-  matrice legacy); `value` è `{"kind": "number" | "text" | "boolean" |
-  "error", "text"}`, con `text` già nel formato numerico della cella; `style`
-  è `{"bold", "italic", "text_color", "fill_color", "horizontal": "start" |
-  "center" | "end"}`, con i colori in `#RRGGBB`. Il testo automatico su una
-  cella senza riempimento non ha `text_color`, e prende il colore della
-  shell;
-- ogni valore è quello che il file ha salvato, comprese le celle versate
-  dalle matrici: niente si ricalcola, e una formula senza valore salvato non
-  ha `value`;
-- `notices` è l'elenco ordinato degli avvisi, `{"kind", "detail"}`:
-  `macros` (le macro non si eseguono), `external_links` (i collegamenti ad
-  altre cartelle non si aggiornano), `incomplete` (con `detail` l'avviso della
-  lettura di GridCraft, in inglese), `not_shown` (con `detail` una fra
-  `merges`, `charts`, `images`, `shapes`, `comments`, `conditional_formats`,
-  `sparklines`), `uncomputed` (ci sono formule senza valore salvato) e
-  `truncated` (con `detail` il foglio dove le celle si fermano: la
-  proiezione non supera 16 MiB né le righe e colonne qui sopra).
+- i valori sono quelli che il file ha salvato, comprese le celle versate
+  dalle matrici: niente si ricalcola. `display` è il valore nel formato
+  numerico della cella, e `input` ciò che la barra mostra e la cella riceve
+  (`=…` per una formula, che non si scrive);
+- `lock` è uno fra `array`, `spill`, `shared-formula`, `data-table`,
+  `table-header`, `table-totals`, `merged`, `pivot`, `rich-value`,
+  `protected` e `sheet-shape` (il foglio ha una forma che l'innesto non sa
+  ancora riscrivere);
+- `stale` segna una formula che legge, anche attraverso altre formule, una
+  cella cambiata: tiene il valore del file, e il salvataggio chiede a Excel di
+  ricalcolare all'apertura (`fullCalcOnLoad`);
+- il testo automatico su una cella senza riempimento non ha `text_color`, e
+  prende il colore della shell.
+
+Gli avvisi della sessione sono `macros`, `external-links`, `incomplete` (la
+lettura ha lasciato indietro qualcosa), `not-shown-merges`,
+`not-shown-charts`, `not-shown-images`, `not-shown-shapes`,
+`not-shown-comments`, `not-shown-conditional-formats`,
+`not-shown-sparklines` e `uncomputed` (formule senza valore salvato), ciascuno
+con il suo conteggio.
 
 Gli errori arrivano tipizzati con chiave di catalogo `host.xlsx.*`: una
 cartella cifrata (`encrypted`), un file oltre 256 MiB (`too_large`), un
 contenuto che non è una cartella di Excel (`not_xlsx`, con `found`) e un
-pacchetto che il codec rifiuta (`codec`). La forma della proiezione è di
-`crates/fub-format-xlsx/src/projection.rs`; la fixture
-`apps/client/src/__fixtures__/xlsx-projection.json` la lega alla shell
-(`crates/fub-format-xlsx/tests/ts_projection.rs`).
+pacchetto che il codec rifiuta (`codec`). La forma della sessione e delle
+finestre è di `crates/fub-format-xlsx/src/grid.rs`; la fixture
+`apps/client/src/__fixtures__/xlsx-grid.json` la lega alla shell
+(`crates/fub-format-xlsx/tests/ts_grid.rs`).
 
 ## Percorsi
 

@@ -2182,11 +2182,12 @@ dependencies = [
  "fub-abi",
  "fub-format-markdown",
  "fub-sdk",
+ "gridcraft-calc",
  "gridcraft-core",
  "gridcraft-model",
  "gridcraft-numfmt",
  "gridcraft-xlsx",
- "serde",
+ "quick-xml",
  "serde_json",
  "thiserror 2.0.19",
  "zip",
@@ -2345,6 +2346,7 @@ dependencies = [
  "fub-format-sheet",
  "fub-host",
  "fub-kernel",
+ "fub-sdk",
  "fub-testkit",
  "ring",
  "serde",
@@ -2724,6 +2726,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "gridcraft-calc"
+version = "0.9.0"
+dependencies = [
+ "gridcraft-core",
+ "gridcraft-formula",
+ "gridcraft-functions",
+ "gridcraft-model",
+ "gridcraft-numfmt",
+ "log",
+]
+
+[[package]]
 name = "gridcraft-core"
 version = "0.9.0"
 dependencies = [
@@ -2739,6 +2753,14 @@ dependencies = [
  "gridcraft-core",
  "serde",
  "thiserror 2.0.19",
+]
+
+[[package]]
+name = "gridcraft-functions"
+version = "0.9.0"
+dependencies = [
+ "gridcraft-core",
+ "regex",
 ]
 
 [[package]]

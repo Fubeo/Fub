@@ -1,46 +1,37 @@
-// La proiezione di una cartella di Excel, come la legge la griglia.
+// Una cartella di Excel nella griglia, sulla versione 2 del protocollo
+// (ADR 0216, `fub_abi::grid_bytes`).
 //
-// L'host non apre il protocollo dei fogli per una cartella: `read_document` dà
-// la sua proiezione (`crates/fub-format-xlsx/src/projection.rs`), JSON chiuso
-// con i valori già nel formato numerico di ogni cella. Qui diventa il
-// `GridWorkbook` che il motore disegna, in sola lettura: l'`input` di una
-// cella è il testo che mostra, così copiare e leggere la selezione danno i
-// valori, e la formula sta a parte, per la barra.
+// L'host apre la superficie sui byte del documento e la shell non li vede:
+// riceve una sessione (i fogli, quello attivo, quelli nascosti, gli avvisi) e
+// le finestre che mostra. Qui le finestre diventano il `GridWorkbook` che il
+// motore disegna. L'`input` di una cella del modello è il testo che mostra,
+// già formattato dal provider, così copiare e leggere la selezione danno i
+// valori; ciò che si scrive sta a parte, nella cella della cartella, con il
+// blocco, il valore non ricalcolato e il conflitto.
 //
-// La forma si controlla stretta come quella del foglio di Fub (`model.ts`):
-// un campo che qui non si conosce rende la proiezione illeggibile, e lo dice.
-// Le liste chiuse sotto le confronta con quelle del codec
-// `crates/fub-format-xlsx/tests/ts_projection.rs`.
-import {
-  columnLabel,
-  type GridCell,
-  type GridCellStyle,
-  type GridColumn,
-  type GridPosition,
-  type GridRow,
-  type GridSheet,
-  type GridWorkbook,
-} from "./model";
+// Le forme si controllano strette come quelle della versione 1 (`engine.ts`):
+// una risposta fuori dai limiti o incoerente con la sessione non si disegna.
+import type { GridBytesCell, GridBytesSession, GridBytesWindow, GridNotice } from "../../host/contract";
+import type { GridCell, GridCellStyle, GridColumn, GridPosition, GridRow, GridSheet, GridWorkbook } from "./model";
 
-/// I tipi di avviso, nell'ordine del codec.
-export const WORKBOOK_NOTICES = ["macros", "external_links", "incomplete", "not_shown", "uncomputed", "truncated"] as const;
-/// Le parti di una cartella che la griglia non disegna, nell'ordine del codec.
-export const WORKBOOK_NOT_SHOWN = ["merges", "charts", "images", "shapes", "comments", "conditional_formats", "sparklines"] as const;
-
-export type WorkbookNoticeKind = (typeof WORKBOOK_NOTICES)[number];
-export type WorkbookNotShown = (typeof WORKBOOK_NOT_SHOWN)[number];
-
-export interface WorkbookNotice {
-  readonly kind: WorkbookNoticeKind;
-  readonly detail?: string;
-}
+const MAX_SHEETS = 1_024;
+const MAX_ROWS = 1_048_576;
+const MAX_COLUMNS = 16_384;
+const MAX_WINDOW_ROWS = 256;
+const MAX_WINDOW_COLUMNS = 128;
+const MAX_NOTICES = 64;
+/// Le misure di Excel sono per il suo carattere a 11 punti; la griglia usa
+/// quello dell'interfaccia, più grande. La riga di serie di Excel (20 px)
+/// diventa così quella del foglio di Fub (28 px), e il resto in proporzione.
+export const WORKBOOK_SCALE = 1.4;
 
 /// Una cella della cartella: quella che il motore disegna, con ciò che la
 /// griglia del foglio di Fub non ha.
 export interface WorkbookCell {
   readonly cell: GridCell;
-  /// Il testo della barra, `=…` o `{=…}`.
-  readonly formula?: string;
+  /// La cella come la dà il provider: l'input da scrivere, il blocco, il
+  /// valore del file non ricalcolato, il conflitto.
+  readonly bytes: GridBytesCell;
 }
 
 export interface WorkbookSheet {
@@ -48,233 +39,214 @@ export interface WorkbookSheet {
 }
 
 export interface WorkbookView {
-  /// I fogli visibili, nell'ordine del file.
+  /// I fogli visibili, nell'ordine della sessione.
   readonly workbook: GridWorkbook;
-  /// Le celle di ogni foglio di `workbook`, per posizione ([`cellKey`]).
+  /// Le celle lette di ogni foglio di `workbook`, per posizione ([`cellKey`]).
   readonly sheets: readonly WorkbookSheet[];
   /// L'indice in `workbook.sheets` del foglio attivo nel file, o del primo
   /// visibile se quello è nascosto.
   readonly active: number;
-  readonly notices: readonly WorkbookNotice[];
+  readonly notices: readonly GridNotice[];
 }
-
-const VERSION = 1;
-const MAX_SOURCE_BYTES = 16 * 1024 * 1024;
-const MAX_ROWS = 1_048_576;
-const MAX_COLUMNS = 16_384;
-/// Le righe e le colonne di tutti i fogli insieme, come `MAX_LINES` del codec:
-/// ognuna è una voce del foglio.
-const MAX_LINES = 262_144;
-/// Le misure di Excel sono per il suo carattere a 11 punti; la griglia usa
-/// quello dell'interfaccia, più grande. La riga di serie di Excel (20 px)
-/// diventa così quella del foglio di Fub (28 px), e il resto in proporzione.
-export const WORKBOOK_SCALE = 1.4;
-const COLOR = /^#[0-9A-Fa-f]{6}$/u;
 
 /// La chiave di una posizione nelle mappe di [`WorkbookSheet`].
 export function cellKey(position: GridPosition): number {
   return position.row * MAX_COLUMNS + position.column;
 }
 
-function record(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError(`${label} non è un oggetto`);
-  return value as Record<string, unknown>;
+/// La posizione di una chiave di [`cellKey`].
+export function keyPosition(key: number): GridPosition {
+  return { row: Math.floor(key / MAX_COLUMNS), column: key % MAX_COLUMNS };
 }
 
-function exactKeys(value: Record<string, unknown>, allowed: readonly string[], label: string): void {
-  for (const key of Object.keys(value)) {
-    if (!allowed.includes(key)) throw new TypeError(`${label}: campo sconosciuto ${key}`);
+function count(value: unknown, maximum: number): boolean {
+  return Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= maximum;
+}
+
+function id(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+/// Controlla una sessione della versione 2; lancia se non si può disegnare.
+export function validateBytesSession(session: GridBytesSession): void {
+  if (
+    !session
+    || !id(session.instance)
+    || !id(session.revision)
+    || !Array.isArray(session.sheets)
+    || session.sheets.length === 0
+    || session.sheets.length > MAX_SHEETS
+    || !Array.isArray(session.hidden)
+    || !Array.isArray(session.notices)
+    || session.notices.length > MAX_NOTICES
+    || !Array.isArray(session.conflicts)
+  ) {
+    throw new Error("malformed grid bytes session");
+  }
+  const sheets = new Set<string>();
+  for (const sheet of session.sheets) {
+    if (
+      !id(sheet.id)
+      || typeof sheet.name !== "string"
+      || sheets.has(sheet.id)
+      || !count(sheet.row_count, MAX_ROWS)
+      || !count(sheet.column_count, MAX_COLUMNS)
+    ) {
+      throw new Error("malformed grid bytes sheets");
+    }
+    sheets.add(sheet.id);
+  }
+  if (!sheets.has(session.active) || session.hidden.some((hidden) => !sheets.has(hidden))) {
+    throw new Error("grid bytes session names a sheet it does not have");
+  }
+  if (new Set(session.hidden).size >= session.sheets.length) throw new Error("grid bytes session hides every sheet");
+  for (const notice of session.notices) {
+    if (!id(notice.code) || !count(notice.count, 0xffff_ffff)) throw new Error("malformed grid notice");
   }
 }
 
-function array(value: unknown, label: string): unknown[] {
-  if (!Array.isArray(value)) throw new TypeError(`${label} non è una lista`);
-  return value;
-}
-
-function index(value: unknown, below: number, label: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) >= below) {
-    throw new TypeError(`${label} fuori dal foglio`);
+/// Controlla una finestra della sessione.
+export function validateBytesWindow(window: GridBytesWindow, session: GridBytesSession): void {
+  const sheet = session.sheets.find((candidate) => candidate.id === window.sheet);
+  if (
+    !sheet
+    || window.revision !== session.revision
+    || !count(window.row_start, MAX_ROWS)
+    || !count(window.column_start, MAX_COLUMNS)
+    || window.total_rows !== sheet.row_count
+    || window.total_columns !== sheet.column_count
+    || !Array.isArray(window.rows)
+    || !Array.isArray(window.columns)
+    || !Array.isArray(window.cells)
+    || window.rows.length > MAX_WINDOW_ROWS
+    || window.columns.length > MAX_WINDOW_COLUMNS
+    || window.cells.length > MAX_WINDOW_ROWS * MAX_WINDOW_COLUMNS
+    || window.row_start + window.rows.length > sheet.row_count
+    || window.column_start + window.columns.length > sheet.column_count
+    || window.rows.some((row, at) => row.index !== window.row_start + at || !id(row.id))
+    || window.columns.some((column, at) => column.index !== window.column_start + at || !id(column.id))
+  ) {
+    throw new Error("malformed grid bytes window");
   }
-  return value as number;
-}
-
-function count(value: unknown, maximum: number, label: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > maximum) {
-    throw new TypeError(`${label} non valido`);
+  const rows = new Set(window.rows.map((row) => row.id));
+  const columns = new Set(window.columns.map((column) => column.id));
+  for (const cell of window.cells) {
+    if (
+      cell.key.sheet !== window.sheet
+      || !rows.has(cell.key.row)
+      || !columns.has(cell.key.column)
+      || typeof cell.input !== "string"
+      || typeof cell.display !== "string"
+    ) {
+      throw new Error("grid bytes window has a cell outside it");
+    }
   }
-  return value as number;
 }
 
-function size(value: unknown, label: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) throw new TypeError(`${label} non valida`);
-  return value;
+function size(value: number | null): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value * WORKBOOK_SCALE : undefined;
 }
 
-function flag(value: unknown, label: string): boolean {
-  if (value === undefined) return false;
-  if (typeof value !== "boolean") throw new TypeError(`${label} non è booleano`);
-  return value;
+function style(cell: GridBytesCell): GridCellStyle | undefined {
+  const out: GridCellStyle = {
+    ...(cell.style.bold ? { bold: true } : {}),
+    ...(cell.style.italic ? { italic: true } : {}),
+    ...(cell.style.text_color === null ? {} : { text_color: cell.style.text_color }),
+    ...(cell.style.fill_color === null ? {} : { fill_color: cell.style.fill_color }),
+    ...(cell.style.horizontal === null ? {} : { horizontal: cell.style.horizontal }),
+  };
+  return Object.keys(out).length ? out : undefined;
 }
 
-function string(value: unknown, label: string): string {
-  if (typeof value !== "string") throw new TypeError(`${label} non è una stringa`);
-  return value;
-}
-
-function optionalString(value: unknown, label: string): string | undefined {
-  return value === undefined ? undefined : string(value, label);
-}
-
-function color(value: unknown, label: string): string | undefined {
-  if (value === undefined) return undefined;
-  const parsed = string(value, label);
-  if (!COLOR.test(parsed)) throw new TypeError(`${label} non è un colore`);
-  return parsed;
-}
-
-function oneOf<T extends string>(value: unknown, allowed: readonly T[], label: string): T {
-  if (typeof value !== "string" || !allowed.includes(value as T)) throw new TypeError(`${label} sconosciuto: ${String(value)}`);
-  return value as T;
-}
-
-function parseNotice(value: unknown, at: number): WorkbookNotice {
-  const notice = record(value, `avviso ${at + 1}`);
-  exactKeys(notice, ["kind", "detail"], `avviso ${at + 1}`);
-  const kind = oneOf(notice.kind, WORKBOOK_NOTICES, "tipo di avviso");
-  const detail = optionalString(notice.detail, `dettaglio dell'avviso ${at + 1}`);
-  if (kind === "not_shown") oneOf(detail, WORKBOOK_NOT_SHOWN, "parte non mostrata");
-  return detail === undefined ? { kind } : { kind, detail };
-}
-
-/// Le linee di un asse: tutte, con la dimensione del foglio dove il file non
-/// ne dà una sua.
-function parseLines(value: unknown, total: number, fallback: number, label: string): { size: number; hidden: boolean }[] {
-  const lines = Array.from({ length: total }, () => ({ size: fallback, hidden: false }));
-  const seen = new Set<number>();
-  for (const [at, entry] of array(value, label).entries()) {
-    const line = record(entry, `${label} ${at + 1}`);
-    exactKeys(line, ["index", "size", "hidden"], `${label} ${at + 1}`);
-    const position = index(line.index, total, `${label} ${at + 1}`);
-    if (seen.has(position)) throw new TypeError(`${label} ${position} ripetuta`);
-    seen.add(position);
-    lines[position] = {
-      size: line.size === undefined ? fallback : size(line.size, `dimensione ${label} ${at + 1}`),
-      hidden: flag(line.hidden, `visibilità ${label} ${at + 1}`),
-    };
+/// La cartella da disegnare: i fogli visibili della sessione, con le righe,
+/// le colonne e le celle delle finestre lette. Una riga che nessuna finestra
+/// ha portato tiene la misura che aveva in `previous`, o quella di serie.
+export function workbookView(
+  session: GridBytesSession,
+  windows: readonly GridBytesWindow[],
+  previous: WorkbookView | null,
+): WorkbookView {
+  const hidden = new Set(session.hidden);
+  const visible = session.sheets.filter((sheet) => !hidden.has(sheet.id));
+  const earlier = new Map((previous?.workbook.sheets ?? []).map((sheet) => [sheet.id, sheet]));
+  const sheets: GridSheet[] = [];
+  const cells: WorkbookSheet[] = [];
+  for (const sessionSheet of visible) {
+    const prior = earlier.get(sessionSheet.id);
+    const own = windows.filter((window) => window.sheet === sessionSheet.id);
+    const loadedRows = new Map(own.flatMap((window) => window.rows.map((row) => [row.index, row] as const)));
+    const loadedColumns = new Map(own.flatMap((window) => window.columns.map((column) => [column.index, column] as const)));
+    const rows: GridRow[] = Array.from({ length: sessionSheet.row_count }, (_, index) => {
+      const row = loadedRows.get(index);
+      if (row) return { id: row.id, height: size(row.height), hidden: row.hidden };
+      const kept = prior?.rows[index];
+      return kept ? { ...kept } : { id: `__grid_row_${sessionSheet.id}_${index}`, hidden: false };
+    });
+    const columns: GridColumn[] = Array.from({ length: sessionSheet.column_count }, (_, index) => {
+      const column = loadedColumns.get(index);
+      if (column) return { id: column.id, width: size(column.width), hidden: column.hidden };
+      const kept = prior?.columns[index];
+      return kept ? { ...kept } : { id: `__grid_column_${sessionSheet.id}_${index}`, hidden: false };
+    });
+    const map = new Map<number, WorkbookCell>();
+    const list: GridCell[] = [];
+    for (const window of own) {
+      const rowIndex = new Map(window.rows.map((row) => [row.id, row.index] as const));
+      const columnIndex = new Map(window.columns.map((column) => [column.id, column.index] as const));
+      for (const cell of window.cells) {
+        const position = { row: rowIndex.get(cell.key.row)!, column: columnIndex.get(cell.key.column)! };
+        const cellStyle = style(cell);
+        const grid: GridCell = {
+          row: cell.key.row,
+          column: cell.key.column,
+          ...(cell.display ? { input: cell.display } : {}),
+          ...(cellStyle ? { style: cellStyle } : {}),
+        };
+        list.push(grid);
+        map.set(cellKey(position), { cell: grid, bytes: cell });
+      }
+    }
+    sheets.push({
+      id: sessionSheet.id,
+      name: sessionSheet.name,
+      rows,
+      columns,
+      ...(list.length ? { cells: list } : {}),
+    });
+    cells.push({ cells: map });
   }
-  return lines;
-}
-
-function parseStyle(value: unknown, label: string): GridCellStyle | undefined {
-  if (value === undefined) return undefined;
-  const style = record(value, label);
-  exactKeys(style, ["bold", "italic", "text_color", "fill_color", "horizontal"], label);
-  const textColor = color(style.text_color, `colore del testo di ${label}`);
-  const fillColor = color(style.fill_color, `riempimento di ${label}`);
-  const horizontal = style.horizontal === undefined
-    ? undefined
-    : oneOf(style.horizontal, ["start", "center", "end"] as const, `allineamento di ${label}`);
   return {
-    ...(flag(style.bold, `grassetto di ${label}`) ? { bold: true } : {}),
-    ...(flag(style.italic, `corsivo di ${label}`) ? { italic: true } : {}),
-    ...(textColor === undefined ? {} : { text_color: textColor }),
-    ...(fillColor === undefined ? {} : { fill_color: fillColor }),
-    ...(horizontal === undefined ? {} : { horizontal }),
+    workbook: { version: 1, sheets },
+    sheets: cells,
+    active: Math.max(0, visible.findIndex((sheet) => sheet.id === session.active)),
+    notices: session.notices,
   };
 }
 
-function parseValue(value: unknown, label: string): string {
-  if (value === undefined) return "";
-  const parsed = record(value, label);
-  exactKeys(parsed, ["kind", "text"], label);
-  oneOf(parsed.kind, ["number", "text", "boolean", "error"] as const, `tipo di ${label}`);
-  return string(parsed.text, `testo di ${label}`);
+/// Il numero come lo scrive il file: `[+-]cifre[.cifre][e[+-]cifre]`, la
+/// regola di `fub-format-xlsx/src/input.rs`.
+const FILE_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/u;
+const LOCAL_NUMBER = /^[+-]?(?:\d+(?:,\d*)?|,\d+)(?:[eE][+-]?\d+)?$/u;
+
+/// Il separatore decimale di `language`.
+export function decimalSeparator(language: string): "." | "," {
+  const part = new Intl.NumberFormat(language).formatToParts(1.5).find((candidate) => candidate.type === "decimal");
+  return part?.value === "," ? "," : ".";
 }
 
-interface ParsedSheet {
-  readonly name: string;
-  readonly hidden: boolean;
-  readonly sheet: GridSheet;
-  readonly cells: Map<number, WorkbookCell>;
+/// L'input del file come lo si legge e lo si scrive nella lingua: un numero
+/// prende la virgola dove la lingua la usa. Tutto il resto resta com'è.
+export function localInput(input: string, decimal: "." | ","): string {
+  return decimal === "," && FILE_NUMBER.test(input) ? input.replace(".", ",") : input;
 }
 
-function parseSheet(value: unknown, at: number): ParsedSheet {
-  const label = `foglio ${at + 1}`;
-  const raw = record(value, label);
-  exactKeys(raw, ["name", "hidden", "row_count", "column_count", "row_height", "column_width", "rows", "columns", "cells"], label);
-  const name = string(raw.name, `nome del ${label}`);
-  if (!name.trim()) throw new TypeError(`nome del ${label} vuoto`);
-  const rowCount = count(raw.row_count, MAX_ROWS, `righe del ${label}`);
-  const columnCount = count(raw.column_count, MAX_COLUMNS, `colonne del ${label}`);
-  const rowHeight = size(raw.row_height, `altezza di riga del ${label}`);
-  const columnWidth = size(raw.column_width, `larghezza di colonna del ${label}`);
-  const rows: GridRow[] = parseLines(raw.rows, rowCount, rowHeight, "riga").map((line, row) => ({
-    id: String(row + 1),
-    height: line.size * WORKBOOK_SCALE,
-    hidden: line.hidden,
-  }));
-  const columns: GridColumn[] = parseLines(raw.columns, columnCount, columnWidth, "colonna").map((line, column) => ({
-    id: columnLabel(column),
-    width: line.size * WORKBOOK_SCALE,
-    hidden: line.hidden,
-  }));
-  const cells = new Map<number, WorkbookCell>();
-  const list: GridCell[] = [];
-  for (const [position, entry] of array(raw.cells, `celle del ${label}`).entries()) {
-    const cellLabel = `cella ${position + 1} del ${label}`;
-    const cell = record(entry, cellLabel);
-    exactKeys(cell, ["row", "col", "formula", "value", "style"], cellLabel);
-    const row = index(cell.row, rowCount, cellLabel);
-    const column = index(cell.col, columnCount, cellLabel);
-    const key = cellKey({ row, column });
-    if (cells.has(key)) throw new TypeError(`${cellLabel} ripetuta`);
-    const formula = optionalString(cell.formula, `formula della ${cellLabel}`);
-    const input = parseValue(cell.value, `valore della ${cellLabel}`);
-    const style = parseStyle(cell.style, `stile della ${cellLabel}`);
-    const grid: GridCell = {
-      row: rows[row].id,
-      column: columns[column].id,
-      ...(input ? { input } : {}),
-      ...(style && Object.keys(style).length ? { style } : {}),
-    };
-    list.push(grid);
-    cells.set(key, { cell: grid, ...(formula === undefined ? {} : { formula }) });
-  }
-  return {
-    name,
-    hidden: flag(raw.hidden, `visibilità del ${label}`),
-    sheet: { id: String(at), name, rows, columns, ...(list.length ? { cells: list } : {}) },
-    cells,
-  };
-}
-
-/// Legge la proiezione di una cartella. Lancia se la forma non è quella del
-/// codec, come `parseWorkbook` per il foglio di Fub.
-export function parseWorkbookProjection(source: string): WorkbookView {
-  if (new TextEncoder().encode(source).length > MAX_SOURCE_BYTES) {
-    throw new RangeError("proiezione oltre il limite di 16 MiB");
-  }
-  const root = record(JSON.parse(source), "proiezione");
-  exactKeys(root, ["version", "active", "notices", "sheets"], "proiezione");
-  if (root.version !== VERSION) throw new RangeError(`versione della proiezione non supportata: ${String(root.version)}`);
-  const sheets = array(root.sheets, "fogli");
-  let lines = 0;
-  for (const [at, sheet] of sheets.entries()) {
-    const raw = record(sheet, `foglio ${at + 1}`);
-    lines += count(raw.row_count, MAX_ROWS, `righe del foglio ${at + 1}`) + count(raw.column_count, MAX_COLUMNS, `colonne del foglio ${at + 1}`);
-  }
-  if (lines > MAX_LINES) throw new RangeError(`proiezione con ${lines} righe e colonne, oltre il limite di ${MAX_LINES}`);
-  const parsed = sheets.map(parseSheet);
-  const active = parsed.length ? index(root.active, parsed.length, "foglio attivo") : 0;
-  const names = new Set(parsed.map((sheet) => sheet.name));
-  if (names.size !== parsed.length) throw new TypeError("nomi dei fogli ripetuti");
-  const visible = parsed.filter((sheet) => !sheet.hidden);
-  const shown = visible.indexOf(parsed[active]);
-  return {
-    workbook: { version: 1, sheets: visible.map((sheet) => sheet.sheet) },
-    sheets: visible.map((sheet) => ({ cells: sheet.cells })),
-    active: Math.max(0, shown),
-    notices: array(root.notices, "avvisi").map(parseNotice),
-  };
+/// Ciò che l'utente ha scritto, come lo vuole il file. Con la virgola
+/// decimale un numero con la virgola diventa col punto; uno col punto non si
+/// indovina (`1.500` è mille e cinquecento, in italiano) e resta il testo
+/// scritto, con l'apostrofo che lo dice.
+export function fileInput(draft: string, decimal: "." | ","): string {
+  if (decimal !== ",") return draft;
+  if (LOCAL_NUMBER.test(draft)) return draft.replace(",", ".");
+  if (FILE_NUMBER.test(draft) && draft.includes(".")) return `'${draft}`;
+  return draft;
 }

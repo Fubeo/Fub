@@ -36,7 +36,7 @@
 // fuori (il perché sta in `host/fake.ts`). E non è un presidio di layout: in
 // `happy-dom` non c'è né CSS né misura, quindi si asserisce su *cosa* c'è e
 // mai su *dove*.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   appendToTextEditor as typeInEditor,
   mountedTextEditors as editorViews,
@@ -69,6 +69,10 @@ const box = vi.hoisted(() => ({
 
 let activeStop: (() => void) | null = null;
 let stopAnswering = (): void => {};
+// L'ultimo montaggio non ha un successore che fermi il suo intervallo: senza
+// questo, un giro dopo lo smontaggio dell'ambiente cerca un `document` che non
+// c'è più.
+afterAll(() => stopAnswering());
 
 // Il modulo mimato è **uno solo per tutto il file**, e delega all'host di
 // adesso a ogni chiamata. Non è un vezzo: `vi.resetModules()` svuota il

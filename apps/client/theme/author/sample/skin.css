@@ -5496,9 +5496,21 @@ kbd,
   background: var(--bg-elev);
   box-shadow: var(--shadow-2);
 }
-/* Una cartella di Excel si legge soltanto: l'avviso lo dice sopra la barra,
-   come per i documenti di videoscrittura. Un valore che il file non salva ha
-   un filo a puntini sotto, che resta anche sul colore della cella. */
+/* Una cella di una cartella di Excel che legge una cella cambiata mostra
+   ancora il valore del file, che Fub non ricalcola: lo dice un filo a puntini
+   sotto, che resta anche sul colore della cella. Una cella cambiata qui e
+   anche nel file ha un contorno tratteggiato, dentro i suoi fili. */
+.grid-cell.stale {
+  text-decoration: underline dotted var(--muted);
+  text-underline-offset: 3px;
+}
+.grid-cell.conflict {
+  outline: 2px dashed var(--danger);
+  outline-offset: -3px;
+}
+/* L'avviso della cartella sta sopra la barra, come per i documenti di
+   videoscrittura: ciò che Fub non mostra, i valori non ricalcolati, i
+   conflitti e l'ultimo gesto rifiutato. */
 .grid-notice {
   padding: var(--space-3) var(--space-9);
   background: var(--info-wash);

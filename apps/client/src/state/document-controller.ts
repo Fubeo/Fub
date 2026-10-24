@@ -801,6 +801,10 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       blocksOf: (page: string) => noteBlocks(page).catch(() => []),
     },
     gridHost: api,
+    documentBase: (doc) => {
+      const base = documentSessions.inspect(doc)?.base;
+      return base?.kind === "descends_from" ? base.value : null;
+    },
     media: {
       transport: mediaTransport,
       assetUrl: api.assetUrl,

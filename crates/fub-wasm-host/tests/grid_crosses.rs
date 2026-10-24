@@ -156,8 +156,9 @@ fn real_grid_bundle_mounts_and_publishes_a_namespaced_surface() {
     host.open(&root).expect("vault opens");
     host.wait_indexed(None).expect("indexing finishes");
     let native_surfaces = host.grid_surfaces(None).expect("native grid registry");
-    assert_eq!(native_surfaces.len(), 1);
-    assert_eq!(native_surfaces[0].id, SHEET_GRID_SURFACE);
+    assert!(native_surfaces
+        .iter()
+        .any(|surface| surface.id == SHEET_GRID_SURFACE));
 
     let bundle =
         WasmBundle::from_file(&common::grid(), Trust::Community).expect("grid component loads");
@@ -172,7 +173,8 @@ fn real_grid_bundle_mounts_and_publishes_a_namespaced_surface() {
         .expect("grid bundle is in the registry");
     assert!(inventory.mounted);
     let surfaces = host.grid_surfaces(None).expect("grid registry");
-    assert_eq!(surfaces.len(), 2);
+    // The component declares one surface per protocol.
+    assert_eq!(surfaces.len(), native_surfaces.len() + 2);
     assert!(surfaces
         .iter()
         .any(|surface| surface.id == SHEET_GRID_SURFACE));

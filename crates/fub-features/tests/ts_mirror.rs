@@ -64,6 +64,9 @@ use fub_abi::ui::{
     ActionRef, Align, Axis, FieldValue, Intent, KeyValueEntry, TableColumn, UiAction, UiKind,
     UiNode, UiOption, UiValue, ViewUpdate,
 };
+use fub_abi::{
+    GridBytesCell, GridBytesSession, GridBytesWindow, GridJournal, GridNotice, GridValue,
+};
 use fub_features::VersionRef;
 use fub_kernel::{TrashEntry, MAIN_PANE};
 use serde_json::{json, Value};
@@ -1295,13 +1298,161 @@ fn grid_samples() -> Vec<Value> {
     ]
 }
 
+/// I campioni della versione 2: ogni forma di `GridValue`, una cella bloccata
+/// e una segnata, un avviso e un conflitto.
+fn grid_bytes_samples() -> (Value, Value, Value, Vec<Value>) {
+    let key = GridCellKey {
+        sheet: "s1".into(),
+        row: "r0".into(),
+        column: "c0".into(),
+    };
+    let style = GridCellStyle {
+        bold: false,
+        italic: true,
+        text_color: None,
+        fill_color: Some("#ffeeaa".into()),
+        horizontal: None,
+        number_format: Some("0.00%".into()),
+    };
+    let values = vec![
+        GridValue::Blank,
+        GridValue::Number(0.25),
+        GridValue::Text("tre".into()),
+        GridValue::Boolean(true),
+        GridValue::Error("#N/A".into()),
+    ];
+    let cells: Vec<GridBytesCell> = values
+        .into_iter()
+        .enumerate()
+        .map(|(the, value)| GridBytesCell {
+            key: GridCellKey {
+                row: format!("r{the}"),
+                ..key.clone()
+            },
+            input: "=A1*2".into(),
+            style: style.clone(),
+            value,
+            display: "25.00%".into(),
+            lock: (the == 1).then(|| "spill".into()),
+            stale: the == 2,
+            conflict: the == 3,
+        })
+        .collect();
+    let session = GridBytesSession {
+        instance: "xlsx-1".into(),
+        revision: Revision::of("rev-2"),
+        sheets: vec![GridSheet {
+            id: "s1".into(),
+            name: "Conti".into(),
+            row_count: 100,
+            column_count: 26,
+        }],
+        active: "s1".into(),
+        hidden: vec!["s1".into()],
+        notices: vec![GridNotice {
+            code: "uncomputed".into(),
+            count: 2,
+        }],
+        conflicts: vec![key.clone()],
+    };
+    let window = GridBytesWindow {
+        revision: Revision::of("rev-2"),
+        sheet: "s1".into(),
+        row_start: 0,
+        column_start: 0,
+        total_rows: 100,
+        total_columns: 26,
+        rows: vec![GridRow {
+            id: "r0".into(),
+            index: 0,
+            height: None,
+            hidden: false,
+        }],
+        columns: vec![GridColumn {
+            id: "c0".into(),
+            index: 0,
+            width: Some(64.0),
+            hidden: true,
+        }],
+        cells: cells.clone(),
+    };
+    (
+        to_value(GridNotice {
+            code: "macros".into(),
+            count: 1,
+        }),
+        to_value(session),
+        to_value(window),
+        cells.into_iter().map(to_value).collect(),
+    )
+}
+
+/// I giornali della versione 2 e i loro rebase, scritti dal Rust: la shell
+/// riporta il suo giornale sui byte salvati con la stessa regola, e il testo
+/// che scrive deve essere quello canonico byte per byte.
+fn grid_journal_samples() -> Vec<Value> {
+    let key = |row: &str, column: &str| GridCellKey {
+        sheet: "s1".into(),
+        row: row.into(),
+        column: column.into(),
+    };
+    let journal = |entries: &[(GridCellKey, &str, &str)]| {
+        let mut journal = GridJournal::new();
+        for (key, before, after) in entries {
+            journal
+                .record(key.clone(), (*before).into(), (*after).into())
+                .unwrap();
+        }
+        journal
+    };
+    // Il salvataggio ha scritto `saved`; nel frattempo la shell è andata
+    // avanti fino a `current`.
+    let cases = [
+        // Niente è cambiato durante il salvataggio: il giornale si svuota.
+        (
+            journal(&[(key("r0", "c0"), "1", "2")]),
+            journal(&[(key("r0", "c0"), "1", "2")]),
+        ),
+        // Una cella cambiata ancora e una nuova restano, con il disco come
+        // `before`; l'ordine è quello delle chiavi come byte (`r10` < `r2`).
+        (
+            journal(&[
+                (key("r0", "c0"), "1", "3"),
+                (key("r10", "c1"), "", "x"),
+                (key("r2", "c0"), "\"virgolette\" e \\ e \n", "è\u{1f}"),
+            ]),
+            journal(&[(key("r0", "c0"), "1", "2")]),
+        ),
+        // Una cella tornata al suo input durante il salvataggio rientra, per
+        // riportarlo sul disco.
+        (journal(&[]), journal(&[(key("r0", "c0"), "1", "2")])),
+    ];
+    cases
+        .iter()
+        .map(|(current, saved)| {
+            json!({
+                "current": current.to_text(),
+                "saved": saved.to_text(),
+                "rebased": current.rebase(saved).to_text(),
+            })
+        })
+        .collect()
+}
+
 /// La fixture attesa, costruita dai tipi Rust.
 fn expected() -> Value {
     // Un errore concreto per provare che anche `PluginError` (dentro `JobDone`)
     // ha una forma che il lato TS può trattare come opaca.
     let _ = PluginError::BadArgs("x".into());
     let grid = grid_samples();
+    let (grid_notice, grid_bytes_session, grid_bytes_window, grid_bytes_cells) =
+        grid_bytes_samples();
     json!({
+        "GridNotice": [grid_notice],
+        "GridBytesSession": [grid_bytes_session],
+        "GridBytesWindow": [grid_bytes_window],
+        "GridBytesCell": grid_bytes_cells,
+        "GridJournalRebase": grid_journal_samples(),
         "GridSurfaceSpec": [grid[0].clone()],
         "GridSession": [grid[1].clone()],
         "GridSheet": [grid[2].clone()],

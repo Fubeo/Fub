@@ -1,5 +1,10 @@
 import type {
   GridApplyRequest,
+  GridBytesCell,
+  GridBytesSession,
+  GridBytesWindow,
+  GridCellPatch as GridRequestPatch,
+  GridCellStyle as GridBytesStyle,
   GridCommit,
   GridInvalidation,
   GridSession,
@@ -8,9 +13,19 @@ import type {
   GridWindowRequest,
   SheetCellValue,
 } from "../../host/contract";
+import { GRID_BYTES_PROTOCOL_VERSION } from "../../host/contract";
+import { errorText, isErrorKind } from "../../host/errors";
 import { operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
+import { parseTsv } from "../core/tsv";
+import {
+  gridJournalEntry,
+  gridJournalText,
+  parseGridJournal,
+  recordGridJournal,
+  type GridJournal,
+} from "../../state/grid-journal";
 import type { Theme } from "../../theme/theme";
-import { t, onLanguage, resolvedLanguage, type Key } from "../../i18n/strings";
+import { t, onLanguage, plural, resolvedLanguage, type Key } from "../../i18n/strings";
 import { createTabs, type TabsHandle } from "../../kit";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { createTextEngine, type TextEngine } from "../text/engine";
@@ -18,6 +33,7 @@ import { createFormulaProfile } from "../text/profiles/formula";
 import {
   cellAt,
   columnLabel,
+  coordinateAt,
   normalizedSelection,
   parseWorkbook,
   positionOf,
@@ -41,9 +57,14 @@ import {
 } from "./operation";
 import {
   cellKey,
-  parseWorkbookProjection,
+  decimalSeparator,
+  keyPosition,
+  fileInput,
+  localInput,
+  validateBytesSession,
+  validateBytesWindow,
+  workbookView,
   type WorkbookCell,
-  type WorkbookNotShown,
   type WorkbookView,
 } from "./workbook";
 
@@ -64,20 +85,73 @@ export const MAX_GRID_SESSION_ROWS = 1_048_576;
 export const MAX_GRID_SESSION_COLUMNS = 16_384;
 export const MAX_GRID_SESSION_WINDOWS = 256;
 export const MAX_GRID_INVALIDATED_CELLS = 32_768;
-/// Quanti avvisi della lettura di una cartella si mostrano per intero.
-const INCOMPLETE_SHOWN = 3;
-const NOT_SHOWN_KEYS: Readonly<Record<WorkbookNotShown, Key>> = {
-  merges: "grid.workbook.part.merges",
-  charts: "grid.workbook.part.charts",
-  images: "grid.workbook.part.images",
-  shapes: "grid.workbook.part.shapes",
-  comments: "grid.workbook.part.comments",
-  conditional_formats: "grid.workbook.part.conditional_formats",
-  sparklines: "grid.workbook.part.sparklines",
+/// Le parti di una cartella che la griglia non disegna, per codice d'avviso
+/// di `fub-format-xlsx` (`not-shown-…`).
+const NOT_SHOWN_KEYS: Readonly<Record<string, Key>> = {
+  "not-shown-merges": "grid.workbook.part.merges",
+  "not-shown-charts": "grid.workbook.part.charts",
+  "not-shown-images": "grid.workbook.part.images",
+  "not-shown-shapes": "grid.workbook.part.shapes",
+  "not-shown-comments": "grid.workbook.part.comments",
+  "not-shown-conditional-formats": "grid.workbook.part.conditional_formats",
+  "not-shown-sparklines": "grid.workbook.part.sparklines",
 };
+/// Perché una cella non si modifica, per codice di blocco.
+const LOCK_KEYS: Readonly<Record<string, Key>> = {
+  array: "grid.workbook.lock.array",
+  spill: "grid.workbook.lock.spill",
+  "shared-formula": "grid.workbook.lock.shared_formula",
+  "data-table": "grid.workbook.lock.data_table",
+  "table-header": "grid.workbook.lock.table_header",
+  "table-totals": "grid.workbook.lock.table_totals",
+  merged: "grid.workbook.lock.merged",
+  pivot: "grid.workbook.lock.pivot",
+  "rich-value": "grid.workbook.lock.rich_value",
+  protected: "grid.workbook.lock.protected",
+  "sheet-shape": "grid.workbook.lock.sheet_shape",
+};
+/// Le finestre lette che la griglia tiene, per non rileggerle a ogni
+/// scorrimento: poco più di quelle di uno schermo.
+const MAX_KEPT_WINDOWS = 16;
+const PLAIN_STYLE: GridBytesStyle = {
+  bold: false,
+  italic: false,
+  text_color: null,
+  fill_color: null,
+  horizontal: null,
+  number_format: null,
+};
+
+/// La sessione della versione 2 aperta su una cartella.
+interface BytesState {
+  readonly surface: string;
+  readonly instance: string;
+  session: GridBytesSession;
+}
+
+/// Una cella da scrivere: dove, e l'input che il file deve avere.
+interface CellWrite {
+  readonly position: GridPosition;
+  readonly after: string;
+}
+
+function sameWindow(left: GridBytesWindow, right: GridBytesWindow): boolean {
+  return left.sheet === right.sheet && left.row_start === right.row_start && left.column_start === right.column_start;
+}
+
+/// Le finestre da tenere dopo una lettura: quelle nuove, e le vecchie ancora
+/// della revisione `revision` che le nuove non sostituiscono.
+function keptWindows(kept: readonly GridBytesWindow[], fresh: readonly GridBytesWindow[], revision: string): GridBytesWindow[] {
+  const old = kept.filter((window) => window.revision === revision && !fresh.some((candidate) => sameWindow(candidate, window)));
+  return [...old, ...fresh].slice(-MAX_KEPT_WINDOWS);
+}
 
 export interface GridHost {
   readonly listGridSurfaces: () => Promise<readonly GridSurfaceSpec[]>;
+  readonly openGridBytes: (surface: string, doc: string, journal: string, base: string) => Promise<GridBytesSession>;
+  readonly gridBytesWindow: (surface: string, instance: string, request: GridWindowRequest) => Promise<GridBytesWindow>;
+  readonly applyGridBytes: (surface: string, instance: string, request: GridApplyRequest) => Promise<GridCommit>;
+  readonly closeGridBytes: (surface: string, instance: string) => Promise<void>;
   readonly openGrid: (surface: string, source: string, revision: string) => Promise<GridSession>;
   readonly gridWindow: (surface: string, instance: string, request: GridWindowRequest) => Promise<GridWindow>;
   readonly applyGrid: (surface: string, instance: string, request: GridApplyRequest) => Promise<GridCommit>;
@@ -99,13 +173,19 @@ export interface GridChange {
 export interface GridEngineOptions {
   readonly surfaceId: string;
   /**
-   * `sheet` (di serie) è il foglio di Fub, che si scrive; `workbook` è la
-   * proiezione di una cartella di Excel ([`parseWorkbookProjection`]), che
-   * si legge soltanto e non apre il protocollo dei fogli.
+   * `sheet` (di serie) è il foglio di Fub, il cui testo è il sorgente; con
+   * `workbook` il testo è il giornale delle celle di una cartella di Excel, e
+   * la griglia si apre sui byte con la versione 2 del protocollo
+   * (`editors/grid/workbook.ts`).
    */
   readonly profile?: "sheet" | "workbook";
   readonly formatId?: string | null;
   readonly revision?: string;
+  /// Il documento, per aprire la versione 2 sui suoi byte.
+  readonly documentId?: string;
+  /// La revisione dei byte da cui il giornale discende adesso: cambia a ogni
+  /// salvataggio. Senza, si usa `revision`.
+  readonly base?: () => string | null;
   readonly onChange: (change: GridChange) => void;
   readonly onSelectionChange: () => void;
   readonly grid?: GridHost;
@@ -418,6 +498,28 @@ export class GridEngine {
   #sourceWorkbook: GridWorkbook | null = null;
   /// La cartella di Excel che il profilo `workbook` mostra.
   #view: WorkbookView | null = null;
+  readonly #workbookProfile: boolean;
+  /// La sessione aperta; `null` mentre si apre o se non si è aperta.
+  #bytes: BytesState | null = null;
+  #bytesOpening = false;
+  /// L'ultima sessione mostrata e le finestre lette: restano mentre la
+  /// cartella si riapre, così la griglia non si svuota.
+  #shownSession: GridBytesSession | null = null;
+  #windows: GridBytesWindow[] = [];
+  /// La revisione dei byte su cui la sessione è aperta.
+  #bytesBase: string | null = null;
+  /// Il giornale pubblicato alla sessione, e quello che il provider tiene.
+  #journal = "";
+  #confirmedJournal = "";
+  /// Cresce a ogni apertura: un passo in coda di prima non vale più.
+  #bytesEpoch = 0;
+  /// Cresce quando una modifica non entra: quelle in coda partivano da lei.
+  #editEpoch = 0;
+  #bytesTickets = 0;
+  #bytesConflicts = 0;
+  /// L'ultima frase di un gesto rifiutato o di un guasto, sotto gli avvisi.
+  #bytesMessage: string | null = null;
+  #decimal: "." | "," = decimalSeparator(resolvedLanguage());
   #sheetTabs: { readonly handle: TabsHandle; readonly names: string; readonly lifetime: Lifetime } | null = null;
   #sheetIndex = 0;
   #source = "";
@@ -434,8 +536,6 @@ export class GridEngine {
   #columns: AxisLayout = { offsets: [0], sizes: [], total: 0 };
   #editing: EditingState | null = null;
   #readOnly = false;
-  /// Il profilo `workbook` non si scrive mai, qualunque cosa chieda la shell.
-  readonly #intrinsicReadOnly: boolean;
   #destroyed = false;
   #providerCommitTail: Promise<void> = Promise.resolve();
   /// Il sorgente come lo tiene il provider, dopo l'ultima risposta: il diff di
@@ -452,7 +552,7 @@ export class GridEngine {
   constructor(parent: HTMLElement, options: GridEngineOptions) {
     const signal = this.#abort.signal;
     this.#options = options;
-    this.#intrinsicReadOnly = options.profile === "workbook";
+    this.#workbookProfile = options.profile === "workbook";
     this.#root = document.createElement("div");
     this.#root.className = "grid-surface";
     this.#notice = document.createElement("p");
@@ -492,9 +592,11 @@ export class GridEngine {
     parent.replaceChildren(this.#root);
     this.#stopLanguage = onLanguage(() => {
       this.#viewport.setAttribute("aria-label", t("grid.surface"));
-      if (this.#view) {
+      if (this.#workbookProfile) {
+        this.#decimal = decimalSeparator(resolvedLanguage());
         this.#showNotice();
         this.#sheetBar.querySelector(".kit-tabs")?.setAttribute("aria-label", t("grid.workbook.sheets"));
+        if (!this.#editing) this.#syncFormulaBar();
         this.#render();
       }
     });
@@ -525,30 +627,37 @@ export class GridEngine {
       field: true,
       extensions: () => cellProfile.extensions(),
     });
-    if (this.#intrinsicReadOnly) this.setReadOnly(false);
 
     this.#viewport.addEventListener("scroll", () => {
       this.#render();
       void this.#loadViewport();
     }, { signal });
-    this.#viewport.addEventListener("keydown", (event) => this.#keydown(event), { signal });
-    this.#viewport.addEventListener("pointerdown", (event) => this.#pointerDown(event), { signal });
-    this.#viewport.addEventListener("pointermove", (event) => this.#pointerMove(event), { signal });
+    // L'editor della cella sta dentro la griglia, e i suoi eventi salgono fin
+    // qui: battute, clic per spostare il cursore, appunti. Sono suoi, e la
+    // griglia non li legge come gesti sulle celle (riaprirebbe la cella, la
+    // chiuderebbe, o taglierebbe la selezione invece del testo).
+    const grid = <E extends Event>(handler: (event: E) => void) => (event: E) => {
+      if (event.target instanceof Node && this.#cellEditorHost.contains(event.target)) return;
+      handler(event);
+    };
+    this.#viewport.addEventListener("keydown", grid((event) => this.#keydown(event)), { signal });
+    this.#viewport.addEventListener("pointerdown", grid((event) => this.#pointerDown(event)), { signal });
+    this.#viewport.addEventListener("pointermove", grid((event) => this.#pointerMove(event)), { signal });
     this.#viewport.addEventListener("pointerup", () => { this.#pointerAnchor = null; }, { signal });
-    this.#viewport.addEventListener("copy", (event) => this.#copy(event), { signal });
-    this.#viewport.addEventListener("cut", (event) => this.#cut(event), { signal });
-    this.#viewport.addEventListener("paste", (event) => this.#paste(event), { signal });
-    this.#viewport.addEventListener("dblclick", (event) => {
+    this.#viewport.addEventListener("copy", grid((event) => this.#copy(event)), { signal });
+    this.#viewport.addEventListener("cut", grid((event) => this.#cut(event)), { signal });
+    this.#viewport.addEventListener("paste", grid((event) => this.#paste(event)), { signal });
+    this.#viewport.addEventListener("dblclick", grid((event) => {
       const position = this.#eventPosition(event);
       if (position) this.#beginEditing("cell", position);
-    }, { signal });
+    }), { signal });
     this.#formulaHost.addEventListener("focusin", () => this.#beginEditing("formula", this.#selection.focus), { signal });
     this.#formulaHost.addEventListener("focusout", () => this.#commitAfterBlur("formula"), { signal });
   }
   setDoc(source: string): void {
     if (this.#destroyed) return;
-    if (this.#intrinsicReadOnly) {
-      this.#setProjection(source, true);
+    if (this.#workbookProfile) {
+      void this.#openWorkbook(source, true);
       return;
     }
     this.#protocolGeneration++;
@@ -580,8 +689,12 @@ export class GridEngine {
     if (this.#destroyed) return;
     const source = typeof update === "string" ? update : update.text;
     const operation = typeof update === "string" ? null : update.operation;
-    if (this.#intrinsicReadOnly) {
-      this.#setProjection(source, false);
+    if (this.#workbookProfile) {
+      // Il giornale che la griglia ha già, sugli stessi byte: niente da fare.
+      // Altrimenti è cambiato altrove (un altro riquadro, un salvataggio che
+      // l'ha messo nei byte, una ricarica) e la griglia si riapre.
+      if (source === this.#journal && this.#currentBase() === this.#bytesBase) return;
+      void this.#openWorkbook(source, false);
       return;
     }
     if (this.#provider) {
@@ -623,7 +736,7 @@ export class GridEngine {
     this.#render();
   }
 
-  getDoc(): string { return this.#source; }
+  getDoc(): string { return this.#workbookProfile ? this.#journal : this.#source; }
   selection(): GridSelection {
     return {
       anchor: { ...this.#selection.anchor },
@@ -649,7 +762,7 @@ export class GridEngine {
   }
 
   setReadOnly(requested: boolean): void {
-    const readOnly = requested || this.#intrinsicReadOnly;
+    const readOnly = requested;
     this.#readOnly = readOnly;
     this.#formulaEditor.setReadOnly(readOnly);
     this.#cellEditor.setReadOnly(readOnly);
@@ -697,6 +810,8 @@ export class GridEngine {
     if (instance && surface && this.#options.grid) {
       void this.#options.grid.closeGrid(surface, instance).catch(() => {});
     }
+    this.#bytesEpoch++;
+    this.#closeBytes();
     this.#instance = null;
     this.#surface = null;
     this.#sheetTabs?.lifetime.close();
@@ -721,24 +836,424 @@ export class GridEngine {
     return this.#view?.sheets[this.#sheetIndex]?.cells.get(cellKey(position));
   }
 
-  /// Mostra la proiezione `source`. `reset` è un documento nuovo: si parte dal
-  /// foglio attivo nel file, in alto a sinistra; altrimenti è lo stesso
-  /// documento riletto, e foglio e selezione restano dove sono.
-  #setProjection(source: string, reset: boolean): void {
-    const view = parseWorkbookProjection(source);
-    const previous = this.#workbook?.sheets[this.#sheetIndex]?.id;
-    this.#source = source;
-    this.#revision = this.#options.revision ?? "";
+  #currentBase(): string | null {
+    return this.#options.base?.() ?? this.#options.revision ?? null;
+  }
+
+  /// Apre la cartella sul giornale `journal` e sui byte della base di
+  /// adesso. `reset` è un documento nuovo: si parte dal foglio attivo nel
+  /// file, in alto a sinistra; altrimenti foglio, selezione e scorrimento
+  /// restano dove sono. L'apertura va in coda alle modifiche già partite, e
+  /// quelle scritte mentre si apre partono dopo di lei.
+  #openWorkbook(journal: string, reset: boolean): void {
+    const epoch = ++this.#bytesEpoch;
+    this.#journal = journal;
+    this.#bytesOpening = true;
+    this.#root.dataset.gridProfile = "workbook";
+    if (reset) {
+      this.#undo = [];
+      this.#redo = [];
+    }
+    this.#enqueueProtocol(() => this.#openBytes(journal, reset, epoch));
+  }
+
+  async #openBytes(journal: string, reset: boolean, epoch: number): Promise<void> {
+    if (this.#destroyed || epoch !== this.#bytesEpoch) return;
+    const host = this.#options.grid;
+    const doc = this.#options.documentId;
+    const base = this.#currentBase();
+    this.#closeBytes();
+    let opened: { readonly surface: string; readonly instance: string } | null = null;
+    try {
+      const surface = host && doc && base
+        ? (await host.listGridSurfaces()).find((candidate) =>
+          candidate.family === "grid"
+          && candidate.protocol_version === GRID_BYTES_PROTOCOL_VERSION
+          && candidate.format === this.#options.formatId)
+        : undefined;
+      if (!host || !doc || !base || !surface) {
+        if (!this.#destroyed && epoch === this.#bytesEpoch) this.#openFailed(journal, t("grid.workbook.unavailable"));
+        return;
+      }
+      const session = await host.openGridBytes(surface.id, doc, journal, base);
+      opened = { surface: surface.id, instance: session.instance };
+      validateBytesSession(session);
+      if (this.#destroyed || epoch !== this.#bytesEpoch) return;
+      const hidden = new Set(session.hidden);
+      const kept = reset ? undefined : this.#workbook?.sheets[this.#sheetIndex]?.id;
+      const visible = session.sheets.filter((sheet) => !hidden.has(sheet.id));
+      const sheet = visible.find((candidate) => candidate.id === kept)
+        ?? visible.find((candidate) => candidate.id === session.active)
+        ?? visible[0];
+      const top = sheet.id !== kept;
+      if (top) {
+        this.#viewport.scrollTop = 0;
+        this.#viewport.scrollLeft = 0;
+      }
+      const state: BytesState = { surface: surface.id, instance: session.instance, session };
+      const windows = await this.#readBytesWindows(state, sheet.id, !top, []);
+      if (this.#destroyed || epoch !== this.#bytesEpoch) return;
+      opened = null;
+      this.#bytes = state;
+      this.#shownSession = session;
+      this.#windows = windows;
+      this.#bytesBase = base;
+      this.#confirmedJournal = journal;
+      this.#bytesConflicts = session.conflicts.length;
+      this.#bytesMessage = null;
+      this.#root.dataset.gridProtocol = "v2";
+      this.#showView(sheet.id, top);
+    } catch (error) {
+      if (this.#destroyed || epoch !== this.#bytesEpoch) return;
+      this.#openFailed(journal, isErrorKind(error, "conflict")
+        ? t("grid.workbook.changed")
+        : t("grid.workbook.open_failed", { error: errorText(error) }));
+    } finally {
+      if (opened && host) void host.closeGridBytes(opened.surface, opened.instance).catch(() => {});
+      if (epoch === this.#bytesEpoch) this.#bytesOpening = false;
+    }
+  }
+
+  #openFailed(journal: string, message: string): void {
+    this.#bytesMessage = message;
+    this.#root.dataset.gridProtocol = "unavailable";
+    // Una modifica scritta mentre si apriva non ha chi la controlli: il
+    // giornale torna quello aperto.
+    this.#publishJournal(journal, "input");
+    this.#undo = [];
+    this.#redo = [];
+    this.#showNotice();
+  }
+
+  #closeBytes(): void {
+    const state = this.#bytes;
+    this.#bytes = null;
+    if (state && this.#options.grid) void this.#options.grid.closeGridBytes(state.surface, state.instance).catch(() => {});
+  }
+
+  #publishJournal(text: string, origin: EditorChangeOrigin): void {
+    const published = this.#journal;
+    if (text === published) return;
+    this.#journal = text;
+    this.#options.onChange({ text, operation: operationFromText(published, text), origin });
+  }
+
+  /// Le finestre del foglio `sheetId` che lo schermo mostra e che `kept` non
+  /// ha già alla revisione della sessione. `layout` usa le misure del foglio
+  /// mostrato, che è quello.
+  async #readBytesWindows(
+    state: BytesState,
+    sheetId: string,
+    layout: boolean,
+    kept: readonly GridBytesWindow[],
+  ): Promise<GridBytesWindow[]> {
+    const host = this.#options.grid;
+    const session = state.session;
+    const sheet = session.sheets.find((candidate) => candidate.id === sheetId);
+    if (!host || !sheet) return [];
+    const none: AxisLayout = { offsets: [], sizes: [], total: 0 };
+    const rowRange = viewportRange(
+      sheet.row_count,
+      layout ? this.#rows : none,
+      this.#viewport.scrollTop,
+      this.#viewport.clientHeight,
+      COLUMN_HEADER_HEIGHT,
+      DEFAULT_ROW_HEIGHT,
+    );
+    const columnRange = viewportRange(
+      sheet.column_count,
+      layout ? this.#columns : none,
+      this.#viewport.scrollLeft,
+      this.#viewport.clientWidth,
+      ROW_HEADER_WIDTH,
+      DEFAULT_COLUMN_WIDTH,
+    );
+    if (!rowRange || !columnRange) return [];
+    const requests: GridWindowRequest[] = [];
+    for (let row = Math.floor(rowRange.start / GRID_WINDOW_ROWS) * GRID_WINDOW_ROWS; row <= rowRange.end; row += GRID_WINDOW_ROWS) {
+      for (let column = Math.floor(columnRange.start / GRID_WINDOW_COLUMNS) * GRID_WINDOW_COLUMNS; column <= columnRange.end; column += GRID_WINDOW_COLUMNS) {
+        if (kept.some((window) =>
+          window.revision === session.revision
+          && window.sheet === sheet.id
+          && window.row_start === row
+          && window.column_start === column)) continue;
+        requests.push({
+          revision: session.revision,
+          sheet: sheet.id,
+          row_start: row,
+          row_count: Math.min(GRID_WINDOW_ROWS, sheet.row_count - row),
+          column_start: column,
+          column_count: Math.min(GRID_WINDOW_COLUMNS, sheet.column_count - column),
+        });
+      }
+    }
+    if (requests.length > MAX_GRID_SESSION_WINDOWS) throw new Error("grid viewport requests exceed limit");
+    return Promise.all(requests.map(async (request) => {
+      const window = await host.gridBytesWindow(state.surface, state.instance, request);
+      validateBytesWindow(window, session);
+      return window;
+    }));
+  }
+
+  /// Ridisegna la cartella dalla sessione mostrata e dalle finestre lette.
+  #showView(sheetId: string, top: boolean): void {
+    const session = this.#shownSession;
+    if (!session) return;
+    const view = workbookView(session, this.#windows, this.#view);
     this.#view = view;
     this.#workbook = view.workbook;
     this.#sourceWorkbook = null;
-    const kept = reset ? -1 : view.workbook.sheets.findIndex((sheet) => sheet.id === previous);
-    this.#sheetIndex = kept >= 0 ? kept : view.active;
-    if (reset || kept < 0) this.#selection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
-    this.#root.dataset.gridProfile = "workbook";
+    const index = view.workbook.sheets.findIndex((sheet) => sheet.id === sheetId);
+    this.#sheetIndex = index >= 0 ? index : view.active;
+    if (top) this.#selection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
     this.#showNotice();
     this.#showSheetTabs();
-    this.#showSheet(reset || kept < 0);
+    this.#showSheet(top);
+  }
+
+  #loadBytesViewport(): Promise<void> {
+    const state = this.#bytes;
+    if (!state || this.#destroyed) return Promise.resolve();
+    if (this.#viewportLoad) {
+      this.#viewportLoadQueued = true;
+      return this.#viewportLoad;
+    }
+    const epoch = this.#bytesEpoch;
+    const sheetId = this.#sheet().id;
+    const revision = state.session.revision;
+    const current = () => !this.#destroyed && epoch === this.#bytesEpoch && this.#bytes === state && state.session.revision === revision;
+    const load = (async () => {
+      try {
+        const fresh = await this.#readBytesWindows(state, sheetId, true, this.#windows);
+        // Una modifica confermata nel frattempo rilegge lo schermo da sé.
+        if (!current() || !fresh.length) return;
+        this.#windows = keptWindows(this.#windows, fresh, revision);
+        this.#showView(this.#sheet().id, false);
+      } catch (error) {
+        if (!current()) return;
+        this.#refuse(t("grid.workbook.read_failed", { error: errorText(error) }));
+      }
+    })().finally(() => {
+      this.#viewportLoad = null;
+      if (this.#viewportLoadQueued) {
+        this.#viewportLoadQueued = false;
+        void this.#loadViewport();
+      }
+    });
+    this.#viewportLoad = load;
+    return load;
+  }
+
+  /// Rilegge lo schermo dopo una modifica confermata, o dopo una rifiutata.
+  async #refreshBytes(state: BytesState, epoch: number): Promise<void> {
+    const revision = state.session.revision;
+    try {
+      const fresh = await this.#readBytesWindows(state, this.#sheet().id, true, []);
+      if (this.#destroyed || epoch !== this.#bytesEpoch || this.#bytes !== state || state.session.revision !== revision) return;
+      this.#windows = keptWindows(this.#windows, fresh, revision);
+      this.#showView(this.#sheet().id, false);
+    } catch (error) {
+      if (this.#destroyed || epoch !== this.#bytesEpoch || this.#bytes !== state || state.session.revision !== revision) return;
+      this.#refuse(t("grid.workbook.read_failed", { error: errorText(error) }));
+    }
+  }
+
+  #refuse(message: string): void {
+    this.#bytesMessage = message;
+    this.#showNotice();
+  }
+
+  /// La finestra letta che contiene `position` del foglio mostrato.
+  #windowAt(position: GridPosition): GridBytesWindow | undefined {
+    const sheet = this.#sheet().id;
+    return this.#windows.find((window) =>
+      window.sheet === sheet
+      && position.row >= window.row_start
+      && position.row < window.row_start + window.rows.length
+      && position.column >= window.column_start
+      && position.column < window.column_start + window.columns.length);
+  }
+
+  /// Ogni cella dell'intervallo è in una finestra letta: le finestre si
+  /// chiedono allineate, e basta guardare i loro angoli.
+  #rangeRead(range: ReturnType<typeof normalizedSelection>): boolean {
+    const sheet = this.#sheet().id;
+    for (let row = Math.floor(range.rowStart / GRID_WINDOW_ROWS) * GRID_WINDOW_ROWS; row <= range.rowEnd; row += GRID_WINDOW_ROWS) {
+      for (let column = Math.floor(range.columnStart / GRID_WINDOW_COLUMNS) * GRID_WINDOW_COLUMNS; column <= range.columnEnd; column += GRID_WINDOW_COLUMNS) {
+        if (!this.#windows.some((window) => window.sheet === sheet && window.row_start === row && window.column_start === column)) return false;
+      }
+    }
+    return true;
+  }
+
+  /// Perché la cella in `position` non si scrive, o `null`.
+  #writeRefusal(position: GridPosition): string | null {
+    if (!this.#view || (!this.#bytes && !this.#bytesOpening)) return t("grid.workbook.unavailable");
+    if (!this.#windowAt(position)) return t("grid.workbook.not_loaded");
+    const lock = this.#workbookCell(position)?.bytes.lock;
+    return lock ? t("grid.workbook.locked", { reason: t(LOCK_KEYS[lock] ?? "grid.workbook.lock.other") }) : null;
+  }
+
+  /// La cella come la griglia la mostra finché il provider non la rilegge.
+  #showWritten(position: GridPosition, input: string): void {
+    const window = this.#windowAt(position);
+    const key = coordinateAt(this.#sheet(), position);
+    if (!window || !key) return;
+    const same = (cell: GridBytesCell) => cell.key.row === key.row && cell.key.column === key.column;
+    const previous = window.cells.find(same);
+    const display = input.startsWith("'") ? input.slice(1) : localInput(input, this.#decimal);
+    window.cells = [...window.cells.filter((cell) => !same(cell)), {
+      key: { sheet: key.sheet, row: key.row, column: key.column },
+      input,
+      style: previous?.style ?? PLAIN_STYLE,
+      value: input ? { kind: "text", value: display } : { kind: "blank" },
+      display,
+      lock: null,
+      stale: false,
+      conflict: false,
+    }];
+  }
+
+  /// Scrive le celle nel giornale. La sessione del documento lo riceve
+  /// subito, come i commit del foglio di Fub; il provider lo controlla dopo,
+  /// in coda, e la sua risposta corregge il giornale e la history.
+  #commitCells(writes: readonly CellWrite[], origin: EditorChangeOrigin, recordHistory: boolean): boolean {
+    if (!this.#view || this.#readOnly || !writes.length) return false;
+    let journal: GridJournal;
+    try {
+      journal = parseGridJournal(this.#journal);
+    } catch {
+      this.#refuse(t("grid.workbook.journal_invalid"));
+      return false;
+    }
+    const sheet = this.#sheet();
+    const request: GridRequestPatch[] = [];
+    const history: GridCellPatch[] = [];
+    const disks: string[] = [];
+    const written: CellWrite[] = [];
+    for (const write of writes) {
+      const refusal = this.#writeRefusal(write.position);
+      if (refusal) {
+        this.#refuse(refusal);
+        return false;
+      }
+      const coordinate = coordinateAt(sheet, write.position)!;
+      const current = this.#workbookCell(write.position)?.bytes.input ?? "";
+      if (write.after === current) continue;
+      const entry = gridJournalEntry(journal, coordinate);
+      // Una formula si riscrive soltanto per tornare a quella del file.
+      if (write.after.startsWith("=") && entry?.before !== write.after) {
+        this.#refuse(t("grid.workbook.formula"));
+        return false;
+      }
+      try {
+        journal = recordGridJournal(journal, coordinate, current, write.after);
+      } catch {
+        this.#refuse(t("grid.workbook.too_many"));
+        return false;
+      }
+      request.push({ cell: { ...coordinate }, before: current, after: write.after });
+      history.push({ coordinate, before: { input: current }, after: { input: write.after } });
+      disks.push(entry?.before ?? current);
+      written.push(write);
+    }
+    if (!request.length) return false;
+    for (const write of written) this.#showWritten(write.position, write.after);
+    if (recordHistory) {
+      this.#undo.push(history);
+      this.#redo = [];
+    }
+    this.#bytesMessage = null;
+    this.#showView(sheet.id, false);
+    this.#publishJournal(gridJournalText(journal), origin);
+    const epoch = this.#bytesEpoch;
+    const edits = this.#editEpoch;
+    const ticket = ++this.#bytesTickets;
+    this.#enqueueProtocol(() => this.#applyBytes(request, history, disks, origin, epoch, edits, ticket));
+    return true;
+  }
+
+  async #applyBytes(
+    patches: GridRequestPatch[],
+    history: GridCellPatch[],
+    disks: readonly string[],
+    origin: EditorChangeOrigin,
+    epoch: number,
+    edits: number,
+    ticket: number,
+  ): Promise<void> {
+    const host = this.#options.grid;
+    const state = this.#bytes;
+    const current = () => !this.#destroyed && epoch === this.#bytesEpoch && edits === this.#editEpoch && this.#bytes === state;
+    // Senza sessione l'apertura è fallita, e ha già riportato il giornale.
+    if (!host || !state || !current()) return;
+    let confirmed: GridJournal;
+    try {
+      const commit = await host.applyGridBytes(state.surface, state.instance, { revision: state.session.revision, patches });
+      if (!current()) return;
+      const text = applySourceEdit(this.#confirmedJournal, commit.edit);
+      confirmed = parseGridJournal(text);
+      this.#confirmedJournal = text;
+      state.session = { ...state.session, revision: commit.revision };
+    } catch (error) {
+      if (!current()) return;
+      // Le modifiche in coda partivano da questa: non entrano neanche loro.
+      this.#editEpoch++;
+      // Una cella che il provider dice bloccata lo era in una finestra che la
+      // shell non aveva ancora riletto: lo dice come il blocco che si vede.
+      this.#bytesMessage = isErrorKind(error, "permission_denied")
+        ? t("grid.workbook.locked", { reason: t("grid.workbook.lock.other") })
+        : t("grid.workbook.apply_failed", { error: errorText(error) });
+      this.#publishJournal(this.#confirmedJournal, origin);
+      this.#undo = [];
+      this.#redo = [];
+      this.#windows = [];
+      this.#showNotice();
+      await this.#refreshBytes(state, epoch);
+      return;
+    }
+    // La history tiene l'input che il provider ha scritto (`0.250` è `0.25`):
+    // annullare parte da quello.
+    history.forEach((patch, index) => {
+      history[index] = { ...patch, after: { input: gridJournalEntry(confirmed, patch.coordinate)?.after ?? disks[index] } };
+    });
+    // Il giornale ottimistico si corregge soltanto quando non resta niente in
+    // coda: prima, la conferma non contiene ancora le modifiche che seguono.
+    if (ticket === this.#bytesTickets) this.#publishJournal(this.#confirmedJournal, origin);
+    await this.#refreshBytes(state, epoch);
+  }
+
+  #showNotice(): void {
+    if (!this.#workbookProfile) return;
+    const lines: string[] = [];
+    const parts: string[] = [];
+    let other = false;
+    for (const notice of this.#view?.notices ?? []) {
+      const part = NOT_SHOWN_KEYS[notice.code];
+      if (part) {
+        parts.push(t(part));
+        continue;
+      }
+      switch (notice.code) {
+        case "macros": lines.push(t("grid.workbook.macros")); break;
+        case "external-links": lines.push(t("grid.workbook.external_links")); break;
+        case "uncomputed": lines.push(t("grid.workbook.uncomputed")); break;
+        case "incomplete": lines.push(plural(notice.count, "grid.workbook.incomplete_one", "grid.workbook.incomplete")); break;
+        default: other = true;
+      }
+    }
+    if (parts.length) {
+      const list = new Intl.ListFormat(resolvedLanguage(), { type: "conjunction" }).format(parts);
+      lines.push(t("grid.workbook.not_shown", { parts: list }));
+    }
+    if (other) lines.push(t("grid.workbook.notice_other"));
+    if (this.#bytesConflicts) lines.push(plural(this.#bytesConflicts, "grid.workbook.conflicts_one", "grid.workbook.conflicts"));
+    if (this.#view?.sheets.some((sheet) => [...sheet.cells.values()].some((cell) => cell.bytes.stale))) {
+      lines.push(t("grid.workbook.stale"));
+    }
+    if (this.#bytesMessage) lines.push(this.#bytesMessage);
+    this.#notice.textContent = lines.join(" ");
+    this.#notice.hidden = lines.length === 0;
   }
 
   /// Ridisegna il foglio `#sheetIndex`; `top` lo riporta in cima.
@@ -750,40 +1265,8 @@ export class GridEngine {
       this.#viewport.scrollTop = 0;
       this.#viewport.scrollLeft = 0;
     }
-    this.#syncFormulaBar();
+    if (!this.#editing) this.#syncFormulaBar();
     this.#render();
-  }
-
-  #showNotice(): void {
-    const view = this.#view;
-    if (!view) return;
-    const lines = [t("grid.workbook.readonly")];
-    const parts: WorkbookNotShown[] = [];
-    const incomplete: string[] = [];
-    const truncated: string[] = [];
-    for (const notice of view.notices) {
-      switch (notice.kind) {
-        case "not_shown": parts.push(notice.detail as WorkbookNotShown); break;
-        case "incomplete": if (notice.detail) incomplete.push(notice.detail); break;
-        case "truncated": if (notice.detail) truncated.push(notice.detail); break;
-        case "macros": lines.push(t("grid.workbook.macros")); break;
-        case "external_links": lines.push(t("grid.workbook.external_links")); break;
-        case "uncomputed": lines.push(t("grid.workbook.uncomputed")); break;
-      }
-    }
-    const list = (items: readonly string[]) => new Intl.ListFormat(resolvedLanguage(), { type: "conjunction" }).format(items);
-    if (parts.length) lines.push(t("grid.workbook.not_shown", { parts: list(parts.map((part) => t(NOT_SHOWN_KEYS[part]))) }));
-    if (truncated.length) lines.push(t("grid.workbook.truncated", { sheets: list(truncated.map((name) => t("grid.workbook.sheet_name", { name }))) }));
-    if (incomplete.length) {
-      // Gli avvisi della lettura sono di GridCraft, in inglese: se ne mostrano
-      // pochi, e quanti restano.
-      const shown = incomplete.slice(0, INCOMPLETE_SHOWN).join("; ");
-      lines.push(incomplete.length > INCOMPLETE_SHOWN
-        ? t("grid.workbook.incomplete_more", { details: shown, more: String(incomplete.length - INCOMPLETE_SHOWN) })
-        : t("grid.workbook.incomplete", { details: shown }));
-    }
-    this.#notice.textContent = lines.join(" ");
-    this.#notice.hidden = false;
   }
 
   /// Le schede dei fogli, quando ce n'è più di uno da mostrare. Si rifanno
@@ -821,6 +1304,7 @@ export class GridEngine {
         this.#sheetIndex = index;
         this.#selection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
         this.#showSheet(true);
+        if (this.#workbookProfile) void this.#loadViewport();
         this.#options.onSelectionChange();
       },
     });
@@ -954,6 +1438,13 @@ export class GridEngine {
         if (persisted?.style?.text_color) element.style.color = persisted.style.text_color;
         if (persisted?.style?.fill_color) element.style.backgroundColor = persisted.style.fill_color;
         if (persisted?.style?.horizontal) element.style.textAlign = persisted.style.horizontal;
+        const bytes = this.#view ? this.#workbookCell(position)?.bytes : undefined;
+        if (bytes?.stale) element.classList.add("stale");
+        if (bytes?.conflict) {
+          element.classList.add("conflict");
+          element.setAttribute("aria-invalid", "true");
+        }
+        if (bytes?.lock) element.setAttribute("aria-readonly", "true");
         const value = persisted
           ? this.#values.get(key(sheet.id, persisted.row, persisted.column))
           : undefined;
@@ -1028,8 +1519,13 @@ export class GridEngine {
   #syncFormulaBar(): void {
     if (!this.#workbook) return;
     const focus = this.#selection.focus;
-    const shown = this.#view ? this.#workbookCell(focus) : undefined;
-    this.#formulaEditor.setDoc(shown?.formula ?? this.#cellAt(focus)?.input ?? "");
+    if (this.#workbookProfile) {
+      const bytes = this.#workbookCell(focus)?.bytes;
+      this.#formulaEditor.setReadOnly(this.#readOnly || Boolean(bytes?.lock));
+      this.#formulaEditor.setDoc(localInput(bytes?.input ?? "", this.#decimal));
+      return;
+    }
+    this.#formulaEditor.setDoc(this.#cellAt(focus)?.input ?? "");
   }
 
   #select(position: GridPosition, extend: boolean): void {
@@ -1193,7 +1689,17 @@ export class GridEngine {
 
   #beginEditing(owner: "cell" | "formula", position: GridPosition, initial?: string): void {
     if (this.#readOnly || !this.#workbook || !this.#isVisiblePosition(position)) return;
-    const current = this.#cellAt(position)?.input ?? "";
+    let current: string;
+    if (this.#workbookProfile) {
+      const refusal = this.#writeRefusal(position);
+      if (refusal) {
+        this.#refuse(refusal);
+        return;
+      }
+      current = localInput(this.#workbookCell(position)?.bytes.input ?? "", this.#decimal);
+    } else {
+      current = this.#cellAt(position)?.input ?? "";
+    }
     if (this.#editing && (!samePosition(this.#editing.position, position) || this.#editing.owner !== owner)) {
       this.#finishEditing(true, "input", false);
     }
@@ -1209,7 +1715,9 @@ export class GridEngine {
       this.#cellEditorHost.removeAttribute("aria-hidden");
       this.#positionEditor(position);
       this.#cellEditor.setDoc(this.#editing.draft);
-      this.#cellEditor.focus();
+      // Il cursore va in fondo, come nei fogli di calcolo: la battuta che ha
+      // aperto la cella è già scritta, e le altre la seguono.
+      this.#cellEditor.revealByteOffset(new TextEncoder().encode(this.#editing.draft).length);
     } else {
       this.#formulaEditor.setDoc(this.#editing.draft);
     }
@@ -1235,8 +1743,12 @@ export class GridEngine {
     this.#cellEditorHost.hidden = true;
     this.#cellEditorHost.setAttribute("aria-hidden", "true");
     if (commit && editing.draft !== editing.original) {
-      const patch = inputPatch(this.#sheet(), editing.position, editing.draft);
-      if (patch) this.#commit([patch], origin, true);
+      if (this.#workbookProfile) {
+        this.#commitCells([{ position: editing.position, after: fileInput(editing.draft, this.#decimal) }], origin, true);
+      } else {
+        const patch = inputPatch(this.#sheet(), editing.position, editing.draft);
+        if (patch) this.#commit([patch], origin, true);
+      }
     }
     this.#syncFormulaBar();
     this.#render();
@@ -1255,6 +1767,19 @@ export class GridEngine {
   }
 
   #commit(patches: readonly GridCellPatch[], origin: EditorChangeOrigin, recordHistory: boolean): boolean {
+    if (this.#workbookProfile) {
+      const sheet = this.#sheet();
+      const writes: CellWrite[] = [];
+      for (const patch of patches) {
+        const position = positionOf(sheet, patch.coordinate);
+        if (!position) {
+          this.#refuse(t("grid.workbook.not_loaded"));
+          return false;
+        }
+        writes.push({ position, after: patch.after?.input ?? "" });
+      }
+      return this.#commitCells(writes, origin, recordHistory);
+    }
     if (!this.#workbook || this.#readOnly) return false;
     const beforeSource = this.#source;
     const sourceWorkbook = this.#sourceWorkbook ?? parseWorkbook(beforeSource);
@@ -1295,6 +1820,23 @@ export class GridEngine {
   #clearSelection(): void {
     if (this.#readOnly) return;
     const range = normalizedSelection(this.#selection);
+    if (this.#workbookProfile) {
+      if (!this.#rangeRead(range)) {
+        this.#refuse(t("grid.workbook.not_loaded"));
+        return;
+      }
+      const writes: CellWrite[] = [];
+      for (const [key, cell] of this.#view?.sheets[this.#sheetIndex]?.cells ?? []) {
+        const position = keyPosition(key);
+        if (
+          cell.bytes.input !== ""
+          && position.row >= range.rowStart && position.row <= range.rowEnd
+          && position.column >= range.columnStart && position.column <= range.columnEnd
+        ) writes.push({ position, after: "" });
+      }
+      this.#commitCells(writes, "input", true);
+      return;
+    }
     const patches: GridCellPatch[] = [];
     for (let row = range.rowStart; row <= range.rowEnd; row += 1) {
       for (let column = range.columnStart; column <= range.columnEnd; column += 1) {
@@ -1320,6 +1862,19 @@ export class GridEngine {
   #paste(event: ClipboardEvent): void {
     if (this.#readOnly || !event.clipboardData) return;
     event.preventDefault();
+    if (this.#workbookProfile) {
+      const sheet = this.#sheet();
+      const focus = this.#selection.focus;
+      const writes: CellWrite[] = [];
+      parseTsv(event.clipboardData.getData("text/plain")).forEach((values, row) => values.forEach((value, column) => {
+        const position = { row: focus.row + row, column: focus.column + column };
+        if (position.row < sheet.rows.length && position.column < sheet.columns.length) {
+          writes.push({ position, after: fileInput(value, this.#decimal) });
+        }
+      }));
+      this.#commitCells(writes, "input", true);
+      return;
+    }
     const patches = pastePatches(this.#sheet(), this.#selection.focus, event.clipboardData.getData("text/plain"));
     this.#commit(patches, "input", true);
   }
@@ -1502,6 +2057,7 @@ export class GridEngine {
     return windows;
   }
   #loadViewport(): Promise<void> {
+    if (this.#workbookProfile) return this.#loadBytesViewport();
     const host = this.#options.grid;
     const session = this.#session;
     const instance = this.#instance;
