@@ -145,8 +145,8 @@ export function showContextMenu(
   // WebKitGTK può terminare il processo web mentre fotografa in una View
   // Transition un menu fisso appena inserito. Conserviamo l'animazione CSS
   // canonica, senza portare questa superficie effimera nel percorso nativo.
-  lifetime.add(() => exitSurface(menu, () => menu.remove(), { viewTransition: false }));
-  enterSurface(menu, { viewTransition: false });
+  lifetime.add(() => exitSurface(menu, () => menu.remove()));
+  enterSurface(menu);
   const strip = options.strip ? mountStrip(menu, options, lifetime) : null;
   // Il primo click fuori chiude, e il ritardo evita che sia questo stesso click
   // ad attivarlo. Il `once` **non** bastava: se il menu si chiudeva prima —
@@ -468,9 +468,9 @@ function mountStrip(menu: HTMLElement, options: ContextMenuOptions, lifetime: Li
   const unmount = options.strip!(strip);
   lifetime.add(() => {
     unmount();
-    exitSurface(strip, () => strip.remove(), { viewTransition: false });
+    exitSurface(strip, () => strip.remove());
   });
-  enterSurface(strip, { viewTransition: false });
+  enterSurface(strip);
   placeStrip(strip, menu.getBoundingClientRect());
   return strip;
 }
@@ -668,8 +668,8 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
 
   document.body.appendChild(pop);
   // Il selettore di icona è la stessa specie di superficie fissa effimera.
-  lifetime.add(() => exitSurface(pop, () => pop.remove(), { viewTransition: false }));
-  enterSurface(pop, { viewTransition: false });
+  lifetime.add(() => exitSurface(pop, () => pop.remove()));
+  enterSurface(pop);
   // La trappola prima del `focus()` esplicito: `trapFocus` metterebbe il
   // fuoco sul primo elemento — la prima emoji — mentre qui la cosa giusta è il
   // campo, che è ciò che permette di scriverne una qualsiasi senza attraversare

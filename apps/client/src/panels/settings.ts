@@ -461,7 +461,7 @@ async function open(): Promise<void> {
   if (settingsLifetime?.closed || release) return;
   panelEl.hidden = false;
   syncToolbar();
-  enterSurface(panelEl, { viewTransition: false });
+  enterSurface(panelEl);
   // Il fuoco entra e resta: mentre le impostazioni sono aperte, sono quello che
   // si sta facendo (è la ragione per cui stanno sopra tutto anche visivamente,
   // scritto accanto al loro `z-index`). Una modale da cui il linguetta scappa mette
@@ -487,13 +487,9 @@ function close(): void {
   renderedTab = null;
   resetFilters();
   if (searchEl) searchEl.value = "";
-  exitSurface(
-    panelEl,
-    () => {
-      panelEl.hidden = true;
-    },
-    { viewTransition: false },
-  );
+  exitSurface(panelEl, () => {
+    panelEl.hidden = true;
+  });
 }
 
 /// Quale disegno è l'ultimo chiesto.

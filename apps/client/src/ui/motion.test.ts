@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 //
-// Il presidio della coreografia di shell: prova i due rami del browser e il
-// caso che la sola animazione CSS non sa chiudere, cioè riaprire mentre l'uscita
-// è ancora in corso. I timer sono finti perché qui il tempo è soltanto il bound
-// di sicurezza, non ciò che dimostra il comportamento.
+// Il presidio della coreografia di shell: prova gli stati, l'assenza delle View
+// Transitions e il caso che la sola animazione CSS non sa chiudere, cioè
+// riaprire mentre l'uscita è ancora in corso. I timer sono finti perché qui il
+// tempo è soltanto il bound di sicurezza, non ciò che dimostra il comportamento.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 function media(reduced: boolean): void {
@@ -44,12 +44,11 @@ describe("la coreografia delle superfici", () => {
     transitionSupport(undefined);
   });
 
-  it("senza View Transitions percorre per intero il fallback a stati", async () => {
-    const { enterSurface, exitSurface, supportsViewTransitions } = await motion();
+  it("percorre per intero gli stati di entrata e di uscita", async () => {
+    const { enterSurface, exitSurface } = await motion();
     const surface = document.createElement("div");
     document.body.append(surface);
 
-    expect(supportsViewTransitions()).toBe(false);
     enterSurface(surface);
     expect(surface.dataset.shellMotion).toBe("enter");
     surface.dispatchEvent(new Event("animationend"));
@@ -64,25 +63,24 @@ describe("la coreografia delle superfici", () => {
     expect(concealed).toBe(1);
   });
 
-  it("con supporto usa il ramo progressivo per la stessa mutazione", async () => {
+  it("non avvia mai una View Transition, anche dove il motore le ha", async () => {
     const start = vi.fn((update: () => void) => {
       update();
       return { finished: Promise.resolve() };
     });
     transitionSupport(start);
-    const { enterSurface, supportsViewTransitions } = await motion();
+    const { enterSurface, exitSurface } = await motion();
     const surface = document.createElement("div");
     surface.id = "settings-panel";
     document.body.append(surface);
 
     enterSurface(surface);
-
-    expect(supportsViewTransitions()).toBe(true);
-    expect(start).toHaveBeenCalledTimes(1);
     expect(surface.dataset.shellMotion).toBe("enter");
-    expect(surface.style.getPropertyValue("view-transition-name")).toBe(
-      "fub-surface-settings-panel",
-    );
+    exitSurface(surface, () => {});
+    vi.runAllTimers();
+
+    expect(start).not.toHaveBeenCalled();
+    expect(surface.style.getPropertyValue("view-transition-name")).toBe("");
   });
 
   it("riaprire durante l'uscita riannoda il nodo senza classi residue", async () => {

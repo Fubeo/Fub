@@ -343,8 +343,8 @@ export function openRadial(x: number, y: number, items: readonly (RadialItem | n
   });
 
   document.body.append(layer);
-  lifetime.add(() => exitSurface(layer, () => layer.remove(), { viewTransition: false }));
-  enterSurface(layer, { viewTransition: false });
+  lifetime.add(() => exitSurface(layer, () => layer.remove()));
+  enterSurface(layer);
   // La trappola prima del fuoco: Esc chiude, e chiudendo il fuoco torna.
   lifetime.add(trapFocus(ring, close));
   const first = next(7, 1);

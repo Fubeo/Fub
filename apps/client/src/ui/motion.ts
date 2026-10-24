@@ -2,10 +2,10 @@
 //
 // Una superficie entra, esce o viene riannodata mentre stava uscendo. Il DOM
 // resta proprietario del layout e dei gesti; questo modulo possiede soltanto il
-// passaggio fra gli stati, compresi l'unico limite di sicurezza e il ramo
-// progressivo delle View Transitions. Il foglio resta la base: senza
-// `startViewTransition` le stesse mutazioni e gli stessi keyframe continuano a
-// valere.
+// passaggio fra gli stati e l'unico limite di sicurezza. Niente View
+// Transitions: animano una fotografia della pagina invece dell'elemento, non
+// sentono il livello del moto, e su alcuni WebKitGTK la cattura del vecchio
+// fotogramma fa cadere il processo.
 import { reducedMotion } from "../theme/reduced-motion";
 
 type Phase = "enter" | "exit";
@@ -16,39 +16,14 @@ interface MotionRun {
   finish(): void;
 }
 
-interface ViewTransitionLike {
-  readonly finished?: Promise<unknown>;
-}
-
-type TransitionDocument = Document & {
-  startViewTransition?: (update: () => void) => ViewTransitionLike;
-};
-
 // Non è una durata del disegno: è il tetto oltre il quale un `animationend`
 // perso non può tenere una superficie appesa. Le durate vere restano nei token.
 const SAFETY_BOUND_MS = 600;
 const runs = new WeakMap<HTMLElement, MotionRun>();
-const names = new WeakMap<HTMLElement, string>();
-let nextName = 0;
-
-function transitionName(element: HTMLElement): string {
-  const current = names.get(element);
-  if (current) return current;
-  const suffix = element.id.replace(/[^a-zA-Z0-9_-]/g, "-") || String(++nextName);
-  const name = `fub-surface-${suffix}`;
-  names.set(element, name);
-  return name;
-}
 
 function cancel(element: HTMLElement): void {
   runs.get(element)?.cancel();
 }
-
-type MotionOptions = {
-  /// Le superfici fisse inserite al volo possono restare sulla sola animazione
-  /// CSS: alcuni WebKit GTK abortiscono mentre catturano il vecchio fotogramma.
-  readonly viewTransition?: boolean;
-};
 
 function waitForMotion(
   element: HTMLElement,
@@ -90,63 +65,28 @@ function waitForMotion(
   return run;
 }
 
-function progressive(element: HTMLElement, run: MotionRun, update: () => void, useViewTransition: boolean): void {
-  if (!useViewTransition) {
-    update();
-    return;
-  }
-  const start = (document as TransitionDocument).startViewTransition;
-  if (typeof start !== "function") {
-    update();
-    return;
-  }
-
-  element.style.setProperty("view-transition-name", transitionName(element));
-  let updated = false;
-  const once = () => {
-    if (updated || runs.get(element) !== run) return;
-    updated = true;
-    update();
-  };
-  try {
-    const transition = start.call(document, once);
-    transition.finished?.catch(() => {});
-  } catch {
-    once();
-  }
-}
-
 /**
  * Annoda una superficie al suo stato visibile. Se stava uscendo, l'uscita viene
  * cancellata senza eseguire la chiusura: un solo attributo cambia valore, quindi
  * riaprire non accumula classi né conserva `pointer-events: none`.
  */
-export function enterSurface(element: HTMLElement, options: MotionOptions = {}): void {
+export function enterSurface(element: HTMLElement): void {
   cancel(element);
   element.style.removeProperty("pointer-events");
   element.dataset.shellMotion = "pre-enter";
 
   if (reducedMotion()) {
     element.dataset.shellMotion = "rest";
-    element.style.removeProperty("view-transition-name");
     return;
   }
 
   // Il nodo può essere appena entrato nel documento, o arrivare da `exit`. Il
   // flush rende `pre-enter` il fotogramma di partenza prima di scrivere `enter`.
   void element.offsetWidth;
-  const run = waitForMotion(element, "enter", () => {
+  waitForMotion(element, "enter", () => {
     element.dataset.shellMotion = "rest";
-    element.style.removeProperty("view-transition-name");
   });
-  progressive(
-    element,
-    run,
-    () => {
-      element.dataset.shellMotion = "enter";
-    },
-    options.viewTransition !== false,
-  );
+  element.dataset.shellMotion = "enter";
 }
 
 /**
@@ -154,16 +94,10 @@ export function enterSurface(element: HTMLElement, options: MotionOptions = {}):
  * superficie non intercetta il puntatore; la pelle lo garantisce leggendo lo
  * stesso attributo che governa il moto.
  */
-export function exitSurface(
-  element: HTMLElement,
-  conceal: () => void,
-  options: MotionOptions = {},
-): void {
+export function exitSurface(element: HTMLElement, conceal: () => void): void {
   const current = runs.get(element);
   if (current?.phase === "exit") return;
   cancel(element);
-  // Il callback di View Transitions può arrivare dopo la fotografia vecchia:
-  // il puntatore invece smette di appartenere alla superficie subito.
   element.style.setProperty("pointer-events", "none");
 
   if (reducedMotion()) {
@@ -172,18 +106,8 @@ export function exitSurface(
     return;
   }
 
-  const run = waitForMotion(element, "exit", () => {
-    element.style.removeProperty("view-transition-name");
-    conceal();
-  });
-  progressive(
-    element,
-    run,
-    () => {
-      element.dataset.shellMotion = "exit";
-    },
-    options.viewTransition !== false,
-  );
+  waitForMotion(element, "exit", conceal);
+  element.dataset.shellMotion = "exit";
 }
 
 /** Porta subito al termine il passaggio pendente, per uno smontaggio definitivo. */
@@ -191,7 +115,3 @@ export function finishSurface(element: HTMLElement): void {
   runs.get(element)?.finish();
 }
 
-/** Feature detection esposta per il presidio del ramo progressivo. */
-export function supportsViewTransitions(): boolean {
-  return typeof (document as TransitionDocument).startViewTransition === "function";
-}

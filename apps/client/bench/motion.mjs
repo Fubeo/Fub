@@ -45,7 +45,8 @@
 // 3. **Solo proprietà ammesse.** Ogni corsa di `moto`, ogni animazione o
 //    transizione CSS partita col gesto, ogni proprietà in linea riscritta a
 //    ogni fotogramma tocca soltanto quelle cinque. Il referto dice di ogni
-//    estranea se è di sola pittura (un colore) o di geometria.
+//    estranea se è di sola pittura (un colore) o di geometria. Una View
+//    Transition avviata dal gesto è un'estranea anche lei.
 // 4. **Interrompibile.** Si rifà il gesto, a metà corsa lo si inverte: si
 //    arriva allo scatto dell'andata e ritorno completa, e ciò che si stava
 //    muovendo prosegue da dov'era — lo stesso elemento o l'immagine che ne
@@ -173,6 +174,15 @@ function RECORDER() {
     },
     true,
   );
+  // Una View Transition fotografa la pagina e la anima fuori da `moto`: lo
+  // Scrittoio non ne avvia, e una che parte è un'estranea della regola 3.
+  if (typeof document.startViewTransition === "function") {
+    const start = document.startViewTransition;
+    document.startViewTransition = function startViewTransition(...args) {
+      log.css.push({ kind: "View Transition", target: "document", pseudo: "", name: "", keys: ["view-transition"] });
+      return start.apply(this, args);
+    };
+  }
   window.__motoLog = { log, path, paths, keysOf };
 }
 
