@@ -2015,7 +2015,7 @@ async function trashFolderWithConfirm(path: string): Promise<void> {
     .catch(() => true);
   const ok = !ask || await confirm(t("explorer.folder_trash_confirm", { folder: childName(path) }), {
     title: t("explorer.folder_trash_title"),
-    okLabel: t("explorer.delete"),
+    okLabel: t("trash.move"),
   }).catch(() => false);
   if (!ok) return;
   if (await ensureSaved()) return;

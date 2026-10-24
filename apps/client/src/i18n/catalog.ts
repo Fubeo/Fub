@@ -1022,6 +1022,7 @@ export const IT = { // --- la scocca -------------------------------------------
 
 // --- il cestino --------------------------------------------------------
 "trash.confirm_delete": "Spostare «{doc}» nel cestino?",
+"trash.move": "Sposta nel cestino",
 "trash.moved": "«{doc}» è nel cestino.",
 "trash.moved_many": "{n} note sono nel cestino.",
 "trash.failed_many": "Non sono riuscito a cestinare {n} note: {docs}.",
@@ -3607,6 +3608,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "gate.index_query": "answering an index query",
 
 "trash.confirm_delete": "Move «{doc}» to the trash?",
+"trash.move": "Move to trash",
 "trash.moved": "«{doc}» is in the trash.",
 "trash.moved_many": "{n} notes are in the trash.",
 "trash.failed_many": "Could not move {n} notes to the trash: {docs}.",

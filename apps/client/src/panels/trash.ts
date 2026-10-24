@@ -45,7 +45,7 @@ export async function trashWithConfirm(id: string): Promise<void> {
     // salvataggio e bozza sospesi, per un gesto che nessuno ha confermato.
     const ok = await confirm(t("trash.confirm_delete", { doc: pageName(id) }), {
       title: t("trash.delete_title"),
-      okLabel: t("explorer.delete"),
+      okLabel: t("trash.move"),
     }).catch(() => false);
     if (!ok) {
       documentSessions.cancelDeletion(id);
@@ -94,7 +94,7 @@ export async function trashManyWithConfirm(ids: readonly string[]): Promise<numb
   if (await trashesToSystem()) {
     const ok = await confirm(t("trash.confirm_delete_many", { n: String(mine.length) }), {
       title: t("trash.delete_title_many"),
-      okLabel: t("explorer.delete"),
+      okLabel: t("trash.move"),
     }).catch(() => false);
     if (!ok) {
       for (const id of mine) documentSessions.cancelDeletion(id);
