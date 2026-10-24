@@ -208,7 +208,9 @@ pannelli) lo Scrittoio compone:
 - `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi
   chiave WAAPI di sola `transform` e `opacity`; il livello `appearance.motion`
   e la preferenza del sistema decidono quanto movimento esiste, e lo stato
-  finale è lo stesso con e senza movimento;
+  finale è lo stesso con e senza movimento. Nel livello calmo le molle non
+  superano il bersaglio; ciò che entra o esce fa metà strada, con una molla
+  critica più rigida che non dura più di quella piena;
 - `theme/scrittoio/`: la serie di serie (motore `theme-2`), con ricetta dei
   colori, fogli, struttura e pelle a pezzi. La pelle passa dal sanitizer CSS
   del motore, e ogni classe di un pezzo è un hook dell'anatomia di quel pezzo.
