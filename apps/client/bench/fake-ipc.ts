@@ -42,12 +42,15 @@ import XLSX_GRID from "../src/__fixtures__/xlsx-grid.json";
 import type {
   BundleInfo,
   CommandSpec,
+  DocumentMatch,
   IndexQuery,
   IndexResult,
   JobStatus,
   KnownVault,
   Organization,
+  QueryExpr,
   SettingEntry,
+  Span,
   UiNode,
   ViewSpec,
 } from "../src/host/contract";
@@ -1143,11 +1146,61 @@ function treeOf(view: string): UiNode | undefined {
   return tree && view !== "outline" ? inShellLanguage(tree) : tree;
 }
 
+/// Il testo cercato da una query di documenti, se ne cerca uno.
+function searchedText(expr: QueryExpr): string | null {
+  for (const clause of expr.any) {
+    for (const literal of clause.all) {
+      if (!literal.negated && literal.predicate.kind === "text") return literal.predicate.text;
+    }
+  }
+  return null;
+}
+
+const utf8 = new TextEncoder();
+/// Quanto testo sta attorno all'occorrenza in un estratto (caratteri).
+const SNIPPET_BEFORE = 40;
+const SNIPPET_AFTER = 80;
+
+/// L'estratto che darebbe l'indice: la riga del corpo in cui il primo termine
+/// compare, tagliata attorno all'occorrenza, con gli intervalli in byte di ogni
+/// termine. Il finto host risponde i documenti senza estratto, e la foto della
+/// ricerca mostrerebbe un elenco di nomi che il prodotto non mostra.
+function snippetOf(doc: string, text: string): Pick<DocumentMatch, "snippet" | "highlights"> {
+  const terms = text.toLowerCase().split(/\s+/).filter(Boolean);
+  const body = (CORPUS[doc] ?? "").replace(/^---\n[\s\S]*?\n---\n/, "");
+  const lines = body.split("\n").map((line) => line.replace(/^[#>\-*\s]+/, "").trim());
+  const line = lines.find((each) => terms.some((term) => each.toLowerCase().includes(term)));
+  if (!line || terms.length === 0) return {};
+  const at = line.toLowerCase().indexOf(terms.find((term) => line.toLowerCase().includes(term))!);
+  const start = Math.max(0, at - SNIPPET_BEFORE);
+  const end = Math.min(line.length, at + SNIPPET_AFTER);
+  const snippet = `${start > 0 ? "…" : ""}${line.slice(start, end)}${end < line.length ? "…" : ""}`;
+  const lower = snippet.toLowerCase();
+  const highlights: Span[] = [];
+  for (const term of terms) {
+    for (let index = lower.indexOf(term); index !== -1; index = lower.indexOf(term, index + term.length)) {
+      const before = utf8.encode(snippet.slice(0, index)).length;
+      highlights.push({ start: before, end: before + utf8.encode(snippet.slice(index, index + term.length)).length });
+    }
+  }
+  highlights.sort((a, b) => a.start - b.start);
+  return { snippet, highlights };
+}
+
 export const api: typeof host.module.api = {
   ...behind,
   queryIndex: async (q) => {
     const response = RESPONSES[q.kind];
     const result = response ? response(q) : await behind.queryIndex(q);
+    if (q.kind === "documents" && result.kind === "documents") {
+      const text = searchedText(q.matching);
+      if (text) {
+        return {
+          ...result,
+          value: { ...result.value, items: result.value.items.map((hit) => ({ ...hit, ...snippetOf(hit.doc, text) })) },
+        };
+      }
+    }
     return HOST_TEXT.has(q.kind) ? inShellLanguage(result) : result;
   },
   listViews: async (vault) => inShellLanguage(await behind.listViews(vault)),
