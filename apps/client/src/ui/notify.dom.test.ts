@@ -2,7 +2,8 @@
 // Il gesto di un toast che il backend rifiuta dice **perché**, con la frase
 // dell'errore: il confine Tauri consegna `{kind, message}`, e `String(error)`
 // ne faceva `[object Object]` (I65).
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createManualDriver, setMotionDriver } from "../moto";
 import { clearHistory, notify, recentNotices, TOAST_STACK_LIMIT } from "./notify";
 
 describe("il gesto di un toast", () => {
@@ -66,6 +67,33 @@ describe("la pila dei toast", () => {
     expect(toasts()).toHaveLength(TOAST_STACK_LIMIT);
     expect(toasts()[0]!.textContent).toContain("Avviso 1");
     expect(document.querySelector("#toasts > .toast-more")?.textContent).toBe("+1 altri");
+  });
+
+  it("chiuso, esce come immagine in meno di un battito e gli altri scorrono al suo posto", () => {
+    const driver = createManualDriver();
+    setMotionDriver(driver);
+    // Il layout in happy-dom non c'è: ogni toast è alto 50 px nella sua pila.
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const index = this.classList.contains("toast") && this.parentElement ? [...this.parentElement.children].indexOf(this) : 0;
+      return { left: 0, top: index * 50, width: 300, height: 40, right: 300, bottom: index * 50 + 40, x: 0, y: index * 50, toJSON: () => ({}) } as DOMRect;
+    });
+    try {
+      notify("Prima", "info");
+      notify("Seconda", "info");
+      toasts()[0]!.querySelector<HTMLButtonElement>(".toast-close")!.click();
+      // Lo stato cambia subito: nella pila resta la seconda.
+      expect(toasts().map((toast) => toast.querySelector(".toast-text")?.textContent)).toEqual(["Seconda"]);
+      const ghost = document.querySelector<HTMLElement>("body > .toast[aria-hidden='true']");
+      expect(ghost?.textContent).toContain("Prima");
+      const exit = driver.plays.find((play) => play.el === ghost)!;
+      expect(exit.timing.duration).toBeLessThanOrEqual(140);
+      // La seconda parte da dove era, 50 px più in basso.
+      const slide = driver.plays.find((play) => play.el === toasts()[0])!;
+      expect(slide.keyframes[0]!.transform).toBe("translate(0px, 50px)");
+    } finally {
+      vi.restoreAllMocks();
+      setMotionDriver(null);
+    }
   });
 
   it("chiuso l'ultimo toast la pila sparisce", () => {

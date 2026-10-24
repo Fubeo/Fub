@@ -45,6 +45,7 @@ import { focusableElements } from "./a11y";
 import { setTooltip } from "./tooltip";
 import { drawCountButton } from "./icons";
 import { errorText } from "../host/errors";
+import { DURATION, exitGhost, flip } from "../moto";
 /// Quanto **tono** ha un avviso. Due e non cinque: chi disegna deve poterli
 /// distinguere a colpo d'occhio, e una scala di severità che nessuno sa dove
 /// tagliare finisce con tutto sullo stesso gradino.
@@ -453,15 +454,24 @@ function disarm(toast: HTMLElement): void {
   toastTimers.delete(toast);
 }
 
+/// Il toast se ne va subito; ne esce un'immagine ferma, in meno di un
+/// battito, e gli altri scorrono al posto lasciato invece di saltarci.
 function dismissToast(toast: HTMLElement): void {
   if (!toast.isConnected) return;
   disarm(toast);
   const stack = toast.parentElement;
-  toast.remove();
-  if (stack && stack.id === "toasts" && stack.querySelector(".toast") === null) {
-    evicted = 0;
-    stack.remove();
-  }
+  const others = stack ? [...stack.querySelectorAll<HTMLElement>(".toast")].filter((other) => other !== toast) : [];
+  // L'immagine sta nel `body`, fuori dalla pila: resta sopra i fogli come la
+  // pila da cui viene.
+  toast.style.zIndex = "var(--z-toast)";
+  exitGhost(toast, { duration: DURATION.swap, easing: "ease-in" });
+  flip(others, () => {
+    toast.remove();
+    if (stack && stack.id === "toasts" && stack.querySelector(".toast") === null) {
+      evicted = 0;
+      stack.remove();
+    }
+  }, { scale: false });
 }
 
 /// La regione viva: una sola, creata una volta e mai sostituita, a cui cambia
