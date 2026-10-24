@@ -121,9 +121,13 @@ export function labelOf(job: JobRow): string {
 /// un comando, un'automazione — quindi non c'è la famiglia di job silenziosi
 /// per cui questa regola sarebbe rumore. Il giorno che ci fosse, è qui che si
 /// mette la differenza.
-export function noticeOf(notice: KernelNotice): { text: string; tone: Tone } | null {
+export function noticeOf(notice: KernelNotice, rows: readonly JobRow[] = []): { text: string; tone: Tone } | null {
   if (notice.event.type !== "job_done") return null;
-  const { job, result } = notice.event;
+  const { id, result } = notice.event;
+  // Il nome che la riga aveva, cioè ciò che il lavoro ha detto di sé: l'id
+  // del suo entry point soltanto se non ha detto niente.
+  const row = rows.find((candidate) => candidate.id === id);
+  const job = row ? labelOf(row) : notice.event.job;
   // `result` attraversa l'IPC come un `Result` serializzato da serde: `Ok` è
   // ciò che il job ha reso, `Err` è un `PluginError` col `kind` del §12.2 —
   // che resta l'unica domanda su cui ramificare, mai una sottostringa.
@@ -341,7 +345,7 @@ export function mountActivity(lifetime: Lifetime): void {
         finished = [];
         past = [];
       }
-      const resultNotice = noticeOf(eventNotice);
+      const resultNotice = noticeOf(eventNotice, jobs);
       if (resultNotice) past = remember(past, { ...resultNotice, when: Date.now() });
       const result = apply(jobs, eventNotice);
       jobs = result.jobs;

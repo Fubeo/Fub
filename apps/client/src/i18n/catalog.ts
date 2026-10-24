@@ -998,7 +998,7 @@ export const IT = { // --- la scocca -------------------------------------------
 // Due chiavi e non una: un guasto che nomina un documento e uno che riguarda
 // il vault intero si leggono diversamente, e comporre la seconda dalla prima
 // con un soggetto vuoto darebbe una frase che non finisce.
-"trouble.about": "{doc}: {reason}",
+"trouble.about": "{reason}: {doc}",
 "trouble.vault": "{reason}",
 // La porta del panico (§17.3, decisione 0161): quando il kernel sa da dove è
 // entrato il guasto, l'avviso lo dice in coda. Le frasi riadattano quelle di
@@ -3582,7 +3582,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "name_fault.hidden": "it cannot start with a dot: the vault would not list the note",
 "name_fault.too_long": "it is too long (255 bytes at most)",
 
-"trouble.about": "{doc}: {reason}",
+"trouble.about": "{reason}: {doc}",
 "trouble.vault": "{reason}",
 // La porta del panico (§17.3, decisione 0161): quando il kernel sa dove è
 // entrato il difetto, la notifica lo dice alla fine. Le frasi adattano

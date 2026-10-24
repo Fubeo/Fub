@@ -44,6 +44,7 @@ import type { Lifetime } from "./lifetime";
 import { focusableElements } from "./a11y";
 import { setTooltip } from "./tooltip";
 import { exactTime, relativeTime } from "./when";
+import { pageName } from "../rules/mirrored";
 import { drawCountButton } from "./icons";
 import { errorText } from "../host/errors";
 import { DURATION, exitGhost, flip } from "../moto";
@@ -207,8 +208,9 @@ export function failureNotice(e: Extract<KernelEvent, { type: "trouble" }>): {
   tone: Tone;
 } {
   const reason = e.error.message;
+  // Prima che cosa è successo, poi a quale nota: per nome, non per percorso.
   const base = e.subject
-    ? t("trouble.about", { doc: e.subject, reason })
+    ? t("trouble.about", { doc: pageName(e.subject), reason: reason.charAt(0).toLocaleUpperCase() + reason.slice(1) })
     : t("trouble.vault", { reason });
   return {
     text:
