@@ -297,3 +297,77 @@ describe("popup ed editor locali precedono la shell", () => {
     expect(executed).toEqual([]);
   });
 });
+
+// Un tasto dell'app non ruba un tasto di testo: Alt+← in un campo resta del
+// campo (su Mac è Opzione+←, la parola precedente), fuori dal campo va indietro.
+describe("i tasti senza Mod cedono ai campi", () => {
+  const lifetimes: Lifetime[] = [];
+
+  beforeEach(() => {
+    resetShellCommands();
+    registerShellCommand({ id: "shell.pane.back", title: "commands.palette", description: "commands.palette.desc", layer: "global", run: () => {} });
+    registerShellCommand({ id: "shell.palette", title: "commands.palette", description: "commands.palette.desc", layer: "global", run: () => {} });
+  });
+
+  afterEach(() => {
+    for (const lifetime of lifetimes) lifetime.close();
+    lifetimes.length = 0;
+    document.body.replaceChildren();
+    delete (navigator as { platform?: string }).platform;
+  });
+
+  function mount(on: string): string[] {
+    Object.defineProperty(navigator, "platform", { configurable: true, get: () => on });
+    const executed: string[] = [];
+    const lifetime = openLifetime();
+    lifetimes.push(lifetime);
+    mountKeyboard(lifetime, (entry) => executed.push(entry.id));
+    return executed;
+  }
+
+  function field(html: string): HTMLElement {
+    document.body.innerHTML = html;
+    return document.body.firstElementChild as HTMLElement;
+  }
+
+  function press(element: Element, init: KeyboardEventInit): KeyboardEvent {
+    const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+    element.dispatchEvent(event);
+    return event;
+  }
+
+  for (const on of ["Linux x86_64", "MacIntel"]) {
+    describe(on, () => {
+      const mod = on === "MacIntel" ? { metaKey: true } : { ctrlKey: true };
+
+      for (const html of ['<input type="text">', '<input type="search">', "<textarea></textarea>", '<div contenteditable="true"></div>']) {
+        it(`Alt+← in ${html} resta del campo`, () => {
+          const executed = mount(on);
+          const event = press(field(html), { key: "ArrowLeft", altKey: true });
+          expect(executed).toEqual([]);
+          expect(event.defaultPrevented).toBe(false);
+        });
+      }
+
+      it("Alt+← fuori da un campo va indietro", () => {
+        const executed = mount(on);
+        const event = press(field("<div tabindex='0'></div>"), { key: "ArrowLeft", altKey: true });
+        expect(executed).toEqual(["shell.pane.back"]);
+        expect(event.defaultPrevented).toBe(true);
+      });
+
+      it("Alt+← su una casella o un campo di sola lettura va indietro", () => {
+        const executed = mount(on);
+        press(field('<input type="checkbox">'), { key: "ArrowLeft", altKey: true });
+        press(field("<input readonly>"), { key: "ArrowLeft", altKey: true });
+        expect(executed).toEqual(["shell.pane.back", "shell.pane.back"]);
+      });
+
+      it("un accordo con Mod resta dell'app anche in un campo", () => {
+        const executed = mount(on);
+        press(field("<input>"), { key: "P", shiftKey: true, ...mod });
+        expect(executed).toEqual(["shell.palette"]);
+      });
+    });
+  }
+});

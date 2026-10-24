@@ -26,6 +26,7 @@ import {
   keyboardPlatform,
   type Waiting,
   type CommandEntry,
+  type KeyboardPlatform,
 } from "./commands";
 
 /// Gli accordi già premuti, se una sequenza è cominciata.
@@ -47,7 +48,9 @@ export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry)
       stopWaiting();
       return;
     }
-    const result = advance(allCommands(), waiting, e, keyboardPlatform(navigator.platform));
+    const platform = keyboardPlatform(navigator.platform);
+    if (waiting === null && yieldsToField(e, platform)) return;
+    const result = advance(allCommands(), waiting, e, platform);
     // L'unico esito che lascia passare il tasto. Gli altri tre sono gesti
     // dell'app, e un gesto dell'app non finisce anche dentro la nota.
     if (result.type === "passa") return;
@@ -61,6 +64,36 @@ export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry)
     stopWaiting();
     if (result.type === "esegue") execute(result.entry);
   });
+}
+
+/// I tipi di `input` in cui si scrive: lì un tasto muove il cursore o cancella.
+/// Una casella, un bottone o un cursore a scorrimento non hanno un tasto di
+/// testo da perdere.
+const TEXT_INPUTS = new Set(["", "text", "search", "email", "url", "tel", "password", "number", "date", "time"]);
+
+/// Un campo in cui si scrive: `input` di testo, `textarea`, `contenteditable`
+/// (CodeMirror compreso).
+function isTextField(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target instanceof HTMLTextAreaElement) return !target.readOnly && !target.disabled;
+  if (target instanceof HTMLInputElement) {
+    return TEXT_INPUTS.has(target.type.toLowerCase()) && !target.readOnly && !target.disabled;
+  }
+  return target.isContentEditable;
+}
+
+/// Un tasto dell'app non ruba un tasto di testo. Dentro un campo, un accordo
+/// senza Mod (⌘ su Mac, Ctrl altrove) resta del campo: Opzione+← è la parola
+/// precedente su Mac, Ctrl+A l'inizio della riga, Alt+← un salto in CodeMirror.
+/// Fuori dal campo lo stesso accordo torna dell'app (Alt+← va indietro).
+///
+/// I tasti funzione non scrivono e restano dell'app anche in un campo; il
+/// secondo tasto di una sequenza già cominciata è dell'app per definizione, e
+/// chi chiama lo lascia passare prima di arrivare qui.
+function yieldsToField(e: KeyboardEvent, platform: KeyboardPlatform): boolean {
+  const mod = platform === "mac" ? e.metaKey : e.ctrlKey;
+  if (mod || /^F\d{1,2}$/.test(e.key)) return false;
+  return isTextField(e.target);
 }
 
 /// Solo per i banchi e per chi chiude un vault: una sequenza a metà che
