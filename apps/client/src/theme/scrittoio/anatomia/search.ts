@@ -17,6 +17,7 @@ export const SEARCH: PartAnatomy = {
         "hit-context",
         "hit-occurrence",
         "hit-create",
+        "skeleton",
       ],
     },
     // Le linguette: strumenti in testa, «Escludi» sul risultato, esclusioni accese.

@@ -2643,6 +2643,22 @@ describe("cerca", () => {
     expect(transfer.effectAllowed).toBe("copy");
   });
 
+  it("una ricerca che tarda mostra la sagoma dei risultati, e la toglie quando arrivano", async () => {
+    const host = await start(VAULT);
+    const unlock = host.throttle("queryIndex");
+    const field = document.querySelector<HTMLInputElement>("#search-input")!;
+    field.value = "arance";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    const results = document.querySelector<HTMLElement>("#search-results")!;
+    await waitFor("la sagoma compare", () => results.querySelector(":scope > li.skeleton") !== null);
+    expect(results.getAttribute("aria-busy")).toBe("true");
+    expect(results.querySelector(".skeleton")!.getAttribute("aria-hidden")).toBe("true");
+    unlock();
+    await waitFor("i risultati arrivano", () => results.querySelectorAll("li > button.search-result").length > 0);
+    expect(results.querySelector(".skeleton")).toBeNull();
+    expect(results.hasAttribute("aria-busy")).toBe(false);
+  });
+
   it("esclusa l'unica nota, la lista offre di togliere le esclusioni", async () => {
     await start(VAULT);
     const field = document.querySelector<HTMLInputElement>("#search-input")!;

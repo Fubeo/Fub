@@ -64,6 +64,36 @@ html, body, .app {
   font-size: var(--text-sm);
 }
 
+/* Lo scheletro: righe del colore del passaggio al posto di ciò che tarda.
+   Fermo: l'attesa non ha bisogno di luccicare. Le righe si accorciano a
+   turno, come un testo. */
+.skeleton {
+  display: block;
+  padding: var(--space-3) var(--space-4);
+}
+.skeleton-line {
+  display: block;
+  height: 0.75em;
+  border-radius: var(--radius-chip);
+  background: var(--bg-hover);
+}
+.skeleton-line + .skeleton-line {
+  margin-top: var(--space-4);
+}
+/* La sagoma di un elenco di righe, al passo di quelle vere. */
+.skeleton-rows {
+  padding: var(--space-5) var(--space-6);
+}
+.skeleton-rows .skeleton-line + .skeleton-line {
+  margin-top: var(--space-7);
+}
+.skeleton-line:nth-child(3n + 2) {
+  width: 72%;
+}
+.skeleton-line:nth-child(3n) {
+  width: 48%;
+}
+
 /* Il bottone nudo è un fantasma: niente fondo finché non lo si sfiora. Sta a
    specificità zero, così un componente che gli dà una classe decide da solo
    anche il proprio passaggio, senza doverlo disfare. */
@@ -2800,6 +2830,13 @@ kbd,
 }
 .search-results li:hover {
   background: var(--bg-hover);
+}
+/* La sagoma dei risultati che tardano è una riga sola, ferma e senza
+   passaggio: non c'è niente da scegliere. */
+.search-results li.skeleton,
+.search-results li.skeleton:hover {
+  display: block;
+  background: transparent;
 }
 /* Premuta è il risultato a esserlo, non una sua azione: la riga scurisce
    solo quando il dito è sul nome. */

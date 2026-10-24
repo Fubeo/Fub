@@ -49,6 +49,13 @@
 .search-results li:hover {
   background: var(--bg-hover);
 }
+/* La sagoma dei risultati che tardano è una riga sola, ferma e senza
+   passaggio: non c'è niente da scegliere. */
+.search-results li.skeleton,
+.search-results li.skeleton:hover {
+  display: block;
+  background: transparent;
+}
 /* Premuta è il risultato a esserlo, non una sua azione: la riga scurisce
    solo quando il dito è sul nome. */
 .search-results li:has(> .search-result:active) {

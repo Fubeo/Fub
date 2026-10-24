@@ -27,6 +27,7 @@ import { ClipboardUnavailable, writeClipboardText } from "../platform/clipboard"
 import { offerNote } from "../ui/drag-types";
 import { offerOutside } from "../ui/vault-transfer";
 import { openVaultRoot } from "../state/store";
+import { skeleton, SKELETON_DELAY_MS } from "../ui/skeleton";
 
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchSummaryEl = $("#search-summary");
@@ -203,11 +204,21 @@ function testoP8(chiave: ChiaveP8, mostrati = 0, totale = 0): string {
       return t("search.more", { shown: mostrati, total: totale });
   }
 }
+/// Le righe dello scheletro dei risultati.
+const SKELETON_ROWS = 4;
+
+/// Toglie i segni dell'attesa: la sagoma, se c'è, e `aria-busy`.
+function stopWaiting(): void {
+  searchResultsEl.removeAttribute("aria-busy");
+  searchResultsEl.querySelector(":scope > .skeleton")?.remove();
+}
+
 async function runSearch(): Promise<void> {
   const query = searchInputEl.value.trim();
   drawExclusions();
   if (!query) {
     race.cancel();
+    stopWaiting();
     searchResultsEl.innerHTML = "";
     searchSummaryEl.textContent = "";
     return;
@@ -223,20 +234,24 @@ async function runSearch(): Promise<void> {
   } catch (error) {
     if (error instanceof SearchSyntaxError) {
       race.cancel();
+      stopWaiting();
       searchSummaryEl.textContent = t("search.syntax_incomplete", { reason: error.message });
       return;
     }
     showSearchResults([], errorText(error), false, 0);
     return;
   }
-  // Caricamento: si mostra solo se il giro è ancora l'ultimo dopo 180ms, così
-  // una risposta rapida non lampeggia.
+  // Caricamento: si mostra solo se il giro è ancora l'ultimo dopo
+  // `SKELETON_DELAY_MS`, così una risposta rapida non lampeggia. Un elenco
+  // ancora vuoto mostra la sagoma dei risultati; uno pieno resta dov'è.
   const slow = window.setTimeout(() => {
     if (searchInputEl.value.trim() === query) {
       searchSummaryEl.textContent = testoP8("search.loading");
+      searchResultsEl.setAttribute("aria-busy", "true");
+      if (searchResultsEl.childElementCount === 0) searchResultsEl.append(skeleton(SKELETON_ROWS, "li"));
       showPanel("search");
     }
-  }, 180);
+  }, SKELETON_DELAY_MS);
   await race.last(async (expected) => {
     try {
       // Ciò che l'utente digita è **testo cercato**, non una sintassi: la stringa
@@ -326,6 +341,7 @@ function showSearchResults(
   total = hits.length,
 ): void {
   showPanel("search");
+  stopWaiting();
   // Il conteggio è un **argomento**, non una parola declinata: «1 risultato»
   // e «2 risultati» erano due rami di un ternario, che è la forma che una
   // lingua con tre plurali non può scrivere. Vale qui come vale in Rust, dove

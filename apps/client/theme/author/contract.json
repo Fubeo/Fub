@@ -165,6 +165,9 @@
     "elevation-dialog",
     "skip-link",
     "muted",
+    "skeleton",
+    "skeleton-line",
+    "skeleton-rows",
     "primary",
     "ui-button",
     "intent-primary",
@@ -1460,6 +1463,18 @@
       ]
     },
     {
+      "name": "skeleton",
+      "part": "foundation",
+      "hooks": [
+        "skeleton",
+        "skeleton-line",
+        "skeleton-rows"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
       "name": "button-intent",
       "part": "foundation",
       "hooks": [
@@ -2118,7 +2133,8 @@
         "hit-snippet",
         "hit-context",
         "hit-occurrence",
-        "hit-create"
+        "hit-create",
+        "skeleton"
       ],
       "states": [
         "rest",
@@ -5512,10 +5528,10 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1210,
+    "hooks": 1213,
     "state_names": 7,
-    "assigned_states": 631,
-    "components": 187,
+    "assigned_states": 632,
+    "components": 188,
     "preference_tokens": 123
   }
 }

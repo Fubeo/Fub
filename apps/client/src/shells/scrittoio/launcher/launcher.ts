@@ -24,6 +24,7 @@ import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { notify } from "../../../ui/notify";
 import { scopeLabel } from "../../../ui/palette";
 import { Race } from "../../../ui/race";
+import { skeleton, SKELETON_DELAY_MS } from "../../../ui/skeleton";
 import { step, toSearchPanel } from "./actions";
 import { declareLauncherCommands } from "./commands";
 import {
@@ -45,8 +46,11 @@ import { answersAtOnce, listing, type Listing, type Row } from "./sources";
 /// Quanto si aspetta dopo l'ultima battuta prima di chiedere a una sorgente
 /// che risponde da lontano (ms).
 export const ASK_DELAY_MS = 120;
-/// Dopo quanto una risposta che non arriva si dice (ms).
-export const SLOW_AFTER_MS = 180;
+/// Dopo quanto una risposta che non arriva si dice (ms). Un elenco ancora
+/// vuoto mostra intanto la sagoma delle righe.
+export const SLOW_AFTER_MS = SKELETON_DELAY_MS;
+/// Le righe della sagoma dell'elenco.
+const SKELETON_ROWS = 5;
 
 export interface Launcher {
   /// Apre in un modo; se è già aperto, ci passa. Con `text` la domanda è
@@ -230,10 +234,18 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       race.cancel();
     });
 
+    const shape = skeleton(SKELETON_ROWS, "div", true);
     const setBusy = (on: boolean): void => {
       if (surface.hasAttribute("data-busy") === on) return;
       surface.toggleAttribute("data-busy", on);
       if (on) status.textContent = t("launcher.status.waiting");
+      // La sagoma solo dove non c'è niente: un elenco pieno resta dov'è.
+      if (on && input.getAttribute("aria-expanded") !== "true") {
+        note.hidden = true;
+        results.prepend(shape);
+      } else {
+        shape.remove();
+      }
     };
 
     const drawRow = (row: Row, cell: HTMLElement): void => {
