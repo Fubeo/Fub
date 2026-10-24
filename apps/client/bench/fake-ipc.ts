@@ -423,7 +423,7 @@ const SETTINGS: SettingEntry[] = [
     spec: {
       key: "appearance.theme",
       label: "Tema",
-      description: "In che luce si guarda Fub. Vuoto = come il sistema.",
+      description: "In che luce si guarda Fub. «Come il sistema» segue il sistema operativo.",
       group: "Aspetto",
       scope: "machine",
       kind: {
@@ -465,7 +465,7 @@ const SETTINGS: SettingEntry[] = [
     spec: {
       key: "appearance.density",
       label: "Densità",
-      description: "Compatta o allarga la spaziatura dei componenti senza muovere la scocca.",
+      description: "Compatta o allarga la spaziatura dei controlli senza cambiare la disposizione dei pannelli.",
       group: "Aspetto",
       scope: "machine",
       kind: {
@@ -547,8 +547,8 @@ const SETTINGS: SettingEntry[] = [
   {
     spec: {
       key: "appearance.accent",
-      label: "Tinta dell'accento (0–360)",
-      description: "Tinta OKLCH; chiarezza e croma vengono derivati per mantenere il contrasto.",
+      label: "Tinta dell'accento",
+      description: "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.",
       group: "Aspetto",
       scope: "machine",
       kind: { kind: "number", default: 265, min: 0, max: 360 },
@@ -562,7 +562,7 @@ const SETTINGS: SettingEntry[] = [
     spec: {
       key: "appearance.zoom",
       label: "Zoom interfaccia",
-      description: "Scala nativa della finestra, da 0,5 a 2.",
+      description: "Quanto è grande tutta l'interfaccia, dal 50% al 200%.",
       group: "Aspetto",
       scope: "machine",
       kind: { kind: "number", default: 1, min: 0.5, max: 2 },

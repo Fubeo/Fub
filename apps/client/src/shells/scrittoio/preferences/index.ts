@@ -15,6 +15,7 @@ import { dressRow, type Piece } from "./rows";
 import { mountScrim } from "./scrim";
 import { spaceControl } from "./space-control";
 import { themeSettings } from "./theme-settings";
+import { zoomControl } from "./zoom-control";
 
 /// L'esito di una scrittura rifiutata va sotto il controllo che l'ha chiesta:
 /// la vista lo mette in coda al testo della riga, a sinistra, lontano dal gesto.
@@ -34,6 +35,7 @@ export function mountPreferences(lifetime: Lifetime): void {
   const pieces: Piece[] = [
     dressRow(lifetime, body, spaceControl(lifetime)),
     dressRow(lifetime, body, accentControl(lifetime, panel)),
+    dressRow(lifetime, body, zoomControl(lifetime)),
     appearancePreview(lifetime, body),
     themeSettings(lifetime, panel, body),
     () => outcomesUnderControls(body),

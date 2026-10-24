@@ -32,6 +32,18 @@
 
 /* ── Lo spazio dell'interfaccia ──────────────────────────────────────────── */
 
+/* Lo zoom: il cursore della vista, e accanto il valore in percento. */
+.prefs-zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+.prefs-zoom-value {
+  min-width: 72px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .prefs-space {
   display: flex;
   flex-direction: column;

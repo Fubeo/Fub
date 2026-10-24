@@ -398,6 +398,7 @@ export const IT = { // --- la scocca -------------------------------------------
 
 // --- Scrittoio, le preferenze: spazio dell'interfaccia, accento, voci del tema, anteprima
 "prefs.space.more_frame": "Più interfaccia",
+"prefs.zoom.value": "{percent}%",
 "prefs.space.more_sheet": "Più foglio",
 "prefs.space.step": "{name}, passo {step} di {steps}",
 "prefs.space.step.0": "Ampia",
@@ -2923,6 +2924,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "launcher.preview.empty": "This note is empty.",
 
 "prefs.space.more_frame": "More interface",
+"prefs.zoom.value": "{percent}%",
 "prefs.space.more_sheet": "More sheet",
 "prefs.space.step": "{name}, step {step} of {steps}",
 "prefs.space.step.0": "Roomy",

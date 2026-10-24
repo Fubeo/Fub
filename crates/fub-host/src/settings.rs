@@ -1826,15 +1826,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FONT_MONO_DESC, "Famiglia a spaziatura fissa del codice e del sorgente.")
         .with(C_FONT_PLEX, "IBM Plex Mono")
         .with(C_FONT_JETBRAINS, "JetBrains Mono")
-        .with(C_ACCENT, "Tinta dell'accento (0–360)")
+        .with(C_ACCENT, "Tinta dell'accento")
         .with(
             C_ACCENT_DESC,
-            "Tinta OKLCH; chiarezza e croma vengono derivati per mantenere il contrasto.",
+            "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.",
         )
         .with(C_COMPACTNESS, "Spazio dell'interfaccia")
         .with(C_COMPACTNESS_DESC, "Quanto posto prendono barre, binario e cassetti: da 0, ampia, a 4, minima. Il foglio e le sue linguette non cambiano.")
         .with(C_ZOOM, "Zoom interfaccia")
-        .with(C_ZOOM_DESC, "Scala nativa della finestra, da 0,5 a 2.")
+        .with(C_ZOOM_DESC, "Quanto è grande tutta l'interfaccia, dal 50% al 200%.")
         .with(C_THEME_ID, "Tema installato")
         .with(C_THEME_ID_DESC, "L'id del tema montato; si sceglie dal catalogo dei temi.")
         .with(C_MOTION, "Animazioni")
@@ -2319,15 +2319,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FONT_MONO_DESC, "Monospaced font family for code and source.")
         .with(C_FONT_PLEX, "IBM Plex Mono")
         .with(C_FONT_JETBRAINS, "JetBrains Mono")
-        .with(C_ACCENT, "Accent hue (0–360)")
+        .with(C_ACCENT, "Accent hue")
         .with(
             C_ACCENT_DESC,
-            "OKLCH hue; lightness and chroma are derived to preserve contrast.",
+            "The colour of links, focus and selection. Lightness and intensity adapt by themselves to stay readable.",
         )
         .with(C_COMPACTNESS, "Interface space")
         .with(C_COMPACTNESS_DESC, "How much room bars, rail and drawers take: from 0, roomy, to 4, minimal. The sheet and its tabs do not change.")
         .with(C_ZOOM, "Interface zoom")
-        .with(C_ZOOM_DESC, "Native window scale, from 0.5 to 2.")
+        .with(C_ZOOM_DESC, "How large the whole interface is, from 50% to 200%.")
         .with(C_THEME_ID, "Installed theme")
         .with(C_THEME_ID_DESC, "The id of the mounted theme; chosen from the theme catalog.")
         .with(C_MOTION, "Animations")

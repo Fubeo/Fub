@@ -504,3 +504,33 @@ describe("la finestra delle preferenze", () => {
     expect(document.querySelector(".prefs-space")).toBeNull();
   });
 });
+
+describe("lo zoom dell'interfaccia", () => {
+  const ZOOM = "appearance.zoom";
+  const withZoom = (): SettingEntry[] => [...entries(), entry(ZOOM, { kind: "number", default: 1, min: 0.5, max: 2 }, 1)];
+  const slider = (): HTMLInputElement => document.getElementById("prefs-zoom-range") as HTMLInputElement;
+  const readout = (): string => row(ZOOM).querySelector(".prefs-zoom-value")!.textContent ?? "";
+
+  it("si legge in percento, e si scrive come fattore dalla strada della riga", async () => {
+    await openPanel(withZoom());
+    expect(native(ZOOM).closest<HTMLElement>(".setting-range")!.hidden).toBe(true);
+    expect(slider().value).toBe("100");
+    expect(readout()).toBe("100%");
+    expect(slider().getAttribute("aria-valuetext")).toBe("100%");
+    expect(row(ZOOM).querySelector(".setting-default")?.textContent ?? "").not.toContain(" 1");
+    slider().value = "150";
+    slider().dispatchEvent(new Event("input", { bubbles: true }));
+    expect(readout()).toBe("150%");
+    slider().dispatchEvent(new Event("change", { bubbles: true }));
+    await settled();
+    expect(fake.setSetting).toHaveBeenCalledWith(ZOOM, 1.5);
+    expect(readout()).toBe("150%");
+  });
+
+  it("segue un valore cambiato da fuori", async () => {
+    await openPanel(withZoom());
+    await changedOutside(ZOOM, 0.8);
+    expect(slider().value).toBe("80");
+    expect(readout()).toBe("80%");
+  });
+});
