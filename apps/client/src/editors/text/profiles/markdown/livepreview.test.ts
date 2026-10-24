@@ -102,6 +102,40 @@ describe("enfasi", () => {
   });
 });
 
+describe("apici, pedici, elenchi e note", () => {
+  it("`^apice^` e `~pedice~` come in Lettura: segni nascosti, contenuto marcato", () => {
+    const doc = "x^2^ e H~2~O";
+    const ds = decorate(doc);
+    expect(ofKind(ds, "hide").map((d) => [d.from, d.to])).toEqual([[1, 2], [3, 4], [8, 9], [10, 11]]);
+    expect(ofKind(ds, "sup")).toEqual([{ from: 2, to: 3, kind: "sup" }]);
+    expect(ofKind(ds, "sub")).toEqual([{ from: 9, to: 10, kind: "sub" }]);
+    const active = decorate(doc, [1]);
+    expect(ofKind(active, "hide")).toEqual([]);
+    expect(ofKind(active, "sup")).toHaveLength(1);
+  });
+
+  it("il segno di una voce puntata diventa un pallino fuori dalla riga attiva", () => {
+    const doc = "- uno\n* due\n1. tre\n- [ ] cosa";
+    expect(ofKind(decorate(doc), "list-bullet")).toEqual([
+      { from: 0, to: 1, kind: "list-bullet" },
+      { from: 6, to: 7, kind: "list-bullet" },
+      { from: 19, to: 20, kind: "list-bullet", data: "task" },
+    ]);
+    expect(ofKind(decorate(doc, [1, 4]), "list-bullet")).toEqual([
+      { from: 6, to: 7, kind: "list-bullet" },
+    ]);
+  });
+
+  it("il rimando a una nota definita diventa il suo apice; senza definizione resta testo", () => {
+    const doc = "Vedi[^uno] e[^due].\n\n[^uno]: la nota";
+    const ds = decorate(doc);
+    expect(ofKind(ds, "sup")).toEqual([{ from: 6, to: 9, kind: "sup" }]);
+    expect(ofKind(ds, "hide").map((d) => [d.from, d.to])).toEqual([[4, 6], [9, 10]]);
+    expect(ofKind(ds, "link")).toEqual([]);
+    expect(ofKind(decorate(doc, [1]), "sup")).toEqual([]);
+  });
+});
+
 describe("codice", () => {
   it("inline: backtick nascosti fuori riga attiva, contenuto marcato", () => {
     const doc = "vedi `codice` qui";
@@ -121,10 +155,18 @@ describe("codice", () => {
 });
 
 describe("citazioni e righello", () => {
-  it("la citazione marca il `>` e la riga", () => {
-    const ds = decorate("> citazione");
+  it("sulla riga attiva la citazione marca il `>` e la riga", () => {
+    const ds = decorate("> citazione", [1]);
     expect(ofKind(ds, "quote-line")).toEqual([{ from: 0, to: 0, kind: "quote-line" }]);
     expect(ofKind(ds, "quote-mark")).toContainEqual({ from: 0, to: 1, kind: "quote-mark" });
+    expect(ofKind(ds, "hide")).toEqual([]);
+  });
+
+  it("fuori dalla riga attiva il `>` sparisce con il suo spazio, il filo resta", () => {
+    const ds = decorate("> citazione\n>stretta");
+    expect(ofKind(ds, "quote-line")).toHaveLength(2);
+    expect(ofKind(ds, "quote-mark")).toEqual([]);
+    expect(ofKind(ds, "hide").map((d) => [d.from, d.to])).toEqual([[0, 2], [12, 13]]);
   });
 
   it("`---` diventa un righello fuori dalla riga attiva, resta sorgente sopra", () => {
@@ -426,6 +468,7 @@ describe("commenti, formule in riga, ID di blocco ed embed dimensionati", () => 
     // e note in riga restano sorgente.
     const wrap: Partial<Record<LiveDecoKind, [string, string]>> = {
       em: ["*", "*"], strong: ["**", "**"], highlight: ["=(", ")="], wikilink: ["[[", "]]"], link: ["[", "]"],
+      sup: ["^(", ")^"],
     };
     const written = (source: string) => {
       const hidden = new Set<number>();
@@ -452,7 +495,7 @@ describe("commenti, formule in riga, ID di blocco ed embed dimensionati", () => 
       ["==a #b c== z", "==a #b c== z"],
       ["==a [l](u) c== z", "==a [l] c== z"],
       ["==a <b>x</b> c== z", "==a <b>x</b> c== z"],
-      ["==a [^1] c== z\n\n[^1]: n", "==a [^1] c== z"],
+      ["==a [^1] c== z\n\n[^1]: n", "==a ^(1)^ c== z"],
       ["==a [^no] c== z", "==a [^no] c== z"],
       ["%%a *b* c%% z", "%%a *b* c%% z"],
       ["*a %%b* c%% z", "*a %%b* c%% z"],

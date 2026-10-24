@@ -29,6 +29,7 @@ import {
 } from "../../../../rules/syntax";
 import { findTrailingAnchor, frontmatterRange, linkReferences, paragraphMathBlock, renderMarkdownState } from "./render";
 import { decodeDestination, normalizeLabel } from "./link-syntax";
+import { FOOTNOTE_DEFINITION } from "./grammar";
 import type { MarkdownBlock, MarkdownDocument, MarkdownLinkDefinition, MountMarkdown } from "./render-types";
 import { mountMarkdown } from "./mount";
 import { mountMathBlocks } from "./math";
@@ -105,6 +106,11 @@ export type LiveDecoKind =
   | "tag"
   | "done"
   | "quote-mark"
+  | "sup"
+  | "sub"
+  // il segno di una voce d'elenco puntato fuori dalla riga attiva: un pallino
+  // largo quanto il segno, o niente davanti a una casella (`data` "task")
+  | "list-bullet"
   // decorazioni di riga (from == to == inizio riga)
   | "quote-line"
   | "codeblock-line";
@@ -146,15 +152,27 @@ const ATTR_HREF = "data-fub-href";
 /// I nodi in riga che l'albero decora o sottrae al livello regex, e i
 /// marcatori che si nascondono col loro nodo.
 const INLINE_SYNTAX = new Set([
-  "StrongEmphasis", "Emphasis", "Strikethrough", "InlineCode", "URL", "HTMLTag", "Comment", "Image", "Link",
+  "StrongEmphasis", "Emphasis", "Strikethrough", "Superscript", "Subscript", "InlineCode", "URL", "HTMLTag", "Comment",
+  "Image", "Link",
 ]);
-const INLINE_MARKS = new Set(["EmphasisMark", "StrikethroughMark"]);
+const INLINE_MARKS = new Set(["EmphasisMark", "StrikethroughMark", "SuperscriptMark", "SubscriptMark"]);
 
 /// Senza pagina e senza punto (`[[]]`, `[[ ]]`) un wikilink non nomina niente
 /// (cfr. `names_host` nel contratto): niente hide, niente mark, niente click.
 /// `[[#Sezione]]` nomina questa nota e resta.
 function namesSomething(w: FoundWikilink): boolean {
   return w.page.trim() !== "" || (w.heading ?? "") !== "" || (w.block ?? "").trim() !== "";
+}
+
+/// Le etichette delle note definite nel documento (`[^etichetta]:` in testa a
+/// una riga), normalizzate come le legge la Lettura.
+function footnoteLabels(doc: EditorState["doc"]): ReadonlySet<string> {
+  const labels = new Set<string>();
+  for (let n = 1; n <= doc.lines; n++) {
+    const found = FOOTNOTE_DEFINITION.exec(doc.line(n).text);
+    if (found) labels.add(normalizeLabel(found[1]!));
+  }
+  return labels;
 }
 
 /// La funzione pura al centro del modulo: dallo stato (albero Lezer + testo)
@@ -278,6 +296,7 @@ export function computeDecorations(
   // riferimento si risolve con le definizioni della Lettura, lette una volta
   // sola e soltanto quando serve (L02).
   let references: ReadonlyMap<string, MarkdownLinkDefinition> | null = null;
+  let footnotes: ReadonlySet<string> | null = null;
   const inlineImage = (node: SyntaxNode): string | null => {
     if (doc.lineAt(node.from).number !== doc.lineAt(node.to).number) return null;
     const marks = node.getChildren("LinkMark");
@@ -366,6 +385,8 @@ export function computeDecorations(
         // della riga attiva, e nessun replace attraversa il fine riga.
         case "EmphasisMark":
         case "StrikethroughMark":
+        case "SuperscriptMark":
+        case "SubscriptMark":
           if (!active(node.from)) out.push({ from: node.from, to: node.to, kind: "hide" });
           return;
         case "StrongEmphasis":
@@ -376,6 +397,12 @@ export function computeDecorations(
           return;
         case "Strikethrough":
           markContent(node, "StrikethroughMark", "strike");
+          return;
+        case "Superscript":
+          markContent(node, "SuperscriptMark", "sup");
+          return;
+        case "Subscript":
+          markContent(node, "SubscriptMark", "sub");
           return;
 
         case "InlineCode": {
@@ -401,8 +428,24 @@ export function computeDecorations(
         case "Blockquote":
           forRow(node, quoteRows, "quote-line");
           return; // i figli (QuoteMark, paragrafi con enfasi) proseguono
+        // Fuori dalla riga attiva il `>` sparisce con lo spazio che lo segue,
+        // come i `#` di un titolo: della citazione resta il filo a sinistra.
         case "QuoteMark":
-          out.push({ from: node.from, to: node.to, kind: "quote-mark" });
+          if (active(node.from)) out.push({ from: node.from, to: node.to, kind: "quote-mark" });
+          else {
+            const end = doc.sliceString(node.to, node.to + 1) === " " ? node.to + 1 : node.to;
+            out.push({ from: node.from, to: end, kind: "hide" });
+          }
+          return;
+
+        // Il `-`, `*` o `+` di una voce puntata diventa un pallino: una
+        // decorazione sul segno, che tiene la sua larghezza, e il clic resta
+        // dove cade. Una voce con la casella ha già il suo segno.
+        case "ListMark":
+          if (node.node.parent?.parent?.name === "BulletList" && !active(node.from)) {
+            const task = node.node.nextSibling?.name === "Task";
+            out.push({ from: node.from, to: node.to, kind: "list-bullet", data: task ? "task" : undefined });
+          }
           return;
 
         case "HorizontalRule":
@@ -446,6 +489,19 @@ export function computeDecorations(
           // cuore di un `[[wikilink]]`, che il parser non conosce: qui non si
           // tocca niente, altrimenti i suoi `[`/`]` nascosti si accavallano
           // ai replace del livello regex.
+          // Il rimando a una nota diventa il suo apice, se la nota c'è: come in
+          // Lettura, dove un rimando senza definizione resta testo.
+          if (FOOTNOTE_REFERENCE.test(doc.sliceString(node.from, node.to))) {
+            const label = normalizeLabel(doc.sliceString(node.from + 2, node.to - 1));
+            const line = doc.lineAt(node.from);
+            const definition = line.from === node.from && FOOTNOTE_DEFINITION.test(line.text);
+            if (!definition && !active(node.from) && (footnotes ??= footnoteLabels(doc)).has(label)) {
+              out.push({ from: node.from, to: node.from + 2, kind: "hide" });
+              out.push({ from: node.from + 2, to: node.to - 1, kind: "sup" });
+              out.push({ from: node.to - 1, to: node.to, kind: "hide" });
+            }
+            return false;
+          }
           if (marks.length < 2 || !node.node.getChildren("URL").length) return;
           const textFrom = marks[0].to;
           const textEnd = marks[1].from;
@@ -758,8 +814,10 @@ const HEADING_LINES: Partial<Record<LiveDecoKind, Decoration>> = Object.fromEntr
   ),
 );
 const quoteLine = Decoration.line({ class: "cm-fub-quote" });
+const bulletMark = Decoration.mark({ class: "cm-fub-bullet" });
+const taskMark = Decoration.mark({ class: "cm-fub-bullet cm-fub-bullet-task" });
 const marksMap: Partial<Record<LiveDecoKind, Decoration>> = Object.fromEntries(
-  (["h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "strike", "code", "link", "highlight", "done", "quote-mark"] as const).map(
+  (["h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "strike", "sup", "sub", "code", "link", "highlight", "done", "quote-mark"] as const).map(
     (kind) => [kind, Decoration.mark({ class: `cm-fub-${kind}` })],
   ),
 );
@@ -778,6 +836,8 @@ function inDecoration(d: LiveDeco, callbacks: LivePreviewCallbacks): Decoration 
       return Decoration.replace({ widget: new InlineImageWidget(d.data ?? "", callbacks) });
     case "codeblock-line":
       return codeLine;
+    case "list-bullet":
+      return d.data === "task" ? taskMark : bulletMark;
     case "quote-line":
       return quoteLine;
     // Il payload viaggia nel DOM come data-attribute: il gestore del click
@@ -912,6 +972,20 @@ const theme = EditorView.baseTheme({
   ".cm-fub-strong": { fontWeight: "700" },
   ".cm-fub-em": { fontStyle: "italic" },
   ".cm-fub-strike": { textDecoration: "line-through" },
+  ".cm-fub-sup": { verticalAlign: "super", fontSize: "0.75em", lineHeight: "0" },
+  ".cm-fub-sub": { verticalAlign: "sub", fontSize: "0.75em", lineHeight: "0" },
+  // Il segno resta nel testo, trasparente: il pallino gli sta sopra, largo
+  // quanto lui.
+  ".cm-fub-bullet, .cm-fub-bullet *": { color: "transparent" },
+  ".cm-fub-bullet": { position: "relative" },
+  ".cm-fub-bullet::before": {
+    content: '"•"',
+    position: "absolute",
+    left: "50%",
+    transform: "translateX(-50%)",
+    color: "var(--muted, rgba(135, 135, 135, 0.9))",
+  },
+  ".cm-fub-bullet-task::before": { content: "none" },
   ".cm-fub-code": {
     background: "var(--doc-fill, rgba(135, 135, 135, 0.16))",
     fontFamily: "var(--font-mono, monospace)",

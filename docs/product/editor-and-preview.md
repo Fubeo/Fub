@@ -145,6 +145,12 @@ vedono attenuati sulla riga del cursore. Come nel provider, evidenziati e
 commenti non contengono né attraversano link, wikilink, tag, codice, enfasi,
 formule o note in riga, e una nota in riga attraversata si perde.
 
+Fuori dalla riga del cursore Live nasconde anche il `>` di una citazione (resta
+il filo a sinistra) e i segni di apice `^…^` e pedice `~…~`; il segno di una
+voce puntata diventa un pallino largo quanto lui, e un rimando `[^nota]` a una
+nota definita diventa il suo apice. Un rimando senza definizione resta testo,
+come in Lettura. I byte del file non cambiano.
+
 Immagini e media del vault si risolvono con la regola dei link del kernel:
 un'immagine Markdown con path relativo parte dalla nota, un embed `![[nome]]`
 si cerca per nome. I byte arrivano dal
