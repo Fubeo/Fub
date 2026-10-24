@@ -56,7 +56,7 @@ processo hanno un tracker dedicato.
 
 Prerequisiti supportati dal repository:
 
-- Rust **1.89**;
+- Rust **1.95**;
 - Node.js **>=22.12.0** e npm;
 - dipendenze native richieste da Tauri v2 sul sistema operativo.
 

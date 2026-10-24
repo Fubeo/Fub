@@ -77,9 +77,9 @@ Il protocollo globale e la sua orchestrazione host si verificano separatamente
 dal drill storico di backup/restore per-file:
 
 ```bash
-cargo +1.89.0 test -p fub-kernel snapshot
-cargo +1.89.0 test -p fub-host --test global_snapshot
-cargo +1.89.0 test -p fub-app --test schemas_on_disk
+cargo +1.95.0 test -p fub-kernel snapshot
+cargo +1.95.0 test -p fub-host --test global_snapshot
+cargo +1.95.0 test -p fub-app --test schemas_on_disk
 ```
 
 I primi due comandi esercitano manifest, preflight, transazione, recovery e
@@ -92,7 +92,7 @@ indicato nella sezione seguente.
 Il banco d'integrazione eseguibile è:
 
 ```bash
-cargo +1.89.0 test -p fub-host --lib legacy_tests::backup_restore_drill -- --nocapture
+cargo +1.95.0 test -p fub-host --lib legacy_tests::backup_restore_drill -- --nocapture
 ```
 
 Il fixture copre l'intero vault: documenti Markdown, allegati binari, file

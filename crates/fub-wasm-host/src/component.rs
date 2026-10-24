@@ -528,6 +528,16 @@ fn wasi_random_bytes(len: u64) -> wasmtime::Result<Vec<u8>> {
     Ok(bytes)
 }
 
+/// L'interfaccia di `wasi:random` 0.2 che `name` importa (`random` o
+/// `insecure-seed`), a qualunque patch: la std di Rust ne cambia la versione
+/// con la toolchain, e le forme delle due interfacce non cambiano nella 0.2.
+fn wasi_random_interface(name: &str) -> Option<&str> {
+    let (interface, version) = name.strip_prefix("wasi:random/")?.split_once('@')?;
+    let patch = version.strip_prefix("0.2.")?;
+    let known = matches!(interface, "random" | "insecure-seed");
+    (known && !patch.is_empty() && patch.bytes().all(|b| b.is_ascii_digit())).then_some(interface)
+}
+
 /// Tappa con trap gli import non serviti dal contratto, senza aprire WASI sul
 /// sistema operativo dell'host.
 fn cap_the_rest(
@@ -537,7 +547,24 @@ fn cap_the_rest(
 ) -> wasmtime::Result<()> {
     let ty = component.component_type();
     for (name, item) in ty.imports(engine) {
-        if name == "wasi:random/random@0.2.3" {
+        let random = wasi_random_interface(name);
+        if random == Some("insecure-seed") {
+            // Il seme delle `HashMap` della std di Rust dalla 1.95: lo si dà
+            // dal generatore del sistema, che basta anche al caso «insicuro».
+            let mut instance = linker.instance(name)?;
+            instance.func_new("insecure-seed", |_, _, results| {
+                let bytes = wasi_random_bytes(16)?;
+                let word = |at: usize| {
+                    let mut word = [0u8; 8];
+                    word.copy_from_slice(&bytes[at..at + 8]);
+                    Val::U64(u64::from_le_bytes(word))
+                };
+                results[0] = Val::Tuple(vec![word(0), word(8)]);
+                Ok(())
+            })?;
+            continue;
+        }
+        if random == Some("random") {
             // Il caso **sicuro** che WASI promette, dal generatore del sistema:
             // un guest che ci fa un uuid o una chiave non deve ricevere sempre
             // gli stessi byte (I70). Nessun'altra porta di WASI si apre.
@@ -1522,8 +1549,8 @@ impl Plugin for FailedPlugin {
 mod tests {
     use super::{
         enter_instance, is_supported_format_export, resolve_format_indices,
-        select_supported_export, unsupported_versioned_export, wasi_random_bytes, FORMAT_EXPORT,
-        FORMAT_INTERFACE, WASI_RANDOM_LIMIT,
+        select_supported_export, unsupported_versioned_export, wasi_random_bytes,
+        wasi_random_interface, FORMAT_EXPORT, FORMAT_INTERFACE, WASI_RANDOM_LIMIT,
     };
     use std::sync::Mutex;
 
@@ -1541,6 +1568,29 @@ mod tests {
             64 * 1024
         );
         assert!(wasi_random_bytes(WASI_RANDOM_LIMIT + 1).is_err());
+    }
+    /// `random` e `insecure-seed` si servono a ogni patch della 0.2: la std
+    /// della 1.89 importa `random@0.2.3`, quella della 1.95
+    /// `insecure-seed@0.2.4` e `@0.2.6`.
+    #[test]
+    fn wasi_random_is_served_at_every_patch_of_0_2() {
+        assert_eq!(
+            wasi_random_interface("wasi:random/random@0.2.3"),
+            Some("random")
+        );
+        assert_eq!(
+            wasi_random_interface("wasi:random/random@0.2.6"),
+            Some("random")
+        );
+        assert_eq!(
+            wasi_random_interface("wasi:random/insecure-seed@0.2.4"),
+            Some("insecure-seed")
+        );
+        assert_eq!(wasi_random_interface("wasi:random/insecure@0.2.6"), None);
+        assert_eq!(wasi_random_interface("wasi:random/random@0.3.0"), None);
+        assert_eq!(wasi_random_interface("wasi:random/random@0.2."), None);
+        assert_eq!(wasi_random_interface("wasi:random/random@0.2.x"), None);
+        assert_eq!(wasi_random_interface("wasi:cli/environment@0.2.6"), None);
     }
     #[test]
     fn instance_guard_rejects_reentry_and_cleans_up_nested_instances() {

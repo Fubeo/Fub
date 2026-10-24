@@ -45,7 +45,7 @@ cargo test --manifest-path vendor/wordcraft/Cargo.toml --workspace --locked
 Fuori dal workspace di Fub, i crate non passano dal suo
 `cargo clippy --workspace --all-targets -- -D warnings`: i lint del workspace
 di questa cartella permettono gli avvisi, che corregge l'upstream e non una
-copia, e vietano soltanto `unsafe`. Con la 1.89 di Fub i crate compilano e i
+copia, e vietano soltanto `unsafe`. Con la 1.95 di Fub i crate compilano e i
 loro test passano.
 
 Le patch di `patches/`, una per ragione:
@@ -152,8 +152,9 @@ node tools/vendor-craft/vendor.mjs wordcraft gate
 ```
 
 `update` estrae i percorsi gestiti (con `--tag`, controlla che il tag
-dell'upstream punti a quel commit e lo scrive nel lock), applica le patch (si ferma su quella che
-non si applica, senza scrivere niente), stampa le dipendenze aggiunte o tolte
+dell'upstream punti a quel commit e lo scrive nel lock), porta la pila di patch sulla revisione nuova (una patch
+il cui contesto è cambiato si rifà a tre vie e si riscrive in `patches/`; su un
+conflitto vero si ferma, senza scrivere niente), stampa le dipendenze aggiunte o tolte
 dai manifest dell'upstream, controlla che ogni dipendenza ereditata sia
 definita nel workspace di questa cartella, scrive `upstream.lock` e aggiorna la
 `version` del workspace di questa cartella e delle righe `wordcraft-*` dei due
@@ -162,9 +163,12 @@ copia e ritrova le impronte dell'upstream. Una modifica nuova si aggiunge come
 patch in `patches/` e si riesegue `update` con lo stesso commit.
 
 `report` è l'aggiornamento a vuoto: non scrive niente, e dice per ogni patch
-se si applica sulla pila, se l'upstream l'ha assorbita o se va rifatta, quali
-dei suoi file l'upstream ha cambiato, e le dipendenze e la `rust-version`
-che cambiano. `gate`, dopo `update`, esegue le prove che
+se si applica così com'è, se si rifà a tre vie, se l'upstream l'ha assorbita o
+se ha un conflitto vero, quali dei suoi file l'upstream ha cambiato, le
+dipendenze aggiunte, tolte o prese da Git, la `rust-version` se supera quella
+di Fub e i file `osservati` di `motori.mjs` che l'upstream ha cambiato: la
+barra e la mini-barra dell'upstream, che Fub non copia ma da cui prende i
+comandi. `self-test` prova le tre vie su un upstream finto, senza rete. `gate`, dopo `update`, esegue le prove che
 `tools/vendor-craft/motori.mjs` elenca per il motore e le riassume in una
 tabella.
 

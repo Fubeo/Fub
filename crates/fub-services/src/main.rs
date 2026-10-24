@@ -262,10 +262,8 @@ fn read_request(stream: &mut TcpStream, accepted: Instant) -> Result<Parsed, Htt
         match name.as_str() {
             "content-length" => content_lengths.push(value.clone()),
             "transfer-encoding" => has_te = true,
-            "expect" => {
-                if value.to_ascii_lowercase().contains("100-continue") {
-                    has_continue = true;
-                }
+            "expect" if value.to_ascii_lowercase().contains("100-continue") => {
+                has_continue = true;
             }
             "host" => req_host = Some(value.clone()),
             _ => {}

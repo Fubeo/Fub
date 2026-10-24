@@ -9,21 +9,27 @@
 //   node tools/vendor-craft/vendor.mjs <motore> verify-upstream [--source <percorso o URL>]
 //   node tools/vendor-craft/vendor.mjs <motore> report --rev <sha> [--source <percorso o URL>]
 //   node tools/vendor-craft/vendor.mjs <motore> gate
+//   node tools/vendor-craft/vendor.mjs self-test
 //
 // `check` senza motore li controlla tutti.
 //
 // `report` è l'aggiornamento a vuoto: non tocca la copia, e dice che cosa
-// `update --rev <sha>` troverebbe. Per ogni patch: se si applica sulla pila,
-// se da sola, se l'upstream l'ha già assorbita (si toglie al contrario dai
-// file nuovi), e quali dei file che tocca l'upstream ha cambiato. Poi le
-// dipendenze aggiunte e tolte, le versioni del workspace e la `rust-version`.
+// `update --rev <sha>` troverebbe. Per ogni patch: se si applica così com'è,
+// se si rifà a tre vie sui file nuovi (e quale sua parte cade perché
+// l'upstream ha tolto il file), se l'upstream l'ha già assorbita, se ha un
+// conflitto vero, e quali dei file che tocca l'upstream ha cambiato. Poi le
+// dipendenze aggiunte e tolte, quelle da Git, le versioni del workspace, la
+// `rust-version` rispetto a quella di Fub e i file `osservati` di
+// `motori.mjs` che l'upstream ha cambiato.
 // `gate` esegue, dopo un `update`, le prove che `motori.mjs` elenca per il
 // motore (i test del motore e dell'adattatore, il catalogo servito, il
 // corpus, i mirror, `cargo deny`) e le riassume in una tabella; non si ferma
 // alla prima che fallisce.
 //
-// `update` estrae dall'upstream soltanto i percorsi gestiti, applica la pila
-// di patch e sostituisce la copia soltanto se tutti i passi riescono.
+// `update` estrae dall'upstream soltanto i percorsi gestiti, porta la pila di
+// patch sulla revisione nuova (a tre vie dove serve, riscrivendo le patch
+// rifatte) e sostituisce la copia soltanto se tutti i passi riescono.
+// `self-test` prova le tre vie su un upstream finto, senza rete.
 // `check` (senza rete, in CI) toglie l'intera pila in ordine inverso da una
 // copia temporanea e ritrova le impronte dell'upstream: una modifica a mano
 // che non sta in una patch lo fa fallire. `verify-upstream` (con rete)
@@ -182,7 +188,7 @@ function applyStack(dir, patches, reverse = false) {
   git(["init", "-q"], { cwd: dir });
   const order = reverse ? [...patches].reverse() : patches;
   for (const patch of order) {
-    const args = ["apply", "--whitespace=nowarn", ...(reverse ? ["-R"] : []), path.join(VENDOR, patch)];
+    const args = ["apply", "--whitespace=nowarn", ...(reverse ? ["-R"] : []), path.resolve(VENDOR, patch)];
     const checked = spawnSync("git", [args[0], "--check", ...args.slice(1)], { cwd: dir, encoding: "utf8" });
     if (checked.status !== 0) {
       fail(`${patch} non si ${reverse ? "toglie" : "applica"}:\n${checked.stderr.trim()}`);
@@ -190,6 +196,127 @@ function applyStack(dir, patches, reverse = false) {
     git(args, { cwd: dir });
   }
   fs.rmSync(path.join(dir, ".git"), { recursive: true, force: true });
+}
+
+/// Il contenuto di `rel` in `dir`, o `null` se il file non c'è.
+function readOr(dir, rel) {
+  const full = path.join(dir, rel);
+  return fs.existsSync(full) ? fs.readFileSync(full) : null;
+}
+
+function same(a, b) {
+  return a === null || b === null ? a === b : a.equals(b);
+}
+
+function writeOr(dir, rel, data) {
+  const full = path.join(dir, rel);
+  if (data === null) {
+    fs.rmSync(full, { force: true });
+    return;
+  }
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  fs.writeFileSync(full, data);
+}
+
+/// La fusione a tre vie di un file con `git merge-file`: `ours` è il file
+/// della revisione nuova, `base` quello su cui la patch era scritta, `theirs`
+/// lo stesso con la patch. Senza conflitti torna il testo fuso.
+function merge3(ours, base, theirs) {
+  const dir = tempdir("fusione");
+  const names = ["nuovo", "base", "patch"];
+  [ours, base, theirs].forEach((data, i) => fs.writeFileSync(path.join(dir, names[i]), data));
+  const run = spawnSync("git", ["merge-file", "-p", "-L", "upstream nuovo", "-L", "upstream di prima", "-L", "patch", ...names], {
+    cwd: dir,
+    maxBuffer: 1 << 30,
+  });
+  fs.rmSync(dir, { recursive: true, force: true });
+  return run.status === 0 ? { ok: true, text: run.stdout } : { ok: false };
+}
+
+/// Il diff di `files` da `before` (contenuti, `null` per un file che non c'è)
+/// ai file di `dir`, nella forma delle patch di `patches/`: intestazioni
+/// `diff --git` e niente righe `index`.
+function diffPatch(before, dir, files) {
+  const repo = tempdir("diff");
+  const run = (args) => git(["-c", "user.name=fub", "-c", "user.email=fub@invalid", "-c", "core.autocrlf=false", ...args], { cwd: repo });
+  run(["init", "-q"]);
+  for (const rel of files) if (before.get(rel) !== null) writeOr(repo, rel, before.get(rel));
+  run(["add", "-A"]);
+  run(["commit", "-q", "--allow-empty", "-m", "prima"]);
+  for (const rel of files) writeOr(repo, rel, readOr(dir, rel));
+  run(["add", "-A"]);
+  const diff = run(["diff", "--cached", "--no-color", "--no-ext-diff", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/"]).toString();
+  fs.rmSync(repo, { recursive: true, force: true });
+  return diff.replace(/^index [0-9a-f]+\.\.[0-9a-f]+( \d+)?\n/gm, "");
+}
+
+/// Porta la pila da `oldUpstream` (dove le patch sono state scritte) a
+/// `newUpstream`, una patch alla volta, in una cartella nuova. Una patch che
+/// non si applica così com'è si rifà a tre vie, file per file: la base è il
+/// file prima della patch alla revisione di prima, e il risultato è la patch
+/// riscritta sui file nuovi. La parte di una patch su un file che l'upstream
+/// ha tolto cade, e si dice; un conflitto vero ferma soltanto quella patch.
+///
+/// Gli stati: `applica` (così com'è), `tre-vie` (rifatta: `text` è la patch
+/// nuova), `assorbita` (l'upstream la contiene già), `conflitto` (con i
+/// file) e `rotta` (non si applica nemmeno sulla revisione di prima).
+function rebase(oldUpstream, newUpstream, patches) {
+  let before = tempdir("prima");
+  copyManaged(oldUpstream, before);
+  const after = tempdir("dopo");
+  copyManaged(newUpstream, after);
+  // Un repository vuoto fissa la radice dei percorsi delle patch.
+  git(["init", "-q"], { cwd: after });
+  const rows = [];
+  for (const patch of patches) {
+    const files = touchedBy(patch);
+    const next = tempdir("prima-con-la-patch");
+    copyManaged(before, next);
+    git(["init", "-q"], { cwd: next });
+    const onOld = applies(next, patch);
+    if (onOld.ok) git(["apply", "--whitespace=nowarn", path.resolve(VENDOR, patch)], { cwd: next });
+    if (applies(after, patch).ok) {
+      git(["apply", "--whitespace=nowarn", path.resolve(VENDOR, patch)], { cwd: after });
+      rows.push({ patch, state: "applica" });
+    } else if (applies(after, patch, true).ok) {
+      rows.push({ patch, state: "assorbita" });
+    } else if (!onOld.ok) {
+      rows.push({ patch, state: "rotta", why: onOld.why });
+    } else {
+      const snapshot = new Map(files.map((rel) => [rel, readOr(after, rel)]));
+      const writes = new Map();
+      const conflicts = [];
+      const dropped = [];
+      for (const rel of files) {
+        const [base, theirs, ours] = [readOr(before, rel), readOr(next, rel), snapshot.get(rel)];
+        if (same(base, theirs) || same(ours, theirs)) continue;
+        if (theirs === null) {
+          if (same(ours, base)) writes.set(rel, null);
+          else conflicts.push(rel);
+        } else if (ours === null) {
+          if (base === null) writes.set(rel, theirs);
+          else dropped.push(rel);
+        } else if (base === null) {
+          conflicts.push(rel);
+        } else {
+          const merged = merge3(ours, base, theirs);
+          if (merged.ok) writes.set(rel, merged.text);
+          else conflicts.push(rel);
+        }
+      }
+      if (conflicts.length > 0) {
+        rows.push({ patch, state: "conflitto", conflicts });
+      } else {
+        for (const [rel, data] of writes) writeOr(after, rel, data);
+        const text = diffPatch(snapshot, after, files);
+        rows.push(text === "" ? { patch, state: "assorbita", dropped } : { patch, state: "tre-vie", text, dropped });
+      }
+    }
+    fs.rmSync(before, { recursive: true, force: true });
+    before = next;
+  }
+  fs.rmSync(before, { recursive: true, force: true });
+  return { dir: after, rows };
 }
 
 // --- sorgente dell'upstream ----------------------------------------------------
@@ -335,7 +462,7 @@ function check({ quiet = false } = {}) {
 
   for (const patch of patchFiles()) {
     const entry = lock.patch.find((p) => p.path === patch);
-    const actual = sha256(fs.readFileSync(path.join(VENDOR, patch)));
+    const actual = sha256(fs.readFileSync(path.resolve(VENDOR, patch)));
     if (!entry) problems.push(`${patch}: non è nel lock`);
     else if (entry.sha256 !== actual) problems.push(`${patch}: impronta diversa dal lock`);
   }
@@ -420,9 +547,25 @@ function update(rev, source, tag) {
   const { dir, date, version } = extract(repo, rev);
 
   // Il risultato si costruisce a parte; la copia si sostituisce alla fine.
-  const result = tempdir("result");
-  copyManaged(dir, result);
-  applyStack(result, patchFiles());
+  // Senza una revisione di prima non c'è una base per le tre vie, e la pila
+  // si applica così com'è.
+  let result;
+  let rewritten = [];
+  if (old.rev) {
+    const moved = rebase(previous.upstream, dir, patchFiles());
+    result = moved.dir;
+    const stuck = moved.rows.filter((r) => !["applica", "tre-vie"].includes(r.state));
+    if (stuck.length > 0) {
+      fs.rmSync(result, { recursive: true, force: true });
+      fail(`la pila non si porta su ${rev.slice(0, 12)}:\n${stuck.map(describe).join("\n")}`);
+    }
+    rewritten = moved.rows.filter((r) => r.state === "tre-vie");
+  } else {
+    result = tempdir("result");
+    copyManaged(dir, result);
+    applyStack(result, patchFiles());
+  }
+  const patchText = (p) => rewritten.find((r) => r.patch === p)?.text ?? fs.readFileSync(path.resolve(VENDOR, p));
 
   const changes = dependencyChanges(previous.upstream, dir);
   const problems = checkManifests(result);
@@ -437,7 +580,7 @@ function update(rev, source, tag) {
     tag: tag ?? "",
     date,
     version,
-    patch: patchFiles().map((p) => ({ path: p, sha256: sha256(fs.readFileSync(path.join(VENDOR, p))) })),
+    patch: patchFiles().map((p) => ({ path: p, sha256: sha256(Buffer.from(patchText(p))) })),
     file: [...new Set([...upstream.keys(), ...patched.keys()])].sort().map((rel) => {
       const up = upstream.get(rel) ?? ABSENT;
       const out = patched.get(rel) ?? ABSENT;
@@ -448,6 +591,7 @@ function update(rev, source, tag) {
   // Tutti i passi sono riusciti: si sostituisce.
   for (const managed of MANAGED) fs.rmSync(path.join(VENDOR, managed), { recursive: true, force: true });
   copyManaged(result, VENDOR);
+  for (const { patch, text } of rewritten) fs.writeFileSync(path.resolve(VENDOR, patch), text);
   writeLock(lock);
   writeVersions(version);
   for (const d of [dir, result, previous.upstream]) fs.rmSync(d, { recursive: true, force: true });
@@ -456,6 +600,8 @@ function update(rev, source, tag) {
   const from = previous.lock.rev ? previous.lock.rev.slice(0, 12) : "la copia senza lock";
   console.log(`vendor/${ID}: da ${from} a ${rev.slice(0, 12)} (${date}, ${version}).`);
   console.log(`file dell'upstream cambiati: ${changed.length}; patch applicate: ${lock.patch.length}.`);
+  for (const row of rewritten) console.log(describe(row));
+  if (rewritten.length > 0) console.log("le patch rifatte a tre vie sono riscritte in patches/: il loro diff va riletto.");
   if (changes.length > 0) {
     console.log("dipendenze da rivedere (licenza, avvisi):");
     for (const c of changes) console.log(`  ${c}`);
@@ -483,7 +629,7 @@ function dependencyChanges(beforeDir, afterDir) {
 
 /// I file che una patch tocca, dalle sue intestazioni `diff --git`.
 function touchedBy(patch) {
-  const text = fs.readFileSync(path.join(VENDOR, patch), "utf8");
+  const text = fs.readFileSync(path.resolve(VENDOR, patch), "utf8");
   const out = new Set();
   for (const m of text.matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)) {
     out.add(m[1]);
@@ -494,18 +640,19 @@ function touchedBy(patch) {
 
 /// `git apply --check` di `patch` in `dir`, al contrario con `reverse`.
 function applies(dir, patch, reverse = false) {
-  const args = ["apply", "--check", "--whitespace=nowarn", ...(reverse ? ["-R"] : []), path.join(VENDOR, patch)];
+  const args = ["apply", "--check", "--whitespace=nowarn", ...(reverse ? ["-R"] : []), path.resolve(VENDOR, patch)];
   const run = spawnSync("git", args, { cwd: dir, encoding: "utf8" });
   return { ok: run.status === 0, why: run.stderr.trim().split("\n")[0] ?? "" };
 }
 
-/// La `rust-version` e le dipendenze del workspace del Cargo.toml radice
-/// dell'upstream a `rev`.
+/// La `rust-version`, le dipendenze del workspace e quelle da Git del
+/// Cargo.toml radice dell'upstream a `rev`.
 function upstreamWorkspace(repo, rev) {
   const manifest = git(["-C", repo, "show", `${rev}:Cargo.toml`]).toString();
   return {
     rust: /\nrust-version = "([^"]+)"/.exec(manifest)?.[1] ?? "?",
     dependencies: workspaceDependencies(manifest),
+    git: new Map([...manifest.matchAll(/^([A-Za-z0-9_-]+)\s*=\s*\{[^\n]*\bgit\s*=\s*"([^"]+)"/gm)].map((m) => [m[1], m[2]])),
   };
 }
 
@@ -522,36 +669,19 @@ function report(rev, source) {
   console.log(`vendor/${ID}: da ${lock.rev.slice(0, 12)} (${lock.version}) a ${rev.slice(0, 12)} (${next.date}, ${next.version}), a vuoto.`);
   console.log(`file gestiti che l'upstream cambia: ${changedUpstream.size}.`);
 
-  // Ogni patch da sola sui file nuovi, e la pila nell'ordine: una patch che
-  // non si applica si salta, e le successive si provano lo stesso.
-  git(["init", "-q"], { cwd: next.dir });
-  const stack = tempdir("pila");
-  copyManaged(next.dir, stack);
-  git(["init", "-q"], { cwd: stack });
-  const rows = [];
+  // La pila portata sulla revisione nuova come farebbe `update`: una patch
+  // che si ferma si salta, e le successive si provano lo stesso.
+  const moved = rebase(previous.dir, next.dir, patchFiles());
   let failing = 0;
   let absorbedCount = 0;
-  for (const patch of patchFiles()) {
-    const alone = applies(next.dir, patch);
-    const absorbed = !alone.ok && applies(next.dir, patch, true).ok;
-    const inStack = applies(stack, patch);
-    if (inStack.ok) git(["apply", "--whitespace=nowarn", path.join(VENDOR, patch)], { cwd: stack });
-    const touched = touchedBy(patch).filter((rel) => changedUpstream.has(rel));
-    let state;
-    if (inStack.ok) state = "si applica";
-    else if (absorbed) state = "assorbita dall'upstream: si può togliere";
-    else if (alone.ok) state = "si applica da sola, non sulla pila";
-    else state = `non si applica: ${inStack.why}`;
-    if (!inStack.ok && absorbed) absorbedCount += 1;
-    else if (!inStack.ok) failing += 1;
-    rows.push({ patch, state, touched });
-  }
-  for (const { patch, state, touched } of rows) {
-    console.log(`  ${patch}: ${state}`);
+  for (const row of moved.rows) {
+    if (row.state === "assorbita") absorbedCount += 1;
+    else if (row.state === "conflitto" || row.state === "rotta") failing += 1;
+    console.log(describe(row));
+    const touched = touchedBy(row.patch).filter((rel) => changedUpstream.has(rel));
     if (touched.length > 0) console.log(`    file che l'upstream ha cambiato: ${touched.join(", ")}`);
   }
-  fs.rmSync(path.join(stack, ".git"), { recursive: true, force: true });
-  const problems = failing + absorbedCount === 0 ? checkManifests(stack) : [];
+  const problems = failing + absorbedCount === 0 ? checkManifests(moved.dir) : [];
   for (const p of problems) console.log(`  manifest: ${p}`);
 
   const changes = dependencyChanges(previous.dir, next.dir);
@@ -559,17 +689,64 @@ function report(rev, source) {
   for (const c of changes) console.log(`  ${c}`);
   const was = upstreamWorkspace(repo, lock.rev);
   const now = upstreamWorkspace(repo, rev);
-  if (was.rust !== now.rust) console.log(`rust-version dell'upstream: ${was.rust} → ${now.rust} (Fub resta su quella di rust-toolchain.toml).`);
   for (const name of new Set([...was.dependencies.keys(), ...now.dependencies.keys()])) {
     const [a, b] = [was.dependencies.get(name), now.dependencies.get(name)];
     if (a !== b) console.log(`  workspace: ${name} ${a ?? "-"} → ${b ?? "-"}`);
   }
-  for (const d of [previous.dir, next.dir, stack]) fs.rmSync(d, { recursive: true, force: true });
+  for (const [name, url] of now.git) {
+    if (was.git.get(name) !== url) console.log(`  workspace: ${name} da Git (${url}), che \`deny.toml\` non ammette: un crate copiato che la usa va copiato anche lei`);
+  }
+  const fub = /\nrust-version = "([^"]+)"/.exec(fs.readFileSync(path.join(ROOT, "Cargo.toml"), "utf8"))?.[1] ?? "?";
+  if (was.rust !== now.rust) console.log(`rust-version dell'upstream: ${was.rust} → ${now.rust}.`);
+  if (newer(now.rust, fub)) console.log(`l'upstream chiede Rust ${now.rust}, Fub è su ${fub}: si alza Fub, non si aggiunge una patch di compatibilità.`);
+
+  // Ciò che Fub non copia ma rispecchia a mano (la barra dei fogli in TS, per
+  // esempio): un cambiamento è un avviso, non un blocco.
+  const observed = observedChanges(repo, lock.rev, rev);
+  if (observed.length > 0) console.log("osservati, cambiati nell'upstream (da rileggere, la copia non li contiene):");
+  for (const line of observed) console.log(`  ${line}`);
+
+  for (const d of [previous.dir, next.dir, moved.dir]) fs.rmSync(d, { recursive: true, force: true });
   const ready = failing + absorbedCount === 0 && problems.length === 0;
   if (ready) console.log(`la pila si applica: \`update --rev ${rev}\`, poi \`${ID} gate\`.`);
   if (absorbedCount > 0) console.log(`${absorbedCount} patch da togliere (e da togliere da UPSTREAM.md) prima di \`update\`.`);
   if (failing > 0) console.log(`${failing} patch da rifare sui file nuovi prima di \`update\` (vedi vendor/${ID}/UPSTREAM.md).`);
   return ready;
+}
+
+/// Una riga per lo stato di una patch portata da `rebase`.
+function describe(row) {
+  const dropped = row.dropped?.length ? `; cade la parte sui file che l'upstream ha tolto: ${row.dropped.join(", ")}` : "";
+  if (row.state === "applica") return `  ${row.patch}: si applica`;
+  if (row.state === "tre-vie") return `  ${row.patch}: si applica a tre vie, riscritta sui file nuovi${dropped}`;
+  if (row.state === "assorbita") return `  ${row.patch}: assorbita dall'upstream, si può togliere${dropped}`;
+  if (row.state === "conflitto") return `  ${row.patch}: conflitto vero in ${row.conflicts.join(", ")}`;
+  return `  ${row.patch}: non si applica nemmeno sulla revisione di prima: ${row.why}`;
+}
+
+/// `a` è una versione più alta di `b` (`1.95` contro `1.90.0`).
+function newer(a, b) {
+  const [x, y] = [a, b].map((v) => v.split(".").map(Number));
+  if (x.some(Number.isNaN) || y.some(Number.isNaN)) return false;
+  for (let i = 0; i < Math.max(x.length, y.length); i += 1) {
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
+  }
+  return false;
+}
+
+/// I percorsi `osservati` di `motori.mjs` che cambiano fra `from` e `to`.
+function observedChanges(repo, from, to) {
+  const blob = (rev, rel) => {
+    const run = spawnSync("git", ["-C", repo, "rev-parse", "--verify", "--quiet", `${rev}:${rel}`], { encoding: "utf8" });
+    return run.status === 0 ? run.stdout.trim() : null;
+  };
+  const out = [];
+  for (const [rel, why] of MOTORI[ID].osservati ?? []) {
+    const [a, b] = [blob(from, rel), blob(to, rel)];
+    if (a === b) continue;
+    out.push(`${rel}: ${b === null ? "tolto" : a === null ? "nuovo" : "cambiato"} (${why})`);
+  }
+  return out;
 }
 
 /// Le prove di `motori.mjs` per il motore, una dopo l'altra.
@@ -629,6 +806,66 @@ function verifyUpstream(source) {
   fs.rmSync(local.upstream, { recursive: true, force: true });
 }
 
+/// Le tre vie su un upstream finto di due revisioni: una patch per stato.
+function selfTest() {
+  MANAGED = ["src"];
+  const lines = (n, edits = {}) => Array.from({ length: n }, (_, i) => edits[i + 1] ?? `riga ${i + 1}`).join("\n") + "\n";
+  const tree = (files) => {
+    const dir = tempdir("finto");
+    for (const [rel, text] of Object.entries(files)) writeOr(dir, `src/${rel}`, text === null ? null : Buffer.from(text));
+    return dir;
+  };
+  const base = { "a.txt": lines(12), "b.txt": lines(12), "c.txt": lines(12), "d.txt": lines(12), "e.txt": lines(12), "f.txt": lines(12) };
+  const v1 = tree(base);
+  const v2 = tree({
+    ...base,
+    "a.txt": lines(12, { 11: "lontana" }),
+    "b.txt": lines(12, { 4: "vicina" }),
+    "c.txt": lines(12, { 5: "dell'upstream" }),
+    "d.txt": lines(12, { 1: "uno" }),
+    "e.txt": null,
+    "f.txt": lines(12, { 4: "vicina" }),
+  });
+  const patches = tempdir("patch");
+  const write = (name, edits) => {
+    const files = Object.keys(edits).map((rel) => `src/${rel}`);
+    const after = tree({ ...base, ...edits });
+    const text = diffPatch(new Map(files.map((rel) => [rel, readOr(v1, rel)])), after, files);
+    fs.rmSync(after, { recursive: true, force: true });
+    fs.writeFileSync(path.join(patches, name), text);
+    return path.join(patches, name);
+  };
+  const stack = [
+    write("1-applica", { "a.txt": lines(12, { 2: "due" }) }),
+    write("2-tre-vie", { "b.txt": lines(12, { 2: "due" }) }),
+    write("3-conflitto", { "c.txt": lines(12, { 5: "della patch" }) }),
+    write("4-assorbita", { "d.txt": lines(12, { 1: "uno" }) }),
+    write("5-cade", { "e.txt": lines(12, { 2: "due" }), "f.txt": lines(12, { 2: "due" }) }),
+  ];
+  const { dir, rows } = rebase(v1, v2, stack);
+  const problems = [];
+  const expect = (i, state, extra = () => true) => {
+    if (rows[i].state !== state || !extra(rows[i])) problems.push(`${path.basename(stack[i])}: ${describe(rows[i]).trim()}`);
+  };
+  expect(0, "applica");
+  expect(1, "tre-vie");
+  expect(2, "conflitto", (r) => r.conflicts.join() === "src/c.txt");
+  expect(3, "assorbita");
+  expect(4, "tre-vie", (r) => r.dropped.join() === "src/e.txt");
+  const read = (rel) => readOr(dir, `src/${rel}`)?.toString();
+  if (read("b.txt") !== lines(12, { 2: "due", 4: "vicina" })) problems.push("b.txt: la fusione non tiene le due modifiche");
+  if (read("c.txt") !== lines(12, { 5: "dell'upstream" })) problems.push("c.txt: un conflitto ha toccato il file");
+  if (read("e.txt") !== undefined) problems.push("e.txt: il file tolto dall'upstream è tornato");
+  // La patch riscritta si applica così com'è sulla revisione nuova.
+  const fresh = tree({ "b.txt": lines(12, { 4: "vicina" }) });
+  git(["init", "-q"], { cwd: fresh });
+  fs.writeFileSync(path.join(patches, "riscritta"), rows[1].text ?? "");
+  if (!applies(fresh, path.join(patches, "riscritta")).ok) problems.push("2-tre-vie: la patch riscritta non si applica sui file nuovi");
+  for (const d of [v1, v2, patches, dir, fresh]) fs.rmSync(d, { recursive: true, force: true });
+  if (problems.length > 0) fail(`autoprova di vendor.mjs fallita:\n- ${problems.join("\n- ")}`);
+  console.log("autoprova di vendor.mjs riuscita: applica, tre vie, conflitto, assorbita, file tolto.");
+}
+
 function option(args, name) {
   const at = args.indexOf(name);
   if (at < 0) return undefined;
@@ -637,10 +874,15 @@ function option(args, name) {
 }
 
 const USO =
-  "uso: vendor.mjs <motore> update --rev <sha> [--tag <tag>] [--source <percorso o URL>] | [<motore>] check | <motore> verify-upstream [--source <percorso o URL>] | <motore> report --rev <sha> [--source <percorso o URL>] | <motore> gate";
+  "uso: vendor.mjs <motore> update --rev <sha> [--tag <tag>] [--source <percorso o URL>] | [<motore>] check | <motore> verify-upstream [--source <percorso o URL>] | <motore> report --rev <sha> [--source <percorso o URL>] | <motore> gate | self-test";
 
 try {
   const argv = process.argv.slice(2);
+  if (argv[0] === "self-test" && argv.length === 1) {
+    selfTest();
+    done();
+    process.exit(0);
+  }
   if (argv[0] === "check" && argv.length === 1) {
     // Tutti i motori, uno dopo l'altro: il primo che non torna ferma.
     for (const id of Object.keys(MOTORI)) {

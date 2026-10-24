@@ -242,7 +242,7 @@ impl Ink {
         if values.is_empty() {
             return Err(InkError::NoSamples);
         }
-        if values.len() % width != 0 {
+        if !values.len().is_multiple_of(width) {
             return Err(InkError::Arity {
                 sample: values.len() / width,
             });
