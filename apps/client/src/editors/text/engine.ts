@@ -187,13 +187,24 @@ const DEFAULT_LAYOUT: LayoutPreferences = {
 };
 const FIELD_LAYOUT: LayoutPreferences = { ...DEFAULT_LAYOUT, lineNumbers: false };
 
+/// Il segno di piega: «⌄» dove la riga si può piegare, «›» dove è piegata.
+/// La pelle lo tiene nascosto finché non si passa sul margine, tranne quando
+/// la riga è piegata: è lì che c'è qualcosa da riaprire.
+function foldMarker(open: boolean): HTMLElement {
+  const marker = document.createElement("span");
+  marker.dataset.fold = open ? "open" : "folded";
+  marker.title = t(open ? "editor.cm.fold_line" : "editor.cm.unfold_line");
+  marker.textContent = open ? "⌄" : "›";
+  return marker;
+}
+
 function layoutExtensions(layout: LayoutPreferences): Extension {
   const unit = layout.indent === "tab" ? "\t" : layout.indent === "4" ? "    " : "  ";
   return [
     layout.lineNumbers ? lineNumbers() : [],
     layout.lineWrap ? EditorView.lineWrapping : [],
     indentUnit.of(unit),
-    layout.foldGutter ? foldGutter({ openText: "↓" }) : [],
+    layout.foldGutter ? foldGutter({ markerDOM: foldMarker }) : [],
     smartLists.of(layout.smartLists),
     pasteHtml.of(layout.pasteHtml),
     propertiesDisplay.of(layout.properties),
