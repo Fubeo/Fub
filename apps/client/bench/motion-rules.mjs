@@ -24,13 +24,27 @@
 //    proprietà in linea che il moto ridotto non lascia;
 // 3. si muovono soltanto `transform` e `opacity` (e le loro proprietà singole);
 // 4. a metà corsa si può tornare indietro: si arriva dove si era, e niente
-//    riparte da zero.
+//    riparte da zero;
+// 5. un'uscita (una coreografia con `exit`) finisce entro `EXIT_LIMIT_MS`:
+//    chi chiude ha già deciso, e ciò che se ne va non lo fa aspettare.
 //
 // Qui stanno i confronti; le misure le prende `motion.mjs` nel browser.
 
 /// Le proprietà che una corsa può toccare. È la regola 3, ed è una costante
 /// perché allargarla sia una decisione che si legge in un diff.
 export const ALLOWED = Object.freeze(["transform", "opacity", "translate", "scale", "rotate"]);
+
+/// Quanto può durare un'uscita, ritardo compreso (ms). È la regola 5.
+export const EXIT_LIMIT_MS = 140;
+
+/// Le corse di un'uscita che durano più di `limit`, ritardo compreso. `runs`
+/// sono `{ target, pseudo, duration, delay }` delle corse partite col gesto
+/// che disfa.
+export function longExits(runs, limit = EXIT_LIMIT_MS) {
+  return runs
+    .map((run) => ({ target: `${run.target}${run.pseudo ?? ""}`, length: run.delay + run.duration }))
+    .filter((run) => run.length > limit);
+}
 
 /// Ciò che un fotogramma chiave porta di suo e non è una proprietà animata.
 const SERVICE = new Set(["offset", "easing", "composite", "computed-offset"]);
@@ -181,6 +195,13 @@ const rowActive = (index) => (page) =>
     const row = list?.querySelectorAll('[role="option"]')[i];
     return !!row && list.getAttribute("aria-activedescendant") === row.id;
   }, index);
+/// I titoli dell'indice nell'ispettore, per posto, e quello scelto.
+const OUTLINE = (index) => `#right-pane .ui-tree-label >> nth=${index}`;
+const outlineChosen = (index) => (page) =>
+  page.evaluate((i) => {
+    const label = document.querySelectorAll("#right-pane .ui-tree-label")[i];
+    return label?.closest(".ui-tree-item")?.getAttribute("aria-selected") === "true";
+  }, index);
 const sheetTab = (index) => `.pane.focus .tab[data-index="${index}"]`;
 const railPressed = (panel) => has(`#views-ribbon .rail-btn[data-panel="${panel}"][aria-pressed="true"]`);
 const sheets = (count) => (page) =>
@@ -225,6 +246,8 @@ const light = (theme) => (page) =>
 ///   corsa che il motore possa elencare (di ogni selettore, il primo elemento);
 /// - `still`: oggi non passa da `moto`, e le regole devono valere lo stesso;
 /// - `mount`: parte al montaggio, senza un gesto;
+/// - `exit`: il gesto che disfa fa uscire ciò che il gesto ha fatto entrare,
+///   e la regola 5 vale per le sue corse;
 /// - `sources`: i file che fanno partire queste corse.
 export const CHOREOGRAPHIES = [
   {
@@ -339,6 +362,7 @@ export const CHOREOGRAPHIES = [
     arrived: has(".launcher-input:focus"),
     undo: (page) => page.keyboard.press("Escape"),
     returned: lacks(".launcher-layer"),
+    exit: true,
   },
   {
     id: "peek",
@@ -352,6 +376,36 @@ export const CHOREOGRAPHIES = [
     undo: (page) => page.mouse.move(400, 300, { steps: 2 }),
     reversing: has("#sidebar[inert]"),
     returned: lacks("#layout.peek-sidebar"),
+    exit: true,
+  },
+  {
+    id: "mobile-sheet",
+    title: "Telefono: il cassetto sale dal basso col suo velo, e torna giù",
+    sources: ["src/shells/scrittoio/mobile/bottom-sheets.ts"],
+    scene: "mobile-startup",
+    act: (page) => press(page, '#views-ribbon .rail-btn[data-panel="files"]'),
+    arrived: has("#sidebar > .sheet-grip:focus"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: has("#sidebar-scrim[hidden]"),
+    exit: true,
+  },
+  {
+    id: "views-outline",
+    title: "Viste dichiarative: la sagoma della voce scelta scorre da un titolo all'altro dell'indice",
+    sources: ["src/shells/scrittoio/views-motion.ts"],
+    scene: "inspector",
+    // L'indice è la prima scheda dell'ispettore; un titolo è già scelto, così
+    // il gesto sposta la sagoma invece di farla nascere.
+    setup: async (page) => {
+      await press(page, "#right-pane .inspector-tab >> nth=0");
+      await page.waitForSelector("#right-pane .ui-tree-label");
+      await press(page, OUTLINE(1));
+      await page.waitForFunction(() => document.querySelector('#right-pane .ui-tree-item[aria-selected="true"]') !== null);
+    },
+    act: (page) => press(page, OUTLINE(4)),
+    arrived: outlineChosen(4),
+    undo: (page) => press(page, OUTLINE(1)),
+    returned: outlineChosen(1),
   },
   {
     id: "welcome-fan",
@@ -376,6 +430,7 @@ export const CHOREOGRAPHIES = [
     arrived: has('.kit-popover [role="menuitem"]:focus'),
     undo: (page) => page.keyboard.press("Escape"),
     returned: lacks(".kit-popover"),
+    exit: true,
   },
   {
     id: "kit-hover-card",
@@ -389,6 +444,7 @@ export const CHOREOGRAPHIES = [
     undo: (page) => page.mouse.move(0, 0, { steps: 2 }),
     reversing: lacks(".kit-hover-card:not([aria-hidden])"),
     returned: lacks(".kit-hover-card"),
+    exit: true,
   },
   {
     id: "kit-dialog",
@@ -401,6 +457,7 @@ export const CHOREOGRAPHIES = [
     undo: (page) => page.keyboard.press("Escape"),
     returned: (page) =>
       page.evaluate(() => document.querySelector(".kit-dialog, .kit-dialog-scrim") === null),
+    exit: true,
   },
   {
     id: "kit-tabs",
@@ -461,13 +518,4 @@ export const CHOREOGRAPHIES = [
 
 /// I file che fanno partire corse di `moto` e che il banco non guarda, con la
 /// ragione. Un file nuovo entra qui o in una coreografia: non c'è una terza via.
-export const UNCOVERED = [
-  {
-    source: "src/shells/scrittoio/mobile/bottom-sheets.ts",
-    reason: "è della shell mobile: il banco del moto apre la finestra da scrivania",
-  },
-  {
-    source: "src/shells/scrittoio/views-motion.ts",
-    reason: "anima le patch delle viste dichiarative, che arrivano dall'host: manca una scena che ne produca una a comando",
-  },
-];
+export const UNCOVERED = [];

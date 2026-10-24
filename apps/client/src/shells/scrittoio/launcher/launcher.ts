@@ -603,9 +603,10 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       const pose = to && to.width > 0 && from.width > 0 && from.height > 0
         ? { ...pillPose(to, from), opacity: 0 }
         : { opacity: 0 };
-      // Chi smonta la shell non lascia un'immagine a metà corsa.
+      // Chi smonta la shell non lascia un'immagine a metà corsa. L'uscita è
+      // breve come tutte (≤ `swap`): chi chiude ha già deciso.
       if (!lifetime.closed) {
-        leaving.play({ to: pose, spring: "wide", lifetime });
+        leaving.play({ to: pose, duration: DURATION.swap, easing: "ease-in", lifetime });
         fading.play({ to: { opacity: 0 }, duration: DURATION.swap, lifetime });
       }
       if (origin?.isConnected) origin.focus();

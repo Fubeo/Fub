@@ -1146,6 +1146,17 @@ function treeOf(view: string): UiNode | undefined {
   return tree && view !== "outline" ? inShellLanguage(tree) : tree;
 }
 
+/// L'albero con scelta la voce il cui salto porta `payload`, e nessun'altra.
+function choose(node: UiNode, payload: unknown): UiNode {
+  if (node.node === "tree") return { ...node, roots: node.roots.map((item) => choose(item, payload) as typeof item) };
+  if (node.node !== "tree_item") return node;
+  return {
+    ...node,
+    selected: node.action?.payload === payload,
+    children: node.children.map((item) => choose(item, payload) as typeof item),
+  };
+}
+
 /// Il testo cercato da una query di documenti, se ne cerca uno.
 function searchedText(expr: QueryExpr): string | null {
   for (const clause of expr.any) {
@@ -1212,11 +1223,14 @@ export const api: typeof host.module.api = {
   // Un'azione di una view della scenografia non fa niente e **lo dice
   // ridisegnando l'albero di prima**: è la risposta minima che il protocollo
   // accetta, e non un `throw` — un click di troppo durante una scena non deve
-  // far morire una foto.
+  // far morire una foto. Tranne il salto dell'indice: come il provider vero,
+  // segna scelto il titolo a cui si è andati, e il banco del moto vede la
+  // sagoma della voce scelta scorrere.
   viewAction: (view, instance, params, action, payload, fields) => {
     const tree = treeOf(view);
     if (!tree) return behind.viewAction(view, instance, params, action, payload, fields);
-    return Promise.resolve({ kind: "replace" as const, root: tree });
+    const root = view === "outline" && action === "goto" ? choose(tree, payload) : tree;
+    return Promise.resolve({ kind: "replace" as const, root });
   },
   listBundles: () => Promise.resolve(inShellLanguage(BUNDLE)),
   knownVaults: () => Promise.resolve(KNOWN_VAULTS),

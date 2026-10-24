@@ -44,6 +44,8 @@ export interface Choreography {
   still?: boolean;
   /// Parte al montaggio, senza un gesto.
   mount?: boolean;
+  /// Il gesto che disfa è un'uscita: vale la regola 5.
+  exit?: boolean;
 }
 
 export interface Uncovered {
@@ -74,6 +76,11 @@ export interface Jump {
 }
 
 export declare const ALLOWED: readonly string[];
+export declare const EXIT_LIMIT_MS: number;
+export declare function longExits(
+  runs: readonly { target: string; pseudo?: string; duration: number; delay: number }[],
+  limit?: number,
+): { target: string; length: number }[];
 export declare const CONTINUITY: { readonly px: number; readonly opacity: number };
 export declare const CHOREOGRAPHIES: readonly Choreography[];
 export declare const UNCOVERED: readonly Uncovered[];

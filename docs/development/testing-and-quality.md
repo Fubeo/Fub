@@ -181,8 +181,10 @@ rigenerazione nell'ambiente Ubuntu validato.
 Il banco del moto (`npm run bench:motion`) misura le coreografie dello
 Scrittoio nel browser: lo stato d'arrivo coincide con quello a moto ridotto,
 non resta nessuna animazione viva, i fotogrammi chiave toccano soltanto
-`transform` e `opacity`, e un gesto invertito a metà torna allo stato di
-partenza. Anche il budget d'interazione (`npm run bench:interaction`) apre
+`transform` e `opacity`, un gesto invertito a metà torna allo stato di
+partenza, e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
+finisce entro 140 ms. Ogni file della shell e del kit che fa partire una corsa
+ha la sua coreografia. Anche il budget d'interazione (`npm run bench:interaction`) apre
 la pagina col movimento acceso e l'ora vera: misura in quanti millisecondi un
 menu, la palette e una nota arrivano al primo fotogramma e alla fine del moto,
 contro i budget del [budget prestazionale](../product/performance-budget.md#il-budget-dinterazione).
