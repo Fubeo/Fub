@@ -56,7 +56,16 @@ import { state } from "../state/store";
 import { $ } from "../ui/dom";
 import { trapFocus } from "../ui/a11y";
 import { notify } from "../ui/notify";
-import { allCommands, keybindingIssues, keybindingKey, validateKeybinding, type CommandEntry } from "../ui/commands";
+import {
+  allCommands,
+  displayBinding,
+  keybindingIssues,
+  keybindingKey,
+  keyboardPlatform,
+  reservedChord,
+  validateKeybinding,
+  type CommandEntry,
+} from "../ui/commands";
 import { TRUST_LABELS, isPermissionKey, rows, type PermissionRow } from "../ui/permissions";
 import { SETTINGS_WITH_THEIR_OWN_GESTURE } from "../ui/shell-ids.generated";
 import { errorText } from "../host/errors";
@@ -2125,7 +2134,7 @@ function shortcutDiagnostic(command: CommandEntry, binding: string, commands: Co
     return t("settings.shortcut.invalid_unsaved", { reason: t(descriptions[validation.reason]) });
   }
   const proposed = commands.map((item) => item.id === command.id ? { ...item, binding } : item);
-  return keybindingIssues(proposed)
+  const issues = keybindingIssues(proposed)
     .filter((issue) => issue.type === "invalid"
       ? issue.command.id === command.id
       : issue.type === "shadowed"
@@ -2141,8 +2150,12 @@ function shortcutDiagnostic(command: CommandEntry, binding: string, commands: Co
             command: issue.short.title,
             commands: issue.long.map((other) => other.title).join(", "),
           })
-        : t("settings.shortcut.invalid", { binding: issue.binding }))
-    .join("; ");
+        : t("settings.shortcut.invalid", { binding: issue.binding }));
+  // Un accordo che il sistema si prende si salva lo stesso, e si dice.
+  const platform = keyboardPlatform(navigator.platform);
+  const reserved = reservedChord(binding, platform);
+  if (reserved !== null) issues.unshift(t("settings.shortcut.reserved", { chord: displayBinding(reserved, platform) }));
+  return issues.join("; ");
 }
 
 async function renderShortcuts(): Promise<HTMLElement[]> {

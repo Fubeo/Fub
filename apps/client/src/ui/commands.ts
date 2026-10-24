@@ -682,11 +682,22 @@ const KEY_NAMES: Record<string, string> = {
   space: "Space",
 };
 
+/// I tasti che una tastiera da Mac non ha: si premono con Fn e una freccia, e
+/// si leggono così, o chi cerca PgDn non lo trova.
+const MAC_KEY_NAMES: Record<string, string> = {
+  pagedown: "Fn↓",
+  pageup: "Fn↑",
+  home: "Fn←",
+  end: "Fn→",
+};
+
 /// Il nome che si legge di un tasto di `KeyboardEvent.key`, da solo: `←`,
 /// `Esc`, `Enter`, `P`. Un tasto funzione si legge come è stampato, `F10`,
 /// anche quando l'accordo lo scrive minuscolo.
-export function keyName(key: string): string {
-  return KEY_NAMES[key.toLowerCase()] ?? (key.length === 1 || /^f\d{1,2}$/i.test(key) ? key.toUpperCase() : key);
+export function keyName(key: string, platform: KeyboardPlatform = "any"): string {
+  const lower = key.toLowerCase();
+  if (platform === "mac" && MAC_KEY_NAMES[lower]) return MAC_KEY_NAMES[lower];
+  return KEY_NAMES[lower] ?? (key.length === 1 || /^f\d{1,2}$/i.test(key) ? key.toUpperCase() : key);
 }
 
 /// Il nome che si legge di un modificatore da solo, tenuto mentre si fa
@@ -729,7 +740,7 @@ export function displayBinding(
       if (chord.mod) parts.push(mac ? "⌘" : "Ctrl");
       if (chord.alt) parts.push(mac ? "⌥" : "Alt");
       if (chord.shift) parts.push(mac ? "⇧" : "Shift");
-      parts.push(keyName(chord.key));
+      parts.push(keyName(chord.key, platform));
       return parts.join(mac ? "" : "+");
     })
     .join(" ");
@@ -764,6 +775,39 @@ export function ariaBinding(
   if (chord.shift) parts.push("Shift");
   parts.push(ARIA_KEYS[chord.key] ?? chord.key.charAt(0).toUpperCase() + chord.key.slice(1));
   return parts.join("+");
+}
+
+/// Gli accordi che il sistema si prende prima che arrivino alla finestra, per
+/// piattaforma. Una scorciatoia su uno di questi si salva lo stesso — su un
+/// altro sistema può servire — ma si dice che qui non arriverà mai.
+const RESERVED: Record<"mac" | "other", readonly string[]> = {
+  mac: [
+    "Mod-Tab", "Mod-Shift-Tab", "Mod-`", "Mod-Space", "Mod-h", "Mod-Alt-h", "Mod-m",
+    "Mod-Alt-d", "Mod-Alt-Escape", "Mod-Shift-3", "Mod-Shift-4", "Mod-Shift-5",
+    "Ctrl-Space", "Ctrl-ArrowLeft", "Ctrl-ArrowRight", "Ctrl-ArrowUp", "Ctrl-ArrowDown",
+  ],
+  other: [
+    "Alt-Tab", "Alt-Shift-Tab", "Alt-F4", "Alt-Space", "Ctrl-Alt-Delete",
+    "Ctrl-Alt-ArrowLeft", "Ctrl-Alt-ArrowRight", "Ctrl-Alt-t", "Ctrl-Alt-l",
+  ],
+};
+
+/// Il primo accordo di `binding` che il sistema si prende su `platform`, come
+/// è scritto nella tabella, o `null`. Con `any` guarda tutti e due i sistemi:
+/// è la domanda di chi dichiara un tasto senza sapere dove lo premeranno.
+export function reservedChord(binding: string | null | undefined, platform: KeyboardPlatform): string | null {
+  const platforms = platform === "any" ? (["mac", "other"] as const) : [platform];
+  for (const chords of parseAlternatives(binding) ?? []) {
+    for (const where of platforms) {
+      const first = onPlatform(chords[0]!, where);
+      const hit = RESERVED[where].find((reserved) => {
+        const taken = parseChords(reserved)?.[0];
+        return taken !== undefined && equalChords(onPlatform(taken, where), first);
+      });
+      if (hit) return hit;
+    }
+  }
+  return null;
 }
 
 /// Questa combinazione è l'accordo scritto?

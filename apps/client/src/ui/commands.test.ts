@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import { state } from "../state/store";
+import { SHELL_KEYS } from "./shell-keys.generated";
 import {
   rejectedChords,
   allCommands,
@@ -14,6 +15,7 @@ import {
   modifierName,
   keybindingKey,
   parseChords,
+  reservedChord,
   chordMap,
   matchesBinding,
   normalize,
@@ -717,6 +719,31 @@ describe("la parola Ctrl", () => {
     expect(shadowedPrefixes([recent, long]).map(({ short }) => short.id)).toEqual(["recent"]);
     // La forma canonica tiene la parola che si è scritta.
     expect(normalize("Shift-Ctrl-Tab")).toBe("ctrl-shift-tab");
+  });
+});
+
+describe("gli accordi del sistema", () => {
+  it("si riconoscono per piattaforma", () => {
+    expect(reservedChord("Mod-Tab", "mac")).toBe("Mod-Tab");
+    expect(reservedChord("Mod-Tab", "other")).toBeNull();
+    expect(reservedChord("Alt-F4", "other")).toBe("Alt-F4");
+    expect(reservedChord("Ctrl-ArrowLeft", "mac")).toBe("Ctrl-ArrowLeft");
+    // Fuori dal Mac Ctrl-← è il salto di parola, e lo dichiara chi vuole.
+    expect(reservedChord("Ctrl-ArrowLeft", "other")).toBeNull();
+    expect(reservedChord("Mod-s || Alt-Tab", "any")).toBe("Alt-Tab");
+    expect(reservedChord("Meta-k", "any")).toBeNull();
+  });
+
+  it("nessun accordo di serie della shell è del sistema, su nessuna piattaforma", () => {
+    const taken = Object.entries(SHELL_KEYS)
+      .filter(([, binding]) => reservedChord(binding, "any") !== null)
+      .map(([id, binding]) => `${id}: ${binding}`);
+    expect(taken).toEqual([]);
+  });
+
+  it("sul Mac i tasti che mancano si leggono con Fn", () => {
+    expect(displayBinding("Mod-PageDown", "mac")).toBe("⌘Fn↓");
+    expect(displayBinding("Mod-PageDown", "other")).toBe("Ctrl+PgDn");
   });
 });
 

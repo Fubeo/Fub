@@ -30,7 +30,9 @@ cursore lì e torna indietro fuori. Una scorciatoia scrive `Mod` per ⌘ sul Mac
 e Ctrl altrove, e `Ctrl` per Control anche sul Mac: il giro delle schede in
 ordine d'uso è `Ctrl-Tab`, perché ⌘-Tab è del sistema. Fuori dal Mac `Ctrl-k`
 e `Mod-k` sono lo stesso tasto, e le impostazioni li segnalano come
-conflitto. La modalità delle
+conflitto. Le impostazioni dicono anche quando un accordo lo prende il sistema
+(⌘-Tab sul Mac, Alt-F4 altrove): si salva lo stesso, ma lì non arriva. Sul Mac
+PgDn e PgUp si leggono `Fn↓` e `Fn↑`, come si premono. La modalità delle
 note in una finestra nuova viene da `editor.default-mode`; un riquadro diviso
 eredita quelle del riquadro da cui nasce. I divisori fra riquadri si trascinano,
 si spostano con le frecce e tornano a parti uguali con un doppio clic; le
