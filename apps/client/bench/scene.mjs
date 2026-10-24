@@ -301,12 +301,20 @@ export const SCENE = onPage("shell", [
     id: "nota-tre-modi",
     title: "La stessa nota in Sorgente, Live e Lettura: tre fogli affiancati",
     prepare: async (page) => {
+      // In un foglio stretto le modalità sono un bottone solo che apre la
+      // scelta; in uno largo, i segmenti.
+      const chooseMode = async (mode, label) => {
+        const segment = page.locator(`.pane.focus .pane-toolbar button[data-mode="${mode}"]`);
+        if (await segment.isVisible()) return segment.click();
+        await page.click(".pane.focus .pane-toolbar .pane-mode-current");
+        await page.click(`#context-menu [role="menuitemradio"]:has-text("${label}")`);
+      };
       await openNote(page, "Guida/Sintassi di Fub.md");
-      await page.click('.pane.focus .pane-toolbar button[data-mode="source"]');
+      await chooseMode("source", "Sorgente");
       await runScrittoioCommand(page, "Dividi il riquadro a destra");
-      await page.click('.pane.focus .pane-toolbar button[data-mode="live_preview"]');
+      await chooseMode("live_preview", "Live");
       await runScrittoioCommand(page, "Dividi il riquadro a destra");
-      await page.click('.pane.focus .pane-toolbar button[data-mode="reading"]');
+      await chooseMode("reading", "Lettura");
       await page.waitForSelector('.pane[data-mode="source"] .cm-content');
       await page.waitForSelector('.pane[data-mode="live_preview"] .cm-content');
       await page.waitForSelector('.pane[data-mode="reading"] .pane-preview');

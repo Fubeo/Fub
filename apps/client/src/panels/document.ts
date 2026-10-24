@@ -1000,18 +1000,38 @@ function drawToolbar(r: Pane): void {
     const group = document.createElement("span");
     group.className = "segmented";
     group.setAttribute("role", "group");
+    // Le stesse modalità in un bottone solo, che dice quella accesa e apre la
+    // scelta: la cornice decide quale delle due forme mostrare (sul telefono
+    // i segmenti tagliano il nome della nota).
+    const current = document.createElement("button");
+    current.type = "button";
+    current.className = "pane-mode-current";
+    current.setAttribute("aria-haspopup", "menu");
+    current.setAttribute("aria-expanded", "false");
+    current.addEventListener("click", () => {
+      focusPane(r.id);
+      const active = selectedMode(r);
+      current.setAttribute("aria-expanded", "true");
+      showContextMenu(current, (r.surface?.modes ?? []).map((mode) => ({
+        label: mode.label(),
+        choice: "radio" as const,
+        checked: active?.id === mode.id,
+        run: () => void setMode(mode.id),
+      })), { onClose: () => current.setAttribute("aria-expanded", "false") });
+    });
     const menu = document.createElement("button");
     menu.type = "button";
     menu.dataset.paneMenu = "";
     menu.textContent = "…";
     menu.setAttribute("aria-haspopup", "menu");
     menu.addEventListener("click", (event) => openPaneMenu(r, event));
-    bar.append(nav, crumbs, status, group, menu);
+    bar.append(nav, crumbs, status, group, current, menu);
   }
   const nav = bar.querySelector<HTMLElement>(":scope > .pane-nav")!;
   const crumbs = bar.querySelector<HTMLElement>(":scope > .muted")!;
   const status = bar.querySelector<HTMLElement>(":scope > .pane-status-slot")!;
   const group = bar.querySelector<HTMLElement>(":scope > .segmented")!;
+  const current = bar.querySelector<HTMLButtonElement>(":scope > .pane-mode-current")!;
   const menu = bar.querySelector<HTMLElement>(":scope > [data-pane-menu]")!;
   const history = paneState(r.id)?.history;
   for (const button of nav.querySelectorAll<HTMLButtonElement>("button")) {
@@ -1035,6 +1055,9 @@ function drawToolbar(r: Pane): void {
   const modes = r.surface && r.surface.modes.length > 1 ? r.surface.modes : [];
   const active = selectedMode(r);
   group.hidden = modes.length <= 1;
+  current.hidden = group.hidden;
+  current.textContent = active?.label() ?? "";
+  current.setAttribute("aria-label", t("document.toolbar.mode_current", { mode: active?.label() ?? "" }));
   while (group.children.length > modes.length) group.lastElementChild!.remove();
   modes.forEach((mode, index) => {
     let button = group.children[index] as HTMLButtonElement | undefined;

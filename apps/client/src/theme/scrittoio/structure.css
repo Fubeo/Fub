@@ -846,6 +846,23 @@ body {
   order: 3;
 }
 
+/* Le modalità in un bottone solo: c'è soltanto dove i segmenti taglierebbero
+   il nome della nota, cioè in una testata stretta (il telefono, tre fogli
+   affiancati). */
+.pane-toolbar > .pane-mode-current {
+  display: none;
+  flex: 0 0 auto;
+  order: 2;
+}
+@container sheet-head (max-width: 440px) {
+  .pane-toolbar > .segmented {
+    display: none;
+  }
+  .pane-toolbar > .pane-mode-current:not([hidden]) {
+    display: inline-flex;
+  }
+}
+
 /* In una testata stretta il percorso e lo stato avrebbero un pezzo di lettera
    e un punto, e il punto dello stato si leggerebbe «modificato». Escono: il
    percorso tiene il suo posto, lo stato lo dice la banda. */

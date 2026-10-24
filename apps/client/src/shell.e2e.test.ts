@@ -3326,6 +3326,26 @@ describe("la modalità di ogni famiglia di superfici", () => {
     await settle();
   };
 
+  it("il bottone solo dice la modalità accesa e la cambia da un menu di scelte", async () => {
+    await start(VAULT);
+    const current = document.querySelector<HTMLButtonElement>(".pane.focus .pane-toolbar .pane-mode-current")!;
+    const pressed = () =>
+      document.querySelector<HTMLElement>('.pane.focus .pane-toolbar button[data-mode][aria-pressed="true"]')?.textContent;
+    expect(current.hidden).toBe(false);
+    expect(current.textContent).toBe(pressed());
+    expect(current.getAttribute("aria-label")).toContain(pressed()!);
+    current.click();
+    expect(current.getAttribute("aria-expanded")).toBe("true");
+    const radios = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
+    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Sorgente", "Live", "Lettura"]);
+    expect(radios.filter((item) => item.getAttribute("aria-checked") === "true")).toHaveLength(1);
+    radios[0]!.click();
+    await settle();
+    expect(paneMode()).toBe("source");
+    expect(current.textContent).toBe("Sorgente");
+    expect(current.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("una nota in Sorgente non fa aprire la tela seguente come JSON", async () => {
     await start({ ...VAULT, "lavagna.canvas": BOARD });
     const { openDocument } = await import("./panels/document");

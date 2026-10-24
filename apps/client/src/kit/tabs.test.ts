@@ -216,6 +216,14 @@ describe("la scelta", () => {
     expect(selections).toEqual([]);
   });
 
+  it("in una fila che scorre porta nella vista la scheda scelta", () => {
+    const handle = tabs();
+    const seen: unknown[] = [];
+    buttons()[3]!.scrollIntoView = (options?: boolean | ScrollIntoViewOptions) => void seen.push(options);
+    handle.select("quattro");
+    expect(seen).toEqual([{ block: "nearest", inline: "nearest" }]);
+  });
+
   it("una scheda spenta è un pulsante spento", () => {
     tabs();
     expect(buttons()[2].disabled).toBe(true);

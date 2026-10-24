@@ -350,6 +350,7 @@
     "tab-close",
     "tab-new",
     "pane-toolbar",
+    "pane-mode-current",
     "sheet-title",
     "sheet-title-edit",
     "sheet-title-error",
@@ -2225,7 +2226,8 @@
       "part": "sheets",
       "hooks": [
         "pane-toolbar",
-        "muted"
+        "muted",
+        "pane-mode-current"
       ],
       "states": [
         "rest"
@@ -5506,7 +5508,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1207,
+    "hooks": 1208,
     "state_names": 7,
     "assigned_states": 631,
     "components": 187,
