@@ -9,7 +9,9 @@ import "./preferences.css";
 import { onLanguage } from "../../../i18n/strings";
 import type { Lifetime } from "../../../ui/lifetime";
 import { byId, follow } from "../frame/dom";
+import { FONT_KEY, MONO_FONT_KEY, UI_FONT_KEY } from "../../../theme/theme";
 import { accentControl } from "./accent-control";
+import { fontControl, fontSamples } from "./font-control";
 import { appearancePreview } from "./preview";
 import { dressRow, type Piece } from "./rows";
 import { mountScrim } from "./scrim";
@@ -36,6 +38,10 @@ export function mountPreferences(lifetime: Lifetime): void {
     dressRow(lifetime, body, spaceControl(lifetime)),
     dressRow(lifetime, body, accentControl(lifetime, panel)),
     dressRow(lifetime, body, zoomControl(lifetime)),
+    dressRow(lifetime, body, fontControl(lifetime, FONT_KEY, "reading")),
+    dressRow(lifetime, body, fontControl(lifetime, UI_FONT_KEY, "ui")),
+    dressRow(lifetime, body, fontControl(lifetime, MONO_FONT_KEY, "mono")),
+    fontSamples(body, [[FONT_KEY, "reading"], [UI_FONT_KEY, "ui"], [MONO_FONT_KEY, "mono"]]),
     appearancePreview(lifetime, body),
     themeSettings(lifetime, panel, body),
     () => outcomesUnderControls(body),

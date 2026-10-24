@@ -128,6 +128,7 @@ export const SETTINGS: PartAnatomy = {
         "prefs-swatch-mark",
         "prefs-hue",
         "prefs-hue-value",
+        "prefs-font",
       ],
     },
     {

@@ -1330,6 +1330,7 @@
     "prefs-swatch-mark",
     "prefs-hue",
     "prefs-hue-value",
+    "prefs-font",
     "prefs-theme-entries",
     "prefs-preview",
     "prefs-preview-side",
@@ -4593,7 +4594,8 @@
         "prefs-swatch--custom",
         "prefs-swatch-mark",
         "prefs-hue",
-        "prefs-hue-value"
+        "prefs-hue-value",
+        "prefs-font"
       ],
       "states": [
         "rest",
@@ -5510,7 +5512,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1209,
+    "hooks": 1210,
     "state_names": 7,
     "assigned_states": 631,
     "components": 187,

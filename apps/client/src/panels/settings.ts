@@ -1754,6 +1754,10 @@ function selectField(entry: SettingEntry, id: string, options: UiOption[]): HTML
     el.selected = option.value === entry.value;
     select.append(el);
   }
+  // Di nuovo a tendina piena: `selected` messo su un'opzione non ancora
+  // inserita non tutti i DOM lo tengono (happy-dom ne sceglie un'altra), e chi
+  // legge `value` — una veste della shell — leggerebbe una scelta falsa.
+  select.value = current;
   select.addEventListener("change", () => {
     void writeRow(entry.spec.key, select.value, () => writeChoice(entry.spec.key, select.value));
   });

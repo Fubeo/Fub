@@ -880,6 +880,33 @@
  * della scocca, il foglio nel suo, le righe di testo nell'inchiostro tenue. Il
  * passo scelto ha il contorno e la velatura della matita blu, e sotto la
  * figura il punto pieno: si riconosce anche senza colore. */
+/* Le voci dei caratteri: come i passi dello spazio, un contorno che si
+ * accende sulla scelta. Il carattere lo mette la voce stessa. */
+.prefs-font {
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+}
+
+.prefs-font:hover {
+  background: var(--overlay-hover);
+}
+
+.prefs-font:active {
+  background: var(--overlay-active);
+}
+
+.prefs-font[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+.prefs-font:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .prefs-space-step {
   border: 1px solid transparent;
   border-radius: var(--radius-control);

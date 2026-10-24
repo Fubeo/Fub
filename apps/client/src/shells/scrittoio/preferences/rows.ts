@@ -4,11 +4,11 @@
 // valore: una riga di ieri non è la riga di oggi. Chi veste una riga tiene
 // quindi un nodo suo, sempre lo stesso, e lo rimette nella riga nuova ogni
 // volta che la vista ha finito; della riga legge soltanto ciò che la vista
-// promette (`data-setting-key`, `.setting-control`, il campo numerico con il
-// suo `change`).
+// promette (`data-setting-key`, `.setting-control`, il campo numerico o la
+// tendina col suo `change`).
 //
-// Il valore si scrive **attraverso la riga**: il campo numerico della vista
-// riceve il numero e un `change`, e da lì parte la sua stessa scrittura
+// Il valore si scrive **attraverso la riga**: il campo della vista riceve il
+// valore e un `change`, e da lì parte la sua stessa scrittura
 // (`api.setSetting`), con l'attesa, l'esito sotto la riga, la riga tenuta in
 // vista sotto un filtro e il fuoco rimesso. Una seconda strada verso l'host
 // avrebbe dovuto rifare tutte e quattro le cose.
@@ -23,6 +23,17 @@ export function rowFor(body: HTMLElement, key: string): HTMLElement | null {
 /// suo cursore.
 export function numberField(row: HTMLElement): HTMLInputElement | null {
   return row.querySelector<HTMLInputElement>('.setting-control input[type="number"]');
+}
+
+/// La tendina che la vista ha messo nella riga.
+export function choiceField(row: HTMLElement): HTMLSelectElement | null {
+  return row.querySelector<HTMLSelectElement>(".setting-control select");
+}
+
+/// Scrive una scelta dalla strada della riga.
+export function chooseThrough(field: HTMLSelectElement, value: string): void {
+  field.value = value;
+  field.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 /// Scrive un numero dalla strada della riga.
@@ -94,13 +105,19 @@ export function keepFocus(lifetime: Lifetime, root: HTMLElement, fallback: (targ
   };
 }
 
+/// Il controllo della vista che una veste sa pilotare.
+type Field = HTMLInputElement | HTMLSelectElement;
+
 /// Una veste: il nodo che prende il posto del controllo generico di una riga.
-export interface Dress {
+export interface Dress<F extends Field = HTMLInputElement> {
   readonly key: string;
   /// Sempre lo stesso nodo, da una riscrittura all'altra.
   readonly element: HTMLElement;
   /// Allinea il nodo alla riga appena scritta. Scrive solo ciò che cambia.
-  update(row: HTMLElement, field: HTMLInputElement): void;
+  update(row: HTMLElement, field: F): void;
+  /// Dove sta, nella riga, il controllo da pilotare. Di serie il campo
+  /// numerico (`numberField`).
+  field?(row: HTMLElement): F | null;
 }
 
 /// Un pezzo che segue la vista: il gesto da ripetere a ogni riscrittura del
@@ -112,10 +129,11 @@ export type Piece = () => boolean;
  * Tiene una veste nella sua riga. Torna il gesto da ripetere a ogni
  * riscrittura del corpo: non fa niente se niente è cambiato.
  *
- * Senza la riga, o senza il campo numerico che la veste sa pilotare, la veste
+ * Senza la riga, o senza il controllo che la veste sa pilotare, la veste
  * si toglie e resta il controllo della vista.
  */
-export function dressRow(lifetime: Lifetime, body: HTMLElement, dress: Dress): Piece {
+export function dressRow<F extends Field>(lifetime: Lifetime, body: HTMLElement, dress: Dress<F>): Piece {
+  const fieldOf = dress.field ?? ((row: HTMLElement) => numberField(row) as F | null);
   // Il controllo della vista, nella riga vestita, è nascosto: la persona non ci
   // arriva. La vista sì — dopo una scrittura rimette il fuoco «sul controllo
   // della riga», e se arriva prima che la veste sia tornata trova lui.
@@ -136,7 +154,7 @@ export function dressRow(lifetime: Lifetime, body: HTMLElement, dress: Dress): P
   });
   return () => {
     const row = rowFor(body, dress.key);
-    const field = row ? numberField(row) : null;
+    const field = row ? fieldOf(row) : null;
     const control = field?.closest<HTMLElement>(".setting-control") ?? null;
     if (!row || !field || !control) {
       if (dress.element.isConnected) dress.element.remove();
