@@ -27,6 +27,11 @@ export const GERGO: readonly Gergo[] = [
   { parola: /\bscocca\b/i, invece: "«cornice»" },
   { parola: /\boklch\b/i, invece: "«tinta»" },
   { parola: /\bpayload\b/i, invece: "«contenuto»" },
+  { parola: /\bruntime\b/i, invece: "«attivo», «stato dei componenti»" },
+  // Maiuscolo: l'estensione `.wasm` di un file è un nome che si legge sul disco.
+  { parola: /\bWASM\b/, invece: "«componenti», «motore dei componenti»" },
+  { parola: /\bABI\b/, invece: "«versione del contratto»" },
+  { parola: /\bfeed\b/i, invece: "«catalogo»" },
   // Una revisione si dice per quello che è, non col suo numero interno.
   { parola: /\br\d+\b/, invece: "«versione», con la data" },
   // Un campo vuoto si spiega a parole, non con un'uguaglianza.
