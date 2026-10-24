@@ -1294,7 +1294,7 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
     described.push(desc.id);
     text.append(desc);
   }
-  text.append(rowMeta(entry, modified));
+  if (modified) text.append(rowMeta(entry));
   // La frase intera sulla provenienza: la pastiglia la dice in breve a chi
   // guarda, questa la dice per intero a chi ascolta, arrivando sul campo.
   const source = document.createElement("span");
@@ -1334,18 +1334,22 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
   return el;
 }
 
-/// La riga dei metadati: la pastiglia dell'ambito e, per una riga modificata,
-/// il predefinito e «Azzera».
+/// La riga dei metadati, solo per una riga modificata: la pastiglia
+/// dell'ambito, il predefinito e «Azzera».
+///
+/// Su una riga al valore di serie non c'è niente da dire che serva a chi
+/// guarda: dove varrà il valore lo dice la pastiglia quando un valore c'è, e a
+/// chi ascolta lo dice comunque la frase della provenienza. Tre parole grigie
+/// sotto ogni riga erano rumore uguale dappertutto.
 ///
 /// «Azzera» compare **solo dove c'è qualcosa da azzerare**: su una riga al
 /// valore predefinito sarebbe un pulsante che non fa niente, cioè un pulsante
 /// che insegna a non fidarsi dei pulsanti. E accanto dice a cosa riporta:
 /// senza, «azzera» era un salto nel buio.
-function rowMeta(entry: SettingEntry, modified: boolean): HTMLElement {
+function rowMeta(entry: SettingEntry): HTMLElement {
   const meta = document.createElement("div");
   meta.className = "setting-meta";
   meta.append(scopeChip(entry.spec.scope));
-  if (!modified) return meta;
   // Lingua e fuso vuoti vogliono dire «come il sistema», ed è così che li
   // chiama il loro controllo: il predefinito deve dirlo con la stessa parola.
   const empty = SYSTEM_WHEN_EMPTY.has(entry.spec.key) ? t("settings.as_system") : undefined;

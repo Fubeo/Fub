@@ -231,6 +231,9 @@ describe("la riga dice dove vale il valore, e a cosa riporta «Azzera»", () => 
     expect(changed.querySelector(".setting-reset")?.textContent).toBe("Azzera");
     const untouched = document.querySelector<HTMLElement>('[data-setting-key="editor.spellcheck"]')!;
     expect(untouched.dataset.modified).toBeUndefined();
+    // Al valore di serie la riga non ha metadati: niente pastiglia, niente
+    // predefinito, niente «Azzera».
+    expect(untouched.querySelector(".setting-meta")).toBeNull();
     expect(untouched.querySelector(".setting-default")).toBeNull();
     expect(untouched.querySelector(".setting-reset")).toBeNull();
   });
