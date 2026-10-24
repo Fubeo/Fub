@@ -3,14 +3,13 @@
   "sha256": "bc5cb0c4f496b7271a100b536567caeca45fa579505ad6c7753e055f467833ff",
   "open": {
     "readonly": "revisions",
-    "projection": "130153a7e30e332cf5c33836c2c632d2e59d8411ce1b328ad4f05866ccda06ae",
+    "projection": "1145ee895e6042df20f73de3cc50a9910eddff98e8cdfbd78d8cb4340ffe7789",
     "blocks": 2,
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 4",
+    "differenze all'apertura: 3",
     "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
     "normalizzazione «w:id»: 1 nel file, 1 nella prova a vuoto",

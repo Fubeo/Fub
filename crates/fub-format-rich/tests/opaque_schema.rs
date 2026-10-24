@@ -16,8 +16,9 @@
 //!   contenimento, perché un salvataggio li decodifica tutti.
 //! - `una_bozza_dello_schema_0_si_salva`: una proiezione di versione 1, come
 //!   le bozze di prima della versione 2, si salva sui suoi byte;
-//!   `una_bozza_dello_schema_1_si_salva`: lo stesso per una proiezione dello
-//!   schema 1, di prima di WordCraft 0.9.
+//!   `una_bozza_dello_schema_1_si_salva` e `una_bozza_dello_schema_2_si_salva`:
+//!   lo stesso per una proiezione dello schema 1, di prima di WordCraft 0.9,
+//!   e dello schema 2, di prima di WordCraft 0.10.
 
 mod common;
 
@@ -242,6 +243,11 @@ fn una_bozza_dello_schema_1_si_salva() {
     a_draft_of_schema_saves(1, 2);
 }
 
+#[test]
+fn una_bozza_dello_schema_2_si_salva() {
+    a_draft_of_schema_saves(2, 2);
+}
+
 /// La bozza di `tests/fixtures/opaque/schema-<schema>/`, una proiezione di
 /// versione `version`, si salva e si rilegge com'era voluta.
 fn a_draft_of_schema_saves(schema: u32, version: u32) {
@@ -289,7 +295,7 @@ fn texts(projection: &Projection) -> Vec<String> {
 #[test]
 #[ignore]
 fn genera_le_fixture_degli_schemi_precedenti() {
-    for schema in [0u32, 1] {
+    for schema in [0u32, 1, 2] {
         let dir = here().join(format!("tests/fixtures/opaque/schema-{schema}"));
         if dir.join("projection.json").exists() {
             continue;
