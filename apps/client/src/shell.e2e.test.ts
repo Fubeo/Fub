@@ -1709,6 +1709,26 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     expect(commands(host, "folder.rename")).toEqual([]);
   });
 
+  it("la riga trascinata si solleva finché dura il gesto, poi torna giù", async () => {
+    await start({ ...VAULT, "Altro.md": "y" });
+    const source = row("Altro.md")!;
+    source.dispatchEvent(dragEvent("dragstart"));
+    expect(source.hasAttribute("data-lifted")).toBe(true);
+    // Solo la riga d'origine: le altre restano al loro posto.
+    expect(document.querySelectorAll("#file-list [data-lifted]")).toHaveLength(1);
+    source.dispatchEvent(dragEvent("dragend"));
+    expect(document.querySelector("[data-lifted]")).toBeNull();
+
+    // Lo stesso per una linguetta.
+    source.click();
+    await waitFor("la nota ha la sua linguetta", () => !!document.querySelector(".tab-entry"));
+    const tab = document.querySelector<HTMLElement>(".tab-entry")!;
+    tab.dispatchEvent(dragEvent("dragstart"));
+    expect(tab.hasAttribute("data-lifted")).toBe(true);
+    tab.dispatchEvent(dragEvent("dragend"));
+    expect(document.querySelector("[data-lifted]")).toBeNull();
+  });
+
   it("le note scelte insieme si trascinano insieme", async () => {
     const host = await start({ ...VAULT, "Altro.md": "y" });
     row("Benvenuto.md")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));

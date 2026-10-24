@@ -141,6 +141,19 @@ describe("il moto dell'albero", () => {
     expect(list.querySelector('[style*="transform"], [style*="opacity"]')).toBeNull();
   });
 
+  it("dopo un riordino le righe scivolano al loro posto nuovo, e non entra niente", () => {
+    render(false);
+    const motion = beginTreeMotion(list, null);
+    // Il riordino: `zeta.md` passa in cima.
+    list.prepend(list.lastElementChild!);
+    motion.settle();
+
+    const moved = new Set(driver.plays.map((play) => (play.el.parentElement as HTMLElement).dataset.path));
+    expect(moved).toEqual(new Set(["zeta.md", "alfa.md", "docs"]));
+    expect(driver.plays.every((play) => play.keyframes[0]?.opacity === undefined)).toBe(true);
+    expect(list.querySelector("[inert]")).toBeNull();
+  });
+
   it("si compie una volta sola", () => {
     render(false);
     const motion = beginTreeMotion(list, "docs");

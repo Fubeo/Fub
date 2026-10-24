@@ -2116,6 +2116,10 @@ function wireDrag(row: HTMLElement, path: string, kind: "note" | "folder", isNot
     const picked = selection?.paths() ?? [];
     const group = picked.length > 1 && picked.includes(path) ? picked : [path];
     drag = { path, kind, parent: parentOf(path), group };
+    // La riga d'origine si solleva: il fantasma che segue il puntatore resta
+    // quello del sistema, che sa uscire anche dalla finestra. La scala ha una
+    // transizione, quindi l'immagine che il sistema prende adesso è a riposo.
+    row.dataset.lifted = "";
     // Spostare dentro l'albero, lasciarla cadere in una nota per collegarla,
     // o fuori, in un altro programma, come il file vero che è sul disco.
     e.dataTransfer!.effectAllowed = "copyMove";
@@ -2129,6 +2133,7 @@ function wireDrag(row: HTMLElement, path: string, kind: "note" | "folder", isNot
     if (entries.length) e.dataTransfer!.setData(ENTRIES_DRAG_TYPE, JSON.stringify(entries));
   });
   row.addEventListener("dragend", () => {
+    row.removeAttribute("data-lifted");
     drag = null;
     cancelHoverOpen();
     clearDropMarks();
@@ -2198,6 +2203,9 @@ function clearDropMarks(): void {
 ///
 /// La cartella è quella dei due fratelli che si stanno riordinando, quindi è a
 /// schermo, quindi è caricata: `children` la trova senza chiedere niente.
+///
+/// Al ridisegno le righe scivolano dal posto che avevano al nuovo ordine, che
+/// il gesto sia un rilascio o una voce di menu.
 function applyReorder(parent: string, dragged: string, target: string, before: boolean): void {
   const node = children(parent);
   if (!node) return;
@@ -2205,7 +2213,11 @@ function applyReorder(parent: string, dragged: string, target: string, before: b
   const at = names.indexOf(target);
   if (at === -1) return;
   names.splice(before ? at : at + 1, 0, dragged);
-  void setOrder(parent, names);
+  const motion = beginTreeMotion(fileListEl, null, treeLife ?? undefined);
+  treeMotion = motion;
+  void setOrder(parent, names).finally(() => {
+    if (treeMotion === motion) treeMotion = null;
+  });
 }
 /// Sposta una nota dentro un'altra cartella (drag "into", voce di menu o
 /// tastiera): stesso rename del kernel, quindi stesso flush preventivo — un

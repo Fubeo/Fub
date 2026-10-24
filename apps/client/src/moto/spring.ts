@@ -38,8 +38,6 @@ export const PRESS_SCALE = 0.97;
 /// Lo sfalsamento fra le voci di un elenco (ms) e quante ne sfalsa al massimo.
 export const STAGGER_MS = 12;
 export const STAGGER_MAX = 8;
-/// L'inclinazione massima di un oggetto trascinato (gradi).
-export const MAX_TILT_DEG = 4;
 /// Non è una durata del disegno: è il tetto oltre il quale un'uscita non può
 /// restare appesa (ms).
 export const EXIT_SAFETY_MS = 600;

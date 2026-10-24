@@ -858,7 +858,10 @@ function wireTabDrag(r: PaneFrame, item: HTMLElement, index: number, target: Tab
   item.addEventListener("dragstart", (e) => {
     e.dataTransfer!.effectAllowed = "move";
     e.dataTransfer!.setData("text/plain", JSON.stringify({ pane: r.id, index }));
+    // Si solleva la linguetta d'origine; il fantasma resta quello del sistema.
+    item.dataset.lifted = "";
   });
+  item.addEventListener("dragend", () => item.removeAttribute("data-lifted"));
   item.addEventListener("dragover", (e) => {
     e.preventDefault();
     e.dataTransfer!.dropEffect = "move";

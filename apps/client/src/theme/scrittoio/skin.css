@@ -2349,6 +2349,17 @@ kbd,
 .tree-row:active {
   background: var(--bg-active);
 }
+/* La riga presa per trascinarla si solleva dal suo posto: di poco, con
+   l'ombra, sopra le vicine. Il fantasma che segue il puntatore è quello del
+   sistema; la scala arriva con una transizione, così l'immagine che il
+   sistema fotografa alla partenza è la riga a riposo. */
+.tree-row[data-lifted] {
+  z-index: 1;
+  background: var(--bg-hover);
+  box-shadow: var(--shadow-md);
+  transform: scale(1.02);
+  transition: transform var(--duration-fast) var(--ease);
+}
 
 /* Il rientro, un livello alla volta (`--tree-indent` si stringe coi passi di
    compattezza). Otto livelli sono scritti per esteso; dal nono rientra la
@@ -3307,6 +3318,17 @@ kbd,
   transition: opacity var(--duration-state) var(--ease);
 }
 .tab-entry:hover::after {
+  opacity: 1;
+}
+/* La linguetta presa per trascinarla si solleva, come una riga dell'albero. */
+.tab-entry[data-lifted] {
+  z-index: 1;
+  border-radius: var(--radius-chip);
+  box-shadow: var(--shadow-md);
+  transform: scale(1.02);
+  transition: transform var(--duration-fast) var(--ease);
+}
+.tab-entry[data-lifted]::after {
   opacity: 1;
 }
 .tab-entry:has(> .tab[aria-selected="true"])::after {

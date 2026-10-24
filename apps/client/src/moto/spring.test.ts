@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   DURATION,
   EXIT_SAFETY_MS,
-  MAX_TILT_DEG,
   PRESS_SCALE,
   SAMPLE_MS,
   SKELETON_DELAY_MS,
@@ -48,7 +47,7 @@ describe("i parametri del disegno", () => {
       jelly: { stiffness: 260, damping: 12 },
     });
     expect(DURATION).toEqual({ state: 90, swap: 140, short: 220, large: 360, scene: 560 });
-    expect([PRESS_SCALE, STAGGER_MS, STAGGER_MAX, MAX_TILT_DEG]).toEqual([0.97, 12, 8, 4]);
+    expect([PRESS_SCALE, STAGGER_MS, STAGGER_MAX]).toEqual([0.97, 12, 8]);
     expect([EXIT_SAFETY_MS, SKELETON_DELAY_MS]).toEqual([600, 120]);
   });
 });

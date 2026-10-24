@@ -98,6 +98,17 @@
 .tab-entry:hover::after {
   opacity: 1;
 }
+/* La linguetta presa per trascinarla si solleva, come una riga dell'albero. */
+.tab-entry[data-lifted] {
+  z-index: 1;
+  border-radius: var(--radius-chip);
+  box-shadow: var(--shadow-md);
+  transform: scale(1.02);
+  transition: transform var(--duration-fast) var(--ease);
+}
+.tab-entry[data-lifted]::after {
+  opacity: 1;
+}
 .tab-entry:has(> .tab[aria-selected="true"])::after {
   opacity: 0;
 }

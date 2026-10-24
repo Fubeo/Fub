@@ -34,11 +34,13 @@ function folderEntry(list: HTMLElement, path: string): HTMLElement | null {
   return list.querySelector<HTMLElement>(`li[role="treeitem"][data-path="${CSS.escape(path)}"]`);
 }
 
-/// Misura l'albero prima che `path` si apra o si chiuda.
-export function beginTreeMotion(list: HTMLElement, path: string, lifetime?: Lifetime): TreeMotion {
+/// Misura l'albero prima che `path` si apra o si chiuda. Con `null` non si
+/// apre niente: le righe che restano scivolano soltanto al loro posto nuovo,
+/// come dopo un riordino.
+export function beginTreeMotion(list: HTMLElement, path: string | null, lifetime?: Lifetime): TreeMotion {
   const before = new Map<string, number>();
   for (const [key, row] of rows(list)) before.set(key, row.getBoundingClientRect().top);
-  const group = folderEntry(list, path)?.querySelector<HTMLElement>(":scope > .tree-children:not([inert])");
+  const group = (path === null ? null : folderEntry(list, path))?.querySelector<HTMLElement>(":scope > .tree-children:not([inert])");
   const ghost: Ghost | null = group ? prepareExit(group) : null;
 
   let settled = false;
@@ -47,7 +49,7 @@ export function beginTreeMotion(list: HTMLElement, path: string, lifetime?: Life
       if (settled) return [];
       settled = true;
       const motions: Motion[] = [];
-      const folder = folderEntry(list, path);
+      const folder = path === null ? null : folderEntry(list, path);
 
       // Chi esce: l'immagine sta nella cartella, quindi alla sua profondità,
       // ma non è dell'albero: niente ruoli né path che un giro dopo si

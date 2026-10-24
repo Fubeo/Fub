@@ -202,6 +202,23 @@ const outlineChosen = (index) => (page) =>
     const label = document.querySelectorAll("#right-pane .ui-tree-label")[i];
     return label?.closest(".ui-tree-item")?.getAttribute("aria-selected") === "true";
   }, index);
+/// Trascina la riga `from` dell'albero su `to`, a `fraction` della sua altezza:
+/// sopra la metà è «prima», sotto è «dopo».
+const treeRow = (path) => `#file-list li[data-path="${path}"] > .tree-row`;
+const reorder = async (page, from, to, fraction) => {
+  const box = await page.locator(treeRow(to)).boundingBox();
+  await page.dragAndDrop(treeRow(from), treeRow(to), {
+    targetPosition: { x: box.width / 2, y: box.height * fraction },
+  });
+};
+const treeOrder = (first, second) => (page) =>
+  page.evaluate(
+    ([a, b]) => {
+      const paths = [...document.querySelectorAll('#file-list > li[role="treeitem"]')].map((li) => li.dataset.path);
+      return paths.indexOf(a) >= 0 && paths.indexOf(a) < paths.indexOf(b);
+    },
+    [first, second],
+  );
 const sheetTab = (index) => `.pane.focus .tab[data-index="${index}"]`;
 const railPressed = (panel) => has(`#views-ribbon .rail-btn[data-panel="${panel}"][aria-pressed="true"]`);
 const sheets = (count) => (page) =>
@@ -336,6 +353,16 @@ export const CHOREOGRAPHIES = [
     undo: (page) => press(page, '#file-list li[data-path="Guida"] > .tree-row > .chevron'),
     returned: has('#file-list li[data-path="Guida"][aria-expanded="false"]'),
     exit: true,
+  },
+  {
+    id: "trascina",
+    title: "Trascinamento: la riga d'origine si solleva, e all'arrivo le righe scivolano nel nuovo ordine",
+    sources: ["src/panels/explorer-motion.ts", "src/panels/explorer.ts"],
+    scene: "startup",
+    act: (page) => reorder(page, "Diario", "Guida", 0.8),
+    arrived: treeOrder("Guida", "Diario"),
+    undo: (page) => reorder(page, "Diario", "Guida", 0.2),
+    returned: treeOrder("Diario", "Guida"),
   },
   {
     id: "menu-edge",
