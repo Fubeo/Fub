@@ -10,7 +10,7 @@
 // Una coreografia è un gesto che fa partire un movimento, e il gesto che lo
 // disfa. Sta scritta come le scene di `scene.mjs`: da che scena si parte, che
 // cosa si preme, come si riconosce l'arrivo. L'elenco è **chiuso**: ogni file
-// di `src/shells/scrittoio` e di `src/kit` che fa partire una corsa di `moto`
+// di `src/shells/scrittoio`, di `src/panels` e di `src/kit` che fa partire una corsa di `moto`
 // è la sorgente di una coreografia, oppure sta in `UNCOVERED` con la sua
 // ragione. Lo verifica `motion.test.ts`, perché un movimento nuovo che il banco
 // non guarda è un verde che non dice niente.
@@ -324,6 +324,17 @@ export const CHOREOGRAPHIES = [
     arrived: has("#context-menu:not([hidden])"),
     undo: (page) => page.keyboard.press("Escape"),
     returned: lacks("#context-menu"),
+    exit: true,
+  },
+  {
+    id: "albero",
+    title: "Albero: i figli entrano sfalsati, le righe sotto scivolano; chiusa, i figli sbiadiscono dove stavano",
+    sources: ["src/panels/explorer-motion.ts"],
+    scene: "startup",
+    act: (page) => press(page, '#file-list li[data-path="Guida"] > .tree-row > .chevron'),
+    arrived: has('#file-list li[data-path="Guida"][aria-expanded="true"] > .tree-children'),
+    undo: (page) => press(page, '#file-list li[data-path="Guida"] > .tree-row > .chevron'),
+    returned: has('#file-list li[data-path="Guida"][aria-expanded="false"]'),
     exit: true,
   },
   {

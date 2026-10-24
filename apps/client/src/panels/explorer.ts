@@ -66,6 +66,7 @@ import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../sta
 import { contextMenuItems, hasContextMenuViews, type ContextTarget } from "../ui/context-views";
 import { trashManyWithConfirm, trashWithConfirm } from "./trash";
 import { mountTreeSelection, type TreeSelection } from "./explorer-selection";
+import { beginTreeMotion, type TreeMotion } from "./explorer-motion";
 import { errorText } from "../host/errors";
 import { folderForNote, nameFault, normalizedName } from "../rules/mirrored";
 import { onLanguage, plural, t } from "../i18n/strings";
@@ -77,6 +78,10 @@ import { mediaKindOfId } from "../editors/media/media-types";
 import type { ResourceKind } from "../host/contract";
 
 const fileListEl = $("#file-list");
+/// Il moto della cartella appena aperta o chiusa, finché l'albero non si
+/// ridisegna; e la vita del pannello, che lo chiude.
+let treeMotion: TreeMotion | null = null;
+let treeLife: Lifetime | null = null;
 const filesTitleEl = $("#files-title");
 const spaceStripEl = $("#space-strip");
 const spaceTitleEl = $("#space-title");
@@ -145,6 +150,11 @@ const levelWindows = new Map<string, number>();
 let lastSignature = "";
 
 export function mountExplorer(lifetime: Lifetime): void {
+  treeLife = lifetime;
+  lifetime.add(() => {
+    treeLife = null;
+    treeMotion = null;
+  });
   lifetime.listen($("#new-note"), "click", () => void newNote());
   // Il titolo del pannello è la radice di ciò che si vede (il vault o lo
   // spazio attivo): il suo contestuale crea lì un disegno, se il kernel sa
@@ -537,6 +547,8 @@ function renderFileList(): void {
 
   roving(toRestore);
   selection?.repaint();
+  treeMotion?.settle();
+  treeMotion = null;
   if (toRestore !== undefined) {
     const row = entry(toRestore);
     const control = onChevron
@@ -1236,10 +1248,17 @@ function namedFolder(path: string, name = childName(path)): string {
 
 /// Apre o chiude una cartella. Aprirne una **chiede il suo contenuto**
 /// (§14.4): non c'era in memoria, perché in memoria c'è ciò che si vede.
+///
+/// Il moto si misura qui, prima del giro, e si compie al ridisegno che segue:
+/// se il giro è superato da un altro, lo compie quello.
 function toggleFolder(path: string): void {
   if (!state.expanded.delete(path)) state.expanded.add(path);
   saveExpanded();
-  void refreshFromKernel(true);
+  const motion = drag === null ? beginTreeMotion(fileListEl, path, treeLife ?? undefined) : null;
+  treeMotion = motion;
+  void refreshFromKernel(true).finally(() => {
+    if (treeMotion === motion) treeMotion = null;
+  });
 }
 
 /// Porta in vista nell'albero il documento attivo: esce da uno spazio che non
