@@ -31,3 +31,17 @@ vi.stubGlobal("navigator", ITALIAN);
 beforeEach(() => {
   vi.stubGlobal("navigator", ITALIAN);
 });
+
+// Dalla 21 happy-dom ha un suo `Element.animate`, ma il suo tempo non scorre:
+// le corse non finiscono mai, e la scelta del motore di `moto/driver.ts`
+// prenderebbe WAAPI al posto dell'istantaneo. La suite è scritta per un DOM
+// senza WAAPI: chi prova WAAPI lo installa finto e lo toglie
+// (`moto/driver.test.ts`). Qui lo si toglie, una volta, dal prototipo che lo
+// definisce; negli ambienti senza DOM non c'è niente da togliere.
+if (typeof Element !== "undefined") {
+  for (let prototype: object | null = Element.prototype; prototype; prototype = Object.getPrototypeOf(prototype)) {
+    if (Object.prototype.hasOwnProperty.call(prototype, "animate")) {
+      delete (prototype as { animate?: unknown }).animate;
+    }
+  }
+}
