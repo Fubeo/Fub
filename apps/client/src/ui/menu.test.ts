@@ -422,6 +422,26 @@ describe("un menu aperto da un pulsante", () => {
     showContextMenu(clickEvent(), [{ label: "Una", run: () => {} }]);
     const menu = document.getElementById("context-menu")!;
     expect([menu.style.left, menu.style.top, menu.style.maxHeight]).toEqual(["10px", "10px", ""]);
+    expect(menu.style.transformOrigin).toBe("0px 0px");
+  });
+
+  it("spinto dal bordo, cresce ancora dal puntatore", () => {
+    window_(1024, 768);
+    size = [160, 300];
+    // In basso a destra: il menu si ribalta sopra e a sinistra del puntatore,
+    // e l'origine è il puntatore dentro il menu, cioè l'angolo in basso a destra.
+    showContextMenu({ x: 1000, y: 700 }, [{ label: "Una", run: () => {} }]);
+    const menu = document.getElementById("context-menu")!;
+    expect([menu.style.left, menu.style.top]).toEqual(["840px", "460px"]);
+    expect(menu.style.transformOrigin).toBe("160px 240px");
+  });
+
+  it("aperto sopra il pulsante, cresce dal suo lato", () => {
+    window_(1024, 700);
+    size = [160, 200];
+    const menu = open(button(100, 600));
+    expect(menu.style.transformOrigin).toBe("0px 200px");
+    expect(open(button(100, 200)).style.transformOrigin).toBe("0px 0px");
   });
 });
 

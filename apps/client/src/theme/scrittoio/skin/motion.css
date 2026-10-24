@@ -89,8 +89,9 @@
 .icon-picker[data-shell-motion="exit"] {
   animation: fub-exit-rise var(--duration-fast) var(--ease-in);
 }
-/* Il menu nasce dal punto in cui lo si è chiesto: l'origine è l'angolo in
-   alto a sinistra, che è dove sta il puntatore. */
+/* Il menu nasce dal punto in cui lo si è chiesto. Di serie è l'angolo in
+   alto a sinistra; quando il bordo lo sposta, `ui/menu.ts` mette l'origine
+   sul puntatore. */
 .context-menu {
   transform-origin: top left;
 }

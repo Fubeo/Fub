@@ -535,6 +535,16 @@ function placeCascade(sub: HTMLElement, button: DOMRectReadOnly, parent: DOMRect
   sub.style.top = `${Math.max(margin, top)}px`;
 }
 
+/// Il menu cresce dal punto `x`,`y` della finestra, anche quando il bordo l'ha
+/// spinto sopra o a sinistra del puntatore: l'origine è quel punto, dentro il
+/// menu.
+function growFrom(menu: HTMLElement, left: number, top: number, x: number, y: number): void {
+  const box = menu.getBoundingClientRect();
+  const originX = Math.min(Math.max(x - left, 0), box.width);
+  const originY = Math.min(Math.max(y - top, 0), box.height);
+  menu.style.transformOrigin = `${Math.round(originX)}px ${Math.round(originY)}px`;
+}
+
 /// Un menu aperto vicino al bordo resta dentro la finestra: si ribalta a
 /// sinistra o in alto invece di uscire, e un elenco lungo scorre.
 function placeInViewport(menu: HTMLElement, x: number, y: number): void {
@@ -548,6 +558,7 @@ function placeInViewport(menu: HTMLElement, x: number, y: number): void {
   if (top + height > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - margin - height);
   menu.style.left = `${Math.max(margin, left)}px`;
   menu.style.top = `${Math.max(margin, top)}px`;
+  growFrom(menu, Math.max(margin, left), Math.max(margin, top), x, y);
 }
 
 /// Quanto un menu sta staccato dal pulsante che lo apre.
@@ -574,6 +585,8 @@ function placeBeside(menu: HTMLElement, anchor: DOMRectReadOnly): void {
   if (left + box.width > window.innerWidth - margin) left = anchor.right - box.width;
   menu.style.left = `${Math.max(margin, left)}px`;
   menu.style.top = `${top}px`;
+  // Dal lato del pulsante: sotto cresce dal bordo alto, sopra dal basso.
+  growFrom(menu, Math.max(margin, left), top, anchor.left, top > anchor.top ? anchor.bottom : anchor.top);
 }
 
 export function closeContextMenu(): void {
