@@ -233,7 +233,11 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   «Annulla» generico quando l'esito del comando dichiara `outcome.undo`; il
   centro attività tiene lo storico dei lavori. Cestinare più note insieme non
   ha un «Annulla» unico: l'annullamento del vault disfa l'ultima operazione, e
-  le note tornano dal cestino una a una.
+  le note tornano dal cestino una a una. Avvisi e attività dicono l'ora come
+  «adesso», «2 min fa», poi l'ora senza secondi (i secondi nel suggerimento).
+  Un vault senza rilevamento delle modifiche esterne lo dice in testa al
+  centro con «Riapri il vault», che scrive ciò che è in sospeso, chiude il
+  vault nell'host e lo riapre.
 - **Scrittura.** Con la barra di formattazione spenta
   (`chrome.formatbar.visible`) compare la mini-barra sulla selezione;
   l'impostazione `editor.minibar` (`auto`, `always`, `menu`, `off`) dice se

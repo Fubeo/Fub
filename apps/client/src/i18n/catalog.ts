@@ -70,7 +70,7 @@ export const IT = { // --- la scocca -------------------------------------------
 "app.dialog": "Finestra di dialogo",
 "app.start_failed": "Avvio fallito: {reason}",
 "app.external_changes":
-  "Le modifiche fatte da altre app non verranno rilevate: chiudi e riapri il vault per rileggerlo.",
+  "Le modifiche fatte da altre app non si vedono: riaprire il vault le rilegge.",
 // Nomina i comandi e non li conta soltanto, come l'avviso dei conflitti: «hai
 // tre scorciatoie in sospeso» manda a cercare quali.
 "app.vault_keys_pending":
@@ -1149,7 +1149,10 @@ export const IT = { // --- la scocca -------------------------------------------
 "notices.problem": "Problema",
 "theme.rejected": "Tema «{theme}» rifiutato:",
 "notices.open_problems": "Avvisi aperti: {count}",
-"notices.watcher_off": "Rilevamento modifiche esterne assente: chiudi e riapri il vault per rileggere",
+"notices.watcher_off": "Le modifiche fatte fuori da Fub non si vedono più. Riaprire il vault le rilegge.",
+"notices.reopen": "Riapri il vault",
+"notices.reopen.hint": "Scrive ciò che è in sospeso, chiude il vault e lo riapre",
+"time.now": "adesso",
 "notices.toast": "Avviso",
 
 // --- le impostazioni ---------------------------------------------------
@@ -2594,7 +2597,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "app.dialog": "Dialog",
 "app.start_failed": "Startup failed: {reason}",
 "app.external_changes":
-  "Changes made by other apps will not be detected: close and reopen the vault to read it again.",
+  "Changes made by other apps are not seen: reopening the vault reads them again.",
 "app.vault_keys_pending":
   "This vault proposes {count} shortcuts that are not active yet ({commands}). Look at them in the settings, Shortcuts section.",
 "app.vault_keys_pending.one":
@@ -3635,7 +3638,10 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "notices.problem": "Problem",
 "theme.rejected": "Theme «{theme}» rejected:",
 "notices.open_problems": "Open problems: {count}",
-"notices.watcher_off": "External change detection off: close and reopen the vault to reread",
+"notices.watcher_off": "Changes made outside Fub are no longer seen. Reopening the vault reads them again.",
+"notices.reopen": "Reopen the vault",
+"notices.reopen.hint": "Writes what is pending, closes the vault and opens it again",
+"time.now": "just now",
 "notices.toast": "Notice",
 
 "settings.title": "Settings",

@@ -4,7 +4,7 @@
 // ne faceva `[object Object]` (I65).
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createManualDriver, setMotionDriver } from "../moto";
-import { clearHistory, notify, recentNotices, TOAST_STACK_LIMIT } from "./notify";
+import { clearHistory, notify, openHistory, recentNotices, setWatcherOff, TOAST_STACK_LIMIT } from "./notify";
 
 describe("il gesto di un toast", () => {
   afterEach(() => {
@@ -101,5 +101,38 @@ describe("la pila dei toast", () => {
     notify("Solo", "guasto");
     document.querySelector<HTMLButtonElement>(".toast-close")!.click();
     expect(document.getElementById("toasts")).toBeNull();
+  });
+});
+
+describe("il rilevamento assente, nel centro", () => {
+  afterEach(() => {
+    setWatcherOff(false);
+    openHistory(false);
+    clearHistory();
+    document.body.innerHTML = "";
+  });
+
+  it("dice che cosa non si vede e offre il gesto che lo rimette", async () => {
+    document.body.innerHTML = `<button id="notify-button"></button><div id="notify-panel"><ul id="notify-list"></ul></div>`;
+    let reopened = 0;
+    setWatcherOff(true, async () => void reopened++);
+    openHistory(true);
+    const note = document.querySelector("#notify-list > li")!;
+    expect(note.textContent).toContain("Riaprire il vault le rilegge");
+    const button = note.querySelector<HTMLButtonElement>("button")!;
+    expect(button.textContent).toBe("Riapri il vault");
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(reopened).toBe(1);
+    // Tornato il rilevamento, la riga e il suo gesto non ci sono più.
+    setWatcherOff(false);
+    expect(document.querySelector("#notify-list button")).toBeNull();
+  });
+
+  it("l'ora di un avviso è relativa, i secondi nel suggerimento", () => {
+    document.body.innerHTML = `<button id="notify-button"></button><div id="notify-panel"><ul id="notify-list"></ul></div>`;
+    notify("Fatto", "info");
+    openHistory(true);
+    expect(document.querySelector(".notify-ora")!.textContent).toBe("adesso");
   });
 });

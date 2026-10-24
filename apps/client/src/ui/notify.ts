@@ -37,12 +37,13 @@
 // [decisione 0052]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
 // [decisione 0080]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
 
-import { onLanguage, resolvedLanguage, t, type Key } from "../i18n/strings";
+import { onLanguage, t, type Key } from "../i18n/strings";
 import type { Gate, KernelEvent } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import type { Lifetime } from "./lifetime";
 import { focusableElements } from "./a11y";
 import { setTooltip } from "./tooltip";
+import { exactTime, relativeTime } from "./when";
 import { drawCountButton } from "./icons";
 import { errorText } from "../host/errors";
 import { DURATION, exitGhost, flip } from "../moto";
@@ -120,6 +121,9 @@ let open = false;
 /// Resta finché un segnale contrario non la abbassa — nessun timeout che la
 /// faccia sparire da sola.
 let watcherOff = false;
+/// Il gesto che rimette il rilevamento: riaprire il vault. Lo dà chi alza il
+/// segnale, e vale finché il segnale resta.
+let reopenVault: (() => Promise<void>) | null = null;
 /// Chi ha aperto per ultimo il centro, per riportargli il fuoco (C04).
 let opener: HTMLElement | null = null;
 
@@ -276,8 +280,9 @@ export function openHistory(isOpen = !open): void {
 /// segnale (I04/R07-R08). Nota: nessun iscritto automatico qui — il segnale
 /// `watching` arriva da `vaultStatus()` in desktop-shell, che resta l'unico a
 /// chiamarla (ownership sua, nessun secondo writer).
-export function setWatcherOff(off: boolean): void {
+export function setWatcherOff(off: boolean, reopen?: () => Promise<void>): void {
   watcherOff = off;
+  reopenVault = off ? reopen ?? null : null;
   redraw();
 }
 
@@ -548,6 +553,19 @@ function watcherNote(): HTMLLIElement {
   const text = document.createElement("span");
   text.textContent = notifyText("notices.watcher_off");
   note.appendChild(text);
+  const reopen = reopenVault;
+  if (reopen) {
+    // Il gesto che il testo nomina, accanto al testo.
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "toast-action";
+    button.textContent = t("notices.reopen");
+    setTooltip(button, t("notices.reopen.hint"));
+    button.addEventListener("click", () => {
+      void reopen().catch((error: unknown) => notify(errorText(error), "guasto"));
+    });
+    note.appendChild(button);
+  }
   return note;
 }
 /// Una riga dello storico con dettagli senza console (U65): testo, ora, e i
@@ -562,9 +580,10 @@ function noticeRow(notice: Notice): HTMLLIElement {
   setTooltip(text, lineOf(notice));
   const time = document.createElement("span");
   time.className = "muted notify-ora";
-  // Nella lingua che la shell parla, non in quella del sistema.
-  time.textContent = new Date(notice.when).toLocaleTimeString(resolvedLanguage());
-  setTooltip(time, new Date(notice.when).toLocaleString(resolvedLanguage()));
+  // Nella lingua che la shell parla, non in quella del sistema; i secondi
+  // nel suggerimento.
+  time.textContent = relativeTime(notice.when);
+  setTooltip(time, exactTime(notice.when));
   row.append(text, time);
   return row;
 }

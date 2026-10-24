@@ -35,9 +35,10 @@ import { $ } from "../ui/dom";
 import { notify, showPanel } from "../ui/notify";
 import type { Tone } from "../ui/notify";
 import { asPluginError, errorText } from "../host/errors";
-import { onLanguage, resolvedLanguage, t } from "../i18n/strings";
+import { onLanguage, t } from "../i18n/strings";
 import type { Lifetime } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
+import { exactTime, relativeTime } from "../ui/when";
 import { drawCountButton } from "../ui/icons";
 import { focusableElements } from "../ui/a11y";
 
@@ -546,7 +547,8 @@ function pastRow(item: Past): HTMLLIElement {
   setTooltip(text, item.text);
   const time = document.createElement("span");
   time.className = "muted";
-  time.textContent = new Date(item.when).toLocaleTimeString(resolvedLanguage());
+  time.textContent = relativeTime(item.when);
+  setTooltip(time, exactTime(item.when));
   el.append(text, time);
   return el;
 }
