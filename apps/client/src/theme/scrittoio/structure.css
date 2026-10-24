@@ -123,6 +123,19 @@
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
+
+  [aria-pressed="mixed"] {
+    outline: 2px dashed Highlight;
+    outline-offset: -2px;
+  }
+
+  /* La riga che divide le voci di un menu è un fondo, e i fondi si
+     forzano: resta del colore del testo, perché i gruppi si vedano. La
+     pelle viene dopo questo foglio e colora lo stesso selettore, quindi il
+     pavimento vince con `!important`. */
+  .context-menu .menu-separator {
+    background: CanvasText !important;
+  }
 }
 
 :focus-visible {
@@ -2338,19 +2351,6 @@ body {
 
 /* ---- L'editor dei disegni (FubDraw) e le sue finestre ---- */
 
-
-  [aria-pressed="mixed"] {
-    outline: 2px dashed Highlight;
-    outline-offset: -2px;
-  }
-
-  /* La riga che divide le voci di un menu è un fondo, e i fondi si
-     forzano: resta del colore del testo, perché i gruppi si vedano. La
-     pelle viene dopo questo foglio e colora lo stesso selettore, quindi il
-     pavimento vince con `!important`. */
-  .context-menu .menu-separator {
-    background: CanvasText !important;
-  }
 /* FubDraw: gli strati del painter e quello sopra, nell'ordine del documento.
    Uno strato vivo non eredita niente dalla pagina, come un SVG aperto da
    solo: il testo del disegno parte dai valori iniziali, non dal carattere
