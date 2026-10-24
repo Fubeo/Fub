@@ -256,8 +256,9 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   sistema o quello proprio; il tasto Menu e Maiusc+F10 lo aprono sotto il
   cursore. Sui collegamenti una scheda al passaggio mostra
   la destinazione (`render_embed`) con apri, di fianco e nuova linguetta; un
-  collegamento irrisolto offre «Crea». In Live le azioni della scheda non
-  sono raggiungibili da tastiera.
+  collegamento irrisolto offre «Crea». In Live, col cursore in un
+  collegamento, Maiusc+Alt+Invio apre la scheda col fuoco sulla prima azione;
+  Esc riporta il fuoco nel testo.
 - **Cerca.** Il cassetto espone le opzioni che la porta regge (maiuscole,
   regex, tolleranza, parola intera) e «Sostituisci nel vault»: prima il piano
   (`vault.replace` in `dry_run`), poi «Applica». La sostituzione è letterale e

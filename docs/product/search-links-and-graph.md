@@ -176,7 +176,9 @@ link che non si risolve non apre niente.
 Nell'editor, Live o Sorgente, `Alt+Invio` apre il link su cui sta il cursore:
 un wikilink porta alla nota, alla sezione o al blocco che nomina, come
 Ctrl/Cmd+click; un indirizzo esterno si apre solo se la policy di Lettura lo
-permette. Dentro il codice il tasto non apre niente.
+permette. Dentro il codice il tasto non apre niente. In Live
+`Maiusc+Alt+Invio` su un wikilink apre invece la sua scheda, col fuoco sulle
+azioni (apri, di fianco, nuova linguetta, o «Crea»); Esc torna al testo.
 
 «Copia il link a questo punto», dalla palette, mette negli appunti il link al
 titolo o al paragrafo dove sta il cursore: `[[Nota#Titolo]]`, o
