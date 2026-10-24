@@ -8,7 +8,7 @@ export const MOTION: PartAnatomy = {
     { name: "context-menu", states: INTERACTIVE, hooks: ["context-menu"] },
     { name: "modal-palette", states: SELECTABLE, hooks: ["modale", "palette-box"] },
     { name: "settings", states: [S("rest"), S("selected"), S("focused")], hooks: ["settings-panel"] },
-    { name: "editor-motion-surface", states: [S("rest"), S("focused")], hooks: ["cm-editor", "pane-editor"] },
+    { name: "editor-motion-surface", states: [S("rest"), S("focused")], hooks: ["cm-editor", "pane-editor", "cm-cursorLayer"] },
     { name: "sheet-ghost", states: REST, hooks: ["sheet-ghost"] },
     { name: "draw-radial", states: INTERACTIVE, hooks: ["draw-radial", "draw-radial-ring"] },
   ],

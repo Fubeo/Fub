@@ -15609,11 +15609,13 @@ h6.ui-heading {
   animation: fub-exit-rise-sm var(--duration-state) var(--ease-in);
 }
 
-/* Il moto è della scocca, mai del foglio. La scrittura sta ferma. */
+/* Il moto è della scocca, mai del foglio. La scrittura sta ferma. Il cursore
+   no: se lampeggia lo decide `editor.cursor-blink` (di serie fermo), che ne
+   fissa la cadenza; qui non lo si spegne una seconda volta. */
 .cm-editor,
-.cm-editor *,
+.cm-editor *:not(.cm-cursorLayer),
 .pane-editor,
-.pane-editor * {
+.pane-editor *:not(.cm-cursorLayer) {
   animation: none !important;
   transition: none !important;
 }

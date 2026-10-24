@@ -1361,6 +1361,7 @@
     "onboarding-forget",
     "onboarding-extra",
     "onboarding-trouble",
+    "cm-cursorLayer",
     "sheet-ghost",
     "draw-radial"
   ],
@@ -4782,7 +4783,8 @@
       "part": "motion",
       "hooks": [
         "cm-editor",
-        "pane-editor"
+        "pane-editor",
+        "cm-cursorLayer"
       ],
       "states": [
         "rest",
@@ -5540,7 +5542,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1206,
+    "hooks": 1207,
     "state_names": 7,
     "assigned_states": 641,
     "components": 190,

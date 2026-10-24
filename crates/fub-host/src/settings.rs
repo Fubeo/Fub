@@ -172,6 +172,8 @@ pub const EDITOR_FOLD_GUTTER: &str = "editor.fold-gutter";
 pub const EDITOR_SMART_LISTS: &str = "editor.smart-lists";
 pub const EDITOR_PASTE_HTML: &str = "editor.paste-html";
 pub const EDITOR_INDENT_GUIDES: &str = "editor.indent-guides";
+/// Il cursore dell'editor lampeggia. Di serie sta fermo.
+pub const EDITOR_CURSOR_BLINK: &str = "editor.cursor-blink";
 /// Il testo dell'editor e della Lettura va da destra a sinistra (arabo, ebraico).
 pub const EDITOR_RTL: &str = "editor.rtl";
 /// L'anteprima di un link al passaggio vuole sempre Ctrl/Cmd, anche in Lettura.
@@ -585,6 +587,12 @@ fn editor_settings() -> Vec<SettingSpec> {
                 EDITOR_INDENT_GUIDES,
                 C_EDITOR_INDENT_GUIDES,
                 C_EDITOR_INDENT_GUIDES_DESC,
+                false,
+            ),
+            (
+                EDITOR_CURSOR_BLINK,
+                C_EDITOR_CURSOR_BLINK,
+                C_EDITOR_CURSOR_BLINK_DESC,
                 false,
             ),
             (
@@ -1200,6 +1208,8 @@ const C_EDITOR_INDENT_GUIDES: &str = "core.editor.indent_guides";
 const C_EDITOR_RTL: &str = "core.editor.rtl";
 const C_EDITOR_RTL_DESC: &str = "core.editor.rtl.desc";
 const C_EDITOR_INDENT_GUIDES_DESC: &str = "core.editor.indent_guides.desc";
+const C_EDITOR_CURSOR_BLINK: &str = "core.editor.cursor_blink";
+const C_EDITOR_CURSOR_BLINK_DESC: &str = "core.editor.cursor_blink.desc";
 const C_EDITOR_PREVIEW_MODIFIER: &str = "core.editor.preview_modifier";
 const C_EDITOR_PREVIEW_MODIFIER_DESC: &str = "core.editor.preview_modifier.desc";
 const C_EDITOR_PASTE_HTML: &str = "core.editor.paste_html";
@@ -1721,6 +1731,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_RTL_DESC, "Per l'arabo, l'ebraico e le altre scritture da destra a sinistra: l'editor e la Lettura partono dal margine destro.")
         .with(C_EDITOR_INDENT_GUIDES, "Guide di rientro")
         .with(C_EDITOR_INDENT_GUIDES_DESC, "Disegna una riga verticale per ogni livello di rientro. Funziona in modalità Sorgente.")
+        .with(C_EDITOR_CURSOR_BLINK, "Cursore che lampeggia")
+        .with(C_EDITOR_CURSOR_BLINK_DESC, "Il cursore dell'editor si accende e si spegne. Di serie sta fermo, per non distrarre mentre si legge.")
         .with(C_EDITOR_PREVIEW_MODIFIER, "Anteprima dei link solo con Ctrl")
         .with(C_EDITOR_PREVIEW_MODIFIER_DESC, "Passando sopra un link, l'anteprima della nota si apre solo tenendo premuto Ctrl (Cmd sul Mac), anche in Lettura. Mentre si scrive serve sempre.")
         .with(C_EDITOR_PASTE_HTML, "Converti l'HTML incollato")
@@ -2218,6 +2230,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_RTL_DESC, "For Arabic, Hebrew and other right-to-left scripts: the editor and Reading start from the right margin.")
         .with(C_EDITOR_INDENT_GUIDES, "Indentation guides")
         .with(C_EDITOR_INDENT_GUIDES_DESC, "Draws a vertical line for each indentation level. Works in Source mode.")
+        .with(C_EDITOR_CURSOR_BLINK, "Blinking cursor")
+        .with(C_EDITOR_CURSOR_BLINK_DESC, "The editor cursor turns on and off. By default it stays still, so it does not distract while reading.")
         .with(C_EDITOR_PREVIEW_MODIFIER, "Link preview only with Ctrl")
         .with(C_EDITOR_PREVIEW_MODIFIER_DESC, "Hovering a link opens the note preview only while Ctrl (Cmd on Mac) is held, in Reading too. While writing it is always needed.")
         .with(C_EDITOR_PASTE_HTML, "Convert pasted HTML")

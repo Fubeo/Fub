@@ -58,9 +58,9 @@
 // dove l'ha messo l'ultimo, e quello è stato, non movimento. Se i due scatti
 // differiscono il referto lo dice, senza farne una colpa della corsa.
 //
-// Due eccezioni, scritte perché siano le sole. Il cursore di CodeMirror
-// lampeggia con un'animazione sua, senza fine, che `stage.mjs` nasconde e che
-// qui non conta fra le vive. E ciò che era già vivo prima del gesto non è un
+// Due eccezioni, scritte perché siano le sole. Il cursore di CodeMirror, con
+// `editor.cursor-blink`, lampeggia con un'animazione sua, senza fine, che
+// `stage.mjs` nasconde e che qui non conta fra le vive. E ciò che era già vivo prima del gesto non è un
 // residuo del gesto.
 //
 // # Un rosso è del prodotto

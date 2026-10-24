@@ -128,6 +128,7 @@ export const EDITOR_FOLD_GUTTER_KEY = "editor.fold-gutter";
 export const EDITOR_SMART_LISTS_KEY = "editor.smart-lists";
 export const EDITOR_PASTE_HTML_KEY = "editor.paste-html";
 export const EDITOR_INDENT_GUIDES_KEY = "editor.indent-guides";
+export const EDITOR_CURSOR_BLINK_KEY = "editor.cursor-blink";
 export const EDITOR_RTL_KEY = "editor.rtl";
 export const EDITOR_PROPERTIES_KEY = "editor.properties";
 const INPUT_KEYS = new Set([
@@ -141,6 +142,7 @@ const INPUT_KEYS = new Set([
   EDITOR_SMART_LISTS_KEY,
   EDITOR_PASTE_HTML_KEY,
   EDITOR_INDENT_GUIDES_KEY,
+  EDITOR_CURSOR_BLINK_KEY,
   EDITOR_RTL_KEY,
   EDITOR_PROPERTIES_KEY,
 ]);
@@ -162,6 +164,9 @@ interface LayoutPreferences {
   readonly pasteHtml: boolean;
   /// Righe di rientro nel margine sinistro del testo.
   readonly indentGuides: boolean;
+  /// Il cursore lampeggia. Di serie sta fermo: un segno che si accende e si
+  /// spegne accanto al testo è moto dentro il foglio.
+  readonly cursorBlink: boolean;
   /// Il testo va da destra a sinistra.
   readonly rtl: boolean;
   /// Come Live mostra il frontmatter (`properties-display.ts`).
@@ -176,6 +181,7 @@ const DEFAULT_LAYOUT: LayoutPreferences = {
   smartLists: true,
   pasteHtml: true,
   indentGuides: false,
+  cursorBlink: false,
   rtl: false,
   properties: "source",
 };
@@ -192,6 +198,10 @@ function layoutExtensions(layout: LayoutPreferences): Extension {
     pasteHtml.of(layout.pasteHtml),
     propertiesDisplay.of(layout.properties),
     layout.indentGuides ? indentGuides : [],
+    // Il facet tiene la cadenza più breve fra quelle dichiarate: lo zero vince
+    // sui 1200 ms di `drawSelection()`, e un'animazione di zero ms non spegne
+    // mai il cursore.
+    layout.cursorBlink ? [] : drawSelection({ cursorBlinkRate: 0 }),
     // Sopra il `dir: "auto"` di sempre, che altrimenti vince: un documento che
     // comincia in latino (il frontmatter) partirebbe da sinistra.
     layout.rtl ? Prec.highest(EditorView.contentAttributes.of({ dir: "rtl" })) : [],
@@ -531,6 +541,7 @@ export class TextEngine {
       && next.smartLists === this.layout.smartLists
       && next.pasteHtml === this.layout.pasteHtml
       && next.indentGuides === this.layout.indentGuides
+      && next.cursorBlink === this.layout.cursorBlink
       && next.rtl === this.layout.rtl
       && next.properties === this.layout.properties;
     if (this.disposed || same) return;
@@ -607,6 +618,7 @@ export class TextEngine {
         smartLists: value(EDITOR_SMART_LISTS_KEY) !== false,
         pasteHtml: value(EDITOR_PASTE_HTML_KEY) !== false,
         indentGuides: value(EDITOR_INDENT_GUIDES_KEY) === true,
+        cursorBlink: value(EDITOR_CURSOR_BLINK_KEY) === true,
         rtl: value(EDITOR_RTL_KEY) === true,
         properties: propertiesDisplayOf(value(EDITOR_PROPERTIES_KEY)),
       });
