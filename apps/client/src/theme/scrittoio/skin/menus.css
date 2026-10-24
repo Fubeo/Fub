@@ -157,11 +157,12 @@
   padding-left: calc(var(--space-4) * 2 + 16px);
 }
 
-/* Un filetto da bordo a bordo, con la sua aria sopra e sotto. */
+/* Un filetto da bordo a bordo, con la sua aria sopra e sotto. A metà del
+   contrasto di un bordo: separa i gruppi senza rigare il menu. */
 .context-menu .menu-separator {
   height: 1px;
   margin: var(--space-2) calc(var(--space-2) * -1);
-  background: var(--border);
+  background: color-mix(in oklab, var(--border) 50%, transparent);
 }
 
 /* **La voce distruttiva** scrive in rosso a riposo. Evidenziata non prende la

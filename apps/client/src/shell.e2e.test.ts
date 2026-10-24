@@ -416,11 +416,10 @@ describe("il pannello delle impostazioni", () => {
       open.click();
       await settle();
       expect(panel.hidden).toBe(false);
-      expect(panel.dataset.shellMotion).toBe("enter");
       expect(start).not.toHaveBeenCalled();
 
+      // L'uscita è un'immagine che se ne va: il pannello è già nascosto.
       close.click();
-      panel.dispatchEvent(new Event("animationend"));
       expect(panel.hidden).toBe(true);
       expect(start).not.toHaveBeenCalled();
 
@@ -620,7 +619,9 @@ describe("filtra l'esplora per percorso", () => {
     await waitFor("l'albero torna", () => !document.querySelector<HTMLElement>("#file-list")!.hidden);
     await settle();
     expect(document.querySelector('#file-list li[data-path="note"]')?.getAttribute("aria-expanded")).toBe("true");
-    expect(document.querySelector<HTMLElement>(".explorer-filter")!.hidden).toBe(true);
+    // Il campo resta, vuoto: è l'unico campo del pannello File.
+    expect(document.querySelector<HTMLElement>(".explorer-filter")!.hidden).toBe(false);
+    expect(input.value).toBe("");
   });
 });
 
@@ -2563,6 +2564,20 @@ describe("spostare un file col testo non ancora sul disco", () => {
   });
 });
 
+describe("l'albero e le icone", () => {
+  it("una cartella senza icona ha la figura a tratto, e quella scelta la sostituisce", async () => {
+    await start(VAULT);
+    const folder = () => document.querySelector<HTMLElement>("#file-list .tree-row.folder")!;
+    await waitFor("la cartella è disegnata", () => document.querySelector("#file-list .tree-row.folder") !== null);
+    expect(folder().querySelector(".row-icon > svg")).not.toBeNull();
+    const path = folder().closest<HTMLElement>("[data-path]")!.dataset.path!;
+    const { setIcon } = await import("./state/organization");
+    await setIcon(path, "📚");
+    await waitFor("l'icona scelta arriva", () => folder().querySelector(".row-icon")?.textContent === "📚");
+    expect(folder().querySelector(".row-icon > svg")).toBeNull();
+  });
+});
+
 describe("cerca", () => {
   it("ordina per nome e comprime i risultati, dal pannello", async () => {
     await start(VAULT);
@@ -2580,8 +2595,11 @@ describe("cerca", () => {
       return list.length > 1 && list[0] !== [...list].sort((x, y) => x.localeCompare(y, "it", { numeric: true }))[0];
     });
     expect(titles()).toEqual([...titles()].sort((x, y) => y.localeCompare(x, "it", { numeric: true })));
-    const collapse = [...document.querySelectorAll<HTMLButtonElement>("#search-results .search-tools button")]
-      .find((b) => b.getAttribute("aria-pressed") === "false")!;
+    // Comprimere sta nel menu «⋯» degli strumenti, con le altre azioni rare.
+    document.querySelector<HTMLButtonElement>("#search-results .search-tools .search-more")!.click();
+    const collapse = [...document.querySelectorAll<HTMLElement>(".context-menu [role=menuitemcheckbox]")]
+      .find((item) => item.textContent?.includes("Comprimi"))!;
+    expect(collapse.getAttribute("aria-checked")).toBe("false");
     collapse.click();
     expect(document.querySelectorAll("#search-results .hit-snippet").length).toBe(0);
   });

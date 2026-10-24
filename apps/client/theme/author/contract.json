@@ -271,6 +271,7 @@
     "danger",
     "clickable",
     "search-results",
+    "search-exclusions",
     "drop-into",
     "space-strip",
     "space-chip",
@@ -320,9 +321,9 @@
     "search-action",
     "search-tools",
     "search-syntax",
-    "search-exclusions",
     "search-chip",
     "search-options",
+    "search-options-group",
     "search-option",
     "search-replace",
     "search-replace-entry",
@@ -1925,6 +1926,7 @@
         "danger",
         "clickable",
         "search-results",
+        "search-exclusions",
         "drop-into"
       ],
       "states": [
@@ -2148,7 +2150,9 @@
       "part": "search",
       "hooks": [
         "search-options",
-        "search-option"
+        "search-options-group",
+        "search-option",
+        "sidebar"
       ],
       "states": [
         "rest",
@@ -5502,7 +5506,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1206,
+    "hooks": 1207,
     "state_names": 7,
     "assigned_states": 631,
     "components": 187,

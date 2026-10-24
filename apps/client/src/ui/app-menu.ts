@@ -55,6 +55,14 @@ export interface MenuHost {
   /// Snapshot completo e ripristino, se il kernel ha i comandi e un vault è
   /// aperto: comandi del kernel e non di shell, per questo arrivano da qui.
   vault?(): readonly MenuView[];
+  /// Se la voce del comando è una scelta, e quale stato ha adesso: la modalità
+  /// del foglio a fuoco è una fra tre, e il menu la spunta. Letta a ogni
+  /// apertura.
+  choice?(id: ShellCommandId): { readonly choice: "radio" | "checkbox"; readonly checked: boolean } | undefined;
+  /// Il nome della voce adesso, quando dice dove porta: «Passa alla luce
+  /// chiara» invece di «Cambia luce». Senza, il nome della voce resta quello
+  /// del menu.
+  label?(id: ShellCommandId): string | undefined;
 }
 
 /// Una view principale come voce del menu Vista: il nome già tradotto e il
@@ -335,9 +343,11 @@ export function mountAppMenu(host: MenuHost): Teardown {
         }));
       }
       if ("command" in v && v.optional && !host.has?.(v.command)) return [];
+      const state = "command" in v ? host.choice?.(v.command) : undefined;
       return [{
-        label: t(v.label as never),
+        label: ("command" in v ? host.label?.(v.command) : undefined) ?? t(v.label as never),
         separator: v.separator,
+        ...(state ? { choice: state.choice, checked: state.checked } : {}),
         hint: "command" in v ? host.shortcut?.(v.command) || undefined : undefined,
         run: () => {
           // Il runner può essere raggiunto dopo un click nativo o da un test che

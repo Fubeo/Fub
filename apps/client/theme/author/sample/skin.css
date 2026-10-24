@@ -1250,6 +1250,17 @@ kbd,
 .vault-chip[data-empty] .vault-chip-icon {
   background: var(--border-strong);
 }
+/* Il vault ha un'icona scelta: prende il posto del quadratino. */
+.vault-chip-icon:not(:empty) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  background: none;
+  font-size: var(--text-base);
+  line-height: 1;
+}
 
 .vault-chip-name {
   max-width: 200px;
@@ -1901,8 +1912,9 @@ kbd,
   line-height: var(--leading-tight);
 }
 /* Un titolo che ne segue un altro è un'**etichetta di sezione** («Appuntate»):
-   maiuscoletto piccolo in grafite, che nomina senza pesare. */
-.files-panel .panel-title + .panel-title,
+   maiuscoletto piccolo in grafite, che nomina senza pesare. Fra i due può
+   stare il campo che filtra le note: conta l'ordine, non la vicinanza. */
+.files-panel .panel-title ~ .panel-title,
 .bookmarks-panel .palette-row {
   min-height: var(--space-8);
   padding: var(--space-3) var(--space-4) 0;
@@ -1913,8 +1925,11 @@ kbd,
   text-transform: uppercase;
 }
 /* L'esito della ricerca («Risultati: 4», «Nessun risultato», «Indicizzazione
-   in corso…») è una riga di stato, non un titolo: grafite, corpo piccolo. */
-.sidebar .panel-title:has(~ .search-results) {
+   in corso…») è una riga di stato, non un titolo: grafite, corpo piccolo. È
+   quella che sta subito sopra gli esiti, o sopra le esclusioni: «Note», più
+   su dell'elenco del filtro, resta un titolo. */
+.sidebar .panel-title:has(+ .search-results),
+.sidebar .panel-title:has(+ .search-exclusions) {
   min-height: var(--row-h);
   color: var(--muted);
   font-size: var(--text-sm);
@@ -1992,6 +2007,11 @@ kbd,
   font-size: var(--text-sm);
   line-height: 1;
   cursor: pointer;
+}
+/* La casa e gli spazi senza un'emoji scelta portano la figura a linea. */
+.space-chip > svg {
+  width: var(--space-6);
+  height: var(--space-6);
 }
 .space-chip:hover,
 .space-chip:active {
@@ -2367,11 +2387,23 @@ kbd,
    «quella corrente». La dice la matita blu — fondo tenue, inchiostro blu,
    peso da titolo — e non un grigio: è l'unica riga del cassetto che parla del
    foglio aperto. */
-[role="treeitem"][aria-selected="true"] > .tree-row,
-.tree-row[aria-current="true"] {
+[role="treeitem"][aria-selected="true"] > .tree-row {
   background: var(--accent-wash);
   color: var(--accent);
   font-weight: var(--weight-bold);
+}
+/* Fra le appuntate la stessa nota ha soltanto un punto blu sul bordo: la riga
+   accesa è una, nell'albero. */
+.tree-row[aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: var(--space-2);
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 /* Il fuoco da tastiera sta sul `treeitem`, che contiene anche il sottoalbero:
@@ -2405,6 +2437,16 @@ kbd,
   font-size: calc(var(--drawer-icon) - 3px);
   line-height: 1;
 }
+/* La cartella senza un'emoji scelta: la figura a linea, in grafite come il
+   foglietto delle note. */
+.row-icon > svg {
+  width: var(--drawer-icon);
+  height: var(--drawer-icon);
+  color: var(--muted);
+}
+[role="treeitem"][aria-selected="true"] > .tree-row > .row-icon > svg {
+  color: var(--accent);
+}
 /* Una nota senza icona tiene la colonna con un foglietto: contorno grafite,
    l'angolo piegato. È disegnato, non un carattere, così prende il colore
    della riga corrente. */
@@ -2421,8 +2463,7 @@ kbd,
   background: linear-gradient(to bottom left, transparent 50%, var(--muted) 50%) top right / 5px 5px no-repeat border-box;
   clip-path: polygon(0 0, calc(100% - 4.5px) 0, 100% 4.5px, 100% 100%, 0 100%);
 }
-[role="treeitem"][aria-selected="true"] > .tree-row.no-icon::after,
-.tree-row.no-icon[aria-current="true"]::after {
+[role="treeitem"][aria-selected="true"] > .tree-row.no-icon::after {
   border-color: var(--accent);
   background-image: linear-gradient(to bottom left, transparent 50%, var(--accent) 50%);
 }
@@ -3085,11 +3126,28 @@ kbd,
 /* **Le opzioni e la sostituzione**, sotto il campo. Gli interruttori sono le
    stesse linguette delle azioni, accese in blu quando premuti; il blocco
    «Sostituisci» si apre sotto di loro e porta il piano scritto, non un dialogo. */
+/* **Il campo e le opzioni sono della Ricerca.** Negli altri pannelli il
+   cassetto ha un campo solo, quello che filtra le note. */
+.sidebar:not([data-panel="search"]) > .search-input,
+.sidebar:not([data-panel="search"]) > .search-options,
+.sidebar:not([data-panel="search"]) > .search-replace {
+  display: none;
+}
+/* Le sei azioni stanno dietro «Opzioni», e aperte vanno a capo sotto. */
 .search-options {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   padding: var(--space-3) 0 var(--space-2);
+}
+.search-options-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  width: 100%;
+}
+.search-options-group[hidden] {
+  display: none;
 }
 .search-option {
   min-width: var(--space-8);
@@ -11137,11 +11195,12 @@ h6.ui-heading {
   padding-left: calc(var(--space-4) * 2 + 16px);
 }
 
-/* Un filetto da bordo a bordo, con la sua aria sopra e sotto. */
+/* Un filetto da bordo a bordo, con la sua aria sopra e sotto. A metà del
+   contrasto di un bordo: separa i gruppi senza rigare il menu. */
 .context-menu .menu-separator {
   height: 1px;
   margin: var(--space-2) calc(var(--space-2) * -1);
-  background: var(--border);
+  background: color-mix(in oklab, var(--border) 50%, transparent);
 }
 
 /* **La voce distruttiva** scrive in rosso a riposo. Evidenziata non prende la

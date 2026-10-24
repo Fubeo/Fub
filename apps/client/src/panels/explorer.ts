@@ -39,6 +39,7 @@ import {
   type FolderContent,
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
+import { iconEl } from "../ui/icons";
 import { pickIcon, showContextMenu, type MenuItem } from "../ui/menu";
 import {
   canCreateDrawing,
@@ -1048,7 +1049,7 @@ async function pickMoveFolders(ids: readonly string[]): Promise<void> {
       ...(here !== "" ? [{ label: t("explorer.root"), value: "" }] : []),
       ...folders.items
         .filter((f) => f.path !== here && !ids.some((id) => f.path === id || f.path.startsWith(`${id}/`)))
-        .map((f) => ({ label: `${state.meta.icons[f.path] ?? "📁"} ${childName(f.path)}`, detail: f.path, value: f.path })),
+        .map((f) => ({ label: namedFolder(f.path), detail: f.path, value: f.path })),
     ],
     more: other,
   });
@@ -1144,7 +1145,7 @@ function folderRow(folder: VaultFolder): HTMLElement {
     });
   }
   row.appendChild(chevron);
-  row.appendChild(rowIcon(state.meta.icons[folder.path] ?? "📁"));
+  row.appendChild(rowIcon(state.meta.icons[folder.path] ?? null, "folder"));
 
   const name = document.createElement("span");
   name.className = "row-name";
@@ -1215,12 +1216,22 @@ function folderMenu(at: MouseEvent, path: string): void {
   );
 }
 
-function rowIcon(icon: string): HTMLElement {
+/// L'icona di una riga: quella scelta da chi scrive, che resta com'è, o
+/// senza una scelta la figura a linea del kit (`line`).
+function rowIcon(icon: string | null, line?: string): HTMLElement {
   const span = document.createElement("span");
   span.className = "row-icon";
-  span.textContent = icon;
+  if (icon !== null) span.textContent = icon;
+  else if (line) span.append(iconEl(line) ?? "");
   span.setAttribute("aria-hidden", "true");
   return span;
+}
+
+/// Il nome di una cartella preceduto dall'icona che chi scrive le ha dato, se
+/// gliene ha data una: nei menu e nei titoli una figura di ripiego è rumore.
+function namedFolder(path: string, name = childName(path)): string {
+  const icon = state.meta.icons[path];
+  return icon ? `${icon} ${name}` : name;
 }
 
 /// Apre o chiude una cartella. Aprirne una **chiede il suo contenuto**
@@ -1430,7 +1441,7 @@ function renderSpaceStrip(): void {
   const home = document.createElement("button");
   home.className = "space-chip";
   home.setAttribute("aria-pressed", String(state.activeSpace === null));
-  home.textContent = "🏠";
+  home.append(iconEl("home") ?? "");
   home.setAttribute("aria-label", t("explorer.whole_vault"));
   setTooltip(home, t("explorer.whole_vault"));
   home.addEventListener("click", () => selectSpace(null));
@@ -1440,9 +1451,12 @@ function renderSpaceStrip(): void {
     const chip = document.createElement("button");
     chip.className = "space-chip";
     chip.setAttribute("aria-pressed", String(state.activeSpace === path));
-    chip.textContent = state.meta.icons[path] ?? "🗂️";
-    // Nome annunciato (V15): emoji + nome spazio, non solo il simbolo.
-    chip.setAttribute("aria-label", `${state.meta.icons[path] ?? "🗂️"} ${childName(path)}`);
+    const chosen = state.meta.icons[path];
+    if (chosen) chip.textContent = chosen;
+    else chip.append(iconEl("folder") ?? "");
+    // Nome annunciato (V15): l'emoji scelta e il nome dello spazio, non solo
+    // il simbolo.
+    chip.setAttribute("aria-label", namedFolder(path));
     setTooltip(chip, path);
     chip.addEventListener("click", () => selectSpace(path));
     chip.addEventListener("contextmenu", (e) => {
@@ -1473,7 +1487,7 @@ function renderSpaceTitle(): void {
   spaceTitleEl.textContent =
     state.activeSpace === null
       ? t("explorer.notes")
-      : `${state.meta.icons[state.activeSpace] ?? "🗂️"} ${childName(state.activeSpace)}`;
+      : namedFolder(state.activeSpace);
   spaceTitleEl.classList.toggle("clickable", state.activeSpace !== null);
 }
 
@@ -1518,7 +1532,7 @@ async function pickNewSpace(at: MouseEvent): Promise<void> {
   const other = Math.max(0, folders.total - folders.items.length);
   showContextMenu(at, [
     ...candidate.map((f) => ({
-      label: `${state.meta.icons[f.path] ?? "📁"} ${f.path}`,
+      label: namedFolder(f.path, f.path),
       run: () => addSpace(f.path),
     })),
     ...(other > 0 ? [{ label: plural(other, "explorer.altre_cartelle.one", "explorer.altre_cartelle"), run: () => {} }] : []),

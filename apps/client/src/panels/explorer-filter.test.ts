@@ -74,12 +74,25 @@ describe("il campo sopra l'albero", () => {
     { path: "Guida/schema.png", kind: "file" },
   ];
 
-  it("è nascosto finché non lo si apre, e aperto ha il fuoco", () => {
+  it("è sempre lì, dice che filtra le note, e il comando gli dà il fuoco", () => {
     const { filter, input } = mount(async () => VAULT);
-    expect(input.closest<HTMLElement>(".explorer-filter")!.hidden).toBe(true);
-    filter.show();
     expect(input.closest<HTMLElement>(".explorer-filter")!.hidden).toBe(false);
+    expect(input.placeholder).toBe("Filtra le note");
+    expect(document.activeElement).not.toBe(input);
+    filter.show();
     expect(document.activeElement).toBe(input);
+  });
+
+  it("vuoto lascia passare Esc a chi sta sopra; con del testo lo tiene", async () => {
+    const { input, type } = mount(async () => VAULT);
+    const empty = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    input.dispatchEvent(empty);
+    expect(empty.defaultPrevented).toBe(false);
+    await type("guida");
+    const full = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    input.dispatchEvent(full);
+    expect(full.defaultPrevented).toBe(true);
+    expect(input.value).toBe("");
   });
 
   it("col testo l'elenco prende il posto dell'albero; senza, glielo rende", async () => {
@@ -101,7 +114,7 @@ describe("il campo sopra l'albero", () => {
     expect(covering.mock.calls).toEqual([[true], [false]]);
   });
 
-  it("Invio apre la prima voce, le frecce scendono nell'elenco, Esc chiude tutto", async () => {
+  it("Invio apre la prima voce, le frecce scendono nell'elenco, Esc toglie il testo", async () => {
     const { input, open, filter, type, rows, tree } = mount(async () => VAULT);
     filter.show();
     await type("guida");
@@ -113,7 +126,7 @@ describe("il campo sopra l'albero", () => {
     expect(document.activeElement).toBe(rows()[1]);
     rows()[1].dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(input.value).toBe("");
-    expect(input.closest<HTMLElement>(".explorer-filter")!.hidden).toBe(true);
+    expect(input.closest<HTMLElement>(".explorer-filter")!.hidden).toBe(false);
     expect(tree.hidden).toBe(false);
   });
 

@@ -94,6 +94,8 @@ export const SCENE = onPage("shell", [
     id: "search",
     title: "La ricerca, con i risultati",
     prepare: async (page) => {
+      // Il campo di File filtra l'albero: la ricerca sta nel pannello Cerca.
+      await page.click('#views-ribbon .rail-btn[data-panel="search"]');
       await page.fill("#search-input", SEARCH);
       await page.waitForSelector("#search-results li");
     },

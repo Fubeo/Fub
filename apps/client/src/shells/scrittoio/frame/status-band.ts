@@ -1,4 +1,4 @@
-// La banda di stato: a sinistra il vault e ciò che gli sta succedendo, a
+// La banda di stato: a sinistra ciò che sta succedendo al vault, a
 // destra la modalità del foglio a fuoco e lo zoom. Fra le due, le view che dichiarano
 // `ViewSurface::StatusBar` (le monta `ui/views.ts` in `#views-status`).
 //
@@ -28,23 +28,13 @@ function show(el: HTMLElement | null, text: string, tone?: string): void {
 export function mountStatusBand(lifetime: Lifetime): void {
   const band = byId("status-band");
   if (!band) return;
-  const vault = byId("status-vault");
   const index = byId("status-index");
   const saving = byId("status-saving");
   const mode = byId("status-mode");
   const zoom = byId<HTMLButtonElement>("status-zoom");
-  const vaultName = byId("vault-path");
 
-  // Il vault: lo stesso nome che la barra del titolo mostra nel chip.
-  const drawVault = (): void => {
-    const name = vaultName?.textContent?.trim() ?? "";
-    show(vault, state.vaultRoot ? name : "", "ok");
-    if (vault) setTooltip(vault, state.vaultRoot);
-  };
-  drawVault();
-  if (vaultName) follow(lifetime, vaultName, drawVault);
-  lifetime.add(on("vault", drawVault));
-
+  // Il nome del vault non si ripete qui: lo dice già il chip nella barra del
+  // titolo, che c'è sempre.
   // L'indice e la sorveglianza del disco: si dicono solo quando non sono a posto.
   const reads = new Race();
   lifetime.add(() => reads.cancel());

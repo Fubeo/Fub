@@ -25,12 +25,14 @@ export const SEARCH: PartAnatomy = {
       states: [...INTERACTIVE, S("selected")],
       hooks: ["search-action", "search-tools", "search-syntax", "search-exclusions", "search-chip"],
     },
-    // Sotto il campo: le quattro opzioni (interruttori), «Sostituisci» e
-    // «Salva ricerca»; e, aperta, la sostituzione con il suo piano.
+    // Sotto il campo, dietro «Opzioni»: le quattro opzioni (interruttori),
+    // «Sostituisci» e «Salva ricerca»; e, aperta, la sostituzione con il suo
+    // piano. `sidebar` è del cassetto: qui dice soltanto che campo, opzioni e
+    // sostituzione stanno nel pannello Cerca e non sopra l'albero.
     {
       name: "search-options",
       states: [...INTERACTIVE, S("selected")],
-      hooks: ["search-options", "search-option"],
+      hooks: ["search-options", "search-options-group", "search-option", "sidebar"],
     },
     {
       name: "search-replace",

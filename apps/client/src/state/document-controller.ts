@@ -2188,6 +2188,15 @@ export function selectedMode(r: Pane | undefined): SurfaceMode | undefined {
     ?? modes[0];
 }
 
+/// Il contesto della modalità del riquadro col fuoco (sorgente, Live,
+/// Lettura), se la sua superficie ne offre più d'uno: è ciò che il menu Vista
+/// spunta.
+export function focusedContextMode(): PaneMode | undefined {
+  const r = panes.get(layout.focus);
+  if ((r?.surface?.modes.length ?? 0) < 2) return undefined;
+  return selectedMode(r)?.contextMode;
+}
+
 /// Le modalità della superficie del riquadro col fuoco; nessuna senza superficie.
 function focusedModes(): readonly SurfaceMode[] {
   return panes.get(layout.focus)?.surface?.modes ?? [];

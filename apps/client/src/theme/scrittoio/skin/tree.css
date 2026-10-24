@@ -83,11 +83,23 @@
    «quella corrente». La dice la matita blu — fondo tenue, inchiostro blu,
    peso da titolo — e non un grigio: è l'unica riga del cassetto che parla del
    foglio aperto. */
-[role="treeitem"][aria-selected="true"] > .tree-row,
-.tree-row[aria-current="true"] {
+[role="treeitem"][aria-selected="true"] > .tree-row {
   background: var(--accent-wash);
   color: var(--accent);
   font-weight: var(--weight-bold);
+}
+/* Fra le appuntate la stessa nota ha soltanto un punto blu sul bordo: la riga
+   accesa è una, nell'albero. */
+.tree-row[aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: var(--space-2);
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 /* Il fuoco da tastiera sta sul `treeitem`, che contiene anche il sottoalbero:
@@ -121,6 +133,16 @@
   font-size: calc(var(--drawer-icon) - 3px);
   line-height: 1;
 }
+/* La cartella senza un'emoji scelta: la figura a linea, in grafite come il
+   foglietto delle note. */
+.row-icon > svg {
+  width: var(--drawer-icon);
+  height: var(--drawer-icon);
+  color: var(--muted);
+}
+[role="treeitem"][aria-selected="true"] > .tree-row > .row-icon > svg {
+  color: var(--accent);
+}
 /* Una nota senza icona tiene la colonna con un foglietto: contorno grafite,
    l'angolo piegato. È disegnato, non un carattere, così prende il colore
    della riga corrente. */
@@ -137,8 +159,7 @@
   background: linear-gradient(to bottom left, transparent 50%, var(--muted) 50%) top right / 5px 5px no-repeat border-box;
   clip-path: polygon(0 0, calc(100% - 4.5px) 0, 100% 4.5px, 100% 100%, 0 100%);
 }
-[role="treeitem"][aria-selected="true"] > .tree-row.no-icon::after,
-.tree-row.no-icon[aria-current="true"]::after {
+[role="treeitem"][aria-selected="true"] > .tree-row.no-icon::after {
   border-color: var(--accent);
   background-image: linear-gradient(to bottom left, transparent 50%, var(--accent) 50%);
 }
