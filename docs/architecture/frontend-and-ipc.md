@@ -378,7 +378,11 @@ Oltre al confine di CodeMirror, i guard del frontend impediscono:
 - usi degli appunti della webview fuori da `platform/clipboard.ts`;
 - listener globali senza owner;
 - attese concorrenti senza il primitivo di cancellazione;
-- mirror TypeScript non aggiornati.
+- mirror TypeScript non aggiornati;
+- parole del codice nei testi italiani dell'interfaccia: il glossario in
+  `apps/client/src/i18n/gergo.ts` dà per ognuna la parola da usare (per
+  esempio «copia completa» invece di «snapshot», «vista» invece di «view»), e
+  `gergo.test.ts` la cerca nel catalogo.
 
 ## Dove si trova
 

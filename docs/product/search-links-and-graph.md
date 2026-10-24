@@ -30,11 +30,9 @@ la nota. `Maiusc+Invio` crea la nota col nome scritto anche se qualcosa
 combacia.
 
 `Ctrl+F` cerca nella nota con una sola barra: in Sorgente e in Live è quella
-dell'editor, con sostituisci, maiuscole, parola intera ed espressioni regolari,
-e il tasto la apre anche col fuoco fuori dal testo (sulla barra del riquadro,
-nell'albero). Dove la nota non ha un editor di testo, in Lettura o in un
-documento Word, cerca nella nota con il motore della ricerca, ordinato per
-rilevanza. `Ctrl+Maiusc+F` cerca nel vault.
+dell'editor (sostituisci, maiuscole, parola intera, espressioni regolari),
+anche col fuoco fuori dal testo. In Lettura o in un documento Word cerca con il
+motore della ricerca. `Ctrl+Maiusc+F` cerca nel vault.
 
 Le query salvate stanno in `queries.json`, nello spazio dati di `fub.queries`.
 Un file scritto da una versione più recente di Fub non si usa e non si
@@ -183,9 +181,8 @@ link che non si risolve non apre niente.
 Nell'editor, Live o Sorgente, `Alt+Invio` apre il link su cui sta il cursore:
 un wikilink porta alla nota, alla sezione o al blocco che nomina, come
 Ctrl/Cmd+click; un indirizzo esterno si apre solo se la policy di Lettura lo
-permette. Dentro il codice il tasto non apre niente. In Live
-`Maiusc+Alt+Invio` su un wikilink apre invece la sua scheda, col fuoco sulle
-azioni (apri, di fianco, nuova linguetta, o «Crea»); Esc torna al testo.
+permette. Dentro il codice il tasto non apre niente. In Live `Maiusc+Alt+Invio`
+su un wikilink apre la sua scheda col fuoco sulle azioni; Esc torna al testo.
 
 «Copia il link a questo punto», dalla palette, mette negli appunti il link al
 titolo o al paragrafo dove sta il cursore: `[[Nota#Titolo]]`, o
