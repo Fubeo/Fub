@@ -22,7 +22,7 @@ members = [
 [workspace.package]
 # La versione dell'upstream: `tools/vendor-craft/vendor.mjs` la riporta qui,
 # nelle righe `wordcraft-*` qui sotto e in quelle del Cargo.toml di Fub.
-version = "0.9.0"
+version = "0.10.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 
@@ -44,12 +44,12 @@ all = "allow"
 #   dipendenze in più: un'immagine d'altro formato si legge, senza la misura in
 #   pixel (UPSTREAM.md).
 [workspace.dependencies]
-wordcraft-geom = { path = "crates/geom", version = "0.9.0" }
-wordcraft-doc = { path = "crates/doc", version = "0.9.0" }
-wordcraft-docx = { path = "crates/docx", version = "0.9.0" }
-wordcraft-docbin = { path = "crates/docbin", version = "0.9.0" }
-wordcraft-formats = { path = "crates/formats", version = "0.9.0" }
-wordcraft-proof = { path = "crates/proof", version = "0.9.0" }
+wordcraft-geom = { path = "crates/geom", version = "0.10.0" }
+wordcraft-doc = { path = "crates/doc", version = "0.10.0" }
+wordcraft-docx = { path = "crates/docx", version = "0.10.0" }
+wordcraft-docbin = { path = "crates/docbin", version = "0.10.0" }
+wordcraft-formats = { path = "crates/formats", version = "0.10.0" }
+wordcraft-proof = { path = "crates/proof", version = "0.10.0" }
 
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
@@ -70,5 +70,6 @@ sha1 = "0.11"
 sha2 = "0.11"
 hmac = "0.13"
 base64 = "0.22.1"
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
 getrandom = "0.3"
 zeroize = "1.9.0"

@@ -226,7 +226,8 @@ impl ProofIndex {
             (spelling, (!spelling).then_some(name))
         };
         let (spelling, missing_dictionary) = match lang {
-            ProofLang::En => (true, None),
+            // Le tre grafie dell'inglese usano lo stesso elenco di parole.
+            ProofLang::En | ProofLang::EnGb | ProofLang::EnCa => (true, None),
             ProofLang::It => hunspell(wordcraft_proof::it::has_dictionary, "it_IT"),
             ProofLang::Pt => hunspell(wordcraft_proof::pt::has_dictionary, "pt_BR"),
             ProofLang::Pl => hunspell(wordcraft_proof::pl::has_dictionary, "pl_PL"),
@@ -235,7 +236,7 @@ impl ProofIndex {
             ProofLang::Ru => hunspell(wordcraft_proof::ru::has_dictionary, "ru_RU"),
             ProofLang::Tr => hunspell(wordcraft_proof::tr::has_dictionary, "tr_TR"),
             ProofLang::Id => hunspell(wordcraft_proof::id::has_dictionary, "id_ID"),
-            ProofLang::Bg | ProofLang::Other => (false, None),
+            ProofLang::Bg | ProofLang::De | ProofLang::Other => (false, None),
         };
         LanguageSupport {
             code,
@@ -783,6 +784,20 @@ mod tests {
 
     fn spans<'a>(segment: &'a str, issues: &[ProofIssue]) -> Vec<&'a str> {
         issues.iter().map(|i| &segment[i.start..i.end]).collect()
+    }
+
+    /// La regione dell'etichetta sceglie la grafia dell'inglese: `en-GB`
+    /// accetta `colour` e segna `color`, `en-US` il contrario.
+    #[test]
+    fn english_spelling_follows_the_region_of_the_tag() {
+        let index = ProofIndex::bundled_only();
+        let segment = "The colour and the color.";
+        let british = check(&index, "en-GB", &[segment]);
+        assert!(british.language.spelling);
+        assert_eq!(british.language.code, "en");
+        assert_eq!(spans(segment, &british.segments[0]), ["color"]);
+        let american = check(&index, "en-US", &[segment]);
+        assert_eq!(spans(segment, &american.segments[0]), ["colour"]);
     }
 
     #[test]

@@ -3,14 +3,13 @@
   "sha256": "1be323709ba4c37d9cd6e4dbd3c8f21d652c39f0c36e9dc4fe6421a3a91f9393",
   "open": {
     "readonly": "codec",
-    "projection": "1ed7dd851472487405267b32aebf5a150b1fbe2cdc10f2620ec020f0f9426c7f",
+    "projection": "543a8d61d9b14a4af3f5faab2210b9acaaaa754708d2f6161137cf385d953b03",
     "blocks": 5,
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 4",
+    "differenze all'apertura: 3",
     "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
     "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"

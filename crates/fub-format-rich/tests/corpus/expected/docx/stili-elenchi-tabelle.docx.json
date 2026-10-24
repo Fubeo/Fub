@@ -3,16 +3,15 @@
   "sha256": "c72ad55224f314f336eb42ca2fc6c4ab7ac7686f3e3b6e55879809116bf16e6b",
   "open": {
     "readonly": "codec",
-    "projection": "6d86b23c5e96fffd3569b99101a128211c4f446541e578d5d4e8c0c8708d4307",
+    "projection": "8658e45a37ab08d707a11eabe03c3e96ec4b258da537b23c83dd3cf47fd5cc77",
     "blocks": 8,
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 7",
+    "differenze all'apertura: 6",
     "  header: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fldSimple>: 1 → 0",
     "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
     "  header: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}fldSimple @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}instr=\" PAGE \": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
     "  header: text of {http://schemas.openxmlformats.org/wordprocessingml/2006/main}p b9d9f2de6ebd: 1 → 0",
