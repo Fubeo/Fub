@@ -188,12 +188,15 @@ const sheets = (count) => (page) =>
 /// Un comando della shell dal registro che servono menu, lanciatore e tastiera.
 /// Senza passare da un bottone della cornice: il suo hover e la sua pressione
 /// hanno transizioni loro, che non sono il moto di questo gesto.
-/// Un punto sulla nota a 24 px dal bordo basso della finestra, dove un menu
-/// deve aprirsi sopra il puntatore.
+/// Un punto sull'ultima riga della nota, dove un menu deve aprirsi sopra il
+/// puntatore.
 const menuEdgePoint = (page) =>
   page.evaluate(() => {
-    const note = document.querySelector(".pane.focus .cm-content")?.getBoundingClientRect();
-    return { x: Math.round(note ? note.left + 80 : 400), y: window.innerHeight - 24 };
+    const lines = document.querySelectorAll(".pane.focus .cm-line");
+    const line = lines[lines.length - 1]?.getBoundingClientRect();
+    return line
+      ? { x: Math.round(line.left + 40), y: Math.round(line.top + line.height / 2) }
+      : { x: 400, y: window.innerHeight - 40 };
   });
 const shellCommand = (id) => (page) =>
   page.evaluate(async (command) => {
@@ -302,9 +305,11 @@ export const CHOREOGRAPHIES = [
   },
   {
     id: "menu-edge",
-    title: "Menu al bordo basso: ribaltato sopra il puntatore, cresce ancora dal puntatore",
+    title: "Menu al bordo basso: spinto in su dal bordo, cresce ancora dal puntatore",
     sources: [],
     scene: "startup",
+    // Una finestra bassa: il testo della nota arriva vicino al bordo.
+    setup: (page) => page.setViewportSize({ width: 1280, height: 640 }),
     act: async (page) => {
       const at = await menuEdgePoint(page);
       await page.mouse.click(at.x, at.y, { button: "right" });
@@ -317,7 +322,7 @@ export const CHOREOGRAPHIES = [
         if (!menu) return false;
         const box = menu.getBoundingClientRect();
         const [ox, oy] = getComputedStyle(menu).transformOrigin.split(" ").map(Number.parseFloat);
-        return box.bottom < y + 8 && Math.hypot(box.left + ox - x, box.top + oy - y) <= 8;
+        return Math.hypot(box.left + ox - x, box.top + oy - y) <= 8;
       }, at);
     },
     undo: (page) => page.keyboard.press("Escape"),

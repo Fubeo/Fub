@@ -146,8 +146,10 @@ export function showContextMenu(
   // Transition un menu fisso appena inserito. Conserviamo l'animazione CSS
   // canonica, senza portare questa superficie effimera nel percorso nativo.
   lifetime.add(() => exitSurface(menu, () => menu.remove()));
-  enterSurface(menu);
+  // La barra si misura sul menu fermo: a entrata cominciata il suo riquadro è
+  // già scalato, e la barra resterebbe dove il menu era al primo fotogramma.
   const strip = options.strip ? mountStrip(menu, options, lifetime) : null;
+  enterSurface(menu);
   // Il primo click fuori chiude, e il ritardo evita che sia questo stesso click
   // ad attivarlo. Il `once` **non** bastava: se il menu si chiudeva prima —
   // Escape, o una voce scelta da tastiera — l'ascoltatore non era ancora
@@ -470,8 +472,8 @@ function mountStrip(menu: HTMLElement, options: ContextMenuOptions, lifetime: Li
     unmount();
     exitSurface(strip, () => strip.remove());
   });
-  enterSurface(strip);
   placeStrip(strip, menu.getBoundingClientRect());
+  enterSurface(strip);
   return strip;
 }
 
