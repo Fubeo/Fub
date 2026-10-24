@@ -3607,6 +3607,10 @@ kbd,
   font-family: var(--font-ui);
   font-size: var(--text-sm);
 }
+/* Il nome che si può usare, sotto il perché: il gesto che chiude il giro. */
+.sheet-title-proposal {
+  margin: 0 var(--space-4) var(--space-3);
+}
 
 /* Lo stato di salvataggio è un bottone: parola e punto sono quelli della
    regione viva (`.save-state`), qui c'è solo ciò che lo fa premere. */

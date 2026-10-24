@@ -40,7 +40,7 @@ vi.mock("../../../ui/tooltip", () => ({
 }));
 vi.mock("../../../ui/icons", () => ({ iconEl: () => null }));
 
-import { mountTitleRename } from "./title-rename";
+import { mountTitleRename, proposedName } from "./title-rename";
 
 let driver: ManualDriver;
 let lifetime: Lifetime;
@@ -333,6 +333,53 @@ describe("rinominare", () => {
     press(input, "Enter");
     await settled();
     expect(renames).toEqual([{ from: "Guida/Nota.md", to: "Guida/Che cosa.md" }]);
+  });
+
+  it("propone il nome pulito solo quando la regola del kernel lo accetta", () => {
+    expect(proposedName("Guida/Nota.md", "Che: cosa?")).toBe("Che cosa");
+    expect(proposedName("Guida/Nota.md", "a/b")).toBe("a b");
+    // Niente da proporre: già buono, uguale al nome di adesso, vuoto, nascosto,
+    // o un nome che la regola rifiuta per altro (un device di Windows).
+    expect(proposedName("Guida/Nota.md", "Che cosa")).toBeNull();
+    expect(proposedName("Guida/Nota.md", "Nota?")).toBeNull();
+    expect(proposedName("Guida/Nota.md", "???")).toBeNull();
+    expect(proposedName("Guida/Nota.md", ".nascosta")).toBeNull();
+    expect(proposedName("Guida/Nota.md", "CON:")).toBeNull();
+  });
+
+  it("il nome proposto si usa col bottone, dal puntatore o da Tab", async () => {
+    const bar = pane("main", "Guida/Nota.md");
+    mountTitleRename(lifetime);
+    dblclick(crumbOf(bar));
+    type(inputOf(bar)!, "Che: cosa?");
+    press(inputOf(bar)!, "Enter");
+    await settled();
+    const input = inputOf(bar)!;
+    const use = document.querySelector<HTMLButtonElement>(".kit-popover .sheet-title-proposal")!;
+    expect(use.textContent).toBe("sheet.title.use Che cosa");
+    // Tab porta al bottone e il campo resta aperto; Esc riporta al campo.
+    expect(press(input, "Tab").defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(use);
+    expect(inputOf(bar)).toBe(input);
+    press(use, "Escape");
+    expect(document.activeElement).toBe(input);
+    expect(inputOf(bar)).toBe(input);
+    use.click();
+    await settled();
+    expect(renames).toEqual([{ from: "Guida/Nota.md", to: "Guida/Che cosa.md" }]);
+    expect(inputOf(bar)).toBeNull();
+  });
+
+  it("senza un nome da proporre Tab esce dal campo come sempre", async () => {
+    const bar = pane("main", "Guida/Nota.md");
+    mountTitleRename(lifetime);
+    dblclick(crumbOf(bar));
+    type(inputOf(bar)!, "???");
+    press(inputOf(bar)!, "Enter");
+    await settled();
+    expect(note()).not.toBeNull();
+    expect(document.querySelector(".sheet-title-proposal")).toBeNull();
+    expect(press(inputOf(bar)!, "Tab").defaultPrevented).toBe(false);
   });
 
   it("un rifiuto del kernel lascia il campo aperto col testo scritto e il motivo sotto", async () => {
