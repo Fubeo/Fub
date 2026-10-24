@@ -569,6 +569,23 @@ function showSearchResults(
     const name = searchedName(searchInputEl.value);
     if (name) newItems.appendChild(createRow(name));
   }
+  // Niente vicoli ciechi: se a togliere i risultati sono le esclusioni, la
+  // via d'uscita sta nella lista stessa e non solo nelle etichette sopra.
+  const exclusions = excluded.size + excludedFolders.size;
+  if (!error && hits.length === 0 && !indexing && exclusions > 0) {
+    const li = document.createElement("li");
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "search-result";
+    clear.textContent = t("search.exclusions_clear", { count: exclusions });
+    clear.addEventListener("click", () => {
+      excluded.clear();
+      excludedFolders.clear();
+      void runSearch();
+    });
+    li.appendChild(clear);
+    newItems.appendChild(li);
+  }
   searchResultsEl.appendChild(newItems);
   wireSearchListSelection();
 }

@@ -2623,6 +2623,22 @@ describe("cerca", () => {
     expect(transfer.effectAllowed).toBe("copy");
   });
 
+  it("esclusa l'unica nota, la lista offre di togliere le esclusioni", async () => {
+    await start(VAULT);
+    const field = document.querySelector<HTMLInputElement>("#search-input")!;
+    field.value = "arance";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    await waitFor("i risultati arrivano", () => document.querySelectorAll("#search-results li > button.search-result").length > 0);
+    [...document.querySelectorAll<HTMLButtonElement>("#search-results .search-action")]
+      .find((button) => button.textContent === "Escludi")!.click();
+    const clear = () => [...document.querySelectorAll<HTMLButtonElement>("#search-results li > button.search-result")]
+      .find((button) => button.textContent === "Togli le esclusioni (1)");
+    await waitFor("la via d'uscita c'è", () => clear() !== undefined);
+    clear()!.click();
+    await waitFor("la nota torna", () => document.querySelector("#search-results .hit-path")?.textContent?.includes("Spesa") === true);
+    expect(clear()).toBeUndefined();
+  });
+
   it("la casella trova, e il risultato apre il documento", async () => {
     const host = await start(VAULT);
     const field = document.querySelector<HTMLInputElement>("#search-input");
