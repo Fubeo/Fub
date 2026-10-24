@@ -96,10 +96,37 @@ type MenuClose = () => void;
 let menuLifetime: Lifetime | null = null;
 let menuClose: MenuClose | null = null;
 
-/// Quanto aspetta il puntatore fermo su una voce prima che il suo sottomenu
-/// si apra, o che quello aperto si chiuda: il tempo di attraversare in
-/// diagonale le voci fra la voce e il sottomenu senza che cambi sotto le mani.
-const HOVER_DELAY = 250;
+/// Quanto aspetta il puntatore su una voce prima che il suo sottomenu si apra,
+/// o che quello aperto si chiuda: abbastanza per non aprire tutto ciò che si
+/// attraversa, poco perché non sembri lento.
+const HOVER_DELAY = 100;
+
+/// Quanto si aspetta ancora quando il puntatore va verso il sottomenu aperto:
+/// il tempo di attraversare in diagonale le voci che ci stanno in mezzo.
+const AIM_DELAY = 300;
+
+interface Point {
+  readonly x: number;
+  readonly y: number;
+}
+
+/// Il puntatore, andato da `from` a `to`, sta mirando al sottomenu `target`?
+/// Sì se `to` cade nel triangolo fra `from` e i due angoli del lato del
+/// sottomenu rivolto al menu: la mira di macOS, al posto di un ritardo uguale
+/// per tutti.
+export function aimsAt(from: Point, to: Point, target: DOMRectReadOnly): boolean {
+  const edge = from.x <= target.left ? target.left : target.right;
+  if (to.x === from.x && to.y === from.y) return false;
+  const a = { x: edge, y: target.top };
+  const b = { x: edge, y: target.bottom };
+  const side = (p: Point, q: Point, r: Point): number => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const d1 = side(from, a, to);
+  const d2 = side(a, b, to);
+  const d3 = side(b, from, to);
+  const negative = d1 < 0 || d2 < 0 || d3 < 0;
+  const positive = d1 > 0 || d2 > 0 || d3 > 0;
+  return !(negative && positive);
+}
 
 /// Il punto da cui aprire un menu che non nasce da un click: sotto la
 /// selezione o il cursore, allineato al suo inizio. Mai in 0,0.
@@ -202,7 +229,13 @@ function renderMenu(
   const pictured = items.some((item) => item.sample !== undefined || (item.icon !== undefined && icon(item.icon) !== ""));
   let group = null as { name: string; node: HTMLElement } | null;
   // Il sottomenu aperto, se ce n'è uno: la voce da cui parte e come chiuderlo.
-  let open: { button: HTMLButtonElement; lifetime: Lifetime; focusFirst: () => void } | null = null;
+  let open: { button: HTMLButtonElement; lifetime: Lifetime; focusFirst: () => void; sub: HTMLElement } | null = null;
+  // Dove stava il puntatore al movimento prima e adesso: la mira si legge da qui.
+  let pointer: { from: Point; to: Point } | null = null;
+  lifetime.listen(menu, "pointermove", (e) => {
+    const to = { x: e.clientX, y: e.clientY };
+    pointer = { from: pointer?.to ?? to, to };
+  });
   let hoverTimer: ReturnType<typeof setTimeout> | null = null;
   const cancelHover = (): void => {
     if (hoverTimer !== null) clearTimeout(hoverTimer);
@@ -242,7 +275,7 @@ function renderMenu(
     // ci sta sopra: la tolleranza diagonale è questa.
     childLifetime.listen(sub, "pointerenter", cancelHover);
     button.setAttribute("aria-expanded", "true");
-    const state = { button, lifetime: childLifetime, focusFirst: () => child.focusActive() };
+    const state = { button, lifetime: childLifetime, focusFirst: () => child.focusActive(), sub };
     open = state;
     // ← o Escape tornano alla voce da cui si è entrati: la trappola del
     // sottomenu sta sopra quella del menu, ed Escape chiude solo lei.
@@ -352,16 +385,20 @@ function renderMenu(
       if (nested) b.setAttribute("aria-expanded", "false");
     }
     if (item.danger) b.className = "danger";
-    // Il passaggio del puntatore: fermo su una voce con un sottomenu lo apre,
-    // fermo su un'altra chiude quello aperto. Sempre dopo una pausa.
+    // Il passaggio del puntatore: su una voce con un sottomenu lo apre, su
+    // un'altra chiude quello aperto. Sempre dopo una pausa breve, e più lunga
+    // se il puntatore sta andando verso il sottomenu aperto: attraversa, non
+    // sceglie.
     b.addEventListener("pointerenter", (e) => {
       if (e.pointerType === "touch") return;
       cancelHover();
+      const aiming = open !== null && open.button !== b && pointer !== null &&
+        aimsAt(pointer.from, { x: e.clientX, y: e.clientY }, open.sub.getBoundingClientRect());
       hoverTimer = setTimeout(() => {
         hoverTimer = null;
         if (nested && !item.disabled) void cascade(b, item, false);
         else if (open !== null && open.button !== b) closeOpen();
-      }, HOVER_DELAY);
+      }, aiming ? AIM_DELAY : HOVER_DELAY);
     });
     if (item.disabled) {
       b.setAttribute("aria-disabled", "true");

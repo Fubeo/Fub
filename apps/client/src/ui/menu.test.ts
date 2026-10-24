@@ -517,6 +517,47 @@ describe("i sottomenu a cascata", () => {
     expect(document.querySelector(".context-submenu")).toBeNull();
   });
 
+  it("verso il sottomenu aperto il puntatore attraversa le voci senza chiuderlo", async () => {
+    showContextMenu(clickEvent(), [
+      { label: "Altro", items: async () => [{ label: "Dentro", run: () => {} }] },
+      { label: "Fuori", run: () => {} },
+    ]);
+    const menu = document.getElementById("context-menu")!;
+    const [parent, other] = document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]");
+    parent!.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    await vi.advanceTimersByTimeAsync(110);
+    const sub = document.querySelector<HTMLElement>(".context-submenu")!;
+    sub.getBoundingClientRect = () => ({ left: 200, right: 360, top: 0, bottom: 200, width: 160, height: 200, x: 200, y: 0, toJSON: () => ({}) }) as DOMRect;
+    // In diagonale verso il sottomenu: la voce sotto non lo chiude subito.
+    menu.dispatchEvent(new PointerEvent("pointermove", { clientX: 100, clientY: 10 }));
+    menu.dispatchEvent(new PointerEvent("pointermove", { clientX: 130, clientY: 30 }));
+    other!.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse", clientX: 130, clientY: 30 }));
+    await vi.advanceTimersByTimeAsync(150);
+    expect(document.querySelector(".context-submenu")).not.toBeNull();
+    // Arrivato, il sottomenu resta.
+    sub.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    await vi.advanceTimersByTimeAsync(400);
+    expect(document.querySelector(".context-submenu")).not.toBeNull();
+  });
+
+  it("allontanandosi dal sottomenu, la voce nuova lo chiude dopo una pausa breve", async () => {
+    showContextMenu(clickEvent(), [
+      { label: "Altro", items: async () => [{ label: "Dentro", run: () => {} }] },
+      { label: "Fuori", run: () => {} },
+    ]);
+    const menu = document.getElementById("context-menu")!;
+    const [parent, other] = document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]");
+    parent!.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    await vi.advanceTimersByTimeAsync(110);
+    const sub = document.querySelector<HTMLElement>(".context-submenu")!;
+    sub.getBoundingClientRect = () => ({ left: 200, right: 360, top: 0, bottom: 200, width: 160, height: 200, x: 200, y: 0, toJSON: () => ({}) }) as DOMRect;
+    menu.dispatchEvent(new PointerEvent("pointermove", { clientX: 100, clientY: 10 }));
+    menu.dispatchEvent(new PointerEvent("pointermove", { clientX: 60, clientY: 40 }));
+    other!.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse", clientX: 60, clientY: 40 }));
+    await vi.advanceTimersByTimeAsync(110);
+    expect(document.querySelector(".context-submenu")).toBeNull();
+  });
+
   it("chiudere il menu chiude anche il sottomenu aperto", async () => {
     showContextMenu(clickEvent(), [{ label: "Altro", items: [{ label: "Dentro", run: () => {} }] }]);
     document.querySelector<HTMLButtonElement>("#context-menu [role=menuitem]")!.click();
