@@ -10,7 +10,7 @@ import { t } from "../i18n/strings";
 import { trapFocus } from "./a11y";
 import { icon, iconEl } from "./icons";
 import { openLifetime, type Lifetime } from "./lifetime";
-import { enterSurface, exitSurface, finishSurface } from "./motion";
+import { enterSurface, exitSurface } from "./motion";
 
 export interface MenuItem {
   label: string;
@@ -143,8 +143,6 @@ export function showContextMenu(
   options: ContextMenuOptions = {},
 ): void {
   closeContextMenu();
-  const previous = document.getElementById("context-menu");
-  if (previous) finishSurface(previous);
   const lifetime = openLifetime();
   menuLifetime = lifetime;
   menuClose = options.onClose ?? null;
@@ -659,8 +657,6 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
   // lui la trappola del fuoco, che è la parte che si sentiva, perché Escape
   // continuava a rispondere per un selettore che nessuno vedeva più.
   closePickIcon();
-  const previous = document.getElementById("icon-picker");
-  if (previous) finishSurface(previous);
   const lifetime = openLifetime();
   iconLifetime = lifetime;
   const pop = document.createElement("div");

@@ -42,7 +42,10 @@ export function attachTooltip(target: HTMLElement, text: string): () => void {
   // il controllo appena lo raggiunge, e un `aria-describedby` che arriva mezzo
   // secondo dopo non viene mai letto. Il testo si prepara nell'elemento ancora
   // nascosto (una descrizione può puntare a un nodo nascosto); a vedersi resta
-  // il ritardo di sempre.
+  // il ritardo di sempre. Si vede solo col fuoco della tastiera: un pannello
+  // aperto col mouse che porta il fuoco sul suo primo bottone non deve
+  // spuntare, mezzo secondo dopo, la didascalia di un bottone che nessuno ha
+  // indicato.
   const focus = () => {
     if (registration.disposed || registration.text.trim() === "") return;
     if (current && current.target !== target) current.registration.hide();
@@ -50,7 +53,7 @@ export function attachTooltip(target: HTMLElement, text: string): () => void {
     element.textContent = registration.text;
     target.setAttribute("aria-describedby", element.id);
     current = { target, registration, element };
-    schedule();
+    if (keyboardFocus(target)) schedule();
   };
   const cancel = () => {
     ownerWindow.clearTimeout(registration.timer);
@@ -124,6 +127,17 @@ export function setTooltip(target: HTMLElement, text: string): void {
   const existing = registrations.get(target);
   if (existing) existing.update(text);
   else attachTooltip(target, text);
+}
+
+/// Il fuoco è arrivato dalla tastiera, o il motore lo mostrerebbe come tale?
+/// Un motore che non sa `:focus-visible` lo dà per vero: meglio una didascalia
+/// in più che una in meno.
+function keyboardFocus(target: HTMLElement): boolean {
+  try {
+    return target.matches(":focus-visible");
+  } catch {
+    return true;
+  }
 }
 
 function tooltipElement(): HTMLElement {

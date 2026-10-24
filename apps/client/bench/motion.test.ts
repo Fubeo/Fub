@@ -34,7 +34,7 @@ import {
 /// radice del client e il testo.
 const sources = new Map(
   Object.entries(
-    import.meta.glob(["../src/shells/scrittoio/**/*.ts", "../src/kit/**/*.ts"], {
+    import.meta.glob(["../src/shells/scrittoio/**/*.ts", "../src/kit/**/*.ts", "../src/ui/motion.ts"], {
       eager: true,
       query: "?raw",
       import: "default",

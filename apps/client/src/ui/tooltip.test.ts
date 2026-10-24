@@ -24,7 +24,7 @@ describe("il suggerimento della shell", () => {
     document.body.append(button);
     const dispose = attachTooltip(button, "Apri la palette");
 
-    button.dispatchEvent(new FocusEvent("focus"));
+    button.focus();
     // Il lettore di schermo annuncia al fuoco: la descrizione c'è già, anche
     // se il suggerimento non si vede ancora.
     const early = document.querySelector<HTMLElement>('[role="tooltip"]');
@@ -42,6 +42,18 @@ describe("il suggerimento della shell", () => {
     dispose();
   });
 
+  it("col fuoco dato dal codice dopo un clic descrive il controllo, ma non si vede", () => {
+    const button = document.createElement("button");
+    document.body.append(button);
+    attachTooltip(button, "Dimentica gli avvisi");
+    // Il fuoco che un pannello aperto col mouse porta sul suo primo bottone:
+    // l'evento arriva, `:focus-visible` no.
+    button.dispatchEvent(new FocusEvent("focus"));
+    expect(button.getAttribute("aria-describedby")).toBe("fub-tooltip");
+    vi.advanceTimersByTime(TOOLTIP_DELAY_MS * 2);
+    expect(document.querySelector<HTMLElement>('[role="tooltip"]')?.hidden).toBe(true);
+  });
+
   it("chiude con il blur, Escape e quando cambia bersaglio", () => {
     const first = document.createElement("button");
     const second = document.createElement("button");
@@ -49,7 +61,7 @@ describe("il suggerimento della shell", () => {
     attachTooltip(first, "Primo");
     attachTooltip(second, "Secondo");
 
-    first.dispatchEvent(new FocusEvent("focus"));
+    first.focus();
     vi.advanceTimersByTime(TOOLTIP_DELAY_MS);
     expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Primo");
 
@@ -57,10 +69,10 @@ describe("il suggerimento della shell", () => {
     expect(document.querySelector('[role="tooltip"]')?.hasAttribute("hidden")).toBe(true);
     expect(first.hasAttribute("aria-describedby")).toBe(false);
 
-    second.dispatchEvent(new FocusEvent("focus"));
+    second.focus();
     vi.advanceTimersByTime(TOOLTIP_DELAY_MS);
     expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Secondo");
-    second.dispatchEvent(new FocusEvent("blur"));
+    second.blur();
     expect(document.querySelector('[role="tooltip"]')?.hasAttribute("hidden")).toBe(true);
   });
 

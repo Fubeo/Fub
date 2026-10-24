@@ -32,7 +32,7 @@ import type { ExportArtifact, JobProgress, JobStatus, KernelNotice, TransferNote
 import { ARTIFACT_JOB } from "../ui/shell-ids.generated";
 import { onAnyEvent } from "../state/kernel";
 import { $ } from "../ui/dom";
-import { notify } from "../ui/notify";
+import { notify, showPanel } from "../ui/notify";
 import type { Tone } from "../ui/notify";
 import { asPluginError, errorText } from "../host/errors";
 import { onLanguage, resolvedLanguage, t } from "../i18n/strings";
@@ -450,7 +450,7 @@ function redraw(): void {
 
   const panel = document.getElementById("activity-panel");
   if (!panel) return;
-  panel.hidden = !open;
+  showPanel(panel, open);
   if (!open) return;
 
   const list = panel.querySelector("#activity-list");

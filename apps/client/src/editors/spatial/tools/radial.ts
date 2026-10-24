@@ -27,7 +27,7 @@ import { trapFocus } from "../../../ui/a11y";
 import { iconEl } from "../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu } from "../../../ui/menu";
-import { enterSurface, exitSurface, finishSurface } from "../../../ui/motion";
+import { enterSurface, exitSurface } from "../../../ui/motion";
 
 /// Le otto direzioni, dall'alto in senso orario: l'ordine delle voci.
 export const DIRECTIONS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as const;
@@ -356,8 +356,7 @@ export function openRadial(x: number, y: number, items: readonly (RadialItem | n
 
 /// Chiude il menu radiale, se è aperto.
 export function closeRadial(): void {
+  // Chi se ne sta andando se ne va subito: dell'uscita resta un'immagine, e
+  // un menu nuovo non ne trova uno vecchio sotto.
   opened?.close();
-  // Chi se ne sta andando se ne va subito: un menu nuovo non ne trova uno
-  // vecchio sotto.
-  for (const layer of document.querySelectorAll<HTMLElement>(".draw-radial")) finishSurface(layer);
 }

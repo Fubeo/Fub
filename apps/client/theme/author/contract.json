@@ -1362,8 +1362,7 @@
     "onboarding-extra",
     "onboarding-trouble",
     "cm-cursorLayer",
-    "sheet-ghost",
-    "draw-radial"
+    "sheet-ghost"
   ],
   "states": [
     "rest",
@@ -4726,17 +4725,6 @@
       ]
     },
     {
-      "name": "icon-picker",
-      "part": "motion",
-      "hooks": [
-        "icon-picker"
-      ],
-      "states": [
-        "rest",
-        "focused"
-      ]
-    },
-    {
       "name": "context-menu",
       "part": "motion",
       "hooks": [
@@ -4754,7 +4742,6 @@
       "name": "modal-palette",
       "part": "motion",
       "hooks": [
-        "modale",
         "palette-box"
       ],
       "states": [
@@ -4764,18 +4751,6 @@
         "focused",
         "disabled",
         "selected"
-      ]
-    },
-    {
-      "name": "settings",
-      "part": "motion",
-      "hooks": [
-        "settings-panel"
-      ],
-      "states": [
-        "rest",
-        "selected",
-        "focused"
       ]
     },
     {
@@ -4799,21 +4774,6 @@
       ],
       "states": [
         "rest"
-      ]
-    },
-    {
-      "name": "draw-radial",
-      "part": "motion",
-      "hooks": [
-        "draw-radial",
-        "draw-radial-ring"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "pressed",
-        "focused",
-        "disabled"
       ]
     }
   ],
@@ -5542,10 +5502,10 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1207,
+    "hooks": 1206,
     "state_names": 7,
-    "assigned_states": 641,
-    "components": 190,
+    "assigned_states": 631,
+    "components": 187,
     "preference_tokens": 123
   }
 }

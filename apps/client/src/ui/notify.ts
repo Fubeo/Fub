@@ -46,6 +46,7 @@ import { setTooltip } from "./tooltip";
 import { drawCountButton } from "./icons";
 import { errorText } from "../host/errors";
 import { DURATION, exitGhost, flip } from "../moto";
+import { enterSurface, exitSurface } from "./motion";
 /// Quanto **tono** ha un avviso. Due e non cinque: chi disegna deve poterli
 /// distinguere a colpo d'occhio, e una scala di severità che nessuno sa dove
 /// tagliare finisce con tutto sullo stesso gradino.
@@ -381,6 +382,7 @@ function show(notice: Notice, actions: readonly NoticeAction[]): void {
   close.addEventListener("click", () => dismissToast(toast));
   toast.append(close);
   stack.appendChild(toast);
+  enterSurface(toast);
   // Oltre il limite esce il più vecchio, senza gesto: ciò che diceva sta nello
   // storico, e il conto lo ricorda.
   const toasts = stack.querySelectorAll<HTMLElement>(".toast");
@@ -516,7 +518,7 @@ function redraw(): void {
 
   const panel = document.getElementById("notify-panel");
   if (!panel) return;
-  panel.hidden = !open;
+  showPanel(panel, open);
   if (!open) return;
 
   const list = panel.querySelector("#notify-list");
@@ -592,4 +594,18 @@ export function mountNotifications(lifetime: Lifetime): void {
   // dire riscrivere la storia di ciò che è successo.
   lifetime.add(onLanguage(redraw));
   redraw();
+}
+
+/// Apre o chiude un centro, con il suo moto se cambia: `redraw` passa di qui
+/// a ogni avviso, e un centro già aperto non rientra.
+export function showPanel(panel: HTMLElement, open: boolean): void {
+  if (open === !panel.hidden) return;
+  if (open) {
+    panel.hidden = false;
+    enterSurface(panel);
+  } else {
+    exitSurface(panel, () => {
+      panel.hidden = true;
+    });
+  }
 }

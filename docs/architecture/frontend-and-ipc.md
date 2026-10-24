@@ -210,7 +210,10 @@ pannelli) lo Scrittoio compone:
   e la preferenza del sistema decidono quanto movimento esiste, e lo stato
   finale è lo stesso con e senza movimento. Nel livello calmo le molle non
   superano il bersaglio; ciò che entra o esce fa metà strada, con una molla
-  critica più rigida che non dura più di quella piena;
+  critica più rigida che non dura più di quella piena. Menu, modali,
+  pannelli, centri e avvisi entrano ed escono da `ui/motion.ts`, sopra
+  `moto`: la pelle non ha fotogrammi chiave d'entrata o d'uscita, e
+  un'uscita è un'immagine che se ne va in 140 ms al più;
 - `theme/scrittoio/`: la serie di serie (motore `theme-2`), con ricetta dei
   colori, fogli, struttura e pelle a pezzi. La pelle passa dal sanitizer CSS
   del motore, e ogni classe di un pezzo è un hook dell'anatomia di quel pezzo.

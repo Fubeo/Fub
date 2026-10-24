@@ -88,7 +88,8 @@ describe("la pila dei toast", () => {
       const exit = driver.plays.find((play) => play.el === ghost)!;
       expect(exit.timing.duration).toBeLessThanOrEqual(140);
       // La seconda parte da dove era, 50 px più in basso.
-      const slide = driver.plays.find((play) => play.el === toasts()[0])!;
+      // L'ultima sua corsa: la prima è la sua entrata.
+      const slide = driver.plays.filter((play) => play.el === toasts()[0]).pop()!;
       expect(slide.keyframes[0]!.transform).toBe("translate(0px, 50px)");
     } finally {
       vi.restoreAllMocks();

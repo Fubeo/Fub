@@ -315,21 +315,21 @@ export const CHOREOGRAPHIES = [
   {
     id: "menu",
     title: "Menu dell'applicazione: una voce del marchio apre il suo menu",
-    sources: [],
+    // Il menu, come le modali e i pannelli della shell, entra ed esce dalla
+    // coreografia comune delle superfici.
+    sources: ["src/ui/motion.ts"],
     scene: "startup",
     setup: (page) => press(page, "#brand-menu"),
     act: (page) => press(page, "#app-menu > button >> nth=2"),
     arrived: has("#context-menu:not([hidden])"),
     undo: (page) => page.keyboard.press("Escape"),
     returned: lacks("#context-menu"),
-    // Il menu della shell è quello comune e non passa da `moto`: sta qui perché
-    // «aprire un menu» resti misurato anche il giorno in cui si muoverà.
-    still: true,
+    exit: true,
   },
   {
     id: "menu-edge",
     title: "Menu al bordo basso: spinto in su dal bordo, cresce ancora dal puntatore",
-    sources: [],
+    sources: ["src/ui/motion.ts"],
     scene: "startup",
     // Una finestra bassa: il testo della nota arriva vicino al bordo.
     setup: (page) => page.setViewportSize({ width: 1280, height: 640 }),
@@ -350,7 +350,18 @@ export const CHOREOGRAPHIES = [
     },
     undo: (page) => page.keyboard.press("Escape"),
     returned: lacks("#context-menu"),
-    still: true,
+    exit: true,
+  },
+  {
+    id: "preferences",
+    title: "Preferenze: la finestra sale sul suo velo, e se ne va con lui",
+    sources: ["src/shells/scrittoio/preferences/scrim.ts", "src/ui/motion.ts"],
+    scene: "startup",
+    act: (page) => press(page, "#open-settings"),
+    arrived: has("#settings-body .setting-row"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: has("#settings-panel[hidden]"),
+    exit: true,
   },
   {
     id: "launcher",
