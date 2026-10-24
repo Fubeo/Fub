@@ -44,7 +44,7 @@ import { setTooltip } from "../ui/tooltip";
 import { state } from "../state/store";
 import { highlighted } from "../ui/highlight";
 import { enterSurface, exitSurface } from "../ui/motion";
-import { reveal } from "../state/document-controller";
+import { findInFocusedSurface, reveal } from "../state/document-controller";
 
 const OVERLAY_ID = "doc-search";
 
@@ -113,7 +113,14 @@ export function mountDocSearch(): void {
     title: "commands.doc.search",
     description: "commands.doc.search.desc",
     layer: "document",
-    run: () => openInDocumentSearch(),
+    // Una sola barra per Ctrl+F: dove la superficie ha la sua (il testo in
+    // Sorgente e Live) il comando apre quella, la stessa che il tasto apre col
+    // fuoco nel testo, con sostituisci, maiuscole, parola intera ed
+    // espressioni regolari. Dove non ce l'ha, la Lettura per esempio, cerca
+    // qui.
+    run: () => {
+      if (!findInFocusedSurface()) openInDocumentSearch();
+    },
   });
 }
 

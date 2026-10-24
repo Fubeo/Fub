@@ -962,6 +962,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       if (life.closed) return null;
       return mode === "reading" ? readingMenu(at) : writingMenu(at);
     },
+    find: () => !life.closed && mode !== "reading" && engine.openFind(),
     anchorHere: () => {
       if (life.closed) return null;
       const found = engine.readState((state) => anchorAtCursor(state));

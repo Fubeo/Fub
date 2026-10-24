@@ -54,7 +54,7 @@ import {
   undoDepth,
   redoDepth,
 } from "@codemirror/commands";
-import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
+import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
 import type { SyntaxNode } from "@lezer/common";
 import { vim } from "@replit/codemirror-vim";
 import { lintKeymap } from "@codemirror/lint";
@@ -386,6 +386,15 @@ export class TextEngine {
 
   public getDoc(): string {
     return this.rendered();
+  }
+
+  /// Apre la barra trova/sostituisci di CodeMirror, la stessa di `Mod-f` nel
+  /// testo, e ci porta il fuoco: vale anche in sola lettura, dove sostituire
+  /// non c'è.
+  public openFind(): boolean {
+    if (this.disposed) return false;
+    this.view.focus();
+    return openSearchPanel(this.view);
   }
 
   public focus(): void {

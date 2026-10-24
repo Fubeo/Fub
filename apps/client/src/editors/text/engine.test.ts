@@ -4,6 +4,7 @@ import { EditorView, keymap } from "@codemirror/view";
 import { getCM } from "@replit/codemirror-vim";
 import { insertNewlineAndIndent, redoDepth, undoDepth } from "@codemirror/commands";
 import { EditorSelection, EditorState, StateField, Transaction, type Extension } from "@codemirror/state";
+import { findNext, replaceAll, SearchQuery, selectMatches, setSearchQuery } from "@codemirror/search";
 import { createTextEngine, type TextEngine } from "./engine";
 import type { EditorChange } from "../core/text-operation";
 import { MAX_FOOTPRINTS, type FootprintState } from "./history-footprints";
@@ -1334,5 +1335,56 @@ describe("smontare un editor", () => {
     expect(surface.ed.redo()).toBe(false);
     expect(emitted).toBe(0);
     surface.ed.destroy();
+  });
+});
+
+describe("la barra trova/sostituisci", () => {
+  /// Un campo o un comando della barra, per il nome che CodeMirror gli dà.
+  function control<T extends HTMLElement>(parent: HTMLElement, selector: string): T {
+    const found = parent.querySelector<T>(`.cm-search ${selector}`);
+    if (!found) throw new Error(`nella barra manca ${selector}`);
+    return found;
+  }
+
+  it("openFind apre quella di CodeMirror, e ogni sua funzione c'è", () => {
+    const { ed, parent, view } = editor();
+    ed.setDoc("Gatto gatto gattone\ncane");
+    expect(ed.openFind()).toBe(true);
+    const search = control<HTMLInputElement>(parent, "input[name=search]");
+    expect(search.isConnected).toBe(true);
+    for (const name of ["case", "re", "word"]) control(parent, `input[name=${name}]`);
+    for (const name of ["next", "prev", "select", "replace", "replaceAll", "close"]) control(parent, `button[name=${name}]`);
+
+    // happy-dom manda `selectionchange` dentro l'aggiornamento della vista a
+    // fuoco: le prove sui comandi girano col fuoco altrove.
+    (document.activeElement as HTMLElement | null)?.blur();
+    // Le funzioni dietro i controlli, con la query che la barra scrive:
+    // avanti, maiuscole, parola intera, tutte, regex e sostituisci tutto.
+    const query = (spec: ConstructorParameters<typeof SearchQuery>[0]) =>
+      view().dispatch({ effects: setSearchQuery.of(new SearchQuery(spec)) });
+    query({ search: "gatto" });
+    findNext(view());
+    expect(view().state.selection.main.from).toBe(0);
+    query({ search: "gatto", caseSensitive: true });
+    findNext(view());
+    expect(view().state.selection.main.from).toBe(6);
+    query({ search: "gatto", wholeWord: true });
+    selectMatches(view());
+    expect(view().state.selection.ranges.map((r) => r.from)).toEqual([0, 6]);
+    query({ search: "g(a)tt\\w*", regexp: true, replace: "m$1o" });
+    replaceAll(view());
+    expect(ed.getDoc()).toBe("mao mao mao\ncane");
+    ed.destroy();
+  });
+
+  it("in sola lettura si apre lo stesso, senza sostituire", () => {
+    const { ed, parent } = editor();
+    ed.setDoc("testo");
+    ed.setReadOnly(true);
+    expect(ed.openFind()).toBe(true);
+    control(parent, "input[name=search]");
+    expect(parent.querySelector(".cm-search input[name=replace]")).toBeNull();
+    ed.destroy();
+    expect(ed.openFind()).toBe(false);
   });
 });

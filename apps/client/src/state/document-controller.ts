@@ -517,6 +517,14 @@ function focusedAnchorSurface(): { doc: string; anchorHere: () => SurfaceAnchor 
   return { doc: r.shown.doc, anchorHere: () => surface.anchorHere?.() ?? null };
 }
 
+/// Ctrl+F fuori dal testo apre la stessa barra che apre dentro: quella della
+/// superficie del riquadro col fuoco, se ne ha una nella modalità attuale.
+export function findInFocusedSurface(): boolean {
+  const r = panes.get(layout.focus);
+  if (r?.shown?.k !== "doc") return false;
+  return r.surface?.find?.() ?? false;
+}
+
 /// «Copia il link a questo punto»: `[[Nota#Titolo]]` o `[[Nota#^id]]` negli
 /// appunti, scritto come vuole il vault, come per una nota trascinata; a un
 /// blocco senza id la superficie ne scrive uno. Negli appunti un link Markdown

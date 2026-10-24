@@ -29,6 +29,13 @@ per un alias mostra l'alias, con le parole scritte segnate, e sotto «alias di»
 la nota. `Maiusc+Invio` crea la nota col nome scritto anche se qualcosa
 combacia.
 
+`Ctrl+F` cerca nella nota con una sola barra: in Sorgente e in Live è quella
+dell'editor, con sostituisci, maiuscole, parola intera ed espressioni regolari,
+e il tasto la apre anche col fuoco fuori dal testo (sulla barra del riquadro,
+nell'albero). Dove la nota non ha un editor di testo, in Lettura o in un
+documento Word, cerca nella nota con il motore della ricerca, ordinato per
+rilevanza. `Ctrl+Maiusc+F` cerca nel vault.
+
 Le query salvate stanno in `queries.json`, nello spazio dati di `fub.queries`.
 Un file scritto da una versione più recente di Fub non si usa e non si
 riscrive; i campi che questa versione non conosce tornano su disco come erano.
