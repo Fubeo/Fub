@@ -413,7 +413,8 @@ fn damaged_kept_content_is_dropped_without_failing_the_read() {
     names.sort();
     assert_eq!(names, ["customXml/item1.xml", "customXml/itemProps1.xml"]);
     assert!(p.elements.is_empty());
-    assert!(wb.sheet(0).unwrap().preserved.is_none());
+    // Only the source forms of what the sheet reader models stay (the page setup's orientation).
+    assert!(wb.sheet(0).unwrap().preserved.as_deref().is_none_or(|p| p.parts.is_empty() && p.elements.is_empty() && p.vml.is_none()));
     let u = Unpacked::new(&write_xlsx(&wb).unwrap());
     u.assert_valid();
     assert!(!u.text("xl/workbook.xml").contains("externalReferences"));
@@ -791,8 +792,11 @@ fn file_version_and_calc_features_survive_a_save() {
     // Excel trusts the saved cell values only when workbook.xml carries both <fileVersion> and the
     // calcFeatures extension; without them it recalculates everything on open (#799).
     let calc_features = r#"<ext uri="{B58B0392-4F1F-4190-BB64-5DF3571DCE5F}" xmlns:xcalcf="http://schemas.microsoft.com/office/spreadsheetml/2018/calcfeatures"><xcalcf:calcFeatures><xcalcf:feature name="microsoft.com:RD"/><xcalcf:feature name="microsoft.com:Single"/><xcalcf:feature name="microsoft.com:FV"/><xcalcf:feature name="microsoft.com:CNMTM"/><xcalcf:feature name="microsoft.com:LET_WF"/><xcalcf:feature name="microsoft.com:ARRAYTEXT_WF"/></xcalcf:calcFeatures></ext>"#;
+    // Extensions GridCraft does not read are kept as they were, unless they refer to parts.
+    let lo = r#"<ext uri="{7626C862-2A13-11E5-B345-FEFF819CDC9F}" xmlns:loext="http://schemas.libreoffice.org/"><loext:extCalcPr stringRefSyntax="CalcA1ExcelA1"/></ext>"#;
+    let slicers = r#"<ext uri="{BBE1A952-AA13-448e-AADC-164F8A28A991}" xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:slicerCaches><x14:slicerCache r:id="rId9"/></x14:slicerCaches></ext>"#;
     let workbook = format!(
-        r#"<?xml version="1.0"?><workbook xmlns="{NS_MAIN}" xmlns:r="{NS_R}"><fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="11008"/><workbookPr/><sheets><sheet name="A" sheetId="1" r:id="rId1"/></sheets><calcPr calcId="191029"/><extLst><ext uri="{{140A7094-0E35-4892-8432-C4D2E57EDEB5}}" xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main"><x15:workbookPr chartTrackingRefBase="1"/></ext>{calc_features}</extLst></workbook>"#
+        r#"<?xml version="1.0"?><workbook xmlns="{NS_MAIN}" xmlns:r="{NS_R}"><fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="11008"/><workbookPr/><sheets><sheet name="A" sheetId="1" r:id="rId1"/></sheets><calcPr calcId="191029"/><extLst><ext uri="{{140A7094-0E35-4892-8432-C4D2E57EDEB5}}" xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main"><x15:workbookPr chartTrackingRefBase="1"/></ext>{calc_features}{lo}{slicers}</extLst></workbook>"#
     );
     let sheet = format!(
         r#"<?xml version="1.0"?><worksheet xmlns="{NS_MAIN}"><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f>A1*2</f><v>2</v></c></row></sheetData></worksheet>"#
@@ -816,10 +820,122 @@ fn file_version_and_calc_features_survive_a_save() {
         assert_eq!(root.children.first().map(|e| e.name.as_str()), Some("fileVersion"), "{text}");
         assert_eq!(root.children.last().map(|e| e.name.as_str()), Some("extLst"), "{text}");
         assert!(text.contains(r#"<fileVersion appName="xl" lastEdited="7" lowestEdited="7" rupBuild="11008"/>"#), "{text}");
-        assert!(text.contains(&format!("<extLst>{calc_features}</extLst>")), "{text}");
+        assert!(text.contains(&format!("<extLst>{calc_features}<ext ")), "{text}");
+        assert!(
+            text.contains(
+                r#"xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main"><x15:workbookPr chartTrackingRefBase="1"/></ext>"#
+            ),
+            "{text}"
+        );
+        assert!(text.contains(r#"xmlns:loext="http://schemas.libreoffice.org/"><loext:extCalcPr stringRefSyntax="CalcA1ExcelA1"/></ext>"#), "{text}");
+        assert_eq!(text.matches("<ext ").count(), 3, "{text}");
+        assert!(!text.contains("slicerCache"), "{text}");
     }
 
-    // A workbook that had neither gets neither.
-    let plain = Unpacked::new(&write_xlsx(&gridcraft_model::Workbook::new()).unwrap()).text("xl/workbook.xml");
-    assert!(!plain.contains("fileVersion") && !plain.contains("extLst"), "{plain}");
+    // A workbook that had neither gets a <fileVersion> naming GridCraft (#1699), kept on the next
+    // save, and no calcFeatures: Excel recalculates it on open.
+    let new = write_xlsx(&gridcraft_model::Workbook::new()).unwrap();
+    let (reread, _) = read_xlsx(&new).unwrap();
+    for saved in [new, write_xlsx(&reread).unwrap()] {
+        let u = Unpacked::new(&saved);
+        u.assert_valid();
+        let plain = u.text("xl/workbook.xml");
+        let root = xml::parse(plain.as_bytes()).unwrap();
+        assert_eq!(root.children.first().map(|e| e.name.as_str()), Some("fileVersion"), "{plain}");
+        assert!(plain.contains(r#"<fileVersion appName="gridcraft"/>"#) && !plain.contains("extLst"), "{plain}");
+    }
+}
+
+const LOGO: &[u8] = b"\x89PNG\r\n\x1a\n letterhead logo";
+const SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n footer signature";
+const HF_VML: &str = r##"<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><o:shapelayout v:ext="edit"><o:idmap v:ext="edit" data="1"/></o:shapelayout><v:shapetype id="_x0000_t75" coordsize="21600,21600" o:spt="75" o:preferrelative="t" path="m@4@5l@4@11@9@11@9@5xe" filled="f" stroked="f"/><v:shape id="LH" o:spid="_x0000_s1025" type="#_x0000_t75" style="position:absolute;margin-left:0;margin-top:0;width:120pt;height:40pt;z-index:1"><v:imagedata o:relid="rId1" o:title="logo"/><o:lock v:ext="edit" rotation="t"/></v:shape><v:shape id="CF" o:spid="_x0000_s1026" type="#_x0000_t75" style="position:absolute;margin-left:0;margin-top:0;width:80pt;height:20pt;z-index:2"><v:imagedata o:relid="rId2" o:title="signature"/><o:lock v:ext="edit" rotation="t"/></v:shape></xml>"##;
+
+/// #1257: a letterhead in the header and a picture in the footer (`&G`), drawn from a VML part
+/// that `<legacyDrawingHF>` names, next to a note whose VML drawing GridCraft rewrites.
+fn header_picture_package() -> Vec<u8> {
+    let types = r#"<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="vml" ContentType="application/vnd.openxmlformats-officedocument.vmlDrawing"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/comments1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml"/></Types>"#;
+    let workbook = format!(
+        r#"<?xml version="1.0"?><workbook xmlns="{NS_MAIN}" xmlns:r="{NS_R}"><sheets><sheet name="Invoice" sheetId="1" r:id="rId1"/></sheets></workbook>"#
+    );
+    let sheet = format!(
+        r#"<?xml version="1.0"?><worksheet xmlns="{NS_MAIN}" xmlns:r="{NS_R}"><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData><pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/><headerFooter><oddHeader>&amp;L&amp;G&amp;CInvoice</oddHeader><oddFooter>&amp;C&amp;G</oddFooter></headerFooter><legacyDrawing r:id="rId2"/><legacyDrawingHF r:id="rId3"/></worksheet>"#
+    );
+    let root_rels = rels(&[("rId1", "officeDocument", "xl/workbook.xml")]);
+    let wb_rels = rels(&[("rId1", "worksheet", "worksheets/sheet1.xml")]);
+    let sheet_rels = rels(&[
+        ("rId1", "comments", "../comments1.xml"),
+        ("rId2", "vmlDrawing", "../drawings/vmlDrawing1.vml"),
+        ("rId3", "vmlDrawing", "../drawings/vmlDrawing2.vml"),
+    ]);
+    let hf_rels = rels(&[("rId1", "image", "../media/image1.png"), ("rId2", "image", "../media/image2.png")]);
+    make_zip(&[
+        ("[Content_Types].xml", types.as_bytes()),
+        ("_rels/.rels", root_rels.as_bytes()),
+        ("xl/workbook.xml", workbook.as_bytes()),
+        ("xl/_rels/workbook.xml.rels", wb_rels.as_bytes()),
+        ("xl/worksheets/sheet1.xml", sheet.as_bytes()),
+        ("xl/worksheets/_rels/sheet1.xml.rels", sheet_rels.as_bytes()),
+        ("xl/comments1.xml", COMMENTS.as_bytes()),
+        ("xl/drawings/vmlDrawing1.vml", VML.as_bytes()),
+        ("xl/drawings/vmlDrawing2.vml", HF_VML.as_bytes()),
+        ("xl/drawings/_rels/vmlDrawing2.vml.rels", hf_rels.as_bytes()),
+        ("xl/media/image1.png", LOGO),
+        ("xl/media/image2.png", SIGNATURE),
+    ])
+}
+
+#[test]
+fn header_and_footer_pictures_survive_a_save() {
+    let (wb, rep) = read_xlsx(&header_picture_package()).unwrap();
+    assert!(!rep.warnings.iter().any(|w| w.contains("dropped")), "{:?}", rep.warnings);
+    assert_eq!(wb.sheet(0).unwrap().comments.len(), 1, "the note is modelled");
+    // Twice: what was kept on the first save is read back and kept again.
+    let (again, _) = read_xlsx(&write_xlsx(&wb).unwrap()).unwrap();
+    for saved in [write_xlsx(&wb).unwrap(), write_xlsx(&again).unwrap()] {
+        let u = Unpacked::new(&saved);
+        u.assert_valid();
+        let sheet = sheet_part(&u, "Invoice");
+        let sx = u.text(&sheet);
+        assert!(sx.contains("<oddHeader>&amp;L&amp;G&amp;CInvoice</oddHeader>"), "{sx}");
+        let (ty, vml) = u.target(&sheet, &attr_of(&sx, "legacyDrawingHF", "r:id"));
+        assert!(ty.ends_with("/vmlDrawing"), "{ty}");
+        assert_eq!(u.text(&vml), HF_VML);
+        let pictures: Vec<(String, Vec<u8>)> = u.rels(&vml).into_iter().map(|r| (r.0, u.parts.get(&r.2).unwrap().clone())).collect();
+        assert_eq!(pictures, [("rId1".to_string(), LOGO.to_vec()), ("rId2".to_string(), SIGNATURE.to_vec())]);
+        // The notes keep their own drawing; CT_Worksheet puts legacyDrawingHF right after it.
+        let notes = u.target(&sheet, &attr_of(&sx, "legacyDrawing", "r:id")).1;
+        assert_ne!(notes, vml);
+        assert!(u.text(&notes).contains("ObjectType=\"Note\""));
+        assert!(sx.find("<headerFooter").unwrap() < sx.find("<legacyDrawing ").unwrap());
+        assert!(sx.find("<legacyDrawing ").unwrap() < sx.find("<legacyDrawingHF ").unwrap());
+    }
+}
+
+/// The shape blocks a VML drawing claims (`<o:idmap data>`) and the blocks of its shape ids
+/// (`_x0000_s1025` is in block 1).
+fn vml_blocks(vml: &str) -> (Vec<u64>, Vec<u64>) {
+    let i = vml.find("<o:idmap").unwrap_or_else(|| panic!("no idmap in {vml}"));
+    let data = attr_of(&vml[i..], "o:idmap", "data");
+    let idmap = data.split(',').map(|b| b.trim().parse().unwrap()).collect();
+    let spids = vml
+        .match_indices("_x0000_s")
+        .map(|(j, m)| vml[j + m.len()..].chars().take_while(char::is_ascii_digit).collect::<String>().parse::<u64>().unwrap() / 1024)
+        .collect();
+    (idmap, spids)
+}
+
+#[test]
+fn notes_take_shape_blocks_the_header_pictures_dont_use() {
+    let (wb, _) = read_xlsx(&header_picture_package()).unwrap();
+    let u = Unpacked::new(&write_xlsx(&wb).unwrap());
+    let sheet = sheet_part(&u, "Invoice");
+    let sx = u.text(&sheet);
+    let (hf_map, hf_ids) = vml_blocks(&u.text(&u.target(&sheet, &attr_of(&sx, "legacyDrawingHF", "r:id")).1));
+    let (notes_map, notes_ids) = vml_blocks(&u.text(&u.target(&sheet, &attr_of(&sx, "legacyDrawing", "r:id")).1));
+    assert_eq!((hf_map.as_slice(), hf_ids.as_slice()), ([1].as_slice(), [1, 1].as_slice()), "the header drawing is kept as it was");
+    assert!(!notes_ids.is_empty());
+    for b in notes_map.iter().chain(&notes_ids) {
+        assert!(!hf_map.contains(b) && !hf_ids.contains(b), "notes reuse shape block {b}: {notes_map:?} {notes_ids:?}");
+    }
+    assert!(notes_ids.iter().all(|b| notes_map.contains(b)), "note ids outside their drawing's blocks");
 }

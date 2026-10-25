@@ -147,6 +147,8 @@ ragione; nessun file si modifica a mano.
 node tools/vendor-craft/vendor.mjs wordcraft update --rev <sha> [--tag <tag>] [--source <clone o URL>]
 node tools/vendor-craft/vendor.mjs wordcraft check
 node tools/vendor-craft/vendor.mjs wordcraft verify-upstream
+node tools/vendor-craft/vendor.mjs wordcraft report --rev <sha> [--source <clone o URL>]
+node tools/vendor-craft/vendor.mjs wordcraft gate
 ```
 
 `update` estrae i percorsi gestiti (con `--tag`, controlla che il tag
@@ -158,6 +160,13 @@ definita nel workspace di questa cartella, scrive `upstream.lock` e aggiorna la
 `Cargo.toml`. `check`, in CI, toglie la pila intera in ordine inverso da una
 copia e ritrova le impronte dell'upstream. Una modifica nuova si aggiunge come
 patch in `patches/` e si riesegue `update` con lo stesso commit.
+
+`report` è l'aggiornamento a vuoto: non scrive niente, e dice per ogni patch
+se si applica sulla pila, se l'upstream l'ha assorbita o se va rifatta, quali
+dei suoi file l'upstream ha cambiato, e le dipendenze e la `rust-version`
+che cambiano. `gate`, dopo `update`, esegue le prove che
+`tools/vendor-craft/motori.mjs` elenca per il motore e le riassume in una
+tabella.
 
 Dopo un aggiornamento: i test qui sopra, con il `Cargo.lock` di questa
 cartella aggiornato (`cargo update --manifest-path vendor/wordcraft/Cargo.toml

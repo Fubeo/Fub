@@ -1368,9 +1368,266 @@ body {
 }
 
 .grid-cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
   padding: 0.3rem 0.45rem;
   white-space: nowrap;
+}
+
+/* Il testo sta sopra la barra di dati, e si taglia dove la cella finisce.
+   Un testo che passa nelle celle vuote accanto è largo quanto serve, fino
+   al limite che la griglia gli dà. */
+.grid-cell-text {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.grid-cell.spill {
+  overflow: visible;
+  z-index: 1;
+}
+
+.grid-cell.spill > .grid-cell-text {
+  width: max-content;
+}
+
+/* Righe e colonne bloccate restano ferme sopra quelle che scorrono; i fili
+   del blocco stanno sopra tutte. */
+.grid-row.frozen {
+  z-index: 6;
+}
+
+.grid-cell.frozen,
+.grid-border.frozen {
+  z-index: 2;
+}
+
+.grid-column-header.frozen {
+  z-index: 4;
+}
+
+.grid-freeze {
+  position: absolute;
+  z-index: 7;
+  pointer-events: none;
+}
+
+/* I bordi del file stanno sui fili della griglia, in un riquadro sopra la
+   cella. */
+.grid-border {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.grid-data-bar {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 2px;
+  pointer-events: none;
+}
+
+.grid-icon {
+  position: absolute;
+  bottom: 0.3rem;
+  left: 0.25rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.grid-comment-mark {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 7px 7px 0;
+  pointer-events: none;
+}
+
+/* La scheda di una nota o di un commento: il thread scorre, i gesti restano
+   sotto. */
+.grid-comment-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 240px;
+}
+.grid-comment-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.grid-comment-thread {
+  max-height: min(240px, 40vh);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+.grid-comment-post {
+  display: flex;
+  flex-direction: column;
+}
+.grid-comment-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.grid-comment-reply {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.grid-comment-field {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+}
+.grid-comment-actions {
+  display: flex;
+  flex-wrap: wrap;
+}
+.grid-comment-error {
+  margin: 0;
+}
+.grid-comment-error[hidden] { display: none; }
+
+/* Gli oggetti del foglio galleggiano sopra le celle e passano sotto le
+   intestazioni e le righe bloccate, come in Excel. Quelli nella cella (un
+   grafico sparkline, un'immagine nella cella) lasciano il clic alla cella. */
+.grid-object {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+}
+
+.grid-object.frozen {
+  z-index: 6;
+}
+
+.grid-object.in-cell {
+  pointer-events: none;
+}
+
+.grid-object.movable {
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.grid-object-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.grid-object.in-cell .grid-object-image {
+  object-fit: contain;
+}
+
+.grid-object-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 0.25rem;
+  overflow: hidden;
+  text-align: center;
+}
+
+.grid-object-shape {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.grid-object-figure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.grid-object-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+  line-height: 1.2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+/* Il quadratino di riempimento sta sopra le celle che scorrono e sotto le
+   righe bloccate; il contorno del riempimento tirato non prende il puntatore. */
+.grid-fill-handle,
+.grid-fill-preview {
+  position: absolute;
+  z-index: 3;
+  box-sizing: border-box;
+}
+
+.grid-fill-handle,
+.grid-viewport.filling {
+  cursor: crosshair;
+}
+
+.grid-fill-preview {
+  pointer-events: none;
+}
+
+.grid-object-handle {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+}
+
+.grid-object-handle.nw,
+.grid-object-handle.se {
+  cursor: nwse-resize;
+}
+
+.grid-object-handle.ne,
+.grid-object-handle.sw {
+  cursor: nesw-resize;
+}
+
+.grid-object-handle.n,
+.grid-object-handle.s {
+  cursor: ns-resize;
+}
+
+.grid-object-handle.e,
+.grid-object-handle.w {
+  cursor: ew-resize;
+}
+
+.grid-object-text-editor {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  resize: none;
+  cursor: text;
 }
 
 .grid-header {
@@ -1399,6 +1656,302 @@ body {
   flex: none;
   min-width: 0;
   overflow-x: auto;
+}
+
+/* La barra multifunzione del foglio (`editors/grid/ribbon/`): la fila delle
+   schede, poi i gruppi di una scheda in una striscia d'altezza fissa. Un
+   gruppo che non ci sta si raccoglie nel suo pulsante (`data-collapsed`); le
+   lettere di Excel sono distintivi posati sopra i controlli. */
+.grid-ribbon-host { flex: none; min-width: 0; }
+.grid-ribbon {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.grid-ribbon-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.grid-ribbon-tabs {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+.grid-ribbon-tabs .kit-tab,
+.grid-ribbon-item,
+.grid-ribbon-group {
+  position: relative;
+}
+.grid-ribbon-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+.grid-ribbon-toggle svg { width: 16px; height: 16px; }
+.grid-ribbon-panel { min-width: 0; }
+.grid-ribbon-toolbar {
+  display: flex;
+  align-items: stretch;
+  height: 102px;
+  min-width: 0;
+  overflow: hidden;
+}
+.grid-ribbon-group {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+}
+.grid-ribbon-group-body {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+}
+.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-body,
+.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-label {
+  display: none;
+}
+.grid-ribbon-group-label {
+  flex: none;
+  white-space: nowrap;
+  text-align: center;
+}
+.grid-ribbon-stack {
+  display: flex;
+  flex-direction: column;
+}
+.grid-ribbon-row,
+.grid-ribbon-item,
+.grid-ribbon-field,
+.grid-ribbon-check,
+.grid-ribbon-chevron {
+  display: inline-flex;
+  align-items: center;
+}
+.grid-ribbon-row { display: flex; }
+.grid-ribbon-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+.grid-ribbon-small {
+  min-width: 24px;
+  height: 24px;
+}
+.grid-ribbon-small svg { flex: none; width: 16px; height: 16px; }
+.grid-ribbon-large {
+  flex-direction: column;
+  justify-content: flex-start;
+  min-width: 44px;
+  max-width: 96px;
+  height: 76px;
+}
+.grid-ribbon-large svg { flex: none; width: 26px; height: 26px; }
+/* Il nome di un pulsante grande sta in due righe al più, sopra il nome del
+   gruppo. */
+.grid-ribbon-large .grid-ribbon-label {
+  max-height: 2.5em;
+  overflow: hidden;
+  white-space: normal;
+  text-align: center;
+}
+.grid-ribbon-large .grid-ribbon-chevron svg,
+.grid-ribbon-chevron svg { width: 10px; height: 10px; }
+.grid-ribbon-split-large { flex-direction: column; }
+.grid-ribbon-split-large > .grid-ribbon-large { height: 58px; }
+.grid-ribbon-split-large > .grid-ribbon-arrow { align-self: stretch; height: 18px; }
+.grid-ribbon-arrow { min-width: 14px; }
+.grid-ribbon-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+}
+.grid-ribbon-color-bar {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 2px;
+  height: 3px;
+}
+.grid-ribbon-panel[data-compact="true"] .grid-ribbon-small .grid-ribbon-label { display: none; }
+.grid-ribbon-keytip {
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  z-index: var(--z-menu);
+  transform: translateX(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.grid-ribbon-popup-group { display: flex; }
+.grid-ribbon-palette,
+.grid-ribbon-gallery {
+  display: flex;
+  flex-direction: column;
+}
+.grid-ribbon-gallery { max-height: 60vh; overflow-y: auto; }
+.grid-ribbon-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 18px);
+}
+.grid-ribbon-swatch { width: 18px; height: 18px; padding: 0; }
+.grid-ribbon-gallery-grid { display: grid; }
+.grid-ribbon-gallery-table .grid-ribbon-gallery-grid { grid-template-columns: repeat(7, 64px); }
+.grid-ribbon-gallery-cell .grid-ribbon-gallery-grid { grid-template-columns: repeat(4, 108px); }
+.grid-ribbon-gallery-item { display: flex; justify-content: center; padding: 3px; }
+.grid-ribbon-table-preview {
+  display: grid;
+  grid-template-columns: repeat(3, 18px);
+}
+.grid-ribbon-table-preview > span { height: 9px; }
+.grid-ribbon-cell-sample {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Le finestre del foglio (`editors/grid/dialogs/`): una colonna di campi, il
+   nome a sinistra e il controllo a destra. Le finestre larghe (Formato celle,
+   Ordinamento, Gestione nomi) stanno a 640px; Formato celle tiene ferma
+   l'altezza delle pagine, perché passando da una scheda all'altra la finestra
+   non salti. */
+.kit-dialog.grid-dialog-wide { width: min(640px, 100%); }
+.grid-dialog-format .grid-dialog-fields:not([hidden]) { min-height: 33rem; }
+.grid-dialog,
+.grid-dialog-form,
+.grid-dialog-fields,
+.grid-dialog-section,
+.grid-dialog-choices,
+.grid-dialog-palette {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.grid-dialog-section,
+.grid-dialog-choices {
+  min-inline-size: 0;
+  margin: 0;
+}
+.grid-dialog-choices { padding: 0; border: 0; }
+.grid-dialog-fields[hidden],
+.grid-dialog-palette[hidden] { display: none; }
+.grid-dialog-field {
+  display: grid;
+  grid-template-columns: minmax(8em, 1fr) minmax(0, 2fr);
+  align-items: center;
+}
+.grid-dialog-field > .grid-dialog-palette { grid-column: 1 / -1; }
+.grid-dialog-check,
+.grid-dialog-choice {
+  display: flex;
+  align-items: center;
+}
+.grid-dialog-input,
+.grid-dialog-select,
+.grid-dialog-area {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+.grid-dialog-number { max-width: 10em; }
+.grid-dialog-area { resize: vertical; }
+.grid-dialog-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+}
+/* L'anteprima di stampa: la pagina disegnata sta al centro di un palco che
+   scorre, e non allarga mai la finestra. */
+.grid-preview-stage {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  height: 26rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.grid-preview-page { display: block; max-width: 100%; height: auto; }
+.grid-preview-page[hidden] { display: none; }
+.grid-dialog-results {
+  max-height: 14rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.grid-dialog-names-head,
+.grid-dialog-names-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr);
+}
+.grid-dialog-names-head > span,
+.grid-dialog-names-row > span,
+.grid-dialog-sample-text,
+.grid-dialog-preview-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.grid-dialog-signature { overflow-wrap: anywhere; }
+.grid-dialog-color-button {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  max-width: 100%;
+}
+.grid-dialog-color-chip {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.grid-dialog-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 18px);
+}
+.grid-dialog-swatch { width: 18px; height: 18px; padding: 0; }
+.grid-dialog-sample-text,
+.grid-dialog-preview-text { display: block; }
+.grid-dialog-sample-text,
+.grid-dialog-preview-text { min-height: 2.5em; box-sizing: border-box; }
+/* Le caselle sole di una sezione di Formato celle (i lati del bordo, gli
+   effetti del carattere) stanno su due colonne, come in Excel. */
+.grid-dialog-format .grid-dialog-section:not(:has(> :not(legend, .grid-dialog-check))) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12em, 1fr));
+}
+.grid-dialog-border-preview {
+  display: flex;
+  justify-content: center;
+}
+/* La cella dell'anteprima dei bordi: i lati li scrive la finestra, le
+   diagonali sono due strati sopra, del colore della linea scelta. */
+.grid-dialog-border-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: min(220px, 100%);
+  height: 88px;
+}
+.grid-dialog-border-cell--down::before,
+.grid-dialog-border-cell--up::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.grid-dialog-border-cell--down::before {
+  background: linear-gradient(to top right, transparent calc(50% - 1px), var(--grid-dialog-diagonal, currentColor) calc(50% - 1px), var(--grid-dialog-diagonal, currentColor) calc(50% + 1px), transparent calc(50% + 1px));
+}
+.grid-dialog-border-cell--up::after {
+  background: linear-gradient(to bottom right, transparent calc(50% - 1px), var(--grid-dialog-diagonal, currentColor) calc(50% - 1px), var(--grid-dialog-diagonal, currentColor) calc(50% + 1px), transparent calc(50% + 1px));
 }
 
 /* L'ospite del canvas riempie il foglio: senza un'altezza sua la tela, che è

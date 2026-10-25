@@ -17,13 +17,14 @@ use fub_abi::edit::Revision;
 use fub_abi::grid::GridCellKey as AbiKey;
 use fub_abi::{grid_bytes_revision, grid_journal_match, GridJournal, GridJournalMatch};
 
-use crate::fub::abi::grid::{
-    GridApplyRequest, GridCellKey, GridCellStyle, GridColumn, GridCommit, GridInvalidation,
-    GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindowRequest,
-};
 use crate::exports::fub::abi::grid_bytes::{
-    GridBytesCell, GridBytesSession, GridBytesWindow, GridNotice, GridValue,
-    Guest as GridBytesGuest,
+    GridBytesCell, GridBytesSession, GridBytesWindow, GridCommandOutcome, GridCommandRequest,
+    GridBook, GridCalculation, GridCommandState, GridNotice, GridSelection, GridSheetView,
+    GridValue, GridViewMode, Guest as GridBytesGuest,
+};
+use crate::fub::abi::grid::{
+    GridApplyRequest, GridBorders, GridCellKey, GridCellStyle, GridColumn, GridCommit,
+    GridInvalidation, GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindowRequest,
 };
 use crate::{bad, conflict, not_found, Component, PluginError};
 
@@ -120,6 +121,24 @@ fn plain() -> GridCellStyle {
         fill_color: None,
         horizontal: None,
         number_format: None,
+        font: None,
+        font_size: None,
+        underline: None,
+        strike: false,
+        script: None,
+        vertical: None,
+        wrap: false,
+        shrink: false,
+        indent: 0,
+        rotation: 0,
+        borders: GridBorders {
+            top: None,
+            right: None,
+            bottom: None,
+            left: None,
+            diagonal_down: None,
+            diagonal_up: None,
+        },
     }
 }
 
@@ -159,6 +178,11 @@ impl GridBytesGuest for Component {
         }
         let text = String::from_utf8(source).map_err(|_| bad("the source is not UTF-8"))?;
         let journal = GridJournal::parse(&journal).map_err(|_| bad("malformed journal"))?;
+        // L'esempio non serve comandi: un giornale di comandi non si legge
+        // come vuoto.
+        if !journal.commands().is_empty() {
+            return Err(bad("the journal carries commands"));
+        }
         if journal.entries().any(|(key, _, _)| row_of(key).is_none()) {
             return Err(bad("the journal names a cell outside the lines"));
         }
@@ -186,6 +210,8 @@ impl GridBytesGuest for Component {
                 count: lines.lines.len() as u32,
             }],
             conflicts: lines.conflicts(),
+            commands: Vec::new(),
+            book: office_book(),
         };
         state.sessions.insert(instance, lines);
         Ok(result)
@@ -251,9 +277,13 @@ impl GridBytesGuest for Component {
                         display: input.clone(),
                         value: GridValue::Text(input.clone()),
                         input,
-                        style: plain(),
+                        style: 0,
                         lock: None,
                         stale: false,
+                        data_bar: None,
+                        icon: None,
+                        comment: None,
+                        link: None,
                     })
                 })
                 .collect()
@@ -273,6 +303,23 @@ impl GridBytesGuest for Component {
             rows,
             columns,
             cells,
+            styles: vec![plain()],
+            merges: Vec::new(),
+            view: GridSheetView {
+                frozen_rows: 0,
+                frozen_columns: 0,
+                gridlines: true,
+                headings: true,
+                zoom: 100,
+                right_to_left: false,
+                mode: GridViewMode::Normal,
+                formulas: false,
+                protected: false,
+                print_gridlines: false,
+                print_headings: false,
+            },
+            tables: Vec::new(),
+            objects: Vec::new(),
         })
     }
 
@@ -323,6 +370,26 @@ impl GridBytesGuest for Component {
         })
     }
 
+    /// L'esempio modifica soltanto con le patch: il catalogo è vuoto.
+    fn commands(
+        instance: String,
+        _selection: GridSelection,
+    ) -> Result<Vec<GridCommandState>, PluginError> {
+        session(&instance)?;
+        Ok(Vec::new())
+    }
+
+    fn command(
+        instance: String,
+        request: GridCommandRequest,
+    ) -> Result<GridCommandOutcome, PluginError> {
+        session(&instance)?;
+        Err(bad(format!(
+            "grid command `{}` is not served",
+            request.command.id
+        )))
+    }
+
     fn bytes_to_write(instance: String, expected: String) -> Result<Vec<u8>, PluginError> {
         let lines = session(&instance)?;
         if expected != lines.revision().0 {
@@ -350,5 +417,22 @@ impl GridBytesGuest for Component {
     fn shutdown() -> Result<(), PluginError> {
         state().sessions.clear();
         Ok(())
+    }
+}
+
+/// Le righe di testo non hanno un tema: quello di Office.
+fn office_book() -> GridBook {
+    GridBook {
+        theme_colors: [
+            "#FFFFFF", "#000000", "#E7E6E6", "#44546A", "#4472C4", "#ED7D31", "#A5A5A5",
+            "#FFC000", "#5B9BD5", "#70AD47", "#0563C1", "#954F72",
+        ]
+        .map(str::to_owned)
+        .to_vec(),
+        names: Vec::new(),
+        calculation: GridCalculation::Automatic,
+        protected: false,
+        font: "Calibri".to_owned(),
+        font_size: 11.0,
     }
 }

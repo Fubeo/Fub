@@ -1,0 +1,34 @@
+diff --git a/crates/engine/src/chart_svg.rs b/crates/engine/src/chart_svg.rs
+--- a/crates/engine/src/chart_svg.rs
++++ b/crates/engine/src/chart_svg.rs
+@@ -19,7 +19,7 @@ impl gridcraft_chart::Measure for HelveticaMeasure {
+ }
+ 
+ /// `chart` of sheet `sheet` as an `<svg>` element placed by `style`, or `None` for a degenerate size.
+-pub(crate) fn chart_svg(wb: &Workbook, sheet: usize, chart: &Chart, style: &str) -> Option<String> {
++pub fn chart_svg(wb: &Workbook, sheet: usize, chart: &Chart, style: &str) -> Option<String> {
+     let (w, h) = (chart.anchor.width.min(MAX_SIDE), chart.anchor.height.min(MAX_SIDE));
+     if !(w >= 1.0 && h >= 1.0) {
+         return None;
+@@ -29,7 +29,8 @@ pub(crate) fn chart_svg(wb: &Workbook, sheet: usize, chart: &Chart, style: &str)
+     Some(prims_svg(&prims, w, h, style))
+ }
+ 
+-fn prims_svg(prims: &[Prim], w: f32, h: f32, style: &str) -> String {
++/// Drawing primitives as an `<svg>` element of `w`×`h`, placed by `style`.
++pub fn prims_svg(prims: &[Prim], w: f32, h: f32, style: &str) -> String {
+     let mut out = String::new();
+     let _ = write!(
+         out,
+diff --git a/crates/engine/src/lib.rs b/crates/engine/src/lib.rs
+--- a/crates/engine/src/lib.rs
++++ b/crates/engine/src/lib.rs
+@@ -8,7 +8,7 @@
+ 
+ pub mod catalog;
+ pub mod cf;
+-mod chart_svg;
++pub mod chart_svg;
+ mod clip_html;
+ pub mod cmd;
+ pub mod display;

@@ -45,6 +45,21 @@ pub struct PreservedXml {
     pub xml: String,
 }
 
+/// The source form of content GridCraft models and writes itself: the theme part as it was, the
+/// attributes of an element it writes that it does not model (`workbookPr`'s `codeName`), an
+/// element it never reads (`phoneticPr`). Written back instead of GridCraft's own form while the
+/// model still holds what was read from it, so an open and save keeps the file as it was.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PreservedSource {
+    /// What it is (`theme`, `workbookPr`, `pageSetup`…).
+    pub slot: String,
+    /// What the model held right after reading it, as the file-format crate fingerprints it;
+    /// empty for content the model has no counterpart for, which is always written back.
+    pub model: String,
+    /// The bytes: a part, an XML element, or attributes (` codeName="Sheet1"`).
+    pub data: Arc<[u8]>,
+}
+
 /// A chart sheet (a sheet that holds one chart and no cells) kept as it was in the source file. Its
 /// part, drawing, chart, style and colour parts are in [`Preserved::parts`]; the workbook
 /// relationship to it is in [`Preserved::rels`].
@@ -56,6 +71,8 @@ pub struct PreservedSheet {
     pub rel_id: String,
     /// How many worksheets come before it: its position among the model's sheets.
     pub before: usize,
+    /// Its `sheetId` in the source file.
+    pub sheet_id: u32,
 }
 
 /// Unmodelled content kept for one owner (the workbook, which also holds package-root content,
@@ -75,6 +92,8 @@ pub struct Preserved {
     pub vml: Option<PreservedPart>,
     /// Chart sheets, in file order (workbook owner only).
     pub sheets: Vec<PreservedSheet>,
+    /// Source forms of modelled content.
+    pub sources: Vec<PreservedSource>,
 }
 
 impl Preserved {
@@ -85,9 +104,11 @@ impl Preserved {
             && self.elements.is_empty()
             && self.vml.is_none()
             && self.sheets.is_empty()
+            && self.sources.is_empty()
     }
     /// Total bytes held.
     pub fn byte_len(&self) -> usize {
-        self.parts.iter().chain(self.vml.iter()).fold(0usize, |n, p| n.saturating_add(p.data.len()))
+        let parts = self.parts.iter().chain(self.vml.iter()).fold(0usize, |n, p| n.saturating_add(p.data.len()));
+        self.sources.iter().fold(parts, |n, s| n.saturating_add(s.data.len()))
     }
 }

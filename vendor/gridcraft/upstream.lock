@@ -2,22 +2,50 @@
 # Non si modifica a mano: la scrive `update`. Un tag è informativo, lo SHA no.
 repository = "https://github.com/storytold/gridcraft"
 mirror = ""
-rev = "a2cc4b42cac6e2c41bae71fba4607300755a0b47"
-tag = "v0.9.0"
-date = "2026-10-19"
-version = "0.9.0"
+rev = "ac8da7d49cbeb4be6aa1ad5869f3d29fe2da8cd9"
+tag = "v0.11.1"
+date = "2026-10-22"
+version = "0.11.1"
 
 [[patch]]
 path = "patches/0001-zip-9.patch"
-sha256 = "sha256:414595d0e2c9405d1022a64b046b17afb44a4fc3701358928abc979023b880ec"
+sha256 = "sha256:3b77699ece3a886f1d67faee835d32213a575dca11688e98b8fa43545141aed7"
 
 [[patch]]
 path = "patches/0002-rust-1-89.patch"
-sha256 = "sha256:8fad50da440194af56e70cfbaad949fa15884853a3d81f632231b12d04d0cc98"
+sha256 = "sha256:91213cda62223ad6ae4de3aebb46dea78a8c4792b186dddcb8d41d41c5e0e73d"
 
 [[patch]]
 path = "patches/0003-valori-delle-matrici.patch"
-sha256 = "sha256:ef9ca6c35202af5534448a56ed7f3e7bf8bf3f846580ea9c1bbe27acf9e41e07"
+sha256 = "sha256:9ac8a5b194502d4c3cb87366f6626c07876acfcd8ca27d4f48558191fb49a91b"
+
+[[patch]]
+path = "patches/0004-apertura-senza-ricalcolo.patch"
+sha256 = "sha256:90d660794eff060bafb3158c5191afecaeb211b5030e807e0d13c5b6d545564c"
+
+[[patch]]
+path = "patches/0005-sheetid-del-file.patch"
+sha256 = "sha256:0a35dda66732d71a6808b2acb8b3f37a6d6f7b3626bb13a2f3e96ca61d7b5dd8"
+
+[[patch]]
+path = "patches/0006-intersezione-implicita.patch"
+sha256 = "sha256:5119b563b7588f7e31277d9b84913d79a4f8b9bbb1cc0aa4f4283885aa51ae09"
+
+[[patch]]
+path = "patches/0007-forme-del-file.patch"
+sha256 = "sha256:a0176ce3d5f94bdb374c91918ceb089404d1ff9953ac6a4c6afc28e12e0cc220"
+
+[[patch]]
+path = "patches/0008-viste-ed-estensioni.patch"
+sha256 = "sha256:ce23e0341a173f180e624c73c1ed8ada671df5c6a9a67b0b6ca4be9bc3dcc74d"
+
+[[patch]]
+path = "patches/0009-svg-degli-oggetti.patch"
+sha256 = "sha256:b544dc3a95400ca0f8e02f77cc16c81e1f8771cfc5fb399bf6c36c0099a5d6ec"
+
+[[patch]]
+path = "patches/0010-modifica-di-note-e-commenti.patch"
+sha256 = "sha256:5228ac08563618dc7bc58500d3ee64da5ba4d3d46c4246162d2ec56787010b79"
 
 [[file]]
 path = "LICENSE-APACHE"
@@ -37,7 +65,7 @@ upstream = "sha256:d2e8fb04d33b08ce7860f3bfa4968ec4f119b90c05eb26ce8645f3c2b68ba
 
 [[file]]
 path = "crates/calc/src/eval.rs"
-upstream = "sha256:807d4fd4f2b4b7d4f50f2cf886fd345430e0a8f1cf79e3d6a67e82d215a6c0be"
+upstream = "sha256:982433243c0b355d36d4340463e817bbda4302153f86dd43511ac88bf99f92a4"
 
 [[file]]
 path = "crates/calc/src/lib.rs"
@@ -45,15 +73,51 @@ upstream = "sha256:5aff054a446cc7b0dba8801d8d440e21825e275320218a7f2411b66cdfdc3
 
 [[file]]
 path = "crates/calc/src/recalc.rs"
-upstream = "sha256:7ec6a2a802c475f2539debef986cbbc8880a9dc6fdb21984ad38840275758080"
+upstream = "sha256:dac9126e87a5e28dc9af100b8672324a41c965683adb41704bef7e7db6cccc85"
 
 [[file]]
 path = "crates/calc/src/tests.rs"
-upstream = "sha256:807b79395a4bced4e451e4e5a507fa2938f7c683d819196e636321b815b0dc2f"
+upstream = "sha256:afafceeada38d7b34b5b45c8f7e5002dc4e46be778813f842dcb16a9a1df5561"
 
 [[file]]
 path = "crates/calc/src/trimrange.rs"
 upstream = "sha256:bb8dab77149c6ad2bf0f6dd2df354510bdde545b4839ff8adc74c067b64907b9"
+
+[[file]]
+path = "crates/chart/Cargo.toml"
+upstream = "sha256:53112cd48e7ee7109c7db3f15fe9a3780d9f95da87625c2ce3078cf066df2d75"
+
+[[file]]
+path = "crates/chart/src/axis.rs"
+upstream = "sha256:825edba1bf585c7f5dae8eee2cd39d67455bbf6861cb6d176134fa7833323948"
+
+[[file]]
+path = "crates/chart/src/lib.rs"
+upstream = "sha256:2c74b91a401820f211da29c0079dc72fa4b6432f741f1abeab4a7fccef433c74"
+
+[[file]]
+path = "crates/chart/src/raster.rs"
+upstream = "sha256:d85998be96b67da18e6240342b6e4f16c4d4325a3f2aae9f822dfe1ae2081ae4"
+
+[[file]]
+path = "crates/chart/src/render.rs"
+upstream = "sha256:3bc13f3b4fcaee0bb3d782da6966948976136277b32518793f6a0a46e805931e"
+
+[[file]]
+path = "crates/chart/src/resolve.rs"
+upstream = "sha256:f47c3735efdd05e260fae3ab00a0f68a71e76c687c595aee7bad67e32bbe14e1"
+
+[[file]]
+path = "crates/chart/src/sparkline.rs"
+upstream = "sha256:5c9fc47f866f26a2ccc625ad6a6f3c12bb31d0ca6f8e5305968932d0050cc5f4"
+
+[[file]]
+path = "crates/chart/src/tests.rs"
+upstream = "sha256:9e1001f65fe2034c612ce63422bc80c3d0bf33ae87bbfc854f15c1f48f473663"
+
+[[file]]
+path = "crates/chart/src/trend.rs"
+upstream = "sha256:698bb73f1b55b8347801f7f3a877ff2ec3a4835987b4cfdfdef3cd3f67444387"
 
 [[file]]
 path = "crates/core/Cargo.toml"
@@ -61,7 +125,11 @@ upstream = "sha256:f63d75299f932e91783d6e09cb75b054687cd2c1a1f12373cab4b38cffd4f
 
 [[file]]
 path = "crates/core/src/addr.rs"
-upstream = "sha256:858b194a5293cb9297b7af76b88f04f2b0f230c300807abed8e20e7386d5f6db"
+upstream = "sha256:7b7cd9a16aefe8295088c4e4fa1e43c5678095ee608efd5a92709234de647312"
+
+[[file]]
+path = "crates/core/src/color.rs"
+upstream = "sha256:5cc6e8ea8ebcdd42fb0cb6d6e3f00982e8770cbcd914524613ec98664c570313"
 
 [[file]]
 path = "crates/core/src/date.rs"
@@ -69,15 +137,298 @@ upstream = "sha256:6651a77aa835d8efa14b4271feb66c0d33ee0abc3fb6226195e94a4723e22
 
 [[file]]
 path = "crates/core/src/lib.rs"
-upstream = "sha256:4c86cb687c7325192212dce659edfb9fbb0eb1f3a72b6bbb89df910dff9512ab"
+upstream = "sha256:2de2a3665537597e8d219ee452ccca92dd54c537bbd327001f4fccb49f51f228"
 
 [[file]]
 path = "crates/core/src/parse.rs"
-upstream = "sha256:d53ea229e96376c834490761e831617e1fabf1f086a4120e1bd4dcd32c3ac1d8"
+upstream = "sha256:2bf67b24a377f113cf833caaaa800774abceecd4fc5a4af8d4ee25fc087e722b"
 
 [[file]]
 path = "crates/core/src/value.rs"
-upstream = "sha256:04a90fa043a734dd838f61de243ef754039f6ea548b84e294e4fcd21b8966835"
+upstream = "sha256:ddee3617a9c44f1558ad74c3855f138de6769c7c9e17e3cc1cd9f2bdf340edc3"
+
+[[file]]
+path = "crates/engine/Cargo.toml"
+upstream = "sha256:0438e65bd023d3431bed4abc2cba100c3c87c68ac824feeb09b01e9ee966fe7c"
+
+[[file]]
+path = "crates/engine/examples/fill_handle_perf.rs"
+upstream = "sha256:d0cdffa823f60f88ee2c1ecf677888cd20d7ecb2bc563a21bf8654bd1d3f948d"
+
+[[file]]
+path = "crates/engine/examples/perf.rs"
+upstream = "sha256:fef1cb8c97b655c1ad32370d0c68803d2f281cb86d004f0efed9cffd0fb10f2c"
+
+[[file]]
+path = "crates/engine/src/catalog.rs"
+upstream = "sha256:2f32ef6910b16dcf8efb08160e7986c5ba8234198e0f9ae6a610b7602c96333d"
+
+[[file]]
+path = "crates/engine/src/cf.rs"
+upstream = "sha256:51bad2c5f85237398f7fd323acd34a4cb0217db4e64c23348af4e516afe97a41"
+
+[[file]]
+path = "crates/engine/src/chart_svg.rs"
+upstream = "sha256:cf5d686cde00e3d17f0180bf7815b5912a1b7c515af882b0ce44d64bf689b316"
+result = "sha256:af1ac62568346417c36b698bdd2f84268190c07d8fd02021ec261057c750f3dc"
+
+[[file]]
+path = "crates/engine/src/clip_html.rs"
+upstream = "sha256:8a46992ec2cc500fe908d48b24ce2376b63c8a468a81c6f7f66679094f1af32c"
+
+[[file]]
+path = "crates/engine/src/cmd/analysis.rs"
+upstream = "sha256:51e74dbe25bfb05cd5e6899edd8997f0220dbafbfba89a5bdc8beb6a6050f8fe"
+result = "sha256:03aa6189cd254be807fbc0e39bbfbf283ab35dd2bf81da4d8767f194935afcf4"
+
+[[file]]
+path = "crates/engine/src/cmd/data.rs"
+upstream = "sha256:03b06fffa14b4dfe5b47d86eb8f7850c11855c56aa9fdb0617d5be34cee3ca41"
+
+[[file]]
+path = "crates/engine/src/cmd/draw.rs"
+upstream = "sha256:30186e45a6d66709eb7496202591bcde1d4df980f81c969066bffe64e860dfa4"
+
+[[file]]
+path = "crates/engine/src/cmd/edit.rs"
+upstream = "sha256:80d0232c67a9e0f2ea6f952df0be6d7b132dc4cc7446b163094600e4fd9d02c2"
+result = "sha256:6a1e0c54bdb38932f6aa902582edd5af46bf37a99ed29ccc3c23eb8e2aeb1168"
+
+[[file]]
+path = "crates/engine/src/cmd/extra.rs"
+upstream = "sha256:a9fcae6dee041a4d4f08d200b08936ba1fc2c41a81fe31588fd183429ed09375"
+result = "sha256:502fe46c85564f301e4dd9959b5cce88597eb349fed2d5989ff1d85a14f3d4e9"
+
+[[file]]
+path = "crates/engine/src/cmd/file.rs"
+upstream = "sha256:6fa7a2d16660917062987c5d4336d8b53957bc737736b049a5bbf68fc4fe73f4"
+
+[[file]]
+path = "crates/engine/src/cmd/forecast.rs"
+upstream = "sha256:ff871eb052fef573085c48520d6cb8dd605479f1df1a6701e1b6813f42b7a0a3"
+result = "sha256:f4d3cf077806f602ad7a73d000db9b0981b682254dd5e0b075db89fee605763a"
+
+[[file]]
+path = "crates/engine/src/cmd/format.rs"
+upstream = "sha256:0c0dd942091abd96fbfa761f0b77d0caa496cccc938b655f92f8db08ddb534e7"
+result = "sha256:238318e7d33aeb64c286d77ef84f42b5eec0a9d6c37d1c0ad5b45c6a74a97af8"
+
+[[file]]
+path = "crates/engine/src/cmd/formulas.rs"
+upstream = "sha256:9d829369593a394fe0bfee64d8cfafd6898a18ff6089fcfaa5efc4dd3aaee32d"
+
+[[file]]
+path = "crates/engine/src/cmd/insert.rs"
+upstream = "sha256:a27e8318ab194f5431e76a60e53d8055e92a8edd4db5ad29e0e2ebb153e8eb90"
+result = "sha256:c83e1f2b0a05b0fb8e0383da01bfc3df958cb992370f25f5e62891722b9e2ecf"
+
+[[file]]
+path = "crates/engine/src/cmd/inspect.rs"
+upstream = "sha256:d2dd3f0e7ab4a61db110ef07b7c40c8242916606f3739a3eab241d22a7880281"
+
+[[file]]
+path = "crates/engine/src/cmd/mod.rs"
+upstream = "sha256:8041953c95a29f05e9166364c2fb5f143518fe4852adc5ac2b5b88bbe3889bf4"
+
+[[file]]
+path = "crates/engine/src/cmd/pivot.rs"
+upstream = "sha256:6e63be7fd9748d05c1165c435a00d62f13dd5055ce57b5b762ed5068fc0d2815"
+
+[[file]]
+path = "crates/engine/src/cmd/print.rs"
+upstream = "sha256:54498dc826d37d7c2757f5b828f1bbcde9ee670a7e312cd171d18836222e6602"
+
+[[file]]
+path = "crates/engine/src/cmd/review.rs"
+upstream = "sha256:1b91902050601663e797638ed85271dada2dde0c4bab4817a199faf6ef1d1278"
+
+[[file]]
+path = "crates/engine/src/cmd/sheet.rs"
+upstream = "sha256:ab4665c8d591a5b93b84ceac16c8e4fb461b886c758c74e98235e25f3ea73ba0"
+
+[[file]]
+path = "crates/engine/src/cmd/slicer.rs"
+upstream = "sha256:9365bb7ff08b282c4a9f8c6e1ba582a89cd1c5502a9f7721b011792089ad7ab6"
+
+[[file]]
+path = "crates/engine/src/cmd/solver.rs"
+upstream = "sha256:63eaadecd3d8fe670662852e4ac595bce7174b6038b4c8b6331e9214d8de9bba"
+result = "sha256:8e72ab6c85d3b6b9c1077fe31f6ba25ca108d0e44c4b2df216219783e178903f"
+
+[[file]]
+path = "crates/engine/src/cmd/spelling.rs"
+upstream = "sha256:184ff0474b6185a36beeaa9156507d888a11b4e3cb112d64a32f0117a88087ee"
+
+[[file]]
+path = "crates/engine/src/cmd/view.rs"
+upstream = "sha256:c0305666b0aa7a85d04a56ece4695a3ca0ca034e3fc3fb2558f688fab66db423"
+
+[[file]]
+path = "crates/engine/src/cmd/whatif.rs"
+upstream = "sha256:1bbde98d9e33ff43324707e8747e74f26b0d32a4cc08709a94998a2ba62e401e"
+result = "sha256:a950ffab3d40a0cbd88d0449d5bac805d0c3b904e1eea785d31f61c438a89bec"
+
+[[file]]
+path = "crates/engine/src/display.rs"
+upstream = "sha256:ac463b4140cc8df5e33c9ec1d0bed9d25267b7914b48d38b69bb08793f73ca59"
+
+[[file]]
+path = "crates/engine/src/fill.rs"
+upstream = "sha256:c3f5b5c637c625d4b4a9012223c97df91757128bc2272ee190416786ae361e56"
+result = "sha256:0d508747fd2d75027defe3c743c03156e0df640ba374cf7d1e1f3b528ef6e52b"
+
+[[file]]
+path = "crates/engine/src/io.rs"
+upstream = "sha256:e256f8bc8722f2b1a24ad006eab2b17d56376a0419dd09d0c3ad664642f19aa9"
+result = "sha256:0108833369a02048d1385b6a0500d8c34e3fc294d6cec414228ba457340669ff"
+
+[[file]]
+path = "crates/engine/src/lib.rs"
+upstream = "sha256:b41ebb2d7114756e6cc2e5ca68a91f2af01de3b1de426f83bf3135d810822966"
+result = "sha256:6e735d280025707bb43673bf489f09b2de032dd431106c3514198e3b26b87772"
+
+[[file]]
+path = "crates/engine/src/links.rs"
+upstream = "sha256:ff280c17b638a85b1de609666c07d7a9777c86f1ef579d0075e5efecdf7c93f3"
+
+[[file]]
+path = "crates/engine/src/outline.rs"
+upstream = "sha256:cf705ad69f5da878c54a9601f53aff4cfd53d352ecfd8b583e7e0612f9d8224f"
+
+[[file]]
+path = "crates/engine/src/paper.rs"
+upstream = "sha256:cf7b8b2687fced12503a0ad40e38f2165f00f73d8cc2d6fd9d40f3cbc019f3e7"
+
+[[file]]
+path = "crates/engine/src/pivot.rs"
+upstream = "sha256:9468c345061e8a71dd998a9a3fdf4cd7c70c67d8833467fdce30447ea293ecb5"
+result = "sha256:1040b6b7f1af401ab1d7e4506ce44cde0b93ead8de8049e16ef915377f640326"
+
+[[file]]
+path = "crates/engine/src/pivot_calc.rs"
+upstream = "sha256:0b3d59c43cc05dcd2810337648d4dd19d534c7fe00fcc6036bbba8d42b012b70"
+
+[[file]]
+path = "crates/engine/src/sample.rs"
+upstream = "sha256:e464530606eb7ead7cddb646273665dc29a180ea292b9191348e4e626fc6600c"
+
+[[file]]
+path = "crates/engine/src/selection.rs"
+upstream = "sha256:0b66c6a65326d2bd7451eac93bfa7a9bc1f54d93f3f47ff0fc36a2f22c0ac3bc"
+
+[[file]]
+path = "crates/engine/src/tables.rs"
+upstream = "sha256:cef99c655829725036d15191d6a1d7099ee7a2e5905311e6a6820e3269d17fa1"
+
+[[file]]
+path = "crates/engine/src/tests.rs"
+upstream = "sha256:27dc31170fa41f0280740741bf62f3d6c0d0284bc398b897fef895c1c69e0757"
+result = "sha256:1dd5a84c2c68740eca3c1e6b5d9c38d463eac9326ee0ab1114091c7dd32c5f86"
+
+[[file]]
+path = "crates/engine/tests/autofit_filter_buttons.rs"
+upstream = "sha256:5aa9edfe88ae9481f0169f2801c41b13438b3867fb21fd39a1526a4c85e9d60b"
+
+[[file]]
+path = "crates/engine/tests/cf_formula_validate.rs"
+upstream = "sha256:c4854cc92d2ca67185fd47eb218e81a6b2798bed84c1fbf67c8d50c1ae4b0704"
+
+[[file]]
+path = "crates/engine/tests/chart_workbook_names.rs"
+upstream = "sha256:ab7c1e05e7751e372506c94777c955d38f4f4f87377fe5c8cc51e663eeb76205"
+result = "sha256:bfc32ffcf1abc8c9ee3aaed3ed1d1506f6dc748c4118df6660374545ecd8f6b1"
+
+[[file]]
+path = "crates/engine/tests/command_sequence_fuzz.rs"
+upstream = "sha256:d93576ed192a280cbd3002f22c7347ea136adcde9ad132ad1fe4e020e0627fec"
+
+[[file]]
+path = "crates/engine/tests/cross_sheet_cut.rs"
+upstream = "sha256:36914cdfa6da5ab90a528e38ae20aa956033f74519f3fec159e88cb7ac1b34ab"
+
+[[file]]
+path = "crates/engine/tests/csv_export_budget.rs"
+upstream = "sha256:74a1b716b44a13b0290881de069cb5d2e54cb53c029e0a2dfd0d233dc49e7887"
+
+[[file]]
+path = "crates/engine/tests/custom_filter_blanks.rs"
+upstream = "sha256:755df3e72c26672ffb4c66c18c1b05e2a4fe8c5243faa7bc0ea4dfe2c6d9c9a9"
+
+[[file]]
+path = "crates/engine/tests/custom_view_freeze.rs"
+upstream = "sha256:f66d3c2dfb0f58fdabcf8e2adf24f2757b91baa6817e0f7dfa1add8e19511350"
+
+[[file]]
+path = "crates/engine/tests/dynamicmetadata.rs"
+upstream = "sha256:01c46da5671d29832c7449865a244439d651a146184c35c5ba580a528c4786b5"
+
+[[file]]
+path = "crates/engine/tests/extreme_selection_moves.rs"
+upstream = "sha256:9326fc6c42cb2977319dd1cb6dfa3d58b5f2dcd93e463e290e0324a9ad318224"
+
+[[file]]
+path = "crates/engine/tests/hidden_sheet_navigation.rs"
+upstream = "sha256:a40ad894066e847f0b2cc8b7e133772528277e8489d58bb5cc0d6a90df41f64d"
+
+[[file]]
+path = "crates/engine/tests/ink_roundtrip.rs"
+upstream = "sha256:1aaf1f2c01c8aefd7708ee86d292129003b47c0c782eafb0f8fed619ac9ccd27"
+
+[[file]]
+path = "crates/engine/tests/line_count_overflow.rs"
+upstream = "sha256:584232e437c22e03c22b029b0a57f5a807e64b9ff5cffd7ec82da0aebd031ebc"
+
+[[file]]
+path = "crates/engine/tests/long-operator-chains.rs"
+upstream = "sha256:f73c786f9cf7e8bfcff7649ff3099f2f1b9ffbc4afc412ba4db34b127797789f"
+
+[[file]]
+path = "crates/engine/tests/offset_overflow.rs"
+upstream = "sha256:63f5f1d9630d8a9622079252b1604cdabfa83184d241402f5f295a5ffb718292"
+
+[[file]]
+path = "crates/engine/tests/percent_entry.rs"
+upstream = "sha256:8ac73398bc5c412461909ab507f7f15d6dcfd379e6edd33991790f36fc4e1778"
+
+[[file]]
+path = "crates/engine/tests/pivot_unknown_func.rs"
+upstream = "sha256:fd0bfee13710ddc73b78a8470bdae5937f5653b36eb2fb90e5994b47bca082d9"
+
+[[file]]
+path = "crates/engine/tests/pivotchart_link.rs"
+upstream = "sha256:bde9981bb2db07ffdcbe5b33f4618d16f8b86d78c7f132f4a50288e421a3297e"
+
+[[file]]
+path = "crates/engine/tests/range_fill_formats.rs"
+upstream = "sha256:4810625593fa7607befbaa9b0b98a525de0e78acb9349b3312cf2dd7eee7adf8"
+
+[[file]]
+path = "crates/engine/tests/row_autofit.rs"
+upstream = "sha256:8658c5de6e3acd28f04d97e06c1fbe5f10eecb720c0c062ed6f8bdd72cc885b3"
+
+[[file]]
+path = "crates/engine/tests/sheet_name_quoting.rs"
+upstream = "sha256:c6ab244249f30fbe10cc8846bcb8456f08fcff9c326e3ade057ce6005a94a30a"
+
+[[file]]
+path = "crates/engine/tests/sparse_clear_invalidation.rs"
+upstream = "sha256:301b4f21c7babd0daa6aaf9819a4fd94bc757b6bbbd020b40965d62778fa1629"
+
+[[file]]
+path = "crates/engine/tests/stored_list_shape.rs"
+upstream = "sha256:2be7fc1a5bb8ca0427a973caec6ae76ec9d817e4ed2e24b98e3d64f0b4b5bc75"
+
+[[file]]
+path = "crates/engine/tests/table_resize_overlap.rs"
+upstream = "sha256:b4377b3a89593a70b2bf300ff22baaf6d2494ba73f6cfc7166eac8ef9902bdc1"
+
+[[file]]
+path = "crates/engine/tests/table_total_row_last_row.rs"
+upstream = "sha256:20459ea3d347c65723b1446105abfc8c9199c9697bbe9e9e87cc709168196129"
+
+[[file]]
+path = "crates/engine/tests/wrap_row_height.rs"
+upstream = "sha256:c960936350d34c480befd57fbec09e454ef006df92a0d74b0217c995b253536d"
 
 [[file]]
 path = "crates/formula/Cargo.toml"
@@ -89,35 +440,35 @@ upstream = "sha256:5a94d77df3b8a45d2cfeccca82848fb225081b84d3d7f60857f4a5b2b5025
 
 [[file]]
 path = "crates/formula/src/ast.rs"
-upstream = "sha256:8ff04799b1a9cda37adc7de56fdb330ceb605e780e15402e61a5987db2d8f108"
+upstream = "sha256:eb800dfdb2ea8b01ed2aa6e6bbc556bbd080e5a231cbce5818486915ae235d00"
 
 [[file]]
 path = "crates/formula/src/input.rs"
-upstream = "sha256:1ab9ba03cc8e32c959daf59ff231d9df04ed8323de60cb5f9183fba9a6e62ee1"
+upstream = "sha256:a34c4e1c1fa615a418a97527327f62fa589d4bc089ba88dc92153fb8c25d2246"
 
 [[file]]
 path = "crates/formula/src/lexer.rs"
-upstream = "sha256:799578857bf2611b4f3bfbeacb1e730d03f79f1a628d04adb7d123f4c2d1f173"
+upstream = "sha256:41c6635bd7a1dfafcb3356cd3bedef27840877746f036a8d5eb02f181c185893"
 
 [[file]]
 path = "crates/formula/src/lib.rs"
-upstream = "sha256:662f35e9753db7917937d73af0b98fb8b1a34d7c66a3456fe2c069056c798ed2"
+upstream = "sha256:50ebf3d38f440abfc4e14a1ec79ab35cf1f3643450ef4a033fc0f37d02c087df"
 
 [[file]]
 path = "crates/formula/src/parser.rs"
-upstream = "sha256:6cc28db4e29d6b1a2d9dba3552bdb56275eacec8ce67c1b256d38c0d64125585"
+upstream = "sha256:4104e4dde3c366bd762f9539950c893d5a6ed32012cfb125b5985ec32fe326ed"
 
 [[file]]
 path = "crates/formula/src/printer.rs"
-upstream = "sha256:0a17c9faf38c926de516b03ab72c673bde60194f663bf534a9be1e4435d0bbca"
+upstream = "sha256:45e244c18996befc7d0cb3e8fc213cd5b5a6229ae35cf71ce1cceebb11713394"
 
 [[file]]
 path = "crates/formula/src/tests.rs"
-upstream = "sha256:20bada4c883ed9d9c3cff41c99a985838a494ce022e74ae033f1537e5be4f835"
+upstream = "sha256:ca3684c9139f07d07e0dcdd55fdb17a9cda64e6df35c9c3b6ee2b8276091499e"
 
 [[file]]
 path = "crates/formula/tests/spanish_input.rs"
-upstream = "sha256:197afb898a3cf34aa5050b18391e55d1b661de1c4938a102d53a2167da9193e9"
+upstream = "sha256:2e19b9134440903d3e7893fe3a2955258d00965c6249d4ad0b85c7aa4ce73dd9"
 
 [[file]]
 path = "crates/functions/Cargo.toml"
@@ -133,11 +484,11 @@ upstream = "sha256:c28dbee59693e27b2a6e28f5b0402c7759f54da23411519926771a54989ca
 
 [[file]]
 path = "crates/functions/src/date.rs"
-upstream = "sha256:03a5bc3d5281e0fd3c11aa0e1624fd450b01d8f095400a829bbf4fc0908bfc7f"
+upstream = "sha256:5d2537d48fbf286771d9884a606957f7627666bb86ed1bb86c9b737dbbd84352"
 
 [[file]]
 path = "crates/functions/src/dynamic.rs"
-upstream = "sha256:b7e3bc2ddf818c9ffcf45711db3a51c520301e7654a0ca1ce8c18b410fe299a8"
+upstream = "sha256:08a014b32e2cb1889394933f089c07e43133346701b53ddb0ded05c5b80d215c"
 
 [[file]]
 path = "crates/functions/src/engineering.rs"
@@ -146,19 +497,19 @@ result = "sha256:0390d03990174013a25d6e4c78ad15fc77d2c53ee80cc7bb045276cf8b9dd6e
 
 [[file]]
 path = "crates/functions/src/ets.rs"
-upstream = "sha256:95faabc0525b80f7018ddbe5986ba91d40ba89214839947972e46b78ef25ba94"
+upstream = "sha256:708ffa18d4bea9af7be24de6522c2b5aea40b19e2782d5c71585d96d71b756de"
 
 [[file]]
 path = "crates/functions/src/financial.rs"
-upstream = "sha256:a23548a58185077f54be9f0ee26110093e70194bfa1f6ade611585f1f78a8e94"
+upstream = "sha256:5b594506a49f91133a974d34e5bf444b196463671caa501b01a2270ce1caa443"
 
 [[file]]
 path = "crates/functions/src/info.rs"
-upstream = "sha256:2de84bf8c706019c93e17a617e0104ae7b1b0b36a15b03c6ef1637e4e7b4fbde"
+upstream = "sha256:9150073d42049edfcc7a24c029191e0b215432c5ac2f891f472b1de47b714b70"
 
 [[file]]
 path = "crates/functions/src/lib.rs"
-upstream = "sha256:493f77470501c88c34b70e6f68c5e50e98018a96000e976c751adebfb4d06fd7"
+upstream = "sha256:757c89c7b603e2bb4da87675280e93a8f42333867cc75c2a1400972ee693acdd"
 
 [[file]]
 path = "crates/functions/src/lift.rs"
@@ -166,7 +517,7 @@ upstream = "sha256:ff472e5a9f945a0e76982831d0ad5896d8f0e4a130e766d9c857db45725c9
 
 [[file]]
 path = "crates/functions/src/lookup.rs"
-upstream = "sha256:11023369cf30326373e7a5e54919721936cefd5e9b70b06353709f4acf2e677e"
+upstream = "sha256:ceb3d1c34d4eaec5ebc910180b3349d2729af5b2e66dca50b04d5848cf837896"
 
 [[file]]
 path = "crates/functions/src/math.rs"
@@ -178,11 +529,11 @@ upstream = "sha256:9f2263158ebd3369dd4cfc3b25bcb5820655f989d22e7f78c85cc1b9a406d
 
 [[file]]
 path = "crates/functions/src/stat.rs"
-upstream = "sha256:ea796a46c0184d2625deea6f8b36ac67fd6eddeebda392835d894445acfa832a"
+upstream = "sha256:5b2e65822d5bb70cee50767929779029d18e509e1a9e3f51c90a5b22bda6349d"
 
 [[file]]
 path = "crates/functions/src/text.rs"
-upstream = "sha256:14773e144fc607c91a52ea255ced75b36d817347534bebfbd669a9fb4fb01aa2"
+upstream = "sha256:41499dd5b27fd111d932c67f897548d7e44f940508cea50592b7aba2ed282516"
 
 [[file]]
 path = "crates/functions/src/util.rs"
@@ -194,23 +545,25 @@ upstream = "sha256:7a64060ac95060fc1637178ad6cf8c6851263c5abbe29218f1e82bb5fe4fe
 
 [[file]]
 path = "crates/model/src/b64.rs"
-upstream = "sha256:0f74b3fb13b4b930c5c68563328dbdae8fe7c7763f6548c951175ee374648c1c"
+upstream = "sha256:4705db41928ffbe00cbd1748ed6a471aa1745a8c69ce23d9bd7acea5f12eccef"
 
 [[file]]
 path = "crates/model/src/cell.rs"
-upstream = "sha256:f87ad386399bdb67b162dd8633fa3b10f8e83c549fa7deffb68f97915de9002b"
+upstream = "sha256:f60d7e5ed526d863d229d1e0d74960aad68df1c7a9f59e6f96e92d35bbb95cf5"
+result = "sha256:cc926729efd46dc051fd1b2fb5ff3e31503ac62c89b862400d32ac60b7a7fb91"
 
 [[file]]
 path = "crates/model/src/cellmap.rs"
-upstream = "sha256:41b943ed3b3f93037c021d4aa48ae1d396bdde9718ef00552efe30800c798084"
+upstream = "sha256:a43d266aef81c70dc4197a15f257b30e016b9cab3525b30b61050970e445e171"
 
 [[file]]
 path = "crates/model/src/features.rs"
-upstream = "sha256:ebae4283c10543c45f577cc4eb9b20b5575ec92e639239f95ad2f44610519f41"
+upstream = "sha256:ecd337a776d400e241ee086f2b50979523fd5544bc356c54d9519173138d0474"
 
 [[file]]
 path = "crates/model/src/lib.rs"
-upstream = "sha256:e77132f85dcf570d803443423771ea33c42dda728083b9ac33f5801088bf577f"
+upstream = "sha256:bad2c0a1ce89e9dfca58afb270078208eb32c92a3a7d2f193f239f8b5355aa75"
+result = "sha256:e39a7de6826fc5081a4d1e5612f9ddf6a09e773e8685b7451f59c63f08e106dd"
 
 [[file]]
 path = "crates/model/src/password.rs"
@@ -219,22 +572,25 @@ upstream = "sha256:f798374eff813908d3a3a131c3fa3517ef47785aa93524a3b1a26f417ba2e
 [[file]]
 path = "crates/model/src/preserved.rs"
 upstream = "sha256:96b86543610d20c688cb811da7bfa405904986a3ef9378944dcc6e4ab46d0bde"
+result = "sha256:d232eef9a2943373f7e1b546fee65e75c03db473d1446162befaf4a9c5790c53"
 
 [[file]]
 path = "crates/model/src/sheet.rs"
-upstream = "sha256:dd86447d52e2f9308b3dfc95869e2ce83b692a00cc6193733d6a796e3ab2192a"
+upstream = "sha256:21993227d49a77eb849d0034d7ed8aae22d441fb3bccd2c073556e8f02e13422"
+result = "sha256:afebbff1f3c079fd581b1d3c254906de20a4d927fce9cc75c1fb1c4268948d0f"
 
 [[file]]
 path = "crates/model/src/store.rs"
-upstream = "sha256:216dd6b28414716dfe4c4a4795e502eda9f718c8f00253f8c43ded7e0d8b927b"
+upstream = "sha256:054bf4e1ebe48c5c1c6a8df3bae0e3083f2489faa4e577309cce174fba1fa7b9"
 
 [[file]]
 path = "crates/model/src/style.rs"
-upstream = "sha256:fcbb721bec344bd19b287331da1e458e150b9d3d1eb53e31bae133f0bfef208b"
+upstream = "sha256:f4f47ebe1cda815e1c2744f926b73379bd5574ccf1ae1a38ae033d89212f81d1"
+result = "sha256:16df8e83f0af2258ae331f8b00900761d80d1c5edb2511dd0ea0962a46f23e78"
 
 [[file]]
 path = "crates/model/src/workbook.rs"
-upstream = "sha256:5febdd50c2ab4bb1920b4e5676a83f073263381f714c2d631fe6310f351a06c4"
+upstream = "sha256:7e120b644402dc941b415ae03e6de8ced224d4a5a762e4c35ebee890770dcf19"
 
 [[file]]
 path = "crates/numfmt/Cargo.toml"
@@ -250,7 +606,7 @@ upstream = "sha256:ff9e80219dfa942ffb8159e244be40c73dbe8098ecaf2d0a0cb62dc4b3e10
 
 [[file]]
 path = "crates/numfmt/src/lib.rs"
-upstream = "sha256:c8b2b6ea70f28b2213c7b40da020a04e890127ff9e7d9b0dcf0bfc4ad8a42418"
+upstream = "sha256:0d42abcd03bdc8fff1e1bb710d537a8941441d7aaf7c9a80f6480395c3303e8a"
 
 [[file]]
 path = "crates/numfmt/src/parse.rs"
@@ -258,15 +614,31 @@ upstream = "sha256:d4fa9ebafb39d3e15e987e7eb9f265452df28f1f8238f3387151b02cd89ab
 
 [[file]]
 path = "crates/numfmt/src/render.rs"
-upstream = "sha256:2f72eeb32479777588d2e178acd4cc1b296a83eeaa916ca697f1f7759420c507"
+upstream = "sha256:516fc7c31e8e569c4363485171e645437a8b70649a7acb76bd45242650dfe3f2"
 
 [[file]]
 path = "crates/numfmt/src/tests.rs"
-upstream = "sha256:8eb1c50977aba2a8090c0e1599deb9aafdda2b75497f054bb9e053a09ac80d30"
+upstream = "sha256:0cd25df4ec134dadec6e173f7ec452be858d708e091f53e49f0d946c754aa87d"
 
 [[file]]
 path = "crates/numfmt/tests/poi_number_format_approx.rs"
 upstream = "sha256:0396b3dee7db6434e9ee376ef51d623cc7dbe94fa2715b13ce12948cc732b64b"
+
+[[file]]
+path = "crates/pdf/Cargo.toml"
+upstream = "sha256:c7dd93b12436e292eff53ca56324d66105afea54f44acef485eb735d7f2d6d8b"
+
+[[file]]
+path = "crates/pdf/src/lib.rs"
+upstream = "sha256:f757ef2be0b0609a51aefe24e11bc893ff8d651a2107c847b711f85ed0866e17"
+
+[[file]]
+path = "crates/pdf/src/metrics.rs"
+upstream = "sha256:77354747f1fbf41e9416e1898f9f37e6768b1f3c57dd18b7f42d21e0510672f8"
+
+[[file]]
+path = "crates/pdf/src/tests.rs"
+upstream = "sha256:b2d70d3fc13258948e6c671b80ed9e619429c89ccec2d128d222c825dc576ded"
 
 [[file]]
 path = "crates/xlsx/Cargo.toml"
@@ -274,7 +646,8 @@ upstream = "sha256:5bac3327c83891334cc7c0199d74dfef6c433532485d621cf88ffec555337
 
 [[file]]
 path = "crates/xlsx/src/array_formula.rs"
-upstream = "sha256:4e2f72bcb6106f53c9318b5a14e984433697216e3f0368b781228de478ea5536"
+upstream = "sha256:2ee2f9cd389ae4befc1c3f0717eca351df47856b7cccd6a9132dfaea1534c1a5"
+result = "sha256:740d5e5f71af22e1954d08d2e6b2a17502d7db953038620f4834cf39d8e429b3"
 
 [[file]]
 path = "crates/xlsx/src/cfb.rs"
@@ -282,11 +655,11 @@ upstream = "sha256:7bbe6b517861fcf7db3abb97815cf0466d16e7b193cfb8e3e46a5f857ab5c
 
 [[file]]
 path = "crates/xlsx/src/chart.rs"
-upstream = "sha256:89cc963e6a90ed62dbd8413dccb15a6f6eb64ba0171097d12a118bd1f03572ba"
+upstream = "sha256:5c12c648e4c86cb533ced83ebe1f521db1f005b3de78b8ca1f574e69901d8a44"
 
 [[file]]
 path = "crates/xlsx/src/chartex.rs"
-upstream = "sha256:aef86bf6082b5c9a917f7b8ea127715ce351d0aadaf69f3c9943ddc54a64cab6"
+upstream = "sha256:a68d196cf58cf07ddac925934982b2628cf305e44609965ad6e42f2cdb056374"
 
 [[file]]
 path = "crates/xlsx/src/crypto.rs"
@@ -298,11 +671,13 @@ upstream = "sha256:17256b146e22ca4c9b179a1902f728810bf9c94cba19cc63c6252543a7a11
 
 [[file]]
 path = "crates/xlsx/src/csv.rs"
-upstream = "sha256:824e707fd38cbee8231cab4afd7921ef65f342d426125180f4bdd6450dbe78ad"
+upstream = "sha256:1f0eebee44ba0f2351e2020535fe835c02b7b67a33cffd924f0e6c847aa15f96"
+result = "sha256:bba1bdb55e57f46485ec7663077332bbe0f248691081c5437d708702e4a83d6e"
 
 [[file]]
 path = "crates/xlsx/src/drawing.rs"
-upstream = "sha256:dd71e0d48e1482a037098f7eab236786ee7469976e5e7c9e973619f798247609"
+upstream = "sha256:9fd8ded268f9a0f9b678c72493405b4f9bffdb88bd4e56cc2f96dda09914a150"
+result = "sha256:8941a645fe26a80093f2f4006f9bd2dc426eeee3913e049155d925b3a660d4de"
 
 [[file]]
 path = "crates/xlsx/src/drawing/ink.rs"
@@ -314,11 +689,12 @@ upstream = "sha256:1dc0b7e4c6c7116777fec6f4609a8181c9dd1d88a7a046f838b0caf115968
 
 [[file]]
 path = "crates/xlsx/src/fmla.rs"
-upstream = "sha256:56f8c6fdb8d14f709eab2b20f1dd642f9af3bd6d87fd6de2502b135ba13ac63a"
+upstream = "sha256:2d57ee31441806ce46f5091701254e87a5af5acf0561e2e7bb0e54feec640cc1"
+result = "sha256:b0e3a79f62800db070f6ba8726a1134c62e41a428a6f8e2b6eb3e77a46b0eea8"
 
 [[file]]
 path = "crates/xlsx/src/lib.rs"
-upstream = "sha256:5fa4f6269e92021cad3db2f6d605f1af594651e3cd090ccef33eb8f4a1737155"
+upstream = "sha256:b7c60f7e740b4fe7a43596141fdfb16788f317341ad6d8960dbbb8c5d16e9f72"
 
 [[file]]
 path = "crates/xlsx/src/ods.rs"
@@ -327,20 +703,22 @@ result = "sha256:aba6bd2e41710730cbcf041ab3ea20ce55c20690026770c525c136b8fe89bff
 
 [[file]]
 path = "crates/xlsx/src/package.rs"
-upstream = "sha256:441a3b6edbef79112f42fb6e122afbd7d664d89bbd9c70344a5267dc56bc4d4e"
-result = "sha256:81cb3ab7bf475e3eabdb576b2080dacb2820f0553a882fba786e4b09bee0fa7e"
+upstream = "sha256:6ab3264f186e13dce6a1d80e29268e4a04fc3691e82e493ebd4f2c86ccce81f0"
+result = "sha256:28840681ebdb5aa3c2d084e8eb11e147b79f08c26da964899b5b80e3fc290c31"
 
 [[file]]
 path = "crates/xlsx/src/passthrough.rs"
-upstream = "sha256:06aba83467cf232b22485393a9bf93e4feb496e4417c1e37412e77a93b9bb084"
+upstream = "sha256:40cbd89364e3a06594fb29ac7899cc83333dd9c2c2610cc82dad6487e669630e"
+result = "sha256:2c219b6aa66a3bf1f608704ff514a0297ba972772b22b6d4ce6d2d022a4e8eb1"
 
 [[file]]
 path = "crates/xlsx/src/pivot.rs"
-upstream = "sha256:7b084121347040911d2acc5bd381e3b4bfeb12a9f1ebc364a7dfbc8f208f73b6"
+upstream = "sha256:de0f4bfb23dcfc5917c203aa3179d7b99a5094a03de7ed8c8ee666869b85e0df"
 
 [[file]]
 path = "crates/xlsx/src/read.rs"
-upstream = "sha256:bcb95ae7c8d8b81c1153ba6f90a3724805631ff03f6436d1f26b77432003ad32"
+upstream = "sha256:3865b72cefeedd2cc98a13d29bad326774050c4acb7ea84f17c023adb226c436"
+result = "sha256:6a89f55bfa9ae124d02bd6f51f503d389f700281ed6fe494759155d01968b74a"
 
 [[file]]
 path = "crates/xlsx/src/richdata.rs"
@@ -348,20 +726,22 @@ upstream = "sha256:e0bebe5d47528b39e000276099c4992d4d264fe336dc842a9c3412fd57adf
 
 [[file]]
 path = "crates/xlsx/src/sheet_read.rs"
-upstream = "sha256:6ebf10ff69f437296822f7a14cf171b697493e0a4a89602179c7c0acc5623930"
-result = "sha256:8453c3711bb6b1d9bc32a81a071187ac4ea98f36c80d32ca170423e549fd495a"
+upstream = "sha256:dc8b3e39f127d65e6c471a26c8aaec59dacc64fd25d5e3b5b0c8f80d9949f012"
+result = "sha256:040a086c30c0ed739fedbc585443ea4a25de069a254fe71e60dc2576b136274d"
 
 [[file]]
 path = "crates/xlsx/src/sheet_write.rs"
-upstream = "sha256:c4b9b017f103006e47bdecc041b03af6ba2dc080c411bcf439ae35331846f3cd"
+upstream = "sha256:4d5cfe1cc60b2df444665f58dabb9a596e4205906be158fbe754d50242c78bee"
+result = "sha256:bb47a702e6c30e88b4f05a5fc7cba1ab080f72b1b2d4f72cd594404088bb838f"
 
 [[file]]
 path = "crates/xlsx/src/styles.rs"
-upstream = "sha256:ba577926470212738453fccad536b01a29dba16ab441c2c147660653369e92a9"
+upstream = "sha256:db2d4df5140569f03e3135e32db7bd756d9778a02b9d51d81d9df85b4afc72aa"
+result = "sha256:42a8df334bbdae60a34e126ae54868fb8a360d3a27b259d1248ddfe17efa43ab"
 
 [[file]]
 path = "crates/xlsx/src/tables.rs"
-upstream = "sha256:2186299d599b72a0219a811409371649a71f205fdacc7ebad38d6b624b1a23ea"
+upstream = "sha256:f5bb5dbc4b0255de68ebb7ab557c3de12fbadae84b39c26390c46cc0b9f15420"
 
 [[file]]
 path = "crates/xlsx/src/testing.rs"
@@ -369,15 +749,32 @@ upstream = "sha256:e61b7f6bedab68a949b52359d458e0b2af1614c913f35e7a5c8927ae70e6c
 
 [[file]]
 path = "crates/xlsx/src/tests/array_export.rs"
-upstream = "sha256:e69b583f16c01c3234b0c06d4af1635b97dac8ff3c5b7778a46576a60d260636"
+upstream = "sha256:d7c7626a722a8c4a76549f681c81704c4371d356c31b594811e0a6a7138ab953"
+result = "sha256:02d8b1e7bdebfc244fb18fc0dcf05a26dfbd8e180fc59889bcb9bc51ab6a3e87"
+
+[[file]]
+path = "crates/xlsx/src/tests/cellmetadata.rs"
+upstream = "sha256:8f9be80a34544284c0f0143a8995ddc2d7f4b09b7ff8ac2ee9bb15f58cc7e9ed"
+
+[[file]]
+path = "crates/xlsx/src/tests/chart_book_names.rs"
+upstream = "sha256:f06422d9a4accc0fdcd89f2454c93e4e4a38c72165fa29cb117ada34e2e2bba7"
 
 [[file]]
 path = "crates/xlsx/src/tests/chart_bool_default.rs"
 upstream = "sha256:65dd284000809c27b6cd556ec48fc984bd11ac799af483d7b17a3f629a89d981"
 
 [[file]]
+path = "crates/xlsx/src/tests/chart_combo_kinds.rs"
+upstream = "sha256:30637052d6da746c62a11c4125ce29f40b15ed48d518bdc97c9e564daf4fb317"
+
+[[file]]
+path = "crates/xlsx/src/tests/chart_ref_offsets.rs"
+upstream = "sha256:d03ce0cad0d4054e00446cb8c8712df17706d43f86bdbba099f9f723319689ed"
+
+[[file]]
 path = "crates/xlsx/src/tests/csv_tests.rs"
-upstream = "sha256:ce2a0b4fd8f89e4af525bc0b542d5f2cf98a5a93b623f6791e9ce80963afa114"
+upstream = "sha256:4fc809367a906741be59b4e8276999cbe8917560244fc27fe8aa878f7bba0760"
 
 [[file]]
 path = "crates/xlsx/src/tests/encrypted_tests.rs"
@@ -385,25 +782,40 @@ upstream = "sha256:a02fbd48c1774485369808aefdbef9e1b0e2e65bc14120fccefd251202ae8
 
 [[file]]
 path = "crates/xlsx/src/tests/fixtures.rs"
-upstream = "sha256:b6969b2a0450f63f099df768890feaba3e789fea72e0ed9bffb7c20e4f57c584"
-result = "sha256:80da70609824df1381c3f0eb934027c9156892203bc24798324f02e6cf4e4ccf"
+upstream = "sha256:54ee7921a400889171b878a185420f137bb62606619197e44d0ae6e06b000ed4"
+result = "sha256:b1b471737631be44f427c14b3d90c99c2c554a6f6db036daf7bd6c8894443cfb"
 
 [[file]]
 path = "crates/xlsx/src/tests/ink_roundtrip.rs"
 upstream = "sha256:07e0d0b152ccf3222435ad31ccb8895247fd6dc06ca16c1f39865a25e47aa528"
 
 [[file]]
+path = "crates/xlsx/src/tests/legacy_formulas.rs"
+upstream = "none"
+result = "sha256:36dbab45c9397edee4041cb9ef18a7550a0d3199232897624596f08fee37a7b2"
+
+[[file]]
 path = "crates/xlsx/src/tests/literal_category_roundtrip.rs"
-upstream = "sha256:b0f29d7d16b2937b2ae6b9d79f33458589a375e4d4afa8db6b30478e128003cd"
+upstream = "sha256:9cb34d35a801502581b0fa19eeeebd08dc9989451fdd392e54f8c688c7e77c02"
 
 [[file]]
 path = "crates/xlsx/src/tests/malformed.rs"
-upstream = "sha256:03bd68b23c942267c3a0b63b9d1a814dce035774d2ed1855a53f33d26ce1ebe5"
-result = "sha256:8c19fc82a78dbf601ccf1264b0746166138f40c5b93309297c0955ad122d3e1c"
+upstream = "sha256:82b897ae082f21e52cda80ea748da5202c4ee3f7957d30b09a737c96d142f8d1"
+result = "sha256:9bae72120d7c2920cca52163f14b2493de2437588730f97df5f6392a920ce11b"
 
 [[file]]
 path = "crates/xlsx/src/tests/mod.rs"
-upstream = "sha256:b25e027143180aa6af6e0584a0f3d0995f8c5d65a98b07c73539714f57cd5e47"
+upstream = "sha256:898b93b047b258614b45326b4c6b9be07d04343df90472d63a70c3cde06364db"
+result = "sha256:082e484f3460154ad431562cab9b9c65afb0c929db6c3c39235b9f476c6ada04"
+
+[[file]]
+path = "crates/xlsx/src/tests/multilevel_category_roundtrip.rs"
+upstream = "sha256:0e6d63e3b532155826894dea912efa36438fefb20f95fb26152a0aaeb46947f3"
+
+[[file]]
+path = "crates/xlsx/src/tests/note_box.rs"
+upstream = "sha256:679978950b78a47ee5c629d72f9ac3af5474a2bd9c38b54664f921dbe3f53c58"
+result = "sha256:afe603e9c0c715d407003433dce35646316012396975c81ca2de7a5cfdc8a89e"
 
 [[file]]
 path = "crates/xlsx/src/tests/ods_tests.rs"
@@ -411,13 +823,18 @@ upstream = "sha256:1873df6e1723b08bb5c5f240026ea117126e4aadf122b3227c5f36b406aa4
 
 [[file]]
 path = "crates/xlsx/src/tests/passthrough_tests.rs"
-upstream = "sha256:8c521f49db2e3e515bfc70e1171cb3f19693033dbe9e44cf174a39398a652b80"
-result = "sha256:f30f36063daef8a18d7e4912bae6f1988f7914f65b3671efc25348d54980960b"
+upstream = "sha256:20724f5bbdd9e15a22d0e5ab6756e325dbe06352fb1009d1cb7898b692da10b7"
+result = "sha256:bf9f7b5604621d0f5b7c708999e7a30512e8fb2df66a844492eb096ecef4fe7a"
+
+[[file]]
+path = "crates/xlsx/src/tests/phonetic_tests.rs"
+upstream = "sha256:d1460abe2b9d2a351e8adb5bd353e949ea25cc51b1bc00bf1f272817e052737e"
+result = "sha256:23c0738066b78ce6ca8aa0dacffbca8684d3c75cd965fa0cf149e50331706d78"
 
 [[file]]
 path = "crates/xlsx/src/tests/pivot_tests.rs"
-upstream = "sha256:64c9c9b0dc5183fd3821549d21a99dc9f160e14ce2f86a1cc92043b4c26e3274"
-result = "sha256:87790946c8bdc638b19190e1d6aa9c5c793d1986621c3e5ac92c627350d82913"
+upstream = "sha256:8609cc779646e22a203675bb5ebb51f43bf692f6a6e4293b1f94d35c226c78d3"
+result = "sha256:95c7d2745d60260d75005b58b7d43dd013f0e6ffdad56782f7addbf259e3a93d"
 
 [[file]]
 path = "crates/xlsx/src/tests/richdata_tests.rs"
@@ -425,25 +842,36 @@ upstream = "sha256:84b8d374b8aee77b7a0dcb02b5827aeede9d2e323e1de03f28f1ddd3a28c6
 
 [[file]]
 path = "crates/xlsx/src/tests/roundtrip.rs"
-upstream = "sha256:9be56744ad55142a26f914acc7989764a5c1b52c9f87d2a63f7072ccc579b7c2"
-result = "sha256:b14814cfd9b53076bd4acbbf2f8bd7527fd535b6aa5837ed7c9719c165ea7ca2"
+upstream = "sha256:91291b23222dc9fb9dc4d95ca9b48b7fd8fd19bdc1e45f3145c2a066b0168a0e"
+result = "sha256:75abf0cf0d9747f7b7c309efd9db0706d94c75a476d357ac9c2da78e444a7e72"
 
 [[file]]
 path = "crates/xlsx/src/tests/shape_text_rtl.rs"
 upstream = "sha256:d5ce61e405072af14fb0545745ce7f01d42e7636521e39248708b516921dd561"
 
 [[file]]
+path = "crates/xlsx/src/tests/shared_media.rs"
+upstream = "sha256:86dbf86b0b4ea93732ce2a20c6069153a4856ebb026f7cd531b96262543e8da6"
+result = "sha256:73a5178a55389c9aa9fa20f3ca5c498a437667667a0a2f25abaa50af0a2ccbe9"
+
+[[file]]
 path = "crates/xlsx/src/tests/sheet_names.rs"
 upstream = "sha256:62c2b6dc8e13d061a02a471230bd69148d81328927d68798317f342acefcfa93"
+result = "sha256:b1066e57799a551f105ca8b70a67f85feb87ccd32a3ae9e009f98ce7d693d09d"
 
 [[file]]
 path = "crates/xlsx/src/tests/smooth_roundtrip.rs"
-upstream = "sha256:8d74ad339d1b2f298ba11256f3af17848cf9f533dbfa7d6e2bd2edfb60affd21"
+upstream = "sha256:ec98cfda4c48151dd4b657e7d732411bf0e63836ba3bf6b2e0dc569685ca741d"
+
+[[file]]
+path = "crates/xlsx/src/tests/source_forms.rs"
+upstream = "none"
+result = "sha256:6f15e00cdf7d30a4faf253c7b64c704b0fca19c3f90130e5a3f1223aae1cde40"
 
 [[file]]
 path = "crates/xlsx/src/tests/trendline_roundtrip.rs"
-upstream = "sha256:646c484b0163392a5f88126891206a857edd0268db6068a9c066663a3469b489"
-result = "sha256:6e90e33458920c4ef9c9f89cc69da835081d9af0f4dc2d08ee32e0bd856d2aed"
+upstream = "sha256:56a6bed40a9cdf031701a418f95d20d43dd21367fbaf49a001b702a269c640c8"
+result = "sha256:d9e3b4ee21d3f41931d83be76f6df20b990313621b2132474a3057d994c63ea9"
 
 [[file]]
 path = "crates/xlsx/src/tests/xls_tests.rs"
@@ -454,12 +882,18 @@ path = "crates/xlsx/src/tests/xlsb_tests.rs"
 upstream = "sha256:a6530c75c5d2079fbef436a143dc8eba35a68a7bb0429647fa5e63c02bbf1064"
 
 [[file]]
+path = "crates/xlsx/src/tests/zip_order.rs"
+upstream = "sha256:05249e06bd70f575c861c3c992cc626b44253f90b15bb4dd95bbc3548c2ba9eb"
+result = "sha256:a87697a52777de50a3ce924b39f50dbc7adf71eebf4a5a66715aec66495ffbba"
+
+[[file]]
 path = "crates/xlsx/src/theme.rs"
-upstream = "sha256:2e6541996386022d0c7200d1a25da10d5120059097fe3560f04b8f201efcacb0"
+upstream = "sha256:6cef46e3a45abd124c1c1240f23962c57f1096392104a6e38f997ae58fb2e114"
 
 [[file]]
 path = "crates/xlsx/src/write.rs"
-upstream = "sha256:83a00f8df641fb1bd53de2cf9baf4ac5d50d5f416c029b19a345c3c7a6d88d4e"
+upstream = "sha256:6a105ac1a62f628733801867ba1e4e03bd63844b1ceed17da27badf51efdbf4d"
+result = "sha256:28b799ec3ebafb8930ccfae212c1423cf669a2d2e3f975d2eba09fefa25ff5d9"
 
 [[file]]
 path = "crates/xlsx/src/xls/formula.rs"
@@ -472,6 +906,7 @@ upstream = "sha256:66cc53c8f0a06cca575ad6b5837091e33b581da35f8d56e0fc75f931129f3
 [[file]]
 path = "crates/xlsx/src/xls/mod.rs"
 upstream = "sha256:d5f26c48904e2c715bb71f7ddcb8e9d0e7c468bc61368b6e919eba2cf4624982"
+result = "sha256:7f811f0b84c738b68f3b477169c07f5deca9e807e1f802b5242f7ceca8ca220c"
 
 [[file]]
 path = "crates/xlsx/src/xls/records.rs"
@@ -483,7 +918,8 @@ upstream = "sha256:59c723fe38619e34c5c767132300d492ca687db093e34bc7bac2ed57391b1
 
 [[file]]
 path = "crates/xlsx/src/xml.rs"
-upstream = "sha256:285e19369fa5b543e043a9f67287a6b26c7d50c075c3054424f5c17b8ad45e68"
+upstream = "sha256:a2d10f99a6b9bef85f11918b70fa7223546b71dfa2099cc9960e44fa3e3aecf9"
+result = "sha256:a391c20b8ac2c4ced5271e6a0cc0cb418fa9364c1b14dcadd2c55de6bd92dce2"
 
 [[file]]
 path = "rustfmt.toml"

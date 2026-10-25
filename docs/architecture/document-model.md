@@ -151,15 +151,42 @@ cambiata tiene il valore del file, segnato come vecchio.
 `apps/client/src/editors/grid/workbook.ts` controlla sessioni e finestre
 campo per campo e le trasforma nel modello che
 `GridEngine` disegna, con le schede dei fogli visibili, la formula nella barra
-e un avviso per ciò che la griglia non mostra o non ricalcola. Modificare una
-cella scrive una voce del giornale; si scrivono soltanto valori costanti, e le
-celle bloccate (matrici, formule condivise, tabelle, celle unite, pivot, fogli
-protetti) lo dicono già nella finestra.
+e un avviso per ciò che la griglia non mostra o non ricalcola. La griglia
+disegna lo stile risolto di ogni cella (carattere, bordi, allineamento,
+rotazione, barre e icone della formattazione condizionale), le celle unite, i
+commenti, il testo che passa nelle celle vuote accanto e la vista del foglio
+(riquadri bloccati, zoom, griglia e intestazioni). Modificare una costante
+scrive una voce del giornale; le celle bloccate (matrici, formule condivise,
+tabelle, celle unite, pivot, fogli protetti) lo dicono già nella finestra.
+Una formula, un comando del catalogo (anche dalle scorciatoie di Excel,
+`editors/grid/shortcuts.ts`) o un giornale che ha già comandi portano la
+sessione ai **comandi**: da lì il giornale lo scrive il provider, la griglia
+pubblica quello che lui conferma, e annulla e ripeti sono del documento
+(`edit.undo`, `edit.redo`).
 
 Salvare è dell'host: `write_document` del giornale rilegge i byte alla base,
 innesta le voci a livello di riga (il resto del file resta byte per byte),
-rilegge il risultato e lo scrive con il CAS. Il giornale salvato si ribasa
+rilegge il risultato e lo scrive con il CAS. Un giornale di comandi
+(`fub-format-xlsx`, [ADR
+0219](../decisions/0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md),
+in proposta) si rifà sui byte, e si salva per
+innesto quando cambia soltanto l'input di costanti, altrimenti riscrivendo la
+cartella con il codec, se l'inventario del pacchetto dice che la riscrittura
+non perde niente. Il giornale salvato si ribasa
 nella `DocumentSession`; `resource_write` crea una cartella ma non la copre.
+
+Una cartella cade così in una di tre classi, che
+`crates/fub-format-xlsx/tests/corpus.rs` prova su un corpus scritto a mano e,
+con `FUB_XLSX_CORPUS`, su uno esterno: **modificabile** (i comandi si
+servono, e salvare due volte non cambia i byte), **preservabile** (la
+riscrittura perderebbe qualcosa: i comandi che la chiedono si rifiutano con
+il perché, l'input delle celle entra per innesto e le altre parti restano
+byte per byte), **rifiutata** (cifrata o illeggibile: non si apre). Le celle
+bloccate di un foglio protetto non prendono né comandi né input. Ciò che una riscrittura
+può non portare senza contare come perdita, ciascuno con la sua ragione, sono
+le `NORMALIZATIONS` di `inventory.rs` (la catena di calcolo, le dimensioni,
+gli stili che nessuna cella usa, il percorso del salvataggio).
+
 Il perché è nell'[ADR
 0216](../decisions/0216-protocollo-grid-2-sorgente-a-byte.md), che sostituisce
 la proiezione dell'[ADR
@@ -193,7 +220,7 @@ albero malformato.
 - un nuovo campo pubblico rispetta l'additività del WIT;
 - una regola comune vive nel contratto, non in due provider;
 - un workbook a celle conserva autorità e identità fuori da `DocumentModel`;
-- i byte di una cartella di Excel restano all'host, e il file cambia soltanto per innesto delle celle cambiate.
+- i byte di una cartella di Excel restano all'host, e il file cambia soltanto dal giornale: per innesto delle celle cambiate, o con una riscrittura misurata che non perde niente.
 
 ## Dove si trova
 
@@ -205,5 +232,7 @@ albero malformato.
 - `crates/fub-format-markdown/src/serialize.rs`
 - `crates/fub-format-xlsx/src/grid.rs`
 - `crates/fub-format-xlsx/src/graft.rs`
+- `crates/fub-format-xlsx/src/inventory.rs`
+- `crates/fub-format-xlsx/tests/corpus.rs`
 - `apps/client/src/editors/grid/workbook.ts`
 - `crates/fub-format-svg/src/parse.rs`

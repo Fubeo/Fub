@@ -79,13 +79,18 @@ use fub_abi::format::{
 };
 use fub_abi::gate::Gate;
 use fub_abi::grid::{
-    GridApplyRequest, GridCellKey, GridCellPatch, GridCellStyle, GridColumn, GridCommit,
-    GridHorizontalAlign, GridInvalidation, GridRow, GridSheet, GridSourceEdit, GridSurfaceSpec,
+    GridApplyRequest, GridBorder, GridBorderStyle, GridBorders, GridCellKey, GridCellPatch,
+    GridCellStyle, GridColumn, GridCommit, GridHorizontalAlign, GridInvalidation, GridRow,
+    GridScript, GridSheet, GridSourceEdit, GridSurfaceSpec, GridUnderline, GridVerticalAlign,
     GridWindowRequest,
 };
 use fub_abi::grid_bytes::{
-    GridBytesCell, GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal, GridNotice,
-    GridValue,
+    GridBook, GridBytesCell, GridBytesProvider, GridBytesSession, GridBytesWindow, GridCalculation,
+    GridCommand, GridCommandOutcome, GridCommandRequest, GridCommandState, GridComment,
+    GridCommentReply, GridDataBar, GridDialog, GridIcon, GridJournal, GridLink, GridMedia,
+    GridMerge, GridNotice, GridObject, GridObjectKind, GridObjectMissing, GridSelection, GridShape,
+    GridShapeAlign, GridShapeAnchor, GridShapeKind, GridSheetView, GridTable, GridValue,
+    GridViewMode,
 };
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{
@@ -370,6 +375,12 @@ wit_kebab! {
     GridColumn,
     GridCellKey,
     GridHorizontalAlign,
+    GridVerticalAlign,
+    GridUnderline,
+    GridScript,
+    GridBorderStyle,
+    GridBorder,
+    GridBorders,
     GridCellStyle,
     GridWindowRequest,
     GridCellPatch,
@@ -378,10 +389,35 @@ wit_kebab! {
     GridSourceEdit,
     GridCommit,
     GridNotice,
+    GridCalculation,
+    GridBook,
     GridBytesSession,
     GridValue,
+    GridDataBar,
+    GridIcon,
+    GridCommentReply,
+    GridComment,
+    GridLink,
     GridBytesCell,
+    GridMerge,
+    GridViewMode,
+    GridSheetView,
+    GridTable,
+    GridObjectKind,
+    GridShapeKind,
+    GridShapeAlign,
+    GridShapeAnchor,
+    GridShape,
+    GridMedia,
+    GridObjectMissing,
+    GridObject,
     GridBytesWindow,
+    GridSelection,
+    GridCommandState,
+    GridCommand,
+    GridCommandRequest,
+    GridDialog,
+    GridCommandOutcome,
     // La mappa con namespace: al confine è una lista di coppie, perché WIT non
     // ha mappe. È lo stesso tipo in tutte e quattro le sedi del §3.5 — e che
     // sia lo STESSO è metà della risposta.
@@ -3616,6 +3652,40 @@ fn conform(source: &str) -> Result<(), String> {
     );
     contract.enumeration_from("grid-horizontal-align", ("grid.rs", "GridHorizontalAlign"));
 
+    contract.enumeration_from("grid-vertical-align", ("grid.rs", "GridVerticalAlign"));
+    contract.enumeration_from("grid-underline", ("grid.rs", "GridUnderline"));
+    contract.enumeration_from("grid-script", ("grid.rs", "GridScript"));
+    contract.enumeration_from("grid-border-style", ("grid.rs", "GridBorderStyle"));
+
+    let GridBorder { style, color } = GridBorder {
+        style: GridBorderStyle::Thin,
+        color: None,
+    };
+    contract.record(
+        "grid-border",
+        &[("style", wit(&style)), ("color", wit(&color))],
+    );
+
+    let GridBorders {
+        top,
+        right,
+        bottom,
+        left,
+        diagonal_down,
+        diagonal_up,
+    } = GridBorders::default();
+    contract.record(
+        "grid-borders",
+        &[
+            ("top", wit(&top)),
+            ("right", wit(&right)),
+            ("bottom", wit(&bottom)),
+            ("left", wit(&left)),
+            ("diagonal-down", wit(&diagonal_down)),
+            ("diagonal-up", wit(&diagonal_up)),
+        ],
+    );
+
     let GridCellStyle {
         bold,
         italic,
@@ -3623,6 +3693,17 @@ fn conform(source: &str) -> Result<(), String> {
         fill_color,
         horizontal,
         number_format,
+        font,
+        font_size,
+        underline,
+        strike,
+        script,
+        vertical,
+        wrap,
+        shrink,
+        indent,
+        rotation,
+        borders,
     } = GridCellStyle::default();
     contract.record(
         "grid-cell-style",
@@ -3633,6 +3714,17 @@ fn conform(source: &str) -> Result<(), String> {
             ("fill-color", wit(&fill_color)),
             ("horizontal", wit(&horizontal)),
             ("number-format", wit(&number_format)),
+            ("font", wit(&font)),
+            ("font-size", wit(&font_size)),
+            ("underline", wit(&underline)),
+            ("strike", wit(&strike)),
+            ("script", wit(&script)),
+            ("vertical", wit(&vertical)),
+            ("wrap", wit(&wrap)),
+            ("shrink", wit(&shrink)),
+            ("indent", wit(&indent)),
+            ("rotation", wit(&rotation)),
+            ("borders", wit(&borders)),
         ],
     );
     let GridWindowRequest {
@@ -3642,6 +3734,7 @@ fn conform(source: &str) -> Result<(), String> {
         row_count,
         column_start,
         column_count,
+        known_media,
     } = GridWindowRequest {
         revision: Revision::of(""),
         sheet: String::new(),
@@ -3649,6 +3742,7 @@ fn conform(source: &str) -> Result<(), String> {
         row_count: 0,
         column_start: 0,
         column_count: 0,
+        known_media: Vec::new(),
     };
     contract.record(
         "grid-window-request",
@@ -3659,6 +3753,7 @@ fn conform(source: &str) -> Result<(), String> {
             ("row-count", wit(&row_count)),
             ("column-start", wit(&column_start)),
             ("column-count", wit(&column_count)),
+            ("known-media", wit(&known_media)),
         ],
     );
 
@@ -3759,6 +3854,27 @@ fn conform(source: &str) -> Result<(), String> {
         &[("code", wit(&code)), ("count", wit(&count))],
     );
 
+    contract.enumeration_from("grid-calculation", ("grid_bytes.rs", "GridCalculation"));
+    let GridBook {
+        theme_colors,
+        names,
+        calculation,
+        protected,
+        font,
+        font_size,
+    } = GridBook::default();
+    contract.record(
+        "grid-book",
+        &[
+            ("theme-colors", wit(&theme_colors)),
+            ("names", wit(&names)),
+            ("calculation", wit(&calculation)),
+            ("protected", wit(&protected)),
+            ("font", wit(&font)),
+            ("font-size", wit(&font_size)),
+        ],
+    );
+
     let GridBytesSession {
         instance,
         revision,
@@ -3767,6 +3883,8 @@ fn conform(source: &str) -> Result<(), String> {
         hidden,
         notices,
         conflicts,
+        commands,
+        book,
     } = GridBytesSession {
         instance: String::new(),
         revision: Revision::of(""),
@@ -3775,6 +3893,8 @@ fn conform(source: &str) -> Result<(), String> {
         hidden: Vec::new(),
         notices: Vec::new(),
         conflicts: Vec::new(),
+        commands: Vec::new(),
+        book: GridBook::default(),
     };
     contract.record(
         "grid-bytes-session",
@@ -3786,6 +3906,132 @@ fn conform(source: &str) -> Result<(), String> {
             ("hidden", wit(&hidden)),
             ("notices", wit(&notices)),
             ("conflicts", wit(&conflicts)),
+            ("commands", wit(&commands)),
+            ("book", wit(&book)),
+        ],
+    );
+
+    let GridSelection {
+        sheet,
+        selection,
+        active,
+    } = GridSelection {
+        sheet: String::new(),
+        selection: String::new(),
+        active: String::new(),
+    };
+    contract.record(
+        "grid-selection",
+        &[
+            ("sheet", wit(&sheet)),
+            ("selection", wit(&selection)),
+            ("active", wit(&active)),
+        ],
+    );
+
+    let GridCommandState {
+        id,
+        enabled,
+        reason,
+    } = GridCommandState {
+        id: String::new(),
+        enabled: false,
+        reason: None,
+    };
+    contract.record(
+        "grid-command-state",
+        &[
+            ("id", wit(&id)),
+            ("enabled", wit(&enabled)),
+            ("reason", wit(&reason)),
+        ],
+    );
+
+    let grid_command = GridCommand {
+        id: String::new(),
+        params: String::new(),
+        sheet: String::new(),
+        selection: String::new(),
+        active: String::new(),
+    };
+    {
+        let GridCommand {
+            id,
+            params,
+            sheet,
+            selection,
+            active,
+        } = &grid_command;
+        contract.record(
+            "grid-command",
+            &[
+                ("id", wit(id)),
+                ("params", wit(params)),
+                ("sheet", wit(sheet)),
+                ("selection", wit(selection)),
+                ("active", wit(active)),
+            ],
+        );
+    }
+
+    let GridCommandRequest { revision, command } = GridCommandRequest {
+        revision: Revision::of(""),
+        command: grid_command,
+    };
+    contract.record(
+        "grid-command-request",
+        &[("revision", wit(&revision)), ("command", wit(&command))],
+    );
+
+    let GridDialog { id, params } = GridDialog {
+        id: String::new(),
+        params: String::new(),
+    };
+    contract.record("grid-dialog", &[("id", wit(&id)), ("params", wit(&params))]);
+
+    let GridCommandOutcome {
+        commit,
+        sheets,
+        hidden,
+        selection,
+        result,
+        dialog,
+        commands,
+        book,
+    } = GridCommandOutcome {
+        commit: GridCommit {
+            revision: Revision::of(""),
+            edit: GridSourceEdit {
+                from: 0,
+                to: 0,
+                deleted: String::new(),
+                inserted: String::new(),
+            },
+            invalidation: GridInvalidation::All,
+        },
+        sheets: Vec::new(),
+        hidden: Vec::new(),
+        selection: GridSelection {
+            sheet: String::new(),
+            selection: String::new(),
+            active: String::new(),
+        },
+        result: None,
+        dialog: None,
+        commands: Vec::new(),
+        book: GridBook::default(),
+    };
+    contract.record(
+        "grid-command-outcome",
+        &[
+            ("commit", wit(&commit)),
+            ("sheets", wit(&sheets)),
+            ("hidden", wit(&hidden)),
+            ("selection", wit(&selection)),
+            ("result", wit(&result)),
+            ("dialog", wit(&dialog)),
+            ("commands", wit(&commands)),
+            ("book", wit(&book)),
         ],
     );
 
@@ -3808,6 +4054,81 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    let GridDataBar {
+        fraction,
+        color,
+        gradient,
+    } = GridDataBar {
+        fraction: 0.0,
+        color: String::new(),
+        gradient: false,
+    };
+    contract.record(
+        "grid-data-bar",
+        &[
+            ("fraction", wit(&fraction)),
+            ("color", wit(&color)),
+            ("gradient", wit(&gradient)),
+        ],
+    );
+
+    let GridIcon { set, index } = GridIcon {
+        set: String::new(),
+        index: 0,
+    };
+    contract.record("grid-icon", &[("set", wit(&set)), ("index", wit(&index))]);
+
+    let GridCommentReply { author, text } = GridCommentReply {
+        author: String::new(),
+        text: String::new(),
+    };
+    contract.record(
+        "grid-comment-reply",
+        &[("author", wit(&author)), ("text", wit(&text))],
+    );
+
+    let GridComment {
+        author,
+        text,
+        threaded,
+        resolved,
+        replies,
+    } = GridComment {
+        author: String::new(),
+        text: String::new(),
+        threaded: false,
+        resolved: false,
+        replies: Vec::new(),
+    };
+    contract.record(
+        "grid-comment",
+        &[
+            ("author", wit(&author)),
+            ("text", wit(&text)),
+            ("threaded", wit(&threaded)),
+            ("resolved", wit(&resolved)),
+            ("replies", wit(&replies)),
+        ],
+    );
+
+    let GridLink {
+        target,
+        tooltip,
+        external,
+    } = GridLink {
+        target: String::new(),
+        tooltip: None,
+        external: false,
+    };
+    contract.record(
+        "grid-link",
+        &[
+            ("target", wit(&target)),
+            ("tooltip", wit(&tooltip)),
+            ("external", wit(&external)),
+        ],
+    );
+
     let GridBytesCell {
         key,
         input,
@@ -3817,6 +4138,10 @@ fn conform(source: &str) -> Result<(), String> {
         lock,
         stale,
         conflict,
+        data_bar,
+        icon,
+        comment,
+        link,
     } = GridBytesCell {
         key: GridCellKey {
             sheet: String::new(),
@@ -3824,12 +4149,16 @@ fn conform(source: &str) -> Result<(), String> {
             column: String::new(),
         },
         input: String::new(),
-        style: GridCellStyle::default(),
+        style: 0,
         value: GridValue::Blank,
         display: String::new(),
         lock: None,
         stale: false,
         conflict: false,
+        data_bar: None,
+        icon: None,
+        comment: None,
+        link: None,
     };
     contract.record(
         "grid-bytes-cell",
@@ -3842,6 +4171,224 @@ fn conform(source: &str) -> Result<(), String> {
             ("lock", wit(&lock)),
             ("stale", wit(&stale)),
             ("conflict", wit(&conflict)),
+            ("data-bar", wit(&data_bar)),
+            ("icon", wit(&icon)),
+            ("comment", wit(&comment)),
+            ("link", wit(&link)),
+        ],
+    );
+
+    let GridMerge {
+        row,
+        column,
+        rows,
+        columns,
+    } = GridMerge {
+        row: 0,
+        column: 0,
+        rows: 0,
+        columns: 0,
+    };
+    contract.record(
+        "grid-merge",
+        &[
+            ("row", wit(&row)),
+            ("column", wit(&column)),
+            ("rows", wit(&rows)),
+            ("columns", wit(&columns)),
+        ],
+    );
+
+    contract.enumeration_from("grid-view-mode", ("grid_bytes.rs", "GridViewMode"));
+    let GridSheetView {
+        frozen_rows,
+        frozen_columns,
+        gridlines,
+        headings,
+        zoom,
+        right_to_left,
+        mode,
+        formulas,
+        protected,
+        print_gridlines,
+        print_headings,
+    } = GridSheetView::default();
+    contract.record(
+        "grid-sheet-view",
+        &[
+            ("frozen-rows", wit(&frozen_rows)),
+            ("frozen-columns", wit(&frozen_columns)),
+            ("gridlines", wit(&gridlines)),
+            ("headings", wit(&headings)),
+            ("zoom", wit(&zoom)),
+            ("right-to-left", wit(&right_to_left)),
+            ("mode", wit(&mode)),
+            ("formulas", wit(&formulas)),
+            ("protected", wit(&protected)),
+            ("print-gridlines", wit(&print_gridlines)),
+            ("print-headings", wit(&print_headings)),
+        ],
+    );
+
+    let GridTable {
+        name,
+        row,
+        column,
+        rows,
+        columns,
+        header_row,
+        totals_row,
+        banded_rows,
+        banded_columns,
+        first_column,
+        last_column,
+        filter_button,
+        style,
+    } = GridTable {
+        name: String::new(),
+        row: 0,
+        column: 0,
+        rows: 0,
+        columns: 0,
+        header_row: false,
+        totals_row: false,
+        banded_rows: false,
+        banded_columns: false,
+        first_column: false,
+        last_column: false,
+        filter_button: false,
+        style: String::new(),
+    };
+    contract.record(
+        "grid-table",
+        &[
+            ("name", wit(&name)),
+            ("row", wit(&row)),
+            ("column", wit(&column)),
+            ("rows", wit(&rows)),
+            ("columns", wit(&columns)),
+            ("header-row", wit(&header_row)),
+            ("totals-row", wit(&totals_row)),
+            ("banded-rows", wit(&banded_rows)),
+            ("banded-columns", wit(&banded_columns)),
+            ("first-column", wit(&first_column)),
+            ("last-column", wit(&last_column)),
+            ("filter-button", wit(&filter_button)),
+            ("style", wit(&style)),
+        ],
+    );
+
+    for (name, rust) in [
+        ("grid-object-kind", "GridObjectKind"),
+        ("grid-shape-kind", "GridShapeKind"),
+        ("grid-shape-align", "GridShapeAlign"),
+        ("grid-shape-anchor", "GridShapeAnchor"),
+        ("grid-object-missing", "GridObjectMissing"),
+    ] {
+        contract.enumeration_from(name, ("grid_bytes.rs", rust));
+    }
+    let GridShape {
+        kind,
+        fill,
+        line,
+        text,
+        font,
+        font_size,
+        bold,
+        italic,
+        text_color,
+        align,
+        anchor,
+        right_to_left,
+    } = GridShape {
+        kind: GridShapeKind::Rectangle,
+        fill: None,
+        line: None,
+        text: String::new(),
+        font: None,
+        font_size: 0.0,
+        bold: false,
+        italic: false,
+        text_color: String::new(),
+        align: GridShapeAlign::Left,
+        anchor: GridShapeAnchor::Top,
+        right_to_left: false,
+    };
+    contract.record(
+        "grid-shape",
+        &[
+            ("kind", wit(&kind)),
+            ("fill", wit(&fill)),
+            ("line", wit(&line)),
+            ("text", wit(&text)),
+            ("font", wit(&font)),
+            ("font-size", wit(&font_size)),
+            ("bold", wit(&bold)),
+            ("italic", wit(&italic)),
+            ("text-color", wit(&text_color)),
+            ("align", wit(&align)),
+            ("anchor", wit(&anchor)),
+            ("right-to-left", wit(&right_to_left)),
+        ],
+    );
+    let GridMedia { mime, key, data } = GridMedia {
+        mime: String::new(),
+        key: String::new(),
+        data: None,
+    };
+    contract.record(
+        "grid-media",
+        &[
+            ("mime", wit(&mime)),
+            ("key", wit(&key)),
+            ("data", wit(&data)),
+        ],
+    );
+    let GridObject {
+        kind,
+        id,
+        row,
+        column,
+        dx,
+        dy,
+        width,
+        height,
+        alt,
+        svg,
+        media,
+        shape,
+        missing,
+    } = GridObject {
+        kind: GridObjectKind::Chart,
+        id: 0,
+        row: 0,
+        column: 0,
+        dx: 0.0,
+        dy: 0.0,
+        width: 0.0,
+        height: 0.0,
+        alt: String::new(),
+        svg: None,
+        media: None,
+        shape: None,
+        missing: None,
+    };
+    contract.record(
+        "grid-object",
+        &[
+            ("kind", wit(&kind)),
+            ("id", wit(&id)),
+            ("row", wit(&row)),
+            ("column", wit(&column)),
+            ("dx", wit(&dx)),
+            ("dy", wit(&dy)),
+            ("width", wit(&width)),
+            ("height", wit(&height)),
+            ("alt", wit(&alt)),
+            ("svg", wit(&svg)),
+            ("media", wit(&media)),
+            ("shape", wit(&shape)),
+            ("missing", wit(&missing)),
         ],
     );
 
@@ -3855,6 +4402,11 @@ fn conform(source: &str) -> Result<(), String> {
         rows,
         columns,
         cells,
+        styles,
+        merges,
+        view,
+        tables,
+        objects,
     } = GridBytesWindow {
         revision: Revision::of(""),
         sheet: String::new(),
@@ -3865,6 +4417,11 @@ fn conform(source: &str) -> Result<(), String> {
         rows: Vec::new(),
         columns: Vec::new(),
         cells: Vec::new(),
+        styles: Vec::new(),
+        merges: Vec::new(),
+        view: GridSheetView::default(),
+        tables: Vec::new(),
+        objects: Vec::new(),
     };
     contract.record(
         "grid-bytes-window",
@@ -3878,6 +4435,11 @@ fn conform(source: &str) -> Result<(), String> {
             ("rows", wit(&rows)),
             ("columns", wit(&columns)),
             ("cells", wit(&cells)),
+            ("styles", wit(&styles)),
+            ("merges", wit(&merges)),
+            ("view", wit(&view)),
+            ("tables", wit(&tables)),
+            ("objects", wit(&objects)),
         ],
     );
 
@@ -5593,6 +6155,28 @@ fn conform(source: &str) -> Result<(), String> {
                 &'static str,
                 GridApplyRequest,
             ) -> Result<GridCommit, PluginError>,
+        &["instance", "request"],
+    );
+    contract.method(
+        "grid-bytes",
+        "commands",
+        <dyn GridBytesProvider>::commands
+            as fn(
+                &'static mut dyn GridBytesProvider,
+                &'static str,
+                GridSelection,
+            ) -> Result<Vec<GridCommandState>, PluginError>,
+        &["instance", "selection"],
+    );
+    contract.method(
+        "grid-bytes",
+        "command",
+        <dyn GridBytesProvider>::command
+            as fn(
+                &'static mut dyn GridBytesProvider,
+                &'static str,
+                GridCommandRequest,
+            ) -> Result<GridCommandOutcome, PluginError>,
         &["instance", "request"],
     );
     contract.method(

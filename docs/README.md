@@ -86,7 +86,7 @@ flowchart LR
 - [Storage e identità](architecture/storage-and-identity.md)
 - [Runtime, eventi e job](architecture/runtime-events-and-jobs.md)
 - [Frontend e IPC](architecture/frontend-and-ipc.md)
-- [Superfici dell'editor](architecture/editor-surfaces.md) e [superficie ricca e correttore](architecture/rich-surface-and-proofing.md)
+- [Superfici dell'editor](architecture/editor-surfaces.md), [superficie ricca e correttore](architecture/rich-surface-and-proofing.md) e [superficie dei fogli](architecture/grid-surface.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md)
 

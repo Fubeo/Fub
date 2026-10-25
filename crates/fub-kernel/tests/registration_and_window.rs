@@ -24,7 +24,8 @@ use fub_abi::traits::{
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::PluginError;
 use fub_abi::{
-    grid_bytes_revision, GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal,
+    grid_bytes_revision, GridBook, GridBytesProvider, GridBytesSession, GridBytesWindow,
+    GridJournal,
 };
 use fub_kernel::{FormatRegistry, RegistryError, Workspace};
 
@@ -147,6 +148,8 @@ impl GridBytesProvider for OwnedGrid {
             hidden: Vec::new(),
             notices: Vec::new(),
             conflicts: Vec::new(),
+            commands: Vec::new(),
+            book: GridBook::default(),
         })
     }
 

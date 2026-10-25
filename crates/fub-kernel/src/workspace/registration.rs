@@ -11,8 +11,9 @@ use fub_abi::grid::{
     GridApplyRequest, GridCommit, GridInvalidation, GridSurfaceSpec, GridWindowRequest,
 };
 use fub_abi::{
-    grid_bytes_revision, Arg, GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal,
-    PluginError, Revision, Text, GRID_BYTES_PROTOCOL_VERSION, MAX_GRID_BYTES_SOURCE,
+    grid_bytes_revision, validate_grid_catalog, Arg, GridBytesProvider, GridBytesSession,
+    GridBytesWindow, GridCommandOutcome, GridCommandRequest, GridCommandState, GridJournal,
+    GridSelection, PluginError, Revision, Text, GRID_BYTES_PROTOCOL_VERSION, MAX_GRID_BYTES_SOURCE,
 };
 
 use crate::providers::{GridBackend, SharedGrid};
@@ -202,6 +203,32 @@ impl PreparedGridBytesCall {
         Ok(commit)
     }
 
+    pub fn commands(
+        &self,
+        instance: &str,
+        selection: GridSelection,
+    ) -> std::result::Result<Vec<GridCommandState>, PluginError> {
+        selection.validate()?;
+        let commands = self.invoke("grid commands", |provider| {
+            provider.commands(instance, selection.clone())
+        })?;
+        validate_grid_catalog(&commands).map_err(provider_response)?;
+        Ok(commands)
+    }
+
+    pub fn command(
+        &self,
+        instance: &str,
+        request: GridCommandRequest,
+    ) -> std::result::Result<GridCommandOutcome, PluginError> {
+        request.validate()?;
+        let outcome = self.invoke("grid command", |provider| {
+            provider.command(instance, request.clone())
+        })?;
+        validate_grid_command_response(&outcome, &request)?;
+        Ok(outcome)
+    }
+
     /// I byte da scrivere alla revisione `expected`. Una risposta oltre il
     /// limite della sorgente non arriva al disco.
     pub fn bytes_to_write(
@@ -349,6 +376,26 @@ fn validate_grid_commit_response(
                 ));
             }
         }
+    }
+    Ok(())
+}
+
+/// Un comando che non cambia la cartella lascia il giornale e la revisione
+/// come erano; uno che la cambia porta entrambi avanti.
+fn validate_grid_command_response(
+    outcome: &GridCommandOutcome,
+    request: &GridCommandRequest,
+) -> std::result::Result<(), PluginError> {
+    outcome.validate().map_err(provider_response)?;
+    let edit = &outcome.commit.edit;
+    if usize::try_from(edit.from).is_err() || usize::try_from(edit.to).is_err() {
+        return Err(provider_response("grid source diff offset overflows usize"));
+    }
+    let unchanged = edit.from == edit.to && edit.deleted.is_empty() && edit.inserted.is_empty();
+    if unchanged != (outcome.commit.revision == request.revision) {
+        return Err(provider_response(
+            "grid command revision does not follow its journal edit",
+        ));
     }
     Ok(())
 }

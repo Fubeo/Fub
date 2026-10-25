@@ -10,56 +10,39 @@
 //! prende quello della shell; su una cella riempita resta quello del file, nero
 //! se automatico, perché il riempimento è del file.
 
-use fub_abi::{GridCellStyle, GridHorizontalAlign};
+use fub_abi::{
+    GridBorder, GridBorderStyle, GridBorders, GridCellStyle, GridHorizontalAlign, GridScript,
+    GridUnderline, GridVerticalAlign,
+};
 use gridcraft_core::{CellRef, Value as GcValue};
-use gridcraft_model::style::{Color, HAlign, PatternType, Style as GcStyle};
+use gridcraft_engine::cf::{CfCache, CfLook};
+use gridcraft_model::style::{
+    BorderLine, BorderStyle, Color, HAlign, PatternType, Style as GcStyle, StyleId, Underline,
+    VAlign, VertAlign,
+};
 use gridcraft_model::{Sheet as GcSheet, Workbook};
 use gridcraft_numfmt::FormatColor;
 
-/// Le parti di una cartella che la griglia non disegna.
+/// Le parti di una cartella che la griglia non disegna. Le unioni, le note, la
+/// formattazione condizionale e gli oggetti (grafici, grafici sparkline,
+/// immagini e forme) arrivano nella finestra, e si disegnano.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NotShown {
-    Merges,
-    Charts,
-    Images,
-    Shapes,
-    Comments,
-    ConditionalFormats,
-    Sparklines,
+    Slicers,
 }
 
 impl NotShown {
-    pub const ALL: [NotShown; 7] = [
-        NotShown::Merges,
-        NotShown::Charts,
-        NotShown::Images,
-        NotShown::Shapes,
-        NotShown::Comments,
-        NotShown::ConditionalFormats,
-        NotShown::Sparklines,
-    ];
+    pub const ALL: [NotShown; 1] = [NotShown::Slicers];
 
     pub fn id(self) -> &'static str {
         match self {
-            NotShown::Merges => "merges",
-            NotShown::Charts => "charts",
-            NotShown::Images => "images",
-            NotShown::Shapes => "shapes",
-            NotShown::Comments => "comments",
-            NotShown::ConditionalFormats => "conditional_formats",
-            NotShown::Sparklines => "sparklines",
+            NotShown::Slicers => "slicers",
         }
     }
 
     pub(crate) fn present(self, sheet: &GcSheet) -> bool {
         match self {
-            NotShown::Merges => !sheet.merges.is_empty(),
-            NotShown::Charts => !sheet.charts.is_empty(),
-            NotShown::Images => !sheet.images.is_empty() || !sheet.cell_pictures.is_empty(),
-            NotShown::Shapes => !sheet.shapes.is_empty() || !sheet.slicers.is_empty(),
-            NotShown::Comments => !sheet.comments.is_empty(),
-            NotShown::ConditionalFormats => !sheet.cond_formats.is_empty(),
-            NotShown::Sparklines => !sheet.sparklines.is_empty(),
+            NotShown::Slicers => !sheet.slicers.is_empty(),
         }
     }
 }
@@ -141,19 +124,150 @@ pub(crate) fn shows(
     style.fill.pattern == PatternType::Solid && style.fill.fg.hex(&workbook.theme).is_some()
 }
 
+/// L'aspetto che una cella ha davvero: il suo stile, o quello della tabella
+/// in cui sta, con sopra la formattazione condizionale. È la regola della
+/// stampa di GridCraft (`cell_look` in `engine/src/cmd/print.rs`), che non è
+/// pubblica.
+pub(crate) struct Look {
+    pub style: GcStyle,
+    /// Il riempimento di una scala di colori, che vince sullo stile.
+    pub scale_fill: Option<[u8; 3]>,
+    pub cf: Option<CfLook>,
+}
+
+pub(crate) fn look(
+    workbook: &Workbook,
+    index: usize,
+    sheet: &GcSheet,
+    at: CellRef,
+    cache: &mut CfCache,
+) -> Look {
+    let mut style = match sheet.table_at(at) {
+        Some(table) => gridcraft_engine::tables::table_cell_style(workbook, index, table, at),
+        None => workbook.styles.get(sheet.style_id(at)).clone(),
+    };
+    let cf = if sheet.cond_formats.is_empty() {
+        None
+    } else {
+        cache.look(workbook, index, at)
+    };
+    if let Some(own) = cf.as_ref().and_then(|look| look.style.as_ref()) {
+        if own.fill.pattern != PatternType::None {
+            style.fill = own.fill;
+        }
+        if own.font.color != Color::Auto {
+            style.font.color = own.font.color;
+        }
+        style.font.bold |= own.font.bold;
+        style.font.italic |= own.font.italic;
+        style.font.strike |= own.font.strike;
+        if own.font.underline != Underline::None {
+            style.font.underline = own.font.underline;
+        }
+        // In uno stile differenziale «General» vuol dire «non detto».
+        if own.num_fmt.as_str() != "General" {
+            style.num_fmt = own.num_fmt.clone();
+        }
+        for (side, from) in [
+            (&mut style.borders.left, own.borders.left),
+            (&mut style.borders.right, own.borders.right),
+            (&mut style.borders.top, own.borders.top),
+            (&mut style.borders.bottom, own.borders.bottom),
+        ] {
+            if !from.is_none() {
+                *side = from;
+            }
+        }
+    }
+    Look {
+        style,
+        scale_fill: cf.as_ref().and_then(|look| look.scale_fill),
+        cf,
+    }
+}
+
+/// Se l'aspetto di una cella vuota si vede: un riempimento, un bordo o una
+/// formattazione condizionale che dà qualcosa.
+pub(crate) fn visible(look: &Look) -> bool {
+    let borders = &look.style.borders;
+    look.style.fill.pattern != PatternType::None
+        || look.scale_fill.is_some()
+        || look
+            .cf
+            .as_ref()
+            .is_some_and(|cf| cf.bar.is_some() || cf.icon.is_some())
+        || [
+            borders.left,
+            borders.right,
+            borders.top,
+            borders.bottom,
+            borders.diag_down,
+            borders.diag_up,
+        ]
+        .iter()
+        .any(|line| !line.is_none())
+}
+
+fn hex([r, g, b]: [u8; 3]) -> String {
+    format!("#{r:02X}{g:02X}{b:02X}")
+}
+
+/// Il riempimento come un colore solo: un motivo si disegna come la stampa
+/// di GridCraft, un quarto del primo piano su tre quarti dello sfondo.
+fn fill_hex(workbook: &Workbook, look: &Look) -> Option<String> {
+    if let Some(rgb) = look.scale_fill {
+        return Some(hex(rgb));
+    }
+    let theme = &workbook.theme;
+    let fill = &look.style.fill;
+    match fill.pattern {
+        PatternType::None => None,
+        PatternType::Solid => fill.fg.hex(theme),
+        _ => {
+            let fg = fill.fg.resolve(theme).unwrap_or([0, 0, 0]);
+            let bg = fill.bg.resolve(theme).unwrap_or([255, 255, 255]);
+            Some(hex([0, 1, 2].map(|i| {
+                ((u16::from(fg[i]) + u16::from(bg[i]) * 3) / 4) as u8
+            })))
+        }
+    }
+}
+
+fn border(workbook: &Workbook, line: BorderLine) -> Option<GridBorder> {
+    let style = match line.style {
+        BorderStyle::None => return None,
+        BorderStyle::Thin => GridBorderStyle::Thin,
+        BorderStyle::Medium => GridBorderStyle::Medium,
+        BorderStyle::Thick => GridBorderStyle::Thick,
+        BorderStyle::Dashed => GridBorderStyle::Dashed,
+        BorderStyle::Dotted => GridBorderStyle::Dotted,
+        BorderStyle::Double => GridBorderStyle::Double,
+        BorderStyle::Hair => GridBorderStyle::Hair,
+        BorderStyle::MediumDashed => GridBorderStyle::MediumDashed,
+        BorderStyle::DashDot => GridBorderStyle::DashDot,
+        BorderStyle::MediumDashDot => GridBorderStyle::MediumDashDot,
+        BorderStyle::DashDotDot => GridBorderStyle::DashDotDot,
+        BorderStyle::MediumDashDotDot => GridBorderStyle::MediumDashDotDot,
+        BorderStyle::SlantDashDot => GridBorderStyle::SlantDashDot,
+    };
+    Some(GridBorder {
+        style,
+        color: line.color.hex(&workbook.theme),
+    })
+}
+
 /// L'aspetto di una cella che mostra `value`, formattato con `numeric` e il
 /// colore del formato numerico `format_color`.
 pub(crate) fn cell_style(
     workbook: &Workbook,
-    style: &GcStyle,
+    look: &Look,
     value: &GcValue,
     numeric: bool,
     format_color: Option<FormatColor>,
 ) -> GridCellStyle {
     let theme = &workbook.theme;
-    let fill_color = (style.fill.pattern == PatternType::Solid)
-        .then(|| style.fill.fg.hex(theme))
-        .flatten();
+    let style = &look.style;
+    let fill_color = fill_hex(workbook, look);
     let text_color = match format_color {
         Some(color) => Some(format_color_hex(color)),
         None => {
@@ -181,14 +295,18 @@ pub(crate) fn cell_style(
         HAlign::Left => Some(GridHorizontalAlign::Start),
         HAlign::Center | HAlign::CenterAcross => Some(GridHorizontalAlign::Center),
         HAlign::Right => Some(GridHorizontalAlign::End),
+        HAlign::Fill => Some(GridHorizontalAlign::Fill),
+        HAlign::Justify => Some(GridHorizontalAlign::Justify),
+        HAlign::Distributed => Some(GridHorizontalAlign::Distributed),
         // Come in Excel: i numeri a destra, i booleani e gli errori al centro.
         HAlign::General => match shown(value) {
             Some(GcValue::Number(_)) if numeric => Some(GridHorizontalAlign::End),
             Some(GcValue::Bool(_) | GcValue::Error(_)) => Some(GridHorizontalAlign::Center),
             _ => None,
         },
-        HAlign::Fill | HAlign::Justify | HAlign::Distributed => None,
     };
+    let lines = &style.borders;
+    let normal = &workbook.styles.get(StyleId::DEFAULT).font;
     GridCellStyle {
         bold: style.font.bold,
         italic: style.font.italic,
@@ -196,6 +314,49 @@ pub(crate) fn cell_style(
         fill_color,
         horizontal,
         number_format: None,
+        // Il carattere dello stile Normale è quello di serie: assente.
+        font: (!style.font.name.is_empty() && style.font.name != normal.name)
+            .then(|| style.font.name.clone()),
+        font_size: (style.font.size.is_finite()
+            && style.font.size > 0.0
+            && style.font.size != normal.size)
+            .then_some(style.font.size.min(409.0)),
+        underline: match style.font.underline {
+            Underline::None => None,
+            Underline::Single => Some(GridUnderline::Single),
+            Underline::Double => Some(GridUnderline::Double),
+            Underline::SingleAccounting => Some(GridUnderline::SingleAccounting),
+            Underline::DoubleAccounting => Some(GridUnderline::DoubleAccounting),
+        },
+        strike: style.font.strike,
+        script: match style.font.vert {
+            VertAlign::Baseline => None,
+            VertAlign::Superscript => Some(GridScript::Superscript),
+            VertAlign::Subscript => Some(GridScript::Subscript),
+        },
+        vertical: match style.align.v {
+            VAlign::Bottom => None,
+            VAlign::Top => Some(GridVerticalAlign::Top),
+            VAlign::Center => Some(GridVerticalAlign::Center),
+            VAlign::Justify => Some(GridVerticalAlign::Justify),
+            VAlign::Distributed => Some(GridVerticalAlign::Distributed),
+        },
+        wrap: style.align.wrap,
+        shrink: style.align.shrink,
+        indent: style.align.indent,
+        rotation: match style.align.rotation {
+            rotation @ -90..=90 => rotation,
+            fub_abi::GRID_STACKED_ROTATION => fub_abi::GRID_STACKED_ROTATION,
+            _ => 0,
+        },
+        borders: GridBorders {
+            top: border(workbook, lines.top),
+            right: border(workbook, lines.right),
+            bottom: border(workbook, lines.bottom),
+            left: border(workbook, lines.left),
+            diagonal_down: border(workbook, lines.diag_down),
+            diagonal_up: border(workbook, lines.diag_up),
+        },
     }
 }
 

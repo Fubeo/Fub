@@ -5483,6 +5483,124 @@ kbd,
   font-variant-numeric: tabular-nums;
   line-height: var(--leading-tight);
 }
+/* Le intestazioni della selezione prendono l'accento, come nei fogli di
+   calcolo. */
+.grid-header.selected {
+  box-shadow: inset 0 0 0 999px var(--accent-veil);
+  color: var(--accent);
+}
+/* Un foglio senza griglia: i fili delle celle spariscono, i bordi del file
+   restano. */
+.grid-viewport.no-gridlines .grid-cell {
+  border-color: transparent;
+}
+/* Ciò che resta fermo ha la carta del foglio sotto, perché le celle che
+   scorrono gli passano dietro; il filo del blocco è quello di Excel. */
+.grid-cell.frozen {
+  background-color: var(--sheet);
+}
+.grid-freeze {
+  background: var(--muted);
+}
+/* Il segno di una nota nell'angolo, come in Excel: rosso per le note,
+   d'accento per i commenti in thread. */
+.grid-comment-mark {
+  border-color: transparent var(--danger) transparent transparent;
+}
+.grid-comment-mark.threaded {
+  border-color: transparent var(--accent) transparent transparent;
+}
+/* Un thread risolto si spegne, come in Excel. */
+.grid-comment-mark.threaded.resolved {
+  border-color: transparent var(--muted) transparent transparent;
+}
+.grid-comment-card {
+  gap: var(--space-4);
+}
+.grid-comment-head {
+  gap: var(--space-3);
+}
+.grid-comment-kind {
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+.grid-comment-where,
+.grid-comment-resolved {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.grid-comment-thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  scrollbar-width: thin;
+}
+.grid-comment-post {
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.grid-comment-post + .grid-comment-post {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.grid-comment-author {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.grid-comment-text {
+  color: var(--text);
+}
+.grid-comment-card.threaded .grid-comment-post + .grid-comment-post {
+  padding-left: var(--space-4);
+}
+.grid-comment-reply {
+  gap: var(--space-2);
+}
+.grid-comment-field {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+.grid-comment-field:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.grid-comment-actions {
+  gap: var(--space-2);
+}
+.grid-comment-action {
+  font-size: var(--text-sm);
+}
+.grid-comment-error {
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+/* Un oggetto selezionato ha il filo d'accento e le maniglie tonde, come in
+   Excel; uno che Fub non mostra resta un riquadro tratteggiato col perché. */
+.grid-object.selected {
+  outline: 1px solid var(--accent);
+}
+.grid-object-handle {
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  background: var(--bg-elev);
+}
+.grid-object-missing {
+  border: 1px dashed var(--border);
+  background: var(--sheet-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.grid-object-text-editor {
+  border: 2px solid var(--accent);
+  background: var(--bg-elev);
+  color: var(--doc-fg);
+}
 /* Il velo è un'ombra interna e non un fondo: una cella può avere un colore
    suo, scritto dal foglio, e la selezione deve vedersi anche lì sopra. */
 .grid-cell.selected {
@@ -5490,6 +5608,15 @@ kbd,
 }
 .grid-cell.active {
   box-shadow: inset 0 0 0 2px var(--accent);
+}
+/* Il quadratino all'angolo della selezione, e il riempimento tirato a
+   tratteggio come in Excel. */
+.grid-fill-handle {
+  border: 1px solid var(--sheet);
+  background: var(--accent);
+}
+.grid-fill-preview {
+  border: 2px dashed var(--accent);
 }
 .grid-cell-editor {
   border: 2px solid var(--accent);
@@ -5523,6 +5650,408 @@ kbd,
   border-top: 1px solid var(--border);
   background: var(--sheet-2);
   padding: 0 var(--space-4);
+}
+/* La barra multifunzione: le schede su un filetto, i gruppi divisi da un
+   filo e col nome sotto, a voce bassa. I controlli sono quieti come quelli
+   della striscia dei documenti; lo stato acceso prende il velo d'accento. */
+.grid-ribbon {
+  border-bottom: 1px solid var(--border);
+  background: var(--sheet);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.grid-ribbon-head {
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-4) 0;
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.grid-ribbon-tabs.kit-tabs {
+  gap: var(--space-1);
+  padding-bottom: 0;
+  box-shadow: none;
+}
+.grid-ribbon-tabs .kit-tab {
+  min-height: 30px;
+  padding: 0 var(--space-4);
+  font-size: var(--text-sm);
+}
+.grid-ribbon-tabs .grid-ribbon-contextual {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.grid-ribbon[data-collapsed="true"] .grid-ribbon-head {
+  box-shadow: none;
+}
+.grid-ribbon-toggle,
+.grid-ribbon-button,
+.grid-ribbon-palette-empty,
+.grid-ribbon-gallery-item {
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.grid-ribbon-toggle {
+  color: var(--muted);
+}
+.grid-ribbon-toolbar {
+  padding: var(--space-2) var(--space-3) var(--space-1);
+}
+.grid-ribbon-group {
+  padding: 0 var(--space-3);
+  border-right: 1px solid var(--border);
+}
+.grid-ribbon-group:last-child {
+  border-right: none;
+}
+.grid-ribbon-group-body {
+  gap: var(--space-1);
+}
+.grid-ribbon-group-label {
+  padding-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.grid-ribbon-stack {
+  gap: 1px;
+}
+.grid-ribbon-row {
+  gap: 1px;
+}
+.grid-ribbon-button {
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  line-height: var(--leading-tight);
+}
+.grid-ribbon-large {
+  padding: var(--space-2) var(--space-2) 0;
+  font-size: var(--text-xs);
+}
+.grid-ribbon-arrow {
+  padding: 0 2px;
+  color: var(--muted);
+}
+.grid-ribbon-toggle:hover,
+.grid-ribbon-button:hover:not([aria-disabled="true"]),
+.grid-ribbon-button[aria-expanded="true"],
+.grid-ribbon-palette-empty:hover,
+.grid-ribbon-gallery-item:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.grid-ribbon-button:active:not([aria-disabled="true"]) {
+  background: var(--overlay-active);
+}
+.grid-ribbon-split:hover > .grid-ribbon-button {
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.grid-ribbon-button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.grid-ribbon-button[aria-disabled="true"],
+.grid-ribbon-check:has(> input:disabled) {
+  opacity: 0.4;
+  cursor: default;
+}
+.grid-ribbon-toggle:focus-visible,
+.grid-ribbon-button:focus-visible,
+.grid-ribbon-select:focus-visible,
+.grid-ribbon-input:focus-visible,
+.grid-ribbon-palette-empty:focus-visible,
+.grid-ribbon-gallery-item:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.grid-ribbon-glyph {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+.grid-ribbon-bold { font-weight: var(--weight-bold); }
+.grid-ribbon-italic { font-style: italic; }
+.grid-ribbon-underline { text-decoration: underline; }
+.grid-ribbon-strike { text-decoration: line-through; }
+.grid-ribbon-color-bar {
+  border-radius: 1px;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.grid-ribbon-select,
+.grid-ribbon-input {
+  height: 24px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--sheet);
+  color: var(--text);
+  font: inherit;
+}
+.grid-ribbon-check {
+  gap: var(--space-2);
+  min-height: 24px;
+  padding: 0 var(--space-2);
+  cursor: pointer;
+}
+.grid-ribbon-check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+.grid-ribbon-field-label {
+  margin-inline-end: var(--space-2);
+  color: var(--muted);
+}
+.grid-ribbon-keytip {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--text);
+  box-shadow: var(--shadow-2);
+  color: var(--sheet);
+  font-size: 10px;
+  font-weight: var(--weight-bold);
+  line-height: 14px;
+}
+.grid-ribbon-popup-group {
+  padding: var(--space-3);
+}
+.grid-ribbon-palette,
+.grid-ribbon-gallery {
+  gap: var(--space-2);
+  padding: var(--space-3);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.grid-ribbon-palette-empty {
+  padding: var(--space-2) var(--space-3);
+  text-align: start;
+}
+.grid-ribbon-palette-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+}
+.grid-ribbon-palette-grid {
+  gap: 2px;
+}
+.grid-ribbon-swatch {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.grid-ribbon-swatch-base {
+  margin-bottom: var(--space-1);
+}
+.grid-ribbon-swatch:hover,
+.grid-ribbon-swatch:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.grid-ribbon-gallery-grid {
+  gap: var(--space-1);
+}
+.grid-ribbon-gallery-item {
+  box-shadow: inset 0 0 0 1px transparent;
+}
+.grid-ribbon-gallery-item[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+/* L'anteprima di uno stile è un pezzo di foglio: carta bianca come nella
+   cartella, anche col buio, perché i colori sono quelli del file. */
+.grid-ribbon-table-preview {
+  border: 1px solid var(--border);
+  background: #ffffff;
+}
+.grid-ribbon-cell-sample {
+  padding: var(--space-2) var(--space-2);
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: #000000;
+  font-size: var(--text-xs);
+}
+
+/* Le finestre del foglio: i campi stretti come nelle finestre di Excel, le
+   sezioni con un filo, gli elenchi su un fondo loro. */
+.grid-dialog,
+.grid-dialog-form,
+.grid-dialog-fields {
+  gap: var(--space-4);
+}
+.grid-dialog-section {
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+.grid-dialog-legend {
+  padding: 0 var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.grid-dialog-choices {
+  gap: var(--space-2);
+}
+.grid-dialog-field {
+  column-gap: var(--space-5);
+  row-gap: var(--space-3);
+}
+.grid-dialog-label {
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.grid-dialog-check,
+.grid-dialog-choice {
+  gap: var(--space-3);
+  min-height: 24px;
+}
+.grid-dialog-check input,
+.grid-dialog-choice input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+.grid-dialog-check:has(> input:disabled),
+.grid-dialog-choice:has(> input:disabled) {
+  opacity: 0.5;
+}
+.grid-dialog-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.grid-dialog-error {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--danger-wash);
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+.grid-dialog-toolbar {
+  gap: var(--space-3);
+}
+.grid-preview-stage {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+}
+.grid-preview-page {
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-1);
+}
+.grid-dialog-preview .grid-dialog-toolbar {
+  align-items: center;
+}
+.grid-dialog-results {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+}
+.grid-dialog-names-head,
+.grid-dialog-names-row {
+  column-gap: var(--space-4);
+}
+.grid-dialog-names-head {
+  padding: 0 var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+}
+.grid-dialog-signature {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.grid-dialog-color-button {
+  gap: var(--space-3);
+  min-height: var(--control-h);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.grid-dialog-color-button:hover,
+.grid-dialog-color-button[aria-expanded="true"] {
+  border-color: var(--border-strong);
+}
+.grid-dialog-color-chip {
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+}
+.grid-dialog-color-chip--auto {
+  border-style: dashed;
+}
+.grid-dialog-palette {
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  font-size: var(--text-sm);
+}
+.grid-dialog-palette-title {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+}
+.grid-dialog-palette-grid {
+  gap: 2px;
+}
+.grid-dialog-palette-auto {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.grid-dialog-palette-auto:hover,
+.grid-dialog-palette-auto[aria-pressed="true"] {
+  background: var(--bg-hover);
+}
+.grid-dialog-swatch {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.grid-dialog-swatch[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.grid-dialog-swatch:hover,
+.grid-dialog-swatch:focus-visible,
+.grid-dialog-palette-auto:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+/* L'esempio e le anteprime sono un pezzo di foglio: carta bianca come nella
+   cartella, anche col buio, perché i colori sono quelli del file. */
+.grid-dialog-sample-text,
+.grid-dialog-preview-text,
+.grid-dialog-border-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: #ffffff;
+  color: #000000;
+}
+.grid-dialog-sample-text,
+.grid-dialog-preview-text {
+  padding: var(--space-3) var(--space-4);
+}
+.grid-dialog-border-preview {
+  padding: var(--space-6);
+}
+.grid-dialog-border-cell {
+  font-size: var(--text-sm);
 }
 
 /* ── Il canvas ───────────────────────────────────────────────────────────── */

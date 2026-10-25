@@ -41,6 +41,7 @@ impl Opened {
                     row_count: rows.1,
                     column_start: columns.0,
                     column_count: columns.1,
+                    known_media: Vec::new(),
                 },
             )
             .expect("window")
@@ -54,6 +55,16 @@ impl Opened {
             .into_iter()
             .next()
             .unwrap_or_else(|| panic!("la cella {row}/{column} non c'è"))
+    }
+
+    /// Lo stile della cella, dalla tavola degli stili della sua finestra.
+    fn style(&mut self, row: u32, column: u32) -> GridCellStyle {
+        let window = self.window(0, (row, 1), (column, 1));
+        let cell = window
+            .cells
+            .first()
+            .unwrap_or_else(|| panic!("la cella {row}/{column} non c'è"));
+        window.styles[cell.style as usize].clone()
     }
 
     fn notices(&self) -> Vec<(&str, u32)> {
@@ -134,16 +145,9 @@ fn l_aspetto_segue_il_file_e_il_tema_della_shell() {
     let mut p = opened(&one_sheet(
         r#"<sheetData><row r="1"><c r="A1" s="3" t="inlineStr"><is><t>titolo</t></is></c><c r="B1" s="4" t="inlineStr"><is><t>giallo</t></is></c><c r="C1" s="7" t="inlineStr"><is><t>nero</t></is></c><c r="D1"><v>7</v></c><c r="E1" s="6"><v>-1</v></c><c r="F1" t="b"><v>0</v></c><c r="G1" s="4"/></row></sheetData>"#,
     ));
-    let plain = GridCellStyle {
-        bold: false,
-        italic: false,
-        text_color: None,
-        fill_color: None,
-        horizontal: None,
-        number_format: None,
-    };
+    let plain = GridCellStyle::default();
     assert_eq!(
-        p.cell(0, 0).style,
+        p.style(0, 0),
         GridCellStyle {
             bold: true,
             italic: true,
@@ -154,7 +158,7 @@ fn l_aspetto_segue_il_file_e_il_tema_della_shell() {
     );
     // Sul riempimento del file il testo automatico è il nero di Excel.
     assert_eq!(
-        p.cell(0, 1).style,
+        p.style(0, 1),
         GridCellStyle {
             fill_color: Some("#FFFF00".into()),
             text_color: Some("#000000".into()),
@@ -163,7 +167,7 @@ fn l_aspetto_segue_il_file_e_il_tema_della_shell() {
     );
     // Il nero del tema senza riempimento è il testo della shell.
     assert_eq!(
-        p.cell(0, 2).style,
+        p.style(0, 2),
         GridCellStyle {
             horizontal: Some(GridHorizontalAlign::Start),
             ..plain
@@ -171,22 +175,16 @@ fn l_aspetto_segue_il_file_e_il_tema_della_shell() {
     );
     // I numeri vanno a destra, i booleani al centro; il rosso del formato
     // numerico colora il testo.
-    assert_eq!(
-        p.cell(0, 3).style.horizontal,
-        Some(GridHorizontalAlign::End)
-    );
-    assert_eq!(p.cell(0, 4).style.text_color.as_deref(), Some("#FF0000"));
-    assert_eq!(
-        p.cell(0, 5).style.horizontal,
-        Some(GridHorizontalAlign::Center)
-    );
+    assert_eq!(p.style(0, 3).horizontal, Some(GridHorizontalAlign::End));
+    assert_eq!(p.style(0, 4).text_color.as_deref(), Some("#FF0000"));
+    assert_eq!(p.style(0, 5).horizontal, Some(GridHorizontalAlign::Center));
     // Una cella vuota ma riempita si vede.
     let filled = p.cell(0, 6);
     assert_eq!(
         (filled.value, filled.display.as_str()),
         (GridValue::Blank, "")
     );
-    assert_eq!(filled.style.fill_color.as_deref(), Some("#FFFF00"));
+    assert_eq!(p.style(0, 6).fill_color.as_deref(), Some("#FFFF00"));
 }
 
 #[test]
@@ -284,17 +282,11 @@ fn le_macro_e_i_collegamenti_esterni_si_dicono() {
 }
 
 #[test]
-fn ciò_che_la_griglia_non_disegna_si_dice() {
+fn le_unioni_e_la_formattazione_condizionale_si_disegnano_e_non_si_dicono() {
     let p = opened(&one_sheet(
         r#"<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData><mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells><conditionalFormatting sqref="A1"><cfRule type="cellIs" dxfId="0" priority="1" operator="greaterThan"><formula>0</formula></cfRule></conditionalFormatting>"#,
     ));
-    assert_eq!(
-        p.notices(),
-        [
-            ("not-shown-conditional-formats", 1),
-            ("not-shown-merges", 1)
-        ]
-    );
+    assert!(p.notices().is_empty(), "{:?}", p.notices());
 }
 
 #[test]

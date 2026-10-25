@@ -124,6 +124,15 @@ impl<'a> Package<'a> {
     }
 }
 
+/// The first part whose declared unpacked size is over [`MAX_PART`], with that size.
+pub fn oversized_part(bytes: &[u8]) -> Option<(String, u64)> {
+    let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).ok()?;
+    (0..zip.len().min(MAX_ENTRIES)).find_map(|i| {
+        let f = zip.by_index_raw(i).ok()?;
+        (f.size() > MAX_PART).then(|| (f.name().map(|n| n.to_string()).unwrap_or_default(), f.size()))
+    })
+}
+
 fn prefix(part: &str, e: IoError) -> IoError {
     match e {
         IoError::Xml(m) => IoError::Xml(format!("{part}: {m}")),

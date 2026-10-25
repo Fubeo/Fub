@@ -4,9 +4,12 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use gridcraft_model::style::Protection;
+use std::sync::Arc;
+
+use gridcraft_model::style::{DxfStated, Protection};
 use gridcraft_model::{
-    Alignment, BorderLine, BorderStyle, Borders, Color, Fill, Font, HAlign, NumFmt, PatternType, Style, Underline, VAlign, VertAlign, Workbook,
+    Alignment, BorderLine, BorderStyle, Borders, Color, Fill, Font, HAlign, NumFmt, PatternType, PreservedSource, Style, Theme, Underline, VAlign,
+    VertAlign, Workbook,
 };
 
 use crate::tables::{INDEXED, builtin_format, builtin_id};
@@ -26,6 +29,8 @@ pub struct StylesIn {
     pub named: Vec<(String, Style)>,
     /// Custom number formats (`numFmts`) by id.
     pub num_fmts: HashMap<u32, String>,
+    /// Source forms of the cell formats and cell styles (see [`xf_sources`]).
+    pub sources: Vec<PreservedSource>,
 }
 
 pub fn read_color(e: &El, palette: &[u32]) -> Color {
@@ -57,6 +62,8 @@ fn bool_prop(e: &El, name: &str) -> bool {
     e.child(name).is_some_and(|c| c.flag("val", true))
 }
 
+const MAX_FONT_FAMILY: u8 = 14;
+
 pub fn read_font(e: &El, palette: &[u32]) -> Font {
     let mut f = Font::default();
     if let Some(n) = e.child("name").or_else(|| e.child("rFont")).and_then(|n| n.attr("val")) {
@@ -84,6 +91,8 @@ pub fn read_font(e: &El, palette: &[u32]) -> Font {
             _ => VertAlign::Baseline,
         };
     }
+    f.charset = e.child("charset").and_then(|c| c.attr_u32("val")).and_then(|v| u8::try_from(v).ok());
+    f.family = e.child("family").and_then(|c| c.attr_u32("val")).and_then(|v| u8::try_from(v).ok()).filter(|v| *v <= MAX_FONT_FAMILY);
     f.color = opt_color(e.child("color"), palette);
     // Text 1 (dk1) is what "automatic" font colour means in practice.
     if f.color == Color::Theme(1, 0) {
@@ -298,7 +307,168 @@ fn read_xf(xf: &El, fonts: &[Font], fills: &[Fill], borders: &[Borders], fmts: &
     if let Some(p) = xf.child("protection") {
         s.protection = read_protection(p);
     }
+    s.quote_prefix = xf.flag("quotePrefix", false);
     s
+}
+
+/// A differential format (`<dxf>`), which states only what it changes.
+fn read_dxf(x: &El, palette: &[u32], fmts: &HashMap<u32, String>) -> Style {
+    let mut s = Style::default();
+    if let Some(e) = x.child("font") {
+        let f = read_font(e, palette);
+        // Differential fonts rarely name a face; unless stated, keep the default face and size.
+        let has_size = e.child("sz").and_then(|n| n.attr_f64("val")).is_some();
+        let has_name = e.child("name").and_then(|n| n.attr("val")).is_some();
+        let name = if has_name { f.name.clone() } else { s.font.name.clone() };
+        let size = if has_size { f.size } else { s.font.size };
+        let def = Font::default();
+        let st = &mut s.dxf_stated;
+        st.bold = e.child("b").is_some() && !f.bold;
+        st.italic = e.child("i").is_some() && !f.italic;
+        st.strike = e.child("strike").is_some() && !f.strike;
+        st.underline = e.child("u").is_some() && f.underline == Underline::None;
+        st.size = has_size && size == def.size;
+        st.name = has_name && name == def.name;
+        st.scheme = e.child_val("scheme").map(str::to_string);
+        s.font = Font { name, size, ..f };
+    }
+    if let Some(n) = x.child("numFmt") {
+        if let Some(code) = n.attr("formatCode") {
+            s.num_fmt = NumFmt::new(code);
+        } else if let Some(id) = n.attr_u32("numFmtId") {
+            s.num_fmt = num_fmt_code(id, fmts);
+        }
+    }
+    if let Some(f) = x.child("fill") {
+        s.fill = read_fill(f, palette, true);
+    }
+    if let Some(b) = x.child("border") {
+        s.borders = read_border(b, palette);
+    }
+    if let Some(a) = x.child("alignment") {
+        s.align = read_alignment(a);
+    }
+    if let Some(p) = x.child("protection") {
+        s.protection = read_protection(p);
+        s.dxf_stated.protection = s.protection == Protection::default();
+    }
+    s
+}
+
+/// Elements and attributes of the font, fill, border and differential-format records of the
+/// styles part, the ones [`style_sources`] writes back as the file had them.
+const STYLE_ELEMENTS: &[&str] = &[
+    "font",
+    "b",
+    "i",
+    "strike",
+    "condense",
+    "extend",
+    "outline",
+    "shadow",
+    "u",
+    "vertAlign",
+    "sz",
+    "color",
+    "name",
+    "family",
+    "charset",
+    "scheme",
+    "fill",
+    "patternFill",
+    "gradientFill",
+    "fgColor",
+    "bgColor",
+    "stop",
+    "border",
+    "left",
+    "right",
+    "top",
+    "bottom",
+    "diagonal",
+    "vertical",
+    "horizontal",
+    "start",
+    "end",
+    "dxf",
+    "alignment",
+    "protection",
+];
+const STYLE_ATTRS: &[&str] = &[
+    "val",
+    "rgb",
+    "theme",
+    "tint",
+    "indexed",
+    "auto",
+    "patternType",
+    "type",
+    "degree",
+    "left",
+    "right",
+    "top",
+    "bottom",
+    "position",
+    "style",
+    "diagonalUp",
+    "diagonalDown",
+    "outline",
+    "horizontal",
+    "vertical",
+    "textRotation",
+    "wrapText",
+    "indent",
+    "relativeIndent",
+    "justifyLastLine",
+    "shrinkToFit",
+    "readingOrder",
+    "locked",
+    "hidden",
+];
+
+/// Whether a record of the styles part holds only values the schema allows where GridCraft
+/// reads past a wrong one (a font family above 14, a tint outside -1..=1): such a record is
+/// written in GridCraft's form.
+fn valid_record(e: &El) -> bool {
+    let family = e.name != "family" || e.attr_u32("val").is_some_and(|v| v <= u32::from(MAX_FONT_FAMILY));
+    let tint = e.attr("tint").is_none_or(|_| e.attr_f64("tint").is_some_and(|t| (-1.0..=1.0).contains(&t)));
+    family && tint && e.children.iter().all(valid_record)
+}
+
+/// What a font of the styles part is written from: the font, and the theme fonts a `<scheme>`
+/// in it follows.
+pub fn font_model(f: &Font, theme: &Theme) -> String {
+    crate::passthrough::model_of(&(f, &theme.major_font, &theme.minor_font))
+}
+
+/// The source forms of the styles part: each font, fill, border and differential format as the
+/// file wrote it (tints to the last digit, a family or scheme the model folds), for the model it
+/// was read into. A differential format with a number format is left to GridCraft, which numbers
+/// the formats.
+pub fn style_sources(root: &El, palette: &[u32], theme: &Theme) -> Vec<PreservedSource> {
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut push = |slot: &str, model: String, e: &El| {
+        if valid_record(e)
+            && let Some(xml) = crate::xml::plain_xml(e, STYLE_ELEMENTS, STYLE_ATTRS)
+            && seen.insert((slot.to_string(), model.clone()))
+        {
+            out.push(PreservedSource { slot: slot.into(), model, data: Arc::from(xml.into_bytes()) });
+        }
+    };
+    for e in root.child("fonts").into_iter().flat_map(|f| f.kids("font")) {
+        push("font", font_model(&read_font(e, palette), theme), e);
+    }
+    for e in root.child("fills").into_iter().flat_map(|f| f.kids("fill")) {
+        push("fill", crate::passthrough::model_of(&read_fill(e, palette, false)), e);
+    }
+    for e in root.child("borders").into_iter().flat_map(|f| f.kids("border")) {
+        push("border", crate::passthrough::model_of(&read_border(e, palette)), e);
+    }
+    for e in root.child("dxfs").into_iter().flat_map(|f| f.kids("dxf")).filter(|e| e.child("numFmt").is_none()) {
+        push("dxf", crate::passthrough::model_of(&read_dxf(e, palette, &HashMap::new())), e);
+    }
+    out
 }
 
 /// `checkboxes`: for each `xfComplement` index, whether it is a checkbox (see
@@ -328,56 +498,63 @@ pub fn read_styles(root: &El, checkboxes: &[bool]) -> StylesIn {
     let fonts: Vec<Font> = root.child("fonts").map(|f| f.kids("font").map(|e| read_font(e, &palette)).collect()).unwrap_or_default();
     let fills: Vec<Fill> = root.child("fills").map(|f| f.kids("fill").map(|e| read_fill(e, &palette, false)).collect()).unwrap_or_default();
     let borders: Vec<Borders> = root.child("borders").map(|f| f.kids("border").map(|e| read_border(e, &palette)).collect()).unwrap_or_default();
-    let xfs =
+    let mut xfs: Vec<Style> =
         root.child("cellXfs").map(|x| x.kids("xf").map(|xf| read_xf(xf, &fonts, &fills, &borders, &fmts, checkboxes)).collect()).unwrap_or_default();
     let style_xfs: Vec<Style> =
         root.child("cellStyleXfs").map(|x| x.kids("xf").map(|xf| read_xf(xf, &fonts, &fills, &borders, &fmts, &[])).collect()).unwrap_or_default();
     let mut named = Vec::new();
+    // Named style of each `cellStyleXfs` entry, for the cell formats based on it.
+    let mut parents = HashMap::new();
     if let Some(cs) = root.child("cellStyles") {
         for c in cs.kids("cellStyle") {
-            if let (Some(name), Some(s)) = (c.attr("name"), c.attr_u32("xfId").and_then(|i| style_xfs.get(i as usize)))
+            if let (Some(name), Some(i)) = (c.attr("name"), c.attr_u32("xfId"))
+                && let Some(s) = style_xfs.get(i as usize)
                 && name != "Normal"
             {
                 named.push((name.to_string(), s.clone()));
+                parents.entry(i).or_insert(name);
             }
         }
     }
-    let dxfs = root
-        .child("dxfs")
-        .map(|d| {
-            d.kids("dxf")
-                .map(|x| {
-                    let mut s = Style::default();
-                    if let Some(f) = x.child("font") {
-                        let f = read_font(f, &palette);
-                        // Differential fonts rarely name a face; keep the default face and size.
-                        s.font = Font { name: s.font.name.clone(), size: s.font.size, ..f };
-                    }
-                    if let Some(n) = x.child("numFmt") {
-                        if let Some(code) = n.attr("formatCode") {
-                            s.num_fmt = NumFmt::new(code);
-                        } else if let Some(id) = n.attr_u32("numFmtId") {
-                            s.num_fmt = num_fmt_code(id, &fmts);
-                        }
-                    }
-                    if let Some(f) = x.child("fill") {
-                        s.fill = read_fill(f, &palette, true);
-                    }
-                    if let Some(b) = x.child("border") {
-                        s.borders = read_border(b, &palette);
-                    }
-                    if let Some(a) = x.child("alignment") {
-                        s.align = read_alignment(a);
-                    }
-                    if let Some(p) = x.child("protection") {
-                        s.protection = read_protection(p);
-                    }
-                    s
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    StylesIn { xfs, dxfs, palette, named, num_fmts: fmts }
+    for (st, xf) in xfs.iter_mut().zip(root.child("cellXfs").into_iter().flat_map(|x| x.kids("xf"))).skip(1) {
+        st.parent = xf.attr_u32("xfId").filter(|i| *i != 0).and_then(|i| parents.get(&i)).map(|n| n.to_string());
+    }
+    let dxfs = root.child("dxfs").map(|d| d.kids("dxf").map(|x| read_dxf(x, &palette, &fmts)).collect()).unwrap_or_default();
+    let sources = xf_sources(root, &xfs, &named);
+    StylesIn { xfs, dxfs, palette, named, num_fmts: fmts, sources }
+}
+
+/// Attributes of a cell format the model has no field for.
+const XF_ATTRS: &[&str] = &["pivotButton"];
+/// Attributes of a cell style besides its name and format.
+const CELL_STYLE_ATTRS: &[&str] = &["builtinId", "iLevel", "hidden", "customBuiltin"];
+
+/// What a named style is written from: its name and its format.
+pub fn cell_style_model(name: &str, st: &Style) -> String {
+    format!("{name}\n{}", crate::passthrough::model_of(st))
+}
+
+/// The source forms of the cell formats and cell styles: the attributes of a cell format
+/// without a model field, for the style it was read into, and which built-in style each named
+/// style is, while it keeps its name and format.
+fn xf_sources(root: &El, xfs: &[Style], named: &[(String, Style)]) -> Vec<PreservedSource> {
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut push = |slot: &str, model: String, data: String| {
+        if (slot == "cellStyle" || !data.is_empty()) && seen.insert((slot.to_string(), model.clone())) {
+            out.push(PreservedSource { slot: slot.into(), model, data: Arc::from(data.into_bytes()) });
+        }
+    };
+    for c in root.child("cellStyles").into_iter().flat_map(|c| c.kids("cellStyle")) {
+        let Some(name) = c.attr("name") else { continue };
+        if let Some((_, st)) = named.iter().find(|(n, _)| n == name) {
+            push("cellStyle", cell_style_model(name, st), crate::passthrough::attrs_of(c, CELL_STYLE_ATTRS));
+        }
+    }
+    for (xf, st) in root.child("cellXfs").into_iter().flat_map(|x| x.kids("xf")).zip(xfs).skip(1) {
+        push("xf", crate::passthrough::model_of(st), crate::passthrough::attrs_of(xf, XF_ATTRS));
+    }
+    out
 }
 
 // ---------------------------------------------------------------- writing
@@ -396,19 +573,20 @@ pub fn color_attrs(c: &Color) -> String {
     }
 }
 
-/// `minor`: the font follows the theme's body font (`<scheme val="minor"/>`).
-fn font_xml(f: &Font, dxf: bool, minor: bool) -> String {
+/// `minor`: the font follows the theme's body font (`<scheme val="minor"/>`). `dxf`: a
+/// differential format's font, which writes only what it states.
+fn font_xml(f: &Font, dxf: Option<&DxfStated>, minor: bool) -> String {
+    let stated = dxf.cloned().unwrap_or_default();
     let mut s = String::from("<font>");
-    if f.bold {
-        s.push_str("<b/>");
-    }
-    if f.italic {
-        s.push_str("<i/>");
-    }
-    if f.strike {
-        s.push_str("<strike/>");
+    for (on, said, tag) in [(f.bold, stated.bold, "b"), (f.italic, stated.italic, "i"), (f.strike, stated.strike, "strike")] {
+        if on {
+            let _ = write!(s, "<{tag}/>");
+        } else if said {
+            let _ = write!(s, "<{tag} val=\"0\"/>");
+        }
     }
     match f.underline {
+        Underline::None if stated.underline => s.push_str("<u val=\"none\"/>"),
         Underline::None => {}
         Underline::Single => s.push_str("<u/>"),
         Underline::Double => s.push_str("<u val=\"double\"/>"),
@@ -420,18 +598,33 @@ fn font_xml(f: &Font, dxf: bool, minor: bool) -> String {
         VertAlign::Superscript => s.push_str("<vertAlign val=\"superscript\"/>"),
         VertAlign::Subscript => s.push_str("<vertAlign val=\"subscript\"/>"),
     }
-    if !dxf {
+    let def = Font::default();
+    if dxf.is_none() || stated.size || f.size != def.size {
         let _ = write!(s, "<sz val=\"{}\"/>", num(f.size as f64));
     }
     if f.color != Color::Auto {
         let _ = write!(s, "<color {}/>", color_attrs(&f.color));
-    } else if !dxf {
+    } else if dxf.is_none() {
         s.push_str("<color theme=\"1\"/>");
     }
-    if !dxf {
-        let _ = write!(s, "<name val=\"{}\"/><family val=\"2\"/>", esc_attr(&f.name));
+    if dxf.is_none() {
+        let _ = write!(s, "<name val=\"{}\"/>", esc_attr(&f.name));
+        // A family only where one was stated: Excel reads a font without one as it was.
+        if let Some(family) = f.family.filter(|v| *v <= MAX_FONT_FAMILY) {
+            let _ = write!(s, "<family val=\"{family}\"/>");
+        }
+        if let Some(charset) = f.charset {
+            let _ = write!(s, "<charset val=\"{charset}\"/>");
+        }
         if minor {
             s.push_str("<scheme val=\"minor\"/>");
+        }
+    } else {
+        if stated.name || f.name != def.name {
+            let _ = write!(s, "<name val=\"{}\"/>", esc_attr(&f.name));
+        }
+        if let Some(sc) = &stated.scheme {
+            let _ = write!(s, "<scheme val=\"{}\"/>", esc_attr(sc));
         }
     }
     s.push_str("</font>");
@@ -582,6 +775,15 @@ impl NumFmts {
 /// `extra_fmts` are number formats used outside cell styles (PivotTable value fields); the
 /// returned map gives the id of every custom format written.
 pub fn write_styles(wb: &Workbook, dxfs: &[Style], extra_fmts: &[String]) -> (String, HashMap<String, u32>) {
+    use crate::passthrough::model_of;
+    // The records as the file wrote them, while the model holds what was read from them.
+    let forms: HashMap<(&str, String), &str> = wb
+        .preserved
+        .iter()
+        .flat_map(|p| &p.sources)
+        .filter(|f| matches!(f.slot.as_str(), "font" | "fill" | "border" | "dxf" | "xf" | "cellStyle"))
+        .filter_map(|f| Some(((f.slot.as_str(), f.model.clone()), std::str::from_utf8(&f.data).ok()?)))
+        .collect();
     let mut nf = NumFmts { custom: vec![], map: HashMap::new() };
     let mut fonts: Vec<Font> = vec![];
     let mut font_map = HashMap::new();
@@ -592,6 +794,9 @@ pub fn write_styles(wb: &Workbook, dxfs: &[Style], extra_fmts: &[String]) -> (St
     // The default style's font is font 0.
     intern(&mut fonts, &mut font_map, &wb.styles.get(gridcraft_model::StyleId::DEFAULT).font);
 
+    // The named styles, numbered as `cellStyleXfs` below writes them.
+    let named_ids: HashMap<&str, usize> =
+        wb.cell_styles.iter().map(|(n, _)| n.as_str()).filter(|n| !n.is_empty() && *n != "Normal").enumerate().map(|(i, n)| (n, i + 1)).collect();
     let mut xfs = String::new();
     let mut count = 0;
     for (_, st) in wb.styles.iter() {
@@ -601,7 +806,15 @@ pub fn write_styles(wb: &Workbook, dxfs: &[Style], extra_fmts: &[String]) -> (St
         // A checkbox is General plus the feature-property-bag complement (see `feature_bags`).
         let checkbox = st.num_fmt.as_str() == "checkbox";
         let fmt = if checkbox { 0 } else { nf.id(st.num_fmt.as_str()) };
-        let _ = write!(xfs, "<xf numFmtId=\"{fmt}\" fontId=\"{font}\" fillId=\"{fill}\" borderId=\"{border}\" xfId=\"0\"");
+        let model = model_of(st);
+        let parent = st.parent.as_deref().and_then(|n| named_ids.get(n)).copied().unwrap_or(0);
+        let _ = write!(xfs, "<xf numFmtId=\"{fmt}\" fontId=\"{font}\" fillId=\"{fill}\" borderId=\"{border}\" xfId=\"{parent}\"");
+        if st.quote_prefix {
+            xfs.push_str(" quotePrefix=\"1\"");
+        }
+        if let Some(attrs) = forms.get(&("xf", model)) {
+            xfs.push_str(attrs);
+        }
         if fmt != 0 {
             xfs.push_str(" applyNumberFormat=\"1\"");
         }
@@ -656,22 +869,37 @@ pub fn write_styles(wb: &Workbook, dxfs: &[Style], extra_fmts: &[String]) -> (St
         } else {
             let _ = write!(style_xfs, ">{}{}</xf>", al.unwrap_or_default(), pr.unwrap_or_default());
         }
-        let _ = write!(cell_styles, "<cellStyle name=\"{}\" xfId=\"{named}\" customBuiltin=\"1\"/>", esc_attr(name));
+        let kept = forms.get(&("cellStyle", cell_style_model(name, st))).copied().unwrap_or(" customBuiltin=\"1\"");
+        let _ = write!(cell_styles, "<cellStyle name=\"{}\" xfId=\"{named}\"{kept}/>", esc_attr(name));
         named += 1;
     }
 
     let mut dx = String::new();
     for d in dxfs {
+        if let Some(x) = forms.get(&("dxf", model_of(d))) {
+            dx.push_str(x);
+            continue;
+        }
         dx.push_str("<dxf>");
         let def = Style::default();
+        let st = &d.dxf_stated;
         if d.font.bold
             || d.font.italic
             || d.font.strike
             || d.font.underline != Underline::None
             || d.font.color != Color::Auto
             || d.font.vert != VertAlign::Baseline
+            || d.font.size != def.font.size
+            || d.font.name != def.font.name
+            || st.bold
+            || st.italic
+            || st.strike
+            || st.underline
+            || st.size
+            || st.name
+            || st.scheme.is_some()
         {
-            dx.push_str(&font_xml(&d.font, true, false));
+            dx.push_str(&font_xml(&d.font, Some(st), false));
         }
         if d.num_fmt != def.num_fmt {
             let id = nf.id(d.num_fmt.as_str());
@@ -685,6 +913,9 @@ pub fn write_styles(wb: &Workbook, dxfs: &[Style], extra_fmts: &[String]) -> (St
         }
         if d.borders != def.borders {
             dx.push_str(&border_xml(&d.borders));
+        }
+        if st.protection || d.protection != def.protection {
+            let _ = write!(dx, "<protection locked=\"{}\" hidden=\"{}\"/>", d.protection.locked as u8, d.protection.hidden as u8);
         }
         dx.push_str("</dxf>");
     }
@@ -704,16 +935,25 @@ pub fn write_styles(wb: &Workbook, dxfs: &[Style], extra_fmts: &[String]) -> (St
     }
     let _ = write!(s, "<fonts count=\"{}\">", fonts.len());
     for (i, f) in fonts.iter().enumerate() {
-        // A Normal font in the theme's body face follows the theme, as Excel writes it (#805).
-        s.push_str(&font_xml(f, false, i == 0 && f.name == wb.theme.minor_font));
+        match forms.get(&("font", font_model(f, &wb.theme))) {
+            Some(x) => s.push_str(x),
+            // A Normal font in the theme's body face follows the theme, as Excel writes it (#805).
+            None => s.push_str(&font_xml(f, None, i == 0 && f.name == wb.theme.minor_font)),
+        }
     }
     let _ = write!(s, "</fonts><fills count=\"{}\">", fills.len());
     for f in &fills {
-        s.push_str(&fill_xml(f, false));
+        match forms.get(&("fill", model_of(f))) {
+            Some(x) => s.push_str(x),
+            None => s.push_str(&fill_xml(f, false)),
+        }
     }
     let _ = write!(s, "</fills><borders count=\"{}\">", borders.len());
     for b in &borders {
-        s.push_str(&border_xml(b));
+        match forms.get(&("border", model_of(b))) {
+            Some(x) => s.push_str(x),
+            None => s.push_str(&border_xml(b)),
+        }
     }
     let _ = write!(s, "</borders><cellStyleXfs count=\"{named}\">{style_xfs}</cellStyleXfs>");
     let _ = write!(s, "<cellXfs count=\"{count}\">{xfs}</cellXfs>");

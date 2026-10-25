@@ -343,33 +343,10 @@ li consuma; gli accordi che non usa, come `Mod-E`, arrivano alla shell
 
 ### La griglia
 
-La famiglia `grid` ha due profili. `workbook` apre una cartella di Excel con
-la versione 2 del protocollo: la sorgente a byte resta nell'host, e il testo
-della `DocumentSession` è il **giornale** delle celle cambiate. `GridEngine`
-(`apps/client/src/editors/grid/engine.ts`) sceglie la prima superficie
-dichiarata con famiglia, versione e formato giusti, apre una sessione sul
-giornale e sulla revisione dei byte, e chiede soltanto le finestre che lo
-schermo mostra, al massimo 256 righe per 128 colonne l'una. Righe e colonne
-sono virtualizzate; le coordinate stabili `SheetId + RowId + ColumnId`
-vengono dalle finestre.
-
-Editor in-cell e formula bar usano due istanze di `TextEngine` con
-`FormulaProfile`, e nessuna battuta attraversa IPC. Un commit scrive le voci
-nel giornale, lo pubblica subito alla sessione e lo consegna al provider, che
-controlla le preimmagini sulla revisione, rifiuta le celle bloccate e risponde
-con le celle da rileggere. Le modifiche in coda partono una dopo l'altra, e
-l'undo è locale alla superficie. Un giornale cambiato altrove (un altro
-riquadro, un salvataggio, una ricarica) riapre la sessione, chiude la
-precedente e annulla la bozza aperta. Se non c'è una superficie compatibile,
-la sessione non si apre o una finestra fallisce, la superficie dichiara
-`data-grid-protocol="unavailable"`, lo dice nell'avviso e non scrive; il
-linguaggio delle formule non si duplica in TypeScript.
-
-La shell non riceve DOM, callback JavaScript o oggetti CodeMirror: possiede
-rendering, input, clipboard, selezione e stato visuale, mentre il provider
-possiede lettura, formule, blocchi e innesto. Limiti, coordinate, fallback e
-parità nativo/WASM sono normati in [ABI e WIT](../reference/abi-and-wit.md) e
-nel [contratto IPC](../reference/ipc-contract.md).
+La famiglia `grid` apre le cartelle di Excel sulla versione 2 del protocollo:
+la sorgente a byte resta nell'host, e il testo della `DocumentSession` è il
+giornale della cartella. Griglia, barra multifunzione, finestre e oggetti
+dei fogli sono descritti nella [superficie dei fogli](grid-surface.md).
 
 ## Confine CodeMirror
 
@@ -406,8 +383,6 @@ mantiene CodeMirror un servizio della shell testuale.
 - `apps/client/src/editors/core/bootstrap.ts`
 - `apps/client/src/editors/spatial/lazy.ts`
 - `apps/client/src/state/layout.ts`
-- `apps/client/src/editors/grid/engine.ts`
-- `apps/client/src/editors/grid/workbook.ts`
-- `apps/client/src/editors/grid/retired.ts`
+- `apps/client/src/editors/grid/`
 - `apps/client/src/editors/core/text-operation.ts`
 - `apps/client/src/state/document-session.ts`

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAIN_PANE } from "./contract";
+import { GRID_THEME_COLORS, MAIN_PANE } from "./contract";
 import type {
   BacklinkRef,
   BundleInfo,
@@ -18,6 +18,8 @@ import type {
   EventMask,
   ExportReport,
   GridApplyRequest,
+  GridBorder,
+  GridBorders,
   GridBytesCell,
   GridBytesSession,
   GridBytesWindow,
@@ -25,10 +27,26 @@ import type {
   GridCellPatch,
   GridCellStyle,
   GridColumn,
+  GridCommandOutcome,
+  GridCommandRequest,
+  GridCommandState,
+  GridComment,
+  GridCommentReply,
   GridCommit,
+  GridDataBar,
+  GridIcon,
+  GridLink,
+  GridBook,
+  GridMedia,
+  GridMerge,
   GridNotice,
+  GridObject,
   GridRow,
+  GridSelection,
   GridSheet,
+  GridShape,
+  GridSheetView,
+  GridTable,
   GridSourceEdit,
   GridSurfaceSpec,
   GridValue,
@@ -627,6 +645,17 @@ const RECORD_KEYS: Record<string, string[]> = {
     fill_color: true,
     horizontal: true,
     number_format: true,
+    font: true,
+    font_size: true,
+    underline: true,
+    strike: true,
+    script: true,
+    vertical: true,
+    wrap: true,
+    shrink: true,
+    indent: true,
+    rotation: true,
+    borders: true,
   }),
   GridWindowRequest: keysOf<GridWindowRequest>({
     revision: true,
@@ -635,6 +664,7 @@ const RECORD_KEYS: Record<string, string[]> = {
     row_count: true,
     column_start: true,
     column_count: true,
+    known_media: true,
   }),
   GridCellPatch: keysOf<GridCellPatch>({ cell: true, before: true, after: true }),
   GridApplyRequest: keysOf<GridApplyRequest>({ revision: true, patches: true }),
@@ -654,6 +684,8 @@ const RECORD_KEYS: Record<string, string[]> = {
     hidden: true,
     notices: true,
     conflicts: true,
+    commands: true,
+    book: true,
   }),
   GridBytesCell: keysOf<GridBytesCell>({
     key: true,
@@ -664,6 +696,23 @@ const RECORD_KEYS: Record<string, string[]> = {
     lock: true,
     stale: true,
     conflict: true,
+    data_bar: true,
+    icon: true,
+    comment: true,
+    link: true,
+  }),
+  GridSelection: keysOf<GridSelection>({ sheet: true, selection: true, active: true }),
+  GridCommandState: keysOf<GridCommandState>({ id: true, enabled: true, reason: true }),
+  GridCommandRequest: keysOf<GridCommandRequest>({ revision: true, command: true }),
+  GridCommandOutcome: keysOf<GridCommandOutcome>({
+    commit: true,
+    sheets: true,
+    hidden: true,
+    selection: true,
+    result: true,
+    dialog: true,
+    commands: true,
+    book: true,
   }),
   GridBytesWindow: keysOf<GridBytesWindow>({
     revision: true,
@@ -675,6 +724,11 @@ const RECORD_KEYS: Record<string, string[]> = {
     rows: true,
     columns: true,
     cells: true,
+    styles: true,
+    merges: true,
+    view: true,
+    tables: true,
+    objects: true,
   }),
   Span: keysOf<Span>({ start: true, end: true }),
   VersionRef: keysOf<VersionRef>({ ts: true, hash: true, size: true }),
@@ -1403,6 +1457,97 @@ describe("mirror TS↔Rust", () => {
       "boolean",
       "string",
     ]);
+  });
+
+  // Le forme dentro una finestra non hanno un campione loro: si leggono dalla
+  // finestra del campione, che il test di Rust riempie di ogni segno.
+  it("la finestra porta stili, segni, unioni e vista con le chiavi del tipo TS", () => {
+    const sorted = (keys: string[]) => [...keys].sort();
+    const window = (fixture["GridBytesWindow"] as GridBytesWindow[])[0]!;
+    const styleKeys = RECORD_KEYS["GridCellStyle"]!;
+    expect(window.styles.length).toBeGreaterThan(1);
+    for (const style of window.styles) {
+      expect(Object.keys(style).sort()).toEqual(styleKeys);
+      expect(Object.keys(style.borders).sort())
+        .toEqual(sorted(keysOf<GridBorders>({ top: true, right: true, bottom: true, left: true, diagonal_down: true, diagonal_up: true })));
+    }
+    const sides = window.styles.flatMap((style) => Object.values(style.borders).filter((side): side is GridBorder => side !== null));
+    expect(sides.length).toBeGreaterThan(0);
+    for (const side of sides) expect(Object.keys(side).sort()).toEqual(sorted(keysOf<GridBorder>({ style: true, color: true })));
+    const marks = <T,>(pick: (cell: GridBytesCell) => T | null): T[] =>
+      window.cells.map(pick).filter((mark): mark is T => mark !== null);
+    const one = <T extends object>(found: T[], spec: Record<keyof T, true>) => {
+      expect(found.length, "il campione ha il segno").toBeGreaterThan(0);
+      for (const mark of found) expect(Object.keys(mark).sort()).toEqual(sorted(keysOf<T>(spec)));
+    };
+    one<GridDataBar>(marks((cell) => cell.data_bar), { fraction: true, color: true, gradient: true });
+    one<GridIcon>(marks((cell) => cell.icon), { set: true, index: true });
+    const comments = marks((cell) => cell.comment);
+    one<GridComment>(comments, { author: true, text: true, threaded: true, resolved: true, replies: true });
+    one<GridCommentReply>(comments.flatMap((comment) => comment.replies), { author: true, text: true });
+    one<GridLink>(marks((cell) => cell.link), { target: true, tooltip: true, external: true });
+    one<GridMerge>(window.merges, { row: true, column: true, rows: true, columns: true });
+    one<GridSheetView>([window.view], {
+      frozen_rows: true,
+      frozen_columns: true,
+      gridlines: true,
+      headings: true,
+      zoom: true,
+      right_to_left: true,
+      mode: true,
+      formulas: true,
+      protected: true,
+      print_gridlines: true,
+      print_headings: true,
+    });
+    one<GridTable>(window.tables, {
+      name: true,
+      row: true,
+      column: true,
+      rows: true,
+      columns: true,
+      header_row: true,
+      totals_row: true,
+      banded_rows: true,
+      banded_columns: true,
+      first_column: true,
+      last_column: true,
+      filter_button: true,
+      style: true,
+    });
+    one<GridObject>(window.objects, {
+      kind: true,
+      id: true,
+      row: true,
+      column: true,
+      dx: true,
+      dy: true,
+      width: true,
+      height: true,
+      alt: true,
+      svg: true,
+      media: true,
+      shape: true,
+      missing: true,
+    });
+    one<GridMedia>(window.objects.flatMap((object) => (object.media ? [object.media] : [])), { mime: true, key: true, data: true });
+    one<GridShape>(window.objects.flatMap((object) => (object.shape ? [object.shape] : [])), {
+      kind: true,
+      fill: true,
+      line: true,
+      text: true,
+      font: true,
+      font_size: true,
+      bold: true,
+      italic: true,
+      text_color: true,
+      align: true,
+      anchor: true,
+      right_to_left: true,
+    });
+    const session = (fixture["GridBytesSession"] as GridBytesSession[])[0]!;
+    one<GridBook>([session.book], { theme_colors: true, names: true, calculation: true, protected: true, font: true, font_size: true });
+    expect(session.book.theme_colors).toHaveLength(GRID_THEME_COLORS);
   });
 
   it("i record hanno esattamente le chiavi del tipo TS", () => {

@@ -388,14 +388,20 @@ pub(crate) fn mount_with_formats(
         ),
     ));
 
-    // La griglia delle cartelle di Excel, sui byte del file: senza la feature
-    // una cartella non si apre.
+    // La griglia delle cartelle di Excel, sui byte del file, e la loro stampa
+    // in PDF: senza la feature una cartella non si apre.
     #[cfg(feature = "xlsx")]
-    bundles.push(Arc::new(CoreBundle::new(
-        crate::workbook::WORKBOOK_ID,
-        "Excel workbooks",
-        crate::workbook::register,
-    )));
+    bundles.push(Arc::new(
+        CoreBundle::new(
+            crate::workbook::WORKBOOK_ID,
+            "Excel workbooks",
+            crate::workbook::register,
+        )
+        .speaking(
+            crate::settings::CORE_DEFAULT_LOCALE,
+            fub_format_xlsx::export::catalog(),
+        ),
+    ));
 
     // Ogni feature ufficiale si monta con lo stesso ciclo: ciò che registra, le
     // impostazioni, i servizi forniti e richiesti e il collegamento che solo

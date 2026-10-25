@@ -94,7 +94,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::PluginError;
 use crate::model::DocId;
 use crate::rules::folders;
-use crate::rules::path::resolution_key;
+use crate::rules::path::{resolution_key, strip_ext};
 use crate::traits::{HostApi, IndexQuery, IndexResult, ReadApi, TransferRead};
 
 /// Quanto chiede per volta chi legge una sorgente intera.
@@ -897,6 +897,36 @@ pub fn check_artifact_path(path: &str) -> Result<(), PluginError> {
 /// li distingua.
 pub fn artifact_key(path: &str) -> String {
     resolution_key(path)
+}
+
+/// Il nome della copia di ciascun documento, uno per documento e mai lo
+/// stesso: il documento senza estensione, con `extension`. Due documenti che
+/// differiscono soltanto per l'estensione (`Lettera.docx` e `Lettera.odt`) la
+/// tengono entrambi, e ciò che collide ancora prende un numero (`<nome> 1`,
+/// `<nome> 2`, …). Lo stesso nome è quello di [`artifact_key`], con cui il
+/// sink rifiuterebbe il secondo.
+pub fn copy_names(docs: &[DocId], extension: &str) -> Vec<String> {
+    let stem_key = |doc: &DocId| artifact_key(&strip_ext(doc.as_str()));
+    let mut stems: BTreeMap<String, usize> = BTreeMap::new();
+    for doc in docs {
+        *stems.entry(stem_key(doc)).or_default() += 1;
+    }
+    let mut taken = BTreeSet::new();
+    docs.iter()
+        .map(|doc| {
+            let base = match stems[&stem_key(doc)] {
+                1 => strip_ext(doc.as_str()),
+                _ => doc.to_string(),
+            };
+            (0u32..)
+                .map(|n| match n {
+                    0 => format!("{base}.{extension}"),
+                    n => format!("{base} {n}.{extension}"),
+                })
+                .find(|name| taken.insert(artifact_key(name)))
+                .expect("la sequenza dei candidati è infinita")
+        })
+        .collect()
 }
 
 /// Il rifiuto del secondo artefatto con la stessa [`artifact_key`].
