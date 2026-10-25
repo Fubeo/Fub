@@ -46,6 +46,7 @@ import {
   toggleItalic,
   toggleOrderedList,
   toggleStrikethrough,
+  toggleEmbed,
   toggleWikilink,
 } from "./commands";
 import { decodeDestination, escapeLinkLabel, linkDestination, normalizeLabel } from "./link-syntax";
@@ -113,6 +114,7 @@ function insidePair(state: EditorState, pattern: RegExp): boolean {
 const HIGHLIGHT_PAIR = /==(?=\S)(?:[^=\n]|=(?!=))*?\S==/g;
 const COMMENT_PAIR = /%%[^\n]*?%%/g;
 const WIKILINK_PAIR = /\[\[[^\]\n]*\]\]/g;
+const EMBED_PAIR = /!\[\[[^\]\n]*\]\]/g;
 
 /// Dentro una formula `$…$`, letta sul suo contenitore come fa la Lettura: può
 /// cominciare su una riga e chiudere sulla seguente.
@@ -632,6 +634,26 @@ function wrapLink(prefix: string): StateCommand {
 
 const insertImage = wrapLink("!");
 
+/// Un diagramma: un recinto `mermaid` vuoto, col cursore dentro, dove il
+/// completamento propone i modelli. Su una riga vuota prende il suo posto,
+/// altrimenti va sotto.
+const insertDiagram: StateCommand = ({ state, dispatch }) => {
+  if (state.readOnly) return false;
+  const line = state.doc.lineAt(state.selection.main.head);
+  const nl = state.lineBreak;
+  const blank = line.text.trim() === "";
+  const before = blank ? "" : nl;
+  const open = "```mermaid";
+  const at = blank ? line.from : line.to;
+  dispatch(state.update({
+    changes: { from: at, to: blank ? line.to : at, insert: `${before}${open}${nl}${nl}\`\`\`` },
+    selection: EditorSelection.cursor(at + before.length + open.length + nl.length),
+    scrollIntoView: true,
+    userEvent: "input",
+  }));
+  return true;
+};
+
 /// Una nota a piè di pagina: il richiamo dopo la selezione col primo numero
 /// libero, la definizione in fondo al documento, e il cursore lì a scriverla.
 const insertFootnote: StateCommand = ({ state, dispatch }) => {
@@ -894,6 +916,7 @@ export const MARKDOWN_ACTIONS: ReadonlyMap<string, MarkdownAction> = new Map<str
   ["markdown.clear", { run: clearFormatting, applicable: wouldRun(clearFormatting), prose: true }],
   ["markdown.link", { run: toggleLink, active: (s) => enclosing(s, LINK) !== null, prose: true }],
   ["markdown.wikilink", { run: toggleWikilink, active: (s) => insidePair(s, WIKILINK_PAIR), prose: true, chord: "Mod-k" }],
+  ["markdown.embed", { run: toggleEmbed, active: (s) => insidePair(s, EMBED_PAIR), prose: true }],
   ["markdown.image", { run: insertImage, prose: true }],
   ["markdown.footnote", { run: insertFootnote, prose: true }],
   ["markdown.footnote.delete", {
@@ -924,6 +947,7 @@ export const MARKDOWN_ACTIONS: ReadonlyMap<string, MarkdownAction> = new Map<str
   ["markdown.callout", { run: insertCallout, active: calloutActive, prose: true }],
   ["markdown.codeblock", { run: toggleCodeBlock, active: (s) => enclosingCodeFence(s) !== null }],
   ["markdown.mathblock", { run: toggleMathBlock, active: (s) => enclosingMathFence(s) !== null, prose: true }],
+  ["markdown.diagram", { run: insertDiagram, prose: true }],
   ["markdown.rule", { run: insertRule, prose: true }],
   ["markdown.table", { run: insertTable, prose: true }],
   ["markdown.property.add", { run: addProperty, chord: "Mod-;" }],

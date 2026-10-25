@@ -138,6 +138,9 @@ import { showActivity } from "../panels/activity";
 import { notify } from "../ui/notify";
 import { applyIntent } from "../ui/intents";
 import { slashContextDoc } from "./slash";
+import { openSlashPalette, recentCommands, rememberCommand } from "../ui/palette";
+import { slashMenuEntries } from "../panels/slash-menu";
+import type { SelectionBox } from "../editors/core/editor-actions";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
 import { errorText } from "../host/errors";
 import { onLanguage, t } from "../i18n/strings";
@@ -791,6 +794,14 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       notify,
       flushPendingSave,
       publishContext,
+      menu: {
+        enabled: () => document.getElementById("app")?.dataset["slash"] !== "off",
+        entries: (query, has) => slashMenuEntries(state.commandSpecs, query, has, recentCommands()),
+        chosen: (entry, owner, anchor) => {
+          rememberCommand(entry.id);
+          if (!entry.action) runSlashCommand(owner, entry.id, "", anchor);
+        },
+      },
     },
     completions: {
       searchNotes: (prefix: string) =>
@@ -2589,6 +2600,23 @@ function paneContext(): ViewContext {
 /// invecchiate. Chi le ridisegna è l'host dei pannelli (`ui/panel-host.ts`): il
 /// verso passa dal bus e non da una chiamata, perché la catena che le monta
 /// dipende già da questo modulo.
+/// Esegue un comando del «/» scelto fuori dalla palette (il «/» nel testo,
+/// «Comandi ▸» del tasto destro), per la stessa via della palette: il modulo
+/// e il piano accanto ad `anchor`, il flush prima di scrivere, il contesto
+/// pubblicato. Vale finché il documento del gesto resta quello a fuoco.
+export function runSlashCommand(owner: HTMLElement, command: string, selection: string, anchor: SelectionBox | null): void {
+  const doc = slashContextDoc();
+  void openSlashPalette(
+    owner,
+    selection,
+    () => owner.isConnected && slashContextDoc() === doc,
+    { onEffect: applyIntent, notify, flushPendingSave, publishContext },
+    undefined,
+    anchor,
+    command,
+  );
+}
+
 export async function publishContext(): Promise<void> {
   window.clearTimeout(contextTimer);
   try {

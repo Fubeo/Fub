@@ -271,6 +271,8 @@ uno spegne il pulsante di chi lo nomina. La superficie Markdown conosce:
   `markdown.list.indent`, `markdown.list.dedent`;
 - `markdown.quote`, `markdown.callout`, `markdown.codeblock`,
   `markdown.mathblock`, `markdown.rule`, `markdown.table`;
+- `markdown.embed` (una nota incorporata `![[`) e `markdown.diagram` (un
+  blocco `mermaid`), che riaprono il completamento delle note e dei modelli;
 - `markdown.property.add`, `markdown.property.up`, `markdown.property.down`;
 - `markdown.table.row.before`, `.row.after`, `.row.up`, `.row.down`,
   `.row.delete`, `.column.before`, `.column.after`, `.column.left`,

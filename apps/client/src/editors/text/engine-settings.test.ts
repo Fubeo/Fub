@@ -235,7 +235,12 @@ describe("text input settings", () => {
     expect(press(field.querySelector(".cm-content")!)).toBe(false);
     expect(press(host.querySelector(".cm-gutters")!)).toBe(true);
     const items = [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")];
-    expect(items.map((item) => item.textContent)).toEqual(["Nascondi i numeri di riga", "Nascondi le frecce per piegare"]);
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Nascondi i numeri di riga",
+      "Nascondi le frecce per piegare",
+      "Piega tutto",
+      "Apri tutto",
+    ]);
     items[0]!.click();
     expect(setSetting).toHaveBeenCalledWith("editor.line-numbers", false);
     engine.destroy();

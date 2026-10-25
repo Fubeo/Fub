@@ -550,6 +550,8 @@ const IT = {
   "ribbon.review.protect_sheet": "Proteggi foglio",
   "ribbon.view.zoom_dialog": "Zoom…",
   "ribbon.table.resize": "Ridimensiona tabella",
+  "ribbon.context.table": "Tabella",
+  "ribbon.context.mini": "Formato rapido",
 } as const;
 
 export type RibbonKey = keyof typeof IT;
@@ -1095,6 +1097,8 @@ const EN: Record<RibbonKey, string> = {
   "ribbon.review.protect_sheet": "Protect Sheet",
   "ribbon.view.zoom_dialog": "Zoom…",
   "ribbon.table.resize": "Resize Table",
+  "ribbon.context.table": "Table",
+  "ribbon.context.mini": "Quick format",
 };
 
 export const ribbonStrings = catalog(IT, { en: EN });

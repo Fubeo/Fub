@@ -114,6 +114,17 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
 - `mountPresentation` monta la resa da presentare come slide;
 - `printable` dichiara una resa di stampa del provider (`IndexQuery::RenderPrint`);
 - `anchorHere` dà titolo o blocco sotto il cursore a `shell.doc.copy_anchor_link`;
+- `contextMenu(at)` dice, come dati (`editors/core/editor-menu.ts`), cosa la
+  superficie offre al tasto destro nel punto `at`, o sotto il cursore quando
+  `at` è `null` (il tasto Menu): il bersaglio, le voci per ciò che sta lì, gli
+  appunti eseguiti sui suoi dati e gli id delle azioni di formato, trasformazione
+  e inserimento. Passano soltanto id, testi, booleani e funzioni senza
+  argomenti; `null` lascia il menu del sistema. Lo dichiarano il Markdown
+  (scrittura e Lettura), i documenti di Word, i fogli, la tela, le basi e il
+  visualizzatore dei media;
+- `miniBar()` monta la mini-barra di chi ha controlli suoi (i documenti di
+  Word, i fogli) sopra il menu; il Markdown usa i gruppi della barra di
+  formattazione;
 - `exports` dichiara gli export registrati che valgono per il documento: il
   disegno offre PNG e PDF, il profilo `pdf` il PDF annotato e quello redatto.
   Il core ne fa `shell.doc.export` e una voce del menu del riquadro ciascuno,

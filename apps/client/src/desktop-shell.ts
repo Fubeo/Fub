@@ -25,6 +25,7 @@ import { $ } from "./ui/dom";
 import { takeNoticeAfterReload } from "./ui/intents";
 import { mountLinkPreview } from "./ui/link-preview";
 import { FORMATBAR_EVENT } from "./panels/selection-bubble";
+import { MINIBAR_SETTING, miniBarModeOf } from "./panels/mini-bar";
 import { listenForFailures, mountNotifications, notify, setWatcherOff } from "./ui/notify";
 import { writeClipboardText } from "./platform/clipboard";
 import { closeCommandPalette, openCommandPalette, startCommand } from "./ui/palette";
@@ -148,6 +149,14 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
       app.toggleAttribute("data-formatbar-off", formatbarOff);
       window.dispatchEvent(new CustomEvent(FORMATBAR_EVENT));
     }
+    // Il menu «/» nel testo: spento, il «/» è testo.
+    if (app) app.dataset["slash"] = values.get("editor.slash") === false ? "off" : "on";
+    // La mini-barra: quando c'è, col tasto destro e sul testo scelto.
+    const minibar = miniBarModeOf(values.get(MINIBAR_SETTING));
+    if (app && app.dataset["minibar"] !== minibar) {
+      app.dataset["minibar"] = minibar;
+      window.dispatchEvent(new CustomEvent(FORMATBAR_EVENT));
+    }
     if (frameAtBoot === null) {
       frameAtBoot = valid && values.get("chrome.frame") === "system" ? "system" : "custom";
       if (platformSupports("nativeWindowControls")) {
@@ -165,7 +174,7 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
     }
   };
   lifetime.add(onEvent("setting_changed", ({ key }) => {
-    if (key.startsWith("chrome.")) void reread();
+    if (key.startsWith("chrome.") || key === MINIBAR_SETTING || key === "editor.slash") void reread();
   }));
   await reread();
 }

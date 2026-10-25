@@ -984,6 +984,105 @@ export class GridEngine {
     return true;
   }
 
+  /// Il tasto destro nel punto `x`, `y` della finestra, come in Excel: su un
+  /// oggetto lo seleziona; sulla linguetta di un foglio lo mostra; su una
+  /// cella, una riga o una colonna fuori dalla selezione la sceglie, dentro
+  /// la lascia com'è. Torna su cosa si è premuto, o `null` fuori dalla griglia.
+  pointAt(x: number, y: number): "cell" | "row" | "column" | "corner" | "sheet" | "object" | null {
+    if (this.#destroyed || !this.#workbook) return null;
+    const element = document.elementFromPoint(x, y);
+    if (!element || !this.#root.contains(element)) return null;
+    const tab = this.#sheetBar.contains(element) ? element.closest<HTMLElement>("[data-tab]") : null;
+    if (tab) {
+      const index = this.#workbook.sheets.findIndex((sheet) => sheet.id === tab.dataset.tab);
+      if (index < 0) return null;
+      this.#showSheetAt(index);
+      return "sheet";
+    }
+    const object = element.closest<HTMLElement>(".grid-object");
+    const key = object?.dataset.object ?? null;
+    if (key && this.#objectByKey(key)) {
+      this.#finishEditing(true, "input", false);
+      this.#selectObject(key);
+      return "object";
+    }
+    if (!this.#viewport.contains(element)) return null;
+    const cell = this.#eventPosition({ target: element } as unknown as Event);
+    const hit = cell ?? this.#hit(x, y, false);
+    if (!hit) return null;
+    if (this.#selectedObject !== null) this.#selectObject(null);
+    const sheet = this.#sheet();
+    const lastRow = Math.max(0, sheet.rows.length - 1);
+    const lastColumn = Math.max(0, sheet.columns.length - 1);
+    const range = normalizedSelection(this.#selection);
+    const kind = hit.row === null && hit.column === null ? "all" : hit.row === null ? "columns" : hit.column === null ? "rows" : "cells";
+    let next: GridSelection | null = null;
+    if (kind === "all") {
+      next = { anchor: { row: lastRow, column: lastColumn }, focus: { row: 0, column: 0 } };
+    } else {
+      const position = { row: hit.row ?? 0, column: hit.column ?? 0 };
+      const whole = kind === "rows"
+        ? range.columnStart === 0 && range.columnEnd === lastColumn
+        : kind === "columns" ? range.rowStart === 0 && range.rowEnd === lastRow : true;
+      const inside = whole
+        && (kind === "columns" || (position.row >= range.rowStart && position.row <= range.rowEnd))
+        && (kind === "rows" || (position.column >= range.columnStart && position.column <= range.columnEnd));
+      if (!inside) {
+        const anchor = this.#anchorOf(position);
+        next = kind === "cells" ? { anchor, focus: anchor } : this.#dragSelection(kind, anchor, position);
+      }
+    }
+    if (next) {
+      this.#finishEditing(true, "input", false);
+      this.#selection = next;
+      this.#syncFormulaBar();
+      this.#render();
+      this.#selectionChanged();
+    }
+    return kind === "all" ? "corner" : kind === "rows" ? "row" : kind === "columns" ? "column" : "cell";
+  }
+
+  /// Il riquadro della cella attiva nella finestra, per aprire il menu dalla
+  /// tastiera.
+  activeCellBox(): { left: number; top: number; right: number; bottom: number } | null {
+    const cell = this.#viewport.querySelector<HTMLElement>(".grid-cell.active");
+    const box = (cell ?? this.#viewport).getBoundingClientRect();
+    return { left: box.left, top: box.top, right: box.right, bottom: box.bottom };
+  }
+
+  /// Si scrive nelle celle: una cartella letta e un documento non in sola
+  /// lettura.
+  writable(): boolean {
+    return !this.#destroyed && !this.#readOnly && this.#workbook !== null;
+  }
+
+  /// Sceglie tutto il foglio, come l'angolo delle intestazioni.
+  selectAll(): void {
+    if (this.#destroyed || !this.#workbook) return;
+    const sheet = this.#sheet();
+    if (this.#selectedObject !== null) this.#selectObject(null);
+    this.#selection = { anchor: { row: Math.max(0, sheet.rows.length - 1), column: Math.max(0, sheet.columns.length - 1) }, focus: { row: 0, column: 0 } };
+    this.#syncFormulaBar();
+    this.#render();
+    this.#selectionChanged();
+  }
+
+  /// La selezione come la copia Mod-c: testo separato da tabulazioni.
+  selectionTsv(): string {
+    return selectionTsv(this.#selection, (position) => this.#cellAt(position));
+  }
+
+  /// Incolla `text` (righe e tabulazioni) dalla cella attiva, come Mod-v.
+  pasteText(text: string): void {
+    if (this.#readOnly || this.#destroyed) return;
+    this.#pasteTsv(text);
+  }
+
+  /// Svuota le celle scelte, come Canc.
+  clearCells(): void {
+    this.#clearSelection();
+  }
+
   /// La selezione come la scrive una formula: il nome del foglio,
   /// l'intervallo e la cella attiva in A1.
   selectionRefs(): { readonly sheet: string; readonly range: string; readonly active: string } {
@@ -3009,10 +3108,14 @@ export class GridEngine {
   #paste(event: ClipboardEvent): void {
     if (this.#readOnly || !event.clipboardData) return;
     event.preventDefault();
+    this.#pasteTsv(event.clipboardData.getData("text/plain"));
+  }
+
+  #pasteTsv(text: string): void {
     const sheet = this.#sheet();
     const focus = this.#selection.focus;
     const writes: CellWrite[] = [];
-    parseTsv(event.clipboardData.getData("text/plain")).forEach((values, row) => values.forEach((value, column) => {
+    parseTsv(text).forEach((values, row) => values.forEach((value, column) => {
       const position = { row: focus.row + row, column: focus.column + column };
       if (position.row < sheet.rows.length && position.column < sheet.columns.length) {
         writes.push({ position, after: fileInput(value, this.#decimal) });

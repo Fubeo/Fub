@@ -1,6 +1,8 @@
 import type { Theme } from "../../theme/theme";
 import type { SyntaxForm } from "../../host/contract";
-import { t, onLanguage } from "../../i18n/strings";
+import { t, onLanguage, type Key } from "../../i18n/strings";
+import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../core/editor-menu";
+import { writeClipboardText } from "../../platform/clipboard";
 import { lineFeeds, tryApplyOperation, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
 import {
   applyCanvasPatches,
@@ -746,7 +748,7 @@ export class CanvasEngine {
     if (patch) this.#commit([patch], "input");
   }
 
-  async #addFileNode(): Promise<void> {
+  async #addFileNode(at?: { x: number; y: number }): Promise<void> {
     const pick = this.#options.onPickFile;
     if (!pick || this.#readOnly || this.#destroyed || !this.#doc) return;
     const source = this.#source;
@@ -754,17 +756,17 @@ export class CanvasEngine {
     const path = await pick();
     if (!isVaultPath(path) || this.#destroyed || this.#readOnly || source !== this.#source
       || this.#epoch !== epoch) return;
-    this.#addNode("file", path);
+    this.#addNode("file", path, at);
   }
 
-  /** Una card nuova al centro della vista; una card file vuole il suo `file`. */
-  #addNode(type: CanvasNode["type"], file?: string): void {
+  /** Una card nuova al centro della vista, o in `at` (coordinate del mondo);
+   *  una card file vuole il suo `file`. */
+  #addNode(type: CanvasNode["type"], file?: string, at?: { x: number; y: number }): void {
     if (!this.#doc || this.#readOnly || (type === "file" && !file)) return;
     const rect = this.#viewport.getBoundingClientRect();
-    const center = this.#screenToWorld(
-      rect.left + (rect.width || 800) / 2,
-      rect.top + (rect.height || 600) / 2,
-    );
+    const center = at
+      ? { x: at.x + 160, y: at.y + 80 }
+      : this.#screenToWorld(rect.left + (rect.width || 800) / 2, rect.top + (rect.height || 600) / 2);
     const node: CanvasNode = {
       id: newNodeId("n"),
       type,
@@ -838,6 +840,174 @@ export class CanvasEngine {
     const after = where === "front" ? [...rest, ...this.#selection] : [...this.#selection, ...rest];
     if (JSON.stringify(ids) === JSON.stringify(after)) return;
     this.#commit([{ kind: "reorder", before: ids, after }], "input");
+  }
+
+  // --- menu -----------------------------------------------------------------------
+
+  /** Il menu del tasto destro nel punto `at` della finestra (`null`: dalla
+   *  tastiera, sulla selezione). Una scheda o un collegamento fuori dalla
+   *  selezione diventano la selezione; sul vuoto si aggiunge lì. */
+  contextMenu(at: { x: number; y: number } | null): SurfaceMenu | null {
+    if (this.#destroyed || !this.#doc || this.#isSceneOversized()) return null;
+    const element = at ? document.elementFromPoint(at.x, at.y) : null;
+    if (at && (!element || !this.#viewport.contains(element))) return null;
+    const node = element ? this.#nodeAt(element) : this.#selection[0] ?? null;
+    const edge = node ? null : element ? this.#edgeAt(element) : this.#edgeSelection[0] ?? null;
+    const chosen = node ? !this.#selection.includes(node) : edge ? !this.#edgeSelection.includes(edge) : at !== null && (this.#selection.length > 0 || this.#edgeSelection.length > 0);
+    if (chosen) {
+      this.#selection = node ? [node] : [];
+      this.#edgeSelection = edge ? [edge] : [];
+      this.#options.onSelectionChange();
+      this.#displaySelection();
+    }
+    const writable = !this.#readOnly;
+    const then = (run: () => void) => () => {
+      run();
+      this.#viewport.focus();
+    };
+    const colors = (current: string | undefined, apply: (color: string | undefined) => void): SurfaceMenuItem => ({
+      id: "canvas.color",
+      label: t("canvas_menu.color"),
+      enabled: writable,
+      items: ["", "1", "2", "3", "4", "5", "6"].map((value) => ({
+        id: `canvas.color.${value || "none"}`,
+        label: value ? t(`canvas_menu.color.${value}` as Key) : t("canvas.default"),
+        checked: (current ?? "") === value,
+        run: then(() => apply(value || undefined)),
+      })),
+    });
+    if (node) {
+      const nodes = this.#selectedNodes();
+      const one = nodes.length === 1 ? nodes[0]! : null;
+      const context: SurfaceMenuEntry[] = [];
+      if (one?.type === "text") context.push({ id: "canvas.edit", label: t("canvas_menu.edit"), enabled: writable, run: () => this.#beginCardEdit(one) });
+      if (one?.type === "file" && one.file) {
+        const path = `/${one.file.replace(/^\/+/, "")}${one.subpath ?? ""}`;
+        context.push({ id: "canvas.open", label: t("canvas_menu.open"), run: () => void this.#options.onOpenPath?.(path, this.#options.documentId) });
+      }
+      if (one?.type === "link") {
+        const destination = externalUrl(one.url ?? "");
+        const media = this.#options.media;
+        context.push({
+          id: "canvas.open_url",
+          label: t("canvas.open_url"),
+          enabled: destination !== null && !!media,
+          run: () => {
+            if (!destination) return;
+            if (media?.openViewer) void media.openViewer(destination);
+            else if (media) void media.openExternal(destination);
+          },
+        });
+      }
+      context.push(
+        colors(one?.color, (color) => this.#commit(this.#selectedNodes().map((current) => {
+          const next = { ...current };
+          if (color === undefined) delete next.color;
+          else next.color = color;
+          return upsertNodePatch(this.#doc!, next);
+        }).filter((patch): patch is NonNullable<typeof patch> => patch !== null), "input")),
+        { id: "canvas.duplicate", label: t("canvas.duplicate"), enabled: writable, run: then(() => this.#duplicateSelection()) },
+        {
+          id: "canvas.order",
+          label: t("canvas_menu.order"),
+          enabled: writable,
+          items: [
+            { id: "canvas.bring_front", label: t("canvas.bring_front"), run: then(() => this.#reorderSelection("front")) },
+            { id: "canvas.send_back", label: t("canvas.send_back"), run: then(() => this.#reorderSelection("back")) },
+          ],
+        },
+      );
+      if (nodes.length >= 2) {
+        const axes = ["left", "center", "right", "top", "middle", "bottom"] as const;
+        context.push({
+          id: "canvas.align",
+          label: t("canvas_menu.align"),
+          enabled: writable,
+          items: [
+            ...axes.map((axis) => ({ id: `canvas.align.${axis}`, label: t(`canvas.align_${axis}`), run: then(() => this.#layoutSelection(axis)) })),
+            ...(nodes.length >= 3
+              ? [
+                  { id: "canvas.distribute_x", label: t("canvas.distribute_x"), run: then(() => this.#layoutSelection("distribute-x")) },
+                  { id: "canvas.distribute_y", label: t("canvas.distribute_y"), run: then(() => this.#layoutSelection("distribute-y")) },
+                ]
+              : []),
+          ],
+        });
+      }
+      context.push(
+        { id: "canvas.fit_selection", label: t("canvas.fit_selection"), run: () => this.#fitCamera(true, this.#selectedNodes()) },
+        { id: "canvas.delete", label: t("canvas.delete"), enabled: writable, danger: true, run: then(() => this.#deleteSelection()) },
+      );
+      const box = this.#stage.querySelector<HTMLElement>(`.canvas-node[data-node="${CSS.escape(node)}"]`)?.getBoundingClientRect();
+      return {
+        target: { kind: one?.type === "group" ? "group" : "node", ref: node },
+        at: box ? { x: Math.round(box.left), y: Math.round(box.bottom) + 4 } : undefined,
+        context,
+        clipboard: { offers: { copy: true }, run: () => void writeClipboardText(this.selectedText()?.primary ?? "").catch(() => {}) },
+      };
+    }
+    if (edge) {
+      const current = this.#doc.edges.find((one) => one.id === edge);
+      if (!current) return null;
+      return {
+        target: { kind: "edge", ref: edge },
+        context: [
+          colors(current.color, (color) => {
+            const next = { ...current };
+            if (color === undefined) delete next.color;
+            else next.color = color;
+            const patch = upsertEdgePatch(this.#doc!, next);
+            if (patch) this.#commit([patch], "input");
+          }),
+          {
+            id: "canvas.edge.reverse",
+            label: t("canvas_menu.reverse"),
+            enabled: writable,
+            run: then(() => {
+              const next = { ...current, fromNode: current.toNode, toNode: current.fromNode };
+              for (const [from, to] of [["fromSide", "toSide"], ["fromEnd", "toEnd"]] as const) {
+                const a = current[from];
+                const b = current[to];
+                if (b === undefined) delete next[from];
+                else (next as Record<string, unknown>)[from] = b;
+                if (a === undefined) delete next[to];
+                else (next as Record<string, unknown>)[to] = a;
+              }
+              const patch = upsertEdgePatch(this.#doc!, next);
+              if (patch) this.#commit([patch], "input");
+            }),
+          },
+          { id: "canvas.delete", label: t("canvas.delete"), enabled: writable, danger: true, run: then(() => this.#deleteSelection()) },
+        ],
+      };
+    }
+    const point = at ? this.#screenToWorld(at.x, at.y) : undefined;
+    const add = (type: CanvasNode["type"], label: string): SurfaceMenuItem => ({ id: `canvas.add.${type}`, label, run: then(() => this.#addNode(type, undefined, point)) });
+    return {
+      target: { kind: "empty" },
+      context: [
+        {
+          id: "canvas.add",
+          label: t("canvas_menu.add_here"),
+          enabled: writable,
+          items: [
+            add("text", t("canvas.add_text")),
+            ...(this.#options.onPickFile
+              ? [{ id: "canvas.add.file", label: t("canvas.add_file"), run: () => void this.#addFileNode(point).catch((error: unknown) => this.#showIntakeError(error)) }]
+              : []),
+            add("link", t("canvas.add_link")),
+            add("group", t("canvas.add_group")),
+          ],
+        },
+        { id: "canvas.fit", label: t("canvas.fit"), run: () => { this.#fitCamera(); this.#render(); } },
+        ...(at
+          ? [
+              { id: "canvas.zoom_in", label: t("canvas.zoom_in"), run: () => this.#zoomAt(at.x, at.y, 1.2) },
+              { id: "canvas.zoom_out", label: t("canvas.zoom_out"), run: () => this.#zoomAt(at.x, at.y, 1 / 1.2) },
+            ]
+          : []),
+      ],
+    };
   }
 
   // --- pointer ------------------------------------------------------------------

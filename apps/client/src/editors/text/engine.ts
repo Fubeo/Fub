@@ -28,12 +28,14 @@ import {
 import {
   bracketMatching,
   defaultHighlightStyle,
+  foldAll,
   foldGutter,
   foldKeymap,
   indentOnInput,
   indentUnit,
   syntaxHighlighting,
   syntaxTree,
+  unfoldAll,
 } from "@codemirror/language";
 import {
   autocompletion,
@@ -582,6 +584,8 @@ export class TextEngine {
         label: t(foldGutter ? "editor.gutter.fold.hide" : "editor.gutter.fold.show"),
         run: toggle(EDITOR_FOLD_GUTTER_KEY, foldGutter),
       },
+      { label: t("editor.gutter.fold_all"), separator: true, run: () => void foldAll(this.view) },
+      { label: t("editor.gutter.unfold_all"), run: () => void unfoldAll(this.view) },
     ]);
   }
 
@@ -648,6 +652,48 @@ export class TextEngine {
       ...(main.empty && main.head === head ? { selection: { anchor: head + text.length } } : {}),
       userEvent: "input",
     });
+    return true;
+  }
+
+  /// Porta il cursore a `pos` (UTF-16 del documento normalizzato), senza
+  /// toccare il testo: il tasto destro fuori dalla selezione la sposta lì,
+  /// come il clic. Vale anche in sola lettura.
+  public placeCursor(pos: number): boolean {
+    if (this.disposed || !Number.isSafeInteger(pos) || pos < 0 || pos > this.view.state.doc.length) return false;
+    this.view.dispatch({ selection: { anchor: pos }, userEvent: "select.pointer" });
+    return true;
+  }
+
+  /// Sceglie tutto il testo, come Mod-a.
+  public selectAll(): void {
+    if (this.disposed) return;
+    this.view.dispatch({ selection: { anchor: 0, head: this.view.state.doc.length }, userEvent: "select" });
+  }
+
+  /// Incolla come se arrivasse dalla tastiera: lo stesso evento `paste` che
+  /// gli appunti danno a Mod-v, così valgono le stesse regole (l'HTML
+  /// convertito in Markdown, le liste intelligenti). Senza `html` è il testo
+  /// semplice. `false` in sola lettura o dove il motore non sa costruire
+  /// l'evento, e allora il testo entra al cursore com'è.
+  public paste(text: string, html: string | null): boolean {
+    if (this.disposed || this.readOnlyEnabled) return false;
+    try {
+      const data = new DataTransfer();
+      data.setData("text/plain", text);
+      if (html !== null) data.setData("text/html", html);
+      const event = new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true });
+      this.view.contentDOM.dispatchEvent(event);
+      if (event.defaultPrevented) return true;
+    } catch {
+      // Un motore senza `DataTransfer` costruibile: il testo, al cursore.
+    }
+    return text === "" ? false : this.insertAtCursor(text.replace(/\r\n?/g, "\n"));
+  }
+
+  /// Toglie il testo scelto, come una battuta: è la metà di «Taglia».
+  public deleteSelection(): boolean {
+    if (this.disposed || this.readOnlyEnabled || this.view.state.selection.ranges.every((range) => range.empty)) return false;
+    this.view.dispatch(this.view.state.replaceSelection(""), { userEvent: "delete.cut" });
     return true;
   }
 

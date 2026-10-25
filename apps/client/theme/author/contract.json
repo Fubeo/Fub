@@ -495,6 +495,8 @@
     "cm-completionMatchedText",
     "cm-completionDetail",
     "cm-completionInfo",
+    "cm-completionIcon-fub-slash",
+    "cm-fub-slash-icon",
     "document-surface-error",
     "document-surface-viewer",
     "media-surface",
@@ -540,6 +542,7 @@
     "threaded",
     "no-gridlines",
     "grid-ribbon",
+    "grid-ribbon-mini",
     "grid-ribbon-head",
     "grid-ribbon-tabs",
     "grid-ribbon-toggle",
@@ -667,6 +670,9 @@
     "rich-strip-group",
     "rich-strip-button",
     "rich-strip-underline",
+    "rich-strip-bold",
+    "rich-strip-italic",
+    "rich-strip-mini",
     "rich-strip-marker",
     "rich-strip-bar",
     "rich-strip-select",
@@ -1042,6 +1048,10 @@
     "graph-list-more",
     "context-menu",
     "menu-separator",
+    "menu-group",
+    "context-submenu",
+    "menu-more",
+    "context-strip",
     "menu-label",
     "menu-hint",
     "menu-body",
@@ -2709,7 +2719,9 @@
         "cm-tooltip-autocomplete",
         "cm-completionMatchedText",
         "cm-completionDetail",
-        "cm-completionInfo"
+        "cm-completionInfo",
+        "cm-completionIcon-fub-slash",
+        "cm-fub-slash-icon"
       ],
       "states": [
         "rest",
@@ -2789,6 +2801,7 @@
       "part": "editors",
       "hooks": [
         "grid-ribbon",
+        "grid-ribbon-mini",
         "grid-ribbon-head",
         "grid-ribbon-tabs",
         "grid-ribbon-toggle",
@@ -3045,6 +3058,9 @@
         "rich-strip-group",
         "rich-strip-button",
         "rich-strip-underline",
+        "rich-strip-bold",
+        "rich-strip-italic",
+        "rich-strip-mini",
         "rich-strip-marker",
         "rich-strip-bar",
         "rich-strip-select",
@@ -3812,7 +3828,30 @@
       "part": "menus",
       "hooks": [
         "context-menu",
-        "menu-separator"
+        "menu-separator",
+        "menu-group"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "context-submenu",
+      "part": "menus",
+      "hooks": [
+        "context-submenu",
+        "menu-more"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "context-strip",
+      "part": "menus",
+      "hooks": [
+        "context-strip",
+        "format-bar"
       ],
       "states": [
         "rest"
@@ -5501,10 +5540,10 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1196,
+    "hooks": 1206,
     "state_names": 7,
-    "assigned_states": 639,
-    "components": 188,
+    "assigned_states": 641,
+    "components": 190,
     "preference_tokens": 123
   }
 }

@@ -8,7 +8,6 @@ import { cursorIsLiteral, mountMarkdownSurface, type EditorSlashHost, type Markd
 import { api } from "../../../../host/ipc";
 import { state } from "../../../../state/store";
 import { closeCommandPalette } from "../../../../ui/palette";
-import { closeContextMenu } from "../../../../ui/menu";
 import { declareClipboard } from "../../../../platform/clipboard";
 
 interface TestEditor {
@@ -546,31 +545,29 @@ describe("le azioni dell'editor della superficie", () => {
     ed.destroy();
   });
 
-  it("il tasto destro sulle proprietà rese offre di aggiungerne una e di svuotarle", () => {
+  it("il tasto destro sulle proprietà rese offre di aggiungerne una e di svuotarle, e soltanto quello", () => {
     const { ed, view } = editor();
     ed.buffer.setDoc("---\ntitle: x\n---\nTesto\n");
-    const items = (spot: Element) => {
-      const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 1, clientY: 1 });
-      spot.dispatchEvent(event);
-      expect(event.defaultPrevented).toBe(true);
-      return [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitem]")];
-    };
-    const widget = () => {
+    // CodeMirror toglie dal suo DOM ciò che non ha disegnato: un widget nuovo
+    // a ogni richiesta.
+    const point = vi.spyOn(document, "elementFromPoint").mockImplementation(() => {
       const spot = document.createElement("div");
       spot.className = "cm-fub-properties";
       view().contentDOM.append(spot);
       return spot;
+    });
+    const entry = (label: string) => {
+      const menu = ed.contextMenu!({ x: 1, y: 1 });
+      expect(menu?.target.kind).toBe("properties");
+      expect(menu?.clipboard).toBeUndefined();
+      const item = menu!.context!.find((each) => typeof each !== "string" && each.label === label);
+      return item as { run: () => void };
     };
-    const add = items(widget()).find((each) => each.textContent?.includes(t("editor.properties.add")));
-    expect(add).toBeDefined();
-    add!.click();
+    entry(t("editor.properties.add")).run();
     expect(ed.buffer.getDoc()).toBe("---\ntitle: x\n\n---\nTesto\n");
-    const clear = items(widget()).find((each) => each.textContent?.includes(t("editor.properties.clear")));
-    expect(clear).toBeDefined();
-    clear!.click();
+    entry(t("editor.properties.clear")).run();
     expect(ed.buffer.getDoc()).toBe("Testo\n");
-    closeContextMenu();
-    document.getElementById("context-menu")?.remove();
+    point.mockRestore();
     ed.destroy();
   });
 
@@ -604,27 +601,24 @@ describe("le azioni dell'editor della superficie", () => {
     ed.destroy();
   });
 
-  it("il tasto destro su un richiamo offre di eliminare la nota, altrove lascia il menu del sistema", () => {
+  it("il tasto destro su un richiamo offre di eliminare la nota, e porta lì il cursore", () => {
     const { ed, view } = editor();
     ed.buffer.setDoc("Uno[^1] due\n\n[^1]: prima\n");
-    const content = view().contentDOM;
     const spot = { pos: 4 };
     const original = view().posAtCoords.bind(view());
     view().posAtCoords = ((_coords: { x: number; y: number }) => spot.pos) as typeof original;
-    const plain = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 1, clientY: 1 });
+    const point = vi.spyOn(document, "elementFromPoint").mockReturnValue(view().contentDOM);
+    const deletes = () => ed.contextMenu!({ x: 1, y: 1 })!.context?.find((each) =>
+      typeof each !== "string" && each.label === t("editor.footnote.delete")) as { run: () => void } | undefined;
     spot.pos = 9;
-    content.dispatchEvent(plain);
-    expect(plain.defaultPrevented).toBe(false);
-    expect(document.querySelector("#context-menu [role=menuitem]")).toBeNull();
+    expect(deletes()).toBeUndefined();
+    expect(view().state.selection.main.head).toBe(9);
     spot.pos = 4;
-    const onReference = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 1, clientY: 1 });
-    content.dispatchEvent(onReference);
-    expect(onReference.defaultPrevented).toBe(true);
-    const item = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitem]")].find((each) =>
-      each.textContent?.includes(t("editor.footnote.delete")));
+    const item = deletes();
     expect(item).toBeDefined();
-    item!.click();
+    item!.run();
     expect(ed.buffer.getDoc()).toBe("Uno due\n");
+    point.mockRestore();
     ed.destroy();
   });
 

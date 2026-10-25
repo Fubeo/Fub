@@ -302,6 +302,8 @@ export function pdfIdWithoutFragment(id: string): string {
 
 export interface PdfView {
   readonly element: HTMLElement;
+  /// La pagina che si legge adesso.
+  page(): number;
   goToPage(page: number): Promise<void>;
   search(needle: string): Promise<PdfSearchHit[]>;
   destroy(): void;
@@ -676,6 +678,7 @@ export function mountPdfView(
 
   return {
     element: root,
+    page: () => page,
     goToPage: (n: number) => show(n),
     search: async (needle: string) => (engine && !destroyed ? engine.search(needle, 20) : []),
     destroy: () => life.close(),

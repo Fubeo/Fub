@@ -53,6 +53,8 @@ import { setTooltip } from "../ui/tooltip";
 import { tabIndexForKey } from "../ui/tab-keys";
 import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-bar";
 import { createSelectionBubble, type SelectionBubble } from "./selection-bubble";
+import { bubbleWanted, miniBarMode, mountMiniBar } from "./mini-bar";
+import { openEditorMenu, type EditorMenuHost } from "./editor-menu";
 import { platformSupports } from "../platform/capabilities";
 import { writeClipboardText } from "../platform/clipboard";
 import {
@@ -88,6 +90,7 @@ import {
   type Pane,
   type PaneElements,
   type PaneView,
+  runSlashCommand,
 } from "../state/document-controller";
 
 // Ciò che questo modulo esportava e che adesso è del controller: i percorsi
@@ -414,10 +417,30 @@ function createPane(id: string): PaneElements {
   const formatBar = createFormatBar(barHost);
   const selectionBubble: SelectionBubble = createSelectionBubble({
     ...barHost,
-    barOff: () => document.getElementById("app")?.hasAttribute("data-formatbar-off") === true,
+    wanted: () => bubbleWanted(miniBarMode(), document.getElementById("app")?.hasAttribute("data-formatbar-off") === true),
     active: () => root.contains(document.activeElement) || selectionBubble.element.contains(document.activeElement),
   });
   root.append(tabsShell, toolbarEl, formatBar.element, conflictEl, noticeEl, contentEl);
+  // Il tasto destro nell'editor: il menu che la superficie offre, composto
+  // nelle sezioni di tutti i menu dell'editor (`editor-menu.ts`). Un menu già
+  // aperto da un pezzo dell'editor (la griglia di una tabella, il disegno) ha
+  // già preso l'evento; Maiusc lascia il menu del sistema.
+  const selectedText = (): string => barHost.surface()?.selections?.()?.primary.text ?? "";
+  const menuHost: EditorMenuHost = {
+    surface: barHost.surface,
+    specs: () => state.commandSpecs,
+    commands: () => allCommands(),
+    selection: selectedText,
+    runSlash: (command) =>
+      runSlashCommand(contentEl, command, selectedText(), barHost.surface()?.editorActions?.selectionBox?.() ?? null),
+    runCommand: (command) => deps.runCommand(command),
+    focusPane: () => focusPane(id),
+    miniBar: () => mountMiniBar(barHost, state.commandSpecs, barHost.surface()?.miniBar?.() ?? null),
+  };
+  contentEl.addEventListener("contextmenu", (event) => {
+    if (event.defaultPrevented || event.shiftKey) return;
+    openEditorMenu(event, contentEl, menuHost);
+  });
   // Toccare un riquadro gli dà il fuoco. `mousedown` e non `click` perché il
   // fuoco deve essere già di questo riquadro quando l'editor riceve l'evento:
   // altrimenti il contesto pubblicato subito dopo sarebbe quello di prima.

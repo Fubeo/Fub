@@ -8,6 +8,8 @@ import { RICH_ACTIONS } from "./commands";
 import * as engineModule from "./engine";
 import { mountRichSurface, RICH_ACTION_IDS, RICH_CHORDS, RICH_PROFILE } from "./surface";
 import { t } from "../../i18n/strings";
+import { declareClipboard } from "../../platform/clipboard";
+import type { SurfaceMenuItem } from "../core/editor-menu";
 
 afterEach(() => document.body.replaceChildren());
 
@@ -130,6 +132,70 @@ describe("la superficie ricca", () => {
     expect(JSON.parse(change.text).blocks[0].role).toEqual({ kind: "heading", level: 1 });
     expect(surface.buffer!.getDoc()).toBe(change.text);
     expect(surface.editorActions!.state("markdown.heading.1")).toEqual({ enabled: true, active: true });
+    surface.destroy();
+  });
+
+  it("il menu del tasto destro dice cosa c'è al cursore, e in sola lettura lascia soltanto copiare", async () => {
+    const { surface } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    surface.buffer!.setDoc(JSON.stringify({
+      format: "fub-rich",
+      version: 1,
+      blocks: [{ t: "para", role: { kind: "body" }, k: "P", c: [{ t: "text", x: "il sito", k: "R", href: "https://esempio.it" }] }],
+    }));
+    const menu = surface.contextMenu!(null)!;
+    expect(menu.target.kind).toBe("link");
+    const ids = (menu.context ?? []).map((entry) => (typeof entry === "string" ? entry : entry.id));
+    expect(ids).toEqual(["rich.link.copy", "rich.link", "rich.link.remove"]);
+    expect(menu.clipboard!.offers).toMatchObject({ cut: false, copy: false, paste: true });
+    const underline = menu.format!.find((entry) => typeof entry !== "string" && entry.id === "rich.underline") as SurfaceMenuItem;
+    expect(underline).toMatchObject({ label: t("rich.underline"), chord: "Mod-u", enabled: true, checked: false });
+    expect(menu.miniBar).toBe(true);
+
+    surface.setReadOnly!(true);
+    const reading = surface.contextMenu!(null)!;
+    expect(reading.format).toEqual([]);
+    expect(reading.insert).toEqual([]);
+    expect(reading.clipboard!.offers.paste).toBe(false);
+    expect(reading.miniBar).toBe(false);
+    expect(surface.miniBar!()).toBeNull();
+    surface.destroy();
+  });
+
+  it("«Taglia» scrive negli appunti e soltanto dopo toglie la selezione", async () => {
+    const written: string[] = [];
+    const stop = declareClipboard(async (text) => void written.push(text));
+    const { surface, onChange } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    surface.buffer!.setDoc(SOURCE);
+    surface.contextMenu!(null)!.clipboard!.run("select-all");
+    const menu = surface.contextMenu!(null)!;
+    expect(menu.target.kind).toBe("selection");
+    menu.clipboard!.run("cut");
+    await flush();
+    expect(written).toEqual(["ciao"]);
+    expect(onChange).toHaveBeenCalled();
+    expect(surface.selectedText!()).toBeNull();
+    stop();
+    surface.destroy();
+  });
+
+  it("la mini-barra è la striscia ristretta, e smontata non lascia niente", async () => {
+    const { surface } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    surface.buffer!.setDoc(SOURCE);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const unmount = surface.miniBar!()!.mount(host);
+    const mini = host.querySelector(".rich-strip-mini")!;
+    expect(mini).not.toBeNull();
+    expect(mini.querySelector(".rich-strip-bold")).not.toBeNull();
+    expect(mini.querySelector(".rich-strip-font")).not.toBeNull();
+    expect(mini.querySelector("[data-action='rich.link']")).toBeNull();
+    // La striscia intera non ha l'enfasi: sta nella barra di formattazione.
+    expect(document.querySelectorAll(".rich-strip-bold")).toHaveLength(1);
+    unmount();
+    expect(host.childElementCount).toBe(0);
     surface.destroy();
   });
 });

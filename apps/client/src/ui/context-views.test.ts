@@ -77,7 +77,7 @@ describe("view sulla superficie context_menu", () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ label: "Fai", separator: true });
     expect(fake.render).toHaveBeenCalledWith("plug.menu", undefined, { target: "a.md" });
-    items[0]!.run();
+    items[0]!.run!();
     await vi.waitFor(() => expect(fake.intents).toHaveBeenCalledWith({ kind: "navigate", doc_id: "b.md" }));
     expect(fake.action).toHaveBeenCalledWith("plug.menu", null, { target: "a.md" }, "go", { x: 1 }, []);
   });

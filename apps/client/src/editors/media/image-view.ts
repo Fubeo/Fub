@@ -12,7 +12,7 @@
 import type { Lifetime } from "../../ui/lifetime";
 import { formatBytes, type ResourceDescriptor } from "./media-types";
 import { t } from "../../i18n/strings";
-import { mountZoomView, type Size } from "./zoom-view";
+import { mountZoomView, type Size, type ZoomView } from "./zoom-view";
 
 export interface DecodedImage {
   readonly blob: Blob;
@@ -193,6 +193,8 @@ function gifDimensions(bytes: Uint8Array): [number, number] | null {
 
 export interface ImageView {
   readonly element: HTMLElement;
+  /// Lo zoom, per il menu del tasto destro.
+  readonly zoom: ZoomView;
   destroy(): void;
 }
 
@@ -238,5 +240,5 @@ export function mountImageView(image: DecodedImage, alt: string, life: Lifetime)
     revoke();
     figure.remove();
   });
-  return { element: figure, destroy: () => life.close() };
+  return { element: figure, zoom: view, destroy: () => life.close() };
 }
