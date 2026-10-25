@@ -91,6 +91,9 @@ export function hooksOf(part: string): readonly string[] {
   return found ? [...new Set(found.components.flatMap((component) => component.hooks))] : [];
 }
 
+/** Gli hook che la pelle della casa non veste (`ShellComponent.unstyled`). */
+export const UNSTYLED: ReadonlySet<string> = new Set(PARTS.flatMap((part) => part.components.flatMap((component) => component.unstyled ?? [])));
+
 /** Lo strato di un hook in un componente: il suo, quello del componente o
  * quello del pezzo. */
 function layerIn(part: PartAnatomy, component: ShellComponent, hook: string): Layer {

@@ -26,7 +26,7 @@ import { focusZone } from "../../ui/a11y";
 import type { ReadOnlyReason } from "./projection";
 import type { DrawingImagePort } from "../canvas/surface";
 import { relativeRef } from "../../rules/mirrored";
-import { LOOKS, type Look } from "../../theme/content-look";
+import { adaptedPaper, shownLook, type Look } from "../../theme/content-look";
 import type { Paper } from "../../theme/adapt";
 
 export const RICH_OWNER = "fub.shell.rich";
@@ -295,7 +295,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
           display: {
             mode: () => mode,
             setMode: (next) => callbacks.requestMode?.(next),
-            look: shownLook,
+            look,
             setLook: (next) => callbacks.requestLook?.(next),
           },
         },
@@ -351,18 +351,10 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
 
   /// L'aspetto che il contenitore mostra adesso: lo decide la shell, con la
   /// classe `look-*`.
-  function shownLook(): Look | null {
-    return LOOKS.find((look) => parent.classList.contains(`look-${look}`)) ?? null;
-  }
+  const look = (): Look | null => shownLook(parent);
   /// La carta del tema, quando l'aspetto è adattato: i colori del file ci si
   /// portano sopra (`tints.ts`). Negli altri aspetti, nessuna.
-  function paper(): Paper | null {
-    if (shownLook() !== "adattato") return null;
-    const css = getComputedStyle(page);
-    const bg = css.getPropertyValue("--doc-bg").trim();
-    const ink = css.getPropertyValue("--doc-fg").trim();
-    return bg && ink ? { bg, ink } : null;
-  }
+  const paper = (): Paper | null => adaptedPaper(parent, page);
   // In Pagina la carta si adatta alla vista, larga quanto lei o intera; negli
   // altri modi è la carta vera.
   // Una vista più stretta di `NARROW_PX` tiene la carta larga quanto lei,

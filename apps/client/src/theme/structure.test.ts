@@ -197,11 +197,11 @@ describe("l'aspetto file: i segni sulla carta chiara", () => {
     }
   });
 
-  // Il documento dipinge la carta del file sulla sua scrivania: lì la carta
-  // passa ai ruoli `--paper-*`, e il testo non resta l'inchiostro chiaro del
-  // tema scuro su un foglio bianco.
-  it("la scrivania del documento ricollega la carta ai ruoli della carta del file", () => {
-    const desk = parseTokens(block(withoutComments, ".look-file .rich-desk"));
+  // Il documento dipinge la carta del file sulla sua scrivania, il foglio di
+  // calcolo nella sua vista: lì la carta passa ai ruoli `--paper-*`, e il
+  // testo non resta l'inchiostro chiaro del tema scuro su un foglio bianco.
+  it("la scrivania del documento e la vista del foglio ricollegano la carta ai ruoli della carta del file", () => {
+    const desk = parseTokens(block(withoutComments, ".look-file .rich-desk,\n.look-file .grid-viewport"));
     const paperOf: Readonly<Record<string, string>> = { "doc-fg": "paper-ink", "doc-heading": "paper-ink" };
     for (const name of ["doc-bg", "doc-fg", "doc-heading", "doc-link", "doc-rule", "doc-rule-soft", "doc-highlight"]) {
       const paper = paperOf[name] ?? name.replace(/^doc-/, "paper-");

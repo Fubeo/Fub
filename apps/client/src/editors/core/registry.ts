@@ -38,9 +38,9 @@ export interface SurfaceMode {
   /**
    * Who owns the look of the content in this mode, the default first: the
    * theme (`tema`), the file on its own paper (`file`), or the file's tints on
-   * the theme's paper (`adattato`). Missing means `tema`.
+   * the theme's paper (`adattato`). Every mode declares it.
    */
-  readonly looks?: readonly Look[];
+  readonly looks: readonly Look[];
 }
 
 export interface SurfaceMountContext {

@@ -11,11 +11,9 @@
 import type { Mark as PmMark, Node as PmNode } from "prosemirror-model";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
-import { adapter, type Adapter, type Paper, type Use } from "../../theme/adapt";
+import { adapter, AUTO_INK, textUse, type Adapter, type Paper } from "../../theme/adapt";
 import { COLOR_AUTO, HIGHLIGHT_DEFAULT, type Look, type Role } from "./projection";
 
-/// L'inchiostro per cui il file ha scelto «automatico»: il nero sul bianco.
-const AUTO_INK = "#000000";
 /// La misura del testo che non dice la sua, in punti.
 const BODY_PT = 11;
 
@@ -28,11 +26,6 @@ interface Tints {
 
 export const tintKey = new PluginKey<Tints>("fub-rich-tints");
 
-/// Grande, per la soglia del contrasto: da 18 pt, o da 14 pt in grassetto.
-function useOf(pt: number, bold: boolean): Exclude<Use, "fill"> {
-  return pt >= 18 || (bold && pt >= 14) ? "large" : "text";
-}
-
 function solid(color: string | undefined): color is string {
   return color !== undefined && color !== COLOR_AUTO;
 }
@@ -44,7 +37,7 @@ function tintBlock(block: PmNode, pos: number, paint: Adapter, docPt: number, ou
   const heading = role?.kind === "heading";
   const blockPt = look?.size ?? docPt;
   if (solid(look?.color)) {
-    out.push(Decoration.node(pos, pos + block.nodeSize, { class: "rich-tinted", style: `--file-color-a: ${paint.color(look.color, useOf(blockPt, heading))}` }));
+    out.push(Decoration.node(pos, pos + block.nodeSize, { class: "rich-tinted", style: `--file-color-a: ${paint.color(look.color, textUse(blockPt, heading))}` }));
   }
   block.forEach((child, offset) => {
     if (!child.isText) return;
@@ -54,7 +47,7 @@ function tintBlock(block: PmNode, pos: number, paint: Adapter, docPt: number, ou
     const highlight = markOf("h");
     if (!solid(color) && !highlight) return;
     const pt = (markOf("size")?.attrs.pt as number | undefined) ?? blockPt;
-    const use = useOf(pt, heading || markOf("b") !== undefined);
+    const use = textUse(pt, heading || markOf("b") !== undefined);
     const style: string[] = [];
     const attrs: Record<string, string> = { class: "rich-tint" };
     if (highlight) {

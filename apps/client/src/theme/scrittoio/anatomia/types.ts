@@ -56,6 +56,12 @@ export interface ShellComponent {
    * rispettare il sanitizer (`ContentGate`).
    */
   readonly gate?: { readonly scope: readonly string[] };
+  /**
+   * Gli hook di contenuto che la pelle della casa non veste: la superficie non
+   * offre l'aspetto `tema`, e nessuna pelle li veste. Restano pubblici perché
+   * il gate li riconosca in una pelle di terzi.
+   */
+  readonly unstyled?: readonly string[];
 }
 
 export interface PartAnatomy {

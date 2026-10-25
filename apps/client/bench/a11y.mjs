@@ -17,11 +17,13 @@ import { openStage, openPage, prepareScene, OUTPUT, WINDOW } from "./stage.mjs";
 const DEBT = [
   // Il rosso puro delle intestazioni della cartella d'esempio è del file, non
   // della pelle: una cartella di Excel si mostra coi colori che ha, e Fub non
-  // li riscrive. Si vede da quando la carta del foglio è misurabile (G1).
+  // li riscrive. Si vede da quando la carta del foglio è misurabile (G1). Nel
+  // suo aspetto predefinito, `file`, il foglio sta sulla carta bianca del file
+  // in tutte e due le luci (N8); l'aspetto adattato lo porterebbe a 4,5:1.
   ...["dark", "light"].map((light) => ({
     light,
     front: "#ff0000",
-    behind: light === "dark" ? "#151a21" : "#fcfdff",
+    behind: "#ffffff",
     voce: "G1",
     cosa: "Il colore del testo di una cella viene dal file. Si mostra com'è, anche quando non raggiunge 4,5:1 sulla carta.",
   })),

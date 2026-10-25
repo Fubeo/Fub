@@ -43,8 +43,18 @@ nel [contratto IPC](../reference/ipc-contract.md).
 Nei tre strati
 ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)) le
 intestazioni di righe e colonne e la barra sono cornice, la griglia e le celle
-contenuto. La modalità `sheet` non dichiara ancora i suoi aspetti, e vale
-`tema`: il testo automatico di una cella prende l'inchiostro del tema.
+contenuto. La modalità `sheet` offre `file`, il predefinito, e `adattato`. In
+`file` le celle stanno sulla carta chiara del file anche di notte, con i
+riempimenti e i colori del file; in `adattato` stanno sulla carta del tema, e
+riempimento e testo vi si portano in coppia con `theme/adapt.ts`. Il testo
+automatico è l'inchiostro della carta, i fili della griglia sono quelli della
+carta (`--doc-rule`). `editors/grid/paint.ts` mette i colori sulla cella come
+variabili di dato (`--file-fill`, `--file-color` e le versioni `-a`), e la
+regola dell'aspetto sta in `theme/scrittoio/structure.css`. Una pelle non veste
+le celle: il gate del contenuto rifiuta `.grid-cell` e `.no-gridlines`, e i
+segni (selezione, cella attiva, valore non ricalcolato, conflitto) si scrivono
+dalla riga, `.grid-row .selected`. Gli oggetti del foglio non sono ancora sotto
+il gate.
 
 ## La selezione e il riempimento
 

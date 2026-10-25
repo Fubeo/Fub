@@ -921,7 +921,7 @@ describe("GridEngine con una cartella di Excel", () => {
     expect(cell(0, 0)?.style.textAlign).toBe("center");
     expect(cell(1, 2)?.textContent).toBe("50.00%");
     expect(cell(3, 2)?.textContent).toBe("#DIV/0!");
-    expect(cell(3, 1)?.style.backgroundColor).not.toBe("");
+    expect(cell(3, 1)?.style.getPropertyValue("--file-fill")).not.toBe("");
     // La colonna D e la riga 6 sono nascoste nel file.
     expect(cell(0, 3)).toBeNull();
     expect(cell(5, 5)).toBeNull();

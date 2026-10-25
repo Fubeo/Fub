@@ -1471,6 +1471,39 @@ body {
 /* Il testo sta sopra la barra di dati, e si taglia dove la cella finisce.
    Un testo che passa nelle celle vuote accanto è largo quanto serve, fino
    al limite che la griglia gli dà. */
+/* Le celle sono contenuto con l'aspetto del file (`GRID_MODES`): in
+   `look-file` stanno sulla carta del file, chiara in ogni luce, con i
+   riempimenti e i colori del file; in `look-adattato` sulla carta del tema,
+   con i colori del file portati su di lei da `editors/grid/paint.ts`, fondo e
+   testo in coppia. Il testo automatico è l'inchiostro della carta, e i fili
+   della griglia sono quelli della carta. Le intestazioni di righe e colonne
+   sono cornice, e restano del tema. */
+.look-file .grid-viewport,
+.look-adattato .grid-viewport { background-color: var(--doc-bg, #ffffff); }
+.look-file .grid-cell,
+.look-adattato .grid-cell {
+  border-right: 1px solid var(--doc-rule, rgb(20 22 26 / 30%));
+  border-bottom: 1px solid var(--doc-rule, rgb(20 22 26 / 30%));
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+.look-file .grid-cell {
+  background-color: var(--file-fill, transparent);
+  color: var(--file-color, var(--doc-fg, #14161a));
+}
+.look-adattato .grid-cell {
+  background-color: var(--file-fill-a, transparent);
+  color: var(--file-color-a, var(--doc-fg, #14161a));
+}
+/* Un foglio senza griglia: i fili delle celle spariscono, i bordi del file
+   restano. */
+.look-file .no-gridlines .grid-cell,
+.look-adattato .no-gridlines .grid-cell { border-color: transparent; }
+/* Ciò che resta fermo ha la carta sotto, perché le celle che scorrono gli
+   passano dietro. */
+.look-file .grid-cell.frozen { background-color: var(--file-fill, var(--doc-bg, #ffffff)); }
+.look-adattato .grid-cell.frozen { background-color: var(--file-fill-a, var(--doc-bg, #ffffff)); }
+
 .grid-cell-text {
   position: relative;
   min-width: 0;
@@ -2282,8 +2315,10 @@ body {
    chiara in ogni luce: la scrivania ricollega la carta (`--doc-*`) ai ruoli
    `--paper-*`, con i valori della serie per un tema che non li dichiara. In
    `look-adattato` la carta resta quella del tema, e i colori del file li porta
-   sulla carta `editors/rich/tints.ts`. */
-.look-file .rich-desk {
+   sulla carta `editors/rich/tints.ts`. La griglia di una cartella di Excel fa
+   lo stesso, nella sua vista. */
+.look-file .rich-desk,
+.look-file .grid-viewport {
   --doc-bg: var(--paper-bg, #ffffff);
   --doc-fg: var(--paper-ink, #14161a);
   --doc-heading: var(--paper-ink, #14161a);

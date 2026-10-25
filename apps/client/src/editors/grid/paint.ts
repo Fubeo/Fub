@@ -5,6 +5,14 @@
 // in linea sull'elemento della cella e sul suo testo. Le misure seguono
 // quelle del file in proporzione: il carattere di serie di Excel (11 punti) è
 // quello dell'interfaccia, e il resto cresce o cala con lui.
+//
+// Il riempimento e il colore del testo sono contenuto con un aspetto: vanno
+// sull'elemento come variabili di dato (`--file-fill`, `--file-color`), e li
+// usa la regola di `look-file` in `structure.css`. Con una carta (l'aspetto
+// adattato) accanto c'è la loro versione portata su quella carta da
+// `theme/adapt.ts`, in coppia (`--file-fill-a`, `--file-color-a`), per la
+// regola di `look-adattato`. Il testo automatico non ha variabile: è
+// l'inchiostro della carta.
 import type {
   GridBorder,
   GridBorders,
@@ -14,6 +22,7 @@ import type {
   GridIcon,
 } from "../../host/contract";
 import { GRID_STACKED_ROTATION } from "../../host/contract";
+import { AUTO_INK, textUse, type Adapter } from "../../theme/adapt";
 
 /// La dimensione di serie del carattere di Excel, in punti.
 const DEFAULT_POINTS = 11;
@@ -58,13 +67,15 @@ function cssFont(font: string): string {
 }
 
 /// Disegna lo stile `style` sulla cella `element` e sul suo testo `text`.
-/// `fallbackFont` è la famiglia della griglia, per un carattere che manca.
+/// `fallbackFont` è la famiglia della griglia, per un carattere che manca;
+/// `paper` porta i colori del file sulla carta del tema, nell'aspetto adattato.
 export function paintCell(
   element: HTMLElement,
   text: HTMLElement,
   style: GridCellStyle | undefined,
   cell: GridBytesCell | undefined,
   fallbackFont: string,
+  paper: Adapter | null = null,
 ): void {
   const value = cell?.value ?? { kind: "blank" as const };
   const horizontal = horizontalOf(style, value);
@@ -72,8 +83,7 @@ export function paintCell(
   const vertical = style?.vertical ?? "bottom";
   element.style.alignContent = vertical === "top" ? "start" : vertical === "bottom" ? "end" : "center";
   if (!style) return;
-  if (style.fill_color) element.style.backgroundColor = style.fill_color;
-  if (style.text_color) element.style.color = style.text_color;
+  paintColors(element, style, paper);
   if (style.bold) element.style.fontWeight = "700";
   if (style.italic) element.style.fontStyle = "italic";
   if (style.font) element.style.fontFamily = fallbackFont ? `${cssFont(style.font)}, ${fallbackFont}` : cssFont(style.font);
@@ -110,6 +120,23 @@ export function paintCell(
     text.style.display = "inline-block";
     text.style.transform = `rotate(${-style.rotation}deg)`;
     text.style.justifySelf = "center";
+  }
+}
+
+/// Il riempimento e il testo del file, e la loro versione sulla carta.
+function paintColors(element: HTMLElement, style: GridCellStyle, paper: Adapter | null): void {
+  const { fill_color: fill, text_color: color } = style;
+  if (fill) element.style.setProperty("--file-fill", fill);
+  if (color) element.style.setProperty("--file-color", color);
+  if (!paper || (!fill && !color)) return;
+  const use = textUse(style.font_size ?? DEFAULT_POINTS, style.bold);
+  if (fill) {
+    // Prima il fondo rispetto alla carta, poi il testo rispetto al fondo nuovo.
+    const pair = paper.pair(fill, color ?? AUTO_INK, use);
+    element.style.setProperty("--file-fill-a", pair.fill);
+    element.style.setProperty("--file-color-a", pair.text);
+  } else if (color) {
+    element.style.setProperty("--file-color-a", paper.color(color, use));
   }
 }
 

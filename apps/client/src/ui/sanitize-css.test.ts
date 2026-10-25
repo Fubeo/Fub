@@ -282,4 +282,29 @@ describe("il gate del contenuto", () => {
   it("senza gate non cambia niente", () => {
     expect(codes(".rich-para { color: red; }", { ...skin, gate: undefined })).toEqual([]);
   });
+
+  // Il foglio di calcolo offre soltanto `file` e `adattato`: le celle non le
+  // veste nessuna pelle, e i segni si appoggiano alla riga, che è cornice.
+  it("nel foglio di calcolo le celle sono contenuto, e i segni passano dalla riga", () => {
+    const grid = { hooks: ["grid-cell", "no-gridlines"], scopes: ["grid-viewport"] };
+    const gridHooks = ["look-tema", "grid-viewport", "grid-row", "grid-cell", "grid-header", "no-gridlines", "selected", "active"];
+    const sheet: ThemeCssPolicy = { assetNamespace: "", allowedHooks: gridHooks, kind: "skin", gate: grid };
+    for (const css of [
+      ".grid-row .selected { box-shadow: inset 0 0 0 999px var(--accent-veil); }",
+      ".grid-row .active { box-shadow: inset 0 0 0 2px var(--accent); }",
+      ".grid-header.selected { color: var(--accent); }",
+      ".grid-viewport:focus-visible { box-shadow: none; }",
+    ]) {
+      expect(codes(css, sheet), css).toEqual([]);
+    }
+    for (const css of [
+      ".grid-cell { color: var(--doc-fg); }",
+      ".grid-cell.selected { box-shadow: none; }",
+      ".grid-viewport.no-gridlines .grid-header { border-color: transparent; }",
+      ".grid-cell { background: red !important; }",
+      ".grid-viewport span { color: red; }",
+    ]) {
+      expect(codes(css, sheet), css).toHaveLength(1);
+    }
+  });
 });

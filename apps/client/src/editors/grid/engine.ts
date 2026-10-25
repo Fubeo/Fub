@@ -31,6 +31,7 @@ import {
   recordGridJournal,
   type GridJournal,
 } from "../../state/grid-journal";
+import { adapter, type Adapter, type Paper } from "../../theme/adapt";
 import type { Theme } from "../../theme/theme";
 import type { PdfEngineLoader } from "../media/pdf-view";
 import { t, onLanguage, plural, resolvedLanguage, type Key } from "../../i18n/strings";
@@ -578,6 +579,8 @@ export class GridEngine {
   };
   /// La famiglia di caratteri della griglia, per un carattere del file che manca.
   #fallbackFont: string | null = null;
+  /// La carta su cui i colori del file si portano, nell'aspetto adattato.
+  #paper: Adapter | null = null;
   /// Le immagini lette, per impronta: restano fra una finestra e l'altra, e
   /// l'host non le rimanda.
   readonly #media = new GridMediaCache();
@@ -807,6 +810,15 @@ export class GridEngine {
     this.#formulaEditor.setTheme(theme);
     this.#cellEditor.setTheme(theme);
     this.#root.dataset.theme = theme;
+  }
+
+  /// La carta del tema nell'aspetto adattato, o `null` negli altri: le celle
+  /// si ridipingono soltanto se cambia.
+  setPaper(paper: Paper | null): void {
+    const next = paper ? adapter(paper) : null;
+    if (next === this.#paper) return;
+    this.#paper = next;
+    this.#render();
   }
 
   undo(): boolean {
@@ -2521,7 +2533,7 @@ export class GridEngine {
     const text = document.createElement("span");
     text.className = "grid-cell-text";
     text.textContent = workbookCell?.cell.input ?? "";
-    paintCell(element, text, style, bytes, this.#gridFont());
+    paintCell(element, text, style, bytes, this.#gridFont(), this.#paper);
     if (bytes?.data_bar) {
       const bar = document.createElement("div");
       bar.className = "grid-data-bar";

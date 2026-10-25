@@ -87,11 +87,12 @@ Un tema veste la cornice e i segni di Fub, e il contenuto soltanto dove la
 modalità della superficie ne dà l'autorità al tema: una regola sul contenuto si
 scrive sotto `.look-tema`. In `look-file` i valori del file e la sua carta
 vincono, e i segni prendono i ruoli facoltativi della carta chiara
-(`--paper-*`). Per le classi di contenuto del documento il sanitizer rifiuta
-una regola fuori da `.look-tema` (`content-look`), in una pelle, in un tema e
-in un frammento. Un tema `theme-2` può non dichiarare i ruoli facoltativi
-(`optional_roles` del contratto): la struttura ha un ripiego, e le coppie di
-contrasto di quei ruoli (`optional_pairs`) contano solo per chi li dichiara
+(`--paper-*`). Per le classi di contenuto del documento e del foglio di
+calcolo il sanitizer rifiuta una regola fuori da `.look-tema` (`content-look`),
+in una pelle, in un tema e in un frammento. Un tema `theme-2` può non
+dichiarare i ruoli facoltativi (`optional_roles` del contratto): la struttura
+ha un ripiego, e le coppie di contrasto di quei ruoli (`optional_pairs`)
+contano solo per chi li dichiara
 ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)).
 
 ## Runtime WASM

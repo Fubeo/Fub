@@ -6,7 +6,7 @@
 // rimasto indietro, e in quale pezzo.
 import { describe, expect, it } from "vitest";
 
-import { COMPONENTS, HOOK_LAYERS, HOOKS, hooksOf, LAYER_CONFLICTS, LAYERS, LOOK_HOOKS, PARTS, STATE_NAMES } from "./anatomia";
+import { COMPONENTS, CONTENT_GATE, HOOK_LAYERS, HOOKS, hooksOf, LAYER_CONFLICTS, LAYERS, LOOK_HOOKS, PARTS, STATE_NAMES, UNSTYLED } from "./anatomia";
 import { ORDER } from "./skin/order";
 
 const skinParts = import.meta.glob("./skin/*.css", {
@@ -51,9 +51,16 @@ describe("i pezzi della pelle e la loro anatomia", () => {
 
   for (const part of ORDER) {
     it(`${part}: classi del CSS e hook dichiarati coincidono`, () => {
-      expect(classesOf(partText(part))).toEqual([...hooksOf(part)].sort());
+      expect(classesOf(partText(part))).toEqual([...hooksOf(part)].filter((hook) => !UNSTYLED.has(hook)).sort());
     });
   }
+
+  it("un hook che la pelle non veste è contenuto sotto il gate", () => {
+    for (const hook of UNSTYLED) {
+      expect(HOOK_LAYERS[hook], hook).toBe("contenuto");
+      expect(CONTENT_GATE.hooks, hook).toContain(hook);
+    }
+  });
 
   it("l'unione degli hook non ha doppioni", () => {
     expect(new Set(HOOKS).size).toBe(HOOKS.length);

@@ -67,7 +67,7 @@ import { Queue } from "../ui/race";
 import { openWebPage } from "../ui/web-viewer";
 import { invalidateDocumentCaches, renameInDocumentCaches } from "./document-caches";
 import type { Theme } from "../theme/theme";
-import { contentLookPreference, markLook, resolveLook, UNDECLARED, type Look } from "../theme/content-look";
+import { contentLookPreference, markLook, resolveLook, type Look } from "../theme/content-look";
 import { api } from "../host/ipc";
 import { WITHOUT_PAGE, documentOutline, matchingDocuments, notesByName, renderPrint, resolvedReference, searchExpression, settings, vaultEntries, vaultTags } from "../host/query";
 import { theseDocuments, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
@@ -2237,7 +2237,7 @@ export function selectedLook(r: Pane | undefined): Look | null {
 export function setLook(next: Look): void {
   const r = panes.get(layout.focus);
   const mode = selectedMode(r);
-  if (!r?.surface || !mode || !(mode.looks ?? UNDECLARED).includes(next)) return;
+  if (!r?.surface || !mode || !mode.looks.includes(next)) return;
   setPaneLook(layout.focus, r.surface.family, next);
   markLook(r.editorEl, selectedLook(r));
 }

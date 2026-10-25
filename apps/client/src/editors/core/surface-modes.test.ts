@@ -4,7 +4,7 @@ import type { SurfaceMode } from "./registry";
 import { modeForContext, offersContext, offersReadingToggle, readingToggleTarget } from "./surface-modes";
 
 function mode(id: string, contextMode: PaneMode, presentation: SurfaceMode["presentation"] = "surface"): SurfaceMode {
-  return { id, label: () => id, presentation, contextMode };
+  return { id, label: () => id, presentation, contextMode, looks: ["tema"] };
 }
 
 // Le modalità che le superfici della shell dichiarano davvero, più una

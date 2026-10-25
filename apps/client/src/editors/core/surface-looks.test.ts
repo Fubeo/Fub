@@ -16,8 +16,9 @@ const sources = import.meta.glob(["../**/*.ts", "!../**/*.test.ts", "!../**/test
   eager: true,
 }) as Record<string, string>;
 
-/// Le modalità senza aspetto, come `file#id`: il foglio di calcolo aspetta N8.
-const UNDECLARED = new Set(["core/bootstrap.ts#sheet"]);
+/// Le modalità senza aspetto, come `file#id`: nessuna. `SurfaceMode.looks` è
+/// obbligatorio, e l'elenco resta vuoto.
+const UNDECLARED = new Set<string>();
 
 /// Una modalità come si scrive: `{ id: "…", label: …, contextMode: … }` su una
 /// riga, con o senza `looks`.

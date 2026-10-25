@@ -2,7 +2,7 @@
 
 Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.
 
-Il contratto richiede **154 ruoli**, espone **1307 hook**, **7 stati** (641 assegnazioni su 192 componenti) e lascia ridichiarare alla persona **161 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
+Il contratto richiede **154 ruoli**, espone **1307 hook**, **7 stati** (647 assegnazioni su 193 componenti) e lascia ridichiarare alla persona **161 token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in `contract.json`, generato dalle sorgenti della shell.
 
 Dichiara anche **38 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un file (`--paper-*`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (`optional_pairs`) si contano come le altre.
 
@@ -11,12 +11,12 @@ Dichiara anche **38 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla
 Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
 - **cornice** (1100 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
-- **segno** (72 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
-- **contenuto** (135 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
+- **segno** (76 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
+- **contenuto** (131 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 
 Una regola sul contenuto vale quando il tema lo veste: si scrive sotto `.look-tema`, come `.look-tema .rich-heading`.
 
-Dove una superficie offre anche `file` o `adattato` il cancello lo fa rispettare (`content_gate`): una regola che nomina una delle 11 classi di contenuto di `hooks` fuori da `.look-tema` è rifiutata (`content-look`), con `!important` o senza, e lo stesso un selettore di tipo o `*` dentro una cornice di `scopes` (`.rich-page`). Vale per i fogli, le pelli e i frammenti CSS.
+Dove una superficie offre anche `file` o `adattato` il cancello lo fa rispettare (`content_gate`): una regola che nomina una delle 13 classi di contenuto di `hooks` fuori da `.look-tema` è rifiutata (`content-look`), con `!important` o senza, e lo stesso un selettore di tipo o `*` dentro una cornice di `scopes` (`.grid-viewport`, `.rich-page`). Vale per i fogli, le pelli e i frammenti CSS.
 
 ## Struttura minima
 

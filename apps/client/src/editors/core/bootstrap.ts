@@ -26,7 +26,7 @@ import type { DrawingImagePort } from "../canvas/surface";
 import type { VaultFontPort } from "../spatial/fonts/vault";
 import type { SymbolLibraryPort } from "../spatial/tools/symbol-libraries";
 import type { GridDialog, SyntaxForm } from "../../host/contract";
-import type { Look } from "../../theme/content-look";
+import { adaptedPaper, type Look } from "../../theme/content-look";
 import {
   DocumentSurfaceRegistry,
   type EditorSurface,
@@ -112,8 +112,10 @@ const PLAIN_TEXT_MODES = [
   { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source", looks: ["tema"] },
 ] as const;
 
+/// Il foglio sta sulla carta del file, o con i colori del file adattati alla
+/// carta del tema; le intestazioni di righe e colonne sono cornice.
 const GRID_MODES = [
-  { id: "sheet", label: () => t("mode.sheet"), presentation: "surface", contextMode: "live_preview" },
+  { id: "sheet", label: () => t("mode.sheet"), presentation: "surface", contextMode: "live_preview", looks: ["file", "adattato"] },
 ] as const;
 
 /// La stampa in PDF di una cartella, con l'export dell'host (`xlsx.copy.pdf`):
@@ -344,6 +346,11 @@ export function createDocumentSurfaceRegistry(
             run: () => options.exportDocument!.run(context.documentId, GRID_EXPORTS[0]!),
           },
         });
+        // L'aspetto lo decide la shell con la classe `look-*` del contenitore:
+        // nell'adattato le celle portano i colori del file sulla carta del tema.
+        const looks = new MutationObserver(() => engine.setPaper(adaptedPaper(context.parent)));
+        looks.observe(context.parent, { attributes: true, attributeFilter: ["class"] });
+        engine.setPaper(adaptedPaper(context.parent));
         void import("../grid/ribbon/ribbon").then(
           ({ mountRibbon, mountGridDialogs }) => {
             if (destroyed) return;
@@ -377,11 +384,15 @@ export function createDocumentSurfaceRegistry(
           focus: () => engine.focus(),
           selectedText: () => engine.selectedText(),
           setReadOnly: (readOnly) => engine.setReadOnly(readOnly),
-          setTheme: (theme) => engine.setTheme(theme),
+          setTheme: (theme) => {
+            engine.setTheme(theme);
+            engine.setPaper(adaptedPaper(context.parent));
+          },
           contextMenu: (at) => gridContextMenu(menuHost, at),
           miniBar: () => gridMiniBar(menuHost),
           destroy: () => {
             destroyed = true;
+            looks.disconnect();
             ribbon?.destroy();
             ribbon = null;
             dialogs?.destroy();

@@ -368,7 +368,9 @@
 
 /* Una griglia è un dato: carattere dell'interfaccia, cifre in colonna, fili
    sottili. Le intestazioni stanno un tono sotto la carta; la cella attiva ha
-   l'anello d'accento, la selezione il suo velo. */
+   l'anello d'accento, la selezione il suo velo. Le celle sono contenuto con
+   l'aspetto del file: la loro carta, i fili e il testo li disegna
+   `structure.css`, e qui restano la cornice e i segni, presi dalla riga. */
 .grid-surface {
   color: var(--doc-fg);
   font-family: var(--font-ui);
@@ -398,7 +400,6 @@
 .grid-viewport:focus-visible {
   box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
 }
-.grid-cell,
 .grid-header,
 .grid-corner {
   border-right: 1px solid var(--border);
@@ -412,27 +413,13 @@
   font-variant-numeric: tabular-nums;
   font-weight: var(--weight-bold);
 }
-.grid-cell {
-  color: var(--doc-fg);
-  font-variant-numeric: tabular-nums;
-  line-height: var(--leading-tight);
-}
 /* Le intestazioni della selezione prendono l'accento, come nei fogli di
    calcolo. */
 .grid-header.selected {
   box-shadow: inset 0 0 0 999px var(--accent-veil);
   color: var(--accent);
 }
-/* Un foglio senza griglia: i fili delle celle spariscono, i bordi del file
-   restano. */
-.grid-viewport.no-gridlines .grid-cell {
-  border-color: transparent;
-}
-/* Ciò che resta fermo ha la carta del foglio sotto, perché le celle che
-   scorrono gli passano dietro; il filo del blocco è quello di Excel. */
-.grid-cell.frozen {
-  background-color: var(--sheet);
-}
+/* Il filo del blocco è quello di Excel. */
 .grid-freeze {
   background: var(--muted);
 }
@@ -537,10 +524,10 @@
 }
 /* Il velo è un'ombra interna e non un fondo: una cella può avere un colore
    suo, scritto dal foglio, e la selezione deve vedersi anche lì sopra. */
-.grid-cell.selected {
+.grid-row .selected {
   box-shadow: inset 0 0 0 999px var(--accent-veil);
 }
-.grid-cell.active {
+.grid-row .active {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 /* Il quadratino all'angolo della selezione, e il riempimento tirato a
@@ -561,11 +548,11 @@
    ancora il valore del file, che Fub non ricalcola: lo dice un filo a puntini
    sotto, che resta anche sul colore della cella. Una cella cambiata qui e
    anche nel file ha un contorno tratteggiato, dentro i suoi fili. */
-.grid-cell.stale {
+.grid-row .stale {
   text-decoration: underline dotted var(--muted);
   text-underline-offset: 3px;
 }
-.grid-cell.conflict {
+.grid-row .conflict {
   outline: 2px dashed var(--danger);
   outline-offset: -3px;
 }

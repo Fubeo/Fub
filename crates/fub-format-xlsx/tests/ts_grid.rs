@@ -98,8 +98,11 @@ fn drawing() -> Vec<(&'static str, &'static str, Vec<u8>)> {
 /// Una cartella di due fogli visibili e uno nascosto: valori di ogni tipo con i
 /// loro formati, l'aspetto, una matrice dinamica versata, una formula senza
 /// valore salvato, una cella unita, colonne e righe con le loro dimensioni, e
-/// un disegno con un'immagine, una casella di testo e un grafico.
+/// un disegno con un'immagine, una casella di testo e un grafico. Il
+/// riempimento della riga del totale è il giallo chiaro `#FFF2CC` di Excel, col
+/// testo automatico: la cella che l'aspetto adattato porta in coppia.
 fn workbook() -> Vec<u8> {
+    let styles = common::STYLES.replace("FFFFFF00", "FFFFF2CC");
     let conti = r#"<sheetFormatPr defaultRowHeight="15"/><cols><col min="1" max="1" width="20" customWidth="1"/><col min="4" max="4" width="9" hidden="1"/></cols><sheetData>
 <row r="1"><c r="A1" s="3" t="inlineStr"><is><t>Voce</t></is></c><c r="B1" s="3" t="inlineStr"><is><t>Importo</t></is></c><c r="C1" s="3" t="inlineStr"><is><t>Quota</t></is></c></row>
 <row r="2"><c r="A2" t="inlineStr"><is><t>Affitto</t></is></c><c r="B2"><v>800</v></c><c r="C2" s="1"><v>0.5</v></c><c r="E2" s="5"><v>45000</v></c></row>
@@ -127,6 +130,7 @@ fn workbook() -> Vec<u8> {
             ),
         )],
         parts: drawing(),
+        styles: &styles,
         ..Package::default()
     }
     .bytes()

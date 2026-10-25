@@ -26,6 +26,7 @@ function factory(family: SurfaceFamily, destroyed: string[], mountedProfiles: st
             label: () => "Edit",
             presentation: "surface",
             contextMode: "source",
+            looks: ["tema"],
           },
         ],
         setMode: vi.fn(),

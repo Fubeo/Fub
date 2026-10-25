@@ -12,6 +12,8 @@
 // classe `look-*`: una classe e non un attributo, perché i frammenti CSS
 // accettano soltanto selettori di classe.
 
+import type { Paper } from "./adapt";
+
 /// Gli aspetti di una modalità.
 export const LOOKS = ["tema", "file", "adattato"] as const;
 export type Look = (typeof LOOKS)[number];
@@ -22,9 +24,9 @@ export type Look = (typeof LOOKS)[number];
 export const CONTENT_LOOK_CHOICES = ["auto", "file", "adattato"] as const;
 export type ContentLookChoice = (typeof CONTENT_LOOK_CHOICES)[number];
 
-/// Ciò che vale quando una modalità non dichiara niente: il tema, cioè ciò che
-/// succedeva prima che gli aspetti esistessero.
-export const UNDECLARED: readonly Look[] = ["tema"];
+/// Ciò che vale senza una modalità, o con un elenco vuoto: il tema, cioè ciò
+/// che succedeva prima che gli aspetti esistessero.
+const UNDECLARED: readonly Look[] = ["tema"];
 
 export function isLook(value: unknown): value is Look {
   return (LOOKS as readonly unknown[]).includes(value);
@@ -63,6 +65,22 @@ export function lookClass(look: Look): `look-${Look}` {
 /// Mette su `root` la classe dell'aspetto, e toglie le altre.
 export function markLook(root: HTMLElement, look: Look | null): void {
   for (const each of LOOKS) root.classList.toggle(lookClass(each), each === look);
+}
+
+/// L'aspetto che `root` mostra, dalla sua classe; `null` senza.
+export function shownLook(root: HTMLElement): Look | null {
+  return LOOKS.find((look) => root.classList.contains(lookClass(look))) ?? null;
+}
+
+/// La carta del tema su cui portare i colori del file (`adapt.ts`), quando
+/// `root` mostra l'aspetto adattato: il fondo e l'inchiostro della carta
+/// (`--doc-bg`, `--doc-fg`) come li vede `at`. Negli altri aspetti, nessuna.
+export function adaptedPaper(root: HTMLElement, at: Element = root): Paper | null {
+  if (shownLook(root) !== "adattato") return null;
+  const css = getComputedStyle(at);
+  const bg = css.getPropertyValue("--doc-bg").trim();
+  const ink = css.getPropertyValue("--doc-fg").trim();
+  return bg && ink ? { bg, ink } : null;
 }
 
 let preference: ContentLookChoice = "auto";

@@ -40,6 +40,15 @@ export const LARGE_MINIMUM = 3;
 /// Che cosa sta portando: il testo (normale o grande) o un fondo.
 export type Use = "text" | "large" | "fill";
 
+/// L'inchiostro del testo per cui il file ha scelto «automatico»: il nero sul
+/// bianco.
+export const AUTO_INK = "#000000";
+
+/// Grande, per la soglia del contrasto: da 18 pt, o da 14 pt in grassetto.
+export function textUse(pt: number, bold: boolean): Exclude<Use, "fill"> {
+  return pt >= 18 || (bold && pt >= 14) ? "large" : "text";
+}
+
 export type Adapter = {
   /// Il colore di un testo, o di un fondo, sulla carta.
   readonly color: (color: string, use?: Use) => string;
