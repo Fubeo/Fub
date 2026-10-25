@@ -30,6 +30,7 @@ import { SHEETS } from "./anatomia/sheets";
 import { TREE } from "./anatomia/tree";
 import { WELCOME } from "./anatomia/welcome";
 import type { Layer, PartAnatomy, ShellComponent } from "./anatomia/types";
+import type { ContentGate } from "../../ui/sanitize-css";
 
 export { LAYERS, STATE_NAMES } from "./anatomia/types";
 export type { ComponentState, Layer, PartAnatomy, ShellComponent, StateName } from "./anatomia/types";
@@ -125,4 +126,23 @@ export const HOOK_LAYERS: Readonly<Record<string, Layer>> = (() => {
   }
   for (const hook of LOOK_HOOKS) layers[hook] ??= "contenuto";
   return layers;
+})();
+
+/**
+ * Il gate del contenuto: le classi di contenuto dei componenti che offrono
+ * `file` o `adattato`, e le cornici che lo contengono. In quegli aspetti il
+ * contenuto lo disegna la meccanica di `structure.css`, e una pelle lo veste
+ * soltanto sotto `.look-tema`.
+ */
+export const CONTENT_GATE: ContentGate = (() => {
+  const hooks = new Set<string>();
+  const scopes = new Set<string>();
+  for (const part of PARTS) {
+    for (const component of part.components) {
+      if (!component.gate) continue;
+      for (const hook of component.hooks) if (layerIn(part, component, hook) === "contenuto") hooks.add(hook);
+      for (const hook of component.gate.scope) scopes.add(hook);
+    }
+  }
+  return { hooks: [...hooks], scopes: [...scopes] };
 })();

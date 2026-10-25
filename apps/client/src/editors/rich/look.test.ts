@@ -71,11 +71,20 @@ describe("l'aspetto del carattere", () => {
     const e = engine(blocks);
     const span = document.querySelector("[data-rich-font]") as HTMLElement;
     expect(span.textContent).toBe("due");
-    expect(span.style.fontFamily).toContain("Georgia");
-    // La misura in proporzione al paragrafo (`calc` con `var`) la prova il
-    // banco: happy-dom non la tiene.
-    expect(document.querySelector("[data-rich-size]")?.getAttribute("data-rich-size")).toBe("18");
-    expect((document.querySelector("mark") as HTMLElement).style.backgroundColor).not.toBe("");
+    // I valori del file vanno sull'elemento come dati, non come stile: li
+    // disegna la carta di Pagina, e in Scrittura nessuna regola li legge.
+    expect(span.style.fontFamily).toBe("");
+    expect(span.style.getPropertyValue("--file-font")).toContain("Georgia");
+    const sized = document.querySelector<HTMLElement>("[data-rich-size]")!;
+    expect(sized.getAttribute("data-rich-size")).toBe("18");
+    expect(sized.style.getPropertyValue("--file-size")).toBe("18pt");
+    expect(sized.style.fontSize).toBe("");
+    const colored = document.querySelector<HTMLElement>("[data-rich-color]")!;
+    expect(colored.style.getPropertyValue("--file-color")).toBe("#c00000");
+    expect(colored.style.color).toBe("");
+    const mark = document.querySelector("mark") as HTMLElement;
+    expect(mark.style.getPropertyValue("--file-hl")).toBe("#00ff00");
+    expect(mark.style.backgroundColor).toBe("");
     expect(document.querySelector("[data-rich-caps]")).not.toBeNull();
     select(e, "due");
     expect(e.look()).toEqual({ font: "Georgia", size: 18, color: "#c00000", hl: "#00ff00" });

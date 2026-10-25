@@ -7071,7 +7071,11 @@ kbd,
   line-height: var(--leading-relaxed);
   caret-color: var(--accent);
 }
-.rich-para {
+/* Il contenuto lo veste il tema soltanto in Scrittura (`look-tema`): in
+   Pagina e in Lettura lo disegna il file, con la meccanica di
+   `structure.css`, e il sanitizer rifiuta una regola sul contenuto fuori da
+   lì. */
+.look-tema .rich-para {
   margin-block: 0 var(--space-4);
 }
 /* I titoli nella misura del tema valgono quando il tema veste il contenuto
@@ -7111,69 +7115,70 @@ kbd,
     padding: var(--space-8) var(--space-7) var(--space-10);
   }
 }
-.rich-content > .rich-para:first-child {
+.look-tema .rich-content > .rich-para:first-child {
   margin-top: 0;
 }
-.rich-list {
+.look-tema .rich-list {
   margin-block: 0 var(--space-2);
 }
-.rich-list::before {
+.look-tema .rich-list::before {
   color: var(--muted);
 }
-.rich-quote {
+.look-tema .rich-quote {
   border-left: 3px solid var(--doc-rule);
   padding-left: var(--space-5);
   color: var(--muted);
 }
-.rich-content mark {
+.look-tema .rich-content mark {
   background: var(--doc-highlight);
   color: inherit;
 }
-.rich-link {
+.look-tema .rich-link {
   color: var(--doc-link);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 /* La fine di una sezione: un filo doppio a tutta colonna, che si seleziona
    come un oggetto e non si cancella per sbaglio. */
-.rich-section {
+.look-tema .rich-section {
   margin-block: var(--space-6);
   border-top: 3px double var(--doc-rule);
 }
-.rich-break-page {
+.look-tema .rich-break-page {
   border-top: 1px dashed var(--doc-rule);
 }
-.rich-break-column {
+.look-tema .rich-break-column {
   border-top: 1px dotted var(--doc-rule-soft);
 }
-.rich-break-page[data-name]::after,
-.rich-break-column[data-name]::after,
-.rich-section[data-name]::after {
+.look-tema .rich-break-page[data-name]::after,
+.look-tema .rich-break-column[data-name]::after,
+.look-tema .rich-section[data-name]::after {
   background: var(--doc-bg);
   color: var(--doc-gutter-fg);
   font-family: var(--font-ui);
   font-size: var(--text-xs);
   line-height: 1.5;
 }
-.rich-table {
+.look-tema .rich-table {
   margin-block: 0 var(--space-4);
 }
-.rich-cell {
+.look-tema .rich-cell {
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--doc-rule-soft);
 }
-.rich-cell > .rich-para:last-child {
+.look-tema .rich-cell > .rich-para:last-child {
   margin-bottom: 0;
 }
 /* Un oggetto del documento (un'immagine, un campo, una nota) è una casella:
-   la sua misura viene dal documento, il suo contenuto resta nel file. */
+   la sua misura viene dal documento, il suo contenuto resta nel file. La
+   casella è un segno di Fub, e prende i colori della carta su cui sta. */
 .rich-atom {
   min-width: 1.2em;
   padding: 0 var(--space-2);
   border: 1px solid var(--doc-rule-soft);
   border-radius: var(--radius-xs);
   background: var(--doc-fill);
-  color: var(--muted);
+  color: var(--doc-gutter-fg);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
   line-height: 1.6;
@@ -7187,13 +7192,13 @@ kbd,
   line-height: var(--leading-tight);
 }
 .rich-atom-glyph {
-  color: var(--muted);
+  color: var(--doc-gutter-fg);
 }
 .rich-atom-equation {
   gap: var(--space-1);
 }
 .rich-atom-name {
-  color: var(--muted);
+  color: var(--doc-gutter-fg);
   font-size: var(--text-xs);
 }
 .rich-atom-field {
@@ -7215,8 +7220,8 @@ kbd,
   border: none;
   background: transparent;
 }
-.rich-content .ProseMirror-selectednode {
-  outline: 2px solid var(--accent);
+.rich-page .ProseMirror-selectednode {
+  outline: 2px solid var(--doc-caret);
   outline-offset: 1px;
 }
 /* I segni di Fub sul documento hanno i colori della carta su cui stanno

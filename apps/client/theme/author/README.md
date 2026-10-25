@@ -11,10 +11,12 @@ Dichiara anche **26 ruoli facoltativi** (`optional_roles`): i segni di Fub sulla
 Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:
 
 - **cornice** (1082 hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.
-- **segno** (42 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
-- **contenuto** (147 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
+- **segno** (54 hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (`--doc-*`).
+- **contenuto** (135 hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: `look-tema`, `look-file` o `look-adattato`.
 
 Una regola sul contenuto vale quando il tema lo veste: si scrive sotto `.look-tema`, come `.look-tema .rich-heading`.
+
+Dove una superficie offre anche `file` o `adattato` il cancello lo fa rispettare (`content_gate`): una regola che nomina una delle 11 classi di contenuto di `hooks` fuori da `.look-tema` è rifiutata (`content-look`), con `!important` o senza, e lo stesso un selettore di tipo o `*` dentro una cornice di `scopes` (`.rich-page`). Vale per i fogli, le pelli e i frammenti CSS.
 
 ## Struttura minima
 

@@ -120,6 +120,7 @@ try {
     required_roles: roles,
     hooks: [...anatomy.HOOKS],
     layers: Object.fromEntries(anatomy.HOOKS.map((hook) => [hook, anatomy.HOOK_LAYERS[hook]])),
+    content_gate: anatomy.CONTENT_GATE,
     states: [...anatomy.STATE_NAMES],
     components: anatomy.COMPONENTS.map((component) => ({
       name: component.name,
@@ -164,6 +165,8 @@ try {
     `- **contenuto** (${layerCount("contenuto")} hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: \`look-tema\`, \`look-file\` o \`look-adattato\`.`,
     "",
     "Una regola sul contenuto vale quando il tema lo veste: si scrive sotto `.look-tema`, come `.look-tema .rich-heading`.",
+    "",
+    `Dove una superficie offre anche \`file\` o \`adattato\` il cancello lo fa rispettare (\`content_gate\`): una regola che nomina una delle ${anatomy.CONTENT_GATE.hooks.length} classi di contenuto di \`hooks\` fuori da \`.look-tema\` è rifiutata (\`content-look\`), con \`!important\` o senza, e lo stesso un selettore di tipo o \`*\` dentro una cornice di \`scopes\` (${anatomy.CONTENT_GATE.scopes.map((hook) => `\`.${hook}\``).join(", ")}). Vale per i fogli, le pelli e i frammenti CSS.`,
     "",
     "## Struttura minima",
     "",

@@ -191,10 +191,25 @@ describe("l'aspetto file: i segni sulla carta chiara", () => {
     }
   });
 
-  it("la carta stessa non si ricollega ancora: la dipinge il documento", () => {
+  it("la carta stessa non si ricollega sulla radice: la ricollega la superficie che la dipinge", () => {
     for (const name of ["doc-bg", "doc-fg", "doc-rule", "doc-rule-soft", "doc-highlight", "doc-link", "doc-heading"]) {
       expect(rule[name], name).toBeUndefined();
     }
+  });
+
+  // Il documento dipinge la carta del file sulla sua scrivania: lì la carta
+  // passa ai ruoli `--paper-*`, e il testo non resta l'inchiostro chiaro del
+  // tema scuro su un foglio bianco.
+  it("la scrivania del documento ricollega la carta ai ruoli della carta del file", () => {
+    const desk = parseTokens(block(withoutComments, ".look-file .rich-desk"));
+    const paperOf: Readonly<Record<string, string>> = { "doc-fg": "paper-ink", "doc-heading": "paper-ink" };
+    for (const name of ["doc-bg", "doc-fg", "doc-heading", "doc-link", "doc-rule", "doc-rule-soft", "doc-highlight"]) {
+      const paper = paperOf[name] ?? name.replace(/^doc-/, "paper-");
+      expect(desk[name], name).toBe(`var(--${paper}, ${LIGHT[paper]})`);
+    }
+    // Il testo dei segni è l'inchiostro verso la carta: niente di nuovo da
+    // dichiarare in un tema.
+    expect(desk["doc-gutter-fg"]).toMatch(/^color-mix\(in oklab, var\(--paper-ink, [^)]+\) \d+%, var\(--paper-bg, [^)]+\)\)$/);
   });
 });
 

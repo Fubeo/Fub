@@ -129,6 +129,18 @@ describe("un rifiuto nomina la ragione, lascia il tema precedente e si dice come
     expect(troubles[0].reasons.join("\n")).toContain("hook .ui-estraneo non dichiarato");
   });
 
+  it("una pelle che veste il contenuto del documento fuori da .look-tema rifiuta, e il tema precedente resta", () => {
+    const troubles: ThemeTrouble[] = [];
+    const result = mountThemeBundle(bundle(sheetLight, `${skin}\n.rich-heading { font-family: serif; }`), "light", (trouble) =>
+      troubles.push(trouble),
+    );
+
+    expect(result.mounted).toBe(false);
+    expect(troubles[0].reasons.join("\n")).toContain("pelle: content-look");
+    expect(troubles[0].reasons.join("\n")).toContain(".look-tema .rich-heading");
+    expect(document.head.querySelector('style[data-fub="pelle"]')).toBeNull();
+  });
+
   it("un contrasto caduto sotto la soglia AA rifiuta nominando la coppia", () => {
     // `--muted` torna quasi del colore del fondo: la coppia `--muted` su
     // `--bg` (il corpo dell'app) scende sotto 4.5:1 e il cancello lo dice.

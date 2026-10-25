@@ -24,6 +24,7 @@ import type { ReadOnlyReason } from "./projection";
 import type { DrawingImagePort } from "../canvas/surface";
 import { relativeRef } from "../../rules/mirrored";
 import { LOOKS, type Look } from "../../theme/content-look";
+import type { Paper } from "../../theme/adapt";
 
 export const RICH_OWNER = "fub.shell.rich";
 export const RICH_FAMILY = "rich";
@@ -279,6 +280,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         notify();
       });
       engine.setReadOnly(locked());
+      engine.setPaper(paper());
       ribbonHost.hidden = mode === RICH_READING_MODE;
       if (pending !== null) engine.setDoc(pending);
       pending = null;
@@ -310,8 +312,20 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   function shownLook(): Look | null {
     return LOOKS.find((look) => parent.classList.contains(`look-${look}`)) ?? null;
   }
-  // La barra dice l'aspetto: lo segue quando la shell lo cambia.
-  const looks = new MutationObserver(() => ribbon?.refresh());
+  /// La carta del tema, quando l'aspetto è adattato: i colori del file ci si
+  /// portano sopra (`tints.ts`). Negli altri aspetti, nessuna.
+  function paper(): Paper | null {
+    if (shownLook() !== "adattato") return null;
+    const css = getComputedStyle(page);
+    const bg = css.getPropertyValue("--doc-bg").trim();
+    const ink = css.getPropertyValue("--doc-fg").trim();
+    return bg && ink ? { bg, ink } : null;
+  }
+  // La barra dice l'aspetto, e la carta lo segue, quando la shell lo cambia.
+  const looks = new MutationObserver(() => {
+    engine?.setPaper(paper());
+    ribbon?.refresh();
+  });
   looks.observe(parent, { attributes: true, attributeFilter: ["class"] });
 
   // Esc, in Lettura, torna a Pagina.
@@ -564,6 +578,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     },
     setTheme(theme) {
       root.dataset.theme = theme;
+      engine?.setPaper(paper());
     },
     editorActions,
     contextMenu,

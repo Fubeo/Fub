@@ -98,19 +98,33 @@ function jsonAttr<T>(dom: HTMLElement, name: string): T | null {
 
 /// Lo stile in linea di una disposizione: lunghezze in punti, un multiplo
 /// d'interlinea rispetto alla riga singola del tema.
+/// La forma di un paragrafo. I rientri sono struttura, e valgono in ogni
+/// aspetto; la spaziatura e l'interlinea sono del file, e vanno come variabili
+/// di dato (`--file-*`), che usano soltanto Pagina e Lettura.
 export function layoutStyle(layout: Layout): string[] {
   const style: string[] = [];
   if (layout.left !== undefined) style.push(`margin-left: ${layout.left}pt`);
   if (layout.right !== undefined) style.push(`margin-right: ${layout.right}pt`);
   if (layout.first !== undefined) style.push(`text-indent: ${layout.first}pt`);
-  if (layout.before !== undefined) style.push(`margin-top: ${layout.before}pt`);
-  if (layout.after !== undefined) style.push(`margin-bottom: ${layout.after}pt`);
+  if (layout.before !== undefined) style.push(`--file-before: ${layout.before}pt`);
+  if (layout.after !== undefined) style.push(`--file-after: ${layout.after}pt`);
   const line = layout.line;
   if (line) {
-    if ("multiple" in line) style.push(`line-height: calc(1.2 * ${line.multiple})`);
-    else if ("at_least" in line) style.push(`line-height: max(1.2em, ${line.at_least}pt)`);
-    else style.push(`line-height: ${line.exactly}pt`);
+    if ("multiple" in line) style.push(`--file-line: calc(1.2 * ${line.multiple})`);
+    else if ("at_least" in line) style.push(`--file-line: max(1.2em, ${line.at_least}pt)`);
+    else style.push(`--file-line: ${line.exactly}pt`);
   }
+  return style;
+}
+
+/// I valori del file per un tratto o un paragrafo, come variabili di dato:
+/// li usano Pagina e Lettura (`structure.css`), in Scrittura nessuna regola li
+/// legge, e cambiare modalità non ridisegna il documento.
+export function lookVariables(look: Look): string[] {
+  const style: string[] = [];
+  if (look.font !== undefined) style.push(`--file-font: ${fontStack(look.font)}`);
+  if (look.size !== undefined) style.push(`--file-size: ${look.size}pt`);
+  if (look.color !== undefined && look.color !== COLOR_AUTO) style.push(`--file-color: ${look.color}`);
   return style;
 }
 
@@ -186,19 +200,13 @@ const para: NodeSpec = {
       attrs["data-rich-p"] = JSON.stringify(layout);
       style.push(...layoutStyle(layout));
     }
-    // La dimensione del paragrafo non si disegna (la dà il tema), ma un tratto
-    // di altra dimensione la misura rispetto a questa. Un paragrafo di corpo
-    // con uno stile suo la disegna, rispetto a quella del documento.
+    // L'aspetto risolto del paragrafo, come dato: lo disegna la carta.
     const base = node.attrs.f as Look | null;
     const named = node.attrs.s as string | null;
     if (named) attrs["data-rich-s"] = named;
     if (base) {
       attrs["data-rich-f"] = JSON.stringify(base);
-      if (base.size !== undefined) style.push(`--rich-base-pt: ${base.size}`);
-      if (named && role.kind === "body") {
-        if (base.font !== undefined) style.push(`font-family: ${fontStack(base.font)}`);
-        if (base.size !== undefined) style.push(`font-size: calc(1em * ${base.size} / var(--rich-doc-pt, ${base.size}))`);
-      }
+      style.push(...lookVariables(base));
     }
     // Il segno di fine revisionato lo disegna una decorazione (`review.ts`).
     if (node.attrs.ins) attrs["data-rich-ins"] = JSON.stringify(node.attrs.ins);
@@ -522,7 +530,7 @@ const marks: Record<string, MarkSpec> = {
     parseDOM: [{ tag: "mark", getAttrs: (dom) => ({ color: colorValue((dom as HTMLElement).getAttribute("data-rich-hl")) }) }],
     toDOM: (mark) => {
       const color = mark.attrs.color as string | null;
-      return color ? ["mark", { "data-rich-hl": color, style: `background-color: ${color}` }, 0] : ["mark", 0];
+      return ["mark", { ...(color ? { "data-rich-hl": color } : {}), style: `--file-hl: ${color ?? HIGHLIGHT_DEFAULT}` }, 0];
     },
   },
   sup: { excludes: "sup sub", parseDOM: [{ tag: "sup" }], toDOM: () => ["sup", 0] },
@@ -541,7 +549,7 @@ const marks: Record<string, MarkSpec> = {
     parseDOM: [{ tag: "span[data-rich-font]", getAttrs: (dom) => ({ family: (dom as HTMLElement).getAttribute("data-rich-font") }) }],
     toDOM: (mark) => {
       const family = mark.attrs.family as string;
-      return ["span", { "data-rich-font": family, style: `font-family: ${fontStack(family)}` }, 0];
+      return ["span", { "data-rich-font": family, style: `--file-font: ${fontStack(family)}` }, 0];
     },
   },
   size: {
@@ -555,10 +563,9 @@ const marks: Record<string, MarkSpec> = {
         },
       },
     ],
-    // In proporzione al paragrafo, che il tema disegna alla sua misura.
     toDOM: (mark) => {
       const pt = mark.attrs.pt as number;
-      return ["span", { "data-rich-size": String(pt), style: `font-size: calc(1em * ${pt} / var(--rich-base-pt, 11))` }, 0];
+      return ["span", { "data-rich-size": String(pt), style: `--file-size: ${pt}pt` }, 0];
     },
   },
   color: {
@@ -567,7 +574,7 @@ const marks: Record<string, MarkSpec> = {
     toDOM: (mark) => {
       const value = mark.attrs.value as string;
       const attrs: Record<string, string> = { "data-rich-color": value };
-      if (value !== COLOR_AUTO) attrs.style = `color: ${value}`;
+      if (value !== COLOR_AUTO) attrs.style = `--file-color: ${value}`;
       return ["span", attrs, 0];
     },
   },

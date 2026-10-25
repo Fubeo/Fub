@@ -64,8 +64,12 @@ describe("il paragrafo", () => {
     expect(one!.style.textAlign).toBe("center");
     expect(one!.style.marginLeft).toBe("36pt");
     expect(one!.style.textIndent).toBe("-18pt");
-    // Uno stile del documento si disegna col suo carattere, rispetto al testo.
-    expect(two!.style.fontFamily).toContain("Aptos");
+    // Lo spazio e l'interlinea del file sono dati, come il carattere.
+    expect(one!.style.getPropertyValue("--file-line")).toBe("calc(1.2 * 1.5)");
+    expect(one!.style.lineHeight).toBe("");
+    expect(two!.style.getPropertyValue("--file-font")).toContain("Aptos");
+    expect(two!.style.getPropertyValue("--file-size")).toBe("14pt");
+    expect(two!.style.fontFamily).toBe("");
     expect(two!.dataset.richS).toBe("Subtitle");
   });
 

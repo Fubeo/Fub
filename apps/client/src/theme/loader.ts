@@ -36,6 +36,7 @@ import {
   themeAssetReferences,
   themeAssetUrls,
   themeCssViolations,
+  type ContentGate,
   type ThemeCssVocabulary,
 } from "../ui/sanitize-css";
 import { contrast } from "./contrast";
@@ -68,6 +69,9 @@ export interface ThemeProfile {
   readonly preferenceTokens: readonly string[];
   /** Assente = il vocabolario comune, quello dei frammenti CSS. */
   readonly vocabulary?: ThemeCssVocabulary;
+  /** Le classi di contenuto che una pelle veste soltanto sotto `.look-tema`:
+   * valgono per i fogli, le pelli e i frammenti. */
+  readonly gate?: ContentGate;
 }
 
 
@@ -302,6 +306,7 @@ export function validateThemeBundle(bundle: ThemeBundle, light: ThemeLight): str
     allowedHooks: profile.hooks,
     requiredRoles: profile.requiredRoles,
     vocabulary: profile.vocabulary,
+    gate: profile.gate,
   };
   if (typeof bundle.sheet === "string") {
     for (const violation of themeCssViolations(bundle.sheet, policy)) {

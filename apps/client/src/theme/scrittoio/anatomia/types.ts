@@ -49,6 +49,13 @@ export interface ShellComponent {
   readonly layer?: Layer;
   /** Gli hook di un altro strato da quello del componente. */
   readonly layers?: Readonly<Record<string, Layer>>;
+  /**
+   * Il contenuto offre anche l'aspetto `file` o `adattato`: le sue classi di
+   * contenuto valgono soltanto sotto `.look-tema`, e lo stesso un selettore di
+   * tipo dentro una delle cornici di `scope`, che lo contengono. Lo fa
+   * rispettare il sanitizer (`ContentGate`).
+   */
+  readonly gate?: { readonly scope: readonly string[] };
 }
 
 export interface PartAnatomy {

@@ -45,8 +45,10 @@ import { richProof } from "./proof";
 import { commentPlugin, commentsOf } from "./comments";
 import { notePlugin } from "./notes";
 import { sectionPlugin } from "./breaks";
+import { setTint, tintPlugin } from "./tints";
+import type { Paper } from "../../theme/adapt";
 import { findPlugin, revisionPlugin, showMatches, type FindQuery } from "./review";
-import { BlockWriter, richSchema, toDoc } from "./schema";
+import { BlockWriter, lookVariables, richSchema, toDoc } from "./schema";
 import { deleteChar, reviewAuthor, trackable, trackTransaction, tracking } from "./track";
 
 export { mountRichRibbon } from "./ribbon";
@@ -98,6 +100,7 @@ export class RichEngine {
   /// della pagina come variabili di dato, che la carta e il testo leggono.
   readonly #desk: HTMLElement;
   #drawnPage = "";
+  #paper: Paper | null = null;
 
   constructor(parent: HTMLElement, options: RichEngineOptions) {
     this.#options = options;
@@ -119,9 +122,9 @@ export class RichEngine {
       editable: () => this.editable(),
       attributes: () => ({
         class: "rich-content",
-        // La dimensione di un paragrafo senza stile: quella di uno con uno
-        // stile proprio si misura su questa.
-        style: this.#head.f?.size !== undefined ? `--rich-doc-pt: ${this.#head.f.size}` : "",
+        // L'aspetto del documento, come dato: il carattere e la misura del
+        // testo che non ne dice altri.
+        style: lookVariables(this.#head.f ?? {}).join("; "),
         role: "textbox",
         "aria-multiline": "true",
         "aria-label": options.label(),
@@ -180,6 +183,7 @@ export class RichEngine {
       commentPlugin,
       notePlugin,
       sectionPlugin,
+      tintPlugin,
       keymap(this.#keys()),
       keymap(baseKeymap),
     ];
@@ -223,7 +227,19 @@ export class RichEngine {
   }
 
   #state(doc: PmNode): EditorState {
-    return EditorState.create({ schema: richSchema, doc, plugins: this.#plugins() });
+    const state = EditorState.create({ schema: richSchema, doc, plugins: this.#plugins() });
+    // Un documento nuovo resta sulla carta di prima.
+    const tint = setTint(state, this.#paper, this.#head.f?.size);
+    return tint ? state.apply(tint) : state;
+  }
+
+  /// La carta su cui portare i colori del file (l'aspetto adattato), o `null`
+  /// negli altri aspetti, dove i colori restano quelli del file.
+  setPaper(paper: Paper | null): void {
+    if (this.#destroyed) return;
+    this.#paper = paper;
+    const tr = setTint(this.#view.state, paper, this.#head.f?.size);
+    if (tr) this.#view.updateState(this.#view.state.apply(tr));
   }
 
   /// Il documento non si scrive: lo dice la proiezione, la shell, o il testo

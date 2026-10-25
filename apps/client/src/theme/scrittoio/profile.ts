@@ -18,7 +18,7 @@
 import type { ThemeCssVocabulary } from "../../ui/sanitize-css";
 import { THEME_CONTRAST_PAIRS, type ContrastPair } from "../contrast-fixture";
 import type { ThemeProfile } from "../loader";
-import { HOOKS } from "./anatomia";
+import { CONTENT_GATE, HOOKS } from "./anatomia";
 import { CHROME_MEASURE_TOKENS } from "./measures";
 import { COLOR_TOKENS } from "./recipe";
 
@@ -203,4 +203,5 @@ export const THEME_2_PROFILE: ThemeProfile = {
   optionalPairs: THEME_2_OPTIONAL_PAIRS,
   preferenceTokens: THEME_2_PREFERENCE_TOKENS,
   vocabulary: THEME_2_VOCABULARY,
+  gate: CONTENT_GATE,
 };

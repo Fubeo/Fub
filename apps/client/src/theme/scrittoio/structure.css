@@ -2163,6 +2163,94 @@ body {
   min-height: var(--page-h, 841.9pt);
   padding: var(--page-top, 56.7pt) var(--page-right, 56.7pt) var(--page-bottom, 56.7pt) var(--page-left, 56.7pt);
 }
+/* La carta del file. In `look-file` il documento sta sulla carta del file,
+   chiara in ogni luce: la scrivania ricollega la carta (`--doc-*`) ai ruoli
+   `--paper-*`, con i valori della serie per un tema che non li dichiara. In
+   `look-adattato` la carta resta quella del tema, e i colori del file li porta
+   sulla carta `editors/rich/tints.ts`. */
+.look-file .rich-desk {
+  --doc-bg: var(--paper-bg, #ffffff);
+  --doc-fg: var(--paper-ink, #14161a);
+  --doc-heading: var(--paper-ink, #14161a);
+  --doc-link: var(--paper-link, #2c57cd);
+  --doc-danger: var(--paper-danger, #c60817);
+  --doc-rule: var(--paper-rule, rgb(20 22 26 / 30%));
+  --doc-rule-soft: var(--paper-rule-soft, rgb(20 22 26 / 16%));
+  --doc-fill: var(--paper-fill, rgb(20 22 26 / 8%));
+  --doc-fill-soft: var(--paper-fill-soft, rgb(20 22 26 / 5%));
+  --doc-highlight: var(--paper-highlight, rgb(250 222 78 / 55%));
+  /* Il testo dei segni di Fub (il nome di un'interruzione, un segnaposto):
+     l'inchiostro verso la carta, a 5,5:1 sul bianco. */
+  --doc-gutter-fg: color-mix(in oklab, var(--paper-ink, #14161a) 60%, var(--paper-bg, #ffffff));
+}
+/* Il testo del file: carattere, misura, colore, spazi e interlinea risolti
+   dal formato, come variabili di dato sull'elemento (`--file-*`,
+   `editors/rich/schema.ts`). Un paragrafo che non ne dice uno prende quello
+   del documento, che sta sulla radice; senza, quelli di un documento nuovo di
+   Word: Calibri 11, 8 pt dopo il paragrafo, interlinea 1,08. Gli stili del
+   browser per titoli, collegamenti ed evidenziato non sono del file. */
+.look-file .rich-content,
+.look-adattato .rich-content {
+  color: var(--doc-fg, #14161a);
+  font-family: var(--file-font, Calibri, Carlito, sans-serif);
+  font-size: var(--file-size, 11pt);
+  caret-color: var(--doc-caret, #2c57cd);
+}
+.look-file .rich-para,
+.look-adattato .rich-para {
+  margin-block: var(--file-before, 0) var(--file-after, 8pt);
+  font-family: var(--file-font, Calibri, Carlito, sans-serif);
+  font-size: var(--file-size, 11pt);
+  font-weight: 400;
+  line-height: var(--file-line, calc(1.2 * 1.08));
+}
+.look-file .rich-content [data-rich-font],
+.look-adattato .rich-content [data-rich-font] { font-family: var(--file-font, Calibri, Carlito, sans-serif); }
+.look-file .rich-content [data-rich-size],
+.look-adattato .rich-content [data-rich-size] { font-size: var(--file-size, 11pt); }
+.look-file .rich-content .rich-link,
+.look-adattato .rich-content .rich-link { color: inherit; text-decoration: none; }
+/* «Automatico» è l'inchiostro della carta, anche dentro un paragrafo di un
+   altro colore. */
+.look-file .rich-para { color: var(--file-color, var(--doc-fg, #14161a)); }
+.look-file .rich-content [data-rich-color] { color: var(--file-color, var(--doc-fg, #14161a)); }
+.look-file .rich-content [data-rich-color="auto"],
+.look-adattato .rich-content [data-rich-color="auto"] { color: var(--doc-fg, #14161a); }
+.look-file .rich-content mark { background-color: var(--file-hl, #ffff00); color: inherit; }
+/* Sulla carta del tema i colori del file sono quelli adattati, che
+   `editors/rich/tints.ts` mette accanto ai valori del file. */
+.look-adattato .rich-content mark { background-color: var(--doc-highlight, rgb(250 222 78 / 55%)); color: inherit; }
+.look-adattato .rich-tinted,
+.look-adattato .rich-tint[data-tint-color] { color: var(--file-color-a, currentColor); }
+.look-adattato .rich-tint[data-tint-hl] { background-color: var(--file-hl-a, transparent); }
+/* Le tabelle del file: il filo della griglia e i margini delle celle di Word
+   (0,19 cm). Il bordo del file non viaggia nella proiezione. */
+.look-file .rich-cell,
+.look-adattato .rich-cell {
+  padding: 0 5.4pt;
+  border: 0.5pt solid var(--doc-rule, rgb(20 22 26 / 30%));
+}
+/* Le interruzioni e le sezioni sulla carta, con il loro nome. */
+.look-file .rich-section,
+.look-adattato .rich-section {
+  margin-block: 12pt;
+  border-top: 3px double var(--doc-rule, rgb(20 22 26 / 30%));
+}
+.look-file .rich-break-page,
+.look-adattato .rich-break-page { border-top: 1px dashed var(--doc-rule, rgb(20 22 26 / 30%)); }
+.look-file .rich-break-column,
+.look-adattato .rich-break-column { border-top: 1px dotted var(--doc-rule-soft, rgb(20 22 26 / 16%)); }
+.look-file .rich-break[data-name]::after,
+.look-file .rich-section[data-name]::after,
+.look-adattato .rich-break[data-name]::after,
+.look-adattato .rich-section[data-name]::after {
+  background: var(--doc-bg, #ffffff);
+  color: var(--doc-gutter-fg, #5d626d);
+  font-family: var(--font-ui, system-ui, sans-serif);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+}
 .rich-content {
   position: relative;
   box-sizing: border-box;
