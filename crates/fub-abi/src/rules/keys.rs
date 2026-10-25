@@ -22,18 +22,30 @@
 //!   dopo `Mod-k` la modalità c'è ed è dichiarata, e dentro quella finestra la
 //!   `d` non è di nessuno.
 //!
+//! # `Mod` e `Ctrl`
+//!
+//! `Mod` è il modificatore dei comandi: Cmd sul Mac, Ctrl altrove. `Ctrl` è il
+//! tasto Control **anche** sul Mac, per i pochi accordi che lì non possono
+//! stare su Cmd: `Cmd-Tab` è del sistema, e il giro delle schede è `Ctrl-Tab`
+//! come in ogni browser. Fuori dal Mac i due sono lo stesso tasto, quindi
+//! `Ctrl-k` e `Mod-k` si contendono lo stesso gesto: le domande sui conflitti
+//! si fanno sulla forma **piegata** ([`folded`]), dove `ctrl` diventa `mod`.
+//! `Mod-Ctrl-k` si rifiuta, perché fuori dal Mac sarebbe un tasto tenuto due
+//! volte.
+//!
 //! # Perché `None` e non «una stringa qualunque»
 //!
-//! `Ctrl-k` non è `Mod-k`: `Ctrl` non è fra i modificatori che questa app
+//! `Meta-k` non è `Mod-k`: `Meta` non è fra i modificatori che questa app
 //! riconosce, e leggere perdonando il modificatore ignoto vorrebbe dire
 //! registrare `k` **nudo**. Chi l'ha scritto crederebbe di aver configurato
-//! Ctrl. Una scorciatoia scritta male si rifiuta e si dice.
+//! Meta. Una scorciatoia scritta male si rifiuta e si dice.
 
 /// I modificatori che questa app riconosce, e nessun altro.
 ///
 /// `mod` è Ctrl o Cmd: sono lo stesso modificatore per chi scrive un accordo, e
-/// due tasti diversi solo per chi ha comprato il computer.
-const MODIFIERS: [&str; 3] = ["mod", "shift", "alt"];
+/// due tasti diversi solo per chi ha comprato il computer. `ctrl` è Control
+/// anche sul Mac.
+const MODIFIERS: [&str; 4] = ["mod", "ctrl", "shift", "alt"];
 
 /// Un accordo — modificatori e tasto — già in forma confrontabile.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -43,6 +55,8 @@ pub struct Chord {
     pub key: String,
     /// Ctrl o Cmd.
     pub command: bool,
+    /// Control anche sul Mac; fuori dal Mac è lo stesso tasto di `command`.
+    pub control: bool,
     pub shift: bool,
     pub alt: bool,
 }
@@ -52,9 +66,12 @@ impl Chord {
     /// alfabetico, minuscolo. Non è la forma che si legge — quella la scrive
     /// chi disegna, e dice `Mod-K`.
     pub fn canonical(&self) -> String {
-        let mut parts: Vec<&str> = Vec::with_capacity(4);
+        let mut parts: Vec<&str> = Vec::with_capacity(5);
         if self.alt {
             parts.push("alt");
+        }
+        if self.control {
+            parts.push("ctrl");
         }
         if self.command {
             parts.push("mod");
@@ -64,6 +81,16 @@ impl Chord {
         }
         parts.push(&self.key);
         parts.join("-")
+    }
+
+    /// Lo stesso accordo con `ctrl` letto come `mod`: com'è premuto fuori dal
+    /// Mac.
+    fn fold(&self) -> Chord {
+        Chord {
+            command: self.command || self.control,
+            control: false,
+            ..self.clone()
+        }
     }
 }
 
@@ -102,6 +129,10 @@ pub fn chords(binding: &str) -> Option<Vec<Chord>> {
         if seen.len() != mods.len() {
             return None;
         }
+        // `Mod-Ctrl-k`: fuori dal Mac è Ctrl tenuto due volte, cioè `Mod-k`.
+        if mods.iter().any(|m| m == "mod") && mods.iter().any(|m| m == "ctrl") {
+            return None;
+        }
         // `+` e `=` sono lo stesso tasto dello zoom: sulla tastiera americana
         // `+` è `Shift-=`, su quella italiana `+` ha un tasto suo.
         let plus = key == "+";
@@ -112,12 +143,13 @@ pub fn chords(binding: &str) -> Option<Vec<Chord>> {
                 key.to_lowercase()
             },
             command: mods.iter().any(|m| m == "mod"),
+            control: mods.iter().any(|m| m == "ctrl"),
             shift: !plus && mods.iter().any(|m| m == "shift"),
             alt: mods.iter().any(|m| m == "alt"),
         });
     }
     let first = chords.first()?;
-    if !first.command && !first.shift && !first.alt {
+    if !first.command && !first.control && !first.shift && !first.alt {
         return None;
     }
     Some(chords)
@@ -138,6 +170,22 @@ pub fn canonical(binding: &str) -> Option<String> {
     )
 }
 
+/// La scorciatoia in forma canonica **piegata**: come [`canonical`], con
+/// `ctrl` letto come `mod`.
+///
+/// È la chiave dei conflitti. `Ctrl-Tab` e `Mod-Tab` sono due accordi sul Mac
+/// e uno solo altrove, e un conflitto che esiste su una piattaforma è un
+/// conflitto: chi dichiara i tasti non sa dove li premeranno.
+pub fn folded(binding: &str) -> Option<String> {
+    Some(
+        chords(binding)?
+            .iter()
+            .map(|chord| chord.fold().canonical())
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
+}
+
 /// La corta **oscura** la lunga: chi preme la corta non arriva mai alla lunga.
 ///
 /// Non è un conflitto di accordi — `Mod-k` e `Mod-k d` non sono lo stesso
@@ -148,9 +196,10 @@ pub fn canonical(binding: &str) -> Option<String> {
 ///
 /// Si legge sulla forma canonica, dove la sequenza è già separata da spazi: la
 /// corta è un prefisso della lunga **fino a un confine di accordo**, o `mod-k`
-/// oscurerebbe `mod-k2 d`, che non è la stessa cosa.
+/// oscurerebbe `mod-k2 d`, che non è la stessa cosa. La forma è quella
+/// piegata, per la ragione di [`folded`].
 pub fn obscures(short: &str, long: &str) -> bool {
-    let (Some(short), Some(long)) = (canonical(short), canonical(long)) else {
+    let (Some(short), Some(long)) = (folded(short), folded(long)) else {
         return false;
     };
     // Prefisso fino al confine di accordo: la corta seguita da uno spazio.
@@ -181,7 +230,7 @@ mod tests {
     fn what_this_app_cannot_press_does_not_normalize() {
         // Il modificatore che non esiste, il primo tasto nudo, il tasto che
         // manca, il modificatore ripetuto, il vuoto.
-        for writing in ["Ctrl-k", "d", "Mod-", "Mod-Mod-k", "", "   "] {
+        for writing in ["Meta-k", "d", "Mod-", "Mod-Mod-k", "Mod-Ctrl-k", "", "   "] {
             assert_eq!(canonical(writing), None, "\"{writing}\"");
         }
         // E il secondo accordo nudo invece va bene: dopo `Mod-k` la modalità è
@@ -206,6 +255,20 @@ mod tests {
         // Il caso che uno `starts_with` sulla stringa nuda sbaglierebbe.
         assert!(!obscures("Mod-k", "Mod-k2 d"));
         // E ciò che non si sa premere non oscura niente.
-        assert!(!obscures("Ctrl-k", "Ctrl-k d"));
+        assert!(!obscures("Meta-k", "Meta-k d"));
+        // `Ctrl-k` è il prefisso di `Mod-k d` fuori dal Mac.
+        assert!(obscures("Ctrl-k", "Mod-k d"));
+    }
+
+    #[test]
+    fn ctrl_is_its_own_word_and_folds_into_mod() {
+        assert_eq!(canonical("Ctrl-Tab").as_deref(), Some("ctrl-tab"));
+        assert_eq!(
+            canonical("Shift-Ctrl-Tab").as_deref(),
+            Some("ctrl-shift-tab")
+        );
+        assert_ne!(canonical("Ctrl-Tab"), canonical("Mod-Tab"));
+        assert_eq!(folded("Ctrl-Tab"), folded("Mod-Tab"));
+        assert_eq!(folded("Alt-Ctrl-k  d").as_deref(), Some("alt-mod-k d"));
     }
 }

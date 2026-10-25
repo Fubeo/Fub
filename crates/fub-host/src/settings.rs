@@ -172,6 +172,8 @@ pub const EDITOR_FOLD_GUTTER: &str = "editor.fold-gutter";
 pub const EDITOR_SMART_LISTS: &str = "editor.smart-lists";
 pub const EDITOR_PASTE_HTML: &str = "editor.paste-html";
 pub const EDITOR_INDENT_GUIDES: &str = "editor.indent-guides";
+/// Il cursore dell'editor lampeggia. Di serie sta fermo.
+pub const EDITOR_CURSOR_BLINK: &str = "editor.cursor-blink";
 /// Il testo dell'editor e della Lettura va da destra a sinistra (arabo, ebraico).
 pub const EDITOR_RTL: &str = "editor.rtl";
 /// L'anteprima di un link al passaggio vuole sempre Ctrl/Cmd, anche in Lettura.
@@ -585,6 +587,12 @@ fn editor_settings() -> Vec<SettingSpec> {
                 EDITOR_INDENT_GUIDES,
                 C_EDITOR_INDENT_GUIDES,
                 C_EDITOR_INDENT_GUIDES_DESC,
+                false,
+            ),
+            (
+                EDITOR_CURSOR_BLINK,
+                C_EDITOR_CURSOR_BLINK,
+                C_EDITOR_CURSOR_BLINK_DESC,
                 false,
             ),
             (
@@ -1200,6 +1208,8 @@ const C_EDITOR_INDENT_GUIDES: &str = "core.editor.indent_guides";
 const C_EDITOR_RTL: &str = "core.editor.rtl";
 const C_EDITOR_RTL_DESC: &str = "core.editor.rtl.desc";
 const C_EDITOR_INDENT_GUIDES_DESC: &str = "core.editor.indent_guides.desc";
+const C_EDITOR_CURSOR_BLINK: &str = "core.editor.cursor_blink";
+const C_EDITOR_CURSOR_BLINK_DESC: &str = "core.editor.cursor_blink.desc";
 const C_EDITOR_PREVIEW_MODIFIER: &str = "core.editor.preview_modifier";
 const C_EDITOR_PREVIEW_MODIFIER_DESC: &str = "core.editor.preview_modifier.desc";
 const C_EDITOR_PASTE_HTML: &str = "core.editor.paste_html";
@@ -1721,6 +1731,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_RTL_DESC, "Per l'arabo, l'ebraico e le altre scritture da destra a sinistra: l'editor e la Lettura partono dal margine destro.")
         .with(C_EDITOR_INDENT_GUIDES, "Guide di rientro")
         .with(C_EDITOR_INDENT_GUIDES_DESC, "Disegna una riga verticale per ogni livello di rientro. Funziona in modalità Sorgente.")
+        .with(C_EDITOR_CURSOR_BLINK, "Cursore che lampeggia")
+        .with(C_EDITOR_CURSOR_BLINK_DESC, "Il cursore dell'editor si accende e si spegne. Di serie sta fermo, per non distrarre mentre si legge.")
         .with(C_EDITOR_PREVIEW_MODIFIER, "Anteprima dei link solo con Ctrl")
         .with(C_EDITOR_PREVIEW_MODIFIER_DESC, "Passando sopra un link, l'anteprima della nota si apre solo tenendo premuto Ctrl (Cmd sul Mac), anche in Lettura. Mentre si scrive serve sempre.")
         .with(C_EDITOR_PASTE_HTML, "Converti l'HTML incollato")
@@ -1814,15 +1826,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FONT_MONO_DESC, "Famiglia a spaziatura fissa del codice e del sorgente.")
         .with(C_FONT_PLEX, "IBM Plex Mono")
         .with(C_FONT_JETBRAINS, "JetBrains Mono")
-        .with(C_ACCENT, "Tinta dell'accento (0–360)")
+        .with(C_ACCENT, "Tinta dell'accento")
         .with(
             C_ACCENT_DESC,
-            "Tinta OKLCH; chiarezza e croma vengono derivati per mantenere il contrasto.",
+            "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.",
         )
         .with(C_COMPACTNESS, "Spazio dell'interfaccia")
         .with(C_COMPACTNESS_DESC, "Quanto posto prendono barre, binario e cassetti: da 0, ampia, a 4, minima. Il foglio e le sue linguette non cambiano.")
         .with(C_ZOOM, "Zoom interfaccia")
-        .with(C_ZOOM_DESC, "Scala nativa della finestra, da 0,5 a 2.")
+        .with(C_ZOOM_DESC, "Quanto è grande tutta l'interfaccia, dal 50% al 200%.")
         .with(C_THEME_ID, "Tema installato")
         .with(C_THEME_ID_DESC, "L'id del tema montato; si sceglie dal catalogo dei temi.")
         .with(C_MOTION, "Animazioni")
@@ -2218,6 +2230,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_RTL_DESC, "For Arabic, Hebrew and other right-to-left scripts: the editor and Reading start from the right margin.")
         .with(C_EDITOR_INDENT_GUIDES, "Indentation guides")
         .with(C_EDITOR_INDENT_GUIDES_DESC, "Draws a vertical line for each indentation level. Works in Source mode.")
+        .with(C_EDITOR_CURSOR_BLINK, "Blinking cursor")
+        .with(C_EDITOR_CURSOR_BLINK_DESC, "The editor cursor turns on and off. By default it stays still, so it does not distract while reading.")
         .with(C_EDITOR_PREVIEW_MODIFIER, "Link preview only with Ctrl")
         .with(C_EDITOR_PREVIEW_MODIFIER_DESC, "Hovering a link opens the note preview only while Ctrl (Cmd on Mac) is held, in Reading too. While writing it is always needed.")
         .with(C_EDITOR_PASTE_HTML, "Convert pasted HTML")
@@ -2305,15 +2319,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FONT_MONO_DESC, "Monospaced font family for code and source.")
         .with(C_FONT_PLEX, "IBM Plex Mono")
         .with(C_FONT_JETBRAINS, "JetBrains Mono")
-        .with(C_ACCENT, "Accent hue (0–360)")
+        .with(C_ACCENT, "Accent hue")
         .with(
             C_ACCENT_DESC,
-            "OKLCH hue; lightness and chroma are derived to preserve contrast.",
+            "The colour of links, focus and selection. Lightness and intensity adapt by themselves to stay readable.",
         )
         .with(C_COMPACTNESS, "Interface space")
         .with(C_COMPACTNESS_DESC, "How much room bars, rail and drawers take: from 0, roomy, to 4, minimal. The sheet and its tabs do not change.")
         .with(C_ZOOM, "Interface zoom")
-        .with(C_ZOOM_DESC, "Native window scale, from 0.5 to 2.")
+        .with(C_ZOOM_DESC, "How large the whole interface is, from 50% to 200%.")
         .with(C_THEME_ID, "Installed theme")
         .with(C_THEME_ID_DESC, "The id of the mounted theme; chosen from the theme catalog.")
         .with(C_MOTION, "Animations")

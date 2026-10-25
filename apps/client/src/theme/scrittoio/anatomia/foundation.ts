@@ -12,6 +12,7 @@ export const FOUNDATION: PartAnatomy = {
     { name: "elevation-dialog", states: REST, hooks: ["elevation-dialog"] },
     { name: "skip-link", states: [S("rest"), S("focused")], hooks: ["skip-link"] },
     { name: "muted-copy", states: REST, hooks: ["muted"] },
+    { name: "skeleton", states: REST, hooks: ["skeleton", "skeleton-line", "skeleton-rows"] },
     { name: "button-intent", states: INTERACTIVE, hooks: ["primary", "ui-button", "intent-primary", "intent-danger"] },
   ],
 };

@@ -126,6 +126,8 @@ export function createTabs(options: TabsOptions): TabsHandle {
     next.button.setAttribute("aria-selected", "true");
     next.button.tabIndex = 0;
     if (next.spec.panel) next.spec.panel.hidden = false;
+    // In una fila che scorre la scheda scelta non resta fuori dalla vista.
+    next.button.scrollIntoView?.({ block: "nearest", inline: "nearest" });
     // La prima volta il segno compare al suo posto: non ha da dove venire.
     if (slide && previous) flip([indicator], place, { spring: "snap", lifetime });
     else place();

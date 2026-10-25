@@ -120,9 +120,10 @@ export function mountBottomSheets(lifetime: Lifetime): void {
           whenReduced: "none",
           lifetime,
         })
-      : animate(panel, {
+      : // Chiuso senza il dito: un'uscita, breve come tutte (≤ `swap`).
+        animate(panel, {
           to: { y: distance },
-          duration: DURATION.large,
+          duration: DURATION.swap,
           easing: "cubic-bezier(0.4, 0, 1, 1)",
           whenReduced: "none",
           lifetime,
@@ -139,7 +140,7 @@ export function mountBottomSheets(lifetime: Lifetime): void {
     const fade = animate(scrim, {
       from: { opacity: from ? from.veil : 1 },
       to: { opacity: 0 },
-      duration: DURATION.large,
+      duration: from ? DURATION.large : DURATION.swap,
       whenReduced: "none",
       lifetime,
     });

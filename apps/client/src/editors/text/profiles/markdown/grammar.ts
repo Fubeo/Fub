@@ -1,5 +1,5 @@
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import type { Language } from "@codemirror/language";
+import { foldNodeProp, type Language } from "@codemirror/language";
 
 /// La definizione di una nota a piè di pagina, con la regola di comrak:
 /// `[^etichetta]:` in testa al blocco, un'etichetta senza spazi e gli spazi
@@ -65,6 +65,26 @@ const footnoteDefinitions: MarkdownConfig = {
   }],
 };
 
+/// Le piegature dove servono: titoli (il servizio di `lang-markdown`), voci
+/// di elenco, blocchi di codice e il frontmatter (`profile.ts`). CodeMirror
+/// piega ogni blocco, e un segno accanto a ogni paragrafo era rumore nel
+/// margine: paragrafi, citazioni, tabelle e blocchi HTML non si piegano.
+const noFold = (): null => null;
+const foldWhereUseful: MarkdownConfig = {
+  props: [foldNodeProp.add({
+    Paragraph: noFold,
+    Blockquote: noFold,
+    Table: noFold,
+    HTMLBlock: noFold,
+    CommentBlock: noFold,
+    ProcessingInstructionBlock: noFold,
+    LinkReference: noFold,
+  })],
+};
+
 /// La grammatica Markdown della shell: quella di CodeMirror con le
 /// definizioni di nota. Editor, Lettura e widget leggono lo stesso albero.
-export const markdownGrammar: Language = markdown({ base: markdownLanguage, extensions: footnoteDefinitions }).language;
+export const markdownGrammar: Language = markdown({
+  base: markdownLanguage,
+  extensions: [footnoteDefinitions, foldWhereUseful],
+}).language;

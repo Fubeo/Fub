@@ -1,6 +1,6 @@
 import { markdown } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
-import { syntaxTree } from "@codemirror/language";
+import { foldService, syntaxTree } from "@codemirror/language";
 import { Prec, RangeSetBuilder, type Extension } from "@codemirror/state";
 import {
   Decoration,
@@ -97,7 +97,17 @@ function frontmatterLines(view: EditorView): DecorationSet {
   return builder.finish();
 }
 
+/// Il frontmatter si piega dalla sua prima riga fino al `---` che lo chiude.
+const frontmatterFold = foldService.of((state, lineStart, lineEnd) => {
+  if (lineStart !== 0) return null;
+  const range = frontmatterRange(state.doc);
+  if (!range) return null;
+  const end = state.doc.lineAt(Math.max(range.to - 1, 0)).to;
+  return end > lineEnd ? { from: lineEnd, to: end } : null;
+});
+
 const frontmatter: Extension = [
+  frontmatterFold,
   ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;

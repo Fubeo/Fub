@@ -129,7 +129,7 @@ describe("il vault ripristinato", () => {
     setReloaderForTests(reload);
     await applyIntent({ kind: "custom", ns: VAULT_RESTORED_NS, payload: { entries: 3 } });
     expect(reload).toHaveBeenCalledTimes(1);
-    expect(takeNoticeAfterReload()).toContain("snapshot");
+    expect(takeNoticeAfterReload()).toContain("copia completa");
     expect(takeNoticeAfterReload()).toBeNull();
   });
 });

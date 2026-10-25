@@ -207,6 +207,12 @@ export interface EditorSurface {
   readonly buffer?: SurfaceBuffer;
   focus?(): void;
   /**
+   * Opens the surface's own find bar, the one its editor offers inside the
+   * text, and moves focus there. `false` where the current mode has none:
+   * the shell then searches the note on its own.
+   */
+  find?(): boolean;
+  /**
    * Brings the view to a place in the document. `false` when this surface
    * cannot get there, so that the shell says it instead of doing nothing.
    */

@@ -416,11 +416,10 @@ describe("il pannello delle impostazioni", () => {
       open.click();
       await settle();
       expect(panel.hidden).toBe(false);
-      expect(panel.dataset.shellMotion).toBe("enter");
       expect(start).not.toHaveBeenCalled();
 
+      // L'uscita è un'immagine che se ne va: il pannello è già nascosto.
       close.click();
-      panel.dispatchEvent(new Event("animationend"));
       expect(panel.hidden).toBe(true);
       expect(start).not.toHaveBeenCalled();
 
@@ -620,7 +619,9 @@ describe("filtra l'esplora per percorso", () => {
     await waitFor("l'albero torna", () => !document.querySelector<HTMLElement>("#file-list")!.hidden);
     await settle();
     expect(document.querySelector('#file-list li[data-path="note"]')?.getAttribute("aria-expanded")).toBe("true");
-    expect(document.querySelector<HTMLElement>(".explorer-filter")!.hidden).toBe(true);
+    // Il campo resta, vuoto: è l'unico campo del pannello File.
+    expect(document.querySelector<HTMLElement>(".explorer-filter")!.hidden).toBe(false);
+    expect(input.value).toBe("");
   });
 });
 
@@ -1708,6 +1709,26 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     expect(commands(host, "folder.rename")).toEqual([]);
   });
 
+  it("la riga trascinata si solleva finché dura il gesto, poi torna giù", async () => {
+    await start({ ...VAULT, "Altro.md": "y" });
+    const source = row("Altro.md")!;
+    source.dispatchEvent(dragEvent("dragstart"));
+    expect(source.hasAttribute("data-lifted")).toBe(true);
+    // Solo la riga d'origine: le altre restano al loro posto.
+    expect(document.querySelectorAll("#file-list [data-lifted]")).toHaveLength(1);
+    source.dispatchEvent(dragEvent("dragend"));
+    expect(document.querySelector("[data-lifted]")).toBeNull();
+
+    // Lo stesso per una linguetta.
+    source.click();
+    await waitFor("la nota ha la sua linguetta", () => !!document.querySelector(".tab-entry"));
+    const tab = document.querySelector<HTMLElement>(".tab-entry")!;
+    tab.dispatchEvent(dragEvent("dragstart"));
+    expect(tab.hasAttribute("data-lifted")).toBe(true);
+    tab.dispatchEvent(dragEvent("dragend"));
+    expect(document.querySelector("[data-lifted]")).toBeNull();
+  });
+
   it("le note scelte insieme si trascinano insieme", async () => {
     const host = await start({ ...VAULT, "Altro.md": "y" });
     row("Benvenuto.md")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
@@ -2563,6 +2584,20 @@ describe("spostare un file col testo non ancora sul disco", () => {
   });
 });
 
+describe("l'albero e le icone", () => {
+  it("una cartella senza icona ha la figura a tratto, e quella scelta la sostituisce", async () => {
+    await start(VAULT);
+    const folder = () => document.querySelector<HTMLElement>("#file-list .tree-row.folder")!;
+    await waitFor("la cartella è disegnata", () => document.querySelector("#file-list .tree-row.folder") !== null);
+    expect(folder().querySelector(".row-icon > svg")).not.toBeNull();
+    const path = folder().closest<HTMLElement>("[data-path]")!.dataset.path!;
+    const { setIcon } = await import("./state/organization");
+    await setIcon(path, "📚");
+    await waitFor("l'icona scelta arriva", () => folder().querySelector(".row-icon")?.textContent === "📚");
+    expect(folder().querySelector(".row-icon > svg")).toBeNull();
+  });
+});
+
 describe("cerca", () => {
   it("ordina per nome e comprime i risultati, dal pannello", async () => {
     await start(VAULT);
@@ -2580,8 +2615,11 @@ describe("cerca", () => {
       return list.length > 1 && list[0] !== [...list].sort((x, y) => x.localeCompare(y, "it", { numeric: true }))[0];
     });
     expect(titles()).toEqual([...titles()].sort((x, y) => y.localeCompare(x, "it", { numeric: true })));
-    const collapse = [...document.querySelectorAll<HTMLButtonElement>("#search-results .search-tools button")]
-      .find((b) => b.getAttribute("aria-pressed") === "false")!;
+    // Comprimere sta nel menu «⋯» degli strumenti, con le altre azioni rare.
+    document.querySelector<HTMLButtonElement>("#search-results .search-tools .search-more")!.click();
+    const collapse = [...document.querySelectorAll<HTMLElement>(".context-menu [role=menuitemcheckbox]")]
+      .find((item) => item.textContent?.includes("Comprimi"))!;
+    expect(collapse.getAttribute("aria-checked")).toBe("false");
     collapse.click();
     expect(document.querySelectorAll("#search-results .hit-snippet").length).toBe(0);
   });
@@ -2603,6 +2641,38 @@ describe("cerca", () => {
     expect(JSON.parse(offered.get("application/x-fub-entries")!)).toEqual([{ id: "note/Spesa.md", note: true }]);
     expect(offered.get("text/uri-list")).toBe("file:///vault/note/Spesa.md");
     expect(transfer.effectAllowed).toBe("copy");
+  });
+
+  it("una ricerca che tarda mostra la sagoma dei risultati, e la toglie quando arrivano", async () => {
+    const host = await start(VAULT);
+    const unlock = host.throttle("queryIndex");
+    const field = document.querySelector<HTMLInputElement>("#search-input")!;
+    field.value = "arance";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    const results = document.querySelector<HTMLElement>("#search-results")!;
+    await waitFor("la sagoma compare", () => results.querySelector(":scope > li.skeleton") !== null);
+    expect(results.getAttribute("aria-busy")).toBe("true");
+    expect(results.querySelector(".skeleton")!.getAttribute("aria-hidden")).toBe("true");
+    unlock();
+    await waitFor("i risultati arrivano", () => results.querySelectorAll("li > button.search-result").length > 0);
+    expect(results.querySelector(".skeleton")).toBeNull();
+    expect(results.hasAttribute("aria-busy")).toBe(false);
+  });
+
+  it("esclusa l'unica nota, la lista offre di togliere le esclusioni", async () => {
+    await start(VAULT);
+    const field = document.querySelector<HTMLInputElement>("#search-input")!;
+    field.value = "arance";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    await waitFor("i risultati arrivano", () => document.querySelectorAll("#search-results li > button.search-result").length > 0);
+    [...document.querySelectorAll<HTMLButtonElement>("#search-results .search-action")]
+      .find((button) => button.textContent === "Escludi")!.click();
+    const clear = () => [...document.querySelectorAll<HTMLButtonElement>("#search-results li > button.search-result")]
+      .find((button) => button.textContent === "Togli le esclusioni (1)");
+    await waitFor("la via d'uscita c'è", () => clear() !== undefined);
+    clear()!.click();
+    await waitFor("la nota torna", () => document.querySelector("#search-results .hit-path")?.textContent?.includes("Spesa") === true);
+    expect(clear()).toBeUndefined();
   });
 
   it("la casella trova, e il risultato apre il documento", async () => {
@@ -3307,6 +3377,26 @@ describe("la modalità di ogni famiglia di superfici", () => {
     document.querySelector<HTMLButtonElement>(`.pane.focus .pane-toolbar button[data-mode="${mode}"]`)!.click();
     await settle();
   };
+
+  it("il bottone solo dice la modalità accesa e la cambia da un menu di scelte", async () => {
+    await start(VAULT);
+    const current = document.querySelector<HTMLButtonElement>(".pane.focus .pane-toolbar .pane-mode-current")!;
+    const pressed = () =>
+      document.querySelector<HTMLElement>('.pane.focus .pane-toolbar button[data-mode][aria-pressed="true"]')?.textContent;
+    expect(current.hidden).toBe(false);
+    expect(current.textContent).toBe(pressed());
+    expect(current.getAttribute("aria-label")).toContain(pressed()!);
+    current.click();
+    expect(current.getAttribute("aria-expanded")).toBe("true");
+    const radios = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
+    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Sorgente", "Live", "Lettura"]);
+    expect(radios.filter((item) => item.getAttribute("aria-checked") === "true")).toHaveLength(1);
+    radios[0]!.click();
+    await settle();
+    expect(paneMode()).toBe("source");
+    expect(current.textContent).toBe("Sorgente");
+    expect(current.getAttribute("aria-expanded")).toBe("false");
+  });
 
   it("una nota in Sorgente non fa aprire la tela seguente come JSON", async () => {
     await start({ ...VAULT, "lavagna.canvas": BOARD });

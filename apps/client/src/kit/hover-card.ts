@@ -9,7 +9,9 @@
 //   nuovo viene annullato (il suo segnale) e il suo esito scartato (la corsa).
 //
 // Si apre anche col fuoco, ma solo quello arrivato dalla tastiera: un clic
-// che mette a fuoco un collegamento non è una domanda.
+// che mette a fuoco un collegamento non è una domanda. Chi la chiede con
+// `show(target, { focus: true })` ci entra invece da tastiera: il fuoco va
+// alla prima azione, ed Esc o Tab oltre il bordo lo riportano dov'era.
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 import { Race } from "../ui/race";
 import { openPopover, type PopoverAlign, type PopoverHandle, type PopoverPlacement } from "./popover";
@@ -43,8 +45,8 @@ export type HoverCardOptions = HoverCardCommon &
   );
 
 export interface HoverCardHandle {
-  /// Apre la scheda di `target` senza attesa.
-  show(target: HTMLElement): void;
+  /// Apre la scheda di `target` senza attesa; con `focus` ci porta il fuoco.
+  show(target: HTMLElement, options?: { focus?: boolean }): void;
   /// Chiude la scheda e annulla ciò che stava per aprirsi.
   hide(): void;
   readonly open: boolean;
@@ -117,7 +119,7 @@ export function attachHoverCard(options: HoverCardOptions): HoverCardHandle {
     closeTimer = view.setTimeout(closeCard, closeDelay);
   };
 
-  const show = (target: HTMLElement, content: Node, byPointer: boolean): void => {
+  const show = (target: HTMLElement, content: Node, byPointer: boolean, focus: boolean): void => {
     closeCard();
     if (current !== handle) current?.hide();
     const life = openLifetime();
@@ -135,8 +137,8 @@ export function attachHoverCard(options: HoverCardOptions): HoverCardHandle {
       // ritrova fra le regioni finché è aperta. Senza nome resta un gruppo.
       role: label ? "region" : "group",
       label,
-      autoFocus: false,
-      returnFocus: false,
+      autoFocus: focus,
+      returnFocus: focus,
       onClose() {
         life.close();
         if (card?.life !== life) return;
@@ -183,7 +185,7 @@ export function attachHoverCard(options: HoverCardOptions): HoverCardHandle {
     }
   };
 
-  const begin = (target: HTMLElement, byPointer: boolean): void => {
+  const begin = (target: HTMLElement, byPointer: boolean, focus: boolean): void => {
     openTimer = undefined;
     const controller = new AbortController();
     loading = controller;
@@ -198,17 +200,17 @@ export function attachHoverCard(options: HoverCardOptions): HoverCardHandle {
       const content = await expected(loaded.catch(() => null));
       loading = null;
       pending = null;
-      if (content && target.isConnected) show(target, content, byPointer);
+      if (content && target.isConnected) show(target, content, byPointer, focus);
     });
   };
 
-  const request = (target: HTMLElement, delay: number, byPointer: boolean): void => {
+  const request = (target: HTMLElement, delay: number, byPointer: boolean, focus = false): void => {
     stay();
     if (lifetime.closed || card?.target === target || pending === target) return;
     cancelPending();
     pending = target;
-    if (delay > 0) openTimer = view.setTimeout(() => begin(target, byPointer), delay);
-    else begin(target, byPointer);
+    if (delay > 0) openTimer = view.setTimeout(() => begin(target, byPointer, focus), delay);
+    else begin(target, byPointer, focus);
   };
   const leave = (target: HTMLElement): void => {
     if (pending === target) cancelPending();
@@ -249,10 +251,14 @@ export function attachHoverCard(options: HoverCardOptions): HoverCardHandle {
   });
 
   const handle: HoverCardHandle = {
-    show(target) {
-      if (card?.target === target) return;
+    show(target, { focus = false } = {}) {
+      if (card?.target === target) {
+        if (!focus) return;
+        // Aperta dal passaggio, non riporterebbe il fuoco: si riapre.
+        closeCard();
+      }
       cancelPending();
-      request(target, 0, false);
+      request(target, 0, false, focus);
     },
     hide() {
       cancelPending();

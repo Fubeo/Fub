@@ -10,7 +10,7 @@ import { t } from "../i18n/strings";
 import { trapFocus } from "./a11y";
 import { icon, iconEl } from "./icons";
 import { openLifetime, type Lifetime } from "./lifetime";
-import { enterSurface, exitSurface, finishSurface } from "./motion";
+import { enterSurface, exitSurface } from "./motion";
 
 export interface MenuItem {
   label: string;
@@ -96,10 +96,37 @@ type MenuClose = () => void;
 let menuLifetime: Lifetime | null = null;
 let menuClose: MenuClose | null = null;
 
-/// Quanto aspetta il puntatore fermo su una voce prima che il suo sottomenu
-/// si apra, o che quello aperto si chiuda: il tempo di attraversare in
-/// diagonale le voci fra la voce e il sottomenu senza che cambi sotto le mani.
-const HOVER_DELAY = 250;
+/// Quanto aspetta il puntatore su una voce prima che il suo sottomenu si apra,
+/// o che quello aperto si chiuda: abbastanza per non aprire tutto ciò che si
+/// attraversa, poco perché non sembri lento.
+const HOVER_DELAY = 100;
+
+/// Quanto si aspetta ancora quando il puntatore va verso il sottomenu aperto:
+/// il tempo di attraversare in diagonale le voci che ci stanno in mezzo.
+const AIM_DELAY = 300;
+
+interface Point {
+  readonly x: number;
+  readonly y: number;
+}
+
+/// Il puntatore, andato da `from` a `to`, sta mirando al sottomenu `target`?
+/// Sì se `to` cade nel triangolo fra `from` e i due angoli del lato del
+/// sottomenu rivolto al menu: la mira di macOS, al posto di un ritardo uguale
+/// per tutti.
+export function aimsAt(from: Point, to: Point, target: DOMRectReadOnly): boolean {
+  const edge = from.x <= target.left ? target.left : target.right;
+  if (to.x === from.x && to.y === from.y) return false;
+  const a = { x: edge, y: target.top };
+  const b = { x: edge, y: target.bottom };
+  const side = (p: Point, q: Point, r: Point): number => (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+  const d1 = side(from, a, to);
+  const d2 = side(a, b, to);
+  const d3 = side(b, from, to);
+  const negative = d1 < 0 || d2 < 0 || d3 < 0;
+  const positive = d1 > 0 || d2 > 0 || d3 > 0;
+  return !(negative && positive);
+}
 
 /// Il punto da cui aprire un menu che non nasce da un click: sotto la
 /// selezione o il cursore, allineato al suo inizio. Mai in 0,0.
@@ -116,8 +143,6 @@ export function showContextMenu(
   options: ContextMenuOptions = {},
 ): void {
   closeContextMenu();
-  const previous = document.getElementById("context-menu");
-  if (previous) finishSurface(previous);
   const lifetime = openLifetime();
   menuLifetime = lifetime;
   menuClose = options.onClose ?? null;
@@ -145,9 +170,11 @@ export function showContextMenu(
   // WebKitGTK può terminare il processo web mentre fotografa in una View
   // Transition un menu fisso appena inserito. Conserviamo l'animazione CSS
   // canonica, senza portare questa superficie effimera nel percorso nativo.
-  lifetime.add(() => exitSurface(menu, () => menu.remove(), { viewTransition: false }));
-  enterSurface(menu, { viewTransition: false });
+  lifetime.add(() => exitSurface(menu, () => menu.remove()));
+  // La barra si misura sul menu fermo: a entrata cominciata il suo riquadro è
+  // già scalato, e la barra resterebbe dove il menu era al primo fotogramma.
   const strip = options.strip ? mountStrip(menu, options, lifetime) : null;
+  enterSurface(menu);
   // Il primo click fuori chiude, e il ritardo evita che sia questo stesso click
   // ad attivarlo. Il `once` **non** bastava: se il menu si chiudeva prima —
   // Escape, o una voce scelta da tastiera — l'ascoltatore non era ancora
@@ -200,7 +227,13 @@ function renderMenu(
   const pictured = items.some((item) => item.sample !== undefined || (item.icon !== undefined && icon(item.icon) !== ""));
   let group = null as { name: string; node: HTMLElement } | null;
   // Il sottomenu aperto, se ce n'è uno: la voce da cui parte e come chiuderlo.
-  let open: { button: HTMLButtonElement; lifetime: Lifetime; focusFirst: () => void } | null = null;
+  let open: { button: HTMLButtonElement; lifetime: Lifetime; focusFirst: () => void; sub: HTMLElement } | null = null;
+  // Dove stava il puntatore al movimento prima e adesso: la mira si legge da qui.
+  let pointer: { from: Point; to: Point } | null = null;
+  lifetime.listen(menu, "pointermove", (e) => {
+    const to = { x: e.clientX, y: e.clientY };
+    pointer = { from: pointer?.to ?? to, to };
+  });
   let hoverTimer: ReturnType<typeof setTimeout> | null = null;
   const cancelHover = (): void => {
     if (hoverTimer !== null) clearTimeout(hoverTimer);
@@ -240,7 +273,7 @@ function renderMenu(
     // ci sta sopra: la tolleranza diagonale è questa.
     childLifetime.listen(sub, "pointerenter", cancelHover);
     button.setAttribute("aria-expanded", "true");
-    const state = { button, lifetime: childLifetime, focusFirst: () => child.focusActive() };
+    const state = { button, lifetime: childLifetime, focusFirst: () => child.focusActive(), sub };
     open = state;
     // ← o Escape tornano alla voce da cui si è entrati: la trappola del
     // sottomenu sta sopra quella del menu, ed Escape chiude solo lei.
@@ -350,16 +383,20 @@ function renderMenu(
       if (nested) b.setAttribute("aria-expanded", "false");
     }
     if (item.danger) b.className = "danger";
-    // Il passaggio del puntatore: fermo su una voce con un sottomenu lo apre,
-    // fermo su un'altra chiude quello aperto. Sempre dopo una pausa.
+    // Il passaggio del puntatore: su una voce con un sottomenu lo apre, su
+    // un'altra chiude quello aperto. Sempre dopo una pausa breve, e più lunga
+    // se il puntatore sta andando verso il sottomenu aperto: attraversa, non
+    // sceglie.
     b.addEventListener("pointerenter", (e) => {
       if (e.pointerType === "touch") return;
       cancelHover();
+      const aiming = open !== null && open.button !== b && pointer !== null &&
+        aimsAt(pointer.from, { x: e.clientX, y: e.clientY }, open.sub.getBoundingClientRect());
       hoverTimer = setTimeout(() => {
         hoverTimer = null;
         if (nested && !item.disabled) void cascade(b, item, false);
         else if (open !== null && open.button !== b) closeOpen();
-      }, HOVER_DELAY);
+      }, aiming ? AIM_DELAY : HOVER_DELAY);
     });
     if (item.disabled) {
       b.setAttribute("aria-disabled", "true");
@@ -468,10 +505,10 @@ function mountStrip(menu: HTMLElement, options: ContextMenuOptions, lifetime: Li
   const unmount = options.strip!(strip);
   lifetime.add(() => {
     unmount();
-    exitSurface(strip, () => strip.remove(), { viewTransition: false });
+    exitSurface(strip, () => strip.remove());
   });
-  enterSurface(strip, { viewTransition: false });
   placeStrip(strip, menu.getBoundingClientRect());
+  enterSurface(strip);
   return strip;
 }
 
@@ -535,6 +572,16 @@ function placeCascade(sub: HTMLElement, button: DOMRectReadOnly, parent: DOMRect
   sub.style.top = `${Math.max(margin, top)}px`;
 }
 
+/// Il menu cresce dal punto `x`,`y` della finestra, anche quando il bordo l'ha
+/// spinto sopra o a sinistra del puntatore: l'origine è quel punto, dentro il
+/// menu.
+function growFrom(menu: HTMLElement, left: number, top: number, x: number, y: number): void {
+  const box = menu.getBoundingClientRect();
+  const originX = Math.min(Math.max(x - left, 0), box.width);
+  const originY = Math.min(Math.max(y - top, 0), box.height);
+  menu.style.transformOrigin = `${Math.round(originX)}px ${Math.round(originY)}px`;
+}
+
 /// Un menu aperto vicino al bordo resta dentro la finestra: si ribalta a
 /// sinistra o in alto invece di uscire, e un elenco lungo scorre.
 function placeInViewport(menu: HTMLElement, x: number, y: number): void {
@@ -548,6 +595,7 @@ function placeInViewport(menu: HTMLElement, x: number, y: number): void {
   if (top + height > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - margin - height);
   menu.style.left = `${Math.max(margin, left)}px`;
   menu.style.top = `${Math.max(margin, top)}px`;
+  growFrom(menu, Math.max(margin, left), Math.max(margin, top), x, y);
 }
 
 /// Quanto un menu sta staccato dal pulsante che lo apre.
@@ -574,6 +622,8 @@ function placeBeside(menu: HTMLElement, anchor: DOMRectReadOnly): void {
   if (left + box.width > window.innerWidth - margin) left = anchor.right - box.width;
   menu.style.left = `${Math.max(margin, left)}px`;
   menu.style.top = `${top}px`;
+  // Dal lato del pulsante: sotto cresce dal bordo alto, sopra dal basso.
+  growFrom(menu, Math.max(margin, left), top, anchor.left, top > anchor.top ? anchor.bottom : anchor.top);
 }
 
 export function closeContextMenu(): void {
@@ -607,8 +657,6 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
   // lui la trappola del fuoco, che è la parte che si sentiva, perché Escape
   // continuava a rispondere per un selettore che nessuno vedeva più.
   closePickIcon();
-  const previous = document.getElementById("icon-picker");
-  if (previous) finishSurface(previous);
   const lifetime = openLifetime();
   iconLifetime = lifetime;
   const pop = document.createElement("div");
@@ -668,8 +716,8 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
 
   document.body.appendChild(pop);
   // Il selettore di icona è la stessa specie di superficie fissa effimera.
-  lifetime.add(() => exitSurface(pop, () => pop.remove(), { viewTransition: false }));
-  enterSurface(pop, { viewTransition: false });
+  lifetime.add(() => exitSurface(pop, () => pop.remove()));
+  enterSurface(pop);
   // La trappola prima del `focus()` esplicito: `trapFocus` metterebbe il
   // fuoco sul primo elemento — la prima emoji — mentre qui la cosa giusta è il
   // campo, che è ciò che permette di scriverne una qualsiasi senza attraversare

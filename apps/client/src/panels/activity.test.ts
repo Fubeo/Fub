@@ -100,6 +100,15 @@ describe("l'esito di un lavoro lungo", () => {
     expect(noticeResult).toEqual({ text: "«export» è finito.", tone: "info" });
   });
 
+  it("nomina il lavoro con ciò che ha detto di sé, non col suo entry point", () => {
+    const rows: JobRow[] = [{ id: "7", job: "export", progress: { done: 3, total: 3, label: "Esporta «Diario» in PDF" } }];
+    const noticeResult = noticeOf(
+      notice({ type: "job_done", id: "7", job: "export", result: { Ok: null } }),
+      rows,
+    );
+    expect(noticeResult?.text).toBe("«Esporta «Diario» in PDF» è finito.");
+  });
+
   it("quando fallisce dice **perché**, e con un altro tono", () => {
     const noticeResult = noticeOf(
       notice({

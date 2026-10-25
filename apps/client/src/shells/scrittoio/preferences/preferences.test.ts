@@ -504,3 +504,95 @@ describe("la finestra delle preferenze", () => {
     expect(document.querySelector(".prefs-space")).toBeNull();
   });
 });
+
+describe("lo zoom dell'interfaccia", () => {
+  const ZOOM = "appearance.zoom";
+  const withZoom = (): SettingEntry[] => [...entries(), entry(ZOOM, { kind: "number", default: 1, min: 0.5, max: 2 }, 1)];
+  const slider = (): HTMLInputElement => document.getElementById("prefs-zoom-range") as HTMLInputElement;
+  const readout = (): string => row(ZOOM).querySelector(".prefs-zoom-value")!.textContent ?? "";
+
+  it("si legge in percento, e si scrive come fattore dalla strada della riga", async () => {
+    await openPanel(withZoom());
+    expect(native(ZOOM).closest<HTMLElement>(".setting-range")!.hidden).toBe(true);
+    expect(slider().value).toBe("100");
+    expect(readout()).toBe("100%");
+    expect(slider().getAttribute("aria-valuetext")).toBe("100%");
+    expect(row(ZOOM).querySelector(".setting-default")?.textContent ?? "").not.toContain(" 1");
+    slider().value = "150";
+    slider().dispatchEvent(new Event("input", { bubbles: true }));
+    expect(readout()).toBe("150%");
+    slider().dispatchEvent(new Event("change", { bubbles: true }));
+    await settled();
+    expect(fake.setSetting).toHaveBeenCalledWith(ZOOM, 1.5);
+    expect(readout()).toBe("150%");
+  });
+
+  it("segue un valore cambiato da fuori", async () => {
+    await openPanel(withZoom());
+    await changedOutside(ZOOM, 0.8);
+    expect(slider().value).toBe("80");
+    expect(readout()).toBe("80%");
+  });
+});
+
+describe("i caratteri", () => {
+  const FONT = "appearance.font";
+  const withFont = (value = "newsreader"): SettingEntry[] => [
+    ...entries(),
+    entry(FONT, {
+      kind: "choice",
+      default: "newsreader",
+      options: [
+        { value: "newsreader", label: "Newsreader" },
+        { value: "hanken", label: "Hanken Grotesk" },
+        { value: "literata", label: "Literata" },
+        { value: "inter", label: "Inter" },
+        { value: "system", label: "Del sistema" },
+      ],
+    }, value),
+    entry("appearance.font-mono", {
+      kind: "choice",
+      default: "plex",
+      options: [{ value: "plex", label: "IBM Plex Mono" }, { value: "jetbrains", label: "JetBrains Mono" }],
+    }, "plex"),
+  ];
+  const voices = (): HTMLButtonElement[] => [...row(FONT).querySelectorAll<HTMLButtonElement>(".prefs-font")];
+
+  it("ogni voce è scritta col carattere che nomina, in un gruppo di scelta", async () => {
+    await openPanel(withFont());
+    const group = row(FONT).querySelector<HTMLElement>(".prefs-fonts")!;
+    expect(group.getAttribute("role")).toBe("radiogroup");
+    expect(group.getAttribute("aria-label")).toBe(`etichetta ${FONT}`);
+    expect(voices().map((voice) => voice.textContent)).toEqual(["Newsreader", "Hanken Grotesk", "Literata", "Inter", "Del sistema"]);
+    expect(voices()[0]!.style.fontFamily).toContain("Newsreader");
+    expect(voices()[3]!.style.fontFamily).toContain("Inter");
+    expect(checkedIn(".prefs-fonts")).toEqual([voices()[0]!.id]);
+    expect(voices().map((voice) => voice.tabIndex)).toEqual([0, -1, -1, -1, -1]);
+    // La tendina resta nella riga, nascosta: è la strada per scrivere.
+    expect(native(FONT).hidden).toBe(true);
+  });
+
+  it("scegliere scrive dalla strada della riga, e le frecce spostano la scelta", async () => {
+    await openPanel(withFont());
+    voices()[3]!.click();
+    await settled();
+    expect(fake.setSetting).toHaveBeenCalledWith(FONT, "inter");
+    expect(checkedIn(".prefs-fonts")).toEqual([voices()[3]!.id]);
+    press(voices()[3]!, "ArrowRight");
+    await settled();
+    expect(fake.setSetting).toHaveBeenLastCalledWith(FONT, "system");
+    expect(document.activeElement).toBe(voices()[4]);
+  });
+
+  it("segue un valore cambiato da fuori", async () => {
+    await openPanel(withFont());
+    await changedOutside(FONT, "system");
+    expect(checkedIn(".prefs-fonts")).toEqual([voices()[4]!.id]);
+  });
+
+  it("nel segmentato di poche voci ogni bottone è scritto col suo carattere", async () => {
+    await openPanel(withFont());
+    const options = [...row("appearance.font-mono").querySelectorAll<HTMLElement>(".segmented-option")];
+    expect(options.map((option) => option.style.fontFamily.split(",")[0])).toEqual(['"IBM Plex Mono"', '"JetBrains Mono Variable"']);
+  });
+});

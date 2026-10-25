@@ -98,6 +98,17 @@
 .tab-entry:hover::after {
   opacity: 1;
 }
+/* La linguetta presa per trascinarla si solleva, come una riga dell'albero. */
+.tab-entry[data-lifted] {
+  z-index: 1;
+  border-radius: var(--radius-chip);
+  box-shadow: var(--shadow-md);
+  transform: scale(1.02);
+  transition: transform var(--duration-fast) var(--ease);
+}
+.tab-entry[data-lifted]::after {
+  opacity: 1;
+}
 .tab-entry:has(> .tab[aria-selected="true"])::after {
   opacity: 0;
 }
@@ -325,6 +336,31 @@
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
+/* Le modalità in un bottone solo, in una testata stretta: dice quella accesa
+   con la matita blu dei segmenti, e apre la scelta. */
+.pane-toolbar > .pane-mode-current {
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: var(--accent-wash);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pane-toolbar > .pane-mode-current::after {
+  content: "▾";
+  font-weight: var(--weight-regular);
+}
+.pane-toolbar > .pane-mode-current:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
 /* Un foglio stretto (tre affiancati, la finestra piccola): i passi del
    selettore e il menu cedono respiro prima che il selettore ceda una voce. */
 @container sheet-head (max-width: 320px) {
@@ -370,6 +406,10 @@
   color: var(--danger);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
+}
+/* Il nome che si può usare, sotto il perché: il gesto che chiude il giro. */
+.sheet-title-proposal {
+  margin: 0 var(--space-4) var(--space-3);
 }
 
 /* Lo stato di salvataggio è un bottone: parola e punto sono quelli della

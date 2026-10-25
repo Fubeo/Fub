@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   DURATION,
   EXIT_SAFETY_MS,
-  MAX_TILT_DEG,
   PRESS_SCALE,
   SAMPLE_MS,
   SKELETON_DELAY_MS,
@@ -12,6 +11,7 @@ import {
   SPRINGS,
   STAGGER_MAX,
   STAGGER_MS,
+  calmPresence,
   critical,
   invalidateSpringTokens,
   resolveSpring,
@@ -47,7 +47,7 @@ describe("i parametri del disegno", () => {
       jelly: { stiffness: 260, damping: 12 },
     });
     expect(DURATION).toEqual({ state: 90, swap: 140, short: 220, large: 360, scene: 560 });
-    expect([PRESS_SCALE, STAGGER_MS, STAGGER_MAX, MAX_TILT_DEG]).toEqual([0.97, 12, 8, 4]);
+    expect([PRESS_SCALE, STAGGER_MS, STAGGER_MAX]).toEqual([0.97, 12, 8]);
     expect([EXIT_SAFETY_MS, SKELETON_DELAY_MS]).toEqual([600, 120]);
   });
 });
@@ -148,6 +148,38 @@ describe("critical", () => {
 
   it("non rende più svelta una molla già sovrasmorzata", () => {
     expect(critical({ stiffness: 100, damping: 50 })).toEqual({ stiffness: 100, damping: 50 });
+  });
+});
+
+describe("calmPresence", () => {
+  const speed = (values: number[]): number =>
+    Math.max(...values.slice(1).map((value, index) => Math.abs(value - values[index]!)));
+
+  it.each(NAMES)("%s: metà strada senza superamento, e non più lunga della molla piena", (name) => {
+    const full = sampleSpring(SPRINGS[name], { from: 0, to: 1 });
+    const calm = calmPresence(SPRINGS[name]);
+    const half = sampleSpring(calm, { from: 0.5, to: 1 });
+    expect(Math.max(...half.values)).toBe(1);
+    expect(sampleSpring(calm, { from: 0, to: 1 }).duration).toBeLessThanOrEqual(full.duration);
+    expect(half.duration).toBeLessThanOrEqual(full.duration);
+    expect(speed(half.values)).toBeLessThanOrEqual(speed(full.values));
+    // Critica, e la rigidezza non scende mai sotto quella piena.
+    expect(calm.damping).toBeCloseTo(2 * Math.sqrt(calm.stiffness), 6);
+    expect(calm.stiffness).toBeGreaterThanOrEqual(SPRINGS[name].stiffness);
+  });
+
+  it("dà le rigidezze del piano", () => {
+    const k = Object.fromEntries(NAMES.map((name) => [name, calmPresence(SPRINGS[name]).stiffness]));
+    expect(k.snap).toBeGreaterThan(600);
+    expect(k.snap).toBeLessThan(700);
+    expect(k.soft).toBeGreaterThan(330);
+    expect(k.soft).toBeLessThan(410);
+  });
+
+  it("`springFor` la dà alle presenze del calmo, e `critical` al resto", () => {
+    expect(springFor("soft", true, true)).toEqual(calmPresence(SPRINGS.soft));
+    expect(springFor("soft", true)).toEqual(critical(SPRINGS.soft));
+    expect(springFor("soft", false, true)).toEqual(SPRINGS.soft);
   });
 });
 

@@ -8,6 +8,7 @@ import { api } from "../host/ipc";
 import { $ } from "../ui/dom";
 import { highlighted } from "../ui/highlight";
 import { setTooltip } from "../ui/tooltip";
+import { showContextMenu, type MenuItem } from "../ui/menu";
 import { refreshOn, registerPanel, unregisterPanel } from "../ui/panel-host";
 import { openDocument, reveal } from "../state/document-controller";
 import { isPanelVisible, showPanel } from "./sidebar";
@@ -26,6 +27,7 @@ import { ClipboardUnavailable, writeClipboardText } from "../platform/clipboard"
 import { offerNote } from "../ui/drag-types";
 import { offerOutside } from "../ui/vault-transfer";
 import { openVaultRoot } from "../state/store";
+import { skeleton, SKELETON_DELAY_MS } from "../ui/skeleton";
 
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchSummaryEl = $("#search-summary");
@@ -202,11 +204,21 @@ function testoP8(chiave: ChiaveP8, mostrati = 0, totale = 0): string {
       return t("search.more", { shown: mostrati, total: totale });
   }
 }
+/// Le righe dello scheletro dei risultati.
+const SKELETON_ROWS = 4;
+
+/// Toglie i segni dell'attesa: la sagoma, se c'è, e `aria-busy`.
+function stopWaiting(): void {
+  searchResultsEl.removeAttribute("aria-busy");
+  searchResultsEl.querySelector(":scope > .skeleton")?.remove();
+}
+
 async function runSearch(): Promise<void> {
   const query = searchInputEl.value.trim();
   drawExclusions();
   if (!query) {
     race.cancel();
+    stopWaiting();
     searchResultsEl.innerHTML = "";
     searchSummaryEl.textContent = "";
     return;
@@ -222,20 +234,24 @@ async function runSearch(): Promise<void> {
   } catch (error) {
     if (error instanceof SearchSyntaxError) {
       race.cancel();
+      stopWaiting();
       searchSummaryEl.textContent = t("search.syntax_incomplete", { reason: error.message });
       return;
     }
     showSearchResults([], errorText(error), false, 0);
     return;
   }
-  // Caricamento: si mostra solo se il giro è ancora l'ultimo dopo 180ms, così
-  // una risposta rapida non lampeggia.
+  // Caricamento: si mostra solo se il giro è ancora l'ultimo dopo
+  // `SKELETON_DELAY_MS`, così una risposta rapida non lampeggia. Un elenco
+  // ancora vuoto mostra la sagoma dei risultati; uno pieno resta dov'è.
   const slow = window.setTimeout(() => {
     if (searchInputEl.value.trim() === query) {
       searchSummaryEl.textContent = testoP8("search.loading");
+      searchResultsEl.setAttribute("aria-busy", "true");
+      if (searchResultsEl.childElementCount === 0) searchResultsEl.append(skeleton(SKELETON_ROWS, "li"));
       showPanel("search");
     }
-  }, 180);
+  }, SKELETON_DELAY_MS);
   await race.last(async (expected) => {
     try {
       // Ciò che l'utente digita è **testo cercato**, non una sintassi: la stringa
@@ -325,6 +341,7 @@ function showSearchResults(
   total = hits.length,
 ): void {
   showPanel("search");
+  stopWaiting();
   // Il conteggio è un **argomento**, non una parola declinata: «1 risultato»
   // e «2 risultati» erano due rami di un ternario, che è la forma che una
   // lingua con tre plurali non può scrivere. Vale qui come vale in Rust, dove
@@ -359,36 +376,9 @@ function showSearchResults(
   shownHits = hits;
   const tools = document.createElement("li");
   tools.className = "search-tools";
-  const copy = document.createElement("button");
-  copy.type = "button";
-  copy.className = "search-action";
-  copy.textContent = t("search.copy_visible");
-  copy.addEventListener("click", () => {
-    void writeClipboardText(shownHits.map((hit) => hit.doc).join("\n"))
-      .catch((err: unknown) => notify(
-        err instanceof ClipboardUnavailable ? t("search.clipboard_unavailable") : errorText(err),
-        "guasto",
-      ));
-  });
-  if (hits.length > 0) tools.append(copy);
-  // Gli operatori della barra, detti a parole: la sintassi c'è ed è ricca, ma
-  // da un segnaposto non si scopre.
-  const help = document.createElement("button");
-  help.type = "button";
-  help.className = "search-action";
-  help.textContent = t("search.syntax_help");
-  help.setAttribute("aria-expanded", "false");
-  help.addEventListener("click", () => {
-    const open = tools.querySelector(".search-syntax");
-    if (open) {
-      open.remove();
-      help.setAttribute("aria-expanded", "false");
-      return;
-    }
-    tools.append(syntaxHelp());
-    help.setAttribute("aria-expanded", "true");
-  });
-  tools.append(help);
+  // In vista resta l'ordine, che cambia ciò che si legge; le altre quattro
+  // azioni stanno nel menu «⋯», ognuna col suo nome e, se è un interruttore,
+  // col suo stato.
   if (hits.length > 0) {
     const order = document.createElement("select");
     order.className = "search-action";
@@ -404,29 +394,70 @@ function showSearchResults(
       sortMode = SEARCH_SORTS.find((mode) => mode === order.value) ?? "relevance";
       void runSearch();
     });
-    const collapse = document.createElement("button");
-    collapse.type = "button";
-    collapse.className = "search-action";
-    collapse.textContent = t(collapsedResults ? "search.expand_results" : "search.collapse_results");
-    collapse.setAttribute("aria-pressed", String(collapsedResults));
-    collapse.addEventListener("click", () => {
-      collapsedResults = !collapsedResults;
-      showSearchResults(hits, error, indexing, total);
-    });
-    tools.append(order, collapse);
-    if (!collapsedResults) {
-      const context = document.createElement("button");
-      context.type = "button";
-      context.className = "search-action";
-      context.textContent = t(widerContext ? "search.less_context" : "search.more_context");
-      context.setAttribute("aria-pressed", String(widerContext));
-      context.addEventListener("click", () => {
-        widerContext = !widerContext;
-        showSearchResults(hits, error, indexing, total);
-      });
-      tools.append(context);
-    }
+    tools.append(order);
   }
+  const more = document.createElement("button");
+  more.type = "button";
+  more.className = "search-action search-more";
+  more.textContent = "⋯";
+  more.setAttribute("aria-label", t("search.more_actions"));
+  more.setAttribute("aria-haspopup", "menu");
+  more.setAttribute("aria-expanded", "false");
+  setTooltip(more, t("search.more_actions"));
+  // Gli operatori della barra, detti a parole: la sintassi c'è ed è ricca, ma
+  // da un segnaposto non si scopre.
+  const toggleSyntax = (): void => {
+    const open = tools.querySelector(".search-syntax");
+    if (open) open.remove();
+    else tools.append(syntaxHelp());
+  };
+  more.addEventListener("click", () => {
+    const items: MenuItem[] = [];
+    if (hits.length > 0) {
+      items.push({
+        label: t("search.copy_visible"),
+        run: () => {
+          void writeClipboardText(shownHits.map((hit) => hit.doc).join("\n"))
+            .catch((err: unknown) => notify(
+              err instanceof ClipboardUnavailable ? t("search.clipboard_unavailable") : errorText(err),
+              "guasto",
+            ));
+        },
+      });
+    }
+    items.push({
+      label: t("search.syntax_help"),
+      choice: "checkbox",
+      checked: tools.querySelector(".search-syntax") !== null,
+      run: toggleSyntax,
+    });
+    if (hits.length > 0) {
+      items.push({
+        label: t("search.collapse_results"),
+        separator: true,
+        choice: "checkbox",
+        checked: collapsedResults,
+        run: () => {
+          collapsedResults = !collapsedResults;
+          showSearchResults(hits, error, indexing, total);
+        },
+      });
+      if (!collapsedResults) {
+        items.push({
+          label: t("search.more_context"),
+          choice: "checkbox",
+          checked: widerContext,
+          run: () => {
+            widerContext = !widerContext;
+            showSearchResults(hits, error, indexing, total);
+          },
+        });
+      }
+    }
+    more.setAttribute("aria-expanded", "true");
+    showContextMenu(more, items, { onClose: () => more.setAttribute("aria-expanded", "false") });
+  });
+  tools.append(more);
   searchResultsEl.append(tools);
   // Le righe si montano **fuori dal documento** e si attaccano in una volta
   // sola. Non è cosmetica: una pagina di cinquanta note con le loro occorrenze
@@ -553,6 +584,23 @@ function showSearchResults(
   if (!error && hits.length === 0 && !indexing && !searchInputEl.value.trim().startsWith('{"any"')) {
     const name = searchedName(searchInputEl.value);
     if (name) newItems.appendChild(createRow(name));
+  }
+  // Niente vicoli ciechi: se a togliere i risultati sono le esclusioni, la
+  // via d'uscita sta nella lista stessa e non solo nelle etichette sopra.
+  const exclusions = excluded.size + excludedFolders.size;
+  if (!error && hits.length === 0 && !indexing && exclusions > 0) {
+    const li = document.createElement("li");
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "search-result";
+    clear.textContent = t("search.exclusions_clear", { count: exclusions });
+    clear.addEventListener("click", () => {
+      excluded.clear();
+      excludedFolders.clear();
+      void runSearch();
+    });
+    li.appendChild(clear);
+    newItems.appendChild(li);
   }
   searchResultsEl.appendChild(newItems);
   wireSearchListSelection();

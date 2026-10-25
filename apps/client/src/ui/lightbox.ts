@@ -89,8 +89,8 @@ export function openLightbox(options: LightboxOptions): Lightbox {
   current = handle;
 
   document.body.append(overlay);
-  enterSurface(overlay, { viewTransition: false });
-  life.add(() => exitSurface(overlay, () => overlay.remove(), { viewTransition: false }));
+  enterSurface(overlay);
+  life.add(() => exitSurface(overlay, () => overlay.remove()));
   life.add(trapFocus(overlay, () => handle.close()));
   life.add(attachTooltip(closeButton, t("lightbox.close")));
   life.listen(closeButton, "click", () => handle.close());

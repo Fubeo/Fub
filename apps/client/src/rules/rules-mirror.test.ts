@@ -14,7 +14,7 @@ import {
   topicMatches,
 } from "./mirrored";
 import { expand } from "../i18n/strings";
-import { normalize } from "../ui/commands";
+import { foldedChord, normalize } from "../ui/commands";
 import { byteToCharIndex, charToByteIndex } from "./offsets";
 import { parseSearch } from "./search-syntax";
 // La fixture è generata dalle regole Rust — vedi
@@ -67,6 +67,7 @@ const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   // guarda il registro fermo; `null` da entrambe le parti vuol dire «questa app
   // non la sa premere», e sono le stringhe su cui le due copie divergevano.
   "canonical_chord": (c) => normalize(c.binding),
+  "folded_chord": (c) => foldedChord(c.binding),
   byte_to_utf16: (c) => byteToCharIndex(c.text, c.byte),
   // I due motori di sostituzione `{nome}`: l'unica coppia che il repo
   // dichiarava gemella e nessuna fixture teneva tale (difetto 0224).

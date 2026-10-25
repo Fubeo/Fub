@@ -104,8 +104,9 @@
   line-height: var(--leading-tight);
 }
 /* Un titolo che ne segue un altro è un'**etichetta di sezione** («Appuntate»):
-   maiuscoletto piccolo in grafite, che nomina senza pesare. */
-.files-panel .panel-title + .panel-title,
+   maiuscoletto piccolo in grafite, che nomina senza pesare. Fra i due può
+   stare il campo che filtra le note: conta l'ordine, non la vicinanza. */
+.files-panel .panel-title ~ .panel-title,
 .bookmarks-panel .palette-row {
   min-height: var(--space-8);
   padding: var(--space-3) var(--space-4) 0;
@@ -116,8 +117,11 @@
   text-transform: uppercase;
 }
 /* L'esito della ricerca («Risultati: 4», «Nessun risultato», «Indicizzazione
-   in corso…») è una riga di stato, non un titolo: grafite, corpo piccolo. */
-.sidebar .panel-title:has(~ .search-results) {
+   in corso…») è una riga di stato, non un titolo: grafite, corpo piccolo. È
+   quella che sta subito sopra gli esiti, o sopra le esclusioni: «Note», più
+   su dell'elenco del filtro, resta un titolo. */
+.sidebar .panel-title:has(+ .search-results),
+.sidebar .panel-title:has(+ .search-exclusions) {
   min-height: var(--row-h);
   color: var(--muted);
   font-size: var(--text-sm);
@@ -195,6 +199,11 @@
   font-size: var(--text-sm);
   line-height: 1;
   cursor: pointer;
+}
+/* La casa e gli spazi senza un'emoji scelta portano la figura a linea. */
+.space-chip > svg {
+  width: var(--space-6);
+  height: var(--space-6);
 }
 .space-chip:hover,
 .space-chip:active {
@@ -463,7 +472,6 @@
   align-items: center;
   justify-content: center;
   background: var(--scrim);
-  animation: fub-enter-fade var(--duration-slow) var(--ease-out);
 }
 .views-modal .declared-view-panel {
   min-width: 380px;
@@ -475,7 +483,6 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-dialog);
   box-shadow: var(--shadow-5);
-  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
 }
 
 /* Un'azione in volo: il bottone resta dov'è, ma dice che sta lavorando e non

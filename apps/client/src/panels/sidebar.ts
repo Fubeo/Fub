@@ -60,6 +60,10 @@ export function showPanel(panel: SidebarPanel): void {
   // nascosti, nessuna view accesa).
   const effective: SidebarPanel = matched ? panel : "files";
   lastPanel = effective;
+  // Il campo della ricerca e le sue opzioni sono della Ricerca: negli altri
+  // pannelli la pelle li toglie, e in File resta il campo che filtra le note.
+  const sidebar = document.getElementById("sidebar");
+  if (sidebar) sidebar.dataset.panel = isNative ? effective : "view";
   // I due nativi si escludono a vicenda e con le view.
   NATIVE_PANELS.files.hidden = effective !== "files";
   NATIVE_PANELS.search.hidden = effective !== "search";

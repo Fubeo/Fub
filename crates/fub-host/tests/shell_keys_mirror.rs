@@ -27,7 +27,7 @@
 
 use std::path::PathBuf;
 
-use fub_abi::rules::keys::{canonical, obscures};
+use fub_abi::rules::keys::{folded, obscures};
 use fub_host::shell::SHELL_COMMANDS;
 
 const HEADER: &str = "\
@@ -116,7 +116,7 @@ fn no_binding_declared_by_both_registries() {
     for spec in fub_features::commands::CoreCommands::specs() {
         if let Some(k) = &spec.keybinding {
             from_kernel += 1;
-            match canonical(k) {
+            match folded(k) {
                 Some(key) => for_binding.entry(key).or_default().push(spec.id.clone()),
                 None => untypeable.push((spec.id.clone(), k.clone())),
             }
@@ -127,7 +127,7 @@ fn no_binding_declared_by_both_registries() {
             from_shell += 1;
         }
         if let Some(k) = chord {
-            match canonical(k) {
+            match folded(k) {
                 Some(key) => for_binding.entry(key).or_default().push((*id).to_string()),
                 None => untypeable.push(((*id).to_string(), (*k).to_string())),
             }

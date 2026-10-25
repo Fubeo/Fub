@@ -272,13 +272,13 @@ describe("la superficie Markdown", () => {
       content.dispatchEvent(new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }));
       await vi.waitFor(() => expect(list).toHaveBeenCalledTimes(2));
       ed.buffer.setDoc("different buffer");
-      expect(document.getElementById("command-palette")?.dataset.shellMotion).toBe("exit");
+      expect(document.getElementById("command-palette")?.hidden ?? true).toBe(true);
       content.dispatchEvent(new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }));
       await vi.waitFor(() => expect(list).toHaveBeenCalledTimes(3));
       const outsider = document.createElement("button");
       document.body.append(outsider);
       outsider.focus();
-      expect(document.getElementById("command-palette")?.dataset.shellMotion).toBe("exit");
+      expect(document.getElementById("command-palette")?.hidden ?? true).toBe(true);
       outsider.remove();
       const count = list.mock.calls.length;
       ed.destroy();

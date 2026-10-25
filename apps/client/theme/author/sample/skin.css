@@ -64,6 +64,36 @@ html, body, .app {
   font-size: var(--text-sm);
 }
 
+/* Lo scheletro: righe del colore del passaggio al posto di ciò che tarda.
+   Fermo: l'attesa non ha bisogno di luccicare. Le righe si accorciano a
+   turno, come un testo. */
+.skeleton {
+  display: block;
+  padding: var(--space-3) var(--space-4);
+}
+.skeleton-line {
+  display: block;
+  height: 0.75em;
+  border-radius: var(--radius-chip);
+  background: var(--bg-hover);
+}
+.skeleton-line + .skeleton-line {
+  margin-top: var(--space-4);
+}
+/* La sagoma di un elenco di righe, al passo di quelle vere. */
+.skeleton-rows {
+  padding: var(--space-5) var(--space-6);
+}
+.skeleton-rows .skeleton-line + .skeleton-line {
+  margin-top: var(--space-7);
+}
+.skeleton-line:nth-child(3n + 2) {
+  width: 72%;
+}
+.skeleton-line:nth-child(3n) {
+  width: 48%;
+}
+
 /* Il bottone nudo è un fantasma: niente fondo finché non lo si sfiora. Sta a
    specificità zero, così un componente che gli dà una classe decide da solo
    anche il proprio passaggio, senza doverlo disfare. */
@@ -1250,6 +1280,17 @@ kbd,
 .vault-chip[data-empty] .vault-chip-icon {
   background: var(--border-strong);
 }
+/* Il vault ha un'icona scelta: prende il posto del quadratino. */
+.vault-chip-icon:not(:empty) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  background: none;
+  font-size: var(--text-base);
+  line-height: 1;
+}
 
 .vault-chip-name {
   max-width: 200px;
@@ -1901,8 +1942,9 @@ kbd,
   line-height: var(--leading-tight);
 }
 /* Un titolo che ne segue un altro è un'**etichetta di sezione** («Appuntate»):
-   maiuscoletto piccolo in grafite, che nomina senza pesare. */
-.files-panel .panel-title + .panel-title,
+   maiuscoletto piccolo in grafite, che nomina senza pesare. Fra i due può
+   stare il campo che filtra le note: conta l'ordine, non la vicinanza. */
+.files-panel .panel-title ~ .panel-title,
 .bookmarks-panel .palette-row {
   min-height: var(--space-8);
   padding: var(--space-3) var(--space-4) 0;
@@ -1913,8 +1955,11 @@ kbd,
   text-transform: uppercase;
 }
 /* L'esito della ricerca («Risultati: 4», «Nessun risultato», «Indicizzazione
-   in corso…») è una riga di stato, non un titolo: grafite, corpo piccolo. */
-.sidebar .panel-title:has(~ .search-results) {
+   in corso…») è una riga di stato, non un titolo: grafite, corpo piccolo. È
+   quella che sta subito sopra gli esiti, o sopra le esclusioni: «Note», più
+   su dell'elenco del filtro, resta un titolo. */
+.sidebar .panel-title:has(+ .search-results),
+.sidebar .panel-title:has(+ .search-exclusions) {
   min-height: var(--row-h);
   color: var(--muted);
   font-size: var(--text-sm);
@@ -1992,6 +2037,11 @@ kbd,
   font-size: var(--text-sm);
   line-height: 1;
   cursor: pointer;
+}
+/* La casa e gli spazi senza un'emoji scelta portano la figura a linea. */
+.space-chip > svg {
+  width: var(--space-6);
+  height: var(--space-6);
 }
 .space-chip:hover,
 .space-chip:active {
@@ -2260,7 +2310,6 @@ kbd,
   align-items: center;
   justify-content: center;
   background: var(--scrim);
-  animation: fub-enter-fade var(--duration-slow) var(--ease-out);
 }
 .views-modal .declared-view-panel {
   min-width: 380px;
@@ -2272,7 +2321,6 @@ kbd,
   border: 1px solid var(--border);
   border-radius: var(--radius-dialog);
   box-shadow: var(--shadow-5);
-  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
 }
 
 /* Un'azione in volo: il bottone resta dov'è, ma dice che sta lavorando e non
@@ -2331,6 +2379,17 @@ kbd,
 .tree-row:active {
   background: var(--bg-active);
 }
+/* La riga presa per trascinarla si solleva dal suo posto: di poco, con
+   l'ombra, sopra le vicine. Il fantasma che segue il puntatore è quello del
+   sistema; la scala arriva con una transizione, così l'immagine che il
+   sistema fotografa alla partenza è la riga a riposo. */
+.tree-row[data-lifted] {
+  z-index: 1;
+  background: var(--bg-hover);
+  box-shadow: var(--shadow-md);
+  transform: scale(1.02);
+  transition: transform var(--duration-fast) var(--ease);
+}
 
 /* Il rientro, un livello alla volta (`--tree-indent` si stringe coi passi di
    compattezza). Otto livelli sono scritti per esteso; dal nono rientra la
@@ -2369,11 +2428,23 @@ kbd,
    «quella corrente». La dice la matita blu — fondo tenue, inchiostro blu,
    peso da titolo — e non un grigio: è l'unica riga del cassetto che parla del
    foglio aperto. */
-[role="treeitem"][aria-selected="true"] > .tree-row,
-.tree-row[aria-current="true"] {
+[role="treeitem"][aria-selected="true"] > .tree-row {
   background: var(--accent-wash);
   color: var(--accent);
   font-weight: var(--weight-bold);
+}
+/* Fra le appuntate la stessa nota ha soltanto un punto blu sul bordo: la riga
+   accesa è una, nell'albero. */
+.tree-row[aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: var(--space-2);
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 /* Il fuoco da tastiera sta sul `treeitem`, che contiene anche il sottoalbero:
@@ -2407,6 +2478,16 @@ kbd,
   font-size: calc(var(--drawer-icon) - 3px);
   line-height: 1;
 }
+/* La cartella senza un'emoji scelta: la figura a linea, in grafite come il
+   foglietto delle note. */
+.row-icon > svg {
+  width: var(--drawer-icon);
+  height: var(--drawer-icon);
+  color: var(--muted);
+}
+[role="treeitem"][aria-selected="true"] > .tree-row > .row-icon > svg {
+  color: var(--accent);
+}
 /* Una nota senza icona tiene la colonna con un foglietto: contorno grafite,
    l'angolo piegato. È disegnato, non un carattere, così prende il colore
    della riga corrente. */
@@ -2423,8 +2504,7 @@ kbd,
   background: linear-gradient(to bottom left, transparent 50%, var(--muted) 50%) top right / 5px 5px no-repeat border-box;
   clip-path: polygon(0 0, calc(100% - 4.5px) 0, 100% 4.5px, 100% 100%, 0 100%);
 }
-[role="treeitem"][aria-selected="true"] > .tree-row.no-icon::after,
-.tree-row.no-icon[aria-current="true"]::after {
+[role="treeitem"][aria-selected="true"] > .tree-row.no-icon::after {
   border-color: var(--accent);
   background-image: linear-gradient(to bottom left, transparent 50%, var(--accent) 50%);
 }
@@ -2750,6 +2830,13 @@ kbd,
 }
 .search-results li:hover {
   background: var(--bg-hover);
+}
+/* La sagoma dei risultati che tardano è una riga sola, ferma e senza
+   passaggio: non c'è niente da scegliere. */
+.search-results li.skeleton,
+.search-results li.skeleton:hover {
+  display: block;
+  background: transparent;
 }
 /* Premuta è il risultato a esserlo, non una sua azione: la riga scurisce
    solo quando il dito è sul nome. */
@@ -3087,11 +3174,28 @@ kbd,
 /* **Le opzioni e la sostituzione**, sotto il campo. Gli interruttori sono le
    stesse linguette delle azioni, accese in blu quando premuti; il blocco
    «Sostituisci» si apre sotto di loro e porta il piano scritto, non un dialogo. */
+/* **Il campo e le opzioni sono della Ricerca.** Negli altri pannelli il
+   cassetto ha un campo solo, quello che filtra le note. */
+.sidebar:not([data-panel="search"]) > .search-input,
+.sidebar:not([data-panel="search"]) > .search-options,
+.sidebar:not([data-panel="search"]) > .search-replace {
+  display: none;
+}
+/* Le sei azioni stanno dietro «Opzioni», e aperte vanno a capo sotto. */
 .search-options {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   padding: var(--space-3) 0 var(--space-2);
+}
+.search-options-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  width: 100%;
+}
+.search-options-group[hidden] {
+  display: none;
 }
 .search-option {
   min-width: var(--space-8);
@@ -3251,6 +3355,17 @@ kbd,
   transition: opacity var(--duration-state) var(--ease);
 }
 .tab-entry:hover::after {
+  opacity: 1;
+}
+/* La linguetta presa per trascinarla si solleva, come una riga dell'albero. */
+.tab-entry[data-lifted] {
+  z-index: 1;
+  border-radius: var(--radius-chip);
+  box-shadow: var(--shadow-md);
+  transform: scale(1.02);
+  transition: transform var(--duration-fast) var(--ease);
+}
+.tab-entry[data-lifted]::after {
   opacity: 1;
 }
 .tab-entry:has(> .tab[aria-selected="true"])::after {
@@ -3480,6 +3595,31 @@ kbd,
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
+/* Le modalità in un bottone solo, in una testata stretta: dice quella accesa
+   con la matita blu dei segmenti, e apre la scelta. */
+.pane-toolbar > .pane-mode-current {
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: var(--accent-wash);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pane-toolbar > .pane-mode-current::after {
+  content: "▾";
+  font-weight: var(--weight-regular);
+}
+.pane-toolbar > .pane-mode-current:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
 /* Un foglio stretto (tre affiancati, la finestra piccola): i passi del
    selettore e il menu cedono respiro prima che il selettore ceda una voce. */
 @container sheet-head (max-width: 320px) {
@@ -3525,6 +3665,10 @@ kbd,
   color: var(--danger);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
+}
+/* Il nome che si può usare, sotto il perché: il gesto che chiude il giro. */
+.sheet-title-proposal {
+  margin: 0 var(--space-4) var(--space-3);
 }
 
 /* Lo stato di salvataggio è un bottone: parola e punto sono quelli della
@@ -5154,14 +5298,21 @@ kbd,
   background-color: transparent;
   color: var(--doc-fg);
 }
-/* I segni di piega ci sono su ogni titolo: a voce bassa finché il puntatore
-   non entra nel margine. */
+/* I segni di piega stanno su titoli, voci, codice e frontmatter, e si vedono
+   quando il puntatore entra nel margine. Una riga piegata il suo lo tiene
+   sempre: è lì che c'è qualcosa da riaprire. */
 .cm-editor .cm-scroller .cm-foldGutter span {
   color: var(--doc-gutter-fg);
-  opacity: 0.45;
+  cursor: pointer;
 }
-.cm-editor .cm-scroller .cm-gutters:hover .cm-foldGutter span {
+.cm-editor .cm-scroller .cm-foldGutter span[data-fold="open"] {
+  opacity: 0;
+}
+.cm-editor .cm-scroller .cm-gutters:hover .cm-foldGutter span[data-fold="open"] {
   opacity: 1;
+}
+.cm-editor .cm-scroller .cm-foldGutter span[data-fold="folded"] {
+  color: var(--accent);
 }
 /* La riga attiva è un tono appena, e solo dove si scrive sorgente. In Live la
    pagina è resa: una banda che attraversa titoli e citazioni la sporcherebbe.
@@ -10490,7 +10641,6 @@ h6.ui-heading {
   pointer-events: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
-  animation: fub-enter-rise-sm var(--duration-med) var(--ease-out);
 }
 .graph-panel-popover[hidden] {
   display: none;
@@ -11140,11 +11290,12 @@ h6.ui-heading {
   padding-left: calc(var(--space-4) * 2 + 16px);
 }
 
-/* Un filetto da bordo a bordo, con la sua aria sopra e sotto. */
+/* Un filetto da bordo a bordo, con la sua aria sopra e sotto. A metà del
+   contrasto di un bordo: separa i gruppi senza rigare il menu. */
 .context-menu .menu-separator {
   height: 1px;
   margin: var(--space-2) calc(var(--space-2) * -1);
-  background: var(--border);
+  background: color-mix(in oklab, var(--border) 50%, transparent);
 }
 
 /* **La voce distruttiva** scrive in rosso a riposo. Evidenziata non prende la
@@ -12252,7 +12403,6 @@ h6.ui-heading {
   color: var(--text);
   font-size: var(--text-base);
   line-height: var(--leading-normal);
-  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
 }
 /* Il punto sta a metà della prima riga, qualunque sia il corpo del testo. */
 .toast::before {
@@ -12415,7 +12565,6 @@ h6.ui-heading {
   font-size: var(--text-base);
   line-height: var(--leading-normal);
   overflow: hidden;
-  animation: fub-enter-rise-sm var(--duration-med) var(--ease-out);
 }
 
 .dock-panel--notify {
@@ -13541,14 +13690,6 @@ h6.ui-heading {
   background: var(--scrim);
 }
 
-.settings-scrim[data-shell-motion="enter"] {
-  animation: fub-enter-fade var(--duration-slow) var(--ease-out);
-}
-
-.settings-scrim[data-shell-motion="exit"] {
-  animation: fub-exit-fade var(--duration-fast) var(--ease-in);
-}
-
 .settings-header {
   grid-area: 1 / 1;
   z-index: 1;
@@ -14392,6 +14533,33 @@ h6.ui-heading {
  * della scocca, il foglio nel suo, le righe di testo nell'inchiostro tenue. Il
  * passo scelto ha il contorno e la velatura della matita blu, e sotto la
  * figura il punto pieno: si riconosce anche senza colore. */
+/* Le voci dei caratteri: come i passi dello spazio, un contorno che si
+ * accende sulla scelta. Il carattere lo mette la voce stessa. */
+.prefs-font {
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+}
+
+.prefs-font:hover {
+  background: var(--overlay-hover);
+}
+
+.prefs-font:active {
+  background: var(--overlay-active);
+}
+
+.prefs-font[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+.prefs-font:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .prefs-space-step {
   border: 1px solid transparent;
   border-radius: var(--radius-control);
@@ -15506,114 +15674,27 @@ h6.ui-heading {
 
 /* ── skin/motion.css ────────────────────────────────────────────────────── */
 
-/* Il moto delle superfici che entrano ed escono. */
+/* Il moto delle superfici che entrano ed escono è di `src/moto`, chiamato da
+   `ui/motion.ts`: qui non ci sono fotogrammi chiave. Restano le origini da cui
+   una superficie cresce o scende. */
 
-/* Gli stati li possiede `ui/motion.ts`: lo stesso attributo governa entrata,
-   uscita, riannodamento e puntatore, e questi fotogrammi chiave sono il moto
-   completo di ciò che non passa ancora dalle molle di `src/moto`. Transform e
-   opacità, mai geometria; il moto ridotto resta un pavimento della struttura.
-
-   Il gesto è uno solo, in tre misure: una superficie **si posa**. Arriva da
-   poco lontano e si assesta con la curva d'uscita; se ne va più in fretta di
-   come è arrivata, appena rimpicciolita, così l'Esc non sembra ignorato. La
-   scala è minima apposta: si sente come profondità, non si vede come zoom.
-
-   Entrando non scala. Dopo una corsa composita con una scala, Chromium
-   dipinge un elemento posato su una frazione di pixel (un toast alto quanto le
-   sue righe) un pixel più in là di dove lo dipinge senza: lo stato d'arrivo
-   non sarebbe più quello del moto ridotto. Un'uscita finisce con l'elemento
-   tolto, e la sua scala non lascia niente.
-
-   Il lanciatore nasce dalla pillola, quindi scende dall'alto; una finestra
-   interna sale dal basso; un menu si apre dal punto in cui lo si è chiesto. */
-
-@keyframes fub-enter-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes fub-exit-fade {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-@keyframes fub-enter-rise {
-  from { opacity: 0; transform: translateY(var(--space-5)); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes fub-exit-rise {
-  from { opacity: 1; transform: none; }
-  to { opacity: 0; transform: translateY(var(--space-3)) scale(0.99); }
-}
-@keyframes fub-enter-drop {
-  from { opacity: 0; transform: translateY(calc(-1 * var(--space-5))); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes fub-exit-drop {
-  from { opacity: 1; transform: none; }
-  to { opacity: 0; transform: translateY(calc(-1 * var(--space-3))) scale(0.985); }
-}
-@keyframes fub-enter-rise-sm {
-  from { opacity: 0; transform: translateY(calc(-1 * var(--space-2))); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes fub-exit-rise-sm {
-  from { opacity: 1; transform: none; }
-  to { opacity: 0; transform: translateY(calc(-1 * var(--space-1))) scale(0.98); }
-}
-
-[data-shell-motion="pre-enter"],
-[data-shell-motion="exit"] {
-  pointer-events: none !important;
-}
-
-/* Il fotogramma di partenza e quello d'arrivo dell'uscita. Il secondo serve:
-   fra la fine del keyframe e `animationend`, che chiude la superficie, passa
-   almeno un fotogramma, e senza questa riga la superficie ci torna piena —
-   un lampo proprio mentre se ne va. */
-[data-shell-motion="pre-enter"],
-[data-shell-motion="exit"] {
-  opacity: 0;
-}
-
-.modale[data-shell-motion="enter"] {
-  animation: fub-enter-fade var(--duration-med) var(--ease-out);
-}
-.modale[data-shell-motion="exit"] {
-  animation: fub-exit-fade var(--duration-fast) var(--ease-in);
-}
 .palette-box {
   transform-origin: top center;
 }
-.modale[data-shell-motion="enter"] .palette-box {
-  animation: fub-enter-drop var(--duration-med) var(--ease-out);
-}
-.modale[data-shell-motion="exit"] .palette-box {
-  animation: fub-exit-drop var(--duration-fast) var(--ease-in);
-}
-.settings-panel[data-shell-motion="enter"],
-.icon-picker[data-shell-motion="enter"] {
-  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
-}
-.settings-panel[data-shell-motion="exit"],
-.icon-picker[data-shell-motion="exit"] {
-  animation: fub-exit-rise var(--duration-fast) var(--ease-in);
-}
-/* Il menu nasce dal punto in cui lo si è chiesto: l'origine è l'angolo in
-   alto a sinistra, che è dove sta il puntatore. */
+/* Il menu nasce dal punto in cui lo si è chiesto. Di serie è l'angolo in
+   alto a sinistra; quando il bordo lo sposta, `ui/menu.ts` mette l'origine
+   sul puntatore. */
 .context-menu {
   transform-origin: top left;
 }
-.context-menu[data-shell-motion="enter"] {
-  animation: fub-enter-rise-sm var(--duration-fast) var(--ease-out);
-}
-.context-menu[data-shell-motion="exit"] {
-  animation: fub-exit-rise-sm var(--duration-state) var(--ease-in);
-}
 
-/* Il moto è della scocca, mai del foglio. La scrittura sta ferma. */
+/* Il moto è della scocca, mai del foglio. La scrittura sta ferma. Il cursore
+   no: se lampeggia lo decide `editor.cursor-blink` (di serie fermo), che ne
+   fissa la cadenza; qui non lo si spegne una seconda volta. */
 .cm-editor,
-.cm-editor *,
+.cm-editor *:not(.cm-cursorLayer),
 .pane-editor,
-.pane-editor * {
+.pane-editor *:not(.cm-cursorLayer) {
   animation: none !important;
   transition: none !important;
 }
@@ -15624,20 +15705,4 @@ h6.ui-heading {
   border-radius: var(--radius-sheet);
   background: var(--sheet);
   box-shadow: var(--shadow-1);
-}
-
-/* Il menu radiale si apre dal punto chiesto: il disco cresce dal centro
-   mentre lo strato appare, e se ne va sbiadendo. */
-@keyframes fub-radial-grow {
-  from { transform: scale(0.8); }
-  to { transform: none; }
-}
-.draw-radial[data-shell-motion="enter"] {
-  animation: fub-enter-fade var(--duration-med) var(--ease-out);
-}
-.draw-radial[data-shell-motion="enter"] .draw-radial-ring {
-  animation: fub-radial-grow var(--duration-med) var(--ease-out);
-}
-.draw-radial[data-shell-motion="exit"] {
-  animation: fub-exit-fade var(--duration-fast) var(--ease-in);
 }

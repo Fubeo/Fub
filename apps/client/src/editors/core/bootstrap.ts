@@ -260,6 +260,7 @@ export function createDocumentSurfaceRegistry(
             getDoc: () => engine.getDoc(),
           },
           focus: () => engine.focus(),
+          find: () => engine.openFind(),
           reveal: ({ span }) => {
             engine.revealByteOffset(span.start);
             return true;

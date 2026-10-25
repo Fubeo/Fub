@@ -70,10 +70,27 @@ export function mountSearchTools(lifetime: Lifetime, host: SearchToolsHost): Sea
   /// «Applica» riusa **quelli**, non quello che la casella dice adesso.
   let pending: { args: Record<string, unknown>; plan: CommandPlan } | null = null;
 
+  // Le sei azioni stanno dietro «Opzioni»: chi cerca scrive, e le apre quando
+  // gli servono. Chiuse, il bottone dice quante opzioni sono accese, perché
+  // una ricerca che si comporta diversamente non lo nasconda.
   const bar = document.createElement("div");
   bar.className = "search-options";
-  bar.setAttribute("role", "group");
-  bar.setAttribute("aria-label", t("search.options"));
+  const more = document.createElement("button");
+  more.type = "button";
+  more.className = "search-action search-options-toggle";
+  more.setAttribute("aria-expanded", "false");
+  const group = document.createElement("div");
+  group.className = "search-options-group";
+  group.id = "search-options-group";
+  group.hidden = true;
+  group.setAttribute("role", "group");
+  group.setAttribute("aria-label", t("search.options"));
+  more.setAttribute("aria-controls", group.id);
+  lifetime.listen(more, "click", () => {
+    group.hidden = !group.hidden;
+    more.setAttribute("aria-expanded", String(!group.hidden));
+  });
+  bar.append(more, group);
   const toggles = new Map<SearchOptionName, HTMLButtonElement>();
   for (const spec of OPTION_BUTTONS) {
     const button = document.createElement("button");
@@ -90,7 +107,7 @@ export function mountSearchTools(lifetime: Lifetime, host: SearchToolsHost): Sea
       host.rerun();
     });
     toggles.set(spec.name, button);
-    bar.append(button);
+    group.append(button);
   }
   const replaceToggle = document.createElement("button");
   replaceToggle.type = "button";
@@ -102,7 +119,7 @@ export function mountSearchTools(lifetime: Lifetime, host: SearchToolsHost): Sea
   save.className = "search-action";
   save.textContent = t("search.save");
   setTooltip(save, t("search.save.hint"));
-  bar.append(replaceToggle, save);
+  group.append(replaceToggle, save);
 
   const region = document.createElement("div");
   region.className = "search-replace";
@@ -131,6 +148,7 @@ export function mountSearchTools(lifetime: Lifetime, host: SearchToolsHost): Sea
   entry.append(field, preview);
   region.append(label, entry, plan);
   host.input.after(bar, region);
+  sync();
   lifetime.add(() => {
     race.cancel();
     bar.remove();
@@ -139,6 +157,8 @@ export function mountSearchTools(lifetime: Lifetime, host: SearchToolsHost): Sea
 
   function sync(): void {
     for (const [name, button] of toggles) button.setAttribute("aria-pressed", String(options[name]));
+    const on = [...toggles.keys()].filter((name) => options[name]).length;
+    more.textContent = on === 0 ? t("search.options.toggle") : t("search.options.toggle.active", { count: on });
   }
 
   function invalidate(): void {

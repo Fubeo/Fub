@@ -101,7 +101,6 @@ beforeEach(() => {
     <span id="vault-path">Vault del banco</span>
     <div id="panes"><div class="pane" id="p1"></div></div>
     <footer id="status-band">
-      <span id="status-vault" hidden></span>
       <span id="status-index" hidden></span>
       <span id="status-saving" hidden></span>
       <span id="status-mode" hidden></span>
@@ -131,27 +130,18 @@ afterEach(() => {
 });
 
 describe("il vault", () => {
-  it("porta il nome del chip, e il percorso nel suggerimento", () => {
+  it("non ripete il nome che il chip dice già", () => {
     mountStatusBand(life);
-    expect(el("status-vault").hidden).toBe(false);
-    expect(el("status-vault").textContent).toBe("Vault del banco");
-    expect(world.tooltips.get(el("status-vault"))).toBe("/casa/vault");
+    expect(document.getElementById("status-band")!.textContent).not.toContain("Vault del banco");
   });
 
   it("senza un vault non dice niente", () => {
     state.vaultRoot = "";
     mountStatusBand(life);
-    for (const id of ["status-vault", "status-index", "status-saving", "status-mode"]) {
+    for (const id of ["status-index", "status-saving", "status-mode"]) {
       expect(el(id).hidden, id).toBe(true);
     }
     expect(world.statusAsked).toBe(0);
-  });
-
-  it("segue il nome quando il chip lo cambia", async () => {
-    mountStatusBand(life);
-    el("vault-path").textContent = "Appunti";
-    await settle();
-    expect(el("status-vault").textContent).toBe("Appunti");
   });
 });
 
@@ -338,7 +328,6 @@ describe("la lingua e lo smontaggio", () => {
     el("vault-path").textContent = "Altro";
     await settle();
     expect(el("status-saving").textContent).toBe("frame.status.saved");
-    expect(el("status-vault").textContent).toBe("Vault del banco");
   });
 
   it("senza la banda nel markup non fa niente", () => {

@@ -14,7 +14,18 @@ import { SCENE, LIGHTS, sceneUrl } from "./scene.mjs";
 import { openStage, openPage, prepareScene, OUTPUT, WINDOW } from "./stage.mjs";
 /// Debito storico dichiarato. Non è un'esenzione dalle altre regole:
 /// ogni violazione fuori dal debito resta bloccante e viene riportata.
-const DEBT = [];
+const DEBT = [
+  // Il rosso puro delle intestazioni della cartella d'esempio è del file, non
+  // della pelle: una cartella di Excel si mostra coi colori che ha, e Fub non
+  // li riscrive. Si vede da quando la carta del foglio è misurabile (G1).
+  ...["dark", "light"].map((light) => ({
+    light,
+    front: "#ff0000",
+    behind: light === "dark" ? "#151a21" : "#fcfdff",
+    voce: "G1",
+    cosa: "Il colore del testo di una cella viene dal file. Si mostra com'è, anche quando non raggiunge 4,5:1 sulla carta.",
+  })),
+];
 
 /// Che cosa si esamina, e dove va il referto.
 const SET = { scenes: SCENE, report: join(OUTPUT, "accessibilita") };
@@ -94,6 +105,7 @@ async function aScene(page, scene, light, base, axeSource) {
   const hasAxe = await page.evaluate(() => Boolean(window.axe));
   if (!hasAxe) await page.addScriptTag({ content: axeSource });
 
+  await paperUnderText(page);
   // Nessuna selezione manuale: una nuova regola axe applicabile deve diventare
   // senza che questo file debba essere aggiornato a mano.
   const outcome = await page.evaluate(
@@ -105,6 +117,11 @@ async function aScene(page, scene, light, base, axeSource) {
         iframes: false,
       }),
   );
+
+  await page.evaluate(() => {
+    document.getElementById("bench-carta")?.remove();
+    document.querySelectorAll("[data-bench-carta]").forEach((pane) => delete pane.dataset.benchCarta);
+  });
 
   const count = (group) => group.reduce((n, r) => n + r.nodes.length, 0);
   row.examined =
@@ -144,6 +161,30 @@ async function aScene(page, scene, light, base, axeSource) {
 
   print(row);
   return row;
+}
+
+/// La carta di un foglio è uno pseudo-elemento del riquadro (`.pane::before`),
+/// perché è lei a muoversi quando la disposizione cambia (`stage-motion.ts`).
+/// axe non legge il colore di uno pseudo-elemento dietro il testo e lascia
+/// indeciso il contrasto di tutto ciò che sta sul foglio. Per la sola misura, a
+/// scena ferma, la carta passa dallo pseudo-elemento ai fratelli che le stanno
+/// sopra, col colore che ha davvero: ciò che si vede non cambia, e axe confronta
+/// il testo con la carta vera invece di arrendersi.
+async function paperUnderText(page) {
+  await page.evaluate(() => {
+    document.getElementById("bench-carta")?.remove();
+    const rules = [".pane::before, .pane::after { background: transparent !important; }"];
+    document.querySelectorAll(".pane").forEach((pane, index) => {
+      const paper = getComputedStyle(pane, "::before").backgroundColor;
+      if (!paper || paper === "rgba(0, 0, 0, 0)" || paper === "transparent") return;
+      pane.dataset.benchCarta = String(index);
+      rules.push(`.pane[data-bench-carta="${index}"] > :not(.pane-tabs) { background-color: ${paper} !important; }`);
+    });
+    const style = document.createElement("style");
+    style.id = "bench-carta";
+    style.textContent = rules.join("\n");
+    document.head.append(style);
+  });
 }
 
 /// Un rilievo axe, ridotto a regola e indicazioni che permettono di ripararlo.

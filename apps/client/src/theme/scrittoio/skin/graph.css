@@ -265,7 +265,6 @@
   pointer-events: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
-  animation: fub-enter-rise-sm var(--duration-med) var(--ease-out);
 }
 .graph-panel-popover[hidden] {
   display: none;

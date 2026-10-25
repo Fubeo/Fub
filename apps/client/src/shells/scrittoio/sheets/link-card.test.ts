@@ -38,7 +38,7 @@ vi.mock("../launcher/actions", () => ({
 }));
 vi.mock("../../../ui/notify", () => ({ notify: () => {} }));
 
-import { linkOf, mountLinkCards } from "./link-card";
+import { linkAtCaret, linkOf, mountLinkCards } from "./link-card";
 
 let life: Lifetime;
 
@@ -136,5 +136,54 @@ describe("la scheda", () => {
     const plain = document.createElement("span");
     document.getElementById("panes")!.append(plain);
     expect(await hover(plain)).toBeNull();
+  });
+});
+
+describe("da tastiera, in Live", () => {
+  /// Un wikilink dentro il contenuto di un editor, col cursore nel suo testo.
+  function caretIn(page: string): { content: HTMLElement; link: HTMLElement } {
+    const content = document.createElement("div");
+    content.className = "cm-content";
+    content.contentEditable = "true";
+    document.getElementById("panes")!.append(content);
+    const link = document.createElement("span");
+    link.className = "cm-fub-wikilink";
+    link.dataset.wikilinkPage = page;
+    link.textContent = page;
+    content.append("prima ", link, " dopo");
+    content.focus();
+    document.getSelection()!.collapse(link.firstChild!, 2);
+    return { content, link };
+  }
+  const altEnter = (on: HTMLElement, extra: KeyboardEventInit = {}) =>
+    on.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Enter", altKey: true, shiftKey: true, bubbles: true, cancelable: true, ...extra,
+    }));
+
+  it("Maiusc+Alt+Invio col cursore nel collegamento apre la scheda col fuoco su «Apri»", async () => {
+    world.resolved.set("Nota", { doc: "Cartella/Nota.md" } as ResolvedRef);
+    const { content, link } = caretIn("Nota");
+    expect(linkAtCaret(document.getElementById("panes")!)).toBe(link);
+    expect(altEnter(content)).toBe(false);
+    await vi.advanceTimersByTimeAsync(0);
+    const card = document.querySelector<HTMLElement>(".kit-hover-card");
+    expect(card).not.toBeNull();
+    expect(document.activeElement?.textContent).toBe("Apri");
+    (document.activeElement as HTMLElement).click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(world.opened).toEqual([["Cartella/Nota.md", "here"]]);
+  });
+
+  it("fuori da un collegamento, o con un altro modificatore, il tasto resta all'editor", async () => {
+    const { content } = caretIn("Nota");
+    document.getSelection()!.collapse(content.firstChild!, 1);
+    expect(linkAtCaret(document.getElementById("panes")!)).toBeNull();
+    expect(altEnter(content)).toBe(true);
+    const again = caretIn("Altra");
+    expect(altEnter(again.content, { ctrlKey: true })).toBe(true);
+    // Alt+Invio da solo è di `open-link.ts`: apre il collegamento.
+    expect(altEnter(again.content, { shiftKey: false })).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector(".kit-hover-card")).toBeNull();
   });
 });

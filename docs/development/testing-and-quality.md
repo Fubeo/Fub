@@ -181,11 +181,21 @@ rigenerazione nell'ambiente Ubuntu validato.
 Il banco del moto (`npm run bench:motion`) misura le coreografie dello
 Scrittoio nel browser: lo stato d'arrivo coincide con quello a moto ridotto,
 non resta nessuna animazione viva, i fotogrammi chiave toccano soltanto
-`transform` e `opacity`, e un gesto invertito a metà torna allo stato di
-partenza. È il solo banco che apre la pagina col movimento acceso.
+`transform` e `opacity`, un gesto invertito a metà torna allo stato di
+partenza, e un'uscita (un lanciatore, un cassetto, un dialogo che si chiude)
+finisce entro 140 ms. Ogni file della shell e del kit che fa partire una corsa
+ha la sua coreografia. Anche il budget d'interazione (`npm run bench:interaction`) apre
+la pagina col movimento acceso e l'ora vera: misura in quanti millisecondi un
+menu, la palette e una nota arrivano al primo fotogramma e alla fine del moto,
+contro i budget del [budget prestazionale](../product/performance-budget.md#il-budget-dinterazione).
+Nessuno dei due vede la webview del sistema: per quella c'è la [prova manuale
+del moto](motion-smoke-test.md).
 
 L'accessibilità verifica la pagina resa, non soltanto una tabella teorica di
-colori.
+colori. La carta dei fogli è uno pseudo-elemento, che axe non sa leggere dietro
+il testo: per la sola misura, a scena ferma, il banco la porta sui fratelli che
+le stanno sopra, col suo colore, e il contrasto del testo sul foglio diventa un
+esito invece di un «da verificare».
 Il catalogo contiene i campioni posizionati dentro i rispettivi riquadri;
 le regioni che scorrono hanno nome accessibile e ingresso da tastiera.
 Il controllo del focus distingue i discendenti di un `details` chiuso

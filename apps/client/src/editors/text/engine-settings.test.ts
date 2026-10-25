@@ -14,6 +14,7 @@ import {
   EDITOR_FOLD_GUTTER_KEY,
   EDITOR_SMART_LISTS_KEY,
   EDITOR_INDENT_GUIDES_KEY,
+  EDITOR_CURSOR_BLINK_KEY,
   EDITOR_PASTE_HTML_KEY,
   EDITOR_PROPERTIES_KEY,
   EDITOR_RTL_KEY,
@@ -186,6 +187,26 @@ describe("text input settings", () => {
       origin: { actor: { kind: "user" }, batch: null },
     });
     await vi.waitFor(() => expect(guided()).toBe(1));
+    engine.destroy();
+    host.remove();
+  });
+
+  it("editor.cursor-blink: di serie il cursore sta fermo, la preferenza lo fa lampeggiare", async () => {
+    const read = vi.mocked(settings);
+    read.mockReset();
+    read.mockResolvedValue([]);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const engine = createTextEngine(host, { onChange: () => {}, onSelectionChange: () => {} });
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    const rate = () => host.querySelector<HTMLElement>(".cm-cursorLayer")?.style.animationDuration;
+    expect(rate()).toBe("0ms");
+    read.mockResolvedValue([entry(EDITOR_CURSOR_BLINK_KEY, true)]);
+    forwardNotice({
+      event: { type: "setting_changed", key: EDITOR_CURSOR_BLINK_KEY, scope: "machine" },
+      origin: { actor: { kind: "user" }, batch: null },
+    });
+    await vi.waitFor(() => expect(rate()).toBe("1200ms"));
     engine.destroy();
     host.remove();
   });

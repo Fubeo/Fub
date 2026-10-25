@@ -50,6 +50,7 @@ import { refreshPanel, registerPanel, unregisterPanel } from "./panel-host";
 import { notify } from "./notify";
 import { t } from "../i18n/strings";
 import { iconEl } from "./icons";
+import { enterSurface } from "./motion";
 import { setTooltip } from "./tooltip";
 import { tabIndexForKey } from "./tab-keys";
 import { openLifetime, type Lifetime, type Teardown } from "./lifetime";
@@ -401,7 +402,9 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
 
   viewsBottomEl.hidden = viewsBottomEl.childElementCount === 0;
   viewsStatusEl.hidden = viewsStatusEl.childElementCount === 0;
+  const modalWasHidden = viewsModalEl.hidden;
   viewsModalEl.hidden = viewsModalEl.childElementCount === 0;
+  if (modalWasHidden && !viewsModalEl.hidden) enterSurface(viewsModalEl);
   // L'inspector a tab: per le view `right_sidebar` costruisce un tablist in
   // cima. Va dopo il montaggio, perché legge i pannelli già nati.
   buildInspector();

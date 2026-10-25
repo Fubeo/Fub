@@ -517,6 +517,14 @@ function focusedAnchorSurface(): { doc: string; anchorHere: () => SurfaceAnchor 
   return { doc: r.shown.doc, anchorHere: () => surface.anchorHere?.() ?? null };
 }
 
+/// Ctrl+F fuori dal testo apre la stessa barra che apre dentro: quella della
+/// superficie del riquadro col fuoco, se ne ha una nella modalità attuale.
+export function findInFocusedSurface(): boolean {
+  const r = panes.get(layout.focus);
+  if (r?.shown?.k !== "doc") return false;
+  return r.surface?.find?.() ?? false;
+}
+
 /// «Copia il link a questo punto»: `[[Nota#Titolo]]` o `[[Nota#^id]]` negli
 /// appunti, scritto come vuole il vault, come per una nota trascinata; a un
 /// blocco senza id la superficie ne scrive uno. Negli appunti un link Markdown
@@ -2186,6 +2194,15 @@ export function selectedMode(r: Pane | undefined): SurfaceMode | undefined {
   return modes.find((mode) => mode.id === requested)
     ?? modes.find((mode) => mode.id === defaultMode)
     ?? modes[0];
+}
+
+/// Il contesto della modalità del riquadro col fuoco (sorgente, Live,
+/// Lettura), se la sua superficie ne offre più d'uno: è ciò che il menu Vista
+/// spunta.
+export function focusedContextMode(): PaneMode | undefined {
+  const r = panes.get(layout.focus);
+  if ((r?.surface?.modes.length ?? 0) < 2) return undefined;
+  return selectedMode(r)?.contextMode;
 }
 
 /// Le modalità della superficie del riquadro col fuoco; nessuna senza superficie.

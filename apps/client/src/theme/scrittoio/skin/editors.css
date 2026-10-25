@@ -66,14 +66,21 @@
   background-color: transparent;
   color: var(--doc-fg);
 }
-/* I segni di piega ci sono su ogni titolo: a voce bassa finché il puntatore
-   non entra nel margine. */
+/* I segni di piega stanno su titoli, voci, codice e frontmatter, e si vedono
+   quando il puntatore entra nel margine. Una riga piegata il suo lo tiene
+   sempre: è lì che c'è qualcosa da riaprire. */
 .cm-editor .cm-scroller .cm-foldGutter span {
   color: var(--doc-gutter-fg);
-  opacity: 0.45;
+  cursor: pointer;
 }
-.cm-editor .cm-scroller .cm-gutters:hover .cm-foldGutter span {
+.cm-editor .cm-scroller .cm-foldGutter span[data-fold="open"] {
+  opacity: 0;
+}
+.cm-editor .cm-scroller .cm-gutters:hover .cm-foldGutter span[data-fold="open"] {
   opacity: 1;
+}
+.cm-editor .cm-scroller .cm-foldGutter span[data-fold="folded"] {
+  color: var(--accent);
 }
 /* La riga attiva è un tono appena, e solo dove si scrive sorgente. In Live la
    pagina è resa: una banda che attraversa titoli e citazioni la sporcherebbe.

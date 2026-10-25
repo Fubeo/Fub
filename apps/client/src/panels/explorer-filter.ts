@@ -1,7 +1,7 @@
 // Filtrare l'esplora per percorso.
 //
-// Il campo sta sopra l'albero e si apre col comando `shell.explorer.filter`.
-// Con del testo scritto l'albero cede il posto a un elenco piatto: ogni voce
+// Il campo sta sopra l'albero, sempre: è l'unico campo del pannello File, e
+// il comando `shell.explorer.filter` gli dà il fuoco. Con del testo scritto l'albero cede il posto a un elenco piatto: ogni voce
 // e cartella dello spazio il cui percorso intero contiene tutte le parole.
 // Una parola col meno davanti (`-bozze`) toglie le voci che hanno un pezzo di
 // percorso che la contiene: una cartella che corrisponde sparisce con tutto il
@@ -47,9 +47,9 @@ export interface ExplorerFilterOptions {
 }
 
 export interface ExplorerFilter {
-  /// Mostra il campo e gli dà il fuoco.
+  /// Dà il fuoco al campo.
   show(): void;
-  /// Toglie testo e campo, e rende l'albero.
+  /// Toglie il testo e rende l'albero; il campo resta.
   hide(): void;
   /// I documenti sono cambiati: l'elenco si richiede alla prossima lettura.
   stale(): void;
@@ -61,7 +61,6 @@ export function mountExplorerFilter(options: ExplorerFilterOptions): ExplorerFil
   const { lifetime } = options;
   const box = document.createElement("div");
   box.className = "explorer-filter";
-  box.hidden = true;
   const field = textField({
     label: t("explorer.filter"),
     labelHidden: true,
@@ -169,6 +168,9 @@ export function mountExplorerFilter(options: ExplorerFilterOptions): ExplorerFil
   lifetime.listen(field.input, "keydown", (event) => {
     if (event.isComposing) return;
     if (event.key === "Escape") {
+      // Vuoto, il campo non ha niente da togliere: Esc va a chi sta sopra
+      // (il cassetto sul telefono, per esempio).
+      if (field.input.value === "") return;
       event.preventDefault();
       event.stopPropagation();
       hide();
@@ -208,7 +210,6 @@ export function mountExplorerFilter(options: ExplorerFilterOptions): ExplorerFil
     list.hidden = true;
     list.replaceChildren();
     cover(false);
-    box.hidden = true;
   };
 
   // Smontato col filtro aperto, l'albero torna visibile per il montaggio dopo.
@@ -221,7 +222,6 @@ export function mountExplorerFilter(options: ExplorerFilterOptions): ExplorerFil
 
   return {
     show() {
-      box.hidden = false;
       field.input.focus({ preventScroll: true });
       field.input.select();
     },

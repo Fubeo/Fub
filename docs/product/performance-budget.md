@@ -1,7 +1,8 @@
 # Budget prestazionale
 
 > **Ambito:** evidenza osservazionale e criteri provvisori per la Graph View;
-> budget applicati in CI per i [disegni grandi](#i-disegni-grandi).
+> budget applicati in CI per i [disegni grandi](#i-disegni-grandi); il
+> [budget d'interazione](#il-budget-dinterazione) dello Scrittoio, fuori dalla CI.
 > **Snapshot applicativo della Graph View:** SHA `4383a7c9d54b1e6557d070501e5ad998224ff294`.
 
 Questa pagina documenta tre distribuzioni dello stesso codice (locale, CI push e
@@ -184,3 +185,39 @@ nell'intestazione del banco; che cosa vede chi disegna sta in
 
 Ricalibrare quando cambiano Chromium, la lavagna del banco, il painter o la
 soglia delle scene grandi, con le stesse tre serie di corse.
+
+## Il budget d'interazione
+
+Quanto lo Scrittoio ci mette a rispondere a un gesto, col moto pieno e con
+l'ora vera. Lo misura [`interaction.mjs`](../../apps/client/bench/interaction.mjs):
+
+```bash
+cd apps/client
+npm run bench:interaction                # cinque giri per interazione
+node bench/interaction.mjs --rounds=9 --only=palette
+```
+
+Per ogni interazione il banco prende due tempi, dal `timeStamp` dell'evento
+che la fa partire:
+
+- **primo fotogramma:** il primo `requestAnimationFrame` in cui ciò che il
+  gesto apre è nel documento;
+- **fine del moto:** il primo fotogramma senza corse di `moto` e senza
+  animazioni o transizioni del documento in corso.
+
+Il budget vale per la mediana dei giri, e il banco esce diverso da zero se una
+mediana lo supera. Non sta nella CI, perché i tempi del runner condiviso non
+sono quelli della macchina di chi scrive.
+
+| Interazione | Primo fotogramma | Fine del moto | Misura (mediana) |
+|---|---:|---:|---:|
+| Aprire un menu dell'applicazione | ≤ 100 ms | ≤ 300 ms | 10 / 160 ms |
+| Aprire la palette (il lanciatore) | ≤ 100 ms | ≤ 700 ms | 14 / 598 ms |
+| Aprire una nota dall'albero | ≤ 100 ms | ≤ 700 ms | 27 / 544 ms |
+
+La misura è della stessa macchina della Graph View (Intel N150, Chromium della
+revisione Playwright fissata, 1280 × 800). Il primo fotogramma ha la soglia dei
+100 ms, sotto la quale una risposta si sente immediata. La fine del moto ha
+per tetto la misura nella tabella con un margine: la coda di una molla che si assesta
+conta, anche se l'occhio non la vede più, e un tetto più basso si sceglie
+quando cambia il moto, non prima.

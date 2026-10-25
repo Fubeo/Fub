@@ -56,7 +56,16 @@ import { state } from "../state/store";
 import { $ } from "../ui/dom";
 import { trapFocus } from "../ui/a11y";
 import { notify } from "../ui/notify";
-import { allCommands, keybindingIssues, keybindingKey, validateKeybinding, type CommandEntry } from "../ui/commands";
+import {
+  allCommands,
+  displayBinding,
+  keybindingIssues,
+  keybindingKey,
+  keyboardPlatform,
+  reservedChord,
+  validateKeybinding,
+  type CommandEntry,
+} from "../ui/commands";
 import { TRUST_LABELS, isPermissionKey, rows, type PermissionRow } from "../ui/permissions";
 import { SETTINGS_WITH_THEIR_OWN_GESTURE } from "../ui/shell-ids.generated";
 import { errorText } from "../host/errors";
@@ -461,7 +470,7 @@ async function open(): Promise<void> {
   if (settingsLifetime?.closed || release) return;
   panelEl.hidden = false;
   syncToolbar();
-  enterSurface(panelEl, { viewTransition: false });
+  enterSurface(panelEl);
   // Il fuoco entra e resta: mentre le impostazioni sono aperte, sono quello che
   // si sta facendo (è la ragione per cui stanno sopra tutto anche visivamente,
   // scritto accanto al loro `z-index`). Una modale da cui il linguetta scappa mette
@@ -487,13 +496,9 @@ function close(): void {
   renderedTab = null;
   resetFilters();
   if (searchEl) searchEl.value = "";
-  exitSurface(
-    panelEl,
-    () => {
-      panelEl.hidden = true;
-    },
-    { viewTransition: false },
-  );
+  exitSurface(panelEl, () => {
+    panelEl.hidden = true;
+  });
 }
 
 /// Quale disegno è l'ultimo chiesto.
@@ -1289,7 +1294,7 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
     described.push(desc.id);
     text.append(desc);
   }
-  text.append(rowMeta(entry, modified));
+  if (modified) text.append(rowMeta(entry));
   // La frase intera sulla provenienza: la pastiglia la dice in breve a chi
   // guarda, questa la dice per intero a chi ascolta, arrivando sul campo.
   const source = document.createElement("span");
@@ -1329,18 +1334,22 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
   return el;
 }
 
-/// La riga dei metadati: la pastiglia dell'ambito e, per una riga modificata,
-/// il predefinito e «Azzera».
+/// La riga dei metadati, solo per una riga modificata: la pastiglia
+/// dell'ambito, il predefinito e «Azzera».
+///
+/// Su una riga al valore di serie non c'è niente da dire che serva a chi
+/// guarda: dove varrà il valore lo dice la pastiglia quando un valore c'è, e a
+/// chi ascolta lo dice comunque la frase della provenienza. Tre parole grigie
+/// sotto ogni riga erano rumore uguale dappertutto.
 ///
 /// «Azzera» compare **solo dove c'è qualcosa da azzerare**: su una riga al
 /// valore predefinito sarebbe un pulsante che non fa niente, cioè un pulsante
 /// che insegna a non fidarsi dei pulsanti. E accanto dice a cosa riporta:
 /// senza, «azzera» era un salto nel buio.
-function rowMeta(entry: SettingEntry, modified: boolean): HTMLElement {
+function rowMeta(entry: SettingEntry): HTMLElement {
   const meta = document.createElement("div");
   meta.className = "setting-meta";
   meta.append(scopeChip(entry.spec.scope));
-  if (!modified) return meta;
   // Lingua e fuso vuoti vogliono dire «come il sistema», ed è così che li
   // chiama il loro controllo: il predefinito deve dirlo con la stessa parola.
   const empty = SYSTEM_WHEN_EMPTY.has(entry.spec.key) ? t("settings.as_system") : undefined;
@@ -1745,6 +1754,10 @@ function selectField(entry: SettingEntry, id: string, options: UiOption[]): HTML
     el.selected = option.value === entry.value;
     select.append(el);
   }
+  // Di nuovo a tendina piena: `selected` messo su un'opzione non ancora
+  // inserita non tutti i DOM lo tengono (happy-dom ne sceglie un'altra), e chi
+  // legge `value` — una veste della shell — leggerebbe una scelta falsa.
+  select.value = current;
   select.addEventListener("change", () => {
     void writeRow(entry.spec.key, select.value, () => writeChoice(entry.spec.key, select.value));
   });
@@ -2129,7 +2142,7 @@ function shortcutDiagnostic(command: CommandEntry, binding: string, commands: Co
     return t("settings.shortcut.invalid_unsaved", { reason: t(descriptions[validation.reason]) });
   }
   const proposed = commands.map((item) => item.id === command.id ? { ...item, binding } : item);
-  return keybindingIssues(proposed)
+  const issues = keybindingIssues(proposed)
     .filter((issue) => issue.type === "invalid"
       ? issue.command.id === command.id
       : issue.type === "shadowed"
@@ -2145,8 +2158,12 @@ function shortcutDiagnostic(command: CommandEntry, binding: string, commands: Co
             command: issue.short.title,
             commands: issue.long.map((other) => other.title).join(", "),
           })
-        : t("settings.shortcut.invalid", { binding: issue.binding }))
-    .join("; ");
+        : t("settings.shortcut.invalid", { binding: issue.binding }));
+  // Un accordo che il sistema si prende si salva lo stesso, e si dice.
+  const platform = keyboardPlatform(navigator.platform);
+  const reserved = reservedChord(binding, platform);
+  if (reserved !== null) issues.unshift(t("settings.shortcut.reserved", { chord: displayBinding(reserved, platform) }));
+  return issues.join("; ");
 }
 
 async function renderShortcuts(): Promise<HTMLElement[]> {

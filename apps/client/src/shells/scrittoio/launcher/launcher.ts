@@ -24,6 +24,7 @@ import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { notify } from "../../../ui/notify";
 import { scopeLabel } from "../../../ui/palette";
 import { Race } from "../../../ui/race";
+import { skeleton, SKELETON_DELAY_MS } from "../../../ui/skeleton";
 import { step, toSearchPanel } from "./actions";
 import { declareLauncherCommands } from "./commands";
 import {
@@ -45,8 +46,11 @@ import { answersAtOnce, listing, type Listing, type Row } from "./sources";
 /// Quanto si aspetta dopo l'ultima battuta prima di chiedere a una sorgente
 /// che risponde da lontano (ms).
 export const ASK_DELAY_MS = 120;
-/// Dopo quanto una risposta che non arriva si dice (ms).
-export const SLOW_AFTER_MS = 180;
+/// Dopo quanto una risposta che non arriva si dice (ms). Un elenco ancora
+/// vuoto mostra intanto la sagoma delle righe.
+export const SLOW_AFTER_MS = SKELETON_DELAY_MS;
+/// Le righe della sagoma dell'elenco.
+const SKELETON_ROWS = 5;
 
 export interface Launcher {
   /// Apre in un modo; se è già aperto, ci passa. Con `text` la domanda è
@@ -230,10 +234,18 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       race.cancel();
     });
 
+    const shape = skeleton(SKELETON_ROWS, "div", true);
     const setBusy = (on: boolean): void => {
       if (surface.hasAttribute("data-busy") === on) return;
       surface.toggleAttribute("data-busy", on);
       if (on) status.textContent = t("launcher.status.waiting");
+      // La sagoma solo dove non c'è niente: un elenco pieno resta dov'è.
+      if (on && input.getAttribute("aria-expanded") !== "true") {
+        note.hidden = true;
+        results.prepend(shape);
+      } else {
+        shape.remove();
+      }
     };
 
     const drawRow = (row: Row, cell: HTMLElement): void => {
@@ -603,9 +615,10 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       const pose = to && to.width > 0 && from.width > 0 && from.height > 0
         ? { ...pillPose(to, from), opacity: 0 }
         : { opacity: 0 };
-      // Chi smonta la shell non lascia un'immagine a metà corsa.
+      // Chi smonta la shell non lascia un'immagine a metà corsa. L'uscita è
+      // breve come tutte (≤ `swap`): chi chiude ha già deciso.
       if (!lifetime.closed) {
-        leaving.play({ to: pose, spring: "wide", lifetime });
+        leaving.play({ to: pose, duration: DURATION.swap, easing: "ease-in", lifetime });
         fading.play({ to: { opacity: 0 }, duration: DURATION.swap, lifetime });
       }
       if (origin?.isConnected) origin.focus();

@@ -69,7 +69,8 @@ import { mountStrings, onLanguage, resolvedLanguage, t, type Key } from "./i18n/
 import { mountSplitter } from "./kit";
 import { mountActivity } from "./panels/activity";
 import { mountSettings } from "./panels/settings";
-import { mountTheme } from "./theme/theme";
+import { currentTheme, mountTheme } from "./theme/theme";
+import { focusedContextMode } from "./state/document-controller";
 import { reducedMotion } from "./theme/reduced-motion";
 import {
   mountDocument,
@@ -96,7 +97,7 @@ import { mountShellOwnerCommands } from "./state/shell-commands";
 import { hidePreview } from "./state/preview";
 import { closeContextMenu } from "./ui/menu";
 import { setTooltip } from "./ui/tooltip";
-import type { SettingEntry } from "./host/contract";
+import type { PaneMode, SettingEntry } from "./host/contract";
 import { adoptLegacyChrome, writeChrome } from "./state/machine-chrome";
 import { Race } from "./ui/race";
 import { mountCloseGuard } from "./state/close-guard";
@@ -655,6 +656,13 @@ function mountAdaptiveShell(): void {
 
 const vaultPathEl = $("#vault-path");
 
+/// I comandi delle modalità, col contesto che scelgono.
+const MODE_COMMANDS: Partial<Record<string, PaneMode>> = {
+  "shell.mode.live": "live_preview",
+  "shell.mode.source": "source",
+  "shell.mode.reading": "reading",
+};
+
 /// Il nome con cui si riconosce il vault aperto: quello scelto nel registro dei
 /// vault, altrimenti la cartella. Il percorso intero resta nel suggerimento.
 let vaultName = "";
@@ -663,11 +671,19 @@ function folderName(root: string): string {
   return root.split(/[\\/]/).filter(Boolean).pop() ?? root;
 }
 
+/// L'icona scelta per il vault sta nel suo posto accanto al nome, al posto del
+/// quadratino di colore: un segno solo, non due.
+function showVaultIcon(icon: string): void {
+  const el = document.getElementById("vault-chip-icon");
+  if (el) el.textContent = icon;
+}
+
 /// La barra del titolo mostrava il percorso assoluto, che in una finestra
 /// stretta si taglia proprio dove sta il nome.
 function showVaultName(root: string): void {
   vaultName = root ? folderName(root) : "";
   vaultPathEl.textContent = vaultName;
+  showVaultIcon("");
   setTooltip(vaultPathEl, root);
   drawWindowTitle();
   if (!root) return;
@@ -675,7 +691,8 @@ function showVaultName(root: string): void {
     if (state.vaultRoot !== root) return;
     const entry = known.find((vault) => vault.root === root);
     if (entry?.name) vaultName = entry.name;
-    vaultPathEl.textContent = `${entry?.icon ?? ""} ${vaultName}`.trim();
+    vaultPathEl.textContent = vaultName;
+    showVaultIcon(entry?.icon ?? "");
     drawWindowTitle();
   }).catch(() => {});
 }
@@ -977,6 +994,15 @@ async function init(): Promise<Teardown> {
       if (entry) startCommand(entry, paletteHost);
     },
     has: (id) => allCommands().some((e) => e.id === id),
+    // Le tre modalità sono una scelta: si spunta quella del foglio a fuoco.
+    choice: (id) => {
+      const context = MODE_COMMANDS[id];
+      const current = context ? focusedContextMode() : undefined;
+      return context && current ? { choice: "radio", checked: current === context } : undefined;
+    },
+    // «Cambia luce» dice verso quale luce si va.
+    label: (id) =>
+      id === "shell.light.toggle" ? t(currentTheme() === "dark" ? "frame.light.to_light" : "frame.light.to_dark") : undefined,
     // Letta a ogni apertura del menu: una scorciatoia rimappata si vede subito.
     shortcut: (id) => displayBinding(allCommands().find((e) => e.id === id)?.binding ?? null),
     // Le stesse view principali che la palette elenca, con la stessa frase.

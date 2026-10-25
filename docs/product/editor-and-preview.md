@@ -24,7 +24,15 @@ modalità non mostra un selettore né offre i comandi di modalità, che trovano 
 modalità per ruolo (Live, sulla tela, riporta alle carte). Il riquadro ricorda
 la modalità scelta per ogni famiglia di superfici: una nota in Sorgente non fa
 aprire la tela seguente come JSON, e la tela non cambia la modalità in cui si
-riapre la nota. Le scorciatoie seguono il riquadro attivo. La modalità delle
+riapre la nota. Le scorciatoie seguono il riquadro attivo. In un campo in cui
+si scrive, un accordo senza Ctrl e senza ⌘ resta del campo: Alt+← muove il
+cursore lì e torna indietro fuori. Una scorciatoia scrive `Mod` per ⌘ sul Mac
+e Ctrl altrove, e `Ctrl` per Control anche sul Mac: il giro delle schede in
+ordine d'uso è `Ctrl-Tab`, perché ⌘-Tab è del sistema. Fuori dal Mac `Ctrl-k`
+e `Mod-k` sono lo stesso tasto, e le impostazioni li segnalano come
+conflitto. Le impostazioni dicono anche quando un accordo lo prende il sistema
+(⌘-Tab sul Mac, Alt-F4 altrove): si salva lo stesso, ma lì non arriva. Sul Mac
+PgDn e PgUp si leggono `Fn↓` e `Fn↑`, come si premono. La modalità delle
 note in una finestra nuova viene da `editor.default-mode`; un riquadro diviso
 eredita quelle del riquadro da cui nasce. I divisori fra riquadri si trascinano,
 si spostano con le frecce e tornano a parti uguali con un doppio clic; le
@@ -52,8 +60,8 @@ interni. Un allegato incollato o trascinato si incorpora se la lettura lo sa
 mostrare (immagini, audio, video, PDF), altrimenti diventa un link col suo nome;
 una nota trascinata dall'albero diventa un wikilink nel punto in cui cade.
 Correttore ortografico, modalità Vim, numeri di riga (visibili in Sorgente), a
-capo automatico e unità di rientro sono preferenze di macchina aggiornate senza
-rimontare la sessione; il tasto destro sul margine mostra o nasconde numeri di
+capo automatico, unità di rientro e cursore che lampeggia (di serie fermo) sono
+preferenze di macchina aggiornate senza rimontare la sessione; il tasto destro sul margine mostra o nasconde numeri di
 riga e frecce di piegatura. Valgono per le superfici di documento: la barra
 delle formule e l'editor di cella della griglia sono campi con una disposizione
 fissa, senza numeri di riga, Vim o correttore. La direzione del testo è
@@ -136,6 +144,12 @@ I commenti `%%…%%` restano nel file e nel modello, non nella resa; in Live si
 vedono attenuati sulla riga del cursore. Come nel provider, evidenziati e
 commenti non contengono né attraversano link, wikilink, tag, codice, enfasi,
 formule o note in riga, e una nota in riga attraversata si perde.
+
+Fuori dalla riga del cursore Live nasconde anche il `>` di una citazione (resta
+il filo a sinistra) e i segni di apice `^…^` e pedice `~…~`; il segno di una
+voce puntata diventa un pallino largo quanto lui, e un rimando `[^nota]` a una
+nota definita diventa il suo apice. Un rimando senza definizione resta testo,
+come in Lettura. I byte del file non cambiano.
 
 Immagini e media del vault si risolvono con la regola dei link del kernel:
 un'immagine Markdown con path relativo parte dalla nota, un embed `![[nome]]`

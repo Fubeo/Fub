@@ -54,7 +54,7 @@ import {
   undoDepth,
   redoDepth,
 } from "@codemirror/commands";
-import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
+import { highlightSelectionMatches, openSearchPanel, searchKeymap } from "@codemirror/search";
 import type { SyntaxNode } from "@lezer/common";
 import { vim } from "@replit/codemirror-vim";
 import { lintKeymap } from "@codemirror/lint";
@@ -128,6 +128,7 @@ export const EDITOR_FOLD_GUTTER_KEY = "editor.fold-gutter";
 export const EDITOR_SMART_LISTS_KEY = "editor.smart-lists";
 export const EDITOR_PASTE_HTML_KEY = "editor.paste-html";
 export const EDITOR_INDENT_GUIDES_KEY = "editor.indent-guides";
+export const EDITOR_CURSOR_BLINK_KEY = "editor.cursor-blink";
 export const EDITOR_RTL_KEY = "editor.rtl";
 export const EDITOR_PROPERTIES_KEY = "editor.properties";
 const INPUT_KEYS = new Set([
@@ -141,6 +142,7 @@ const INPUT_KEYS = new Set([
   EDITOR_SMART_LISTS_KEY,
   EDITOR_PASTE_HTML_KEY,
   EDITOR_INDENT_GUIDES_KEY,
+  EDITOR_CURSOR_BLINK_KEY,
   EDITOR_RTL_KEY,
   EDITOR_PROPERTIES_KEY,
 ]);
@@ -162,6 +164,9 @@ interface LayoutPreferences {
   readonly pasteHtml: boolean;
   /// Righe di rientro nel margine sinistro del testo.
   readonly indentGuides: boolean;
+  /// Il cursore lampeggia. Di serie sta fermo: un segno che si accende e si
+  /// spegne accanto al testo è moto dentro il foglio.
+  readonly cursorBlink: boolean;
   /// Il testo va da destra a sinistra.
   readonly rtl: boolean;
   /// Come Live mostra il frontmatter (`properties-display.ts`).
@@ -176,10 +181,22 @@ const DEFAULT_LAYOUT: LayoutPreferences = {
   smartLists: true,
   pasteHtml: true,
   indentGuides: false,
+  cursorBlink: false,
   rtl: false,
   properties: "source",
 };
 const FIELD_LAYOUT: LayoutPreferences = { ...DEFAULT_LAYOUT, lineNumbers: false };
+
+/// Il segno di piega: «⌄» dove la riga si può piegare, «›» dove è piegata.
+/// La pelle lo tiene nascosto finché non si passa sul margine, tranne quando
+/// la riga è piegata: è lì che c'è qualcosa da riaprire.
+function foldMarker(open: boolean): HTMLElement {
+  const marker = document.createElement("span");
+  marker.dataset.fold = open ? "open" : "folded";
+  marker.title = t(open ? "editor.cm.fold_line" : "editor.cm.unfold_line");
+  marker.textContent = open ? "⌄" : "›";
+  return marker;
+}
 
 function layoutExtensions(layout: LayoutPreferences): Extension {
   const unit = layout.indent === "tab" ? "\t" : layout.indent === "4" ? "    " : "  ";
@@ -187,11 +204,15 @@ function layoutExtensions(layout: LayoutPreferences): Extension {
     layout.lineNumbers ? lineNumbers() : [],
     layout.lineWrap ? EditorView.lineWrapping : [],
     indentUnit.of(unit),
-    layout.foldGutter ? foldGutter({ openText: "↓" }) : [],
+    layout.foldGutter ? foldGutter({ markerDOM: foldMarker }) : [],
     smartLists.of(layout.smartLists),
     pasteHtml.of(layout.pasteHtml),
     propertiesDisplay.of(layout.properties),
     layout.indentGuides ? indentGuides : [],
+    // Il facet tiene la cadenza più breve fra quelle dichiarate: lo zero vince
+    // sui 1200 ms di `drawSelection()`, e un'animazione di zero ms non spegne
+    // mai il cursore.
+    layout.cursorBlink ? [] : drawSelection({ cursorBlinkRate: 0 }),
     // Sopra il `dir: "auto"` di sempre, che altrimenti vince: un documento che
     // comincia in latino (il frontmatter) partirebbe da sinistra.
     layout.rtl ? Prec.highest(EditorView.contentAttributes.of({ dir: "rtl" })) : [],
@@ -367,6 +388,15 @@ export class TextEngine {
     return this.rendered();
   }
 
+  /// Apre la barra trova/sostituisci di CodeMirror, la stessa di `Mod-f` nel
+  /// testo, e ci porta il fuoco: vale anche in sola lettura, dove sostituire
+  /// non c'è.
+  public openFind(): boolean {
+    if (this.disposed) return false;
+    this.view.focus();
+    return openSearchPanel(this.view);
+  }
+
   public focus(): void {
     if (!this.disposed) this.view.focus();
   }
@@ -531,6 +561,7 @@ export class TextEngine {
       && next.smartLists === this.layout.smartLists
       && next.pasteHtml === this.layout.pasteHtml
       && next.indentGuides === this.layout.indentGuides
+      && next.cursorBlink === this.layout.cursorBlink
       && next.rtl === this.layout.rtl
       && next.properties === this.layout.properties;
     if (this.disposed || same) return;
@@ -607,6 +638,7 @@ export class TextEngine {
         smartLists: value(EDITOR_SMART_LISTS_KEY) !== false,
         pasteHtml: value(EDITOR_PASTE_HTML_KEY) !== false,
         indentGuides: value(EDITOR_INDENT_GUIDES_KEY) === true,
+        cursorBlink: value(EDITOR_CURSOR_BLINK_KEY) === true,
         rtl: value(EDITOR_RTL_KEY) === true,
         properties: propertiesDisplayOf(value(EDITOR_PROPERTIES_KEY)),
       });

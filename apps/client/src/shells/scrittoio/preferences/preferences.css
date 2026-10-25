@@ -32,6 +32,42 @@
 
 /* ── Lo spazio dell'interfaccia ──────────────────────────────────────────── */
 
+/* I caratteri: ogni voce scritta con sé stessa, in righe che vanno a capo. */
+.prefs-fonts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 316px;
+}
+/* Ogni carattere ha le sue misure verticali: un'altezza fissa e la riga a 1
+   tengono le voci allineate, qualunque sia la famiglia. */
+.prefs-font {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 12px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.prefs-font:disabled {
+  cursor: default;
+}
+
+/* Lo zoom: il cursore della vista, e accanto il valore in percento. */
+.prefs-zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+.prefs-zoom-value {
+  min-width: 72px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .prefs-space {
   display: flex;
   flex-direction: column;
@@ -347,7 +383,8 @@
   .prefs-accent {
     align-items: flex-start;
   }
-  .prefs-accent-swatches {
+  .prefs-accent-swatches,
+  .prefs-fonts {
     justify-content: flex-start;
   }
   .setting-control > .setting-error {

@@ -123,6 +123,19 @@
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }
+
+  [aria-pressed="mixed"] {
+    outline: 2px dashed Highlight;
+    outline-offset: -2px;
+  }
+
+  /* La riga che divide le voci di un menu è un fondo, e i fondi si
+     forzano: resta del colore del testo, perché i gruppi si vedano. La
+     pelle viene dopo questo foglio e colora lo stesso selettore, quindi il
+     pavimento vince con `!important`. */
+  .context-menu .menu-separator {
+    background: CanvasText !important;
+  }
 }
 
 :focus-visible {
@@ -831,6 +844,23 @@ body {
 .pane-toolbar > .pane-status-slot {
   flex: 0 1 auto;
   order: 3;
+}
+
+/* Le modalità in un bottone solo: c'è soltanto dove i segmenti taglierebbero
+   il nome della nota, cioè in una testata stretta (il telefono, tre fogli
+   affiancati). */
+.pane-toolbar > .pane-mode-current {
+  display: none;
+  flex: 0 0 auto;
+  order: 2;
+}
+@container sheet-head (max-width: 440px) {
+  .pane-toolbar > .segmented {
+    display: none;
+  }
+  .pane-toolbar > .pane-mode-current:not([hidden]) {
+    display: inline-flex;
+  }
 }
 
 /* In una testata stretta il percorso e lo stato avrebbero un pezzo di lettera
@@ -2338,19 +2368,6 @@ body {
 
 /* ---- L'editor dei disegni (FubDraw) e le sue finestre ---- */
 
-
-  [aria-pressed="mixed"] {
-    outline: 2px dashed Highlight;
-    outline-offset: -2px;
-  }
-
-  /* La riga che divide le voci di un menu è un fondo, e i fondi si
-     forzano: resta del colore del testo, perché i gruppi si vedano. La
-     pelle viene dopo questo foglio e colora lo stesso selettore, quindi il
-     pavimento vince con `!important`. */
-  .context-menu .menu-separator {
-    background: CanvasText !important;
-  }
 /* FubDraw: gli strati del painter e quello sopra, nell'ordine del documento.
    Uno strato vivo non eredita niente dalla pagina, come un SVG aperto da
    solo: il testo del disegno parte dai valori iniziali, non dal carattere

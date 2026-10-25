@@ -49,6 +49,13 @@
 .search-results li:hover {
   background: var(--bg-hover);
 }
+/* La sagoma dei risultati che tardano è una riga sola, ferma e senza
+   passaggio: non c'è niente da scegliere. */
+.search-results li.skeleton,
+.search-results li.skeleton:hover {
+  display: block;
+  background: transparent;
+}
 /* Premuta è il risultato a esserlo, non una sua azione: la riga scurisce
    solo quando il dito è sul nome. */
 .search-results li:has(> .search-result:active) {
@@ -385,11 +392,28 @@
 /* **Le opzioni e la sostituzione**, sotto il campo. Gli interruttori sono le
    stesse linguette delle azioni, accese in blu quando premuti; il blocco
    «Sostituisci» si apre sotto di loro e porta il piano scritto, non un dialogo. */
+/* **Il campo e le opzioni sono della Ricerca.** Negli altri pannelli il
+   cassetto ha un campo solo, quello che filtra le note. */
+.sidebar:not([data-panel="search"]) > .search-input,
+.sidebar:not([data-panel="search"]) > .search-options,
+.sidebar:not([data-panel="search"]) > .search-replace {
+  display: none;
+}
+/* Le sei azioni stanno dietro «Opzioni», e aperte vanno a capo sotto. */
 .search-options {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   padding: var(--space-3) 0 var(--space-2);
+}
+.search-options-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  width: 100%;
+}
+.search-options-group[hidden] {
+  display: none;
 }
 .search-option {
   min-width: var(--space-8);

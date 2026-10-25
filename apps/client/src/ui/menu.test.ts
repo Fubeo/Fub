@@ -81,7 +81,7 @@ describe("il menu contestuale", () => {
     expect(tab().defaultPrevented).toBe(false);
   });
 
-  it("mantiene l'animazione CSS senza catturare il menu in una View Transition", () => {
+  it("entra ed esce col moto, senza catturare il menu in una View Transition", () => {
     const start = vi.fn(() => {
       throw new Error("View Transition non disponibile nel WebKit della shell");
     });
@@ -91,8 +91,7 @@ describe("il menu contestuale", () => {
     });
 
     showContextMenu(clickEvent(), [{ label: "Apri", run: () => {} }]);
-    const menu = document.getElementById("context-menu")!;
-    expect(menu.dataset.shellMotion).toBe("enter");
+    expect(document.getElementById("context-menu")).not.toBeNull();
     expect(start).not.toHaveBeenCalled();
 
     closeContextMenu();
@@ -422,6 +421,26 @@ describe("un menu aperto da un pulsante", () => {
     showContextMenu(clickEvent(), [{ label: "Una", run: () => {} }]);
     const menu = document.getElementById("context-menu")!;
     expect([menu.style.left, menu.style.top, menu.style.maxHeight]).toEqual(["10px", "10px", ""]);
+    expect(menu.style.transformOrigin).toBe("0px 0px");
+  });
+
+  it("spinto dal bordo, cresce ancora dal puntatore", () => {
+    window_(1024, 768);
+    size = [160, 300];
+    // In basso a destra: il menu si ribalta sopra e a sinistra del puntatore,
+    // e l'origine è il puntatore dentro il menu, cioè l'angolo in basso a destra.
+    showContextMenu({ x: 1000, y: 700 }, [{ label: "Una", run: () => {} }]);
+    const menu = document.getElementById("context-menu")!;
+    expect([menu.style.left, menu.style.top]).toEqual(["840px", "460px"]);
+    expect(menu.style.transformOrigin).toBe("160px 240px");
+  });
+
+  it("aperto sopra il pulsante, cresce dal suo lato", () => {
+    window_(1024, 700);
+    size = [160, 200];
+    const menu = open(button(100, 600));
+    expect(menu.style.transformOrigin).toBe("0px 200px");
+    expect(open(button(100, 200)).style.transformOrigin).toBe("0px 0px");
   });
 });
 
@@ -494,6 +513,47 @@ describe("i sottomenu a cascata", () => {
     expect(document.querySelector(".context-submenu")).not.toBeNull();
     other!.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
     await vi.advanceTimersByTimeAsync(260);
+    expect(document.querySelector(".context-submenu")).toBeNull();
+  });
+
+  it("verso il sottomenu aperto il puntatore attraversa le voci senza chiuderlo", async () => {
+    showContextMenu(clickEvent(), [
+      { label: "Altro", items: async () => [{ label: "Dentro", run: () => {} }] },
+      { label: "Fuori", run: () => {} },
+    ]);
+    const menu = document.getElementById("context-menu")!;
+    const [parent, other] = document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]");
+    parent!.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    await vi.advanceTimersByTimeAsync(110);
+    const sub = document.querySelector<HTMLElement>(".context-submenu")!;
+    sub.getBoundingClientRect = () => ({ left: 200, right: 360, top: 0, bottom: 200, width: 160, height: 200, x: 200, y: 0, toJSON: () => ({}) }) as DOMRect;
+    // In diagonale verso il sottomenu: la voce sotto non lo chiude subito.
+    menu.dispatchEvent(new PointerEvent("pointermove", { clientX: 100, clientY: 10 }));
+    menu.dispatchEvent(new PointerEvent("pointermove", { clientX: 130, clientY: 30 }));
+    other!.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse", clientX: 130, clientY: 30 }));
+    await vi.advanceTimersByTimeAsync(150);
+    expect(document.querySelector(".context-submenu")).not.toBeNull();
+    // Arrivato, il sottomenu resta.
+    sub.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    await vi.advanceTimersByTimeAsync(400);
+    expect(document.querySelector(".context-submenu")).not.toBeNull();
+  });
+
+  it("allontanandosi dal sottomenu, la voce nuova lo chiude dopo una pausa breve", async () => {
+    showContextMenu(clickEvent(), [
+      { label: "Altro", items: async () => [{ label: "Dentro", run: () => {} }] },
+      { label: "Fuori", run: () => {} },
+    ]);
+    const menu = document.getElementById("context-menu")!;
+    const [parent, other] = document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]");
+    parent!.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    await vi.advanceTimersByTimeAsync(110);
+    const sub = document.querySelector<HTMLElement>(".context-submenu")!;
+    sub.getBoundingClientRect = () => ({ left: 200, right: 360, top: 0, bottom: 200, width: 160, height: 200, x: 200, y: 0, toJSON: () => ({}) }) as DOMRect;
+    menu.dispatchEvent(new PointerEvent("pointermove", { clientX: 100, clientY: 10 }));
+    menu.dispatchEvent(new PointerEvent("pointermove", { clientX: 60, clientY: 40 }));
+    other!.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse", clientX: 60, clientY: 40 }));
+    await vi.advanceTimersByTimeAsync(110);
     expect(document.querySelector(".context-submenu")).toBeNull();
   });
 

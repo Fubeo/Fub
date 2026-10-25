@@ -207,7 +207,7 @@ describe("combobox del quick switcher", () => {
     const stop = mountQuickSwitcher(first);
     await openSwitcher();
     stop();
-    expect(document.getElementById("quick-switcher")?.querySelector("input")).toBeNull();
+    expect(document.getElementById("quick-switcher")).toBeNull();
     const second = vi.fn();
     const stopAgain = mountQuickSwitcher(second);
     const { input } = await openSwitcher(["notes/Beta.md"]);

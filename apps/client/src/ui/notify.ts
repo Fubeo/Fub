@@ -37,14 +37,18 @@
 // [decisione 0052]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
 // [decisione 0080]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
 
-import { onLanguage, resolvedLanguage, t, type Key } from "../i18n/strings";
+import { onLanguage, t, type Key } from "../i18n/strings";
 import type { Gate, KernelEvent } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import type { Lifetime } from "./lifetime";
 import { focusableElements } from "./a11y";
 import { setTooltip } from "./tooltip";
+import { exactTime, relativeTime } from "./when";
+import { pageName } from "../rules/mirrored";
 import { drawCountButton } from "./icons";
 import { errorText } from "../host/errors";
+import { DURATION, exitGhost, flip } from "../moto";
+import { enterSurface, exitSurface } from "./motion";
 /// Quanto **tono** ha un avviso. Due e non cinque: chi disegna deve poterli
 /// distinguere a colpo d'occhio, e una scala di severità che nessuno sa dove
 /// tagliare finisce con tutto sullo stesso gradino.
@@ -118,6 +122,9 @@ let open = false;
 /// Resta finché un segnale contrario non la abbassa — nessun timeout che la
 /// faccia sparire da sola.
 let watcherOff = false;
+/// Il gesto che rimette il rilevamento: riaprire il vault. Lo dà chi alza il
+/// segnale, e vale finché il segnale resta.
+let reopenVault: (() => Promise<void>) | null = null;
 /// Chi ha aperto per ultimo il centro, per riportargli il fuoco (C04).
 let opener: HTMLElement | null = null;
 
@@ -201,8 +208,9 @@ export function failureNotice(e: Extract<KernelEvent, { type: "trouble" }>): {
   tone: Tone;
 } {
   const reason = e.error.message;
+  // Prima che cosa è successo, poi a quale nota: per nome, non per percorso.
   const base = e.subject
-    ? t("trouble.about", { doc: e.subject, reason })
+    ? t("trouble.about", { doc: pageName(e.subject), reason: reason.charAt(0).toLocaleUpperCase() + reason.slice(1) })
     : t("trouble.vault", { reason });
   return {
     text:
@@ -274,8 +282,9 @@ export function openHistory(isOpen = !open): void {
 /// segnale (I04/R07-R08). Nota: nessun iscritto automatico qui — il segnale
 /// `watching` arriva da `vaultStatus()` in desktop-shell, che resta l'unico a
 /// chiamarla (ownership sua, nessun secondo writer).
-export function setWatcherOff(off: boolean): void {
+export function setWatcherOff(off: boolean, reopen?: () => Promise<void>): void {
   watcherOff = off;
+  reopenVault = off ? reopen ?? null : null;
   redraw();
 }
 
@@ -380,6 +389,7 @@ function show(notice: Notice, actions: readonly NoticeAction[]): void {
   close.addEventListener("click", () => dismissToast(toast));
   toast.append(close);
   stack.appendChild(toast);
+  enterSurface(toast);
   // Oltre il limite esce il più vecchio, senza gesto: ciò che diceva sta nello
   // storico, e il conto lo ricorda.
   const toasts = stack.querySelectorAll<HTMLElement>(".toast");
@@ -453,15 +463,24 @@ function disarm(toast: HTMLElement): void {
   toastTimers.delete(toast);
 }
 
+/// Il toast se ne va subito; ne esce un'immagine ferma, in meno di un
+/// battito, e gli altri scorrono al posto lasciato invece di saltarci.
 function dismissToast(toast: HTMLElement): void {
   if (!toast.isConnected) return;
   disarm(toast);
   const stack = toast.parentElement;
-  toast.remove();
-  if (stack && stack.id === "toasts" && stack.querySelector(".toast") === null) {
-    evicted = 0;
-    stack.remove();
-  }
+  const others = stack ? [...stack.querySelectorAll<HTMLElement>(".toast")].filter((other) => other !== toast) : [];
+  // L'immagine sta nel `body`, fuori dalla pila: resta sopra i fogli come la
+  // pila da cui viene.
+  toast.style.zIndex = "var(--z-toast)";
+  exitGhost(toast, { duration: DURATION.swap, easing: "ease-in" });
+  flip(others, () => {
+    toast.remove();
+    if (stack && stack.id === "toasts" && stack.querySelector(".toast") === null) {
+      evicted = 0;
+      stack.remove();
+    }
+  }, { scale: false });
 }
 
 /// La regione viva: una sola, creata una volta e mai sostituita, a cui cambia
@@ -506,7 +525,7 @@ function redraw(): void {
 
   const panel = document.getElementById("notify-panel");
   if (!panel) return;
-  panel.hidden = !open;
+  showPanel(panel, open);
   if (!open) return;
 
   const list = panel.querySelector("#notify-list");
@@ -536,6 +555,19 @@ function watcherNote(): HTMLLIElement {
   const text = document.createElement("span");
   text.textContent = notifyText("notices.watcher_off");
   note.appendChild(text);
+  const reopen = reopenVault;
+  if (reopen) {
+    // Il gesto che il testo nomina, accanto al testo.
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "toast-action";
+    button.textContent = t("notices.reopen");
+    setTooltip(button, t("notices.reopen.hint"));
+    button.addEventListener("click", () => {
+      void reopen().catch((error: unknown) => notify(errorText(error), "guasto"));
+    });
+    note.appendChild(button);
+  }
   return note;
 }
 /// Una riga dello storico con dettagli senza console (U65): testo, ora, e i
@@ -550,9 +582,10 @@ function noticeRow(notice: Notice): HTMLLIElement {
   setTooltip(text, lineOf(notice));
   const time = document.createElement("span");
   time.className = "muted notify-ora";
-  // Nella lingua che la shell parla, non in quella del sistema.
-  time.textContent = new Date(notice.when).toLocaleTimeString(resolvedLanguage());
-  setTooltip(time, new Date(notice.when).toLocaleString(resolvedLanguage()));
+  // Nella lingua che la shell parla, non in quella del sistema; i secondi
+  // nel suggerimento.
+  time.textContent = relativeTime(notice.when);
+  setTooltip(time, exactTime(notice.when));
   row.append(text, time);
   return row;
 }
@@ -582,4 +615,18 @@ export function mountNotifications(lifetime: Lifetime): void {
   // dire riscrivere la storia di ciò che è successo.
   lifetime.add(onLanguage(redraw));
   redraw();
+}
+
+/// Apre o chiude un centro, con il suo moto se cambia: `redraw` passa di qui
+/// a ogni avviso, e un centro già aperto non rientra.
+export function showPanel(panel: HTMLElement, open: boolean): void {
+  if (open === !panel.hidden) return;
+  if (open) {
+    panel.hidden = false;
+    enterSurface(panel);
+  } else {
+    exitSurface(panel, () => {
+      panel.hidden = true;
+    });
+  }
 }

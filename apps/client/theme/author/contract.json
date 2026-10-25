@@ -165,6 +165,9 @@
     "elevation-dialog",
     "skip-link",
     "muted",
+    "skeleton",
+    "skeleton-line",
+    "skeleton-rows",
     "primary",
     "ui-button",
     "intent-primary",
@@ -271,6 +274,7 @@
     "danger",
     "clickable",
     "search-results",
+    "search-exclusions",
     "drop-into",
     "space-strip",
     "space-chip",
@@ -320,9 +324,9 @@
     "search-action",
     "search-tools",
     "search-syntax",
-    "search-exclusions",
     "search-chip",
     "search-options",
+    "search-options-group",
     "search-option",
     "search-replace",
     "search-replace-entry",
@@ -349,9 +353,11 @@
     "tab-close",
     "tab-new",
     "pane-toolbar",
+    "pane-mode-current",
     "sheet-title",
     "sheet-title-edit",
     "sheet-title-error",
+    "sheet-title-proposal",
     "sheet-save",
     "sheet-save-panel",
     "sheet-save-headline",
@@ -1327,6 +1333,7 @@
     "prefs-swatch-mark",
     "prefs-hue",
     "prefs-hue-value",
+    "prefs-font",
     "prefs-theme-entries",
     "prefs-preview",
     "prefs-preview-side",
@@ -1361,8 +1368,8 @@
     "onboarding-forget",
     "onboarding-extra",
     "onboarding-trouble",
-    "sheet-ghost",
-    "draw-radial"
+    "cm-cursorLayer",
+    "sheet-ghost"
   ],
   "states": [
     "rest",
@@ -1450,6 +1457,18 @@
       "part": "foundation",
       "hooks": [
         "muted"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "skeleton",
+      "part": "foundation",
+      "hooks": [
+        "skeleton",
+        "skeleton-line",
+        "skeleton-rows"
       ],
       "states": [
         "rest"
@@ -1925,6 +1944,7 @@
         "danger",
         "clickable",
         "search-results",
+        "search-exclusions",
         "drop-into"
       ],
       "states": [
@@ -2113,7 +2133,8 @@
         "hit-snippet",
         "hit-context",
         "hit-occurrence",
-        "hit-create"
+        "hit-create",
+        "skeleton"
       ],
       "states": [
         "rest",
@@ -2148,7 +2169,9 @@
       "part": "search",
       "hooks": [
         "search-options",
-        "search-option"
+        "search-options-group",
+        "search-option",
+        "sidebar"
       ],
       "states": [
         "rest",
@@ -2221,7 +2244,8 @@
       "part": "sheets",
       "hooks": [
         "pane-toolbar",
-        "muted"
+        "muted",
+        "pane-mode-current"
       ],
       "states": [
         "rest"
@@ -2234,6 +2258,7 @@
         "sheet-title",
         "sheet-title-edit",
         "sheet-title-error",
+        "sheet-title-proposal",
         "kit-field-box"
       ],
       "states": [
@@ -4585,7 +4610,8 @@
         "prefs-swatch--custom",
         "prefs-swatch-mark",
         "prefs-hue",
-        "prefs-hue-value"
+        "prefs-hue-value",
+        "prefs-font"
       ],
       "states": [
         "rest",
@@ -4725,17 +4751,6 @@
       ]
     },
     {
-      "name": "icon-picker",
-      "part": "motion",
-      "hooks": [
-        "icon-picker"
-      ],
-      "states": [
-        "rest",
-        "focused"
-      ]
-    },
-    {
       "name": "context-menu",
       "part": "motion",
       "hooks": [
@@ -4753,7 +4768,6 @@
       "name": "modal-palette",
       "part": "motion",
       "hooks": [
-        "modale",
         "palette-box"
       ],
       "states": [
@@ -4766,23 +4780,12 @@
       ]
     },
     {
-      "name": "settings",
-      "part": "motion",
-      "hooks": [
-        "settings-panel"
-      ],
-      "states": [
-        "rest",
-        "selected",
-        "focused"
-      ]
-    },
-    {
       "name": "editor-motion-surface",
       "part": "motion",
       "hooks": [
         "cm-editor",
-        "pane-editor"
+        "pane-editor",
+        "cm-cursorLayer"
       ],
       "states": [
         "rest",
@@ -4797,21 +4800,6 @@
       ],
       "states": [
         "rest"
-      ]
-    },
-    {
-      "name": "draw-radial",
-      "part": "motion",
-      "hooks": [
-        "draw-radial",
-        "draw-radial-ring"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "pressed",
-        "focused",
-        "disabled"
       ]
     }
   ],
@@ -5540,10 +5528,10 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1206,
+    "hooks": 1213,
     "state_names": 7,
-    "assigned_states": 641,
-    "components": 190,
+    "assigned_states": 632,
+    "components": 188,
     "preference_tokens": 123
   }
 }

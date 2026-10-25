@@ -17,12 +17,16 @@ import { t } from "../../../i18n/strings";
 import type { Lifetime } from "../../../ui/lifetime";
 import { Race } from "../../../ui/race";
 import { setSanitizedHtml } from "../../../ui/sanitize";
+import { skeleton, SKELETON_DELAY_MS } from "../../../ui/skeleton";
 
 /// Quanto la riga attiva deve restare ferma prima che si chieda la sua resa
 /// (ms): chi scorre l'elenco non fa partire una domanda per riga.
 export const PREVIEW_DELAY_MS = 90;
-/// Dopo quanto una resa che non arriva si dice, attenuando quella di prima (ms).
-export const PREVIEW_SLOW_MS = 180;
+/// Dopo quanto una resa che non arriva si dice (ms): attenua quella di prima,
+/// o se non ce n'è una mostra lo scheletro di una pagina.
+export const PREVIEW_SLOW_MS = SKELETON_DELAY_MS;
+/// Le righe dello scheletro della pagina.
+const SKELETON_LINES = 6;
 
 export interface Preview {
   /// Il riquadro, da posare accanto all'elenco.
@@ -67,7 +71,13 @@ export function createPreview(lifetime: Lifetime): Preview {
 
   const ask = (doc: string): void => {
     delay = undefined;
-    slow = window.setTimeout(() => element.setAttribute("data-waiting", ""), PREVIEW_SLOW_MS);
+    slow = window.setTimeout(() => {
+      element.setAttribute("data-waiting", "");
+      if (page.childElementCount === 0) {
+        say(null);
+        page.append(skeleton(SKELETON_LINES));
+      }
+    }, PREVIEW_SLOW_MS);
     // Una resa superata da una riga più nuova non arriva a disegnarsi; il
     // guasto diventa un valore prima del cancello, e passa dallo stesso.
     void race.last(async (expected) => {

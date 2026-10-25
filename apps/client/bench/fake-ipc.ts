@@ -42,12 +42,15 @@ import XLSX_GRID from "../src/__fixtures__/xlsx-grid.json";
 import type {
   BundleInfo,
   CommandSpec,
+  DocumentMatch,
   IndexQuery,
   IndexResult,
   JobStatus,
   KnownVault,
   Organization,
+  QueryExpr,
   SettingEntry,
+  Span,
   UiNode,
   ViewSpec,
 } from "../src/host/contract";
@@ -420,7 +423,7 @@ const SETTINGS: SettingEntry[] = [
     spec: {
       key: "appearance.theme",
       label: "Tema",
-      description: "In che luce si guarda Fub. Vuoto = come il sistema.",
+      description: "In che luce si guarda Fub. «Come il sistema» segue il sistema operativo.",
       group: "Aspetto",
       scope: "machine",
       kind: {
@@ -462,7 +465,7 @@ const SETTINGS: SettingEntry[] = [
     spec: {
       key: "appearance.density",
       label: "Densità",
-      description: "Compatta o allarga la spaziatura dei componenti senza muovere la scocca.",
+      description: "Compatta o allarga la spaziatura dei controlli senza cambiare la disposizione dei pannelli.",
       group: "Aspetto",
       scope: "machine",
       kind: {
@@ -544,8 +547,8 @@ const SETTINGS: SettingEntry[] = [
   {
     spec: {
       key: "appearance.accent",
-      label: "Tinta dell'accento (0–360)",
-      description: "Tinta OKLCH; chiarezza e croma vengono derivati per mantenere il contrasto.",
+      label: "Tinta dell'accento",
+      description: "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.",
       group: "Aspetto",
       scope: "machine",
       kind: { kind: "number", default: 265, min: 0, max: 360 },
@@ -559,7 +562,7 @@ const SETTINGS: SettingEntry[] = [
     spec: {
       key: "appearance.zoom",
       label: "Zoom interfaccia",
-      description: "Scala nativa della finestra, da 0,5 a 2.",
+      description: "Quanto è grande tutta l'interfaccia, dal 50% al 200%.",
       group: "Aspetto",
       scope: "machine",
       kind: { kind: "number", default: 1, min: 0.5, max: 2 },
@@ -1143,11 +1146,72 @@ function treeOf(view: string): UiNode | undefined {
   return tree && view !== "outline" ? inShellLanguage(tree) : tree;
 }
 
+/// L'albero con scelta la voce il cui salto porta `payload`, e nessun'altra.
+function choose(node: UiNode, payload: unknown): UiNode {
+  if (node.node === "tree") return { ...node, roots: node.roots.map((item) => choose(item, payload) as typeof item) };
+  if (node.node !== "tree_item") return node;
+  return {
+    ...node,
+    selected: node.action?.payload === payload,
+    children: node.children.map((item) => choose(item, payload) as typeof item),
+  };
+}
+
+/// Il testo cercato da una query di documenti, se ne cerca uno.
+function searchedText(expr: QueryExpr): string | null {
+  for (const clause of expr.any) {
+    for (const literal of clause.all) {
+      if (!literal.negated && literal.predicate.kind === "text") return literal.predicate.text;
+    }
+  }
+  return null;
+}
+
+const utf8 = new TextEncoder();
+/// Quanto testo sta attorno all'occorrenza in un estratto (caratteri).
+const SNIPPET_BEFORE = 40;
+const SNIPPET_AFTER = 80;
+
+/// L'estratto che darebbe l'indice: la riga del corpo in cui il primo termine
+/// compare, tagliata attorno all'occorrenza, con gli intervalli in byte di ogni
+/// termine. Il finto host risponde i documenti senza estratto, e la foto della
+/// ricerca mostrerebbe un elenco di nomi che il prodotto non mostra.
+function snippetOf(doc: string, text: string): Pick<DocumentMatch, "snippet" | "highlights"> {
+  const terms = text.toLowerCase().split(/\s+/).filter(Boolean);
+  const body = (CORPUS[doc] ?? "").replace(/^---\n[\s\S]*?\n---\n/, "");
+  const lines = body.split("\n").map((line) => line.replace(/^[#>\-*\s]+/, "").trim());
+  const line = lines.find((each) => terms.some((term) => each.toLowerCase().includes(term)));
+  if (!line || terms.length === 0) return {};
+  const at = line.toLowerCase().indexOf(terms.find((term) => line.toLowerCase().includes(term))!);
+  const start = Math.max(0, at - SNIPPET_BEFORE);
+  const end = Math.min(line.length, at + SNIPPET_AFTER);
+  const snippet = `${start > 0 ? "…" : ""}${line.slice(start, end)}${end < line.length ? "…" : ""}`;
+  const lower = snippet.toLowerCase();
+  const highlights: Span[] = [];
+  for (const term of terms) {
+    for (let index = lower.indexOf(term); index !== -1; index = lower.indexOf(term, index + term.length)) {
+      const before = utf8.encode(snippet.slice(0, index)).length;
+      highlights.push({ start: before, end: before + utf8.encode(snippet.slice(index, index + term.length)).length });
+    }
+  }
+  highlights.sort((a, b) => a.start - b.start);
+  return { snippet, highlights };
+}
+
 export const api: typeof host.module.api = {
   ...behind,
   queryIndex: async (q) => {
     const response = RESPONSES[q.kind];
     const result = response ? response(q) : await behind.queryIndex(q);
+    if (q.kind === "documents" && result.kind === "documents") {
+      const text = searchedText(q.matching);
+      if (text) {
+        return {
+          ...result,
+          value: { ...result.value, items: result.value.items.map((hit) => ({ ...hit, ...snippetOf(hit.doc, text) })) },
+        };
+      }
+    }
     return HOST_TEXT.has(q.kind) ? inShellLanguage(result) : result;
   },
   listViews: async (vault) => inShellLanguage(await behind.listViews(vault)),
@@ -1159,11 +1223,14 @@ export const api: typeof host.module.api = {
   // Un'azione di una view della scenografia non fa niente e **lo dice
   // ridisegnando l'albero di prima**: è la risposta minima che il protocollo
   // accetta, e non un `throw` — un click di troppo durante una scena non deve
-  // far morire una foto.
+  // far morire una foto. Tranne il salto dell'indice: come il provider vero,
+  // segna scelto il titolo a cui si è andati, e il banco del moto vede la
+  // sagoma della voce scelta scorrere.
   viewAction: (view, instance, params, action, payload, fields) => {
     const tree = treeOf(view);
     if (!tree) return behind.viewAction(view, instance, params, action, payload, fields);
-    return Promise.resolve({ kind: "replace" as const, root: tree });
+    const root = view === "outline" && action === "goto" ? choose(tree, payload) : tree;
+    return Promise.resolve({ kind: "replace" as const, root });
   },
   listBundles: () => Promise.resolve(inShellLanguage(BUNDLE)),
   knownVaults: () => Promise.resolve(KNOWN_VAULTS),
