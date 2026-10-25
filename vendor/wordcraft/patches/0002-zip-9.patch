@@ -21,6 +21,18 @@ index debef3c..457a084 100644
              if f.size() > max_part {
                  return Err(DocxError::Limit(format!("part {name} declares {} bytes", f.size())));
              }
+diff --git a/crates/docx/tests/content_control_save_cost.rs b/crates/docx/tests/content_control_save_cost.rs
+--- a/crates/docx/tests/content_control_save_cost.rs
++++ b/crates/docx/tests/content_control_save_cost.rs
+@@ -137,7 +137,7 @@
+ /// The names of the parts of a package, in the order they are in it.
+ fn part_names(bytes: &[u8]) -> Vec<String> {
+     let z = zip::ZipArchive::new(std::io::Cursor::new(bytes)).expect("zip");
+-    z.file_names().map(str::to_string).collect()
++    z.file_names().map(|name| name.unwrap().into_owned()).collect()
+ }
+ 
+ /// The body of the document part of a package.
 diff --git a/crates/docx/tests/custom_xml.rs b/crates/docx/tests/custom_xml.rs
 index 53c1f0c..27f11c6 100644
 --- a/crates/docx/tests/custom_xml.rs

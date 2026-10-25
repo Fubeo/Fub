@@ -3,23 +3,18 @@
   "sha256": "fb3a81f11a5b00f3a34d68592e94a2c0d1513a901931eea8f25277fa88d0d215",
   "open": {
     "readonly": "codec",
-    "projection": "8d955ca9779b10ce78d75b2e07f400a42bbc4402b05c400ff36e34f7e9b1a1ca",
+    "projection": "ee587bcfe61ca9970526c677b8b120b302628db9413866c844de456a34715ad0",
     "blocks": 4,
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 12",
-    "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang>: 3 → 2",
+    "differenze all'apertura: 7",
     "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts>: 1 → 0",
     "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
-    "  document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
     "  document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hint=\"eastAsia\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
-    "  block 0: document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang>: 1 → 0",
     "  block 0: document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts>: 1 → 0",
-    "  block 0: document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
     "  block 0: document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hint=\"eastAsia\": 1 → 0",
     "normalizzazione «w:id»: 1 nel file, 1 nella prova a vuoto",
     "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"

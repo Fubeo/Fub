@@ -8,6 +8,10 @@
 //
 // `gate` sono le prove di `vendor.mjs <motore> gate` dopo un aggiornamento:
 // [etichetta, comando, argomenti…], eseguite dalla radice del repository.
+//
+// `osservati` sono file dell'upstream che Fub non copia ma rispecchia a mano
+// nella shell: [percorso, che cosa li rispecchia]. `report` dice quando
+// cambiano, perché chi aggiorna li rilegga.
 
 export const MOTORI = {
   wordcraft: {
@@ -34,6 +38,11 @@ export const MOTORI = {
       ["il correttore", "cargo", "test", "-p", "fub-features", "--no-fail-fast"],
       ["soltanto gli adattatori nominano il motore", "node", ".github/scripts/check-engine-boundary.mjs"],
       ["licenze e avvisi", "cargo", "deny", "check"],
+    ],
+    osservati: [
+      ["crates/engine/src/ribbon.rs", "la striscia dei documenti, editors/rich/strip.ts"],
+      ["crates/ui-egui/src/ribbon.rs", "la striscia dei documenti, editors/rich/strip.ts"],
+      ["crates/ui-egui/src/mini_toolbar.rs", "la mini-barra dei documenti"],
     ],
   },
   gridcraft: {
@@ -67,6 +76,10 @@ export const MOTORI = {
       ["soltanto gli adattatori nominano il motore", "node", ".github/scripts/check-engine-boundary.mjs"],
       ["i confini delle dipendenze", "cargo", "test", "-p", "fub-abi", "--test", "dependency_invariant"],
       ["licenze e avvisi", "cargo", "deny", "check"],
+    ],
+    osservati: [
+      ["crates/ui-egui/src/ribbon.rs", "la barra dei fogli, editors/grid/ribbon/tabs.ts"],
+      ["crates/ui-egui/src/dialogs.rs", "le finestre dei fogli, editors/grid/dialogs/"],
     ],
   },
 };

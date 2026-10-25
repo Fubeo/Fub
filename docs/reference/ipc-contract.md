@@ -362,7 +362,10 @@ riporta il file intero. Un file nuovo `rtf` o `doc` non si crea
 `opaque_schema`, subito dopo `version`, è lo schema dei dati opachi (`k` e
 `sect`, JSON del modello del motore in base64), che si incrementa quando
 cambia la loro forma serializzata: lo schema 2 aggiunge all'1 il campo
-facoltativo `eastAsianLayout` delle proprietà del carattere, e il codec legge
+facoltativo `eastAsianLayout` delle proprietà del carattere, il 3 altri campi
+facoltativi (`langEa` del carattere, `z` di un oggetto mobile, `outlineFill`
+e `size` di forme e filigrane) e il riempimento trasparente o sfumato di una
+forma come oggetto con `type`, accanto al colore `[r, g, b]`. Il codec legge
 ogni schema fino al suo. La versione 1, quella delle bozze di
 prima, ha le stesse chiavi senza `opaque_schema` e i dati dello schema 0. La
 shell legge le due versioni, ciascuna con il suo elenco chiuso di chiavi, e

@@ -841,8 +841,7 @@ fn hankel(n: u32, x: f64) -> Option<(f64, f64)> {
     if j.is_finite() && y.is_finite() { Some((j, y)) } else { None }
 }
 
-// The value of `std::f64::consts::EULER_GAMMA`, which is stable only since Rust 1.94.
-const EULER: f64 = 0.577215664901532860606512090082402431_f64;
+const EULER: f64 = std::f64::consts::EULER_GAMMA;
 
 /// J_0..J_m(x) for 0 < x ≤ ~100 by Miller's backward recurrence, normalised with
 /// J_0 + 2ΣJ_{2k} = 1.

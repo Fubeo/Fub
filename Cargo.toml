@@ -72,7 +72,7 @@ exclude = [
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-rust-version = "1.89"
+rust-version = "1.95"
 
 # Versioni condivise: un solo punto di verità per l'intero workspace.
 [workspace.dependencies]
@@ -158,14 +158,14 @@ fub-format-xlsx = { path = "crates/fub-format-xlsx", version = "0.1.0" }
 fub-importers = { path = "crates/fub-importers", version = "0.1.0" }
 # Il correttore di WordCraft, vendorizzato (vendor/wordcraft/UPSTREAM.md). La
 # `version` la scrive `tools/vendor-craft/vendor.mjs update`.
-wordcraft-proof = { path = "vendor/wordcraft/crates/proof", version = "0.9.0" }
+wordcraft-proof = { path = "vendor/wordcraft/crates/proof", version = "0.10.0" }
 # Il modello e il codec DOCX di WordCraft, vendorizzati con il correttore.
-wordcraft-geom = { path = "vendor/wordcraft/crates/geom", version = "0.9.0" }
-wordcraft-doc = { path = "vendor/wordcraft/crates/doc", version = "0.9.0" }
-wordcraft-docx = { path = "vendor/wordcraft/crates/docx", version = "0.9.0" }
+wordcraft-geom = { path = "vendor/wordcraft/crates/geom", version = "0.10.0" }
+wordcraft-doc = { path = "vendor/wordcraft/crates/doc", version = "0.10.0" }
+wordcraft-docx = { path = "vendor/wordcraft/crates/docx", version = "0.10.0" }
 # I lettori di WordCraft per OpenDocument, RTF e Word 97-2003.
-wordcraft-formats = { path = "vendor/wordcraft/crates/formats", version = "0.9.0" }
-wordcraft-docbin = { path = "vendor/wordcraft/crates/docbin", version = "0.9.0" }
+wordcraft-formats = { path = "vendor/wordcraft/crates/formats", version = "0.10.0" }
+wordcraft-docbin = { path = "vendor/wordcraft/crates/docbin", version = "0.10.0" }
 # Il modello del foglio di calcolo, le formule, il calcolo, i formati numerici
 # e il codec XLSX di GridCraft, vendorizzati (vendor/gridcraft/UPSTREAM.md).
 gridcraft-core = { path = "vendor/gridcraft/crates/core", version = "0.11.1" }

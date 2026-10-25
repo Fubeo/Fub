@@ -1,5 +1,5 @@
 {
-  "opaque_schema": 2,
+  "opaque_schema": 3,
   "defaults": {
     "CharProps": {},
     "ParaProps": {},
@@ -226,6 +226,33 @@
               ],
               "omml": "string"
             }
+          }
+        },
+        {
+          "props": {},
+          "object": {
+            "type": "string",
+            "media": "string",
+            "w": "number",
+            "h": "number",
+            "alt": "string",
+            "float": {
+              "wrap": "string",
+              "hRel": "string",
+              "vRel": "string",
+              "x": "number",
+              "y": "number",
+              "dist": "number",
+              "distTop": "number",
+              "distBottom": "number",
+              "effect": [
+                "number"
+              ],
+              "z": "number"
+            },
+            "crop": [
+              "number"
+            ]
           }
         },
         {
@@ -535,13 +562,14 @@
           "del": "number"
         },
         {
+          "ins": "number"
+        },
+        {
+          "langEa": "string",
           "eastAsianLayout": {
             "id": "number",
             "combine": "bool"
           }
-        },
-        {
-          "ins": "number"
         },
         {
           "link": "string"

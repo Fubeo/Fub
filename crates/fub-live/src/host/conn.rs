@@ -287,6 +287,9 @@ async fn upgrade(shared: &Shared, stream: Budget<Box<dyn Io>>, deadline: Instant
         .ok()?
         .ok()?;
     let origin = shared.origin.clone();
+    // La firma è quella che tungstenite chiede alla callback dell'upgrade:
+    // l'errore è la sua risposta HTTP, che non si può mettere in un `Box`.
+    #[allow(clippy::result_large_err)]
     let callback = move |request: &Request, response: Response| match refusal(request, &origin) {
         None => Ok(response),
         Some(status) => {

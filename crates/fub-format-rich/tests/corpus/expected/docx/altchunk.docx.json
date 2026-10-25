@@ -3,16 +3,15 @@
   "sha256": "321ddb4a99480231305d550b45720b4e210839eb581a925e0283a0ab4a31c978",
   "open": {
     "readonly": "codec",
-    "projection": "9d3c1c12bfa1cda5fae62a3d76e8413c3dd79573ae4aa38f232e7311c8e7c27c",
+    "projection": "f9b063d995b888f5c69024ff3a5ee6f9f89954f7ea42c86d66758c21e9947549",
     "blocks": 2,
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 9",
+    "differenze all'apertura: 8",
     "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}altChunk>: 1 → 0",
     "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
     "  document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}altChunk @{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk → sha256:5dcd893e3e6b6cdf79d080aecffe79821b7887f37c3f1789cb9f42cfe95d3899\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"ja-JP\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
     "  document: relationship http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk → sha256:5dcd893e3e6b6cdf79d080aecffe79821b7887f37c3f1789cb9f42cfe95d3899: 1 → 0",

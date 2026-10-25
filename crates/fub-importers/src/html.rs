@@ -491,30 +491,28 @@ pub fn html_to_markdown(html: &str, opts: &ClipOptions) -> (String, Vec<ClipAsse
                     out.push("\n".to_string());
                 }
             }
-            "li" => {
-                if !closing {
-                    let depth = list_stack.len().saturating_sub(1);
-                    if depth > MAX_LIST_INDENT && !flattened {
-                        flattened = true;
-                        notes.push(ClipNote {
-                            level: "warn",
-                            message: format!(
-                                "list nesting deeper than {MAX_LIST_INDENT} levels kept at that level"
-                            ),
-                            entry: "li".to_string(),
-                        });
-                    }
-                    let indent = "  ".repeat(depth.min(MAX_LIST_INDENT));
-                    let marker = match list_stack.last_mut() {
-                        Some((true, n)) => {
-                            let m = format!("{n}. ");
-                            *n += 1;
-                            m
-                        }
-                        _ => "- ".to_string(),
-                    };
-                    out.push(format!("\n{indent}{marker}"));
+            "li" if !closing => {
+                let depth = list_stack.len().saturating_sub(1);
+                if depth > MAX_LIST_INDENT && !flattened {
+                    flattened = true;
+                    notes.push(ClipNote {
+                        level: "warn",
+                        message: format!(
+                            "list nesting deeper than {MAX_LIST_INDENT} levels kept at that level"
+                        ),
+                        entry: "li".to_string(),
+                    });
                 }
+                let indent = "  ".repeat(depth.min(MAX_LIST_INDENT));
+                let marker = match list_stack.last_mut() {
+                    Some((true, n)) => {
+                        let m = format!("{n}. ");
+                        *n += 1;
+                        m
+                    }
+                    _ => "- ".to_string(),
+                };
+                out.push(format!("\n{indent}{marker}"));
             }
             "mark" => out.push("==".to_string()),
             "table" => {
@@ -524,18 +522,15 @@ pub fn html_to_markdown(html: &str, opts: &ClipOptions) -> (String, Vec<ClipAsse
                     out.push("\n\n".to_string());
                 }
             }
-            "tr" => {
-                if !closing {
-                    out.push("\n| ".to_string());
-                }
+            "tr" if !closing => {
+                out.push("\n| ".to_string());
             }
-            "th" | "td" => {
-                if !closing {
+            "th" | "td"
+                if !closing
                     // Cell separator: leading `| ` came from `tr`.
-                    if !out.last().is_some_and(|s| s.ends_with("| ")) {
-                        out.push(" | ".to_string());
-                    }
-                }
+                    && !out.last().is_some_and(|s| s.ends_with("| ")) =>
+            {
+                out.push(" | ".to_string());
             }
             _ => {}
         }
