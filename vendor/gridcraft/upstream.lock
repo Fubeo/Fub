@@ -9,11 +9,7 @@ version = "0.11.1"
 
 [[patch]]
 path = "patches/0001-zip-9.patch"
-sha256 = "sha256:3b77699ece3a886f1d67faee835d32213a575dca11688e98b8fa43545141aed7"
-
-[[patch]]
-path = "patches/0002-rust-1-89.patch"
-sha256 = "sha256:91213cda62223ad6ae4de3aebb46dea78a8c4792b186dddcb8d41d41c5e0e73d"
+sha256 = "sha256:8feeb688fd23d5db221c36e911d2c2dcfff33d4eadbe0e4c60a204eb54800aa9"
 
 [[patch]]
 path = "patches/0003-valori-delle-matrici.patch"
@@ -493,7 +489,6 @@ upstream = "sha256:08a014b32e2cb1889394933f089c07e43133346701b53ddb0ded05c5b80d2
 [[file]]
 path = "crates/functions/src/engineering.rs"
 upstream = "sha256:e770f727e0a90ee23bd15105683d4c3c3a8f3234a23f5525c395f7b867274d4b"
-result = "sha256:0390d03990174013a25d6e4c78ad15fc77d2c53ee80cc7bb045276cf8b9dd6e8"
 
 [[file]]
 path = "crates/functions/src/ets.rs"

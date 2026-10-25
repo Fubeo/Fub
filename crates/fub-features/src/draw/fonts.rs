@@ -1800,7 +1800,7 @@ pub(crate) mod tests {
                 let record = &font[12 + 16 * t..28 + 16 * t];
                 let offset = u32::from_be_bytes(record[8..12].try_into().unwrap()) as usize;
                 let length = u32::from_be_bytes(record[12..16].try_into().unwrap()) as usize;
-                while out.len() % 4 != 0 {
+                while !out.len().is_multiple_of(4) {
                     out.push(0);
                 }
                 let moved = out.len() as u32;

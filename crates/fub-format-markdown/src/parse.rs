@@ -76,7 +76,7 @@ fn footnote_close(source: &str, start: usize, limit: usize) -> Option<usize> {
         if matches!(byte, b'\r' | b'\n') {
             return None;
         }
-        let escaped = run % 2 != 0;
+        let escaped = !run.is_multiple_of(2);
         run = if byte == b'\\' { run + 1 } else { 0 };
         if escaped {
             continue;
@@ -1815,7 +1815,7 @@ fn footnote_closes(source: &str, slice: &str, base: usize) -> HashMap<usize, usi
     let mut open: Vec<(usize, bool)> = Vec::new();
     let mut run = backslashes_before(source.as_bytes(), base);
     for (at, &byte) in bytes.iter().enumerate() {
-        let escaped = run % 2 != 0;
+        let escaped = !run.is_multiple_of(2);
         run = if byte == b'\\' { run + 1 } else { 0 };
         match byte {
             b'\r' | b'\n' => open.clear(),

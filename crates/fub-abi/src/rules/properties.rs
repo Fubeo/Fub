@@ -922,7 +922,7 @@ mod tests {
 
     #[test]
     fn one_registry_drives_filters_columns_facets_and_sort() {
-        let vault = vec![
+        let vault = [
             (DocId::new("a.md"), fm(serde_json::json!({"rating": "10"}))),
             (DocId::new("b.md"), fm(serde_json::json!({"rating": 10}))),
             (DocId::new("c.md"), fm(serde_json::json!({"rating": "2"}))),

@@ -364,7 +364,7 @@ pub fn frontmatter(
 /// be a multiple of four and padding may only close the final group.
 pub fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     let bytes = input.as_bytes();
-    if bytes.len() % 4 != 0 {
+    if !bytes.len().is_multiple_of(4) {
         return Err("base64 length is not a multiple of 4".to_string());
     }
     let pad = bytes.iter().rev().take_while(|&&b| b == b'=').count();

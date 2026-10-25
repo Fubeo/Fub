@@ -867,7 +867,7 @@ fn path_data(raw: &str, decimals: usize) -> Option<String> {
         None => true,
         Some(c) => match arity(c.to_ascii_uppercase()) {
             0 => count == 0,
-            n => count > 0 && count % n == 0,
+            n => count > 0 && count.is_multiple_of(n),
         },
     };
     loop {

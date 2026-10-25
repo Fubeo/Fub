@@ -414,155 +414,70 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_expr(&mut self) -> Result<FormulaAst, String> {
-        self.parse_or()
+        self.parse_binary(1)
     }
 
-    fn parse_or(&mut self) -> Result<FormulaAst, String> {
-        let entry = self.depth;
-        let mut left = self.parse_and()?;
-        loop {
-            self.skip_ws();
-            if self.eat("||") {
-                self.deeper()?;
-                let right = self.parse_and()?;
-                left = FormulaAst::Binary(BinaryOp::Or, Box::new(left), Box::new(right));
-            } else {
-                self.depth = entry;
-                return Ok(left);
-            }
-        }
-    }
-
-    fn parse_and(&mut self) -> Result<FormulaAst, String> {
-        let entry = self.depth;
-        let mut left = self.parse_equality()?;
-        loop {
-            self.skip_ws();
-            if self.eat("&&") {
-                self.deeper()?;
-                let right = self.parse_equality()?;
-                left = FormulaAst::Binary(BinaryOp::And, Box::new(left), Box::new(right));
-            } else {
-                self.depth = entry;
-                return Ok(left);
-            }
-        }
-    }
-
-    fn parse_equality(&mut self) -> Result<FormulaAst, String> {
-        let entry = self.depth;
-        let mut left = self.parse_comparison()?;
-        loop {
-            self.skip_ws();
-            if self.eat("==") {
-                self.deeper()?;
-                let right = self.parse_comparison()?;
-                left = FormulaAst::Binary(BinaryOp::Eq, Box::new(left), Box::new(right));
-            } else if self.eat("!=") {
-                self.deeper()?;
-                let right = self.parse_comparison()?;
-                left = FormulaAst::Binary(BinaryOp::NotEq, Box::new(left), Box::new(right));
-            } else {
-                self.depth = entry;
-                return Ok(left);
-            }
-        }
-    }
-
-    fn parse_comparison(&mut self) -> Result<FormulaAst, String> {
-        let entry = self.depth;
-        let mut left = self.parse_add()?;
-        loop {
-            self.skip_ws();
-            if self.eat(">=") {
-                self.deeper()?;
-                let right = self.parse_add()?;
-                left = FormulaAst::Binary(BinaryOp::Gte, Box::new(left), Box::new(right));
-            } else if self.eat("<=") {
-                self.deeper()?;
-                let right = self.parse_add()?;
-                left = FormulaAst::Binary(BinaryOp::Lte, Box::new(left), Box::new(right));
-            } else if self.eat('>') {
-                self.deeper()?;
-                let right = self.parse_add()?;
-                left = FormulaAst::Binary(BinaryOp::Gt, Box::new(left), Box::new(right));
-            } else if self.eat('<') {
-                self.deeper()?;
-                let right = self.parse_add()?;
-                left = FormulaAst::Binary(BinaryOp::Lt, Box::new(left), Box::new(right));
-            } else {
-                self.depth = entry;
-                return Ok(left);
-            }
-        }
-    }
-
-    fn parse_add(&mut self) -> Result<FormulaAst, String> {
-        let entry = self.depth;
-        let mut left = self.parse_mul()?;
-        loop {
-            self.skip_ws();
-            if self.eat('+') {
-                self.deeper()?;
-                let right = self.parse_mul()?;
-                left = FormulaAst::Binary(BinaryOp::Add, Box::new(left), Box::new(right));
-            } else if self.eat('-') {
-                self.deeper()?;
-                let right = self.parse_mul()?;
-                left = FormulaAst::Binary(BinaryOp::Sub, Box::new(left), Box::new(right));
-            } else {
-                self.depth = entry;
-                return Ok(left);
-            }
-        }
-    }
-
-    fn parse_mul(&mut self) -> Result<FormulaAst, String> {
+    /// Gli operatori binari per precedenza, dal più debole: una catena a
+    /// sinistra di operandi legati da operatori di precedenza almeno `min`.
+    /// Una funzione sola per tutte le precedenze, e non una per livello:
+    /// ogni parentesi ripete la discesa, e in debug sei frame di catena per
+    /// parentesi esaurivano la pila di un thread prima del tetto.
+    fn parse_binary(&mut self, min: u8) -> Result<FormulaAst, String> {
         let entry = self.depth;
         let mut left = self.parse_unary()?;
         loop {
             self.skip_ws();
-            if self.eat('*') {
-                self.deeper()?;
-                let right = self.parse_unary()?;
-                left = FormulaAst::Binary(BinaryOp::Mul, Box::new(left), Box::new(right));
-            } else if self.eat('/') {
-                self.deeper()?;
-                let right = self.parse_unary()?;
-                left = FormulaAst::Binary(BinaryOp::Div, Box::new(left), Box::new(right));
-            } else if self.eat('%') {
-                self.deeper()?;
-                let right = self.parse_unary()?;
-                left = FormulaAst::Binary(BinaryOp::Mod, Box::new(left), Box::new(right));
-            } else {
+            let Some((op, precedence, len)) = self.peek_binary().filter(|(_, p, _)| *p >= min)
+            else {
                 self.depth = entry;
                 return Ok(left);
-            }
+            };
+            self.pos += len;
+            self.deeper()?;
+            let right = self.parse_binary(precedence + 1)?;
+            left = FormulaAst::Binary(op, Box::new(left), Box::new(right));
+        }
+    }
+
+    /// L'operatore binario alla posizione corrente, con la sua precedenza e
+    /// la sua lunghezza, senza consumarlo. `>=` e `<=` prima di `>` e `<`;
+    /// un `!` da solo non è binario.
+    fn peek_binary(&self) -> Option<(BinaryOp, u8, usize)> {
+        let rest = self.bytes.get(self.pos..)?;
+        let two = |op, precedence| Some((op, precedence, 2));
+        let one = |op, precedence| Some((op, precedence, 1));
+        match rest {
+            [b'|', b'|', ..] => two(BinaryOp::Or, 1),
+            [b'&', b'&', ..] => two(BinaryOp::And, 2),
+            [b'=', b'=', ..] => two(BinaryOp::Eq, 3),
+            [b'!', b'=', ..] => two(BinaryOp::NotEq, 3),
+            [b'>', b'=', ..] => two(BinaryOp::Gte, 4),
+            [b'<', b'=', ..] => two(BinaryOp::Lte, 4),
+            [b'>', ..] => one(BinaryOp::Gt, 4),
+            [b'<', ..] => one(BinaryOp::Lt, 4),
+            [b'+', ..] => one(BinaryOp::Add, 5),
+            [b'-', ..] => one(BinaryOp::Sub, 5),
+            [b'*', ..] => one(BinaryOp::Mul, 6),
+            [b'/', ..] => one(BinaryOp::Div, 6),
+            [b'%', ..] => one(BinaryOp::Mod, 6),
+            _ => None,
         }
     }
 
     fn parse_unary(&mut self) -> Result<FormulaAst, String> {
         self.skip_ws();
-        if self.eat('-') {
-            return Ok(FormulaAst::Unary(
-                UnaryOp::Minus,
-                Box::new(self.nested(Self::parse_unary)?),
-            ));
-        }
-        if self.eat('+') {
-            return Ok(FormulaAst::Unary(
-                UnaryOp::Plus,
-                Box::new(self.nested(Self::parse_unary)?),
-            ));
-        }
-        if self.eat('!') {
-            // `!=` è già stato consumato sopra; qui `!` è negazione.
-            return Ok(FormulaAst::Unary(
-                UnaryOp::Not,
-                Box::new(self.nested(Self::parse_unary)?),
-            ));
-        }
-        self.parse_postfix()
+        // `!=` è già stato consumato sopra; qui `!` è negazione.
+        let op = if self.eat('-') {
+            UnaryOp::Minus
+        } else if self.eat('+') {
+            UnaryOp::Plus
+        } else if self.eat('!') {
+            UnaryOp::Not
+        } else {
+            return self.parse_postfix();
+        };
+        let operand = self.nested(Self::parse_unary)?;
+        Ok(FormulaAst::Unary(op, Box::new(operand)))
     }
 
     fn parse_postfix(&mut self) -> Result<FormulaAst, String> {
@@ -602,6 +517,14 @@ impl<'a> Parser<'a> {
         if self.eat('[') {
             return self.nested(Self::parse_list);
         }
+        self.parse_atom()
+    }
+
+    /// Il resto di [`Self::parse_primary`]: letterali, riferimenti e
+    /// chiamate. Sta in una funzione sua perché i suoi locali (testi,
+    /// identificatori, messaggi) non pesino sul frame che ogni parentesi
+    /// ripete: in debug quel frame era il grosso della pila di `((((…))))`.
+    fn parse_atom(&mut self) -> Result<FormulaAst, String> {
         if let Some(text) = self.parse_string()? {
             return Ok(FormulaAst::Text(text));
         }
@@ -1488,7 +1411,7 @@ fn call_known(name: &str, args: Vec<BaseValue>, ctx: &RowContext) -> Result<Base
             other => Err(EvalError::Value(format!("tags su {}", other.type_name()))),
         },
         "object" => {
-            if args.len() % 2 != 0 {
+            if !args.len().is_multiple_of(2) {
                 return Err(EvalError::Value("object vuole coppie chiave/valore".into()));
             }
             let mut out = BTreeMap::new();
@@ -2498,8 +2421,21 @@ mod tests {
 
     /// I100: dentro gli 8 KiB ammessi, ogni forma che scende di un livello
     /// è un errore di parsing e non uno stack esaurito prima del valutatore.
+    /// Gira su un thread di 1,5 MiB, tre quarti di quello di un test o di un
+    /// worker di tokio: in debug la discesa più profonda deve starci con
+    /// margine, su ogni piattaforma (con la 1.95 su macOS, prima di
+    /// `parse_binary`, non ci stava nemmeno in 2 MiB).
     #[test]
     fn un_annidamento_ostile_e_un_errore_non_uno_stack_esaurito() {
+        std::thread::Builder::new()
+            .stack_size(3 * 512 * 1024)
+            .spawn(annidamenti_ostili)
+            .expect("il thread parte")
+            .join()
+            .expect("nessuno stack esaurito");
+    }
+
+    fn annidamenti_ostili() {
         let deep = MAX_FORMULA_BYTES / 2 - 1;
         let hostile = [
             format!("{}1{}", "(".repeat(deep), ")".repeat(deep)),

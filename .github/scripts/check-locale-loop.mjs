@@ -41,11 +41,11 @@ for (const command of commands) {
 }
 
 const cargo = fs.readFileSync(path.join(root, "Cargo.toml"), "utf8");
-if (!/rust-version\s*=\s*"1\.89"/.test(cargo)) {
-  errors.push("Cargo.toml non dichiara rust-version 1.89");
+if (!/rust-version\s*=\s*"1\.95"/.test(cargo)) {
+  errors.push("Cargo.toml non dichiara rust-version 1.95");
 }
-if (!/Rust 1\.89/.test(contributing)) {
-  errors.push("CONTRIBUTING.md non dichiara Rust 1.89");
+if (!/Rust 1\.95/.test(contributing)) {
+  errors.push("CONTRIBUTING.md non dichiara Rust 1.95");
 }
 if (!/node-version:\s*22/.test(workflows)) {
   errors.push("nessun workflow usa Node 22");

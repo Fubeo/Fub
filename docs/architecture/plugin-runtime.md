@@ -236,10 +236,11 @@ caricamento fallisce con `UnservedFamilies` e l'errore nomina la famiglia.
 
 Il component model isola la memoria. Il runtime corrente:
 
-- non collega WASI, tranne `wasi:random/random`, che dà byte dal generatore
-  crittografico del sistema (al massimo 64 KiB per richiesta) perché un guest
-  che genera identità o chiavi non riceva valori prevedibili; ogni altro import
-  WASI è collegato a una trap;
+- non collega WASI, tranne `wasi:random/random` e `insecure-seed` (il seme
+  delle `HashMap` della std dalla Rust 1.95), a ogni patch della 0.2: danno
+  byte dal generatore crittografico del sistema (al massimo 64 KiB per
+  richiesta) perché un guest che genera identità o chiavi non riceva valori
+  prevedibili; ogni altro import WASI è collegato a una trap;
 - non concede filesystem o rete diretti;
 - impone un limite alla memoria lineare e agli elementi di ogni tabella, che
   l'host alloca per il componente;

@@ -10,6 +10,18 @@ diff --git a/crates/engine/tests/chart_workbook_names.rs b/crates/engine/tests/c
          let mut data = Vec::new();
          f.read_to_end(&mut data).unwrap();
          if name == "xl/charts/chart1.xml" {
+diff --git a/crates/xlsx/src/ods.rs b/crates/xlsx/src/ods.rs
+--- a/crates/xlsx/src/ods.rs
++++ b/crates/xlsx/src/ods.rs
+@@ -280,7 +280,7 @@ impl Import {
+                 Event::GeneralRef(r) => {
+                     let ch = match r.resolve_char_ref().map_err(xml_error)? {
+                         Some(c) => c,
+-                        None => match r.as_ref() {
++                        None => match &*r {
+                             b"amp" => '&',
+                             b"lt" => '<',
+                             b"gt" => '>',
 diff --git a/crates/xlsx/src/package.rs b/crates/xlsx/src/package.rs
 --- a/crates/xlsx/src/package.rs
 +++ b/crates/xlsx/src/package.rs
