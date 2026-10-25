@@ -89,6 +89,11 @@ la sezione seguente raccoglie le modifiche per la prima versione.
   (`w:eastAsianLayout`) la conserva, la copia RTF porta le revisioni tracciate
   e il correttore corregge una nota o un documento in indonesiano (`lang`
   `id`), con l'ortografia quando sulla macchina c'è il dizionario `id_ID`;
+- motore dei documenti di videoscrittura e del correttore aggiornato a
+  WordCraft 0.10: un `.docx` conserva la lingua del testo dell'Asia orientale
+  (`w:lang/@w:eastAsia`) e l'ordine degli oggetti mobili (`relativeHeight`),
+  e il correttore segue la grafia britannica (`en-GB`) o canadese (`en-CA`)
+  dell'inglese;
 
 ### Corretto
 

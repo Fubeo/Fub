@@ -37,13 +37,21 @@ use crate::RichError;
 /// - 0: quello implicito della proiezione di versione 1, con la forma dell'1;
 /// - 1: il primo dichiarato (WordCraft 0.7);
 /// - 2: le proprietà del carattere hanno in più `eastAsianLayout` (WordCraft
-///   0.9), facoltativo.
-pub const OPAQUE_SCHEMA: u32 = 2;
+///   0.9), facoltativo;
+/// - 3: in più, tutti facoltativi (WordCraft 0.10): la lingua del testo
+///   dell'Asia orientale nelle proprietà del carattere (`langEa`), l'ordine
+///   di un oggetto mobile (`z` del `float`), il riempimento del contorno di
+///   una forma (`outlineFill`), la misura di una filigrana (`size`), e il
+///   riempimento di una forma o di un'area di disegno che, se trasparente o
+///   sfumato, è un oggetto con `type` invece del colore `[r, g, b]`.
+pub const OPAQUE_SCHEMA: u32 = 3;
 
 /// Se questo Fub legge i dati opachi dello schema `schema`. Ogni schema
-/// precedente si legge così com'è: il 2 aggiunge all'1 soltanto un campo
-/// facoltativo, che in un dato dell'1 manca e vale assente. Uno schema più
-/// vecchio con una forma diversa avrà la sua migrazione esplicita, qui.
+/// precedente si legge così com'è: ciascuno aggiunge al precedente soltanto
+/// campi facoltativi, che in un dato più vecchio mancano e valgono assenti, e
+/// il riempimento `[r, g, b]` dello schema 2 resta la forma di un colore
+/// pieno. Uno schema più vecchio con una forma diversa avrà la sua migrazione
+/// esplicita, qui.
 pub(crate) fn readable(schema: u32) -> bool {
     schema <= OPAQUE_SCHEMA
 }

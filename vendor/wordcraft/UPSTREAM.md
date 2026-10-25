@@ -13,7 +13,7 @@ altri formati di testo (`formats`: OpenDocument, RTF e gli altri).
 ## Riferimento
 
 - repository: `https://github.com/storytold/wordcraft`
-- commit: `2e6db0bd88795e80375176c01665cff7dbe2b057` (tag `v0.9.0`, 2026-10-19)
+- commit: `9130181a5fdaee2293e67756fd5458c601489f3c` (tag `v0.10.0`, 2026-10-22)
 - licenza del codice: `MIT OR Apache-2.0` (`LICENSE-MIT`, `LICENSE-APACHE`)
 
 ## Cosa è copiato
@@ -23,7 +23,7 @@ altri formati di testo (`formats`: OpenDocument, RTF e gli altri).
 | `crates/proof/` | `crates/proof/` | nessuna |
 | `crates/geom/` | `crates/geom/` | nessuna |
 | `crates/doc/` | `crates/doc/` | nessuna |
-| `crates/docx/` | `crates/docx/` | `src/package.rs` e sette file di `tests/` per `zip` 9; `src/write/settings_merge.rs`, `src/write/mod.rs` e `src/lib.rs` per una verifica in più |
+| `crates/docx/` | `crates/docx/` | `src/package.rs` e otto file di `tests/` per `zip` 9; `src/write/settings_merge.rs`, `src/write/mod.rs` e `src/lib.rs` per una verifica in più |
 | `crates/docbin/` | `crates/docbin/` | nessuna |
 | `crates/formats/` | `crates/formats/` | un test di `src/odt.rs` per `zip` 9 |
 | `assets/hyphenation/` | `assets/hyphenation/` | nessuna |
@@ -56,8 +56,9 @@ Le patch di `patches/`, una per ragione:
   (RUSTSEC-2026-0367, -0368, -0369) corretti in `zip` 9. In `zip` 9 il nome di
   una voce dell'archivio è un `Result`: in `docx/src/package.rs` una voce dal
   nome illeggibile si salta con un avviso nel log, come l'upstream fa già con
-  una voce illeggibile, e nei sette file di `docx/tests/` che leggono l'archivio
-  `f.name()` diventa `f.name().unwrap()`. In `formats/src/odt.rs`, test
+  una voce illeggibile; nei sette file di `docx/tests/` che leggono l'archivio
+  `f.name()` diventa `f.name().unwrap()`, e in `content_control_save_cost.rs`
+  i nomi di `file_names()` si scartano con `unwrap()`. In `formats/src/odt.rs`, test
   `pictures_over_the_budget_are_not_inflated`, una voce che si espande oltre la
   misura dichiarata si ferma a quella misura e fallisce il controllo, quindi è
   rifiutata senza consumare il budget invece di esaurirlo: il test verifica

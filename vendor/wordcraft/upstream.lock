@@ -2,10 +2,10 @@
 # Non si modifica a mano: la scrive `update`. Un tag è informativo, lo SHA no.
 repository = "https://github.com/storytold/wordcraft"
 mirror = ""
-rev = "2e6db0bd88795e80375176c01665cff7dbe2b057"
-tag = "v0.9.0"
-date = "2026-10-19"
-version = "0.9.0"
+rev = "9130181a5fdaee2293e67756fd5458c601489f3c"
+tag = "v0.10.0"
+date = "2026-10-22"
+version = "0.10.0"
 
 [[patch]]
 path = "patches/0001-notice-del-materiale-copiato.patch"
@@ -13,7 +13,7 @@ sha256 = "sha256:572d09277230eed1b520dd0257f63fc91f40e2bc8b6158edb98b952d99ac3bc
 
 [[patch]]
 path = "patches/0002-zip-9.patch"
-sha256 = "sha256:1defb2b350d9402d3e587365bb0778a5d721d26baab962b5530f944076b88861"
+sha256 = "sha256:d408d22685e3c7ea1195277a242145532ac31a795ae24deb441b1105043a1093"
 
 [[patch]]
 path = "patches/0003-settings-kept-unowned.patch"
@@ -29,8 +29,12 @@ upstream = "sha256:fc257de83c44ae49e4aad1cf777b886794be3ac9c8d00c010ef55935d5bbe
 
 [[file]]
 path = "NOTICE"
-upstream = "sha256:ae40ebee75eaed52c2bd03c063dbec73909466632c3f8896ba4de75537b26dc1"
-result = "sha256:2dd72d06f8652177d7091a159c1843b25cb97ae91f726f0b6f3836de98d395b6"
+upstream = "sha256:77a6916ab20608b0cdf3b8f991fdd8724752a83ced01fbf0545b169138d17831"
+result = "sha256:1c2a9cbe56cdf7b5bce061078ecfc9574b6b0fc52c884aff75ed0e81f2a89c2a"
+
+[[file]]
+path = "assets/hyphenation/de.pat"
+upstream = "sha256:374ad1ce3263f8a2791ec070ef9b516c532dae64456f3fb656e617e8ae53a9d3"
 
 [[file]]
 path = "assets/hyphenation/en-us.dic"
@@ -57,16 +61,24 @@ path = "assets/spelling/en-extra.txt"
 upstream = "sha256:33805dd7fce89e5f07f53b9ad969165251ead0058a339910e9009bfbc86ddd57"
 
 [[file]]
+path = "assets/spelling/en-variants.txt"
+upstream = "sha256:aaf09f83ca7fbce0f1a6636a79d9b06e2ce829fa4e58b9a2b21797bad2eebe31"
+
+[[file]]
 path = "assets/spelling/ru-extra.txt"
 upstream = "sha256:12ca009a9b4d4b62a0f6d561f0a17d9b5aab2d6794c77d42cdf139a9831e9505"
 
 [[file]]
 path = "crates/doc/Cargo.toml"
-upstream = "sha256:78b50197fdc1fcd990b35a9df00d8931e0dd85045a2db33eaa2954f2029bec65"
+upstream = "sha256:b6e637d3a102780c1fe6412474acbe2fa991df74ccdc21eef08c3343fd09e8d3"
 
 [[file]]
 path = "crates/doc/src/bidi.rs"
 upstream = "sha256:2f9cf02ce21ba89b83fa56aed6852e989fc0eff8995f99f69a5cab3de093d683"
+
+[[file]]
+path = "crates/doc/src/byte_store.rs"
+upstream = "sha256:813a8852e5da77bb9aa6ac14b36a7e2c1c0d8c06d477f81a7cf6e678162820d5"
 
 [[file]]
 path = "crates/doc/src/chart.rs"
@@ -82,11 +94,11 @@ upstream = "sha256:7071620f11d1ba3179dfcfdf6133220229d75341c752488ea3129a6229fd5
 
 [[file]]
 path = "crates/doc/src/collate.rs"
-upstream = "sha256:08628d2984f46c1a2c907f4281661c5fc136a1921c0d573cf6d77c3a750d86f2"
+upstream = "sha256:7d1ff27b6f9dfc68cf06f667542ac1877c78c08a1304c12d09c17448d1b36995"
 
 [[file]]
 path = "crates/doc/src/connector.rs"
-upstream = "sha256:e9d90a15d575fb5fa36932a2d2bcddaea0d4dda57f6bd02dd91c08ab21a123c3"
+upstream = "sha256:a5dcda5d6786df17119985ab498e643ea1837fb08d156020ad83011b30512373"
 
 [[file]]
 path = "crates/doc/src/control.rs"
@@ -94,7 +106,7 @@ upstream = "sha256:c9005f451a8451bf812e2f4e5cba0430c717667fa097df47ae19f6b8be2c3
 
 [[file]]
 path = "crates/doc/src/edit.rs"
-upstream = "sha256:fa25d5cfb9c5d7a086f2b4e33e3a0b18c6843194dcb49912e31600cbc77946ad"
+upstream = "sha256:4b14c166a73c1d494781ff82018ac1697c870e192774e680fa8a5d850ed785d4"
 
 [[file]]
 path = "crates/doc/src/effects.rs"
@@ -102,7 +114,7 @@ upstream = "sha256:402ee7c406e456bae05067da7cfe75fef8780be007f2b9cde097ae860b817
 
 [[file]]
 path = "crates/doc/src/encoding.rs"
-upstream = "sha256:d090d58afccaff8533dafb608eaaf0a4ccaf23fe57517c653fad4ef489beb8b1"
+upstream = "sha256:192675f51b5140e5596a6f63f72a64b2bb0b2a84e245277e528c767ec70e6fc4"
 
 [[file]]
 path = "crates/doc/src/eq.rs"
@@ -113,12 +125,16 @@ path = "crates/doc/src/fields.rs"
 upstream = "sha256:301c2499f2fe513ef6d9c073216b329428f757e3e4430a149d918b8229dbc084"
 
 [[file]]
+path = "crates/doc/src/fill.rs"
+upstream = "sha256:870438caca5e57e593b073555860f8a288af51e1b721939b86bf08092afd931f"
+
+[[file]]
 path = "crates/doc/src/freeform.rs"
 upstream = "sha256:ecce8c8a2914de6232bd561c09329300143f58375c8371dfe5cb9a0ee0ac6682"
 
 [[file]]
 path = "crates/doc/src/graphic.rs"
-upstream = "sha256:9f2f3de7a5581fc5170970ab5259aa8faeceb9a7b0c94c2ef285230a785f1ad7"
+upstream = "sha256:8a99bc1682b87cc419ad6ece5325cb508aeb28e5fd328c607ec757622b5eb1ce"
 
 [[file]]
 path = "crates/doc/src/legacy_form.rs"
@@ -126,7 +142,7 @@ upstream = "sha256:8f603ae0ef5901cc95e988ede8d5cafb6ca242de14ff2aaf8e48a3f14a101
 
 [[file]]
 path = "crates/doc/src/lib.rs"
-upstream = "sha256:d9b67a74e56910bd1e9b0eb33670c83bd7b9c25c3d5e024a992329a723d2c2c2"
+upstream = "sha256:23640384c22d957985a73c19268263240c9ab84dfb04e884eaa899a4d059bdea"
 
 [[file]]
 path = "crates/doc/src/line_dash.rs"
@@ -138,7 +154,7 @@ upstream = "sha256:541b36548a14033db46a92c37b3d7c2364477d9c44d7aade5f28ad9a16ba5
 
 [[file]]
 path = "crates/doc/src/locale_number.rs"
-upstream = "sha256:0bcab37f45af6e2e9ed0eee04c6d5d0a459fcd377b3a75bf9a9a73b73495906f"
+upstream = "sha256:473074fd7cc52f9ca0f3bdd6a69184a0ae3ec1aed7c91d3aa493826ace8f82a3"
 
 [[file]]
 path = "crates/doc/src/math.rs"
@@ -162,15 +178,15 @@ upstream = "sha256:5b1bd47fbc20dce911ccccb4620423ed048023482fe20c705e3ae542f375c
 
 [[file]]
 path = "crates/doc/src/numbering.rs"
-upstream = "sha256:be4d3fc40b658b26f84d1c42f9cf05e7269a2f32e6880099aac892919544b980"
+upstream = "sha256:2195503c639e804b5746ea5a8b56746fe38f62245cb34d4ad62c49f452a0199f"
 
 [[file]]
 path = "crates/doc/src/para.rs"
-upstream = "sha256:b4d3d6ae1a88175b2f035066fa4ab0c28e161356eb160132b6e46fc4bd848a81"
+upstream = "sha256:adbdb918567db705b859692e0249718a8f6a94f07885f44cab4eda39767fb1c1"
 
 [[file]]
 path = "crates/doc/src/props.rs"
-upstream = "sha256:61c424eab6ff350381a035ef0ef2380f72e9504270108fadc37bc893307731ff"
+upstream = "sha256:c5578fbcf058900e9bc40144ef4bc4c5d2177e4e027a9caaa4b341f1f61e419c"
 
 [[file]]
 path = "crates/doc/src/resolve.rs"
@@ -186,7 +202,7 @@ upstream = "sha256:33f5af2c57a12570eb2a6341202d8ca67e636c7a57ca488cc0b599d8a2707
 
 [[file]]
 path = "crates/doc/src/styles.rs"
-upstream = "sha256:5ff29f81f6ab44147a6c60939634fa74ff545582f9a3093a33db783217c4e9a2"
+upstream = "sha256:18928a308d1ec0b7081d89cf3e15fe20b8649fdd166d5081ffd93614c2ead9d8"
 
 [[file]]
 path = "crates/doc/src/symbol_fonts.rs"
@@ -194,7 +210,7 @@ upstream = "sha256:b9299bb3c55f71f0474621009cfda7dafd4b76af4e099ff4497ebf3568fff
 
 [[file]]
 path = "crates/doc/src/table.rs"
-upstream = "sha256:a208ea08c4e62b8283a647b7ddb0db7b68c347902aff2cb4fdd0ad7fc294261e"
+upstream = "sha256:63667af399017f1bfe56b67177c237094dba4ae5310ab51da771c22e7383fb24"
 
 [[file]]
 path = "crates/doc/src/tests.rs"
@@ -202,7 +218,7 @@ upstream = "sha256:17aa40f6e3671e14864f081493cdec3385e606f2a590565cf4c47ed04b1a9
 
 [[file]]
 path = "crates/doc/src/wordart.rs"
-upstream = "sha256:fdba485bbc971f72d0f2142fa25e6d7f3d0612551b661c245260a3ffc309cc86"
+upstream = "sha256:a72d55fae26bfae204657f65f8549672cc19005dda5c28ebfde22170ececb181"
 
 [[file]]
 path = "crates/doc/src/wrap.rs"
@@ -210,7 +226,7 @@ upstream = "sha256:9fe2f9dafd98b819ec186df079d65ddf3b599affbadc9b9b11602b3dfcdd6
 
 [[file]]
 path = "crates/docbin/Cargo.toml"
-upstream = "sha256:d99efb824f2bdb8a12cb90de59a5d897f261cd5b78c372876ab62181ebf35d3b"
+upstream = "sha256:e53d32c09feb213bde1c39f83aa2333d6b4ddd2c35ed8ac84645a51a6a7a384c"
 
 [[file]]
 path = "crates/docbin/src/crypt.rs"
@@ -218,7 +234,7 @@ upstream = "sha256:10a01780cd143e646abfc97d9d80b9bc6807328df371a5dba47dba7bc959c
 
 [[file]]
 path = "crates/docbin/src/drawing.rs"
-upstream = "sha256:0653e1458fcfdd4cfe21f6ab1a5eeead1a28b80c4aac154d148f8628b7eba5ab"
+upstream = "sha256:d620dc862836e23e32ac01f244275965d609c07bac1e53bd9fbecba9ca484e30"
 
 [[file]]
 path = "crates/docbin/src/fib.rs"
@@ -230,11 +246,11 @@ upstream = "sha256:bde2ef699dd5d9aac663219ae64937220529e3ba9588a2b544e05317d987c
 
 [[file]]
 path = "crates/docbin/src/fmt.rs"
-upstream = "sha256:99048afecda65c4f8bd85f0613a3dddd6f6e341887067c5b8352a09f5c069978"
+upstream = "sha256:2aabe5da19a751b0941b88aab7381d0f7e414bfd05f3aa8e7457035f5b79c4cd"
 
 [[file]]
 path = "crates/docbin/src/lib.rs"
-upstream = "sha256:850707e975d48b9c9eadc95331749e491d87921a9e3525ed836b1090aca950ff"
+upstream = "sha256:802960b65bf9da3a0767bd2330f17f2e2e838e5575fe366e424db9d38f69f7ea"
 
 [[file]]
 path = "crates/docbin/src/list.rs"
@@ -246,7 +262,7 @@ upstream = "sha256:be949303969b58eafc86b06e56d82d17abe736711b3c37f8589d51d2091f1
 
 [[file]]
 path = "crates/docbin/src/metadata.rs"
-upstream = "sha256:8ad3e4ef7975a8bf6981cf93b3d7c1889447af5906a3f01a98a302be490aa9df"
+upstream = "sha256:58610495a01ff74723943d85cc62842d1fb6219506551efd4a15dfc2d1bbea80"
 
 [[file]]
 path = "crates/docbin/src/notes.rs"
@@ -278,11 +294,11 @@ upstream = "sha256:73a3e07951854c7aea6bfc9fb0dd1b5347e0bd719a3be1eb857c98f81771e
 
 [[file]]
 path = "crates/docbin/src/tests.rs"
-upstream = "sha256:a29c41f6be79a29b77b9668d9a993e2ae58ef8d56ee481ef795ba288bc412c6e"
+upstream = "sha256:52b27b09d67b1c1f23e9c655a5521cd23ad2645a7195a85c42195a18c6dde56f"
 
 [[file]]
 path = "crates/docbin/src/tests/drawing.rs"
-upstream = "sha256:047f93cca320834aebb88c1d6c0e12c00f31848284ac416bb20e76b0aae7277a"
+upstream = "sha256:57c25efb2b1f66ae5d76e14203d8d85468c3ceedeee762d998bea6264c6aa84d"
 
 [[file]]
 path = "crates/docbin/src/tests/encrypted.rs"
@@ -294,7 +310,7 @@ upstream = "sha256:1aaa11ebb794f94d452c000864084b36fdb29015080ab10c3ba37c885acd7
 
 [[file]]
 path = "crates/docx/Cargo.toml"
-upstream = "sha256:293d37b4148138c8e769e5b73b9bf262ca3763375d1dfb9a8c83d6f573e55c04"
+upstream = "sha256:c2b6e9a187d9e1ae9e50b6ed10af7094d653d521363e4957ad9e1f4d1113bb10"
 
 [[file]]
 path = "crates/docx/src/bibliography.rs"
@@ -322,8 +338,8 @@ upstream = "sha256:3c3c613406b5dc19b4f7685e38a9f65761f583e728082d4dd737316ed1cd5
 
 [[file]]
 path = "crates/docx/src/lib.rs"
-upstream = "sha256:5839aa4033bc23eeab7768ef3bb4d064c80b666addb98830b87fef8d44b5f8d0"
-result = "sha256:1a22b6ec9687dbc46b6ec51977618b7454b4ec9634bb2c4dab5796817ddc8318"
+upstream = "sha256:bc2a539e3f2060d9a774d55adbbf6f36f00cb6d8c0a60c4fccd701383688ba84"
+result = "sha256:b0bded4d5aa5076d5cd1fa70da0486798bcbe7ef33283ac319f336ac33279eef"
 
 [[file]]
 path = "crates/docx/src/package.rs"
@@ -332,7 +348,7 @@ result = "sha256:c5d78b861f4c39f6257cb5133d9cacf60d81c01f325e4ab869cb0d72168619f
 
 [[file]]
 path = "crates/docx/src/read/chart.rs"
-upstream = "sha256:b47c438336e02b0385cc521370c4fb3c784d166f524b030f123d9a33b006f1b5"
+upstream = "sha256:71d7a56ea1c50347f71eda6fcc09dfe286bea5f918118a7bfa0fad1c8a76b86b"
 
 [[file]]
 path = "crates/docx/src/read/diagram.rs"
@@ -340,7 +356,7 @@ upstream = "sha256:160952513c7d626658849121f9532de11056d3b520676b78d63718ef83e81
 
 [[file]]
 path = "crates/docx/src/read/drawing_color.rs"
-upstream = "sha256:b18b282731cd75bbf8fec7b4eef44dafbaadf2e050a571f83d0898fce9ff6d43"
+upstream = "sha256:14248e8024620ecde52169f3619412d195d229f55ea9fe52db104ca47544805e"
 
 [[file]]
 path = "crates/docx/src/read/embed.rs"
@@ -360,11 +376,11 @@ upstream = "sha256:c13560a9337950c72605c8f9b61579cbe0a96a5c0ed149696fa878735d6e5
 
 [[file]]
 path = "crates/docx/src/read/mod.rs"
-upstream = "sha256:d0142bb578663aaa3189c9176cd8dc37d5da46c4b11af5704a2041b54175b036"
+upstream = "sha256:71480d2229c9bd8610e22827ba3e1a3020a389f230d224abc04724720def427e"
 
 [[file]]
 path = "crates/docx/src/read/props.rs"
-upstream = "sha256:3db9c6c9011c2f320a9e5053db3b0f21863f32c39a96bf291dc10e741eca17d8"
+upstream = "sha256:a09f5a2f0ee8cb8088d34c1a02ddc75c301f04c3cabd1ef34159bdf07c245758"
 
 [[file]]
 path = "crates/docx/src/read/sdt.rs"
@@ -372,11 +388,11 @@ upstream = "sha256:bd525955f6fc68b6c6cda07b657344e285d2f73a96672964726f619520788
 
 [[file]]
 path = "crates/docx/src/read/shape_style.rs"
-upstream = "sha256:a3b85cd015ad7b8b77ccb5249da3874d2fcd0be0b33142ad87d76b767575e147"
+upstream = "sha256:ff7d7d2cccdf9493c8473bbd8bab5659362c08387a9c97ddee6e085809cf2ed8"
 
 [[file]]
 path = "crates/docx/src/read/story.rs"
-upstream = "sha256:b5145350c5132515ad3fbf854b2f88046a93e6375501886e120123422938a929"
+upstream = "sha256:17afae46d555c2f6f2a0bb31b913449484fc3e1525d7be29858983672f8deec6"
 
 [[file]]
 path = "crates/docx/src/read/wordart.rs"
@@ -388,7 +404,7 @@ upstream = "sha256:0ebe6a39626e7ea811e8f0a90aa90c3595e97b19e205ded082e49c2f75386
 
 [[file]]
 path = "crates/docx/src/units.rs"
-upstream = "sha256:6614fe17b826d92944ea9669a3a33a557c69f305ea100724fe5fc81991a4e173"
+upstream = "sha256:af19d8d15c5dcf02658459dbf5706627ad015b5085a3a777dfb78c9ca3b16901"
 
 [[file]]
 path = "crates/docx/src/wordml2003.rs"
@@ -416,16 +432,16 @@ upstream = "sha256:605f25e956311fdc3aabb21f529abfdf2d98098af926e7549f9abbb0663df
 
 [[file]]
 path = "crates/docx/src/write/mod.rs"
-upstream = "sha256:c8d8252789c3fb1253c1c72d315c081945d7cc9279ff1962b4a455444e6a1b12"
-result = "sha256:2e8b089a1c7e640ac8793a9918108e39608a73ad57b92353d584c9ec6c859fc8"
+upstream = "sha256:a7aca926b68908c88ef1117169731b1e562c37961601d8af06be2d7b326a59a1"
+result = "sha256:a2755d1a04b7001bd35f0e3ec960ebe090787ce7c0e33986cfc070a6b4e20997"
 
 [[file]]
 path = "crates/docx/src/write/props.rs"
-upstream = "sha256:c289b0ca654bd2c367f4e7c394676430bce7f8507c469a1fee92b0f3196bbf65"
+upstream = "sha256:ac6307b7b73fadef91791008484f0ea0b477736f5338cb6f38162eb401b4fbf3"
 
 [[file]]
 path = "crates/docx/src/write/sdt.rs"
-upstream = "sha256:be7e9680626cc982c67aa82e3d8467e85041681ae30e1adb7f7d05fed2bf192e"
+upstream = "sha256:60eeb8c09287c3985be6d3454e30f36aa54ae93611b7ae51827566fbe4f64ec3"
 
 [[file]]
 path = "crates/docx/src/write/settings_merge.rs"
@@ -434,11 +450,11 @@ result = "sha256:250976147045bec1209c3e492b92233b79dbf3a477ec9e6bec8a1da003bb653
 
 [[file]]
 path = "crates/docx/src/write/story.rs"
-upstream = "sha256:7414afc1bf3b0c73f2453ebb10201306bf3ace93483535a49c09a8762a906dd5"
+upstream = "sha256:78f5f0625b91b3da419d617e8bde8c3deb0749de4caeaefd21054db250f0e2a3"
 
 [[file]]
 path = "crates/docx/src/write/watermark.rs"
-upstream = "sha256:e6aced5808c42cb4cdf35edbd91fd28e705007efa801b6d98ff3dd84683a4f3d"
+upstream = "sha256:2b0b5dd4b31cb94ca14f3f3cbf579e0f7eb662f8c0ebba4d835d414c56c0a452"
 
 [[file]]
 path = "crates/docx/src/write/wordart.rs"
@@ -473,8 +489,13 @@ path = "crates/docx/tests/complex_script_inheritance.rs"
 upstream = "sha256:272b842e0a769e46e4f639432b473e2dc84a461dd68f689eaec317a85c49197f"
 
 [[file]]
+path = "crates/docx/tests/content_control_save_cost.rs"
+upstream = "sha256:27e0a1e4c2332a23b454e0740143d2311cc3c1da28a20cc15cb68d70bd642d77"
+result = "sha256:c8f411c578591cf2411753c122d6160fb565fde8bde765df8758b098d48ce257"
+
+[[file]]
 path = "crates/docx/tests/content_controls.rs"
-upstream = "sha256:b123f00af8ed650e900fc214177368facbb3b290e96c7b39a6b76fe67e07d159"
+upstream = "sha256:1ec891dac780b07f1ca315c6d75e378cbd0bee13991a057ee88a8a79246b6393"
 
 [[file]]
 path = "crates/docx/tests/custom_xml.rs"
@@ -482,13 +503,21 @@ upstream = "sha256:0a2670babc9c8903cfe245d38131bb4fea8f3de498aaf176318eb1b306bb2
 result = "sha256:b87ee55ddab395e602b900ca09811a2e92b3d8871aafa364958ce5991cb759d1"
 
 [[file]]
+path = "crates/docx/tests/drawing_payload.rs"
+upstream = "sha256:cba5ede5437a6698d98d714319c4962b7c65f8f805d132177b4e26ffbbd03f30"
+
+[[file]]
+path = "crates/docx/tests/east_asian_lang.rs"
+upstream = "sha256:bdfad085c5287eccd6d082751a6a68bc1accd30a91e5c7e3e335558a18a5b5b5"
+
+[[file]]
 path = "crates/docx/tests/east_asian_layout.rs"
 upstream = "sha256:f6df5fe61150d55cf2ed7f5d3bb57790d4e320ddde08f2f87aaf1a05d8cf3cf1"
 
 [[file]]
 path = "crates/docx/tests/fixtures.rs"
-upstream = "sha256:0f4127f332648aeecf14fa6353fb91350bb70f5d4bc98b13f91eb853297d4afc"
-result = "sha256:c5e491c903f4700a8156e24a3f1ef3c4637e52609127d9bfe5b79d0e636e7c1a"
+upstream = "sha256:90e31dec4ccd5c86bb1ed210ec1c3a8d27043a64aefd6af9d131b770ca6664f8"
+result = "sha256:87816a93a1fe51d3445dafb9b5bbe10734cefb0ac6c8ecab8fc42379a1387a64"
 
 [[file]]
 path = "crates/docx/tests/glossary.rs"
@@ -523,8 +552,8 @@ result = "sha256:f2d46e07187a62400796a517982c531304b2a3bf3c0946242812f9af69321bb
 
 [[file]]
 path = "crates/docx/tests/roundtrip.rs"
-upstream = "sha256:2167559a90c82abb674ec7ff89339add7963e990f525d4d248b19ef8d4a112bc"
-result = "sha256:67e19b6b005c928a862757236a093a61b393e1849a4320360e73b9a4c62f9af2"
+upstream = "sha256:f24d2d7006ddc5426d071e6dad36bb53e83b18418018a01352be946fb5182a0c"
+result = "sha256:45078912433f9dc1f7881c764ff02edd08dd5797236d6a13340eefde486a6812"
 
 [[file]]
 path = "crates/docx/tests/row_property_exceptions.rs"
@@ -553,15 +582,15 @@ result = "sha256:af323570513a770ab29895e8660e971cd528d45306c3eda4e4216b040a1950b
 
 [[file]]
 path = "crates/docx/tests/text_boxes.rs"
-upstream = "sha256:8c0203b9010f7f8e6f79329d6526a156260334688e621f6b5de63ca89909f09a"
+upstream = "sha256:4efc59b1e41dbcc554344205d1e721156792bd37d092a6e1fc5e7674d77ae79c"
 
 [[file]]
 path = "crates/docx/tests/toc_ranges.rs"
-upstream = "sha256:f90900c279e625c40cee3f3931200b9af85af4f19610863bb0fba7a00990f363"
+upstream = "sha256:b93711179b64c1cb6946bb0399bc3ad529eb307fc7750f03c0d4c324fc8b76e4"
 
 [[file]]
 path = "crates/docx/tests/vml_shapes.rs"
-upstream = "sha256:66c049afb313ccf81f5d98efea9d35d60950508ce318026c27b50cbf0735731b"
+upstream = "sha256:0aba4706cb1716c1d3dca5e7a3df3c9becbe21f05bc5f719f87e9ce82efa67c2"
 
 [[file]]
 path = "crates/docx/tests/word_xml.rs"
@@ -573,7 +602,7 @@ upstream = "sha256:14e9e2aecaf5192def964d615077602f630f797fc55d4b791c99951acd304
 
 [[file]]
 path = "crates/formats/Cargo.toml"
-upstream = "sha256:4f8cd1d2b8e3a80b5eb9ebffc639f421b900769e10bce2686e39defd27930f3e"
+upstream = "sha256:59110bda07a103f6100333b16571bfac77af895945b5077a74d9aab9d8eec123"
 
 [[file]]
 path = "crates/formats/src/comments.rs"
@@ -581,11 +610,11 @@ upstream = "sha256:089bf31d3c6afe9378bd69aa1e9fde8716e6b7f8f782b7244b1992197597f
 
 [[file]]
 path = "crates/formats/src/html.rs"
-upstream = "sha256:b436e9a034a53c40ca0f8d7a4cb14d87286b1f77ff662e40fee6b8cc776250fd"
+upstream = "sha256:9f70f4b198806b675346d0da6c4bc268dceeff91966079ae2da320b7141ad9f6"
 
 [[file]]
 path = "crates/formats/src/latex.rs"
-upstream = "sha256:c0f6a96efbfbb0ca3d12f3671d7759bfc7270ce6403ee65cde1b9551b81c4d78"
+upstream = "sha256:20084979d3aa79512544d1457d0d72fa36dbc0c3fc4364e0f44bf09dad3a92f2"
 
 [[file]]
 path = "crates/formats/src/lib.rs"
@@ -593,36 +622,40 @@ upstream = "sha256:5e9ca56facc3ecd9f83b24e0dbcf7d3029a430ef9cd67630ba2fa20a0e8f4
 
 [[file]]
 path = "crates/formats/src/markdown.rs"
-upstream = "sha256:e64212a93ca9cd4bee200787b0ed5dfde3bf633165aa51173ed390f76182ac09"
+upstream = "sha256:7c7e657a7f2b05ece958bf8b0e9141c23ce89ca9bbf6361453da79c3b63c7cbe"
 
 [[file]]
 path = "crates/formats/src/mathml.rs"
-upstream = "sha256:5455a345263a53d00e9bcf22ceb8a83f82f1efbc99a5cc8fc712b6d71bbdcf09"
+upstream = "sha256:6fca1f095d59fc0d4812fdc55511fdc9887bca87f7cd74b08d2786cc2970015d"
 
 [[file]]
 path = "crates/formats/src/model.rs"
-upstream = "sha256:18be2285f0d8b400fda4bdea059324d6f1c687105bd66439d4516b8f133b00f1"
+upstream = "sha256:0c75aca7e358573a99146702338699da7b00abe0043751cf53ec666e662a0b83"
 
 [[file]]
 path = "crates/formats/src/odt.rs"
-upstream = "sha256:eb642f70187b1991c05bab6c45301ba2afabc22b9c8841eea17f707d728b9ed1"
-result = "sha256:c6ec2328c9d379ad87725aa46630a50bc29e9c5f63c0d3bcf4585b7aa1ff007e"
+upstream = "sha256:df6b63ed8c93c7f80261b7c342ad2d21679dc50943a3aa389ffb45ffac3ec149"
+result = "sha256:b20dc9d9de4312a1e27e7f823075a07a1c48ae3eafa5feacfdcd70cfd191bf4b"
+
+[[file]]
+path = "crates/formats/src/odt/page_parts.rs"
+upstream = "sha256:07741847c5a7e8492db831322ea3fd6f59fa97912fea6fab054095c1fb16af06"
 
 [[file]]
 path = "crates/formats/src/rtf.rs"
-upstream = "sha256:c4be0dd59e1b59ca5b11ede2b6cc59f87bf71f42c60d7a45cefe44f268aa4374"
+upstream = "sha256:cb2bd030ce93f90fb0c1d2ed6a6f8c22cae16388e65506f730b1cff6d6f6f024"
 
 [[file]]
 path = "crates/formats/src/sheet.rs"
-upstream = "sha256:5437193b3acd4e84ac60e06597c9da564dbc360b9b80d650b14d7cee6d22f77c"
+upstream = "sha256:0acc8705db2e244bde54b4a9e73b0ac5d92537a26d98c86484720b03aef5bf6d"
 
 [[file]]
 path = "crates/formats/src/sheet/xls.rs"
-upstream = "sha256:cd7003d30c8f7e8c8865e1e913a925ddfab63e5767c870831f620485cf000331"
+upstream = "sha256:811edb5a17d1b121ba6bd6163682acd4510b64ca8715a1b066668622f5feffa6"
 
 [[file]]
 path = "crates/formats/src/tests.rs"
-upstream = "sha256:b79e7c63f81fb14b3316ba18a4598a111e140f436b040bf3ec630bc6055c7f31"
+upstream = "sha256:31f71787407e5d4edfe883ab792679f7976e19a7ecd49ee3f20686617e97f16f"
 
 [[file]]
 path = "crates/formats/src/txt.rs"
@@ -634,7 +667,7 @@ upstream = "sha256:4e5dc9e7dbd5dd17ca82b9cd18b0e8f2297ad02faee5508c6c6f7feb6dcc5
 
 [[file]]
 path = "crates/geom/src/lib.rs"
-upstream = "sha256:305c7dc4a57b260374639d1952a5dfd195f9e51114f0b1f26191b498c5a17032"
+upstream = "sha256:b062426eb264712e1b2397c35e7b1dca162968a13091eab93b5bbdd661d72ef5"
 
 [[file]]
 path = "crates/geom/src/pixels.rs"
@@ -650,7 +683,7 @@ upstream = "sha256:8dce5ad4aa4ffe4db325a3d38bd2761423823dbf501dbb09f0181d5e5bfd8
 
 [[file]]
 path = "crates/proof/src/affix.rs"
-upstream = "sha256:a130c7d65b0efc92bf6df941dac831cd59faf3aaa727d0c4bb12e8413524cc64"
+upstream = "sha256:9af8535340e16b5a2b4ba99836474940f3e81ebcfc033b29ff4661412d0dc928"
 
 [[file]]
 path = "crates/proof/src/bg.rs"
@@ -662,7 +695,7 @@ upstream = "sha256:7cf9e0781de769795a7591d7b54d8e829716b186d32a796f4ab4289635bd6
 
 [[file]]
 path = "crates/proof/src/cs/mod.rs"
-upstream = "sha256:d19929402c324fe3fa3ae54413b6fa7d08e3744abf6e5d8337b76fca468cc265"
+upstream = "sha256:9bd8696aa4d58264240e210f9dd0cc310792e90442b16583257a8f7be12f518c"
 
 [[file]]
 path = "crates/proof/src/cs/suggest.rs"
@@ -675,6 +708,10 @@ upstream = "sha256:3076f4b900b8de0d2a18622a9fda9db01d738a218ca43709d83c03480cd38
 [[file]]
 path = "crates/proof/src/dict.rs"
 upstream = "sha256:dc1622df067291b862991e004f4a23649c912411faa357015e7e40ae15b5b3d7"
+
+[[file]]
+path = "crates/proof/src/en_variants.rs"
+upstream = "sha256:da81637e02debb25c3e800d3cbc235fdd884f87e78fce3ce391ca4f731f5ce2e"
 
 [[file]]
 path = "crates/proof/src/hr/grammar.rs"
@@ -698,7 +735,7 @@ upstream = "sha256:092ef1c2c9195f991147121278945590ac151afa6cb30200f7b55947d3573
 
 [[file]]
 path = "crates/proof/src/hyphen.rs"
-upstream = "sha256:c8c32734afa418312ad92b9a8da986aa0be9d810ea4bbabc0975d40d7fb8de7a"
+upstream = "sha256:998f47fbe2030cf7415180d0836b631bd59de9c4a678d825d4d323baf1907c92"
 
 [[file]]
 path = "crates/proof/src/id/grammar.rs"
@@ -734,15 +771,15 @@ upstream = "sha256:4134603c6dc632495f90540e6dc52731a8644a8af692bf4db6034ea95af7b
 
 [[file]]
 path = "crates/proof/src/lang.rs"
-upstream = "sha256:c9f8efe606909e195703900c553eff35a6f54d223c1ff7526a9284215e7b6791"
+upstream = "sha256:c02f159eb582de03cfeb061523dd16fab495f43979191eb6b32c8746a6897b8d"
 
 [[file]]
 path = "crates/proof/src/lib.rs"
-upstream = "sha256:68186317e1efe75ce3a8850d226f5a4689297734a0e96de311a18dd358632328"
+upstream = "sha256:4f7ddccb5a8ed42f7183e7e5786a70c1c779a0ef248197702f824d46aab30478"
 
 [[file]]
 path = "crates/proof/src/patterns.rs"
-upstream = "sha256:62495a3375731020395a251c156ad6a792669b7dc41e1f440abb7d4181561bc5"
+upstream = "sha256:6af123137e49aa505be1d9652bc328af9985a9c14ebf9a0f8d344f1f2e028616"
 
 [[file]]
 path = "crates/proof/src/pl/grammar.rs"
@@ -790,7 +827,7 @@ upstream = "sha256:4175cf7cb67ea6e41bb5ca2d990b7a00ab5de286dd5da26b1b2d58f32267c
 
 [[file]]
 path = "crates/proof/src/ru/mod.rs"
-upstream = "sha256:cd77a14e831da970ec672375a09903eea399e3bc7b1e68ec75606beecae0dfab"
+upstream = "sha256:686a0be2d881721c4d7c47695404467c7b4d513d2bec908322661321c86e70ab"
 
 [[file]]
 path = "crates/proof/src/ru/suggest.rs"
