@@ -24,7 +24,7 @@ import {
   validPage,
 } from "./page";
 import { parseProjection, type Block, type Page, type Para, type RunningText } from "./projection";
-import { mountStrip } from "./strip";
+import { mountRichRibbon } from "./ribbon";
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -112,15 +112,15 @@ describe("pagina", () => {
     expect(pageStyle(null)).toEqual([]);
   });
 
-  it("senza una pagina nel formato non c'è niente da cambiare, e la striscia non la offre", () => {
+  it("senza una pagina nel formato non c'è niente da cambiare, e la barra non la offre", () => {
     const e = engine(null);
     expect(pageAt(e.state)).toBeNull();
     expect(e.apply(setLandscape(true))).toBe(false);
-    const strip = mountStrip(e, () => null);
-    document.body.append(strip.element);
-    const button = [...strip.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.page"))!;
-    expect(button.parentElement!.hidden).toBe(true);
-    strip.destroy();
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
+    const button = [...ribbon.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.page"))!;
+    expect(button.closest<HTMLElement>("[data-command]")!.hidden).toBe(true);
+    ribbon.destroy();
   });
 
   it("mentre si registra la pagina non si cambia", () => {
@@ -129,20 +129,20 @@ describe("pagina", () => {
     const before = e.getDoc();
     e.apply(setLandscape(true));
     expect(e.getDoc()).toBe(before);
-    const strip = mountStrip(e, () => null, { review: true });
-    document.body.append(strip.element);
-    const button = [...strip.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.page"))!;
-    expect(button.parentElement!.hidden).toBe(false);
-    expect(button.disabled).toBe(true);
-    strip.destroy();
+    const ribbon = mountRichRibbon(e, () => null, { review: true });
+    document.body.append(ribbon.element);
+    const button = [...ribbon.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.page"))!;
+    expect(button.closest<HTMLElement>("[data-command]")!.hidden).toBe(false);
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    ribbon.destroy();
   });
 
-  it("la striscia sceglie carta, verso, margini e colonne", () => {
+  it("la barra sceglie carta, verso, margini e colonne", () => {
     const e = engine();
     e.select(2);
-    const strip = mountStrip(e, () => null);
-    document.body.append(strip.element);
-    const button = [...strip.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.page"))!;
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
+    const button = [...ribbon.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.page"))!;
     button.click();
     const field = (label: string) => {
       const caption = [...document.querySelectorAll("label")].find((l) => l.textContent === label)!;
@@ -173,7 +173,7 @@ describe("pagina", () => {
     const alert = document.querySelector<HTMLElement>("[role=alert]")!;
     expect(alert.hidden).toBe(false);
     expect(alert.textContent).toBe(t("rich.page.too_large"));
-    strip.destroy();
+    ribbon.destroy();
   });
 
   it("un'intestazione si scrive come testo, con i numeri di pagina come codici", () => {
@@ -207,12 +207,12 @@ describe("pagina", () => {
     expect(parseProjection(e.getDoc()).header).toEqual({ lines: [["Pagina ", { field: "page" }]] });
   });
 
-  it("la striscia scrive l'intestazione e mette il numero di pagina dove si scriveva", () => {
+  it("la barra scrive l'intestazione e mette il numero di pagina dove si scriveva", () => {
     const e = engine(LETTER, false, { footer: { lines: [["logo"]], locked: true } });
     e.select(e.state.doc.content.size - 2);
-    const strip = mountStrip(e, () => null);
-    document.body.append(strip.element);
-    const button = [...strip.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.hf"))!;
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
+    const button = [...ribbon.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.hf"))!;
     button.click();
     const area = (label: string) => {
       const caption = [...document.querySelectorAll("label")].find((l) => l.textContent === label)!;
@@ -231,7 +231,7 @@ describe("pagina", () => {
     page.click();
     expect(header.value).toBe("Pagina {PAGE}");
     expect(parseProjection(e.getDoc()).header).toEqual({ lines: [["Pagina ", { field: "page" }]] });
-    strip.destroy();
+    ribbon.destroy();
   });
 });
 

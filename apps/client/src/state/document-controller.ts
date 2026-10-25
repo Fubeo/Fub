@@ -798,6 +798,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       },
     },
     onSearchTag: (tag) => deps.searchTag(tag),
+    runShellCommand: (id) => deps.runCommand(id),
     slash: {
       currentDoc: slashContextDoc,
       onEffect: applyIntent,

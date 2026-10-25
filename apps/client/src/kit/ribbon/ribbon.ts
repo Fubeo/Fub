@@ -20,7 +20,7 @@
 // Come il resto del kit non ha testo suo: le etichette e le frasi arrivano da
 // chi la monta, e le classi portano il suo prefisso (`grid-ribbon-…`), perché
 // le pelli che lo vestono restino le sue.
-import { labelButton, setPressed } from "../button";
+import { labelButton, setPressed, type ButtonChord } from "../button";
 import { openPopover, type PopoverHandle } from "../popover";
 import { createTabs, type TabsHandle } from "../tabs";
 import { identifier } from "../../ui/a11y";
@@ -65,6 +65,8 @@ export interface RibbonStrings {
   empty(): string;
   /// Il nome della mini-barra.
   mini(): string;
+  /// Il nome della fila dei pulsanti accanto alle schede (`quick`).
+  quick?(): string;
 }
 
 /// Una voce del menu del tasto destro, con la forma del menu dell'editor
@@ -142,7 +144,13 @@ export interface RibbonOptions<V, K extends string, X extends ExtraControl<V, K>
   /// Se il contesto di una scheda contestuale c'è.
   contextShown(context: string, view: V): boolean;
   command(id: string, params: string): void;
-  openDialog(id: string, params: string): void;
+  /// Apre la finestra `id`; `anchor` è il controllo che la chiede, per chi
+  /// la apre in un riquadro sotto di lui.
+  openDialog(id: string, params: string, anchor: HTMLElement): void;
+  /// L'accordo del comando `id`, per il suggerimento e `aria-keyshortcuts`.
+  chord?(id: string): ButtonChord | null;
+  /// I pulsanti accanto alle schede, sempre a portata (Annulla, Ripeti).
+  readonly quick?: readonly ButtonControl<V, K>[];
   /// Scrive il testo di una voce `write`.
   write?(text: string): void;
   /// L'azione della shell `action`, se la shell la offre adesso.
@@ -209,6 +217,10 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   toggle.type = "button";
   toggle.className = cls("toggle");
   toggle.tabIndex = -1;
+  const quickBar = document.createElement("div");
+  quickBar.className = cls("quick");
+  quickBar.setAttribute("role", "toolbar");
+  if (options.quick?.length) head.append(quickBar);
   head.append(tablist, toggle);
   const panels = document.createElement("div");
   panels.className = cls("panels");
@@ -226,17 +238,20 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
 
   function give(id: string, params: Params | null | undefined): void {
     closePopover();
+    endPeek();
     options.command(id, JSON.stringify(params ?? {}));
   }
 
   function shellAction(action: string): void {
     closePopover();
+    endPeek();
     options.shell?.(action)?.();
   }
 
-  function ask(dialog: string, params: Params | null | undefined): void {
+  function ask(dialog: string, params: Params | null | undefined, anchor: HTMLElement): void {
     closePopover();
-    options.openDialog(dialog, JSON.stringify(params ?? {}));
+    endPeek();
+    options.openDialog(dialog, JSON.stringify(params ?? {}), anchor);
   }
 
   // ── I menu ────────────────────────────────────────────────────────────
@@ -281,7 +296,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     }
     if (!entry.id) return;
     chosen?.(entry);
-    if (entry.dialog) ask(entry.dialog, entry.params);
+    if (entry.dialog) ask(entry.dialog, entry.params, anchor);
     else give(entry.id, entry.params);
   }
 
@@ -344,7 +359,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
         description: off && state?.reason ? state.reason : entry.description,
         checked: entry.checked,
         run: () => {
-          if (entry.dialog) ask(entry.dialog, entry.params);
+          if (entry.dialog) ask(entry.dialog, entry.params, element);
           else give(id, entry.params);
         },
       });
@@ -462,26 +477,46 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     el.append(caption);
     const name = () => {
       caption.textContent = label();
-      labelButton(el, label());
+      labelButton(el, label(), chordOf(control) ?? undefined);
     };
     name();
     relabels.push(name);
-    life.listen(el, "click", () => onPress(el));
+    // Spento col perché, resta raggiungibile e dice il perché; ma il clic,
+    // Invio e Spazio non lo premono.
+    const spent = () => el.getAttribute("aria-disabled") === "true";
+    life.listen(el, "click", () => {
+      if (!spent()) onPress(el);
+    });
+    const hold = (event: KeyboardEvent) => {
+      if ((event.key === "Enter" || event.key === " ") && spent()) event.preventDefault();
+    };
+    life.listen(el, "keydown", hold);
+    life.listen(el, "keyup", hold);
     return el;
   }
 
-  /// Spento con la ragione del catalogo nel suggerimento, o acceso.
+  /// L'accordo del comando del controllo, se chi monta la barra ne dà.
+  function chordOf(control: C): ButtonChord | null {
+    const id = (control as { readonly id?: unknown }).id;
+    return typeof id === "string" ? (options.chord?.(id) ?? null) : null;
+  }
+
+  /// Spento con la ragione del catalogo nel suggerimento, o acceso; acceso,
+  /// il suggerimento dice anche l'accordo.
   function availability(el: HTMLElement, state: RibbonCommandState | undefined, label: string): void {
     const off = state !== undefined && !state.enabled;
     if (off) el.setAttribute("aria-disabled", "true");
     else el.removeAttribute("aria-disabled");
-    setTooltip(el, off && state?.reason ? strings.unavailable(label, state.reason) : label);
+    const chord = state ? options.chord?.(state.id) : null;
+    setTooltip(el, off && state?.reason ? strings.unavailable(label, state.reason) : chord?.display ? `${label} (${chord.display})` : label);
   }
 
   function wrap(control: C): HTMLElement {
     const el = document.createElement("span");
     el.className = cls("item");
     el.dataset.keytip = control.keytip;
+    const id = (control as { readonly id?: unknown }).id;
+    if (typeof id === "string") el.dataset.command = id;
     return el;
   }
 
@@ -510,7 +545,7 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
         const params = typeof control.params === "function" ? control.params(now) : control.params;
         const dialog = typeof control.dialog === "function" ? control.dialog(now) : control.dialog;
         if (control.shell) shellAction(control.shell);
-        else if (dialog) ask(dialog, params);
+        else if (dialog) ask(dialog, params, press);
         else give(control.id, params);
       },
     );
@@ -961,6 +996,19 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     return { spec, panel, toolbar, groups, settle };
   });
 
+  // ── I pulsanti accanto alle schede ────────────────────────────────────
+  const quickGroup: RibbonGroup<C, K> = { id: "quick", label: (options.quick?.[0]?.label ?? "") as K, icon: "", keytip: "", columns: options.quick ?? [] };
+  const quickItems: Item[] = (options.quick ?? []).map((control) => {
+    const one = buttonItem(control, quickGroup);
+    quickBar.append(one.wrap);
+    return one;
+  });
+  const settleQuick = roving(life, quickBar);
+  relabels.push(() => {
+    const name = strings.quick?.();
+    if (name) quickBar.setAttribute("aria-label", name);
+  });
+
   // ── La barra degli strumenti di una scheda ────────────────────────────
   /// Nascosto da qualcosa dentro `container`: il pannello di una scheda non
   /// scelta è nascosto, ma i suoi controlli restano in ordine.
@@ -1063,10 +1111,10 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
       button.dataset.keytip = tab.spec.keytip;
       if (tab.spec.contextual) button.classList.add(cls("contextual"));
     }
-    // Una scheda scelta mentre la barra è raccolta la riapre; due click la
-    // raccolgono, come in Office.
+    // Una scheda scelta mentre la barra è ritirata si apre finché non si
+    // torna all'editor; due click la ritirano o la riaprono, come in Office.
     local.listen(tablist, "click", (event) => {
-      if ((event.target as Element | null)?.closest(".kit-tab") && collapsed) setCollapsed(false);
+      if ((event.target as Element | null)?.closest(".kit-tab") && collapsed) peek(true);
     });
     local.listen(tablist, "dblclick", (event) => {
       if ((event.target as Element | null)?.closest(".kit-tab")) setCollapsed(!collapsed);
@@ -1083,8 +1131,30 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     scheduleFit();
   }
 
+  /// La barra ritirata mostra una scheda per un gesto: un comando, un clic o
+  /// il fuoco fuori dalla barra la ritirano di nuovo.
+  let peeking = false;
+  function peek(on: boolean): void {
+    peeking = on && collapsed;
+    if (peeking) element.dataset.peek = "true";
+    else delete element.dataset.peek;
+    panels.hidden = collapsed && !peeking;
+    if (peeking) scheduleFit();
+  }
+  function endPeek(): void {
+    if (peeking) peek(false);
+  }
+  life.listen(root, "pointerdown", (event) => {
+    if (peeking && !element.contains(event.target as Node | null)) endPeek();
+  });
+  life.listen(root, "focusin", (event) => {
+    if (peeking && !element.contains(event.target as Node | null)) endPeek();
+  });
+
   function setCollapsed(on: boolean): void {
     collapsed = on;
+    peeking = false;
+    delete element.dataset.peek;
     element.dataset.collapsed = String(on);
     panels.hidden = on;
     toggle.setAttribute("aria-expanded", String(!on));
@@ -1122,8 +1192,15 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
     for (const group of tab.groups) collapseGroup(group, false);
     if (!overflows()) return;
     tab.panel.dataset.compact = "true";
+    // Nell'ordine della scheda, se lo dichiara; altrimenti da destra.
     const open = tab.groups.filter((group) => !group.element.hidden);
-    for (let at = open.length - 1; at >= 0 && overflows(); at -= 1) collapseGroup(open[at]!, true);
+    const order = tab.spec.fold
+      ? tab.spec.fold.flatMap((id) => open.filter((group) => group.spec.id === id))
+      : [...open].reverse();
+    for (const group of order) {
+      if (!overflows()) break;
+      collapseGroup(group, true);
+    }
     // Dentro i gruppi raccolti il fuoco non ha più dove stare.
     const focus = document.activeElement as HTMLElement | null;
     if (focus && toolbar.contains(focus) && !focusables(toolbar).includes(focus)) options.focus();
@@ -1150,20 +1227,23 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   }
 
   function tabTips(): Tip[] {
-    return tabs
+    const quickTips = quickItems
+      .filter((one) => one.shown)
+      .map((one) => ({ keytip: one.control.keytip, anchor: one.wrap, run: () => one.activate() }));
+    return quickTips.concat(tabs
       .filter((tab) => shownTabs.split(" ").includes(tab.spec.id))
       .map((tab) => ({
         keytip: tab.spec.keytip,
         anchor: tabsHandle?.tab(tab.spec.id) ?? tab.panel,
         run: () => {
-          if (collapsed) setCollapsed(false);
+          if (collapsed) peek(true);
           chooseTab(tab.spec.id);
           // La scheda si è appena mostrata: i gruppi si raccolgono prima che
           // si contino le lettere.
           fit();
           showTips(controlTips(tab), () => showTips(tabTips(), null));
         },
-      }));
+      })));
   }
 
   function controlTips(tab: Tab): Tip[] {
@@ -1268,6 +1348,12 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   life.add(hideTips);
   life.listen(root, "keydown", (event) => {
     if (tipsLife || element.hidden) return;
+    // Ctrl+F1 ritira la barra e la riapre, come in Office.
+    if (event.key === "F1" && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
+      event.preventDefault();
+      setCollapsed(!collapsed);
+      return;
+    }
     if (event.key === "F10" && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
       if (editing(event.target)) return;
       event.preventDefault();
@@ -1319,6 +1405,12 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
       if (any && (tab.spec.contextual === undefined || options.contextShown(tab.spec.contextual, view))) shown.push(tab);
     }
     mountTabs(shown, false);
+    for (const one of quickItems) {
+      one.shown = visible(one.control, view);
+      one.wrap.hidden = !one.shown;
+      if (one.shown) one.update(view);
+    }
+    settleQuick(null);
     for (const tab of tabs) tab.settle(null);
     if (mini?.element.isConnected) refreshMini();
     scheduleFit();

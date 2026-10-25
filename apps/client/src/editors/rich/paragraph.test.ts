@@ -9,7 +9,7 @@ import { RichEngine } from "./engine";
 import { parseProjection, type Block, type Para } from "./projection";
 import { t } from "../../i18n/strings";
 import { richSchema } from "./schema";
-import { mountStrip } from "./strip";
+import { mountRichRibbon } from "./ribbon";
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -114,23 +114,24 @@ describe("il paragrafo", () => {
     expect(paras(e)[0]!.s).toBeUndefined();
   });
 
-  it("la striscia propone gli stili del documento e la spaziatura del paragrafo", () => {
+  it("la barra propone gli stili del documento e la spaziatura del paragrafo", () => {
     const e = engine([para("uno", { p: { after: 8 } })]);
     selectParas(e, 0);
-    const strip = mountStrip(e, () => null);
-    document.body.append(strip.element);
-    const style = strip.element.querySelector<HTMLSelectElement>(".rich-strip-style")!;
-    expect(style.value).toBe("body");
-    expect([...style.options].map((o) => o.textContent)).toContain("Subtitle");
-    style.value = "s:Subtitle";
-    style.dispatchEvent(new Event("change"));
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
+    // La galleria: lo stile di adesso è premuto, e ogni stile si scrive col
+    // suo nome.
+    const cell = (value: string) => ribbon.element.querySelector<HTMLButtonElement>(`.rich-ribbon-style[data-style="${value}"]`)!;
+    expect(cell("body").getAttribute("aria-pressed")).toBe("true");
+    expect(cell("s:Subtitle").textContent).toBe("Subtitle");
+    cell("s:Subtitle").click();
     expect(paras(e)[0]!.s).toBe("Subtitle");
-    strip.element.querySelector<HTMLButtonElement>('[data-action="rich.align.right"]')!.click();
+    ribbon.element.querySelector<HTMLButtonElement>('[data-command="rich.align.right"] button')!.click();
     expect(paras(e)[0]!.align).toBe("right");
-    expect(strip.element.querySelector('[data-action="rich.align.right"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(ribbon.element.querySelector('[data-command="rich.align.right"] button')?.getAttribute("aria-pressed")).toBe("true");
     // La spaziatura: ogni campo ha un nome; il valore del paragrafo, o vuoto
     // dove segue lo stile.
-    const spacing = strip.element.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.spacing")}"]`)!;
+    const spacing = ribbon.element.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.spacing")}"]`)!;
     spacing.click();
     // L'interlinea esatta, poi i rientri in centimetri e gli spazi in punti.
     const fields = [...document.querySelectorAll<HTMLInputElement>('input[inputmode="decimal"]')];
@@ -155,7 +156,7 @@ describe("il paragrafo", () => {
     expect(paras(e)[0]!.p?.line).toEqual({ exactly: 12 });
     set(fields[0]!, "14,5");
     expect(paras(e)[0]!.p?.line).toEqual({ exactly: 14.5 });
-    strip.destroy();
+    ribbon.destroy();
   });
 
   it("un paragrafo incollato da un altro documento perde il k e tiene allineamento e disposizione", () => {

@@ -1,51 +1,23 @@
-// La striscia del carattere della superficie ricca: tipo e dimensione del
-// carattere, colori, sottolineato, apice e pedice, maiuscole, «Copia formato»;
-// e del paragrafo: stile, allineamento, rientri, interlinea e spaziature;
-// ciò che si inserisce: link, tabelle, immagini, note e salti di pagina e di
-// colonna; la revisione: trova e sostituisci, il conteggio delle parole.
+// I riquadri della barra del documento e la barra di ricerca: i colori, la
+// tabella, la nota, il link, la spaziatura, la pagina, l'intestazione, il
+// conteggio, i commenti e la registrazione delle modifiche; e la barra di
+// Trova e sostituisci che sta sopra il foglio.
 //
-// La barra di formattazione della shell porta gesti che commutano, dichiarati
-// dai plugin per id; un carattere o un colore sono valori, e la loro scelta è
-// della superficie che li sa scrivere. Questa striscia sta sopra la pagina e
-// si carica col motore. È una barra degli strumenti WAI-ARIA: un solo
-// controllo nel Tab, le frecce fra gli altri, Esc torna al testo. Il puntatore
-// non prende il fuoco ai pulsanti, così la selezione del testo resta dov'è.
+// Ogni riquadro si apre sotto il controllo che lo chiede (`open`) e scrive nel
+// documento con i comandi del motore: niente di qui passa per il catalogo
+// della barra, che sa soltanto quale riquadro aprire.
 import type { Command } from "prosemirror-state";
-import { iconButton, labelButton, openPopover, setPressed, textButton, textField, type ButtonKind, type PopoverHandle } from "../../kit";
+import { iconButton, labelButton, openPopover, textButton, textField, type ButtonKind, type PopoverHandle } from "../../kit";
 import { identifier } from "../../ui/a11y";
-import { ariaBinding, displayBinding } from "../../ui/commands";
 import { openLifetime } from "../../ui/lifetime";
-import { setTooltip } from "../../ui/tooltip";
 import { notify } from "../../ui/notify";
 import { errorText } from "../../host/errors";
-import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
-import {
-  FONT_SIZES,
-  insertImage,
-  insertNote,
-  insertTable,
-  LINE_SPACINGS,
-  linkAt,
-  selectedLayout,
-  selectedStyle,
-  setColor,
-  setFont,
-  setHighlight,
-  setLayout,
-  setLineSpacing,
-  setLink,
-  setSize,
-  setStyle,
-  type StylePick,
-  COMMENT_ACTION,
-  FIND_ACTION,
-  LINK_ACTION,
-} from "./commands";
+import { resolvedLanguage, t, type Key } from "../../i18n/strings";
+import { insertImage, insertNote, insertTable, LINE_SPACINGS, linkAt, selectedLayout, setColor, setHighlight, setLayout, setLineSpacing, setLink } from "./commands";
 import { addComment, anchorsOf, canComment, commentsOf, deleteComment, goToComment, replyComment, resolveComment } from "./comments";
 import type { RichEngine } from "./engine";
 import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, PAGE_FIELDS, type LayoutLength } from "./projection";
 import { imageMime } from "./schema";
-import { insertToc } from "./toc";
 import {
   columns,
   FIELD_CODES,
@@ -66,19 +38,9 @@ import {
   setRunning,
 } from "./page";
 import { reviewAuthor, setReviewAuthor, setTracking } from "./track";
-import { countText, findMatches, goToRevision, nextMatch, replaceAll, replaceMatch, type FindQuery, type TextCount } from "./review";
+import { countText, findMatches, nextMatch, replaceAll, replaceMatch, type FindQuery, type TextCount } from "./review";
 
-/// I gesti delle revisioni tracciate, con il loro segno.
-const REVISION_BUTTONS: readonly { id: string; lines: readonly string[] }[] = [
-  { id: "rich.rev.previous", lines: ["M15 6l-6 6 6 6"] },
-  { id: "rich.rev.next", lines: ["M9 6l6 6-6 6"] },
-  { id: "rich.rev.accept", lines: ["M5 12l5 5 9-10"] },
-  { id: "rich.rev.reject", lines: ["M6 6l12 12", "M18 6 6 18"] },
-  { id: "rich.rev.accept_all", lines: ["M2 12l5 5 9-10", "M12 16l1 1 9-10"] },
-  { id: "rich.rev.reject_all", lines: ["M4 4h16v16H4z", "M8 8l8 8", "M16 8l-8 8"] },
-];
-
-/// Ciò che la striscia chiede alla shell.
+/// Ciò che la barra chiede alla shell.
 export interface RichMedia {
   /// Un'immagine del vault scelta da chi scrive: i suoi byte, `null` se la
   /// scelta è annullata, `"unreadable"` se non si legge o pesa troppo.
@@ -86,28 +48,6 @@ export interface RichMedia {
   /// Il formato scrive commenti nuovi e registra le modifiche.
   readonly review?: boolean;
 }
-
-/// I gruppi della striscia, nell'ordine in cui si vedono. `emphasis`
-/// (grassetto, corsivo, sottolineato) c'è soltanto quando lo si chiede: nella
-/// striscia intera quei gesti stanno nella barra di formattazione.
-export type RichStripGroup = "type" | "emphasis" | "toggles" | "colors" | "tools" | "paragraph" | "insert" | "layout" | "review";
-
-/// La mini-barra del menu, come la Mini Toolbar di Word: il carattere, la
-/// dimensione, l'enfasi e «Copia formato». Senza i comandi che aprono un
-/// modulo: il menu si chiude al primo gesto e lo porterebbe con sé.
-export const RICH_MINI_GROUPS: readonly RichStripGroup[] = ["type", "emphasis", "tools"];
-
-export interface RichStripOptions {
-  /// Soltanto questi gruppi; senza, la striscia intera.
-  readonly only?: readonly RichStripGroup[];
-}
-
-/// Il grassetto, il corsivo e il sottolineato della mini-barra.
-const EMPHASES: readonly { id: string; label: Key; glyph: string; className: string }[] = [
-  { id: "markdown.bold", label: "rich.bold", glyph: "B", className: "rich-strip-bold" },
-  { id: "markdown.italic", label: "rich.italic", glyph: "I", className: "rich-strip-italic" },
-  { id: "rich.underline", label: "rich.underline", glyph: "U", className: "rich-strip-underline" },
-];
 
 /// La colonna del testo di una pagina Letter con i margini di Word, in punti:
 /// un'immagine nuova più grande si riduce a starci, come la riduce Word.
@@ -149,21 +89,6 @@ async function placedImage(blob: Blob): Promise<{ data: string; w: number; h: nu
   bitmap.close();
   return size && { data, ...size };
 }
-
-/// I caratteri proposti sempre, oltre a quelli del documento.
-export const COMMON_FONTS: readonly string[] = [
-  "Arial",
-  "Calibri",
-  "Cambria",
-  "Courier New",
-  "Garamond",
-  "Georgia",
-  "Helvetica",
-  "Liberation Sans",
-  "Liberation Serif",
-  "Times New Roman",
-  "Verdana",
-];
 
 interface Swatch {
   readonly name: string;
@@ -208,303 +133,64 @@ export const HIGHLIGHT_COLORS: readonly Swatch[] = [
 
 const colorName = (swatch: Swatch): string => t(`rich.color.name.${swatch.name}` as Key);
 
-/// I gesti che commutano, con l'id del catalogo e il segno che li mostra.
-const TOGGLES: readonly { id: string; label: Key; glyph: string; className?: string; smallCaps?: boolean }[] = [
-  { id: "rich.underline", label: "rich.underline", glyph: "U", className: "rich-strip-underline" },
-  { id: "rich.superscript", label: "rich.superscript", glyph: "x²" },
-  { id: "rich.subscript", label: "rich.subscript", glyph: "x₂" },
-  { id: "rich.caps", label: "rich.caps", glyph: "AA" },
-  { id: "rich.small_caps", label: "rich.small_caps", glyph: "Aa", smallCaps: true },
-];
+/// I riquadri che la barra apre, per il loro id.
+export type RichPanelId =
+  | "rich.color"
+  | "rich.highlight"
+  | "rich.spacing"
+  | "rich.table"
+  | "rich.note"
+  | "rich.link"
+  | "rich.page"
+  | "rich.hf"
+  | "rich.count"
+  | "rich.comments"
+  | "rich.comment"
+  | "rich.track";
 
-/// Gli allineamenti, con l'id del catalogo e le righe che li disegnano.
-const ALIGNS: readonly { id: string; label: Key; lines: readonly string[] }[] = [
-  { id: "rich.align.left", label: "rich.align.left", lines: ["M4 6h16", "M4 10h10", "M4 14h16", "M4 18h10"] },
-  { id: "rich.align.center", label: "rich.align.center", lines: ["M4 6h16", "M7 10h10", "M4 14h16", "M7 18h10"] },
-  { id: "rich.align.right", label: "rich.align.right", lines: ["M4 6h16", "M10 10h10", "M4 14h16", "M10 18h10"] },
-  { id: "rich.align.justify", label: "rich.align.justify", lines: ["M4 6h16", "M4 10h16", "M4 14h16", "M4 18h16"] },
-];
+export const RICH_PANEL_IDS: ReadonlySet<string> = new Set<RichPanelId>([
+  "rich.color",
+  "rich.highlight",
+  "rich.spacing",
+  "rich.table",
+  "rich.note",
+  "rich.link",
+  "rich.page",
+  "rich.hf",
+  "rich.count",
+  "rich.comments",
+  "rich.comment",
+  "rich.track",
+]);
 
-/// I ruoli della galleria degli stili, prima degli stili del documento.
-const ROLE_STYLES: readonly string[] = ["body", "h:1", "h:2", "h:3", "h:4", "h:5", "h:6", "quote"];
-
-export interface RichStrip {
-  readonly element: HTMLElement;
-  /// La barra di ricerca, da posare fra la striscia e il foglio.
+export interface RichPanels {
+  /// La barra di ricerca, da posare fra la barra e il foglio.
   readonly findBar: HTMLElement;
+  /// Apre il riquadro `id` sotto `anchor`.
+  open(id: RichPanelId, anchor: HTMLElement): void;
   /// Apre la barra di ricerca; con `replace`, anche Sostituisci.
   find(replace: boolean): void;
-  /// Rilegge l'aspetto della selezione e lo stato dei gesti.
-  refresh(): void;
+  closeFind(): void;
+  /// La barra di ricerca è aperta.
+  finding(): boolean;
+  /// Sceglie un'immagine del vault e la mette al cursore.
+  addImage(): Promise<void>;
+  /// Chiude il riquadro aperto e la barra di ricerca.
+  close(): void;
   destroy(): void;
 }
 
 let ids = 0;
 
-/// Un'icona disegnata col tratto delle icone della shell.
-function icon(paths: readonly string[]): SVGElement {
-  const ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("width", "16");
-  svg.setAttribute("height", "16");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-width", "1.75");
-  svg.setAttribute("stroke-linecap", "round");
-  svg.setAttribute("stroke-linejoin", "round");
-  svg.setAttribute("aria-hidden", "true");
-  for (const d of paths) {
-    const path = document.createElementNS(ns, "path");
-    path.setAttribute("d", d);
-    svg.append(path);
-  }
-  return svg;
-}
-
-export function mountStrip(
-  engine: RichEngine,
-  chord: (id: string) => string | null,
-  media: RichMedia = {},
-  stripOptions: RichStripOptions = {},
-): RichStrip {
+/// `changed` dice a chi mostra lo stato che la barra di ricerca si è aperta
+/// o chiusa.
+export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: () => void): RichPanels {
   const life = openLifetime();
-  const element = document.createElement("div");
-  element.className = stripOptions.only ? "rich-strip rich-strip-mini" : "rich-strip";
-  element.setAttribute("role", "toolbar");
-  element.setAttribute("aria-orientation", "horizontal");
-  const prefix = `rich-strip-${(ids += 1)}`;
+  const prefix = `rich-panel-${(ids += 1)}`;
   let popover: PopoverHandle | null = null;
-  const relabel: (() => void)[] = [];
-
-  const shown = (name: RichStripGroup): boolean => (stripOptions.only ? stripOptions.only.includes(name) : name !== "emphasis");
-
-  /// Un gruppo della striscia. Uno che non si mostra resta fuori dal
-  /// documento: i suoi controlli esistono e si aggiornano, nessuno li vede.
-  function group(name: RichStripGroup): HTMLElement {
-    const el = document.createElement("div");
-    el.className = "rich-strip-group";
-    // Il lettore di schermo annuncia il gruppo entrando: «Paragrafo», poi il
-    // controllo.
-    el.setAttribute("role", "group");
-    const label = () => el.setAttribute("aria-label", t(`rich.strip.group.${name}`));
-    label();
-    relabel.push(label);
-    if (shown(name)) element.append(el);
-    return el;
-  }
-
-  // In sola lettura la striscia resta: i comandi che scrivono sono spenti
-  // (`aria-disabled`, così il fuoco li raggiunge e il suggerimento dice
-  // perché), quelli che leggono restano accesi.
-  let locked = false;
-  const reading = new Set<HTMLElement>();
-
-  function button(label: () => string, id: string | null, onPress: (button: HTMLButtonElement) => void): HTMLButtonElement {
-    const control = document.createElement("button");
-    control.type = "button";
-    control.className = "rich-strip-button";
-    control.tabIndex = -1;
-    const name = () => {
-      const hint = id ? chord(id) : null;
-      const display = displayBinding(hint);
-      labelButton(control, label(), display ? { display, aria: ariaBinding(hint) ?? undefined } : undefined);
-      if (locked && !reading.has(control)) setTooltip(control, t("rich.strip.readonly", { command: label() }));
-    };
-    name();
-    relabel.push(name);
-    life.listen(control, "click", () => {
-      if (control.getAttribute("aria-disabled") !== "true") onPress(control);
-    });
-    return control;
-  }
-
-  function select(className: string, label: Key, onChange: (value: string) => void): HTMLSelectElement {
-    const control = document.createElement("select");
-    control.className = `rich-strip-select ${className}`;
-    control.id = `${prefix}-${className}`;
-    control.tabIndex = -1;
-    const caption = document.createElement("label");
-    caption.className = "sr-only";
-    caption.htmlFor = control.id;
-    const name = () => {
-      caption.textContent = t(label);
-    };
-    name();
-    relabel.push(name);
-    life.listen(control, "change", () => onChange(control.value));
-    const holder = document.createElement("span");
-    holder.className = "rich-strip-field";
-    holder.append(caption, control);
-    return control;
-  }
-
-  // ── Tipo e dimensione ─────────────────────────────────────────────────
-  const type = group("type");
-  const font = select("rich-strip-font", "rich.font", (value) => {
-    if (value) engine.apply(setFont(value));
-  });
-  const size = select("rich-strip-size", "rich.size", (value) => {
-    const pt = Number(value);
-    if (Number.isFinite(pt) && pt > 0) engine.apply(setSize(pt));
-  });
-  type.append(font.parentElement!, size.parentElement!);
-  const grow = button(() => t("rich.font.grow"), "rich.font.grow", () => engine.run("rich.font.grow"));
-  grow.textContent = "A⁺";
-  const shrink = button(() => t("rich.font.shrink"), "rich.font.shrink", () => engine.run("rich.font.shrink"));
-  shrink.textContent = "A⁻";
-  type.append(grow, shrink);
-
-  // ── Enfasi (soltanto nella mini-barra) ────────────────────────────────
-  const emphasis = group("emphasis");
-  const emphasisButtons = (shown("emphasis") ? EMPHASES : []).map((spec) => {
-    const control = button(() => t(spec.label), spec.id, () => engine.run(spec.id));
-    control.textContent = spec.glyph;
-    control.classList.add(spec.className);
-    control.dataset.action = spec.id;
-    setPressed(control, false);
-    emphasis.append(control);
-    return { spec, control };
-  });
-
-  // ── Gesti che commutano ───────────────────────────────────────────────
-  const toggles = group("toggles");
-  const toggleButtons = TOGGLES.map((spec) => {
-    const control = button(() => t(spec.label), spec.id, () => engine.run(spec.id));
-    control.textContent = spec.glyph;
-    if (spec.className) control.classList.add(spec.className);
-    // Il maiuscoletto si mostra com'è: il segno `ᴀ` manca in molti caratteri.
-    if (spec.smallCaps) control.style.fontVariantCaps = "small-caps";
-    control.dataset.action = spec.id;
-    setPressed(control, false);
-    toggles.append(control);
-    return { spec, control };
-  });
-
-  // ── Colori ────────────────────────────────────────────────────────────
-  const colors = group("colors");
-  const colorButton = button(() => t("rich.color"), null, (anchor) => openColors(anchor, "color"));
-  const colorBar = document.createElement("span");
-  colorBar.className = "rich-strip-bar";
-  colorButton.append("A", colorBar);
-  colorButton.setAttribute("aria-haspopup", "dialog");
-  const highlightButton = button(() => t("rich.highlight"), null, (anchor) => openColors(anchor, "highlight"));
-  const highlightBar = document.createElement("span");
-  highlightBar.className = "rich-strip-bar";
-  highlightButton.append("ab", highlightBar);
-  highlightButton.classList.add("rich-strip-marker");
-  highlightButton.setAttribute("aria-haspopup", "dialog");
-  colors.append(colorButton, highlightButton);
-
-  // ── Copia formato ─────────────────────────────────────────────────────
-  const tools = group("tools");
-  const painter = button(() => t("rich.painter"), null, () => engine.togglePainter());
-  // Il pennello.
-  painter.append(icon(["M5 3h12v6H5z", "M17 6h2v5h-8v3", "M10 14h2v7h-2z"]));
-  painter.classList.add("rich-strip-painter");
-  setPressed(painter, false);
-  tools.append(painter);
-
-  // ── Il paragrafo ──────────────────────────────────────────────────────
-  const paragraph = group("paragraph");
-  const style = select("rich-strip-style", "rich.style", (value) => {
-    const pick = stylePick(value);
-    if (pick) engine.apply(setStyle(pick, engine.documentLook()));
-  });
-  style.style.width = "148px";
-  paragraph.append(style.parentElement!);
-  const alignButtons = ALIGNS.map((spec) => {
-    const control = button(() => t(spec.label), spec.id, () => engine.run(spec.id));
-    control.append(icon(spec.lines));
-    control.dataset.action = spec.id;
-    setPressed(control, false);
-    paragraph.append(control);
-    return { spec, control };
-  });
-  const dedent = button(() => t("rich.indent.decrease"), "rich.indent.decrease", () => engine.run("rich.indent.decrease"));
-  dedent.append(icon(["M11 6h9", "M11 10h9", "M11 14h9", "M11 18h9", "M7 9l-3 3 3 3"]));
-  const indent = button(() => t("rich.indent.increase"), "rich.indent.increase", () => engine.run("rich.indent.increase"));
-  indent.append(icon(["M11 6h9", "M11 10h9", "M11 14h9", "M11 18h9", "M4 9l3 3-3 3"]));
-  const spacing = button(() => t("rich.spacing"), null, (anchor) => openSpacing(anchor));
-  spacing.append(icon(["M11 6h9", "M11 12h9", "M11 18h9", "M5 4v16", "M3 6l2-2 2 2", "M3 18l2 2 2-2"]));
-  spacing.setAttribute("aria-haspopup", "dialog");
-  paragraph.append(dedent, indent, spacing);
-
-  // ── Inserisci ─────────────────────────────────────────────────────────
-  const insert = group("insert");
-  const link = button(() => t("rich.link"), "rich.link", () => engine.run("rich.link"));
-  link.append(icon(["M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1", "M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"]));
-  link.dataset.action = "rich.link";
-  link.setAttribute("aria-haspopup", "dialog");
-  const pageBreak = button(() => t("rich.break.page"), "rich.break.page", () => engine.run("rich.break.page"));
-  pageBreak.append(icon(["M5 3v5h14V3", "M5 21v-5h14v5", "M4 12h2", "M9 12h2", "M13 12h2", "M18 12h2"]));
-  const columnBreak = button(() => t("rich.break.column"), "rich.break.column", () => engine.run("rich.break.column"));
-  columnBreak.append(icon(["M4 5h6", "M4 9h6", "M4 13h6", "M14 11h6", "M14 15h6", "M14 19h6", "M12 3v18"]));
-  const table = button(() => t("rich.table"), null, (anchor) => openTable(anchor));
-  table.append(icon(["M4 5h16v14H4z", "M4 10h16", "M4 15h16", "M10 5v14"]));
-  table.setAttribute("aria-haspopup", "dialog");
-  const merge = button(() => t("rich.table.merge"), "rich.table.merge", () => engine.run("rich.table.merge"));
-  merge.append(icon(["M4 5h16v14H4z", "M7 12h4", "M9 10l2 2-2 2", "M17 12h-4", "M15 10l-2 2 2 2"]));
-  const split = button(() => t("rich.table.split"), "rich.table.split", () => engine.run("rich.table.split"));
-  split.append(icon(["M4 5h16v14H4z", "M12 5v14", "M9 12H6", "M7.5 10.5 6 12l1.5 1.5", "M15 12h3", "M16.5 10.5 18 12l-1.5 1.5"]));
-  const image = button(() => t("rich.image"), null, () => void addImage());
-  image.append(icon(["M4 5h16v14H4z", "M4 16l5-5 4 4 2-2 5 5", "M15.5 9.5h.01"]));
-  image.hidden = media.pickImage === undefined;
-  const note = button(() => t("rich.note"), null, (anchor) => openNote(anchor));
-  note.append(icon(["M5 4h14v10l-5 6H5z", "M14 20v-6h5", "M8 8h8", "M8 11h5"]));
-  note.setAttribute("aria-haspopup", "dialog");
-  insert.append(link, table, merge, split, image, note, pageBreak, columnBreak);
-  // Chi chiede un link, una ricerca o un commento lo chiede alla striscia
-  // che ne mostra il pulsante: la mini-barra non risponde al posto suo.
-  if (shown("insert")) life.add(engine.onAsk(LINK_ACTION, () => openLink(link)));
-
-  // ── Pagina ────────────────────────────────────────────────────────────
-  // Soltanto in un formato che ha una pagina (il docx, non l'odt).
-  const layout = group("layout");
-  const pageButton = button(() => t("rich.page"), null, (anchor) => openPage(anchor));
-  pageButton.append(icon(["M6 3h9l4 4v14H6z", "M14 3v5h5", "M9 12h7", "M9 15h7", "M9 18h4"]));
-  pageButton.setAttribute("aria-haspopup", "dialog");
-  const runningButton = button(() => t("rich.hf"), null, (anchor) => openRunning(anchor));
-  runningButton.append(icon(["M6 3h12v18H6z", "M9 6h6", "M9 18h6", "M6 9h12", "M6 15h12"]));
-  runningButton.setAttribute("aria-haspopup", "dialog");
-  const tocButton = button(() => t("rich.toc"), null, () => engine.apply(insertToc(t("rich.toc.title"))));
-  tocButton.append(icon(["M4 6h2", "M9 6h11", "M6 11h2", "M11 11h9", "M6 16h2", "M11 16h9"]));
-  layout.append(pageButton, runningButton, tocButton);
-
-  // ── Revisione ─────────────────────────────────────────────────────────
-  const review = group("review");
-  const find = button(() => t("rich.find"), FIND_ACTION, () => (bar ? closeFind() : openFind(true)));
-  find.append(icon(["M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z", "M15.5 15.5 20 20"]));
-  const count = button(() => t("rich.count"), null, (anchor) => openCount(anchor));
-  count.append(icon(["M4 6h10", "M4 10h16", "M4 14h12", "M4 18h7", "M17 16v4", "M15 18h4"]));
-  count.setAttribute("aria-haspopup", "dialog");
-  const comments = button(() => t("rich.comments"), null, (anchor) => openComments(anchor, false));
-  comments.append(icon(["M4 5h16v11H9l-5 4z", "M8 9h8", "M8 12h5"]));
-  comments.setAttribute("aria-haspopup", "dialog");
-  const track = button(() => t("rich.track"), null, (anchor) => openTrack(anchor));
-  track.append(icon(["M4 20h4L19 9l-4-4L4 16z", "M13 7l4 4", "M14 20h6"]));
-  track.setAttribute("aria-haspopup", "dialog");
-  review.append(find, count, comments, track);
-  for (const control of [find, count, comments]) reading.add(control);
-  if (shown("review")) {
-    life.add(engine.onAsk(FIND_ACTION, () => openFind(true)));
-    life.add(engine.onAsk(COMMENT_ACTION, () => openComments(comments, true)));
-  }
-  // Le revisioni tracciate: si vedono soltanto in un documento che ne ha.
-  // Le prime due scorrono le revisioni, e scorrere vale anche in sola lettura.
-  const MOVES: Readonly<Record<string, 1 | -1>> = { "rich.rev.previous": -1, "rich.rev.next": 1 };
-  const revisionButtons = REVISION_BUTTONS.map((spec) => {
-    const move = MOVES[spec.id];
-    const control = button(() => t(spec.id as Key), spec.id, () => (move ? engine.browse(goToRevision(move)) : engine.run(spec.id)));
-    control.append(icon(spec.lines));
-    control.dataset.action = spec.id;
-    if (move) reading.add(control);
-    review.append(control);
-    return control;
-  });
 
   // ── I riquadri ────────────────────────────────────────────────────────
-  // Ogni riquadro della striscia ha un titolo che gli dà il nome, i campi con
+  // Ogni riquadro della barra ha un titolo che gli dà il nome, i campi con
   // la loro `label[for]` sopra, come quelli del kit, e in fondo le azioni:
   // pulsanti del kit, con la principale per ultima. È un `form`: Invio in un
   // campo è la sua azione principale, dove ne ha una che si invia.
@@ -535,7 +221,7 @@ export function mountStrip(
   }
 
   /// Apre il riquadro sotto il suo pulsante.
-  function showPanel(anchor: HTMLButtonElement, card: Panel, onClose?: () => void): void {
+  function showPanel(anchor: HTMLElement, card: Panel, onClose?: () => void): void {
     if (card.actions.childElementCount === 0) card.actions.remove();
     popover = openPopover({
       anchor,
@@ -635,8 +321,6 @@ export function mountStrip(
   findBar.setAttribute("role", "search");
   findBar.hidden = true;
   life.listen(findBar, "submit", (event) => event.preventDefault());
-  find.setAttribute("aria-controls", findBar.id);
-  find.setAttribute("aria-expanded", "false");
   let bar: { readonly what: HTMLInputElement; replacing(open: boolean): void; readonly life: ReturnType<typeof openLifetime> } | null = null;
 
   function closeFind(): void {
@@ -646,7 +330,7 @@ export function mountStrip(
     engine.find(null);
     findBar.hidden = true;
     findBar.replaceChildren();
-    find.setAttribute("aria-expanded", "false");
+    changed();
   }
 
   function openFind(replace: boolean): void {
@@ -775,14 +459,14 @@ export function mountStrip(
     });
     bar = { what, replacing, life: own };
     findBar.hidden = false;
-    find.setAttribute("aria-expanded", "true");
+    changed();
     refind();
     what.focus();
     what.select();
   }
 
   /// Parole, caratteri e paragrafi del documento e, se c'è, della selezione.
-  function openCount(anchor: HTMLButtonElement): void {
+  function openCount(anchor: HTMLElement): void {
     popover?.close();
     const card = panel(t("rich.count"));
     const table = document.createElement("table");
@@ -816,7 +500,7 @@ export function mountStrip(
 
   /// I commenti del documento, con le risposte sotto, e uno nuovo sulla
   /// selezione. Ogni gesto è una battuta del documento.
-  function openComments(anchor: HTMLButtonElement, writing: boolean): void {
+  function openComments(anchor: HTMLElement, writing: boolean): void {
     popover?.close();
     const card = panel(t("rich.comments"));
     card.root.classList.add("rich-strip-comments");
@@ -965,7 +649,7 @@ export function mountStrip(
 
   /// Registra le modifiche: chi le scrive, e l'interruttore. Mentre si
   /// registra, ciò che si scrive è una revisione di quell'autore.
-  function openTrack(anchor: HTMLButtonElement): void {
+  function openTrack(anchor: HTMLElement): void {
     popover?.close();
     const card = panel(t("rich.track"));
     const on = engine.tracking();
@@ -988,7 +672,7 @@ export function mountStrip(
 
   /// La griglia delle dimensioni: righe e colonne fino alla cella indicata,
   /// col mouse o con le frecce. «Inserisci» mette quella indicata.
-  function openTable(anchor: HTMLButtonElement): void {
+  function openTable(anchor: HTMLElement): void {
     popover?.close();
     const ROWS = 8;
     const COLS = 10;
@@ -1073,7 +757,7 @@ export function mountStrip(
   }
 
   /// Il testo di una nota nuova e dove va: a piè di pagina o in chiusura.
-  function openNote(anchor: HTMLButtonElement): void {
+  function openNote(anchor: HTMLElement): void {
     popover?.close();
     const card = panel(t("rich.note"));
     const said = text(card.body, t("rich.note.text"));
@@ -1099,7 +783,7 @@ export function mountStrip(
 
   /// L'indirizzo del link sulla selezione o al cursore; senza selezione,
   /// anche il testo da scrivere.
-  function openLink(anchor: HTMLButtonElement): void {
+  function openLink(anchor: HTMLElement): void {
     popover?.close();
     const current = engine.read(linkAt);
     const typing = !current && engine.read((state) => state.selection.empty);
@@ -1131,30 +815,12 @@ export function mountStrip(
     address.focus();
   }
 
-  function stylePick(value: string): StylePick | null {
-    if (value === "body") return { role: { kind: "body" } };
-    if (value === "quote") return { role: { kind: "quote" } };
-    if (value.startsWith("h:")) return { role: { kind: "heading", level: Number(value.slice(2)) } };
-    if (value.startsWith("s:")) {
-      const found = engine.styles().find((s) => s.id === value.slice(2));
-      if (found) return { s: found.id, ...(found.f ? { f: found.f } : {}) };
-    }
-    return null;
-  }
-
-  function styleName(value: string): string {
-    if (value === "body") return t("rich.style.body");
-    if (value === "quote") return t("rich.style.quote");
-    if (value.startsWith("h:")) return t("rich.style.heading", { n: value.slice(2) });
-    return engine.styles().find((s) => s.id === value.slice(2))?.name ?? value.slice(2);
-  }
-
   /// La spaziatura del paragrafo: interlinea in righe o esatta in punti,
   /// rientri in centimetri, spazi prima e dopo in punti, come in Word, con la
   /// virgola della lingua. Un campo vuoto segue lo stile; un campo lasciato
   /// com'era non riscrive niente, perché l'arrotondamento non diventi una
   /// modifica. Ogni scelta vale subito: «Fine» chiude.
-  function openSpacing(anchor: HTMLButtonElement): void {
+  function openSpacing(anchor: HTMLElement): void {
     popover?.close();
     const card = panel(t("rich.spacing"), "pairs");
     const language = resolvedLanguage();
@@ -1218,7 +884,7 @@ export function mountStrip(
   /// La pagina della sezione del cursore: carta, verso, margini (in
   /// centimetri) e colonne. Ogni scelta si applica subito, e i campi si
   /// rileggono da ciò che il documento ha preso.
-  function openPage(anchor: HTMLButtonElement): void {
+  function openPage(anchor: HTMLElement): void {
     popover?.close();
     const card = panel(t("rich.page"), "pairs");
     // Una pagina che il codec rifiuterebbe non si prende: i campi tornano a
@@ -1287,7 +953,7 @@ export function mountStrip(
   /// testo: una riga per paragrafo, i numeri di pagina con il loro codice.
   /// Ogni battuta si applica subito; vuoto, la sezione mostra quello della
   /// sezione prima.
-  function openRunning(anchor: HTMLButtonElement): void {
+  function openRunning(anchor: HTMLElement): void {
     popover?.close();
     const at = engine.read(pageAt);
     if (!at) return;
@@ -1330,7 +996,7 @@ export function mountStrip(
   }
 
   /// I colori: un campione si applica subito e chiude.
-  function openColors(anchor: HTMLButtonElement, kind: "color" | "highlight"): void {
+  function openColors(anchor: HTMLElement, kind: "color" | "highlight"): void {
     popover?.close();
     const card = panel(t(kind === "color" ? "rich.color" : "rich.highlight"));
     const grid = document.createElement("div");
@@ -1369,191 +1035,50 @@ export function mountStrip(
     showPanel(anchor, card);
   }
 
-  // ── La barra degli strumenti ──────────────────────────────────────────
-  let current: HTMLElement | null = null;
-  const controls = (): HTMLElement[] =>
-    [...element.querySelectorAll<HTMLElement>("button, select")].filter(
-      (control) => !(control as HTMLButtonElement).disabled,
-    );
-  function roving(target: HTMLElement | null): void {
-    const all = controls();
-    current = target && all.includes(target) ? target : all[0] ?? null;
-    for (const control of element.querySelectorAll<HTMLElement>("button, select")) {
-      control.tabIndex = control === current ? 0 : -1;
+  function open(id: RichPanelId, anchor: HTMLElement): void {
+    switch (id) {
+      case "rich.color":
+        return openColors(anchor, "color");
+      case "rich.highlight":
+        return openColors(anchor, "highlight");
+      case "rich.spacing":
+        return openSpacing(anchor);
+      case "rich.table":
+        return openTable(anchor);
+      case "rich.note":
+        return openNote(anchor);
+      case "rich.link":
+        return openLink(anchor);
+      case "rich.page":
+        return openPage(anchor);
+      case "rich.hf":
+        return openRunning(anchor);
+      case "rich.count":
+        return openCount(anchor);
+      case "rich.comments":
+        return openComments(anchor, false);
+      case "rich.comment":
+        return openComments(anchor, true);
+      case "rich.track":
+        return openTrack(anchor);
     }
   }
-  life.listen(element, "mousedown", (event) => {
-    if ((event.target as Element | null)?.closest("button")) event.preventDefault();
-  });
-  life.listen(element, "focusin", (event) => {
-    if (event.target instanceof HTMLElement && element.contains(event.target)) roving(event.target);
-  });
-  // Un comando spento con il perché resta raggiungibile, ma Invio e Spazio
-  // non lo premono.
-  const spent = (event: KeyboardEvent) =>
-    (event.key === "Enter" || event.key === " ") && event.target instanceof HTMLElement && event.target.getAttribute("aria-disabled") === "true";
-  life.listen(element, "keyup", (event) => {
-    if (spent(event)) event.preventDefault();
-  });
-  life.listen(element, "keydown", (event) => {
-    if (spent(event)) {
-      event.preventDefault();
-      return;
-    }
-    const all = controls();
-    const at = all.indexOf(document.activeElement as HTMLElement);
-    if (at < 0) return;
-    let next: number | null = null;
-    if (event.key === "ArrowRight") next = (at + 1) % all.length;
-    else if (event.key === "ArrowLeft") next = (at - 1 + all.length) % all.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = all.length - 1;
-    else if (event.key === "Escape") {
-      event.preventDefault();
-      engine.focus();
-      return;
-    }
-    if (next === null) return;
-    event.preventDefault();
-    roving(all[next]!);
-    all[next]!.focus();
-  });
-
-  function options(control: HTMLSelectElement, values: readonly string[], value: string | null, show: (v: string) => string): void {
-    const wanted = value === null ? ["", ...values] : values;
-    const same =
-      control.options.length === wanted.length && wanted.every((v, i) => control.options[i]!.value === v);
-    if (!same) {
-      control.replaceChildren(
-        ...wanted.map((v) => {
-          const option = document.createElement("option");
-          option.value = v;
-          option.textContent = v === "" ? "" : show(v);
-          return option;
-        }),
-      );
-    }
-    control.value = value ?? "";
-  }
-
-  function refresh(): void {
-    const editable = engine.editable();
-    if (locked === editable) {
-      locked = !editable;
-      popover?.close();
-      closeFind();
-      for (const label of relabel) label();
-    }
-    if (!editable) {
-      readOnlyRefresh();
-      return;
-    }
-    for (const control of element.querySelectorAll("[aria-disabled]")) control.removeAttribute("aria-disabled");
-    showLook();
-    // Mentre si registra, il formato non si cambia: non ha una revisione.
-    const free = !engine.tracking();
-    for (const { spec, control } of [...emphasisButtons, ...toggleButtons]) {
-      const state = engine.actionState(spec.id);
-      control.disabled = !state.enabled;
-      setPressed(control, state.active === true);
-    }
-    for (const control of [grow, shrink]) control.disabled = !engine.actionState(control === grow ? "rich.font.grow" : "rich.font.shrink").enabled;
-    for (const { spec, control } of alignButtons) {
-      const state = engine.actionState(spec.id);
-      control.disabled = !state.enabled;
-      setPressed(control, state.active === true);
-    }
-    const linkState = engine.actionState("rich.link");
-    link.disabled = !linkState.enabled;
-    setPressed(link, linkState.active === true);
-    find.disabled = !engine.actionState(FIND_ACTION).enabled;
-    pageBreak.disabled = !engine.actionState("rich.break.page").enabled;
-    columnBreak.disabled = !engine.actionState("rich.break.column").enabled;
-    table.disabled = !engine.editable() || !engine.read(insertTable(1, 1));
-    image.disabled = note.disabled = !engine.read(insertNote("·", false));
-    merge.disabled = !engine.actionState("rich.table.merge").enabled;
-    split.disabled = !engine.actionState("rich.table.split").enabled;
-    comments.hidden = !media.review && engine.read((state) => commentsOf(state.doc).length === 0);
-    track.hidden = !media.review && !engine.tracking();
-    setPressed(track, engine.tracking());
-    layout.hidden = engine.read(pageAt) === null;
-    for (const control of [font, size, style, colorButton, highlightButton, painter, spacing, pageButton, runningButton, tocButton]) control.disabled = !free;
-    if (free) tocButton.disabled = !engine.read(insertToc(""));
-    if (!free) table.disabled = true;
-    const tracked = engine.read(goToRevision(1));
-    for (const control of revisionButtons) {
-      control.hidden = !tracked;
-      control.disabled = !tracked || !engine.actionState(control.dataset.action!).enabled;
-    }
-    dedent.disabled = !engine.actionState("rich.indent.decrease").enabled;
-    indent.disabled = !engine.actionState("rich.indent.increase").enabled;
-    setPressed(painter, engine.painterArmed());
-    if (!current || !element.contains(current) || (current as HTMLButtonElement).disabled) roving(null);
-  }
-
-  /// Carattere, dimensione, stile e colori della selezione: si vedono anche
-  /// in sola lettura.
-  function showLook(): ReturnType<RichEngine["look"]> {
-    const look = engine.look();
-    const fonts = [...new Set([...COMMON_FONTS, ...engine.fonts(), ...(look.font ? [look.font] : [])])].sort((a, b) =>
-      a.localeCompare(b),
-    );
-    options(font, fonts, look.font, (v) => v);
-    const sizes = [...new Set([...FONT_SIZES, ...(look.size !== null ? [look.size] : [])])].sort((a, b) => a - b);
-    options(size, sizes.map(String), look.size === null ? null : String(look.size), (v) => v);
-    const styleValues = [...ROLE_STYLES, ...engine.styles().map((s) => `s:${s.id}`)];
-    const chosen = engine.read(selectedStyle);
-    options(style, styleValues, chosen !== null && styleValues.includes(chosen) ? chosen : null, styleName);
-    colorBar.style.backgroundColor = look.color && look.color !== COLOR_AUTO ? look.color : "currentColor";
-    highlightBar.style.backgroundColor = look.hl ?? "transparent";
-    highlightBar.dataset.empty = String(look.hl === null);
-    return look;
-  }
-
-  /// In sola lettura: acceso ciò che legge, spento con la ragione il resto.
-  function readOnlyRefresh(): void {
-    showLook();
-    for (const control of element.querySelectorAll<HTMLButtonElement | HTMLSelectElement>("button, select")) {
-      if (control instanceof HTMLSelectElement) {
-        control.disabled = true;
-        continue;
-      }
-      control.disabled = false;
-      if (reading.has(control)) control.removeAttribute("aria-disabled");
-      else control.setAttribute("aria-disabled", "true");
-    }
-    const tracked = engine.read(goToRevision(1));
-    for (const control of revisionButtons) control.hidden = !tracked;
-    comments.hidden = engine.read((state) => commentsOf(state.doc).length === 0);
-    track.hidden = !engine.tracking();
-    layout.hidden = engine.read(pageAt) === null;
-    // Le scelte spente non tengono il Tab della barra.
-    if (!current || !element.contains(current) || (current as HTMLSelectElement).disabled) roving(null);
-  }
-
-  function name(): void {
-    element.setAttribute("aria-label", t("rich.strip"));
-    for (const label of relabel) label();
-  }
-  name();
-  life.add(onLanguage(() => {
-    name();
-    refresh();
-  }));
-  life.add(engine.subscribe(refresh));
-  roving(font);
-  refresh();
 
   return {
-    element,
     findBar,
+    open,
     find: openFind,
-    refresh,
+    closeFind,
+    finding: () => bar !== null,
+    addImage,
+    close() {
+      popover?.close();
+      closeFind();
+    },
     destroy() {
       popover?.close();
       closeFind();
       life.close();
-      element.remove();
       findBar.remove();
     },
   };

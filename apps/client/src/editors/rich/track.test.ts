@@ -9,7 +9,7 @@ import { backspace as joinBack, deleteForward as joinForward, splitParagraph } f
 import { RichEngine } from "./engine";
 import { parseProjection, type Block, type Para } from "./projection";
 import { replaceAll, resolveAll } from "./review";
-import { mountStrip } from "./strip";
+import { mountRichRibbon } from "./ribbon";
 import { deleteChar, setReviewAuthor, setTracking, trackTransaction } from "./track";
 import { addComment } from "./comments";
 
@@ -172,7 +172,7 @@ describe("registra modifiche", () => {
     expect(shown(e)).toEqual(["den+(fuori:Bea)tro"]);
   });
 
-  it("il formato non si cambia mentre si registra, e la striscia lo spegne", () => {
+  it("il formato non si cambia mentre si registra, e la barra lo spegne", () => {
     setReviewAuthor("Bea");
     const e = engine([para([{ t: "text", x: "testo" }])]);
     e.select(1, 3);
@@ -207,14 +207,14 @@ describe("registra modifiche", () => {
     expect(shown(e)).toEqual(["abc"]);
   });
 
-  it("la striscia registra con il nome di chi scrive, e smette", () => {
+  it("la barra registra con il nome di chi scrive, e smette", () => {
     const e = engine([para([{ t: "text", x: "testo" }])], false);
-    const strip = mountStrip(e, () => null, { review: true });
-    document.body.append(strip.element);
-    const button = [...strip.element.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+    const ribbon = mountRichRibbon(e, () => null, { review: true });
+    document.body.append(ribbon.element);
+    const button = [...ribbon.element.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
       b.getAttribute("aria-label")?.startsWith(t("rich.track")),
     )!;
-    expect(button.hidden).toBe(false);
+    expect(button.closest<HTMLElement>("[data-command]")!.hidden).toBe(false);
     expect(button.getAttribute("aria-pressed")).toBe("false");
     button.click();
     const author = document.activeElement as HTMLInputElement;
@@ -233,17 +233,17 @@ describe("registra modifiche", () => {
     button.click();
     (document.activeElement as HTMLButtonElement).click();
     expect(e.tracking()).toBe(false);
-    strip.destroy();
+    ribbon.destroy();
   });
 
-  it("in un formato che non registra la striscia non lo offre", () => {
+  it("in un formato che non registra la barra non lo offre", () => {
     const e = engine([para([{ t: "text", x: "testo" }])], false);
-    const strip = mountStrip(e, () => null);
-    document.body.append(strip.element);
-    const button = [...strip.element.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
+    const button = [...ribbon.element.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
       b.getAttribute("aria-label")?.startsWith(t("rich.track")),
     )!;
-    expect(button.hidden).toBe(true);
-    strip.destroy();
+    expect(button.closest<HTMLElement>("[data-command]")!.hidden).toBe(true);
+    ribbon.destroy();
   });
 });

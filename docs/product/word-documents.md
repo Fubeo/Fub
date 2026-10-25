@@ -6,19 +6,28 @@
 > quando un documento si apre soltanto in lettura, cosa si modifica in un
 > `.odt`, come si leggono `.rtf` e `.doc` e come se ne esporta una copia.
 
-Un `.docx` si apre in una superficie di scrittura, con la stessa carta, la
-stessa barra di formattazione, le stesse scorciatoie e lo stesso correttore
-delle note. Si salva nel file stesso, senza conversioni e senza copie a lato.
+Un `.docx` si apre in una superficie di scrittura, con la stessa carta, le
+stesse scorciatoie e lo stesso correttore delle note. Si salva nel file
+stesso, senza conversioni e senza copie a lato.
+
+I comandi stanno nella barra multifunzione sopra il foglio, come in Word: le
+schede **Home**, **Inserisci**, **Layout**, **Revisione** e **Visualizza**, e
+**Tabella** quando il cursore sta in una tabella; **Annulla** e **Ripeti**
+accanto alle schede. Alt o F10 mostrano le lettere di ogni scheda e di ogni
+comando, `Ctrl+F1` ritira la barra e la riapre; ritirata, una scheda scelta
+si apre per un gesto. Stretta, la barra raccoglie prima Modifica, Stili e
+Paragrafo in un pulsante ciascuno. Un comando che adesso non si dà resta al
+suo posto, spento, e il suggerimento dice perché.
 
 Si modificano:
 
 - il testo, con a-capo, tabulazioni e salti di pagina (`Ctrl+Invio`) o di
-  colonna (`Ctrl+Maiusc+Invio`), anche dal gruppo **Inserisci** della striscia;
-- i link: `Ctrl+K` o il pulsante della striscia chiedono l'indirizzo (web o
+  colonna (`Ctrl+Maiusc+Invio`), anche dalla scheda **Inserisci**;
+- i link: `Ctrl+K` o **Collegamento** in **Inserisci** chiedono l'indirizzo (web o
   posta) e lo mettono sulla selezione, sul link al cursore o, senza
   selezione, su un testo nuovo; dallo stesso modulo un link si toglie;
-- grassetto, corsivo, barrato ed evidenziato dalla barra;
-- l'aspetto del carattere dalla striscia sopra il foglio: tipo e
+- grassetto, corsivo e barrato dal gruppo **Carattere** di **Home**;
+- l'aspetto del carattere dallo stesso gruppo: tipo e
   dimensione (anche a passi, `Ctrl+]` e `Ctrl+[`), colore del testo, colore
   dell'evidenziatore, sottolineato (`Ctrl+U`), apice (`Ctrl+Maiusc+=`), pedice
   (`Ctrl+=`), tutto maiuscolo (`Ctrl+Maiusc+A`) e maiuscoletto
@@ -27,8 +36,10 @@ Si modificano:
   Un valore uguale a quello del paragrafo non si scrive: il tratto torna a
   seguire il suo stile;
 - lo stile del paragrafo: testo, titoli da 1 a 6, citazione e, dalla
-  striscia, gli stili di paragrafo che il documento propone o usa;
-- il paragrafo, dalla stessa striscia: allineamento a sinistra (`Ctrl+L`),
+  galleria **Stili** di **Home**, che scrive ogni nome nel carattere del
+  documento, gli stili di paragrafo che il documento propone o usa;
+- il paragrafo, dal gruppo **Paragrafo** di **Home** (le spaziature anche da
+  **Layout**): allineamento a sinistra (`Ctrl+L`),
   centrato, a destra (`Ctrl+R`) e giustificato (`Ctrl+J`); rientro sinistro a
   passi di mezzo pollice (`Ctrl+M`, `Ctrl+Maiusc+M`); interlinea singola,
   1,5 e doppia (`Ctrl+1`, `Ctrl+5`, `Ctrl+2`) o 1,15, 2,5 e tripla; rientri,
@@ -36,27 +47,27 @@ Si modificano:
   dello stile, e come per il carattere un valore uguale a quello dello stile
   non si scrive;
 - elenchi puntati e numerati su nove livelli;
-- le tabelle: una nuova dal pulsante **Tabella** della striscia, scegliendo
+- le tabelle: una nuova dal pulsante **Tabella** di **Inserisci**, scegliendo
   righe e colonne sulla griglia (col mouse o con le frecce), dopo il paragrafo
   del cursore o al posto di uno vuoto; è la griglia di Word, a tutta riga, a
-  colonne uguali e con i bordi (anche **Inserisci tabella** della barra, 2 × 2).
-  Righe e colonne si aggiungono, si spostano e si tolgono dal menu tabella
-  della barra o con le scorciatoie della tabella Markdown; una colonna nuova
+  colonne uguali e con i bordi.
+  Righe e colonne si aggiungono, si spostano e si tolgono dalla scheda
+  **Tabella** o con le scorciatoie della tabella Markdown; una colonna nuova
   copia le proprietà delle celle accanto e la griglia si rifà alla larghezza
-  di prima, nelle proporzioni delle colonne. Dalla striscia le celle che la
+  di prima, nelle proporzioni delle colonne. Dalla scheda **Tabella** le celle che la
   selezione tocca in una riga si uniscono (i loro paragrafi, tranne i vuoti,
   vanno nella prima) e una cella unita si divide;
-- le immagini e le note nuove, dal gruppo **Inserisci** della striscia:
+- le immagini e le note nuove, dalla scheda **Inserisci**:
   **Immagine** sceglie un PNG, un JPEG o un GIF del vault (fino a 16 MB) e lo
   mette al cursore, nel testo, alla sua misura (un pixel CSS è tre quarti di
   punto) ridotta se serve alla colonna di una pagina Letter; **Nota** chiede il
   testo, una riga, e se va a piè di pagina o in chiusura, e la scrive con gli
   stili delle note di Word.
 
-Dal gruppo **Revisione** della striscia:
+Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
 
-- **Trova e sostituisci** (`Ctrl+H`; `Ctrl+F` resta la ricerca nella nota
-  della shell) mostra nel testo le occorrenze mentre si scrive, con maiuscole
+- **Trova e sostituisci** (`Ctrl+F` apre la ricerca del documento, `Ctrl+H`
+  anche con Sostituisci) mostra nel testo le occorrenze mentre si scrive, con maiuscole
   e minuscole o soltanto parole intere; Invio va alla prossima, Maiusc+Invio
   alla precedente. Un'occorrenza sta dentro un paragrafo e non scavalca un
   oggetto o un segno (l'inizio di un commento, un segnalibro). Il testo nuovo
@@ -68,7 +79,7 @@ Dal gruppo **Revisione** della striscia:
 - le **revisioni tracciate** di un `.docx` si vedono: il testo inserito
   sottolineato, quello eliminato barrato, un segno di paragrafo inserito o
   eliminato come `¶`, con autore e data al passaggio del puntatore. In un
-  documento che ne ha, la striscia le scorre (precedente, successiva) e le
+  documento che ne ha, la scheda **Revisione** le scorre (precedente, successiva) e le
   **accetta** o **rifiuta**, una alla volta (quella del cursore o quelle
   della selezione) o tutte insieme. Tratti vicini con la stessa revisione
   sono una modifica sola, e i due capi di uno spostamento vanno insieme.
@@ -153,7 +164,7 @@ Limiti attuali:
 - una nota nuova è testo semplice su una riga, senza formattazione; copiata e
   incollata, è una seconda nota con lo stesso testo;
 - l'interlinea «almeno» ed «esattamente» si mostra e si conserva, ma dalla
-  striscia si sceglie soltanto un multiplo; rientri, spazi e interlinea che
+  barra si sceglie soltanto un multiplo; rientri, spazi e interlinea che
   vengono dallo stile non si disegnano (il foglio usa quelli del tema), e un
   campo vuoto della spaziatura non dice quanto valgono;
 - un carattere che la macchina non ha si mostra con uno di ripiego, ma nel
@@ -203,7 +214,7 @@ disposizione del paragrafo nuovi aggiungono gli stili automatici che servono
 (`FubP…`, `FubT…`, `FubL…`) e, se mancano, gli stili comuni dei titoli e della
 citazione, senza toccare gli altri. Le lunghezze nuove si scrivono in punti. Le revisioni tracciate e i commenti di un `.odt`
 non si scrivono: un testo che ne porta (incollato da un `.docx`) non si
-salva, e la striscia non offre commenti nuovi.
+salva, e la barra non offre commenti nuovi.
 
 Oltre ai motivi del `.docx`, un `.odt` si apre **in sola lettura** quando la
 superficie non saprebbe riscriverlo identico, per esempio con due elenchi uguali

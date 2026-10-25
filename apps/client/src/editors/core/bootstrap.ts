@@ -42,6 +42,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onImportRemoteImage?: (url: string, from: string) => Promise<string | null>;
   readonly onOpenDocument: (doc: string) => void | Promise<void>;
   readonly onSearchTag: (tag: string) => void;
+  /// Un comando della shell dato da dentro una superficie, come dalla
+  /// palette: lo zoom della barra del documento.
+  readonly runShellCommand?: (id: string) => void;
   readonly completions: CompletionSources;
   readonly slash?: EditorSlashHost;
   readonly gridHost?: GridHost;
@@ -428,6 +431,7 @@ export function createDocumentSurfaceRegistry(
           onChange: options.onChange,
           onSelectionChange: options.onSelectionChange,
           images: options.drawingImages,
+          shellCommand: options.runShellCommand ? (id) => () => options.runShellCommand!(id) : undefined,
           proof: {
             ports: proofPorts(openVaultRoot()),
             notify: options.slash ? (message) => options.slash!.notify(message) : undefined,

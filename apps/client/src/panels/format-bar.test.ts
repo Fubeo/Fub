@@ -170,6 +170,20 @@ describe("la barra di un riquadro", () => {
     expect(empty.bar.element.hidden).toBe(true);
   });
 
+  it("su una superficie con la sua barra non c'è, e la bolla della selezione resta", () => {
+    const fake = fakeActions(["markdown.bold"]);
+    const own: EditorSurface = { ...surfaceWith(fake.actions), ownBar: true };
+    const view = mount(own);
+    view.bar.update(SPECS);
+    expect(view.bar.element.hidden).toBe(true);
+    const bubble = createFormatBar({ surface: () => own, writing: () => true, focusPane: () => {}, runCommand: () => {}, only: ["inline"] });
+    bars.push(bubble);
+    bubble.update(SPECS);
+    expect(bubble.element.hidden).toBe(false);
+    bubble.element.querySelector<HTMLButtonElement>('[data-command="markdown.bold"]')!.click();
+    expect(fake.runs).toEqual(["markdown.bold"]);
+  });
+
   it("dice premuto e spento come la superficie, e si aggiorna quando lei cambia", async () => {
     const fake = fakeActions(["markdown.bold", "markdown.italic"]);
     const { bar } = mount(surfaceWith(fake.actions));

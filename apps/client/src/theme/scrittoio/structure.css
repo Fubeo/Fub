@@ -1727,28 +1727,36 @@ body {
    schede, poi i gruppi di una scheda in una striscia d'altezza fissa. Un
    gruppo che non ci sta si raccoglie nel suo pulsante (`data-collapsed`); le
    lettere di Excel sono distintivi posati sopra i controlli. */
-.grid-ribbon-host { flex: none; min-width: 0; }
-.grid-ribbon {
+.grid-ribbon-host,
+.rich-ribbon-host { flex: none; min-width: 0; }
+.grid-ribbon,
+.rich-ribbon {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-.grid-ribbon-head {
+.grid-ribbon-head,
+.rich-ribbon-head {
   display: flex;
   align-items: center;
   min-width: 0;
 }
-.grid-ribbon-tabs {
+.grid-ribbon-tabs,
+.rich-ribbon-tabs {
   flex: 1;
   min-width: 0;
   overflow-x: auto;
 }
 .grid-ribbon-tabs .kit-tab,
 .grid-ribbon-item,
-.grid-ribbon-group {
+.grid-ribbon-group,
+.rich-ribbon-tabs .kit-tab,
+.rich-ribbon-item,
+.rich-ribbon-group {
   position: relative;
 }
-.grid-ribbon-toggle {
+.grid-ribbon-toggle,
+.rich-ribbon-toggle {
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -1757,35 +1765,44 @@ body {
   height: 28px;
   padding: 0;
 }
-.grid-ribbon-toggle svg { width: 16px; height: 16px; }
-.grid-ribbon-panel { min-width: 0; }
-.grid-ribbon-toolbar {
+.grid-ribbon-toggle svg,
+.rich-ribbon-toggle svg { width: 16px; height: 16px; }
+.grid-ribbon-panel,
+.rich-ribbon-panel { min-width: 0; }
+.grid-ribbon-toolbar,
+.rich-ribbon-toolbar {
   display: flex;
   align-items: stretch;
   height: 102px;
   min-width: 0;
   overflow: hidden;
 }
-.grid-ribbon-group {
+.grid-ribbon-group,
+.rich-ribbon-group {
   display: flex;
   flex: none;
   flex-direction: column;
 }
-.grid-ribbon-group-body {
+.grid-ribbon-group-body,
+.rich-ribbon-group-body {
   display: flex;
   flex: 1;
   align-items: flex-start;
 }
 .grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-body,
-.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-label {
+.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-label,
+.rich-ribbon-group[data-collapsed="true"] > .rich-ribbon-group-body,
+.rich-ribbon-group[data-collapsed="true"] > .rich-ribbon-group-label {
   display: none;
 }
-.grid-ribbon-group-label {
+.grid-ribbon-group-label,
+.rich-ribbon-group-label {
   flex: none;
   white-space: nowrap;
   text-align: center;
 }
-.grid-ribbon-stack {
+.grid-ribbon-stack,
+.rich-ribbon-stack {
   display: flex;
   flex-direction: column;
 }
@@ -1793,60 +1810,82 @@ body {
 .grid-ribbon-item,
 .grid-ribbon-field,
 .grid-ribbon-check,
-.grid-ribbon-chevron {
+.grid-ribbon-chevron,
+.rich-ribbon-row,
+.rich-ribbon-item,
+.rich-ribbon-field,
+.rich-ribbon-check,
+.rich-ribbon-chevron {
   display: inline-flex;
   align-items: center;
 }
-.grid-ribbon-row { display: flex; }
-.grid-ribbon-button {
+.grid-ribbon-row,
+.rich-ribbon-row { display: flex; }
+.grid-ribbon-button,
+.rich-ribbon-button {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   white-space: nowrap;
 }
-.grid-ribbon-small {
+.grid-ribbon-small,
+.rich-ribbon-small {
   min-width: 24px;
   height: 24px;
 }
-.grid-ribbon-small svg { flex: none; width: 16px; height: 16px; }
-.grid-ribbon-large {
+.grid-ribbon-small svg,
+.rich-ribbon-small svg { flex: none; width: 16px; height: 16px; }
+.grid-ribbon-large,
+.rich-ribbon-large {
   flex-direction: column;
   justify-content: flex-start;
   min-width: 44px;
   max-width: 96px;
   height: 76px;
 }
-.grid-ribbon-large svg { flex: none; width: 26px; height: 26px; }
+.grid-ribbon-large svg,
+.rich-ribbon-large svg { flex: none; width: 26px; height: 26px; }
 /* Il nome di un pulsante grande sta in due righe al più, sopra il nome del
    gruppo. */
-.grid-ribbon-large .grid-ribbon-label {
+.grid-ribbon-large .grid-ribbon-label,
+.rich-ribbon-large .rich-ribbon-label {
   max-height: 2.5em;
   overflow: hidden;
   white-space: normal;
   text-align: center;
 }
 .grid-ribbon-large .grid-ribbon-chevron svg,
-.grid-ribbon-chevron svg { width: 10px; height: 10px; }
-.grid-ribbon-split-large { flex-direction: column; }
-.grid-ribbon-split-large > .grid-ribbon-large { height: 58px; }
-.grid-ribbon-split-large > .grid-ribbon-arrow { align-self: stretch; height: 18px; }
-.grid-ribbon-arrow { min-width: 14px; }
-.grid-ribbon-glyph {
+.grid-ribbon-chevron svg,
+.rich-ribbon-large .rich-ribbon-chevron svg,
+.rich-ribbon-chevron svg { width: 10px; height: 10px; }
+.grid-ribbon-split-large,
+.rich-ribbon-split-large { flex-direction: column; }
+.grid-ribbon-split-large > .grid-ribbon-large,
+.rich-ribbon-split-large > .rich-ribbon-large { height: 58px; }
+.grid-ribbon-split-large > .grid-ribbon-arrow,
+.rich-ribbon-split-large > .rich-ribbon-arrow { align-self: stretch; height: 18px; }
+.grid-ribbon-arrow,
+.rich-ribbon-arrow { min-width: 14px; }
+.grid-ribbon-glyph,
+.rich-ribbon-glyph {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 16px;
 }
-.grid-ribbon-color-bar {
+.grid-ribbon-color-bar,
+.rich-ribbon-color-bar {
   position: absolute;
   left: 4px;
   right: 4px;
   bottom: 2px;
   height: 3px;
 }
-.grid-ribbon-panel[data-compact="true"] .grid-ribbon-small .grid-ribbon-label { display: none; }
-.grid-ribbon-keytip {
+.grid-ribbon-panel[data-compact="true"] .grid-ribbon-small .grid-ribbon-label,
+.rich-ribbon-panel[data-compact="true"] .rich-ribbon-small .rich-ribbon-label { display: none; }
+.grid-ribbon-keytip,
+.rich-ribbon-keytip {
   position: absolute;
   left: 50%;
   bottom: -4px;
@@ -1855,7 +1894,8 @@ body {
   pointer-events: none;
   white-space: nowrap;
 }
-.grid-ribbon-popup-group { display: flex; }
+.grid-ribbon-popup-group,
+.rich-ribbon-popup-group { display: flex; }
 .grid-ribbon-palette,
 .grid-ribbon-gallery {
   display: flex;
@@ -2050,32 +2090,34 @@ body {
   min-height: 0;
 }
 .rich-notice { flex: none; margin: 0; }
-.rich-strip {
-  flex: none;
+/* La barra del documento (`editors/rich/ribbon.ts`) è quella del kit, con le
+   regole della barra del foglio; qui soltanto ciò che il foglio non ha:
+   l'accesso rapido accanto alle schede e la galleria degli stili. */
+.rich-ribbon-quick { display: flex; flex: none; align-items: center; }
+.rich-ribbon-styles { display: flex; align-items: stretch; height: 64px; }
+.rich-ribbon-styles-cells { display: flex; align-items: stretch; min-width: 0; }
+.rich-ribbon-style {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
+  width: 76px;
   min-width: 0;
+  overflow: hidden;
 }
-.rich-strip-group { display: flex; align-items: center; }
-.rich-strip-field { display: inline-flex; }
-.rich-strip-button { position: relative; }
-.rich-strip-bar {
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  bottom: 3px;
-  height: 3px;
+.rich-ribbon-style-sample {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rich-strip-swatches { display: grid; grid-template-columns: repeat(6, 24px); }
 .rich-strip-swatch-none,
 .rich-strip-swatch-custom { grid-column: 1 / -1; }
-/* La barra di ricerca del documento, fra la striscia e il foglio. */
+/* La barra di ricerca del documento, fra la barra multifunzione e il foglio. */
 .rich-findbar { flex: none; display: flex; flex-direction: column; }
 .rich-findbar-row { display: flex; flex-wrap: wrap; align-items: center; }
 .rich-findbar-row > .kit-field { flex: 0 1 240px; }
 .rich-findbar-close { margin-left: auto; }
-/* I riquadri della striscia: titolo, campi, azioni in fondo. */
+/* I riquadri della barra: titolo, campi, azioni in fondo. */
 .rich-strip-panel { display: flex; flex-direction: column; width: 288px; max-width: 100%; }
 .rich-strip-panel-body { display: flex; flex-direction: column; }
 .rich-strip-panel-pairs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }

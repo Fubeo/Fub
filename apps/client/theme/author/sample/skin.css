@@ -5820,39 +5820,47 @@ kbd,
 /* La barra multifunzione: le schede su un filetto, i gruppi divisi da un
    filo e col nome sotto, a voce bassa. I controlli sono quieti come quelli
    della striscia dei documenti; lo stato acceso prende il velo d'accento. */
-.grid-ribbon {
+.grid-ribbon,
+.rich-ribbon {
   border-bottom: 1px solid var(--border);
   background: var(--sheet);
   color: var(--text);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
 }
-.grid-ribbon-head {
+.grid-ribbon-head,
+.rich-ribbon-head {
   gap: var(--space-2);
   padding: var(--space-1) var(--space-4) 0;
   box-shadow: inset 0 -1px 0 var(--border);
 }
-.grid-ribbon-tabs.kit-tabs {
+.grid-ribbon-tabs.kit-tabs,
+.rich-ribbon-tabs.kit-tabs {
   gap: var(--space-1);
   padding-bottom: 0;
   box-shadow: none;
 }
-.grid-ribbon-tabs .kit-tab {
+.grid-ribbon-tabs .kit-tab,
+.rich-ribbon-tabs .kit-tab {
   min-height: 30px;
   padding: 0 var(--space-4);
   font-size: var(--text-sm);
 }
-.grid-ribbon-tabs .grid-ribbon-contextual {
+.grid-ribbon-tabs .grid-ribbon-contextual,
+.rich-ribbon-tabs .rich-ribbon-contextual {
   background: var(--accent-wash);
   color: var(--accent);
 }
-.grid-ribbon[data-collapsed="true"] .grid-ribbon-head {
+.grid-ribbon[data-collapsed="true"] .grid-ribbon-head,
+.rich-ribbon[data-collapsed="true"] .rich-ribbon-head {
   box-shadow: none;
 }
 .grid-ribbon-toggle,
 .grid-ribbon-button,
 .grid-ribbon-palette-empty,
-.grid-ribbon-gallery-item {
+.grid-ribbon-gallery-item,
+.rich-ribbon-toggle,
+.rich-ribbon-button {
   border: none;
   border-radius: var(--radius-chip);
   background: transparent;
@@ -5860,43 +5868,54 @@ kbd,
   font: inherit;
   cursor: pointer;
 }
-.grid-ribbon-toggle {
+.grid-ribbon-toggle,
+.rich-ribbon-toggle {
   color: var(--muted);
 }
-.grid-ribbon-toolbar {
+.grid-ribbon-toolbar,
+.rich-ribbon-toolbar {
   padding: var(--space-2) var(--space-3) var(--space-1);
 }
-.grid-ribbon-group {
+.grid-ribbon-group,
+.rich-ribbon-group {
   padding: 0 var(--space-3);
   border-right: 1px solid var(--border);
 }
-.grid-ribbon-group:last-child {
+.grid-ribbon-group:last-child,
+.rich-ribbon-group:last-child {
   border-right: none;
 }
-.grid-ribbon-group-body {
+.grid-ribbon-group-body,
+.rich-ribbon-group-body {
   gap: var(--space-1);
 }
-.grid-ribbon-group-label {
+.grid-ribbon-group-label,
+.rich-ribbon-group-label {
   padding-top: var(--space-1);
   color: var(--muted);
   font-size: var(--text-xs);
 }
-.grid-ribbon-stack {
+.grid-ribbon-stack,
+.rich-ribbon-stack {
   gap: 1px;
 }
-.grid-ribbon-row {
+.grid-ribbon-row,
+.rich-ribbon-row {
   gap: 1px;
 }
-.grid-ribbon-button {
+.grid-ribbon-button,
+.rich-ribbon-button {
   gap: var(--space-1);
   padding: 0 var(--space-2);
   line-height: var(--leading-tight);
 }
-.grid-ribbon-large {
+.grid-ribbon-large,
+.rich-ribbon-large {
   padding: var(--space-2) var(--space-2) 0;
   font-size: var(--text-xs);
 }
-.grid-ribbon-arrow {
+.grid-ribbon-arrow,
+.rich-ribbon-arrow {
   padding: 0 2px;
   color: var(--muted);
 }
@@ -5904,22 +5923,30 @@ kbd,
 .grid-ribbon-button:hover:not([aria-disabled="true"]),
 .grid-ribbon-button[aria-expanded="true"],
 .grid-ribbon-palette-empty:hover,
-.grid-ribbon-gallery-item:hover {
+.grid-ribbon-gallery-item:hover,
+.rich-ribbon-toggle:hover,
+.rich-ribbon-button:hover:not([aria-disabled="true"]),
+.rich-ribbon-button[aria-expanded="true"] {
   background: var(--overlay-hover);
   color: var(--text);
 }
-.grid-ribbon-button:active:not([aria-disabled="true"]) {
+.grid-ribbon-button:active:not([aria-disabled="true"]),
+.rich-ribbon-button:active:not([aria-disabled="true"]) {
   background: var(--overlay-active);
 }
-.grid-ribbon-split:hover > .grid-ribbon-button {
+.grid-ribbon-split:hover > .grid-ribbon-button,
+.rich-ribbon-split:hover > .rich-ribbon-button {
   box-shadow: inset 0 0 0 1px var(--border);
 }
-.grid-ribbon-button[aria-pressed="true"] {
+.grid-ribbon-button[aria-pressed="true"],
+.rich-ribbon-button[aria-pressed="true"] {
   background: var(--accent-wash);
   color: var(--accent);
 }
 .grid-ribbon-button[aria-disabled="true"],
-.grid-ribbon-check:has(> input:disabled) {
+.grid-ribbon-check:has(> input:disabled),
+.rich-ribbon-button[aria-disabled="true"],
+.rich-ribbon-check:has(> input:disabled) {
   opacity: 0.4;
   cursor: default;
 }
@@ -5928,30 +5955,43 @@ kbd,
 .grid-ribbon-select:focus-visible,
 .grid-ribbon-input:focus-visible,
 .grid-ribbon-palette-empty:focus-visible,
-.grid-ribbon-gallery-item:focus-visible {
+.grid-ribbon-gallery-item:focus-visible,
+.rich-ribbon-toggle:focus-visible,
+.rich-ribbon-button:focus-visible,
+.rich-ribbon-select:focus-visible,
+.rich-ribbon-input:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
-.grid-ribbon-glyph {
+.grid-ribbon-glyph,
+.rich-ribbon-glyph {
   font-family: var(--font-ui);
   font-size: var(--text-base);
 }
-.grid-ribbon-bold { font-weight: var(--weight-bold); }
-.grid-ribbon-italic { font-style: italic; }
+.grid-ribbon-bold,
+.rich-ribbon-bold { font-weight: var(--weight-bold); }
+.grid-ribbon-italic,
+.rich-ribbon-italic { font-style: italic; }
 /* La mini-barra del menu: i controlli della scheda Home in una fila. */
-.grid-ribbon-mini {
+.grid-ribbon-mini,
+.rich-ribbon-mini {
   display: flex;
   align-items: center;
   gap: var(--space-1);
 }
-.grid-ribbon-underline { text-decoration: underline; }
-.grid-ribbon-strike { text-decoration: line-through; }
-.grid-ribbon-color-bar {
+.grid-ribbon-underline,
+.rich-ribbon-underline { text-decoration: underline; }
+.grid-ribbon-strike,
+.rich-ribbon-strike { text-decoration: line-through; }
+.grid-ribbon-color-bar,
+.rich-ribbon-color-bar {
   border-radius: 1px;
   box-shadow: inset 0 0 0 1px var(--border);
 }
 .grid-ribbon-select,
-.grid-ribbon-input {
+.grid-ribbon-input,
+.rich-ribbon-select,
+.rich-ribbon-input {
   height: 24px;
   padding: 0 var(--space-2);
   border: 1px solid var(--border);
@@ -5960,21 +6000,25 @@ kbd,
   color: var(--text);
   font: inherit;
 }
-.grid-ribbon-check {
+.grid-ribbon-check,
+.rich-ribbon-check {
   gap: var(--space-2);
   min-height: 24px;
   padding: 0 var(--space-2);
   cursor: pointer;
 }
-.grid-ribbon-check input {
+.grid-ribbon-check input,
+.rich-ribbon-check input {
   margin: 0;
   accent-color: var(--accent);
 }
-.grid-ribbon-field-label {
+.grid-ribbon-field-label,
+.rich-ribbon-field-label {
   margin-inline-end: var(--space-2);
   color: var(--muted);
 }
-.grid-ribbon-keytip {
+.grid-ribbon-keytip,
+.rich-ribbon-keytip {
   padding: 0 var(--space-1);
   border-radius: var(--radius-xs);
   background: var(--text);
@@ -5984,7 +6028,8 @@ kbd,
   font-weight: var(--weight-bold);
   line-height: 14px;
 }
-.grid-ribbon-popup-group {
+.grid-ribbon-popup-group,
+.rich-ribbon-popup-group {
   padding: var(--space-3);
 }
 .grid-ribbon-palette,
@@ -6818,24 +6863,56 @@ kbd,
   color: var(--text);
   font-size: var(--text-sm);
 }
-/* La striscia del carattere, sopra il foglio. */
-.rich-strip {
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-6);
-  border-bottom: 1px solid var(--border);
-  background: var(--sheet);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-}
-.rich-strip-group {
-  gap: var(--space-1);
+/* La barra del documento: la pelle della barra del foglio, e qui ciò che è
+   soltanto sua. Meno inchiostro del foglio: le cifre dei campi sono
+   tabulari, la galleria degli stili scrive ogni nome nel suo carattere. */
+.rich-ribbon-quick {
+  gap: 1px;
+  margin-inline-end: var(--space-2);
   padding-inline-end: var(--space-2);
   border-right: 1px solid var(--border);
 }
-.rich-strip-group:last-child {
-  border-right: none;
+.rich-ribbon-select,
+.rich-ribbon-input {
+  font-variant-numeric: tabular-nums;
 }
-.rich-strip-button,
+.rich-ribbon-marker {
+  font-style: italic;
+}
+.rich-ribbon-color-bar[data-empty="true"] {
+  background: transparent;
+}
+.rich-ribbon-styles {
+  gap: 1px;
+  padding: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--sheet);
+}
+.rich-ribbon-style {
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+.rich-ribbon-style:hover:not([aria-disabled="true"]) {
+  background: var(--overlay-hover);
+}
+.rich-ribbon-style[aria-pressed="true"] {
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.rich-ribbon-style[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+.rich-ribbon-style:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
 .rich-strip-swatch-none,
 .rich-strip-swatch-custom {
   display: inline-flex;
@@ -6850,73 +6927,10 @@ kbd,
   font: inherit;
   cursor: pointer;
 }
-.rich-strip-button {
-  justify-content: center;
-  min-width: 28px;
-  height: 28px;
-  color: var(--muted);
-  line-height: 1;
-}
-.rich-strip-button:hover:not(:disabled):not([aria-disabled="true"]),
-.rich-strip-button[aria-expanded="true"],
 .rich-strip-swatch-none:hover,
 .rich-strip-swatch-custom:hover {
   background: var(--overlay-hover);
   color: var(--text);
-}
-.rich-strip-button[aria-pressed="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-.rich-strip-button:focus-visible,
-.rich-strip-select:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: -2px;
-}
-.rich-strip-button:disabled,
-.rich-strip-button[aria-disabled="true"] {
-  opacity: 0.4;
-  cursor: default;
-}
-.rich-strip-underline {
-  text-decoration: underline;
-}
-.rich-strip-bold {
-  font-weight: 700;
-}
-.rich-strip-italic {
-  font-style: italic;
-}
-/* La mini-barra del menu: la stessa striscia, senza la riga del foglio. */
-.rich-strip-mini {
-  flex-wrap: nowrap;
-  padding: 0;
-  border-bottom: none;
-  background: transparent;
-}
-.rich-strip-marker {
-  font-style: italic;
-}
-.rich-strip-bar {
-  border-radius: 1px;
-}
-.rich-strip-bar[data-empty="true"] {
-  box-shadow: inset 0 0 0 1px var(--border);
-}
-.rich-strip-select {
-  height: 28px;
-  padding: 0 var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-chip);
-  background: var(--sheet);
-  color: var(--text);
-  font: inherit;
-}
-.rich-strip-font {
-  width: 156px;
-}
-.rich-strip-size {
-  width: 64px;
 }
 .rich-strip-swatches {
   gap: var(--space-1);

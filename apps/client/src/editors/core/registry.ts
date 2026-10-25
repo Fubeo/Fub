@@ -220,6 +220,12 @@ export interface EditorSurface {
    */
   find?(): boolean;
   /**
+   * The surface draws its own bar of commands (the document ribbon): the
+   * shell's format bar then stays out of the way, while the selection
+   * bubble and the `fub.editor.action` commands keep working.
+   */
+  readonly ownBar?: boolean;
+  /**
    * Brings the view to a place in the document. `false` when this surface
    * cannot get there, so that the shell says it instead of doing nothing.
    */

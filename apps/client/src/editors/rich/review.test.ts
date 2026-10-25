@@ -9,7 +9,7 @@ import { RichEngine } from "./engine";
 import { parseProjection, type Block, type Para, type TextInline } from "./projection";
 import type { EditorView } from "prosemirror-view";
 import { countText, findKey, findMatches, replaceAll, replaceMatch, revisionPlugin, revisions } from "./review";
-import { mountStrip } from "./strip";
+import { mountRichRibbon } from "./ribbon";
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -95,13 +95,13 @@ describe("sostituisci", () => {
   });
 });
 
-describe("la striscia", () => {
+describe("la barra", () => {
   it("Mod-h apre trova e sostituisci: le occorrenze si vedono, si scorrono e si sostituiscono", () => {
     const e = engine([para([{ t: "text", x: "uno due uno tre uno" }])]);
-    const strip = mountStrip(e, () => null);
-    document.body.append(strip.element, strip.findBar);
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element, ribbon.findBar);
     expect(e.run("rich.find")).toBe(true);
-    expect(strip.findBar.hidden).toBe(false);
+    expect(ribbon.findBar.hidden).toBe(false);
     const field = (label: string) =>
       document.getElementById([...document.querySelectorAll("form label")].find((l) => l.textContent === label)!.getAttribute("for")!) as HTMLInputElement;
     const text = field(t("rich.find.text"));
@@ -122,18 +122,18 @@ describe("la striscia", () => {
     expect(status.textContent).toBe(t("rich.find.replaced", { n: "2" }));
     // Chiusa la ricerca con Esc, il testo non ha più segni.
     text.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    expect(strip.findBar.hidden).toBe(true);
+    expect(ribbon.findBar.hidden).toBe(true);
     expect(findKey.getState(e.state)?.decorations.find().length).toBe(0);
-    strip.destroy();
+    ribbon.destroy();
     expect(findKey.getState(e.state)?.decorations.find().length).toBe(0);
   });
 
   it("il conteggio dice parole, caratteri e paragrafi del documento e della selezione", () => {
     const e = engine([para([{ t: "text", x: "Una  frase\tbreve." }]), para([]), para([{ t: "text", x: "Due" }])]);
-    const strip = mountStrip(e, () => null);
-    document.body.append(strip.element);
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
     e.select(1, 4);
-    [...strip.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.count"))!.click();
+    [...ribbon.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.count"))!.click();
     const rows = [...document.querySelectorAll("table tr")].map((row) => [...row.children].map((c) => c.textContent));
     expect(rows).toEqual([
       ["", t("rich.count.selection"), t("rich.count.document")],
@@ -142,7 +142,7 @@ describe("la striscia", () => {
       [t("rich.count.visible"), "3", "17"],
       [t("rich.count.paragraphs"), "1", "2"],
     ]);
-    strip.destroy();
+    ribbon.destroy();
   });
 });
 

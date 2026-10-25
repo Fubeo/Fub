@@ -16,7 +16,7 @@ import type { EditorChange } from "../core/text-operation";
 import type { ProofPorts } from "../core/proof-ports";
 import { onLanguage, t, type Key } from "../../i18n/strings";
 import type { RichEngine } from "./engine";
-import type { mountStrip, RichStrip, RichStripGroup } from "./strip";
+import type { RichRibbon } from "./ribbon";
 import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem, SurfaceMiniBar } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
 import { closeContextMenu } from "../../ui/menu";
@@ -168,6 +168,9 @@ export interface RichSurfaceCallbacks {
   readonly proof?: { readonly ports: ProofPorts; readonly notify?: (message: string) => void };
   /// Le immagini del vault, per inserirne una nel documento.
   readonly images?: DrawingImagePort;
+  /// Un comando della shell che la barra offre (lo zoom): come darlo, o
+  /// `null` se la shell non lo dà.
+  readonly shellCommand?: (id: string) => (() => void) | null;
   /// Per i test: il modulo del motore. Di solito è `import("./engine")`.
   readonly loadEngine?: () => Promise<typeof import("./engine")>;
 }
@@ -189,10 +192,8 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   parent.append(root);
 
   let engine: RichEngine | null = null;
-  let strip: RichStrip | null = null;
-  // La striscia arriva col motore: la mini-barra la prende da lì.
-  let miniStrip: typeof mountStrip | null = null;
-  let miniGroups: readonly RichStripGroup[] = [];
+  // La barra multifunzione arriva col motore; la mini-barra è la sua.
+  let ribbon: RichRibbon | null = null;
   let pending: string | null = null;
   let readOnly = false;
   let closed = false;
@@ -230,10 +231,8 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
 
   const load = callbacks.loadEngine ?? (() => import("./engine"));
   load().then(
-    ({ RichEngine, mountStrip, RICH_MINI_GROUPS }) => {
+    ({ RichEngine, mountRichRibbon }) => {
       if (closed) return;
-      miniStrip = mountStrip;
-      miniGroups = RICH_MINI_GROUPS;
       page.removeAttribute("aria-busy");
       engine = new RichEngine(page, {
         label: () => t("rich.label"),
@@ -241,12 +240,16 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
         proof: callbacks.proof,
       });
-      strip = mountStrip(engine, (id) => RICH_CHORDS[id] ?? null, {
-        pickImage: pickImage(),
-        review: RICH_REVIEW_FORMATS.has(context.formatId ?? ""),
-      });
-      root.insertBefore(strip.element, page);
-      root.insertBefore(strip.findBar, page);
+      const ribbonHost = document.createElement("div");
+      ribbonHost.className = "rich-ribbon-host";
+      root.insertBefore(ribbonHost, page);
+      ribbon = mountRichRibbon(
+        engine,
+        (id) => RICH_CHORDS[id] ?? null,
+        { pickImage: pickImage(), review: RICH_REVIEW_FORMATS.has(context.formatId ?? "") },
+        { host: ribbonHost, shell: (id) => callbacks.shellCommand?.(id) ?? null },
+      );
+      root.insertBefore(ribbon.findBar, page);
       stopEngine = engine.subscribe(() => {
         showNotice();
         notify();
@@ -438,23 +441,22 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     };
   }
 
-  /// La mini-barra: la striscia ristretta al carattere e all'enfasi. Un
-  /// gesto chiude il menu, che parlerebbe dello stato di prima.
+  /// La mini-barra: quella della barra multifunzione, col carattere e
+  /// l'enfasi. Un gesto chiude il menu, che parlerebbe dello stato di prima.
   const miniBar: SurfaceMiniBar = {
     mount(host) {
-      if (!engine || !miniStrip) return () => {};
-      const mini = miniStrip(engine, (id) => RICH_CHORDS[id] ?? null, {}, { only: miniGroups });
+      if (!ribbon) return () => {};
+      const remove = ribbon.mountMini(host);
       // Un pulsante agisce subito; una tendina, quando cambia.
       const done = (event: Event) => {
         if (event.type === "change" || (event.target as Element | null)?.closest("button")) queueMicrotask(closeContextMenu);
       };
-      mini.element.addEventListener("click", done);
-      mini.element.addEventListener("change", done);
-      host.append(mini.element);
+      host.addEventListener("click", done);
+      host.addEventListener("change", done);
       return () => {
-        mini.element.removeEventListener("click", done);
-        mini.element.removeEventListener("change", done);
-        mini.destroy();
+        host.removeEventListener("click", done);
+        host.removeEventListener("change", done);
+        remove();
       };
     },
   };
@@ -481,10 +483,13 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       getDoc: () => (engine ? engine.getDoc() : pending ?? ""),
     },
     focus: () => engine?.focus(),
+    // La barra multifunzione è della superficie: la barra di formattazione
+    // della shell non si mostra sopra.
+    ownBar: true,
     // Ctrl+F: la barra di ricerca del documento, non quella della shell.
     find() {
-      if (!strip) return false;
-      strip.find(false);
+      if (!ribbon) return false;
+      ribbon.find(false);
       return true;
     },
     // Le selezioni non sono intervalli del sorgente (il sorgente è la
@@ -510,8 +515,8 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       closed = true;
       stopLanguage();
       stopEngine?.();
-      strip?.destroy();
-      strip = null;
+      ribbon?.destroy();
+      ribbon = null;
       listeners.clear();
       engine?.destroy();
       engine = null;

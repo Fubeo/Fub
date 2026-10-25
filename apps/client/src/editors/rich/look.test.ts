@@ -7,7 +7,7 @@ import type { Node as PmNode } from "prosemirror-model";
 import { clearFormatting, setFont, setHighlight, setSize } from "./commands";
 import { RichEngine } from "./engine";
 import { parseProjection, writeProjection, type Block, type TextInline } from "./projection";
-import { mountStrip } from "./strip";
+import { mountRichRibbon } from "./ribbon";
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -146,32 +146,36 @@ describe("l'aspetto del carattere", () => {
     expect(e.painterArmed()).toBe(false);
   });
 
-  it("la striscia mostra l'aspetto della selezione e in sola lettura si spegne", () => {
+  it("la barra mostra l'aspetto della selezione e in sola lettura si spegne", () => {
     const e = engine([para([{ t: "text", x: "testo", m: ["u"], f: { font: "Georgia", size: 14 } }])]);
     select(e, "testo");
-    const strip = mountStrip(e, () => null);
-    document.body.append(strip.element);
-    const font = strip.element.querySelector<HTMLSelectElement>(".rich-strip-font")!;
-    const size = strip.element.querySelector<HTMLSelectElement>(".rich-strip-size")!;
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
+    const font = ribbon.element.querySelector<HTMLSelectElement>('[data-command="rich.font"] select')!;
+    const size = ribbon.element.querySelector<HTMLSelectElement>('[data-command="rich.size"] select')!;
     expect(font.value).toBe("Georgia");
     expect(size.value).toBe("14");
-    expect(strip.element.querySelector('[data-action="rich.underline"]')?.getAttribute("aria-pressed")).toBe("true");
-    // Ogni controllo ha un nome; uno solo è nel Tab.
-    for (const control of strip.element.querySelectorAll("select")) {
-      expect(strip.element.querySelector(`label[for="${control.id}"]`)?.textContent).not.toBe("");
+    expect(ribbon.element.querySelector('[data-command="rich.underline"] button')?.getAttribute("aria-pressed")).toBe("true");
+    // Ogni controllo ha un nome; ogni fila della barra (le schede, l'accesso
+    // rapido, la scheda aperta) è un punto solo del Tab.
+    for (const control of ribbon.element.querySelectorAll("select")) {
+      expect(control.getAttribute("aria-label") || ribbon.element.querySelector(`label[for="${control.id}"]`)?.textContent).toBeTruthy();
     }
-    expect([...strip.element.querySelectorAll("button, select")].filter((c) => (c as HTMLElement).tabIndex === 0)).toHaveLength(1);
+    for (const row of ribbon.element.querySelectorAll<HTMLElement>('[role="tablist"], [role="toolbar"]:not([hidden])')) {
+      if (row.closest("[hidden]")) continue;
+      expect([...row.querySelectorAll("button, select")].filter((c) => (c as HTMLElement).tabIndex === 0)).toHaveLength(1);
+    }
     size.value = "20";
     size.dispatchEvent(new Event("change"));
     expect(texts(e)[0]?.f).toEqual({ font: "Georgia", size: 20 });
     e.setReadOnly(true);
-    expect(strip.element.hidden).toBe(false);
+    expect(ribbon.element.hidden).toBe(false);
     expect(font.disabled).toBe(true);
-    expect(strip.element.querySelector('[data-action="rich.underline"]')?.getAttribute("aria-disabled")).toBe("true");
+    expect(ribbon.element.querySelector('[data-command="rich.underline"] button')?.getAttribute("aria-disabled")).toBe("true");
     e.setReadOnly(false);
     expect(font.disabled).toBe(false);
-    expect(strip.element.querySelector("[aria-disabled]")).toBeNull();
-    strip.destroy();
-    expect(strip.element.isConnected).toBe(false);
+    expect(ribbon.element.querySelector('[data-command="rich.underline"] button')?.hasAttribute("aria-disabled")).toBe(false);
+    ribbon.destroy();
+    expect(ribbon.element.isConnected).toBe(false);
   });
 });

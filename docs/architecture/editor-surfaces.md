@@ -125,6 +125,10 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
 - `miniBar()` monta la mini-barra di chi ha controlli suoi (i documenti di
   Word, i fogli) sopra il menu; il Markdown usa i gruppi della barra di
   formattazione;
+- `ownBar` dice che la superficie disegna la sua barra dei comandi (i
+  documenti di Word, con la barra multifunzione del kit): la barra di
+  formattazione della shell allora non si mostra, mentre la bolla della
+  selezione e `fub.editor.action` restano;
 - `exports` dichiara gli export registrati che valgono per il documento: il
   disegno offre PNG e PDF, il profilo `pdf` il PDF annotato e quello redatto.
   Il core ne fa `shell.doc.export` e una voce del menu del riquadro ciascuno,

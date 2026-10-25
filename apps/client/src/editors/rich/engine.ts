@@ -49,7 +49,7 @@ import { findPlugin, revisionPlugin, showMatches, type FindQuery } from "./revie
 import { BlockWriter, richSchema, toDoc } from "./schema";
 import { deleteChar, reviewAuthor, trackable, trackTransaction, tracking } from "./track";
 
-export { mountStrip, RICH_MINI_GROUPS } from "./strip";
+export { mountRichRibbon } from "./ribbon";
 
 export interface RichEngineOptions {
   readonly onChange: (change: EditorChange) => void;

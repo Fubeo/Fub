@@ -8,7 +8,7 @@ import { RichEngine } from "./engine";
 import { parseProjection, type Block, type CommentView, type Para } from "./projection";
 import { addComment, commentText, deleteComment, goToComment, replyComment, resolveComment } from "./comments";
 import { filterSlice } from "./paste";
-import { mountStrip } from "./strip";
+import { mountRichRibbon } from "./ribbon";
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -137,10 +137,10 @@ describe("i commenti", () => {
     expect(markers(false)).toBe(0);
   });
 
-  it("la striscia li elenca, ne aggiunge uno sulla selezione e ricorda l'autore", () => {
+  it("la barra li elenca, ne aggiunge uno sulla selezione e ricorda l'autore", () => {
     const e = engine([para([{ t: "text", x: "il " }, keptMarker(false), { t: "text", x: "passo" }, keptMarker(true), { t: "text", x: " e altro" }])], [kept]);
-    const strip = mountStrip(e, () => null, { review: true });
-    document.body.append(strip.element);
+    const ribbon = mountRichRibbon(e, () => null, { review: true });
+    document.body.append(ribbon.element);
     const from = at(e, "altro");
     e.select(from, from + "altro".length);
     expect(e.run("rich.comment")).toBe(true);
@@ -162,9 +162,9 @@ describe("i commenti", () => {
     // «Risolvi» del primo.
     [...document.querySelectorAll("button")].find((b) => b.textContent === t("rich.comment.resolve"))!.click();
     expect(listed(e)[0]!.done).toBe(true);
-    strip.destroy();
+    ribbon.destroy();
     // L'autore resta per il prossimo pannello.
-    const again = mountStrip(e, () => null, { review: true });
+    const again = mountRichRibbon(e, () => null, { review: true });
     document.body.append(again.element);
     e.select(at(e, "il"), at(e, "il") + 2);
     e.run("rich.comment");
@@ -172,16 +172,16 @@ describe("i commenti", () => {
     again.destroy();
   });
 
-  it("in un formato che non li scrive la striscia non ne aggiunge", () => {
+  it("in un formato che non li scrive la barra non ne aggiunge", () => {
     const e = engine([para([{ t: "text", x: "una parola" }])]);
-    const strip = mountStrip(e, () => null);
-    document.body.append(strip.element);
-    const button = [...strip.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label")?.startsWith(t("rich.comments")));
-    expect(button?.hidden).toBe(true);
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
+    const button = [...ribbon.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label")?.startsWith(t("rich.comments")));
+    expect(button?.closest<HTMLElement>("[data-command]")?.hidden).toBe(true);
     e.select(1, 4);
     expect(e.run("rich.comment")).toBe(true);
     expect(document.body.textContent).toContain(t("rich.comment.unsupported"));
     expect(document.querySelector("textarea")).toBeNull();
-    strip.destroy();
+    ribbon.destroy();
   });
 });

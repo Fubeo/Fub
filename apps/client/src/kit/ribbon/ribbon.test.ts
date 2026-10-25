@@ -179,3 +179,138 @@ describe("la barra del kit", () => {
     expect(languages).toHaveLength(0);
   });
 });
+
+describe("la barra del kit, i gesti di Office", () => {
+  let root: HTMLElement;
+  let place: HTMLElement;
+  let mounted: Ribbon<View, Key>;
+  let gave: string[];
+  let asked: [string, HTMLElement][];
+
+  beforeEach(() => {
+    ribbon.destroy();
+    document.body.replaceChildren();
+    root = document.createElement("div");
+    place = document.createElement("div");
+    const outside = document.createElement("textarea");
+    root.append(place, outside);
+    document.body.append(root);
+    gave = [];
+    asked = [];
+    states = [
+      { id: "doc.bold", enabled: true },
+      { id: "doc.italic", enabled: false, reason: "spento" },
+      { id: "doc.undo", enabled: true },
+      { id: "doc.find", enabled: true },
+    ];
+    const tabs: readonly RibbonTab<KitControl<View, Key>, Key>[] = [
+      {
+        id: "home",
+        label: "home",
+        keytip: "H",
+        groups: [
+          {
+            id: "font",
+            label: "font",
+            icon: "bold",
+            keytip: "ZF",
+            columns: [
+              { kind: "button", id: "doc.bold", label: "bold", keytip: "1", glyph: "G" },
+              { kind: "button", id: "doc.italic", label: "italic", keytip: "2", glyph: "C" },
+              { kind: "button", id: "doc.find", dialog: "find", label: "stamp", keytip: "3", glyph: "T" },
+            ],
+          },
+        ],
+      },
+    ];
+    mounted = mountRibbon<View, Key>({
+      host: place,
+      prefix: "doc-ribbon",
+      menuPrefix: "doc.menu.",
+      tabs,
+      quick: [{ kind: "button", id: "doc.undo", label: "rows", keytip: "1", glyph: "↶" }],
+      mini: [],
+      chevrons: { down: "chevron", up: "chevron" },
+      strings: {
+        label: () => "Barra",
+        collapse: () => "Comprimi",
+        expand: () => "Mostra",
+        unavailable: (label, reason) => `${label}: ${reason}`,
+        empty: () => "Nessuna voce",
+        mini: () => "Mini-barra",
+        quick: () => "Accesso rapido",
+      },
+      t: (key) => WORDS[key],
+      commands: () => states,
+      commandable: () => true,
+      view: () => view,
+      contextShown: () => false,
+      command: (id) => {
+        gave.push(id);
+      },
+      openDialog: (id, _params, anchor) => {
+        asked.push([id, anchor]);
+      },
+      chord: (id) => (id === "doc.bold" ? { display: "Ctrl+B", aria: "Control+B" } : null),
+      focus: () => {},
+      languages: () => () => {},
+    });
+  });
+
+  afterEach(() => mounted.destroy());
+
+  const ribbonEl = () => place.querySelector<HTMLElement>(".doc-ribbon")!;
+  const panels = () => place.querySelector<HTMLElement>(".doc-ribbon-panels")!;
+  const press = (label: string) => place.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+
+  it("Ctrl+F1 ritira la barra e la riapre", () => {
+    const f1 = () => root.dispatchEvent(new KeyboardEvent("keydown", { key: "F1", ctrlKey: true, bubbles: true, cancelable: true }));
+    expect(ribbonEl().dataset.collapsed).toBe("false");
+    f1();
+    expect(ribbonEl().dataset.collapsed).toBe("true");
+    expect(panels().hidden).toBe(true);
+    f1();
+    expect(ribbonEl().dataset.collapsed).toBe("false");
+    // Con Maiusc non è il suo gesto.
+    root.dispatchEvent(new KeyboardEvent("keydown", { key: "F1", ctrlKey: true, shiftKey: true, bubbles: true }));
+    expect(ribbonEl().dataset.collapsed).toBe("false");
+  });
+
+  it("ritirata, una scheda scelta si apre per un gesto e si richiude fuori dalla barra", () => {
+    root.dispatchEvent(new KeyboardEvent("keydown", { key: "F1", ctrlKey: true, bubbles: true }));
+    place.querySelector<HTMLElement>(".kit-tab")!.click();
+    expect(ribbonEl().dataset.peek).toBe("true");
+    expect(panels().hidden).toBe(false);
+    root.querySelector("textarea")!.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    expect(ribbonEl().dataset.peek).toBeUndefined();
+    expect(panels().hidden).toBe(true);
+    // Un comando dato dalla barra aperta per un gesto la richiude.
+    place.querySelector<HTMLElement>(".kit-tab")!.click();
+    press("Grassetto").click();
+    expect(gave).toEqual(["doc.bold"]);
+    expect(panels().hidden).toBe(true);
+    expect(ribbonEl().dataset.collapsed).toBe("true");
+  });
+
+  it("ha l'accesso rapido accanto alle schede, con il suo nome e il suo punto del Tab", () => {
+    const quick = place.querySelector<HTMLElement>(".doc-ribbon-quick")!;
+    expect(quick.getAttribute("role")).toBe("toolbar");
+    expect(quick.getAttribute("aria-label")).toBe("Accesso rapido");
+    expect(quick.nextElementSibling?.getAttribute("role")).toBe("tablist");
+    expect([...quick.querySelectorAll("button")].filter((b) => b.tabIndex === 0)).toHaveLength(1);
+    press("Righe").click();
+    expect(gave).toEqual(["doc.undo"]);
+  });
+
+  it("dice l'accordo, apre il riquadro sul suo pulsante e non preme uno spento", () => {
+    expect(press("Grassetto").getAttribute("aria-keyshortcuts")).toBe("Control+B");
+    press("Timbro").click();
+    expect(asked).toEqual([["find", press("Timbro")]]);
+    const off = press("Corsivo");
+    off.click();
+    const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    off.dispatchEvent(enter);
+    expect(enter.defaultPrevented).toBe(true);
+    expect(gave).toEqual([]);
+  });
+});

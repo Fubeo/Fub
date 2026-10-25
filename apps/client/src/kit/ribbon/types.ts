@@ -147,6 +147,10 @@ export interface RibbonTab<C, K extends string> {
   /// Una scheda che c'è soltanto in un contesto: quale, lo dice chi la
   /// dichiara (`RibbonOptions.contextShown`).
   readonly contextual?: string;
+  /// Gli id dei gruppi che si raccolgono quando la barra è stretta,
+  /// nell'ordine in cui si raccolgono; gli altri restano. Senza, si
+  /// raccolgono tutti, da destra.
+  readonly fold?: readonly string[];
 }
 
 /// I controlli di una colonna, nell'ordine in cui si leggono.

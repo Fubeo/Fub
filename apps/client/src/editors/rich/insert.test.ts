@@ -10,7 +10,8 @@ import { RichEngine } from "./engine";
 import { parseProjection, writeBlock, type AtomInline, type Block, type Para, type Table, type TextInline } from "./projection";
 import { roman } from "./notes";
 import { filterSlice } from "./paste";
-import { base64, fitImage, mountStrip } from "./strip";
+import { base64, fitImage } from "./panels";
+import { mountRichRibbon } from "./ribbon";
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -77,10 +78,10 @@ describe("i link", () => {
     ]);
   });
 
-  it("Mod-k chiede l'indirizzo alla striscia, che lo scrive", () => {
+  it("Mod-k chiede l'indirizzo alla barra, che lo scrive", () => {
     const e = engine([para([{ t: "text", x: "una parola" }])]);
-    const strip = mountStrip(e, () => null);
-    document.body.append(strip.element);
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
     const from = at(e, "parola");
     e.select(from, from + "parola".length);
     expect(e.run("rich.link")).toBe(true);
@@ -94,8 +95,8 @@ describe("i link", () => {
     address.form!.requestSubmit();
     expect(texts(e)[1]).toEqual({ t: "text", x: "parola", href: "https://fub.app" });
     expect(document.querySelector("form")).toBeNull();
-    strip.destroy();
-    // Senza la striscia nessuno chiede: l'accordo non fa niente.
+    ribbon.destroy();
+    // Senza la barra nessuno chiede: l'accordo non fa niente.
     expect(e.run("rich.link")).toBe(false);
   });
 });
@@ -142,12 +143,12 @@ describe("le tabelle nuove", () => {
     expect(shape(e)).toEqual(["p", "1x2", "p"]);
   });
 
-  it("la striscia le dimensiona con la griglia, col mouse e con le frecce", () => {
+  it("la barra le dimensiona con la griglia, col mouse e con le frecce", () => {
     const e = engine([para([{ t: "text", x: "testo" }])]);
     e.select(at(e, "testo"));
-    const strip = mountStrip(e, () => null);
-    document.body.append(strip.element);
-    const open = () => strip.element.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.table")}"]`)!.click();
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
+    const open = () => ribbon.element.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.table")}"]`)!.click();
     open();
     const cell = (rows: number, cols: number) =>
       document.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.table.cells", { rows: String(rows), cols: String(cols) })}"]`)!;
@@ -171,7 +172,7 @@ describe("le tabelle nuove", () => {
     cell(3, 2).dispatchEvent(new Event("pointerover", { bubbles: true }));
     [...document.querySelectorAll<HTMLButtonElement>(".rich-strip-panel-actions button")].find((b) => b.textContent === t("rich.table.apply"))!.click();
     expect(shape(e)).toEqual(["p", "3x2", "p", "2x2", "p", "2x3", "p"]);
-    strip.destroy();
+    ribbon.destroy();
   });
 });
 
@@ -360,16 +361,16 @@ describe("le immagini e le note nuove", () => {
     expect(kinds).toEqual(["image", "note"]);
   });
 
-  it("la striscia sceglie un'immagine e la riduce alla colonna; scrive una nota dal modulo", async () => {
+  it("la barra sceglie un'immagine e la riduce alla colonna; scrive una nota dal modulo", async () => {
     const bytes = Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0));
     vi.stubGlobal("createImageBitmap", async () => ({ width: 1248, height: 312, close() {} }));
     try {
       const e = engine([para([{ t: "text", x: "qui" }])]);
       e.select(at(e, "qui") + 3);
       let answer: Blob | "unreadable" | null = new Blob([bytes], { type: "image/png" });
-      const strip = mountStrip(e, () => null, { pickImage: async () => answer });
-      document.body.append(strip.element);
-      const press = (key: Parameters<typeof t>[0]) => strip.element.querySelector<HTMLButtonElement>(`[aria-label="${t(key)}"]`)!.click();
+      const ribbon = mountRichRibbon(e, () => null, { pickImage: async () => answer });
+      document.body.append(ribbon.element);
+      const press = (key: Parameters<typeof t>[0]) => ribbon.element.querySelector<HTMLButtonElement>(`[aria-label="${t(key)}"]`)!.click();
       press("rich.image");
       await vi.waitFor(() => expect(atoms(e)).toHaveLength(1));
       expect(atoms(e)[0]).toEqual({ t: "atom", kind: "image", w: 468, h: 117, data: PNG });
@@ -385,10 +386,10 @@ describe("le immagini e le note nuove", () => {
       field.form!.requestSubmit();
       expect(atoms(e)[1]).toEqual({ t: "atom", kind: "note", note: "Di chiusura.", end: true });
       expect(document.querySelector("form")).toBeNull();
-      strip.destroy();
+      ribbon.destroy();
       // Senza chi sceglie, niente pulsante dell'immagine.
-      const bare = mountStrip(e, () => null);
-      expect(bare.element.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.image")}"]`)!.hidden).toBe(true);
+      const bare = mountRichRibbon(e, () => null);
+      expect(bare.element.querySelector<HTMLElement>('[data-command="rich.image"]')!.hidden).toBe(true);
       bare.destroy();
     } finally {
       vi.unstubAllGlobals();

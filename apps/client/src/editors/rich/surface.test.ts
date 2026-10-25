@@ -108,20 +108,20 @@ describe("la superficie ricca", () => {
     surface.destroy();
   });
 
-  it("in sola lettura la striscia resta: si cerca e si leggono i commenti, il resto è spento col perché", async () => {
+  it("in sola lettura la barra resta: si cerca e si leggono i commenti, il resto è spento col perché", async () => {
     const { parent, surface, onChange } = mount(() => Promise.resolve(engineModule));
     await flush();
     const comments = [{ id: 7, by: "Ada", at: "2026-10-18T14:00:00Z", text: "Da rivedere." }];
     surface.buffer!.setDoc(JSON.stringify({ ...JSON.parse(SOURCE), readonly: "protected", comments }));
-    const strip = parent.querySelector<HTMLElement>(".rich-strip")!;
-    expect(strip.hidden).toBe(false);
-    const named = (label: string) => strip.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+    const ribbon = parent.querySelector<HTMLElement>(".rich-ribbon")!;
+    expect(ribbon.hidden).toBe(false);
+    const named = (label: string) => ribbon.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
     // La sottolineatura è spenta, raggiungibile, e dice perché.
-    const bold = strip.querySelector<HTMLButtonElement>('[data-action="rich.underline"]')!;
+    const bold = ribbon.querySelector<HTMLButtonElement>('[data-command="rich.underline"] button')!;
     expect(bold.getAttribute("aria-disabled")).toBe("true");
     bold.focus();
     expect(document.getElementById(bold.getAttribute("aria-describedby")!)!.textContent).toBe(
-      t("rich.strip.readonly", { command: bold.getAttribute("aria-label")! }),
+      t("rich.ribbon.unavailable", { command: bold.getAttribute("aria-label")!, reason: t("rich.ribbon.readonly") }),
     );
     bold.click();
     expect(onChange).not.toHaveBeenCalled();
@@ -131,9 +131,10 @@ describe("la superficie ricca", () => {
       bold.dispatchEvent(down);
       expect(down.defaultPrevented).toBe(true);
     }
-    expect(strip.querySelector<HTMLSelectElement>(".rich-strip-font")!.disabled).toBe(true);
+    const font = ribbon.querySelector<HTMLSelectElement>('[data-command="rich.font"] select')!;
+    expect(font.disabled).toBe(true);
     // La scelta spenta non tiene il Tab della barra.
-    expect(strip.querySelector<HTMLSelectElement>(".rich-strip-font")!.tabIndex).toBe(-1);
+    expect(font.tabIndex).toBe(-1);
     // Trova si apre, cerca, e non offre di sostituire.
     named(t("rich.find")).click();
     const bar = parent.querySelector<HTMLElement>(".rich-findbar")!;
@@ -236,17 +237,17 @@ describe("la superficie ricca", () => {
     surface.destroy();
   });
 
-  it("ogni gruppo della striscia ha un nome", async () => {
+  it("ogni gruppo della barra ha un nome", async () => {
     const { parent, surface } = mount(() => Promise.resolve(engineModule));
     await flush();
     surface.buffer!.setDoc(SOURCE);
-    const groups = [...parent.ownerDocument.querySelectorAll(".rich-strip-group")];
+    const groups = [...parent.ownerDocument.querySelectorAll(".rich-ribbon-group")];
     expect(groups.length).toBeGreaterThan(0);
     for (const group of groups) {
       expect(group.getAttribute("role")).toBe("group");
       expect(group.getAttribute("aria-label")).toMatch(/\S/);
     }
-    expect(groups.map((group) => group.getAttribute("aria-label"))).toContain(t("rich.strip.group.paragraph"));
+    expect(groups.map((group) => group.getAttribute("aria-label"))).toContain(t("rich.ribbon.group.paragraph"));
     surface.destroy();
   });
 
@@ -271,12 +272,18 @@ describe("la superficie ricca", () => {
     expect(parent.querySelector(".rich-findbar")).toBeNull();
   });
 
-  it("ogni riquadro della striscia ha un titolo, i campi del kit e un'azione principale", async () => {
+  it("ogni riquadro della barra ha un titolo, i campi del kit e un'azione principale", async () => {
     const { parent, surface } = mount(() => Promise.resolve(engineModule));
     await flush();
     surface.buffer!.setDoc(SOURCE);
-    const openers = [...parent.ownerDocument.querySelectorAll<HTMLButtonElement>(".rich-strip button[aria-haspopup]")];
-    expect(openers.length).toBeGreaterThan(8);
+    // I pulsanti che aprono un riquadro; non i gruppi raccolti, che aprono
+    // i loro controlli.
+    const openers = [
+      ...parent.ownerDocument.querySelectorAll<HTMLButtonElement>('.rich-ribbon button[aria-haspopup="dialog"]:not(.rich-ribbon-group-toggle)'),
+    ].filter((opener) => !opener.closest<HTMLElement>("[data-command]")!.hidden && opener.getAttribute("aria-disabled") !== "true");
+    // Senza pagina non ci sono Pagina e Intestazione; senza selezione il
+    // commento nuovo è spento.
+    expect(openers.length).toBeGreaterThan(7);
     let opened = 0;
     for (const opener of openers) {
       opener.click();
@@ -304,20 +311,18 @@ describe("la superficie ricca", () => {
     surface.destroy();
   });
 
-  it("la mini-barra è la striscia ristretta, e smontata non lascia niente", async () => {
+  it("la mini-barra è quella della barra, ristretta, e smontata non lascia niente", async () => {
     const { surface } = mount(() => Promise.resolve(engineModule));
     await flush();
     surface.buffer!.setDoc(SOURCE);
     const host = document.createElement("div");
     document.body.append(host);
     const unmount = surface.miniBar!()!.mount(host);
-    const mini = host.querySelector(".rich-strip-mini")!;
+    const mini = host.querySelector(".rich-ribbon-mini")!;
     expect(mini).not.toBeNull();
-    expect(mini.querySelector(".rich-strip-bold")).not.toBeNull();
-    expect(mini.querySelector(".rich-strip-font")).not.toBeNull();
-    expect(mini.querySelector("[data-action='rich.link']")).toBeNull();
-    // La striscia intera non ha l'enfasi: sta nella barra di formattazione.
-    expect(document.querySelectorAll(".rich-strip-bold")).toHaveLength(1);
+    expect(mini.querySelector('[data-command="markdown.bold"] button')).not.toBeNull();
+    expect(mini.querySelector('[data-command="rich.font"] select')).not.toBeNull();
+    expect(mini.querySelector('[data-command="rich.link"]')).toBeNull();
     unmount();
     expect(host.childElementCount).toBe(0);
     surface.destroy();

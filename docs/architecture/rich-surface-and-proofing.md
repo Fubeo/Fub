@@ -95,7 +95,7 @@ l'IPC.
   (`editors/rich/paste.ts`) toglie i `k` che il documento non ha e i link non
   web; allineamento e disposizione di un paragrafo incollato restano.
 - `editors/rich/commands.ts` esegue le azioni dell'editor con gli id della
-  superficie Markdown che hanno lo stesso gesto; la barra di formattazione e
+  superficie Markdown che hanno lo stesso gesto; la barra, la bolla della selezione e
   l'intento `fub.editor.action` le usano senza saperlo. Ogni superficie ha la
   propria cronologia `prosemirror-history`; ciò che arriva da un altro riquadro
   o dal disco sostituisce i blocchi diversi fuori dalla cronologia.
@@ -103,10 +103,20 @@ l'IPC.
   (`.rich-page`, `role="document"`), non dentro il documento: Invio porta a
   scrivere, dove Tab scrive una tabulazione o sposta il livello di un
   elenco, e dopo un Esc, per due secondi, Tab esce.
-- `editors/rich/strip.ts` è la striscia del carattere e del paragrafo,
-  caricata col motore: i valori (tipo, dimensione, colori, stile del
-  paragrafo, spaziature) non sono gesti che commutano e non passano dalla
-  barra di formattazione dei plugin. «Copia formato» lo tiene
+- `editors/rich/ribbon.ts` è la barra multifunzione del documento, caricata
+  col motore: la barra del kit (`kit/ribbon/ribbon.ts`, la stessa del
+  foglio) con le schede Home, Inserisci, Layout, Revisione, Visualizza e la
+  contestuale Tabella, Annulla e Ripeti accanto alle schede, le lettere con
+  Alt o F10 e Ctrl+F1 per ritirarla. Ogni controllo è un'azione del motore
+  (`RICH_ACTION_IDS`, con i suoi accordi), un valore che il motore scrive
+  (tipo, dimensione, stile del paragrafo, con la galleria che scrive ogni
+  nome nel carattere del documento) o un riquadro di
+  `editors/rich/panels.ts`. Il catalogo della barra spegne col perché ciò
+  che non si dà adesso: in sola lettura ciò che scrive (restano Trova,
+  Conteggio, Commenti, scorrere le revisioni e lo zoom), mentre si registra
+  il formato. La superficie dichiara `ownBar`, e la barra di formattazione
+  della shell non si mostra sopra; la mini-barra del menu è quella della
+  barra. Lo zoom è il comando della shell (`runShellCommand`). «Copia formato» lo tiene
   il motore e lo applica alla prossima selezione finita (puntatore o Maiusc
   rilasciati). **Immagine** sceglie un'immagine del vault con la porta delle
   immagini del disegno (`DrawingImagePort`: `pick`, poi `read` dal documento
@@ -115,7 +125,7 @@ l'IPC.
   un paragrafo alla volta, con una foglia (a-capo, oggetto, segno) per
   posizione: un'occorrenza torna a un intervallo esatto e non porta via un
   segno. Le occorrenze sono decorazioni del plugin `findPlugin`, che il
-  motore tiene sempre e la striscia accende con `RichEngine.find`; trova e
+  motore tiene sempre e la barra di ricerca accende con `RichEngine.find`; trova e
   sostituisci è un'azione che chiede (`ASK_ACTIONS`, come il link), aperta
   da chi la sa chiedere.
 - Le revisioni tracciate attraversano la proiezione come `ins` e `del`
@@ -139,7 +149,7 @@ l'IPC.
   di `comments.ts` cambia segni ed elenco in una battuta (`setDocAttribute`);
   `commentPlugin` dà lo sfondo agli intervalli aperti. Il controllo di
   rilettura accetta l'id durevole e la data UTC che il codec dà a un
-  commento nuovo. La striscia offre commenti nuovi soltanto ai formati di
+  commento nuovo. La barra offre commenti nuovi soltanto ai formati di
   `RICH_REVIEW_FORMATS` (`docx`).
 - Registrare le modifiche è il campo `track` della proiezione
   (`settings.track_changes` del documento), nello schema l'attributo `track`
