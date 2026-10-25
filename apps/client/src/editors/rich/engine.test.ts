@@ -135,6 +135,15 @@ describe("il motore ricco", () => {
     for (const atom of document.body.querySelectorAll<HTMLElement>(".rich-atom")) expect(atom.title).toContain(t("rich.atom.kept"));
   });
 
+  it("una casella troppo stretta per il nome mostra il segno, e il nome resta nel suggerimento", () => {
+    engine(source([{ t: "para", role: { kind: "body" }, k: "P", c: [{ t: "atom", k: "I", kind: "image", w: 40, h: 30 }] } as Block]));
+    const atom = document.body.querySelector<HTMLElement>(".rich-atom")!;
+    expect(atom.querySelector(".rich-atom-name")).toBeNull();
+    expect(atom.querySelector(".rich-atom-glyph")).not.toBeNull();
+    expect(atom.title).toBe(`${t("rich.atom.image")} · 1,4 × 1,1 cm. ${t("rich.atom.kept")}`);
+    expect(atom.getAttribute("aria-label")).toBe(t("rich.atom.image"));
+  });
+
   it("una proiezione in sola lettura non si scrive", () => {
     const e = engine(source([para("ciao")], { readonly: "revisions" }));
     expect(e.intake()).toEqual({ kind: "ok", readonly: "revisions" });

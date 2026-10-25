@@ -229,6 +229,11 @@ const DRAWN: ReadonlySet<AtomKind> = new Set<AtomKind>(["image", "graphic", "sha
 /// Le specie che si mostrano come segnaposto, con un nome e una misura.
 const PLACEHOLDERS: ReadonlySet<AtomKind> = new Set<AtomKind>([...DRAWN, "equation"]);
 
+/// Sotto questa larghezza, in pixel CSS, una casella mostra soltanto il segno
+/// della sua specie: il nome andrebbe a capo dentro la parola. Il nome e la
+/// misura restano nel suggerimento e per chi legge con la sintesi vocale.
+const NAME_ROOM_PX = 72;
+
 /// «4 × 3 cm» da una misura in punti, con la virgola della lingua.
 export function centimetres(w: number, h: number): string {
   const format = new Intl.NumberFormat(resolvedLanguage(), { maximumFractionDigits: 1 });
@@ -437,8 +442,12 @@ const nodes: Record<string, NodeSpec> = {
       // grande, e il suggerimento dice perché non si vede.
       if (PLACEHOLDERS.has(kind)) {
         attrs.title = `${attrs["aria-label"]}. ${t("rich.atom.kept")}`;
-        const said = kind === "equation" && label ? `${name} ${label}` : w !== null && h !== null ? `${name} · ${centimetres(w, h)}` : name;
-        return ["span", attrs, ["span", { class: "rich-atom-glyph", "aria-hidden": "true" }, ATOM_GLYPHS[kind]], ["span", { class: "rich-atom-name" }, said]];
+        const sized = w !== null && h !== null;
+        const said = kind === "equation" && label ? `${name} ${label}` : sized ? `${name} · ${centimetres(w, h)}` : name;
+        if (sized) attrs.title = `${name} · ${centimetres(w, h)}${told ? `: ${told}` : ""}. ${t("rich.atom.kept")}`;
+        const glyph = ["span", { class: "rich-atom-glyph", "aria-hidden": "true" }, ATOM_GLYPHS[kind]] as const;
+        if (sized && DRAWN.has(kind) && w * (4 / 3) < NAME_ROOM_PX) return ["span", attrs, glyph];
+        return ["span", attrs, glyph, ["span", { class: "rich-atom-name" }, said]];
       }
       // Il richiamo di una nota è il suo numero, che dà la posizione
       // (`notes.ts`): il segno si vede soltanto finché non c'è.
