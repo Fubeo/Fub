@@ -1,7 +1,7 @@
 # La provenienza della copia di WordCraft, per `tools/vendor-craft/vendor.mjs`.
 # Non si modifica a mano: la scrive `update`. Un tag è informativo, lo SHA no.
 repository = "https://github.com/storytold/wordcraft"
-mirror = ""
+mirror = "https://github.com/Fubeo/wordcraft"
 rev = "9130181a5fdaee2293e67756fd5458c601489f3c"
 tag = "v0.10.0"
 date = "2026-10-22"

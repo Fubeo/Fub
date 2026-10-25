@@ -5,6 +5,12 @@ Questa cartella contiene codice di
 modifiche elencate qui sotto. Fub non dipende da GridCraft via Git:
 `deny.toml` ammette soltanto crates.io, e i crate non sono pubblicati là.
 
+Il fork [`Fubeo/gridcraft`](https://github.com/Fubeo/gridcraft) è il mirror: il campo
+`mirror` di `upstream.lock` lo nomina, e `verify-upstream` lo prova dopo
+l'upstream. Prende rami e tag dell'upstream senza potare e senza riscrivere un
+tag, così una revisione copiata resta raggiungibile anche se l'upstream la
+cancella.
+
 Dieci crate: quelli del dominio del foglio di calcolo, cioè i tipi comuni
 (`core`), il parser delle formule (`formula`), le funzioni (`functions`), i
 formati numerici (`numfmt`), il modello della cartella (`model`), il calcolo
