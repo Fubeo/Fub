@@ -2168,6 +2168,12 @@
   background-color: var(--doc-find-now, var(--doc-highlight));
   outline: 1px solid var(--doc-fg);
 }
+/* L'anello di un punto raggiunto (Trova, una revisione, un commento): il
+   colore del cursore, che dice «qui». Si stringe e sfuma una volta. */
+.rich-goto-ring {
+  border: 2px solid var(--doc-caret);
+  border-radius: 4px;
+}
 .rich-comment {
   background-color: color-mix(in oklab, var(--doc-comment, var(--doc-link)) 16%, transparent);
   border-bottom: 2px solid var(--doc-comment, var(--doc-link));

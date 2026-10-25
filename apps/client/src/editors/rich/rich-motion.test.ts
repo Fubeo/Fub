@@ -6,9 +6,9 @@
 //
 // happy-dom non impagina: i rettangoli vengono da una scrivania finta.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createManualDriver, setMotionDriver, type ManualDriver } from "../../moto";
+import { createManualDriver, setMotionDriver, setMotionPreference, type ManualDriver } from "../../moto";
 import { RichEngine } from "./engine";
-import { keepReadingPoint, readingPoint } from "./rich-motion";
+import { keepReadingPoint, lineBoxes, readingPoint, RichMotion } from "./rich-motion";
 import type { Block, Page } from "./projection";
 import { PX_PER_PT } from "./sheets";
 
@@ -20,6 +20,7 @@ afterEach(() => {
   document.body.replaceChildren();
   vi.restoreAllMocks();
   setMotionDriver(null);
+  setMotionPreference("system");
   driver = null;
 });
 
@@ -164,5 +165,84 @@ describe("il foglio che nasce", () => {
     driver.advance(1000);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.querySelector(".rich-sheet-ghost")).toBeNull();
+  });
+});
+
+describe("andare a un punto", () => {
+  /// Una vista alta 300 px su una scrivania alta 3000, con lo zoom a 1.
+  function view() {
+    const page = document.createElement("div");
+    const desk = page.appendChild(document.createElement("div"));
+    const layer = desk.appendChild(document.createElement("div"));
+    const content = desk.appendChild(document.createElement("div"));
+    document.body.append(page);
+    Object.defineProperty(page, "clientHeight", { value: 300 });
+    Object.defineProperty(page, "scrollHeight", { value: 3000 });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this === desk) return rect(-page.scrollTop, 3000, 800);
+      return rect(0, 300, 800);
+    });
+    const motion = new RichMotion({ page, desk, layer, content: () => content, scale: () => 1, measure: () => undefined });
+    return { page, desk, motion };
+  }
+  const line = (top: number, left = 100, width = 200) => ({ top, left, width, height: 20 });
+
+  it("i rettangoli del testo si uniscono in una riga per altezza", () => {
+    expect(lineBoxes([line(40, 300, 50), line(10, 100, 80), line(12, 180, 40), { top: 50, left: 0, width: 5, height: 0 }])).toEqual([
+      { left: 100, top: 10, width: 120, height: 22 },
+      { left: 300, top: 40, width: 50, height: 20 },
+    ]);
+  });
+
+  it("un punto fuori vista arriva a un terzo; poi l'anello si stringe, sfuma e se ne va", async () => {
+    driver = createManualDriver();
+    setMotionDriver(driver);
+    const { page, desk, motion } = view();
+    motion.goTo([line(1200), line(1220)], true);
+    // L'anello aspetta che la vista sia arrivata.
+    expect(desk.querySelector(".rich-goto-ring")).toBeNull();
+    let rings: HTMLElement[] = [];
+    for (let ms = 0; ms < 2000 && rings.length === 0; ms += 1000 / 60) {
+      driver.advance(1000 / 60);
+      rings = [...desk.querySelectorAll<HTMLElement>(".rich-goto-ring")];
+    }
+    expect(rings).toHaveLength(2);
+    expect(Math.abs(page.scrollTop - 1100)).toBeLessThanOrEqual(24);
+    // Sulla scrivania, dove sta il testo: scorre con lui.
+    expect(rings[0]!.style.top).toBe("1200px");
+    expect(rings[0]!.getAttribute("aria-hidden")).toBe("true");
+    const play = driver.plays.find((p) => p.el === rings[0]);
+    expect(play?.keyframes[0]?.opacity).toBe(1);
+    expect(play?.keyframes[play.keyframes.length - 1]?.opacity).toBe(0);
+    driver.advance(1000);
+    expect(page.scrollTop).toBeCloseTo(1100, 0);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(desk.querySelector(".rich-goto-ring")).toBeNull();
+    motion.destroy();
+  });
+
+  it("un punto che si vede già non fa scorrere; un salto nuovo toglie l'anello di prima", () => {
+    driver = createManualDriver();
+    setMotionDriver(driver);
+    const { page, desk, motion } = view();
+    motion.goTo([line(120)], true);
+    motion.goTo([line(160)], true);
+    driver.advance(1000);
+    expect(page.scrollTop).toBe(0);
+    expect(desk.querySelectorAll(".rich-goto-ring")).toHaveLength(1);
+    motion.destroy();
+    expect(desk.querySelector(".rich-goto-ring")).toBeNull();
+  });
+
+  it("nel livello ridotto lo scorrimento salta e l'anello non c'è", () => {
+    driver = createManualDriver();
+    setMotionDriver(driver);
+    setMotionPreference("reduced");
+    const { page, desk, motion } = view();
+    motion.goTo([line(2000)], true);
+    expect(page.scrollTop).toBe(1900);
+    expect(desk.querySelector(".rich-goto-ring")).toBeNull();
+    expect(driver.plays).toHaveLength(0);
+    motion.destroy();
   });
 });

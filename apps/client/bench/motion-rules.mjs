@@ -634,6 +634,22 @@ export const CHOREOGRAPHIES = [
     reversing: sheetsMore(0),
     returned: sheetsMore(0),
   },
+  {
+    id: "rich-goto",
+    title: "Documento: andando a una revisione la vista la porta a un terzo, e un anello sopra di lei si stringe e sfuma",
+    sources: ["src/editors/rich/rich-motion.ts"],
+    scene: "document-docx",
+    // Il bottone della barra, dal suo `click()`: la scheda Revisione può non
+    // essere quella aperta.
+    act: click('[data-command="rich.rev.next"] button'),
+    arrived: (page) =>
+      page.evaluate(() => {
+        const selection = document.getSelection();
+        return !!selection && !selection.isCollapsed && !!selection.anchorNode && !!document.querySelector(".rich-content")?.contains(selection.anchorNode);
+      }),
+    undo: null,
+    irreversible: "andare a un punto non si disfa: il punto dopo è un altro salto, con il suo anello",
+  },
 ];
 
 /// I file che fanno partire corse di `moto` e che il banco non guarda, con la

@@ -278,6 +278,16 @@ vista, un foglio nuovo esce da quello sopra, di uno tolto resta una sagoma
 fuori non muove niente; le coreografie `rich-*` di `bench/motion-rules.mjs`
 lo misurano.
 
+Andare a un punto (Trova, la revisione dopo o prima, una voce di Commenti o
+di Revisioni) è una transazione col segno `GO_TO`. Il motore la scorre da sé,
+anche quando il fuoco è nella barra o nel pannello: se il punto non si vede
+già, `RichMotion.goTo` lo porta a un terzo della vista con un valore a molla
+che si ferma quando chi legge scorre; arrivato, un anello per riga
+(`.rich-goto-ring`, al più quattro) sta sulla scrivania sopra il testo, si
+stringe e sfuma in `DURATION.large`, poi se ne va. Trova che resta sulla
+stessa occorrenza mentre si scrive la parola non riaccende l'anello. Nel
+moto ridotto lo scorrimento salta e l'anello non c'è.
+
 ## Correttore condiviso
 
 Il correttore ha un motore e un client per tutte le superfici di prosa, e un

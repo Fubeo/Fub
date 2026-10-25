@@ -2173,6 +2173,9 @@ body {
    scrivania. */
 .rich-sheet-paper { position: absolute; inset: 0; box-sizing: border-box; pointer-events: auto; }
 .rich-sheet-ghost { position: absolute; pointer-events: none; }
+/* L'anello sopra un punto raggiunto: sulla scrivania, dopo il testo, e
+   largo quanto la riga più il suo bordo. */
+.rich-goto-ring { position: absolute; box-sizing: content-box; margin: -4px 0 0 -4px; padding: 2px; pointer-events: none; }
 .look-tema .rich-sheets { display: none; }
 /* Un foglio per interruzione (`editors/rich/sheets.ts`): le sagome stanno
    in linea dove la misura le mette, e dove un foglio finisce il testo lascia

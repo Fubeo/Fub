@@ -45,7 +45,7 @@ import { DEFAULT_PAGE, pageVariables, samePage, setRunningAt } from "./page";
 import { openRunningEditor, type RunningEditor } from "./running";
 import { DESK_INSET, fitScale, PX_PER_PT, runningInset, SheetDesk, sheetAt, sheetElement, sheetPlanOf, sheetsPlugin } from "./sheets";
 import { richProof } from "./proof";
-import { RichMotion } from "./rich-motion";
+import { GO_TO, lineBoxes, RichMotion, type Rect } from "./rich-motion";
 import { commentPlugin, commentsOf } from "./comments";
 import { notePlugin } from "./notes";
 import { sectionPlugin } from "./breaks";
@@ -111,6 +111,10 @@ export class RichEngine {
   #running: RunningEditor | null = null;
   /// Il moto della carta: modalità, zoom, fogli che nascono.
   readonly #motion: RichMotion;
+  /// La transazione in corso va a un punto (`GO_TO`), con l'anello o no; e
+  /// l'ultima occorrenza a cui è andato Trova.
+  #goingTo: { ring: boolean } | null = null;
+  #lastFound = -1;
 
   constructor(parent: HTMLElement, options: RichEngineOptions) {
     this.#options = options;
@@ -142,6 +146,9 @@ export class RichEngine {
         tabindex: "-1",
       }),
       dispatchTransaction: (tr) => this.#dispatch(tr),
+      // Andare a un punto ha il suo scorrimento (`RichMotion.goTo`, dopo
+      // l'aggiornamento); il resto scorre quanto basta, come sempre.
+      handleScrollToSelection: () => this.#goingTo !== null,
       transformPasted: (slice, view) => this.#filter(slice, view),
       handleDOMEvents: {
         pointerdown: () => {
@@ -377,7 +384,23 @@ export class RichEngine {
     // Un foglio che nasce da ciò che si scrive si muove; uno che arriva col
     // documento no.
     if (tr.docChanged && !tr.getMeta(SYNC)) this.#sheets.local();
-    this.#view.updateState(state);
+    const goTo = tr.getMeta(GO_TO) as true | "find" | undefined;
+    if (goTo) {
+      // Trova che resta sulla stessa occorrenza mentre si scrive la parola non
+      // riaccende l'anello.
+      const at = state.selection.from;
+      this.#goingTo = { ring: goTo !== "find" || at !== this.#lastFound };
+      this.#lastFound = goTo === "find" ? at : -1;
+    }
+    try {
+      this.#view.updateState(state);
+    } finally {
+      // Anche senza il fuoco, che ProseMirror vuole per scorrere: si va a un
+      // punto dalla barra di Trova o dal pannello.
+      const going = this.#goingTo;
+      this.#goingTo = null;
+      if (going) this.#motion.goTo(this.#lines(this.#view), going.ring);
+    }
     if (tr.docChanged && !tr.getMeta(SYNC)) {
       // Ciò che il documento ha, l'ha avuto: un taglia e incolla lo ritrova.
       collectKeys(state.doc, this.#known);
@@ -485,6 +508,26 @@ export class RichEngine {
     }, this.#view);
     if (moved && focus) this.#view.focus();
     return moved;
+  }
+
+  /// Le righe della selezione sullo schermo; del cursore, se è vuota.
+  #lines(view: EditorView): Rect[] {
+    const { from, to, empty } = view.state.selection;
+    try {
+      if (!empty) {
+        const start = view.domAtPos(from);
+        const end = view.domAtPos(to);
+        const range = document.createRange();
+        range.setStart(start.node, start.offset);
+        range.setEnd(end.node, end.offset);
+        const lines = typeof range.getClientRects === "function" ? lineBoxes([...range.getClientRects()]) : [];
+        if (lines.length > 0) return lines;
+      }
+      const at = view.coordsAtPos(from);
+      return [{ left: at.left, top: at.top, width: Math.max(1, at.right - at.left), height: at.bottom - at.top }];
+    } catch {
+      return [];
+    }
   }
 
   #filter(slice: Slice, view: EditorView): Slice {

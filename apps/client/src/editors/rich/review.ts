@@ -24,6 +24,7 @@ import { Plugin, PluginKey, TextSelection, type Command, type EditorState, type 
 import { Decoration, DecorationSet } from "prosemirror-view";
 import { authorClass, authorSlot, authorSlots } from "./authors";
 import type { Rev } from "./projection";
+import { GO_TO } from "./rich-motion";
 import { revTitle, richSchema, sameRev } from "./schema";
 import { untracked } from "./track";
 
@@ -175,7 +176,7 @@ export function showMatches(query: FindQuery | null, current = -1): Command {
     if (dispatch) {
       const tr = state.tr.setMeta(findKey, { query, current }).setMeta("addToHistory", false);
       const match = query ? findMatches(state.doc, query)[current] : undefined;
-      if (match) tr.setSelection(TextSelection.create(state.doc, match.from, match.to)).scrollIntoView();
+      if (match) tr.setSelection(TextSelection.create(state.doc, match.from, match.to)).scrollIntoView().setMeta(GO_TO, "find");
       dispatch(tr);
     }
     return true;
@@ -400,7 +401,7 @@ export function goToChange(kind: RevKind, from: number): Command {
   return (state, dispatch) => {
     const found = changeAt(state.doc, kind, from);
     if (!found) return false;
-    if (dispatch) dispatch(select(state.tr, found.change).scrollIntoView());
+    if (dispatch) dispatch(select(state.tr, found.change).scrollIntoView().setMeta(GO_TO, true));
     return true;
   };
 }
@@ -441,7 +442,7 @@ export function goToRevision(direction: 1 | -1): Command {
     const change = direction === 1
       ? all.find((c) => (empty ? c.from >= to : c.from >= to || c.from > from)) ?? all[0]!
       : [...all].reverse().find((c) => c.from < from) ?? all[all.length - 1]!;
-    if (dispatch) dispatch(select(state.tr, change).scrollIntoView());
+    if (dispatch) dispatch(select(state.tr, change).scrollIntoView().setMeta(GO_TO, true));
     return true;
   };
 }

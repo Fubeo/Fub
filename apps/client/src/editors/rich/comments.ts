@@ -13,6 +13,7 @@ import type { Node as PmNode } from "prosemirror-model";
 import { Plugin, PluginKey, TextSelection, type Command, type EditorState, type Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import type { Anchor, CommentView } from "./projection";
+import { GO_TO } from "./rich-motion";
 import { richSchema } from "./schema";
 import { untracked } from "./track";
 
@@ -230,7 +231,7 @@ export function goToComment(id: number): Command {
     if (place?.start === undefined || place.end === undefined || place.end <= place.start) return false;
     if (dispatch) {
       const selection = TextSelection.create(state.doc, place.start + 1, place.end);
-      dispatch(state.tr.setSelection(selection).scrollIntoView());
+      dispatch(state.tr.setSelection(selection).scrollIntoView().setMeta(GO_TO, true));
     }
     return true;
   };

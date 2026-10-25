@@ -780,6 +780,7 @@
     "rich-autore-ins",
     "rich-autore-del",
     "rich-changed",
+    "rich-goto-ring",
     "rich-sheet-head",
     "rich-sheet-foot",
     "rich-sheet-name",
@@ -2083,6 +2084,7 @@
     "rich-autore-ins": "segno",
     "rich-autore-del": "segno",
     "rich-changed": "segno",
+    "rich-goto-ring": "segno",
     "rich-sheet-head": "segno",
     "rich-sheet-foot": "segno",
     "rich-sheet-name": "segno",
@@ -4639,7 +4641,8 @@
         "rich-autore-6",
         "rich-autore-ins",
         "rich-autore-del",
-        "rich-changed"
+        "rich-changed",
+        "rich-goto-ring"
       ],
       "states": [
         "rest"
@@ -7339,7 +7342,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 38,
-    "hooks": 1301,
+    "hooks": 1302,
     "state_names": 7,
     "assigned_states": 641,
     "components": 192,

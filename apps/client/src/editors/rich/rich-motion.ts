@@ -1,5 +1,5 @@
-// Il moto della carta del documento: le modalità, la barra, lo zoom e il
-// foglio che nasce.
+// Il moto della carta del documento: le modalità, la barra, lo zoom, il
+// foglio che nasce e l'andare a un punto.
 //
 // La regola è quella del palco (`shells/scrittoio/stage-motion.ts`):
 //
@@ -17,14 +17,18 @@
 // - un foglio **nuovo** (un salto pagina scritto) esce dal bordo di quello
 //   sopra e i fogli sotto scivolano; di uno **tolto** resta una sagoma che si
 //   dissolve, mentre quello sopra si allunga. Quando il documento si apre o
-//   cambia da fuori, niente si muove.
+//   cambia da fuori, niente si muove;
+// - **andare a un punto** (Trova, una revisione, un commento) porta il punto
+//   a un terzo della vista, se non si vede già; poi un anello sopra il punto
+//   si stringe e sfuma, una volta. Nel livello ridotto lo scorrimento salta e
+//   l'anello non c'è.
 //
 // Chi cambia la modalità (la shell, con la classe `look-*` e `data-mode`) non
 // ne sa niente: il modulo segue gli attributi. Quando la mutazione arriva il
 // DOM è già cambiato, quindi il «prima» è una fotografia tenuta aggiornata a
 // ogni scorrimento e a ogni misura. Lo zoom e i fogli li cambia il motore, che
 // chiama il modulo prima di cambiare.
-import { animate, DURATION, liveState, motionDriver, motionLevel, type Motion, type MotionState } from "../../moto";
+import { animate, DURATION, liveState, motionDriver, motionLevel, springValue, type Motion, type MotionState, type SpringValue } from "../../moto";
 import { openLifetime } from "../../ui/lifetime";
 
 /// Di quanto scorre la barra rientrando (px): lo stesso passo dei cassetti.
@@ -37,6 +41,20 @@ const SHEET_TRAVEL_MAX = 64;
 const GHOST_SCALE = 0.97;
 /// Sotto questa differenza (px) un foglio non si è mosso.
 const NEGLIGIBLE_PX = 0.5;
+/// Il segno sulle transazioni che vanno a un punto: la vista ci arriva col
+/// suo scorrimento, e l'anello lo mostra (`RichMotion.goTo`). Vale `true`, o
+/// `"find"` per Trova, che va avanti mentre si scrive la parola.
+export const GO_TO = "fub-rich-goto";
+/// Dove arriva il punto: a un terzo della vista, dall'alto.
+const GOTO_LINE = 1 / 3;
+/// Quanto dentro la vista sta un punto che non chiede di scorrere (px).
+const GOTO_MARGIN = 48;
+/// Di quanto l'anello parte più largo del punto, per lato (px).
+const RING_SPREAD = 8;
+/// Le righe del punto che l'anello cerchia, al più.
+const RING_LINES = 4;
+/// A quanti px dal punto lo scorrimento lascia comparire l'anello.
+const RING_NEAR_PX = 24;
 
 export interface Rect {
   readonly left: number;
@@ -166,6 +184,27 @@ function moves(record: MutationRecord, ribbon: HTMLElement | null): boolean {
   }
 }
 
+/// Le righe di un punto, dai rettangoli del suo testo (`Range.getClientRects`):
+/// quelli che stanno alla stessa altezza si uniscono, uno per riga, dall'alto.
+export function lineBoxes(rects: readonly Rect[]): Rect[] {
+  const lines: Rect[] = [];
+  const sorted = rects.filter((r) => r.height > 0).sort((a, b) => a.top - b.top || a.left - b.left);
+  for (const r of sorted) {
+    const last = lines[lines.length - 1];
+    const middle = r.top + r.height / 2;
+    if (last && middle > last.top && middle < last.top + last.height) {
+      const left = Math.min(last.left, r.left);
+      const right = Math.max(last.left + last.width, r.left + r.width);
+      const top = Math.min(last.top, r.top);
+      const bottom = Math.max(last.top + last.height, r.top + r.height);
+      lines[lines.length - 1] = { left, top, width: right - left, height: bottom - top };
+    } else {
+      lines.push({ left: r.left, top: r.top, width: r.width, height: r.height });
+    }
+  }
+  return lines;
+}
+
 function rectOf(el: Element): Rect {
   const rect = el.getBoundingClientRect();
   return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
@@ -193,6 +232,12 @@ export class RichMotion {
   #ribbonRun: Motion | null = null;
   readonly #papers = new Map<HTMLElement, Motion>();
   #observer: MutationObserver | null = null;
+  /// Lo scorrimento che porta a un punto, e gli anelli in volo.
+  #scroll: SpringValue | null = null;
+  #scrollTarget = 0;
+  readonly #rings = new Set<HTMLElement>();
+  /// L'anello che aspetta lo scorrimento, in px della carta.
+  #pendingRing: readonly SheetBox[] | null = null;
 
   constructor(options: RichMotionOptions) {
     this.#options = options;
@@ -202,6 +247,107 @@ export class RichMotion {
       sizes.observe(options.page);
       sizes.observe(options.desk);
       this.#life.add(() => sizes.disconnect());
+    }
+    // Chi scorre da sé ferma lo scorrimento verso il punto.
+    const stop = () => {
+      this.#scroll?.stop();
+      this.#pendingRing = null;
+    };
+    for (const name of ["wheel", "pointerdown", "touchstart"] as const) this.#life.listen(options.page, name, stop, { passive: true });
+  }
+
+  /// Va al punto le cui righe, sullo schermo, sono `lines`: se non si vede
+  /// già, la vista lo porta a un terzo della sua altezza; poi, se `ring`,
+  /// l'anello, quando lo scorrimento è arrivato. L'anello sta sulla
+  /// scrivania, sopra il testo, e scorre con lui.
+  goTo(lines: readonly Rect[], ring: boolean): void {
+    if (this.#life.closed || lines.length === 0) return;
+    const { page, desk } = this.#options;
+    this.#clearRings();
+    const scale = this.#options.scale();
+    const origin = desk.getBoundingClientRect();
+    const boxes = lines.slice(0, RING_LINES).map((line) => ({
+      left: (line.left - origin.left) / scale,
+      top: (line.top - origin.top) / scale,
+      width: line.width / scale,
+      height: line.height / scale,
+    }));
+    this.#pendingRing = ring ? boxes : null;
+    const view = page.getBoundingClientRect();
+    const first = lines[0]!;
+    const last = lines[lines.length - 1]!;
+    const inside = first.top >= view.top + GOTO_MARGIN && last.top + last.height <= view.bottom - GOTO_MARGIN;
+    if (!inside) {
+      const most = Math.max(0, page.scrollHeight - page.clientHeight);
+      const target = Math.min(most, Math.max(0, page.scrollTop + first.top - view.top - view.height * GOTO_LINE));
+      this.#scrollTo(target);
+    }
+    this.#near();
+  }
+
+  /// L'anello in attesa compare quando la vista è arrivata, o quasi.
+  #near(): void {
+    const boxes = this.#pendingRing;
+    if (!boxes) return;
+    const scroll = this.#scroll;
+    if (scroll && Math.abs(scroll.get() - this.#scrollTarget) > RING_NEAR_PX) return;
+    this.#pendingRing = null;
+    this.#ring(boxes);
+  }
+
+  #scrollTo(target: number): void {
+    const page = this.#options.page;
+    if (!this.#scroll) {
+      this.#scroll = springValue({
+        spring: "wide",
+        initial: page.scrollTop,
+        precision: NEGLIGIBLE_PX,
+        onUpdate: (value) => {
+          page.scrollTop = value;
+          this.#near();
+        },
+        lifetime: this.#life,
+      });
+    } else if (Math.abs(this.#scroll.get() - page.scrollTop) >= 1) {
+      // La vista è stata scorsa da altri: si riparte da dov'è.
+      this.#scroll.jump(page.scrollTop);
+    }
+    this.#scrollTarget = target;
+    this.#scroll.set(target);
+  }
+
+  #clearRings(): void {
+    this.#pendingRing = null;
+    for (const ring of this.#rings) ring.remove();
+    this.#rings.clear();
+  }
+
+  /// Un anello per riga, un po' più largo del testo, che si stringe su di lui
+  /// e sfuma in `DURATION.large`. Un salto nuovo toglie quelli di prima.
+  #ring(boxes: readonly SheetBox[]): void {
+    if (motionLevel() === "reduced" || motionDriver().instant) return;
+    const { desk } = this.#options;
+    for (const box of boxes) {
+      const ring = document.createElement("div");
+      ring.className = "rich-goto-ring";
+      ring.setAttribute("aria-hidden", "true");
+      ring.style.cssText = `top: ${box.top}px; left: ${box.left}px; width: ${box.width}px; height: ${box.height}px`;
+      desk.append(ring);
+      this.#rings.add(ring);
+      const motion = animate(ring, {
+        from: { scaleX: (box.width + 2 * RING_SPREAD) / Math.max(1, box.width), scaleY: (box.height + 2 * RING_SPREAD) / Math.max(1, box.height), opacity: 1 },
+        to: { opacity: 0 },
+        duration: DURATION.large,
+        easing: "ease-out",
+        whenReduced: "none",
+        lifetime: this.#life,
+      });
+      // A riposo l'anello non si vede, e se ne va.
+      ring.style.opacity = "0";
+      void motion.finished.then(() => {
+        ring.remove();
+        this.#rings.delete(ring);
+      });
     }
   }
 
@@ -293,6 +439,7 @@ export class RichMotion {
 
   destroy(): void {
     this.#life.close();
+    this.#clearRings();
     this.#papers.clear();
     this.#snapshot = null;
   }
