@@ -3,6 +3,7 @@ import { INTERACTIVE, REST, S, SELECTABLE, type PartAnatomy } from "./types";
 
 export const SETTINGS: PartAnatomy = {
   part: "settings",
+  layer: "cornice",
   components: [
     {
       name: "settings-window",

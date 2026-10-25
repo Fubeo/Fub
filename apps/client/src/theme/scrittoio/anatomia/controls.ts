@@ -3,6 +3,7 @@ import { REST, S, SELECTABLE, type PartAnatomy } from "./types";
 
 export const CONTROLS: PartAnatomy = {
   part: "controls",
+  layer: "cornice",
   components: [
     // I due cassetti stanno sulla scrivania: lì il campo cambia superficie.
     { name: "field-on-desk", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["sidebar", "inspector-pane"] },

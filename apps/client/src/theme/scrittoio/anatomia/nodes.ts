@@ -3,6 +3,7 @@ import { INTERACTIVE, REST, S, SELECTABLE, type PartAnatomy } from "./types";
 
 export const NODES: PartAnatomy = {
   part: "nodes",
+  layer: "cornice",
   components: [
     { name: "declared-view", states: REST, hooks: ["ui-stack", "ui-text", "ui-heading", "ui-children"] },
     // Dove una view è montata: nei due cassetti le sue righe prendono il gradino pieno.

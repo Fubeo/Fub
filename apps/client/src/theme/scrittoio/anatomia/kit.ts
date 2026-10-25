@@ -3,6 +3,7 @@ import { S, SELECTABLE, type PartAnatomy } from "./types";
 
 export const KIT: PartAnatomy = {
   part: "kit",
+  layer: "cornice",
   components: [
     { name: "kit-popover", states: [S("rest"), S("focused")], hooks: ["kit-popover", "kit-hover-card"] },
     // Dentro la scheda al passaggio sui collegamenti: titolo, ritaglio della nota

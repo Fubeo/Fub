@@ -7045,32 +7045,34 @@ kbd,
 .rich-para {
   margin-block: 0 var(--space-4);
 }
-.rich-heading {
+/* I titoli nella misura del tema valgono quando il tema veste il contenuto
+   (Scrittura): nella pagina del file vincono i suoi. */
+.look-tema .rich-heading {
   color: var(--doc-heading);
   font-weight: var(--weight-bold);
   line-height: var(--leading-tight);
   margin: var(--space-7) 0 var(--space-3);
 }
-.rich-heading[data-level="1"] {
+.look-tema .rich-heading[data-level="1"] {
   font-size: max(1.75em, var(--text-3xl));
   letter-spacing: -0.01em;
   margin-top: var(--space-8);
   padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--doc-rule-soft);
 }
-.rich-heading[data-level="2"] {
+.look-tema .rich-heading[data-level="2"] {
   font-size: max(1.45em, var(--text-2xl));
 }
-.rich-heading[data-level="3"] {
+.look-tema .rich-heading[data-level="3"] {
   font-size: 1.22em;
   font-weight: 650;
 }
-.rich-heading[data-level="4"] {
+.look-tema .rich-heading[data-level="4"] {
   font-size: 1.08em;
   font-weight: 650;
 }
-.rich-heading[data-level="5"],
-.rich-heading[data-level="6"] {
+.look-tema .rich-heading[data-level="5"],
+.look-tema .rich-heading[data-level="6"] {
   font-size: 1em;
   font-weight: 650;
   color: var(--muted);

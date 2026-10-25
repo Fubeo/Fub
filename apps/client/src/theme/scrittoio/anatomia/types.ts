@@ -26,16 +26,36 @@ export interface ComponentState {
   readonly label: string;
 }
 
+/**
+ * Lo strato di una classe, cioè chi ha l'autorità su come si vede:
+ *
+ * - `cornice`: barre, pannelli, menu, righelli, scrivania. Sempre del tema;
+ * - `segno`: ciò che Fub disegna sul contenuto — selezione, cursore, fuoco,
+ *   ricerca, revisioni, correttore, commenti, maniglie. Del tema, con i colori
+ *   della carta su cui sta;
+ * - `contenuto`: ciò che il file dice. Chi ne ha l'autorità lo dichiara la
+ *   modalità della superficie, con il suo aspetto (`theme/content-look.ts`).
+ */
+export const LAYERS = ["cornice", "segno", "contenuto"] as const;
+
+export type Layer = (typeof LAYERS)[number];
+
 export interface ShellComponent {
   readonly name: string;
   readonly states: readonly ComponentState[];
   /** Le classi pubbliche che il componente espone alla pelle. */
   readonly hooks: readonly string[];
+  /** Lo strato dei suoi hook; assente, quello del pezzo. */
+  readonly layer?: Layer;
+  /** Gli hook di un altro strato da quello del componente. */
+  readonly layers?: Readonly<Record<string, Layer>>;
 }
 
 export interface PartAnatomy {
   /** Il nome del pezzo: `skin/<part>.css`. */
   readonly part: string;
+  /** Lo strato dei suoi componenti, quando non ne dichiarano uno. */
+  readonly layer: Layer;
   readonly components: readonly ShellComponent[];
 }
 

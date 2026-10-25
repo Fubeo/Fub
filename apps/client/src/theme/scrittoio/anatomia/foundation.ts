@@ -3,6 +3,7 @@ import { INTERACTIVE, REST, S, type PartAnatomy } from "./types";
 
 export const FOUNDATION: PartAnatomy = {
   part: "foundation",
+  layer: "cornice",
   components: [
     { name: "app-surface", states: REST, hooks: ["app"] },
     { name: "elevation-paper", states: REST, hooks: ["elevation-paper"] },

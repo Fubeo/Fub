@@ -60,7 +60,7 @@ const vite = await createServer({
 const recipe = await vite.ssrLoadModule("/src/theme/scrittoio/recipe.ts");
 /** @type {{ SKIN: string, assemble: (c: Record<string,string>) => string }} */
 const skin = await vite.ssrLoadModule("/src/theme/scrittoio/skin/order.ts");
-/** @type {{ HOOKS: readonly string[], STATE_NAMES: readonly string[], COMPONENTS: readonly { name: string, part: string, hooks: readonly string[], states: readonly { name: string }[] }[] }} */
+/** @type {{ HOOKS: readonly string[], HOOK_LAYERS: Readonly<Record<string, string>>, LAYERS: readonly string[], STATE_NAMES: readonly string[], COMPONENTS: readonly { name: string, part: string, hooks: readonly string[], states: readonly { name: string }[] }[] }} */
 const anatomy = await vite.ssrLoadModule("/src/theme/scrittoio/anatomia.ts");
 /** @type {{ THEME_2_ENGINE: string, THEME_2_PROFILE: { requiredRoles: readonly string[], contrastPairs: readonly unknown[], preferenceTokens: readonly string[], vocabulary: { properties?: readonly string[], functions?: readonly string[], atRules?: readonly string[] } } }} */
 const profile = await vite.ssrLoadModule("/src/theme/scrittoio/profile.ts");
@@ -119,6 +119,7 @@ try {
     engine,
     required_roles: roles,
     hooks: [...anatomy.HOOKS],
+    layers: Object.fromEntries(anatomy.HOOKS.map((hook) => [hook, anatomy.HOOK_LAYERS[hook]])),
     states: [...anatomy.STATE_NAMES],
     components: anatomy.COMPONENTS.map((component) => ({
       name: component.name,
@@ -139,6 +140,7 @@ try {
     },
   };
   const contractText = `${JSON.stringify(authorContract, null, 2)}\n`;
+  const layerCount = (layer) => anatomy.HOOKS.filter((hook) => anatomy.HOOK_LAYERS[hook] === layer).length;
   await derived("contract.json", contractText, "a ricetta, anatomia e profilo", AUTHOR);
 
   const guide = [
@@ -147,6 +149,16 @@ try {
     "Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.",
     "",
     `Il contratto richiede **${roles.length} ruoli**, espone **${anatomy.HOOKS.length} hook**, **${anatomy.STATE_NAMES.length} stati** (${assignedStates} assegnazioni su ${anatomy.COMPONENTS.length} componenti) e lascia ridichiarare alla persona **${profile.THEME_2_PROFILE.preferenceTokens.length} token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in \`contract.json\`, generato dalle sorgenti della shell.`,
+    "",
+    "## Strati",
+    "",
+    "Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:",
+    "",
+    `- **cornice** (${layerCount("cornice")} hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.`,
+    `- **segno** (${layerCount("segno")} hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (\`--doc-*\`).`,
+    `- **contenuto** (${layerCount("contenuto")} hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: \`look-tema\`, \`look-file\` o \`look-adattato\`.`,
+    "",
+    "Una regola sul contenuto vale quando il tema lo veste: si scrive sotto `.look-tema`, come `.look-tema .rich-heading`.",
     "",
     "## Struttura minima",
     "",

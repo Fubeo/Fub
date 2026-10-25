@@ -3,10 +3,17 @@ import { S, SELECTABLE, type PartAnatomy } from "./types";
 
 export const DRAW: PartAnatomy = {
   part: "draw",
+  layer: "cornice",
   components: [
     {
       name: "draw-editor",
       states: SELECTABLE,
+      // Il foglio è il disegno, con la sua carta; la griglia, le guide, i
+      // righelli, il cursore e i segni dei collegamenti sono di Fub.
+      layers: {
+        "draw-surface": "contenuto", "draw-page": "contenuto", "draw-grid": "segno", "draw-guides": "segno",
+        "draw-cursor": "segno", "draw-link-layer": "segno", "draw-link-mark": "segno",
+      },
       hooks: [
         "draw-header", "draw-toolbar", "draw-group", "draw-button", "draw-zoom-level", "draw-layer-button",
         "draw-layer-state", "draw-swatch-frame", "draw-swatch", "draw-width-bar", "draw-size-glyph", "draw-title",
@@ -76,6 +83,7 @@ export const DRAW: PartAnatomy = {
     {
       name: "draw-presentation",
       states: [S("rest"), S("focused")],
+      layers: { "draw-present-board": "contenuto", "draw-present-stage": "contenuto", "draw-present-ink": "segno", "draw-present-laser": "segno" },
       hooks: [
         "draw-present-board", "draw-present-stage", "draw-present-ink", "draw-present-laser", "draw-present-end",
         "draw-present-end-title", "draw-present-end-hint",

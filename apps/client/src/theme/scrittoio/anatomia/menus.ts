@@ -3,6 +3,7 @@ import { S, type PartAnatomy } from "./types";
 
 export const MENUS: PartAnatomy = {
   part: "menus",
+  layer: "cornice",
   components: [
     { name: "context-menu", states: [S("rest")], hooks: ["context-menu", "menu-separator", "menu-group"] },
     { name: "context-submenu", states: [S("rest")], hooks: ["context-submenu", "menu-more"] },

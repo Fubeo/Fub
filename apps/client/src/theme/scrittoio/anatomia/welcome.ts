@@ -3,6 +3,7 @@ import { INTERACTIVE, REST, S, type PartAnatomy } from "./types";
 
 export const WELCOME: PartAnatomy = {
   part: "welcome",
+  layer: "cornice",
   components: [
     // La colonna al centro della scrivania e ciò che dice mentre si apre.
     { name: "welcome-surface", states: REST, hooks: ["onboarding", "onboarding-status", "onboarding-error"] },

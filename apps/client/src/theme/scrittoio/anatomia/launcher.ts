@@ -3,6 +3,7 @@ import { INTERACTIVE, REST, S, SELECTABLE, type PartAnatomy } from "./types";
 
 export const LAUNCHER: PartAnatomy = {
   part: "launcher",
+  layer: "cornice",
   components: [
     // Il velo e la scatola: lanciatore se ha un campo in testa, dialogo se no.
     { name: "modal-surface", states: REST, hooks: ["modale", "palette-box", "palette-heading"] },

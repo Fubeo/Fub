@@ -3,6 +3,7 @@ import { INTERACTIVE, SELECTABLE, type PartAnatomy } from "./types";
 
 export const DRAW_DIALOGS: PartAnatomy = {
   part: "draw-dialogs",
+  layer: "cornice",
   components: [
     {
       name: "draw-dialog-base",
