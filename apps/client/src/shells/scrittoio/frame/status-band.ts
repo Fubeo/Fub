@@ -94,14 +94,14 @@ export function mountStatusBand(lifetime: Lifetime): void {
   // Il motore arriva dopo la superficie, e la modalità cambia: la superficie
   // a fuoco dice quando ridisegnare.
   let watched: SurfacePaperFit | null = null;
-  let unwatch: (() => void) | null = null;
-  lifetime.add(() => unwatch?.());
+  let stopWatching: (() => void) | null = null;
+  lifetime.add(() => stopWatching?.());
   const drawFit = (): void => {
     const paper = fitOf();
     if (paper !== watched) {
-      unwatch?.();
+      stopWatching?.();
       watched = paper;
-      unwatch = paper?.subscribe(drawFit) ?? null;
+      stopWatching = paper?.subscribe(drawFit) ?? null;
     }
     const offers = paper?.offers() ?? [];
     for (const { fit, button, label } of fits) {
