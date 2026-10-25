@@ -22,6 +22,7 @@
 // scritto si ritrova nella cache per nodo (i nodi sono immutabili), così una
 // battuta riscrive un paragrafo e non il documento.
 import { t, type Key } from "../../i18n/strings";
+import { fontStack } from "./fonts";
 import { Fragment, Schema, type Mark as PmMark, type Node as PmNode, type NodeSpec, type MarkSpec } from "prosemirror-model";
 import {
   BODY,
@@ -195,7 +196,7 @@ const para: NodeSpec = {
       attrs["data-rich-f"] = JSON.stringify(base);
       if (base.size !== undefined) style.push(`--rich-base-pt: ${base.size}`);
       if (named && role.kind === "body") {
-        if (base.font !== undefined) style.push(`font-family: ${JSON.stringify(base.font)}, serif`);
+        if (base.font !== undefined) style.push(`font-family: ${fontStack(base.font)}`);
         if (base.size !== undefined) style.push(`font-size: calc(1em * ${base.size} / var(--rich-doc-pt, ${base.size}))`);
       }
     }
@@ -508,7 +509,7 @@ const marks: Record<string, MarkSpec> = {
     parseDOM: [{ tag: "span[data-rich-font]", getAttrs: (dom) => ({ family: (dom as HTMLElement).getAttribute("data-rich-font") }) }],
     toDOM: (mark) => {
       const family = mark.attrs.family as string;
-      return ["span", { "data-rich-font": family, style: `font-family: ${JSON.stringify(family)}, serif` }, 0];
+      return ["span", { "data-rich-font": family, style: `font-family: ${fontStack(family)}` }, 0];
     },
   },
   size: {
