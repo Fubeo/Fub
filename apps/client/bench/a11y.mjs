@@ -25,6 +25,16 @@ const DEBT = [
     voce: "G1",
     cosa: "Il colore del testo di una cella viene dal file. Si mostra com'è, anche quando non raggiunge 4,5:1 sulla carta.",
   })),
+  // Il blu dei link di Word (`Hyperlink`, #467886) è del documento: sulla
+  // carta scura resta a 3,6:1 finché l'aspetto adattato non lo schiarisce
+  // (N6 del piano dell'editor dei documenti).
+  {
+    light: "dark",
+    front: "#467886",
+    behind: "#151a21",
+    voce: "N6",
+    cosa: "Il colore del testo di un documento viene dal file. Si mostra com'è finché non c'è l'aspetto adattato.",
+  },
 ];
 
 /// Che cosa si esamina, e dove va il referto.

@@ -99,6 +99,10 @@ l'IPC.
   l'intento `fub.editor.action` le usano senza saperlo. Ogni superficie ha la
   propria cronologia `prosemirror-history`; ciò che arriva da un altro riquadro
   o dal disco sostituisce i blocchi diversi fuori dalla cronologia.
+  Come nell'editor di testo il Tab si ferma sul foglio che scorre
+  (`.rich-page`, `role="document"`), non dentro il documento: Invio porta a
+  scrivere, dove Tab scrive una tabulazione o sposta il livello di un
+  elenco, e dopo un Esc, per due secondi, Tab esce.
 - `editors/rich/strip.ts` è la striscia del carattere e del paragrafo,
   caricata col motore: i valori (tipo, dimensione, colori, stile del
   paragrafo, spaziature) non sono gesti che commutano e non passano dalla

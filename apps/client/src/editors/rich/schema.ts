@@ -500,7 +500,8 @@ const marks: Record<string, MarkSpec> = {
     ],
     // Senza `href`: dentro la superficie un collegamento è testo del
     // documento, e un clic non porta la finestra altrove.
-    toDOM: (mark) => ["a", { "data-rich-href": mark.attrs.href as string, title: mark.attrs.href as string, class: "rich-link" }, 0],
+    // Non è un arresto del Tab: è un pezzo del testo.
+    toDOM: (mark) => ["a", { "data-rich-href": mark.attrs.href as string, title: mark.attrs.href as string, class: "rich-link", tabindex: "-1" }, 0],
   },
   /// Le proprietà opache di un tratto. Una sola per volta (si escludono da sé).
   run: {

@@ -1795,6 +1795,12 @@
 .rich-strip-count td {
   padding: 2px var(--space-2);
 }
+/* Il foglio che scorre è l'arresto del Tab del documento: l'anello sta
+   dentro il riquadro. */
+.rich-page:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
+}
 .rich-content {
   max-width: calc(var(--content-width) + 2 * var(--space-9));
   margin-inline: auto;

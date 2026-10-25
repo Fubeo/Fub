@@ -125,7 +125,15 @@ describe("la superficie ricca", () => {
     );
     bold.click();
     expect(onChange).not.toHaveBeenCalled();
+    // Invio e Spazio non lo premono.
+    for (const key of ["Enter", " "]) {
+      const down = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      bold.dispatchEvent(down);
+      expect(down.defaultPrevented).toBe(true);
+    }
     expect(strip.querySelector<HTMLSelectElement>(".rich-strip-font")!.disabled).toBe(true);
+    // La scelta spenta non tiene il Tab della barra.
+    expect(strip.querySelector<HTMLSelectElement>(".rich-strip-font")!.tabIndex).toBe(-1);
     // Trova si apre, cerca, e non offre di sostituire.
     named(t("rich.find")).click();
     const bar = parent.querySelector<HTMLElement>(".rich-findbar")!;

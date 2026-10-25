@@ -90,6 +90,10 @@ export class RichEngine {
   /// Una selezione col puntatore o con Maiusc non è finita finché si tiene.
   #pointerDown = false;
   #shiftDown = false;
+  /// Fino a quando un Tab esce dal documento invece di scrivere: un Esc lo
+  /// concede per due secondi, come in CodeMirror.
+  #tabLeaves = 0;
+  #stopPage: () => void;
 
   constructor(parent: HTMLElement, options: RichEngineOptions) {
     this.#options = options;
@@ -110,6 +114,7 @@ export class RichEngine {
         "aria-label": options.label(),
         "aria-readonly": String(!this.editable()),
         spellcheck: "false",
+        tabindex: "-1",
       }),
       dispatchTransaction: (tr) => this.#dispatch(tr),
       transformPasted: (slice, view) => this.#filter(slice, view),
@@ -135,6 +140,22 @@ export class RichEngine {
         },
       },
     });
+    // Come nell'editor di testo il Tab si ferma sul foglio che scorre, non
+    // dentro il documento, dove scrive: Invio porta a scrivere, Esc e Tab
+    // riportano fuori.
+    parent.tabIndex = 0;
+    parent.setAttribute("role", "document");
+    parent.setAttribute("aria-label", options.label());
+    const enter = (event: KeyboardEvent) => {
+      if (event.target !== parent || event.key !== "Enter") return;
+      event.preventDefault();
+      this.focus();
+    };
+    parent.addEventListener("keydown", enter);
+    this.#stopPage = () => {
+      parent.removeEventListener("keydown", enter);
+      for (const name of ["tabindex", "role", "aria-label"]) parent.removeAttribute(name);
+    };
   }
 
   #plugins(): Plugin[] {
@@ -169,9 +190,11 @@ export class RichEngine {
       Backspace: chainCommands(backspace, deleteChar(-1)),
       Delete: chainCommands(deleteForward, deleteChar(1)),
       "Mod-y": redo,
-      Tab: chainCommands(shiftListLevel(1), insertTab),
-      "Shift-Tab": shiftListLevel(-1),
+      // Dopo un Esc il Tab porta fuori dal documento, come nell'editor di testo.
+      Tab: (state, dispatch) => Date.now() > this.#tabLeaves && chainCommands(shiftListLevel(1), insertTab)(state, dispatch),
+      "Shift-Tab": (state, dispatch) => Date.now() > this.#tabLeaves && shiftListLevel(-1)(state, dispatch),
       Escape: () => {
+        this.#tabLeaves = Date.now() + 2000;
         if (!this.#painter) return false;
         this.disarmPainter();
         return true;
@@ -489,7 +512,9 @@ export class RichEngine {
 
   /// Ridisegna gli attributi che dipendono dalla lingua.
   refresh(): void {
-    if (!this.#destroyed) this.#view.setProps({});
+    if (this.#destroyed) return;
+    this.#view.dom.parentElement?.setAttribute("aria-label", this.#options.label());
+    this.#view.setProps({});
   }
 
   focus(): void {
@@ -595,6 +620,7 @@ export class RichEngine {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#stopPage();
     this.#listeners.clear();
     this.#asks.clear();
     this.#view.destroy();

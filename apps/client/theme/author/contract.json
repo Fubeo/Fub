@@ -661,6 +661,7 @@
     "canvas-field-editor",
     "rich-surface",
     "rich-notice",
+    "rich-page",
     "rich-content",
     "rich-para",
     "rich-heading",
@@ -3094,6 +3095,7 @@
       "hooks": [
         "rich-surface",
         "rich-notice",
+        "rich-page",
         "rich-content",
         "rich-para",
         "rich-heading",
@@ -5580,7 +5582,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1239,
+    "hooks": 1240,
     "state_names": 7,
     "assigned_states": 632,
     "components": 188,

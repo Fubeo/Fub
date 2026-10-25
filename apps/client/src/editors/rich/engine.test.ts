@@ -48,6 +48,28 @@ function at(doc: PmNode, needle: string, offset = 0): number {
 const blocksOf = (e: RichEngine) => parseProjection(e.getDoc()).blocks;
 
 describe("il motore ricco", () => {
+  it("il Tab si ferma sul foglio: Invio porta a scrivere, e dopo un Esc il Tab esce invece di scrivere", () => {
+    const e = engine(source([para("uno")]));
+    const page = document.querySelector<HTMLElement>(".rich-content")!.parentElement!;
+    const editable = document.querySelector<HTMLElement>(".rich-content")!;
+    expect(page.tabIndex).toBe(0);
+    expect(page.getAttribute("role")).toBe("document");
+    expect(page.getAttribute("aria-label")).toBe("documento");
+    expect(editable.getAttribute("tabindex")).toBe("-1");
+    page.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(editable);
+    e.select(at(e.state.doc, "uno"));
+    const tab = () => editable.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", keyCode: 9, bubbles: true, cancelable: true }));
+    // Un Tab scrive una tabulazione e il browser non sposta il fuoco.
+    expect(tab()).toBe(false);
+    expect(e.state.doc.textContent).toBe("\tuno");
+    editable.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true, cancelable: true }));
+    expect(tab()).toBe(true);
+    expect(e.state.doc.textContent).toBe("\tuno");
+    e.destroy();
+    expect(page.hasAttribute("tabindex")).toBe(false);
+  });
+
   it("un testo che non si legge non si scrive, e non diventa un documento vuoto salvabile", () => {
     const changes: EditorChange[] = [];
     const e = engine("{non è una proiezione", changes);

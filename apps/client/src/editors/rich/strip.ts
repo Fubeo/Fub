@@ -1388,7 +1388,18 @@ export function mountStrip(
   life.listen(element, "focusin", (event) => {
     if (event.target instanceof HTMLElement && element.contains(event.target)) roving(event.target);
   });
+  // Un comando spento con il perché resta raggiungibile, ma Invio e Spazio
+  // non lo premono.
+  const spent = (event: KeyboardEvent) =>
+    (event.key === "Enter" || event.key === " ") && event.target instanceof HTMLElement && event.target.getAttribute("aria-disabled") === "true";
+  life.listen(element, "keyup", (event) => {
+    if (spent(event)) event.preventDefault();
+  });
   life.listen(element, "keydown", (event) => {
+    if (spent(event)) {
+      event.preventDefault();
+      return;
+    }
     const all = controls();
     const at = all.indexOf(document.activeElement as HTMLElement);
     if (at < 0) return;
@@ -1516,7 +1527,8 @@ export function mountStrip(
     comments.hidden = engine.read((state) => commentsOf(state.doc).length === 0);
     track.hidden = !engine.tracking();
     layout.hidden = engine.read(pageAt) === null;
-    if (!current || !element.contains(current)) roving(null);
+    // Le scelte spente non tengono il Tab della barra.
+    if (!current || !element.contains(current) || (current as HTMLSelectElement).disabled) roving(null);
   }
 
   function name(): void {
