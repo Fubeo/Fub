@@ -181,6 +181,20 @@ describe("la superficie ricca", () => {
     surface.destroy();
   });
 
+  it("ogni gruppo della striscia ha un nome", async () => {
+    const { parent, surface } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    surface.buffer!.setDoc(SOURCE);
+    const groups = [...parent.ownerDocument.querySelectorAll(".rich-strip-group")];
+    expect(groups.length).toBeGreaterThan(0);
+    for (const group of groups) {
+      expect(group.getAttribute("role")).toBe("group");
+      expect(group.getAttribute("aria-label")).toMatch(/\S/);
+    }
+    expect(groups.map((group) => group.getAttribute("aria-label"))).toContain(t("rich.strip.group.paragraph"));
+    surface.destroy();
+  });
+
   it("la mini-barra è la striscia ristretta, e smontata non lascia niente", async () => {
     const { surface } = mount(() => Promise.resolve(engineModule));
     await flush();

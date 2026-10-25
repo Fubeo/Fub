@@ -275,6 +275,12 @@ export function mountStrip(
   function group(name: RichStripGroup): HTMLElement {
     const el = document.createElement("div");
     el.className = "rich-strip-group";
+    // Il lettore di schermo annuncia il gruppo entrando: «Paragrafo», poi il
+    // controllo.
+    el.setAttribute("role", "group");
+    const label = () => el.setAttribute("aria-label", t(`rich.strip.group.${name}`));
+    label();
+    relabel.push(label);
     if (shown(name)) element.append(el);
     return el;
   }
