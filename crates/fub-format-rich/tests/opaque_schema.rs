@@ -281,7 +281,9 @@ fn collect(
                     }
                 }
             }
-            syn::Item::Type(mut item) => {
+            // Un alias conta come il tipo che nomina: un `Cell` di
+            // `projection.rs` non è un dato opaco.
+            syn::Item::Type(mut item) if wanted(&item.ident.to_string()) => {
                 strip(&mut item.attrs);
                 out.insert(format!("{file}::type {}", item.ident), vec![tokens(&item)]);
             }
