@@ -171,7 +171,14 @@ l'IPC.
   Canc cancellano un carattere da sé (`deleteChar`), per scavalcare il testo
   già eliminato. L'autore è della sessione (`reviewAuthor`), condiviso con i
   commenti. Il codec ODT rifiuta `track`, e un `.odt` che registra resta in
-  sola lettura (`track_changes`).
+  sola lettura (`track_changes`). La scheda Revisioni dell'ispettore ha
+  l'interruttore (una casella con il ruolo `switch`), il nome di chi scrive,
+  senza il quale non si comincia, e le modifiche nell'ordine del testo, con
+  che cosa, chi, quando e il testo toccato (`changeText`); un clic sul testo
+  lo seleziona, Accetta e Rifiuta valgono per una (`resolveChange`) o per
+  tutte. Una voce si riconosce da ciò che dice, non dal posto, e resta la
+  stessa mentre il testo prima di lei cambia. «Registra modifiche» della
+  barra alterna la registrazione, e senza un nome apre la scheda sul nome.
 - La pagina di una sezione è il campo `page` della proiezione: sul paragrafo
   che la chiude, accanto a `sect`, e in testa per l'ultima
   (`document.last_section`). Nello schema è l'attributo `page` del nodo

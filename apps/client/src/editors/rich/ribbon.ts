@@ -47,6 +47,7 @@ import { mountRichPanels, RICH_PANEL_IDS, type RichMedia, type RichPanelId } fro
 import { COLOR_AUTO } from "./projection";
 import { goToRevision } from "./review";
 import type { RichSide } from "./side";
+import { reviewAuthor, setTracking } from "./track";
 import { insertToc } from "./toc";
 import type { Look } from "../../theme/content-look";
 
@@ -110,6 +111,7 @@ export const RICH_RIBBON_COMMANDS: ReadonlySet<string> = new Set([
   "rich.footer",
   "rich.find.replace",
   "rich.comments",
+  "rich.track",
   "shell.zoom.in",
   "shell.zoom.out",
   "shell.zoom.reset",
@@ -488,7 +490,8 @@ export const RICH_TABS: readonly RichTab[] = [
         icon: "rc-track",
         keytip: "ZR",
         columns: [
-          panel("rich.track", "rich.track", "G", "rc-track", "large", "rich.track", (view) => view.tracking),
+          // Premuto, registra o smette; senza un nome apre Revisioni, dove lo si scrive.
+          { kind: "button", id: "rich.track", label: "rich.track", keytip: "G", icon: "rc-track", size: "large", pressed: (view) => view.tracking },
           {
             rows: [
               [action("rich.rev.previous", "rich.rev.previous", "P", "rc-rev-previous"), action("rich.rev.next", "rich.rev.next", "X", "rc-rev-next")],
@@ -823,6 +826,10 @@ export function mountRichRibbon(
         return;
       case "rich.comments":
         options.side?.show("comments", "list");
+        return;
+      case "rich.track":
+        if (!engine.tracking() && reviewAuthor() === "") options.side?.show("revisions", "author");
+        else engine.apply(setTracking(!engine.tracking()));
         return;
       case "rich.rev.previous":
       case "rich.rev.next":

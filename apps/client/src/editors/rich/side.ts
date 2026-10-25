@@ -6,6 +6,10 @@
 // Quando il documento si scrive, uno nuovo sulla selezione, e per ogni filo
 // Rispondi, Risolvi ed Elimina; in sola lettura si leggono e basta.
 //
+// Revisioni: l'interruttore «Registra le modifiche» con chi le firma, e
+// l'elenco delle modifiche con chi e quando, ognuna con Accetta e Rifiuta, e
+// tutte insieme.
+//
 // Ogni gesto è una battuta del documento, coi comandi del motore. Una scheda
 // montata ascolta il motore finché non la smonta la shell, e si ridisegna
 // soltanto dove il documento è cambiato: una risposta che si sta scrivendo
@@ -17,21 +21,23 @@ import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { setTooltip } from "../../ui/tooltip";
 import { addComment, canComment, commentThreads, deleteComment, goToComment, replyComment, resolveComment, type Thread } from "./comments";
 import type { RichEngine } from "./engine";
-import { labelled, remark } from "./form";
+import { check, labelled, remark } from "./form";
 import type { RichMedia } from "./panels";
-import { reviewAuthor, setReviewAuthor } from "./track";
+import { changeText, goToChange, resolveAll, resolveChange, revisions, type Change } from "./review";
+import { reviewAuthor, setReviewAuthor, setTracking } from "./track";
 
 /// Le schede, per il loro nome breve.
-export type RichSideId = "comments";
+export type RichSideId = "comments" | "revisions";
 
 /// L'id con cui l'ispettore conosce ogni scheda: non si scontra con quelli
 /// delle view dichiarate.
 export const RICH_SIDE_VIEWS: Readonly<Record<RichSideId, string>> = {
   comments: "rich.side.comments",
+  revisions: "rich.side.revisions",
 };
 
 /// Dove va il fuoco quando la barra apre una scheda.
-export type RichSideTarget = "compose" | "list";
+export type RichSideTarget = "compose" | "list" | "author";
 
 export interface RichSide {
   /// Le schede, sempre le stesse: la shell le rifà soltanto quando cambiano.
@@ -282,8 +288,175 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
     };
   }
 
+  /// La scheda delle revisioni: l'interruttore, chi scrive, l'elenco.
+  function mountRevisions(host: HTMLElement): Mounted {
+    const life = openLifetime();
+    const root = document.createElement("div");
+    root.className = "rich-side rich-side-revisions";
+    host.append(root);
+
+    // L'interruttore è una casella col ruolo di `switch`: Invio la preme come
+    // lo Spazio, perché è un comando.
+    const head = document.createElement("div");
+    head.className = "rich-side-compose";
+    const toggle = check(head, t("rich.track.switch"));
+    toggle.setAttribute("role", "switch");
+    toggle.closest("label")!.classList.add("rich-side-switch");
+    const author = textField({ label: t("rich.comment.author"), lifetime: life }).element;
+    const name = author.querySelector<HTMLInputElement>("input")!;
+    name.maxLength = 200;
+    name.required = true;
+    head.append(author);
+    const need = remark(head, "status");
+    const all = document.createElement("div");
+    all.className = "rich-side-actions";
+    const acceptAll = button(all, life, t("rich.rev.accept_all.short"), () => engine.apply(resolveAll(true), false));
+    const rejectAll = button(all, life, t("rich.rev.reject_all.short"), () => engine.apply(resolveAll(false), false));
+    head.append(all);
+    const list = document.createElement("div");
+    list.className = "rich-side-list";
+    list.setAttribute("role", "list");
+    list.setAttribute("aria-label", t("rich.side.revisions"));
+    root.append(head, list);
+
+    life.listen(name, "input", () => {
+      setReviewAuthor(name.value);
+      need.hidden = true;
+    });
+    const flip = () => {
+      const on = engine.tracking();
+      if (!on && name.value.trim() === "") {
+        toggle.checked = false;
+        need.textContent = t("rich.track.need_author");
+        need.hidden = false;
+        name.focus();
+        return;
+      }
+      engine.apply(setTracking(!on), false);
+    };
+    life.listen(toggle, "change", flip);
+    life.listen(toggle, "keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      toggle.click();
+    });
+
+    let doc: unknown = null;
+    let writable: boolean | null = null;
+    /// Ogni voce disegnata, con la modifica di adesso: il testo prima di lei
+    /// la sposta, e i suoi pulsanti la cercano dov'è.
+    const drawn = new Map<string, { readonly el: HTMLElement; readonly life: Lifetime; readonly at: { change: Change } }>();
+
+    /// Una voce: che cosa, chi, quando, il testo, e le sue due azioni.
+    function entry(at: { change: Change }, text: string, own: Lifetime): HTMLElement {
+      const { change } = at;
+      const el = document.createElement("article");
+      el.className = "rich-side-item rich-side-change";
+      el.setAttribute("role", "listitem");
+      el.dataset.kind = change.kind;
+      const shown = text || t("rich.rev.paragraph");
+      const go = document.createElement("button");
+      go.type = "button";
+      go.className = "rich-side-quote";
+      go.textContent = shown;
+      go.setAttribute("aria-label", t("rich.comment.go.quote", { quote: shown }));
+      setTooltip(go, t("rich.comment.go"));
+      own.listen(go, "click", () => engine.browse(goToChange(at.change.kind, at.change.from)));
+      const line = document.createElement("p");
+      line.className = "rich-side-head";
+      const who = document.createElement("strong");
+      who.textContent = change.rev.by || t("rich.rev.anonymous");
+      line.append(t(change.kind === "ins" ? "rich.rev.kind.ins" : "rich.rev.kind.del"), " · ", who);
+      const date = when(change.rev.at);
+      if (date) {
+        const time = document.createElement("time");
+        if (change.rev.at) time.dateTime = change.rev.at;
+        time.textContent = date;
+        line.append(" · ", time);
+      }
+      el.append(line, go);
+      if (writable) {
+        const actions = document.createElement("div");
+        actions.className = "rich-side-actions";
+        button(actions, own, t("rich.rev.accept.one"), () => engine.apply(resolveChange(at.change.kind, at.change.from, true), false));
+        button(actions, own, t("rich.rev.reject.one"), () => engine.apply(resolveChange(at.change.kind, at.change.from, false), false));
+        el.append(actions);
+      }
+      return el;
+    }
+
+    function draw(): void {
+      const on = engine.tracking();
+      const nowWritable = engine.editable();
+      toggle.checked = on;
+      toggle.setAttribute("aria-checked", String(on));
+      toggle.disabled = !nowWritable || (media.review !== true && !on);
+      if (document.activeElement !== name) name.value = reviewAuthor();
+      author.hidden = !nowWritable;
+      if (nowWritable !== writable) {
+        writable = nowWritable;
+        for (const each of drawn.values()) each.life.close();
+        drawn.clear();
+        doc = null;
+      }
+      const current = engine.state.doc;
+      if (current === doc) return;
+      doc = current;
+      const changes = engine.read((state) => revisions(state.doc));
+      acceptAll.hidden = rejectAll.hidden = !writable || changes.length === 0;
+      // Una voce si riconosce da ciò che dice, non dal posto, che si sposta
+      // con il testo prima di lei; due uguali si contano.
+      const seen = new Map<string, number>();
+      const keep = new Set<string>();
+      const order: HTMLElement[] = [];
+      for (const change of changes) {
+        const text = engine.read((state) => changeText(state.doc, change));
+        const base = JSON.stringify([change.kind, change.rev, text]);
+        const n = seen.get(base) ?? 0;
+        seen.set(base, n + 1);
+        const key = `${base}#${n}`;
+        keep.add(key);
+        const had = drawn.get(key);
+        if (had) {
+          had.at.change = change;
+          order.push(had.el);
+          continue;
+        }
+        const own = openLifetime();
+        const at = { change };
+        const el = entry(at, text, own);
+        drawn.set(key, { el, life: own, at });
+        order.push(el);
+      }
+      for (const [key, each] of drawn) {
+        if (keep.has(key)) continue;
+        each.life.close();
+        drawn.delete(key);
+      }
+      list.replaceChildren(...order);
+      if (changes.length === 0) remark(list).textContent = t("rich.rev.none");
+    }
+
+    draw();
+    life.add(engine.subscribe(draw));
+    return {
+      host,
+      focus(target) {
+        if (target === "author" && !author.hidden) return name.focus();
+        (toggle.disabled ? list.querySelector<HTMLElement>("button") : toggle)?.focus();
+      },
+      close() {
+        for (const each of drawn.values()) each.life.close();
+        drawn.clear();
+        life.close();
+        root.remove();
+      },
+    };
+  }
+
   const MOUNTS: Record<RichSideId, (host: HTMLElement) => Mounted> = {
     comments: mountComments,
+    revisions: mountRevisions,
   };
 
   const panel = (id: RichSideId, title: () => string, icon: string): SurfacePanel => ({
@@ -301,7 +474,10 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
     },
   });
 
-  const all: readonly SurfacePanel[] = [panel("comments", () => t("rich.comments"), "rc-comments")];
+  const all: readonly SurfacePanel[] = [
+    panel("comments", () => t("rich.comments"), "rc-comments"),
+    panel("revisions", () => t("rich.side.revisions"), "rc-track"),
+  ];
 
   return {
     panels: all,

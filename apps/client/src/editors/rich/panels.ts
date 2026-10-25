@@ -1,7 +1,6 @@
 // I riquadri della barra del documento e la barra di ricerca: i colori, la
 // tabella, la nota, il link, la spaziatura, la pagina, l'intestazione, il
-// conteggio e la registrazione delle modifiche; e la barra di
-// Trova e sostituisci che sta sopra il foglio.
+// conteggio; e la barra di Trova e sostituisci che sta sopra il foglio.
 //
 // Ogni riquadro si apre sotto il controllo che lo chiede (`open`) e scrive nel
 // documento con i comandi del motore: niente di qui passa per il catalogo
@@ -34,7 +33,6 @@ import {
   setMargins,
   setPaper,
 } from "./page";
-import { reviewAuthor, setReviewAuthor, setTracking } from "./track";
 import { countText, findMatches, nextMatch, replaceAll, replaceMatch, type FindQuery, type TextCount } from "./review";
 
 /// Ciò che la barra chiede alla shell.
@@ -139,8 +137,7 @@ export type RichPanelId =
   | "rich.note"
   | "rich.link"
   | "rich.page"
-  | "rich.count"
-  | "rich.track";
+  | "rich.count";
 
 export const RICH_PANEL_IDS: ReadonlySet<string> = new Set<RichPanelId>([
   "rich.color",
@@ -151,7 +148,6 @@ export const RICH_PANEL_IDS: ReadonlySet<string> = new Set<RichPanelId>([
   "rich.link",
   "rich.page",
   "rich.count",
-  "rich.track",
 ]);
 
 export interface RichPanels {
@@ -438,29 +434,6 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
     card.body.append(table);
     finish(card);
     showPanel(anchor, card);
-  }
-
-  /// Registra le modifiche: chi le scrive, e l'interruttore. Mentre si
-  /// registra, ciò che si scrive è una revisione di quell'autore.
-  function openTrack(anchor: HTMLElement): void {
-    popover?.close();
-    const card = panel(t("rich.track"));
-    const on = engine.tracking();
-    remark(card.body).textContent = t(on ? "rich.track.on" : "rich.track.off");
-    const author = text(card.body, t("rich.comment.author"), reviewAuthor());
-    author.maxLength = 200;
-    life.listen(author, "input", () => setReviewAuthor(author.value));
-    const submit = action(card.actions, t(on ? "rich.track.stop" : "rich.track.start"), () => {}, "primary", true);
-    life.listen(card.root, "submit", () => {
-      if (!on && author.value.trim() === "") {
-        author.focus();
-        return;
-      }
-      engine.apply(setTracking(!on));
-      popover?.close();
-    });
-    showPanel(anchor, card);
-    (on ? submit : author).focus();
   }
 
   /// La griglia delle dimensioni: righe e colonne fino alla cella indicata,
@@ -807,8 +780,6 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
         return openPage(anchor);
       case "rich.count":
         return openCount(anchor);
-      case "rich.track":
-        return openTrack(anchor);
     }
   }
 

@@ -10,6 +10,7 @@ import { RichEngine } from "./engine";
 import { parseProjection, type Block, type Para } from "./projection";
 import { replaceAll, resolveAll } from "./review";
 import { mountRichRibbon } from "./ribbon";
+import { mountRichSide } from "./side";
 import { deleteChar, setReviewAuthor, setTracking, trackTransaction } from "./track";
 import { addComment } from "./comments";
 
@@ -209,29 +210,43 @@ describe("registra modifiche", () => {
 
   it("la barra registra con il nome di chi scrive, e smette", () => {
     const e = engine([para([{ t: "text", x: "testo" }])], false);
-    const ribbon = mountRichRibbon(e, () => null, { review: true });
+    const host = document.createElement("div");
+    document.body.append(host);
+    const side = mountRichSide(e, { review: true }, (viewId) => {
+      if (host.childElementCount === 0) side.panels.find((panel) => panel.id === viewId)!.mount(host);
+    });
+    const ribbon = mountRichRibbon(e, () => null, { review: true }, { side });
     document.body.append(ribbon.element);
     const button = [...ribbon.element.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
       b.getAttribute("aria-label")?.startsWith(t("rich.track")),
     )!;
     expect(button.closest<HTMLElement>("[data-command]")!.hidden).toBe(false);
     expect(button.getAttribute("aria-pressed")).toBe("false");
+    // Senza un nome non comincia: la barra apre Revisioni, sul nome.
+    setReviewAuthor("");
     button.click();
+    expect(e.tracking()).toBe(false);
     const author = document.activeElement as HTMLInputElement;
     expect(author.tagName).toBe("INPUT");
-    // Senza un nome non comincia.
-    author.form!.requestSubmit();
+    expect(host.contains(author)).toBe(true);
+    // L'interruttore senza nome non accende, e dice perché.
+    const toggle = host.querySelector<HTMLInputElement>('[role="switch"]')!;
+    toggle.click();
     expect(e.tracking()).toBe(false);
+    expect(host.textContent).toContain(t("rich.track.need_author"));
     author.value = "Bea";
     author.dispatchEvent(new Event("input"));
-    author.form!.requestSubmit();
+    // Invio sull'interruttore lo preme, come lo Spazio.
+    toggle.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     expect(e.tracking()).toBe(true);
+    expect(toggle.checked).toBe(true);
     expect(button.getAttribute("aria-pressed")).toBe("true");
     e.select(6);
     type(e, "!");
     expect(shown(e)).toEqual(["testo+(!:Bea)"]);
+    // La modifica è nell'elenco, con chi l'ha fatta.
+    expect(host.querySelector(".rich-side-change .rich-side-head")?.textContent).toContain("Bea");
     button.click();
-    (document.activeElement as HTMLButtonElement).click();
     expect(e.tracking()).toBe(false);
     ribbon.destroy();
   });

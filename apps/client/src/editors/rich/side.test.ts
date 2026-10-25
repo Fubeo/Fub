@@ -153,3 +153,59 @@ describe("la scheda Commenti", () => {
     expect(host.childElementCount).toBe(0);
   });
 });
+
+describe("la scheda Revisioni", () => {
+  const ada = { by: "Ada", at: AT };
+  const bea = { by: "Bea", at: AT };
+  const tracked = () => [para([{ t: "text", x: "resta " }, { t: "text", x: "nuovo", ins: ada }, { t: "text", x: " e " }, { t: "text", x: "vecchio", del: bea }])];
+
+  it("elenca le modifiche nell'ordine del testo, le raggiunge, le accetta una alla volta e tutte", () => {
+    const e = engine(tracked());
+    const { side: panel, host } = side(e);
+    expect(panel.panels.map((p) => p.id)).toEqual([RICH_SIDE_VIEWS.comments, RICH_SIDE_VIEWS.revisions]);
+    panel.show("revisions");
+    const items = () => [...host.querySelectorAll<HTMLElement>(".rich-side-change")];
+    expect(items().map((el) => [el.dataset.kind, el.querySelector(".rich-side-quote")?.textContent])).toEqual([
+      ["ins", "nuovo"],
+      ["del", "vecchio"],
+    ]);
+    expect(items()[1]!.querySelector(".rich-side-head")?.textContent).toContain("Bea");
+    // Un clic sul testo lo seleziona nel documento.
+    items()[1]!.querySelector<HTMLButtonElement>(".rich-side-quote")!.click();
+    expect(e.state.doc.textBetween(e.state.selection.from, e.state.selection.to)).toBe("vecchio");
+    // Accettare l'inserimento lo tiene, e la sua voce se ne va; l'altra resta
+    // la stessa voce, anche se il testo prima di lei è cambiato.
+    const second = items()[1];
+    pressed(items()[0]!, t("rich.rev.accept.one")).click();
+    expect(items()).toEqual([second]);
+    expect(e.state.doc.textContent).toBe("resta nuovo e vecchio");
+    pressed(host, t("rich.rev.reject_all.short")).click();
+    expect(e.state.doc.textContent).toBe("resta nuovo e vecchio");
+    expect(items()).toHaveLength(0);
+    expect(host.textContent).toContain(t("rich.rev.none"));
+    expect(pressed(host, t("rich.rev.accept_all.short")).hidden).toBe(true);
+  });
+
+  it("in sola lettura si leggono e basta, e l'interruttore è spento", () => {
+    const e = engine(tracked(), [], true);
+    const { side: panel, host } = side(e);
+    panel.show("revisions");
+    expect(host.querySelectorAll(".rich-side-change")).toHaveLength(2);
+    expect(host.querySelector<HTMLInputElement>('[role="switch"]')!.disabled).toBe(true);
+    expect([...host.querySelectorAll<HTMLButtonElement>(".rich-side-change button")].map((b) => b.className)).toEqual(["rich-side-quote", "rich-side-quote"]);
+  });
+
+  it("smontata non lascia nodi, e una modifica dopo non la ridisegna", () => {
+    const e = engine(tracked());
+    const { side: panel, host, unmount } = side(e);
+    for (let round = 0; round < 3; round += 1) {
+      panel.show("revisions");
+      expect(host.querySelectorAll(".rich-side-revisions")).toHaveLength(1);
+      unmount(RICH_SIDE_VIEWS.revisions);
+      expect(host.childElementCount).toBe(0);
+    }
+    e.select(1);
+    e.run("text.newline");
+    expect(host.childElementCount).toBe(0);
+  });
+});

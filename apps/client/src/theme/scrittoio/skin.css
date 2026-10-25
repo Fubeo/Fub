@@ -7066,6 +7066,19 @@ kbd,
 .rich-side-answer {
   gap: var(--space-2);
 }
+.rich-side-switch {
+  font-weight: var(--weight-bold);
+}
+/* Nell'elenco delle revisioni il testo porta il segno che ha sulla carta:
+   inserito sottolineato, tolto barrato, con i colori della cornice. */
+.rich-side-change[data-kind="ins"] .rich-side-quote {
+  border-left-color: var(--accent);
+  text-decoration-line: underline;
+}
+.rich-side-change[data-kind="del"] .rich-side-quote {
+  border-left-color: var(--danger);
+  text-decoration-line: line-through;
+}
 .rich-strip-table-grid {
   gap: 2px;
 }

@@ -385,6 +385,51 @@ export function resolveAll(accept: boolean): Command {
   };
 }
 
+/// La modifica di specie `kind` che comincia in `from`, come l'ha data
+/// `revisions`: chi l'ha mostrata la ritrova anche se nel frattempo le altre
+/// sono cambiate.
+function changeAt(doc: PmNode, kind: RevKind, from: number): { all: Change[]; change: Change } | null {
+  const all = revisions(doc);
+  const change = all.find((c) => c.kind === kind && c.from === from);
+  return change ? { all, change } : null;
+}
+
+/// Seleziona una modifica dell'elenco.
+export function goToChange(kind: RevKind, from: number): Command {
+  return (state, dispatch) => {
+    const found = changeAt(state.doc, kind, from);
+    if (!found) return false;
+    if (dispatch) dispatch(select(state.tr, found.change).scrollIntoView());
+    return true;
+  };
+}
+
+/// Accetta (o rifiuta) una modifica dell'elenco, con l'altro capo se è uno
+/// spostamento.
+export function resolveChange(kind: RevKind, from: number, accept: boolean): Command {
+  return (state, dispatch) => {
+    const found = changeAt(state.doc, kind, from);
+    if (!found) return false;
+    if (dispatch) {
+      const tr = state.tr;
+      resolve(tr, withMoves(found.all, [found.change]), accept);
+      dispatch(untracked(tr));
+    }
+    return true;
+  };
+}
+
+/// Il testo di una modifica, per l'elenco: vuoto per il solo segno di fine
+/// di un paragrafo.
+export function changeText(doc: PmNode, change: Change): string {
+  return change.pieces
+    .filter((piece) => piece.para === undefined)
+    .map((piece) => doc.textBetween(piece.from, piece.to, " ", " "))
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /// Seleziona la modifica dopo (o prima) della selezione, girando in fondo.
 export function goToRevision(direction: 1 | -1): Command {
   return (state, dispatch) => {
