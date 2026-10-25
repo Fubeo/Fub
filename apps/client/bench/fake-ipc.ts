@@ -39,6 +39,8 @@
 import { createFakeHost, type GridBytesFake, type Options } from "../src/host/fake";
 import { MARKDOWN_SYNTAX } from "../src/rules/syntax.generated";
 import XLSX_GRID from "../src/__fixtures__/xlsx-grid.json";
+import RICH_PROJECTION from "../src/__fixtures__/rich-projection.json";
+import RICH_BENCH from "../src/__fixtures__/rich-bench.json";
 import type {
   BundleInfo,
   CommandSpec,
@@ -260,6 +262,19 @@ globalThis.__fubLargeBench = Object.freeze({
 /// restano quelli delle loro baseline. Sessione e finestre sono quelle che
 /// `fub-format-xlsx` produce davvero (`tests/ts_grid.rs`).
 const WORKBOOK_DOC = params.get("workbook") === "1" ? "Dati/Conti.xlsx" : null;
+
+/// Il documento di videoscrittura delle scene `document-*` (`?rich=…`), con
+/// la proiezione che `fub-format-rich` dà davvero del file: quella con un po'
+/// di tutto (`tests/ts_projection.rs`), oppure un `.odt`, uno pieno di
+/// oggetti e uno protetto (`tests/ts_bench.rs`). Come la cartella di Excel,
+/// soltanto la sua scena lo ha.
+const RICH_DOCS: Readonly<Record<string, { doc: string; text: string }>> = {
+  docx: { doc: "Documenti/Prova.docx", text: RICH_PROJECTION.source },
+  odt: { doc: "Documenti/Verbale.odt", text: RICH_BENCH.odt },
+  objects: { doc: "Documenti/Oggetti.docx", text: RICH_BENCH.objects },
+  readonly: { doc: "Documenti/Riservato.docx", text: RICH_BENCH.readonly },
+};
+const RICH_DOC = RICH_DOCS[params.get("rich") ?? ""] ?? null;
 
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = BOARDS !== null
@@ -994,6 +1009,8 @@ const options: Options = {
     ...(DRAWING === null ? {} : { [DRAWING.doc]: DRAWING.text }),
     // Il testo di una cartella è il suo giornale, vuoto sul disco.
     ...(WORKBOOK_DOC === null ? {} : { [WORKBOOK_DOC]: "" }),
+    // Il testo di un documento di videoscrittura è la sua proiezione.
+    ...(RICH_DOC === null ? {} : { [RICH_DOC.doc]: RICH_DOC.text }),
   },
   resources: RESOURCES,
   root: ROOT,

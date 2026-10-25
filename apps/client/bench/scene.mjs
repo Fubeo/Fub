@@ -297,6 +297,22 @@ export const SCENE = onPage("shell", [
       });
     },
   },
+  // **I documenti di videoscrittura**: un `.docx` e un `.odt` aperti dalla
+  // proiezione vera del codec (`?rich=…`, vedi `fake-ipc.ts`), largo e nella
+  // finestra di un documento appena aperto.
+  ...[
+    ["document-docx", "docx", "Prova.docx", "Un .docx con un po' di tutto: titoli, elenco, tabella, revisioni, un commento"],
+    ["document-docx-narrow", "docx", "Prova.docx", "Lo stesso .docx in una finestra di 900 px"],
+    ["document-odt", "odt", "Verbale.odt", "Un .odt: il verbale di una riunione"],
+    ["document-objects", "objects", "Oggetti.docx", "Gli oggetti che la superficie tiene com'erano: immagine, forma, casella, formula, note, salti"],
+    ["document-readonly", "readonly", "Riservato.docx", "Un .docx protetto, aperto in sola lettura"],
+  ].map(([id, rich, name, title]) => ({
+    id,
+    title,
+    query: `rich=${rich}`,
+    ...(id.endsWith("-narrow") ? { viewport: DOCUMENT_WINDOW } : {}),
+    prepare: (page) => openRichDocument(page, `Documenti/${name}`),
+  })),
   {
     id: "nota-tre-modi",
     title: "La stessa nota in Sorgente, Live e Lettura: tre fogli affiancati",
@@ -793,6 +809,25 @@ async function openNote(page, path) {
       false,
     name,
   );
+}
+
+/// Apre un documento di videoscrittura dall'albero e aspetta che la
+/// superficie abbia montato la sua proiezione.
+/// In una finestra stretta l'albero sta nel cassetto: lo si apre, e dopo la
+/// scelta lo si richiude, perché la foto è del documento.
+async function openRichDocument(page, path) {
+  const compact = await page.evaluate(() => document.querySelector("#layout")?.classList.contains("layout-compact") ?? false);
+  if (compact) {
+    await page.click('#views-ribbon .rail-btn[data-panel="files"]');
+    await page.waitForSelector("#sidebar-scrim:not([hidden])");
+  }
+  await openFolder(page, path.slice(0, path.lastIndexOf("/")));
+  await page.click(`#file-list .tree-row[data-path="${path}"]`);
+  await page.waitForSelector(".pane.focus .rich-surface .ProseMirror");
+  if (compact && await page.isVisible("#sidebar-scrim")) {
+    await page.click("#sidebar-scrim");
+    await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
+  }
 }
 
 /// Apre una cartella dell'albero, se non è già aperta. Il `data-path` della
