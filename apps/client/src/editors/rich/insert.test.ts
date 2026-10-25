@@ -151,8 +151,8 @@ describe("le tabelle nuove", () => {
     const cell = (rows: number, cols: number) =>
       document.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.table.cells", { rows: String(rows), cols: String(cols) })}"]`)!;
     cell(2, 3).dispatchEvent(new Event("pointerover", { bubbles: true }));
-    expect(cell(1, 2).style.backgroundColor).not.toBe("");
-    expect(cell(3, 1).style.backgroundColor).toBe("");
+    expect(cell(1, 2).hasAttribute("data-inside")).toBe(true);
+    expect(cell(3, 1).hasAttribute("data-inside")).toBe(false);
     cell(2, 3).click();
     expect(shape(e)).toEqual(["p", "2x3", "p"]);
     // Con le frecce: una a destra e una in giù.
@@ -164,6 +164,12 @@ describe("le tabelle nuove", () => {
     expect(document.activeElement).toBe(cell(2, 2));
     cell(2, 2).click();
     expect(shape(e)).toEqual(["p", "2x2", "p", "2x3", "p"]);
+    // «Inserisci», l'azione principale del riquadro, mette la misura indicata.
+    e.select(at(e, "testo"));
+    open();
+    cell(3, 2).dispatchEvent(new Event("pointerover", { bubbles: true }));
+    [...document.querySelectorAll<HTMLButtonElement>(".rich-strip-panel-actions button")].find((b) => b.textContent === t("rich.table.apply"))!.click();
+    expect(shape(e)).toEqual(["p", "3x2", "p", "2x2", "p", "2x3", "p"]);
     strip.destroy();
   });
 });

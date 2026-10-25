@@ -195,6 +195,39 @@ describe("la superficie ricca", () => {
     surface.destroy();
   });
 
+  it("ogni riquadro della striscia ha un titolo, i campi del kit e un'azione principale", async () => {
+    const { parent, surface } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    surface.buffer!.setDoc(SOURCE);
+    const openers = [...parent.ownerDocument.querySelectorAll<HTMLButtonElement>(".rich-strip button[aria-haspopup]")];
+    expect(openers.length).toBeGreaterThan(8);
+    let opened = 0;
+    for (const opener of openers) {
+      opener.click();
+      const name = opener.getAttribute("aria-label");
+      // Intestazione e piè di pagina chiedono una sezione, che qui non c'è.
+      if (opener.getAttribute("aria-expanded") !== "true") continue;
+      opened += 1;
+      const popover = document.querySelector<HTMLElement>(".kit-popover")!;
+      const title = document.getElementById(popover.getAttribute("aria-labelledby") ?? "");
+      expect(title?.classList.contains("rich-strip-panel-title"), name!).toBe(true);
+      // I campi hanno la loro `label[for]`, come quelli del kit.
+      for (const control of popover.querySelectorAll<HTMLElement>("input:not([type=checkbox]):not([type=color]), select, textarea")) {
+        expect(control.classList.contains("kit-field-input"), name!).toBe(true);
+        expect(popover.querySelector(`label[for="${control.id}"]`), name!).not.toBeNull();
+      }
+      // Un'azione principale, o i campioni che agiscono da sé.
+      const primary = popover.querySelectorAll('.rich-strip-panel-actions .kit-button[data-kind="primary"]').length;
+      const swatches = popover.querySelectorAll(".rich-strip-swatches").length;
+      expect(primary + swatches, name!).toBe(1);
+      expect(popover.querySelector("[style]:not(.rich-strip-swatch)"), name!).toBeNull();
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(opener.getAttribute("aria-expanded"), name!).toBe("false");
+    }
+    expect(opened).toBeGreaterThanOrEqual(openers.length - 1);
+    surface.destroy();
+  });
+
   it("la mini-barra è la striscia ristretta, e smontata non lascia niente", async () => {
     const { surface } = mount(() => Promise.resolve(engineModule));
     await flush();

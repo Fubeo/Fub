@@ -2035,6 +2035,27 @@ body {
 .rich-strip-swatches { display: grid; grid-template-columns: repeat(6, 24px); }
 .rich-strip-swatch-none,
 .rich-strip-swatch-custom { grid-column: 1 / -1; }
+/* I riquadri della striscia: titolo, campi, azioni in fondo. */
+.rich-strip-panel { display: flex; flex-direction: column; width: 288px; max-width: 100%; }
+.rich-strip-panel-body { display: flex; flex-direction: column; }
+.rich-strip-panel-pairs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rich-strip-panel-pairs > .rich-strip-panel-note { grid-column: 1 / -1; }
+.rich-strip-panel-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; }
+.rich-strip-panel-check { display: flex; align-items: center; }
+.rich-strip-panel-fields { display: flex; flex-wrap: wrap; }
+.rich-strip-panel-area .kit-field-box { height: auto; }
+.rich-strip-panel-area textarea { resize: vertical; }
+.rich-strip-panel .rich-strip-swatches { padding: 0; }
+.rich-strip-comments { width: 336px; }
+.rich-strip-comment-list { display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; }
+.rich-strip-comment { display: flex; flex-direction: column; }
+.rich-strip-comment-text { white-space: pre-wrap; }
+.rich-strip-comment-actions { display: flex; flex-wrap: wrap; }
+.rich-strip-comment-answer { display: flex; flex-direction: column; }
+.rich-strip-table-grid { display: grid; grid-template-columns: repeat(10, 20px); }
+.rich-strip-table-cell { width: 20px; height: 20px; }
+.rich-strip-count td { text-align: end; }
+.rich-strip-count th[scope="row"] { text-align: start; }
 .rich-page { flex: 1; min-height: 0; overflow-y: auto; }
 .rich-content {
   position: relative;

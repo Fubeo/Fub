@@ -11,7 +11,8 @@
 // controllo nel Tab, le frecce fra gli altri, Esc torna al testo. Il puntatore
 // non prende il fuoco ai pulsanti, così la selezione del testo resta dov'è.
 import type { Command } from "prosemirror-state";
-import { labelButton, openPopover, setPressed, type PopoverHandle } from "../../kit";
+import { labelButton, openPopover, setPressed, textButton, textField, type ButtonKind, type PopoverHandle } from "../../kit";
+import { identifier } from "../../ui/a11y";
 import { ariaBinding, displayBinding } from "../../ui/commands";
 import { openLifetime } from "../../ui/lifetime";
 import { notify } from "../../ui/notify";
@@ -484,73 +485,147 @@ export function mountStrip(
     return control;
   });
 
+  // ── I riquadri ────────────────────────────────────────────────────────
+  // Ogni riquadro della striscia ha un titolo che gli dà il nome, i campi con
+  // la loro `label[for]` sopra, come quelli del kit, e in fondo le azioni:
+  // pulsanti del kit, con la principale per ultima. È un `form`: Invio in un
+  // campo è la sua azione principale, dove ne ha una che si invia.
+
+  interface Panel {
+    readonly root: HTMLFormElement;
+    readonly body: HTMLElement;
+    readonly actions: HTMLElement;
+    readonly titleId: string;
+  }
+
+  /// Un riquadro col suo titolo. `pairs` mette i campi a due a due.
+  function panel(title: string, layout: "stack" | "pairs" = "stack"): Panel {
+    const root = document.createElement("form");
+    root.className = "rich-strip-panel";
+    const heading = document.createElement("h2");
+    heading.className = "rich-strip-panel-title";
+    heading.id = identifier(`${prefix}-panel`);
+    heading.textContent = title;
+    const body = document.createElement("div");
+    body.className = layout === "pairs" ? "rich-strip-panel-body rich-strip-panel-pairs" : "rich-strip-panel-body";
+    const actions = document.createElement("div");
+    actions.className = "rich-strip-panel-actions";
+    root.append(heading, body, actions);
+    // Un riquadro senza un'azione da inviare non ricarica niente con Invio.
+    life.listen(root, "submit", (event) => event.preventDefault());
+    return { root, body, actions, titleId: heading.id };
+  }
+
+  /// Apre il riquadro sotto il suo pulsante.
+  function showPanel(anchor: HTMLButtonElement, card: Panel, onClose?: () => void): void {
+    if (card.actions.childElementCount === 0) card.actions.remove();
+    popover = openPopover({
+      anchor,
+      content: card.root,
+      labelledBy: card.titleId,
+      className: "rich-strip-popover",
+      lifetime: life,
+      onClose: () => {
+        popover = null;
+        anchor.setAttribute("aria-expanded", "false");
+        onClose?.();
+      },
+    });
+    anchor.setAttribute("aria-expanded", "true");
+  }
+
+  /// Un'azione del riquadro. Quella che si invia (`submit`) la fa il `form`.
+  function action(into: HTMLElement, label: string, onPress: () => void, kind: ButtonKind = "normal", submit = false): HTMLButtonElement {
+    const control = textButton({ label, kind, onPress: submit ? () => {} : onPress, lifetime: life });
+    if (submit) control.type = "submit";
+    into.append(control);
+    return control;
+  }
+
+  /// «Fine»: chiude un riquadro le cui scelte valgono già.
+  function finish(card: Panel): HTMLButtonElement {
+    return action(card.actions, t("rich.panel.done"), () => {
+      popover?.close();
+      engine.focus();
+    }, "primary");
+  }
+
+  /// Un campo di testo del kit.
+  function text(into: HTMLElement, label: string, value = "", placeholder?: string): HTMLInputElement {
+    const field = textField({ label, value, ...(placeholder === undefined ? {} : { placeholder }), lifetime: life });
+    into.append(field.element);
+    return field.input;
+  }
+
+  /// Una scelta o un'area di testo vestite come i campi del kit.
+  function labelled<T extends HTMLSelectElement | HTMLTextAreaElement>(into: HTMLElement, control: T, label: string): T {
+    control.id = identifier(`${prefix}-field`);
+    control.classList.add("kit-field-input");
+    const field = document.createElement("div");
+    field.className = control instanceof HTMLTextAreaElement ? "kit-field rich-strip-panel-area" : "kit-field";
+    const caption = document.createElement("label");
+    caption.className = "kit-field-label";
+    caption.htmlFor = control.id;
+    caption.textContent = label;
+    const box = document.createElement("div");
+    box.className = "kit-field-box";
+    box.append(control);
+    field.append(caption, box);
+    into.append(field);
+    return control;
+  }
+
+  function choice(values: readonly (readonly [string, string])[]): HTMLSelectElement {
+    const control = document.createElement("select");
+    for (const [value, label] of values) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      control.append(option);
+    }
+    return control;
+  }
+
+  /// Una casella con il suo nome accanto.
+  function check(into: HTMLElement, label: string): HTMLInputElement {
+    const row = document.createElement("label");
+    row.className = "rich-strip-panel-check";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    row.append(box, label);
+    into.append(row);
+    return box;
+  }
+
+  /// Una riga di testo del riquadro: uno stato, un avviso, una spiegazione.
+  function remark(into: HTMLElement, role?: "status" | "alert"): HTMLParagraphElement {
+    const line = document.createElement("p");
+    line.className = "rich-strip-panel-note";
+    if (role) line.setAttribute("role", role);
+    into.append(line);
+    return line;
+  }
+
   /// Trova e sostituisci: le occorrenze si vedono nel testo mentre si scrive
   /// ciò che si cerca; Invio va alla prossima, Maiusc+Invio alla precedente.
   function openFind(anchor: HTMLButtonElement): void {
     popover?.close();
-    const form = document.createElement("form");
-    form.className = "rich-strip-swatches";
-    form.style.display = "grid";
-    form.style.gridTemplateColumns = "auto 220px";
-    form.style.alignItems = "center";
-    const field = (control: HTMLInputElement, label: Key, wide = false) => {
-      control.id = `${prefix}-find-${form.childElementCount}`;
-      const caption = document.createElement("label");
-      caption.htmlFor = control.id;
-      caption.textContent = t(label);
-      if (wide) {
-        // Una casella con la sua etichetta accanto, su tutta la riga.
-        const row = document.createElement("span");
-        row.style.gridColumn = "1 / -1";
-        row.append(control, " ", caption);
-        form.append(row);
-        return;
-      }
-      control.className = "rich-strip-select";
-      form.append(caption, control);
-    };
-    const text = document.createElement("input");
-    text.type = "text";
+    const card = panel(t("rich.find"));
     const selected = engine.selectedText();
-    if (selected && !selected.includes("\n") && selected.length <= 200) text.value = selected;
-    field(text, "rich.find.text");
-    const replacement = document.createElement("input");
-    replacement.type = "text";
-    field(replacement, "rich.find.replace");
-    const matchCase = document.createElement("input");
-    matchCase.type = "checkbox";
-    field(matchCase, "rich.find.case", true);
-    const wholeWord = document.createElement("input");
-    wholeWord.type = "checkbox";
-    field(wholeWord, "rich.find.word", true);
-    const status = document.createElement("p");
-    status.setAttribute("role", "status");
-    status.style.gridColumn = "1 / -1";
-    status.style.margin = "0";
-    const actions = document.createElement("div");
-    actions.style.gridColumn = "1 / -1";
-    actions.style.display = "flex";
-    actions.style.flexWrap = "wrap";
-    actions.style.gap = "4px";
-    actions.style.justifyContent = "flex-end";
-    const action = (label: Key, onPress: () => void, submit = false) => {
-      const control = document.createElement("button");
-      control.type = submit ? "submit" : "button";
-      control.className = "rich-strip-swatch-none";
-      control.textContent = t(label);
-      if (!submit) life.listen(control, "click", onPress);
-      actions.append(control);
-      return control;
-    };
-    const query = (): FindQuery => ({ text: text.value, matchCase: matchCase.checked, wholeWord: wholeWord.checked });
+    const what = text(card.body, t("rich.find.text"), selected && !selected.includes("\n") && selected.length <= 200 ? selected : "");
+    const replacement = text(card.body, t("rich.find.replace"));
+    const matchCase = check(card.body, t("rich.find.case"));
+    const wholeWord = check(card.body, t("rich.find.word"));
+    const status = remark(card.body, "status");
+    const query = (): FindQuery => ({ text: what.value, matchCase: matchCase.checked, wholeWord: wholeWord.checked });
     let current = -1;
     const show = (index: number, said?: string) => {
       const matches = findMatches(engine.read((state) => state.doc), query());
       current = index >= 0 && index < matches.length ? index : -1;
-      engine.find(text.value === "" ? null : query(), current);
+      engine.find(what.value === "" ? null : query(), current);
       status.textContent =
         said ??
-        (text.value === ""
+        (what.value === ""
           ? ""
           : matches.length === 0
             ? t("rich.find.none")
@@ -562,9 +637,9 @@ export function mountStrip(
       const matches = findMatches(engine.read((state) => state.doc), query());
       show(engine.read((state) => nextMatch(state, matches, direction)));
     };
-    const previous = action("rich.find.previous", () => step(-1));
-    const next = action("rich.find.next", () => step(1), true);
-    const replaceOne = action("rich.find.replace_one", () => {
+    const previous = action(card.actions, t("rich.find.previous"), () => step(-1));
+    const next = action(card.actions, t("rich.find.next"), () => {}, "normal", true);
+    const replaceOne = action(card.actions, t("rich.find.replace_one"), () => {
       const matches = findMatches(engine.read((state) => state.doc), query());
       const match = matches[current];
       if (!match) {
@@ -574,12 +649,11 @@ export function mountStrip(
       engine.apply(replaceMatch(query(), match, replacement.value), false);
       step(1);
     });
-    const replaceEvery = action("rich.find.replace_all", () => {
+    const replaceEvery = action(card.actions, t("rich.find.replace_all"), () => {
       const total = findMatches(engine.read((state) => state.doc), query()).length;
       if (!engine.apply(replaceAll(query(), replacement.value), false)) return;
       show(-1, t("rich.find.replaced", { n: String(total) }));
-    });
-    form.append(status, actions);
+    }, "primary");
     const refind = () => {
       const matches = findMatches(engine.read((state) => state.doc), query());
       // Da dove sta il cursore, come quando si comincia a scrivere.
@@ -587,42 +661,27 @@ export function mountStrip(
       const at = matches.findIndex((m) => m.from >= from);
       show(matches.length === 0 ? -1 : at < 0 ? 0 : at);
     };
-    life.listen(text, "input", refind);
+    life.listen(what, "input", refind);
     life.listen(matchCase, "change", refind);
     life.listen(wholeWord, "change", refind);
-    life.listen(form, "submit", (event) => {
-      event.preventDefault();
-      step(1);
-    });
-    life.listen(form, "keydown", (event) => {
-      if (event.key !== "Enter" || !event.shiftKey || event.target !== text) return;
+    life.listen(card.root, "submit", () => step(1));
+    life.listen(card.root, "keydown", (event) => {
+      if (event.key !== "Enter" || !event.shiftKey || event.target !== what) return;
       event.preventDefault();
       step(-1);
     });
-    popover = openPopover({
-      anchor,
-      content: form,
-      label: t("rich.find"),
-      className: "rich-strip-popover",
-      lifetime: life,
-      onClose: () => {
-        popover = null;
-        anchor.setAttribute("aria-expanded", "false");
-        engine.find(null);
-      },
-    });
-    anchor.setAttribute("aria-expanded", "true");
+    showPanel(anchor, card, () => engine.find(null));
     refind();
-    text.focus();
-    text.select();
+    what.focus();
+    what.select();
   }
 
   /// Parole, caratteri e paragrafi del documento e, se c'è, della selezione.
   function openCount(anchor: HTMLButtonElement): void {
     popover?.close();
+    const card = panel(t("rich.count"));
     const table = document.createElement("table");
-    table.className = "rich-strip-swatches";
-    table.style.display = "table";
+    table.className = "rich-strip-count";
     const { doc, from, to, empty } = engine.read(({ doc, selection }) => ({ doc, from: selection.from, to: selection.to, empty: selection.empty }));
     const columns: { label: Key; count: TextCount }[] = [
       ...(empty ? [] : [{ label: "rich.count.selection" as Key, count: countText(doc, from, to) }]),
@@ -632,8 +691,6 @@ export function mountStrip(
       const el = document.createElement(tag);
       el.textContent = content;
       if (scope) el.scope = scope;
-      if (tag === "td") el.style.textAlign = "end";
-      el.style.padding = "2px 6px";
       return el;
     };
     if (!empty) {
@@ -644,68 +701,26 @@ export function mountStrip(
     const format = new Intl.NumberFormat(document.documentElement.lang || undefined);
     for (const key of ["words", "characters", "visible", "paragraphs"] as const) {
       const row = document.createElement("tr");
-      const name = cell("th", t(`rich.count.${key}` as Key), "row");
-      name.style.textAlign = "start";
-      row.append(name, ...columns.map((column) => cell("td", format.format(column.count[key]))));
+      row.append(cell("th", t(`rich.count.${key}` as Key), "row"), ...columns.map((column) => cell("td", format.format(column.count[key]))));
       table.append(row);
     }
-    popover = openPopover({
-      anchor,
-      content: table,
-      label: t("rich.count"),
-      className: "rich-strip-popover",
-      lifetime: life,
-      onClose: () => {
-        popover = null;
-        anchor.setAttribute("aria-expanded", "false");
-      },
-    });
-    anchor.setAttribute("aria-expanded", "true");
+    card.body.append(table);
+    finish(card);
+    showPanel(anchor, card);
   }
 
   /// I commenti del documento, con le risposte sotto, e uno nuovo sulla
   /// selezione. Ogni gesto è una battuta del documento.
   function openComments(anchor: HTMLButtonElement, writing: boolean): void {
     popover?.close();
-    const box = document.createElement("div");
-    box.className = "rich-strip-swatches";
-    box.style.display = "grid";
-    box.style.gridTemplateColumns = "auto";
-    box.style.width = "320px";
-    const row = (gap = "4px") => {
-      const el = document.createElement("div");
-      el.style.display = "flex";
-      el.style.flexWrap = "wrap";
-      el.style.gap = gap;
-      el.style.alignItems = "center";
-      return el;
-    };
-    const action = (label: Key, onPress: () => void, submit = false) => {
-      const control = document.createElement("button");
-      control.type = submit ? "submit" : "button";
-      control.className = "rich-strip-swatch-none";
-      control.textContent = t(label);
-      if (!submit) life.listen(control, "click", onPress);
-      return control;
-    };
-    let fields = 0;
-    const field = (form: HTMLElement, control: HTMLInputElement | HTMLTextAreaElement, label: Key) => {
-      control.id = `${prefix}-comment-${(fields += 1)}`;
-      control.className = "rich-strip-select";
-      control.style.width = "100%";
-      control.style.boxSizing = "border-box";
-      const caption = document.createElement("label");
-      caption.htmlFor = control.id;
-      caption.textContent = t(label);
-      form.append(caption, control);
-    };
-    const area = (rows: number) => {
-      const text = document.createElement("textarea");
-      text.rows = rows;
-      text.required = true;
-      text.maxLength = 4000;
-      text.style.resize = "vertical";
-      return text;
+    const card = panel(t("rich.comments"));
+    card.root.classList.add("rich-strip-comments");
+    const area = (into: HTMLElement, label: string, rows: number) => {
+      const said = document.createElement("textarea");
+      said.rows = rows;
+      said.required = true;
+      said.maxLength = 4000;
+      return labelled(into, said, label);
     };
     const author = document.createElement("input");
     author.type = "text";
@@ -713,6 +728,14 @@ export function mountStrip(
     author.maxLength = 200;
     author.value = reviewAuthor();
     life.listen(author, "input", () => setReviewAuthor(author.value));
+    /// Il campo dell'autore, dove serve: è uno solo, e si sposta.
+    const authorField = (into: HTMLElement) => {
+      const field = textField({ label: t("rich.comment.author"), lifetime: life });
+      field.element.querySelector(".kit-field-box")!.replaceChildren(author);
+      author.id = field.input.id;
+      author.className = "kit-field-input";
+      into.append(field.element);
+    };
     const by = () => author.value.trim();
     const done = (applied: boolean) => {
       if (!applied) return false;
@@ -720,39 +743,29 @@ export function mountStrip(
       return true;
     };
 
-    // Un commento nuovo, sulla selezione.
-    const form = document.createElement("form");
-    form.style.display = "grid";
-    form.style.gap = "4px";
-    const text = area(3);
-    const hint = document.createElement("p");
-    hint.style.margin = "0";
+    // Un commento nuovo, sulla selezione: l'azione principale del riquadro.
+    const said = area(card.body, t("rich.comment.text"), 3);
+    const hint = remark(card.body);
+    let apply: HTMLButtonElement | null = null;
     if (media.review) {
-      field(form, text, "rich.comment.text");
-      field(form, author, "rich.comment.author");
-      const actions = row();
-      actions.style.justifyContent = "flex-end";
-      actions.append(hint, action("rich.comment.apply", () => {}, true));
-      form.append(actions);
+      authorField(card.body);
+      apply = action(card.actions, t("rich.comment.apply"), () => {}, "primary", true);
     } else {
-      hint.textContent = t("rich.comment.unsupported");
-      form.append(hint);
+      said.closest(".kit-field")!.remove();
     }
-    life.listen(form, "submit", (event) => {
-      event.preventDefault();
+    life.listen(card.root, "submit", () => {
+      if (!media.review) return;
       if (!by()) {
         author.focus();
         return;
       }
-      if (done(engine.apply(addComment(text.value, by()), false))) text.value = "";
+      if (done(engine.apply(addComment(said.value, by()), false))) said.value = "";
     });
 
     const list = document.createElement("div");
-    list.style.display = "grid";
-    list.style.gap = "8px";
-    list.style.maxHeight = "320px";
-    list.style.overflowY = "auto";
-    box.append(form, list);
+    list.className = "rich-strip-comment-list";
+    // L'elenco sta dopo le azioni del commento nuovo: si legge dall'alto.
+    card.root.append(list);
 
     const when = (at: string | undefined) => {
       const date = at ? new Date(at) : null;
@@ -762,57 +775,54 @@ export function mountStrip(
     function thread(id: number, depth: number, all: ReturnType<typeof commentsOf>, placed: ReadonlySet<number>, into: HTMLElement): void {
       const comment = all.find((c) => c.id === id)!;
       const item = document.createElement("article");
-      item.style.display = "grid";
-      item.style.gap = "2px";
-      item.style.paddingInlineStart = `${depth * 12}px`;
-      if (depth > 0) item.style.borderInlineStart = "2px solid var(--border)";
-      if (comment.done) item.style.opacity = "0.7";
+      item.className = depth > 0 ? "rich-strip-comment rich-strip-comment-reply" : "rich-strip-comment";
+      if (comment.done) item.dataset.done = "";
       const head = document.createElement("strong");
+      head.className = "rich-strip-comment-head";
       head.textContent = [comment.by || t("rich.rev.anonymous"), when(comment.at), comment.done ? t("rich.comment.resolved") : ""]
         .filter(Boolean)
         .join(" · ");
       const body = document.createElement("p");
-      body.style.margin = "0";
-      body.style.whiteSpace = "pre-wrap";
+      body.className = "rich-strip-comment-text";
       body.textContent = comment.text ?? "";
       item.append(head, body);
       if (depth === 0) {
-        const actions = row();
-        const go = action("rich.comment.go", () => {
+        const actions = document.createElement("div");
+        actions.className = "rich-strip-comment-actions";
+        const go = action(actions, t("rich.comment.go"), () => {
           if (engine.apply(goToComment(id))) popover?.close();
         });
         go.disabled = !placed.has(id);
-        const reply = action("rich.comment.reply", () => {
+        const reply = action(actions, t("rich.comment.reply"), () => {
           reply.disabled = true;
+          // La risposta è un `form` suo, dentro l'articolo e non nel riquadro.
           const answer = document.createElement("form");
-          answer.style.display = "grid";
-          answer.style.gap = "4px";
-          const said = area(2);
-          field(answer, said, "rich.comment.reply.text");
-          if (!by()) field(answer, author, "rich.comment.author");
-          const send = row();
-          send.style.justifyContent = "flex-end";
-          send.append(action("rich.comment.reply", () => {}, true));
+          answer.className = "rich-strip-comment-answer";
+          const answerText = area(answer, t("rich.comment.reply.text"), 2);
+          if (!by()) authorField(answer);
+          const send = document.createElement("div");
+          send.className = "rich-strip-panel-actions";
+          action(send, t("rich.comment.reply"), () => {}, "primary", true);
           answer.append(send);
           life.listen(answer, "submit", (event) => {
             event.preventDefault();
+            event.stopPropagation();
             if (!by()) {
               author.focus();
               return;
             }
-            done(engine.apply(replyComment(id, said.value, by()), false));
+            done(engine.apply(replyComment(id, answerText.value, by()), false));
           });
           item.append(answer);
-          said.focus();
+          answerText.focus();
         });
         reply.disabled = !media.review;
-        const resolve = action(comment.done ? "rich.comment.reopen" : "rich.comment.resolve", () => {
+        action(actions, t(comment.done ? "rich.comment.reopen" : "rich.comment.resolve"), () => {
           done(engine.apply(resolveComment(id, !comment.done), false));
         });
-        const remove = action("rich.comment.delete", () => {
+        action(actions, t("rich.comment.delete"), () => {
           done(engine.apply(deleteComment(id), false));
         });
-        actions.append(go, reply, resolve, remove);
         item.append(actions);
       }
       into.append(item);
@@ -827,34 +837,20 @@ export function mountStrip(
         return out;
       });
       const can = media.review === true && engine.read(canComment);
-      text.disabled = !can;
+      said.disabled = !can;
+      if (apply) apply.disabled = !can;
       hint.textContent = media.review ? (can ? "" : t("rich.comment.need_selection")) : t("rich.comment.unsupported");
+      hint.hidden = hint.textContent === "";
       list.replaceChildren();
       const ids = new Set(all.map((c) => c.id));
       for (const comment of all) {
         if (comment.parent === undefined || !ids.has(comment.parent)) thread(comment.id, 0, all, placed, list);
       }
-      if (all.length === 0) {
-        const none = document.createElement("p");
-        none.style.margin = "0";
-        none.textContent = t("rich.comment.none");
-        list.append(none);
-      }
+      if (all.length === 0) remark(list).textContent = t("rich.comment.none");
     }
     render();
-    popover = openPopover({
-      anchor,
-      content: box,
-      label: t("rich.comments"),
-      className: "rich-strip-popover",
-      lifetime: life,
-      onClose: () => {
-        popover = null;
-        anchor.setAttribute("aria-expanded", "false");
-      },
-    });
-    anchor.setAttribute("aria-expanded", "true");
-    if (writing && !text.disabled) text.focus();
+    showPanel(anchor, card);
+    if (writing && !said.disabled) said.focus();
     else list.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
   }
 
@@ -862,36 +858,14 @@ export function mountStrip(
   /// registra, ciò che si scrive è una revisione di quell'autore.
   function openTrack(anchor: HTMLButtonElement): void {
     popover?.close();
-    const form = document.createElement("form");
-    form.className = "rich-strip-swatches";
-    form.style.display = "grid";
-    form.style.gridTemplateColumns = "auto";
-    form.style.gap = "4px";
-    form.style.width = "260px";
+    const card = panel(t("rich.track"));
     const on = engine.tracking();
-    const hint = document.createElement("p");
-    hint.style.margin = "0";
-    hint.textContent = t(on ? "rich.track.on" : "rich.track.off");
-    const author = document.createElement("input");
-    author.type = "text";
+    remark(card.body).textContent = t(on ? "rich.track.on" : "rich.track.off");
+    const author = text(card.body, t("rich.comment.author"), reviewAuthor());
     author.maxLength = 200;
-    author.id = `${prefix}-track-author`;
-    author.className = "rich-strip-select";
-    author.style.width = "100%";
-    author.style.boxSizing = "border-box";
-    author.value = reviewAuthor();
     life.listen(author, "input", () => setReviewAuthor(author.value));
-    const caption = document.createElement("label");
-    caption.htmlFor = author.id;
-    caption.textContent = t("rich.comment.author");
-    const submit = document.createElement("button");
-    submit.type = "submit";
-    submit.className = "rich-strip-swatch-none";
-    submit.textContent = t(on ? "rich.track.stop" : "rich.track.start");
-    submit.style.justifySelf = "end";
-    form.append(hint, caption, author, submit);
-    life.listen(form, "submit", (event) => {
-      event.preventDefault();
+    const submit = action(card.actions, t(on ? "rich.track.stop" : "rich.track.start"), () => {}, "primary", true);
+    life.listen(card.root, "submit", () => {
       if (!on && author.value.trim() === "") {
         author.focus();
         return;
@@ -899,46 +873,27 @@ export function mountStrip(
       engine.apply(setTracking(!on));
       popover?.close();
     });
-    popover = openPopover({
-      anchor,
-      content: form,
-      label: t("rich.track"),
-      className: "rich-strip-popover",
-      lifetime: life,
-      onClose: () => {
-        popover = null;
-        anchor.setAttribute("aria-expanded", "false");
-      },
-    });
-    anchor.setAttribute("aria-expanded", "true");
+    showPanel(anchor, card);
     (on ? submit : author).focus();
   }
 
   /// La griglia delle dimensioni: righe e colonne fino alla cella indicata,
-  /// col mouse o con le frecce.
+  /// col mouse o con le frecce. «Inserisci» mette quella indicata.
   function openTable(anchor: HTMLButtonElement): void {
     popover?.close();
     const ROWS = 8;
     const COLS = 10;
-    const box = document.createElement("div");
-    box.className = "rich-strip-swatches";
-    // Una colonna sola: la griglia, sotto le sue dimensioni.
-    box.style.gridTemplateColumns = "auto";
+    const card = panel(t("rich.table"));
     const grid = document.createElement("div");
-    grid.style.display = "grid";
-    grid.style.gridTemplateColumns = `repeat(${COLS}, 20px)`;
-    grid.style.gap = "2px";
-    const size = document.createElement("p");
+    grid.className = "rich-strip-table-grid";
+    const size = remark(card.body);
     size.setAttribute("aria-hidden", "true");
-    size.style.margin = "0";
-    size.style.textAlign = "center";
     const cells: HTMLButtonElement[] = [];
     for (let r = 1; r <= ROWS; r += 1) {
       for (let c = 1; c <= COLS; c += 1) {
         const cell = document.createElement("button");
         cell.type = "button";
-        cell.className = "rich-strip-swatch";
-        cell.style.width = cell.style.height = "20px";
+        cell.className = "rich-strip-swatch rich-strip-table-cell";
         cell.dataset.rows = String(r);
         cell.dataset.cols = String(c);
         cell.setAttribute("aria-label", t("rich.table.cells", { rows: String(r), cols: String(c) }));
@@ -947,12 +902,13 @@ export function mountStrip(
       }
     }
     grid.append(...cells);
-    box.append(grid, size);
+    card.body.prepend(grid);
+    let chosen = { rows: 2, cols: 2 };
     const at = (target: EventTarget | null) => (target instanceof HTMLButtonElement && cells.includes(target) ? target : null);
     const show = (rows: number, cols: number) => {
+      chosen = { rows, cols };
       for (const cell of cells) {
-        const inside = Number(cell.dataset.rows) <= rows && Number(cell.dataset.cols) <= cols;
-        cell.style.backgroundColor = inside ? "var(--accent-wash)" : "";
+        cell.toggleAttribute("data-inside", Number(cell.dataset.rows) <= rows && Number(cell.dataset.cols) <= cols);
       }
       size.textContent = t("rich.table.size", { rows: String(rows), cols: String(cols) });
     };
@@ -960,14 +916,15 @@ export function mountStrip(
       const cell = at(target);
       if (cell) show(Number(cell.dataset.rows), Number(cell.dataset.cols));
     };
-    show(1, 1);
+    const place = () => {
+      popover?.close();
+      engine.apply(insertTable(chosen.rows, chosen.cols));
+    };
+    show(chosen.rows, chosen.cols);
     life.listen(grid, "pointerover", (event) => point(event.target));
     life.listen(grid, "focusin", (event) => point(event.target));
     life.listen(grid, "click", (event) => {
-      const cell = at(event.target);
-      if (!cell) return;
-      popover?.close();
-      engine.apply(insertTable(Number(cell.dataset.rows), Number(cell.dataset.cols)));
+      if (at(event.target)) place();
     });
     life.listen(grid, "keydown", (event) => {
       const cell = at(event.target);
@@ -980,18 +937,8 @@ export function mountStrip(
       next.tabIndex = 0;
       next.focus();
     });
-    popover = openPopover({
-      anchor,
-      content: box,
-      label: t("rich.table"),
-      className: "rich-strip-popover",
-      lifetime: life,
-      onClose: () => {
-        popover = null;
-        anchor.setAttribute("aria-expanded", "false");
-      },
-    });
-    anchor.setAttribute("aria-expanded", "true");
+    action(card.actions, t("rich.table.apply"), place, "primary");
+    showPanel(anchor, card);
   }
 
   /// Un'immagine del vault, alla sua misura entro la colonna del testo.
@@ -1019,61 +966,26 @@ export function mountStrip(
   /// Il testo di una nota nuova e dove va: a piè di pagina o in chiusura.
   function openNote(anchor: HTMLButtonElement): void {
     popover?.close();
-    const form = document.createElement("form");
-    form.className = "rich-strip-swatches";
-    form.style.display = "grid";
-    form.style.gridTemplateColumns = "auto 220px";
-    form.style.alignItems = "center";
-    const caption = (control: HTMLElement, label: Key) => {
-      control.id = `${prefix}-note-${form.childElementCount}`;
-      control.className = "rich-strip-select";
-      const text = document.createElement("label");
-      text.htmlFor = control.id;
-      text.textContent = t(label);
-      form.append(text, control);
-    };
-    const text = document.createElement("input");
-    text.type = "text";
-    text.required = true;
-    text.maxLength = 4000;
-    caption(text, "rich.note.text");
-    const kind = document.createElement("select");
-    for (const [value, label] of [["foot", "rich.note.foot"], ["end", "rich.note.end"]] as const) {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = t(label);
-      kind.append(option);
-    }
-    caption(kind, "rich.note.kind");
-    const actions = document.createElement("div");
-    actions.style.gridColumn = "1 / -1";
-    actions.style.display = "flex";
-    actions.style.justifyContent = "flex-end";
-    const apply = document.createElement("button");
-    apply.type = "submit";
-    apply.className = "rich-strip-swatch-none";
-    apply.textContent = t("rich.note.apply");
-    actions.append(apply);
-    form.append(actions);
-    life.listen(form, "submit", (event) => {
-      event.preventDefault();
-      if (!engine.apply(insertNote(text.value, kind.value === "end"), false)) return;
+    const card = panel(t("rich.note"));
+    const said = text(card.body, t("rich.note.text"));
+    said.required = true;
+    said.maxLength = 4000;
+    const kind = labelled(
+      card.body,
+      choice([
+        ["foot", t("rich.note.foot")],
+        ["end", t("rich.note.end")],
+      ]),
+      t("rich.note.kind"),
+    );
+    action(card.actions, t("rich.note.apply"), () => {}, "primary", true);
+    life.listen(card.root, "submit", () => {
+      if (!engine.apply(insertNote(said.value, kind.value === "end"), false)) return;
       popover?.close();
       engine.focus();
     });
-    popover = openPopover({
-      anchor,
-      content: form,
-      label: t("rich.note"),
-      className: "rich-strip-popover",
-      lifetime: life,
-      onClose: () => {
-        popover = null;
-        anchor.setAttribute("aria-expanded", "false");
-      },
-    });
-    anchor.setAttribute("aria-expanded", "true");
-    text.focus();
+    showPanel(anchor, card);
+    said.focus();
   }
 
   /// L'indirizzo del link sulla selezione o al cursore; senza selezione,
@@ -1082,80 +994,31 @@ export function mountStrip(
     popover?.close();
     const current = engine.read(linkAt);
     const typing = !current && engine.read((state) => state.selection.empty);
-    const form = document.createElement("form");
-    form.className = "rich-strip-swatches";
-    form.style.display = "grid";
-    form.style.gridTemplateColumns = "auto 220px";
-    form.style.alignItems = "center";
-    const field = (input: HTMLInputElement, label: Key) => {
-      input.id = `${prefix}-link-${form.childElementCount}`;
-      input.className = "rich-strip-select";
-      const caption = document.createElement("label");
-      caption.htmlFor = input.id;
-      caption.textContent = t(label);
-      form.append(caption, input);
-    };
-    const address = document.createElement("input");
-    address.type = "text";
+    const card = panel(t("rich.link"));
+    const address = text(card.body, t("rich.link.address"), current?.href ?? "", "https://");
     address.inputMode = "url";
-    address.placeholder = "https://";
-    address.value = current?.href ?? "";
-    field(address, "rich.link.address");
-    const text = document.createElement("input");
-    text.type = "text";
-    if (typing) field(text, "rich.link.text");
-    const problem = document.createElement("p");
-    problem.setAttribute("role", "alert");
-    problem.style.gridColumn = "1 / -1";
-    problem.style.margin = "0";
+    const words = typing ? text(card.body, t("rich.link.text")) : null;
+    const problem = remark(card.body, "alert");
     problem.hidden = true;
-    const actions = document.createElement("div");
-    actions.style.gridColumn = "1 / -1";
-    actions.style.display = "flex";
-    actions.style.justifyContent = "flex-end";
     const done = (applied: boolean) => {
       if (!applied) return;
       popover?.close();
       engine.focus();
     };
-    if (current) {
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "rich-strip-swatch-none";
-      remove.textContent = t("rich.link.remove");
-      life.listen(remove, "click", () => done(engine.apply(setLink(null), false)));
-      actions.append(remove);
-    }
-    const apply = document.createElement("button");
-    apply.type = "submit";
-    apply.className = "rich-strip-swatch-none";
-    apply.textContent = t("rich.link.apply");
-    actions.append(apply);
-    form.append(problem, actions);
-    life.listen(form, "submit", (event) => {
-      event.preventDefault();
+    if (current) action(card.actions, t("rich.link.remove"), () => done(engine.apply(setLink(null), false)), "danger");
+    action(card.actions, t("rich.link.apply"), () => {}, "primary", true);
+    life.listen(card.root, "submit", () => {
       const href = address.value.trim();
       if (href === "") {
         done(current ? engine.apply(setLink(null), false) : true);
         return;
       }
-      const applied = engine.apply(setLink(href, typing ? text.value : undefined), false);
+      const applied = engine.apply(setLink(href, words ? words.value : undefined), false);
       problem.textContent = t("rich.link.invalid");
       problem.hidden = applied;
       done(applied);
     });
-    popover = openPopover({
-      anchor,
-      content: form,
-      label: t("rich.link"),
-      className: "rich-strip-popover",
-      lifetime: life,
-      onClose: () => {
-        popover = null;
-        anchor.setAttribute("aria-expanded", "false");
-      },
-    });
-    anchor.setAttribute("aria-expanded", "true");
+    showPanel(anchor, card);
     address.focus();
   }
 
@@ -1181,45 +1044,33 @@ export function mountStrip(
   /// rientri in centimetri, spazi prima e dopo in punti, come in Word, con la
   /// virgola della lingua. Un campo vuoto segue lo stile; un campo lasciato
   /// com'era non riscrive niente, perché l'arrotondamento non diventi una
-  /// modifica.
+  /// modifica. Ogni scelta vale subito: «Fine» chiude.
   function openSpacing(anchor: HTMLButtonElement): void {
     popover?.close();
-    const form = document.createElement("div");
-    form.className = "rich-strip-swatches";
-    form.style.display = "grid";
-    form.style.gridTemplateColumns = "auto 96px";
-    form.style.alignItems = "center";
-    const field = (control: HTMLElement, label: string) => {
-      control.id = `${prefix}-spacing-${form.childElementCount}`;
-      control.classList.add("rich-strip-select");
-      const caption = document.createElement("label");
-      caption.htmlFor = control.id;
-      caption.textContent = label;
-      form.append(caption, control);
-    };
+    const card = panel(t("rich.spacing"), "pairs");
     const language = resolvedLanguage();
-    const line = document.createElement("select");
     const current = engine.read((state) => selectedLayout(state, "line"));
     const shown = !current ? (current === undefined ? "" : "mixed") : "multiple" in current ? String(current.multiple) : "exactly" in current ? "exactly" : "at_least";
     const values = ["", ...LINE_SPACINGS.map(String), "exactly", ...(shown === "at_least" || shown === "mixed" ? [shown] : [])];
-    for (const value of values) {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent =
-        value === "" ? t("rich.spacing.style")
-        : value === "exactly" ? t("rich.spacing.exactly")
-        : value === "at_least" ? t("rich.spacing.at_least")
-        : value === "mixed" ? ""
-        : new Intl.NumberFormat(language, { minimumFractionDigits: 1, maximumFractionDigits: 2 }).format(Number(value));
-      line.append(option);
-    }
+    const line = labelled(
+      card.body,
+      choice(
+        values.map((value): [string, string] => [
+          value,
+          value === "" ? t("rich.spacing.style")
+          : value === "exactly" ? t("rich.spacing.exactly")
+          : value === "at_least" ? t("rich.spacing.at_least")
+          : value === "mixed" ? ""
+          : new Intl.NumberFormat(language, { minimumFractionDigits: 1, maximumFractionDigits: 2 }).format(Number(value)),
+        ]),
+      ),
+      t("rich.spacing.line"),
+    );
     line.value = shown;
     // L'interlinea esatta (o minima) in punti: si scrive solo con quella scelta.
-    const points = document.createElement("input");
-    points.type = "text";
-    points.inputMode = "decimal";
     const exact = current && !("multiple" in current) ? ("exactly" in current ? current.exactly : current.at_least) : null;
-    points.value = exact === null ? "" : formatLength(exact, "pt", language);
+    const points = text(card.body, t("rich.spacing.points"), exact === null ? "" : formatLength(exact, "pt", language));
+    points.inputMode = "decimal";
     points.disabled = exact === null;
     life.listen(line, "change", () => {
       points.disabled = line.value !== "exactly" && line.value !== "at_least";
@@ -1238,16 +1089,11 @@ export function mountStrip(
       if (n === null || n === undefined || n <= 0) return;
       engine.apply(setLayout({ line: line.value === "at_least" ? { at_least: n } : { exactly: n } }), false);
     });
-    field(line, t("rich.spacing.line"));
-    field(points, t("rich.spacing.points"));
     for (const key of LAYOUT_LENGTHS) {
       const unit = key === "before" || key === "after" ? "pt" : "cm";
-      const input = document.createElement("input");
-      input.type = "text";
-      input.inputMode = "decimal";
-      input.placeholder = t("rich.spacing.style");
       const value = engine.read((state) => selectedLayout(state, key));
-      input.value = typeof value === "number" ? formatLength(value, unit, language) : "";
+      const input = text(card.body, t(`rich.spacing.${key}` as Key), typeof value === "number" ? formatLength(value, unit, language) : "", t("rich.spacing.style"));
+      input.inputMode = "decimal";
       const was = input.value;
       life.listen(input, "change", () => {
         if (input.value.trim() === was) return;
@@ -1255,20 +1101,9 @@ export function mountStrip(
         if (n === undefined || (n !== null && n < 0 && key !== "first")) return;
         engine.apply(setLayout({ [key]: n } as { [K in LayoutLength]?: number | null }), false);
       });
-      field(input, t(`rich.spacing.${key}` as Key));
     }
-    popover = openPopover({
-      anchor,
-      content: form,
-      label: t("rich.spacing"),
-      className: "rich-strip-popover",
-      lifetime: life,
-      onClose: () => {
-        popover = null;
-        anchor.setAttribute("aria-expanded", "false");
-      },
-    });
-    anchor.setAttribute("aria-expanded", "true");
+    finish(card);
+    showPanel(anchor, card);
   }
 
   /// La pagina della sezione del cursore: carta, verso, margini (in
@@ -1276,30 +1111,7 @@ export function mountStrip(
   /// rileggono da ciò che il documento ha preso.
   function openPage(anchor: HTMLButtonElement): void {
     popover?.close();
-    const form = document.createElement("div");
-    form.className = "rich-strip-swatches";
-    form.style.display = "grid";
-    form.style.gridTemplateColumns = "auto 132px";
-    form.style.alignItems = "center";
-    const field = <T extends HTMLElement>(control: T, label: () => string): T => {
-      control.id = `${prefix}-page-${form.childElementCount}`;
-      control.classList.add("rich-strip-select");
-      const caption = document.createElement("label");
-      caption.htmlFor = control.id;
-      caption.textContent = label();
-      form.append(caption, control);
-      return control;
-    };
-    const choice = (values: readonly [string, string][]): HTMLSelectElement => {
-      const control = document.createElement("select");
-      for (const [value, text] of values) {
-        const option = document.createElement("option");
-        option.value = value;
-        option.textContent = text;
-        control.append(option);
-      }
-      return control;
-    };
+    const card = panel(t("rich.page"), "pairs");
     // Una pagina che il codec rifiuterebbe non si prende: i campi tornano a
     // ciò che c'è, e l'avviso dice perché.
     const apply = (command: Command) => {
@@ -1307,28 +1119,28 @@ export function mountStrip(
       fill();
       problem.hidden = applied;
     };
-    const paper = field(choice([...PAPER_SIZES.map((s): [string, string] => [s.name, paperLabel(s.name)]), ["", t("rich.page.custom")]]), () => t("rich.page.size"));
+    const paper = labelled(card.body, choice([...PAPER_SIZES.map((s): [string, string] => [s.name, paperLabel(s.name)]), ["", t("rich.page.custom")]]), t("rich.page.size"));
     life.listen(paper, "change", () => {
       const size = PAPER_SIZES.find((s) => s.name === paper.value);
       if (size) apply(setPaper(size.w, size.h));
     });
-    const turn = field(
+    const turn = labelled(
+      card.body,
       choice([
         ["portrait", t("rich.page.portrait")],
         ["landscape", t("rich.page.landscape")],
       ]),
-      () => t("rich.page.orientation"),
+      t("rich.page.orientation"),
     );
     life.listen(turn, "change", () => apply(setLandscape(turn.value === "landscape")));
-    const preset = field(choice([...MARGIN_PRESETS.map((m): [string, string] => [m.id, t(`rich.page.margins.${m.id}` as Key)]), ["", t("rich.page.custom")]]), () => t("rich.page.margins"));
+    const preset = labelled(card.body, choice([...MARGIN_PRESETS.map((m): [string, string] => [m.id, t(`rich.page.margins.${m.id}` as Key)]), ["", t("rich.page.custom")]]), t("rich.page.margins"));
     life.listen(preset, "change", () => {
       const margins = MARGIN_PRESETS.find((m) => m.id === preset.value);
       if (margins) apply(setMargins(margins));
     });
     const language = resolvedLanguage();
     const sides = (["top", "bottom", "left", "right"] as const).map((side) => {
-      const input = document.createElement("input");
-      input.type = "text";
+      const input = text(card.body, t(`rich.page.${side}` as Key));
       input.inputMode = "decimal";
       life.listen(input, "change", () => {
         const points = parseLength(input.value, "cm");
@@ -1337,16 +1149,12 @@ export function mountStrip(
         if (points === null || points === undefined || points < 0 || !page || input.value.trim() === formatLength(page[side], "cm", language)) return fill();
         apply(setMargins({ top: page.top, bottom: page.bottom, left: page.left, right: page.right, [side]: points }));
       });
-      return { side, input: field(input, () => t(`rich.page.${side}` as Key)) };
+      return { side, input };
     });
-    const cols = field(choice([1, 2, 3].map((n): [string, string] => [String(n), String(n)])), () => t("rich.page.columns"));
+    const cols = labelled(card.body, choice([1, 2, 3].map((n): [string, string] => [String(n), String(n)])), t("rich.page.columns"));
     life.listen(cols, "change", () => apply(setColumns(Number(cols.value))));
-    const problem = document.createElement("p");
-    problem.setAttribute("role", "alert");
-    problem.style.gridColumn = "1 / -1";
-    problem.style.margin = "0";
+    const problem = remark(card.body, "alert");
     problem.textContent = t("rich.page.too_large");
-    form.append(problem);
     const fill = () => {
       problem.hidden = true;
       const page = engine.read(pageAt)?.page;
@@ -1362,18 +1170,8 @@ export function mountStrip(
       cols.value = String(n);
     };
     fill();
-    popover = openPopover({
-      anchor,
-      content: form,
-      label: t("rich.page"),
-      className: "rich-strip-popover",
-      lifetime: life,
-      onClose: () => {
-        popover = null;
-        anchor.setAttribute("aria-expanded", "false");
-      },
-    });
-    anchor.setAttribute("aria-expanded", "true");
+    finish(card);
+    showPanel(anchor, card);
   }
 
   /// L'intestazione e il piè di pagina della sezione del cursore, come
@@ -1384,74 +1182,48 @@ export function mountStrip(
     popover?.close();
     const at = engine.read(pageAt);
     if (!at) return;
-    const form = document.createElement("div");
-    form.className = "rich-strip-swatches";
-    form.style.display = "grid";
-    form.style.gridTemplateColumns = "1fr";
-    form.style.width = "320px";
+    const card = panel(t("rich.hf"));
     let last: HTMLTextAreaElement | null = null;
     const areas = (["header", "footer"] as const).map((kind) => {
       const area = document.createElement("textarea");
-      area.id = `${prefix}-hf-${kind}`;
-      area.className = "rich-strip-select";
       area.rows = 2;
-      area.style.resize = "vertical";
       area.placeholder = t("rich.hf.inherit");
-      const caption = document.createElement("label");
-      caption.htmlFor = area.id;
-      caption.textContent = t(`rich.hf.${kind}`);
       const running = at[kind];
-      const text = running ? runningText(running) : "";
-      area.value = text ?? running!.lines.map((line) => line.map((piece) => (typeof piece === "string" ? piece : FIELD_CODES[piece.field])).join("")).join("\n");
-      area.readOnly = text === null;
+      const said = running ? runningText(running) : "";
+      area.value = said ?? running!.lines.map((line) => line.map((piece) => (typeof piece === "string" ? piece : FIELD_CODES[piece.field])).join("")).join("\n");
+      area.readOnly = said === null;
       if (area.readOnly) area.title = t("rich.hf.locked");
       life.listen(area, "focus", () => {
         last = area;
       });
       life.listen(area, "input", () => engine.apply(setRunning(kind, runningOf(area.value)), false));
-      form.append(caption, area);
-      return area;
+      return labelled(card.body, area, t(`rich.hf.${kind}`));
     });
-    const locked = document.createElement("p");
-    locked.style.margin = "0";
-    locked.textContent = t("rich.hf.locked");
-    locked.hidden = !areas.some((area) => area.readOnly);
     const fields = document.createElement("div");
-    fields.style.display = "flex";
-    fields.style.gap = "var(--space-2)";
+    fields.className = "rich-strip-panel-fields";
     for (const field of PAGE_FIELDS) {
-      const add = document.createElement("button");
-      add.type = "button";
-      add.className = "rich-strip-select";
-      add.textContent = t(`rich.hf.${field}`);
-      // Il campo va dove si scriveva: il bottone non prende il fuoco.
-      life.listen(add, "mousedown", (event) => event.preventDefault());
-      life.listen(add, "click", () => {
+      const add = action(fields, t(`rich.hf.${field}`), () => {
         const area = last ?? areas.find((a) => !a.readOnly);
         if (!area || area.readOnly) return;
         area.setRangeText(FIELD_CODES[field], area.selectionStart, area.selectionEnd, "end");
         area.focus();
         area.dispatchEvent(new Event("input"));
       });
-      fields.append(add);
+      // Il campo va dove si scriveva: il bottone non prende il fuoco.
+      life.listen(add, "mousedown", (event) => event.preventDefault());
     }
-    form.append(fields, locked);
-    popover = openPopover({
-      anchor,
-      content: form,
-      label: t("rich.hf"),
-      className: "rich-strip-popover",
-      lifetime: life,
-      onClose: () => {
-        popover = null;
-        anchor.setAttribute("aria-expanded", "false");
-      },
-    });
-    anchor.setAttribute("aria-expanded", "true");
+    card.body.append(fields);
+    const locked = remark(card.body);
+    locked.textContent = t("rich.hf.locked");
+    locked.hidden = !areas.some((area) => area.readOnly);
+    finish(card);
+    showPanel(anchor, card);
   }
 
+  /// I colori: un campione si applica subito e chiude.
   function openColors(anchor: HTMLButtonElement, kind: "color" | "highlight"): void {
     popover?.close();
+    const card = panel(t(kind === "color" ? "rich.color" : "rich.highlight"));
     const grid = document.createElement("div");
     grid.className = "rich-strip-swatches";
     const pick = (value: string | null) => {
@@ -1484,18 +1256,8 @@ export function mountStrip(
       life.listen(input, "change", () => pick(input.value.toLowerCase()));
       grid.append(custom);
     }
-    popover = openPopover({
-      anchor,
-      content: grid,
-      label: t(kind === "color" ? "rich.color" : "rich.highlight"),
-      className: "rich-strip-popover",
-      lifetime: life,
-      onClose: () => {
-        popover = null;
-        anchor.setAttribute("aria-expanded", "false");
-      },
-    });
-    anchor.setAttribute("aria-expanded", "true");
+    card.body.append(grid);
+    showPanel(anchor, card);
   }
 
   // ── La barra degli strumenti ──────────────────────────────────────────
