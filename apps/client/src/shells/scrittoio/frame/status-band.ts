@@ -4,7 +4,11 @@
 //
 // Ogni voce si vede solo quando ha qualcosa da dire: una banda che ripete
 // «tutto bene» in sei modi è rumore.
-import type { SurfacePaperFit } from "../../../editors/core/registry";
+//
+// Il documento a fuoco può portare le sue voci (`EditorSurface.status`: il
+// foglio, le parole, la lingua). Se conta lui le parole, il conteggio della
+// view dichiarata si fa da parte: lo stesso numero da due fonti non si dice.
+import type { SurfacePaperFit, SurfaceStatus } from "../../../editors/core/registry";
 import { settings, vaultStatus } from "../../../host/query";
 import { onLanguage, t } from "../../../i18n/strings";
 import { paneOf, selectedMode } from "../../../state/document-controller";
@@ -84,7 +88,68 @@ export function mountStatusBand(lifetime: Lifetime): void {
     const several = (pane?.surface?.modes.length ?? 0) > 1;
     show(mode, several ? (selectedMode(pane)?.label() ?? "") : "");
     drawFit();
+    drawSurface();
   };
+
+  // Le voci della superficie a fuoco, prima della modalità. Un elemento per
+  // voce, che resta finché la voce c'è: il fuoco su un pulsante non si perde
+  // a ogni battuta.
+  const end = mode?.parentElement ?? null;
+  const items = new Map<string, HTMLElement>();
+  let told: SurfaceStatus | null = null;
+  let stopTelling: (() => void) | null = null;
+  lifetime.add(() => {
+    stopTelling?.();
+    for (const el of items.values()) el.remove();
+    items.clear();
+  });
+  const statusOf = () => {
+    const tab = state.vaultRoot ? activeTab() : null;
+    return tab?.k === "doc" ? paneOf(layout.focus)?.surface?.status ?? null : null;
+  };
+  function drawSurface(): void {
+    const status = statusOf();
+    if (status !== told) {
+      stopTelling?.();
+      told = status;
+      stopTelling = status?.subscribe(drawSurface) ?? null;
+    }
+    if (status?.counts) band!.dataset.surfaceCounts = "";
+    else delete band!.dataset.surfaceCounts;
+    const list = status?.items() ?? [];
+    const ids = new Set(list.map((item) => item.id));
+    for (const [id, el] of items) {
+      if (ids.has(id)) continue;
+      el.remove();
+      items.delete(id);
+    }
+    for (const item of list) {
+      let el = items.get(item.id);
+      const button = item.open !== undefined;
+      if (!el || (el instanceof HTMLButtonElement) !== button) {
+        el?.remove();
+        el = document.createElement(button ? "button" : "span");
+        el.className = button ? "status-item status-item--button" : "status-item";
+        el.dataset.surfaceItem = item.id;
+        if (el instanceof HTMLButtonElement) {
+          el.type = "button";
+          const id = item.id;
+          el.addEventListener("click", () => statusOf()?.items().find((each) => each.id === id)?.open?.());
+        }
+        items.set(item.id, el);
+      }
+      if (el.textContent !== item.text) el.textContent = item.text;
+      if (item.hint) setTooltip(el, item.hint);
+    }
+    // Al loro posto, prima della modalità; un elemento che c'è già non si
+    // sposta, che perderebbe il fuoco.
+    let next: Element | null = mode;
+    for (const item of [...list].reverse()) {
+      const el = items.get(item.id)!;
+      if (end && el.nextElementSibling !== next) end.insertBefore(el, next);
+      next = el;
+    }
+  }
   // L'adattamento della carta: soltanto dove la superficie lo offre adesso
   // (un documento in Pagina). Premuto, un altro clic torna alla carta vera.
   const fitOf = () => {

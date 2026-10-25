@@ -952,6 +952,13 @@ body {
   min-width: 0;
 }
 
+/* Il documento a fuoco conta le sue parole (`EditorSurface.status`): il
+   conteggio della view dichiarata (`fub.stats`) si fa da parte, che lo stesso
+   numero da due fonti non si dice. */
+#status-band[data-surface-counts] #views-status > [data-view-id="stats"] {
+  display: none;
+}
+
 .format-bar {
   display: flex;
   align-items: center;

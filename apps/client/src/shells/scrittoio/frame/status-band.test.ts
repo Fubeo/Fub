@@ -349,6 +349,87 @@ describe("la carta adattata alla vista", () => {
   });
 });
 
+describe("le voci della superficie", () => {
+  function statusPane() {
+    const listeners = new Set<() => void>();
+    const said = { items: [] as { id: string; text: string; hint?: string; open?: () => void }[] };
+    const pane = {
+      surface: {
+        modes: [{ id: "a" }, { id: "b" }],
+        status: {
+          counts: true,
+          items: () => said.items,
+          subscribe(listener: () => void) {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+        },
+      },
+      mode: { label: () => "Pagina" },
+    };
+    const changed = () => {
+      for (const listener of [...listeners]) listener();
+    };
+    return { pane, said, changed, listeners };
+  }
+  const items = () => [...document.querySelectorAll<HTMLElement>("[data-surface-item]")];
+
+  it("stanno prima della modalità, un clic apre, e il conteggio dichiarato si fa da parte", async () => {
+    const { pane, said, changed } = statusPane();
+    const opened: string[] = [];
+    said.items = [
+      { id: "page", text: "Pagina 1 di 2" },
+      { id: "words", text: "418 parole", hint: "Apri il conteggio", open: () => opened.push("words") },
+    ];
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    await settle();
+    expect(items().map((each) => [each.tagName, each.textContent])).toEqual([
+      ["SPAN", "Pagina 1 di 2"],
+      ["BUTTON", "418 parole"],
+    ]);
+    expect(items()[1]!.nextElementSibling).toBe(el("status-mode"));
+    expect(world.tooltips.get(items()[1]!)).toBe("Apri il conteggio");
+    expect(el("status-band").hasAttribute("data-surface-counts")).toBe(true);
+    items()[1]!.click();
+    expect(opened).toEqual(["words"]);
+    // Una selezione cambia il numero: lo stesso pulsante, che tiene il fuoco.
+    const words = items()[1]!;
+    words.focus();
+    said.items = [said.items[0]!, { ...said.items[1]!, text: "12 di 418 parole" }, { id: "tracking", text: "Registra" }];
+    changed();
+    expect(items()[1]).toBe(words);
+    expect(document.activeElement).toBe(words);
+    expect(items().map((each) => each.textContent)).toEqual(["Pagina 1 di 2", "12 di 418 parole", "Registra"]);
+    // Scrittura: niente fogli.
+    said.items = said.items.slice(1);
+    changed();
+    expect(items().map((each) => each.dataset.surfaceItem)).toEqual(["words", "tracking"]);
+  });
+
+  it("una superficie senza voci, o fuori fuoco, non lascia niente e non è più ascoltata", async () => {
+    const { pane, said, listeners } = statusPane();
+    said.items = [{ id: "words", text: "3 parole" }];
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    await settle();
+    expect(items()).toHaveLength(1);
+    world.pane = surface(3);
+    for (const listener of world.languageListeners) listener();
+    expect(items()).toHaveLength(0);
+    expect(listeners.size).toBe(0);
+    expect(el("status-band").hasAttribute("data-surface-counts")).toBe(false);
+    world.pane = pane;
+    for (const listener of world.languageListeners) listener();
+    expect(listeners.size).toBe(1);
+    life.close();
+    expect(listeners.size).toBe(0);
+    expect(items()).toHaveLength(0);
+  });
+});
+
 describe("lo zoom", () => {
   const zoomAt = (value: unknown) => () => Promise.resolve([{ spec: { key: "appearance.zoom" }, value }]);
 

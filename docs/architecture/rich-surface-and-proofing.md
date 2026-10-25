@@ -227,6 +227,11 @@ l'IPC.
   righe con il loro nome. Lo zoom (`fitScale`, «Adatta larghezza» e «Pagina
   intera» dalla banda di stato con `SurfacePaperFit`) è lo `zoom` CSS della
   scrivania, e le misure lette tornano in px della carta.
+- Le voci della banda di stato vengono da `EditorSurface.status`
+  (`editors/rich/status.ts`): il foglio del cursore (`RichEngine.sheetOf`), le
+  parole di `countText`, le stesse del Conteggio, la lingua e «Registra». La
+  superficie dichiara `counts`, e la banda nasconde la view `stats` di
+  `fub.stats` finché il documento ha il fuoco.
 - L'intestazione e il piè di pagina di una sezione (la storia `default`)
   sono `header` e `footer` accanto a `page`: righe di testo e campi
   `page`/`pages`, `locked` quando la storia ha altro (`running.rs`). Una

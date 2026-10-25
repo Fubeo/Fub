@@ -209,6 +209,29 @@ export interface SurfacePaperFit {
   subscribe(listener: () => void): () => void;
 }
 
+/** A fact about the document that the status band shows while the surface has the focus. */
+export interface SurfaceStatusItem {
+  /** Stable within the surface: the band keeps the element across redraws. */
+  readonly id: string;
+  readonly text: string;
+  /** Said by the tooltip; with `open`, what a click does. */
+  readonly hint?: string;
+  /** A click opens more about it: the band draws a button. */
+  readonly open?: () => void;
+}
+
+/**
+ * The surface's own entries in the status band: page, words, language. A
+ * surface that `counts` its words is the one source for them, and the declared
+ * word count steps aside while it has the focus.
+ */
+export interface SurfaceStatus {
+  readonly counts: boolean;
+  items(): readonly SurfaceStatusItem[];
+  /** Called when an item may have changed: an edit, the selection, the mode. */
+  subscribe(listener: () => void): () => void;
+}
+
 /** A tab the document brings to the side panel, next to the declared views. */
 export interface SurfacePanel {
   /** Stable within the surface: the panel keeps its tab across rebuilds. */
@@ -272,6 +295,8 @@ export interface EditorSurface {
   readonly paperFit?: SurfacePaperFit;
   /** The document's own tabs in the side panel. */
   readonly panels?: SurfacePanels;
+  /** The document's entries in the status band. */
+  readonly status?: SurfaceStatus;
   /**
    * Brings the view to a place in the document. `false` when this surface
    * cannot get there, so that the shell says it instead of doing nothing.

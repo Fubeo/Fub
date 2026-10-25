@@ -57,6 +57,7 @@ import { deleteChar, reviewAuthor, trackable, trackTransaction, tracking } from 
 
 export { mountRichRibbon } from "./ribbon";
 export { mountRichSide } from "./side";
+export { richStatus } from "./status";
 
 export interface RichEngineOptions {
   readonly onChange: (change: EditorChange) => void;
@@ -566,6 +567,14 @@ export class RichEngine {
   /// Il documento registra le modifiche.
   tracking(): boolean {
     return tracking(this.#view.state.doc);
+  }
+
+  /// Il foglio del cursore, da 1, e quanti sono: `null` se la carta non si
+  /// vede (in Scrittura) o non c'è ancora.
+  sheetOf(): { readonly at: number; readonly total: number } | null {
+    const plan = this.#sheets.plan;
+    if (!plan || !this.#sheets.visible()) return null;
+    return { at: sheetAt(plan, this.#view.state.selection.head) + 1, total: plan.sheets.length };
   }
 
   /// Mostra le occorrenze di una ricerca (nessuna con `null`) e seleziona

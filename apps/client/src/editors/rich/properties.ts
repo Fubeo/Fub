@@ -42,7 +42,7 @@ const FORMAT_NAMES: Readonly<Record<string, Key>> = {
 
 /// Il nome di una lingua (`it-IT`) nella lingua della shell; il codice se il
 /// browser non lo conosce.
-function languageName(code: string): string {
+export function languageName(code: string): string {
   try {
     return new Intl.DisplayNames([resolvedLanguage()], { type: "language" }).of(code) ?? code;
   } catch {

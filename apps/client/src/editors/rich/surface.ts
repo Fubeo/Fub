@@ -10,7 +10,7 @@
 // La superficie mostra perché un documento non si scrive (revisioni
 // tracciate, protezione, un documento che non tornerebbe identico): il motivo
 // lo misura il core all'apertura, e qui diventa una frase.
-import type { EditorSurface, PaperFit, SurfaceMountContext, SurfaceMode } from "../core/registry";
+import type { EditorSurface, PaperFit, SurfaceMountContext, SurfaceMode, SurfaceStatusItem } from "../core/registry";
 import { ACTION_UNAVAILABLE, type EditorActionState, type SurfaceEditorActions } from "../core/editor-actions";
 import type { EditorChange } from "../core/text-operation";
 import type { ProofPorts } from "../core/proof-ports";
@@ -214,6 +214,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   let ribbon: RichRibbon | null = null;
   // Il pannello del documento arriva anche lui col motore.
   let side: RichSide | null = null;
+  let statusOf: (() => readonly SurfaceStatusItem[]) | null = null;
   const reveals = new Set<(viewId: string) => void>();
   let pending: string | null = null;
   let readOnly = false;
@@ -265,7 +266,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
 
   const load = callbacks.loadEngine ?? (() => import("./engine"));
   load().then(
-    ({ RichEngine, mountRichRibbon, mountRichSide }) => {
+    ({ RichEngine, mountRichRibbon, mountRichSide, richStatus }) => {
       if (closed) return;
       page.removeAttribute("aria-busy");
       engine = new RichEngine(page, {
@@ -281,6 +282,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       side = mountRichSide(engine, media, (viewId) => {
         for (const listener of [...reveals]) listener(viewId);
       });
+      statusOf = richStatus(engine, side);
       ribbon = mountRichRibbon(
         engine,
         (id) => RICH_CHORDS[id] ?? null,
@@ -642,6 +644,16 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         return () => reveals.delete(listener);
       },
     },
+    // Il foglio, le parole, la lingua e «Registra» nella banda di stato: le
+    // parole sono quelle del Conteggio, e quelle della banda si fanno da parte.
+    status: {
+      counts: true,
+      items: () => statusOf?.() ?? [],
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
     // Ctrl+F: la barra di ricerca del documento, non quella della shell.
     find() {
       if (!ribbon) return false;
@@ -679,6 +691,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       ribbon = null;
       side?.destroy();
       side = null;
+      statusOf = null;
       // La shell rilegge le schede: non ce ne sono più.
       notify();
       listeners.clear();

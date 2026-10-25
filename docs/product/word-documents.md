@@ -209,6 +209,13 @@ Un documento si guarda in tre modi, dal selettore accanto al percorso:
   riga con il suo nome;
 - **Lettura**: la barra si ritira e resta la carta; Esc torna a Pagina.
 
+Mentre il documento ha il fuoco, la banda di stato dice il foglio del cursore
+(«Pagina 2 di 5», in Pagina e in Lettura), le parole («12 di 418 parole» con
+una selezione), la lingua che il file dice per il testo e **Registra** quando
+le modifiche si registrano. Le parole sono quelle di Proprietà › Conteggio, e
+un clic ci porta; il conteggio della nota, che la banda mostra per le altre
+note, si fa da parte.
+
 **Carta adattata**, nella scheda **Visualizza**, porta il documento di Pagina
 e di Lettura sulla carta del tema, che di notte è scura. Ogni colore del file
 tiene la tinta e il contrasto che aveva sul bianco. Con il contrasto alto è

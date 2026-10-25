@@ -4,6 +4,7 @@
 // perché un documento non si scrive, e smonta tutto anche a motore non ancora
 // caricato.
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { TextSelection } from "prosemirror-state";
 import { RICH_ACTIONS } from "./commands";
 import * as engineModule from "./engine";
 import { mountRichSurface, RICH_ACTION_IDS, RICH_CHORDS, RICH_PROFILE } from "./surface";
@@ -429,6 +430,46 @@ describe("la superficie ricca", () => {
     } finally {
       width.mockRestore();
     }
+  });
+
+  it("la banda dice il foglio e le parole del Conteggio, e un clic sulle parole apre il Conteggio", async () => {
+    let engine: engineModule.RichEngine | null = null;
+    class Captured extends engineModule.RichEngine {
+      constructor(...args: ConstructorParameters<typeof engineModule.RichEngine>) {
+        super(...args);
+        engine = this;
+      }
+    }
+    const { surface } = mount(() => Promise.resolve({ ...engineModule, RichEngine: Captured }));
+    await flush();
+    const page = { w: 595, h: 842, top: 72, bottom: 72, left: 72, right: 72 };
+    surface.buffer!.setDoc(
+      JSON.stringify({
+        format: "fub-rich",
+        version: 1,
+        page,
+        blocks: [{ t: "para", role: { kind: "body" }, k: "P", c: [{ t: "text", x: "una prosa di cinque parole", k: "R" }] }],
+      }),
+    );
+    const status = surface.status!;
+    expect(status.counts).toBe(true);
+    const said = () => Object.fromEntries(status.items().map((item) => [item.id, item.text]));
+    expect(said().words).toBe(t("rich.status.words", { count: "5" }));
+    expect(said().page).toBe(t("rich.status.page", { at: "1", total: "1" }));
+    expect(said().tracking).toBeUndefined();
+    // Il numero è quello del Conteggio di Proprietà, che il clic apre.
+    const side = inspector(surface);
+    status.items().find((item) => item.id === "words")!.open!();
+    const row = [...side.host.querySelectorAll("tr")].find((tr) => tr.querySelector("th")?.textContent === t("rich.count.words"))!;
+    expect(row.querySelector("td")!.textContent).toBe("5");
+    expect(document.activeElement?.closest(".rich-side-properties")).not.toBeNull();
+    // Una selezione: «2 di 5».
+    const e = engine as engineModule.RichEngine | null;
+    e!.dispatch(e!.state.tr.setSelection(TextSelection.create(e!.state.doc, 1, 9)));
+    expect(said().words).toBe(t("rich.status.words.selected", { selected: "2", count: "5" }));
+    side.close();
+    surface.destroy();
+    expect(status.items()).toEqual([]);
   });
 
   it("scrivere, incollare e annullare non fanno partire nessuna corsa", async () => {
