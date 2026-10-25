@@ -629,6 +629,9 @@ export const CHOREOGRAPHIES = [
     act: (page) => page.keyboard.press("Control+Enter"),
     arrived: sheetsMore(1),
     undo: (page) => page.keyboard.press("Control+KeyZ"),
+    // Il disegno dei fogli aspetta il fotogramma dopo la modifica: l'inversione
+    // si misura quando c'è.
+    reversing: sheetsMore(0),
     returned: sheetsMore(0),
   },
 ];

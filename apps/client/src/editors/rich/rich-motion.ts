@@ -236,9 +236,9 @@ export class RichMotion {
 
   /// I fogli che una modifica scritta sta per rifare: uno nuovo esce da quello
   /// sopra, uno tolto si dissolve, gli altri scivolano. Si legge subito dove
-  /// si vede ogni foglio di prima, perché il disegno riusa gli elementi per
-  /// indice e ne toglie: la corsa in volo di un foglio sta sull'elemento che
-  /// lo mostrava, e un elemento tolto la perde.
+  /// si vede ogni foglio di prima, perché il disegno toglie l'elemento del
+  /// foglio tolto, e con lui la sua corsa in volo. Gli altri fogli restano i
+  /// loro elementi (`sheets.ts`).
   redraw(previous: readonly HTMLElement[]): (change: SheetRedraw) => void {
     const scale = this.#options.scale();
     const local = (b: SheetBox): Rect => ({ left: b.left * scale, top: b.top * scale, width: b.width * scale, height: b.height * scale });

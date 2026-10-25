@@ -303,12 +303,33 @@ export class SheetDesk {
     // Prima di rifare: una corsa in volo vive sull'elemento che il disegno
     // riusa o toglie.
     const follow = drawn && this.#redrawn ? this.#redrawn(this.#drawnSheets()) : null;
+    const at = follow ? sheetAt(plan, view.state.selection.head) : 0;
+    if (follow) this.#keepIdentity(plan.sheets.length, at);
     this.#draw(plan, layout, width);
     if (follow && drawn) {
       const elements = this.#drawnSheets();
-      follow({ before: drawn, after: elements.map(sheetBox), elements, at: sheetAt(plan, view.state.selection.head) });
+      follow({ before: drawn, after: elements.map(sheetBox), elements, at });
     }
     return true;
+  }
+
+  /// Un foglio scritto o tolto vicino al cursore: il disegno riusa gli
+  /// elementi per indice, e senza questo il foglio dopo il taglio passerebbe
+  /// all'elemento del foglio nuovo, o il nuovo a quello del foglio dopo. Si
+  /// mette o si toglie l'elemento proprio lì, perché ogni foglio resti il suo
+  /// elemento e la sua corsa in volo prosegua su di lui. Gli indici sono quelli
+  /// del moto (`rich-motion.ts`): il nuovo è il foglio del cursore, il tolto
+  /// quello dopo.
+  #keepIdentity(total: number, at: number): void {
+    const sheets = this.#drawnSheets();
+    const delta = total - sheets.length;
+    if (delta === 1 && at >= 1 && at < sheets.length) {
+      sheets[at]!.before(sheetElement());
+      this.#drawn.splice(at, 0, "");
+    } else if (delta === -1 && at + 1 < sheets.length) {
+      sheets[at + 1]!.remove();
+      this.#drawn.splice(at + 1, 1);
+    }
   }
 
   #drawnSheets(): HTMLElement[] {

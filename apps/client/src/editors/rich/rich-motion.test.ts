@@ -120,6 +120,29 @@ describe("il foglio che nasce", () => {
     expect(driver.plays.every((play) => play.el.classList.contains("rich-sheet-paper"))).toBe(true);
   });
 
+  it("un salto scritto in mezzo apre un elemento nuovo: i fogli dopo restano i loro", () => {
+    fakeDesk();
+    driver = createManualDriver();
+    setMotionDriver(driver);
+    const e = engine([para("uno\u000cdue"), para("tre")]);
+    measure(e);
+    const [first, second] = [...document.querySelectorAll<HTMLElement>(".rich-sheets > .rich-sheet")];
+    e.select(2);
+    e.run("rich.break.page");
+    measure(e);
+    const opened = [...document.querySelectorAll<HTMLElement>(".rich-sheets > .rich-sheet")];
+    expect(opened).toHaveLength(3);
+    expect([opened[0], opened[2]]).toEqual([first, second]);
+    expect(opened[1]!.firstElementChild?.className).toBe("rich-sheet-paper");
+    // Tolto il salto, se ne va il suo elemento, e il foglio dopo resta il suo.
+    e.run("text.undo");
+    measure(e);
+    const closed = [...document.querySelectorAll<HTMLElement>(".rich-sheets > .rich-sheet")];
+    expect(closed).toHaveLength(2);
+    expect(closed[0]).toBe(first);
+    expect(closed[1]).toBe(second);
+  });
+
   it("tolto il salto, la sua sagoma si dissolve e non resta", async () => {
     fakeDesk();
     driver = createManualDriver();
