@@ -347,9 +347,10 @@ Cornice e segni sono sempre del tema. Del contenuto decide la modalità: una
 primo, fra `tema`, `file` e `adattato` (`apps/client/src/theme/content-look.ts`).
 Markdown, testo, sorgenti, Lavagna e Base dichiarano `tema`; disegno,
 annotazioni, immagini e media `file`; l'SVG `tema` nel sorgente e `file`
-nell'anteprima. Il documento e il foglio di calcolo non dichiarano ancora, e
-valgono `tema`: `apps/client/src/editors/core/surface-looks.test.ts` tiene
-l'elenco delle modalità senza aspetto, che può solo accorciarsi.
+nell'anteprima. Il documento offre `file` e `adattato` in Pagina e in
+Lettura, `tema` in Scrittura. Il foglio di calcolo non dichiara ancora, e vale
+`tema`: `apps/client/src/editors/core/surface-looks.test.ts` tiene l'elenco
+delle modalità senza aspetto, che può solo accorciarsi.
 
 L'aspetto che si vede lo risolve il controller del documento: vale la scelta
 del riquadro per quella famiglia (`PaneState.looks`), se la modalità la offre;
@@ -361,6 +362,13 @@ regione del contenuto (`.pane-editor`) riceve la classe `look-tema`,
 `apps/client/src/theme/scrittoio/structure.css`: in `look-file` i segni di Fub
 prendono i colori della carta chiara (`--paper-*`). L'adattamento di un colore
 del file a un'altra carta è una funzione sola, `apps/client/src/theme/adapt.ts`.
+
+Dove un componente offre `file` o `adattato` il suo contenuto lo disegna
+quella meccanica, e una pelle, un tema o un frammento lo vestono soltanto
+sotto `.look-tema`. Il sanitizer lo fa rispettare con il gate del contenuto
+(`CONTENT_GATE` in `apps/client/src/theme/scrittoio/anatomia.ts`, violazione
+`content-look`): le classi di contenuto dei componenti con `gate`, e ogni
+selettore di tipo dentro le loro cornici. Ha `gate` il documento.
 
 Un editor non scrive un ruolo del tema sull'elemento: sull'elemento vanno i
 valori del file. `.github/scripts/check-inline-theme.mjs` lo controlla in

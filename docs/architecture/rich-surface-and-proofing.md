@@ -176,20 +176,37 @@ l'IPC.
   `wordcraft_geom::PAPER_SIZES` attraverso `paper.generated.ts`
   (`UPDATE_MIRROR=1 cargo test -p fub-format-rich --test ts_paper`). Non è una
   sostituzione, quindi mentre si registra si rifiuta. Il codec ODT rifiuta
-  una pagina. Il foglio (`.rich-content`) prende da `pageStyle` la pagina
-  del documento come stile in linea: larghezza della carta, margini (i
-  laterali in proporzione quando il riquadro è più stretto) e un bordo.
-  `start` dice dove comincia la sezione: la fine della sezione prima lo
-  mostra nel suo nome («Fine sezione · continua», `breaks.ts`), come i
-  salti pagina e di colonna mostrano il loro.
+  una pagina, e un formato senza la sua (l'ODT) vale `DEFAULT_PAGE`, un A4
+  con i margini di 2 cm che il riquadro Pagina dice senza scriverlo.
+  `pageVariables` mette la pagina sul testo (`.rich-content`) come variabili
+  di dato in punti (`--page-w`, `--page-top`, …), che la carta di Pagina e di
+  Lettura legge in `structure.css`: la carta è grande quanto quella vera e
+  non si stringe col riquadro. `start` dice dove comincia la sezione: la fine
+  della sezione prima lo mostra nel suo nome («Fine sezione · continua»,
+  `breaks.ts`), come i salti pagina e di colonna mostrano il loro.
+- I fogli sono della vista (`editors/rich/sheets.ts`). `sheetPlan` legge dal
+  documento un foglio per salto pagina e per fine di sezione che comincia a
+  pagina nuova, con la pagina, l'intestazione e il piè che valgono lì.
+  `SheetDesk` misura una volta per fotogramma, e soltanto quando la carta si
+  vede: scrive l'altezza degli spazi (`.rich-sheet-gap`, decorazioni
+  `aria-hidden`), così il testo dopo un taglio comincia al margine del foglio
+  dopo, e disegna i fogli (`.rich-sheet`) dietro il testo con i numeri veri.
+  Un foglio il cui testo non ci sta si allunga. In Scrittura i tagli restano
+  righe con il loro nome. Lo zoom (`fitScale`, «Adatta larghezza» e «Pagina
+  intera» dalla banda di stato con `SurfacePaperFit`) è lo `zoom` CSS della
+  scrivania, e le misure lette tornano in px della carta.
 - L'intestazione e il piè di pagina di una sezione (la storia `default`)
   sono `header` e `footer` accanto a `page`: righe di testo e campi
   `page`/`pages`, `locked` quando la storia ha altro (`running.rs`). Una
   storia che non cambia resta quella che è; una cambiata diventa una storia
   nuova con l'aspetto della prima riga di prima, o con gli stili `Header` e
-  `Footer`. Nello schema sono attributi del nodo `section` e del documento;
-  `page.ts` li scrive come testo con i codici `{PAGE}` e `{NUMPAGES}`
-  (`runningText`, `runningOf`, `setRunning`).
+  `Footer`. Nello schema sono attributi del nodo `section` e del documento.
+  Si scrivono sul posto (`editors/rich/running.ts`): un doppio clic nel
+  margine di un foglio (`SheetDesk.zoneAt`) o i bottoni della barra aprono
+  sopra il margine un campo con i numeri come gettoni, e chiudendolo
+  `setRunning` scrive la storia con un passo solo. `page.ts` tiene la forma
+  di testo con i codici `{PAGE}` e `{NUMPAGES}` (`runningText`,
+  `runningOf`).
 - `editors/rich/toc.ts` (`insertToc`) mette prima del blocco del cursore, o
   al posto del sommario che c'è, un paragrafo `TOCHeading` che finisce con il
   campo `toc` e una voce `TOC1`…`TOC3` per titolo, come li scrive Word; il
@@ -201,12 +218,33 @@ verifica ancora come per CodeMirror. Il Markdown non dipende da questa famiglia;
 senza la feature `rich` dell'host questi documenti tornano file a byte.
 
 L'aspetto del contenuto
-([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)): la
-modalità `document` non dichiara ancora i suoi aspetti, e vale `tema`. I
-caratteri e i colori del file stanno in linea sugli elementi, mentre le regole
-della pelle sui titoli (`.rich-heading`) valgono solo sotto `.look-tema`. Le
-revisioni, il filo della carta e i commenti scrivono ancora ruoli del tema
-sull'elemento, contati nell'elenco di `check-inline-theme.mjs`.
+([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)): le
+modalità `document` (Pagina) e `reading` (Lettura) offrono `file` e
+`adattato`, `writing` (Scrittura) offre `tema`. I valori del file (carattere,
+misura, colore, evidenziato, spazi, interlinea) stanno sull'elemento come
+variabili di dato `--file-*`, e li disegna la meccanica di `structure.css`
+sotto `look-file` e `look-adattato`; in Scrittura nessuna regola li legge, e
+cambiare modalità non ridisegna il documento. Nell'aspetto adattato
+`editors/rich/tints.ts` porta ogni colore del file sulla carta del tema con
+`theme/adapt.ts`, come decorazione, perché il colore dipende dalla carta e
+non dal documento. Le regole della pelle sul contenuto valgono solo sotto
+`.look-tema`, e il gate del sanitizer lo fa rispettare. I segni del documento
+(revisioni, correttore, ricerca, commenti) prendono i ruoli della carta su
+cui stanno, dalla pelle, e la superficie non scrive ruoli del tema
+sull'elemento.
+
+Il moto della carta (`editors/rich/rich-motion.ts`) segue la regola del palco:
+il testo è sempre al suo posto finale, e si muove la sagoma di ogni foglio
+(`.rich-sheet::before`). `RichMotion` osserva la classe `look-*`,
+`data-mode` e la barra, e tiene una fotografia del «prima» aggiornata a ogni
+scorrimento e a ogni misura: il paragrafo in cima alla vista resta in cima
+(`readingPoint`, `keepReadingPoint`), e ogni sagoma va dal rettangolo che si
+vedeva, anche a metà di una corsa, a quello nuovo. Lo zoom e i fogli rifatti
+da una modifica scritta li annuncia il motore: lo zoom tiene il centro della
+vista, un foglio nuovo esce da quello sopra, di uno tolto resta una sagoma
+(`.rich-sheet-ghost`) che si dissolve. Un documento aperto o cambiato da
+fuori non muove niente; le coreografie `rich-*` di `bench/motion-rules.mjs`
+lo misurano.
 
 ## Correttore condiviso
 

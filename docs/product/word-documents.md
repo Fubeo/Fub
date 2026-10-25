@@ -113,14 +113,16 @@ Da **Trova** e **Sostituisci** di **Home** e dalla scheda **Revisione**:
   l'avviso lo dice. Il resto della sezione (la rilegatura, la larghezza delle
   colonne, le intestazioni) resta com'è, ma cambiare il numero di colonne le
   rende uguali. Mentre si registra la pagina non si cambia. Un `.odt` non
-  offre la pagina. Il foglio di un `.docx` è la pagina dell'ultima sezione,
-  larga quanto la carta e con i suoi margini, e la si cambia vedendola; in un
-  riquadro più stretto il foglio si stringe con i margini in proporzione. Le
-  colonne e le pagine delle altre sezioni non si vedono sul foglio;
-- **Intestazione e piè di pagina** in un `.docx` scrivono quelli della
-  sezione del cursore come testo, una riga per paragrafo, con il numero di
-  pagina (`{PAGE}`) e il numero delle pagine (`{NUMPAGES}`) messi dai loro
-  bottoni. Una riga riscritta tiene l'aspetto di quella di prima; una nuova
+  offre la pagina. La pagina si cambia vedendola sui fogli (in
+  [Pagina, Scrittura e Lettura](#pagina-scrittura-e-lettura)); le colonne non
+  si vedono sul foglio;
+- **Intestazione e piè di pagina** in un `.docx` si scrivono sul posto: un
+  doppio clic nel margine di un foglio, o i loro bottoni nella barra, aprono
+  sopra il margine un campo «Intestazione · Sezione N». Si scrive testo, una
+  riga per paragrafo; il numero di pagina e il numero delle pagine sono i
+  gettoni «Pagina» e «Pagine», messi dai due bottoni accanto all'etichetta.
+  Esc o un clic fuori chiudono e scrivono, con un passo solo che `Ctrl+Z`
+  annulla. Una riga riscritta tiene l'aspetto di quella di prima; una nuova
   prende gli stili Intestazione e Piè di pagina di Word. Vuoti, la sezione
   mostra quelli della sezione prima. Quelli della prima pagina e delle pagine
   pari restano come sono, e uno con immagini, tabelle o aspetti diversi si
@@ -164,9 +166,16 @@ Limiti attuali:
 - una nota nuova è testo semplice su una riga, senza formattazione; copiata e
   incollata, è una seconda nota con lo stesso testo;
 - l'interlinea «almeno» ed «esattamente» si mostra e si conserva, ma dalla
-  barra si sceglie soltanto un multiplo; rientri, spazi e interlinea che
-  vengono dallo stile non si disegnano (il foglio usa quelli del tema), e un
-  campo vuoto della spaziatura non dice quanto valgono;
+  barra si sceglie soltanto un multiplo. La carta disegna carattere, misura,
+  colore, rientri, spazi e interlinea che il file scrive sul paragrafo o sul
+  tratto; quelli che vengono dallo stile non si disegnano (valgono i
+  predefiniti di Word), e un campo vuoto della spaziatura non dice quanto
+  valgono. I bordi delle tabelle del file non si disegnano;
+- un foglio il cui testo non ci sta si allunga e non si spezza, quindi le
+  **Pagine** della banda di stato contano i fogli, non le pagine che Word
+  stamperebbe. Una sezione che comincia a pagina pari o dispari apre un foglio
+  solo, senza il foglio bianco; un salto dentro una tabella non apre un
+  foglio; i numeri di pagina non ripartono a ogni sezione;
 - un carattere che la macchina non ha si mostra con uno di ripiego, ma nel
   file resta quello scelto; in un `.docx` l'evidenziatore ha soltanto i sedici
   colori di Word;
@@ -182,6 +191,37 @@ Limiti attuali:
   pagina, note e caselle di testo, fonde le impostazioni che genera con quelle
   originali e toglie le immagini che il testo non mostra più. Il contenuto non
   cambia, ma il file salvato non è identico byte per byte.
+
+## Pagina, Scrittura e Lettura
+
+Un documento si guarda in tre modi, dal selettore accanto al percorso:
+
+- **Pagina**, il predefinito: il documento sta sulla carta vera, misurata in
+  punti, sulla scrivania. Ha la carta e i margini della sua sezione, e il
+  carattere, la misura e i colori del file. Ogni salto pagina e ogni sezione
+  che comincia a pagina nuova aprono un foglio, con l'intestazione, il piè e i
+  numeri di pagina veri; fra due fogli c'è il nome dell'interruzione. La carta
+  non si stringe col riquadro, si scorre. **Adatta larghezza** e **Pagina
+  intera**, nella banda di stato, la scalano alla vista, fra un decimo e il
+  doppio; un altro clic torna alla carta vera;
+- **Scrittura**: la colonna di una nota, con il carattere e i colori del
+  tema. Restano titoli, elenchi, tabelle ed enfasi, e un'interruzione è una
+  riga con il suo nome;
+- **Lettura**: la barra si ritira e resta la carta; Esc torna a Pagina.
+
+**Carta adattata**, nella scheda **Visualizza**, porta il documento di Pagina
+e di Lettura sulla carta del tema, che di notte è scura. Ogni colore del file
+tiene la tinta e il contrasto che aveva sul bianco. Con il contrasto alto è
+il predefinito, se l'aspetto del contenuto in Preferenze › Aspetto è
+automatico. I segni di Fub (revisioni, correttore, ricerca, commenti)
+prendono i colori della carta su cui stanno.
+
+Cambiando modo, ritirando la barra o cambiando lo zoom si muove la carta, e
+il testo è già al suo posto: il paragrafo in cima alla vista resta in cima, e
+lo zoom tiene fermo il centro della vista. Un foglio aperto da `Ctrl+Invio`
+esce da quello sopra; tolto il salto, la sua sagoma si dissolve. Un documento
+aperto o cambiato da fuori non muove niente, e con il moto ridotto gli stessi
+stati arrivano subito.
 
 ## Tasto destro e mini-barra
 
@@ -201,7 +241,9 @@ formattazione è spenta, secondo l'impostazione «Mini-barra di formattazione».
 ## OpenDocument
 
 Un `.odt` si apre nella stessa superficie e si modifica come un `.docx`, con
-gli stessi limiti; un salto di pagina o di colonna però non si scrive, e una
+gli stessi limiti. Il codec non porta la sua pagina, quindi in Pagina sta su
+un A4 con i margini di 2 cm, che il riquadro **Pagina** dice senza
+cambiarli; un salto di pagina o di colonna però non si scrive, e una
 tabella nuova ha una colonna per cella della riga più lunga e celle con un
 bordo sottile (lo stile automatico `FubC…`). Le colonne si aggiungono o si
 tolgono soltanto in una tabella con le colonne tutte uguali, e le celle si
