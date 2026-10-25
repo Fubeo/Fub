@@ -183,20 +183,21 @@ export function setColumns(cols: number): Command {
   return changePage((page) => ({ ...page, cols }));
 }
 
-/// Il foglio con la pagina del documento: largo quanto la carta, con i suoi
-/// margini, e il bordo che la mostra. In un riquadro più stretto della carta
-/// il foglio si stringe, lasciando vedere il bordo, e i margini laterali con
-/// lui in proporzione. Senza
-/// una pagina resta il foglio del tema.
-export function pageStyle(page: Page | null): string[] {
-  if (!page) return [];
-  const side = (margin: number) => `min(${margin}pt, ${((margin / page.w) * 100).toFixed(3)}%)`;
-  return [
-    `max-width: min(${page.w}pt, calc(100% - 2 * var(--space-7)))`,
-    `padding: ${page.top}pt ${side(page.right)} ${page.bottom}pt ${side(page.left)}`,
-    "margin-block: var(--space-7)",
-    "box-shadow: 0 0 0 1px var(--doc-rule-soft)",
-  ];
+/// Le misure della pagina del documento, come variabili di dato in punti: la
+/// carta è grande quanto la carta vera, con i suoi margini, e non si stringe
+/// col riquadro (si scorre). Le usa la carta di Pagina e di Lettura
+/// (`structure.css`); senza una pagina vale quella dell'ODT, un A4 con i
+/// margini di 2 cm. In Scrittura non le legge nessuno.
+export function pageVariables(page: Page | null): Readonly<Record<string, string>> {
+  if (!page) return {};
+  return {
+    "--page-w": `${page.w}pt`,
+    "--page-h": `${page.h}pt`,
+    "--page-top": `${page.top}pt`,
+    "--page-right": `${page.right}pt`,
+    "--page-bottom": `${page.bottom}pt`,
+    "--page-left": `${page.left}pt`,
+  };
 }
 
 /// Come un numero di pagina si scrive nel testo di un'intestazione: con il

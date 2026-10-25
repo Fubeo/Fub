@@ -42,7 +42,6 @@ const EXCEPTIONS = new Map([
   // La stampa compone una pagina sua, fuori dalla pelle.
   [`${EDITORS}media/print-view.ts`, 2],
   [`${EDITORS}rich/comments.ts`, 1],
-  [`${EDITORS}rich/page.ts`, 3],
   [`${EDITORS}rich/review.ts`, 3],
   [`${EDITORS}rich/schema.ts`, 2],
   [`${EDITORS}spatial/tools/accessibility-panel.ts`, 1],

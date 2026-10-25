@@ -7047,7 +7047,22 @@ kbd,
   outline: none;
   box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
 }
-.rich-content {
+/* La scrivania di Pagina e di Lettura è il fondo dello Scrittoio spostato
+   di poco verso il testo: un poco più scura di giorno, un poco più chiara di
+   notte, perché la carta chiara non abbagli. In oklab, perché fra due grigi
+   quasi neutri la tinta di oklch girerebbe. */
+.look-file .rich-page,
+.look-adattato .rich-page {
+  background: color-mix(in oklab, var(--elevation-base-surface) 92%, var(--text));
+}
+/* La carta si solleva: il filo e l'elevazione della carta del tema. */
+.rich-sheet {
+  background: var(--doc-bg);
+  border: 1px solid var(--doc-rule-soft);
+  box-shadow: var(--elevation-paper-shadow);
+}
+/* In Scrittura il testo sta nella colonna della nota. */
+.look-tema .rich-content {
   max-width: calc(var(--content-width) + 2 * var(--space-9));
   margin-inline: auto;
   padding: var(--space-9) var(--space-9) var(--space-11);
@@ -7092,7 +7107,7 @@ kbd,
   color: var(--muted);
 }
 @container sheet (max-width: 560px) {
-  .rich-content {
+  .look-tema .rich-content {
     padding: var(--space-8) var(--space-7) var(--space-10);
   }
 }

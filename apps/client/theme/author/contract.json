@@ -694,6 +694,7 @@
     "rich-surface",
     "rich-notice",
     "rich-page",
+    "rich-sheet",
     "rich-content",
     "rich-para",
     "rich-heading",
@@ -732,6 +733,8 @@
     "rich-strip-table-cell",
     "rich-strip-count",
     "look-tema",
+    "look-file",
+    "look-adattato",
     "rich-atom",
     "rich-atom-image",
     "rich-atom-graphic",
@@ -1417,9 +1420,7 @@
     "onboarding-extra",
     "onboarding-trouble",
     "cm-cursorLayer",
-    "sheet-ghost",
-    "look-file",
-    "look-adattato"
+    "sheet-ghost"
   ],
   "layers": {
     "app": "cornice",
@@ -1958,7 +1959,8 @@
     "rich-ribbon-underline": "cornice",
     "rich-surface": "cornice",
     "rich-notice": "cornice",
-    "rich-page": "contenuto",
+    "rich-page": "cornice",
+    "rich-sheet": "cornice",
     "rich-content": "contenuto",
     "rich-para": "contenuto",
     "rich-heading": "contenuto",
@@ -1997,6 +1999,8 @@
     "rich-strip-table-cell": "cornice",
     "rich-strip-count": "cornice",
     "look-tema": "contenuto",
+    "look-file": "contenuto",
+    "look-adattato": "contenuto",
     "rich-atom": "contenuto",
     "rich-atom-image": "contenuto",
     "rich-atom-graphic": "contenuto",
@@ -2682,9 +2686,7 @@
     "onboarding-extra": "cornice",
     "onboarding-trouble": "cornice",
     "cm-cursorLayer": "segno",
-    "sheet-ghost": "cornice",
-    "look-file": "contenuto",
-    "look-adattato": "contenuto"
+    "sheet-ghost": "cornice"
   },
   "states": [
     "rest",
@@ -4429,6 +4431,7 @@
         "rich-surface",
         "rich-notice",
         "rich-page",
+        "rich-sheet",
         "rich-content",
         "rich-para",
         "rich-heading",
@@ -4478,7 +4481,9 @@
       "name": "content-look",
       "part": "editors",
       "hooks": [
-        "look-tema"
+        "look-tema",
+        "look-file",
+        "look-adattato"
       ],
       "states": [
         "rest"
@@ -7090,7 +7095,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 26,
-    "hooks": 1263,
+    "hooks": 1264,
     "state_names": 7,
     "assigned_states": 638,
     "components": 190,

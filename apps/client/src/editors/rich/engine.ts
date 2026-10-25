@@ -40,7 +40,7 @@ import {
 } from "./commands";
 import { collectKeys, filterSlice, uniqueKeys } from "./paste";
 import { parseProjection, writeComment, writeHead, writeRunning, type Look, type Page, type RunningText, type ParaStyle, type Projection, type ReadOnlyReason } from "./projection";
-import { pageStyle, samePage } from "./page";
+import { pageVariables, samePage } from "./page";
 import { richProof } from "./proof";
 import { commentPlugin, commentsOf } from "./comments";
 import { notePlugin } from "./notes";
@@ -94,21 +94,34 @@ export class RichEngine {
   /// concede per due secondi, come in CodeMirror.
   #tabLeaves = 0;
   #stopPage: () => void;
+  /// La scrivania: la carta e il testo che ci sta sopra. Porta le misure
+  /// della pagina come variabili di dato, che la carta e il testo leggono.
+  readonly #desk: HTMLElement;
+  #drawnPage = "";
 
   constructor(parent: HTMLElement, options: RichEngineOptions) {
     this.#options = options;
     this.#proofClient = options.proof ? new ProofClient(options.proof.ports) : null;
-    this.#view = new EditorView(parent, {
+    // La carta è una sagoma dietro il testo, non il testo: la disegna la
+    // pelle, e il testo resta trasparente sopra.
+    this.#desk = document.createElement("div");
+    this.#desk.className = "rich-desk";
+    const sheets = document.createElement("div");
+    sheets.className = "rich-sheets";
+    sheets.setAttribute("aria-hidden", "true");
+    const sheet = document.createElement("div");
+    sheet.className = "rich-sheet";
+    sheets.append(sheet);
+    this.#desk.append(sheets);
+    parent.append(this.#desk);
+    this.#view = new EditorView(this.#desk, {
       state: this.#state(richSchema.nodes.doc.create(null, richSchema.nodes.para.create())),
       editable: () => this.editable(),
-      attributes: (state) => ({
+      attributes: () => ({
         class: "rich-content",
-        // La dimensione di un paragrafo senza stile (quella di uno con uno
-        // stile proprio si misura su questa) e la pagina del documento.
-        style: [
-          ...(this.#head.f?.size !== undefined ? [`--rich-doc-pt: ${this.#head.f.size}`] : []),
-          ...pageStyle(state.doc.attrs.page as Page | null),
-        ].join("; "),
+        // La dimensione di un paragrafo senza stile: quella di uno con uno
+        // stile proprio si misura su questa.
+        style: this.#head.f?.size !== undefined ? `--rich-doc-pt: ${this.#head.f.size}` : "",
         role: "textbox",
         "aria-multiline": "true",
         "aria-label": options.label(),
@@ -498,7 +511,18 @@ export class RichEngine {
   }
 
   #notify(): void {
+    this.#drawPage();
     for (const listener of [...this.#listeners]) listener();
+  }
+
+  /// Le misure della pagina sulla scrivania, se sono cambiate.
+  #drawPage(): void {
+    const variables = pageVariables(this.#view.state.doc.attrs.page as Page | null);
+    const drawn = JSON.stringify(variables);
+    if (drawn === this.#drawnPage) return;
+    for (const name of Object.keys(JSON.parse(this.#drawnPage || "{}") as Record<string, string>)) this.#desk.style.removeProperty(name);
+    for (const [name, value] of Object.entries(variables)) this.#desk.style.setProperty(name, value);
+    this.#drawnPage = drawn;
   }
 
   setReadOnly(readOnly: boolean): void {
@@ -624,6 +648,7 @@ export class RichEngine {
     this.#listeners.clear();
     this.#asks.clear();
     this.#view.destroy();
+    this.#desk.remove();
     this.#proofClient?.dispose();
   }
 

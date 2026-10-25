@@ -9,7 +9,7 @@ import {
   formatLength,
   MARGIN_PRESETS,
   pageAt,
-  pageStyle,
+  pageVariables,
   PAPER_SIZES,
   paperLabel,
   paperName,
@@ -101,15 +101,35 @@ describe("pagina", () => {
     expect(MARGIN_PRESETS.every((m) => validPage({ ...LETTER, ...m }))).toBe(true);
   });
 
-  it("il foglio prende la carta e i margini del documento", () => {
+  it("la scrivania prende la carta e i margini del documento, in punti veri", () => {
     const e = engine({ ...LETTER, left: 90 });
-    const sheet = document.querySelector<HTMLElement>(".rich-content")!;
-    expect(sheet.style.maxWidth).toContain("612pt");
-    expect(pageStyle({ ...LETTER, left: 90 })).toContain("padding: 72pt min(72pt, 11.765%) 72pt min(90pt, 14.706%)");
+    const desk = document.querySelector<HTMLElement>(".rich-desk")!;
+    // Letter: 612 × 792 pt, cioè 816 × 1056 px CSS al 100 %.
+    expect(desk.style.getPropertyValue("--page-w")).toBe("612pt");
+    expect(desk.style.getPropertyValue("--page-h")).toBe("792pt");
+    expect(desk.style.getPropertyValue("--page-left")).toBe("90pt");
+    expect(desk.style.getPropertyValue("--page-right")).toBe("72pt");
+    // Nessuna misura dipende dal riquadro, né un ruolo del tema sta sull'elemento.
+    expect(desk.getAttribute("style")).not.toMatch(/%|min\(|var\(/);
+    expect(desk.querySelector(":scope > .rich-sheets > .rich-sheet")).not.toBeNull();
+    expect(desk.querySelector(":scope > .rich-content")).not.toBeNull();
     e.select(e.state.doc.content.size - 2);
     e.apply(setLandscape(true));
-    expect(sheet.style.maxWidth).toContain("792pt");
-    expect(pageStyle(null)).toEqual([]);
+    expect(desk.style.getPropertyValue("--page-w")).toBe("792pt");
+    expect(desk.style.getPropertyValue("--page-h")).toBe("612pt");
+  });
+
+  it("A4 misura 595,3 × 841,9 pt, e senza una pagina non si scrive niente", () => {
+    const a4 = { w: 595.3, h: 841.9, top: 56.7, bottom: 56.7, left: 56.7, right: 56.7 };
+    expect(pageVariables(a4)).toEqual({
+      "--page-w": "595.3pt",
+      "--page-h": "841.9pt",
+      "--page-top": "56.7pt",
+      "--page-right": "56.7pt",
+      "--page-bottom": "56.7pt",
+      "--page-left": "56.7pt",
+    });
+    expect(pageVariables(null)).toEqual({});
   });
 
   it("senza una pagina nel formato non c'è niente da cambiare, e la barra non la offre", () => {

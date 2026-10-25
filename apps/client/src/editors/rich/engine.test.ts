@@ -50,7 +50,7 @@ const blocksOf = (e: RichEngine) => parseProjection(e.getDoc()).blocks;
 describe("il motore ricco", () => {
   it("il Tab si ferma sul foglio: Invio porta a scrivere, e dopo un Esc il Tab esce invece di scrivere", () => {
     const e = engine(source([para("uno")]));
-    const page = document.querySelector<HTMLElement>(".rich-content")!.parentElement!;
+    const page = document.querySelector<HTMLElement>(".rich-desk")!.parentElement!;
     const editable = document.querySelector<HTMLElement>(".rich-content")!;
     expect(page.tabIndex).toBe(0);
     expect(page.getAttribute("role")).toBe("document");

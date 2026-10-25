@@ -2138,7 +2138,31 @@ body {
 .rich-strip-table-cell { width: 20px; height: 20px; }
 .rich-strip-count td { text-align: end; }
 .rich-strip-count th[scope="row"] { text-align: start; }
-.rich-page { flex: 1; min-height: 0; overflow-y: auto; }
+.rich-page { flex: 1; min-height: 0; overflow: auto; }
+/* La scrivania: dietro il testo, le sagome della carta, che la pelle dipinge;
+   sopra, il testo trasparente. In Scrittura la carta non c'è, e il testo sta
+   nella colonna del tema. */
+.rich-desk { position: relative; }
+.rich-sheets { position: absolute; inset: 0; pointer-events: none; }
+.rich-sheet { position: absolute; inset: 0; }
+.look-tema .rich-sheets { display: none; }
+/* In Pagina e in Lettura la carta è quella vera: 1 pt è 1/72 di pollice, e
+   al 100 % un Letter è largo 816 px. Non si stringe col riquadro: si scorre.
+   Le misure sono del documento (`--page-*`, `page.ts`); senza, quelle
+   dell'ODT, un A4 con i margini di 2 cm. */
+.look-file .rich-page,
+.look-adattato .rich-page { padding: 24px; }
+.look-file .rich-desk,
+.look-adattato .rich-desk {
+  width: var(--page-w, 595.3pt);
+  min-height: var(--page-h, 841.9pt);
+  margin-inline: auto;
+}
+.look-file .rich-content,
+.look-adattato .rich-content {
+  min-height: var(--page-h, 841.9pt);
+  padding: var(--page-top, 56.7pt) var(--page-right, 56.7pt) var(--page-bottom, 56.7pt) var(--page-left, 56.7pt);
+}
 .rich-content {
   position: relative;
   box-sizing: border-box;
