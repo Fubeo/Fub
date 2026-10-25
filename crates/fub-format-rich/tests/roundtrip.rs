@@ -7,7 +7,7 @@ use base64::Engine;
 use common::{bytes, sample, styled, text, PNG};
 use fub_format_rich::projection::{
     Align, AtomKind, Block, Cell, Inline, Layout, Line, Look, Mark, Page, PageField, Para, Piece,
-    Projection, Role, Row, RunningText, Table, OPAQUE_SCHEMA,
+    Projection, Role, Row, RunningText, SectionBegin, Table, OPAQUE_SCHEMA,
 };
 use fub_format_rich::{open, save, Codec, ReadOnly, RichError, Saved};
 use wordcraft_doc::para::NoteKind;
@@ -1723,6 +1723,36 @@ fn un_documento_che_registra_le_modifiche_si_scrive_con_le_sue_revisioni() {
 }
 
 #[test]
+fn dove_comincia_una_sezione_si_legge_e_si_scrive() {
+    let mut d = sample();
+    let mut first = text("Prima sezione", CharProps::default());
+    first.section = Some(Box::new(d.last_section.clone()));
+    d.body.insert(0, para_block(first));
+    d.last_section.start = wordcraft_doc::section::SectionStart::Continuous;
+    let file = bytes(&d);
+    let p = projection(&file);
+    assert_eq!(p.page.unwrap().start, SectionBegin::Continuous);
+    assert_eq!(
+        para_mut(&mut p.clone(), 0).page.as_deref().unwrap().start,
+        SectionBegin::NextPage
+    );
+    // Nella proiezione si scrive soltanto quando non è a pagina nuova.
+    let json = p.to_json().unwrap();
+    assert_eq!(json.matches(r#""start":"continuous""#).count(), 1);
+    assert!(!json.contains("next_page"));
+    assert_eq!(save(Codec::Docx, &file, &json), Ok(Saved::Unchanged));
+    let mut changed = p.clone();
+    changed.page = Some(Page {
+        start: SectionBegin::OddPage,
+        ..p.page.unwrap()
+    });
+    assert_eq!(
+        read(&saved(&file, &changed)).last_section.start,
+        wordcraft_doc::section::SectionStart::OddPage
+    );
+}
+
+#[test]
 fn la_pagina_di_ogni_sezione_va_e_torna() {
     let mut d = sample();
     let mut first = text("Prima sezione", CharProps::default());
@@ -1739,6 +1769,7 @@ fn la_pagina_di_ogni_sezione_va_e_torna() {
         left: 72.0,
         right: 72.0,
         cols: 1,
+        start: Default::default(),
     };
     assert_eq!(p.page, Some(letter));
     assert_eq!(para_mut(&mut p.clone(), 0).page.as_deref(), Some(&letter));

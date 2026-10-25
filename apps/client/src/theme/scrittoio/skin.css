@@ -7109,6 +7109,15 @@ kbd,
 .rich-break-column {
   border-top: 1px dotted var(--doc-rule-soft);
 }
+.rich-break-page[data-name]::after,
+.rich-break-column[data-name]::after,
+.rich-section[data-name]::after {
+  background: var(--doc-bg);
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
 .rich-table {
   margin-block: 0 var(--space-4);
 }

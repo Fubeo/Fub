@@ -278,3 +278,39 @@ describe("le misure come Word", () => {
     expect(paperLabel("A4")).toBe("A4");
   });
 });
+
+describe("le interruzioni", () => {
+  it("la fine di una sezione dice dove comincia quella dopo, e lo tiene quando la pagina cambia", () => {
+    const e = engine(LETTER);
+    const end = () => document.querySelector<HTMLElement>(".rich-section")!;
+    expect(end().dataset.name).toBe(`${t("rich.break.section")} · ${t("rich.break.next_page")}`);
+    e.setDoc(JSON.stringify({ format: "fub-rich", version: 1, page: { ...LETTER, start: "continuous" }, blocks: [para("uno", { sect: "s1", page: LETTER }), para("due")] }));
+    expect(end().dataset.name).toBe(`${t("rich.break.section")} · ${t("rich.break.continuous")}`);
+    expect(end().getAttribute("aria-label")).toBe(end().dataset.name);
+    // I margini cambiati non fanno ricominciare la sezione a pagina nuova.
+    e.select(e.state.doc.content.size - 2);
+    expect(e.apply(setMargins({ top: 36, bottom: 36, left: 36, right: 36 }))).toBe(true);
+    expect(last(e)?.start).toBe("continuous");
+    expect(e.getDoc()).toContain(`"right":36.0,"start":"continuous"}`);
+    expect(end().dataset.name).toBe(`${t("rich.break.section")} · ${t("rich.break.continuous")}`);
+    // Un inizio che il formato non conosce è una proiezione malformata.
+    expect(() => parseProjection(JSON.stringify({ format: "fub-rich", version: 1, page: { ...LETTER, start: "domani" }, blocks: [para("x")] }))).toThrow();
+  });
+
+  it("senza una pagina la fine di una sezione dice soltanto la fine", () => {
+    engine(null);
+    expect(document.querySelector<HTMLElement>(".rich-section")!.dataset.name).toBe(t("rich.break.section"));
+  });
+
+  it("un salto pagina e un salto di colonna hanno il loro nome", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const made = new RichEngine(parent, { label: () => "documento", onChange: () => {}, onSelectionChange: () => {} });
+    engines.push(made);
+    made.setDoc(JSON.stringify({ format: "fub-rich", version: 1, blocks: [para("a\fb\u000ec")] }));
+    const page = document.querySelector<HTMLElement>(".rich-break-page")!;
+    expect(page.dataset.name).toBe(t("rich.break.page"));
+    expect(page.getAttribute("role")).toBe("separator");
+    expect(document.querySelector<HTMLElement>(".rich-break-column")!.getAttribute("aria-label")).toBe(t("rich.break.column"));
+  });
+});

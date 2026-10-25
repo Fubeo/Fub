@@ -126,11 +126,11 @@ export function validPage(page: Page): boolean {
 
 export function samePage(a: Page | null, b: Page | null): boolean {
   if (!a || !b) return a === b;
-  return a.w === b.w && a.h === b.h && a.top === b.top && a.bottom === b.bottom && a.left === b.left && a.right === b.right && columns(a) === columns(b);
+  return a.w === b.w && a.h === b.h && a.top === b.top && a.bottom === b.bottom && a.left === b.left && a.right === b.right && columns(a) === columns(b) && (a.start ?? "next_page") === (b.start ?? "next_page");
 }
 
 /// Una pagina con i valori arrotondati come li riscrive il codec, senza
-/// `cols` quando è una.
+/// `cols` quando è una; dove comincia la sezione resta com'era.
 function normal(page: Page): Page {
   const cols = columns(page);
   return {
@@ -141,6 +141,7 @@ function normal(page: Page): Page {
     left: twips(page.left),
     right: twips(page.right),
     ...(cols !== 1 ? { cols } : {}),
+    ...(page.start !== undefined && page.start !== "next_page" ? { start: page.start } : {}),
   };
 }
 

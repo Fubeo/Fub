@@ -21,6 +21,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use wordcraft_doc::para::{NoteKind, OBJ};
+use wordcraft_doc::section::SectionStart;
 
 use wordcraft_doc::props::{Highlight, LineSpacing, TextColor, Underline, VertAlign};
 use wordcraft_doc::{
@@ -79,7 +80,7 @@ pub struct Projection {
 
 /// La pagina di una sezione, in punti: i lati (già scambiati se è
 /// orizzontale), i margini e le colonne, di uguale larghezza quando la shell
-/// ne cambia il numero.
+/// ne cambia il numero, e dove comincia la sezione.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Page {
@@ -91,6 +92,48 @@ pub struct Page {
     pub right: f32,
     #[serde(default = "one_column", skip_serializing_if = "is_one_column")]
     pub cols: u32,
+    #[serde(default, skip_serializing_if = "SectionBegin::is_next_page")]
+    pub start: SectionBegin,
+}
+
+/// Dove comincia una sezione, come la fine della sezione prima lo dice in
+/// Word: a pagina nuova, di seguito, alla pagina pari o dispari, alla colonna
+/// dopo.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SectionBegin {
+    #[default]
+    NextPage,
+    Continuous,
+    EvenPage,
+    OddPage,
+    NextColumn,
+}
+
+impl SectionBegin {
+    fn is_next_page(&self) -> bool {
+        *self == SectionBegin::NextPage
+    }
+
+    fn of(start: SectionStart) -> SectionBegin {
+        match start {
+            SectionStart::NextPage => SectionBegin::NextPage,
+            SectionStart::Continuous => SectionBegin::Continuous,
+            SectionStart::EvenPage => SectionBegin::EvenPage,
+            SectionStart::OddPage => SectionBegin::OddPage,
+            SectionStart::NextColumn => SectionBegin::NextColumn,
+        }
+    }
+
+    fn start(self) -> SectionStart {
+        match self {
+            SectionBegin::NextPage => SectionStart::NextPage,
+            SectionBegin::Continuous => SectionStart::Continuous,
+            SectionBegin::EvenPage => SectionStart::EvenPage,
+            SectionBegin::OddPage => SectionStart::OddPage,
+            SectionBegin::NextColumn => SectionStart::NextColumn,
+        }
+    }
 }
 
 fn one_column() -> u32 {
@@ -119,6 +162,7 @@ impl Page {
             left: section.margin_left,
             right: section.margin_right,
             cols: section.columns.count.max(1),
+            start: SectionBegin::of(section.start),
         }
     }
 
@@ -144,6 +188,7 @@ impl Page {
             left: twips(self.left),
             right: twips(self.right),
             cols: self.cols,
+            start: self.start,
         }
     }
 
@@ -182,6 +227,7 @@ impl Page {
             section.columns.count = self.cols;
             section.columns.widths.clear();
         }
+        section.start = self.start.start();
         Ok(())
     }
 }

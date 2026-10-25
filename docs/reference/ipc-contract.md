@@ -331,8 +331,10 @@ revisioni `ins` e `del`, e il codec salva l'impostazione con il documento. Il
 codec ODT rifiuta `track`.
 
 `page` è la pagina di una sezione in punti, `{"w", "h", "top", "bottom",
-"left", "right", "cols"}`, con `w` e `h` già nel verso della pagina e `cols`
-assente quando è una. La porta il paragrafo che chiude la sezione, dopo
+"left", "right", "cols", "start"}`, con `w` e `h` già nel verso della pagina,
+`cols` assente quando è una e `start`, dove comincia la sezione
+(`continuous`, `even_page`, `odd_page`, `next_column`), assente quando
+comincia a pagina nuova (`next_page`). La porta il paragrafo che chiude la sezione, dopo
 `sect`, e la testa della proiezione per l'ultima, fra `styles` e `comments`.
 Il codec la rilegge al ventesimo di punto e rifiuta lati fuori da 7,2–1584,
 margini negativi o che lasciano meno di 36 punti al testo, `cols` fuori da

@@ -165,6 +165,9 @@ l'IPC.
   una pagina. Il foglio (`.rich-content`) prende da `pageStyle` la pagina
   del documento come stile in linea: larghezza della carta, margini (i
   laterali in proporzione quando il riquadro è più stretto) e un bordo.
+  `start` dice dove comincia la sezione: la fine della sezione prima lo
+  mostra nel suo nome («Fine sezione · continua», `breaks.ts`), come i
+  salti pagina e di colonna mostrano il loro.
 - L'intestazione e il piè di pagina di una sezione (la storia `default`)
   sono `header` e `footer` accanto a `page`: righe di testo e campi
   `page`/`pages`, `locked` quando la storia ha altro (`running.rs`). Una

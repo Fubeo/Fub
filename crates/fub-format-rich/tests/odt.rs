@@ -1269,6 +1269,7 @@ fn la_pagina_non_si_scrive() {
         left: 72.0,
         right: 72.0,
         cols: 1,
+        start: Default::default(),
     });
     assert!(matches!(
         save(Codec::Odt, &bytes, &projection.to_json().unwrap()),

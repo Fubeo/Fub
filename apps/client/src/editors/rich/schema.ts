@@ -272,7 +272,8 @@ const nodes: Record<string, NodeSpec> = {
   },
   para,
   /// La fine di una sezione: chiude il paragrafo prima di lei. `page`,
-  /// `header` e `footer` sono quelli della sezione che chiude.
+  /// `header` e `footer` sono quelli della sezione che chiude; il nome, che
+  /// dice dove comincia la sezione dopo, lo dà `breaks.ts`.
   section: {
     attrs: { sect: {}, page: { default: null }, header: { default: null }, footer: { default: null } },
     atom: true,
@@ -335,8 +336,10 @@ const nodes: Record<string, NodeSpec> = {
       const ch = node.attrs.ch as BreakChar;
       if (ch === "\n") return ["br", { "data-rich-ch": ch }];
       // Un salto pagina o di colonna: un filo a tutta riga, che va a capo e
-      // lo dice.
-      return ["span", { class: ch === "\u000c" ? "rich-break rich-break-page" : "rich-break rich-break-column", "data-rich-ch": ch }];
+      // dice il suo nome, come i segni di formattazione di Word.
+      const page = ch === "\u000c";
+      const name = t(page ? "rich.break.page" : "rich.break.column");
+      return ["span", { class: page ? "rich-break rich-break-page" : "rich-break rich-break-column", "data-rich-ch": ch, "data-name": name, role: "separator", "aria-label": name }];
     },
   },
   atom: {

@@ -254,7 +254,13 @@ export interface Page {
   readonly left: number;
   readonly right: number;
   readonly cols?: number;
+  /// Dove comincia la sezione; assente, a pagina nuova.
+  readonly start?: SectionStart;
 }
+
+/// Dove comincia una sezione, come lo dice in Word la fine della sezione prima.
+export type SectionStart = "next_page" | "continuous" | "even_page" | "odd_page" | "next_column";
+export const SECTION_STARTS: readonly SectionStart[] = ["next_page", "continuous", "even_page", "odd_page", "next_column"];
 
 const PAGE_LENGTHS = ["w", "h", "top", "bottom", "left", "right"] as const;
 
@@ -539,7 +545,7 @@ function readInline(value: unknown, where: string): Inline {
 
 function readPage(value: unknown, where: string): Page {
   const page = record(value, where);
-  closed(page, [...PAGE_LENGTHS, "cols"], where);
+  closed(page, [...PAGE_LENGTHS, "cols", "start"], where);
   const out: Record<string, number> = {};
   for (const key of PAGE_LENGTHS) {
     const n = optionalNumber(page[key], `${where}.${key}`);
@@ -548,7 +554,13 @@ function readPage(value: unknown, where: string): Page {
   }
   const cols = optionalNumber(page.cols, `${where}.cols`);
   if (cols !== undefined && (!Number.isInteger(cols) || cols < 1)) throw new ProjectionError(`${where}: colonne non valide`);
-  return { ...(out as Omit<Page, "cols">), ...(cols !== undefined && cols !== 1 ? { cols } : {}) };
+  if (page.start !== undefined && !SECTION_STARTS.includes(page.start as SectionStart)) throw new ProjectionError(`${where}.start: inizio sconosciuto`);
+  const start = page.start as SectionStart | undefined;
+  return {
+    ...(out as Omit<Page, "cols" | "start">),
+    ...(cols !== undefined && cols !== 1 ? { cols } : {}),
+    ...(start !== undefined && start !== "next_page" ? { start } : {}),
+  };
 }
 
 function readRunning(value: unknown, where: string): RunningText {
@@ -581,6 +593,7 @@ export function writeRunning(running: RunningText): string {
 export function writePage(page: Page): string {
   const fields = PAGE_LENGTHS.map((key) => `"${key}":${float(page[key])}`);
   if (page.cols !== undefined && page.cols !== 1) fields.push(`"cols":${page.cols}`);
+  if (page.start !== undefined && page.start !== "next_page") fields.push(`"start":"${page.start}"`);
   return `{${fields.join(",")}}`;
 }
 
