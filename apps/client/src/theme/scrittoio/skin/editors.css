@@ -1625,7 +1625,7 @@
   color: var(--muted);
   line-height: 1;
 }
-.rich-strip-button:hover:not(:disabled),
+.rich-strip-button:hover:not(:disabled):not([aria-disabled="true"]),
 .rich-strip-button[aria-expanded="true"],
 .rich-strip-swatch-none:hover,
 .rich-strip-swatch-custom:hover {
@@ -1641,7 +1641,8 @@
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
-.rich-strip-button:disabled {
+.rich-strip-button:disabled,
+.rich-strip-button[aria-disabled="true"] {
   opacity: 0.4;
   cursor: default;
 }

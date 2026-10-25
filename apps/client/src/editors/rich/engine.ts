@@ -387,6 +387,21 @@ export class RichEngine {
     return done;
   }
 
+  /// Un gesto che sposta soltanto la selezione, come andare a una revisione o
+  /// a un commento: vale anche in sola lettura. Se il comando toccasse il
+  /// documento non si applica.
+  browse(command: Command, focus = true): boolean {
+    if (this.#destroyed) return false;
+    let moved = false;
+    command(this.#view.state, (tr) => {
+      if (tr.docChanged) return;
+      this.#view.dispatch(tr);
+      moved = true;
+    }, this.#view);
+    if (moved && focus) this.#view.focus();
+    return moved;
+  }
+
   #filter(slice: Slice, view: EditorView): Slice {
     return filterSlice(slice, {
       known: this.#known,

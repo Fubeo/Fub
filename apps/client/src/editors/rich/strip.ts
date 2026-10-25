@@ -15,6 +15,7 @@ import { labelButton, openPopover, setPressed, textButton, textField, type Butto
 import { identifier } from "../../ui/a11y";
 import { ariaBinding, displayBinding } from "../../ui/commands";
 import { openLifetime } from "../../ui/lifetime";
+import { setTooltip } from "../../ui/tooltip";
 import { notify } from "../../ui/notify";
 import { errorText } from "../../host/errors";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
@@ -289,6 +290,12 @@ export function mountStrip(
     return el;
   }
 
+  // In sola lettura la striscia resta: i comandi che scrivono sono spenti
+  // (`aria-disabled`, così il fuoco li raggiunge e il suggerimento dice
+  // perché), quelli che leggono restano accesi.
+  let locked = false;
+  const reading = new Set<HTMLElement>();
+
   function button(label: () => string, id: string | null, onPress: (button: HTMLButtonElement) => void): HTMLButtonElement {
     const control = document.createElement("button");
     control.type = "button";
@@ -298,10 +305,13 @@ export function mountStrip(
       const hint = id ? chord(id) : null;
       const display = displayBinding(hint);
       labelButton(control, label(), display ? { display, aria: ariaBinding(hint) ?? undefined } : undefined);
+      if (locked && !reading.has(control)) setTooltip(control, t("rich.strip.readonly", { command: label() }));
     };
     name();
     relabel.push(name);
-    life.listen(control, "click", () => onPress(control));
+    life.listen(control, "click", () => {
+      if (control.getAttribute("aria-disabled") !== "true") onPress(control);
+    });
     return control;
   }
 
@@ -459,7 +469,7 @@ export function mountStrip(
 
   // ── Revisione ─────────────────────────────────────────────────────────
   const review = group("review");
-  const find = button(() => t("rich.find"), FIND_ACTION, () => engine.run(FIND_ACTION));
+  const find = button(() => t("rich.find"), FIND_ACTION, () => (engine.editable() ? engine.run(FIND_ACTION) : openFind(find)));
   find.append(icon(["M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z", "M15.5 15.5 20 20"]));
   find.setAttribute("aria-haspopup", "dialog");
   const count = button(() => t("rich.count"), null, (anchor) => openCount(anchor));
@@ -472,15 +482,20 @@ export function mountStrip(
   track.append(icon(["M4 20h4L19 9l-4-4L4 16z", "M13 7l4 4", "M14 20h6"]));
   track.setAttribute("aria-haspopup", "dialog");
   review.append(find, count, comments, track);
+  for (const control of [find, count, comments]) reading.add(control);
   if (shown("review")) {
     life.add(engine.onAsk(FIND_ACTION, () => openFind(find)));
     life.add(engine.onAsk(COMMENT_ACTION, () => openComments(comments, true)));
   }
   // Le revisioni tracciate: si vedono soltanto in un documento che ne ha.
+  // Le prime due scorrono le revisioni, e scorrere vale anche in sola lettura.
+  const MOVES: Readonly<Record<string, 1 | -1>> = { "rich.rev.previous": -1, "rich.rev.next": 1 };
   const revisionButtons = REVISION_BUTTONS.map((spec) => {
-    const control = button(() => t(spec.id as Key), spec.id, () => engine.run(spec.id));
+    const move = MOVES[spec.id];
+    const control = button(() => t(spec.id as Key), spec.id, () => (move ? engine.browse(goToRevision(move)) : engine.run(spec.id)));
     control.append(icon(spec.lines));
     control.dataset.action = spec.id;
+    if (move) reading.add(control);
     review.append(control);
     return control;
   });
@@ -613,7 +628,10 @@ export function mountStrip(
     const card = panel(t("rich.find"));
     const selected = engine.selectedText();
     const what = text(card.body, t("rich.find.text"), selected && !selected.includes("\n") && selected.length <= 200 ? selected : "");
+    // In sola lettura si cerca soltanto.
+    const writable = engine.editable();
     const replacement = text(card.body, t("rich.find.replace"));
+    if (!writable) replacement.closest(".kit-field")!.remove();
     const matchCase = check(card.body, t("rich.find.case"));
     const wholeWord = check(card.body, t("rich.find.word"));
     const status = remark(card.body, "status");
@@ -631,6 +649,7 @@ export function mountStrip(
             ? t("rich.find.none")
             : t("rich.find.count", { current: String(current + 1), total: String(matches.length) }));
       for (const control of [previous, next, replaceOne, replaceEvery]) control.disabled = matches.length === 0;
+      if (!writable) replaceOne.hidden = replaceEvery.hidden = true;
       return matches;
     };
     const step = (direction: 1 | -1) => {
@@ -746,15 +765,18 @@ export function mountStrip(
     // Un commento nuovo, sulla selezione: l'azione principale del riquadro.
     const said = area(card.body, t("rich.comment.text"), 3);
     const hint = remark(card.body);
+    // In sola lettura i commenti si leggono e basta.
+    const writable = engine.editable();
+    const composing = media.review === true && writable;
     let apply: HTMLButtonElement | null = null;
-    if (media.review) {
+    if (composing) {
       authorField(card.body);
       apply = action(card.actions, t("rich.comment.apply"), () => {}, "primary", true);
     } else {
       said.closest(".kit-field")!.remove();
     }
     life.listen(card.root, "submit", () => {
-      if (!media.review) return;
+      if (!composing) return;
       if (!by()) {
         author.focus();
         return;
@@ -790,7 +812,7 @@ export function mountStrip(
         const actions = document.createElement("div");
         actions.className = "rich-strip-comment-actions";
         const go = action(actions, t("rich.comment.go"), () => {
-          if (engine.apply(goToComment(id))) popover?.close();
+          if (engine.browse(goToComment(id))) popover?.close();
         });
         go.disabled = !placed.has(id);
         const reply = action(actions, t("rich.comment.reply"), () => {
@@ -816,13 +838,14 @@ export function mountStrip(
           item.append(answer);
           answerText.focus();
         });
-        reply.disabled = !media.review;
-        action(actions, t(comment.done ? "rich.comment.reopen" : "rich.comment.resolve"), () => {
+        reply.hidden = !composing;
+        const resolve = action(actions, t(comment.done ? "rich.comment.reopen" : "rich.comment.resolve"), () => {
           done(engine.apply(resolveComment(id, !comment.done), false));
         });
-        action(actions, t("rich.comment.delete"), () => {
+        const remove = action(actions, t("rich.comment.delete"), () => {
           done(engine.apply(deleteComment(id), false));
         });
+        resolve.hidden = remove.hidden = !writable;
         item.append(actions);
       }
       into.append(item);
@@ -836,10 +859,10 @@ export function mountStrip(
         for (const [id, place] of anchorsOf(state.doc)) if (place.start !== undefined && place.end !== undefined) out.add(id);
         return out;
       });
-      const can = media.review === true && engine.read(canComment);
+      const can = composing && engine.read(canComment);
       said.disabled = !can;
       if (apply) apply.disabled = !can;
-      hint.textContent = media.review ? (can ? "" : t("rich.comment.need_selection")) : t("rich.comment.unsupported");
+      hint.textContent = !writable ? "" : media.review ? (can ? "" : t("rich.comment.need_selection")) : t("rich.comment.unsupported");
       hint.hidden = hint.textContent === "";
       list.replaceChildren();
       const ids = new Set(all.map((c) => c.id));
@@ -1318,29 +1341,25 @@ export function mountStrip(
 
   function refresh(): void {
     const editable = engine.editable();
-    element.hidden = !editable;
-    if (!editable) {
+    if (locked === editable) {
+      locked = !editable;
       popover?.close();
+      for (const label of relabel) label();
+    }
+    if (!editable) {
+      readOnlyRefresh();
       return;
     }
-    const look = engine.look();
+    for (const control of element.querySelectorAll("[aria-disabled]")) control.removeAttribute("aria-disabled");
+    showLook();
     // Mentre si registra, il formato non si cambia: non ha una revisione.
     const free = !engine.tracking();
-    const fonts = [...new Set([...COMMON_FONTS, ...engine.fonts(), ...(look.font ? [look.font] : [])])].sort((a, b) =>
-      a.localeCompare(b),
-    );
-    options(font, fonts, look.font, (v) => v);
-    const sizes = [...new Set([...FONT_SIZES, ...(look.size !== null ? [look.size] : [])])].sort((a, b) => a - b);
-    options(size, sizes.map(String), look.size === null ? null : String(look.size), (v) => v);
     for (const { spec, control } of [...emphasisButtons, ...toggleButtons]) {
       const state = engine.actionState(spec.id);
       control.disabled = !state.enabled;
       setPressed(control, state.active === true);
     }
     for (const control of [grow, shrink]) control.disabled = !engine.actionState(control === grow ? "rich.font.grow" : "rich.font.shrink").enabled;
-    const styleValues = [...ROLE_STYLES, ...engine.styles().map((s) => `s:${s.id}`)];
-    const chosen = engine.read(selectedStyle);
-    options(style, styleValues, chosen !== null && styleValues.includes(chosen) ? chosen : null, styleName);
     for (const { spec, control } of alignButtons) {
       const state = engine.actionState(spec.id);
       control.disabled = !state.enabled;
@@ -1370,11 +1389,47 @@ export function mountStrip(
     }
     dedent.disabled = !engine.actionState("rich.indent.decrease").enabled;
     indent.disabled = !engine.actionState("rich.indent.increase").enabled;
+    setPressed(painter, engine.painterArmed());
+    if (!current || !element.contains(current) || (current as HTMLButtonElement).disabled) roving(null);
+  }
+
+  /// Carattere, dimensione, stile e colori della selezione: si vedono anche
+  /// in sola lettura.
+  function showLook(): ReturnType<RichEngine["look"]> {
+    const look = engine.look();
+    const fonts = [...new Set([...COMMON_FONTS, ...engine.fonts(), ...(look.font ? [look.font] : [])])].sort((a, b) =>
+      a.localeCompare(b),
+    );
+    options(font, fonts, look.font, (v) => v);
+    const sizes = [...new Set([...FONT_SIZES, ...(look.size !== null ? [look.size] : [])])].sort((a, b) => a - b);
+    options(size, sizes.map(String), look.size === null ? null : String(look.size), (v) => v);
+    const styleValues = [...ROLE_STYLES, ...engine.styles().map((s) => `s:${s.id}`)];
+    const chosen = engine.read(selectedStyle);
+    options(style, styleValues, chosen !== null && styleValues.includes(chosen) ? chosen : null, styleName);
     colorBar.style.backgroundColor = look.color && look.color !== COLOR_AUTO ? look.color : "currentColor";
     highlightBar.style.backgroundColor = look.hl ?? "transparent";
     highlightBar.dataset.empty = String(look.hl === null);
-    setPressed(painter, engine.painterArmed());
-    if (!current || !element.contains(current) || (current as HTMLButtonElement).disabled) roving(null);
+    return look;
+  }
+
+  /// In sola lettura: acceso ciò che legge, spento con la ragione il resto.
+  function readOnlyRefresh(): void {
+    showLook();
+    for (const control of element.querySelectorAll<HTMLButtonElement | HTMLSelectElement>("button, select")) {
+      if (control instanceof HTMLSelectElement) {
+        control.disabled = true;
+        continue;
+      }
+      control.disabled = false;
+      if (reading.has(control)) control.removeAttribute("aria-disabled");
+      else control.setAttribute("aria-disabled", "true");
+    }
+    const tracked = engine.read(goToRevision(1));
+    for (const control of revisionButtons) control.hidden = !tracked;
+    comments.hidden = engine.read((state) => commentsOf(state.doc).length === 0);
+    track.hidden = !engine.tracking();
+    layout.hidden = engine.read(pageAt) === null;
+    if (!current || !element.contains(current)) roving(null);
   }
 
   function name(): void {

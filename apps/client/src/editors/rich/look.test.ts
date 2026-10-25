@@ -146,7 +146,7 @@ describe("l'aspetto del carattere", () => {
     expect(e.painterArmed()).toBe(false);
   });
 
-  it("la striscia mostra l'aspetto della selezione e sparisce in sola lettura", () => {
+  it("la striscia mostra l'aspetto della selezione e in sola lettura si spegne", () => {
     const e = engine([para([{ t: "text", x: "testo", m: ["u"], f: { font: "Georgia", size: 14 } }])]);
     select(e, "testo");
     const strip = mountStrip(e, () => null);
@@ -165,7 +165,12 @@ describe("l'aspetto del carattere", () => {
     size.dispatchEvent(new Event("change"));
     expect(texts(e)[0]?.f).toEqual({ font: "Georgia", size: 20 });
     e.setReadOnly(true);
-    expect(strip.element.hidden).toBe(true);
+    expect(strip.element.hidden).toBe(false);
+    expect(font.disabled).toBe(true);
+    expect(strip.element.querySelector('[data-action="rich.underline"]')?.getAttribute("aria-disabled")).toBe("true");
+    e.setReadOnly(false);
+    expect(font.disabled).toBe(false);
+    expect(strip.element.querySelector("[aria-disabled]")).toBeNull();
     strip.destroy();
     expect(strip.element.isConnected).toBe(false);
   });

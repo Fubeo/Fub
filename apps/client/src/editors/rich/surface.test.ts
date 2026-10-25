@@ -108,6 +108,49 @@ describe("la superficie ricca", () => {
     surface.destroy();
   });
 
+  it("in sola lettura la striscia resta: si cerca e si leggono i commenti, il resto è spento col perché", async () => {
+    const { parent, surface, onChange } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    const comments = [{ id: 7, by: "Ada", at: "2026-10-18T14:00:00Z", text: "Da rivedere." }];
+    surface.buffer!.setDoc(JSON.stringify({ ...JSON.parse(SOURCE), readonly: "protected", comments }));
+    const strip = parent.querySelector<HTMLElement>(".rich-strip")!;
+    expect(strip.hidden).toBe(false);
+    const named = (label: string) => strip.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+    // La sottolineatura è spenta, raggiungibile, e dice perché.
+    const bold = strip.querySelector<HTMLButtonElement>('[data-action="rich.underline"]')!;
+    expect(bold.getAttribute("aria-disabled")).toBe("true");
+    bold.focus();
+    expect(document.getElementById(bold.getAttribute("aria-describedby")!)!.textContent).toBe(
+      t("rich.strip.readonly", { command: bold.getAttribute("aria-label")! }),
+    );
+    bold.click();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(strip.querySelector<HTMLSelectElement>(".rich-strip-font")!.disabled).toBe(true);
+    // Trova si apre, cerca, e non offre di sostituire.
+    named(t("rich.find")).click();
+    let popover = document.querySelector<HTMLElement>(".kit-popover")!;
+    const what = popover.querySelector<HTMLInputElement>("input")!;
+    what.value = "ciao";
+    what.dispatchEvent(new Event("input"));
+    expect(popover.querySelector("[role=status]")!.textContent).toBe(t("rich.find.count", { current: "1", total: "1" }));
+    expect(popover.querySelectorAll("input[type=text]").length).toBe(1);
+    expect([...popover.querySelectorAll<HTMLButtonElement>("button")].filter((b) => !b.hidden).map((b) => b.textContent)).toEqual([
+      t("rich.find.previous"),
+      t("rich.find.next"),
+    ]);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    // Il commento si legge; non se ne scrivono, non si risolvono, non si tolgono.
+    named(t("rich.comments")).click();
+    popover = document.querySelector<HTMLElement>(".kit-popover")!;
+    expect(popover.querySelector(".rich-strip-comment-text")!.textContent).toBe("Da rivedere.");
+    expect(popover.querySelector("textarea")).toBeNull();
+    expect([...popover.querySelectorAll<HTMLButtonElement>("button")].filter((b) => !b.hidden).map((b) => b.textContent)).toEqual([
+      t("rich.comment.go"),
+    ]);
+    expect(onChange).not.toHaveBeenCalled();
+    surface.destroy();
+  });
+
   it("un documento importato si legge e dice perché non si scrive", async () => {
     const { parent, surface } = mount(() => Promise.resolve(engineModule));
     await flush();
