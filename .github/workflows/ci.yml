@@ -236,6 +236,10 @@ jobs:
         working-directory: apps/client
       - name: il confine CodeMirror resta nel package testuale
         run: node .github/scripts/check-codemirror-boundary.mjs
+      - name: un editor non scrive un ruolo del tema sull'elemento
+        run: |
+          node .github/scripts/check-inline-theme.mjs --self-test
+          node .github/scripts/check-inline-theme.mjs
       - name: ogni ascoltatore globale della shell ha una Vita
         run: node .github/scripts/check-listeners.mjs
       - name: dentro un giro non si aspetta di nascosto
