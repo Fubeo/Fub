@@ -99,7 +99,7 @@ describe("lo strato di ogni hook", () => {
 
   it("i segni di Fub sono segno", () => {
     for (const hook of [
-      "rich-proof-spelling", "rich-proof-grammar", "ProseMirror-selectednode",
+      "rich-proof-spelling", "rich-proof-grammar", "ProseMirror-selectednode", "rich-ins", "rich-del", "rich-find", "rich-comment",
       "cm-searchMatch", "cm-searchMatch-selected", "cm-cursor", "cm-selectionBackground",
       "grid-comment-mark", "grid-fill-handle", "canvas-node-handle",
     ]) {

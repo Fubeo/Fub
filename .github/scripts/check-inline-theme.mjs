@@ -41,9 +41,6 @@ const EXCEPTIONS = new Map([
   [`${EDITORS}grid/engine.ts`, 2],
   // La stampa compone una pagina sua, fuori dalla pelle.
   [`${EDITORS}media/print-view.ts`, 2],
-  [`${EDITORS}rich/comments.ts`, 1],
-  [`${EDITORS}rich/review.ts`, 3],
-  [`${EDITORS}rich/schema.ts`, 2],
   [`${EDITORS}spatial/tools/accessibility-panel.ts`, 1],
   // I profili Markdown passano ruoli a `EditorView.theme`: issue #242.
   [`${EDITORS}text/profiles/markdown/livepreview.ts`, 20],

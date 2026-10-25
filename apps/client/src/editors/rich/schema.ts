@@ -465,12 +465,6 @@ export function revTitle(kind: "ins" | "del", rev: Rev): string {
   return t(kind === "ins" ? "rich.rev.inserted" : "rich.rev.deleted", { by, at: when }).trim();
 }
 
-/// L'aspetto di Word: inserito sottolineato, eliminato barrato.
-export const REV_STYLE = {
-  ins: "color: var(--accent); text-decoration-line: underline",
-  del: "color: var(--danger); text-decoration-line: line-through",
-} as const;
-
 /// Una revisione: non si allarga a ciò che si scrive accanto, e ciò che si
 /// scrive dentro la perde (`review.ts`), perché non è di chi l'ha fatta.
 function revisionMark(kind: "ins" | "del"): MarkSpec {
@@ -492,7 +486,7 @@ function revisionMark(kind: "ins" | "del"): MarkSpec {
     ],
     toDOM: (mark) => {
       const rev = mark.attrs.rev as Rev;
-      return [kind, { "data-rich-rev": JSON.stringify(rev), class: `rich-${kind}`, title: revTitle(kind, rev), style: REV_STYLE[kind] }, 0];
+      return [kind, { "data-rich-rev": JSON.stringify(rev), class: `rich-${kind}`, title: revTitle(kind, rev) }, 0];
     },
   };
 }

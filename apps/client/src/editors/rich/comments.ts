@@ -19,8 +19,6 @@ import { untracked } from "./track";
 /// Il testo più lungo di un commento nuovo, in byte UTF-8, come il codec.
 export const MAX_COMMENT_BYTES = 64 * 1024;
 
-const RANGE_STYLE = "background-color: var(--warning-wash)";
-
 /// I commenti del documento, nell'ordine in cui il documento li tiene.
 export function commentsOf(doc: PmNode): readonly CommentView[] {
   return (doc.attrs.comments as readonly CommentView[] | undefined) ?? [];
@@ -221,7 +219,7 @@ function ranges(doc: PmNode): DecorationSet {
     if (!comment || comment.done || comment.parent !== undefined) continue;
     if (place.start === undefined || place.end === undefined || place.end <= place.start + 1) continue;
     const title = comment.by ? `${comment.by}: ${comment.text ?? ""}` : (comment.text ?? "");
-    out.push(Decoration.inline(place.start + 1, place.end, { style: RANGE_STYLE, title, "data-rich-comment": String(id) }));
+    out.push(Decoration.inline(place.start + 1, place.end, { class: "rich-comment", title, "data-rich-comment": String(id) }));
   }
   return DecorationSet.create(doc, out);
 }

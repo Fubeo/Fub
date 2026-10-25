@@ -750,6 +750,13 @@
     "ProseMirror-selectednode",
     "rich-proof-spelling",
     "rich-proof-grammar",
+    "rich-ins",
+    "rich-del",
+    "rich-ins-mark",
+    "rich-del-mark",
+    "rich-find",
+    "rich-find-current",
+    "rich-comment",
     "canvas-edge-hit",
     "canvas-edge-line",
     "canvas-edge-arrow",
@@ -2016,6 +2023,13 @@
     "ProseMirror-selectednode": "segno",
     "rich-proof-spelling": "segno",
     "rich-proof-grammar": "segno",
+    "rich-ins": "segno",
+    "rich-del": "segno",
+    "rich-ins-mark": "segno",
+    "rich-del-mark": "segno",
+    "rich-find": "segno",
+    "rich-find-current": "segno",
+    "rich-comment": "segno",
     "canvas-edge-hit": "segno",
     "canvas-edge-line": "contenuto",
     "canvas-edge-arrow": "contenuto",
@@ -4512,6 +4526,22 @@
       "states": [
         "rest",
         "selected"
+      ]
+    },
+    {
+      "name": "rich-marks",
+      "part": "editors",
+      "hooks": [
+        "rich-ins",
+        "rich-del",
+        "rich-ins-mark",
+        "rich-del-mark",
+        "rich-find",
+        "rich-find-current",
+        "rich-comment"
+      ],
+      "states": [
+        "rest"
       ]
     },
     {
@@ -7095,10 +7125,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 26,
-    "hooks": 1264,
+    "hooks": 1271,
     "state_names": 7,
-    "assigned_states": 638,
-    "components": 190,
+    "assigned_states": 639,
+    "components": 191,
     "preference_tokens": 149
   }
 }

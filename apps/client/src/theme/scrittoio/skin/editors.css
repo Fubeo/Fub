@@ -1987,11 +1987,39 @@
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+/* I segni di Fub sul documento hanno i colori della carta su cui stanno
+   (`--doc-*`): la carta di ogni aspetto li ricollega ai suoi, e su un foglio
+   chiaro di notte restano leggibili. Il ripiego è per un tema che non li
+   dichiara. Le revisioni come in Word: inserito sottolineato, tolto barrato. */
+.rich-ins,
+.rich-ins-mark {
+  color: var(--doc-ins, var(--doc-link));
+  text-decoration-line: underline;
+}
+.rich-del,
+.rich-del-mark {
+  color: var(--doc-del, var(--doc-danger));
+  text-decoration-line: line-through;
+}
+.rich-find {
+  background-color: var(--doc-find, var(--doc-highlight));
+  color: var(--doc-fg);
+}
+.rich-find-current {
+  background-color: var(--doc-find-now, var(--doc-highlight));
+  outline: 1px solid var(--doc-fg);
+}
+.rich-comment {
+  background-color: color-mix(in oklab, var(--doc-comment, var(--doc-link)) 16%, transparent);
+  border-bottom: 2px solid var(--doc-comment, var(--doc-link));
+}
+/* L'ondulata: rossa per l'ortografia, ambra per la grammatica, come nelle
+   note. Il blu sulla carta dice già collegamento. */
 .rich-proof-spelling {
-  text-decoration: underline wavy var(--danger) 1px;
+  text-decoration: underline wavy var(--doc-proof-spell, var(--doc-danger)) 1px;
   text-underline-offset: 3px;
 }
 .rich-proof-grammar {
-  text-decoration: underline wavy var(--warning) 1px;
+  text-decoration: underline wavy var(--doc-proof-gram, var(--doc-danger)) 1px;
   text-underline-offset: 3px;
 }

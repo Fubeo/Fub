@@ -23,7 +23,7 @@ import type { Node as PmNode, MarkType } from "prosemirror-model";
 import { Plugin, PluginKey, TextSelection, type Command, type EditorState, type Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import type { Rev } from "./projection";
-import { REV_STYLE, revTitle, richSchema, sameRev } from "./schema";
+import { revTitle, richSchema, sameRev } from "./schema";
 import { untracked } from "./track";
 
 export interface FindQuery {
@@ -137,9 +137,6 @@ interface Shown {
 
 export const findKey = new PluginKey<Shown>("fub-rich-find");
 
-const ALL_STYLE = "background-color: var(--accent-wash)";
-const CURRENT_STYLE = "background-color: var(--accent-soft); outline: 1px solid var(--accent)";
-
 function decorate(doc: PmNode, query: FindQuery | null, current: number): DecorationSet {
   if (!query) return DecorationSet.empty;
   const matches = findMatches(doc, query);
@@ -148,7 +145,6 @@ function decorate(doc: PmNode, query: FindQuery | null, current: number): Decora
     matches.map((m, i) =>
       Decoration.inline(m.from, m.to, {
         class: i === current ? "rich-find rich-find-current" : "rich-find",
-        style: i === current ? CURRENT_STYLE : ALL_STYLE,
       }),
     ),
   );
@@ -446,7 +442,6 @@ function markWidgets(doc: PmNode): DecorationSet {
             span.className = `rich-${kind}-mark`;
             span.textContent = "¶";
             span.title = revTitle(kind, rev);
-            span.setAttribute("style", REV_STYLE[kind]);
             span.setAttribute("aria-hidden", "true");
             return span;
           },
