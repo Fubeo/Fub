@@ -83,9 +83,10 @@ describe("la serie Scrittoio passa dal cancello", () => {
     // `--doc-find` né `--paper-*`, e deve restare valido.
     const bundle = (sheet: string) => ({ manifest: SCRITTOIO_SERIES.manifest, sheet, skin: SCRITTOIO_SERIES.skin, assets: {} });
     const full = SCRITTOIO_SERIES.sheet("light", "normal");
-    const without = full.replace(/^\s*--(paper-[a-z-]+|doc-(ins|del|proof-spell|proof-gram|find|find-now|comment)):[^;]*;\n/gm, "");
+    const without = full.replace(/^\s*--(paper-[a-z0-9-]+|doc-(ins|del|proof-spell|proof-gram|find|find-now|comment|author-[1-6])):[^;]*;\n/gm, "");
     expect(without).not.toContain("--paper-");
     expect(without).not.toContain("--doc-find");
+    expect(without).not.toContain("--doc-author-");
     expect(validateThemeBundle(bundle(without), "light")).toEqual([]);
     const faint = full.replace(/--paper-link:[^;]*;/, "--paper-link: #c8d4f0;");
     expect(validateThemeBundle(bundle(faint), "light")).toEqual([

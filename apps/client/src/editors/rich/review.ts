@@ -22,6 +22,7 @@
 import type { Node as PmNode, MarkType } from "prosemirror-model";
 import { Plugin, PluginKey, TextSelection, type Command, type EditorState, type Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
+import { authorClass, authorSlot, authorSlots } from "./authors";
 import type { Rev } from "./projection";
 import { revTitle, richSchema, sameRev } from "./schema";
 import { untracked } from "./track";
@@ -452,8 +453,8 @@ const revisionKey = new PluginKey<DecorationSet>("fub-rich-revisions");
 export const revisionPlugin = new Plugin<DecorationSet>({
   key: revisionKey,
   state: {
-    init: (_config, state) => markWidgets(state.doc),
-    apply: (tr, set) => (tr.docChanged ? markWidgets(tr.doc) : set),
+    init: (_config, state) => revisionDecorations(state.doc),
+    apply: (tr, set) => (tr.docChanged ? revisionDecorations(tr.doc) : set),
   },
   props: {
     decorations: (state) => revisionKey.getState(state),
@@ -471,30 +472,50 @@ export const revisionPlugin = new Plugin<DecorationSet>({
   },
 });
 
-function markWidgets(doc: PmNode): DecorationSet {
-  const widgets: Decoration[] = [];
+function revisionDecorations(doc: PmNode): DecorationSet {
+  const decorations: Decoration[] = [];
+  const slots = authorSlots(doc);
+  // Il colore di chi l'ha fatta, sul testo di ogni modifica; e una barra nel
+  // margine accanto a ogni paragrafo che ne ha una, come in Word.
+  const changed = new Set<number>();
+  for (const change of revisions(doc)) {
+    const author = `rich-autore ${authorClass(authorSlot(slots, change.rev.by))} rich-autore-${change.kind}`;
+    for (const piece of change.pieces) {
+      if (piece.para !== undefined) {
+        changed.add(piece.para);
+        continue;
+      }
+      decorations.push(Decoration.inline(piece.from, piece.to, { class: author }));
+      changed.add(doc.resolve(piece.from).before());
+    }
+  }
+  for (const pos of changed) {
+    const node = doc.nodeAt(pos);
+    if (node) decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: "rich-changed" }));
+  }
   doc.descendants((node, pos) => {
     if (!node.isTextblock) return true;
     for (const kind of REV_KINDS) {
       const rev = node.attrs[kind] as Rev | null;
       if (!rev) continue;
       const end = pos + node.nodeSize - 1;
-      widgets.push(
+      const slot = authorSlot(slots, rev.by);
+      decorations.push(
         Decoration.widget(
           end,
           () => {
             const span = document.createElement("span");
-            span.className = `rich-${kind}-mark`;
+            span.className = `rich-${kind}-mark rich-autore ${authorClass(slot)}`;
             span.textContent = "¶";
             span.title = revTitle(kind, rev);
             span.setAttribute("aria-hidden", "true");
             return span;
           },
-          { side: 1, marks: [], key: `${kind}:${JSON.stringify(rev)}`, ignoreSelection: true },
+          { side: 1, marks: [], key: `${kind}:${slot}:${JSON.stringify(rev)}`, ignoreSelection: true },
         ),
       );
     }
     return false;
   });
-  return DecorationSet.create(doc, widgets);
+  return DecorationSet.create(doc, decorations);
 }

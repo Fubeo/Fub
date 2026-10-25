@@ -143,7 +143,16 @@ l'IPC.
   Accettare e rifiutare sono comandi di `review.ts` (`rich.rev.*`); il
   plugin `revisionPlugin` disegna il segno di fine revisionato e toglie la
   revisione da ciò che si scrive dentro, e a capo e unione di due paragrafi
-  lasciano il segno revisionato a chi chiude il testo.
+  lasciano il segno revisionato a chi chiude il testo. Come in Word la forma
+  dice che cosa è successo (inserito sottolineato, tolto barrato) e il
+  colore chi è stato: `authors.ts` dà agli autori un posto da 1 a 6
+  nell'ordine in cui compaiono nel documento (revisioni e commenti nel loro
+  punto, poi i commenti senza un posto; il settimo riprende dal primo), e
+  `revisionPlugin` mette sul testo il posto come classe (`rich-autore-3`),
+  non il colore, con una barra nel margine accanto a ogni paragrafo che ha
+  una revisione (`rich-changed`). I colori sono i ruoli facoltativi
+  `--doc-author-*` e `--paper-author-*`, a 4,5:1 sulle due carte; il
+  pallino accanto al nome in Commenti e in Revisioni ha lo stesso colore.
 - I commenti attraversano la proiezione come elenco `comments` in testa e
   come segni `marker` con `comment` (`id`, `end`) nel testo. Uno tenuto porta
   il commento e le sue parti in `k`, e di lui cambia soltanto `done`; uno

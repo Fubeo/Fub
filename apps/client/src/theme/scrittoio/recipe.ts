@@ -65,6 +65,10 @@ const THRESHOLDS: Readonly<Record<ContrastLevel, Thresholds>> = {
   high: { text: 7, ui: 4.5 },
 };
 
+/// Le tinte degli autori, nell'ordine dei posti: blu, rosso, verde, viola,
+/// ocra, petrolio.
+const AUTHOR_HUES: readonly number[] = [255, 25, 145, 310, 60, 200];
+
 const lch = (l: number, c: number, h: number): Oklch => ({ l, c, h: ((h % 360) + 360) % 360 });
 
 /// Si allontana dalla carta finché la coppia regge su ogni fondo.
@@ -275,6 +279,11 @@ export function palette(
   const docComment = hold(day ? lch(0.68, 0.15, 70) : lch(0.8, 0.13, 75), papers, T.ui, light);
   const away = day ? "dark" : "light";
   const docFind = hold(day ? lch(0.92, 0.1, 98) : lch(0.36, 0.06, 95), [docFg], T.text, away);
+  // Un colore per autore (`rich-autore-*`): sei tinte lontane fra loro, che
+  // si leggono come il testo su ogni fondo della carta.
+  const docAuthors = Object.fromEntries(
+    AUTHOR_HUES.map((tint, i) => [`doc-author-${i + 1}`, hold(day ? lch(0.5, 0.17, tint) : lch(0.76, 0.12, tint), papers, T.text, light)]),
+  );
   const docFindNow = hold(day ? lch(0.84, 0.14, 80) : lch(0.46, 0.09, 75), [docFg], T.text, away);
 
   // ── La carta chiara di un file ──────────────────────────────────────────
@@ -290,6 +299,7 @@ export function palette(
   const paperDanger = hold(lch(0.55, 0.21, 27), paperPapers, T.text, "light");
   const paperVeil = (percent: number): string => veil(paperInk, percent);
   const paperMarker = toHex(lch(0.9, 0.16, 98));
+  const paperAuthors = Object.fromEntries(AUTHOR_HUES.map((tint, i) => [`paper-author-${i + 1}`, hold(lch(0.5, 0.17, tint), paperPapers, T.text, "light")]));
 
   const graphNode = hold(day ? lch(0.62, 0.02, pen) : lch(0.58, 0.02, pen), [bg, sheetColor], T.ui, light);
   const levels = SHADOWS[light].map(([near, far]) => shadow(light, near, far));
@@ -399,6 +409,7 @@ export function palette(
     "doc-find": docFind,
     "doc-find-now": docFindNow,
     "doc-comment": docComment,
+    ...docAuthors,
 
     // La carta chiara di un file, con i suoi segni: facoltativi anche questi.
     "paper-bg": paperBg,
@@ -420,6 +431,7 @@ export function palette(
     "paper-find": hold(lch(0.92, 0.1, 98), [paperInk], T.text, "dark"),
     "paper-find-now": hold(lch(0.84, 0.14, 80), [paperInk], T.text, "dark"),
     "paper-comment": hold(lch(0.68, 0.15, 70), paperPapers, T.ui, "light"),
+    ...paperAuthors,
   };
 }
 
@@ -531,7 +543,7 @@ export const COLOR_TOKENS: readonly string[] = Object.keys(palette("light", "nor
  * (`THEME_2_OPTIONAL_PAIRS`).
  */
 export const OPTIONAL_ROLES: readonly string[] = COLOR_TOKENS.filter(
-  (name) => name.startsWith("paper-") || ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment"].includes(name),
+  (name) => name.startsWith("paper-") || name.startsWith("doc-author-") || ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment"].includes(name),
 );
 
 /** Ogni ruolo che un foglio della serie dichiara e che un tema deve dichiarare. */

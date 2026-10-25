@@ -170,6 +170,12 @@
   --doc-find: #f6e697;
   --doc-find-now: #fac053;
   --doc-comment: #8c5600;
+  --doc-author-1: #00448d;
+  --doc-author-2: #910012;
+  --doc-author-3: #00520d;
+  --doc-author-4: #68238e;
+  --doc-author-5: #6d3800;
+  --doc-author-6: #004e52;
   --paper-bg: #ffffff;
   --paper-ink: #050608;
   --paper-link: #1538ae;
@@ -189,6 +195,12 @@
   --paper-find: #f6e697;
   --paper-find-now: #fac053;
   --paper-comment: #8c5600;
+  --paper-author-1: #00448d;
+  --paper-author-2: #910012;
+  --paper-author-3: #00520d;
+  --paper-author-4: #68238e;
+  --paper-author-5: #6d3800;
+  --paper-author-6: #004e52;
   color-scheme: light;
   font-family: var(--font-ui);
   font-size: var(--text-base);

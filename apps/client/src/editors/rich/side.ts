@@ -21,6 +21,7 @@ import { textButton, textField, type ButtonKind } from "../../kit";
 import { resolvedLanguage, t } from "../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { setTooltip } from "../../ui/tooltip";
+import { authorClass, authorSlot, authorSlots } from "./authors";
 import { addComment, canComment, commentThreads, deleteComment, goToComment, replyComment, resolveComment, type Thread } from "./comments";
 import type { RichEngine } from "./engine";
 import { check, labelled, remark } from "./form";
@@ -64,6 +65,24 @@ function button(into: HTMLElement, life: Lifetime, label: string, onPress: () =>
   const control = textButton({ label, kind, onPress, lifetime: life });
   into.append(control);
   return control;
+}
+
+/// Il pallino del colore di chi scrive, accanto al suo nome. Il colore lo dà
+/// `paint`: il posto di un autore cambia quando ne compare uno prima di lui,
+/// e una voce non si rifà per questo.
+function dot(by: string | undefined): HTMLElement {
+  const mark = document.createElement("span");
+  mark.className = "rich-side-dot";
+  mark.dataset.by = by ?? "";
+  mark.setAttribute("aria-hidden", "true");
+  return mark;
+}
+
+/// Dà a ogni pallino di `root` il colore del suo autore.
+function paint(root: HTMLElement, slots: ReadonlyMap<string, number>): void {
+  for (const mark of root.querySelectorAll<HTMLElement>(".rich-side-dot")) {
+    mark.className = `rich-side-dot rich-autore ${authorClass(authorSlot(slots, mark.dataset.by))}`;
+  }
 }
 
 /// Una scheda montata: il suo disposer, e dove mettere il fuoco.
@@ -141,7 +160,7 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
       line.className = "rich-side-head";
       const name = document.createElement("strong");
       name.textContent = comment.by || t("rich.rev.anonymous");
-      line.append(name);
+      line.append(dot(comment.by), name);
       const date = when(comment.at);
       if (date) {
         const time = document.createElement("time");
@@ -272,6 +291,7 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
       }
       list.replaceChildren(...order);
       if (threads.length === 0) remark(list).textContent = t("rich.comment.none");
+      paint(list, engine.read((state) => authorSlots(state.doc)));
     }
 
     draw();
@@ -370,7 +390,7 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
       line.className = "rich-side-head";
       const who = document.createElement("strong");
       who.textContent = change.rev.by || t("rich.rev.anonymous");
-      line.append(t(change.kind === "ins" ? "rich.rev.kind.ins" : "rich.rev.kind.del"), " · ", who);
+      line.append(dot(change.rev.by), t(change.kind === "ins" ? "rich.rev.kind.ins" : "rich.rev.kind.del"), " · ", who);
       const date = when(change.rev.at);
       if (date) {
         const time = document.createElement("time");
@@ -439,6 +459,7 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
       }
       list.replaceChildren(...order);
       if (changes.length === 0) remark(list).textContent = t("rich.rev.none");
+      paint(list, engine.read((state) => authorSlots(state.doc)));
     }
 
     draw();

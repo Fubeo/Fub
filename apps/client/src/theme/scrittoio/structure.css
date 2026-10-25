@@ -100,6 +100,12 @@
   --doc-find: var(--paper-find, #f6e697);
   --doc-find-now: var(--paper-find-now, #fac053);
   --doc-comment: var(--paper-comment, #b16f00);
+  --doc-author-1: var(--paper-author-1, #0060bf);
+  --doc-author-2: var(--paper-author-2, #b02a2d);
+  --doc-author-3: var(--paper-author-3, #007219);
+  --doc-author-4: var(--paper-author-4, #813faa);
+  --doc-author-5: var(--paper-author-5, #934f00);
+  --doc-author-6: var(--paper-author-6, #006d72);
 }
 
 /* ── Le garanzie ─────────────────────────────────────────────────────────── */
@@ -2142,6 +2148,12 @@ body {
 .rich-side-preview-column { flex: 1 1 0; min-width: 0; }
 .rich-side-facts { display: grid; grid-template-columns: auto 1fr; margin: 0; }
 .rich-side-facts dd { margin: 0; overflow-wrap: anywhere; }
+.rich-side-dot { display: inline-block; width: 8px; height: 8px; margin-inline-end: 6px; border-radius: 50%; vertical-align: middle; }
+/* La barra di modifica nel margine sinistro, accanto al paragrafo che ha una
+   revisione; in una cella non esce dalla cella. */
+.rich-changed { position: relative; }
+.rich-changed::after { content: ""; position: absolute; top: 0; bottom: 0; inset-inline-start: -18px; width: 2px; pointer-events: none; }
+.rich-cell .rich-changed::after { content: none; }
 .rich-strip-table-grid { display: grid; grid-template-columns: repeat(10, 20px); }
 .rich-strip-table-cell { width: 20px; height: 20px; }
 .rich-strip-count td { text-align: end; }

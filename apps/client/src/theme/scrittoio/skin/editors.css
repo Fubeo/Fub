@@ -2127,6 +2127,39 @@
   color: var(--doc-del, var(--doc-danger));
   text-decoration-line: line-through;
 }
+/* Il colore di chi ha fatto la modifica, sul suo testo: la forma resta
+   quella della revisione. Il ripiego è quello di inserito e tolto, per un
+   tema che non dichiara gli autori. */
+.rich-autore-1 {
+  color: var(--doc-author-1, var(--doc-ins, var(--doc-link)));
+}
+.rich-autore-2 {
+  color: var(--doc-author-2, var(--doc-ins, var(--doc-link)));
+}
+.rich-autore-3 {
+  color: var(--doc-author-3, var(--doc-ins, var(--doc-link)));
+}
+.rich-autore-4 {
+  color: var(--doc-author-4, var(--doc-ins, var(--doc-link)));
+}
+.rich-autore-5 {
+  color: var(--doc-author-5, var(--doc-ins, var(--doc-link)));
+}
+.rich-autore-6 {
+  color: var(--doc-author-6, var(--doc-ins, var(--doc-link)));
+}
+.rich-autore-ins {
+  text-decoration-line: underline;
+}
+.rich-autore-del {
+  text-decoration-line: line-through;
+}
+.rich-changed::after {
+  background: var(--doc-fg);
+}
+.rich-side-dot {
+  background: currentColor;
+}
 .rich-find {
   background-color: var(--doc-find, var(--doc-highlight));
   color: var(--doc-fg);

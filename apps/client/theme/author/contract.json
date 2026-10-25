@@ -742,6 +742,7 @@
     "rich-side-preview-text",
     "rich-side-preview-column",
     "rich-side-facts",
+    "rich-side-dot",
     "rich-strip-table-grid",
     "rich-strip-table-cell",
     "rich-strip-count",
@@ -770,6 +771,15 @@
     "rich-find",
     "rich-find-current",
     "rich-comment",
+    "rich-autore-1",
+    "rich-autore-2",
+    "rich-autore-3",
+    "rich-autore-4",
+    "rich-autore-5",
+    "rich-autore-6",
+    "rich-autore-ins",
+    "rich-autore-del",
+    "rich-changed",
     "rich-sheet-head",
     "rich-sheet-foot",
     "rich-sheet-name",
@@ -2035,6 +2045,7 @@
     "rich-side-preview-text": "cornice",
     "rich-side-preview-column": "cornice",
     "rich-side-facts": "cornice",
+    "rich-side-dot": "cornice",
     "rich-strip-table-grid": "cornice",
     "rich-strip-table-cell": "cornice",
     "rich-strip-count": "cornice",
@@ -2063,6 +2074,15 @@
     "rich-find": "segno",
     "rich-find-current": "segno",
     "rich-comment": "segno",
+    "rich-autore-1": "segno",
+    "rich-autore-2": "segno",
+    "rich-autore-3": "segno",
+    "rich-autore-4": "segno",
+    "rich-autore-5": "segno",
+    "rich-autore-6": "segno",
+    "rich-autore-ins": "segno",
+    "rich-autore-del": "segno",
+    "rich-changed": "segno",
     "rich-sheet-head": "segno",
     "rich-sheet-foot": "segno",
     "rich-sheet-name": "segno",
@@ -4551,6 +4571,7 @@
         "rich-side-preview-text",
         "rich-side-preview-column",
         "rich-side-facts",
+        "rich-side-dot",
         "rich-strip-table-grid",
         "rich-strip-table-cell",
         "rich-strip-count"
@@ -4609,7 +4630,16 @@
         "rich-del-mark",
         "rich-find",
         "rich-find-current",
-        "rich-comment"
+        "rich-comment",
+        "rich-autore-1",
+        "rich-autore-2",
+        "rich-autore-3",
+        "rich-autore-4",
+        "rich-autore-5",
+        "rich-autore-6",
+        "rich-autore-ins",
+        "rich-autore-del",
+        "rich-changed"
       ],
       "states": [
         "rest"
@@ -6867,6 +6897,12 @@
     "doc-find",
     "doc-find-now",
     "doc-comment",
+    "doc-author-1",
+    "doc-author-2",
+    "doc-author-3",
+    "doc-author-4",
+    "doc-author-5",
+    "doc-author-6",
     "paper-bg",
     "paper-ink",
     "paper-link",
@@ -6885,7 +6921,13 @@
     "paper-proof-gram",
     "paper-find",
     "paper-find-now",
-    "paper-comment"
+    "paper-comment",
+    "paper-author-1",
+    "paper-author-2",
+    "paper-author-3",
+    "paper-author-4",
+    "paper-author-5",
+    "paper-author-6"
   ],
   "optional_pairs": [
     [
@@ -6917,6 +6959,42 @@
       "doc-bg",
       3,
       "il filo di un commento"
+    ],
+    [
+      "doc-author-1",
+      "doc-bg",
+      4.5,
+      "il testo di una revisione del 1° autore"
+    ],
+    [
+      "doc-author-2",
+      "doc-bg",
+      4.5,
+      "il testo di una revisione del 2° autore"
+    ],
+    [
+      "doc-author-3",
+      "doc-bg",
+      4.5,
+      "il testo di una revisione del 3° autore"
+    ],
+    [
+      "doc-author-4",
+      "doc-bg",
+      4.5,
+      "il testo di una revisione del 4° autore"
+    ],
+    [
+      "doc-author-5",
+      "doc-bg",
+      4.5,
+      "il testo di una revisione del 5° autore"
+    ],
+    [
+      "doc-author-6",
+      "doc-bg",
+      4.5,
+      "il testo di una revisione del 6° autore"
     ],
     [
       "doc-fg",
@@ -6971,6 +7049,42 @@
       "paper-bg",
       4.5,
       "il testo tolto, sulla carta di un file"
+    ],
+    [
+      "paper-author-1",
+      "paper-bg",
+      4.5,
+      "il testo di una revisione del 1° autore, sulla carta di un file"
+    ],
+    [
+      "paper-author-2",
+      "paper-bg",
+      4.5,
+      "il testo di una revisione del 2° autore, sulla carta di un file"
+    ],
+    [
+      "paper-author-3",
+      "paper-bg",
+      4.5,
+      "il testo di una revisione del 3° autore, sulla carta di un file"
+    ],
+    [
+      "paper-author-4",
+      "paper-bg",
+      4.5,
+      "il testo di una revisione del 4° autore, sulla carta di un file"
+    ],
+    [
+      "paper-author-5",
+      "paper-bg",
+      4.5,
+      "il testo di una revisione del 5° autore, sulla carta di un file"
+    ],
+    [
+      "paper-author-6",
+      "paper-bg",
+      4.5,
+      "il testo di una revisione del 6° autore, sulla carta di un file"
     ],
     [
       "paper-caret",
@@ -7140,6 +7254,12 @@
     "doc-find",
     "doc-find-now",
     "doc-comment",
+    "doc-author-1",
+    "doc-author-2",
+    "doc-author-3",
+    "doc-author-4",
+    "doc-author-5",
+    "doc-author-6",
     "paper-bg",
     "paper-ink",
     "paper-link",
@@ -7158,7 +7278,13 @@
     "paper-proof-gram",
     "paper-find",
     "paper-find-now",
-    "paper-comment"
+    "paper-comment",
+    "paper-author-1",
+    "paper-author-2",
+    "paper-author-3",
+    "paper-author-4",
+    "paper-author-5",
+    "paper-author-6"
   ],
   "vocabulary": {
     "properties": [
@@ -7212,11 +7338,11 @@
   },
   "counts": {
     "required_roles": 154,
-    "optional_roles": 26,
-    "hooks": 1291,
+    "optional_roles": 38,
+    "hooks": 1301,
     "state_names": 7,
     "assigned_states": 641,
     "components": 192,
-    "preference_tokens": 149
+    "preference_tokens": 161
   }
 }

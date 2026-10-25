@@ -170,6 +170,10 @@ describe("la scheda Revisioni", () => {
       ["del", "vecchio"],
     ]);
     expect(items()[1]!.querySelector(".rich-side-head")?.textContent).toContain("Bea");
+    // Il pallino ha il colore dell'autore, nell'ordine in cui compare.
+    const dotOf = (el: HTMLElement) => el.querySelector(".rich-side-dot")!.classList;
+    expect(dotOf(items()[0]!).contains("rich-autore-1")).toBe(true);
+    expect(dotOf(items()[1]!).contains("rich-autore-2")).toBe(true);
     // Un clic sul testo lo seleziona nel documento.
     items()[1]!.querySelector<HTMLButtonElement>(".rich-side-quote")!.click();
     expect(e.state.doc.textBetween(e.state.selection.from, e.state.selection.to)).toBe("vecchio");
@@ -178,6 +182,8 @@ describe("la scheda Revisioni", () => {
     const second = items()[1];
     pressed(items()[0]!, t("rich.rev.accept.one")).click();
     expect(items()).toEqual([second]);
+    // Tolta Ada, Bea è la prima: la sua voce resta e cambia colore.
+    expect(dotOf(second!).contains("rich-autore-1")).toBe(true);
     expect(e.state.doc.textContent).toBe("resta nuovo e vecchio");
     pressed(host, t("rich.rev.reject_all.short")).click();
     expect(e.state.doc.textContent).toBe("resta nuovo e vecchio");
