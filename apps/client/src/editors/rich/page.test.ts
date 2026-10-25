@@ -113,7 +113,12 @@ describe("pagina", () => {
     expect(desk.getAttribute("style")).not.toMatch(/%|min\(|var\(/);
     expect(desk.querySelector(":scope > .rich-sheets > .rich-sheet")).not.toBeNull();
     expect(desk.querySelector(":scope > .rich-content")).not.toBeNull();
+    // La scrivania è larga quanto il primo foglio: girare l'ultima sezione
+    // gira soltanto il suo foglio.
     e.select(e.state.doc.content.size - 2);
+    e.apply(setLandscape(true));
+    expect(desk.style.getPropertyValue("--page-w")).toBe("612pt");
+    e.select(2);
     e.apply(setLandscape(true));
     expect(desk.style.getPropertyValue("--page-w")).toBe("792pt");
     expect(desk.style.getPropertyValue("--page-h")).toBe("612pt");
@@ -132,14 +137,23 @@ describe("pagina", () => {
     expect(pageVariables(null)).toEqual({});
   });
 
-  it("senza una pagina nel formato non c'è niente da cambiare, e la barra non la offre", () => {
+  it("senza una pagina nel formato (l'ODT) il riquadro dice l'A4 su cui si vede, e non lo cambia", () => {
     const e = engine(null);
     expect(pageAt(e.state)).toBeNull();
     expect(e.apply(setLandscape(true))).toBe(false);
     const ribbon = mountRichRibbon(e, () => null);
     document.body.append(ribbon.element);
     const button = [...ribbon.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.page"))!;
-    expect(button.closest<HTMLElement>("[data-command]")!.hidden).toBe(true);
+    expect(button.closest<HTMLElement>("[data-command]")!.hidden).toBe(false);
+    button.click();
+    const card = document.querySelector<HTMLElement>(".rich-strip-panel")!;
+    const controls = [...card.querySelectorAll<HTMLInputElement | HTMLSelectElement>("input, select")];
+    expect(controls.length).toBeGreaterThan(5);
+    expect(controls.every((control) => control.disabled)).toBe(true);
+    expect(card.textContent).toContain(t("rich.page.default"));
+    const paper = controls.find((control) => control.tagName === "SELECT")!;
+    expect(paper.value).toBe("A4");
+    expect((controls.find((control) => control.tagName === "INPUT") as HTMLInputElement).value).toBe("2");
     ribbon.destroy();
   });
 
@@ -225,33 +239,6 @@ describe("pagina", () => {
     expect(parseProjection(e.getDoc()).header).toBeUndefined();
     e.run("text.undo");
     expect(parseProjection(e.getDoc()).header).toEqual({ lines: [["Pagina ", { field: "page" }]] });
-  });
-
-  it("la barra scrive l'intestazione e mette il numero di pagina dove si scriveva", () => {
-    const e = engine(LETTER, false, { footer: { lines: [["logo"]], locked: true } });
-    e.select(e.state.doc.content.size - 2);
-    const ribbon = mountRichRibbon(e, () => null);
-    document.body.append(ribbon.element);
-    const button = [...ribbon.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.hf"))!;
-    button.click();
-    const area = (label: string) => {
-      const caption = [...document.querySelectorAll("label")].find((l) => l.textContent === label)!;
-      return document.getElementById(caption.htmlFor) as HTMLTextAreaElement;
-    };
-    const header = area(t("rich.hf.header"));
-    const footer = area(t("rich.hf.footer"));
-    expect(header.value).toBe("");
-    expect(footer.readOnly).toBe(true);
-    expect(footer.value).toBe("logo");
-    header.focus();
-    header.value = "Pagina ";
-    header.setSelectionRange(7, 7);
-    header.dispatchEvent(new Event("input"));
-    const page = [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === t("rich.hf.page"))!;
-    page.click();
-    expect(header.value).toBe("Pagina {PAGE}");
-    expect(parseProjection(e.getDoc()).header).toEqual({ lines: [["Pagina ", { field: "page" }]] });
-    ribbon.destroy();
   });
 });
 

@@ -35,6 +35,10 @@ export const EDITORS: PartAnatomy = {
     { name: "rich-atom", layer: "segno", states: [S("rest"), S("selected")], hooks: ["rich-atom", "rich-atom-image", "rich-atom-graphic", "rich-atom-shape", "rich-atom-text_box", "rich-atom-group", "rich-atom-equation", "rich-atom-glyph", "rich-atom-name", "rich-atom-note", "rich-atom-field", "rich-atom-marker", "ProseMirror-selectednode", "rich-proof-spelling", "rich-proof-grammar"] },
     // I segni di Fub sul documento: revisioni, ricerca, commenti.
     { name: "rich-marks", layer: "segno", states: REST, hooks: ["rich-ins", "rich-del", "rich-ins-mark", "rich-del-mark", "rich-find", "rich-find-current", "rich-comment"] },
+    // I fogli: l'anteprima dell'intestazione e del piè, il nome di
+    // un'interruzione fra due fogli, e l'intestazione che si scrive sul posto.
+    // Sono segni di Fub sulla carta, non il testo del file.
+    { name: "rich-sheet-marks", layer: "segno", states: [S("rest"), S("focused")], hooks: ["rich-sheet-head", "rich-sheet-foot", "rich-sheet-name", "rich-running-bar", "rich-running-label", "rich-running-area", "rich-token"] },
     { name: "canvas-edge", layer: "contenuto", layers: { "canvas-edge-hit": "segno", "canvas-edge-reconnect": "segno" }, states: [S("rest"), S("selected"), S("dragging")], hooks: ["canvas-edge-hit", "canvas-edge-line", "canvas-edge-arrow", "canvas-edge-label", "canvas-edge-reconnect"] },
   ],
 };

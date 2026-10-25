@@ -40,7 +40,9 @@ import {
 } from "./commands";
 import { collectKeys, filterSlice, uniqueKeys } from "./paste";
 import { parseProjection, writeComment, writeHead, writeRunning, type Look, type Page, type RunningText, type ParaStyle, type Projection, type ReadOnlyReason } from "./projection";
-import { pageVariables, samePage } from "./page";
+import { pageVariables, samePage, setRunningAt } from "./page";
+import { openRunningEditor, type RunningEditor } from "./running";
+import { runningInset, SheetDesk, sheetAt, sheetPlanOf, sheetsPlugin } from "./sheets";
 import { richProof } from "./proof";
 import { commentPlugin, commentsOf } from "./comments";
 import { notePlugin } from "./notes";
@@ -101,6 +103,9 @@ export class RichEngine {
   readonly #desk: HTMLElement;
   #drawnPage = "";
   #paper: Paper | null = null;
+  /// I fogli di Pagina e di Lettura, e l'intestazione che si scrive sul posto.
+  readonly #sheets: SheetDesk;
+  #running: RunningEditor | null = null;
 
   constructor(parent: HTMLElement, options: RichEngineOptions) {
     this.#options = options;
@@ -117,6 +122,7 @@ export class RichEngine {
     sheets.append(sheet);
     this.#desk.append(sheets);
     parent.append(this.#desk);
+    this.#sheets = new SheetDesk(this.#desk, sheets);
     this.#view = new EditorView(this.#desk, {
       state: this.#state(richSchema.nodes.doc.create(null, richSchema.nodes.para.create())),
       editable: () => this.editable(),
@@ -183,6 +189,7 @@ export class RichEngine {
       commentPlugin,
       notePlugin,
       sectionPlugin,
+      sheetsPlugin(this.#sheets, (zone) => this.#openRunning(zone.kind, zone.sheet)),
       tintPlugin,
       keymap(this.#keys()),
       keymap(baseKeymap),
@@ -256,6 +263,7 @@ export class RichEngine {
     if (this.#destroyed) return;
     this.#source = source;
     this.#known.clear();
+    this.#running?.close(false);
     const projection = this.#read(source);
     this.#view.updateState(this.#state(projection ? toDoc(projection) : richSchema.nodes.doc.create(null, richSchema.nodes.para.create())));
     this.#notify();
@@ -533,7 +541,8 @@ export class RichEngine {
 
   /// Le misure della pagina sulla scrivania, se sono cambiate.
   #drawPage(): void {
-    const variables = pageVariables(this.#view.state.doc.attrs.page as Page | null);
+    // La scrivania è larga quanto il primo foglio.
+    const variables = pageVariables(sheetPlanOf(this.#view.state)?.sections[0]?.page ?? null);
     const drawn = JSON.stringify(variables);
     if (drawn === this.#drawnPage) return;
     for (const name of Object.keys(JSON.parse(this.#drawnPage || "{}") as Record<string, string>)) this.#desk.style.removeProperty(name);
@@ -650,6 +659,59 @@ export class RichEngine {
     return html !== null ? this.#view.pasteHTML(html) : this.#view.pasteText(text);
   }
 
+  /// Apre sul posto l'intestazione o il piè del foglio del cursore. Riesce
+  /// soltanto sulla carta (Pagina e Lettura), in un documento che si scrive,
+  /// con una pagina, e se il testo non è bloccato.
+  editRunning(kind: "header" | "footer"): boolean {
+    const plan = sheetPlanOf(this.#view.state);
+    return plan !== null && this.#openRunning(kind, sheetAt(plan, this.#view.state.selection.from));
+  }
+
+  /// L'intestazione o il piè del foglio del cursore non si cambia: ha
+  /// immagini, tabelle o aspetti che Fub non scrive.
+  runningLocked(kind: "header" | "footer"): boolean {
+    const plan = sheetPlanOf(this.#view.state);
+    return plan?.sheets[sheetAt(plan, this.#view.state.selection.from)]?.[kind]?.locked === true;
+  }
+
+  /// L'intestazione o il piè si sta scrivendo sul posto.
+  writingRunning(): boolean {
+    return this.#running !== null;
+  }
+
+  #openRunning(kind: "header" | "footer", index: number): boolean {
+    const plan = sheetPlanOf(this.#view.state);
+    const sheet = plan?.sheets[index];
+    if (!plan || !sheet || !this.editable() || this.tracking()) return false;
+    const section = plan.sections[sheet.section]!;
+    const running = sheet[kind];
+    if (!section.page || running?.locked || !this.#sheets.measure()) return false;
+    const box = this.#sheets.box(index);
+    if (!box) return false;
+    const page = sheet.page;
+    const inset = runningInset(kind === "header" ? page.top : page.bottom);
+    const left = `left: calc(${box.left}px + ${page.left}pt); width: ${page.w - page.left - page.right}pt`;
+    const place = kind === "header" ? `top: calc(${box.top}px + ${inset}pt); ${left}` : `top: calc(${box.top + box.height}px - ${inset}pt); transform: translateY(-100%); ${left}`;
+    this.#running?.close(true);
+    this.#desk.classList.add("rich-desk-running");
+    this.#running = openRunningEditor({
+      host: this.#desk,
+      kind,
+      section: sheet.section + 1,
+      running,
+      place,
+      commit: (next) => {
+        this.apply(setRunningAt(kind, section.pos, next), false);
+      },
+      closed: (back) => {
+        this.#running = null;
+        this.#desk.classList.remove("rich-desk-running");
+        if (back) this.focus();
+      },
+    });
+    return true;
+  }
+
   /// Seleziona tutto il documento.
   selectAll(): void {
     if (this.#destroyed) return;
@@ -659,8 +721,10 @@ export class RichEngine {
 
   destroy(): void {
     if (this.#destroyed) return;
+    this.#running?.close(false);
     this.#destroyed = true;
     this.#stopPage();
+    this.#sheets.destroy();
     this.#listeners.clear();
     this.#asks.clear();
     this.#view.destroy();

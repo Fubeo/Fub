@@ -2146,6 +2146,55 @@ body {
 .rich-sheets { position: absolute; inset: 0; pointer-events: none; }
 .rich-sheet { position: absolute; inset: 0; }
 .look-tema .rich-sheets { display: none; }
+/* Un foglio per interruzione (`editors/rich/sheets.ts`): le sagome stanno
+   in linea dove la misura le mette, e dove un foglio finisce il testo lascia
+   uno spazio alto quanto serve perché il foglio dopo cominci al suo margine.
+   In Scrittura lo spazio non c'è, e l'interruzione è una riga con un nome. */
+.rich-sheet-gap { display: block; }
+.look-tema .rich-sheet-gap { display: none; }
+/* L'intestazione e il piè di un foglio, coi numeri veri; il nome di
+   un'interruzione sta nello spazio fra due fogli. */
+.rich-sheet-head,
+.rich-sheet-foot {
+  position: absolute;
+  overflow: hidden;
+  white-space: pre-wrap;
+  font-family: Calibri, Carlito, sans-serif;
+  font-size: 11pt;
+  line-height: 1.2;
+}
+.rich-sheet-foot { display: flex; flex-direction: column; justify-content: flex-end; }
+.rich-sheet-name {
+  position: absolute;
+  inset-inline: 0;
+  transform: translateY(-50%);
+  text-align: center;
+  white-space: nowrap;
+  font-family: var(--font-ui, system-ui, sans-serif);
+  font-size: 11px;
+  line-height: 1.5;
+}
+/* Scrivendo l'intestazione il corpo si attenua, come in Word. */
+.rich-desk-running > .rich-content { opacity: 0.45; }
+.rich-running { position: absolute; z-index: 1; box-sizing: border-box; }
+.rich-running-bar {
+  position: absolute;
+  inset-inline-start: 0;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.rich-running[data-kind="header"] .rich-running-bar { bottom: 100%; }
+.rich-running[data-kind="footer"] .rich-running-bar { top: 100%; }
+.rich-running-area {
+  min-height: 1.2em;
+  outline: none;
+  white-space: pre-wrap;
+  font-family: Calibri, Carlito, sans-serif;
+  font-size: 11pt;
+  line-height: 1.2;
+}
+.rich-token { display: inline-block; white-space: nowrap; user-select: all; }
 /* In Pagina e in Lettura la carta è quella vera: 1 pt è 1/72 di pollice, e
    al 100 % un Letter è largo 816 px. Non si stringe col riquadro: si scorre.
    Le misure sono del documento (`--page-*`, `page.ts`); senza, quelle
@@ -2160,7 +2209,7 @@ body {
 }
 .look-file .rich-content,
 .look-adattato .rich-content {
-  min-height: var(--page-h, 841.9pt);
+  min-height: var(--desk-h, var(--page-h, 841.9pt));
   padding: var(--page-top, 56.7pt) var(--page-right, 56.7pt) var(--page-bottom, 56.7pt) var(--page-left, 56.7pt);
 }
 /* La carta del file. In `look-file` il documento sta sulla carta del file,
@@ -2251,6 +2300,12 @@ body {
   font-weight: 400;
   line-height: 1.5;
 }
+/* Un'interruzione che apre un foglio non è più una riga: il foglio dopo la
+   dice, e il suo nome sta fra i due fogli. */
+.look-file .rich-cut,
+.look-adattato .rich-cut { margin-block: 0; border-top: 0; }
+.look-file .rich-cut[data-name]::after,
+.look-adattato .rich-cut[data-name]::after { display: none; }
 .rich-content {
   position: relative;
   box-sizing: border-box;

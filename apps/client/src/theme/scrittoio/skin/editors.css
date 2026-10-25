@@ -1829,6 +1829,33 @@
   border: 1px solid var(--doc-rule-soft);
   box-shadow: var(--elevation-paper-shadow);
 }
+/* L'intestazione e il piè sul foglio sono un'anteprima, in grigio; il nome
+   di un'interruzione sta sulla scrivania, fra due fogli. */
+.rich-sheet-head,
+.rich-sheet-foot { color: var(--doc-gutter-fg); }
+.rich-sheet-name { color: var(--muted); }
+/* L'intestazione che si scrive sul posto: il campo sulla carta, l'etichetta
+   e i gettoni dei numeri. */
+.rich-running-bar {
+  gap: var(--space-2);
+  padding-block: var(--space-1);
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+}
+.rich-running-label { font-weight: var(--weight-medium); }
+.rich-running-area {
+  color: var(--doc-fg);
+  box-shadow: 0 0 0 1px var(--doc-caret);
+  caret-color: var(--doc-caret);
+}
+.rich-token {
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--doc-fill);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+}
 /* In Scrittura il testo sta nella colonna della nota. */
 .look-tema .rich-content {
   max-width: calc(var(--content-width) + 2 * var(--space-9));

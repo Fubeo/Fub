@@ -105,6 +105,8 @@ export const RICH_RIBBON_COMMANDS: ReadonlySet<string> = new Set([
   "rich.painter",
   "rich.image",
   "rich.toc",
+  "rich.header",
+  "rich.footer",
   "rich.find.replace",
   "shell.zoom.in",
   "shell.zoom.out",
@@ -165,7 +167,7 @@ const READING: ReadonlySet<string> = new Set([
 
 /// Il formato si cambia soltanto se non si registra: un formato cambiato non
 /// ha una revisione.
-const FORMATTING: ReadonlySet<string> = new Set(["rich.font", "rich.size", "rich.style", "rich.color", "rich.highlight", "rich.painter", "rich.spacing", "rich.page", "rich.hf", "rich.toc"]);
+const FORMATTING: ReadonlySet<string> = new Set(["rich.font", "rich.size", "rich.style", "rich.color", "rich.highlight", "rich.painter", "rich.spacing", "rich.page", "rich.header", "rich.footer", "rich.toc"]);
 
 /// Una modalità di Visualizza: premuta quando è quella di adesso.
 const modeButton = (id: string, label: Key, keytip: string, icon: string): RichControl => ({
@@ -451,9 +453,10 @@ export const RICH_TABS: readonly RichTab[] = [
       {
         id: "hf",
         label: "rich.ribbon.group.hf",
-        icon: "rc-hf",
+        icon: "rc-header",
         keytip: "ZH",
-        columns: [panel("rich.hf", "rich.hf", "H", "rc-hf")],
+        // Sul posto, sul foglio del cursore: la barra porta in Pagina.
+        columns: [action("rich.header", "rich.hf.header", "H", "rc-header", "large", true), action("rich.footer", "rich.hf.footer", "O", "rc-footer", "large", true)],
       },
     ],
   },
@@ -725,9 +728,14 @@ export function mountRichRibbon(
     // La tabella si mette con la griglia delle dimensioni.
     states.splice(states.findIndex((state) => state.id === "markdown.table"), 1);
     put("markdown.table", free && engine.read(insertTable(1, 1)));
+    // Senza una pagina il riquadro dice quella su cui il documento si vede.
+    if (!hasPage) states.push({ id: "rich.page", enabled: true });
     if (hasPage) {
       put("rich.page", free);
-      put("rich.hf", free);
+      for (const [id, kind] of [["rich.header", "header"], ["rich.footer", "footer"]] as const) {
+        if (free && engine.runningLocked(kind)) off(id, t("rich.hf.locked"));
+        else put(id, free);
+      }
       put("rich.toc", free && engine.read(insertToc("")));
     }
     put("rich.find.replace", editable);
@@ -801,6 +809,12 @@ export function mountRichRibbon(
         return;
       case "rich.toc":
         engine.apply(insertToc(t("rich.toc.title")));
+        return;
+      case "rich.header":
+      case "rich.footer":
+        // L'intestazione si scrive sul foglio: da Scrittura si passa a Pagina.
+        if (options.display && options.display.mode() === "writing") options.display.setMode("document");
+        engine.editRunning(id === "rich.header" ? "header" : "footer");
         return;
       case "rich.rev.previous":
       case "rich.rev.next":

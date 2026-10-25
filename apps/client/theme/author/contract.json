@@ -757,6 +757,13 @@
     "rich-find",
     "rich-find-current",
     "rich-comment",
+    "rich-sheet-head",
+    "rich-sheet-foot",
+    "rich-sheet-name",
+    "rich-running-bar",
+    "rich-running-label",
+    "rich-running-area",
+    "rich-token",
     "canvas-edge-hit",
     "canvas-edge-line",
     "canvas-edge-arrow",
@@ -2030,6 +2037,13 @@
     "rich-find": "segno",
     "rich-find-current": "segno",
     "rich-comment": "segno",
+    "rich-sheet-head": "segno",
+    "rich-sheet-foot": "segno",
+    "rich-sheet-name": "segno",
+    "rich-running-bar": "segno",
+    "rich-running-label": "segno",
+    "rich-running-area": "segno",
+    "rich-token": "segno",
     "canvas-edge-hit": "segno",
     "canvas-edge-line": "contenuto",
     "canvas-edge-arrow": "contenuto",
@@ -4560,6 +4574,23 @@
       ],
       "states": [
         "rest"
+      ]
+    },
+    {
+      "name": "rich-sheet-marks",
+      "part": "editors",
+      "hooks": [
+        "rich-sheet-head",
+        "rich-sheet-foot",
+        "rich-sheet-name",
+        "rich-running-bar",
+        "rich-running-label",
+        "rich-running-area",
+        "rich-token"
+      ],
+      "states": [
+        "rest",
+        "focused"
       ]
     },
     {
@@ -7143,10 +7174,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 26,
-    "hooks": 1271,
+    "hooks": 1278,
     "state_names": 7,
-    "assigned_states": 639,
-    "components": 191,
+    "assigned_states": 641,
+    "components": 192,
     "preference_tokens": 149
   }
 }

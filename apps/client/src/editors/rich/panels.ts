@@ -16,11 +16,11 @@ import { resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { insertImage, insertNote, insertTable, LINE_SPACINGS, linkAt, selectedLayout, setColor, setHighlight, setLayout, setLineSpacing, setLink } from "./commands";
 import { addComment, anchorsOf, canComment, commentsOf, deleteComment, goToComment, replyComment, resolveComment } from "./comments";
 import type { RichEngine } from "./engine";
-import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, PAGE_FIELDS, type LayoutLength } from "./projection";
+import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, type LayoutLength } from "./projection";
 import { imageMime } from "./schema";
 import {
   columns,
-  FIELD_CODES,
+  DEFAULT_PAGE,
   formatLength,
   landscape,
   MARGIN_PRESETS,
@@ -29,13 +29,10 @@ import {
   paperLabel,
   paperName,
   parseLength,
-  runningOf,
-  runningText,
   setColumns,
   setLandscape,
   setMargins,
   setPaper,
-  setRunning,
 } from "./page";
 import { reviewAuthor, setReviewAuthor, setTracking } from "./track";
 import { countText, findMatches, nextMatch, replaceAll, replaceMatch, type FindQuery, type TextCount } from "./review";
@@ -142,7 +139,6 @@ export type RichPanelId =
   | "rich.note"
   | "rich.link"
   | "rich.page"
-  | "rich.hf"
   | "rich.count"
   | "rich.comments"
   | "rich.comment"
@@ -156,7 +152,6 @@ export const RICH_PANEL_IDS: ReadonlySet<string> = new Set<RichPanelId>([
   "rich.note",
   "rich.link",
   "rich.page",
-  "rich.hf",
   "rich.count",
   "rich.comments",
   "rich.comment",
@@ -930,9 +925,16 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
     life.listen(cols, "change", () => apply(setColumns(Number(cols.value))));
     const problem = remark(card.body, "alert");
     problem.textContent = t("rich.page.too_large");
+    // Un formato che non porta la sua pagina (l'ODT) sta su quella di
+    // `DEFAULT_PAGE`: il riquadro la dice com'è, e non la cambia.
+    const fixed = engine.read(pageAt) === null;
+    if (fixed) {
+      for (const control of [paper, turn, preset, cols, ...sides.map(({ input }) => input)]) control.disabled = true;
+      remark(card.body).textContent = t("rich.page.default");
+    }
     const fill = () => {
       problem.hidden = true;
-      const page = engine.read(pageAt)?.page;
+      const page = engine.read(pageAt)?.page ?? (fixed ? DEFAULT_PAGE : null);
       if (!page) return void popover?.close();
       paper.value = paperName(page, PAPER_SIZES) ?? "";
       turn.value = landscape(page) ? "landscape" : "portrait";
@@ -945,52 +947,6 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
       cols.value = String(n);
     };
     fill();
-    finish(card);
-    showPanel(anchor, card);
-  }
-
-  /// L'intestazione e il piè di pagina della sezione del cursore, come
-  /// testo: una riga per paragrafo, i numeri di pagina con il loro codice.
-  /// Ogni battuta si applica subito; vuoto, la sezione mostra quello della
-  /// sezione prima.
-  function openRunning(anchor: HTMLElement): void {
-    popover?.close();
-    const at = engine.read(pageAt);
-    if (!at) return;
-    const card = panel(t("rich.hf"));
-    let last: HTMLTextAreaElement | null = null;
-    const areas = (["header", "footer"] as const).map((kind) => {
-      const area = document.createElement("textarea");
-      area.rows = 2;
-      area.placeholder = t("rich.hf.inherit");
-      const running = at[kind];
-      const said = running ? runningText(running) : "";
-      area.value = said ?? running!.lines.map((line) => line.map((piece) => (typeof piece === "string" ? piece : FIELD_CODES[piece.field])).join("")).join("\n");
-      area.readOnly = said === null;
-      if (area.readOnly) area.title = t("rich.hf.locked");
-      life.listen(area, "focus", () => {
-        last = area;
-      });
-      life.listen(area, "input", () => engine.apply(setRunning(kind, runningOf(area.value)), false));
-      return labelled(card.body, area, t(`rich.hf.${kind}`));
-    });
-    const fields = document.createElement("div");
-    fields.className = "rich-strip-panel-fields";
-    for (const field of PAGE_FIELDS) {
-      const add = action(fields, t(`rich.hf.${field}`), () => {
-        const area = last ?? areas.find((a) => !a.readOnly);
-        if (!area || area.readOnly) return;
-        area.setRangeText(FIELD_CODES[field], area.selectionStart, area.selectionEnd, "end");
-        area.focus();
-        area.dispatchEvent(new Event("input"));
-      });
-      // Il campo va dove si scriveva: il bottone non prende il fuoco.
-      life.listen(add, "mousedown", (event) => event.preventDefault());
-    }
-    card.body.append(fields);
-    const locked = remark(card.body);
-    locked.textContent = t("rich.hf.locked");
-    locked.hidden = !areas.some((area) => area.readOnly);
     finish(card);
     showPanel(anchor, card);
   }
@@ -1051,8 +1007,6 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
         return openLink(anchor);
       case "rich.page":
         return openPage(anchor);
-      case "rich.hf":
-        return openRunning(anchor);
       case "rich.count":
         return openCount(anchor);
       case "rich.comments":

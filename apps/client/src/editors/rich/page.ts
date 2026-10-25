@@ -183,11 +183,15 @@ export function setColumns(cols: number): Command {
   return changePage((page) => ({ ...page, cols }));
 }
 
+/// La pagina di un formato che non ne porta una (l'ODT, finché la proiezione
+/// non la dice): un A4 con i margini di 2 cm, in punti.
+export const DEFAULT_PAGE: Page = { w: 595.3, h: 841.9, top: 56.7, bottom: 56.7, left: 56.7, right: 56.7 };
+
 /// Le misure della pagina del documento, come variabili di dato in punti: la
 /// carta è grande quanto la carta vera, con i suoi margini, e non si stringe
 /// col riquadro (si scorre). Le usa la carta di Pagina e di Lettura
-/// (`structure.css`); senza una pagina vale quella dell'ODT, un A4 con i
-/// margini di 2 cm. In Scrittura non le legge nessuno.
+/// (`structure.css`); senza una pagina vale `DEFAULT_PAGE`, che è anche il
+/// ripiego della regola. In Scrittura non le legge nessuno.
 export function pageVariables(page: Page | null): Readonly<Record<string, string>> {
   if (!page) return {};
   return {
@@ -246,6 +250,17 @@ export function runningOf(text: string): RunningText | null {
 export function setRunning(kind: "header" | "footer", running: RunningText | null): Command {
   return (state, dispatch) => {
     const at = pageAt(state);
+    return at !== null && setRunningAt(kind, at.pos, running)(state, dispatch);
+  };
+}
+
+/// Come `setRunning`, per la sezione che chiude il segno di fine a `pos`, o
+/// per l'ultima con `null`: quella di un foglio, non del cursore.
+export function setRunningAt(kind: "header" | "footer", pos: number | null, running: RunningText | null): Command {
+  return (state, dispatch) => {
+    const node = pos === null ? null : state.doc.nodeAt(pos);
+    if (pos !== null && node?.type.name !== "section") return false;
+    const at = own(node ? node.attrs : state.doc.attrs, pos);
     if (!at || at[kind]?.locked || running?.locked) return false;
     const same = (at[kind] ? writeRunning(at[kind]) : "") === (running ? writeRunning(running) : "");
     if (dispatch && !same) {
@@ -254,4 +269,10 @@ export function setRunning(kind: "header" | "footer", running: RunningText | nul
     }
     return true;
   };
+}
+
+/// Un'intestazione come si legge sul foglio `page` di `pages`: una riga per
+/// paragrafo, i numeri veri al posto dei campi.
+export function runningOnSheet(running: RunningText, page: number, pages: number): string {
+  return running.lines.map((line) => line.map((piece) => (typeof piece === "string" ? piece : String(piece.field === "page" ? page : pages))).join("")).join("\n");
 }
