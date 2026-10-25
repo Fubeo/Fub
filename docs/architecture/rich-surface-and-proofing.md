@@ -190,6 +190,14 @@ Gli import `prosemirror-*` stanno sotto `editors/rich/`, ma nessun guard lo
 verifica ancora come per CodeMirror. Il Markdown non dipende da questa famiglia;
 senza la feature `rich` dell'host questi documenti tornano file a byte.
 
+L'aspetto del contenuto
+([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)): la
+modalità `document` non dichiara ancora i suoi aspetti, e vale `tema`. I
+caratteri e i colori del file stanno in linea sugli elementi, mentre le regole
+della pelle sui titoli (`.rich-heading`) valgono solo sotto `.look-tema`. Le
+revisioni, il filo della carta e i commenti scrivono ancora ruoli del tema
+sull'elemento, contati nell'elenco di `check-inline-theme.mjs`.
+
 ## Correttore condiviso
 
 Il correttore ha un motore e un client per tutte le superfici di prosa, e un

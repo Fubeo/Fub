@@ -217,6 +217,9 @@ pannelli) lo Scrittoio compone:
 - `theme/scrittoio/`: la serie di serie (motore `theme-2`), con ricetta dei
   colori, fogli, struttura e pelle a pezzi. La pelle passa dal sanitizer CSS
   del motore, e ogni classe di un pezzo è un hook dell'anatomia di quel pezzo.
+  Ogni hook dichiara il suo strato (cornice, segno o contenuto), e il
+  contratto del tema lo esporta in `layers`
+  ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)).
 
 I predefiniti dell'aspetto (accento, i tre caratteri, corpo, interlinea,
 giustezza)
@@ -377,6 +380,8 @@ Oltre al confine di CodeMirror, i guard del frontend impediscono:
 - nuovi import Tauri fuori dal seam;
 - usi degli appunti della webview fuori da `platform/clipboard.ts`;
 - listener globali senza owner;
+- ruoli del tema scritti sull'elemento negli editor, oltre l'elenco delle eccezioni
+  (`check-inline-theme.mjs`);
 - attese concorrenti senza il primitivo di cancellazione;
 - mirror TypeScript non aggiornati;
 - parole del codice nei testi italiani dell'interfaccia: il glossario in

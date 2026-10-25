@@ -40,6 +40,12 @@ possiede lettura, formule, blocchi e innesto. Limiti, coordinate, fallback e
 parità nativo/WASM sono normati in [ABI e WIT](../reference/abi-and-wit.md) e
 nel [contratto IPC](../reference/ipc-contract.md).
 
+Nei tre strati
+([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)) le
+intestazioni di righe e colonne e la barra sono cornice, la griglia e le celle
+contenuto. La modalità `sheet` non dichiara ancora i suoi aspetti, e vale
+`tema`: il testo automatico di una cella prende l'inchiostro del tema.
+
 ## La selezione e il riempimento
 
 Il puntatore seleziona trascinando: da una cella un intervallo, da

@@ -52,3 +52,4 @@ Nuove decisioni usano il [template](template.md).
 | [0219 — La cartella di Excel si modifica con i comandi di GridCraft, e il giornale diventa di comandi](0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md) | proposta | contratto | 0216, 0214 (in parte) |
 | [0220 — Gli oggetti dei fogli viaggiano con le finestre, e i grafici arrivano disegnati](0220-gli-oggetti-dei-fogli-viaggiano-con-le-finestre.md) | proposta | contratto | — |
 | [0221 — I motori esterni si seguono da vicino: la loro toolchain, le patch a tre vie e un avviso pianificato](0221-i-motori-si-seguono-da-vicino.md) | proposta | sicurezza | — |
+| [0222 — Tre strati in ogni superficie, e l'aspetto del contenuto lo dichiara la modalità](0222-tre-strati-e-l-aspetto-del-contenuto.md) | proposta | frontend | — |

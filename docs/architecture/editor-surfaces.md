@@ -334,6 +334,34 @@ superficie la dichiara; altrimenti alla `defaultMode` se è di scrittura, poi
 alla prima scrittura dichiarata. La command palette usa la stessa proiezione e
 non conosce nomi di profilo.
 
+### L'aspetto del contenuto
+
+Ogni superficie ha tre strati: la cornice, i segni di Fub sul contenuto e il
+contenuto ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)).
+Cornice e segni sono sempre del tema. Del contenuto decide la modalità: una
+`SurfaceMode` dichiara in `looks` gli aspetti che offre, il predefinito per
+primo, fra `tema`, `file` e `adattato` (`apps/client/src/theme/content-look.ts`).
+Markdown, testo, sorgenti, Lavagna e Base dichiarano `tema`; disegno,
+annotazioni, immagini e media `file`; l'SVG `tema` nel sorgente e `file`
+nell'anteprima. Il documento e il foglio di calcolo non dichiarano ancora, e
+valgono `tema`: `apps/client/src/editors/core/surface-looks.test.ts` tiene
+l'elenco delle modalità senza aspetto, che può solo accorciarsi.
+
+L'aspetto che si vede lo risolve il controller del documento: vale la scelta
+del riquadro per quella famiglia (`PaneState.looks`), se la modalità la offre;
+altrimenti l'impostazione `appearance.content-look`, dove `auto` è il
+predefinito della modalità oppure `adattato` con il contrasto alto; altrimenti
+il predefinito. La scelta non si cancella quando una modalità non la offre. La
+regione del contenuto (`.pane-editor`) riceve la classe `look-tema`,
+`look-file` o `look-adattato`, e la meccanica sta in
+`apps/client/src/theme/scrittoio/structure.css`: in `look-file` i segni di Fub
+prendono i colori della carta chiara (`--paper-*`). L'adattamento di un colore
+del file a un'altra carta è una funzione sola, `apps/client/src/theme/adapt.ts`.
+
+Un editor non scrive un ruolo del tema sull'elemento: sull'elemento vanno i
+valori del file. `.github/scripts/check-inline-theme.mjs` lo controlla in
+`apps/client/src/editors/`, con l'elenco delle righe che lo fanno ancora.
+
 La finestra documento a parte (`apps/client/src/shells/document/`) non ha IPC:
 riceve dalla finestra principale il profilo di testo che il registro ha risolto
 per il documento (`DocumentWindowRequest.profile`) e lo monta su un
