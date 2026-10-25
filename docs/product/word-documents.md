@@ -142,21 +142,51 @@ Backspace.
 Un documento si apre **soltanto in lettura**, con il motivo in testa, quando
 ha modifiche di formato tracciate o revisioni fuori dal corpo (note,
 intestazioni, piè di pagina, commenti, caselle di testo), è protetto,
-oppure quando la
-superficie o il codec non saprebbero riscriverlo identico. Per un `.docx` lo
-si misura sui byte del pacchetto, non soltanto sul modello: all'apertura Fub
-confronta il file con una riscrittura a vuoto del codec, e se questa perde o
-cambia un elemento, un attributo o il suo valore, il testo di un paragrafo,
-una relazione o una parte copiata (per esempio un contenuto importato con
-`w:altChunk`, o il nome che Word ha dato a un'immagine) il documento si apre
-in sola lettura (motivo `codec`). Non contano i segni che Word stesso
-rigenera a ogni salvataggio: le sessioni di modifica (`rsid`), gli errori di
-ortografia segnati, l'ultima impaginazione, gli identificativi dei paragrafi,
-le statistiche del file e la numerazione degli id. Un documento cifrato o più grande di 256 MiB non si apre.
-Un salvataggio che non si rilegge uguale a ciò che si voleva scrivere non
-scrive, e il testo resta nel buffer; lo stesso vale per un salvataggio che
-cambierebbe un blocco o una parte che l'utente non ha toccato, che
-duplicherebbe un'immagine o lascerebbe un riferimento senza relazione.
+oppure quando la superficie o il codec non saprebbero riscriverlo identico.
+Per un `.docx` lo si misura sui byte del pacchetto, non soltanto sul modello:
+all'apertura Fub confronta il file con una riscrittura a vuoto del codec, e
+guarda che cosa questa perde o cambia: un elemento, un attributo o il suo
+valore, il testo di un paragrafo, una relazione, una parte copiata (per
+esempio un contenuto importato con `w:altChunk`, o il nome che Word ha dato a
+un'immagine), o anche soltanto il posto di un segno dentro il paragrafo. Non
+contano i segni che Word stesso rigenera a ogni salvataggio: le sessioni di
+modifica (`rsid`), gli errori di ortografia segnati, l'ultima impaginazione,
+gli identificativi dei paragrafi, le statistiche del file e la numerazione
+degli id; né le forme che la norma considera uguali, come un contenitore di
+proprietà vuoto, `start` ed `end` al posto di `left` e `right`, un
+interruttore acceso scritto con `w:val="true"` o senza, un rientro sporgente
+nullo al posto di una prima riga nulla, un campo semplice o il paragrafo che
+chiude il corpo dopo una tabella.
+
+Ciò che si perderebbe non chiude per forza tutto il documento:
+
+- un **paragrafo o una tabella** che la riscrittura non porterebbe intero
+  resta com'è nel file, segnato, e da Fub non si cambia: lo si può spostare
+  intero, ma non scriverci dentro né toglierlo. In testa un avviso dice che le
+  parti segnate restano come sono, e il resto del testo si scrive;
+- se si perderebbe qualcosa **fuori dal corpo** (stili, numerazioni,
+  impostazioni, tema, proprietà del file, intestazioni, commenti), si
+  scrivono soltanto i paragrafi e le tabelle del testo: la pagina, le
+  intestazioni e i piè di pagina, i commenti, la registrazione delle
+  modifiche e le note non si cambiano, e un elenco di una specie che il
+  documento non ha ancora non si crea, perché vorrebbe una numerazione nuova.
+  L'avviso in testa lo dice;
+- tutto il documento resta in sola lettura (motivo `codec`) soltanto quando
+  il modello non si rilegge uguale, o il corpo del file non si legge blocco
+  per blocco come lo legge il codec.
+
+Un salvataggio che tocca soltanto il testo è un **innesto**: il file resta
+com'era, byte per byte, tranne i paragrafi e le tabelle toccati, che arrivano
+dal codec con i loro riferimenti riportati a quelli del file (immagini,
+segnalibri, commenti, note). Un salvataggio che cambia anche ciò che sta fuori
+dal corpo riscrive tutto il file con il codec, e si fa soltanto se la
+riscrittura non perde niente. In ogni caso un salvataggio che non si rilegge
+uguale a ciò che si voleva scrivere non scrive, e il testo resta nel buffer;
+lo stesso vale per un salvataggio che cambierebbe un blocco chiuso o una
+parte che l'utente non ha toccato, che duplicherebbe un'immagine o
+lascerebbe un riferimento senza relazione. Un documento cifrato o più grande
+di 256 MiB non si apre; uno molto lungo (centomila paragrafi) si apre in
+qualche secondo, senza fermare l'interfaccia.
 
 Limiti attuali:
 
@@ -189,10 +219,12 @@ Limiti attuali:
   mostra come una cella per riga;
 - un elenco numerato mostra sempre numeri arabi, qualunque sia la numerazione
   del documento, che resta quella del file;
-- il codec riscrive il file in forma propria: rinumera intestazioni, piè di
-  pagina, note e caselle di testo, fonde le impostazioni che genera con quelle
-  originali e toglie le immagini che il testo non mostra più. Il contenuto non
-  cambia, ma il file salvato non è identico byte per byte.
+- quando un salvataggio riscrive tutto il file (perché è cambiato ciò che
+  sta fuori dal corpo), il codec lo scrive in forma propria: rinumera
+  intestazioni, piè di pagina, note e caselle di testo, fonde le impostazioni
+  che genera con quelle originali e toglie le immagini che il testo non
+  mostra più. Il contenuto non cambia, ma il file salvato non è identico byte
+  per byte; un innesto invece lo è, fuori dalle unità toccate.
 
 ## Pagina, Scrittura e Lettura
 
@@ -342,5 +374,6 @@ Il disegno del confine è in
 la forma alle porte nel [contratto IPC](../reference/ipc-contract.md#documenti-di-videoscrittura)
 e il perché nelle decisioni [0209](../decisions/0209-videoscrittura-come-proiezione.md),
 [0210](../decisions/0210-opendocument-con-un-codec-di-fub.md),
-[0211](../decisions/0211-copie-esportate-con-la-perdita-misurata.md) e
-[0212](../decisions/0212-preservazione-misurata-sul-pacchetto.md).
+[0211](../decisions/0211-copie-esportate-con-la-perdita-misurata.md),
+[0212](../decisions/0212-preservazione-misurata-sul-pacchetto.md) e
+[0215](../decisions/0215-salvataggio-docx-per-innesto.md).

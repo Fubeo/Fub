@@ -142,8 +142,11 @@ function headingTag(level: number): string {
 const para: NodeSpec = {
   group: "block",
   content: "inline*",
+  // `locked`: il formato non riscriverebbe il paragrafo senza perdite. Non si
+  // legge dal DOM: una copia incollata è un paragrafo nuovo.
   attrs: {
     role: { default: BODY },
+    locked: { default: false },
     align: { default: null },
     k: { default: null },
     p: { default: null },
@@ -190,6 +193,14 @@ const para: NodeSpec = {
       attrs["data-list"] = role.ordered ? "ordered" : "bullet";
     }
     if (node.attrs.k) attrs["data-rich-k"] = node.attrs.k as string;
+    // Un blocco chiuso non prende il cursore: ciò che vi si scrivesse non
+    // entrerebbe, e la battuta rifiutata non deve finire altrove.
+    if (node.attrs.locked) {
+      attrs.class += " rich-locked";
+      attrs["data-rich-locked"] = "";
+      attrs.contenteditable = "false";
+      attrs.title = t("rich.locked");
+    }
     const style: string[] = [];
     if (node.attrs.align) {
       attrs["data-rich-align"] = node.attrs.align as string;
@@ -299,10 +310,18 @@ const nodes: Record<string, NodeSpec> = {
   table: {
     group: "block",
     content: "row+",
-    attrs: { k: { default: null } },
+    attrs: { k: { default: null }, locked: { default: false } },
     isolating: true,
     parseDOM: [{ tag: "table[data-rich-k]", getAttrs: keyOf }],
-    toDOM: (node) => ["table", { class: "rich-table", "data-rich-k": (node.attrs.k as string | null) ?? "" }, ["tbody", 0]],
+    toDOM: (node) => [
+      "table",
+      {
+        class: node.attrs.locked ? "rich-table rich-locked" : "rich-table",
+        "data-rich-k": (node.attrs.k as string | null) ?? "",
+        ...(node.attrs.locked ? { "data-rich-locked": "", contenteditable: "false", title: t("rich.locked") } : {}),
+      },
+      ["tbody", 0],
+    ],
   },
   // Riga e cella hanno un `k` che ProseMirror può lasciare vuoto quando ripara
   // una tabella (una selezione che taglia righe intere): lo riempie dai vicini
@@ -648,6 +667,7 @@ function blockNodes(blocks: readonly Block[]): PmNode[] {
         richSchema.nodes.para.create(
           {
             role: block.role,
+            locked: block.locked === true,
             align: block.align ?? null,
             k: block.k ?? null,
             p: block.p ?? null,
@@ -672,7 +692,7 @@ function blockNodes(blocks: readonly Block[]): PmNode[] {
         }),
       ),
     );
-    out.push(richSchema.nodes.table.create({ k: block.k ?? null }, rows));
+    out.push(richSchema.nodes.table.create({ k: block.k ?? null, locked: block.locked === true }, rows));
   }
   return out;
 }
@@ -839,6 +859,7 @@ function paraOf(node: PmNode, section: PmNode | null): Para {
   return {
     t: "para",
     role: node.attrs.role as Role,
+    ...(node.attrs.locked ? { locked: true } : {}),
     ...(align ? { align } : {}),
     ...(k !== null ? { k } : {}),
     ...(sect !== undefined ? { sect } : {}),
@@ -887,7 +908,7 @@ function tableOf(table: PmNode): Block {
     });
     rows.push({ ...key(row), cells });
   });
-  return { t: "table", ...key(table), rows };
+  return { t: "table", ...(table.attrs.locked ? { locked: true } : {}), ...key(table), rows };
 }
 
 /// I blocchi del documento in JSON, uno per figlio del documento che porta un
@@ -897,7 +918,9 @@ function tableOf(table: PmNode): Block {
 export class BlockWriter {
   readonly #cache = new WeakMap<PmNode, { readonly sect: PmNode | null; readonly json: string }>();
 
-  write(doc: PmNode): string[] {
+  /// I blocchi del documento in JSON; quelli chiusi anche in `closed`, se
+  /// c'è.
+  write(doc: PmNode, closed?: string[]): string[] {
     const out: string[] = [];
     const children: PmNode[] = [];
     doc.forEach((child) => children.push(child));
@@ -914,6 +937,7 @@ export class BlockWriter {
         this.#cache.set(child, { sect, json });
         out.push(json);
       }
+      if (closed && child.attrs.locked === true) closed.push(out[out.length - 1]!);
       if (sect) i += 1;
     }
     return out;

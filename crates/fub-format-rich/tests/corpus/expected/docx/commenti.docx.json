@@ -1,18 +1,16 @@
 {
   "file": "docx/commenti.docx",
-  "sha256": "7845e03dad2457342ce1f4b6e4b6d94fbb273c3c9b1b54d21f1034e3dc91560c",
+  "sha256": "2498f0cf20f155faf38c7bd07016074baa61092896cfaa1e79486f87fb1cf072",
   "open": {
-    "readonly": "codec",
-    "projection": "9c9a77a8d5ae3b3033c65dc66f5eb566b085e65e7c8f801150e6a1400c8fa6cf",
+    "readonly": null,
+    "projection": "4a84e2fdf61b28f72d0b86cf78d4d3927c946e75cc408149eb809542df4003cf",
     "blocks": 2,
     "comments": 3
   },
   "preservation": [
-    "differenze all'apertura: 4",
+    "differenze all'apertura: 1",
     "  comments: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}annotationRef>: 3 → 0",
-    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
+    "blocchi chiusi: {}; scrittura intera: false",
     "normalizzazione «w:id»: 12 nel file, 12 nella prova a vuoto",
     "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto",
     "normalizzazione «paraId»: 10 nel file, 10 nella prova a vuoto",
@@ -43,11 +41,32 @@
     "wordxml": []
   },
   "edits": {
-    "E0": "readonly",
-    "E1": "readonly",
-    "E2": "readonly",
-    "E3": "readonly",
-    "E4": "readonly",
-    "E5": "readonly"
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "error": "locked",
+      "message": "rich document has closed parts: block None"
+    },
+    "E5": "n/a",
+    "E6": "n/a",
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    }
   }
 }

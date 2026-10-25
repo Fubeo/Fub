@@ -525,6 +525,62 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-format-rich/src/graft.rs::internal",
+            (
+                Family::AsciiCase,
+                "nell'innesto, ritrova fra le parti già aggiunte quella a cui punta una \
+                 relazione del codec, confrontando nomi di parte OPC nella loro forma minuscola \
+                 ASCII, come `inventory.rs::read`: è la regola del formato (ECMA-376 parte 2), \
+                 non un nome di file del vault.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/graft.rs::relative",
+            (
+                Family::AsciiCase,
+                "scrive il riferimento relativo fra due nomi di parte OPC, che si confrontano \
+                 segmento per segmento senza distinguere le maiuscole ASCII come vuole il \
+                 formato: la parte comune dei due percorsi non dipende dal caso.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/graft.rs::types_xml",
+            (
+                Family::AsciiCase,
+                "toglie da `[Content_Types].xml` gli `Override` delle parti tolte, che \
+                 l'innesto tiene per nome di parte OPC in minuscolo ASCII come \
+                 `inventory.rs::read`; il `/` iniziale del `PartName` non fa parte del nome.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/graft.rs::graft",
+            (
+                Family::AsciiCase,
+                "riscrive lo ZIP voce per voce e ritrova ciascuna fra le parti sostituite o \
+                 tolte per nome di parte OPC in minuscolo ASCII, la stessa chiave di \
+                 `inventory.rs::read`, così che una voce scritta con un'altra forma non \
+                 sfugga alla sostituzione.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/graft.rs::para_id",
+            (
+                Family::AsciiCase,
+                "tiene unici i `w14:paraId` del documento innestato: sono otto cifre \
+                 esadecimali (ST_LongHexNumber), e `0a1B…` e `0A1b…` sono lo stesso numero; \
+                 l'alfabeto è ASCII per costruzione. Non è un nome.",
+            ),
+        ),
+        (
+            "crates/fub-format-rich/src/graft.rs::para_ids_of",
+            (
+                Family::AsciiCase,
+                "raccoglie i `w14:paraId` di un frammento nella forma maiuscola con cui \
+                 `para_id` li confronta: numeri esadecimali, ASCII per costruzione. Non è \
+                 un nome.",
+            ),
+        ),
+        (
             "crates/fub-app/src/live.rs::pc_name",
             (
                 Family::AsciiCase,

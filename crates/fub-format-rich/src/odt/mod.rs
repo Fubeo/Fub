@@ -93,6 +93,7 @@ pub(crate) fn open(bytes: &[u8]) -> Result<Opened, RichError> {
         version: VERSION,
         opaque_schema: Some(OPAQUE_SCHEMA),
         readonly,
+        body_only: false,
         lang: doc.styles.lang.clone(),
         f: doc.styles.text(None, &[]).base(),
         styles: {

@@ -3,12 +3,13 @@
   "sha256": "b5600140e3fe20ac469b6d22fb52b6101439ac29e6d1ab4d96ffc01dc393fa12",
   "open": {
     "readonly": null,
-    "projection": "8a6f76539b04ca71e940de6dab66804b920f80eec9d6e818142e0f5a93898220",
+    "projection": "9a43f9c7b8d2062011734be00ff44a4f351f92be119ad9b4ae73560ec8cfcdcd",
     "blocks": 4,
     "comments": 0
   },
   "preservation": [
     "differenze all'apertura: 0",
+    "blocchi chiusi: {}; scrittura intera: true",
     "normalizzazione «w:id»: 4 nel file, 4 nella prova a vuoto",
     "normalizzazione «w:rsid*»: 11 nel file, 0 nella prova a vuoto",
     "normalizzazione «w:proofErr»: 2 nel file, 0 nella prova a vuoto",
@@ -65,6 +66,12 @@
       "readonly": null,
       "reopened": "same"
     },
-    "E5": "n/a"
+    "E5": "n/a",
+    "E6": "n/a",
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    }
   }
 }

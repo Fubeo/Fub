@@ -10,13 +10,18 @@
 //! la proiezione deve tornare al documento identico, e il documento deve
 //! rileggersi identico dopo una scrittura del codec. Se uno dei due fallisce,
 //! la proiezione esce lo stesso, con [`ReadOnly`]: si legge, non si scrive.
+//! Ciò che la prova a vuoto perderebbe nei byte non chiude tutto il
+//! documento: un blocco del corpo esce `locked`, e ciò che sta fuori dal
+//! corpo dà `body_only` ([`crate::preservation`]).
 //!
 //! L'OpenDocument fa eccezione: apre e salva con il codec di Fub (`odt`), che
 //! lavora sull'XML del file e fa le proprie prove, con le stesse specie.
 //!
 //! **Salvare** rilegge sempre ciò che sta per scrivere: se i byte nuovi non
 //! descrivono il documento voluto non si scrive niente, e chi scrive tiene il
-//! proprio buffer.
+//! proprio buffer. Un salvataggio che tocca soltanto il corpo innesta le
+//! unità toccate nel file com'era ([`crate::graft`]); uno che toccherebbe ciò
+//! che è chiuso non si fa ([`RichError::Locked`]).
 
 use std::sync::Arc;
 
@@ -24,6 +29,7 @@ use serde::{Deserialize, Serialize};
 use wordcraft_doc::{Document, RevisionKind};
 
 use crate::fidelity::{reads_back, revisions_outside_body, same};
+use crate::parallel;
 use crate::preservation;
 use crate::projection::{self, Projection};
 use crate::unproject::unproject;
@@ -47,9 +53,10 @@ pub enum ReadOnly {
     /// Non torna identico dalla proiezione.
     Projection,
     /// Il codec non lo riscriverebbe identico: il modello non si rilegge
-    /// uguale, oppure la prova a vuoto perde o aggiunge qualcosa nei byte del
-    /// pacchetto (un elemento, un attributo, una relazione, una parte copiata;
-    /// vedi [`crate::preservation`]).
+    /// uguale, oppure i byte del pacchetto non si misurano blocco per blocco
+    /// del corpo (vedi [`crate::preservation`]). Ciò che la prova a vuoto
+    /// perderebbe in un pacchetto che si misura chiude soltanto il blocco, o
+    /// ciò che sta fuori dal corpo.
     Codec,
     /// È stato letto da un importatore che non riporta il file intero.
     Import,
@@ -77,13 +84,18 @@ pub fn open(codec: Codec, bytes: &[u8]) -> Result<Opened, RichError> {
     if codec == Codec::Odt {
         return crate::odt::open(bytes);
     }
-    let document = codec.read(bytes)?;
-    let normal = normalized(&document);
+    let normal = normalized(codec.read(bytes)?);
     let mut projection = projection::project(&normal)?;
     let readonly = match policy(&normal) {
         Some(reason) => Some(reason),
         None if !codec.lossless() => Some(ReadOnly::Import),
-        None => fidelity(codec, bytes, &projection, &normal)?,
+        None => match fidelity(codec, bytes, &projection, &normal)? {
+            Ok(baseline) => {
+                projection.close(&baseline.locked, baseline.whole);
+                None
+            }
+            Err(reason) => Some(reason),
+        },
     };
     projection.readonly = readonly;
     Ok(Opened {
@@ -98,7 +110,7 @@ pub fn save(codec: Codec, current: &[u8], json: &str) -> Result<Saved, RichError
     if codec == Codec::Odt {
         return crate::odt::save(current, json);
     }
-    let base = normalized(&codec.read(current)?);
+    let base = normalized(codec.read(current)?);
     if let Some(reason) = policy(&base) {
         return Err(RichError::ReadOnly(reason));
     }
@@ -114,36 +126,143 @@ pub fn save(codec: Codec, current: &[u8], json: &str) -> Result<Saved, RichError
         return Err(RichError::ReadOnly(reason));
     }
     let wanted = unproject(&projection, &base)?;
+    // Della proiezione resta soltanto dove segna i blocchi chiusi: un
+    // documento grande non la tiene accanto al modello voluto.
+    let marked = projection.locked();
+    drop(projection);
     // Uguale a meno del numero delle parti: una storia che un oggetto ha
     // riportato con un altro id è la stessa storia.
     if same(&wanted, &base) {
         return Ok(Saved::Unchanged);
     }
     let bytes = codec.write(&wanted)?;
-    if !reads_back(&wanted, &normalized(&codec.read(&bytes)?)) {
+    // La rilettura dei byte nuovi, la prova a vuoto della base e i flussi dei
+    // due file non si parlano: insieme.
+    let (back, (baseline, (written, file))) = parallel::join(
+        || {
+            codec
+                .read(&bytes)
+                .map(|read| reads_back(&wanted, &normalized(read)))
+        },
+        || {
+            parallel::join(
+                || baseline_of(codec, current, &base),
+                || {
+                    parallel::join(
+                        || preservation::written(&bytes, &wanted),
+                        || crate::flow::main_of(current, &crate::inventory::LIMITS),
+                    )
+                },
+            )
+        },
+    );
+    if !back? {
         return Err(RichError::Fidelity);
     }
-    // I controlli di Fub sui byte: il file da sovrascrivere deve essere quello
-    // che il codec sa riscrivere, e i byte nuovi devono lasciare identico ciò
-    // che l'utente non ha toccato. La prova a vuoto della base l'ha già fatta,
-    // di solito, l'apertura degli stessi byte.
-    let key = preservation::key(current);
-    let baseline = match preservation::remembered(&key) {
-        Some(baseline) => baseline,
-        None => {
-            let dry = codec.write(&base)?;
-            let Ok(baseline) = preservation::check_open(current, &dry) else {
-                return Err(RichError::ReadOnly(ReadOnly::Codec));
-            };
-            let baseline = Arc::new(baseline);
-            preservation::remember(key, Arc::clone(&baseline));
-            baseline
-        }
+    let baseline = baseline?;
+    // I blocchi chiusi restano i byte del file: il voluto li deve avere
+    // uguali, dove la proiezione li segna.
+    let anchors = preservation::anchors(&baseline.locked, &marked, &base, &wanted)
+        .map_err(|at| RichError::Locked(Some(at)))?;
+    let pairs = preservation::untouched_blocks(&base, &wanted, &anchors);
+    let Ok(written) = written else {
+        return Err(RichError::Fidelity);
     };
-    if preservation::check_save(&baseline, &bytes, &base, &wanted).is_err() {
+    // Quando fuori dal corpo niente è cambiato, il file nuovo è un innesto:
+    // il file com'era, con le unità toccate prese dai byte del codec, che ha
+    // i suoi controlli. Altrimenti si riscrive tutto, se il codec lo sa fare
+    // senza perdite.
+    if preservation::body_only(&base, &wanted, &pairs) {
+        let graft = Graft {
+            file: file.ok(),
+            written: &written,
+            base: &base,
+            wanted: &wanted,
+            pairs: &pairs,
+            baseline: &baseline,
+        };
+        if let Some(grafted) = graft.run(codec, current) {
+            return Ok(Saved::Bytes(grafted));
+        }
+    }
+    if !baseline.whole {
+        return Err(RichError::Locked(None));
+    }
+    if preservation::check_save(&baseline, &bytes, &written, &base, &wanted, &pairs).is_err() {
         return Err(RichError::Fidelity);
     }
     Ok(Saved::Bytes(bytes))
+}
+
+/// La prova a vuoto della base: il file da sovrascrivere deve essere quello
+/// che il codec sa riscrivere, e i byte nuovi devono lasciare identico ciò che
+/// l'utente non ha toccato. Di solito l'ha già fatta l'apertura degli stessi
+/// byte.
+fn baseline_of(
+    codec: Codec,
+    current: &[u8],
+    base: &Document,
+) -> Result<Arc<preservation::Baseline>, RichError> {
+    let key = preservation::key(current);
+    if let Some(baseline) = preservation::remembered(&key) {
+        return Ok(baseline);
+    }
+    let dry = codec.write(base)?;
+    let Ok(baseline) = preservation::check_open(current, &dry, base.body.len()) else {
+        return Err(RichError::ReadOnly(ReadOnly::Codec));
+    };
+    let baseline = Arc::new(baseline);
+    preservation::remember(key, Arc::clone(&baseline));
+    Ok(baseline)
+}
+
+/// Ciò che serve all'innesto del salvataggio ([`crate::graft`]).
+struct Graft<'a> {
+    /// Il flusso del file, se si legge.
+    file: Option<crate::flow::Main>,
+    /// Il flusso dei byte del codec.
+    written: &'a crate::flow::Main,
+    base: &'a Document,
+    wanted: &'a Document,
+    pairs: &'a [(usize, usize)],
+    baseline: &'a preservation::Baseline,
+}
+
+impl Graft<'_> {
+    /// L'innesto, riletto e controllato come i byte del codec; `None` se non
+    /// si fa.
+    fn run(self, codec: Codec, current: &[u8]) -> Option<Vec<u8>> {
+        let limits = &crate::inventory::LIMITS;
+        let file = self.file?;
+        if file.scan.blocks.len() != self.base.body.len() {
+            return None;
+        }
+        let pieces = crate::graft::plan(&file, self.written, self.pairs).ok()?;
+        let out = crate::graft::graft(
+            current,
+            &file,
+            self.written,
+            self.base,
+            self.wanted,
+            &pieces,
+            limits,
+        )
+        .ok()?;
+        // Il flusso del file è servito: la rilettura non lo tiene accanto.
+        drop(file);
+        let (back, checked) = parallel::join(
+            || {
+                codec
+                    .read(&out)
+                    .is_ok_and(|read| reads_back(self.wanted, &normalized(read)))
+            },
+            || {
+                preservation::check_graft(self.baseline, &out, self.base, self.wanted, self.pairs)
+                    .is_ok()
+            },
+        );
+        (back && checked).then_some(out)
+    }
 }
 
 /// I byte di un documento vuoto: la base di chi scrive una proiezione in un
@@ -155,10 +274,12 @@ pub fn blank(codec: Codec) -> Result<Vec<u8>, RichError> {
     codec.write(&Document::new())
 }
 
-fn normalized(document: &Document) -> Document {
-    let mut out = document.clone();
-    out.normalize_runs();
-    out
+/// Il documento con i run uguali uniti: il modello che si proietta e si
+/// confronta. Prende il documento letto, che serve soltanto a questo: un
+/// documento grande non si tiene due volte.
+fn normalized(mut document: Document) -> Document {
+    document.normalize_runs();
+    document
 }
 
 /// Ciò che il documento stesso dice di sé.
@@ -182,29 +303,44 @@ fn policy(document: &Document) -> Option<ReadOnly> {
 }
 
 /// Le due andate e ritorni. La proiezione passa dal JSON, come farà quella
-/// della shell.
+/// della shell. Dà la prova a vuoto accettata, con ciò che resta chiuso.
+///
+/// La proiezione e la rilettura del codec si provano insieme, poi si misurano
+/// i byte: ciascuna delle tre tiene in memoria quasi quanto il documento, e
+/// così non se ne tengono mai tre insieme.
 fn fidelity(
     codec: Codec,
     original: &[u8],
     projection: &Projection,
     document: &Document,
-) -> Result<Option<ReadOnly>, RichError> {
-    let wire = Projection::from_json(&projection.to_json()?)?;
-    if unproject(&wire, document).ok().as_ref() != Some(document) {
-        return Ok(Some(ReadOnly::Projection));
+) -> Result<Result<Arc<preservation::Baseline>, ReadOnly>, RichError> {
+    let json = projection.to_json()?;
+    let (wire, dry) = parallel::join(
+        || {
+            let wire = Projection::from_json(&json)?;
+            Ok::<bool, RichError>(unproject(&wire, document).ok().as_ref() == Some(document))
+        },
+        || dry_run(codec, document),
+    );
+    if !wire? {
+        return Ok(Err(ReadOnly::Projection));
     }
-    let Ok(written) = codec.write(document) else {
-        return Ok(Some(ReadOnly::Codec));
+    // I byte dicono che il modello descrive il file: ciò che il lettore ha
+    // saltato manca dalla prova a vuoto, e resta chiuso dove si trova.
+    let Some(baseline) =
+        dry.and_then(|dry| preservation::check_open(original, &dry, document.body.len()).ok())
+    else {
+        return Ok(Err(ReadOnly::Codec));
     };
-    let reread = codec.read(&written).map(|d| normalized(&d));
-    if !reread.is_ok_and(|reread| reads_back(document, &reread)) {
-        return Ok(Some(ReadOnly::Codec));
-    }
-    // Il modello torna uguale; i byte devono dire che il modello descrive il
-    // file: ciò che il lettore ha saltato manca dalla prova a vuoto.
-    let Ok(baseline) = preservation::check_open(original, &written) else {
-        return Ok(Some(ReadOnly::Codec));
-    };
-    preservation::remember(preservation::key(original), Arc::new(baseline));
-    Ok(None)
+    let baseline = Arc::new(baseline);
+    preservation::remember(preservation::key(original), Arc::clone(&baseline));
+    Ok(Ok(baseline))
+}
+
+/// La prova a vuoto: il codec scrive il documento letto e lo rilegge uguale.
+/// Dà i byte scritti; `None` se il codec non ci riesce.
+fn dry_run(codec: Codec, document: &Document) -> Option<Vec<u8>> {
+    let written = codec.write(document).ok()?;
+    let reread = codec.read(&written).ok()?;
+    reads_back(document, &normalized(reread)).then_some(written)
 }

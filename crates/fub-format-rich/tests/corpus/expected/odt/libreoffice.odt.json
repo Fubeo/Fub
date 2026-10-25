@@ -1,0 +1,75 @@
+{
+  "file": "odt/libreoffice.odt",
+  "sha256": "9c4fb9ce7adca4880988444e39d85a58b0773c2ab7d8f1827e46bc2effbfcb3a",
+  "open": {
+    "readonly": null,
+    "projection": "baad0ab1dcdb56387dbd744ff4bd47ab2723348042db0d99a0819b1e87fd15f2",
+    "blocks": 8,
+    "comments": 0
+  },
+  "model": {
+    "outline": [
+      "1 Un documento di LibreOffice",
+      "2 Un elenco e una tabella"
+    ],
+    "links": [
+      "Url(\"https://example.org/\")"
+    ],
+    "text": "9987fcf566a87c316e00eb9da45ff506e25a4426923901cfad73918c90d5080b",
+    "words": 33
+  },
+  "export": {
+    "html": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ],
+    "txt": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia Testo semplice non porta: 2 titoli, 2 voci d'elenco, 1 tabella, 1 link, 9 caratteri in grassetto, 7 caratteri in corsivo"
+    ],
+    "latex": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ],
+    "rtf": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ],
+    "odt": {
+      "error": "invalid arguments: nothing to export as OpenDocument: no selected document is a word-processing document in another format"
+    },
+    "wordxml": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ]
+  },
+  "edits": {
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "error": "codec",
+      "message": "rich codec: odt: comments are not written"
+    },
+    "E5": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E6": "n/a",
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "different"
+    }
+  }
+}

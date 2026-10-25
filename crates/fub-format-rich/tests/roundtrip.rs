@@ -134,6 +134,69 @@ fn cambiare_una_parola_lascia_il_resto_com_era() {
     assert_eq!(after.media, before.media);
 }
 
+/// Un `.docx` scritto a mano, con il solo documento principale.
+fn package(body: &str) -> Vec<u8> {
+    use std::io::Write;
+    const W: &str = r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships""#;
+    let types = r#"<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#;
+    let rels = r#"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#;
+    let document = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document {W}><w:body>{body}<w:sectPr/></w:body></w:document>"#
+    );
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for (name, bytes) in [
+        ("[Content_Types].xml", types.as_bytes()),
+        ("_rels/.rels", rels.as_bytes()),
+        ("word/document.xml", document.as_bytes()),
+    ] {
+        zip.start_file(name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(bytes).unwrap();
+    }
+    zip.finish().unwrap().into_inner()
+}
+
+/// La parte principale di un `.docx`, come testo.
+fn main_part(bytes: &[u8]) -> String {
+    use std::io::Read;
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut out = String::new();
+    zip.by_name("word/document.xml")
+        .unwrap()
+        .read_to_string(&mut out)
+        .unwrap();
+    out
+}
+
+/// La disposizione asiatica di un tratto non passa dalla proiezione: resta
+/// con le proprietà opache del tratto che l'utente ha cambiato. Un testo che
+/// arriva senza quelle proprietà la perderebbe, e il salvataggio si rifiuta
+/// invece di perderla.
+#[test]
+fn ciò_che_la_proiezione_non_porta_non_si_perde_nel_paragrafo_cambiato() {
+    let file = package(
+        r#"<w:p><w:r><w:rPr><w:eastAsianLayout w:id="1" w:combine="1"/></w:rPr><w:t>Primo paragrafo</w:t></w:r></w:p>"#,
+    );
+    let mut p = projection(&file);
+    let Some(Inline::Text { x, .. }) = para_mut(&mut p, 0).c.first_mut() else {
+        panic!("il paragrafo comincia col testo")
+    };
+    x.push_str(" modificato");
+    let out = saved(&file, &p);
+    let xml = main_part(&out);
+    assert!(xml.contains("Primo paragrafo modificato"), "{xml}");
+    assert!(xml.contains(r#"w:combine="1""#), "{xml}");
+
+    let Some(Inline::Text { k, .. }) = para_mut(&mut p, 0).c.first_mut() else {
+        panic!("il paragrafo comincia col testo")
+    };
+    *k = None;
+    assert_eq!(
+        save(Codec::Docx, &file, &p.to_json().unwrap()),
+        Err(RichError::Fidelity)
+    );
+}
+
 #[test]
 fn il_grassetto_si_toglie_e_si_mette_come_formattazione_diretta() {
     let file = bytes(&sample());
@@ -419,6 +482,7 @@ fn le_celle_si_scrivono_e_la_tabella_resta() {
 /// testo della cella in ogni cella.
 fn new_table(rows: usize, cols: usize) -> Block {
     Block::Table(Table {
+        locked: false,
         k: None,
         rows: (0..rows)
             .map(|r| Row {
@@ -431,6 +495,7 @@ fn new_table(rows: usize, cols: usize) -> Block {
                             ins: None,
                             del: None,
                             role: Role::Body,
+                            locked: false,
                             align: None,
                             k: None,
                             sect: None,
@@ -1186,12 +1251,27 @@ fn una_proiezione_malformata_è_rifiutata_con_la_sua_specie() {
     let file = bytes(&sample());
     let opened = open(Codec::Docx, &file).unwrap();
     let mut value: serde_json::Value = serde_json::from_str(&opened.projection).unwrap();
-    value["version"] = 3.into();
+    value["version"] = 4.into();
     assert_eq!(
         save(Codec::Docx, &file, &value.to_string()),
-        Err(RichError::Version(3))
+        Err(RichError::Version(4))
     );
-    value["version"] = 2.into();
+    // Un Fub più nuovo aggiunge campi: la versione si legge prima del resto.
+    value["campo_futuro"] = true.into();
+    value["blocks"][0]["nuovo"] = 1.into();
+    assert_eq!(
+        save(Codec::Docx, &file, &value.to_string()),
+        Err(RichError::Version(4))
+    );
+    value["version"] = 3.into();
+    value["opaque_schema"] = 999.into();
+    assert_eq!(
+        save(Codec::Docx, &file, &value.to_string()),
+        Err(RichError::OpaqueSchema(999))
+    );
+    value["opaque_schema"] = OPAQUE_SCHEMA.into();
+    value.as_object_mut().unwrap().remove("campo_futuro");
+    value["blocks"][0].as_object_mut().unwrap().remove("nuovo");
     value["inatteso"] = true.into();
     assert!(matches!(
         save(Codec::Docx, &file, &value.to_string()),
@@ -1214,7 +1294,7 @@ fn la_proiezione_dichiara_lo_schema_dei_dati_opachi() {
     let file = bytes(&sample());
     let opened = open(Codec::Docx, &file).unwrap();
     let mut value: serde_json::Value = serde_json::from_str(&opened.projection).unwrap();
-    assert_eq!(value["version"], 2);
+    assert_eq!(value["version"], fub_format_rich::projection::VERSION);
     assert_eq!(value["opaque_schema"], OPAQUE_SCHEMA);
     let edited = |value: &serde_json::Value| {
         let mut p = Projection::from_json(&value.to_string()).unwrap();
@@ -1228,6 +1308,12 @@ fn la_proiezione_dichiara_lo_schema_dei_dati_opachi() {
         save(Codec::Docx, &file, &edited(&value)),
         Ok(Saved::Bytes(_))
     ));
+    // Una bozza di versione 2, di prima dei segni della 3, si salva.
+    value["version"] = 2.into();
+    assert!(matches!(
+        save(Codec::Docx, &file, &edited(&value)),
+        Ok(Saved::Bytes(_))
+    ));
 
     // Uno schema più nuovo non si legge, nemmeno in parte.
     value["opaque_schema"] = (OPAQUE_SCHEMA + 1).into();
@@ -1235,7 +1321,7 @@ fn la_proiezione_dichiara_lo_schema_dei_dati_opachi() {
         save(Codec::Docx, &file, &value.to_string()),
         Err(RichError::OpaqueSchema(OPAQUE_SCHEMA + 1))
     );
-    // La versione 2 senza lo schema è malformata.
+    // Una versione con lo schema, senza lo schema, è malformata.
     value.as_object_mut().unwrap().remove("opaque_schema");
     assert!(matches!(
         save(Codec::Docx, &file, &value.to_string()),

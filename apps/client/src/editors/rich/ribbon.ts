@@ -25,6 +25,7 @@ import {
   FIND_ACTION,
   COMMENT_ACTION,
   FONT_SIZES,
+  insertBreak,
   insertNote,
   insertTable,
   LINE_SPACINGS,
@@ -793,27 +794,35 @@ export function mountRichRibbon(
     put("rich.highlight", free);
     put("rich.painter", free);
     put("rich.spacing", free);
-    put("rich.note", editable && engine.read(insertNote("·", false)));
-    if (media.pickImage) put("rich.image", editable && engine.read(insertNote("·", false)));
+    // Una nota sta anche fuori dal corpo; un'immagine entra dove entra un
+    // oggetto, e non in un blocco chiuso.
+    put("rich.note", engine.allows(insertNote("·", false)));
+    if (media.pickImage) put("rich.image", editable && engine.read(insertNote("·", false)) && engine.allows(insertBreak("\n")));
     // La tabella si mette con la griglia delle dimensioni.
     states.splice(states.findIndex((state) => state.id === "markdown.table"), 1);
-    put("markdown.table", free && engine.read(insertTable(1, 1)));
+    put("markdown.table", free && engine.allows(insertTable(1, 1)));
     // Proprietà dice la pagina anche quando non si cambia; le gallerie la
     // cambiano soltanto se il formato la porta.
     put("rich.page", true);
     if (!hasPage) for (const id of PAGE_GALLERIES) off(id, t("rich.page.fixed"));
+    // La pagina, le intestazioni e i piè di pagina stanno fuori dal corpo.
+    const bodyOnly = editable && engine.bodyOnly();
     if (hasPage) {
-      for (const id of PAGE_GALLERIES) put(id, free);
-      for (const [id, kind] of [["rich.header", "header"], ["rich.footer", "footer"]] as const) {
-        if (free && engine.runningLocked(kind)) off(id, t("rich.hf.locked"));
+      for (const id of PAGE_GALLERIES) {
+        if (bodyOnly) off(id, t("rich.ribbon.body_only"));
         else put(id, free);
       }
-      put("rich.toc", free && engine.read(insertToc("")));
+      for (const [id, kind] of [["rich.header", "header"], ["rich.footer", "footer"]] as const) {
+        if (bodyOnly) off(id, t("rich.ribbon.body_only"));
+        else if (free && engine.runningLocked(kind)) off(id, t("rich.hf.locked"));
+        else put(id, free);
+      }
+      put("rich.toc", free && engine.allows(insertToc("")));
     }
     put("rich.find.replace", editable);
     put("rich.count", true);
     if (media.review || hasComments) put("rich.comments", true);
-    if (media.review || tracking) put("rich.track", editable);
+    if (media.review || tracking) put("rich.track", editable && engine.allows(setTracking(!tracking)));
     for (const id of ["shell.zoom.in", "shell.zoom.out", "shell.zoom.reset"]) if (options.shell?.(id)) put(id, true);
     if (options.display) {
       for (const id of Object.keys(RICH_MODE_COMMANDS)) put(id, true);

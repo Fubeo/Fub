@@ -1,0 +1,49 @@
+{
+  "file": "odt/libreoffice-revisioni.odt",
+  "sha256": "237f61347144cf0c1711af3f0bd71277977d9a6896fd87d20f007fa502affa92",
+  "open": {
+    "readonly": "revisions",
+    "projection": "12479f80c545e11fc45da60fc93488fc81fe3b77a1e43b9d77749daabc9e50bc",
+    "blocks": 2,
+    "comments": 0
+  },
+  "model": {
+    "outline": [],
+    "links": [],
+    "text": "7c718f7325abfc5f51176134e601e23438631d69a59003a2b08db078df513aad",
+    "words": 9
+  },
+  "export": {
+    "html": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia HTML non porta: 1 parola su 9, 2 revisioni tracciate"
+    ],
+    "txt": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia Testo semplice non porta: 1 parola su 9, 2 revisioni tracciate"
+    ],
+    "latex": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia LaTeX non porta: 1 parola su 9, 2 revisioni tracciate"
+    ],
+    "rtf": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ],
+    "odt": {
+      "error": "invalid arguments: nothing to export as OpenDocument: no selected document is a word-processing document in another format"
+    },
+    "wordxml": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ]
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly",
+    "E6": "readonly",
+    "E7": "readonly"
+  }
+}

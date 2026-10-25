@@ -1,17 +1,15 @@
 {
   "file": "docx/pacchetto.docx",
-  "sha256": "50b36eec66e72cbb5068788957cb61c3ffd058f5baf6db73ecabc2f61617f92e",
+  "sha256": "65aeb1340bef7006873385687f79195bbc6f02ec33094cc8504ecd5c7709b4e8",
   "open": {
-    "readonly": "codec",
-    "projection": "e17fb23f4aaaba6f35b3f74fd7a5ec782fa074280315bf3bc391c55a84b0737b",
+    "readonly": null,
+    "projection": "5aafe1e7f962ff8770ce504f0918a6c616880dd53b86546ac3bcea4d9b9438d3",
     "blocks": 1,
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 3",
-    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
+    "differenze all'apertura: 0",
+    "blocchi chiusi: {}; scrittura intera: true",
     "normalizzazione «statistiche di app.xml»: 2 nel file, 3 nella prova a vuoto"
   ],
   "model": {
@@ -33,11 +31,33 @@
     "wordxml": []
   },
   "edits": {
-    "E0": "readonly",
-    "E1": "readonly",
-    "E2": "readonly",
-    "E3": "readonly",
-    "E4": "readonly",
-    "E5": "readonly"
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E5": "n/a",
+    "E6": "n/a",
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "different"
+    }
   }
 }

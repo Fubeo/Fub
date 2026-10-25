@@ -299,7 +299,7 @@ Un documento di un formato di `fub-format-rich` (`docx`, `odt`, `rtf` e
 passa dalle stesse porte dei documenti, senza una porta in più:
 
 - `read_document` restituisce in `text` la **proiezione** del file: JSON
-  chiuso e versionato (`"format": "fub-rich"`, `"version": 2`,
+  chiuso e versionato (`"format": "fub-rich"`, `"version": 3`,
   `"opaque_schema": N`), con `format_id` `"docx"` e `source_kind` `"bytes"`.
   `revision` è quella dei byte del file, non del testo restituito;
 - `write_document` riceve una proiezione in `source` e la `base` letta
@@ -309,6 +309,13 @@ passa dalle stesse porte dei documenti, senza una porta in più:
   un file, la proiezione crea un documento nuovo;
 - `save_draft` conserva la proiezione come testo del buffer, come per ogni
   altro documento.
+
+`read_document` e `write_document` girano fuori dal thread principale
+dell'app, per ogni formato: aprire e salvare un `.docx` legge, proietta e
+misura il pacchetto, e la finestra non si ferma ad aspettarli. L'ordine delle
+scritture di un documento lo tiene la `DocumentSession` della shell, che le
+accoda, e una lettura superata la scarta. Le bozze (`save_draft`,
+`discard_draft`) restano sul thread principale, nell'ordine in cui arrivano.
 
 Un tratto, un oggetto e un paragrafo (per il suo segno di fine) portano
 `ins` e `del` quando sono una revisione tracciata: `{"by", "at", "mv"}`,
@@ -360,6 +367,18 @@ la superficie la numera e la mostra al passaggio. Il ritorno al documento li
 ignora, perché vale la nota tenuta nel `k`; su un'altra specie tenuta sono una
 proiezione malformata.
 
+Un blocco del corpo (paragrafo o tabella, non i blocchi dentro una cella)
+che il codec non riscriverebbe senza perdite porta `"locked": true`, subito
+dopo `role` nel paragrafo e dopo `t` nella tabella: il salvataggio lo lascia
+i byte del file. Toglierlo, cambiarlo o togliergli il segno viene rifiutato
+(`host.rich.locked.block`, con il numero del blocco da 1); spostarlo intero
+si può. `"body_only": true`, fra `readonly` e `track`, dice che il codec non
+riscriverebbe senza perdite qualcosa fuori dal corpo, o che un blocco è
+chiuso: si salvano soltanto i blocchi del corpo, per innesto, e un
+salvataggio che tocca altro (pagina, intestazioni, commenti, note) o che
+l'innesto non sa trattare viene rifiutato (`host.rich.locked.outside`).
+Entrambi sono assenti quando sono falsi.
+
 Un documento che il codec o la proiezione non riportano identico si apre con
 `"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
 `projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo
@@ -374,18 +393,24 @@ facoltativo `eastAsianLayout` delle proprietà del carattere, il 3 altri campi
 facoltativi (`langEa` del carattere, `z` di un oggetto mobile, `outlineFill`
 e `size` di forme e filigrane) e il riempimento trasparente o sfumato di una
 forma come oggetto con `type`, accanto al colore `[r, g, b]`. Il codec legge
-ogni schema fino al suo. La versione 1, quella delle bozze di
-prima, ha le stesse chiavi senza `opaque_schema` e i dati dello schema 0. La
-shell legge le due versioni, ciascuna con il suo elenco chiuso di chiavi, e
-ricopia versione e schema come li ha ricevuti. Il codec rifiuta una versione
-futura (`host.rich.version`) e uno schema che non legge, scritto da un Fub
-più nuovo (`host.rich.opaque_schema`); un dato opaco che, decodificato e
-riscritto, perderebbe un campo è una proiezione malformata.
+gli schemi che elenca, ciascuno con la sua regola: lo 0, l'1, il 2 e il 3,
+perché ciascuno ha la forma del successivo senza i suoi campi facoltativi. La
+versione 2 ha le chiavi della 3 senza `locked` e `body_only`; la 1, quella
+delle bozze di prima, quelle della 2 senza `opaque_schema`, e i dati dello
+schema 0. La shell legge le tre versioni, ciascuna con il suo elenco chiuso di
+chiavi, e ricopia versione e schema come li ha ricevuti. Il codec legge
+formato, versione e schema prima del resto, e rifiuta una versione futura
+(`host.rich.version`) e uno schema che non legge, scritto da un Fub più nuovo
+(`host.rich.opaque_schema`), anche quando portano campi che non conosce; un
+dato opaco che, decodificato e riscritto, perderebbe un campo è una
+proiezione malformata, anche quando il campo sconosciuto vale `null`, `[]` o
+`{}`.
 
 Gli errori del codec arrivano tipizzati con chiave di catalogo `host.rich.*`.
 La forma della proiezione è di `crates/fub-format-rich/src/projection.rs`; la
 fixture `apps/client/src/__fixtures__/rich-projection.json` la lega alla
-shell nei due versi (`crates/fub-format-rich/tests/ts_projection.rs`).
+shell nei due versi, e `rich-closed.json` ne porta i blocchi chiusi
+(`crates/fub-format-rich/tests/ts_projection.rs`).
 
 ## Cartelle di Excel
 

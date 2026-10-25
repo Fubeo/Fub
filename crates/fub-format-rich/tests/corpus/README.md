@@ -1,7 +1,7 @@
 # Corpus dei documenti di videoscrittura
 
 I file su cui gira il banco `tests/corpus.rs`: apertura, esportazioni e
-modifiche standard (E0–E5) di ogni file, confrontate con i risultati attesi in
+modifiche standard (E0–E7) di ogni file, confrontate con i risultati attesi in
 `expected/`. Il banco gira dentro `cargo test --workspace`.
 
 ## Regole
@@ -35,32 +35,54 @@ UPDATE_CORPUS=1 cargo test -p fub-format-rich --test corpus
 Il diff di `expected/` è il resoconto di ciò che è cambiato. Chi rivede la PR
 ne spiega ogni riga.
 
-Altri due test usano gli stessi file: `le_mutazioni_non_fanno_panic` (tredici
-mutazioni deterministiche per file, senza panic ed entro un tempo) e `tempi`
-(ignorato, da lanciare con `--release -- --ignored --nocapture tempi`).
+Altri tre test usano gli stessi file: `l_esito_dichiarato_è_quello_dell_apertura`
+(il campo `atteso` del manifesto è l'esito vero dell'apertura, e ogni esito che
+non è `modificabile` dice `perché`), `le_mutazioni_non_fanno_panic` (mutazioni
+deterministiche per file: cinque troncamenti, otto giri di byte cambiati e,
+in un pacchetto, otto mutazioni dentro l'XML, come valori di attributo strani
+e tag tolti, ripetuti, rinominati o spostati; aprire e salvare non fa panic ed
+entro un tempo, e qualche mutazione dell'XML si apre davvero) e `tempi`
+(ignorato, da lanciare con `--release -- --ignored --nocapture tempi`;
+`FUB_TEMPI_PARAGRAFI` sceglie la grandezza del file grande).
 
 ## Rifare i file
 
-I file di oggi sono costruiti a mano dalle specifiche da
+Quasi tutti i file sono costruiti a mano dalle specifiche da
 `examples/genera_corpus.rs`, che li riscrive identici:
 
 ```text
 cargo run -p fub-format-rich --example genera_corpus
 ```
 
+I file `libreoffice*` li ha scritti LibreOffice, dalle sorgenti in
+`../corpus-sorgenti/` (OpenDocument piatto, scritto a mano). Non si rifanno
+identici: il programma mette nel file data e versione. La versione usata è
+nel manifesto; per rifarli, con la stessa o un'altra:
+
+```text
+soffice --headless --convert-to docx libreoffice.fodt
+soffice --headless --convert-to odt libreoffice.fodt
+soffice --headless --convert-to rtf libreoffice.fodt
+soffice --headless --convert-to doc libreoffice.fodt
+```
+
+Un file rifatto con un'altra versione cambia il suo esito soltanto se cambia
+ciò che il programma scrive: il diff di `expected/` lo dice.
+
 ## Righe della matrice ancora scoperte
 
-Questo è il primo nucleo. Nessun file è prodotto dai programmi veri, perché
-sulla macchina che l'ha costruito non c'erano Word, LibreOffice, Google Docs,
-pandoc, python-docx o docx4j. Mancano quindi:
+Dei programmi veri c'è soltanto LibreOffice (Writer, in `.docx`, `.odt`,
+`.rtf` e `.doc`, con un documento e uno con le revisioni). Sulla macchina che
+ha costruito il corpus non c'erano Word, Google Docs, pandoc, python-docx o
+docx4j. Mancano quindi:
 
 - documenti salvati da Word 365 su Windows e Mac, compresi SmartArt, grafici,
   oggetti OLE, gruppi di forme, font incorporati, glossario e protezione per
   moduli;
-- `.docx` scritti da LibreOffice, Google Docs, Pages, pandoc, python-docx e
-  docx4j, e un `altChunk` RTF;
+- `.docx` scritti da Google Docs, Pages, pandoc, python-docx e docx4j, e un
+  `altChunk` RTF;
 - un `.docx` cifrato con una password;
-- `.odt` con revisioni e stili salvati da LibreOffice;
+- `.odt` con stili personalizzati salvati da LibreOffice;
 - RTF di Word, WordPad e TextEdit;
 - un `.doc` salvato da Word con stili e tabelle;
 - una bomba di decompressione sopra i limiti, che non sta nei 256 KB.

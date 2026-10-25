@@ -1,0 +1,56 @@
+{
+  "file": "doc/libreoffice.doc",
+  "sha256": "374dbfd96667421b30cb63e9118fa273f4c9d3e649839f24abf58ad20f4e373f",
+  "open": {
+    "readonly": "import",
+    "projection": "655b5d24124bc1c285ebb379f7f38317547491d6b4e277d35529f5aa02e092b4",
+    "blocks": 8,
+    "comments": 0
+  },
+  "model": {
+    "outline": [
+      "1 Un documento di LibreOffice",
+      "2 Un elenco e una tabella"
+    ],
+    "links": [
+      "Url(\"https://example.org/\")"
+    ],
+    "text": "9987fcf566a87c316e00eb9da45ff506e25a4426923901cfad73918c90d5080b",
+    "words": 33
+  },
+  "export": {
+    "html": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia HTML non porta: 2 titoli, 33 caratteri in grassetto su 52, 1 nota a piè di pagina"
+    ],
+    "txt": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia Testo semplice non porta: 2 titoli, 2 voci d'elenco, 1 tabella, 1 link, 52 caratteri in grassetto, 7 caratteri in corsivo, 1 nota a piè di pagina"
+    ],
+    "latex": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia LaTeX non porta: 2 titoli, 43 caratteri in grassetto su 52, 1 nota a piè di pagina"
+    ],
+    "rtf": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia RTF non porta: 33 caratteri in grassetto su 52, 1 nota a piè di pagina"
+    ],
+    "odt": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia OpenDocument non porta: 43 caratteri in grassetto su 52, 1 nota a piè di pagina"
+    ],
+    "wordxml": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ]
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly",
+    "E6": "readonly",
+    "E7": "readonly"
+  }
+}

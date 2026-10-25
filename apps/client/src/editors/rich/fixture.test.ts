@@ -8,6 +8,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Node as PmNode } from "prosemirror-model";
 import { TextSelection } from "prosemirror-state";
+import closedFixture from "../../__fixtures__/rich-closed.json";
 import projectionFixture from "../../__fixtures__/rich-projection.json";
 import type { EditorChange } from "../core/text-operation";
 import { RichEngine } from "./engine";
@@ -21,6 +22,8 @@ import { setReviewAuthor, setTracking } from "./track";
 
 const SOURCE = projectionFixture.source;
 const SCHEMA = (JSON.parse(SOURCE) as { opaque_schema: number }).opaque_schema;
+/// Un paragrafo e una tabella che il formato non riscriverebbe senza perdite.
+const CLOSED = closedFixture.source;
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -62,35 +65,70 @@ describe("la proiezione del codec", () => {
     const projection = parseProjection(SOURCE);
     // Lo schema è quello che il formato scrive: lo si legge dalla fixture.
     expect(Number.isInteger(SCHEMA)).toBe(true);
-    expect([projection.version, projection.opaque_schema]).toEqual([2, SCHEMA]);
+    expect([projection.version, projection.opaque_schema]).toEqual([3, SCHEMA]);
+    // Una bozza di versione 2, di prima dei segni, resta di versione 2.
+    const v2 = SOURCE.replace(`"version":3,`, `"version":2,`);
+    expect(v2).not.toBe(SOURCE);
+    expect(writeProjection(parseProjection(v2))).toBe(v2);
     // Una bozza di versione 1, di prima dello schema, resta di versione 1.
-    const v1 = SOURCE.replace(`"version":2,"opaque_schema":${SCHEMA},`, `"version":1,`);
+    const v1 = SOURCE.replace(`"version":3,"opaque_schema":${SCHEMA},`, `"version":1,`);
     expect(v1).not.toBe(SOURCE);
     expect(writeProjection(parseProjection(v1))).toBe(v1);
     // Uno schema che la shell non conosce lo decide il formato: si ricopia.
     const later = SOURCE.replace(`"opaque_schema":${SCHEMA}`, `"opaque_schema":7`);
     expect(writeProjection(parseProjection(later))).toBe(later);
-    const changes: EditorChange[] = [];
-    const e = engine(changes);
-    e.setDoc(v1);
-    e.select(find(e.state.doc, "Fine."));
-    e.dispatch(e.state.tr.insertText("!"));
-    expect(changes.length).toBeGreaterThan(0);
-    const written = JSON.parse(changes[changes.length - 1]!.text) as Record<string, unknown>;
-    expect([written.version, "opaque_schema" in written]).toEqual([1, false]);
+    for (const [draft, version] of [
+      [v1, 1],
+      [v2, 2],
+    ] as const) {
+      const changes: EditorChange[] = [];
+      const e = engine(changes);
+      e.setDoc(draft);
+      e.select(find(e.state.doc, "Fine."));
+      e.dispatch(e.state.tr.insertText("!"));
+      expect(changes.length).toBeGreaterThan(0);
+      const written = JSON.parse(changes[changes.length - 1]!.text) as Record<string, unknown>;
+      expect([written.version, "opaque_schema" in written]).toEqual([version, version === 2]);
+    }
   });
 
   it("rifiuta una versione futura e le chiavi dell'altra versione", () => {
     for (const bad of [
-      SOURCE.replace(`"version":2`, `"version":3`),
-      SOURCE.replace(`"version":2,"opaque_schema":${SCHEMA},`, `"version":2,`),
-      SOURCE.replace(`"version":2,`, `"version":1,`),
+      SOURCE.replace(`"version":3`, `"version":4`),
+      SOURCE.replace(`"version":3,"opaque_schema":${SCHEMA},`, `"version":3,`),
+      SOURCE.replace(`"version":3,`, `"version":1,`),
       SOURCE.replace(`"opaque_schema":${SCHEMA}`, `"opaque_schema":-1`),
       SOURCE.replace(`"opaque_schema":${SCHEMA}`, `"opaque_schema":"1"`),
+      // I segni della versione 3 non stanno in una bozza di versione 2.
+      CLOSED.replace(`"version":3,`, `"version":2,`).replace(`"body_only":true,`, ""),
+      CLOSED.replace(`"version":3,`, `"version":2,`).replaceAll(`"locked":true,`, ""),
+      CLOSED.replace(`"locked":true`, `"locked":1`),
+      CLOSED.replace(`"body_only":true`, `"body_only":"sì"`),
     ]) {
       expect(bad).not.toBe(SOURCE);
+      expect(bad).not.toBe(CLOSED);
       expect(() => parseProjection(bad)).toThrow();
     }
+  });
+
+  it("con i blocchi chiusi si riscrive identica, segni compresi", () => {
+    const projection = parseProjection(CLOSED);
+    expect(projection.body_only).toBe(true);
+    expect(projection.blocks.map((block) => block.locked === true)).toEqual([false, true, true, false]);
+    expect(writeProjection(projection)).toBe(CLOSED);
+    const blocks = new BlockWriter().write(toDoc(projection));
+    expect(writeProjection(projection, blocks)).toBe(CLOSED);
+    const changes: EditorChange[] = [];
+    const e = engine(changes);
+    e.setDoc(CLOSED);
+    expect(e.getDoc()).toBe(CLOSED);
+    expect(changes).toEqual([]);
+    // Un paragrafo aperto si scrive, e i segni restano dove sono.
+    e.select(find(e.state.doc, "Ancora aperto", "Ancora aperto".length));
+    e.dispatch(e.state.tr.insertText("!"));
+    const written = parseProjection(changes[changes.length - 1]!.text);
+    expect(written.body_only).toBe(true);
+    expect(written.blocks.map((block) => block.locked === true)).toEqual([false, true, true, false]);
   });
 
   it("passa dal documento ProseMirror e torna identica", () => {

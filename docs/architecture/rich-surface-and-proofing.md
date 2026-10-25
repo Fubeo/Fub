@@ -25,6 +25,17 @@ l'IPC.
   accordi, mostra il motivo di una sola lettura o di un testo illeggibile.
   Il motore (`editors/rich/engine.ts`, ProseMirror) è un chunk caricato con un
   import dinamico; una superficie smontata prima che arrivi non monta niente.
+- `editors/rich/closed.ts` tiene fuori dal buffer ciò che il formato
+  rifiuterebbe al salvataggio (`host.rich.locked.*`). Un blocco chiuso
+  (`locked`) si disegna segnato, senza cursore (`contenteditable="false"`), e
+  ogni transazione dell'utente che lo cambia, lo toglie o ne scambia l'ordine
+  con un altro chiuso non entra; spostarlo intero sì. Con `body_only` non
+  entra nemmeno ciò che tocca la pagina dell'ultima sezione, le intestazioni
+  e i piè di pagina, i commenti, la registrazione, l'insieme delle note o una
+  specie di elenco che il documento non ha. Le azioni che scriverebbero
+  qualcosa di tutto questo si spengono (`RichEngine.allows`), e l'avviso
+  della superficie dice perché. Ciò che arriva da un altro riquadro o dal disco
+  entra com'è.
 - `editors/rich/schema.ts` traduce la proiezione in un documento ProseMirror
   e ritorno. Ogni nodo porta con sé il proprio `k`, i dati originali opachi
   che la shell non legge e copia così come sono. Il loro schema lo dichiara la
@@ -32,7 +43,9 @@ l'IPC.
   (`fub-format-rich/src/blob.rs`) rifiuta uno schema più nuovo e, a ogni
   lettura, un dato che decodificato e riscritto non contiene più tutto ciò
   che diceva, invece di perderne un campo. `tests/opaque_schema.rs` tiene la
-  forma dei dati del corpus e chiede di incrementare lo schema quando cambia. Una tabella, una riga o una
+  superficie serde dei tipi che quei dati codificano, letta dai sorgenti, e
+  quando cambia chiede di incrementare lo schema, di dire come si legge
+  quello di prima e di scriverne la bozza. Una tabella, una riga o una
   cella nuova non ha `k`: il formato la scrive con le sue proprietà
   predefinite (la griglia di Word, le colonne e un bordo in ODF), e una riga
   che ProseMirror crea riparando una tabella esistente prende il `k` della
@@ -81,22 +94,61 @@ l'IPC.
   impronta, le relazioni con la loro destinazione (un `r:id` vale la
   relazione che nomina) e le parti copiate per impronta sha256. Dentro un
   paragrafo la forma dei run conta una volta, perché il codec unisce i run
-  uguali. All'apertura la prova a vuoto del codec non deve perdere niente del
-  file, nel totale e blocco per blocco del corpo, altrimenti `codec`; a ogni
+  uguali. All'apertura la prova a vuoto del codec si misura fuori dal corpo e
+  blocco per blocco del corpo: un blocco che perderebbe qualcosa si
+  **chiude** (`locked` nella proiezione) e resta i byte del file; una perdita
+  fuori dal corpo, o un blocco chiuso, vieta la scrittura intera
+  (`body_only`), e si salva soltanto per innesto. Un blocco chiuso si
+  ritrova nel documento voluto, in ordine, come il primo blocco segnato
+  uguale a quello del file; toglierlo o cambiarlo è un errore `Locked`. Un
+  corpo che non si misura per blocchi apre in sola lettura (`codec`); a ogni
   salvataggio i blocchi del corpo che il modello voluto ha uguali alla base
   (allineati per prefisso, suffisso e sottosequenza comune; i figli di un
   content control di blocco o di un contenitore trasparente contano uno per
   uno, e un segnalibro fra due blocchi va con il blocco che segue) e le parti
   il cui dato non è cambiato devono uscire uguali alla prova a vuoto della
-  base, senza parti copiate in più e senza riferimenti pendenti nuovi. La
-  prova a vuoto accettata si ricorda per l'impronta dei byte del file (il
+  base, senza parti copiate in più e senza riferimenti pendenti nuovi.
+  L'inventario conta e non dice dove: il **flusso** (`flow.rs`) legge ogni
+  blocco del corpo come sequenza di caratteri, oggetti e strutture, ciascuno
+  con le proprietà che lo riguardano, senza i run. All'apertura la prova a
+  vuoto porta il flusso di ogni blocco nello stesso ordine (un segnalibro
+  spostato di un carattere è una perdita); a ogni salvataggio un blocco non
+  toccato porta quello del file, e nei blocchi toccati ogni carattere,
+  oggetto e paragrafo che resta tiene le voci che la proiezione non porta
+  (la lingua o la disposizione dell'Asia orientale di un tratto). Un corpo
+  che non si legge come flusso con i blocchi del modello apre in sola
+  lettura. La prova a vuoto accettata si ricorda per l'impronta dei byte del file (il
   writer è deterministico, e il banco del corpus lo prova): il salvataggio
-  dopo l'apertura degli stessi byte non la rifà. Le normalizzazioni
+  dopo l'apertura degli stessi byte non la rifà. Se ne ricordano al più
+  otto, e quelle prima dell'ultima entro un peso di circa 350 MB: un documento
+  da centomila paragrafi ne tiene da solo più di 400 MB. Le misure che non si
+  parlano (i due inventari e i due flussi, la proiezione e la rilettura del
+  codec, l'innesto e la sua rilettura) corrono su due thread (`parallel.rs`);
+  all'apertura i byte si misurano soltanto dopo che la proiezione e la
+  rilettura hanno lasciato la memoria. Un documento da centomila paragrafi apre in meno di cinque secondi con un
+  picco di circa 1,3 GB, quasi tutto del modello del codec. Quando fuori dal corpo
+  niente è cambiato, il salvataggio è un **innesto** (`graft.rs`,
+  [0215](../decisions/0215-salvataggio-docx-per-innesto.md)): il file
+  com'era, con le sole unità toccate del corpo prese dai byte del codec e i
+  loro riferimenti riportati a quelli del file (relazioni; segnalibri per
+  nome; commenti, note e permessi per identità; numeri unici nuovi). Si
+  rilegge e si controlla contro il file come i byte del codec, e ciò che non
+  sa trattare ripiega sulla scrittura intera. Le normalizzazioni
   dichiarate (`NORMALIZATIONS` in `inventory.rs`, ciascuna con la sua
   ragione) non si contano: gli `w:rsid*`, `w:proofErr`,
   `w:lastRenderedPageBreak`, gli `w14:paraId`/`w14:textId` e i loro rimandi
   nei commenti, le statistiche di `app.xml`, il numero (non la presenza) di
-  `w:id` e degli `id` dei disegni, il numero dei nomi «Picture N».
+  `w:id` e degli `id` dei disegni, il numero dei nomi «Picture N», i
+  contenitori di proprietà vuoti (`w:rPr`, `w:pPr`, `w:trPr`, `w:tcPr` senza
+  attributi né figli, che LibreOffice scrive). Cinque forme si contano come
+  quelle che il codec scrive: i lati di ISO 29500 (`w:start`, `w:end`,
+  `jc="start"`) come `left` e `right`, il `w:val` vero di un interruttore
+  (`CT_OnOff`, `<w:keepNext w:val="true"/>`) come la sua assenza, lo
+  sporgente nullo (`w:hanging="0"`) come la prima riga nulla, un
+  `w:fldSimple` come il campo complesso, e un corpo che finisce con una tabella come se avesse il
+  paragrafo vuoto che il modello le mette dopo, un blocco senza byte che
+  l'innesto scrive soltanto se lo si tocca. Una parte di WordprocessingML
+  senza `+xml` nel tipo (le impostazioni della stampante) si copia.
   L'esempio `misura` del crate stampa il resoconto per un file. Il filtro di ciò che si incolla
   (`editors/rich/paste.ts`) toglie i `k` che il documento non ha e i link non
   web; allineamento e disposizione di un paragrafo incollato restano.

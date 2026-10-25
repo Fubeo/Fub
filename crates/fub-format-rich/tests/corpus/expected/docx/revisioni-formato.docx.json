@@ -1,18 +1,17 @@
 {
   "file": "docx/revisioni-formato.docx",
-  "sha256": "bc5cb0c4f496b7271a100b536567caeca45fa579505ad6c7753e055f467833ff",
+  "sha256": "51f131e1f2c77a3819d56cbc3564ed58e499bfdf5af59e9d6ea059bdc5ef2660",
   "open": {
     "readonly": "revisions",
-    "projection": "1145ee895e6042df20f73de3cc50a9910eddff98e8cdfbd78d8cb4340ffe7789",
+    "projection": "30bcad18376e307a7ceae0465a823838dc0b072174123f7b2fa2f35240723d0b",
     "blocks": 2,
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 3",
-    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
+    "differenze all'apertura: 0",
+    "blocchi chiusi: {}; scrittura intera: true",
     "normalizzazione «w:id»: 1 nel file, 1 nella prova a vuoto",
+    "normalizzazione «proprietà vuote»: 1 nel file, 1 nella prova a vuoto",
     "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
   ],
   "model": {
@@ -43,6 +42,8 @@
     "E2": "readonly",
     "E3": "readonly",
     "E4": "readonly",
-    "E5": "readonly"
+    "E5": "readonly",
+    "E6": "readonly",
+    "E7": "readonly"
   }
 }

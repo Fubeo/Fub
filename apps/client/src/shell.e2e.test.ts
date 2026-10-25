@@ -331,6 +331,14 @@ beforeEach(() => {
   localStorage.clear();
 });
 
+// L'ultimo montaggio del file non ha un `beforeEach` dopo di sé: il suo
+// risponditore si ferma qui, prima che l'ambiente se ne vada.
+afterAll(() => {
+  activeStop?.();
+  activeStop = null;
+  stopAnswering();
+});
+
 describe("la menubar applicativa", () => {
   it("apre File, seleziona una voce, si chiude e si rimonta senza errori", async () => {
     const first = await mount({});

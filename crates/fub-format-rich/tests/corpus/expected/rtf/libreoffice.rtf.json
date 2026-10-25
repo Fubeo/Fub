@@ -1,0 +1,54 @@
+{
+  "file": "rtf/libreoffice.rtf",
+  "sha256": "7bc09789e87b66373a8c6b3e54a2cc447505efa283c97a8115fb29ada0383c68",
+  "open": {
+    "readonly": "import",
+    "projection": "a8fcc90768bbf6c74772d17942e634a6683148df0712abad3eeb4e210729feb6",
+    "blocks": 8,
+    "comments": 0
+  },
+  "model": {
+    "outline": [
+      "1 Un documento di LibreOffice",
+      "2 Un elenco e una tabella"
+    ],
+    "links": [
+      "Url(\"https://example.org/\")"
+    ],
+    "text": "9987fcf566a87c316e00eb9da45ff506e25a4426923901cfad73918c90d5080b",
+    "words": 33
+  },
+  "export": {
+    "html": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia HTML non porta: 2 titoli"
+    ],
+    "txt": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia Testo semplice non porta: 2 titoli, 2 voci d'elenco, 1 tabella, 1 link, 9 caratteri in grassetto, 7 caratteri in corsivo"
+    ],
+    "latex": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia",
+      "la copia LaTeX non porta: 1 parola su 33, 2 titoli"
+    ],
+    "rtf": {
+      "error": "invalid arguments: nothing to export as RTF: no selected document is a word-processing document in another format"
+    },
+    "odt": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ],
+    "wordxml": [
+      "il documento si legge con l'importatore di WordCraft: ciò che l'importatore non legge (note, commenti, caselle di testo, forme, gran parte degli stili) non arriva nella copia"
+    ]
+  },
+  "edits": {
+    "E0": "readonly",
+    "E1": "readonly",
+    "E2": "readonly",
+    "E3": "readonly",
+    "E4": "readonly",
+    "E5": "readonly",
+    "E6": "readonly",
+    "E7": "readonly"
+  }
+}

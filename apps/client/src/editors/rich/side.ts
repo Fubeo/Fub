@@ -286,7 +286,9 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
     }
 
     function draw(): void {
-      const nowWritable = engine.editable();
+      // I commenti stanno fuori dal corpo: dove si scrive soltanto quello, si
+      // leggono e non si cambiano.
+      const nowWritable = engine.editable() && !engine.bodyOnly();
       if (nowWritable !== writable) {
         writable = nowWritable;
         composing = media.review === true && writable;
@@ -308,7 +310,11 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
       apply.disabled = !can;
       hint.textContent = composing && !can ? t("rich.comment.need_selection") : "";
       hint.hidden = hint.textContent === "";
-      note.textContent = writable && media.review !== true ? t("rich.comment.unsupported") : "";
+      note.textContent = engine.editable() && engine.bodyOnly()
+        ? t("rich.comment.body_only")
+        : writable && media.review !== true
+          ? t("rich.comment.unsupported")
+          : "";
       note.hidden = note.textContent === "";
 
       const current = engine.state.doc;
@@ -474,7 +480,7 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
       const nowWritable = engine.editable();
       toggle.checked = on;
       toggle.setAttribute("aria-checked", String(on));
-      toggle.disabled = !nowWritable || (media.review !== true && !on);
+      toggle.disabled = !nowWritable || (media.review !== true && !on) || !engine.allows(setTracking(!on));
       if (document.activeElement !== name) name.value = reviewAuthor();
       author.hidden = !nowWritable;
       if (nowWritable !== writable) {

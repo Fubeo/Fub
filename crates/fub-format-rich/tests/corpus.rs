@@ -1,5 +1,5 @@
 //! **Il banco del corpus.** Ogni file di `tests/corpus/` passa dall'apertura,
-//! dalle esportazioni e dalle modifiche standard della shell (E0–E5); l'esito
+//! dalle esportazioni e dalle modifiche standard della shell (E0–E7); l'esito
 //! si confronta con `tests/corpus/expected/<file>.json`.
 //!
 //! I risultati attesi committati sono il comportamento del motore di oggi: in
@@ -15,6 +15,7 @@
 //! `tempi`, con `--ignored`).
 
 use std::collections::BTreeMap;
+use std::io::{Cursor, Read, Write};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -82,6 +83,40 @@ fn manifest() -> Vec<Entry> {
     out
 }
 
+/// L'esito dell'apertura in una riga, come lo scrive `atteso` nel
+/// manifesto: `modificabile`, `solo il corpo` (con `body_only`), seguiti da
+/// `, blocchi chiusi: <indici>` se ce ne sono; `sola lettura: <ragione>`;
+/// `errore: <specie>`.
+fn esito(codec: Codec, bytes: &[u8]) -> String {
+    let opened = match open(codec, bytes) {
+        Ok(opened) => opened,
+        Err(error) => return format!("errore: {}", error_of(&error)["error"].as_str().unwrap()),
+    };
+    if let Some(reason) = opened.readonly {
+        return format!(
+            "sola lettura: {}",
+            readonly_of(Some(reason)).as_str().unwrap()
+        );
+    }
+    let projection: Value = serde_json::from_str(&opened.projection).unwrap();
+    let mut out = match projection["body_only"].as_bool() == Some(true) {
+        true => "solo il corpo".to_string(),
+        false => "modificabile".to_string(),
+    };
+    let locked: Vec<String> = projection["blocks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .filter(|(_, block)| block["locked"].as_bool() == Some(true))
+        .map(|(at, _)| at.to_string())
+        .collect();
+    if !locked.is_empty() {
+        out.push_str(&format!(", blocchi chiusi: {}", locked.join(" ")));
+    }
+    out
+}
+
 const REQUIRED: [&str; 7] = [
     "path",
     "origine",
@@ -119,6 +154,7 @@ fn error_of(error: &RichError) -> Value {
         RichError::NoWriter(_) => "no_writer",
         RichError::ReadOnly(_) => "readonly",
         RichError::Fidelity => "fidelity",
+        RichError::Locked(_) => "locked",
         _ => "other",
     };
     json!({ "error": kind, "message": error.to_string() })
@@ -244,11 +280,16 @@ fn marker(id: u32, end: bool) -> Inline {
 
 /// Il primo paragrafo del corpo con un testo di almeno due caratteri, e
 /// l'indice di quel testo.
-fn first_text(projection: &mut Projection) -> Option<(usize, usize)> {
+/// Il primo tratto di testo di un paragrafo del corpo, aperto (`locked`
+/// falso) o chiuso: la shell modifica soltanto i primi.
+fn first_text(projection: &mut Projection, locked: bool) -> Option<(usize, usize)> {
     projection.blocks.iter().enumerate().find_map(|(b, block)| {
         let Block::Para(para) = block else {
             return None;
         };
+        if para.locked != locked {
+            return None;
+        }
         para.c
             .iter()
             .position(|inline| match inline {
@@ -276,7 +317,7 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
     match name {
         "E0" => {}
         "E1" => {
-            let (b, i) = first_text(&mut p)?;
+            let (b, i) = first_text(&mut p, false)?;
             let x = text_mut(&mut p, b, i);
             let start = x.len() - x.trim_start().len();
             let end = x[start..]
@@ -285,7 +326,7 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
             x.replace_range(start..end, "Cambiato");
         }
         "E2" => {
-            let (b, i) = first_text(&mut p)?;
+            let (b, i) = first_text(&mut p, false)?;
             let Block::Para(para) = &p.blocks[b] else {
                 unreachable!()
             };
@@ -319,6 +360,7 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
         }
         "E3" => p.blocks.push(Block::Para(Para {
             role: Role::Body,
+            locked: false,
             align: None,
             k: None,
             sect: None,
@@ -333,7 +375,7 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
             c: vec![text_inline("Un paragrafo aggiunto in fondo.")],
         })),
         "E4" => {
-            let (b, i) = first_text(&mut p)?;
+            let (b, i) = first_text(&mut p, false)?;
             let id = p.comments.iter().map(|c| c.id).max().map_or(1, |m| m + 1);
             let Block::Para(para) = &mut p.blocks[b] else {
                 unreachable!()
@@ -385,12 +427,26 @@ fn edit(name: &str, original: &Projection) -> Option<Projection> {
             })?;
             table.rows.pop();
         }
+        // Scrivere nell'ultimo paragrafo del corpo: dopo una tabella finale è
+        // il paragrafo vuoto che il modello aggiunge.
+        "E7" => {
+            let para = p.blocks.iter_mut().rev().find_map(|block| match block {
+                Block::Para(para) if !para.locked => Some(para),
+                _ => None,
+            })?;
+            para.c.push(text_inline(" In fondo."));
+        }
+        // Ciò che la shell non fa: cambiare un blocco chiuso.
+        "E6" => {
+            let (b, i) = first_text(&mut p, true)?;
+            text_mut(&mut p, b, i).push_str(" cambiato");
+        }
         _ => unreachable!(),
     }
     Some(p)
 }
 
-const EDITS: [&str; 6] = ["E0", "E1", "E2", "E3", "E4", "E5"];
+const EDITS: [&str; 8] = ["E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7"];
 
 /// Salva una modifica, riapre i byte e confronta la proiezione riaperta con
 /// quella voluta, a meno dei dati opachi.
@@ -507,6 +563,26 @@ fn il_manifesto_descrive_ogni_file_e_nient_altro() {
     assert!(total <= 15 * 1024 * 1024, "corpus di {total} byte");
 }
 
+/// L'esito che il manifesto dichiara è quello dell'apertura: chi cambia il
+/// motore o la misura e cambia un esito lo vede qui, con la ragione
+/// (`perché`) da riscrivere. Ogni esito che non è `modificabile` dice perché.
+#[test]
+fn l_esito_dichiarato_è_quello_dell_apertura() {
+    let mut failures = Vec::new();
+    for entry in manifest() {
+        let bytes = std::fs::read(corpus().join(&entry.path)).unwrap();
+        let got = esito(codec_of(&entry.path), &bytes);
+        let wanted = &entry.fields["atteso"];
+        if &got != wanted {
+            failures.push(format!("{}: atteso «{wanted}», aperto «{got}»", entry.path));
+        }
+        if got != "modificabile" && !entry.fields.contains_key("perché") {
+            failures.push(format!("{}: «{got}» senza `perché`", entry.path));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
 #[test]
 fn il_corpus_dà_gli_esiti_attesi() {
     let update = std::env::var_os("UPDATE_CORPUS").is_some();
@@ -582,10 +658,12 @@ impl Lcg {
     }
 }
 
-/// Mutazioni deterministiche di ogni file: troncamenti in punti fissi e byte
-/// cambiati. `open` dà un esito o un errore, senza panic, entro un tempo.
-/// `CORPUS_MUTATIONS=<n>` fa `n` giri di byte cambiati invece di 8, per la
-/// prova lunga di un aggiornamento del motore.
+/// Mutazioni deterministiche di ogni file: troncamenti in punti fissi, byte
+/// cambiati e, in un pacchetto, mutazioni dentro l'XML ([`xml_mutants`]).
+/// `open` dà un esito o un errore, senza panic, entro un tempo, e un
+/// documento che si apre si salva o si rifiuta. `CORPUS_MUTATIONS=<n>` fa `n`
+/// giri di ciascuna mutazione invece di 8, per la prova lunga di un
+/// aggiornamento del motore.
 #[test]
 fn le_mutazioni_non_fanno_panic() {
     const LIMIT: Duration = Duration::from_secs(20);
@@ -594,6 +672,7 @@ fn le_mutazioni_non_fanno_panic() {
         .and_then(|n| n.parse().ok())
         .unwrap_or(8);
     let mut failures = Vec::new();
+    let mut xml_opened = 0;
     for entry in manifest() {
         let codec = codec_of(&entry.path);
         let bytes = std::fs::read(corpus().join(&entry.path)).unwrap();
@@ -611,22 +690,33 @@ fn le_mutazioni_non_fanno_panic() {
             }
             mutants.push((format!("{} byte cambiati, giro {n}", n + 1), changed));
         }
-        for (what, mutant) in mutants {
+        let xml = xml_mutants(&bytes, &mut rng, rounds);
+        let all = mutants
+            .into_iter()
+            .map(|mutant| (mutant, false))
+            .chain(xml.into_iter().map(|mutant| (mutant, true)));
+        for ((what, mutant), in_xml) in all {
             let start = Instant::now();
             let result = std::panic::catch_unwind(|| {
-                if let Ok(opened) = open(codec, &mutant) {
+                let opened = open(codec, &mutant).ok();
+                if let Some(opened) = &opened {
                     // Un documento che si apre si salva anche, o lo rifiuta.
                     let _ = save(codec, &mutant, &opened.projection);
                 }
+                opened.is_some()
             });
             let took = start.elapsed();
-            if result.is_err() {
-                failures.push(format!("{}: panic con {what}", entry.path));
-            } else if took > LIMIT {
-                failures.push(format!("{}: {took:?} con {what}", entry.path));
+            match result {
+                Err(_) => failures.push(format!("{}: panic con {what}", entry.path)),
+                Ok(_) if took > LIMIT => {
+                    failures.push(format!("{}: {took:?} con {what}", entry.path))
+                }
+                Ok(opened) => xml_opened += usize::from(opened && in_xml),
             }
         }
     }
+    // Le mutazioni dentro l'XML arrivano al modello: qualcuna si apre.
+    assert!(xml_opened > 0, "nessuna mutazione dell'XML si apre");
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
@@ -651,6 +741,148 @@ fn images(blocks: &mut [Block]) -> Vec<&mut Inline> {
                 }
             }
         }
+    }
+    out
+}
+
+/// Valori di attributo che un lettore non si aspetta.
+const STRANGE: &[&str] = &[
+    "",
+    "-1",
+    "0",
+    "4294967296",
+    "99999999999999999999999",
+    "NaN",
+    "1e308",
+    "x",
+    "auto",
+    "💥",
+];
+
+/// Mutazioni dentro l'XML di un pacchetto. Un byte cambiato di solito rompe
+/// lo ZIP e si ferma lì; queste arrivano al lettore e al modello. Ogni giro
+/// cambia una parte XML (la principale un giro su due): un valore di
+/// attributo strano, un tag tolto, ripetuto, rinominato o spostato, un
+/// elemento sconosciuto.
+fn xml_mutants(bytes: &[u8], rng: &mut Lcg, rounds: u32) -> Vec<(String, Vec<u8>)> {
+    let Ok(mut archive) = zip::ZipArchive::new(Cursor::new(bytes)) else {
+        return Vec::new();
+    };
+    let mut parts = Vec::new();
+    for i in 0..archive.len() {
+        let Ok(mut file) = archive.by_index(i) else {
+            return Vec::new();
+        };
+        let Ok(name) = file.name().map(|name| name.to_string()) else {
+            return Vec::new();
+        };
+        let mut data = Vec::new();
+        if file.read_to_end(&mut data).is_err() {
+            return Vec::new();
+        }
+        parts.push((name, data));
+    }
+    let xml: Vec<usize> = (0..parts.len())
+        .filter(|&i| {
+            let (name, data) = &parts[i];
+            (name.ends_with(".xml") || name.ends_with(".rels")) && std::str::from_utf8(data).is_ok()
+        })
+        .collect();
+    let main = xml
+        .iter()
+        .copied()
+        .find(|&i| parts[i].0 == "word/document.xml" || parts[i].0 == "content.xml");
+    let mut out = Vec::new();
+    for n in 0..rounds {
+        let at = match main {
+            Some(main) if n % 2 == 0 => main,
+            _ if xml.is_empty() => break,
+            _ => xml[rng.next() as usize % xml.len()],
+        };
+        let text = std::str::from_utf8(&parts[at].1).unwrap();
+        let tags = tags_of(text);
+        if tags.is_empty() {
+            continue;
+        }
+        let pick = |rng: &mut Lcg| tags[rng.next() as usize % tags.len()].clone();
+        let tag = pick(rng);
+        let (what, changed) = match rng.next() % 6 {
+            0 => {
+                let quotes: Vec<usize> = text[tag.clone()]
+                    .match_indices("=\"")
+                    .map(|(i, _)| tag.start + i + 2)
+                    .collect();
+                let Some(&from) = quotes.get(rng.next() as usize % quotes.len().max(1)) else {
+                    continue;
+                };
+                let to = from + text[from..].find('"').unwrap_or(0);
+                let value = STRANGE[rng.next() as usize % STRANGE.len()];
+                (
+                    "valore strano",
+                    format!("{}{value}{}", &text[..from], &text[to..]),
+                )
+            }
+            1 => (
+                "tag tolto",
+                format!("{}{}", &text[..tag.start], &text[tag.end..]),
+            ),
+            2 => (
+                "tag ripetuto",
+                format!(
+                    "{}{}{}",
+                    &text[..tag.end],
+                    &text[tag.clone()],
+                    &text[tag.end..]
+                ),
+            ),
+            3 => {
+                let start = tag.start + 1 + usize::from(text[tag.start + 1..].starts_with('/'));
+                let end = start
+                    + text[start..tag.end]
+                        .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
+                        .unwrap_or(0);
+                (
+                    "tag rinominato",
+                    format!("{}z{}", &text[..end], &text[end..]),
+                )
+            }
+            4 => {
+                let name = &text[tag.start + 1..];
+                let name = name.trim_start_matches('/');
+                let prefix = name
+                    .split(':')
+                    .next()
+                    .filter(|p| name.contains(':') && !p.contains(' '));
+                let unknown = match prefix {
+                    Some(prefix) => format!("<{prefix}:zz {prefix}:val=\"1\"/>"),
+                    None => "<zz val=\"1\"/>".to_string(),
+                };
+                (
+                    "elemento sconosciuto",
+                    format!("{}{unknown}{}", &text[..tag.end], &text[tag.end..]),
+                )
+            }
+            _ => {
+                let to = pick(rng);
+                let moved = &text[tag.clone()];
+                let without = format!("{}{}", &text[..tag.start], &text[tag.end..]);
+                let at = if to.start >= tag.start {
+                    to.end - moved.len()
+                } else {
+                    to.end
+                };
+                (
+                    "tag spostato",
+                    format!("{}{moved}{}", &without[..at], &without[at..]),
+                )
+            }
+        };
+        let mut mutated = parts.clone();
+        mutated[at].1 = changed.into_bytes();
+        out.push((
+            format!("{what} in {}, giro {n}", parts[at].0),
+            rezip(&mutated),
+        ));
     }
     out
 }
@@ -729,6 +961,32 @@ fn chi_scrive_ignora_i_byte_da_vedere_di_un_immagine_tenuta() {
     }
 }
 
+/// Gli intervalli dei tag di un testo XML, senza dichiarazioni e commenti.
+fn tags_of(text: &str) -> Vec<std::ops::Range<usize>> {
+    let mut out = Vec::new();
+    let mut from = 0;
+    while let Some(open) = text[from..].find('<').map(|i| from + i) {
+        let Some(close) = text[open..].find('>').map(|i| open + i + 1) else {
+            break;
+        };
+        if !matches!(text.as_bytes().get(open + 1), Some(b'?' | b'!')) {
+            out.push(open..close);
+        }
+        from = close;
+    }
+    out
+}
+
+fn rezip(parts: &[(String, Vec<u8>)]) -> Vec<u8> {
+    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    for (name, data) in parts {
+        zip.start_file(name.as_str(), zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(data).unwrap();
+    }
+    zip.finish().unwrap().into_inner()
+}
+
 /// Il writer è deterministico: lo stesso modello dà gli stessi byte, due volte
 /// di fila e dopo un `clone`. Il salvataggio confronta i blocchi non toccati con
 /// la prova a vuoto della base, e la prova regge soltanto così.
@@ -772,6 +1030,8 @@ fn il_writer_è_deterministico() {
 /// ```text
 /// cargo test -p fub-format-rich --release --test corpus -- --ignored --nocapture tempi
 /// ```
+///
+/// `FUB_TEMPI_PARAGRAFI` dice quanti paragrafi ha il file grande (tremila).
 #[test]
 #[ignore]
 fn tempi() {
@@ -782,7 +1042,14 @@ fn tempi() {
             (entry.path, bytes)
         })
         .collect();
-    files.push(("docx/grande-3000-paragrafi.docx".into(), large()));
+    let paragraphs = std::env::var("FUB_TEMPI_PARAGRAFI")
+        .ok()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(3000);
+    files.push((
+        format!("docx/grande-{paragraphs}-paragrafi.docx"),
+        large(paragraphs),
+    ));
     for (path, bytes) in files {
         let codec = codec_of(&path);
         let start = Instant::now();
@@ -818,9 +1085,9 @@ fn tempi() {
     }
 }
 
-/// Un `.docx` grande: i paragrafi di `segni-di-word.docx` ripetuti fino a tremila,
-/// scritti dal salvataggio.
-fn large() -> Vec<u8> {
+/// Un `.docx` grande: i paragrafi di `segni-di-word.docx` ripetuti fino a
+/// `paragraphs`, scritti dal salvataggio.
+fn large(paragraphs: usize) -> Vec<u8> {
     let base = std::fs::read(corpus().join("docx/segni-di-word.docx")).unwrap();
     let opened = open(Codec::Docx, &base).unwrap();
     let mut projection = Projection::from_json(&opened.projection).unwrap();
@@ -836,7 +1103,7 @@ fn large() -> Vec<u8> {
             _ => None,
         })
         .collect();
-    while projection.blocks.len() < 3000 {
+    while projection.blocks.len() < paragraphs {
         projection.blocks.extend(body.iter().cloned());
     }
     match save(Codec::Docx, &base, &projection.to_json().unwrap()).unwrap() {
