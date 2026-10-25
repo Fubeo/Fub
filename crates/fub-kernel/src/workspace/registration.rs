@@ -8,10 +8,15 @@
 use super::*;
 use fub_abi::custom::{CustomRendererSpec, SyntaxRuleSpec};
 use fub_abi::grid::{
-    validate_grid_source, GridApplyRequest, GridCommit, GridInvalidation, GridProvider,
-    GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
+    GridApplyRequest, GridCommit, GridInvalidation, GridSurfaceSpec, GridWindowRequest,
 };
-use fub_abi::{PluginError, Revision};
+use fub_abi::{
+    grid_bytes_revision, validate_grid_catalog, Arg, GridBytesProvider, GridBytesSession,
+    GridBytesWindow, GridCommandOutcome, GridCommandRequest, GridCommandState, GridJournal,
+    GridSelection, PluginError, Revision, Text, GRID_BYTES_PROTOCOL_VERSION, MAX_GRID_BYTES_SOURCE,
+};
+
+use crate::providers::{GridBackend, SharedGrid};
 
 /// Authority to publish providers for one live plugin declaration.
 ///
@@ -33,7 +38,7 @@ impl RegistrationPermit {
 enum Declaration {
     Commands(Vec<CommandSpec>, Box<dyn CommandProvider>),
     Views(Vec<ViewSpec>, Box<dyn ViewProvider>),
-    Grid(Vec<GridSurfaceSpec>, Box<dyn GridProvider>),
+    Grid(Vec<GridSurfaceSpec>, GridBackend),
     Export(Vec<String>, Box<dyn ExportProvider>),
     Import(Box<dyn ImportProvider>),
     Handler(Box<dyn EventHandler>),
@@ -69,16 +74,23 @@ impl PreparedRegistration {
         Ok(Self::new(Declaration::Views(specs, provider)))
     }
 
-    /// Calls `surfaces` exactly once, without borrowing a workspace.
-    pub fn grid(provider: Box<dyn GridProvider>) -> std::result::Result<Self, PluginError> {
+    /// Calls `surfaces` exactly once, without borrowing a workspace. Every
+    /// surface it declares must speak the byte protocol, version 2.
+    pub fn grid_bytes(
+        provider: Box<dyn GridBytesProvider>,
+    ) -> std::result::Result<Self, PluginError> {
         let (specs, provider) = capture(provider, |provider| provider.surfaces())?;
         if specs.is_empty() {
-            return Err(PluginError::BadArgs(
-                "a grid provider must declare at least one surface".into(),
-            ));
+            return Err(no_grid_surface());
         }
         for spec in &specs {
             spec.validate()?;
+            if spec.protocol_version != GRID_BYTES_PROTOCOL_VERSION {
+                return Err(PluginError::BadArgs(Text::message(
+                    "host.grid.not_bytes",
+                    vec![Arg::text("surface", spec.id.as_str())],
+                )));
+            }
         }
         Ok(Self::new(Declaration::Grid(specs, provider)))
     }
@@ -118,38 +130,50 @@ impl PreparedRegistration {
     }
 }
 
-/// A provider borrowed without retaining the workspace custody guard.
-pub struct PreparedGridCall {
-    provider: Arc<SharedShelter<Box<dyn GridProvider>>>,
+/// Un provider grid, preso senza tenere la custodia del workspace. Le
+/// risposte si controllano prima di uscire, e la revisione della sessione è
+/// quella dei byte con il giornale.
+pub struct PreparedGridBytesCall {
+    provider: SharedGrid,
 }
 
-impl PreparedGridCall {
+impl PreparedGridBytesCall {
     fn invoke<R>(
         &self,
         operation: &'static str,
-        call: impl FnOnce(&mut dyn GridProvider) -> std::result::Result<R, PluginError>,
+        call: impl FnOnce(&mut dyn GridBytesProvider) -> std::result::Result<R, PluginError>,
     ) -> std::result::Result<R, PluginError> {
         crate::safety::external(
             operation,
             |message| PluginError::Internal(message.into()),
-            || {
-                let mut provider = self.provider.write();
-                call(provider.as_mut())
-            },
+            || call(self.provider.write().as_mut()),
         )
     }
 
     pub fn open(
         &self,
         surface: &str,
-        source: &str,
+        source: &[u8],
         revision: Revision,
-    ) -> std::result::Result<GridSession, PluginError> {
-        validate_grid_source(source)?;
+        journal: &GridJournal,
+    ) -> std::result::Result<GridBytesSession, PluginError> {
+        if source.len() > MAX_GRID_BYTES_SOURCE {
+            return Err(PluginError::BadArgs(Text::message(
+                "host.grid.source_too_large",
+                vec![Arg::text("bytes", source.len().to_string())],
+            )));
+        }
+        journal.validate()?;
+        let expected = grid_bytes_revision(&revision, &journal.to_text());
         let session = self.invoke("grid open", |provider| {
-            provider.open(surface, source, revision.clone())
+            provider.open(surface, source, revision.clone(), journal)
         })?;
-        validate_grid_session_response(&session, Some(&revision), "open")?;
+        session.validate().map_err(provider_response)?;
+        if session.revision != expected {
+            return Err(provider_response(
+                "grid open returned an unexpected revision",
+            ));
+        }
         Ok(session)
     }
 
@@ -157,12 +181,12 @@ impl PreparedGridCall {
         &self,
         instance: &str,
         request: GridWindowRequest,
-    ) -> std::result::Result<GridWindow, PluginError> {
+    ) -> std::result::Result<GridBytesWindow, PluginError> {
         request.validate()?;
         let window = self.invoke("grid window", |provider| {
             provider.window(instance, request.clone())
         })?;
-        validate_grid_window_response(&window, &request)?;
+        validate_grid_bytes_window_response(&window, &request)?;
         Ok(window)
     }
 
@@ -179,49 +203,97 @@ impl PreparedGridCall {
         Ok(commit)
     }
 
-    pub fn reload(
+    pub fn commands(
+        &self,
+        instance: &str,
+        selection: GridSelection,
+    ) -> std::result::Result<Vec<GridCommandState>, PluginError> {
+        selection.validate()?;
+        let commands = self.invoke("grid commands", |provider| {
+            provider.commands(instance, selection.clone())
+        })?;
+        validate_grid_catalog(&commands).map_err(provider_response)?;
+        Ok(commands)
+    }
+
+    pub fn command(
+        &self,
+        instance: &str,
+        request: GridCommandRequest,
+    ) -> std::result::Result<GridCommandOutcome, PluginError> {
+        request.validate()?;
+        let outcome = self.invoke("grid command", |provider| {
+            provider.command(instance, request.clone())
+        })?;
+        validate_grid_command_response(&outcome, &request)?;
+        Ok(outcome)
+    }
+
+    /// I byte da scrivere alla revisione `expected`. Una risposta oltre il
+    /// limite della sorgente non arriva al disco.
+    pub fn bytes_to_write(
         &self,
         instance: &str,
         expected: Revision,
-        source: &str,
-        revision: Revision,
-    ) -> std::result::Result<GridSession, PluginError> {
-        validate_grid_source(source)?;
-        let session = self.invoke("grid reload", |provider| {
-            provider.reload(instance, expected, source, revision.clone())
+    ) -> std::result::Result<Vec<u8>, PluginError> {
+        let bytes = self.invoke("grid bytes to write", |provider| {
+            provider.bytes_to_write(instance, expected.clone())
         })?;
-        validate_grid_session_response(&session, Some(&revision), "reload")?;
-        Ok(session)
+        if bytes.is_empty() || bytes.len() > MAX_GRID_BYTES_SOURCE {
+            return Err(provider_response("grid bytes exceed the source limits"));
+        }
+        Ok(bytes)
     }
 
     pub fn close(&self, instance: &str) -> std::result::Result<(), PluginError> {
         self.invoke("grid close", |provider| provider.close(instance))
     }
 }
+
+fn no_grid_surface() -> PluginError {
+    PluginError::BadArgs(Text::key("host.grid.no_surface"))
+}
+
 fn provider_response(message: impl std::fmt::Display) -> PluginError {
     PluginError::Internal(format!("malformed grid provider response: {message}").into())
 }
 
-fn validate_grid_session_response(
-    session: &GridSession,
-    expected: Option<&Revision>,
-    operation: &str,
-) -> std::result::Result<(), PluginError> {
-    session.validate().map_err(provider_response)?;
-    if expected.is_some_and(|revision| revision != &session.revision) {
-        return Err(provider_response(format!(
-            "grid {operation} returned an unexpected revision"
-        )));
-    }
-    Ok(())
-}
-
-fn validate_grid_window_response(
-    window: &GridWindow,
+fn validate_grid_bytes_window_response(
+    window: &GridBytesWindow,
     request: &GridWindowRequest,
 ) -> std::result::Result<(), PluginError> {
     window.validate().map_err(provider_response)?;
-    if window.revision != request.revision
+    validate_window_shape(
+        WindowShape {
+            revision: &window.revision,
+            sheet: &window.sheet,
+            row_start: window.row_start,
+            column_start: window.column_start,
+            rows: &window.rows,
+            columns: &window.columns,
+        },
+        window.cells.iter().map(|cell| &cell.key),
+        request,
+    )
+}
+
+/// Gli assi e le coordinate delle celle di una finestra, da confrontare con
+/// la richiesta.
+struct WindowShape<'a> {
+    revision: &'a Revision,
+    sheet: &'a str,
+    row_start: u32,
+    column_start: u32,
+    rows: &'a [fub_abi::grid::GridRow],
+    columns: &'a [fub_abi::grid::GridColumn],
+}
+
+fn validate_window_shape<'a>(
+    window: WindowShape<'a>,
+    keys: impl Iterator<Item = &'a fub_abi::grid::GridCellKey>,
+    request: &GridWindowRequest,
+) -> std::result::Result<(), PluginError> {
+    if window.revision != &request.revision
         || window.sheet != request.sheet
         || window.row_start != request.row_start
         || window.column_start != request.column_start
@@ -261,12 +333,12 @@ fn validate_grid_window_response(
             return Err(provider_response("grid window has invalid column metadata"));
         }
     }
-    let mut cells = std::collections::HashSet::with_capacity(window.cells.len());
-    for cell in &window.cells {
-        if cell.key.sheet != window.sheet
-            || !rows.contains(&cell.key.row)
-            || !columns.contains(&cell.key.column)
-            || !cells.insert(cell.key.clone())
+    let mut cells = std::collections::HashSet::new();
+    for key in keys {
+        if key.sheet != window.sheet
+            || !rows.contains(&key.row)
+            || !columns.contains(&key.column)
+            || !cells.insert(key)
         {
             return Err(provider_response(
                 "grid window has invalid cell coordinates",
@@ -308,6 +380,26 @@ fn validate_grid_commit_response(
     Ok(())
 }
 
+/// Un comando che non cambia la cartella lascia il giornale e la revisione
+/// come erano; uno che la cambia porta entrambi avanti.
+fn validate_grid_command_response(
+    outcome: &GridCommandOutcome,
+    request: &GridCommandRequest,
+) -> std::result::Result<(), PluginError> {
+    outcome.validate().map_err(provider_response)?;
+    let edit = &outcome.commit.edit;
+    if usize::try_from(edit.from).is_err() || usize::try_from(edit.to).is_err() {
+        return Err(provider_response("grid source diff offset overflows usize"));
+    }
+    let unchanged = edit.from == edit.to && edit.deleted.is_empty() && edit.inserted.is_empty();
+    if unchanged != (outcome.commit.revision == request.revision) {
+        return Err(provider_response(
+            "grid command revision does not follow its journal edit",
+        ));
+    }
+    Ok(())
+}
+
 impl Workspace {
     pub fn registration_permit(
         &self,
@@ -336,10 +428,18 @@ impl Workspace {
             .collect()
     }
 
-    pub fn prepare_grid_call(
+    /// Il provider della superficie `surface`, da chiamare senza la custodia.
+    pub fn prepare_grid_bytes_call(
         &self,
         surface: &str,
-    ) -> std::result::Result<PreparedGridCall, PluginError> {
+    ) -> std::result::Result<PreparedGridBytesCall, PluginError> {
+        Ok(PreparedGridBytesCall {
+            provider: self.grid_backend(surface)?,
+        })
+    }
+
+    /// La superficie, se c'è e se parla il protocollo a byte.
+    fn grid_backend(&self, surface: &str) -> std::result::Result<SharedGrid, PluginError> {
         let registered = self
             .providers
             .grids
@@ -354,15 +454,13 @@ impl Workspace {
             .find(|spec| spec.id == surface)
             .expect("surface found above");
         if spec.family != fub_abi::grid::GRID_FAMILY
-            || spec.protocol_version != fub_abi::grid::GRID_PROTOCOL_VERSION
+            || spec.protocol_version != GRID_BYTES_PROTOCOL_VERSION
         {
             return Err(PluginError::Unserved(
                 format!("grid surface `{surface}` uses unsupported family/version").into(),
             ));
         }
-        Ok(PreparedGridCall {
-            provider: Arc::clone(&registered.provider),
-        })
+        Ok(Arc::clone(&registered.provider))
     }
 
     fn validate_registration_permit(
@@ -568,7 +666,7 @@ impl Workspace {
 enum RetiredProvider {
     Command(Arc<dyn CommandProvider>),
     View(Arc<SharedShelter<Box<dyn ViewProvider>>>),
-    Grid(Arc<SharedShelter<Box<dyn GridProvider>>>),
+    Grid(SharedGrid),
     Handler(Box<dyn EventHandler>),
     Service(Arc<dyn ServiceProvider>),
     Import(Arc<SharedShelter<Box<dyn ImportProvider>>>),

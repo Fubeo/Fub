@@ -14,6 +14,7 @@ import {
   EDITOR_FOLD_GUTTER_KEY,
   EDITOR_SMART_LISTS_KEY,
   EDITOR_INDENT_GUIDES_KEY,
+  EDITOR_CURSOR_BLINK_KEY,
   EDITOR_PASTE_HTML_KEY,
   EDITOR_PROPERTIES_KEY,
   EDITOR_RTL_KEY,
@@ -190,6 +191,26 @@ describe("text input settings", () => {
     host.remove();
   });
 
+  it("editor.cursor-blink: di serie il cursore sta fermo, la preferenza lo fa lampeggiare", async () => {
+    const read = vi.mocked(settings);
+    read.mockReset();
+    read.mockResolvedValue([]);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const engine = createTextEngine(host, { onChange: () => {}, onSelectionChange: () => {} });
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    const rate = () => host.querySelector<HTMLElement>(".cm-cursorLayer")?.style.animationDuration;
+    expect(rate()).toBe("0ms");
+    read.mockResolvedValue([entry(EDITOR_CURSOR_BLINK_KEY, true)]);
+    forwardNotice({
+      event: { type: "setting_changed", key: EDITOR_CURSOR_BLINK_KEY, scope: "machine" },
+      origin: { actor: { kind: "user" }, batch: null },
+    });
+    await vi.waitFor(() => expect(rate()).toBe("1200ms"));
+    engine.destroy();
+    host.remove();
+  });
+
   it("editor.properties sceglie come Live mostra il frontmatter, e un valore ignoto resta YAML", async () => {
     const read = vi.mocked(settings);
     read.mockReset();
@@ -235,7 +256,12 @@ describe("text input settings", () => {
     expect(press(field.querySelector(".cm-content")!)).toBe(false);
     expect(press(host.querySelector(".cm-gutters")!)).toBe(true);
     const items = [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")];
-    expect(items.map((item) => item.textContent)).toEqual(["Nascondi i numeri di riga", "Nascondi le frecce per piegare"]);
+    expect(items.map((item) => item.textContent)).toEqual([
+      "Nascondi i numeri di riga",
+      "Nascondi le frecce per piegare",
+      "Piega tutto",
+      "Apri tutto",
+    ]);
     items[0]!.click();
     expect(setSetting).toHaveBeenCalledWith("editor.line-numbers", false);
     engine.destroy();

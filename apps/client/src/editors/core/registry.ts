@@ -3,6 +3,7 @@ import type { SourceKind } from "../../host/enums.generated";
 import type { PaneMode, SelectionSet, Span, SyntaxForm } from "../../host/contract";
 import type { DocumentUpdate, EditorChange } from "./text-operation";
 import type { SurfaceEditorActions } from "./editor-actions";
+import type { SurfaceMenu, SurfaceMiniBar } from "./editor-menu";
 
 /**
  * The family of a surface: a name its registration owns, one owner at a time.
@@ -206,6 +207,12 @@ export interface EditorSurface {
   readonly buffer?: SurfaceBuffer;
   focus?(): void;
   /**
+   * Opens the surface's own find bar, the one its editor offers inside the
+   * text, and moves focus there. `false` where the current mode has none:
+   * the shell then searches the note on its own.
+   */
+  find?(): boolean;
+  /**
    * Brings the view to a place in the document. `false` when this surface
    * cannot get there, so that the shell says it instead of doing nothing.
    */
@@ -265,6 +272,18 @@ export interface EditorSurface {
    * it the pane scrolls on its own.
    */
   readonly scrollLink?: SurfaceScrollLink;
+  /**
+   * What the right button offers at `at` (client coordinates), or at the
+   * cursor when `at` is `null` (the Menu key, Shift+F10). The shell composes
+   * the sections and draws the menu (`editor-menu.ts`); `null` leaves the
+   * platform's own menu.
+   */
+  contextMenu?(at: SurfacePoint | null): SurfaceMenu | null;
+  /**
+   * The mini toolbar for a surface with controls of its own (a Word document,
+   * a sheet); without it the shell narrows the formatting bar.
+   */
+  miniBar?(): SurfaceMiniBar | null;
   destroy(): void;
 }
 

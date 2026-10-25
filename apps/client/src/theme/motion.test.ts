@@ -66,13 +66,6 @@ const MOTION_TOKEN = Object.keys(MOTION) as readonly (keyof typeof MOTION)[];
 /// spesa da quella di serie.
 const SPENT_BY_SKIN = MOTION_TOKEN.filter((name) => name !== "duration-scene");
 
-/// Le tre coppie della coreografia: fade, rise e rise corto, in entrata e uscita.
-const KEYFRAMES_FUB = [
-  "fub-enter-fade", "fub-exit-fade",
-  "fub-enter-rise", "fub-exit-rise",
-  "fub-enter-rise-sm", "fub-exit-rise-sm",
-] as const;
-
 /// Il corpo di un blocco `selettore { … }` di primo livello, coi commenti già
 /// tolti: senza toglierli, un `--token: valore;` citato dentro una spiegazione
 /// entrerebbe nella tavolozza come se fosse dichiarato. È lo stesso modo di
@@ -224,13 +217,14 @@ describe("hard-stop dell'editor", () => {
   });
 });
 
-describe("le tre coppie di keyframe fub esistono come @keyframes", () => {
-  it("fade, rise e rise corto hanno entrata e uscita", () => {
-    const missing = KEYFRAMES_FUB.filter((k) => !SKIN.includes(`@keyframes ${k}`));
-    expect(
-      missing,
-      "ogni gesto della coreografia ha entrata e uscita nel fallback CSS",
-    ).toEqual([]);
+describe("le superfici entrano ed escono con `moto`, non con la pelle", () => {
+  it("la pelle non dichiara i fotogrammi d'entrata e d'uscita né lo stato che li guidava", () => {
+    // Un moto solo: menu, modali, pannelli e avvisi passano da `ui/motion.ts`
+    // e `src/moto`. Un `@keyframes fub-enter-*` o una regola su
+    // `data-shell-motion` sarebbe una seconda coreografia, che non sente il
+    // livello del moto e non si interrompe.
+    expect(SKIN).not.toMatch(/@keyframes\s+fub-(enter|exit)-/);
+    expect(SKIN).not.toContain("data-shell-motion");
   });
 });
 

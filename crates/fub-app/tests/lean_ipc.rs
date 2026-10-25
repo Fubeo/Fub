@@ -403,13 +403,14 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("list_commands", Why::Bridge),
     ("invoke_command", Why::Bridge),
     ("query_index", Why::Bridge),
-    // --- Grid v1: discovery, sessioni e finestre tipate ----------------------
+    // --- Grid v2: discovery, sessioni sui byte e finestre tipate ------------
     ("list_grid_surfaces", Why::Grid),
-    ("open_grid", Why::Grid),
-    ("grid_window", Why::Grid),
-    ("apply_grid", Why::Grid),
-    ("reload_grid", Why::Grid),
-    ("close_grid", Why::Grid),
+    ("open_grid_bytes", Why::Grid),
+    ("grid_bytes_window", Why::Grid),
+    ("apply_grid_bytes", Why::Grid),
+    ("grid_bytes_commands", Why::Grid),
+    ("grid_bytes_command", Why::Grid),
+    ("close_grid_bytes", Why::Grid),
     // --- la sessione live (0205): un servizio dell'app, con il suo canale ---
     //
     // Listener, TLS e scrittore vivono nel processo dell'app, sul runtime di
@@ -988,11 +989,12 @@ fn bridges_stay_six() {
 fn grid_surface_uses_only_named_typed_ports() {
     const GRID: &[&str] = &[
         "list_grid_surfaces",
-        "open_grid",
-        "grid_window",
-        "apply_grid",
-        "reload_grid",
-        "close_grid",
+        "open_grid_bytes",
+        "grid_bytes_window",
+        "apply_grid_bytes",
+        "grid_bytes_commands",
+        "grid_bytes_command",
+        "close_grid_bytes",
     ];
     let app = include_str!("../src/lib.rs");
     let ipc = include_str!("../../../apps/client/src/host/ipc.ts");

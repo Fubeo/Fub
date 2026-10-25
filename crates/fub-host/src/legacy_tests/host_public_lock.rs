@@ -9,10 +9,7 @@ use fub_abi::error::FormatError;
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
-use fub_abi::grid::{
-    GridApplyRequest, GridCommit, GridProvider, GridSession, GridSurfaceSpec, GridWindow,
-    GridWindowRequest,
-};
+use fub_abi::grid::{GridApplyRequest, GridCommit, GridSurfaceSpec, GridWindowRequest};
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{
     HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, Plugin, PluginManifest, QueryRoute,
@@ -20,6 +17,7 @@ use fub_abi::traits::{
 };
 use fub_abi::ui::{UiNode, ViewUpdate};
 use fub_abi::PluginError;
+use fub_abi::{GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal};
 use fub_host::{Bundle, Custody, Host, PreparedFormatSource};
 use fub_kernel::{Trust, Workspace};
 
@@ -499,9 +497,9 @@ impl Drop for LifecycleGrid {
     }
 }
 
-impl GridProvider for LifecycleGrid {
+impl GridBytesProvider for LifecycleGrid {
     fn surfaces(&self) -> Vec<GridSurfaceSpec> {
-        vec![GridSurfaceSpec::new(
+        vec![GridSurfaceSpec::bytes(
             "fub.audit-public-unmount-grid",
             "fub.audit-public-unmount-format",
         )]
@@ -510,9 +508,10 @@ impl GridProvider for LifecycleGrid {
     fn open(
         &mut self,
         _surface: &str,
-        _source: &str,
+        _source: &[u8],
         _revision: Revision,
-    ) -> Result<GridSession, PluginError> {
+        _journal: &GridJournal,
+    ) -> Result<GridBytesSession, PluginError> {
         unreachable!("lifecycle grid is not opened")
     }
 
@@ -520,7 +519,7 @@ impl GridProvider for LifecycleGrid {
         &mut self,
         _instance: &str,
         _request: GridWindowRequest,
-    ) -> Result<GridWindow, PluginError> {
+    ) -> Result<GridBytesWindow, PluginError> {
         unreachable!("lifecycle grid is not opened")
     }
 
@@ -532,13 +531,11 @@ impl GridProvider for LifecycleGrid {
         unreachable!("lifecycle grid is not opened")
     }
 
-    fn reload(
+    fn bytes_to_write(
         &mut self,
         _instance: &str,
         _expected: Revision,
-        _source: &str,
-        _revision: Revision,
-    ) -> Result<GridSession, PluginError> {
+    ) -> Result<Vec<u8>, PluginError> {
         unreachable!("lifecycle grid is not opened")
     }
 
@@ -634,7 +631,7 @@ impl Bundle for LifecycleBundle {
             .register_index_provider(Box::new(LifecycleIndex(self.probe.clone())))
             .expect("lifecycle index registers");
         registrar
-            .register_grid_provider(Box::new(LifecycleGrid {
+            .register_grid_bytes_provider(Box::new(LifecycleGrid {
                 probe: self.probe.clone(),
                 panic_on_shutdown: true,
             }))

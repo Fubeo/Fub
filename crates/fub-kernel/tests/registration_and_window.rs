@@ -15,10 +15,7 @@ use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
     RenderOptions,
 };
-use fub_abi::grid::{
-    GridApplyRequest, GridCommit, GridProvider, GridSession, GridSheet, GridSurfaceSpec,
-    GridWindow, GridWindowRequest,
-};
+use fub_abi::grid::{GridApplyRequest, GridCommit, GridSheet, GridSurfaceSpec, GridWindowRequest};
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{
     CommandProvider, HostApi, Page, ReadApi, ViewInstance, ViewInterests, ViewProvider, ViewSpec,
@@ -26,6 +23,10 @@ use fub_abi::traits::{
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::PluginError;
+use fub_abi::{
+    grid_bytes_revision, GridBook, GridBytesProvider, GridBytesSession, GridBytesWindow,
+    GridJournal,
+};
 use fub_kernel::{FormatRegistry, RegistryError, Workspace};
 
 // --- un provider che conta quante volte gli si chiede cosa offre ------------
@@ -50,7 +51,7 @@ impl IncompatibleGrid {
     }
 }
 
-impl GridProvider for IncompatibleGrid {
+impl GridBytesProvider for IncompatibleGrid {
     fn surfaces(&self) -> Vec<GridSurfaceSpec> {
         vec![GridSurfaceSpec {
             id: "future.sheet".into(),
@@ -63,9 +64,10 @@ impl GridProvider for IncompatibleGrid {
     fn open(
         &mut self,
         _surface: &str,
-        _source: &str,
+        _source: &[u8],
         _revision: Revision,
-    ) -> Result<GridSession, PluginError> {
+        _journal: &GridJournal,
+    ) -> Result<GridBytesSession, PluginError> {
         Err(self.unexpected())
     }
 
@@ -73,7 +75,7 @@ impl GridProvider for IncompatibleGrid {
         &mut self,
         _instance: &str,
         _request: GridWindowRequest,
-    ) -> Result<GridWindow, PluginError> {
+    ) -> Result<GridBytesWindow, PluginError> {
         Err(self.unexpected())
     }
 
@@ -85,13 +87,11 @@ impl GridProvider for IncompatibleGrid {
         Err(self.unexpected())
     }
 
-    fn reload(
+    fn bytes_to_write(
         &mut self,
         _instance: &str,
         _expected: Revision,
-        _source: &str,
-        _revision: Revision,
-    ) -> Result<GridSession, PluginError> {
+    ) -> Result<Vec<u8>, PluginError> {
         Err(self.unexpected())
     }
 
@@ -120,29 +120,36 @@ impl OwnedGrid {
     }
 }
 
-impl GridProvider for OwnedGrid {
+impl GridBytesProvider for OwnedGrid {
     fn surfaces(&self) -> Vec<GridSurfaceSpec> {
-        vec![GridSurfaceSpec::new(self.surface.clone(), "fubsheet")]
+        vec![GridSurfaceSpec::bytes(self.surface.clone(), "xlsx")]
     }
 
     fn open(
         &mut self,
         surface: &str,
-        _source: &str,
+        _source: &[u8],
         revision: Revision,
-    ) -> Result<GridSession, PluginError> {
+        journal: &GridJournal,
+    ) -> Result<GridBytesSession, PluginError> {
         if surface != self.surface {
             return Err(PluginError::Unserved("surface owner mismatch".into()));
         }
-        Ok(GridSession {
+        Ok(GridBytesSession {
             instance: self.instance(),
-            revision,
+            revision: grid_bytes_revision(&revision, &journal.to_text()),
             sheets: vec![GridSheet {
                 id: "main".into(),
                 name: "Main".into(),
                 row_count: 1,
                 column_count: 1,
             }],
+            active: "main".into(),
+            hidden: Vec::new(),
+            notices: Vec::new(),
+            conflicts: Vec::new(),
+            commands: Vec::new(),
+            book: GridBook::default(),
         })
     }
 
@@ -150,7 +157,7 @@ impl GridProvider for OwnedGrid {
         &mut self,
         _instance: &str,
         _request: GridWindowRequest,
-    ) -> Result<GridWindow, PluginError> {
+    ) -> Result<GridBytesWindow, PluginError> {
         Err(PluginError::NotFound("test window not implemented".into()))
     }
 
@@ -162,14 +169,12 @@ impl GridProvider for OwnedGrid {
         Err(PluginError::NotFound("test apply not implemented".into()))
     }
 
-    fn reload(
+    fn bytes_to_write(
         &mut self,
         _instance: &str,
         _expected: Revision,
-        _source: &str,
-        _revision: Revision,
-    ) -> Result<GridSession, PluginError> {
-        Err(PluginError::NotFound("test reload not implemented".into()))
+    ) -> Result<Vec<u8>, PluginError> {
+        Err(PluginError::NotFound("test write not implemented".into()))
     }
 
     fn close(&mut self, instance: &str) -> Result<(), PluginError> {
@@ -515,7 +520,7 @@ fn incompatible_grid_surface_falls_back_without_invoking_provider() {
     let calls = Arc::new(Mutex::new(0));
     let permit = ws.registration_permit("prova").expect("declared");
     let mut prepared =
-        fub_kernel::workspace::PreparedRegistration::grid(Box::new(IncompatibleGrid {
+        fub_kernel::workspace::PreparedRegistration::grid_bytes(Box::new(IncompatibleGrid {
             calls: Arc::clone(&calls),
         }))
         .expect("surface declaration is structurally valid");
@@ -529,7 +534,7 @@ fn incompatible_grid_surface_falls_back_without_invoking_provider() {
         .expect("surface retained for negotiation");
     assert_eq!(surface.family, "future-grid");
     assert!(matches!(
-        ws.prepare_grid_call("future.sheet"),
+        ws.prepare_grid_bytes_call("future.sheet"),
         Err(PluginError::Unserved(_))
     ));
     assert_eq!(
@@ -545,32 +550,39 @@ fn grid_surface_owner_collision_and_cross_surface_instance_are_rejected() {
         .expect("declared");
 
     let first_permit = ws.registration_permit("prova").expect("declared");
-    let mut first =
-        fub_kernel::workspace::PreparedRegistration::grid(Box::new(OwnedGrid::new("prova.sheet")))
-            .expect("first surface is valid");
+    let mut first = fub_kernel::workspace::PreparedRegistration::grid_bytes(Box::new(
+        OwnedGrid::new("prova.sheet"),
+    ))
+    .expect("first surface is valid");
     ws.commit_registration(&first_permit, &mut first)
         .expect("first provider registered");
 
     let second_permit = ws.registration_permit("second").expect("declared");
-    let mut duplicate =
-        fub_kernel::workspace::PreparedRegistration::grid(Box::new(OwnedGrid::new("prova.sheet")))
-            .expect("duplicate declaration is structurally valid");
+    let mut duplicate = fub_kernel::workspace::PreparedRegistration::grid_bytes(Box::new(
+        OwnedGrid::new("prova.sheet"),
+    ))
+    .expect("duplicate declaration is structurally valid");
     let error = ws
         .commit_registration(&second_permit, &mut duplicate)
         .expect_err("a surface has one owner");
     assert!(matches!(error, RegistryError::Claimed { id, .. } if id == "prova.sheet"));
 
-    let mut second =
-        fub_kernel::workspace::PreparedRegistration::grid(Box::new(OwnedGrid::new("second.sheet")))
-            .expect("second surface is valid");
+    let mut second = fub_kernel::workspace::PreparedRegistration::grid_bytes(Box::new(
+        OwnedGrid::new("second.sheet"),
+    ))
+    .expect("second surface is valid");
     ws.commit_registration(&second_permit, &mut second)
         .expect("second provider registered under its own surface");
 
-    let revision = Revision::of("grid source");
-    let first_call = ws.prepare_grid_call("prova.sheet").expect("first owner");
-    let second_call = ws.prepare_grid_call("second.sheet").expect("second owner");
+    let revision = Revision::of_bytes(b"PK");
+    let first_call = ws
+        .prepare_grid_bytes_call("prova.sheet")
+        .expect("first owner");
+    let second_call = ws
+        .prepare_grid_bytes_call("second.sheet")
+        .expect("second owner");
     let session = first_call
-        .open("prova.sheet", "grid source", revision)
+        .open("prova.sheet", b"PK", revision, &GridJournal::new())
         .expect("first provider opens");
     assert!(matches!(
         second_call.close(&session.instance),

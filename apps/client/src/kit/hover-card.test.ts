@@ -390,6 +390,45 @@ describe("il fuoco", () => {
   });
 });
 
+describe("entrarci da tastiera", () => {
+  it("show con focus porta il fuoco alla prima azione, ed Esc lo riporta dov'era", async () => {
+    const field = document.createElement("textarea");
+    document.body.append(field);
+    field.focus();
+    const target = link("Nota");
+    const handle = attachHoverCard({ target, load, lifetime: life });
+    handle.show(target, { focus: true });
+    const content = document.createElement("div");
+    const first = document.createElement("button");
+    content.append(first, document.createElement("button"));
+    calls[0].answer.resolve(content);
+    await wait(0);
+    expect(handle.open).toBe(true);
+    expect(document.activeElement).toBe(first);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(handle.open).toBe(false);
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("una scheda già aperta dal passaggio si riapre col fuoco dentro", async () => {
+    const field = document.createElement("textarea");
+    document.body.append(field);
+    field.focus();
+    const target = link("Nota");
+    const handle = attachHoverCard({ target, load, lifetime: life });
+    await hoverOpen(target);
+    expect(document.activeElement).toBe(field);
+    handle.show(target, { focus: true });
+    const content = document.createElement("div");
+    const action = document.createElement("button");
+    content.append(action);
+    calls[calls.length - 1].answer.resolve(content);
+    await wait(0);
+    expect(cards()).toHaveLength(1);
+    expect(document.activeElement).toBe(action);
+  });
+});
+
 describe("una alla volta", () => {
   it("aprirne una chiude quella di un altro bersaglio, di chiunque sia", async () => {
     const first = link("Uno");

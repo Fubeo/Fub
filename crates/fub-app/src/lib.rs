@@ -33,17 +33,18 @@ use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::format::SourceKind;
-use fub_abi::grid::{
-    GridApplyRequest, GridCommit, GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
-};
+use fub_abi::grid::{GridApplyRequest, GridCommit, GridSurfaceSpec, GridWindowRequest};
 use fub_abi::locale::Locale;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::{SettingScope, SettingValue};
 use fub_abi::theme::ThemeLight;
 use fub_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
-use fub_abi::{Notice, PluginError};
-use fub_host::{doc_id, Delivery, EventSink, Host};
+use fub_abi::{
+    GridBytesSession, GridBytesWindow, GridCommandOutcome, GridCommandRequest, GridCommandState,
+    GridSelection, Notice, PluginError,
+};
+use fub_host::{doc_id, document_text, Delivery, DocumentText, EventSink, Host};
 use fub_wasm_host::catalog::{CatalogEntry, CatalogError, CatalogTrust, SignedFeed};
 use fub_wasm_host::installed::Consent;
 use fub_wasm_host::managed::{InstalledOperation, InstalledPluginManager, InstalledShutdown};
@@ -463,6 +464,9 @@ pub struct DocumentSource {
     pub revision: String,
     pub format_id: Option<String>,
     pub source_kind: SourceKind,
+    /// `grid_journal` per una cartella di Excel: il testo è il giornale delle
+    /// celle cambiate, e i byte si leggono soltanto dalla griglia.
+    pub text_kind: DocumentText,
 }
 
 /// Il lavoro di un comando sui documenti fuori dal thread principale: aprire
@@ -492,6 +496,7 @@ async fn read_document(
     off_main(app, move |host| {
         let (text, revision, format) = host.read_document_with_format(vault.as_deref(), &id)?;
         let format_id = format.as_ref().map(|known| known.descriptor.id.clone());
+        let text_kind = document_text(format.as_ref());
         let source_kind = format
             .map(|known| known.descriptor.source)
             .unwrap_or(SourceKind::Text);
@@ -500,6 +505,7 @@ async fn read_document(
             revision: revision.0,
             format_id,
             source_kind,
+            text_kind,
         })
     })
     .await
@@ -683,66 +689,77 @@ fn list_grid_surfaces(
     host.grid_surfaces(vault.as_deref())
 }
 
+/// Apre una superficie grid della versione 2 sui byte di un documento. La
+/// shell non porta i byte: manda il diario delle celle cambiate (il testo
+/// della sessione documento) e la revisione dei byte da cui parte; l'host li
+/// legge e rifiuta con `Conflict` se nel frattempo sono cambiati.
 #[tauri::command]
-fn open_grid(
+fn open_grid_bytes(
     host: State<Host>,
     surface: String,
-    source: String,
-    revision: String,
+    doc: String,
+    journal: String,
+    base: String,
     vault: Option<String>,
-) -> Result<GridSession, PluginError> {
-    host.grid_open(vault.as_deref(), &surface, &source, Revision(revision))
+) -> Result<GridBytesSession, PluginError> {
+    let doc = doc_id(&doc)?;
+    host.grid_bytes_open(vault.as_deref(), &surface, &doc, &journal, Revision(base))
 }
 
 #[tauri::command]
-fn grid_window(
+fn grid_bytes_window(
     host: State<Host>,
     surface: String,
     instance: String,
     request: GridWindowRequest,
     vault: Option<String>,
-) -> Result<GridWindow, PluginError> {
-    host.grid_window(vault.as_deref(), &surface, &instance, request)
+) -> Result<GridBytesWindow, PluginError> {
+    host.grid_bytes_window(vault.as_deref(), &surface, &instance, request)
 }
 
 #[tauri::command]
-fn apply_grid(
+fn apply_grid_bytes(
     host: State<Host>,
     surface: String,
     instance: String,
     request: GridApplyRequest,
     vault: Option<String>,
 ) -> Result<GridCommit, PluginError> {
-    host.grid_apply(vault.as_deref(), &surface, &instance, request)
+    host.grid_bytes_apply(vault.as_deref(), &surface, &instance, request)
 }
 
+/// Il catalogo dei comandi di una sessione grid sulla selezione.
 #[tauri::command]
-fn reload_grid(
+fn grid_bytes_commands(
     host: State<Host>,
     surface: String,
     instance: String,
-    source: String,
-    revision: String,
+    selection: GridSelection,
     vault: Option<String>,
-) -> Result<GridSession, PluginError> {
-    host.grid_reload(
-        vault.as_deref(),
-        &surface,
-        &instance,
-        Revision(revision),
-        &source,
-        Revision::of(&source),
-    )
+) -> Result<Vec<GridCommandState>, PluginError> {
+    host.grid_bytes_commands(vault.as_deref(), &surface, &instance, selection)
+}
+
+/// Un comando del catalogo (ADR 0219): l'esito porta il diff del giornale.
+#[tauri::command]
+fn grid_bytes_command(
+    host: State<Host>,
+    surface: String,
+    instance: String,
+    request: GridCommandRequest,
+    vault: Option<String>,
+) -> Result<GridCommandOutcome, PluginError> {
+    host.grid_bytes_command(vault.as_deref(), &surface, &instance, request)
 }
 
 #[tauri::command]
-fn close_grid(
+fn close_grid_bytes(
     host: State<Host>,
     surface: String,
     instance: String,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    host.grid_close(vault.as_deref(), &surface, &instance)
+    host.grid_bytes_close(vault.as_deref(), &surface, &instance)
 }
 
 /// **Scrive un documento intero** dichiarando da cosa parte (§18.1, §23.11).
@@ -2647,11 +2664,12 @@ pub fn run() {
             viewer_control,
             viewer_save,
             list_grid_surfaces,
-            open_grid,
-            grid_window,
-            apply_grid,
-            reload_grid,
-            close_grid,
+            open_grid_bytes,
+            grid_bytes_window,
+            apply_grid_bytes,
+            grid_bytes_commands,
+            grid_bytes_command,
+            close_grid_bytes,
             write_document,
             save_draft,
             list_bundles,

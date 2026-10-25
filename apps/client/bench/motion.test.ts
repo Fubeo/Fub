@@ -18,21 +18,23 @@ import { SCENE as scenes } from "./scene.mjs";
 import {
   ALLOWED,
   CHOREOGRAPHIES as choreographies,
+  EXIT_LIMIT_MS,
   UNCOVERED as uncovered,
   cssName,
   family,
   foreignInKeyframes,
   foreignProperties,
   jumps,
+  longExits,
   midpoint,
   residue,
 } from "./motion-rules.mjs";
 
-/// I sorgenti della shell e del kit, come Vite li vede: il percorso dalla
+/// I sorgenti della shell, dei pannelli e del kit, come Vite li vede: il percorso dalla
 /// radice del client e il testo.
 const sources = new Map(
   Object.entries(
-    import.meta.glob(["../src/shells/scrittoio/**/*.ts", "../src/kit/**/*.ts"], {
+    import.meta.glob(["../src/shells/scrittoio/**/*.ts", "../src/panels/**/*.ts", "../src/kit/**/*.ts", "../src/ui/motion.ts"], {
       eager: true,
       query: "?raw",
       import: "default",
@@ -213,5 +215,27 @@ describe("la metà corsa", () => {
   it("senza corse vale il ripiego, e non scende mai sotto un fotogramma", () => {
     expect(midpoint([], 50)).toBeCloseTo(3 * frame, 9);
     expect(midpoint([4])).toBeCloseTo(frame, 9);
+  });
+});
+
+describe("la regola 5: le uscite sono brevi", () => {
+  it("tiene il limite del piano, e conta anche il ritardo", () => {
+    expect(EXIT_LIMIT_MS).toBe(140);
+    const runs = [
+      { target: "#a", duration: 140, delay: 0 },
+      { target: "#b", duration: 100, delay: 60 },
+      { target: "#c", pseudo: "::after", duration: 220, delay: 0 },
+    ];
+    expect(longExits(runs)).toEqual([
+      { target: "#b", length: 160 },
+      { target: "#c::after", length: 220 },
+    ]);
+  });
+
+  it("vale per qualche coreografia: un elenco di uscite vuoto non prova niente", () => {
+    expect(choreographies.filter((c) => c.exit).length).toBeGreaterThanOrEqual(3);
+    for (const c of choreographies.filter((c) => c.exit)) {
+      expect(typeof c.undo, `${c.id} esce senza un gesto che disfa`).toBe("function");
+    }
   });
 });

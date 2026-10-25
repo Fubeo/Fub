@@ -98,8 +98,8 @@ export function openCompare(title: string, theirs: string, mine: string): void {
     if (event.target === overlay) dismiss();
   });
   document.body.append(overlay);
-  enterSurface(overlay, { viewTransition: false });
-  life.add(() => exitSurface(overlay, () => overlay.remove(), { viewTransition: false }));
+  enterSurface(overlay);
+  life.add(() => exitSurface(overlay, () => overlay.remove()));
   life.add(trapFocus(overlay, dismiss));
   close.focus();
 }

@@ -51,9 +51,6 @@ use fub_abi::{FormatProvider, PluginError};
 use fub_kernel::{FormatRegistry, Trust, Workspace};
 
 pub mod format;
-pub mod grid;
-
-pub use grid::{GridCall, GridHarness};
 
 pub use format::{SampleExtractor, SampleText};
 

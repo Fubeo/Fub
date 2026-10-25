@@ -138,6 +138,9 @@ import { showActivity } from "../panels/activity";
 import { notify } from "../ui/notify";
 import { applyIntent } from "../ui/intents";
 import { slashContextDoc } from "./slash";
+import { openSlashPalette, recentCommands, rememberCommand } from "../ui/palette";
+import { slashMenuEntries } from "../panels/slash-menu";
+import type { SelectionBox } from "../editors/core/editor-actions";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
 import { errorText } from "../host/errors";
 import { onLanguage, t } from "../i18n/strings";
@@ -514,6 +517,14 @@ function focusedAnchorSurface(): { doc: string; anchorHere: () => SurfaceAnchor 
   return { doc: r.shown.doc, anchorHere: () => surface.anchorHere?.() ?? null };
 }
 
+/// Ctrl+F fuori dal testo apre la stessa barra che apre dentro: quella della
+/// superficie del riquadro col fuoco, se ne ha una nella modalità attuale.
+export function findInFocusedSurface(): boolean {
+  const r = panes.get(layout.focus);
+  if (r?.shown?.k !== "doc") return false;
+  return r.surface?.find?.() ?? false;
+}
+
 /// «Copia il link a questo punto»: `[[Nota#Titolo]]` o `[[Nota#^id]]` negli
 /// appunti, scritto come vuole il vault, come per una nota trascinata; a un
 /// blocco senza id la superficie ne scrive uno. Negli appunti un link Markdown
@@ -791,6 +802,14 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       notify,
       flushPendingSave,
       publishContext,
+      menu: {
+        enabled: () => document.getElementById("app")?.dataset["slash"] !== "off",
+        entries: (query, has) => slashMenuEntries(state.commandSpecs, query, has, recentCommands()),
+        chosen: (entry, owner, anchor) => {
+          rememberCommand(entry.id);
+          if (!entry.action) runSlashCommand(owner, entry.id, "", anchor);
+        },
+      },
     },
     completions: {
       searchNotes: (prefix: string) =>
@@ -801,6 +820,14 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       blocksOf: (page: string) => noteBlocks(page).catch(() => []),
     },
     gridHost: api,
+    exportDocument: {
+      available: () => state.commandSpecs.some((spec) => spec.id === EXPORT_COMMAND),
+      run: (doc, chosen) => void runExport(doc, chosen),
+    },
+    documentBase: (doc) => {
+      const base = documentSessions.inspect(doc)?.base;
+      return base?.kind === "descends_from" ? base.value : null;
+    },
     media: {
       transport: mediaTransport,
       assetUrl: api.assetUrl,
@@ -2169,6 +2196,15 @@ export function selectedMode(r: Pane | undefined): SurfaceMode | undefined {
     ?? modes[0];
 }
 
+/// Il contesto della modalità del riquadro col fuoco (sorgente, Live,
+/// Lettura), se la sua superficie ne offre più d'uno: è ciò che il menu Vista
+/// spunta.
+export function focusedContextMode(): PaneMode | undefined {
+  const r = panes.get(layout.focus);
+  if ((r?.surface?.modes.length ?? 0) < 2) return undefined;
+  return selectedMode(r)?.contextMode;
+}
+
 /// Le modalità della superficie del riquadro col fuoco; nessuna senza superficie.
 function focusedModes(): readonly SurfaceMode[] {
   return panes.get(layout.focus)?.surface?.modes ?? [];
@@ -2581,6 +2617,23 @@ function paneContext(): ViewContext {
 /// invecchiate. Chi le ridisegna è l'host dei pannelli (`ui/panel-host.ts`): il
 /// verso passa dal bus e non da una chiamata, perché la catena che le monta
 /// dipende già da questo modulo.
+/// Esegue un comando del «/» scelto fuori dalla palette (il «/» nel testo,
+/// «Comandi ▸» del tasto destro), per la stessa via della palette: il modulo
+/// e il piano accanto ad `anchor`, il flush prima di scrivere, il contesto
+/// pubblicato. Vale finché il documento del gesto resta quello a fuoco.
+export function runSlashCommand(owner: HTMLElement, command: string, selection: string, anchor: SelectionBox | null): void {
+  const doc = slashContextDoc();
+  void openSlashPalette(
+    owner,
+    selection,
+    () => owner.isConnected && slashContextDoc() === doc,
+    { onEffect: applyIntent, notify, flushPendingSave, publishContext },
+    undefined,
+    anchor,
+    command,
+  );
+}
+
 export async function publishContext(): Promise<void> {
   window.clearTimeout(contextTimer);
   try {

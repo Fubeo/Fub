@@ -65,16 +65,6 @@ const BOARD = JSON.stringify({
   nodes: [{ id: "prima", type: "text", text: "prima", x: 0, y: 0, width: 10, height: 10 }],
   edges: [],
 });
-const SHEET = JSON.stringify({
-  version: 1,
-  sheets: [{
-    id: "main",
-    name: "Main",
-    rows: [{ id: "r0", hidden: false }],
-    columns: [{ id: "c0", hidden: false }],
-    cells: [{ row: "r0", column: "c0", input: "1" }],
-  }],
-});
 const VAULT = {
   "Benvenuto.md": "# Benvenuto\n",
   "Plain.txt": "solo testo\n",
@@ -82,7 +72,6 @@ const VAULT = {
   "albero.svg": TREE,
   "logo.svg": FOREIGN,
   "lavagna.canvas": BOARD,
-  "conti.fubsheet": SHEET,
   "foto.png": "png",
 };
 
@@ -300,7 +289,6 @@ describe("un .svg è un disegno", () => {
       ["Benvenuto.md", ["shell.mode.reading", "shell.mode.live", "shell.mode.source"]],
       ["Plain.txt", []],
       ["lavagna.canvas", ["shell.mode.live", "shell.mode.source"]],
-      ["conti.fubsheet", []],
       ["foto.png", []],
     ];
     for (const [doc, expected] of cases) {
@@ -677,7 +665,7 @@ describe("«Esporta…» su un disegno", () => {
     expect(await offered(EXPORT_COMMANDS)).toEqual(EXPORT_COMMANDS);
     await open("logo.svg");
     expect(await offered(EXPORT_COMMANDS), "un SVG estraneo").toEqual(EXPORT_COMMANDS);
-    for (const doc of ["lavagna.canvas", "conti.fubsheet", "foto.png"]) {
+    for (const doc of ["lavagna.canvas", "foto.png"]) {
       await open(doc);
       expect(await offered(EXPORT_COMMANDS), doc).toEqual([]);
     }

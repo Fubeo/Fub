@@ -98,6 +98,17 @@
 .vault-chip[data-empty] .vault-chip-icon {
   background: var(--border-strong);
 }
+/* Il vault ha un'icona scelta: prende il posto del quadratino. */
+.vault-chip-icon:not(:empty) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  background: none;
+  font-size: var(--text-base);
+  line-height: 1;
+}
 
 .vault-chip-name {
   max-width: 200px;

@@ -184,12 +184,25 @@ function keyframe(tracks: readonly (number[] | null)[], index: number): Keyframe
   return frame;
 }
 
+/// Una presenza: una corsa che fa apparire o sparire, perché una delle due
+/// pose è trasparente.
+function isPresence(spec: MotionSpec): boolean {
+  return (spec.from?.opacity ?? 1) < 1 || (spec.to?.opacity ?? 1) < 1;
+}
+
+/// Nel calmo una presenza fa metà strada: i canali di trasformazione vanno a
+/// metà fra la posa e il riposo, l'opacità resta quella.
+function halfway(vector: readonly number[]): number[] {
+  return vector.map((value, channel) => (channel === OPACITY ? value : REST[channel] + (value - REST[channel]) / 2));
+}
+
 function plot(
   from: readonly number[],
   to: readonly number[],
   speed: readonly number[],
   spec: MotionSpec,
   level: MotionLevel,
+  presence: boolean,
 ): Plan | null {
   const reduced = level === "reduced";
   const timed = reduced || spec.duration !== undefined;
@@ -208,7 +221,7 @@ function plot(
         return start + (target - start) * curve.at(Math.min(1, (index * SAMPLE_MS) / duration));
       });
   } else {
-    const spring = springFor(spec.spring ?? "soft", level === "calm");
+    const spring = springFor(spec.spring ?? "soft", level === "calm", presence);
     sample = (start, target, channel) =>
       sampleSpring(spring, {
         from: start,
@@ -367,14 +380,19 @@ export function launch(el: Element, spec: MotionSpec, extras: LaunchExtras = {})
   const level = motionLevel();
   const reduced = level === "reduced";
   const skipped = spec.lifetime?.closed || driver.instant || (reduced && spec.whenReduced !== "fade");
+  // Gli estremi dichiarati restano quelli di `reverse`: la metà strada è del
+  // percorso, non della corsa.
+  const presence = level === "calm" && isPresence(spec);
+  const start = presence ? halfway(home) : home;
   const plan = skipped
     ? null
     : plot(
-        state ? vectorOf(state.pose, home) : home,
-        goal,
+        state ? vectorOf(state.pose, start) : start,
+        presence ? halfway(goal) : goal,
         vectorOf(state ? { ...spec.velocity, ...state.velocity } : spec.velocity, STILL),
         spec,
         level,
+        presence,
       );
   if (!plan) {
     end(run);

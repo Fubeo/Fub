@@ -23,7 +23,7 @@
 //!
 //! - i **bundle** dichiarati sono esattamente le feature dell'inventario più i
 //!   bundle infrastrutturali dell'host: `fub.core`, `fub.maintenance`,
-//!   `fub.markdown`, `fub.sheet`, il tema di serie e `fub.importers` (sempre),
+//!   `fub.markdown`, il tema di serie e `fub.importers` (sempre),
 //!   più `fub.sync` e `fub.publish` solo con la cargo feature `http-client`.
 //!   Una feature registrata a mano è rossa qui;
 //! - le **view** montate sono esattamente quelle che i provider dell'inventario
@@ -86,7 +86,6 @@ fn declared_bundles_are_inventory_plus_host_infrastructure() {
             CORE_ID.to_string(),
             fub_kernel::maintenance::MAINTENANCE_ID.to_string(),
             "fub.markdown".to_string(),
-            "fub.sheet".to_string(),
             fub_host::theme::SERIES_ID.to_string(),
             fub_importers::PLUGIN_ID.to_string(),
         ])
@@ -94,6 +93,9 @@ fn declared_bundles_are_inventory_plus_host_infrastructure() {
     // Le copie dei documenti di videoscrittura vengono col loro codec.
     #[cfg(feature = "rich")]
     expected.insert("fub.rich".to_string());
+    // La griglia delle cartelle di Excel viene col loro codec.
+    #[cfg(feature = "xlsx")]
+    expected.insert("fub.xlsx".to_string());
     #[cfg(feature = "http-client")]
     {
         expected.insert(fub_host::remote::views::SYNC_ID.to_string());

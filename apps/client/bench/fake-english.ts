@@ -76,7 +76,8 @@ export const ENGLISH: Readonly<Record<string, string>> = {
   "Quanto posto prendono le barre attorno ai fogli: 0 comoda, 4 minima. I fogli non cambiano.":
     "How much room the bars around the sheets take: 0 roomy, 4 minimal. The sheets do not change.",
   Tema: "Theme",
-  "In che luce si guarda Fub. Vuoto = come il sistema.": "The light Fub is seen in. Empty = like the system.",
+  "In che luce si guarda Fub. «Come il sistema» segue il sistema operativo.":
+    "The light Fub is seen in. “Like the system” follows the operating system.",
   "Come il sistema": "Like the system",
   Chiaro: "Light",
   Scuro: "Dark",
@@ -86,8 +87,8 @@ export const ENGLISH: Readonly<Record<string, string>> = {
   Normale: "Normal",
   Alto: "High",
   Densità: "Density",
-  "Compatta o allarga la spaziatura dei componenti senza muovere la scocca.":
-    "Tightens or widens the spacing of components without moving the frame.",
+  "Compatta o allarga la spaziatura dei controlli senza cambiare la disposizione dei pannelli.":
+    "Tightens or loosens the spacing of controls without changing the panel layout.",
   Compatta: "Compact",
   Comoda: "Comfortable",
   Rilassata: "Relaxed",
@@ -100,11 +101,11 @@ export const ENGLISH: Readonly<Record<string, string>> = {
   "Carattere di lettura": "Reading typeface",
   "Famiglia usata per la prosa lunga.": "Family used for long prose.",
   "Del sistema": "System",
-  "Tinta dell'accento (0–360)": "Accent hue (0–360)",
-  "Tinta OKLCH; chiarezza e croma vengono derivati per mantenere il contrasto.":
-    "OKLCH hue; lightness and chroma are derived to keep the contrast.",
+  "Tinta dell'accento": "Accent hue",
+  "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.":
+    "The colour of links, focus and selection. Lightness and intensity adapt by themselves to stay readable.",
   "Zoom interfaccia": "Interface zoom",
-  "Scala nativa della finestra, da 0,5 a 2.": "Native window scale, from 0.5 to 2.",
+  "Quanto è grande tutta l'interfaccia, dal 50% al 200%.": "How large the whole interface is, from 50% to 200%.",
   "Numeri di riga": "Line numbers",
   "Mostra la grondaia con il numero di ogni riga.": "Shows the gutter with the number of each line.",
   "Larghezza della colonna": "Column width",

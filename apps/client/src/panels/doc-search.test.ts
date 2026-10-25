@@ -15,13 +15,15 @@ const fixture = vi.hoisted(() => ({
   state: { currentDoc: "old.md" as string | null },
   matching: vi.fn(),
   reveal: vi.fn(),
+  find: vi.fn(() => false),
+  register: vi.fn(),
   pending: [] as Array<{ resolve: (page: Page) => void }>,
 }));
 
 vi.mock("../state/store", () => ({ state: fixture.state }));
 vi.mock("../host/query", () => ({ matchingDocuments: fixture.matching }));
-vi.mock("../state/document-controller", () => ({ reveal: fixture.reveal }));
-vi.mock("../ui/commands", () => ({ registerShellCommand: vi.fn() }));
+vi.mock("../state/document-controller", () => ({ reveal: fixture.reveal, findInFocusedSurface: fixture.find }));
+vi.mock("../ui/commands", () => ({ registerShellCommand: fixture.register }));
 vi.mock("../ui/a11y", () => ({
   trapFocus: (_root: HTMLElement, _close: () => void) => () => {},
 }));
@@ -37,7 +39,7 @@ vi.mock("../i18n/strings", () => ({
     args.count === undefined ? key : `${key}:${args.count}`,
 }));
 
-import { closeInDocumentSearch, openInDocumentSearch } from "./doc-search";
+import { closeInDocumentSearch, mountDocSearch, openInDocumentSearch } from "./doc-search";
 
 function page(doc: string, offset: number, snippet: string): Page {
   return {
@@ -142,5 +144,26 @@ describe("ciclo di vita della ricerca nella nota", () => {
     // Il punto va al documento cercato, nominato: non al riquadro col fuoco.
     box().querySelector<HTMLButtonElement>("button.search-result")!.click();
     expect(fixture.reveal).toHaveBeenCalledWith("new.md", { span: { start: 30, end: 30 } });
+  });
+});
+
+describe("Ctrl+F, una sola barra", () => {
+  function command(): () => void {
+    fixture.register.mockClear();
+    mountDocSearch();
+    return fixture.register.mock.calls[0]![0].run;
+  }
+
+  it("dove la superficie ha la sua barra apre quella, e il modale non c'è", () => {
+    fixture.find.mockReturnValueOnce(true);
+    command()();
+    expect(fixture.find).toHaveBeenCalled();
+    expect(document.getElementById("doc-search")).toBeNull();
+  });
+
+  it("dove non ce l'ha, in Lettura, cerca nella nota col motore della ricerca", () => {
+    fixture.find.mockReturnValueOnce(false);
+    command()();
+    expect(document.querySelector("#doc-search .palette-box")).not.toBeNull();
   });
 });

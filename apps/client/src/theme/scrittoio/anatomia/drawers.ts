@@ -24,12 +24,13 @@ export const DRAWERS: PartAnatomy = {
       ],
     },
     { name: "divider", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["layout-divider"] },
-    // `search-results` e `drop-into` sono di altri pezzi: qui dicono soltanto
-    // quale titolo è l'esito della ricerca e quale è bersaglio di un rilascio.
+    // `search-results`, `search-exclusions` e `drop-into` sono di altri pezzi:
+    // qui dicono soltanto quale titolo è l'esito della ricerca e quale è
+    // bersaglio di un rilascio.
     {
       name: "panel-title",
       states: [S("rest"), S("hover"), S("pressed"), S("focused"), S("dragging")],
-      hooks: ["panel-title", "link-button", "danger", "clickable", "search-results", "drop-into"],
+      hooks: ["panel-title", "link-button", "danger", "clickable", "search-results", "search-exclusions", "drop-into"],
     },
     {
       name: "space-strip",

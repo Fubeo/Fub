@@ -364,7 +364,7 @@ pub fn frontmatter(
 /// be a multiple of four and padding may only close the final group.
 pub fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
     let bytes = input.as_bytes();
-    if bytes.len() % 4 != 0 {
+    if !bytes.len().is_multiple_of(4) {
         return Err("base64 length is not a multiple of 4".to_string());
     }
     let pad = bytes.iter().rev().take_while(|&&b| b == b'=').count();
@@ -400,8 +400,8 @@ pub fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
 /// Fallback plain-text import: the contract's faithful minimum.
 ///
 /// Claims `.txt`/`.text` (and `text/plain` without an extension), never
-/// `.md`/`.markdown` (owned by `fub.markdown`), never `.base`/`.canvas`/
-/// `.fubsheet` (owned by their format crates: those fall back to source
+/// `.md`/`.markdown` (owned by `fub.markdown`), never `.base`/`.canvas`
+/// (owned by their format crates: those fall back to source
 /// text only through their own providers, never through a generic import).
 #[derive(Default)]
 pub struct TextImport;

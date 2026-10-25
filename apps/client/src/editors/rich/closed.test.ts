@@ -122,7 +122,7 @@ describe("un blocco chiuso", () => {
 
   it("arrivato da un altro riquadro o dal disco entra com'è", () => {
     const { e, changes } = engine();
-    const other = CLOSED.replace(`"x":"chiuso","k":"eyJsYW5nIjoiaXQtSVQifQ"}]},{"t":"table"`, `"x":"riaperto","k":"eyJsYW5nIjoiaXQtSVQifQ"}]},{"t":"table"`);
+    const other = CLOSED.replace(`"x":"chiuso","k":"e30"}]},{"t":"table"`, `"x":"riaperto","k":"e30"}]},{"t":"table"`);
     expect(other).not.toBe(CLOSED);
     e.syncDoc(other);
     expect(e.state.doc.child(1).textContent).toBe("riaperto");

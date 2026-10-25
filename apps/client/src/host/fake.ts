@@ -47,10 +47,11 @@ import type {
   DraftInfo,
   DocumentWindowEvent,
   DocumentWindowRequest,
+  GridBytesSession,
+  GridBytesWindow,
+  GridCommandOutcome,
   GridCommit,
-  GridSession,
   GridSurfaceSpec,
-  GridWindow,
   IndexQuery,
   IndexResult,
   KernelEvent,
@@ -128,6 +129,9 @@ interface Lease {
 const CHUNK_MAX = 64 * 1024;
 /// I formati di `fub-format-rich` con la feature `rich` dell'host.
 const RICH_FAKE_FORMATS: ReadonlySet<string> = new Set(["docx", "odt", "rtf", "doc"]);
+/// Le estensioni delle cartelle di `fub-format-xlsx`, con la feature `xlsx`
+/// dell'host: la shell ne riceve la proiezione, e non le scrive.
+const XLSX_FAKE_EXTENSIONS = ["xlsx", "xlsm", "xltx", "xltm"] as const;
 
 /// Una voce del cestino finto.
 interface Trashed {
@@ -135,11 +139,18 @@ interface Trashed {
   text: string;
 }
 
-export interface GridFake {
+/// Una superficie della versione 2: si apre sui byte di un documento del
+/// vault, e le finestre portano valore, blocco e conflitto di ogni cella.
+export interface GridBytesFake {
   surface: GridSurfaceSpec;
-  session: GridSession;
-  windows: GridWindow[];
+  session: GridBytesSession;
+  /// Le finestre per revisione: dopo un commit il finto dà quelle della sua
+  /// revisione, se le ha, e altrimenti quelle della sessione.
+  windows: GridBytesWindow[];
   commits?: GridCommit[];
+  /// Gli esiti dei comandi, in ordine: senza, il finto rifiuta ogni comando
+  /// come un provider che modifica soltanto con le patch.
+  outcomes?: GridCommandOutcome[];
 }
 
 export interface Options {
@@ -164,7 +175,7 @@ export interface Options {
   /// consenso: il fake non li ricava dai bundle runtime.
   installedPlugins?: InstalledPluginInfo[];
   installablePlugins?: Record<string, InstalledPluginInfo>;
-  grid?: GridFake;
+  gridBytes?: GridBytesFake;
   /// Provider finti per le query custom, indicizzati dal namespace.
   customQueries?: Record<string, (query: unknown) => unknown>;
   /// I vault che la macchina ricorda (i recenti). `forgetVault` li toglie.
@@ -329,12 +340,15 @@ function resolveAgainst(from: string, raw: string): string | null {
 /// L'host finto, pronto a rispondere.
 export function createFakeHost(options: Options = {}): FakeHost {
   const root = options.root === undefined ? "/vault" : options.root;
-  const grid = options.grid;
-  const gridInstances = new Map<string, GridSession>();
-  const gridWindows = new Map(
-    (grid?.windows ?? []).map((window) => [`${grid?.session.instance}\u0000${window.sheet}\u0000${window.row_start}\u0000${window.column_start}`, window]),
+  const gridBytes = options.gridBytes;
+  const gridBytesInstances = new Map<string, GridBytesSession>();
+  const gridBytesKey = (revision: string, sheet: string, row: number, column: number) =>
+    `${revision}\u0000${sheet}\u0000${row}\u0000${column}`;
+  const gridBytesWindows = new Map(
+    (gridBytes?.windows ?? []).map((window) => [gridBytesKey(window.revision, window.sheet, window.row_start, window.column_start), window]),
   );
-  let gridCommit = 0;
+  let gridBytesCommit = 0;
+  let gridBytesOutcome = 0;
   const docs = new Map<string, Document>();
   let known = [...(options.knownVaults ?? [])];
   const trash = new Map<string, Trashed>();
@@ -411,7 +425,6 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// o `null`: allora nessun provider serve il file e `write_document` lo
   /// rifiuta (`unserved`), come nel kernel.
   function formatOf(id: string): string | null {
-    if (id.endsWith(".fubsheet")) return "fubsheet";
     if (id.endsWith(".canvas")) return "canvas";
     if (id.endsWith(".base")) return "base";
     if (id.endsWith(".md") || id.endsWith(".markdown")) return "markdown";
@@ -421,6 +434,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (id.endsWith(".odt")) return "odt";
     if (id.endsWith(".rtf")) return "rtf";
     if (id.endsWith(".doc") || id.endsWith(".dot")) return "doc";
+    if (XLSX_FAKE_EXTENSIONS.some((extension) => id.toLowerCase().endsWith(`.${extension}`))) return "xlsx";
     return null;
   }
 
@@ -428,7 +442,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// provider lo vuole a byte, e la shell ne riceve la proiezione
   /// (`fub-format-rich`).
   function sourceKindOf(id: string): "text" | "bytes" {
-    return RICH_FAKE_FORMATS.has(formatOf(id) ?? "") ? "bytes" : "text";
+    const format = formatOf(id) ?? "";
+    return RICH_FAKE_FORMATS.has(format) || format === "xlsx" ? "bytes" : "text";
   }
 
   /// Registra la chiamata e restituisce ciò che la porta risponde.
@@ -1242,7 +1257,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       configHealth: () => gate("configHealth", [], Promise.reject(new Error("host fake: configurazione di macchina non disponibile"))),
       recoverConfig: (path, action) => gate("recoverConfig", [path, action], Promise.reject(new Error("host fake: recovery senza disco"))),
       openVault: (path) => {
-        const extensions = ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", "fubsheet", "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : [])];
+        const extensions = ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", ...XLSX_FAKE_EXTENSIONS, "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : [])];
         const info: VaultInfo = { root: path, extensions, plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
@@ -1251,10 +1266,12 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const doc = docs.get(id);
         if (!doc) return gate("readDocument", named([id], vault), Promise.reject(new Error(`«${id}» non c'è`)));
         return gate("readDocument", named([id], vault), Promise.resolve({
-          text: doc.text,
+          // Una cartella si apre col giornale vuoto: i byte sono suoi.
+          text: formatOf(id) === "xlsx" ? "" : doc.text,
           revision: doc.revision,
           format_id: formatOf(id),
           source_kind: sourceKindOf(id),
+          text_kind: formatOf(id) === "xlsx" ? "grid_journal" : "source",
         }));
       },
       resourceOpen: (id, vault) => gate("resourceOpen", [id, vault], Promise.resolve().then((): ResourceDescriptor => {
@@ -1327,35 +1344,63 @@ export function createFakeHost(options: Options = {}): FakeHost {
         options.revealInSystem
           ? gate("revealInSystem", [path, open], options.revealInSystem(path, open))
           : unavailable("revealInSystem", [path, open]),
-      listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve(grid ? [grid.surface] : [])),
-      openGrid: (surface, source, revision) => gate("openGrid", [surface, source, revision], Promise.resolve().then(() => {
-        if (!grid || surface !== grid.surface.id) throw new Error("host fake: la famiglia grid non è montata");
-        const session = { ...grid.session, revision: revision || grid.session.revision };
-        gridInstances.set(session.instance, session);
+      listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve(gridBytes ? [gridBytes.surface] : [])),
+      // L'host legge i byte da sé: il finto controlla soltanto che il
+      // documento ci sia e che la revisione da cui la shell parte sia ancora
+      // la sua: altrimenti `conflict`, come l'host.
+      openGridBytes: (surface, doc, journal, base) => gate("openGridBytes", [surface, doc, journal, base], Promise.resolve().then(() => {
+        if (!gridBytes || surface !== gridBytes.surface.id) {
+          throw { kind: "unserved", message: "host fake: la superficie a byte non è montata" } satisfies PluginError;
+        }
+        const known = docs.get(doc);
+        if (!known) throw { kind: "not_found", message: `host fake: «${doc}» non c'è` } satisfies PluginError;
+        if (known.revision !== base) {
+          throw { kind: "conflict", message: `host fake: «${doc}» è cambiato sotto` } satisfies PluginError;
+        }
+        const session = { ...gridBytes.session };
+        gridBytesInstances.set(session.instance, session);
         return session;
       })),
-      gridWindow: (_surface, instance, request) => gate("gridWindow", [instance, request], Promise.resolve().then(() => {
-        if (!gridInstances.has(instance)) throw new Error("host fake: grid session closed");
-        const window = gridWindows.get(`${instance}\u0000${request.sheet}\u0000${request.row_start}\u0000${request.column_start}`);
+      gridBytesWindow: (_surface, instance, request) => gate("gridBytesWindow", [instance, request], Promise.resolve().then(() => {
+        if (!gridBytesInstances.has(instance)) throw new Error("host fake: grid session closed");
+        const window = gridBytesWindows.get(gridBytesKey(request.revision, request.sheet, request.row_start, request.column_start))
+          ?? gridBytesWindows.get(gridBytesKey(gridBytes!.session.revision, request.sheet, request.row_start, request.column_start));
         if (!window) throw new Error("host fake: grid window unavailable");
         return { ...window, revision: request.revision };
       })),
-      applyGrid: (_surface, instance, request) => gate("applyGrid", [instance, request], Promise.resolve().then(() => {
-        if (!gridInstances.has(instance)) throw new Error("host fake: grid session closed");
-        const commit = grid?.commits?.[gridCommit++];
+      applyGridBytes: (_surface, instance, request) => gate("applyGridBytes", [instance, request], Promise.resolve().then(() => {
+        const session = gridBytesInstances.get(instance);
+        if (!session) throw new Error("host fake: grid session closed");
+        const commit = gridBytes?.commits?.[gridBytesCommit++];
         if (!commit) throw new Error("host fake: grid commit unavailable");
-        const session = gridInstances.get(instance)!;
-        gridInstances.set(instance, { ...session, revision: commit.revision });
+        gridBytesInstances.set(instance, { ...session, revision: commit.revision });
         return commit;
       })),
-      reloadGrid: (_surface, instance, source, revision) => gate("reloadGrid", [instance, source, revision], Promise.resolve().then(() => {
-        if (!gridInstances.has(instance)) throw new Error("host fake: grid session closed");
-        const session = { ...grid!.session, instance, revision };
-        gridInstances.set(instance, session);
-        return session;
+      gridBytesCommands: (_surface, instance, selection) => gate("gridBytesCommands", [instance, selection], Promise.resolve().then(() => {
+        const session = gridBytesInstances.get(instance);
+        if (!session) throw new Error("host fake: grid session closed");
+        return session.commands;
       })),
-      closeGrid: (_surface, instance) => gate("closeGrid", [instance], Promise.resolve().then(() => {
-        gridInstances.delete(instance);
+      gridBytesCommand: (_surface, instance, request) => gate("gridBytesCommand", [instance, request], Promise.resolve().then(() => {
+        const session = gridBytesInstances.get(instance);
+        if (!session) throw new Error("host fake: grid session closed");
+        const outcome = gridBytes?.outcomes?.[gridBytesOutcome++];
+        if (!outcome) {
+          throw { kind: "bad_args", message: `host fake: grid command \`${request.command.id}\` is not served` } satisfies PluginError;
+        }
+        gridBytesInstances.set(instance, {
+          ...session,
+          revision: outcome.commit.revision,
+          sheets: outcome.sheets,
+          hidden: outcome.hidden,
+          commands: outcome.commands,
+        });
+        return outcome;
+      })),
+      closeGridBytes: (_surface, instance) => gate("closeGridBytes", [instance], Promise.resolve().then(() => {
+        if (!gridBytesInstances.delete(instance)) {
+          throw { kind: "not_found", message: "host fake: grid session closed" } satisfies PluginError;
+        }
       })),
       writeDocument: (id, source, base, vault) => {
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre
@@ -1373,6 +1418,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
           return gate("writeDocument", named([id, source, base], vault), Promise.reject(unserved));
         }
         const before = docs.get(id);
+        // Il testo di una cartella è il giornale delle celle (ADR 0216):
+        // l'host lo innesta nei byte, e il documento che resta ha il giornale
+        // vuoto e una revisione nuova. Il finto non ha byte da innestare, e
+        // tiene quelli che aveva.
+        if (formatOf(id) === "xlsx") {
+          if (!before || (base.kind === "descends_from" && before.revision !== base.value)) {
+            const conflict: PluginError = { kind: "conflict", message: `host fake: «${id}» è cambiato sotto` };
+            return gate("writeDocument", named([id, source, base], vault), Promise.reject(conflict));
+          }
+          revision += 1;
+          const rev = `r${revision}`;
+          docs.set(id, { ...before, text: "", revision: rev });
+          return gate("writeDocument", named([id, source, base], vault), Promise.resolve(rev));
+        }
         if (base.kind === "descends_from" && before && before.revision !== base.value) {
           const conflict: PluginError = {
             kind: "conflict",

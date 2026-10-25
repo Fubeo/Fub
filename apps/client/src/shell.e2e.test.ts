@@ -69,6 +69,10 @@ const box = vi.hoisted(() => ({
 
 let activeStop: (() => void) | null = null;
 let stopAnswering = (): void => {};
+// L'ultimo montaggio non ha un successore che fermi il suo intervallo: senza
+// questo, un giro dopo lo smontaggio dell'ambiente cerca un `document` che non
+// c'è più.
+afterAll(() => stopAnswering());
 
 // Il modulo mimato è **uno solo per tutto il file**, e delega all'host di
 // adesso a ogni chiamata. Non è un vezzo: `vi.resetModules()` svuota il
@@ -420,11 +424,10 @@ describe("il pannello delle impostazioni", () => {
       open.click();
       await settle();
       expect(panel.hidden).toBe(false);
-      expect(panel.dataset.shellMotion).toBe("enter");
       expect(start).not.toHaveBeenCalled();
 
+      // L'uscita è un'immagine che se ne va: il pannello è già nascosto.
       close.click();
-      panel.dispatchEvent(new Event("animationend"));
       expect(panel.hidden).toBe(true);
       expect(start).not.toHaveBeenCalled();
 
@@ -624,7 +627,9 @@ describe("filtra l'esplora per percorso", () => {
     await waitFor("l'albero torna", () => !document.querySelector<HTMLElement>("#file-list")!.hidden);
     await settle();
     expect(document.querySelector('#file-list li[data-path="note"]')?.getAttribute("aria-expanded")).toBe("true");
-    expect(document.querySelector<HTMLElement>(".explorer-filter")!.hidden).toBe(true);
+    // Il campo resta, vuoto: è l'unico campo del pannello File.
+    expect(document.querySelector<HTMLElement>(".explorer-filter")!.hidden).toBe(false);
+    expect(input.value).toBe("");
   });
 });
 
@@ -1712,6 +1717,26 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     expect(commands(host, "folder.rename")).toEqual([]);
   });
 
+  it("la riga trascinata si solleva finché dura il gesto, poi torna giù", async () => {
+    await start({ ...VAULT, "Altro.md": "y" });
+    const source = row("Altro.md")!;
+    source.dispatchEvent(dragEvent("dragstart"));
+    expect(source.hasAttribute("data-lifted")).toBe(true);
+    // Solo la riga d'origine: le altre restano al loro posto.
+    expect(document.querySelectorAll("#file-list [data-lifted]")).toHaveLength(1);
+    source.dispatchEvent(dragEvent("dragend"));
+    expect(document.querySelector("[data-lifted]")).toBeNull();
+
+    // Lo stesso per una linguetta.
+    source.click();
+    await waitFor("la nota ha la sua linguetta", () => !!document.querySelector(".tab-entry"));
+    const tab = document.querySelector<HTMLElement>(".tab-entry")!;
+    tab.dispatchEvent(dragEvent("dragstart"));
+    expect(tab.hasAttribute("data-lifted")).toBe(true);
+    tab.dispatchEvent(dragEvent("dragend"));
+    expect(document.querySelector("[data-lifted]")).toBeNull();
+  });
+
   it("le note scelte insieme si trascinano insieme", async () => {
     const host = await start({ ...VAULT, "Altro.md": "y" });
     row("Benvenuto.md")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
@@ -2567,6 +2592,20 @@ describe("spostare un file col testo non ancora sul disco", () => {
   });
 });
 
+describe("l'albero e le icone", () => {
+  it("una cartella senza icona ha la figura a tratto, e quella scelta la sostituisce", async () => {
+    await start(VAULT);
+    const folder = () => document.querySelector<HTMLElement>("#file-list .tree-row.folder")!;
+    await waitFor("la cartella è disegnata", () => document.querySelector("#file-list .tree-row.folder") !== null);
+    expect(folder().querySelector(".row-icon > svg")).not.toBeNull();
+    const path = folder().closest<HTMLElement>("[data-path]")!.dataset.path!;
+    const { setIcon } = await import("./state/organization");
+    await setIcon(path, "📚");
+    await waitFor("l'icona scelta arriva", () => folder().querySelector(".row-icon")?.textContent === "📚");
+    expect(folder().querySelector(".row-icon > svg")).toBeNull();
+  });
+});
+
 describe("cerca", () => {
   it("ordina per nome e comprime i risultati, dal pannello", async () => {
     await start(VAULT);
@@ -2584,8 +2623,11 @@ describe("cerca", () => {
       return list.length > 1 && list[0] !== [...list].sort((x, y) => x.localeCompare(y, "it", { numeric: true }))[0];
     });
     expect(titles()).toEqual([...titles()].sort((x, y) => y.localeCompare(x, "it", { numeric: true })));
-    const collapse = [...document.querySelectorAll<HTMLButtonElement>("#search-results .search-tools button")]
-      .find((b) => b.getAttribute("aria-pressed") === "false")!;
+    // Comprimere sta nel menu «⋯» degli strumenti, con le altre azioni rare.
+    document.querySelector<HTMLButtonElement>("#search-results .search-tools .search-more")!.click();
+    const collapse = [...document.querySelectorAll<HTMLElement>(".context-menu [role=menuitemcheckbox]")]
+      .find((item) => item.textContent?.includes("Comprimi"))!;
+    expect(collapse.getAttribute("aria-checked")).toBe("false");
     collapse.click();
     expect(document.querySelectorAll("#search-results .hit-snippet").length).toBe(0);
   });
@@ -2607,6 +2649,38 @@ describe("cerca", () => {
     expect(JSON.parse(offered.get("application/x-fub-entries")!)).toEqual([{ id: "note/Spesa.md", note: true }]);
     expect(offered.get("text/uri-list")).toBe("file:///vault/note/Spesa.md");
     expect(transfer.effectAllowed).toBe("copy");
+  });
+
+  it("una ricerca che tarda mostra la sagoma dei risultati, e la toglie quando arrivano", async () => {
+    const host = await start(VAULT);
+    const unlock = host.throttle("queryIndex");
+    const field = document.querySelector<HTMLInputElement>("#search-input")!;
+    field.value = "arance";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    const results = document.querySelector<HTMLElement>("#search-results")!;
+    await waitFor("la sagoma compare", () => results.querySelector(":scope > li.skeleton") !== null);
+    expect(results.getAttribute("aria-busy")).toBe("true");
+    expect(results.querySelector(".skeleton")!.getAttribute("aria-hidden")).toBe("true");
+    unlock();
+    await waitFor("i risultati arrivano", () => results.querySelectorAll("li > button.search-result").length > 0);
+    expect(results.querySelector(".skeleton")).toBeNull();
+    expect(results.hasAttribute("aria-busy")).toBe(false);
+  });
+
+  it("esclusa l'unica nota, la lista offre di togliere le esclusioni", async () => {
+    await start(VAULT);
+    const field = document.querySelector<HTMLInputElement>("#search-input")!;
+    field.value = "arance";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    await waitFor("i risultati arrivano", () => document.querySelectorAll("#search-results li > button.search-result").length > 0);
+    [...document.querySelectorAll<HTMLButtonElement>("#search-results .search-action")]
+      .find((button) => button.textContent === "Escludi")!.click();
+    const clear = () => [...document.querySelectorAll<HTMLButtonElement>("#search-results li > button.search-result")]
+      .find((button) => button.textContent === "Togli le esclusioni (1)");
+    await waitFor("la via d'uscita c'è", () => clear() !== undefined);
+    clear()!.click();
+    await waitFor("la nota torna", () => document.querySelector("#search-results .hit-path")?.textContent?.includes("Spesa") === true);
+    expect(clear()).toBeUndefined();
   });
 
   it("la casella trova, e il risultato apre il documento", async () => {
@@ -3118,10 +3192,10 @@ describe("i riquadri dopo un'attesa", () => {
     expect(errorSurfaces()).toHaveLength(0);
   });
 
-  it("uno sheet rotto mostra la superficie d'errore, non un riquadro vuoto", async () => {
-    await start({ ...VAULT, "conti.fubsheet": "{rotto" });
+  it("un canvas rotto all'apertura mostra la superficie d'errore, non un riquadro vuoto", async () => {
+    await start({ ...VAULT, "lavagna.canvas": "{rotto" });
     const { openDocument } = await import("./panels/document");
-    await openDocument("conti.fubsheet");
+    await openDocument("lavagna.canvas");
     await settle();
 
     expect(errorSurfaces()).toHaveLength(1);
@@ -3129,7 +3203,7 @@ describe("i riquadri dopo un'attesa", () => {
   });
 
   it("un riquadro che non si monta non ferma l'altro", async () => {
-    await start({ ...VAULT, "conti.fubsheet": "{rotto" });
+    await start({ ...VAULT, "lavagna.canvas": "{rotto" });
     await splitRight();
     await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
     await settle();
@@ -3138,7 +3212,7 @@ describe("i riquadri dopo un'attesa", () => {
     const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
 
     panes()[0]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-    await openDocument("conti.fubsheet");
+    await openDocument("lavagna.canvas");
     await waitFor("il primo riquadro mostra l'errore", () => errorSurfaces().length === 1);
 
     panes()[1]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
@@ -3167,18 +3241,6 @@ describe("i riquadri dopo un'attesa", () => {
     expect(texts[1]).toBe(texts[0]);
     expect(texts[1]).toContain("[durante il montaggio]");
   });
-});
-
-/// Un foglio minimo che la superficie a griglia accetta.
-const SHEET = JSON.stringify({
-  version: 1,
-  sheets: [{
-    id: "main",
-    name: "Main",
-    rows: [{ id: "r0", hidden: false }],
-    columns: [{ id: "c0", hidden: false }],
-    cells: [{ row: "r0", column: "c0", input: "1" }],
-  }],
 });
 
 /// Una tela con due carte: la seconda lontana dalla prima.
@@ -3233,15 +3295,15 @@ describe("portare a schermo un punto", () => {
   });
 
   it("una superficie che non sa portarci lo dice, invece di non fare niente", async () => {
-    await start({ ...VAULT, "conti.fubsheet": SHEET });
+    await start({ ...VAULT, "foto.png": "png" });
     const { applyIntent } = await import("./ui/intents");
     const { t } = await import("./i18n/strings");
 
-    await applyIntent({ kind: "reveal", doc: "conti.fubsheet", span: { start: 3, end: 3 } });
+    await applyIntent({ kind: "reveal", doc: "foto.png", span: { start: 3, end: 3 } });
     await settle();
 
-    expect(panes()[0]!.querySelector("[data-surface-mode='sheet']"), "lo sheet è aperto").not.toBeNull();
-    expect(toast()).toContain(t("document.reveal_unavailable", { doc: "conti" }));
+    expect(panes()[0]!.querySelector(".media-surface"), "l'immagine è aperta").not.toBeNull();
+    expect(toast()).toContain(t("document.reveal_unavailable", { doc: "foto" }));
   });
 
   it("sulla tela il punto è la carta che lo contiene", async () => {
@@ -3259,7 +3321,7 @@ describe("portare a schermo un punto", () => {
   });
 
   it("il menu del riquadro offre ciò che la superficie dichiara di saper fare", async () => {
-    await start({ ...VAULT, "lavagna.canvas": BOARD, "conti.fubsheet": SHEET });
+    await start({ ...VAULT, "lavagna.canvas": BOARD });
     const { openDocument } = await import("./panels/document");
     const { t } = await import("./i18n/strings");
     const { closeContextMenu } = await import("./ui/menu");
@@ -3281,9 +3343,6 @@ describe("portare a schermo un punto", () => {
     // La tela si stampa dal suo provider; non ha una resa da presentare né
     // una sintassi in cui scrivere un rimando.
     expect(await offered(), "la tela").toEqual([t("pane.print")]);
-    await openDocument("conti.fubsheet");
-    await settle();
-    expect(await offered(), "lo sheet, che non ha un provider di stampa").toEqual([]);
   });
 
   it("la stampa salva prima ciò che il buffer ha, e su afterprint non lascia niente", async () => {
@@ -3327,6 +3386,26 @@ describe("la modalità di ogni famiglia di superfici", () => {
     await settle();
   };
 
+  it("il bottone solo dice la modalità accesa e la cambia da un menu di scelte", async () => {
+    await start(VAULT);
+    const current = document.querySelector<HTMLButtonElement>(".pane.focus .pane-toolbar .pane-mode-current")!;
+    const pressed = () =>
+      document.querySelector<HTMLElement>('.pane.focus .pane-toolbar button[data-mode][aria-pressed="true"]')?.textContent;
+    expect(current.hidden).toBe(false);
+    expect(current.textContent).toBe(pressed());
+    expect(current.getAttribute("aria-label")).toContain(pressed()!);
+    current.click();
+    expect(current.getAttribute("aria-expanded")).toBe("true");
+    const radios = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
+    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Sorgente", "Live", "Lettura"]);
+    expect(radios.filter((item) => item.getAttribute("aria-checked") === "true")).toHaveLength(1);
+    radios[0]!.click();
+    await settle();
+    expect(paneMode()).toBe("source");
+    expect(current.textContent).toBe("Sorgente");
+    expect(current.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("una nota in Sorgente non fa aprire la tela seguente come JSON", async () => {
     await start({ ...VAULT, "lavagna.canvas": BOARD });
     const { openDocument } = await import("./panels/document");
@@ -3368,9 +3447,9 @@ describe("la modalità di ogni famiglia di superfici", () => {
   });
 
   // Il contratto non nomina le modalità di una superficie: dice che vista è.
-  // La tela e il foglio si scrivono attraverso una resa, non sul sorgente.
+  // La tela si scrive attraverso una resa, non sul sorgente.
   it("il contesto pubblicato dice che vista è, non una modalità Markdown", async () => {
-    const host = await start({ ...VAULT, "lavagna.canvas": BOARD, "conti.fubsheet": SHEET });
+    const host = await start({ ...VAULT, "lavagna.canvas": BOARD });
     const { openDocument } = await import("./panels/document");
     const published = () => {
       const calls = host.atGate("setActiveContext");
@@ -3382,10 +3461,6 @@ describe("la modalità di ogni famiglia di superfici", () => {
     expect(published()).toMatchObject({ doc: "lavagna.canvas", mode: "live_preview" });
     await choose("source");
     expect(published()).toMatchObject({ doc: "lavagna.canvas", mode: "source" });
-
-    await openDocument("conti.fubsheet");
-    await settle();
-    expect(published()).toMatchObject({ doc: "conti.fubsheet", mode: "live_preview" });
 
     await openDocument("Benvenuto.md");
     await settle();

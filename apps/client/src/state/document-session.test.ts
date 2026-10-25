@@ -10,10 +10,11 @@ import {
 } from "./document-session";
 import { operationFromText } from "../editors/core/text-operation";
 import type { DocumentSource } from "../host/contract";
+import { gridJournalText } from "./grid-journal";
 
 function fakeApi(): DocumentSessionApi {
   return {
-    readDocument: vi.fn(async (id): Promise<DocumentSource> => ({ text: `${id}: disco`, revision: "rev-1", format_id: "markdown", source_kind: "text" })),
+    readDocument: vi.fn(async (id): Promise<DocumentSource> => ({ text: `${id}: disco`, revision: "rev-1", format_id: "markdown", source_kind: "text", text_kind: "source" })),
     writeDocument: vi.fn(async () => "rev-2"),
     resourceWrite: vi.fn(async () => ({ revision: "rev-byte" })),
     saveDraft: vi.fn(async () => {}),
@@ -74,7 +75,7 @@ describe("ownership delle DocumentSession", () => {
       text: "testo sul disco",
       revision: "rev-1",
       format_id: "plain",
-      source_kind: "text",
+      source_kind: "text", text_kind: "source",
     }));
     const sessions = new DocumentSessionCollection(api);
     sessions.restore("nota.txt", "bozza non salvata", { kind: "dictated" });
@@ -221,10 +222,10 @@ describe("decisioni del ciclo di vita della sessione", () => {
   });
 
   it("aggiorna la sessione prima di restituire una ricarica pulita", async () => {
-    const source = { text: "contenuto esterno", revision: "rev-2", format_id: "markdown", source_kind: "text" };
+    const source = { text: "contenuto esterno", revision: "rev-2", format_id: "markdown", source_kind: "text", text_kind: "source" };
     api.readDocument = vi
       .fn()
-      .mockResolvedValueOnce({ text: "contenuto iniziale", revision: "rev-1", format_id: "markdown", source_kind: "text" })
+      .mockResolvedValueOnce({ text: "contenuto iniziale", revision: "rev-1", format_id: "markdown", source_kind: "text", text_kind: "source" })
       .mockResolvedValueOnce(source);
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
@@ -243,7 +244,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
   });
 
   it("la ricarica forzata pulisce e aggiorna il testo autorevole", async () => {
-    const source: DocumentSource = { text: "versione ripristinata", revision: "rev-3", format_id: "markdown", source_kind: "text" };
+    const source: DocumentSource = { text: "versione ripristinata", revision: "rev-3", format_id: "markdown", source_kind: "text", text_kind: "source" };
     api.readDocument = vi.fn(async () => source);
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
@@ -525,7 +526,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     const sessions = new DocumentSessionCollection(api);
     const pending = sessions.read("lenta.md");
     expect(sessions.close("lenta.md")).toEqual({ kind: "missing" });
-    releaseRead({ text: "non deve diventare owner", revision: "rev-1", format_id: "markdown", source_kind: "text" });
+    releaseRead({ text: "non deve diventare owner", revision: "rev-1", format_id: "markdown", source_kind: "text", text_kind: "source" });
 
     await pending;
     expect(sessions.get("lenta.md")).toBeUndefined();
@@ -543,7 +544,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     const pending = sessions.read("lenta.md");
 
     expect(await sessions.release("lenta.md")).toEqual({ kind: "missing" });
-    releaseRead({ text: "non deve diventare owner", revision: "rev-1", format_id: "markdown", source_kind: "text" });
+    releaseRead({ text: "non deve diventare owner", revision: "rev-1", format_id: "markdown", source_kind: "text", text_kind: "source" });
 
     expect(await pending).toBe("non deve diventare owner");
     expect(sessions.get("lenta.md")).toBeUndefined();
@@ -648,7 +649,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
       await deleteFinished;
     });
     await deleteStarted;
-    releaseRead({ text: "testo non più valido", revision: "rev-1", format_id: "markdown", source_kind: "text" });
+    releaseRead({ text: "testo non più valido", revision: "rev-1", format_id: "markdown", source_kind: "text", text_kind: "source" });
     finishDelete();
 
     expect(await deleting).toEqual({ kind: "deleted", dirty: false });
@@ -1004,7 +1005,7 @@ describe("le superfici sottoscritte alla sessione", () => {
     expect(nextTimer).toBe(0);
   });
   it("confronta preimmagine e atteso sulla stessa normalizzazione di terminatori", async () => {
-    api.readDocument = vi.fn(async (): Promise<DocumentSource> => ({ text: "riga1\r\nriga2\n", revision: "rev-1", format_id: "markdown", source_kind: "text" }));
+    api.readDocument = vi.fn(async (): Promise<DocumentSource> => ({ text: "riga1\r\nriga2\n", revision: "rev-1", format_id: "markdown", source_kind: "text", text_kind: "source" }));
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
     const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
@@ -1133,7 +1134,7 @@ describe("le superfici sottoscritte alla sessione", () => {
     sessions.attachSurface("nota.md", recordingSurface("riquadro-a", log));
     sessions.attachSurface("nota.md", recordingSurface("riquadro-b", log));
 
-    api.readDocument = vi.fn(async (): Promise<DocumentSource> => ({ text: "testo nuovo dal disco", revision: "rev-2", format_id: "markdown", source_kind: "text" }));
+    api.readDocument = vi.fn(async (): Promise<DocumentSource> => ({ text: "testo nuovo dal disco", revision: "rev-2", format_id: "markdown", source_kind: "text", text_kind: "source" }));
     const reloaded = await sessions.reloadIfClean("nota.md");
     expect(reloaded).toMatchObject({ kind: "reloaded", changed: true });
     expect(log.map((entry) => entry.surface).sort()).toEqual(["riquadro-a", "riquadro-b"]);
@@ -1161,7 +1162,7 @@ describe("il salvataggio di un file senza formato", () => {
       text: "<svg/>",
       revision: "rev-disco",
       format_id: id.endsWith(".md") ? "markdown" : null,
-      source_kind: "text",
+      source_kind: "text", text_kind: "source",
     }));
     vi.stubGlobal("setTimeout", vi.fn(() => 1));
     vi.stubGlobal("clearTimeout", vi.fn());
@@ -1416,7 +1417,7 @@ describe("il vault delle sessioni (FUB-001)", () => {
     const reading = sessions.read("nota.md");
 
     current = B; // mentre la lettura aspetta, la shell passa all'altro vault
-    finish({ text: "dal vault A", revision: "rev-A", format_id: "markdown", source_kind: "text" });
+    finish({ text: "dal vault A", revision: "rev-A", format_id: "markdown", source_kind: "text", text_kind: "source" });
 
     await expect(reading).resolves.toBe("dal vault A");
     expect(sessions.get("nota.md")).toBeUndefined();
@@ -1440,7 +1441,7 @@ describe("il vault delle sessioni (FUB-001)", () => {
         text: "<svg/>",
         revision: "rev-s",
         format_id: null,
-        source_kind: "text",
+        source_kind: "text", text_kind: "source",
       }),
     );
     await sessions.read("disegno.svg");
@@ -1481,5 +1482,109 @@ describe("il vault delle sessioni (FUB-001)", () => {
     expect(sessions.vaultFor("altra.md")).toBe(B);
     current = null;
     expect(sessions.vaultFor("altra.md")).toBeUndefined();
+  });
+});
+
+describe("il giornale di una cartella di Excel", () => {
+  let api: DocumentSessionApi;
+  const journal = (...cells: Array<[row: string, before: string, after: string]>) =>
+    gridJournalText({ entries: cells.map(([row, before, after]) => ({ sheet: "s1", row, column: "c1", before, after })), commands: [] });
+
+  beforeEach(() => {
+    api = fakeApi();
+    vi.mocked(api.readDocument).mockImplementation(async (id): Promise<DocumentSource> => ({
+      text: "",
+      revision: id.endsWith(".xlsx") ? "sha256:uno" : "rev-1",
+      format_id: id.endsWith(".xlsx") ? "xlsx" : "markdown",
+      source_kind: id.endsWith(".xlsx") ? "bytes" : "text",
+      text_kind: id.endsWith(".xlsx") ? "grid_journal" : "source",
+    }));
+    vi.stubGlobal("setTimeout", vi.fn(() => 1));
+    vi.stubGlobal("clearTimeout", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function recording(log: DocumentSurfaceUpdate[]): DocumentSurface {
+    return { id: "griglia", sync: (update) => log.push(update) };
+  }
+
+  it("salvato, il giornale è nei byte: il testo torna vuoto e la griglia lo riceve", async () => {
+    vi.mocked(api.writeDocument).mockResolvedValueOnce("sha256:due");
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("conti.xlsx");
+    const log: DocumentSurfaceUpdate[] = [];
+    sessions.attachSurface("conti.xlsx", recording(log));
+    const written = journal(["r1", "800", "900"]);
+    acceptText(sessions, "conti.xlsx", written, "altra");
+    await sessions.flush("conti.xlsx");
+
+    expect(api.writeDocument).toHaveBeenCalledWith("conti.xlsx", written, { kind: "descends_from", value: "sha256:uno" });
+    expect(sessions.inspect("conti.xlsx")).toMatchObject({
+      text: "",
+      dirty: false,
+      result: "ok",
+      base: { kind: "descends_from", value: "sha256:due" },
+    });
+    // La griglia si riapre sui byte nuovi: riceve il testo per intero.
+    expect(log[log.length - 1]).toEqual({ kind: "text", text: "" });
+    expect(api.discardDraft).toHaveBeenCalledWith("conti.xlsx");
+  });
+
+  it("ciò che si scrive durante il salvataggio si riporta sui byte nuovi, e resta da salvare", async () => {
+    let finish!: (revision: string) => void;
+    vi.mocked(api.writeDocument).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("conti.xlsx");
+    const log: DocumentSurfaceUpdate[] = [];
+    sessions.attachSurface("conti.xlsx", recording(log));
+    acceptText(sessions, "conti.xlsx", journal(["r1", "800", "900"]), "altra");
+    const saving = sessions.flush("conti.xlsx");
+    await Promise.resolve();
+    // Durante il salvataggio: B2 cambia ancora, e B3 entra.
+    acceptText(sessions, "conti.xlsx", journal(["r1", "800", "950"], ["r2", "1", "2"]), "altra");
+    finish("sha256:due");
+    await saving;
+
+    const rebased = journal(["r1", "900", "950"], ["r2", "1", "2"]);
+    expect(sessions.inspect("conti.xlsx")).toMatchObject({
+      text: rebased,
+      dirty: true,
+      base: { kind: "descends_from", value: "sha256:due" },
+    });
+    expect(log[log.length - 1]).toEqual({ kind: "text", text: rebased });
+  });
+
+  it("una rilettura pulita su byte nuovi riapre la griglia anche se il giornale resta vuoto", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("conti.xlsx");
+    const log: DocumentSurfaceUpdate[] = [];
+    sessions.attachSurface("conti.xlsx", recording(log));
+    expect(await sessions.reloadIfClean("conti.xlsx")).toMatchObject({ kind: "reloaded", changed: false });
+    expect(log).toEqual([]);
+
+    vi.mocked(api.readDocument).mockResolvedValueOnce({
+      text: "", revision: "sha256:altra", format_id: "xlsx", source_kind: "bytes", text_kind: "grid_journal",
+    });
+    expect(await sessions.reloadIfClean("conti.xlsx")).toMatchObject({ kind: "reloaded", changed: true });
+    expect(log).toEqual([{ kind: "text", text: "" }]);
+    expect(sessions.inspect("conti.xlsx")?.base).toEqual({ kind: "descends_from", value: "sha256:altra" });
+  });
+
+  it("un testo di sorgente non è un giornale: la stessa rilettura vuota non cambia niente", async () => {
+    vi.mocked(api.readDocument).mockResolvedValue({
+      text: "", revision: "rev-altra", format_id: "markdown", source_kind: "text", text_kind: "source",
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    const log: DocumentSurfaceUpdate[] = [];
+    sessions.attachSurface("nota.md", recording(log));
+    vi.mocked(api.readDocument).mockResolvedValueOnce({
+      text: "", revision: "rev-terza", format_id: "markdown", source_kind: "text", text_kind: "source",
+    });
+    expect(await sessions.reloadIfClean("nota.md")).toMatchObject({ kind: "reloaded", changed: false });
+    expect(log).toEqual([]);
   });
 });

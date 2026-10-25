@@ -10,6 +10,7 @@ import type { DocumentUpdate } from "../core/text-operation";
 import { onEvent } from "../../state/kernel";
 import { openVaultRoot, vaultArg } from "../../state/vault";
 import type { BufferedSurface, SurfaceMountContext } from "../core/registry";
+import type { SurfaceMenu, SurfaceMenuItem } from "../core/editor-menu";
 import { uniformRowRange } from "../grid/engine";
 import {
   BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS,
@@ -270,6 +271,7 @@ export function mountBaseSurface(
   const editable = (row: BaseRow, column: string): HTMLElement => {
     const field = document.createElement("span");
     field.className = "base-cell";
+    field.dataset.column = column;
     const value = row.values[column];
     const writable = !readOnly && !column.startsWith("formula.") && !column.startsWith("file.") && value?.kind !== "error";
     if (value?.kind === "bool") {
@@ -301,7 +303,7 @@ export function mountBaseSurface(
     table.className = "base-table";
     table.style.tableLayout = "fixed";
     const head = table.createTHead().insertRow();
-    for (const column of ["", ...(plan?.columns ?? [])]) { const th = document.createElement("th"); th.textContent = column ? plan?.columnLabels[column] ?? column : t("menu.file"); head.append(th); }
+    for (const column of ["", ...(plan?.columns ?? [])]) { const th = document.createElement("th"); if (column) th.dataset.column = column; th.textContent = column ? plan?.columnLabels[column] ?? column : t("menu.file"); head.append(th); }
     const tableBody = table.createTBody();
     const spacer = (height: number): HTMLTableRowElement => {
       const tr = document.createElement("tr");
@@ -458,6 +460,7 @@ export function mountBaseSurface(
       for (const row of members) {
         const card = document.createElement("article");
         card.className = "base-kanban-card";
+        card.dataset.doc = row.doc;
         card.draggable = writable;
         card.append(button(row.doc, () => open(row.doc)));
         if (writable) card.addEventListener("dragstart", (event) => event.dataTransfer?.setData("application/x-fub-base-doc", row.doc));
@@ -740,6 +743,92 @@ export function mountBaseSurface(
     draw();
   });
   search.addEventListener("input", () => { displayed = VISIBLE_STEP; draw(); });
+
+  // Il tasto destro: la riga o la scheda sotto il puntatore (la sua nota), la
+  // cella (il suo valore), l'intestazione (la sua colonna), o la vista intera.
+  // Le scritture passano dalla stessa via CAS dei campi.
+  const copy = (text: string): void => {
+    void writeClipboardText(text).then(() => { status.textContent = t("editor_menu.copied"); }, presentError);
+  };
+  const searchFor = (text: string): void => { search.value = text; displayed = VISIBLE_STEP; draw(); search.focus(); };
+  const viewItems = (): SurfaceMenuItem[] => {
+    const items: SurfaceMenuItem[] = [];
+    if (names.length > 1) {
+      items.push({
+        id: "base.view",
+        label: labels().view,
+        items: names.map((name) => ({
+          id: `base.view.${name}`,
+          label: name,
+          checked: name === activeView,
+          run: () => { if (name !== activeView) { views.value = name; views.dispatchEvent(new Event("change")); } },
+        })),
+      });
+    }
+    items.push(
+      { id: "base.note.new", label: t("explorer.new.hint"), enabled: !readOnly, run: () => void createNote() },
+      { id: "base.csv.copy", label: t("base.csv.copy"), run: () => void copyResults() },
+      { id: "base.csv.export", label: t("base.csv.export"), run: exportResults },
+    );
+    return items;
+  };
+  const menuAt = (at: { x: number; y: number } | null): SurfaceMenu | null => {
+    if (!plan || error) return null;
+    const under = at ? document.elementFromPoint(at.x, at.y) : document.activeElement;
+    if (!(under instanceof Element) || !root.contains(under)) return null;
+    // Un campo con del testo scelto tiene il menu del sistema: taglia, incolla,
+    // il correttore. Senza scelta vale il menu della cella.
+    if (under instanceof HTMLInputElement && under.type === "text" && under.selectionStart !== under.selectionEnd) return null;
+    if (under instanceof HTMLSelectElement || under === search) return null;
+    if (!body.contains(under)) return null;
+    const header = under.closest<HTMLElement>("th[data-column]");
+    if (header) {
+      const column = header.dataset.column!;
+      const items: SurfaceMenuItem[] = [];
+      if (regroupable()) {
+        items.push({
+          id: "base.group.column",
+          label: t("base.group.by_named", { name: plan.columnLabels[column] ?? column }),
+          checked: grouping() === column,
+          run: () => { groupBy.value = grouping() === column ? "" : column; groupBy.dispatchEvent(new Event("change")); },
+        });
+      }
+      items.push({
+        id: "base.column.copy",
+        label: t("base_menu.column.copy"),
+        run: () => copy(filteredRows().map((row) => cellText(row.values[column])).join("\n")),
+      });
+      return { target: { kind: "column", ref: column }, context: items, tail: viewItems() };
+    }
+    const doc = under.closest<HTMLElement>("[data-doc]")?.dataset.doc;
+    const row = doc === undefined ? undefined : rows.find((each) => each.doc === doc);
+    if (!row) return { target: { kind: "empty" }, context: viewItems() };
+    const items: SurfaceMenuItem[] = [
+      { id: "base.row.open", label: t("base_menu.open"), run: () => open(row.doc) },
+      { id: "base.row.copy_link", label: t("base_menu.copy_link"), run: () => copy(`[[${row.doc.replace(/\.md$/i, "")}]]`) },
+      {
+        id: "base.row.copy",
+        label: t("base_menu.row.copy"),
+        run: () => copy([row.doc, ...(plan?.columns ?? []).map((column) => cellText(row.values[column]))].join("\t")),
+      },
+    ];
+    const column = under.closest<HTMLElement>(".base-cell[data-column]")?.dataset.column;
+    if (column !== undefined) {
+      const value = cellText(row.values[column]);
+      const writable = !readOnly && !column.startsWith("formula.") && !column.startsWith("file.") && row.values[column]?.kind !== "error";
+      items.unshift(
+        { id: "base.cell.copy", label: t("base_menu.cell.copy"), enabled: value !== "", run: () => copy(value) },
+        { id: "base.cell.search", label: t("base_menu.cell.search"), enabled: value !== "", run: () => searchFor(value) },
+        { id: "base.cell.clear", label: t("base_menu.cell.clear"), enabled: writable && value !== "", danger: true, run: () => void editCell(row, column, null) },
+      );
+    }
+    return {
+      target: column === undefined ? { kind: "row", ref: row.doc } : { kind: "cell", ref: column },
+      context: items,
+      note: /\.md$/i.test(row.doc) ? { kind: "note", id: row.doc } : { kind: "file", id: row.doc },
+      tail: viewItems(),
+    };
+  };
   const modes = baseSurfaceModes();
   return {
     family: "structured", profile: "base", surfaceId: context.paneId, modes,
@@ -750,6 +839,7 @@ export function mountBaseSurface(
       getDoc() { return source; },
     },
     focus() { search.focus(); },
+    contextMenu: menuAt,
     setReadOnly(next: boolean) {
       if (readOnly === next) return;
       if (next) writeEpoch++;

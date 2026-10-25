@@ -52,6 +52,7 @@ pub mod event;
 pub mod format;
 pub mod gate;
 pub mod grid;
+pub mod grid_bytes;
 pub mod html;
 pub mod ipc;
 pub mod locale;
@@ -102,14 +103,35 @@ pub use format::{
 };
 pub use gate::Gate;
 pub use grid::{
-    validate_grid_source, GridApplyRequest, GridCell, GridCellKey, GridCellPatch, GridCellStyle,
-    GridCellValue, GridColumn, GridCommit, GridFormulaError, GridHorizontalAlign, GridInvalidation,
-    GridProvider, GridRow, GridSession, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindow,
-    GridWindowRequest, GRID_FAMILY, GRID_PROTOCOL_VERSION, MAX_GRID_INVALIDATED_CELLS,
-    MAX_GRID_PATCHES, MAX_GRID_PATCH_INPUT_BYTES, MAX_GRID_RESPONSE_BYTES, MAX_GRID_SESSION_CELLS,
+    GridApplyRequest, GridBorder, GridBorderStyle, GridBorders, GridCellKey, GridCellPatch,
+    GridCellStyle, GridColumn, GridCommit, GridHorizontalAlign, GridInvalidation, GridRow,
+    GridScript, GridSheet, GridSourceEdit, GridSurfaceSpec, GridUnderline, GridVerticalAlign,
+    GridWindowRequest, GRID_FAMILY, GRID_STACKED_ROTATION, MAX_GRID_FONT_BYTES,
+    MAX_GRID_INVALIDATED_CELLS, MAX_GRID_KNOWN_MEDIA, MAX_GRID_MEDIA_KEY_BYTES, MAX_GRID_PATCHES,
+    MAX_GRID_PATCH_INPUT_BYTES, MAX_GRID_RESPONSE_BYTES, MAX_GRID_SESSION_CELLS,
     MAX_GRID_SESSION_COLUMNS, MAX_GRID_SESSION_ROWS, MAX_GRID_SESSION_SHEETS,
-    MAX_GRID_SESSION_WINDOWS, MAX_GRID_SOURCE_BYTES, MAX_GRID_WINDOW_CELLS,
-    MAX_GRID_WINDOW_COLUMNS, MAX_GRID_WINDOW_ROWS,
+    MAX_GRID_SESSION_WINDOWS, MAX_GRID_WINDOW_CELLS, MAX_GRID_WINDOW_COLUMNS, MAX_GRID_WINDOW_ROWS,
+};
+pub use grid_bytes::{
+    grid_bytes_revision, grid_journal_match, validate_grid_catalog, GridBytesCell,
+    GridBytesProvider, GridBytesSession, GridBytesWindow, GridCommand, GridCommandOutcome,
+    GridCommandRequest, GridCommandState, GridComment, GridCommentReply, GridDataBar, GridDialog,
+    GridIcon, GridJournal, GridJournalEntry, GridJournalMatch, GridLink, GridMerge, GridNotice,
+    GridSelection, GridSheetView, GridValue, GRID_BYTES_PROTOCOL_VERSION,
+    GRID_COMMAND_JOURNAL_VERSION, GRID_JOURNAL_VERSION, MAX_GRID_BYTES_SOURCE,
+    MAX_GRID_CATALOG_COMMANDS, MAX_GRID_COMMAND_JOURNAL_BYTES, MAX_GRID_COMMAND_PARAMS_BYTES,
+    MAX_GRID_COMMAND_REASON_BYTES, MAX_GRID_COMMAND_RESULT_BYTES, MAX_GRID_ID_BYTES,
+    MAX_GRID_JOURNAL_COMMANDS, MAX_GRID_JOURNAL_ENTRIES, MAX_GRID_JOURNAL_INPUT_BYTES,
+    MAX_GRID_NOTICES, MAX_GRID_SELECTION_BYTES,
+};
+pub use grid_bytes::{
+    GridBook, GridCalculation, GridTable, GridViewMode, GRID_THEME_COLORS, MAX_GRID_BOOK_NAMES,
+    MAX_GRID_NAME_BYTES, MAX_GRID_WINDOW_TABLES,
+};
+pub use grid_bytes::{
+    GridMedia, GridObject, GridObjectKind, GridObjectMissing, GridShape, GridShapeAlign,
+    GridShapeAnchor, GridShapeKind, GRID_MEDIA_TYPES, MAX_GRID_MEDIA_BYTES,
+    MAX_GRID_OBJECT_SVG_BYTES, MAX_GRID_SHAPE_TEXT_BYTES, MAX_GRID_WINDOW_OBJECTS,
 };
 pub use locale::{HourCycle, Locale, Weekday};
 pub use model::Payload;

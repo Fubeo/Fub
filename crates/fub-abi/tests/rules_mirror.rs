@@ -685,17 +685,39 @@ fn canonical_chord_cases() -> Vec<Value> {
         "Mod-Shift--",
         "Mod-+",
         "Mod-=",
+        // Control, che sul Mac non è Cmd.
+        "Ctrl-Tab",
+        "Shift-Ctrl-Tab",
         // Ciò che questa app non sa premere.
-        "Ctrl-k",    // il modificatore che non esiste
-        "d",         // il primo tasto nudo, che ruberebbe una lettera a chi scrive
-        "Mod-",      // l'accordo senza tasto
-        "Mod-Mod-k", // il modificatore ripetuto
-        "-",         // il meno nudo
+        "Meta-k",     // il modificatore che non esiste
+        "Mod-Ctrl-k", // fuori dal Mac, Ctrl tenuto due volte
+        "d",          // il primo tasto nudo, che ruberebbe una lettera a chi scrive
+        "Mod-",       // l'accordo senza tasto
+        "Mod-Mod-k",  // il modificatore ripetuto
+        "-",          // il meno nudo
         "",
         "   ",
     ]
     .into_iter()
     .map(|binding| json!({"binding": binding, "out": keys::canonical(binding)}))
+    .collect()
+}
+
+/// La forma piegata, con cui le due metà cercano i conflitti: `Ctrl-Tab` e
+/// `Mod-Tab` sono lo stesso gesto fuori dal Mac, e un conflitto su una
+/// piattaforma lo è anche per chi dichiara il tasto.
+fn folded_chord_cases() -> Vec<Value> {
+    [
+        "Ctrl-Tab",
+        "Mod-Tab",
+        "Shift-Ctrl-Tab",
+        "Alt-Ctrl-k d",
+        "Mod-Shift-g",
+        "Mod-Ctrl-k",
+        "Meta-k",
+    ]
+    .into_iter()
+    .map(|binding| json!({"binding": binding, "out": keys::folded(binding)}))
     .collect()
 }
 
@@ -857,6 +879,7 @@ fn expected() -> Value {
         "mask_wants": mask_wants_cases(),
         "scan_tags": scan_tags_cases(),
         "canonical_chord": canonical_chord_cases(),
+        "folded_chord": folded_chord_cases(),
         "byte_to_utf16": offset_cases(true),
         "expansion": expansion_cases(),
         "utf16_to_byte": offset_cases(false),

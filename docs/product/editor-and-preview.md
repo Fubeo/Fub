@@ -18,15 +18,21 @@ Markdown. Un file `.svg` si apre come testo in **Sorgente**, **Diviso**
 [disegno](drawing.md) con la feature `draw` dell'host. L'anteprima si ridisegna
 dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
 l'ultima buona, attenuata, sotto il motivo con riga e colonna. I documenti
-`.fubsheet` usano invece la modalità **foglio** della famiglia Grid; se il
-provider Grid non è servito, la stessa superficie resta navigabile e mostra gli
-input grezzi senza un secondo valutatore formule. Il commutatore nella barra di
+`.xlsx` usano invece la famiglia Grid. Il commutatore nella barra di
 ciascun riquadro legge la dichiarazione della propria superficie; con una sola
 modalità non mostra un selettore né offre i comandi di modalità, che trovano la
 modalità per ruolo (Live, sulla tela, riporta alle carte). Il riquadro ricorda
 la modalità scelta per ogni famiglia di superfici: una nota in Sorgente non fa
 aprire la tela seguente come JSON, e la tela non cambia la modalità in cui si
-riapre la nota. Le scorciatoie seguono il riquadro attivo. La modalità delle
+riapre la nota. Le scorciatoie seguono il riquadro attivo. In un campo in cui
+si scrive, un accordo senza Ctrl e senza ⌘ resta del campo: Alt+← muove il
+cursore lì e torna indietro fuori. Una scorciatoia scrive `Mod` per ⌘ sul Mac
+e Ctrl altrove, e `Ctrl` per Control anche sul Mac: il giro delle schede in
+ordine d'uso è `Ctrl-Tab`, perché ⌘-Tab è del sistema. Fuori dal Mac `Ctrl-k`
+e `Mod-k` sono lo stesso tasto, e le impostazioni li segnalano come
+conflitto. Le impostazioni dicono anche quando un accordo lo prende il sistema
+(⌘-Tab sul Mac, Alt-F4 altrove): si salva lo stesso, ma lì non arriva. Sul Mac
+PgDn e PgUp si leggono `Fn↓` e `Fn↑`, come si premono. La modalità delle
 note in una finestra nuova viene da `editor.default-mode`; un riquadro diviso
 eredita quelle del riquadro da cui nasce. I divisori fra riquadri si trascinano,
 si spostano con le frecce e tornano a parti uguali con un doppio clic; le
@@ -54,8 +60,8 @@ interni. Un allegato incollato o trascinato si incorpora se la lettura lo sa
 mostrare (immagini, audio, video, PDF), altrimenti diventa un link col suo nome;
 una nota trascinata dall'albero diventa un wikilink nel punto in cui cade.
 Correttore ortografico, modalità Vim, numeri di riga (visibili in Sorgente), a
-capo automatico e unità di rientro sono preferenze di macchina aggiornate senza
-rimontare la sessione; il tasto destro sul margine mostra o nasconde numeri di
+capo automatico, unità di rientro e cursore che lampeggia (di serie fermo) sono
+preferenze di macchina aggiornate senza rimontare la sessione; il tasto destro sul margine mostra o nasconde numeri di
 riga e frecce di piegatura. Valgono per le superfici di documento: la barra
 delle formule e l'editor di cella della griglia sono campi con una disposizione
 fissa, senza numeri di riga, Vim o correttore. La direzione del testo è
@@ -138,6 +144,12 @@ I commenti `%%…%%` restano nel file e nel modello, non nella resa; in Live si
 vedono attenuati sulla riga del cursore. Come nel provider, evidenziati e
 commenti non contengono né attraversano link, wikilink, tag, codice, enfasi,
 formule o note in riga, e una nota in riga attraversata si perde.
+
+Fuori dalla riga del cursore Live nasconde anche il `>` di una citazione (resta
+il filo a sinistra) e i segni di apice `^…^` e pedice `~…~`; il segno di una
+voce puntata diventa un pallino largo quanto lui, e un rimando `[^nota]` a una
+nota definita diventa il suo apice. Un rimando senza definizione resta testo,
+come in Lettura. I byte del file non cambiano.
 
 Immagini e media del vault si risolvono con la regola dei link del kernel:
 un'immagine Markdown con path relativo parte dalla nota, un embed `![[nome]]`
@@ -362,6 +374,9 @@ comando della palette, a cui si può assegnare una scorciatoia. Invocato dalla
 palette, il comando agisce nel riquadro col fuoco; se lì non c'è una nota
 Markdown in scrittura, un avviso lo dice.
 
+Il tasto destro, la mini-barra e il menu «/» nel testo sono descritti in
+[Tasto destro, mini-barra e «/»](editor-menus.md).
+
 ## Tabelle in Live
 
 In Live ogni tabella è una griglia da foglio di calcolo, anche col cursore
@@ -400,38 +415,21 @@ formattazione agisce sulle celle selezionate: formattazione in riga e
 operazioni sulla tabella; titoli, elenchi e blocchi sono spenti. In sola
 lettura la griglia si seleziona e si copia, ma non si scrive.
 
-## Formato pilota `.fubsheet`
+## La griglia
 
-Il formato persistente della griglia è un documento JSON testuale versionato.
-Conserva input, ordine, dimensioni, stile, proprietà e identità stabili di
-sheet, righe e colonne; le proprietà, JSON libero, tengono i numeri come erano
-scritti anche oltre la precisione di JavaScript. L'indirizzo A1 segue l'ordine
-corrente: riordinare una riga sposta l'indirizzo, non l'identità della cella.
+La griglia mostra intestazioni, celle e selezione rettangolare in una viewport
+virtualizzata. Supporta tastiera, schede dei fogli, formula bar e copia TSV
+(celle multilinea fra virgolette, come in Excel). Tab e Maiusc+Tab percorrono
+le celle visibili; raggiunti i due estremi, lasciano la griglia e proseguono
+verso gli altri controlli della shell. Nessuna battuta attraversa IPC.
 
-La superficie mostra intestazioni, celle e selezione rettangolare in una
-viewport virtualizzata. Supporta tastiera, editor in-cell, formula bar,
-copia/incolla TSV (celle multilinea fra virgolette, come in Excel) e undo/redo
-del workbook. Invio conferma la cella, Esc annulla la modifica e uscire dalla
-cella (o dalla formula bar) la conferma; una modifica peer strutturata conserva
-la bozza locale, mentre una riscrittura completa autorevole la annulla.
-
-Tab e Maiusc+Tab percorrono le celle visibili; raggiunti i due estremi,
-lasciano la griglia e proseguono verso gli altri controlli della shell.
-
-Valori calcolati, AST delle formule, dipendenze, cache ed errori non vengono
-salvati nel file: il valutatore Rust li ricostruisce dai dati autorevoli. Se il
-valutatore non è disponibile, anche perché il bundle `fub.sheet` è disabilitato,
-la griglia resta modificabile e mostra gli input grezzi. Nessuna battuta
-attraversa IPC; la valutazione parte dopo il commit e una risposta stantia non
-sostituisce lo stato corrente. Il commit arriva alla `DocumentSession` all'invio
-e sopravvive a una linguetta chiusa prima della risposta; i byte del provider
-lo correggono a coda vuota, e un rifiuto lascia il fallback con il commit.
-
-Outline, ricerca e proprietà sono proiezioni del workbook, non un adattamento a
-`DocumentModel`. Il protocollo Grid v1 è promosso in ABI/WIT e mirror
-TypeScript insieme ai consumatori nativo e WASM; famiglia, versione e fallback
-sono negoziati prima dell'invocazione. Limiti, coordinate, diff UTF-8 e
-invalidazione sono normati in [ABI e WIT](../reference/abi-and-wit.md).
+Una cartella di Excel si apre in sola lettura con i valori salvati nel file,
+senza ricalcolo; la forma è descritta nel [modello del
+documento](../architecture/document-model.md). Il protocollo Grid a byte (la
+versione 2) porta finestre, patch e giornale fra la shell e un provider nativo
+o WASM; famiglia, versione e fallback sono negoziati prima dell'invocazione.
+Limiti, coordinate e invalidazione sono normati in [ABI e
+WIT](../reference/abi-and-wit.md).
 
 ## Dove si trova
 
@@ -446,4 +444,5 @@ invalidazione sono normati in [ABI e WIT](../reference/abi-and-wit.md).
 - `crates/fub-abi/src/edit.rs`
 - `crates/fub-abi/src/session.rs`
 - `crates/fub-kernel/src/drafts.rs`
-- `crates/fub-format-sheet/src/lib.rs`
+- `apps/client/src/editors/grid/`
+- `crates/fub-format-xlsx/src/convert.rs`

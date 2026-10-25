@@ -83,7 +83,7 @@ describe("la bolla di selezione", () => {
       writing: () => true,
       focusPane: () => {},
       runCommand: () => {},
-      barOff: () => off,
+      wanted: () => off,
       active: () => true,
     });
     bubble.update(SPECS);

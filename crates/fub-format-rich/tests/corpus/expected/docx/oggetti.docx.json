@@ -3,12 +3,12 @@
   "sha256": "10f0c0cd362781b9fdba497c60da6249aae1d646fa80362d3c72f84bdad25096",
   "open": {
     "readonly": null,
-    "projection": "36e5096658d6ad8e3eaf08990396e8d710a6f27d23f5e7c047b6c10f6ed44b44",
+    "projection": "158301038dce039efb9466b53e97963825be6725caea5330ea8cab81b54f7608",
     "blocks": 4,
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 41",
+    "differenze all'apertura: 39",
     "  document: <{http://schemas.openxmlformats.org/markup-compatibility/2006}AlternateContent>: 1 → 0",
     "  document: <{http://schemas.openxmlformats.org/markup-compatibility/2006}Choice>: 1 → 0",
     "  document: <{http://schemas.openxmlformats.org/markup-compatibility/2006}Fallback>: 1 → 0",
@@ -20,7 +20,6 @@
     "  document: <{urn:schemas-microsoft-com:vml}shape>: 1 → 0",
     "  document: <{urn:schemas-microsoft-com:vml}textbox>: 1 → 0",
     "  document: {http://schemas.openxmlformats.org/drawingml/2006/picture}cNvPr @{}name=\"pixel.png\": 2 → 0",
-    "  document: {http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}anchor @{}relativeHeight=\"2\": 1 → 0",
     "  document: {http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}docPr @{}name=\"Casella 3\": 1 → 0",
     "  document: {http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}docPr @{}name=\"Immagine 1\": 1 → 0",
     "  document: {http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}docPr @{}name=\"Immagine 2\": 1 → 0",
@@ -32,7 +31,6 @@
     "  block 0: document: {http://schemas.openxmlformats.org/drawingml/2006/picture}cNvPr @{}name=\"pixel.png\": 1 → 0",
     "  block 0: document: {http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}docPr @{}name=\"Immagine 1\": 1 → 0",
     "  block 1: document: {http://schemas.openxmlformats.org/drawingml/2006/picture}cNvPr @{}name=\"pixel.png\": 1 → 0",
-    "  block 1: document: {http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}anchor @{}relativeHeight=\"2\": 1 → 0",
     "  block 1: document: {http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}docPr @{}name=\"Immagine 2\": 1 → 0",
     "  block 2: document: <{http://schemas.openxmlformats.org/markup-compatibility/2006}AlternateContent>: 1 → 0",
     "  block 2: document: <{http://schemas.openxmlformats.org/markup-compatibility/2006}Choice>: 1 → 0",

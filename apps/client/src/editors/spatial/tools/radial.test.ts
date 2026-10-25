@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import { registerIcon } from "../../../ui/icons";
 import { setReducedMotionPreference } from "../../../theme/reduced-motion";
+import { createManualDriver, setMotionDriver } from "../../../moto";
 import { closeRadial, DEAD_PX, openRadial, radialCenter, sectorOf, type RadialItem } from "./radial";
 
 const runs: string[] = [];
@@ -110,7 +111,6 @@ describe("openRadial", () => {
     expect(items().map((each) => each.tabIndex)).toEqual([0, -1, -1, -1, -1, -1, -1]);
     // Aperto col puntatore, il nome sopra il menu aspetta il puntatore.
     expect(caption()).toBe("");
-    expect(layer()!.dataset.shellMotion).toBe("rest");
     expect(formatIssues(checkAccessibility(layer()!))).toBe("");
   });
 
@@ -253,10 +253,21 @@ describe("openRadial", () => {
 
   it("col moto, lo strato entra e se ne va animato", () => {
     setReducedMotionPreference(false);
-    const radial = openRadial(500, 400, ITEMS, { label: "Menu radiale" });
-    expect(radial.element.dataset.shellMotion).toBe("enter");
-    radial.close();
-    expect(radial.element.dataset.shellMotion).toBe("exit");
-    expect(radial.element.isConnected).toBe(true);
+    const driver = createManualDriver();
+    setMotionDriver(driver);
+    const box = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 400, 400));
+    try {
+      const radial = openRadial(500, 400, ITEMS, { label: "Menu radiale" });
+      // Lo strato appare e il disco cresce.
+      expect(driver.plays.map((play) => play.el)).toEqual([radial.element, ring()]);
+      radial.close();
+      // Chiuso, se ne va subito; ne resta un'immagine che sbiadisce.
+      expect(radial.element.isConnected).toBe(false);
+      const ghost = driver.plays.map((play) => play.el).find((el) => el !== radial.element && el.classList.contains("draw-radial"));
+      expect(ghost?.isConnected).toBe(true);
+    } finally {
+      box.mockRestore();
+      setMotionDriver(null);
+    }
   });
 });

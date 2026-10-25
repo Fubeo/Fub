@@ -87,13 +87,17 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     // annotazioni dei PDF (ADR 0203), e la shell riconosce da qui le note di
     // cartella `.svg`. `docx`, `odt`, `rtf`, `doc` e `dot` ci sono quando
     // l'host è costruito con i documenti di videoscrittura (feature `rich`), e
-    // allora li dichiarano i loro provider come gli altri. L'anagrafe le dà in
-    // ordine alfabetico.
-    let mut extensions = vec!["base", "canvas", "fubsheet", "markdown", "md"];
+    // allora li dichiarano i loro provider come gli altri; `xlsx`, `xlsm`,
+    // `xltx` e `xltm` con le cartelle di Excel (feature `xlsx`). L'anagrafe le
+    // dà in ordine alfabetico.
+    let mut extensions = vec!["base", "canvas", "markdown", "md"];
     #[cfg(feature = "draw")]
     extensions.extend(["fubann", "svg"]);
     if cfg!(feature = "rich") {
         extensions.extend(["doc", "docx", "dot", "odt", "rtf"]);
+    }
+    if cfg!(feature = "xlsx") {
+        extensions.extend(["xlsm", "xlsx", "xltm", "xltx"]);
     }
     extensions.sort_unstable();
     assert_eq!(
@@ -123,6 +127,11 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
         plugins.retain(|id| *id != "fub.rich");
         assert!(info.plugins.iter().any(|p| p.id == "fub.rich"));
     }
+    // La griglia delle cartelle di Excel viene col loro codec.
+    if cfg!(feature = "xlsx") {
+        plugins.retain(|id| *id != "fub.xlsx");
+        assert!(info.plugins.iter().any(|p| p.id == "fub.xlsx"));
+    }
     #[cfg_attr(not(feature = "draw"), allow(unused_mut))]
     let mut expected = vec![
         "fub.backlinks",
@@ -144,7 +153,6 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
         "fub.queries",
         "fub.search",
         "fub.serie",
-        "fub.sheet",
         "fub.stats",
         "fub.sync",
         "fub.tags",

@@ -75,6 +75,8 @@ const SVG: Record<string, string> = {
 
   // --- l'apri-vault, che è un menu item ma anche un bottone --------------
   vault: '<path d="M3 7a2 2 0 0 1 2-2h3l2 2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  // La casa della striscia degli spazi: il vault intero.
+  home: '<path d="M4 11 12 4l8 7"/><path d="M6 9.5V19a1 1 0 0 0 1 1h3.5v-5h3v5H17a1 1 0 0 0 1-1V9.5"/>',
 
   // --- le impostazioni: le schede e dove vale un valore -------------------
   component: '<path d="M5 8h3a2 2 0 1 1 4 0h3a1 1 0 0 1 1 1v3a2 2 0 1 1 0 4v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/>',
@@ -97,6 +99,8 @@ const ALIASES: Record<string, string> = {
   collections: "collection",
   footnotes: "footnote",
   "layout-dashboard": "dashboard",
+  // Una cartella dell'albero, o uno spazio, senza un'icona scelta.
+  folder: "vault",
 };
 
 /// Le icone registrate dai moduli della shell, sopra il set di serie.

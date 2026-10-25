@@ -38,8 +38,6 @@ export const PRESS_SCALE = 0.97;
 /// Lo sfalsamento fra le voci di un elenco (ms) e quante ne sfalsa al massimo.
 export const STAGGER_MS = 12;
 export const STAGGER_MAX = 8;
-/// L'inclinazione massima di un oggetto trascinato (gradi).
-export const MAX_TILT_DEG = 4;
 /// Non è una durata del disegno: è il tetto oltre il quale un'uscita non può
 /// restare appesa (ms).
 export const EXIT_SAFETY_MS = 600;
@@ -139,6 +137,46 @@ export function critical(spring: Spring): Spring {
   return { ...spring, damping: Math.max(spring.damping, 2 * Math.sqrt(spring.stiffness * mass)) };
 }
 
+/// Quanto dura l'assestamento di una corsa lunga 1, da ferma (ms).
+function settleMs(spring: Spring): number {
+  return sampleSpring(spring, { from: 0, to: 1 }).duration;
+}
+
+const calmed = new Map<string, Spring>();
+
+/// La molla del livello «calmo» per ciò che entra ed esce: smorzamento
+/// critico, e la rigidezza alzata quanto basta perché non duri più della
+/// molla piena. `critical` tiene la rigidezza, e una molla critica con la
+/// stessa k è più lenta di quella che oscilla: il calmo diventava un moto più
+/// lungo, cioè più presente, proprio dove doveva esserlo meno. Insieme alla
+/// corsa dimezzata di `animate`, la presenza nel calmo fa metà strada, senza
+/// superamento e senza più tempo.
+export function calmPresence(spring: Spring): Spring {
+  const mass = spring.mass !== undefined && spring.mass > 0 ? spring.mass : 1;
+  const key = `${spring.stiffness}/${spring.damping}/${mass}`;
+  const known = calmed.get(key);
+  if (known) return known;
+  const budget = settleMs(spring);
+  const at = (stiffness: number): Spring => ({ ...spring, stiffness, damping: 2 * Math.sqrt(stiffness * mass) });
+  let low = spring.stiffness;
+  let high = spring.stiffness;
+  if (settleMs(at(low)) <= budget) {
+    calmed.set(key, at(low));
+    return at(low);
+  }
+  while (settleMs(at(high)) > budget && high < spring.stiffness * 64) high *= 2;
+  // Venti dimezzamenti bastano a una k esatta al decimo; si arrotonda in su,
+  // dalla parte che non allunga.
+  for (let step = 0; step < 20; step++) {
+    const middle = (low + high) / 2;
+    if (settleMs(at(middle)) > budget) low = middle;
+    else high = middle;
+  }
+  const result = at(Math.ceil(high));
+  calmed.set(key, result);
+  return result;
+}
+
 let tokens = new WeakMap<Element, Partial<Record<SpringName, Spring>>>();
 
 /// Da chiamare quando cambia la pelle: i token si rileggono alla prossima corsa.
@@ -174,8 +212,10 @@ export function resolveSpring(name: SpringName, root?: Element): Spring {
 }
 
 /// La molla che una corsa usa davvero: per nome o per parametri, calmata se il
-/// livello lo chiede.
-export function springFor(spring: SpringName | Spring, calm: boolean): Spring {
+/// livello lo chiede. Una presenza (ciò che entra o esce) nel calmo prende
+/// `calmPresence`; il resto, i FLIP e i valori vivi, `critical`.
+export function springFor(spring: SpringName | Spring, calm: boolean, presence = false): Spring {
   const base = typeof spring === "string" ? resolveSpring(spring) : spring;
-  return calm ? critical(base) : base;
+  if (!calm) return base;
+  return presence ? calmPresence(base) : critical(base);
 }

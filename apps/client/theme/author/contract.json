@@ -165,6 +165,9 @@
     "elevation-dialog",
     "skip-link",
     "muted",
+    "skeleton",
+    "skeleton-line",
+    "skeleton-rows",
     "primary",
     "ui-button",
     "intent-primary",
@@ -271,6 +274,7 @@
     "danger",
     "clickable",
     "search-results",
+    "search-exclusions",
     "drop-into",
     "space-strip",
     "space-chip",
@@ -320,9 +324,9 @@
     "search-action",
     "search-tools",
     "search-syntax",
-    "search-exclusions",
     "search-chip",
     "search-options",
+    "search-options-group",
     "search-option",
     "search-replace",
     "search-replace-entry",
@@ -349,9 +353,11 @@
     "tab-close",
     "tab-new",
     "pane-toolbar",
+    "pane-mode-current",
     "sheet-title",
     "sheet-title-edit",
     "sheet-title-error",
+    "sheet-title-proposal",
     "sheet-save",
     "sheet-save-panel",
     "sheet-save-headline",
@@ -495,6 +501,8 @@
     "cm-completionMatchedText",
     "cm-completionDetail",
     "cm-completionInfo",
+    "cm-completionIcon-fub-slash",
+    "cm-fub-slash-icon",
     "document-surface-error",
     "document-surface-viewer",
     "media-surface",
@@ -507,8 +515,109 @@
     "grid-header",
     "grid-corner",
     "grid-cell-editor",
+    "grid-notice",
+    "grid-sheets",
+    "grid-freeze",
+    "grid-comment-mark",
+    "grid-comment-card",
+    "grid-comment-head",
+    "grid-comment-kind",
+    "grid-comment-where",
+    "grid-comment-resolved",
+    "grid-comment-thread",
+    "grid-comment-post",
+    "grid-comment-author",
+    "grid-comment-text",
+    "grid-comment-reply",
+    "grid-comment-field",
+    "grid-comment-actions",
+    "grid-comment-action",
+    "grid-comment-error",
+    "resolved",
+    "grid-object",
+    "grid-object-handle",
+    "grid-object-missing",
+    "grid-object-text-editor",
+    "grid-fill-handle",
+    "grid-fill-preview",
     "selected",
     "active",
+    "stale",
+    "conflict",
+    "frozen",
+    "threaded",
+    "no-gridlines",
+    "grid-ribbon",
+    "grid-ribbon-mini",
+    "grid-ribbon-head",
+    "grid-ribbon-tabs",
+    "grid-ribbon-toggle",
+    "grid-ribbon-toolbar",
+    "grid-ribbon-group",
+    "grid-ribbon-group-body",
+    "grid-ribbon-group-label",
+    "grid-ribbon-stack",
+    "grid-ribbon-row",
+    "grid-ribbon-button",
+    "grid-ribbon-large",
+    "grid-ribbon-arrow",
+    "grid-ribbon-split",
+    "grid-ribbon-glyph",
+    "grid-ribbon-bold",
+    "grid-ribbon-italic",
+    "grid-ribbon-underline",
+    "grid-ribbon-strike",
+    "grid-ribbon-color-bar",
+    "grid-ribbon-select",
+    "grid-ribbon-input",
+    "grid-ribbon-check",
+    "grid-ribbon-field-label",
+    "grid-ribbon-keytip",
+    "grid-ribbon-contextual",
+    "grid-ribbon-popup-group",
+    "grid-ribbon-palette",
+    "grid-ribbon-palette-empty",
+    "grid-ribbon-palette-title",
+    "grid-ribbon-palette-grid",
+    "grid-ribbon-swatch",
+    "grid-ribbon-swatch-base",
+    "grid-ribbon-gallery",
+    "grid-ribbon-gallery-grid",
+    "grid-ribbon-gallery-item",
+    "grid-ribbon-table-preview",
+    "grid-ribbon-cell-sample",
+    "grid-dialog",
+    "grid-dialog-border-cell",
+    "grid-dialog-border-preview",
+    "grid-dialog-check",
+    "grid-dialog-choice",
+    "grid-dialog-choices",
+    "grid-dialog-color-button",
+    "grid-dialog-color-chip",
+    "grid-dialog-color-chip--auto",
+    "grid-dialog-error",
+    "grid-dialog-field",
+    "grid-dialog-fields",
+    "grid-dialog-form",
+    "grid-dialog-label",
+    "grid-dialog-legend",
+    "grid-dialog-names-head",
+    "grid-dialog-names-row",
+    "grid-dialog-note",
+    "grid-dialog-preview",
+    "grid-preview-stage",
+    "grid-preview-page",
+    "grid-dialog-palette",
+    "grid-dialog-palette-auto",
+    "grid-dialog-palette-grid",
+    "grid-dialog-palette-title",
+    "grid-dialog-preview-text",
+    "grid-dialog-results",
+    "grid-dialog-sample-text",
+    "grid-dialog-section",
+    "grid-dialog-signature",
+    "grid-dialog-swatch",
+    "grid-dialog-toolbar",
     "base-surface",
     "base-toolbar",
     "base-status",
@@ -568,6 +677,9 @@
     "rich-strip-group",
     "rich-strip-button",
     "rich-strip-underline",
+    "rich-strip-bold",
+    "rich-strip-italic",
+    "rich-strip-mini",
     "rich-strip-marker",
     "rich-strip-bar",
     "rich-strip-select",
@@ -943,6 +1055,10 @@
     "graph-list-more",
     "context-menu",
     "menu-separator",
+    "menu-group",
+    "context-submenu",
+    "menu-more",
+    "context-strip",
     "menu-label",
     "menu-hint",
     "menu-body",
@@ -1218,6 +1334,7 @@
     "prefs-swatch-mark",
     "prefs-hue",
     "prefs-hue-value",
+    "prefs-font",
     "prefs-theme-entries",
     "prefs-preview",
     "prefs-preview-side",
@@ -1252,8 +1369,8 @@
     "onboarding-forget",
     "onboarding-extra",
     "onboarding-trouble",
-    "sheet-ghost",
-    "draw-radial"
+    "cm-cursorLayer",
+    "sheet-ghost"
   ],
   "states": [
     "rest",
@@ -1341,6 +1458,18 @@
       "part": "foundation",
       "hooks": [
         "muted"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "skeleton",
+      "part": "foundation",
+      "hooks": [
+        "skeleton",
+        "skeleton-line",
+        "skeleton-rows"
       ],
       "states": [
         "rest"
@@ -1816,6 +1945,7 @@
         "danger",
         "clickable",
         "search-results",
+        "search-exclusions",
         "drop-into"
       ],
       "states": [
@@ -2004,7 +2134,8 @@
         "hit-snippet",
         "hit-context",
         "hit-occurrence",
-        "hit-create"
+        "hit-create",
+        "skeleton"
       ],
       "states": [
         "rest",
@@ -2039,7 +2170,9 @@
       "part": "search",
       "hooks": [
         "search-options",
-        "search-option"
+        "search-options-group",
+        "search-option",
+        "sidebar"
       ],
       "states": [
         "rest",
@@ -2112,7 +2245,8 @@
       "part": "sheets",
       "hooks": [
         "pane-toolbar",
-        "muted"
+        "muted",
+        "pane-mode-current"
       ],
       "states": [
         "rest"
@@ -2125,6 +2259,7 @@
         "sheet-title",
         "sheet-title-edit",
         "sheet-title-error",
+        "sheet-title-proposal",
         "kit-field-box"
       ],
       "states": [
@@ -2610,7 +2745,9 @@
         "cm-tooltip-autocomplete",
         "cm-completionMatchedText",
         "cm-completionDetail",
-        "cm-completionInfo"
+        "cm-completionInfo",
+        "cm-completionIcon-fub-slash",
+        "cm-fub-slash-icon"
       ],
       "states": [
         "rest",
@@ -2643,8 +2780,38 @@
         "grid-header",
         "grid-corner",
         "grid-cell-editor",
+        "grid-notice",
+        "grid-sheets",
+        "grid-freeze",
+        "grid-comment-mark",
+        "grid-comment-card",
+        "grid-comment-head",
+        "grid-comment-kind",
+        "grid-comment-where",
+        "grid-comment-resolved",
+        "grid-comment-thread",
+        "grid-comment-post",
+        "grid-comment-author",
+        "grid-comment-text",
+        "grid-comment-reply",
+        "grid-comment-field",
+        "grid-comment-actions",
+        "grid-comment-action",
+        "grid-comment-error",
+        "resolved",
+        "grid-object",
+        "grid-object-handle",
+        "grid-object-missing",
+        "grid-object-text-editor",
+        "grid-fill-handle",
+        "grid-fill-preview",
         "selected",
-        "active"
+        "active",
+        "stale",
+        "conflict",
+        "frozen",
+        "threaded",
+        "no-gridlines"
       ],
       "states": [
         "rest",
@@ -2653,6 +2820,117 @@
         "focused",
         "disabled",
         "selected"
+      ]
+    },
+    {
+      "name": "grid-ribbon",
+      "part": "editors",
+      "hooks": [
+        "grid-ribbon",
+        "grid-ribbon-mini",
+        "grid-ribbon-head",
+        "grid-ribbon-tabs",
+        "grid-ribbon-toggle",
+        "grid-ribbon-toolbar",
+        "grid-ribbon-group",
+        "grid-ribbon-group-body",
+        "grid-ribbon-group-label",
+        "grid-ribbon-stack",
+        "grid-ribbon-row",
+        "grid-ribbon-button",
+        "grid-ribbon-large",
+        "grid-ribbon-arrow",
+        "grid-ribbon-split",
+        "grid-ribbon-glyph",
+        "grid-ribbon-bold",
+        "grid-ribbon-italic",
+        "grid-ribbon-underline",
+        "grid-ribbon-strike",
+        "grid-ribbon-color-bar",
+        "grid-ribbon-select",
+        "grid-ribbon-input",
+        "grid-ribbon-check",
+        "grid-ribbon-field-label",
+        "grid-ribbon-keytip",
+        "grid-ribbon-contextual",
+        "kit-tabs",
+        "kit-tab"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "grid-ribbon-popover",
+      "part": "editors",
+      "hooks": [
+        "grid-ribbon-popup-group",
+        "grid-ribbon-palette",
+        "grid-ribbon-palette-empty",
+        "grid-ribbon-palette-title",
+        "grid-ribbon-palette-grid",
+        "grid-ribbon-swatch",
+        "grid-ribbon-swatch-base",
+        "grid-ribbon-gallery",
+        "grid-ribbon-gallery-grid",
+        "grid-ribbon-gallery-item",
+        "grid-ribbon-table-preview",
+        "grid-ribbon-cell-sample"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "selected"
+      ]
+    },
+    {
+      "name": "grid-dialog",
+      "part": "editors",
+      "hooks": [
+        "grid-dialog",
+        "grid-dialog-border-cell",
+        "grid-dialog-border-preview",
+        "grid-dialog-check",
+        "grid-dialog-choice",
+        "grid-dialog-choices",
+        "grid-dialog-color-button",
+        "grid-dialog-color-chip",
+        "grid-dialog-color-chip--auto",
+        "grid-dialog-error",
+        "grid-dialog-field",
+        "grid-dialog-fields",
+        "grid-dialog-form",
+        "grid-dialog-label",
+        "grid-dialog-legend",
+        "grid-dialog-names-head",
+        "grid-dialog-names-row",
+        "grid-dialog-note",
+        "grid-dialog-preview",
+        "grid-preview-stage",
+        "grid-preview-page",
+        "grid-dialog-palette",
+        "grid-dialog-palette-auto",
+        "grid-dialog-palette-grid",
+        "grid-dialog-palette-title",
+        "grid-dialog-preview-text",
+        "grid-dialog-results",
+        "grid-dialog-sample-text",
+        "grid-dialog-section",
+        "grid-dialog-signature",
+        "grid-dialog-swatch",
+        "grid-dialog-toolbar"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "selected",
+        "disabled"
       ]
     },
     {
@@ -2807,6 +3085,9 @@
         "rich-strip-group",
         "rich-strip-button",
         "rich-strip-underline",
+        "rich-strip-bold",
+        "rich-strip-italic",
+        "rich-strip-mini",
         "rich-strip-marker",
         "rich-strip-bar",
         "rich-strip-select",
@@ -3574,7 +3855,30 @@
       "part": "menus",
       "hooks": [
         "context-menu",
-        "menu-separator"
+        "menu-separator",
+        "menu-group"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "context-submenu",
+      "part": "menus",
+      "hooks": [
+        "context-submenu",
+        "menu-more"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "context-strip",
+      "part": "menus",
+      "hooks": [
+        "context-strip",
+        "format-bar"
       ],
       "states": [
         "rest"
@@ -4308,7 +4612,8 @@
         "prefs-swatch--custom",
         "prefs-swatch-mark",
         "prefs-hue",
-        "prefs-hue-value"
+        "prefs-hue-value",
+        "prefs-font"
       ],
       "states": [
         "rest",
@@ -4448,17 +4753,6 @@
       ]
     },
     {
-      "name": "icon-picker",
-      "part": "motion",
-      "hooks": [
-        "icon-picker"
-      ],
-      "states": [
-        "rest",
-        "focused"
-      ]
-    },
-    {
       "name": "context-menu",
       "part": "motion",
       "hooks": [
@@ -4476,7 +4770,6 @@
       "name": "modal-palette",
       "part": "motion",
       "hooks": [
-        "modale",
         "palette-box"
       ],
       "states": [
@@ -4489,23 +4782,12 @@
       ]
     },
     {
-      "name": "settings",
-      "part": "motion",
-      "hooks": [
-        "settings-panel"
-      ],
-      "states": [
-        "rest",
-        "selected",
-        "focused"
-      ]
-    },
-    {
       "name": "editor-motion-surface",
       "part": "motion",
       "hooks": [
         "cm-editor",
-        "pane-editor"
+        "pane-editor",
+        "cm-cursorLayer"
       ],
       "states": [
         "rest",
@@ -4520,21 +4802,6 @@
       ],
       "states": [
         "rest"
-      ]
-    },
-    {
-      "name": "draw-radial",
-      "part": "motion",
-      "hooks": [
-        "draw-radial",
-        "draw-radial-ring"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "pressed",
-        "focused",
-        "disabled"
       ]
     }
   ],
@@ -5263,10 +5530,10 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1097,
+    "hooks": 1214,
     "state_names": 7,
-    "assigned_states": 625,
-    "components": 185,
+    "assigned_states": 632,
+    "components": 188,
     "preference_tokens": 123
   }
 }

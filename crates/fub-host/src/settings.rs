@@ -172,6 +172,8 @@ pub const EDITOR_FOLD_GUTTER: &str = "editor.fold-gutter";
 pub const EDITOR_SMART_LISTS: &str = "editor.smart-lists";
 pub const EDITOR_PASTE_HTML: &str = "editor.paste-html";
 pub const EDITOR_INDENT_GUIDES: &str = "editor.indent-guides";
+/// Il cursore dell'editor lampeggia. Di serie sta fermo.
+pub const EDITOR_CURSOR_BLINK: &str = "editor.cursor-blink";
 /// Il testo dell'editor e della Lettura va da destra a sinistra (arabo, ebraico).
 pub const EDITOR_RTL: &str = "editor.rtl";
 /// L'anteprima di un link al passaggio vuole sempre Ctrl/Cmd, anche in Lettura.
@@ -184,6 +186,14 @@ pub const EDITOR_INDENT: &str = "editor.indent";
 /// proprietà, `hidden` lo riduce a una riga che si apre, `source` lo lascia
 /// YAML. Il default è quello di prima che fosse una scelta.
 pub const EDITOR_PROPERTIES: &str = "editor.properties";
+/// Quando compare la mini-barra di formattazione accanto al puntatore:
+/// `auto` col tasto destro e, a barra del foglio spenta, sul testo scelto;
+/// `always` anche sul testo scelto a barra accesa; `menu` soltanto col tasto
+/// destro; `off` mai.
+pub const EDITOR_MINIBAR: &str = "editor.minibar";
+/// Il «/» a inizio riga o dopo uno spazio apre il menu dei blocchi e dei
+/// comandi, filtrato da ciò che si scrive dopo. Spento, il «/» resta testo.
+pub const EDITOR_SLASH: &str = "editor.slash";
 /// In che modalità si apre un riquadro nuovo: `source`, `live_preview` o
 /// `reading`, gli id delle modalità della superficie testuale.
 pub const EDITOR_DEFAULT_MODE: &str = "editor.default-mode";
@@ -580,6 +590,12 @@ fn editor_settings() -> Vec<SettingSpec> {
                 false,
             ),
             (
+                EDITOR_CURSOR_BLINK,
+                C_EDITOR_CURSOR_BLINK,
+                C_EDITOR_CURSOR_BLINK_DESC,
+                false,
+            ),
+            (
                 EDITOR_PASTE_HTML,
                 C_EDITOR_PASTE_HTML,
                 C_EDITOR_PASTE_HTML_DESC,
@@ -623,6 +639,24 @@ fn editor_settings() -> Vec<SettingSpec> {
             UiOption::new("source", Text::key(C_EDITOR_PROPERTIES_SOURCE)),
         ],
     ));
+    settings.push(choice(
+        EDITOR_MINIBAR,
+        C_EDITOR_MINIBAR,
+        C_EDITOR_MINIBAR_DESC,
+        "auto",
+        vec![
+            UiOption::new("auto", Text::key(C_EDITOR_MINIBAR_AUTO)),
+            UiOption::new("always", Text::key(C_EDITOR_MINIBAR_ALWAYS)),
+            UiOption::new("menu", Text::key(C_EDITOR_MINIBAR_MENU)),
+            UiOption::new("off", Text::key(C_EDITOR_MINIBAR_OFF)),
+        ],
+    ));
+    settings.push(
+        SettingSpec::toggle(EDITOR_SLASH, Text::key(C_EDITOR_SLASH), true)
+            .describing(Text::key(C_EDITOR_SLASH_DESC))
+            .grouped(Text::key(C_GROUP_EDITOR))
+            .for_machine(),
+    );
     settings.push(
         SettingSpec::toggle(EDITOR_VIM, Text::key(C_EDITOR_VIM), false)
             .describing(Text::key(C_EDITOR_VIM_DESC))
@@ -1174,6 +1208,8 @@ const C_EDITOR_INDENT_GUIDES: &str = "core.editor.indent_guides";
 const C_EDITOR_RTL: &str = "core.editor.rtl";
 const C_EDITOR_RTL_DESC: &str = "core.editor.rtl.desc";
 const C_EDITOR_INDENT_GUIDES_DESC: &str = "core.editor.indent_guides.desc";
+const C_EDITOR_CURSOR_BLINK: &str = "core.editor.cursor_blink";
+const C_EDITOR_CURSOR_BLINK_DESC: &str = "core.editor.cursor_blink.desc";
 const C_EDITOR_PREVIEW_MODIFIER: &str = "core.editor.preview_modifier";
 const C_EDITOR_PREVIEW_MODIFIER_DESC: &str = "core.editor.preview_modifier.desc";
 const C_EDITOR_PASTE_HTML: &str = "core.editor.paste_html";
@@ -1190,6 +1226,14 @@ const C_EDITOR_PROPERTIES_DESC: &str = "core.editor.properties.desc";
 const C_EDITOR_PROPERTIES_VISIBLE: &str = "core.editor.properties.visible";
 const C_EDITOR_PROPERTIES_HIDDEN: &str = "core.editor.properties.hidden";
 const C_EDITOR_PROPERTIES_SOURCE: &str = "core.editor.properties.source";
+const C_EDITOR_MINIBAR: &str = "core.editor.minibar";
+const C_EDITOR_MINIBAR_DESC: &str = "core.editor.minibar.desc";
+const C_EDITOR_MINIBAR_AUTO: &str = "core.editor.minibar.auto";
+const C_EDITOR_MINIBAR_ALWAYS: &str = "core.editor.minibar.always";
+const C_EDITOR_MINIBAR_MENU: &str = "core.editor.minibar.menu";
+const C_EDITOR_MINIBAR_OFF: &str = "core.editor.minibar.off";
+const C_EDITOR_SLASH: &str = "core.editor.slash";
+const C_EDITOR_SLASH_DESC: &str = "core.editor.slash.desc";
 const C_EDITOR_DEFAULT_MODE: &str = "core.editor.default_mode";
 const C_EDITOR_DEFAULT_MODE_DESC: &str = "core.editor.default_mode.desc";
 const C_MODE_SOURCE: &str = "core.mode.source";
@@ -1431,6 +1475,22 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.rich.locked.block", "«{doc}» non è stato salvato: il paragrafo o la tabella {block} del testo ha parti che Fub non sa riscrivere senza perderle, e da qui non si cambia.")
         .with("host.rich.locked.outside", "«{doc}» non è stato salvato: la modifica tocca parti del file fuori dal testo che Fub non sa riscrivere senza perderle. Si salvano soltanto i paragrafi e le tabelle del testo.")
         .with("host.rich.codec", "«{doc}» non si legge o non si scrive nel suo formato: {why}")
+        .with("host.xlsx.readonly", "«{doc}» è una cartella di Excel: Fub ne cambia soltanto i valori delle celle, e non la copre con altri byte.")
+        .with("host.xlsx.missing", "«{doc}» non c'è più: Fub non crea una cartella di Excel dalle celle cambiate.")
+        .with("host.xlsx.journal", "Le celle cambiate da salvare in «{doc}» non sono leggibili: {why}")
+        .with("host.xlsx.encrypted", "«{doc}» è protetta da una password: Fub non la apre.")
+        .with("host.xlsx.too_large", "«{doc}» pesa {bytes} byte, più di quanto Fub apra.")
+        .with("host.xlsx.not_xlsx", "«{doc}» non è una cartella di Excel, anche se ne ha il nome ({found}).")
+        .with("host.xlsx.codec", "«{doc}» non si legge come cartella di Excel: {why}")
+        .with("xlsx.rewrite.loses", "La cartella non si salva: riscriverla perderebbe parti del file che Fub non sa scrivere, e il file resta com'era ({why}).")
+        .with("host.grid.protocol", "La superficie della griglia parla un'altra versione del protocollo: questa porta non la serve.")
+        .with("host.grid.no_surface", "Un provider della griglia deve dichiarare almeno una superficie.")
+        .with("host.grid.not_bytes", "La superficie della griglia «{surface}» non è della versione a byte.")
+        .with("host.grid.surface_format", "La superficie della griglia «{surface}» non apre «{doc}»: è di un altro formato.")
+        .with("host.grid.source_too_large", "La sorgente della griglia pesa {bytes} byte, più del limite.")
+        .with("host.grid.source_revision", "La sorgente della griglia non ha la revisione con cui è arrivata.")
+        .with("host.wasm.reentrant", "Il componente è stato richiamato mentre era già al lavoro.")
+        .with("host.wasm.missing_export", "Il componente non esporta «{interface}».")
         .with("host.turn.cycle", "Il vault sta salvando una nota che aspetta questo componente, e questo componente aspetta il vault: il lavoro si ferma per lasciar finire il salvataggio. Riprova.")
         .with("host.instance.cycle", "Questo componente aspetta un altro componente che a sua volta aspetta questo: il lavoro si ferma per non bloccarli entrambi. Riprova.")
         .with("host.capture.source", "Fonte: {url}")
@@ -1673,6 +1733,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_RTL_DESC, "Per l'arabo, l'ebraico e le altre scritture da destra a sinistra: l'editor e la Lettura partono dal margine destro.")
         .with(C_EDITOR_INDENT_GUIDES, "Guide di rientro")
         .with(C_EDITOR_INDENT_GUIDES_DESC, "Disegna una riga verticale per ogni livello di rientro. Funziona in modalità Sorgente.")
+        .with(C_EDITOR_CURSOR_BLINK, "Cursore che lampeggia")
+        .with(C_EDITOR_CURSOR_BLINK_DESC, "Il cursore dell'editor si accende e si spegne. Di serie sta fermo, per non distrarre mentre si legge.")
         .with(C_EDITOR_PREVIEW_MODIFIER, "Anteprima dei link solo con Ctrl")
         .with(C_EDITOR_PREVIEW_MODIFIER_DESC, "Passando sopra un link, l'anteprima della nota si apre solo tenendo premuto Ctrl (Cmd sul Mac), anche in Lettura. Mentre si scrive serve sempre.")
         .with(C_EDITOR_PASTE_HTML, "Converti l'HTML incollato")
@@ -1689,6 +1751,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_PROPERTIES_VISIBLE, "Visibili")
         .with(C_EDITOR_PROPERTIES_HIDDEN, "Nascoste")
         .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
+        .with(C_EDITOR_MINIBAR, "Mini-barra di formattazione")
+        .with(C_EDITOR_MINIBAR_DESC, "I gesti di formattazione accanto al puntatore: sopra il menu del tasto destro e, se si vuole, sul testo scelto.")
+        .with(C_EDITOR_MINIBAR_AUTO, "Col tasto destro, e sul testo scelto a barra spenta")
+        .with(C_EDITOR_MINIBAR_ALWAYS, "Col tasto destro e su ogni testo scelto")
+        .with(C_EDITOR_MINIBAR_MENU, "Soltanto col tasto destro")
+        .with(C_EDITOR_MINIBAR_OFF, "Mai")
+        .with(C_EDITOR_SLASH, "Menu «/» nel testo")
+        .with(C_EDITOR_SLASH_DESC, "Un «/» a inizio riga o dopo uno spazio apre i blocchi e i comandi, filtrati da ciò che si scrive dopo. Esc lo lascia come testo.")
         .with(C_EDITOR_DEFAULT_MODE, "Modalità iniziale")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "La modalità di una finestra nuova o di un vault aperto per la prima volta. Un riquadro diviso eredita quella del riquadro da cui nasce, e ognuno ricorda la sua.")
         .with(C_MODE_SOURCE, "Sorgente")
@@ -1758,15 +1828,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FONT_MONO_DESC, "Famiglia a spaziatura fissa del codice e del sorgente.")
         .with(C_FONT_PLEX, "IBM Plex Mono")
         .with(C_FONT_JETBRAINS, "JetBrains Mono")
-        .with(C_ACCENT, "Tinta dell'accento (0–360)")
+        .with(C_ACCENT, "Tinta dell'accento")
         .with(
             C_ACCENT_DESC,
-            "Tinta OKLCH; chiarezza e croma vengono derivati per mantenere il contrasto.",
+            "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.",
         )
         .with(C_COMPACTNESS, "Spazio dell'interfaccia")
         .with(C_COMPACTNESS_DESC, "Quanto posto prendono barre, binario e cassetti: da 0, ampia, a 4, minima. Il foglio e le sue linguette non cambiano.")
         .with(C_ZOOM, "Zoom interfaccia")
-        .with(C_ZOOM_DESC, "Scala nativa della finestra, da 0,5 a 2.")
+        .with(C_ZOOM_DESC, "Quanto è grande tutta l'interfaccia, dal 50% al 200%.")
         .with(C_THEME_ID, "Tema installato")
         .with(C_THEME_ID_DESC, "L'id del tema montato; si sceglie dal catalogo dei temi.")
         .with(C_MOTION, "Animazioni")
@@ -1909,6 +1979,22 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.rich.locked.block", "“{doc}” was not saved: paragraph or table {block} of the text has parts Fub cannot rewrite without losing them, and it cannot be changed from here.")
         .with("host.rich.locked.outside", "“{doc}” was not saved: the change touches parts of the file outside the text that Fub cannot rewrite without losing them. Only the paragraphs and tables of the text are saved.")
         .with("host.rich.codec", "“{doc}” cannot be read or written in its format: {why}")
+        .with("host.xlsx.readonly", "“{doc}” is an Excel workbook: Fub only changes the values of its cells and does not overwrite it with other bytes.")
+        .with("host.xlsx.missing", "“{doc}” no longer exists: Fub does not create an Excel workbook from changed cells.")
+        .with("host.xlsx.journal", "The changed cells to save in “{doc}” cannot be read: {why}")
+        .with("host.xlsx.encrypted", "“{doc}” is protected by a password: Fub does not open it.")
+        .with("host.xlsx.too_large", "“{doc}” is {bytes} bytes, more than Fub opens.")
+        .with("host.xlsx.not_xlsx", "“{doc}” is not an Excel workbook, even though it has the name of one ({found}).")
+        .with("host.xlsx.codec", "“{doc}” cannot be read as an Excel workbook: {why}")
+        .with("xlsx.rewrite.loses", "The workbook was not saved: rewriting it would lose parts of the file that Fub cannot write, so the file stays as it was ({why}).")
+        .with("host.grid.protocol", "The grid surface speaks another protocol version: this port does not serve it.")
+        .with("host.grid.no_surface", "A grid provider must declare at least one surface.")
+        .with("host.grid.not_bytes", "The grid surface “{surface}” is not a byte surface.")
+        .with("host.grid.surface_format", "The grid surface “{surface}” does not open “{doc}”: it belongs to another format.")
+        .with("host.grid.source_too_large", "The grid source is {bytes} bytes, more than the limit.")
+        .with("host.grid.source_revision", "The grid source does not have the revision it arrived with.")
+        .with("host.wasm.reentrant", "The component was called again while it was already working.")
+        .with("host.wasm.missing_export", "The component does not export “{interface}”.")
         .with("host.turn.cycle", "The vault is saving a note that waits for this component, and this component waits for the vault: the work stops so the save can finish. Try again.")
         .with("host.instance.cycle", "This component waits for another one that in turn waits for this one: the work stops so neither blocks. Try again.")
         .with("host.capture.source", "Source: {url}")
@@ -2148,6 +2234,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_RTL_DESC, "For Arabic, Hebrew and other right-to-left scripts: the editor and Reading start from the right margin.")
         .with(C_EDITOR_INDENT_GUIDES, "Indentation guides")
         .with(C_EDITOR_INDENT_GUIDES_DESC, "Draws a vertical line for each indentation level. Works in Source mode.")
+        .with(C_EDITOR_CURSOR_BLINK, "Blinking cursor")
+        .with(C_EDITOR_CURSOR_BLINK_DESC, "The editor cursor turns on and off. By default it stays still, so it does not distract while reading.")
         .with(C_EDITOR_PREVIEW_MODIFIER, "Link preview only with Ctrl")
         .with(C_EDITOR_PREVIEW_MODIFIER_DESC, "Hovering a link opens the note preview only while Ctrl (Cmd on Mac) is held, in Reading too. While writing it is always needed.")
         .with(C_EDITOR_PASTE_HTML, "Convert pasted HTML")
@@ -2164,6 +2252,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_PROPERTIES_VISIBLE, "Visible")
         .with(C_EDITOR_PROPERTIES_HIDDEN, "Hidden")
         .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
+        .with(C_EDITOR_MINIBAR, "Formatting mini toolbar")
+        .with(C_EDITOR_MINIBAR_DESC, "Formatting gestures next to the pointer: above the right-click menu and, if you like, on selected text.")
+        .with(C_EDITOR_MINIBAR_AUTO, "On right-click, and on selected text with the bar off")
+        .with(C_EDITOR_MINIBAR_ALWAYS, "On right-click and on any selected text")
+        .with(C_EDITOR_MINIBAR_MENU, "Only on right-click")
+        .with(C_EDITOR_MINIBAR_OFF, "Never")
+        .with(C_EDITOR_SLASH, "«/» menu in the text")
+        .with(C_EDITOR_SLASH_DESC, "A «/» at the start of a line or after a space opens blocks and commands, filtered by what you type next. Esc leaves it as text.")
         .with(C_EDITOR_DEFAULT_MODE, "Initial mode")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "The mode of a new window or of a vault opened for the first time. A split pane inherits the mode of the pane it comes from, and each pane remembers its own.")
         .with(C_MODE_SOURCE, "Source")
@@ -2227,15 +2323,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FONT_MONO_DESC, "Monospaced font family for code and source.")
         .with(C_FONT_PLEX, "IBM Plex Mono")
         .with(C_FONT_JETBRAINS, "JetBrains Mono")
-        .with(C_ACCENT, "Accent hue (0–360)")
+        .with(C_ACCENT, "Accent hue")
         .with(
             C_ACCENT_DESC,
-            "OKLCH hue; lightness and chroma are derived to preserve contrast.",
+            "The colour of links, focus and selection. Lightness and intensity adapt by themselves to stay readable.",
         )
         .with(C_COMPACTNESS, "Interface space")
         .with(C_COMPACTNESS_DESC, "How much room bars, rail and drawers take: from 0, roomy, to 4, minimal. The sheet and its tabs do not change.")
         .with(C_ZOOM, "Interface zoom")
-        .with(C_ZOOM_DESC, "Native window scale, from 0.5 to 2.")
+        .with(C_ZOOM_DESC, "How large the whole interface is, from 50% to 200%.")
         .with(C_THEME_ID, "Installed theme")
         .with(C_THEME_ID_DESC, "The id of the mounted theme; chosen from the theme catalog.")
         .with(C_MOTION, "Animations")

@@ -19,10 +19,10 @@ Il core non dipende dal formato, dal toolkit desktop o dal motore WASM.
 
 ## Dipendenze del workspace Rust
 
-I due diagrammi seguenti sono, insieme, la fotografia completa delle
+I tre diagrammi seguenti sono, insieme, la fotografia completa delle
 dipendenze dichiarate fra i crate del workspace. Le frecce continue indicano
 dipendenze normali; quelle tratteggiate esistono soltanto in
-`[dev-dependencies]`. Un test confronta l'unione dei due blocchi con
+`[dev-dependencies]`. Un test confronta l'unione dei blocchi con
 `cargo metadata`, quindi un crate o un arco non può restare fuori senza far
 fallire la CI.
 
@@ -35,7 +35,6 @@ flowchart TD
     host["fub-host"]
     features["fub-features"]
     markdown["fub-format-markdown"]
-    sheet["fub-format-sheet"]
     base["fub-format-base"]
     canvas["fub-format-canvas"]
     svg["fub-format-svg"]
@@ -64,7 +63,6 @@ flowchart TD
     host --> importers
     host --> markdown
     host --> rich
-    host --> sheet
     host --> svg
     host --> kernel
     cli --> abi
@@ -82,7 +80,6 @@ flowchart TD
     features --> scene
     markdown --> abi
     markdown --> sdk
-    sheet --> abi
     svg --> abi
     svg --> scene
     scene --> ink
@@ -102,8 +99,8 @@ flowchart TD
     kernel -.-> testkit
     host -.-> sdk
     host -.-> testkit
-    wasmhost -.-> sheet
     wasmhost -.-> testkit
+    wasmhost -.-> sdk
     importers -.-> markdown
     importers -.-> sdk
     svg -.-> sdk
@@ -146,6 +143,80 @@ flowchart LR
     wdocbin --> wgeom
     wformats --> wdoc
     wformats --> wgeom
+```
+
+I crate di GridCraft in `vendor/gridcraft/` sono codice di terzi allo stesso
+modo, con un workspace loro: li usa soltanto `fub-format-xlsx`, che legge le
+cartelle di Excel per l'host (feature `xlsx`) e ne innesta i valori cambiati
+sui byte del file, e nessuno di loro dipende da Fub. Finché una sessione ha
+soltanto celle cambiate, di `gridcraft-calc` l'adattatore usa il grafo delle
+dipendenze fra le formule, per dire quali valori del file una modifica rende
+vecchi: niente si ricalcola. Dal primo comando la sessione passa a
+`gridcraft-engine`, la facciata dei comandi di GridCraft (vendorizzata con
+`gridcraft-chart` e `gridcraft-pdf`), che ricalcola ciò che il comando
+raggiunge; il salvataggio resta l'innesto o riscrive la cartella con il codec
+dopo averla misurata. Da `gridcraft-chart` l'adattatore prende anche il
+disegno in SVG dei grafici, che porta alla shell con le finestre. Il terzo blocco è il seguito dello stesso grafo, con
+l'adattatore e i crate di Fub da cui dipende.
+
+```mermaid
+flowchart LR
+    %% @grafo-dipendenze
+    %% Il seguito del grafo: fub-format-xlsx e i crate di GridCraft.
+
+    host["fub-host"]
+    abi["fub-abi"]
+    markdown["fub-format-markdown"]
+    sdk["fub-sdk"]
+    xlsx["fub-format-xlsx"]
+    gcalc["gridcraft-calc"]
+    gchart["gridcraft-chart"]
+    gcore["gridcraft-core"]
+    gengine["gridcraft-engine"]
+    gformula["gridcraft-formula"]
+    gfunctions["gridcraft-functions"]
+    gnumfmt["gridcraft-numfmt"]
+    gmodel["gridcraft-model"]
+    gpdf["gridcraft-pdf"]
+    gxlsx["gridcraft-xlsx"]
+
+    host --> xlsx
+    xlsx --> abi
+    xlsx --> markdown
+    xlsx -.-> sdk
+    xlsx --> gcalc
+    xlsx --> gchart
+    xlsx --> gcore
+    xlsx --> gengine
+    xlsx --> gmodel
+    xlsx --> gnumfmt
+    xlsx --> gxlsx
+    gcalc --> gcore
+    gcalc --> gformula
+    gcalc --> gfunctions
+    gcalc --> gmodel
+    gcalc --> gnumfmt
+    gchart --> gcalc
+    gchart --> gcore
+    gchart --> gmodel
+    gchart --> gnumfmt
+    gengine --> gcalc
+    gengine --> gchart
+    gengine --> gcore
+    gengine --> gformula
+    gengine --> gfunctions
+    gengine --> gmodel
+    gengine --> gnumfmt
+    gengine --> gpdf
+    gengine --> gxlsx
+    gformula --> gcore
+    gfunctions --> gcore
+    gmodel --> gcore
+    gmodel --> gformula
+    gnumfmt --> gcore
+    gxlsx --> gcore
+    gxlsx --> gformula
+    gxlsx --> gmodel
 ```
 
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso

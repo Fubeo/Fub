@@ -763,12 +763,13 @@ fn i_numeri_nuovi_non_ripetono_quelli_delle_altre_storie() {
     assert!(id > 50, "{}", rest[0]);
 }
 
-/// Un paragrafo che il codec non riscriverebbe uguale (la lingua dell'Asia
-/// orientale di un carattere, storytold/wordcraft#3457) resta chiuso: si
+/// Un paragrafo che il codec non riscriverebbe uguale (il suggerimento
+/// dei caratteri dell'Asia orientale, `w:hint`, storytold/wordcraft#3541) resta chiuso: si
 /// salvano gli altri, e lui resta i byte del file.
 #[test]
 fn un_blocco_chiuso_resta_i_byte_del_file() {
-    let closed = r#"<w:p><w:r><w:rPr><w:lang w:val="it-IT" w:eastAsia="ja-JP"/></w:rPr><w:t>chiuso</w:t></w:r></w:p>"#;
+    let closed =
+        r#"<w:p><w:r><w:rPr><w:rFonts w:hint="eastAsia"/></w:rPr><w:t>chiuso</w:t></w:r></w:p>"#;
     let file = package(
         "",
         &format!("{closed}{}{}", para("Primo"), para("Secondo")),

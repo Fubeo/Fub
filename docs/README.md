@@ -30,7 +30,7 @@ flowchart LR
 
 - [Panoramica](product/overview.md)
 - [Vault e file](product/vault-and-files.md), [explorer e cartelle](product/explorer-and-folders.md) e [importare ed esportare](product/import-and-export.md)
-- [Editor e anteprima](product/editor-and-preview.md), [correttore](product/proofing.md) e [documenti di Word](product/word-documents.md)
+- [Editor e anteprima](product/editor-and-preview.md), [tasto destro, mini-barra e «/»](product/editor-menus.md), [correttore](product/proofing.md) e [documenti di Word](product/word-documents.md)
 - [Disegni](product/drawing.md)
 - [Disegni, modelli e suggerimenti](product/drawing-new.md)
 - [Disegni, importare da Excalidraw e draw.io](product/drawing-import.md)
@@ -86,7 +86,7 @@ flowchart LR
 - [Storage e identità](architecture/storage-and-identity.md)
 - [Runtime, eventi e job](architecture/runtime-events-and-jobs.md)
 - [Frontend e IPC](architecture/frontend-and-ipc.md)
-- [Superfici dell'editor](architecture/editor-surfaces.md) e [superficie ricca e correttore](architecture/rich-surface-and-proofing.md)
+- [Superfici dell'editor](architecture/editor-surfaces.md), [superficie ricca e correttore](architecture/rich-surface-and-proofing.md) e [superficie dei fogli](architecture/grid-surface.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md)
 
@@ -94,7 +94,7 @@ flowchart LR
 
 - [Workflow](development/workflow.md)
 - [Test e qualità](development/testing-and-quality.md)
-- [Prova manuale dell'inchiostro](development/ink-input-smoke-test.md)
+- Prove manuali: [l'inchiostro](development/ink-input-smoke-test.md), [il moto](development/motion-smoke-test.md)
 - [Creare un plugin](development/plugin-authoring.md)
 - [Stile della documentazione](development/documentation-style.md)
 - [Versionamento e release](development/versioning-and-releases.md)

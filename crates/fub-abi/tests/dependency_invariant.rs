@@ -311,8 +311,8 @@ impl<'a> Graph<'a> {
     }
 
     /// I crate i cui `Cargo.toml` stanno in questa repository: i membri e le
-    /// dipendenze a percorso fuori dal workspace, come i crate di WordCraft in
-    /// `vendor/wordcraft/`, che hanno un workspace loro.
+    /// dipendenze a percorso fuori dal workspace, come i crate di WordCraft e di
+    /// GridCraft in `vendor/`, che hanno un workspace loro.
     fn local(&self) -> BTreeSet<&'a str> {
         arr(self.metadata, "packages")
             .iter()
@@ -1115,10 +1115,28 @@ const WORDCRAFT_OWNERS: &[(&str, &str, Option<&str>)] = &[
 /// contratto, il core e ciò che un guest importa.
 const WORDCRAFT_FREE: &[&str] = &["fub-abi", "fub-kernel", "fub-sdk"];
 
-/// I crate di WordCraft fra le dipendenze dichiarate di un membro, con il genere.
-fn wordcraft_declared<'a>(
+/// Chi può dichiarare un crate di GridCraft, come [`WORDCRAFT_OWNERS`]: il
+/// foglio di calcolo entra da un adattatore soltanto, che legge le cartelle di
+/// Excel (vedi ../../../docs/decisions/0214-gridcraft-motore-del-foglio-di-calcolo.md).
+const GRIDCRAFT_OWNERS: &[(&str, &str, Option<&str>)] = &[
+    ("fub-format-xlsx", "gridcraft-calc", None),
+    ("fub-format-xlsx", "gridcraft-chart", None),
+    ("fub-format-xlsx", "gridcraft-core", None),
+    ("fub-format-xlsx", "gridcraft-engine", None),
+    ("fub-format-xlsx", "gridcraft-model", None),
+    ("fub-format-xlsx", "gridcraft-numfmt", None),
+    ("fub-format-xlsx", "gridcraft-xlsx", None),
+];
+
+/// I crate che non devono vedere GridCraft nemmeno attraverso qualcun altro.
+const GRIDCRAFT_FREE: &[&str] = &["fub-abi", "fub-kernel", "fub-sdk"];
+
+/// I crate di un motore (`family`) fra le dipendenze dichiarate di un membro,
+/// con il genere e se sono opzionali.
+fn engine_declared<'a>(
     graph: &Graph<'a>,
     member: &str,
+    family: &str,
 ) -> Vec<(&'a str, Option<&'a str>, bool)> {
     let pkg = arr(graph.metadata, "packages")
         .iter()
@@ -1126,7 +1144,7 @@ fn wordcraft_declared<'a>(
         .unwrap_or_else(|| panic!("`{member}` non è nel workspace"));
     arr(pkg, "dependencies")
         .iter()
-        .filter(|d| in_families(str_of(d, "name"), &["wordcraft"]))
+        .filter(|d| in_families(str_of(d, "name"), &[family]))
         .map(|d| {
             (
                 str_of(d, "name"),
@@ -1137,24 +1155,22 @@ fn wordcraft_declared<'a>(
         .collect()
 }
 
-/// I proprietari di WordCraft (F4 di `piano_motori_craft.md`): il motore cambia
-/// in fretta, e ogni crate che lo nomina è un posto in più da correggere a ogni
-/// aggiornamento. Si guardano **tutti** i membri, e tutti i generi di
-/// dipendenza: anche un test che costruisce un `wordcraft_doc::Document` lega
-/// quel crate al motore.
-#[test]
-fn only_the_adapters_name_wordcraft() {
+/// Ogni membro che nomina un crate del motore `family` è fra i suoi
+/// proprietari, e ogni riga di `owners` c'è ancora. Si guardano **tutti** i
+/// membri, e tutti i generi di dipendenza: anche un test che costruisce un
+/// documento del motore lega quel crate al motore.
+fn only_owners_name(family: &str, owners: &[(&str, &str, Option<&str>)], hint: &str) {
     let metadata = metadata();
     let graph = Graph::new(&metadata);
 
     let mut guilty = Vec::new();
     for member in graph.members() {
         // I crate del motore si nominano fra loro: non sono adattatori.
-        if in_families(member, &["wordcraft"]) {
+        if in_families(member, &[family]) {
             continue;
         }
-        for (name, kind, _) in wordcraft_declared(&graph, member) {
-            let allowed = WORDCRAFT_OWNERS
+        for (name, kind, _) in engine_declared(&graph, member, family) {
+            let allowed = owners
                 .iter()
                 .any(|(m, n, k)| *m == member && *n == name && *k == kind);
             if !allowed {
@@ -1164,39 +1180,117 @@ fn only_the_adapters_name_wordcraft() {
     }
     assert!(
         guilty.is_empty(),
-        "{guilty:?}: dipendenze da WordCraft fuori dall'elenco dei proprietari.\n\
-         Il motore entra da `fub-format-rich` (documenti) e da `fub-features`\n\
-         (correttore, feature `proof`). Un altro crate passa da quegli\n\
-         adattatori; se davvero serve, è una decisione da prendere aggiornando\n\
-         `WORDCRAFT_OWNERS` qui e l'ADR 0213, con chi possiede `fub-format-rich`."
+        "{guilty:?}: dipendenze da {family} fuori dall'elenco dei proprietari.\n{hint}"
     );
 
-    for (member, name, kind) in WORDCRAFT_OWNERS {
+    for (member, name, kind) in owners {
         assert!(
-            wordcraft_declared(&graph, member)
+            engine_declared(&graph, member, family)
                 .iter()
                 .any(|(n, k, _)| n == name && k == kind),
-            "`WORDCRAFT_OWNERS` elenca {member} → {name}, che non c'è più: \
-             togli la riga, l'elenco descrive il presente."
+            "l'elenco dei proprietari di {family} ha {member} → {name}, che non c'è \
+             più: togli la riga, l'elenco descrive il presente."
         );
     }
 }
 
-#[test]
-fn the_core_does_not_reach_wordcraft() {
+/// Nessun crate di `free` raggiunge il motore `family` fra le dipendenze
+/// normali, nemmeno attraverso un altro.
+fn the_core_does_not_reach(family: &str, free: &[&str], what: &str) {
     let metadata = metadata();
     let graph = Graph::new(&metadata);
 
-    for member in WORDCRAFT_FREE {
+    for member in free {
         let reached: Vec<&str> = graph
             .closure(member)
             .into_iter()
-            .filter(|n| in_families(n, &["wordcraft"]))
+            .filter(|n| in_families(n, &[family]))
             .collect();
         assert!(
             reached.is_empty(),
             "`{member}` raggiunge {reached:?} fra le dipendenze normali: il\n\
-             contratto, il core e l'SDK non conoscono il motore dei documenti."
+             contratto, il core e l'SDK non conoscono {what}."
+        );
+    }
+}
+
+/// I proprietari di WordCraft (F4 di `piano_motori_craft.md`): il motore cambia
+/// in fretta, e ogni crate che lo nomina è un posto in più da correggere a ogni
+/// aggiornamento.
+#[test]
+fn only_the_adapters_name_wordcraft() {
+    only_owners_name(
+        "wordcraft",
+        WORDCRAFT_OWNERS,
+        "Il motore entra da `fub-format-rich` (documenti) e da `fub-features`\n\
+         (correttore, feature `proof`). Un altro crate passa da quegli\n\
+         adattatori; se davvero serve, è una decisione da prendere aggiornando\n\
+         `WORDCRAFT_OWNERS` qui e l'ADR 0213, con chi possiede `fub-format-rich`.",
+    );
+}
+
+#[test]
+fn the_core_does_not_reach_wordcraft() {
+    the_core_does_not_reach("wordcraft", WORDCRAFT_FREE, "il motore dei documenti");
+}
+
+/// I proprietari di GridCraft: lo stesso confine, per il foglio di calcolo.
+#[test]
+fn only_the_adapter_names_gridcraft() {
+    only_owners_name(
+        "gridcraft",
+        GRIDCRAFT_OWNERS,
+        "Il motore entra soltanto da `fub-format-xlsx`. Un altro crate passa da\n\
+         quell'adattatore; se davvero serve, è una decisione da prendere\n\
+         aggiornando `GRIDCRAFT_OWNERS` qui e l'ADR 0214.",
+    );
+}
+
+#[test]
+fn the_core_does_not_reach_gridcraft() {
+    the_core_does_not_reach(
+        "gridcraft",
+        GRIDCRAFT_FREE,
+        "il motore del foglio di calcolo",
+    );
+}
+
+/// Le cartelle di Excel restano una feature dell'host: una build di `fub-host`
+/// senza `xlsx` non contiene GridCraft.
+#[test]
+fn the_spreadsheet_engine_stays_optional() {
+    let metadata = metadata();
+    let host = arr(&metadata, "packages")
+        .iter()
+        .find(|p| str_of(p, "name") == "fub-host")
+        .expect("`fub-host` nel workspace");
+    let adapter: Vec<bool> = arr(host, "dependencies")
+        .iter()
+        .filter(|d| {
+            str_of(d, "name") == "fub-format-xlsx" && d.get("kind").is_none_or(Value::is_null)
+        })
+        .map(|d| d.get("optional").and_then(Value::as_bool).unwrap_or(false))
+        .collect();
+    assert_eq!(
+        adapter,
+        [true],
+        "in `fub-host` `fub-format-xlsx` è una dipendenza normale e opzionale,\n\
+         accesa soltanto dalla feature `xlsx`."
+    );
+    let features = host
+        .get("features")
+        .and_then(Value::as_object)
+        .expect("`fub-host` senza feature");
+    for (feature, enables) in features {
+        let pulls = enables
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .any(|e| e == "dep:fub-format-xlsx" || e.starts_with("fub-format-xlsx/"));
+        assert!(
+            feature == "xlsx" || !pulls,
+            "la feature `{feature}` di `fub-host` accende `fub-format-xlsx`: soltanto `xlsx` lo fa."
         );
     }
 }
@@ -1208,7 +1302,7 @@ fn the_proofing_engine_stays_optional() {
     let metadata = metadata();
     let graph = Graph::new(&metadata);
 
-    let declared = wordcraft_declared(&graph, "fub-features");
+    let declared = engine_declared(&graph, "fub-features", "wordcraft");
     assert!(
         !declared.is_empty() && declared.iter().all(|(_, _, optional)| *optional),
         "{declared:?}: in `fub-features` ogni crate di WordCraft è opzionale,\n\

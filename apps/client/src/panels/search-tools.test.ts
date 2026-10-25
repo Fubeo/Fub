@@ -89,6 +89,21 @@ describe("le opzioni", () => {
     }
   });
 
+  it("stanno dietro «Opzioni», che dice quante ne sono accese", () => {
+    const toggle = button("Opzioni");
+    const group = document.getElementById(toggle.getAttribute("aria-controls")!)!;
+    expect(group.hidden).toBe(true);
+    expect(group.contains(button("Aa"))).toBe(true);
+    toggle.click();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(group.hidden).toBe(false);
+    button("Aa").click();
+    button(".*").click();
+    expect(toggle.textContent).toBe("Opzioni · 2");
+    toggle.click();
+    expect(group.hidden).toBe(true);
+  });
+
   it("reset le spegne tutte", () => {
     button(".*").click();
     tools.reset();

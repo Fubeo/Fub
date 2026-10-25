@@ -52,12 +52,13 @@ const LOCALE = "it-IT";
 /// Ciò che si spegne prima di scattare, e la sola cosa che il banco cambia
 /// nella pagina.
 ///
-/// Il cursore di CodeMirror **lampeggia**: è un'animazione sua, non passa dai
-/// token del moto e quindi `prefers-reduced-motion` non la tocca. Due scatti
-/// della stessa scena a mezzo secondo di distanza differiscono di quaranta
-/// pixel, e quaranta pixel che vanno e vengono sono il modo in cui un banco
-/// visivo diventa «ogni tanto rosso». Si nasconde il livello, non il tema:
-/// quello che si fotografa resta il CSS vero.
+/// Il cursore di CodeMirror di serie sta fermo, ma con `editor.cursor-blink`
+/// **lampeggia**: è un'animazione sua, non passa dai token del moto e quindi
+/// `prefers-reduced-motion` non la tocca. E anche fermo dipende da dove il
+/// fuoco è caduto per ultimo. Due scatti della stessa scena differirebbero di
+/// quaranta pixel, e quaranta pixel che vanno e vengono sono il modo in cui un
+/// banco visivo diventa «ogni tanto rosso». Si nasconde il livello, non il
+/// tema: quello che si fotografa resta il CSS vero.
 const QUIET = `
   .cm-cursorLayer { visibility: hidden !important; }
 `;

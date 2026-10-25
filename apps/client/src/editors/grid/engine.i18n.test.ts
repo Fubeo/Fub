@@ -14,6 +14,7 @@ vi.mock("../../i18n/strings", () => ({
       if (index >= 0) i18n.listeners.splice(index, 1);
     };
   },
+  resolvedLanguage: () => i18n.language,
   t(key: string) {
     const messages = {
       it: { "grid.surface": "Foglio di calcolo" },

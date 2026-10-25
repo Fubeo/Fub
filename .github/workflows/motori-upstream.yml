@@ -1,0 +1,73 @@
+name: Motori upstream
+
+# Il report a vuoto dei motori copiati in `vendor/` contro l'ultimo tag
+# dell'upstream (ADR 0221). Avvisa e basta: non tocca la copia e non apre PR,
+# perché la revisione cambia soltanto con una PR decisa (ADR 0213).
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "40 5 * * 1,4"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  report:
+    name: report di ${{ matrix.motore }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        motore: [wordcraft, gridcraft]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: l'ultimo tag dell'upstream
+        id: tag
+        run: |
+          lock="vendor/${{ matrix.motore }}/upstream.lock"
+          url=$(sed -n 's/^repository = "\(.*\)"$/\1/p' "$lock")
+          rev=$(sed -n 's/^rev = "\(.*\)"$/\1/p' "$lock")
+          tag=$(git ls-remote --tags --refs --sort=-v:refname "$url" | head -n 1 | sed 's|.*refs/tags/||')
+          sha=$(git ls-remote --tags "$url" "refs/tags/$tag^{}" | cut -f1)
+          [ -n "$sha" ] || sha=$(git ls-remote --tags "$url" "refs/tags/$tag" | cut -f1)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ "$sha" = "$rev" ]; then echo "nuovo=no" >> "$GITHUB_OUTPUT"; else echo "nuovo=si" >> "$GITHUB_OUTPUT"; fi
+      - name: report a vuoto
+        if: steps.tag.outputs.nuovo == 'si'
+        id: report
+        run: |
+          set +e
+          node tools/vendor-craft/vendor.mjs ${{ matrix.motore }} report --rev ${{ steps.tag.outputs.sha }} > report.txt 2>&1
+          echo "esito=$?" >> "$GITHUB_OUTPUT"
+          cat report.txt
+      - name: apre o aggiorna la issue
+        if: steps.tag.outputs.nuovo == 'si'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MOTORE: ${{ matrix.motore }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          SHA: ${{ steps.tag.outputs.sha }}
+          ESITO: ${{ steps.report.outputs.esito }}
+        run: |
+          title="motori: $MOTORE upstream"
+          if [ "$ESITO" = "0" ]; then stato="la pila si applica"; else stato="prima di \`update\` c'è da fare (vedi il report)"; fi
+          {
+            echo "L'upstream di \`vendor/$MOTORE\` è a \`$TAG\` (\`$SHA\`): $stato."
+            echo
+            echo "Report a vuoto (\`node tools/vendor-craft/vendor.mjs $MOTORE report --rev $SHA\`):"
+            echo
+            echo '```text'
+            cat report.txt
+            echo '```'
+            echo
+            echo "La copia si aggiorna soltanto con una PR (ADR 0213 e 0221); vedi \`vendor/$MOTORE/UPSTREAM.md\`."
+          } > body.md
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)
+          if [ -n "$number" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/$number" -F body=@body.md > /dev/null
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file body.md
+          fi

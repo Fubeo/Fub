@@ -239,7 +239,7 @@ describe("inventario dei componenti installati", () => {
     expect(text).toContain("Official Notes");
     expect(text).toContain("Acme Notes");
     expect(document.querySelector<HTMLSelectElement>("#installed-consent-41")!.value).toBe("denied");
-    expect(text).toContain("non in esecuzione");
+    expect(text).toContain("Non attivo");
   });
 
   it("mantiene visibili i metadata senza un vault o un inventario runtime leggibile", async () => {
@@ -253,7 +253,7 @@ describe("inventario dei componenti installati", () => {
 
     expect(document.querySelector("#settings-body")!.textContent).toContain("Acme Notes");
     expect(document.querySelector<HTMLSelectElement>("#installed-consent-41")!.value).toBe("denied");
-    expect(document.querySelector("#settings-body")!.textContent).toContain("non in esecuzione");
+    expect(document.querySelector("#settings-body")!.textContent).toContain("Non attivo");
   });
 
   it("un inventario installato illeggibile non nasconde i controlli nativi", async () => {

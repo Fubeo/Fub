@@ -357,3 +357,40 @@ describe("il menu File e il vault intero", () => {
     teardown();
   });
 });
+
+describe("il menu Vista e le scelte", () => {
+  afterEach(() => {
+    closeContextMenu();
+    document.body.replaceChildren();
+  });
+
+  it("spunta la modalità del foglio a fuoco e dice dove porta la luce", () => {
+    const menubar = document.createElement("nav");
+    menubar.id = "app-menu";
+    document.body.replaceChildren(menubar);
+    let mode = "shell.mode.source";
+    const teardown = mountAppMenu({
+      run: () => {},
+      has: () => true,
+      choice: (id) => (id.startsWith("shell.mode.") ? { choice: "radio", checked: id === mode } : undefined),
+      label: (id) => (id === "shell.light.toggle" ? "Passa alla luce giorno" : undefined),
+    });
+    const open = (): HTMLElement[] => {
+      document.querySelector<HTMLButtonElement>("#app-menu-2")!.click();
+      return [...document.querySelectorAll<HTMLElement>("#context-menu [role^=menuitem]")];
+    };
+    let items = open();
+    const radios = items.filter((item) => item.getAttribute("role") === "menuitemradio");
+    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Modalità Live", "Modalità Sorgente", "Modalità Lettura"]);
+    expect(radios.map((item) => item.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
+    expect(items.map((item) => item.querySelector(".menu-label")?.textContent)).toContain("Passa alla luce giorno");
+    closeContextMenu();
+
+    // Letta a ogni apertura: cambiata la modalità, la spunta la segue.
+    mode = "shell.mode.reading";
+    items = open();
+    expect(items.filter((item) => item.getAttribute("aria-checked") === "true").map((item) => item.querySelector(".menu-label")?.textContent))
+      .toEqual(["Modalità Lettura"]);
+    teardown();
+  });
+});

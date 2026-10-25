@@ -22,13 +22,18 @@ cicli indipendenti. Il frontend porta la stessa versione del prodotto.
 Prima di `1.0`, una minor può essere incompatibile secondo SemVer, ma una
 rottura va comunque dichiarata e motivata.
 
-L'MSRV fa parte della promessa di build. La CI pinna Rust 1.89. Alzarlo è una
-decisione deliberata e richiede aggiornamento di manifest, CI e guide.
+L'MSRV fa parte della promessa di build. La CI pinna Rust 1.95, la
+`rust-version` più alta fra i motori copiati in `vendor/`: l'MSRV di Fub
+segue la loro
+([ADR 0221](../decisions/0221-i-motori-si-seguono-da-vicino.md)). Alzarlo è
+una decisione deliberata e richiede aggiornamento di manifest, CI e guide.
 
 ## Versione ABI
 
-Il contratto corrente è `fub:abi@0.2.0`. La linea `0.2` conserva Grid v1 e
-aggiunge soltanto forme additive per le capacità consegnate; le versioni dei
+Il contratto corrente è `fub:abi@0.2.0`. La linea `0.2` aggiunge soltanto
+forme additive per le capacità consegnate (fra queste Grid a byte, la versione
+2; la versione 1 non è in nessuno snapshot congelato ed è uscita con
+l'[ADR 0218](../decisions/0218-via-il-fubsheet-e-la-versione-1-di-grid.md)); le versioni dei
 protocolli di superficie restano indipendenti da ABI e formati.
 
 La regola di caricamento:

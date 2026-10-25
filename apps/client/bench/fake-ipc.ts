@@ -36,17 +36,21 @@
 // poi rilegge l'impostazione dal canale dati, quindi il banco scrive tutte e
 // due — la cache qui sotto, prima che `main.ts` giri, e il valore di
 // `appearance.theme` fra le impostazioni che serve.
-import { createFakeHost, type Options } from "../src/host/fake";
+import { createFakeHost, type GridBytesFake, type Options } from "../src/host/fake";
 import { MARKDOWN_SYNTAX } from "../src/rules/syntax.generated";
+import XLSX_GRID from "../src/__fixtures__/xlsx-grid.json";
 import type {
   BundleInfo,
   CommandSpec,
+  DocumentMatch,
   IndexQuery,
   IndexResult,
   JobStatus,
   KnownVault,
   Organization,
+  QueryExpr,
   SettingEntry,
+  Span,
   UiNode,
   ViewSpec,
 } from "../src/host/contract";
@@ -251,6 +255,12 @@ globalThis.__fubLargeBench = Object.freeze({
     : null,
 });
 
+/// La cartella di Excel della scena `grid-workbook` (`?workbook=1`). È un
+/// file che soltanto quella scena ha: l'albero e i conteggi delle altre
+/// restano quelli delle loro baseline. Sessione e finestre sono quelle che
+/// `fub-format-xlsx` produce davvero (`tests/ts_grid.rs`).
+const WORKBOOK_DOC = params.get("workbook") === "1" ? "Dati/Conti.xlsx" : null;
+
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = BOARDS !== null
   ? { doc: BOARDS_DOC, text: BOARDS.text }
@@ -413,7 +423,7 @@ const SETTINGS: SettingEntry[] = [
     spec: {
       key: "appearance.theme",
       label: "Tema",
-      description: "In che luce si guarda Fub. Vuoto = come il sistema.",
+      description: "In che luce si guarda Fub. «Come il sistema» segue il sistema operativo.",
       group: "Aspetto",
       scope: "machine",
       kind: {
@@ -455,7 +465,7 @@ const SETTINGS: SettingEntry[] = [
     spec: {
       key: "appearance.density",
       label: "Densità",
-      description: "Compatta o allarga la spaziatura dei componenti senza muovere la scocca.",
+      description: "Compatta o allarga la spaziatura dei controlli senza cambiare la disposizione dei pannelli.",
       group: "Aspetto",
       scope: "machine",
       kind: {
@@ -537,8 +547,8 @@ const SETTINGS: SettingEntry[] = [
   {
     spec: {
       key: "appearance.accent",
-      label: "Tinta dell'accento (0–360)",
-      description: "Tinta OKLCH; chiarezza e croma vengono derivati per mantenere il contrasto.",
+      label: "Tinta dell'accento",
+      description: "Il colore di collegamenti, fuoco e selezione. Chiarezza e intensità si adattano da sole per restare leggibili.",
       group: "Aspetto",
       scope: "machine",
       kind: { kind: "number", default: 265, min: 0, max: 360 },
@@ -552,7 +562,7 @@ const SETTINGS: SettingEntry[] = [
     spec: {
       key: "appearance.zoom",
       label: "Zoom interfaccia",
-      description: "Scala nativa della finestra, da 0,5 a 2.",
+      description: "Quanto è grande tutta l'interfaccia, dal 50% al 200%.",
       group: "Aspetto",
       scope: "machine",
       kind: { kind: "number", default: 1, min: 0.5, max: 2 },
@@ -978,66 +988,28 @@ const TREES: Record<string, UiNode> = {
 // La porta.
 // ---------------------------------------------------------------------------
 
-const GRID: NonNullable<Options["grid"]> = {
-  surface: { id: "sheet", format: "fubsheet", family: "grid", protocol_version: 1 },
-  session: {
-    instance: "bench-grid",
-    revision: "bench-revision",
-    sheets: [{ id: "budget", name: "Budget 2026", row_count: 24, column_count: 10 }],
-  },
-  windows: [{
-    revision: "bench-revision",
-    sheet: "budget",
-    row_start: 0,
-    column_start: 0,
-    total_rows: 24,
-    total_columns: 10,
-    rows: Array.from({ length: 24 }, (_, index) => ({
-      id: `r${index}`, index, height: null, hidden: false,
-    })),
-    columns: Array.from({ length: 10 }, (_, index) => ({
-      id: `c${index}`, index, width: null, hidden: false,
-    })),
-    cells: [
-      ["r0", "c0", "Voce", "text", "Voce"],
-      ["r0", "c1", "Gennaio", "text", "Gennaio"],
-      ["r0", "c2", "Febbraio", "text", "Febbraio"],
-      ["r1", "c0", "Ricavi", "text", "Ricavi"],
-      ["r1", "c1", "12500", "number", 12500],
-      ["r1", "c2", "13200", "number", 13200],
-      ["r2", "c0", "Costi", "text", "Costi"],
-      ["r2", "c1", "7800", "number", 7800],
-      ["r2", "c2", "8100", "number", 8100],
-      ["r3", "c0", "Margine", "text", "Margine"],
-      ["r3", "c1", "=B2-B3", "number", 4700],
-      ["r3", "c2", "=C2-C3", "number", 5100],
-    ].map(([row, column, input, kind, value]) => ({
-      key: { sheet: "budget", row: String(row), column: String(column) },
-      input: String(input),
-      style: {
-        bold: row === "r0",
-        italic: false,
-        text_color: null,
-        fill_color: null,
-        horizontal: null,
-        number_format: null,
-      },
-      value: kind === "number"
-        ? { kind: "number" as const, value: Number(value) }
-        : { kind: "text" as const, value: String(value) },
-    })),
-  }],
-};
-
 const options: Options = {
-  file: DRAWING === null ? CORPUS : { ...CORPUS, [DRAWING.doc]: DRAWING.text },
+  file: {
+    ...CORPUS,
+    ...(DRAWING === null ? {} : { [DRAWING.doc]: DRAWING.text }),
+    // Il testo di una cartella è il suo giornale, vuoto sul disco.
+    ...(WORKBOOK_DOC === null ? {} : { [WORKBOOK_DOC]: "" }),
+  },
   resources: RESOURCES,
   root: ROOT,
   view: VIEWS,
   commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : BENCH_COMMANDS,
   settings: DRAWING === null ? SETTINGS : [...SETTINGS, DRAW_LEVEL],
   syntaxForms: [...MARKDOWN_SYNTAX],
-  grid: GRID,
+  ...(WORKBOOK_DOC === null ? {} : {
+    // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
+    gridBytes: {
+      surface: XLSX_GRID.surface,
+      session: XLSX_GRID.session,
+      windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window],
+      commits: [XLSX_GRID.edit.commit],
+    } as GridBytesFake,
+  }),
   ...(DRAWING === null ? {} : { draw: true }),
 };
 
@@ -1174,11 +1146,72 @@ function treeOf(view: string): UiNode | undefined {
   return tree && view !== "outline" ? inShellLanguage(tree) : tree;
 }
 
+/// L'albero con scelta la voce il cui salto porta `payload`, e nessun'altra.
+function choose(node: UiNode, payload: unknown): UiNode {
+  if (node.node === "tree") return { ...node, roots: node.roots.map((item) => choose(item, payload) as typeof item) };
+  if (node.node !== "tree_item") return node;
+  return {
+    ...node,
+    selected: node.action?.payload === payload,
+    children: node.children.map((item) => choose(item, payload) as typeof item),
+  };
+}
+
+/// Il testo cercato da una query di documenti, se ne cerca uno.
+function searchedText(expr: QueryExpr): string | null {
+  for (const clause of expr.any) {
+    for (const literal of clause.all) {
+      if (!literal.negated && literal.predicate.kind === "text") return literal.predicate.text;
+    }
+  }
+  return null;
+}
+
+const utf8 = new TextEncoder();
+/// Quanto testo sta attorno all'occorrenza in un estratto (caratteri).
+const SNIPPET_BEFORE = 40;
+const SNIPPET_AFTER = 80;
+
+/// L'estratto che darebbe l'indice: la riga del corpo in cui il primo termine
+/// compare, tagliata attorno all'occorrenza, con gli intervalli in byte di ogni
+/// termine. Il finto host risponde i documenti senza estratto, e la foto della
+/// ricerca mostrerebbe un elenco di nomi che il prodotto non mostra.
+function snippetOf(doc: string, text: string): Pick<DocumentMatch, "snippet" | "highlights"> {
+  const terms = text.toLowerCase().split(/\s+/).filter(Boolean);
+  const body = (CORPUS[doc] ?? "").replace(/^---\n[\s\S]*?\n---\n/, "");
+  const lines = body.split("\n").map((line) => line.replace(/^[#>\-*\s]+/, "").trim());
+  const line = lines.find((each) => terms.some((term) => each.toLowerCase().includes(term)));
+  if (!line || terms.length === 0) return {};
+  const at = line.toLowerCase().indexOf(terms.find((term) => line.toLowerCase().includes(term))!);
+  const start = Math.max(0, at - SNIPPET_BEFORE);
+  const end = Math.min(line.length, at + SNIPPET_AFTER);
+  const snippet = `${start > 0 ? "…" : ""}${line.slice(start, end)}${end < line.length ? "…" : ""}`;
+  const lower = snippet.toLowerCase();
+  const highlights: Span[] = [];
+  for (const term of terms) {
+    for (let index = lower.indexOf(term); index !== -1; index = lower.indexOf(term, index + term.length)) {
+      const before = utf8.encode(snippet.slice(0, index)).length;
+      highlights.push({ start: before, end: before + utf8.encode(snippet.slice(index, index + term.length)).length });
+    }
+  }
+  highlights.sort((a, b) => a.start - b.start);
+  return { snippet, highlights };
+}
+
 export const api: typeof host.module.api = {
   ...behind,
   queryIndex: async (q) => {
     const response = RESPONSES[q.kind];
     const result = response ? response(q) : await behind.queryIndex(q);
+    if (q.kind === "documents" && result.kind === "documents") {
+      const text = searchedText(q.matching);
+      if (text) {
+        return {
+          ...result,
+          value: { ...result.value, items: result.value.items.map((hit) => ({ ...hit, ...snippetOf(hit.doc, text) })) },
+        };
+      }
+    }
     return HOST_TEXT.has(q.kind) ? inShellLanguage(result) : result;
   },
   listViews: async (vault) => inShellLanguage(await behind.listViews(vault)),
@@ -1190,11 +1223,14 @@ export const api: typeof host.module.api = {
   // Un'azione di una view della scenografia non fa niente e **lo dice
   // ridisegnando l'albero di prima**: è la risposta minima che il protocollo
   // accetta, e non un `throw` — un click di troppo durante una scena non deve
-  // far morire una foto.
+  // far morire una foto. Tranne il salto dell'indice: come il provider vero,
+  // segna scelto il titolo a cui si è andati, e il banco del moto vede la
+  // sagoma della voce scelta scorrere.
   viewAction: (view, instance, params, action, payload, fields) => {
     const tree = treeOf(view);
     if (!tree) return behind.viewAction(view, instance, params, action, payload, fields);
-    return Promise.resolve({ kind: "replace" as const, root: tree });
+    const root = view === "outline" && action === "goto" ? choose(tree, payload) : tree;
+    return Promise.resolve({ kind: "replace" as const, root });
   },
   listBundles: () => Promise.resolve(inShellLanguage(BUNDLE)),
   knownVaults: () => Promise.resolve(KNOWN_VAULTS),

@@ -38,6 +38,15 @@ import { catalogLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
 import { childName, pageName, resolutionKey } from "../../../../rules/mirrored";
 import { TAG_CHARACTER } from "../../../../rules/mirrored";
 import { tagInProgress } from "../../../../rules/syntax";
+import {
+  calloutTypeSource,
+  codeLanguageSource,
+  dismissSlashMenu,
+  slashDismissed,
+  slashIcon,
+  slashSource,
+  type SlashMenuSource,
+} from "./slash";
 
 /// Le sorgenti dati dei completamenti.
 ///
@@ -66,6 +75,8 @@ export interface CompletionSources {
   /// I blocchi con un id della nota che `page` nomina, per `[[Nota#^`; `page`
   /// vuota è la nota stessa. Assente, `#^` non completa.
   blocksOf?(page: string): Promise<readonly BlockOption[]>;
+  /// Il menu «/» nel testo (`slash.ts`). Assente, il «/» è testo.
+  slash?: SlashMenuSource;
 }
 
 /// Un blocco da proporre: il suo id e l'inizio del suo testo.
@@ -565,19 +576,32 @@ export function diagramTemplateSource(today: () => Date = () => new Date()): Com
 }
 
 /// L'estensione CM6 dell'autocompletamento: attiva durante la digitazione, ma
-/// SOLO dentro i tre contesti (fuori, le sorgenti rispondono null e nessun
+/// SOLO dentro i suoi contesti (fuori, le sorgenti rispondono null e nessun
 /// popup compare). `override` scavalca le sorgenti di default del linguaggio:
 /// qui completiamo note, tag e modelli di diagramma, non parole qualsiasi.
 export function markdownCompletions(sources: CompletionSources): Extension {
-  return [Prec.highest(keymap.of([{ key: "Tab", run: completeTagSegment }])), autocompletion({
-    override: [
-      wikilinkSource(sources.searchNotes),
-      ...(sources.headingsOf ? [headingSource(sources.headingsOf)] : []),
-      ...(sources.searchHeadings ? [vaultHeadingSource(sources.searchHeadings)] : []),
-      ...(sources.blocksOf ? [blockSource(sources.blocksOf)] : []),
-      tagSource(sources.listTags),
-      diagramTemplateSource(),
-    ],
-    activateOnTyping: true,
-  })];
+  return [
+    Prec.highest(keymap.of([
+      { key: "Tab", run: completeTagSegment },
+      // Esc sul menu «/» lo chiude e lascia il testo: prima del keymap del
+      // completamento, che lo chiuderebbe soltanto.
+      ...(sources.slash ? [{ key: "Escape", run: dismissSlashMenu }] : []),
+    ])),
+    ...(sources.slash ? [slashDismissed] : []),
+    autocompletion({
+      override: [
+        wikilinkSource(sources.searchNotes),
+        ...(sources.headingsOf ? [headingSource(sources.headingsOf)] : []),
+        ...(sources.searchHeadings ? [vaultHeadingSource(sources.searchHeadings)] : []),
+        ...(sources.blocksOf ? [blockSource(sources.blocksOf)] : []),
+        tagSource(sources.listTags),
+        diagramTemplateSource(),
+        calloutTypeSource(),
+        codeLanguageSource(),
+        ...(sources.slash ? [slashSource(sources.slash)] : []),
+      ],
+      ...(sources.slash ? { addToOptions: [slashIcon(sources.slash)] } : {}),
+      activateOnTyping: true,
+    }),
+  ];
 }

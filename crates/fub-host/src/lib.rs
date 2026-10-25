@@ -131,6 +131,7 @@ pub mod waits;
 mod wall;
 mod watcher;
 pub mod web_clip;
+mod workbook;
 extern crate self as fub_host;
 pub use custody::Custody;
 #[cfg(feature = "notify-watcher")]
@@ -158,7 +159,9 @@ pub use resources::{
     ResourceWrite, ResourceWriteReceipt,
 };
 pub use runner::{InProgress, JobRunner, ShutDown, DEFAULT_JOB_THREADS};
-pub use session::{doc_id, Delivery, EventSink, Host, SnapshotHostError, VaultSession};
+pub use session::{
+    doc_id, document_text, Delivery, DocumentText, EventSink, Host, SnapshotHostError, VaultSession,
+};
 pub use settings::{initial_vault, versioning_enabled, CORE_ID};
 pub use theme::{ThemeInfo, ThemePayload};
 pub use vaults::{VaultEntry, VaultRegistry, VaultRegistryHandle};

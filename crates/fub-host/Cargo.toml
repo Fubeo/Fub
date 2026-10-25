@@ -14,7 +14,6 @@ fub-abi = { workspace = true }
 # solo (§16.3).
 fub-features = { workspace = true }
 fub-format-markdown = { workspace = true }
-fub-format-sheet = { workspace = true }
 fub-format-canvas = { workspace = true }
 fub-format-base = { workspace = true }
 # Le scene di FubDraw (ADR 0203): i formati `svg` e `fubann`, le annotazioni
@@ -24,6 +23,7 @@ fub-format-base = { workspace = true }
 # altro programma resta un'immagine finché l'utente non lo adotta.
 fub-format-svg = { workspace = true, optional = true }
 fub-format-rich = { workspace = true, optional = true }
+fub-format-xlsx = { workspace = true, optional = true }
 fub-importers = { workspace = true }
 fub-kernel = { workspace = true }
 serde = { workspace = true }
@@ -139,7 +139,7 @@ ureq = { version = "3", default-features = false, features = [
 rustix = { workspace = true }
 
 [features]
-default = ["notify-watcher", "http-client", "official-features", "rich", "draw"]
+default = ["notify-watcher", "http-client", "official-features", "rich", "xlsx", "draw"]
 notify-watcher = ["dep:notify", "dep:notify-debouncer-full"]
 
 # I documenti di videoscrittura (`fub-format-rich`: Word, OpenDocument, RTF,
@@ -148,6 +148,11 @@ notify-watcher = ["dep:notify", "dep:notify-debouncer-full"]
 # Spento, un `.docx` o un `.odt` sono file come altri, e il resto dei
 # formati e delle feature non cambia.
 rich = ["dep:fub-format-rich"]
+
+# Le cartelle di Excel (`fub-format-xlsx`: `.xlsx`, `.xlsm`, `.xltx`,
+# `.xltm`) in sola lettura: il formato a byte e la proiezione che la griglia
+# mostra. Spento, una cartella è un file come altri.
+xlsx = ["dep:fub-format-xlsx"]
 
 # Il client HTTP: acceso di default come il watcher, e per la stessa ragione —
 # i client desktop previsti (CLI 27.1, API locale 27.2, l'app) lo vogliono, e
@@ -213,3 +218,5 @@ fub-sdk = { workspace = true }
 wordcraft-formats = { workspace = true }
 # Per cambiare una parte di quei pacchetti.
 zip = { workspace = true }
+# La proiezione delle cartelle di Excel, letta nei test dell'host.
+fub-format-xlsx = { workspace = true }

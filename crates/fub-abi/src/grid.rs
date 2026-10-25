@@ -1,10 +1,10 @@
-//! Contratto dati fra una famiglia grid posseduta dalla shell e i provider che
-//! la alimentano.
+//! Le forme comuni della famiglia `grid`: la superficie dichiarata, gli assi,
+//! le chiavi stabili delle celle, l'aspetto, la richiesta di una finestra e
+//! la patch con il suo commit.
 //!
-//! Il provider non disegna: apre una proiezione derivata del sorgente, risponde
-//! per finestre e applica patch a coordinate stabili. DOM, CodeMirror e stato
-//! visuale restano nella shell. Il sorgente completo attraversa il confine solo
-//! all'apertura o a un reload autorevole; nessuna battuta lo attraversa.
+//! Il provider non disegna: risponde per finestre e applica patch a coordinate
+//! stabili. DOM, CodeMirror e stato visuale restano nella shell. L'unico
+//! protocollo è quello a byte, in [`crate::grid_bytes`].
 
 use serde::{Deserialize, Serialize};
 
@@ -12,8 +12,6 @@ use crate::edit::Revision;
 use crate::error::PluginError;
 
 pub const GRID_FAMILY: &str = "grid";
-pub const GRID_PROTOCOL_VERSION: u32 = 1;
-pub const MAX_GRID_SOURCE_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_GRID_WINDOW_ROWS: u32 = 256;
 pub const MAX_GRID_WINDOW_COLUMNS: u32 = 128;
 pub const MAX_GRID_WINDOW_CELLS: usize = 32_768;
@@ -29,6 +27,10 @@ pub const MAX_GRID_SESSION_ROWS: u32 = 1_048_576;
 pub const MAX_GRID_SESSION_COLUMNS: u32 = 16_384;
 pub const MAX_GRID_SESSION_CELLS: u64 = 4_000_000;
 pub const MAX_GRID_SESSION_WINDOWS: usize = 256;
+/// Le immagini che una richiesta dice di avere già, al più, e la misura
+/// della chiave di una.
+pub const MAX_GRID_KNOWN_MEDIA: usize = 256;
+pub const MAX_GRID_MEDIA_KEY_BYTES: usize = 64;
 
 /// Binding dichiarato dal provider: il formato sceglie una famiglia e una
 /// versione di protocollo, mai una versione simile per tentativi.
@@ -41,15 +43,6 @@ pub struct GridSurfaceSpec {
 }
 
 impl GridSurfaceSpec {
-    pub fn new(id: impl Into<String>, format: impl Into<String>) -> Self {
-        Self {
-            id: id.into(),
-            format: format.into(),
-            family: GRID_FAMILY.to_owned(),
-            protocol_version: GRID_PROTOCOL_VERSION,
-        }
-    }
-
     pub fn validate(&self) -> Result<(), PluginError> {
         if self.id.is_empty()
             || self.format.is_empty()
@@ -58,53 +51,6 @@ impl GridSurfaceSpec {
         {
             return Err(PluginError::BadArgs(
                 "grid surface has an empty identity".into(),
-            ));
-        }
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GridSession {
-    pub instance: String,
-    pub revision: Revision,
-    pub sheets: Vec<GridSheet>,
-}
-
-impl GridSession {
-    pub fn validate(&self) -> Result<(), PluginError> {
-        if self.instance.is_empty() || self.revision.0.is_empty() {
-            return Err(PluginError::BadArgs(
-                "grid session has an empty identity".into(),
-            ));
-        }
-        if self.sheets.len() > MAX_GRID_SESSION_SHEETS {
-            return Err(PluginError::BadArgs(
-                "grid session exceeds sheet limit".into(),
-            ));
-        }
-        for sheet in &self.sheets {
-            if sheet.id.is_empty() || sheet.name.is_empty() {
-                return Err(PluginError::BadArgs(
-                    "grid session has an empty identity".into(),
-                ));
-            }
-            if sheet.row_count > MAX_GRID_SESSION_ROWS
-                || sheet.column_count > MAX_GRID_SESSION_COLUMNS
-            {
-                return Err(PluginError::BadArgs(
-                    "grid session axes exceed limits".into(),
-                ));
-            }
-            // Total session area is intentionally not multiplied here:
-            // providers may expose large lazy sheets, while every requested
-            // window remains bounded below.
-        }
-        let encoded = serde_json::to_vec(self)
-            .map_err(|error| PluginError::Internal(error.to_string().into()))?;
-        if encoded.len() > MAX_GRID_RESPONSE_BYTES {
-            return Err(PluginError::BadArgs(
-                "grid session exceeds byte limit".into(),
             ));
         }
         Ok(())
@@ -148,9 +94,79 @@ pub enum GridHorizontalAlign {
     Start,
     Center,
     End,
+    /// Ripete il testo fino a riempire la cella.
+    Fill,
+    Justify,
+    Distributed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridVerticalAlign {
+    Top,
+    Center,
+    Bottom,
+    Justify,
+    Distributed,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridUnderline {
+    Single,
+    Double,
+    SingleAccounting,
+    DoubleAccounting,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridScript {
+    Superscript,
+    Subscript,
+}
+
+/// I tratti di un bordo, quelli di Excel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GridBorderStyle {
+    Thin,
+    Medium,
+    Thick,
+    Dashed,
+    Dotted,
+    Double,
+    Hair,
+    MediumDashed,
+    DashDot,
+    MediumDashDot,
+    DashDotDot,
+    MediumDashDotDot,
+    SlantDashDot,
+}
+
+/// Un lato del bordo; `color` assente è il colore automatico.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridBorder {
+    pub style: GridBorderStyle,
+    pub color: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GridBorders {
+    pub top: Option<GridBorder>,
+    pub right: Option<GridBorder>,
+    pub bottom: Option<GridBorder>,
+    pub left: Option<GridBorder>,
+    pub diagonal_down: Option<GridBorder>,
+    pub diagonal_up: Option<GridBorder>,
+}
+
+/// L'aspetto di una cella, già risolto dal provider: il tema, lo stile di
+/// una tabella e la formattazione condizionale sono dentro. Un campo assente
+/// è il valore di serie del formato (carattere, dimensione, allineamento
+/// verticale in basso).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct GridCellStyle {
     pub bold: bool,
     pub italic: bool,
@@ -158,38 +174,65 @@ pub struct GridCellStyle {
     pub fill_color: Option<String>,
     pub horizontal: Option<GridHorizontalAlign>,
     pub number_format: Option<String>,
+    pub font: Option<String>,
+    /// In punti.
+    pub font_size: Option<f32>,
+    pub underline: Option<GridUnderline>,
+    pub strike: bool,
+    pub script: Option<GridScript>,
+    pub vertical: Option<GridVerticalAlign>,
+    pub wrap: bool,
+    pub shrink: bool,
+    /// Livelli di rientro, come in Excel.
+    pub indent: u8,
+    /// Gradi in senso antiorario, da -90 a 90; 255 è il testo in colonna.
+    pub rotation: i16,
+    pub borders: GridBorders,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum GridFormulaError {
-    Parse,
-    Ref,
-    Name,
-    Value,
-    DivZero,
-    Num,
-    Cycle,
-}
+pub const GRID_STACKED_ROTATION: i16 = 255;
+pub const MAX_GRID_FONT_BYTES: usize = 256;
+pub const MAX_GRID_COLOR_BYTES: usize = 32;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
-pub enum GridCellValue {
-    Blank,
-    Number(f64),
-    Text(String),
-    Boolean(bool),
-    Error(GridFormulaError),
-}
-
-/// Cella materializzata nella finestra. `input` e `style` sono persistiti;
-/// `value` è sempre derivato dal solo provider autorevole.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct GridCell {
-    pub key: GridCellKey,
-    pub input: String,
-    pub style: GridCellStyle,
-    pub value: GridCellValue,
+impl GridCellStyle {
+    pub fn validate(&self) -> Result<(), PluginError> {
+        let color = |value: &Option<String>| {
+            value
+                .as_ref()
+                .is_some_and(|c| c.len() > MAX_GRID_COLOR_BYTES)
+        };
+        let borders = &self.borders;
+        let border = |side: &Option<GridBorder>| side.as_ref().is_some_and(|b| color(&b.color));
+        if color(&self.text_color)
+            || color(&self.fill_color)
+            || [
+                &borders.top,
+                &borders.right,
+                &borders.bottom,
+                &borders.left,
+                &borders.diagonal_down,
+                &borders.diagonal_up,
+            ]
+            .into_iter()
+            .any(border)
+        {
+            return Err(PluginError::BadArgs("grid style color is too long".into()));
+        }
+        if self
+            .font
+            .as_ref()
+            .is_some_and(|font| font.is_empty() || font.len() > MAX_GRID_FONT_BYTES)
+            || self
+                .font_size
+                .is_some_and(|size| !size.is_finite() || size <= 0.0 || size > 409.0)
+            || !((-90..=90).contains(&self.rotation) || self.rotation == GRID_STACKED_ROTATION)
+        {
+            return Err(PluginError::BadArgs(
+                "grid style is outside its limits".into(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -200,6 +243,10 @@ pub struct GridWindowRequest {
     pub row_count: u32,
     pub column_start: u32,
     pub column_count: u32,
+    /// Le chiavi delle immagini che la shell ha già: la finestra non ne
+    /// riporta i byte.
+    #[serde(default)]
+    pub known_media: Vec<String>,
 }
 
 impl GridWindowRequest {
@@ -227,55 +274,14 @@ impl GridWindowRequest {
                 "grid window exceeds cell limit".into(),
             ));
         }
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct GridWindow {
-    pub revision: Revision,
-    pub sheet: String,
-    pub row_start: u32,
-    pub column_start: u32,
-    pub total_rows: u32,
-    pub total_columns: u32,
-    pub rows: Vec<GridRow>,
-    pub columns: Vec<GridColumn>,
-    pub cells: Vec<GridCell>,
-}
-
-impl GridWindow {
-    pub fn validate(&self) -> Result<(), PluginError> {
-        if self.revision.0.is_empty()
-            || self.sheet.is_empty()
-            || self.total_rows > MAX_GRID_SESSION_ROWS
-            || self.total_columns > MAX_GRID_SESSION_COLUMNS
-            || self.rows.len() > MAX_GRID_WINDOW_ROWS as usize
-            || self.columns.len() > MAX_GRID_WINDOW_COLUMNS as usize
-            || self.cells.len() > MAX_GRID_WINDOW_CELLS
+        if self.known_media.len() > MAX_GRID_KNOWN_MEDIA
+            || self
+                .known_media
+                .iter()
+                .any(|key| key.is_empty() || key.len() > MAX_GRID_MEDIA_KEY_BYTES)
         {
             return Err(PluginError::BadArgs(
-                "grid response exceeds window limits".into(),
-            ));
-        }
-        let row_end = self
-            .row_start
-            .checked_add(self.rows.len() as u32)
-            .ok_or_else(|| PluginError::BadArgs("grid row range overflows".into()))?;
-        let column_end = self
-            .column_start
-            .checked_add(self.columns.len() as u32)
-            .ok_or_else(|| PluginError::BadArgs("grid column range overflows".into()))?;
-        if row_end > self.total_rows || column_end > self.total_columns {
-            return Err(PluginError::BadArgs(
-                "grid window lies outside its session axes".into(),
-            ));
-        }
-        let encoded = serde_json::to_vec(self)
-            .map_err(|error| PluginError::Internal(error.to_string().into()))?;
-        if encoded.len() > MAX_GRID_RESPONSE_BYTES {
-            return Err(PluginError::BadArgs(
-                "grid response exceeds byte limit".into(),
+                "grid window names too many known media".into(),
             ));
         }
         Ok(())
@@ -384,7 +390,6 @@ impl GridSourceEdit {
     /// JavaScript/UTF-16 positions.
     pub fn validate_against(&self, source: &str) -> Result<(), PluginError> {
         self.validate()?;
-        validate_grid_source(source)?;
         let from = usize::try_from(self.from)
             .map_err(|_| PluginError::BadArgs("grid source diff offset overflows usize".into()))?;
         let to = usize::try_from(self.to)
@@ -443,46 +448,6 @@ impl GridCommit {
     }
 }
 
-/// Provider di dati per una superficie grid posseduta dalla shell.
-pub trait GridProvider: Send + Sync {
-    fn surfaces(&self) -> Vec<GridSurfaceSpec>;
-    fn open(
-        &mut self,
-        surface: &str,
-        source: &str,
-        revision: Revision,
-    ) -> Result<GridSession, PluginError>;
-    fn window(
-        &mut self,
-        instance: &str,
-        request: GridWindowRequest,
-    ) -> Result<GridWindow, PluginError>;
-    fn apply(
-        &mut self,
-        instance: &str,
-        request: GridApplyRequest,
-    ) -> Result<GridCommit, PluginError>;
-    fn reload(
-        &mut self,
-        instance: &str,
-        expected: Revision,
-        source: &str,
-        revision: Revision,
-    ) -> Result<GridSession, PluginError>;
-    fn close(&mut self, instance: &str) -> Result<(), PluginError>;
-    /// Distrugge tutte le istanze prima che il corpo del plugin venga disattivato.
-    fn shutdown(&mut self) -> Result<(), PluginError>;
-}
-
-pub fn validate_grid_source(source: &str) -> Result<(), PluginError> {
-    if source.len() > MAX_GRID_SOURCE_BYTES {
-        return Err(PluginError::BadArgs(
-            "grid source exceeds byte limit".into(),
-        ));
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -495,6 +460,7 @@ mod tests {
             row_count: rows,
             column_start: 0,
             column_count: columns,
+            known_media: Vec::new(),
         }
     }
 
@@ -514,6 +480,13 @@ mod tests {
         assert!(request(MAX_GRID_WINDOW_ROWS + 1, 1).validate().is_err());
         assert!(request(1, MAX_GRID_WINDOW_COLUMNS + 1).validate().is_err());
         assert!(request(0, 1).validate().is_err());
+        let mut known = request(1, 1);
+        known.known_media = vec!["a".repeat(MAX_GRID_MEDIA_KEY_BYTES); MAX_GRID_KNOWN_MEDIA];
+        assert!(known.validate().is_ok());
+        known.known_media.push("b".into());
+        assert!(known.validate().is_err());
+        known.known_media = vec![String::new()];
+        assert!(known.validate().is_err());
     }
 
     #[test]
@@ -549,11 +522,7 @@ mod tests {
     }
 
     #[test]
-    fn source_patch_and_invalidation_limits_are_bounded() {
-        let source = "x".repeat(MAX_GRID_SOURCE_BYTES);
-        assert!(validate_grid_source(&source).is_ok());
-        assert!(validate_grid_source(&format!("{source}x")).is_err());
-
+    fn patch_and_invalidation_limits_are_bounded() {
         let patch = GridCellPatch {
             cell: key(),
             before: None,
@@ -581,31 +550,10 @@ mod tests {
 
     #[test]
     fn surface_validation_accepts_future_family_versions_for_negotiation() {
-        let mut spec = GridSurfaceSpec::new("future.sheet", "future-format");
+        let mut spec = GridSurfaceSpec::bytes("future.sheet", "future-format");
         spec.family = "future-grid".into();
-        spec.protocol_version = 2;
+        spec.protocol_version = 3;
         assert!(spec.validate().is_ok());
-    }
-
-    #[test]
-    fn session_axes_reject_u32_max_but_allow_large_lazy_sheets() {
-        let mut session = GridSession {
-            instance: "instance".into(),
-            revision: Revision("r1".into()),
-            sheets: vec![GridSheet {
-                id: "sheet".into(),
-                name: "Sheet".into(),
-                row_count: u32::MAX,
-                column_count: 1,
-            }],
-        };
-        assert!(session.validate().is_err());
-        session.sheets[0].row_count = 100_000;
-        session.sheets[0].column_count = 1_000;
-        assert!(session.validate().is_ok());
-        session.sheets[0].row_count = 1;
-        session.sheets[0].column_count = u32::MAX;
-        assert!(session.validate().is_err());
     }
 
     #[test]

@@ -20,7 +20,7 @@ import { baseKeymap, chainCommands } from "prosemirror-commands";
 import { history, isHistoryTransaction, redo, undo, undoDepth } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
 import type { Mark as PmMark, Node as PmNode, Slice } from "prosemirror-model";
-import { EditorState, Plugin, Selection, TextSelection, type Command, type Transaction } from "prosemirror-state";
+import { AllSelection, EditorState, Plugin, Selection, TextSelection, type Command, type Transaction } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { operationFromText, type EditorChange, type EditorChangeOrigin } from "../core/text-operation";
 import { ProofClient, type ProofPorts } from "../core/proof";
@@ -50,7 +50,7 @@ import { BlockWriter, richSchema, toDoc } from "./schema";
 import { closedBlocks, keepsOutside } from "./closed";
 import { deleteChar, reviewAuthor, trackable, trackTransaction, tracking } from "./track";
 
-export { mountStrip } from "./strip";
+export { mountStrip, RICH_MINI_GROUPS } from "./strip";
 
 export interface RichEngineOptions {
   readonly onChange: (change: EditorChange) => void;
@@ -549,6 +549,86 @@ export class RichEngine {
   selectStart(): void {
     const tr = this.#view.state.tr.setSelection(Selection.atStart(this.#view.state.doc));
     this.#view.dispatch(tr.setMeta("addToHistory", false));
+  }
+
+  /// Il tasto destro in un punto della finestra: fuori dalla selezione il
+  /// cursore va lì, dentro la selezione resta, come in Word. Torna la
+  /// posizione nel documento, o `null` fuori dal testo.
+  pointAt(x: number, y: number): number | null {
+    if (this.#destroyed) return null;
+    const hit = this.#view.posAtCoords({ left: x, top: y });
+    if (!hit) return null;
+    const { from, to } = this.#view.state.selection;
+    if (hit.pos < from || hit.pos > to) {
+      const tr = this.#view.state.tr.setSelection(TextSelection.near(this.#view.state.doc.resolve(hit.pos)));
+      this.#view.dispatch(tr.setMeta("addToHistory", false));
+    }
+    return hit.pos;
+  }
+
+  /// Ciò che sta al cursore, per il menu del tasto destro.
+  menuTarget(): { readonly href: string | null; readonly table: boolean; readonly revision: boolean } {
+    const { $from } = this.#view.state.selection;
+    // Un link non si estende oltre la sua fine: al suo primo carattere lo
+    // dice il nodo che segue.
+    const marks = [...$from.marks(), ...($from.nodeAfter?.marks ?? [])];
+    const link = marks.find((mark) => mark.type === richSchema.marks.link);
+    let table = false;
+    for (let depth = $from.depth; depth > 0; depth--) {
+      if ($from.node(depth).type === richSchema.nodes.cell) table = true;
+    }
+    const revision = marks.some((mark) => mark.type === richSchema.marks.ins || mark.type === richSchema.marks.del);
+    return { href: link ? (link.attrs.href as string) : null, table, revision };
+  }
+
+  /// Il riquadro della selezione nella finestra, per la bolla e il menu
+  /// aperto dalla tastiera.
+  selectionBox(): { left: number; top: number; right: number; bottom: number } | null {
+    if (this.#destroyed) return null;
+    const { from, to } = this.#view.state.selection;
+    try {
+      const start = this.#view.coordsAtPos(from, 1);
+      const end = this.#view.coordsAtPos(to, -1);
+      return {
+        left: Math.min(start.left, end.left),
+        top: Math.min(start.top, end.top),
+        right: Math.max(start.right, end.right),
+        bottom: Math.max(start.bottom, end.bottom),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /// La selezione come la copierebbe Mod-c: l'HTML di ProseMirror e il testo.
+  clipboardContent(): { readonly html: string; readonly text: string } | null {
+    const selection = this.#view.state.selection;
+    if (selection.empty) return null;
+    const { dom, text } = this.#view.serializeForClipboard(selection.content());
+    return { html: dom.innerHTML, text };
+  }
+
+  /// Toglie la selezione, come il secondo tempo di «Taglia».
+  deleteSelection(): boolean {
+    return this.apply((state, dispatch) => {
+      if (state.selection.empty) return false;
+      dispatch?.(state.tr.deleteSelection().scrollIntoView().setMeta("uiEvent", "cut"));
+      return true;
+    });
+  }
+
+  /// Incolla come l'incolla del browser: passa dallo stesso filtro.
+  pasteContent(text: string, html: string | null): boolean {
+    if (!this.editable()) return false;
+    this.#view.focus();
+    return html !== null ? this.#view.pasteHTML(html) : this.#view.pasteText(text);
+  }
+
+  /// Seleziona tutto il documento.
+  selectAll(): void {
+    if (this.#destroyed) return;
+    this.#view.dispatch(this.#view.state.tr.setSelection(new AllSelection(this.#view.state.doc)));
+    this.#view.focus();
   }
 
   destroy(): void {

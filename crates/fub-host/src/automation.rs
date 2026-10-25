@@ -716,7 +716,7 @@ pub fn validate_nm_attachment_chunk(request: &NmAttachmentChunk) -> Result<(), A
     // before allocation; the host decoder still rejects malformed padding.
     let data = request.data.as_bytes();
     if data.is_empty()
-        || data.len() % 4 != 0
+        || !data.len().is_multiple_of(4)
         || data.len() > ATTACHMENT_CHUNK_MAX_BYTES.div_ceil(3) * 4
         || !data
             .iter()
@@ -954,7 +954,7 @@ fn validate_date(value: &str) -> Result<(), AutomationError> {
         return Err(AutomationError::bad_args("`date` fuori intervallo"));
     }
     // Giorni per mese con bisestile: il confine che nessuno prova.
-    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let leap = year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400));
     let max_day = match month {
         2 if leap => 29,
         2 => 28,

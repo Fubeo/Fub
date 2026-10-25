@@ -37,7 +37,7 @@
 //! romperlo a chi scrive il codice. Qui stanno i comandi che spediamo noi, per i
 //! quali un conflitto è un difetto e non una convivenza da segnalare.
 
-use fub_abi::rules::keys::{canonical, obscures};
+use fub_abi::rules::keys::{folded, obscures};
 use fub_features::commands::CoreCommands;
 use serde_json::{Map, Value};
 
@@ -116,7 +116,7 @@ fn no_two_official_commands_want_the_same_chord() {
     let mut impremibili: Vec<(String, String)> = Vec::new();
     for spec in CoreCommands::specs() {
         if let Some(k) = &spec.keybinding {
-            match canonical(k) {
+            match folded(k) {
                 Some(key) => for_agreement.entry(key).or_default().push(spec.id.clone()),
                 None => impremibili.push((spec.id.clone(), k.clone())),
             }

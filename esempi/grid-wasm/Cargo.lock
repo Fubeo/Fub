@@ -37,21 +37,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "fub-format-sheet"
-version = "0.1.0"
-dependencies = [
- "fub-abi",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "grid-wasm"
 version = "0.0.0"
 dependencies = [
  "fub-abi",
- "fub-format-sheet",
  "wit-bindgen",
 ]
 

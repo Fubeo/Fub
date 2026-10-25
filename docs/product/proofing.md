@@ -31,9 +31,13 @@ dichiarata dal documento vale come il `lang` di una nota.
 La lingua è quella dell'impostazione «Lingua del testo» (di serie quella
 dell'interfaccia); una nota la cambia per sé con `lang` nel frontmatter. Le
 lingue sono italiano, inglese, portoghese, polacco, ceco, croato, russo e
-turco. L'inglese ha l'ortografia sempre; le altre la hanno quando sulla
-macchina c'è il dizionario Hunspell della lingua (`it_IT`, `pt_BR`, …), per
-esempio quello di LibreOffice o del pacchetto `hunspell-it`. Senza dizionario
+turco. L'inglese ha l'ortografia sempre, con la grafia della regione
+dell'etichetta: britannica per `en-GB` e le regioni che scrivono come il Regno
+Unito (`en-AU`, `en-IE`, …: «colour»), canadese per `en-CA`, americana per le
+altre («color»). Le
+altre lingue hanno l'ortografia quando sulla macchina c'è il dizionario
+Hunspell della lingua (`it_IT`, `pt_BR`, …), per esempio quello di
+LibreOffice o del pacchetto `hunspell-it`. Senza dizionario
 restano le regole grammaticali della lingua: parole ripetute, spazi doppi,
 punteggiatura e confusioni frequenti come «un pò» o «qual'è». Altre
 impostazioni spengono la grammatica e fanno contare come corrette le parole in

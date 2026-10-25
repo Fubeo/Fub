@@ -138,11 +138,12 @@ use crate::plugins::{PluginInfo, PluginRegistry, RegistrationKind, RegistryError
 use crate::poison::SharedShelter;
 use crate::workspace::Trust;
 use fub_abi::command::CommandSpec;
-use fub_abi::grid::{GridProvider, GridSurfaceSpec};
+use fub_abi::grid::GridSurfaceSpec;
 use fub_abi::traits::{
     CommandProvider, EventHandler, ServiceProvider, ViewInstance, ViewProvider, ViewSpec,
 };
 use fub_abi::transfer::{ExportProvider, ExportTarget, ImportProvider};
+use fub_abi::GridBytesProvider;
 use fub_abi::PluginError;
 
 /// Un provider registrato, con **ciò che ha dichiarato al momento della
@@ -209,9 +210,15 @@ pub(crate) struct RegisteredCommand {
     pub(crate) specs: Vec<CommandSpec>,
 }
 
+/// Il provider di una superficie grid, sui byte del documento.
+pub(crate) type GridBackend = Box<dyn GridBytesProvider>;
+
+/// Il backend grid condiviso fra il registro e le chiamate fuori dal lock.
+pub(crate) type SharedGrid = Arc<SharedShelter<GridBackend>>;
+
 pub(crate) struct RegisteredGrid {
     pub(crate) id: String,
-    pub(crate) provider: Arc<SharedShelter<Box<dyn GridProvider>>>,
+    pub(crate) provider: SharedGrid,
     pub(crate) specs: Vec<GridSurfaceSpec>,
 }
 

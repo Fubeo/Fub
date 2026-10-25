@@ -72,8 +72,8 @@ mano.
 - I dati che Word rigenera (statistiche, `rsid`) non cambiano dove l'utente
   non ha scritto.
 
-- Un documento con una parte che il codec non tiene (una lingua dell'Asia
-  orientale, wordcraft#3457) si scrive lo stesso dove quella parte non c'è.
+- Un documento con una parte che il codec non tiene (il suggerimento dei
+  caratteri dell'Asia orientale, `w:hint`) si scrive lo stesso dove quella parte non c'è.
 
 ### Negative
 

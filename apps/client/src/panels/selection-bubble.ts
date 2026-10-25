@@ -1,11 +1,13 @@
 // La bolla di selezione: i gesti di formattazione accanto al testo scelto,
-// quando la barra del foglio è spenta (`chrome.formatbar.visible`).
+// quando la barra del foglio è spenta (`chrome.formatbar.visible`) o
+// l'impostazione `editor.minibar` la vuole sempre (`mini-bar.ts`).
 //
 // È la stessa barra, ristretta ai gruppi che si fanno su un testo scelto
 // (corsivo, grassetto, collegamento): nessun comando nuovo, nessuna scorciatoia
 // in più, e la tastiera resta quella della barra — un solo punto di tabulazione,
-// le frecce, Escape che riporta al testo. Con la barra accesa la bolla non
-// esiste: due copie degli stessi pulsanti sullo stesso foglio sarebbero rumore.
+// le frecce, Escape che riporta al testo. Con la barra accesa, di norma, la
+// bolla non c'è: due copie degli stessi pulsanti sullo stesso foglio sarebbero
+// rumore, a meno che chi scrive non la chieda (`editor.minibar` = `always`).
 //
 // Dove sta il testo lo dice la superficie (`selectionBox`), mai l'editor: qui
 // passano soltanto quattro numeri.
@@ -32,8 +34,9 @@ export interface SelectionBubble {
 }
 
 export interface BubbleHost extends Omit<FormatBarHost, "only"> {
-  /// La barra del foglio è spenta: solo allora c'è la bolla.
-  barOff(): boolean;
+  /// La bolla è voluta adesso: barra del foglio spenta, o `editor.minibar`
+  /// che la chiede sempre (`bubbleWanted`).
+  wanted(): boolean;
   /// Il riquadro ha il fuoco (o la bolla ce l'ha): un riquadro che non si sta
   /// usando non mostra una bolla per una selezione di prima.
   active(): boolean;
@@ -69,7 +72,7 @@ export function createSelectionBubble(host: BubbleHost): SelectionBubble {
   const place = (): void => {
     frame = null;
     const surface = host.surface();
-    const box = !host.barOff() || !host.active() ? null : surface?.editorActions?.selectionBox?.() ?? null;
+    const box = !host.wanted() || !host.active() ? null : surface?.editorActions?.selectionBox?.() ?? null;
     if (!box || !host.writing() || bar.element.hidden) {
       element.hidden = true;
       return;

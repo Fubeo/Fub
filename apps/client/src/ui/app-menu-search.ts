@@ -91,7 +91,7 @@ export function openMenuSearch(options: {
   const choose = (entry: SearchableEntry | undefined): void => {
     if (!entry) return;
     close();
-    entry.item.run();
+    entry.item.run?.();
   };
 
   const render = (): void => {

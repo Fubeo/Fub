@@ -208,7 +208,12 @@ pannelli) lo Scrittoio compone:
 - `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi
   chiave WAAPI di sola `transform` e `opacity`; il livello `appearance.motion`
   e la preferenza del sistema decidono quanto movimento esiste, e lo stato
-  finale è lo stesso con e senza movimento;
+  finale è lo stesso con e senza movimento. Nel livello calmo le molle non
+  superano il bersaglio; ciò che entra o esce fa metà strada, con una molla
+  critica più rigida che non dura più di quella piena. Menu, modali,
+  pannelli, centri e avvisi entrano ed escono da `ui/motion.ts`, sopra
+  `moto`: la pelle non ha fotogrammi chiave d'entrata o d'uscita, e
+  un'uscita è un'immagine che se ne va in 140 ms al più;
 - `theme/scrittoio/`: la serie di serie (motore `theme-2`), con ricetta dei
   colori, fogli, struttura e pelle a pezzi. La pelle passa dal sanitizer CSS
   del motore, e ogni classe di un pezzo è un hook dell'anatomia di quel pezzo.
@@ -228,14 +233,36 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
   «Annulla» generico quando l'esito del comando dichiara `outcome.undo`; il
   centro attività tiene lo storico dei lavori. Cestinare più note insieme non
   ha un «Annulla» unico: l'annullamento del vault disfa l'ultima operazione, e
-  le note tornano dal cestino una a una.
+  le note tornano dal cestino una a una. Avvisi e attività dicono l'ora come
+  «adesso», «2 min fa», poi l'ora senza secondi (i secondi nel suggerimento).
+  Un vault senza rilevamento delle modifiche esterne lo dice in testa al
+  centro con «Riapri il vault», che scrive ciò che è in sospeso, chiude il
+  vault nell'host e lo riapre.
 - **Scrittura.** Con la barra di formattazione spenta
-  (`chrome.formatbar.visible`) compare la bolla di selezione; il menu «/» è
-  ancorato al cursore e passa per l'interfaccia della superficie testuale,
-  mai per oggetti CodeMirror. Sui collegamenti una scheda al passaggio mostra
+  (`chrome.formatbar.visible`) compare la mini-barra sulla selezione;
+  l'impostazione `editor.minibar` (`auto`, `always`, `menu`, `off`) dice se
+  compare anche col tasto destro e su ogni selezione. Il «/» a inizio riga o
+  dopo uno spazio apre nella nota il menu dei blocchi e dei comandi, filtrato
+  da ciò che si scrive dopo (`editor.slash` lo spegne); con una selezione il
+  menu «/» ha il suo campo. Entrambi passano per l'interfaccia della
+  superficie testuale, mai per oggetti CodeMirror.
+- **Tasto destro negli editor.** Un solo ascoltatore sul riquadro
+  (`panels/document.ts`) chiede alla superficie il suo `contextMenu(at)` e lo
+  compone in `panels/editor-menu.ts` con le stesse sezioni, nello stesso
+  ordine, in ogni editor: ciò che sta sotto il puntatore (prima le correzioni
+  del correttore), gli appunti, «Formato», «Trasforma in» e «Inserisci»,
+  «Comandi» (i comandi del registro dichiarati per il «/») con le voci dei
+  plugin per la nota o il file, e le utilità. Al primo livello stanno al più
+  dodici voci, il resto scende in «Altro». Un id d'azione o di comando prende
+  nome, icona, stato e accordo da chi lo dichiara, e senza dichiarazione non
+  si vede. Il menu si apre senza IPC; Maiusc+tasto destro e un evento già
+  gestito (la griglia delle tabelle, il disegno) lasciano passare il menu del
+  sistema o quello proprio; il tasto Menu e Maiusc+F10 lo aprono sotto il
+  cursore. Sui collegamenti una scheda al passaggio mostra
   la destinazione (`render_embed`) con apri, di fianco e nuova linguetta; un
-  collegamento irrisolto offre «Crea». In Live le azioni della scheda non
-  sono raggiungibili da tastiera.
+  collegamento irrisolto offre «Crea». In Live, col cursore in un
+  collegamento, Maiusc+Alt+Invio apre la scheda col fuoco sulla prima azione;
+  Esc riporta il fuoco nel testo.
 - **Cerca.** Il cassetto espone le opzioni che la porta regge (maiuscole,
   regex, tolleranza, parola intera) e «Sostituisci nel vault»: prima il piano
   (`vault.replace` in `dry_run`), poi «Applica». La sostituzione è letterale e
@@ -351,7 +378,11 @@ Oltre al confine di CodeMirror, i guard del frontend impediscono:
 - usi degli appunti della webview fuori da `platform/clipboard.ts`;
 - listener globali senza owner;
 - attese concorrenti senza il primitivo di cancellazione;
-- mirror TypeScript non aggiornati.
+- mirror TypeScript non aggiornati;
+- parole del codice nei testi italiani dell'interfaccia: il glossario in
+  `apps/client/src/i18n/gergo.ts` dà per ognuna la parola da usare (per
+  esempio «copia completa» invece di «snapshot», «vista» invece di «view»), e
+  `gergo.test.ts` la cerca nel catalogo.
 
 ## Dove si trova
 

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { currentCompletions, startCompletion } from "@codemirror/autocomplete";
-import { syntaxTree } from "@codemirror/language";
+import { ensureSyntaxTree, foldable, syntaxTree } from "@codemirror/language";
 import { EditorSelection, type EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { createTextEngine, type TextEngine } from "../../engine";
@@ -132,6 +132,49 @@ describe("MarkdownProfile", () => {
     expect(engine.undo()).toBe(true);
     expect(engine.getDoc()).toBe("@@evidenza@@\ncorpo");
 
+    engine.destroy();
+  });
+});
+
+describe("le piegature", () => {
+  const DOC = [
+    "---", //                1
+    "titolo: Nota", //       2
+    "---", //                3
+    "# Titolo", //           4
+    "Un paragrafo", //       5
+    "su due righe.", //      6
+    "", //                   7
+    "> Una citazione", //    8
+    "> lunga.", //           9
+    "", //                  10
+    "- una voce", //        11
+    "  che continua", //    12
+    "- l'altra", //         13
+    "", //                  14
+    "```js", //             15
+    "let x = 1;", //        16
+    "```", //               17
+    "", //                  18
+    "| a | b |", //         19
+    "| - | - |", //         20
+    "| 1 | 2 |", //         21
+  ].join("\n");
+
+  it("stanno su frontmatter, titoli, voci e codice, non su paragrafi, citazioni e tabelle", () => {
+    const { engine, view } = mounted(profile());
+    engine.setDoc(DOC);
+    const state = view().state;
+    ensureSyntaxTree(state, state.doc.length, 5000);
+    const folds = (number: number): boolean => {
+      const line = state.doc.line(number);
+      return foldable(state, line.from, line.to) !== null;
+    };
+    expect([1, 4, 11, 15].map(folds)).toEqual([true, true, true, true]);
+    expect([5, 8, 19].map(folds)).toEqual([false, false, false]);
+    // Il frontmatter si piega fino al `---` che lo chiude, non oltre.
+    const front = foldable(state, 0, state.doc.line(1).to)!;
+    expect(front.to).toBe(state.doc.line(3).to);
     engine.destroy();
   });
 });

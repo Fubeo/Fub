@@ -72,17 +72,62 @@ export type Gate =
   | "index_query"
 ;
 
-export type GridFormulaError =
-  | "parse"
-  | "ref"
-  | "name"
-  | "value"
-  | "div_zero"
-  | "num"
-  | "cycle"
+export type GridBorderStyle =
+  | "thin"
+  | "medium"
+  | "thick"
+  | "dashed"
+  | "dotted"
+  | "double"
+  | "hair"
+  | "medium_dashed"
+  | "dash_dot"
+  | "medium_dash_dot"
+  | "dash_dot_dot"
+  | "medium_dash_dot_dot"
+  | "slant_dash_dot"
 ;
 
-export type GridHorizontalAlign = "start" | "center" | "end";
+export type GridCalculation = "automatic" | "automatic_except_tables" | "manual";
+
+export type GridHorizontalAlign =
+  | "start"
+  | "center"
+  | "end"
+  | "fill"
+  | "justify"
+  | "distributed"
+;
+
+export type GridJournalMatch = "pending" | "applied" | "conflict";
+
+export type GridObjectKind = "chart" | "sparkline" | "image" | "cell_picture" | "shape";
+
+export type GridObjectMissing = "too_large" | "unsupported";
+
+export type GridScript = "superscript" | "subscript";
+
+export type GridShapeAlign = "left" | "center" | "right";
+
+export type GridShapeAnchor = "top" | "middle" | "bottom";
+
+export type GridShapeKind =
+  | "rectangle"
+  | "rounded_rectangle"
+  | "ellipse"
+  | "triangle"
+  | "line"
+  | "arrow"
+  | "text_box"
+  | "icon"
+  | "ink"
+;
+
+export type GridUnderline = "single" | "double" | "single_accounting" | "double_accounting";
+
+export type GridVerticalAlign = "top" | "center" | "bottom" | "justify" | "distributed";
+
+export type GridViewMode = "normal" | "page_layout" | "page_break_preview";
 
 export type HealthCheck =
   | "broken_links"

@@ -31,51 +31,85 @@ test usano un fake.
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
 
-## Valutazione del foglio pilota
+## La griglia
 
-La shell usa `IndexQuery::Custom` con namespace `fub.sheet` soltanto per la
-valutazione read-only della vertical slice, non per il protocollo Grid a
-finestre. Il payload privato è `{kind: "evaluate", version: 1, source: string}`:
-versioni, specie o campi sconosciuti sono `BadArgs`. La risposta è
-`IndexResult::Custom` con la forma `SheetEvaluation` del mirror TypeScript. Ogni
-dipendenza elenca in `depends_on` le celle nominate una per una e, in
-`depends_on_ranges`, gli intervalli come rettangoli per angoli; il secondo campo
-manca quando la formula non nomina intervalli.
+La famiglia Grid usa porte strettamente tipate, con i record `Grid*` del
+mirror: `list_grid_surfaces` elenca i binding, e una superficie con
+`protocol_version` 2 si apre sui byte di un documento con `open_grid_bytes`,
+`grid_bytes_window`, `apply_grid_bytes`, `grid_bytes_commands`,
+`grid_bytes_command` e `close_grid_bytes`. La shell
+negozia famiglia, versione e formato prima di aprire; un binding sconosciuto
+o incompatibile non viene chiamato e la superficie dice che il foglio non si
+apre. `query_index` non applica patch e non possiede lifecycle.
 
-`query_index` non applica patch e non possiede lifecycle: resta una porta di
-sola lettura. La famiglia Grid usa invece le porte strettamente tipate
-`list_grid_surfaces`, `open_grid`, `grid_window`, `apply_grid`, `reload_grid` e
-`close_grid`, con i record `Grid*` del mirror. La shell negozia famiglia e
-versione prima di `open_grid`; un binding sconosciuto o incompatibile non viene
-chiamato e attiva il fallback registrato.
+`open_grid_bytes` riceve `surface`, `doc`, `journal` e `base`: la shell non
+trasporta i byte, ma il giornale canonico delle celle cambiate (il testo
+della sessione documento) e la revisione dei byte da cui parte. L'host legge
+il documento, controlla che il formato sia quello della superficie (`BadArgs`
+altrimenti) e risponde `Conflict` se i byte non sono più quelli di `base`. La
+sessione è un `GridBytesSession` (fogli, foglio attivo, fogli nascosti, avvisi
+`GridNotice`, celle in conflitto e il libro `GridBook`: i dodici colori del
+tema in `#RRGGBB`, i nomi definiti visibili, il modo di calcolo
+`GridCalculation`, la struttura protetta e il carattere dello stile Normale,
+nome e punti, che lo stile di una cella tace); la finestra è un `GridBytesWindow`, la cui
+cella porta `GridValue`, il testo formattato, blocco, `stale`, `conflict`,
+l'indice del suo stile e i segni (barra di dati, icona, commento,
+collegamento). La finestra porta gli stili delle sue celle, ognuno una volta
+(`GridCellStyle`: carattere, colori, bordi, allineamenti, rientro, a capo,
+rotazione), le unioni e le tabelle che la toccano (`GridMerge`, `GridTable`
+con le opzioni e il nome dello stile) e la vista del foglio (`GridSheetView`:
+riquadri bloccati, griglia, intestazioni, zoom, da destra a sinistra, la
+modalità `GridViewMode`, le formule mostrate, la protezione, griglia e
+intestazioni in stampa). La finestra porta anche gli oggetti che la toccano,
+nell'ordine in cui si disegnano (`GridObject`: tipo `GridObjectKind`, id,
+cella dell'angolo, scarto e misura in pixel a zoom 100, testo alternativo):
+un grafico o un grafico sparkline con il suo disegno in SVG, un'immagine con
+i suoi byte (`GridMedia`: tipo, impronta `key` e base64), una forma con il
+suo aspetto (`GridShape`), che disegna la shell; `missing` dice perché un
+oggetto non porta ciò che mostra (`too_large`, `unsupported`). La richiesta
+della finestra elenca in `known_media` le impronte che la shell ha già: di
+quelle immagini la finestra porta la chiave senza i byte. Il
+commit è un `GridCommit` il cui `edit` è il diff del testo del giornale, da
+applicare al buffer della sessione documento.
 
-Il provider verifica il limite sorgente di 16 MiB e misura la risposta JSON,
-compreso l'envelope, entro 8 MiB prima di materializzare il valore JSON.
-Disabilitare il bundle ritira la route di valutazione: la query restituisce
-`Unserved` e la shell usa il fallback agli input grezzi. Le finestre, patch,
-invalidazioni e il diff UTF-8 seguono i limiti del contratto ABI/WIT e non
-trasportano DOM, CodeMirror, callback JavaScript o una battuta.
-Il payload non è il percorso Grid pubblico a finestre.
-
-Le fonti sono `crates/fub-format-sheet/src/index.rs` e il mirror TypeScript in
-`apps/client/src/host/contract.ts`. La fixture
-`apps/client/src/__fixtures__/sheet-query.json` è generata e verificata dal test
-Rust [`crates/fub-host/tests/sheet_query.rs`](../../crates/fub-host/tests/sheet_query.rs);
-non è un percorso di esecuzione del fake host e nessun interprete formule vive
-nel fake host.
+La sessione porta anche il catalogo dei comandi che serve
+(`GridCommandState`: id, acceso, perché è spento). `grid_bytes_commands`
+riceve una `GridSelection` (foglio, intervalli A1, cella attiva) e ridà il
+catalogo su quella selezione; `grid_bytes_command` riceve un
+`GridCommandRequest` (la revisione e un `GridCommand` con i parametri come
+testo di un oggetto JSON) e ridà un `GridCommandOutcome`: il commit del
+giornale, che resta alla revisione se il comando non cambia la cartella, i
+fogli, la selezione nuova, il risultato come testo JSON, la finestra di
+dialogo chiesta, il catalogo aggiornato e il libro. Il risultato è sempre un
+oggetto: un valore che non lo è sta sotto `value`, i messaggi del comando
+sotto `messages`. I parametri della finestra chiesta portano anche ciò che la
+finestra mostra all'apertura e che la shell non legge da sé (la regola di
+convalida della cella attiva per `dataValidation`). Un comando che il provider non
+serve, spento o con parametri che non tornano è `BadArgs`. Il provider delle
+cartelle di Excel serve un sottoinsieme del catalogo di GridCraft, più
+`edit.undo` ed `edit.redo` del documento
+([ADR 0219](../decisions/0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md),
+in proposta); su una cartella che la riscrittura perderebbe i comandi che la
+cambiano sono spenti, e darne uno è `PermissionDenied` con `xlsx.rewrite.loses`.
 
 ## Limiti e semantica Grid
 
-Le coordinate sono `SheetId + RowId + ColumnId`; una sessione apre o ricarica
-la sorgente completa (massimo 16 MiB), mentre le letture successive sono
-finestre fino a 256×128 e 32.768 coordinate. Un commit accetta 16.384 patch e
+Le coordinate sono `SheetId + RowId + ColumnId`; una sessione apre la
+sorgente nell'host, e le letture sono finestre fino a 256×128 e 32.768
+coordinate. Un commit accetta 16.384 patch e
 4 MiB di preimmagini e nuovi input; la risposta, envelope compreso, è al
-massimo 8 MiB. L'invalidazione restituisce coordinate modificate e dipendenti
-fino a 32.768 elementi, poi `all`. Il diff conseguente usa offset in byte UTF-8.
+massimo 8 MiB. L'invalidazione restituisce le coordinate da rileggere fino a
+32.768 elementi, poi `all`. Il diff del giornale usa offset in byte UTF-8.
+Una finestra porta fino a 1.024 tabelle; il libro fino a 4.096 nomi; un nome
+di tabella, di stile o definito è al massimo di 255 byte. Una finestra porta
+fino a 1.024 oggetti; il disegno di un grafico è al massimo di 1 MiB, i byte
+di un'immagine di 3 MiB in base64 (soltanto PNG, JPEG, GIF, BMP, WebP e SVG),
+il testo di una forma di 64 KiB; la richiesta elenca fino a 256 impronte di
+64 byte al più.
 
 Il registro conserva ownership e disposer per ogni binding. L'unload ritira il
 binding, distrugge le istanze e soltanto dopo rilascia il provider. Nessuna
-battuta attraversa IPC: la shell pubblica una sola operazione al commit.
+battuta attraversa IPC: la shell consegna una sola richiesta al commit.
 Provider nativo e proxy WASM devono osservare la stessa famiglia/versione,
 limiti, fallback ed errori.
 
@@ -237,6 +271,8 @@ uno spegne il pulsante di chi lo nomina. La superficie Markdown conosce:
   `markdown.list.indent`, `markdown.list.dedent`;
 - `markdown.quote`, `markdown.callout`, `markdown.codeblock`,
   `markdown.mathblock`, `markdown.rule`, `markdown.table`;
+- `markdown.embed` (una nota incorporata `![[`) e `markdown.diagram` (un
+  blocco `mermaid`), che riaprono il completamento delle note e dei modelli;
 - `markdown.property.add`, `markdown.property.up`, `markdown.property.down`;
 - `markdown.table.row.before`, `.row.after`, `.row.up`, `.row.down`,
   `.row.delete`, `.column.before`, `.column.after`, `.column.left`,
@@ -345,24 +381,88 @@ riporta il file intero. Un file nuovo `rtf` o `doc` non si crea
 `opaque_schema`, subito dopo `version`, è lo schema dei dati opachi (`k` e
 `sect`, JSON del modello del motore in base64), che si incrementa quando
 cambia la loro forma serializzata: lo schema 2 aggiunge all'1 il campo
-facoltativo `eastAsianLayout` delle proprietà del carattere. Il codec legge
-gli schemi che elenca, ciascuno con la sua regola: lo 0, l'1 e il 2,
-perché i primi due hanno la forma del 2 senza quel campo. La versione 2 ha le chiavi della 3 senza `locked`
-e `body_only`; la 1, quella delle bozze di prima, quelle della 2 senza
-`opaque_schema`, e i dati dello schema 0. La shell legge le tre versioni,
-ciascuna con il suo elenco chiuso di chiavi, e
-ricopia versione e schema come li ha ricevuti. Il codec legge formato,
-versione e schema prima del resto, e rifiuta una versione futura
+facoltativo `eastAsianLayout` delle proprietà del carattere, il 3 altri campi
+facoltativi (`langEa` del carattere, `z` di un oggetto mobile, `outlineFill`
+e `size` di forme e filigrane) e il riempimento trasparente o sfumato di una
+forma come oggetto con `type`, accanto al colore `[r, g, b]`. Il codec legge
+gli schemi che elenca, ciascuno con la sua regola: lo 0, l'1, il 2 e il 3,
+perché ciascuno ha la forma del successivo senza i suoi campi facoltativi. La
+versione 2 ha le chiavi della 3 senza `locked` e `body_only`; la 1, quella
+delle bozze di prima, quelle della 2 senza `opaque_schema`, e i dati dello
+schema 0. La shell legge le tre versioni, ciascuna con il suo elenco chiuso di
+chiavi, e ricopia versione e schema come li ha ricevuti. Il codec legge
+formato, versione e schema prima del resto, e rifiuta una versione futura
 (`host.rich.version`) e uno schema che non legge, scritto da un Fub più nuovo
-(`host.rich.opaque_schema`), anche quando portano campi che non conosce; un dato opaco che, decodificato e
-riscritto, perderebbe un campo è una proiezione malformata, anche quando il
-campo sconosciuto vale `null`, `[]` o `{}`.
+(`host.rich.opaque_schema`), anche quando portano campi che non conosce; un
+dato opaco che, decodificato e riscritto, perderebbe un campo è una
+proiezione malformata, anche quando il campo sconosciuto vale `null`, `[]` o
+`{}`.
 
 Gli errori del codec arrivano tipizzati con chiave di catalogo `host.rich.*`.
 La forma della proiezione è di `crates/fub-format-rich/src/projection.rs`; la
 fixture `apps/client/src/__fixtures__/rich-projection.json` la lega alla
 shell nei due versi, e `rich-closed.json` ne porta i blocchi chiusi
 (`crates/fub-format-rich/tests/ts_projection.rs`).
+
+## Cartelle di Excel
+
+Una cartella di `fub-format-xlsx` (formato `xlsx`, per `.xlsx`, `.xlsm`,
+`.xltx` e `.xltm`, con la feature `xlsx` di `fub-host`) passa dalle stesse
+porte, e il suo testo è il **giornale** delle celle cambiate (ADR 0216):
+
+- `read_document` restituisce `text` vuoto (il giornale vuoto), con
+  `format_id` `"xlsx"`, `source_kind` `"bytes"`, `text_kind`
+  `"grid_journal"` e la `revision` dei byte del file. Ogni altro documento ha
+  `text_kind` `"source"`: il testo è il sorgente che `write_document` riceve;
+- la griglia si apre sui byte con `open_grid_bytes`, sulla superficie
+  `fub.grid.xlsx` della versione 2, e legge le finestre che mostra;
+- `write_document` riceve il giornale nella forma canonica (`BadArgs` con
+  `host.xlsx.journal` altrimenti) e lo **innesta** nei byte alla revisione
+  `base`, con il CAS della stessa revisione: il resto del file resta byte
+  per byte. Un giornale di comandi che cambia più dell'input di costanti si
+  rifà sui byte, e la cartella si **riscrive** con il codec soltanto se la
+  misura dice che non perde niente (`PermissionDenied` con
+  `xlsx.rewrite.loses`, che nomina la perdita, altrimenti). Un giornale vuoto, o già tutto nei byte, non scrive niente; un
+  giornale per un file che non c'è si rifiuta (`host.xlsx.missing`); una
+  voce che i byte non possono ricevere si rifiuta con la sua specie
+  (`PermissionDenied` per una cella bloccata, `Conflict` per un foglio che
+  non c'è più, `BadArgs` per una formula in una voce di cella: una formula
+  entra soltanto come comando), e il file resta com'era;
+- `resource_write` deposita una cartella nuova (`expected` nullo) come ogni
+  file, e rifiuta di coprirne una che c'è (`host.xlsx.readonly`): una
+  cartella cambia soltanto dal giornale, con `write_document`.
+
+Nella finestra:
+
+- i valori sono quelli che il file ha salvato, comprese le celle versate
+  dalle matrici: niente si ricalcola. `display` è il valore nel formato
+  numerico della cella, e `input` ciò che la barra mostra e la cella riceve
+  (`=…` per una formula). `apply_grid_bytes` con la prima formula da
+  scrivere porta la sessione ai comandi: la formula entra come
+  `range.setValues`, e il commit riscrive il giornale;
+- `lock` è uno fra `array`, `spill`, `shared-formula`, `data-table`,
+  `table-header`, `table-totals`, `merged`, `pivot`, `rich-value`,
+  `protected` e `sheet-shape` (il foglio ha una forma che l'innesto non sa
+  ancora riscrivere);
+- `stale` segna una formula che legge, anche attraverso altre formule, una
+  cella cambiata: tiene il valore del file, e il salvataggio chiede a Excel di
+  ricalcolare all'apertura (`fullCalcOnLoad`);
+- il testo automatico su una cella senza riempimento non ha `text_color`, e
+  prende il colore della shell.
+
+Gli avvisi della sessione sono `macros`, `external-links`, `incomplete` (la
+lettura ha lasciato indietro qualcosa), `not-shown-slicers` e `uncomputed`
+(formule senza valore salvato), ciascuno con il suo conteggio. Le unioni, le
+note, la formattazione condizionale e gli oggetti (grafici, grafici
+sparkline, immagini e forme) arrivano nella finestra, e non sono avvisi.
+
+Gli errori arrivano tipizzati con chiave di catalogo `host.xlsx.*`: una
+cartella cifrata (`encrypted`), un file oltre 256 MiB (`too_large`), un
+contenuto che non è una cartella di Excel (`not_xlsx`, con `found`) e un
+pacchetto che il codec rifiuta (`codec`). La forma della sessione e delle
+finestre è di `crates/fub-format-xlsx/src/grid.rs`; la fixture
+`apps/client/src/__fixtures__/xlsx-grid.json` la lega alla shell
+(`crates/fub-format-xlsx/tests/ts_grid.rs`).
 
 ## Percorsi
 

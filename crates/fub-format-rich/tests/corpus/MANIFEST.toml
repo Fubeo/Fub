@@ -24,7 +24,7 @@ licenza = "MIT OR Apache-2.0"
 matrice = "Word moderno"
 esercita = "stili, elenco puntato, tabella con celle unite in larghezza e in altezza, intestazione con PAGE, nota a piè di pagina, due sezioni di cui una orizzontale"
 atteso = "solo il corpo"
-perché = "il motore di oggi perde la lingua dell'Asia orientale dei valori predefiniti (storytold/wordcraft#3457) e il rientro dello stile di tabella (storytold/wordcraft#3541); il corpo si riscrive senza perdite"
+perché = "il motore di oggi perde il rientro dello stile di tabella (storytold/wordcraft#3541); il corpo si riscrive senza perdite"
 
 [[file]]
 path = "docx/senza-perdite.docx"
@@ -257,7 +257,7 @@ licenza = "CC0-1.0"
 matrice = "Writer di LibreOffice"
 esercita = "titoli, grassetto e corsivo, collegamento, nota a piè di pagina, commento, elenco puntato, tabella, come li scrive LibreOffice"
 atteso = "solo il corpo"
-perché = "fuori dal corpo il motore di oggi perde la lingua dell'Asia orientale degli stili (storytold/wordcraft#3457), il tema di LibreOffice, la lingua e le voci vuote delle proprietà del documento, `w:annotationRef` e le iniziali vuote dei commenti, il suggerimento dei caratteri della numerazione (storytold/wordcraft#3541)"
+perché = "fuori dal corpo il motore di oggi perde il tema di LibreOffice, la lingua e le voci vuote delle proprietà del documento, `w:annotationRef` e le iniziali vuote dei commenti, il suggerimento dei caratteri della numerazione (storytold/wordcraft#3541)"
 
 [[file]]
 path = "docx/libreoffice-revisioni.docx"
@@ -267,7 +267,7 @@ licenza = "CC0-1.0"
 matrice = "Revisioni"
 esercita = "un inserimento e un'eliminazione tracciati, con la registrazione attiva, come li scrive LibreOffice"
 atteso = "solo il corpo"
-perché = "fuori dal corpo il motore di oggi perde la lingua dell'Asia orientale degli stili (storytold/wordcraft#3457), il tema di LibreOffice e la lingua e le voci vuote delle proprietà del documento (storytold/wordcraft#3541); le revisioni del corpo si riscrivono senza perdite"
+perché = "fuori dal corpo il motore di oggi perde il tema di LibreOffice e la lingua e le voci vuote delle proprietà del documento (storytold/wordcraft#3541); le revisioni del corpo si riscrivono senza perdite"
 
 [[file]]
 path = "odt/libreoffice.odt"

@@ -94,6 +94,8 @@ export const SCENE = onPage("shell", [
     id: "search",
     title: "La ricerca, con i risultati",
     prepare: async (page) => {
+      // Il campo di File filtra l'albero: la ricerca sta nel pannello Cerca.
+      await page.click('#views-ribbon .rail-btn[data-panel="search"]');
       await page.fill("#search-input", SEARCH);
       await page.waitForSelector("#search-results li");
     },
@@ -282,15 +284,15 @@ export const SCENE = onPage("shell", [
     prepare: async () => {},
   },
   {
-    id: "grid-sheet",
-    title: "Grid v1: workbook .fubsheet",
+    id: "grid-workbook",
+    title: "Grid v2: una cartella di Excel sui suoi byte",
+    query: "workbook=1",
     prepare: async (page) => {
       await openFolder(page, "Dati");
-      await page.click('#file-list .tree-row.note[data-path="Dati/Budget.fubsheet"]');
-      await page.waitForSelector('.grid-surface[data-grid-protocol="v1"]');
+      await page.click('#file-list .tree-row[data-path="Dati/Conti.xlsx"]');
       await page.waitForFunction(() => {
         const grid = document.querySelector(".grid-surface");
-        return grid?.getAttribute("data-grid-protocol") === "v1"
+        return grid?.getAttribute("data-grid-protocol") === "v2"
           && (grid?.querySelectorAll('[role="gridcell"]').length ?? 0) > 0;
       });
     },
@@ -299,12 +301,20 @@ export const SCENE = onPage("shell", [
     id: "nota-tre-modi",
     title: "La stessa nota in Sorgente, Live e Lettura: tre fogli affiancati",
     prepare: async (page) => {
+      // In un foglio stretto le modalità sono un bottone solo che apre la
+      // scelta; in uno largo, i segmenti.
+      const chooseMode = async (mode, label) => {
+        const segment = page.locator(`.pane.focus .pane-toolbar button[data-mode="${mode}"]`);
+        if (await segment.isVisible()) return segment.click();
+        await page.click(".pane.focus .pane-toolbar .pane-mode-current");
+        await page.click(`#context-menu [role="menuitemradio"]:has-text("${label}")`);
+      };
       await openNote(page, "Guida/Sintassi di Fub.md");
-      await page.click('.pane.focus .pane-toolbar button[data-mode="source"]');
+      await chooseMode("source", "Sorgente");
       await runScrittoioCommand(page, "Dividi il riquadro a destra");
-      await page.click('.pane.focus .pane-toolbar button[data-mode="live_preview"]');
+      await chooseMode("live_preview", "Live");
       await runScrittoioCommand(page, "Dividi il riquadro a destra");
-      await page.click('.pane.focus .pane-toolbar button[data-mode="reading"]');
+      await chooseMode("reading", "Lettura");
       await page.waitForSelector('.pane[data-mode="source"] .cm-content');
       await page.waitForSelector('.pane[data-mode="live_preview"] .cm-content');
       await page.waitForSelector('.pane[data-mode="reading"] .pane-preview');

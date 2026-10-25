@@ -34,8 +34,8 @@ la sezione seguente raccoglie le modifiche per la prima versione.
   conversioni di BOM o terminatori di riga;
 - comandi, query, view ed eventi attraverso registri generici;
 - feature ufficiali abilitate con feature Cargo indipendenti;
-- contratto WIT `fub:abi@0.2.0` con snapshot congelati e famiglia Grid v1
-  verificata su provider nativo e proxy WASM;
+- contratto WIT `fub:abi@0.2.0` con snapshot congelati e famiglia Grid a byte
+  (versione 2) verificata su provider nativo e proxy WASM;
 - provider WASM inbound reali di indice ed eventi, con feed, query, flush,
   close, `up_to_date`, reconcile e consegna notifiche nello stesso registro
   del nativo;
@@ -89,6 +89,11 @@ la sezione seguente raccoglie le modifiche per la prima versione.
   (`w:eastAsianLayout`) la conserva, la copia RTF porta le revisioni tracciate
   e il correttore corregge una nota o un documento in indonesiano (`lang`
   `id`), con l'ortografia quando sulla macchina c'è il dizionario `id_ID`;
+- motore dei documenti di videoscrittura e del correttore aggiornato a
+  WordCraft 0.10: un `.docx` conserva la lingua del testo dell'Asia orientale
+  (`w:lang/@w:eastAsia`) e l'ordine degli oggetti mobili (`relativeHeight`),
+  e il correttore segue la grafia britannica (`en-GB`) o canadese (`en-CA`)
+  dell'inglese;
 
 ### Corretto
 

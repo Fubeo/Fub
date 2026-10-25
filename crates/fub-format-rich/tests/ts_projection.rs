@@ -162,13 +162,12 @@ fn la_fixture_della_shell_è_la_proiezione_del_codec() {
     );
 }
 
-/// Un `.docx` scritto a mano: un paragrafo e una tabella con la lingua
-/// dell'Asia orientale, che il codec non tiene (wordcraft#3457), fra due
-/// paragrafi che tiene.
+/// Un `.docx` scritto a mano: un paragrafo e una tabella con il suggerimento
+/// dei caratteri dell'Asia orientale (`w:hint`, storytold/wordcraft#3541), che il codec non tiene, fra
+/// due paragrafi che tiene.
 fn closed_docx() -> Vec<u8> {
     use std::io::Write;
-    let lost =
-        r#"<w:r><w:rPr><w:lang w:val="it-IT" w:eastAsia="ja-JP"/></w:rPr><w:t>chiuso</w:t></w:r>"#;
+    let lost = r#"<w:r><w:rPr><w:rFonts w:hint="eastAsia"/></w:rPr><w:t>chiuso</w:t></w:r>"#;
     let body = format!(
         "<w:p><w:r><w:t>Aperto</w:t></w:r></w:p>\
          <w:p>{lost}</w:p>\

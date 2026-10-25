@@ -3,12 +3,12 @@
   "sha256": "3dba4d1e409c0f6df90cdfc321fea0714d6640633ad0bf1ec015eecc0a8aa40f",
   "open": {
     "readonly": null,
-    "projection": "20b54f8588b9e7487cf2e3da49bd726651ea0179f34b308035c80b5a87ba17ad",
+    "projection": "aa8c87f76a5345a0cd6ff1c190d782ead2d24f0f072c2e730f0dc99cd4c1286e",
     "blocks": 8,
     "comments": 1
   },
   "preservation": [
-    "differenze all'apertura: 22",
+    "differenze all'apertura: 20",
     "  comments: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}annotationRef>: 1 → 0",
     "  core-properties: <{http://purl.org/dc/elements/1.1/}description>: 1 → 0",
     "  core-properties: <{http://purl.org/dc/elements/1.1/}language>: 1 → 0",
@@ -16,9 +16,7 @@
     "  core-properties: <{http://schemas.openxmlformats.org/package/2006/metadata/core-properties}lastModifiedBy>: 1 → 0",
     "  core-properties: <{http://schemas.openxmlformats.org/package/2006/metadata/core-properties}revision>: 1 → 0",
     "  comments: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}comment @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}initials=\"\": 1 → 0",
-    "  comments: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"en-US\": 1 → 0",
     "  numbering: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hint=\"default\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"zh-CN\": 4 → 0",
     "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}clrScheme @{}name=\"LibreOffice\": 1 → 0",
     "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}cs @{}charset=\"1\": 2 → 0",
     "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}cs @{}pitchFamily=\"0\": 2 → 0",

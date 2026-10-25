@@ -355,6 +355,21 @@ describe("i livelli", () => {
     expect(Math.min(...driver.plays[1].keyframes.map(xOf))).toBe(0);
   });
 
+  it("in «calmo» una presenza fa metà strada, e `reverse` torna agli estremi dichiarati", () => {
+    setMotionPreference("calm");
+    const motion = animate(el, { from: { y: 16, scale: 0.9, opacity: 0 }, spring: "soft" });
+    const first = driver.plays[0].keyframes[0]!;
+    expect(first.transform).toBe("translate(0px, 8px) scale(0.95, 0.95)");
+    expect(first.opacity).toBe(0);
+    // Un FLIP non è una presenza: la corsa resta intera.
+    const other = document.createElement("div");
+    animate(other, { from: { x: 100 }, spring: "soft" });
+    expect(xOf(driver.plays[1].keyframes[0]!)).toBe(100);
+    // Invertita, la presenza va verso la sua posa dichiarata, ancora a metà.
+    motion.reverse();
+    expect(last(driver.plays[2].keyframes)).toEqual({ transform: "translate(0px, 8px) scale(0.95, 0.95)", opacity: 0 });
+  });
+
   it("in «ridotto» non parte niente e la corsa è già conclusa", async () => {
     setMotionPreference("reduced");
     const motion = animate(el, { from: { x: 100, opacity: 0 }, spring: "elastic" });

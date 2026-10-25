@@ -1,0 +1,76 @@
+# Il workspace dei dieci crate di GridCraft copiati (vedi UPSTREAM.md). È di
+# Fub, non dell'upstream: i manifest dei crate restano quelli dell'upstream ed
+# ereditano da qui versione, edizione, licenza, lint e dipendenze. Le scelte di
+# Fub stanno in questo file solo.
+#
+# Sta fuori dal workspace di Fub (`exclude` nel Cargo.toml radice): Fub prende
+# i crate come dipendenze a percorso, con il proprio Cargo.lock; i test
+# dell'upstream girano qui, con il Cargo.lock accanto:
+#
+#   cargo test --manifest-path vendor/gridcraft/Cargo.toml --workspace --locked
+[workspace]
+resolver = "3"
+members = [
+    "crates/core",
+    "crates/formula",
+    "crates/functions",
+    "crates/numfmt",
+    "crates/model",
+    "crates/calc",
+    "crates/xlsx",
+    "crates/chart",
+    "crates/pdf",
+    "crates/engine",
+]
+
+[workspace.package]
+# La versione dell'upstream: `tools/vendor-craft/vendor.mjs` la riporta qui,
+# nelle righe `gridcraft-*` qui sotto e in quelle del Cargo.toml di Fub.
+version = "0.11.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+# Codice di terzi: gli avvisi li corregge l'upstream, non una copia. I lint di
+# Fub non lo guardano, perché non è un membro del suo workspace.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+warnings = "allow"
+
+[workspace.lints.clippy]
+all = "allow"
+
+# Le versioni di quelle in comune con Fub sono le stesse del Cargo.toml radice
+# (lo controlla `vendor.mjs check`). Rispetto all'upstream:
+# - `zip` 9.0.5 al posto di 3, per RUSTSEC-2026-0367, -0368 e -0369;
+# - `serde_json` senza `float_roundtrip`: serve soltanto ai test dell'upstream,
+#   e le feature si unificano in tutto il grafo di Fub.
+[workspace.dependencies]
+gridcraft-core = { path = "crates/core", version = "0.11.1" }
+gridcraft-formula = { path = "crates/formula", version = "0.11.1" }
+gridcraft-functions = { path = "crates/functions", version = "0.11.1" }
+gridcraft-numfmt = { path = "crates/numfmt", version = "0.11.1" }
+gridcraft-model = { path = "crates/model", version = "0.11.1" }
+gridcraft-calc = { path = "crates/calc", version = "0.11.1" }
+gridcraft-xlsx = { path = "crates/xlsx", version = "0.11.1" }
+gridcraft-chart = { path = "crates/chart", version = "0.11.1" }
+gridcraft-pdf = { path = "crates/pdf", version = "0.11.1" }
+gridcraft-engine = { path = "crates/engine", version = "0.11.1" }
+
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+thiserror = "2"
+log = "0.4"
+regex = { version = "1", default-features = false, features = ["std", "unicode", "perf"] }
+quick-xml = "0.41.0"
+zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
+sha2 = { version = "0.11", default-features = false }
+aes = { version = "0.9", default-features = false }
+sha1 = { version = "0.11", default-features = false }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
+
+# Come nel workspace dell'upstream. Senza ottimizzazione, l'analisi di una
+# formula con la catena di 4.096 operandi che Excel ammette
+# (`formula/tests/spanish_input.rs`) esaurisce la pila di 2 MiB di un thread
+# di test.
+[profile.dev]
+opt-level = 1

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import { state } from "../state/store";
+import { SHELL_KEYS } from "./shell-keys.generated";
 import {
   rejectedChords,
   allCommands,
@@ -14,6 +15,7 @@ import {
   modifierName,
   keybindingKey,
   parseChords,
+  reservedChord,
   chordMap,
   matchesBinding,
   normalize,
@@ -513,11 +515,13 @@ describe("la sintassi di una scorciatoia", () => {
   });
 
   it("un modificatore che non esiste è un rifiuto, non un tasto nudo", () => {
-    // Prima di questa voce `Ctrl-k` passava e valeva `k`: cioè un tasto che
+    // Prima di questa voce `Meta-k` passava e valeva `k`: cioè un tasto che
     // risponde mentre si scrive, dichiarato da chi credeva di aver scritto
-    // Ctrl. Il silenzio era la parte peggiore.
-    expect(parseChords("Ctrl-k")).toBeNull();
+    // Meta. Il silenzio era la parte peggiore.
+    expect(parseChords("Meta-k")).toBeNull();
     expect(parseChords("Cmd-k")).toBeNull();
+    // Fuori dal Mac sarebbe Ctrl tenuto due volte.
+    expect(parseChords("Mod-Ctrl-k")).toBeNull();
     expect(parseChords("Mod-Mod-k")).toBeNull();
     expect(parseChords("Mod-")).toBeNull();
     expect(parseChords("")).toBeNull();
@@ -649,7 +653,7 @@ describe("un accordo che non si può premere si dice", () => {
     // è una stringa che l'utente scrive a mano, e prima di questa voce una
     // scritto male finiva in un `continue` — non un conflitto, vero, ma
     // nemmeno una scorciatoia, e nessuno lo diceva.
-    const malformedEntry = entry({ id: "x", title: "Storto", binding: "Ctrl-k" });
+    const malformedEntry = entry({ id: "x", title: "Storto", binding: "Meta-k" });
     expect(conflicts([malformedEntry])).toHaveLength(0);
     expect(rejectedChords([malformedEntry]).map((e) => e.id)).toEqual(["x"]);
     expect(conflictMessage([malformedEntry])).toContain("Storto");
@@ -691,6 +695,58 @@ describe("i conflitti", () => {
   });
 });
 
+describe("la parola Ctrl", () => {
+  it("sul Mac è Control, e non Cmd", () => {
+    const recent = entry({ id: "recent", binding: "Ctrl-Tab" });
+    const save = entry({ id: "save", binding: "Mod-s" });
+    expect(advance([recent], null, chord({ key: "Tab", ctrlKey: true }), "mac").type).toBe("esegue");
+    // Cmd-Tab è del sistema, e Ctrl-s sul Mac non è Cmd-s.
+    expect(advance([recent], null, chord({ key: "Tab", metaKey: true }), "mac").type).toBe("passa");
+    expect(advance([save], null, chord({ key: "s", ctrlKey: true }), "mac").type).toBe("passa");
+    expect(advance([save], null, chord({ key: "s", metaKey: true }), "mac").type).toBe("esegue");
+    expect(matchesBinding(chord({ key: "Tab", ctrlKey: true }), "Ctrl-Tab", "mac")).toBe(true);
+  });
+
+  it("fuori dal Mac è il tasto di Mod, e i due si contendono lo stesso gesto", () => {
+    const recent = entry({ id: "recent", title: "Recente", binding: "Ctrl-Tab" });
+    expect(advance([recent], null, chord({ key: "Tab", ctrlKey: true }), "other").type).toBe("esegue");
+    expect(advance([recent], null, chord({ key: "Tab", ctrlKey: true }), "any").type).toBe("esegue");
+    expect(matchesBinding(chord({ key: "Tab", ctrlKey: true }), "Ctrl-Tab", "other")).toBe(true);
+    const next = entry({ id: "next", title: "Dopo", binding: "Mod-Tab" });
+    expect(conflicts([recent, next]).map((group) => group.map((e) => e.id))).toEqual([["recent", "next"]]);
+    // E la corta piegata oscura la lunga.
+    const long = entry({ id: "long", binding: "Mod-Tab d" });
+    expect(shadowedPrefixes([recent, long]).map(({ short }) => short.id)).toEqual(["recent"]);
+    // La forma canonica tiene la parola che si è scritta.
+    expect(normalize("Shift-Ctrl-Tab")).toBe("ctrl-shift-tab");
+  });
+});
+
+describe("gli accordi del sistema", () => {
+  it("si riconoscono per piattaforma", () => {
+    expect(reservedChord("Mod-Tab", "mac")).toBe("Mod-Tab");
+    expect(reservedChord("Mod-Tab", "other")).toBeNull();
+    expect(reservedChord("Alt-F4", "other")).toBe("Alt-F4");
+    expect(reservedChord("Ctrl-ArrowLeft", "mac")).toBe("Ctrl-ArrowLeft");
+    // Fuori dal Mac Ctrl-← è il salto di parola, e lo dichiara chi vuole.
+    expect(reservedChord("Ctrl-ArrowLeft", "other")).toBeNull();
+    expect(reservedChord("Mod-s || Alt-Tab", "any")).toBe("Alt-Tab");
+    expect(reservedChord("Meta-k", "any")).toBeNull();
+  });
+
+  it("nessun accordo di serie della shell è del sistema, su nessuna piattaforma", () => {
+    const taken = Object.entries(SHELL_KEYS)
+      .filter(([, binding]) => reservedChord(binding, "any") !== null)
+      .map(([id, binding]) => `${id}: ${binding}`);
+    expect(taken).toEqual([]);
+  });
+
+  it("sul Mac i tasti che mancano si leggono con Fn", () => {
+    expect(displayBinding("Mod-PageDown", "mac")).toBe("⌘Fn↓");
+    expect(displayBinding("Mod-PageDown", "other")).toBe("Ctrl+PgDn");
+  });
+});
+
 describe("alternative keyboard gestures", () => {
   it("dispatches every alternative, including a sequence, without stealing Meta on Linux", () => {
     const choice = entry({ binding: "Mod-x || Mod-k d" });
@@ -726,7 +782,11 @@ describe("una scorciatoia come si preme", () => {
     expect(displayBinding("Mod", "mac")).toBe("⌘");
     expect(modifierName("Shift", "other")).toBe("Shift");
     expect(modifierName("alt", "mac")).toBe("⌥");
-    expect(modifierName("Ctrl", "other")).toBeNull();
+    expect(modifierName("Ctrl", "other")).toBe("Ctrl");
+    expect(modifierName("Ctrl", "mac")).toBe("⌃");
+    expect(modifierName("Meta", "other")).toBeNull();
+    expect(displayBinding("Ctrl-Shift-Tab", "mac")).toBe("⌃⇧Tab");
+    expect(displayBinding("Ctrl-Shift-Tab", "other")).toBe("Ctrl+Shift+Tab");
     // Ciò che non si sa leggere resta scritto, non sparisce.
     expect(displayBinding("Hyper-x", "other")).toBe("Hyper-x");
   });
@@ -736,6 +796,8 @@ describe("una scorciatoia come si annuncia", () => {
   it("usa i nomi di KeyboardEvent, non i simboli che si leggono", () => {
     expect(ariaBinding("Mod-Shift-PageDown", "other")).toBe("Control+Shift+PageDown");
     expect(ariaBinding("Mod-Shift-e", "mac")).toBe("Meta+Shift+E");
+    expect(ariaBinding("Ctrl-Tab", "mac")).toBe("Control+Tab");
+    expect(ariaBinding("Ctrl-Tab", "other")).toBe("Control+Tab");
     expect(ariaBinding("Mod-Alt-ArrowLeft", "other")).toBe("Control+Alt+ArrowLeft");
     expect(ariaBinding("Mod--", "other")).toBe("Control+-");
     expect(ariaBinding("Mod-o || Mod-k o", "other")).toBe("Control+O");

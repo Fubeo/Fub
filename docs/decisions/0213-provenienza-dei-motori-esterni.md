@@ -23,7 +23,7 @@ feature e le dipendenze nel workspace dell'upstream.
 
 - **La copia è derivata.** `vendor/wordcraft/` è l'upstream al commit di
   `upstream.lock` più le patch di `patches/`, in ordine, una per ragione.
-  `tools/vendor-wordcraft/vendor.mjs update` la rigenera, `check` (in CI) la
+  `tools/vendor-craft/vendor.mjs wordcraft update` la rigenera, `check` (in CI) la
   ricostruisce all'indietro fino alle impronte dell'upstream. Nessun file si
   modifica a mano.
 - **I manifest sono dell'upstream.** I sei crate stanno in un workspace loro,
@@ -84,13 +84,13 @@ aggiornamento che riscriveva i manifest ogni volta.
 
 ## Verifica
 
-- `node tools/vendor-wordcraft/vendor.mjs check`, nel job delle invarianti
+- `node tools/vendor-craft/vendor.mjs wordcraft check`, nel job delle invarianti
   della CI;
 - `cargo test --manifest-path vendor/wordcraft/Cargo.toml --workspace --locked`,
   nel job dei test;
 - `crates/fub-abi/tests/dependency_invariant.rs`: i proprietari
   (`WORDCRAFT_OWNERS`), il nucleo che non raggiunge il motore e il diagramma
   delle dipendenze;
-- `.github/scripts/check-wordcraft-boundary.mjs`: nessun import del motore
+- `.github/scripts/check-engine-boundary.mjs`: nessun import del motore
   fuori dai proprietari;
 - `cargo deny check`, nel job della supply chain.

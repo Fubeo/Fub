@@ -114,7 +114,7 @@ pub struct CommandSpec {
     ///
     /// **La forma è una regola dichiarata e non un esempio da imitare**:
     /// [`crate::rules::keys`] dice quali modificatori esistono — `mod`,
-    /// `shift`, `alt`, e `Ctrl-k` si **rifiuta** —, che il primo accordo ne
+    /// `ctrl`, `shift`, `alt`, e `Meta-k` si **rifiuta** —, che il primo accordo ne
     /// porta uno (un tasto nudo ruberebbe una lettera a chi scrive), e che uno
     /// spazio separa gli accordi di una **sequenza**: `"Mod-k d"` è due accordi
     /// e una scorciatoia sola. Chi scrive una stringa che quella regola non

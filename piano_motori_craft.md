@@ -23,8 +23,8 @@ aggiornamenti.
   scrivere**: non sono risultati.
 - **Gestione del lavoro:** ogni fase diventa una GitHub Issue, coordinata da
   una issue madre. Nessuna issue è stata ancora aperta.
-- **Collocazione:** come `piano_feature.md`, `piano_grafica.md` e
-  `piano_impostazioni.md`, questo file sta alla radice. Non sostituisce le
+- **Collocazione:** come `piano_feature.md` e `piano_impostazioni.md`,
+  questo file sta alla radice. Non sostituisce le
   pagine canoniche in `docs/` e non è un secondo tracker.
 
 ## In breve

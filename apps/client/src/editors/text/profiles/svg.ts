@@ -334,6 +334,7 @@ export function mountSvgSurface(context: SurfaceMountContext, options: SvgSurfac
       if (mode === "reading" && view) view.stage.focus();
       else engine.focus();
     },
+    find: () => mode !== "reading" && engine.openFind(),
     reveal: ({ span }) => {
       if (mode === "reading") return false;
       engine.revealByteOffset(span.start);

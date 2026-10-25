@@ -721,14 +721,15 @@ fn un_docx_che_il_codec_perderebbe_si_legge_e_non_si_scrive() {
     assert_eq!(vault.on_disk(), bytes);
 }
 
-/// Un paragrafo che il codec perderebbe (storytold/wordcraft#3457) resta
+/// Un paragrafo che il codec perderebbe (il suggerimento `w:hint`, storytold/wordcraft#3541) resta
 /// chiuso: cambiarlo si rifiuta con il suo numero e il file resta; cambiare un
 /// altro paragrafo si salva, e il chiuso resta i suoi byte.
 #[test]
 fn un_paragrafo_chiuso_non_si_scrive_e_gli_altri_sì() {
     let vault = Vault::with_docx(&["Primo", "Secondo"]);
     let document = String::from_utf8(part(&vault.on_disk(), "word/document.xml")).unwrap();
-    let closed = r#"<w:p><w:r><w:rPr><w:lang w:val="it-IT" w:eastAsia="ja-JP"/></w:rPr><w:t>Chiuso</w:t></w:r></w:p>"#;
+    let closed =
+        r#"<w:p><w:r><w:rPr><w:rFonts w:hint="eastAsia"/></w:rPr><w:t>Chiuso</w:t></w:r></w:p>"#;
     let at = document.find("<w:body>").unwrap() + "<w:body>".len();
     let document = format!("{}{closed}{}", &document[..at], &document[at..]);
     let bytes = with_part(&vault.on_disk(), "word/document.xml", document.as_bytes());

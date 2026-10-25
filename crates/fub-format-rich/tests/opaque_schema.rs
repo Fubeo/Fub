@@ -14,7 +14,7 @@
 //! - `ogni_schema_si_legge_e_ha_la_sua_bozza`: la bozza di ogni schema, in
 //!   `tests/fixtures/opaque/schema-<N>/`, si legge, si salva sui suoi byte e
 //!   si rilegge com'era voluta. Lo 0 è una proiezione di versione 1, di prima
-//!   della 2; l'1 è di prima di WordCraft 0.9.
+//!   della 2; l'1 è di prima di WordCraft 0.9, il 2 di prima della 0.10.
 //! - `ogni_dato_opaco_del_corpus_si_rilegge`: ogni dato opaco di ogni
 //!   proiezione del corpus che si modifica passa il controllo di
 //!   contenimento, perché un salvataggio li decodifica tutti.

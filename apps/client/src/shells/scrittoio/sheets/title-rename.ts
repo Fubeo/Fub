@@ -32,8 +32,9 @@ import "./sheets.css";
 
 import { errorText } from "../../../host/errors";
 import { onLanguage, t, type Key } from "../../../i18n/strings";
-import { openPopover, textField, type PopoverHandle } from "../../../kit";
+import { openPopover, textButton, textField, type PopoverHandle } from "../../../kit";
 import { nameFault, normalizedName, pageName, type NameFault } from "../../../rules/mirrored";
+import { searchedName } from "../../../rules/searched-name";
 import { flushPendingSave, renameKeepingBuffer } from "../../../state/document-session";
 import { activeDoc } from "../../../state/layout";
 import { identifier } from "../../../ui/a11y";
@@ -78,6 +79,19 @@ function renamed(from: string, name: string): string {
   const dot = from.lastIndexOf(".");
   const ext = dot > slash ? from.slice(dot) : "";
   return normalizedName(`${dir}${name}${ext}`);
+}
+
+/// Il nome che si può usare al posto di uno rifiutato, o `null`.
+///
+/// La pulizia è quella di «non l'ho trovata, creala» (`searchedName`: via i
+/// caratteri che un filesystem si riserva, i controlli, i punti in coda); a dire
+/// se il risultato va bene è poi la stessa regola del kernel (`nameFault`), non
+/// una seconda. Si propone soltanto un nome che passa e che cambia davvero
+/// qualcosa: «Che: cosa?» diventa «Che cosa».
+export function proposedName(from: string, typed: string): string | null {
+  const clean = searchedName(typed);
+  if (clean === null || clean === typed.trim() || clean === pageName(from)) return null;
+  return nameFault(renamed(from, clean), "new") === null ? clean : null;
 }
 
 export function mountTitleRename(lifetime: Lifetime): void {
@@ -145,7 +159,7 @@ export function mountTitleRename(lifetime: Lifetime): void {
 
   /// Qualcosa non è andato. Col campo ancora aperto il messaggio gli sta sotto
   /// e il nome scritto resta; col campo già chiuso si dice con un avviso.
-  const fail = (mine: Edit, message: string, tone: "info" | "guasto"): void => {
+  const fail = (mine: Edit, message: string, tone: "info" | "guasto", proposal: string | null = null): void => {
     mine.busy = false;
     if (edit !== mine) {
       if (!lifetime.closed) notify(message, tone);
@@ -160,9 +174,35 @@ export function mountTitleRename(lifetime: Lifetime): void {
     text.textContent = message;
     mine.input.setAttribute("aria-invalid", "true");
     mine.input.setAttribute("aria-describedby", text.id);
+    const content = document.createElement("div");
+    content.append(text);
+    // Niente vicolo cieco: un nome rifiutato per i suoi caratteri ha accanto
+    // quello che si può usare, pronto, e un bottone per usarlo.
+    if (proposal !== null) {
+      const use = textButton({
+        label: t("sheet.title.use", { name: proposal }),
+        onPress: () => {
+          if (edit !== mine || mine.busy) return;
+          mine.input.value = proposal;
+          mine.input.focus({ preventScroll: true });
+          void submit();
+        },
+        lifetime: mine.life,
+      });
+      use.classList.add("sheet-title-proposal");
+      // Il puntatore non porta via il fuoco dal campo, che chiuderebbe tutto.
+      mine.life.listen(use, "mousedown", (event) => event.preventDefault());
+      mine.life.listen(use, "keydown", (event) => {
+        if (event.key !== "Escape" && !(event.key === "Tab" && event.shiftKey)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        mine.input.focus({ preventScroll: true });
+      });
+      content.append(use);
+    }
     mine.note = openPopover({
       anchor: mine.input,
-      content: text,
+      content,
       placement: "bottom",
       align: "start",
       role: "alert",
@@ -191,7 +231,7 @@ export function mountTitleRename(lifetime: Lifetime): void {
     }
     const fault = nameFault(to, "new");
     if (fault !== null) {
-      fail(mine, t("explorer.bad_name", { name, reason: t(FAULT[fault]) }), "info");
+      fail(mine, t("explorer.bad_name", { name, reason: t(FAULT[fault]) }), "info", proposedName(from, name));
       return;
     }
     mine.busy = true;
@@ -246,6 +286,16 @@ export function mountTitleRename(lifetime: Lifetime): void {
     crumb.after(holder);
 
     life.listen(field.input, "keydown", (event) => {
+      // Da tastiera il nome proposto si raggiunge con Tab, come il prossimo
+      // controllo: il riquadro del messaggio non sta accanto al campo nel DOM.
+      if (event.key === "Tab" && !event.shiftKey && !event.isComposing) {
+        const use = mine.note?.element.querySelector<HTMLElement>(".sheet-title-proposal");
+        if (use) {
+          event.preventDefault();
+          use.focus({ preventScroll: true });
+        }
+        return;
+      }
       if (event.key !== "Escape" || event.isComposing) return;
       event.preventDefault();
       event.stopPropagation();
@@ -253,8 +303,16 @@ export function mountTitleRename(lifetime: Lifetime): void {
       if (edit === mine && !mine.busy) close(true);
     });
     life.listen(field.input, "input", () => clearNote(mine));
-    life.listen(field.input, "blur", () => {
-      if (edit === mine) close(false);
+    // Il fuoco che passa al bottone del nome proposto resta dentro la rinomina;
+    // ogni altra uscita la chiude.
+    const inside = (target: EventTarget | null): boolean =>
+      target instanceof Node && (target === mine.input || mine.note?.element.contains(target) === true);
+    life.listen(field.input, "blur", (event) => {
+      if (edit === mine && !inside(event.relatedTarget)) close(false);
+    });
+    life.listen(document, "focusout", (event) => {
+      if (edit !== mine || !(event.target instanceof Node) || !mine.note?.element.contains(event.target)) return;
+      if (!inside(event.relatedTarget)) close(false);
     });
     field.input.focus({ preventScroll: true });
     field.input.select();

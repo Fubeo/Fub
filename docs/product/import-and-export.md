@@ -167,6 +167,23 @@ nell'HTML resta un riquadro col suo nome; un'immagine remota, che resta un
 collegamento; un riferimento che non si risolve, un'immagine oltre il tetto,
 una nota incorporata troppo in profondità o in un giro.
 
+## Stampare una cartella di Excel
+
+Una cartella di Excel si stampa in PDF dal menu del riquadro («PDF
+stampato»), dalla scheda Layout di pagina della barra dei fogli o con il
+comando `xlsx.export-pdf` della palette, che sceglie anche fra tutti i fogli
+visibili e il foglio attivo del file. Come per una nota, prima si salva, e il
+PDF arriva al centro attività: è la cartella salvata, impaginata con le
+impostazioni di pagina di ogni foglio (carta, orientamento, margini,
+proporzioni, area di stampa, titoli, intestazione e piè di pagina).
+
+Il rapporto conta ciò che la stampa non porta: i fogli nascosti, le formule
+senza un valore salvato nel file (Fub non le calcola, e si stampano vuote) e i
+fogli senza niente da stampare; una nota ricorda che il PDF stampa i valori:
+formule, convalide, filtri e collegamenti fra fogli restano nella cartella, e
+i caratteri diventano quelli standard del PDF. L'anteprima di stampa della barra mostra
+invece la cartella com'è nella sessione, anche prima del salvataggio.
+
 ## Il formato Markdown
 
 Il provider Markdown offre due destinazioni: `markdown.files`, un file per
@@ -183,4 +200,3 @@ L'opzione `frontmatter` (predefinita `true`) tiene o toglie i metadati.
   JSON o YAML fra le note.
 - Il documento unico non può contenere allegati: ogni allegato citato è un
   avviso nel rapporto, col documento che lo cita.
-

@@ -45,7 +45,8 @@
 // 3. **Solo proprietà ammesse.** Ogni corsa di `moto`, ogni animazione o
 //    transizione CSS partita col gesto, ogni proprietà in linea riscritta a
 //    ogni fotogramma tocca soltanto quelle cinque. Il referto dice di ogni
-//    estranea se è di sola pittura (un colore) o di geometria.
+//    estranea se è di sola pittura (un colore) o di geometria. Una View
+//    Transition avviata dal gesto è un'estranea anche lei.
 // 4. **Interrompibile.** Si rifà il gesto, a metà corsa lo si inverte: si
 //    arriva allo scatto dell'andata e ritorno completa, e ciò che si stava
 //    muovendo prosegue da dov'era — lo stesso elemento o l'immagine che ne
@@ -57,9 +58,9 @@
 // dove l'ha messo l'ultimo, e quello è stato, non movimento. Se i due scatti
 // differiscono il referto lo dice, senza farne una colpa della corsa.
 //
-// Due eccezioni, scritte perché siano le sole. Il cursore di CodeMirror
-// lampeggia con un'animazione sua, senza fine, che `stage.mjs` nasconde e che
-// qui non conta fra le vive. E ciò che era già vivo prima del gesto non è un
+// Due eccezioni, scritte perché siano le sole. Il cursore di CodeMirror, con
+// `editor.cursor-blink`, lampeggia con un'animazione sua, senza fine, che
+// `stage.mjs` nasconde e che qui non conta fra le vive. E ciò che era già vivo prima del gesto non è un
 // residuo del gesto.
 //
 // # Un rosso è del prodotto
@@ -80,7 +81,9 @@ import {
   UNCOVERED,
   family,
   foreignProperties,
+  EXIT_LIMIT_MS,
   jumps,
+  longExits,
   midpoint,
   residue,
 } from "./motion-rules.mjs";
@@ -173,6 +176,15 @@ function RECORDER() {
     },
     true,
   );
+  // Una View Transition fotografa la pagina e la anima fuori da `moto`: lo
+  // Scrittoio non ne avvia, e una che parte è un'estranea della regola 3.
+  if (typeof document.startViewTransition === "function") {
+    const start = document.startViewTransition;
+    document.startViewTransition = function startViewTransition(...args) {
+      log.css.push({ kind: "View Transition", target: "document", pseudo: "", name: "", keys: ["view-transition"] });
+      return start.apply(this, args);
+    };
+  }
   window.__motoLog = { log, path, paths, keysOf };
 }
 
@@ -187,6 +199,7 @@ async function TOOLS() {
   let at = { waapi: 0, css: 0, plays: 0 };
   let written = new Map();
   let watched = [];
+  let marked = 0;
 
   /// Il cursore dell'editor: un'animazione senza fine che non è del moto.
   const caret = (animation) =>
@@ -311,6 +324,19 @@ async function TOOLS() {
         }
         before = after;
       }
+    },
+    /// Segna il punto da cui `since` conta le corse.
+    mark() {
+      marked = driver ? driver.plays.length : 0;
+    },
+    /// Le corse partite da `mark` in poi, con durata e ritardo.
+    since() {
+      return (driver ? driver.plays.slice(marked) : []).map((play) => ({
+        target: paths.get(play.el) ?? path(play.el),
+        pseudo: play.timing.pseudo ?? "",
+        duration: play.timing.duration,
+        delay: play.timing.delay,
+      }));
     },
     /// Quanto durano le corse vive, ritardo compreso.
     lengths() {
@@ -567,9 +593,10 @@ async function reversal(stage, choreography, scene) {
       await settle(page, choreography.arrived, true);
       await park(page, choreography);
       await settle(page, choreography.arrived, true);
+      await inPage(page, "mark");
       await choreography.undo(page);
       const rest = await back();
-      round = { ...(await shot(page)), rest };
+      round = { ...(await shot(page)), rest, exits: await inPage(page, "since") };
     }
 
     await gesture(page, choreography);
@@ -744,6 +771,20 @@ async function measure(stage, choreography, scene) {
     rules[4] = { pass: why4.length === 0, why: why4, jumps: jumped, watched: turned.before.length };
   }
 
+  // 5. Le uscite sono brevi.
+  if (!choreography.exit) {
+    rules[5] = { pass: null, why: ["non è un'uscita"] };
+  } else if (!turned?.round) {
+    rules[5] = { pass: false, why: ["l'uscita non è stata misurata: manca l'andata e ritorno"] };
+  } else {
+    const long = longExits(turned.round.exits);
+    rules[5] = {
+      pass: long.length === 0,
+      why: long.map((run) => `${run.target} esce in ${Math.round(run.length)} ms (≤ ${EXIT_LIMIT_MS})`),
+      exits: turned.round.exits.length,
+    };
+  }
+
   const notes = [];
   if (!moved && !choreography.still) notes.push("non si è mosso niente: nessuna corsa di moto e nessun valore a molla");
   if (!moved && choreography.still) notes.push("non passa da moto: nessuna corsa, le regole valgono a vuoto");
@@ -811,9 +852,9 @@ try {
       continue;
     }
     const red = !row.moved || Object.values(row.rules).some((rule) => rule.pass === false);
-    const marks = [1, 2, 3, 4].map((n) => `${n} ${mark(row.rules[n])}`).join("  ");
+    const marks = [1, 2, 3, 4, 5].map((n) => `${n} ${mark(row.rules[n])}`).join("  ");
     console.log(`${red ? "✗" : "·"} ${row.id} — ${row.title}\n    ${marks}`);
-    for (const n of [1, 2, 3, 4]) {
+    for (const n of [1, 2, 3, 4, 5]) {
       if (row.rules[n].pass !== false) continue;
       for (const why of row.rules[n].why) console.log(`    [${n}] ${why}`);
     }
@@ -829,8 +870,10 @@ const failed = report.filter(
   (row) => row.error || !row.moved || Object.values(row.rules).some((rule) => rule.pass === false),
 );
 console.log("");
-console.log("Le regole: 1 stato finale identico · 2 nessun residuo · 3 solo proprietà ammesse · 4 interrompibile");
-if (!only) {
+console.log(
+  `Le regole: 1 stato finale identico · 2 nessun residuo · 3 solo proprietà ammesse · 4 interrompibile · 5 uscite entro ${EXIT_LIMIT_MS} ms`,
+);
+if (!only && UNCOVERED.length > 0) {
   console.log("Senza coreografia:");
   for (const entry of UNCOVERED) console.log(`    ${entry.source} — ${entry.reason}`);
 }

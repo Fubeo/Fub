@@ -127,7 +127,7 @@ describe("DocumentSurfaceRegistry", () => {
     ).toMatchObject({ family: "text", profile: "markdown" });
   });
 
-  it("routes the fubsheet format to the grid sheet surface", () => {
+  it("routes a workbook to the grid", async () => {
     const registry = createDocumentSurfaceRegistry({
       onChange: vi.fn(),
       onSelectionChange: vi.fn(),
@@ -141,11 +141,24 @@ describe("DocumentSurfaceRegistry", () => {
       },
     });
 
-    expect(registry.resolve({ formatId: "fubsheet", sourceKind: "text" })).toMatchObject({
+    // Una cartella di Excel arriva a byte, e la griglia la apre sulla
+    // protocollo a byte: senza un host che la serva lo dice.
+    expect(registry.resolve({ formatId: "xlsx", sourceKind: "bytes", documentId: "conti.xlsx" })).toMatchObject({
       owner: "fub.shell.grid",
       family: "grid",
-      profile: "sheet",
+      profile: "workbook",
     });
+    const parent = document.createElement("div");
+    const surface = registry.mount(
+      { formatId: "xlsx", sourceKind: "bytes", documentId: "conti.xlsx" },
+      { paneId: "conti", documentId: "conti.xlsx", parent },
+    );
+    surface.buffer!.setDoc("");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(parent.querySelector<HTMLElement>(".grid-surface")?.dataset.gridProtocol).toBe("unavailable");
+    expect(parent.querySelector<HTMLElement>(".grid-notice")?.hidden).toBe(false);
+    surface.destroy();
+    expect(parent.querySelector(".grid-surface")).toBeNull();
   });
 
   it("selects canvas and local media profiles without a network fallback", () => {
@@ -210,8 +223,7 @@ describe("DocumentSurfaceRegistry", () => {
         { buffer: true, reveal: true, references: true, presentation: true, printable: true }],
       [{ formatId: null, sourceKind: "text" }, "notes.txt",
         { buffer: true, reveal: true, references: false, presentation: false, printable: false }],
-      // Lo sheet non ha un provider che lo stampi (`RenderPrint` → `NoProvider`).
-      [{ formatId: "fubsheet", sourceKind: "text" }, "budget.fubsheet",
+      [{ formatId: "xlsx", sourceKind: "bytes" }, "conti.xlsx",
         { buffer: true, reveal: false, references: false, presentation: false, printable: false }],
       [{ formatId: "canvas", sourceKind: "text" }, "board.canvas",
         { buffer: true, reveal: true, references: false, presentation: false, printable: true }],

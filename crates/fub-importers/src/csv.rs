@@ -11,7 +11,7 @@
 //! multiline cells move to the body with a `row_N` reference. The manifest
 //! sets `convertible_to_base: true` when every header is identifier-like and
 //! every row parsed cleanly — a hint for DataViewsOwner, never a `*.base`
-//! write (this crate never writes `*.base`/`*.canvas`/`*.fubsheet` paths).
+//! write (this crate never writes `*.base`/`*.canvas` paths).
 //!
 //! Export (`csv.rows`, target `importers.csv`) renders one row per document
 //! from scalar frontmatter keys + `title`/`source`: lossy by construction,

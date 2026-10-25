@@ -211,12 +211,12 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 THE_LANGUAGE_DESC,
                 "Il tag BCP-47 della lingua dell'interfaccia (`it`, `it-IT`, `en-US`). \
-                 Vuoto = quella del sistema.",
+                 Se resta vuoto vale quella del sistema.",
             )
             .with(THE_TIMEZONE, "Fuso orario")
             .with(
                 THE_TIMEZONE_DESC,
-                "Il nome IANA del fuso (`Europe/Rome`). Vuoto = quello del sistema. \
+                "Il nome IANA del fuso (`Europe/Rome`). Se resta vuoto vale quello del sistema. \
                  Cambiarlo qui non cambia l'orologio del sistema: cambia come Fub \
                  mostra le date, e a che ora suonano le sveglie dei componenti \
                  che ne dichiarano una a un orario di parete.",
@@ -243,13 +243,13 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 THE_LANGUAGE_DESC,
                 "The BCP-47 tag of the interface language (`it`, `it-IT`, `en-US`). \
-                 Empty = the system one.",
+                 If empty, the system one applies.",
             )
             .with(THE_TIMEZONE, "Time zone")
             .with(
                 THE_TIMEZONE_DESC,
-                "The IANA name of the time zone (`Europe/Rome`). Empty = the system \
-                 one. Changing it here does not change the system clock: it changes \
+                "The IANA name of the time zone (`Europe/Rome`). If empty, the system \
+                 one applies. Changing it here does not change the system clock: it changes \
                  how Fub shows dates, and what time wall-clock alarms declared by \
                  components go off.",
             )

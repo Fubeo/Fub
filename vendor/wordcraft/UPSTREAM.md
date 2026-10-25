@@ -5,6 +5,12 @@ Questa cartella contiene codice e dati di
 modifiche elencate qui sotto. Fub non dipende da WordCraft via Git:
 `deny.toml` ammette soltanto crates.io, e i crate non sono pubblicati là.
 
+Il fork [`Fubeo/wordcraft`](https://github.com/Fubeo/wordcraft) è il mirror: il campo
+`mirror` di `upstream.lock` lo nomina, e `verify-upstream` lo prova dopo
+l'upstream. Prende rami e tag dell'upstream senza potare e senza riscrivere un
+tag, così una revisione copiata resta raggiungibile anche se l'upstream la
+cancella.
+
 Sei crate: il correttore (`proof`) e, per i documenti di videoscrittura, il
 modello del documento (`doc`), le sue unità di misura (`geom`), il codec DOCX
 (`docx`), il lettore di Word 97-2003 (`docbin`) e gli import ed export degli
@@ -13,7 +19,7 @@ altri formati di testo (`formats`: OpenDocument, RTF e gli altri).
 ## Riferimento
 
 - repository: `https://github.com/storytold/wordcraft`
-- commit: `2e6db0bd88795e80375176c01665cff7dbe2b057` (tag `v0.9.0`, 2026-10-19)
+- commit: `9130181a5fdaee2293e67756fd5458c601489f3c` (tag `v0.10.0`, 2026-10-22)
 - licenza del codice: `MIT OR Apache-2.0` (`LICENSE-MIT`, `LICENSE-APACHE`)
 
 ## Cosa è copiato
@@ -23,7 +29,7 @@ altri formati di testo (`formats`: OpenDocument, RTF e gli altri).
 | `crates/proof/` | `crates/proof/` | nessuna |
 | `crates/geom/` | `crates/geom/` | nessuna |
 | `crates/doc/` | `crates/doc/` | nessuna |
-| `crates/docx/` | `crates/docx/` | `src/package.rs` e sette file di `tests/` per `zip` 9; `src/write/settings_merge.rs`, `src/write/mod.rs` e `src/lib.rs` per una verifica in più |
+| `crates/docx/` | `crates/docx/` | `src/package.rs` e otto file di `tests/` per `zip` 9; `src/write/settings_merge.rs`, `src/write/mod.rs` e `src/lib.rs` per una verifica in più |
 | `crates/docbin/` | `crates/docbin/` | nessuna |
 | `crates/formats/` | `crates/formats/` | un test di `src/odt.rs` per `zip` 9 |
 | `assets/hyphenation/` | `assets/hyphenation/` | nessuna |
@@ -45,7 +51,7 @@ cargo test --manifest-path vendor/wordcraft/Cargo.toml --workspace --locked
 Fuori dal workspace di Fub, i crate non passano dal suo
 `cargo clippy --workspace --all-targets -- -D warnings`: i lint del workspace
 di questa cartella permettono gli avvisi, che corregge l'upstream e non una
-copia, e vietano soltanto `unsafe`. Con la 1.89 di Fub i crate compilano e i
+copia, e vietano soltanto `unsafe`. Con la 1.95 di Fub i crate compilano e i
 loro test passano.
 
 Le patch di `patches/`, una per ragione:
@@ -56,8 +62,9 @@ Le patch di `patches/`, una per ragione:
   (RUSTSEC-2026-0367, -0368, -0369) corretti in `zip` 9. In `zip` 9 il nome di
   una voce dell'archivio è un `Result`: in `docx/src/package.rs` una voce dal
   nome illeggibile si salta con un avviso nel log, come l'upstream fa già con
-  una voce illeggibile, e nei sette file di `docx/tests/` che leggono l'archivio
-  `f.name()` diventa `f.name().unwrap()`. In `formats/src/odt.rs`, test
+  una voce illeggibile; nei sette file di `docx/tests/` che leggono l'archivio
+  `f.name()` diventa `f.name().unwrap()`, e in `content_control_save_cost.rs`
+  i nomi di `file_names()` si scartano con `unwrap()`. In `formats/src/odt.rs`, test
   `pictures_over_the_budget_are_not_inflated`, una voce che si espande oltre la
   misura dichiarata si ferma a quella misura e fallisce il controllo, quindi è
   rifiutata senza consumare il budget invece di esaurirlo: il test verifica
@@ -145,7 +152,6 @@ WordCraft. Quando una si chiude, l'aggiornamento della copia cambia gli
 
 | Segnalazione | Cosa si perde al salvataggio |
 | --- | --- |
-| [storytold/wordcraft#3457](https://github.com/storytold/wordcraft/issues/3457) | `w:lang/@w:eastAsia` |
 | [storytold/wordcraft#3541](https://github.com/storytold/wordcraft/issues/3541) | il tema rigenerato, `tblInd` degli stili di tabella, `w:rFonts/@w:hint`, `w:annotationRef` e `w:initials` vuoto dei commenti, `dc:language` e `cp:contentStatus` |
 
 ## Aggiornare
@@ -155,20 +161,33 @@ La copia è derivata: l'upstream al commit di `upstream.lock` più le patch di
 ragione; nessun file si modifica a mano.
 
 ```text
-node tools/vendor-wordcraft/vendor.mjs update --rev <sha> [--tag <tag>] [--source <clone o URL>]
-node tools/vendor-wordcraft/vendor.mjs check
-node tools/vendor-wordcraft/vendor.mjs verify-upstream
+node tools/vendor-craft/vendor.mjs wordcraft update --rev <sha> [--tag <tag>] [--source <clone o URL>]
+node tools/vendor-craft/vendor.mjs wordcraft check
+node tools/vendor-craft/vendor.mjs wordcraft verify-upstream
+node tools/vendor-craft/vendor.mjs wordcraft report --rev <sha> [--source <clone o URL>]
+node tools/vendor-craft/vendor.mjs wordcraft gate
 ```
 
 `update` estrae i percorsi gestiti (con `--tag`, controlla che il tag
-dell'upstream punti a quel commit e lo scrive nel lock), applica le patch (si ferma su quella che
-non si applica, senza scrivere niente), stampa le dipendenze aggiunte o tolte
+dell'upstream punti a quel commit e lo scrive nel lock), porta la pila di patch sulla revisione nuova (una patch
+il cui contesto è cambiato si rifà a tre vie e si riscrive in `patches/`; su un
+conflitto vero si ferma, senza scrivere niente), stampa le dipendenze aggiunte o tolte
 dai manifest dell'upstream, controlla che ogni dipendenza ereditata sia
 definita nel workspace di questa cartella, scrive `upstream.lock` e aggiorna la
 `version` del workspace di questa cartella e delle righe `wordcraft-*` dei due
 `Cargo.toml`. `check`, in CI, toglie la pila intera in ordine inverso da una
 copia e ritrova le impronte dell'upstream. Una modifica nuova si aggiunge come
 patch in `patches/` e si riesegue `update` con lo stesso commit.
+
+`report` è l'aggiornamento a vuoto: non scrive niente, e dice per ogni patch
+se si applica così com'è, se si rifà a tre vie, se l'upstream l'ha assorbita o
+se ha un conflitto vero, quali dei suoi file l'upstream ha cambiato, le
+dipendenze aggiunte, tolte o prese da Git, la `rust-version` se supera quella
+di Fub e i file `osservati` di `motori.mjs` che l'upstream ha cambiato: la
+barra e la mini-barra dell'upstream, che Fub non copia ma da cui prende i
+comandi. `self-test` prova le tre vie su un upstream finto, senza rete. `gate`, dopo `update`, esegue le prove che
+`tools/vendor-craft/motori.mjs` elenca per il motore e le riassume in una
+tabella.
 
 Dopo un aggiornamento: i test qui sopra, con il `Cargo.lock` di questa
 cartella aggiornato (`cargo update --manifest-path vendor/wordcraft/Cargo.toml

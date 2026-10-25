@@ -89,31 +89,92 @@ host implica accesso diretto a filesystem, rete o orologio.
 
 ## Famiglia `grid`
 
-La famiglia `grid` è il primo contratto strutturato a finestre. Il binding
-negozia prima `family = "grid"` e `protocol_version = 1`; famiglia, versione
-ABI e versione del formato `.fubsheet` restano indipendenti. Una shell che non
-conosce la coppia esatta non invoca il provider: conserva gli altri binding,
-mostra un notice e usa il fallback registrato (testo UTF-8, viewer per byte o
-errore esplicito).
+La famiglia `grid` è il contratto strutturato a finestre. Il binding negozia
+prima `family = "grid"` e `protocol_version`; famiglia, versione ABI e
+versione del formato restano indipendenti. L'unica versione servita è la 2:
+la 1, su un sorgente di testo, è uscita dal contratto
+([ADR 0218](../decisions/0218-via-il-fubsheet-e-la-versione-1-di-grid.md)), e
+l'interfaccia WIT `grid` tiene soltanto i tipi comuni. Una shell che non
+conosce la coppia esatta non invoca il provider: conserva gli altri binding e
+dice che il foglio non si apre.
 
-Le coordinate pubbliche sono sempre `SheetId + RowId + ColumnId`. L'apertura e
-il reload accettano la sorgente completa fino a 16 MiB; le finestre rispettano
-256 righe, 128 colonne e 32.768 coordinate. Un'operazione accetta al massimo
-16.384 patch e 4 MiB complessivi di preimmagini e nuovi input. Risposta e
-envelope JSON sono limitati a 8 MiB. L'invalidazione elenca coordinate
-modificate e dipendenti fino a 32.768 elementi; oltre usa `all`.
+Le coordinate pubbliche sono sempre `SheetId + RowId + ColumnId`. Le finestre
+rispettano 256 righe, 128 colonne e 32.768 coordinate. Un'operazione accetta
+al massimo 16.384 patch e 4 MiB complessivi di preimmagini e nuovi input.
+Risposta e envelope JSON sono limitati a 8 MiB. L'invalidazione elenca le
+coordinate da rileggere fino a 32.768 elementi; oltre usa `all`.
 
 Le patch sono input-only con preimmagine; il provider resta l'autorità per
-stile, formule, valori e dipendenze. Il commit restituisce un diff conseguente
-con offset in byte UTF-8, senza spezzare caratteri multibyte o `\r\n`.
-Provider nativo e proxy WASM usano gli stessi tipi, limiti, errori e lifecycle.
-DOM, oggetti CodeMirror e callback JavaScript non compaiono in Rust, WIT o
-mirror TypeScript; il testo resta locale e nessuna battuta genera IPC o WASM.
+stile, formule, valori e dipendenze. Provider nativo e proxy WASM usano gli
+stessi tipi, limiti, errori e lifecycle. DOM, oggetti CodeMirror e callback
+JavaScript non compaiono in Rust, WIT o mirror TypeScript; il testo resta
+locale e nessuna battuta genera IPC o WASM.
 
 La famiglia è una porta tipizzata del contratto, non una capability di
-sicurezza. `query_index` resta il canale read-only per dati indicizzati e per
-la query privata di valutazione `.fubsheet`; non è il percorso delle finestre,
-delle patch o del lifecycle Grid.
+sicurezza. `query_index` resta il canale read-only per dati indicizzati; non è
+il percorso delle finestre, delle patch o del lifecycle Grid.
+
+### Una sorgente a byte
+
+La versione 2 (`protocol_version = 2`, `fub_abi::grid_bytes`, interfaccia WIT
+`grid-bytes`) apre una sorgente **a byte** che resta nella custodia dell'host:
+la shell non vede mai i byte. Il trait `GridBytesProvider` ha `surfaces`,
+`open`, `window`, `apply`, `bytes_to_write`, `close` e `shutdown`; nativo e
+WASM lo implementano con gli stessi tipi, limiti, errori e lifecycle.
+
+- `open(surface, source, revision, journal)` riceve i byte, la loro
+  revisione e il **giornale** delle celle cambiate (`GridJournal`), e dà un
+  `GridBytesSession`: fogli, foglio attivo, fogli nascosti, avvisi in codici
+  chiusi (`GridNotice`) e voci del giornale in conflitto con i byte.
+- `window` dà un `GridBytesWindow`: ogni cella porta l'input, l'indice dello
+  stile, il valore (`GridValue`), il testo formattato dal provider, il codice
+  del blocco (`lock`), `stale` (il valore del file non segue una cella
+  cambiata), `conflict` e i segni già risolti: barra di dati, icona,
+  commento con le risposte e collegamento. La finestra porta gli stili
+  (`grid-cell-style`, non più delle celle), le unioni che la
+  toccano, mai di una cella sola, e la vista del foglio, con lo zoom da 10 a
+  400 e i riquadri bloccati dentro il foglio. Uno stile ha il carattere fino
+  a 256 byte, la dimensione fra 0 e 409 punti, colori fino a 32 byte e la
+  rotazione fra -90 e 90 gradi, o 255 per il testo in colonna.
+- `apply` riceve le patch di `GridApplyRequest`; il `GridCommit` porta il diff del
+  **testo del giornale**, e l'invalidazione.
+- `commands(instance, selection)` dà il catalogo (`GridCommandState`, fino a
+  1.024 comandi con id unici; il perché, fino a 1 KiB, soltanto per un comando
+  spento) sulla `GridSelection`. Di serie è vuoto.
+- `command(instance, request)` dà un comando del catalogo e ridà un
+  `GridCommandOutcome`: il `GridCommit` del giornale, i fogli, la selezione
+  nuova, il risultato (un oggetto JSON fino a 1 MiB), la `GridDialog` chiesta
+  e il catalogo. L'host controlla che la revisione vada avanti se e soltanto
+  se il diff non è vuoto. Di serie è `BadArgs`; l'esempio `esempi/grid-wasm`
+  dà il catalogo vuoto e rifiuta ogni comando.
+- `bytes_to_write(instance, expected)` dà i byte con il giornale innestato, o
+  la cartella riscritta quando il giornale di comandi cambia più dell'input.
+  La chiama soltanto l'host, per salvare.
+
+Il giornale ha una sola forma canonica, il cui testo vuoto è il giornale
+vuoto: JSON `{"version": 1, "cells": [...]}`, voci `{"sheet", "row",
+"column", "before", "after"}` in ordine di chiave confrontata come byte, id
+di ASCII stampabile fino a 64 byte, nessuna chiave due volte e nessuna voce
+con `after` uguale a `before`. `GridJournal::rebase` lo riporta sui byte di un
+salvataggio; la shell ne ha il mirror, legato dalla fixture
+`GridJournalRebase`. La sorgente arriva fino a 256 MiB
+(`MAX_GRID_BYTES_SOURCE`); il giornale ha i limiti di un'operazione (16.384
+voci, 4 MiB di input); una sessione porta al più 64 avvisi. Il perché è
+nell'[ADR 0216](../decisions/0216-protocollo-grid-2-sorgente-a-byte.md).
+
+`GridJournal` legge e scrive anche una seconda forma, mai insieme alla prima:
+il **giornale di comandi**, `{"version": 2, "commands": [...]}`, con almeno un
+comando `{"id", "params", "sheet", "selection", "active"}` (`GridCommand`) in
+ordine di applicazione. `params` è il testo di un oggetto JSON fino a 64 KiB,
+portato com'è; la selezione è in riferimenti A1 separati da virgola, la cella
+attiva è un riferimento solo. Fino a 16.384 comandi e 16 MiB di testo. Il
+rebase toglie i comandi in comune con il salvataggio dall'inizio, e
+`reverted_by` conta quelli salvati che il giornale non ha più. La serve il
+provider delle cartelle di Excel (`crates/fub-format-xlsx/src/commands.rs`),
+dal primo comando di una sessione: le voci del giornale di celle diventano
+allora comandi `range.setValues`. Il perché è nell'[ADR
+0219](../decisions/0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md),
+in proposta.
 
 ## Errori
 

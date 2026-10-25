@@ -1,5 +1,5 @@
 {
-  "opaque_schema": 2,
+  "opaque_schema": 3,
   "surface": {
     "fub-format-rich/odt/keys.rs::AtomKey": [
       "struct AtomKey",
@@ -59,6 +59,15 @@
       "section : SectionProps",
       "# [serde (default , skip_serializing_if = \"BTreeMap::is_empty\")] parts : BTreeMap < u32 , Part >"
     ],
+    "wordcraft-doc/byte_store.rs::impl Deserialize for Bytes": [
+      "impl < 'de > de :: Deserialize < 'de > for Bytes { fn deserialize < D : Deserializer < 'de > > (d : D) -> Result < Self , D :: Error > { d . deserialize_any (BytesVisitor) . map (Bytes) } }"
+    ],
+    "wordcraft-doc/byte_store.rs::impl Serialize for Encoded": [
+      "impl Serialize for Encoded < '_ > { fn serialize < S : Serializer > (& self , s : S) -> Result < S :: Ok , S :: Error > { s . collect_str (& Base64Display :: new (self . 0 , & STANDARD)) } }"
+    ],
+    "wordcraft-doc/byte_store.rs::type Store": [
+      "type Store = BTreeMap < String , Arc < Vec < u8 > > > ;"
+    ],
     "wordcraft-doc/chart.rs::ChartSeries": [
       "# [serde (rename_all = \"camelCase\")] struct ChartSeries",
       "name : String",
@@ -106,7 +115,8 @@
       "# [serde (skip_serializing_if = \"is_false\")] arrow_start : bool",
       "# [serde (skip_serializing_if = \"is_false\")] arrow_end : bool",
       "# [serde (skip_serializing_if = \"Option::is_none\")] corner : Option < u32 >",
-      "# [serde (skip_serializing_if = \"crate::line_dash::LineDash::is_solid\")] dash : crate :: line_dash :: LineDash"
+      "# [serde (skip_serializing_if = \"crate::line_dash::LineDash::is_solid\")] dash : crate :: line_dash :: LineDash",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] outline_fill : Option < crate :: fill :: Fill >"
     ],
     "wordcraft-doc/connector.rs::ShapeExtra::is_empty": [
       "pub fn is_empty (& self) -> bool { * self == ShapeExtra :: default () }"
@@ -201,6 +211,51 @@
     ],
     "wordcraft-doc/effects.rs::impl Default for Shadow": [
       "impl Default for Shadow { fn default () -> Self { Shadow { color : Rgb :: BLACK , transparency : 60.0 , blur : 4.0 , distance : 3.0 , angle : 45.0 , rot_with_shape : false } } }"
+    ],
+    "wordcraft-doc/fill.rs::AnyForm": [
+      "# [serde (untagged)] enum AnyForm",
+      "Plain (Rgb)",
+      "Tagged (Tagged)"
+    ],
+    "wordcraft-doc/fill.rs::Gradient": [
+      "# [serde (rename_all = \"camelCase\")] struct Gradient",
+      "stops : Vec < GradStop >",
+      "kind : GradientKind",
+      "# [serde (default , skip_serializing_if = \"Option::is_none\")] tile : Option < [f32 ; 4] >",
+      "# [serde (default)] rot_with_shape : bool",
+      "# [serde (default , skip_serializing_if = \"GradientFlip::is_none\")] flip : GradientFlip"
+    ],
+    "wordcraft-doc/fill.rs::GradientFlip": [
+      "# [serde (rename_all = \"camelCase\")] enum GradientFlip",
+      "# [default] None",
+      "X",
+      "Y",
+      "Xy"
+    ],
+    "wordcraft-doc/fill.rs::GradientFlip::is_none": [
+      "pub fn is_none (& self) -> bool { * self == GradientFlip :: None }"
+    ],
+    "wordcraft-doc/fill.rs::GradientKind": [
+      "# [serde (tag = \"type\" , rename_all = \"camelCase\")] enum GradientKind",
+      "Linear { angle : f32 , # [serde (default)] scaled : bool , }",
+      "Path { shape : PathShape , focus : [f32 ; 4] }"
+    ],
+    "wordcraft-doc/fill.rs::PathShape": [
+      "# [serde (rename_all = \"camelCase\")] enum PathShape",
+      "Circle",
+      "Rect",
+      "Shape"
+    ],
+    "wordcraft-doc/fill.rs::Tagged": [
+      "# [serde (tag = \"type\" , rename_all = \"camelCase\")] enum Tagged",
+      "Solid { color : Rgb , # [serde (default)] transparency : f32 , }",
+      "Gradient (Gradient)"
+    ],
+    "wordcraft-doc/fill.rs::impl Deserialize for Fill": [
+      "impl < 'de > Deserialize < 'de > for Fill { fn deserialize < D : Deserializer < 'de > > (d : D) -> Result < Fill , D :: Error > { Ok (match AnyForm :: deserialize (d) ? { AnyForm :: Plain (color) => Fill :: solid (color) , AnyForm :: Tagged (Tagged :: Solid { color , transparency }) => Fill :: Solid { color , transparency } , AnyForm :: Tagged (Tagged :: Gradient (g)) => Fill :: Gradient (Arc :: new (g)) , }) } }"
+    ],
+    "wordcraft-doc/fill.rs::impl Serialize for Fill": [
+      "impl Serialize for Fill { fn serialize < S : Serializer > (& self , s : S) -> Result < S :: Ok , S :: Error > { match self { Fill :: Solid { color , transparency : 0.0 } => color . serialize (s) , Fill :: Solid { color , transparency } => Tagged :: Solid { color : * color , transparency : * transparency } . serialize (s) , Fill :: Gradient (g) => Tagged :: Gradient (Gradient :: clone (g)) . serialize (s) , } } }"
     ],
     "wordcraft-doc/freeform.rs::FreePath": [
       "# [serde (default , rename_all = \"camelCase\")] struct FreePath",
@@ -335,8 +390,8 @@
       "custom_props : Vec < CustomProp >",
       "# [serde (skip_serializing_if = \"NoteSeparators::is_empty\")] footnote_separators : NoteSeparators",
       "# [serde (skip_serializing_if = \"NoteSeparators::is_empty\")] endnote_separators : NoteSeparators",
-      "# [serde (skip_serializing_if = \"BTreeMap::is_empty\")] media : BTreeMap < String , Arc < Vec < u8 > > >",
-      "# [serde (skip_serializing_if = \"BTreeMap::is_empty\")] passthrough : BTreeMap < String , Arc < Vec < u8 > > >",
+      "# [serde (skip_serializing_if = \"BTreeMap::is_empty\" , with = \"byte_store\")] media : BTreeMap < String , Arc < Vec < u8 > > >",
+      "# [serde (skip_serializing_if = \"BTreeMap::is_empty\" , with = \"byte_store\")] passthrough : BTreeMap < String , Arc < Vec < u8 > > >",
       "# [serde (skip_serializing_if = \"Vec::is_empty\")] glossary : Vec < BuildingBlock >"
     ],
     "wordcraft-doc/lib.rs::NoteSeparators": [
@@ -475,7 +530,8 @@
       "font : String",
       "color : Rgb",
       "diagonal : bool",
-      "semitransparent : bool"
+      "semitransparent : bool",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] size : Option < [f32 ; 2] >"
     ],
     "wordcraft-doc/lib.rs::Zoom": [
       "# [serde (rename_all = \"camelCase\")] struct Zoom",
@@ -495,7 +551,7 @@
       "impl Default for Settings { fn default () -> Self { Settings { track_changes : false , track_moves : true , default_tab : 36.0 , even_odd_headers : false , mirror_margins : false , auto_hyphenation : false , hyphenation_zone : DEFAULT_HYPHENATION_ZONE , hyphenate_caps : true , consecutive_hyphen_limit : 0 , page_color : None , page_picture : None , watermark : None , major_font : styles :: HEADING_FONT . into () , minor_font : styles :: BODY_FONT . into () , theme_colors : THEME_COLORS . to_vec () , theme_name : \"Craft\" . into () , footnote_format : section :: NumFormat :: Decimal , endnote_format : section :: NumFormat :: LowerRoman , footnote_pr : section :: NoteProps :: default () , endnote_pr : section :: NoteProps :: default () , protection : None , protect_formatting : false , protect_hash : Vec :: new () , compat_mode : COMPAT_MODE_CURRENT , roman_fonts : Vec :: new () , sum_paragraph_spacing : false , allow_space_of_same_style_in_table : false , grid_h : DEFAULT_GRID , grid_v : DEFAULT_GRID , math : None , bib_style : None , attached_template : None , link_styles : false , zoom : None , remove_personal_info : false , remove_date_time : false , } } }"
     ],
     "wordcraft-doc/lib.rs::impl Default for Watermark": [
-      "impl Default for Watermark { fn default () -> Self { Watermark { text : \"DRAFT\" . into () , font : styles :: BODY_FONT . into () , color : Rgb (0xC0 , 0xC0 , 0xC0) , diagonal : true , semitransparent : true } } }"
+      "impl Default for Watermark { fn default () -> Self { Watermark { text : \"DRAFT\" . into () , font : styles :: BODY_FONT . into () , color : Rgb (0xC0 , 0xC0 , 0xC0) , diagonal : true , semitransparent : true , size : None , } } }"
     ],
     "wordcraft-doc/lib.rs::type Blocks": [
       "pub type Blocks = Vec < Arc < Block > > ;"
@@ -731,7 +787,7 @@
     ],
     "wordcraft-doc/para.rs::CanvasStyle": [
       "# [serde (default , rename_all = \"camelCase\")] struct CanvasStyle",
-      "fill : Option < crate :: props :: Rgb >",
+      "fill : Option < crate :: fill :: Fill >",
       "stroke : Option < crate :: props :: Rgb >",
       "stroke_width : f32"
     ],
@@ -755,7 +811,8 @@
       "# [serde (skip_serializing_if = \"Option::is_none\")] wrap_polygon : Option < std :: sync :: Arc < crate :: wrap :: WrapPolygon > >",
       "# [serde (skip_serializing_if = \"AltText::is_empty\")] alt : AltText",
       "# [serde (skip_serializing_if = \"is_false\")] hidden : bool",
-      "# [serde (skip_serializing_if = \"is_false\")] outside_cell : bool"
+      "# [serde (skip_serializing_if = \"is_false\")] outside_cell : bool",
+      "# [serde (skip_serializing_if = \"is_zero_u32\")] z : u32"
     ],
     "wordcraft-doc/para.rs::FloatAlign": [
       "# [serde (rename_all = \"camelCase\")] enum FloatAlign",
@@ -775,7 +832,7 @@
       "# [serde (tag = \"type\" , rename_all = \"camelCase\")] enum InlineObject",
       "Image { media : String , w : f32 , h : f32 , # [serde (default)] alt : String , # [serde (default)] float : Float , # [serde (default)] crop : [f32 ; 4] , # [serde (default , skip_serializing_if = \"Option::is_none\")] ole : Option < std :: sync :: Arc < crate :: graphic :: Embedded > > , }",
       "Graphic { w : f32 , h : f32 , # [serde (default)] alt : String , # [serde (default)] float : Float , graphic : std :: sync :: Arc < crate :: graphic :: Graphic > , }",
-      "Shape { kind : ShapeKind , w : f32 , h : f32 , fill : Option < crate :: props :: Rgb > , stroke : Option < crate :: props :: Rgb > , # [serde (default)] stroke_width : f32 , # [serde (default)] float : Float , # [serde (default)] story : Option < u32 > , # [serde (default , skip_serializing_if = \"Option::is_none\")] freeform : Option < std :: sync :: Arc < crate :: freeform :: Freeform > > , # [serde (default , skip_serializing_if = \"crate::effects::ShapeEffects::is_empty\")] effects : crate :: effects :: ShapeEffects , # [serde (default , skip_serializing_if = \"crate::connector::ShapeExtra::is_empty\")] extra : crate :: connector :: ShapeExtra , }",
+      "Shape { kind : ShapeKind , w : f32 , h : f32 , fill : Option < crate :: fill :: Fill > , stroke : Option < crate :: props :: Rgb > , # [serde (default)] stroke_width : f32 , # [serde (default)] float : Float , # [serde (default)] story : Option < u32 > , # [serde (default , skip_serializing_if = \"Option::is_none\")] freeform : Option < std :: sync :: Arc < crate :: freeform :: Freeform > > , # [serde (default , skip_serializing_if = \"crate::effects::ShapeEffects::is_empty\")] effects : crate :: effects :: ShapeEffects , # [serde (default , skip_serializing_if = \"crate::connector::ShapeExtra::is_empty\")] extra : crate :: connector :: ShapeExtra , }",
       "Group { w : f32 , h : f32 , # [serde (default)] float : Float , ch_w : f32 , ch_h : f32 , children : Vec < GroupChild > , # [serde (default , skip_serializing_if = \"Option::is_none\")] canvas : Option < CanvasStyle > , }",
       "Field { instr : String , # [serde (default)] result : String , # [serde (default)] locked : bool , # [serde (default , skip_serializing_if = \"std::ops::Not::not\")] dirty : bool , # [serde (default , skip_serializing_if = \"std::ops::Not::not\")] code : bool , # [serde (default , skip_serializing_if = \"String::is_empty\")] form : String , }",
       "FieldStart { instr : String , # [serde (default)] locked : bool , # [serde (default , skip_serializing_if = \"std::ops::Not::not\")] dirty : bool , }",
@@ -879,6 +936,9 @@
     "wordcraft-doc/para.rs::fn is_zero": [
       "fn is_zero (v : & f32) -> bool { * v == 0.0 }"
     ],
+    "wordcraft-doc/para.rs::fn is_zero_u32": [
+      "fn is_zero_u32 (v : & u32) -> bool { * v == 0 }"
+    ],
     "wordcraft-doc/para.rs::fn next_rev": [
       "pub fn next_rev () -> u64 { REV . fetch_add (1 , Ordering :: Relaxed) }"
     ],
@@ -978,6 +1038,7 @@
       "# [serde (skip_serializing_if = \"Option::is_none\")] bold_cs : Option < bool >",
       "# [serde (skip_serializing_if = \"Option::is_none\")] italic_cs : Option < bool >",
       "# [serde (skip_serializing_if = \"Option::is_none\")] lang_bidi : Option < String >",
+      "# [serde (skip_serializing_if = \"Option::is_none\")] lang_ea : Option < String >",
       "# [serde (skip_serializing_if = \"Option::is_none\")] east_asian_layout : Option < EastAsianLayout >",
       "# [serde (skip_serializing_if = \"Option::is_none\")] link : Option < String >",
       "# [serde (skip_serializing_if = \"Option::is_none\")] ins : Option < u32 >",
@@ -1643,6 +1704,7 @@
       "band_chr : CharProps",
       "band_borders : Option < Borders >",
       "band_size : Option < u32 >",
+      "col_band_size : Option < u32 >",
       "first_col_chr : CharProps",
       "total_chr : CharProps",
       "total_border_top : Option < Border >",

@@ -1,24 +1,680 @@
 {
-  "GridSurfaceSpec": [
+  "GridSelection": [
     {
-      "id": "sheet",
-      "format": "fubsheet",
-      "family": "grid",
-      "protocol_version": 1
+      "sheet": "s1",
+      "selection": "A1:B2,$D$4",
+      "active": "A1"
     }
   ],
-  "GridSession": [
+  "GridCommandState": [
     {
-      "instance": "grid-1",
-      "revision": "sha256:a6d1d4ea8e5a4fa08e8438c91ab01e2055faf19e5134fddd3a61efc0c133aa46",
+      "id": "home.bold",
+      "enabled": true,
+      "reason": null
+    },
+    {
+      "id": "home.mergeCenter",
+      "enabled": false,
+      "reason": "the selection is a single cell"
+    }
+  ],
+  "GridCommandRequest": [
+    {
+      "revision": "sha256:c64a4543ce76fcbcade5797b53bedc08e6d81e9e031a72380c03a07cb788efce",
+      "command": {
+        "id": "edit.copy",
+        "params": "{\"html\":true}",
+        "sheet": "s1",
+        "selection": "A1:B2,$D$4",
+        "active": "A1"
+      }
+    }
+  ],
+  "GridCommandOutcome": [
+    {
+      "commit": {
+        "revision": "sha256:c64a4543ce76fcbcade5797b53bedc08e6d81e9e031a72380c03a07cb788efce",
+        "edit": {
+          "from": 0,
+          "to": 0,
+          "deleted": "",
+          "inserted": ""
+        },
+        "invalidation": {
+          "kind": "cells",
+          "cells": []
+        }
+      },
       "sheets": [
         {
-          "id": "sheet-1",
-          "name": "Foglio 1",
-          "row_count": 4,
-          "column_count": 3
+          "id": "s1",
+          "name": "Conti",
+          "row_count": 100,
+          "column_count": 26
+        }
+      ],
+      "hidden": [],
+      "selection": {
+        "sheet": "s1",
+        "selection": "A1:B2,$D$4",
+        "active": "A1"
+      },
+      "result": "{\"range\":\"A1:B2\",\"text\":\"1\\t2\"}",
+      "dialog": {
+        "id": "pasteSpecial",
+        "params": "{}"
+      },
+      "commands": [
+        {
+          "id": "home.bold",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.mergeCenter",
+          "enabled": false,
+          "reason": "the selection is a single cell"
+        }
+      ],
+      "book": {
+        "theme_colors": [
+          "#FFFFFF",
+          "#000000",
+          "#E7E6E6",
+          "#44546A",
+          "#4472C4",
+          "#ED7D31",
+          "#A5A5A5",
+          "#FFC000",
+          "#5B9BD5",
+          "#70AD47",
+          "#0563C1",
+          "#954F72"
+        ],
+        "names": [],
+        "calculation": "automatic",
+        "protected": false,
+        "font": "Calibri",
+        "font_size": 11.0
+      }
+    }
+  ],
+  "GridNotice": [
+    {
+      "code": "macros",
+      "count": 1
+    }
+  ],
+  "GridBytesSession": [
+    {
+      "instance": "xlsx-1",
+      "revision": "sha256:c64a4543ce76fcbcade5797b53bedc08e6d81e9e031a72380c03a07cb788efce",
+      "sheets": [
+        {
+          "id": "s1",
+          "name": "Conti",
+          "row_count": 100,
+          "column_count": 26
+        }
+      ],
+      "active": "s1",
+      "hidden": [
+        "s1"
+      ],
+      "notices": [
+        {
+          "code": "uncomputed",
+          "count": 2
+        }
+      ],
+      "conflicts": [
+        {
+          "sheet": "s1",
+          "row": "r0",
+          "column": "c0"
+        }
+      ],
+      "commands": [
+        {
+          "id": "home.bold",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "home.mergeCenter",
+          "enabled": false,
+          "reason": "the selection is a single cell"
+        }
+      ],
+      "book": {
+        "theme_colors": [
+          "#FFFFFF",
+          "#000000",
+          "#E7E6E6",
+          "#44546A",
+          "#4472C4",
+          "#ED7D31",
+          "#A5A5A5",
+          "#FFC000",
+          "#5B9BD5",
+          "#70AD47",
+          "#0563C1",
+          "#954F72"
+        ],
+        "names": [
+          "Aliquota",
+          "Totali"
+        ],
+        "calculation": "manual",
+        "protected": true,
+        "font": "Calibri",
+        "font_size": 11.0
+      }
+    }
+  ],
+  "GridBytesWindow": [
+    {
+      "revision": "sha256:c64a4543ce76fcbcade5797b53bedc08e6d81e9e031a72380c03a07cb788efce",
+      "sheet": "s1",
+      "row_start": 0,
+      "column_start": 0,
+      "total_rows": 100,
+      "total_columns": 26,
+      "rows": [
+        {
+          "id": "r0",
+          "index": 0,
+          "height": null,
+          "hidden": false
+        }
+      ],
+      "columns": [
+        {
+          "id": "c0",
+          "index": 0,
+          "width": 64.0,
+          "hidden": true
+        }
+      ],
+      "cells": [
+        {
+          "key": {
+            "sheet": "s1",
+            "row": "r0",
+            "column": "c0"
+          },
+          "input": "=A1*2",
+          "style": 0,
+          "value": {
+            "kind": "blank"
+          },
+          "display": "25.00%",
+          "lock": null,
+          "stale": false,
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": null
+        },
+        {
+          "key": {
+            "sheet": "s1",
+            "row": "r1",
+            "column": "c0"
+          },
+          "input": "=A1*2",
+          "style": 1,
+          "value": {
+            "kind": "number",
+            "value": 0.25
+          },
+          "display": "25.00%",
+          "lock": "spill",
+          "stale": false,
+          "conflict": false,
+          "data_bar": {
+            "fraction": 0.25,
+            "color": "#638ec6",
+            "gradient": true
+          },
+          "icon": null,
+          "comment": null,
+          "link": null
+        },
+        {
+          "key": {
+            "sheet": "s1",
+            "row": "r2",
+            "column": "c0"
+          },
+          "input": "=A1*2",
+          "style": 1,
+          "value": {
+            "kind": "text",
+            "value": "tre"
+          },
+          "display": "25.00%",
+          "lock": null,
+          "stale": true,
+          "conflict": false,
+          "data_bar": null,
+          "icon": {
+            "set": "3Arrows",
+            "index": 1
+          },
+          "comment": null,
+          "link": null
+        },
+        {
+          "key": {
+            "sheet": "s1",
+            "row": "r3",
+            "column": "c0"
+          },
+          "input": "=A1*2",
+          "style": 1,
+          "value": {
+            "kind": "boolean",
+            "value": true
+          },
+          "display": "25.00%",
+          "lock": null,
+          "stale": false,
+          "conflict": true,
+          "data_bar": null,
+          "icon": null,
+          "comment": {
+            "author": "Ada",
+            "text": "Da rivedere",
+            "threaded": true,
+            "resolved": false,
+            "replies": [
+              {
+                "author": "Bruno",
+                "text": "Fatto"
+              }
+            ]
+          },
+          "link": null
+        },
+        {
+          "key": {
+            "sheet": "s1",
+            "row": "r4",
+            "column": "c0"
+          },
+          "input": "=A1*2",
+          "style": 1,
+          "value": {
+            "kind": "error",
+            "value": "#N/A"
+          },
+          "display": "25.00%",
+          "lock": null,
+          "stale": false,
+          "conflict": false,
+          "data_bar": null,
+          "icon": null,
+          "comment": null,
+          "link": {
+            "target": "Conti!A1",
+            "tooltip": "Torna su",
+            "external": false
+          }
+        }
+      ],
+      "styles": [
+        {
+          "bold": false,
+          "italic": false,
+          "text_color": null,
+          "fill_color": null,
+          "horizontal": null,
+          "number_format": null,
+          "font": null,
+          "font_size": null,
+          "underline": null,
+          "strike": false,
+          "script": null,
+          "vertical": null,
+          "wrap": false,
+          "shrink": false,
+          "indent": 0,
+          "rotation": 0,
+          "borders": {
+            "top": null,
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": null
+          }
+        },
+        {
+          "bold": false,
+          "italic": true,
+          "text_color": null,
+          "fill_color": "#ffeeaa",
+          "horizontal": "distributed",
+          "number_format": "0.00%",
+          "font": "Aptos Narrow",
+          "font_size": 10.5,
+          "underline": "double_accounting",
+          "strike": true,
+          "script": "superscript",
+          "vertical": "center",
+          "wrap": true,
+          "shrink": false,
+          "indent": 2,
+          "rotation": 255,
+          "borders": {
+            "top": {
+              "style": "medium_dash_dot_dot",
+              "color": "#203040"
+            },
+            "right": null,
+            "bottom": null,
+            "left": null,
+            "diagonal_down": null,
+            "diagonal_up": {
+              "style": "hair",
+              "color": null
+            }
+          }
+        }
+      ],
+      "merges": [
+        {
+          "row": 0,
+          "column": 0,
+          "rows": 2,
+          "columns": 1
+        }
+      ],
+      "view": {
+        "frozen_rows": 1,
+        "frozen_columns": 0,
+        "gridlines": false,
+        "headings": true,
+        "zoom": 125,
+        "right_to_left": false,
+        "mode": "page_layout",
+        "formulas": true,
+        "protected": true,
+        "print_gridlines": true,
+        "print_headings": false
+      },
+      "tables": [
+        {
+          "name": "Spese",
+          "row": 0,
+          "column": 0,
+          "rows": 3,
+          "columns": 2,
+          "header_row": true,
+          "totals_row": false,
+          "banded_rows": true,
+          "banded_columns": false,
+          "first_column": false,
+          "last_column": true,
+          "filter_button": true,
+          "style": "TableStyleMedium2"
+        }
+      ],
+      "objects": [
+        {
+          "kind": "chart",
+          "id": 1,
+          "row": 2,
+          "column": 1,
+          "dx": 4.0,
+          "dy": 0.0,
+          "width": 320.0,
+          "height": 200.0,
+          "alt": "Vendite",
+          "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+          "media": null,
+          "shape": null,
+          "missing": null
+        },
+        {
+          "kind": "image",
+          "id": 2,
+          "row": 0,
+          "column": 3,
+          "dx": 0.0,
+          "dy": 0.0,
+          "width": 48.0,
+          "height": 48.0,
+          "alt": "Il logo",
+          "svg": null,
+          "media": {
+            "mime": "image/png",
+            "key": "0123456789abcdef0123456789abcdef",
+            "data": "iVBORw0KGgo="
+          },
+          "shape": null,
+          "missing": null
+        },
+        {
+          "kind": "shape",
+          "id": 3,
+          "row": 5,
+          "column": 0,
+          "dx": 0.0,
+          "dy": 2.5,
+          "width": 120.0,
+          "height": 40.0,
+          "alt": "",
+          "svg": null,
+          "media": null,
+          "shape": {
+            "kind": "text_box",
+            "fill": "#4472C4",
+            "line": null,
+            "text": "Totale",
+            "font": "Calibri",
+            "font_size": 11.0,
+            "bold": true,
+            "italic": false,
+            "text_color": "#000000",
+            "align": "left",
+            "anchor": "top",
+            "right_to_left": false
+          },
+          "missing": null
+        },
+        {
+          "kind": "image",
+          "id": 4,
+          "row": 8,
+          "column": 0,
+          "dx": 0.0,
+          "dy": 0.0,
+          "width": 64.0,
+          "height": 64.0,
+          "alt": "",
+          "svg": null,
+          "media": null,
+          "shape": null,
+          "missing": "unsupported"
         }
       ]
+    }
+  ],
+  "GridBytesCell": [
+    {
+      "key": {
+        "sheet": "s1",
+        "row": "r0",
+        "column": "c0"
+      },
+      "input": "=A1*2",
+      "style": 0,
+      "value": {
+        "kind": "blank"
+      },
+      "display": "25.00%",
+      "lock": null,
+      "stale": false,
+      "conflict": false,
+      "data_bar": null,
+      "icon": null,
+      "comment": null,
+      "link": null
+    },
+    {
+      "key": {
+        "sheet": "s1",
+        "row": "r1",
+        "column": "c0"
+      },
+      "input": "=A1*2",
+      "style": 1,
+      "value": {
+        "kind": "number",
+        "value": 0.25
+      },
+      "display": "25.00%",
+      "lock": "spill",
+      "stale": false,
+      "conflict": false,
+      "data_bar": {
+        "fraction": 0.25,
+        "color": "#638ec6",
+        "gradient": true
+      },
+      "icon": null,
+      "comment": null,
+      "link": null
+    },
+    {
+      "key": {
+        "sheet": "s1",
+        "row": "r2",
+        "column": "c0"
+      },
+      "input": "=A1*2",
+      "style": 1,
+      "value": {
+        "kind": "text",
+        "value": "tre"
+      },
+      "display": "25.00%",
+      "lock": null,
+      "stale": true,
+      "conflict": false,
+      "data_bar": null,
+      "icon": {
+        "set": "3Arrows",
+        "index": 1
+      },
+      "comment": null,
+      "link": null
+    },
+    {
+      "key": {
+        "sheet": "s1",
+        "row": "r3",
+        "column": "c0"
+      },
+      "input": "=A1*2",
+      "style": 1,
+      "value": {
+        "kind": "boolean",
+        "value": true
+      },
+      "display": "25.00%",
+      "lock": null,
+      "stale": false,
+      "conflict": true,
+      "data_bar": null,
+      "icon": null,
+      "comment": {
+        "author": "Ada",
+        "text": "Da rivedere",
+        "threaded": true,
+        "resolved": false,
+        "replies": [
+          {
+            "author": "Bruno",
+            "text": "Fatto"
+          }
+        ]
+      },
+      "link": null
+    },
+    {
+      "key": {
+        "sheet": "s1",
+        "row": "r4",
+        "column": "c0"
+      },
+      "input": "=A1*2",
+      "style": 1,
+      "value": {
+        "kind": "error",
+        "value": "#N/A"
+      },
+      "display": "25.00%",
+      "lock": null,
+      "stale": false,
+      "conflict": false,
+      "data_bar": null,
+      "icon": null,
+      "comment": null,
+      "link": {
+        "target": "Conti!A1",
+        "tooltip": "Torna su",
+        "external": false
+      }
+    }
+  ],
+  "GridJournalRebase": [
+    {
+      "current": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"2\"}]}",
+      "saved": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"2\"}]}",
+      "rebased": "",
+      "reverted": 0
+    },
+    {
+      "current": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"3\"},{\"sheet\":\"s1\",\"row\":\"r10\",\"column\":\"c1\",\"before\":\"\",\"after\":\"x\"},{\"sheet\":\"s1\",\"row\":\"r2\",\"column\":\"c0\",\"before\":\"\\\"virgolette\\\" e \\\\ e \\n\",\"after\":\"è\\u001f\"}]}",
+      "saved": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"2\"}]}",
+      "rebased": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"2\",\"after\":\"3\"},{\"sheet\":\"s1\",\"row\":\"r10\",\"column\":\"c1\",\"before\":\"\",\"after\":\"x\"},{\"sheet\":\"s1\",\"row\":\"r2\",\"column\":\"c0\",\"before\":\"\\\"virgolette\\\" e \\\\ e \\n\",\"after\":\"è\\u001f\"}]}",
+      "reverted": 0
+    },
+    {
+      "current": "",
+      "saved": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"2\"}]}",
+      "rebased": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"2\",\"after\":\"1\"}]}",
+      "reverted": 0
+    },
+    {
+      "current": "{\"version\":2,\"commands\":[{\"id\":\"home.bold\",\"params\":\"{}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"},{\"id\":\"cell.set\",\"params\":\"{\\\"input\\\":\\\"=\\\\\\\"è\\\\\\\"&A2\\\"}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"}]}",
+      "saved": "{\"version\":2,\"commands\":[{\"id\":\"home.bold\",\"params\":\"{}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"}]}",
+      "rebased": "{\"version\":2,\"commands\":[{\"id\":\"cell.set\",\"params\":\"{\\\"input\\\":\\\"=\\\\\\\"è\\\\\\\"&A2\\\"}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"}]}",
+      "reverted": 0
+    },
+    {
+      "current": "{\"version\":2,\"commands\":[{\"id\":\"home.bold\",\"params\":\"{}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"}]}",
+      "saved": "{\"version\":2,\"commands\":[{\"id\":\"home.bold\",\"params\":\"{}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"},{\"id\":\"home.italic\",\"params\":\"{}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"}]}",
+      "rebased": "",
+      "reverted": 1
+    },
+    {
+      "current": "{\"version\":2,\"commands\":[{\"id\":\"cell.set\",\"params\":\"{\\\"input\\\":\\\"2\\\"}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"}]}",
+      "saved": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r0\",\"column\":\"c0\",\"before\":\"1\",\"after\":\"2\"}]}",
+      "rebased": "{\"version\":2,\"commands\":[{\"id\":\"cell.set\",\"params\":\"{\\\"input\\\":\\\"2\\\"}\",\"sheet\":\"s1\",\"selection\":\"A1:B2,$D$4\",\"active\":\"A1\"}]}",
+      "reverted": 0
+    }
+  ],
+  "GridSurfaceSpec": [
+    {
+      "id": "workbook",
+      "format": "xlsx",
+      "family": "grid",
+      "protocol_version": 2
     }
   ],
   "GridSheet": [
@@ -59,28 +715,24 @@
       "text_color": "#111",
       "fill_color": null,
       "horizontal": "center",
-      "number_format": "0.00"
-    }
-  ],
-  "GridCell": [
-    {
-      "key": {
-        "sheet": "sheet-1",
-        "row": "row-1",
-        "column": "column-1"
-      },
-      "input": "=1+1",
-      "style": {
-        "bold": false,
-        "italic": false,
-        "text_color": null,
-        "fill_color": null,
-        "horizontal": null,
-        "number_format": null
-      },
-      "value": {
-        "kind": "error",
-        "value": "ref"
+      "number_format": "0.00",
+      "font": null,
+      "font_size": null,
+      "underline": null,
+      "strike": false,
+      "script": null,
+      "vertical": null,
+      "wrap": false,
+      "shrink": false,
+      "indent": 0,
+      "rotation": 0,
+      "borders": {
+        "top": null,
+        "right": null,
+        "bottom": null,
+        "left": null,
+        "diagonal_down": null,
+        "diagonal_up": null
       }
     }
   ],
@@ -91,55 +743,8 @@
       "row_start": 0,
       "row_count": 1,
       "column_start": 0,
-      "column_count": 1
-    }
-  ],
-  "GridWindow": [
-    {
-      "revision": "sha256:a6d1d4ea8e5a4fa08e8438c91ab01e2055faf19e5134fddd3a61efc0c133aa46",
-      "sheet": "sheet-1",
-      "row_start": 0,
-      "column_start": 0,
-      "total_rows": 4,
-      "total_columns": 3,
-      "rows": [
-        {
-          "id": "row-1",
-          "index": 0,
-          "height": 24.0,
-          "hidden": false
-        }
-      ],
-      "columns": [
-        {
-          "id": "column-1",
-          "index": 0,
-          "width": 120.0,
-          "hidden": false
-        }
-      ],
-      "cells": [
-        {
-          "key": {
-            "sheet": "sheet-1",
-            "row": "row-1",
-            "column": "column-1"
-          },
-          "input": "=1+1",
-          "style": {
-            "bold": true,
-            "italic": false,
-            "text_color": "#111",
-            "fill_color": null,
-            "horizontal": "center",
-            "number_format": "0.00"
-          },
-          "value": {
-            "kind": "number",
-            "value": 2.0
-          }
-        }
-      ]
+      "column_count": 1,
+      "known_media": []
     }
   ],
   "GridCellPatch": [

@@ -204,6 +204,21 @@ Limiti attuali:
   mostra più. Il contenuto non cambia, ma il file salvato non è identico byte
   per byte; un innesto invece lo è, fuori dalle unità toccate.
 
+## Tasto destro e mini-barra
+
+Il tasto destro, il tasto Menu o Maiusc+F10 aprono il menu del documento,
+con le sezioni dei menu delle note. Sotto il puntatore: il link (copia
+l'indirizzo, modifica, rimuovi), la revisione tracciata (accetta, rifiuta) e
+la tabella (righe e colonne). Poi Taglia, Copia, Incolla e Incolla solo testo;
+«Formato», «Trasforma in», l'allineamento e il rientro; «Inserisci»; in fondo
+Trova e sostituisci e Seleziona tutto. Il tasto destro fuori dalla selezione
+porta lì il cursore. Su una parola segnata dal correttore il menu è quello
+delle correzioni.
+
+Sopra il menu c'è la mini-barra, come in Word: carattere, dimensione, A⁺ e
+A⁻, grassetto, corsivo, sottolineato e copia formato. Sulla selezione compare da sola quando la barra di
+formattazione è spenta, secondo l'impostazione «Mini-barra di formattazione».
+
 ## OpenDocument
 
 Un `.odt` si apre nella stessa superficie e si modifica come un `.docx`, con

@@ -15,7 +15,6 @@ flowchart LR
     TESTKIT --> ABI
     MARKDOWN["fub-format-markdown"] --> ABI
     MARKDOWN --> SDK
-    SHEET["fub-format-sheet"] --> ABI
     CANVAS["fub-format-canvas"] --> ABI
     CANVAS --> MARKDOWN
     BASE["fub-format-base"] --> ABI
@@ -31,7 +30,6 @@ flowchart LR
     HOST --> ABI
     HOST --> FEATURES
     HOST --> MARKDOWN
-    HOST --> SHEET
     HOST --> CANVAS
     HOST --> BASE
     HOST -. "feature draw" .-> SVG
@@ -65,6 +63,19 @@ flowchart LR
     FEATURES -. "feature proof" .-> PROOF["wordcraft-proof"]
 ```
 
+Il codice copiato da GridCraft (`vendor/gridcraft/`) ha lo stesso statuto e un
+solo proprietario, `fub-format-xlsx`, che l'host accende con la feature
+`xlsx`; il ruolo del motore è deciso nell'[ADR
+0214](../decisions/0214-gridcraft-motore-del-foglio-di-calcolo.md):
+
+```mermaid
+flowchart LR
+    HOST["fub-host"] -. "feature xlsx" .-> XLSX["fub-format-xlsx"]
+    XLSX --> ABI["fub-abi"]
+    XLSX --> GXLSX["gridcraft-xlsx"]
+    GXLSX --> GMODEL["gridcraft-model"]
+```
+
 ## Tabella dei componenti
 
 | Componente | Possiede | Non deve possedere |
@@ -76,7 +87,6 @@ flowchart LR
 | `fub-sdk` | API comoda per autori e host in memoria | composition root dell'app |
 | `fub-testkit` | fixture e integrazione host/kernel | dipendenze di produzione |
 | `fub-format-markdown` | parse, render, serialize e transfer Markdown | risoluzione dei path del vault |
-| `fub-format-sheet` | workbook persistito, valutatore, sessioni derivate, provider grid e route di valutazione | host, storage, Tauri, Wasmtime |
 | `fub-format-canvas` | JSON Canvas: modello con i campi ignoti conservati, `DocumentModel`, HTML statico e riscrittura dei link; il Markdown delle card lo analizza e lo disegna il provider Markdown | host, storage, Tauri, Wasmtime |
 | `fub-format-base` | definizioni `.base`: modello YAML persistito, limiti e valutatore di formule | selezione delle righe, che resta del core (`query_index`) |
 | `fub-ink` | il nucleo dell'inchiostro, puro: campione del puntatore, ruoli (il palmo), curva della pressione, inclinazione, stabilizzatore e ciclo di vita del tratto, come riduttore di campioni in effetti; è la copia che fa fede del nucleo TypeScript di `apps/client/src/ink/` | DOM, Tauri, kernel, formati su disco, strumenti o interfaccia di un prodotto |
@@ -84,10 +94,12 @@ flowchart LR
 | `fub-scene` | lettura dei disegni di FubDraw secondo il [formato della scena](../reference/scene-format.md), e delle annotazioni PDF secondo il [loro formato](../reference/annotation-format.md): classificazione, inchiostro, indice e diagnostica | `fub-abi`, host, qualunque I/O |
 | `fub-format-svg` | i formati `svg` e `fubann`: modello per l'indice, segnaposto HTML o elenco delle annotazioni, documento nuovo e riscrittura dei riferimenti | disegno della scena, che resta della shell; verifica del PDF annotato |
 | `fub-format-rich` | documenti di videoscrittura (`.docx`, `.odt`, `.rtf`, `.doc`): codec, provider a byte, proiezione modificabile senza perdite silenziose e copie esportate con la perdita misurata; l'HTML lo disegna il provider Markdown dal modello comune | host, storage, Tauri, Wasmtime, superficie della shell |
+| `fub-format-xlsx` | cartelle di Excel: provider a byte, superficie `grid` della versione 2 sui byte con i valori del file senza ricalcolo all'apertura, i blocchi e gli avvisi di ciò che non mostra, l'innesto dei valori cambiati a livello di riga, la modalità a comandi sulla facciata di GridCraft e la riscrittura misurata con l'inventario del pacchetto | una riscrittura che perde qualcosa, ricalcolo di ciò che una modifica non raggiunge, host, storage, Tauri, superficie della shell |
 | `fub-importers` | import ed export ufficiali e comandi di conversione | kernel, Tauri |
 | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
 | `wordcraft-proof` | correttore di WordCraft vendorizzato in `vendor/wordcraft/`, usato soltanto dalla feature `proof` | dipendenze da Fub |
 | `wordcraft-doc`, `-docx`, `-docbin`, `-formats`, `-geom` | modello del documento, codec DOCX, lettore di Word 97-2003, importatori ed esportatori e unità di misura di WordCraft, vendorizzati in `vendor/wordcraft/`, usati soltanto da `fub-format-rich` | dipendenze da Fub |
+| `gridcraft-core`, `-formula`, `-functions`, `-numfmt`, `-model`, `-calc`, `-xlsx` | dominio del foglio di calcolo di GridCraft: modello, formule e funzioni di Excel, formati numerici, calcolo e codec, vendorizzati in `vendor/gridcraft/`, usati soltanto da `fub-format-xlsx` | dipendenze da Fub |
 | `fub-wasm-host` | Wasmtime, binding, traduzione, store e lifecycle dei plugin installati | policy duplicata |
 | `fub-cli` | automazione locale sopra `Host`, senza Tauri | un secondo coordinatore di job o di scrittura |
 | `fub-services` | servizio self-hostable separato per account, sync e publish | kernel, host, app |
@@ -179,7 +191,7 @@ indipendenti.
 | composizione | `crates/fub-host/src/mount.rs`, `session.rs`, `registry.rs` |
 | desktop | `crates/fub-app/src/lib.rs` |
 | Markdown | `crates/fub-format-markdown/src/` |
-| foglio | `crates/fub-format-sheet/src/` |
+| foglio | `crates/fub-format-xlsx/src/`, `apps/client/src/editors/grid/` |
 | lavagna e base | `crates/fub-format-canvas/src/`, `crates/fub-format-base/src/` |
 | disegni | `crates/fub-scene/src/`, `crates/fub-format-svg/src/`, `crates/fub-features/src/draw.rs`, `crates/fub-features/src/draw/` |
 | feature | `crates/fub-features/src/` |

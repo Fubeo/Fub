@@ -19,8 +19,9 @@
 //
 // La scheda si apre anche col fuoco, ma solo se è arrivato dalla tastiera
 // (`kit/hover-card`): in Lettura i collegamenti sono fermate del Tab. In Live il
-// collegamento è testo dell'editor, non prende il fuoco da solo: lì Mod-clic lo
-// apre e il lanciatore resta la strada da tastiera.
+// collegamento è testo dell'editor e non prende il fuoco: lì Alt+Invio lo apre
+// (`open-link.ts`) e Maiusc+Alt+Invio, col cursore nel collegamento, apre la
+// scheda col fuoco sulla prima azione. Esc riporta il fuoco nel testo.
 import { errorText } from "../../../host/errors";
 import { renderEmbed, resolvedReference } from "../../../host/query";
 import type { LinkTarget } from "../../../host/contract";
@@ -68,7 +69,7 @@ export function linkOf(el: HTMLElement): LinkRef | null {
 export function mountLinkCards(lifetime: Lifetime): void {
   const panes = byId("panes");
   if (!panes) return;
-  attachHoverCard({
+  const card = attachHoverCard({
     delegate: { root: panes, selector: LINK_SELECTOR },
     lifetime,
     placement: "bottom",
@@ -85,6 +86,25 @@ export function mountLinkCards(lifetime: Lifetime): void {
       return found(resolved.doc, content.html);
     },
   });
+  lifetime.listen(panes, "keydown", (event) => {
+    if (event.key !== "Enter" || !event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return;
+    if (event.isComposing || event.defaultPrevented) return;
+    const target = linkAtCaret(panes);
+    if (!target) return;
+    event.preventDefault();
+    card.show(target, { focus: true });
+  });
+}
+
+/// Il collegamento della Live in cui sta il cursore, se c'è: la selezione del
+/// documento è quella dell'editor che ha il fuoco.
+export function linkAtCaret(root: HTMLElement): HTMLElement | null {
+  const selection = root.ownerDocument.getSelection();
+  const node = selection?.focusNode;
+  const start = node instanceof Element ? node : node?.parentElement;
+  if (!start || !root.contains(start) || !start.closest(".cm-content")) return null;
+  const link = start.closest(LINK_SELECTOR);
+  return link instanceof HTMLElement && linkOf(link) ? link : null;
 }
 
 /// Il nome con cui un collegamento nomina la sua nota, per l'etichetta della scheda.

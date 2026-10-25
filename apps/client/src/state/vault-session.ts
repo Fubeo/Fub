@@ -16,7 +16,7 @@ import { errorText, isErrorKind } from "../host/errors";
 import { vaultStatus } from "../host/query";
 import { plural, t } from "../i18n/strings";
 import { allCommands, conflictMessage, keybindingKey, loadKeyOverrides } from "../ui/commands";
-import type { Tone } from "../ui/notify";
+import type { NoticeAction, Tone } from "../ui/notify";
 import { openDocument, recoverDrafts, resetDocumentsForVault, synchronize } from "./document-controller";
 import { flushPendingSave } from "./document-session";
 import { drainDocumentWindows } from "./document-windows";
@@ -36,10 +36,11 @@ export interface VaultSessionPorts {
   /// `alive` per chi apre senza passarne uno; la sequenza lo richiede dopo
   /// ogni attesa e, se risponde no, si ferma senza toccare altro.
   alive(): boolean;
-  /// Un avviso all'utente.
-  notify(message: string, tone?: Tone): void;
-  /// Accende o spegne il segnale «questo vault non è sorvegliato».
-  setWatcherOff(off: boolean): void;
+  /// Un avviso all'utente, con il gesto che offre se ne ha uno.
+  notify(message: string, tone?: Tone, action?: NoticeAction): void;
+  /// Accende o spegne il segnale «questo vault non è sorvegliato»; acceso,
+  /// porta il gesto che lo rimette (riaprire il vault).
+  setWatcherOff(off: boolean, reopen?: () => Promise<void>): void;
   /// Mostra il nome del vault appena aperto. Arriva **prima** che
   /// `state.vaultRoot` cambi.
   showVaultName(root: string): void;
@@ -64,6 +65,10 @@ export interface VaultSession {
   /// lascia aperto nell'host il vault da cui si viene, per chi ci tornerà da
   /// sé (la demo, che alla chiusura rende corrente quello di prima).
   open(dir: string, alive?: () => boolean, alreadyDrained?: boolean, keepLeft?: boolean): Promise<void>;
+  /// Chiude nell'host il vault corrente e lo riapre: watcher, indici e lock
+  /// ripartono. Prima scrive ciò che è in sospeso; se qualcosa non si scrive,
+  /// lo dice e non chiude niente.
+  reopen(alive?: () => boolean): Promise<void>;
 }
 
 export function createVaultSession(ports: VaultSessionPorts): VaultSession {
@@ -292,9 +297,13 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
   async function warnIfUnwatched(): Promise<void> {
     try {
       const state = await vaultStatus();
-      ports.setWatcherOff(!state.watching);
+      ports.setWatcherOff(!state.watching, () => reopenVault());
       if (!state.watching) {
-        ports.notify(t("app.external_changes"));
+        ports.notify(t("app.external_changes"), "info", {
+          label: t("notices.reopen"),
+          hint: t("notices.reopen.hint"),
+          run: () => reopenVault(),
+        });
       }
     } catch {
       // Un vault che non sa dire come sta non è un motivo per non aprirlo: il
@@ -302,5 +311,23 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     }
   }
 
-  return { open: openVaultPath };
+  /// La riapertura: lo stesso svuotamento di un cambio di vault, poi la
+  /// chiusura nell'host, poi l'apertura intera. Senza la chiusura l'host
+  /// risponderebbe col vault ancora aperto, e il watcher non ripartirebbe.
+  async function reopenVault(alive: () => boolean = ports.alive): Promise<void> {
+    const root = state.vaultRoot;
+    if (!root || !alive()) return;
+    if (!await drainDocumentWindows()) return;
+    const pending = await flushPendingSave();
+    if (!alive()) return;
+    if (pending.length > 0) {
+      ports.notify(t("demo.unsaved", { files: pending.join(", ") }), "guasto");
+      return;
+    }
+    await closeLeftVault(root);
+    if (!alive()) return;
+    await openVaultPath(root, alive, true);
+  }
+
+  return { open: openVaultPath, reopen: reopenVault };
 }

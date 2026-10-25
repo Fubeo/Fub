@@ -16,6 +16,7 @@ import type { PhysicsConfig, GraphicsConfig, GraphConfig } from "./sim/types";
 import { defaultGraphicsConfig, organicConfig } from "./sim/types";
 import { applyPreset as physicsPreset } from "./config";
 import { icon } from "../ui/icons";
+import { enterSurface, exitSurface } from "../ui/motion";
 
 export interface PanelCopy {
   title: string;
@@ -374,6 +375,7 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
   function openPopover(): void {
     isOpen = true;
     popover.hidden = false;
+    enterSurface(popover);
     gear.setAttribute("aria-expanded", "true");
     // Il focus dentro il popover: la select è il primo controllo, così la
     // tastiera ci cade sopra e lo screen reader annuncia il preset prima
@@ -384,7 +386,9 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
 
   function closePopover(): void {
     isOpen = false;
-    popover.hidden = true;
+    exitSurface(popover, () => {
+      popover.hidden = true;
+    });
     gear.setAttribute("aria-expanded", "false");
     gear.focus();
     if (o.restoreFocus) o.restoreFocus();

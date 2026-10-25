@@ -47,16 +47,17 @@ use fub_abi::command::{
 };
 use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::format::DocumentFormat;
-use fub_abi::grid::{
-    GridApplyRequest, GridCommit, GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
-};
+use fub_abi::grid::{GridApplyRequest, GridCommit, GridSurfaceSpec, GridWindowRequest};
 use fub_abi::model::DocId;
 use fub_abi::rules::path_policy::fenced_doc_id;
 use fub_abi::session::ViewContext;
 use fub_abi::text::{Arg, Text};
 use fub_abi::traits::{JobId, JobSpec, ViewInstance, ViewSpec};
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
-use fub_abi::{Actor, Notice, PluginError};
+use fub_abi::{
+    Actor, GridBytesSession, GridBytesWindow, GridCommandOutcome, GridCommandRequest,
+    GridCommandState, GridJournal, GridSelection, Notice, PluginError,
+};
 #[cfg(feature = "versioning")]
 use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
 use fub_kernel::host::authorize_path;
@@ -3367,34 +3368,45 @@ impl Host {
     }
     /// Sorgente, revisione e formato dalla stessa fotografia del workspace.
     ///
-    /// Per un documento di videoscrittura la sorgente è la sua proiezione e la
-    /// revisione è quella dei byte del file ([`crate::rich`]): i byte si
-    /// leggono nella fotografia, la proiezione si calcola fuori.
+    /// Per un documento di videoscrittura la sorgente è la sua proiezione, per
+    /// una cartella di Excel il suo giornale vuoto; la revisione è quella dei
+    /// byte del file ([`crate::rich`], [`crate::workbook`]): i byte si leggono
+    /// nella fotografia, la proiezione si calcola fuori.
     pub fn read_document_with_format(
         &self,
         vault: Option<&str>,
         id: &DocId,
     ) -> Result<(String, Revision, Option<DocumentFormat>), PluginError> {
+        enum Read {
+            Source(String),
+            Rich(crate::rich::Codec, Vec<u8>),
+            Workbook(Vec<u8>),
+        }
         let (read, format) = self.read_workspace(vault, |workspace| {
             let format = workspace.format_of(id);
+            let bytes = || workspace.read_source_bytes(id).map_err(PluginError::from);
             let read = match crate::rich::codec(format.as_ref()) {
-                Some(codec) => {
-                    let bytes = workspace.read_source_bytes(id).map_err(PluginError::from)?;
-                    Err((codec, bytes))
-                }
-                None => Ok(workspace.read_source(id).map_err(PluginError::from)?),
+                Some(codec) => Read::Rich(codec, bytes()?),
+                None if crate::workbook::is_workbook(format.as_ref()) => Read::Workbook(bytes()?),
+                None => Read::Source(workspace.read_source(id).map_err(PluginError::from)?),
             };
             Ok((read, format))
         })?;
         match read {
-            Ok(source) => {
+            Read::Source(source) => {
                 let revision = Revision::of(&source);
                 Ok((source, revision, format))
             }
-            Err((codec, bytes)) => {
+            Read::Rich(codec, bytes) => {
                 let revision = Revision::of_bytes(&bytes);
                 let projection = crate::rich::open(codec, id, &bytes)?;
                 Ok((projection, revision, format))
+            }
+            // Il testo di una cartella è il suo giornale, vuoto finché la shell
+            // non cambia una cella: i valori li dà la griglia, sui byte.
+            Read::Workbook(bytes) => {
+                crate::workbook::check(id, &bytes)?;
+                Ok((String::new(), Revision::of_bytes(&bytes), format))
             }
         }
     }
@@ -3469,75 +3481,125 @@ impl Host {
         self.read_workspace(vault, |workspace| Ok(workspace.grid_surfaces()))
     }
 
-    fn with_grid<R>(
+    fn with_grid_bytes<R>(
         &self,
         vault: Option<&str>,
         surface: &str,
-        call: impl FnOnce(&fub_kernel::workspace::PreparedGridCall) -> Result<R, PluginError>,
+        call: impl FnOnce(&fub_kernel::workspace::PreparedGridBytesCall) -> Result<R, PluginError>,
     ) -> Result<R, PluginError> {
-        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        let workspace = self.session_workspace(vault)?;
         let prepared = {
             let workspace = workspace.read()?;
-            workspace.prepare_grid_call(surface)?
+            workspace.prepare_grid_bytes_call(surface)?
         };
         call(&prepared)
     }
 
-    pub fn grid_open(
+    /// Apre la superficie `surface` della versione 2 sui byte di `doc`, con il
+    /// giornale `journal` della sua `DocumentSession`.
+    ///
+    /// I byte li legge l'host, non la shell: la revisione `base` è quella su
+    /// cui la sessione del documento ha il giornale, e byte diversi sono un
+    /// conflitto da ricaricare. La superficie apre soltanto un documento del
+    /// formato che dichiara.
+    pub fn grid_bytes_open(
         &self,
         vault: Option<&str>,
         surface: &str,
-        source: &str,
-        revision: Revision,
-    ) -> Result<GridSession, PluginError> {
-        self.with_grid(vault, surface, |provider| {
-            provider.open(surface, source, revision)
-        })
+        doc: &DocId,
+        journal: &str,
+        base: Revision,
+    ) -> Result<GridBytesSession, PluginError> {
+        let journal = GridJournal::parse(journal)?;
+        let workspace = self.session_workspace(vault)?;
+        let (bytes, prepared) = {
+            let ws = workspace.read()?;
+            let prepared = ws.prepare_grid_bytes_call(surface)?;
+            let declared = ws
+                .grid_surfaces()
+                .into_iter()
+                .find(|spec| spec.id == surface)
+                .map(|spec| spec.format);
+            let format = ws.format_of(doc).map(|known| known.descriptor.id);
+            if declared.is_none() || declared != format {
+                return Err(PluginError::BadArgs(Text::message(
+                    "host.grid.surface_format",
+                    vec![
+                        Arg::text("surface", surface),
+                        Arg::text("doc", doc.as_str()),
+                    ],
+                )));
+            }
+            (
+                ws.read_source_bytes(doc).map_err(PluginError::from)?,
+                prepared,
+            )
+        };
+        let revision = Revision::of_bytes(&bytes);
+        if revision != base {
+            return Err(PluginError::from(fub_kernel::KernelError::Stale(
+                doc.to_string(),
+            )));
+        }
+        prepared.open(surface, &bytes, revision, &journal)
     }
 
-    pub fn grid_window(
+    pub fn grid_bytes_window(
         &self,
         vault: Option<&str>,
         surface: &str,
         instance: &str,
         request: GridWindowRequest,
-    ) -> Result<GridWindow, PluginError> {
-        self.with_grid(vault, surface, |provider| {
+    ) -> Result<GridBytesWindow, PluginError> {
+        self.with_grid_bytes(vault, surface, |provider| {
             provider.window(instance, request)
         })
     }
 
-    pub fn grid_apply(
+    pub fn grid_bytes_apply(
         &self,
         vault: Option<&str>,
         surface: &str,
         instance: &str,
         request: GridApplyRequest,
     ) -> Result<GridCommit, PluginError> {
-        self.with_grid(vault, surface, |provider| provider.apply(instance, request))
+        self.with_grid_bytes(vault, surface, |provider| provider.apply(instance, request))
     }
 
-    pub fn grid_reload(
+    pub fn grid_bytes_commands(
         &self,
         vault: Option<&str>,
         surface: &str,
         instance: &str,
-        expected: Revision,
-        source: &str,
-        revision: Revision,
-    ) -> Result<GridSession, PluginError> {
-        self.with_grid(vault, surface, |provider| {
-            provider.reload(instance, expected, source, revision)
+        selection: GridSelection,
+    ) -> Result<Vec<GridCommandState>, PluginError> {
+        self.with_grid_bytes(vault, surface, |provider| {
+            provider.commands(instance, selection)
         })
     }
 
-    pub fn grid_close(
+    /// Dà un comando del catalogo alla sessione grid `instance`. L'esito
+    /// porta il diff del giornale, che la shell applica al buffer della
+    /// `DocumentSession` come quello di `grid_bytes_apply`.
+    pub fn grid_bytes_command(
+        &self,
+        vault: Option<&str>,
+        surface: &str,
+        instance: &str,
+        request: GridCommandRequest,
+    ) -> Result<GridCommandOutcome, PluginError> {
+        self.with_grid_bytes(vault, surface, |provider| {
+            provider.command(instance, request)
+        })
+    }
+
+    pub fn grid_bytes_close(
         &self,
         vault: Option<&str>,
         surface: &str,
         instance: &str,
     ) -> Result<(), PluginError> {
-        self.with_grid(vault, surface, |provider| provider.close(instance))
+        self.with_grid_bytes(vault, surface, |provider| provider.close(instance))
     }
 
     pub fn write_document(
@@ -3601,6 +3663,63 @@ impl Host {
         Self::write_bytes_in(workspace, id, &bytes, revision)
     }
 
+    /// Scrive il giornale `source` di una cartella di Excel.
+    ///
+    /// Come per la videoscrittura, tutto dentro il turno di scrittura: i byte
+    /// su cui la shell ha lavorato si leggono e si confrontano con la base, il
+    /// provider della griglia registrato innesta il giornale fuori dal
+    /// lucchetto, e i byte nuovi passano dal CAS della stessa revisione. Una
+    /// voce in conflitto scrive il suo input: la base dice che la shell l'ha
+    /// mostrata su questi byte. Un giornale vuoto, o tutto già applicato, non
+    /// scrive niente.
+    fn write_workbook_in(
+        &self,
+        workspace: &Custody<Workspace>,
+        id: &DocId,
+        source: &str,
+        base: WriteBase,
+    ) -> Result<Revision, PluginError> {
+        let _turn = workspace.write_turn();
+        let journal = crate::workbook::journal(id, source)?;
+        let surface = crate::workbook::surface(id)?;
+        let (current, call) = {
+            let ws = workspace.read()?;
+            let current =
+                fub_kernel::error::optional(ws.read_source_bytes(id)).map_err(PluginError::from)?;
+            let call = if journal.is_empty() {
+                None
+            } else {
+                Some(ws.prepare_grid_bytes_call(surface)?)
+            };
+            (current, call)
+        };
+        let Some(current) = current else {
+            return Err(crate::workbook::missing(id));
+        };
+        let revision = Revision::of_bytes(&current);
+        if let Some(want) = base.expected() {
+            if want != &revision {
+                return Err(PluginError::from(fub_kernel::KernelError::Stale(
+                    id.to_string(),
+                )));
+            }
+        }
+        let Some(call) = call else {
+            return Ok(revision);
+        };
+        crate::workbook::check(id, &current)?;
+        let session = call.open(surface, &current, revision.clone(), &journal)?;
+        let bytes = call.bytes_to_write(&session.instance, session.revision);
+        // L'istanza serviva soltanto a questo salvataggio: si chiude anche
+        // quando l'innesto fallisce, e un errore di chiusura non cambia l'esito.
+        let _ = call.close(&session.instance);
+        let bytes = bytes?;
+        if bytes == current {
+            return Ok(revision);
+        }
+        Self::write_bytes_in(workspace, id, &bytes, Some(revision))
+    }
+
     /// [`Host::write_document_bytes`] sul workspace già risolto.
     fn write_bytes_in(
         workspace: &Custody<Workspace>,
@@ -3643,9 +3762,13 @@ impl Host {
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
         let _turn = workspace.write_turn();
-        let codec = crate::rich::codec(workspace.read()?.format_of(id).as_ref());
-        if let Some(codec) = codec {
+        let format = workspace.read()?.format_of(id);
+        if let Some(codec) = crate::rich::codec(format.as_ref()) {
             return self.write_rich_in(&workspace, codec, id, source, base);
+        }
+        // Il testo di una cartella è il suo giornale, e scriverlo è innestarlo.
+        if crate::workbook::is_workbook(format.as_ref()) {
+            return self.write_workbook_in(&workspace, id, source, base);
         }
         let prepared = {
             let ws = workspace.read()?;
@@ -4499,6 +4622,14 @@ impl crate::resources::ResourceWrite for Host {
         expected: Option<Revision>,
     ) -> Result<crate::resources::ResourceWriteReceipt, PluginError> {
         let id = doc_id(id.as_str())?;
+        // La shell scrive una cartella di Excel soltanto creandola: coprirne
+        // una con dei byte suoi aggirerebbe la sola lettura.
+        if expected.is_some() {
+            let format = self.read_workspace(vault, |workspace| Ok(workspace.format_of(&id)))?;
+            if crate::workbook::is_workbook(format.as_ref()) {
+                return Err(crate::workbook::read_only(&id));
+            }
+        }
         let revision = self.write_document_bytes(vault, &id, bytes, expected)?;
         Ok(crate::resources::ResourceWriteReceipt { id, revision })
     }
@@ -4606,6 +4737,28 @@ fn root_forms(root: &Utf8Path) -> Vec<Utf8PathBuf> {
 pub fn doc_id(raw: &str) -> Result<DocId, PluginError> {
     fub_kernel::valid_doc_id(raw).map_err(PluginError::from)
 }
+
+/// Che cosa la shell tiene come testo di un documento: il sorgente che la
+/// porta di scrittura riceve, o il giornale delle celle di una cartella di
+/// Excel, i cui byte restano all'host (ADR 0216). Dopo un salvataggio il testo
+/// pulito di un giornale è vuoto: le sue voci sono nei byte.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DocumentText {
+    Source,
+    GridJournal,
+}
+
+/// Il testo di un documento del formato `format`, come lo legge
+/// [`Host::read_document_with_format`].
+pub fn document_text(format: Option<&DocumentFormat>) -> DocumentText {
+    if crate::workbook::is_workbook(format) {
+        DocumentText::GridJournal
+    } else {
+        DocumentText::Source
+    }
+}
+
 #[cfg(test)]
 mod opening_publication_tests {
     use std::sync::atomic::{AtomicUsize, Ordering};

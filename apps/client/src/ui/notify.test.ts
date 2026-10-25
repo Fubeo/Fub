@@ -79,9 +79,9 @@ describe("un guasto del kernel (§20.2)", () => {
       }
     ) as const;
 
-  it("nomina il documento quando l'evento ne nomina uno", () => {
+  it("dice prima che cosa è successo, poi la nota per nome", () => {
     expect(failureNotice(failure("warning", "Progetti/Nota.md")).text).toBe(
-      "Progetti/Nota.md: disco pieno",
+      "Disco pieno: Nota",
     );
   });
 
@@ -100,7 +100,7 @@ describe("un guasto del kernel (§20.2)", () => {
     // §17.3, decisione 0161: `gate` è l'unico che il kernel popola davvero
     // oggi, e sapere da che parte guardare è metà della diagnosi.
     expect(failureNotice(failure("warning", "Progetti/Nota.md", "event")).text).toBe(
-      "Progetti/Nota.md: disco pieno · da ricevendo un evento",
+      "Disco pieno: Nota · da ricevendo un evento",
     );
   });
 

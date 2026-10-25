@@ -365,6 +365,12 @@ export function paletteHistoryForTest(): PaletteHistory {
   return paletteHistory;
 }
 
+/// I comandi lanciati di recente, dal più recente: il menu «/» nel testo li
+/// mette in cima.
+export function recentCommands(): readonly string[] {
+  return paletteHistory.recent;
+}
+
 /// Ricorda un lancio riuscito: la cosa in cima, senza doppioni, al tetto.
 /// Pura la regola, impura la scrittura — come `rememberSearch`.
 export function rememberCommand(id: string): void {
@@ -508,6 +514,7 @@ export async function openSlashPalette(
   },
   onDismiss?: () => void,
   anchor: SelectionBox | null = null,
+  command: string | null = null,
 ): Promise<void> {
   closeCommandPalette();
   slashOwner = owner;
@@ -643,6 +650,7 @@ export async function openSlashPalette(
         apply.addEventListener("click", () => void run(entry, args, true));
         actions.append(apply, cancel);
         box.replaceChildren(heading, summary, details, actions);
+        box.hidden = false;
         apply.focus();
         return;
       }
@@ -729,6 +737,20 @@ export async function openSlashPalette(
       if (entry) void launch(entry);
     }
   });
+  // Un comando già scelto altrove (il «/» nel testo, «Comandi ▸» del tasto
+  // destro) parte da qui: il modulo e il piano accanto al cursore, poi la
+  // stessa invocazione. Senza niente da chiedere, la scatola non si vede.
+  const preselected = command === null ? null : entries.find((entry) => entry.id === command);
+  if (command !== null) {
+    if (!preselected) {
+      closeSlashPalette(owner);
+      return;
+    }
+    box.hidden = true;
+    launch(preselected);
+    if (box.childElementCount > 0) box.hidden = false;
+    return;
+  }
   render();
   input.focus();
 }

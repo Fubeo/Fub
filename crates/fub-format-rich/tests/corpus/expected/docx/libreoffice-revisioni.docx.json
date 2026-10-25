@@ -3,12 +3,12 @@
   "sha256": "617ce535ab4a84792624c7bc8d7ec9b235a83e7f75609e86f6a8d66bf57e2976",
   "open": {
     "readonly": null,
-    "projection": "be964ad4a6d45632ead580cdb8f6c81e37063b7b230475e32bbcda4853d42df0",
+    "projection": "ccd342d282217ce18df3016f6472adb075e9ac8baa4f657049b5b5cfeabcdef7",
     "blocks": 2,
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 20",
+    "differenze all'apertura: 19",
     "  core-properties: <{http://purl.org/dc/elements/1.1/}creator>: 1 → 0",
     "  core-properties: <{http://purl.org/dc/elements/1.1/}description>: 1 → 0",
     "  core-properties: <{http://purl.org/dc/elements/1.1/}language>: 1 → 0",
@@ -16,7 +16,6 @@
     "  core-properties: <{http://purl.org/dc/elements/1.1/}title>: 1 → 0",
     "  core-properties: <{http://schemas.openxmlformats.org/package/2006/metadata/core-properties}lastModifiedBy>: 1 → 0",
     "  core-properties: <{http://schemas.openxmlformats.org/package/2006/metadata/core-properties}revision>: 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}lang @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia=\"zh-CN\": 2 → 0",
     "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}clrScheme @{}name=\"LibreOffice\": 1 → 0",
     "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}cs @{}charset=\"1\": 2 → 0",
     "  theme: {http://schemas.openxmlformats.org/drawingml/2006/main}cs @{}pitchFamily=\"0\": 2 → 0",

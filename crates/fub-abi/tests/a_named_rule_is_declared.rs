@@ -193,16 +193,6 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-format-sheet/src/lib.rs::search",
-            (
-                Family::ContextualCase,
-                "cerca una sottostringa nel testo libero delle celle, non stabilisce l'identità \
-                 di un path: piega query e input perché la grafia dell'utente non deve cambiare \
-                 i risultati. Resta locale al formato perché restituisce coordinate stabili del \
-                 foglio, mentre le altre ricerche lavorano su proprietà o indici di documenti.",
-            ),
-        ),
-        (
             "crates/fub-features/src/tags.rs::matches_case_insensitive",
             (
                 Family::ContextualCase,
@@ -265,9 +255,8 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 Family::ContextualCase,
                 "l'identità di un'estensione nel registro è full-Unicode e non ASCII, e diverge \
                  apposta da `rules/media.rs`: qui l'estensione arriva dal **descrittore di un \
-                 provider**, che è testo di terzi, non dal nome di un file del vault. È la sola \
-                 piega di `register` e di `register_source`: un formato privo di parser \
-                 `DocumentModel` non può avere un'altra identità né un altro conflitto.",
+                 provider**, che è testo di terzi, non dal nome di un file del vault. È la piega \
+                 di `register`.",
             ),
         ),
         (
@@ -661,21 +650,90 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-format-sheet/src/formula.rs::matches_ignore_ascii_case",
+            "crates/fub-format-xlsx/src/input.rs::parse",
             (
                 Family::AsciiCase,
-                "confronta identificatori del linguaggio formule con il suo vocabolario chiuso \
-                 (`IF`, `SUM`, `TRUE`): la grammatica accetta token ASCII e una piegatura Unicode \
-                 attribuirebbe equivalenze che il formato non dichiara.",
+                "riconosce l'input `TRUE` e `FALSE` di una cella, le due costanti logiche di \
+                 Excel: il vocabolario è chiuso e ASCII, come quello di `formula.rs`, e una \
+                 piegatura Unicode attribuirebbe equivalenze che il formato non conosce.",
             ),
         ),
         (
-            "crates/fub-format-sheet/src/formula.rs::reference",
+            "crates/fub-format-xlsx/src/package.rs::normalize",
             (
                 Family::AsciiCase,
-                "converte le lettere di una coordinata A1 dopo averle già limitate con \
-                 `is_ascii_alphabetic`: l'alfabeto delle colonne è A–Z per formato, quindi una \
-                 maiuscola Unicode non può identificare una colonna.",
+                "confronta i nomi delle parti di un pacchetto OPC, che la specifica (ECMA-376 \
+                 parte 2, §9.1.1.4) dichiara uguali a meno delle maiuscole ASCII: non sono nomi \
+                 del vault ma nomi dentro uno zip, e il lettore di GridCraft li confronta così.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/package.rs::rels",
+            (
+                Family::AsciiCase,
+                "legge `TargetMode=\"External\"` di una relazione OPC: un valore di un \
+                 vocabolario chiuso dello schema, che i produttori scrivono con maiuscole \
+                 diverse e che nessuna piegatura Unicode renderebbe più vero.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/package.rs::split_dir",
+            (
+                Family::FolderBoundary,
+                "divide il nome di una parte del pacchetto nella sua cartella e nel suo file, \
+                 per trovarne le relazioni (`_rels/<file>.rels`): il `/` iniziale di un nome \
+                 OPC è la radice del pacchetto, non un path del vault.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/inventory.rs::cell_ref",
+            (
+                Family::AsciiCase,
+                "legge le lettere della colonna di un riferimento A1 dentro l'inventario di una cartella: \
+                 un vocabolario ASCII che Excel accetta in maiuscolo e in minuscolo, come \
+                 `formula.rs`.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/inventory.rs::digits",
+            (
+                Family::AsciiCase,
+                "sposta le colonne di una formula condivisa per contarla espansa: le lettere di un \
+                 riferimento A1 sono ASCII e Excel le confronta senza maiuscole, come `cell_ref`.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/inventory.rs::new",
+            (
+                Family::AsciiCase,
+                "riconosce il nero `000000` di un colore del tema: cifre esadecimali, che lo schema \
+                 di DrawingML scrive in maiuscolo o in minuscolo con lo stesso valore.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/inventory.rs::rgb",
+            (
+                Family::AsciiCase,
+                "porta un colore `rgb` di SpreadsheetML in forma canonica: cifre esadecimali, uguali \
+                 a meno delle maiuscole ASCII, come il nero del tema in `new`.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/inventory.rs::sheet",
+            (
+                Family::AsciiCase,
+                "conta le unioni e le convalide di un foglio per i loro riferimenti A1, che Excel \
+                 legge senza maiuscole: le lettere di colonna sono ASCII, come in `cell_ref`.",
+            ),
+        ),
+        (
+            "crates/fub-format-xlsx/src/objects.rs::media",
+            (
+                Family::AsciiCase,
+                "porta il tipo di un'immagine della cartella in forma canonica prima di \
+                 confrontarlo con l'elenco chiuso dei tipi che la shell disegna: i tipi MIME sono \
+                 token ASCII e la specifica (RFC 2045, §5.1) li dichiara uguali a meno delle \
+                 maiuscole.",
             ),
         ),
         (
@@ -915,8 +973,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             (
                 Family::ContextualCase,
                 "piega il filtro di ricerca della vista e le etichette diagnostiche dei riepiloghi \
-                 con `str::to_lowercase`: la query è testo libero dell'utente e deve comportarsi \
-                 come la ricerca del foglio (`format-sheet::search`), non come un vocabolario \
+                 con `str::to_lowercase`: la query è testo libero dell'utente, non un vocabolario \
                  chiuso. Diverge da `matches_case_insensitive` perché qui l'ago si piega una sola \
                  volta per tutte le righe, mentre là si piega a ogni confronto.",
             ),

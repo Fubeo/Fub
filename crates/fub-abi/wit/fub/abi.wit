@@ -3143,11 +3143,11 @@ interface edit {
     }
 }
 
-/// Dati strutturati a finestre per superfici grid. La shell possiede rendering,
-/// input e clipboard; il provider possiede parsing, formule e serializzazione.
+/// Le forme comuni della famiglia grid, che `grid-bytes` usa. La shell
+/// possiede rendering, input e clipboard; il provider possiede lettura, valori
+/// e scrittura. Non ha funzioni: le usa il protocollo a byte.
 interface grid {
     use edit.{revision};
-    use errors.{plugin-error};
 
     /// Binding dichiarato dal provider: il formato sceglie una famiglia e una
     /// versione di protocollo, mai una versione simile per tentativi.
@@ -3156,12 +3156,6 @@ interface grid {
         format: string,
         family: string,
         protocol-version: u32,
-    }
-
-    record grid-session {
-        instance: string,
-        revision: revision,
-        sheets: list<grid-sheet>,
     }
 
     record grid-sheet {
@@ -3195,8 +3189,63 @@ interface grid {
         start,
         center,
         end,
+        fill,
+        justify,
+        distributed,
     }
 
+    enum grid-vertical-align {
+        top,
+        center,
+        bottom,
+        justify,
+        distributed,
+    }
+
+    enum grid-underline {
+        single,
+        double,
+        single-accounting,
+        double-accounting,
+    }
+
+    enum grid-script {
+        superscript,
+        subscript,
+    }
+
+    enum grid-border-style {
+        thin,
+        medium,
+        thick,
+        dashed,
+        dotted,
+        double,
+        hair,
+        medium-dashed,
+        dash-dot,
+        medium-dash-dot,
+        dash-dot-dot,
+        medium-dash-dot-dot,
+        slant-dash-dot,
+    }
+
+    record grid-border {
+        style: grid-border-style,
+        color: option<string>,
+    }
+
+    record grid-borders {
+        top: option<grid-border>,
+        right: option<grid-border>,
+        bottom: option<grid-border>,
+        left: option<grid-border>,
+        diagonal-down: option<grid-border>,
+        diagonal-up: option<grid-border>,
+    }
+
+    /// L'aspetto già risolto: tema, stile di tabella e formattazione
+    /// condizionale sono dentro.
     record grid-cell-style {
         bold: bool,
         italic: bool,
@@ -3204,32 +3253,17 @@ interface grid {
         fill-color: option<string>,
         horizontal: option<grid-horizontal-align>,
         number-format: option<string>,
-    }
-
-    enum grid-formula-error {
-        parse,
-        ref,
-        name,
-        value,
-        div-zero,
-        num,
-        cycle,
-    }
-
-    variant grid-cell-value {
-        blank,
-        number(f64),
-        text(string),
-        boolean(bool),
-        error(grid-formula-error),
-    }
-
-    /// `input` e `style` sono persistiti; `value` è derivato dal provider.
-    record grid-cell {
-        key: grid-cell-key,
-        input: string,
-        style: grid-cell-style,
-        value: grid-cell-value,
+        font: option<string>,
+        font-size: option<f32>,
+        underline: option<grid-underline>,
+        strike: bool,
+        script: option<grid-script>,
+        vertical: option<grid-vertical-align>,
+        wrap: bool,
+        shrink: bool,
+        indent: u8,
+        rotation: s16,
+        borders: grid-borders,
     }
 
     record grid-window-request {
@@ -3239,22 +3273,11 @@ interface grid {
         row-count: u32,
         column-start: u32,
         column-count: u32,
+        /// Le chiavi delle immagini che la shell ha già: la finestra non ne
+        /// riporta i byte.
+        known-media: list<string>,
     }
 
-    record grid-window {
-        revision: revision,
-        sheet: string,
-        row-start: u32,
-        column-start: u32,
-        total-rows: u32,
-        total-columns: u32,
-        rows: list<grid-row>,
-        columns: list<grid-column>,
-        cells: list<grid-cell>,
-    }
-
-    /// Patch atomica input-only: lo stile resta intatto e il valore viene
-    /// ricalcolato dal provider.
     record grid-cell-patch {
         cell: grid-cell-key,
         before: option<string>,
@@ -3284,12 +3307,306 @@ interface grid {
         edit: grid-source-edit,
         invalidation: grid-invalidation,
     }
+}
+
+/// La versione 2 della famiglia grid (`GridBytesProvider`): la sorgente è a
+/// byte e resta nella custodia dell'host, la modifica è un giornale di celle
+/// o di comandi del catalogo della sessione (ADR 0219).
+/// Il giornale attraversa il confine come il suo testo canonico, e le finestre
+/// portano il valore già formattato, il blocco e lo stato della cella.
+interface grid-bytes {
+    use edit.{revision};
+    use errors.{plugin-error};
+    use grid.{grid-surface-spec, grid-sheet, grid-row, grid-column, grid-cell-key, grid-cell-style, grid-window-request, grid-apply-request, grid-commit};
+
+    /// Un avviso della sorgente in un codice chiuso del provider.
+    record grid-notice {
+        code: string,
+        count: u32,
+    }
+
+    /// Quando la cartella si ricalcola.
+    enum grid-calculation {
+        automatic,
+        automatic-except-tables,
+        manual,
+    }
+
+    /// Ciò che vale per la cartella intera: i dodici colori del tema
+    /// (`#RRGGBB`, nell'ordine del file), i nomi definiti, il calcolo, la
+    /// struttura protetta e il carattere dello stile Normale (nome e punti),
+    /// che lo stile di una cella tace.
+    record grid-book {
+        theme-colors: list<string>,
+        names: list<string>,
+        calculation: grid-calculation,
+        %protected: bool,
+        font: string,
+        font-size: f32,
+    }
+
+    record grid-bytes-session {
+        instance: string,
+        revision: revision,
+        sheets: list<grid-sheet>,
+        active: string,
+        hidden: list<string>,
+        notices: list<grid-notice>,
+        conflicts: list<grid-cell-key>,
+        commands: list<grid-command-state>,
+        book: grid-book,
+    }
+
+    /// Il foglio, gli intervalli A1 separati da virgola e la cella attiva.
+    record grid-selection {
+        sheet: string,
+        selection: string,
+        active: string,
+    }
+
+    /// Un comando del catalogo; spento, porta il perché.
+    record grid-command-state {
+        id: string,
+        enabled: bool,
+        reason: option<string>,
+    }
+
+    /// Un comando del giornale: i parametri sono il testo di un oggetto JSON.
+    record grid-command {
+        id: string,
+        params: string,
+        sheet: string,
+        selection: string,
+        active: string,
+    }
+
+    record grid-command-request {
+        revision: revision,
+        command: grid-command,
+    }
+
+    /// Una finestra di dialogo che il comando chiede alla shell.
+    record grid-dialog {
+        id: string,
+        params: string,
+    }
+
+    record grid-command-outcome {
+        commit: grid-commit,
+        sheets: list<grid-sheet>,
+        hidden: list<string>,
+        selection: grid-selection,
+        %result: option<string>,
+        dialog: option<grid-dialog>,
+        commands: list<grid-command-state>,
+        book: grid-book,
+    }
+
+    /// Un errore porta il suo testo: ogni formato ha i suoi.
+    variant grid-value {
+        blank,
+        number(f64),
+        text(string),
+        boolean(bool),
+        error(string),
+    }
+
+    record grid-data-bar {
+        fraction: f32,
+        color: string,
+        gradient: bool,
+    }
+
+    record grid-icon {
+        set: string,
+        index: u32,
+    }
+
+    record grid-comment-reply {
+        author: string,
+        text: string,
+    }
+
+    record grid-comment {
+        author: string,
+        text: string,
+        threaded: bool,
+        resolved: bool,
+        replies: list<grid-comment-reply>,
+    }
+
+    /// `external` porta fuori dalla cartella: la shell non lo segue da sola.
+    record grid-link {
+        target: string,
+        tooltip: option<string>,
+        external: bool,
+    }
+
+    /// `style` è l'indice del suo aspetto negli `styles` della finestra.
+    record grid-bytes-cell {
+        key: grid-cell-key,
+        input: string,
+        style: u32,
+        value: grid-value,
+        display: string,
+        lock: option<string>,
+        stale: bool,
+        conflict: bool,
+        data-bar: option<grid-data-bar>,
+        icon: option<grid-icon>,
+        comment: option<grid-comment>,
+        link: option<grid-link>,
+    }
+
+    /// Un'unione a indici assoluti del foglio.
+    record grid-merge {
+        row: u32,
+        column: u32,
+        rows: u32,
+        columns: u32,
+    }
+
+    /// Le celle, le pagine, o le interruzioni di pagina sopra le celle.
+    enum grid-view-mode {
+        normal,
+        page-layout,
+        page-break-preview,
+    }
+
+    record grid-sheet-view {
+        frozen-rows: u32,
+        frozen-columns: u32,
+        gridlines: bool,
+        headings: bool,
+        zoom: u16,
+        right-to-left: bool,
+        mode: grid-view-mode,
+        formulas: bool,
+        %protected: bool,
+        print-gridlines: bool,
+        print-headings: bool,
+    }
+
+    /// Una tabella a indici assoluti, con l'intestazione e i totali.
+    record grid-table {
+        name: string,
+        row: u32,
+        column: u32,
+        rows: u32,
+        columns: u32,
+        header-row: bool,
+        totals-row: bool,
+        banded-rows: bool,
+        banded-columns: bool,
+        first-column: bool,
+        last-column: bool,
+        filter-button: bool,
+        style: string,
+    }
+
+    /// Che cosa è un oggetto del foglio.
+    enum grid-object-kind {
+        chart,
+        sparkline,
+        image,
+        cell-picture,
+        shape,
+    }
+
+    enum grid-shape-kind {
+        rectangle,
+        rounded-rectangle,
+        ellipse,
+        triangle,
+        line,
+        arrow,
+        text-box,
+        icon,
+        ink,
+    }
+
+    enum grid-shape-align {
+        left,
+        center,
+        right,
+    }
+
+    enum grid-shape-anchor {
+        top,
+        middle,
+        bottom,
+    }
+
+    /// Una forma con i colori risolti (`#RRGGBB`) e il testo.
+    record grid-shape {
+        kind: grid-shape-kind,
+        fill: option<string>,
+        line: option<string>,
+        text: string,
+        font: option<string>,
+        font-size: f32,
+        bold: bool,
+        italic: bool,
+        text-color: string,
+        align: grid-shape-align,
+        anchor: grid-shape-anchor,
+        right-to-left: bool,
+    }
+
+    /// I byte di un'immagine, in base64; mancano se la richiesta ha la chiave.
+    record grid-media {
+        mime: string,
+        key: string,
+        data: option<string>,
+    }
+
+    /// Perché un oggetto non porta ciò che mostra.
+    enum grid-object-missing {
+        too-large,
+        unsupported,
+    }
+
+    /// Un oggetto che tocca la finestra, ancorato a una cella, in pixel.
+    record grid-object {
+        kind: grid-object-kind,
+        id: u32,
+        row: u32,
+        column: u32,
+        dx: f32,
+        dy: f32,
+        width: f32,
+        height: f32,
+        alt: string,
+        svg: option<string>,
+        media: option<grid-media>,
+        shape: option<grid-shape>,
+        missing: option<grid-object-missing>,
+    }
+
+    record grid-bytes-window {
+        revision: revision,
+        sheet: string,
+        row-start: u32,
+        column-start: u32,
+        total-rows: u32,
+        total-columns: u32,
+        rows: list<grid-row>,
+        columns: list<grid-column>,
+        cells: list<grid-bytes-cell>,
+        styles: list<grid-cell-style>,
+        merges: list<grid-merge>,
+        view: grid-sheet-view,
+        tables: list<grid-table>,
+        objects: list<grid-object>,
+    }
 
     surfaces: func() -> list<grid-surface-spec>;
-    open: func(surface: string, source: string, revision: revision) -> result<grid-session, plugin-error>;
-    window: func(instance: string, request: grid-window-request) -> result<grid-window, plugin-error>;
+    open: func(surface: string, source: list<u8>, revision: revision, journal: string) -> result<grid-bytes-session, plugin-error>;
+    window: func(instance: string, request: grid-window-request) -> result<grid-bytes-window, plugin-error>;
     apply: func(instance: string, request: grid-apply-request) -> result<grid-commit, plugin-error>;
-    reload: func(instance: string, expected: revision, source: string, revision: revision) -> result<grid-session, plugin-error>;
+    commands: func(instance: string, selection: grid-selection) -> result<list<grid-command-state>, plugin-error>;
+    command: func(instance: string, request: grid-command-request) -> result<grid-command-outcome, plugin-error>;
+    bytes-to-write: func(instance: string, expected: revision) -> result<list<u8>, plugin-error>;
     close: func(instance: string) -> result<_, plugin-error>;
     shutdown: func() -> result<_, plugin-error>;
 }
@@ -4506,7 +4823,7 @@ world plugin-world {
 
     export plugin;
     export format;
-    export grid;
+    export grid-bytes;
     /// I due innesti del §3.1 e del §3.2: chi aggiunge la sintassi, e chi
     /// disegna il blocco che ne esce. Sono esportati separatamente da `format`
     /// perché un plugin può implementarne uno senza implementare l'altro — ed è

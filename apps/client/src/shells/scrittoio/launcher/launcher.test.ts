@@ -758,12 +758,31 @@ describe("le risposte che arrivano tardi", () => {
     // Le righe di prima restano dove sono finché arriva la risposta.
     expect(titles()).toEqual(["Prima"]);
     expect(document.querySelector(".launcher-wait")).toBe(wait);
+    // Un elenco pieno non lascia il posto alla sagoma.
+    expect(document.querySelector(".launcher-results .skeleton")).toBeNull();
 
     slow.land(listed([note("Poi.md"), note("Poi ancora.md")]));
     await settle();
     expect(surface()!.hasAttribute("data-busy")).toBe(false);
     expect(titles()).toEqual(["Poi", "Poi ancora"]);
     expect(counted()).toBe('launcher.status.count {"count":2}');
+  });
+
+  it("una prima risposta lenta mostra la sagoma delle righe, e la toglie quando arriva", async () => {
+    const slow = pending();
+    world.answer = () => slow.promise;
+    launcher.open("files");
+    await settle();
+    expect(document.querySelector(".launcher-results .skeleton")).toBeNull();
+    vi.advanceTimersByTime(ASK_DELAY_MS + SLOW_AFTER_MS);
+    const shape = document.querySelector(".launcher-results .skeleton");
+    expect(shape).not.toBeNull();
+    expect(shape!.getAttribute("aria-hidden")).toBe("true");
+
+    slow.land(listed([note("Poi.md")]));
+    await settle();
+    expect(document.querySelector(".launcher-results .skeleton")).toBeNull();
+    expect(titles()).toEqual(["Poi"]);
   });
 
   it("una sorgente che fallisce lo dice al posto delle righe", async () => {
@@ -1041,6 +1060,23 @@ describe("l'anteprima accanto all'elenco", () => {
     await settle();
     expect(page().textContent).toBe("Infine");
     expect(pane().hasAttribute("data-waiting")).toBe(false);
+  });
+
+  it("la prima resa che tarda mostra lo scheletro di una pagina, e lo toglie quando arriva", async () => {
+    const slow = rendering();
+    world.render = async () => slow.promise;
+    launcher.open("files");
+    vi.advanceTimersByTime(PREVIEW_DELAY_MS);
+    await settle();
+    expect(page().querySelector(".skeleton")).toBeNull();
+    vi.advanceTimersByTime(PREVIEW_SLOW_MS);
+    expect(page().querySelector(".skeleton")).not.toBeNull();
+    expect(pane().hasAttribute("data-waiting")).toBe(true);
+
+    slow.land("<p>Infine</p>");
+    await settle();
+    expect(page().querySelector(".skeleton")).toBeNull();
+    expect(page().textContent).toBe("Infine");
   });
 
   it("una resa che non riesce è una frase nel riquadro, non un avviso", async () => {

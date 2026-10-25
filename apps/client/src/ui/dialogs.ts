@@ -57,8 +57,8 @@ export function openFrame(title: string, onDismiss: () => void): Frame {
     }
   });
   document.body.append(overlay);
-  enterSurface(overlay, { viewTransition: false });
-  life.add(() => exitSurface(overlay, () => overlay.remove(), { viewTransition: false }));
+  enterSurface(overlay);
+  life.add(() => exitSurface(overlay, () => overlay.remove()));
   life.add(trapFocus(overlay, () => {
     close();
     onDismiss();

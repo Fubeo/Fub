@@ -79,6 +79,8 @@ describe("cestinare una nota", () => {
     fake.system = true;
     fake.confirm = false;
     await trashWithConfirm("vittima.md");
+    // Il bottone dice ciò che fa: sposta, non elimina.
+    expect(vi.mocked(confirm).mock.calls[0]?.[1]).toMatchObject({ okLabel: "Sposta nel cestino" });
     expect(documentSessions.cancelDeletion).toHaveBeenCalledWith("vittima.md");
     expect(documentSessions.delete).not.toHaveBeenCalled();
     expect(closeDocument).not.toHaveBeenCalled();
@@ -159,6 +161,7 @@ describe("cestinare più note insieme", () => {
     fake.confirm = false;
     expect(await trashManyWithConfirm(["a.md", "b.md"])).toBe(0);
     expect(confirm).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(confirm).mock.calls[0]?.[1]).toMatchObject({ okLabel: "Sposta nel cestino" });
     expect(documentSessions.delete).not.toHaveBeenCalled();
     expect(documentSessions.cancelDeletion).toHaveBeenCalledTimes(2);
   });

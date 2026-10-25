@@ -40,7 +40,6 @@
   color: var(--text);
   font-size: var(--text-base);
   line-height: var(--leading-normal);
-  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
 }
 /* Il punto sta a metà della prima riga, qualunque sia il corpo del testo. */
 .toast::before {
@@ -203,7 +202,6 @@
   font-size: var(--text-base);
   line-height: var(--leading-normal);
   overflow: hidden;
-  animation: fub-enter-rise-sm var(--duration-med) var(--ease-out);
 }
 
 .dock-panel--notify {
