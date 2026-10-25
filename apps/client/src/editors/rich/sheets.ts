@@ -345,7 +345,9 @@ export class SheetDesk {
     const drawn: string[] = [];
     const children = [...this.#layer.children] as HTMLElement[];
     const sheets = children.filter((child) => child.classList.contains("rich-sheet"));
-    for (const child of children) if (!child.classList.contains("rich-sheet")) child.remove();
+    // I nomi dei tagli si rifanno; la sagoma di un foglio tolto resta finché
+    // si dissolve (`rich-motion.ts`).
+    for (const child of children) if (child.classList.contains("rich-sheet-name")) child.remove();
     for (const sheet of sheets.slice(total)) sheet.remove();
     for (const [i, sheet] of plan.sheets.entries()) {
       const box = layout.boxes[i]!;

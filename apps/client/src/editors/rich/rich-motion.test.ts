@@ -157,6 +157,10 @@ describe("il foglio che nasce", () => {
     expect(document.querySelectorAll(".rich-sheets > .rich-sheet")).toHaveLength(2);
     const ghost = sheetPlays().find((play) => play.el.classList.contains("rich-sheet-ghost"));
     expect(ghost).toBeDefined();
+    // Un disegno che arriva mentre si dissolve non la toglie a metà.
+    e.syncDoc(JSON.stringify({ format: "fub-rich", version: 1, page: LETTER, blocks: [para("uno\u000cdue"), para("tre!")] }));
+    measure(e);
+    expect(ghost!.el.isConnected).toBe(true);
     driver.advance(1000);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.querySelector(".rich-sheet-ghost")).toBeNull();
