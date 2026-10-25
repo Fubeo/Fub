@@ -20,7 +20,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use wordcraft_doc::para::OBJ;
+use wordcraft_doc::para::{NoteKind, OBJ};
 
 use wordcraft_doc::props::{Highlight, LineSpacing, TextColor, Underline, VertAlign};
 use wordcraft_doc::{
@@ -986,6 +986,22 @@ fn atom(
         other if other.is_marker() => (AtomKind::Marker, String::new(), None),
         _ => (AtomKind::Opaque, object.plain_text().to_string(), None),
     };
+    // Una nota tenuta dice, da leggere, il suo testo e se è di chiusura: la
+    // superficie la numera e la mostra al passaggio. Chi scrive li ignora.
+    let (note, end) = match object {
+        InlineObject::NoteRef { kind, id, .. } => (
+            document.parts.get(id).map(|part| {
+                part.blocks
+                    .iter()
+                    .filter_map(|block| block.as_para())
+                    .map(|paragraph| paragraph.plain_text().to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }),
+            *kind == NoteKind::Endnote,
+        ),
+        _ => (None, false),
+    };
     Ok(Inline::Atom {
         k: Some(blob::encode(&AtomKeep {
             props: props.clone(),
@@ -997,8 +1013,8 @@ fn atom(
         w: size.map(|(w, _)| w),
         h: size.map(|(_, h)| h),
         data: None,
-        note: None,
-        end: false,
+        note,
+        end,
         toc: None,
         comment: match object {
             InlineObject::CommentStart { id } => Some(Anchor {

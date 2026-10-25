@@ -80,7 +80,9 @@ describe("il motore ricco", () => {
     expect(image.title).toBe(`${image.getAttribute("aria-label")}. ${t("rich.atom.kept")}`);
     expect(note.getAttribute("aria-label")).not.toBe("");
     expect(note.getAttribute("aria-label")).not.toContain(":");
-    expect(note.textContent).toBe("*");
+    // Il richiamo è il suo numero, scritto dal tema (`notes.ts`).
+    expect(note.textContent).toBe("");
+    expect(note.dataset.number).toBe("1");
     expect(marker.hasAttribute("role")).toBe(false);
     expect(marker.textContent).toBe("");
   });

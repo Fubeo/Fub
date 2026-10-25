@@ -2171,6 +2171,11 @@ body {
 }
 .rich-atom-equation { display: inline-flex; align-items: baseline; }
 .rich-atom-name { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+/* Il richiamo di una nota, in apice: il suo numero, o un segno finché non
+   ce l'ha. */
+.rich-atom-note { vertical-align: super; }
+.rich-atom-note::before { content: "*"; }
+.rich-atom-note[data-number]::before { content: attr(data-number); }
 .rich-break-page,
 .rich-break-column { display: block; height: 0; margin-block: 0.75em; }
 

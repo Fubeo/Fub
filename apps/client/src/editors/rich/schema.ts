@@ -437,6 +437,9 @@ const nodes: Record<string, NodeSpec> = {
         const said = kind === "equation" && label ? `${name} ${label}` : w !== null && h !== null ? `${name} · ${centimetres(w, h)}` : name;
         return ["span", attrs, ["span", { class: "rich-atom-glyph", "aria-hidden": "true" }, ATOM_GLYPHS[kind]], ["span", { class: "rich-atom-name" }, said]];
       }
+      // Il richiamo di una nota è il suo numero, che dà la posizione
+      // (`notes.ts`): il segno si vede soltanto finché non c'è.
+      if (kind === "note") return ["span", attrs];
       return ["span", attrs, label || ATOM_GLYPHS[kind]];
     },
   },

@@ -7150,9 +7150,18 @@ kbd,
   color: var(--muted);
   font-size: var(--text-xs);
 }
-.rich-atom-note,
 .rich-atom-field {
   border-radius: 1em;
+}
+.rich-atom-note {
+  min-width: 0;
+  padding: 0 0.1em;
+  border: none;
+  background: transparent;
+  color: var(--doc-link);
+  font-family: inherit;
+  font-size: 0.7em;
+  line-height: 1;
 }
 .rich-atom-marker {
   min-width: 0;

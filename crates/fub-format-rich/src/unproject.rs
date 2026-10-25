@@ -345,15 +345,18 @@ fn paragraph(
                 let props = tracked(props, ins.as_ref(), del.as_ref(), document);
                 push(&mut out, x, props);
             }
+            // Una nota tenuta porta il suo testo e la sua specie da leggere:
+            // vale ciò che è tenuto in `k`.
             Inline::Atom {
                 k: Some(k),
+                kind,
                 data: None,
-                note: None,
-                end: false,
+                note,
+                end,
                 ins,
                 del,
                 ..
-            } => {
+            } if *kind == AtomKind::Note || (note.is_none() && !*end) => {
                 let AtomKeep {
                     props,
                     mut object,

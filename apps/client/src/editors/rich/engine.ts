@@ -43,6 +43,7 @@ import { parseProjection, writeComment, writeHead, writeRunning, type Look, type
 import { pageStyle, samePage } from "./page";
 import { richProof } from "./proof";
 import { commentPlugin, commentsOf } from "./comments";
+import { notePlugin } from "./notes";
 import { findPlugin, revisionPlugin, showMatches, type FindQuery } from "./review";
 import { BlockWriter, richSchema, toDoc } from "./schema";
 import { deleteChar, reviewAuthor, trackable, trackTransaction, tracking } from "./track";
@@ -142,6 +143,7 @@ export class RichEngine {
       findPlugin,
       revisionPlugin,
       commentPlugin,
+      notePlugin,
       keymap(this.#keys()),
       keymap(baseKeymap),
     ];

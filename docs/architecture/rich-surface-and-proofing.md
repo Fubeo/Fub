@@ -52,7 +52,10 @@ l'IPC.
   rifiuta; il formato lo scrive alla sua maniera e lo rilegge con
   un `k`. Finché la shell tiene il proprio buffer l'oggetto resta nuovo e ogni
   salvataggio lo riscrive: l'immagine prende il nome dei suoi byte, e una
-  nota uguale si riconosce a meno del numero della parte.
+  nota uguale si riconosce a meno del numero della parte. Una nota tenuta
+  porta anche, da leggere, il suo testo e se è di chiusura: la superficie
+  ne fa il richiamo in apice, 1, 2, 3 a piè di pagina e i, ii, iii in
+  chiusura nell'ordine del documento (`editors/rich/notes.ts`).
   L'enfasi (`m`) e l'aspetto
   del carattere (`f`: tipo, dimensione, colore, colore dell'evidenziatore)
   sono marche **risolte**, scritte soltanto dove differiscono dal paragrafo;

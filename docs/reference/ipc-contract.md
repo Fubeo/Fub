@@ -352,6 +352,12 @@ dopo `end`, è un sommario dei titoli fino al livello N (1–9): il codec Word
 lo scrive come campo `TOC` da ricalcolare all'apertura, e rifiuta un `toc`
 fuori da 1–9 o su un'altra specie; il codec ODT lo rifiuta.
 
+Una nota tenuta (`"kind": "note"` con `k`) porta, da leggere, il testo della
+sua parte in `note` (un paragrafo per riga) e `"end": true` se è di chiusura:
+la superficie la numera e la mostra al passaggio. Il ritorno al documento li
+ignora, perché vale la nota tenuta nel `k`; su un'altra specie tenuta sono una
+proiezione malformata.
+
 Un documento che il codec o la proiezione non riportano identico si apre con
 `"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
 `projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo

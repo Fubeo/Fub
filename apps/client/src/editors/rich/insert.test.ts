@@ -8,6 +8,7 @@ import { t } from "../../i18n/strings";
 import { insertImage, insertNote, insertTable, linkAt, setLink } from "./commands";
 import { RichEngine } from "./engine";
 import { parseProjection, writeBlock, type AtomInline, type Block, type Para, type Table, type TextInline } from "./projection";
+import { roman } from "./notes";
 import { filterSlice } from "./paste";
 import { base64, fitImage, mountStrip } from "./strip";
 
@@ -287,7 +288,36 @@ describe("le immagini e le note nuove", () => {
     // L'immagine nuova si vede; la nota si annuncia col suo testo.
     const img = document.querySelector<HTMLImageElement>(".rich-atom-image img")!;
     expect(img.getAttribute("src")).toBe(`data:image/png;base64,${PNG}`);
-    expect(document.querySelector(".rich-atom-note")!.getAttribute("aria-label")).toBe(`${t("rich.atom.note")}: Vedi sopra.`);
+    expect(document.querySelector(".rich-atom-note")!.getAttribute("aria-label")).toBe(`${t("rich.atom.footnote", { n: "1" })}: Vedi sopra.`);
+  });
+
+  it("le note si numerano nell'ordine del documento: 1, 2 a piè di pagina, i, ii in chiusura", () => {
+    const e = engine([
+      para([
+        { t: "text", x: "uno " },
+        { t: "atom", k: "kept-foot", kind: "note", note: "Tenuta.\nSu due righe." },
+        { t: "text", x: " due " },
+        { t: "atom", k: "kept-end", kind: "note", note: "In chiusura.", end: true },
+        { t: "text", x: " tre" },
+      ]),
+    ]);
+    e.select(at(e, "tre") + 3);
+    expect(e.apply(insertNote("Nuova in fondo.", true))).toBe(true);
+    // Una nota scritta prima di quella tenuta prende l'1 e la sposta al 2.
+    e.select(at(e, "uno"));
+    expect(e.apply(insertNote("Nuova.", false))).toBe(true);
+    const calls = [...document.querySelectorAll<HTMLElement>(".rich-atom-note")];
+    expect(calls.map((call) => call.dataset.number)).toEqual(["1", "2", "i", "ii"]);
+    expect(calls[1]!.getAttribute("aria-label")).toBe(`${t("rich.atom.footnote", { n: "2" })}: Tenuta.\nSu due righe.`);
+    expect(calls[2]!.title).toBe(`${t("rich.atom.endnote", { n: "i" })}: In chiusura.`);
+    // Il numero non entra nella proiezione: la nota tenuta torna com'era.
+    const written = writeBlock(parseProjection(e.getDoc()).blocks[0]!);
+    expect(written).not.toContain("data-number");
+    expect(written).toContain(`{"t":"atom","k":"kept-end","kind":"note","note":"In chiusura.","end":true}`);
+  });
+
+  it("le cifre romane delle note di chiusura", () => {
+    expect([1, 2, 3, 4, 9, 14, 40, 90, 400, 1994].map(roman)).toEqual(["i", "ii", "iii", "iv", "ix", "xiv", "xl", "xc", "cd", "mcmxciv"]);
   });
 
   it("una nota vuota o su più righe non entra", () => {
@@ -301,10 +331,14 @@ describe("le immagini e le note nuove", () => {
   it("la proiezione rifiuta un oggetto né tenuto né nuovo", () => {
     const doc = (atom: unknown) => JSON.stringify({ format: "fub-rich", version: 1, blocks: [para([atom])] });
     expect(() => parseProjection(doc({ t: "atom", kind: "image", data: PNG, w: 1, h: 1 }))).not.toThrow();
+    // Una nota tenuta porta il suo testo e la sua specie da leggere.
+    expect(() => parseProjection(doc({ t: "atom", k: "x", kind: "note", note: "tenuta", end: true }))).not.toThrow();
     for (const bad of [
       { t: "atom", kind: "field", data: PNG },
       { t: "atom", kind: "image" },
-      { t: "atom", k: "x", kind: "note", note: "e anche tenuta" },
+      { t: "atom", k: "x", kind: "image", note: "una nota tenuta su un'immagine" },
+      { t: "atom", k: "x", kind: "field", end: true },
+      { t: "atom", k: "x", kind: "note", note: "n", data: PNG },
       { t: "atom", kind: "note", note: "n", end: "sì" },
     ]) {
       expect(() => parseProjection(doc(bad)), JSON.stringify(bad)).toThrow();
