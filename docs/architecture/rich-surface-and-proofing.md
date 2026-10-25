@@ -235,7 +235,7 @@ sull'elemento.
 
 Il moto della carta (`editors/rich/rich-motion.ts`) segue la regola del palco:
 il testo è sempre al suo posto finale, e si muove la sagoma di ogni foglio
-(`.rich-sheet::before`). `RichMotion` osserva la classe `look-*`,
+(`.rich-sheet-paper`). `RichMotion` osserva la classe `look-*`,
 `data-mode` e la barra, e tiene una fotografia del «prima» aggiornata a ogni
 scorrimento e a ogni misura: il paragrafo in cima alla vista resta in cima
 (`readingPoint`, `keepReadingPoint`), e ogni sagoma va dal rettangolo che si

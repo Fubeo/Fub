@@ -93,7 +93,7 @@ function engine(blocks: readonly Block[]): RichEngine {
 
 /// La misura dei fogli, come al fotogramma dopo una modifica.
 const measure = (e: RichEngine) => e.editRunning("footer") && document.querySelector<HTMLElement>(".rich-running-area")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-const sheetPlays = () => driver!.plays.filter((play) => play.el.classList.contains("rich-sheet") || play.el.classList.contains("rich-sheet-ghost"));
+const sheetPlays = () => driver!.plays.filter((play) => play.el.classList.contains("rich-sheet-paper") || play.el.classList.contains("rich-sheet-ghost"));
 
 describe("il foglio che nasce", () => {
   it("aperto o cambiato da fuori non muove niente; un salto scritto apre un foglio che esce da quello sopra", () => {
@@ -114,11 +114,10 @@ describe("il foglio che nasce", () => {
     measure(e);
     const sheets = [...document.querySelectorAll<HTMLElement>(".rich-sheets > .rich-sheet")];
     expect(sheets).toHaveLength(4);
-    const entered = sheetPlays().find((play) => play.el === sheets[3]);
-    expect(entered?.timing.pseudo).toBe("::before");
+    const entered = sheetPlays().find((play) => play.el === sheets[3]!.firstElementChild);
     expect(entered?.keyframes[0]?.opacity).toBe(0);
     // Il testo non si muove: nessuna corsa fuori dalle sagome.
-    expect(driver.plays.every((play) => play.el.classList.contains("rich-sheet") && play.timing.pseudo === "::before")).toBe(true);
+    expect(driver.plays.every((play) => play.el.classList.contains("rich-sheet-paper"))).toBe(true);
   });
 
   it("tolto il salto, la sua sagoma si dissolve e non resta", async () => {

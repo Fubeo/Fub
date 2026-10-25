@@ -149,6 +149,8 @@ describe("la misura", () => {
     expect(e.editRunning("footer")).toBe(true);
     const sheets = [...document.querySelectorAll<HTMLElement>(".rich-sheet")];
     expect(sheets).toHaveLength(3);
+    // Ogni foglio ha la sua carta, anche il primo, che c'è prima della misura.
+    expect(sheets.map((sheet) => sheet.firstElementChild?.className)).toEqual(["rich-sheet-paper", "rich-sheet-paper", "rich-sheet-paper"]);
     expect(sheets.map((sheet) => sheet.querySelector(".rich-sheet-head")?.textContent)).toEqual(["Pagina 1 di 3", "Pagina 2 di 3", "Pagina 3 di 3"]);
     expect(sheets.map((sheet) => sheet.querySelector(".rich-sheet-foot")?.textContent ?? null)).toEqual([null, null, "Riservato"]);
     const pageH = LETTER.h * PX_PER_PT;

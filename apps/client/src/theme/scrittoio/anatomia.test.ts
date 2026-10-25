@@ -111,7 +111,7 @@ describe("lo strato di ogni hook", () => {
     for (const hook of ["rich-para", "rich-heading", "rich-content", "grid-cell", "cm-line", "markdown-rendered", ...LOOK_HOOKS]) {
       expect(HOOK_LAYERS[hook], hook).toBe("contenuto");
     }
-    for (const hook of ["rich-ribbon", "rich-findbar", "rich-page", "rich-sheet", "grid-ribbon", "grid-header", "pane-editor", "pane-toolbar", "media-surface"]) {
+    for (const hook of ["rich-ribbon", "rich-findbar", "rich-page", "rich-sheet-paper", "grid-ribbon", "grid-header", "pane-editor", "pane-toolbar", "media-surface"]) {
       expect(HOOK_LAYERS[hook], hook).toBe("cornice");
     }
   });

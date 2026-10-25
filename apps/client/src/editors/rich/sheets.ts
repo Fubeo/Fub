@@ -335,12 +335,13 @@ export class SheetDesk {
       drawn.push(key);
       let element = sheets[i];
       if (!element) {
-        element = document.createElement("div");
-        element.className = "rich-sheet";
+        element = sheetElement();
         this.#layer.append(element);
       } else if (this.#drawn[i] === key) continue;
       element.style.cssText = `inset: auto; top: ${box.top}px; left: ${(width - w) / 2}px; width: ${w}px; height: ${box.height}px`;
-      element.replaceChildren(
+      // La carta resta: la sua corsa in volo vive su di lei.
+      for (const child of [...element.children]) if (!child.classList.contains("rich-sheet-paper")) child.remove();
+      element.append(
         ...[
           running("rich-sheet-head", head, `top: ${runningInset(sheet.page.top)}pt`, sheet.page),
           running("rich-sheet-foot", foot, `bottom: ${runningInset(sheet.page.bottom)}pt`, sheet.page),
@@ -402,6 +403,17 @@ export class SheetDesk {
     this.#view = null;
     this.#redrawn = null;
   }
+}
+
+/// Un foglio vuoto: la carta, che il moto muove senza il testo, sta sotto il
+/// resto.
+export function sheetElement(): HTMLElement {
+  const element = document.createElement("div");
+  element.className = "rich-sheet";
+  const paper = document.createElement("div");
+  paper.className = "rich-sheet-paper";
+  element.append(paper);
+  return element;
 }
 
 /// L'intestazione o il piè disegnati sul foglio, in grigio: il testo con i

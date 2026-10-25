@@ -6,7 +6,7 @@
 // - **il testo è sempre al suo posto finale.** Chi scrive non aspetta, e il
 //   testo non si sposta né si deforma;
 // - **a muoversi è la carta**, cioè la sagoma di ogni foglio
-//   (`.rich-sheet::before`): parte dal rettangolo che si vedeva e arriva a
+//   (`.rich-sheet-paper`): parte dal rettangolo che si vedeva e arriva a
 //   quello nuovo. In Scrittura la carta non c'è: entrando in Pagina si allarga
 //   dalla colonna del testo, uscendone sparisce;
 // - **il punto di lettura resta**: il paragrafo in cima alla vista prima del
@@ -171,6 +171,14 @@ function rectOf(el: Element): Rect {
   return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
 }
 
+/// La carta di un foglio, che il moto muove (`sheets.ts` la mette per prima).
+/// Un elemento vero e non uno pseudo-elemento: chi misura il contrasto vede
+/// il testo sulla carta.
+function paperOf(sheet: HTMLElement): HTMLElement {
+  const first = sheet.firstElementChild;
+  return first instanceof HTMLElement && first.classList.contains("rich-sheet-paper") ? first : sheet;
+}
+
 /// Un foglio disegnato, dal suo stile in linea (`sheets.ts`).
 export function sheetBox(sheet: HTMLElement): SheetBox {
   const px = (value: string) => Number.parseFloat(value) || 0;
@@ -235,7 +243,7 @@ export class RichMotion {
     const scale = this.#options.scale();
     const local = (b: SheetBox): Rect => ({ left: b.left * scale, top: b.top * scale, width: b.width * scale, height: b.height * scale });
     const flying = previous.map((sheet) => {
-      const live = liveState(sheet, "::before");
+      const live = liveState(paperOf(sheet));
       return { seen: seen(local(sheetBox(sheet)), live, scale), opacity: live?.pose.opacity ?? 1 };
     });
     return (change) => this.#redrawn(change, flying, previous, scale);
@@ -267,7 +275,7 @@ export class RichMotion {
     if (added >= 0 && shown(after[added]!)) {
       const sheet = elements[added]!;
       const travel = Math.min(SHEET_TRAVEL_MAX, after[added]!.height * SHEET_TRAVEL_SHARE);
-      const motion = animate(sheet, { pseudo: "::before", from: { y: -travel, opacity: 0 }, spring: "wide", whenReduced: "none", lifetime: this.#life });
+      const motion = animate(paperOf(sheet), { from: { y: -travel, opacity: 0 }, spring: "wide", whenReduced: "none", lifetime: this.#life });
       if (motion.running) this.#papers.set(sheet, motion);
     }
     if (removed >= 0 && (shown(before[removed]!) || inFlight[removed])) {
@@ -359,7 +367,7 @@ export class RichMotion {
       const i = sheets.indexOf(sheet);
       // L'ultimo disegno: la fotografia può avere un fotogramma di ritardo.
       const was = i >= 0 ? sheetBox(sheet) : null;
-      const live = liveState(sheet, "::before");
+      const live = liveState(paperOf(sheet));
       this.#papers.get(sheet)?.cancel();
       if (!before || !was || !live) continue;
       const paper = { left: before.deskLeft + was.left * before.scale, top: before.deskTop + was.top * before.scale, width: was.width * before.scale, height: was.height * before.scale };
@@ -406,7 +414,7 @@ export class RichMotion {
           width: was.width * before.scale,
           height: was.height * before.scale,
         };
-        from = seen(paper, liveState(sheet, "::before"), before.scale);
+        from = seen(paper, liveState(paperOf(sheet)), before.scale);
       } else {
         continue;
       }
@@ -436,8 +444,7 @@ export class RichMotion {
       Math.abs(from.width - to.width) < NEGLIGIBLE_PX &&
       Math.abs(from.height - to.height) < NEGLIGIBLE_PX;
     if (still) return;
-    const motion = animate(sheet, {
-      pseudo: "::before",
+    const motion = animate(paperOf(sheet), {
       from: { x: x / scale, y: y / scale, scaleX: from.width / to.width, scaleY: from.height / to.height },
       spring: "wide",
       whenReduced: "none",
