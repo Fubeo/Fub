@@ -1,26 +1,28 @@
 //! Le cartelle di lavoro di Excel — `.xlsx`, `.xlsm`, `.xltx`, `.xltm` — lette
-//! in **sola lettura** con il codec e il modello di GridCraft
-//! (`vendor/gridcraft`).
+//! con il codec e il modello di GridCraft (`vendor/gridcraft`), e modificate
+//! nei soli valori con un innesto sui byte del file.
 //!
-//! Il crate possiede due cose, e l'host le compone senza possederle:
+//! Il crate possiede tre cose, e l'host le compone senza possederle:
 //!
 //! - il **provider di formato**, [`XlsxProvider`]: un formato a byte che dà al
 //!   kernel il modello comune (un titolo per foglio, un'anteprima in tabella e
 //!   il testo delle celle) per la ricerca, l'outline e l'anteprima;
-//! - la **proiezione** ([`projection`]): la cartella come JSON chiuso e
-//!   versionato che la superficie della griglia mostra senza aprire il
-//!   protocollo dei fogli, con i valori già formattati.
+//! - la **superficie della griglia** ([`grid`]): la cartella sul protocollo
+//!   a byte (ADR 0216), con i valori del file già formattati ([`display`]) e
+//!   le celle cambiate in un giornale;
+//! - l'**innesto** ([`graft`]): i byte della cartella con alcuni valori
+//!   cambiati, e ogni altro byte com'era. L'input di una cella ([`input`]) e i
+//!   suoi blocchi ([`locks`]) sono le regole che lo precedono.
 //!
-//! Il file non si scrive da qui: il codec di GridCraft lo riscriverebbe dal
-//! suo modello, e ciò che quel modello non conosce andrebbe perso. Una
-//! cartella si apre per leggerla, e la proiezione dice che cosa non mostra.
+//! Il codec di GridCraft non scrive mai il file: lo riscriverebbe dal suo
+//! modello, e ciò che quel modello non conosce andrebbe perso.
 //!
 //! I valori sono quelli che il file ha salvato, e niente si ricalcola: aprire
 //! una cartella costa la sua lettura, qualunque formula contenga, e un valore
 //! casuale o di oggi resta quello del file. Le celle versate dalle matrici
 //! hanno il valore che il file ha salvato (la patch `0003` di
 //! `vendor/gridcraft`); una formula salvata senza valore resta vuota, e la
-//! proiezione lo dice.
+//! sessione della griglia lo dice.
 //!
 //! Il codec gira in un thread suo con uno stack grande, e un suo panic diventa
 //! un errore: una formula annidata a fondo non abbatte l'host.
@@ -35,8 +37,14 @@ use fub_abi::{
 use gridcraft_model::Workbook;
 use gridcraft_xlsx::{Format, ReadReport};
 
+pub mod display;
+pub mod graft;
+pub mod grid;
+pub mod input;
+pub mod locks;
 mod model;
-pub mod projection;
+mod package;
+mod sheet_xml;
 
 /// L'id del formato.
 pub const FORMAT_ID: &str = "xlsx";
@@ -45,9 +53,6 @@ pub const EXTENSIONS: [&str; 4] = ["xlsx", "xlsm", "xltx", "xltm"];
 /// Il file più grande che si apre: lo stesso limite dei documenti di
 /// videoscrittura.
 pub const MAX_SOURCE_BYTES: usize = 256 * 1024 * 1024;
-/// La proiezione più grande che la superficie della griglia legge: oltre, le
-/// celle che restano non entrano, e la proiezione lo dice.
-pub const MAX_PROJECTION_BYTES: usize = 16 * 1024 * 1024;
 /// Lo stack del thread che legge: il parser delle formule di GridCraft scende
 /// ricorsivamente nelle espressioni.
 const STACK_BYTES: usize = 64 * 1024 * 1024;
@@ -95,18 +100,9 @@ pub fn read(bytes: &[u8]) -> Result<Read, XlsxError> {
     })
 }
 
-/// La proiezione dei byte di una cartella, come la mostra la griglia.
-pub fn open(bytes: &[u8]) -> Result<String, XlsxError> {
-    check(bytes)?;
-    guarded(|| {
-        let (workbook, report) = gridcraft_xlsx::read_xlsx(bytes)
-            .map_err(|error| XlsxError::Codec(error.to_string()))?;
-        projection::project(&workbook, &report).to_json()
-    })
-}
-
-/// Il contenuto prima del codec: le dimensioni e la firma.
-fn check(bytes: &[u8]) -> Result<(), XlsxError> {
+/// Il contenuto prima del codec: le dimensioni e la firma. Non legge il
+/// pacchetto: dice soltanto se il codec ha qualcosa da leggere.
+pub fn check(bytes: &[u8]) -> Result<(), XlsxError> {
     if bytes.len() > MAX_SOURCE_BYTES {
         return Err(XlsxError::TooLarge(bytes.len()));
     }
@@ -123,7 +119,9 @@ fn check(bytes: &[u8]) -> Result<(), XlsxError> {
 
 /// Esegue `work` in un thread con [`STACK_BYTES`] di stack, e ne fa un errore
 /// se si ferma con un panic.
-fn guarded<T: Send>(work: impl FnOnce() -> Result<T, XlsxError> + Send) -> Result<T, XlsxError> {
+pub(crate) fn guarded<T: Send>(
+    work: impl FnOnce() -> Result<T, XlsxError> + Send,
+) -> Result<T, XlsxError> {
     std::thread::scope(|scope| {
         let thread = std::thread::Builder::new()
             .name("fub-xlsx".into())

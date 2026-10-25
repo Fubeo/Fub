@@ -410,6 +410,10 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("apply_grid", Why::Grid),
     ("reload_grid", Why::Grid),
     ("close_grid", Why::Grid),
+    ("open_grid_bytes", Why::Grid),
+    ("grid_bytes_window", Why::Grid),
+    ("apply_grid_bytes", Why::Grid),
+    ("close_grid_bytes", Why::Grid),
     // --- la sessione live (0205): un servizio dell'app, con il suo canale ---
     //
     // Listener, TLS e scrittore vivono nel processo dell'app, sul runtime di
@@ -993,6 +997,10 @@ fn grid_surface_uses_only_named_typed_ports() {
         "apply_grid",
         "reload_grid",
         "close_grid",
+        "open_grid_bytes",
+        "grid_bytes_window",
+        "apply_grid_bytes",
+        "close_grid_bytes",
     ];
     let app = include_str!("../src/lib.rs");
     let ipc = include_str!("../../../apps/client/src/host/ipc.ts");

@@ -5,7 +5,6 @@ import type { EditorSurface, SurfaceFamily, SurfaceFactory } from "./registry";
 import { DocumentSurfaceRegistry, SurfaceRegistrationConflict } from "./registry";
 import { forwardNotice } from "../../state/kernel";
 import { mountStrings } from "../../i18n/strings";
-import xlsxFixture from "../../__fixtures__/xlsx-projection.json";
 
 const localeState = vi.hoisted(() => ({ value: "it" }));
 vi.mock("../../host/query", () => ({
@@ -128,7 +127,7 @@ describe("DocumentSurfaceRegistry", () => {
     ).toMatchObject({ family: "text", profile: "markdown" });
   });
 
-  it("routes the fubsheet format to the grid sheet surface", () => {
+  it("routes the fubsheet format to the grid sheet surface", async () => {
     const registry = createDocumentSurfaceRegistry({
       onChange: vi.fn(),
       onSelectionChange: vi.fn(),
@@ -147,7 +146,8 @@ describe("DocumentSurfaceRegistry", () => {
       family: "grid",
       profile: "sheet",
     });
-    // Una cartella di Excel arriva a byte, e la griglia ne legge la proiezione.
+    // Una cartella di Excel arriva a byte, e la griglia la apre sulla
+    // versione 2 del protocollo: senza un host che la serva lo dice.
     expect(registry.resolve({ formatId: "xlsx", sourceKind: "bytes", documentId: "conti.xlsx" })).toMatchObject({
       owner: "fub.shell.grid",
       family: "grid",
@@ -158,9 +158,10 @@ describe("DocumentSurfaceRegistry", () => {
       { formatId: "xlsx", sourceKind: "bytes", documentId: "conti.xlsx" },
       { paneId: "conti", documentId: "conti.xlsx", parent },
     );
-    surface.buffer!.setDoc(xlsxFixture.source);
-    expect(parent.querySelector(".grid-cell")?.textContent).toBe("Voce");
-    expect(parent.querySelector<HTMLElement>(".grid-surface")?.dataset.readOnly).toBe("true");
+    surface.buffer!.setDoc("");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(parent.querySelector<HTMLElement>(".grid-surface")?.dataset.gridProtocol).toBe("unavailable");
+    expect(parent.querySelector<HTMLElement>(".grid-notice")?.hidden).toBe(false);
     surface.destroy();
     expect(parent.querySelector(".grid-surface")).toBeNull();
   });

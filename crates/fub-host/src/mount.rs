@@ -420,6 +420,15 @@ pub(crate) fn mount_with_formats(
         ),
     ));
 
+    // La griglia delle cartelle di Excel, sui byte del file: senza la feature
+    // una cartella non si apre.
+    #[cfg(feature = "xlsx")]
+    bundles.push(Arc::new(CoreBundle::new(
+        crate::workbook::WORKBOOK_ID,
+        "Excel workbooks",
+        crate::workbook::register,
+    )));
+
     // Ogni feature ufficiale si monta con lo stesso ciclo: ciò che registra, le
     // impostazioni, i servizi forniti e richiesti e il collegamento che solo
     // l'host sa fare sono campi della sua riga d'inventario, non rami per id.

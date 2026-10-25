@@ -18,17 +18,22 @@ import type {
   EventMask,
   ExportReport,
   GridApplyRequest,
+  GridBytesCell,
+  GridBytesSession,
+  GridBytesWindow,
   GridCell,
   GridCellKey,
   GridCellPatch,
   GridCellStyle,
   GridColumn,
   GridCommit,
+  GridNotice,
   GridSession,
   GridRow,
   GridSheet,
   GridSourceEdit,
   GridSurfaceSpec,
+  GridValue,
   GridWindow,
   GridWindowRequest,
   IndexQuery,
@@ -656,6 +661,37 @@ const RECORD_KEYS: Record<string, string[]> = {
     inserted: true,
   }),
   GridCommit: keysOf<GridCommit>({ revision: true, edit: true, invalidation: true }),
+  GridNotice: keysOf<GridNotice>({ code: true, count: true }),
+  GridBytesSession: keysOf<GridBytesSession>({
+    instance: true,
+    revision: true,
+    sheets: true,
+    active: true,
+    hidden: true,
+    notices: true,
+    conflicts: true,
+  }),
+  GridBytesCell: keysOf<GridBytesCell>({
+    key: true,
+    input: true,
+    style: true,
+    value: true,
+    display: true,
+    lock: true,
+    stale: true,
+    conflict: true,
+  }),
+  GridBytesWindow: keysOf<GridBytesWindow>({
+    revision: true,
+    sheet: true,
+    row_start: true,
+    column_start: true,
+    total_rows: true,
+    total_columns: true,
+    rows: true,
+    columns: true,
+    cells: true,
+  }),
   Span: keysOf<Span>({ start: true, end: true }),
   VersionRef: keysOf<VersionRef>({ ts: true, hash: true, size: true }),
   NeighborRef: keysOf<NeighborRef>({ doc: true, via: true, depth: true }),
@@ -824,6 +860,7 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     revision: true,
     format_id: true,
     source_kind: true,
+    text_kind: true,
   }),
   BundleInfo: keysOf<BundleInfo>({
     id: true,
@@ -1353,6 +1390,35 @@ describe("mirror TS↔Rust", () => {
         expect(["info", "warning", "error"]).toContain(note.level);
       }
     }
+  });
+
+  it("i valori della griglia sui byte hanno ogni forma del tipo TS", () => {
+    const touch = (value: GridValue): string => {
+      switch (value.kind) {
+        case "blank":
+          return "blank";
+        case "number":
+          return typeof value.value;
+        case "text":
+        case "error":
+          return typeof value.value;
+        case "boolean":
+          return typeof value.value;
+        default:
+          return assertNever(value);
+      }
+    };
+    const cells = fixture["GridBytesCell"] as GridBytesCell[];
+    expect(new Set(cells.map((cell) => cell.value.kind))).toEqual(
+      new Set(["blank", "number", "text", "boolean", "error"]),
+    );
+    expect(cells.map((cell) => touch(cell.value))).toEqual([
+      "blank",
+      "number",
+      "string",
+      "boolean",
+      "string",
+    ]);
   });
 
   it("i record hanno esattamente le chiavi del tipo TS", () => {

@@ -36,8 +36,9 @@
 // poi rilegge l'impostazione dal canale dati, quindi il banco scrive tutte e
 // due — la cache qui sotto, prima che `main.ts` giri, e il valore di
 // `appearance.theme` fra le impostazioni che serve.
-import { createFakeHost, type Options } from "../src/host/fake";
+import { createFakeHost, type GridBytesFake, type Options } from "../src/host/fake";
 import { MARKDOWN_SYNTAX } from "../src/rules/syntax.generated";
+import XLSX_GRID from "../src/__fixtures__/xlsx-grid.json";
 import type {
   BundleInfo,
   CommandSpec,
@@ -250,6 +251,12 @@ globalThis.__fubLargeBench = Object.freeze({
       })
     : null,
 });
+
+/// La cartella di Excel della scena `grid-workbook` (`?workbook=1`). È un
+/// file che soltanto quella scena ha: l'albero e i conteggi delle altre
+/// restano quelli delle loro baseline. Sessione e finestre sono quelle che
+/// `fub-format-xlsx` produce davvero (`tests/ts_grid.rs`).
+const WORKBOOK_DOC = params.get("workbook") === "1" ? "Dati/Conti.xlsx" : null;
 
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = BOARDS !== null
@@ -1030,7 +1037,12 @@ const GRID: NonNullable<Options["grid"]> = {
 };
 
 const options: Options = {
-  file: DRAWING === null ? CORPUS : { ...CORPUS, [DRAWING.doc]: DRAWING.text },
+  file: {
+    ...CORPUS,
+    ...(DRAWING === null ? {} : { [DRAWING.doc]: DRAWING.text }),
+    // Il testo di una cartella è il suo giornale, vuoto sul disco.
+    ...(WORKBOOK_DOC === null ? {} : { [WORKBOOK_DOC]: "" }),
+  },
   resources: RESOURCES,
   root: ROOT,
   view: VIEWS,
@@ -1038,6 +1050,15 @@ const options: Options = {
   settings: DRAWING === null ? SETTINGS : [...SETTINGS, DRAW_LEVEL],
   syntaxForms: [...MARKDOWN_SYNTAX],
   grid: GRID,
+  ...(WORKBOOK_DOC === null ? {} : {
+    // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
+    gridBytes: {
+      surface: XLSX_GRID.surface,
+      session: XLSX_GRID.session,
+      windows: [...XLSX_GRID.windows, XLSX_GRID.edit.window],
+      commits: [XLSX_GRID.edit.commit],
+    } as GridBytesFake,
+  }),
   ...(DRAWING === null ? {} : { draw: true }),
 };
 

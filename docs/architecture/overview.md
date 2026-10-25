@@ -104,6 +104,7 @@ flowchart TD
     host -.-> testkit
     wasmhost -.-> sheet
     wasmhost -.-> testkit
+    wasmhost -.-> sdk
     importers -.-> markdown
     importers -.-> sdk
     svg -.-> sdk
@@ -150,8 +151,10 @@ flowchart LR
 
 I crate di GridCraft in `vendor/gridcraft/` sono codice di terzi allo stesso
 modo, con un workspace loro: li usa soltanto `fub-format-xlsx`, che legge le
-cartelle di Excel in sola lettura per l'host (feature `xlsx`), e nessuno di
-loro dipende da Fub. Il terzo blocco è il seguito dello stesso grafo, con
+cartelle di Excel per l'host (feature `xlsx`) e ne innesta i valori cambiati
+sui byte del file, e nessuno di loro dipende da Fub. Di `gridcraft-calc`
+l'adattatore usa soltanto il grafo delle dipendenze fra le formule, per dire
+quali valori del file una modifica rende vecchi: niente si ricalcola. Il terzo blocco è il seguito dello stesso grafo, con
 l'adattatore e i crate di Fub da cui dipende.
 
 ```mermaid
@@ -164,8 +167,10 @@ flowchart LR
     markdown["fub-format-markdown"]
     sdk["fub-sdk"]
     xlsx["fub-format-xlsx"]
+    gcalc["gridcraft-calc"]
     gcore["gridcraft-core"]
     gformula["gridcraft-formula"]
+    gfunctions["gridcraft-functions"]
     gnumfmt["gridcraft-numfmt"]
     gmodel["gridcraft-model"]
     gxlsx["gridcraft-xlsx"]
@@ -174,11 +179,18 @@ flowchart LR
     xlsx --> abi
     xlsx --> markdown
     xlsx -.-> sdk
+    xlsx --> gcalc
     xlsx --> gcore
     xlsx --> gmodel
     xlsx --> gnumfmt
     xlsx --> gxlsx
+    gcalc --> gcore
+    gcalc --> gformula
+    gcalc --> gfunctions
+    gcalc --> gmodel
+    gcalc --> gnumfmt
     gformula --> gcore
+    gfunctions --> gcore
     gmodel --> gcore
     gmodel --> gformula
     gnumfmt --> gcore

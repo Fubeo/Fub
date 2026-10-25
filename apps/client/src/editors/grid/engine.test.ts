@@ -4,9 +4,20 @@ import { findTextEditorOrThrow } from "../text/test-support";
 import { applyOperation } from "../core/text-operation";
 import { parseWorkbook } from "./model";
 import { commitGridPatches, inputPatch, isGridOperation, type GridCellPatch } from "./operation";
-import type { GridWindow } from "../../host/contract";
+import type {
+  GridApplyRequest,
+  GridBytesSession,
+  GridBytesWindow,
+  GridCommit,
+  GridWindow,
+  GridWindowRequest,
+  PluginError,
+} from "../../host/contract";
+import { resolvedLanguage, t } from "../../i18n/strings";
+import { gridJournalText, parseGridJournal, recordGridJournal } from "../../state/grid-journal";
 import { GridEngine, type GridChange, type GridHost } from "./engine";
-import xlsxFixture from "../../__fixtures__/xlsx-projection.json";
+import { decimalSeparator, localInput } from "./workbook";
+import xlsx from "../../__fixtures__/xlsx-grid.json";
 
 function workbook(rows = 100, columns = 50): string {
   return JSON.stringify({
@@ -131,8 +142,17 @@ function protocolHost(
       activeInstances.delete(instance);
       onClose?.(instance);
     },
+    ...NO_BYTES,
   };
 }
+
+/// Un host senza la versione 2: il foglio di Fub non la chiama.
+const NO_BYTES = {
+  openGridBytes: () => Promise.reject(new Error("grid bytes unserved")),
+  gridBytesWindow: () => Promise.reject(new Error("grid bytes unserved")),
+  applyGridBytes: () => Promise.reject(new Error("grid bytes unserved")),
+  closeGridBytes: () => Promise.reject(new Error("grid bytes unserved")),
+} satisfies Pick<GridHost, "openGridBytes" | "gridBytesWindow" | "applyGridBytes" | "closeGridBytes">;
 afterEach(() => {
   document.body.replaceChildren();
 });
@@ -146,7 +166,7 @@ function settle(): Promise<void> {
 function typeInActiveCell(host: HTMLElement, viewport: HTMLElement, text: string): void {
   viewport.dispatchEvent(new KeyboardEvent("keydown", { key: text, bubbles: true }));
   host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
-    .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
   viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
 }
 
@@ -239,7 +259,7 @@ describe("GridEngine", () => {
     expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(false);
 
     host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
-      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     expect(changes).toHaveLength(1);
     expect(patchesOf(changes[0])).toHaveLength(1);
     expect(parseWorkbook(engine.getDoc()).sheets[0].cells?.[0].input).toBe("X");
@@ -271,6 +291,30 @@ describe("GridEngine", () => {
     expect(changes[1].origin).toBe("undo");
     engine.destroy();
   });
+  it("le battute dell'editor della cella restano sue, e non la riaprono", () => {
+    const { engine, host, viewport } = mounted();
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "9", bubbles: true, cancelable: true }));
+    const content = host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!;
+    const editor = findTextEditorOrThrow(host.querySelector<HTMLElement>(".grid-cell-editor")!);
+    // CodeMirror scrive un carattere dall'input, e la battuta sale libera.
+    content.dispatchEvent(new KeyboardEvent("keydown", { key: "0", bubbles: true, cancelable: true }));
+    expect(editor.state.selection.main.head).toBe(1);
+    editor.dispatch({ changes: { from: 1, insert: "0" } });
+    content.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true }));
+    // Un clic dentro l'editor sposta il cursore, e la cella resta aperta;
+    // copiare dall'editor copia il suo testo, non la selezione della griglia.
+    content.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true }));
+    const copied: string[] = [];
+    const copy = new Event("copy", { bubbles: true, cancelable: true });
+    Object.defineProperty(copy, "clipboardData", {
+      value: { setData: (_type: string, text: string) => copied.push(text), clearData: () => {} },
+    });
+    content.dispatchEvent(copy);
+    expect(editor.state.doc.toString()).toBe("90");
+    expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(false);
+    expect(copied).toEqual(["90"]);
+    engine.destroy();
+  });
   it("negozia Grid v1, non chiama l'host per battuta e applica il diff guardato", async () => {
     const source = workbook();
     const grid = protocolHost(source);
@@ -286,7 +330,7 @@ describe("GridEngine", () => {
     viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
     expect(grid.calls.filter((call) => call === "apply")).toHaveLength(0);
     host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
-      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -414,7 +458,7 @@ describe("GridEngine", () => {
       changes: { from: 0, to: formula.state.doc.length, insert: "new" },
       userEvent: "input",
     });
-    formula.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    formula.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     for (let index = 0; index < 12; index += 1) await Promise.resolve();
     expect(requests.slice(requestsBeforeInvalidation)).toEqual([{ row_start: 256, column_start: 128 }]);
     expect(host.querySelector<HTMLElement>('.grid-cell[data-row="300"][data-column="200"]')?.textContent).toBe("99");
@@ -449,7 +493,7 @@ describe("GridEngine", () => {
       userEvent: "input",
     });
     expect(changes).toHaveLength(0);
-    formula.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    formula.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     expect(changes).toHaveLength(1);
     expect(parseWorkbook(engine.getDoc()).sheets[0].cells?.[0].input).toBe("7");
 
@@ -1019,7 +1063,7 @@ describe("GridEngine", () => {
     });
     current.viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
     current.host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
-      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     await Promise.resolve();
     const fresh = workbook(2, 2);
     current.engine.setDoc(fresh);
@@ -1039,8 +1083,112 @@ describe("GridEngine", () => {
 
 });
 
+/**
+ * La superficie della cartella come la risponde `XlsxGridProvider`: le
+ * finestre e la modifica di `xlsx-grid.json`. Fuori dalla fixture tiene il suo
+ * giornale come il provider, con gli input dei byte delle finestre lette.
+ */
+function workbookHost(options: { readonly base?: () => string } = {}) {
+  const calls: string[] = [];
+  const opened: string[] = [];
+  const closed: string[] = [];
+  const applied: GridApplyRequest[] = [];
+  const answers: Array<() => void> = [];
+  let hold = false;
+  let failApply: PluginError | null = null;
+  let journal = "";
+  let instances = 0;
+  const base = options.base ?? (() => xlsx.document_revision);
+  const sessionFor = (text: string): GridBytesSession => {
+    if (text === xlsx.conflict.journal) return structuredClone(xlsx.conflict.session) as GridBytesSession;
+    const session = structuredClone(xlsx.session) as GridBytesSession;
+    return { ...session, revision: text === "" ? session.revision : `rev:${text}` };
+  };
+  const diskOf = (sheet: string, row: string, column: string) => (xlsx.windows as GridBytesWindow[])
+    .find((window) => window.sheet === sheet)?.cells
+    .find((cell) => cell.key.row === row && cell.key.column === column)?.input ?? "";
+  const revisionOf = (text: string) => text === xlsx.edit.commit.edit.inserted
+    ? xlsx.edit.commit.revision
+    : text === "" ? xlsx.session.revision : `rev:${text}`;
+  const host: GridHost = {
+    listGridSurfaces: async () => {
+      calls.push("list");
+      return [xlsx.surface];
+    },
+    openGridBytes: async (surface, doc, text, revision) => {
+      calls.push(`open ${surface} ${doc} ${text === "" ? "∅" : "journal"} ${revision === xlsx.document_revision ? "base" : revision}`);
+      if (revision !== base()) throw { kind: "conflict", message: "grid source changed" } satisfies PluginError;
+      journal = text;
+      const session = sessionFor(text);
+      session.instance = `xlsx-${++instances}`;
+      opened.push(session.instance);
+      return session;
+    },
+    gridBytesWindow: async (_surface, instance, request: GridWindowRequest) => {
+      calls.push(`window ${request.sheet} ${request.row_start} ${request.column_start}`);
+      if (closed.includes(instance)) throw new Error("closed");
+      if (request.revision === xlsx.edit.commit.revision && request.sheet === "s1") {
+        return structuredClone(xlsx.edit.window) as GridBytesWindow;
+      }
+      if (journal === xlsx.conflict.journal && request.sheet === "s1") {
+        return structuredClone(xlsx.conflict.window) as GridBytesWindow;
+      }
+      const window = structuredClone((xlsx.windows as GridBytesWindow[]).find((candidate) => candidate.sheet === request.sheet)!);
+      window.revision = request.revision;
+      for (const entry of parseGridJournal(journal).entries.filter((candidate) => candidate.sheet === request.sheet)) {
+        const cell = window.cells.find((candidate) => candidate.key.row === entry.row && candidate.key.column === entry.column);
+        if (cell) Object.assign(cell, { input: entry.after, display: entry.after });
+      }
+      return window;
+    },
+    applyGridBytes: async (_surface, _instance, request) => {
+      calls.push("apply");
+      applied.push(structuredClone(request));
+      if (hold) await new Promise<void>((resolve) => answers.push(resolve));
+      if (failApply) throw failApply;
+      if (request.revision !== revisionOf(journal)) throw { kind: "conflict", message: "stale grid revision" } satisfies PluginError;
+      let next = parseGridJournal(journal);
+      for (const patch of request.patches) {
+        next = recordGridJournal(next, patch.cell, diskOf(patch.cell.sheet, patch.cell.row, patch.cell.column), patch.after);
+      }
+      const deleted = journal;
+      journal = gridJournalText(next);
+      const commit: GridCommit = {
+        revision: revisionOf(journal),
+        edit: { from: 0, to: new TextEncoder().encode(deleted).length, deleted, inserted: journal },
+        invalidation: { kind: "cells", cells: request.patches.map((patch) => patch.cell) },
+      };
+      return commit;
+    },
+    closeGridBytes: async (_surface, instance) => {
+      calls.push("close");
+      closed.push(instance);
+    },
+    openGrid: () => Promise.reject(new Error("grid v1 unserved")),
+    gridWindow: () => Promise.reject(new Error("grid v1 unserved")),
+    applyGrid: () => Promise.reject(new Error("grid v1 unserved")),
+    reloadGrid: () => Promise.reject(new Error("grid v1 unserved")),
+    closeGrid: () => Promise.reject(new Error("grid v1 unserved")),
+  };
+  return {
+    host,
+    calls,
+    opened,
+    closed,
+    applied,
+    journal: () => journal,
+    hold: (value: boolean) => { hold = value; },
+    release: () => { for (const answer of answers.splice(0)) answer(); },
+    failApply: (error: PluginError | null) => { failApply = error; },
+  };
+}
+
 describe("GridEngine con una cartella di Excel", () => {
-  function workbookMounted(grid?: GridHost, source = xlsxFixture.source) {
+  async function workbookMounted(
+    grid: ReturnType<typeof workbookHost> | null = workbookHost(),
+    journal = "",
+    base?: () => string,
+  ) {
     const host = document.createElement("div");
     document.body.append(host);
     const changes: GridChange[] = [];
@@ -1049,27 +1197,40 @@ describe("GridEngine con una cartella di Excel", () => {
       surfaceId: "xlsx",
       profile: "workbook",
       formatId: "xlsx",
-      revision: "rev-1",
+      revision: xlsx.document_revision,
+      documentId: "conti.xlsx",
+      base,
       onChange: (change) => changes.push(change),
       onSelectionChange: () => { selections += 1; },
-      grid,
+      grid: grid?.host,
     });
     const viewport = host.querySelector<HTMLElement>(".grid-viewport")!;
     Object.defineProperties(viewport, {
       clientWidth: { configurable: true, value: 900 },
       clientHeight: { configurable: true, value: 400 },
     });
-    engine.setDoc(source);
+    engine.setDoc(journal);
+    await settle();
     const cell = (row: number, column: number) =>
       host.querySelector<HTMLElement>(`.grid-cell[data-row="${row}"][data-column="${column}"]`);
-    return { engine, host, viewport, changes, cell, selections: () => selections };
+    const notice = () => host.querySelector<HTMLElement>(".grid-notice")!;
+    const formula = () => findTextEditorOrThrow(host.querySelector<HTMLElement>(".grid-formula-editor")!).state.doc.toString();
+    const go = (row: number, column: number) => {
+      cell(row, column)!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    };
+    return { engine, host, viewport, changes, cell, notice, formula, go, selections: () => selections };
   }
 
-  it("mostra i valori del file senza aprire il protocollo dei fogli", () => {
-    const grid = protocolHost(workbook());
-    const { engine, host, cell } = workbookMounted(grid);
-    expect(grid.calls).toEqual([]);
-    expect(host.querySelector<HTMLElement>(".grid-surface")!.dataset.gridProfile).toBe("workbook");
+  const decimal = () => decimalSeparator(resolvedLanguage());
+
+  it("apre la versione 2 sui byte del documento e mostra i valori del file", async () => {
+    const grid = workbookHost();
+    const { engine, host, cell, notice, formula, go } = await workbookMounted(grid);
+    expect(grid.calls.slice(0, 3)).toEqual(["list", "open fub.grid.xlsx conti.xlsx ∅ base", "window s1 0 0"]);
+    const surface = host.querySelector<HTMLElement>(".grid-surface")!;
+    expect(surface.dataset.gridProfile).toBe("workbook");
+    expect(surface.dataset.gridProtocol).toBe("v2");
+    expect(surface.dataset.readOnly).not.toBe("true");
     expect(cell(0, 0)?.textContent).toBe("Voce");
     expect(cell(0, 0)?.style.fontWeight).toBe("700");
     expect(cell(0, 0)?.style.textAlign).toBe("center");
@@ -1079,85 +1240,234 @@ describe("GridEngine con una cartella di Excel", () => {
     // La colonna D e la riga 6 sono nascoste nel file.
     expect(cell(0, 3)).toBeNull();
     expect(cell(5, 5)).toBeNull();
-    // Le celle versate dalla matrice hanno i valori del file.
+    // L'area versata dalla matrice ha i valori del file, e non si scrive.
     expect(cell(4, 5)?.textContent).toBe("2");
+    expect(cell(4, 5)?.getAttribute("aria-readonly")).toBe("true");
+    expect(cell(1, 1)?.hasAttribute("aria-readonly")).toBe(false);
+    expect(notice().hidden).toBe(false);
+    expect(notice().getAttribute("role")).toBe("status");
+    expect(notice().textContent).not.toBe("");
+    // La barra mostra l'input da scrivere, nella lingua; la cella il valore.
+    go(1, 2);
+    expect(formula()).toBe(localInput("0.5", decimal()));
+    go(2, 2);
+    expect(formula()).toBe("=B3/B4");
+    expect(engine.selectedText()).toEqual({ primary: "-15.00%", secondary: [] });
+    engine.destroy();
+    await settle();
+    expect(grid.closed).toEqual(grid.opened);
+  });
+
+  it("scrive una cella nel giornale, lo pubblica subito e lo fa controllare al provider", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, changes, cell, notice, go } = await workbookMounted(grid);
+    go(1, 1);
+    typeInActiveCell(host, viewport, "9");
+    // `typeInActiveCell` scrive una battuta: la cella diventa `9`, poi `900`
+    // con una seconda modifica. Il giornale va alla sessione all'invio.
+    expect(changes).toHaveLength(1);
+    expect(changes[0].origin).toBe("input");
+    expect(engine.getDoc()).toBe(gridJournalText({ entries: [{ sheet: "s1", row: "r1", column: "c1", before: "800", after: "9" }] }));
+    expect(cell(1, 1)?.textContent).toBe("9");
+    await settle();
+    expect(grid.applied[0]).toEqual({
+      revision: xlsx.session.revision,
+      patches: [{ cell: { sheet: "s1", row: "r1", column: "c1" }, before: "800", after: "9" }],
+    });
+
+    go(1, 1);
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true }));
+    const editor = findTextEditorOrThrow(host.querySelector<HTMLElement>(".grid-cell-editor")!);
+    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: "900" } });
+    host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await settle();
+    // La seconda modifica tiene il `before` dei byte: è la fixture del provider.
+    expect(engine.getDoc()).toBe(xlsx.edit.commit.edit.inserted);
+    expect(grid.applied[1]).toEqual({ ...xlsx.edit.request, revision: grid.applied[1].revision, patches: [{ ...xlsx.edit.request.patches[0], before: "9" }] });
+    // Le formule che leggono B2 mostrano il valore del file, segnato.
+    expect(cell(3, 1)?.classList.contains("stale")).toBe(true);
+    expect(cell(3, 1)?.textContent).toBe("680");
+    expect(notice().textContent).toContain(" ");
+
+    // Annullare riporta i byte: il giornale si svuota.
+    expect(engine.undo()).toBe(true);
+    expect(changes[changes.length - 1]?.origin).toBe("undo");
+    expect(engine.getDoc()).toBe(gridJournalText({ entries: [{ sheet: "s1", row: "r1", column: "c1", before: "800", after: "9" }] }));
+    expect(engine.undo()).toBe(true);
+    expect(engine.getDoc()).toBe("");
+    await settle();
+    expect(grid.journal()).toBe("");
+    expect(cell(1, 1)?.textContent).toBe("800");
+    expect(engine.redo()).toBe(true);
+    await settle();
+    expect(grid.journal()).toBe(gridJournalText({ entries: [{ sheet: "s1", row: "r1", column: "c1", before: "800", after: "9" }] }));
     engine.destroy();
   });
 
-  it("è in sola lettura qualunque cosa chieda la shell, e lo dice", () => {
-    const { engine, host, viewport, changes } = workbookMounted();
-    const surface = host.querySelector<HTMLElement>(".grid-surface")!;
-    expect(surface.dataset.readOnly).toBe("true");
-    engine.setReadOnly(false);
-    expect(surface.dataset.readOnly).toBe("true");
-    const notice = host.querySelector<HTMLElement>(".grid-notice")!;
-    expect(notice.hidden).toBe(false);
-    expect(notice.getAttribute("role")).toBe("status");
-    expect(notice.textContent).not.toBe("");
-
-    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
-    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
-    expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(true);
+  it("scrive i numeri col separatore della lingua, e il provider li tiene col punto", async () => {
+    const grid = workbookHost();
+    const { engine, viewport, changes, go } = await workbookMounted(grid);
+    go(1, 1);
     const paste = new Event("paste", { bubbles: true, cancelable: true });
-    Object.defineProperty(paste, "clipboardData", { value: { getData: () => "a\tb" } });
+    const typed = decimal() === "," ? "1,5\tx" : "1.5\tx";
+    Object.defineProperty(paste, "clipboardData", { value: { getData: () => typed } });
     viewport.dispatchEvent(paste);
+    expect(changes).toHaveLength(1);
+    await settle();
+    expect(grid.applied[0].patches.map((patch) => patch.after)).toEqual(["1.5", "x"]);
+    engine.destroy();
+  });
+
+  it("non scrive le celle bloccate né le formule, e dice perché", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, changes, notice, go, formula } = await workbookMounted(grid);
+    go(4, 5);
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
+    expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(true);
+    const locked = notice().textContent;
+    expect(locked).not.toBe("");
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+    expect(formula()).toBe("");
+
+    go(1, 0);
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "=", bubbles: true }));
+    host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(notice().textContent).not.toBe(locked);
     expect(changes).toEqual([]);
-    expect(engine.getDoc()).toBe(xlsxFixture.source);
+
+    // La selezione che prende una cella bloccata non si svuota.
+    go(3, 5);
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", shiftKey: true, bubbles: true }));
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
+    expect(changes).toEqual([]);
+
+    engine.setReadOnly(true);
+    go(1, 1);
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
+    expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(true);
+    await settle();
+    expect(grid.applied).toEqual([]);
+    engine.destroy();
+  });
+
+  it("una modifica che il provider rifiuta esce dal giornale, e lo dice", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, changes, cell, notice, go } = await workbookMounted(grid);
+    grid.failApply({ kind: "bad_args", message: "grid cell text is too long" });
+    go(1, 1);
+    typeInActiveCell(host, viewport, "7");
+    expect(engine.getDoc()).not.toBe("");
+    await settle();
+    expect(engine.getDoc()).toBe("");
+    expect(changes[changes.length - 1]?.text).toBe("");
+    expect(notice().textContent).toContain("grid cell text is too long");
+    expect(cell(1, 1)?.textContent).toBe("800");
     expect(engine.undo()).toBe(false);
     engine.destroy();
   });
 
-  it("la barra mostra la formula, la copia e il contesto i valori mostrati", () => {
-    const { engine, host, viewport } = workbookMounted();
-    const formula = findTextEditorOrThrow(host.querySelector<HTMLElement>(".grid-formula-editor")!);
-    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
-    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
-    expect(formula.state.doc.toString()).toBe("=B3/B4");
-    expect(engine.selectedText()).toEqual({ primary: "-15.00%", secondary: [] });
-    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
-    expect(formula.state.doc.toString()).toBe("50.00%");
-    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", shiftKey: true, bubbles: true }));
-    let copied = "";
-    const copy = new Event("copy", { bubbles: true, cancelable: true });
-    Object.defineProperty(copy, "clipboardData", { value: { setData: (_type: string, text: string) => { copied = text; } } });
-    viewport.dispatchEvent(copy);
-    expect(copied).toBe("50.00%\n-15.00%\n");
+  it("una cella che il provider dice bloccata lo dice come un blocco", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, notice, go } = await workbookMounted(grid);
+    grid.failApply({ kind: "permission_denied", message: "grid cell is locked (merged)" });
+    go(1, 1);
+    typeInActiveCell(host, viewport, "7");
+    await settle();
+    expect(engine.getDoc()).toBe("");
+    expect(notice().textContent).toContain(t("grid.workbook.locked", { reason: t("grid.workbook.lock.other") }));
     engine.destroy();
   });
 
-  it("passa da un foglio all'altro con le schede, e le toglie al teardown", () => {
-    const { engine, host, cell, selections } = workbookMounted();
+  it("le modifiche in coda partono una dopo l'altra, e l'ultima conferma corregge il giornale", async () => {
+    const grid = workbookHost();
+    const { engine, host, viewport, changes, go } = await workbookMounted(grid);
+    grid.hold(true);
+    go(1, 1);
+    typeInActiveCell(host, viewport, "1");
+    go(2, 1);
+    typeInActiveCell(host, viewport, "2");
+    await settle();
+    expect(grid.applied).toHaveLength(1);
+    grid.release();
+    await settle();
+    expect(grid.applied).toHaveLength(2);
+    grid.release();
+    await settle();
+    // Il provider tiene lo stesso giornale: niente da ripubblicare.
+    expect(changes).toHaveLength(2);
+    expect(grid.journal()).toBe(engine.getDoc());
+    expect(parseGridJournal(engine.getDoc()).entries.map((entry) => entry.after)).toEqual(["1", "2"]);
+    engine.destroy();
+  });
+
+  it("si riapre sui byte nuovi dopo un salvataggio, e chiude la sessione di prima", async () => {
+    let base = xlsx.document_revision;
+    const grid = workbookHost({ base: () => base });
+    const { engine, host, viewport, cell, go } = await workbookMounted(grid, "", () => base);
+    go(1, 1);
+    typeInActiveCell(host, viewport, "5");
+    await settle();
+    // La sessione ha salvato: il giornale torna vuoto sui byte nuovi.
+    base = "sha256:salvata";
+    engine.syncDoc("");
+    await settle();
+    expect(grid.calls.filter((call) => call.startsWith("open"))).toEqual([
+      "open fub.grid.xlsx conti.xlsx ∅ base",
+      "open fub.grid.xlsx conti.xlsx ∅ sha256:salvata",
+    ]);
+    expect(grid.closed).toEqual([grid.opened[0]]);
+    expect(engine.getDoc()).toBe("");
+    // Lo stesso testo sugli stessi byte non riapre niente.
+    engine.syncDoc("");
+    await settle();
+    expect(grid.opened).toHaveLength(2);
+    expect(cell(0, 0)?.textContent).toBe("Voce");
+    engine.destroy();
+  });
+
+  it("un file cambiato sotto non si apre, e la griglia non scrive", async () => {
+    const grid = workbookHost({ base: () => "sha256:altra" });
+    const { engine, host, viewport, changes, notice } = await workbookMounted(grid);
+    expect(host.querySelector<HTMLElement>(".grid-surface")!.dataset.gridProtocol).toBe("unavailable");
+    expect(notice().hidden).toBe(false);
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
+    expect(changes).toEqual([]);
+    engine.destroy();
+  });
+
+  it("senza il componente della cartella lo dice", async () => {
+    const { engine, host, notice } = await workbookMounted(null);
+    expect(host.querySelector<HTMLElement>(".grid-surface")!.dataset.gridProtocol).toBe("unavailable");
+    expect(notice().hidden).toBe(false);
+    engine.destroy();
+  });
+
+  it("segna le celle che il file ha cambiato sotto il giornale", async () => {
+    const grid = workbookHost();
+    const { engine, cell, notice } = await workbookMounted(grid, xlsx.conflict.journal);
+    expect(cell(1, 1)?.classList.contains("conflict")).toBe(true);
+    expect(cell(1, 1)?.getAttribute("aria-invalid")).toBe("true");
+    expect(cell(1, 1)?.textContent).toBe("900");
+    expect(notice().textContent).not.toBe("");
+    engine.destroy();
+  });
+
+  it("passa da un foglio all'altro con le schede, e le toglie al teardown", async () => {
+    const grid = workbookHost();
+    const { engine, host, cell, selections } = await workbookMounted(grid);
     const tabs = [...host.querySelectorAll<HTMLButtonElement>(".grid-sheets [role=tab]")];
     // Il foglio nascosto non ha una scheda.
     expect(tabs.map((tab) => tab.textContent)).toEqual(["Conti", "Note"]);
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
     tabs[1].click();
+    await settle();
+    expect(grid.calls).toContain("window s2 0 0");
     expect(tabs[1].getAttribute("aria-selected")).toBe("true");
     expect(cell(0, 0)?.textContent).toBe("Una nota");
     expect(selections()).toBe(1);
-    // Rileggere lo stesso documento resta sul foglio scelto.
-    engine.syncDoc(xlsxFixture.source);
-    expect(cell(0, 0)?.textContent).toBe("Una nota");
     engine.destroy();
     expect(host.querySelector(".grid-sheets")).toBeNull();
-  });
-
-  it("un foglio solo non ha schede", () => {
-    const one = JSON.parse(xlsxFixture.source);
-    one.sheets = [one.sheets[1]];
-    one.active = 0;
-    const { engine, host } = workbookMounted(undefined, JSON.stringify(one));
-    expect(host.querySelector<HTMLElement>(".grid-sheets")!.hidden).toBe(true);
-    expect(host.querySelector(".grid-sheets [role=tab]")).toBeNull();
-    engine.destroy();
-  });
-
-  it("una proiezione illeggibile si rifiuta come un foglio illeggibile", () => {
-    const { engine } = workbookMounted();
-    expect(() => engine.setDoc("{\"version\":2}")).toThrow(RangeError);
-    engine.destroy();
   });
 });

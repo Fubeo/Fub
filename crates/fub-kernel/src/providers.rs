@@ -143,6 +143,7 @@ use fub_abi::traits::{
     CommandProvider, EventHandler, ServiceProvider, ViewInstance, ViewProvider, ViewSpec,
 };
 use fub_abi::transfer::{ExportProvider, ExportTarget, ImportProvider};
+use fub_abi::GridBytesProvider;
 use fub_abi::PluginError;
 
 /// Un provider registrato, con **ciò che ha dichiarato al momento della
@@ -209,10 +210,32 @@ pub(crate) struct RegisteredCommand {
     pub(crate) specs: Vec<CommandSpec>,
 }
 
+/// Il provider di una superficie grid, sulla sorgente di testo (versione 1)
+/// o sui byte del documento (versione 2). Il registro, il ritiro e lo
+/// spegnimento sono uno solo; la chiamata sceglie il protocollo.
+pub(crate) enum GridBackend {
+    Text(Box<dyn GridProvider>),
+    Bytes(Box<dyn GridBytesProvider>),
+}
+
+impl GridBackend {
+    pub(crate) fn shutdown(&mut self) -> Result<(), fub_abi::PluginError> {
+        match self {
+            GridBackend::Text(provider) => provider.shutdown(),
+            GridBackend::Bytes(provider) => provider.shutdown(),
+        }
+    }
+}
+
+/// Il backend grid condiviso fra il registro e le chiamate fuori dal lock.
+pub(crate) type SharedGrid = Arc<SharedShelter<GridBackend>>;
+
 pub(crate) struct RegisteredGrid {
     pub(crate) id: String,
-    pub(crate) provider: Arc<SharedShelter<Box<dyn GridProvider>>>,
+    pub(crate) provider: SharedGrid,
     pub(crate) specs: Vec<GridSurfaceSpec>,
+    /// Il protocollo che il backend parla, deciso alla registrazione.
+    pub(crate) protocol_version: u32,
 }
 
 /// Un provider di import condiviso fra il registro e i job che lo chiamano

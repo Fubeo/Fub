@@ -19,6 +19,7 @@ import { rejoinDrafts, type DraftBuffer, type DraftBufferStore } from "./drafts"
 import { state as shellState } from "./store";
 import { renameNote, vaultArg } from "./vault";
 import { lineFeeds, tryApplyOperation, type TextOperation } from "../editors/core/text-operation";
+import { rebaseGridJournalText } from "./grid-journal";
 
 const SAVE_MS = 400;
 const DRAFT_MS = 1_000;
@@ -162,6 +163,9 @@ type SessionListener = (event: DocumentSessionEvent) => void | Promise<void>;
 
 type SessionHooks = {
   emit(event: DocumentSessionEvent): void | Promise<void>;
+  /// Il testo della sessione è il giornale delle celle di una cartella
+  /// (`text_kind` `grid_journal`): salvarlo lo mette nei byte.
+  journal(): boolean;
   draftSucceeded(): void;
   draftFailed(id: string): void;
 };
@@ -487,7 +491,11 @@ export class DocumentSession implements DraftBuffer {
 
   #applyCleanReload(text: string, revision: string): boolean {
     if (!this.#isOpen() || this.#state.dirty) return false;
-    const changed = this.#state.text !== text;
+    const before = this.#state.base;
+    // Il giornale pulito è sempre vuoto: che il file sia cambiato lo dice la
+    // revisione, e la griglia deve riaprirsi sui byte nuovi.
+    const moved = this.#hooks.journal() && (before.kind !== "descends_from" || before.value !== revision);
+    const changed = this.#state.text !== text || moved;
     const resultChanged = this.#state.result !== "ok";
     this.#state.base = { kind: "descends_from", value: revision };
     this.#state.result = "ok";
@@ -795,6 +803,10 @@ export class DocumentSession implements DraftBuffer {
     const changed = this.#state.text !== text;
     this.#state.result = "ok";
     this.#state.base = { kind: "descends_from", value: produced };
+    if (this.#hooks.journal()) {
+      this.#journalSaved(text, changed);
+      return;
+    }
     if (changed) {
       // The newer dirty text now descends from the revision just written.
       // Any draft queued before that write captured the old base.
@@ -804,6 +816,31 @@ export class DocumentSession implements DraftBuffer {
       void this.#dropDraft(this.#id);
     }
     this.#emit({ kind: "saved", id: this.#id });
+  }
+
+  /// Il giornale `written` è nei byte di `#state.base`: il testo pulito è
+  /// vuoto, e ciò che è cambiato durante il salvataggio si riporta sui byte
+  /// nuovi. Le superfici ricevono il testo per intero, perché la griglia si
+  /// riapre su quei byte.
+  #journalSaved(written: string, changed: boolean): void {
+    let next = "";
+    if (changed) {
+      try {
+        next = rebaseGridJournalText(this.#state.text, written);
+      } catch {
+        // Un testo che non è un giornale resta com'è, sporco: l'host lo
+        // rifiuterà al prossimo salvataggio, e niente si perde.
+        next = this.#state.text;
+      }
+    }
+    this.#draftGeneration++;
+    this.#state.text = next;
+    if (next === "") {
+      this.#state.dirty = false;
+      void this.#dropDraft(this.#id);
+    }
+    this.#emit({ kind: "saved", id: this.#id });
+    this.#fanOut({ kind: "text", text: next });
   }
 
   #writeDraft(id: string): Promise<void> {
@@ -894,6 +931,9 @@ export class DocumentSessionCollection implements DraftBufferStore {
   /// salvano a byte. Solo una lettura riuscita ce le mette — il ripiego di
   /// `readForSurface` non sa che file sia, e non indovina.
   readonly #formatless = new WeakSet<DocumentSession>();
+  /// Le sessioni il cui testo è un giornale di celle (`text_kind`
+  /// `grid_journal`), anche loro soltanto da una lettura riuscita.
+  readonly #journals = new WeakSet<DocumentSession>();
   readonly #listeners = new Set<SessionListener>();
   readonly #identityVersions = new Map<string, number>();
   readonly #renaming = new Set<string>();
@@ -1480,6 +1520,8 @@ export class DocumentSessionCollection implements DraftBufferStore {
     });
     if (source.format_id === null && source.source_kind === "text") this.#formatless.add(session);
     else this.#formatless.delete(session);
+    if (source.text_kind === "grid_journal") this.#journals.add(session);
+    else this.#journals.delete(session);
   }
 
   /// Il salvataggio di un file senza formato. `Revision::of(testo)` è
@@ -1520,8 +1562,9 @@ export class DocumentSessionCollection implements DraftBufferStore {
       saveDraft: (doc, source, draftBase) => this.#api.saveDraft(doc, source, draftBase, ...vaultArg(vault)),
       discardDraft: (doc) => this.#api.discardDraft(doc, ...vaultArg(vault)),
     };
-    const session = new DocumentSession(OWNER_TOKEN, id, text, base, api, {
+    const session: DocumentSession = new DocumentSession(OWNER_TOKEN, id, text, base, api, {
       emit: (event) => this.#emit(event),
+      journal: (): boolean => this.#journals.has(session),
       draftSucceeded: () => {
         this.#blindDraft = false;
       },

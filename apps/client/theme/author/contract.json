@@ -511,6 +511,8 @@
     "grid-sheets",
     "selected",
     "active",
+    "stale",
+    "conflict",
     "base-surface",
     "base-toolbar",
     "base-status",
@@ -2647,7 +2649,9 @@
         "grid-notice",
         "grid-sheets",
         "selected",
-        "active"
+        "active",
+        "stale",
+        "conflict"
       ],
       "states": [
         "rest",
@@ -5265,7 +5269,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1098,
+    "hooks": 1100,
     "state_names": 7,
     "assigned_states": 625,
     "components": 185,

@@ -6,6 +6,8 @@ wit_bindgen::generate!({
     generate_all,
 });
 
+mod lines;
+
 use std::collections::HashMap;
 
 use exports::fub::abi::grid::{
@@ -66,9 +68,7 @@ fn not_found(error: impl std::fmt::Display) -> PluginError {
 
 fn session_error(error: SheetSessionError) -> PluginError {
     match error {
-        SheetSessionError::StaleRevision | SheetSessionError::PreimageMismatch => {
-            conflict(error)
-        }
+        SheetSessionError::StaleRevision | SheetSessionError::PreimageMismatch => conflict(error),
         other => bad(other),
     }
 }
@@ -132,7 +132,8 @@ fn summary(session: &SheetSession<Revision>, instance: String) -> Result<GridSes
             Ok(GridSheet {
                 id: sheet.id.as_ref().to_owned(),
                 name: sheet.name.clone(),
-                row_count: u32::try_from(sheet.rows.len()).map_err(|_| bad("too many grid rows"))?,
+                row_count: u32::try_from(sheet.rows.len())
+                    .map_err(|_| bad("too many grid rows"))?,
                 column_count: u32::try_from(sheet.columns.len())
                     .map_err(|_| bad("too many grid columns"))?,
             })
@@ -145,9 +146,7 @@ fn summary(session: &SheetSession<Revision>, instance: String) -> Result<GridSes
     })
 }
 
-fn window(
-    source: fub_format_sheet::session::SheetWindow<'_, Revision>,
-) -> GridWindow {
+fn window(source: fub_format_sheet::session::SheetWindow<'_, Revision>) -> GridWindow {
     let rows = source
         .rows
         .iter()
@@ -207,9 +206,7 @@ fn commit(source: SheetCommit<Revision>) -> GridCommit {
     };
     let invalidation = match source.invalidation {
         SheetInvalidation::All => GridInvalidation::All,
-        SheetInvalidation::Cells(cells) => {
-            GridInvalidation::Cells(cells.iter().map(key).collect())
-        }
+        SheetInvalidation::Cells(cells) => GridInvalidation::Cells(cells.iter().map(key).collect()),
     };
     GridCommit {
         revision: source.revision.0,
@@ -245,6 +242,7 @@ impl PluginGuest for Component {
         unsafe {
             STATE = None;
         }
+        lines::reset();
         Ok(())
     }
 
@@ -271,11 +269,7 @@ impl GridGuest for Component {
         }]
     }
 
-    fn open(
-        surface: String,
-        source: String,
-        revision: String,
-    ) -> Result<GridSession, PluginError> {
+    fn open(surface: String, source: String, revision: String) -> Result<GridSession, PluginError> {
         if cfg!(feature = "incompatible-grid") {
             panic!("incompatible grid open must not be called");
         }
@@ -294,10 +288,7 @@ impl GridGuest for Component {
         Ok(result)
     }
 
-    fn window(
-        instance: String,
-        request: GridWindowRequest,
-    ) -> Result<GridWindow, PluginError> {
+    fn window(instance: String, request: GridWindowRequest) -> Result<GridWindow, PluginError> {
         if cfg!(feature = "trap-on-window") {
             panic!("grid window trap requested by test component");
         }
@@ -325,10 +316,7 @@ impl GridGuest for Component {
         Ok(result)
     }
 
-    fn apply(
-        instance: String,
-        request: GridApplyRequest,
-    ) -> Result<GridCommit, PluginError> {
+    fn apply(instance: String, request: GridApplyRequest) -> Result<GridCommit, PluginError> {
         let operation = SheetOperation {
             patches: request
                 .patches

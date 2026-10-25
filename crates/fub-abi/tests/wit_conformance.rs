@@ -84,6 +84,10 @@ use fub_abi::grid::{
     GridRow, GridSession, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindow,
     GridWindowRequest,
 };
+use fub_abi::grid_bytes::{
+    GridBytesCell, GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal, GridNotice,
+    GridValue,
+};
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{
     Anchor, ColumnAlign, DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget,
@@ -233,6 +237,10 @@ wit_type! {
     // UI: al confine un albero intero è la sua arena.
     UiNode => "ui-tree",
 
+    // Il giornale della griglia a byte attraversa il confine come il suo testo
+    // canonico: chi lo riceve lo rilegge con `GridJournal::parse`.
+    GridJournal => "string",
+
     // Le finestre: un solo `Paged<T>` in Rust, un record per istanza nel WIT
     // (i generici al confine non esistono). L'impl per ciascuna istanza è ciò
     // che rende impossibile paginarne una nuova senza dichiararla anche là.
@@ -260,6 +268,7 @@ wit_type! {
     dyn FormatProvider => SELF,
     dyn CommandProvider => SELF,
     dyn GridProvider => SELF,
+    dyn GridBytesProvider => SELF,
     dyn ViewProvider => SELF,
     dyn IndexProvider => SELF,
     dyn EventHandler => SELF,
@@ -375,6 +384,11 @@ wit_kebab! {
     GridInvalidation,
     GridSourceEdit,
     GridCommit,
+    GridNotice,
+    GridBytesSession,
+    GridValue,
+    GridBytesCell,
+    GridBytesWindow,
     // La mappa con namespace: al confine è una lista di coppie, perché WIT non
     // ha mappe. È lo stesso tipo in tutte e quattro le sedi del §3.5 — e che
     // sia lo STESSO è metà della risposta.
@@ -3843,6 +3857,137 @@ fn conform(source: &str) -> Result<(), String> {
         ],
     );
 
+    let GridNotice { code, count } = GridNotice {
+        code: String::new(),
+        count: 0,
+    };
+    contract.record(
+        "grid-notice",
+        &[("code", wit(&code)), ("count", wit(&count))],
+    );
+
+    let GridBytesSession {
+        instance,
+        revision,
+        sheets,
+        active,
+        hidden,
+        notices,
+        conflicts,
+    } = GridBytesSession {
+        instance: String::new(),
+        revision: Revision::of(""),
+        sheets: Vec::new(),
+        active: String::new(),
+        hidden: Vec::new(),
+        notices: Vec::new(),
+        conflicts: Vec::new(),
+    };
+    contract.record(
+        "grid-bytes-session",
+        &[
+            ("instance", wit(&instance)),
+            ("revision", wit(&revision)),
+            ("sheets", wit(&sheets)),
+            ("active", wit(&active)),
+            ("hidden", wit(&hidden)),
+            ("notices", wit(&notices)),
+            ("conflicts", wit(&conflicts)),
+        ],
+    );
+
+    let grid_bytes_value_case = |value: &GridValue| match value {
+        GridValue::Blank => case("blank"),
+        GridValue::Number(value) => case_ty("number", wit(value)),
+        GridValue::Text(value) => case_ty("text", wit(value)),
+        GridValue::Boolean(value) => case_ty("boolean", wit(value)),
+        GridValue::Error(error) => case_ty("error", wit(error)),
+    };
+    contract.variant_src(
+        "grid-value",
+        ("grid_bytes.rs", "GridValue"),
+        &[
+            grid_bytes_value_case(&GridValue::Blank),
+            grid_bytes_value_case(&GridValue::Number(0.0)),
+            grid_bytes_value_case(&GridValue::Text(String::new())),
+            grid_bytes_value_case(&GridValue::Boolean(false)),
+            grid_bytes_value_case(&GridValue::Error(String::new())),
+        ],
+    );
+
+    let GridBytesCell {
+        key,
+        input,
+        style,
+        value,
+        display,
+        lock,
+        stale,
+        conflict,
+    } = GridBytesCell {
+        key: GridCellKey {
+            sheet: String::new(),
+            row: String::new(),
+            column: String::new(),
+        },
+        input: String::new(),
+        style: GridCellStyle::default(),
+        value: GridValue::Blank,
+        display: String::new(),
+        lock: None,
+        stale: false,
+        conflict: false,
+    };
+    contract.record(
+        "grid-bytes-cell",
+        &[
+            ("key", wit(&key)),
+            ("input", wit(&input)),
+            ("style", wit(&style)),
+            ("value", wit(&value)),
+            ("display", wit(&display)),
+            ("lock", wit(&lock)),
+            ("stale", wit(&stale)),
+            ("conflict", wit(&conflict)),
+        ],
+    );
+
+    let GridBytesWindow {
+        revision,
+        sheet,
+        row_start,
+        column_start,
+        total_rows,
+        total_columns,
+        rows,
+        columns,
+        cells,
+    } = GridBytesWindow {
+        revision: Revision::of(""),
+        sheet: String::new(),
+        row_start: 0,
+        column_start: 0,
+        total_rows: 0,
+        total_columns: 0,
+        rows: Vec::new(),
+        columns: Vec::new(),
+        cells: Vec::new(),
+    };
+    contract.record(
+        "grid-bytes-window",
+        &[
+            ("revision", wit(&revision)),
+            ("sheet", wit(&sheet)),
+            ("row-start", wit(&row_start)),
+            ("column-start", wit(&column_start)),
+            ("total-rows", wit(&total_rows)),
+            ("total-columns", wit(&total_columns)),
+            ("rows", wit(&rows)),
+            ("columns", wit(&columns)),
+            ("cells", wit(&cells)),
+        ],
+    );
+
     // --- i due innesti: chi aggiunge la sintassi (§3.1), chi disegna il blocco
     //     che ne esce (§3.2)
 
@@ -5583,6 +5728,74 @@ fn conform(source: &str) -> Result<(), String> {
     );
 
     contract.method(
+        "grid-bytes",
+        "surfaces",
+        <dyn GridBytesProvider>::surfaces
+            as fn(&'static dyn GridBytesProvider) -> Vec<GridSurfaceSpec>,
+        &[],
+    );
+    contract.method(
+        "grid-bytes",
+        "open",
+        <dyn GridBytesProvider>::open
+            as fn(
+                &'static mut dyn GridBytesProvider,
+                &'static str,
+                &'static [u8],
+                Revision,
+                &'static GridJournal,
+            ) -> Result<GridBytesSession, PluginError>,
+        &["surface", "source", "revision", "journal"],
+    );
+    contract.method(
+        "grid-bytes",
+        "window",
+        <dyn GridBytesProvider>::window
+            as fn(
+                &'static mut dyn GridBytesProvider,
+                &'static str,
+                GridWindowRequest,
+            ) -> Result<GridBytesWindow, PluginError>,
+        &["instance", "request"],
+    );
+    contract.method(
+        "grid-bytes",
+        "apply",
+        <dyn GridBytesProvider>::apply
+            as fn(
+                &'static mut dyn GridBytesProvider,
+                &'static str,
+                GridApplyRequest,
+            ) -> Result<GridCommit, PluginError>,
+        &["instance", "request"],
+    );
+    contract.method(
+        "grid-bytes",
+        "bytes-to-write",
+        <dyn GridBytesProvider>::bytes_to_write
+            as fn(
+                &'static mut dyn GridBytesProvider,
+                &'static str,
+                Revision,
+            ) -> Result<Vec<u8>, PluginError>,
+        &["instance", "expected"],
+    );
+    contract.method(
+        "grid-bytes",
+        "close",
+        <dyn GridBytesProvider>::close
+            as fn(&'static mut dyn GridBytesProvider, &'static str) -> Result<(), PluginError>,
+        &["instance"],
+    );
+    contract.method(
+        "grid-bytes",
+        "shutdown",
+        <dyn GridBytesProvider>::shutdown
+            as fn(&'static mut dyn GridBytesProvider) -> Result<(), PluginError>,
+        &[],
+    );
+
+    contract.method(
         "syntax",
         "spec",
         <dyn SyntaxRule>::spec as fn(&'static dyn SyntaxRule) -> SyntaxRuleSpec,
@@ -6195,6 +6408,7 @@ fn conform(source: &str) -> Result<(), String> {
         "plugin",
         "format",
         "grid",
+        "grid-bytes",
         // I due innesti del §3.1 e del §3.2: separati da `format` perché un
         // plugin può implementarne uno senza l'altro — ed è esattamente ciò che
         // «mezzo plugin» significa.
