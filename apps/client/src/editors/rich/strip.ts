@@ -16,7 +16,7 @@ import { ariaBinding, displayBinding } from "../../ui/commands";
 import { openLifetime } from "../../ui/lifetime";
 import { notify } from "../../ui/notify";
 import { errorText } from "../../host/errors";
-import { onLanguage, t, type Key } from "../../i18n/strings";
+import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
 import {
   FONT_SIZES,
   insertImage,
@@ -47,11 +47,14 @@ import { insertToc } from "./toc";
 import {
   columns,
   FIELD_CODES,
+  formatLength,
   landscape,
   MARGIN_PRESETS,
   pageAt,
   PAPER_SIZES,
+  paperLabel,
   paperName,
+  parseLength,
   runningOf,
   runningText,
   setColumns,
@@ -1174,8 +1177,11 @@ export function mountStrip(
     return engine.styles().find((s) => s.id === value.slice(2))?.name ?? value.slice(2);
   }
 
-  /// La spaziatura del paragrafo: interlinea, rientri e spazi prima e dopo,
-  /// in punti. Un campo vuoto segue lo stile.
+  /// La spaziatura del paragrafo: interlinea in righe o esatta in punti,
+  /// rientri in centimetri, spazi prima e dopo in punti, come in Word, con la
+  /// virgola della lingua. Un campo vuoto segue lo stile; un campo lasciato
+  /// com'era non riscrive niente, perché l'arrotondamento non diventi una
+  /// modifica.
   function openSpacing(anchor: HTMLButtonElement): void {
     popover?.close();
     const form = document.createElement("div");
@@ -1191,34 +1197,62 @@ export function mountStrip(
       caption.textContent = label;
       form.append(caption, control);
     };
+    const language = resolvedLanguage();
     const line = document.createElement("select");
     const current = engine.read((state) => selectedLayout(state, "line"));
-    const shown = current && "multiple" in current ? String(current.multiple) : current ? "other" : current === undefined ? "" : "mixed";
-    const values = ["", ...LINE_SPACINGS.map(String), ...(shown === "other" || shown === "mixed" ? [shown] : [])];
+    const shown = !current ? (current === undefined ? "" : "mixed") : "multiple" in current ? String(current.multiple) : "exactly" in current ? "exactly" : "at_least";
+    const values = ["", ...LINE_SPACINGS.map(String), "exactly", ...(shown === "at_least" || shown === "mixed" ? [shown] : [])];
     for (const value of values) {
       const option = document.createElement("option");
       option.value = value;
       option.textContent =
-        value === "" ? t("rich.spacing.style") : value === "other" ? t("rich.spacing.other") : value === "mixed" ? "" : value;
+        value === "" ? t("rich.spacing.style")
+        : value === "exactly" ? t("rich.spacing.exactly")
+        : value === "at_least" ? t("rich.spacing.at_least")
+        : value === "mixed" ? ""
+        : new Intl.NumberFormat(language, { minimumFractionDigits: 1, maximumFractionDigits: 2 }).format(Number(value));
       line.append(option);
     }
     line.value = shown;
+    // L'interlinea esatta (o minima) in punti: si scrive solo con quella scelta.
+    const points = document.createElement("input");
+    points.type = "text";
+    points.inputMode = "decimal";
+    const exact = current && !("multiple" in current) ? ("exactly" in current ? current.exactly : current.at_least) : null;
+    points.value = exact === null ? "" : formatLength(exact, "pt", language);
+    points.disabled = exact === null;
     life.listen(line, "change", () => {
-      if (line.value === "other" || line.value === "mixed") return;
+      points.disabled = line.value !== "exactly" && line.value !== "at_least";
+      if (line.value === "at_least" || line.value === "mixed") return;
+      if (line.value === "exactly") {
+        const n = parseLength(points.value, "pt") ?? 12;
+        if (n === undefined || n <= 0) return;
+        points.value = formatLength(n, "pt", language);
+        engine.apply(setLayout({ line: { exactly: n } }), false);
+        return;
+      }
       engine.apply(setLineSpacing(line.value === "" ? null : Number(line.value)), false);
     });
+    life.listen(points, "change", () => {
+      const n = parseLength(points.value, "pt");
+      if (n === null || n === undefined || n <= 0) return;
+      engine.apply(setLayout({ line: line.value === "at_least" ? { at_least: n } : { exactly: n } }), false);
+    });
     field(line, t("rich.spacing.line"));
+    field(points, t("rich.spacing.points"));
     for (const key of LAYOUT_LENGTHS) {
+      const unit = key === "before" || key === "after" ? "pt" : "cm";
       const input = document.createElement("input");
-      input.type = "number";
-      input.step = "1";
-      if (key !== "first") input.min = "0";
+      input.type = "text";
+      input.inputMode = "decimal";
       input.placeholder = t("rich.spacing.style");
       const value = engine.read((state) => selectedLayout(state, key));
-      input.value = typeof value === "number" ? String(value) : "";
+      input.value = typeof value === "number" ? formatLength(value, unit, language) : "";
+      const was = input.value;
       life.listen(input, "change", () => {
-        const n = input.value.trim() === "" ? null : Number(input.value);
-        if (n !== null && !Number.isFinite(n)) return;
+        if (input.value.trim() === was) return;
+        const n = parseLength(input.value, unit);
+        if (n === undefined || (n !== null && n < 0 && key !== "first")) return;
         engine.apply(setLayout({ [key]: n } as { [K in LayoutLength]?: number | null }), false);
       });
       field(input, t(`rich.spacing.${key}` as Key));
@@ -1273,7 +1307,7 @@ export function mountStrip(
       fill();
       problem.hidden = applied;
     };
-    const paper = field(choice([...PAPER_SIZES.map((s): [string, string] => [s.name, s.name]), ["", t("rich.page.custom")]]), () => t("rich.page.size"));
+    const paper = field(choice([...PAPER_SIZES.map((s): [string, string] => [s.name, paperLabel(s.name)]), ["", t("rich.page.custom")]]), () => t("rich.page.size"));
     life.listen(paper, "change", () => {
       const size = PAPER_SIZES.find((s) => s.name === paper.value);
       if (size) apply(setPaper(size.w, size.h));
@@ -1291,16 +1325,17 @@ export function mountStrip(
       const margins = MARGIN_PRESETS.find((m) => m.id === preset.value);
       if (margins) apply(setMargins(margins));
     });
+    const language = resolvedLanguage();
     const sides = (["top", "bottom", "left", "right"] as const).map((side) => {
       const input = document.createElement("input");
-      input.type = "number";
-      input.step = "0.1";
-      input.min = "0";
+      input.type = "text";
+      input.inputMode = "decimal";
       life.listen(input, "change", () => {
-        const cm = Number(input.value);
+        const points = parseLength(input.value, "cm");
         const page = engine.read(pageAt)?.page;
-        if (input.value.trim() === "" || !Number.isFinite(cm) || !page) return fill();
-        apply(setMargins({ top: page.top, bottom: page.bottom, left: page.left, right: page.right, [side]: (cm * 72) / 2.54 }));
+        // Il margine lasciato com'era non si riscrive arrotondato.
+        if (points === null || points === undefined || points < 0 || !page || input.value.trim() === formatLength(page[side], "cm", language)) return fill();
+        apply(setMargins({ top: page.top, bottom: page.bottom, left: page.left, right: page.right, [side]: points }));
       });
       return { side, input: field(input, () => t(`rich.page.${side}` as Key)) };
     });
@@ -1321,7 +1356,7 @@ export function mountStrip(
       const near = (a: number, b: number) => Math.abs(a - b) < 0.5;
       preset.value =
         MARGIN_PRESETS.find((m) => near(m.top, page.top) && near(m.bottom, page.bottom) && near(m.left, page.left) && near(m.right, page.right))?.id ?? "";
-      for (const { side, input } of sides) input.value = String(Math.round((page[side] * 2.54 * 100) / 72) / 100);
+      for (const { side, input } of sides) input.value = formatLength(page[side], "cm", language);
       const n = columns(page);
       if (![...cols.options].some((o) => o.value === String(n))) cols.append(choice([[String(n), String(n)]]).options[0]!);
       cols.value = String(n);

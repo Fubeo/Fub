@@ -132,14 +132,29 @@ describe("il paragrafo", () => {
     // dove segue lo stile.
     const spacing = strip.element.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.spacing")}"]`)!;
     spacing.click();
-    const after = [...document.querySelectorAll<HTMLInputElement>('input[type="number"]')];
-    expect(after).toHaveLength(5);
-    for (const input of after) expect(document.querySelector(`label[for="${input.id}"]`)?.textContent).not.toBe("");
-    const values = after.map((input) => input.value);
-    expect(values).toEqual(["", "", "", "", "8"]);
-    after[3]!.value = "12";
-    after[3]!.dispatchEvent(new Event("change"));
+    // L'interlinea esatta, poi i rientri in centimetri e gli spazi in punti.
+    const fields = [...document.querySelectorAll<HTMLInputElement>('input[inputmode="decimal"]')];
+    expect(fields).toHaveLength(6);
+    for (const input of fields) expect(document.querySelector(`label[for="${input.id}"]`)?.textContent).not.toBe("");
+    expect(fields.map((input) => input.value)).toEqual(["", "", "", "", "", "8"]);
+    expect(fields[0]!.disabled).toBe(true);
+    const set = (input: HTMLInputElement, value: string) => {
+      input.value = value;
+      input.dispatchEvent(new Event("change"));
+    };
+    set(fields[4]!, "12");
     expect(paras(e)[0]!.p).toEqual({ before: 12, after: 8 });
+    set(fields[1]!, "1,27");
+    expect(paras(e)[0]!.p).toEqual({ left: 36, before: 12, after: 8 });
+    // L'interlinea esatta prende i punti del suo campo.
+    const caption = [...document.querySelectorAll("label")].find((label) => label.textContent === t("rich.spacing.line"))!;
+    const line = document.getElementById(caption.htmlFor) as HTMLSelectElement;
+    line.value = "exactly";
+    line.dispatchEvent(new Event("change"));
+    expect(fields[0]!.disabled).toBe(false);
+    expect(paras(e)[0]!.p?.line).toEqual({ exactly: 12 });
+    set(fields[0]!, "14,5");
+    expect(paras(e)[0]!.p?.line).toEqual({ exactly: 14.5 });
     strip.destroy();
   });
 

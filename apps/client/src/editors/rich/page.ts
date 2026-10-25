@@ -6,6 +6,7 @@
 // Le regole sono quelle del codec (`Page::write` in `fub-format-rich`): qui
 // servono a non offrire una pagina che il salvataggio rifiuterebbe.
 import type { Command, EditorState } from "prosemirror-state";
+import { t, type Key } from "../../i18n/strings";
 import { writeRunning, type Page, type PageField, type Piece, type RunningText } from "./projection";
 
 export { PAPER_SIZES } from "./paper.generated";
@@ -72,6 +73,44 @@ export function paperName(page: Page, sizes: readonly { name: string; w: number;
 /// Un valore come lo conserva un `.docx`: al ventesimo di punto.
 export function twips(points: number): number {
   return Math.round(points * 20) / 20;
+}
+
+/// Le unità in cui la striscia mostra le misure, come Word: rientri e margini
+/// in centimetri, spazi e interlinea esatta in punti.
+export type LengthUnit = "cm" | "pt";
+
+/// Le cifre dopo la virgola che ogni unità mostra.
+const DECIMALS: Readonly<Record<LengthUnit, number>> = { cm: 2, pt: 1 };
+
+/// Una misura in punti, scritta nell'unità `unit` con il separatore decimale
+/// della lingua (la virgola in italiano) e senza separatore delle migliaia.
+export function formatLength(points: number, unit: LengthUnit, language: string): string {
+  const value = unit === "cm" ? (points * 2.54) / 72 : points;
+  return new Intl.NumberFormat(language, { maximumFractionDigits: DECIMALS[unit], useGrouping: false }).format(value);
+}
+
+/// Una misura scritta da chi usa la striscia, in punti al ventesimo come la
+/// conserva un `.docx`. Vale la virgola o il punto, e l'unità in fondo si può
+/// scrivere o no; `null` se il campo è vuoto, `undefined` se non è un numero.
+export function parseLength(text: string, unit: LengthUnit): number | null | undefined {
+  const bare = text.trim().replace(new RegExp(`\\s*${unit}$`, "i"), "").replace(",", ".");
+  if (bare === "") return null;
+  if (!/^-?(\d+\.?\d*|\.\d+)$/.test(bare)) return undefined;
+  const value = Number(bare);
+  return twips(unit === "cm" ? (value * 72) / 2.54 : value);
+}
+
+/// Il nome della carta nella lingua della shell: quello di Word, dove c'è.
+const PAPER_KEYS: Readonly<Record<string, Key>> = {
+  Letter: "rich.paper.letter",
+  Legal: "rich.paper.legal",
+  "Envelope #10": "rich.paper.envelope_10",
+  "Envelope DL": "rich.paper.envelope_dl",
+};
+
+export function paperLabel(name: string): string {
+  const key = PAPER_KEYS[name];
+  return key ? t(key) : name;
 }
 
 /// La pagina, se il codec la accetta.

@@ -6,11 +6,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { t } from "../../i18n/strings";
 import { RichEngine } from "./engine";
 import {
+  formatLength,
   MARGIN_PRESETS,
   pageAt,
   pageStyle,
   PAPER_SIZES,
+  paperLabel,
   paperName,
+  parseLength,
   runningOf,
   runningText,
   setColumns,
@@ -151,7 +154,7 @@ describe("pagina", () => {
     };
     expect(field(t("rich.page.size")).value).toBe("Letter");
     expect(field(t("rich.page.margins")).value).toBe("normal");
-    expect(field(t("rich.page.left")).value).toBe("2.54");
+    expect(field(t("rich.page.left")).value).toBe("2,54");
     change(field(t("rich.page.size")), "A4");
     change(field(t("rich.page.orientation")), "landscape");
     change(field(t("rich.page.margins")), "narrow");
@@ -159,11 +162,14 @@ describe("pagina", () => {
     expect(first(e)).toEqual({ w: 841.9, h: 595.3, top: 36, bottom: 36, left: 36, right: 36, cols: 2 });
     change(field(t("rich.page.left")), "2");
     expect(first(e)?.left).toBe(56.7);
+    // Rimesso com'era, il margine non si riscrive arrotondato.
+    change(field(t("rich.page.left")), "2");
+    expect(first(e)?.left).toBe(56.7);
     expect(field(t("rich.page.margins")).value).toBe("");
     // Troppo: non si prende, e l'avviso lo dice.
     change(field(t("rich.page.right")), "40");
     expect(first(e)?.right).toBe(36);
-    expect(field(t("rich.page.right")).value).toBe("1.27");
+    expect(field(t("rich.page.right")).value).toBe("1,27");
     const alert = document.querySelector<HTMLElement>("[role=alert]")!;
     expect(alert.hidden).toBe(false);
     expect(alert.textContent).toBe(t("rich.page.too_large"));
@@ -226,5 +232,49 @@ describe("pagina", () => {
     expect(header.value).toBe("Pagina {PAGE}");
     expect(parseProjection(e.getDoc()).header).toEqual({ lines: [["Pagina ", { field: "page" }]] });
     strip.destroy();
+  });
+});
+
+describe("le misure come Word", () => {
+  it("2,54 cm sono un pollice, e tornano 2,54 cm", () => {
+    expect(parseLength("2,54", "cm")).toBe(72);
+    expect(parseLength("2,54 cm", "cm")).toBe(72);
+    expect(parseLength("2.54", "cm")).toBe(72);
+    expect(formatLength(72, "cm", "it-IT")).toBe("2,54");
+    expect(formatLength(parseLength("2,54", "cm")!, "cm", "it-IT")).toBe("2,54");
+  });
+
+  it("ogni misura scritta con due decimali torna identica dopo il giro in punti", () => {
+    for (let hundredths = 0; hundredths <= 1000; hundredths++) {
+      const text = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 2, useGrouping: false }).format(hundredths / 100);
+      expect(formatLength(parseLength(text, "cm")!, "cm", "it-IT"), text).toBe(text);
+    }
+    for (let tenths = 0; tenths <= 1000; tenths++) {
+      const text = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1, useGrouping: false }).format(tenths / 10);
+      expect(formatLength(parseLength(text, "pt")!, "pt", "it-IT"), text).toBe(text);
+    }
+  });
+
+  it("i punti sono al ventesimo, come li conserva un .docx", () => {
+    expect(parseLength("1", "cm")).toBe(28.35);
+    expect(parseLength("12,5 pt", "pt")).toBe(12.5);
+    expect(parseLength("-0,5", "cm")).toBe(-14.15);
+  });
+
+  it("un campo vuoto segue lo stile, un testo che non è un numero non vale", () => {
+    expect(parseLength("  ", "cm")).toBeNull();
+    expect(parseLength("due", "cm")).toBeUndefined();
+    expect(parseLength("1,2,3", "pt")).toBeUndefined();
+  });
+
+  it("la virgola è dell'italiano, il punto dell'inglese, senza migliaia", () => {
+    expect(formatLength(1190.55, "pt", "it-IT")).toBe("1190,6");
+    expect(formatLength(1190.55, "pt", "en-US")).toBe("1190.6");
+  });
+
+  it("le carte hanno il nome italiano", () => {
+    expect(paperLabel("Letter")).toBe(t("rich.paper.letter"));
+    expect(paperLabel("Legal")).toBe(t("rich.paper.legal"));
+    expect(paperLabel("A4")).toBe("A4");
   });
 });
