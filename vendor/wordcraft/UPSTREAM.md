@@ -5,6 +5,12 @@ Questa cartella contiene codice e dati di
 modifiche elencate qui sotto. Fub non dipende da WordCraft via Git:
 `deny.toml` ammette soltanto crates.io, e i crate non sono pubblicati là.
 
+Il fork [`Fubeo/wordcraft`](https://github.com/Fubeo/wordcraft) è il mirror: il campo
+`mirror` di `upstream.lock` lo nomina, e `verify-upstream` lo prova dopo
+l'upstream. Prende rami e tag dell'upstream senza potare e senza riscrivere un
+tag, così una revisione copiata resta raggiungibile anche se l'upstream la
+cancella.
+
 Sei crate: il correttore (`proof`) e, per i documenti di videoscrittura, il
 modello del documento (`doc`), le sue unità di misura (`geom`), il codec DOCX
 (`docx`), il lettore di Word 97-2003 (`docbin`) e gli import ed export degli
