@@ -55,7 +55,13 @@ l'IPC.
   nota uguale si riconosce a meno del numero della parte. Una nota tenuta
   porta anche, da leggere, il suo testo e se è di chiusura: la superficie
   ne fa il richiamo in apice, 1, 2, 3 a piè di pagina e i, ii, iii in
-  chiusura nell'ordine del documento (`editors/rich/notes.ts`).
+  chiusura nell'ordine del documento (`editors/rich/notes.ts`). Un'immagine
+  tenuta porta, da vedere, i suoi byte in `data` quando il file la tiene in
+  PNG, JPEG o GIF, intera (senza ritaglio), fino a 4 MiB l'una e 8 MiB per
+  tutto il documento nell'ordine del testo (`MAX_SHOWN_IMAGE_BYTES`,
+  `MAX_SHOWN_BYTES` in `projection.rs`): la superficie la disegna. Le altre
+  restano segnaposti col nome e la misura. Il ritorno al documento ignora
+  quei byte: vale l'immagine tenuta in `k`. Il codec ODT non li porta ancora.
   L'enfasi (`m`) e l'aspetto
   del carattere (`f`: tipo, dimensione, colore, colore dell'evidenziatore)
   sono marche **risolte**, scritte soltanto dove differiscono dal paragrafo;

@@ -340,10 +340,23 @@ describe("le immagini e le note nuove", () => {
       { t: "atom", k: "x", kind: "image", note: "una nota tenuta su un'immagine" },
       { t: "atom", k: "x", kind: "field", end: true },
       { t: "atom", k: "x", kind: "note", note: "n", data: PNG },
+      { t: "atom", k: "x", kind: "field", data: PNG },
       { t: "atom", kind: "note", note: "n", end: "sì" },
     ]) {
       expect(() => parseProjection(doc(bad)), JSON.stringify(bad)).toThrow();
     }
+  });
+
+  it("un'immagine tenuta porta i suoi byte da vedere: si disegna, e si riscrive com'era", () => {
+    const kept = { t: "atom", k: "I", kind: "image", label: "Un pino", w: 72, h: 36, data: PNG } as const;
+    const e = engine([para([{ t: "text", x: "qui" }, kept])]);
+    expect(atoms(e)).toEqual([kept]);
+    const img = document.querySelector<HTMLImageElement>(".rich-atom-image img")!;
+    expect(img.getAttribute("src")).toBe(`data:image/png;base64,${PNG}`);
+    // Si vede: non è più la casella di un segnaposto, e il suggerimento non
+    // dice più che l'oggetto resta senza disegno.
+    expect(document.querySelector(".rich-atom-image")!.classList.contains("rich-atom-drawn")).toBe(true);
+    expect(document.querySelector(".rich-atom-image")!.getAttribute("title")).not.toContain(t("rich.atom.kept"));
   });
 
   it("incollate restano, e un oggetto senza k che non è nuovo cade", () => {

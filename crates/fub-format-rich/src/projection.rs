@@ -5,8 +5,9 @@
 //! la superficie modifica — testo, enfasi, aspetto del carattere, link, ruolo
 //! dei paragrafi, allineamento, rientri, spaziature, interlinea e stile — e
 //! porta tutto il resto come dati opachi (vedi `blob`). L'aspetto `f` di un
-//! paragrafo e del documento, gli stili proposti, `label`, `w` e `h` sono
-//! soltanto suggerimenti di resa: il ritorno al documento li ignora.
+//! paragrafo e del documento, gli stili proposti, `label`, `w` e `h`, e i byte
+//! di un'immagine tenuta, sono soltanto suggerimenti di resa: il ritorno al
+//! documento li ignora.
 //!
 //! Il testo di un tratto è quello del modello di WordCraft: `\n` è un a-capo
 //! nel paragrafo, `\t` una tabulazione, U+000C un salto pagina e U+000E un
@@ -18,6 +19,8 @@
 //! Ciò che l'host produce è sempre la versione 2 con lo schema corrente; ciò
 //! che la shell rimanda ha la versione e lo schema che aveva ricevuto.
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use wordcraft_doc::para::{NoteKind, OBJ};
@@ -30,7 +33,18 @@ use wordcraft_doc::{
 };
 
 use crate::RichError;
-use crate::{blob, running, stories};
+use crate::{blob, fresh, running, stories};
+
+/// L'immagine del file più pesante che la proiezione porta da vedere: oltre,
+/// la superficie ne mostra il segnaposto.
+pub const MAX_SHOWN_IMAGE_BYTES: usize = 4 * 1024 * 1024;
+/// Il peso di tutte le immagini da vedere di una proiezione, nell'ordine del
+/// testo: finito, le altre restano segnaposti. La proiezione è anche il testo
+/// del buffer e della bozza, e il base64 pesa quattro terzi dei byte.
+pub const MAX_SHOWN_BYTES: usize = 8 * 1024 * 1024;
+
+/// Il peso che le immagini da vedere possono ancora portare.
+type Budget = std::cell::Cell<usize>;
 
 /// Il nome del formato della proiezione.
 pub const FORMAT: &str = "fub-rich";
@@ -551,7 +565,10 @@ pub enum Inline {
         w: Option<f32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         h: Option<f32>,
-        /// I byte di un'immagine nuova (PNG, JPEG o GIF), in base64.
+        /// I byte di un'immagine nuova (PNG, JPEG o GIF), in base64. In
+        /// un'immagine tenuta sono da vedere, quando il file la porta in uno
+        /// di quei formati ed entro [`MAX_SHOWN_IMAGE_BYTES`]: il ritorno al
+        /// documento li ignora.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         data: Option<String>,
         /// Il testo di una nota nuova.
@@ -744,7 +761,11 @@ impl Projection {
 /// (`Document::normalize_runs`): due tratti uguali vicini sono uno solo, come
 /// la superficie li mostra.
 pub(crate) fn project(document: &Document) -> Result<Projection, RichError> {
-    let blocks = blocks(document, &document.body)?;
+    let blocks = blocks(
+        document,
+        &document.body,
+        &std::cell::Cell::new(MAX_SHOWN_BYTES),
+    )?;
     let mut used = BTreeSet::new();
     used_styles(&blocks, &mut used);
     Ok(Projection {
@@ -866,16 +887,22 @@ pub(crate) fn style_of(document: &Document, props: &ParaProps) -> Option<String>
         .map(str::to_string)
 }
 
-fn blocks(document: &Document, body: &[std::sync::Arc<WcBlock>]) -> Result<Vec<Block>, RichError> {
+/// I blocchi di `body`. `left` è il peso che le immagini da vedere possono
+/// ancora portare.
+fn blocks(
+    document: &Document,
+    body: &[std::sync::Arc<WcBlock>],
+    left: &Budget,
+) -> Result<Vec<Block>, RichError> {
     body.iter()
         .map(|block| match &**block {
-            WcBlock::Para(paragraph) => para(document, paragraph).map(Block::Para),
-            WcBlock::Table(table) => self::table(document, table).map(Block::Table),
+            WcBlock::Para(paragraph) => para(document, paragraph, left).map(Block::Para),
+            WcBlock::Table(table) => self::table(document, table, left).map(Block::Table),
         })
         .collect()
 }
 
-fn table(document: &Document, table: &WcTable) -> Result<Table, RichError> {
+fn table(document: &Document, table: &WcTable, left: &Budget) -> Result<Table, RichError> {
     let bare = WcTable {
         rows: Vec::new(),
         ..table.clone()
@@ -899,7 +926,7 @@ fn table(document: &Document, table: &WcTable) -> Result<Table, RichError> {
                     Ok(Cell {
                         k: Some(blob::encode(&bare)?),
                         span: (cell.span() > 1).then_some(cell.span() as u32),
-                        blocks: blocks(document, &cell.blocks)?,
+                        blocks: blocks(document, &cell.blocks, left)?,
                     })
                 })
                 .collect::<Result<_, RichError>>()?;
@@ -915,7 +942,7 @@ fn table(document: &Document, table: &WcTable) -> Result<Table, RichError> {
     })
 }
 
-fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
+fn para(document: &Document, paragraph: &Paragraph, left: &Budget) -> Result<Para, RichError> {
     let styles = &document.styles;
     let keep = ParaKeep {
         props: paragraph.props.clone(),
@@ -934,7 +961,7 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
                 let object = objects.next().ok_or_else(|| {
                     RichError::Codec("paragraph has fewer objects than markers".into())
                 })?;
-                c.push(atom(document, props, object)?);
+                c.push(atom(document, props, object, left)?);
             }
             if !piece.is_empty() {
                 c.push(Inline::Text {
@@ -996,6 +1023,25 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
     })
 }
 
+/// I byte da vedere di un'immagine del file, in base64: soltanto PNG, JPEG o
+/// GIF, intera (un ritaglio disegnato per intero mentirebbe) ed entro i pesi.
+/// Chi scrive li ignora: l'immagine è quella tenuta in `k`.
+fn shown(document: &Document, object: &InlineObject, left: &Budget) -> Option<String> {
+    let InlineObject::Image { media, crop, .. } = object else {
+        return None;
+    };
+    let bytes = document.media.get(media)?;
+    if crop.iter().any(|side| *side != 0.0)
+        || bytes.len() > MAX_SHOWN_IMAGE_BYTES
+        || bytes.len() > left.get()
+        || fresh::sniff(bytes).is_none()
+    {
+        return None;
+    }
+    left.set(left.get() - bytes.len());
+    Some(STANDARD.encode(&bytes[..]))
+}
+
 /// La revisione `index` del documento, come la proiezione la mostra.
 fn rev(document: &Document, index: Option<u32>) -> Option<Rev> {
     let revision = document.revisions.get(index? as usize)?;
@@ -1010,6 +1056,7 @@ fn atom(
     document: &Document,
     props: &CharProps,
     object: &InlineObject,
+    left: &Budget,
 ) -> Result<Inline, RichError> {
     let (kind, label, size) = match object {
         InlineObject::Image { w, h, alt, .. } => (AtomKind::Image, alt.clone(), Some((*w, *h))),
@@ -1058,7 +1105,7 @@ fn atom(
         label,
         w: size.map(|(w, _)| w),
         h: size.map(|(_, h)| h),
-        data: None,
+        data: shown(document, object, left),
         note,
         end,
         toc: None,
@@ -1245,4 +1292,73 @@ pub(crate) fn is_quote(styles: &StyleSheet, style: Option<&str>) -> bool {
                 || matches!(s.name.as_str(), "Quote" | "Intense Quote")
         })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+
+    fn image(media: &str, crop: [f32; 4]) -> InlineObject {
+        InlineObject::Image {
+            media: media.into(),
+            w: 12.0,
+            h: 12.0,
+            alt: String::new(),
+            float: Default::default(),
+            crop,
+            ole: None,
+        }
+    }
+
+    fn document(media: &[(&str, Vec<u8>)]) -> Document {
+        let mut document = Document::default();
+        for (key, bytes) in media {
+            document
+                .media
+                .insert((*key).into(), Arc::new(bytes.clone()));
+        }
+        document
+    }
+
+    #[test]
+    fn un_immagine_intera_png_si_vede_e_consuma_il_suo_peso() {
+        let document = document(&[("a.png", PNG.to_vec())]);
+        let left = Budget::new(100);
+        assert_eq!(
+            shown(&document, &image("a.png", [0.0; 4]), &left),
+            Some(STANDARD.encode(PNG))
+        );
+        assert_eq!(left.get(), 100 - PNG.len());
+    }
+
+    #[test]
+    fn ritagliata_sconosciuta_mancante_o_troppo_pesante_resta_un_segnaposto() {
+        let mut big = PNG.to_vec();
+        big.resize(MAX_SHOWN_IMAGE_BYTES + 1, 0);
+        let document = document(&[
+            ("a.png", PNG.to_vec()),
+            ("b.emf", b"\x01\0\0\0EMF".to_vec()),
+            ("c.png", big),
+        ]);
+        let left = Budget::new(MAX_SHOWN_BYTES);
+        assert_eq!(
+            shown(&document, &image("a.png", [0.1, 0.0, 0.0, 0.0]), &left),
+            None
+        );
+        assert_eq!(shown(&document, &image("b.emf", [0.0; 4]), &left), None);
+        assert_eq!(shown(&document, &image("manca.png", [0.0; 4]), &left), None);
+        assert_eq!(shown(&document, &image("c.png", [0.0; 4]), &left), None);
+        assert_eq!(left.get(), MAX_SHOWN_BYTES);
+    }
+
+    #[test]
+    fn finito_il_peso_le_altre_immagini_restano_segnaposti() {
+        let document = document(&[("a.png", PNG.to_vec())]);
+        let left = Budget::new(PNG.len() + 1);
+        assert!(shown(&document, &image("a.png", [0.0; 4]), &left).is_some());
+        assert_eq!(shown(&document, &image("a.png", [0.0; 4]), &left), None);
+    }
 }

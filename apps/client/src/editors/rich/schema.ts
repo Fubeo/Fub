@@ -440,9 +440,11 @@ const nodes: Record<string, NodeSpec> = {
       const told = note ?? label;
       attrs["aria-label"] = told ? `${name}: ${told}` : name;
       attrs.title = attrs["aria-label"];
-      // Un'immagine nuova si vede: i suoi byte sono qui.
+      // Un'immagine nuova si vede, e una del file quando la proiezione ne
+      // porta i byte: non è più un segnaposto.
       const mime = data !== null ? imageMime(data) : null;
       if (mime !== null) {
+        attrs.class += " rich-atom-drawn";
         const img = { src: `data:${mime};base64,${data}`, alt: "", style: "display: block; width: 100%; height: 100%" };
         return ["span", attrs, ["img", img]];
       }

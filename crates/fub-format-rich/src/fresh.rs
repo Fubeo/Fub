@@ -101,7 +101,8 @@ pub(crate) fn comment(text: &str) -> Result<impl Iterator<Item = &str>, RichErro
     Ok(text.split('\n'))
 }
 
-fn sniff(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
+/// Il tipo di un'immagine dai suoi primi byte: PNG, JPEG o GIF.
+pub(crate) fn sniff(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         Some(("png", "image/png"))
     } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {

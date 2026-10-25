@@ -345,18 +345,21 @@ fn paragraph(
                 let props = tracked(props, ins.as_ref(), del.as_ref(), document);
                 push(&mut out, x, props);
             }
-            // Una nota tenuta porta il suo testo e la sua specie da leggere:
-            // vale ciò che è tenuto in `k`.
+            // Una nota tenuta porta il suo testo e la sua specie da leggere,
+            // un'immagine tenuta i suoi byte da vedere: vale ciò che è tenuto
+            // in `k`.
             Inline::Atom {
                 k: Some(k),
                 kind,
-                data: None,
+                data,
                 note,
                 end,
                 ins,
                 del,
                 ..
-            } if *kind == AtomKind::Note || (note.is_none() && !*end) => {
+            } if (data.is_none() || *kind == AtomKind::Image)
+                && (*kind == AtomKind::Note || (note.is_none() && !*end)) =>
+            {
                 let AtomKeep {
                     props,
                     mut object,

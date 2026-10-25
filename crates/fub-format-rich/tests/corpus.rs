@@ -630,6 +630,105 @@ fn le_mutazioni_non_fanno_panic() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
+/// Le immagini di `blocks`, in profondità: le celle comprese.
+fn images(blocks: &mut [Block]) -> Vec<&mut Inline> {
+    let mut out = Vec::new();
+    for block in blocks {
+        match block {
+            Block::Para(para) => out.extend(para.c.iter_mut().filter(|inline| {
+                matches!(
+                    inline,
+                    Inline::Atom {
+                        kind: AtomKind::Image,
+                        k: Some(_),
+                        ..
+                    }
+                )
+            })),
+            Block::Table(table) => {
+                for cell in table.rows.iter_mut().flat_map(|row| &mut row.cells) {
+                    out.extend(images(&mut cell.blocks));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Un PNG di un pixel.
+const PIXEL: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+/// I byte da vedere delle immagini di `blocks`.
+fn shown(blocks: &mut [Block]) -> Vec<Option<String>> {
+    images(blocks)
+        .into_iter()
+        .map(|image| match image {
+            Inline::Atom { data, .. } => data.clone(),
+            _ => unreachable!(),
+        })
+        .collect()
+}
+
+#[test]
+fn un_immagine_del_file_si_vede() {
+    let bytes = std::fs::read(corpus().join("docx/oggetti.docx")).unwrap();
+    let opened = open(Codec::Docx, &bytes).unwrap();
+    let mut projection = Projection::from_json(&opened.projection).unwrap();
+    let shown = shown(&mut projection.blocks);
+    assert!(!shown.is_empty());
+    for seen in shown {
+        let seen = seen.expect("ogni immagine di oggetti.docx è un PNG piccolo");
+        assert!(
+            ["iVBORw0KGgo", "/9j/", "R0lGODdh", "R0lGODlh"]
+                .iter()
+                .any(|magic| seen.starts_with(magic)),
+            "i byte da vedere sono PNG, JPEG o GIF"
+        );
+    }
+}
+
+#[test]
+fn chi_scrive_ignora_i_byte_da_vedere_di_un_immagine_tenuta() {
+    let bytes = std::fs::read(corpus().join("docx/senza-perdite.docx")).unwrap();
+    let opened = open(Codec::Docx, &bytes).unwrap();
+    let mut projection = Projection::from_json(&opened.projection).unwrap();
+    let Some(Block::Para(para)) = projection.blocks.first_mut() else {
+        panic!("il primo blocco è un paragrafo")
+    };
+    para.c.push(Inline::Atom {
+        k: None,
+        kind: AtomKind::Image,
+        label: "Un pixel".into(),
+        w: Some(12.0),
+        h: Some(12.0),
+        data: Some(PIXEL.into()),
+        note: None,
+        end: false,
+        toc: None,
+        comment: None,
+        ins: None,
+        del: None,
+    });
+    let Ok(Saved::Bytes(with_image)) = save(Codec::Docx, &bytes, &projection.to_json().unwrap())
+    else {
+        panic!("l'immagine nuova si scrive")
+    };
+    // Riaperta, l'immagine è tenuta e porta i suoi byte da vedere.
+    let reopened = open(Codec::Docx, &with_image).unwrap();
+    let mut projection = Projection::from_json(&reopened.projection).unwrap();
+    assert_eq!(shown(&mut projection.blocks), vec![Some(PIXEL.to_string())]);
+    // Cambiati o tolti, il file tiene l'immagine che aveva.
+    for data in [Some("R0lGODlhAQABAAAAACw=".to_string()), None] {
+        for image in images(&mut projection.blocks) {
+            if let Inline::Atom { data: seen, .. } = image {
+                *seen = data.clone();
+            }
+        }
+        let saved = save(Codec::Docx, &with_image, &projection.to_json().unwrap());
+        assert!(matches!(saved, Ok(Saved::Unchanged)), "{saved:?}");
+    }
+}
+
 /// Il writer è deterministico: lo stesso modello dà gli stessi byte, due volte
 /// di fila e dopo un `clone`. Il salvataggio confronta i blocchi non toccati con
 /// la prova a vuoto della base, e la prova regge soltanto così.

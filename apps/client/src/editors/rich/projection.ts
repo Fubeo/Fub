@@ -146,7 +146,8 @@ export interface Anchor {
 /// e la sua misura in punti, una nota con il suo testo (`note`), di chiusura
 /// se `end`, o il segno di un commento (`marker` con `comment`). Il formato lo
 /// scrive alla sua maniera. In un oggetto tenuto `comment` è un suggerimento;
-/// in una nota tenuta `note` ed `end` si leggono soltanto.
+/// in una nota tenuta `note` ed `end` si leggono soltanto, e in un'immagine
+/// tenuta `data` si vede soltanto: il file la porta in PNG, JPEG o GIF.
 export interface AtomInline extends Tracked {
   readonly t: "atom";
   readonly k?: string;
@@ -520,8 +521,11 @@ function readInline(value: unknown, where: string): Inline {
         ? inline.kind === "marker" && data === undefined && note === undefined && inline.end !== true
         : (inline.kind === "image" && data !== undefined && note === undefined && inline.end !== true)
           || (inline.kind === "note" && note !== undefined && data === undefined);
-    // Una nota tenuta porta, da leggere, il suo testo e se è di chiusura.
-    const kept = data === undefined && toc === undefined && (inline.kind === "note" || (note === undefined && inline.end !== true));
+    // Una nota tenuta porta, da leggere, il suo testo e se è di chiusura;
+    // un'immagine tenuta, da vedere, i suoi byte.
+    const kept = toc === undefined
+      && (data === undefined || inline.kind === "image")
+      && (inline.kind === "note" || (note === undefined && inline.end !== true));
     if (k !== undefined ? !kept : !fresh) {
       throw new ProjectionError(`${where}: oggetto né tenuto né nuovo`);
     }

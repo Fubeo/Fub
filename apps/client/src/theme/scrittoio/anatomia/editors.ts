@@ -32,7 +32,7 @@ export const EDITORS: PartAnatomy = {
     { name: "content-look", layer: "contenuto", states: REST, hooks: ["look-tema", "look-file", "look-adattato"] },
     // Il segnaposto di un oggetto che Fub non disegna è un segno di Fub sulla
     // carta, come la selezione: in ogni aspetto lo veste la pelle.
-    { name: "rich-atom", layer: "segno", states: [S("rest"), S("selected")], hooks: ["rich-atom", "rich-atom-image", "rich-atom-graphic", "rich-atom-shape", "rich-atom-text_box", "rich-atom-group", "rich-atom-equation", "rich-atom-glyph", "rich-atom-name", "rich-atom-note", "rich-atom-field", "rich-atom-marker", "ProseMirror-selectednode", "rich-proof-spelling", "rich-proof-grammar"] },
+    { name: "rich-atom", layer: "segno", states: [S("rest"), S("selected")], hooks: ["rich-atom", "rich-atom-image", "rich-atom-graphic", "rich-atom-shape", "rich-atom-text_box", "rich-atom-group", "rich-atom-drawn", "rich-atom-equation", "rich-atom-glyph", "rich-atom-name", "rich-atom-note", "rich-atom-field", "rich-atom-marker", "ProseMirror-selectednode", "rich-proof-spelling", "rich-proof-grammar"] },
     // I segni di Fub sul documento: revisioni, ricerca, commenti.
     { name: "rich-marks", layer: "segno", states: REST, hooks: ["rich-ins", "rich-del", "rich-ins-mark", "rich-del-mark", "rich-find", "rich-find-current", "rich-comment", "rich-autore-1", "rich-autore-2", "rich-autore-3", "rich-autore-4", "rich-autore-5", "rich-autore-6", "rich-autore-ins", "rich-autore-del", "rich-changed", "rich-goto-ring"] },
     // I fogli: l'anteprima dell'intestazione e del piè, il nome di

@@ -7330,6 +7330,13 @@ kbd,
   border-style: dashed;
   line-height: var(--leading-tight);
 }
+/* Un'immagine disegnata è l'immagine, senza la casella del segnaposto. */
+.rich-atom-drawn {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
 .rich-atom-glyph {
   color: var(--doc-gutter-fg);
 }

@@ -160,8 +160,10 @@ duplicherebbe un'immagine o lascerebbe un riferimento senza relazione.
 
 Limiti attuali:
 
-- le immagini del file non si disegnano: si vede soltanto un'immagine appena
-  inserita, finché il documento resta aperto; un oggetto non si modifica dalla
+- di un `.docx` si disegnano le immagini PNG, JPEG e GIF intere, fino a
+  4 MiB l'una e 8 MiB in tutto; un'immagine ritagliata, in un altro formato
+  (EMF, WMF, SVG) o oltre quei pesi, e ogni immagine di un `.odt`, resta un
+  segnaposto con il nome e la misura. Un oggetto non si modifica dalla
   superficie, e il testo di una nota esistente non si cambia;
 - una nota nuova è testo semplice su una riga, senza formattazione; copiata e
   incollata, è una seconda nota con lo stesso testo;
