@@ -10,8 +10,8 @@
 // Una coreografia è un gesto che fa partire un movimento, e il gesto che lo
 // disfa. Sta scritta come le scene di `scene.mjs`: da che scena si parte, che
 // cosa si preme, come si riconosce l'arrivo. L'elenco è **chiuso**: ogni file
-// di `src/shells/scrittoio`, di `src/panels` e di `src/kit` che fa partire una corsa di `moto`
-// è la sorgente di una coreografia, oppure sta in `UNCOVERED` con la sua
+// di `src/shells/scrittoio`, di `src/panels`, di `src/kit` e di `src/editors/rich`
+// che fa partire una corsa di `moto` è la sorgente di una coreografia, oppure sta in `UNCOVERED` con la sua
 // ragione. Lo verifica `motion.test.ts`, perché un movimento nuovo che il banco
 // non guarda è un verde che non dice niente.
 //

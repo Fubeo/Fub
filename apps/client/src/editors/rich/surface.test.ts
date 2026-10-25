@@ -9,6 +9,7 @@ import * as engineModule from "./engine";
 import { mountRichSurface, RICH_ACTION_IDS, RICH_CHORDS, RICH_PROFILE } from "./surface";
 import { t } from "../../i18n/strings";
 import { declareClipboard } from "../../platform/clipboard";
+import { activeMotions, createManualDriver, setMotionDriver } from "../../moto";
 import type { SurfaceMenuItem } from "../core/editor-menu";
 
 afterEach(() => document.body.replaceChildren());
@@ -197,5 +198,34 @@ describe("la superficie ricca", () => {
     unmount();
     expect(host.childElementCount).toBe(0);
     surface.destroy();
+  });
+
+  it("scrivere, incollare e annullare non fanno partire nessuna corsa", async () => {
+    // Il motore vero, di cui si tiene l'istanza per battere come la tastiera.
+    let engine: engineModule.RichEngine | null = null;
+    class Captured extends engineModule.RichEngine {
+      constructor(...args: ConstructorParameters<typeof engineModule.RichEngine>) {
+        super(...args);
+        engine = this;
+      }
+    }
+    const driver = createManualDriver();
+    setMotionDriver(driver);
+    try {
+      const { surface, onChange } = mount(() => Promise.resolve({ ...engineModule, RichEngine: Captured }));
+      await flush();
+      surface.buffer!.setDoc(SOURCE);
+      const e = engine as engineModule.RichEngine | null;
+      expect(e).not.toBeNull();
+      for (let i = 0; i < 50; i++) e!.dispatch(e!.state.tr.insertText("x"));
+      expect(e!.pasteContent("incollato", null)).toBe(true);
+      expect(e!.run("text.undo")).toBe(true);
+      expect(onChange).toHaveBeenCalled();
+      expect(driver.plays).toHaveLength(0);
+      expect(activeMotions()).toBe(0);
+      surface.destroy();
+    } finally {
+      setMotionDriver(null);
+    }
   });
 });
