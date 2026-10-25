@@ -3409,7 +3409,8 @@ kbd,
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tab-pin {
+.tab-pin,
+.tab-format {
   width: 12px;
   height: 12px;
   margin-right: var(--space-2);
@@ -3578,6 +3579,17 @@ kbd,
   color: var(--muted);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* «WORD», «ODT» accanto al percorso: un'etichetta, non un bottone. */
+.pane-toolbar > .pane-format {
+  padding: 1px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0.04em;
+  line-height: 1.4;
 }
 .pane-toolbar > [data-pane-menu] {
   width: 28px;
@@ -12575,6 +12587,14 @@ h6.ui-heading {
 }
 .launcher-row-title {
   font-size: var(--text-base);
+}
+/* Il formato di un documento che non è una nota, prima del nome. */
+.launcher-row-format {
+  width: 14px;
+  height: 14px;
+  margin-right: var(--space-3);
+  color: var(--muted);
+  vertical-align: -2px;
 }
 /* Le lettere scritte, ritrovate nel nome: inchiostro pieno e grassetto. */
 .launcher-row-title mark {

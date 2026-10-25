@@ -792,6 +792,14 @@
 .launcher-row-title {
   font-size: var(--text-base);
 }
+/* Il formato di un documento che non è una nota, prima del nome. */
+.launcher-row-format {
+  width: 14px;
+  height: 14px;
+  margin-right: var(--space-3);
+  color: var(--muted);
+  vertical-align: -2px;
+}
 /* Le lettere scritte, ritrovate nel nome: inchiostro pieno e grassetto. */
 .launcher-row-title mark {
   background: transparent;

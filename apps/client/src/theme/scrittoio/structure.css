@@ -872,6 +872,18 @@ body {
   order: 1;
 }
 
+/* L'etichetta del formato sta subito dopo il percorso: il titolo, che di
+   solito spinge il resto a destra (`sheets/sheets.css`), le cede lo spazio. */
+.pane-toolbar > .pane-format {
+  flex: none;
+  order: 1;
+  margin-inline-end: auto;
+  white-space: nowrap;
+}
+.pane-toolbar:has(> .pane-format:not([hidden])) > .muted {
+  margin-right: 0;
+}
+
 /* Se lo spazio non basta cede prima lo stato, che la banda ripete, poi il
    selettore; mai il menu, che è la sola strada, dal foglio, per dividerlo e
    chiuderlo. Il fattore minimo fa cedere il selettore solo a stato esaurito. */
@@ -910,6 +922,9 @@ body {
 @container sheet-head (max-width: 300px) {
   .pane-toolbar > .muted {
     visibility: hidden;
+  }
+  .pane-toolbar > .pane-format {
+    display: none;
   }
   .pane-toolbar > .pane-status-slot {
     display: none;

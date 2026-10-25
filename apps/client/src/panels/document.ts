@@ -12,6 +12,7 @@
 // riesportato sotto, con gli stessi nomi.
 import { promptText } from "../ui/dialogs";
 import { openCompare } from "../ui/compare";
+import { FORMAT_ICON, formatKindOf, formatNameOf, formatTagOf } from "../ui/format-kind";
 import { iconEl } from "../ui/icons";
 import { api } from "../host/ipc";
 import { emit, on, state } from "../state/store";
@@ -900,6 +901,13 @@ function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boo
   const source = tabOverride(target) ? t("document.tab.source_view") : null;
   const name = tab.querySelector<HTMLElement>(".tab-name")!;
   name.textContent = described.label + (target.stack ? ` [${target.stack}]` : "") + (source ? ` · ${source}` : "");
+  // Un documento che non è una nota porta l'icona del suo formato.
+  const kind = target.k === "doc" ? formatKindOf(target.doc) : null;
+  const format = kind && kind !== "note" ? iconEl(FORMAT_ICON[kind]) : null;
+  if (format) {
+    format.classList.add("tab-format");
+    name.prepend(format);
+  }
   const pin = target.pinned ? iconEl("pin") : null;
   if (pin) {
     pin.classList.add("tab-pin");
@@ -910,7 +918,7 @@ function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boo
   tab.setAttribute("aria-keyshortcuts", tabShortcuts());
   tab.setAttribute(
     "aria-label",
-    (target.pinned ? `${t("tabmenu.pinned")} · ` : "") + (described.dirty ? `${described.label} · ${t("save.unsaved")}` : described.label) + (source ? ` · ${source}` : "") + (target.stack ? ` · ${t("tabmenu.stack", { stack: target.stack })}` : ""),
+    (target.pinned ? `${t("tabmenu.pinned")} · ` : "") + (described.dirty ? `${described.label} · ${t("save.unsaved")}` : described.label) + (format && kind ? ` · ${formatNameOf(kind)}` : "") + (source ? ` · ${source}` : "") + (target.stack ? ` · ${t("tabmenu.stack", { stack: target.stack })}` : ""),
   );
   const close = tab.parentElement!.querySelector<HTMLElement>(".tab-close")!;
   close.tabIndex = tab.tabIndex;
@@ -1030,7 +1038,11 @@ function drawToolbar(r: Pane): void {
     menu.textContent = "…";
     menu.setAttribute("aria-haspopup", "menu");
     menu.addEventListener("click", (event) => openPaneMenu(r, event));
-    bar.append(nav, crumbs, status, group, current, menu);
+    // «WORD», «ODT»: il formato accanto al percorso.
+    const tag = document.createElement("span");
+    tag.className = "pane-format";
+    tag.hidden = true;
+    bar.append(nav, crumbs, tag, status, group, current, menu);
   }
   const nav = bar.querySelector<HTMLElement>(":scope > .pane-nav")!;
   const crumbs = bar.querySelector<HTMLElement>(":scope > .muted")!;
@@ -1055,6 +1067,12 @@ function drawToolbar(r: Pane): void {
   const path = tab?.k === "doc" ? tab.doc : tab?.k === "view" ? nameTab(tab) : "";
   drawCrumbs(crumbs, path, tab?.k === "doc");
   setTooltip(crumbs, path);
+  const tag = bar.querySelector<HTMLElement>(":scope > .pane-format")!;
+  const said = tab?.k === "doc" ? formatTagOf(tab.doc) : null;
+  const kind = tab?.k === "doc" ? formatKindOf(tab.doc) : null;
+  tag.hidden = said === null;
+  tag.textContent = said ?? "";
+  if (said && kind) setTooltip(tag, formatNameOf(kind));
   group.setAttribute("aria-label", t("document.toolbar.modes"));
   menu.setAttribute("aria-label", t("document.pane.menu"));
   const modes = r.surface && r.surface.modes.length > 1 ? r.surface.modes : [];

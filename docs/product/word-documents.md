@@ -216,6 +216,13 @@ le modifiche si registrano. Le parole sono quelle di Proprietà › Conteggio, e
 un clic ci porta; il conteggio della nota, che la banda mostra per le altre
 note, si fa da parte.
 
+Il formato si vede prima di aprire: nell'albero, nelle schede e nel
+lanciatore un documento di Word, un OpenDocument, un foglio di calcolo e un
+disegno hanno ciascuno la sua icona, diversa dal foglietto di una nota. Accanto
+al percorso, nella testata del foglio, un'etichetta dice **WORD**, **ODT**,
+**RTF** o **EXCEL**. La specie viene dall'estensione (`ui/format-kind.ts`);
+quale formato apre il file lo decide sempre il backend.
+
 **Carta adattata**, nella scheda **Visualizza**, porta il documento di Pagina
 e di Lettura sulla carta del tema, che di notte è scura. Ogni colore del file
 tiene la tinta e il contrasto che aveva sul bianco. Con il contrasto alto è
