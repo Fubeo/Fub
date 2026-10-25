@@ -395,6 +395,26 @@
 .pane-standing-rec[hidden] {
   display: none;
 }
+/* In una testata stretta (il telefono, tre fogli affiancati) il percorso
+   resta leggibile: dello stato si vedono i pallini, e la parola la dicono il
+   nome del chip e il suo riquadro. La sola lettura, che non ha pallino, ne
+   prende uno vuoto. */
+@container sheet-head (max-width: 440px) {
+  .pane-standing-chip {
+    padding: 0 var(--space-3);
+  }
+  .pane-standing-text {
+    display: none;
+  }
+  .pane-standing[data-standing="readonly"] .pane-standing-mark {
+    display: block;
+    border: 1px solid var(--muted);
+    background: transparent;
+  }
+  .pane-standing-rec {
+    font-size: 0;
+  }
+}
 .pane-standing-panel {
   max-width: 340px;
   padding: var(--space-4) var(--space-5);

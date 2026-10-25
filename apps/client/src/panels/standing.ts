@@ -10,7 +10,7 @@ import type { SurfaceStanding, SurfaceStandingAction, SurfaceStandingState } fro
 import { t } from "../i18n/strings";
 import { textButton } from "../kit/button";
 import { openPopover, type PopoverHandle } from "../kit/popover";
-import { animate } from "../moto";
+import { animate, DURATION, prepareExit } from "../moto";
 import { focusableElements } from "../ui/a11y";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
@@ -41,6 +41,8 @@ export function createStandingChip(): StandingChip {
   chip.className = "pane-standing-chip";
   chip.setAttribute("aria-haspopup", "dialog");
   chip.setAttribute("aria-expanded", "false");
+  // Un nome anche prima del primo stato, quando il chip è nascosto.
+  chip.setAttribute("aria-label", t("document.standing.name"));
   const mark = document.createElement("span");
   mark.className = "pane-standing-mark";
   mark.setAttribute("aria-hidden", "true");
@@ -172,13 +174,17 @@ export function createStandingChip(): StandingChip {
     chip.setAttribute("aria-label", t("document.standing.label", { state: next.text }));
     setTooltip(chip, next.title);
     const wasRecording = !recording.hidden;
+    // «Registra» che si spegne se ne va come immagine: a metà del battito,
+    // l'immagine prosegue da dov'era.
+    const ghost = wasRecording && !next.recording && before !== null ? prepareExit(recording) : null;
     recording.hidden = !next.recording;
+    ghost?.play({ duration: DURATION.state });
     recording.textContent = t("document.standing.recording");
     if (next.recordingHint) setTooltip(recording, next.recordingHint);
     // Un battito solo, con la molla elastica: niente lampeggio. Arrivare in un
     // documento che registra già non è un'accensione.
     if (next.recording && !wasRecording && before !== null) {
-      animate(recording, { from: { scale: BEAT_SCALE, opacity: 0 }, spring: "elastic", whenReduced: "none", lifetime: life });
+      animate(recording, { from: { scale: BEAT_SCALE }, spring: "elastic", whenReduced: "none", lifetime: life });
     }
     if (!announced) {
       announced = true;

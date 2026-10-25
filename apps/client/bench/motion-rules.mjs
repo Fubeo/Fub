@@ -717,16 +717,22 @@ export const CHOREOGRAPHIES = [
   },
   {
     id: "rich-record",
-    title: "Documento: «Registra» si accende nella banda con un battito solo, e non lampeggia",
-    sources: ["src/shells/scrittoio/frame/status-band.ts"],
+    title: "Documento: «Registra» si accende nella banda e accanto al chip dello stato con un battito solo, e non lampeggia",
+    sources: ["src/shells/scrittoio/frame/status-band.ts", "src/panels/standing.ts"],
     scene: "document-docx",
     // Il nome di chi rivede, scritto nei Commenti: senza, «Registra» apre
     // Revisioni invece di accendersi.
     setup: commentsOpen,
     act: click('[data-command="rich.track"] button'),
-    arrived: has('[data-surface-item="tracking"]'),
+    arrived: (page) =>
+      page.evaluate(
+        () => !!document.querySelector('[data-surface-item="tracking"]') && document.querySelector(".pane-standing-rec")?.hidden === false,
+      ),
     undo: click('[data-command="rich.track"] button'),
-    returned: lacks('[data-surface-item="tracking"]'),
+    returned: (page) =>
+      page.evaluate(
+        () => !document.querySelector('[data-surface-item="tracking"]') && document.querySelector(".pane-standing-rec")?.hidden !== false,
+      ),
   },
   {
     id: "rich-header",
