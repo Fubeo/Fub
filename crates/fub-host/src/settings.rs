@@ -214,6 +214,14 @@ pub const APPEARANCE_DIAGRAM_STYLE: &str = "appearance.diagram-style";
 /// Gli stili offerti, il predefinito per primo.
 pub const DIAGRAM_STYLES: [&str; 5] =
     ["armonia", "acquerello", "aurora", "blueprint", "inchiostro"];
+/// Come si mostra il contenuto di un file che ha un aspetto suo (un documento,
+/// un foglio di calcolo): `auto` è la pagina del file, o la pagina adattata con
+/// il contrasto alto; `file` tiene i colori del file sulla sua carta;
+/// `adattato` li porta sulla carta del tema. Vale per le modalità che offrono
+/// quell'aspetto; le altre restano al loro.
+pub const APPEARANCE_CONTENT_LOOK: &str = "appearance.content-look";
+/// Gli aspetti offerti, il predefinito per primo.
+pub const CONTENT_LOOKS: [&str; 3] = ["auto", "file", "adattato"];
 pub const DEFAULT_ZOOM: f64 = 1.0;
 /// La cartella del vault in cui la shell deposita e cerca gli allegati.
 ///
@@ -811,6 +819,17 @@ fn appearance_settings() -> Vec<SettingSpec> {
             ],
         ),
         choice(
+            APPEARANCE_CONTENT_LOOK,
+            C_CONTENT_LOOK,
+            C_CONTENT_LOOK_DESC,
+            CONTENT_LOOKS[0],
+            vec![
+                UiOption::new(CONTENT_LOOKS[0], Text::key(C_CONTENT_LOOK_AUTO)),
+                UiOption::new(CONTENT_LOOKS[1], Text::key(C_CONTENT_LOOK_FILE)),
+                UiOption::new(CONTENT_LOOKS[2], Text::key(C_CONTENT_LOOK_ADAPTED)),
+            ],
+        ),
+        choice(
             APPEARANCE_FONT,
             C_FONT,
             C_FONT_DESC,
@@ -1302,6 +1321,11 @@ const C_DIAGRAM_STYLE_ACQUERELLO: &str = "core.diagram_style.acquerello";
 const C_DIAGRAM_STYLE_AURORA: &str = "core.diagram_style.aurora";
 const C_DIAGRAM_STYLE_BLUEPRINT: &str = "core.diagram_style.blueprint";
 const C_DIAGRAM_STYLE_INCHIOSTRO: &str = "core.diagram_style.inchiostro";
+const C_CONTENT_LOOK: &str = "core.content_look";
+const C_CONTENT_LOOK_DESC: &str = "core.content_look.desc";
+const C_CONTENT_LOOK_AUTO: &str = "core.content_look.auto";
+const C_CONTENT_LOOK_FILE: &str = "core.content_look.file";
+const C_CONTENT_LOOK_ADAPTED: &str = "core.content_look.adattato";
 const C_GROUP_CHROME: &str = "core.group.chrome";
 const C_CHROME_SCHEMA: &str = "core.chrome.schema";
 const C_CHROME_SCHEMA_DESC: &str = "core.chrome.schema.desc";
@@ -1855,6 +1879,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DIAGRAM_STYLE_AURORA, "Aurora — colori vivi e profondi")
         .with(C_DIAGRAM_STYLE_BLUEPRINT, "Blueprint — tavola tecnica")
         .with(C_DIAGRAM_STYLE_INCHIOSTRO, "Inchiostro — editoriale")
+        .with(C_CONTENT_LOOK, "Aspetto dei documenti")
+        .with(
+            C_CONTENT_LOOK_DESC,
+            "Come si mostra un file che ha un aspetto suo, come un documento: la sua pagina, o la pagina adattata alla luce del tema. Automatico sceglie la pagina, e quella adattata con il contrasto alto.",
+        )
+        .with(C_CONTENT_LOOK_AUTO, "Automatico")
+        .with(C_CONTENT_LOOK_FILE, "Pagina")
+        .with(C_CONTENT_LOOK_ADAPTED, "Pagina adattata")
         .with(C_CSS_SNIPPETS, "Frammenti CSS locali")
         .with(C_CSS_SNIPPETS_DESC, "Frammenti attivabili, locali e limitati agli hook visivi; nessuna rete o importazione CSS.")
         .with(C_GROUP_SYNC, "Sincronizzazione")
@@ -2348,6 +2380,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DIAGRAM_STYLE_AURORA, "Aurora — vivid and deep")
         .with(C_DIAGRAM_STYLE_BLUEPRINT, "Blueprint — technical drawing")
         .with(C_DIAGRAM_STYLE_INCHIOSTRO, "Ink — editorial")
+        .with(C_CONTENT_LOOK, "Document appearance")
+        .with(
+            C_CONTENT_LOOK_DESC,
+            "How a file with a look of its own, such as a document, is shown: its own page, or the page adapted to the theme's light. Automatic picks the page, and the adapted one with high contrast.",
+        )
+        .with(C_CONTENT_LOOK_AUTO, "Automatic")
+        .with(C_CONTENT_LOOK_FILE, "Page")
+        .with(C_CONTENT_LOOK_ADAPTED, "Adapted page")
         .with(C_CSS_SNIPPETS, "Local CSS snippets")
         .with(C_CSS_SNIPPETS_DESC, "Toggleable, local, paint-only snippets scoped to visual hooks; no network or CSS imports.")
         .with(C_GROUP_SYNC, "Synchronization")

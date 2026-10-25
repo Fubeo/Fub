@@ -1,4 +1,5 @@
 import type { Theme } from "../../theme/theme";
+import type { Look } from "../../theme/content-look";
 import type { SourceKind } from "../../host/enums.generated";
 import type { PaneMode, SelectionSet, Span, SyntaxForm } from "../../host/contract";
 import type { DocumentUpdate, EditorChange } from "./text-operation";
@@ -34,6 +35,12 @@ export interface SurfaceMode {
    * as stored, a rendering the user edits, or a rendering without a caret.
    */
   readonly contextMode: PaneMode;
+  /**
+   * Who owns the look of the content in this mode, the default first: the
+   * theme (`tema`), the file on its own paper (`file`), or the file's tints on
+   * the theme's paper (`adattato`). Missing means `tema`.
+   */
+  readonly looks?: readonly Look[];
 }
 
 export interface SurfaceMountContext {

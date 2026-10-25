@@ -763,6 +763,10 @@ fn the_keys_of_appearance_are_the_same_here_and_there_and_are_machine_keys() {
             "DIAGRAM_STYLE_KEY",
             fub_host::settings::APPEARANCE_DIAGRAM_STYLE,
         ),
+        (
+            "CONTENT_LOOK_KEY",
+            fub_host::settings::APPEARANCE_CONTENT_LOOK,
+        ),
     ];
     let core = fub_host::settings::core_settings();
 
@@ -918,6 +922,27 @@ fn the_diagram_styles_are_the_same_here_and_there() {
         .map(|id| id.trim().trim_matches('"'))
         .collect();
     assert_eq!(declared, fub_host::settings::DIAGRAM_STYLES.to_vec());
+}
+
+/// Gli aspetti del contenuto, come gli stili: il core li offre nel pannello,
+/// la shell li risolve. Un valore che la shell non conoscesse varrebbe `auto`.
+#[test]
+fn the_content_looks_are_the_same_here_and_there() {
+    let looks_ts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/theme/content-look.ts");
+    let source = std::fs::read_to_string(&looks_ts)
+        .unwrap_or_else(|and| panic!("the shell no longer has {}: {and}", looks_ts.display()));
+    let declared: Vec<&str> = source
+        .lines()
+        .find_map(|row| {
+            row.strip_prefix("export const CONTENT_LOOK_CHOICES = [")?
+                .strip_suffix("] as const;")
+        })
+        .expect("the shell no longer declares CONTENT_LOOK_CHOICES")
+        .split(',')
+        .map(|id| id.trim().trim_matches('"'))
+        .collect();
+    assert_eq!(declared, fub_host::settings::CONTENT_LOOKS.to_vec());
 }
 
 /// Come il tema, e per una posta più alta: l'interruttore della **memoria**

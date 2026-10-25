@@ -8,6 +8,7 @@
 // dopo, cioè nel modo più difficile da ricondurre alla causa.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  setLook,
   openIn,
   openViewIn,
   activateTab,
@@ -534,6 +535,26 @@ describe("rileggere la finestra com'era", () => {
     split("main", "col", l);
     const reread = parseLayout(JSON.parse(JSON.stringify(l)));
     expect(reread).toEqual(l);
+  });
+
+  it("ritrova l'aspetto scelto per famiglia, e scarta quello che non è un aspetto", () => {
+    const l = newItem();
+    openIn("main", "a.md", l);
+    setLook("main", "rich", "adattato", l);
+    expect(parseLayout(JSON.parse(JSON.stringify(l)))?.panes.main.looks).toEqual({ rich: "adattato" });
+    const split_ = split("main", "row", l)!;
+    expect(l.panes[split_]!.looks, "il riquadro accanto nasce con le stesse scelte").toEqual({ rich: "adattato" });
+    const reread = parseLayout({
+      tree: { k: "leaf", pane: "main" },
+      panes: { main: { tabs: [], active: -1, modes: {}, looks: { rich: "pastello", sheet: "file", "": "tema" } } },
+      focus: "main",
+    });
+    expect(reread?.panes.main.looks).toEqual({ sheet: "file" });
+    expect(parseLayout({
+      tree: { k: "leaf", pane: "main" },
+      panes: { main: { tabs: [], active: -1, modes: {}, looks: "file" } },
+      focus: "main",
+    })?.panes.main.looks).toBeUndefined();
   });
 
   // **La migrazione della §3.3.** Fino a ieri un riquadro teneva `docs:

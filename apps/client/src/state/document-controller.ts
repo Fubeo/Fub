@@ -67,6 +67,7 @@ import { Queue } from "../ui/race";
 import { openWebPage } from "../ui/web-viewer";
 import { invalidateDocumentCaches, renameInDocumentCaches } from "./document-caches";
 import type { Theme } from "../theme/theme";
+import { contentLookPreference, markLook, resolveLook, UNDECLARED, type Look } from "../theme/content-look";
 import { api } from "../host/ipc";
 import { WITHOUT_PAGE, documentOutline, matchingDocuments, notesByName, renderPrint, resolvedReference, searchExpression, settings, vaultEntries, vaultTags } from "../host/query";
 import { theseDocuments, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
@@ -111,6 +112,7 @@ import {
   documents,
   focusPane,
   setMode as setPaneMode,
+  setLook as setPaneLook,
   layout,
   pane as paneState,
   activePane,
@@ -1591,9 +1593,7 @@ async function render(): Promise<void> {
     } catch (error) {
       failure ??= { error };
     }
-    const mode = selectedMode(r);
-    if (mode) r.root.dataset.mode = mode.id;
-    else delete r.root.dataset.mode;
+    markMode(r, selectedMode(r)?.id ?? null);
     view.drawToolbar(r);
     view.drawConflict(r, activeDoc(id));
   }
@@ -1888,7 +1888,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     );
     r.surface = surface;
     surface.setMode("view");
-    r.root.dataset.mode = "view";
+    markMode(r, "view");
     if (theme) surface.setTheme?.(theme);
     return;
   }
@@ -1951,7 +1951,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     return;
   }
   surface.setMode(mode.id);
-  r.root.dataset.mode = mode.id;
+  markMode(r, mode.id);
   if (theme) surface.setTheme?.(theme);
   surface.setSyntaxForms?.(forms);
   try {
@@ -2074,7 +2074,7 @@ function showSurfaceError(r: Pane, doc: string, error: unknown): void {
   );
   r.surface = surface;
   surface.setMode("error");
-  r.root.dataset.mode = "error";
+  markMode(r, "error");
   if (theme) surface.setTheme?.(theme);
   if (documentSessions.text(doc) === null) return;
   r.disposeSurface = documentSessions.attachSurface(doc, {
@@ -2194,6 +2194,41 @@ export function selectedMode(r: Pane | undefined): SurfaceMode | undefined {
   return modes.find((mode) => mode.id === requested)
     ?? modes.find((mode) => mode.id === defaultMode)
     ?? modes[0];
+}
+
+/// Scrive sulla radice del riquadro la modalità montata (`data-mode`), e sulla
+/// regione del contenuto la classe del suo aspetto (`look-*`).
+function markMode(r: Pane, mode: string | null): void {
+  if (mode === null) delete r.root.dataset.mode;
+  else r.root.dataset.mode = mode;
+  markLook(r.editorEl, selectedLook(r));
+}
+
+/// L'aspetto del contenuto che il riquadro mostra: la scelta del riquadro per
+/// la famiglia, se la modalità montata la offre, altrimenti l'impostazione o il
+/// predefinito della modalità (`content-look.ts`). `null` senza superficie.
+export function selectedLook(r: Pane | undefined): Look | null {
+  if (!r?.surface) return null;
+  const shown = r.root.dataset.mode;
+  const mode = r.surface.modes.find((candidate) => candidate.id === shown) ?? selectedMode(r);
+  const { preference, highContrast } = contentLookPreference();
+  return resolveLook(mode?.looks, paneState(r.id)?.looks?.[r.surface.family], preference, highContrast);
+}
+
+/// Sceglie l'aspetto del contenuto nel riquadro col fuoco, per la famiglia
+/// della sua superficie. Un aspetto che la modalità non offre non si prende.
+export function setLook(next: Look): void {
+  const r = panes.get(layout.focus);
+  const mode = selectedMode(r);
+  if (!r?.surface || !mode || !(mode.looks ?? UNDECLARED).includes(next)) return;
+  setPaneLook(layout.focus, r.surface.family, next);
+  markLook(r.editorEl, selectedLook(r));
+}
+
+/// Ridice l'aspetto di ogni riquadro: l'impostazione o il contrasto sono
+/// cambiati.
+export function refreshLooks(): void {
+  for (const r of panes.values()) markLook(r.editorEl, selectedLook(r));
 }
 
 /// Il contesto della modalità del riquadro col fuoco (sorgente, Live,
@@ -2861,7 +2896,7 @@ export async function setMode(next: string): Promise<void> {
     writingModes.set(layout.focus, remembered);
   }
   setPaneMode(layout.focus, r.surface.family, mode.id);
-  r.root.dataset.mode = mode.id;
+  markMode(r, mode.id);
   r.surface.setMode(mode.id);
   if (mode.presentation !== "rendered") r.surface.focus?.();
   view.drawToolbar(r);
