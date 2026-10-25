@@ -110,8 +110,12 @@ l'IPC.
   Alt o F10 e Ctrl+F1 per ritirarla. Ogni controllo è un'azione del motore
   (`RICH_ACTION_IDS`, con i suoi accordi), un valore che il motore scrive
   (tipo, dimensione, stile del paragrafo, con la galleria che scrive ogni
-  nome nel carattere del documento) o un riquadro di
-  `editors/rich/panels.ts`. Il catalogo della barra spegne col perché ciò
+  nome nel carattere del documento), un riquadro di
+  `editors/rich/panels.ts` o una scheda del pannello di destra
+  (`side.ts`). Layout ha le gallerie veloci della pagina (Margini,
+  Orientamento, Dimensione, Colonne), con ciò che c'è segnato e una voce
+  «Altre opzioni di pagina…» che apre Proprietà; Conteggio apre Proprietà
+  sul conteggio. Il catalogo della barra spegne col perché ciò
   che non si dà adesso: in sola lettura ciò che scrive (restano Trova,
   Conteggio, Commenti, scorrere le revisioni e lo zoom), mentre si registra
   il formato. La superficie dichiara `ownBar`, e la barra di formattazione
@@ -190,7 +194,13 @@ l'IPC.
   (`UPDATE_MIRROR=1 cargo test -p fub-format-rich --test ts_paper`). Non è una
   sostituzione, quindi mentre si registra si rifiuta. Il codec ODT rifiuta
   una pagina, e un formato senza la sua (l'ODT) vale `DEFAULT_PAGE`, un A4
-  con i margini di 2 cm che il riquadro Pagina dice senza scriverlo.
+  con i margini di 2 cm che Proprietà dice senza scriverlo. La scheda
+  Proprietà del documento (`editors/rich/properties.ts`) ha la pagina della
+  sezione del cursore (carta coi nomi italiani, orientamento, margini in
+  centimetri, colonne) con l'anteprima del foglio (`previewVariables`), il
+  formato e la lingua che il file dice per il testo, e il conteggio del
+  documento e della selezione, rifatto quando cambia l'uno o l'altra. Mentre
+  si registra, o in sola lettura, la pagina si legge e basta.
   `pageVariables` mette la pagina sul testo (`.rich-content`) come variabili
   di dato in punti (`--page-w`, `--page-top`, …), che la carta di Pagina e di
   Lettura legge in `structure.css`: la carta è grande quanto quella vera e

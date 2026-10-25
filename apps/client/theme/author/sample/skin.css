@@ -7031,6 +7031,7 @@ kbd,
   padding: 0 0 0 var(--space-2);
   border: none;
   border-left: 2px solid var(--border-strong);
+  border-radius: 0;
   background: transparent;
   color: var(--muted);
   font: inherit;
@@ -7065,6 +7066,50 @@ kbd,
 .rich-side-actions,
 .rich-side-answer {
   gap: var(--space-2);
+}
+.rich-side-section {
+  gap: var(--space-3);
+}
+.rich-side-section + .rich-side-section {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.rich-side-section-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.rich-side-section:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* L'anteprima è un disegno della cornice: il foglio, il testo fra i margini
+   e le sue colonne, coi colori del tema e non con quelli della carta. */
+.rich-side-preview {
+  padding: var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+}
+.rich-side-preview-sheet {
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev);
+}
+.rich-side-preview-text {
+  gap: 3px;
+}
+.rich-side-preview-column {
+  background: var(--accent-wash);
+}
+.rich-side-facts {
+  gap: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+}
+.rich-side-facts dt {
+  color: var(--muted);
+}
+.rich-side-facts dd {
+  color: var(--text);
 }
 .rich-side-switch {
   font-weight: var(--weight-bold);

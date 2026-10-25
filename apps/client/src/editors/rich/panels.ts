@@ -1,11 +1,11 @@
 // I riquadri della barra del documento e la barra di ricerca: i colori, la
-// tabella, la nota, il link, la spaziatura, la pagina, l'intestazione, il
-// conteggio; e la barra di Trova e sostituisci che sta sopra il foglio.
+// tabella, la nota, il link, la spaziatura; e la barra di Trova e sostituisci
+// che sta sopra il foglio. La pagina e il conteggio stanno in Proprietà, nel
+// pannello di destra (`properties.ts`).
 //
 // Ogni riquadro si apre sotto il controllo che lo chiede (`open`) e scrive nel
 // documento con i comandi del motore: niente di qui passa per il catalogo
 // della barra, che sa soltanto quale riquadro aprire.
-import type { Command } from "prosemirror-state";
 import { iconButton, labelButton, openPopover, textButton, textField, type ButtonKind, type PopoverHandle } from "../../kit";
 import { identifier } from "../../ui/a11y";
 import { openLifetime } from "../../ui/lifetime";
@@ -17,23 +17,8 @@ import type { RichEngine } from "./engine";
 import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, type LayoutLength } from "./projection";
 import { imageMime } from "./schema";
 import { check, choice, labelled, remark } from "./form";
-import {
-  columns,
-  DEFAULT_PAGE,
-  formatLength,
-  landscape,
-  MARGIN_PRESETS,
-  pageAt,
-  PAPER_SIZES,
-  paperLabel,
-  paperName,
-  parseLength,
-  setColumns,
-  setLandscape,
-  setMargins,
-  setPaper,
-} from "./page";
-import { countText, findMatches, nextMatch, replaceAll, replaceMatch, type FindQuery, type TextCount } from "./review";
+import { formatLength, parseLength } from "./page";
+import { findMatches, nextMatch, replaceAll, replaceMatch, type FindQuery } from "./review";
 
 /// Ciò che la barra chiede alla shell.
 export interface RichMedia {
@@ -42,6 +27,8 @@ export interface RichMedia {
   readonly pickImage?: () => Promise<Blob | "unreadable" | null>;
   /// Il formato scrive commenti nuovi e registra le modifiche.
   readonly review?: boolean;
+  /// Il formato del file (`docx`), che Proprietà nomina.
+  readonly format?: string;
 }
 
 /// La colonna del testo di una pagina Letter con i margini di Word, in punti:
@@ -135,9 +122,7 @@ export type RichPanelId =
   | "rich.spacing"
   | "rich.table"
   | "rich.note"
-  | "rich.link"
-  | "rich.page"
-  | "rich.count";
+  | "rich.link";
 
 export const RICH_PANEL_IDS: ReadonlySet<string> = new Set<RichPanelId>([
   "rich.color",
@@ -146,8 +131,6 @@ export const RICH_PANEL_IDS: ReadonlySet<string> = new Set<RichPanelId>([
   "rich.table",
   "rich.note",
   "rich.link",
-  "rich.page",
-  "rich.count",
 ]);
 
 export interface RichPanels {
@@ -403,39 +386,6 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
     what.select();
   }
 
-  /// Parole, caratteri e paragrafi del documento e, se c'è, della selezione.
-  function openCount(anchor: HTMLElement): void {
-    popover?.close();
-    const card = panel(t("rich.count"));
-    const table = document.createElement("table");
-    table.className = "rich-strip-count";
-    const { doc, from, to, empty } = engine.read(({ doc, selection }) => ({ doc, from: selection.from, to: selection.to, empty: selection.empty }));
-    const columns: { label: Key; count: TextCount }[] = [
-      ...(empty ? [] : [{ label: "rich.count.selection" as Key, count: countText(doc, from, to) }]),
-      { label: "rich.count.document", count: countText(doc) },
-    ];
-    const cell = (tag: "th" | "td", content: string, scope?: string) => {
-      const el = document.createElement(tag);
-      el.textContent = content;
-      if (scope) el.scope = scope;
-      return el;
-    };
-    if (!empty) {
-      const head = document.createElement("tr");
-      head.append(cell("td", ""), ...columns.map((column) => cell("th", t(column.label), "col")));
-      table.append(head);
-    }
-    const format = new Intl.NumberFormat(document.documentElement.lang || undefined);
-    for (const key of ["words", "characters", "visible", "paragraphs"] as const) {
-      const row = document.createElement("tr");
-      row.append(cell("th", t(`rich.count.${key}` as Key), "row"), ...columns.map((column) => cell("td", format.format(column.count[key]))));
-      table.append(row);
-    }
-    card.body.append(table);
-    finish(card);
-    showPanel(anchor, card);
-  }
-
   /// La griglia delle dimensioni: righe e colonne fino alla cella indicata,
   /// col mouse o con le frecce. «Inserisci» mette quella indicata.
   function openTable(anchor: HTMLElement): void {
@@ -647,81 +597,6 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
     showPanel(anchor, card);
   }
 
-  /// La pagina della sezione del cursore: carta, verso, margini (in
-  /// centimetri) e colonne. Ogni scelta si applica subito, e i campi si
-  /// rileggono da ciò che il documento ha preso.
-  function openPage(anchor: HTMLElement): void {
-    popover?.close();
-    const card = panel(t("rich.page"), "pairs");
-    // Una pagina che il codec rifiuterebbe non si prende: i campi tornano a
-    // ciò che c'è, e l'avviso dice perché.
-    const apply = (command: Command) => {
-      const applied = engine.apply(command, false);
-      fill();
-      problem.hidden = applied;
-    };
-    const paper = labelled(card.body, choice([...PAPER_SIZES.map((s): [string, string] => [s.name, paperLabel(s.name)]), ["", t("rich.page.custom")]]), t("rich.page.size"));
-    life.listen(paper, "change", () => {
-      const size = PAPER_SIZES.find((s) => s.name === paper.value);
-      if (size) apply(setPaper(size.w, size.h));
-    });
-    const turn = labelled(
-      card.body,
-      choice([
-        ["portrait", t("rich.page.portrait")],
-        ["landscape", t("rich.page.landscape")],
-      ]),
-      t("rich.page.orientation"),
-    );
-    life.listen(turn, "change", () => apply(setLandscape(turn.value === "landscape")));
-    const preset = labelled(card.body, choice([...MARGIN_PRESETS.map((m): [string, string] => [m.id, t(`rich.page.margins.${m.id}` as Key)]), ["", t("rich.page.custom")]]), t("rich.page.margins"));
-    life.listen(preset, "change", () => {
-      const margins = MARGIN_PRESETS.find((m) => m.id === preset.value);
-      if (margins) apply(setMargins(margins));
-    });
-    const language = resolvedLanguage();
-    const sides = (["top", "bottom", "left", "right"] as const).map((side) => {
-      const input = text(card.body, t(`rich.page.${side}` as Key));
-      input.inputMode = "decimal";
-      life.listen(input, "change", () => {
-        const points = parseLength(input.value, "cm");
-        const page = engine.read(pageAt)?.page;
-        // Il margine lasciato com'era non si riscrive arrotondato.
-        if (points === null || points === undefined || points < 0 || !page || input.value.trim() === formatLength(page[side], "cm", language)) return fill();
-        apply(setMargins({ top: page.top, bottom: page.bottom, left: page.left, right: page.right, [side]: points }));
-      });
-      return { side, input };
-    });
-    const cols = labelled(card.body, choice([1, 2, 3].map((n): [string, string] => [String(n), String(n)])), t("rich.page.columns"));
-    life.listen(cols, "change", () => apply(setColumns(Number(cols.value))));
-    const problem = remark(card.body, "alert");
-    problem.textContent = t("rich.page.too_large");
-    // Un formato che non porta la sua pagina (l'ODT) sta su quella di
-    // `DEFAULT_PAGE`: il riquadro la dice com'è, e non la cambia.
-    const fixed = engine.read(pageAt) === null;
-    if (fixed) {
-      for (const control of [paper, turn, preset, cols, ...sides.map(({ input }) => input)]) control.disabled = true;
-      remark(card.body).textContent = t("rich.page.default");
-    }
-    const fill = () => {
-      problem.hidden = true;
-      const page = engine.read(pageAt)?.page ?? (fixed ? DEFAULT_PAGE : null);
-      if (!page) return void popover?.close();
-      paper.value = paperName(page, PAPER_SIZES) ?? "";
-      turn.value = landscape(page) ? "landscape" : "portrait";
-      const near = (a: number, b: number) => Math.abs(a - b) < 0.5;
-      preset.value =
-        MARGIN_PRESETS.find((m) => near(m.top, page.top) && near(m.bottom, page.bottom) && near(m.left, page.left) && near(m.right, page.right))?.id ?? "";
-      for (const { side, input } of sides) input.value = formatLength(page[side], "cm", language);
-      const n = columns(page);
-      if (![...cols.options].some((o) => o.value === String(n))) cols.append(choice([[String(n), String(n)]]).options[0]!);
-      cols.value = String(n);
-    };
-    fill();
-    finish(card);
-    showPanel(anchor, card);
-  }
-
   /// I colori: un campione si applica subito e chiude.
   function openColors(anchor: HTMLElement, kind: "color" | "highlight"): void {
     popover?.close();
@@ -776,10 +651,6 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
         return openNote(anchor);
       case "rich.link":
         return openLink(anchor);
-      case "rich.page":
-        return openPage(anchor);
-      case "rich.count":
-        return openCount(anchor);
     }
   }
 

@@ -2135,6 +2135,13 @@ body {
 .rich-side-quote { display: block; width: 100%; text-align: start; overflow-wrap: anywhere; }
 .rich-side-reply[data-depth="2"] { margin-inline-start: 12px; }
 .rich-side-reply[data-depth="3"] { margin-inline-start: 24px; }
+.rich-side-section { display: flex; flex-direction: column; }
+.rich-side-preview { display: flex; justify-content: center; }
+.rich-side-preview-sheet { position: relative; aspect-ratio: var(--preview-ratio, 595.3 / 841.9); height: 132px; max-width: 100%; }
+.rich-side-preview-text { position: absolute; top: var(--preview-top, 6.7%); bottom: var(--preview-bottom, 6.7%); left: var(--preview-left, 9.5%); right: var(--preview-right, 9.5%); display: flex; }
+.rich-side-preview-column { flex: 1 1 0; min-width: 0; }
+.rich-side-facts { display: grid; grid-template-columns: auto 1fr; margin: 0; }
+.rich-side-facts dd { margin: 0; overflow-wrap: anywhere; }
 .rich-strip-table-grid { display: grid; grid-template-columns: repeat(10, 20px); }
 .rich-strip-table-cell { width: 20px; height: 20px; }
 .rich-strip-count td { text-align: end; }

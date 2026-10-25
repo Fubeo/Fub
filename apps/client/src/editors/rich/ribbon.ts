@@ -42,9 +42,9 @@ import { commentsOf } from "./comments";
 import type { RichEngine } from "./engine";
 import { useRichIcons } from "./icons";
 import { fontStack } from "./fonts";
-import { pageAt } from "./page";
+import { columns, landscape, MARGIN_PRESETS, PAPER_SIZES, pageAt, paperLabel, paperName, setColumns, setLandscape, setMargins, setPaper } from "./page";
 import { mountRichPanels, RICH_PANEL_IDS, type RichMedia, type RichPanelId } from "./panels";
-import { COLOR_AUTO } from "./projection";
+import { COLOR_AUTO, type Page } from "./projection";
 import { goToRevision } from "./review";
 import type { RichSide } from "./side";
 import { reviewAuthor, setTracking } from "./track";
@@ -69,6 +69,8 @@ export interface RichView {
   /// è adattata al tema.
   readonly mode: string;
   readonly adapted: boolean;
+  /// La pagina della sezione del cursore, `null` se il formato non la porta.
+  readonly page: Page | null;
 }
 
 /// Le modalità che Visualizza offre, col comando di ciascuna.
@@ -98,6 +100,9 @@ type RichExtra = SwatchControl | StylesControl;
 export type RichControl = KitControl<RichView, Key> | RichExtra;
 export type RichTab = RibbonTab<RichControl, Key>;
 
+/// Le gallerie della pagina, un comando ciascuna con il suo valore.
+const PAGE_GALLERIES: readonly string[] = ["rich.margins", "rich.orientation", "rich.paper", "rich.columns"];
+
 /// I comandi della barra che non sono azioni del catalogo del motore: valori
 /// che il motore scrive e gesti della barra.
 export const RICH_RIBBON_COMMANDS: ReadonlySet<string> = new Set([
@@ -112,6 +117,9 @@ export const RICH_RIBBON_COMMANDS: ReadonlySet<string> = new Set([
   "rich.find.replace",
   "rich.comments",
   "rich.track",
+  "rich.page",
+  "rich.count",
+  ...PAGE_GALLERIES,
   "shell.zoom.in",
   "shell.zoom.out",
   "shell.zoom.reset",
@@ -159,6 +167,7 @@ export const COMMON_FONTS: readonly string[] = [
 const READING: ReadonlySet<string> = new Set([
   FIND_ACTION,
   "rich.count",
+  "rich.page",
   "rich.comments",
   "rich.rev.previous",
   "rich.rev.next",
@@ -171,7 +180,7 @@ const READING: ReadonlySet<string> = new Set([
 
 /// Il formato si cambia soltanto se non si registra: un formato cambiato non
 /// ha una revisione.
-const FORMATTING: ReadonlySet<string> = new Set(["rich.font", "rich.size", "rich.style", "rich.color", "rich.highlight", "rich.painter", "rich.spacing", "rich.page", "rich.header", "rich.footer", "rich.toc"]);
+const FORMATTING: ReadonlySet<string> = new Set(["rich.font", "rich.size", "rich.style", "rich.color", "rich.highlight", "rich.painter", "rich.spacing", ...PAGE_GALLERIES, "rich.header", "rich.footer", "rich.toc"]);
 
 /// Una modalità di Visualizza: premuta quando è quella di adesso.
 const modeButton = (id: string, label: Key, keytip: string, icon: string): RichControl => ({
@@ -232,6 +241,51 @@ function spacingEntries(view: RichView): readonly MenuEntry<Key>[] {
       return { id, label: { raw: format.format(multiple) }, choice: "radio", checked: view.active.has(id) };
     }),
     { id: "rich.spacing", dialog: "rich.spacing", label: "rich.ribbon.line.options", separator: true },
+  ];
+}
+
+/// La voce che chiude ogni galleria della pagina: il resto è in Proprietà.
+const MORE_PAGE: MenuEntry<Key> = { id: "rich.page", label: "rich.prop.more", separator: true };
+
+const near = (a: number, b: number) => Math.abs(a - b) < 0.5;
+
+function marginEntries(view: RichView): readonly MenuEntry<Key>[] {
+  const page = view.page;
+  return [
+    ...MARGIN_PRESETS.map((m): MenuEntry<Key> => ({
+      id: "rich.margins",
+      params: { margins: m.id },
+      label: `rich.page.margins.${m.id}` as Key,
+      choice: "radio",
+      checked: page !== null && near(m.top, page.top) && near(m.bottom, page.bottom) && near(m.left, page.left) && near(m.right, page.right),
+    })),
+    MORE_PAGE,
+  ];
+}
+
+function orientationEntries(view: RichView): readonly MenuEntry<Key>[] {
+  const wide = view.page !== null && landscape(view.page);
+  return [
+    { id: "rich.orientation", params: { landscape: false }, label: "rich.page.portrait", choice: "radio", checked: view.page !== null && !wide },
+    { id: "rich.orientation", params: { landscape: true }, label: "rich.page.landscape", choice: "radio", checked: wide },
+    MORE_PAGE,
+  ];
+}
+
+function paperEntries(view: RichView): readonly MenuEntry<Key>[] {
+  const name = view.page ? paperName(view.page, PAPER_SIZES) : null;
+  return [
+    ...PAPER_SIZES.map((size): MenuEntry<Key> => ({ id: "rich.paper", params: { paper: size.name }, label: { raw: paperLabel(size.name) }, choice: "radio", checked: size.name === name })),
+    MORE_PAGE,
+  ];
+}
+
+function columnEntries(view: RichView): readonly MenuEntry<Key>[] {
+  const n = view.page ? columns(view.page) : 0;
+  const format = new Intl.NumberFormat(resolvedLanguage());
+  return [
+    ...[1, 2, 3].map((cols): MenuEntry<Key> => ({ id: "rich.columns", params: { cols }, label: { raw: format.format(cols) }, choice: "radio", checked: cols === n })),
+    MORE_PAGE,
   ];
 }
 
@@ -445,7 +499,13 @@ export const RICH_TABS: readonly RichTab[] = [
         label: "rich.ribbon.group.page",
         icon: "rc-page",
         keytip: "ZG",
-        columns: [panel("rich.page", "rich.page", "M", "rc-page")],
+        // Le gallerie veloci; «…» apre la pagina in Proprietà.
+        columns: [
+          { kind: "menu", label: "rich.page.margins", keytip: "M", icon: "rc-margins", size: "large", items: marginEntries },
+          { kind: "menu", label: "rich.page.orientation", keytip: "R", icon: "rc-orientation", size: "large", items: orientationEntries },
+          { kind: "menu", label: "rich.page.size", keytip: "SZ", icon: "rc-paper-size", size: "large", items: paperEntries },
+          { kind: "menu", label: "rich.page.columns", keytip: "C", icon: "rc-columns", size: "large", items: columnEntries },
+        ],
       },
       {
         id: "paragraph",
@@ -474,7 +534,8 @@ export const RICH_TABS: readonly RichTab[] = [
         label: "rich.ribbon.group.proofing",
         icon: "rc-count",
         keytip: "ZC",
-        columns: [panel("rich.count", "rich.count", "W", "rc-count")],
+        // Il conteggio sta in Proprietà, e si rifà mentre si scrive.
+        columns: [action("rich.count", "rich.count", "W", "rc-count", "large")],
       },
       {
         id: "comments",
@@ -690,6 +751,7 @@ export function mountRichRibbon(
       tracking: engine.tracking(),
       mode: options.display?.mode() ?? "document",
       adapted: options.display?.look() === "adattato",
+      page: engine.read(pageAt)?.page ?? null,
     };
     documentFonts.set(next, engine.fonts());
     view = next;
@@ -736,10 +798,12 @@ export function mountRichRibbon(
     // La tabella si mette con la griglia delle dimensioni.
     states.splice(states.findIndex((state) => state.id === "markdown.table"), 1);
     put("markdown.table", free && engine.read(insertTable(1, 1)));
-    // Senza una pagina il riquadro dice quella su cui il documento si vede.
-    if (!hasPage) states.push({ id: "rich.page", enabled: true });
+    // Proprietà dice la pagina anche quando non si cambia; le gallerie la
+    // cambiano soltanto se il formato la porta.
+    put("rich.page", true);
+    if (!hasPage) for (const id of PAGE_GALLERIES) off(id, t("rich.page.fixed"));
     if (hasPage) {
-      put("rich.page", free);
+      for (const id of PAGE_GALLERIES) put(id, free);
       for (const [id, kind] of [["rich.header", "header"], ["rich.footer", "footer"]] as const) {
         if (free && engine.runningLocked(kind)) off(id, t("rich.hf.locked"));
         else put(id, free);
@@ -826,6 +890,28 @@ export function mountRichRibbon(
         return;
       case "rich.comments":
         options.side?.show("comments", "list");
+        return;
+      case "rich.page":
+        options.side?.show("properties");
+        return;
+      case "rich.count":
+        options.side?.show("properties", "count");
+        return;
+      case "rich.margins": {
+        const margins = MARGIN_PRESETS.find((m) => m.id === params.margins);
+        if (margins) engine.apply(setMargins(margins));
+        return;
+      }
+      case "rich.orientation":
+        if (typeof params.landscape === "boolean") engine.apply(setLandscape(params.landscape));
+        return;
+      case "rich.paper": {
+        const size = PAPER_SIZES.find((each) => each.name === params.paper);
+        if (size) engine.apply(setPaper(size.w, size.h));
+        return;
+      }
+      case "rich.columns":
+        if (typeof params.cols === "number") engine.apply(setColumns(params.cols));
         return;
       case "rich.track":
         if (!engine.tracking() && reviewAuthor() === "") options.side?.show("revisions", "author");

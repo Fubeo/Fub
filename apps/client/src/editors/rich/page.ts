@@ -183,6 +183,22 @@ export function setColumns(cols: number): Command {
   return changePage((page) => ({ ...page, cols }));
 }
 
+/// L'anteprima della pagina in Proprietà: la carta in scala, con i margini
+/// come variabili di dato in percentuale dei suoi lati (in alto e in basso
+/// dell'altezza, ai fianchi della larghezza) e le colonne. Un margine che
+/// supera il foglio si ferma al foglio.
+export function previewVariables(page: Page): Readonly<Record<string, string>> {
+  const share = (side: number, of: number) => `${Math.round(Math.min(Math.max(side / of, 0), 1) * 1000) / 10}%`;
+  return {
+    "--preview-ratio": `${page.w} / ${page.h}`,
+    "--preview-top": share(page.top, page.h),
+    "--preview-bottom": share(page.bottom, page.h),
+    "--preview-left": share(page.left, page.w),
+    "--preview-right": share(page.right, page.w),
+    "--preview-columns": String(columns(page)),
+  };
+}
+
 /// La pagina di un formato che non ne porta una (l'ODT, finché la proiezione
 /// non la dice): un A4 con i margini di 2 cm, in punti.
 export const DEFAULT_PAGE: Page = { w: 595.3, h: 841.9, top: 56.7, bottom: 56.7, left: 56.7, right: 56.7 };

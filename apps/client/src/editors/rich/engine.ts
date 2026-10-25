@@ -271,6 +271,12 @@ export class RichEngine {
     return this.#intake;
   }
 
+  /// La lingua che il file dice per il suo testo (`w:lang` dei predefiniti),
+  /// `null` se non la dice: la usa la rilettura, la mostra Proprietà.
+  language(): string | null {
+    return this.#head.lang ?? null;
+  }
+
   setDoc(source: string): void {
     if (this.#destroyed) return;
     this.#source = source;

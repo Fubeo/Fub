@@ -9,6 +9,7 @@ import { RichEngine } from "./engine";
 import { parseProjection, type Block, type Para, type TextInline } from "./projection";
 import type { EditorView } from "prosemirror-view";
 import { countText, findKey, findMatches, replaceAll, replaceMatch, revisionPlugin, revisions } from "./review";
+import { mountProperties } from "./properties";
 import { mountRichRibbon } from "./ribbon";
 
 let engines: RichEngine[] = [];
@@ -130,19 +131,32 @@ describe("la barra", () => {
 
   it("il conteggio dice parole, caratteri e paragrafi del documento e della selezione", () => {
     const e = engine([para([{ t: "text", x: "Una  frase\tbreve." }]), para([]), para([{ t: "text", x: "Due" }])]);
-    const ribbon = mountRichRibbon(e, () => null);
-    document.body.append(ribbon.element);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const shown = mountProperties(e, "docx", host);
+    const rows = () => [...host.querySelectorAll("table tr")].map((row) => [...row.children].map((c) => c.textContent));
+    expect(rows()).toEqual([
+      [t("rich.count.words"), "4"],
+      [t("rich.count.characters"), "20"],
+      [t("rich.count.visible"), "17"],
+      [t("rich.count.paragraphs"), "2"],
+    ]);
+    // Si rifà quando cambia la selezione, e mentre si scrive.
     e.select(1, 4);
-    [...ribbon.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.count"))!.click();
-    const rows = [...document.querySelectorAll("table tr")].map((row) => [...row.children].map((c) => c.textContent));
-    expect(rows).toEqual([
+    expect(rows()).toEqual([
       ["", t("rich.count.selection"), t("rich.count.document")],
       [t("rich.count.words"), "1", "4"],
       [t("rich.count.characters"), "3", "20"],
       [t("rich.count.visible"), "3", "17"],
       [t("rich.count.paragraphs"), "1", "2"],
     ]);
-    ribbon.destroy();
+    e.select(1);
+    e.apply((state, dispatch) => {
+      dispatch?.(state.tr.insertText("Ecco "));
+      return true;
+    });
+    expect(rows()[0]).toEqual([t("rich.count.words"), "5"]);
+    shown.close();
   });
 });
 

@@ -162,7 +162,7 @@ describe("la scheda Revisioni", () => {
   it("elenca le modifiche nell'ordine del testo, le raggiunge, le accetta una alla volta e tutte", () => {
     const e = engine(tracked());
     const { side: panel, host } = side(e);
-    expect(panel.panels.map((p) => p.id)).toEqual([RICH_SIDE_VIEWS.comments, RICH_SIDE_VIEWS.revisions]);
+    expect(panel.panels.map((p) => p.id)).toEqual([RICH_SIDE_VIEWS.comments, RICH_SIDE_VIEWS.revisions, RICH_SIDE_VIEWS.properties]);
     panel.show("revisions");
     const items = () => [...host.querySelectorAll<HTMLElement>(".rich-side-change")];
     expect(items().map((el) => [el.dataset.kind, el.querySelector(".rich-side-quote")?.textContent])).toEqual([
@@ -202,6 +202,42 @@ describe("la scheda Revisioni", () => {
       panel.show("revisions");
       expect(host.querySelectorAll(".rich-side-revisions")).toHaveLength(1);
       unmount(RICH_SIDE_VIEWS.revisions);
+      expect(host.childElementCount).toBe(0);
+    }
+    e.select(1);
+    e.run("text.newline");
+    expect(host.childElementCount).toBe(0);
+  });
+});
+
+describe("la scheda Proprietà", () => {
+  it("dice formato e lingua del file, e «Conteggio» della barra va al conteggio", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const e = new RichEngine(parent, { label: () => "documento", onChange: () => {}, onSelectionChange: () => {} });
+    e.setDoc(JSON.stringify({ format: "fub-rich", version: 1, lang: "it-IT", blocks: [para([{ t: "text", x: "due parole" }])] }));
+    engines.push(e);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const made = mountRichSide(e, { format: "docx" }, () => {
+      if (host.childElementCount === 0) made.panels.find((panel) => panel.id === RICH_SIDE_VIEWS.properties)!.mount(host);
+    });
+    sides.push(made);
+    expect(made.show("properties", "count")).toBe(true);
+    const facts = [...host.querySelectorAll(".rich-side-facts dd")].map((dd) => dd.textContent);
+    expect(facts[0]).toBe(t("rich.prop.format.docx"));
+    expect(facts[1]).not.toBe(t("rich.prop.language.none"));
+    expect(document.activeElement?.querySelector(".rich-strip-count")).not.toBeNull();
+  });
+
+  it("senza lingua nel file lo dice, e smontata non lascia nodi", () => {
+    const e = engine([para([{ t: "text", x: "testo" }])]);
+    const { side: panel, host, unmount } = side(e);
+    for (let round = 0; round < 3; round += 1) {
+      panel.show("properties");
+      expect(host.querySelectorAll(".rich-side-properties")).toHaveLength(1);
+      expect(host.textContent).toContain(t("rich.prop.language.none"));
+      unmount(RICH_SIDE_VIEWS.properties);
       expect(host.childElementCount).toBe(0);
     }
     e.select(1);

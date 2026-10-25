@@ -351,9 +351,9 @@ describe("la superficie ricca", () => {
     const openers = [
       ...parent.ownerDocument.querySelectorAll<HTMLButtonElement>('.rich-ribbon button[aria-haspopup="dialog"]:not(.rich-ribbon-group-toggle)'),
     ].filter((opener) => !opener.closest<HTMLElement>("[data-command]")!.hidden && opener.getAttribute("aria-disabled") !== "true");
-    // Senza pagina non ci sono Pagina e Intestazione; senza selezione il
-    // commento nuovo è spento.
-    expect(openers.length).toBeGreaterThan(7);
+    // Senza pagina non c'è Intestazione; la pagina e il conteggio stanno in
+    // Proprietà, nel pannello di destra.
+    expect(openers.length).toBeGreaterThan(5);
     let opened = 0;
     for (const opener of openers) {
       opener.click();

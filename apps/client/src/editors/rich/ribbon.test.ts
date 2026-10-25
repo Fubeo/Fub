@@ -42,6 +42,7 @@ const VIEW: RichView = {
   tracking: false,
   mode: "document",
   adapted: false,
+  page: null,
 };
 
 /// Le azioni del motore che la barra non mostra, ciascuna col posto dove sta.

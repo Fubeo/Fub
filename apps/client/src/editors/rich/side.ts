@@ -10,6 +10,8 @@
 // l'elenco delle modifiche con chi e quando, ognuna con Accetta e Rifiuta, e
 // tutte insieme.
 //
+// Proprietà: la pagina, il file e il conteggio (`properties.ts`).
+//
 // Ogni gesto è una battuta del documento, coi comandi del motore. Una scheda
 // montata ascolta il motore finché non la smonta la shell, e si ridisegna
 // soltanto dove il documento è cambiato: una risposta che si sta scrivendo
@@ -23,21 +25,23 @@ import { addComment, canComment, commentThreads, deleteComment, goToComment, rep
 import type { RichEngine } from "./engine";
 import { check, labelled, remark } from "./form";
 import type { RichMedia } from "./panels";
+import { mountProperties } from "./properties";
 import { changeText, goToChange, resolveAll, resolveChange, revisions, type Change } from "./review";
 import { reviewAuthor, setReviewAuthor, setTracking } from "./track";
 
 /// Le schede, per il loro nome breve.
-export type RichSideId = "comments" | "revisions";
+export type RichSideId = "comments" | "revisions" | "properties";
 
 /// L'id con cui l'ispettore conosce ogni scheda: non si scontra con quelli
 /// delle view dichiarate.
 export const RICH_SIDE_VIEWS: Readonly<Record<RichSideId, string>> = {
   comments: "rich.side.comments",
   revisions: "rich.side.revisions",
+  properties: "rich.side.properties",
 };
 
 /// Dove va il fuoco quando la barra apre una scheda.
-export type RichSideTarget = "compose" | "list" | "author";
+export type RichSideTarget = "compose" | "list" | "author" | "count";
 
 export interface RichSide {
   /// Le schede, sempre le stesse: la shell le rifà soltanto quando cambiano.
@@ -457,6 +461,10 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
   const MOUNTS: Record<RichSideId, (host: HTMLElement) => Mounted> = {
     comments: mountComments,
     revisions: mountRevisions,
+    properties: (host) => {
+      const shown = mountProperties(engine, media.format, host);
+      return { host, focus: (target) => shown.focus(target === "count" ? "count" : undefined), close: () => shown.close() };
+    },
   };
 
   const panel = (id: RichSideId, title: () => string, icon: string): SurfacePanel => ({
@@ -477,6 +485,7 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
   const all: readonly SurfacePanel[] = [
     panel("comments", () => t("rich.comments"), "rc-comments"),
     panel("revisions", () => t("rich.side.revisions"), "rc-track"),
+    panel("properties", () => t("rich.side.properties"), "rc-page"),
   ];
 
   return {

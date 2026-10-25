@@ -263,7 +263,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       const ribbonHost = document.createElement("div");
       ribbonHost.className = "rich-ribbon-host";
       root.insertBefore(ribbonHost, page);
-      const media = { pickImage: pickImage(), review: RICH_REVIEW_FORMATS.has(context.formatId ?? "") };
+      const media = { pickImage: pickImage(), review: RICH_REVIEW_FORMATS.has(context.formatId ?? ""), ...(context.formatId ? { format: context.formatId } : {}) };
       side = mountRichSide(engine, media, (viewId) => {
         for (const listener of [...reveals]) listener(viewId);
       });
