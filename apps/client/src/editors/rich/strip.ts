@@ -11,7 +11,7 @@
 // controllo nel Tab, le frecce fra gli altri, Esc torna al testo. Il puntatore
 // non prende il fuoco ai pulsanti, così la selezione del testo resta dov'è.
 import type { Command } from "prosemirror-state";
-import { labelButton, openPopover, setPressed, textButton, textField, type ButtonKind, type PopoverHandle } from "../../kit";
+import { iconButton, labelButton, openPopover, setPressed, textButton, textField, type ButtonKind, type PopoverHandle } from "../../kit";
 import { identifier } from "../../ui/a11y";
 import { ariaBinding, displayBinding } from "../../ui/commands";
 import { openLifetime } from "../../ui/lifetime";
@@ -230,6 +230,10 @@ const ROLE_STYLES: readonly string[] = ["body", "h:1", "h:2", "h:3", "h:4", "h:5
 
 export interface RichStrip {
   readonly element: HTMLElement;
+  /// La barra di ricerca, da posare fra la striscia e il foglio.
+  readonly findBar: HTMLElement;
+  /// Apre la barra di ricerca; con `replace`, anche Sostituisci.
+  find(replace: boolean): void;
   /// Rilegge l'aspetto della selezione e lo stato dei gesti.
   refresh(): void;
   destroy(): void;
@@ -469,9 +473,8 @@ export function mountStrip(
 
   // ── Revisione ─────────────────────────────────────────────────────────
   const review = group("review");
-  const find = button(() => t("rich.find"), FIND_ACTION, () => (engine.editable() ? engine.run(FIND_ACTION) : openFind(find)));
+  const find = button(() => t("rich.find"), FIND_ACTION, () => (bar ? closeFind() : openFind(true)));
   find.append(icon(["M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z", "M15.5 15.5 20 20"]));
-  find.setAttribute("aria-haspopup", "dialog");
   const count = button(() => t("rich.count"), null, (anchor) => openCount(anchor));
   count.append(icon(["M4 6h10", "M4 10h16", "M4 14h12", "M4 18h7", "M17 16v4", "M15 18h4"]));
   count.setAttribute("aria-haspopup", "dialog");
@@ -484,7 +487,7 @@ export function mountStrip(
   review.append(find, count, comments, track);
   for (const control of [find, count, comments]) reading.add(control);
   if (shown("review")) {
-    life.add(engine.onAsk(FIND_ACTION, () => openFind(find)));
+    life.add(engine.onAsk(FIND_ACTION, () => openFind(true)));
     life.add(engine.onAsk(COMMENT_ACTION, () => openComments(comments, true)));
   }
   // Le revisioni tracciate: si vedono soltanto in un documento che ne ha.
@@ -621,20 +624,104 @@ export function mountStrip(
     return line;
   }
 
-  /// Trova e sostituisci: le occorrenze si vedono nel testo mentre si scrive
-  /// ciò che si cerca; Invio va alla prossima, Maiusc+Invio alla precedente.
-  function openFind(anchor: HTMLButtonElement): void {
+  // ── La barra di ricerca del documento ────────────────────────────────
+  // Sta sopra il foglio, come quella delle note: Ctrl+F la apre per cercare,
+  // Ctrl+H e il pulsante Trova la aprono con Sostituisci. Le occorrenze si
+  // vedono nel testo mentre si scrive ciò che si cerca; Invio va alla
+  // prossima, Maiusc+Invio alla precedente, Esc chiude e torna al testo.
+  const findBar = document.createElement("form");
+  findBar.className = "rich-findbar";
+  findBar.id = identifier(`${prefix}-find`);
+  findBar.setAttribute("role", "search");
+  findBar.hidden = true;
+  life.listen(findBar, "submit", (event) => event.preventDefault());
+  find.setAttribute("aria-controls", findBar.id);
+  find.setAttribute("aria-expanded", "false");
+  let bar: { readonly what: HTMLInputElement; replacing(open: boolean): void; readonly life: ReturnType<typeof openLifetime> } | null = null;
+
+  function closeFind(): void {
+    if (!bar) return;
+    bar.life.close();
+    bar = null;
+    engine.find(null);
+    findBar.hidden = true;
+    findBar.replaceChildren();
+    find.setAttribute("aria-expanded", "false");
+  }
+
+  function openFind(replace: boolean): void {
     popover?.close();
-    const card = panel(t("rich.find"));
-    const selected = engine.selectedText();
-    const what = text(card.body, t("rich.find.text"), selected && !selected.includes("\n") && selected.length <= 200 ? selected : "");
+    if (bar) {
+      bar.replacing(replace);
+      bar.what.focus();
+      bar.what.select();
+      return;
+    }
+    const own = openLifetime();
     // In sola lettura si cerca soltanto.
     const writable = engine.editable();
-    const replacement = text(card.body, t("rich.find.replace"));
-    if (!writable) replacement.closest(".kit-field")!.remove();
-    const matchCase = check(card.body, t("rich.find.case"));
-    const wholeWord = check(card.body, t("rich.find.word"));
-    const status = remark(card.body, "status");
+    const title = document.createElement("h2");
+    title.className = "sr-only";
+    title.id = identifier(`${prefix}-find-title`);
+    title.textContent = t("rich.find");
+    findBar.setAttribute("aria-labelledby", title.id);
+    const row = document.createElement("div");
+    row.className = "rich-findbar-row";
+    const selected = engine.selectedText();
+    const what = textField({
+      label: t("rich.find.text"),
+      labelHidden: true,
+      placeholder: t("rich.find.text"),
+      value: selected && !selected.includes("\n") && selected.length <= 200 ? selected : "",
+      lifetime: own,
+    }).input;
+    row.append(what.closest(".kit-field")!);
+    const status = remark(row, "status");
+    const button = (into: HTMLElement, label: string, onPress: () => void, kind: ButtonKind = "normal") => {
+      const control = textButton({ label, kind, onPress, lifetime: own });
+      into.append(control);
+      return control;
+    };
+    const previous = button(row, t("rich.find.previous"), () => step(-1));
+    const next = button(row, t("rich.find.next"), () => step(1));
+    const toggle = button(row, t("rich.find.show_replace"), () => replacing(replaceRow.hidden));
+    toggle.hidden = !writable;
+    const close = iconButton({ icon: "close", label: t("rich.find.close"), onPress: () => done(), lifetime: own });
+    close.classList.add("rich-findbar-close");
+    row.append(close);
+    const options = document.createElement("div");
+    options.className = "rich-findbar-row";
+    const matchCase = check(options, t("rich.find.case"));
+    const wholeWord = check(options, t("rich.find.word"));
+
+    const replaceRow = document.createElement("div");
+    replaceRow.className = "rich-findbar-row";
+    replaceRow.id = identifier(`${prefix}-find-replace`);
+    toggle.setAttribute("aria-controls", replaceRow.id);
+    const replacement = textField({ label: t("rich.find.replace"), labelHidden: true, placeholder: t("rich.find.replace"), lifetime: own }).input;
+    replaceRow.append(replacement.closest(".kit-field")!);
+    const replaceOne = button(replaceRow, t("rich.find.replace_one"), () => {
+      const matches = findMatches(engine.read((state) => state.doc), query());
+      const match = matches[current];
+      if (!match) {
+        step(1);
+        return;
+      }
+      engine.apply(replaceMatch(query(), match, replacement.value), false);
+      step(1);
+    });
+    const replaceEvery = button(replaceRow, t("rich.find.replace_all"), () => {
+      const total = findMatches(engine.read((state) => state.doc), query()).length;
+      if (!engine.apply(replaceAll(query(), replacement.value), false)) return;
+      show(-1, t("rich.find.replaced", { n: String(total) }));
+    }, "primary");
+    function replacing(open: boolean): void {
+      replaceRow.hidden = !(open && writable);
+      toggle.setAttribute("aria-expanded", String(!replaceRow.hidden));
+    }
+    replacing(replace);
+    findBar.append(title, row, options, replaceRow);
+
     const query = (): FindQuery => ({ text: what.value, matchCase: matchCase.checked, wholeWord: wholeWord.checked });
     let current = -1;
     const show = (index: number, said?: string) => {
@@ -649,30 +736,12 @@ export function mountStrip(
             ? t("rich.find.none")
             : t("rich.find.count", { current: String(current + 1), total: String(matches.length) }));
       for (const control of [previous, next, replaceOne, replaceEvery]) control.disabled = matches.length === 0;
-      if (!writable) replaceOne.hidden = replaceEvery.hidden = true;
       return matches;
     };
     const step = (direction: 1 | -1) => {
       const matches = findMatches(engine.read((state) => state.doc), query());
       show(engine.read((state) => nextMatch(state, matches, direction)));
     };
-    const previous = action(card.actions, t("rich.find.previous"), () => step(-1));
-    const next = action(card.actions, t("rich.find.next"), () => {}, "normal", true);
-    const replaceOne = action(card.actions, t("rich.find.replace_one"), () => {
-      const matches = findMatches(engine.read((state) => state.doc), query());
-      const match = matches[current];
-      if (!match) {
-        step(1);
-        return;
-      }
-      engine.apply(replaceMatch(query(), match, replacement.value), false);
-      step(1);
-    });
-    const replaceEvery = action(card.actions, t("rich.find.replace_all"), () => {
-      const total = findMatches(engine.read((state) => state.doc), query()).length;
-      if (!engine.apply(replaceAll(query(), replacement.value), false)) return;
-      show(-1, t("rich.find.replaced", { n: String(total) }));
-    }, "primary");
     const refind = () => {
       const matches = findMatches(engine.read((state) => state.doc), query());
       // Da dove sta il cursore, come quando si comincia a scrivere.
@@ -680,16 +749,33 @@ export function mountStrip(
       const at = matches.findIndex((m) => m.from >= from);
       show(matches.length === 0 ? -1 : at < 0 ? 0 : at);
     };
-    life.listen(what, "input", refind);
-    life.listen(matchCase, "change", refind);
-    life.listen(wholeWord, "change", refind);
-    life.listen(card.root, "submit", () => step(1));
-    life.listen(card.root, "keydown", (event) => {
-      if (event.key !== "Enter" || !event.shiftKey || event.target !== what) return;
-      event.preventDefault();
-      step(-1);
+    const done = () => {
+      closeFind();
+      engine.focus();
+    };
+    own.listen(findBar, "submit", () => step(1));
+    own.listen(what, "input", refind);
+    own.listen(matchCase, "change", refind);
+    own.listen(wholeWord, "change", refind);
+    own.listen(findBar, "keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        done();
+        return;
+      }
+      if (event.key !== "Enter" || event.isComposing) return;
+      if (event.target === what) {
+        event.preventDefault();
+        step(event.shiftKey ? -1 : 1);
+      } else if (event.target === replacement && !replaceOne.disabled) {
+        event.preventDefault();
+        replaceOne.click();
+      }
     });
-    showPanel(anchor, card, () => engine.find(null));
+    bar = { what, replacing, life: own };
+    findBar.hidden = false;
+    find.setAttribute("aria-expanded", "true");
     refind();
     what.focus();
     what.select();
@@ -1344,6 +1430,7 @@ export function mountStrip(
     if (locked === editable) {
       locked = !editable;
       popover?.close();
+      closeFind();
       for (const label of relabel) label();
     }
     if (!editable) {
@@ -1447,11 +1534,15 @@ export function mountStrip(
 
   return {
     element,
+    findBar,
+    find: openFind,
     refresh,
     destroy() {
       popover?.close();
+      closeFind();
       life.close();
       element.remove();
+      findBar.remove();
     },
   };
 }

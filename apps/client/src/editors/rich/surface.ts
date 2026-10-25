@@ -246,6 +246,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         review: RICH_REVIEW_FORMATS.has(context.formatId ?? ""),
       });
       root.insertBefore(strip.element, page);
+      root.insertBefore(strip.findBar, page);
       stopEngine = engine.subscribe(() => {
         showNotice();
         notify();
@@ -480,6 +481,12 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       getDoc: () => (engine ? engine.getDoc() : pending ?? ""),
     },
     focus: () => engine?.focus(),
+    // Ctrl+F: la barra di ricerca del documento, non quella della shell.
+    find() {
+      if (!strip) return false;
+      strip.find(false);
+      return true;
+    },
     // Le selezioni non sono intervalli del sorgente (il sorgente è la
     // proiezione): il contesto riceve il testo, senza coordinate.
     selectedText() {

@@ -128,17 +128,21 @@ describe("la superficie ricca", () => {
     expect(strip.querySelector<HTMLSelectElement>(".rich-strip-font")!.disabled).toBe(true);
     // Trova si apre, cerca, e non offre di sostituire.
     named(t("rich.find")).click();
-    let popover = document.querySelector<HTMLElement>(".kit-popover")!;
-    const what = popover.querySelector<HTMLInputElement>("input")!;
+    const bar = parent.querySelector<HTMLElement>(".rich-findbar")!;
+    expect(bar.hidden).toBe(false);
+    const what = bar.querySelector<HTMLInputElement>("input")!;
     what.value = "ciao";
     what.dispatchEvent(new Event("input"));
-    expect(popover.querySelector("[role=status]")!.textContent).toBe(t("rich.find.count", { current: "1", total: "1" }));
-    expect(popover.querySelectorAll("input[type=text]").length).toBe(1);
-    expect([...popover.querySelectorAll<HTMLButtonElement>("button")].filter((b) => !b.hidden).map((b) => b.textContent)).toEqual([
+    expect(bar.querySelector("[role=status]")!.textContent).toBe(t("rich.find.count", { current: "1", total: "1" }));
+    const visible = (el: Element | null): boolean => !el || (!(el as HTMLElement).hidden && visible(el.parentElement));
+    expect([...bar.querySelectorAll<HTMLButtonElement>("button")].filter(visible).map((b) => b.textContent)).toEqual([
       t("rich.find.previous"),
       t("rich.find.next"),
+      "",
     ]);
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    what.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(bar.hidden).toBe(true);
+    let popover: HTMLElement;
     // Il commento si legge; non se ne scrivono, non si risolvono, non si tolgono.
     named(t("rich.comments")).click();
     popover = document.querySelector<HTMLElement>(".kit-popover")!;
@@ -236,6 +240,27 @@ describe("la superficie ricca", () => {
     }
     expect(groups.map((group) => group.getAttribute("aria-label"))).toContain(t("rich.strip.group.paragraph"));
     surface.destroy();
+  });
+
+  it("Ctrl+F apre la barra di ricerca del documento, non quella della shell; Ctrl+H anche Sostituisci", async () => {
+    const { parent, surface } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    surface.buffer!.setDoc(SOURCE);
+    const bar = parent.querySelector<HTMLElement>(".rich-findbar")!;
+    expect(bar.hidden).toBe(true);
+    // La shell chiama `find()` per Ctrl+F: `true` vuol dire che non apre la sua.
+    expect(surface.find!()).toBe(true);
+    expect(bar.hidden).toBe(false);
+    expect(bar.getAttribute("role")).toBe("search");
+    expect(bar.contains(document.activeElement)).toBe(true);
+    const replaceRow = bar.querySelectorAll<HTMLElement>(".rich-findbar-row")[2]!;
+    expect(replaceRow.hidden).toBe(true);
+    // Ctrl+H, nel testo, la apre con Sostituisci.
+    surface.focus!();
+    parent.querySelector(".rich-content")!.dispatchEvent(new KeyboardEvent("keydown", { key: "h", ctrlKey: true, bubbles: true }));
+    expect(replaceRow.hidden).toBe(false);
+    surface.destroy();
+    expect(parent.querySelector(".rich-findbar")).toBeNull();
   });
 
   it("ogni riquadro della striscia ha un titolo, i campi del kit e un'azione principale", async () => {

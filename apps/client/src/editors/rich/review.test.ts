@@ -99,8 +99,9 @@ describe("la striscia", () => {
   it("Mod-h apre trova e sostituisci: le occorrenze si vedono, si scorrono e si sostituiscono", () => {
     const e = engine([para([{ t: "text", x: "uno due uno tre uno" }])]);
     const strip = mountStrip(e, () => null);
-    document.body.append(strip.element);
+    document.body.append(strip.element, strip.findBar);
     expect(e.run("rich.find")).toBe(true);
+    expect(strip.findBar.hidden).toBe(false);
     const field = (label: string) =>
       document.getElementById([...document.querySelectorAll("form label")].find((l) => l.textContent === label)!.getAttribute("for")!) as HTMLInputElement;
     const text = field(t("rich.find.text"));
@@ -119,7 +120,10 @@ describe("la striscia", () => {
     press(t("rich.find.replace_all"));
     expect(texts(e)).toEqual([{ t: "text", x: "1 due 1 tre 1" }]);
     expect(status.textContent).toBe(t("rich.find.replaced", { n: "2" }));
-    // Chiusa la ricerca, il testo non ha più segni.
+    // Chiusa la ricerca con Esc, il testo non ha più segni.
+    text.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(strip.findBar.hidden).toBe(true);
+    expect(findKey.getState(e.state)?.decorations.find().length).toBe(0);
     strip.destroy();
     expect(findKey.getState(e.state)?.decorations.find().length).toBe(0);
   });

@@ -2035,6 +2035,11 @@ body {
 .rich-strip-swatches { display: grid; grid-template-columns: repeat(6, 24px); }
 .rich-strip-swatch-none,
 .rich-strip-swatch-custom { grid-column: 1 / -1; }
+/* La barra di ricerca del documento, fra la striscia e il foglio. */
+.rich-findbar { flex: none; display: flex; flex-direction: column; }
+.rich-findbar-row { display: flex; flex-wrap: wrap; align-items: center; }
+.rich-findbar-row > .kit-field { flex: 0 1 240px; }
+.rich-findbar-close { margin-left: auto; }
 /* I riquadri della striscia: titolo, campi, azioni in fondo. */
 .rich-strip-panel { display: flex; flex-direction: column; width: 288px; max-width: 100%; }
 .rich-strip-panel-body { display: flex; flex-direction: column; }
