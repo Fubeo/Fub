@@ -125,6 +125,8 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
 - `miniBar()` monta la mini-barra di chi ha controlli suoi (i documenti di
   Word, i fogli) sopra il menu; il Markdown usa i gruppi della barra di
   formattazione;
+- `standing`: fin dove si scrive, perché, i posti con «Vai» e le azioni; ne
+  fa il chip accanto al percorso `panels/standing.ts`; lo dà la superficie rich;
 - `ownBar` dice che la superficie disegna la sua barra dei comandi (i
   documenti di Word, con la barra multifunzione del kit): la barra di
   formattazione della shell allora non si mostra, mentre la bolla della

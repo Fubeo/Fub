@@ -880,8 +880,25 @@ body {
   margin-inline-end: auto;
   white-space: nowrap;
 }
-.pane-toolbar:has(> .pane-format:not([hidden])) > .muted {
+.pane-toolbar:has(> .pane-format:not([hidden])) > .muted,
+.pane-toolbar:has(> .pane-standing:not([hidden])) > .muted {
   margin-right: 0;
+}
+
+/* Lo stato del documento viene dopo il formato, e spinge lui il resto a
+   destra. */
+.pane-toolbar > .pane-standing {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  order: 1;
+  margin-inline-end: auto;
+}
+.pane-toolbar > .pane-standing[hidden] {
+  display: none;
+}
+.pane-toolbar:has(> .pane-standing:not([hidden])) > .pane-format {
+  margin-inline-end: 0;
 }
 
 /* Se lo spazio non basta cede prima lo stato, che la banda ripete, poi il
@@ -923,7 +940,8 @@ body {
   .pane-toolbar > .muted {
     visibility: hidden;
   }
-  .pane-toolbar > .pane-format {
+  .pane-toolbar > .pane-format,
+  .pane-toolbar > .pane-standing {
     display: none;
   }
   .pane-toolbar > .pane-status-slot {

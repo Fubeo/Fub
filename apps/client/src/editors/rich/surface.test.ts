@@ -171,8 +171,7 @@ describe("la superficie ricca", () => {
     const { parent, surface } = mount(() => Promise.resolve(engineModule));
     await flush();
     surface.buffer!.setDoc(JSON.stringify({ ...JSON.parse(SOURCE), readonly: "protected" }));
-    const notice = parent.querySelector<HTMLElement>(".rich-notice")!;
-    expect(notice.hidden).toBe(false);
+    expect(surface.standing!.current()!.kind).toBe("readonly");
     expect(surface.editorActions!.editable()).toBe(false);
     expect(parent.querySelector(".rich-content")?.getAttribute("contenteditable")).toBe("false");
     surface.destroy();
@@ -239,7 +238,9 @@ describe("la superficie ricca", () => {
     const { parent, surface } = mount(() => Promise.resolve(engineModule));
     await flush();
     surface.buffer!.setDoc(JSON.stringify({ ...JSON.parse(SOURCE), readonly: "import" }));
-    expect(parent.querySelector<HTMLElement>(".rich-notice")!.textContent).toBe(t("rich.readonly.import"));
+    // Il perché lo dice il chip accanto al percorso, non una riga sopra il foglio.
+    expect(parent.querySelector<HTMLElement>(".rich-notice")!.hidden).toBe(true);
+    expect(surface.standing!.current()!.source).toBe(t("rich.standing.reason", { reason: t("rich.readonly.import") }));
     expect(parent.querySelector(".rich-content")?.textContent).toContain("ciao");
     expect(surface.editorActions!.editable()).toBe(false);
     surface.destroy();

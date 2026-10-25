@@ -12,7 +12,9 @@
 // documento non ha vorrebbe una numerazione nuova, che sta fuori anche lei.
 // L'autorità resta il formato: ciò che qui sfugge lo rifiuta lui.
 import type { Node as PmNode } from "prosemirror-model";
+import { TextSelection, type Command } from "prosemirror-state";
 import { commentsOf } from "./comments";
+import { GO_TO } from "./rich-motion";
 import { writeBlock, writeComment, writePage, writeRunning, type Block, type Page, type Role, type RunningText } from "./projection";
 import { tracking } from "./track";
 
@@ -61,4 +63,45 @@ export function keepsOutside(before: PmNode, after: PmNode): boolean {
   const had = listKinds(before);
   for (const kind of listKinds(after)) if (!had.has(kind)) return false;
   return true;
+}
+
+/// Un blocco chiuso del documento: dove comincia e che cosa è.
+export interface ClosedPlace {
+  readonly pos: number;
+  readonly kind: "para" | "table";
+  /// Le prime parole del paragrafo; vuoto per una tabella o un paragrafo
+  /// senza testo.
+  readonly excerpt: string;
+}
+
+/// Quante lettere dice l'estratto di un paragrafo chiuso.
+const EXCERPT = 40;
+
+/// I blocchi chiusi del documento, nell'ordine in cui si leggono.
+export function closedPlaces(doc: PmNode): ClosedPlace[] {
+  const out: ClosedPlace[] = [];
+  doc.descendants((node, pos) => {
+    if (node.attrs.locked === true && (node.type.name === "para" || node.type.name === "table")) {
+      const kind = node.type.name;
+      const text = kind === "para" ? node.textContent.replace(/\s+/g, " ").trim() : "";
+      out.push({ pos, kind, excerpt: text.length > EXCERPT ? `${text.slice(0, EXCERPT).trimEnd()}…` : text });
+      return false;
+    }
+    return node.type.name !== "para";
+  });
+  return out;
+}
+
+/// Porta il cursore all'inizio del blocco che comincia in `pos`, come si va a
+/// un commento: si legge anche in sola lettura, e non scrive niente.
+export function goToBlock(pos: number): Command {
+  return (state, dispatch) => {
+    const node = state.doc.nodeAt(pos);
+    if (!node || (node.type.name !== "para" && node.type.name !== "table")) return false;
+    if (dispatch) {
+      const selection = TextSelection.near(state.doc.resolve(pos + 1));
+      dispatch(state.tr.setSelection(selection).scrollIntoView().setMeta(GO_TO, true));
+    }
+    return true;
+  };
 }

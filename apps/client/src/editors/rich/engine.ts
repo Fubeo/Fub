@@ -61,6 +61,7 @@ import { deleteChar, reviewAuthor, trackable, trackTransaction, tracking } from 
 export { mountRichRibbon } from "./ribbon";
 export { mountRichSide } from "./side";
 export { richStatus } from "./status";
+export { richStanding } from "./standing";
 
 export interface RichEngineOptions {
   readonly onChange: (change: EditorChange) => void;
@@ -635,6 +636,14 @@ export class RichEngine {
     const plan = this.#sheets.plan;
     if (!plan || !this.#sheets.visible()) return null;
     return { at: sheetAt(plan, this.#view.state.selection.head) + 1, total: plan.sheets.length };
+  }
+
+  /// Il foglio di `pos`, da 1: `null` se la carta non si vede o non c'è
+  /// ancora.
+  sheetFor(pos: number): number | null {
+    const plan = this.#sheets.plan;
+    if (!plan || !this.#sheets.visible()) return null;
+    return sheetAt(plan, pos) + 1;
   }
 
   /// Mostra le occorrenze di una ricerca (nessuna con `null`) e seleziona

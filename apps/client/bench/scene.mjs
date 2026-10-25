@@ -306,6 +306,7 @@ export const SCENE = onPage("shell", [
     ["document-odt", "odt", "Verbale.odt", "Un .odt: il verbale di una riunione"],
     ["document-objects", "objects", "Oggetti.docx", "Gli oggetti che la superficie tiene com'erano: immagine, forma, casella, formula, note, salti"],
     ["document-readonly", "readonly", "Riservato.docx", "Un .docx protetto, aperto in sola lettura"],
+    ["document-closed", "closed", "Chiuso.docx", "Un .docx con un paragrafo e una tabella chiusi, che restano come sono nel file"],
   ].map(([id, rich, name, title]) => ({
     id,
     title,

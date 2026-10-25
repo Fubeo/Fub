@@ -185,27 +185,6 @@ describe("un documento che si scrive soltanto nel corpo", () => {
     unmount();
     side.destroy();
   });
-
-  it("dice perché nella superficie", async () => {
-    const { mountRichSurface, RICH_PROFILE } = await import("./surface");
-    const engineModule = await import("./engine");
-    const parent = document.createElement("div");
-    document.body.append(parent);
-    const surface = mountRichSurface(
-      RICH_PROFILE,
-      { paneId: "pane", documentId: "lettera.docx", parent, formatId: "docx" },
-      { onChange: () => {}, onSelectionChange: () => {}, loadEngine: () => Promise.resolve(engineModule) },
-    );
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    surface.buffer!.setDoc(CLOSED);
-    const notice = parent.querySelector<HTMLElement>(".rich-notice")!;
-    expect(notice.textContent).toBe(t("rich.locked.notice"));
-    expect(surface.editorActions!.editable()).toBe(true);
-    // Senza blocchi chiusi, il perché è quello di ciò che sta fuori.
-    surface.buffer!.setDoc(CLOSED.replaceAll(`"locked":true,`, ""));
-    expect(notice.textContent).toBe(t("rich.body_only.notice"));
-    surface.destroy();
-  });
 });
 
 describe("ciò che sta fuori dal corpo", () => {

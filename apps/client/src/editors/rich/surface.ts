@@ -10,7 +10,7 @@
 // La superficie mostra perché un documento non si scrive (revisioni
 // tracciate, protezione, un documento che non tornerebbe identico): il motivo
 // lo misura il core all'apertura, e qui diventa una frase.
-import type { EditorSurface, PaperFit, SurfaceMountContext, SurfaceMode, SurfaceStatusItem } from "../core/registry";
+import type { EditorSurface, PaperFit, SurfaceMountContext, SurfaceMode, SurfaceStandingState, SurfaceStatusItem } from "../core/registry";
 import { ACTION_UNAVAILABLE, type EditorActionState, type SurfaceEditorActions } from "../core/editor-actions";
 import type { EditorChange } from "../core/text-operation";
 import type { ProofPorts } from "../core/proof-ports";
@@ -23,7 +23,6 @@ import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardTex
 import { iconEl } from "../../ui/icons";
 import { closeContextMenu } from "../../ui/menu";
 import { focusZone } from "../../ui/a11y";
-import type { ReadOnlyReason } from "./projection";
 import type { DrawingImagePort } from "../canvas/surface";
 import { relativeRef } from "../../rules/mirrored";
 import { adaptedPaper, shownLook, type Look } from "../../theme/content-look";
@@ -167,15 +166,6 @@ export const RICH_CHORDS: Readonly<Record<string, string>> = {
 /// L'immagine più pesante che un documento accoglie, come il codec.
 export const RICH_IMAGE_LIMIT = 16 * 1024 * 1024;
 
-const READ_ONLY_KEYS: Readonly<Record<ReadOnlyReason, Key>> = {
-  revisions: "rich.readonly.revisions",
-  track_changes: "rich.readonly.track_changes",
-  protected: "rich.readonly.protected",
-  projection: "rich.readonly.projection",
-  codec: "rich.readonly.codec",
-  import: "rich.readonly.import",
-};
-
 export interface RichSurfaceCallbacks {
   readonly onChange: (paneId: string, change: EditorChange) => void;
   readonly onSelectionChange: (paneId: string) => void;
@@ -216,6 +206,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   // Il pannello del documento arriva anche lui col motore.
   let side: RichSide | null = null;
   let statusOf: (() => readonly SurfaceStatusItem[]) | null = null;
+  let standingOf: (() => SurfaceStandingState | null) | null = null;
   const reveals = new Set<(viewId: string) => void>();
   let pending: string | null = null;
   let readOnly = false;
@@ -240,17 +231,13 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   }
 
   let failed = false;
+  // Sola lettura, parti chiuse, solo il testo e la registrazione li dice il
+  // chip accanto al percorso (`standing`); qui resta soltanto ciò che lascia
+  // il documento senza un editor.
   function showNotice(): void {
     const intake = engine?.intake();
     let text = failed ? t("rich.unavailable") : "";
     if (intake?.kind === "invalid") text = t("rich.invalid");
-    else if (intake?.kind === "ok" && intake.readonly) text = t(READ_ONLY_KEYS[intake.readonly]);
-    else if (engine?.editable()) {
-      // Ciò che il formato non riscriverebbe resta com'è: lo si dice prima
-      // della registrazione, che vale per il resto.
-      const closed = engine.hasClosed() ? t("rich.locked.notice") : engine.bodyOnly() ? t("rich.body_only.notice") : "";
-      text = [closed, engine.tracking() ? t("rich.track.notice") : ""].filter(Boolean).join(" ");
-    }
     notice.textContent = text;
     notice.hidden = text === "";
     root.dataset.readonly = String(!(engine?.editable() ?? false));
@@ -272,7 +259,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
 
   const load = callbacks.loadEngine ?? (() => import("./engine"));
   load().then(
-    ({ RichEngine, mountRichRibbon, mountRichSide, richStatus }) => {
+    ({ RichEngine, mountRichRibbon, mountRichSide, richStanding, richStatus }) => {
       if (closed) return;
       page.removeAttribute("aria-busy");
       engine = new RichEngine(page, {
@@ -306,6 +293,8 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         },
       );
       root.insertBefore(ribbon.findBar, page);
+      const found = ribbon;
+      standingOf = richStanding(engine, { ...(context.formatId ? { format: context.formatId } : {}), review: media.review, find: () => found.find(false) });
       // Nello stretto il pannello è un foglio che sale dal basso: lo apre
       // questo pulsante, col numero dei commenti. Altrove non si vede.
       const opened = side;
@@ -647,6 +636,14 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     status: {
       counts: true,
       items: () => statusOf?.() ?? [],
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
+    // Si scrive tutto, in parte o per niente: il chip accanto al percorso.
+    standing: {
+      current: () => (closed ? null : standingOf?.() ?? null),
       subscribe(listener) {
         listeners.add(listener);
         return () => listeners.delete(listener);

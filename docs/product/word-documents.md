@@ -162,18 +162,24 @@ Ciò che si perderebbe non chiude per forza tutto il documento:
 
 - un **paragrafo o una tabella** che la riscrittura non porterebbe intero
   resta com'è nel file, segnato, e da Fub non si cambia: lo si può spostare
-  intero, ma non scriverci dentro né toglierlo. In testa un avviso dice che le
-  parti segnate restano come sono, e il resto del testo si scrive;
+  intero, ma non scriverci dentro né toglierlo. Il chip accanto al percorso
+  dice quante parti restano come sono («2 parti chiuse»); il suo riquadro le
+  elenca, con la pagina e un «Vai» per ciascuna, e il resto del testo si
+  scrive;
 - se si perderebbe qualcosa **fuori dal corpo** (stili, numerazioni,
   impostazioni, tema, proprietà del file, intestazioni, commenti), si
   scrivono soltanto i paragrafi e le tabelle del testo: la pagina, le
   intestazioni e i piè di pagina, i commenti, la registrazione delle
   modifiche e le note non si cambiano, e un elenco di una specie che il
   documento non ha ancora non si crea, perché vorrebbe una numerazione nuova.
-  L'avviso in testa lo dice;
+  Il chip dice «Solo il testo»;
 - tutto il documento resta in sola lettura (motivo `codec`) soltanto quando
   il modello non si rilegge uguale, o il corpo del file non si legge blocco
   per blocco come lo legge il codec.
+
+Il chip dice anche «Si scrive», quando il file si riscrive tutto, e «Sola
+lettura», con il perché nella lingua di chi scrive; il suo riquadro offre di
+cercare. Accanto al chip, «Registra» dice che le modifiche si registrano.
 
 Un salvataggio che tocca soltanto il testo è un **innesto**: il file resta
 com'era, byte per byte, tranne i paragrafi e le tabelle toccati, che arrivano

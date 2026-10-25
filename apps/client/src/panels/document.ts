@@ -56,6 +56,7 @@ import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-b
 import { createSelectionBubble, type SelectionBubble } from "./selection-bubble";
 import { bubbleWanted, miniBarMode, mountMiniBar } from "./mini-bar";
 import { openEditorMenu, type EditorMenuHost } from "./editor-menu";
+import { createStandingChip, type StandingChip } from "./standing";
 import { platformSupports } from "../platform/capabilities";
 import { writeClipboardText } from "../platform/clipboard";
 import {
@@ -156,6 +157,8 @@ interface PaneFrame {
   noticeEl: HTMLElement;
   /// Lo stato vuoto: cosa fare quando il riquadro non ha tab.
   emptyEl: HTMLElement;
+  /// Il chip dello stato del documento, accanto al percorso.
+  standing: StandingChip;
   /// Firma dell'ultima striscia disegnata: un cambio di riquadro non deve
   /// ricreare tab identiche e togliere il fuoco al loro nodo DOM.
   tabsSignature: string | null;
@@ -205,6 +208,7 @@ const view: PaneView = {
   releaseFrame: (pane) => {
     frameOf(pane).formatBar.destroy();
     frameOf(pane).selectionBubble.destroy();
+    frameOf(pane).standing.destroy();
   },
   removePane: (pane) => {
     pane.root.remove();
@@ -477,6 +481,7 @@ function createPane(id: string): PaneElements {
     conflictEl,
     noticeEl,
     emptyEl,
+    standing: createStandingChip(),
     tabsSignature: null,
   };
   frames.set(id, r);
@@ -1042,7 +1047,7 @@ function drawToolbar(r: Pane): void {
     const tag = document.createElement("span");
     tag.className = "pane-format";
     tag.hidden = true;
-    bar.append(nav, crumbs, tag, status, group, current, menu);
+    bar.append(nav, crumbs, tag, frameOf(r).standing.element, status, group, current, menu);
   }
   const nav = bar.querySelector<HTMLElement>(":scope > .pane-nav")!;
   const crumbs = bar.querySelector<HTMLElement>(":scope > .muted")!;
@@ -1073,6 +1078,8 @@ function drawToolbar(r: Pane): void {
   tag.hidden = said === null;
   tag.textContent = said ?? "";
   if (said && kind) setTooltip(tag, formatNameOf(kind));
+  // Si scrive tutto, in parte o per niente: lo dice il documento.
+  frameOf(r).standing.follow(tab?.k === "doc" ? r.surface?.standing ?? null : null);
   group.setAttribute("aria-label", t("document.toolbar.modes"));
   menu.setAttribute("aria-label", t("document.pane.menu"));
   const modes = r.surface && r.surface.modes.length > 1 ? r.surface.modes : [];

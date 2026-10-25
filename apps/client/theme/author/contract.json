@@ -360,6 +360,17 @@
     "sheet-title-edit",
     "sheet-title-error",
     "sheet-title-proposal",
+    "pane-standing",
+    "pane-standing-chip",
+    "pane-standing-mark",
+    "pane-standing-text",
+    "pane-standing-rec",
+    "pane-standing-panel",
+    "pane-standing-title",
+    "pane-standing-body",
+    "pane-standing-places",
+    "pane-standing-source",
+    "pane-standing-actions",
     "sheet-save",
     "sheet-save-panel",
     "sheet-save-headline",
@@ -1670,6 +1681,17 @@
     "sheet-title-edit": "cornice",
     "sheet-title-error": "cornice",
     "sheet-title-proposal": "cornice",
+    "pane-standing": "cornice",
+    "pane-standing-chip": "cornice",
+    "pane-standing-mark": "cornice",
+    "pane-standing-text": "cornice",
+    "pane-standing-rec": "cornice",
+    "pane-standing-panel": "cornice",
+    "pane-standing-title": "cornice",
+    "pane-standing-body": "cornice",
+    "pane-standing-places": "cornice",
+    "pane-standing-source": "cornice",
+    "pane-standing-actions": "cornice",
     "sheet-save": "cornice",
     "sheet-save-panel": "cornice",
     "sheet-save-headline": "cornice",
@@ -3688,6 +3710,30 @@
         "sheet-title-error",
         "sheet-title-proposal",
         "kit-field-box"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "standing",
+      "part": "sheets",
+      "hooks": [
+        "pane-standing",
+        "pane-standing-chip",
+        "pane-standing-mark",
+        "pane-standing-text",
+        "pane-standing-rec",
+        "pane-standing-panel",
+        "pane-standing-title",
+        "pane-standing-body",
+        "pane-standing-places",
+        "pane-standing-source",
+        "pane-standing-actions"
       ],
       "states": [
         "rest",
@@ -7377,10 +7423,10 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 38,
-    "hooks": 1308,
+    "hooks": 1319,
     "state_names": 7,
-    "assigned_states": 647,
-    "components": 193,
+    "assigned_states": 652,
+    "components": 194,
     "preference_tokens": 161
   }
 }

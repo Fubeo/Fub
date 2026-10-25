@@ -41,6 +41,7 @@ import { MARKDOWN_SYNTAX } from "../src/rules/syntax.generated";
 import XLSX_GRID from "../src/__fixtures__/xlsx-grid.json";
 import RICH_PROJECTION from "../src/__fixtures__/rich-projection.json";
 import RICH_BENCH from "../src/__fixtures__/rich-bench.json";
+import RICH_CLOSED from "../src/__fixtures__/rich-closed.json";
 import type {
   BundleInfo,
   CommandSpec,
@@ -266,13 +267,15 @@ const WORKBOOK_DOC = params.get("workbook") === "1" ? "Dati/Conti.xlsx" : null;
 /// Il documento di videoscrittura delle scene `document-*` (`?rich=…`), con
 /// la proiezione che `fub-format-rich` dà davvero del file: quella con un po'
 /// di tutto (`tests/ts_projection.rs`), oppure un `.odt`, uno pieno di
-/// oggetti e uno protetto (`tests/ts_bench.rs`). Come la cartella di Excel,
+/// oggetti e uno protetto (`tests/ts_bench.rs`), o uno con due blocchi chiusi
+/// (`tests/ts_projection.rs`). Come la cartella di Excel,
 /// soltanto la sua scena lo ha.
 const RICH_DOCS: Readonly<Record<string, { doc: string; text: string }>> = {
   docx: { doc: "Documenti/Prova.docx", text: RICH_PROJECTION.source },
   odt: { doc: "Documenti/Verbale.odt", text: RICH_BENCH.odt },
   objects: { doc: "Documenti/Oggetti.docx", text: RICH_BENCH.objects },
   readonly: { doc: "Documenti/Riservato.docx", text: RICH_BENCH.readonly },
+  closed: { doc: "Documenti/Chiuso.docx", text: RICH_CLOSED.source },
 };
 const RICH_DOC = RICH_DOCS[params.get("rich") ?? ""] ?? null;
 

@@ -237,6 +237,44 @@ export interface SurfaceStatus {
   subscribe(listener: () => void): () => void;
 }
 
+/** How far the document can be written, as the chip by its path says it. */
+export type SurfaceStandingKind = "writes" | "closed" | "body" | "readonly";
+
+/** A gesture the standing offers: going to a place, finding, recording. */
+export interface SurfaceStandingAction {
+  readonly label: string;
+  run(): void;
+}
+
+/** What the chip says and what its popover explains. */
+export interface SurfaceStandingState {
+  readonly kind: SurfaceStandingKind;
+  /** The chip's own words: «Si scrive», «2 parti chiuse». */
+  readonly text: string;
+  readonly title: string;
+  readonly body: string;
+  /** Where the rule comes from, or where the file is saved. */
+  readonly source?: string;
+  /** The places that stay as the file has them, each with its «Vai». */
+  readonly places?: readonly SurfaceStandingAction[];
+  readonly actions?: readonly SurfaceStandingAction[];
+  /** Changes are being tracked: the chip shows «Registra» next to itself. */
+  readonly recording: boolean;
+  /** What tracking means, said by the «Registra» sign. */
+  readonly recordingHint?: string;
+}
+
+/**
+ * The document says how far it can be written: the shell draws the chip next
+ * to the path and its popover. `null` while there is nothing to say yet, as
+ * before the editor arrives or when the document cannot be read.
+ */
+export interface SurfaceStanding {
+  current(): SurfaceStandingState | null;
+  /** Called when the standing may have changed: an edit, the mode, tracking. */
+  subscribe(listener: () => void): () => void;
+}
+
 /** A tab the document brings to the side panel, next to the declared views. */
 export interface SurfacePanel {
   /** Stable within the surface: the panel keeps its tab across rebuilds. */
@@ -309,6 +347,8 @@ export interface EditorSurface {
   readonly panels?: SurfacePanels;
   /** The document's entries in the status band. */
   readonly status?: SurfaceStatus;
+  /** How far the document can be written, by its path. */
+  readonly standing?: SurfaceStanding;
   /**
    * Brings the view to a place in the document. `false` when this surface
    * cannot get there, so that the shell says it instead of doing nothing.

@@ -32,6 +32,9 @@ export const GERGO: readonly Gergo[] = [
   { parola: /\bWASM\b/, invece: "«componenti», «motore dei componenti»" },
   { parola: /\bABI\b/, invece: "«versione del contratto»" },
   { parola: /\bfeed\b/i, invece: "«catalogo»" },
+  // Il formato legge e scrive il file: chi scrive non vede né l'uno né l'altra.
+  { parola: /\bcodec\b/i, invece: "«il formato»" },
+  { parola: /\bproiezion[ei]\b/i, invece: "«come Fub legge il documento»" },
   // Una revisione si dice per quello che è, non col suo numero interno.
   { parola: /\br\d+\b/, invece: "«versione», con la data" },
   // Un campo vuoto si spiega a parole, non con un'uguaglianza.
