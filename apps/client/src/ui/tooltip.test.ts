@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   attachTooltip,
   closeTooltip,
+  dismissTooltip,
   resetTooltips,
   TOOLTIP_DELAY_MS,
 } from "./tooltip";
@@ -102,5 +103,43 @@ describe("il suggerimento della shell", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("si chiude quando il controllo apre il suo riquadro, e non torna finché è aperto", () => {
+    const button = document.createElement("button");
+    document.body.append(button);
+    const dispose = attachTooltip(button, "Trova");
+    const tooltip = () => document.querySelector<HTMLElement>('[role="tooltip"]');
+
+    button.dispatchEvent(new MouseEvent("mouseenter"));
+    vi.advanceTimersByTime(TOOLTIP_DELAY_MS);
+    expect(tooltip()?.hidden).toBe(false);
+
+    // Il clic apre il riquadro: il suggerimento se ne va subito.
+    button.setAttribute("aria-expanded", "true");
+    dismissTooltip(button);
+    expect(tooltip()?.hidden).toBe(true);
+    expect(button.hasAttribute("aria-describedby")).toBe(false);
+
+    // Il puntatore esce e rientra, a riquadro aperto: niente.
+    button.dispatchEvent(new MouseEvent("mouseleave"));
+    button.dispatchEvent(new MouseEvent("mouseenter"));
+    vi.advanceTimersByTime(TOOLTIP_DELAY_MS * 2);
+    expect(tooltip()?.hidden).toBe(true);
+
+    // Un ritardo partito prima che il riquadro si aprisse non lo riapre.
+    button.setAttribute("aria-expanded", "false");
+    button.dispatchEvent(new MouseEvent("mouseenter"));
+    button.setAttribute("aria-expanded", "true");
+    vi.advanceTimersByTime(TOOLTIP_DELAY_MS);
+    expect(tooltip()?.hidden).toBe(true);
+
+    // Chiuso il riquadro, torna come sempre.
+    button.setAttribute("aria-expanded", "false");
+    button.dispatchEvent(new MouseEvent("mouseleave"));
+    button.dispatchEvent(new MouseEvent("mouseenter"));
+    vi.advanceTimersByTime(TOOLTIP_DELAY_MS);
+    expect(tooltip()?.hidden).toBe(false);
+    dispose();
   });
 });
