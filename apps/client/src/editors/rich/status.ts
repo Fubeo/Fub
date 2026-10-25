@@ -32,7 +32,7 @@ export function richStatus(engine: RichEngine, side: RichSide): () => readonly S
     items.push({ id: "words", text, hint: t("rich.status.words.hint"), open: () => side.show("properties", "count") });
     const language = engine.language();
     if (language) items.push({ id: "language", text: languageName(language), hint: t("rich.status.language") });
-    if (engine.tracking()) items.push({ id: "tracking", text: t("rich.status.tracking"), hint: t("rich.track.switch") });
+    if (engine.tracking()) items.push({ id: "tracking", text: t("rich.status.tracking"), hint: t("rich.track.switch"), beat: true });
     return items;
   };
 }

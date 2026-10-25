@@ -21,7 +21,10 @@
 // - **andare a un punto** (Trova, una revisione, un commento) porta il punto
 //   a un terzo della vista, se non si vede già; poi un anello sopra il punto
 //   si stringe e sfuma, una volta. Nel livello ridotto lo scorrimento salta e
-//   l'anello non c'è.
+//   l'anello non c'è;
+// - mentre si scrive l'intestazione o il piè **il corpo si attenua** a 0,45
+//   in 220 ms, e chiudendo torna; l'attenuazione è del CSS
+//   (`.rich-desk-running`), la corsa ne segue il cambio.
 //
 // Chi cambia la modalità (la shell, con la classe `look-*` e `data-mode`) non
 // ne sa niente: il modulo segue gli attributi. Quando la mutazione arriva il
@@ -51,6 +54,9 @@ const GOTO_LINE = 1 / 3;
 const GOTO_MARGIN = 48;
 /// Di quanto l'anello parte più largo del punto, per lato (px).
 const RING_SPREAD = 8;
+/// L'opacità del corpo mentre si scrive l'intestazione: la stessa di
+/// `.rich-desk-running > .rich-content` in `structure.css`.
+const RUNNING_DIM = 0.45;
 /// Le righe del punto che l'anello cerchia, al più.
 const RING_LINES = 4;
 /// A quanti px dal punto lo scorrimento lascia comparire l'anello.
@@ -349,6 +355,19 @@ export class RichMotion {
         this.#rings.delete(ring);
       });
     }
+  }
+
+  /// Il corpo si attenua (`on`) o torna, dopo che la classe della scrivania è
+  /// già cambiata: la corsa va dall'opacità di prima a quella del CSS.
+  running(on: boolean): void {
+    animate(this.#options.content(), {
+      from: { opacity: on ? 1 : RUNNING_DIM },
+      to: on ? { opacity: RUNNING_DIM } : {},
+      duration: DURATION.short,
+      easing: "ease-out",
+      whenReduced: "none",
+      lifetime: this.#life,
+    });
   }
 
   /// Segue la modalità e l'aspetto: gli attributi di `targets` e la barra

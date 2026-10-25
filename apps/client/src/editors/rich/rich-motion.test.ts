@@ -95,6 +95,8 @@ function engine(blocks: readonly Block[]): RichEngine {
 /// La misura dei fogli, come al fotogramma dopo una modifica.
 const measure = (e: RichEngine) => e.editRunning("footer") && document.querySelector<HTMLElement>(".rich-running-area")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
 const sheetPlays = () => driver!.plays.filter((play) => play.el.classList.contains("rich-sheet-paper") || play.el.classList.contains("rich-sheet-ghost"));
+/// Le corse che non sono l'attenuazione del corpo mentre `measure` apre il piè.
+const notDimming = () => driver!.plays.filter((play) => !play.keyframes.every((frame) => Object.keys(frame).every((key) => key === "opacity" || key === "offset")));
 
 describe("il foglio che nasce", () => {
   it("aperto o cambiato da fuori non muove niente; un salto scritto apre un foglio che esce da quello sopra", () => {
@@ -108,7 +110,7 @@ describe("il foglio che nasce", () => {
     e.syncDoc(JSON.stringify({ format: "fub-rich", version: 1, page: LETTER, blocks: [para("uno\u000cdue\u000ctre"), para("quattro")] }));
     measure(e);
     expect(document.querySelectorAll(".rich-sheets > .rich-sheet")).toHaveLength(3);
-    expect(driver.plays).toHaveLength(0);
+    expect(notDimming()).toHaveLength(0);
     // Un salto scritto in fondo: il foglio nuovo esce dal bordo di quello sopra.
     e.select(e.state.doc.content.size - 1);
     expect(e.run("rich.break.page")).toBe(true);
@@ -118,7 +120,7 @@ describe("il foglio che nasce", () => {
     const entered = sheetPlays().find((play) => play.el === sheets[3]!.firstElementChild);
     expect(entered?.keyframes[0]?.opacity).toBe(0);
     // Il testo non si muove: nessuna corsa fuori dalle sagome.
-    expect(driver.plays.every((play) => play.el.classList.contains("rich-sheet-paper"))).toBe(true);
+    expect(notDimming().every((play) => play.el.classList.contains("rich-sheet-paper"))).toBe(true);
   });
 
   it("un salto scritto in mezzo apre un elemento nuovo: i fogli dopo restano i loro", () => {
@@ -165,6 +167,33 @@ describe("il foglio che nasce", () => {
     driver.advance(1000);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.querySelector(".rich-sheet-ghost")).toBeNull();
+  });
+});
+
+describe("l'intestazione sul foglio", () => {
+  it("il corpo si attenua a 0,45 in 220 ms e torna; dall'intestazione al piè resta attenuato", () => {
+    fakeDesk();
+    driver = createManualDriver();
+    setMotionDriver(driver);
+    const e = engine([para("uno"), para("due")]);
+    const content = document.querySelector<HTMLElement>(".rich-content")!;
+    const dims = () => driver!.plays.filter((play) => play.el === content);
+    expect(e.editRunning("header")).toBe(true);
+    expect(dims()).toHaveLength(1);
+    const opening = dims()[0]!;
+    expect(opening.timing.duration).toBe(220);
+    expect([opening.keyframes[0]?.opacity, opening.keyframes[opening.keyframes.length - 1]?.opacity]).toEqual([1, 0.45]);
+    expect(document.querySelector(".rich-desk-running")).not.toBeNull();
+    // Il piè al posto dell'intestazione: nessuna corsa nuova.
+    expect(e.editRunning("footer")).toBe(true);
+    expect(dims()).toHaveLength(1);
+    driver.advance(400);
+    document.querySelector<HTMLElement>(".rich-running-area")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(document.querySelector(".rich-desk-running")).toBeNull();
+    expect(dims()).toHaveLength(2);
+    expect(dims()[1]!.keyframes[0]?.opacity).toBe(0.45);
+    driver.advance(400);
+    expect(content.getAttribute("style") ?? "").not.toContain("opacity");
   });
 });
 

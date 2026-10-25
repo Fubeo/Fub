@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emit, state } from "../../../state/store";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { activeMotions, createManualDriver, setMotionDriver } from "../../../moto";
 
 type Status = { indexing: string; watching: boolean } | null;
 
@@ -427,6 +428,51 @@ describe("le voci della superficie", () => {
     life.close();
     expect(listeners.size).toBe(0);
     expect(items()).toHaveLength(0);
+  });
+});
+
+describe("il segno che si accende", () => {
+  it("«Registra» batte una volta quando si accende, non quando si torna al documento", async () => {
+    const driver = createManualDriver();
+    setMotionDriver(driver);
+    try {
+      const listeners = new Set<() => void>();
+      const said = { items: [{ id: "words", text: "3 parole" }] as { id: string; text: string; beat?: boolean }[] };
+      const status = {
+        counts: true,
+        items: () => said.items,
+        subscribe(listener: () => void) {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      };
+      const pane = { surface: { modes: [{ id: "a" }], status }, mode: { label: () => "Pagina" } };
+      world.tab = { k: "doc" };
+      world.pane = pane;
+      mountStatusBand(life);
+      await settle();
+      expect(driver.plays).toHaveLength(0);
+      // Si accende: un battito, sulla scala, con la molla.
+      said.items = [...said.items, { id: "tracking", text: "Registra", beat: true }];
+      for (const listener of [...listeners]) listener();
+      const sign = document.querySelector<HTMLElement>('[data-surface-item="tracking"]')!;
+      expect(driver.plays.map((play) => play.el)).toEqual([sign]);
+      expect(driver.plays[0]!.keyframes.every((frame) => frame.opacity === undefined)).toBe(true);
+      // Ridisegnare non batte di nuovo.
+      for (const listener of [...listeners]) listener();
+      expect(driver.plays).toHaveLength(1);
+      driver.advance(2000);
+      expect(activeMotions()).toBe(0);
+      // Un altro foglio, poi di nuovo il documento che registra già: niente.
+      world.pane = surface(3);
+      for (const listener of world.languageListeners) listener();
+      world.pane = pane;
+      for (const listener of world.languageListeners) listener();
+      expect(document.querySelector('[data-surface-item="tracking"]')).not.toBeNull();
+      expect(driver.plays).toHaveLength(1);
+    } finally {
+      setMotionDriver(null);
+    }
   });
 });
 

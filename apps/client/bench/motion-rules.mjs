@@ -260,10 +260,26 @@ const countSheets = (page) =>
   });
 const sheetsMore = (more) => (page) =>
   page.evaluate((n) => document.querySelectorAll(".rich-sheets > .rich-sheet").length === window.__richSheets + n, more);
+/// Il cursore all'inizio del primo paragrafo, senza il clic di Playwright: la
+/// carta è più larga della colonna, e un clic che trova il bersaglio coperto
+/// da una corsa riprova scorrendo la vista per centrarlo. Lo scorrimento non è
+/// una corsa da misurare, e cambierebbe fra la corsa ferma e quella mossa.
+const firstPara = (page) =>
+  page.evaluate(() => {
+    const para = document.querySelector(".rich-content > .rich-para");
+    const content = para?.closest("[contenteditable]");
+    if (!para || !(content instanceof HTMLElement)) throw new Error("manca il primo paragrafo");
+    const range = document.createRange();
+    range.setStart(para, 0);
+    range.collapse(true);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+    content.focus({ preventScroll: true });
+  });
 /// La scheda Commenti dell'ispettore, con il primo paragrafo selezionato:
 /// il posto di un commento nuovo.
 const commentsOpen = async (page) => {
-  await page.locator(".rich-content > .rich-para >> nth=0").click();
+  await firstPara(page);
   await page.keyboard.press("Home");
   await page.keyboard.press("Shift+End");
   await page.evaluate(() => document.querySelector('[aria-controls="surface-panel-rich-side-comments"]')?.click());
@@ -698,6 +714,30 @@ export const CHOREOGRAPHIES = [
     undo: commentDrop,
     returned: commentShown(false),
     exit: true,
+  },
+  {
+    id: "rich-record",
+    title: "Documento: «Registra» si accende nella banda con un battito solo, e non lampeggia",
+    sources: ["src/shells/scrittoio/frame/status-band.ts"],
+    scene: "document-docx",
+    // Il nome di chi rivede, scritto nei Commenti: senza, «Registra» apre
+    // Revisioni invece di accendersi.
+    setup: commentsOpen,
+    act: click('[data-command="rich.track"] button'),
+    arrived: has('[data-surface-item="tracking"]'),
+    undo: click('[data-command="rich.track"] button'),
+    returned: lacks('[data-surface-item="tracking"]'),
+  },
+  {
+    id: "rich-header",
+    title: "Documento: mentre si scrive l'intestazione il corpo si attenua, e chiudendo torna",
+    sources: ["src/editors/rich/rich-motion.ts"],
+    scene: "document-docx",
+    setup: firstPara,
+    act: click('[data-command="rich.header"] button'),
+    arrived: has(".rich-desk-running .rich-running-area"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks(".rich-desk-running"),
   },
 ];
 

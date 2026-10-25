@@ -231,7 +231,13 @@ l'IPC.
   (`editors/rich/status.ts`): il foglio del cursore (`RichEngine.sheetOf`), le
   parole di `countText`, le stesse del Conteggio, la lingua e «Registra». La
   superficie dichiara `counts`, e la banda nasconde la view `stats` di
-  `fub.stats` finché il documento ha il fuoco.
+  `fub.stats` finché il documento ha il fuoco. «Registra» è una voce con
+  `beat`: quando si accende nello stesso documento entra con un battito della
+  molla elastica, e spegnendosi esce come immagine; passando a un documento
+  che registra già non batte.
+- Mentre si scrive l'intestazione o il piè, il corpo è a 0,45
+  (`.rich-desk-running`) e `RichMotion.running` ne segue il cambio in 220 ms;
+  passare dall'intestazione al piè non lo riaccende.
 - F6 e Maiusc+F6 (`shell.zone.next`/`prev`, dichiarati in
   `crates/fub-host/src/shell.rs`) girano le zone della finestra
   (`shells/scrittoio/zones.ts`): il pannello dei file, il foglio col fuoco,

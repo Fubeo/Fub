@@ -110,6 +110,8 @@ export class RichEngine {
   /// I fogli di Pagina e di Lettura, e l'intestazione che si scrive sul posto.
   readonly #sheets: SheetDesk;
   #running: RunningEditor | null = null;
+  /// Un campo dell'intestazione si chiude per aprirne un altro.
+  #swapping = false;
   /// Il moto della carta: modalità, zoom, fogli che nascono.
   readonly #motion: RichMotion;
   /// La transazione in corso va a un punto (`GO_TO`), con l'anello o no; e
@@ -795,8 +797,13 @@ export class RichEngine {
     const inset = runningInset(kind === "header" ? page.top : page.bottom);
     const left = `left: calc(${box.left}px + ${page.left}pt); width: ${page.w - page.left - page.right}pt`;
     const place = kind === "header" ? `top: calc(${box.top}px + ${inset}pt); ${left}` : `top: calc(${box.top + box.height}px - ${inset}pt); transform: translateY(-100%); ${left}`;
+    // Dall'intestazione al piè il corpo resta attenuato: niente corsa.
+    const swapping = this.#running !== null;
+    this.#swapping = swapping;
     this.#running?.close(true);
+    this.#swapping = false;
     this.#desk.classList.add("rich-desk-running");
+    if (!swapping) this.#motion.running(true);
     this.#running = openRunningEditor({
       host: this.#desk,
       kind,
@@ -809,6 +816,7 @@ export class RichEngine {
       closed: (back) => {
         this.#running = null;
         this.#desk.classList.remove("rich-desk-running");
+        if (!this.#swapping) this.#motion.running(false);
         if (back) this.focus();
       },
     });

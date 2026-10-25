@@ -20,7 +20,12 @@ import { zoomBy } from "../../../state/zoom";
 import type { Lifetime } from "../../../ui/lifetime";
 import { Race } from "../../../ui/race";
 import { setTooltip } from "../../../ui/tooltip";
+import { animate, DURATION, prepareExit } from "../../../moto";
 import { byId, follow } from "./dom";
+
+/// Da quanto piccolo entra un segno che si accende: la molla elastica lo porta
+/// oltre la misura, una volta, e lo posa.
+const BEAT_SCALE = 0.8;
 
 function show(el: HTMLElement | null, text: string, tone?: string): void {
   if (!el) return;
@@ -109,6 +114,9 @@ export function mountStatusBand(lifetime: Lifetime): void {
   };
   function drawSurface(): void {
     const status = statusOf();
+    // Un segno che si accende batte solo se il documento è lo stesso di prima:
+    // passare a un documento che registra già non è un'accensione.
+    const same = status !== null && status === told;
     if (status !== told) {
       stopTelling?.();
       told = status;
@@ -117,11 +125,16 @@ export function mountStatusBand(lifetime: Lifetime): void {
     if (status?.counts) band!.dataset.surfaceCounts = "";
     else delete band!.dataset.surfaceCounts;
     const list = status?.items() ?? [];
+    const beats: HTMLElement[] = [];
     const ids = new Set(list.map((item) => item.id));
     for (const [id, el] of items) {
       if (ids.has(id)) continue;
+      // Il segno che si spegne nello stesso documento se ne va come immagine:
+      // a metà del battito, l'immagine prosegue da dov'era.
+      const ghost = same && el.dataset.beat !== undefined ? prepareExit(el) : null;
       el.remove();
       items.delete(id);
+      ghost?.play({ duration: DURATION.state });
     }
     for (const item of list) {
       let el = items.get(item.id);
@@ -137,7 +150,10 @@ export function mountStatusBand(lifetime: Lifetime): void {
           el.addEventListener("click", () => statusOf()?.items().find((each) => each.id === id)?.open?.());
         }
         items.set(item.id, el);
+        if (item.beat && same) beats.push(el);
       }
+      if (item.beat) el.dataset.beat = "";
+      else delete el.dataset.beat;
       if (el.textContent !== item.text) el.textContent = item.text;
       if (item.hint) setTooltip(el, item.hint);
     }
@@ -149,6 +165,8 @@ export function mountStatusBand(lifetime: Lifetime): void {
       if (end && el.nextElementSibling !== next) end.insertBefore(el, next);
       next = el;
     }
+    // Un battito solo, con la molla elastica: niente lampeggio.
+    for (const el of beats) animate(el, { from: { scale: BEAT_SCALE }, spring: "elastic", whenReduced: "none", lifetime });
   }
   // L'adattamento della carta: soltanto dove la superficie lo offre adesso
   // (un documento in Pagina). Premuto, un altro clic torna alla carta vera.
