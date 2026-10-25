@@ -47,6 +47,7 @@ import { mountRichPanels, RICH_PANEL_IDS, type RichMedia, type RichPanelId } fro
 import { COLOR_AUTO } from "./projection";
 import { goToRevision } from "./review";
 import { insertToc } from "./toc";
+import type { Look } from "../../theme/content-look";
 
 export type { RichMedia } from "./panels";
 
@@ -62,7 +63,20 @@ export interface RichView {
   readonly painter: boolean;
   readonly finding: boolean;
   readonly tracking: boolean;
+  /// La modalità della superficie (Pagina, Scrittura, Lettura) e se la carta
+  /// è adattata al tema.
+  readonly mode: string;
+  readonly adapted: boolean;
 }
+
+/// Le modalità che Visualizza offre, col comando di ciascuna.
+export const RICH_MODE_COMMANDS: Readonly<Record<string, string>> = {
+  "rich.mode.document": "document",
+  "rich.mode.writing": "writing",
+  "rich.mode.reading": "reading",
+};
+/// La carta adattata al tema, in Pagina e in Lettura.
+export const RICH_ADAPTED_COMMAND = "rich.look.adapted";
 
 /// Il colore del testo o dell'evidenziatore: un segno con sotto la barretta
 /// del colore della selezione; apre la tavolozza.
@@ -95,6 +109,8 @@ export const RICH_RIBBON_COMMANDS: ReadonlySet<string> = new Set([
   "shell.zoom.in",
   "shell.zoom.out",
   "shell.zoom.reset",
+  ...Object.keys(RICH_MODE_COMMANDS),
+  RICH_ADAPTED_COMMAND,
 ]);
 
 /// Le azioni degli stili che la galleria dà, con il valore dello stile.
@@ -143,11 +159,24 @@ const READING: ReadonlySet<string> = new Set([
   "shell.zoom.in",
   "shell.zoom.out",
   "shell.zoom.reset",
+  ...Object.keys(RICH_MODE_COMMANDS),
+  RICH_ADAPTED_COMMAND,
 ]);
 
 /// Il formato si cambia soltanto se non si registra: un formato cambiato non
 /// ha una revisione.
 const FORMATTING: ReadonlySet<string> = new Set(["rich.font", "rich.size", "rich.style", "rich.color", "rich.highlight", "rich.painter", "rich.spacing", "rich.page", "rich.hf", "rich.toc"]);
+
+/// Una modalità di Visualizza: premuta quando è quella di adesso.
+const modeButton = (id: string, label: Key, keytip: string, icon: string): RichControl => ({
+  kind: "button",
+  id,
+  label,
+  keytip,
+  icon,
+  size: "large",
+  pressed: (view) => view.mode === RICH_MODE_COMMANDS[id],
+});
 
 const toggle = (id: string, label: Key, keytip: string, figure: { icon?: string; glyph?: string; className?: string }): RichControl => ({
   kind: "button",
@@ -471,6 +500,26 @@ export const RICH_TABS: readonly RichTab[] = [
     keytip: "W",
     groups: [
       {
+        id: "modes",
+        label: "rich.ribbon.group.modes",
+        icon: "rc-mode-page",
+        keytip: "ZV",
+        columns: [
+          modeButton("rich.mode.reading", "rich.mode.reading", "F", "rc-mode-reading"),
+          modeButton("rich.mode.document", "rich.mode.document", "P", "rc-mode-page"),
+          modeButton("rich.mode.writing", "rich.mode.writing", "S", "rc-mode-writing"),
+        ],
+      },
+      {
+        id: "paper",
+        label: "rich.ribbon.group.paper",
+        icon: "rc-look-adapted",
+        keytip: "ZA",
+        columns: [
+          { kind: "button", id: RICH_ADAPTED_COMMAND, label: "rich.look.adapted", keytip: "A", icon: "rc-look-adapted", size: "large", pressed: (view) => view.adapted },
+        ],
+      },
+      {
         id: "zoom",
         label: "rich.ribbon.group.zoom",
         icon: "rc-zoom-in",
@@ -577,6 +626,7 @@ export interface RichRibbon {
   readonly findBar: HTMLElement;
   /// Apre la barra di ricerca; con `replace`, anche Sostituisci.
   find(replace: boolean): void;
+  closeFind(): void;
   refresh(): void;
   /// Monta la mini-barra in `host` e torna come toglierla.
   mountMini(host: HTMLElement): () => void;
@@ -588,6 +638,15 @@ export interface RichRibbonOptions {
   readonly host?: HTMLElement;
   /// Un comando della shell (lo zoom), se la shell lo offre.
   readonly shell?: (id: string) => (() => void) | null;
+  /// La modalità e l'aspetto della carta, che la superficie chiede alla shell.
+  readonly display?: RichDisplay;
+}
+
+export interface RichDisplay {
+  mode(): string;
+  setMode(mode: string): void;
+  look(): Look | null;
+  setLook(look: Look): void;
 }
 
 export function mountRichRibbon(
@@ -618,6 +677,8 @@ export function mountRichRibbon(
       painter: engine.painterArmed(),
       finding: panels.finding(),
       tracking: engine.tracking(),
+      mode: options.display?.mode() ?? "document",
+      adapted: options.display?.look() === "adattato",
     };
     documentFonts.set(next, engine.fonts());
     view = next;
@@ -674,6 +735,12 @@ export function mountRichRibbon(
     if (media.review || hasComments) put("rich.comments", true);
     if (media.review || tracking) put("rich.track", editable);
     for (const id of ["shell.zoom.in", "shell.zoom.out", "shell.zoom.reset"]) if (options.shell?.(id)) put(id, true);
+    if (options.display) {
+      for (const id of Object.keys(RICH_MODE_COMMANDS)) put(id, true);
+      // La Scrittura è del tema: la carta non c'è, né chiara né adattata.
+      if (options.display.mode() === "writing") off(RICH_ADAPTED_COMMAND, t("rich.look.adapted.writing"));
+      else put(RICH_ADAPTED_COMMAND, true);
+    }
     return states;
   }
 
@@ -712,7 +779,11 @@ export function mountRichRibbon(
     if (!enabled(id)) return;
     const params = JSON.parse(json) as Params;
     if (ACTION_ROLES[id]) return setStyleValue(ACTION_ROLES[id]);
+    if (RICH_MODE_COMMANDS[id]) return options.display?.setMode(RICH_MODE_COMMANDS[id]);
     switch (id) {
+      case RICH_ADAPTED_COMMAND:
+        options.display?.setLook(options.display.look() === "adattato" ? "file" : "adattato");
+        return;
       case "rich.font":
         if (typeof params.font === "string") engine.apply(setFont(params.font));
         return;
@@ -951,6 +1022,7 @@ export function mountRichRibbon(
     element: options.host ? ribbon.element : host,
     findBar: panels.findBar,
     find: (replace) => panels.find(replace),
+    closeFind: () => panels.closeFind(),
     refresh: ribbon.refresh,
     mountMini: (place) => ribbon.mountMini(place),
     destroy() {

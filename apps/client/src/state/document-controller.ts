@@ -799,6 +799,14 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     },
     onSearchTag: (tag) => deps.searchTag(tag),
     runShellCommand: (id) => deps.runCommand(id),
+    requestMode: (paneId, mode) => {
+      if (layout.focus !== paneId) focusPane(paneId);
+      void setMode(mode);
+    },
+    requestLook: (paneId, look) => {
+      if (layout.focus !== paneId) focusPane(paneId);
+      setLook(look);
+    },
     slash: {
       currentDoc: slashContextDoc,
       onEffect: applyIntent,

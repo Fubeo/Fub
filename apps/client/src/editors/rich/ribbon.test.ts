@@ -40,6 +40,8 @@ const VIEW: RichView = {
   painter: false,
   finding: false,
   tracking: false,
+  mode: "document",
+  adapted: false,
 };
 
 /// Le azioni del motore che la barra non mostra, ciascuna col posto dove sta.
@@ -133,6 +135,47 @@ describe("la barra del documento", () => {
     document.body.append(ribbon.element);
     ribbon.element.querySelector<HTMLButtonElement>('[data-command="shell.zoom.in"] button')!.click();
     expect(asked).toEqual(["shell.zoom.in"]);
+    ribbon.destroy();
+  });
+
+  it("Visualizza chiede la modalità e la carta alla superficie, e in Scrittura spegne la carta col perché", () => {
+    const e = engine([para("testo")]);
+    let mode = "document";
+    let look: "file" | "adattato" | "tema" = "file";
+    const asked: string[] = [];
+    const display = {
+      mode: () => mode,
+      setMode: (next: string) => asked.push(`mode:${next}`),
+      look: () => look,
+      setLook: (next: "file" | "adattato" | "tema") => asked.push(`look:${next}`),
+    };
+    const ribbon = mountRichRibbon(e, () => null, {}, { display });
+    document.body.append(ribbon.element);
+    const press = (id: string) => ribbon.element.querySelector<HTMLButtonElement>(`[data-command="${id}"] button`)!;
+    expect(press("rich.mode.document").getAttribute("aria-pressed")).toBe("true");
+    expect(press("rich.mode.writing").getAttribute("aria-pressed")).toBe("false");
+    press("rich.mode.reading").click();
+    press("rich.look.adapted").click();
+    expect(asked).toEqual(["mode:reading", "look:adattato"]);
+    mode = "writing";
+    look = "tema";
+    ribbon.refresh();
+    expect(press("rich.mode.writing").getAttribute("aria-pressed")).toBe("true");
+    const adapted = press("rich.look.adapted");
+    expect(adapted.getAttribute("aria-disabled")).toBe("true");
+    adapted.focus();
+    expect(document.getElementById(adapted.getAttribute("aria-describedby")!)!.textContent).toBe(
+      t("rich.ribbon.unavailable", { command: t("rich.look.adapted"), reason: t("rich.look.adapted.writing") }),
+    );
+    adapted.click();
+    expect(asked).toHaveLength(2);
+    ribbon.destroy();
+  });
+
+  it("senza chi le dia, la barra non mostra modalità né carta", () => {
+    const ribbon = mountRichRibbon(engine([para("testo")]), () => null);
+    expect(ribbon.element.querySelector<HTMLElement>('[data-command="rich.mode.document"]')!.hidden).toBe(true);
+    expect(ribbon.element.querySelector<HTMLElement>('[data-command="rich.look.adapted"]')!.hidden).toBe(true);
     ribbon.destroy();
   });
 });

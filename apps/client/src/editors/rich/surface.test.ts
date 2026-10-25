@@ -30,14 +30,14 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function mount(load: () => Promise<typeof engineModule>) {
+function mount(load: () => Promise<typeof engineModule>, requestMode?: (mode: string) => void) {
   const parent = document.createElement("div");
   document.body.append(parent);
   const onChange = vi.fn();
   const surface = mountRichSurface(
     RICH_PROFILE,
     { paneId: "pane", documentId: "lettera.docx", parent, formatId: "docx" },
-    { onChange, onSelectionChange: vi.fn(), loadEngine: load },
+    { onChange, onSelectionChange: vi.fn(), loadEngine: load, requestMode },
   );
   return { parent, surface, onChange };
 }
@@ -72,6 +72,53 @@ describe("la superficie ricca", () => {
     expect(onChange).not.toHaveBeenCalled();
     surface.destroy();
     expect(parent.childElementCount).toBe(0);
+  });
+
+  it("ha Pagina, Scrittura e Lettura, ciascuna coi suoi aspetti, e Pagina per prima", () => {
+    const { surface } = mount(() => new Promise(() => {}));
+    expect(surface.modes.map((mode) => [mode.id, mode.contextMode, mode.looks])).toEqual([
+      ["document", "live_preview", ["file", "adattato"]],
+      ["writing", "live_preview", ["tema"]],
+      ["reading", "reading", ["file", "adattato"]],
+    ]);
+    expect(surface.defaultMode ?? surface.modes[0].id).toBe("document");
+    expect(() => surface.setMode("source")).toThrow();
+    surface.destroy();
+  });
+
+  it("in Lettura la barra si ritira e il documento non si scrive; Esc chiede Pagina", async () => {
+    const asked: string[] = [];
+    const { parent, surface } = mount(() => Promise.resolve(engineModule), (mode) => asked.push(mode));
+    await flush();
+    surface.buffer!.setDoc(SOURCE);
+    const host = parent.querySelector<HTMLElement>(".rich-ribbon-host")!;
+    const content = parent.querySelector<HTMLElement>(".rich-content")!;
+    surface.setMode("reading");
+    expect(parent.dataset.surfaceMode).toBe("reading");
+    expect(host.hidden).toBe(true);
+    expect(surface.editorActions!.editable()).toBe(false);
+    expect(content.getAttribute("contenteditable")).toBe("false");
+    const esc = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    content.dispatchEvent(esc);
+    expect(esc.defaultPrevented).toBe(true);
+    expect(asked).toEqual(["document"]);
+    surface.setMode("writing");
+    expect(host.hidden).toBe(false);
+    expect(surface.editorActions!.editable()).toBe(true);
+    // Fuori dalla Lettura, Esc resta di chi lo aspetta.
+    content.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(asked).toEqual(["document"]);
+    surface.destroy();
+  });
+
+  it("un documento in sola lettura resta tale fuori dalla Lettura", async () => {
+    const { surface } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    surface.buffer!.setDoc(JSON.stringify({ ...JSON.parse(SOURCE), readonly: "protected" }));
+    surface.setMode("reading");
+    surface.setMode("document");
+    expect(surface.editorActions!.editable()).toBe(false);
+    surface.destroy();
   });
 
   it("smontata prima che il motore arrivi non monta niente dopo", async () => {

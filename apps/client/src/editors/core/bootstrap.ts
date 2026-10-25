@@ -26,6 +26,7 @@ import type { DrawingImagePort } from "../canvas/surface";
 import type { VaultFontPort } from "../spatial/fonts/vault";
 import type { SymbolLibraryPort } from "../spatial/tools/symbol-libraries";
 import type { GridDialog, SyntaxForm } from "../../host/contract";
+import type { Look } from "../../theme/content-look";
 import {
   DocumentSurfaceRegistry,
   type EditorSurface,
@@ -45,6 +46,10 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   /// Un comando della shell dato da dentro una superficie, come dalla
   /// palette: lo zoom della barra del documento.
   readonly runShellCommand?: (id: string) => void;
+  /// Una superficie che chiede un'altra modalità, o un altro aspetto del
+  /// contenuto, per il suo riquadro: come dal selettore della banda.
+  readonly requestMode?: (paneId: string, mode: string) => void;
+  readonly requestLook?: (paneId: string, look: Look) => void;
   readonly completions: CompletionSources;
   readonly slash?: EditorSlashHost;
   readonly gridHost?: GridHost;
@@ -432,6 +437,8 @@ export function createDocumentSurfaceRegistry(
           onSelectionChange: options.onSelectionChange,
           images: options.drawingImages,
           shellCommand: options.runShellCommand ? (id) => () => options.runShellCommand!(id) : undefined,
+          requestMode: options.requestMode ? (mode) => options.requestMode!(context.paneId, mode) : undefined,
+          requestLook: options.requestLook ? (look) => options.requestLook!(context.paneId, look) : undefined,
           proof: {
             ports: proofPorts(openVaultRoot()),
             notify: options.slash ? (message) => options.slash!.notify(message) : undefined,

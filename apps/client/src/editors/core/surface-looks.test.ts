@@ -16,9 +16,8 @@ const sources = import.meta.glob(["../**/*.ts", "!../**/*.test.ts", "!../**/test
   eager: true,
 }) as Record<string, string>;
 
-/// Le modalità senza aspetto, come `file#id`: il documento aspetta la carta,
-/// il foglio di calcolo N8.
-const UNDECLARED = new Set(["rich/surface.ts#document", "core/bootstrap.ts#sheet"]);
+/// Le modalità senza aspetto, come `file#id`: il foglio di calcolo aspetta N8.
+const UNDECLARED = new Set(["core/bootstrap.ts#sheet"]);
 
 /// Una modalità come si scrive: `{ id: "…", label: …, contextMode: … }` su una
 /// riga, con o senza `looks`.
@@ -70,5 +69,8 @@ describe("gli aspetti delle modalità", () => {
     expect(of("spatial/modes.ts#draw")).toEqual(["file"]);
     expect(of("media/media-surface.ts#view")).toEqual(["file"]);
     expect(of("base/data.ts#base")).toEqual(["tema"]);
+    expect(of("rich/surface.ts#document")).toEqual(["file", "adattato"]);
+    expect(of("rich/surface.ts#writing")).toEqual(["tema"]);
+    expect(of("rich/surface.ts#reading")).toEqual(["file", "adattato"]);
   });
 });
