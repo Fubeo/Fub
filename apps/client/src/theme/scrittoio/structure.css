@@ -2145,6 +2145,11 @@ body {
 .rich-desk { position: relative; }
 .rich-sheets { position: absolute; inset: 0; pointer-events: none; }
 .rich-sheet { position: absolute; inset: 0; }
+/* La carta di un foglio è la sua sagoma, che il moto muove da sola
+   (`editors/rich/rich-motion.ts`): l'intestazione e il piè, sopra, stanno
+   fermi. Di un foglio tolto resta per un momento la sagoma. */
+.rich-sheet::before { content: ""; position: absolute; inset: 0; box-sizing: border-box; }
+.rich-sheet-ghost { position: absolute; pointer-events: none; }
 .look-tema .rich-sheets { display: none; }
 /* Un foglio per interruzione (`editors/rich/sheets.ts`): le sagome stanno
    in linea dove la misura le mette, e dove un foglio finisce il testo lascia

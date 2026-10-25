@@ -257,8 +257,12 @@ async function TOOLS() {
     if (style.content === "none" || style.display === "none" || style.position !== "absolute") return null;
     const width = Number.parseFloat(style.width);
     const height = Number.parseFloat(style.height);
-    const left = host.left + el.clientLeft + Number.parseFloat(style.left);
-    const top = host.top + el.clientTop + Number.parseFloat(style.top);
+    // Sotto uno zoom CSS (la carta adattata di un documento) il rettangolo
+    // dell'ospite è sullo schermo, lo stile dello pseudo-elemento no.
+    const own = Number.parseFloat(getComputedStyle(el).width);
+    const zoom = own > 0 && host.width > 0 ? host.width / own : 1;
+    const left = host.left + (el.clientLeft + Number.parseFloat(style.left)) * zoom;
+    const top = host.top + (el.clientTop + Number.parseFloat(style.top)) * zoom;
     if (![width, height, left, top].every(Number.isFinite)) return null;
     const matrix = new DOMMatrixReadOnly(style.transform === "none" ? undefined : style.transform);
     const [ox, oy] = style.transformOrigin.split(" ").map(Number.parseFloat);
@@ -270,10 +274,10 @@ async function TOOLS() {
       ys.push(point.y + oy);
     }
     return {
-      left: left + Math.min(...xs),
-      top: top + Math.min(...ys),
-      width: Math.max(...xs) - Math.min(...xs),
-      height: Math.max(...ys) - Math.min(...ys),
+      left: left + Math.min(...xs) * zoom,
+      top: top + Math.min(...ys) * zoom,
+      width: (Math.max(...xs) - Math.min(...xs)) * zoom,
+      height: (Math.max(...ys) - Math.min(...ys)) * zoom,
       opacity: Number(style.opacity),
     };
   };

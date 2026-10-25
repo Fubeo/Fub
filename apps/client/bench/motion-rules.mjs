@@ -243,6 +243,23 @@ const shellCommand = (id) => (page) =>
     if (!entry?.run) throw new Error(`nessun comando ${command}`);
     await entry.run();
   }, id);
+/// La modalità del documento a fuoco, come la chiede la shell: senza un
+/// bottone, il cui hover ha transizioni sue.
+const richMode = (mode) => (page) =>
+  page.evaluate(async (m) => {
+    const { setMode } = await import("/src/state/document-controller.ts");
+    await setMode(m);
+  }, mode);
+const richShown = (mode) => has(`.rich-surface[data-mode="${mode}"]`);
+/// Un bottone premuto dal suo `click()`, senza il puntatore sopra.
+const click = (selector) => (page) => page.evaluate((s) => document.querySelector(s)?.click(), selector);
+/// Quanti fogli ha la scrivania, rispetto a quelli contati da `countSheets`.
+const countSheets = (page) =>
+  page.evaluate(() => {
+    window.__richSheets = document.querySelectorAll(".rich-sheets > .rich-sheet").length;
+  });
+const sheetsMore = (more) => (page) =>
+  page.evaluate((n) => document.querySelectorAll(".rich-sheets > .rich-sheet").length === window.__richSheets + n, more);
 const light = (theme) => (page) =>
   page.evaluate(
     (t) => document.documentElement.dataset.theme === t && document.querySelector(".light-scene") === null,
@@ -562,6 +579,57 @@ export const CHOREOGRAPHIES = [
     undo: null,
     irreversible: "il ritorno segue un rilascio: riprendere la maniglia è un altro trascinamento",
     track: ["#sample-splitter"],
+  },
+  {
+    id: "rich-mode",
+    title: "Documento: entrando in Pagina la carta si allarga dalla colonna del testo, che resta al suo posto",
+    sources: ["src/editors/rich/rich-motion.ts"],
+    scene: "document-docx",
+    setup: richMode("writing"),
+    act: richMode("document"),
+    arrived: richShown("document"),
+    undo: richMode("writing"),
+    returned: richShown("writing"),
+  },
+  {
+    id: "rich-reading",
+    title: "Documento: in Lettura la barra sparisce e la carta sale; tornando, la barra entra dal suo bordo",
+    sources: ["src/editors/rich/rich-motion.ts"],
+    scene: "document-docx",
+    act: richMode("reading"),
+    arrived: has('.rich-surface[data-mode="reading"] > .rich-ribbon-host[hidden]'),
+    undo: richMode("document"),
+    returned: has('.rich-surface[data-mode="document"] > .rich-ribbon-host:not([hidden])'),
+  },
+  {
+    id: "rich-zoom",
+    title: "Documento: la pagina intera scala la carta attorno al centro della vista",
+    sources: ["src/editors/rich/rich-motion.ts"],
+    scene: "document-docx",
+    act: click("#status-fit-page"),
+    arrived: has('#status-fit-page[aria-pressed="true"]'),
+    undo: click("#status-fit-page"),
+    returned: has('#status-fit-page[aria-pressed="false"]'),
+  },
+  {
+    id: "rich-page-break",
+    title: "Documento: il foglio nuovo esce da quello sopra e i fogli sotto scivolano; tolto, la sua sagoma si dissolve",
+    sources: ["src/editors/rich/rich-motion.ts"],
+    scene: "document-docx",
+    // Il cursore in fondo al primo paragrafo, dove il salto apre un foglio.
+    // La finestra è alta quanto basta per vedere il cursore prima e dopo il
+    // salto, e larga quanto la carta: altrimenti la vista scorre per mostrarlo,
+    // e lo scorrimento non è una corsa da misurare.
+    setup: async (page) => {
+      await page.setViewportSize({ width: 1600, height: 1600 });
+      await page.locator(".rich-content > .rich-para >> nth=0").click();
+      await page.keyboard.press("End");
+      await countSheets(page);
+    },
+    act: (page) => page.keyboard.press("Control+Enter"),
+    arrived: sheetsMore(1),
+    undo: (page) => page.keyboard.press("Control+KeyZ"),
+    returned: sheetsMore(0),
   },
 ];
 

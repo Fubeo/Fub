@@ -45,6 +45,7 @@ import { DEFAULT_PAGE, pageVariables, samePage, setRunningAt } from "./page";
 import { openRunningEditor, type RunningEditor } from "./running";
 import { DESK_INSET, fitScale, PX_PER_PT, runningInset, SheetDesk, sheetAt, sheetPlanOf, sheetsPlugin } from "./sheets";
 import { richProof } from "./proof";
+import { RichMotion } from "./rich-motion";
 import { commentPlugin, commentsOf } from "./comments";
 import { notePlugin } from "./notes";
 import { sectionPlugin } from "./breaks";
@@ -107,6 +108,8 @@ export class RichEngine {
   /// I fogli di Pagina e di Lettura, e l'intestazione che si scrive sul posto.
   readonly #sheets: SheetDesk;
   #running: RunningEditor | null = null;
+  /// Il moto della carta: modalità, zoom, fogli che nascono.
+  readonly #motion: RichMotion;
 
   constructor(parent: HTMLElement, options: RichEngineOptions) {
     this.#options = options;
@@ -175,6 +178,15 @@ export class RichEngine {
       this.focus();
     };
     parent.addEventListener("keydown", enter);
+    this.#motion = new RichMotion({
+      page: parent,
+      desk: this.#desk,
+      layer: sheets,
+      content: () => this.#view.dom,
+      scale: () => Number.parseFloat(this.#desk.style.zoom) || 1,
+      measure: () => void this.#sheets.measure(),
+    });
+    this.#sheets.onRedraw((previous) => this.#motion.redraw(previous));
     this.#stopPage = () => {
       parent.removeEventListener("keydown", enter);
       for (const name of ["tabindex", "role", "aria-label"]) parent.removeAttribute(name);
@@ -357,6 +369,9 @@ export class RichEngine {
       tr = tracked;
     }
     const state = before.apply(tr);
+    // Un foglio che nasce da ciò che si scrive si muove; uno che arriva col
+    // documento no.
+    if (tr.docChanged && !tr.getMeta(SYNC)) this.#sheets.local();
     this.#view.updateState(state);
     if (tr.docChanged && !tr.getMeta(SYNC)) {
       // Ciò che il documento ha, l'ha avuto: un taglia e incolla lo ritrova.
@@ -669,20 +684,33 @@ export class RichEngine {
   }
 
   /// Adatta la carta alla vista `view` (in px): larga quanto la vista, o il
-  /// primo foglio intero; `null` è la carta vera.
-  fitPaper(fit: PaperFit | null, view: { readonly width: number; readonly height: number }): void {
+  /// primo foglio intero; `null` è la carta vera. Con `moved` (un bottone) la
+  /// carta si scala attorno al centro della vista.
+  fitPaper(fit: PaperFit | null, view: { readonly width: number; readonly height: number }, moved = false): void {
     const page = sheetPlanOf(this.#view.state)?.sheets[0]?.page ?? DEFAULT_PAGE;
-    this.setScale(fit === null ? 1 : fitScale(fit, view, { width: page.w * PX_PER_PT, height: page.h * PX_PER_PT }, DESK_INSET));
+    this.setScale(fit === null ? 1 : fitScale(fit, view, { width: page.w * PX_PER_PT, height: page.h * PX_PER_PT }, DESK_INSET), moved);
   }
 
   /// La scala della carta: 1 è la carta vera. Lo zoom porta con sé la
-  /// scrivania intera, e la misura dei fogli lo legge dal rettangolo.
-  setScale(scale: number): void {
+  /// scrivania intera, e la misura dei fogli lo legge dal rettangolo. Con
+  /// `moved` il punto al centro della vista resta lì e la carta si scala
+  /// attorno a lui; senza (la vista che cambia misura) cambia e basta.
+  setScale(scale: number, moved = false): void {
     if (this.#destroyed) return;
     const value = Math.abs(scale - 1) < 0.001 ? "" : String(Math.round(scale * 1000) / 1000);
     if (this.#desk.style.zoom === value) return;
-    this.#desk.style.zoom = value;
-    this.#sheets.schedule();
+    const apply = () => {
+      this.#desk.style.zoom = value;
+      this.#sheets.schedule();
+    };
+    if (moved) this.#motion.zoom(apply);
+    else apply();
+  }
+
+  /// La carta segue la modalità e l'aspetto scritti su `targets`, e la barra
+  /// `ribbon` che si nasconde o si raccoglie.
+  followView(targets: readonly HTMLElement[], ribbon: HTMLElement | null): void {
+    if (!this.#destroyed) this.#motion.follow(targets, ribbon);
   }
 
   /// L'intestazione o il piè del foglio del cursore non si cambia: ha
@@ -742,6 +770,7 @@ export class RichEngine {
     this.#running?.close(false);
     this.#destroyed = true;
     this.#stopPage();
+    this.#motion.destroy();
     this.#sheets.destroy();
     this.#listeners.clear();
     this.#asks.clear();

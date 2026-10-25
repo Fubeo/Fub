@@ -21,6 +21,7 @@ import { t } from "../../i18n/strings";
 import { sectionName } from "./breaks";
 import { DEFAULT_PAGE, runningOnSheet } from "./page";
 import type { Page, RunningText } from "./projection";
+import { sheetBox, type SheetBox as PaperBox, type SheetRedraw } from "./rich-motion";
 
 /// Una sezione del documento: la pagina, l'intestazione e il piè che porta
 /// il suo segno di fine (`pos`), o il documento per l'ultima (`null`).
@@ -208,6 +209,11 @@ export class SheetDesk {
   #drawn: string[] = [];
   #drawnPlan: SheetPlan | null = null;
   #drawnLayout = "";
+  /// Il prossimo piano viene da una modifica scritta, e quello di adesso.
+  #local = false;
+  #planLocal = false;
+  /// Chi segue i fogli rifatti da una modifica scritta (il moto).
+  #redrawn: ((previous: readonly HTMLElement[]) => (change: SheetRedraw) => void) | null = null;
 
   constructor(desk: HTMLElement, layer: HTMLElement) {
     this.#desk = desk;
@@ -219,6 +225,8 @@ export class SheetDesk {
     this.#view = view;
     const changed = plan !== this.#plan;
     this.#plan = plan;
+    if (changed) this.#planLocal = this.#local;
+    this.#local = false;
     if (!this.#observer && typeof ResizeObserver !== "undefined") {
       this.#observer = new ResizeObserver(() => this.schedule());
       this.#observer.observe(view.dom);
@@ -226,6 +234,18 @@ export class SheetDesk {
     // Il testo si muove soltanto se cambia il documento; il resto lo dice
     // la misura della vista.
     if (changed) this.schedule();
+  }
+
+  /// Il prossimo stato viene da una modifica scritta, non da un documento
+  /// aperto o cambiato da fuori: se cambia i fogli, il moto li segue.
+  local(): void {
+    this.#local = true;
+  }
+
+  /// Chiamata quando una modifica scritta sta per rifare i fogli, con i fogli
+  /// di prima; ciò che rende si chiama coi fogli rifatti.
+  onRedraw(listener: ((previous: readonly HTMLElement[]) => (change: SheetRedraw) => void) | null): void {
+    this.#redrawn = listener;
   }
 
   get plan(): SheetPlan | null {
@@ -274,10 +294,29 @@ export class SheetDesk {
     this.#layout = layout;
     this.#scale = scale;
     if (plan === this.#drawnPlan && signature === this.#drawnLayout) return true;
+    const first = this.#drawnPlan === null;
     this.#drawnPlan = plan;
     this.#drawnLayout = signature;
+    const local = this.#planLocal && !first;
+    this.#planLocal = false;
+    const drawn = local ? this.#drawnBoxes() : null;
+    // Prima di rifare: una corsa in volo vive sull'elemento che il disegno
+    // riusa o toglie.
+    const follow = drawn && this.#redrawn ? this.#redrawn(this.#drawnSheets()) : null;
     this.#draw(plan, layout, width);
+    if (follow && drawn) {
+      const elements = this.#drawnSheets();
+      follow({ before: drawn, after: elements.map(sheetBox), elements, at: sheetAt(plan, view.state.selection.head) });
+    }
     return true;
+  }
+
+  #drawnSheets(): HTMLElement[] {
+    return ([...this.#layer.children] as HTMLElement[]).filter((child) => child.classList.contains("rich-sheet"));
+  }
+
+  #drawnBoxes(): PaperBox[] {
+    return this.#drawnSheets().map(sheetBox);
   }
 
   #draw(plan: SheetPlan, layout: SheetLayout, width: number): void {
@@ -361,6 +400,7 @@ export class SheetDesk {
     this.#observer?.disconnect();
     this.#observer = null;
     this.#view = null;
+    this.#redrawn = null;
   }
 }
 

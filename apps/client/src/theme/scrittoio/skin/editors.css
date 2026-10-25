@@ -1823,8 +1823,10 @@
 .look-adattato .rich-page {
   background: color-mix(in oklab, var(--elevation-base-surface) 92%, var(--text));
 }
-/* La carta si solleva: il filo e l'elevazione della carta del tema. */
-.rich-sheet {
+/* La carta si solleva: il filo e l'elevazione della carta del tema. La
+   dipinge la sagoma del foglio, che il moto muove senza il testo. */
+.rich-sheet::before,
+.rich-sheet-ghost {
   background: var(--doc-bg);
   border: 1px solid var(--doc-rule-soft);
   box-shadow: var(--elevation-paper-shadow);

@@ -275,6 +275,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         },
       );
       root.insertBefore(ribbon.findBar, page);
+      engine.followView([parent, root], ribbonHost);
       stopEngine = engine.subscribe(() => {
         showNotice();
         notify();
@@ -325,11 +326,14 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   // In Pagina la carta si adatta alla vista, larga quanto lei o intera; negli
   // altri modi è la carta vera.
   let fit: PaperFit | null = null;
-  const applyFit = () => engine?.fitPaper(mode === RICH_PAGE_MODE ? fit : null, { width: page.clientWidth, height: page.clientHeight });
-  const fitting = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
-    if (fit !== null) applyFit();
-  });
-  fitting?.observe(page);
+  const applyFit = (moved = false) => engine?.fitPaper(mode === RICH_PAGE_MODE ? fit : null, { width: page.clientWidth, height: page.clientHeight }, moved);
+  let fitting: ResizeObserver | null = null;
+  if (typeof ResizeObserver !== "undefined") {
+    fitting = new ResizeObserver(() => {
+      if (fit !== null) applyFit();
+    });
+    fitting.observe(page);
+  }
 
   // La barra dice l'aspetto, e la carta lo segue, quando la shell lo cambia.
   const looks = new MutationObserver(() => {
@@ -574,7 +578,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       current: () => fit,
       set(next) {
         fit = next;
-        applyFit();
+        applyFit(true);
         notify();
       },
       subscribe(listener) {
