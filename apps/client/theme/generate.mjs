@@ -56,13 +56,13 @@ const vite = await createServer({
   logLevel: "warn",
 });
 
-/** @type {{ VARIANTS: readonly { light: string, contrast: string }[], SHEETS: Record<string,Record<string,string>>, sheet: (l: string, c: string) => string, roles: () => string[] }} */
+/** @type {{ VARIANTS: readonly { light: string, contrast: string }[], SHEETS: Record<string,Record<string,string>>, sheet: (l: string, c: string) => string, roles: () => string[], OPTIONAL_ROLES: readonly string[] }} */
 const recipe = await vite.ssrLoadModule("/src/theme/scrittoio/recipe.ts");
 /** @type {{ SKIN: string, assemble: (c: Record<string,string>) => string }} */
 const skin = await vite.ssrLoadModule("/src/theme/scrittoio/skin/order.ts");
 /** @type {{ HOOKS: readonly string[], HOOK_LAYERS: Readonly<Record<string, string>>, LAYERS: readonly string[], STATE_NAMES: readonly string[], COMPONENTS: readonly { name: string, part: string, hooks: readonly string[], states: readonly { name: string }[] }[] }} */
 const anatomy = await vite.ssrLoadModule("/src/theme/scrittoio/anatomia.ts");
-/** @type {{ THEME_2_ENGINE: string, THEME_2_PROFILE: { requiredRoles: readonly string[], contrastPairs: readonly unknown[], preferenceTokens: readonly string[], vocabulary: { properties?: readonly string[], functions?: readonly string[], atRules?: readonly string[] } } }} */
+/** @type {{ THEME_2_ENGINE: string, THEME_2_PROFILE: { requiredRoles: readonly string[], contrastPairs: readonly unknown[], optionalPairs?: readonly unknown[], preferenceTokens: readonly string[], vocabulary: { properties?: readonly string[], functions?: readonly string[], atRules?: readonly string[] } } }} */
 const profile = await vite.ssrLoadModule("/src/theme/scrittoio/profile.ts");
 
 let diffCount = 0;
@@ -128,10 +128,13 @@ try {
       states: component.states.map((state) => state.name),
     })),
     contrast_pairs: profile.THEME_2_PROFILE.contrastPairs,
+    optional_roles: [...recipe.OPTIONAL_ROLES],
+    optional_pairs: profile.THEME_2_PROFILE.optionalPairs ?? [],
     preference_tokens: [...profile.THEME_2_PROFILE.preferenceTokens],
     vocabulary: profile.THEME_2_PROFILE.vocabulary,
     counts: {
       required_roles: roles.length,
+      optional_roles: recipe.OPTIONAL_ROLES.length,
       hooks: anatomy.HOOKS.length,
       state_names: anatomy.STATE_NAMES.length,
       assigned_states: assignedStates,
@@ -149,6 +152,8 @@ try {
     "Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.",
     "",
     `Il contratto richiede **${roles.length} ruoli**, espone **${anatomy.HOOKS.length} hook**, **${anatomy.STATE_NAMES.length} stati** (${assignedStates} assegnazioni su ${anatomy.COMPONENTS.length} componenti) e lascia ridichiarare alla persona **${profile.THEME_2_PROFILE.preferenceTokens.length} token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in \`contract.json\`, generato dalle sorgenti della shell.`,
+    "",
+    `Dichiara anche **${recipe.OPTIONAL_ROLES.length} ruoli facoltativi** (\`optional_roles\`): i segni di Fub sulla carta del tema (\`--doc-ins\`, \`--doc-find\`, …) e la carta chiara di un file (\`--paper-*\`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (\`optional_pairs\`) si contano come le altre.`,
     "",
     "## Strati",
     "",

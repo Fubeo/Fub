@@ -6663,6 +6663,156 @@
       "l'anello del fuoco dentro un foglio"
     ]
   ],
+  "optional_roles": [
+    "doc-ins",
+    "doc-del",
+    "doc-proof-spell",
+    "doc-proof-gram",
+    "doc-find",
+    "doc-find-now",
+    "doc-comment",
+    "paper-bg",
+    "paper-ink",
+    "paper-link",
+    "paper-danger",
+    "paper-rule",
+    "paper-rule-soft",
+    "paper-fill",
+    "paper-fill-soft",
+    "paper-caret",
+    "paper-selection",
+    "paper-active-line",
+    "paper-highlight",
+    "paper-ins",
+    "paper-del",
+    "paper-proof-spell",
+    "paper-proof-gram",
+    "paper-find",
+    "paper-find-now",
+    "paper-comment"
+  ],
+  "optional_pairs": [
+    [
+      "doc-ins",
+      "doc-bg",
+      4.5,
+      "il testo inserito di una revisione"
+    ],
+    [
+      "doc-del",
+      "doc-bg",
+      4.5,
+      "il testo tolto di una revisione"
+    ],
+    [
+      "doc-proof-spell",
+      "doc-bg",
+      3,
+      "l'onda di una parola sconosciuta"
+    ],
+    [
+      "doc-proof-gram",
+      "doc-bg",
+      3,
+      "l'onda di un suggerimento di grammatica"
+    ],
+    [
+      "doc-comment",
+      "doc-bg",
+      3,
+      "il filo di un commento"
+    ],
+    [
+      "doc-fg",
+      "doc-find",
+      4.5,
+      "il testo di un risultato della ricerca"
+    ],
+    [
+      "doc-fg",
+      "doc-find-now",
+      4.5,
+      "il testo del risultato corrente"
+    ],
+    [
+      "paper-ink",
+      "paper-bg",
+      4.5,
+      "il testo automatico sulla carta di un file"
+    ],
+    [
+      "paper-ink",
+      "paper-selection",
+      4.5,
+      "il testo selezionato sulla carta di un file"
+    ],
+    [
+      "paper-ink",
+      "paper-active-line",
+      4.5,
+      "la riga del cursore sulla carta di un file"
+    ],
+    [
+      "paper-link",
+      "paper-bg",
+      4.5,
+      "un collegamento di Fub sulla carta di un file"
+    ],
+    [
+      "paper-danger",
+      "paper-bg",
+      4.5,
+      "un errore sulla carta di un file"
+    ],
+    [
+      "paper-ins",
+      "paper-bg",
+      4.5,
+      "il testo inserito, sulla carta di un file"
+    ],
+    [
+      "paper-del",
+      "paper-bg",
+      4.5,
+      "il testo tolto, sulla carta di un file"
+    ],
+    [
+      "paper-caret",
+      "paper-bg",
+      3,
+      "il cursore sulla carta di un file"
+    ],
+    [
+      "paper-proof-spell",
+      "paper-bg",
+      3,
+      "l'onda del correttore sulla carta di un file"
+    ],
+    [
+      "paper-proof-gram",
+      "paper-bg",
+      3,
+      "l'onda della grammatica sulla carta di un file"
+    ],
+    [
+      "paper-comment",
+      "paper-bg",
+      3,
+      "il filo di un commento sulla carta di un file"
+    ],
+    [
+      "paper-ink",
+      "paper-find",
+      4.5,
+      "un risultato della ricerca sulla carta di un file"
+    ],
+    [
+      "paper-ink",
+      "paper-find-now",
+      4.5,
+      "il risultato corrente sulla carta di un file"
+    ]
+  ],
   "preference_tokens": [
     "space-1",
     "space-2",
@@ -6786,7 +6936,33 @@
     "syn-comment",
     "syn-string",
     "syn-heading",
-    "syn-invalid"
+    "syn-invalid",
+    "doc-ins",
+    "doc-del",
+    "doc-proof-spell",
+    "doc-proof-gram",
+    "doc-find",
+    "doc-find-now",
+    "doc-comment",
+    "paper-bg",
+    "paper-ink",
+    "paper-link",
+    "paper-danger",
+    "paper-rule",
+    "paper-rule-soft",
+    "paper-fill",
+    "paper-fill-soft",
+    "paper-caret",
+    "paper-selection",
+    "paper-active-line",
+    "paper-highlight",
+    "paper-ins",
+    "paper-del",
+    "paper-proof-spell",
+    "paper-proof-gram",
+    "paper-find",
+    "paper-find-now",
+    "paper-comment"
   ],
   "vocabulary": {
     "properties": [
@@ -6840,10 +7016,11 @@
   },
   "counts": {
     "required_roles": 154,
+    "optional_roles": 26,
     "hooks": 1243,
     "state_names": 7,
     "assigned_states": 633,
     "components": 189,
-    "preference_tokens": 123
+    "preference_tokens": 149
   }
 }

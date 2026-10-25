@@ -78,6 +78,21 @@ describe("la serie Scrittoio passa dal cancello", () => {
     expect(reasons.some((reason) => reason.includes("engine") && reason.includes(THEME_2_ENGINE))).toBe(true);
   });
 
+  it("un tema senza i ruoli facoltativi passa; se li dichiara, le loro coppie contano", () => {
+    // Un tema `theme-2` scritto prima dei segni sulle due carte non dichiara
+    // `--doc-find` né `--paper-*`, e deve restare valido.
+    const bundle = (sheet: string) => ({ manifest: SCRITTOIO_SERIES.manifest, sheet, skin: SCRITTOIO_SERIES.skin, assets: {} });
+    const full = SCRITTOIO_SERIES.sheet("light", "normal");
+    const without = full.replace(/^\s*--(paper-[a-z-]+|doc-(ins|del|proof-spell|proof-gram|find|find-now|comment)):[^;]*;\n/gm, "");
+    expect(without).not.toContain("--paper-");
+    expect(without).not.toContain("--doc-find");
+    expect(validateThemeBundle(bundle(without), "light")).toEqual([]);
+    const faint = full.replace(/--paper-link:[^;]*;/, "--paper-link: #c8d4f0;");
+    expect(validateThemeBundle(bundle(faint), "light")).toEqual([
+      expect.stringContaining("--paper-link su --paper-bg"),
+    ]);
+  });
+
   it("la pelle Scrittoio non passa dal vocabolario comune", () => {
     const back = declareThemeSeries({ ...SCRITTOIO_SERIES, profile: { ...THEME_2_PROFILE, vocabulary: undefined } });
     const reasons = validateThemeBundle(

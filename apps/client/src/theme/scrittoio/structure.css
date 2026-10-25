@@ -67,6 +67,41 @@
   box-sizing: border-box;
 }
 
+/* ── Gli aspetti del contenuto ──────────────────────────────────────────────
+ *
+ * La radice del contenuto di un riquadro porta `look-tema`, `look-file` o
+ * `look-adattato` (`theme/content-look.ts`). La meccanica sta qui, e non in una
+ * pelle, perché dice di chi è un colore e non che colore è.
+ *
+ * In `look-file` il contenuto sta sulla carta del file, che è chiara anche di
+ * notte: i segni di Fub sul contenuto (cursore, selezione, riga attiva,
+ * revisioni, correttore, ricerca, commenti) prendono i colori di quella carta,
+ * `--paper-*`, o un cursore fatto per il foglio scuro sparirebbe. Il ripiego è
+ * per un tema che non li dichiara: sono i valori della serie. `look-adattato`
+ * e `look-tema` lasciano i segni alla carta del tema.
+ *
+ * La carta stessa (`--doc-bg`, `--doc-fg`, i filetti, l'evidenziatore) passa a
+ * `--paper-*` con la superficie che la dipinge, il documento: le superfici
+ * `file` di oggi (immagini, anteprima SVG, diapositive, disegno) disegnano
+ * ancora sulla carta del tema, e ricollegarne l'inchiostro senza il fondo
+ * metterebbe un testo scuro su un fondo scuro.
+ *
+ * Un ruolo facoltativo della carta del tema (`--doc-ins`, `--doc-find`, …) non
+ * ha un ripiego qui: dichiararlo su una classe vincerebbe sul foglio del tema.
+ * Chi lo legge porta il suo, `var(--doc-ins, var(--doc-link))`. */
+.look-file {
+  --doc-caret: var(--paper-caret, #2c57cd);
+  --doc-selection: var(--paper-selection, #d0defd);
+  --doc-active-line: var(--paper-active-line, #f4f7fb);
+  --doc-ins: var(--paper-ins, #2c57cd);
+  --doc-del: var(--paper-del, #c60817);
+  --doc-proof-spell: var(--paper-proof-spell, #d01d21);
+  --doc-proof-gram: var(--paper-proof-gram, #a16500);
+  --doc-find: var(--paper-find, #f6e697);
+  --doc-find-now: var(--paper-find-now, #fac053);
+  --doc-comment: var(--paper-comment, #b16f00);
+}
+
 /* ── Le garanzie ─────────────────────────────────────────────────────────── */
 
 [hidden] {
