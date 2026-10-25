@@ -260,6 +260,43 @@ const countSheets = (page) =>
   });
 const sheetsMore = (more) => (page) =>
   page.evaluate((n) => document.querySelectorAll(".rich-sheets > .rich-sheet").length === window.__richSheets + n, more);
+/// La scheda Commenti dell'ispettore, con il primo paragrafo selezionato:
+/// il posto di un commento nuovo.
+const commentsOpen = async (page) => {
+  await page.locator(".rich-content > .rich-para >> nth=0").click();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Shift+End");
+  await page.evaluate(() => document.querySelector('[aria-controls="surface-panel-rich-side-comments"]')?.click());
+  await page.evaluate(() => {
+    const author = document.querySelector(".rich-side-comments .rich-side-compose input");
+    if (author && !author.value) {
+      author.value = "Banco";
+      author.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  });
+};
+/// Un commento nuovo dal modulo del pannello, e quello tolto col suo bottone.
+const NOTE = "Nota del banco";
+const commentAdd = (page) =>
+  page.evaluate((note) => {
+    const form = document.querySelector(".rich-side-comments .rich-side-compose");
+    const said = form?.querySelector("textarea");
+    if (!form || !said) throw new Error("nessun modulo dei commenti");
+    said.value = note;
+    form.querySelector('button[type="submit"]')?.click();
+  }, NOTE);
+const commentDrop = (page) =>
+  page.evaluate((note) => {
+    const item = [...document.querySelectorAll(".rich-side-comments .rich-side-comment")].find((el) => el.textContent.includes(note));
+    const drop = [...(item?.querySelectorAll(".rich-side-actions button") ?? [])].pop();
+    if (!drop) throw new Error("nessun commento del banco");
+    drop.click();
+  }, NOTE);
+const commentShown = (yes) => (page) =>
+  page.evaluate(
+    ([note, want]) => [...document.querySelectorAll(".rich-side-comments .rich-side-comment")].some((el) => el.textContent.includes(note)) === want,
+    [NOTE, yes],
+  );
 const light = (theme) => (page) =>
   page.evaluate(
     (t) => document.documentElement.dataset.theme === t && document.querySelector(".light-scene") === null,
@@ -649,6 +686,18 @@ export const CHOREOGRAPHIES = [
       }),
     undo: null,
     irreversible: "andare a un punto non si disfa: il punto dopo è un altro salto, con il suo anello",
+  },
+  {
+    id: "rich-review-list",
+    title: "Documento: nel pannello un commento nuovo entra di 4 px e gli altri scendono; tolto, esce come immagine e gli altri salgono",
+    sources: ["src/editors/rich/side.ts"],
+    scene: "document-docx",
+    setup: commentsOpen,
+    act: commentAdd,
+    arrived: commentShown(true),
+    undo: commentDrop,
+    returned: commentShown(false),
+    exit: true,
   },
 ];
 

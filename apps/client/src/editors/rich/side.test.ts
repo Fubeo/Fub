@@ -2,7 +2,8 @@
 //
 // Il pannello del documento: le schede che la superficie porta
 // nell'ispettore. Qui le monta un ispettore finto, come fa la shell.
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { activeMotions, createManualDriver, setMotionDriver } from "../../moto";
 import { t } from "../../i18n/strings";
 import { RichEngine } from "./engine";
 import { parseProjection, type Block, type CommentView } from "./projection";
@@ -16,6 +17,8 @@ afterEach(() => {
   sides = [];
   engines = [];
   document.body.replaceChildren();
+  setMotionDriver(null);
+  vi.restoreAllMocks();
 });
 
 const AT = "2026-10-18T13:00:00Z";
@@ -190,6 +193,38 @@ describe("la scheda Revisioni", () => {
     expect(items()).toHaveLength(0);
     expect(host.textContent).toContain(t("rich.rev.none"));
     expect(pressed(host, t("rich.rev.accept_all.short")).hidden).toBe(true);
+  });
+
+  it("accettando, la voce esce come immagine entro 140 ms e l'altra sale; una battuta non muove niente", async () => {
+    const driver = createManualDriver();
+    setMotionDriver(driver);
+    // happy-dom non impagina: ogni voce ha un posto suo, sotto la precedente.
+    vi.spyOn(HTMLElement.prototype, "getClientRects").mockImplementation(() => [new DOMRect(0, 0, 200, 40)] as unknown as DOMRectList);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const index = this.parentElement ? [...this.parentElement.children].indexOf(this) : 0;
+      return new DOMRect(0, 40 * index, 200, 40);
+    });
+    const e = engine(tracked());
+    const { side: panel, host } = side(e);
+    panel.show("revisions");
+    const items = () => [...host.querySelectorAll<HTMLElement>(".rich-side-change")];
+    const second = items()[1]!;
+    // Una battuta nel documento rifà l'elenco senza muoverlo.
+    e.select(1);
+    e.run("text.newline");
+    expect(driver.plays).toHaveLength(0);
+    pressed(items()[0]!, t("rich.rev.accept.one")).click();
+    expect(items()).toEqual([second]);
+    const exits = driver.plays.filter((play) => !play.el.isConnected || !host.contains(play.el));
+    expect(exits.length).toBeGreaterThan(0);
+    for (const exit of exits) expect((exit.timing.delay ?? 0) + Number(exit.timing.duration)).toBeLessThanOrEqual(140);
+    // Quella che resta sale di una riga, dal posto che aveva.
+    const rise = driver.plays.find((play) => play.el === second);
+    expect(rise?.keyframes[0]?.transform).toContain("40");
+    driver.advance(1000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(activeMotions()).toBe(0);
+    expect(document.body.querySelectorAll(".rich-side-change")).toHaveLength(1);
   });
 
   it("in sola lettura si leggono e basta, e l'interruttore è spento", () => {

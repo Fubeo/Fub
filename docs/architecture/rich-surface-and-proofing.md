@@ -288,6 +288,14 @@ stringe e sfuma in `DURATION.large`, poi se ne va. Trova che resta sulla
 stessa occorrenza mentre si scrive la parola non riaccende l'anello. Nel
 moto ridotto lo scorrimento salta e l'anello non c'è.
 
+Nelle schede Commenti e Revisioni si muovono le voci soltanto per un gesto
+del pannello (aggiungere, rispondere, risolvere, togliere, accettare,
+rifiutare): una battuta nel documento rifà l'elenco e basta. La voce che se
+ne va esce come immagine (`prepareExit`) in `DURATION.swap`, le altre vanno
+al loro posto con `flip`, entro lo stesso tempo quando qualcosa esce, e una
+voce nuova entra di 4 px. Il testo sul foglio cambia subito. La coreografia
+`rich-review-list` lo misura.
+
 ## Correttore condiviso
 
 Il correttore ha un motore e un client per tutte le superfici di prosa, e un

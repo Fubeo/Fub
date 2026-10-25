@@ -15,6 +15,10 @@ export interface FlipOptions {
   /// Anima anche il cambio di dimensione, come scala. Di serie sì; senza, si
   /// spostano solo i centri.
   scale?: boolean;
+  /// Se c'è, la corsa è una curva a tempo (ms), come in `animate`: chi sale
+  /// al posto di ciò che esce finisce entro il tempo dell'uscita.
+  duration?: number;
+  easing?: string;
   lifetime?: Lifetime;
 }
 
@@ -80,7 +84,14 @@ export function flip(
         }
       : undefined;
     motions.push(
-      animate(el, { from, velocity, spring: options.spring ?? "soft", lifetime: options.lifetime }),
+      animate(el, {
+        from,
+        velocity,
+        spring: options.spring ?? "soft",
+        duration: options.duration,
+        easing: options.easing,
+        lifetime: options.lifetime,
+      }),
     );
   });
   return group(motions);

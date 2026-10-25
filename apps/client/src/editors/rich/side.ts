@@ -20,6 +20,7 @@ import type { SurfacePanel } from "../core/registry";
 import { textButton, textField, type ButtonKind } from "../../kit";
 import { resolvedLanguage, t } from "../../i18n/strings";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { DURATION, enter, flip, prepareExit } from "../../moto";
 import { setTooltip } from "../../ui/tooltip";
 import { authorClass, authorSlot, authorSlots } from "./authors";
 import { addComment, canComment, commentThreads, deleteComment, goToComment, replyComment, resolveComment, type Thread } from "./comments";
@@ -93,6 +94,35 @@ interface Mounted {
 }
 
 /// `reveal` chiede alla shell di mostrare la scheda con quell'id.
+/// Di quanto entra una voce nuova (px).
+const ENTER_PX = 4;
+
+/// Rifà l'elenco `list` con `order`. Se `moving`, chi se ne va (`gone`) esce
+/// come immagine, chi resta sale o scende al suo posto e chi arriva (`fresh`)
+/// entra di qualche px. Una voce rifatta perché è cambiata non entra né esce:
+/// sta dov'era. Senza moto, o con l'elenco nascosto, si rifà e basta.
+function relist(
+  list: HTMLElement,
+  order: readonly HTMLElement[],
+  change: { readonly gone: readonly HTMLElement[]; readonly fresh: ReadonlySet<HTMLElement> },
+  empty: string | null,
+  moving: boolean,
+  life: Lifetime,
+): void {
+  const mutate = () => {
+    list.replaceChildren(...order);
+    if (empty !== null) remark(list).textContent = empty;
+  };
+  if (!moving || list.getClientRects().length === 0) return mutate();
+  const before = new Set(list.children);
+  const leaving = change.gone.filter((el) => before.has(el)).map((el) => prepareExit(el));
+  // Chi sale al posto di una voce che esce finisce col tempo dell'uscita.
+  const pace = leaving.length > 0 ? { duration: DURATION.swap, easing: "ease-out" } : { spring: "snap" as const };
+  flip(order.filter((el) => before.has(el)), mutate, { ...pace, scale: false, lifetime: life });
+  for (const ghost of leaving) ghost.play({ to: { opacity: 0 }, duration: DURATION.swap, easing: "ease-in", lifetime: life });
+  for (const el of order) if (change.fresh.has(el)) enter(el, { from: { y: ENTER_PX, opacity: 0 }, spring: "snap", whenReduced: "none", lifetime: life });
+}
+
 export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (viewId: string) => void): RichSide {
   const mounted = new Map<RichSideId, Mounted>();
   let destroyed = false;
@@ -118,6 +148,17 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
       into.append(field.element);
     };
     const by = () => author.value.trim();
+    // Un gesto del pannello (aggiungere, rispondere, risolvere, togliere)
+    // muove le voci; una battuta nel documento no.
+    let acting = false;
+    const act = (run: () => unknown): void => {
+      acting = true;
+      try {
+        run();
+      } finally {
+        acting = false;
+      }
+    };
     const area = (into: HTMLElement, label: string, rows: number) => {
       const said = document.createElement("textarea");
       said.rows = rows;
@@ -139,7 +180,9 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
     life.listen(compose, "submit", (event) => {
       event.preventDefault();
       if (!by()) return author.focus();
-      if (engine.apply(addComment(said.value, by()), false)) said.value = "";
+      act(() => {
+        if (engine.apply(addComment(said.value, by()), false)) said.value = "";
+      });
     });
 
     const note = remark(root);
@@ -222,17 +265,17 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
         own.listen(form, "submit", (event) => {
           event.preventDefault();
           if (!by()) return author.focus();
-          engine.apply(replyComment(comment.id, text.value, by()), false);
+          act(() => engine.apply(replyComment(comment.id, text.value, by()), false));
         });
         el.append(form);
         text.focus();
       });
       reply.hidden = !composing;
       button(actions, own, t(comment.done ? "rich.comment.reopen" : "rich.comment.resolve"), () => {
-        engine.apply(resolveComment(comment.id, !comment.done), false);
+        act(() => engine.apply(resolveComment(comment.id, !comment.done), false));
       });
       button(actions, own, t("rich.comment.delete"), () => {
-        engine.apply(deleteComment(comment.id), false);
+        act(() => engine.apply(deleteComment(comment.id), false));
       });
       el.append(actions);
       return el;
@@ -266,10 +309,13 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
 
       const current = engine.state.doc;
       if (current === doc) return;
+      const moving = acting && doc !== null;
       doc = current;
       const threads = engine.read((state) => commentThreads(state.doc));
       const keep = new Set<number>();
       const order: HTMLElement[] = [];
+      const gone: HTMLElement[] = [];
+      const fresh = new Set<HTMLElement>();
       for (const item of threads) {
         const sign = JSON.stringify([item.comment, item.quote, item.placed, item.replies]);
         const had = drawn.get(item.comment.id);
@@ -282,15 +328,16 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
         const own = openLifetime();
         const el = thread(item, own);
         drawn.set(item.comment.id, { el, sign, life: own });
+        if (!had) fresh.add(el);
         order.push(el);
       }
       for (const [id, each] of drawn) {
         if (keep.has(id)) continue;
         each.life.close();
+        gone.push(each.el);
         drawn.delete(id);
       }
-      list.replaceChildren(...order);
-      if (threads.length === 0) remark(list).textContent = t("rich.comment.none");
+      relist(list, order, { gone, fresh }, threads.length === 0 ? t("rich.comment.none") : null, moving, life);
       paint(list, engine.read((state) => authorSlots(state.doc)));
     }
 
@@ -323,6 +370,15 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
     // lo Spazio, perché è un comando.
     const head = document.createElement("div");
     head.className = "rich-side-compose";
+    let acting = false;
+    const act = (run: () => unknown): void => {
+      acting = true;
+      try {
+        run();
+      } finally {
+        acting = false;
+      }
+    };
     const toggle = check(head, t("rich.track.switch"));
     toggle.setAttribute("role", "switch");
     toggle.closest("label")!.classList.add("rich-side-switch");
@@ -334,8 +390,8 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
     const need = remark(head, "status");
     const all = document.createElement("div");
     all.className = "rich-side-actions";
-    const acceptAll = button(all, life, t("rich.rev.accept_all.short"), () => engine.apply(resolveAll(true), false));
-    const rejectAll = button(all, life, t("rich.rev.reject_all.short"), () => engine.apply(resolveAll(false), false));
+    const acceptAll = button(all, life, t("rich.rev.accept_all.short"), () => act(() => engine.apply(resolveAll(true), false)));
+    const rejectAll = button(all, life, t("rich.rev.reject_all.short"), () => act(() => engine.apply(resolveAll(false), false)));
     head.append(all);
     const list = document.createElement("div");
     list.className = "rich-side-list";
@@ -402,8 +458,8 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
       if (writable) {
         const actions = document.createElement("div");
         actions.className = "rich-side-actions";
-        button(actions, own, t("rich.rev.accept.one"), () => engine.apply(resolveChange(at.change.kind, at.change.from, true), false));
-        button(actions, own, t("rich.rev.reject.one"), () => engine.apply(resolveChange(at.change.kind, at.change.from, false), false));
+        button(actions, own, t("rich.rev.accept.one"), () => act(() => engine.apply(resolveChange(at.change.kind, at.change.from, true), false)));
+        button(actions, own, t("rich.rev.reject.one"), () => act(() => engine.apply(resolveChange(at.change.kind, at.change.from, false), false)));
         el.append(actions);
       }
       return el;
@@ -425,6 +481,7 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
       }
       const current = engine.state.doc;
       if (current === doc) return;
+      const moving = acting && doc !== null;
       doc = current;
       const changes = engine.read((state) => revisions(state.doc));
       acceptAll.hidden = rejectAll.hidden = !writable || changes.length === 0;
@@ -433,6 +490,8 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
       const seen = new Map<string, number>();
       const keep = new Set<string>();
       const order: HTMLElement[] = [];
+      const gone: HTMLElement[] = [];
+      const fresh = new Set<HTMLElement>();
       for (const change of changes) {
         const text = engine.read((state) => changeText(state.doc, change));
         const base = JSON.stringify([change.kind, change.rev, text]);
@@ -450,15 +509,16 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
         const at = { change };
         const el = entry(at, text, own);
         drawn.set(key, { el, life: own, at });
+        fresh.add(el);
         order.push(el);
       }
       for (const [key, each] of drawn) {
         if (keep.has(key)) continue;
         each.life.close();
+        gone.push(each.el);
         drawn.delete(key);
       }
-      list.replaceChildren(...order);
-      if (changes.length === 0) remark(list).textContent = t("rich.rev.none");
+      relist(list, order, { gone, fresh }, changes.length === 0 ? t("rich.rev.none") : null, moving, life);
       paint(list, engine.read((state) => authorSlots(state.doc)));
     }
 
