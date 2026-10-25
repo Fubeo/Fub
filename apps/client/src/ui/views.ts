@@ -256,6 +256,7 @@ const mountRun = new Race();
 function clearMountedViews(): void {
   mountRun.cancel();
   stopFollowing();
+  selectTab = () => false;
   for (const [id, mountedView] of mounted) {
     unmountMounted(id, mountedView);
   }
@@ -697,6 +698,14 @@ export function showSurfacePanels(panels: readonly HTMLElement[]): void {
   buildInspector();
 }
 
+/// Sceglie la scheda dell'ispettore costruito adesso, come un clic.
+let selectTab: (viewId: string) => boolean = () => false;
+
+/// Porta in vista la scheda `viewId`, se l'ispettore ce l'ha; `false` se no.
+export function selectInspectorTab(viewId: string): boolean {
+  return selectTab(viewId);
+}
+
 /// Ogni giro dell'ispettore ha il suo numero: una lettura arrivata tardi non
 /// sceglie fra le schede di un giro che non c'è più.
 let inspectorRound = 0;
@@ -717,6 +726,7 @@ function buildInspector(): void {
   const header = document.createElement("div");
   header.className = "inspector-title";
   viewsRightEl.prepend(header);
+  selectTab = () => false;
   if (panels.length === 0) {
     header.setAttribute("role", "status");
     header.textContent = t("inspector.empty");
@@ -754,6 +764,12 @@ function buildInspector(): void {
     if (!viewId) return;
     chosenTab = viewId;
     void api.setViewState("inspector.tab", viewId);
+  };
+  selectTab = (viewId) => {
+    const index = panels.findIndex((p) => p.dataset.viewId === viewId);
+    if (index < 0) return false;
+    pick(index, false);
+    return true;
   };
   for (let i = 0; i < panels.length; i++) {
     const panel = panels[i]!;

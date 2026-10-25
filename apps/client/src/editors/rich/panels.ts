@@ -1,6 +1,6 @@
 // I riquadri della barra del documento e la barra di ricerca: i colori, la
 // tabella, la nota, il link, la spaziatura, la pagina, l'intestazione, il
-// conteggio, i commenti e la registrazione delle modifiche; e la barra di
+// conteggio e la registrazione delle modifiche; e la barra di
 // Trova e sostituisci che sta sopra il foglio.
 //
 // Ogni riquadro si apre sotto il controllo che lo chiede (`open`) e scrive nel
@@ -14,10 +14,10 @@ import { notify } from "../../ui/notify";
 import { errorText } from "../../host/errors";
 import { resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { insertImage, insertNote, insertTable, LINE_SPACINGS, linkAt, selectedLayout, setColor, setHighlight, setLayout, setLineSpacing, setLink } from "./commands";
-import { addComment, anchorsOf, canComment, commentsOf, deleteComment, goToComment, replyComment, resolveComment } from "./comments";
 import type { RichEngine } from "./engine";
 import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, type LayoutLength } from "./projection";
 import { imageMime } from "./schema";
+import { check, choice, labelled, remark } from "./form";
 import {
   columns,
   DEFAULT_PAGE,
@@ -140,8 +140,6 @@ export type RichPanelId =
   | "rich.link"
   | "rich.page"
   | "rich.count"
-  | "rich.comments"
-  | "rich.comment"
   | "rich.track";
 
 export const RICH_PANEL_IDS: ReadonlySet<string> = new Set<RichPanelId>([
@@ -153,8 +151,6 @@ export const RICH_PANEL_IDS: ReadonlySet<string> = new Set<RichPanelId>([
   "rich.link",
   "rich.page",
   "rich.count",
-  "rich.comments",
-  "rich.comment",
   "rich.track",
 ]);
 
@@ -254,55 +250,6 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
     const field = textField({ label, value, ...(placeholder === undefined ? {} : { placeholder }), lifetime: life });
     into.append(field.element);
     return field.input;
-  }
-
-  /// Una scelta o un'area di testo vestite come i campi del kit.
-  function labelled<T extends HTMLSelectElement | HTMLTextAreaElement>(into: HTMLElement, control: T, label: string): T {
-    control.id = identifier(`${prefix}-field`);
-    control.classList.add("kit-field-input");
-    const field = document.createElement("div");
-    field.className = control instanceof HTMLTextAreaElement ? "kit-field rich-strip-panel-area" : "kit-field";
-    const caption = document.createElement("label");
-    caption.className = "kit-field-label";
-    caption.htmlFor = control.id;
-    caption.textContent = label;
-    const box = document.createElement("div");
-    box.className = "kit-field-box";
-    box.append(control);
-    field.append(caption, box);
-    into.append(field);
-    return control;
-  }
-
-  function choice(values: readonly (readonly [string, string])[]): HTMLSelectElement {
-    const control = document.createElement("select");
-    for (const [value, label] of values) {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = label;
-      control.append(option);
-    }
-    return control;
-  }
-
-  /// Una casella con il suo nome accanto.
-  function check(into: HTMLElement, label: string): HTMLInputElement {
-    const row = document.createElement("label");
-    row.className = "rich-strip-panel-check";
-    const box = document.createElement("input");
-    box.type = "checkbox";
-    row.append(box, label);
-    into.append(row);
-    return box;
-  }
-
-  /// Una riga di testo del riquadro: uno stato, un avviso, una spiegazione.
-  function remark(into: HTMLElement, role?: "status" | "alert"): HTMLParagraphElement {
-    const line = document.createElement("p");
-    line.className = "rich-strip-panel-note";
-    if (role) line.setAttribute("role", role);
-    into.append(line);
-    return line;
   }
 
   // ── La barra di ricerca del documento ────────────────────────────────
@@ -491,155 +438,6 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
     card.body.append(table);
     finish(card);
     showPanel(anchor, card);
-  }
-
-  /// I commenti del documento, con le risposte sotto, e uno nuovo sulla
-  /// selezione. Ogni gesto è una battuta del documento.
-  function openComments(anchor: HTMLElement, writing: boolean): void {
-    popover?.close();
-    const card = panel(t("rich.comments"));
-    card.root.classList.add("rich-strip-comments");
-    const area = (into: HTMLElement, label: string, rows: number) => {
-      const said = document.createElement("textarea");
-      said.rows = rows;
-      said.required = true;
-      said.maxLength = 4000;
-      return labelled(into, said, label);
-    };
-    const author = document.createElement("input");
-    author.type = "text";
-    author.required = true;
-    author.maxLength = 200;
-    author.value = reviewAuthor();
-    life.listen(author, "input", () => setReviewAuthor(author.value));
-    /// Il campo dell'autore, dove serve: è uno solo, e si sposta.
-    const authorField = (into: HTMLElement) => {
-      const field = textField({ label: t("rich.comment.author"), lifetime: life });
-      field.element.querySelector(".kit-field-box")!.replaceChildren(author);
-      author.id = field.input.id;
-      author.className = "kit-field-input";
-      into.append(field.element);
-    };
-    const by = () => author.value.trim();
-    const done = (applied: boolean) => {
-      if (!applied) return false;
-      render();
-      return true;
-    };
-
-    // Un commento nuovo, sulla selezione: l'azione principale del riquadro.
-    const said = area(card.body, t("rich.comment.text"), 3);
-    const hint = remark(card.body);
-    // In sola lettura i commenti si leggono e basta.
-    const writable = engine.editable();
-    const composing = media.review === true && writable;
-    let apply: HTMLButtonElement | null = null;
-    if (composing) {
-      authorField(card.body);
-      apply = action(card.actions, t("rich.comment.apply"), () => {}, "primary", true);
-    } else {
-      said.closest(".kit-field")!.remove();
-    }
-    life.listen(card.root, "submit", () => {
-      if (!composing) return;
-      if (!by()) {
-        author.focus();
-        return;
-      }
-      if (done(engine.apply(addComment(said.value, by()), false))) said.value = "";
-    });
-
-    const list = document.createElement("div");
-    list.className = "rich-strip-comment-list";
-    // L'elenco sta dopo le azioni del commento nuovo: si legge dall'alto.
-    card.root.append(list);
-
-    const when = (at: string | undefined) => {
-      const date = at ? new Date(at) : null;
-      return date && !Number.isNaN(date.getTime()) ? date.toLocaleString() : (at ?? "");
-    };
-    /// Il commento con le sue risposte, ciascuna rientrata sotto.
-    function thread(id: number, depth: number, all: ReturnType<typeof commentsOf>, placed: ReadonlySet<number>, into: HTMLElement): void {
-      const comment = all.find((c) => c.id === id)!;
-      const item = document.createElement("article");
-      item.className = depth > 0 ? "rich-strip-comment rich-strip-comment-reply" : "rich-strip-comment";
-      if (comment.done) item.dataset.done = "";
-      const head = document.createElement("strong");
-      head.className = "rich-strip-comment-head";
-      head.textContent = [comment.by || t("rich.rev.anonymous"), when(comment.at), comment.done ? t("rich.comment.resolved") : ""]
-        .filter(Boolean)
-        .join(" · ");
-      const body = document.createElement("p");
-      body.className = "rich-strip-comment-text";
-      body.textContent = comment.text ?? "";
-      item.append(head, body);
-      if (depth === 0) {
-        const actions = document.createElement("div");
-        actions.className = "rich-strip-comment-actions";
-        const go = action(actions, t("rich.comment.go"), () => {
-          if (engine.browse(goToComment(id))) popover?.close();
-        });
-        go.disabled = !placed.has(id);
-        const reply = action(actions, t("rich.comment.reply"), () => {
-          reply.disabled = true;
-          // La risposta è un `form` suo, dentro l'articolo e non nel riquadro.
-          const answer = document.createElement("form");
-          answer.className = "rich-strip-comment-answer";
-          const answerText = area(answer, t("rich.comment.reply.text"), 2);
-          if (!by()) authorField(answer);
-          const send = document.createElement("div");
-          send.className = "rich-strip-panel-actions";
-          action(send, t("rich.comment.reply"), () => {}, "primary", true);
-          answer.append(send);
-          life.listen(answer, "submit", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (!by()) {
-              author.focus();
-              return;
-            }
-            done(engine.apply(replyComment(id, answerText.value, by()), false));
-          });
-          item.append(answer);
-          answerText.focus();
-        });
-        reply.hidden = !composing;
-        const resolve = action(actions, t(comment.done ? "rich.comment.reopen" : "rich.comment.resolve"), () => {
-          done(engine.apply(resolveComment(id, !comment.done), false));
-        });
-        const remove = action(actions, t("rich.comment.delete"), () => {
-          done(engine.apply(deleteComment(id), false));
-        });
-        resolve.hidden = remove.hidden = !writable;
-        item.append(actions);
-      }
-      into.append(item);
-      for (const child of all) if (child.parent === id) thread(child.id, depth + 1, all, placed, into);
-    }
-
-    function render(): void {
-      const all = engine.read((state) => commentsOf(state.doc));
-      const placed = engine.read((state) => {
-        const out = new Set<number>();
-        for (const [id, place] of anchorsOf(state.doc)) if (place.start !== undefined && place.end !== undefined) out.add(id);
-        return out;
-      });
-      const can = composing && engine.read(canComment);
-      said.disabled = !can;
-      if (apply) apply.disabled = !can;
-      hint.textContent = !writable ? "" : media.review ? (can ? "" : t("rich.comment.need_selection")) : t("rich.comment.unsupported");
-      hint.hidden = hint.textContent === "";
-      list.replaceChildren();
-      const ids = new Set(all.map((c) => c.id));
-      for (const comment of all) {
-        if (comment.parent === undefined || !ids.has(comment.parent)) thread(comment.id, 0, all, placed, list);
-      }
-      if (all.length === 0) remark(list).textContent = t("rich.comment.none");
-    }
-    render();
-    showPanel(anchor, card);
-    if (writing && !said.disabled) said.focus();
-    else list.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
   }
 
   /// Registra le modifiche: chi le scrive, e l'interruttore. Mentre si
@@ -1009,10 +807,6 @@ export function mountRichPanels(engine: RichEngine, media: RichMedia, changed: (
         return openPage(anchor);
       case "rich.count":
         return openCount(anchor);
-      case "rich.comments":
-        return openComments(anchor, false);
-      case "rich.comment":
-        return openComments(anchor, true);
       case "rich.track":
         return openTrack(anchor);
     }

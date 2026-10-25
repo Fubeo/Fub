@@ -149,8 +149,14 @@ l'IPC.
   di `comments.ts` cambia segni ed elenco in una battuta (`setDocAttribute`);
   `commentPlugin` dà lo sfondo agli intervalli aperti. Il controllo di
   rilettura accetta l'id durevole e la data UTC che il codec dà a un
-  commento nuovo. La barra offre commenti nuovi soltanto ai formati di
-  `RICH_REVIEW_FORMATS` (`docx`).
+  commento nuovo. I commenti si leggono e si scrivono nella scheda Commenti
+  dell'ispettore (`editors/rich/side.ts`, la capacità `panels` della
+  superficie): i fili nell'ordine del testo (`commentThreads`), con chi,
+  quando, il testo commentato e le risposte; un clic sul testo commentato lo
+  seleziona. Nuovo, Rispondi, Risolvi ed Elimina ci sono quando il documento
+  si scrive; un filo si ridisegna soltanto quando cambia. «Nuovo commento» e
+  «Commenti» della barra aprono la scheda. Commenti nuovi soltanto per i
+  formati di `RICH_REVIEW_FORMATS` (`docx`).
 - Registrare le modifiche è il campo `track` della proiezione
   (`settings.track_changes` del documento), nello schema l'attributo `track`
   del documento. Mentre è acceso, il motore passa ogni transazione

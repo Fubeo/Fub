@@ -229,6 +229,11 @@ export interface SurfacePanels {
   list(): readonly SurfacePanel[];
   /** Called when the list may have changed. */
   subscribe(listener: () => void): () => void;
+  /**
+   * The surface asks to bring one of its tabs into view, as when its bar
+   * opens Comments: the shell shows the panel and selects the tab.
+   */
+  onShow(listener: (id: string) => void): () => void;
 }
 
 /**

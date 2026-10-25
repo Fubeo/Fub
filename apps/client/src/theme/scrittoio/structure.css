@@ -2128,12 +2128,13 @@ body {
 .rich-strip-panel-area .kit-field-box { height: auto; }
 .rich-strip-panel-area textarea { resize: vertical; }
 .rich-strip-panel .rich-strip-swatches { padding: 0; }
-.rich-strip-comments { width: 336px; }
-.rich-strip-comment-list { display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; }
-.rich-strip-comment { display: flex; flex-direction: column; }
-.rich-strip-comment-text { white-space: pre-wrap; }
-.rich-strip-comment-actions { display: flex; flex-wrap: wrap; }
-.rich-strip-comment-answer { display: flex; flex-direction: column; }
+/* Il pannello del documento nell'ispettore (`editors/rich/side.ts`). */
+.rich-side, .rich-side-compose, .rich-side-list, .rich-side-item, .rich-side-answer { display: flex; flex-direction: column; }
+.rich-side-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.rich-side-actions { display: flex; flex-wrap: wrap; }
+.rich-side-quote { display: block; width: 100%; text-align: start; overflow-wrap: anywhere; }
+.rich-side-reply[data-depth="2"] { margin-inline-start: 12px; }
+.rich-side-reply[data-depth="3"] { margin-inline-start: 24px; }
 .rich-strip-table-grid { display: grid; grid-template-columns: repeat(10, 20px); }
 .rich-strip-table-cell { width: 20px; height: 20px; }
 .rich-strip-count td { text-align: end; }

@@ -17,6 +17,7 @@ import type { ProofPorts } from "../core/proof-ports";
 import { onLanguage, t, type Key } from "../../i18n/strings";
 import type { RichEngine } from "./engine";
 import type { RichRibbon } from "./ribbon";
+import type { RichSide } from "./side";
 import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem, SurfaceMiniBar } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
 import { closeContextMenu } from "../../ui/menu";
@@ -207,6 +208,9 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   let engine: RichEngine | null = null;
   // La barra multifunzione arriva col motore; la mini-barra è la sua.
   let ribbon: RichRibbon | null = null;
+  // Il pannello del documento arriva anche lui col motore.
+  let side: RichSide | null = null;
+  const reveals = new Set<(viewId: string) => void>();
   let pending: string | null = null;
   let readOnly = false;
   let mode = RICH_PAGE_MODE;
@@ -247,7 +251,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
 
   const load = callbacks.loadEngine ?? (() => import("./engine"));
   load().then(
-    ({ RichEngine, mountRichRibbon }) => {
+    ({ RichEngine, mountRichRibbon, mountRichSide }) => {
       if (closed) return;
       page.removeAttribute("aria-busy");
       engine = new RichEngine(page, {
@@ -259,12 +263,17 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       const ribbonHost = document.createElement("div");
       ribbonHost.className = "rich-ribbon-host";
       root.insertBefore(ribbonHost, page);
+      const media = { pickImage: pickImage(), review: RICH_REVIEW_FORMATS.has(context.formatId ?? "") };
+      side = mountRichSide(engine, media, (viewId) => {
+        for (const listener of [...reveals]) listener(viewId);
+      });
       ribbon = mountRichRibbon(
         engine,
         (id) => RICH_CHORDS[id] ?? null,
-        { pickImage: pickImage(), review: RICH_REVIEW_FORMATS.has(context.formatId ?? "") },
+        media,
         {
           host: ribbonHost,
+          side,
           shell: (id) => callbacks.shellCommand?.(id) ?? null,
           display: {
             mode: () => mode,
@@ -586,6 +595,18 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         return () => listeners.delete(listener);
       },
     },
+    // Commenti, Revisioni e Proprietà nell'ispettore, quando il motore c'è.
+    panels: {
+      list: () => side?.panels ?? [],
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      onShow(listener) {
+        reveals.add(listener);
+        return () => reveals.delete(listener);
+      },
+    },
     // Ctrl+F: la barra di ricerca del documento, non quella della shell.
     find() {
       if (!ribbon) return false;
@@ -621,7 +642,12 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       stopEngine?.();
       ribbon?.destroy();
       ribbon = null;
+      side?.destroy();
+      side = null;
+      // La shell rilegge le schede: non ce ne sono più.
+      notify();
       listeners.clear();
+      reveals.clear();
       engine?.destroy();
       engine = null;
       root.remove();

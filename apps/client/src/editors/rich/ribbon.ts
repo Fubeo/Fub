@@ -46,6 +46,7 @@ import { pageAt } from "./page";
 import { mountRichPanels, RICH_PANEL_IDS, type RichMedia, type RichPanelId } from "./panels";
 import { COLOR_AUTO } from "./projection";
 import { goToRevision } from "./review";
+import type { RichSide } from "./side";
 import { insertToc } from "./toc";
 import type { Look } from "../../theme/content-look";
 
@@ -108,6 +109,7 @@ export const RICH_RIBBON_COMMANDS: ReadonlySet<string> = new Set([
   "rich.header",
   "rich.footer",
   "rich.find.replace",
+  "rich.comments",
   "shell.zoom.in",
   "shell.zoom.out",
   "shell.zoom.reset",
@@ -477,7 +479,8 @@ export const RICH_TABS: readonly RichTab[] = [
         label: "rich.ribbon.group.comments",
         icon: "rc-comments",
         keytip: "ZM",
-        columns: [panel("rich.comment", "rich.comment", "N", "rc-comment-new", "large", COMMENT_ACTION), panel("rich.comments", "rich.comments", "C", "rc-comments")],
+        // Nel pannello del documento, la scheda Commenti (`side.ts`).
+        columns: [action(COMMENT_ACTION, "rich.comment", "N", "rc-comment-new", "large"), action("rich.comments", "rich.comments", "C", "rc-comments", "large")],
       },
       {
         id: "tracking",
@@ -643,6 +646,8 @@ export interface RichRibbonOptions {
   readonly shell?: (id: string) => (() => void) | null;
   /// La modalità e l'aspetto della carta, che la superficie chiede alla shell.
   readonly display?: RichDisplay;
+  /// Il pannello del documento, dove la barra apre Commenti.
+  readonly side?: RichSide;
 }
 
 export interface RichDisplay {
@@ -816,6 +821,9 @@ export function mountRichRibbon(
         if (options.display && options.display.mode() === "writing") options.display.setMode("document");
         engine.editRunning(id === "rich.header" ? "header" : "footer");
         return;
+      case "rich.comments":
+        options.side?.show("comments", "list");
+        return;
       case "rich.rev.previous":
       case "rich.rev.next":
         engine.browse(goToRevision(id === "rich.rev.next" ? 1 : -1));
@@ -841,7 +849,7 @@ export function mountRichRibbon(
       return;
     }
     if (!RICH_PANEL_IDS.has(id)) return;
-    const gate = id === "rich.table" ? "markdown.table" : id === "rich.link" ? LINK_ACTION : id === "rich.comment" ? COMMENT_ACTION : id;
+    const gate = id === "rich.table" ? "markdown.table" : id === "rich.link" ? LINK_ACTION : id;
     if (!enabled(gate)) return;
     panels.open(id as RichPanelId, anchor);
   }
@@ -1019,7 +1027,7 @@ export function mountRichRibbon(
   const stopAsks = [
     engine.onAsk(LINK_ACTION, () => panels.open("rich.link", anchorOf(LINK_ACTION))),
     engine.onAsk(FIND_ACTION, () => panels.find(true)),
-    engine.onAsk(COMMENT_ACTION, () => panels.open("rich.comment", anchorOf(COMMENT_ACTION))),
+    engine.onAsk(COMMENT_ACTION, () => options.side?.show("comments", "compose")),
   ];
   // Subito, come il motore: la barra dice lo stato della battuta appena data.
   const stopEngine = engine.subscribe(() => ribbon.refresh());

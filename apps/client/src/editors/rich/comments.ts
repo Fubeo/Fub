@@ -60,6 +60,49 @@ export function threadOf(comments: readonly CommentView[], id: number): Set<numb
   return out;
 }
 
+/// Un filo del pannello: il commento, il testo che segna e le risposte, in
+/// ordine.
+export interface Thread {
+  readonly comment: CommentView;
+  /// Il testo commentato; vuoto quando i segni non lo racchiudono.
+  readonly quote: string;
+  /// Il testo si raggiunge: ha i suoi due segni.
+  readonly placed: boolean;
+  /// Le risposte, anche quelle alle risposte, nell'ordine in cui sono state
+  /// scritte; `depth` 1 risponde al commento.
+  readonly replies: readonly { readonly comment: CommentView; readonly depth: number }[];
+}
+
+/// I commenti nell'ordine in cui stanno nel testo, come li mostra Word; quelli
+/// che non hanno un posto vanno in fondo, nell'ordine del documento.
+export function commentThreads(doc: PmNode): Thread[] {
+  const comments = commentsOf(doc);
+  if (comments.length === 0) return [];
+  const anchors = anchorsOf(doc);
+  const ids = new Set(comments.map((c) => c.id));
+  const roots = comments.filter((c) => c.parent === undefined || !ids.has(c.parent));
+  const threads = roots.map((comment, order) => {
+    const place = anchors.get(comment.id);
+    const placed = place?.start !== undefined && place.end !== undefined && place.end > place.start;
+    const quote = placed ? doc.textBetween(place.start! + 1, place.end!, " ", " ").trim() : "";
+    const replies: { comment: CommentView; depth: number }[] = [];
+    // Un file che fa rispondere un commento a sé stesso non gira in tondo.
+    const seen = new Set([comment.id]);
+    const walk = (parent: number, depth: number) => {
+      for (const child of comments) {
+        if (child.parent !== parent || seen.has(child.id)) continue;
+        seen.add(child.id);
+        replies.push({ comment: child, depth });
+        walk(child.id, depth + 1);
+      }
+    };
+    walk(comment.id, 1);
+    return { thread: { comment, quote, placed, replies }, at: placed ? place.start! : Number.POSITIVE_INFINITY, order };
+  });
+  threads.sort((a, b) => a.at - b.at || a.order - b.order);
+  return threads.map((each) => each.thread);
+}
+
 /// Il testo di un commento nuovo come il codec lo accetta: un a capo per
 /// paragrafo, un tab come spazio, niente altri caratteri di controllo né
 /// segni di oggetto. `null` se resta vuoto o è troppo lungo.

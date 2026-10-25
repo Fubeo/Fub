@@ -11,6 +11,7 @@ import { t } from "../../i18n/strings";
 import { declareClipboard } from "../../platform/clipboard";
 import { activeMotions, createManualDriver, setMotionDriver } from "../../moto";
 import type { SurfaceMenuItem } from "../core/editor-menu";
+import type { EditorSurface } from "../core/registry";
 
 afterEach(() => document.body.replaceChildren());
 
@@ -43,6 +44,27 @@ function mount(load: () => Promise<typeof engineModule>, requestMode?: (mode: st
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/// L'ispettore della shell, in piccolo: monta la scheda che la superficie
+/// chiede di mostrare.
+function inspector(surface: EditorSurface) {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const mounted = new Map<string, () => void>();
+  const stop = surface.panels!.onShow((id) => {
+    if (mounted.has(id)) return;
+    const panel = surface.panels!.list().find((each) => each.id === id)!;
+    mounted.set(id, panel.mount(host));
+  });
+  return {
+    host,
+    close() {
+      stop();
+      for (const unmount of mounted.values()) unmount();
+      host.remove();
+    },
+  };
+}
 
 describe("la superficie ricca", () => {
   it("dichiara le stesse azioni e gli stessi accordi del motore", () => {
@@ -198,17 +220,18 @@ describe("la superficie ricca", () => {
     ]);
     what.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(bar.hidden).toBe(true);
-    let popover: HTMLElement;
-    // Il commento si legge; non se ne scrivono, non si risolvono, non si tolgono.
+    // Il commento si legge nella sua scheda; non se ne scrivono, non si
+    // risolvono, non si tolgono.
+    const side = inspector(surface);
     named(t("rich.comments")).click();
-    popover = document.querySelector<HTMLElement>(".kit-popover")!;
-    expect(popover.querySelector(".rich-strip-comment-text")!.textContent).toBe("Da rivedere.");
-    expect(popover.querySelector("textarea")).toBeNull();
-    expect([...popover.querySelectorAll<HTMLButtonElement>("button")].filter((b) => !b.hidden).map((b) => b.textContent)).toEqual([
-      t("rich.comment.go"),
-    ]);
+    expect(side.host.querySelector(".rich-side-text")!.textContent).toBe("Da rivedere.");
+    expect(side.host.querySelector(".rich-side-compose")?.hasAttribute("hidden")).toBe(true);
+    expect([...side.host.querySelectorAll<HTMLButtonElement>("button")].filter(visible)).toEqual([]);
     expect(onChange).not.toHaveBeenCalled();
     surface.destroy();
+    // La superficie smontata non porta più schede.
+    expect(surface.panels!.list()).toEqual([]);
+    side.close();
   });
 
   it("un documento importato si legge e dice perché non si scrive", async () => {

@@ -134,7 +134,8 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   restituisce il suo disposer. Le segue `shells/scrittoio/frame/document-panels.ts`
   sul riquadro a fuoco: cambiano con lui, se ne vanno col documento e si
   rifanno soltanto quando cambia quali sono. La scheda scelta si ricorda anche
-  mentre manca;
+  mentre manca. Con `onShow` la superficie chiede di mostrarne una (la barra
+  del documento apre Commenti): la shell apre l'ispettore e la sceglie;
 - `exports` dichiara gli export registrati che valgono per il documento: il
   disegno offre PNG e PDF, il profilo `pdf` il PDF annotato e quello redatto.
   Il core ne fa `shell.doc.export` e una voce del menu del riquadro ciascuno,

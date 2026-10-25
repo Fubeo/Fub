@@ -11,7 +11,8 @@ import { paneOf } from "../../../state/document-controller";
 import { activeTab, layout } from "../../../state/layout";
 import { on, state } from "../../../state/store";
 import type { Lifetime } from "../../../ui/lifetime";
-import { showSurfacePanels } from "../../../ui/views";
+import { revealSidePanel } from "../../../ui/side-panels";
+import { selectInspectorTab, showSurfacePanels } from "../../../ui/views";
 import { byId, follow } from "./dom";
 
 interface Shown {
@@ -69,7 +70,19 @@ export function mountDocumentPanels(lifetime: Lifetime): void {
     if (panels !== watched) {
       stopWatching?.();
       watched = panels;
-      stopWatching = panels?.subscribe(draw) ?? null;
+      const stopList = panels?.subscribe(draw);
+      // La superficie chiede una sua scheda: l'ispettore si apre su quella.
+      const offShow = panels?.onShow((id) => {
+        draw();
+        revealSidePanel("inspector");
+        selectInspectorTab(id);
+      });
+      stopWatching = panels
+        ? () => {
+            stopList?.();
+            offShow?.();
+          }
+        : null;
     }
     const list = panels?.list() ?? [];
     // La stessa superficie avvisa a ogni battuta: le schede si rifanno

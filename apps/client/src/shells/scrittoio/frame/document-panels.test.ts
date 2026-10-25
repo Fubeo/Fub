@@ -12,6 +12,8 @@ const world = vi.hoisted(() => ({
   focus: "p1",
   panes: new Map<string, unknown>(),
   shown: [] as HTMLElement[][],
+  selected: [] as string[],
+  revealed: [] as string[],
 }));
 
 vi.mock("../../../state/document-controller", () => ({ paneOf: (id: string) => world.panes.get(id) }));
@@ -23,7 +25,11 @@ vi.mock("../../../state/layout", () => ({
     },
   },
 }));
-vi.mock("../../../ui/views", () => ({ showSurfacePanels: (els: readonly HTMLElement[]) => world.shown.push([...els]) }));
+vi.mock("../../../ui/views", () => ({
+  showSurfacePanels: (els: readonly HTMLElement[]) => world.shown.push([...els]),
+  selectInspectorTab: (id: string) => world.selected.push(id),
+}));
+vi.mock("../../../ui/side-panels", () => ({ revealSidePanel: (side: string) => world.revealed.push(side) }));
 
 import { mountDocumentPanels } from "./document-panels";
 
@@ -31,6 +37,7 @@ import { mountDocumentPanels } from "./document-panels";
 function surface(ids: readonly string[]) {
   const live = new Set<string>();
   const listeners = new Set<() => void>();
+  const asks = new Set<(id: string) => void>();
   let list: SurfacePanel[] = ids.map((id) => ({
     id,
     icon: "comment",
@@ -47,12 +54,18 @@ function surface(ids: readonly string[]) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    onShow(listener) {
+      asks.add(listener);
+      return () => asks.delete(listener);
+    },
   };
   return {
     pane: { surface: { panels } },
     live,
     listeners,
     tell: () => [...listeners].forEach((listener) => listener()),
+    ask: (id: string) => [...asks].forEach((listener) => listener(id)),
+    asks,
     drop: () => {
       list = [];
     },
@@ -69,6 +82,8 @@ beforeEach(() => {
   world.focus = "p1";
   world.panes.clear();
   world.shown = [];
+  world.selected = [];
+  world.revealed = [];
   life = openLifetime();
 });
 afterEach(() => {
@@ -131,6 +146,15 @@ describe("le schede del documento", () => {
     expect(one.listeners.size).toBe(0);
   });
 
+  it("la superficie chiede una sua scheda: l'ispettore si apre e la sceglie", () => {
+    const one = surface(["doc.comments"]);
+    world.panes.set("p1", one.pane);
+    mountDocumentPanels(life);
+    one.ask("doc.comments");
+    expect(world.revealed).toEqual(["inspector"]);
+    expect(world.selected).toEqual(["doc.comments"]);
+  });
+
   it("montaggi e smontaggi ripetuti non lasciano schede né ascoltatori", () => {
     const one = surface(["doc.comments", "doc.revisions"]);
     world.panes.set("p1", one.pane);
@@ -141,6 +165,7 @@ describe("le schede del documento", () => {
       each.close();
       expect(one.live.size).toBe(0);
       expect(one.listeners.size).toBe(0);
+      expect(one.asks.size).toBe(0);
       expect(last()).toEqual([]);
     }
   });

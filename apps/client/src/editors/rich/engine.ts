@@ -56,6 +56,7 @@ import { BlockWriter, lookVariables, richSchema, toDoc } from "./schema";
 import { deleteChar, reviewAuthor, trackable, trackTransaction, tracking } from "./track";
 
 export { mountRichRibbon } from "./ribbon";
+export { mountRichSide } from "./side";
 
 export interface RichEngineOptions {
   readonly onChange: (change: EditorChange) => void;
