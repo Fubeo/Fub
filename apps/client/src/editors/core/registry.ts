@@ -209,6 +209,28 @@ export interface SurfacePaperFit {
   subscribe(listener: () => void): () => void;
 }
 
+/** A tab the document brings to the side panel, next to the declared views. */
+export interface SurfacePanel {
+  /** Stable within the surface: the panel keeps its tab across rebuilds. */
+  readonly id: string;
+  title(): string;
+  /** A shell icon name, as the declared views use. */
+  readonly icon: string;
+  /** Draws the panel into `host`; returns its teardown. */
+  mount(host: HTMLElement): () => void;
+}
+
+/**
+ * The tabs of the document (comments, revisions, properties). They follow the
+ * pane in focus and leave with the document.
+ */
+export interface SurfacePanels {
+  /** The tabs on offer now: none before the editor is ready. */
+  list(): readonly SurfacePanel[];
+  /** Called when the list may have changed. */
+  subscribe(listener: () => void): () => void;
+}
+
 /**
  * A mounted shell-owned surface. No DOM or CodeMirror value crosses its
  * boundary. Past the first five members everything is a capability: the shell
@@ -243,6 +265,8 @@ export interface EditorSurface {
   readonly ownBar?: boolean;
   /** The page fits the pane, to its width or whole. */
   readonly paperFit?: SurfacePaperFit;
+  /** The document's own tabs in the side panel. */
+  readonly panels?: SurfacePanels;
   /**
    * Brings the view to a place in the document. `false` when this surface
    * cannot get there, so that the shell says it instead of doing nothing.

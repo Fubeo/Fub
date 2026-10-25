@@ -129,6 +129,12 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
   documenti di Word, con la barra multifunzione del kit): la barra di
   formattazione della shell allora non si mostra, mentre la bolla della
   selezione e `fub.editor.action` restano;
+- `panels` porta le schede del documento nell'ispettore, dopo le view
+  dichiarate: ognuna ha un id, un titolo, un'icona e `mount(host)`, che
+  restituisce il suo disposer. Le segue `shells/scrittoio/frame/document-panels.ts`
+  sul riquadro a fuoco: cambiano con lui, se ne vanno col documento e si
+  rifanno soltanto quando cambia quali sono. La scheda scelta si ricorda anche
+  mentre manca;
 - `exports` dichiara gli export registrati che valgono per il documento: il
   disegno offre PNG e PDF, il profilo `pdf` il PDF annotato e quello redatto.
   Il core ne fa `shell.doc.export` e una voce del menu del riquadro ciascuno,

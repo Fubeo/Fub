@@ -406,7 +406,9 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
   viewsModalEl.hidden = viewsModalEl.childElementCount === 0;
   if (modalWasHidden && !viewsModalEl.hidden) enterSurface(viewsModalEl);
   // L'inspector a tab: per le view `right_sidebar` costruisce un tablist in
-  // cima. Va dopo il montaggio, perché legge i pannelli già nati.
+  // cima. Va dopo il montaggio, perché legge i pannelli già nati, e dopo i
+  // pannelli del documento, che seguono le view.
+  viewsRightEl.append(...surfacePanels);
   buildInspector();
   modalTrap(parent);
   await Promise.all([...mounted.keys()].map((id) => refreshPanel(id)));
@@ -676,7 +678,31 @@ function draw(id: string, mountedView: Mounted, tree: UiNode): void {
 /// ridisegnava a ogni cambio, e finché c'è un ispettore costruito c'è chi ascolta.
 let stopFollowing: Teardown = () => {};
 
+/// La scheda che chi guarda ha scelto, o che si è ripresa da ciò che si era
+/// salvato. Resta anche quando sparisce per un giro, come le schede di un
+/// documento passando a una nota: tornati sul documento, si ritrova.
+let chosenTab: string | null = null;
+
+/// I pannelli che porta il documento a fuoco (`EditorSurface.panels`). Li
+/// costruisce e li possiede chi segue il riquadro (`shells/scrittoio/frame/
+/// document-panels.ts`); qui stanno dopo le view dichiarate, anche quando
+/// queste si rimontano.
+let surfacePanels: readonly HTMLElement[] = [];
+
+/// Mette nell'ispettore i pannelli del documento al posto di quelli di prima.
+export function showSurfacePanels(panels: readonly HTMLElement[]): void {
+  for (const el of surfacePanels) if (!panels.includes(el)) el.remove();
+  surfacePanels = panels;
+  viewsRightEl.append(...panels);
+  buildInspector();
+}
+
+/// Ogni giro dell'ispettore ha il suo numero: una lettura arrivata tardi non
+/// sceglie fra le schede di un giro che non c'è più.
+let inspectorRound = 0;
+
 function buildInspector(): void {
+  const round = (inspectorRound += 1);
   stopFollowing();
   stopFollowing = () => {};
   const panels = [...viewsRightEl.querySelectorAll<HTMLElement>(".declared-view-panel")];
@@ -720,6 +746,15 @@ function buildInspector(): void {
   // la persistenza è async e il default è sincrono.
   let active = 0;
   const tabs: HTMLButtonElement[] = [];
+  // Ciò che sceglie chi guarda si ricorda; una scheda presa perché quella
+  // scelta non c'è non si salva al suo posto.
+  const pick = (index: number, focus: boolean) => {
+    activateTab(index, focus);
+    const viewId = panels[active]?.dataset.viewId;
+    if (!viewId) return;
+    chosenTab = viewId;
+    void api.setViewState("inspector.tab", viewId);
+  };
   for (let i = 0; i < panels.length; i++) {
     const panel = panels[i]!;
     const viewId = panel.dataset.viewId ?? `view-${i}`;
@@ -754,12 +789,12 @@ function buildInspector(): void {
     // ogni scelta, perché la misura cambiava con la veste stessa.
     tab.setAttribute("aria-label", name);
 
-    tab.addEventListener("click", () => activateTab(i, false));
+    tab.addEventListener("click", () => pick(i, false));
     tab.addEventListener("keydown", (e) => {
       const next = tabIndexForKey(i, e.key, tabs.length);
       if (next === null) return;
       e.preventDefault();
-      activateTab(next, true);
+      pick(next, true);
     });
 
     tabs.push(tab);
@@ -799,9 +834,7 @@ function buildInspector(): void {
     // cercabile, come la scala della 0040 chiede ai ripieghi.
     headerText.textContent = titleEl?.textContent ?? current?.dataset.viewId ?? "";
     drawFollows();
-    const viewId = current?.dataset.viewId;
     if (focus) tabs[safe]?.focus();
-    if (viewId) void api.setViewState("inspector.tab", viewId);
     if (focusedView !== null && !panels.some((p) => p.dataset.viewId === focusedView)) {
       (tablist.children[safe] as HTMLElement)?.focus();
     }
@@ -832,12 +865,15 @@ function buildInspector(): void {
   const defaultIndex = panels.findIndex(
     (p) => !p.querySelector<HTMLElement>(":scope > .declared-view")?.hidden,
   );
-  activateTab(defaultIndex >= 0 ? defaultIndex : 0, false);
+  const chosenIndex = panels.findIndex((p) => p.dataset.viewId === chosenTab);
+  activateTab(chosenIndex >= 0 ? chosenIndex : defaultIndex >= 0 ? defaultIndex : 0, false);
+  if (chosenTab !== null) return;
 
   // Ripristina la scelta persistita senza rubare il fuoco a chi ha già
   // iniziato a usare l'inspector.
   void api.viewState<string>("inspector.tab").then((saved) => {
-    if (!saved) return;
+    if (!saved || chosenTab !== null || round !== inspectorRound) return;
+    chosenTab = saved;
     const idx = panels.findIndex((p) => p.dataset.viewId === saved);
     if (idx >= 0 && idx !== active) activateTab(idx, false);
   });
