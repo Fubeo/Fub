@@ -286,6 +286,13 @@ export interface EditorSurface {
    */
   find?(): boolean;
   /**
+   * F6 inside the pane: moves the focus to the surface's next own zone (its
+   * bar, its page) in the direction of `step`. From outside the surface it
+   * enters at the first zone, or at the last one going back. `false` when no
+   * zone is left that way, and the shell moves on to its own.
+   */
+  zone?(step: 1 | -1): boolean;
+  /**
    * The surface draws its own bar of commands (the document ribbon): the
    * shell's format bar then stays out of the way, while the selection
    * bubble and the `fub.editor.action` commands keep working.

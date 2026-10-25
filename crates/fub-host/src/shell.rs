@@ -245,6 +245,11 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.pane.focus.right", None),
     ("shell.pane.focus.up", None),
     ("shell.pane.focus.down", None),
+    // Il fuoco da una zona della finestra alla seguente, come in Office: la
+    // barra del documento, il foglio, il pannello, la banda. F6 non scrive e
+    // nessun editor lo usa, quindi vale anche dentro il testo.
+    ("shell.zone.next", Some("F6")),
+    ("shell.zone.prev", Some("Shift-F6")),
 ];
 
 /// Le chiavi di configurazione che hanno un gesto loro, e che nel form generico

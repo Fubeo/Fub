@@ -527,6 +527,14 @@ export function findInFocusedSurface(): boolean {
   return r.surface?.find?.() ?? false;
 }
 
+/// F6 dentro il riquadro col fuoco: la superficie passa alla sua zona seguente
+/// (la barra, il foglio). `null` se non ha zone sue, `false` se in quel verso
+/// sono finite.
+export function stepSurfaceZone(step: 1 | -1): boolean | null {
+  const surface = panes.get(layout.focus)?.surface;
+  return surface?.zone ? surface.zone(step) : null;
+}
+
 /// «Copia il link a questo punto»: `[[Nota#Titolo]]` o `[[Nota#^id]]` negli
 /// appunti, scritto come vuole il vault, come per una nota trascinata; a un
 /// blocco senza id la superficie ne scrive uno. Negli appunti un link Markdown

@@ -20,7 +20,8 @@
 //! - **Il primo accordo porta un modificatore, i successivi no per forza**:
 //!   un tasto nudo non ha un momento in cui è libero mentre si scrive una nota;
 //!   dopo `Mod-k` la modalità c'è ed è dichiarata, e dentro quella finestra la
-//!   `d` non è di nessuno.
+//!   `d` non è di nessuno. Fanno eccezione i **tasti funzione** (`F1`…`F24`):
+//!   non scrivono niente, e la shell li tiene suoi anche dentro un campo.
 //!
 //! # `Mod` e `Ctrl`
 //!
@@ -149,10 +150,18 @@ pub fn chords(binding: &str) -> Option<Vec<Chord>> {
         });
     }
     let first = chords.first()?;
-    if !first.command && !first.control && !first.shift && !first.alt {
+    if !first.command && !first.control && !first.shift && !first.alt && !function_key(&first.key) {
         return None;
     }
     Some(chords)
+}
+
+/// `f1`…`f24`: i tasti che non scrivono, e che per questo possono aprire una
+/// scorciatoia anche nudi (F6 fra le zone della finestra, come in Office).
+fn function_key(key: &str) -> bool {
+    key.strip_prefix('f')
+        .and_then(|n| n.parse::<u8>().ok().filter(|_| !n.starts_with('0')))
+        .is_some_and(|n| (1..=24).contains(&n))
 }
 
 /// La scorciatoia in forma canonica — gli accordi in ordine, i modificatori in
@@ -236,6 +245,16 @@ mod tests {
         // E il secondo accordo nudo invece va bene: dopo `Mod-k` la modalità è
         // aperta e dichiarata.
         assert_eq!(canonical("Mod-k d").as_deref(), Some("mod-k d"));
+    }
+
+    #[test]
+    fn a_function_key_may_stand_alone() {
+        assert_eq!(canonical("F6").as_deref(), Some("f6"));
+        assert_eq!(canonical("Shift-F6").as_deref(), Some("shift-f6"));
+        assert_eq!(canonical("F24").as_deref(), Some("f24"));
+        for binding in ["F0", "F25", "F06", "Fx", "f"] {
+            assert_eq!(canonical(binding), None, "{binding}");
+        }
     }
 
     #[test]

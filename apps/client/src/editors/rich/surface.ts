@@ -22,6 +22,7 @@ import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem, SurfaceMiniBar } f
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
 import { iconEl } from "../../ui/icons";
 import { closeContextMenu } from "../../ui/menu";
+import { focusZone } from "../../ui/a11y";
 import type { ReadOnlyReason } from "./projection";
 import type { DrawingImagePort } from "../canvas/surface";
 import { relativeRef } from "../../rules/mirrored";
@@ -653,6 +654,23 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
+    },
+    // F6: la barra, la ricerca se è aperta, poi il foglio. Il resto del giro
+    // (il pannello, la banda) è della shell.
+    zone(step) {
+      if (!engine || !ribbon) return false;
+      const zones = [root.querySelector<HTMLElement>(":scope > .rich-ribbon-host"), ribbon.findBar, page].filter(
+        (zone): zone is HTMLElement => zone !== null && !zone.hidden,
+      );
+      const at = zones.findIndex((zone) => zone.contains(document.activeElement));
+      const next = at < 0 ? (step > 0 ? 0 : zones.length - 1) : at + step;
+      const target = zones[next];
+      if (!target) return false;
+      if (target === page) engine.focus();
+      // Un documento in sola lettura non prende il fuoco nel testo: lo prende
+      // il foglio, o il giro si fermerebbe sulla barra.
+      if (target !== page || !page.contains(document.activeElement)) focusZone(target);
+      return true;
     },
     // Ctrl+F: la barra di ricerca del documento, non quella della shell.
     find() {

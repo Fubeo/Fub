@@ -107,6 +107,21 @@ export function focusableElements(root: HTMLElement): HTMLElement[] {
   );
 }
 
+/// Porta il fuoco dentro una zona della finestra, come fa F6: sulla scheda
+/// scelta se la zona ha delle schede (la barra, l'ispettore), se no sul primo
+/// elemento che il tab raggiunge, o sulla zona stessa se non ne ha.
+export function focusZone(zone: HTMLElement): void {
+  const reachable = focusableElements(zone);
+  const chosen = reachable.find((el) => el.getAttribute("role") === "tab" && el.getAttribute("aria-selected") === "true");
+  const first = chosen ?? reachable[0];
+  if (first) {
+    first.focus();
+    return;
+  }
+  if (!zone.hasAttribute("tabindex")) zone.tabIndex = -1;
+  zone.focus();
+}
+
 /// Chiude il fuoco dentro una superficie modale finché resta aperta.
 ///
 /// Le due cose che una modale deve fare e che nessuna di questa shell faceva:

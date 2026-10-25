@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TextSelection } from "prosemirror-state";
 import { RICH_ACTIONS } from "./commands";
 import * as engineModule from "./engine";
-import { mountRichSurface, RICH_ACTION_IDS, RICH_CHORDS, RICH_PROFILE } from "./surface";
+import { mountRichSurface, RICH_ACTION_IDS, RICH_CHORDS, RICH_PROFILE, RICH_READING_MODE } from "./surface";
 import { t } from "../../i18n/strings";
 import { declareClipboard } from "../../platform/clipboard";
 import { activeMotions, createManualDriver, setMotionDriver } from "../../moto";
@@ -470,6 +470,37 @@ describe("la superficie ricca", () => {
     side.close();
     surface.destroy();
     expect(status.items()).toEqual([]);
+  });
+
+  it("F6 passa dalla barra al foglio, e alla fine lascia il giro alla shell", async () => {
+    const { parent, surface } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    surface.buffer!.setDoc(
+      JSON.stringify({ format: "fub-rich", version: 1, blocks: [{ t: "para", role: { kind: "body" }, k: "P", c: [{ t: "text", x: "testo", k: "R" }] }] }),
+    );
+    const bar = parent.querySelector<HTMLElement>(".rich-ribbon-host")!;
+    const page = parent.querySelector<HTMLElement>(".ProseMirror")!;
+    // Da fuori si entra dalla barra, sulla scheda scelta.
+    expect(surface.zone!(1)).toBe(true);
+    expect(bar.contains(document.activeElement)).toBe(true);
+    expect(surface.zone!(1)).toBe(true);
+    expect(document.activeElement).toBe(page);
+    expect(surface.zone!(1)).toBe(false);
+    // Indietro: dal foglio alla barra, poi fuori; da fuori si entra dal foglio.
+    expect(surface.zone!(-1)).toBe(true);
+    expect(bar.contains(document.activeElement)).toBe(true);
+    expect(surface.zone!(-1)).toBe(false);
+    (document.activeElement as HTMLElement).blur();
+    expect(surface.zone!(-1)).toBe(true);
+    expect(document.activeElement).toBe(page);
+    // In Lettura la barra non c'è, e non si conta; il testo non si scrive, e
+    // il fuoco lo prende il foglio.
+    surface.setMode(RICH_READING_MODE);
+    (document.activeElement as HTMLElement).blur();
+    expect(surface.zone!(1)).toBe(true);
+    expect(document.activeElement).toBe(parent.querySelector(".rich-page"));
+    expect(surface.zone!(1)).toBe(false);
+    surface.destroy();
   });
 
   it("scrivere, incollare e annullare non fanno partire nessuna corsa", async () => {

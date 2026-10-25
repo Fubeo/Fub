@@ -21,6 +21,8 @@ let paneCount = 1;
 
 vi.mock("./space", () => ({ spaceBy: (step: number) => space(step) }));
 vi.mock("./pane-focus", () => ({ focusNeighbour: (direction: string) => moved(direction) }));
+const zoned = vi.fn((_step: number): void => {});
+vi.mock("./zones", () => ({ stepZone: (step: number) => zoned(step) }));
 vi.mock("../../state/layout", () => ({ panes: () => Array.from({ length: paneCount }, (_, index) => `p${index}`) }));
 /// Se la scena in corso si lascia ancora disfare.
 let turnable = false;
@@ -35,6 +37,7 @@ vi.mock("../../host/query", () => ({ settings: async () => [] }));
 const SPACE = ["shell.chrome.compact.more", "shell.chrome.compact.less", "shell.chrome.compact.reset"];
 const LIGHT = "shell.light.toggle";
 const FOCUS = ["shell.pane.focus.left", "shell.pane.focus.right", "shell.pane.focus.up", "shell.pane.focus.down"];
+const ZONE = ["shell.zone.next", "shell.zone.prev"];
 
 function run(id: string): void {
   void allCommands()
@@ -63,11 +66,17 @@ afterEach(() => {
 });
 
 describe("i comandi che esistono solo nello Scrittoio", () => {
-  it("dichiara lo spazio dell'interfaccia e la luce, tutti senza accordo", () => {
+  it("dichiara lo spazio dell'interfaccia e la luce senza accordo, le zone con F6", () => {
     mountShellCommands(lifetime);
     const ids = allCommands().map((entry) => entry.id);
-    expect(ids).toEqual([...SPACE, LIGHT]);
-    expect(allCommands().map((entry) => entry.binding)).toEqual([null, null, null, null]);
+    expect(ids).toEqual([...SPACE, ...ZONE, LIGHT]);
+    expect(allCommands().map((entry) => entry.binding)).toEqual([null, null, null, "F6", "Shift-F6", null]);
+  });
+
+  it("F6 va alla zona seguente, Maiusc+F6 a quella prima", () => {
+    mountShellCommands(lifetime);
+    for (const id of ZONE) run(id);
+    expect(zoned.mock.calls.map(([step]) => step)).toEqual([1, -1]);
   });
 
   it("con più di un foglio offre anche il fuoco per direzione, senza accordo", () => {
@@ -76,7 +85,7 @@ describe("i comandi che esistono solo nello Scrittoio", () => {
 
     paneCount = 2;
     const entries = allCommands();
-    expect(entries.map((entry) => entry.id)).toEqual([...SPACE, ...FOCUS, LIGHT]);
+    expect(entries.map((entry) => entry.id)).toEqual([...SPACE, ...FOCUS, ...ZONE, LIGHT]);
     expect(entries.filter((entry) => FOCUS.includes(entry.id)).map((entry) => entry.binding)).toEqual([null, null, null, null]);
 
     for (const id of FOCUS) run(id);

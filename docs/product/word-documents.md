@@ -216,6 +216,13 @@ le modifiche si registrano. Le parole sono quelle di Proprietà › Conteggio, e
 un clic ci porta; il conteggio della nota, che la banda mostra per le altre
 note, si fa da parte.
 
+**F6** porta il fuoco alla zona seguente della finestra, come in Office: la
+barra del documento, il foglio, l'ispettore con Commenti, Revisioni e
+Proprietà, la banda di stato, poi il pannello dei file se è aperto.
+**Maiusc+F6** fa il giro al contrario. Una zona chiusa non si conta, e in
+Lettura la barra non c'è. F6 vale anche per gli altri fogli, che sono una zona
+sola; la scorciatoia si cambia in Preferenze come le altre.
+
 Il formato si vede prima di aprire: nell'albero, nelle schede e nel
 lanciatore un documento di Word, un OpenDocument, un foglio di calcolo e un
 disegno hanno ciascuno la sua icona, diversa dal foglietto di una nota. Accanto

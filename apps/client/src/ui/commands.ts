@@ -482,6 +482,10 @@ export interface Chord {
   alt: boolean;
 }
 
+/// `f1`…`f24`: i tasti che non scrivono, e che possono aprire una scorciatoia
+/// anche nudi (F6 fra le zone della finestra).
+const FUNCTION_KEY = /^f([1-9]|1\d|2[0-4])$/;
+
 /// Una scorciatoia scomposta negli accordi che la compongono, o `null` se non è
 /// una scorciatoia che questa shell sa premere.
 ///
@@ -515,7 +519,7 @@ export function parseChords(binding: string | null | undefined): Chord[] | null 
     }));
   }
   const first = chords[0]!;
-  if (!first.mod && !first.ctrl && !first.shift && !first.alt) return null;
+  if (!first.mod && !first.ctrl && !first.shift && !first.alt && !FUNCTION_KEY.test(first.key)) return null;
   return chords;
 }
 /// Quante alternative può portare una scorciatoia.

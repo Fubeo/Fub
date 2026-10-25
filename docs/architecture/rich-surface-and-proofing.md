@@ -232,6 +232,14 @@ l'IPC.
   parole di `countText`, le stesse del Conteggio, la lingua e «Registra». La
   superficie dichiara `counts`, e la banda nasconde la view `stats` di
   `fub.stats` finché il documento ha il fuoco.
+- F6 e Maiusc+F6 (`shell.zone.next`/`prev`, dichiarati in
+  `crates/fub-host/src/shell.rs`) girano le zone della finestra
+  (`shells/scrittoio/zones.ts`): il pannello dei file, il foglio col fuoco,
+  l'ispettore, la banda. Dentro il foglio la superficie gira le sue con
+  `EditorSurface.zone`: la barra, la ricerca se è aperta, la pagina; quando
+  in quel verso sono finite risponde `false` e la shell va avanti. Un tasto
+  funzione può stare nudo in una scorciatoia (`fub_abi::rules::keys`), perché
+  non scrive.
 - L'intestazione e il piè di pagina di una sezione (la storia `default`)
   sono `header` e `footer` accanto a `page`: righe di testo e campi
   `page`/`pages`, `locked` quando la storia ha altro (`running.rs`). Una

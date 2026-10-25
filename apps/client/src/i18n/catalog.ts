@@ -1871,6 +1871,10 @@ export const IT = { // --- la scocca -------------------------------------------
 "commands.pane.focus.up.desc": "Porta il fuoco al foglio che sta sopra questo.",
 "commands.pane.focus.down": "Fuoco al foglio sotto",
 "commands.pane.focus.down.desc": "Porta il fuoco al foglio che sta sotto questo.",
+"commands.zone.next": "Zona seguente",
+"commands.zone.next.desc": "Porta il fuoco alla zona seguente della finestra: la barra, il foglio, il pannello, la banda.",
+"commands.zone.prev": "Zona precedente",
+"commands.zone.prev.desc": "Porta il fuoco alla zona precedente della finestra.",
 // I comandi dei riquadri (§1.2). Dividere e chiudere sono comandi e non solo
 // gesti del mouse per la ragione della 0077: un gesto che vive solo in un
 // listener non compare in nessun elenco e nessuno lo può riconfigurare.
@@ -4446,6 +4450,10 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "commands.pane.focus.up.desc": "Moves focus to the sheet above this one.",
 "commands.pane.focus.down": "Focus the sheet below",
 "commands.pane.focus.down.desc": "Moves focus to the sheet below this one.",
+"commands.zone.next": "Next zone",
+"commands.zone.next.desc": "Moves focus to the next zone of the window: the bar, the sheet, the panel, the status band.",
+"commands.zone.prev": "Previous zone",
+"commands.zone.prev.desc": "Moves focus to the previous zone of the window.",
 "commands.pane.split.right": "Split the pane to the right",
 "commands.pane.split.right.desc":
   "Opens the same note in a pane alongside, to look at two of them together.",
