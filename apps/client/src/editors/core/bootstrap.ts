@@ -101,7 +101,7 @@ function proofPorts(vault: string | null | undefined): ProofPorts {
 }
 
 const PLAIN_TEXT_MODES = [
-  { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source" },
+  { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source", looks: ["tema"] },
 ] as const;
 
 const GRID_MODES = [
@@ -120,12 +120,12 @@ const GRID_EXPORTS: readonly SurfaceExport[] = [
 ];
 
 const VIEWER_MODES = [
-  { id: "view", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading" },
+  { id: "view", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading", looks: ["file"] },
 ] as const;
 
 
 const ERROR_MODES = [
-  { id: "error", label: () => t("mode.source"), presentation: "surface", contextMode: "reading" },
+  { id: "error", label: () => t("mode.source"), presentation: "surface", contextMode: "reading", looks: ["tema"] },
 ] as const;
 
 function requireMode(modes: EditorSurface["modes"], mode: string): void {

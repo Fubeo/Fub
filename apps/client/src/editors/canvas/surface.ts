@@ -179,8 +179,8 @@ export function mountCanvasSurface(
   });
   let mode: "canvas" | "source" = profile === CANVAS_SOURCE_PROFILE ? "source" : "canvas";
   const modes = [
-    { id: "canvas", label: () => t("mode.canvas"), presentation: "surface" as const, contextMode: "live_preview" as const },
-    { id: "source", label: () => t("mode.source"), presentation: "surface" as const, contextMode: "source" as const },
+    { id: "canvas", label: () => t("mode.canvas"), presentation: "surface" as const, contextMode: "live_preview" as const, looks: ["tema"] as const },
+    { id: "source", label: () => t("mode.source"), presentation: "surface" as const, contextMode: "source" as const, looks: ["tema"] as const },
   ];
   const surface: EditorSurface = {
     family: CANVAS_FAMILY,

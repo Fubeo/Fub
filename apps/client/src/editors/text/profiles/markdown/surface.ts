@@ -69,9 +69,9 @@ import { codeBlockAt, headingAt, linkAt, listAt, tableRowAt, taskAt, type Markdo
 export type MarkdownMode = "source" | "live_preview" | "reading";
 
 export const MARKDOWN_MODES: readonly SurfaceMode[] = [
-  { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source" },
-  { id: "live_preview", label: () => t("mode.live"), presentation: "surface", contextMode: "live_preview" },
-  { id: "reading", label: () => t("mode.reading"), presentation: "rendered", contextMode: "reading" },
+  { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source", looks: ["tema"] },
+  { id: "live_preview", label: () => t("mode.live"), presentation: "surface", contextMode: "live_preview", looks: ["tema"] },
+  { id: "reading", label: () => t("mode.reading"), presentation: "rendered", contextMode: "reading", looks: ["tema"] },
 ];
 
 /// Le sole capacità di shell necessarie alla palette slash.

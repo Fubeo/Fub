@@ -285,7 +285,7 @@ export function parseBaseEmbed(node: UiNode): BaseEmbed | null {
   if (typeof payload.base === "string") return { base: payload.base, view: typeof payload.view === "string" ? payload.view : null, container: typeof payload.container === "string" ? payload.container : null };
   return null;
 }
-export function baseSurfaceModes(): SurfaceMode[] { return [{ id: "base", label: () => "Base", presentation: "surface", contextMode: "live_preview" }]; }
+export function baseSurfaceModes(): SurfaceMode[] { return [{ id: "base", label: () => "Base", presentation: "surface", contextMode: "live_preview", looks: ["tema"] }]; }
 function stateKey(doc: string): string { return `${BASE_STATE_KEY}:${doc}`; }
 export async function persistBaseView(deps: BaseSurfaceDeps, doc: string, view: string): Promise<void> { await deps.setViewState(stateKey(doc), view); }
 export async function restoreBaseView(deps: BaseSurfaceDeps, doc: string): Promise<string | null> {
