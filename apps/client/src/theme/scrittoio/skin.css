@@ -1825,6 +1825,12 @@ kbd,
   color: var(--text);
 }
 
+/* Un adattamento della carta acceso. */
+.status-item--button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--text);
+}
+
 /* ── La concentrazione ───────────────────────────────────────────────────── */
 
 /* La scrivania si spegne di un gradino: il foglio resta l'unica cosa chiara.

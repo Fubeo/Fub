@@ -193,6 +193,22 @@ export interface SurfaceExportWindow {
   open(): Promise<SurfaceExport | null>;
 }
 
+/** How a page fits its pane: to the pane's width, or whole in view. */
+export type PaperFit = "width" | "page";
+
+/**
+ * The page of a document can be fitted to its pane. The band of the frame
+ * offers the fits while the surface shows a page; `null` is the real size.
+ */
+export interface SurfacePaperFit {
+  /** The fits on offer now: none in a mode without a page. */
+  offers(): readonly PaperFit[];
+  current(): PaperFit | null;
+  set(fit: PaperFit | null): void;
+  /** Called when the offers or the current fit change, as when the page arrives. */
+  subscribe(listener: () => void): () => void;
+}
+
 /**
  * A mounted shell-owned surface. No DOM or CodeMirror value crosses its
  * boundary. Past the first five members everything is a capability: the shell
@@ -225,6 +241,8 @@ export interface EditorSurface {
    * bubble and the `fub.editor.action` commands keep working.
    */
   readonly ownBar?: boolean;
+  /** The page fits the pane, to its width or whole. */
+  readonly paperFit?: SurfacePaperFit;
   /**
    * Brings the view to a place in the document. `false` when this surface
    * cannot get there, so that the shell says it instead of doing nothing.

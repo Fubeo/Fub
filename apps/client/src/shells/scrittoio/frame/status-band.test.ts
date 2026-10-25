@@ -104,6 +104,8 @@ beforeEach(() => {
       <span id="status-index" hidden></span>
       <span id="status-saving" hidden></span>
       <span id="status-mode" hidden></span>
+      <button id="status-fit-width" hidden></button>
+      <button id="status-fit-page" hidden></button>
       <button id="status-zoom" hidden></button>
     </footer>`;
   world.status = () => Promise.resolve({ indexing: "idle", watching: true } satisfies Status);
@@ -257,6 +259,93 @@ describe("la modalità", () => {
     el("p1").dataset.mode = "source";
     await settle();
     expect(el("status-mode").textContent).toBe("Sorgente");
+  });
+});
+
+describe("la carta adattata alla vista", () => {
+  /// Una superficie che offre gli adattamenti finché è in Pagina; `changed`
+  /// è ciò che dice quando le offerte cambiano.
+  function paperPane(inPage: { value: boolean }) {
+    let fit: "width" | "page" | null = null;
+    const asked: ("width" | "page" | null)[] = [];
+    const listeners = new Set<() => void>();
+    const changed = () => {
+      for (const listener of listeners) listener();
+    };
+    const pane = {
+      surface: {
+        modes: [{ id: "document" }, { id: "writing" }],
+        paperFit: {
+          offers: () => (inPage.value ? (["width", "page"] as const) : []),
+          current: () => fit,
+          set: (next: "width" | "page" | null) => {
+            fit = next;
+            asked.push(next);
+          },
+          subscribe: (listener: () => void) => {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+        },
+      },
+      mode: { label: () => "Pagina" },
+    };
+    return { pane, asked, changed, listeners };
+  }
+
+  it("si offre soltanto dove la superficie lo offre, e un altro clic torna alla carta vera", async () => {
+    const inPage = { value: true };
+    const { pane, asked, changed } = paperPane(inPage);
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    await settle();
+    const width = el("status-fit-width");
+    const whole = el("status-fit-page");
+    expect([width.hidden, whole.hidden]).toEqual([false, false]);
+    expect(width.textContent).toBe("frame.status.fit.width");
+    expect(width.getAttribute("aria-pressed")).toBe("false");
+    width.click();
+    expect(width.getAttribute("aria-pressed")).toBe("true");
+    whole.click();
+    expect([width.getAttribute("aria-pressed"), whole.getAttribute("aria-pressed")]).toEqual(["false", "true"]);
+    whole.click();
+    expect(asked).toEqual(["width", "page", null]);
+    // Fuori da Pagina, e senza la capacità, non si vede.
+    inPage.value = false;
+    changed();
+    expect([width.hidden, whole.hidden]).toEqual([true, true]);
+    world.pane = surface(3);
+    for (const listener of world.languageListeners) listener();
+    expect(width.hidden).toBe(true);
+  });
+
+  it("si accende quando la pagina arriva dopo il riquadro, e lascia la superficie che non è più a fuoco", async () => {
+    const inPage = { value: false };
+    const { pane, changed, listeners } = paperPane(inPage);
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    await settle();
+    expect(el("status-fit-width").hidden).toBe(true);
+    // Il motore è pronto: la superficie lo dice, senza un evento della shell.
+    inPage.value = true;
+    changed();
+    expect(el("status-fit-width").hidden).toBe(false);
+    world.pane = surface(3);
+    for (const listener of world.languageListeners) listener();
+    expect(listeners.size).toBe(0);
+  });
+
+  it("chiusa la banda, non ascolta più la superficie", async () => {
+    const { pane, listeners } = paperPane({ value: true });
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    await settle();
+    expect(listeners.size).toBe(1);
+    life.close();
+    expect(listeners.size).toBe(0);
   });
 });
 

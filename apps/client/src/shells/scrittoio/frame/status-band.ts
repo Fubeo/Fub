@@ -4,6 +4,7 @@
 //
 // Ogni voce si vede solo quando ha qualcosa da dire: una banda che ripete
 // «tutto bene» in sei modi è rumore.
+import type { SurfacePaperFit } from "../../../editors/core/registry";
 import { settings, vaultStatus } from "../../../host/query";
 import { onLanguage, t } from "../../../i18n/strings";
 import { paneOf, selectedMode } from "../../../state/document-controller";
@@ -32,6 +33,10 @@ export function mountStatusBand(lifetime: Lifetime): void {
   const saving = byId("status-saving");
   const mode = byId("status-mode");
   const zoom = byId<HTMLButtonElement>("status-zoom");
+  const fits = [
+    { fit: "width", button: byId<HTMLButtonElement>("status-fit-width"), label: "frame.status.fit.width" },
+    { fit: "page", button: byId<HTMLButtonElement>("status-fit-page"), label: "frame.status.fit.page" },
+  ] as const;
 
   // Il nome del vault non si ripete qui: lo dice già il chip nella barra del
   // titolo, che c'è sempre.
@@ -78,7 +83,44 @@ export function mountStatusBand(lifetime: Lifetime): void {
     const pane = tab?.k === "doc" ? paneOf(layout.focus) : undefined;
     const several = (pane?.surface?.modes.length ?? 0) > 1;
     show(mode, several ? (selectedMode(pane)?.label() ?? "") : "");
+    drawFit();
   };
+  // L'adattamento della carta: soltanto dove la superficie lo offre adesso
+  // (un documento in Pagina). Premuto, un altro clic torna alla carta vera.
+  const fitOf = () => {
+    const tab = state.vaultRoot ? activeTab() : null;
+    return tab?.k === "doc" ? paneOf(layout.focus)?.surface?.paperFit ?? null : null;
+  };
+  // Il motore arriva dopo la superficie, e la modalità cambia: la superficie
+  // a fuoco dice quando ridisegnare.
+  let watched: SurfacePaperFit | null = null;
+  let unwatch: (() => void) | null = null;
+  lifetime.add(() => unwatch?.());
+  const drawFit = (): void => {
+    const paper = fitOf();
+    if (paper !== watched) {
+      unwatch?.();
+      watched = paper;
+      unwatch = paper?.subscribe(drawFit) ?? null;
+    }
+    const offers = paper?.offers() ?? [];
+    for (const { fit, button, label } of fits) {
+      if (!button) continue;
+      button.hidden = !offers.includes(fit);
+      button.textContent = t(label);
+      button.setAttribute("aria-pressed", String(paper?.current() === fit));
+      setTooltip(button, t("frame.status.fit.hint"));
+    }
+  };
+  for (const { fit, button } of fits) {
+    if (!button) continue;
+    lifetime.listen(button, "click", () => {
+      const paper = fitOf();
+      if (!paper) return;
+      paper.set(paper.current() === fit ? null : fit);
+      drawFit();
+    });
+  }
   const drawDocument = (): void => {
     drawMode();
     drawSaving();

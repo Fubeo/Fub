@@ -10,7 +10,7 @@
 // La superficie mostra perché un documento non si scrive (revisioni
 // tracciate, protezione, un documento che non tornerebbe identico): il motivo
 // lo misura il core all'apertura, e qui diventa una frase.
-import type { EditorSurface, SurfaceMountContext, SurfaceMode } from "../core/registry";
+import type { EditorSurface, PaperFit, SurfaceMountContext, SurfaceMode } from "../core/registry";
 import { ACTION_UNAVAILABLE, type EditorActionState, type SurfaceEditorActions } from "../core/editor-actions";
 import type { EditorChange } from "../core/text-operation";
 import type { ProofPorts } from "../core/proof-ports";
@@ -281,6 +281,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       });
       engine.setReadOnly(locked());
       engine.setPaper(paper());
+      applyFit();
       ribbonHost.hidden = mode === RICH_READING_MODE;
       if (pending !== null) engine.setDoc(pending);
       pending = null;
@@ -321,6 +322,15 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     const ink = css.getPropertyValue("--doc-fg").trim();
     return bg && ink ? { bg, ink } : null;
   }
+  // In Pagina la carta si adatta alla vista, larga quanto lei o intera; negli
+  // altri modi è la carta vera.
+  let fit: PaperFit | null = null;
+  const applyFit = () => engine?.fitPaper(mode === RICH_PAGE_MODE ? fit : null, { width: page.clientWidth, height: page.clientHeight });
+  const fitting = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
+    if (fit !== null) applyFit();
+  });
+  fitting?.observe(page);
+
   // La barra dice l'aspetto, e la carta lo segue, quando la shell lo cambia.
   const looks = new MutationObserver(() => {
     engine?.setPaper(paper());
@@ -537,6 +547,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         if (host) host.hidden = next === RICH_READING_MODE;
         if (next === RICH_READING_MODE) ribbon?.closeFind();
         engine.setReadOnly(locked());
+        applyFit();
       }
       ribbon?.refresh();
       showNotice();
@@ -558,6 +569,19 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     // La barra multifunzione è della superficie: la barra di formattazione
     // della shell non si mostra sopra.
     ownBar: true,
+    paperFit: {
+      offers: (): readonly PaperFit[] => (engine && mode === RICH_PAGE_MODE ? ["width", "page"] : []),
+      current: () => fit,
+      set(next) {
+        fit = next;
+        applyFit();
+        notify();
+      },
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
     // Ctrl+F: la barra di ricerca del documento, non quella della shell.
     find() {
       if (!ribbon) return false;
@@ -587,6 +611,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       if (closed) return;
       closed = true;
       looks.disconnect();
+      fitting?.disconnect();
       root.removeEventListener("keydown", leaveReading);
       stopLanguage();
       stopEngine?.();

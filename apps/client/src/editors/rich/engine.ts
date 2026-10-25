@@ -20,6 +20,7 @@ import { keymap } from "prosemirror-keymap";
 import type { Mark as PmMark, Node as PmNode, Slice } from "prosemirror-model";
 import { AllSelection, EditorState, Plugin, Selection, TextSelection, type Command, type Transaction } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
+import type { PaperFit } from "../core/registry";
 import { operationFromText, type EditorChange, type EditorChangeOrigin } from "../core/text-operation";
 import { ProofClient, type ProofPorts } from "../core/proof";
 import {
@@ -40,9 +41,9 @@ import {
 } from "./commands";
 import { collectKeys, filterSlice, uniqueKeys } from "./paste";
 import { parseProjection, writeComment, writeHead, writeRunning, type Look, type Page, type RunningText, type ParaStyle, type Projection, type ReadOnlyReason } from "./projection";
-import { pageVariables, samePage, setRunningAt } from "./page";
+import { DEFAULT_PAGE, pageVariables, samePage, setRunningAt } from "./page";
 import { openRunningEditor, type RunningEditor } from "./running";
-import { runningInset, SheetDesk, sheetAt, sheetPlanOf, sheetsPlugin } from "./sheets";
+import { DESK_INSET, fitScale, PX_PER_PT, runningInset, SheetDesk, sheetAt, sheetPlanOf, sheetsPlugin } from "./sheets";
 import { richProof } from "./proof";
 import { commentPlugin, commentsOf } from "./comments";
 import { notePlugin } from "./notes";
@@ -665,6 +666,23 @@ export class RichEngine {
   editRunning(kind: "header" | "footer"): boolean {
     const plan = sheetPlanOf(this.#view.state);
     return plan !== null && this.#openRunning(kind, sheetAt(plan, this.#view.state.selection.from));
+  }
+
+  /// Adatta la carta alla vista `view` (in px): larga quanto la vista, o il
+  /// primo foglio intero; `null` è la carta vera.
+  fitPaper(fit: PaperFit | null, view: { readonly width: number; readonly height: number }): void {
+    const page = sheetPlanOf(this.#view.state)?.sheets[0]?.page ?? DEFAULT_PAGE;
+    this.setScale(fit === null ? 1 : fitScale(fit, view, { width: page.w * PX_PER_PT, height: page.h * PX_PER_PT }, DESK_INSET));
+  }
+
+  /// La scala della carta: 1 è la carta vera. Lo zoom porta con sé la
+  /// scrivania intera, e la misura dei fogli lo legge dal rettangolo.
+  setScale(scale: number): void {
+    if (this.#destroyed) return;
+    const value = Math.abs(scale - 1) < 0.001 ? "" : String(Math.round(scale * 1000) / 1000);
+    if (this.#desk.style.zoom === value) return;
+    this.#desk.style.zoom = value;
+    this.#sheets.schedule();
   }
 
   /// L'intestazione o il piè del foglio del cursore non si cambia: ha

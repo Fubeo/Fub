@@ -119,6 +119,9 @@ export function sheetAt(plan: SheetPlan, pos: number): number {
 
 /// Lo spazio fra due fogli, in px.
 export const SHEET_GAP = 24;
+/// Il margine della scrivania attorno ai fogli, per lato, in px
+/// (`.rich-page` in `structure.css`).
+export const DESK_INSET = 24;
 /// Un punto in px: 1/72 di pollice, a 96 px per pollice.
 export const PX_PER_PT = 4 / 3;
 
@@ -162,6 +165,17 @@ export function sheetLayout(sheets: readonly Sheet[], natural: readonly number[]
   }
   const lastBox = boxes[boxes.length - 1]!;
   return { boxes, gaps, height: lastBox.top + lastBox.height };
+}
+
+/// La scala della carta perché il foglio stia nella vista: largo quanto la
+/// vista, o intero. `view` e `sheet` in px, `inset` il margine della vista per
+/// lato. Mai meno di un decimo, mai più del doppio.
+export function fitScale(fit: "width" | "page", view: { readonly width: number; readonly height: number }, sheet: { readonly width: number; readonly height: number }, inset: number): number {
+  // Una vista non ancora misurata non cambia niente.
+  if (!(view.width > 0 && view.height > 0)) return 1;
+  const across = (view.width - 2 * inset) / sheet.width;
+  const scale = fit === "width" ? across : Math.min(across, (view.height - 2 * inset) / sheet.height);
+  return Math.min(2, Math.max(0.1, scale));
 }
 
 /// Dove apre l'intestazione o il piè di un foglio: il margine di sopra o di

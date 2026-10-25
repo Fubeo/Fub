@@ -326,6 +326,9 @@ export const IT = { // --- la scocca -------------------------------------------
 "frame.status.unsaved": "Da salvare: {count}",
 "frame.status.zoom": "Zoom {percent}%",
 "frame.status.zoom.hint": "Riporta lo zoom al 100%",
+"frame.status.fit.width": "Adatta larghezza",
+"frame.status.fit.page": "Pagina intera",
+"frame.status.fit.hint": "Un altro clic torna alla carta vera",
 
 // --- Scrittoio, il lanciatore: modi, comandi, righe, stati
 "launcher.label": "Lanciatore",
@@ -2938,6 +2941,9 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "frame.status.unsaved": "To save: {count}",
 "frame.status.zoom": "Zoom {percent}%",
 "frame.status.zoom.hint": "Reset zoom to 100%",
+"frame.status.fit.width": "Fit width",
+"frame.status.fit.page": "Whole page",
+"frame.status.fit.hint": "Click again for the real size",
 
 "launcher.label": "Launcher",
 "launcher.field": "Open, search, run",

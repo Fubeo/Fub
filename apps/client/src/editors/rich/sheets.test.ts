@@ -12,7 +12,7 @@ import { sectionName } from "./breaks";
 import { RichEngine } from "./engine";
 import { DEFAULT_PAGE } from "./page";
 import { parseProjection, type Block, type Page, type RunningText } from "./projection";
-import { PX_PER_PT, SHEET_GAP, sheetAt, sheetLayout, sheetPlan, type Sheet } from "./sheets";
+import { DESK_INSET, fitScale, PX_PER_PT, SHEET_GAP, sheetAt, sheetLayout, sheetPlan, type Sheet } from "./sheets";
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -170,5 +170,31 @@ describe("la misura", () => {
     expect(engine().editRunning("footer")).toBe(true);
     const gap = document.querySelector<HTMLElement>(".rich-sheet-gap")!;
     expect(400 + Number.parseFloat(gap.style.height)).toBeCloseTo(LETTER.h * PX_PER_PT + SHEET_GAP + 72 * PX_PER_PT, 3);
+  });
+});
+
+describe("la carta adattata alla vista", () => {
+  const letter = { width: LETTER.w * PX_PER_PT, height: LETTER.h * PX_PER_PT };
+
+  it("larga quanto la vista, o intera; mai meno di un decimo né più del doppio", () => {
+    // Una vista di 900 × 700 px: 852 px per la larghezza, 652 per l'altezza.
+    expect(fitScale("width", { width: 900, height: 700 }, letter, DESK_INSET)).toBeCloseTo(852 / 816, 6);
+    expect(fitScale("page", { width: 900, height: 700 }, letter, DESK_INSET)).toBeCloseTo(652 / 1056, 6);
+    // In una vista larga e bassa la pagina intera la decide l'altezza; in una
+    // stretta e alta, la larghezza.
+    expect(fitScale("page", { width: 400, height: 3000 }, letter, DESK_INSET)).toBeCloseTo(352 / 816, 6);
+    expect(fitScale("width", { width: 4000, height: 700 }, letter, DESK_INSET)).toBe(2);
+    expect(fitScale("width", { width: 40, height: 700 }, letter, DESK_INSET)).toBe(0.1);
+    // Una vista non ancora misurata non rimpicciolisce niente.
+    expect(fitScale("width", { width: 0, height: 0 }, letter, DESK_INSET)).toBe(1);
+  });
+
+  it("la scala sta sulla scrivania, e la carta vera la toglie", () => {
+    const e = engine();
+    const desk = document.querySelector<HTMLElement>(".rich-desk")!;
+    e.fitPaper("width", { width: 900, height: 700 });
+    expect(Number(desk.style.zoom)).toBeCloseTo(852 / 816, 3);
+    e.fitPaper(null, { width: 900, height: 700 });
+    expect(desk.style.zoom).toBe("");
   });
 });

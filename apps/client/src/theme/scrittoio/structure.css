@@ -2200,7 +2200,7 @@ body {
    Le misure sono del documento (`--page-*`, `page.ts`); senza, quelle
    dell'ODT, un A4 con i margini di 2 cm. */
 .look-file .rich-page,
-.look-adattato .rich-page { padding: 24px; }
+.look-adattato .rich-page { padding: 24px; scrollbar-gutter: stable; }
 .look-file .rich-desk,
 .look-adattato .rich-desk {
   width: var(--page-w, 595.3pt);
