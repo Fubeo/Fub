@@ -204,7 +204,11 @@ pannelli) lo Scrittoio compone:
   pagine le lasciano;
 - `kit/`: le primitive di interfaccia senza framework (pulsante, campo,
   elenco, schede, popover, dialogo, divisore, scheda al passaggio). Ogni
-  primitiva ha un owner e un disposer per ciò che registra;
+  primitiva ha un owner e un disposer per ciò che registra. `kit/ribbon/` è
+  la barra multifunzione comune (schede e schede contestuali, gruppi raccolti
+  da destra, lettere con Alt e F10, mini-barra), generica sulla vista e sulle
+  etichette di chi la monta; non sta nell'indice del kit, perché arriva con
+  l'editor che la carica a parte;
 - `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi
   chiave WAAPI di sola `transform` e `opacity`; il livello `appearance.motion`
   e la preferenza del sistema decidono quanto movimento esiste, e lo stato

@@ -67,9 +67,11 @@ tastiera.
 
 Sopra la barra della formula di una cartella a comandi sta la barra
 multifunzione (`apps/client/src/editors/grid/ribbon/`), che il bootstrap
-carica a parte. `tabs.ts` descrive schede, gruppi e controlli (pulsanti,
+carica a parte. La barra è quella del kit (`kit/ribbon/`); la griglia le dà
+la sua vista, le sue schede e le due specie di controllo sue, la tavolozza e
+le gallerie. `tabs.ts` descrive schede, gruppi e controlli (pulsanti,
 pulsanti divisi, menu, colori, elenchi, caselle, gallerie, campi); ogni
-controllo nomina un id del catalogo del provider, e `ribbon.ts` mostra
+controllo nomina un id del catalogo del provider, e la barra mostra
 soltanto quelli che il catalogo serve, spegne quelli spenti con il motivo
 nel suggerimento e dà il comando con i parametri della facciata. Lo stato
 viene dallo stile della cella attiva, dalle tabelle e dalla vista del foglio
@@ -173,6 +175,7 @@ byte salvati, non la sessione, e il rapporto conta ciò che il PDF non porta.
 - `apps/client/src/editors/grid/objects.ts`
 - `apps/client/src/editors/grid/comment-card.ts`
 - `apps/client/src/editors/grid/ribbon/ribbon.ts`
+- `apps/client/src/kit/ribbon/ribbon.ts`
 - `apps/client/src/editors/grid/ribbon/tabs.ts`
 - `apps/client/src/editors/grid/dialogs/host.ts`
 - `apps/client/src/editors/grid/dialogs/catalog.ts`
