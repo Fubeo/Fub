@@ -296,6 +296,15 @@ al loro posto con `flip`, entro lo stesso tempo quando qualcosa esce, e una
 voce nuova entra di 4 px. Il testo sul foglio cambia subito. La coreografia
 `rich-review-list` lo misura.
 
+Una vista più stretta di `NARROW_PX` (600 px) tiene la carta larga quanto lei
+finché chi legge non sceglie un altro adattamento. La finestra desktop non
+scende sotto gli 800 px, quindi lo stretto è il telefono: lì l'ispettore è un
+foglio che sale dal basso (`shells/scrittoio/mobile/bottom-sheets.ts`), e il
+pulsante `.rich-side-open` sulla carta, col numero dei fili di commento, lo
+apre sulla scheda Commenti. Fuori dalla shell del telefono il pulsante non si
+vede. Le scene `mobile-document` e `mobile-document-panel` del banco lo
+fotografano.
+
 ## Correttore condiviso
 
 Il correttore ha un motore e un client per tutte le superfici di prosa, e un

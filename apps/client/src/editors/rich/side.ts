@@ -51,6 +51,9 @@ export interface RichSide {
   /// Porta in vista la scheda `id` e le dà il fuoco; `false` se la shell non
   /// l'ha mostrata.
   show(id: RichSideId, target?: RichSideTarget): boolean;
+  /// Quanti fili di commento ha il documento: il numero sul pulsante che,
+  /// nello stretto, apre il pannello.
+  comments(): number;
   destroy(): void;
 }
 
@@ -126,6 +129,7 @@ function relist(
 export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (viewId: string) => void): RichSide {
   const mounted = new Map<RichSideId, Mounted>();
   let destroyed = false;
+  let counted: { doc: unknown; n: number } = { doc: null, n: 0 };
 
   /// La scheda dei commenti, montata in `host`.
   function mountComments(host: HTMLElement): Mounted {
@@ -578,6 +582,11 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
       if (!shown?.host.isConnected) return false;
       shown.focus(target);
       return true;
+    },
+    comments() {
+      const doc = engine.state.doc;
+      if (doc !== counted.doc) counted = { doc, n: engine.read((state) => commentThreads(state.doc).length) };
+      return counted.n;
     },
     destroy() {
       if (destroyed) return;

@@ -2096,6 +2096,19 @@ body {
   min-height: 0;
 }
 .rich-notice { flex: none; margin: 0; }
+/* Il pulsante che, sul telefono, apre il pannello del documento: in basso a
+   destra, sopra la carta. Altrove il pannello sta di lato, e lui non c'è
+   (`shells/scrittoio/mobile/mobile.css` lo mostra). */
+.rich-surface { position: relative; }
+.rich-side-open {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1;
+  display: none;
+  align-items: center;
+  gap: 4px;
+}
 /* La barra del documento (`editors/rich/ribbon.ts`) è quella del kit, con le
    regole della barra del foglio; qui soltanto ciò che il foglio non ha:
    l'accesso rapido accanto alle schede e la galleria degli stili. */

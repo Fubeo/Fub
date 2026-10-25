@@ -398,6 +398,39 @@ describe("la superficie ricca", () => {
     surface.destroy();
   });
 
+  it("nello stretto la carta è larga quanto la vista, e un pulsante col numero dei commenti apre il pannello", async () => {
+    const fits: (string | null)[] = [];
+    class Captured extends engineModule.RichEngine {
+      override fitPaper(...args: Parameters<engineModule.RichEngine["fitPaper"]>): void {
+        fits.push(args[0]);
+        super.fitPaper(...args);
+      }
+    }
+    const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(560);
+    try {
+      const { parent, surface } = mount(() => Promise.resolve({ ...engineModule, RichEngine: Captured }));
+      const comments = [
+        { id: 7, by: "Ada", at: "2026-10-18T14:00:00Z", text: "Da rivedere." },
+        { id: 8, by: "Bea", at: "2026-10-18T15:00:00Z", text: "Fatto.", parent: 7 },
+        { id: 9, by: "Ada", at: "2026-10-18T16:00:00Z", text: "E qui?" },
+      ];
+      surface.buffer!.setDoc(JSON.stringify({ ...JSON.parse(SOURCE), comments }));
+      await flush();
+      expect(fits[fits.length - 1]).toBe("width");
+      // Due fili: la risposta sta nel suo.
+      const open = parent.querySelector<HTMLButtonElement>(".rich-side-open")!;
+      expect(open.textContent).toBe("2");
+      expect(open.getAttribute("aria-label")).toBe(t("rich.side.open", { count: "2" }));
+      const side = inspector(surface);
+      open.click();
+      expect(side.host.querySelector(".rich-side-comments")).not.toBeNull();
+      side.close();
+      surface.destroy();
+    } finally {
+      width.mockRestore();
+    }
+  });
+
   it("scrivere, incollare e annullare non fanno partire nessuna corsa", async () => {
     // Il motore vero, di cui si tiene l'istanza per battere come la tastiera.
     let engine: engineModule.RichEngine | null = null;

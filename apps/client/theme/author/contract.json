@@ -743,6 +743,7 @@
     "rich-side-preview-column",
     "rich-side-facts",
     "rich-side-dot",
+    "rich-side-open",
     "rich-strip-table-grid",
     "rich-strip-table-cell",
     "rich-strip-count",
@@ -2047,6 +2048,7 @@
     "rich-side-preview-column": "cornice",
     "rich-side-facts": "cornice",
     "rich-side-dot": "cornice",
+    "rich-side-open": "cornice",
     "rich-strip-table-grid": "cornice",
     "rich-strip-table-cell": "cornice",
     "rich-strip-count": "cornice",
@@ -4574,6 +4576,7 @@
         "rich-side-preview-column",
         "rich-side-facts",
         "rich-side-dot",
+        "rich-side-open",
         "rich-strip-table-grid",
         "rich-strip-table-cell",
         "rich-strip-count"
@@ -7342,7 +7345,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 38,
-    "hooks": 1302,
+    "hooks": 1303,
     "state_names": 7,
     "assigned_states": 641,
     "components": 192,

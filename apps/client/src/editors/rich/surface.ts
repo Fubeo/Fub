@@ -20,6 +20,7 @@ import type { RichRibbon } from "./ribbon";
 import type { RichSide } from "./side";
 import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem, SurfaceMiniBar } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
+import { iconEl } from "../../ui/icons";
 import { closeContextMenu } from "../../ui/menu";
 import type { ReadOnlyReason } from "./projection";
 import type { DrawingImagePort } from "../canvas/surface";
@@ -36,6 +37,9 @@ export const RICH_PROFILE = "document";
 export const RICH_PAGE_MODE = "document";
 export const RICH_WRITING_MODE = "writing";
 export const RICH_READING_MODE = "reading";
+/// Sotto questa larghezza (px) la vista è stretta: la carta le sta dentro, e
+/// il pannello del documento è un foglio che sale dal basso.
+export const NARROW_PX = 600;
 /// I formati che questa superficie apre, con il loro profilo. Se un documento
 /// si scrive lo dice la sua proiezione (`readonly`), non il formato.
 export const RICH_FORMATS: Readonly<Record<string, string>> = {
@@ -223,6 +227,16 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     for (const listener of [...listeners]) listener();
   };
 
+  let opener: HTMLButtonElement | null = null;
+  function countComments(): void {
+    if (!opener || !side) return;
+    const count = String(side.comments());
+    const shown = opener.lastElementChild!;
+    if (shown.textContent === count) return;
+    shown.textContent = count;
+    opener.setAttribute("aria-label", t("rich.side.open", { count }));
+  }
+
   let failed = false;
   function showNotice(): void {
     const intake = engine?.intake();
@@ -284,11 +298,24 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         },
       );
       root.insertBefore(ribbon.findBar, page);
+      // Nello stretto il pannello è un foglio che sale dal basso: lo apre
+      // questo pulsante, col numero dei commenti. Altrove non si vede.
+      const opened = side;
+      opener = document.createElement("button");
+      opener.type = "button";
+      opener.className = "rich-side-open";
+      const mark = iconEl("rc-comments");
+      if (mark) opener.append(mark);
+      opener.append(document.createElement("span"));
+      opener.addEventListener("click", () => opened.show("comments"));
+      root.append(opener);
       engine.followView([parent, root], ribbonHost);
       stopEngine = engine.subscribe(() => {
         showNotice();
+        countComments();
         notify();
       });
+      countComments();
       engine.setReadOnly(locked());
       engine.setPaper(paper());
       applyFit();
@@ -307,6 +334,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   );
   const stopLanguage = onLanguage(() => {
     showNotice();
+    if (opener) opener.setAttribute("aria-label", t("rich.side.open", { count: opener.lastElementChild?.textContent ?? "0" }));
     engine?.refresh();
   });
 
@@ -334,12 +362,19 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   }
   // In Pagina la carta si adatta alla vista, larga quanto lei o intera; negli
   // altri modi è la carta vera.
+  // Una vista più stretta di `NARROW_PX` tiene la carta larga quanto lei,
+  // finché chi legge non sceglie altro.
   let fit: PaperFit | null = null;
-  const applyFit = (moved = false) => engine?.fitPaper(mode === RICH_PAGE_MODE ? fit : null, { width: page.clientWidth, height: page.clientHeight }, moved);
+  const fitNow = (): PaperFit | null => fit ?? (page.clientWidth > 0 && page.clientWidth < NARROW_PX ? "width" : null);
+  let fitted: PaperFit | null = null;
+  const applyFit = (moved = false) => {
+    fitted = fitNow();
+    engine?.fitPaper(mode === RICH_PAGE_MODE ? fitted : null, { width: page.clientWidth, height: page.clientHeight }, moved);
+  };
   let fitting: ResizeObserver | null = null;
   if (typeof ResizeObserver !== "undefined") {
     fitting = new ResizeObserver(() => {
-      if (fit !== null) applyFit();
+      if (fitted !== null || fitNow() !== null) applyFit();
     });
     fitting.observe(page);
   }

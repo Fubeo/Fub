@@ -614,6 +614,27 @@ export const SCENE = onPage("shell", [
         await page.waitForSelector("#inspector-scrim:not([hidden])");
       },
     },
+    // Il documento in piedi: la carta sta nella vista, e il pannello del
+    // documento sale dal basso, aperto dal pulsante col numero dei commenti.
+    {
+      id: "mobile-document",
+      title: "Il telefono: un .docx con la carta larga quanto la vista e il pulsante dei commenti",
+      query: "rich=docx",
+      viewport: PHONE,
+      prepare: (page) => openRichDocument(page, "Documenti/Prova.docx"),
+    },
+    {
+      id: "mobile-document-panel",
+      title: "Il telefono: i commenti del .docx nel foglio che sale dal basso",
+      query: "rich=docx",
+      viewport: PHONE,
+      prepare: async (page) => {
+        await openRichDocument(page, "Documenti/Prova.docx");
+        await page.click(".pane.focus .rich-side-open");
+        await page.waitForSelector("#inspector-scrim:not([hidden])");
+        await page.waitForSelector(".rich-side-comments .rich-side-comment");
+      },
+    },
     {
       id: "mobile-launcher",
       title: "Il telefono: il lanciatore, dalla pillola",
@@ -825,7 +846,10 @@ async function openRichDocument(page, path) {
   await page.click(`#file-list .tree-row[data-path="${path}"]`);
   await page.waitForSelector(".pane.focus .rich-surface .ProseMirror");
   if (compact && await page.isVisible("#sidebar-scrim")) {
-    await page.click("#sidebar-scrim");
+    // In alto a destra: in una finestra stretta il cassetto copre il centro,
+    // e su un telefono sale dal basso.
+    const scrim = await page.locator("#sidebar-scrim").boundingBox();
+    await page.click("#sidebar-scrim", { position: { x: scrim.width - 8, y: 8 } });
     await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
   }
 }
