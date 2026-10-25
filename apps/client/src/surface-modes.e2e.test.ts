@@ -145,16 +145,6 @@ const BOARD = JSON.stringify({
   nodes: [{ id: "prima", type: "text", text: "prima", x: 0, y: 0, width: 10, height: 10 }],
   edges: [],
 });
-const SHEET = JSON.stringify({
-  version: 1,
-  sheets: [{
-    id: "main",
-    name: "Main",
-    rows: [{ id: "r0", hidden: false }],
-    columns: [{ id: "c0", hidden: false }],
-    cells: [{ row: "r0", column: "c0", input: "1" }],
-  }],
-});
 const VAULT = {
   "Benvenuto.md": "# Benvenuto\n",
   "Plain.txt": "solo testo\n",
@@ -162,7 +152,6 @@ const VAULT = {
   "schizzo.draw": DRAWING,
   "lavagna.canvas": BOARD,
   "rotta.canvas": "{",
-  "conti.fubsheet": SHEET,
   "foto.png": "png",
 };
 
@@ -262,7 +251,6 @@ describe("i comandi delle modalità seguono il ruolo dichiarato", () => {
       ["logo.svg", ["shell.mode.reading", "shell.mode.live", "shell.mode.source"]],
       ["Plain.txt", []],
       ["lavagna.canvas", ["shell.mode.live", "shell.mode.source"]],
-      ["conti.fubsheet", []],
       ["foto.png", []],
       ["rotta.canvas", []],
       ["schizzo.draw", ["shell.mode.reading", "shell.mode.live"]],
@@ -332,7 +320,7 @@ describe("i comandi delle modalità seguono il ruolo dichiarato", () => {
 describe("la vista sorgente di una scheda", () => {
   it("si offre soltanto dove la superficie la dichiara", async () => {
     await start();
-    for (const doc of ["Benvenuto.md", "logo.svg", "Plain.txt", "lavagna.canvas", "conti.fubsheet", "foto.png"]) {
+    for (const doc of ["Benvenuto.md", "logo.svg", "Plain.txt", "lavagna.canvas", "foto.png"]) {
       await open(doc);
       expect(await offered(SOURCE_COMMANDS), doc).toEqual([]);
     }

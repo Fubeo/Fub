@@ -1,15 +1,12 @@
-//! Il registro grid con un provider della versione 2: la superficie si chiama
-//! soltanto con il suo protocollo, le risposte si controllano come quelle della
-//! versione 1, e il ritiro spegne il provider come ogni altro grid.
+//! Il registro grid con un provider a byte: la superficie dichiara il suo
+//! protocollo, le risposte si controllano prima di uscire, e il ritiro spegne
+//! il provider.
 
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
 use fub_abi::edit::Revision;
-use fub_abi::grid::{
-    GridApplyRequest, GridCommit, GridProvider, GridSession, GridSheet, GridSurfaceSpec,
-    GridWindow, GridWindowRequest,
-};
+use fub_abi::grid::{GridApplyRequest, GridCommit, GridSheet, GridSurfaceSpec, GridWindowRequest};
 use fub_abi::{
     grid_bytes_revision, GridBytesProvider, GridBytesSession, GridBytesWindow, GridJournal,
     PluginError,
@@ -122,45 +119,6 @@ impl GridBytesProvider for Bytes {
     }
 }
 
-/// Un provider della versione 1 che dichiara una superficie della 2.
-struct Pretender;
-
-impl GridProvider for Pretender {
-    fn surfaces(&self) -> Vec<GridSurfaceSpec> {
-        vec![GridSurfaceSpec::bytes("finta.bytes", "xlsx")]
-    }
-
-    fn open(&mut self, _: &str, _: &str, _: Revision) -> Result<GridSession, PluginError> {
-        panic!("una superficie della versione 2 non apre un provider della 1")
-    }
-
-    fn window(&mut self, _: &str, _: GridWindowRequest) -> Result<GridWindow, PluginError> {
-        unreachable!()
-    }
-
-    fn apply(&mut self, _: &str, _: GridApplyRequest) -> Result<GridCommit, PluginError> {
-        unreachable!()
-    }
-
-    fn reload(
-        &mut self,
-        _: &str,
-        _: Revision,
-        _: &str,
-        _: Revision,
-    ) -> Result<GridSession, PluginError> {
-        unreachable!()
-    }
-
-    fn close(&mut self, _: &str) -> Result<(), PluginError> {
-        Ok(())
-    }
-
-    fn shutdown(&mut self) -> Result<(), PluginError> {
-        Ok(())
-    }
-}
-
 #[test]
 fn la_superficie_a_byte_si_chiama_soltanto_con_il_suo_protocollo() {
     let (_dir, mut ws) = workspace();
@@ -173,10 +131,6 @@ fn la_superficie_a_byte_si_chiama_soltanto_con_il_suo_protocollo() {
         .grid_surfaces()
         .iter()
         .any(|spec| spec.id == "prova.bytes" && spec.protocol_version == 2));
-    assert!(matches!(
-        ws.prepare_grid_call("prova.bytes"),
-        Err(PluginError::Unserved(_))
-    ));
 
     let call = ws.prepare_grid_bytes_call("prova.bytes").expect("served");
     let revision = Revision::of_bytes(b"PK");
@@ -214,28 +168,13 @@ fn la_superficie_a_byte_si_chiama_soltanto_con_il_suo_protocollo() {
 }
 
 #[test]
-fn un_provider_della_versione_1_non_serve_una_superficie_della_2() {
-    let (_dir, mut ws) = workspace();
-    register(
-        &mut ws,
-        PreparedRegistration::grid(Box::new(Pretender)).expect("structurally valid"),
-    );
-    assert!(matches!(
-        ws.prepare_grid_bytes_call("finta.bytes"),
-        Err(PluginError::Unserved(_))
-    ));
-    assert!(matches!(
-        ws.prepare_grid_call("finta.bytes"),
-        Err(PluginError::Unserved(_))
-    ));
-}
-
-#[test]
-fn una_registrazione_a_byte_dichiara_soltanto_la_versione_2() {
+fn una_registrazione_dichiara_soltanto_la_versione_2() {
     struct Mixed(Bytes);
     impl GridBytesProvider for Mixed {
         fn surfaces(&self) -> Vec<GridSurfaceSpec> {
-            vec![GridSurfaceSpec::new("vecchia.sheet", "fubsheet")]
+            let mut vecchia = GridSurfaceSpec::bytes("vecchia.grid", "xlsx");
+            vecchia.protocol_version = 1;
+            vec![vecchia]
         }
         fn open(
             &mut self,

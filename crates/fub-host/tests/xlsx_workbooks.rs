@@ -33,7 +33,9 @@ impl Vault {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = Utf8PathBuf::from_path_buf(dir.path().canonicalize().unwrap()).expect("utf8");
         for (name, bytes) in files {
-            std::fs::write(root.join(name), bytes).unwrap();
+            let path = root.join(name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, bytes).unwrap();
         }
         std::fs::write(root.join("Nota.md"), "# Nota\n").unwrap();
         let config = tempfile::tempdir().expect("config");

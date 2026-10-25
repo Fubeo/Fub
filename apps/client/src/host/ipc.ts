@@ -23,9 +23,7 @@ import type {
   GridBytesSession,
   GridBytesWindow,
   GridCommit,
-  GridSession,
   GridSurfaceSpec,
-  GridWindow,
   GridWindowRequest,
   IndexQuery,
   IndexResult,
@@ -225,19 +223,6 @@ export const api = {
   revealInSystem: (path: string, open: boolean, vault?: string | null) =>
     invoke<RevealOutcome>("reveal_in_system", toVault({ path, open }, vault)),
   listGridSurfaces: () => invoke<GridSurfaceSpec[]>("list_grid_surfaces"),
-  openGrid: (surface: string, source: string, revision: string) =>
-    invoke<GridSession>("open_grid", { surface, source, revision }),
-  gridWindow: (surface: string, instance: string, request: GridWindowRequest) =>
-    invoke<GridWindow>("grid_window", { surface, instance, request }),
-  applyGrid: (surface: string, instance: string, request: GridApplyRequest) =>
-    invoke<GridCommit>("apply_grid", { surface, instance, request }),
-  reloadGrid: (surface: string, instance: string, source: string, revision: string) =>
-    invoke<GridSession>("reload_grid", { surface, instance, source, revision }),
-  closeGrid: (surface: string, instance: string) =>
-    invoke<void>("close_grid", { surface, instance }),
-  // La versione 2 della famiglia: la shell manda il diario delle celle e la
-  // revisione dei byte da cui parte, non i byte. L'host li legge, e un
-  // `PluginError` `conflict` vuol dire che il file non è più quello.
   openGridBytes: (surface: string, doc: string, journal: string, base: string) =>
     invoke<GridBytesSession>("open_grid_bytes", { surface, doc, journal, base }),
   gridBytesWindow: (surface: string, instance: string, request: GridWindowRequest) =>

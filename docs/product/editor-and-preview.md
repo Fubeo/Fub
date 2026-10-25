@@ -18,9 +18,7 @@ Markdown. Un file `.svg` si apre come testo in **Sorgente**, **Diviso**
 [disegno](drawing.md) con la feature `draw` dell'host. L'anteprima si ridisegna
 dopo una pausa di scrittura, come immagine inerte; una versione rotta lascia
 l'ultima buona, attenuata, sotto il motivo con riga e colonna. I documenti
-`.fubsheet` usano invece la modalità **foglio** della famiglia Grid; se il
-provider Grid non è servito, la stessa superficie resta navigabile e mostra gli
-input grezzi senza un secondo valutatore formule. Il commutatore nella barra di
+`.xlsx` usano invece la famiglia Grid. Il commutatore nella barra di
 ciascun riquadro legge la dichiarazione della propria superficie; con una sola
 modalità non mostra un selettore né offre i comandi di modalità, che trovano la
 modalità per ruolo (Live, sulla tela, riporta alle carte). Il riquadro ricorda
@@ -400,38 +398,21 @@ formattazione agisce sulle celle selezionate: formattazione in riga e
 operazioni sulla tabella; titoli, elenchi e blocchi sono spenti. In sola
 lettura la griglia si seleziona e si copia, ma non si scrive.
 
-## Formato pilota `.fubsheet`
+## La griglia
 
-Il formato persistente della griglia è un documento JSON testuale versionato.
-Conserva input, ordine, dimensioni, stile, proprietà e identità stabili di
-sheet, righe e colonne; le proprietà, JSON libero, tengono i numeri come erano
-scritti anche oltre la precisione di JavaScript. L'indirizzo A1 segue l'ordine
-corrente: riordinare una riga sposta l'indirizzo, non l'identità della cella.
+La griglia mostra intestazioni, celle e selezione rettangolare in una viewport
+virtualizzata. Supporta tastiera, schede dei fogli, formula bar e copia TSV
+(celle multilinea fra virgolette, come in Excel). Tab e Maiusc+Tab percorrono
+le celle visibili; raggiunti i due estremi, lasciano la griglia e proseguono
+verso gli altri controlli della shell. Nessuna battuta attraversa IPC.
 
-La superficie mostra intestazioni, celle e selezione rettangolare in una
-viewport virtualizzata. Supporta tastiera, editor in-cell, formula bar,
-copia/incolla TSV (celle multilinea fra virgolette, come in Excel) e undo/redo
-del workbook. Invio conferma la cella, Esc annulla la modifica e uscire dalla
-cella (o dalla formula bar) la conferma; una modifica peer strutturata conserva
-la bozza locale, mentre una riscrittura completa autorevole la annulla.
-
-Tab e Maiusc+Tab percorrono le celle visibili; raggiunti i due estremi,
-lasciano la griglia e proseguono verso gli altri controlli della shell.
-
-Valori calcolati, AST delle formule, dipendenze, cache ed errori non vengono
-salvati nel file: il valutatore Rust li ricostruisce dai dati autorevoli. Se il
-valutatore non è disponibile, anche perché il bundle `fub.sheet` è disabilitato,
-la griglia resta modificabile e mostra gli input grezzi. Nessuna battuta
-attraversa IPC; la valutazione parte dopo il commit e una risposta stantia non
-sostituisce lo stato corrente. Il commit arriva alla `DocumentSession` all'invio
-e sopravvive a una linguetta chiusa prima della risposta; i byte del provider
-lo correggono a coda vuota, e un rifiuto lascia il fallback con il commit.
-
-Outline, ricerca e proprietà sono proiezioni del workbook, non un adattamento a
-`DocumentModel`. Il protocollo Grid v1 è promosso in ABI/WIT e mirror
-TypeScript insieme ai consumatori nativo e WASM; famiglia, versione e fallback
-sono negoziati prima dell'invocazione. Limiti, coordinate, diff UTF-8 e
-invalidazione sono normati in [ABI e WIT](../reference/abi-and-wit.md).
+Una cartella di Excel si apre in sola lettura con i valori salvati nel file,
+senza ricalcolo; la forma è descritta nel [modello del
+documento](../architecture/document-model.md). Il protocollo Grid a byte (la
+versione 2) porta finestre, patch e giornale fra la shell e un provider nativo
+o WASM; famiglia, versione e fallback sono negoziati prima dell'invocazione.
+Limiti, coordinate e invalidazione sono normati in [ABI e
+WIT](../reference/abi-and-wit.md).
 
 ## Dove si trova
 
@@ -446,4 +427,5 @@ invalidazione sono normati in [ABI e WIT](../reference/abi-and-wit.md).
 - `crates/fub-abi/src/edit.rs`
 - `crates/fub-abi/src/session.rs`
 - `crates/fub-kernel/src/drafts.rs`
-- `crates/fub-format-sheet/src/lib.rs`
+- `apps/client/src/editors/grid/`
+- `crates/fub-format-xlsx/src/convert.rs`

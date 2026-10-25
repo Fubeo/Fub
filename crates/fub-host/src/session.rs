@@ -47,9 +47,7 @@ use fub_abi::command::{
 };
 use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::format::DocumentFormat;
-use fub_abi::grid::{
-    GridApplyRequest, GridCommit, GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
-};
+use fub_abi::grid::{GridApplyRequest, GridCommit, GridSurfaceSpec, GridWindowRequest};
 use fub_abi::model::DocId;
 use fub_abi::rules::path_policy::fenced_doc_id;
 use fub_abi::session::ViewContext;
@@ -3478,77 +3476,6 @@ impl Host {
     }
     pub fn grid_surfaces(&self, vault: Option<&str>) -> Result<Vec<GridSurfaceSpec>, PluginError> {
         self.read_workspace(vault, |workspace| Ok(workspace.grid_surfaces()))
-    }
-
-    fn with_grid<R>(
-        &self,
-        vault: Option<&str>,
-        surface: &str,
-        call: impl FnOnce(&fub_kernel::workspace::PreparedGridCall) -> Result<R, PluginError>,
-    ) -> Result<R, PluginError> {
-        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
-        let prepared = {
-            let workspace = workspace.read()?;
-            workspace.prepare_grid_call(surface)?
-        };
-        call(&prepared)
-    }
-
-    pub fn grid_open(
-        &self,
-        vault: Option<&str>,
-        surface: &str,
-        source: &str,
-        revision: Revision,
-    ) -> Result<GridSession, PluginError> {
-        self.with_grid(vault, surface, |provider| {
-            provider.open(surface, source, revision)
-        })
-    }
-
-    pub fn grid_window(
-        &self,
-        vault: Option<&str>,
-        surface: &str,
-        instance: &str,
-        request: GridWindowRequest,
-    ) -> Result<GridWindow, PluginError> {
-        self.with_grid(vault, surface, |provider| {
-            provider.window(instance, request)
-        })
-    }
-
-    pub fn grid_apply(
-        &self,
-        vault: Option<&str>,
-        surface: &str,
-        instance: &str,
-        request: GridApplyRequest,
-    ) -> Result<GridCommit, PluginError> {
-        self.with_grid(vault, surface, |provider| provider.apply(instance, request))
-    }
-
-    pub fn grid_reload(
-        &self,
-        vault: Option<&str>,
-        surface: &str,
-        instance: &str,
-        expected: Revision,
-        source: &str,
-        revision: Revision,
-    ) -> Result<GridSession, PluginError> {
-        self.with_grid(vault, surface, |provider| {
-            provider.reload(instance, expected, source, revision)
-        })
-    }
-
-    pub fn grid_close(
-        &self,
-        vault: Option<&str>,
-        surface: &str,
-        instance: &str,
-    ) -> Result<(), PluginError> {
-        self.with_grid(vault, surface, |provider| provider.close(instance))
     }
 
     fn with_grid_bytes<R>(

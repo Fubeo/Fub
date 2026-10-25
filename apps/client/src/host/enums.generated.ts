@@ -72,16 +72,6 @@ export type Gate =
   | "index_query"
 ;
 
-export type GridFormulaError =
-  | "parse"
-  | "ref"
-  | "name"
-  | "value"
-  | "div_zero"
-  | "num"
-  | "cycle"
-;
-
 export type GridHorizontalAlign = "start" | "center" | "end";
 
 export type GridJournalMatch = "pending" | "applied" | "conflict";

@@ -42,7 +42,7 @@ impl std::fmt::Display for RegistryConflict {
 struct RegisteredFormat {
     descriptor: FormatDescriptor,
     capabilities: FormatCapabilities,
-    provider: Option<Arc<dyn FormatProvider>>,
+    provider: Arc<dyn FormatProvider>,
 }
 
 #[derive(Default)]
@@ -67,20 +67,7 @@ impl FormatRegistry {
         let descriptor = provider.descriptor();
         let extensions = self.checked_extensions(&descriptor)?;
         let capabilities = provider.capabilities();
-        self.insert_normalized(Some(provider), descriptor, capabilities, extensions);
-        Ok(())
-    }
-
-    /// Registers a document source whose editor owns its model.
-    ///
-    /// Source-only formats participate in discovery, source-kind selection and
-    /// surface routing, but deliberately have no `DocumentModel` parser.
-    pub fn register_source(
-        &mut self,
-        descriptor: FormatDescriptor,
-    ) -> Result<(), RegistryConflict> {
-        let extensions = self.checked_extensions(&descriptor)?;
-        self.insert_normalized(None, descriptor, FormatCapabilities::default(), extensions);
+        self.insert_normalized(provider, descriptor, capabilities, extensions);
         Ok(())
     }
 
@@ -114,7 +101,7 @@ impl FormatRegistry {
         let capabilities = provider.capabilities();
         let extensions = descriptor.extensions.clone();
         self.insert_normalized(
-            Some(provider),
+            provider,
             descriptor,
             capabilities,
             extensions
@@ -126,7 +113,7 @@ impl FormatRegistry {
 
     fn insert_normalized(
         &mut self,
-        provider: Option<Box<dyn FormatProvider>>,
+        provider: Box<dyn FormatProvider>,
         descriptor: FormatDescriptor,
         capabilities: FormatCapabilities,
         extensions: Vec<String>,
@@ -138,7 +125,7 @@ impl FormatRegistry {
         self.providers.push(RegisteredFormat {
             descriptor,
             capabilities,
-            provider: provider.map(Arc::from),
+            provider: Arc::from(provider),
         });
     }
 
@@ -148,7 +135,7 @@ impl FormatRegistry {
             .get(ext)
             .copied()
             .or_else(|| self.by_ext.get(&ext.to_lowercase()).copied())?;
-        self.providers[at].provider.as_deref()
+        Some(self.providers[at].provider.as_ref())
     }
 
     /// Lo stesso lookup di `provider_for_ext`, ma con ownership condivisa: chi
@@ -160,7 +147,7 @@ impl FormatRegistry {
             .get(ext)
             .copied()
             .or_else(|| self.by_ext.get(&ext.to_lowercase()).copied())?;
-        self.providers[at].provider.as_ref().map(Arc::clone)
+        Some(Arc::clone(&self.providers[at].provider))
     }
 
     /// Descriptor congelato al momento della registrazione. Consultarlo non è
@@ -356,44 +343,6 @@ mod tests {
         assert!(!reg.has_doc_ext("txt"));
     }
 
-    #[test]
-    fn source_only_formats_are_discoverable_without_a_document_model_parser() {
-        let mut reg = FormatRegistry::new();
-        let descriptor = FormatDescriptor::text("fubsheet", "Fub Sheet", &["fubsheet"]);
-        let expected_source = descriptor.source;
-        reg.register_source(descriptor).unwrap();
-
-        assert!(reg.has_doc_ext("fubsheet"));
-        assert!(reg.all_extensions().contains(&"fubsheet".to_owned()));
-        assert_eq!(
-            reg.descriptor_for_ext("FUBSHEET").unwrap().source,
-            expected_source
-        );
-        assert!(
-            reg.provider_for_ext("fubsheet").is_none(),
-            "source-only discovery must not invent a DocumentModel parser"
-        );
-    }
-
-    #[test]
-    fn a_source_only_conflict_is_atomic_against_existing_providers() {
-        let mut reg = FormatRegistry::new();
-        reg.register(Box::new(Fake("markdown", "md"))).unwrap();
-
-        let error = reg
-            .register_source(FormatDescriptor::text(
-                "mixed",
-                "Mixed source",
-                &["fubsheet", "md"],
-            ))
-            .expect_err("md is already owned");
-
-        assert_eq!(error.incumbent, "markdown");
-        assert_eq!(error.challenger, "mixed");
-        assert!(!reg.has_doc_ext("fubsheet"));
-        assert!(reg.provider_for_ext("md").is_some());
-    }
-
     /// Un provider che dichiara il descrittore che gli si dà.
     struct Declares(FormatDescriptor);
 
@@ -423,53 +372,40 @@ mod tests {
         }
     }
 
-    /// Le due porte rivendicano allo stesso modo: estensioni in minuscolo, il
-    /// **primo** conflitto nell'ordine dichiarato e niente registrato a metà,
-    /// nemmeno l'estensione libera che lo precede.
+    /// Il registro rivendica le estensioni in minuscolo, nomina il **primo**
+    /// conflitto nell'ordine dichiarato e non registra niente a metà, nemmeno
+    /// l'estensione libera che lo precede.
     #[test]
-    fn both_ports_claim_lowercase_extensions_and_name_the_first_conflict() {
-        type Claim = fn(&mut FormatRegistry, FormatDescriptor) -> Result<(), RegistryConflict>;
-        let ports: [(&str, Claim); 2] = [
-            ("register", |reg, descriptor| {
-                reg.register(Box::new(Declares(descriptor)))
-            }),
-            ("register_source", |reg, descriptor| {
-                reg.register_source(descriptor)
-            }),
-        ];
-        for (port, claim) in ports {
-            let mut reg = FormatRegistry::new();
-            reg.register(Box::new(Fake("markdown", "md"))).unwrap();
-            reg.register(Box::new(Fake("testo", "txt"))).unwrap();
+    fn claims_lowercase_extensions_and_names_the_first_conflict() {
+        let mut reg = FormatRegistry::new();
+        reg.register(Box::new(Fake("markdown", "md"))).unwrap();
+        reg.register(Box::new(Fake("testo", "txt"))).unwrap();
 
-            let error = claim(
-                &mut reg,
-                FormatDescriptor::text("misto", "Misto", &["Fub", "TXT", "md"]),
-            )
+        let error = reg
+            .register(Box::new(Declares(FormatDescriptor::text(
+                "misto",
+                "Misto",
+                &["Fub", "TXT", "md"],
+            ))))
             .expect_err("txt e md sono già presi");
-            assert_eq!(
-                error,
-                RegistryConflict {
-                    extension: "txt".into(),
-                    incumbent: "testo".into(),
-                    challenger: "misto".into(),
-                },
-                "{port}"
-            );
-            assert!(!reg.has_doc_ext("fub"), "{port}");
-            assert_eq!(reg.descriptor_for_ext("txt").unwrap().id, "testo", "{port}");
+        assert_eq!(
+            error,
+            RegistryConflict {
+                extension: "txt".into(),
+                incumbent: "testo".into(),
+                challenger: "misto".into(),
+            }
+        );
+        assert!(!reg.has_doc_ext("fub"));
+        assert_eq!(reg.descriptor_for_ext("txt").unwrap().id, "testo");
 
-            claim(
-                &mut reg,
-                FormatDescriptor::text("foglio", "Foglio", &["FubSheet"]),
-            )
-            .unwrap();
-            assert_eq!(
-                reg.descriptor_for_ext("fubsheet").unwrap().id,
-                "foglio",
-                "{port}"
-            );
-        }
+        reg.register(Box::new(Declares(FormatDescriptor::text(
+            "tela",
+            "Tela",
+            &["Canvas"],
+        ))))
+        .unwrap();
+        assert_eq!(reg.descriptor_for_ext("canvas").unwrap().id, "tela");
     }
 
     #[test]
