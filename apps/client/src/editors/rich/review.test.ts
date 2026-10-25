@@ -194,7 +194,7 @@ describe("le revisioni tracciate", () => {
     // Inserito sottolineato, eliminato barrato, e il segno di fine si vede.
     const root = document.body;
     expect(root.querySelector("ins.rich-ins")?.getAttribute("title")).toContain("Ada");
-    expect([...root.querySelectorAll("del.rich-del")].map((el) => el.textContent)).toEqual(["▣", "dopo"]);
+    expect([...root.querySelectorAll("del.rich-del")].map((el) => el.textContent)).toEqual([`▣${t("rich.atom.image")}`, "dopo"]);
     expect(root.querySelector(".rich-ins-mark")?.textContent).toBe("¶");
     // Il testo, l'oggetto e il segno di fine nuovi fanno una modifica sola;
     // l'eliminazione dello spostamento è un'altra revisione.

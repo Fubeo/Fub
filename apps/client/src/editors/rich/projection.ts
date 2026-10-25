@@ -102,6 +102,7 @@ export const ATOM_KINDS = [
   "image",
   "graphic",
   "shape",
+  "text_box",
   "group",
   "field",
   "note",

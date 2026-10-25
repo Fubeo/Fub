@@ -7135,8 +7135,20 @@ kbd,
 .rich-atom-image,
 .rich-atom-graphic,
 .rich-atom-shape,
+.rich-atom-text_box,
 .rich-atom-group {
   border-style: dashed;
+  line-height: var(--leading-tight);
+}
+.rich-atom-glyph {
+  color: var(--muted);
+}
+.rich-atom-equation {
+  gap: var(--space-1);
+}
+.rich-atom-name {
+  color: var(--muted);
+  font-size: var(--text-xs);
 }
 .rich-atom-note,
 .rich-atom-field {

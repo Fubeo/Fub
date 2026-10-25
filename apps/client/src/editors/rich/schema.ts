@@ -21,7 +21,7 @@
 // `fromDoc` riscrive il documento nella forma della proiezione; un blocco già
 // scritto si ritrova nella cache per nodo (i nodi sono immutabili), così una
 // battuta riscrive un paragrafo e non il documento.
-import { t, type Key } from "../../i18n/strings";
+import { resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { fontStack } from "./fonts";
 import { Fragment, Schema, type Mark as PmMark, type Node as PmNode, type NodeSpec, type MarkSpec } from "prosemirror-model";
 import {
@@ -59,7 +59,7 @@ const BREAK_SPLIT = /([\n\u000c\u000e])/;
 /// Le specie di oggetto che occupano una storia del documento o ne segnano un
 /// intervallo: due copie dello stesso non si scrivono (una nota mostrata due
 /// volte, un segnalibro che comincia due volte).
-export const UNIQUE_ATOMS: ReadonlySet<AtomKind> = new Set<AtomKind>(["note", "shape", "group", "marker"]);
+export const UNIQUE_ATOMS: ReadonlySet<AtomKind> = new Set<AtomKind>(["note", "shape", "text_box", "group", "marker"]);
 
 function roleAttr(dom: HTMLElement): Role | null {
   const raw = dom.getAttribute("data-rich-role");
@@ -213,6 +213,7 @@ const ATOM_NAMES: Readonly<Record<AtomKind, Key>> = {
   image: "rich.atom.image",
   graphic: "rich.atom.graphic",
   shape: "rich.atom.shape",
+  text_box: "rich.atom.text_box",
   group: "rich.atom.group",
   field: "rich.atom.field",
   note: "rich.atom.note",
@@ -221,6 +222,19 @@ const ATOM_NAMES: Readonly<Record<AtomKind, Key>> = {
   opaque: "rich.atom.opaque",
   marker: "rich.atom.opaque",
 };
+
+/// Le specie con una misura nel documento: la casella ne prende la forma.
+const DRAWN: ReadonlySet<AtomKind> = new Set<AtomKind>(["image", "graphic", "shape", "text_box", "group"]);
+
+/// Le specie che si mostrano come segnaposto, con un nome e una misura.
+const PLACEHOLDERS: ReadonlySet<AtomKind> = new Set<AtomKind>([...DRAWN, "equation"]);
+
+/// «4 × 3 cm» da una misura in punti, con la virgola della lingua.
+export function centimetres(w: number, h: number): string {
+  const format = new Intl.NumberFormat(resolvedLanguage(), { maximumFractionDigits: 1 });
+  const cm = (points: number) => format.format(Math.round((points / (72 / 2.54)) * 10) / 10);
+  return `${cm(w)} × ${cm(h)} cm`;
+}
 
 /// Il tipo di un'immagine dai primi byte del suo base64: PNG, JPEG o GIF, le
 /// sole che un'immagine nuova può essere.
@@ -236,6 +250,7 @@ const ATOM_GLYPHS: Readonly<Record<AtomKind, string>> = {
   image: "▣",
   graphic: "◇",
   shape: "◇",
+  text_box: "▭",
   group: "◇",
   field: "{ }",
   note: "*",
@@ -397,7 +412,7 @@ const nodes: Record<string, NodeSpec> = {
       const h = node.attrs.h as number | null;
       if (w !== null) attrs["data-w"] = String(w);
       if (h !== null) attrs["data-h"] = String(h);
-      if (w !== null && h !== null && (kind === "image" || kind === "graphic" || kind === "shape" || kind === "group")) {
+      if (w !== null && h !== null && DRAWN.has(kind)) {
         // Punti tipografici in pixel CSS, entro la colonna del testo.
         attrs.style = `width: ${Math.max(8, w * (4 / 3))}px; aspect-ratio: ${Math.max(w, 1)} / ${Math.max(h, 1)}`;
       }
@@ -414,6 +429,13 @@ const nodes: Record<string, NodeSpec> = {
       if (mime !== null) {
         const img = { src: `data:${mime};base64,${data}`, alt: "", style: "display: block; width: 100%; height: 100%" };
         return ["span", attrs, ["img", img]];
+      }
+      // Un oggetto che la superficie non disegna dice che cosa è e quanto è
+      // grande, e il suggerimento dice perché non si vede.
+      if (PLACEHOLDERS.has(kind)) {
+        attrs.title = `${attrs["aria-label"]}. ${t("rich.atom.kept")}`;
+        const said = kind === "equation" && label ? `${name} ${label}` : w !== null && h !== null ? `${name} · ${centimetres(w, h)}` : name;
+        return ["span", attrs, ["span", { class: "rich-atom-glyph", "aria-hidden": "true" }, ATOM_GLYPHS[kind]], ["span", { class: "rich-atom-name" }, said]];
       }
       return ["span", attrs, label || ATOM_GLYPHS[kind]];
     },

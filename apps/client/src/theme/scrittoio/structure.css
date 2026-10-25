@@ -2156,6 +2156,21 @@ body {
   user-select: none;
 }
 .rich-atom-marker { display: inline; }
+/* Un segnaposto con una misura: il segno e il nome al centro della casella. */
+.rich-atom-image,
+.rich-atom-graphic,
+.rich-atom-shape,
+.rich-atom-text_box,
+.rich-atom-group {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  white-space: normal;
+  text-align: center;
+}
+.rich-atom-equation { display: inline-flex; align-items: baseline; }
+.rich-atom-name { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .rich-break-page,
 .rich-break-column { display: block; height: 0; margin-block: 0.75em; }
 

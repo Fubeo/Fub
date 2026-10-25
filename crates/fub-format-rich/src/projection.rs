@@ -561,6 +561,9 @@ pub enum AtomKind {
     Image,
     Graphic,
     Shape,
+    /// Una forma che porta testo: la casella di testo di Word, il
+    /// `draw:text-box` di OpenDocument.
+    TextBox,
     Group,
     Field,
     Note,
@@ -965,7 +968,15 @@ fn atom(
     let (kind, label, size) = match object {
         InlineObject::Image { w, h, alt, .. } => (AtomKind::Image, alt.clone(), Some((*w, *h))),
         InlineObject::Graphic { w, h, alt, .. } => (AtomKind::Graphic, alt.clone(), Some((*w, *h))),
-        InlineObject::Shape { w, h, .. } => (AtomKind::Shape, String::new(), Some((*w, *h))),
+        InlineObject::Shape { w, h, story, .. } => (
+            if story.is_some() {
+                AtomKind::TextBox
+            } else {
+                AtomKind::Shape
+            },
+            String::new(),
+            Some((*w, *h)),
+        ),
         InlineObject::Group { w, h, .. } => (AtomKind::Group, String::new(), Some((*w, *h))),
         InlineObject::Field { result, .. } => (AtomKind::Field, result.clone(), None),
         InlineObject::NoteRef { custom, .. } => (AtomKind::Note, custom.clone(), None),

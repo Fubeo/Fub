@@ -9,6 +9,7 @@ import { RichEngine } from "./engine";
 import { parseProjection, type Block, type Projection } from "./projection";
 import { extractSegments, replaceChecked } from "./proof";
 import { richSchema, toDoc } from "./schema";
+import { t } from "../../i18n/strings";
 import { safeHref } from "./paste";
 
 let engines: RichEngine[] = [];
@@ -57,7 +58,7 @@ describe("il motore ricco", () => {
     expect(changes).toEqual([]);
   });
 
-  it("un oggetto si annuncia per specie e testo alternativo, e senza etichetta mostra un segno", () => {
+  it("un oggetto si annuncia per specie e testo alternativo, e il segnaposto dice che cosa è", () => {
     engine(
       source([
         {
@@ -75,12 +76,39 @@ describe("il motore ricco", () => {
     const [image, note, marker] = [...document.body.querySelectorAll<HTMLElement>(".rich-atom")];
     expect(image.getAttribute("role")).toBe("img");
     expect(image.getAttribute("aria-label")).toMatch(/: Un pino$/);
-    expect(image.textContent).toBe("Un pino");
+    expect(image.textContent).toBe(`▣${t("rich.atom.image")}`);
+    expect(image.title).toBe(`${image.getAttribute("aria-label")}. ${t("rich.atom.kept")}`);
     expect(note.getAttribute("aria-label")).not.toBe("");
     expect(note.getAttribute("aria-label")).not.toContain(":");
     expect(note.textContent).toBe("*");
     expect(marker.hasAttribute("role")).toBe(false);
     expect(marker.textContent).toBe("");
+  });
+
+  it("i segnaposto dicono specie e misura: un'immagine, una forma, una casella di testo, una formula", () => {
+    engine(
+      source([
+        {
+          t: "para",
+          role: { kind: "body" },
+          k: "P",
+          c: [
+            { t: "atom", k: "I", kind: "image", label: "Il cortile", w: 113.4, h: 85.05 },
+            { t: "atom", k: "S", kind: "shape", w: 72, h: 36 },
+            { t: "atom", k: "B", kind: "text_box", w: 72, h: 36 },
+            { t: "atom", k: "E", kind: "equation", label: "a+b" },
+          ],
+        } as Block,
+      ]),
+    );
+    const said = [...document.body.querySelectorAll<HTMLElement>(".rich-atom-name")].map((el) => el.textContent);
+    expect(said).toEqual([
+      `${t("rich.atom.image")} · 4 × 3 cm`,
+      `${t("rich.atom.shape")} · 2,5 × 1,3 cm`,
+      `${t("rich.atom.text_box")} · 2,5 × 1,3 cm`,
+      `${t("rich.atom.equation")} a+b`,
+    ]);
+    for (const atom of document.body.querySelectorAll<HTMLElement>(".rich-atom")) expect(atom.title).toContain(t("rich.atom.kept"));
   });
 
   it("una proiezione in sola lettura non si scrive", () => {

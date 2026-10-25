@@ -840,7 +840,7 @@ fn describe(tree: &Tree, id: NodeId) -> (AtomKind, String, Option<(f32, f32)>) {
             let kind = if tree.child(id, "draw:image").is_some() {
                 AtomKind::Image
             } else if tree.child(id, "draw:text-box").is_some() {
-                AtomKind::Shape
+                AtomKind::TextBox
             } else {
                 AtomKind::Graphic
             };
