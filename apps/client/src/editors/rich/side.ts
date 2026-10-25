@@ -226,7 +226,7 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
     /// Un filo: il testo commentato, il commento, le risposte e le azioni.
     function thread(item: Thread, own: Lifetime): HTMLElement {
       const { comment } = item;
-      const el = document.createElement("article");
+      const el = document.createElement("div");
       el.className = "rich-side-item rich-side-comment";
       el.setAttribute("role", "listitem");
       el.dataset.comment = String(comment.id);
@@ -434,7 +434,7 @@ export function mountRichSide(engine: RichEngine, media: RichMedia, reveal: (vie
     /// Una voce: che cosa, chi, quando, il testo, e le sue due azioni.
     function entry(at: { change: Change }, text: string, own: Lifetime): HTMLElement {
       const { change } = at;
-      const el = document.createElement("article");
+      const el = document.createElement("div");
       el.className = "rich-side-item rich-side-change";
       el.setAttribute("role", "listitem");
       el.dataset.kind = change.kind;
