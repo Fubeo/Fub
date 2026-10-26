@@ -45,6 +45,46 @@ const CLOSED: SurfaceStandingState = {
 };
 
 describe("il chip dello stato", () => {
+  it("in sola lettura «Che cosa manca?» apre e richiude l'elenco, e solo le voci con un posto hanno «Vai»", () => {
+    const go = vi.fn();
+    const readonly: SurfaceStandingState = {
+      kind: "readonly",
+      text: "Sola lettura",
+      title: "Sola lettura, per non rovinare il file",
+      body: "Fub lo apre in lettura.",
+      places: [{ label: "Una modifica di formato registrata: «due»", run: go }, { label: "Modifiche registrate nelle note" }],
+      placesAsk: "Che cosa manca?",
+      actions: [{ label: "Cerca", run: vi.fn() }],
+      recording: false,
+    };
+    const chip = createStandingChip();
+    document.body.append(chip.element);
+    chip.follow(source(readonly).standing);
+    chip.element.querySelector<HTMLButtonElement>(".pane-standing-chip")!.click();
+    const panel = document.querySelector<HTMLElement>(".pane-standing-panel")!;
+    const ask = panel.querySelector<HTMLButtonElement>(".pane-standing-ask")!;
+    expect(ask.textContent).toBe("Che cosa manca?");
+    expect(ask.getAttribute("aria-expanded")).toBe("false");
+    expect(panel.querySelector(".pane-standing-places")).toBeNull();
+    // La domanda è il primo posto del fuoco, prima di «Cerca».
+    expect(document.activeElement).toBe(ask);
+    ask.click();
+    const list = panel.querySelector<HTMLElement>(".pane-standing-places")!;
+    expect(ask.getAttribute("aria-expanded")).toBe("true");
+    expect(ask.getAttribute("aria-controls")).toBe(list.id);
+    expect(list.getAttribute("aria-label")).toBe("Che cosa manca?");
+    expect(ask.nextElementSibling).toBe(list);
+    const items = [...list.querySelectorAll("li")];
+    expect(items.map((item) => item.querySelectorAll("button").length)).toEqual([1, 0]);
+    ask.click();
+    expect(panel.querySelector(".pane-standing-places")).toBeNull();
+    expect(ask.getAttribute("aria-expanded")).toBe("false");
+    ask.click();
+    panel.querySelector<HTMLButtonElement>(".pane-standing-places button")!.click();
+    expect(go).toHaveBeenCalledTimes(1);
+    chip.destroy();
+  });
+
   it("dice lo stato, si annuncia una volta, e apre il riquadro con le voci", () => {
     const chip = createStandingChip();
     document.body.append(chip.element);

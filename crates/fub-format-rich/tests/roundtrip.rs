@@ -6,8 +6,8 @@ mod common;
 use base64::Engine;
 use common::{bytes, sample, styled, text, PNG};
 use fub_format_rich::projection::{
-    Align, AtomKind, Block, Cell, Inline, Layout, Line, Look, Mark, Page, PageField, Para, Piece,
-    Projection, Role, Row, RunningText, SectionBegin, Table, OPAQUE_SCHEMA,
+    Align, AtomKind, Block, Cell, Inline, Layout, Line, Look, Mark, Missing, MissingWhat, Page,
+    PageField, Para, Piece, Projection, Role, Row, RunningText, SectionBegin, Table, OPAQUE_SCHEMA,
 };
 use fub_format_rich::{open, save, Codec, ReadOnly, RichError, Saved};
 use wordcraft_doc::para::NoteKind;
@@ -1206,12 +1206,19 @@ fn le_modifiche_di_formato_tracciate_aprono_in_sola_lettura() {
     );
     changed.props = ParaProps::default();
     d.body.push(para_block(changed));
+    let last = d.body.len() - 1;
     let file = bytes(&d);
     let opened = open(Codec::Docx, &file).unwrap();
     assert_eq!(opened.readonly, Some(ReadOnly::Revisions));
+    let projection = Projection::from_json(&opened.projection).unwrap();
+    assert_eq!(projection.readonly, Some(ReadOnly::Revisions));
+    // «Che cosa manca?» dice il paragrafo con la revisione di formato.
     assert_eq!(
-        Projection::from_json(&opened.projection).unwrap().readonly,
-        Some(ReadOnly::Revisions)
+        projection.missing,
+        [Missing {
+            what: MissingWhat::Format,
+            block: Some(last),
+        }]
     );
     assert_eq!(
         save(Codec::Docx, &file, &opened.projection),
@@ -1244,6 +1251,24 @@ fn le_revisioni_in_una_nota_aprono_in_sola_lettura() {
     )));
     let opened = open(Codec::Docx, &bytes(&d)).unwrap();
     assert_eq!(opened.readonly, Some(ReadOnly::Revisions));
+    // La revisione sta in una nota: l'elenco dice le note, senza un blocco.
+    assert_eq!(
+        Projection::from_json(&opened.projection).unwrap().missing,
+        [Missing {
+            what: MissingWhat::Note,
+            block: None,
+        }]
+    );
+}
+
+#[test]
+fn un_documento_che_si_scrive_non_dice_che_cosa_manca() {
+    let opened = open(Codec::Docx, &bytes(&sample())).unwrap();
+    assert_eq!(opened.readonly, None);
+    assert!(Projection::from_json(&opened.projection)
+        .unwrap()
+        .missing
+        .is_empty());
 }
 
 #[test]
@@ -1498,9 +1523,18 @@ fn una_nota_mostrata_due_volte_apre_in_sola_lettura() {
         .unwrap();
     }
     d.body.push(para_block(p));
+    let last = d.body.len() - 1;
     let file = bytes(&d);
     let opened = open(Codec::Docx, &file).unwrap();
     assert_eq!(opened.readonly, Some(ReadOnly::Projection));
+    // «Che cosa manca?» dice il paragrafo dei rimandi.
+    assert_eq!(
+        Projection::from_json(&opened.projection).unwrap().missing,
+        [Missing {
+            what: MissingWhat::Changed,
+            block: Some(last),
+        }]
+    );
     let mut projection = Projection::from_json(&opened.projection).unwrap();
     assert_eq!(projection.readonly, Some(ReadOnly::Projection));
     // Una modifica si rifiuta con il motivo misurato all'apertura; e chi

@@ -448,6 +448,9 @@
   border-radius: var(--radius-sm);
   background: var(--bg-hover);
 }
+.pane-standing-ask {
+  margin: 0 0 var(--space-3);
+}
 .pane-standing-source {
   margin: 0 0 var(--space-3);
   color: var(--muted);

@@ -43,6 +43,19 @@ export const READ_ONLY_REASONS: readonly ReadOnlyReason[] = [
   "import",
 ];
 
+/// Che cosa manca a un documento in sola lettura, quando ha un posto: una
+/// revisione di formato, le revisioni di una specie di parte, un blocco che
+/// non torna identico, o qualcosa fuori dal corpo.
+export type MissingWhat = "format" | "header" | "footer" | "note" | "comment" | "text_box" | "changed" | "outside";
+export const MISSING_WHATS: readonly MissingWhat[] = ["format", "header", "footer", "note", "comment", "text_box", "changed", "outside"];
+
+/// Una voce di «Che cosa manca?»: `block` è l'indice del blocco del corpo in
+/// cui sta, quando sta in un blocco.
+export interface Missing {
+  readonly what: MissingWhat;
+  readonly block?: number;
+}
+
 export type Role =
   | { readonly kind: "body" }
   | { readonly kind: "heading"; readonly level: number }
@@ -238,6 +251,9 @@ export interface Projection {
   /// Lo schema dei dati opachi: c'è dalla versione 2, non nella 1.
   readonly opaque_schema?: number;
   readonly readonly?: ReadOnlyReason;
+  /// Con `readonly`, dove sta ciò che manca (versione 3). Il ritorno lo
+  /// ignora.
+  readonly missing?: readonly Missing[];
   /// Il formato non riscriverebbe senza perdite qualcosa fuori dal corpo: si
   /// salvano soltanto i paragrafi e le tabelle del corpo (versione 3).
   readonly body_only?: boolean;
@@ -499,6 +515,17 @@ function readStyle(value: unknown, where: string): ParaStyle {
   };
 }
 
+function readMissing(value: unknown, where: string): Missing {
+  const missing = record(value, where);
+  closed(missing, ["what", "block"], where);
+  if (!(MISSING_WHATS as readonly unknown[]).includes(missing.what)) throw new ProjectionError(`${where}.what: sconosciuto`);
+  const block = missing.block;
+  if (block !== undefined && !(typeof block === "number" && Number.isSafeInteger(block) && block >= 0)) {
+    throw new ProjectionError(`${where}.block: atteso un intero`);
+  }
+  return { what: missing.what as MissingWhat, ...(block !== undefined ? { block } : {}) };
+}
+
 function readRoles(value: unknown, where: string): RoleLooks {
   const roles = record(value, where);
   closed(roles, ["h", "quote", "list"], where);
@@ -707,7 +734,7 @@ export function parseProjection(source: string): Projection {
   const keys = {
     1: ["format", "version", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"],
     2: ["format", "version", "opaque_schema", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"],
-    3: ["format", "version", "opaque_schema", "readonly", "body_only", "track", "lang", "f", "styles", "roles", "page", "header", "footer", "comments", "blocks"],
+    3: ["format", "version", "opaque_schema", "readonly", "missing", "body_only", "track", "lang", "f", "styles", "roles", "page", "header", "footer", "comments", "blocks"],
   }[version];
   closed(root, keys, "proiezione");
   const schema = root.opaque_schema;
@@ -725,6 +752,7 @@ export function parseProjection(source: string): Projection {
     version,
     ...(version >= 2 ? { opaque_schema: schema as number } : {}),
     ...(readonly !== undefined ? { readonly: readonly as ReadOnlyReason } : {}),
+    ...(root.missing !== undefined ? { missing: list(root.missing, "missing").map((m, i) => readMissing(m, `missing[${i}]`)) } : {}),
     ...(root.body_only === true ? { body_only: true } : {}),
     ...(root.track === true ? { track: true } : {}),
     ...(root.lang !== undefined ? { lang: text(root.lang, "lang") } : {}),
@@ -890,10 +918,14 @@ export function writeBlock(block: Block): string {
 }
 
 /// L'intestazione della proiezione fino all'elenco dei blocchi escluso.
-export function writeHead(projection: Pick<Projection, "version" | "opaque_schema" | "readonly" | "body_only" | "track" | "lang" | "f" | "styles" | "roles" | "page" | "header" | "footer" | "comments">): string {
+export function writeHead(projection: Pick<Projection, "version" | "opaque_schema" | "readonly" | "missing" | "body_only" | "track" | "lang" | "f" | "styles" | "roles" | "page" | "header" | "footer" | "comments">): string {
   let out = `{"format":"${PROJECTION_FORMAT}","version":${projection.version}`;
   if (projection.opaque_schema !== undefined) out += `,"opaque_schema":${projection.opaque_schema}`;
   if (projection.readonly !== undefined) out += `,"readonly":"${projection.readonly}"`;
+  if (projection.missing && projection.missing.length > 0) {
+    const missing = projection.missing.map((m) => `{"what":"${m.what}"${m.block !== undefined ? `,"block":${m.block}` : ""}}`);
+    out += `,"missing":[${missing.join(",")}]`;
+  }
   if (projection.body_only) out += `,"body_only":true`;
   if (projection.track) out += `,"track":true`;
   if (projection.lang !== undefined) out += `,"lang":${JSON.stringify(projection.lang)}`;

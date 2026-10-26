@@ -43,7 +43,7 @@ import {
   splitParagraph,
 } from "./commands";
 import { collectKeys, filterSlice, uniqueKeys } from "./paste";
-import { parseProjection, writeComment, writeHead, writeRunning, type Look, type Page, type RunningText, type ParaStyle, type Projection, type ReadOnlyReason } from "./projection";
+import { parseProjection, writeComment, writeHead, writeRunning, type Look, type Missing, type Page, type RunningText, type ParaStyle, type Projection, type ReadOnlyReason } from "./projection";
 import { DEFAULT_PAGE, pageVariables, samePage, setRunningAt } from "./page";
 import { openRunningEditor, type RunningEditor } from "./running";
 import { DESK_INSET, fitScale, PX_PER_PT, runningInset, SheetDesk, sheetAt, sheetElement, sheetPlanOf, sheetsPlugin } from "./sheets";
@@ -91,7 +91,7 @@ export class RichEngine {
   /// L'intestazione dell'ultima proiezione letta. Versione e schema si
   /// ricopiano come sono arrivati; prima di ogni lettura non si scrive niente
   /// che un formato accetti, ma la forma resta quella della versione 3.
-  #head: Pick<Projection, "version" | "opaque_schema" | "readonly" | "body_only" | "lang" | "f" | "styles" | "roles"> = { version: 3 };
+  #head: Pick<Projection, "version" | "opaque_schema" | "readonly" | "missing" | "body_only" | "lang" | "f" | "styles" | "roles"> = { version: 3 };
   /// Il testo del buffer come lo tiene il motore: quello ricevuto finché
   /// nessuno lo cambia, poi quello riscritto.
   #source = "";
@@ -364,6 +364,7 @@ export class RichEngine {
         version: projection.version,
         opaque_schema: projection.opaque_schema,
         readonly: projection.readonly,
+        missing: projection.missing,
         body_only: projection.body_only,
         lang: projection.lang,
         f: projection.f,
@@ -466,6 +467,12 @@ export class RichEngine {
   /// senza perdite qualcosa fuori, o un blocco chiuso.
   bodyOnly(): boolean {
     return this.#head.body_only === true;
+  }
+
+  /// Dove sta ciò che manca a un documento in sola lettura, quando il formato
+  /// lo sa dire.
+  missing(): readonly Missing[] {
+    return this.#head.missing ?? [];
   }
 
   /// Il documento ha blocchi chiusi.

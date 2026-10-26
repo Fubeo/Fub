@@ -82,14 +82,35 @@ export function closedPlaces(doc: PmNode): ClosedPlace[] {
   const out: ClosedPlace[] = [];
   doc.descendants((node, pos) => {
     if (node.attrs.locked === true && (node.type.name === "para" || node.type.name === "table")) {
-      const kind = node.type.name;
-      const text = kind === "para" ? node.textContent.replace(/\s+/g, " ").trim() : "";
-      out.push({ pos, kind, excerpt: text.length > EXCERPT ? `${text.slice(0, EXCERPT).trimEnd()}…` : text });
+      out.push({ pos, kind: node.type.name as ClosedPlace["kind"], excerpt: excerptAt(doc, pos) });
       return false;
     }
     return node.type.name !== "para";
   });
   return out;
+}
+
+/// Dove comincia il blocco `index` del corpo, contato come nella proiezione:
+/// i paragrafi e le tabelle del documento, senza le fini di sezione. `null`
+/// se il corpo ne ha meno.
+export function blockStart(doc: PmNode, index: number): number | null {
+  let seen = 0;
+  let found: number | null = null;
+  doc.forEach((node, offset) => {
+    if (found !== null || node.type.name === "section") return;
+    if (seen === index) found = offset;
+    seen += 1;
+  });
+  return found;
+}
+
+/// Le prime parole del blocco in `pos`; vuoto per una tabella o un
+/// paragrafo senza testo.
+export function excerptAt(doc: PmNode, pos: number): string {
+  const node = doc.nodeAt(pos);
+  if (!node || node.type.name !== "para") return "";
+  const text = node.textContent.replace(/\s+/g, " ").trim();
+  return text.length > EXCERPT ? `${text.slice(0, EXCERPT).trimEnd()}…` : text;
 }
 
 /// Porta il cursore all'inizio del blocco che comincia in `pos`, come si va a

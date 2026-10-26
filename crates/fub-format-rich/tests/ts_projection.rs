@@ -609,3 +609,52 @@ fn la_shell_conosce_ogni_motivo_di_sola_lettura() {
         .collect();
     assert_eq!(listed, wanted, "{}", path.display());
 }
+
+#[test]
+fn la_shell_conosce_ogni_voce_di_che_cosa_manca() {
+    use fub_format_rich::projection::MissingWhat;
+    // Il `match` senza ramo di riserva non compila finché una voce nuova non
+    // entra anche qui; `MISSING_WHATS` in `projection.ts` è la lista con cui
+    // la shell accetta il campo.
+    let all = [
+        MissingWhat::Format,
+        MissingWhat::Header,
+        MissingWhat::Footer,
+        MissingWhat::Note,
+        MissingWhat::Comment,
+        MissingWhat::TextBox,
+        MissingWhat::Changed,
+        MissingWhat::Outside,
+    ];
+    for what in all {
+        match what {
+            MissingWhat::Format
+            | MissingWhat::Header
+            | MissingWhat::Footer
+            | MissingWhat::Note
+            | MissingWhat::Comment
+            | MissingWhat::TextBox
+            | MissingWhat::Changed
+            | MissingWhat::Outside => {}
+        }
+    }
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/editors/rich/projection.ts");
+    let source = std::fs::read_to_string(&path).unwrap();
+    let start = source
+        .find("export const MISSING_WHATS")
+        .expect("MISSING_WHATS in projection.ts");
+    let list = &source[start..start + source[start..].find("];").unwrap()];
+    let listed: Vec<&str> = list.split('"').skip(1).step_by(2).collect();
+    let wanted: Vec<String> = all
+        .iter()
+        .map(|what| {
+            serde_json::to_value(what)
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_string()
+        })
+        .collect();
+    assert_eq!(listed, wanted, "{}", path.display());
+}

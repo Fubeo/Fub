@@ -246,6 +246,12 @@ export interface SurfaceStandingAction {
   run(): void;
 }
 
+/** A place the popover lists: with `run`, a «Vai» goes there. */
+export interface SurfaceStandingPlace {
+  readonly label: string;
+  run?(): void;
+}
+
 /** What the chip says and what its popover explains. */
 export interface SurfaceStandingState {
   readonly kind: SurfaceStandingKind;
@@ -256,7 +262,12 @@ export interface SurfaceStandingState {
   /** Where the rule comes from, or where the file is saved. */
   readonly source?: string;
   /** The places that stay as the file has them, each with its «Vai». */
-  readonly places?: readonly SurfaceStandingAction[];
+  readonly places?: readonly SurfaceStandingPlace[];
+  /**
+   * With a question («Che cosa manca?»), the places start folded behind a
+   * button that asks it; without one, they are listed as they are.
+   */
+  readonly placesAsk?: string;
   readonly actions?: readonly SurfaceStandingAction[];
   /** Changes are being tracked: the chip shows «Registra» next to itself. */
   readonly recording: boolean;

@@ -4,11 +4,11 @@
 //
 // Le ragioni sono quelle del formato: la sola lettura arriva con la
 // proiezione, i blocchi chiusi e il solo corpo anche (`closed.ts`).
-import type { SurfaceStandingAction, SurfaceStandingState } from "../core/registry";
+import type { SurfaceStandingAction, SurfaceStandingPlace, SurfaceStandingState } from "../core/registry";
 import { plural, t, type Key } from "../../i18n/strings";
-import { closedPlaces, goToBlock, type ClosedPlace } from "./closed";
+import { blockStart, closedPlaces, excerptAt, goToBlock, type ClosedPlace } from "./closed";
 import type { RichEngine } from "./engine";
-import type { ReadOnlyReason } from "./projection";
+import type { Missing, MissingWhat, ReadOnlyReason } from "./projection";
 import { setTracking } from "./track";
 
 const READ_ONLY_KEYS: Readonly<Record<ReadOnlyReason, Key>> = {
@@ -18,6 +18,24 @@ const READ_ONLY_KEYS: Readonly<Record<ReadOnlyReason, Key>> = {
   projection: "rich.readonly.projection",
   codec: "rich.readonly.codec",
   import: "rich.readonly.import",
+};
+
+/// Che cosa manca, detto da chi scrive, quando non ha un blocco.
+const MISSING_KEYS: Readonly<Record<MissingWhat, Key>> = {
+  format: "rich.standing.missing.format",
+  header: "rich.standing.missing.header",
+  footer: "rich.standing.missing.footer",
+  note: "rich.standing.missing.note",
+  comment: "rich.standing.missing.comment",
+  text_box: "rich.standing.missing.text_box",
+  changed: "rich.standing.missing.changed",
+  outside: "rich.standing.missing.outside",
+};
+
+/// Che cosa manca in un blocco, che `{place}` nomina.
+const PLACED_KEYS: Readonly<Record<"format" | "changed", Key>> = {
+  format: "rich.standing.missing.format.at",
+  changed: "rich.standing.missing.changed.at",
 };
 
 /// I formati che hanno un nome da dire.
@@ -40,18 +58,21 @@ export interface RichStandingHost {
 /// Che cosa dice il chip del documento di `engine`; `null` finché il
 /// documento non si legge.
 export function richStanding(engine: RichEngine, host: RichStandingHost): () => SurfaceStandingState | null {
-  const place = (at: ClosedPlace): SurfaceStandingAction => {
-    const what =
-      at.kind === "table"
-        ? t("rich.standing.place.table")
-        : at.excerpt
-          ? t("rich.standing.place.para", { excerpt: at.excerpt })
-          : t("rich.standing.place.empty");
-    const page = engine.sheetFor(at.pos);
-    return {
-      label: page === null ? what : t("rich.standing.place.page", { place: what, page }),
-      run: () => void engine.browse(goToBlock(at.pos)),
-    };
+  /// Il nome di un blocco: le sue prime parole, o che cos'è, e la pagina.
+  const named = (pos: number): string => {
+    const [table, excerpt] = engine.read((state) => [state.doc.nodeAt(pos)?.type.name === "table", excerptAt(state.doc, pos)] as const);
+    const what = table ? t("rich.standing.place.table") : excerpt ? t("rich.standing.place.para", { excerpt }) : t("rich.standing.place.empty");
+    const page = engine.sheetFor(pos);
+    return page === null ? what : t("rich.standing.place.page", { place: what, page });
+  };
+  const place = (at: ClosedPlace): SurfaceStandingAction => ({ label: named(at.pos), run: () => void engine.browse(goToBlock(at.pos)) });
+  /// Una voce di «Che cosa manca?»: con il suo blocco, un «Vai».
+  const missing = (item: Missing): SurfaceStandingPlace => {
+    const at = item.block;
+    const pos = at === undefined ? null : engine.read((state) => blockStart(state.doc, at));
+    const placed = item.what === "format" || item.what === "changed" ? PLACED_KEYS[item.what] : null;
+    if (pos === null || placed === null) return { label: t(MISSING_KEYS[item.what]) };
+    return { label: t(placed, { place: named(pos) }), run: () => void engine.browse(goToBlock(pos)) };
   };
   return () => {
     const intake = engine.intake();
@@ -67,6 +88,7 @@ export function richStanding(engine: RichEngine, host: RichStandingHost): () => 
         title: t("rich.standing.readonly.title"),
         body: t("rich.standing.readonly.body"),
         source: t("rich.standing.reason", { reason: t(READ_ONLY_KEYS[intake.readonly]) }),
+        ...whatIsMissing(engine.missing().map(missing)),
         actions: [{ label: t("rich.standing.find"), run: host.find }],
         ...sign,
       };
@@ -110,4 +132,9 @@ export function richStanding(engine: RichEngine, host: RichStandingHost): () => 
       ...sign,
     };
   };
+}
+
+/// L'elenco di «Che cosa manca?», se il formato lo sa dire.
+function whatIsMissing(places: readonly SurfaceStandingPlace[]): Pick<SurfaceStandingState, "places" | "placesAsk"> {
+  return places.length > 0 ? { places, placesAsk: t("rich.standing.missing") } : {};
 }

@@ -56,6 +56,39 @@ describe("lo stato del documento", () => {
     });
   }
 
+  it("in sola lettura «Che cosa manca?» elenca dove, con un «Vai» per ogni voce che ha un posto", () => {
+    const source = JSON.stringify({
+      format: "fub-rich",
+      version: 3,
+      opaque_schema: 3,
+      readonly: "revisions",
+      missing: [{ what: "format", block: 1 }, { what: "note" }, { what: "changed", block: 9 }],
+      blocks: [
+        { t: "para", role: { kind: "body" }, k: "P", c: [{ t: "text", x: "uno", k: "R" }] },
+        { t: "para", role: { kind: "body" }, k: "P", c: [{ t: "text", x: "due", k: "R" }] },
+      ],
+    });
+    const { now, engine } = standing(source);
+    const state = now();
+    expect(state.kind).toBe("readonly");
+    expect(state.placesAsk).toBe(t("rich.standing.missing"));
+    const place = t("rich.standing.place.page", { place: t("rich.standing.place.para", { excerpt: "due" }), page: 1 });
+    expect(state.places!.map((item) => [item.label, item.run !== undefined])).toEqual([
+      [t("rich.standing.missing.format.at", { place }), true],
+      [t("rich.standing.missing.note"), false],
+      // Un blocco che il documento non ha non ha un posto.
+      [t("rich.standing.missing.changed"), false],
+    ]);
+    const before = engine.getDoc();
+    state.places![0]!.run!();
+    expect(engine.state.selection.from).toBe(engine.state.doc.child(0).nodeSize + 1);
+    expect(engine.getDoc()).toBe(before);
+    // Senza un elenco, la domanda non si fa.
+    const plain = standing(JSON.stringify({ ...JSON.parse(source), missing: undefined })).now();
+    expect(plain.places).toBeUndefined();
+    expect(plain.placesAsk).toBeUndefined();
+  });
+
   it("con parti chiuse le conta, le elenca, e il «Vai» ci porta senza scrivere", () => {
     const { now, engine } = standing(CLOSED);
     const state = now();
@@ -72,7 +105,7 @@ describe("lo stato del documento", () => {
     ]);
     expect(state.actions!.map((action) => action.label)).toEqual([t("rich.standing.closed.first")]);
     const before = engine.getDoc();
-    state.places![1]!.run();
+    state.places![1]!.run!();
     const table = engine.state.doc.child(2);
     expect(engine.state.selection.from).toBeGreaterThan(engine.state.doc.child(0).nodeSize + engine.state.doc.child(1).nodeSize);
     expect(engine.state.selection.from).toBeLessThan(engine.state.doc.child(0).nodeSize + engine.state.doc.child(1).nodeSize + table.nodeSize);

@@ -369,6 +369,7 @@
     "pane-standing-title",
     "pane-standing-body",
     "pane-standing-places",
+    "pane-standing-ask",
     "pane-standing-source",
     "pane-standing-actions",
     "sheet-save",
@@ -1690,6 +1691,7 @@
     "pane-standing-title": "cornice",
     "pane-standing-body": "cornice",
     "pane-standing-places": "cornice",
+    "pane-standing-ask": "cornice",
     "pane-standing-source": "cornice",
     "pane-standing-actions": "cornice",
     "sheet-save": "cornice",
@@ -3732,6 +3734,7 @@
         "pane-standing-title",
         "pane-standing-body",
         "pane-standing-places",
+        "pane-standing-ask",
         "pane-standing-source",
         "pane-standing-actions"
       ],
@@ -7423,7 +7426,7 @@
   "counts": {
     "required_roles": 154,
     "optional_roles": 38,
-    "hooks": 1319,
+    "hooks": 1320,
     "state_names": 7,
     "assigned_states": 652,
     "components": 194,

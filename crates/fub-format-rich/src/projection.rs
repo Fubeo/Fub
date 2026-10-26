@@ -65,6 +65,10 @@ pub struct Projection {
     /// Perché il documento non si modifica, quando non si modifica.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub readonly: Option<crate::ReadOnly>,
+    /// Con `readonly`, dove sta ciò che manca, quando ha un posto: l'elenco
+    /// di «Che cosa manca?». Il ritorno lo ignora.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing: Vec<Missing>,
     /// Il codec non riscriverebbe senza perdite qualcosa fuori dal corpo: si
     /// salvano soltanto i paragrafi e le tabelle del corpo, e il resto si
     /// legge.
@@ -102,6 +106,35 @@ pub struct Projection {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub comments: Vec<CommentView>,
     pub blocks: Vec<Block>,
+}
+
+/// Una voce di «Che cosa manca?»: che cosa, e il blocco del corpo in cui
+/// sta, quando sta in un blocco.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Missing {
+    pub what: MissingWhat,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub block: Option<usize>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MissingWhat {
+    /// Una revisione di formato, che la superficie non mostra.
+    Format,
+    /// Revisioni nelle intestazioni, nei piè di pagina, nelle note, nei
+    /// commenti o nelle caselle di testo.
+    Header,
+    Footer,
+    Note,
+    Comment,
+    TextBox,
+    /// Un blocco che la proiezione non riporta identico; senza blocco, il
+    /// corpo intero.
+    Changed,
+    /// Qualcosa fuori dal corpo, senza un posto da indicare.
+    Outside,
 }
 
 /// La pagina di una sezione, in punti: i lati (già scambiati se è
@@ -861,6 +894,7 @@ pub(crate) fn project(document: &Document) -> Result<Projection, RichError> {
         version: VERSION,
         opaque_schema: Some(OPAQUE_SCHEMA),
         readonly: None,
+        missing: Vec::new(),
         body_only: false,
         track: document.settings.track_changes,
         lang: document.styles.default_chr.lang.clone(),

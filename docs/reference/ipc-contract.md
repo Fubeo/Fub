@@ -392,6 +392,15 @@ motivo. `import` è il motivo di ogni documento `rtf` e `doc`, e di un `odt`
 che il codec OpenDocument non sa rappresentare: lo legge un importatore che non
 riporta il file intero. Un file nuovo `rtf` o `doc` non si crea
 (`host.rich.no_writer`); un `odt` sì.
+
+`missing`, subito dopo `readonly`, dice dove sta ciò che manca quando il
+motivo ha un posto: `[{"what", "block"}]`, con `block` l'indice del blocco
+del corpo, assente se non sta in un blocco. Per `revisions` le voci sono
+`format` (una revisione di formato, nel suo blocco) e una per specie di parte
+con revisioni (`header`, `footer`, `note`, `comment`, `text_box`); per
+`projection` i blocchi che non tornano identici (`changed`). `outside` è
+qualcosa fuori dal corpo senza un posto da dire. L'elenco ha al più 50 voci,
+è assente quando è vuoto e il ritorno lo ignora. Il codec ODT non lo scrive.
 `opaque_schema`, subito dopo `version`, è lo schema dei dati opachi (`k` e
 `sect`, JSON del modello del motore in base64), che si incrementa quando
 cambia la loro forma serializzata: lo schema 2 aggiunge all'1 il campo

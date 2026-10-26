@@ -23,7 +23,9 @@ l'IPC.
 - `editors/rich/surface.ts` è statico e leggero: tiene il buffer finché il
   motore non arriva, dichiara subito gli id delle azioni (spente) e i loro
   accordi, dice lo stato del documento (`standing`, da
-  `editors/rich/standing.ts`) e mostra in una riga soltanto un testo
+  `editors/rich/standing.ts`: in sola lettura «Che cosa manca?» elenca le
+  voci di `missing` della proiezione, con un «Vai» per quelle che stanno in
+  un blocco) e mostra in una riga soltanto un testo
   illeggibile o un motore che non si è caricato.
   Il motore (`editors/rich/engine.ts`, ProseMirror) è un chunk caricato con un
   import dinamico; una superficie smontata prima che arrivi non monta niente.

@@ -100,15 +100,40 @@ export function createStandingChip(): StandingChip {
     if (shown.places && shown.places.length > 0) {
       const list = document.createElement("ul");
       list.className = "pane-standing-places";
-      list.setAttribute("aria-label", t("document.standing.places"));
+      list.id = `pane-standing-places-${++ids}`;
+      list.setAttribute("aria-label", shown.placesAsk ?? t("document.standing.places"));
       for (const place of shown.places) {
         const item = document.createElement("li");
         const label = document.createElement("span");
         label.textContent = place.label;
-        item.append(label, button(t("document.standing.go"), place, fresh, "normal", t("document.standing.go.label", { place: place.label })));
+        item.append(label);
+        if (place.run) {
+          const go = { label: place.label, run: () => place.run?.() };
+          item.append(button(t("document.standing.go"), go, fresh, "normal", t("document.standing.go.label", { place: place.label })));
+        }
         list.append(item);
       }
-      nodes.push(list);
+      if (shown.placesAsk) {
+        // La domanda apre l'elenco subito sotto di sé, e lo richiude: il
+        // riquadro resta aperto.
+        const ask = textButton({
+          label: shown.placesAsk,
+          lifetime: fresh,
+          onPress: () => {
+            const open = !list.isConnected;
+            if (open) ask.after(list);
+            else list.remove();
+            ask.setAttribute("aria-expanded", String(open));
+            opened?.popover.reposition();
+          },
+        });
+        ask.classList.add("pane-standing-ask");
+        ask.setAttribute("aria-controls", list.id);
+        ask.setAttribute("aria-expanded", "false");
+        nodes.push(ask);
+      } else {
+        nodes.push(list);
+      }
     }
     if (shown.source) {
       const source = document.createElement("p");

@@ -97,6 +97,13 @@ pub fn open(codec: Codec, bytes: &[u8]) -> Result<Opened, RichError> {
             Err(reason) => Some(reason),
         },
     };
+    // Dove sta ciò che manca, prima di segnare la sola lettura: la prova
+    // riparte dalla proiezione come la scrive l'apertura.
+    projection.missing = match readonly {
+        Some(ReadOnly::Revisions) => crate::missing::revisions(&normal),
+        Some(ReadOnly::Projection) => crate::missing::changes(&projection, &normal),
+        _ => Vec::new(),
+    };
     projection.readonly = readonly;
     Ok(Opened {
         projection: projection.to_json()?,
