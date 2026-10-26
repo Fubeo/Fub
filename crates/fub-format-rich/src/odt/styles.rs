@@ -614,7 +614,21 @@ impl Styles {
         } else {
             Look::default()
         };
-        projection::RoleLooks::new(h, quote, Look::default())
+        let body = self.align(None);
+        let h_align = (1..=9)
+            .map(|level| match self.heading(level) {
+                Some(name) => self.align(Some(&name)),
+                None => body,
+            })
+            .collect();
+        let quote_align = if self.common("paragraph", "Quotations") {
+            self.align(Some("Quotations"))
+        } else {
+            body
+        };
+        projection::RoleLooks::new(h, quote, Look::default()).with_align(
+            projection::RoleAligns::new(body, h_align, quote_align, body),
+        )
     }
 
     /// Gli stili comuni di paragrafo da proporre a un paragrafo di corpo:
@@ -638,6 +652,7 @@ impl Styles {
                     .clone()
                     .unwrap_or_else(|| name.replace("_20_", " ")),
                 f: self.text(Some(name), &[]).base(),
+                align: self.align(Some(name)),
             })
             .collect();
         out.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));

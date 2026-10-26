@@ -338,10 +338,14 @@ revisioni `ins` e `del`, e il codec salva l'impostazione con il documento. Il
 codec ODT rifiuta `track`.
 
 `roles`, fra `styles` e `page`, è l'aspetto del carattere che lo stile di
-ogni ruolo darà a un paragrafo: `{"h", "quote", "list"}`, con `h` un aspetto
-per livello di titolo (senza i livelli vuoti in fondo) e ciascun campo
-assente se vuoto. È un suggerimento di resa, come `f` e `styles`: la shell lo
-ricopia in un paragrafo che cambia ruolo, e il ritorno al documento lo ignora.
+ogni ruolo darà a un paragrafo: `{"h", "quote", "list", "align"}`, con `h` un
+aspetto per livello di titolo (senza i livelli vuoti in fondo) e ciascun
+campo assente se vuoto. `align` è l'allineamento che lo stile di ogni ruolo
+dà: `{"body", "h", "quote", "list"}`, con `h` un valore o `null` per livello,
+e a sinistra ciò che manca. Anche una voce di `styles` può portare il suo
+`align`. Sono suggerimenti di resa, come `f`: la shell li ricopia in un
+paragrafo che cambia ruolo o stile (l'allineamento soltanto se seguiva lo
+stile di prima), e il ritorno al documento li ignora.
 
 `page` è la pagina di una sezione in punti, `{"w", "h", "top", "bottom",
 "left", "right", "cols", "start"}`, con `w` e `h` già nel verso della pagina,

@@ -366,6 +366,9 @@ pub struct ParaStyle {
     /// Il carattere e la dimensione del suo testo.
     #[serde(default, skip_serializing_if = "Look::is_plain")]
     pub f: Look,
+    /// L'allineamento che dà al paragrafo; nessuno è a sinistra.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub align: Option<Align>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -480,6 +483,9 @@ pub struct RoleLooks {
     pub quote: Look,
     #[serde(default, skip_serializing_if = "Look::is_plain")]
     pub list: Look,
+    /// L'allineamento che lo stile di ogni ruolo dà al paragrafo.
+    #[serde(default, skip_serializing_if = "RoleAligns::is_plain")]
+    pub align: RoleAligns,
 }
 
 impl RoleLooks {
@@ -488,11 +494,61 @@ impl RoleLooks {
         while h.last().is_some_and(Look::is_plain) {
             h.pop();
         }
-        RoleLooks { h, quote, list }
+        RoleLooks {
+            h,
+            quote,
+            list,
+            align: RoleAligns::default(),
+        }
+    }
+
+    pub fn with_align(self, align: RoleAligns) -> Self {
+        RoleLooks { align, ..self }
     }
 
     pub fn is_plain(&self) -> bool {
         *self == RoleLooks::default()
+    }
+}
+
+/// L'allineamento che lo stile di ogni ruolo dà al paragrafo, compreso il
+/// corpo senza stile; nessuno è a sinistra. Chi cambia ruolo o stile a un
+/// paragrafo che seguiva lo stile di prima gli dà quello del nuovo.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoleAligns {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<Align>,
+    /// I titoli, dal livello 1; oltre la fine, a sinistra.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub h: Vec<Option<Align>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quote: Option<Align>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub list: Option<Align>,
+}
+
+impl RoleAligns {
+    /// Senza i livelli a sinistra in fondo, così da rileggersi uguale.
+    pub fn new(
+        body: Option<Align>,
+        mut h: Vec<Option<Align>>,
+        quote: Option<Align>,
+        list: Option<Align>,
+    ) -> Self {
+        while h.last().is_some_and(Option::is_none) {
+            h.pop();
+        }
+        RoleAligns {
+            body,
+            h,
+            quote,
+            list,
+        }
+    }
+
+    pub fn is_plain(&self) -> bool {
+        *self == RoleAligns::default()
     }
 }
 
@@ -981,8 +1037,17 @@ fn gallery(document: &Document, used: &BTreeSet<String>) -> Vec<ParaStyle> {
                 s.name.clone()
             },
             f: base(styles, Some(&s.id)),
+            align: align(styles, &styled(&s.id)),
         })
         .collect()
+}
+
+/// Le proprietà di un paragrafo che ha soltanto lo stile `id`.
+fn styled(id: &str) -> ParaProps {
+    ParaProps {
+        style: Some(id.to_string()),
+        ..ParaProps::default()
+    }
 }
 
 /// L'aspetto di ogni ruolo, dagli stili che il salvataggio gli darebbe: quelli
@@ -993,17 +1058,28 @@ fn role_looks(document: &Document) -> RoleLooks {
     let look = |id: Option<String>, styles: &StyleSheet| {
         id.map(|id| base(styles, Some(&id))).unwrap_or_default()
     };
-    let h = (1..=9)
+    let aligned = |id: &Option<String>, styles: &StyleSheet| {
+        id.as_deref().and_then(|id| align(styles, &styled(id)))
+    };
+    let (h, h_align): (Vec<_>, Vec<_>) = (1..=9)
         .map(|level| {
             let id = heading_style(&mut styles, level);
-            look(id, &styles)
+            (look(id.clone(), &styles), aligned(&id, &styles))
         })
-        .collect();
+        .unzip();
     let quote = builtin_style(&mut styles, "Quote");
+    let quote_align = aligned(&quote, &styles);
     let quote = look(quote, &styles);
     let list = builtin_style(&mut styles, "ListParagraph");
+    let list_align = aligned(&list, &styles);
     let list = look(list, &styles);
-    RoleLooks::new(h, quote, list)
+    let body = align(&styles, &ParaProps::default());
+    RoleLooks::new(h, quote, list).with_align(RoleAligns::new(
+        body,
+        h_align,
+        quote_align,
+        list_align,
+    ))
 }
 
 /// Uno stile che un paragrafo di corpo può avere: non il predefinito, e
@@ -1487,6 +1563,15 @@ mod tests {
         let json = serde_json::to_string(&roles).unwrap();
         assert_eq!(serde_json::from_str::<RoleLooks>(&json).unwrap(), roles);
         assert!(RoleLooks::new(vec![Look::default()], Look::default(), Look::default()).is_plain());
+        // La citazione di WordCraft è centrata, il corpo e i titoli no.
+        assert_eq!(
+            roles.align,
+            RoleAligns {
+                quote: Some(Align::Center),
+                ..RoleAligns::default()
+            }
+        );
+        assert!(RoleAligns::new(None, vec![None, None], None, None).is_plain());
     }
 
     fn document(media: &[(&str, Vec<u8>)]) -> Document {

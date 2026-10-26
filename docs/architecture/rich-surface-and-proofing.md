@@ -90,7 +90,9 @@ l'IPC.
   la galleria degli stili (`styles`) e l'aspetto di ogni ruolo (`roles`:
   titoli, citazione, elenco) sono suggerimenti di resa che il ritorno
   ignora: un paragrafo che diventa titolo, sottotitolo o corpo prende subito
-  il carattere che il suo stile gli darà. `BlockWriter` riscrive
+  il carattere e l'allineamento che il suo stile gli darà. Come in Word, il
+  carattere, la dimensione e il colore scritti su più di metà del suo testo
+  se ne vanno, e un allineamento scritto a mano resta. `BlockWriter` riscrive
   soltanto i blocchi cambiati. Per un `.docx` la rilettura del modello non
   basta, perché un lettore non vede ciò che lui stesso salta: il controllo di
   Fub (`fub-format-rich/src/preservation.rs`, sull'inventario di

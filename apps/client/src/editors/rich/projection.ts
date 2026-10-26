@@ -107,6 +107,8 @@ export interface ParaStyle {
   readonly id: string;
   readonly name: string;
   readonly f?: Look;
+  /// L'allineamento che dà al paragrafo; assente, a sinistra.
+  readonly align?: Align;
 }
 
 /// Il giallo che un tratto evidenziato senza `hl` porta.
@@ -280,6 +282,16 @@ export interface RoleLooks {
   readonly h?: readonly Look[];
   readonly quote?: Look;
   readonly list?: Look;
+  readonly align?: RoleAligns;
+}
+
+/// L'allineamento che lo stile di ogni ruolo dà al paragrafo, compreso il
+/// corpo senza stile; assente (o `null` fra i titoli), a sinistra.
+export interface RoleAligns {
+  readonly body?: Align;
+  readonly h?: readonly (Align | null)[];
+  readonly quote?: Align;
+  readonly list?: Align;
 }
 
 /// La pagina di una sezione, in punti: i lati (già scambiati se è
@@ -507,11 +519,35 @@ function readComment(value: unknown, where: string): CommentView {
 
 function readStyle(value: unknown, where: string): ParaStyle {
   const style = record(value, where);
-  closed(style, ["id", "name", "f"], where);
+  closed(style, ["id", "name", "f", "align"], where);
+  const align = readAlign(style.align, `${where}.align`);
   return {
     id: text(style.id, `${where}.id`),
     name: text(style.name, `${where}.name`),
     ...withLook(readLook(style.f, `${where}.f`)),
+    ...(align ? { align } : {}),
+  };
+}
+
+const ALIGNS: readonly Align[] = ["left", "center", "right", "justify"];
+
+function readAlign(value: unknown, where: string): Align | undefined {
+  if (value === undefined) return undefined;
+  if (!(ALIGNS as readonly unknown[]).includes(value)) throw new ProjectionError(`${where}: allineamento sconosciuto`);
+  return value as Align;
+}
+
+function readAligns(value: unknown, where: string): RoleAligns {
+  const aligns = record(value, where);
+  closed(aligns, ["body", "h", "quote", "list"], where);
+  const body = readAlign(aligns.body, `${where}.body`);
+  const quote = readAlign(aligns.quote, `${where}.quote`);
+  const listed = readAlign(aligns.list, `${where}.list`);
+  return {
+    ...(body ? { body } : {}),
+    ...(aligns.h !== undefined ? { h: list(aligns.h, `${where}.h`).map((h, i) => (h === null ? null : readAlign(h, `${where}.h[${i}]`)!)) } : {}),
+    ...(quote ? { quote } : {}),
+    ...(listed ? { list: listed } : {}),
   };
 }
 
@@ -528,13 +564,14 @@ function readMissing(value: unknown, where: string): Missing {
 
 function readRoles(value: unknown, where: string): RoleLooks {
   const roles = record(value, where);
-  closed(roles, ["h", "quote", "list"], where);
+  closed(roles, ["h", "quote", "list", "align"], where);
   const quote = readLook(roles.quote, `${where}.quote`);
   const listed = readLook(roles.list, `${where}.list`);
   return {
     ...(roles.h !== undefined ? { h: list(roles.h, `${where}.h`).map((h, i) => readLook(h, `${where}.h[${i}]`) ?? {}) } : {}),
     ...(quote ? { quote } : {}),
     ...(listed ? { list: listed } : {}),
+    ...(roles.align !== undefined ? { align: readAligns(roles.align, `${where}.align`) } : {}),
   };
 }
 
@@ -818,7 +855,19 @@ function writeRoles(roles: RoleLooks | undefined): string {
   let body = "";
   if (roles.h && roles.h.length > 0) body += `,"h":[${roles.h.map(lookBody).join(",")}]`;
   body += writeLook(roles.quote, "quote") + writeLook(roles.list, "list");
+  const aligns = writeAligns(roles.align);
+  if (aligns) body += `,"align":${aligns}`;
   return body === "" ? "" : `,"roles":{${body.slice(1)}}`;
+}
+
+function writeAligns(aligns: RoleAligns | undefined): string {
+  if (!aligns) return "";
+  const fields: string[] = [];
+  if (aligns.body) fields.push(`"body":"${aligns.body}"`);
+  if (aligns.h && aligns.h.length > 0) fields.push(`"h":[${aligns.h.map((h) => (h ? `"${h}"` : "null")).join(",")}]`);
+  if (aligns.quote) fields.push(`"quote":"${aligns.quote}"`);
+  if (aligns.list) fields.push(`"list":"${aligns.list}"`);
+  return fields.length > 0 ? `{${fields.join(",")}}` : "";
 }
 
 function writeLayout(layout: Layout | undefined): string {
@@ -932,7 +981,7 @@ export function writeHead(projection: Pick<Projection, "version" | "opaque_schem
   out += writeLook(projection.f);
   if (projection.styles && projection.styles.length > 0) {
     const styles = projection.styles.map(
-      (s) => `{"id":${JSON.stringify(s.id)},"name":${JSON.stringify(s.name)}${writeLook(s.f)}}`,
+      (s) => `{"id":${JSON.stringify(s.id)},"name":${JSON.stringify(s.name)}${writeLook(s.f)}${s.align ? `,"align":"${s.align}"` : ""}}`,
     );
     out += `,"styles":[${styles.join(",")}]`;
   }

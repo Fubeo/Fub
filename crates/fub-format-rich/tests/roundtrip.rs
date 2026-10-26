@@ -405,6 +405,62 @@ fn il_ruolo_cambia_stile_ed_elenco() {
 }
 
 #[test]
+fn cambiando_stile_l_allineamento_che_ne_veniva_segue_il_nuovo() {
+    let mut document = sample();
+    let quote = text("Una citazione", CharProps::default()).styled("Quote");
+    document.body.push(para_block(quote));
+    document
+        .body
+        .push(para_block(text("Del corpo", CharProps::default())));
+    if document.styles.get("Quote").is_none() {
+        let builtin = wordcraft_doc::StyleSheet::builtin();
+        document
+            .styles
+            .upsert(builtin.get("Quote").unwrap().clone());
+    }
+    let file = bytes(&document);
+    let mut p = projection(&file);
+    assert_eq!(p.roles.align.quote, Some(Align::Center));
+    assert_eq!(
+        (
+            p.roles.align.body,
+            p.roles.align.h.first().copied().flatten()
+        ),
+        (None, None)
+    );
+    let last = p.blocks.len() - 1;
+    assert_eq!(para_mut(&mut p, last - 1).align, Some(Align::Center));
+    // Come fa la shell: la citazione diventa titolo e va a sinistra come lui;
+    // il corpo diventa citazione e si centra come lei.
+    let heading = para_mut(&mut p, last - 1);
+    heading.role = Role::Heading { level: 1 };
+    heading.align = None;
+    let cited = para_mut(&mut p, last);
+    cited.role = Role::Quote;
+    cited.align = Some(Align::Center);
+    let out = saved(&file, &p);
+    let after = read(&out);
+    let n = after.body.len();
+    assert_eq!(
+        (
+            paragraph(&after, n - 2).props.align,
+            paragraph(&after, n - 1).props.align
+        ),
+        (None, None),
+        "l'allineamento viene dallo stile, non si scrive diretto"
+    );
+    let mut reopened = projection(&out);
+    assert_eq!(
+        (
+            para_mut(&mut reopened, last - 1).align,
+            para_mut(&mut reopened, last).align
+        ),
+        (None, Some(Align::Center)),
+        "si riapre come si vedeva"
+    );
+}
+
+#[test]
 fn un_link_nuovo_prende_lo_stile_dei_link() {
     let file = bytes(&sample());
     let mut p = projection(&file);

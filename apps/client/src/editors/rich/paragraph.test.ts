@@ -173,6 +173,99 @@ describe("il paragrafo", () => {
     ]);
   });
 
+  it("l'allineamento che veniva dallo stile segue lo stile nuovo, quello scritto a mano resta", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const e = new RichEngine(parent, { label: () => "documento", onChange: () => {}, onSelectionChange: () => {} });
+    engines.push(e);
+    e.setDoc(
+      JSON.stringify({
+        format: "fub-rich",
+        version: 3,
+        opaque_schema: 3,
+        f: LOOK,
+        styles: [...STYLES, { id: "Title", name: "Title", align: "center" }],
+        roles: { quote: LOOK, align: { h: [null, "center"], quote: "center" } },
+        blocks: [para("uno"), para("due", { align: "right" })],
+      }),
+    );
+    const aligned = (index: number) => paras(e)[index]!.align;
+    selectParas(e, 0);
+    const steps: [Parameters<typeof setStyle>[0], string | undefined][] = [
+      [{ role: { kind: "quote" } }, "center"],
+      [{ role: { kind: "heading", level: 1 } }, undefined],
+      [{ role: { kind: "heading", level: 2 } }, "center"],
+      [{ s: "Subtitle", f: STYLES[0]!.f }, undefined],
+      [{ s: "Title" }, "center"],
+      [{ role: { kind: "body" } }, undefined],
+    ];
+    for (const [pick, want] of steps) {
+      expect(e.apply(setStyle(pick, e.documentLook()))).toBe(true);
+      expect([pick, aligned(0)]).toEqual([pick, want]);
+    }
+    // A destra a mano: resta, anche da titolo.
+    selectParas(e, 1);
+    expect(e.run("markdown.heading.2")).toBe(true);
+    expect(aligned(1)).toBe("right");
+    // Invio in fondo a un titolo centrato dal suo stile: il testo nuovo è a
+    // sinistra, come il corpo.
+    selectParas(e, 0);
+    expect(e.run("markdown.heading.2")).toBe(true);
+    expect(aligned(0)).toBe("center");
+    e.select(e.state.doc.firstChild!.nodeSize - 1);
+    expect(e.apply(splitParagraph)).toBe(true);
+    expect([aligned(0), aligned(1)]).toEqual(["center", undefined]);
+  });
+
+  it("uno stile toglie, come Word, il carattere e la misura scritti su più di metà del paragrafo", () => {
+    const H1 = { font: "Aptos Display", size: 20 };
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const e = new RichEngine(parent, { label: () => "documento", onChange: () => {}, onSelectionChange: () => {} });
+    engines.push(e);
+    const big = { size: 22 };
+    e.setDoc(
+      JSON.stringify({
+        format: "fub-rich",
+        version: 3,
+        opaque_schema: 3,
+        f: LOOK,
+        styles: STYLES,
+        roles: { h: [H1] },
+        blocks: [
+          // Tutto a 22 pt e in rosso, una parola in Verdana.
+          { t: "para", role: { kind: "body" }, f: LOOK, c: [
+            { t: "text", x: "Tutto grande ", f: { ...big, color: "#ff0000" } },
+            { t: "text", x: "e", f: { ...big, color: "#ff0000", font: "Verdana" } },
+          ] },
+          { t: "para", role: { kind: "body" }, f: LOOK, c: [{ t: "text", x: "Verdana", f: { font: "Verdana" } }] },
+          para("due"),
+          { t: "para", role: { kind: "body" }, f: LOOK, c: [{ t: "text", x: "voce", f: big }] },
+        ],
+      }),
+    );
+    const runs = (index: number) => (paras(e)[index]!.c as readonly { x?: string; f?: unknown }[]).map((run) => [run.x, run.f]);
+    selectParas(e, 0);
+    expect(e.apply(setStyle({ role: { kind: "heading", level: 1 } }, e.documentLook()))).toBe(true);
+    expect(paras(e)[0]!.f).toEqual(H1);
+    // La misura e il colore coprono tutto, e se ne vanno; la Verdana è su una
+    // lettera sola, e resta.
+    expect(runs(0)).toEqual([["Tutto grande ", undefined], ["e", { font: "Verdana" }]]);
+    // Dalla tastiera lo stesso, e con uno stile del documento.
+    selectParas(e, 1);
+    expect(e.run("markdown.heading.1")).toBe(true);
+    expect(runs(1)).toEqual([["Verdana", undefined]]);
+    selectParas(e, 0);
+    expect(e.apply(setStyle({ s: "Subtitle", f: STYLES[0]!.f }, e.documentLook()))).toBe(true);
+    expect(runs(0)).toEqual([["Tutto grande ", undefined], ["e", { font: "Verdana" }]]);
+    expect(paras(e)[0]!.f).toEqual(STYLES[0]!.f);
+    // L'elenco non è uno stile: il paragrafo che lo diventa tiene la sua misura.
+    selectParas(e, 3);
+    expect(e.run("markdown.list.bullet")).toBe(true);
+    expect(paras(e)[3]!.role.kind).toBe("list");
+    expect(runs(3)).toEqual([["voce", big]]);
+  });
+
   it("la barra propone gli stili del documento e la spaziatura del paragrafo", () => {
     const e = engine([para("uno", { p: { after: 8 } })]);
     selectParas(e, 0);

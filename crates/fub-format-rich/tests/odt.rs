@@ -573,10 +573,11 @@ fn i_titoli_hanno_l_aspetto_dello_stile_che_il_salvataggio_gli_scrive() {
     fixture.common.push_str(
         "<style:style style:name=\"Heading_20_1\" style:display-name=\"Heading 1\" \
          style:family=\"paragraph\" style:default-outline-level=\"1\">\
+         <style:paragraph-properties fo:text-align=\"center\"/>\
          <style:text-properties fo:font-size=\"18pt\"/></style:style>",
     );
     let bytes = fixture.bytes();
-    let projection = projection(&bytes);
+    let mut projection = projection(&bytes);
     assert_eq!(
         projection.roles.h[0].size,
         Some(18.0),
@@ -586,6 +587,30 @@ fn i_titoli_hanno_l_aspetto_dello_stile_che_il_salvataggio_gli_scrive() {
     // aggiungerebbe, al 115% del testo.
     assert_eq!(projection.f.size, Some(12.0));
     assert_eq!(projection.roles.h[1].size, Some(12.0 * 1.15));
+    // E l'allineamento: il titolo 1 è centrato, il corpo no.
+    assert_eq!(
+        (
+            projection.roles.align.h.first().copied().flatten(),
+            projection.roles.align.body
+        ),
+        (Some(Align::Center), None)
+    );
+    // Come fa la shell: il corpo diventa titolo 1 e si centra come lui. Il
+    // centro viene dallo stile, e si riapre com'era.
+    let first = para_mut(&mut projection, 0);
+    first.role = Role::Heading { level: 1 };
+    first.align = Some(Align::Center);
+    let out = saved(&bytes, &projection);
+    let content = part(&out, "content.xml");
+    assert!(
+        content.contains("text:style-name=\"Heading_20_1\">uno"),
+        "nessuno stile automatico con l'allineamento diretto: {content}"
+    );
+    let reopened = self::projection(&out);
+    assert_eq!(
+        (para(&reopened, 0).role, para(&reopened, 0).align),
+        (Role::Heading { level: 1 }, Some(Align::Center))
+    );
 }
 
 #[test]

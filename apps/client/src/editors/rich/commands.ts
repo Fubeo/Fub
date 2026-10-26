@@ -114,6 +114,53 @@ export function roleLook(state: EditorState, role: Role, s: string | null, curre
   }
 }
 
+/// Le marche dei valori che uno stile nuovo può togliere.
+const DIRECT_LOOK: readonly MarkType[] = [richSchema.marks.font, richSchema.marks.size, richSchema.marks.color];
+
+/// Come Word: dando uno stile a un paragrafo, il carattere, la dimensione o il
+/// colore scritti a mano su più di metà del suo testo se ne vanno, e il
+/// paragrafo prende l'aspetto dello stile. Su un tratto più breve restano,
+/// come l'enfasi.
+function dropMostlyDirect(tr: Transaction, pos: number): void {
+  const node = tr.doc.nodeAt(pos);
+  if (!node) return;
+  let total = 0;
+  const covered = new Map<MarkType, number>();
+  node.forEach((child) => {
+    if (!child.isText) return;
+    total += child.nodeSize;
+    for (const type of DIRECT_LOOK) if (type.isInSet(child.marks)) covered.set(type, (covered.get(type) ?? 0) + child.nodeSize);
+  });
+  for (const [type, size] of covered) if (size * 2 > total) tr.removeMark(pos + 1, pos + node.nodeSize - 1, type);
+}
+
+/// L'allineamento che lo stile del ruolo `role`, o lo stile `s`, dà al
+/// paragrafo; `null` a sinistra.
+function styleAlign(state: EditorState, role: Role, s: string | null): Align | null {
+  const looks = paraLooks(state);
+  const aligns = looks.roles?.align;
+  const own = s ? looks.styles?.find((style) => style.id === s) : undefined;
+  switch (role.kind) {
+    case "heading":
+      return aligns?.h?.[role.level - 1] ?? null;
+    case "quote":
+      return aligns?.quote ?? null;
+    case "list":
+      return (own ? own.align : aligns?.list) ?? null;
+    case "body":
+      return (own ? own.align : aligns?.body) ?? null;
+  }
+}
+
+/// L'allineamento di un paragrafo che passa al ruolo `role` con lo stile `s`.
+/// Come in Word: uno che seguiva il suo stile prende quello del nuovo, uno
+/// scritto a mano resta.
+function restyledAlign(state: EditorState, node: PmNode, role: Role, s: string | null): Align | null {
+  const now = (node.attrs.align as Align | null) ?? null;
+  const shown = now === "left" ? null : now;
+  return shown === styleAlign(state, node.attrs.role as Role, node.attrs.s as string | null) ? styleAlign(state, role, s) : shown;
+}
+
 export function setRole(role: Role, toggle = false): Command {
   return (state, dispatch) => {
     const paras = selectedParas(state);
@@ -124,8 +171,11 @@ export function setRole(role: Role, toggle = false): Command {
     if (dispatch) {
       const tr = state.tr;
       for (const { node, pos } of paras) {
-        const f = roleLook(state, next, node.attrs.s as string | null, node.attrs.f as Look | null);
-        tr.setNodeMarkup(pos, null, { ...node.attrs, role: next, f });
+        const s = node.attrs.s as string | null;
+        const f = roleLook(state, next, s, node.attrs.f as Look | null);
+        tr.setNodeMarkup(pos, null, { ...node.attrs, role: next, f, align: restyledAlign(state, node, next, s) });
+        // Un elenco non è uno stile: la voce tiene il suo aspetto.
+        if (next.kind !== "list") dropMostlyDirect(tr, pos);
       }
       dispatch(tr.scrollIntoView());
     }
@@ -387,8 +437,9 @@ export const splitParagraph: Command = (state, dispatch) => {
   if (paragraph.content.size === 0 && role.kind === "list" && !recording) {
     // Una voce vuota esce dall'elenco invece di farne un'altra.
     if (dispatch) {
-      const f = roleLook(state, BODY, paragraph.attrs.s as string | null, paragraph.attrs.f as Look | null);
-      dispatch(state.tr.setNodeMarkup($from.before(), null, { ...paragraph.attrs, role: BODY, f }));
+      const s = paragraph.attrs.s as string | null;
+      const f = roleLook(state, BODY, s, paragraph.attrs.f as Look | null);
+      dispatch(state.tr.setNodeMarkup($from.before(), null, { ...paragraph.attrs, role: BODY, f, align: restyledAlign(state, paragraph, BODY, s) }));
     }
     return true;
   }
@@ -400,7 +451,9 @@ export const splitParagraph: Command = (state, dispatch) => {
   const leavesHeading = atEnd && role.kind === "heading";
   const marks = state.storedMarks ?? $pos.marks();
   // Dopo un titolo si scrive testo normale, con l'aspetto del testo.
-  const after = leavesHeading ? { role: BODY, s: null, f: roleLook(state, BODY, null, null) } : { role };
+  const after = leavesHeading
+    ? { role: BODY, s: null, f: roleLook(state, BODY, null, null), align: restyledAlign(state, paragraph, BODY, null) }
+    : { role };
   tr.split($pos.pos, 1, [{ type: para, attrs: { ...paragraph.attrs, ...after } }]);
   // Il segno di fine revisionato resta in fondo, al secondo: il primo ne ha
   // uno nuovo, di chi scrive.
@@ -982,7 +1035,7 @@ export const LINE_SPACINGS: readonly number[] = [1, 1.15, 1.5, 2, 2.5, 3];
 
 /// Cambia gli attributi dei paragrafi selezionati con `change`; `false` se
 /// nessuno cambierebbe.
-function updateParas(change: (node: PmNode) => Record<string, unknown> | null): Command {
+function updateParas(change: (node: PmNode) => Record<string, unknown> | null, after?: (tr: Transaction, pos: number) => void): Command {
   return (state, dispatch) => {
     const edits: { pos: number; attrs: Record<string, unknown> }[] = [];
     for (const { node, pos } of selectedParas(state)) {
@@ -994,7 +1047,10 @@ function updateParas(change: (node: PmNode) => Record<string, unknown> | null): 
     if (edits.length === 0) return false;
     if (dispatch) {
       const tr = state.tr;
-      for (const { pos, attrs } of edits) tr.setNodeMarkup(pos, null, attrs);
+      for (const { pos, attrs } of edits) {
+        tr.setNodeMarkup(pos, null, attrs);
+        after?.(tr, pos);
+      }
       dispatch(tr.scrollIntoView());
     }
     return true;
@@ -1089,13 +1145,20 @@ export function selectedStyle(state: EditorState): string | null {
 /// documento li fa testo normale con quello stile; un ruolo toglie lo stile.
 /// `look` è l'aspetto del testo senza stile: quello che un paragrafo di corpo
 /// torna a mostrare.
+/// Il carattere, la dimensione o il colore scritti su più di metà del testo
+/// se ne vanno (`dropMostlyDirect`).
 export function setStyle(pick: StylePick, look: Look | undefined): Command {
   return (state, dispatch) =>
     updateParas((node) => {
-      if ("s" in pick) return { role: BODY, s: pick.s, f: pick.f ?? look ?? null };
-      if (pick.role.kind === "body") return { role: BODY, s: null, f: look ?? null };
-      return { role: pick.role, s: null, f: roleLook(state, pick.role, null, node.attrs.f as Look | null) };
-    })(state, dispatch);
+      if ("s" in pick) return { role: BODY, s: pick.s, f: pick.f ?? look ?? null, align: restyledAlign(state, node, BODY, pick.s) };
+      if (pick.role.kind === "body") return { role: BODY, s: null, f: look ?? null, align: restyledAlign(state, node, BODY, null) };
+      return {
+        role: pick.role,
+        s: null,
+        f: roleLook(state, pick.role, null, node.attrs.f as Look | null),
+        align: restyledAlign(state, node, pick.role, null),
+      };
+    }, dropMostlyDirect)(state, dispatch);
 }
 
 // ── Il catalogo ──────────────────────────────────────────────────────────────
