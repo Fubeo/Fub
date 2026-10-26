@@ -1372,13 +1372,7 @@ impl<'a> Writer<'a> {
         }
         self.need_styles_part("heading")?;
         let name = format!("Heading_20_{level}");
-        let size = match level {
-            1 => "130%",
-            2 => "115%",
-            3 => "101%",
-            4 => "95%",
-            _ => "85%",
-        };
+        let size = format!("{}%", (super::styles::heading_scale(level) * 100.0).round());
         self.common_xml.push_str(&format!(
             "<style:style style:name=\"{name}\" style:display-name=\"Heading {level}\" \
              style:family=\"paragraph\" style:default-outline-level=\"{level}\" \

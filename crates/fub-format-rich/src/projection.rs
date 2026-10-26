@@ -84,6 +84,11 @@ pub struct Projection {
     /// loro ordine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub styles: Vec<ParaStyle>,
+    /// Suggerimento: il carattere e la dimensione che ogni ruolo dà al testo,
+    /// come li dà lo stile che il salvataggio gli scrive. Chi cambia il ruolo
+    /// di un paragrafo lo mostra subito come verrà.
+    #[serde(default, skip_serializing_if = "RoleLooks::is_plain")]
+    pub roles: RoleLooks,
     /// La pagina dell'ultima sezione, quella che nessun paragrafo chiude.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page: Option<Page>,
@@ -426,6 +431,35 @@ pub struct Look {
 impl Look {
     pub fn is_plain(&self) -> bool {
         *self == Look::default()
+    }
+}
+
+/// L'aspetto del testo di ogni ruolo che non è il corpo: per il corpo vale
+/// [`Projection::f`], o quello del suo stile.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoleLooks {
+    /// I titoli, dal livello 1. Un livello vuoto, o oltre la fine, è uno che
+    /// il codec non sa dire.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub h: Vec<Look>,
+    #[serde(default, skip_serializing_if = "Look::is_plain")]
+    pub quote: Look,
+    #[serde(default, skip_serializing_if = "Look::is_plain")]
+    pub list: Look,
+}
+
+impl RoleLooks {
+    /// Senza i livelli vuoti in fondo, così da rileggersi uguale.
+    pub fn new(mut h: Vec<Look>, quote: Look, list: Look) -> Self {
+        while h.last().is_some_and(Look::is_plain) {
+            h.pop();
+        }
+        RoleLooks { h, quote, list }
+    }
+
+    pub fn is_plain(&self) -> bool {
+        *self == RoleLooks::default()
     }
 }
 
@@ -832,6 +866,7 @@ pub(crate) fn project(document: &Document) -> Result<Projection, RichError> {
         lang: document.styles.default_chr.lang.clone(),
         f: base(&document.styles, None),
         styles: gallery(document, &used),
+        roles: role_looks(document),
         page: Some(Page::of(&document.last_section)),
         header: running::of(document, document.last_section.headers.default),
         footer: running::of(document, document.last_section.footers.default),
@@ -914,6 +949,27 @@ fn gallery(document: &Document, used: &BTreeSet<String>) -> Vec<ParaStyle> {
             f: base(styles, Some(&s.id)),
         })
         .collect()
+}
+
+/// L'aspetto di ogni ruolo, dagli stili che il salvataggio gli darebbe: quelli
+/// del documento, o quelli di WordCraft che gli aggiungerebbe.
+fn role_looks(document: &Document) -> RoleLooks {
+    use crate::unproject::{builtin_style, heading_style};
+    let mut styles = document.styles.clone();
+    let look = |id: Option<String>, styles: &StyleSheet| {
+        id.map(|id| base(styles, Some(&id))).unwrap_or_default()
+    };
+    let h = (1..=9)
+        .map(|level| {
+            let id = heading_style(&mut styles, level);
+            look(id, &styles)
+        })
+        .collect();
+    let quote = builtin_style(&mut styles, "Quote");
+    let quote = look(quote, &styles);
+    let list = builtin_style(&mut styles, "ListParagraph");
+    let list = look(list, &styles);
+    RoleLooks::new(h, quote, list)
 }
 
 /// Uno stile che un paragrafo di corpo può avere: non il predefinito, e
@@ -1368,6 +1424,35 @@ mod tests {
             crop,
             ole: None,
         }
+    }
+
+    #[test]
+    fn ogni_ruolo_ha_l_aspetto_dello_stile_che_il_salvataggio_gli_scrive() {
+        let mut document = Document::default();
+        let plain = base(&document.styles, None);
+        // Il titolo 1 del documento è suo; gli altri sono quelli che
+        // WordCraft aggiungerebbe.
+        let mut styles = document.styles.clone();
+        let id = crate::unproject::heading_style(&mut styles, 1).unwrap();
+        let mut own = styles.get(&id).unwrap().clone();
+        own.chr.size = Some(31.0);
+        document.styles = styles;
+        document.styles.styles.retain(|s| s.id != id);
+        document.styles.styles.push(own);
+        let roles = role_looks(&document);
+        assert_eq!(roles.h[0].size, Some(31.0), "lo stile del documento");
+        let mut builtin = StyleSheet::default();
+        let h2 = crate::unproject::heading_style(&mut builtin, 2).unwrap();
+        assert_eq!(
+            roles.h[1],
+            base(&builtin, Some(&h2)),
+            "quello che si aggiungerebbe"
+        );
+        assert_ne!(roles.h[1], plain, "un titolo non ha la misura del testo");
+        // Si rilegge uguale: i livelli vuoti in fondo non ci sono.
+        let json = serde_json::to_string(&roles).unwrap();
+        assert_eq!(serde_json::from_str::<RoleLooks>(&json).unwrap(), roles);
+        assert!(RoleLooks::new(vec![Look::default()], Look::default(), Look::default()).is_plain());
     }
 
     fn document(media: &[(&str, Vec<u8>)]) -> Document {

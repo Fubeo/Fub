@@ -32,6 +32,18 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+/// La proiezione senza `roles`, byte per byte come il resto.
+function withoutRoles(source: string): string {
+  const start = source.indexOf(`,"roles":{`);
+  if (start < 0) return source;
+  let depth = 0;
+  for (let i = source.indexOf("{", start); i < source.length; i++) {
+    if (source[i] === "{") depth++;
+    else if (source[i] === "}" && --depth === 0) return source.slice(0, start) + source.slice(i + 1);
+  }
+  throw new Error("roles non si chiude");
+}
+
 function engine(changes: EditorChange[] = []): RichEngine {
   const parent = document.createElement("div");
   document.body.append(parent);
@@ -66,12 +78,14 @@ describe("la proiezione del codec", () => {
     // Lo schema è quello che il formato scrive: lo si legge dalla fixture.
     expect(Number.isInteger(SCHEMA)).toBe(true);
     expect([projection.version, projection.opaque_schema]).toEqual([3, SCHEMA]);
+    // Le bozze di prima non avevano l'aspetto dei ruoli, che è della 3.
+    const older = withoutRoles(SOURCE);
     // Una bozza di versione 2, di prima dei segni, resta di versione 2.
-    const v2 = SOURCE.replace(`"version":3,`, `"version":2,`);
+    const v2 = older.replace(`"version":3,`, `"version":2,`);
     expect(v2).not.toBe(SOURCE);
     expect(writeProjection(parseProjection(v2))).toBe(v2);
     // Una bozza di versione 1, di prima dello schema, resta di versione 1.
-    const v1 = SOURCE.replace(`"version":3,"opaque_schema":${SCHEMA},`, `"version":1,`);
+    const v1 = older.replace(`"version":3,"opaque_schema":${SCHEMA},`, `"version":1,`);
     expect(v1).not.toBe(SOURCE);
     expect(writeProjection(parseProjection(v1))).toBe(v1);
     // Uno schema che la shell non conosce lo decide il formato: si ricopia.

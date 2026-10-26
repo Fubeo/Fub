@@ -37,6 +37,7 @@ import {
   insertTab,
   ASK_ACTIONS,
   richActionState,
+  paraLooksPlugin,
   RICH_ACTIONS,
   shiftListLevel,
   splitParagraph,
@@ -90,7 +91,7 @@ export class RichEngine {
   /// L'intestazione dell'ultima proiezione letta. Versione e schema si
   /// ricopiano come sono arrivati; prima di ogni lettura non si scrive niente
   /// che un formato accetti, ma la forma resta quella della versione 3.
-  #head: Pick<Projection, "version" | "opaque_schema" | "readonly" | "body_only" | "lang" | "f" | "styles"> = { version: 3 };
+  #head: Pick<Projection, "version" | "opaque_schema" | "readonly" | "body_only" | "lang" | "f" | "styles" | "roles"> = { version: 3 };
   /// Il testo del buffer come lo tiene il motore: quello ricevuto finché
   /// nessuno lo cambia, poi quello riscritto.
   #source = "";
@@ -222,6 +223,7 @@ export class RichEngine {
       sectionPlugin,
       sheetsPlugin(this.#sheets, (zone) => this.#openRunning(zone.kind, zone.sheet)),
       tintPlugin,
+      paraLooksPlugin(() => ({ body: this.#head.f, roles: this.#head.roles, styles: this.#head.styles })),
       keymap(this.#keys()),
       keymap(baseKeymap),
     ];
@@ -366,6 +368,7 @@ export class RichEngine {
         lang: projection.lang,
         f: projection.f,
         styles: projection.styles,
+        roles: projection.roles,
       };
       this.#intake = { kind: "ok", readonly: projection.readonly ?? null };
       this.#closed = closedBlocks(projection.blocks);

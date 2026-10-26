@@ -247,12 +247,23 @@ export interface Projection {
   /// Suggerimento: il carattere e la dimensione di un paragrafo senza stile.
   readonly f?: Look;
   readonly styles?: readonly ParaStyle[];
+  /// Suggerimento: il carattere e la dimensione che ogni ruolo dà al testo,
+  /// come li dà lo stile che il salvataggio gli scrive.
+  readonly roles?: RoleLooks;
   /// La pagina dell'ultima sezione, quella che nessun paragrafo chiude.
   readonly page?: Page;
   readonly header?: RunningText;
   readonly footer?: RunningText;
   readonly comments?: readonly CommentView[];
   readonly blocks: readonly Block[];
+}
+
+/// L'aspetto del testo dei ruoli che non sono il corpo. `h` va dal livello 1;
+/// un livello vuoto (`{}`), o oltre la fine, è uno che il codec non sa dire.
+export interface RoleLooks {
+  readonly h?: readonly Look[];
+  readonly quote?: Look;
+  readonly list?: Look;
 }
 
 /// La pagina di una sezione, in punti: i lati (già scambiati se è
@@ -488,6 +499,18 @@ function readStyle(value: unknown, where: string): ParaStyle {
   };
 }
 
+function readRoles(value: unknown, where: string): RoleLooks {
+  const roles = record(value, where);
+  closed(roles, ["h", "quote", "list"], where);
+  const quote = readLook(roles.quote, `${where}.quote`);
+  const listed = readLook(roles.list, `${where}.list`);
+  return {
+    ...(roles.h !== undefined ? { h: list(roles.h, `${where}.h`).map((h, i) => readLook(h, `${where}.h[${i}]`) ?? {}) } : {}),
+    ...(quote ? { quote } : {}),
+    ...(listed ? { list: listed } : {}),
+  };
+}
+
 function readInline(value: unknown, where: string): Inline {
   const inline = record(value, where);
   if (inline.t === "text") {
@@ -684,7 +707,7 @@ export function parseProjection(source: string): Projection {
   const keys = {
     1: ["format", "version", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"],
     2: ["format", "version", "opaque_schema", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"],
-    3: ["format", "version", "opaque_schema", "readonly", "body_only", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"],
+    3: ["format", "version", "opaque_schema", "readonly", "body_only", "track", "lang", "f", "styles", "roles", "page", "header", "footer", "comments", "blocks"],
   }[version];
   closed(root, keys, "proiezione");
   const schema = root.opaque_schema;
@@ -707,6 +730,7 @@ export function parseProjection(source: string): Projection {
     ...(root.lang !== undefined ? { lang: text(root.lang, "lang") } : {}),
     ...withLook(readLook(root.f, "f")),
     ...(root.styles !== undefined ? { styles: list(root.styles, "styles").map((s, i) => readStyle(s, `styles[${i}]`)) } : {}),
+    ...(root.roles !== undefined ? { roles: readRoles(root.roles, "roles") } : {}),
     ...(root.page !== undefined ? { page: readPage(root.page, "page") } : {}),
     ...(root.header !== undefined ? { header: readRunning(root.header, "header") } : {}),
     ...(root.footer !== undefined ? { footer: readRunning(root.footer, "footer") } : {}),
@@ -747,14 +771,26 @@ function float(n: number): string {
   return Number.isInteger(n) && Math.abs(n) < 1e16 ? `${n}.0` : String(n);
 }
 
-function writeLook(look: Look | undefined): string {
-  if (!look) return "";
+function writeLook(look: Look | undefined, key = "f"): string {
+  const body = lookBody(look);
+  return body === "{}" ? "" : `,"${key}":${body}`;
+}
+
+function lookBody(look: Look | undefined): string {
   const fields: string[] = [];
-  if (look.font !== undefined) fields.push(`"font":${JSON.stringify(look.font)}`);
-  if (look.size !== undefined) fields.push(`"size":${float(look.size)}`);
-  if (look.color !== undefined) fields.push(`"color":${JSON.stringify(look.color)}`);
-  if (look.hl !== undefined) fields.push(`"hl":${JSON.stringify(look.hl)}`);
-  return fields.length > 0 ? `,"f":{${fields.join(",")}}` : "";
+  if (look?.font !== undefined) fields.push(`"font":${JSON.stringify(look.font)}`);
+  if (look?.size !== undefined) fields.push(`"size":${float(look.size)}`);
+  if (look?.color !== undefined) fields.push(`"color":${JSON.stringify(look.color)}`);
+  if (look?.hl !== undefined) fields.push(`"hl":${JSON.stringify(look.hl)}`);
+  return `{${fields.join(",")}}`;
+}
+
+function writeRoles(roles: RoleLooks | undefined): string {
+  if (!roles) return "";
+  let body = "";
+  if (roles.h && roles.h.length > 0) body += `,"h":[${roles.h.map(lookBody).join(",")}]`;
+  body += writeLook(roles.quote, "quote") + writeLook(roles.list, "list");
+  return body === "" ? "" : `,"roles":{${body.slice(1)}}`;
 }
 
 function writeLayout(layout: Layout | undefined): string {
@@ -854,7 +890,7 @@ export function writeBlock(block: Block): string {
 }
 
 /// L'intestazione della proiezione fino all'elenco dei blocchi escluso.
-export function writeHead(projection: Pick<Projection, "version" | "opaque_schema" | "readonly" | "body_only" | "track" | "lang" | "f" | "styles" | "page" | "header" | "footer" | "comments">): string {
+export function writeHead(projection: Pick<Projection, "version" | "opaque_schema" | "readonly" | "body_only" | "track" | "lang" | "f" | "styles" | "roles" | "page" | "header" | "footer" | "comments">): string {
   let out = `{"format":"${PROJECTION_FORMAT}","version":${projection.version}`;
   if (projection.opaque_schema !== undefined) out += `,"opaque_schema":${projection.opaque_schema}`;
   if (projection.readonly !== undefined) out += `,"readonly":"${projection.readonly}"`;
@@ -868,6 +904,7 @@ export function writeHead(projection: Pick<Projection, "version" | "opaque_schem
     );
     out += `,"styles":[${styles.join(",")}]`;
   }
+  out += writeRoles(projection.roles);
   if (projection.page) out += `,"page":${writePage(projection.page)}`;
   if (projection.header) out += `,"header":${writeRunning(projection.header)}`;
   if (projection.footer) out += `,"footer":${writeRunning(projection.footer)}`;

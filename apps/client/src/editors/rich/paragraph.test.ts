@@ -4,7 +4,7 @@
 // la proiezione porta in `align`, `p` e `s`, e i gesti che li cambiano.
 import { afterEach, describe, expect, it } from "vitest";
 import { Fragment, Slice } from "prosemirror-model";
-import { selectedLayout, selectedStyle, setLayout, setStyle } from "./commands";
+import { selectedLayout, selectedStyle, setLayout, setStyle, splitParagraph } from "./commands";
 import { RichEngine } from "./engine";
 import { parseProjection, type Block, type Para } from "./projection";
 import { t } from "../../i18n/strings";
@@ -116,6 +116,61 @@ describe("il paragrafo", () => {
     expect(e.apply(setStyle({ role: { kind: "body" } }, e.documentLook()))).toBe(true);
     expect(paras(e)[0]).toMatchObject({ role: { kind: "body" }, f: LOOK });
     expect(paras(e)[0]!.s).toBeUndefined();
+  });
+
+  it("cambiando ruolo o stile il paragrafo prende subito l'aspetto che lo stile gli darà", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const e = new RichEngine(parent, { label: () => "documento", onChange: () => {}, onSelectionChange: () => {} });
+    engines.push(e);
+    const H1 = { font: "Aptos Display", size: 20 };
+    const H2 = { font: "Aptos Display", size: 16 };
+    const QUOTE = { font: "Aptos", size: 11 };
+    const TITLE = { font: "Aptos Display", size: 28 };
+    e.setDoc(
+      JSON.stringify({
+        format: "fub-rich",
+        version: 3,
+        opaque_schema: 3,
+        f: LOOK,
+        styles: [...STYLES, { id: "Title", name: "Title", f: TITLE }],
+        roles: { h: [H1, H2], quote: QUOTE },
+        blocks: [para("uno"), para("due")],
+      }),
+    );
+    selectParas(e, 0);
+    const look = () => paras(e)[0]!.f;
+    // Dalla galleria: Titolo, poi Titolo 1, Titolo 2, Sottotitolo, di nuovo
+    // Titolo 1 e il testo normale; ognuno ha il suo carattere e la sua misura.
+    expect(e.apply(setStyle({ s: "Title", f: TITLE }, e.documentLook()))).toBe(true);
+    expect(look()).toEqual(TITLE);
+    expect(e.apply(setStyle({ role: { kind: "heading", level: 1 } }, e.documentLook()))).toBe(true);
+    expect(look()).toEqual(H1);
+    expect(e.apply(setStyle({ role: { kind: "heading", level: 2 } }, e.documentLook()))).toBe(true);
+    expect(look()).toEqual(H2);
+    expect(e.apply(setStyle({ s: "Subtitle", f: STYLES[0]!.f }, e.documentLook()))).toBe(true);
+    expect(look()).toEqual(STYLES[0]!.f);
+    expect(e.apply(setStyle({ role: { kind: "heading", level: 1 } }, e.documentLook()))).toBe(true);
+    expect(look()).toEqual(H1);
+    // Un livello che il codec non sa dire torna al testo, non tiene il Titolo 1.
+    expect(e.apply(setStyle({ role: { kind: "heading", level: 3 } }, e.documentLook()))).toBe(true);
+    expect(look()).toEqual(LOOK);
+    expect(e.apply(setStyle({ role: { kind: "quote" } }, e.documentLook()))).toBe(true);
+    expect(look()).toEqual(QUOTE);
+    // Dalla tastiera, come i comandi del Markdown: andata e ritorno.
+    expect(e.run("markdown.heading.2")).toBe(true);
+    expect(look()).toEqual(H2);
+    expect(e.run("markdown.heading.2")).toBe(true);
+    expect(paras(e)[0]!.role).toEqual({ kind: "body" });
+    expect(look()).toEqual(LOOK);
+    // Invio in fondo a un titolo: il paragrafo nuovo è testo, con la misura del testo.
+    expect(e.run("markdown.heading.1")).toBe(true);
+    e.select(e.state.doc.firstChild!.nodeSize - 1);
+    expect(e.apply(splitParagraph)).toBe(true);
+    expect(paras(e).slice(0, 2).map((p) => [p.role.kind, p.f])).toEqual([
+      ["heading", H1],
+      ["body", LOOK],
+    ]);
   });
 
   it("la barra propone gli stili del documento e la spaziatura del paragrafo", () => {

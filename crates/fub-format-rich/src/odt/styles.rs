@@ -595,6 +595,28 @@ impl Styles {
         difference(&self.para(para), &self.para(common.as_deref()))
     }
 
+    /// L'aspetto dei titoli e delle citazioni, dagli stili che il salvataggio
+    /// darebbe loro: quelli del documento, o quelli di LibreOffice che gli
+    /// aggiungerebbe (`write::heading`).
+    pub fn role_looks(&self) -> projection::RoleLooks {
+        let plain = self.text(None, &[]).base();
+        let h = (1..=9)
+            .map(|level| match self.heading(level) {
+                Some(name) => self.text(Some(&name), &[]).base(),
+                None => Look {
+                    size: plain.size.map(|size| size * heading_scale(level)),
+                    ..plain.clone()
+                },
+            })
+            .collect();
+        let quote = if self.common("paragraph", "Quotations") {
+            self.text(Some("Quotations"), &[]).base()
+        } else {
+            Look::default()
+        };
+        projection::RoleLooks::new(h, quote, Look::default())
+    }
+
     /// Gli stili comuni di paragrafo da proporre a un paragrafo di corpo:
     /// quelli di testo e di capitolo, e quelli in uso, tranne titoli,
     /// citazioni e quelli che portano un elenco; in ordine di nome mostrato.
@@ -783,5 +805,17 @@ fn align(value: &str) -> Option<Align> {
         "end" | "right" => Some(Align::Right),
         "justify" => Some(Align::Justify),
         _ => None,
+    }
+}
+
+/// Quanto il titolo di LibreOffice di livello `level` ingrandisce il testo,
+/// come lo scrive `write::heading`.
+pub(crate) fn heading_scale(level: u8) -> f32 {
+    match level {
+        1 => 1.30,
+        2 => 1.15,
+        3 => 1.01,
+        4 => 0.95,
+        _ => 0.85,
     }
 }

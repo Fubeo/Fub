@@ -101,6 +101,7 @@ pub(crate) fn open(bytes: &[u8]) -> Result<Opened, RichError> {
             projection::used_styles(&blocks, &mut used);
             doc.styles.gallery(&used)
         },
+        roles: doc.styles.role_looks(),
         track: false,
         page: None,
         header: None,

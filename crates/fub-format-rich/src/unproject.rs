@@ -1122,7 +1122,7 @@ fn kind(ordered: bool) -> ListKind {
 
 /// Lo stile di titolo del livello: quello del documento se c'è, altrimenti
 /// quello predefinito di WordCraft, aggiunto al documento.
-fn heading_style(styles: &mut StyleSheet, level: u8) -> Option<String> {
+pub(crate) fn heading_style(styles: &mut StyleSheet, level: u8) -> Option<String> {
     let id = format!("Heading{level}");
     if styles.get(&id).is_some() {
         return Some(id);

@@ -564,6 +564,31 @@ fn carattere_dimensione_colori_e_maiuscole_diventano_uno_stile_automatico() {
 }
 
 #[test]
+fn i_titoli_hanno_l_aspetto_dello_stile_che_il_salvataggio_gli_scrive() {
+    let mut fixture = Fixture::new("<text:p>uno</text:p>");
+    fixture.common = fixture.common.replace(
+        "<style:text-properties fo:language",
+        "<style:text-properties fo:font-size=\"12pt\" fo:language",
+    );
+    fixture.common.push_str(
+        "<style:style style:name=\"Heading_20_1\" style:display-name=\"Heading 1\" \
+         style:family=\"paragraph\" style:default-outline-level=\"1\">\
+         <style:text-properties fo:font-size=\"18pt\"/></style:style>",
+    );
+    let bytes = fixture.bytes();
+    let projection = projection(&bytes);
+    assert_eq!(
+        projection.roles.h[0].size,
+        Some(18.0),
+        "lo stile del documento"
+    );
+    // Il titolo 2 non c'è: è quello di LibreOffice che il salvataggio
+    // aggiungerebbe, al 115% del testo.
+    assert_eq!(projection.f.size, Some(12.0));
+    assert_eq!(projection.roles.h[1].size, Some(12.0 * 1.15));
+}
+
+#[test]
 fn allineamento_disposizione_e_stile_diventano_stili_automatici() {
     let mut fixture = Fixture::new(
         "<text:p text:style-name=\"P1\">uno</text:p><text:p>due</text:p>\

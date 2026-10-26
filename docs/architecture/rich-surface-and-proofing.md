@@ -85,8 +85,10 @@ l'IPC.
   risolto (`align`), la disposizione (`p`: rientri, prima riga, spazi,
   interlinea, in punti) dove differisce da quella del suo stile, e lo stile
   di un paragrafo di corpo (`s`). Il carattere del documento (`f` in testa)
-  e la galleria degli stili (`styles`) sono suggerimenti di resa che il
-  ritorno ignora. `BlockWriter` riscrive
+  la galleria degli stili (`styles`) e l'aspetto di ogni ruolo (`roles`:
+  titoli, citazione, elenco) sono suggerimenti di resa che il ritorno
+  ignora: un paragrafo che diventa titolo, sottotitolo o corpo prende subito
+  il carattere che il suo stile gli darà. `BlockWriter` riscrive
   soltanto i blocchi cambiati. Per un `.docx` la rilettura del modello non
   basta, perché un lettore non vede ciò che lui stesso salta: il controllo di
   Fub (`fub-format-rich/src/preservation.rs`, sull'inventario di

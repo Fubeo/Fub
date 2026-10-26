@@ -19,7 +19,7 @@
 import { chainCommands, deleteSelection, joinBackward, joinForward, selectNodeBackward, selectNodeForward, toggleMark } from "prosemirror-commands";
 import { redo, redoDepth, undo, undoDepth } from "prosemirror-history";
 import type { Mark as PmMark, MarkType, Node as PmNode, ResolvedPos } from "prosemirror-model";
-import { NodeSelection, Plugin, TextSelection, type Command, type EditorState, type Transaction } from "prosemirror-state";
+import { NodeSelection, Plugin, PluginKey, TextSelection, type Command, type EditorState, type Transaction } from "prosemirror-state";
 import {
   BODY,
   COLOR_AUTO,
@@ -31,7 +31,9 @@ import {
   type LayoutLength,
   type Line,
   type Look,
+  type ParaStyle,
   type Role,
+  type RoleLooks,
 } from "./projection";
 import { safeHref } from "./paste";
 import { canComment } from "./comments";
@@ -69,6 +71,49 @@ export function selectedRole(state: EditorState): Role | null {
 
 /// Dà `role` ai paragrafi selezionati. `toggle`: se l'hanno già tutti, tornano
 /// testo normale.
+/// Gli aspetti che il documento dà ai ruoli e ai suoi stili: chi cambia il
+/// ruolo o lo stile di un paragrafo li legge qui, perché il paragrafo si
+/// mostri subito come verrà salvato.
+export interface ParaLooks {
+  /// Il testo senza stile.
+  readonly body?: Look;
+  readonly roles?: RoleLooks;
+  readonly styles?: readonly ParaStyle[];
+}
+
+const PARA_LOOKS = new PluginKey("rich-para-looks");
+
+/// Porta nello stato gli aspetti del documento di adesso: `looks` si legge a
+/// ogni cambio, così un documento ricaricato non lascia quelli di prima.
+export function paraLooksPlugin(looks: () => ParaLooks): Plugin {
+  return new Plugin({ key: PARA_LOOKS, looks });
+}
+
+function paraLooks(state: EditorState): ParaLooks {
+  const looks = PARA_LOOKS.get(state)?.spec.looks as (() => ParaLooks) | undefined;
+  return looks?.() ?? {};
+}
+
+/// L'aspetto (`f`) di un paragrafo che prende il ruolo `role` con lo stile
+/// `s`: quello che lo stile del ruolo gli darà. Un titolo di cui il codec non
+/// sa dire l'aspetto torna al testo senza stile, non tiene quello di prima.
+export function roleLook(state: EditorState, role: Role, s: string | null, current: Look | null): Look | null {
+  const looks = paraLooks(state);
+  const known = (look: Look | undefined) => (look && Object.keys(look).length > 0 ? look : undefined);
+  const body = known(looks.body) ?? null;
+  switch (role.kind) {
+    case "heading":
+      return known(looks.roles?.h?.[role.level - 1]) ?? body;
+    case "quote":
+      return known(looks.roles?.quote) ?? body;
+    case "list":
+      // Una voce con uno stile suo lo tiene: il salvataggio non lo cambia.
+      return s ? current : (known(looks.roles?.list) ?? body);
+    case "body":
+      return s ? (known(looks.styles?.find((style) => style.id === s)?.f) ?? current) : body;
+  }
+}
+
 export function setRole(role: Role, toggle = false): Command {
   return (state, dispatch) => {
     const paras = selectedParas(state);
@@ -78,7 +123,10 @@ export function setRole(role: Role, toggle = false): Command {
     if (paras.every(({ node }) => sameRole(node.attrs.role as Role, next))) return false;
     if (dispatch) {
       const tr = state.tr;
-      for (const { node, pos } of paras) tr.setNodeMarkup(pos, null, { ...node.attrs, role: next });
+      for (const { node, pos } of paras) {
+        const f = roleLook(state, next, node.attrs.s as string | null, node.attrs.f as Look | null);
+        tr.setNodeMarkup(pos, null, { ...node.attrs, role: next, f });
+      }
       dispatch(tr.scrollIntoView());
     }
     return true;
@@ -338,7 +386,10 @@ export const splitParagraph: Command = (state, dispatch) => {
   const recording = tracking(state.doc);
   if (paragraph.content.size === 0 && role.kind === "list" && !recording) {
     // Una voce vuota esce dall'elenco invece di farne un'altra.
-    if (dispatch) dispatch(state.tr.setNodeMarkup($from.before(), null, { ...paragraph.attrs, role: BODY }));
+    if (dispatch) {
+      const f = roleLook(state, BODY, paragraph.attrs.s as string | null, paragraph.attrs.f as Look | null);
+      dispatch(state.tr.setNodeMarkup($from.before(), null, { ...paragraph.attrs, role: BODY, f }));
+    }
     return true;
   }
   if (!dispatch) return true;
@@ -348,7 +399,9 @@ export const splitParagraph: Command = (state, dispatch) => {
   const atEnd = $pos.parentOffset === $pos.parent.content.size;
   const leavesHeading = atEnd && role.kind === "heading";
   const marks = state.storedMarks ?? $pos.marks();
-  tr.split($pos.pos, 1, [{ type: para, attrs: { ...paragraph.attrs, role: leavesHeading ? BODY : role } }]);
+  // Dopo un titolo si scrive testo normale, con l'aspetto del testo.
+  const after = leavesHeading ? { role: BODY, s: null, f: roleLook(state, BODY, null, null) } : { role };
+  tr.split($pos.pos, 1, [{ type: para, attrs: { ...paragraph.attrs, ...after } }]);
   // Il segno di fine revisionato resta in fondo, al secondo: il primo ne ha
   // uno nuovo, di chi scrive.
   if (tracksMark(paragraph) && !recording) tr.setNodeMarkup($pos.before(), null, { ...tr.doc.nodeAt($pos.before())!.attrs, ins: null, del: null });
@@ -1037,11 +1090,12 @@ export function selectedStyle(state: EditorState): string | null {
 /// `look` è l'aspetto del testo senza stile: quello che un paragrafo di corpo
 /// torna a mostrare.
 export function setStyle(pick: StylePick, look: Look | undefined): Command {
-  return updateParas(() => {
-    if ("s" in pick) return { role: BODY, s: pick.s, f: pick.f ?? look ?? null };
-    if (pick.role.kind === "body") return { role: BODY, s: null, f: look ?? null };
-    return { role: pick.role, s: null };
-  });
+  return (state, dispatch) =>
+    updateParas((node) => {
+      if ("s" in pick) return { role: BODY, s: pick.s, f: pick.f ?? look ?? null };
+      if (pick.role.kind === "body") return { role: BODY, s: null, f: look ?? null };
+      return { role: pick.role, s: null, f: roleLook(state, pick.role, null, node.attrs.f as Look | null) };
+    })(state, dispatch);
 }
 
 // ── Il catalogo ──────────────────────────────────────────────────────────────
