@@ -2620,7 +2620,9 @@ pub struct PreparedDocumentWrite {
     existed: bool,
     from: Option<Revision>,
     expected_source: Option<String>,
-    parser: PreparedParse,
+    /// `None` per un formato di sola sorgente: il suo editor possiede il
+    /// modello, e il testo si scrive senza parse.
+    parser: Option<PreparedParse>,
     before_write: Vec<(String, BeforeWriteHook)>,
 }
 
@@ -3256,8 +3258,12 @@ impl PreparedDocumentFeed {
 
 impl PreparedDocumentWrite {
     /// Esegue `FormatProvider::parse` e tutte le `SyntaxRule`, e nient'altro.
-    pub fn parse(&self, source: &str) -> Result<DocumentModel> {
-        self.parser.invoke(DocumentSource::Text(source.to_string()))
+    /// Un formato di sola sorgente non ha parser e non ha modello: `None`.
+    pub fn parse(&self, source: &str) -> Result<Option<DocumentModel>> {
+        self.parser
+            .as_ref()
+            .map(|parser| parser.invoke(DocumentSource::Text(source.to_string())))
+            .transpose()
     }
 
     /// Il sorgente verificato da `WriteBase::DescendsFrom`.
@@ -6352,7 +6358,15 @@ impl Workspace {
                 }
             }
         };
-        let parser = self.docs.prepare_parse(&id)?;
+        // Un formato di sola sorgente (il `.fubsheet`) non ha parser: il
+        // modello è del suo editor, e il testo si scrive come il file opaco
+        // della via a byte, in anagrafe e senza `DocumentChanged`.
+        // Un'estensione che nessuno ha dichiarato resta senza provider.
+        let parser = match self.docs.prepare_parse(&id) {
+            Ok(parser) => Some(parser),
+            Err(KernelError::NoProvider(_)) if self.docs.is_text_source_only(&id) => None,
+            Err(error) => return Err(error),
+        };
         Ok(PreparedDocumentWrite {
             id,
             existed,
@@ -6383,7 +6397,7 @@ impl Workspace {
         &mut self,
         prepared: PreparedDocumentWrite,
         source: &str,
-        model: DocumentModel,
+        model: Option<DocumentModel>,
         before_write: std::result::Result<(), PluginError>,
     ) -> Result<PreparedDocumentFeed> {
         self.indexes.ensure_mutation_available()?;
@@ -6415,13 +6429,20 @@ impl Workspace {
             self.docs.vault.write(&id, source)?
         };
         let revision = Revision::of(source);
-        let changes = self.indexes.core.changes_for(&model, &revision);
+        let changes = model
+            .as_ref()
+            .map(|model| self.indexes.core.changes_for(model, &revision))
+            .unwrap_or_default();
         self.set_entry(&id, placed.0, placed.1, Some(revision.clone()));
-        let losses = self
-            .indexes
-            .core
-            .on_documents_indexed(std::slice::from_ref(&model));
-        let providers = self.indexes.feed_handles();
+        let (losses, providers) = match &model {
+            Some(model) => (
+                self.indexes
+                    .core
+                    .on_documents_indexed(std::slice::from_ref(model)),
+                self.indexes.feed_handles(),
+            ),
+            None => (Vec::new(), Vec::new()),
+        };
         let journal = if existed {
             JournalOp::Written {
                 doc: id.clone(),
@@ -6436,7 +6457,7 @@ impl Workspace {
         };
         Ok(PreparedDocumentFeed {
             id,
-            model: Some(model),
+            model,
             changes,
             revision,
             journal,
@@ -6451,7 +6472,7 @@ impl Workspace {
         &mut self,
         prepared: PreparedDocumentWrite,
         source: &str,
-        model: DocumentModel,
+        model: Option<DocumentModel>,
         before_write: std::result::Result<(), PluginError>,
         base: Revision,
         report: &EditReport,
@@ -6508,7 +6529,7 @@ impl Workspace {
         &mut self,
         prepared: PreparedDocumentWrite,
         source: &str,
-        model: DocumentModel,
+        model: Option<DocumentModel>,
         before_write: std::result::Result<(), PluginError>,
     ) -> Result<Revision> {
         let pending = self.commit_document_write(prepared, source, model, before_write)?;
