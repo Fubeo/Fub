@@ -41,6 +41,24 @@ pub(crate) const UNDO: &str = "edit.undo";
 pub(crate) const REDO: &str = "edit.redo";
 /// Il comando con cui l'input di una cella entra nel giornale.
 pub(crate) const SET_VALUES: &str = "range.setValues";
+/// Copia, o sposta, un intervallo della cartella nella selezione in un passo
+/// solo: `edit.copy` (o `edit.cut`) e `edit.pasteSpecial` della facciata,
+/// senza appunti che restano. Rifatto dal giornale dà la stessa cartella, e
+/// formule, formati e unioni seguono come in GridCraft.
+pub(crate) const PASTE_FROM: &str = "fub.pasteFrom";
+/// Il testo e la tabella HTML di un intervallo, per gli appunti di sistema:
+/// legge soltanto.
+pub(crate) const COPY_HTML: &str = "fub.copyHtml";
+/// I comandi composti di Fub, fuori dal catalogo della facciata: id, se
+/// cambia la cartella, parametri.
+const COMPOSED: &[(&str, bool, &str)] = &[
+    (
+        PASTE_FROM,
+        true,
+        "{source: \"A1:B2\", sourceSheet?: \"s1\", at?: \"C3\", what?: all|formulas|values|formats|comments|validation|allExceptBorders|columnWidths|formulasAndNumberFormats|valuesAndNumberFormats, move?: bool}",
+    ),
+    (COPY_HTML, false, "{range?} → {range, text, html?}"),
+];
 
 /// I gruppi del catalogo che Fub non serve: file e finestre sono della shell,
 /// gli script eseguono codice del documento, la cronologia è del documento.
@@ -85,7 +103,7 @@ const UNDO_SNAPSHOTS: usize = 100;
 
 /// Se Fub serve il comando `id` della facciata.
 pub(crate) fn served(id: &str) -> bool {
-    if id == UNDO || id == REDO {
+    if id == UNDO || id == REDO || COMPOSED.iter().any(|(composed, ..)| *composed == id) {
         return true;
     }
     if SERVED_ANYWAY.contains(&id) {
@@ -100,6 +118,9 @@ pub(crate) fn served(id: &str) -> bool {
 
 /// Se il comando `id` può cambiare la cartella.
 pub(crate) fn edits(id: &str) -> bool {
+    if let Some((_, edits, _)) = COMPOSED.iter().find(|(composed, ..)| *composed == id) {
+        return *edits;
+    }
     find_command(id).is_some_and(|spec| spec.undoable)
 }
 
@@ -427,7 +448,17 @@ impl Facade {
             self.ready = true;
         }
         self.select(&command.selection())?;
-        let outcome = self.session.execute(&command.id, params);
+        let outcome = match command.id.as_str() {
+            PASTE_FROM => self.paste_from(&params),
+            COPY_HTML => self.session.execute(
+                "edit.copy",
+                json!({ "range": params.get("range"), "html": true }),
+            ),
+            _ => self.session.execute(&command.id, params),
+        };
+        // Gli appunti della facciata non si rifanno dal giornale: nessuno
+        // resta dopo un comando.
+        self.session.clipboard = None;
         self.session.journal.clear();
         // La cronologia è del giornale: quella della facciata terrebbe in
         // memoria una seconda copia di ogni stato.
@@ -435,6 +466,43 @@ impl Facade {
         doc.undo.clear();
         doc.redo.clear();
         outcome.map_err(engine_error)
+    }
+
+    /// [`PASTE_FROM`] sulla selezione del comando: `edit.copy` (o
+    /// `edit.cut` con `move`) di `source`, sul foglio `sourceSheet` o su
+    /// quello del comando, poi `edit.pasteSpecial`.
+    fn paste_from(&mut self, params: &Json) -> Result<Json, EngineError> {
+        let bad = |why: &str| EngineError::Other(format!("{PASTE_FROM}: {why}"));
+        let source = params
+            .get("source")
+            .and_then(Json::as_str)
+            .ok_or_else(|| bad("`source` is required"))?;
+        let sheet = match params.get("sourceSheet") {
+            None | Some(Json::Null) => self.doc().wb.active_sheet,
+            Some(id) => id
+                .as_str()
+                .and_then(|id| self.sheet_index(id))
+                .ok_or_else(|| bad("`sourceSheet` names no sheet"))?,
+        };
+        let moving = match params.get("move") {
+            None | Some(Json::Null) => false,
+            Some(flag) => flag.as_bool().ok_or_else(|| bad("`move` is a bool"))?,
+        };
+        let what = match params.get("what") {
+            None | Some(Json::Null) => "all",
+            Some(what) => what.as_str().ok_or_else(|| bad("`what` is a string"))?,
+        };
+        if moving && what != "all" {
+            return Err(bad("only `what: all` moves"));
+        }
+        let take = if moving { "edit.cut" } else { "edit.copy" };
+        self.session
+            .execute(take, json!({ "sheet": sheet, "range": source }))?;
+        let mut paste = json!({ "what": what });
+        if let Some(at) = params.get("at").filter(|at| !at.is_null()) {
+            paste["at"] = at.clone();
+        }
+        self.session.execute("edit.pasteSpecial", paste)
     }
 
     /// Mette nella finestra chiesta ciò che mostra all'apertura e che la
@@ -611,6 +679,14 @@ impl Facade {
                 id: spec.id.to_owned(),
                 enabled,
                 reason,
+            });
+        }
+        for (id, changes, _) in COMPOSED {
+            let blocked = if *changes { edits } else { None };
+            out.push(GridCommandState {
+                id: (*id).to_owned(),
+                enabled: blocked.is_none(),
+                reason: blocked.map(|why| truncate(why.to_owned(), MAX_GRID_COMMAND_REASON_BYTES)),
             });
         }
         out
@@ -940,6 +1016,10 @@ mod tests {
         for spec in command_specs().iter().filter(|spec| served(spec.id)) {
             let kind = if spec.undoable { "modifica" } else { "legge" };
             text.push_str(&format!("{}\t{kind}\t{}\n", spec.id, spec.params));
+        }
+        for (id, changes, params) in COMPOSED {
+            let kind = if *changes { "modifica" } else { "legge" };
+            text.push_str(&format!("{id}\t{kind}\t{params}\n"));
         }
         let path = concat!(
             env!("CARGO_MANIFEST_DIR"),
