@@ -1305,6 +1305,21 @@ impl Reader<'_> {
         let blip = pic.find("a:blip")?;
         float.set_spin(xfrm_spin(pic.find("pic:spPr")));
         let media = blip.attr("r:embed").and_then(|id| self.media_for(rels, id))?;
+        // An SVG picture's SVG (`asvg:svgBlip`), kept beside its PNG so a save writes both.
+        let svg = blip
+            .child("a:extLst")
+            .into_iter()
+            .flat_map(|l| l.children("a:ext"))
+            .filter(|x| x.attr("uri").is_some_and(|u| u.eq_ignore_ascii_case(crate::ink::SVG_EXT)))
+            .flat_map(|x| x.els())
+            .find(|e| e.local() == "svgBlip")
+            .and_then(|e| e.attr("r:embed"))
+            .and_then(|id| self.media_for(rels, id));
+        if let Some(svg) = svg
+            && crate::ink::svg_key_of(&self.doc, &media).is_none()
+        {
+            crate::ink::link_svg(&mut self.doc, &media, &svg);
+        }
         let mut crop = [0.0f32; 4];
         if let Some(sr) = pic.find("a:srcRect") {
             for (i, n) in ["l", "t", "r", "b"].iter().enumerate() {

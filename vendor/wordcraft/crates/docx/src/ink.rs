@@ -1,0 +1,293 @@
+//! New native ink and SVG pictures, for callers that make them rather than read them.
+//!
+//! Native ink is written as Word writes it: an `mc:AlternateContent` whose choice is the ink part
+//! (`w14:contentPart`, InkML) and whose fallback is a VML picture of the strokes, so a reader
+//! without ink shows the picture and Word keeps ink it can edit. The object is an ordinary kept
+//! [`Graphic`] of kind [`GraphicKind::Ink`]: saving writes it back like ink read from a file.
+//!
+//! An SVG picture is a PNG picture with an SVG companion (`asvg:svgBlip`, Office 2016): readers
+//! without SVG show the PNG. The companion is a `Document::media` entry named by
+//! [`SVG_PICTURES`], read back from files that carry one.
+
+use std::sync::Arc;
+
+use wordcraft_doc::graphic::{Embedded, EmbeddedRef, Graphic, GraphicItem, GraphicKind};
+use wordcraft_doc::para::Float;
+use wordcraft_doc::{Document, InlineObject};
+
+/// The kept part that lists the parts kept objects bring, with their content types.
+pub use crate::package::EMBEDDED_PARTS;
+use crate::package::{EmbeddedManifest, EmbeddedPart, rt};
+
+/// The `a:graphicData` URI of native ink.
+pub const INK_URI: &str = "http://schemas.microsoft.com/office/word/2010/wordprocessingInk";
+/// The relationship type of an ink part.
+pub const INK_REL: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml";
+/// The content type of an ink part.
+pub const INKML_CONTENT_TYPE: &str = "application/inkml+xml";
+/// The `a:ext` URI of an SVG companion, and the namespace of its `asvg:svgBlip`.
+pub const SVG_EXT: &str = "{96DAC541-7B7A-43D3-8B79-37D633B846F1}";
+pub const SVG_NS: &str = "http://schemas.microsoft.com/office/drawing/2016/SVG/main";
+/// `Document::passthrough` key listing the SVG companions of pictures: one `picture media key \t
+/// SVG media key` line each. Not a package part: WordCraft's own bookkeeping.
+pub const SVG_PICTURES: &str = "wordcraft:svg.pictures";
+/// Largest ink part or SVG companion made here.
+pub const MAX_INK_BYTES: usize = 16 * 1024 * 1024;
+
+const NS: &str = concat!(
+    r#"xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" "#,
+    r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" "#,
+    r#"xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" "#,
+    r#"xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" "#,
+    r#"xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" "#,
+    r#"xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" "#,
+    r#"xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" "#,
+    r#"xmlns:v="urn:schemas-microsoft-com:vml" "#,
+    r#"xmlns:o="urn:schemas-microsoft-com:office:office""#,
+);
+
+/// Why ink or an SVG picture can't be made.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InkError {
+    /// Empty, over [`MAX_INK_BYTES`], or not the expected kind of data.
+    Data(&'static str),
+    /// The document already carries as many kept parts as a file may.
+    TooManyParts,
+}
+
+impl std::fmt::Display for InkError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InkError::Data(what) => write!(f, "unusable {what}"),
+            InkError::TooManyParts => f.write_str("too many kept parts"),
+        }
+    }
+}
+
+impl std::error::Error for InkError {}
+
+/// The InkML of a native ink graphic, as kept from its file or made by [`new_ink`].
+pub fn ink_markup<'d>(doc: &'d Document, graphic: &Graphic) -> Option<&'d Arc<Vec<u8>>> {
+    if graphic.kind != GraphicKind::Ink {
+        return None;
+    }
+    let source = graphic.source.as_deref()?;
+    let part = source.refs.iter().find(|r| !r.external && r.kind == INK_REL)?;
+    doc.passthrough.get(&part.target)
+}
+
+/// A new native ink object, `w` × `h` points, from an InkML document and a PNG picture of it (the
+/// fallback). Its parts are added to `doc`; the object still has to be placed in a paragraph.
+pub fn new_ink(doc: &mut Document, inkml: &[u8], preview_png: &[u8], w: f32, h: f32, alt: &str, float: Float) -> Result<InlineObject, InkError> {
+    if inkml.is_empty() || inkml.len() > MAX_INK_BYTES || !looks_like_inkml(inkml) {
+        return Err(InkError::Data("InkML"));
+    }
+    if !preview_png.starts_with(b"\x89PNG") || preview_png.len() > MAX_INK_BYTES {
+        return Err(InkError::Data("PNG picture"));
+    }
+    let (w, h) = (finite_len(w), finite_len(h));
+    let mut manifest = doc.passthrough.get(EMBEDDED_PARTS).map(|m| EmbeddedManifest::parse(m)).unwrap_or_default();
+    if manifest.parts.len() + 2 > crate::package::MAX_EMBEDDED_PARTS {
+        return Err(InkError::TooManyParts);
+    }
+    // The ink part, its picture beside it and the picture's media key share a number none of
+    // them has yet: the picture's key is the one a reader gives the part.
+    let n = (1u32..)
+        .find(|n| {
+            let names = [format!("word/ink/ink{n}.xml"), format!("word/ink/ink{n}.png")];
+            names.iter().all(|name| !doc.passthrough.contains_key(name) && !manifest.parts.contains_key(name))
+                && !doc.media.contains_key(&format!("ink{n}.png"))
+        })
+        .unwrap_or_default();
+    let (ink_part, png_part, media) = (format!("word/ink/ink{n}.xml"), format!("word/ink/ink{n}.png"), format!("ink{n}.png"));
+    let (cx, cy) = (emu(w), emu(h));
+    let xml = format!(
+        r#"<mc:AlternateContent {NS}><mc:Choice Requires="wpi"><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="{cx}" cy="{cy}"/><wp:docPr id="1" name="Ink 1"/><a:graphic><a:graphicData uri="{INK_URI}"><w14:contentPart bwMode="auto" r:id="rIdInk"><w14:nvContentPartPr><w14:cNvContentPartPr/></w14:nvContentPartPr><w14:xfrm><a:off x="0" y="0"/><a:ext cx="{cx}" cy="{cy}"/></w14:xfrm></w14:contentPart></a:graphicData></a:graphic></wp:inline></w:drawing></mc:Choice><mc:Fallback><w:pict><v:shape id="Ink1" style="width:{w}pt;height:{h}pt" coordsize="21600,21600" stroked="f" filled="f"><v:imagedata r:id="rIdInkPicture" o:title=""/></v:shape></w:pict></mc:Fallback></mc:AlternateContent>"#,
+        w = fmt_pt(w),
+        h = fmt_pt(h),
+    );
+    let refs = vec![
+        EmbeddedRef { id: "rIdInk".into(), kind: INK_REL.into(), target: ink_part.clone(), external: false },
+        EmbeddedRef { id: "rIdInkPicture".into(), kind: rt::IMAGE.into(), target: png_part.clone(), external: false },
+    ];
+    let items = vec![GraphicItem::Image { rect: [0.0, 0.0, w, h], media: media.clone() }];
+    let graphic = Graphic { kind: GraphicKind::Ink, items, w, h, source: Some(Arc::new(Embedded { xml, refs })), ..Default::default() };
+    let made = InlineObject::Graphic { w, h, alt: alt.to_string(), float, graphic: Arc::new(graphic) };
+    // Made as a reader makes it: saved alone and read back, so a document that gets it saves and
+    // reads back the same object (but for numbering that depends on its place in the file).
+    let mut alone = Document::default();
+    let mut parts = EmbeddedManifest::default();
+    parts.parts.insert(ink_part.clone(), EmbeddedPart { content_type: INKML_CONTENT_TYPE.into(), rels: Vec::new() });
+    parts.parts.insert(png_part.clone(), EmbeddedPart { content_type: "image/png".into(), rels: Vec::new() });
+    alone.passthrough.insert(ink_part.clone(), Arc::new(inkml.to_vec()));
+    alone.passthrough.insert(png_part.clone(), Arc::new(preview_png.to_vec()));
+    alone.passthrough.insert(EMBEDDED_PARTS.into(), Arc::new(parts.to_bytes()));
+    alone.body.clear();
+    let mut paragraph = wordcraft_doc::Paragraph::new();
+    paragraph.insert_object(0, made, &wordcraft_doc::CharProps::default()).map_err(|_| InkError::Data("object"))?;
+    alone.body.push(wordcraft_doc::para_block(paragraph));
+    let back = crate::write(&alone).ok().and_then(|bytes| crate::read(&bytes).ok()).ok_or(InkError::Data("ink"))?;
+    let object = back.body.iter().find_map(|b| b.as_para()).and_then(|p| p.objects.first()).cloned().ok_or(InkError::Data("ink"))?;
+    let InlineObject::Graphic { graphic, .. } = &object else { return Err(InkError::Data("ink")) };
+    let source = graphic.source.as_deref().ok_or(InkError::Data("ink"))?;
+    let mut targets: Vec<&str> = source.refs.iter().map(|r| r.target.as_str()).collect();
+    targets.sort_unstable();
+    if graphic.kind != GraphicKind::Ink || targets != [png_part.as_str(), ink_part.as_str()] || back.media.get(&media).is_none() {
+        return Err(InkError::Data("ink"));
+    }
+    manifest.parts.insert(ink_part.clone(), EmbeddedPart { content_type: INKML_CONTENT_TYPE.into(), rels: Vec::new() });
+    manifest.parts.insert(png_part.clone(), EmbeddedPart { content_type: "image/png".into(), rels: Vec::new() });
+    doc.passthrough.insert(ink_part, Arc::new(inkml.to_vec()));
+    doc.passthrough.insert(png_part, Arc::new(preview_png.to_vec()));
+    doc.passthrough.insert(EMBEDDED_PARTS.into(), Arc::new(manifest.to_bytes()));
+    doc.media.insert(media, Arc::new(preview_png.to_vec()));
+    Ok(object)
+}
+
+/// The SVG companion of picture `media`, when it has one.
+pub fn svg_of<'d>(doc: &'d Document, media: &str) -> Option<&'d Arc<Vec<u8>>> {
+    doc.media.get(&svg_key_of(doc, media)?)
+}
+
+/// The media key of picture `media`'s SVG companion, when it has one.
+pub fn svg_key_of(doc: &Document, media: &str) -> Option<String> {
+    let list = doc.passthrough.get(SVG_PICTURES)?;
+    String::from_utf8_lossy(list).lines().find_map(|line| match line.split_once('\t') {
+        Some((picture, svg)) if picture == media && doc.media.contains_key(svg) => Some(svg.to_string()),
+        _ => None,
+    })
+}
+
+/// A new picture, `w` × `h` points, that is an SVG with a PNG for readers without SVG. Its media
+/// are added to `doc`; the object still has to be placed in a paragraph.
+pub fn new_svg_picture(doc: &mut Document, svg: &[u8], png: &[u8], w: f32, h: f32, alt: &str, float: Float) -> Result<InlineObject, InkError> {
+    if svg.is_empty() || svg.len() > MAX_INK_BYTES || !looks_like_svg(svg) {
+        return Err(InkError::Data("SVG"));
+    }
+    if !png.starts_with(b"\x89PNG") || png.len() > MAX_INK_BYTES {
+        return Err(InkError::Data("PNG picture"));
+    }
+    let media = free_media(doc, "drawing", "png");
+    doc.media.insert(media.clone(), Arc::new(png.to_vec()));
+    let companion = free_media(doc, "drawing", "svg");
+    doc.media.insert(companion.clone(), Arc::new(svg.to_vec()));
+    link_svg(doc, &media, &companion);
+    Ok(InlineObject::Image { media, w: finite_len(w), h: finite_len(h), alt: alt.to_string(), float, crop: [0.0; 4], ole: None })
+}
+
+/// Record `svg` (a media key) as the SVG companion of picture `media`.
+pub(crate) fn link_svg(doc: &mut Document, media: &str, svg: &str) {
+    if [media, svg].iter().any(|k| k.is_empty() || k.contains(['\t', '\r', '\n'])) {
+        return;
+    }
+    let mut list = doc.passthrough.get(SVG_PICTURES).map(|b| String::from_utf8_lossy(b).into_owned()).unwrap_or_default();
+    list.push_str(&format!("{media}\t{svg}\n"));
+    doc.passthrough.insert(SVG_PICTURES.into(), Arc::new(list.into_bytes()));
+}
+
+fn looks_like_inkml(bytes: &[u8]) -> bool {
+    let head = String::from_utf8_lossy(&bytes[..bytes.len().min(512)]);
+    head.contains("<ink") || head.contains(":ink")
+}
+
+fn looks_like_svg(bytes: &[u8]) -> bool {
+    let head = String::from_utf8_lossy(&bytes[..bytes.len().min(1024)]);
+    head.contains("<svg")
+}
+
+fn finite_len(v: f32) -> f32 {
+    if v.is_finite() { v.clamp(1.0, crate::units::MAX_LEN_PT) } else { 1.0 }
+}
+
+fn emu(pt: f32) -> i64 {
+    (pt as f64 * 12_700.0).round() as i64
+}
+
+fn fmt_pt(pt: f32) -> String {
+    let s = format!("{:.2}", pt);
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+/// A part name `{stem}{n}.{ext}` neither kept nor named by the manifest.
+fn free_part(doc: &Document, manifest: &EmbeddedManifest, stem: &str, ext: &str) -> String {
+    (1u32..)
+        .map(|n| format!("{stem}{n}.{ext}"))
+        .find(|name| !doc.passthrough.contains_key(name) && !manifest.parts.contains_key(name))
+        .unwrap_or_default()
+}
+
+/// A media key `{stem}{n}.{ext}` not yet used.
+fn free_media(doc: &Document, stem: &str, ext: &str) -> String {
+    (1u32..).map(|n| format!("{stem}{n}.{ext}")).find(|name| !doc.media.contains_key(name)).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wordcraft_doc::{CharProps, Paragraph, para_block};
+
+    const INKML: &[u8] = br#"<ink xmlns="http://www.w3.org/2003/InkML"><trace>0 0, 10 10</trace></ink>"#;
+    const PNG: &[u8] = b"\x89PNG\r\n\x1a\n0000";
+    const SVG: &[u8] = br#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>"#;
+
+    fn with(object: InlineObject) -> Document {
+        let mut doc = Document::default();
+        doc.body.clear();
+        let mut p = Paragraph::new();
+        p.insert_object(0, object, &CharProps::default()).unwrap();
+        doc.body.push(para_block(p));
+        doc
+    }
+
+    fn first_object(doc: &Document) -> &InlineObject {
+        doc.body.iter().find_map(|b| b.as_para()).and_then(|p| p.objects.first()).expect("an object")
+    }
+
+    #[test]
+    fn new_ink_survives_a_save_as_ink_with_its_picture() {
+        let mut doc = Document::default();
+        let ink = new_ink(&mut doc, INKML, PNG, 72.0, 36.0, "firma", Float::default()).unwrap();
+        let mut out = with(ink);
+        out.passthrough = doc.passthrough.clone();
+        out.media = doc.media.clone();
+        let bytes = crate::write(&out).unwrap();
+        let back = crate::read(&bytes).unwrap();
+        let InlineObject::Graphic { w, h, graphic, .. } = first_object(&back) else { panic!("ink read back as something else") };
+        assert_eq!(graphic.kind, GraphicKind::Ink);
+        assert!((w - 72.0).abs() < 0.1 && (h - 36.0).abs() < 0.1);
+        assert_eq!(ink_markup(&back, graphic).map(|b| b.as_slice()), Some(INKML));
+        let source = graphic.source.as_deref().unwrap();
+        assert!(source.xml.contains("mc:Fallback"), "the picture fallback is kept: {}", source.xml);
+        // Saved again unchanged, it stays ink.
+        let again = crate::read(&crate::write(&back).unwrap()).unwrap();
+        let InlineObject::Graphic { graphic, .. } = first_object(&again) else { panic!("ink lost") };
+        assert_eq!(ink_markup(&again, graphic).map(|b| b.as_slice()), Some(INKML));
+    }
+
+    #[test]
+    fn bad_data_makes_no_ink() {
+        let mut doc = Document::default();
+        assert_eq!(new_ink(&mut doc, b"", PNG, 1.0, 1.0, "", Float::default()), Err(InkError::Data("InkML")));
+        assert_eq!(new_ink(&mut doc, INKML, b"GIF8", 1.0, 1.0, "", Float::default()), Err(InkError::Data("PNG picture")));
+        assert!(doc.passthrough.is_empty() && doc.media.is_empty());
+    }
+
+    #[test]
+    fn an_svg_picture_keeps_its_svg_through_a_save() {
+        let mut doc = Document::default();
+        let picture = new_svg_picture(&mut doc, SVG, PNG, 120.0, 80.0, "disegno", Float::default()).unwrap();
+        let mut out = with(picture);
+        out.passthrough = doc.passthrough.clone();
+        out.media = doc.media.clone();
+        let bytes = crate::write(&out).unwrap();
+        let text = crate::package::Package::open(&bytes)
+            .ok()
+            .and_then(|p| p.get("word/document.xml").map(|b| String::from_utf8_lossy(b).into_owned()))
+            .unwrap_or_default();
+        assert!(text.contains("svgBlip"), "{text}");
+        let back = crate::read(&bytes).unwrap();
+        let InlineObject::Image { media, .. } = first_object(&back) else { panic!("not a picture") };
+        assert_eq!(back.media.get(media).map(|b| b.as_slice()), Some(PNG));
+        assert_eq!(svg_of(&back, media).map(|b| b.as_slice()), Some(SVG));
+    }
+}
