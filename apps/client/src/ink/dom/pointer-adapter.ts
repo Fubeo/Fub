@@ -217,6 +217,7 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
           pressure: effect.pressure,
           timeStamp: effect.timeStamp,
           continued: effect.continued,
+          role: effect.role,
         });
         return;
       case "samples":
@@ -234,6 +235,7 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
           pressure: effect.pressure,
           timeStamp: effect.timeStamp,
           continued: effect.continued,
+          role: effect.role,
           samples: effect.samples,
           tilt: effect.tilt,
           split: effect.split,
@@ -329,6 +331,22 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
       ? event.getPredictedEvents().map((one) => pointerOf(one, turn, scale, false))
       : [];
     run(session.pointerMove(coalesced, pointerOf(event, turn, scale), predicted));
+  }, { capture: true });
+
+  // `pointerrawupdate` arriva prima di `pointermove`, appena il dispositivo
+  // parla, dove il motore lo manda (Chromium, in un contesto sicuro): il
+  // tratto cresce subito, dentro il gestore, senza aspettare il fotogramma
+  // (FD-748, DEC-26). Il `pointermove` che segue porta gli stessi campioni,
+  // che la sessione scarta come doppioni, e le predizioni; una predizione
+  // vecchia si toglie al primo campione vero.
+  life.listen(element, "pointerrawupdate" as "pointermove", (event: PointerEvent) => {
+    if (!session.tracks(event.pointerId)) return;
+    const turn = options.turn?.() ?? 0;
+    const scale = options.scale?.() ?? 1;
+    const coalesced = typeof event.getCoalescedEvents === "function"
+      ? event.getCoalescedEvents().map((one) => pointerOf(one, turn, scale))
+      : [];
+    run(session.pointerMove(coalesced, pointerOf(event, turn, scale), []));
   }, { capture: true });
 
   // Sul documento, in cattura: il `pointerup` arriva anche se la cattura non è

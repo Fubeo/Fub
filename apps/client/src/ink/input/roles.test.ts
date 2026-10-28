@@ -4,10 +4,11 @@ import { classifyPointer, type RoleContext } from "./roles";
 const calm: RoleContext = { touch: "auto", penSeen: false, penNear: false, touchesDown: 0 };
 
 describe("ruoli dei puntatori", () => {
-  it("la punta della penna disegna; tasto laterale e gomma no", () => {
+  it("la punta della penna disegna, la gomma cancella, il tasto laterale sceglie", () => {
     expect(classifyPointer({ pointerType: "pen", button: 0 }, calm)).toBe("ink");
-    expect(classifyPointer({ pointerType: "pen", button: 2 }, calm)).toBe("ignore");
-    expect(classifyPointer({ pointerType: "pen", button: 5 }, calm)).toBe("ignore");
+    expect(classifyPointer({ pointerType: "pen", button: 2 }, calm)).toBe("barrel");
+    expect(classifyPointer({ pointerType: "pen", button: 5 }, calm)).toBe("erase");
+    expect(classifyPointer({ pointerType: "pen", button: 3 }, calm)).toBe("ignore");
   });
 
   it("il mouse disegna col tasto principale e muove la vista con quello centrale", () => {

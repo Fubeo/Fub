@@ -12,9 +12,10 @@
 // Non sanno dove finirà il tratto, quale livello lo riceve né come si
 // annulla; lo sa il prodotto.
 
-import type { Pf1Brush } from "../brush";
-import { mappedSamples, straight, type Affine } from "../geometry";
-import { pf1Input, pf1Outline, type OutlinePoint } from "../pf1";
+import { isNib1, type InkBrush, type Pf1Brush } from "../brush";
+import { mappedSamples, straight, STRAIGHT_SNAP, type Affine } from "../geometry";
+import { inkOutline } from "../outline";
+import { pf1Input, type OutlinePoint } from "../pf1";
 import { Pf1Live, type Pf1Input } from "../pf1-live";
 import {
   checkInkStep,
@@ -28,23 +29,23 @@ import {
 } from "../sample";
 
 /// Il contorno del tratto in corso: i campioni `local`, più quelli
-/// `predicted` se ci stanno ancora, o dritto dal primo all'ultimo se
-/// `straightened`. Vuoto se non c'è niente da disegnare o i campioni non si
+/// `predicted` se ci stanno ancora, o dritto dal primo all'ultimo, a passi di
+/// 15°, se `straightened`. Vuoto se non c'è niente da disegnare o i campioni non si
 /// scrivono: l'anteprima non lancia mai.
 export function previewOutline(
   local: readonly InkSample[],
   predicted: readonly InkSample[],
-  brush: Pf1Brush,
+  brush: InkBrush,
   straightened: boolean,
 ): OutlinePoint[] {
   const samples = straightened
-    ? straight(local)
+    ? straight(local, STRAIGHT_SNAP)
     : local.length + predicted.length <= INK_MAX_SAMPLES
       ? [...local, ...predicted]
       : local;
   if (samples.length === 0) return [];
   try {
-    return pf1Outline(quantizeInk(samples), brush, { last: false });
+    return inkOutline(quantizeInk(samples), brush, { last: false });
   } catch {
     return [];
   }
@@ -71,10 +72,11 @@ export class StrokePreview {
   /// vuoto finché il tratto non ricomincia.
   private failed = false;
 
-  constructor(private readonly brush: Pf1Brush) {}
+  constructor(private readonly brush: InkBrush) {}
 
   outline(local: readonly InkSample[], predicted: readonly InkSample[], straightened: boolean): OutlinePoint[] {
-    if (straightened || local.length === 0 || local.length > INK_MAX_SAMPLES) {
+    // La punta piatta costa poco: si rifà tutta, come la definizione.
+    if (straightened || isNib1(this.brush) || local.length === 0 || local.length > INK_MAX_SAMPLES) {
       return previewOutline(local, predicted, this.brush, straightened);
     }
     if (local.length < this.fed || (this.fed > 0 && local[this.fed - 1] !== this.seen)) this.restart();
@@ -119,7 +121,7 @@ export class StrokePreview {
       if (i === 0) {
         if (sample.t !== 0) return null;
         this.first = sample;
-        this.live = new Pf1Live(this.brush);
+        this.live = new Pf1Live(this.brush as Pf1Brush);
       }
       const quantized = quantizeInkSample(sample, i, this.first!, DEFAULT_INK_SCALE);
       if (this.previous !== null) checkInkStep(quantized, this.previous, i);
@@ -155,12 +157,12 @@ export type BuiltStroke =
 /// Il tratto finito dei campioni `samples` col pennello `brush`, e le sue
 /// copie portate da ognuna delle `matrices`. Una copia che uscirebbe dai
 /// numeri dell'inchiostro, o che non fa contorno, non c'è: le altre sì.
-export function buildStroke(samples: readonly InkSample[], brush: Pf1Brush, matrices: readonly Affine[]): BuiltStroke {
+export function buildStroke(samples: readonly InkSample[], brush: InkBrush, matrices: readonly Affine[]): BuiltStroke {
   let ink: QuantizedInk;
   let outline: OutlinePoint[];
   try {
     ink = quantizeInk(samples);
-    outline = pf1Outline(ink, brush);
+    outline = inkOutline(ink, brush);
   } catch {
     return { ok: false, reason: "failed" };
   }
@@ -169,7 +171,7 @@ export function buildStroke(samples: readonly InkSample[], brush: Pf1Brush, matr
   for (const matrix of matrices) {
     try {
       const copyInk = quantizeInk(mappedSamples(samples, matrix));
-      const copyOutline = pf1Outline(copyInk, brush);
+      const copyOutline = inkOutline(copyInk, brush);
       if (copyOutline.length > 0) copies.push({ matrix, ink: copyInk, outline: copyOutline });
     } catch {
       continue;

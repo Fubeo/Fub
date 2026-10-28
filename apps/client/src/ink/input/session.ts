@@ -32,6 +32,10 @@
 //   finché non preme; una penna sospesa non disegna mai. Il mouse disegna col
 //   tasto principale, senza canale di pressione: il pennello la simula
 //   (`sim=1`). Lo stesso per il dito.
+// - **La penna ha tre tratti.** La punta fa il tratto dell'inchiostro, la
+//   gomma della penna girata e il tasto laterale fanno il loro, che `role`
+//   distingue: chi disegna decide che cosa farne. Ogni tratto vive finché è
+//   premuto il suo tasto (il bit 1, 32 o 2 di `buttons`).
 // - **Il palmo non disegna.** I ruoli dei puntatori sono quelli di `roles.ts`.
 // - **Al massimo `maxSamples` campioni.** Oltre, il tratto si chiude e ne
 //   comincia un altro dallo stesso punto, senza buchi: l'ultimo campione del
@@ -54,7 +58,7 @@
 
 import { INK_MAX_SAMPLES, type InkSample, type InkTilt } from "../sample";
 import type { InkPointerType, PointerSample } from "./pointer";
-import { classifyPointer, type PointerRole, type TouchPolicy } from "./roles";
+import { buttonMask, classifyPointer, strokes, type PointerRole, type StrokeRole, type TouchPolicy } from "./roles";
 import { Stabilizer, type StabilizerConfig, NO_STABILIZER } from "./stabilizer";
 import { penAngles, reportsTilt, type PenAngles } from "./tilt";
 
@@ -69,6 +73,9 @@ export interface StrokeStart {
   readonly timeStamp: number;
   /// Il tratto continua quello appena chiuso al limite dei campioni.
   readonly continued: boolean;
+  /// Chi fa il tratto: la punta (`ink`), la gomma della penna girata o il
+  /// tasto laterale.
+  readonly role: StrokeRole;
 }
 
 /// Un tratto concluso alzando il puntatore, o chiuso al limite dei campioni.
@@ -124,9 +131,6 @@ export interface SessionConfig {
   readonly stabilizer?: StabilizerConfig;
 }
 
-/// Il bit del tasto principale in `PointerEvent.buttons`.
-const PRIMARY_BUTTON = 1;
-
 interface PointerEntry {
   readonly kind: InkPointerType;
   role: PointerRole;
@@ -135,6 +139,8 @@ interface PointerEntry {
 interface Stroke {
   readonly pointerId: number;
   readonly kind: InkPointerType;
+  /// Chi fa il tratto; il suo bit di `buttons` lo tiene vivo.
+  readonly role: StrokeRole;
   readonly pressure: boolean;
   continued: boolean;
   /// `null` finché il tratto non è annunciato con `start`: una penna
@@ -271,13 +277,14 @@ export class Session {
       this.cancelStroke("gesture");
     }
     // Un tratto alla volta.
-    if (role === "ink" && this.stroke !== null) role = "ignore";
+    if (strokes(role) && this.stroke !== null) role = "ignore";
     this.pointers.set(event.pointerId, { kind, role });
-    if (role !== "ink") return this.takeEffects();
+    if (!strokes(role)) return this.takeEffects();
     this.effects.push({ fx: "capture", pointer: event.pointerId });
     const stroke: Stroke = {
       pointerId: event.pointerId,
       kind,
+      role,
       pressure: kind === "pen",
       continued: false,
       id: null,
@@ -301,9 +308,9 @@ export class Session {
     if (event.pointerType === "pen") this.notePen(event.pointerId);
     const stroke = this.takeStrokeOf(event.pointerId);
     if (stroke === null) return this.takeEffects();
-    // Il tasto principale rilasciato con un altro ancora premuto non manda
+    // Il tasto del tratto rilasciato con un altro ancora premuto non manda
     // `pointerup`: il tratto finisce qui.
-    if ((event.buttons & PRIMARY_BUTTON) === 0) {
+    if ((event.buttons & buttonMask(stroke.role)) === 0) {
       this.finish(stroke, [], null);
       return this.takeEffects();
     }
@@ -448,7 +455,7 @@ export class Session {
   /// finché non si alza, e la cattura torna al browser.
   private retire(pointerId: number): void {
     const entry = this.pointers.get(pointerId);
-    if (entry?.role === "ink") entry.role = "ignore";
+    if (entry !== undefined && strokes(entry.role)) entry.role = "ignore";
     this.effects.push({ fx: "release", pointer: pointerId });
   }
 
@@ -492,6 +499,7 @@ export class Session {
       pressure: stroke.pressure,
       timeStamp: stroke.origin,
       continued: stroke.continued,
+      role: stroke.role,
     });
   }
 
@@ -508,6 +516,7 @@ export class Session {
       pressure: stroke.pressure,
       timeStamp: stroke.origin,
       continued: stroke.continued,
+      role: stroke.role,
       samples,
       tilt,
       split,

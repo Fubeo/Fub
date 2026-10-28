@@ -1,45 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { brushForInput, formatBrush, PF1_DEFAULTS } from "../brush";
+import { formatInkBrush, isNib1, PF1_DEFAULTS, penOf, withPen } from "../brush";
+import { DEFAULT_PEN, penBrush, penLook } from "../pens";
 import { ERASER } from "./eraser";
 import { HIGHLIGHTER, HIGHLIGHTER_OPACITY } from "./highlighter";
 import { PEN } from "./pen";
 import { INK_TOOLS, InkToolRegistry, systemInkTools } from "./registry";
 import { checkTool, closedAtLimit, joined, type EraseTool, type StrokeTool } from "./tool";
 
-// Gli strumenti da soli: la ricetta del tratto, le capacità, il registro. Le
-// ricette sono quelle che FubDraw aveva dentro l'editor, e i test le fissano
-// com'erano: un tratto già scritto non deve cambiare perché lo strumento si è
-// spostato.
+// Gli strumenti da soli: la ricetta del tratto, le capacità, il registro. Un
+// tratto già scritto non cambia con le penne: il suo pennello sta nel file.
 
 const fresh = { pressure: true, continued: false };
 
 describe("la penna", () => {
-  it("col canale della pressione scrive il pennello di perfect-freehand, a tutto spessore", () => {
-    expect(PEN.brush(4, fresh)).toEqual({ ...PF1_DEFAULTS, size: 4, sim: false });
+  it("scrive con la Sfera, se non si sceglie un'altra penna, e lo dice nel pennello", () => {
+    expect(PEN.pens[0]).toBe(DEFAULT_PEN);
+    expect(PEN.brush(4, fresh)).toEqual(penBrush("ballpoint", 4, true));
+    expect(formatInkBrush(PEN.brush(4, fresh))).toBe(
+      "pf1 size=4 thinning=0.25 smoothing=0.5 streamline=0.5 taperStart=4 taperEnd=16 capStart=1 capEnd=1 sim=0 pen=ballpoint",
+    );
   });
 
   it("senza pressione (mouse, dito) la finge, e il file lo dice con sim=1", () => {
     const brush = PEN.brush(4, { pressure: false, continued: false });
-    expect(brush).toEqual({ ...PF1_DEFAULTS, size: 4, sim: true });
-    expect(formatBrush(brush)).toContain("sim=1");
-    expect(formatBrush(PEN.brush(4, fresh))).toContain("sim=0");
-    expect(brush).toEqual(brushForInput({ ...PF1_DEFAULTS, size: 4, sim: false }, false));
+    expect(formatInkBrush(brush)).toContain("sim=1");
+    expect(formatInkBrush(PEN.brush(4, fresh))).toContain("sim=0");
   });
 
-  it("è la ricetta che l'editor aveva scritta due volte: del puntatore e del tratto da tastiera", () => {
-    // Del puntatore: `brushForInput({ …PF1_DEFAULTS, size, sim: false }, pressione)`.
-    for (const pressure of [true, false]) {
-      expect(PEN.brush(7, { pressure, continued: false })).toEqual(brushForInput({ ...PF1_DEFAULTS, size: 7, sim: false }, pressure));
-    }
-    // Da tastiera, senza dispositivo: `{ …PF1_DEFAULTS, size, sim: true }`.
-    expect(PEN.brush(7, { pressure: false, continued: false })).toEqual({ ...PF1_DEFAULTS, size: 7, sim: true });
+  it("ogni sua penna dà il suo pennello; quella di un altro strumento no", () => {
+    for (const pen of PEN.pens) expect(penOf(PEN.brush(5, fresh, pen))).toBe(pen);
+    expect(PEN.pens).not.toContain("highlighter");
+    expect(penOf(PEN.brush(5, fresh, "highlighter"))).toBe(DEFAULT_PEN);
+    expect(isNib1(PEN.brush(12, fresh, "calligraphy"))).toBe(true);
   });
 
-  it("copre del tutto e può tenersi ferma per diventare una forma", () => {
+  it("copre del tutto, raddrizza con Maiusc e può tenersi ferma per diventare una forma", () => {
     expect(PEN.opacity).toBe(1);
     expect(PEN.capabilities).toEqual({
       pressure: true,
-      straightWithModifier: false,
+      straightWithModifier: true,
       symmetry: true,
       holdsToShape: true,
       stabilizes: true,
@@ -49,16 +48,15 @@ describe("la penna", () => {
 
 describe("l'evidenziatore", () => {
   it("ha lo spessore costante e le punte piatte, qualunque sia il dispositivo", () => {
-    const expected = { ...PF1_DEFAULTS, size: 16, thinning: 0, capStart: false, capEnd: false, sim: false };
+    const expected = withPen({ ...PF1_DEFAULTS, size: 16, thinning: 0, capStart: false, capEnd: false, sim: false }, "highlighter");
     expect(HIGHLIGHTER.brush(16, fresh)).toEqual(expected);
     expect(HIGHLIGHTER.brush(16, { pressure: false, continued: false })).toEqual(expected);
-    // Il pennello che l'editor scriveva a mano per il puntatore e per la tastiera.
-    expect(expected).toEqual({ ...PF1_DEFAULTS, size: 16, thinning: 0, capStart: false, capEnd: false, sim: false });
   });
 
-  it("si vede attraverso al 40%, il numero che il file scrive nel riempimento", () => {
-    expect(HIGHLIGHTER.opacity).toBe(0.4);
-    expect(HIGHLIGHTER_OPACITY).toBe(0.4);
+  it("si vede attraverso a metà e moltiplica: il nero sotto resta nero", () => {
+    expect(HIGHLIGHTER.opacity).toBe(0.5);
+    expect(HIGHLIGHTER_OPACITY).toBe(0.5);
+    expect(penLook(HIGHLIGHTER.brush(16, fresh), "highlighter")).toEqual({ opacity: 0.5, blend: "multiply" });
     expect(HIGHLIGHTER.capabilities.straightWithModifier).toBe(true);
     expect(HIGHLIGHTER.capabilities.pressure).toBe(false);
     expect(HIGHLIGHTER.capabilities.holdsToShape).toBe(false);
@@ -93,6 +91,7 @@ describe("il registro degli strumenti dell'inchiostro", () => {
     id: "marker-2",
     opacity: 0.8,
     capabilities: { pressure: false, straightWithModifier: false, symmetry: false, holdsToShape: false, stabilizes: false },
+    pens: ["marker"],
     brush: (width) => ({ ...PF1_DEFAULTS, size: width }),
   };
 
