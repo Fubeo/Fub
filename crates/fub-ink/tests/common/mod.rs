@@ -147,6 +147,15 @@ pub fn button(e: PointerSample, button: i32) -> PointerSample {
     PointerSample { button, ..e }
 }
 
+/// L'evento col tasto `button` e i tasti premuti `buttons`.
+pub fn pressed(e: PointerSample, button: i32, buttons: u32) -> PointerSample {
+    PointerSample {
+        button,
+        buttons,
+        ..e
+    }
+}
+
 pub fn tilted(e: PointerSample, tilt_x: f64, tilt_y: f64) -> PointerSample {
     PointerSample {
         tilt: Tilt {
@@ -526,8 +535,8 @@ pub fn catalog() -> Vec<Script> {
         ],
     ));
 
-    // I tasti: il secondario del mouse e la gomma della penna non disegnano; il
-    // centrale muove la vista.
+    // I tasti: il secondario del mouse e un tasto strano della penna non
+    // disegnano; il centrale muove la vista.
     all.push(script(
         "buttons_decide_the_role",
         vec![
@@ -535,8 +544,24 @@ pub fn catalog() -> Vec<Script> {
             Step::Up(button(mouse(70, 0.0, 0.0, 5.0), 2)),
             Step::Down(button(mouse(71, 0.0, 0.0, 10.0), 1)),
             Step::Up(button(mouse(71, 0.0, 0.0, 15.0), 1)),
-            Step::Down(button(pen(72, 0.0, 0.0, 20.0, 0.5), 5)),
-            Step::Up(button(pen(72, 0.0, 0.0, 25.0, 0.0), 5)),
+            Step::Down(button(pen(72, 0.0, 0.0, 20.0, 0.5), 3)),
+            Step::Up(button(pen(72, 0.0, 0.0, 25.0, 0.0), 3)),
+        ],
+    ));
+
+    // La penna girata fa un tratto da gomma, tenuto vivo dal bit 32; il tasto
+    // laterale un tratto suo, tenuto dal bit 2, che finisce quando si
+    // rilascia anche se la punta resta giù.
+    all.push(script(
+        "the_pen_eraser_and_barrel_make_their_strokes",
+        vec![
+            Step::Down(pressed(pen(73, 0.0, 0.0, 0.0, 0.5), 5, 32)),
+            moved(pressed(pen(73, 4.0, 0.0, 10.0, 0.5), -1, 32)),
+            Step::Up(pressed(pen(73, 6.0, 0.0, 20.0, 0.0), 5, 0)),
+            Step::Down(pressed(pen(74, 0.0, 9.0, 100.0, 0.5), 2, 2)),
+            moved(pressed(pen(74, 4.0, 9.0, 110.0, 0.5), -1, 2)),
+            moved(pressed(pen(74, 6.0, 9.0, 120.0, 0.5), -1, 1)),
+            Step::Up(pressed(pen(74, 6.0, 9.0, 130.0, 0.0), 0, 0)),
         ],
     ));
 
@@ -859,6 +884,7 @@ pub fn effect_json(effect: &Effect) -> Value {
             "pressure": start.pressure,
             "timeStamp": start.time_stamp,
             "continued": start.continued,
+            "role": start.role.name(),
         }),
         Effect::Samples { id, samples } => {
             json!({"fx": "samples", "id": id, "samples": samples_json(samples)})
@@ -873,6 +899,7 @@ pub fn effect_json(effect: &Effect) -> Value {
             "pressure": done.start.pressure,
             "timeStamp": done.start.time_stamp,
             "continued": done.start.continued,
+            "role": done.start.role.name(),
             "samples": samples_json(&done.samples),
             "tilt": done.tilt,
             "split": done.split,

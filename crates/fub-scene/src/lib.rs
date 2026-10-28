@@ -18,7 +18,8 @@
 //! di un PDF ([formato](../../../docs/reference/annotation-format.md)): la
 //! scena, e in più il documento annotato, le pagine e le note.
 //!
-//! [`Ink`] e [`Brush`] sono il codec di `fub:ink` e la lettura di `fub:brush`
+//! [`Ink`] e [`InkBrush`] (`pf1` in [`Brush`], `nib1` in [`Nib1Brush`]) sono
+//! il codec di `fub:ink` e la lettura di `fub:brush`
 //! (§5): la scena li usa per dire se un tratto si ridisegna, e chi scrive un
 //! tratto li usa per quantizzarlo. [`rulers`] legge l'unità e le guide del
 //! documento (formato della scena, unità e guide).
@@ -55,7 +56,7 @@ pub use analysis::{
     MAX_IMAGE_BYTES, MIN_CONTRAST, MIN_TEXT_CONTRAST, MIN_TEXT_SIZE,
 };
 pub use annotation::{read_annotations, Annotated, Annotations, Note, Page};
-pub use brush::{Brush, BrushError, PF1, PF1_KEYS};
+pub use brush::{Brush, BrushError, InkBrush, Nib1Brush, NIB1, NIB1_KEYS, PF1, PF1_KEYS};
 pub use classify::{
     ConnectorFacts, ElementItem, ForeignItem, Item, Layer, Lifecycle, Motif, Role, RootItem,
     Stroke, StyleFacts, StyleKind, Swatch, Tags, Tool, STYLE_GRAPHIC_POINTS,

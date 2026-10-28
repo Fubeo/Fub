@@ -462,6 +462,24 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-ink/src/inkml.rs::to_inkml",
+            (
+                Family::AsciiCase,
+                "scrive il colore del pennello InkML `#RRGGBB` in maiuscolo, la forma di Word: \
+                 il colore è già `#rrggbb` di sei cifre esadecimali ASCII. Normalizza un \
+                 numero, non confronta nomi.",
+            ),
+        ),
+        (
+            "crates/fub-ink/src/inkml.rs::brush_of",
+            (
+                Family::AsciiCase,
+                "legge il colore del pennello InkML in minuscolo, la forma di `fub-ink`, dopo \
+                 aver controllato sei cifre esadecimali ASCII. Normalizza un numero, non \
+                 confronta nomi.",
+            ),
+        ),
+        (
             "crates/fub-format-rich/src/projection.rs::look",
             (
                 Family::AsciiCase,

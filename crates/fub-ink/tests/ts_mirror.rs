@@ -63,7 +63,7 @@ fn role_cases() -> Vec<Value> {
     };
     // La penna e il mouse non guardano il contesto: contano i tasti.
     for kind in [PointerKind::Pen, PointerKind::Mouse] {
-        for button in [0, 1, 2, 5] {
+        for button in [0, 1, 2, 3, 5] {
             push(kind, button, quiet);
         }
     }
@@ -570,7 +570,11 @@ fn the_scenarios_exercise_every_kind_of_effect() {
         ],
         "la ragione",
     );
-    expect(&roles, &["ink", "navigate", "ignore"], "il ruolo");
+    expect(
+        &roles,
+        &["ink", "erase", "barrel", "navigate", "ignore"],
+        "il ruolo",
+    );
     assert!(split && continued, "nessuno scenario divide un tratto");
     assert!(tilted_end && flat_end, "i tratti con e senza inclinazione");
 }

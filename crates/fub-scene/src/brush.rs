@@ -1,6 +1,6 @@
-//! La lettura di `fub:brush` (§5): `pf1` e coppie `chiave=valore`.
+//! La lettura di `fub:brush` (§5): `pf1` o `nib1` e coppie `chiave=valore`.
 //!
-//! È la stessa grammatica di `parseBrush` in TypeScript
+//! È la stessa grammatica di `parseInkBrush` in TypeScript
 //! (`apps/client/src/ink/brush.ts`), che ridisegna i tratti:
 //! un pennello che uno dei due lati rifiuta non si ridisegna, quindi devono
 //! rifiutare gli stessi.
@@ -20,6 +20,22 @@ pub const PF1_KEYS: [&str; 9] = [
     "taperEnd",
     "capStart",
     "capEnd",
+    "sim",
+];
+
+/// Il nome della punta piatta della Calligrafia.
+pub const NIB1: &str = "nib1";
+
+/// Le chiavi note di `nib1`, nell'ordine in cui FubDraw le scrive.
+pub const NIB1_KEYS: [&str; 9] = [
+    "size",
+    "tip",
+    "angle",
+    "fixation",
+    "thinning",
+    "tilt",
+    "smoothing",
+    "streamline",
     "sim",
 ];
 
@@ -65,12 +81,81 @@ impl Default for Brush {
     }
 }
 
+/// Un pennello `nib1`, la punta piatta, letto e validato.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Nib1Brush {
+    /// Larghezza della punta in unità, maggiore di 0.
+    pub size: f64,
+    /// Spessore della punta in unità, 0 o più: il tratto non è mai più sottile.
+    pub tip: f64,
+    /// Angolo della punta in gradi, −180…180.
+    pub angle: f64,
+    /// Quanto la punta tiene l'angolo invece di seguire la direzione, 0…1.
+    pub fixation: f64,
+    /// Effetto della pressione sulla larghezza, 0…1.
+    pub thinning: f64,
+    /// L'angolo dall'azimut del campione, quando il tratto lo porta.
+    pub tilt: bool,
+    /// Levigatura della direzione, 0…1.
+    pub smoothing: f64,
+    /// Quanto il tratto insegue la penna in ritardo, 0…1.
+    pub streamline: f64,
+    /// Pressione ignorata.
+    pub sim: bool,
+    /// Le coppie che `nib1` non conosce, nell'ordine, anche ripetute.
+    pub unknown: Vec<(String, String)>,
+}
+
+impl Default for Nib1Brush {
+    /// I valori di una chiave di `nib1` che manca.
+    fn default() -> Self {
+        Nib1Brush {
+            size: 12.0,
+            tip: 1.0,
+            angle: 35.0,
+            fixation: 0.9,
+            thinning: 0.3,
+            tilt: true,
+            smoothing: 0.6,
+            streamline: 0.5,
+            sim: false,
+            unknown: Vec::new(),
+        }
+    }
+}
+
+/// Un pennello di uno dei due algoritmi.
+#[derive(Clone, Debug, PartialEq)]
+pub enum InkBrush {
+    Pf1(Brush),
+    Nib1(Nib1Brush),
+}
+
+impl InkBrush {
+    /// Legge un `fub:brush` di `pf1` o di `nib1`, con gli stessi errori.
+    pub fn parse(text: &str) -> Result<InkBrush, BrushError> {
+        if tokens(text).next() == Some(NIB1) {
+            Nib1Brush::parse(text).map(InkBrush::Nib1)
+        } else {
+            Brush::parse(text).map(InkBrush::Pf1)
+        }
+    }
+
+    /// Le coppie sconosciute: fra queste, `pen=<id>` dice la penna.
+    pub fn unknown(&self) -> &[(String, String)] {
+        match self {
+            InkBrush::Pf1(brush) => &brush.unknown,
+            InkBrush::Nib1(brush) => &brush.unknown,
+        }
+    }
+}
+
 /// Perché un `fub:brush` non si legge: ognuno produce S004.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum BrushError {
     /// Un tratto senza `fub:brush`.
     Missing,
-    /// Il pennello non comincia con `pf1`.
+    /// Il pennello non comincia con `pf1` né con `nib1`.
     Algorithm,
     /// Una voce senza `chiave=valore`, con la chiave o il valore vuoti.
     Entry,
@@ -110,7 +195,7 @@ impl fmt::Display for BrushError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BrushError::Missing => f.write_str("il tratto non ha fub:brush"),
-            BrushError::Algorithm => f.write_str("fub:brush non comincia con pf1"),
+            BrushError::Algorithm => f.write_str("fub:brush non comincia con pf1 né con nib1"),
             BrushError::Entry => f.write_str("fub:brush ha una voce senza chiave=valore"),
             BrushError::Repeated(key) => write!(f, "fub:brush ripete {key}"),
             BrushError::Number(key) => write!(f, "{key} di fub:brush non è un numero"),
@@ -189,34 +274,48 @@ fn flag(key: &'static str, text: &str) -> Result<bool, BrushError> {
     }
 }
 
+/// Le voci di un `fub:brush`, separate da spazi di XML, anche più d'uno.
+fn tokens(text: &str) -> impl Iterator<Item = &str> {
+    text.split([' ', '\t', '\n', '\r'])
+        .filter(|t| !t.is_empty())
+}
+
+/// I valori delle chiavi note `keys` e le coppie sconosciute dopo il nome
+/// dell'algoritmo; la prima `=` di una voce separa la chiave dal valore.
+#[allow(clippy::type_complexity)]
+fn entries<'a>(
+    tokens: impl Iterator<Item = &'a str>,
+    keys: &[&'static str; 9],
+) -> Result<([Option<&'a str>; 9], Vec<(String, String)>), BrushError> {
+    let mut known: [Option<&str>; 9] = [None; 9];
+    let mut unknown = Vec::new();
+    for token in tokens {
+        let Some((key, value)) = token.split_once('=') else {
+            return Err(BrushError::Entry);
+        };
+        if key.is_empty() || value.is_empty() {
+            return Err(BrushError::Entry);
+        }
+        match keys.iter().position(|&k| k == key) {
+            Some(index) => {
+                if known[index].replace(value).is_some() {
+                    return Err(BrushError::Repeated(keys[index]));
+                }
+            }
+            None => unknown.push((key.to_owned(), value.to_owned())),
+        }
+    }
+    Ok((known, unknown))
+}
+
 impl Brush {
-    /// Legge un `fub:brush`. Le voci sono separate da spazi di XML, anche
-    /// più d'uno; la prima `=` di una voce separa la chiave dal valore.
+    /// Legge un `fub:brush` di `pf1`.
     pub fn parse(text: &str) -> Result<Brush, BrushError> {
-        let mut tokens = text
-            .split([' ', '\t', '\n', '\r'])
-            .filter(|t| !t.is_empty());
+        let mut tokens = tokens(text);
         if tokens.next() != Some(PF1) {
             return Err(BrushError::Algorithm);
         }
-        let mut known: [Option<&str>; 9] = [None; 9];
-        let mut unknown = Vec::new();
-        for token in tokens {
-            let Some((key, value)) = token.split_once('=') else {
-                return Err(BrushError::Entry);
-            };
-            if key.is_empty() || value.is_empty() {
-                return Err(BrushError::Entry);
-            }
-            match PF1_KEYS.iter().position(|&k| k == key) {
-                Some(index) => {
-                    if known[index].replace(value).is_some() {
-                        return Err(BrushError::Repeated(PF1_KEYS[index]));
-                    }
-                }
-                None => unknown.push((key.to_owned(), value.to_owned())),
-            }
-        }
+        let (known, unknown) = entries(tokens, &PF1_KEYS)?;
         let defaults = Brush::default();
         let value = |index: usize, fallback: f64| match known[index] {
             Some(text) => number(PF1_KEYS[index], text),
@@ -239,6 +338,45 @@ impl Brush {
             taper_end: in_range("taperEnd", value(5, defaults.taper_end)?, 0.0, f64::MAX)?,
             cap_start: bit(6, defaults.cap_start)?,
             cap_end: bit(7, defaults.cap_end)?,
+            sim: bit(8, defaults.sim)?,
+            unknown,
+        })
+    }
+}
+
+impl Nib1Brush {
+    /// Legge un `fub:brush` di `nib1`.
+    pub fn parse(text: &str) -> Result<Nib1Brush, BrushError> {
+        let mut tokens = tokens(text);
+        if tokens.next() != Some(NIB1) {
+            return Err(BrushError::Algorithm);
+        }
+        let (known, unknown) = entries(tokens, &NIB1_KEYS)?;
+        let defaults = Nib1Brush::default();
+        let value = |index: usize, fallback: f64, min: f64, max: f64| match known[index] {
+            Some(text) => in_range(NIB1_KEYS[index], number(NIB1_KEYS[index], text)?, min, max),
+            None => Ok(fallback),
+        };
+        let bit = |index: usize, fallback: bool| match known[index] {
+            Some(text) => flag(NIB1_KEYS[index], text),
+            None => Ok(fallback),
+        };
+        let size = match known[0] {
+            Some(text) => number("size", text)?,
+            None => defaults.size,
+        };
+        if size <= 0.0 {
+            return Err(BrushError::Range("size"));
+        }
+        Ok(Nib1Brush {
+            size,
+            tip: value(1, defaults.tip, 0.0, f64::MAX)?,
+            angle: value(2, defaults.angle, -180.0, 180.0)?,
+            fixation: value(3, defaults.fixation, 0.0, 1.0)?,
+            thinning: value(4, defaults.thinning, 0.0, 1.0)?,
+            tilt: bit(5, defaults.tilt)?,
+            smoothing: value(6, defaults.smoothing, 0.0, 1.0)?,
+            streamline: value(7, defaults.streamline, 0.0, 1.0)?,
             sim: bit(8, defaults.sim)?,
             unknown,
         })

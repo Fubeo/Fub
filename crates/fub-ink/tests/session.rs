@@ -416,6 +416,23 @@ fn i_tasti_decidono_il_ruolo() {
     assert!(!trace.all().iter().any(|e| matches!(e, Effect::Capture(_))));
 }
 
+#[test]
+fn la_gomma_e_il_tasto_laterale_della_penna_fanno_il_loro_tratto() {
+    let script = scenario("the_pen_eraser_and_barrel_make_their_strokes");
+    let trace = run(&script);
+    assert_eq!(role(&script, &trace, 0, 73), Some(PointerRole::Erase));
+    assert_eq!(role(&script, &trace, 3, 74), Some(PointerRole::Barrel));
+    let done = ends(&trace);
+    assert_eq!(done.len(), 2);
+    // La gomma resta giù col bit 32 e finisce alzandosi.
+    assert_eq!(done[0].start.role, PointerRole::Erase);
+    assert_eq!(done[0].samples.len(), 3);
+    // Il tasto laterale rilasciato chiude il suo tratto, anche con la punta giù.
+    assert_eq!(done[1].start.role, PointerRole::Barrel);
+    assert_eq!(done[1].samples.len(), 2);
+    assert!(cancels(&trace).is_empty());
+}
+
 // --- Tratti molto corti e molto lunghi ---------------------------------------------
 
 #[test]
