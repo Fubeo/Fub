@@ -103,13 +103,13 @@ export interface TreeContext {
   placing: (keys: readonly string[], drop: TreeDrop) => Placing | DrawKey | null;
   moveRows: (keys: readonly string[], drop: TreeDrop) => readonly string[] | null;
   renameSelection: () => void;
-  showHistory: (open: boolean) => void;
+  showHistory: (open: boolean, focus?: boolean) => void;
   syncHistory: () => void;
-  showBoards: (open: boolean) => void;
+  showBoards: (open: boolean, focus?: boolean) => void;
   syncBoards: () => void;
-  showLibrary: (open: boolean) => void;
-  showSymbols: (open: boolean) => void;
-  showAccess: (open: boolean) => void;
+  showLibrary: (open: boolean, focus?: boolean) => void;
+  showSymbols: (open: boolean, focus?: boolean) => void;
+  showAccess: (open: boolean, focus?: boolean) => void;
   accessNames: Map<string, string>;
   accessName: (key: string) => string;
   syncAccess: (now?: boolean) => void;
@@ -514,8 +514,13 @@ export function installTree(ctx: EditorContext): void {
   ctx.renameSelection = renameSelection;
 
   /// Apre o chiude la cronologia; aperta, il fuoco ci va.
-  function showHistory(open: boolean): void {
+  function showHistory(open: boolean, focus = true): void {
     if (open && !has("history")) return;
+    // Nell'ispettore: la sua scheda, e il fuoco ci va.
+    if (ctx.routed("history", open)) {
+      if (open && focus && !historyPanel.element.hidden) historyPanel.focus();
+      return;
+    }
     if (!open && historyPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     historyPanel.element.hidden = !open;
     historyButton.setAttribute("aria-expanded", String(open));
@@ -523,7 +528,7 @@ export function installTree(ctx: EditorContext): void {
     if (open) {
       ctx.historyShown = null;
       syncHistory();
-      historyPanel.focus();
+      if (focus) historyPanel.focus();
     }
   }
   ctx.showHistory = showHistory;
@@ -547,8 +552,13 @@ export function installTree(ctx: EditorContext): void {
   ctx.syncHistory = syncHistory;
 
   /// Apre o chiude l'elenco delle tavole; aperto, il fuoco ci va.
-  function showBoards(open: boolean): void {
+  function showBoards(open: boolean, focus = true): void {
     if (open && !has("board")) return;
+    // Nell'ispettore: la sua scheda, e il fuoco ci va.
+    if (ctx.routed("design", open)) {
+      if (open && focus && !boardsPanel.element.hidden) boardsPanel.focus();
+      return;
+    }
     if (!open && boardsPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     boardsPanel.element.hidden = !open;
     boardsButton.setAttribute("aria-expanded", String(open));
@@ -556,7 +566,7 @@ export function installTree(ctx: EditorContext): void {
     if (open) {
       ctx.boardsShown = null;
       syncBoards();
-      boardsPanel.focus();
+      if (focus) boardsPanel.focus();
     }
   }
   ctx.showBoards = showBoards;
@@ -585,8 +595,13 @@ export function installTree(ctx: EditorContext): void {
 
   /// Apre o chiude le forme; aperte, il fuoco va al campo di ricerca. Un
   /// trascinamento in corso finisce.
-  function showLibrary(open: boolean): void {
+  function showLibrary(open: boolean, focus = true): void {
     if (open && !has("library")) return;
+    // Nell'ispettore: la sua scheda, e il fuoco ci va.
+    if (ctx.routed("resources", open)) {
+      if (open && focus && !libraryPanel.element.hidden) libraryPanel.focus();
+      return;
+    }
     if (!open && libraryPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     if (!open) ctx.cancelShapeDrag();
     libraryPanel.element.hidden = !open;
@@ -594,7 +609,7 @@ export function installTree(ctx: EditorContext): void {
     ctx.syncDock();
     if (open) {
       libraryPanel.update({ editable: editable() });
-      libraryPanel.focus();
+      if (focus) libraryPanel.focus();
     }
   }
   ctx.showLibrary = showLibrary;
@@ -602,8 +617,13 @@ export function installTree(ctx: EditorContext): void {
   /// Apre o chiude i simboli; aperti, il fuoco va al campo di ricerca, e le
   /// librerie del vault si leggono, la prima volta. Un trascinamento in
   /// corso finisce.
-  function showSymbols(open: boolean): void {
+  function showSymbols(open: boolean, focus = true): void {
     if (open && !has("symbols")) return;
+    // Nell'ispettore: la sua scheda, e il fuoco ci va.
+    if (ctx.routed("resources", open)) {
+      if (open && focus && !symbolsPanel.element.hidden) symbolsPanel.focus();
+      return;
+    }
     if (!open && symbolsPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     if (!open) ctx.cancelSymbolDrag();
     symbolsPanel.element.hidden = !open;
@@ -612,15 +632,20 @@ export function installTree(ctx: EditorContext): void {
     if (open) {
       symbolLibraries?.start();
       ctx.syncSymbols();
-      symbolsPanel.focus();
+      if (focus) symbolsPanel.focus();
     }
   }
   ctx.showSymbols = showSymbols;
 
   /// Apre o chiude la verifica dell'accessibilità; aperta, il fuoco ci va.
   /// Chiusa, dimentica ciò che ha letto.
-  function showAccess(open: boolean): void {
+  function showAccess(open: boolean, focus = true): void {
     if (open && !has("accessibility")) return;
+    // Nell'ispettore: la sua scheda, e il fuoco ci va.
+    if (ctx.routed("accessibility", open)) {
+      if (open && focus && !accessPanel.element.hidden) accessPanel.focus();
+      return;
+    }
     if (!open && accessPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     accessPanel.element.hidden = !open;
     accessButton.setAttribute("aria-expanded", String(open));
@@ -628,7 +653,7 @@ export function installTree(ctx: EditorContext): void {
     ctx.accessShown = null;
     if (open) {
       syncAccess(true);
-      accessPanel.focus();
+      if (focus) accessPanel.focus();
     } else {
       clearTimeout(ctx.auditTimer);
       ctx.audited = null;
@@ -743,6 +768,7 @@ export function installTree(ctx: EditorContext): void {
     const fix = problem?.fix ?? null;
     if (problem === null || fix === null) return;
     if (fix.kind === "title") {
+      if (has("properties")) ctx.showPanel(true, false);
       titleInput.focus();
       titleInput.select();
       return;

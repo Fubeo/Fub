@@ -51,7 +51,7 @@
 //   la sua geometria non è solo `d`.
 
 import { formatNumber } from "../number";
-import { checkBrush, formatBrush, parseBrush } from "../../../ink/brush";
+import { checkInkBrush, formatInkBrush, isNib1, parseInkBrush } from "../../../ink/brush";
 import { createInk, decodeInk, encodeInk, INK_MAX_BYTES } from "../ink/codec";
 import { quantizeAzimuth, quantizeCoordinate } from "../../../ink/sample";
 import { svgAttribute } from "../scene/classify";
@@ -265,14 +265,15 @@ function movedInk(fub: ReadonlyMap<string, string>, m: Matrix): Record<string, s
     // L'inchiostro è ASCII: un carattere è un byte.
     if (text.length > INK_MAX_BYTES) return null;
     const out: Record<string, string> = { "fub:ink": text };
-    const brush = parseBrush(fub.get("brush") ?? "");
+    const brush = parseInkBrush(fub.get("brush") ?? "");
     const k = Math.sqrt(Math.abs(determinant(m)));
-    const lengths = [brush.size, brush.taperStart, brush.taperEnd];
+    // Le lunghezze del pennello: la punta piatta ha la larghezza e il taglio.
+    const lengths = isNib1(brush) ? [brush.size, brush.tip] : [brush.size, brush.taperStart, brush.taperEnd];
     if (lengths.some((value) => place(value * k) !== place(value))) {
-      const [size, taperStart, taperEnd] = lengths.map((value) => Number(place(value * k))) as [number, number, number];
-      const scaled = { ...brush, size, taperStart, taperEnd };
-      checkBrush(scaled);
-      out["fub:brush"] = formatBrush(scaled);
+      const [size, second, third] = lengths.map((value) => Number(place(value * k))) as [number, number, number?];
+      const scaled = isNib1(brush) ? { ...brush, size, tip: second } : { ...brush, size, taperStart: second, taperEnd: third! };
+      checkInkBrush(scaled);
+      out["fub:brush"] = formatInkBrush(scaled);
     }
     return out;
   } catch {

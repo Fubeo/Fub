@@ -17,9 +17,9 @@
 // applica l'inversa, che vale anche dopo cambiamenti altrui (§7).
 
 import { formatNumber } from "../number";
-import { BrushError, parseBrush } from "../../../ink/brush";
+import { BrushError, parseInkBrush } from "../../../ink/brush";
+import { inkPath } from "../../../ink/outline";
 import { decodeInk, inkToQuantized, unknownChannels } from "../ink/codec";
-import { pf1 } from "../../../ink/pf1";
 import { InkError } from "../../../ink/sample";
 import type { TextOperation } from "../../core/text-operation";
 import { isContainer, len } from "./analysis";
@@ -1885,9 +1885,9 @@ export class SceneEngine {
       if (ink === undefined) throw new InkError("missing");
       const decoded = decodeInk(ink);
       if (brush === undefined) throw new BrushError("missing");
-      const parsed = parseBrush(brush);
+      const parsed = parseInkBrush(brush);
       if (unknownChannels(decoded) !== "") return null;
-      return pf1(inkToQuantized(decoded), parsed);
+      return inkPath(inkToQuantized(decoded), parsed);
     } catch (error) {
       const detail = inkDetail(error);
       if (detail !== null) reject("invalid-elem", detail);

@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { estimate } from "./measure";
 import { lineRuns, richLine, richText, type Rich } from "./rich";
 import { createTextField, LINES_FORM, type FieldForm, type TextField } from "./text-field";
+import { loadWriting } from "./writing";
 
 const BOLD = { "font-weight": "bold" };
 const BLUE = { fill: "#0072b2" };
@@ -41,6 +42,11 @@ function mount(rich: Rich, form: FieldForm = LINES_FORM): void {
   field.open(rich);
   field.element.focus();
 }
+
+// Scrittura arriva prima dei campi, come dopo il montaggio del disegno.
+beforeAll(async () => {
+  await loadWriting();
+});
 
 afterEach(() => {
   life?.close();
@@ -127,7 +133,7 @@ describe("scrivere", () => {
     expect(field.rich.lines.map(lineRuns)).toEqual(["Evaporazione", ["in ", { text: "piAB", attrs: { ...BLUE, ...BOLD } }], [{ text: "CDia", attrs: { ...BLUE, ...BOLD } }]]);
   });
 
-  it("una composizione la fa il browser, e il campo la rilegge quando finisce", () => {
+  it("una composizione la fa il browser, e il campo la rilegge quando finisce", async () => {
     mount(TWO);
     choose([1, 10]);
     field.element.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
@@ -136,6 +142,8 @@ describe("scrivere", () => {
     expect(input("insertCompositionText", "è")).toBe(false);
     field.element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: "è", isComposing: true }));
     field.element.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true, data: "è" }));
+    // La vista legge il DOM cambiato dopo l'evento.
+    await vi.waitFor(() => expect(richText(field.rich)).toContain("pioggiaè"));
     expect(lineRuns(field.rich.lines[1]!)).toEqual(["in ", { text: "pioggiaè", attrs: { ...BLUE, ...BOLD } }]);
     // Le righe tengono i loro attributi.
     expect(field.rich.lines[1]!.attrs).toEqual({ x: "10", dy: "25" });

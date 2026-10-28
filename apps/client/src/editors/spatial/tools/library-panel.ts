@@ -80,6 +80,9 @@ export interface LibraryPanelOptions {
   /// Di quanti pixel si deve muovere il puntatore perché il clic diventi un
   /// trascinamento: la soglia dei gesti dell'editor.
   readonly slop: Readonly<Record<LibraryPointer, number>>;
+  /// Il campo di ricerca è cambiato: con la ricerca comune delle risorse lo
+  /// seguono anche i simboli.
+  onQuery?(text: string): void;
 }
 
 export interface LibraryPanel {
@@ -88,6 +91,11 @@ export interface LibraryPanel {
   update(view: LibraryView): void;
   /// Il fuoco va al campo di ricerca.
   focus(): void;
+  /// Ciò che cerca il campo.
+  query(): string;
+  /// Vero quando il campo cerca fra tutte le risorse, non soltanto le
+  /// forme: cambia il suo nome.
+  share(shared: boolean): void;
   /// Riscrive i testi nella lingua di adesso.
   relabel(): void;
 }
@@ -306,10 +314,13 @@ export function createLibraryPanel(life: Lifetime, options: LibraryPanelOptions)
   };
 
   /// Scrive il testo di ogni cosa nella lingua di adesso.
+  /// Il campo cerca fra tutte le risorse.
+  let shared = false;
   const relabel = (): void => {
     setText(heading, t("draw.library"));
-    setText(label, t("draw.shapes.search"));
-    search.placeholder = t("draw.shapes.search");
+    const searchText = t(shared ? "draw.resources.search" : "draw.shapes.search");
+    setText(label, searchText);
+    search.placeholder = searchText;
     setText(hint, t(editable ? "draw.shapes.hint" : "draw.shapes.hint.read_only"));
     for (const section of sections) setText(section.heading, t(GROUP_KEYS[section.group]));
     for (const { shape, button } of tiles) {
@@ -454,6 +465,7 @@ export function createLibraryPanel(life: Lifetime, options: LibraryPanelOptions)
   life.listen(search, "input", () => {
     filter();
     say(shown === 0 ? noneText() : countText(shown));
+    options.onQuery?.(search.value);
   });
 
   // --- Il puntatore -------------------------------------------------------------
@@ -594,6 +606,12 @@ export function createLibraryPanel(life: Lifetime, options: LibraryPanelOptions)
     },
     focus() {
       search.focus({ preventScroll: true });
+    },
+    query: () => search.value,
+    share(next) {
+      if (next === shared) return;
+      shared = next;
+      relabel();
     },
     relabel,
   };

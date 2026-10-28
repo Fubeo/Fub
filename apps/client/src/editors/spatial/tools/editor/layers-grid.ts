@@ -228,6 +228,10 @@ export function installLayersGrid(ctx: EditorContext): void {
 
   /// La griglia diventa `next` per scelta di chi disegna: si vede subito, si
   /// dice che cosa è cambiato, e chi monta l'editor lo sa.
+  /// Vero se fra `a` e `b` cambia una scelta della penna o della gomma.
+  const penChanged = (a: Grid, b: Grid): boolean =>
+    a.eraser !== b.eraser || a.penId !== b.penId || a.barrel !== b.barrel || a.output !== b.output || a.fidelity !== b.fidelity;
+
   const changeGrid = (next: Grid): void => {
     const before = ctx.grid;
     ctx.grid = checkedGrid(next, before);
@@ -246,9 +250,10 @@ export function installLayersGrid(ctx: EditorContext): void {
     else if (ctx.grid.shapes !== before.shapes) announce(t(ctx.grid.shapes ? "draw.recognize.on" : "draw.recognize.off"));
     else if (ctx.grid.bar !== before.bar) announce(t(ctx.grid.bar ? "draw.bar.beside.on" : "draw.bar.beside.off"));
     else if (ctx.grid.twist !== before.twist || ctx.grid.taps !== before.taps || !sameCurve(ctx.grid.pen, before.pen) || ctx.grid.steady?.amount !== before.steady?.amount || ctx.grid.steady?.string !== before.steady?.string) announce(t("draw.touch.changed"));
-    // Il pannello aperto o chiuso, e le sue sezioni, si ricordano in silenzio:
-    // lo si vede, e il pulsante lo dice.
-    else if (ctx.grid.panel === before.panel && ctx.grid.closed.join("\n") === before.closed.join("\n")) return;
+    // Il pannello aperto o chiuso, le sue sezioni, la gomma, la penna, il
+    // tasto laterale e l'uscita si ricordano in silenzio: chi li cambia lo
+    // dice da sé, o lo si vede.
+    else if (ctx.grid.panel === before.panel && ctx.grid.closed.join("\n") === before.closed.join("\n") && !penChanged(ctx.grid, before)) return;
     syncProperties();
     options.onGridChange?.(ctx.grid);
   };

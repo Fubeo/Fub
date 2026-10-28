@@ -33,9 +33,9 @@
 //   `marker-end`.
 
 import { formatNumber } from "../number";
-import { parseBrush, type Pf1Brush } from "../../../ink/brush";
+import { parseInkBrush, type InkBrush } from "../../../ink/brush";
+import { inkPath } from "../../../ink/outline";
 import { decodeInk, encodeInk, INK_MAX_BYTES, inkLength, inkPoint, inkToQuantized, type Ink } from "../ink/codec";
-import { pf1 } from "../../../ink/pf1";
 import { parsePath, Track, type Segment } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
 import type { ElementPart } from "../scene/model";
@@ -63,7 +63,7 @@ export type Nodable =
   | { readonly kind: "shape"; readonly tag: ShapeTag; readonly attrs: ReadonlyMap<string, string>; readonly subs: readonly Subpath[] }
   | { readonly kind: "polygonal"; readonly shape: Polygonal; readonly subs: readonly Subpath[] }
   | { readonly kind: "arrow"; readonly width: number; readonly subs: readonly Subpath[] }
-  | { readonly kind: "stroke"; readonly ink: Ink; readonly brush: Pf1Brush; readonly spine: Spine; readonly subs: readonly Subpath[] }
+  | { readonly kind: "stroke"; readonly ink: Ink; readonly brush: InkBrush; readonly spine: Spine; readonly subs: readonly Subpath[] }
   | { readonly kind: "width"; readonly shape: WidthShape; readonly subs: readonly Subpath[] }
   /// Il tracciato che un testo segue: la risorsa `target`.
   | { readonly kind: "track"; readonly target: string; readonly subs: readonly Subpath[] };
@@ -182,7 +182,7 @@ export function nodableOf(node: ElementPart, spineOf: SpineOf = freshSpine, trac
       const written = fub.get("ink") ?? "";
       try {
         const ink = decodeInk(written);
-        const brush = parseBrush(fub.get("brush") ?? "");
+        const brush = parseInkBrush(fub.get("brush") ?? "");
         const spine = spineOf(written, ink, spineTolerance(brush.size));
         return { kind: "stroke", ink, brush, spine, subs: [spine.sub] };
       } catch {
@@ -374,7 +374,7 @@ export function rewrite(nodable: Nodable, subs: readonly Subpath[], moved: Reado
       const ink = encodeInk(followed.ink);
       // Il testo è ASCII: i caratteri sono i byte.
       if (ink.length > INK_MAX_BYTES) return { kind: "refused", reason: "long" };
-      return { kind: "set", attrs: { "fub:ink": ink }, look: pf1(inkToQuantized(followed.ink), nodable.brush), spine: followed.spine };
+      return { kind: "set", attrs: { "fub:ink": ink }, look: inkPath(inkToQuantized(followed.ink), nodable.brush), spine: followed.spine };
     }
   }
 }
@@ -389,7 +389,7 @@ export function draftOf(nodable: Nodable, subs: readonly Subpath[]): string | nu
   }
   if (nodable.kind === "stroke") {
     const followed = strokeFollowing(nodable, subs, null);
-    return followed === null ? null : pf1(inkToQuantized(followed.ink), nodable.brush);
+    return followed === null ? null : inkPath(inkToQuantized(followed.ink), nodable.brush);
   }
   if (nodable.kind === "width") {
     const outline = subs.length === 1 ? widthOutline({ ...nodable.shape, spine: writeNodes(subs) }) : null;

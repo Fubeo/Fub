@@ -26,7 +26,8 @@
 //   porta attorno a tutto il disegno, con un margine.
 
 import { formatNumber } from "../number";
-import { formatBrush, type Pf1Brush } from "../../../ink/brush";
+import { formatInkBrush, type InkBrush } from "../../../ink/brush";
+import { penLook } from "../../../ink/pens";
 import { encodeInk, inkFromQuantized } from "../ink/codec";
 import type { QuantizedInk } from "../../../ink/sample";
 import type { Tool } from "../scene/analysis";
@@ -39,7 +40,6 @@ import { formatTransform, type Elem } from "../scene/serialize";
 import type { Page } from "../painter/paint";
 import type { LayerInfo, SceneIndex, Unit } from "./hit";
 import { formatShortest } from "../../../ink/number";
-import { INK_TOOLS } from "../../../ink/tools/registry";
 
 /// Il passo con cui la pagina si allarga.
 export const PAGE_STEP = 256;
@@ -128,14 +128,18 @@ export function addOp(to: Destination, elem: Elem): AddOp {
 /// penna, o dell'evidenziatore, che si vede attraverso con l'opacità del
 /// formato. Il `d` non si scrive: il motore lo calcola da `fub:ink` e
 /// `fub:brush`.
-export function strokeElem(id: string, color: string, brush: Pf1Brush, ink: QuantizedInk, at: string | null, tool: Tool = "pen"): Elem {
+export function strokeElem(id: string, color: string, brush: InkBrush, ink: QuantizedInk, at: string | null, tool: Tool = "pen", opacity = 1): Elem {
   const attrs: Record<string, string> = { id, "fub:tool": tool };
   if (at !== null) attrs["fub:at"] = at;
-  attrs["fub:brush"] = formatBrush(brush);
+  attrs["fub:brush"] = formatInkBrush(brush);
   attrs.fill = color;
-  // Lo strumento dice quanto copre; il file scrive l'opacità solo se è meno di tutto.
-  const opacity = INK_TOOLS.stroke(tool)?.opacity ?? 1;
-  if (opacity < 1) attrs["fill-opacity"] = formatShortest(opacity);
+  // La penna dice quanto copre e come si fonde, e `opacity`, quella scelta da
+  // chi disegna, la moltiplica; il file scrive l'opacità solo se è meno di
+  // tutto, e la fusione solo se non è quella normale.
+  const look = penLook(brush, tool);
+  const covers = Math.round(look.opacity * opacity * 1000) / 1000;
+  if (covers < 1) attrs["fill-opacity"] = formatShortest(covers);
+  if (look.blend !== "normal") attrs.style = `mix-blend-mode: ${look.blend}`;
   attrs["fub:ink"] = encodeInk(inkFromQuantized(ink));
   return { tag: "path", attrs };
 }

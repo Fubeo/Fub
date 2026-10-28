@@ -31,8 +31,8 @@ describe("la tavolozza", () => {
     for (const swatch of PALETTE) expect(swatch.color).toMatch(/^#[0-9a-f]{6}$/);
   });
 
-  it("dà a ogni colore una forma e un nome diversi", () => {
-    expect(new Set(PALETTE.map((swatch) => swatch.shape)).size).toBe(PALETTE.length);
+  it("dà a ogni colore un nome diverso, senza forme", () => {
+    for (const swatch of PALETTE) expect("shape" in swatch, swatch.id).toBe(false);
     expect(new Set(PALETTE.map((swatch) => swatch.label)).size).toBe(PALETTE.length);
     expect(new Set(PALETTE.map((swatch) => swatch.id)).size).toBe(PALETTE.length);
   });

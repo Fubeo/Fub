@@ -15,7 +15,8 @@
 //   l'annuncio del gesto che l'ha fatto comparire non si perde.
 
 import { identifier } from "../../../ui/a11y";
-import { icon, iconEl, registerIcon } from "../../../ui/icons";
+import { iconEl } from "../../../ui/icons";
+import { ensureDrawIcons } from "../icons";
 import type { Lifetime } from "../../../ui/lifetime";
 import { t } from "../strings";
 
@@ -68,13 +69,8 @@ export interface Suggestions {
   close(): void;
 }
 
-/// La lampadina, sul reticolo delle icone.
-const ICONS: Readonly<Record<string, readonly string[]>> = {
-  "draw-suggestion": ["M9 18h6", "M10 21h4", "M12 3a6 6 0 0 0-3.8 10.6c.6.5.8 1.2.8 1.9V16h6v-.5c0-.7.2-1.4.8-1.9A6 6 0 0 0 12 3z"],
-};
-
 export function createSuggestions(life: Lifetime, options: SuggestionsOptions): Suggestions {
-  for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
+  ensureDrawIcons();
   const element = document.createElement("div");
   element.className = "draw-suggestions";
   const row = document.createElement("div");

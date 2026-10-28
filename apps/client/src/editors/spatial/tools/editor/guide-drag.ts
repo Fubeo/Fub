@@ -4,6 +4,7 @@
 
 import { symmetryMatrices } from "../symmetry";
 import type { StrokeStart } from "../../../../ink/input/session";
+import { penLook } from "../../../../ink/pens";
 import { INK_TOOLS } from "../../../../ink/tools/registry";
 import { StrokePreview } from "../../../../ink/tools/stroke";
 import { EraseSweep } from "../../../../ink/tools/sweep";
@@ -236,7 +237,13 @@ export function installGuideDrag(ctx: EditorContext): void {
     cancelGesture();
     ctx.asking = true;
     try {
-      const answer = await touchDialog({ twist: ctx.grid.twist, taps: ctx.grid.taps, pen: ctx.grid.pen, ...(ctx.grid.steady === undefined ? {} : { steady: ctx.grid.steady }) });
+      const answer = await touchDialog({
+        twist: ctx.grid.twist,
+        taps: ctx.grid.taps,
+        pen: ctx.grid.pen,
+        ...(ctx.grid.steady === undefined ? {} : { steady: ctx.grid.steady }),
+        ...(ctx.grid.barrel === undefined ? {} : { barrel: ctx.grid.barrel }),
+      });
       if (answer === null || ctx.disposed) return;
       ctx.changeGrid({ ...ctx.grid, ...answer });
     } finally {
@@ -267,19 +274,43 @@ export function installGuideDrag(ctx: EditorContext): void {
   }
   ctx.editGuides = editGuides;
 
+  /// Il gesto della gomma, con la gomma scelta.
+  const eraseGesture = (base: GestureBase): Gesture => {
+    const tool = INK_TOOLS.erase("eraser");
+    return tool === undefined ? { ...base, kind: "refused" } : { ...base, kind: "erase", sweep: new EraseSweep(tool, base.pointer), path: [], radius: null, cuts: new Map() };
+  };
+
   const begin = (start: StrokeStart): Gesture => {
     const base = { stroke: start.id, pointer: start.pointerType };
+    // La penna girata cancella con qualunque strumento; il tasto laterale fa
+    // ciò che chi disegna ha scelto in «Penna e dita». Il menu radiale lo
+    // apre il suo ascolto (`curvature-tool.ts`), non il tratto.
+    if (start.role !== "ink") {
+      const action = start.role === "erase" ? "eraser" : (ctx.grid.barrel ?? "radial");
+      if (!editable()) return { ...base, kind: "refused" };
+      if (action === "eraser") return eraseGesture(base);
+      if (action === "lasso") return { ...base, kind: "lasso", points: [], base: [...ctx.selection], mode: ctx.shift ? "add" : ctx.alt ? "remove" : "replace", dragging: false };
+      return { ...base, kind: "refused" };
+    }
     // Un righello o una guida sotto il puntatore prendono il gesto, con
     // qualunque strumento il righello, con la Selezione la guida.
     const guide = start.id >= 0 ? guideStart(base) : null;
     if (guide !== null) return guide;
     if (!editable()) return { ...base, kind: "refused" };
+    // Il righello preso in mezzo si sposta, con ogni strumento (P13).
+    const ruler = ctx.rulerStart(base);
+    if (ruler !== null) return ruler;
     // Il centro della simmetria prende il gesto della penna che lo tocca.
     const center = ctx.symmetryStart(base);
     if (center !== null) return center;
     // Mentre si ritaglia, il gesto è del ritaglio.
     if (ctx.cropping !== null && ctx.tool === "select") return { ...base, kind: "crop", from: null, end: null, grab: null, start: null, offset: [0, 0], dragging: false };
     switch (ctx.tool) {
+      // La Mano e la Lente muovono la vista prima della pipeline
+      // (`hand-zoom.ts`): il cursore da tastiera non disegna niente.
+      case "hand":
+      case "zoom":
+        return { ...base, kind: "refused" };
       case "pen":
       case "highlighter": {
         // Che cosa fa lo strumento lo dice il registro dell'inchiostro
@@ -287,17 +318,24 @@ export function installGuideDrag(ctx: EditorContext): void {
         // tenendo fermo il tratto.
         const tool = INK_TOOLS.stroke(ctx.tool);
         if (tool === undefined) return { ...base, kind: "refused" };
+        // Alt tenuto: il contagocce, che prende il colore di ciò che tocca.
+        if (ctx.alt && has("eyedropper")) {
+          ctx.dropperHover = null;
+          return { ...base, kind: "dropper", at: null, seen: null };
+        }
         const ids = newIds();
         const to = target(ids);
         if (to === null) return { ...base, kind: "refused" };
         const { color, width } = style();
-        const brush = tool.brush(width, { pressure: start.pressure, continued: start.continued });
+        const brush = tool.brush(width, { pressure: start.pressure, continued: start.continued }, ctx.penId);
+        const edge = ctx.rulerEdgeAt(base.pointer, brush, to);
         return {
           ...base,
           kind: "ink",
           tool: ctx.tool,
           color,
           brush,
+          opacity: ctx.inkOpacity[ctx.tool],
           to,
           ids,
           scene: [],
@@ -305,10 +343,13 @@ export function installGuideDrag(ctx: EditorContext): void {
           predicted: [],
           preview: new StrokePreview(brush),
           began: start.timeStamp,
-          holds: tool.capabilities.holdsToShape && start.id >= 0 && !start.continued,
+          // Un tratto lungo il righello è già una linea: non diventa una forma.
+          holds: tool.capabilities.holdsToShape && start.id >= 0 && !start.continued && edge === null,
           still: null,
           held: null,
           copies: tool.capabilities.symmetry && ctx.symmetryShown() ? symmetryMatrices(ctx.symmetryNow()) : [],
+          straight: false,
+          ruler: edge,
         };
       }
       case "rect":
@@ -332,10 +373,8 @@ export function installGuideDrag(ctx: EditorContext): void {
         if (to === null) return { ...base, kind: "refused" };
         return { ...base, kind: "bezier", to, curve: ctx.curvature, mode: null, path: null, reshaped: null, index: -1, from: null, end: null, at: null, dragging: false };
       }
-      case "eraser": {
-        const tool = INK_TOOLS.erase("eraser");
-        return tool === undefined ? { ...base, kind: "refused" } : { ...base, kind: "erase", sweep: new EraseSweep(tool, base.pointer) };
-      }
+      case "eraser":
+        return eraseGesture(base);
       case "note":
         return { ...base, kind: "note", at: null };
       case "select":
@@ -412,14 +451,16 @@ export function installGuideDrag(ctx: EditorContext): void {
   };
   ctx.begin = begin;
 
-  /// Con lo strumento che lo prevede (l'evidenziatore) e Maiusc, il tratto va
-  /// dritto dal primo punto all'ultimo.
-  const straightened = (g: InkGesture): boolean => ctx.shift && INK_TOOLS.stroke(g.tool)?.capabilities.straightWithModifier === true;
+  /// Con lo strumento che lo prevede (penna, evidenziatore) e Maiusc, il
+  /// tratto va dritto dal primo punto all'ultimo, a passi di 15°; lasciato
+  /// Maiusc, resta dritto fino al rilascio.
+  const straightened = (g: InkGesture): boolean =>
+    (g.straight ||= ctx.shift && INK_TOOLS.stroke(g.tool)?.capabilities.straightWithModifier === true);
   ctx.straightened = straightened;
 
   const drawInk = (g: InkGesture): void => {
     const outline = g.preview.outline(g.local, g.predicted, straightened(g));
-    const opacity = INK_TOOLS.stroke(g.tool)?.opacity ?? 1;
+    const opacity = penLook(g.brush, g.tool).opacity * g.opacity;
     const ink = outline.length === 0 ? null : { outline, matrix: g.to.matrix, color: g.color, opacity };
     overlay.setInk(INK_KEY, ink);
     // Le copie in simmetria: lo stesso contorno, portato nella scena.

@@ -188,6 +188,7 @@ export function installTextTool(ctx: EditorContext): void {
     if (next.look?.family) drawingFonts.prefetch(next.look.family, next.look.weight ?? "normal");
     field.form(formOf(next));
     field.open(next.before);
+    ctx.proofText();
     labelText();
     textLayer.hidden = false;
     cursorMark.hidden = true;
@@ -633,7 +634,7 @@ export function installTextTool(ctx: EditorContext): void {
     cancelGesture();
     ctx.closedTyping = false;
     const at = cursorPoint();
-    const start: StrokeStart = { id: --ctx.keyStrokes, pointerType: "mouse", pressure: false, timeStamp, continued: false };
+    const start: StrokeStart = { id: --ctx.keyStrokes, pointerType: "mouse", pressure: false, timeStamp, continued: false, role: "ink" };
     const first: InkSample = { x: at[0], y: at[1], t: 0 };
     ctx.pressed = { start, samples: [first], at, time: 0 };
     cursorMark.hidden = false;

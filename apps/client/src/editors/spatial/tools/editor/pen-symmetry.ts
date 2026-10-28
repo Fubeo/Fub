@@ -11,7 +11,7 @@ import { t } from "../../strings";
 import type { OverlayHandle } from "../../painter/overlay";
 import type { PaintNode } from "../../painter/paint";
 import { movedMatrix, roundDelta, transformedMatrix, transformValue, type Destination } from "../edit";
-import { boundsAfter, numericOps } from "../transform";
+import { boundsAfter, numericMatrix, numericOps, UNCHANGED } from "../transform";
 import { framedText, lookOps } from "../look";
 import type { FieldId } from "../properties";
 import {
@@ -74,6 +74,7 @@ export interface PenSymmetryContext {
   snappedDelta: (dx: number, dy: number, source: Point | null, box: Bounds | null, guides: () => GuideIndex, pointer: InkPointerType) => [number, number];
   moveDelta: (g: SelectGesture) => [number, number];
   rotateSelection: (degrees: number) => void;
+  flipSelection: (axis: "x" | "y") => void;
   selectStart: (g: SelectGesture, p: Point) => void;
   followImages: (moved: Map<object, Matrix>, unit: Unit, next: Matrix) => void;
   boxAround: (a: Point, b: Point) => Bounds;
@@ -419,6 +420,28 @@ export function installPenSymmetry(ctx: EditorContext): void {
     applyFrame(units, frame, rotationMatrix(frameCenter(frame), degrees), degrees);
   };
   ctx.rotateSelection = rotateSelection;
+
+  /// Maiusc+H e Maiusc+V: la selezione si riflette attorno al centro della
+  /// sua cornice, da sinistra a destra o dall'alto in basso del foglio.
+  const flipSelection = (axis: "x" | "y"): void => {
+    ctx.settleCrop();
+    const units = selectedUnits();
+    const frame = frameOf(units);
+    if (frame === null) return;
+    const m = numericMatrix({ ...UNCHANGED, scaleX: axis === "x" ? -1 : 1, scaleY: axis === "y" ? -1 : 1 }, frameCenter(frame));
+    const transformed = numericOps(units, m, newIds());
+    if (transformed === null) {
+      announce(t("draw.transform.unwritable"));
+      return;
+    }
+    if (transformed.changed === 0) return;
+    const hooked = hookedIn(units);
+    if (ctx.arrange("draw.action.flip", transformed, boundsAfter(units, m)) === null) return;
+    ctx.kept = units.length > 1 ? { index: currentIndex(), keys: ctx.selection.join("\n"), frame: movedFrame(frame, m) } : null;
+    showHandles();
+    announce(noted(t(axis === "x" ? "draw.flipped.x" : "draw.flipped.y"), detachedNote(hooked)));
+  };
+  ctx.flipSelection = flipSelection;
 
   /// La maniglia `grip` della cornice del testo in area scelto da solo:
   /// tirarla ne cambierà il riquadro. `null` per ogni altra selezione.

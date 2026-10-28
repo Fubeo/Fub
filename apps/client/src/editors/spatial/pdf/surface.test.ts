@@ -145,9 +145,9 @@ describe("la superficie", () => {
     await vi.waitFor(() => expect(shown).toContain(0));
     expect(notices()).toEqual([]);
     // L'evidenziatore è lo strumento di partenza, con le note e la copertura.
-    const tools = [...parent.querySelectorAll<HTMLButtonElement>(".draw-tool")].map((button) => button.dataset.tool);
-    expect(tools).toEqual(["select", "pen", "highlighter", "eraser", "note", "rect", "ellipse", "line", "arrow", "cover"]);
-    expect(parent.querySelector('.draw-tool[aria-checked="true"]')!.getAttribute("data-tool")).toBe("highlighter");
+    const tools = [...parent.querySelectorAll<HTMLButtonElement>(".draw-tool")].flatMap((button) => button.dataset.tools!.split(" "));
+    expect(tools).toEqual(["select", "hand", "zoom", "pen", "highlighter", "eraser", "note", "rect", "ellipse", "line", "arrow", "cover"]);
+    expect(parent.querySelector('.draw-tool[aria-pressed="true"]')!.getAttribute("data-tool")).toBe("highlighter");
   });
 
   it("aprire non scrive niente", async () => {
@@ -168,7 +168,7 @@ describe("il primo gesto", () => {
     expect(changes).toHaveLength(1);
     const text = surface.buffer!.getDoc();
     expect(text).toContain(`fub:digest="${TEST_DIGEST}" fub:pages="3"`);
-    expect(text).toMatch(/<g id="p0002" fub:page="2" fub:page-size="600 800">\n {4}<path id="o[a-z0-9]{8}" fub:tool="highlighter" fub:at="[^"]+" fub:brush="pf1 size=16 thinning=0 [^"]*" d="[^"]+" fill="#f0e442" fill-opacity="0.4"/);
+    expect(text).toMatch(/<g id="p0002" fub:page="2" fub:page-size="600 800">\n {4}<path id="o[a-z0-9]{8}" fub:tool="highlighter" fub:at="[^"]+" fub:brush="pf1 size=16 thinning=0 [^"]*" d="[^"]+" fill="#f0e442" fill-opacity="0.5" style="mix-blend-mode: multiply"/);
     // Annullare toglie tutto il passo: il gruppo e il legame.
     key("z", { ctrlKey: true });
     expect(surface.buffer!.getDoc()).toBe(NEW);
@@ -295,18 +295,20 @@ describe("le note", () => {
 });
 
 describe("gli strumenti delle annotazioni", () => {
+  /// Il pozzo del colore della barra, col nome del colore.
+  const color = (): string | null => parent.querySelector(".draw-toolbar .kit-color-well-button")?.getAttribute("aria-label") ?? null;
   it("la copertura è un rettangolo pieno del suo colore, e lo spessore non vale", async () => {
     const { surface } = mount(NEW, "Bando.pdf.fubann", { transport: transportOf({ "Bando.pdf": "test" }), loader: loaderOf(3) });
     await loaded("di 3");
     key("c");
     const widths = [...parent.querySelectorAll<HTMLButtonElement>(".draw-width")];
     expect(widths.every((button) => button.disabled)).toBe(true);
-    expect(parent.querySelector('.draw-color[aria-checked="true"]')!.getAttribute("aria-label")).toBe("Nero");
+    expect(color()).toBe("Colore: Nero");
     drag([[20, 20], [120, 40], [220, 60]]);
     expect(surface.buffer!.getDoc()).toMatch(/<rect id="o[a-z0-9]{8}" x="20" y="20" width="200" height="40" fill="#000000"\/>/);
     // Ogni famiglia ricorda il suo colore: l'evidenziatore resta giallo.
-    key("h");
-    expect(parent.querySelector('.draw-color[aria-checked="true"]')!.getAttribute("aria-label")).toBe("Giallo");
+    key("P", { shiftKey: true });
+    expect(color()).toBe("Colore: Giallo");
     expect(widths.some((button) => !button.disabled)).toBe(true);
   });
 

@@ -2,8 +2,10 @@
 // le impostazioni dei disegni, il client le legge, e i nomi devono essere gli
 // stessi**.
 //
-// `fub.draw` dichiara in Rust `draw.level` (con i suoi quattro valori),
-// `draw.custom` (con le parti di partenza del Personalizzato),
+// `fub.draw` dichiara in Rust `draw.workspace` (Completo o Semplice),
+// `draw.toolbar` (gli strumenti della colonna), `draw.level` (con i suoi
+// quattro valori, letto ancora per dedurre lo spazio dalle versioni
+// precedenti), `draw.custom` (con le parti di partenza del Personalizzato),
 // `draw.suggestions` e le cartelle dei modelli e delle librerie di simboli
 // (`crates/fub-features/src/draw.rs`); il client li legge da
 // `preferences.ts`, da `templates/choices.ts` e da
@@ -21,8 +23,8 @@
 // confronta non deve restare verde.
 import { describe, expect, it } from "vitest";
 import DRAW_RS from "../../../../../crates/fub-features/src/draw.rs?raw";
-import { CUSTOM_KEY, LEVEL_KEY, SUGGESTIONS_KEY, currentCustom, currentLevel } from "./preferences";
-import { CUSTOM_DEFAULT, isFeature, isLevel, levelsAbove } from "./tools/registry";
+import { CUSTOM_KEY, LEVEL_KEY, SUGGESTIONS_KEY, TOOLBAR_KEY, WORKSPACE_KEY, currentCustom, currentLevel, currentWorkspace } from "./preferences";
+import { CUSTOM_DEFAULT, WORKSPACES, isFeature, isLevel, levelsAbove } from "./tools/registry";
 import { SYMBOLS_FOLDER, SYMBOLS_SETTING, symbolsFolder } from "./tools/symbol-libraries";
 import { DRAW_BUNDLE, TEMPLATES_FOLDER, TEMPLATES_SETTING, templatesFolder } from "./templates/choices";
 
@@ -55,7 +57,7 @@ function strings(name: string): string[] {
 
 describe("le impostazioni dei disegni, Rust e client", () => {
   it("il sorgente Rust si legge: le costanti che si confrontano ci sono", () => {
-    for (const name of ["DRAW_LEVEL_KEY", "DRAW_CUSTOM_KEY", "DRAW_SUGGESTIONS_KEY"]) {
+    for (const name of ["DRAW_WORKSPACE_KEY", "DRAW_TOOLBAR_KEY", "DRAW_LEVEL_KEY", "DRAW_CUSTOM_KEY", "DRAW_SUGGESTIONS_KEY"]) {
       expect(text(name), name).toMatch(/^draw\.[a-z]+$/);
     }
     expect(strings("DRAW_LEVELS").length).toBeGreaterThan(0);
@@ -63,6 +65,8 @@ describe("le impostazioni dei disegni, Rust e client", () => {
   });
 
   it("le chiavi sono quelle che il client legge e scrive", () => {
+    expect(text("DRAW_WORKSPACE_KEY")).toBe(WORKSPACE_KEY);
+    expect(text("DRAW_TOOLBAR_KEY")).toBe(TOOLBAR_KEY);
     expect(text("DRAW_LEVEL_KEY")).toBe(LEVEL_KEY);
     expect(text("DRAW_CUSTOM_KEY")).toBe(CUSTOM_KEY);
     expect(text("DRAW_SUGGESTIONS_KEY")).toBe(SUGGESTIONS_KEY);
@@ -96,5 +100,13 @@ describe("le impostazioni dei disegni, Rust e client", () => {
     expect(new Set(parts).size).toBe(parts.length);
     // E sono ciò che l'editor usa quando l'impostazione non dice niente.
     expect(currentCustom()).toEqual(parts);
+  });
+
+  it("gli spazi di lavoro sono quelli del registro, e il primo è quello di serie", () => {
+    const workspaces = strings("DRAW_WORKSPACES");
+    expect(workspaces).toEqual([...WORKSPACES]);
+    // Senza impostazioni l'editor parte dal primo, «Completo», con la colonna
+    // di serie.
+    expect(currentWorkspace()).toEqual({ workspace: workspaces[0], toolbar: [] });
   });
 });

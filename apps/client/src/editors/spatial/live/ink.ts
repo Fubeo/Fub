@@ -15,8 +15,8 @@
 // tornano a vista appena un foglio si monta (`redraw`).
 
 import type { LiveEvent } from "../../../host/contract";
-import { parseBrush, type Pf1Brush } from "../../../ink/brush";
-import { pf1Outline } from "../../../ink/pf1";
+import { parseInkBrush, type InkBrush } from "../../../ink/brush";
+import { inkOutline } from "../../../ink/outline";
 import { INK_MAX_SAMPLES, quantizeInk, type InkSample } from "../../../ink/sample";
 import type { InkPreview } from "../painter/overlay";
 import { apply, IDENTITY, invert, type Matrix } from "../scene/matrix";
@@ -36,7 +36,7 @@ interface Stroke {
   readonly layer: string;
   readonly color: string;
   readonly opacity: number;
-  readonly brush: Pf1Brush;
+  readonly brush: InkBrush;
   readonly pressure: boolean;
   /// In coordinate del documento, col tempo dal primo campione.
   readonly samples: InkSample[];
@@ -112,7 +112,7 @@ export function createLiveInk(options: LiveInkOptions): LiveInk {
           return sample.p === undefined ? { x, y, t: sample.t } : { x, y, p: sample.p, t: sample.t };
         });
     try {
-      const outline = pf1Outline(quantizeInk(local), stroke.brush, { last: stroke.ended });
+      const outline = inkOutline(quantizeInk(local), stroke.brush, { last: stroke.ended });
       return outline.length === 0 ? null : { outline, matrix, color: stroke.color, opacity: stroke.opacity };
     } catch {
       return null;
@@ -148,9 +148,9 @@ export function createLiveInk(options: LiveInkOptions): LiveInk {
   return {
     begin(event, pressure) {
       if (disposed || strokes.has(event.s)) return;
-      let brush: Pf1Brush;
+      let brush: InkBrush;
       try {
-        brush = parseBrush(event.brush);
+        brush = parseInkBrush(event.brush);
       } catch {
         // Un pennello che non si legge non ha un contorno: il commit dirà.
         return;

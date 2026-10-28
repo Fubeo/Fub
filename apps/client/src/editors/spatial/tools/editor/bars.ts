@@ -17,11 +17,26 @@ import { createTextField, type TextField } from "../text-field";
 import { JOIN_NAMES, SIMPLIFY_STEPS, TRANSFORM_BINDING } from "./constants";
 import type { EditorContext } from "./context";
 
+/// Un'azione della barra della selezione, col suo pulsante.
+export interface BarCommand {
+  readonly id: string;
+  readonly label: () => string;
+  readonly icon: string;
+  readonly binding: string | null;
+  readonly control: HTMLButtonElement;
+  readonly run: () => void;
+}
+
 /// Ciò che le barre della selezione, dei nodi, del gruppo isolato e dei tracciati dà agli altri pezzi dell'editor.
 export interface BarsContext {
   arrangeBar: HTMLDivElement;
   nameArrange: (control: HTMLButtonElement, text: string, binding: string | null) => void;
   arrangeButtons: HTMLButtonElement[];
+  /// Le azioni della barra per il catalogo dei comandi: si vedono quando il
+  /// loro pulsante si vede.
+  barCommands: BarCommand[];
+  /// «…» della barra: le azioni oltre le prime `ARRANGE_SHOWN`, in un menu.
+  arrangeMore: HTMLButtonElement;
   textButton: HTMLButtonElement;
   duplicateButton: HTMLButtonElement;
   groupButton: HTMLButtonElement;
@@ -141,12 +156,14 @@ export function installBars(ctx: EditorContext): void {
   /// I pulsanti della barra: se nessuno si vede, la barra non c'è.
   const arrangeButtons: HTMLButtonElement[] = [];
   ctx.arrangeButtons = arrangeButtons;
+  ctx.barCommands = [];
   /// Un pulsante della barra; il nome è una chiave, o una funzione per quelli
   /// che cambiano nome con la selezione.
   const arrangeButton = (label: DrawKey | (() => string), iconName: string, binding: string | null, run: () => void): HTMLButtonElement => {
     const text = typeof label === "function" ? label : () => t(label);
     const control = button(arrangeBar, "draw-button", text, iconName, run);
     arrangeButtons.push(control);
+    ctx.barCommands.push({ id: typeof label === "string" ? label : `draw.bar.${iconName}`, label: text, icon: iconName, binding, control, run });
     // Un tasto senza modificatori, come F2, si scrive com'è.
     if (binding !== null) control.setAttribute("aria-keyshortcuts", ariaBinding(binding) || binding);
     relabels.push(() => nameArrange(control, text(), binding));
@@ -279,7 +296,20 @@ export function installBars(ctx: EditorContext): void {
   // toglierlo dal suo tracciato e rovesciarlo, in un menu.
   const textPathButton = arrangeButton("draw.text_path", "draw-text-path", null, () => ctx.openMenu(textPathButton, ctx.textPathItems()));
   ctx.textPathButton = textPathButton;
-  for (const control of [orderButton, intoButton, alignButton, pathButton, booleanButton, maskButton, repeatButton, outlineButton, textPathButton]) {
+  // Le azioni oltre le prime `ARRANGE_SHOWN` restano nella barra, nascoste
+  // con `data-more`, e il «…» le offre in un menu: la barra resta una
+  // pillola corta accanto alla selezione (B7).
+  const arrangeMore = button(arrangeBar, "draw-button draw-arrange-more", () => t("draw.chrome.context.more"), "draw-more", () =>
+    ctx.openMenu(arrangeMore, arrangeButtons.filter((control) => control.hasAttribute("data-more")).map((control) => ({
+      label: control.getAttribute("aria-label") ?? "",
+      hint: control.title.match(/\(([^)]*)\)$/)?.[1],
+      disabled: control.disabled,
+      run: () => control.click(),
+    }))));
+  ctx.arrangeMore = arrangeMore;
+  arrangeMore.hidden = true;
+  relabels.push(() => nameArrange(arrangeMore, t("draw.chrome.context.more"), null));
+  for (const control of [arrangeMore, orderButton, intoButton, alignButton, pathButton, booleanButton, maskButton, repeatButton, outlineButton, textPathButton]) {
     control.setAttribute("aria-haspopup", "menu");
     control.setAttribute("aria-expanded", "false");
   }
@@ -373,10 +403,15 @@ export function installBars(ctx: EditorContext): void {
   textLayer.className = "draw-text-layer";
   textLayer.hidden = true;
   const field = createTextField(life, {
-    onChange: () => ctx.placeText(),
+    onChange: () => {
+      ctx.placeText();
+      ctx.syncCharacter();
+      ctx.proofText();
+    },
     onFinish: () => ctx.finishText(),
     announce: (text) => ctx.announce(text),
     family: drawingFonts.live,
+    onLook: () => ctx.syncCharacter(),
   });
   ctx.field = field;
   const textInput = field.element;

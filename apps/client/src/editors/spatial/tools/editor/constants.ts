@@ -36,8 +36,16 @@ export const LASSO_MAX_POINTS = 512;
 export const MIN_SHAPE_PX = 4;
 
 export const ZOOM_STEP = 1.25;
+/// Le azioni che la barra accanto alla selezione mostra; le altre vanno nel
+/// suo «…» (B7).
+export const ARRANGE_SHOWN = 6;
+/// Quanto la rotella deve tacere perché lo zoom sia finito, in ms.
+export const ZOOM_SETTLE_MS = 160;
 
 export const FIT_PAD = 0.08;
+
+/// Il margine dell'inquadratura d'apertura, in pixel dello schermo.
+export const OPEN_MARGIN_PX = 48;
 
 /// Di quanto le frecce spostano o ridimensionano la selezione, in unità
 /// della scena.

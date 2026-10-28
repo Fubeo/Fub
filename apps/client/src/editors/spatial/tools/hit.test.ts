@@ -963,8 +963,8 @@ describe("l'evidenziatore", () => {
     const marker = strokeElem("o1", "#f0e442", brush, quantizeInk(samples), null, "highlighter");
     expect(pen.attrs["fub:tool"]).toBe("pen");
     expect(pen.attrs["fill-opacity"]).toBeUndefined();
-    expect(marker.attrs).toEqual({ ...pen.attrs, "fub:tool": "highlighter", "fill-opacity": "0.4" });
-    expect(Object.keys(marker.attrs)).toEqual(["id", "fub:tool", "fub:brush", "fill", "fill-opacity", "fub:ink"]);
+    expect(marker.attrs).toEqual({ ...pen.attrs, "fub:tool": "highlighter", "fill-opacity": "0.5", style: "mix-blend-mode: multiply" });
+    expect(Object.keys(marker.attrs)).toEqual(["id", "fub:tool", "fub:brush", "fill", "fill-opacity", "style", "fub:ink"]);
   });
 });
 

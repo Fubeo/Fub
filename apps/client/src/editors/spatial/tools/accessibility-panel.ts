@@ -32,7 +32,8 @@
 
 import { resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
-import { icon, iconEl, registerIcon } from "../../../ui/icons";
+import { iconEl } from "../../../ui/icons";
+import { ensureDrawIcons } from "../icons";
 import type { Lifetime } from "../../../ui/lifetime";
 import { plural, t, type DrawKey } from "../strings";
 import type { Problem, ReadingRow } from "./audit";
@@ -44,13 +45,6 @@ const PAGE = 100;
 
 /// Le righe disegnate oltre quelle che si vedono, sopra e sotto.
 const OVERSCAN = 8;
-
-/// Le icone della gravità, col costrutto di `ui/icons.ts`: il triangolo
-/// dell'avviso e il cerchio della nota.
-const ICONS: Readonly<Record<string, readonly string[]>> = {
-  "draw-access-warning": ["M12 3.5L21.5 20H2.5z", "M12 9.5V14", "M12 17v.01"],
-  "draw-access-info": ["M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z", "M12 11v5.5", "M12 7.5v.01"],
-};
 
 /// Ciò che il pannello mostra.
 export interface AccessView {
@@ -110,7 +104,7 @@ function titleOf(problem: Problem): DrawKey {
 }
 
 export function createAccessPanel(life: Lifetime, options: AccessPanelOptions): AccessPanel {
-  for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
+  ensureDrawIcons();
   const element = document.createElement("section");
   element.className = "draw-access";
   element.id = identifier("draw-access");

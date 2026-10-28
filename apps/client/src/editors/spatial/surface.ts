@@ -32,11 +32,12 @@
 // (`fonts/vault.ts`). Un carattere che il disegno non può caricare lo dice un
 // avviso, una volta per famiglia.
 //
-// Il livello dell'editor è l'impostazione del vault `draw.level`, con le parti
-// del Personalizzato in `draw.custom`, e la griglia l'ultima scelta su questa
-// macchina (`preferences.ts`): la superficie li legge quando nasce, segue il
-// livello finché vive, e ricorda la griglia che chi disegna sceglie. Così i
-// suggerimenti brevi: se si mostrano, e quelli già visti.
+// Lo spazio di lavoro dell'editor è l'impostazione del vault `draw.workspace`,
+// con gli strumenti della colonna in `draw.toolbar`, e la griglia l'ultima
+// scelta su questa macchina (`preferences.ts`): la superficie li legge quando
+// nasce, segue lo spazio finché vive, scrive quello che chi disegna sceglie
+// dal menu, e ricorda la griglia. Così i suggerimenti brevi: se si mostrano,
+// e quelli già visti.
 //
 // In Disegno il documento può non essere modificabile, e la modalità del
 // riquadro non cambia per questo (`docs/product/drawing.md`):
@@ -53,7 +54,7 @@
 import { errorText } from "../../host/errors";
 import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
 import { relativeRef, resolveAgainst } from "../../rules/mirrored";
-import { identifier } from "../../ui/a11y";
+import { focusZone, identifier } from "../../ui/a11y";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { notify } from "../../ui/notify";
 import type { EditorRange, EditorSelections, EditorSurface, SelectedText, SurfaceExportWindow, SurfaceMountContext } from "../core/registry";
@@ -66,20 +67,24 @@ import { DrawingFonts, markupFonts, vaultFontsOf, type FontNotes, type VaultFont
 import type { SymbolLibraryPort } from "./tools/symbol-libraries";
 import { VECTOR_EXPORTS, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
 import {
-  currentCustom,
   currentGrid,
-  currentLevel,
   currentRecentColors,
   currentSuggested,
+  currentWorkspace,
   readExportMemory,
   readGrid,
   readRecentColors,
+  readSavedPens,
+  saveSavedPens,
+  currentSavedPens,
   saveExportMemory,
   saveGrid,
   saveRecentColors,
   saveSuggested,
+  saveToolbar,
+  saveWorkspace,
   switchSuggestions,
-  watchLevel,
+  watchWorkspace,
   watchSuggested,
 } from "./preferences";
 import { SceneEngine } from "./scene/engine";
@@ -87,8 +92,11 @@ import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } fro
 import { href as parseHref } from "./scene/values";
 import { linkTarget, nodeOf } from "./tools/arrange";
 import { createDrawEditor, type DrawEditor, type DrawExport, type DrawImages, type DrawLinks, type DrawPlace } from "./tools/editor";
+import type { DrawProof } from "./tools/editor/text-proof";
+import { inspectorChrome, type InspectorChrome } from "./tools/editor/chrome/hosts";
 import { exportDialog } from "./tools/export-dialog";
-import { featuresFor } from "./tools/registry";
+import { asking } from "./tools/export-plan";
+import { featuresFor, workspaceLevel } from "./tools/registry";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, type ImageRef } from "./read-images";
 import { fontSheets, picture, type FontSheets } from "./picture";
 import { noteSceneChange, offerStage } from "./live/registry";
@@ -114,6 +122,10 @@ export interface VectorSurfaceOptions {
   vaultFonts?: VaultFontPort;
   /// Le librerie di simboli del vault, che la shell elenca e legge.
   symbolLibraries?: SymbolLibraryPort;
+  /// Apre la finestra «Esporta» della shell.
+  onExport?(): void;
+  /// Il correttore per il testo che si scrive.
+  proof?: DrawProof;
 }
 
 /// Le immagini del vault di un disegno: `path` è l'`href` com'è scritto nel
@@ -289,6 +301,24 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   let opened: Opened | null = null;
   let editor: DrawEditor | null = null;
   let editorLife: Lifetime | null = null;
+  /// I pannelli dell'editor di adesso, nell'ispettore dello Scrittoio (C1).
+  let chrome: InspectorChrome | null = null;
+  const panelListeners = new Set<() => void>();
+  const panelReveals = new Set<(id: string) => void>();
+  /// Vero se l'ispettore ha le schede del disegno: con l'editor e il foglio
+  /// in vista.
+  let tabsOffered = false;
+  /// Che cosa esportare, chiesto dall'editor per la prossima apertura della
+  /// finestra «Esporta».
+  let exportAsked: "selection" | null = null;
+  const panelsChanged = (): void => {
+    for (const listener of [...panelListeners]) listener();
+  };
+  /// Chi ascolta la banda di stato (E1).
+  const statusListeners = new Set<() => void>();
+  const statusChanged = (): void => {
+    for (const listener of [...statusListeners]) listener();
+  };
   let view: ZoomView | null = null;
   let shownUrl: string | null = null;
   /// Il testo che l'immagine mostra: non si ridisegna uguale.
@@ -303,10 +333,11 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   /// disegnate.
   let connectedText: string | null = null;
   let connectedLanguage: string | null = null;
-  /// Il livello, le parti del Personalizzato e la griglia dell'editor: quelli
-  /// dell'ultima lettura, finché non arriva quella di questa superficie.
-  let level = currentLevel();
-  let custom = currentCustom();
+  /// Lo spazio di lavoro, la colonna e la griglia dell'editor: quelli
+  /// dell'ultima lettura, finché non arriva quella di questa superficie. Il
+  /// livello e le parti sono quelli con cui l'editor offre lo spazio.
+  let workspace = currentWorkspace();
+  let { level, custom } = workspaceLevel(workspace.workspace);
   let grid = currentGrid();
   /// Chi disegna ha già scelto la griglia qui: la lettura non la riporta
   /// indietro.
@@ -314,6 +345,9 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   /// I colori recenti, come la griglia.
   let colors = currentRecentColors();
   let colorsChosen = false;
+  /// Le penne salvate, come i colori.
+  let pens = currentSavedPens();
+  let pensChosen = false;
   /// I suggerimenti, come il livello.
   let suggested = currentSuggested();
 
@@ -402,10 +436,14 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   // --- L'editor -------------------------------------------------------------
 
   const mountEditor = (engine: SceneEngine): DrawEditor => {
-    const owner = openLifetime();
-    const mounted = createDrawEditor(drawHost, engine, owner, {
-      level,
-      custom,
+    const editorLifetime = openLifetime();
+    const made = inspectorChrome();
+    const mounted = createDrawEditor(drawHost, engine, editorLifetime, {
+      chrome: made,
+      workspace: workspace.workspace,
+      toolbar: workspace.toolbar,
+      onWorkspace: saveWorkspace,
+      onToolbar: saveToolbar,
       grid,
       onGridChange: (next) => {
         grid = next;
@@ -418,6 +456,12 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
         colorsChosen = true;
         saveRecentColors(next);
       },
+      pens,
+      onPensChange: (next) => {
+        pens = next;
+        pensChosen = true;
+        saveSavedPens(next);
+      },
       suggestions: suggested,
       onSuggestionsSwitch: (on) => switchSuggestions(on),
       onSuggestedChange: (seen) => saveSuggested(seen),
@@ -425,6 +469,15 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       ...(images === undefined ? {} : { images }),
       ...(options.vaultFonts === undefined ? {} : { vaultFonts: options.vaultFonts }),
       ...(options.symbolLibraries === undefined ? {} : { symbolLibraries: options.symbolLibraries }),
+      ...(options.proof === undefined ? {} : { proof: options.proof }),
+      ...(options.onExport === undefined
+        ? {}
+        : {
+            onExport: (what?: "selection") => {
+              exportAsked = what ?? null;
+              options.onExport!();
+            },
+          }),
       onFontNotes: sayFonts,
       place,
       onChange: (change) => {
@@ -437,9 +490,18 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       onSelectionChange: () => options.onSelectionChange(),
     });
     mounted.setReadOnly(readOnly);
+    editorLifetime.add(made.panels.subscribe(panelsChanged));
+    editorLifetime.add(mounted.status.subscribe(statusChanged));
+    editorLifetime.add(
+      made.panels.onShow((id) => {
+        for (const listener of [...panelReveals]) listener(id);
+      }),
+    );
+    editorLifetime.add(() => made.dispose());
+    chrome = made;
     // Il foglio per la sessione live, finché l'editor c'è.
-    owner.add(offerStage(context.documentId, { root, stage: mounted.stage, visible: () => !drawHost.hidden }));
-    editorLife = owner;
+    editorLifetime.add(offerStage(context.documentId, { root, stage: mounted.stage, visible: () => !drawHost.hidden }));
+    editorLife = editorLifetime;
     editor = mounted;
     return mounted;
   };
@@ -449,6 +511,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     editorLife?.close();
     editorLife = null;
     editor = null;
+    chrome = null;
     if (had) options.onSelectionChange();
   };
 
@@ -721,6 +784,12 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     readHost.hidden = !image;
     if (image) showImage();
     if (hadFocus && drawHost.hidden) focusShown();
+    const tabs = chrome !== null && !drawHost.hidden;
+    if (tabs !== tabsOffered) {
+      tabsOffered = tabs;
+      panelsChanged();
+      statusChanged();
+    }
   };
 
   life.listen(adoptButton, "click", () => {
@@ -733,12 +802,12 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   });
   life.add(onLanguage(paint));
 
-  // --- Il livello e la griglia ----------------------------------------------
+  // --- Lo spazio di lavoro e la griglia -------------------------------------
 
-  life.add(watchLevel((next, parts) => {
-    level = next;
-    custom = parts;
-    editor?.setLevel(next, parts);
+  life.add(watchWorkspace((next) => {
+    workspace = next;
+    ({ level, custom } = workspaceLevel(next.workspace));
+    editor?.setWorkspace(next.workspace, next.toolbar);
     // «Rendi modificabile…» sull'avviso c'è all'Esperto.
     paint();
   }));
@@ -751,6 +820,11 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     if (life.closed || colorsChosen) return;
     colors = next;
     editor?.setRecentColors(next);
+  });
+  void readSavedPens().then((next) => {
+    if (life.closed || pensChosen) return;
+    pens = next;
+    editor?.setSavedPens(next);
   });
   life.add(watchSuggested((next) => {
     suggested = next;
@@ -799,7 +873,11 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   const exportWindow: SurfaceExportWindow = {
     available: () => featuresFor(level, custom).has("export") && shownEngine() !== null,
     open: async () => {
-      const memory = await readExportMemory(context.documentId);
+      // Ciò che l'editor ha chiesto vale per questa apertura soltanto.
+      const asked = exportAsked;
+      exportAsked = null;
+      const remembered = await readExportMemory(context.documentId);
+      const memory = asked === null ? remembered : asking(remembered, asked);
       if (life.closed || shownEngine() === null) return null;
       const base = text;
       const offer = exportOffer();
@@ -831,6 +909,9 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
 
   life.add(() => {
     unmountEditor();
+    panelListeners.clear();
+    panelReveals.clear();
+    statusListeners.clear();
     if (shownUrl !== null) URL.revokeObjectURL(shownUrl);
     shownUrl = null;
     root.remove();
@@ -867,6 +948,47 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       getDoc: () => text,
     },
     focus: focusShown,
+    // F6: la tela, la colonna degli strumenti, poi la barra in alto con le
+    // opzioni. Il resto del giro (l'ispettore, la banda) è della shell.
+    zone(step) {
+      if (drawHost.hidden || editor === null) return false;
+      const root = editor.element;
+      const canvas = root.querySelector<HTMLElement>(".draw-surface");
+      const zones = [canvas, root.querySelector<HTMLElement>(".draw-rail"), root.querySelector<HTMLElement>(".draw-header")].filter(
+        (zone): zone is HTMLElement => zone !== null && zone.closest("[hidden]") === null,
+      );
+      const at = zones.findIndex((zone) => zone.contains(document.activeElement));
+      const target = zones[at < 0 ? (step > 0 ? 0 : zones.length - 1) : at + step];
+      if (target === undefined) return false;
+      if (target === canvas) editor.focus();
+      else focusZone(target);
+      return true;
+    },
+    // Design, Livelli, Risorse, Cronologia e Accessibilità nell'ispettore, col
+    // foglio in vista. I titoli, le note e le proprietà di una nota non dicono
+    // niente di un disegno.
+    panels: {
+      list: () => (tabsOffered && chrome !== null ? chrome.panels.list() : []),
+      subscribe(listener) {
+        panelListeners.add(listener);
+        return () => panelListeners.delete(listener);
+      },
+      onShow(listener) {
+        panelReveals.add(listener);
+        return () => panelReveals.delete(listener);
+      },
+      covers: ["outline", "footnotes", "properties"],
+    },
+    // Lo zoom, il puntatore, le misure e gli oggetti al posto delle parole,
+    // che un disegno non conta.
+    status: {
+      counts: true,
+      items: () => (tabsOffered && editor !== null ? editor.status.items() : []),
+      subscribe(listener) {
+        statusListeners.add(listener);
+        return () => statusListeners.delete(listener);
+      },
+    },
     reveal: ({ span }) => !drawHost.hidden && editor !== null && editor.reveal(span.start),
     selections: (): EditorSelections | undefined => {
       const [first, ...rest] = selectedRanges();

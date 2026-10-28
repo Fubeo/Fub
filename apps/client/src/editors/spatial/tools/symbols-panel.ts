@@ -110,6 +110,9 @@ export interface SymbolsPanel {
   focus(): void;
   /// Il fuoco va al riquadro di `ref`, se c'è.
   focusTile(ref: SymbolRef): boolean;
+  /// Con la ricerca comune delle risorse (`text`), il campo proprio non si
+  /// vede e i simboli rispondono a quella; `null` torna al campo proprio.
+  follow(text: string | null): void;
   /// Riscrive i testi nella lingua di adesso.
   relabel(): void;
 }
@@ -526,7 +529,7 @@ export function createSymbolsPanel(life: Lifetime, options: SymbolsPanelOptions)
         const above = laidOut(tile) ? vertical(tile, -1) : (list[at - 1] ?? null);
         if (above === null) {
           activate(tile);
-          search.focus({ preventScroll: true });
+          if (!find.hidden) search.focus({ preventScroll: true });
         } else goTo(above);
         break;
       }
@@ -674,7 +677,15 @@ export function createSymbolsPanel(life: Lifetime, options: SymbolsPanelOptions)
       if (editableChanged) setText(hint, t(view.editable ? "draw.symbols.hint" : "draw.symbols.hint.read_only"));
     },
     focus() {
-      search.focus({ preventScroll: true });
+      // Senza il campo proprio, il fuoco va ai simboli.
+      if (!find.hidden) search.focus({ preventScroll: true });
+      else goTo(active !== null && !active.button.hidden ? active : visible()[0]);
+    },
+    follow(text) {
+      find.hidden = text !== null;
+      if (text === null || search.value === text) return;
+      search.value = text;
+      filter();
     },
     focusTile(ref) {
       const tile = byKey.get(refKey(ref));

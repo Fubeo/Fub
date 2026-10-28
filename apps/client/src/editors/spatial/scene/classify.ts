@@ -20,7 +20,7 @@
 // ogni id. Il tracciato di un testo su tracciato è anch'esso una risorsa, un
 // `path` nelle `defs` della radice (formato della scena, testo).
 
-import { BrushError, parseBrush } from "../../../ink/brush";
+import { BrushError, parseInkBrush } from "../../../ink/brush";
 import { decodeInk, inkDuration, inkLength, unknownChannels, type Ink } from "../ink/codec";
 import { InkError } from "../../../ink/sample";
 import { Context, isContainer, Tally, useTarget, type Role, type Stroke, type Swatches, type Tool } from "./analysis";
@@ -1704,7 +1704,7 @@ export function readStroke(element: ElementNode): { stroke: Stroke; problems: St
     problems.push(["S004", new BrushError("missing").detail]);
   } else {
     try {
-      parseBrush(brushText);
+      parseInkBrush(brushText);
     } catch (error) {
       if (!(error instanceof BrushError)) throw error;
       problems.push(["S004", error.detail]);

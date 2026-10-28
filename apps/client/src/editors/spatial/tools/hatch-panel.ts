@@ -34,37 +34,19 @@
 
 import { resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
-import { icon, iconEl, registerIcon } from "../../../ui/icons";
+import { iconEl } from "../../../ui/icons";
+import { ensureDrawIcons } from "../icons";
 import type { Lifetime } from "../../../ui/lifetime";
 import { showContextMenu, type MenuItem } from "../../../ui/menu";
 import type { LengthUnit } from "../scene/rulers";
 import { plural, t, type DrawKey } from "../strings";
 import { clampSpacing, clampWidth, HATCH_PRESETS, MAX_SPACING, MIN_SPACING, MIN_WIDTH, normalAngle, type HatchPreset } from "./hatches";
 import { cleanName } from "./naming";
-import { customColor, PALETTE, swatchOf } from "./palette";
+import { customColor, PALETTE } from "./palette";
 import type { HatchChange, HatchChoice, HatchView } from "./patterns";
 import { ANGLE_UNITS, evaluate, lengthUnits, type QuantityProblem } from "./quantity";
 import { FIELD_PLACES, fromUnit, toUnit } from "./rulers";
 import { swatchNameProblem } from "./swatches";
-
-/// Il riquadro di ogni figura: lo stesso delle altre icone di una sezione.
-const FRAME = "M4 4h16v16H4z";
-
-/// Un puntino della figura delle puntinate: un cerchietto pieno per il tratto.
-const dot = (x: number, y: number): string => `M${x - 0.6} ${y}a0.6 0.6 0 1 0 1.2 0a0.6 0.6 0 1 0-1.2 0z`;
-
-/// Le icone della sezione, col costrutto di `ui/icons.ts`: la figura di
-/// ogni campitura pronta, di una personalizzata e di un motivo.
-const ICONS: Readonly<Record<string, readonly string[]>> = {
-  "draw-hatch-none": [FRAME, "M4 20 20 4"],
-  "draw-hatch-diagonal": [FRAME, "M4 12 12 4", "M4 20 20 4", "M12 20l8-8"],
-  "draw-hatch-cross": [FRAME, "M4 12 12 4", "M4 20 20 4", "M12 20l8-8", "M12 4l8 8", "M4 4l16 16", "M4 12l8 8"],
-  "draw-hatch-horizontal": [FRAME, "M4 8h16", "M4 12h16", "M4 16h16"],
-  "draw-hatch-dots": [FRAME, dot(8, 8), dot(16, 8), dot(12, 12), dot(8, 16), dot(16, 16)],
-  "draw-hatch-grid": [FRAME, "M4 9.33h16", "M4 14.67h16", "M9.33 4v16", "M14.67 4v16"],
-  "draw-hatch-custom": [FRAME, "M4 9c3-3 5 3 8 0s5 3 8 0", "M4 15c3-3 5 3 8 0s5 3 8 0"],
-  "draw-hatch-pattern": [FRAME, "M12 4v8h8", "M4 12h8v8"],
-};
 
 /// Il nome della figura di una scelta del menu; `null` per la scelta mista,
 /// che non ne ha una.
@@ -198,7 +180,7 @@ function motifIdOf(choice: HatchChoice | null): string | null {
 }
 
 export function createHatchPanel(life: Lifetime, options: HatchPanelOptions): HatchPanel {
-  for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
+  ensureDrawIcons();
   const element = document.createElement("div");
   element.className = "draw-hatch";
 
@@ -475,7 +457,7 @@ export function createHatchPanel(life: Lifetime, options: HatchPanelOptions): Ha
   const showChip = (field: Field, value: string | null): void => {
     if (field.frame === null || field.swatch === null) return;
     const code = value === null || value === "none" ? null : customColor(value);
-    field.frame.dataset.shape = value === null ? "mixed" : value === "none" ? "none" : code === null ? "mixed" : (swatchOf(code)?.shape ?? "ring");
+    field.frame.dataset.shape = value === null ? "mixed" : value === "none" ? "none" : code === null ? "mixed" : "circle";
     if (code === null) field.swatch.style.removeProperty("--swatch");
     else field.swatch.style.setProperty("--swatch", code);
   };

@@ -307,6 +307,10 @@ export interface ScenePainter {
   /// Ridisegna subito gli strati immagine che ne hanno bisogno, senza
   /// aspettare che la camera stia ferma.
   settle(): void;
+  /// La vista dei contorni: ogni tracciato un filo di un pixel, senza
+  /// riempimenti né effetti, il testo pieno e le immagini velate. Il disegno
+  /// non cambia.
+  setOutline(on: boolean): void;
   /// Toglie tutto dal DOM e revoca ogni risorsa. Chiudere la vita di chi lo
   /// ha montato fa lo stesso.
   dispose(): void;
@@ -421,6 +425,17 @@ interface DefsRecord {
 }
 
 /// Monta un painter dentro `host`.
+/// Il foglio della vista dei contorni, per gli `svg` dentro `scope`.
+export function outlineSheet(scope: string): string {
+  const all = `${scope}svg *`;
+  const text = `${scope}svg text, ${scope}svg tspan, ${scope}svg textPath`;
+  return `${all}{fill:none!important;stroke:#1a1a1a!important;stroke-width:1px!important;stroke-dasharray:none!important;`
+    + `stroke-opacity:1!important;opacity:1!important;vector-effect:non-scaling-stroke!important;filter:none!important;`
+    + `mask:none!important;mix-blend-mode:normal!important;marker:none!important}`
+    + `${text}{fill:#1a1a1a!important;fill-opacity:1!important;stroke:none!important}`
+    + `${scope}svg image{opacity:0.25!important}`;
+}
+
 export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: PainterOptions = {}): ScenePainter {
   const life = openLifetime();
   const settleMs = options.settleMs ?? DEFAULT_SETTLE_MS;
@@ -1136,15 +1151,34 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   /// letti. Altrimenti lo strato si disegna subito coi caratteri del sistema,
   /// e di nuovo quando arrivano, se nel frattempo non è cambiato.
   const fontsOf = (record: ImageRecord, generation: number): string => {
+    const lines = outline ? outlineSheet("") : "";
     const fonts = options.fonts;
-    if (fonts === undefined) return "";
+    if (fonts === undefined) return lines;
     const named = layerText(record.layer);
     const css = fonts.now(named);
-    if (css !== null) return css;
+    if (css !== null) return css + lines;
     void fonts.load(named).then(() => {
       if (!disposed && record.generation === generation && fonts.now(named) !== null) render(record);
     });
-    return "";
+    return lines;
+  };
+
+  // La vista dei contorni: un foglio per gli strati vivi, che la radice
+  // accende, e lo stesso dentro ogni strato immagine, ridisegnato.
+  let outline = false;
+  let outlineStyle: HTMLStyleElement | null = null;
+  const setOutline = (on: boolean): void => {
+    if (disposed || on === outline) return;
+    outline = on;
+    root.toggleAttribute("data-outline", on);
+    outlineStyle?.remove();
+    outlineStyle = null;
+    if (on) {
+      outlineStyle = document.createElement("style");
+      outlineStyle.textContent = outlineSheet(".spatial-painter[data-outline] ");
+      root.prepend(outlineStyle);
+    }
+    for (const record of layers) if (record.kind === "image") render(record);
   };
 
   const render = (record: ImageRecord): void => {
@@ -1461,7 +1495,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   };
   owner.add(dispose);
 
-  return { update, setDraft, setFocus, setCovers, setCrops, setView, settle, dispose };
+  return { update, setDraft, setFocus, setCovers, setCrops, setView, settle, setOutline, dispose };
 }
 
 /// Vero se lo strato racchiuso da `containers` sta dentro l'ultimo dei

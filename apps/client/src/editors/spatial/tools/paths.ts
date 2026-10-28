@@ -33,19 +33,22 @@
 //   nodi che lo strumento Nodi mostra, col colore dell'inchiostro come
 //   contorno e lo spessore del pennello, come «Rendi forma».
 
-import { parseBrush } from "../../../ink/brush";
+import { isNib1, parseInkBrush, type Pf1Brush } from "../../../ink/brush";
+import { dequantizeSample, type InkSample, type InkScale } from "../../../ink/sample";
+import { decodeInk, inkToQuantized } from "../ink/codec";
 import { formatNumber } from "../number";
 import { parsePath, type Segment } from "../scene/geometry";
-import { invert, type Matrix } from "../scene/matrix";
+import { invert, type Matrix, type Point } from "../scene/matrix";
 import type { DocumentModel, ElementPart } from "../scene/model";
 import { pathData, type Elem } from "../scene/serialize";
 import { nonNegativeLength, number } from "../scene/values";
-import { spineOf } from "../scene/varwidth";
-import { elemOf, fubAttributes, nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
+import { AT_DECIMALS, spineOf, type WidthPoint } from "../scene/varwidth";
+import { elemOf, nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
 import { combine, mapped, type Shape } from "./boolean";
 import type { NewIds } from "./edit";
 import { shapeSegments, type SceneIndex, type Unit } from "./hit";
-import { isPenStroke, strokePoints } from "./inkshape";
+import type { Fidelity } from "./grid";
+import { isPenStroke } from "./inkshape";
 import { writeNodes } from "./nodes";
 import { MAX_PIECES, offsetArea, strokeArea, type Cap, type Join, type OffsetStyle, type StrokeStyle } from "./offset";
 import { writtenDashes } from "./outline";
@@ -456,37 +459,94 @@ export function simplifyOps(model: DocumentModel, index: SceneIndex, units: read
 /// pennello e il riempimento, che diventa il contorno.
 const INK = ["id", "d", "fill", "fill-opacity", "fub:tool", "fub:ink", "fub:brush", "fub:at"];
 
-/// Il tracciato che prende il posto del tratto a penna `node`: la sua spina,
-/// nelle sue coordinate. `null` se l'inchiostro o il pennello non si
-/// leggono.
-export function inkPathElem(node: ElementPart): Elem | null {
-  const elem = elemOf(node);
-  const points = strokePoints(node);
-  if (elem === null || points === null || points.length === 0) return null;
+/// La tolleranza della spina per fedeltà, in parti di quella di serie.
+const FIDELITY: Readonly<Record<Fidelity, number>> = { high: 0.4, medium: 1, low: 2.5 };
+
+/// I punti del profilo al più, perché la linea resti leggera.
+const PROFILE_POINTS = 64;
+
+/// Il profilo di spessore che la pressione dà a un tratto col pennello
+/// `brush`: il raggio di perfect-freehand per ogni campione,
+/// lungo la linea dei campioni. `null` se il tratto non ha la pressione, se
+/// il pennello non la segue, o se la larghezza non cambia.
+function pressureProfile(samples: readonly InkSample[], brush: Pf1Brush): WidthPoint[] | null {
+  if (brush.thinning === 0 || samples.length < 2 || samples.some((sample) => sample.p === undefined)) return null;
+  const lengths = [0];
+  for (let i = 1; i < samples.length; i++) lengths.push(lengths[i - 1]! + Math.hypot(samples[i]!.x - samples[i - 1]!.x, samples[i]!.y - samples[i - 1]!.y));
+  const total = lengths[lengths.length - 1]!;
+  if (!(total > 0)) return null;
+  const half = (p: number): number => Math.max(0.01, brush.size * (0.5 - brush.thinning * (0.5 - p)));
+  const points: WidthPoint[] = [];
+  const step = 1 / PROFILE_POINTS;
+  for (let i = 0; i < samples.length; i++) {
+    const at = i === samples.length - 1 ? 1 : Number(formatNumber(lengths[i]! / total, AT_DECIMALS));
+    const last = points[points.length - 1];
+    // Un punto ogni passo, il primo e l'ultimo sempre; il penultimo non sta
+    // sull'1.
+    if (last !== undefined && i < samples.length - 1 && (at - last[0] < step || at >= 1)) continue;
+    const h = half(samples[i]!.p!);
+    points.push([at, h, h]);
+  }
+  if (points.length < 2 || points[points.length - 1]![0] !== 1 || points[1]![0] === 0) return null;
+  const first = points[0]![1];
+  return points.every((point) => Math.abs(point[1] - first) < 0.01) ? null : points;
+}
+
+/// Il tracciato che prende il posto del tratto a penna `elem`: la sua spina,
+/// nelle sue coordinate, con la fedeltà `fidelity`. Se il pennello segue la
+/// pressione e il tratto la porta, una linea a spessore variabile col
+/// profilo della pressione, che lo strumento Spessore legge; se no un
+/// contorno uniforme. Senza id: chi lo scrive lo mette. `null` se
+/// l'inchiostro o il pennello non si leggono.
+export function inkAsPath(elem: Elem, fidelity: Fidelity = "medium"): Elem | null {
   let brush;
+  let samples: InkSample[];
   try {
-    brush = parseBrush(fubAttributes(node).get("brush") ?? "");
+    brush = parseInkBrush(elem.attrs["fub:brush"] ?? "");
+    const ink = inkToQuantized(decodeInk(elem.attrs["fub:ink"] ?? ""));
+    samples = ink.samples.map((sample) => dequantizeSample(sample, ink.scale as InkScale));
   } catch {
     return null;
   }
-  const { sub } = fitSpine(points, spineTolerance(brush.size));
+  if (samples.length === 0) return null;
+  const { sub } = fitSpine(
+    samples.map((sample): Point => [sample.x, sample.y]),
+    spineTolerance(brush.size) * FIDELITY[fidelity],
+  );
   // Un punto è una linea lunga zero, che gli estremi tondi fanno vedere:
   // la penna lo disegna tondo anche con un pennello senza estremi.
   const dot = sub.nodes.length < 2;
   const segments: Segment[] = dot ? [{ kind: "move", to: sub.nodes[0]! }, { kind: "line", to: sub.nodes[0]! }] : writeNodes([sub]);
   const d = pathData(segments);
   if (!readable(d)) return null;
-  const attrs: Record<string, string> = { ...without(elem.attrs, INK), d, fill: "none", stroke: elem.attrs.fill ?? "#000000", "stroke-width": formatNumber(brush.size, 2) };
+  const rest = without(elem.attrs, INK);
+  // La punta piatta lascia estremi dritti, come il suo pennino.
+  const round = dot || (!isNib1(brush) && (brush.capStart || brush.capEnd));
+  const profile = dot || isNib1(brush) ? null : pressureProfile(samples, brush);
+  const written = profile === null ? null : widthAttrs({ cap: round ? "round" : "butt", join: "round", profile, spine: segments });
+  if (written !== null) {
+    const attrs: Record<string, string> = { ...rest, "fub:shape": "width", "fub:geom": written.geom, d: written.d, fill: elem.attrs.fill ?? "#000000" };
+    if (elem.attrs["fill-opacity"] !== undefined) attrs["fill-opacity"] = elem.attrs["fill-opacity"];
+    return elem.children === undefined ? { tag: "path", attrs } : { tag: "path", attrs, children: elem.children };
+  }
+  const attrs: Record<string, string> = { ...rest, d, fill: "none", stroke: elem.attrs.fill ?? "#000000", "stroke-width": formatNumber(brush.size, 2) };
   if (elem.attrs["fill-opacity"] !== undefined) attrs["stroke-opacity"] = elem.attrs["fill-opacity"];
-  if (dot || brush.capStart || brush.capEnd) attrs["stroke-linecap"] = "round";
+  if (round) attrs["stroke-linecap"] = "round";
   attrs["stroke-linejoin"] = "round";
   return elem.children === undefined ? { tag: "path", attrs } : { tag: "path", attrs, children: elem.children };
+}
+
+/// Il tracciato che prende il posto del tratto a penna `node` (vedi
+/// [`inkAsPath`]); `null` se l'inchiostro o il pennello non si leggono.
+export function inkPathElem(node: ElementPart, fidelity: Fidelity = "medium"): Elem | null {
+  const elem = elemOf(node);
+  return elem === null ? null : inkAsPath(elem, fidelity);
 }
 
 /// Le operazioni di «Inchiostro in tracciato» su `units`: i tratti a penna
 /// diventano tracciati, gli altri oggetti non contano. La selezione resta
 /// la stessa.
-export function inkPathOps(model: DocumentModel, index: SceneIndex, units: readonly Unit[], ids: NewIds): PathsDone {
+export function inkPathOps(model: DocumentModel, index: SceneIndex, units: readonly Unit[], ids: NewIds, fidelity: Fidelity = "medium"): PathsDone {
   const plan = new Plan(model, ids);
   let [changed, refused] = [0, 0];
   const visit = (unit: Unit): void => {
@@ -495,7 +555,7 @@ export function inkPathOps(model: DocumentModel, index: SceneIndex, units: reado
       return;
     }
     if (!isPenStroke(unit.node)) return;
-    const elem = inkPathElem(unit.node);
+    const elem = inkPathElem(unit.node, fidelity);
     if (elem === null || !replaceElem(plan, unit.node, elem)) {
       refused++;
       return;

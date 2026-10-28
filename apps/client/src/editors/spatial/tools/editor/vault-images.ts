@@ -7,6 +7,7 @@ import { nextTurn } from "../../view";
 import { carriesFiles, type Decoded } from "../images";
 import { toolForKey, type Feature, type ToolSpec } from "../registry";
 import { ROTATE_STEP, ZOOM_STEP } from "./constants";
+import type { Edge } from "../arrange";
 import type { EditorContext } from "./context";
 import type { NodeCommand } from "./types";
 
@@ -15,6 +16,14 @@ const ROTATE_STEP_SHIFT = 90;
 /// Fra Ctrl+Maiusc+V e l'incolla che il browser manda dietro, al più tanti
 /// millisecondi.
 const IN_PLACE_MS = 1000;
+
+/// Alt con queste lettere, per posizione, allinea la selezione.
+const ALIGN_KEYS: Readonly<Record<string, Edge>> = {
+  KeyA: "left",
+  KeyD: "right",
+  KeyW: "top",
+  KeyS: "bottom",
+};
 
 const NODE_COMMANDS: Readonly<Record<string, NodeCommand>> = {
   c: "corner",
@@ -44,7 +53,7 @@ export function installVaultImages(ctx: EditorContext): void {
     gradientKeysOn, gradientEntries, visitGradient, deleteGradientStop, insertGradientStop, unpickGradient, editGradient, announceNodes, setNodes,
     nodesUpdate, editSelectedNote, keyboardAdd, drawHeld, drawing, showBezier, bezierUpdate, curveKindKey, curveDelete, finishBezier, deleteBezierNode,
     radialHere, editLabel, editSelectedText, openText, finishText, cursorPoint, press, release, showRadial, duplicateSelection, orderSelection,
-    groupSelection, ungroupSelection, linkSelection, unlinkSelection, openSelectedLink, menuPoint, flagSelection, selectionItems, transformDialog,
+    groupSelection, ungroupSelection, linkSelection, unlinkSelection, openSelectedLink, menuPoint, flagSelection, transformDialog,
     joinSelection, cancelCrop, applyCrop, cropUpdate, maskSelection, releaseMasks, insertSelectedNodes, deleteSelectedNodes, joinSelectedNodes,
     runNodeCommand, changeGrid, focusArrange, nodeKeysOn, arrows, visit, nodeList, visitNode, selectAllNodes, walk, walkList, properties, keys, codec,
     placeImages, carriedBy, pasteCarried, copyStyle, pasteStyle, options
@@ -203,6 +212,11 @@ export function installVaultImages(ctx: EditorContext): void {
     const altGraph = typeof event.getModifierState === "function" && event.getModifierState("AltGraph");
     // `[` e `]` ruotano la selezione, `{` e `}` di un angolo retto: come si
     // scrivono, anche con AltGr; con Ctrl o ⌘ cambiano l'ordine.
+    // Con la Penna e l'Evidenziatore `[` e `]` cambiano la punta (P4).
+    if ((event.key === "[" || event.key === "]") && onSurface && (altGraph || !mod) && ctx.stepNib(event.key === "[" ? -1 : 1)) {
+      event.preventDefault();
+      return;
+    }
     const turn = { "[": -ROTATE_STEP, "]": ROTATE_STEP, "{": -ROTATE_STEP_SHIFT, "}": ROTATE_STEP_SHIFT }[event.key];
     if (turn !== undefined && onSurface && (altGraph || !mod) && ctx.tool !== "nodes" && ctx.tool !== "bezier") {
       if (ctx.current !== null || ctx.pressed !== null || ctx.selection.length === 0 || !editable()) return;
@@ -255,6 +269,13 @@ export function installVaultImages(ctx: EditorContext): void {
         return;
       }
       if (event.altKey) return;
+      // Ctrl+/ cerca fra i comandi del disegno; sulla tastiera italiana la
+      // barra si scrive con Maiusc.
+      if (event.key === "/" || (event.code === "Slash" && !event.shiftKey)) {
+        ctx.searchCommands();
+        event.preventDefault();
+        return;
+      }
       const key = event.key.toLowerCase();
       // Ctrl+C, Ctrl+X e Ctrl+V sono del browser, che manda gli eventi degli
       // appunti; Ctrl+Maiusc+V chiede che l'incolla vada nello stesso punto.
@@ -265,6 +286,10 @@ export function installVaultImages(ctx: EditorContext): void {
       if (key === "z") {
         if (event.shiftKey) redo();
         else undo();
+      } else if (key === "y" && !event.shiftKey && onSurface) {
+        // Col foglio a fuoco Ctrl+Y è la vista dei contorni, come in
+        // Illustrator; Ripeti resta Ctrl+Maiusc+Z.
+        ctx.setOutline(!ctx.outline);
       } else if (key === "y" && !event.shiftKey) {
         redo();
       } else if (key === "a" && !event.shiftKey) {
@@ -277,7 +302,7 @@ export function installVaultImages(ctx: EditorContext): void {
       } else if (key === "x" && event.shiftKey && has("attributes")) {
         // Nel pannello, il tasto porta agli attributi e, da lì, torna al
         // foglio.
-        if (!nestedNow()) showAttributes(inspector.element.hidden);
+        if (!nestedNow()) showAttributes(ctx.toggles(inspector.element));
         else if (inspector.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
         else focusAttributes();
       } else if (key === "m" && event.shiftKey && arranges("transform")) {
@@ -306,6 +331,19 @@ export function installVaultImages(ctx: EditorContext): void {
         isolateSelection();
       } else if ((key === "l" || key === "h") && event.shiftKey && arranges("selection") && !inTree) {
         flagSelection(key === "l" ? "locked" : "hidden");
+      } else if (key === "0" && !event.shiftKey && onSurface) {
+        // Col foglio a fuoco Ctrl+0 è il 100% del disegno, come «0»; col
+        // fuoco altrove resta lo zoom dello Scrittoio.
+        zoomBy(1 / ctx.camera.scale);
+      } else if (event.key === "'" && has("grid")) {
+        changeGrid({ ...ctx.grid, shown: !ctx.grid.shown });
+      } else if (event.key === ";" && has("rulers")) {
+        // Il punto e virgola come si scrive: sulla tastiera italiana con Maiusc.
+        changeGrid({ ...ctx.grid, rulerGuides: !ctx.grid.rulerGuides });
+      } else if (key === "u" && !event.shiftKey && has("guides")) {
+        changeGrid({ ...ctx.grid, guides: !ctx.grid.guides });
+      } else if (event.key === "." && !event.shiftKey) {
+        ctx.setBare(!ctx.bare);
       } else {
         return;
       }
@@ -319,18 +357,26 @@ export function installVaultImages(ctx: EditorContext): void {
       } else if (onSurface && (event.key === "PageUp" || event.key === "PageDown") && !event.shiftKey && has("board")) {
         if (ctx.pressed !== null || ctx.current !== null) return;
         stepBoard(event.key === "PageDown" ? 1 : -1);
+      } else if (onSurface && !event.shiftKey && ALIGN_KEYS[event.code] !== undefined && arranges("arrange")) {
+        // Alt con A, D, W e S allinea, per posizione come le frecce di un
+        // gioco; Alt con H e V centra, e con Maiusc distribuisce.
+        if (ctx.pressed !== null || ctx.current !== null) return;
+        ctx.alignSelection(ALIGN_KEYS[event.code]!);
+      } else if (onSurface && (event.code === "KeyH" || event.code === "KeyV") && arranges("arrange")) {
+        if (ctx.pressed !== null || ctx.current !== null) return;
+        if (event.shiftKey) ctx.distributeSelection(event.code === "KeyH" ? "x" : "y");
+        else ctx.alignSelection(event.code === "KeyH" ? "center" : "middle");
       } else if (event.key !== "F10" || event.shiftKey || !focusArrange()) {
         return;
       }
       event.preventDefault();
       return;
     }
-    // Maiusc+F10, o il tasto del menu: ciò che apre il clic destro. Con gli
-    // strumenti che disegnano e niente di scelto, il menu radiale, al
-    // cursore; altrimenti il menu della selezione, sotto la selezione o al
-    // cursore.
+    // Maiusc+F10, o il tasto del menu: il menu del clic destro, sotto la
+    // selezione o al cursore, che con gli strumenti che disegnano offre in
+    // fondo il menu radiale. Senza il menu della selezione, il radiale.
     const menuKey = event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey);
-    if (onSurface && menuKey && radialHere() && ctx.selection.length === 0) {
+    if (onSurface && menuKey && radialHere() && !has("selection")) {
       if (ctx.current !== null || ctx.pressed !== null) return;
       event.preventDefault();
       ctx.keyedMenu = event.timeStamp;
@@ -342,7 +388,8 @@ export function installVaultImages(ctx: EditorContext): void {
       if (ctx.current !== null || ctx.pressed !== null) return;
       event.preventDefault();
       ctx.keyedMenu = event.timeStamp;
-      showContextMenu(menuPoint(), selectionItems(), { labelledBy: selectionButton.id });
+      const at = menuPoint();
+      showContextMenu(at, ctx.canvasMenu(null, at), { labelledBy: selectionButton.id });
       return;
     }
     if (onSurface && event.key === "Tab") {
@@ -460,6 +507,10 @@ export function installVaultImages(ctx: EditorContext): void {
       curveKindKey(event.key.toLowerCase() === "c" ? "corner" : "smooth");
     } else if (event.shiftKey && NODE_COMMANDS[event.key.toLowerCase()] !== undefined && nodeKeysOn() && (onSurface || inNodesBar)) {
       runNodeCommand(NODE_COMMANDS[event.key.toLowerCase()]!);
+    } else if (event.shiftKey && onSurface && (event.code === "KeyH" || event.code === "KeyV") && ctx.selection.length > 0 && editable()) {
+      // Maiusc+H e Maiusc+V riflettono la selezione, come in Illustrator e Figma.
+      if (ctx.current !== null || ctx.pressed !== null) return;
+      ctx.flipSelection(event.code === "KeyH" ? "x" : "y");
     } else if (event.key === "Escape") {
       if (ctx.current !== null) cancelGesture();
       else if (ctx.cropping !== null) cancelCrop();
@@ -491,6 +542,9 @@ export function installVaultImages(ctx: EditorContext): void {
       } else return;
     } else if (event.shiftKey && event.code === "Digit1") {
       fit();
+    } else if (event.shiftKey && event.code === "Digit2") {
+      // Maiusc+2 inquadra la selezione.
+      ctx.fitSelection();
     } else if (event.key === "+" || event.key === "=") {
       zoomBy(ZOOM_STEP);
     } else if (event.key === "-") {
@@ -502,7 +556,7 @@ export function installVaultImages(ctx: EditorContext): void {
     } else if (event.key === "5" && has("gestures")) {
       turnView(0);
     } else {
-      const spec: ToolSpec | null = event.shiftKey ? null : toolForKey(ctx.tools, event.key);
+      const spec: ToolSpec | null = toolForKey(ctx.tools, event.key, event.shiftKey);
       if (spec === null || !editable()) return;
       pickTool(spec.id);
     }

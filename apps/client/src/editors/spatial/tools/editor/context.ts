@@ -5,6 +5,20 @@
 import type { DrawEditorOptions } from "../editor";
 import type { ArrangingContext } from "./arranging";
 import type { BarsContext } from "./bars";
+import type { RailContext } from "./chrome/rail";
+import type { CharacterContext } from "./chrome/character";
+import type { PenOptionsContext } from "./chrome/pen-options";
+import type { NibContext } from "./nib";
+import type { ReplayContext } from "./replay";
+import type { RulerContext } from "./ruler-ink";
+import type { TextProofContext } from "./text-proof";
+import type { BareContext } from "./chrome/bare";
+import type { OutlineContext } from "./chrome/outline";
+import type { CommandSearchContext } from "./chrome/command-search";
+import type { NavigatorContext } from "./chrome/navigator";
+import type { CommandsContext } from "./chrome/commands";
+import type { WorkspaceContext } from "./chrome/workspace";
+import type { StatusContext } from "./chrome/status";
 import type { BezierToolContext } from "./bezier-tool";
 import type { BoardToolContext } from "./board-tool";
 import type { ClipboardCommandsContext } from "./clipboard-commands";
@@ -15,6 +29,7 @@ import type { DropperToolContext } from "./dropper-tool";
 import type { GradientGestureContext } from "./gradient-gesture";
 import type { GradientToolContext } from "./gradient-tool";
 import type { GuideDragContext } from "./guide-drag";
+import type { HandZoomContext } from "./hand-zoom";
 import type { ImageCommandsContext } from "./image-commands";
 import type { InputContext } from "./input";
 import type { InsertsContext } from "./inserts";
@@ -50,7 +65,9 @@ export interface EditorContext extends
     GradientToolContext, GradientGestureContext, NodeGesturesContext, InsertsContext, SymbolPanelContext,
     ShapesConnectorContext, BezierToolContext, CurvatureToolContext, TextToolContext, InputContext,
     ArrangingContext, SelectionCommandsContext, ImageCommandsContext, MasksNodesContext,
-    LayersGridContext, KeysContext, ClipboardCommandsContext, VaultImagesContext, LifeContext {
+    LayersGridContext, KeysContext, ClipboardCommandsContext, VaultImagesContext, LifeContext, RailContext, CharacterContext, PenOptionsContext, TextProofContext,
+    StatusContext, HandZoomContext, BareContext, OutlineContext, CommandSearchContext, NavigatorContext, CommandsContext,
+    WorkspaceContext, NibContext, ReplayContext, RulerContext {
   readonly host: HTMLElement;
   readonly initial: SceneEngine;
   readonly owner: Lifetime;

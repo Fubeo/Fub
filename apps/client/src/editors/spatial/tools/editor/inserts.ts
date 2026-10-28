@@ -183,14 +183,14 @@ export function installInserts(ctx: EditorContext): void {
         // Il pennello di un tratto del puntatore senza pressione.
         const tool = INK_TOOLS.stroke(ctx.tool);
         if (tool === undefined) return;
-        const brush = tool.brush(width, { pressure: false, continued: false });
+        const brush = tool.brush(width, { pressure: false, continued: false }, ctx.penId);
         const built = buildStroke(straight([{ x: x1, y: y1, t: 0 }, { x: x2, y: y2, t: 250 }]), brush, []);
         if (!built.ok) {
           if (built.reason === "failed") announce(t("draw.ink_failed"));
           return;
         }
         const highlight = ctx.tool === "highlighter";
-        const elem = strokeElem(ids.next("object"), drawnPaint(color), brush, built.ink, new Date().toISOString(), ctx.tool);
+        const elem = strokeElem(ids.next("object"), drawnPaint(color), brush, built.ink, new Date().toISOString(), ctx.tool, ctx.tool === "highlighter" ? ctx.inkOpacity.highlighter : ctx.inkOpacity.pen);
         placeNew(to, elem, highlight ? "draw.action.highlight" : "draw.action.stroke", highlight ? "draw.added.highlight" : "draw.added.stroke", true);
         return;
       }

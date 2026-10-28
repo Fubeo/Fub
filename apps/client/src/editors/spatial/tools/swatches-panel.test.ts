@@ -213,7 +213,7 @@ describe("le griglie", () => {
     expect(chip("used", "#000000").querySelector(".draw-swatches-count")!.getAttribute("aria-hidden")).toBe("true");
     // La forma della tavolozza, o l'anello di un colore a piacere.
     const shape = (button: HTMLButtonElement): string => button.querySelector<HTMLElement>(".draw-swatch-frame")!.dataset.shape!;
-    expect(chips("used").map(shape)).toEqual(["circle", "square", "ring"]);
+    expect(chips("used").map(shape)).toEqual(["circle", "circle", "circle"]);
     expect(chip("swatches", "rb").querySelector<HTMLElement>(".draw-swatch")!.style.getPropertyValue("--swatch")).toBe("#f5f5dc");
     // Il suggerimento dice anche che cosa fa un clic.
     expect(chip("swatches", "ra").title).toBe("Blu marca, campione #0072b2, usato da 3 oggetti\nClic: al riempimento.\nMaiusc+clic: al contorno.");

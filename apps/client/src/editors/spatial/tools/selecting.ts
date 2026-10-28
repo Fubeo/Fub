@@ -22,7 +22,7 @@
 //   bloccato non si mostra niente, e dentro uno nascosto non si sblocca
 //   niente, perché non si vedrebbe.
 
-import { parseBrush } from "../../../ink/brush";
+import { parseInkBrush } from "../../../ink/brush";
 import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import { fubAttributes, nodeOf, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
@@ -54,7 +54,7 @@ export function allUnits(index: SceneIndex): Unit[] {
 /// La punta di un tratto a mano libera: lo spessore del suo pennello.
 function tipOf(node: ElementPart): string {
   try {
-    return String(parseBrush(fubAttributes(node).get("brush") ?? "").size);
+    return String(parseInkBrush(fubAttributes(node).get("brush") ?? "").size);
   } catch {
     return "";
   }

@@ -22,7 +22,8 @@
 //   comando spento resta raggiungibile e dice perché.
 
 import { identifier } from "../../../ui/a11y";
-import { icon, iconEl, registerIcon } from "../../../ui/icons";
+import { iconEl } from "../../../ui/icons";
+import { ensureDrawIcons } from "../icons";
 import type { Lifetime } from "../../../ui/lifetime";
 import { ANCHORS, type Anchor, type ConnectorKind } from "../scene/connectors";
 import { plural, t, type DrawKey } from "../strings";
@@ -44,18 +45,6 @@ const ANCHOR_LABELS: Readonly<Record<Anchor, DrawKey>> = {
   right: "draw.connector.anchor.right",
   bottom: "draw.connector.anchor.bottom",
   left: "draw.connector.anchor.left",
-};
-
-/// Il riquadro di un oggetto agganciato, lo stesso in ogni figura: due
-/// oggetti, e fra loro la linea di quel tipo.
-const FROM = "M3 15h6v6H3z";
-const TO = "M15 3h6v6h-6z";
-
-/// Le icone della sezione, col costrutto di `ui/icons.ts`.
-const ICONS: Readonly<Record<string, readonly string[]>> = {
-  "draw-connector-straight": [FROM, TO, "M9 15 15 9"],
-  "draw-connector-elbow": [FROM, TO, "M9 18h3V6h3"],
-  "draw-connector-curved": [FROM, TO, "M9 18c3.5 0 2.5-12 6-12"],
 };
 
 /// Ciò che la sezione mostra.
@@ -103,7 +92,7 @@ function setText(node: HTMLElement, text: string): void {
 }
 
 export function createConnectorPanel(life: Lifetime, options: ConnectorPanelOptions): ConnectorPanel {
-  for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
+  ensureDrawIcons();
   const element = document.createElement("div");
   element.className = "draw-connector";
 

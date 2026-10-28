@@ -171,6 +171,19 @@ export function initialState(scene: ExportScene, memory: ExportMemory | null): E
   };
 }
 
+/// Le scelte ricordate `memory`, con `what` chiesto da chi apre la finestra
+/// (la selezione, dall'ispettore): le altre restano quelle di sempre.
+export function asking(memory: ExportMemory | null, what: ExportWhat): ExportMemory {
+  return {
+    what,
+    off: memory?.off ?? [],
+    format: memory?.format ?? "png",
+    size: memory?.size ?? { scale: 2 },
+    background: memory?.background ?? "paper",
+    print: memory?.print ?? PLAIN_PRINT,
+  };
+}
+
 /// Ciò che si ricorda di `state`.
 export function memoryOf(state: ExportState): ExportMemory {
   return { what: state.what, off: [...state.off], format: state.format, size: state.size, background: state.background, print: state.print };

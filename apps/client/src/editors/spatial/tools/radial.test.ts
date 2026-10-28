@@ -19,8 +19,8 @@ const ITEMS: (RadialItem | null)[] = [
   item("Testo"),
   item("Ripeti", { disabled: true }),
   null,
-  item("Colore: Blu", { icon: undefined, swatch: { color: "#0072b2", shape: "square" } }),
-  item("Colore: Nero", { icon: undefined, swatch: { color: "#000000", shape: "circle" } }),
+  item("Colore: Blu", { icon: undefined, swatch: { color: "#0072b2" } }),
+  item("Colore: Nero", { icon: undefined, swatch: { color: "#000000" } }),
 ];
 
 const layer = (): HTMLElement | null => document.querySelector<HTMLElement>(".draw-radial:not([data-shell-motion='exit'])");
@@ -103,7 +103,7 @@ describe("openRadial", () => {
     expect(byLabel("Ripeti").getAttribute("aria-disabled")).toBe("true");
     expect(byLabel("Penna").style.left).toBe("80px");
     expect(byLabel("Annulla").style.top).toBe("-80px");
-    expect(byLabel("Colore: Blu").querySelector(".draw-swatch-frame")!.getAttribute("data-shape")).toBe("square");
+    expect(byLabel("Colore: Blu").querySelector(".draw-swatch-frame")!.getAttribute("data-shape"), "un tondo, senza formine").toBe("circle");
     const center = ring().querySelector<HTMLElement>(".draw-radial-center")!;
     expect(center.style.getPropertyValue("--radial-color")).toBe("#d55e00");
     expect(center.querySelector("svg")).not.toBeNull();

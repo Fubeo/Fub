@@ -29,7 +29,8 @@
 
 import { plural, t } from "../strings";
 import { identifier } from "../../../ui/a11y";
-import { iconEl, icon, registerIcon } from "../../../ui/icons";
+import { iconEl } from "../../../ui/icons";
+import { ensureDrawIcons } from "../icons";
 import type { Lifetime } from "../../../ui/lifetime";
 import type { Mark, Step } from "./history";
 import { cleanName, NAME_MAX } from "./naming";
@@ -37,14 +38,6 @@ import { ROW_PX } from "./objects";
 
 /// Le righe disegnate oltre quelle che si vedono, sopra e sotto.
 const OVERSCAN = 8;
-
-/// Le icone del pannello, col costrutto di `ui/icons.ts`: il triangolo del
-/// punto di adesso, la bandierina del segno e la croce che lo toglie.
-const ICONS: Readonly<Record<string, readonly string[]>> = {
-  "draw-here": ["M8 5.5l10 6.5-10 6.5z"],
-  "draw-mark": ["M6 21V4", "M6 4h11.5l-2.5 4.5 2.5 4.5H6"],
-  "draw-unmark": ["M7 7l10 10", "M17 7L7 17"],
-};
 
 /// Ciò che il pannello mostra: la cronologia di adesso.
 export interface HistoryView {
@@ -106,7 +99,7 @@ interface Parts {
 }
 
 export function createHistoryPanel(life: Lifetime, options: HistoryPanelOptions): HistoryPanel {
-  for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
+  ensureDrawIcons();
   const element = document.createElement("section");
   element.className = "draw-history";
   element.id = identifier("draw-history");

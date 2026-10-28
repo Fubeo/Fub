@@ -942,6 +942,27 @@ describe("l'anteprima degli strumenti", () => {
   });
 });
 
+describe("la vista dei contorni", () => {
+  it("accende un foglio sugli strati vivi e lo mette dentro gli strati immagine, e spenta li toglie", async () => {
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(SceneEngine.open(HOSTILE), new PaintBuilder()));
+    await decoded();
+    const root = host.querySelector<HTMLElement>(".spatial-painter")!;
+    painter.setOutline(true);
+    await decoded();
+    expect(root.hasAttribute("data-outline")).toBe(true);
+    const sheet = root.querySelector("style")!.textContent!;
+    expect(sheet).toContain(".spatial-painter[data-outline] svg *{fill:none!important");
+    expect(sheet).toContain("vector-effect:non-scaling-stroke!important");
+    // L'estraneo, uno strato immagine, si ridisegna col foglio dentro.
+    const img = host.querySelector("img")!;
+    expect(await blobs.get(img.getAttribute("src")!)!.text()).toContain("svg *{fill:none!important");
+    painter.setOutline(false);
+    expect(root.hasAttribute("data-outline")).toBe(false);
+    expect(root.querySelector("style")).toBeNull();
+  });
+});
+
 describe("lo smontaggio", () => {
   it("revoca ogni URL e toglie tutto quando si chiude la vita di chi lo monta", async () => {
     vi.useFakeTimers();
@@ -1072,6 +1093,43 @@ describe("lo strato sopra la scena", () => {
     overlay.setHandles([{ kind: "measure", from: [390, 298], to: [395, 298], text: "5" }]);
     overlay.flush();
     expect(texts()).toEqual([["fillText", "5", 790, 590.5]]);
+  });
+
+  it("disegna la punta alla misura vera per lo zoom, girata con la vista; la gomma resta della stessa misura", () => {
+    const calls: Array<readonly [string, ...unknown[]]> = [];
+    const context = new Proxy({} as Record<string | symbol, unknown>, {
+      get: (target, name) => {
+        if (name in target) return target[name];
+        return (...args: unknown[]) => void calls.push([String(name), ...args]);
+      },
+      set: (target, name, value) => {
+        target[name] = value;
+        return true;
+      },
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context as never);
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation(() => 1);
+    vi.spyOn(globalThis, "cancelAnimationFrame").mockImplementation(() => undefined);
+    const overlay = createOverlay(host, owner);
+    const ellipses = (): unknown[] => calls.filter(([name]) => name === "ellipse").map(([, ...args]) => args.slice(0, 5));
+    overlay.setView({ scale: 2, angle: 0, tx: 0, ty: 0 });
+    overlay.setHandles([{ kind: "nib", x: 10, y: 10, shape: "round", width: 6, height: 6, angle: 0 }]);
+    overlay.flush();
+    // Il contorno due volte, sul filo di carta e sopra.
+    expect(ellipses()).toEqual([[20, 20, 6, 6, 0], [20, 20, 6, 6, 0]]);
+    // La punta piatta, girata del suo angolo e di quello della vista.
+    calls.length = 0;
+    overlay.setView({ scale: 1, angle: 90, tx: 0, ty: 0 });
+    overlay.setHandles([{ kind: "nib", x: 0, y: 0, shape: "flat", width: 12, height: 1, angle: 35 }]);
+    overlay.flush();
+    expect(ellipses()[0]).toEqual([0, 0, 6, 1, (125 * Math.PI) / 180]);
+    // La gomma: il diametro è in pixel, con lo zoom che sia.
+    calls.length = 0;
+    overlay.setView({ scale: 4, angle: 0, tx: 0, ty: 0 });
+    overlay.setHandles([{ kind: "nib", x: 0, y: 0, shape: "eraser", width: 16, height: 16, angle: 0 }]);
+    overlay.flush();
+    expect(ellipses()[0]).toEqual([0, 0, 8, 8, 0]);
+    expect(calls.some(([name, dash]) => name === "setLineDash" && Array.isArray(dash) && dash.length > 0)).toBe(true);
   });
 
   it("disegna il ritaglio col bordo, i segni agli angoli e a metà dei lati, mai più lunghi di un quarto del lato, e i terzi solo se li chiede", () => {

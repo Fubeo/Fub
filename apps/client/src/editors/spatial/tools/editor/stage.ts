@@ -24,6 +24,7 @@ import type { Crop } from "../crop";
 import { MAX_COLORS, MIN_COLORS, TRACE_PRESETS, type TracePreset, type TraceSettings } from "../trace-settings";
 import type { DrawImages } from "../editor";
 import { INK_KEY, inkCopyKey, PAGE_SHEET } from "./constants";
+import { inlineChrome, type DrawChrome, type DrawPanelId, type DrawPanelPiece } from "./chrome/hosts";
 import type { EditorContext } from "./context";
 import { nodeAtPath } from "./helpers";
 import type { Entered, Hook, Sheet, Tracing } from "./types";
@@ -43,6 +44,15 @@ let previewTips = 0;
 
 /// Ciò che le barre del ricalco e del ritaglio, gli strati del foglio e il painter dà agli altri pezzi dell'editor.
 export interface StageContext {
+  /// Dove stanno barra, colonna, foglio e pannelli.
+  chrome: DrawChrome;
+  /// Vero se i pannelli stanno in schede di chi ospita l'editor: aprirne uno
+  /// chiede la scheda `id`, e la cromatura li apre e li chiude quando la
+  /// scheda si monta e si smonta (C1).
+  routed: (id: DrawPanelId, open: boolean) => boolean;
+  /// Ciò che chiede il pulsante di un pannello: aprirlo se è chiuso; con le
+  /// schede, sempre mostrarlo.
+  toggles: (element: HTMLElement) => boolean;
   traceBar: HTMLDivElement;
   presetSelect: HTMLSelectElement;
   thresholdRange: { readonly input: HTMLInputElement; readonly field: HTMLLabelElement; readonly name: HTMLSpanElement; readonly show: () => void; };
@@ -135,7 +145,7 @@ export interface StageContext {
 export function installStage(ctx: EditorContext): void {
   const {
     life, folio, relabels, drawingFonts, pictureFonts, root, header, toolbar, surface, live, surfaceHint, tree, historyPanel, suggestions, accessPanel,
-    boardsPanel, libraryPanel, symbolsPanel, inspector, panel, titleField, arrangeBar, nodesBar, isolationBar, textLayer, linkLayer, progressBar,
+    boardsPanel, libraryPanel, symbolsPanel, inspector, panel, arrangeBar, nodesBar, isolationBar, textLayer, linkLayer, progressBar,
     describeBar, pathsBar, pathsField, pathsAction, host, options
   } = ctx;
   // «Ricalca immagine», dal livello Esperto: come lo scostamento, in fondo
@@ -287,14 +297,66 @@ export function installStage(ctx: EditorContext): void {
   dock.className = "draw-dock";
   dock.hidden = true;
   dock.append(boardsPanel.element, libraryPanel.element, symbolsPanel.element, tree.element, panel.element, inspector.element, historyPanel.element, accessPanel.element);
-  const body = document.createElement("div");
-  body.className = "draw-body";
-  body.append(stage, dock);
-  header.append(toolbar);
+  header.append(ctx.topStart, toolbar);
   if (folio?.controls) header.append(folio.controls);
-  header.append(titleField);
-  root.append(header, body, suggestions.element, surfaceHint, live);
-  host.append(root);
+  header.append(ctx.topEnd);
+  const chrome = options.chrome ?? inlineChrome();
+  ctx.chrome = chrome;
+  /// Vero mentre la cromatura apre o chiude un pannello nella sua scheda.
+  let placing = false;
+  ctx.routed = (id, open) => {
+    if (chrome.reveal === undefined || placing) return false;
+    if (open) chrome.reveal(id);
+    return true;
+  };
+  ctx.toggles = (element) => element.hidden || chrome.reveal !== undefined;
+  const piece = (element: HTMLElement, offered: () => boolean, show: (open: boolean) => void): DrawPanelPiece => {
+    const placed = (open: boolean) => () => {
+      placing = true;
+      try {
+        show(open);
+      } finally {
+        placing = false;
+      }
+    };
+    return { element, offered, open: placed(true), close: placed(false) };
+  };
+  const { has } = ctx;
+  const library = piece(libraryPanel.element, () => has("library"), (open) => ctx.showLibrary(open, false));
+  const symbols = piece(symbolsPanel.element, () => has("symbols"), (open) => ctx.showSymbols(open, false));
+  chrome.place(host, {
+    root,
+    top: header,
+    rail: ctx.railColumn,
+    stage,
+    dock,
+    // Le schede dell'ispettore: il documento o l'oggetto, l'albero, ciò che
+    // si inserisce, la cronologia, la verifica.
+    panels: [
+      {
+        id: "design",
+        title: () => t("draw.chrome.tab.design"),
+        icon: "draw-design",
+        pieces: [
+          piece(panel.element, () => has("properties"), (open) => ctx.showPanel(open, false, false)),
+          piece(inspector.element, () => has("attributes") && !ctx.nestedNow(), (open) => ctx.showAttributes(open, false)),
+          piece(boardsPanel.element, () => has("board"), (open) => ctx.showBoards(open, false)),
+        ],
+      },
+      { id: "layers", title: () => t("draw.chrome.tab.layers"), icon: "draw-layers", pieces: [piece(tree.element, () => true, (open) => ctx.showObjects(open, false))] },
+      {
+        id: "resources",
+        title: () => t("draw.chrome.tab.resources"),
+        icon: "draw-resources",
+        pieces: [library, symbols],
+        // Una ricerca sola, quando ci sono tutte e due.
+        arranged: (inside) => ctx.shareSearch(inside.includes(library) && inside.includes(symbols)),
+      },
+      { id: "history", title: () => t("draw.chrome.tab.history"), icon: "draw-history", pieces: [piece(historyPanel.element, () => has("history"), (open) => ctx.showHistory(open, false))] },
+      { id: "accessibility", title: () => t("draw.chrome.tab.accessibility"), icon: "draw-access", pieces: [piece(accessPanel.element, () => has("accessibility"), (open) => ctx.showAccess(open, false))] },
+    ],
+    tail: [suggestions.element, surfaceHint, live],
+  });
 
   // La carta, la griglia, il painter, poi l'anteprima delle forme, poi lo
   // strato sopra: l'ordine in cui si vedono. La carta è bianca in ogni tema:
