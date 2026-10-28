@@ -328,6 +328,27 @@ describe("le schede del documento nell'ispettore", () => {
     listViews.mockReset();
     listViews.mockResolvedValue([]);
   });
+
+  it("le view che il documento lascia fuori non hanno scheda finché è a fuoco, e tornano dopo", async () => {
+    listViews.mockResolvedValue([spec("outline", "right_sidebar"), spec("backlinks", "right_sidebar")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+    const right = document.getElementById("views-right")!;
+    const ids = () => [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")].map((tab) => tab.dataset.viewId);
+    const outline = right.querySelector<HTMLElement>('.declared-view-panel[data-view-id="outline"]')!;
+    const design = docPanel("draw.design");
+    views.showSurfacePanels([design], ["outline"]);
+    expect(ids()).toEqual(["backlinks", "draw.design"]);
+    expect(outline.hidden).toBe(true);
+    expect(outline.hasAttribute("role"), "senza scheda non è un pannello di scheda").toBe(false);
+    // Rimontate, le view lasciate fuori restano fuori.
+    await views.mountDeclaredViews();
+    expect(ids()).toEqual(["backlinks", "draw.design"]);
+    views.showSurfacePanels([]);
+    expect(ids()).toEqual(["outline", "backlinks"]);
+    listViews.mockReset();
+    listViews.mockResolvedValue([]);
+  });
 });
 
 /// Ogni superficie che il contratto nomina è **classificata** da questa shell:

@@ -690,10 +690,16 @@ let chosenTab: string | null = null;
 /// queste si rimontano.
 let surfacePanels: readonly HTMLElement[] = [];
 
-/// Mette nell'ispettore i pannelli del documento al posto di quelli di prima.
-export function showSurfacePanels(panels: readonly HTMLElement[]): void {
+/// Le view dichiarate che il documento a fuoco lascia fuori dall'ispettore
+/// (`SurfacePanels.covers`): restano montate, senza scheda.
+let coveredViews: ReadonlySet<string> = new Set();
+
+/// Mette nell'ispettore i pannelli del documento al posto di quelli di prima,
+/// senza le view dichiarate che `covers` nomina.
+export function showSurfacePanels(panels: readonly HTMLElement[], covers: readonly string[] = []): void {
   for (const el of surfacePanels) if (!panels.includes(el)) el.remove();
   surfacePanels = panels;
+  coveredViews = new Set(covers);
   viewsRightEl.append(...panels);
   buildInspector();
 }
@@ -714,7 +720,16 @@ function buildInspector(): void {
   const round = (inspectorRound += 1);
   stopFollowing();
   stopFollowing = () => {};
-  const panels = [...viewsRightEl.querySelectorAll<HTMLElement>(".declared-view-panel")];
+  const all = [...viewsRightEl.querySelectorAll<HTMLElement>(".declared-view-panel")];
+  const panels = all.filter((p) => surfacePanels.includes(p) || !coveredViews.has(p.dataset.viewId ?? ""));
+  // Una view lasciata fuori dal documento a fuoco non ha scheda: nascosta, e
+  // non più pannello di una scheda che non c'è.
+  for (const p of all) {
+    if (panels.includes(p)) continue;
+    p.hidden = true;
+    p.removeAttribute("role");
+    p.removeAttribute("aria-labelledby");
+  }
   // Rimuove tablist e titolo del giro precedente, se ci sono.
   viewsRightEl.querySelector(".inspector-tabs")?.remove();
   viewsRightEl.querySelector(".inspector-title")?.remove();

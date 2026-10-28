@@ -251,11 +251,29 @@ function keysTable(group: KeyGroup): HTMLTableElement {
   return table;
 }
 
+/// Ciò che l'elenco dei tasti può avere in più: una ricerca fra le righe, e
+/// in cima, chiuso, ciò che è cambiato rispetto a prima.
+export interface KeysExtras {
+  /// Il nome del campo di ricerca, e la frase quando niente corrisponde.
+  readonly search?: { readonly label: string; readonly empty: string };
+  readonly changed?: KeyGroup;
+}
+
+/// Le parole di una ricerca, in minuscolo e senza accenti.
+const searchable = (text: string): string =>
+  text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
 /// L'elenco dei tasti, una tabella per gruppo. Si chiude con Esc o con
 /// «Chiudi», e il fuoco torna dov'era, come da ogni modale. Con `more`,
 /// l'interruttore «Mostra tutto» aggiunge in fondo la sua frase e i suoi
-/// gruppi, e premuto di nuovo li toglie.
-export function showKeys(title: string, groups: readonly KeyGroup[], more?: MoreKeys): Promise<void> {
+/// gruppi, e premuto di nuovo li toglie. Con `extras.search` un campo in cima
+/// tiene soltanto le righe che hanno tutte le parole scritte, nei tasti o
+/// nell'azione, anche fra quelle tenute da parte; con `extras.changed`, sopra
+/// l'elenco, ciò che è cambiato.
+export function showKeys(title: string, groups: readonly KeyGroup[], more?: MoreKeys, extras: KeysExtras = {}): Promise<void> {
   return new Promise((resolve) => {
     let settled = false;
     const settle = (): void => {
@@ -304,7 +322,53 @@ export function showKeys(title: string, groups: readonly KeyGroup[], more?: More
     close.textContent = t("app.close");
     close.addEventListener("click", settle);
     row.append(close);
-    frame.box.append(list, row);
-    close.focus();
+    const top: HTMLElement[] = [];
+    if (extras.changed !== undefined) {
+      const changed = document.createElement("details");
+      changed.className = "keys-changed";
+      const summary = document.createElement("summary");
+      summary.textContent = extras.changed.title;
+      changed.append(summary, keysTable(extras.changed));
+      top.push(changed);
+    }
+    let search: HTMLInputElement | null = null;
+    if (extras.search !== undefined) {
+      const field = document.createElement("label");
+      field.className = "keys-search";
+      const name = document.createElement("span");
+      name.textContent = extras.search.label;
+      search = document.createElement("input");
+      search.type = "search";
+      search.autocomplete = "off";
+      search.spellcheck = false;
+      list.id = identifier("keys-list");
+      search.setAttribute("aria-controls", list.id);
+      field.append(name, search);
+      const empty = document.createElement("p");
+      empty.className = "keys-empty";
+      empty.setAttribute("role", "status");
+      const extra = list.querySelector<HTMLElement>(".keys-more");
+      const toggle = row.querySelector<HTMLButtonElement>(".keys-show-all");
+      // Le righe con il testo in cui si cerca: i tasti come si vedono, e
+      // l'azione.
+      const rows = [...list.querySelectorAll("tr")].map((tr) => ({ tr, text: searchable(tr.textContent ?? "") }));
+      const filter = (): void => {
+        const words = searchable(search!.value).split(/\s+/).filter((word) => word !== "");
+        let found = 0;
+        for (const one of rows) {
+          const shown = words.every((word) => one.text.includes(word));
+          one.tr.hidden = !shown;
+          if (shown) found += 1;
+        }
+        for (const table of list.querySelectorAll("table")) table.hidden = [...table.querySelectorAll("tr")].every((tr) => tr.hidden);
+        // Cercando, si cerca anche fra i tasti tenuti da parte.
+        if (extra !== null && toggle !== null) extra.hidden = words.length === 0 ? toggle.getAttribute("aria-pressed") !== "true" : false;
+        empty.textContent = words.length > 0 && found === 0 ? extras.search!.empty : "";
+      };
+      search.addEventListener("input", filter);
+      top.push(field, empty);
+    }
+    frame.box.append(...top, list, row);
+    (search ?? close).focus();
   });
 }
