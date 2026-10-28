@@ -2,7 +2,8 @@
 //! Rigenera la fixture con UPDATE_MIRROR=1 cargo test -p fub-host --test sheet_query.
 
 use camino::Utf8PathBuf;
-use fub_abi::{DocId, IndexQuery, IndexResult, PluginError};
+use fub_abi::grid::{GridApplyRequest, GridCellKey, GridCellPatch};
+use fub_abi::{DocId, IndexQuery, IndexResult, PluginError, WriteBase};
 use fub_host::Host;
 use serde_json::{json, Value};
 
@@ -155,4 +156,68 @@ fn source_and_escaped_response_limits_apply_on_the_real_route() {
         Err(PluginError::BadArgs(_))
     ));
     assert!(host.query_index(None, query(&source(&["4"]))).is_ok());
+}
+
+/// Il giro della shell su un `.fubsheet`: la griglia rende la modifica del
+/// testo, e la sessione documento la salva con `write_document`. Il formato è
+/// di sola sorgente, e il salvataggio non chiede un parser.
+#[test]
+fn a_sheet_edited_in_the_grid_is_saved_and_keeps_the_base_guard() {
+    let (_dir, path, host) = host();
+    let before = source(&["2", "=A1+1"]);
+    std::fs::write(path.join("book.fubsheet"), &before).unwrap();
+    let id = DocId::new("book.fubsheet");
+    let (read, revision) = host.read_document(None, &id).unwrap();
+    assert_eq!(read, before);
+    let surface = host
+        .grid_surfaces(None)
+        .unwrap()
+        .into_iter()
+        .find(|surface| surface.format == "fubsheet")
+        .expect("the sheet grid surface");
+    let session = host
+        .grid_open(None, &surface.id, &read, revision.clone())
+        .unwrap();
+    let commit = host
+        .grid_apply(
+            None,
+            &surface.id,
+            &session.instance,
+            GridApplyRequest {
+                revision: session.revision,
+                patches: vec![GridCellPatch {
+                    cell: GridCellKey {
+                        sheet: "s".into(),
+                        row: "r".into(),
+                        column: "c0".into(),
+                    },
+                    before: Some("2".into()),
+                    after: "40".into(),
+                }],
+            },
+        )
+        .unwrap();
+    let (from, to) = (commit.edit.from as usize, commit.edit.to as usize);
+    let after = format!("{}{}{}", &read[..from], commit.edit.inserted, &read[to..]);
+
+    let saved = host
+        .write_document(None, &id, &after, WriteBase::DescendsFrom(revision.clone()))
+        .expect("saving a sheet needs no parser");
+    assert_eq!(saved, commit.revision);
+    assert_eq!(
+        std::fs::read_to_string(path.join("book.fubsheet")).unwrap(),
+        after
+    );
+    assert_eq!(
+        host.read_document(None, &id).unwrap(),
+        (after.clone(), saved)
+    );
+
+    let stale = host.write_document(None, &id, &before, WriteBase::DescendsFrom(revision));
+    assert!(matches!(stale, Err(PluginError::Conflict(_))), "{stale:?}");
+    assert_eq!(
+        std::fs::read_to_string(path.join("book.fubsheet")).unwrap(),
+        after
+    );
+    assert!(host.close_vault(&path).unwrap().is_empty());
 }
