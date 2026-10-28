@@ -191,6 +191,46 @@ describe("showKeys", () => {
     await closed;
   });
 
+  it("la ricerca tiene le righe con tutte le parole, anche fra quelle da parte; ciò che è cambiato sta sopra, chiuso", async () => {
+    const closed = showKeys(
+      "Tasti del disegno",
+      [
+        { title: "Strumenti", rows: [["v", "Selezione"], ["h", "Mano"]] },
+        { title: "Vista", rows: [["Mod-0", "Al 100%"]] },
+      ],
+      { groups: [{ title: "Griglia · dal livello Standard", rows: [["#", "Mostra la griglia"]] }], note: "Da un livello più alto." },
+      { search: { label: "Cerca un tasto", empty: "Nessun tasto." }, changed: { title: "Che cosa è cambiato", rows: [["h", "La Mano"]] } },
+    );
+    const search = dialog().querySelector<HTMLInputElement>(".keys-search input")!;
+    expect(document.activeElement, "il fuoco parte dalla ricerca").toBe(search);
+    expect(search.getAttribute("aria-controls")).toBe(dialog().querySelector(".keys-list")!.id);
+    const changed = dialog().querySelector<HTMLDetailsElement>(".keys-changed")!;
+    expect(changed.open).toBe(false);
+    expect(changed.querySelector("summary")!.textContent).toBe("Che cosa è cambiato");
+    expect(changed.closest(".keys-list"), "fuori dall'elenco").toBeNull();
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    const shown = (): string[] =>
+      [...dialog().querySelectorAll<HTMLTableRowElement>(".keys-list tr")].filter((row) => !row.hidden && row.closest("[hidden]") === null).map((row) => row.cells[1]!.textContent!);
+    const type = (text: string): void => {
+      search.value = text;
+      search.dispatchEvent(new Event("input"));
+    };
+    expect(shown()).toEqual(["Selezione", "Mano", "Al 100%"]);
+    type("griglia");
+    expect(shown()).toEqual(["Mostra la griglia"]);
+    type("CTRL 100");
+    expect(shown()).toEqual(["Al 100%"]);
+    expect(dialog().querySelector(".keys-empty")!.textContent).toBe("");
+    type("selezione mano");
+    expect(shown()).toEqual([]);
+    expect(dialog().querySelector(".keys-empty")!.textContent).toBe("Nessun tasto.");
+    type("");
+    expect(shown()).toEqual(["Selezione", "Mano", "Al 100%"]);
+    expect(dialog().querySelector<HTMLElement>(".keys-more")!.hidden).toBe(true);
+    dialog().querySelector<HTMLButtonElement>(".primary")!.click();
+    await closed;
+  });
+
   it("senza niente da aggiungere, nessun interruttore", async () => {
     const closed = showKeys("Tasti del disegno", [{ title: "Strumenti", rows: [["v", "Seleziona"]] }], {
       groups: [],

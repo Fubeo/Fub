@@ -2,10 +2,11 @@
 // lo stato dei controlli. Un pezzo di createDrawEditor (`../editor.ts`): lavora
 // sul contesto che i pezzi condividono.
 
+import { DURATION, animate } from "../../../../moto";
 import { keyOf } from "../../describe";
 import { elementChildren } from "../../scene/model";
 import { t } from "../../strings";
-import { HANDLE_REACH_PX } from "../../painter/overlay";
+import { HANDLE_REACH_PX, LABEL_ROOM_PX } from "../../painter/overlay";
 import { holdsLinks, isGroup, isLink, linkTarget, nodeOf } from "../arrange";
 import { cites } from "../attributes";
 import { barSpot, type ScreenBox } from "../bar";
@@ -21,7 +22,7 @@ import { screenBox } from "../../view";
 import type { LayerInfo } from "../hit";
 import { inLayer } from "../layers";
 import { croppedImages, cropState } from "../crop";
-import { BAR_FEATURES } from "./constants";
+import { ARRANGE_SHOWN, BAR_FEATURES } from "./constants";
 import type { EditorContext } from "./context";
 import { innerNode, layerState, layerTitle, linksBetween, union } from "./helpers";
 import type { DrawStyle } from "./types";
@@ -48,11 +49,11 @@ export interface ControlsContext {
 /// Monta la barra accanto alla selezione, il livello corrente e lo stato dei controlli.
 export function installControls(ctx: EditorContext): void {
   const {
-    life, has, relabels, drawingFonts, styles, style, widthsNow, root, surface, toolButtons, insertGroup, imageButton, colorButtons, customLabel,
-    customButton, customChip, moreGroup, moreButton, widthButtons, showWidthLabels, undoButton, redoButton, deleteButton, selectionButton,
+    life, has, relabels, drawingFonts, styles, style, widthsNow, root, surface, insertGroup, imageButton,
+    widthButtons, showWidthLabels, undoButton, redoButton, deleteButton, selectionButton,
     propertiesButton, layerGroup, layersButton, layerText, layerStateText, historyPanel, accessPanel, boardsPanel, libraryPanel, symbolsPanel, inspector,
     panel, pageButton, boardsButton, presentButton, libraryButton, symbolsButton, historyButton, accessButton, attributesButton, titleInput, arrangeBar, nameArrange,
-    arrangeButtons, textButton, duplicateButton, groupButton, ungroupButton, linkText, openLinkText, linkButton, openLinkButton, unlinkButton, orderButton,
+    arrangeButtons, arrangeMore, textButton, duplicateButton, groupButton, ungroupButton, linkText, openLinkText, linkButton, openLinkButton, unlinkButton, orderButton,
     intoButton, alignButton, opacityField, opacityInput, connectButton, shapeButton, cropButton, uncropButton, transformButton, applyButton, pathButton,
     booleanButton, maskButton, motifButton, symbolButton, detachButton, repeatButton, outlineButton, traceButton, textPathButton, nodesBar,
     insertNodesButton, deleteNodesButton, cornerButton, smoothButton, symmetricButton, linesButton, curvesButton, breakButton, joinButton,
@@ -79,11 +80,13 @@ export function installControls(ctx: EditorContext): void {
     if (band === null) return null;
     const box = screenBox(ctx.camera, band);
     const pad = FRAME_PX + HANDLE_REACH_PX;
+    // Sotto la cornice ferma ci sono le sue misure: la barra va più in giù.
+    const below = view !== null && ctx.current === null ? LABEL_ROOM_PX : 0;
     return {
       x: box.min[0] - pad,
       y: box.min[1] - pad,
       w: box.max[0] - box.min[0] + 2 * pad,
-      h: box.max[1] - box.min[1] + 2 * pad,
+      h: box.max[1] - box.min[1] + 2 * pad + below,
     };
   };
 
@@ -116,7 +119,8 @@ export function installControls(ctx: EditorContext): void {
 
   /// La barra della selezione accanto alla selezione, se chi disegna la
   /// vuole lì (`bar.ts`): sotto la cornice, o sopra se sotto non c'è posto.
-  /// Durante un gesto non si vede, perché non copra ciò che si muove.
+  /// Durante un gesto o uno zoom non si vede, perché non copra ciò che si
+  /// muove.
   function placeBar(): void {
     if (barHeld > 0) {
       barDue = true;
@@ -124,12 +128,12 @@ export function installControls(ctx: EditorContext): void {
     }
     const beside = ctx.grid.bar && !arrangeBar.hidden;
     arrangeBar.toggleAttribute("data-beside", beside);
-    arrangeBar.toggleAttribute("data-gesture", beside && (ctx.current !== null || ctx.pressed !== null));
+    arrangeBar.toggleAttribute("data-gesture", beside && (ctx.current !== null || ctx.pressed !== null || ctx.zooming));
     if (!beside) {
       arrangeBar.style.removeProperty("transform");
       return;
     }
-    const signature = [...arrangeButtons, opacityField].map((control) => (control.hidden ? "0" : "1")).join("");
+    const signature = [...arrangeButtons, opacityField].map((control) => (control.hidden || control.hasAttribute("data-more") ? "0" : "1")).join("");
     if (barSize === null || barSize.signature !== signature || barSize.w === 0) {
       barSize = { signature, w: arrangeBar.offsetWidth, h: arrangeBar.offsetHeight };
     }
@@ -245,15 +249,6 @@ export function installControls(ctx: EditorContext): void {
   const currentTitle = (): string => rootText("title");
   ctx.currentTitle = currentTitle;
 
-  /// Il campione del colore a piacere: il colore, il nome, e se si vede.
-  const showCustom = (): void => {
-    customButton.hidden = ctx.custom === null || !has("colors");
-    if (ctx.custom === null) return;
-    customChip.style.setProperty("--swatch", ctx.custom);
-    const label = customLabel();
-    customButton.setAttribute("aria-label", label);
-    customButton.title = label;
-  };
 
   /// I pulsanti dei nodi: si spegne quello che coi nodi scelti non farebbe
   /// niente in nessuna forma.
@@ -457,10 +452,19 @@ export function installControls(ctx: EditorContext): void {
     const opacity = units.length === 0 || !has("arrange") ? null : opacityOf(ctx.engine.model!, units);
     opacityField.hidden = opacity === null || opacity.count === 0;
     if (opacity !== null && !opacityField.hidden) showOpacity(opacity);
-    arrangeBar.hidden = units.length === 0 || (opacityField.hidden && arrangeButtons.every((control) => control.hidden));
+    // Oltre la sesta, le azioni vanno nel «…».
+    const shown = arrangeButtons.filter((control) => !control.hidden);
+    shown.forEach((control, at) => control.toggleAttribute("data-more", at >= ARRANGE_SHOWN && shown.length > ARRANGE_SHOWN));
+    for (const control of arrangeButtons) if (control.hidden) control.removeAttribute("data-more");
+    arrangeMore.hidden = shown.length <= ARRANGE_SHOWN;
+    const wasHidden = arrangeBar.hidden;
+    arrangeBar.hidden = units.length === 0 || (opacityField.hidden && shown.length === 0);
     ctx.arrangeFocus.sync(null);
     syncNodesBar();
     placeBar();
+    // Comparendo, la barra entra in dissolvenza (H2); riprenderla durante la
+    // corsa la lascia dov'è.
+    if (wasHidden && !arrangeBar.hidden) animate(arrangeBar, { from: { opacity: 0 }, duration: DURATION.state, easing: "ease-out", whenReduced: "none", lifetime: ctx.life });
     if (!focused) return;
     const active = document.activeElement;
     for (const bar of [arrangeBar, nodesBar]) {
@@ -482,23 +486,12 @@ export function installControls(ctx: EditorContext): void {
     root.toggleAttribute("data-readonly", !canEdit);
     surface.dataset.tool = ctx.tool;
     linkLayer.toggleAttribute("data-active", ctx.tool === "select" || !canEdit);
-    for (const [id, control] of toolButtons) {
-      control.hidden = !ctx.tools.some((spec) => spec.id === id);
-      control.setAttribute("aria-checked", String(id === ctx.tool));
-      control.disabled = !canEdit;
-    }
-    for (const [value, control] of colorButtons) {
-      control.setAttribute("aria-checked", String(value === now.color));
-      control.disabled = !canEdit;
-    }
-    showCustom();
-    customButton.setAttribute("aria-checked", String(ctx.custom !== null && now.color === ctx.custom));
-    customButton.disabled = !canEdit;
-    // Il gruppo intero, non solo il pulsante: un gruppo vuoto nella barra
-    // occuperebbe comunque il suo spazio.
-    moreGroup.hidden = !has("colors");
-    moreButton.hidden = moreGroup.hidden;
-    moreButton.disabled = !canEdit;
+    ctx.syncRail(canEdit);
+    ctx.colorWell.setValue(now.color);
+    ctx.syncCharacter();
+    ctx.syncPenOptions();
+    ctx.colorWell.button.disabled = !canEdit;
+    if (!canEdit) ctx.colorWell.close();
     const widths = widthsNow();
     const sizes = ctx.tool === "text";
     // La nota ha il suo corpo e la copertura è piena: lo spessore non vale.
@@ -557,6 +550,8 @@ export function installControls(ctx: EditorContext): void {
     ctx.syncSymbols();
     accessButton.hidden = !has("accessibility");
     if (accessButton.hidden && !accessPanel.element.hidden) showAccess(false);
+    // Le schede dell'ispettore seguono gli strumenti offerti.
+    ctx.chrome.refresh?.();
     syncAccess();
     syncDescriptions();
     ctx.syncPaths();
@@ -564,6 +559,11 @@ export function installControls(ctx: EditorContext): void {
     ctx.syncCrop();
     syncInspector();
     syncProperties();
+    // Il titolo sta nelle proprietà del documento (B6); senza il pannello,
+    // nella barra in alto, come prima.
+    const titleHome = has("properties") ? panel.lead : ctx.topEnd;
+    if (ctx.titleField.parentElement !== titleHome) titleHome.prepend(ctx.titleField);
+    if (titleHome !== panel.lead) ctx.titleField.hidden = false;
     titleInput.disabled = !canEdit;
     if (document.activeElement !== titleInput) titleInput.value = currentTitle();
     syncLayers();

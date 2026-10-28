@@ -29,7 +29,8 @@
 import { resolvedLanguage } from "../../../i18n/strings";
 import { identifier, stableIdentifier } from "../../../ui/a11y";
 import { displayBinding } from "../../../ui/commands";
-import { iconEl, icon, registerIcon } from "../../../ui/icons";
+import { iconEl } from "../../../ui/icons";
+import { ensureDrawIcons } from "../icons";
 import type { Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../../ui/menu";
 import { MAX_BOARDS } from "../scene/read";
@@ -43,13 +44,6 @@ const OVERSCAN = 8;
 /// Dopo il menu aperto dalla tastiera, per tanti millisecondi il clic destro
 /// che il tasto del menu manda dietro non ne apre un altro.
 const KEYED_MENU_MS = 1000;
-
-/// Le icone del pannello, col costrutto di `ui/icons.ts`: il più di «Nuova
-/// tavola» e il triangolo della tavola di adesso.
-const ICONS: Readonly<Record<string, readonly string[]>> = {
-  "draw-board-add": ["M12 5v14", "M5 12h14"],
-  "draw-board-here": ["M8 5.5l10 6.5-10 6.5z"],
-};
 
 /// Una riga del pannello: una tavola.
 export interface BoardRow {
@@ -129,7 +123,7 @@ function setText(node: HTMLElement, text: string): void {
 }
 
 export function createBoardsPanel(life: Lifetime, options: BoardsPanelOptions): BoardsPanel {
-  for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
+  ensureDrawIcons();
   const element = document.createElement("section");
   element.className = "draw-boards";
   element.id = identifier("draw-boards");

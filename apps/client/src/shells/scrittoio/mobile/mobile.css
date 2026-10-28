@@ -401,3 +401,15 @@
     inset: -16px 0 0;
   }
 }
+
+/* ── Il pannello del documento ───────────────────────────────────────────── */
+
+/* In piedi l'ispettore è un foglio che sale dal basso, e il documento non ha
+   un cassetto accanto che dica quanti commenti ci sono: lo dice il pulsante
+   sulla carta, che lo apre. Alto un dito. */
+@media (max-width: 599px) {
+  :root[data-client-shell="mobile"] .rich-surface > .rich-side-open {
+    display: inline-flex;
+    min-height: var(--touch);
+  }
+}

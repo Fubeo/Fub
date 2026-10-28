@@ -3,7 +3,7 @@
   "sha256": "73b19d01d64d5c64ef6a6cfa79dd2e8f44492d2535cd65b28659a8e5b081d910",
   "open": {
     "readonly": "import",
-    "projection": "457f4b7e0cd28af546264ff33e858828efa672b7bb6a3337f72103788cd16529",
+    "projection": "71b69f7fb190ae34ed46877c4f852064eb8bd2bac300e12fe1ab6b652ab65f91",
     "blocks": 3,
     "comments": 0
   },
@@ -41,6 +41,8 @@
     "E2": "readonly",
     "E3": "readonly",
     "E4": "readonly",
-    "E5": "readonly"
+    "E5": "readonly",
+    "E6": "readonly",
+    "E7": "readonly"
   }
 }

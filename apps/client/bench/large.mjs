@@ -62,8 +62,8 @@
 //   e così la corsa da vicino.
 // - **La rotella** sposta il rettangolo, sullo schermo, proprio del suo
 //   passo, e non lo ingrandisce.
-// - **La scelta** dice «1 oggetto scelto.», e il pannello delle proprietà
-//   mostra la posizione e la misura del rettangolo: il clic ha preso lui.
+// - **La scelta** dice «1 oggetto scelto.», e la scheda «Design»
+//   dell'ispettore mostra la posizione e la misura del rettangolo: il clic ha preso lui.
 // - **Ogni tasto di uno strumento** sceglie il suo: Penna o Selezione.
 // - **Il tratto** aggiunge un oggetto solo, un tracciato che copre la strada
 //   del puntatore, e il disegno lo dice col numero nuovo degli oggetti.
@@ -328,8 +328,8 @@ async function installProbe(page, target) {
     const large = () => document.querySelector(".draw-editor .spatial-painter")?.hasAttribute("data-large") ?? false;
     const ids = () => [...surface().querySelectorAll("[data-scene-id]")].map((node) => node.getAttribute("data-scene-id"));
     /// Ciò che si vede: la regione viva, lo zoom scritto, il rettangolo
-    /// sullo schermo, dentro il foglio, lo strumento, ciò che il pannello
-    /// delle proprietà dice della scelta.
+    /// sullo schermo, dentro il foglio, lo strumento, ciò che la scheda
+    /// «Design» dell'ispettore dice della scelta.
     const read = () => {
       const host = surface();
       const box = host.getBoundingClientRect();
@@ -337,7 +337,7 @@ async function installProbe(page, target) {
       const rect = node?.getBoundingClientRect();
       const zoom = [...document.querySelectorAll(".draw-editor .draw-zoom-level")].map((button) => /^(\d+)\s*%$/.exec(button.textContent.trim())).find((m) => m !== null);
       const field = (label) => {
-        const input = [...document.querySelectorAll(".draw-editor .draw-properties-input")].find((each) => each.offsetParent !== null && (each.getAttribute("aria-label") ?? each.labels?.[0]?.textContent?.trim()) === label);
+        const input = [...document.querySelectorAll(".draw-properties-input")].find((each) => each.offsetParent !== null && (each.getAttribute("aria-label") ?? each.labels?.[0]?.textContent?.trim()) === label);
         return input === undefined ? null : Number(input.value.replace(",", "."));
       };
       return {
@@ -698,6 +698,10 @@ async function nearRun(page) {
   return summary;
 }
 
+/// La coda dell'id della scheda «Design»: l'ispettore scrive l'id del
+/// pannello (`draw.design`) in esadecimale, un byte per trattino.
+const DESIGN_TAB = [...Buffer.from("draw.design")].map((byte) => byte.toString(16)).join("-");
+
 /// La scelta: un clic in `at`, che deve prendere il rettangolo. `at` è il
 /// centro del rettangolo, o un altro punto per la prova del banco.
 async function selectRun(page, fixture, at = null) {
@@ -712,11 +716,16 @@ async function selectRun(page, fixture, at = null) {
   const seen = await emit(page, run, "scelta: rilascio", "pointerup", () => page.mouse.up(), "response");
   if (seen.live !== "1 oggetto scelto.") throw new WrongStep(`scelta: il disegno dice «${seen.live}» invece di «1 oggetto scelto.»`);
   const summary = await finish(page, run);
-  // Il pannello si aggiorna quando la pagina ha tempo: si guarda dopo la coda.
+  // Le proprietà stanno nella scheda «Design» dell'ispettore dello
+  // Scrittoio, che si apre dopo la misura. Il pannello si aggiorna quando la
+  // pagina ha tempo: si guarda dopo la coda.
+  await page.click(`.inspector-tab[id$="${DESIGN_TAB}"]`);
+  await frames(page, 2);
   const props = (await probe(page, "read")).props;
+  await page.focus(".draw-editor .draw-surface");
   const box = fixture.target.box;
   if (!props.every((value, i) => value !== null && Math.abs(value - box[i]) < 0.01)) {
-    throw new WrongStep(`scelta: il pannello delle proprietà mostra ${props.map((value) => value ?? "—").join(", ")} invece del rettangolo ${box.join(", ")}`);
+    throw new WrongStep(`scelta: la scheda «Design» mostra ${props.map((value) => value ?? "—").join(", ")} invece del rettangolo ${box.join(", ")}`);
   }
   return summary;
 }

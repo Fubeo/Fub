@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emit, state } from "../../../state/store";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { activeMotions, createManualDriver, setMotionDriver } from "../../../moto";
 
 type Status = { indexing: string; watching: boolean } | null;
 
@@ -104,6 +105,8 @@ beforeEach(() => {
       <span id="status-index" hidden></span>
       <span id="status-saving" hidden></span>
       <span id="status-mode" hidden></span>
+      <button id="status-fit-width" hidden></button>
+      <button id="status-fit-page" hidden></button>
       <button id="status-zoom" hidden></button>
     </footer>`;
   world.status = () => Promise.resolve({ indexing: "idle", watching: true } satisfies Status);
@@ -257,6 +260,219 @@ describe("la modalità", () => {
     el("p1").dataset.mode = "source";
     await settle();
     expect(el("status-mode").textContent).toBe("Sorgente");
+  });
+});
+
+describe("la carta adattata alla vista", () => {
+  /// Una superficie che offre gli adattamenti finché è in Pagina; `changed`
+  /// è ciò che dice quando le offerte cambiano.
+  function paperPane(inPage: { value: boolean }) {
+    let fit: "width" | "page" | null = null;
+    const asked: ("width" | "page" | null)[] = [];
+    const listeners = new Set<() => void>();
+    const changed = () => {
+      for (const listener of listeners) listener();
+    };
+    const pane = {
+      surface: {
+        modes: [{ id: "document" }, { id: "writing" }],
+        paperFit: {
+          offers: () => (inPage.value ? (["width", "page"] as const) : []),
+          current: () => fit,
+          set: (next: "width" | "page" | null) => {
+            fit = next;
+            asked.push(next);
+          },
+          subscribe: (listener: () => void) => {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+        },
+      },
+      mode: { label: () => "Pagina" },
+    };
+    return { pane, asked, changed, listeners };
+  }
+
+  it("si offre soltanto dove la superficie lo offre, e un altro clic torna alla carta vera", async () => {
+    const inPage = { value: true };
+    const { pane, asked, changed } = paperPane(inPage);
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    await settle();
+    const width = el("status-fit-width");
+    const whole = el("status-fit-page");
+    expect([width.hidden, whole.hidden]).toEqual([false, false]);
+    expect(width.textContent).toBe("frame.status.fit.width");
+    expect(width.getAttribute("aria-pressed")).toBe("false");
+    width.click();
+    expect(width.getAttribute("aria-pressed")).toBe("true");
+    whole.click();
+    expect([width.getAttribute("aria-pressed"), whole.getAttribute("aria-pressed")]).toEqual(["false", "true"]);
+    whole.click();
+    expect(asked).toEqual(["width", "page", null]);
+    // Fuori da Pagina, e senza la capacità, non si vede.
+    inPage.value = false;
+    changed();
+    expect([width.hidden, whole.hidden]).toEqual([true, true]);
+    world.pane = surface(3);
+    for (const listener of world.languageListeners) listener();
+    expect(width.hidden).toBe(true);
+  });
+
+  it("si accende quando la pagina arriva dopo il riquadro, e lascia la superficie che non è più a fuoco", async () => {
+    const inPage = { value: false };
+    const { pane, changed, listeners } = paperPane(inPage);
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    await settle();
+    expect(el("status-fit-width").hidden).toBe(true);
+    // Il motore è pronto: la superficie lo dice, senza un evento della shell.
+    inPage.value = true;
+    changed();
+    expect(el("status-fit-width").hidden).toBe(false);
+    world.pane = surface(3);
+    for (const listener of world.languageListeners) listener();
+    expect(listeners.size).toBe(0);
+  });
+
+  it("chiusa la banda, non ascolta più la superficie", async () => {
+    const { pane, listeners } = paperPane({ value: true });
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    await settle();
+    expect(listeners.size).toBe(1);
+    life.close();
+    expect(listeners.size).toBe(0);
+  });
+});
+
+describe("le voci della superficie", () => {
+  function statusPane() {
+    const listeners = new Set<() => void>();
+    const said = { items: [] as { id: string; text: string; hint?: string; open?: () => void }[] };
+    const pane = {
+      surface: {
+        modes: [{ id: "a" }, { id: "b" }],
+        status: {
+          counts: true,
+          items: () => said.items,
+          subscribe(listener: () => void) {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+        },
+      },
+      mode: { label: () => "Pagina" },
+    };
+    const changed = () => {
+      for (const listener of [...listeners]) listener();
+    };
+    return { pane, said, changed, listeners };
+  }
+  const items = () => [...document.querySelectorAll<HTMLElement>("[data-surface-item]")];
+
+  it("stanno prima della modalità, un clic apre, e il conteggio dichiarato si fa da parte", async () => {
+    const { pane, said, changed } = statusPane();
+    const opened: string[] = [];
+    said.items = [
+      { id: "page", text: "Pagina 1 di 2" },
+      { id: "words", text: "418 parole", hint: "Apri il conteggio", open: () => opened.push("words") },
+    ];
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    await settle();
+    expect(items().map((each) => [each.tagName, each.textContent])).toEqual([
+      ["SPAN", "Pagina 1 di 2"],
+      ["BUTTON", "418 parole"],
+    ]);
+    expect(items()[1]!.nextElementSibling).toBe(el("status-mode"));
+    expect(world.tooltips.get(items()[1]!)).toBe("Apri il conteggio");
+    expect(el("status-band").hasAttribute("data-surface-counts")).toBe(true);
+    items()[1]!.click();
+    expect(opened).toEqual(["words"]);
+    // Una selezione cambia il numero: lo stesso pulsante, che tiene il fuoco.
+    const words = items()[1]!;
+    words.focus();
+    said.items = [said.items[0]!, { ...said.items[1]!, text: "12 di 418 parole" }, { id: "tracking", text: "Registra" }];
+    changed();
+    expect(items()[1]).toBe(words);
+    expect(document.activeElement).toBe(words);
+    expect(items().map((each) => each.textContent)).toEqual(["Pagina 1 di 2", "12 di 418 parole", "Registra"]);
+    // Scrittura: niente fogli.
+    said.items = said.items.slice(1);
+    changed();
+    expect(items().map((each) => each.dataset.surfaceItem)).toEqual(["words", "tracking"]);
+  });
+
+  it("una superficie senza voci, o fuori fuoco, non lascia niente e non è più ascoltata", async () => {
+    const { pane, said, listeners } = statusPane();
+    said.items = [{ id: "words", text: "3 parole" }];
+    world.tab = { k: "doc" };
+    world.pane = pane;
+    mountStatusBand(life);
+    await settle();
+    expect(items()).toHaveLength(1);
+    world.pane = surface(3);
+    for (const listener of world.languageListeners) listener();
+    expect(items()).toHaveLength(0);
+    expect(listeners.size).toBe(0);
+    expect(el("status-band").hasAttribute("data-surface-counts")).toBe(false);
+    world.pane = pane;
+    for (const listener of world.languageListeners) listener();
+    expect(listeners.size).toBe(1);
+    life.close();
+    expect(listeners.size).toBe(0);
+    expect(items()).toHaveLength(0);
+  });
+});
+
+describe("il segno che si accende", () => {
+  it("«Registra» batte una volta quando si accende, non quando si torna al documento", async () => {
+    const driver = createManualDriver();
+    setMotionDriver(driver);
+    try {
+      const listeners = new Set<() => void>();
+      const said = { items: [{ id: "words", text: "3 parole" }] as { id: string; text: string; beat?: boolean }[] };
+      const status = {
+        counts: true,
+        items: () => said.items,
+        subscribe(listener: () => void) {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      };
+      const pane = { surface: { modes: [{ id: "a" }], status }, mode: { label: () => "Pagina" } };
+      world.tab = { k: "doc" };
+      world.pane = pane;
+      mountStatusBand(life);
+      await settle();
+      expect(driver.plays).toHaveLength(0);
+      // Si accende: un battito, sulla scala, con la molla.
+      said.items = [...said.items, { id: "tracking", text: "Registra", beat: true }];
+      for (const listener of [...listeners]) listener();
+      const sign = document.querySelector<HTMLElement>('[data-surface-item="tracking"]')!;
+      expect(driver.plays.map((play) => play.el)).toEqual([sign]);
+      expect(driver.plays[0]!.keyframes.every((frame) => frame.opacity === undefined)).toBe(true);
+      // Ridisegnare non batte di nuovo.
+      for (const listener of [...listeners]) listener();
+      expect(driver.plays).toHaveLength(1);
+      driver.advance(2000);
+      expect(activeMotions()).toBe(0);
+      // Un altro foglio, poi di nuovo il documento che registra già: niente.
+      world.pane = surface(3);
+      for (const listener of world.languageListeners) listener();
+      world.pane = pane;
+      for (const listener of world.languageListeners) listener();
+      expect(document.querySelector('[data-surface-item="tracking"]')).not.toBeNull();
+      expect(driver.plays).toHaveLength(1);
+    } finally {
+      setMotionDriver(null);
+    }
   });
 });
 

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { t } from "../../../../i18n/strings";
 import { declareClipboard } from "../../../../platform/clipboard";
 import { closeContextMenu } from "../../../../ui/menu";
+import { caseApplies, playCase, TABLE_CONFORMANCE } from "../../../../tabella/conformance";
 import { TableGrid, type TableGridHost } from "./table-grid";
 import type { TableData } from "./table-model";
 
@@ -41,7 +42,7 @@ function mount(rows: string[][], readOnly = false) {
   grid = new TableGrid(host, { rows, aligns: rows[0]!.map(() => null) });
   grids.push(grid);
   document.body.append(grid.element);
-  const root = grid.element.querySelector<HTMLElement>(".cm-md-grid")!;
+  const root = grid.element.querySelector<HTMLElement>(".tb-grid")!;
   const cell = (row: number, col: number) =>
     root.querySelector<HTMLElement>(`[data-row="${row}"][data-col="${col}"]`)!;
   return { grid, root, cell, writes, left, undo };
@@ -63,8 +64,8 @@ describe("la griglia", () => {
     expect(root.getAttribute("role")).toBe("grid");
     expect(cell(0, 0).textContent).toBe("Nome");
     expect(cell(2, 1).textContent).toBe("9");
-    expect([...root.querySelectorAll(".cm-md-grid-letter")].map((el) => el.textContent)).toEqual(["A", "B"]);
-    expect([...root.querySelectorAll(".cm-md-grid-rowhead")].map((el) => el.textContent)).toEqual(["1", "2", "3"]);
+    expect([...root.querySelectorAll(".tb-letter")].map((el) => el.textContent)).toEqual(["A", "B"]);
+    expect([...root.querySelectorAll(".tb-rowhead")].map((el) => el.textContent)).toEqual(["1", "2", "3"]);
     expect(root.getAttribute("aria-activedescendant")).toBe(cell(0, 0).id);
   });
 
@@ -203,7 +204,7 @@ describe("la griglia", () => {
     expect(grid.selection.focus).toEqual({ row: 1, col: 0 });
     mouse(cell(2, 1), "mousedown", { shiftKey: true });
     expect(grid.selection).toEqual({ anchor: { row: 1, col: 0 }, focus: { row: 2, col: 1 } });
-    mouse(root.querySelectorAll(".cm-md-grid-letter")[1]!, "mousedown");
+    mouse(root.querySelectorAll(".tb-letter")[1]!, "mousedown");
     expect(grid.selection).toEqual({ anchor: { row: 0, col: 1 }, focus: { row: 2, col: 1 } });
   });
 
@@ -316,4 +317,27 @@ describe("le azioni della barra sulla griglia", () => {
     expect(writes[0]!.rows).toEqual([["Nome", "Voto"], ["Ada", "10"]]);
     expect(grid.selection.focus).toEqual({ row: 1, col: 1 });
   });
+});
+
+describe("la prova comune della Tabella, sul Markdown", () => {
+  const caps = { insertRows: true, deleteRows: true, moveRows: true, insertColumns: true, deleteColumns: true, moveColumns: true, sort: true, align: true, merge: false, headerRows: 1 };
+  for (const test of TABLE_CONFORMANCE) {
+    it.runIf(caseApplies(test, caps))(test.name, () => {
+      const { grid } = mount(test.rows.map((row) => [...row]));
+      grid.focus("first");
+      const seen = playCase(test, {
+        key: (name, init) => key(document.activeElement ?? document.body, name, init),
+        command: (id) => void grid.runAction(id),
+        cells: () => grid.data.rows.map((row) => [...row]),
+        active: () => ({ row: grid.selection.focus.row, column: grid.selection.focus.col }),
+        range: () => {
+          const { anchor, focus } = grid.selection;
+          return { r0: Math.min(anchor.row, focus.row), c0: Math.min(anchor.col, focus.col), r1: Math.max(anchor.row, focus.row), c1: Math.max(anchor.col, focus.col) };
+        },
+      });
+      if (test.cells) expect(seen.cells).toEqual(test.cells);
+      if (test.active) expect(seen.active).toEqual(test.active);
+      if (test.range) expect(seen.range).toEqual(test.range);
+    });
+  }
 });

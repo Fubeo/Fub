@@ -108,8 +108,8 @@ function drawRegistration(): SurfaceRegistration {
           profile,
           surfaceId: `draw:${context.paneId}:${box.draws.length}`,
           modes: [
-            { id: "draw", label: () => "Disegno", presentation: "surface", contextMode: "live_preview" },
-            { id: "read", label: () => "Guarda", presentation: "rendered", contextMode: "reading" },
+            { id: "draw", label: () => "Disegno", presentation: "surface", contextMode: "live_preview", looks: ["file", "adattato"] },
+            { id: "read", label: () => "Guarda", presentation: "rendered", contextMode: "reading", looks: ["file"] },
           ],
           defaultMode: "draw",
           setMode(mode) {
@@ -314,6 +314,52 @@ describe("i comandi delle modalità seguono il ruolo dichiarato", () => {
     expect(paneMode()).toBe("source");
     await run("shell.mode.live");
     expect(paneMode()).toBe("canvas");
+  });
+});
+
+describe("l'aspetto del contenuto", () => {
+  const looks = () => [...focusedPane().querySelector<HTMLElement>(".pane-editor")!.classList].filter((name) => name.startsWith("look-"));
+
+  it("la modalità offre due aspetti, la scelta resta alla famiglia e ritorna dopo un nuovo montaggio", async () => {
+    await start();
+    const { setLook } = await import("./panels/document");
+    await open("Benvenuto.md");
+    expect(looks(), "una nota è vestita dal tema").toEqual(["look-tema"]);
+    await open("schizzo.draw");
+    expect(looks(), "il predefinito della modalità").toEqual(["look-file"]);
+    setLook("adattato");
+    expect(looks()).toEqual(["look-adattato"]);
+    setLook("tema");
+    expect(looks(), "un aspetto che la modalità non offre non si prende").toEqual(["look-adattato"]);
+
+    pressModE();
+    await settle();
+    expect(paneMode()).toBe("read");
+    expect(looks(), "la Lettura non offre l'adattato: torna al suo predefinito").toEqual(["look-file"]);
+    pressModE();
+    await settle();
+    expect(looks(), "tornando, la scelta c'è ancora").toEqual(["look-adattato"]);
+
+    await open("Benvenuto.md");
+    expect(looks(), "la scelta è della famiglia, non del riquadro intero").toEqual(["look-tema"]);
+    await open("schizzo.draw");
+    expect(looks(), "una superficie montata da capo ritrova la scelta").toEqual(["look-adattato"]);
+    const state = await import("./state/layout");
+    expect(state.pane(state.layout.focus)?.looks, "e il layout la ricorda").toEqual({ draw: "adattato" });
+  });
+
+  it("senza una scelta decide l'impostazione, e un valore sconosciuto vale auto", async () => {
+    await start();
+    const { setContentLookPreference } = await import("./theme/content-look");
+    await open("schizzo.draw");
+    setContentLookPreference("adattato", false);
+    expect(looks()).toEqual(["look-adattato"]);
+    setContentLookPreference("ignoto", false);
+    expect(looks(), "auto: la pagina del file").toEqual(["look-file"]);
+    setContentLookPreference("auto", true);
+    expect(looks(), "auto con il contrasto alto: la pagina adattata").toEqual(["look-adattato"]);
+    await open("Benvenuto.md");
+    expect(looks(), "una modalità che offre solo il tema resta al tema").toEqual(["look-tema"]);
   });
 });
 

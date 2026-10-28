@@ -323,6 +323,41 @@ describe("le parti del Personalizzato nel pannello", () => {
   });
 });
 
+describe("gli strumenti della colonna nel pannello", () => {
+  const TOOLBAR = "draw.toolbar";
+  const toolbar = (value: string[], source: "default" | "vault" = "vault"): SettingEntry => ({
+    spec: {
+      key: TOOLBAR,
+      label: "Strumenti della colonna",
+      description: "",
+      group: "Disegni",
+      scope: "vault",
+      kind: { kind: "list", default: [] },
+      program_writable: false,
+    },
+    value,
+    source,
+  });
+  const box = (tool: string): HTMLInputElement => document.getElementById(`setting-${TOOLBAR}-${tool}`) as HTMLInputElement;
+
+  it("una casella per strumento; gli scelti si scrivono nel loro ordine, e un nome sconosciuto resta in fondo", async () => {
+    await openPanel([toolbar(["text", "select", "domani"])]);
+    expect(box("text").checked).toBe(true);
+    expect(box("pen").checked).toBe(false);
+    const input = box("pen");
+    input.focus();
+    input.click();
+    await vi.waitFor(() => expect(fake.setSetting).toHaveBeenCalled());
+    expect(fake.setSetting).toHaveBeenLastCalledWith(TOOLBAR, ["text", "select", "pen", "domani"]);
+  });
+
+  it("il predefinito accanto a «Azzera» dice la colonna di serie", async () => {
+    await openPanel([toolbar(["pen"])]);
+    const row = document.querySelector<HTMLElement>(`[data-setting-key="${TOOLBAR}"]`)!;
+    expect(row.querySelector(".setting-default")?.textContent).toBe("Predefinito: Quelli di serie");
+  });
+});
+
 describe("il focus resta sulla riga (A03)", () => {
   function toggleEntry(key: string, value: boolean): SettingEntry {
     return {

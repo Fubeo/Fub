@@ -404,12 +404,18 @@ fn una_tabella_nuova_si_scrive_con_le_colonne_e_il_bordo() {
             ],
         },
     ];
-    projection
-        .blocks
-        .insert(1, Block::Table(Table { k: None, rows }));
+    projection.blocks.insert(
+        1,
+        Block::Table(Table {
+            locked: false,
+            k: None,
+            rows,
+        }),
+    );
     projection.blocks.insert(
         2,
         Block::Table(Table {
+            locked: false,
             k: None,
             rows: vec![Row {
                 k: None,
@@ -555,6 +561,56 @@ fn carattere_dimensione_colori_e_maiuscole_diventano_uno_stile_automatico() {
         panic!()
     };
     assert_eq!(f.color, None, "il colore torna quello del paragrafo");
+}
+
+#[test]
+fn i_titoli_hanno_l_aspetto_dello_stile_che_il_salvataggio_gli_scrive() {
+    let mut fixture = Fixture::new("<text:p>uno</text:p>");
+    fixture.common = fixture.common.replace(
+        "<style:text-properties fo:language",
+        "<style:text-properties fo:font-size=\"12pt\" fo:language",
+    );
+    fixture.common.push_str(
+        "<style:style style:name=\"Heading_20_1\" style:display-name=\"Heading 1\" \
+         style:family=\"paragraph\" style:default-outline-level=\"1\">\
+         <style:paragraph-properties fo:text-align=\"center\"/>\
+         <style:text-properties fo:font-size=\"18pt\"/></style:style>",
+    );
+    let bytes = fixture.bytes();
+    let mut projection = projection(&bytes);
+    assert_eq!(
+        projection.roles.h[0].size,
+        Some(18.0),
+        "lo stile del documento"
+    );
+    // Il titolo 2 non c'è: è quello di LibreOffice che il salvataggio
+    // aggiungerebbe, al 115% del testo.
+    assert_eq!(projection.f.size, Some(12.0));
+    assert_eq!(projection.roles.h[1].size, Some(12.0 * 1.15));
+    // E l'allineamento: il titolo 1 è centrato, il corpo no.
+    assert_eq!(
+        (
+            projection.roles.align.h.first().copied().flatten(),
+            projection.roles.align.body
+        ),
+        (Some(Align::Center), None)
+    );
+    // Come fa la shell: il corpo diventa titolo 1 e si centra come lui. Il
+    // centro viene dallo stile, e si riapre com'era.
+    let first = para_mut(&mut projection, 0);
+    first.role = Role::Heading { level: 1 };
+    first.align = Some(Align::Center);
+    let out = saved(&bytes, &projection);
+    let content = part(&out, "content.xml");
+    assert!(
+        content.contains("text:style-name=\"Heading_20_1\">uno"),
+        "nessuno stile automatico con l'allineamento diretto: {content}"
+    );
+    let reopened = self::projection(&out);
+    assert_eq!(
+        (para(&reopened, 0).role, para(&reopened, 0).align),
+        (Role::Heading { level: 1 }, Some(Align::Center))
+    );
 }
 
 #[test]
@@ -1269,6 +1325,7 @@ fn la_pagina_non_si_scrive() {
         left: 72.0,
         right: 72.0,
         cols: 1,
+        start: Default::default(),
     });
     assert!(matches!(
         save(Codec::Odt, &bytes, &projection.to_json().unwrap()),
@@ -1347,6 +1404,9 @@ fn new_atom(kind: AtomKind, data: Option<&[u8]>, note: Option<&str>, end: bool) 
         end,
         toc: None,
         comment: None,
+        ink: None,
+        svg: None,
+        float: None,
     }
 }
 

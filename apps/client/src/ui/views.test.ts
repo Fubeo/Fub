@@ -286,6 +286,71 @@ describe("l'inspector a tab", () => {
   });
 });
 
+describe("le schede del documento nell'ispettore", () => {
+  function docPanel(id: string): HTMLElement {
+    const el = document.createElement("div");
+    el.className = "declared-view-panel surface-panel";
+    el.dataset.viewId = id;
+    el.dataset.follows = "document";
+    const title = document.createElement("div");
+    title.className = "panel-title";
+    title.textContent = id;
+    const body = document.createElement("div");
+    body.className = "declared-view";
+    el.append(title, body);
+    return el;
+  }
+
+  it("stanno dopo le view, anche rimontate, e la scheda scelta torna col documento", async () => {
+    listViews.mockResolvedValue([spec("outline", "right_sidebar")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+    const right = document.getElementById("views-right")!;
+    const comments = docPanel("doc.comments");
+    views.showSurfacePanels([comments]);
+    const ids = () => [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")].map((tab) => tab.dataset.viewId);
+    expect(ids()).toEqual(["outline", "doc.comments"]);
+    right.querySelectorAll<HTMLButtonElement>(".inspector-tab")[1]!.click();
+    expect(comments.hidden).toBe(false);
+
+    // Le view si rimontano: le schede del documento restano dopo di loro.
+    await views.mountDeclaredViews();
+    expect(ids()).toEqual(["outline", "doc.comments"]);
+    expect(comments.hidden).toBe(false);
+
+    // Una nota senza schede: si torna alla Struttura, ma la scelta resta.
+    views.showSurfacePanels([]);
+    expect(ids()).toEqual(["outline"]);
+    expect(comments.isConnected).toBe(false);
+    const again = docPanel("doc.comments");
+    views.showSurfacePanels([again]);
+    expect(again.hidden).toBe(false);
+    listViews.mockReset();
+    listViews.mockResolvedValue([]);
+  });
+
+  it("le view che il documento lascia fuori non hanno scheda finché è a fuoco, e tornano dopo", async () => {
+    listViews.mockResolvedValue([spec("outline", "right_sidebar"), spec("backlinks", "right_sidebar")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+    const right = document.getElementById("views-right")!;
+    const ids = () => [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")].map((tab) => tab.dataset.viewId);
+    const outline = right.querySelector<HTMLElement>('.declared-view-panel[data-view-id="outline"]')!;
+    const design = docPanel("draw.design");
+    views.showSurfacePanels([design], ["outline"]);
+    expect(ids()).toEqual(["backlinks", "draw.design"]);
+    expect(outline.hidden).toBe(true);
+    expect(outline.hasAttribute("role"), "senza scheda non è un pannello di scheda").toBe(false);
+    // Rimontate, le view lasciate fuori restano fuori.
+    await views.mountDeclaredViews();
+    expect(ids()).toEqual(["backlinks", "draw.design"]);
+    views.showSurfacePanels([]);
+    expect(ids()).toEqual(["outline", "backlinks"]);
+    listViews.mockReset();
+    listViews.mockResolvedValue([]);
+  });
+});
+
 /// Ogni superficie che il contratto nomina è **classificata** da questa shell:
 /// ospitata in un contenitore, aperta in un riquadro, o non ospitata con una
 /// ragione da dire a chi ha scritto la view.

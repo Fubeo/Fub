@@ -81,6 +81,13 @@ function lazily(
   let mode = "draw";
   let readOnly = false;
   let reveal: SurfaceLocation | null = null;
+  /// Chi segue le schede dell'ispettore: le tiene l'involucro, e passano alla
+  /// superficie quando arriva.
+  const panelListeners = new Set<() => void>();
+  const panelReveals = new Set<(id: string) => void>();
+  /// Chi segue la banda di stato, allo stesso modo.
+  const statusListeners = new Set<() => void>();
+  let stopPanels: (() => void) | null = null;
 
   const settle = (mount: () => EditorSurface): void => {
     if (destroyed) return;
@@ -88,10 +95,26 @@ function lazily(
     pending.remove();
     const mounted = mount();
     surface = mounted;
+    const unsubscribeList = mounted.panels?.subscribe(() => {
+      for (const listener of [...panelListeners]) listener();
+    });
+    const offShow = mounted.panels?.onShow((id) => {
+      for (const listener of [...panelReveals]) listener(id);
+    });
+    const unsubscribeStatus = mounted.status?.subscribe(() => {
+      for (const listener of [...statusListeners]) listener();
+    });
+    stopPanels = () => {
+      unsubscribeList?.();
+      offShow?.();
+      unsubscribeStatus?.();
+    };
     if (text !== null) mounted.buffer?.setDoc(text);
     if (mode !== "draw") mounted.setMode(mode);
     if (readOnly) mounted.setReadOnly?.(true);
     if (focused) mounted.focus?.();
+    for (const listener of [...panelListeners]) listener();
+    for (const listener of [...statusListeners]) listener();
     if (reveal !== null && !mounted.reveal?.(reveal)) {
       // La shell ha già avuto il suo sì: il no lo dice la superficie, con le
       // stesse parole.
@@ -148,6 +171,32 @@ function lazily(
       reveal = location;
       return true;
     },
+    // Le schede della superficie, quando c'è: nessuna prima.
+    panels: {
+      list: () => surface?.panels?.list() ?? [],
+      subscribe(listener) {
+        panelListeners.add(listener);
+        return () => panelListeners.delete(listener);
+      },
+      onShow(listener) {
+        panelReveals.add(listener);
+        return () => panelReveals.delete(listener);
+      },
+      get covers() {
+        return surface?.panels?.covers;
+      },
+    },
+    // La banda di stato della superficie, quando c'è: prima, niente.
+    status: {
+      get counts() {
+        return surface?.status?.counts ?? false;
+      },
+      items: () => surface?.status?.items() ?? [],
+      subscribe(listener) {
+        statusListeners.add(listener);
+        return () => statusListeners.delete(listener);
+      },
+    },
     selections: (): EditorSelections | undefined => surface?.selections?.(),
     selectedText: (): SelectedText | null => surface?.selectedText?.() ?? null,
     setReadOnly: (next) => {
@@ -157,6 +206,11 @@ function lazily(
     destroy: () => {
       if (destroyed) return;
       destroyed = true;
+      stopPanels?.();
+      stopPanels = null;
+      panelListeners.clear();
+      panelReveals.clear();
+      statusListeners.clear();
       surface?.destroy();
       surface = null;
       pending.remove();

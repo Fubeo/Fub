@@ -8,7 +8,8 @@ import { elementChildren, type DocumentModel, type ElementPart } from "../../sce
 import { t, type DrawKey } from "../../strings";
 import type { Destination } from "../edit";
 import { nodeKey, type NodeKey, type NodeKind, type Subpath } from "../nodes";
-import { validClosed, validSteady, validStep, validSteps, type Grid, type Steady } from "../grid";
+import { isPenId } from "../../../../ink/pens";
+import { isBarrelAction, isEraseMode, isFidelity, isPenOutput, validClosed, validSteady, validStep, validSteps, type EraseMode, type Grid, type Steady } from "../grid";
 import type { LayerInfo } from "../hit";
 import { MAX_LAYER_NAME } from "../layers";
 
@@ -156,7 +157,17 @@ export function checkedGrid(next: Grid, before: Grid): Grid {
     pen: validCurve(next.pen) ?? before.pen,
     // Uno stabilizzatore che non si legge tiene quello di prima.
     ...steadyOf(next.steady === undefined ? undefined : (validSteady(next.steady) ?? before.steady)),
+    ...eraserOf(isEraseMode(next.eraser) ? next.eraser : before.eraser),
+    ...(isPenId(next.penId) ? { penId: next.penId } : before.penId === undefined ? {} : { penId: before.penId }),
+    ...(isBarrelAction(next.barrel) ? { barrel: next.barrel } : before.barrel === undefined ? {} : { barrel: before.barrel }),
+    ...(isPenOutput(next.output) ? { output: next.output } : before.output === undefined ? {} : { output: before.output }),
+    ...(isFidelity(next.fidelity) ? { fidelity: next.fidelity } : before.fidelity === undefined ? {} : { fidelity: before.fidelity }),
   };
+}
+
+/// La gomma come campo della griglia: assente se non è mai stata scelta.
+function eraserOf(eraser: EraseMode | undefined): { readonly eraser?: EraseMode } {
+  return eraser === undefined ? {} : { eraser };
 }
 
 /// Lo stabilizzatore come campo della griglia: assente se è spento da sempre.

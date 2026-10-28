@@ -991,7 +991,22 @@ impl Writer<'_> {
         w.close("pic:cNvPicPr");
         w.close("pic:nvPicPr");
         w.open("pic:blipFill", &[]);
-        w.empty("a:blip", &[("r:embed", &rid)]);
+        // An SVG picture: the PNG for readers without SVG, the SVG beside it (Office 2016).
+        let svg = crate::ink::svg_key_of(self.doc, media).and_then(|key| self.media_files.get(&key).cloned().map(|file| (key, file)));
+        match svg {
+            Some((key, svg_file)) => {
+                let svg_rid = rels.add(rt::IMAGE, &format!("media/{svg_file}"), false);
+                self.used_media.insert(key);
+                w.open("a:blip", &[("r:embed", &rid)]);
+                w.open("a:extLst", &[]);
+                w.open("a:ext", &[("uri", crate::ink::SVG_EXT)]);
+                w.empty("asvg:svgBlip", &[("xmlns:asvg", crate::ink::SVG_NS), ("r:embed", &svg_rid)]);
+                w.close("a:ext");
+                w.close("a:extLst");
+                w.close("a:blip");
+            }
+            None => w.empty("a:blip", &[("r:embed", &rid)]),
+        }
         if crop.iter().any(|c| *c > 0.0) {
             let c = |v: f32| n((wordcraft_geom::finite(v).clamp(0.0, 1.0) * 100_000.0).round() as i64);
             w.empty("a:srcRect", &[("l", &c(crop[0])), ("t", &c(crop[1])), ("r", &c(crop[2])), ("b", &c(crop[3]))]);

@@ -5,8 +5,9 @@
 //! la superficie modifica — testo, enfasi, aspetto del carattere, link, ruolo
 //! dei paragrafi, allineamento, rientri, spaziature, interlinea e stile — e
 //! porta tutto il resto come dati opachi (vedi `blob`). L'aspetto `f` di un
-//! paragrafo e del documento, gli stili proposti, `label`, `w` e `h` sono
-//! soltanto suggerimenti di resa: il ritorno al documento li ignora.
+//! paragrafo e del documento, gli stili proposti, `label`, `w` e `h`, e i byte
+//! di un'immagine tenuta, sono soltanto suggerimenti di resa: il ritorno al
+//! documento li ignora.
 //!
 //! Il testo di un tratto è quello del modello di WordCraft: `\n` è un a-capo
 //! nel paragrafo, `\t` una tabulazione, U+000C un salto pagina e U+000E un
@@ -18,9 +19,13 @@
 //! Ciò che l'host produce è sempre la versione 2 con lo schema corrente; ciò
 //! che la shell rimanda ha la versione e lo schema che aveva ricevuto.
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use wordcraft_doc::para::OBJ;
+use wordcraft_doc::graphic::{GraphicItem, GraphicKind};
+use wordcraft_doc::para::{NoteKind, Wrap, OBJ};
+use wordcraft_doc::section::SectionStart;
 
 use wordcraft_doc::props::{Highlight, LineSpacing, TextColor, Underline, VertAlign};
 use wordcraft_doc::{
@@ -29,12 +34,32 @@ use wordcraft_doc::{
 };
 
 use crate::RichError;
-use crate::{blob, running, stories};
+use crate::{blob, fresh, running, stories};
+
+/// L'immagine del file più pesante che la proiezione porta da vedere: oltre,
+/// la superficie ne mostra il segnaposto.
+pub const MAX_SHOWN_IMAGE_BYTES: usize = 4 * 1024 * 1024;
+/// Il peso di tutte le immagini da vedere di una proiezione, nell'ordine del
+/// testo: finito, le altre restano segnaposti. La proiezione è anche il testo
+/// del buffer e della bozza, e il base64 pesa quattro terzi dei byte.
+pub const MAX_SHOWN_BYTES: usize = 8 * 1024 * 1024;
+
+/// Il peso che le immagini da vedere possono ancora portare.
+type Budget = std::cell::Cell<usize>;
 
 /// Il nome del formato della proiezione.
 pub const FORMAT: &str = "fub-rich";
-/// La versione che questo crate scrive. Legge anche la 1.
-pub const VERSION: u32 = 2;
+/// La versione che questo crate scrive. Legge anche la 1, la 2 e la 3: la 3
+/// aggiunge alla 2 i segni di ciò che il codec non riscriverebbe senza
+/// perdite (`locked`, `body_only`), che il ritorno non legge; la 4 aggiunge
+/// alla 3 l'inchiostro e i disegni (`ink`, `drawing`, con `ink`, `svg` e
+/// `float` sugli oggetti).
+pub const VERSION: u32 = 4;
+/// L'SVG più pesante di un disegno che la proiezione porta da modificare.
+pub const MAX_SHOWN_SVG_BYTES: usize = 4 * 1024 * 1024;
+/// Il namespace della scena di FubDraw: un'immagine SVG che lo porta è un
+/// disegno che si modifica.
+pub const SCENE_NS: &str = "https://fubeo.github.io/ns/scene/1";
 pub use crate::blob::OPAQUE_SCHEMA;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -42,12 +67,21 @@ pub use crate::blob::OPAQUE_SCHEMA;
 pub struct Projection {
     pub format: String,
     pub version: u32,
-    /// Lo schema dei dati opachi: c'è nella versione 2, non nella 1.
+    /// Lo schema dei dati opachi: c'è dalla versione 2, non nella 1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opaque_schema: Option<u32>,
     /// Perché il documento non si modifica, quando non si modifica.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub readonly: Option<crate::ReadOnly>,
+    /// Con `readonly`, dove sta ciò che manca, quando ha un posto: l'elenco
+    /// di «Che cosa manca?». Il ritorno lo ignora.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing: Vec<Missing>,
+    /// Il codec non riscriverebbe senza perdite qualcosa fuori dal corpo: si
+    /// salvano soltanto i paragrafi e le tabelle del corpo, e il resto si
+    /// legge.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub body_only: bool,
     /// Registra le modifiche: ciò che si scrive diventa una revisione
     /// tracciata, e la shell la scrive come tale.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -62,6 +96,11 @@ pub struct Projection {
     /// loro ordine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub styles: Vec<ParaStyle>,
+    /// Suggerimento: il carattere e la dimensione che ogni ruolo dà al testo,
+    /// come li dà lo stile che il salvataggio gli scrive. Chi cambia il ruolo
+    /// di un paragrafo lo mostra subito come verrà.
+    #[serde(default, skip_serializing_if = "RoleLooks::is_plain")]
+    pub roles: RoleLooks,
     /// La pagina dell'ultima sezione, quella che nessun paragrafo chiude.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page: Option<Page>,
@@ -77,9 +116,38 @@ pub struct Projection {
     pub blocks: Vec<Block>,
 }
 
+/// Una voce di «Che cosa manca?»: che cosa, e il blocco del corpo in cui
+/// sta, quando sta in un blocco.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Missing {
+    pub what: MissingWhat,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub block: Option<usize>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MissingWhat {
+    /// Una revisione di formato, che la superficie non mostra.
+    Format,
+    /// Revisioni nelle intestazioni, nei piè di pagina, nelle note, nei
+    /// commenti o nelle caselle di testo.
+    Header,
+    Footer,
+    Note,
+    Comment,
+    TextBox,
+    /// Un blocco che la proiezione non riporta identico; senza blocco, il
+    /// corpo intero.
+    Changed,
+    /// Qualcosa fuori dal corpo, senza un posto da indicare.
+    Outside,
+}
+
 /// La pagina di una sezione, in punti: i lati (già scambiati se è
 /// orizzontale), i margini e le colonne, di uguale larghezza quando la shell
-/// ne cambia il numero.
+/// ne cambia il numero, e dove comincia la sezione.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Page {
@@ -91,6 +159,48 @@ pub struct Page {
     pub right: f32,
     #[serde(default = "one_column", skip_serializing_if = "is_one_column")]
     pub cols: u32,
+    #[serde(default, skip_serializing_if = "SectionBegin::is_next_page")]
+    pub start: SectionBegin,
+}
+
+/// Dove comincia una sezione, come la fine della sezione prima lo dice in
+/// Word: a pagina nuova, di seguito, alla pagina pari o dispari, alla colonna
+/// dopo.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SectionBegin {
+    #[default]
+    NextPage,
+    Continuous,
+    EvenPage,
+    OddPage,
+    NextColumn,
+}
+
+impl SectionBegin {
+    fn is_next_page(&self) -> bool {
+        *self == SectionBegin::NextPage
+    }
+
+    fn of(start: SectionStart) -> SectionBegin {
+        match start {
+            SectionStart::NextPage => SectionBegin::NextPage,
+            SectionStart::Continuous => SectionBegin::Continuous,
+            SectionStart::EvenPage => SectionBegin::EvenPage,
+            SectionStart::OddPage => SectionBegin::OddPage,
+            SectionStart::NextColumn => SectionBegin::NextColumn,
+        }
+    }
+
+    fn start(self) -> SectionStart {
+        match self {
+            SectionBegin::NextPage => SectionStart::NextPage,
+            SectionBegin::Continuous => SectionStart::Continuous,
+            SectionBegin::EvenPage => SectionStart::EvenPage,
+            SectionBegin::OddPage => SectionStart::OddPage,
+            SectionBegin::NextColumn => SectionStart::NextColumn,
+        }
+    }
 }
 
 fn one_column() -> u32 {
@@ -119,6 +229,7 @@ impl Page {
             left: section.margin_left,
             right: section.margin_right,
             cols: section.columns.count.max(1),
+            start: SectionBegin::of(section.start),
         }
     }
 
@@ -144,6 +255,7 @@ impl Page {
             left: twips(self.left),
             right: twips(self.right),
             cols: self.cols,
+            start: self.start,
         }
     }
 
@@ -182,6 +294,7 @@ impl Page {
             section.columns.count = self.cols;
             section.columns.widths.clear();
         }
+        section.start = self.start.start();
         Ok(())
     }
 }
@@ -261,6 +374,9 @@ pub struct ParaStyle {
     /// Il carattere e la dimensione del suo testo.
     #[serde(default, skip_serializing_if = "Look::is_plain")]
     pub f: Look,
+    /// L'allineamento che dà al paragrafo; nessuno è a sinistra.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub align: Option<Align>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -274,6 +390,10 @@ pub enum Block {
 #[serde(deny_unknown_fields)]
 pub struct Para {
     pub role: Role,
+    /// Il codec non riscriverebbe il blocco senza perdite: resta i byte del
+    /// file, e la shell non lo modifica ([`crate::preservation`]).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
     /// L'allineamento risolto, stile compreso; assente a sinistra.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub align: Option<Align>,
@@ -355,6 +475,88 @@ pub struct Look {
 impl Look {
     pub fn is_plain(&self) -> bool {
         *self == Look::default()
+    }
+}
+
+/// L'aspetto del testo di ogni ruolo che non è il corpo: per il corpo vale
+/// [`Projection::f`], o quello del suo stile.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoleLooks {
+    /// I titoli, dal livello 1. Un livello vuoto, o oltre la fine, è uno che
+    /// il codec non sa dire.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub h: Vec<Look>,
+    #[serde(default, skip_serializing_if = "Look::is_plain")]
+    pub quote: Look,
+    #[serde(default, skip_serializing_if = "Look::is_plain")]
+    pub list: Look,
+    /// L'allineamento che lo stile di ogni ruolo dà al paragrafo.
+    #[serde(default, skip_serializing_if = "RoleAligns::is_plain")]
+    pub align: RoleAligns,
+}
+
+impl RoleLooks {
+    /// Senza i livelli vuoti in fondo, così da rileggersi uguale.
+    pub fn new(mut h: Vec<Look>, quote: Look, list: Look) -> Self {
+        while h.last().is_some_and(Look::is_plain) {
+            h.pop();
+        }
+        RoleLooks {
+            h,
+            quote,
+            list,
+            align: RoleAligns::default(),
+        }
+    }
+
+    pub fn with_align(self, align: RoleAligns) -> Self {
+        RoleLooks { align, ..self }
+    }
+
+    pub fn is_plain(&self) -> bool {
+        *self == RoleLooks::default()
+    }
+}
+
+/// L'allineamento che lo stile di ogni ruolo dà al paragrafo, compreso il
+/// corpo senza stile; nessuno è a sinistra. Chi cambia ruolo o stile a un
+/// paragrafo che seguiva lo stile di prima gli dà quello del nuovo.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoleAligns {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<Align>,
+    /// I titoli, dal livello 1; oltre la fine, a sinistra.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub h: Vec<Option<Align>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quote: Option<Align>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub list: Option<Align>,
+}
+
+impl RoleAligns {
+    /// Senza i livelli a sinistra in fondo, così da rileggersi uguale.
+    pub fn new(
+        body: Option<Align>,
+        mut h: Vec<Option<Align>>,
+        quote: Option<Align>,
+        list: Option<Align>,
+    ) -> Self {
+        while h.last().is_some_and(Option::is_none) {
+            h.pop();
+        }
+        RoleAligns {
+            body,
+            h,
+            quote,
+            list,
+        }
+    }
+
+    pub fn is_plain(&self) -> bool {
+        *self == RoleAligns::default()
     }
 }
 
@@ -505,7 +707,10 @@ pub enum Inline {
         w: Option<f32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         h: Option<f32>,
-        /// I byte di un'immagine nuova (PNG, JPEG o GIF), in base64.
+        /// I byte di un'immagine nuova (PNG, JPEG o GIF), in base64. In
+        /// un'immagine tenuta sono da vedere, quando il file la porta in uno
+        /// di quei formati ed entro [`MAX_SHOWN_IMAGE_BYTES`]: il ritorno al
+        /// documento li ignora.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         data: Option<String>,
         /// Il testo di una nota nuova.
@@ -523,12 +728,74 @@ pub enum Inline {
         /// ciò che lo descrive, in uno che c'è già è un suggerimento.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         comment: Option<Anchor>,
+        /// I tratti di un inchiostro (`ink`): in uno nuovo sono ciò che il
+        /// formato scrive, in uno tenuto sono da leggere e da modificare,
+        /// quando il file li porta in InkML che si legge (versione 4).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ink: Option<InkShape>,
+        /// L'SVG di un disegno (`drawing`): in uno nuovo è ciò che il formato
+        /// scrive, con `data` come immagine di ripiego; in uno tenuto è da
+        /// modificare (versione 4).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        svg: Option<String>,
+        /// Dove sta un oggetto che non è in linea col testo (versione 4).
+        /// Assente, in linea. Cambiarlo in un oggetto tenuto lo sposta.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        float: Option<Place>,
         /// Un oggetto inserito o eliminato con le revisioni tracciate.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ins: Option<Rev>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         del: Option<Rev>,
     },
+}
+
+/// I tratti di un inchiostro, in punti dall'angolo in alto a sinistra
+/// dell'oggetto.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InkShape {
+    pub strokes: Vec<InkLine>,
+}
+
+/// Un tratto: colore, spessore, i punti `x, y` uno dopo l'altro e, se la
+/// penna la dà, la pressione di ognuno da 0 a 1.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InkLine {
+    /// `#rrggbb`.
+    pub color: String,
+    pub width: f32,
+    /// Un evidenziatore: trasparente, sotto il testo.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hl: bool,
+    pub xy: Vec<f32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub p: Vec<f32>,
+    /// La penna di Fub (`ballpoint`, `fountain`…), se non è quella di serie.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pen: Option<String>,
+}
+
+/// Dove sta un oggetto fuori dal testo: come il testo gli gira attorno, e a
+/// che distanza in punti dal margine sinistro della colonna e dall'inizio
+/// del paragrafo in cui è ancorato.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Place {
+    pub wrap: PlaceWrap,
+    pub x: f32,
+    pub y: f32,
+}
+
+/// Come il testo gira attorno a un oggetto. «Stretto», «Attraverso» e
+/// «Sopra e sotto» di Word si mostrano come `square`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaceWrap {
+    Square,
+    Front,
+    Behind,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -561,6 +828,9 @@ pub enum AtomKind {
     Image,
     Graphic,
     Shape,
+    /// Una forma che porta testo: la casella di testo di Word, il
+    /// `draw:text-box` di OpenDocument.
+    TextBox,
     Group,
     Field,
     Note,
@@ -568,6 +838,11 @@ pub enum AtomKind {
     Ruby,
     Opaque,
     Marker,
+    /// Un inchiostro: quello di Word, o uno scritto qui (versione 4).
+    Ink,
+    /// Un disegno di FubDraw: un'immagine SVG con il PNG di ripiego
+    /// (versione 4).
+    Drawing,
 }
 
 impl AtomKind {
@@ -579,6 +854,9 @@ impl AtomKind {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Table {
+    /// Come [`Para::locked`].
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
     /// La tabella senza righe, opaca. Assente in una tabella nuova, che il
     /// formato scrive con le sue proprietà predefinite.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -658,27 +936,67 @@ impl SectKeep {
 }
 
 impl Projection {
-    /// Legge una proiezione dal JSON della shell.
-    pub fn from_json(json: &str) -> Result<Projection, RichError> {
-        let projection: Projection =
-            serde_json::from_str(json).map_err(|error| RichError::Malformed(error.to_string()))?;
-        if projection.format != FORMAT {
-            return Err(RichError::Malformed(format!(
-                "format {:?}",
-                projection.format
-            )));
+    /// Segna ciò che il codec non riscriverebbe senza perdite: i blocchi
+    /// `locked` del corpo e, se il pacchetto non si riscrive intero
+    /// (`whole`), tutto ciò che sta fuori dal corpo ([`Projection::body_only`]).
+    /// Il ritorno non legge i segni: il salvataggio li ricava di nuovo dai
+    /// byte del file.
+    pub(crate) fn close(&mut self, locked: &BTreeSet<usize>, whole: bool) {
+        for &at in locked {
+            match self.blocks.get_mut(at) {
+                Some(Block::Para(para)) => para.locked = true,
+                Some(Block::Table(table)) => table.locked = true,
+                None => {}
+            }
         }
-        let schema = match (projection.version, projection.opaque_schema) {
+        self.body_only = !whole;
+    }
+
+    /// Gli indici dei blocchi che la proiezione segna chiusi.
+    pub(crate) fn locked(&self) -> Vec<usize> {
+        let locked = |block: &Block| match block {
+            Block::Para(para) => para.locked,
+            Block::Table(table) => table.locked,
+        };
+        self.blocks
+            .iter()
+            .enumerate()
+            .filter(|(_, block)| locked(block))
+            .map(|(at, _)| at)
+            .collect()
+    }
+
+    /// Legge una proiezione dal JSON della shell.
+    ///
+    /// Il formato, la versione e lo schema dei dati opachi si leggono prima
+    /// del resto: una proiezione di un Fub più nuovo, con campi che questo non
+    /// conosce, è una versione o uno schema non supportati
+    /// ([`RichError::Version`], [`RichError::OpaqueSchema`]), non una
+    /// proiezione malformata.
+    pub fn from_json(json: &str) -> Result<Projection, RichError> {
+        #[derive(Deserialize)]
+        struct Head {
+            format: String,
+            version: u32,
+            #[serde(default)]
+            opaque_schema: Option<u32>,
+        }
+        let head: Head =
+            serde_json::from_str(json).map_err(|error| RichError::Malformed(error.to_string()))?;
+        if head.format != FORMAT {
+            return Err(RichError::Malformed(format!("format {:?}", head.format)));
+        }
+        let schema = match (head.version, head.opaque_schema) {
             (1, None) => 0,
             (1, Some(_)) => return Err(RichError::Malformed("opaque_schema in version 1".into())),
-            (2, Some(schema)) => schema,
-            (2, None) => return Err(RichError::Malformed("missing opaque_schema".into())),
+            (2..=4, Some(schema)) => schema,
+            (2..=4, None) => return Err(RichError::Malformed("missing opaque_schema".into())),
             (version, _) => return Err(RichError::Version(version)),
         };
         if !blob::readable(schema) {
             return Err(RichError::OpaqueSchema(schema));
         }
-        Ok(projection)
+        serde_json::from_str(json).map_err(|error| RichError::Malformed(error.to_string()))
     }
 
     /// Lo schema dei dati opachi di una proiezione già letta.
@@ -695,7 +1013,11 @@ impl Projection {
 /// (`Document::normalize_runs`): due tratti uguali vicini sono uno solo, come
 /// la superficie li mostra.
 pub(crate) fn project(document: &Document) -> Result<Projection, RichError> {
-    let blocks = blocks(document, &document.body)?;
+    let blocks = blocks(
+        document,
+        &document.body,
+        &std::cell::Cell::new(MAX_SHOWN_BYTES),
+    )?;
     let mut used = BTreeSet::new();
     used_styles(&blocks, &mut used);
     Ok(Projection {
@@ -703,10 +1025,13 @@ pub(crate) fn project(document: &Document) -> Result<Projection, RichError> {
         version: VERSION,
         opaque_schema: Some(OPAQUE_SCHEMA),
         readonly: None,
+        missing: Vec::new(),
+        body_only: false,
         track: document.settings.track_changes,
         lang: document.styles.default_chr.lang.clone(),
         f: base(&document.styles, None),
         styles: gallery(document, &used),
+        roles: role_looks(document),
         page: Some(Page::of(&document.last_section)),
         header: running::of(document, document.last_section.headers.default),
         footer: running::of(document, document.last_section.footers.default),
@@ -787,8 +1112,49 @@ fn gallery(document: &Document, used: &BTreeSet<String>) -> Vec<ParaStyle> {
                 s.name.clone()
             },
             f: base(styles, Some(&s.id)),
+            align: align(styles, &styled(&s.id)),
         })
         .collect()
+}
+
+/// Le proprietà di un paragrafo che ha soltanto lo stile `id`.
+fn styled(id: &str) -> ParaProps {
+    ParaProps {
+        style: Some(id.to_string()),
+        ..ParaProps::default()
+    }
+}
+
+/// L'aspetto di ogni ruolo, dagli stili che il salvataggio gli darebbe: quelli
+/// del documento, o quelli di WordCraft che gli aggiungerebbe.
+fn role_looks(document: &Document) -> RoleLooks {
+    use crate::unproject::{builtin_style, heading_style};
+    let mut styles = document.styles.clone();
+    let look = |id: Option<String>, styles: &StyleSheet| {
+        id.map(|id| base(styles, Some(&id))).unwrap_or_default()
+    };
+    let aligned = |id: &Option<String>, styles: &StyleSheet| {
+        id.as_deref().and_then(|id| align(styles, &styled(id)))
+    };
+    let (h, h_align): (Vec<_>, Vec<_>) = (1..=9)
+        .map(|level| {
+            let id = heading_style(&mut styles, level);
+            (look(id.clone(), &styles), aligned(&id, &styles))
+        })
+        .unzip();
+    let quote = builtin_style(&mut styles, "Quote");
+    let quote_align = aligned(&quote, &styles);
+    let quote = look(quote, &styles);
+    let list = builtin_style(&mut styles, "ListParagraph");
+    let list_align = aligned(&list, &styles);
+    let list = look(list, &styles);
+    let body = align(&styles, &ParaProps::default());
+    RoleLooks::new(h, quote, list).with_align(RoleAligns::new(
+        body,
+        h_align,
+        quote_align,
+        list_align,
+    ))
 }
 
 /// Uno stile che un paragrafo di corpo può avere: non il predefinito, e
@@ -817,16 +1183,22 @@ pub(crate) fn style_of(document: &Document, props: &ParaProps) -> Option<String>
         .map(str::to_string)
 }
 
-fn blocks(document: &Document, body: &[std::sync::Arc<WcBlock>]) -> Result<Vec<Block>, RichError> {
+/// I blocchi di `body`. `left` è il peso che le immagini da vedere possono
+/// ancora portare.
+fn blocks(
+    document: &Document,
+    body: &[std::sync::Arc<WcBlock>],
+    left: &Budget,
+) -> Result<Vec<Block>, RichError> {
     body.iter()
         .map(|block| match &**block {
-            WcBlock::Para(paragraph) => para(document, paragraph).map(Block::Para),
-            WcBlock::Table(table) => self::table(document, table).map(Block::Table),
+            WcBlock::Para(paragraph) => para(document, paragraph, left).map(Block::Para),
+            WcBlock::Table(table) => self::table(document, table, left).map(Block::Table),
         })
         .collect()
 }
 
-fn table(document: &Document, table: &WcTable) -> Result<Table, RichError> {
+fn table(document: &Document, table: &WcTable, left: &Budget) -> Result<Table, RichError> {
     let bare = WcTable {
         rows: Vec::new(),
         ..table.clone()
@@ -850,7 +1222,7 @@ fn table(document: &Document, table: &WcTable) -> Result<Table, RichError> {
                     Ok(Cell {
                         k: Some(blob::encode(&bare)?),
                         span: (cell.span() > 1).then_some(cell.span() as u32),
-                        blocks: blocks(document, &cell.blocks)?,
+                        blocks: blocks(document, &cell.blocks, left)?,
                     })
                 })
                 .collect::<Result<_, RichError>>()?;
@@ -861,12 +1233,13 @@ fn table(document: &Document, table: &WcTable) -> Result<Table, RichError> {
         })
         .collect::<Result<_, RichError>>()?;
     Ok(Table {
+        locked: false,
         k: Some(blob::encode(&bare)?),
         rows,
     })
 }
 
-fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
+fn para(document: &Document, paragraph: &Paragraph, left: &Budget) -> Result<Para, RichError> {
     let styles = &document.styles;
     let keep = ParaKeep {
         props: paragraph.props.clone(),
@@ -885,7 +1258,7 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
                 let object = objects.next().ok_or_else(|| {
                     RichError::Codec("paragraph has fewer objects than markers".into())
                 })?;
-                c.push(atom(document, props, object)?);
+                c.push(atom(document, props, object, left)?);
             }
             if !piece.is_empty() {
                 c.push(Inline::Text {
@@ -904,6 +1277,7 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
     let role = role(document, &paragraph.props);
     Ok(Para {
         role,
+        locked: false,
         align: align(styles, &paragraph.props),
         k: if empty {
             None
@@ -947,6 +1321,191 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
     })
 }
 
+/// I byte da vedere di un'immagine del file, in base64: soltanto PNG, JPEG o
+/// GIF, intera (un ritaglio disegnato per intero mentirebbe) ed entro i pesi.
+/// Chi scrive li ignora: l'immagine è quella tenuta in `k`.
+fn shown(document: &Document, object: &InlineObject, left: &Budget) -> Option<String> {
+    // Un inchiostro mostra la sua immagine di ripiego, quando c'è.
+    let (media, crop) = match object {
+        InlineObject::Image { media, crop, .. } => (media, *crop),
+        InlineObject::Graphic { graphic, .. } if graphic.kind == GraphicKind::Ink => {
+            match graphic.items.first() {
+                Some(GraphicItem::Image { media, .. }) => (media, [0.0; 4]),
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+    let bytes = document.media.get(media)?;
+    if crop.iter().any(|side| *side != 0.0)
+        || bytes.len() > MAX_SHOWN_IMAGE_BYTES
+        || bytes.len() > left.get()
+        || fresh::sniff(bytes).is_none()
+    {
+        return None;
+    }
+    left.set(left.get() - bytes.len());
+    Some(STANDARD.encode(&bytes[..]))
+}
+
+/// L'SVG di un disegno di FubDraw, quando l'immagine ne porta uno entro
+/// [`MAX_SHOWN_SVG_BYTES`].
+fn drawing_svg(document: &Document, object: &InlineObject) -> Option<String> {
+    let InlineObject::Image { media, crop, .. } = object else {
+        return None;
+    };
+    if crop.iter().any(|side| *side != 0.0) {
+        return None;
+    }
+    let bytes = wordcraft_docx::ink::svg_of(document, media)?;
+    if bytes.len() > MAX_SHOWN_SVG_BYTES {
+        return None;
+    }
+    let text = std::str::from_utf8(bytes).ok()?;
+    text.contains(SCENE_NS).then(|| text.to_string())
+}
+
+/// I tratti di un inchiostro tenuto, quando il suo InkML si legge: in punti
+/// dall'angolo dell'oggetto, i tratti portati nella sua misura.
+fn ink_shape(document: &Document, object: &InlineObject, left: &Budget) -> Option<InkShape> {
+    let InlineObject::Graphic { w, h, graphic, .. } = object else {
+        return None;
+    };
+    let bytes = wordcraft_docx::ink::ink_markup(document, graphic)?;
+    if bytes.len() > left.get() {
+        return None;
+    }
+    let ink = fub_ink::inkml::from_inkml(std::str::from_utf8(bytes).ok()?).ok()?;
+    left.set(left.get() - bytes.len());
+    Some(InkShape::fitted(&ink, *w, *h))
+}
+
+impl InkShape {
+    /// I tratti di `ink` portati in un riquadro `w` × `h` dall'angolo in alto
+    /// a sinistra, senza deformarli.
+    pub fn fitted(ink: &fub_ink::inkml::InkDocument, w: f32, h: f32) -> InkShape {
+        let points = ink.strokes.iter().flat_map(|stroke| stroke.samples.iter());
+        let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        for sample in points {
+            x0 = x0.min(sample.x);
+            y0 = y0.min(sample.y);
+            x1 = x1.max(sample.x);
+            y1 = y1.max(sample.y);
+        }
+        let (bw, bh) = ((x1 - x0).max(1e-6), (y1 - y0).max(1e-6));
+        // Un riquadro vuoto o fuori misura lascia i tratti nella loro scala.
+        let scale = if x0 <= x1 && w > 0.0 && h > 0.0 {
+            (f64::from(w) / bw).min(f64::from(h) / bh).min(1.0)
+        } else {
+            1.0
+        };
+        let (x0, y0) = if x0 <= x1 { (x0, y0) } else { (0.0, 0.0) };
+        InkShape {
+            strokes: ink
+                .strokes
+                .iter()
+                .map(|stroke| InkLine {
+                    color: stroke.brush.color.clone(),
+                    width: (stroke.brush.width * scale) as f32,
+                    hl: stroke.brush.highlighter,
+                    pen: if stroke.brush.highlighter {
+                        None
+                    } else {
+                        stroke.brush.pen.clone()
+                    },
+                    xy: stroke
+                        .samples
+                        .iter()
+                        .flat_map(|s| [((s.x - x0) * scale) as f32, ((s.y - y0) * scale) as f32])
+                        .collect(),
+                    p: if stroke.samples.iter().all(|s| s.p.is_some()) {
+                        stroke
+                            .samples
+                            .iter()
+                            .map(|s| s.p.unwrap_or(0.5) as f32)
+                            .collect()
+                    } else {
+                        Vec::new()
+                    },
+                })
+                .collect(),
+        }
+    }
+
+    /// Lo stesso inchiostro per InkML.
+    pub fn to_ink(&self) -> fub_ink::inkml::InkDocument {
+        fub_ink::inkml::InkDocument {
+            strokes: self
+                .strokes
+                .iter()
+                .map(|line| fub_ink::inkml::InkStroke {
+                    brush: line.brush(),
+                    samples: line
+                        .xy
+                        .chunks_exact(2)
+                        .enumerate()
+                        .map(|(i, xy)| fub_ink::sample::Sample {
+                            x: f64::from(xy[0]),
+                            y: f64::from(xy[1]),
+                            p: line.p.get(i).map(|p| f64::from(*p)),
+                            t: i as f64 * 8.0,
+                            tilt: None,
+                        })
+                        .collect(),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl InkLine {
+    /// Il pennello InkML del tratto. La penna di Fub diventa ciò che Word sa
+    /// fare: la Calligrafia una punta rettangolare dritta, alta quanto il suo
+    /// taglio (angolo e fissità si perdono); il Pennarello uno spessore che
+    /// non segue la pressione. Il nome della penna viaggia in `fubPen`.
+    pub fn brush(&self) -> fub_ink::inkml::InkBrush {
+        let width = f64::from(self.width);
+        let pen = if self.hl { None } else { self.pen.as_deref() };
+        let calligraphy = pen == Some("calligraphy");
+        fub_ink::inkml::InkBrush {
+            color: self.color.clone(),
+            width,
+            height: if calligraphy { width.min(1.0) } else { width },
+            tip: if self.hl || calligraphy {
+                fub_ink::inkml::InkTip::Rectangle
+            } else {
+                fub_ink::inkml::InkTip::Ellipse
+            },
+            highlighter: self.hl,
+            transparency: if self.hl { 128 } else { 0 },
+            ignore_pressure: pen == Some("marker"),
+            pen: pen.map(str::to_owned),
+        }
+    }
+}
+
+/// Dove sta un oggetto fuori dal testo, come la proiezione lo mostra.
+pub(crate) fn place_of(object: &InlineObject) -> Option<Place> {
+    let float = match object {
+        InlineObject::Image { float, .. }
+        | InlineObject::Graphic { float, .. }
+        | InlineObject::Shape { float, .. }
+        | InlineObject::Group { float, .. } => float,
+        _ => return None,
+    };
+    let wrap = match float.wrap {
+        Wrap::Inline => return None,
+        Wrap::InFrontOfText => PlaceWrap::Front,
+        Wrap::BehindText => PlaceWrap::Behind,
+        _ => PlaceWrap::Square,
+    };
+    Some(Place {
+        wrap,
+        x: float.x,
+        y: float.y,
+    })
+}
+
 /// La revisione `index` del documento, come la proiezione la mostra.
 fn rev(document: &Document, index: Option<u32>) -> Option<Rev> {
     let revision = document.revisions.get(index? as usize)?;
@@ -961,11 +1520,26 @@ fn atom(
     document: &Document,
     props: &CharProps,
     object: &InlineObject,
+    left: &Budget,
 ) -> Result<Inline, RichError> {
     let (kind, label, size) = match object {
+        InlineObject::Image { w, h, alt, .. } if drawing_svg(document, object).is_some() => {
+            (AtomKind::Drawing, alt.clone(), Some((*w, *h)))
+        }
         InlineObject::Image { w, h, alt, .. } => (AtomKind::Image, alt.clone(), Some((*w, *h))),
+        InlineObject::Graphic {
+            w, h, alt, graphic, ..
+        } if graphic.kind == GraphicKind::Ink => (AtomKind::Ink, alt.clone(), Some((*w, *h))),
         InlineObject::Graphic { w, h, alt, .. } => (AtomKind::Graphic, alt.clone(), Some((*w, *h))),
-        InlineObject::Shape { w, h, .. } => (AtomKind::Shape, String::new(), Some((*w, *h))),
+        InlineObject::Shape { w, h, story, .. } => (
+            if story.is_some() {
+                AtomKind::TextBox
+            } else {
+                AtomKind::Shape
+            },
+            String::new(),
+            Some((*w, *h)),
+        ),
         InlineObject::Group { w, h, .. } => (AtomKind::Group, String::new(), Some((*w, *h))),
         InlineObject::Field { result, .. } => (AtomKind::Field, result.clone(), None),
         InlineObject::NoteRef { custom, .. } => (AtomKind::Note, custom.clone(), None),
@@ -974,6 +1548,22 @@ fn atom(
         InlineObject::Opaque { text, .. } => (AtomKind::Opaque, text.clone(), None),
         other if other.is_marker() => (AtomKind::Marker, String::new(), None),
         _ => (AtomKind::Opaque, object.plain_text().to_string(), None),
+    };
+    // Una nota tenuta dice, da leggere, il suo testo e se è di chiusura: la
+    // superficie la numera e la mostra al passaggio. Chi scrive li ignora.
+    let (note, end) = match object {
+        InlineObject::NoteRef { kind, id, .. } => (
+            document.parts.get(id).map(|part| {
+                part.blocks
+                    .iter()
+                    .filter_map(|block| block.as_para())
+                    .map(|paragraph| paragraph.plain_text().to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }),
+            *kind == NoteKind::Endnote,
+        ),
+        _ => (None, false),
     };
     Ok(Inline::Atom {
         k: Some(blob::encode(&AtomKeep {
@@ -985,10 +1575,22 @@ fn atom(
         label,
         w: size.map(|(w, _)| w),
         h: size.map(|(_, h)| h),
-        data: None,
-        note: None,
-        end: false,
+        data: shown(document, object, left),
+        note,
+        end,
         toc: None,
+        ink: kind
+            .eq(&AtomKind::Ink)
+            .then(|| ink_shape(document, object, left))
+            .flatten(),
+        svg: drawing_svg(document, object).and_then(|svg| {
+            let fits = svg.len() <= left.get();
+            fits.then(|| {
+                left.set(left.get() - svg.len());
+                svg
+            })
+        }),
+        float: place_of(object),
         comment: match object {
             InlineObject::CommentStart { id } => Some(Anchor {
                 id: *id,
@@ -1172,4 +1774,111 @@ pub(crate) fn is_quote(styles: &StyleSheet, style: Option<&str>) -> bool {
                 || matches!(s.name.as_str(), "Quote" | "Intense Quote")
         })
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+
+    fn image(media: &str, crop: [f32; 4]) -> InlineObject {
+        InlineObject::Image {
+            media: media.into(),
+            w: 12.0,
+            h: 12.0,
+            alt: String::new(),
+            float: Default::default(),
+            crop,
+            ole: None,
+        }
+    }
+
+    #[test]
+    fn ogni_ruolo_ha_l_aspetto_dello_stile_che_il_salvataggio_gli_scrive() {
+        let mut document = Document::default();
+        let plain = base(&document.styles, None);
+        // Il titolo 1 del documento è suo; gli altri sono quelli che
+        // WordCraft aggiungerebbe.
+        let mut styles = document.styles.clone();
+        let id = crate::unproject::heading_style(&mut styles, 1).unwrap();
+        let mut own = styles.get(&id).unwrap().clone();
+        own.chr.size = Some(31.0);
+        document.styles = styles;
+        document.styles.styles.retain(|s| s.id != id);
+        document.styles.styles.push(own);
+        let roles = role_looks(&document);
+        assert_eq!(roles.h[0].size, Some(31.0), "lo stile del documento");
+        let mut builtin = StyleSheet::default();
+        let h2 = crate::unproject::heading_style(&mut builtin, 2).unwrap();
+        assert_eq!(
+            roles.h[1],
+            base(&builtin, Some(&h2)),
+            "quello che si aggiungerebbe"
+        );
+        assert_ne!(roles.h[1], plain, "un titolo non ha la misura del testo");
+        // Si rilegge uguale: i livelli vuoti in fondo non ci sono.
+        let json = serde_json::to_string(&roles).unwrap();
+        assert_eq!(serde_json::from_str::<RoleLooks>(&json).unwrap(), roles);
+        assert!(RoleLooks::new(vec![Look::default()], Look::default(), Look::default()).is_plain());
+        // La citazione di WordCraft è centrata, il corpo e i titoli no.
+        assert_eq!(
+            roles.align,
+            RoleAligns {
+                quote: Some(Align::Center),
+                ..RoleAligns::default()
+            }
+        );
+        assert!(RoleAligns::new(None, vec![None, None], None, None).is_plain());
+    }
+
+    fn document(media: &[(&str, Vec<u8>)]) -> Document {
+        let mut document = Document::default();
+        for (key, bytes) in media {
+            document
+                .media
+                .insert((*key).into(), Arc::new(bytes.clone()));
+        }
+        document
+    }
+
+    #[test]
+    fn un_immagine_intera_png_si_vede_e_consuma_il_suo_peso() {
+        let document = document(&[("a.png", PNG.to_vec())]);
+        let left = Budget::new(100);
+        assert_eq!(
+            shown(&document, &image("a.png", [0.0; 4]), &left),
+            Some(STANDARD.encode(PNG))
+        );
+        assert_eq!(left.get(), 100 - PNG.len());
+    }
+
+    #[test]
+    fn ritagliata_sconosciuta_mancante_o_troppo_pesante_resta_un_segnaposto() {
+        let mut big = PNG.to_vec();
+        big.resize(MAX_SHOWN_IMAGE_BYTES + 1, 0);
+        let document = document(&[
+            ("a.png", PNG.to_vec()),
+            ("b.emf", b"\x01\0\0\0EMF".to_vec()),
+            ("c.png", big),
+        ]);
+        let left = Budget::new(MAX_SHOWN_BYTES);
+        assert_eq!(
+            shown(&document, &image("a.png", [0.1, 0.0, 0.0, 0.0]), &left),
+            None
+        );
+        assert_eq!(shown(&document, &image("b.emf", [0.0; 4]), &left), None);
+        assert_eq!(shown(&document, &image("manca.png", [0.0; 4]), &left), None);
+        assert_eq!(shown(&document, &image("c.png", [0.0; 4]), &left), None);
+        assert_eq!(left.get(), MAX_SHOWN_BYTES);
+    }
+
+    #[test]
+    fn finito_il_peso_le_altre_immagini_restano_segnaposti() {
+        let document = document(&[("a.png", PNG.to_vec())]);
+        let left = Budget::new(PNG.len() + 1);
+        assert!(shown(&document, &image("a.png", [0.0; 4]), &left).is_some());
+        assert_eq!(shown(&document, &image("a.png", [0.0; 4]), &left), None);
+    }
 }

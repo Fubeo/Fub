@@ -35,7 +35,7 @@ describe("touchDialog", () => {
   it("mostra i gesti e le tre manopole coi loro valori, col fuoco sul primo gesto", () => {
     void touchDialog(CHOICE);
     expect(dialog().querySelector("h2")!.textContent).toBe("Penna e dita");
-    expect([...dialog().querySelectorAll("legend")].map((legend) => legend.textContent)).toEqual(["Dita", "Pressione della penna", "Stabilizzatore"]);
+    expect([...dialog().querySelectorAll("legend")].map((legend) => legend.textContent)).toEqual(["Dita", "Pressione della penna", "Stabilizzatore", "I tasti della penna"]);
     const checks = [...dialog().querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
     expect(checks.map((check) => check.checked)).toEqual([true, false, false]);
     // Senza levigatura la corda non conta, e lo dice.
@@ -75,7 +75,7 @@ describe("touchDialog", () => {
     expect(document.activeElement).toBe(knobs()[0]);
     slide(knobs()[2]!, 75);
     submit();
-    expect(await answer).toEqual({ twist: true, taps: false, pen: { soft: 0, min: 0, full: 0.75 }, steady: { amount: 0, string: false } });
+    expect(await answer).toEqual({ twist: true, taps: false, pen: { soft: 0, min: 0, full: 0.75 }, steady: { amount: 0, string: false }, barrel: "radial" });
   });
 
   it("lo stabilizzatore parte da quello scelto e torna con la levigatura e la corda", async () => {

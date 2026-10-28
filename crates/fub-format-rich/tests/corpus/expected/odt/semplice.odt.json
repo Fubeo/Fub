@@ -3,7 +3,7 @@
   "sha256": "c6d46f25a8dda1f39411b763fd20c684c294dbae0fe38feef4a2271a987fbb8c",
   "open": {
     "readonly": null,
-    "projection": "b7d968fbeb8164697861b2f45003a0f87261459af4725e51af39a15bc56dee1f",
+    "projection": "e0cc56d30a2c7e0e19463f7db19056b30aa3b2b0fbd2d7ca249de5ad3ba38518",
     "blocks": 5,
     "comments": 0
   },
@@ -57,6 +57,12 @@
       "error": "codec",
       "message": "rich codec: odt: comments are not written"
     },
-    "E5": "n/a"
+    "E5": "n/a",
+    "E6": "n/a",
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "different"
+    }
   }
 }

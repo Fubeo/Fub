@@ -44,8 +44,11 @@ mostrate.
    documento voluto.
 5. La superficie è una famiglia propria della shell (`rich`, ProseMirror,
    caricata in un chunk separato) che riusa `EditorSurface`, le azioni
-   dell'editor con gli id esistenti, la barra di formattazione e il client del
-   correttore.
+   dell'editor con gli id esistenti e il client del correttore. I comandi
+   stanno nella barra multifunzione del kit (`kit/ribbon/`), la stessa del
+   foglio di calcolo, con le schede di Word: la superficie la dichiara
+   (`ownBar`) e la barra di formattazione della shell non si mostra sopra; la
+   bolla della selezione e l'intento `fub.editor.action` restano.
 
 ## Conseguenze
 

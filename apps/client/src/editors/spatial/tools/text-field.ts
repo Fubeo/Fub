@@ -2,17 +2,20 @@
 // i pezzi del testo come si vedranno, e ciò che si scrive, si cancella e si
 // formatta.
 //
-// - **Un campo modificabile, non un'area di testo**: un `div` con
-//   `contenteditable`, un blocco per riga e un elemento per pezzo, ciascuno
-//   col suo carattere, il suo corpo, il suo colore e le sue linee. Il campo
-//   sta sopra il testo, che resta nascosto, e le righe scendono quanto i
-//   loro `dy`: ogni linea di base cade dove il file la mette.
-// - **Il campo scrive nel modello, e il modello nel DOM** (`rich.ts`): ciò
-//   che si sa fare da un `beforeinput` — scrivere, andare a capo, incollare,
-//   cancellare, annullare, formattare — cambia il modello, e il campo si
-//   ridisegna col cursore al suo posto. Ciò che si compone con un metodo
-//   d'immissione, come un accento composto o il giapponese, lo fa il
-//   browser, e il campo lo rilegge quando la composizione finisce.
+// - **Un campo di Scrittura**: la vista del profilo a righe
+//   (`scrittura/profiles/line-writer.ts`), con un blocco per riga e un
+//   elemento per pezzo, ciascuno col suo carattere, il suo corpo, il suo
+//   colore e le sue linee. Il campo sta sopra il testo, che resta nascosto, e
+//   le righe scendono quanto i loro `dy`: ogni linea di base cade dove il file
+//   la mette. Scrittura è un pezzo pigro (`writing.ts`): arriva dopo il
+//   montaggio, e se non arriva il campo lo dice e il testo resta com'è.
+// - **Il campo scrive nel modello, e il modello nella vista** (`rich.ts`):
+//   ciò che si sa fare da un `beforeinput` — scrivere, andare a capo,
+//   incollare, cancellare, annullare, formattare — cambia il modello, e il
+//   campo si ridisegna col cursore al suo posto. Ciò che si compone con un
+//   metodo d'immissione, come un accento composto o il giapponese, lo fa il
+//   browser con la vista, e il campo lo rilegge quando la composizione
+//   finisce.
 // - **Incollare incolla il testo**, con lo stile di dove arriva.
 // - **Annulla e ripeti sono del campo**, mentre si scrive: le battute di
 //   seguito sono un passo solo. Chiuso il campo, tutto ciò che si è fatto
@@ -29,6 +32,7 @@
 //   capo, e ciò che si incolla sta sulla riga.
 
 import type { Lifetime } from "../../../ui/lifetime";
+import type { LineWriter } from "../../../scrittura/profiles/line-writer";
 import { fubLiveFamily } from "../fonts/faces";
 import { length, letterSpacing, nonNegativeLength, paintReference, trim } from "../scene/values";
 import { t, type DrawKey } from "../strings";
@@ -44,6 +48,7 @@ import {
   lineText,
   newLeading,
   ordered,
+  lookIn,
   ownLines,
   replaceRange,
   restyleWhole,
@@ -54,12 +59,13 @@ import {
   styleAt,
   type Attrs,
   type Caret,
+  type RichLook,
   type Emphasis,
   type Rich,
-  type Span,
 } from "./rich";
 import { LINE_SPACING } from "./text";
 import { reflow } from "./wrap";
+import { loadWriting, writingLoaded } from "./writing";
 
 /// Ciò che il campo chiede all'editor.
 export interface TextFieldOptions {
@@ -72,6 +78,9 @@ export interface TextFieldOptions {
   /// La `font-family` da dare al browser per quella scritta: le famiglie del
   /// disegno. Senza, le sole famiglie di Fub.
   readonly family?: (value: string) => string;
+  /// La scelta o ciò che si scriverà ha cambiato aspetto (`look`), senza che
+  /// cambiasse il testo.
+  onLook?(): void;
 }
 
 /// Le misure del campo disegnato, in pixel dello schermo.
@@ -123,6 +132,29 @@ export interface TextField {
   restyleWhole(name: string, value: string): void;
   /// Il cursore alla fine del testo.
   toEnd(): void;
+  /// L'aspetto di ciò che è scelto, o di ciò che si scriverà.
+  look(): RichLook;
+  /// Ridà il fuoco al campo, con la sua scelta.
+  focus(): void;
+  /// Segna i tratti `marks`, come il correttore, al posto di quelli di prima.
+  /// Il testo che cambia li toglie.
+  mark(marks: readonly FieldMark[]): void;
+  /// Il punto sotto le coordinate della finestra; `null` fuori dal testo.
+  caretAtPoint(x: number, y: number): Caret | null;
+  /// Il cursore, o il capo della scelta.
+  caret(): Caret;
+  /// Scrive `text` al posto di `from..to` di una riga, come una battuta, se
+  /// lì c'è ancora `expected`: un menu rimasto aperto su un testo cambiato
+  /// non scrive niente.
+  replace(from: Caret, to: Caret, expected: string, text: string): boolean;
+}
+
+/// Un tratto segnato del campo, da `from` a `to` nella stessa riga.
+export interface FieldMark {
+  readonly from: Caret;
+  readonly to: Caret;
+  readonly className: string;
+  readonly title?: string;
 }
 
 /// Ciò che si scriverà al cursore, cambiato prima di scriverlo.
@@ -238,23 +270,27 @@ function fieldColor(fill: string): string {
   return fallback === null || fallback === "none" ? "" : `#${fallback.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
-/// Lo stile CSS di `attrs`, scritto su `style` a `scale` pixel per unità,
-/// con la famiglia viva di `family`. Ciò che `attrs` non scrive si toglie, e
-/// il campo lo eredita.
-function paintCss(style: CSSStyleDeclaration, attrs: Attrs | null, lines: ReadonlySet<string> | null, scale: number, family: (value: string) => string): void {
+/// La variabile con i pixel per unità del testo, sul campo.
+const SCALE_VAR = "--draw-text-scale";
+
+/// Lo stile CSS di `attrs`, scritto su `style` a `scale` pixel per unità
+/// (`null`: quelli del campo, dalla sua variabile), con la famiglia viva di
+/// `family`. Ciò che `attrs` non scrive si toglie, e il campo lo eredita.
+function paintCss(style: CSSStyleDeclaration, attrs: Attrs | null, lines: ReadonlySet<string> | null, scale: number | null, family: (value: string) => string): void {
   const read = (name: string): string | undefined => attrs?.[name];
+  const pixels = (units: number): string => (scale === null ? `calc(var(${SCALE_VAR}) * ${units}px)` : `${units * scale}px`);
   const written = read("font-family");
   style.fontFamily = written === undefined ? "" : family(written);
   const size = read("font-size");
   const px = size === undefined ? null : nonNegativeLength(size);
-  style.fontSize = px === null ? "" : `${px * scale}px`;
+  style.fontSize = px === null ? "" : pixels(px);
   const weight = read("font-weight");
   style.fontWeight = weight === undefined ? "" : trim(weight);
   const italic = read("font-style");
   style.fontStyle = italic === undefined ? "" : trim(italic);
   const spacing = read("letter-spacing");
   const gap = spacing === undefined ? null : letterSpacing(spacing);
-  style.letterSpacing = gap === null ? "" : `${gap * scale}px`;
+  style.letterSpacing = gap === null ? "" : pixels(gap);
   const fill = read("fill");
   // Un colore che il campo non sa mostrare, come un gradiente senza
   // ripiego, lascia quello di chi lo contiene.
@@ -266,7 +302,8 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
   const family = options.family ?? fubLiveFamily;
   const element = document.createElement("div");
   element.className = "draw-text-input";
-  element.contentEditable = "true";
+  // Fino all'arrivo di Scrittura il campo non si scrive.
+  element.contentEditable = "false";
   element.spellcheck = true;
   element.setAttribute("role", "textbox");
   element.setAttribute("aria-multiline", "true");
@@ -278,11 +315,14 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
 
   const blank: Rich = { attrs: {}, inherited: {}, lines: [{ attrs: {}, spans: [] }] };
   let rich: Rich = blank;
-  /// Gli attributi di ogni riga e di ogni pezzo disegnati, per rileggerli.
-  const lineAttrs = new WeakMap<Element, Attrs>();
-  const pieceAttrs = new WeakMap<Element, Attrs>();
+  /// La vista di Scrittura, quando è arrivata.
+  let writer: LineWriter | null = null;
+  /// Vero dopo `open` e fino a `close`.
+  let opened = false;
   let scale = 1;
-  let composing = false;
+  /// Vero dall'inizio di una composizione fino a quando il campo la rilegge.
+  let composed = false;
+  const composing = (): boolean => writer?.composing ?? false;
   let undos: Snapshot[] = [];
   let redos: Snapshot[] = [];
   /// Dove è finita l'ultima battuta: la prossima lì continua lo stesso passo.
@@ -300,29 +340,28 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
 
   // --- Disegnare ----------------------------------------------------------------
 
-  const lineEls = (): HTMLElement[] => [...element.children].filter((child): child is HTMLElement => child instanceof HTMLElement && child.classList.contains(LINE_CLASS));
+
+  /// Lo stile di ogni riga, scritto qui e dato alla vista tutto insieme: la
+  /// vista ridisegna le sue righe, e uno stile messo a mano lo perderebbe.
+  const rowStyles: HTMLElement[] = [];
+  const rowStyle = (i: number): CSSStyleDeclaration => {
+    while (rowStyles.length <= i) rowStyles.push(document.createElement("div"));
+    return rowStyles[i]!.style;
+  };
+  const showRows = (): void => {
+    writer?.styleRows(rich.lines.map((_, i) => rowStyle(i).cssText));
+  };
+
+  /// Lo stile di un pezzo, dalla scala del campo.
+  const scratch = document.createElement("span");
+  const pieceCss = (attrs: Attrs): string => {
+    scratch.removeAttribute("style");
+    paintCss(scratch.style, attrs, ownLines(attrs), null, family);
+    return scratch.style.cssText;
+  };
 
   function render(): void {
-    const made = rich.lines.map((line) => {
-      const row = document.createElement("div");
-      row.className = LINE_CLASS;
-      lineAttrs.set(row, line.attrs);
-      for (const span of line.spans) {
-        if (span.attrs === null) {
-          row.append(document.createTextNode(span.text));
-          continue;
-        }
-        const piece = document.createElement("span");
-        piece.className = PIECE_CLASS;
-        piece.textContent = span.text;
-        pieceAttrs.set(piece, span.attrs);
-        row.append(piece);
-      }
-      // Una riga vuota ha la sua altezza, e il cursore ci sta.
-      if (lineText(line) === "") row.append(document.createElement("br"));
-      return row;
-    });
-    element.replaceChildren(...made);
+    writer?.set(rich.lines);
     paint();
   }
 
@@ -337,28 +376,23 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
   /// Lo stile del campo, delle righe e dei pezzi, a `scale`.
   function paint(): void {
     const seen = textSeen();
+    element.style.setProperty(SCALE_VAR, String(scale));
     paintCss(element.style, seen, ownLines(rich.attrs), scale, family);
     if (element.style.color === "") element.style.color = INK;
     // Un testo che non dice la famiglia scrive come nell'export.
     if (element.style.fontFamily === "") element.style.fontFamily = family("");
-    const rows = lineEls();
-    rows.forEach((row, i) => {
-      const line = rich.lines[i];
-      if (line === undefined) return;
-      paintCss(row.style, line.attrs, ownLines(line.attrs), scale, family);
+    rich.lines.forEach((line, i) => {
+      const style = rowStyle(i);
+      paintCss(style, line.attrs, ownLines(line.attrs), scale, family);
       const anchor = trim(line.attrs["text-anchor"] ?? seen["text-anchor"] ?? "start");
-      row.style.textAlign = anchor === "middle" ? "center" : anchor === "end" ? "right" : "left";
-      for (const piece of row.querySelectorAll<HTMLElement>(`.${PIECE_CLASS}`)) {
-        const attrs = pieceAttrs.get(piece) ?? null;
-        paintCss(piece.style, attrs, ownLines(attrs), scale, family);
-      }
+      style.textAlign = anchor === "middle" ? "center" : anchor === "end" ? "right" : "left";
     });
+    showRows();
   }
 
   function layout(next: number, baselineOf: BaselineOf): FieldLayout {
     scale = next;
     paint();
-    const rows = lineEls();
     let height = 0;
     let baseline = 0;
     let longest = 0;
@@ -372,7 +406,6 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
       // Dalla cima della riga alla sua linea di base, che la parte più grande
       // tiene più in basso.
       const drop = box / 2 + (Number.isFinite(b) ? b : BASELINE_EM) * tallest;
-      const row = rows[i];
       let margin = 0;
       // La linea di base scende di `dy` da quella della riga prima.
       if (before !== null) {
@@ -381,11 +414,12 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
       } else {
         baseline = drop;
       }
-      if (row !== undefined) row.style.marginTop = i === 0 ? "" : `${margin}px`;
+      rowStyle(i).marginTop = i === 0 ? "" : `${margin}px`;
       height += (i === 0 ? 0 : margin) + box;
       before = { box, drop };
       longest = Math.max(longest, [...lineText(line)].length * CHAR_EM * tallest);
     });
+    showRows();
     element.style.height = `${height}px`;
     let inset = 0;
     let width: number;
@@ -411,105 +445,19 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
     return { width, height, baseline, inset };
   }
 
-  // --- Leggere il DOM -----------------------------------------------------------
-
-  /// Il testo come lo mostra il DOM, dopo che il browser l'ha cambiato da
-  /// sé: le righe che conosce coi loro attributi, i pezzi coi loro.
-  function readDom(): Rich {
-    const lines: Array<{ attrs: Attrs; spans: Span[] }> = [];
-    const leading = newLeading(rich);
-    const open = (attrs: Attrs | undefined): void => {
-      const previous = lines[lines.length - 1];
-      lines.push({ attrs: attrs ?? (previous === undefined ? rich.lines[0]?.attrs ?? {} : freshAttrs(previous, leading)), spans: [] });
-    };
-    const add = (text: string, attrs: Attrs | null): void => {
-      const parts = text.split("\n");
-      parts.forEach((part, i) => {
-        if (i > 0 || lines.length === 0) open(undefined);
-        if (part !== "") lines[lines.length - 1]!.spans.push({ text: part, attrs });
-      });
-    };
-    const visit = (node: Node, attrs: Attrs | null, top: boolean): void => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        add(node.nodeValue ?? "", attrs);
-        return;
-      }
-      if (!(node instanceof HTMLElement)) return;
-      if (node.tagName === "BR") return;
-      const block = top || node.tagName === "DIV" || node.tagName === "P";
-      if (block) open(lineAttrs.get(node));
-      const inner = pieceAttrs.get(node) ?? attrs;
-      for (const child of node.childNodes) visit(child, inner, false);
-    };
-    for (const child of element.childNodes) {
-      if (child instanceof HTMLElement && child.tagName !== "BR") visit(child, null, true);
-      else visit(child, null, false);
-    }
-    if (lines.length === 0) open(undefined);
-    return { attrs: rich.attrs, inherited: rich.inherited, lines: lines.map((line) => ({ attrs: line.attrs, spans: line.spans })) };
-  }
-
   // --- La scelta ----------------------------------------------------------------
-
-  /// Il punto del testo di un punto del DOM; `null` se non è nel campo.
-  function caretOf(node: Node, offset: number): Caret | null {
-    if (!element.contains(node)) return null;
-    const rows = lineEls();
-    if (node === element) {
-      if (offset >= rows.length) return endOf(rich);
-      return { line: offset, offset: 0 };
-    }
-    let row: Node | null = node;
-    while (row !== null && !(row instanceof HTMLElement && row.parentNode === element && row.classList.contains(LINE_CLASS))) row = row.parentNode;
-    if (row === null) return null;
-    const line = rows.indexOf(row as HTMLElement);
-    const range = document.createRange();
-    range.setStart(row, 0);
-    range.setEnd(node, offset);
-    return { line, offset: range.toString().length };
-  }
-
-  /// Il punto del DOM di `caret`: alla fine del tratto prima, come lo stile
-  /// di ciò che si scrive.
-  function pointOf(caret: Caret): [Node, number] {
-    const rows = lineEls();
-    const row = rows[Math.min(caret.line, rows.length - 1)];
-    if (row === undefined) return [element, 0];
-    let left = caret.offset;
-    const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
-    let last: Text | null = null;
-    for (let node = walker.nextNode() as Text | null; node !== null; node = walker.nextNode() as Text | null) {
-      const size = node.data.length;
-      if (left <= size && (left > 0 || last === null)) return [node, left];
-      left -= size;
-      last = node;
-    }
-    return last === null ? [row, 0] : [last, last.data.length];
-  }
 
   /// Ciò che è scelto nel campo, dall'ancora al fuoco; la fine se la scelta
   /// è altrove.
   function selected(): { anchor: Caret; focus: Caret } {
-    const selection = document.getSelection();
-    if (selection !== null && selection.anchorNode !== null && selection.focusNode !== null) {
-      const anchor = caretOf(selection.anchorNode, selection.anchorOffset);
-      const focus = caretOf(selection.focusNode, selection.focusOffset);
-      if (anchor !== null && focus !== null) return { anchor, focus };
-    }
+    const found = writer?.selection() ?? null;
+    if (found !== null) return found;
     const end = endOf(rich);
     return { anchor: end, focus: end };
   }
 
   function select(anchor: Caret, focus: Caret = anchor): void {
-    const selection = document.getSelection();
-    if (selection === null) return;
-    const [a, ao] = pointOf(anchor);
-    const [f, fo] = pointOf(focus);
-    try {
-      selection.setBaseAndExtent(a, ao, f, fo);
-    } catch {
-      // Un punto che il browser non accetta lascia la scelta com'era.
-    }
+    writer?.select(anchor, focus);
   }
 
   // --- Cambiare -----------------------------------------------------------------
@@ -665,6 +613,7 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
       change(emphasize(rich, from, to, which, on), anchor, focus);
     }
     options.announce(t(on ? "draw.text.emphasis.on" : "draw.text.emphasis.off", { name: t(EMPHASIS_NAMES[which]) }));
+    options.onLook?.();
   }
 
   function restyleNow(name: string, value: string): void {
@@ -674,6 +623,7 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
       const now = probe(from);
       pending = { at: from, base: now.base, changes: [...now.changes, { name, value }] };
       typed = null;
+      options.onLook?.();
       return;
     }
     change(setInRange(rich, from, to, name, value), anchor, focus);
@@ -707,9 +657,9 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
   function targetOf(event: InputEvent): [Caret, Caret] {
     const ranges = typeof event.getTargetRanges === "function" ? event.getTargetRanges() : [];
     const range = ranges[0];
-    if (range !== undefined) {
-      const from = caretOf(range.startContainer, range.startOffset);
-      const to = caretOf(range.endContainer, range.endOffset);
+    if (range !== undefined && writer !== null) {
+      const from = writer.caretAt(range.startContainer, range.startOffset);
+      const to = writer.caretAt(range.endContainer, range.endOffset);
       if (from !== null && to !== null) return [from, to];
     }
     const { anchor, focus } = selected();
@@ -718,89 +668,102 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
 
   const plainOf = (event: InputEvent): string => event.data ?? event.dataTransfer?.getData("text/plain") ?? "";
 
-  life.listen(element, "beforeinput", (event) => {
-    if (event.isComposing || composing || !event.cancelable) return;
+  /// Un `beforeinput`: vero se il campo l'ha fatto da sé.
+  function beforeInput(event: InputEvent): boolean {
+    if (event.isComposing || composing() || !event.cancelable) return false;
     const type = event.inputType;
     if (type === "historyUndo" || type === "historyRedo") {
       event.preventDefault();
       if (type === "historyUndo") undo();
       else redo();
-      return;
+      return true;
     }
     if (type.startsWith("format")) {
       event.preventDefault();
       const which: Emphasis | null =
         type === "formatBold" ? "bold" : type === "formatItalic" ? "italic" : type === "formatUnderline" ? "underline" : type === "formatStrikeThrough" ? "strike" : null;
       if (which !== null) emphasizeNow(which);
-      return;
+      return true;
     }
     const [from, to] = targetOf(event);
     if (type === "insertText" || type === "insertReplacementText") {
       event.preventDefault();
       const text = plainOf(event);
       insert(text, from, to, type === "insertText" && !/\s/.test(text));
-      return;
+      return true;
     }
     if (type === "insertParagraph" || type === "insertLineBreak") {
       event.preventDefault();
       if (shape.kind !== "line") insert("\n", from, to, false);
-      return;
+      return true;
     }
     if (type.startsWith("insertFrom")) {
       event.preventDefault();
       insert(plainOf(event), from, to, false);
-      return;
+      return true;
     }
     if (type.startsWith("delete")) {
       const range = deletion(type, from, to) ?? (compareCarets(from, to) === 0 ? null : ([from, to] as [Caret, Caret]));
-      if (range === null) return;
+      if (range === null) return false;
       event.preventDefault();
       remove(range[0], range[1]);
+      return true;
     }
-  });
+    return false;
+  }
 
-  // Il browser che cambia da sé, come una composizione o ciò che il campo
-  // non conosce: il campo rilegge il testo, e lo ridisegna a composizione
-  // finita.
-  life.listen(element, "input", () => {
+  /// Il browser ha cambiato il testo da sé, come una composizione o ciò che
+  /// il campo non conosce: il campo rilegge le righe, e le ridisegna a
+  /// composizione finita.
+  function browserChange(read: Rich["lines"]): void {
+    // Una riga che il browser ha fatto da sé non ha attributi: prende quelli
+    // di una riga nuova, come un a capo.
+    const leading = newLeading(rich);
+    const lines: Array<Rich["lines"][number]> = [];
+    for (const line of read) {
+      const previous = lines[lines.length - 1];
+      const bare = Object.keys(line.attrs).length === 0;
+      lines.push(!bare ? line : { attrs: previous === undefined ? (rich.lines[0]?.attrs ?? {}) : freshAttrs(previous, leading), spans: line.spans });
+    }
+    const next: Rich = { attrs: rich.attrs, inherited: rich.inherited, lines };
     const { anchor, focus } = selected();
-    const next = readDom();
-    if (!composing) remember();
+    if (!composed) remember();
     typed = null;
     pending = null;
-    if (composing) {
+    if (composing()) {
       rich = next;
       options.onChange();
       return;
     }
+    composed = false;
     show(next, anchor, focus);
-  });
+  }
+
   life.listen(element, "compositionstart", () => {
-    composing = true;
+    if (composed) return;
+    composed = true;
     remember();
   });
-  life.listen(element, "compositionend", () => {
-    composing = false;
-    const { anchor, focus } = selected();
-    show(readDom(), anchor, focus);
-  });
-  // Incollare incolla il testo: anche dove il `beforeinput` non lo porta.
-  life.listen(element, "paste", (event) => {
+
+  // Incollare incolla il testo.
+  function paste(event: ClipboardEvent): boolean {
     const text = event.clipboardData?.getData("text/plain");
-    if (text === undefined) return;
+    if (text === undefined) return false;
     event.preventDefault();
     const { anchor, focus } = selected();
     insert(text, anchor, focus, false);
-  });
-  life.listen(element, "keydown", (event) => {
-    if (event.isComposing || composing) return;
+    return true;
+  }
+
+  function keydown(event: KeyboardEvent): boolean {
+    if (event.isComposing || composing()) return false;
     const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
     if (event.key === "Escape" || event.key === "Tab" || (event.key === "Enter" && mod)) {
       event.preventDefault();
       options.onFinish();
-      return;
+      return true;
     }
-    if (!mod) return;
+    if (!mod) return false;
     const key = event.key.toLowerCase();
     if (key === "b" && !event.shiftKey) emphasizeNow("bold");
     else if (key === "i" && !event.shiftKey) emphasizeNow("italic");
@@ -808,10 +771,40 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
     else if (key === "x" && event.shiftKey) emphasizeNow("strike");
     else if (key === "z") (event.shiftKey ? redo : undo)();
     else if (key === "y" && !event.shiftKey) redo();
-    else return;
+    else return false;
     event.preventDefault();
     event.stopPropagation();
-  });
+    return true;
+  }
+
+  /// Scrittura è arrivata: il campo diventa la sua vista.
+  function mountWriter(module: NonNullable<ReturnType<typeof writingLoaded>>): void {
+    if (life.closed || writer !== null) return;
+    writer = module.createLineWriter({
+      element,
+      lifetime: life,
+      profile: { lineClass: LINE_CLASS, pieceClass: PIECE_CLASS, css: pieceCss },
+      events: { beforeinput: beforeInput, keydown, paste },
+      onBrowserChange: browserChange,
+      onSelect: () => options.onLook?.(),
+    });
+    if (!opened) return;
+    // Un testo aperto mentre Scrittura arrivava: si mostra, e si scrive.
+    render();
+    options.onChange();
+    element.focus();
+    select(endOf(rich));
+  }
+
+  const ready = writingLoaded();
+  if (ready !== null) mountWriter(ready);
+  else {
+    loadWriting().then(mountWriter, () => {
+      if (life.closed || !opened) return;
+      options.announce(t("draw.text.unavailable"));
+      options.onFinish();
+    });
+  }
 
   return {
     element,
@@ -824,24 +817,48 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
     },
     open(next) {
       rich = next;
+      opened = true;
       undos = [];
       redos = [];
       typed = null;
       pending = null;
-      composing = false;
+      composed = false;
       render();
     },
     close() {
       rich = blank;
+      opened = false;
+      writer?.mark([]);
       undos = [];
       redos = [];
       pending = null;
-      element.replaceChildren();
+      writer?.set(blank.lines);
     },
     layout,
     emphasize: emphasizeNow,
     restyle: restyleNow,
     restyleWhole: restyleWholeNow,
+    look() {
+      const { anchor, focus } = selected();
+      const [from, to] = ordered(anchor, focus);
+      if (compareCarets(from, to) !== 0) return lookIn(rich, from, to);
+      const now = probe(from);
+      return lookIn(now.rich, now.from, now.to);
+    },
+    focus() {
+      writer?.focus();
+    },
+    mark(marks) {
+      writer?.mark(marks);
+    },
+    caretAtPoint: (x, y) => writer?.caretAtPoint(x, y) ?? null,
+    caret: () => selected().focus,
+    replace(from, to, expected, text) {
+      const line = rich.lines[from.line];
+      if (line === undefined || to.line !== from.line || lineText(line).slice(from.offset, to.offset) !== expected) return false;
+      insert(text, from, to, false);
+      return true;
+    },
     toEnd: () => select(endOf(rich)),
   };
 }

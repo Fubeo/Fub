@@ -352,6 +352,424 @@
   padding-right: calc(var(--space-4) - var(--space-2) + 20px + var(--space-3));
 }
 
+/* Il campo numerico: etichetta corta a sinistra, il numero coi numeri
+   tabellari, l'unità dentro il bordo e l'errore sotto. */
+.kit-number {
+  display: grid;
+  grid-template-columns: minmax(0, 72px) minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
+  min-width: 0;
+}
+.kit-number-label {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+}
+.kit-number.scrubbing .kit-number-label {
+  color: var(--accent);
+}
+.kit-number-box {
+  display: flex;
+  align-items: center;
+  height: var(--control-h);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+}
+.kit-number-box:hover {
+  border-color: var(--text);
+}
+.kit-number-box:has(> .kit-number-input:focus-visible) {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 4px var(--accent-veil);
+}
+.kit-number-box:has(> .kit-number-input[aria-invalid="true"]) {
+  border-color: var(--danger);
+}
+.kit-number-box:has(> .kit-number-input:disabled) {
+  opacity: 0.4;
+}
+.kit-number-input,
+.kit-number-input:hover,
+.kit-number-input:focus-visible,
+.kit-number-input:disabled {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--space-3);
+  border: none;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.kit-number-unit {
+  padding-right: var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.kit-number-error {
+  grid-column: 2;
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+/* Il selettore del colore. I campioni sono tondi e uguali: il nome lo dicono
+   il suggerimento e la spunta, non la forma. */
+.kit-color {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 248px;
+  padding: var(--space-4);
+}
+.kit-color-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.kit-color-group-title {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+}
+.kit-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.kit-color-swatch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+}
+.kit-color-swatch:hover {
+  border-color: var(--outline);
+}
+.kit-color-swatch:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.kit-color-chip {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--text);
+  border-radius: 50%;
+}
+.kit-color-chip.none {
+  background: linear-gradient(135deg, transparent 45%, var(--danger) 45% 55%, transparent 55%);
+}
+.kit-color-chip.mixed {
+  background: linear-gradient(90deg, var(--text) 50%, var(--bg-input) 50%);
+}
+.kit-color-check {
+  position: absolute;
+  color: var(--sheet);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  opacity: 0;
+}
+.kit-color-swatch.selected {
+  border-color: var(--accent);
+}
+.kit-color-swatch.selected .kit-color-check {
+  opacity: 1;
+}
+.kit-color-area,
+.kit-color-hue,
+.kit-color-alpha {
+  border-radius: var(--radius-sm);
+}
+.kit-color-hue,
+.kit-color-alpha {
+  height: 12px;
+}
+.kit-color-area:focus-visible,
+.kit-color-hue:focus-visible,
+.kit-color-alpha:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.kit-color-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #000000;
+}
+.kit-color-code {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.kit-color-format,
+.kit-color-input {
+  height: var(--control-h);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.kit-color-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 var(--space-3);
+  font-variant-numeric: tabular-nums;
+}
+.kit-color-input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.kit-color-dropper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+}
+.kit-color-dropper:hover {
+  background: var(--bg-hover);
+}
+/* Il pozzo: il colore tondo e il suo nome. */
+.kit-color-well-button {
+  display: inline-flex;
+  gap: var(--space-3);
+  align-items: center;
+  height: var(--control-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.kit-color-well-button:hover {
+  border-color: var(--text);
+}
+.kit-color-well-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.kit-color-well.large .kit-color-well-button {
+  height: 44px;
+  font-size: var(--text-base);
+}
+.kit-color-well.large .kit-color-chip {
+  width: 28px;
+  height: 28px;
+}
+
+/* La scelta del carattere: la ricerca in cima, le famiglie sotto, ognuna nel
+   suo carattere; i gruppi sono titoletti. */
+.kit-font {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 260px;
+  padding: var(--space-4);
+}
+.kit-font-list {
+  max-height: 320px;
+  overflow: auto;
+}
+.kit-font-group {
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+}
+.kit-font-item {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+}
+.kit-font-name {
+  overflow: hidden;
+  font-size: var(--text-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-font-note,
+.kit-font-empty {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.kit-font-button {
+  display: inline-flex;
+  align-items: center;
+  max-width: 180px;
+  height: var(--control-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+}
+.kit-font-button:hover {
+  border-color: var(--text);
+}
+.kit-font-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.kit-font-button .kit-font-name {
+  font-size: var(--text-sm);
+}
+
+/* La colonna degli strumenti: caselle quadrate a gruppi, separati da un filo;
+   lo strumento scelto ha il fondo tenue dell'accento, non un bordo. */
+.kit-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+.kit-rail[data-orientation="horizontal"] {
+  flex-direction: row;
+}
+.kit-rail-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.kit-rail[data-orientation="horizontal"] .kit-rail-group {
+  flex-direction: row;
+}
+.kit-rail-rule {
+  align-self: stretch;
+  border-top: 1px solid var(--outline);
+}
+.kit-rail[data-orientation="horizontal"] .kit-rail-rule {
+  border-top: none;
+  border-left: 1px solid var(--outline);
+}
+.kit-rail-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.kit-rail[data-size="large"] .kit-rail-slot {
+  width: 44px;
+  height: 44px;
+}
+.kit-rail-slot:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-rail-slot:active {
+  background: var(--overlay-active);
+}
+.kit-rail-slot[aria-pressed="true"],
+.kit-rail-slot[aria-pressed="true"]:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.kit-rail-slot:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+/* Nella colonna le icone sono da 20 px, sulla stessa griglia di 24. */
+.kit-rail-icon {
+  display: inline-flex;
+}
+.kit-rail-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.kit-rail-corner {
+  border-top: 4px solid transparent;
+  border-right: 4px solid currentColor;
+  opacity: 0.6;
+}
+.kit-rail-flyout {
+  padding: var(--space-2);
+}
+.kit-rail-flyout-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 180px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.kit-rail-flyout-label {
+  flex: 1;
+}
+.kit-rail-flyout-keys {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* La barra delle opzioni: una riga che non va a capo; ciò che non ci sta va
+   in «…». */
+.kit-options {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.kit-options-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.kit-options-more {
+  height: var(--control-h);
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.kit-options-more:hover {
+  background: var(--overlay-hover);
+}
+.kit-options-more:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.kit-options-overflow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
 .kit-field-icon {
   display: inline-flex;
   grid-row: 1;

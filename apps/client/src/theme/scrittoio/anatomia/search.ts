@@ -3,6 +3,7 @@ import { INTERACTIVE, S, SELECTABLE, type PartAnatomy } from "./types";
 
 export const SEARCH: PartAnatomy = {
   part: "search",
+  layer: "cornice",
   components: [
     { name: "search-field", states: [S("rest"), S("focused")], hooks: ["search-input"] },
     {

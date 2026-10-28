@@ -6,7 +6,7 @@
 > forma, come entra nel disegno col clic, con la tastiera o trascinandola, e
 > come la scrive il file.
 
-Dal [livello Standard](drawing.md#il-livello-standard) la barra di un
+Nello spazio [Completo](drawing.md#completo-e-semplice) la barra di un
 [disegno](drawing.md) ha il pulsante **«Forme»**, nel gruppo «Vista» dopo
 «Tavole»: apre accanto al foglio, con gli altri pannelli aperti, le
 **raccolte di forme**, e gli porta il fuoco; di nuovo, lo chiude. Una forma
@@ -161,11 +161,11 @@ Le anteprime sono nel colore del testo: seguono il tema chiaro e scuro e, coi
 colori forzati, quelli del sistema. Con il movimento ridotto le transizioni dei
 riquadri sono spente, come nel resto dell'editor.
 
-## Livelli e parti
+## Spazi e parti
 
-Il pannello c'è dal livello Standard; l'Essenziale non lo ha, e nemmeno il
-pulsante. Nel [Personalizzato](drawing-custom.md) è la parte «Forme»:
-tornati a un livello che non la ha, o tolta la parte, il pannello si chiude e
+Il pannello c'è nello spazio Completo; il Semplice non lo ha, e nemmeno il
+pulsante. Per chi monta l'editor con le sue [parti](drawing-custom.md#che-cosa-porta-una-parte) è la parte «Forme»:
+tornati in uno spazio che non la ha, o tolta la parte, il pannello si chiude e
 il suo pulsante sparisce; il disegno non cambia, e le forme già inserite
 restano com'erano. Nelle annotazioni di un PDF il pannello non c'è.
 

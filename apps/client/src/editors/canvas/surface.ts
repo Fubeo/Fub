@@ -10,6 +10,7 @@
 // (`editors/spatial/pdf/surface.ts`), per il formato `fubann` della stessa
 // feature.
 
+import type { ProofPorts } from "../core/proof-ports";
 import type {
   EditorSurface,
   SurfaceMountContext,
@@ -48,11 +49,15 @@ export interface CanvasSurfaceCallbacks {
   readonly drawingFonts?: VaultFontPort;
   /** The vault's symbol libraries, listed and read by the shell, that a drawing can take symbols from. */
   readonly drawingSymbols?: SymbolLibraryPort;
+  /** The spelling and grammar checker for the text written in a drawing. */
+  readonly drawingProof?: { readonly ports: ProofPorts; readonly notify?: (message: string) => void };
   readonly media?: CanvasEngineOptions["media"];
   readonly attachments?: CanvasEngineOptions["attachments"];
   readonly renderMarkdownForCard?: CanvasEngineOptions["renderMarkdownForCard"];
   /** Where annotations read their PDF: without it the pages are blank. */
   readonly pdf?: PdfPorts;
+  /** Runs a shell command, like the export window a drawing's «Export» opens. */
+  readonly shellCommand?: (id: string) => void;
 }
 
 /**
@@ -128,6 +133,7 @@ export function mountCanvasSurface(
     // li risolve da lì, come quelli di una nota.
     const openPath = callbacks.onOpenPath;
     const pickLink = callbacks.onPickDrawingLink;
+    const shellCommand = callbacks.shellCommand;
     const images = callbacks.drawingImages;
     const pickImage = images?.pick;
     return mountVectorSurfaceLazily(context, {
@@ -146,6 +152,9 @@ export function mountCanvasSurface(
       vaultFonts: callbacks.drawingFonts,
       // Il disegno aperto non è una libreria per sé stesso.
       symbolLibraries: callbacks.drawingSymbols === undefined ? undefined : { ...callbacks.drawingSymbols, here: context.documentId },
+      // «Esporta» apre la finestra dello Scrittoio.
+      onExport: shellCommand === undefined ? undefined : () => shellCommand("shell.doc.export"),
+      proof: callbacks.drawingProof,
     });
   }
   if (profile === PDF_PROFILE) {
@@ -179,8 +188,8 @@ export function mountCanvasSurface(
   });
   let mode: "canvas" | "source" = profile === CANVAS_SOURCE_PROFILE ? "source" : "canvas";
   const modes = [
-    { id: "canvas", label: () => t("mode.canvas"), presentation: "surface" as const, contextMode: "live_preview" as const },
-    { id: "source", label: () => t("mode.source"), presentation: "surface" as const, contextMode: "source" as const },
+    { id: "canvas", label: () => t("mode.canvas"), presentation: "surface" as const, contextMode: "live_preview" as const, looks: ["tema"] as const },
+    { id: "source", label: () => t("mode.source"), presentation: "surface" as const, contextMode: "source" as const, looks: ["tema"] as const },
   ];
   const surface: EditorSurface = {
     family: CANVAS_FAMILY,

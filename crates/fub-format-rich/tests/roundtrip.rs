@@ -6,8 +6,8 @@ mod common;
 use base64::Engine;
 use common::{bytes, sample, styled, text, PNG};
 use fub_format_rich::projection::{
-    Align, AtomKind, Block, Cell, Inline, Layout, Line, Look, Mark, Page, PageField, Para, Piece,
-    Projection, Role, Row, RunningText, Table, OPAQUE_SCHEMA,
+    Align, AtomKind, Block, Cell, Inline, Layout, Line, Look, Mark, Missing, MissingWhat, Page,
+    PageField, Para, Piece, Projection, Role, Row, RunningText, SectionBegin, Table, OPAQUE_SCHEMA,
 };
 use fub_format_rich::{open, save, Codec, ReadOnly, RichError, Saved};
 use wordcraft_doc::para::NoteKind;
@@ -132,6 +132,69 @@ fn cambiare_una_parola_lascia_il_resto_com_era() {
     assert_eq!(after.styles, before.styles);
     assert_eq!(after.parts, before.parts);
     assert_eq!(after.media, before.media);
+}
+
+/// Un `.docx` scritto a mano, con il solo documento principale.
+fn package(body: &str) -> Vec<u8> {
+    use std::io::Write;
+    const W: &str = r#"xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships""#;
+    let types = r#"<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#;
+    let rels = r#"<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>"#;
+    let document = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document {W}><w:body>{body}<w:sectPr/></w:body></w:document>"#
+    );
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for (name, bytes) in [
+        ("[Content_Types].xml", types.as_bytes()),
+        ("_rels/.rels", rels.as_bytes()),
+        ("word/document.xml", document.as_bytes()),
+    ] {
+        zip.start_file(name, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(bytes).unwrap();
+    }
+    zip.finish().unwrap().into_inner()
+}
+
+/// La parte principale di un `.docx`, come testo.
+fn main_part(bytes: &[u8]) -> String {
+    use std::io::Read;
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut out = String::new();
+    zip.by_name("word/document.xml")
+        .unwrap()
+        .read_to_string(&mut out)
+        .unwrap();
+    out
+}
+
+/// La disposizione asiatica di un tratto non passa dalla proiezione: resta
+/// con le proprietà opache del tratto che l'utente ha cambiato. Un testo che
+/// arriva senza quelle proprietà la perderebbe, e il salvataggio si rifiuta
+/// invece di perderla.
+#[test]
+fn ciò_che_la_proiezione_non_porta_non_si_perde_nel_paragrafo_cambiato() {
+    let file = package(
+        r#"<w:p><w:r><w:rPr><w:eastAsianLayout w:id="1" w:combine="1"/></w:rPr><w:t>Primo paragrafo</w:t></w:r></w:p>"#,
+    );
+    let mut p = projection(&file);
+    let Some(Inline::Text { x, .. }) = para_mut(&mut p, 0).c.first_mut() else {
+        panic!("il paragrafo comincia col testo")
+    };
+    x.push_str(" modificato");
+    let out = saved(&file, &p);
+    let xml = main_part(&out);
+    assert!(xml.contains("Primo paragrafo modificato"), "{xml}");
+    assert!(xml.contains(r#"w:combine="1""#), "{xml}");
+
+    let Some(Inline::Text { k, .. }) = para_mut(&mut p, 0).c.first_mut() else {
+        panic!("il paragrafo comincia col testo")
+    };
+    *k = None;
+    assert_eq!(
+        save(Codec::Docx, &file, &p.to_json().unwrap()),
+        Err(RichError::Fidelity)
+    );
 }
 
 #[test]
@@ -342,6 +405,62 @@ fn il_ruolo_cambia_stile_ed_elenco() {
 }
 
 #[test]
+fn cambiando_stile_l_allineamento_che_ne_veniva_segue_il_nuovo() {
+    let mut document = sample();
+    let quote = text("Una citazione", CharProps::default()).styled("Quote");
+    document.body.push(para_block(quote));
+    document
+        .body
+        .push(para_block(text("Del corpo", CharProps::default())));
+    if document.styles.get("Quote").is_none() {
+        let builtin = wordcraft_doc::StyleSheet::builtin();
+        document
+            .styles
+            .upsert(builtin.get("Quote").unwrap().clone());
+    }
+    let file = bytes(&document);
+    let mut p = projection(&file);
+    assert_eq!(p.roles.align.quote, Some(Align::Center));
+    assert_eq!(
+        (
+            p.roles.align.body,
+            p.roles.align.h.first().copied().flatten()
+        ),
+        (None, None)
+    );
+    let last = p.blocks.len() - 1;
+    assert_eq!(para_mut(&mut p, last - 1).align, Some(Align::Center));
+    // Come fa la shell: la citazione diventa titolo e va a sinistra come lui;
+    // il corpo diventa citazione e si centra come lei.
+    let heading = para_mut(&mut p, last - 1);
+    heading.role = Role::Heading { level: 1 };
+    heading.align = None;
+    let cited = para_mut(&mut p, last);
+    cited.role = Role::Quote;
+    cited.align = Some(Align::Center);
+    let out = saved(&file, &p);
+    let after = read(&out);
+    let n = after.body.len();
+    assert_eq!(
+        (
+            paragraph(&after, n - 2).props.align,
+            paragraph(&after, n - 1).props.align
+        ),
+        (None, None),
+        "l'allineamento viene dallo stile, non si scrive diretto"
+    );
+    let mut reopened = projection(&out);
+    assert_eq!(
+        (
+            para_mut(&mut reopened, last - 1).align,
+            para_mut(&mut reopened, last).align
+        ),
+        (None, Some(Align::Center)),
+        "si riapre come si vedeva"
+    );
+}
+
+#[test]
 fn un_link_nuovo_prende_lo_stile_dei_link() {
     let file = bytes(&sample());
     let mut p = projection(&file);
@@ -419,6 +538,7 @@ fn le_celle_si_scrivono_e_la_tabella_resta() {
 /// testo della cella in ogni cella.
 fn new_table(rows: usize, cols: usize) -> Block {
     Block::Table(Table {
+        locked: false,
         k: None,
         rows: (0..rows)
             .map(|r| Row {
@@ -431,6 +551,7 @@ fn new_table(rows: usize, cols: usize) -> Block {
                             ins: None,
                             del: None,
                             role: Role::Body,
+                            locked: false,
                             align: None,
                             k: None,
                             sect: None,
@@ -620,6 +741,9 @@ fn new_image(bytes: &[u8], alt: &str) -> Inline {
         end: false,
         toc: None,
         comment: None,
+        ink: None,
+        svg: None,
+        float: None,
     }
 }
 
@@ -638,6 +762,9 @@ fn new_note(text: &str, end: bool) -> Inline {
         end,
         toc: None,
         comment: None,
+        ink: None,
+        svg: None,
+        float: None,
     }
 }
 
@@ -742,6 +869,9 @@ fn un_oggetto_nuovo_che_non_si_sa_scrivere_è_rifiutato() {
         end: false,
         toc: None,
         comment: None,
+        ink: None,
+        svg: None,
+        float: None,
     });
 }
 
@@ -1141,12 +1271,19 @@ fn le_modifiche_di_formato_tracciate_aprono_in_sola_lettura() {
     );
     changed.props = ParaProps::default();
     d.body.push(para_block(changed));
+    let last = d.body.len() - 1;
     let file = bytes(&d);
     let opened = open(Codec::Docx, &file).unwrap();
     assert_eq!(opened.readonly, Some(ReadOnly::Revisions));
+    let projection = Projection::from_json(&opened.projection).unwrap();
+    assert_eq!(projection.readonly, Some(ReadOnly::Revisions));
+    // «Che cosa manca?» dice il paragrafo con la revisione di formato.
     assert_eq!(
-        Projection::from_json(&opened.projection).unwrap().readonly,
-        Some(ReadOnly::Revisions)
+        projection.missing,
+        [Missing {
+            what: MissingWhat::Format,
+            block: Some(last),
+        }]
     );
     assert_eq!(
         save(Codec::Docx, &file, &opened.projection),
@@ -1179,6 +1316,24 @@ fn le_revisioni_in_una_nota_aprono_in_sola_lettura() {
     )));
     let opened = open(Codec::Docx, &bytes(&d)).unwrap();
     assert_eq!(opened.readonly, Some(ReadOnly::Revisions));
+    // La revisione sta in una nota: l'elenco dice le note, senza un blocco.
+    assert_eq!(
+        Projection::from_json(&opened.projection).unwrap().missing,
+        [Missing {
+            what: MissingWhat::Note,
+            block: None,
+        }]
+    );
+}
+
+#[test]
+fn un_documento_che_si_scrive_non_dice_che_cosa_manca() {
+    let opened = open(Codec::Docx, &bytes(&sample())).unwrap();
+    assert_eq!(opened.readonly, None);
+    assert!(Projection::from_json(&opened.projection)
+        .unwrap()
+        .missing
+        .is_empty());
 }
 
 #[test]
@@ -1186,12 +1341,27 @@ fn una_proiezione_malformata_è_rifiutata_con_la_sua_specie() {
     let file = bytes(&sample());
     let opened = open(Codec::Docx, &file).unwrap();
     let mut value: serde_json::Value = serde_json::from_str(&opened.projection).unwrap();
-    value["version"] = 3.into();
+    value["version"] = 5.into();
     assert_eq!(
         save(Codec::Docx, &file, &value.to_string()),
-        Err(RichError::Version(3))
+        Err(RichError::Version(5))
     );
-    value["version"] = 2.into();
+    // Un Fub più nuovo aggiunge campi: la versione si legge prima del resto.
+    value["campo_futuro"] = true.into();
+    value["blocks"][0]["nuovo"] = 1.into();
+    assert_eq!(
+        save(Codec::Docx, &file, &value.to_string()),
+        Err(RichError::Version(5))
+    );
+    value["version"] = 4.into();
+    value["opaque_schema"] = 999.into();
+    assert_eq!(
+        save(Codec::Docx, &file, &value.to_string()),
+        Err(RichError::OpaqueSchema(999))
+    );
+    value["opaque_schema"] = OPAQUE_SCHEMA.into();
+    value.as_object_mut().unwrap().remove("campo_futuro");
+    value["blocks"][0].as_object_mut().unwrap().remove("nuovo");
     value["inatteso"] = true.into();
     assert!(matches!(
         save(Codec::Docx, &file, &value.to_string()),
@@ -1214,7 +1384,7 @@ fn la_proiezione_dichiara_lo_schema_dei_dati_opachi() {
     let file = bytes(&sample());
     let opened = open(Codec::Docx, &file).unwrap();
     let mut value: serde_json::Value = serde_json::from_str(&opened.projection).unwrap();
-    assert_eq!(value["version"], 2);
+    assert_eq!(value["version"], fub_format_rich::projection::VERSION);
     assert_eq!(value["opaque_schema"], OPAQUE_SCHEMA);
     let edited = |value: &serde_json::Value| {
         let mut p = Projection::from_json(&value.to_string()).unwrap();
@@ -1228,6 +1398,12 @@ fn la_proiezione_dichiara_lo_schema_dei_dati_opachi() {
         save(Codec::Docx, &file, &edited(&value)),
         Ok(Saved::Bytes(_))
     ));
+    // Una bozza di versione 2, di prima dei segni della 3, si salva.
+    value["version"] = 2.into();
+    assert!(matches!(
+        save(Codec::Docx, &file, &edited(&value)),
+        Ok(Saved::Bytes(_))
+    ));
 
     // Uno schema più nuovo non si legge, nemmeno in parte.
     value["opaque_schema"] = (OPAQUE_SCHEMA + 1).into();
@@ -1235,7 +1411,7 @@ fn la_proiezione_dichiara_lo_schema_dei_dati_opachi() {
         save(Codec::Docx, &file, &value.to_string()),
         Err(RichError::OpaqueSchema(OPAQUE_SCHEMA + 1))
     );
-    // La versione 2 senza lo schema è malformata.
+    // Una versione con lo schema, senza lo schema, è malformata.
     value.as_object_mut().unwrap().remove("opaque_schema");
     assert!(matches!(
         save(Codec::Docx, &file, &value.to_string()),
@@ -1412,9 +1588,18 @@ fn una_nota_mostrata_due_volte_apre_in_sola_lettura() {
         .unwrap();
     }
     d.body.push(para_block(p));
+    let last = d.body.len() - 1;
     let file = bytes(&d);
     let opened = open(Codec::Docx, &file).unwrap();
     assert_eq!(opened.readonly, Some(ReadOnly::Projection));
+    // «Che cosa manca?» dice il paragrafo dei rimandi.
+    assert_eq!(
+        Projection::from_json(&opened.projection).unwrap().missing,
+        [Missing {
+            what: MissingWhat::Changed,
+            block: Some(last),
+        }]
+    );
     let mut projection = Projection::from_json(&opened.projection).unwrap();
     assert_eq!(projection.readonly, Some(ReadOnly::Projection));
     // Una modifica si rifiuta con il motivo misurato all'apertura; e chi
@@ -1511,6 +1696,9 @@ fn new_anchor(id: u32, end: bool) -> Inline {
         end: false,
         toc: None,
         comment: Some(fub_format_rich::projection::Anchor { id, end }),
+        ink: None,
+        svg: None,
+        float: None,
     }
 }
 
@@ -1723,6 +1911,36 @@ fn un_documento_che_registra_le_modifiche_si_scrive_con_le_sue_revisioni() {
 }
 
 #[test]
+fn dove_comincia_una_sezione_si_legge_e_si_scrive() {
+    let mut d = sample();
+    let mut first = text("Prima sezione", CharProps::default());
+    first.section = Some(Box::new(d.last_section.clone()));
+    d.body.insert(0, para_block(first));
+    d.last_section.start = wordcraft_doc::section::SectionStart::Continuous;
+    let file = bytes(&d);
+    let p = projection(&file);
+    assert_eq!(p.page.unwrap().start, SectionBegin::Continuous);
+    assert_eq!(
+        para_mut(&mut p.clone(), 0).page.as_deref().unwrap().start,
+        SectionBegin::NextPage
+    );
+    // Nella proiezione si scrive soltanto quando non è a pagina nuova.
+    let json = p.to_json().unwrap();
+    assert_eq!(json.matches(r#""start":"continuous""#).count(), 1);
+    assert!(!json.contains("next_page"));
+    assert_eq!(save(Codec::Docx, &file, &json), Ok(Saved::Unchanged));
+    let mut changed = p.clone();
+    changed.page = Some(Page {
+        start: SectionBegin::OddPage,
+        ..p.page.unwrap()
+    });
+    assert_eq!(
+        read(&saved(&file, &changed)).last_section.start,
+        wordcraft_doc::section::SectionStart::OddPage
+    );
+}
+
+#[test]
 fn la_pagina_di_ogni_sezione_va_e_torna() {
     let mut d = sample();
     let mut first = text("Prima sezione", CharProps::default());
@@ -1739,6 +1957,7 @@ fn la_pagina_di_ogni_sezione_va_e_torna() {
         left: 72.0,
         right: 72.0,
         cols: 1,
+        start: Default::default(),
     };
     assert_eq!(p.page, Some(letter));
     assert_eq!(para_mut(&mut p.clone(), 0).page.as_deref(), Some(&letter));
@@ -2046,4 +2265,344 @@ fn un_sommario_nuovo_si_scrive_da_rifare_in_word() {
         save(Codec::Docx, &file, &bad.to_json().unwrap()),
         Err(RichError::Malformed(_))
     ));
+}
+
+/// Un tratto d'inchiostro di tre punti, con la pressione.
+fn ink_shape() -> fub_format_rich::projection::InkShape {
+    fub_format_rich::projection::InkShape {
+        strokes: vec![fub_format_rich::projection::InkLine {
+            color: "#0072b2".into(),
+            width: 2.0,
+            hl: false,
+            xy: vec![0.0, 0.0, 30.0, 10.0, 60.0, 30.0],
+            p: vec![0.25, 0.5, 0.75],
+            pen: Some("fountain".into()),
+        }],
+    }
+}
+
+#[test]
+fn le_penne_diventano_le_proprietà_del_pennello_di_word() {
+    use fub_format_rich::projection::InkLine;
+    use fub_ink::inkml::InkTip;
+    let line = |pen: Option<&str>, hl: bool| InkLine {
+        color: "#000000".into(),
+        width: 6.0,
+        hl,
+        xy: vec![0.0, 0.0, 10.0, 0.0],
+        p: Vec::new(),
+        pen: pen.map(str::to_owned),
+    };
+    let calligraphy = line(Some("calligraphy"), false).brush();
+    assert_eq!(
+        (calligraphy.tip, calligraphy.width, calligraphy.height),
+        (InkTip::Rectangle, 6.0, 1.0)
+    );
+    assert_eq!(calligraphy.pen.as_deref(), Some("calligraphy"));
+    let marker = line(Some("marker"), false).brush();
+    assert!(marker.ignore_pressure);
+    assert_eq!(marker.tip, InkTip::Ellipse);
+    let plain = line(None, false).brush();
+    assert!(!plain.ignore_pressure && plain.pen.is_none());
+    // L'evidenziatore resta quello di Word, punta rettangolare, senza penna.
+    let highlighter = line(Some("highlighter"), true).brush();
+    assert_eq!(
+        (highlighter.tip, highlighter.highlighter, highlighter.pen),
+        (InkTip::Rectangle, true, None)
+    );
+}
+
+fn new_atom(
+    kind: AtomKind,
+    ink: Option<fub_format_rich::projection::InkShape>,
+    svg: Option<String>,
+    float: Option<fub_format_rich::projection::Place>,
+) -> Inline {
+    Inline::Atom {
+        ins: None,
+        del: None,
+        k: None,
+        kind,
+        label: "a mano".into(),
+        w: Some(60.0),
+        h: Some(30.0),
+        data: Some(base64::engine::general_purpose::STANDARD.encode(PNG)),
+        note: None,
+        end: false,
+        toc: None,
+        comment: None,
+        ink,
+        svg,
+        float,
+    }
+}
+
+const SCENE: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 60 30" width="60" height="30"><rect x="1" y="1" width="20" height="10"/></svg>"#;
+
+#[test]
+fn un_inchiostro_nuovo_si_scrive_come_quello_di_word_e_torna_modificabile() {
+    use fub_format_rich::projection::{Place, PlaceWrap};
+    let file = bytes(&sample());
+    let mut p = projection(&file);
+    let place = Place {
+        wrap: PlaceWrap::Front,
+        x: 12.0,
+        y: 4.0,
+    };
+    para_mut(&mut p, 1).c.push(new_atom(
+        AtomKind::Ink,
+        Some(ink_shape()),
+        None,
+        Some(place),
+    ));
+    let out = saved(&file, &p);
+    let after = read(&out);
+    let ink = paragraph(&after, 1)
+        .objects
+        .iter()
+        .find_map(|o| match o {
+            InlineObject::Graphic { graphic, float, .. } => Some((graphic.clone(), float.clone())),
+            _ => None,
+        })
+        .expect("l'inchiostro è un oggetto di Word");
+    assert_eq!(ink.0.kind, wordcraft_doc::graphic::GraphicKind::Ink);
+    assert_eq!(ink.1.wrap, wordcraft_doc::para::Wrap::InFrontOfText);
+    let markup = wordcraft_docx::ink::ink_markup(&after, &ink.0).expect("la parte InkML");
+    assert!(String::from_utf8_lossy(markup).contains("<ink"));
+    // Riaperto, è un inchiostro coi suoi tratti, al suo posto.
+    let mut back = projection(&out);
+    let Some(Inline::Atom {
+        kind: AtomKind::Ink,
+        ink: Some(shape),
+        float,
+        data,
+        ..
+    }) = para_mut(&mut back, 1).c.last().cloned()
+    else {
+        panic!("{:?}", para_mut(&mut back, 1).c.last())
+    };
+    assert_eq!(float, Some(place));
+    assert!(data.is_some(), "l'immagine di ripiego si vede");
+    assert_eq!(shape.strokes.len(), 1);
+    assert_eq!(shape.strokes[0].color, "#0072b2");
+    assert_eq!(shape.strokes[0].xy.len(), 6);
+    assert_eq!(shape.strokes[0].p.len(), 3);
+    // La penna torna con lui; Word la ignora.
+    assert!(String::from_utf8_lossy(markup).contains("name=\"fubPen\" value=\"fountain\""));
+    assert_eq!(shape.strokes[0].pen.as_deref(), Some("fountain"));
+    // Spostarlo in linea lo mette in linea, e il resto resta.
+    if let Some(Inline::Atom { float, .. }) = para_mut(&mut back, 1).c.last_mut() {
+        *float = None;
+    }
+    let moved = read(&saved(&out, &back));
+    assert!(paragraph(&moved, 1).objects.iter().any(|o| matches!(
+        o,
+        InlineObject::Graphic { float, .. } if float.wrap == wordcraft_doc::para::Wrap::Inline
+    )));
+}
+
+/// Tre PNG di un pixel, blu, arancio e verde.
+const BLUE: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgKNr0HwADvgIkzAHEiwAAAABJRU5ErkJggg==";
+const ORANGE: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGO4GsfwHwAFcgIzrfxWtAAAAABJRU5ErkJggg==";
+const GREEN: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgmFf8HwADxAIRcGHz3wAAAABJRU5ErkJggg==";
+
+fn bytes_of(saved: Result<Saved, RichError>, which: &str) -> Vec<u8> {
+    match saved {
+        Ok(Saved::Bytes(out)) => out,
+        other => panic!("{which} inchiostro: {other:?}"),
+    }
+}
+
+/// Il primo paragrafo che si modifica.
+fn first_para(projection: &Projection) -> usize {
+    projection
+        .blocks
+        .iter()
+        .position(|b| matches!(b, Block::Para(para) if !para.locked))
+        .expect("un paragrafo aperto")
+}
+
+#[test]
+fn un_inchiostro_nuovo_si_innesta_in_un_file_che_il_codec_non_riscrive_intero() {
+    // `oggetti.docx` ha forme e caselle che il codec non riscrive: il
+    // salvataggio è un innesto, che dà all'inchiostro relazioni e `docPr`
+    // liberi nel file, non quelli del codec. Ogni inchiostro ha i suoi
+    // tratti e la sua immagine di ripiego, come quelli veri.
+    let ink = |png: &str, lift: f32| {
+        let mut shape = ink_shape();
+        shape.strokes[0].xy[5] += lift;
+        let mut atom = new_atom(AtomKind::Ink, Some(shape), None, None);
+        if let Inline::Atom { data, .. } = &mut atom {
+            *data = Some(png.into());
+        }
+        atom
+    };
+    let file = std::fs::read(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/corpus/docx/oggetti.docx"),
+    )
+    .unwrap();
+    let mut p = projection(&file);
+    let at = first_para(&p);
+    para_mut(&mut p, at).c.push(ink(BLUE, 0.0));
+    let out = bytes_of(save(Codec::Docx, &file, &p.to_json().unwrap()), "il primo");
+    let mut back = projection(&out);
+    let at = first_para(&back);
+    assert!(
+        para_mut(&mut back, at).c.iter().any(|i| matches!(
+            i,
+            Inline::Atom {
+                kind: AtomKind::Ink,
+                ink: Some(_),
+                ..
+            }
+        )),
+        "riaperto, è un inchiostro"
+    );
+    assert_eq!(
+        save(Codec::Docx, &out, &back.to_json().unwrap()),
+        Ok(Saved::Unchanged)
+    );
+    // Un secondo, dopo il primo già innestato.
+    para_mut(&mut back, at).c.push(ink(ORANGE, 12.0));
+    let again = bytes_of(
+        save(Codec::Docx, &out, &back.to_json().unwrap()),
+        "il secondo",
+    );
+    let inks = read(&again)
+        .body
+        .iter()
+        .filter_map(|b| b.as_para())
+        .flat_map(|p| p.objects.iter())
+        .filter(|o| matches!(o, InlineObject::Graphic { graphic, .. } if graphic.kind == wordcraft_doc::graphic::GraphicKind::Ink))
+        .count();
+    assert_eq!(inks, 2);
+    // Il primo tolto e un terzo aggiunto: le parti del primo se ne vanno.
+    let count = |bytes: &[u8]| {
+        read(bytes)
+            .body
+            .iter()
+            .filter_map(|b| b.as_para())
+            .flat_map(|p| p.objects.iter())
+            .filter(|o| matches!(o, InlineObject::Graphic { graphic, .. } if graphic.kind == wordcraft_doc::graphic::GraphicKind::Ink))
+            .count()
+    };
+    let mut third = projection(&again);
+    let at = first_para(&third);
+    let first = para_mut(&mut third, at)
+        .c
+        .iter()
+        .position(|i| {
+            matches!(
+                i,
+                Inline::Atom {
+                    kind: AtomKind::Ink,
+                    ..
+                }
+            )
+        })
+        .expect("il primo inchiostro");
+    para_mut(&mut third, at).c.remove(first);
+    para_mut(&mut third, at).c.push(ink(GREEN, 24.0));
+    let swapped = bytes_of(
+        save(Codec::Docx, &again, &third.to_json().unwrap()),
+        "il terzo",
+    );
+    assert_eq!(count(&swapped), 2);
+    // Lo stesso inchiostro mandato di nuovo come nuovo, al posto di quello
+    // salvato: l'innesto riprende le parti uguali che il file ha già.
+    let mut resent = projection(&swapped);
+    let at = first_para(&resent);
+    let last = para_mut(&mut resent, at)
+        .c
+        .iter()
+        .rposition(|i| {
+            matches!(
+                i,
+                Inline::Atom {
+                    kind: AtomKind::Ink,
+                    ..
+                }
+            )
+        })
+        .expect("il terzo inchiostro");
+    para_mut(&mut resent, at).c.remove(last);
+    para_mut(&mut resent, at).c.push(ink(GREEN, 24.0));
+    let swapped = bytes_of(
+        save(Codec::Docx, &swapped, &resent.to_json().unwrap()),
+        "lo stesso",
+    );
+    assert_eq!(count(&swapped), 2);
+    let reopened = open(Codec::Docx, &swapped).unwrap();
+    assert_eq!(reopened.readonly, None);
+    // E togliere soltanto.
+    let mut fewer = projection(&swapped);
+    let at = first_para(&fewer);
+    para_mut(&mut fewer, at).c.retain(|i| {
+        !matches!(
+            i,
+            Inline::Atom {
+                kind: AtomKind::Ink,
+                ..
+            }
+        )
+    });
+    let none = bytes_of(
+        save(Codec::Docx, &swapped, &fewer.to_json().unwrap()),
+        "nessun",
+    );
+    assert_eq!(count(&none), 0);
+}
+
+#[test]
+fn un_disegno_nuovo_è_un_svg_col_suo_png_e_si_riapre_da_modificare() {
+    let file = bytes(&sample());
+    let mut p = projection(&file);
+    para_mut(&mut p, 1)
+        .c
+        .push(new_atom(AtomKind::Drawing, None, Some(SCENE.into()), None));
+    let out = saved(&file, &p);
+    let mut back = projection(&out);
+    let Some(Inline::Atom {
+        kind: AtomKind::Drawing,
+        svg: Some(svg),
+        data: Some(_),
+        ..
+    }) = para_mut(&mut back, 1).c.last().cloned()
+    else {
+        panic!("{:?}", para_mut(&mut back, 1).c.last())
+    };
+    assert_eq!(svg, SCENE);
+    // Un SVG che non è di FubDraw resta un'immagine.
+    let mut q = projection(&file);
+    let foreign = SCENE.replace(
+        "https://fubeo.github.io/ns/scene/1",
+        "https://example.org/x",
+    );
+    para_mut(&mut q, 1)
+        .c
+        .push(new_atom(AtomKind::Drawing, None, Some(foreign), None));
+    let mut back = projection(&saved(&file, &q));
+    assert!(matches!(
+        para_mut(&mut back, 1).c.last(),
+        Some(Inline::Atom {
+            kind: AtomKind::Image,
+            svg: None,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn un_inchiostro_o_un_disegno_senza_i_suoi_dati_è_rifiutato() {
+    let file = bytes(&sample());
+    for atom in [
+        new_atom(AtomKind::Ink, None, None, None),
+        new_atom(AtomKind::Drawing, None, None, None),
+        new_atom(AtomKind::Ink, Some(ink_shape()), Some(SCENE.into()), None),
+    ] {
+        let mut p = projection(&file);
+        para_mut(&mut p, 1).c.push(atom);
+        let result = save(Codec::Docx, &file, &p.to_json().unwrap());
+        assert!(matches!(result, Err(RichError::Malformed(_))), "{result:?}");
+    }
 }

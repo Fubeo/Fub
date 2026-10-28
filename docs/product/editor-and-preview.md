@@ -395,9 +395,10 @@ delle righe; la prima riga è l'intestazione della tabella.
   modifica è cominciata con un carattere e muovono il cursore quando è
   cominciata con Invio. Una pipe scritta in una cella diventa `\|` nel file.
 - Canc svuota le celle selezionate; Mod+C, Mod+X e Mod+V usano il TSV dei fogli
-  di calcolo, dove una cella su più righe resta una cella (gli a capo diventano
-  spazi), e incollare oltre il bordo allarga la tabella. Mod+B, Mod+I e
-  Mod+Maiusc+X mettono grassetto, corsivo e barrato alle celle selezionate.
+  di calcolo (e una tabella HTML), dove una cella su più righe resta una cella;
+  incollare oltre il bordo allarga la tabella, e un valore incollato riempie le
+  celle scelte. Il quadratino nell'angolo della selezione continua la serie.
+  Mod+B, Mod+I e Mod+Maiusc+X mettono grassetto, corsivo e barrato.
 - Il menu contestuale (tasto destro, tasto menu o Maiusc+F10) inserisce,
   sposta ed elimina righe e colonne, ordina secondo la colonna attiva,
   allinea a sinistra, al centro o a destra, copia, taglia e svuota. I

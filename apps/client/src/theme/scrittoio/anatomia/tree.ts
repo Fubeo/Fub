@@ -3,6 +3,7 @@ import { S, SELECTABLE, type PartAnatomy } from "./types";
 
 export const TREE: PartAnatomy = {
   part: "tree",
+  layer: "cornice",
   components: [
     // `files-panel` è del pezzo dei cassetti: qui dice soltanto che due liste
     // stanno una sotto l'altra (appuntate e albero).

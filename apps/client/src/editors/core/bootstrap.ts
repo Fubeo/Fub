@@ -26,6 +26,7 @@ import type { DrawingImagePort } from "../canvas/surface";
 import type { VaultFontPort } from "../spatial/fonts/vault";
 import type { SymbolLibraryPort } from "../spatial/tools/symbol-libraries";
 import type { GridDialog, SyntaxForm } from "../../host/contract";
+import { adaptedPaper, type Look } from "../../theme/content-look";
 import {
   DocumentSurfaceRegistry,
   type EditorSurface,
@@ -42,6 +43,13 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onImportRemoteImage?: (url: string, from: string) => Promise<string | null>;
   readonly onOpenDocument: (doc: string) => void | Promise<void>;
   readonly onSearchTag: (tag: string) => void;
+  /// Un comando della shell dato da dentro una superficie, come dalla
+  /// palette: lo zoom della barra del documento.
+  readonly runShellCommand?: (id: string) => void;
+  /// Una superficie che chiede un'altra modalità, o un altro aspetto del
+  /// contenuto, per il suo riquadro: come dal selettore della banda.
+  readonly requestMode?: (paneId: string, mode: string) => void;
+  readonly requestLook?: (paneId: string, look: Look) => void;
   readonly completions: CompletionSources;
   readonly slash?: EditorSlashHost;
   readonly gridHost?: GridHost;
@@ -101,11 +109,13 @@ function proofPorts(vault: string | null | undefined): ProofPorts {
 }
 
 const PLAIN_TEXT_MODES = [
-  { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source" },
+  { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source", looks: ["tema"] },
 ] as const;
 
+/// Il foglio sta sulla carta del file, o con i colori del file adattati alla
+/// carta del tema; le intestazioni di righe e colonne sono cornice.
 const GRID_MODES = [
-  { id: "sheet", label: () => t("mode.sheet"), presentation: "surface", contextMode: "live_preview" },
+  { id: "sheet", label: () => t("mode.sheet"), presentation: "surface", contextMode: "live_preview", looks: ["file", "adattato"] },
 ] as const;
 
 /// La stampa in PDF di una cartella, con l'export dell'host (`xlsx.copy.pdf`):
@@ -120,12 +130,12 @@ const GRID_EXPORTS: readonly SurfaceExport[] = [
 ];
 
 const VIEWER_MODES = [
-  { id: "view", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading" },
+  { id: "view", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading", looks: ["file"] },
 ] as const;
 
 
 const ERROR_MODES = [
-  { id: "error", label: () => t("mode.source"), presentation: "surface", contextMode: "reading" },
+  { id: "error", label: () => t("mode.source"), presentation: "surface", contextMode: "reading", looks: ["tema"] },
 ] as const;
 
 function requireMode(modes: EditorSurface["modes"], mode: string): void {
@@ -182,6 +192,9 @@ function staticSurface(
     },
   };
 }
+
+/// Le parole della banda per il modo della cella di una cartella.
+const GRID_MODE_KEYS = { ready: "grid.mode.ready", insert: "grid.mode.insert", edit: "grid.mode.edit" } as const satisfies Record<string, Key>;
 
 const loadPdf = makePdfJsLoader(
   () => import("pdfjs-dist/build/pdf.min.mjs") as unknown as Promise<PdfJsModule>,
@@ -311,6 +324,9 @@ export function createDocumentSurfaceRegistry(
         let dialogs: GridDialogs | null = null;
         let waiting: GridDialog | null = null;
         let destroyed = false;
+        // Il modo della cella, nella banda di stato: «Pronto», «Inserisci» o
+        // «Modifica», come nei fogli di calcolo.
+        const statusListeners = new Set<() => void>();
         const engine = new GridEngine(context.parent, {
           surfaceId: context.paneId,
           formatId: context.formatId,
@@ -324,6 +340,9 @@ export function createDocumentSurfaceRegistry(
           },
           onCommands: () => ribbon?.schedule(),
           onView: () => ribbon?.schedule(),
+          onEditMode: () => {
+            for (const listener of statusListeners) listener();
+          },
           onDialog: (dialog) => {
             if (dialogs) dialogs.open(dialog);
             else waiting = dialog;
@@ -336,6 +355,11 @@ export function createDocumentSurfaceRegistry(
             run: () => options.exportDocument!.run(context.documentId, GRID_EXPORTS[0]!),
           },
         });
+        // L'aspetto lo decide la shell con la classe `look-*` del contenitore:
+        // nell'adattato le celle portano i colori del file sulla carta del tema.
+        const looks = new MutationObserver(() => engine.setPaper(adaptedPaper(context.parent)));
+        looks.observe(context.parent, { attributes: true, attributeFilter: ["class"] });
+        engine.setPaper(adaptedPaper(context.parent));
         void import("../grid/ribbon/ribbon").then(
           ({ mountRibbon, mountGridDialogs }) => {
             if (destroyed) return;
@@ -369,11 +393,28 @@ export function createDocumentSurfaceRegistry(
           focus: () => engine.focus(),
           selectedText: () => engine.selectedText(),
           setReadOnly: (readOnly) => engine.setReadOnly(readOnly),
-          setTheme: (theme) => engine.setTheme(theme),
+          setTheme: (theme) => {
+            engine.setTheme(theme);
+            engine.setPaper(adaptedPaper(context.parent));
+          },
           contextMenu: (at) => gridContextMenu(menuHost, at),
           miniBar: () => gridMiniBar(menuHost),
+          status: {
+            counts: false,
+            items: () => [{
+              id: "grid-mode",
+              text: t(GRID_MODE_KEYS[engine.editMode()]),
+              hint: t("grid.mode.hint"),
+            }],
+            subscribe(listener) {
+              statusListeners.add(listener);
+              return () => statusListeners.delete(listener);
+            },
+          },
           destroy: () => {
             destroyed = true;
+            statusListeners.clear();
+            looks.disconnect();
             ribbon?.destroy();
             ribbon = null;
             dialogs?.destroy();
@@ -405,6 +446,12 @@ export function createDocumentSurfaceRegistry(
           drawingImages: options.drawingImages,
           drawingFonts: options.drawingFonts,
           drawingSymbols: options.drawingSymbols,
+          // Il testo dei disegni si corregge come i documenti.
+          drawingProof: {
+            ports: proofPorts(openVaultRoot()),
+            notify: options.slash ? (message) => options.slash!.notify(message) : undefined,
+          },
+          shellCommand: options.runShellCommand,
           renderMarkdownForCard: options.renderCanvasMarkdown
             ? (nodeId, text, host, forms) => options.renderCanvasMarkdown!(nodeId, text, host, context.documentId, forms)
             : undefined,
@@ -428,6 +475,9 @@ export function createDocumentSurfaceRegistry(
           onChange: options.onChange,
           onSelectionChange: options.onSelectionChange,
           images: options.drawingImages,
+          shellCommand: options.runShellCommand ? (id) => () => options.runShellCommand!(id) : undefined,
+          requestMode: options.requestMode ? (mode) => options.requestMode!(context.paneId, mode) : undefined,
+          requestLook: options.requestLook ? (look) => options.requestLook!(context.paneId, look) : undefined,
           proof: {
             ports: proofPorts(openVaultRoot()),
             notify: options.slash ? (message) => options.slash!.notify(message) : undefined,

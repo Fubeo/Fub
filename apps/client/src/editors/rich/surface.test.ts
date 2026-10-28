@@ -4,12 +4,15 @@
 // perché un documento non si scrive, e smonta tutto anche a motore non ancora
 // caricato.
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { TextSelection } from "prosemirror-state";
 import { RICH_ACTIONS } from "./commands";
 import * as engineModule from "./engine";
-import { mountRichSurface, RICH_ACTION_IDS, RICH_CHORDS, RICH_PROFILE } from "./surface";
+import { mountRichSurface, RICH_ACTION_IDS, RICH_CHORDS, RICH_PROFILE, RICH_READING_MODE } from "./surface";
 import { t } from "../../i18n/strings";
 import { declareClipboard } from "../../platform/clipboard";
+import { activeMotions, createManualDriver, setMotionDriver } from "../../moto";
 import type { SurfaceMenuItem } from "../core/editor-menu";
+import type { EditorSurface } from "../core/registry";
 
 afterEach(() => document.body.replaceChildren());
 
@@ -29,19 +32,40 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-function mount(load: () => Promise<typeof engineModule>) {
+function mount(load: () => Promise<typeof engineModule>, requestMode?: (mode: string) => void) {
   const parent = document.createElement("div");
   document.body.append(parent);
   const onChange = vi.fn();
   const surface = mountRichSurface(
     RICH_PROFILE,
     { paneId: "pane", documentId: "lettera.docx", parent, formatId: "docx" },
-    { onChange, onSelectionChange: vi.fn(), loadEngine: load },
+    { onChange, onSelectionChange: vi.fn(), loadEngine: load, requestMode },
   );
   return { parent, surface, onChange };
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/// L'ispettore della shell, in piccolo: monta la scheda che la superficie
+/// chiede di mostrare.
+function inspector(surface: EditorSurface) {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const mounted = new Map<string, () => void>();
+  const stop = surface.panels!.onShow((id) => {
+    if (mounted.has(id)) return;
+    const panel = surface.panels!.list().find((each) => each.id === id)!;
+    mounted.set(id, panel.mount(host));
+  });
+  return {
+    host,
+    close() {
+      stop();
+      for (const unmount of mounted.values()) unmount();
+      host.remove();
+    },
+  };
+}
 
 describe("la superficie ricca", () => {
   it("dichiara le stesse azioni e gli stessi accordi del motore", () => {
@@ -73,6 +97,53 @@ describe("la superficie ricca", () => {
     expect(parent.childElementCount).toBe(0);
   });
 
+  it("ha Pagina, Scrittura e Lettura, ciascuna coi suoi aspetti, e Pagina per prima", () => {
+    const { surface } = mount(() => new Promise(() => {}));
+    expect(surface.modes.map((mode) => [mode.id, mode.contextMode, mode.looks])).toEqual([
+      ["document", "live_preview", ["file", "adattato"]],
+      ["writing", "live_preview", ["tema"]],
+      ["reading", "reading", ["file", "adattato"]],
+    ]);
+    expect(surface.defaultMode ?? surface.modes[0].id).toBe("document");
+    expect(() => surface.setMode("source")).toThrow();
+    surface.destroy();
+  });
+
+  it("in Lettura la barra si ritira e il documento non si scrive; Esc chiede Pagina", async () => {
+    const asked: string[] = [];
+    const { parent, surface } = mount(() => Promise.resolve(engineModule), (mode) => asked.push(mode));
+    await flush();
+    surface.buffer!.setDoc(SOURCE);
+    const host = parent.querySelector<HTMLElement>(".rich-ribbon-host")!;
+    const content = parent.querySelector<HTMLElement>(".rich-content")!;
+    surface.setMode("reading");
+    expect(parent.dataset.surfaceMode).toBe("reading");
+    expect(host.hidden).toBe(true);
+    expect(surface.editorActions!.editable()).toBe(false);
+    expect(content.getAttribute("contenteditable")).toBe("false");
+    const esc = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    content.dispatchEvent(esc);
+    expect(esc.defaultPrevented).toBe(true);
+    expect(asked).toEqual(["document"]);
+    surface.setMode("writing");
+    expect(host.hidden).toBe(false);
+    expect(surface.editorActions!.editable()).toBe(true);
+    // Fuori dalla Lettura, Esc resta di chi lo aspetta.
+    content.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(asked).toEqual(["document"]);
+    surface.destroy();
+  });
+
+  it("un documento in sola lettura resta tale fuori dalla Lettura", async () => {
+    const { surface } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    surface.buffer!.setDoc(JSON.stringify({ ...JSON.parse(SOURCE), readonly: "protected" }));
+    surface.setMode("reading");
+    surface.setMode("document");
+    expect(surface.editorActions!.editable()).toBe(false);
+    surface.destroy();
+  });
+
   it("smontata prima che il motore arrivi non monta niente dopo", async () => {
     const load = deferred();
     const { parent, surface } = mount(() => load.promise);
@@ -100,18 +171,76 @@ describe("la superficie ricca", () => {
     const { parent, surface } = mount(() => Promise.resolve(engineModule));
     await flush();
     surface.buffer!.setDoc(JSON.stringify({ ...JSON.parse(SOURCE), readonly: "protected" }));
-    const notice = parent.querySelector<HTMLElement>(".rich-notice")!;
-    expect(notice.hidden).toBe(false);
+    expect(surface.standing!.current()!.kind).toBe("readonly");
     expect(surface.editorActions!.editable()).toBe(false);
     expect(parent.querySelector(".rich-content")?.getAttribute("contenteditable")).toBe("false");
     surface.destroy();
+  });
+
+  it("in sola lettura la barra resta: si cerca e si leggono i commenti, il resto è spento col perché", async () => {
+    const { parent, surface, onChange } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    const comments = [{ id: 7, by: "Ada", at: "2026-10-18T14:00:00Z", text: "Da rivedere." }];
+    surface.buffer!.setDoc(JSON.stringify({ ...JSON.parse(SOURCE), readonly: "protected", comments }));
+    const ribbon = parent.querySelector<HTMLElement>(".rich-ribbon")!;
+    expect(ribbon.hidden).toBe(false);
+    const named = (label: string) => ribbon.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+    // La sottolineatura è spenta, raggiungibile, e dice perché.
+    const bold = ribbon.querySelector<HTMLButtonElement>('[data-command="rich.underline"] button')!;
+    expect(bold.getAttribute("aria-disabled")).toBe("true");
+    bold.focus();
+    expect(document.getElementById(bold.getAttribute("aria-describedby")!)!.textContent).toBe(
+      t("rich.ribbon.unavailable", { command: bold.getAttribute("aria-label")!, reason: t("rich.ribbon.readonly") }),
+    );
+    bold.click();
+    expect(onChange).not.toHaveBeenCalled();
+    // Invio e Spazio non lo premono.
+    for (const key of ["Enter", " "]) {
+      const down = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      bold.dispatchEvent(down);
+      expect(down.defaultPrevented).toBe(true);
+    }
+    const font = ribbon.querySelector<HTMLSelectElement>('[data-command="rich.font"] select')!;
+    expect(font.disabled).toBe(true);
+    // La scelta spenta non tiene il Tab della barra.
+    expect(font.tabIndex).toBe(-1);
+    // Trova si apre, cerca, e non offre di sostituire.
+    named(t("rich.find")).click();
+    const bar = parent.querySelector<HTMLElement>(".rich-findbar")!;
+    expect(bar.hidden).toBe(false);
+    const what = bar.querySelector<HTMLInputElement>("input")!;
+    what.value = "ciao";
+    what.dispatchEvent(new Event("input"));
+    expect(bar.querySelector("[role=status]")!.textContent).toBe(t("rich.find.count", { current: "1", total: "1" }));
+    const visible = (el: Element | null): boolean => !el || (!(el as HTMLElement).hidden && visible(el.parentElement));
+    expect([...bar.querySelectorAll<HTMLButtonElement>("button")].filter(visible).map((b) => b.textContent)).toEqual([
+      t("rich.find.previous"),
+      t("rich.find.next"),
+      "",
+    ]);
+    what.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(bar.hidden).toBe(true);
+    // Il commento si legge nella sua scheda; non se ne scrivono, non si
+    // risolvono, non si tolgono.
+    const side = inspector(surface);
+    named(t("rich.comments")).click();
+    expect(side.host.querySelector(".rich-side-text")!.textContent).toBe("Da rivedere.");
+    expect(side.host.querySelector(".rich-side-compose")?.hasAttribute("hidden")).toBe(true);
+    expect([...side.host.querySelectorAll<HTMLButtonElement>("button")].filter(visible)).toEqual([]);
+    expect(onChange).not.toHaveBeenCalled();
+    surface.destroy();
+    // La superficie smontata non porta più schede.
+    expect(surface.panels!.list()).toEqual([]);
+    side.close();
   });
 
   it("un documento importato si legge e dice perché non si scrive", async () => {
     const { parent, surface } = mount(() => Promise.resolve(engineModule));
     await flush();
     surface.buffer!.setDoc(JSON.stringify({ ...JSON.parse(SOURCE), readonly: "import" }));
-    expect(parent.querySelector<HTMLElement>(".rich-notice")!.textContent).toBe(t("rich.readonly.import"));
+    // Il perché lo dice il chip accanto al percorso, non una riga sopra il foglio.
+    expect(parent.querySelector<HTMLElement>(".rich-notice")!.hidden).toBe(true);
+    expect(surface.standing!.current()!.source).toBe(t("rich.standing.reason", { reason: t("rich.readonly.import") }));
     expect(parent.querySelector(".rich-content")?.textContent).toContain("ciao");
     expect(surface.editorActions!.editable()).toBe(false);
     surface.destroy();
@@ -180,22 +309,227 @@ describe("la superficie ricca", () => {
     surface.destroy();
   });
 
-  it("la mini-barra è la striscia ristretta, e smontata non lascia niente", async () => {
+  it("ogni gruppo della barra ha un nome", async () => {
+    const { parent, surface } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    surface.buffer!.setDoc(SOURCE);
+    const groups = [...parent.ownerDocument.querySelectorAll(".rich-ribbon-group")];
+    expect(groups.length).toBeGreaterThan(0);
+    for (const group of groups) {
+      expect(group.getAttribute("role")).toBe("group");
+      expect(group.getAttribute("aria-label")).toMatch(/\S/);
+    }
+    expect(groups.map((group) => group.getAttribute("aria-label"))).toContain(t("rich.ribbon.group.paragraph"));
+    surface.destroy();
+  });
+
+  it("Ctrl+F apre la barra di ricerca del documento, non quella della shell; Ctrl+H anche Sostituisci", async () => {
+    const { parent, surface } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    surface.buffer!.setDoc(SOURCE);
+    const bar = parent.querySelector<HTMLElement>(".rich-findbar")!;
+    expect(bar.hidden).toBe(true);
+    // La shell chiama `find()` per Ctrl+F: `true` vuol dire che non apre la sua.
+    expect(surface.find!()).toBe(true);
+    expect(bar.hidden).toBe(false);
+    expect(bar.getAttribute("role")).toBe("search");
+    expect(bar.contains(document.activeElement)).toBe(true);
+    const replaceRow = bar.querySelectorAll<HTMLElement>(".rich-findbar-row")[2]!;
+    expect(replaceRow.hidden).toBe(true);
+    // Ctrl+H, nel testo, la apre con Sostituisci.
+    surface.focus!();
+    parent.querySelector(".rich-content")!.dispatchEvent(new KeyboardEvent("keydown", { key: "h", ctrlKey: true, bubbles: true }));
+    expect(replaceRow.hidden).toBe(false);
+    surface.destroy();
+    expect(parent.querySelector(".rich-findbar")).toBeNull();
+  });
+
+  it("ogni riquadro della barra ha un titolo, i campi del kit e un'azione principale", async () => {
+    const { parent, surface } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    surface.buffer!.setDoc(SOURCE);
+    // I pulsanti che aprono un riquadro; non i gruppi raccolti, che aprono
+    // i loro controlli.
+    const openers = [
+      ...parent.ownerDocument.querySelectorAll<HTMLButtonElement>('.rich-ribbon button[aria-haspopup="dialog"]:not(.rich-ribbon-group-toggle)'),
+    ].filter((opener) => !opener.closest<HTMLElement>("[data-command]")!.hidden && opener.getAttribute("aria-disabled") !== "true");
+    // Senza pagina non c'è Intestazione; la pagina e il conteggio stanno in
+    // Proprietà, nel pannello di destra.
+    expect(openers.length).toBeGreaterThan(5);
+    let opened = 0;
+    for (const opener of openers) {
+      opener.click();
+      const name = opener.getAttribute("aria-label");
+      // Intestazione e piè di pagina chiedono una sezione, che qui non c'è.
+      if (opener.getAttribute("aria-expanded") !== "true") continue;
+      opened += 1;
+      const popover = document.querySelector<HTMLElement>(".kit-popover")!;
+      const title = document.getElementById(popover.getAttribute("aria-labelledby") ?? "");
+      expect(title?.classList.contains("rich-strip-panel-title"), name!).toBe(true);
+      // I campi hanno la loro `label[for]`, come quelli del kit.
+      for (const control of popover.querySelectorAll<HTMLElement>("input:not([type=checkbox]):not([type=color]), select, textarea")) {
+        expect(control.classList.contains("kit-field-input"), name!).toBe(true);
+        expect(popover.querySelector(`label[for="${control.id}"]`), name!).not.toBeNull();
+      }
+      // Un'azione principale, o i campioni che agiscono da sé.
+      const primary = popover.querySelectorAll('.rich-strip-panel-actions .kit-button[data-kind="primary"]').length;
+      const swatches = popover.querySelectorAll(".rich-strip-swatches").length;
+      expect(primary + swatches, name!).toBe(1);
+      expect(popover.querySelector("[style]:not(.rich-strip-swatch)"), name!).toBeNull();
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      expect(opener.getAttribute("aria-expanded"), name!).toBe("false");
+    }
+    expect(opened).toBeGreaterThanOrEqual(openers.length - 1);
+    surface.destroy();
+  });
+
+  it("la mini-barra è quella della barra, ristretta, e smontata non lascia niente", async () => {
     const { surface } = mount(() => Promise.resolve(engineModule));
     await flush();
     surface.buffer!.setDoc(SOURCE);
     const host = document.createElement("div");
     document.body.append(host);
     const unmount = surface.miniBar!()!.mount(host);
-    const mini = host.querySelector(".rich-strip-mini")!;
+    const mini = host.querySelector(".rich-ribbon-mini")!;
     expect(mini).not.toBeNull();
-    expect(mini.querySelector(".rich-strip-bold")).not.toBeNull();
-    expect(mini.querySelector(".rich-strip-font")).not.toBeNull();
-    expect(mini.querySelector("[data-action='rich.link']")).toBeNull();
-    // La striscia intera non ha l'enfasi: sta nella barra di formattazione.
-    expect(document.querySelectorAll(".rich-strip-bold")).toHaveLength(1);
+    expect(mini.querySelector('[data-command="markdown.bold"] button')).not.toBeNull();
+    expect(mini.querySelector('[data-command="rich.font"] select')).not.toBeNull();
+    expect(mini.querySelector('[data-command="rich.link"]')).toBeNull();
     unmount();
     expect(host.childElementCount).toBe(0);
     surface.destroy();
+  });
+
+  it("nello stretto la carta è larga quanto la vista, e un pulsante col numero dei commenti apre il pannello", async () => {
+    const fits: (string | null)[] = [];
+    class Captured extends engineModule.RichEngine {
+      override fitPaper(...args: Parameters<engineModule.RichEngine["fitPaper"]>): void {
+        fits.push(args[0]);
+        super.fitPaper(...args);
+      }
+    }
+    const width = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(560);
+    try {
+      const { parent, surface } = mount(() => Promise.resolve({ ...engineModule, RichEngine: Captured }));
+      const comments = [
+        { id: 7, by: "Ada", at: "2026-10-18T14:00:00Z", text: "Da rivedere." },
+        { id: 8, by: "Bea", at: "2026-10-18T15:00:00Z", text: "Fatto.", parent: 7 },
+        { id: 9, by: "Ada", at: "2026-10-18T16:00:00Z", text: "E qui?" },
+      ];
+      surface.buffer!.setDoc(JSON.stringify({ ...JSON.parse(SOURCE), comments }));
+      await flush();
+      expect(fits[fits.length - 1]).toBe("width");
+      // Due fili: la risposta sta nel suo.
+      const open = parent.querySelector<HTMLButtonElement>(".rich-side-open")!;
+      expect(open.textContent).toBe("2");
+      expect(open.getAttribute("aria-label")).toBe(t("rich.side.open", { count: "2" }));
+      const side = inspector(surface);
+      open.click();
+      expect(side.host.querySelector(".rich-side-comments")).not.toBeNull();
+      side.close();
+      surface.destroy();
+    } finally {
+      width.mockRestore();
+    }
+  });
+
+  it("la banda dice il foglio e le parole del Conteggio, e un clic sulle parole apre il Conteggio", async () => {
+    let engine: engineModule.RichEngine | null = null;
+    class Captured extends engineModule.RichEngine {
+      constructor(...args: ConstructorParameters<typeof engineModule.RichEngine>) {
+        super(...args);
+        engine = this;
+      }
+    }
+    const { surface } = mount(() => Promise.resolve({ ...engineModule, RichEngine: Captured }));
+    await flush();
+    const page = { w: 595, h: 842, top: 72, bottom: 72, left: 72, right: 72 };
+    surface.buffer!.setDoc(
+      JSON.stringify({
+        format: "fub-rich",
+        version: 1,
+        page,
+        blocks: [{ t: "para", role: { kind: "body" }, k: "P", c: [{ t: "text", x: "una prosa di cinque parole", k: "R" }] }],
+      }),
+    );
+    const status = surface.status!;
+    expect(status.counts).toBe(true);
+    const said = () => Object.fromEntries(status.items().map((item) => [item.id, item.text]));
+    expect(said().words).toBe(t("rich.status.words", { count: "5" }));
+    expect(said().page).toBe(t("rich.status.page", { at: "1", total: "1" }));
+    expect(said().tracking).toBeUndefined();
+    // Il numero è quello del Conteggio di Proprietà, che il clic apre.
+    const side = inspector(surface);
+    status.items().find((item) => item.id === "words")!.open!();
+    const row = [...side.host.querySelectorAll("tr")].find((tr) => tr.querySelector("th")?.textContent === t("rich.count.words"))!;
+    expect(row.querySelector("td")!.textContent).toBe("5");
+    expect(document.activeElement?.closest(".rich-side-properties")).not.toBeNull();
+    // Una selezione: «2 di 5».
+    const e = engine as engineModule.RichEngine | null;
+    e!.dispatch(e!.state.tr.setSelection(TextSelection.create(e!.state.doc, 1, 9)));
+    expect(said().words).toBe(t("rich.status.words.selected", { selected: "2", count: "5" }));
+    side.close();
+    surface.destroy();
+    expect(status.items()).toEqual([]);
+  });
+
+  it("F6 passa dalla barra al foglio, e alla fine lascia il giro alla shell", async () => {
+    const { parent, surface } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    surface.buffer!.setDoc(
+      JSON.stringify({ format: "fub-rich", version: 1, blocks: [{ t: "para", role: { kind: "body" }, k: "P", c: [{ t: "text", x: "testo", k: "R" }] }] }),
+    );
+    const bar = parent.querySelector<HTMLElement>(".rich-ribbon-host")!;
+    const page = parent.querySelector<HTMLElement>(".ProseMirror")!;
+    // Da fuori si entra dalla barra, sulla scheda scelta.
+    expect(surface.zone!(1)).toBe(true);
+    expect(bar.contains(document.activeElement)).toBe(true);
+    expect(surface.zone!(1)).toBe(true);
+    expect(document.activeElement).toBe(page);
+    expect(surface.zone!(1)).toBe(false);
+    // Indietro: dal foglio alla barra, poi fuori; da fuori si entra dal foglio.
+    expect(surface.zone!(-1)).toBe(true);
+    expect(bar.contains(document.activeElement)).toBe(true);
+    expect(surface.zone!(-1)).toBe(false);
+    (document.activeElement as HTMLElement).blur();
+    expect(surface.zone!(-1)).toBe(true);
+    expect(document.activeElement).toBe(page);
+    // In Lettura la barra non c'è, e non si conta; il testo non si scrive, e
+    // il fuoco lo prende il foglio.
+    surface.setMode(RICH_READING_MODE);
+    (document.activeElement as HTMLElement).blur();
+    expect(surface.zone!(1)).toBe(true);
+    expect(document.activeElement).toBe(parent.querySelector(".rich-page"));
+    expect(surface.zone!(1)).toBe(false);
+    surface.destroy();
+  });
+
+  it("scrivere, incollare e annullare non fanno partire nessuna corsa", async () => {
+    // Il motore vero, di cui si tiene l'istanza per battere come la tastiera.
+    let engine: engineModule.RichEngine | null = null;
+    class Captured extends engineModule.RichEngine {
+      constructor(...args: ConstructorParameters<typeof engineModule.RichEngine>) {
+        super(...args);
+        engine = this;
+      }
+    }
+    const driver = createManualDriver();
+    setMotionDriver(driver);
+    try {
+      const { surface, onChange } = mount(() => Promise.resolve({ ...engineModule, RichEngine: Captured }));
+      await flush();
+      surface.buffer!.setDoc(SOURCE);
+      const e = engine as engineModule.RichEngine | null;
+      expect(e).not.toBeNull();
+      for (let i = 0; i < 50; i++) e!.dispatch(e!.state.tr.insertText("x"));
+      expect(e!.pasteContent("incollato", null)).toBe(true);
+      expect(e!.run("text.undo")).toBe(true);
+      expect(onChange).toHaveBeenCalled();
+      expect(driver.plays).toHaveLength(0);
+      expect(activeMotions()).toBe(0);
+      surface.destroy();
+    } finally {
+      setMotionDriver(null);
+    }
   });
 });

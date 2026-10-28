@@ -1,5 +1,5 @@
 {
-  "document_revision": "sha256:3d78f4ee5b43b35417e48a0c57c5ec52d0a4ce5d6e47666397bb3e7b0e08b404",
+  "document_revision": "sha256:8e0c0837542db1b2aa1375f7a696a2bc8c409ae70bba5f276d6bc9cd8db4a03c",
   "surface": {
     "id": "fub.grid.xlsx",
     "format": "xlsx",
@@ -8,7 +8,7 @@
   },
   "session": {
     "instance": "xlsx-1",
-    "revision": "sha256:27e326cc3ca324fe506a005d0d92e391590e3b26ac49c8f78a1bd4b78c1f5962",
+    "revision": "sha256:56d3050597c00c3f49611d3ee90173680438e0b152a21b4f849e5c0a32b077c6",
     "sheets": [
       {
         "id": "s1",
@@ -1555,6 +1555,16 @@
         "id": "pageLayout.pageSetup",
         "enabled": true,
         "reason": null
+      },
+      {
+        "id": "fub.pasteFrom",
+        "enabled": true,
+        "reason": null
+      },
+      {
+        "id": "fub.copyHtml",
+        "enabled": true,
+        "reason": null
       }
     ],
     "book": {
@@ -1581,7 +1591,7 @@
   },
   "windows": [
     {
-      "revision": "sha256:27e326cc3ca324fe506a005d0d92e391590e3b26ac49c8f78a1bd4b78c1f5962",
+      "revision": "sha256:56d3050597c00c3f49611d3ee90173680438e0b152a21b4f849e5c0a32b077c6",
       "sheet": "s1",
       "row_start": 0,
       "column_start": 0,
@@ -2897,7 +2907,7 @@
           "bold": false,
           "italic": false,
           "text_color": "#000000",
-          "fill_color": "#FFFF00",
+          "fill_color": "#FFF2CC",
           "horizontal": null,
           "number_format": null,
           "font": null,
@@ -2923,7 +2933,7 @@
           "bold": false,
           "italic": false,
           "text_color": "#000000",
-          "fill_color": "#FFFF00",
+          "fill_color": "#FFF2CC",
           "horizontal": "end",
           "number_format": null,
           "font": null,
@@ -3034,7 +3044,7 @@
       ]
     },
     {
-      "revision": "sha256:27e326cc3ca324fe506a005d0d92e391590e3b26ac49c8f78a1bd4b78c1f5962",
+      "revision": "sha256:56d3050597c00c3f49611d3ee90173680438e0b152a21b4f849e5c0a32b077c6",
       "sheet": "s2",
       "row_start": 0,
       "column_start": 0,
@@ -3923,7 +3933,7 @@
   ],
   "edit": {
     "request": {
-      "revision": "sha256:27e326cc3ca324fe506a005d0d92e391590e3b26ac49c8f78a1bd4b78c1f5962",
+      "revision": "sha256:56d3050597c00c3f49611d3ee90173680438e0b152a21b4f849e5c0a32b077c6",
       "patches": [
         {
           "cell": {
@@ -3937,7 +3947,7 @@
       ]
     },
     "commit": {
-      "revision": "sha256:0577eea2c63dab3a0987c3bce97e88ed6c4fb981c75ce058f9618a4d2e2c5487",
+      "revision": "sha256:49ce78563942c0f2489510960d92148a70debf3aa2f6586a6460fb1fda72579e",
       "edit": {
         "from": 0,
         "to": 0,
@@ -3966,7 +3976,7 @@
       }
     },
     "window": {
-      "revision": "sha256:0577eea2c63dab3a0987c3bce97e88ed6c4fb981c75ce058f9618a4d2e2c5487",
+      "revision": "sha256:49ce78563942c0f2489510960d92148a70debf3aa2f6586a6460fb1fda72579e",
       "sheet": "s1",
       "row_start": 0,
       "column_start": 0,
@@ -5282,7 +5292,7 @@
           "bold": false,
           "italic": false,
           "text_color": "#000000",
-          "fill_color": "#FFFF00",
+          "fill_color": "#FFF2CC",
           "horizontal": null,
           "number_format": null,
           "font": null,
@@ -5308,7 +5318,7 @@
           "bold": false,
           "italic": false,
           "text_color": "#000000",
-          "fill_color": "#FFFF00",
+          "fill_color": "#FFF2CC",
           "horizontal": "end",
           "number_format": null,
           "font": null,
@@ -5423,7 +5433,7 @@
     "journal": "{\"version\":1,\"cells\":[{\"sheet\":\"s1\",\"row\":\"r1\",\"column\":\"c1\",\"before\":\"700\",\"after\":\"900\"}]}",
     "session": {
       "instance": "xlsx-2",
-      "revision": "sha256:71325671df7c9965ef064138cff6a1aad04cf762ff8194662d5d31a726b76f2c",
+      "revision": "sha256:7778f3ea659fcafcee21ddffec1b0408b0050a124b0b8cfc9aeb6bb30b0eab8e",
       "sheets": [
         {
           "id": "s1",
@@ -6976,6 +6986,16 @@
           "id": "pageLayout.pageSetup",
           "enabled": true,
           "reason": null
+        },
+        {
+          "id": "fub.pasteFrom",
+          "enabled": true,
+          "reason": null
+        },
+        {
+          "id": "fub.copyHtml",
+          "enabled": true,
+          "reason": null
         }
       ],
       "book": {
@@ -7001,7 +7021,7 @@
       }
     },
     "window": {
-      "revision": "sha256:71325671df7c9965ef064138cff6a1aad04cf762ff8194662d5d31a726b76f2c",
+      "revision": "sha256:7778f3ea659fcafcee21ddffec1b0408b0050a124b0b8cfc9aeb6bb30b0eab8e",
       "sheet": "s1",
       "row_start": 0,
       "column_start": 0,
@@ -8317,7 +8337,7 @@
           "bold": false,
           "italic": false,
           "text_color": "#000000",
-          "fill_color": "#FFFF00",
+          "fill_color": "#FFF2CC",
           "horizontal": null,
           "number_format": null,
           "font": null,
@@ -8343,7 +8363,7 @@
           "bold": false,
           "italic": false,
           "text_color": "#000000",
-          "fill_color": "#FFFF00",
+          "fill_color": "#FFF2CC",
           "horizontal": "end",
           "number_format": null,
           "font": null,

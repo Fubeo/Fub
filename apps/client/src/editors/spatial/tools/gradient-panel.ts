@@ -28,7 +28,8 @@
 
 import { resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
-import { icon, iconEl, registerIcon } from "../../../ui/icons";
+import { iconEl } from "../../../ui/icons";
+import { ensureDrawIcons } from "../icons";
 import type { Lifetime } from "../../../ui/lifetime";
 import { showContextMenu, type MenuItem } from "../../../ui/menu";
 import { t, type DrawKey } from "../strings";
@@ -49,14 +50,6 @@ import {
 import { customColor, swatchOf } from "./palette";
 import { ANGLE_UNITS, evaluate, PERCENT_UNITS, type QuantityProblem } from "./quantity";
 import type { PaintTarget } from "./swatches-panel";
-
-/// Le icone della sezione, col costrutto di `ui/icons.ts`.
-const ICONS: Readonly<Record<string, readonly string[]>> = {
-  "draw-gradient-add": ["M12 5v14", "M5 12h14"],
-  "draw-gradient-remove": ["M5 12h14"],
-  "draw-gradient-reverse": ["M4 8h14", "M14 4l4 4-4 4", "M20 16H6", "M10 12l-4 4 4 4"],
-  "draw-gradient-presets": ["M4 4h7v7H4z", "M13 4h7v7h-7z", "M4 13h7v7H4z", "M13 13h7v7h-7z"],
-};
 
 /// Quanto lontano dalla barra, in pixel CSS, un punto trascinato si toglie.
 const TEAR_PX = 32;
@@ -207,7 +200,7 @@ function normalized(degrees: number): number {
 }
 
 export function createGradientPanel(life: Lifetime, options: GradientPanelOptions): GradientPanel {
-  for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
+  ensureDrawIcons();
   const element = document.createElement("div");
   element.className = "draw-gradient";
 

@@ -6,7 +6,7 @@
 > fra le tavole, che cosa fanno gli schermi nero e bianco, il laser e
 > l'inchiostro, e come si esce.
 
-Dal [livello Standard](drawing.md#il-livello-standard) un [disegno](drawing.md)
+Nello spazio [Completo](drawing.md#completo-e-semplice) un [disegno](drawing.md)
 si presenta: le sue [tavole](drawing-boards.md) a schermo intero, una alla
 volta, nel loro ordine. La presentazione guarda e non scrive: il disegno, il
 file e la [cronologia](drawing-history.md) restano come sono, e si presenta
@@ -145,9 +145,9 @@ esce. Quelli con `Ctrl`, `Alt` o `⌘` la presentazione non li usa.
 `?`, sul foglio, elenca `F5` e `Maiusc+F5` sotto «Vista», e i tasti della
 presentazione sotto «Presentazione».
 
-## Livelli e parti
+## Spazi e parti
 
-All'Essenziale non ci sono il pulsante «Presenta», `F5`, `Maiusc+F5` e
-«Presenta da qui». Sono la parte «Presentare» del
-[Personalizzato](drawing-custom.md), che va anche senza la parte «Tavola»:
+Nel Semplice non ci sono il pulsante «Presenta», `F5`, `Maiusc+F5` e
+«Presenta da qui». Sono la parte «Presentare» delle
+[parti dell'editor](drawing-custom.md#che-cosa-porta-una-parte), che va anche senza la parte «Tavola»:
 allora non c'è l'elenco, e nemmeno «Presenta da qui».

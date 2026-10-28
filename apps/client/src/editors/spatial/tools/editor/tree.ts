@@ -97,19 +97,19 @@ export interface TreeContext {
     readonly count: number;
     keys: string;
   } | null;
-  syncTree: () => void;
+  syncTree: (now?: boolean) => void;
   canRename: (key: string) => boolean;
   renameRow: (key: string, name: string) => string | null;
   placing: (keys: readonly string[], drop: TreeDrop) => Placing | DrawKey | null;
   moveRows: (keys: readonly string[], drop: TreeDrop) => readonly string[] | null;
   renameSelection: () => void;
-  showHistory: (open: boolean) => void;
+  showHistory: (open: boolean, focus?: boolean) => void;
   syncHistory: () => void;
-  showBoards: (open: boolean) => void;
+  showBoards: (open: boolean, focus?: boolean) => void;
   syncBoards: () => void;
-  showLibrary: (open: boolean) => void;
-  showSymbols: (open: boolean) => void;
-  showAccess: (open: boolean) => void;
+  showLibrary: (open: boolean, focus?: boolean) => void;
+  showSymbols: (open: boolean, focus?: boolean) => void;
+  showAccess: (open: boolean, focus?: boolean) => void;
   accessNames: Map<string, string>;
   accessName: (key: string) => string;
   syncAccess: (now?: boolean) => void;
@@ -278,9 +278,26 @@ export function installTree(ctx: EditorContext): void {
 
   ctx.treeShown = null;
 
-  /// Porta l'albero, se è aperto, alla scena e alla selezione di adesso.
-  function syncTree(): void {
-    if (tree.element.hidden) return;
+  /// Vero se l'albero si vede. Nell'ispettore dello Scrittoio la scheda dei
+  /// livelli resta montata anche dietro un'altra, e rifare l'albero a ogni
+  /// scelta in un disegno grande che nessuno guarda rallenta il clic: si
+  /// rifà quando torna in vista. Si parte visibili, e l'osservatore lo dice
+  /// dopo.
+  let treeInView = true;
+  if (typeof IntersectionObserver !== "undefined") {
+    const viewer = new IntersectionObserver((records) => {
+      treeInView = records[records.length - 1]!.isIntersecting;
+      if (treeInView) syncTree();
+    });
+    viewer.observe(tree.element);
+    ctx.life.add(() => viewer.disconnect());
+  }
+
+  /// Porta l'albero, se è aperto e si vede, alla scena e alla selezione di
+  /// adesso; con `now` anche se l'osservatore non l'ha ancora visto
+  /// tornare.
+  function syncTree(now = false): void {
+    if (tree.element.hidden || (!now && !treeInView)) return;
     const index = currentIndex();
     const keys = ctx.selection.join("\n");
     const layer = has("layers") ? ctx.currentLayer() : null;
@@ -508,14 +525,20 @@ export function installTree(ctx: EditorContext): void {
       announce(t("draw.rename.none"));
       return;
     }
-    if (tree.element.hidden) ctx.showObjects(true);
+    if (tree.element.hidden || !treeInView) ctx.showObjects(true);
+    syncTree(true);
     tree.rename(units[0]!.key);
   }
   ctx.renameSelection = renameSelection;
 
   /// Apre o chiude la cronologia; aperta, il fuoco ci va.
-  function showHistory(open: boolean): void {
+  function showHistory(open: boolean, focus = true): void {
     if (open && !has("history")) return;
+    // Nell'ispettore: la sua scheda, e il fuoco ci va.
+    if (ctx.routed("history", open)) {
+      if (open && focus && !historyPanel.element.hidden) historyPanel.focus();
+      return;
+    }
     if (!open && historyPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     historyPanel.element.hidden = !open;
     historyButton.setAttribute("aria-expanded", String(open));
@@ -523,7 +546,7 @@ export function installTree(ctx: EditorContext): void {
     if (open) {
       ctx.historyShown = null;
       syncHistory();
-      historyPanel.focus();
+      if (focus) historyPanel.focus();
     }
   }
   ctx.showHistory = showHistory;
@@ -547,8 +570,13 @@ export function installTree(ctx: EditorContext): void {
   ctx.syncHistory = syncHistory;
 
   /// Apre o chiude l'elenco delle tavole; aperto, il fuoco ci va.
-  function showBoards(open: boolean): void {
+  function showBoards(open: boolean, focus = true): void {
     if (open && !has("board")) return;
+    // Nell'ispettore: la sua scheda, e il fuoco ci va.
+    if (ctx.routed("design", open)) {
+      if (open && focus && !boardsPanel.element.hidden) boardsPanel.focus();
+      return;
+    }
     if (!open && boardsPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     boardsPanel.element.hidden = !open;
     boardsButton.setAttribute("aria-expanded", String(open));
@@ -556,7 +584,7 @@ export function installTree(ctx: EditorContext): void {
     if (open) {
       ctx.boardsShown = null;
       syncBoards();
-      boardsPanel.focus();
+      if (focus) boardsPanel.focus();
     }
   }
   ctx.showBoards = showBoards;
@@ -585,8 +613,13 @@ export function installTree(ctx: EditorContext): void {
 
   /// Apre o chiude le forme; aperte, il fuoco va al campo di ricerca. Un
   /// trascinamento in corso finisce.
-  function showLibrary(open: boolean): void {
+  function showLibrary(open: boolean, focus = true): void {
     if (open && !has("library")) return;
+    // Nell'ispettore: la sua scheda, e il fuoco ci va.
+    if (ctx.routed("resources", open)) {
+      if (open && focus && !libraryPanel.element.hidden) libraryPanel.focus();
+      return;
+    }
     if (!open && libraryPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     if (!open) ctx.cancelShapeDrag();
     libraryPanel.element.hidden = !open;
@@ -594,7 +627,7 @@ export function installTree(ctx: EditorContext): void {
     ctx.syncDock();
     if (open) {
       libraryPanel.update({ editable: editable() });
-      libraryPanel.focus();
+      if (focus) libraryPanel.focus();
     }
   }
   ctx.showLibrary = showLibrary;
@@ -602,8 +635,13 @@ export function installTree(ctx: EditorContext): void {
   /// Apre o chiude i simboli; aperti, il fuoco va al campo di ricerca, e le
   /// librerie del vault si leggono, la prima volta. Un trascinamento in
   /// corso finisce.
-  function showSymbols(open: boolean): void {
+  function showSymbols(open: boolean, focus = true): void {
     if (open && !has("symbols")) return;
+    // Nell'ispettore: la sua scheda, e il fuoco ci va.
+    if (ctx.routed("resources", open)) {
+      if (open && focus && !symbolsPanel.element.hidden) symbolsPanel.focus();
+      return;
+    }
     if (!open && symbolsPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     if (!open) ctx.cancelSymbolDrag();
     symbolsPanel.element.hidden = !open;
@@ -612,15 +650,20 @@ export function installTree(ctx: EditorContext): void {
     if (open) {
       symbolLibraries?.start();
       ctx.syncSymbols();
-      symbolsPanel.focus();
+      if (focus) symbolsPanel.focus();
     }
   }
   ctx.showSymbols = showSymbols;
 
   /// Apre o chiude la verifica dell'accessibilità; aperta, il fuoco ci va.
   /// Chiusa, dimentica ciò che ha letto.
-  function showAccess(open: boolean): void {
+  function showAccess(open: boolean, focus = true): void {
     if (open && !has("accessibility")) return;
+    // Nell'ispettore: la sua scheda, e il fuoco ci va.
+    if (ctx.routed("accessibility", open)) {
+      if (open && focus && !accessPanel.element.hidden) accessPanel.focus();
+      return;
+    }
     if (!open && accessPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     accessPanel.element.hidden = !open;
     accessButton.setAttribute("aria-expanded", String(open));
@@ -628,7 +671,7 @@ export function installTree(ctx: EditorContext): void {
     ctx.accessShown = null;
     if (open) {
       syncAccess(true);
-      accessPanel.focus();
+      if (focus) accessPanel.focus();
     } else {
       clearTimeout(ctx.auditTimer);
       ctx.audited = null;
@@ -662,11 +705,26 @@ export function installTree(ctx: EditorContext): void {
   };
   ctx.accessName = accessName;
 
-  /// Porta la verifica, se è aperta, al disegno di adesso. L'ordine di
-  /// lettura segue subito; i problemi di un disegno cambiato si rileggono un
-  /// momento dopo l'ultimo cambio, o subito con `now`.
+  /// Vero se la verifica si vede. Nell'ispettore dello Scrittoio la sua
+  /// scheda resta montata anche dietro un'altra, e rileggere a ogni cambio
+  /// un disegno grande che nessuno guarda ferma la pagina: si rilegge quando
+  /// torna in vista. Si parte visibili, e l'osservatore lo dice dopo.
+  let accessInView = true;
+  if (typeof IntersectionObserver !== "undefined") {
+    const viewer = new IntersectionObserver((records) => {
+      accessInView = records[records.length - 1]!.isIntersecting;
+      if (accessInView) syncAccess(true);
+      else clearTimeout(ctx.auditTimer);
+    });
+    viewer.observe(accessPanel.element);
+    ctx.life.add(() => viewer.disconnect());
+  }
+
+  /// Porta la verifica, se è aperta e si vede, al disegno di adesso. L'ordine
+  /// di lettura segue subito; i problemi di un disegno cambiato si rileggono
+  /// un momento dopo l'ultimo cambio, o subito con `now`.
   function syncAccess(now = false): void {
-    if (accessPanel.element.hidden) return;
+    if (accessPanel.element.hidden || !accessInView) return;
     const text = ctx.engine.text;
     if (ctx.audited === null || ctx.audited.text !== text) {
       clearTimeout(ctx.auditTimer);
@@ -743,6 +801,7 @@ export function installTree(ctx: EditorContext): void {
     const fix = problem?.fix ?? null;
     if (problem === null || fix === null) return;
     if (fix.kind === "title") {
+      if (has("properties")) ctx.showPanel(true, false);
       titleInput.focus();
       titleInput.select();
       return;

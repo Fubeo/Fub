@@ -111,3 +111,61 @@
 .kit-splitter[aria-orientation="horizontal"] {
   cursor: row-resize;
 }
+
+/* ── Campo numerico ──────────────────────────────────────────────────────── */
+
+/* L'etichetta si tira di lato per cambiare il valore. */
+.kit-number-label:not(.sr-only) {
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: none;
+}
+.kit-number.disabled .kit-number-label {
+  cursor: default;
+}
+
+/* ── Selettore del colore ────────────────────────────────────────────────── */
+
+/* Il quadrato: la tinta pura sotto (in linea, da `picker.ts`), il bianco da
+   sinistra e il nero dal basso sopra. Le strisce e i pomelli stanno a misura
+   del gesto: il pomello è centrato sul punto che dice. */
+.kit-color-area,
+.kit-color-hue,
+.kit-color-alpha {
+  position: relative;
+  touch-action: none;
+  cursor: crosshair;
+}
+.kit-color-area {
+  aspect-ratio: 4 / 3;
+  background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent);
+}
+.kit-color-hue {
+  background-image: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+.kit-color-alpha {
+  background-image:
+    linear-gradient(to right, transparent, var(--kit-color-solid, #000)),
+    conic-gradient(#ccc 25%, #fff 0 50%, #ccc 0 75%, #fff 0);
+  background-size: 100% 100%, 8px 8px;
+}
+.kit-color-thumb {
+  position: absolute;
+  top: 50%;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.kit-color-area > .kit-color-thumb {
+  top: 0;
+}
+
+/* L'angolo della casella con la tendina, in basso a destra. */
+.kit-rail-slot {
+  position: relative;
+}
+.kit-rail-corner {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+}

@@ -152,6 +152,32 @@ describe("prima che il codice arrivi", () => {
 });
 
 describe("dopo", () => {
+  it("le schede dell'ispettore arrivano con la superficie, e chi le seguiva lo sa", async () => {
+    const lazy = mount();
+    lazy.buffer!.setDoc(SOURCE);
+    let told = 0;
+    lazy.panels!.subscribe(() => (told += 1));
+    expect(lazy.panels!.list()).toEqual([]);
+    expect(lazy.panels!.covers).toBeUndefined();
+    await arrive();
+    expect(told).toBeGreaterThan(0);
+    expect(lazy.panels!.list().map((tab) => tab.id)).toContain("draw.layers");
+    expect(lazy.panels!.covers).toEqual(["outline", "footnotes", "properties"]);
+  });
+
+  it("la banda di stato arriva con la superficie: prima non dice niente e non toglie le parole", async () => {
+    const lazy = mount();
+    lazy.buffer!.setDoc(SOURCE);
+    let told = 0;
+    lazy.status!.subscribe(() => (told += 1));
+    expect(lazy.status!.counts).toBe(false);
+    expect(lazy.status!.items()).toEqual([]);
+    await arrive();
+    expect(told).toBeGreaterThan(0);
+    expect(lazy.status!.counts).toBe(true);
+    expect(lazy.status!.items().map((item) => item.id)).toContain("zoom");
+  });
+
   it("tutto passa alla superficie vera", async () => {
     const lazy = mount();
     await arrive();

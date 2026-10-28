@@ -62,7 +62,8 @@
 
 import { plural, t, type DrawKey } from "../strings";
 import { identifier, stableIdentifier } from "../../../ui/a11y";
-import { icon, iconEl, registerIcon } from "../../../ui/icons";
+import { iconEl } from "../../../ui/icons";
+import { ensureDrawIcons } from "../icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { MAX_LAYER_NAME } from "./layers";
 import { cleanName, NAME_MAX } from "./naming";
@@ -100,13 +101,6 @@ const THUMBS_KEPT = 256;
 
 /// Il tempo di un fotogramma dato alle miniature.
 const THUMB_BUDGET_MS = 6;
-
-/// Le icone dei segni, col costrutto di `ui/icons.ts`: il lucchetto e
-/// l'occhio sbarrato.
-const ICONS: Readonly<Record<string, readonly string[]>> = {
-  "draw-lock": ["M6 11h12v9H6z", "M8.5 11V8a3.5 3.5 0 0 1 7 0v3"],
-  "draw-hidden": ["M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z", "M9.5 12a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0", "M4 4l16 16"],
-};
 
 /// Che cosa cambia un segno: il blocco o la visibilità.
 export type TreeToggle = "lock" | "hide";
@@ -282,7 +276,7 @@ function fold(text: string): string {
 }
 
 export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): ObjectTree {
-  for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
+  ensureDrawIcons();
   const element = document.createElement("section");
   element.className = "draw-objects";
   element.id = identifier("draw-objects");

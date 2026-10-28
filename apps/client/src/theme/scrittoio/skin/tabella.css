@@ -1,0 +1,99 @@
+/* ── La Tabella ──────────────────────────────────────────────────────────
+   Una pelle per la cornice delle tabelle (`src/tabella/frame/`): le lettere
+   delle colonne, i numeri delle righe, la selezione, la cella attiva, la
+   maniglia di riempimento e i «+». L'aspetto del contenuto resta del
+   formato: qui c'è soltanto la cornice. */
+
+/* La griglia della Live, cioè la cornice della Tabella attorno a una tabella
+   Markdown. Le intestazioni di riga escono nel margine: la prima
+   colonna resta a filo del testo, come in Lettura, e le maniglie compaiono
+   accanto senza spostarla. */
+.cm-editor .cm-content .tb-frame {
+  padding: 0;
+}
+.cm-editor .cm-content .tb-grid {
+  margin-left: calc(-1 * var(--space-7));
+  padding: 0;
+}
+.cm-editor .cm-content .tb-grid table {
+  display: table;
+  margin: 0;
+  overflow: visible;
+}
+.cm-editor .cm-content .tb-grid .tb-corner,
+.cm-editor .cm-content .tb-grid .tb-letter,
+.cm-editor .cm-content .tb-grid .tb-rowhead {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--doc-gutter-fg);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-relaxed);
+  text-align: center;
+  vertical-align: middle;
+}
+.cm-editor .cm-content .tb-grid .tb-corner,
+.cm-editor .cm-content .tb-grid .tb-rowhead {
+  width: var(--space-7);
+  min-width: var(--space-7);
+}
+.cm-editor .cm-content .tb-grid .tb-letter.is-selected,
+.cm-editor .cm-content .tb-grid .tb-rowhead.is-selected {
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+.cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-selected {
+  background: var(--accent-veil);
+}
+/* La testata scelta tiene il suo fondo sotto il velo, o sparirebbe la riga
+   d'intestazione proprio mentre la si seleziona. */
+.cm-editor .cm-content .tb-grid:focus-within .tb-head.is-selected {
+  background: linear-gradient(var(--accent-veil), var(--accent-veil)), var(--sheet-2);
+}
+.cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-active {
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.cm-editor .cm-content .tb-add {
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.cm-editor .cm-content .tb-add:hover {
+  background: var(--sheet-2);
+  color: var(--text);
+}
+.cm-editor .cm-content .tb-add:active {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.cm-editor .cm-content .tb-adders {
+  gap: var(--space-2);
+  min-height: calc(var(--text-reading) * var(--leading-relaxed));
+  padding-left: var(--space-7);
+  align-items: center;
+}
+/* La maniglia di riempimento all'angolo della selezione, e le celle che il
+   riempimento raggiungerà mentre la si tira. */
+.cm-editor .cm-content .tb-grid .tb-fill {
+  border-color: var(--doc-bg);
+  border-radius: 1px;
+  background: var(--accent);
+}
+.cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-fill {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+/* Le celle scelte di una tabella del documento (`editors/rich/cell-selection.ts`):
+   il velo d'accento sopra il fondo della cella, che resta quello del file, e
+   nessuna selezione di testo del browser che le attraversi. È un segno della
+   Tabella, non l'aspetto del file: vale con ogni aspetto. */
+.has-cell-selection .is-cell-selected {
+  box-shadow: inset 0 0 0 100vmax var(--accent-veil);
+}
+.has-cell-selection ::selection {
+  background: transparent;
+}

@@ -368,7 +368,9 @@
 
 /* Una griglia è un dato: carattere dell'interfaccia, cifre in colonna, fili
    sottili. Le intestazioni stanno un tono sotto la carta; la cella attiva ha
-   l'anello d'accento, la selezione il suo velo. */
+   l'anello d'accento, la selezione il suo velo. Le celle sono contenuto con
+   l'aspetto del file: la loro carta, i fili e il testo li disegna
+   `structure.css`, e qui restano la cornice e i segni, presi dalla riga. */
 .grid-surface {
   color: var(--doc-fg);
   font-family: var(--font-ui);
@@ -395,10 +397,12 @@
 .grid-viewport {
   outline: none;
 }
-.grid-viewport:focus-visible {
+/* Niente anello attorno al riquadro: il fuoco è il bordo della cella attiva,
+   che la griglia indica con `aria-activedescendant`. Senza una cella attiva
+   da mostrare (ogni asse nascosto) l'anello torna. */
+.grid-viewport:focus-visible:not([aria-activedescendant]) {
   box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
 }
-.grid-cell,
 .grid-header,
 .grid-corner {
   border-right: 1px solid var(--border);
@@ -412,27 +416,28 @@
   font-variant-numeric: tabular-nums;
   font-weight: var(--weight-bold);
 }
-.grid-cell {
-  color: var(--doc-fg);
-  font-variant-numeric: tabular-nums;
-  line-height: var(--leading-tight);
-}
 /* Le intestazioni della selezione prendono l'accento, come nei fogli di
    calcolo. */
 .grid-header.selected {
   box-shadow: inset 0 0 0 999px var(--accent-veil);
   color: var(--accent);
 }
-/* Un foglio senza griglia: i fili delle celle spariscono, i bordi del file
-   restano. */
-.grid-viewport.no-gridlines .grid-cell {
-  border-color: transparent;
+/* E un filo d'accento sul lato verso le celle. */
+.grid-column-header.selected {
+  box-shadow: inset 0 -2px 0 var(--accent), inset 0 0 0 999px var(--accent-veil);
 }
-/* Ciò che resta fermo ha la carta del foglio sotto, perché le celle che
-   scorrono gli passano dietro; il filo del blocco è quello di Excel. */
-.grid-cell.frozen {
-  background-color: var(--sheet);
+.grid-row-header.selected {
+  box-shadow: inset -2px 0 0 var(--accent), inset 0 0 0 999px var(--accent-veil);
 }
+/* Dove ci sono colonne o righe nascoste, una tacca doppia sull'intestazione
+   che le segue. */
+.grid-column-header.after-hidden {
+  border-left: 3px double var(--muted);
+}
+.grid-row-header.after-hidden {
+  border-top: 3px double var(--muted);
+}
+/* Il filo del blocco è quello di Excel. */
 .grid-freeze {
   background: var(--muted);
 }
@@ -537,11 +542,19 @@
 }
 /* Il velo è un'ombra interna e non un fondo: una cella può avere un colore
    suo, scritto dal foglio, e la selezione deve vedersi anche lì sopra. */
-.grid-cell.selected {
+.grid-row .selected {
   box-shadow: inset 0 0 0 999px var(--accent-veil);
 }
-.grid-cell.active {
+.grid-row .active {
   box-shadow: inset 0 0 0 2px var(--accent);
+}
+/* Dentro un intervallo la cella attiva resta bianca, con un filo: il bordo
+   forte è quello del rettangolo. */
+.grid-viewport.ranged .grid-row .active {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.grid-selection {
+  border: 2px solid var(--accent);
 }
 /* Il quadratino all'angolo della selezione, e il riempimento tirato a
    tratteggio come in Excel. */
@@ -552,6 +565,73 @@
 .grid-fill-preview {
   border: 2px dashed var(--accent);
 }
+/* Dove andrà la selezione tirata per il bordo. */
+.grid-move-preview {
+  border: 2px solid var(--muted);
+}
+/* I riferimenti della formula aperta: ogni intervallo è contornato del
+   colore che il riferimento ha nel testo. */
+.grid-formula-ref-1 {
+  border: 2px solid var(--doc-author-1);
+}
+.grid-formula-ref-2 {
+  border: 2px solid var(--doc-author-2);
+}
+.grid-formula-ref-3 {
+  border: 2px solid var(--doc-author-3);
+}
+.grid-formula-ref-4 {
+  border: 2px solid var(--doc-author-4);
+}
+.grid-formula-ref-5 {
+  border: 2px solid var(--doc-author-5);
+}
+.grid-formula-ref-6 {
+  border: 2px solid var(--doc-author-6);
+}
+.grid-cell-editor .cm-formula-ref-1,
+.grid-formula-editor .cm-formula-ref-1 {
+  color: var(--doc-author-1);
+}
+.grid-cell-editor .cm-formula-ref-2,
+.grid-formula-editor .cm-formula-ref-2 {
+  color: var(--doc-author-2);
+}
+.grid-cell-editor .cm-formula-ref-3,
+.grid-formula-editor .cm-formula-ref-3 {
+  color: var(--doc-author-3);
+}
+.grid-cell-editor .cm-formula-ref-4,
+.grid-formula-editor .cm-formula-ref-4 {
+  color: var(--doc-author-4);
+}
+.grid-cell-editor .cm-formula-ref-5,
+.grid-formula-editor .cm-formula-ref-5 {
+  color: var(--doc-author-5);
+}
+.grid-cell-editor .cm-formula-ref-6,
+.grid-formula-editor .cm-formula-ref-6 {
+  color: var(--doc-author-6);
+}
+/* Le formiche di un taglio: il tratteggio fitto dice «si sposta». Stanno
+   ferme: un moto che non finisce è ammesso solo per un lavoro in corso. */
+.grid-cut-mark {
+  border: 2px dashed var(--accent);
+}
+/* La guida di una misura tirata, e la misura accanto. */
+.grid-resize-guide {
+  background: var(--accent);
+}
+.grid-resize-label {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
 .grid-cell-editor {
   border: 2px solid var(--accent);
   background: var(--bg-elev);
@@ -561,11 +641,11 @@
    ancora il valore del file, che Fub non ricalcola: lo dice un filo a puntini
    sotto, che resta anche sul colore della cella. Una cella cambiata qui e
    anche nel file ha un contorno tratteggiato, dentro i suoi fili. */
-.grid-cell.stale {
+.grid-row .stale {
   text-decoration: underline dotted var(--muted);
   text-underline-offset: 3px;
 }
-.grid-cell.conflict {
+.grid-row .conflict {
   outline: 2px dashed var(--danger);
   outline-offset: -3px;
 }
@@ -579,6 +659,22 @@
   color: var(--text);
   font-size: var(--text-sm);
 }
+/* La bozza la cui cella è cambiata sotto: la domanda e i due pulsanti. */
+.grid-draft-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-9);
+  background: var(--warning-wash);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.grid-draft-notice > p {
+  flex: 1 1 auto;
+  margin: 0;
+}
 /* Le schede dei fogli stanno sotto la griglia, come nei fogli di calcolo. */
 .grid-sheets {
   border-top: 1px solid var(--border);
@@ -588,39 +684,47 @@
 /* La barra multifunzione: le schede su un filetto, i gruppi divisi da un
    filo e col nome sotto, a voce bassa. I controlli sono quieti come quelli
    della striscia dei documenti; lo stato acceso prende il velo d'accento. */
-.grid-ribbon {
+.grid-ribbon,
+.rich-ribbon {
   border-bottom: 1px solid var(--border);
   background: var(--sheet);
   color: var(--text);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
 }
-.grid-ribbon-head {
+.grid-ribbon-head,
+.rich-ribbon-head {
   gap: var(--space-2);
   padding: var(--space-1) var(--space-4) 0;
   box-shadow: inset 0 -1px 0 var(--border);
 }
-.grid-ribbon-tabs.kit-tabs {
+.grid-ribbon-tabs.kit-tabs,
+.rich-ribbon-tabs.kit-tabs {
   gap: var(--space-1);
   padding-bottom: 0;
   box-shadow: none;
 }
-.grid-ribbon-tabs .kit-tab {
+.grid-ribbon-tabs .kit-tab,
+.rich-ribbon-tabs .kit-tab {
   min-height: 30px;
   padding: 0 var(--space-4);
   font-size: var(--text-sm);
 }
-.grid-ribbon-tabs .grid-ribbon-contextual {
+.grid-ribbon-tabs .grid-ribbon-contextual,
+.rich-ribbon-tabs .rich-ribbon-contextual {
   background: var(--accent-wash);
   color: var(--accent);
 }
-.grid-ribbon[data-collapsed="true"] .grid-ribbon-head {
+.grid-ribbon[data-collapsed="true"] .grid-ribbon-head,
+.rich-ribbon[data-collapsed="true"] .rich-ribbon-head {
   box-shadow: none;
 }
 .grid-ribbon-toggle,
 .grid-ribbon-button,
 .grid-ribbon-palette-empty,
-.grid-ribbon-gallery-item {
+.grid-ribbon-gallery-item,
+.rich-ribbon-toggle,
+.rich-ribbon-button {
   border: none;
   border-radius: var(--radius-chip);
   background: transparent;
@@ -628,43 +732,54 @@
   font: inherit;
   cursor: pointer;
 }
-.grid-ribbon-toggle {
+.grid-ribbon-toggle,
+.rich-ribbon-toggle {
   color: var(--muted);
 }
-.grid-ribbon-toolbar {
+.grid-ribbon-toolbar,
+.rich-ribbon-toolbar {
   padding: var(--space-2) var(--space-3) var(--space-1);
 }
-.grid-ribbon-group {
+.grid-ribbon-group,
+.rich-ribbon-group {
   padding: 0 var(--space-3);
   border-right: 1px solid var(--border);
 }
-.grid-ribbon-group:last-child {
+.grid-ribbon-group:last-child,
+.rich-ribbon-group:last-child {
   border-right: none;
 }
-.grid-ribbon-group-body {
+.grid-ribbon-group-body,
+.rich-ribbon-group-body {
   gap: var(--space-1);
 }
-.grid-ribbon-group-label {
+.grid-ribbon-group-label,
+.rich-ribbon-group-label {
   padding-top: var(--space-1);
   color: var(--muted);
   font-size: var(--text-xs);
 }
-.grid-ribbon-stack {
+.grid-ribbon-stack,
+.rich-ribbon-stack {
   gap: 1px;
 }
-.grid-ribbon-row {
+.grid-ribbon-row,
+.rich-ribbon-row {
   gap: 1px;
 }
-.grid-ribbon-button {
+.grid-ribbon-button,
+.rich-ribbon-button {
   gap: var(--space-1);
   padding: 0 var(--space-2);
   line-height: var(--leading-tight);
 }
-.grid-ribbon-large {
+.grid-ribbon-large,
+.rich-ribbon-large {
   padding: var(--space-2) var(--space-2) 0;
   font-size: var(--text-xs);
 }
-.grid-ribbon-arrow {
+.grid-ribbon-arrow,
+.rich-ribbon-arrow {
   padding: 0 2px;
   color: var(--muted);
 }
@@ -672,22 +787,30 @@
 .grid-ribbon-button:hover:not([aria-disabled="true"]),
 .grid-ribbon-button[aria-expanded="true"],
 .grid-ribbon-palette-empty:hover,
-.grid-ribbon-gallery-item:hover {
+.grid-ribbon-gallery-item:hover,
+.rich-ribbon-toggle:hover,
+.rich-ribbon-button:hover:not([aria-disabled="true"]),
+.rich-ribbon-button[aria-expanded="true"] {
   background: var(--overlay-hover);
   color: var(--text);
 }
-.grid-ribbon-button:active:not([aria-disabled="true"]) {
+.grid-ribbon-button:active:not([aria-disabled="true"]),
+.rich-ribbon-button:active:not([aria-disabled="true"]) {
   background: var(--overlay-active);
 }
-.grid-ribbon-split:hover > .grid-ribbon-button {
+.grid-ribbon-split:hover > .grid-ribbon-button,
+.rich-ribbon-split:hover > .rich-ribbon-button {
   box-shadow: inset 0 0 0 1px var(--border);
 }
-.grid-ribbon-button[aria-pressed="true"] {
+.grid-ribbon-button[aria-pressed="true"],
+.rich-ribbon-button[aria-pressed="true"] {
   background: var(--accent-wash);
   color: var(--accent);
 }
 .grid-ribbon-button[aria-disabled="true"],
-.grid-ribbon-check:has(> input:disabled) {
+.grid-ribbon-check:has(> input:disabled),
+.rich-ribbon-button[aria-disabled="true"],
+.rich-ribbon-check:has(> input:disabled) {
   opacity: 0.4;
   cursor: default;
 }
@@ -696,30 +819,43 @@
 .grid-ribbon-select:focus-visible,
 .grid-ribbon-input:focus-visible,
 .grid-ribbon-palette-empty:focus-visible,
-.grid-ribbon-gallery-item:focus-visible {
+.grid-ribbon-gallery-item:focus-visible,
+.rich-ribbon-toggle:focus-visible,
+.rich-ribbon-button:focus-visible,
+.rich-ribbon-select:focus-visible,
+.rich-ribbon-input:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: -2px;
 }
-.grid-ribbon-glyph {
+.grid-ribbon-glyph,
+.rich-ribbon-glyph {
   font-family: var(--font-ui);
   font-size: var(--text-base);
 }
-.grid-ribbon-bold { font-weight: var(--weight-bold); }
-.grid-ribbon-italic { font-style: italic; }
+.grid-ribbon-bold,
+.rich-ribbon-bold { font-weight: var(--weight-bold); }
+.grid-ribbon-italic,
+.rich-ribbon-italic { font-style: italic; }
 /* La mini-barra del menu: i controlli della scheda Home in una fila. */
-.grid-ribbon-mini {
+.grid-ribbon-mini,
+.rich-ribbon-mini {
   display: flex;
   align-items: center;
   gap: var(--space-1);
 }
-.grid-ribbon-underline { text-decoration: underline; }
-.grid-ribbon-strike { text-decoration: line-through; }
-.grid-ribbon-color-bar {
+.grid-ribbon-underline,
+.rich-ribbon-underline { text-decoration: underline; }
+.grid-ribbon-strike,
+.rich-ribbon-strike { text-decoration: line-through; }
+.grid-ribbon-color-bar,
+.rich-ribbon-color-bar {
   border-radius: 1px;
   box-shadow: inset 0 0 0 1px var(--border);
 }
 .grid-ribbon-select,
-.grid-ribbon-input {
+.grid-ribbon-input,
+.rich-ribbon-select,
+.rich-ribbon-input {
   height: 24px;
   padding: 0 var(--space-2);
   border: 1px solid var(--border);
@@ -728,21 +864,25 @@
   color: var(--text);
   font: inherit;
 }
-.grid-ribbon-check {
+.grid-ribbon-check,
+.rich-ribbon-check {
   gap: var(--space-2);
   min-height: 24px;
   padding: 0 var(--space-2);
   cursor: pointer;
 }
-.grid-ribbon-check input {
+.grid-ribbon-check input,
+.rich-ribbon-check input {
   margin: 0;
   accent-color: var(--accent);
 }
-.grid-ribbon-field-label {
+.grid-ribbon-field-label,
+.rich-ribbon-field-label {
   margin-inline-end: var(--space-2);
   color: var(--muted);
 }
-.grid-ribbon-keytip {
+.grid-ribbon-keytip,
+.rich-ribbon-keytip {
   padding: 0 var(--space-1);
   border-radius: var(--radius-xs);
   background: var(--text);
@@ -752,7 +892,8 @@
   font-weight: var(--weight-bold);
   line-height: 14px;
 }
-.grid-ribbon-popup-group {
+.grid-ribbon-popup-group,
+.rich-ribbon-popup-group {
   padding: var(--space-3);
 }
 .grid-ribbon-palette,
@@ -1586,24 +1727,56 @@
   color: var(--text);
   font-size: var(--text-sm);
 }
-/* La striscia del carattere, sopra il foglio. */
-.rich-strip {
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-6);
-  border-bottom: 1px solid var(--border);
-  background: var(--sheet);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-}
-.rich-strip-group {
-  gap: var(--space-1);
+/* La barra del documento: la pelle della barra del foglio, e qui ciò che è
+   soltanto sua. Meno inchiostro del foglio: le cifre dei campi sono
+   tabulari, la galleria degli stili scrive ogni nome nel suo carattere. */
+.rich-ribbon-quick {
+  gap: 1px;
+  margin-inline-end: var(--space-2);
   padding-inline-end: var(--space-2);
   border-right: 1px solid var(--border);
 }
-.rich-strip-group:last-child {
-  border-right: none;
+.rich-ribbon-select,
+.rich-ribbon-input {
+  font-variant-numeric: tabular-nums;
 }
-.rich-strip-button,
+.rich-ribbon-marker {
+  font-style: italic;
+}
+.rich-ribbon-color-bar[data-empty="true"] {
+  background: transparent;
+}
+.rich-ribbon-styles {
+  gap: 1px;
+  padding: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--sheet);
+}
+.rich-ribbon-style {
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+.rich-ribbon-style:hover:not([aria-disabled="true"]) {
+  background: var(--overlay-hover);
+}
+.rich-ribbon-style[aria-pressed="true"] {
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.rich-ribbon-style[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+.rich-ribbon-style:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
 .rich-strip-swatch-none,
 .rich-strip-swatch-custom {
   display: inline-flex;
@@ -1618,72 +1791,10 @@
   font: inherit;
   cursor: pointer;
 }
-.rich-strip-button {
-  justify-content: center;
-  min-width: 28px;
-  height: 28px;
-  color: var(--muted);
-  line-height: 1;
-}
-.rich-strip-button:hover:not(:disabled),
-.rich-strip-button[aria-expanded="true"],
 .rich-strip-swatch-none:hover,
 .rich-strip-swatch-custom:hover {
   background: var(--overlay-hover);
   color: var(--text);
-}
-.rich-strip-button[aria-pressed="true"] {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-.rich-strip-button:focus-visible,
-.rich-strip-select:focus-visible {
-  outline: var(--focus-ring-width) solid var(--focus-ring);
-  outline-offset: -2px;
-}
-.rich-strip-button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-.rich-strip-underline {
-  text-decoration: underline;
-}
-.rich-strip-bold {
-  font-weight: 700;
-}
-.rich-strip-italic {
-  font-style: italic;
-}
-/* La mini-barra del menu: la stessa striscia, senza la riga del foglio. */
-.rich-strip-mini {
-  flex-wrap: nowrap;
-  padding: 0;
-  border-bottom: none;
-  background: transparent;
-}
-.rich-strip-marker {
-  font-style: italic;
-}
-.rich-strip-bar {
-  border-radius: 1px;
-}
-.rich-strip-bar[data-empty="true"] {
-  box-shadow: inset 0 0 0 1px var(--border);
-}
-.rich-strip-select {
-  height: 28px;
-  padding: 0 var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-chip);
-  background: var(--sheet);
-  color: var(--text);
-  font: inherit;
-}
-.rich-strip-font {
-  width: 156px;
-}
-.rich-strip-size {
-  width: 64px;
 }
 .rich-strip-swatches {
   gap: var(--space-1);
@@ -1702,7 +1813,257 @@
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 1px;
 }
-.rich-content {
+.rich-findbar {
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-6);
+  border-bottom: 1px solid var(--border);
+  background: var(--sheet);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.rich-findbar-row {
+  gap: var(--space-2) var(--space-4);
+}
+.rich-findbar-close {
+  color: var(--muted);
+}
+.rich-drawing-editor {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-menu);
+  background: var(--sheet);
+  box-shadow: var(--shadow-3);
+}
+.rich-drawing-bar {
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.rich-drawing-title {
+  color: var(--muted);
+}
+.rich-strip-panel {
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+.rich-strip-panel-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+.rich-strip-panel-body {
+  gap: var(--space-3);
+}
+.rich-strip-panel-pairs {
+  column-gap: var(--space-3);
+  row-gap: var(--space-3);
+}
+.rich-strip-panel-actions,
+.rich-strip-panel-fields {
+  gap: var(--space-2);
+}
+.rich-strip-panel-check {
+  gap: var(--space-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.rich-strip-panel-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.rich-strip-panel-note[role="alert"] {
+  color: var(--danger);
+}
+.rich-strip-panel-area textarea {
+  padding: var(--space-2) var(--space-4);
+}
+.rich-side {
+  gap: var(--space-4);
+}
+.rich-side-compose {
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.rich-side-list {
+  gap: var(--space-3);
+}
+.rich-side-item {
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+.rich-side-item[data-done] {
+  opacity: 0.7;
+}
+.rich-side-quote {
+  padding: 0 0 0 var(--space-2);
+  border: none;
+  border-left: 2px solid var(--border-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.rich-side-quote:hover {
+  color: var(--text);
+}
+.rich-side-quote:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.rich-side-head {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.rich-side-head strong {
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+.rich-side-text {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.rich-side-reply {
+  padding-inline-start: var(--space-3);
+  border-left: 2px solid var(--border);
+}
+.rich-side-actions,
+.rich-side-answer {
+  gap: var(--space-2);
+}
+.rich-side-section {
+  gap: var(--space-3);
+}
+.rich-side-section + .rich-side-section {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.rich-side-section-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.rich-side-section:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+/* L'anteprima è un disegno della cornice: il foglio, il testo fra i margini
+   e le sue colonne, coi colori del tema e non con quelli della carta. */
+.rich-side-preview {
+  padding: var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+}
+.rich-side-preview-sheet {
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev);
+}
+.rich-side-preview-text {
+  gap: 3px;
+}
+.rich-side-preview-column {
+  background: var(--accent-wash);
+}
+.rich-side-facts {
+  gap: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+}
+.rich-side-facts dt {
+  color: var(--muted);
+}
+.rich-side-facts dd {
+  color: var(--text);
+}
+.rich-side-switch {
+  font-weight: var(--weight-bold);
+}
+/* Nell'elenco delle revisioni il testo porta il segno che ha sulla carta:
+   inserito sottolineato, tolto barrato, con i colori della cornice. */
+.rich-side-change[data-kind="ins"] .rich-side-quote {
+  border-left-color: var(--accent);
+  text-decoration-line: underline;
+}
+.rich-side-change[data-kind="del"] .rich-side-quote {
+  border-left-color: var(--danger);
+  text-decoration-line: line-through;
+}
+.rich-strip-table-grid {
+  gap: 2px;
+}
+.rich-strip-table-cell[data-inside] {
+  background: var(--accent-wash);
+}
+.rich-strip-count {
+  border-collapse: collapse;
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.rich-strip-count th,
+.rich-strip-count td {
+  padding: 2px var(--space-2);
+}
+/* Il foglio che scorre è l'arresto del Tab del documento: l'anello sta
+   dentro il riquadro. */
+.rich-page:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
+}
+/* La scrivania di Pagina e di Lettura è il fondo dello Scrittoio spostato
+   di poco verso il testo: un poco più scura di giorno, un poco più chiara di
+   notte, perché la carta chiara non abbagli. In oklab, perché fra due grigi
+   quasi neutri la tinta di oklch girerebbe. */
+.look-file .rich-page,
+.look-adattato .rich-page {
+  background: color-mix(in oklab, var(--elevation-base-surface) 92%, var(--text));
+}
+/* La carta si solleva: il filo e l'elevazione della carta del tema. La
+   dipinge la sagoma del foglio, che il moto muove senza il testo. */
+.rich-sheet-paper,
+.rich-sheet-ghost {
+  background: var(--doc-bg);
+  border: 1px solid var(--doc-rule-soft);
+  box-shadow: var(--elevation-paper-shadow);
+}
+/* L'intestazione e il piè sul foglio sono un'anteprima, in grigio; il nome
+   di un'interruzione sta sulla scrivania, fra due fogli. */
+.rich-sheet-head,
+.rich-sheet-foot { color: var(--doc-gutter-fg); }
+.rich-sheet-name { color: var(--muted); }
+/* L'intestazione che si scrive sul posto: il campo sulla carta, l'etichetta
+   e i gettoni dei numeri. */
+.rich-running-bar {
+  gap: var(--space-2);
+  padding-block: var(--space-1);
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+}
+.rich-running-label { font-weight: var(--weight-medium); }
+.rich-running-area {
+  color: var(--doc-fg);
+  box-shadow: 0 0 0 1px var(--doc-caret);
+  caret-color: var(--doc-caret);
+}
+.rich-token {
+  padding-inline: var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--doc-fill);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+}
+/* In Scrittura il testo sta nella colonna della nota. */
+.look-tema .rich-content {
   max-width: calc(var(--content-width) + 2 * var(--space-9));
   margin-inline: auto;
   padding: var(--space-9) var(--space-9) var(--space-11);
@@ -1711,98 +2072,122 @@
   line-height: var(--leading-relaxed);
   caret-color: var(--accent);
 }
-.rich-para {
+/* Il contenuto lo veste il tema soltanto in Scrittura (`look-tema`): in
+   Pagina e in Lettura lo disegna il file, con la meccanica di
+   `structure.css`, e il sanitizer rifiuta una regola sul contenuto fuori da
+   lì. */
+.look-tema .rich-para {
   margin-block: 0 var(--space-4);
 }
-.rich-heading {
+/* I titoli nella misura del tema valgono quando il tema veste il contenuto
+   (Scrittura): nella pagina del file vincono i suoi. */
+.look-tema .rich-heading {
   color: var(--doc-heading);
   font-weight: var(--weight-bold);
   line-height: var(--leading-tight);
   margin: var(--space-7) 0 var(--space-3);
 }
-.rich-heading[data-level="1"] {
+.look-tema .rich-heading[data-level="1"] {
   font-size: max(1.75em, var(--text-3xl));
   letter-spacing: -0.01em;
   margin-top: var(--space-8);
   padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--doc-rule-soft);
 }
-.rich-heading[data-level="2"] {
+.look-tema .rich-heading[data-level="2"] {
   font-size: max(1.45em, var(--text-2xl));
 }
-.rich-heading[data-level="3"] {
+.look-tema .rich-heading[data-level="3"] {
   font-size: 1.22em;
   font-weight: 650;
 }
-.rich-heading[data-level="4"] {
+.look-tema .rich-heading[data-level="4"] {
   font-size: 1.08em;
   font-weight: 650;
 }
-.rich-heading[data-level="5"],
-.rich-heading[data-level="6"] {
+.look-tema .rich-heading[data-level="5"],
+.look-tema .rich-heading[data-level="6"] {
   font-size: 1em;
   font-weight: 650;
   color: var(--muted);
 }
 @container sheet (max-width: 560px) {
-  .rich-content {
+  .look-tema .rich-content {
     padding: var(--space-8) var(--space-7) var(--space-10);
   }
 }
-.rich-content > .rich-para:first-child {
+.look-tema .rich-content > .rich-para:first-child {
   margin-top: 0;
 }
-.rich-list {
+.look-tema .rich-list {
   margin-block: 0 var(--space-2);
 }
-.rich-list::before {
+.look-tema .rich-list::before {
   color: var(--muted);
 }
-.rich-quote {
+.look-tema .rich-quote {
   border-left: 3px solid var(--doc-rule);
   padding-left: var(--space-5);
   color: var(--muted);
 }
-.rich-content mark {
+.look-tema .rich-content mark {
   background: var(--doc-highlight);
   color: inherit;
 }
-.rich-link {
+.look-tema .rich-link {
   color: var(--doc-link);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 /* La fine di una sezione: un filo doppio a tutta colonna, che si seleziona
    come un oggetto e non si cancella per sbaglio. */
-.rich-section {
+.look-tema .rich-section {
   margin-block: var(--space-6);
   border-top: 3px double var(--doc-rule);
 }
-.rich-break-page {
+.look-tema .rich-break-page {
   border-top: 1px dashed var(--doc-rule);
 }
-.rich-break-column {
+.look-tema .rich-break-column {
   border-top: 1px dotted var(--doc-rule-soft);
 }
-.rich-table {
+.look-tema .rich-break-page[data-name]::after,
+.look-tema .rich-break-column[data-name]::after,
+.look-tema .rich-section[data-name]::after {
+  background: var(--doc-bg);
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+.look-tema .rich-table {
   margin-block: 0 var(--space-4);
 }
-.rich-cell {
+/* Un blocco che il formato non riscriverebbe senza perdite: si legge e non si
+   cambia. Il fondo e il filo tratteggiato non toccano la sua disposizione. */
+.rich-locked {
+  background: var(--doc-fill);
+  outline: 1px dashed var(--doc-rule);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+.look-tema .rich-cell {
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--doc-rule-soft);
 }
-.rich-cell > .rich-para:last-child {
+.look-tema .rich-cell > .rich-para:last-child {
   margin-bottom: 0;
 }
 /* Un oggetto del documento (un'immagine, un campo, una nota) è una casella:
-   la sua misura viene dal documento, il suo contenuto resta nel file. */
+   la sua misura viene dal documento, il suo contenuto resta nel file. La
+   casella è un segno di Fub, e prende i colori della carta su cui sta. */
 .rich-atom {
   min-width: 1.2em;
   padding: 0 var(--space-2);
   border: 1px solid var(--doc-rule-soft);
   border-radius: var(--radius-xs);
   background: var(--doc-fill);
-  color: var(--muted);
+  color: var(--doc-gutter-fg);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
   line-height: 1.6;
@@ -1810,12 +2195,40 @@
 .rich-atom-image,
 .rich-atom-graphic,
 .rich-atom-shape,
+.rich-atom-text_box,
 .rich-atom-group {
   border-style: dashed;
+  line-height: var(--leading-tight);
 }
-.rich-atom-note,
+/* Un'immagine disegnata è l'immagine, senza la casella del segnaposto. */
+.rich-atom-drawn {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+.rich-atom-glyph {
+  color: var(--doc-gutter-fg);
+}
+.rich-atom-equation {
+  gap: var(--space-1);
+}
+.rich-atom-name {
+  color: var(--doc-gutter-fg);
+  font-size: var(--text-xs);
+}
 .rich-atom-field {
   border-radius: 1em;
+}
+.rich-atom-note {
+  min-width: 0;
+  padding: 0 0.1em;
+  border: none;
+  background: transparent;
+  color: var(--doc-link);
+  font-family: inherit;
+  font-size: 0.7em;
+  line-height: 1;
 }
 .rich-atom-marker {
   min-width: 0;
@@ -1823,15 +2236,101 @@
   border: none;
   background: transparent;
 }
-.rich-content .ProseMirror-selectednode {
-  outline: 2px solid var(--accent);
+.rich-page .ProseMirror-selectednode {
+  outline: 2px solid var(--doc-caret);
   outline-offset: 1px;
 }
+/* I segni di Fub sul documento hanno i colori della carta su cui stanno
+   (`--doc-*`): la carta di ogni aspetto li ricollega ai suoi, e su un foglio
+   chiaro di notte restano leggibili. Il ripiego è per un tema che non li
+   dichiara. Le revisioni come in Word: inserito sottolineato, tolto barrato. */
+.rich-ins,
+.rich-ins-mark {
+  color: var(--doc-ins, var(--doc-link));
+  text-decoration-line: underline;
+}
+.rich-del,
+.rich-del-mark {
+  color: var(--doc-del, var(--doc-danger));
+  text-decoration-line: line-through;
+}
+/* Il colore di chi ha fatto la modifica, sul suo testo: la forma resta
+   quella della revisione. Il ripiego è quello di inserito e tolto, per un
+   tema che non dichiara gli autori. */
+.rich-autore-1 {
+  color: var(--doc-author-1, var(--doc-ins, var(--doc-link)));
+}
+.rich-autore-2 {
+  color: var(--doc-author-2, var(--doc-ins, var(--doc-link)));
+}
+.rich-autore-3 {
+  color: var(--doc-author-3, var(--doc-ins, var(--doc-link)));
+}
+.rich-autore-4 {
+  color: var(--doc-author-4, var(--doc-ins, var(--doc-link)));
+}
+.rich-autore-5 {
+  color: var(--doc-author-5, var(--doc-ins, var(--doc-link)));
+}
+.rich-autore-6 {
+  color: var(--doc-author-6, var(--doc-ins, var(--doc-link)));
+}
+.rich-autore-ins {
+  text-decoration-line: underline;
+}
+.rich-autore-del {
+  text-decoration-line: line-through;
+}
+.rich-changed::after {
+  background: var(--doc-fg);
+}
+.rich-side-dot {
+  background: currentColor;
+}
+/* Il pulsante del pannello nello stretto: una pillola che galleggia sulla
+   carta, col numero dei commenti. */
+.rich-side-open {
+  min-height: var(--control-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: var(--shadow-2);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.rich-side-open:hover { background: var(--bg-hover); }
+.rich-side-open:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring);
+}
+.rich-find {
+  background-color: var(--doc-find, var(--doc-highlight));
+  color: var(--doc-fg);
+}
+.rich-find-current {
+  background-color: var(--doc-find-now, var(--doc-highlight));
+  outline: 1px solid var(--doc-fg);
+}
+/* L'anello di un punto raggiunto (Trova, una revisione, un commento): il
+   colore del cursore, che dice «qui». Si stringe e sfuma una volta. */
+.rich-goto-ring {
+  border: 2px solid var(--doc-caret);
+  border-radius: 4px;
+}
+.rich-comment {
+  background-color: color-mix(in oklab, var(--doc-comment, var(--doc-link)) 16%, transparent);
+  border-bottom: 2px solid var(--doc-comment, var(--doc-link));
+}
+/* L'ondulata: rossa per l'ortografia, ambra per la grammatica, come nelle
+   note. Il blu sulla carta dice già collegamento. */
 .rich-proof-spelling {
-  text-decoration: underline wavy var(--danger) 1px;
+  text-decoration: underline wavy var(--doc-proof-spell, var(--doc-danger)) 1px;
   text-underline-offset: 3px;
 }
 .rich-proof-grammar {
-  text-decoration: underline wavy var(--warning) 1px;
+  text-decoration: underline wavy var(--doc-proof-gram, var(--doc-danger)) 1px;
   text-underline-offset: 3px;
 }

@@ -34,7 +34,7 @@ export interface MediaSurfaceDeps {
 }
 
 const MEDIA_MODES: SurfaceMode[] = [
-  { id: "view", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading" },
+  { id: "view", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading", looks: ["file"] },
 ];
 
 /** La view per una specie: kind -> profilo montato. `other` e' il fallback. */

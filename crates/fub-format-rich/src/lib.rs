@@ -35,12 +35,17 @@ use wordcraft_doc::Document;
 
 mod blob;
 mod canonical;
+mod diff;
 pub mod export;
 mod fidelity;
+mod flow;
 mod fresh;
+mod graft;
 mod inventory;
+mod missing;
 mod model;
 mod odt;
+mod parallel;
 pub mod preservation;
 pub mod projection;
 mod running;
@@ -222,6 +227,12 @@ pub enum RichError {
     /// Il documento da scrivere non si rilegge uguale: non si scrive.
     #[error("rich document would not read back as written")]
     Fidelity,
+    /// Il salvataggio toccherebbe ciò che il codec non riscrive senza
+    /// perdite: un blocco chiuso del corpo, con il suo indice nel file, o,
+    /// senza indice, ciò che sta fuori dal corpo di un documento che si
+    /// salva soltanto per innesto ([`crate::preservation`]).
+    #[error("rich document has closed parts: block {0:?}")]
+    Locked(Option<usize>),
 }
 
 impl From<RichError> for FormatError {

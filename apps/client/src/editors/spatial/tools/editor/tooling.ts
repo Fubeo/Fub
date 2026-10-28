@@ -2,9 +2,9 @@
 // intelligenti. Un pezzo di createDrawEditor (`../editor.ts`): lavora sul
 // contesto che i pezzi condividono.
 
-import { promptForm } from "../../../../ui/form-dialog";
 import { formatNumber } from "../../number";
 import type { InkPointerType } from "../../../../ink/input/pointer";
+import { MAX_PEN_SIZE, MIN_PEN_SIZE } from "../../../../ink/pens";
 import type { Bounds } from "../../scene/geometry";
 import { apply, compose, type Point } from "../../scene/matrix";
 import type { ContainerNode } from "../../scene/model";
@@ -62,7 +62,6 @@ export interface ToolingContext {
   rememberColors: (...codes: string[]) => void;
   setColor: (value: string, from?: { readonly swatch: string | null } | null) => void;
   setWidth: (value: number) => void;
-  chooseColor: () => Promise<void>;
   pickTool: (id: ToolId) => void;
   setPolygonTool: (next: PolygonTool) => void;
   cancelGesture: () => void;
@@ -98,8 +97,8 @@ export interface ToolingContext {
 /// Monta gli strumenti, la pipeline della penna e le guide intelligenti.
 export function installTooling(ctx: EditorContext): void {
   const {
-    profile, folio, has, styles, style, toolLabel, widthsNow, live, showSurfaceHint, showToolMode, customLabel, suggestions, field, indexer, boardsNow,
-    chosenSheet, sheetAt, editable, isolatedNode, isolatedThrough, isolationSteps, currentIndex, currentPage, announce, showPage, surfaceSize, showGrid,
+    profile, folio, has, styles, style, toolLabel, widthsNow, live, showSurfaceHint, showToolMode, suggestions, field, indexer, boardsNow,
+    chosenSheet, sheetAt, isolatedNode, isolatedThrough, isolationSteps, currentIndex, currentPage, announce, showPage, surfaceSize, showGrid,
     setCamera, stepNow, lengthText, lengthSpoken, guidesShown, showGuideLines, viewCenter, selectedUnits, pickedIn, editedUnits, showGrip, showHandles,
     labelOf, showPanelByDefault, syncProperties, currentLayer, syncControls, nameOfNode, options
   } = ctx;
@@ -191,6 +190,7 @@ export function installTooling(ctx: EditorContext): void {
     // Il contagocce mostra subito che cosa vede sotto il puntatore, e lo
     // strumento Sfumatura che cosa sposterebbe.
     if (id === "eyedropper" && ctx.pointerAt !== null) ctx.hoverDropper(ctx.pointerAt.at, ctx.pointerAt.pointer);
+    ctx.hoverNib(ctx.pointerAt?.at ?? null, ctx.pointerAt?.pointer ?? "mouse");
     if (id === "gradient" && ctx.pointerAt !== null) ctx.hoverGradient(ctx.pointerAt.at, ctx.pointerAt.pointer);
     ctx.connectorHover = null;
     if (id === "connector" && ctx.pointerAt !== null) ctx.hoverConnector(ctx.pointerAt.at, ctx.pointerAt.pointer);
@@ -260,7 +260,10 @@ export function installTooling(ctx: EditorContext): void {
   ctx.setColor = setColor;
 
   function setWidth(value: number): void {
-    if (!widthsNow().some((option) => option.value === value)) return;
+    // La Penna e l'Evidenziatore prendono ogni misura da 0,25 a 200; gli
+    // altri soltanto quelle della barra.
+    const free = (ctx.tool === "pen" || ctx.tool === "highlighter") && value >= MIN_PEN_SIZE && value <= MAX_PEN_SIZE;
+    if (!free && !widthsNow().some((option) => option.value === value)) return;
     style().width = value;
     syncControls();
     if (ctx.tool === "text") restyleTyping("font-size", formatNumber(value, 2));
@@ -277,29 +280,6 @@ export function installTooling(ctx: EditorContext): void {
     else field.restyle(name, value);
     ctx.placeText();
   }
-
-  /// «Altro colore…»: il codice, o il selettore del sistema. Un colore della
-  /// tavolozza sceglie il suo campione.
-  async function chooseColor(): Promise<void> {
-    if (ctx.asking || !editable() || !has("colors")) return;
-    ctx.asking = true;
-    cancelGesture();
-    try {
-      const answer = await promptForm({
-        title: t("draw.color.dialog"),
-        fields: [{ id: "color", label: t("draw.color.code"), value: style().color, kind: "color" }],
-      });
-      if (answer === null || ctx.disposed) return;
-      const code = customColor(answer.color ?? "");
-      if (code === null) return;
-      setColor(code);
-      const swatch = swatchOf(code);
-      announce(t("draw.announce.color", { color: swatch === null ? customLabel() : t(swatch.label) }));
-    } finally {
-      ctx.asking = false;
-    }
-  }
-  ctx.chooseColor = chooseColor;
 
   /// Lo strumento `id` scelto dalla barra o dal suo tasto. Il Poligono scelto
   /// di nuovo passa dal poligono alla stella, e ritorno; la penna di Bézier

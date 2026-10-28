@@ -6,7 +6,7 @@
 > pieni, che cosa cambiano il tipo e i cursori, e che cosa resta
 > dell'immagine.
 
-Dal [livello Esperto](drawing-expert.md), **«Ricalca immagine…»** fa di
+Nello spazio Completo, fra gli [strumenti avanzati](drawing-expert.md), **«Ricalca immagine…»** fa di
 un'[immagine](drawing-images.md) un gruppo di **tracciati pieni**, uno per
 macchia di colore, che si modificano come ogni altra forma: con lo strumento
 Nodi, coi colori, con le operazioni booleane. Il pulsante sta nella barra
@@ -113,5 +113,5 @@ stesso che le riduce quando entrano, e i file del vault con `images`:
 senza, un'immagine del vault non si ricalca. Al posto del worker si può
 dare `tracer`, chi ricalca. Il worker è un file della stessa origine, che la
 politica dei contenuti ammette; dove i worker non ci sono il ricalco gira
-nella pagina. Nel Personalizzato è la parte «Ricalca immagine» ([Disegni,
-livello Personalizzato](drawing-custom.md)).
+nella pagina. Per chi monta l'editor con le sue parti è la parte «Ricalca immagine» ([Disegni,
+spazio di lavoro e barra](drawing-custom.md)).

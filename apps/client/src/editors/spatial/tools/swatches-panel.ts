@@ -32,7 +32,8 @@
 import { resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
 import { displayBinding } from "../../../ui/commands";
-import { icon, iconEl, registerIcon } from "../../../ui/icons";
+import { iconEl } from "../../../ui/icons";
+import { ensureDrawIcons } from "../icons";
 import type { Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu, showContextMenu, type MenuItem } from "../../../ui/menu";
 import { plural, t } from "../strings";
@@ -44,12 +45,6 @@ import { freshSwatchName, swatchNameProblem } from "./swatches";
 /// Dopo il menu aperto dalla tastiera, per tanti millisecondi il clic destro
 /// che il tasto del menu manda dietro non ne apre un altro.
 const KEYED_MENU_MS = 1000;
-
-/// Le icone della sezione, col costrutto di `ui/icons.ts`: il più di «Nuovo
-/// campione…».
-const ICONS: Readonly<Record<string, readonly string[]>> = {
-  "draw-swatches-add": ["M12 5v14", "M5 12h14"],
-};
 
 /// Dove va un colore della sezione.
 export type PaintTarget = "fill" | "stroke";
@@ -207,7 +202,7 @@ function setText(node: HTMLElement, text: string): void {
 }
 
 export function createSwatchesPanel(life: Lifetime, options: SwatchesPanelOptions): SwatchesPanel {
-  for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
+  ensureDrawIcons();
   const element = document.createElement("div");
   element.className = "draw-swatches";
 
@@ -405,7 +400,7 @@ export function createSwatchesPanel(life: Lifetime, options: SwatchesPanelOption
       next.set(entry.key, entry);
       const button = group.chips.get(entry.key) ?? createChip(group, entry.key);
       const frame = button.firstElementChild as HTMLElement;
-      frame.dataset.shape = swatchOf(entry.color)?.shape ?? "ring";
+      frame.dataset.shape = "circle";
       (frame.firstElementChild as HTMLElement).style.setProperty("--swatch", entry.color);
       const count = button.querySelector<HTMLElement>(".draw-swatches-count");
       if (count !== null) setText(count, entry.uses === null ? "" : numeral(entry.uses));
@@ -578,12 +573,11 @@ export function createSwatchesPanel(life: Lifetime, options: SwatchesPanelOption
       } else if (!plain) {
         return;
       } else if (event.key === "Enter" || event.key === " ") {
-        if (entry === null) {
-          if (event.shiftKey) return;
-          startNew();
-        } else {
-          apply(entry, event.shiftKey);
-        }
+        // Invio e Spazio fanno un clic solo, come ogni pulsante: lo fa il
+        // clic. Con Maiusc il colore va all'altra parte, senza clic.
+        if (!event.shiftKey) target.click();
+        else if (entry === null) return;
+        else apply(entry, true);
       } else if (event.shiftKey) {
         return;
       } else if (event.key === "ArrowRight") {

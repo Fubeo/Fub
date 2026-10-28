@@ -14,7 +14,8 @@ export type ThemeCssViolationCode =
   | "structural-property"
   | "disallowed-property"
   | "disallowed-value"
-  | "missing-role";
+  | "missing-role"
+  | "content-look";
 
 export interface ThemeCssViolation {
   readonly code: ThemeCssViolationCode;
@@ -41,9 +42,26 @@ export interface ThemeCssVocabulary {
   readonly atRules?: readonly string[];
 }
 
+/**
+ * Il gate del contenuto. Dove una superficie offre l'aspetto `file` o
+ * `adattato`, il suo contenuto lo disegna la meccanica di `structure.css`, che
+ * non si tematizza: una pelle, un tema o un frammento vestono quelle classi
+ * soltanto sotto `.look-tema`, cioè dove il tema ha l'autorità sul contenuto.
+ * Così anche un `!important` sul contenuto vale soltanto lì.
+ */
+export interface ContentGate {
+  /** Le classi di contenuto. */
+  readonly hooks: readonly string[];
+  /** Le cornici che contengono quel contenuto: dentro, anche un selettore di
+   * tipo (`mark`, `strong`, `*`) è contenuto. */
+  readonly scopes: readonly string[];
+}
+
 export interface ThemeCssPolicy {
   readonly assetNamespace: string;
   readonly allowedHooks: readonly string[];
+  /** Assente, nessuna classe è contenuto con un aspetto del file. */
+  readonly gate?: ContentGate;
   readonly requiredRoles?: readonly string[];
   readonly kind?: "sheet" | "skin" | "snippet";
   /** Solo fogli e pelli di un profilo: un frammento dell'utente non lo riceve. */
@@ -615,6 +633,113 @@ function selectorViolations(
   return out;
 }
 
+/// La classe dell'aspetto in cui il tema veste il contenuto.
+const LOOK_TEMA = "look-tema";
+
+/// Le parti di `selector` fra i separatori di primo livello (fuori da
+/// parentesi, attributi, stringhe e commenti), ciascuna col suo indice.
+function splitTopLevel(selector: string, separator: (ch: string) => boolean): { text: string; index: number }[] {
+  const out: { text: string; index: number }[] = [];
+  let depth = 0;
+  let from = 0;
+  let i = 0;
+  while (i < selector.length) {
+    if (selector.startsWith("/*", i)) {
+      i = skipComment(selector, i);
+      continue;
+    }
+    const ch = selector[i]!;
+    if (ch === '"' || ch === "'") {
+      i = skipQuoted(selector, i);
+      continue;
+    }
+    if (ch === "[") {
+      i = skipAttribute(selector, i);
+      continue;
+    }
+    if (ch === "\\") {
+      i = decodeEscape(selector, i).next;
+      continue;
+    }
+    if (ch === "(") depth += 1;
+    else if (ch === ")") depth -= 1;
+    else if (depth === 0 && separator(ch)) {
+      if (i > from) out.push({ text: selector.slice(from, i), index: from });
+      from = i + 1;
+    }
+    i += 1;
+  }
+  if (selector.length > from) out.push({ text: selector.slice(from), index: from });
+  return out.filter((part) => part.text.trim() !== "");
+}
+
+/// Le classi di un composto fuori dalle parentesi: `.look-tema` dentro un
+/// `:not()` non dice che il tema veste il contenuto.
+function ownClasses(compound: string): string[] {
+  let flat = "";
+  let depth = 0;
+  for (const ch of compound) {
+    if (ch === "(") depth += 1;
+    else if (ch === ")") depth -= 1;
+    else if (depth === 0) flat += ch;
+  }
+  return selectorTokens(flat).hooks.map((hook) => hook.text);
+}
+
+/// Un `*` fuori da attributi, stringhe e commenti.
+function universal(compound: string): boolean {
+  let i = 0;
+  while (i < compound.length) {
+    if (compound.startsWith("/*", i)) {
+      i = skipComment(compound, i);
+      continue;
+    }
+    const ch = compound[i]!;
+    if (ch === '"' || ch === "'") i = skipQuoted(compound, i);
+    else if (ch === "[") i = skipAttribute(compound, i);
+    else if (ch === "\\") i = decodeEscape(compound, i).next;
+    else if (ch === "*") return true;
+    else i += 1;
+  }
+  return false;
+}
+
+function contentLookViolations(source: string, root: Root, gate: ContentGate): IndexedViolation[] {
+  const hooks = new Set(gate.hooks);
+  const scopes = new Set(gate.scopes);
+  const out: IndexedViolation[] = [];
+  root.walkRules((rule: Rule) => {
+    let parent: ChildNode | Root | undefined = rule.parent as ChildNode | Root | undefined;
+    while (parent) {
+      if (parent.type === "atrule" && /keyframes$/i.test(decodeCssEscapes(parent.name))) return;
+      parent = parent.parent as ChildNode | Root | undefined;
+    }
+    const start = nodeIndex(source, rule);
+    for (const selector of splitTopLevel(rule.selector, (ch) => ch === ",")) {
+      let themed = false;
+      let scope: string | null = null;
+      for (const compound of splitTopLevel(selector.text, (ch) => /[\s>+~]/.test(ch))) {
+        const tokens = selectorTokens(compound.text);
+        const at = start + selector.index + compound.index;
+        const gated = tokens.hooks.find((hook) => hooks.has(hook.text));
+        if (!themed && gated) {
+          out.push(violation(source, at + gated.index, "content-look",
+            `.${gated.text} è contenuto con l'aspetto del file: vale soltanto sotto .look-tema (.look-tema .${gated.text})`));
+          break;
+        }
+        if (!themed && scope && (tokens.types.length > 0 || universal(compound.text))) {
+          out.push(violation(source, at, "content-look",
+            `${compound.text.trim()} dentro .${scope} è contenuto con l'aspetto del file: vale soltanto sotto .look-tema`));
+          break;
+        }
+        if (ownClasses(compound.text).includes(LOOK_TEMA)) themed = true;
+        scope ??= tokens.hooks.find((hook) => scopes.has(hook.text))?.text ?? null;
+      }
+    }
+  });
+  return out;
+}
+
 function isStructuralProperty(property: string): boolean {
   return Object.prototype.hasOwnProperty.call(STRUCTURAL_PROPERTIES, property) ||
     STRUCTURAL_PREFIXES.some((prefix) => property.startsWith(prefix));
@@ -1131,6 +1256,7 @@ export function themeCssViolations(css: string, policy: ThemeCssPolicy): ThemeCs
     ...urlViolations(css, root, policy.assetNamespace),
     ...selectorViolations(css, root, policy.allowedHooks, skin),
     ...declarationViolations(css, root, skin, vocabulary),
+    ...(policy.gate ? contentLookViolations(css, root, policy.gate) : []),
   ];
   if (snippet) {
     root.walkAtRules((rule) => {
@@ -1172,7 +1298,7 @@ export function sanitizeThemeCss(css: string, policy: ThemeCssPolicy): string {
 /** User CSS is a paint-only, local-only subset of the theme-1 sheet contract.
  * No @-rules, URLs, IDs, elements, attributes, pseudo selectors, or selector
  * combinators beyond one descendant class are available to snippets. */
-export function sanitizeUserCss(css: string, allowedHooks: readonly string[]): string {
+export function sanitizeUserCss(css: string, allowedHooks: readonly string[], gate?: ContentGate): string {
   if (new TextEncoder().encode(css).length > 64 * 1024) {
     throw new Error(t("errors.css.too_large"));
   }
@@ -1180,5 +1306,6 @@ export function sanitizeUserCss(css: string, allowedHooks: readonly string[]): s
     kind: "snippet",
     assetNamespace: "",
     allowedHooks,
+    gate,
   });
 }

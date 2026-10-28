@@ -65,6 +65,10 @@ const THRESHOLDS: Readonly<Record<ContrastLevel, Thresholds>> = {
   high: { text: 7, ui: 4.5 },
 };
 
+/// Le tinte degli autori, nell'ordine dei posti: blu, rosso, verde, viola,
+/// ocra, petrolio.
+const AUTHOR_HUES: readonly number[] = [255, 25, 145, 310, 60, 200];
+
 const lch = (l: number, c: number, h: number): Oklch => ({ l, c, h: ((h % 360) + 360) % 360 });
 
 /// Si allontana dalla carta finché la coppia regge su ogni fondo.
@@ -265,6 +269,38 @@ export function palette(
     }),
   );
 
+  // ── I segni sulla carta del tema ────────────────────────────────────────
+  // Una revisione si legge, quindi regge come il testo; un'onda del
+  // correttore o il filo di un commento si distinguono, quindi reggono come un
+  // confine. Il fondo di un risultato della ricerca si misura dal testo che
+  // gli sta sopra: si allontana dall'inchiostro finché lo lascia leggere.
+  const docSpell = hold(day ? lch(0.55, 0.21, 27) : lch(0.7, 0.17, 25), papers, T.ui, light);
+  const docGram = hold(day ? lch(0.56, 0.13, 70) : lch(0.8, 0.13, 75), papers, T.ui, light);
+  const docComment = hold(day ? lch(0.68, 0.15, 70) : lch(0.8, 0.13, 75), papers, T.ui, light);
+  const away = day ? "dark" : "light";
+  const docFind = hold(day ? lch(0.92, 0.1, 98) : lch(0.36, 0.06, 95), [docFg], T.text, away);
+  // Un colore per autore (`rich-autore-*`): sei tinte lontane fra loro, che
+  // si leggono come il testo su ogni fondo della carta.
+  const docAuthors = Object.fromEntries(
+    AUTHOR_HUES.map((tint, i) => [`doc-author-${i + 1}`, hold(day ? lch(0.5, 0.17, tint) : lch(0.76, 0.12, tint), papers, T.text, light)]),
+  );
+  const docFindNow = hold(day ? lch(0.84, 0.14, 80) : lch(0.46, 0.09, 75), [docFg], T.text, away);
+
+  // ── La carta chiara di un file ──────────────────────────────────────────
+  // Nell'aspetto `file` il contenuto sta sulla sua carta, che è bianca anche
+  // di notte: i segni di Fub prendono i colori della carta chiara, o un
+  // cursore fatto per il foglio scuro sparirebbe.
+  const paperBg = "#ffffff";
+  const paperActive = toHex(lch(0.975, 0.006, hue - 10));
+  const paperSelection = toHex(lch(0.9, 0.045, hue));
+  const paperPapers = [paperBg, paperActive, paperSelection];
+  const paperInk = hold(lch(high ? 0.12 : 0.2, 0.008, pen), paperPapers, T.text, "light");
+  const paperLink = hold(lch(0.5, 0.19, hue), paperPapers, T.text, "light");
+  const paperDanger = hold(lch(0.55, 0.21, 27), paperPapers, T.text, "light");
+  const paperVeil = (percent: number): string => veil(paperInk, percent);
+  const paperMarker = toHex(lch(0.9, 0.16, 98));
+  const paperAuthors = Object.fromEntries(AUTHOR_HUES.map((tint, i) => [`paper-author-${i + 1}`, hold(lch(0.5, 0.17, tint), paperPapers, T.text, "light")]));
+
   const graphNode = hold(day ? lch(0.62, 0.02, pen) : lch(0.58, 0.02, pen), [bg, sheetColor], T.ui, light);
   const levels = SHADOWS[light].map(([near, far]) => shadow(light, near, far));
   const inkVeil = (percent: number): string => veil(text, percent);
@@ -342,6 +378,10 @@ export function palette(
     "elevation-dialog-border": high ? border : raise,
     "elevation-dialog-shadow": levels[4]!,
 
+    // La scrivania del disegno, attorno alla carta bianca: chiara di giorno,
+    // e di notte abbastanza chiara da non far abbagliare la carta.
+    "draw-desk": toHex(day ? lch(0.95, 0.004, 260) : lch(0.3, 0.008, 260)),
+
     // Il grafo.
     "graph-node": graphNode,
     "graph-node-active": accent,
@@ -364,6 +404,38 @@ export function palette(
     "doc-gutter-fg": gutter,
     "doc-caret": accent,
     ...syntax,
+
+    // I segni sulla carta del tema: ruoli facoltativi (`OPTIONAL_ROLES`).
+    "doc-ins": docLink,
+    "doc-del": docDanger,
+    "doc-proof-spell": docSpell,
+    "doc-proof-gram": docGram,
+    "doc-find": docFind,
+    "doc-find-now": docFindNow,
+    "doc-comment": docComment,
+    ...docAuthors,
+
+    // La carta chiara di un file, con i suoi segni: facoltativi anche questi.
+    "paper-bg": paperBg,
+    "paper-ink": paperInk,
+    "paper-link": paperLink,
+    "paper-danger": paperDanger,
+    "paper-rule": paperVeil(30),
+    "paper-rule-soft": paperVeil(16),
+    "paper-fill": paperVeil(8),
+    "paper-fill-soft": paperVeil(5),
+    "paper-caret": paperLink,
+    "paper-selection": paperSelection,
+    "paper-active-line": paperActive,
+    "paper-highlight": veil(paperMarker, 55),
+    "paper-ins": paperLink,
+    "paper-del": paperDanger,
+    "paper-proof-spell": hold(lch(0.55, 0.21, 27), paperPapers, T.ui, "light"),
+    "paper-proof-gram": hold(lch(0.56, 0.13, 70), paperPapers, T.ui, "light"),
+    "paper-find": hold(lch(0.92, 0.1, 98), [paperInk], T.text, "dark"),
+    "paper-find-now": hold(lch(0.84, 0.14, 80), [paperInk], T.text, "dark"),
+    "paper-comment": hold(lch(0.68, 0.15, 70), paperPapers, T.ui, "light"),
+    ...paperAuthors,
   };
 }
 
@@ -466,9 +538,21 @@ const CONSTANTS: readonly (readonly [string, string])[] = [
 /** I token di colore, cioè tutto ciò che `palette` decide. */
 export const COLOR_TOKENS: readonly string[] = Object.keys(palette("light", "normal"));
 
-/** Ogni ruolo che un foglio della serie dichiara. */
+/**
+ * I ruoli che la serie dichiara e che un tema può non dichiarare: i segni
+ * sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un
+ * file (`--paper-*`), e la scrivania del disegno (`--draw-desk`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
+ * rifiutare ogni tema `theme-2` di oggi; chi non li dichiara ha il ripiego di
+ * `structure.css`, e le loro coppie si contano solo quando ci sono
+ * (`THEME_2_OPTIONAL_PAIRS`).
+ */
+export const OPTIONAL_ROLES: readonly string[] = COLOR_TOKENS.filter(
+  (name) => name.startsWith("paper-") || name.startsWith("doc-author-") || ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk"].includes(name),
+);
+
+/** Ogni ruolo che un foglio della serie dichiara e che un tema deve dichiarare. */
 export function roles(): string[] {
-  return [...CONSTANTS.map(([name]) => name), ...COLOR_TOKENS];
+  return [...CONSTANTS.map(([name]) => name), ...COLOR_TOKENS.filter((name) => !OPTIONAL_ROLES.includes(name))];
 }
 
 export const SHEETS: Readonly<Record<Light, Readonly<Record<ContrastLevel, string>>>> = {

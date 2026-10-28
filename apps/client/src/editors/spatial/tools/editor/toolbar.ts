@@ -1,7 +1,12 @@
 // L'editor del disegno: la barra e i pannelli. Un pezzo di createDrawEditor
 // (`../editor.ts`): lavora sul contesto che i pezzi condividono.
 
+import { colorWell, type ColorWell } from "../../../../kit/color/well";
+import type { ColorChoice } from "../../../../kit/color/picker";
+import { createOptionsBar, type OptionItem, type OptionsBar } from "../../../../kit/options-bar";
 import { identifier } from "../../../../ui/a11y";
+import type { MenuItem } from "../../../../ui/menu";
+import { REPLAY_SPEEDS } from "./replay";
 import { ariaBinding, displayBinding } from "../../../../ui/commands";
 import { iconEl } from "../../../../ui/icons";
 import { SymbolLibraries } from "../symbol-libraries";
@@ -15,7 +20,7 @@ import { attributeOps, heldNamer, renameOps } from "../attributes";
 import type { Board } from "../boards";
 import type { PaintChannel, PlaceGrip } from "../gradients";
 import { createProperties, type SectionId, type Properties } from "../properties";
-import type { DocumentColors } from "../swatches";
+import { documentSwatches, type DocumentColors } from "../swatches";
 import type { ConnectorView } from "../connector-ops";
 import type { HatchView } from "../patterns";
 import type { Grid } from "../grid";
@@ -29,15 +34,27 @@ import { createAccessPanel, type AccessPanel } from "../accessibility-panel";
 import type { Problem } from "../audit";
 import { createInspector, type Inspector } from "../inspector";
 import { createObjectTree, type ObjectTree } from "../objects";
-import { isLight, PALETTE, WIDTHS } from "../palette";
-import { TOOLS, type Feature, type ToolId } from "../registry";
+import { drawPickerText } from "../color-text";
+import { customColor, DEFAULT_COLOR, PALETTE, swatchOf, WIDTHS } from "../palette";
+import type { Feature, ToolId } from "../registry";
 import type { PolygonTool } from "../shapes";
 import { ATTRIBUTES_BINDING, BAR_FEATURES, DRAG_PX, IMAGE_BINDING, ZOOM_STEP } from "./constants";
+import { installCharacter } from "./chrome/character";
+import { installPenOptions } from "./chrome/pen-options";
+import { installRail } from "./chrome/rail";
 import type { EditorContext } from "./context";
 import type { GradientRead, PanelReading, ShapeDrag, SymbolDrag, SymbolPictureEntry } from "./types";
 
 /// La lettera dei pulsanti delle dimensioni del testo, in pixel.
 const SIZE_GLYPH_PX: readonly number[] = [12, 16, 22];
+
+/// Un pulsante della barra, come lo legge il catalogo dei comandi.
+export interface ToolbarCommand {
+  readonly control: HTMLButtonElement;
+  readonly label: () => string;
+  readonly icon: string | null;
+  readonly run: () => void;
+}
 
 /// Ciò che la barra e i pannelli dà agli altri pezzi dell'editor.
 export interface ToolbarContext {
@@ -50,18 +67,25 @@ export interface ToolbarContext {
   showSurfaceHint: () => void;
   labelSurface: () => void;
   button: (parent: HTMLElement, className: string, label: () => string, iconName: string | null, run: () => void) => HTMLButtonElement;
-  toolButtons: Map<ToolId, HTMLButtonElement>;
+  /// I pulsanti della barra e della colonna, per il catalogo dei comandi.
+  toolbarCommands: ToolbarCommand[];
   showToolMode: (id: ToolId) => void;
   insertGroup: HTMLElement;
   imageButton: HTMLButtonElement;
-  colorButtons: Map<string, HTMLButtonElement>;
-  customLabel: () => string;
-  customButton: HTMLButtonElement;
-  customChip: HTMLSpanElement;
-  moreGroup: HTMLDivElement;
-  moreButton: HTMLButtonElement;
+  /// Il pozzo del colore dello strumento.
+  colorWell: ColorWell;
   widthButtons: Array<{ readonly control: HTMLButtonElement; readonly bar: HTMLElement; readonly glyph: HTMLElement }>;
   showWidthLabels: () => void;
+  /// La riga delle opzioni, che è la barra.
+  optionsBar: OptionsBar;
+  /// La barra in alto, ai due capi della riga delle opzioni.
+  topStart: HTMLDivElement;
+  topEnd: HTMLDivElement;
+  menuButton: HTMLButtonElement;
+  /// «Esporta», se chi monta l'editor sa esportare.
+  exportButton: HTMLButtonElement | null;
+  /// Le voci del menu del disegno (≡).
+  drawMenuItems: () => MenuItem[];
   undoButton: HTMLButtonElement;
   redoButton: HTMLButtonElement;
   deleteButton: HTMLButtonElement;
@@ -89,6 +113,9 @@ export interface ToolbarContext {
   boardsPanel: BoardsPanel;
   shapeDrag: ShapeDrag | null;
   libraryPanel: LibraryPanel;
+  /// Forme e simboli nella stessa scheda: il campo delle forme cerca anche i
+  /// simboli, che nascondono il loro (C5).
+  shareSearch: (shared: boolean) => void;
   symbolDrag: SymbolDrag | null;
   /// Cresce a ogni cambiamento delle librerie: il pannello si rifà.
   librariesRound: number;
@@ -183,7 +210,7 @@ export interface ToolbarContext {
 /// Monta la barra e i pannelli.
 export function installToolbar(ctx: EditorContext): void {
   const {
-    life, profile, folio, has, relabels, toolLabel, toolHint, widthsNow, zoomText, turnText, options
+    life, folio, has, relabels, widthsNow, zoomText, turnText, options
   } = ctx;
   // --- DOM ----------------------------------------------------------------
 
@@ -193,10 +220,14 @@ export function installToolbar(ctx: EditorContext): void {
   const header = document.createElement("div");
   ctx.header = header;
   header.className = "draw-header";
-  const toolbar = document.createElement("div");
+  // La riga delle opzioni (B4): i gruppi della barra, e in «…» quelli che
+  // non ci stanno, i meno importanti per primi.
+  const optionsBar = createOptionsBar({ label: t("draw.toolbar"), moreLabel: t("draw.chrome.options.more"), lifetime: life });
+  ctx.optionsBar = optionsBar;
+  const toolbar = optionsBar.element as HTMLDivElement;
   ctx.toolbar = toolbar;
-  toolbar.className = "draw-toolbar";
-  toolbar.setAttribute("role", "toolbar");
+  toolbar.classList.add("draw-toolbar");
+  const toolbarGroups: OptionItem[] = [];
   const surface = document.createElement("div");
   ctx.surface = surface;
   surface.className = "draw-surface";
@@ -230,13 +261,23 @@ export function installToolbar(ctx: EditorContext): void {
     showSurfaceHint();
   });
 
-  const group = (label: DrawKey, radio: boolean): HTMLElement => {
+  /// Un gruppo della riga delle opzioni, con la sua priorità: un involucro
+  /// lo porta, così la riga mostra e nasconde l'involucro e il gruppo resta
+  /// del livello. `into` lo mette altrove.
+  const group = (label: DrawKey, radio: boolean, priority = 0, into?: HTMLElement): HTMLElement => {
     const element = document.createElement("div");
     element.className = "draw-group";
     element.setAttribute("role", radio ? "radiogroup" : "group");
     relabels.push(() => element.setAttribute("aria-label", t(label)));
-    toolbar.append(element);
+    if (into !== undefined) into.append(element);
+    else wrap(label, element, priority);
     return element;
+  };
+  const wrap = (id: string, element: HTMLElement, priority: number): void => {
+    const holder = document.createElement("div");
+    holder.className = "draw-options-item";
+    holder.append(element);
+    toolbarGroups.push({ id, element: holder, priority });
   };
 
   const button = (parent: HTMLElement, className: string, label: () => string, iconName: string | null, run: () => void): HTMLButtonElement => {
@@ -255,55 +296,22 @@ export function installToolbar(ctx: EditorContext): void {
     });
     life.listen(control, "click", () => run());
     parent.append(control);
+    ctx.toolbarCommands.push({ control, label, icon: iconName, run });
     return control;
   };
+  ctx.toolbarCommands = [];
   ctx.button = button;
 
-  // Ogni strumento del registro ha il suo pulsante; quelli sopra il livello
-  // restano nascosti finché il livello non sale.
-  const toolButtons = new Map<ToolId, HTMLButtonElement>();
-  ctx.toolButtons = toolButtons;
-  const toolGroup = group("draw.tools", true);
-  /// Le parole dei pulsanti che cambiano col modo dello strumento: il
-  /// Poligono con la stella, la penna di Bézier con la Curvatura.
-  const relabelTool = new Map<ToolId, () => void>();
-  // Gli strumenti del profilo: quelli di un altro non ci sono mai.
-  for (const spec of TOOLS.filter((each) => each.levels[profile] !== undefined)) {
-    const shortcut = spec.shortcut.toUpperCase();
-    const control = button(toolGroup, "draw-button draw-tool", () => `${t(toolLabel(spec.id))} (${shortcut})`, spec.icon, () => ctx.pickTool(spec.id));
-    control.setAttribute("role", "radio");
-    control.setAttribute("aria-keyshortcuts", shortcut);
-    control.dataset.tool = spec.id;
-    const hint = document.createElement("span");
-    hint.className = "sr-only";
-    hint.id = identifier(`draw-hint-${spec.id}`);
-    control.setAttribute("aria-describedby", hint.id);
-    const label = (): void => {
-      const text = t(toolLabel(spec.id));
-      control.title = `${text} (${shortcut})`;
-      control.setAttribute("aria-label", text);
-      hint.textContent = t(toolHint(spec.id));
-    };
-    relabels.push(label);
-    relabelTool.set(spec.id, label);
-    control.append(hint);
-    toolButtons.set(spec.id, control);
-  }
-
-  /// Il pulsante dello strumento `id` come disegna adesso: l'icona e le
-  /// parole della stella o del poligono, della Curvatura o della penna.
-  const showToolMode = (id: ToolId): void => {
-    const control = toolButtons.get(id);
-    const now = control?.querySelector("svg");
-    const glyph = iconEl(ctx.toolIcon(id));
-    if (now != null && glyph !== null) now.replaceWith(glyph);
-    relabelTool.get(id)?.();
-  };
-  ctx.showToolMode = showToolMode;
+  // Gli strumenti stanno nella colonna (`chrome/rail.ts`), che si monta
+  // qui: il pulsante di uno strumento che cambia modo (la stella, la
+  // Curvatura) si rifà da sé alla prossima sincronia.
+  installRail(ctx);
+  ctx.showToolMode = () => ctx.syncRail(ctx.editable());
 
   // Le immagini del vault, dal livello Standard e se chi monta l'editor le
   // sa scegliere: un pulsante accanto agli strumenti, che apre la scelta.
-  const insertGroup = group("draw.insert", false);
+  // Stanno in fondo alla colonna degli strumenti.
+  const insertGroup = group("draw.insert", false, 0, ctx.railColumn);
   ctx.insertGroup = insertGroup;
   const imageButton = button(insertGroup, "draw-button", () => t("draw.image.vault"), "draw-image", () => void ctx.vaultImage());
   ctx.imageButton = imageButton;
@@ -313,48 +321,54 @@ export function installToolbar(ctx: EditorContext): void {
     imageButton.title = `${t("draw.image.vault")} (${displayBinding(IMAGE_BINDING)})`;
   });
 
-  const colorButtons = new Map<string, HTMLButtonElement>();
-  ctx.colorButtons = colorButtons;
-  const colorGroup = group("draw.colors", true);
-  for (const swatch of PALETTE) {
-    const control = button(colorGroup, "draw-button draw-color", () => t(swatch.label), null, () => ctx.setColor(swatch.color));
-    control.setAttribute("role", "radio");
-    const frame = document.createElement("span");
-    frame.className = "draw-swatch-frame";
-    frame.dataset.shape = swatch.shape;
-    const chip = document.createElement("span");
-    chip.className = "draw-swatch";
-    chip.style.setProperty("--swatch", swatch.color);
-    frame.append(chip);
-    control.append(frame);
-    colorButtons.set(swatch.color, control);
-  }
-  // Il colore a piacere: il suo campione, nella stessa scelta della
-  // tavolozza, e dopo il pulsante che lo chiede. Il campione ha una forma
-  // sua, l'anello, e il nome dice il codice.
-  const customLabel = (): string =>
-    ctx.custom === null ? t("draw.color.dialog") : t(isLight(ctx.custom) ? "draw.color.custom.light" : "draw.color.custom", { code: ctx.custom });
-  ctx.customLabel = customLabel;
-  const customButton = button(colorGroup, "draw-button draw-color", customLabel, null, () => {
-    if (ctx.custom !== null) ctx.setColor(ctx.custom);
+  // Il colore (§17): un pozzo col colore e il suo nome, che apre il
+  // selettore del kit. Gli otto colori di Okabe–Ito sono i «Consigliati», in
+  // cima, col nome; poi i colori del documento e i recenti. Un colore
+  // qualunque, dal quadrato o dal codice, dalla funzione «Colori».
+  const colorGroup = group("draw.colors", false, 3);
+  /// Il nome di un colore: quello della tavolozza, del campione del
+  /// documento, o il codice.
+  const colorName = (color: string): string => {
+    const swatch = swatchOf(color);
+    if (swatch !== null) return t(swatch.label);
+    const model = ctx.engine.model;
+    const named = model === null ? undefined : documentSwatches(model).find((each) => each.color === color.toLowerCase());
+    return named?.name || color.toLowerCase();
+  };
+  const colorChoices = (colors: readonly string[]): ColorChoice[] => colors.map((color) => ({ color, name: colorName(color) }));
+  const well = colorWell({
+    label: t("draw.colors"),
+    mixedText: t("draw.chrome.mixed"),
+    text: drawPickerText(),
+    value: DEFAULT_COLOR,
+    nameOf: colorName,
+    lifetime: life,
+    now: () => {
+      const model = ctx.engine.model;
+      const free = has("colors");
+      return {
+        recommended: PALETTE.map((swatch) => ({ color: swatch.color, name: t(swatch.label) })),
+        documentColors: !free || model === null ? [] : documentSwatches(model).map((each) => ({ color: each.color, name: each.name || each.color })),
+        recent: free ? colorChoices(ctx.recentColors.filter((color) => swatchOf(color) === null)) : [],
+        free,
+      };
+    },
+    onChange: (color) => {
+      if (!ctx.editable()) return;
+      // Il colore, scritto: un campione del documento si sceglie dal suo
+      // pannello, che lo lega.
+      const code = customColor(color);
+      if (code === null) return;
+      ctx.setColor(code);
+      ctx.announce(t("draw.announce.color", { color: colorName(code) }));
+      // Con la Penna o l'Evidenziatore, i tratti scelti prendono il colore (P10).
+      if (ctx.tool === "pen" || ctx.tool === "highlighter") ctx.repenSelection({ color: code });
+    },
   });
-  ctx.customButton = customButton;
-  customButton.setAttribute("role", "radio");
-  const customFrame = document.createElement("span");
-  customFrame.className = "draw-swatch-frame";
-  customFrame.dataset.shape = "ring";
-  const customChip = document.createElement("span");
-  ctx.customChip = customChip;
-  customChip.className = "draw-swatch";
-  customFrame.append(customChip);
-  customButton.append(customFrame);
-  const moreGroup = document.createElement("div");
-  ctx.moreGroup = moreGroup;
-  moreGroup.className = "draw-group";
-  toolbar.append(moreGroup);
-  const moreButton = button(moreGroup, "draw-button", () => t("draw.color.more"), "draw-color-more", () => void ctx.chooseColor());
-  ctx.moreButton = moreButton;
-  moreButton.setAttribute("aria-haspopup", "dialog");
+  ctx.colorWell = well;
+  well.button.classList.add("draw-color-well");
+  colorGroup.append(well.element);
+  relabels.push(() => well.relabel({ label: t("draw.colors"), mixedText: t("draw.chrome.mixed"), text: drawPickerText() }));
 
   // Gli spessori, per posizione: Sottile, Medio, Spesso valgono per la penna
   // e le forme quelli della tavolozza, per l'evidenziatore i suoi. Per il
@@ -362,7 +376,7 @@ export function installToolbar(ctx: EditorContext): void {
   // posto della barra.
   const widthButtons: Array<{ readonly control: HTMLButtonElement; readonly bar: HTMLElement; readonly glyph: HTMLElement }> = [];
   ctx.widthButtons = widthButtons;
-  const widthGroup = group("draw.widths", true);
+  const widthGroup = group("draw.widths", true, 3);
   WIDTHS.forEach((_, at) => {
     const control = button(widthGroup, "draw-button draw-width", () => t(widthsNow()[at]!.label), null, () => ctx.setWidth(widthsNow()[at]!.value));
     control.setAttribute("role", "radio");
@@ -391,13 +405,54 @@ export function installToolbar(ctx: EditorContext): void {
   ctx.showWidthLabels = showWidthLabels;
   relabels.push(showWidthLabels);
 
-  const editGroup = group("draw.edit", false);
-  const undoButton = button(editGroup, "draw-button", () => t("draw.undo"), "draw-undo", () => ctx.undo());
+  // Il carattere di ciò che si scrive (S5): famiglia, corpo ed enfasi,
+  // soltanto mentre si scrive un testo.
+  installCharacter(ctx, group("draw.character", false, 3));
+
+  // La penna della Penna e il modo della Gomma (P3, P8).
+  installPenOptions(ctx, group("draw.pen.choose", false, 3), group("draw.eraser.mode", true, 3));
+
+  // La barra in alto (B4): a sinistra il menu del disegno, Annulla e
+  // Ripeti; a destra «Esporta». Sono fuori dalla riga delle opzioni, e il
+  // Tab li raggiunge uno per uno.
+  const topStart = document.createElement("div");
+  topStart.className = "draw-group draw-top";
+  ctx.topStart = topStart;
+  const topEnd = document.createElement("div");
+  topEnd.className = "draw-group draw-top";
+  ctx.topEnd = topEnd;
+  const menuButton = button(topStart, "draw-button", () => t("draw.chrome.menu"), "draw-menu", () => ctx.openMenu(menuButton, ctx.drawMenuItems()));
+  ctx.menuButton = menuButton;
+  menuButton.setAttribute("aria-haspopup", "menu");
+  menuButton.setAttribute("aria-expanded", "false");
+  const undoButton = button(topStart, "draw-button", () => t("draw.undo"), "draw-undo", () => ctx.undo());
   ctx.undoButton = undoButton;
   undoButton.setAttribute("aria-keyshortcuts", "Control+Z");
-  const redoButton = button(editGroup, "draw-button", () => t("draw.redo"), "draw-redo", () => ctx.redo());
+  const redoButton = button(topStart, "draw-button", () => t("draw.redo"), "draw-redo", () => ctx.redo());
   ctx.redoButton = redoButton;
   redoButton.setAttribute("aria-keyshortcuts", "Control+Shift+Z Control+Y");
+  const onExport = options.onExport;
+  const exportButton =
+    onExport === undefined ? null : button(topEnd, "draw-button draw-export", () => t("draw.chrome.export"), "draw-export", () => onExport());
+  ctx.exportButton = exportButton;
+  if (exportButton !== null) {
+    const text = document.createElement("span");
+    text.className = "draw-export-text";
+    text.setAttribute("aria-hidden", "true");
+    exportButton.append(text);
+    relabels.push(() => (text.textContent = t("draw.chrome.export")));
+  }
+  // Fuori dal roving della riga: nel Tab come ogni pulsante, e uno spento
+  // ne esce da sé.
+  for (const control of [menuButton, undoButton, redoButton, exportButton]) control?.removeAttribute("tabindex");
+  // Il puntatore non prende il fuoco, che resta al foglio con i suoi tasti.
+  for (const bar of [topStart, topEnd]) {
+    life.listen(bar, "mousedown", (event) => {
+      if ((event.target as Element | null)?.closest("button")) event.preventDefault();
+    });
+  }
+
+  const editGroup = group("draw.edit", false, 2);
   const deleteButton = button(editGroup, "draw-button", () => t("draw.delete"), "trash", () => ctx.deleteSelection());
   ctx.deleteButton = deleteButton;
   deleteButton.setAttribute("aria-keyshortcuts", "Delete");
@@ -411,7 +466,7 @@ export function installToolbar(ctx: EditorContext): void {
   // «Proprietà» apre e chiude il pannello, dal livello che lo offre; senza,
   // apre la finestra.
   const propertiesButton = button(editGroup, "draw-button", () => t("draw.properties"), "properties", () => {
-    if (has("properties")) ctx.showPanel(panel.element.hidden);
+    if (has("properties")) ctx.showPanel(ctx.toggles(panel.element));
     else void ctx.properties();
   });
   ctx.propertiesButton = propertiesButton;
@@ -419,7 +474,7 @@ export function installToolbar(ctx: EditorContext): void {
 
   // I livelli, dal livello Standard: il pulsante dice dove si disegna e apre
   // il menu che li sceglie e li cambia.
-  const layerGroup = group("draw.layers", false);
+  const layerGroup = group("draw.layers", false, 1);
   ctx.layerGroup = layerGroup;
   const layersButton = button(layerGroup, "draw-button draw-layer-button", () => ctx.layersLabel(), "draw-layers", () => ctx.openMenu(layersButton, ctx.layerItems()));
   ctx.layersButton = layersButton;
@@ -581,8 +636,17 @@ export function installToolbar(ctx: EditorContext): void {
     onDrag: (id, event) => ctx.startShapeDrag(id, event),
     onLeave: () => surface.focus({ preventScroll: true }),
     slop: DRAG_PX,
+    onQuery: (text) => {
+      if (searchShared) ctx.symbolsPanel.follow(text);
+    },
   });
   ctx.libraryPanel = libraryPanel;
+  let searchShared = false;
+  ctx.shareSearch = (shared) => {
+    searchShared = shared;
+    libraryPanel.share(shared);
+    ctx.symbolsPanel.follow(shared ? libraryPanel.query() : null);
+  };
   libraryPanel.element.hidden = true;
   relabels.push(() => libraryPanel.relabel());
 
@@ -656,6 +720,7 @@ export function installToolbar(ctx: EditorContext): void {
     onChange: (id, value) => ctx.changeField(id, value),
     onAction: (id) => ctx.runAction(id),
     onTransform: (values) => ctx.transformFields(values),
+    onExportSelection: () => options.onExport?.("selection"),
     onSection: (id, open) => {
       const closed = ctx.grid.closed.filter((each) => each !== id);
       ctx.changeGrid({ ...ctx.grid, closed: open ? closed : [...closed, id] });
@@ -736,7 +801,7 @@ export function installToolbar(ctx: EditorContext): void {
   pageButton.setAttribute("aria-haspopup", "menu");
   pageButton.setAttribute("aria-expanded", "false");
   // Le tavole, dal livello Standard.
-  const boardsButton = button(viewGroup, "draw-button", () => t("draw.boards"), "draw-boards", () => ctx.showBoards(boardsPanel.element.hidden));
+  const boardsButton = button(viewGroup, "draw-button", () => t("draw.boards"), "draw-boards", () => ctx.showBoards(ctx.toggles(boardsPanel.element)));
   ctx.boardsButton = boardsButton;
   boardsButton.setAttribute("aria-expanded", "false");
   boardsButton.setAttribute("aria-controls", boardsPanel.element.id);
@@ -745,29 +810,29 @@ export function installToolbar(ctx: EditorContext): void {
   ctx.presentButton = presentButton;
   presentButton.setAttribute("aria-keyshortcuts", "F5");
   // Le forme, dal livello Standard.
-  const libraryButton = button(viewGroup, "draw-button", () => t("draw.library"), "draw-library", () => ctx.showLibrary(libraryPanel.element.hidden));
+  const libraryButton = button(viewGroup, "draw-button", () => t("draw.library"), "draw-library", () => ctx.showLibrary(ctx.toggles(libraryPanel.element)));
   ctx.libraryButton = libraryButton;
   libraryButton.setAttribute("aria-expanded", "false");
   libraryButton.setAttribute("aria-controls", libraryPanel.element.id);
   // I simboli, dal livello Esperto.
-  const symbolsButton = button(viewGroup, "draw-button", () => t("draw.symbols.title"), "draw-symbols", () => ctx.showSymbols(symbolsPanel.element.hidden));
+  const symbolsButton = button(viewGroup, "draw-button", () => t("draw.symbols.title"), "draw-symbols", () => ctx.showSymbols(ctx.toggles(symbolsPanel.element)));
   ctx.symbolsButton = symbolsButton;
   symbolsButton.setAttribute("aria-expanded", "false");
   symbolsButton.setAttribute("aria-controls", symbolsPanel.element.id);
-  const objectsButton = button(viewGroup, "draw-button", () => t("draw.objects"), "outline", () => ctx.showObjects(tree.element.hidden));
+  const objectsButton = button(viewGroup, "draw-button", () => t("draw.objects"), "outline", () => ctx.showObjects(ctx.toggles(tree.element)));
   ctx.objectsButton = objectsButton;
   objectsButton.setAttribute("aria-expanded", "false");
   objectsButton.setAttribute("aria-controls", tree.element.id);
-  const historyButton = button(viewGroup, "draw-button", () => t("draw.history"), "draw-history", () => ctx.showHistory(historyPanel.element.hidden));
+  const historyButton = button(viewGroup, "draw-button", () => t("draw.history"), "draw-history", () => ctx.showHistory(ctx.toggles(historyPanel.element)));
   ctx.historyButton = historyButton;
   historyButton.setAttribute("aria-expanded", "false");
   historyButton.setAttribute("aria-controls", historyPanel.element.id);
-  const accessButton = button(viewGroup, "draw-button", () => t("draw.access"), "draw-access", () => ctx.showAccess(accessPanel.element.hidden));
+  const accessButton = button(viewGroup, "draw-button", () => t("draw.access"), "draw-access", () => ctx.showAccess(ctx.toggles(accessPanel.element)));
   ctx.accessButton = accessButton;
   accessButton.setAttribute("aria-expanded", "false");
   accessButton.setAttribute("aria-controls", accessPanel.element.id);
   // Gli attributi, dal livello Esperto.
-  const attributesButton = button(viewGroup, "draw-button", () => t("draw.attributes"), "draw-attributes", () => ctx.showAttributes(inspector.element.hidden));
+  const attributesButton = button(viewGroup, "draw-button", () => t("draw.attributes"), "draw-attributes", () => ctx.showAttributes(ctx.toggles(inspector.element)));
   ctx.attributesButton = attributesButton;
   attributesButton.setAttribute("aria-expanded", "false");
   attributesButton.setAttribute("aria-controls", inspector.element.id);
@@ -791,6 +856,47 @@ export function installToolbar(ctx: EditorContext): void {
   titleInput.autocomplete = "off";
   titleInput.spellcheck = true;
   titleField.append(titleText, titleInput);
+  optionsBar.setItems(toolbarGroups);
+  /// Il sottomenu «Vista» del menu «Disegno»: inquadrare e come si vede.
+  const viewItems = (): MenuItem[] => {
+    const none = ctx.selection.length === 0;
+    return [
+      { label: t("draw.fit"), hint: displayBinding("Shift-1"), run: () => ctx.fit() },
+      { label: t("draw.fit.selection"), hint: displayBinding("Shift-2"), disabled: none, ...(none ? { description: t("draw.selection.empty") } : {}), run: () => ctx.fitSelection() },
+      { label: t("draw.keys.actual"), hint: displayBinding("Mod-0"), run: () => ctx.zoomBy(1 / ctx.camera.scale) },
+      { label: t("draw.outlines"), separator: true, choice: "checkbox", checked: ctx.outline, hint: displayBinding("Mod-y"), run: () => ctx.setOutline(!ctx.outline) },
+      { label: t("draw.navigator"), choice: "checkbox", checked: ctx.navigator, run: () => ctx.setNavigator(!ctx.navigator) },
+      { label: t("draw.bare"), choice: "checkbox", checked: ctx.bare, hint: displayBinding("Mod-."), run: () => ctx.setBare(!ctx.bare) },
+      { label: t("draw.ruler"), separator: true, choice: "checkbox", checked: ctx.ruler !== null, run: () => ctx.setRuler(ctx.ruler === null) },
+      ...(ctx.ruler === null
+        ? []
+        : [
+            { label: t("draw.ruler.turn"), run: () => ctx.stepRuler(1) },
+            { label: t("draw.ruler.level"), disabled: ctx.ruler.angle === -ctx.camera.angle, run: () => ctx.stepRuler(0) },
+          ]),
+      ...REPLAY_SPEEDS.map((speed, at): MenuItem => ({ label: t("draw.replay", { speed: String(speed) }), ...(at === 0 ? { separator: true } : {}), run: () => ctx.replay(speed) })),
+    ];
+  };
+  ctx.drawMenuItems = (): MenuItem[] => {
+    const editable = ctx.editable();
+    const items: MenuItem[] = [];
+    if (has("board")) items.push({ label: t("draw.boards.add"), icon: "draw-boards", disabled: !editable, run: () => ctx.newBoard() });
+    if (ctx.insertsImages(ctx.features)) items.push({ label: t("draw.image.vault"), icon: "draw-image", hint: "Ctrl+I", disabled: !editable, run: () => void ctx.vaultImage() });
+    if (onExport !== undefined) items.push({ label: t("draw.chrome.export.dialog"), icon: "draw-export", run: () => onExport() });
+    if (has("present")) items.push({ label: t("draw.present"), icon: "draw-present", hint: "F5", run: () => ctx.present(null) });
+    if (has("selection")) items.push({ label: t("draw.selection.menu"), icon: "draw-selection", separator: true, submenu: true, items: ctx.selectionItems() });
+    if (!pageButton.hidden) items.push({ label: t("draw.page_grid"), icon: "draw-page-grid", submenu: true, items: ctx.pageItems() });
+    items.push({ label: t("draw.view"), submenu: true, items: viewItems() });
+    items.push(...ctx.workspaceItems());
+    items.push({ label: t("draw.chrome.title"), separator: true, run: () => {
+      if (has("properties")) ctx.showPanel(true, false);
+      titleInput.focus();
+      titleInput.select();
+    } });
+    items.push({ label: t("draw.commands.open"), hint: displayBinding("Mod-/"), run: () => ctx.searchCommands() });
+    items.push({ label: t("draw.keys"), icon: "keyboard", hint: "?", run: () => void ctx.keys() });
+    return items;
+  };
   relabels.push(() => {
     titleText.textContent = t(folio === undefined ? "draw.title" : "draw.sheet.title");
     titleInput.placeholder = t(folio === undefined ? "draw.title.placeholder" : "draw.sheet.title.placeholder");

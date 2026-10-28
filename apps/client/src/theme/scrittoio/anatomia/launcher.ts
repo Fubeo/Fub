@@ -3,6 +3,7 @@ import { INTERACTIVE, REST, S, SELECTABLE, type PartAnatomy } from "./types";
 
 export const LAUNCHER: PartAnatomy = {
   part: "launcher",
+  layer: "cornice",
   components: [
     // Il velo e la scatola: lanciatore se ha un campo in testa, dialogo se no.
     { name: "modal-surface", states: REST, hooks: ["modale", "palette-box", "palette-heading"] },
@@ -23,7 +24,7 @@ export const LAUNCHER: PartAnatomy = {
     { name: "unified-surface", states: REST, hooks: ["launcher-veil", "launcher"] },
     { name: "unified-head", states: [S("rest"), S("focused")], hooks: ["launcher-head", "launcher-lens", "launcher-input", "launcher-wait"] },
     { name: "unified-modes", states: REST, hooks: ["launcher-modes", "launcher-mode-prefix"] },
-    { name: "unified-rows", states: REST, hooks: ["launcher-list", "launcher-row", "launcher-row-title", "launcher-row-detail", "launcher-row-meta", "launcher-note"] },
+    { name: "unified-rows", states: REST, hooks: ["launcher-list", "launcher-row", "launcher-row-title", "launcher-row-format", "launcher-row-detail", "launcher-row-meta", "launcher-note"] },
     { name: "unified-preview", states: REST, hooks: ["launcher-preview", "launcher-preview-page", "launcher-preview-note"] },
     { name: "unified-foot", states: REST, hooks: ["launcher-foot", "launcher-status", "launcher-hints", "launcher-hint", "launcher-key"] },
     { name: "unified-panel", states: INTERACTIVE, hooks: ["launcher-panel"] },

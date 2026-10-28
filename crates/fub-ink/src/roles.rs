@@ -5,8 +5,9 @@
 //!
 //! La politica, pensata per chi scrive con la mano appoggiata:
 //!
-//! - la punta della penna disegna; il tasto laterale e la gomma restano agli
-//!   strumenti, che ne decideranno l'uso;
+//! - la punta della penna disegna; la gomma della penna girata fa un tratto
+//!   da gomma, e il tasto laterale un tratto che gli strumenti usano come
+//!   hanno scelto (radiale, lazo, gomma o niente);
 //! - il mouse disegna con il tasto principale e muove la vista con quello
 //!   centrale;
 //! - un dito non disegna mai mentre una penna tocca lo schermo o è sospesa
@@ -26,6 +27,11 @@ use crate::pointer::PointerKind;
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PointerRole {
     Ink,
+    /// La gomma della penna girata: un tratto che cancella.
+    Erase,
+    /// La penna col tasto laterale premuto: un tratto che decidono gli
+    /// strumenti.
+    Barrel,
     Navigate,
     Ignore,
 }
@@ -35,8 +41,29 @@ impl PointerRole {
     pub fn name(self) -> &'static str {
         match self {
             PointerRole::Ink => "ink",
+            PointerRole::Erase => "erase",
+            PointerRole::Barrel => "barrel",
             PointerRole::Navigate => "navigate",
             PointerRole::Ignore => "ignore",
+        }
+    }
+
+    /// Il ruolo fa un tratto: la punta, la gomma o il tasto laterale.
+    pub fn strokes(self) -> bool {
+        matches!(
+            self,
+            PointerRole::Ink | PointerRole::Erase | PointerRole::Barrel
+        )
+    }
+
+    /// Il bit di `buttons` che tiene vivo il tratto: rilasciato, il tratto
+    /// finisce. Zero per un ruolo che non fa tratti.
+    pub fn button_mask(self) -> u32 {
+        match self {
+            PointerRole::Ink => PRIMARY_BIT,
+            PointerRole::Erase => ERASER_BIT,
+            PointerRole::Barrel => BARREL_BIT,
+            PointerRole::Navigate | PointerRole::Ignore => 0,
         }
     }
 }
@@ -77,17 +104,24 @@ pub struct RoleContext {
 const PRIMARY: i32 = 0;
 /// Il tasto centrale.
 const MIDDLE: i32 = 1;
+/// Il tasto laterale della penna (il secondario del mouse).
+const BARREL: i32 = 2;
+/// La gomma della penna girata.
+const ERASER: i32 = 5;
+/// I bit di `PointerEvent.buttons`: principale, secondario, gomma.
+const PRIMARY_BIT: u32 = 1;
+const BARREL_BIT: u32 = 2;
+const ERASER_BIT: u32 = 32;
 
 /// Il ruolo di un puntatore nel momento in cui si appoggia.
 pub fn classify_pointer(kind: PointerKind, button: i32, context: &RoleContext) -> PointerRole {
     match kind {
-        PointerKind::Pen => {
-            if button == PRIMARY {
-                PointerRole::Ink
-            } else {
-                PointerRole::Ignore
-            }
-        }
+        PointerKind::Pen => match button {
+            PRIMARY => PointerRole::Ink,
+            ERASER => PointerRole::Erase,
+            BARREL => PointerRole::Barrel,
+            _ => PointerRole::Ignore,
+        },
         PointerKind::Touch => {
             if context.pen_near {
                 return PointerRole::Ignore;
@@ -129,18 +163,30 @@ mod tests {
     }
 
     #[test]
-    fn la_punta_della_penna_disegna_e_gli_altri_tasti_no() {
+    fn la_punta_disegna_la_gomma_cancella_il_tasto_laterale_sceglie() {
         assert_eq!(
             classify_pointer(PointerKind::Pen, 0, &context()),
             PointerRole::Ink
         );
-        // Il tasto laterale e la gomma sono degli strumenti, non del tratto.
-        for button in [1, 2, 5] {
+        assert_eq!(
+            classify_pointer(PointerKind::Pen, 5, &context()),
+            PointerRole::Erase
+        );
+        assert_eq!(
+            classify_pointer(PointerKind::Pen, 2, &context()),
+            PointerRole::Barrel
+        );
+        for button in [1, 3, 4] {
             assert_eq!(
                 classify_pointer(PointerKind::Pen, button, &context()),
                 PointerRole::Ignore
             );
         }
+        // Ogni tratto finisce col suo bit di `buttons`.
+        assert_eq!(PointerRole::Ink.button_mask(), 1);
+        assert_eq!(PointerRole::Erase.button_mask(), 32);
+        assert_eq!(PointerRole::Barrel.button_mask(), 2);
+        assert!(!PointerRole::Navigate.strokes());
     }
 
     #[test]

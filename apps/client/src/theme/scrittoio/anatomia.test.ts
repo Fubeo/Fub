@@ -6,7 +6,7 @@
 // rimasto indietro, e in quale pezzo.
 import { describe, expect, it } from "vitest";
 
-import { COMPONENTS, HOOKS, hooksOf, PARTS, STATE_NAMES } from "./anatomia";
+import { COMPONENTS, CONTENT_GATE, HOOK_LAYERS, HOOKS, hooksOf, LAYER_CONFLICTS, LAYERS, LOOK_HOOKS, PARTS, STATE_NAMES, UNSTYLED } from "./anatomia";
 import { ORDER } from "./skin/order";
 
 const skinParts = import.meta.glob("./skin/*.css", {
@@ -51,9 +51,16 @@ describe("i pezzi della pelle e la loro anatomia", () => {
 
   for (const part of ORDER) {
     it(`${part}: classi del CSS e hook dichiarati coincidono`, () => {
-      expect(classesOf(partText(part))).toEqual([...hooksOf(part)].sort());
+      expect(classesOf(partText(part))).toEqual([...hooksOf(part)].filter((hook) => !UNSTYLED.has(hook)).sort());
     });
   }
+
+  it("un hook che la pelle non veste è contenuto sotto il gate", () => {
+    for (const hook of UNSTYLED) {
+      expect(HOOK_LAYERS[hook], hook).toBe("contenuto");
+      expect(CONTENT_GATE.hooks, hook).toContain(hook);
+    }
+  });
 
   it("l'unione degli hook non ha doppioni", () => {
     expect(new Set(HOOKS).size).toBe(HOOKS.length);
@@ -86,6 +93,33 @@ describe("i pezzi della pelle e la loro anatomia", () => {
       const names = part.components.map((component) => component.name);
       expect(new Set(names).size, part.part).toBe(names.length);
       for (const component of part.components) expect(component.hooks.length, component.name).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("lo strato di ogni hook", () => {
+  it("ogni hook ha uno strato, e uno solo", () => {
+    expect(LAYER_CONFLICTS).toEqual([]);
+    for (const hook of HOOKS) expect(LAYERS, hook).toContain(HOOK_LAYERS[hook]);
+    expect(Object.keys(HOOK_LAYERS).sort()).toEqual([...HOOKS].sort());
+  });
+
+  it("i segni di Fub sono segno", () => {
+    for (const hook of [
+      "rich-proof-spelling", "rich-proof-grammar", "ProseMirror-selectednode", "rich-ins", "rich-del", "rich-find", "rich-comment",
+      "cm-searchMatch", "cm-searchMatch-selected", "cm-cursor", "cm-selectionBackground",
+      "grid-comment-mark", "grid-fill-handle", "canvas-node-handle",
+    ]) {
+      expect(HOOK_LAYERS[hook], hook).toBe("segno");
+    }
+  });
+
+  it("il contenuto è contenuto, la cornice cornice", () => {
+    for (const hook of ["rich-para", "rich-heading", "rich-content", "grid-cell", "cm-line", "markdown-rendered", ...LOOK_HOOKS]) {
+      expect(HOOK_LAYERS[hook], hook).toBe("contenuto");
+    }
+    for (const hook of ["rich-ribbon", "rich-findbar", "rich-page", "rich-sheet-paper", "grid-ribbon", "grid-header", "pane-editor", "pane-toolbar", "media-surface"]) {
+      expect(HOOK_LAYERS[hook], hook).toBe("cornice");
     }
   });
 });

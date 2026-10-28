@@ -436,6 +436,7 @@ impl Reader<'_> {
         };
         let role = role(self.styles, &key);
         Ok(Para {
+            locked: false,
             role,
             align: self.styles.align(style),
             k: Some(blob::encode(&key)?),
@@ -507,6 +508,7 @@ impl Reader<'_> {
             rows: movable,
         };
         Ok(Table {
+            locked: false,
             k: Some(blob::encode(&key)?),
             rows,
         })
@@ -813,6 +815,9 @@ impl<'a> Inlines<'_, 'a> {
             end: false,
             toc: None,
             comment: None,
+            ink: None,
+            svg: None,
+            float: None,
             ins: None,
             del: None,
         })
@@ -840,7 +845,7 @@ fn describe(tree: &Tree, id: NodeId) -> (AtomKind, String, Option<(f32, f32)>) {
             let kind = if tree.child(id, "draw:image").is_some() {
                 AtomKind::Image
             } else if tree.child(id, "draw:text-box").is_some() {
-                AtomKind::Shape
+                AtomKind::TextBox
             } else {
                 AtomKind::Graphic
             };

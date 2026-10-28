@@ -665,6 +665,27 @@ export function emphasisIn(rich: Rich, from: Caret, to: Caret, which: Emphasis):
   return hasEmphasis(rich, line, { text: "", attrs: styleAt(rich, from) }, which);
 }
 
+/// L'aspetto dei caratteri fra `from` e `to`, come lo mostra il gruppo
+/// «Carattere»: la famiglia e il corpo, `null` se sono diversi, e le enfasi
+/// accese su tutti. Senza caratteri, quello di ciò che vi si scriverebbe.
+export interface RichLook {
+  readonly family: string | null;
+  readonly size: number | null;
+  readonly emphasis: Readonly<Record<Emphasis, boolean>>;
+}
+
+export function lookIn(rich: Rich, from: Caret, to: Caret): RichLook {
+  let seen = spansIn(rich, from, to);
+  if (seen.length === 0) seen = [{ line: rich.lines[clampCaret(rich, from).line]!, span: { text: "", attrs: styleAt(rich, from) } }];
+  const one = <T>(values: readonly T[]): T | null => (values.every((value) => value === values[0]) ? (values[0] ?? null) : null);
+  const all = (which: Emphasis): boolean => seen.every(({ line, span }) => hasEmphasis(rich, line, span, which));
+  return {
+    family: one(seen.map(({ line, span }) => trim(seenIn(rich, line, span, "font-family") ?? ""))),
+    size: one(seen.map(({ line, span }) => sizeIn(rich, line, span))),
+    emphasis: { bold: all("bold"), italic: all("italic"), underline: all("underline"), strike: all("strike") },
+  };
+}
+
 /// `rich` coi caratteri fra `from` e `to` con l'enfasi `which` accesa o
 /// spenta.
 export function emphasize(rich: Rich, from: Caret, to: Caret, which: Emphasis, on: boolean): Rich {

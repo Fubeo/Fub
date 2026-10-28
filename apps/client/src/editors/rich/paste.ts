@@ -72,8 +72,12 @@ export function safeHref(href: string): boolean {
 }
 
 function newAtom(node: PmNode): boolean {
-  const { kind, data, note } = node.attrs;
-  if (kind === "image") return typeof data === "string" && imageMime(data) !== null && note === null;
+  const { kind, data, note, ink, svg } = node.attrs;
+  const picture = typeof data === "string" && imageMime(data) !== null && note === null;
+  if (kind === "image") return picture && ink === null && svg === null;
+  // Un inchiostro coi suoi tratti, un disegno col suo SVG: entrambi col PNG.
+  if (kind === "ink") return picture && ink !== null && svg === null;
+  if (kind === "drawing") return picture && typeof svg === "string" && ink === null;
   return kind === "note" && typeof note === "string" && data === null;
 }
 

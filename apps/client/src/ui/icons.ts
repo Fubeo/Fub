@@ -53,6 +53,13 @@ const SVG: Record<string, string> = {
   footnote: '<path d="M4 7h9M4 12h9M4 17h6"/><path d="M17 5l2-1v6"/>',
   collection: '<rect x="4" y="9" width="16" height="11" rx="2"/><path d="M6 6h12M8 3h8"/>',
   stats: '<path d="M4 20h16"/><path d="M7 16v-5M12 16V7M17 16v-8"/>',
+  // --- il formato di un documento (`ui/format-kind.ts`) ------------------
+  // Word e OpenDocument sono fogli con una lettera, il foglio di calcolo una
+  // griglia, il disegno due forme. La nota è il foglietto di `notes`.
+  "format-word": '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M8.5 11l1.5 6 2-4.5 2 4.5 1.5-6"/>',
+  "format-odt": '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><circle cx="12" cy="14" r="3"/>',
+  "format-sheet": '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M4 15h16M10 4v16"/>',
+  "format-drawing": '<circle cx="8.5" cy="8.5" r="4.5"/><rect x="11" y="11" width="9" height="9" rx="1.5"/>',
   // Il ripiego di una view che non dichiara un'icona conosciuta: un
   // pannello generico, distinto da ogni icona con un significato.
   view: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16"/>',

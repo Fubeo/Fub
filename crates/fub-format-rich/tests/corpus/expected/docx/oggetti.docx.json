@@ -1,14 +1,14 @@
 {
   "file": "docx/oggetti.docx",
-  "sha256": "5f37c0b95a839984a9c04cf694769ee3977bab21833db17d11e76abe3ee24fdd",
+  "sha256": "10f0c0cd362781b9fdba497c60da6249aae1d646fa80362d3c72f84bdad25096",
   "open": {
-    "readonly": "codec",
-    "projection": "3756cf8b0c92fcc01598be247d28a4b9873a89e3b90532c84b111705b0443a9f",
+    "readonly": null,
+    "projection": "65577945a097481e5bf1a64e698013fb1442baf7f09a59796a4296cd54ac9258",
     "blocks": 4,
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 42",
+    "differenze all'apertura: 39",
     "  document: <{http://schemas.openxmlformats.org/markup-compatibility/2006}AlternateContent>: 1 → 0",
     "  document: <{http://schemas.openxmlformats.org/markup-compatibility/2006}Choice>: 1 → 0",
     "  document: <{http://schemas.openxmlformats.org/markup-compatibility/2006}Fallback>: 1 → 0",
@@ -19,7 +19,6 @@
     "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}txbxContent>: 2 → 1",
     "  document: <{urn:schemas-microsoft-com:vml}shape>: 1 → 0",
     "  document: <{urn:schemas-microsoft-com:vml}textbox>: 1 → 0",
-    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
     "  document: {http://schemas.openxmlformats.org/drawingml/2006/picture}cNvPr @{}name=\"pixel.png\": 2 → 0",
     "  document: {http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}docPr @{}name=\"Casella 3\": 1 → 0",
     "  document: {http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}docPr @{}name=\"Immagine 1\": 1 → 0",
@@ -28,8 +27,6 @@
     "  document: {urn:schemas-microsoft-com:vml}shape @{}id=\"Casella3\": 1 → 0",
     "  document: {urn:schemas-microsoft-com:vml}shape @{}style=\"width:144pt;height:36pt\": 1 → 0",
     "  document: {urn:schemas-microsoft-com:vml}shape @{}type=\"#_x0000_t202\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
     "  document: text of {http://schemas.openxmlformats.org/wordprocessingml/2006/main}p bfc6183b402a: 2 → 1",
     "  block 0: document: {http://schemas.openxmlformats.org/drawingml/2006/picture}cNvPr @{}name=\"pixel.png\": 1 → 0",
     "  block 0: document: {http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing}docPr @{}name=\"Immagine 1\": 1 → 0",
@@ -51,6 +48,7 @@
     "  block 2: document: {urn:schemas-microsoft-com:vml}shape @{}style=\"width:144pt;height:36pt\": 1 → 0",
     "  block 2: document: {urn:schemas-microsoft-com:vml}shape @{}type=\"#_x0000_t202\": 1 → 0",
     "  block 2: document: text of {http://schemas.openxmlformats.org/wordprocessingml/2006/main}p bfc6183b402a: 2 → 1",
+    "blocchi chiusi: {0, 1, 2}; scrittura intera: false",
     "normalizzazione «id dei disegni»: 5 nel file, 5 nella prova a vuoto",
     "normalizzazione «nomi numerati delle immagini»: 0 nel file, 2 nella prova a vuoto",
     "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
@@ -80,11 +78,35 @@
     "wordxml": []
   },
   "edits": {
-    "E0": "readonly",
-    "E1": "readonly",
-    "E2": "readonly",
-    "E3": "readonly",
-    "E4": "readonly",
-    "E5": "readonly"
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "error": "locked",
+      "message": "rich document has closed parts: block None"
+    },
+    "E5": "n/a",
+    "E6": {
+      "error": "locked",
+      "message": "rich document has closed parts: block Some(0)"
+    },
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    }
   }
 }

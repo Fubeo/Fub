@@ -21,7 +21,10 @@
 // `fromDoc` riscrive il documento nella forma della proiezione; un blocco già
 // scritto si ritrova nella cache per nodo (i nodi sono immutabili), così una
 // battuta riscrive un paragrafo e non il documento.
-import { t, type Key } from "../../i18n/strings";
+import { resolvedLanguage, t, type Key } from "../../i18n/strings";
+import { fontStack } from "../../scrittura/fonts";
+import { lineOpacity, lineOutline } from "./ink-shape";
+import { colorValue, writingMarks } from "../../scrittura/marks";
 import { Fragment, Schema, type Mark as PmMark, type Node as PmNode, type NodeSpec, type MarkSpec } from "prosemirror-model";
 import {
   BODY,
@@ -33,6 +36,10 @@ import {
   plainLook,
   writeBlock,
   type Anchor,
+  type InkShape,
+  inkShapeOf,
+  placeOf,
+  type Place,
   type AtomKind,
   type Block,
   type Cell,
@@ -58,7 +65,7 @@ const BREAK_SPLIT = /([\n\u000c\u000e])/;
 /// Le specie di oggetto che occupano una storia del documento o ne segnano un
 /// intervallo: due copie dello stesso non si scrivono (una nota mostrata due
 /// volte, un segnalibro che comincia due volte).
-export const UNIQUE_ATOMS: ReadonlySet<AtomKind> = new Set<AtomKind>(["note", "shape", "group", "marker"]);
+export const UNIQUE_ATOMS: ReadonlySet<AtomKind> = new Set<AtomKind>(["note", "shape", "text_box", "group", "marker"]);
 
 function roleAttr(dom: HTMLElement): Role | null {
   const raw = dom.getAttribute("data-rich-role");
@@ -97,28 +104,39 @@ function jsonAttr<T>(dom: HTMLElement, name: string): T | null {
 
 /// Lo stile in linea di una disposizione: lunghezze in punti, un multiplo
 /// d'interlinea rispetto alla riga singola del tema.
+/// La forma di un paragrafo. I rientri sono struttura, e valgono in ogni
+/// aspetto; la spaziatura e l'interlinea sono del file, e vanno come variabili
+/// di dato (`--file-*`), che usano soltanto Pagina e Lettura.
 export function layoutStyle(layout: Layout): string[] {
   const style: string[] = [];
   if (layout.left !== undefined) style.push(`margin-left: ${layout.left}pt`);
   if (layout.right !== undefined) style.push(`margin-right: ${layout.right}pt`);
   if (layout.first !== undefined) style.push(`text-indent: ${layout.first}pt`);
-  if (layout.before !== undefined) style.push(`margin-top: ${layout.before}pt`);
-  if (layout.after !== undefined) style.push(`margin-bottom: ${layout.after}pt`);
+  if (layout.before !== undefined) style.push(`--file-before: ${layout.before}pt`);
+  if (layout.after !== undefined) style.push(`--file-after: ${layout.after}pt`);
   const line = layout.line;
   if (line) {
-    if ("multiple" in line) style.push(`line-height: calc(1.2 * ${line.multiple})`);
-    else if ("at_least" in line) style.push(`line-height: max(1.2em, ${line.at_least}pt)`);
-    else style.push(`line-height: ${line.exactly}pt`);
+    if ("multiple" in line) style.push(`--file-line: calc(1.2 * ${line.multiple})`);
+    else if ("at_least" in line) style.push(`--file-line: max(1.2em, ${line.at_least}pt)`);
+    else style.push(`--file-line: ${line.exactly}pt`);
   }
   return style;
 }
 
-/// Un colore che la proiezione accetta: `#rrggbb` minuscolo.
-export function colorValue(value: string | null): string | null {
-  if (!value) return null;
-  const lower = value.trim().toLowerCase();
-  return /^#[0-9a-f]{6}$/.test(lower) ? lower : null;
+/// I valori del file per un tratto o un paragrafo, come variabili di dato:
+/// li usano Pagina e Lettura (`structure.css`), in Scrittura nessuna regola li
+/// legge, e cambiare modalità non ridisegna il documento.
+export function lookVariables(look: Look): string[] {
+  const style: string[] = [];
+  if (look.font !== undefined) style.push(`--file-font: ${fontStack(look.font)}`);
+  if (look.size !== undefined) style.push(`--file-size: ${look.size}pt`);
+  if (look.color !== undefined && look.color !== COLOR_AUTO) style.push(`--file-color: ${look.color}`);
+  return style;
 }
+
+/// Un colore che la proiezione accetta: `#rrggbb` minuscolo, come le marche
+/// di Scrittura.
+export { colorValue };
 
 function headingTag(level: number): string {
   return level <= 6 ? `h${level}` : "p";
@@ -127,8 +145,11 @@ function headingTag(level: number): string {
 const para: NodeSpec = {
   group: "block",
   content: "inline*",
+  // `locked`: il formato non riscriverebbe il paragrafo senza perdite. Non si
+  // legge dal DOM: una copia incollata è un paragrafo nuovo.
   attrs: {
     role: { default: BODY },
+    locked: { default: false },
     align: { default: null },
     k: { default: null },
     p: { default: null },
@@ -175,6 +196,14 @@ const para: NodeSpec = {
       attrs["data-list"] = role.ordered ? "ordered" : "bullet";
     }
     if (node.attrs.k) attrs["data-rich-k"] = node.attrs.k as string;
+    // Un blocco chiuso non prende il cursore: ciò che vi si scrivesse non
+    // entrerebbe, e la battuta rifiutata non deve finire altrove.
+    if (node.attrs.locked) {
+      attrs.class += " rich-locked";
+      attrs["data-rich-locked"] = "";
+      attrs.contenteditable = "false";
+      attrs.title = t("rich.locked");
+    }
     const style: string[] = [];
     if (node.attrs.align) {
       attrs["data-rich-align"] = node.attrs.align as string;
@@ -185,19 +214,13 @@ const para: NodeSpec = {
       attrs["data-rich-p"] = JSON.stringify(layout);
       style.push(...layoutStyle(layout));
     }
-    // La dimensione del paragrafo non si disegna (la dà il tema), ma un tratto
-    // di altra dimensione la misura rispetto a questa. Un paragrafo di corpo
-    // con uno stile suo la disegna, rispetto a quella del documento.
+    // L'aspetto risolto del paragrafo, come dato: lo disegna la carta.
     const base = node.attrs.f as Look | null;
     const named = node.attrs.s as string | null;
     if (named) attrs["data-rich-s"] = named;
     if (base) {
       attrs["data-rich-f"] = JSON.stringify(base);
-      if (base.size !== undefined) style.push(`--rich-base-pt: ${base.size}`);
-      if (named && role.kind === "body") {
-        if (base.font !== undefined) style.push(`font-family: ${JSON.stringify(base.font)}, serif`);
-        if (base.size !== undefined) style.push(`font-size: calc(1em * ${base.size} / var(--rich-doc-pt, ${base.size}))`);
-      }
+      style.push(...lookVariables(base));
     }
     // Il segno di fine revisionato lo disegna una decorazione (`review.ts`).
     if (node.attrs.ins) attrs["data-rich-ins"] = JSON.stringify(node.attrs.ins);
@@ -212,6 +235,7 @@ const ATOM_NAMES: Readonly<Record<AtomKind, Key>> = {
   image: "rich.atom.image",
   graphic: "rich.atom.graphic",
   shape: "rich.atom.shape",
+  text_box: "rich.atom.text_box",
   group: "rich.atom.group",
   field: "rich.atom.field",
   note: "rich.atom.note",
@@ -219,7 +243,41 @@ const ATOM_NAMES: Readonly<Record<AtomKind, Key>> = {
   ruby: "rich.atom.ruby",
   opaque: "rich.atom.opaque",
   marker: "rich.atom.opaque",
+  ink: "rich.atom.ink",
+  drawing: "rich.atom.drawing",
 };
+
+/// Le specie con una misura nel documento: la casella ne prende la forma.
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/// Il valore JSON di un attributo, letto da `read`; `null` se manca o non si
+/// legge.
+function jsonAttribute<T>(el: HTMLElement, name: string, read: (value: unknown) => T | null): T | null {
+  const text = el.getAttribute(name);
+  if (text === null) return null;
+  try {
+    return read(JSON.parse(text));
+  } catch {
+    return null;
+  }
+}
+
+const DRAWN: ReadonlySet<AtomKind> = new Set<AtomKind>(["image", "graphic", "shape", "text_box", "group", "ink", "drawing"]);
+
+/// Le specie che si mostrano come segnaposto, con un nome e una misura.
+const PLACEHOLDERS: ReadonlySet<AtomKind> = new Set<AtomKind>([...DRAWN, "equation"]);
+
+/// Sotto questa larghezza, in pixel CSS, una casella mostra soltanto il segno
+/// della sua specie: il nome andrebbe a capo dentro la parola. Il nome e la
+/// misura restano nel suggerimento e per chi legge con la sintesi vocale.
+const NAME_ROOM_PX = 72;
+
+/// «4 × 3 cm» da una misura in punti, con la virgola della lingua.
+export function centimetres(w: number, h: number): string {
+  const format = new Intl.NumberFormat(resolvedLanguage(), { maximumFractionDigits: 1 });
+  const cm = (points: number) => format.format(Math.round((points / (72 / 2.54)) * 10) / 10);
+  return `${cm(w)} × ${cm(h)} cm`;
+}
 
 /// Il tipo di un'immagine dai primi byte del suo base64: PNG, JPEG o GIF, le
 /// sole che un'immagine nuova può essere.
@@ -235,6 +293,7 @@ const ATOM_GLYPHS: Readonly<Record<AtomKind, string>> = {
   image: "▣",
   graphic: "◇",
   shape: "◇",
+  text_box: "▭",
   group: "◇",
   field: "{ }",
   note: "*",
@@ -242,6 +301,8 @@ const ATOM_GLYPHS: Readonly<Record<AtomKind, string>> = {
   ruby: "ア",
   opaque: "◆",
   marker: "",
+  ink: "✎",
+  drawing: "◇",
 };
 
 const nodes: Record<string, NodeSpec> = {
@@ -256,7 +317,8 @@ const nodes: Record<string, NodeSpec> = {
   },
   para,
   /// La fine di una sezione: chiude il paragrafo prima di lei. `page`,
-  /// `header` e `footer` sono quelli della sezione che chiude.
+  /// `header` e `footer` sono quelli della sezione che chiude; il nome, che
+  /// dice dove comincia la sezione dopo, lo dà `breaks.ts`.
   section: {
     attrs: { sect: {}, page: { default: null }, header: { default: null }, footer: { default: null } },
     atom: true,
@@ -269,10 +331,18 @@ const nodes: Record<string, NodeSpec> = {
   table: {
     group: "block",
     content: "row+",
-    attrs: { k: { default: null } },
+    attrs: { k: { default: null }, locked: { default: false } },
     isolating: true,
     parseDOM: [{ tag: "table[data-rich-k]", getAttrs: keyOf }],
-    toDOM: (node) => ["table", { class: "rich-table", "data-rich-k": (node.attrs.k as string | null) ?? "" }, ["tbody", 0]],
+    toDOM: (node) => [
+      "table",
+      {
+        class: node.attrs.locked ? "rich-table rich-locked" : "rich-table",
+        "data-rich-k": (node.attrs.k as string | null) ?? "",
+        ...(node.attrs.locked ? { "data-rich-locked": "", contenteditable: "false", title: t("rich.locked") } : {}),
+      },
+      ["tbody", 0],
+    ],
   },
   // Riga e cella hanno un `k` che ProseMirror può lasciare vuoto quando ripara
   // una tabella (una selezione che taglia righe intere): lo riempie dai vicini
@@ -319,8 +389,10 @@ const nodes: Record<string, NodeSpec> = {
       const ch = node.attrs.ch as BreakChar;
       if (ch === "\n") return ["br", { "data-rich-ch": ch }];
       // Un salto pagina o di colonna: un filo a tutta riga, che va a capo e
-      // lo dice.
-      return ["span", { class: ch === "\u000c" ? "rich-break rich-break-page" : "rich-break rich-break-column", "data-rich-ch": ch }];
+      // dice il suo nome, come i segni di formattazione di Word.
+      const page = ch === "\u000c";
+      const name = t(page ? "rich.break.page" : "rich.break.column");
+      return ["span", { class: page ? "rich-break rich-break-page" : "rich-break rich-break-column", "data-rich-ch": ch, "data-name": name, role: "separator", "aria-label": name }];
     },
   },
   atom: {
@@ -329,7 +401,9 @@ const nodes: Record<string, NodeSpec> = {
     atom: true,
     // Senza `k` l'oggetto è nuovo: `data` sono i byte di un'immagine, `note`
     // il testo di una nota (di chiusura se `end`), `toc` i livelli di un
-    // sommario, `comment` il segno di un commento.
+    // sommario, `comment` il segno di un commento. `ink` sono i tratti di un
+    // inchiostro, `svg` il disegno di FubDraw (con `data` come ripiego), e
+    // `float` il posto di un oggetto fuori dal testo.
     attrs: {
       k: { default: null },
       kind: {},
@@ -341,6 +415,9 @@ const nodes: Record<string, NodeSpec> = {
       end: { default: false },
       toc: { default: null },
       comment: { default: null },
+      ink: { default: null },
+      svg: { default: null },
+      float: { default: null },
     },
     selectable: true,
     parseDOM: [
@@ -368,6 +445,12 @@ const nodes: Record<string, NodeSpec> = {
             comment: el.hasAttribute("data-comment")
               ? { id: Number(el.getAttribute("data-comment")), ...(el.hasAttribute("data-comment-end") ? { end: true } : {}) }
               : null,
+            // I tratti, il disegno e il posto viaggiano con l'oggetto copiato;
+            // ciò che non si legge torna com'era assente, e il filtro
+            // dell'incolla decide.
+            ink: jsonAttribute(el, "data-ink", (value) => inkShapeOf(value)),
+            svg: el.getAttribute("data-svg"),
+            float: jsonAttribute(el, "data-float", (value) => placeOf(value)),
           };
         },
       },
@@ -396,9 +479,21 @@ const nodes: Record<string, NodeSpec> = {
       const h = node.attrs.h as number | null;
       if (w !== null) attrs["data-w"] = String(w);
       if (h !== null) attrs["data-h"] = String(h);
-      if (w !== null && h !== null && (kind === "image" || kind === "graphic" || kind === "shape" || kind === "group")) {
+      if (w !== null && h !== null && DRAWN.has(kind)) {
         // Punti tipografici in pixel CSS, entro la colonna del testo.
         attrs.style = `width: ${Math.max(8, w * (4 / 3))}px; aspect-ratio: ${Math.max(w, 1)} / ${Math.max(h, 1)}`;
+      }
+      const ink = node.attrs.ink as InkShape | null;
+      if (ink) attrs["data-ink"] = JSON.stringify(ink);
+      const svg = node.attrs.svg as string | null;
+      if (svg !== null) attrs["data-svg"] = svg;
+      const place = node.attrs.float as Place | null;
+      if (place) attrs["data-float"] = JSON.stringify(place);
+      if (place) {
+        // Fuori dal testo: davanti o dietro sta al suo posto dal paragrafo,
+        // «Quadrato» va a sinistra col testo attorno.
+        attrs.class += ` rich-atom-float rich-atom-float-${place.wrap}`;
+        if (place.wrap !== "square") attrs.style = `${attrs.style ?? ""}; left: ${place.x * (4 / 3)}px; top: ${place.y * (4 / 3)}px`;
       }
       if (kind === "marker") return ["span", attrs];
       // Un oggetto si annuncia per specie (e per testo alternativo, se ne ha);
@@ -408,12 +503,42 @@ const nodes: Record<string, NodeSpec> = {
       const told = note ?? label;
       attrs["aria-label"] = told ? `${name}: ${told}` : name;
       attrs.title = attrs["aria-label"];
-      // Un'immagine nuova si vede: i suoi byte sono qui.
+      // Un inchiostro coi suoi tratti si disegna da quelli, nitido a ogni
+      // zoom: l'evidenziatore trasparente, sopra il testo che copre.
+      if (kind === "ink" && ink && w !== null && h !== null) {
+        attrs.class += " rich-atom-drawn";
+        const paths = ink.strokes.map((line) => {
+          const look: Record<string, string> = { d: lineOutline(line), fill: line.color };
+          const opacity = lineOpacity(line);
+          if (opacity !== null) look["fill-opacity"] = String(opacity);
+          if (line.hl) look.class = "rich-ink-highlight";
+          return [`${SVG_NS} path`, look] as const;
+        });
+        const box = { viewBox: `0 0 ${w} ${h}`, class: "rich-ink", "aria-hidden": "true", preserveAspectRatio: "none" };
+        return ["span", attrs, [`${SVG_NS} svg`, box, ...paths]];
+      }
+      // Un'immagine nuova si vede, e una del file quando la proiezione ne
+      // porta i byte: non è più un segnaposto.
       const mime = data !== null ? imageMime(data) : null;
       if (mime !== null) {
+        attrs.class += " rich-atom-drawn";
         const img = { src: `data:${mime};base64,${data}`, alt: "", style: "display: block; width: 100%; height: 100%" };
         return ["span", attrs, ["img", img]];
       }
+      // Un oggetto che la superficie non disegna dice che cosa è e quanto è
+      // grande, e il suggerimento dice perché non si vede.
+      if (PLACEHOLDERS.has(kind)) {
+        attrs.title = `${attrs["aria-label"]}. ${t("rich.atom.kept")}`;
+        const sized = w !== null && h !== null;
+        const said = kind === "equation" && label ? `${name} ${label}` : sized ? `${name} · ${centimetres(w, h)}` : name;
+        if (sized) attrs.title = `${name} · ${centimetres(w, h)}${told ? `: ${told}` : ""}. ${t("rich.atom.kept")}`;
+        const glyph = ["span", { class: "rich-atom-glyph", "aria-hidden": "true" }, ATOM_GLYPHS[kind]] as const;
+        if (sized && DRAWN.has(kind) && w * (4 / 3) < NAME_ROOM_PX) return ["span", attrs, glyph];
+        return ["span", attrs, glyph, ["span", { class: "rich-atom-name" }, said]];
+      }
+      // Il richiamo di una nota è il suo numero, che dà la posizione
+      // (`notes.ts`): il segno si vede soltanto finché non c'è.
+      if (kind === "note") return ["span", attrs];
       return ["span", attrs, label || ATOM_GLYPHS[kind]];
     },
   },
@@ -426,12 +551,6 @@ export function revTitle(kind: "ins" | "del", rev: Rev): string {
   const when = at && !Number.isNaN(at.getTime()) ? at.toLocaleString() : (rev.at ?? "");
   return t(kind === "ins" ? "rich.rev.inserted" : "rich.rev.deleted", { by, at: when }).trim();
 }
-
-/// L'aspetto di Word: inserito sottolineato, eliminato barrato.
-export const REV_STYLE = {
-  ins: "color: var(--accent); text-decoration-line: underline",
-  del: "color: var(--danger); text-decoration-line: line-through",
-} as const;
 
 /// Una revisione: non si allarga a ciò che si scrive accanto, e ciò che si
 /// scrive dentro la perde (`review.ts`), perché non è di chi l'ha fatta.
@@ -454,9 +573,16 @@ function revisionMark(kind: "ins" | "del"): MarkSpec {
     ],
     toDOM: (mark) => {
       const rev = mark.attrs.rev as Rev;
-      return [kind, { "data-rich-rev": JSON.stringify(rev), class: `rich-${kind}`, title: revTitle(kind, rev), style: REV_STYLE[kind] }, 0];
+      return [kind, { "data-rich-rev": JSON.stringify(rev), class: `rich-${kind}`, title: revTitle(kind, rev) }, 0];
     },
   };
+}
+
+/// L'enfasi e l'aspetto del carattere sono le marche di Scrittura.
+const WRITING = writingMarks({ highlight: HIGHLIGHT_DEFAULT, auto: COLOR_AUTO });
+
+function pick(specs: Record<string, MarkSpec>, names: readonly string[]): Record<string, MarkSpec> {
+  return Object.fromEntries(names.map((name) => [name, specs[name]!]));
 }
 
 const marks: Record<string, MarkSpec> = {
@@ -471,7 +597,8 @@ const marks: Record<string, MarkSpec> = {
     ],
     // Senza `href`: dentro la superficie un collegamento è testo del
     // documento, e un clic non porta la finestra altrove.
-    toDOM: (mark) => ["a", { "data-rich-href": mark.attrs.href as string, title: mark.attrs.href as string, class: "rich-link" }, 0],
+    // Non è un arresto del Tab: è un pezzo del testo.
+    toDOM: (mark) => ["a", { "data-rich-href": mark.attrs.href as string, title: mark.attrs.href as string, class: "rich-link", tabindex: "-1" }, 0],
   },
   /// Le proprietà opache di un tratto. Una sola per volta (si escludono da sé).
   run: {
@@ -479,21 +606,7 @@ const marks: Record<string, MarkSpec> = {
     parseDOM: [{ tag: "span[data-rich-run]", getAttrs: (dom) => ({ k: (dom as HTMLElement).getAttribute("data-rich-run") }) }],
     toDOM: (mark) => ["span", { "data-rich-run": mark.attrs.k as string }, 0],
   },
-  b: { parseDOM: [{ tag: "strong" }, { tag: "b" }, { style: "font-weight=bold" }], toDOM: () => ["strong", 0] },
-  i: { parseDOM: [{ tag: "em" }, { tag: "i" }, { style: "font-style=italic" }], toDOM: () => ["em", 0] },
-  u: { parseDOM: [{ tag: "u" }], toDOM: () => ["u", 0] },
-  s: { parseDOM: [{ tag: "s" }, { tag: "del" }, { tag: "strike" }], toDOM: () => ["s", 0] },
-  /// L'evidenziatore; `color` nullo è il giallo.
-  h: {
-    attrs: { color: { default: null } },
-    parseDOM: [{ tag: "mark", getAttrs: (dom) => ({ color: colorValue((dom as HTMLElement).getAttribute("data-rich-hl")) }) }],
-    toDOM: (mark) => {
-      const color = mark.attrs.color as string | null;
-      return color ? ["mark", { "data-rich-hl": color, style: `background-color: ${color}` }, 0] : ["mark", 0];
-    },
-  },
-  sup: { excludes: "sup sub", parseDOM: [{ tag: "sup" }], toDOM: () => ["sup", 0] },
-  sub: { excludes: "sup sub", parseDOM: [{ tag: "sub" }], toDOM: () => ["sub", 0] },
+  ...pick(WRITING, ["b", "i", "u", "s", "h", "sup", "sub"]),
   caps: {
     parseDOM: [{ tag: "span[data-rich-caps]" }],
     toDOM: () => ["span", { "data-rich-caps": "", style: "text-transform: uppercase" }, 0],
@@ -503,41 +616,7 @@ const marks: Record<string, MarkSpec> = {
     toDOM: () => ["span", { "data-rich-small-caps": "", style: "font-variant-caps: small-caps" }, 0],
   },
   /// L'aspetto dove differisce da quello del paragrafo: valori, non enfasi.
-  font: {
-    attrs: { family: {} },
-    parseDOM: [{ tag: "span[data-rich-font]", getAttrs: (dom) => ({ family: (dom as HTMLElement).getAttribute("data-rich-font") }) }],
-    toDOM: (mark) => {
-      const family = mark.attrs.family as string;
-      return ["span", { "data-rich-font": family, style: `font-family: ${JSON.stringify(family)}, serif` }, 0];
-    },
-  },
-  size: {
-    attrs: { pt: {} },
-    parseDOM: [
-      {
-        tag: "span[data-rich-size]",
-        getAttrs: (dom) => {
-          const pt = Number((dom as HTMLElement).getAttribute("data-rich-size"));
-          return Number.isFinite(pt) && pt > 0 ? { pt } : false;
-        },
-      },
-    ],
-    // In proporzione al paragrafo, che il tema disegna alla sua misura.
-    toDOM: (mark) => {
-      const pt = mark.attrs.pt as number;
-      return ["span", { "data-rich-size": String(pt), style: `font-size: calc(1em * ${pt} / var(--rich-base-pt, 11))` }, 0];
-    },
-  },
-  color: {
-    attrs: { value: {} },
-    parseDOM: [{ tag: "span[data-rich-color]", getAttrs: (dom) => ({ value: (dom as HTMLElement).getAttribute("data-rich-color") }) }],
-    toDOM: (mark) => {
-      const value = mark.attrs.value as string;
-      const attrs: Record<string, string> = { "data-rich-color": value };
-      if (value !== COLOR_AUTO) attrs.style = `color: ${value}`;
-      return ["span", attrs, 0];
-    },
-  },
+  ...pick(WRITING, ["font", "size", "color"]),
 };
 
 export const richSchema = new Schema({ nodes, marks });
@@ -581,6 +660,9 @@ function inlineNodes(c: readonly Inline[]): PmNode[] {
           end: inline.end === true,
           toc: inline.toc ?? null,
           comment: inline.comment ?? null,
+          ink: inline.ink ?? null,
+          svg: inline.svg ?? null,
+          float: inline.float ?? null,
         }, null, revisionMarks(inline)),
       );
       continue;
@@ -606,6 +688,7 @@ function blockNodes(blocks: readonly Block[]): PmNode[] {
         richSchema.nodes.para.create(
           {
             role: block.role,
+            locked: block.locked === true,
             align: block.align ?? null,
             k: block.k ?? null,
             p: block.p ?? null,
@@ -630,7 +713,7 @@ function blockNodes(blocks: readonly Block[]): PmNode[] {
         }),
       ),
     );
-    out.push(richSchema.nodes.table.create({ k: block.k ?? null }, rows));
+    out.push(richSchema.nodes.table.create({ k: block.k ?? null, locked: block.locked === true }, rows));
   }
   return out;
 }
@@ -747,6 +830,9 @@ export function inlinesOf(paragraph: PmNode): Inline[] {
       const data = child.attrs.data as string | null;
       const note = child.attrs.note as string | null;
       const comment = child.attrs.comment as Anchor | null;
+      const ink = child.attrs.ink as InkShape | null;
+      const svg = child.attrs.svg as string | null;
+      const place = child.attrs.float as Place | null;
       out.push({
         t: "atom",
         ...(k !== null ? { k } : {}),
@@ -759,6 +845,9 @@ export function inlinesOf(paragraph: PmNode): Inline[] {
         ...(child.attrs.end ? { end: true } : {}),
         ...(child.attrs.toc !== null ? { toc: child.attrs.toc as number } : {}),
         ...(comment ? { comment } : {}),
+        ...(ink ? { ink } : {}),
+        ...(svg !== null ? { svg } : {}),
+        ...(place ? { float: place } : {}),
         ...trackedOf(child.marks),
       });
       return;
@@ -797,6 +886,7 @@ function paraOf(node: PmNode, section: PmNode | null): Para {
   return {
     t: "para",
     role: node.attrs.role as Role,
+    ...(node.attrs.locked ? { locked: true } : {}),
     ...(align ? { align } : {}),
     ...(k !== null ? { k } : {}),
     ...(sect !== undefined ? { sect } : {}),
@@ -845,7 +935,7 @@ function tableOf(table: PmNode): Block {
     });
     rows.push({ ...key(row), cells });
   });
-  return { t: "table", ...key(table), rows };
+  return { t: "table", ...(table.attrs.locked ? { locked: true } : {}), ...key(table), rows };
 }
 
 /// I blocchi del documento in JSON, uno per figlio del documento che porta un
@@ -855,7 +945,9 @@ function tableOf(table: PmNode): Block {
 export class BlockWriter {
   readonly #cache = new WeakMap<PmNode, { readonly sect: PmNode | null; readonly json: string }>();
 
-  write(doc: PmNode): string[] {
+  /// I blocchi del documento in JSON; quelli chiusi anche in `closed`, se
+  /// c'è.
+  write(doc: PmNode, closed?: string[]): string[] {
     const out: string[] = [];
     const children: PmNode[] = [];
     doc.forEach((child) => children.push(child));
@@ -872,6 +964,7 @@ export class BlockWriter {
         this.#cache.set(child, { sect, json });
         out.push(json);
       }
+      if (closed && child.attrs.locked === true) closed.push(out[out.length - 1]!);
       if (sect) i += 1;
     }
     return out;

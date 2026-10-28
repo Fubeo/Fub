@@ -7,7 +7,7 @@
 > freccia o una forma, come la si regola prima di alzare la penna, e come si
 > fa lo stesso coi tratti già scritti.
 
-Dal [livello Standard](drawing.md#il-livello-standard) un tratto della
+Nello spazio [Completo](drawing.md#completo-e-semplice) un tratto della
 **penna** tenuto fermo alla fine diventa la forma a cui somiglia, con il suo
 colore e il suo spessore. Si disegna di getto, e il disegno resta in ordine.
 
@@ -108,6 +108,5 @@ la forma che prende il posto del tratto in `inkshape.ts`, la tenuta ferma in
 l'editor riceve e restituisce con `onGridChange`. Il corpus dei tratti registrati, ciascuno
 con la forma attesa nel suo titolo, è in `apps/client/src/__fixtures__/ink-shapes/`.
 
-Non c'è niente da montare: le forme dal tratto vengono col livello Standard, e
-nel Personalizzato sono la parte «Forme dal tratto» ([Disegni, livello
-Personalizzato](drawing-custom.md)).
+Non c'è niente da montare: le forme dal tratto vengono con lo spazio Completo, e
+per chi monta l'editor con le sue parti sono la parte «Forme dal tratto» ([Disegni, spazio di lavoro e barra](drawing-custom.md)).

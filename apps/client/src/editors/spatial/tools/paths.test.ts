@@ -15,6 +15,7 @@ import { doc } from "../scene/test-support";
 import { gesture, NewIds } from "./edit";
 import { nodeCount } from "./simplify";
 import { dashesOf, inkPathOps, offsetOps, outlineStrokeOps, simplifyOps, type PathsDone } from "./paths";
+import type { Fidelity } from "./grid";
 import { LAYER, open, type Opened } from "./test-support";
 import { CUSTOM, DEFS, MARKER as TIP_MARKER } from "./tip-support";
 import { followTips, TIP_ENDS, TIP_SHAPES, TIP_SIZES, type TipEnd, type TipShape, type TipSize } from "./tips";
@@ -73,14 +74,14 @@ const BRUSH = { ...PF1_DEFAULTS, size: 6 };
 
 /// Un tratto dello strumento `tool` lungo gli spigoli `corners`, un punto
 /// ogni tre unità.
-function stroke(id: string, corners: readonly Point[], tool = "pen", extra = ""): string {
+function stroke(id: string, corners: readonly Point[], tool = "pen", extra = "", pressure?: (k: number) => number): string {
   const points: Point[] = [corners[0]!];
   for (let i = 1; i < corners.length; i++) {
     const [[ax, ay], [bx, by]] = [corners[i - 1]!, corners[i]!];
     const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 3));
     for (let k = 1; k <= steps; k++) points.push([ax + ((bx - ax) * k) / steps, ay + ((by - ay) * k) / steps]);
   }
-  const samples: InkSample[] = points.map(([x, y], i) => ({ x, y, t: i * 8 }));
+  const samples: InkSample[] = points.map(([x, y], i) => (pressure === undefined ? { x, y, t: i * 8 } : { x, y, p: pressure(i / (points.length - 1)), t: i * 8 }));
   const d = pf1(quantizeInk(samples), BRUSH);
   return `<path id="${id}" fub:tool="${tool}" fub:brush="${formatBrush(BRUSH)}" d="${d}" fill="#cc3300" fill-opacity="0.8" fub:ink="${encodeInk(inkFromSamples(samples, 100))}"${extra}/>`;
 }
@@ -102,11 +103,11 @@ function run<T extends PathsDone>(
   command: (opened: Opened, units: ReturnType<Opened["index"]["get"]>[]) => T,
   defs = "",
   follow = false,
-): { text: string; change: T } {
+): { text: string; change: T; opened: Opened } {
   const source = doc(`${defs}${LAYER}${body}</g>`);
   const opened = follow ? following(source) : open(source);
   const change = command(opened, keys.map((key) => opened.index.get(key)));
-  return { text: change.ops.length === 0 ? opened.engine.text : written(opened, change), change };
+  return { text: change.ops.length === 0 ? opened.engine.text : written(opened, change), change, opened };
 }
 
 const outline = (body: string, keys: readonly string[], defs = "", follow = false) =>
@@ -568,6 +569,34 @@ describe("inchiostro in tracciato", () => {
     const { text } = ink(flat(stroke("a", [[0, 0], [60, 0]])) + flat(stroke("b", [[40, 40]])), ["a", "b"]);
     expect(element(text, "a").attrs["stroke-linecap"]).toBeUndefined();
     expect(element(text, "b").attrs["stroke-linecap"]).toBe("round");
+  });
+
+  it("la pressione diventa il profilo di spessore, che lo strumento Spessore legge", () => {
+    const { text, change, opened } = ink(stroke("a", [[10, 10], [90, 10]], "pen", "", (k) => 0.2 + 0.8 * k), ["a"]);
+    expect(change).toMatchObject({ changed: 1, refused: 0 });
+    const path = element(text, "a");
+    expect(path.attrs).toMatchObject({ "fub:shape": "width", fill: "#cc3300", "fill-opacity": "0.8" });
+    expect(path.attrs.stroke).toBeUndefined();
+    const unit = opened.reindex().get("a")!;
+    expect(unit.role).toBe("width");
+    const profile = unit.node.details!.varwidth!.profile;
+    // Dalla pressione 0,2 alla 1, il raggio di perfect-freehand:
+    // 6 × (0,5 − 0,5 × (0,5 − p)).
+    expect(profile[0]).toEqual([0, 2.1, 2.1]);
+    expect(profile[profile.length - 1]).toEqual([1, 4.5, 4.5]);
+    expect(profile.length).toBeLessThanOrEqual(66);
+  });
+
+  it("la fedeltà bassa mette meno nodi dell'alta", () => {
+    // Un'onda lenta e un tremolio più stretto della tolleranza bassa.
+    const wave: Point[] = Array.from({ length: 40 }, (_, i) => [i * 4, 30 + 20 * Math.sin(i / 4) + (i % 2 === 0 ? 2 : -2)]);
+    const nodes = (fidelity: Fidelity): number => {
+      const { text } = run(stroke("a", wave), ["a"], (opened, units) => inkPathOps(opened.engine.model!, opened.index, units.map((unit) => unit!), ids(opened), fidelity));
+      return nodeCount(parsePath(element(text, "a").attrs.d!)!);
+    };
+    expect(nodes("low")).toBeLessThanOrEqual(nodes("medium"));
+    expect(nodes("medium")).toBeLessThanOrEqual(nodes("high"));
+    expect(nodes("low")).toBeLessThan(nodes("high"));
   });
 
   it("un pennello che non si legge non si tocca", () => {

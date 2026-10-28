@@ -73,7 +73,7 @@ nell'esportazione il file è quello che è.
   cambierebbe ciò che si vede. Un'immagine col suo ritaglio la applica, e il
   ritaglio la segue. Gli oggetti dentro il gruppo la applicano
   ciascuno per sé
-  ([Disegni, livello Esperto](drawing-expert.md#applica-trasformazione)).
+  ([Disegni, strumenti avanzati](drawing-expert.md#applica-trasformazione)).
 - **Eliminare** un oggetto toglie anche le risorse proprie o condivise che
   nessun altro usa più, nello stesso passo di annulla; quelle scritte da un
   altro programma restano.

@@ -91,6 +91,14 @@ describe("flip", () => {
     expect(driver.plays[0].keyframes[0]).toEqual({ transform: "translate(-200px, 0px)" });
   });
 
+  it("con `duration` la corsa è a tempo, e finisce entro quel tempo", () => {
+    const el = element(0, 40, 100, 40);
+    flip([el], () => place(el, 0, 0, 100, 40), { scale: false, duration: 140, easing: "ease-out" });
+    const [play] = driver.plays;
+    expect(play.timing.duration).toBeLessThanOrEqual(140);
+    expect(play.keyframes[0]).toEqual({ transform: "translate(0px, 40px)" });
+  });
+
   it("anima chi si è mosso; chi è fermo, comparso o sparito non è affar suo", () => {
     const moved = element(0, 0, 100, 40);
     const still = element(0, 40, 100, 40);

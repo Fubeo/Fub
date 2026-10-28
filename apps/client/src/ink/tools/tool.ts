@@ -14,7 +14,8 @@
 // evidenziatore) e quello che **cancella** (gomma). Lo condividono la stessa
 // pipeline dei campioni (`input/`) e la stessa geometria (`geometry.ts`).
 
-import type { Pf1Brush } from "../brush";
+import type { InkBrush } from "../brush";
+import type { PenId } from "../pens";
 import type { InkPointerType } from "../input/pointer";
 
 /// L'id di uno strumento: minuscole, cifre e trattini, come i nomi del
@@ -51,12 +52,16 @@ export interface StrokeInput {
 export interface StrokeTool {
   readonly kind: "stroke";
   readonly id: string;
-  /// Quanto il tratto copre: 1 pieno, meno di 1 si vede attraverso e il file lo
-  /// scrive come opacità del riempimento.
+  /// Quanto copre il tratto della penna di serie: 1 pieno, meno di 1 si vede
+  /// attraverso e il file lo scrive come opacità del riempimento. Ogni penna
+  /// ha il suo (`pens.ts`, `penLook`).
   readonly opacity: number;
   readonly capabilities: StrokeCapabilities;
-  /// Il pennello di un tratto di spessore `width`.
-  brush(width: number, input: StrokeInput): Pf1Brush;
+  /// Le penne che lo strumento usa; la prima è quella di serie.
+  readonly pens: readonly PenId[];
+  /// Il pennello di un tratto di spessore `width` con la penna `pen`, o con
+  /// quella di serie se `pen` non è sua.
+  brush(width: number, input: StrokeInput, pen?: PenId): InkBrush;
 }
 
 /// Uno strumento che cancella ciò che il puntatore attraversa.
@@ -72,14 +77,14 @@ export type InkTool = StrokeTool | EraseTool;
 
 /// Il pennello di un seguito di tratto: dopo la giunzione non si assottiglia,
 /// perché il tratto che continua non ricomincia da una punta.
-export function joined(brush: Pf1Brush, input: StrokeInput): Pf1Brush {
-  return input.continued ? { ...brush, taperStart: 0 } : brush;
+export function joined<B extends InkBrush>(brush: B, input: StrokeInput): B {
+  return input.continued && "taperStart" in brush ? { ...brush, taperStart: 0 } : brush;
 }
 
 /// Il pennello del pezzo di un tratto diviso al limite dei campioni: il pezzo
 /// che segue continua, quindi quello che si chiude lì non si assottiglia.
-export function closedAtLimit(brush: Pf1Brush, split: boolean): Pf1Brush {
-  return split ? { ...brush, taperEnd: 0 } : brush;
+export function closedAtLimit<B extends InkBrush>(brush: B, split: boolean): B {
+  return split && "taperEnd" in brush ? { ...brush, taperEnd: 0 } : brush;
 }
 
 /// Lo strumento `tool` è fatto bene? Lancia `RangeError` altrimenti: lo chiede il

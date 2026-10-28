@@ -27,12 +27,14 @@ import { NODES } from "./anatomia/nodes";
 import { SEARCH } from "./anatomia/search";
 import { SETTINGS } from "./anatomia/settings";
 import { SHEETS } from "./anatomia/sheets";
+import { TABELLA } from "./anatomia/tabella";
 import { TREE } from "./anatomia/tree";
 import { WELCOME } from "./anatomia/welcome";
-import type { PartAnatomy, ShellComponent } from "./anatomia/types";
+import type { Layer, PartAnatomy, ShellComponent } from "./anatomia/types";
+import type { ContentGate } from "../../ui/sanitize-css";
 
-export { STATE_NAMES } from "./anatomia/types";
-export type { ComponentState, PartAnatomy, ShellComponent, StateName } from "./anatomia/types";
+export { LAYERS, STATE_NAMES } from "./anatomia/types";
+export type { ComponentState, Layer, PartAnatomy, ShellComponent, StateName } from "./anatomia/types";
 
 const DECLARED: readonly PartAnatomy[] = [
   FOUNDATION,
@@ -44,6 +46,7 @@ const DECLARED: readonly PartAnatomy[] = [
   SEARCH,
   SHEETS,
   DOCUMENT,
+  TABELLA,
   EDITORS,
   DRAW,
   MEDIA,
@@ -70,9 +73,18 @@ export const COMPONENTS: readonly (ShellComponent & { readonly part: string })[]
   part.components.map((component) => ({ ...component, part: part.part })),
 );
 
+/**
+ * Le classi dell'aspetto del contenuto (`theme/content-look.ts`), che la shell
+ * mette sulla radice della regione del contenuto. Sono hook anche quando la
+ * pelle della casa non le nomina: un frammento scrive `.look-tema
+ * .rich-heading`, e la meccanica di `look-file` e `look-adattato` sta in
+ * `structure.css`, che non si tematizza.
+ */
+export const LOOK_HOOKS: readonly string[] = ["look-tema", "look-file", "look-adattato"];
+
 /** Le classi che una pelle `theme-2` può nominare. */
 export const HOOKS: readonly string[] = [
-  ...new Set(PARTS.flatMap((part) => part.components.flatMap((component) => component.hooks))),
+  ...new Set([...PARTS.flatMap((part) => part.components.flatMap((component) => component.hooks)), ...LOOK_HOOKS]),
 ];
 
 /** Gli hook di un pezzo: ciò che il suo CSS deve nominare, né più né meno. */
@@ -80,3 +92,62 @@ export function hooksOf(part: string): readonly string[] {
   const found = PARTS.find((candidate) => candidate.part === part);
   return found ? [...new Set(found.components.flatMap((component) => component.hooks))] : [];
 }
+
+/** Gli hook che la pelle della casa non veste (`ShellComponent.unstyled`). */
+export const UNSTYLED: ReadonlySet<string> = new Set(PARTS.flatMap((part) => part.components.flatMap((component) => component.unstyled ?? [])));
+
+/** Lo strato di un hook in un componente: il suo, quello del componente o
+ * quello del pezzo. */
+function layerIn(part: PartAnatomy, component: ShellComponent, hook: string): Layer {
+  return component.layers?.[hook] ?? component.layer ?? part.layer;
+}
+
+/**
+ * Gli hook che due componenti dichiarano di due strati diversi, come
+ * `hook: strato, strato`. Il presidio lo vuole vuoto: un hook ha uno strato
+ * solo, e chi lo condivide lo dichiara uguale.
+ */
+export const LAYER_CONFLICTS: readonly string[] = (() => {
+  const seen = new Map<string, Set<Layer>>();
+  for (const part of PARTS) {
+    for (const component of part.components) {
+      for (const hook of component.hooks) {
+        const layers = seen.get(hook) ?? new Set<Layer>();
+        layers.add(layerIn(part, component, hook));
+        seen.set(hook, layers);
+      }
+    }
+  }
+  return [...seen].filter(([, layers]) => layers.size > 1).map(([hook, layers]) => `${hook}: ${[...layers].join(", ")}`);
+})();
+
+/** Lo strato di ogni hook; per uno conteso vale il primo che lo dichiara. */
+export const HOOK_LAYERS: Readonly<Record<string, Layer>> = (() => {
+  const layers: Record<string, Layer> = {};
+  for (const part of PARTS) {
+    for (const component of part.components) {
+      for (const hook of component.hooks) layers[hook] ??= layerIn(part, component, hook);
+    }
+  }
+  for (const hook of LOOK_HOOKS) layers[hook] ??= "contenuto";
+  return layers;
+})();
+
+/**
+ * Il gate del contenuto: le classi di contenuto dei componenti che offrono
+ * `file` o `adattato`, e le cornici che lo contengono. In quegli aspetti il
+ * contenuto lo disegna la meccanica di `structure.css`, e una pelle lo veste
+ * soltanto sotto `.look-tema`.
+ */
+export const CONTENT_GATE: ContentGate = (() => {
+  const hooks = new Set<string>();
+  const scopes = new Set<string>();
+  for (const part of PARTS) {
+    for (const component of part.components) {
+      if (!component.gate) continue;
+      for (const hook of component.hooks) if (layerIn(part, component, hook) === "contenuto") hooks.add(hook);
+      for (const hook of component.gate.scope) scopes.add(hook);
+    }
+  }
+  return { hooks: [...hooks], scopes: [...scopes] };
+})();

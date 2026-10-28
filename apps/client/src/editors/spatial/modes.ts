@@ -10,8 +10,8 @@ export const VECTOR_PROFILE = "vector";
 /// Disegno, dove si scrive sulla resa, e Lettura, il documento intero come
 /// immagine.
 export const VECTOR_MODES: readonly SurfaceMode[] = [
-  { id: "draw", label: () => t("mode.draw"), presentation: "surface", contextMode: "live_preview" },
-  { id: "read", label: () => t("mode.reading"), presentation: "rendered", contextMode: "reading" },
+  { id: "draw", label: () => t("mode.draw"), presentation: "surface", contextMode: "live_preview", looks: ["file"] },
+  { id: "read", label: () => t("mode.reading"), presentation: "rendered", contextMode: "reading", looks: ["file"] },
 ];
 
 /// I due export di un disegno (`draw.png` e `draw.pdf` del bundle `fub.draw`).
@@ -28,8 +28,8 @@ export const PDF_PROFILE = "pdf";
 /// sfogliano e accanto c'è l'elenco delle annotazioni. Gli id sono quelli del
 /// disegno: la shell ricorda la modalità per famiglia.
 export const PDF_MODES: readonly SurfaceMode[] = [
-  { id: "draw", label: () => t("mode.annotate"), presentation: "surface", contextMode: "live_preview" },
-  { id: "read", label: () => t("mode.reading"), presentation: "rendered", contextMode: "reading" },
+  { id: "draw", label: () => t("mode.annotate"), presentation: "surface", contextMode: "live_preview", looks: ["file"] },
+  { id: "read", label: () => t("mode.reading"), presentation: "rendered", contextMode: "reading", looks: ["file"] },
 ];
 
 /// I due export delle annotazioni (`draw.annotated-pdf` e `draw.redacted-pdf`

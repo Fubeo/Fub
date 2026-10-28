@@ -61,7 +61,7 @@ contratto della superficie vera (`apps/client/src/editors/spatial/lazy.ts`):
 finché `import()` non risolve tiene testo, modalità, sola lettura, fuoco e un
 rimando, e li consegna nell'ordine in cui la shell li avrebbe dati. Un `reveal`
 in attesa risponde di sì; se poi la scena non ci arriva, l'avviso è quello della
-shell. Un caricamento fallito lascia il testo alla sessione.
+shell. Un caricamento fallito lascia il testo alla sessione. Il campo di testo del disegno è un altro pezzo pigro ([ADR 0224](../decisions/0224-scrittura-il-nucleo-del-testo-ricco.md)).
 
 I comandi `shell.doc.source.open` («Apri come sorgente») e
 `shell.doc.source.close` («Chiudi la vista sorgente») impostano e tolgono la
@@ -125,6 +125,19 @@ richiederebbe un contratto dichiarativo di superficie che non esiste.
 - `miniBar()` monta la mini-barra di chi ha controlli suoi (i documenti di
   Word, i fogli) sopra il menu; il Markdown usa i gruppi della barra di
   formattazione;
+- `standing`: fin dove si scrive, perché, i posti («Vai» se hanno `run`,
+  dietro `placesAsk`) e le azioni, per il chip di `panels/standing.ts` (rich);
+- `ownBar` dice che la superficie disegna la sua barra dei comandi (i
+  documenti di Word, con la barra multifunzione del kit): la barra di
+  formattazione della shell allora non si mostra, mentre la bolla della
+  selezione e `fub.editor.action` restano;
+- `panels` porta le schede del documento nell'ispettore, dopo le view
+  dichiarate: ognuna ha id, titolo, icona e `mount(host)`, che dà il suo
+  disposer. Le segue `shells/scrittoio/frame/document-panels.ts` sul riquadro
+  a fuoco; si rifanno soltanto quando cambia quali sono, e la scelta si
+  ricorda anche mentre manca. `onShow` ne chiede una (la barra apre
+  Commenti); `covers` toglie le view che sostituiscono. Il disegno ne dà
+  cinque (`chrome/hosts.ts`), e nello `status` la vista e le misure;
 - `exports` dichiara gli export registrati che valgono per il documento: il
   disegno offre PNG e PDF, il profilo `pdf` il PDF annotato e quello redatto.
   Il core ne fa `shell.doc.export` e una voce del menu del riquadro ciascuno,
@@ -273,18 +286,18 @@ la sorgente. Il task passa da normale modifica undoabile della sessione e
 `readOnly` disabilita l'input.
 
 Le tabelle GFM di primo livello fanno eccezione in Live: restano un widget
-anche col cursore dentro, la griglia di `profiles/markdown/table-widget.ts`.
-Il modello puro (`table-model.ts`) legge la tabella dalla sorgente e calcola
-le modifiche: una cella cambia soltanto il proprio intervallo, un cambio di
-forma riscrive la tabella. Il controller (`table-grid.ts`) possiede DOM,
-selezione e tastiera senza importare CodeMirror; il widget applica le
-modifiche con `dispatch` e `userEvent: "input"`, quindi nella cronologia
-nativa della superficie, e usa annulla e ripeti nativi. CodeMirror ignora
-gli eventi dentro la griglia (`ignoreEvent`), e dopo una modifica il widget
-aggiorna il DOM sul posto (`updateDOM`), così fuoco e selezione restano. La
+anche col cursore dentro, la griglia di `profiles/markdown/table-widget.ts`. Il
+modello puro (`table-model.ts`) legge la tabella dalla sorgente e calcola le
+modifiche: una cella cambia soltanto il proprio intervallo, un cambio di forma
+riscrive la tabella. La griglia è la cornice della Tabella ([ADR
+0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)), con
+DOM, selezione e tastiera; `table-grid.ts` è l'adattatore Markdown. Il widget
+applica le modifiche con `dispatch` e `userEvent: "input"`, nella cronologia
+nativa della superficie. CodeMirror ignora gli eventi dentro la griglia
+(`ignoreEvent`); `updateDOM` aggiorna sul posto, e fuoco e selezione restano. La
 resa in riga delle celle viene dal renderer condiviso (`MarkdownBlock.cells`,
-per offset relativo alla tabella), perché la resa HTML della tabella salta le
-celle vuote. La griglia a fuoco riceve le azioni dell'editor della superficie
+per offset nella tabella), perché la resa HTML della tabella salta le celle
+vuote. La griglia a fuoco riceve le azioni dell'editor della superficie
 (`editorActions`) finché il fuoco non torna al testo.
 
 Risorse native ed embed in `apps/client/src/ui/markdown-resources.ts` sono
@@ -334,6 +347,43 @@ superficie la dichiara; altrimenti alla `defaultMode` se è di scrittura, poi
 alla prima scrittura dichiarata. La command palette usa la stessa proiezione e
 non conosce nomi di profilo.
 
+### L'aspetto del contenuto
+
+Ogni superficie ha tre strati: la cornice, i segni di Fub sul contenuto e il
+contenuto ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)).
+Cornice e segni sono sempre del tema. Del contenuto decide la modalità: una
+`SurfaceMode` dichiara in `looks` gli aspetti che offre, il predefinito per
+primo, fra `tema`, `file` e `adattato` (`apps/client/src/theme/content-look.ts`).
+Markdown, testo, sorgenti, Lavagna e Base dichiarano `tema`; disegno,
+annotazioni, immagini e media `file`; l'SVG `tema` nel sorgente e `file`
+nell'anteprima. Il documento offre `file` e `adattato` in Pagina e in
+Lettura, `tema` in Scrittura; il foglio di calcolo `file` e `adattato`. Il
+campo è obbligatorio, e `apps/client/src/editors/core/surface-looks.test.ts`
+controlla che ogni modalità registrata lo dichiari.
+
+L'aspetto che si vede lo risolve il controller del documento: vale la scelta
+del riquadro per quella famiglia (`PaneState.looks`), se la modalità la offre;
+altrimenti l'impostazione `appearance.content-look`, dove `auto` è il
+predefinito della modalità oppure `adattato` con il contrasto alto; altrimenti
+il predefinito. La scelta non si cancella quando una modalità non la offre. La
+regione del contenuto (`.pane-editor`) riceve la classe `look-tema`,
+`look-file` o `look-adattato`, e la meccanica sta in
+`apps/client/src/theme/scrittoio/structure.css`: in `look-file` i segni di Fub
+prendono i colori della carta chiara (`--paper-*`). L'adattamento di un colore
+del file a un'altra carta è una funzione sola, `apps/client/src/theme/adapt.ts`.
+
+Dove un componente offre `file` o `adattato` il suo contenuto lo disegna
+quella meccanica, e una pelle, un tema o un frammento lo vestono soltanto
+sotto `.look-tema`. Il sanitizer lo fa rispettare con il gate del contenuto
+(`CONTENT_GATE` in `apps/client/src/theme/scrittoio/anatomia.ts`, violazione
+`content-look`): le classi di contenuto dei componenti con `gate`, e ogni
+selettore di tipo dentro le loro cornici. Hanno `gate` il documento e il
+foglio di calcolo.
+
+Un editor non scrive un ruolo del tema sull'elemento: sull'elemento vanno i
+valori del file. `.github/scripts/check-inline-theme.mjs` lo controlla in
+`apps/client/src/editors/`, con l'elenco delle righe che lo fanno ancora.
+
 La finestra documento a parte (`apps/client/src/shells/document/`) non ha IPC:
 riceve dalla finestra principale il profilo di testo che il registro ha risolto
 per il documento (`DocumentWindowRequest.profile`) e lo monta su un
@@ -348,9 +398,9 @@ CodeMirror precedono il layer della superficie; poi vengono profilo, documento,
 riquadro e globale. La shell monta un solo listener globale e lo rimuove al
 rimontaggio. Le callback di superficie diventano comandi nella stessa pipeline,
 non un secondo sistema di tasti. Il foglio del disegno tiene per sé i tasti
-di un gesto, cioè frecce, `Spazio`, `Invio`, `?` e `Tab` con una selezione, e
-li consuma; gli accordi che non usa, come `Mod-E`, arrivano alla shell
-(`apps/client/src/editors/spatial/tools/editor/keys.ts`).
+di un gesto (frecce, `Spazio`, `Invio`, `?`, `Tab` con una selezione) e
+`Mod-0`, il suo 100%; gli accordi che non usa, come `Mod-E`, arrivano alla
+shell (`apps/client/src/editors/spatial/tools/editor/vault-images.ts`).
 
 ### La griglia
 

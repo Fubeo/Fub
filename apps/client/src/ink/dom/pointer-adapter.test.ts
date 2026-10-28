@@ -104,7 +104,7 @@ describe("pipeline della penna", () => {
 
     expect(log[0]).toEqual({
       kind: "start",
-      stroke: { id: 1, pointerType: "pen", pressure: true, timeStamp: 100, continued: false },
+      stroke: { id: 1, pointerType: "pen", pressure: true, timeStamp: 100, continued: false, role: "ink" },
     });
     // Durante il tratto i campioni della penna portano gli angoli letti.
     expect(delivered(1)).toEqual([
@@ -120,6 +120,7 @@ describe("pipeline della penna", () => {
       pressure: true,
       timeStamp: 100,
       continued: false,
+      role: "ink",
       split: false,
       tilt: false,
       samples: [
@@ -133,6 +134,20 @@ describe("pipeline della penna", () => {
     expect(surface.hasPointerCapture(7)).toBe(false);
     // I campioni sono quelli che il codec scrive.
     expect(quantizeInk(ends()[0]!.samples).samples[2]).toEqual({ x: 800, y: 1250, p: 179, t: 17 });
+  });
+
+  it("pointerrawupdate fa crescere il tratto subito, e il pointermove che segue non lo raddoppia", () => {
+    attach();
+    dispatch(down({ ...PEN, clientX: 10, clientY: 20, pressure: 0.4, timeStamp: 100 }));
+    dispatch(pointerEvent("pointerrawupdate", { ...PEN, button: -1, buttons: 1, pressure: 0.6, clientX: 12, clientY: 22, timeStamp: 104 }));
+    expect(kinds()).toEqual(["start", "samples", "samples"]);
+    // Il pointermove porta lo stesso campione, già arrivato, e uno nuovo.
+    dispatch(move({ ...PEN, clientX: 12, clientY: 22, pressure: 0.6, timeStamp: 104 }));
+    dispatch(move({ ...PEN, clientX: 16, clientY: 25, pressure: 0.7, timeStamp: 112 }));
+    expect(delivered(1).map((sample) => sample.t)).toEqual([0, 4, 12]);
+    // Un puntatore che non disegna non ha niente da raccogliere.
+    dispatch(pointerEvent("pointerrawupdate", { ...MOUSE, button: -1, buttons: 0, clientX: 1, clientY: 1, timeStamp: 113 }));
+    expect(delivered(1)).toHaveLength(3);
   });
 
   it("l'inclinazione vera si conserva in gradi in tutto il tratto", () => {
@@ -507,7 +522,7 @@ describe("pipeline della penna", () => {
     dispatch(up({ ...MOUSE, clientX: 8, clientY: 2, timeStamp: 20 }));
     expect(log[0]).toEqual({
       kind: "start",
-      stroke: { id: 1, pointerType: "mouse", pressure: false, timeStamp: 10, continued: false },
+      stroke: { id: 1, pointerType: "mouse", pressure: false, timeStamp: 10, continued: false, role: "ink" },
     });
     expect(ends()[0]).toMatchObject({
       pressure: false,

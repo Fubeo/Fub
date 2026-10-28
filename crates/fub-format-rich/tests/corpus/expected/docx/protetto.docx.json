@@ -1,17 +1,15 @@
 {
   "file": "docx/protetto.docx",
-  "sha256": "db6a6a053e06c17d3bc89137031e7bb6019baad2f08edaa0bd9f31855cd484c4",
+  "sha256": "98b83d7d312fce0445ff5eaf0dfb15abae0d11275b9077555fd40ea42437d520",
   "open": {
     "readonly": "protected",
-    "projection": "dc7acfdf457f060153a7383b196ca0850db81d6a9c2a627a4bebb98b1d06a83b",
+    "projection": "ca27f090ceb2accc8cd275066252dbc9d23dba1845b380b8271ae2da7dc187d7",
     "blocks": 1,
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 3",
-    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
+    "differenze all'apertura: 0",
+    "blocchi chiusi: {}; scrittura intera: true",
     "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
   ],
   "model": {
@@ -34,6 +32,8 @@
     "E2": "readonly",
     "E3": "readonly",
     "E4": "readonly",
-    "E5": "readonly"
+    "E5": "readonly",
+    "E6": "readonly",
+    "E7": "readonly"
   }
 }

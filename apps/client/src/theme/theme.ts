@@ -23,6 +23,7 @@ import { mountCssSnippets } from "./snippets";
 import { setMotionPreference } from "../moto/level";
 import { setFrameRatePreference } from "./frame-rate";
 import { setDiagramStylePreference } from "./diagram-style";
+import { setContentLookPreference } from "./content-look";
 import { applyThemeOptions, resolveThemeOptions, type ThemeOption } from "./options";
 import { t } from "../i18n/strings";
 
@@ -52,6 +53,7 @@ export const THEME_ID_KEY = "appearance.theme-id";
 export const MOTION_KEY = "appearance.motion";
 export const FRAME_RATE_KEY = "appearance.frame-rate";
 export const DIAGRAM_STYLE_KEY = "appearance.diagram-style";
+export const CONTENT_LOOK_KEY = "appearance.content-look";
 export const COMPACTNESS_KEY = "chrome.compactness";
 const THEME_CACHE = "fub.appearance.theme";
 export const SERIES_THEME_ID = "fub.serie";
@@ -128,6 +130,9 @@ export function declareThemeSeries(next: ThemeSeries): () => void {
 
 let themeChoice: Theme | "" = "";
 let contrastChoice = "";
+/// `appearance.content-look`, come l'ha letto l'ultimo giro: lo risolve
+/// `content-look.ts` con il contrasto in vigore.
+let contentLookChoice: unknown = undefined;
 let preferences: AppearancePreferences = { ...series.defaults };
 let selectedThemeId = SERIES_THEME_ID;
 let previewSelection: ThemePreviewSelection | null = null;
@@ -286,6 +291,7 @@ async function apply(): Promise<void> {
     mediaMatches(DARK_QUERY, true),
   );
   const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
+  setContentLookPreference(contentLookChoice, contrast === "high");
   const requestedId = previewSelection?.id ?? selectedThemeId;
   let mounted: ThemeMountResult | null = null;
   let actualId = SERIES_THEME_ID;
@@ -388,6 +394,7 @@ async function reread(): Promise<void> {
   setMotionPreference(motion === "reduced" ? "reduced" : motion === "calm" ? "calm" : "system");
   setFrameRatePreference(valueOf(entries, FRAME_RATE_KEY));
   setDiagramStylePreference(valueOf(entries, DIAGRAM_STYLE_KEY));
+  contentLookChoice = valueOf(entries, CONTENT_LOOK_KEY);
   preferences = normalizedPreferences({
     density: valueOf(entries, DENSITY_KEY) as Density,
     body: valueOf(entries, BODY_KEY) as number,

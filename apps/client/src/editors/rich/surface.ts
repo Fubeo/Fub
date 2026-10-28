@@ -10,23 +10,36 @@
 // La superficie mostra perché un documento non si scrive (revisioni
 // tracciate, protezione, un documento che non tornerebbe identico): il motivo
 // lo misura il core all'apertura, e qui diventa una frase.
-import type { EditorSurface, SurfaceMountContext, SurfaceMode } from "../core/registry";
+import type { EditorSurface, PaperFit, SurfaceMountContext, SurfaceMode, SurfaceStandingState, SurfaceStatusItem } from "../core/registry";
 import { ACTION_UNAVAILABLE, type EditorActionState, type SurfaceEditorActions } from "../core/editor-actions";
 import type { EditorChange } from "../core/text-operation";
 import type { ProofPorts } from "../core/proof-ports";
 import { onLanguage, t, type Key } from "../../i18n/strings";
 import type { RichEngine } from "./engine";
-import type { mountStrip, RichStrip, RichStripGroup } from "./strip";
+import type { RichRibbon } from "./ribbon";
+import type { RichSide } from "./side";
 import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem, SurfaceMiniBar } from "../core/editor-menu";
 import { clipboardSupports, readClipboard, writeClipboardData, writeClipboardText } from "../../platform/clipboard";
+import { iconEl } from "../../ui/icons";
 import { closeContextMenu } from "../../ui/menu";
-import type { ReadOnlyReason } from "./projection";
+import { focusZone } from "../../ui/a11y";
 import type { DrawingImagePort } from "../canvas/surface";
 import { relativeRef } from "../../rules/mirrored";
+import { adaptedPaper, shownLook, type Look } from "../../theme/content-look";
+import type { Paper } from "../../theme/adapt";
 
 export const RICH_OWNER = "fub.shell.rich";
 export const RICH_FAMILY = "rich";
 export const RICH_PROFILE = "document";
+/// Le modalità del documento, come in Word: Pagina (il foglio del file),
+/// Scrittura (la colonna della nota, vestita dal tema) e Lettura (la carta,
+/// senza barra e senza cursore). Pagina conserva l'id di quando era l'unica.
+export const RICH_PAGE_MODE = "document";
+export const RICH_WRITING_MODE = "writing";
+export const RICH_READING_MODE = "reading";
+/// Sotto questa larghezza (px) la vista è stretta: la carta le sta dentro, e
+/// il pannello del documento è un foglio che sale dal basso.
+export const NARROW_PX = 600;
 /// I formati che questa superficie apre, con il loro profilo. Se un documento
 /// si scrive lo dice la sua proiezione (`readonly`), non il formato.
 export const RICH_FORMATS: Readonly<Record<string, string>> = {
@@ -153,21 +166,20 @@ export const RICH_CHORDS: Readonly<Record<string, string>> = {
 /// L'immagine più pesante che un documento accoglie, come il codec.
 export const RICH_IMAGE_LIMIT = 16 * 1024 * 1024;
 
-const READ_ONLY_KEYS: Readonly<Record<ReadOnlyReason, Key>> = {
-  revisions: "rich.readonly.revisions",
-  track_changes: "rich.readonly.track_changes",
-  protected: "rich.readonly.protected",
-  projection: "rich.readonly.projection",
-  codec: "rich.readonly.codec",
-  import: "rich.readonly.import",
-};
-
 export interface RichSurfaceCallbacks {
   readonly onChange: (paneId: string, change: EditorChange) => void;
   readonly onSelectionChange: (paneId: string) => void;
   readonly proof?: { readonly ports: ProofPorts; readonly notify?: (message: string) => void };
   /// Le immagini del vault, per inserirne una nel documento.
   readonly images?: DrawingImagePort;
+  /// Un comando della shell che la barra offre (lo zoom): come darlo, o
+  /// `null` se la shell non lo dà.
+  readonly shellCommand?: (id: string) => (() => void) | null;
+  /// Chiede alla shell un'altra modalità, o un altro aspetto della carta: la
+  /// scelta la ricorda il riquadro, e torna con `setMode` e con la classe
+  /// `look-*` del contenitore.
+  readonly requestMode?: (mode: string) => void;
+  readonly requestLook?: (look: Look) => void;
   /// Per i test: il modulo del motore. Di solito è `import("./engine")`.
   readonly loadEngine?: () => Promise<typeof import("./engine")>;
 }
@@ -189,12 +201,18 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   parent.append(root);
 
   let engine: RichEngine | null = null;
-  let strip: RichStrip | null = null;
-  // La striscia arriva col motore: la mini-barra la prende da lì.
-  let miniStrip: typeof mountStrip | null = null;
-  let miniGroups: readonly RichStripGroup[] = [];
+  // La barra multifunzione arriva col motore; la mini-barra è la sua.
+  let ribbon: RichRibbon | null = null;
+  // Il pannello del documento arriva anche lui col motore.
+  let side: RichSide | null = null;
+  let statusOf: (() => readonly SurfaceStatusItem[]) | null = null;
+  let standingOf: (() => SurfaceStandingState | null) | null = null;
+  const reveals = new Set<(viewId: string) => void>();
   let pending: string | null = null;
   let readOnly = false;
+  let mode = RICH_PAGE_MODE;
+  /// In Lettura il documento non si scrive, qualunque cosa dica il file.
+  const locked = () => readOnly || mode === RICH_READING_MODE;
   let closed = false;
   let stopEngine: (() => void) | null = null;
   const listeners = new Set<() => void>();
@@ -202,13 +220,24 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     for (const listener of [...listeners]) listener();
   };
 
+  let opener: HTMLButtonElement | null = null;
+  function countComments(): void {
+    if (!opener || !side) return;
+    const count = String(side.comments());
+    const shown = opener.lastElementChild!;
+    if (shown.textContent === count) return;
+    shown.textContent = count;
+    opener.setAttribute("aria-label", t("rich.side.open", { count }));
+  }
+
   let failed = false;
+  // Sola lettura, parti chiuse, solo il testo e la registrazione li dice il
+  // chip accanto al percorso (`standing`); qui resta soltanto ciò che lascia
+  // il documento senza un editor.
   function showNotice(): void {
     const intake = engine?.intake();
     let text = failed ? t("rich.unavailable") : "";
     if (intake?.kind === "invalid") text = t("rich.invalid");
-    else if (intake?.kind === "ok" && intake.readonly) text = t(READ_ONLY_KEYS[intake.readonly]);
-    else if (engine?.editable() && engine.tracking()) text = t("rich.track.notice");
     notice.textContent = text;
     notice.hidden = text === "";
     root.dataset.readonly = String(!(engine?.editable() ?? false));
@@ -230,10 +259,8 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
 
   const load = callbacks.loadEngine ?? (() => import("./engine"));
   load().then(
-    ({ RichEngine, mountStrip, RICH_MINI_GROUPS }) => {
+    ({ RichEngine, mountRichRibbon, mountRichSide, richStanding, richStatus }) => {
       if (closed) return;
-      miniStrip = mountStrip;
-      miniGroups = RICH_MINI_GROUPS;
       page.removeAttribute("aria-busy");
       engine = new RichEngine(page, {
         label: () => t("rich.label"),
@@ -241,16 +268,55 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
         proof: callbacks.proof,
       });
-      strip = mountStrip(engine, (id) => RICH_CHORDS[id] ?? null, {
-        pickImage: pickImage(),
-        review: RICH_REVIEW_FORMATS.has(context.formatId ?? ""),
+      const ribbonHost = document.createElement("div");
+      ribbonHost.className = "rich-ribbon-host";
+      root.insertBefore(ribbonHost, page);
+      const media = { pickImage: pickImage(), review: RICH_REVIEW_FORMATS.has(context.formatId ?? ""), ...(context.formatId ? { format: context.formatId } : {}) };
+      side = mountRichSide(engine, media, (viewId) => {
+        for (const listener of [...reveals]) listener(viewId);
       });
-      root.insertBefore(strip.element, page);
+      statusOf = richStatus(engine, side);
+      ribbon = mountRichRibbon(
+        engine,
+        (id) => RICH_CHORDS[id] ?? null,
+        media,
+        {
+          host: ribbonHost,
+          side,
+          shell: (id) => callbacks.shellCommand?.(id) ?? null,
+          display: {
+            mode: () => mode,
+            setMode: (next) => callbacks.requestMode?.(next),
+            look,
+            setLook: (next) => callbacks.requestLook?.(next),
+          },
+        },
+      );
+      root.insertBefore(ribbon.findBar, page);
+      const found = ribbon;
+      standingOf = richStanding(engine, { ...(context.formatId ? { format: context.formatId } : {}), review: media.review, find: () => found.find(false) });
+      // Nello stretto il pannello è un foglio che sale dal basso: lo apre
+      // questo pulsante, col numero dei commenti. Altrove non si vede.
+      const opened = side;
+      opener = document.createElement("button");
+      opener.type = "button";
+      opener.className = "rich-side-open";
+      const mark = iconEl("rc-comments");
+      if (mark) opener.append(mark);
+      opener.append(document.createElement("span"));
+      opener.addEventListener("click", () => opened.show("comments"));
+      root.append(opener);
+      engine.followView([parent, root], ribbonHost);
       stopEngine = engine.subscribe(() => {
         showNotice();
+        countComments();
         notify();
       });
-      engine.setReadOnly(readOnly);
+      countComments();
+      engine.setReadOnly(locked());
+      engine.setPaper(paper());
+      applyFit();
+      ribbonHost.hidden = mode === RICH_READING_MODE;
       if (pending !== null) engine.setDoc(pending);
       pending = null;
       showNotice();
@@ -265,12 +331,57 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   );
   const stopLanguage = onLanguage(() => {
     showNotice();
+    if (opener) opener.setAttribute("aria-label", t("rich.side.open", { count: opener.lastElementChild?.textContent ?? "0" }));
     engine?.refresh();
   });
 
+  // Pagina e Lettura mostrano il file sulla sua carta, o adattato a quella
+  // del tema; Scrittura è del tema, e del file tiene struttura ed enfasi.
   const modes: SurfaceMode[] = [
-    { id: "document", label: () => t("mode.document"), presentation: "surface", contextMode: "live_preview" },
+    { id: "document", label: () => t("mode.page"), presentation: "surface", contextMode: "live_preview", looks: ["file", "adattato"] },
+    { id: "writing", label: () => t("mode.writing"), presentation: "surface", contextMode: "live_preview", looks: ["tema"] },
+    { id: "reading", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading", looks: ["file", "adattato"] },
   ];
+
+  /// L'aspetto che il contenitore mostra adesso: lo decide la shell, con la
+  /// classe `look-*`.
+  const look = (): Look | null => shownLook(parent);
+  /// La carta del tema, quando l'aspetto è adattato: i colori del file ci si
+  /// portano sopra (`tints.ts`). Negli altri aspetti, nessuna.
+  const paper = (): Paper | null => adaptedPaper(parent, page);
+  // In Pagina la carta si adatta alla vista, larga quanto lei o intera; negli
+  // altri modi è la carta vera.
+  // Una vista più stretta di `NARROW_PX` tiene la carta larga quanto lei,
+  // finché chi legge non sceglie altro.
+  let fit: PaperFit | null = null;
+  const fitNow = (): PaperFit | null => fit ?? (page.clientWidth > 0 && page.clientWidth < NARROW_PX ? "width" : null);
+  let fitted: PaperFit | null = null;
+  const applyFit = (moved = false) => {
+    fitted = fitNow();
+    engine?.fitPaper(mode === RICH_PAGE_MODE ? fitted : null, { width: page.clientWidth, height: page.clientHeight }, moved);
+  };
+  let fitting: ResizeObserver | null = null;
+  if (typeof ResizeObserver !== "undefined") {
+    fitting = new ResizeObserver(() => {
+      if (fitted !== null || fitNow() !== null) applyFit();
+    });
+    fitting.observe(page);
+  }
+
+  // La barra dice l'aspetto, e la carta lo segue, quando la shell lo cambia.
+  const looks = new MutationObserver(() => {
+    engine?.setPaper(paper());
+    ribbon?.refresh();
+  });
+  looks.observe(parent, { attributes: true, attributeFilter: ["class"] });
+
+  // Esc, in Lettura, torna a Pagina.
+  const leaveReading = (event: KeyboardEvent) => {
+    if (event.key !== "Escape" || mode !== RICH_READING_MODE || event.defaultPrevented || !callbacks.requestMode) return;
+    event.preventDefault();
+    callbacks.requestMode(RICH_PAGE_MODE);
+  };
+  root.addEventListener("keydown", leaveReading);
 
   const editable = () => !closed && !!engine?.editable();
   const editorActions: SurfaceEditorActions = {
@@ -437,23 +548,22 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     };
   }
 
-  /// La mini-barra: la striscia ristretta al carattere e all'enfasi. Un
-  /// gesto chiude il menu, che parlerebbe dello stato di prima.
+  /// La mini-barra: quella della barra multifunzione, col carattere e
+  /// l'enfasi. Un gesto chiude il menu, che parlerebbe dello stato di prima.
   const miniBar: SurfaceMiniBar = {
     mount(host) {
-      if (!engine || !miniStrip) return () => {};
-      const mini = miniStrip(engine, (id) => RICH_CHORDS[id] ?? null, {}, { only: miniGroups });
+      if (!ribbon) return () => {};
+      const remove = ribbon.mountMini(host);
       // Un pulsante agisce subito; una tendina, quando cambia.
       const done = (event: Event) => {
         if (event.type === "change" || (event.target as Element | null)?.closest("button")) queueMicrotask(closeContextMenu);
       };
-      mini.element.addEventListener("click", done);
-      mini.element.addEventListener("change", done);
-      host.append(mini.element);
+      host.addEventListener("click", done);
+      host.addEventListener("change", done);
       return () => {
-        mini.element.removeEventListener("click", done);
-        mini.element.removeEventListener("change", done);
-        mini.destroy();
+        host.removeEventListener("click", done);
+        host.removeEventListener("change", done);
+        remove();
       };
     },
   };
@@ -463,9 +573,22 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     profile: RICH_PROFILE,
     surfaceId: context.paneId,
     modes,
-    setMode(mode) {
-      if (mode !== "document") throw new Error(`rich surface mode ${mode} is not registered`);
-      parent.dataset.surfaceMode = mode;
+    setMode(next) {
+      if (!modes.some((each) => each.id === next)) throw new Error(`rich surface mode ${next} is not registered`);
+      mode = next;
+      parent.dataset.surfaceMode = next;
+      root.dataset.mode = next;
+      if (engine) {
+        // La barra si ritira in Lettura: resta la carta.
+        const host = root.querySelector<HTMLElement>(":scope > .rich-ribbon-host");
+        if (host) host.hidden = next === RICH_READING_MODE;
+        if (next === RICH_READING_MODE) ribbon?.closeFind();
+        engine.setReadOnly(locked());
+        applyFit();
+      }
+      ribbon?.refresh();
+      showNotice();
+      notify();
     },
     buffer: {
       setDoc(text) {
@@ -480,6 +603,75 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       getDoc: () => (engine ? engine.getDoc() : pending ?? ""),
     },
     focus: () => engine?.focus(),
+    // La barra multifunzione è della superficie: la barra di formattazione
+    // della shell non si mostra sopra.
+    ownBar: true,
+    paperFit: {
+      offers: (): readonly PaperFit[] => (engine && mode === RICH_PAGE_MODE ? ["width", "page"] : []),
+      current: () => fit,
+      set(next) {
+        fit = next;
+        applyFit(true);
+        notify();
+      },
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
+    // Commenti, Revisioni e Proprietà nell'ispettore, quando il motore c'è.
+    panels: {
+      list: () => side?.panels ?? [],
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      onShow(listener) {
+        reveals.add(listener);
+        return () => reveals.delete(listener);
+      },
+    },
+    // Il foglio, le parole, la lingua e «Registra» nella banda di stato: le
+    // parole sono quelle del Conteggio, e quelle della banda si fanno da parte.
+    status: {
+      counts: true,
+      items: () => statusOf?.() ?? [],
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
+    // Si scrive tutto, in parte o per niente: il chip accanto al percorso.
+    standing: {
+      current: () => (closed ? null : standingOf?.() ?? null),
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
+    // F6: la barra, la ricerca se è aperta, poi il foglio. Il resto del giro
+    // (il pannello, la banda) è della shell.
+    zone(step) {
+      if (!engine || !ribbon) return false;
+      const zones = [root.querySelector<HTMLElement>(":scope > .rich-ribbon-host"), ribbon.findBar, page].filter(
+        (zone): zone is HTMLElement => zone !== null && !zone.hidden,
+      );
+      const at = zones.findIndex((zone) => zone.contains(document.activeElement));
+      const next = at < 0 ? (step > 0 ? 0 : zones.length - 1) : at + step;
+      const target = zones[next];
+      if (!target) return false;
+      if (target === page) engine.focus();
+      // Un documento in sola lettura non prende il fuoco nel testo: lo prende
+      // il foglio, o il giro si fermerebbe sulla barra.
+      if (target !== page || !page.contains(document.activeElement)) focusZone(target);
+      return true;
+    },
+    // Ctrl+F: la barra di ricerca del documento, non quella della shell.
+    find() {
+      if (!ribbon) return false;
+      ribbon.find(false);
+      return true;
+    },
     // Le selezioni non sono intervalli del sorgente (il sorgente è la
     // proiezione): il contesto riceve il testo, senza coordinate.
     selectedText() {
@@ -488,12 +680,13 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     },
     setReadOnly(next) {
       readOnly = next;
-      engine?.setReadOnly(next);
+      engine?.setReadOnly(locked());
       showNotice();
       notify();
     },
     setTheme(theme) {
       root.dataset.theme = theme;
+      engine?.setPaper(paper());
     },
     editorActions,
     contextMenu,
@@ -501,11 +694,20 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     destroy() {
       if (closed) return;
       closed = true;
+      looks.disconnect();
+      fitting?.disconnect();
+      root.removeEventListener("keydown", leaveReading);
       stopLanguage();
       stopEngine?.();
-      strip?.destroy();
-      strip = null;
+      ribbon?.destroy();
+      ribbon = null;
+      side?.destroy();
+      side = null;
+      statusOf = null;
+      // La shell rilegge le schede: non ce ne sono più.
+      notify();
       listeners.clear();
+      reveals.clear();
       engine?.destroy();
       engine = null;
       root.remove();

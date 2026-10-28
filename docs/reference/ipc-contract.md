@@ -299,7 +299,7 @@ Un documento di un formato di `fub-format-rich` (`docx`, `odt`, `rtf` e
 passa dalle stesse porte dei documenti, senza una porta in più:
 
 - `read_document` restituisce in `text` la **proiezione** del file: JSON
-  chiuso e versionato (`"format": "fub-rich"`, `"version": 2`,
+  chiuso e versionato (`"format": "fub-rich"`, `"version": 4`,
   `"opaque_schema": N`), con `format_id` `"docx"` e `source_kind` `"bytes"`.
   `revision` è quella dei byte del file, non del testo restituito;
 - `write_document` riceve una proiezione in `source` e la `base` letta
@@ -310,74 +310,16 @@ passa dalle stesse porte dei documenti, senza una porta in più:
 - `save_draft` conserva la proiezione come testo del buffer, come per ogni
   altro documento.
 
-Un tratto, un oggetto e un paragrafo (per il suo segno di fine) portano
-`ins` e `del` quando sono una revisione tracciata: `{"by", "at", "mv"}`,
-autore, data e nome dello spostamento, ciascuno assente se vuoto. Due
-revisioni con gli stessi campi sono la stessa; togliere `ins` o `del` la
-accetta o la rifiuta.
+`read_document` e `write_document` girano fuori dal thread principale
+dell'app, per ogni formato: aprire e salvare un `.docx` legge, proietta e
+misura il pacchetto, e la finestra non si ferma ad aspettarli. L'ordine delle
+scritture di un documento lo tiene la `DocumentSession` della shell, che le
+accoda, e una lettura superata la scarta. Le bozze (`save_draft`,
+`discard_draft`) restano sul thread principale, nell'ordine in cui arrivano.
 
-I commenti sono l'elenco `comments`, fra `styles` e `blocks`: `{"id", "k",
-"by", "at", "parent", "done", "text"}`, con `parent` l'id del commento a cui
-risponde e `done` risolto. Di un commento con `k` cambia soltanto `done`; uno
-senza `k` è nuovo, e `text` ne è il testo semplice, un paragrafo per riga.
-L'intervallo è segnato da due oggetti `marker` con `"comment": {"id", "end"}`:
-uno nuovo non ha `k`. Un segno senza il suo commento si toglie; due commenti
-con lo stesso id, o una risposta senza il suo, sono una proiezione malformata.
-Il codec ODT rifiuta un elenco non vuoto.
-
-`"track": true`, fra `readonly` e `lang`, dice che il documento registra le
-modifiche (assente quando non lo fa): la shell scrive ciò che cambia come
-revisioni `ins` e `del`, e il codec salva l'impostazione con il documento. Il
-codec ODT rifiuta `track`.
-
-`page` è la pagina di una sezione in punti, `{"w", "h", "top", "bottom",
-"left", "right", "cols"}`, con `w` e `h` già nel verso della pagina e `cols`
-assente quando è una. La porta il paragrafo che chiude la sezione, dopo
-`sect`, e la testa della proiezione per l'ultima, fra `styles` e `comments`.
-Il codec la rilegge al ventesimo di punto e rifiuta lati fuori da 7,2–1584,
-margini negativi o che lasciano meno di 36 punti al testo, `cols` fuori da
-1–12 e una pagina su un paragrafo senza `sect`; cambiare `cols` rende uguali
-le colonne. Il codec ODT rifiuta `page`.
-
-`header` e `footer`, dopo `page`, sono l'intestazione e il piè di pagina
-della stessa sezione (quelli delle pagine senza uno proprio): `{"lines":
-[[…]], "locked"}`, una riga per paragrafo, ogni pezzo una stringa o
-`{"field": "page" | "pages"}`. Assenti, la sezione mostra quelli della
-sezione prima. Uno `locked` non si cambia; una riga che va a capo, un elenco
-di righe vuoto o un `locked` cambiato sono una proiezione malformata. Il
-codec ODT li rifiuta.
-
-Un oggetto nuovo (`"t": "atom"` senza `k`) di specie `field` con `"toc": N`,
-dopo `end`, è un sommario dei titoli fino al livello N (1–9): il codec Word
-lo scrive come campo `TOC` da ricalcolare all'apertura, e rifiuta un `toc`
-fuori da 1–9 o su un'altra specie; il codec ODT lo rifiuta.
-
-Un documento che il codec o la proiezione non riportano identico si apre con
-`"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
-`projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo
-motivo. `import` è il motivo di ogni documento `rtf` e `doc`, e di un `odt`
-che il codec OpenDocument non sa rappresentare: lo legge un importatore che non
-riporta il file intero. Un file nuovo `rtf` o `doc` non si crea
-(`host.rich.no_writer`); un `odt` sì.
-`opaque_schema`, subito dopo `version`, è lo schema dei dati opachi (`k` e
-`sect`, JSON del modello del motore in base64), che si incrementa quando
-cambia la loro forma serializzata: lo schema 2 aggiunge all'1 il campo
-facoltativo `eastAsianLayout` delle proprietà del carattere, il 3 altri campi
-facoltativi (`langEa` del carattere, `z` di un oggetto mobile, `outlineFill`
-e `size` di forme e filigrane) e il riempimento trasparente o sfumato di una
-forma come oggetto con `type`, accanto al colore `[r, g, b]`. Il codec legge
-ogni schema fino al suo. La versione 1, quella delle bozze di
-prima, ha le stesse chiavi senza `opaque_schema` e i dati dello schema 0. La
-shell legge le due versioni, ciascuna con il suo elenco chiuso di chiavi, e
-ricopia versione e schema come li ha ricevuti. Il codec rifiuta una versione
-futura (`host.rich.version`) e uno schema che non legge, scritto da un Fub
-più nuovo (`host.rich.opaque_schema`); un dato opaco che, decodificato e
-riscritto, perderebbe un campo è una proiezione malformata.
-
-Gli errori del codec arrivano tipizzati con chiave di catalogo `host.rich.*`.
-La forma della proiezione è di `crates/fub-format-rich/src/projection.rs`; la
-fixture `apps/client/src/__fixtures__/rich-projection.json` la lega alla
-shell nei due versi (`crates/fub-format-rich/tests/ts_projection.rs`).
+La forma della proiezione (revisioni, commenti, pagina, oggetti, inchiostri e
+disegni, blocchi chiusi, versioni e schema dei dati opachi) è in
+[Proiezione dei documenti di videoscrittura](rich-projection.md).
 
 ## Cartelle di Excel
 

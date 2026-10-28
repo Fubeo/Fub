@@ -22,8 +22,10 @@
 import type { Node as PmNode, MarkType } from "prosemirror-model";
 import { Plugin, PluginKey, TextSelection, type Command, type EditorState, type Transaction } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
+import { authorClass, authorSlot, authorSlots } from "./authors";
 import type { Rev } from "./projection";
-import { REV_STYLE, revTitle, richSchema, sameRev } from "./schema";
+import { GO_TO } from "./rich-motion";
+import { revTitle, richSchema, sameRev } from "./schema";
 import { untracked } from "./track";
 
 export interface FindQuery {
@@ -137,9 +139,6 @@ interface Shown {
 
 export const findKey = new PluginKey<Shown>("fub-rich-find");
 
-const ALL_STYLE = "background-color: var(--accent-wash)";
-const CURRENT_STYLE = "background-color: var(--accent-soft); outline: 1px solid var(--accent)";
-
 function decorate(doc: PmNode, query: FindQuery | null, current: number): DecorationSet {
   if (!query) return DecorationSet.empty;
   const matches = findMatches(doc, query);
@@ -148,7 +147,6 @@ function decorate(doc: PmNode, query: FindQuery | null, current: number): Decora
     matches.map((m, i) =>
       Decoration.inline(m.from, m.to, {
         class: i === current ? "rich-find rich-find-current" : "rich-find",
-        style: i === current ? CURRENT_STYLE : ALL_STYLE,
       }),
     ),
   );
@@ -178,7 +176,7 @@ export function showMatches(query: FindQuery | null, current = -1): Command {
     if (dispatch) {
       const tr = state.tr.setMeta(findKey, { query, current }).setMeta("addToHistory", false);
       const match = query ? findMatches(state.doc, query)[current] : undefined;
-      if (match) tr.setSelection(TextSelection.create(state.doc, match.from, match.to)).scrollIntoView();
+      if (match) tr.setSelection(TextSelection.create(state.doc, match.from, match.to)).scrollIntoView().setMeta(GO_TO, "find");
       dispatch(tr);
     }
     return true;
@@ -389,6 +387,51 @@ export function resolveAll(accept: boolean): Command {
   };
 }
 
+/// La modifica di specie `kind` che comincia in `from`, come l'ha data
+/// `revisions`: chi l'ha mostrata la ritrova anche se nel frattempo le altre
+/// sono cambiate.
+function changeAt(doc: PmNode, kind: RevKind, from: number): { all: Change[]; change: Change } | null {
+  const all = revisions(doc);
+  const change = all.find((c) => c.kind === kind && c.from === from);
+  return change ? { all, change } : null;
+}
+
+/// Seleziona una modifica dell'elenco.
+export function goToChange(kind: RevKind, from: number): Command {
+  return (state, dispatch) => {
+    const found = changeAt(state.doc, kind, from);
+    if (!found) return false;
+    if (dispatch) dispatch(select(state.tr, found.change).scrollIntoView().setMeta(GO_TO, true));
+    return true;
+  };
+}
+
+/// Accetta (o rifiuta) una modifica dell'elenco, con l'altro capo se è uno
+/// spostamento.
+export function resolveChange(kind: RevKind, from: number, accept: boolean): Command {
+  return (state, dispatch) => {
+    const found = changeAt(state.doc, kind, from);
+    if (!found) return false;
+    if (dispatch) {
+      const tr = state.tr;
+      resolve(tr, withMoves(found.all, [found.change]), accept);
+      dispatch(untracked(tr));
+    }
+    return true;
+  };
+}
+
+/// Il testo di una modifica, per l'elenco: vuoto per il solo segno di fine
+/// di un paragrafo.
+export function changeText(doc: PmNode, change: Change): string {
+  return change.pieces
+    .filter((piece) => piece.para === undefined)
+    .map((piece) => doc.textBetween(piece.from, piece.to, " ", " "))
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /// Seleziona la modifica dopo (o prima) della selezione, girando in fondo.
 export function goToRevision(direction: 1 | -1): Command {
   return (state, dispatch) => {
@@ -399,7 +442,7 @@ export function goToRevision(direction: 1 | -1): Command {
     const change = direction === 1
       ? all.find((c) => (empty ? c.from >= to : c.from >= to || c.from > from)) ?? all[0]!
       : [...all].reverse().find((c) => c.from < from) ?? all[all.length - 1]!;
-    if (dispatch) dispatch(select(state.tr, change).scrollIntoView());
+    if (dispatch) dispatch(select(state.tr, change).scrollIntoView().setMeta(GO_TO, true));
     return true;
   };
 }
@@ -411,8 +454,8 @@ const revisionKey = new PluginKey<DecorationSet>("fub-rich-revisions");
 export const revisionPlugin = new Plugin<DecorationSet>({
   key: revisionKey,
   state: {
-    init: (_config, state) => markWidgets(state.doc),
-    apply: (tr, set) => (tr.docChanged ? markWidgets(tr.doc) : set),
+    init: (_config, state) => revisionDecorations(state.doc),
+    apply: (tr, set) => (tr.docChanged ? revisionDecorations(tr.doc) : set),
   },
   props: {
     decorations: (state) => revisionKey.getState(state),
@@ -430,31 +473,50 @@ export const revisionPlugin = new Plugin<DecorationSet>({
   },
 });
 
-function markWidgets(doc: PmNode): DecorationSet {
-  const widgets: Decoration[] = [];
+function revisionDecorations(doc: PmNode): DecorationSet {
+  const decorations: Decoration[] = [];
+  const slots = authorSlots(doc);
+  // Il colore di chi l'ha fatta, sul testo di ogni modifica; e una barra nel
+  // margine accanto a ogni paragrafo che ne ha una, come in Word.
+  const changed = new Set<number>();
+  for (const change of revisions(doc)) {
+    const author = `rich-autore ${authorClass(authorSlot(slots, change.rev.by))} rich-autore-${change.kind}`;
+    for (const piece of change.pieces) {
+      if (piece.para !== undefined) {
+        changed.add(piece.para);
+        continue;
+      }
+      decorations.push(Decoration.inline(piece.from, piece.to, { class: author }));
+      changed.add(doc.resolve(piece.from).before());
+    }
+  }
+  for (const pos of changed) {
+    const node = doc.nodeAt(pos);
+    if (node) decorations.push(Decoration.node(pos, pos + node.nodeSize, { class: "rich-changed" }));
+  }
   doc.descendants((node, pos) => {
     if (!node.isTextblock) return true;
     for (const kind of REV_KINDS) {
       const rev = node.attrs[kind] as Rev | null;
       if (!rev) continue;
       const end = pos + node.nodeSize - 1;
-      widgets.push(
+      const slot = authorSlot(slots, rev.by);
+      decorations.push(
         Decoration.widget(
           end,
           () => {
             const span = document.createElement("span");
-            span.className = `rich-${kind}-mark`;
+            span.className = `rich-${kind}-mark rich-autore ${authorClass(slot)}`;
             span.textContent = "¶";
             span.title = revTitle(kind, rev);
-            span.setAttribute("style", REV_STYLE[kind]);
             span.setAttribute("aria-hidden", "true");
             return span;
           },
-          { side: 1, marks: [], key: `${kind}:${JSON.stringify(rev)}`, ignoreSelection: true },
+          { side: 1, marks: [], key: `${kind}:${slot}:${JSON.stringify(rev)}`, ignoreSelection: true },
         ),
       );
     }
     return false;
   });
-  return DecorationSet.create(doc, widgets);
+  return DecorationSet.create(doc, decorations);
 }

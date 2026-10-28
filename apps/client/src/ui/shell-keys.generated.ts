@@ -118,6 +118,8 @@ export const SHELL_KEYS = {
   "shell.pane.focus.right": null,
   "shell.pane.focus.up": null,
   "shell.pane.focus.down": null,
+  "shell.zone.next": "F6",
+  "shell.zone.prev": "Shift-F6",
 } as const satisfies Record<string, string | null>;
 
 /// L'id di un comando della shell: uno di quelli in tabella, e nessun altro.

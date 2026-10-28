@@ -464,6 +464,8 @@ export interface FieldsInput {
   readonly bar: boolean;
   /// Vero se il pannello ospita gli attributi.
   readonly attributes: boolean;
+  /// Vero se la selezione si può esportare dalla sua sezione.
+  readonly exportSelection?: boolean;
   /// La forma che disegna lo strumento Poligono, se è lo strumento di
   /// adesso: senza selezione il pannello la mostra.
   readonly tool: ShapeFacts | null;
@@ -1225,6 +1227,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     fields,
     actions,
     attributes: selection !== null && input.attributes,
+    exportSelection: selection !== null && input.exportSelection === true,
     swatches: input.swatches,
     recent: input.recent,
     ...(input.colors === null ? {} : { colors: colorsView(input.colors, selection, input.recent) }),

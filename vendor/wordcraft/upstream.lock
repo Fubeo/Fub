@@ -19,6 +19,10 @@ sha256 = "sha256:d408d22685e3c7ea1195277a242145532ac31a795ae24deb441b1105043a109
 path = "patches/0003-settings-kept-unowned.patch"
 sha256 = "sha256:774ac0f351ec7b560932a3090830b668fd9059f535bca80c2024a6944a7bdc46"
 
+[[patch]]
+path = "patches/0004-inchiostro-e-svg.patch"
+sha256 = "sha256:9fde206cc9b05bb7d969bcd252e571cde17b6bd3afa190129816b5005e7f8f1e"
+
 [[file]]
 path = "LICENSE-APACHE"
 upstream = "sha256:0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
@@ -337,9 +341,14 @@ path = "crates/docx/src/fonts.rs"
 upstream = "sha256:3c3c613406b5dc19b4f7685e38a9f65761f583e728082d4dd737316ed1cd53e3"
 
 [[file]]
+path = "crates/docx/src/ink.rs"
+upstream = "none"
+result = "sha256:5d6de9c0508b1b0d7ba17627d26a12a24db86f9b6da080d247c09f7f6f701228"
+
+[[file]]
 path = "crates/docx/src/lib.rs"
 upstream = "sha256:bc2a539e3f2060d9a774d55adbbf6f36f00cb6d8c0a60c4fccd701383688ba84"
-result = "sha256:b0bded4d5aa5076d5cd1fa70da0486798bcbe7ef33283ac319f336ac33279eef"
+result = "sha256:8c3474bf3f47236bd77f5e5ecb282ec37c267cc9f1851029b06880be37d72ee3"
 
 [[file]]
 path = "crates/docx/src/package.rs"
@@ -393,6 +402,7 @@ upstream = "sha256:ff7d7d2cccdf9493c8473bbd8bab5659362c08387a9c97ddee6e085809cf2
 [[file]]
 path = "crates/docx/src/read/story.rs"
 upstream = "sha256:17afae46d555c2f6f2a0bb31b913449484fc3e1525d7be29858983672f8deec6"
+result = "sha256:c21b9fc8394e22745268628b8dee8c46837b8cf514806deadb3d0d2ea0d19a2f"
 
 [[file]]
 path = "crates/docx/src/read/wordart.rs"
@@ -451,6 +461,7 @@ result = "sha256:250976147045bec1209c3e492b92233b79dbf3a477ec9e6bec8a1da003bb653
 [[file]]
 path = "crates/docx/src/write/story.rs"
 upstream = "sha256:78f5f0625b91b3da419d617e8bde8c3deb0749de4caeaefd21054db250f0e2a3"
+result = "sha256:19b11a78a7f942d5d35819d87efb0dd5d80db0d823820d41fc6510efd42a1563"
 
 [[file]]
 path = "crates/docx/src/write/watermark.rs"

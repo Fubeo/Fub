@@ -39,6 +39,7 @@ import {
   type FolderContent,
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
+import { FORMAT_ICON, formatKindOf } from "../ui/format-kind";
 import { iconEl } from "../ui/icons";
 import { pickIcon, showContextMenu, type MenuItem } from "../ui/menu";
 import {
@@ -844,7 +845,11 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   row.dataset.path = id;
   setTooltip(row, id);
   const icon = state.meta.icons[id];
+  const kind = formatKindOf(id);
   if (icon) row.appendChild(rowIcon(icon));
+  // Un documento che non è una nota dice il suo formato: un Word, un ODT e
+  // una nota non hanno la stessa icona, perché non si fanno le stesse cose.
+  else if (kind && kind !== "note") row.appendChild(rowIcon(null, FORMAT_ICON[kind]));
   // Senza icona la colonna resta (dal CSS, senza un nodo in più per riga): i
   // nomi si allineano con quelli che un'icona ce l'hanno.
   else row.classList.add("no-icon");
@@ -881,7 +886,8 @@ function fileRow(id: string): HTMLElement {
   row.dataset.path = id;
   setTooltip(row, id);
   const kind = mediaKindOfId(id);
-  row.appendChild(rowIcon(FILE_ICONS[kind]));
+  // Un SVG è anche un disegno, e si apre nel suo editor.
+  row.appendChild(formatKindOf(id) === "drawing" ? rowIcon(null, FORMAT_ICON.drawing) : rowIcon(FILE_ICONS[kind]));
   const name = document.createElement("span");
   name.className = "row-name";
   name.textContent = childName(id);

@@ -19,6 +19,7 @@
 //   quello scelto: un documento in millimetri ha la griglia in millimetri, e
 //   quello in pixel accanto resta com'era.
 
+import type { PenId } from "../../../ink/pens";
 import { DEFAULT_CURVE, type PenCurve } from "../../../ink/input/pressure";
 import { NO_STABILIZER, type StabilizerConfig } from "../../../ink/input/stabilizer";
 import type { Bounds } from "../scene/geometry";
@@ -67,6 +68,54 @@ export interface Grid {
   /// Lo stabilizzatore del tratto (`ink/input/stabilizer.ts`). Assente,
   /// spento: una griglia ricordata prima di lui disegna com'era.
   readonly steady?: Steady;
+  /// Come cancella la gomma: il tratto intero, o soltanto dove passa
+  /// (`erase-precise.ts`). Assente, il tratto intero.
+  readonly eraser?: EraseMode;
+  /// La penna della Penna (`ink/pens.ts`). Assente, quella di serie.
+  readonly penId?: PenId;
+  /// Che cosa fa la penna col tasto laterale premuto. Assente, apre il menu
+  /// radiale.
+  readonly barrel?: BarrelAction;
+  /// Che cosa resta di un tratto della Penna al rilascio: l'inchiostro coi
+  /// suoi campioni, o un tracciato. Assente, l'inchiostro.
+  readonly output?: PenOutput;
+  /// Quanto il tracciato segue l'inchiostro, nell'uscita e in «Inchiostro
+  /// in tracciato». Assente, «media».
+  readonly fidelity?: Fidelity;
+}
+
+/// Che cosa resta di un tratto della Penna.
+export type PenOutput = "ink" | "path";
+
+/// Vero se `value` è un'uscita della Penna.
+export function isPenOutput(value: unknown): value is PenOutput {
+  return value === "ink" || value === "path";
+}
+
+/// Quanto il tracciato segue l'inchiostro: «alta» mette più nodi e resta
+/// più vicino, «bassa» ne mette meno.
+export type Fidelity = "high" | "medium" | "low";
+
+/// Vero se `value` è una fedeltà.
+export function isFidelity(value: unknown): value is Fidelity {
+  return value === "high" || value === "medium" || value === "low";
+}
+
+/// Che cosa fa il tasto laterale della penna: il menu radiale, un lazo, una
+/// gomma o niente.
+export type BarrelAction = "radial" | "lasso" | "eraser" | "none";
+
+/// Vero se `value` è un'azione del tasto laterale.
+export function isBarrelAction(value: unknown): value is BarrelAction {
+  return value === "radial" || value === "lasso" || value === "eraser" || value === "none";
+}
+
+/// I modi della gomma.
+export type EraseMode = "stroke" | "precise";
+
+/// Vero se `value` è un modo della gomma.
+export function isEraseMode(value: unknown): value is EraseMode {
+  return value === "stroke" || value === "precise";
 }
 
 /// Quanto si leviga il tratto mentre si disegna.

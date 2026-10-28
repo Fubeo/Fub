@@ -3,6 +3,7 @@ import { INTERACTIVE, SELECTABLE, type PartAnatomy } from "./types";
 
 export const DRAW_DIALOGS: PartAnatomy = {
   part: "draw-dialogs",
+  layer: "cornice",
   components: [
     {
       name: "draw-dialog-base",
@@ -16,8 +17,21 @@ export const DRAW_DIALOGS: PartAnatomy = {
       states: SELECTABLE,
       hooks: [
         "palette-color-row", "palette-color", "palette-thumb", "keys-list", "keys-table", "keys-more", "keys-note",
-        "keys-show-all",
+        "keys-show-all", "keys-search", "keys-empty", "keys-changed",
       ],
+    },
+    {
+      name: "draw-commands-dialog",
+      states: SELECTABLE,
+      hooks: [
+        "draw-commands-dialog", "draw-commands", "draw-commands-field", "draw-commands-list", "draw-commands-row",
+        "draw-commands-label", "draw-commands-path", "draw-commands-key", "draw-commands-why", "draw-commands-empty",
+      ],
+    },
+    {
+      name: "draw-toolbar-dialog",
+      states: SELECTABLE,
+      hooks: ["draw-toolbar-dialog", "draw-toolbar-custom", "draw-toolbar-list", "draw-toolbar-row", "draw-toolbar-move", "draw-toolbar-reset"],
     },
     {
       name: "draw-guides-dialog",
@@ -50,7 +64,7 @@ export const DRAW_DIALOGS: PartAnatomy = {
       hooks: [
         "draw-touch-group", "draw-touch-check", "draw-touch-hint", "draw-touch-pressure", "draw-touch-curve",
         "draw-touch-knobs", "draw-touch-knob", "draw-touch-diagonal", "draw-touch-line", "draw-touch-dot",
-        "draw-touch-pad", "draw-touch-sample", "draw-touch-strokes", "draw-touch-tools",
+        "draw-touch-pad", "draw-touch-sample", "draw-touch-strokes", "draw-touch-tools", "draw-hand-panel",
       ],
     },
     {

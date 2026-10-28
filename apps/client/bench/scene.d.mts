@@ -34,6 +34,9 @@ export interface Scene {
   /// Playwright, che da questo lato del confine non ha un tipo — i tipi di
   /// Playwright sono di Node, e Node qui non c'è.
   prepare: (page: unknown) => Promise<void>;
+  /// Dove si lascia il puntatore, quando la scena fotografa un hover: il
+  /// palco lo toglie da sopra l'ultimo controllo e poi chiama questo.
+  hover?: (page: unknown) => Promise<void>;
 }
 
 export declare const SCENE: readonly Scene[];

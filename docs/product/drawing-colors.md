@@ -6,7 +6,7 @@
 > «Colori del documento», che cosa dice il contrasto, quali colori sono
 > recenti e che cosa prende il contagocce.
 
-Dal livello Standard un disegno ha i suoi colori: i **campioni**, colori con
+Nello spazio Completo un disegno ha i suoi colori: i **campioni**, colori con
 un nome che gli oggetti usano per riferimento, così che cambiarne uno cambia
 tutti quelli che lo usano; i colori che il disegno usa, contati; e quelli
 scelti di recente. Stanno nella sezione «Colori del documento» del [pannello
@@ -77,10 +77,9 @@ Sotto, tre griglie:
 
 Ogni colore ha un nome che si sente e che il suggerimento scrive, con quanti
 oggetti lo mostrano: un campione il suo, «Blu mare, campione #0072b2, usato
-da 3 oggetti», un colore della tavolozza il suo, gli altri il codice. La
-forma è quella della tavolozza, o l'anello di un colore a piacere, così che
-nessun colore si riconosce soltanto dal colore; quello degli oggetti scelti è
-segnato.
+da 3 oggetti», un colore della tavolozza il suo, gli altri il codice. Tutti
+i colori sono tondi: nessuno si riconosce soltanto dal colore perché ognuno
+ha il nome, e quello degli oggetti scelti è segnato.
 
 - **Un clic, `Invio` o `Spazio`** danno il colore agli oggetti scelti, dove
   dice «Applica a», in un passo; con `Maiusc` all'altro. Senza selezione è il
@@ -110,8 +109,10 @@ che li mostrano, ma non cambiano.
 
 Nel pannello delle proprietà il campo di un colore legge anche il nome di un
 campione, con le maiuscole a parte, e lo mostra col suo nome; il nome di un
-campione vale prima di quello di un colore, perché è del disegno. Il menu
-accanto al campo offre nessuno, i campioni, la tavolozza e i recenti.
+campione vale prima di quello di un colore, perché è del disegno. Il
+pulsante accanto al campo apre il selettore dei colori, con «Nessuno», i
+consigliati della tavolozza, i colori del documento, i recenti e un colore
+qualunque.
 
 Sotto il Riempimento e il Contorno una riga dice il **contrasto con la
 carta**, con l'opacità degli oggetti se è una sola. Per il riempimento di un
@@ -128,8 +129,8 @@ Un campione scelto senza selezione, dalla sezione o col contagocce, è il
 colore con cui si disegna: gli oggetti nuovi lo usano, e lo strumento lo
 ricorda. Se il campione cambia colore, anche per un annulla, lo strumento lo
 segue. Lo lascia, e tiene il colore scritto, quando si sceglie un altro
-colore, il campione se ne va, si passa a un altro disegno o, nel
-Personalizzato, se ne va la parte «Colori del documento».
+colore, il campione se ne va, si passa a un altro disegno o, per chi monta l'editor con le sue
+parti, se ne va la parte «Colori del documento».
 
 ## I colori recenti
 
@@ -193,12 +194,12 @@ chi lo usa ne prende il colore come ripiego; altrimenti arriva, e con un nome
 già preso, o che si legge come un colore, prende il primo libero, «Vermiglio
 2» ([Disegni, risorse](drawing-resources.md#copiare-e-incollare)).
 
-## Livelli e parti
+## Spazi e parti
 
-All'Essenziale i campioni restano nel disegno, e gli oggetti che li usano si
+Nel Semplice i campioni restano nel disegno, e gli oggetti che li usano si
 vedono col loro colore. I colori del documento e il contagocce sono le parti
-«Colori del documento» e «Contagocce» del
-[Personalizzato](drawing-custom.md); i colori del documento stanno nel
+«Colori del documento» e «Contagocce» delle
+[parti dell'editor](drawing-custom.md#che-cosa-porta-una-parte); i colori del documento stanno nel
 pannello delle proprietà, e si vedono con lui. Senza il Contagocce chi lo
 aveva in mano riprende la Selezione; senza i colori del documento lo
 strumento lascia il campione e tiene il suo colore. `?` elenca i tasti del

@@ -19,6 +19,7 @@ import { focusEditor } from "../../../state/document-controller";
 import { identifier, trapFocus } from "../../../ui/a11y";
 import { ariaBinding, displayBinding, matchesBinding } from "../../../ui/commands";
 import { highlighted, markedTerms } from "../../../ui/highlight";
+import { FORMAT_ICON, formatKindOf } from "../../../ui/format-kind";
 import { iconEl } from "../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { notify } from "../../../ui/notify";
@@ -263,6 +264,13 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
       switch (row.kind) {
         case "note": {
           const asked = mode === "files" ? input.value : "";
+          // Un documento che non è una nota porta l'icona del suo formato.
+          const kind = formatKindOf(row.doc);
+          const format = kind && kind !== "note" ? iconEl(FORMAT_ICON[kind]) : null;
+          if (format) {
+            format.classList.add("launcher-row-format");
+            title.append(format);
+          }
           title.append(markedTerms(pageName(row.doc), asked));
           if (row.snippet) {
             const snippet = row.snippet;

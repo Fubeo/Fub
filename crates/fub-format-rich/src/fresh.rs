@@ -67,6 +67,31 @@ pub(crate) fn image(data: &str, w: Option<f32>, h: Option<f32>) -> Result<Image,
     })
 }
 
+/// Il PNG di ripiego di un inchiostro o di un disegno nuovo.
+pub(crate) fn png(data: &str) -> Result<Vec<u8>, RichError> {
+    if data.len() > MAX_IMAGE_BYTES / 3 * 4 + 4 {
+        return Err(RichError::Malformed("a new picture too large".into()));
+    }
+    let bytes = STANDARD
+        .decode(data)
+        .map_err(|error| RichError::Malformed(format!("a new picture: {error}")))?;
+    match sniff(&bytes) {
+        Some(("png", _)) => Ok(bytes),
+        _ => Err(RichError::Malformed(
+            "a fallback picture that is not PNG".into(),
+        )),
+    }
+}
+
+/// La misura in punti di un oggetto nuovo.
+pub(crate) fn size(w: Option<f32>, h: Option<f32>) -> Result<(f32, f32), RichError> {
+    let size = |v: Option<f32>| v.filter(|v| v.is_finite() && *v > 0.0 && *v <= MAX_IMAGE_PT);
+    match (size(w), size(h)) {
+        (Some(w), Some(h)) => Ok((w, h)),
+        _ => Err(RichError::Malformed("a new object without a size".into())),
+    }
+}
+
 /// Il testo di una nota nuova: una riga di testo, senza caratteri di
 /// controllo che il paragrafo leggerebbe come salti o oggetti.
 pub(crate) fn note(text: &str) -> Result<&str, RichError> {
@@ -101,7 +126,8 @@ pub(crate) fn comment(text: &str) -> Result<impl Iterator<Item = &str>, RichErro
     Ok(text.split('\n'))
 }
 
-fn sniff(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
+/// Il tipo di un'immagine dai suoi primi byte: PNG, JPEG o GIF.
+pub(crate) fn sniff(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         Some(("png", "image/png"))
     } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {

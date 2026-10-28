@@ -494,7 +494,7 @@ export function installMarks(ctx: EditorContext): void {
   ctx.degreesText = degreesText;
 
   /// La cornice fra le maniglie: il riquadro comune di più oggetti, le
-  /// maniglie, e mentre la si tira le misure o l'angolo, sotto di lei.
+  /// maniglie, e sotto di lei le misure, o l'angolo mentre la si gira.
   const frameHandles = (): OverlayHandle[] => {
     const view = frameNow();
     if (view === null) return [];
@@ -514,11 +514,11 @@ export function installMarks(ctx: EditorContext): void {
       if (drag !== null) out.push({ kind: "label", x: corner.spot[0], y: corner.spot[1], text: lengthText(drag.radius * scaleOf(drag.unit.matrix)) });
     }
     const g = ctx.current?.kind === "select" && (ctx.current.mode === "resize" || ctx.current.mode === "rotate") ? ctx.current : null;
-    if (g !== null) {
+    if (g !== null || ctx.current === null) {
       const corners = [min, [max[0], min[1]], max, [min[0], max[1]]].map((corner) => apply(view.frame.matrix, corner as Point));
       const x = corners.reduce((sum, corner) => sum + corner[0], 0) / 4;
       const y = Math.max(...corners.map((corner) => corner[1]));
-      const text = g.mode === "rotate" ? degreesText(normalized(angleOf(g.grip!.frame.matrix) + g.angle)) : measuresText(frameSize(view.frame));
+      const text = g?.mode === "rotate" ? degreesText(normalized(angleOf(g.grip!.frame.matrix) + g.angle)) : measuresText(frameSize(view.frame));
       out.push({ kind: "label", x, y, text });
     }
     return out;
@@ -568,8 +568,12 @@ export function installMarks(ctx: EditorContext): void {
   ctx.showGrip = showGrip;
 
   /// Le cornici della selezione, i nodi del tracciato che si modifica, e il
-  /// riquadro di un trascinamento sul vuoto.
-  const showHandles = (): void => readFirst(placeHandles);
+  /// riquadro di un trascinamento sul vuoto. Le misure della banda di stato
+  /// seguono.
+  const showHandles = (): void => {
+    readFirst(placeHandles);
+    ctx.statusChanged();
+  };
   ctx.showHandles = showHandles;
 
   const placeHandles = (): void => {
@@ -627,11 +631,13 @@ export function installMarks(ctx: EditorContext): void {
     handles.push(...ctx.cutHandles());
     handles.push(...ctx.widthHandles());
     handles.push(...ctx.dropperHandles());
+    handles.push(...ctx.nibHandles());
     handles.push(...ctx.gradientOverlay());
     handles.push(...ctx.pathsHandles());
     handles.push(...ctx.cropHandles());
     handles.push(...ctx.connectorHandles());
     handles.push(...ctx.symmetryHandles());
+    handles.push(...ctx.rulerHandles());
     for (const edit of ctx.edits) handles.push(...nodeHandles(edit));
     if (ctx.drafting !== null || ctx.current?.kind === "bezier") handles.push(...ctx.bezierHandles());
     const lasso = ctx.current?.kind === "select" && ctx.current.mode === "marquee"

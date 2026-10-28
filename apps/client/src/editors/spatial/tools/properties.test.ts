@@ -260,6 +260,7 @@ function mount(): Properties {
       return refusal;
     },
     onSection: (id, open) => calls.push(`section ${id} ${open ? "open" : "closed"}`),
+    onExportSelection: () => calls.push("export selection"),
     colors: {
       onApply: (choice, target) => (calls.push(`apply ${choice.value} ${target ?? "drawing"}`), null),
       onCreate: (name, color, link) => (calls.push(`create ${name} ${color} ${link}`), null),
@@ -370,7 +371,7 @@ describe("il pannello", () => {
     expect(host.querySelector(".draw-properties-title")!.textContent).toBe("Proprietà");
     expect(host.querySelector(".draw-properties-subject")!.textContent).toBe("Rettangolo");
     const visible = [...host.querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
-    expect(visible).toEqual(["place", "look", "text", "document", "view"]);
+    expect(visible).toEqual(["place", "look", "fill", "stroke", "text", "document", "view"]);
     expect(toggle("place").textContent).toBe("Posizione e misure");
     expect(toggle("place").getAttribute("aria-expanded")).toBe("true");
     expect(formatIssues(checkAccessibility(host))).toBe("");
@@ -538,10 +539,11 @@ describe("i colori", () => {
     const fill = input("fill");
     expect(fill.value).toBe("#0072b2");
     const frame = field("fill").querySelector<HTMLElement>(".draw-swatch-frame")!;
-    expect(frame.dataset.shape).toBe("square");
+    expect(frame.dataset.shape).toBe("circle");
     write(fill, "red");
-    // Il campione segue ciò che si scrive.
-    expect(frame.dataset.shape).toBe("ring");
+    // Il campione segue ciò che si scrive, tondo per ogni colore.
+    expect(frame.dataset.shape).toBe("circle");
+    expect(field("fill").querySelector<HTMLElement>(".draw-swatch")!.style.getPropertyValue("--swatch")).toBe("#ff0000");
     press(fill, "Enter");
     expect(calls).toEqual(["fill=#ff0000"]);
     expect(fill.value).toBe("#ff0000");
@@ -568,7 +570,7 @@ describe("i colori", () => {
     expect(calls).toEqual([]);
     // Un colore scritto prende il posto del campione.
     write(fill, "#ff0000");
-    expect(frame.dataset.shape).toBe("ring");
+    expect(frame.dataset.shape).toBe("circle");
     expect(swatch.style.getPropertyValue("--swatch-image")).toBe("");
     press(fill, "Escape");
     expect(frame.dataset.shape).toBe("gradient");
@@ -588,33 +590,50 @@ describe("i colori", () => {
     expect(error("fill").textContent).toBe("Scrivi un colore: un codice come #0072b2, un nome come red, o «nessuno».");
   });
 
-  it("si scelgono anche col selettore del sistema, in un passo alla fine", () => {
+  it("si scelgono col selettore del kit, in un passo alla fine", () => {
     mount();
-    const picker = field("fill").querySelector<HTMLInputElement>(".draw-properties-picker")!;
-    expect(picker.value).toBe("#0072b2");
-    expect(picker.getAttribute("aria-label")).toBe("Riempimento: selettore del sistema");
-    picker.value = "#009e73";
-    picker.dispatchEvent(new Event("input", { bubbles: true }));
-    expect(input("fill").value).toBe("#009e73");
-    expect(calls).toEqual([]);
-    picker.dispatchEvent(new Event("change", { bubbles: true }));
+    const chip = field("fill").querySelector<HTMLButtonElement>(".draw-properties-chip")!;
+    expect(field("fill").querySelector(".draw-properties-picker")).toBeNull();
+    chip.click();
+    const code = picker().querySelector<HTMLInputElement>(".kit-color-input")!;
+    code.value = "#009e73";
+    code.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
     expect(calls).toEqual(["fill=#009e73"]);
+    // Un secondo clic sul campione lo chiude.
+    chip.click();
+    expect(document.querySelector(".kit-color-popover")).toBeNull();
+    expect(chip.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("hanno i campioni della tavolozza in un menu", () => {
+  it("il campione apre il selettore, con nessuno e i consigliati col loro nome, e niente formine", () => {
     mount();
     const chip = field("fill").querySelector<HTMLButtonElement>(".draw-properties-chip")!;
     expect(chip.getAttribute("aria-label")).toBe("Riempimento: campioni");
-    expect(chip.getAttribute("aria-haspopup")).toBe("menu");
+    expect(chip.getAttribute("aria-haspopup")).toBe("dialog");
     chip.click();
     expect(chip.getAttribute("aria-expanded")).toBe("true");
-    const items = [...document.querySelectorAll<HTMLElement>("#context-menu [role^='menuitem']")];
-    expect(items.map((item) => item.querySelector(".menu-label")!.textContent)).toEqual(["Nessuno", "Nero", "Blu", "Vermiglio", "Verde", "Porpora", "Arancione", "Azzurro", "Giallo"]);
-    expect(items[2]!.getAttribute("aria-checked")).toBe("true");
-    items[4]!.click();
+    expect(pickerGroups()).toEqual([["Consigliati", "Nessuno", "Nero", "Blu", "Vermiglio", "Verde", "Porpora", "Arancione", "Azzurro", "Giallo"]]);
+    expect(swatch("Blu").getAttribute("aria-pressed")).toBe("true");
+    expect(document.querySelector("[data-shape='square'], [data-shape='triangle']")).toBeNull();
+    swatch("Verde").click();
     expect(calls).toEqual(["fill=#009e73"]);
+    swatch("Nessuno").click();
+    expect(calls).toEqual(["fill=#009e73", "fill=none"]);
   });
 });
+
+/// Il selettore del colore aperto.
+const picker = (): HTMLElement => document.querySelector<HTMLElement>(".kit-color-popover .kit-color")!;
+
+/// I nomi dei campioni del selettore, gruppo per gruppo.
+const pickerGroups = (): string[][] =>
+  [...picker().querySelectorAll<HTMLElement>(".kit-color-group")].map((group) => [
+    group.querySelector(".kit-color-group-title")!.textContent!,
+    ...[...group.querySelectorAll<HTMLElement>(".kit-color-swatch")].map((each) => each.getAttribute("aria-label")!),
+  ]);
+
+/// Il campione del selettore che si chiama `name`.
+const swatch = (name: string): HTMLButtonElement => picker().querySelector<HTMLButtonElement>(`.kit-color-swatch[aria-label="${name}"]`)!;
 
 describe("i campioni del documento nei colori", () => {
   const BRAND: FieldSwatch = { id: "ra", name: "Blu marca", color: "#0072b2" };
@@ -629,11 +648,10 @@ describe("i campioni del documento nei colori", () => {
   const chipOf = (): HTMLElement => field("fill").querySelector<HTMLElement>(".draw-swatch-frame")!;
   const colorOf = (): string => field("fill").querySelector<HTMLElement>(".draw-swatch")!.style.getPropertyValue("--swatch");
 
-  it("un campione si vede col suo nome, la forma e il colore del suo colore", () => {
+  it("un campione si vede col suo nome e col suo colore", () => {
     mount();
     expect(input("fill").value).toBe("Blu marca");
-    expect([chipOf().dataset.shape, colorOf()]).toEqual(["square", "#0072b2"]);
-    expect(field("fill").querySelector<HTMLInputElement>(".draw-properties-picker")!.value).toBe("#0072b2");
+    expect([chipOf().dataset.shape, colorOf()]).toEqual(["circle", "#0072b2"]);
   });
 
   it("si scrive col suo nome, senza badare alle maiuscole; il codice scrive il colore, staccato dal campione", () => {
@@ -646,7 +664,7 @@ describe("i campioni del documento nei colori", () => {
     expect(fill.value).toBe("Blu marca");
     // Mentre si scrive, il campione segue.
     write(fill, "fondo");
-    expect([chipOf().dataset.shape, colorOf()]).toEqual(["ring", "#f5f5dc"]);
+    expect([chipOf().dataset.shape, colorOf()]).toEqual(["circle", "#f5f5dc"]);
     press(fill, "Enter");
     expect(calls).toEqual(["fill=url(#rb) #f5f5dc"]);
     expect(fill.value).toBe("Fondo");
@@ -673,32 +691,19 @@ describe("i campioni del documento nei colori", () => {
     // Esc torna al campione, col suo colore.
     press(input("fill"), "Escape");
     expect(input("fill").value).toBe("Blu marca");
-    expect([chipOf().dataset.shape, colorOf()]).toEqual(["square", "#0072b2"]);
+    expect([chipOf().dataset.shape, colorOf()]).toEqual(["circle", "#0072b2"]);
   });
 
-  it("il menu ha nessuno, i campioni col loro codice, la tavolozza e i recenti che non ne sono", () => {
+  it("il selettore ha nessuno, i consigliati, i campioni e i recenti che non ne sono; un colore di un campione lo lega", () => {
     state.recent = ["#3a7bd5", "#0072b2"];
     mount();
     field("fill").querySelector<HTMLButtonElement>(".draw-properties-chip")!.click();
-    const items = [...document.querySelectorAll<HTMLElement>("#context-menu [role^='menuitem']")];
-    expect(items.map((item) => item.querySelector(".menu-label")!.textContent)).toEqual([
-      "Nessuno",
-      "Blu marca",
-      "Fondo",
-      "Nero",
-      "Blu",
-      "Vermiglio",
-      "Verde",
-      "Porpora",
-      "Arancione",
-      "Azzurro",
-      "Giallo",
-      "#3a7bd5",
+    expect(pickerGroups()).toEqual([
+      ["Consigliati", "Nessuno", "Nero", "Blu", "Vermiglio", "Verde", "Porpora", "Arancione", "Azzurro", "Giallo"],
+      ["Colori del documento", "Blu marca", "Fondo"],
+      ["Recenti", "#3a7bd5"],
     ]);
-    expect(items[1]!.querySelector(".menu-description")!.textContent).toBe("Campione #0072b2");
-    // Il campione di adesso, non il blu scritto, che ha lo stesso colore.
-    expect(items.filter((item) => item.getAttribute("aria-checked") === "true")).toEqual([items[1]]);
-    items[2]!.click();
+    swatch("Fondo").click();
     expect(calls).toEqual(["fill=url(#rb) #f5f5dc"]);
   });
 });
@@ -771,13 +776,13 @@ describe("la sezione «Colori del documento»", () => {
     drawingSwatch: null,
   };
 
-  it("c'è quando il livello la offre, dopo l'aspetto, e i suoi gesti vanno all'editor", () => {
+  it("c'è quando il livello la offre, in fondo, e i suoi gesti vanno all'editor", () => {
     mount();
     expect(section("colors").hidden).toBe(true);
     state.colors = COLORS;
     panel.update(view());
     const visible = [...host.querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
-    expect(visible).toEqual(["place", "look", "colors", "text", "document", "view"]);
+    expect(visible).toEqual(["place", "look", "fill", "stroke", "text", "document", "view", "colors"]);
     expect(toggle("colors").textContent).toBe("Colori del documento");
     expect(section("colors").querySelector(".draw-swatches")).not.toBeNull();
     section("colors").querySelector<HTMLButtonElement>('.draw-swatches-chip[data-key="ra"]')!.click();
@@ -822,13 +827,13 @@ describe("la sezione «Sfumatura»", () => {
   const pressedTarget = (id: SectionId): string | undefined =>
     section(id).querySelector<HTMLButtonElement>('[data-target][aria-pressed="true"]')?.dataset.target;
 
-  it("c'è quando l'editor la dà, dopo l'aspetto, e i suoi gesti vanno all'editor", () => {
+  it("c'è quando l'editor la dà, dopo il riempimento, e i suoi gesti vanno all'editor", () => {
     mount();
     expect(section("gradient").hidden).toBe(true);
     state.gradient = GRADIENT;
     panel.update(view());
     const visible = [...host.querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
-    expect(visible).toEqual(["place", "look", "gradient", "text", "document", "view"]);
+    expect(visible).toEqual(["place", "look", "fill", "gradient", "stroke", "text", "document", "view"]);
     expect(toggle("gradient").textContent).toBe("Sfumatura");
     section("gradient").querySelector<HTMLButtonElement>('[data-kind="radial"]')!.click();
     expect(calls).toEqual(['gradient fill {"kind":"radial"} draw.action.gradient_kind', "stop 0"]);
@@ -916,10 +921,10 @@ describe("la sezione «Campitura»", () => {
     state.colors = COLORS;
     mount();
     expect(section("hatch").hidden).toBe(true);
-    expect(visibleSections()).toEqual(["place", "look", "gradient", "effects", "colors", "text", "document", "view"]);
+    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "stroke", "effects", "text", "document", "view", "colors"]);
     state.hatch = HATCH;
     panel.update(view());
-    expect(visibleSections()).toEqual(["place", "look", "gradient", "hatch", "effects", "colors", "text", "document", "view"]);
+    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "hatch", "stroke", "effects", "text", "document", "view", "colors"]);
     expect(toggle("hatch").textContent).toBe("Campitura");
     state.hatch = null;
     panel.update(view());
@@ -930,7 +935,7 @@ describe("la sezione «Campitura»", () => {
   it("c'è anche senza la sfumatura, perché ha la sua parte del livello", () => {
     state.hatch = HATCH;
     mount();
-    expect(visibleSections()).toEqual(["place", "look", "hatch", "text", "document", "view"]);
+    expect(visibleSections()).toEqual(["place", "look", "fill", "hatch", "stroke", "text", "document", "view"]);
   });
 
   it("mostra il menu del tipo e i campi, e un gesto va all'editor col nome del suo passo", () => {
@@ -996,14 +1001,14 @@ describe("la sezione «Connettore»", () => {
   const invert = (): HTMLButtonElement => section("connector").querySelector<HTMLButtonElement>('[data-field="connector-invert"]')!;
   const optionTexts = (select: HTMLSelectElement): string[] => [...select.options].map((each) => each.textContent!);
 
-  it("non c'è senza il connettore nella vista, e sta dopo l'aspetto e prima della sfumatura", () => {
+  it("non c'è senza il connettore nella vista, e sta dopo il testo", () => {
     state.gradient = GRADIENT;
     mount();
     expect(section("connector").hidden).toBe(true);
-    expect(visibleSections()).toEqual(["place", "look", "gradient", "text", "document", "view"]);
+    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "stroke", "text", "document", "view"]);
     state.connector = CONNECTOR;
     panel.update(view());
-    expect(visibleSections()).toEqual(["place", "look", "connector", "gradient", "text", "document", "view"]);
+    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "stroke", "text", "connector", "document", "view"]);
     expect(toggle("connector").textContent).toBe("Connettore");
     expect(formatIssues(checkAccessibility(host))).toBe("");
     state.connector = null;
@@ -1280,15 +1285,15 @@ describe("la sezione «Effetti»", () => {
 
   afterEach(() => closeContextMenu());
 
-  it("non c'è senza gli effetti nella vista, e c'è dopo la sfumatura e prima dei colori", () => {
+  it("non c'è senza gli effetti nella vista, e c'è dopo il contorno e prima del testo", () => {
     state.gradient = GRADIENT;
     state.colors = COLORS;
     mount();
     expect(section("effects").hidden).toBe(true);
-    expect(visibleSections()).toEqual(["place", "look", "gradient", "colors", "text", "document", "view"]);
+    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "stroke", "text", "document", "view", "colors"]);
     state.effects = EFFECTS;
     panel.update(view());
-    expect(visibleSections()).toEqual(["place", "look", "gradient", "effects", "colors", "text", "document", "view"]);
+    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "stroke", "effects", "text", "document", "view", "colors"]);
     expect(toggle("effects").textContent).toBe("Effetti");
     state.effects = null;
     panel.update(view());
@@ -1458,11 +1463,11 @@ describe("un campo a menu", () => {
 
   afterEach(() => closeContextMenu());
 
-  it("sta nell'aspetto, un pulsante per capo, dopo il tratteggio", () => {
+  it("sta nel contorno, un pulsante per capo, dopo il tratteggio", () => {
     mount();
-    expect(field("tipStart").closest<HTMLElement>(".draw-properties-section")!.dataset.section).toBe("look");
-    expect(field("tipEnd").closest<HTMLElement>(".draw-properties-section")!.dataset.section).toBe("look");
-    const order = [...section("look").querySelectorAll<HTMLElement>(".draw-properties-field")].map((each) => each.dataset.field);
+    expect(field("tipStart").closest<HTMLElement>(".draw-properties-section")!.dataset.section).toBe("stroke");
+    expect(field("tipEnd").closest<HTMLElement>(".draw-properties-section")!.dataset.section).toBe("stroke");
+    const order = [...section("stroke").querySelectorAll<HTMLElement>(".draw-properties-field")].map((each) => each.dataset.field);
     expect(order.slice(order.indexOf("dash"))).toEqual(["dash", "tipStart", "tipEnd"]);
     expect(field("tipStart").dataset.column).toBe("all");
   });
@@ -1849,6 +1854,22 @@ describe("«Trasforma»", () => {
   });
 });
 
+describe("«Esporta la selezione»", () => {
+  it("c'è se la vista lo dice, dopo le sezioni dell'oggetto, e apre la finestra sulla selezione", () => {
+    mount();
+    expect(section("exportSelection").hidden).toBe(true);
+    panel.update({ ...view(), exportSelection: true });
+    expect(section("exportSelection").hidden).toBe(false);
+    expect(toggle("exportSelection").textContent).toBe("Esporta la selezione");
+    const visible = [...host.querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
+    expect(visible.indexOf("exportSelection")).toBe(visible.indexOf("text") + 1);
+    const button = section("exportSelection").querySelector<HTMLButtonElement>(".draw-properties-export")!;
+    expect(button.textContent).toBe("Esporta…");
+    button.click();
+    expect(calls).toEqual(["export selection"]);
+  });
+});
+
 describe("le sezioni", () => {
   it("si chiudono e si aprono dall'intestazione, e l'editor lo sa", () => {
     mount();
@@ -1859,13 +1880,13 @@ describe("le sezioni", () => {
   });
 
   it("chiuse restano chiuse, e una si apre per prendere il fuoco", () => {
-    closed = ["look"];
+    closed = ["fill"];
     mount();
-    expect(toggle("look").getAttribute("aria-expanded")).toBe("false");
-    expect(panel.focusSection("look")).toBe(true);
-    expect(toggle("look").getAttribute("aria-expanded")).toBe("true");
+    expect(toggle("fill").getAttribute("aria-expanded")).toBe("false");
+    expect(panel.focusSection("fill")).toBe(true);
+    expect(toggle("fill").getAttribute("aria-expanded")).toBe("true");
     expect(document.activeElement).toBe(field("fill").querySelector(".draw-properties-chip"));
-    expect(calls).toEqual(["section look open"]);
+    expect(calls).toEqual(["section fill open"]);
     expect(panel.focusSection("transform")).toBe(false);
   });
 

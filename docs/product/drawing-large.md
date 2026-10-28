@@ -81,7 +81,7 @@ npm run bench:large -- --cpu 4          # la pagina quattro volte più lenta
 ```
 
 Il banco ([`large.mjs`](../../apps/client/bench/large.mjs)) apre il disegno
-nell'app vera, al livello Standard, e fa otto corse: lo zoom coi tasti, la
+nell'app vera, nello spazio Completo, e fa otto corse: lo zoom coi tasti, la
 rotella che porta un rettangolo al centro della vista, Ctrl+rotella su di
 lui, la rotella e Ctrl+rotella col disegno sei volte più grande della
 vista, un clic che sceglie il rettangolo, i tasti di due strumenti, un
@@ -112,5 +112,5 @@ La soglia delle 5 000 forme è `LARGE_SCENE_SHAPES`, in
 `apps/client/src/editors/spatial/painter/svg-dom.ts`, con la vista portata
 dalla radice del painter. La lavagna del banco sta in
 `apps/client/bench/large-fixture.ts`: lo stesso numero di elementi dà sempre
-lo stesso disegno. Non c'è niente da montare: le scene grandi valgono a
-ogni livello.
+lo stesso disegno. Non c'è niente da montare: le scene grandi valgono in
+tutti e due gli spazi.

@@ -9,6 +9,7 @@ description = "Documenti di videoscrittura (.docx, .odt, .rtf, .doc) con il mode
 [dependencies]
 fub-abi = { workspace = true }
 fub-format-markdown = { workspace = true }
+fub-ink = { workspace = true }
 wordcraft-doc = { workspace = true }
 wordcraft-docx = { workspace = true }
 wordcraft-formats = { workspace = true }
@@ -24,5 +25,9 @@ zip = { workspace = true }
 
 [dev-dependencies]
 cfb = { workspace = true }
+# `tests/opaque_schema.rs` legge la superficie serde dei tipi dei dati opachi
+# dai sorgenti, invece di vederla soltanto nei documenti del corpus.
+quote = { workspace = true }
+syn = { workspace = true, features = ["full", "parsing", "printing", "clone-impls"] }
 fub-sdk = { workspace = true }
 wordcraft-geom = { workspace = true }

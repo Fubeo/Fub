@@ -37,6 +37,7 @@
 // della macchina. La stessa regola di tab, split e focus vale per entrambi.
 import { MAIN_PANE } from "../host/contract";
 import type { SurfaceOverride } from "../editors/core/registry";
+import { isLook, type Look } from "../theme/content-look";
 import { emit, readState, writeState } from "./store";
 
 /// Cosa tiene una linguetta.
@@ -86,6 +87,11 @@ export interface PaneState {
   /// modalità predefinita della superficie. Non è il `PaneMode` dell'ABI: la
   /// proiezione sul contesto è della superficie attiva.
   modes: Record<string, string>;
+  /// L'aspetto del contenuto scelto in questo riquadro, per famiglia di
+  /// superfici, come la modalità. Assente = nessuna scelta: decide
+  /// l'impostazione `appearance.content-look`, e la modalità se non offre ciò
+  /// che chiede.
+  looks?: Record<string, Look>;
   /// Cronologia avanti/indietro di questo riquadro (P06/F21): le tab visitate.
   /// Assente = nessuna navigazione (primo avvio, riquadro nuovo, layout migrato).
   /// Sono identità di tab, non testi: il buffer resta unico nella sessione.
@@ -288,7 +294,7 @@ export function split(id: string, dir: "row" | "col", l: Layout = layout): strin
   }));
   if (!inserted) return null;
   l.tree = flatten(inserted);
-  l.panes[newItem] = { tabs: [], active: -1, modes: { ...l.panes[id].modes } };
+  l.panes[newItem] = { tabs: [], active: -1, modes: { ...l.panes[id].modes }, ...copyLooks(l.panes[id]) };
   l.focus = newItem;
   changed();
   return newItem;
@@ -528,7 +534,7 @@ export function splitWithTab(
   if (!inserted) return null;
   removeTab(from, index, l);
   l.tree = flatten(inserted);
-  l.panes[newItem] = { tabs: [tab], active: 0, modes: { ...l.panes[target]!.modes } };
+  l.panes[newItem] = { tabs: [tab], active: 0, modes: { ...l.panes[target]!.modes }, ...copyLooks(l.panes[target]!) };
   l.focus = newItem;
   changed();
   return newItem;
@@ -840,6 +846,20 @@ export function setMode(id: string, family: string, mode: string, l: Layout = la
   changed();
 }
 
+/// Sceglie l'aspetto del contenuto di un riquadro per una famiglia di
+/// superfici.
+export function setLook(id: string, family: string, look: Look, l: Layout = layout): void {
+  const p = l.panes[id];
+  if (!p || p.looks?.[family] === look) return;
+  p.looks = { ...p.looks, [family]: look };
+  changed();
+}
+
+/// Le scelte d'aspetto di un riquadro, copiate per quello che nasce accanto.
+function copyLooks(p: PaneState): { looks?: Record<string, Look> } {
+  return p.looks ? { looks: { ...p.looks } } : {};
+}
+
 // --- l'albero, in privato ---------------------------------------------------
 
 /// Sostituisce la foglia di `pane` con ciò che `f` ne fa. Torna `null` se quella
@@ -1063,6 +1083,7 @@ function parsePane(v: unknown): PaneState | null {
     // il riquadro c'è, le tab ci sono, non si sa quale era davanti.
     active: Number.isInteger(active) && active >= 0 && active < tabs.length ? active : tabs.length > 0 ? 0 : -1,
     modes: parseModes(o.modes, o.mode),
+    ...parseLooks(o.looks),
     ...(history ? { history } : {}),
     ...(typeof link === "string" ? { link } : {}),
   };
@@ -1085,6 +1106,17 @@ function parseModes(v: unknown, legacy: unknown): Record<string, string> {
   const inherited = validMode(legacy);
   if (inherited) modes[TEXT_FAMILY] = inherited;
   return modes;
+}
+
+/// Gli aspetti per famiglia, clementi come le modalità: una voce che non è
+/// un aspetto vale come assente.
+function parseLooks(v: unknown): { looks?: Record<string, Look> } {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+  const looks: Record<string, Look> = {};
+  for (const [family, look] of Object.entries(v as Record<string, unknown>)) {
+    if (family.trim() !== "" && isLook(look)) looks[family] = look;
+  }
+  return Object.keys(looks).length > 0 ? { looks } : {};
 }
 
 /// Da JSON a cronologia di riquadro: due elenchi di tab, o niente. Severa

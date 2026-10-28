@@ -33,6 +33,8 @@ const LEVEL_ORDER: readonly Preset[] = ["essential", "standard", "expert"];
 
 export type ToolId =
   | "select"
+  | "hand"
+  | "zoom"
   | "lasso"
   | "nodes"
   | "builder"
@@ -72,8 +74,13 @@ export interface ToolSpec {
   readonly icon: string;
   readonly label: DrawKey;
   readonly description: DrawKey;
-  /// Il tasto, minuscolo, come lo dà `KeyboardEvent.key`.
+  /// Il tasto, come le scorciatoie della shell: la lettera minuscola, con
+  /// `Shift-` davanti se va tenuto Maiuscolo (`Shift-p`).
   readonly shortcut: string;
+  /// Altri tasti che lo scelgono, come N per i Nodi accanto ad A.
+  readonly aliases?: readonly string[];
+  /// Nello spazio «Semplice».
+  readonly simple?: true;
 }
 
 const BOTH = { vector: "essential", pdf: "essential" } as const;
@@ -82,10 +89,13 @@ const SHAPE = { vector: "essential", pdf: "standard" } as const;
 /// Nell'ordine della barra.
 export const TOOLS: readonly ToolSpec[] = [
   { id: "select", levels: BOTH, group: "pick", icon: "draw-select", label: "draw.tool.select", description: "draw.tool.select.hint", shortcut: "v" },
+  // La mano e la lente muovono la vista, non il disegno: ci sono sempre.
+  { id: "hand", levels: BOTH, group: "pick", icon: "draw-hand", label: "draw.tool.hand", description: "draw.tool.hand.hint", shortcut: "h" },
+  { id: "zoom", levels: BOTH, group: "pick", icon: "draw-zoom", label: "draw.tool.zoom", description: "draw.tool.zoom.hint", shortcut: "z" },
   // Lo stesso tasto di Illustrator.
   { id: "lasso", levels: { vector: "standard" }, group: "pick", icon: "draw-lasso", label: "draw.tool.lasso", description: "draw.tool.lasso.hint", shortcut: "q" },
   // Lo stesso tasto di Inkscape.
-  { id: "nodes", levels: { vector: "expert" }, group: "pick", icon: "draw-nodes", label: "draw.tool.nodes", description: "draw.tool.nodes.hint", shortcut: "n" },
+  { id: "nodes", levels: { vector: "expert" }, group: "pick", icon: "draw-nodes", label: "draw.tool.nodes", description: "draw.tool.nodes.hint", shortcut: "a", aliases: ["n"] },
   // La lettera di Illustrator, che la vuole con Maiusc: qui, come per gli
   // altri strumenti, da sola.
   { id: "builder", levels: { vector: "expert" }, group: "pick", icon: "draw-builder", label: "draw.tool.builder", description: "draw.tool.builder.hint", shortcut: "m" },
@@ -103,15 +113,15 @@ export const TOOLS: readonly ToolSpec[] = [
   // «Sfumatura» del pannello delle proprietà: nel Personalizzato si
   // scelgono insieme.
   { id: "gradient", levels: { vector: "standard" }, group: "pick", icon: "draw-gradient", label: "draw.tool.gradient", description: "draw.tool.gradient.hint", shortcut: "g" },
-  { id: "pen", levels: BOTH, group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p" },
-  { id: "highlighter", levels: { vector: "standard", pdf: "essential" }, group: "ink", icon: "draw-highlighter", label: "draw.tool.highlighter", description: "draw.tool.highlighter.hint", shortcut: "h" },
-  { id: "eraser", levels: BOTH, group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e" },
+  { id: "pen", levels: BOTH, group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p", simple: true },
+  { id: "highlighter", levels: { vector: "standard", pdf: "essential" }, group: "ink", icon: "draw-highlighter", label: "draw.tool.highlighter", description: "draw.tool.highlighter.hint", shortcut: "Shift-p", simple: true },
+  { id: "eraser", levels: BOTH, group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e", simple: true },
   // Le note sono del PDF: nel disegno la «N» è dei Nodi.
   { id: "note", levels: { pdf: "standard" }, group: "ink", icon: "draw-note", label: "draw.tool.note", description: "draw.tool.note.hint", shortcut: "n" },
-  { id: "rect", levels: SHAPE, group: "shape", icon: "draw-rect", label: "draw.tool.rect", description: "draw.tool.rect.hint", shortcut: "r" },
-  { id: "ellipse", levels: SHAPE, group: "shape", icon: "draw-ellipse", label: "draw.tool.ellipse", description: "draw.tool.ellipse.hint", shortcut: "o" },
-  { id: "line", levels: SHAPE, group: "shape", icon: "draw-line", label: "draw.tool.line", description: "draw.tool.line.hint", shortcut: "l" },
-  { id: "arrow", levels: SHAPE, group: "shape", icon: "draw-arrow", label: "draw.tool.arrow", description: "draw.tool.arrow.hint", shortcut: "a" },
+  { id: "rect", levels: SHAPE, group: "shape", icon: "draw-rect", label: "draw.tool.rect", description: "draw.tool.rect.hint", shortcut: "r", simple: true },
+  { id: "ellipse", levels: SHAPE, group: "shape", icon: "draw-ellipse", label: "draw.tool.ellipse", description: "draw.tool.ellipse.hint", shortcut: "o", simple: true },
+  { id: "line", levels: SHAPE, group: "shape", icon: "draw-line", label: "draw.tool.line", description: "draw.tool.line.hint", shortcut: "l", simple: true },
+  { id: "arrow", levels: SHAPE, group: "shape", icon: "draw-arrow", label: "draw.tool.arrow", description: "draw.tool.arrow.hint", shortcut: "Shift-l", simple: true },
   // La lettera di FigJam. Lo strumento porta con sé la sezione «Connettore»
   // del pannello delle proprietà e «Collega le forme scelte»: nel
   // Personalizzato si scelgono insieme.
@@ -124,7 +134,7 @@ export const TOOLS: readonly ToolSpec[] = [
   { id: "polygon", levels: { vector: "standard" }, group: "shape", icon: "draw-polygon", label: "draw.tool.polygon", description: "draw.tool.polygon.hint", shortcut: "y" },
   // Lo stesso tasto di Inkscape, dove la penna di Bézier è «B».
   { id: "bezier", levels: { vector: "expert" }, group: "shape", icon: "draw-bezier", label: "draw.tool.bezier", description: "draw.tool.bezier.hint", shortcut: "b" },
-  { id: "text", levels: { vector: "standard" }, group: "text", icon: "draw-text", label: "draw.tool.text", description: "draw.tool.text.hint", shortcut: "t" },
+  { id: "text", levels: { vector: "standard" }, group: "text", icon: "draw-text", label: "draw.tool.text", description: "draw.tool.text.hint", shortcut: "t", simple: true },
 ];
 
 /// Lo strumento con cui si apre un disegno: la penna, perché un disegno si
@@ -136,10 +146,21 @@ export function defaultTool(profile: ToolProfile): ToolId {
   return profile === "pdf" ? "highlighter" : DEFAULT_TOOL;
 }
 
-/// Una parte che un livello offre o no: uno strumento, tranne la Selezione,
-/// o un comando con i suoi tasti.
+/// Gli strumenti che ci sono a ogni livello, come parti di nessuno: la
+/// Selezione, la Mano e la Lente.
+export type ViewTool = "select" | "hand" | "zoom";
+
+const VIEW_TOOLS: readonly ToolId[] = ["select", "hand", "zoom"];
+
+/// Vero per uno strumento che c'è a ogni livello.
+export function isViewTool(id: ToolId): id is ViewTool {
+  return VIEW_TOOLS.includes(id);
+}
+
+/// Una parte che un livello offre o no: uno strumento, tranne quelli di
+/// `ViewTool`, o un comando con i suoi tasti.
 export type Feature =
-  | Exclude<ToolId, "select">
+  | Exclude<ToolId, ViewTool>
   | "colors"
   | "swatches"
   | "styles"
@@ -184,15 +205,18 @@ export type Feature =
 
 export interface FeatureSpec {
   readonly id: Feature;
-  /// Il livello pronto da cui la parte c'è.
+  /// Il livello pronto da cui la parte c'è: conta soltanto per leggere il
+  /// livello delle versioni precedenti (`draw.level`).
   readonly level: Preset;
   readonly label: DrawKey;
+  /// Nello spazio «Semplice»; in «Completo» ci sono tutte.
+  readonly simple?: true;
 }
 
 /// I comandi, nell'ordine della barra: quelli dello Standard, poi quelli
 /// dell'Esperto.
 const COMMANDS: readonly FeatureSpec[] = [
-  { id: "colors", level: "standard", label: "draw.feature.colors" },
+  { id: "colors", level: "standard", label: "draw.feature.colors", simple: true },
   // I colori del documento sono una sezione del pannello delle proprietà:
   // nel Personalizzato si vedono con lui.
   { id: "swatches", level: "standard", label: "draw.feature.swatches" },
@@ -215,16 +239,16 @@ const COMMANDS: readonly FeatureSpec[] = [
   // La simmetria della penna è una sezione del pannello delle proprietà,
   // con la penna e l'evidenziatore: nel Personalizzato si vede con lui.
   { id: "symmetry", level: "standard", label: "draw.feature.symmetry" },
-  { id: "gestures", level: "standard", label: "draw.feature.gestures" },
+  { id: "gestures", level: "standard", label: "draw.feature.gestures", simple: true },
   { id: "links", level: "standard", label: "draw.feature.links" },
-  { id: "images", level: "standard", label: "draw.feature.images" },
+  { id: "images", level: "standard", label: "draw.feature.images", simple: true },
   { id: "crop", level: "standard", label: "draw.feature.crop" },
   { id: "library", level: "standard", label: "draw.feature.library" },
-  { id: "properties", level: "standard", label: "draw.feature.properties" },
+  { id: "properties", level: "standard", label: "draw.feature.properties", simple: true },
   { id: "style", level: "standard", label: "draw.feature.style" },
   { id: "history", level: "standard", label: "draw.feature.history" },
   { id: "accessibility", level: "standard", label: "draw.feature.accessibility" },
-  { id: "export", level: "standard", label: "draw.feature.export" },
+  { id: "export", level: "standard", label: "draw.feature.export", simple: true },
   { id: "present", level: "standard", label: "draw.feature.present" },
   { id: "attributes", level: "expert", label: "draw.feature.attributes" },
   { id: "outline", level: "expert", label: "draw.feature.outline" },
@@ -271,8 +295,8 @@ const COMMANDS: readonly FeatureSpec[] = [
 /// strumenti nell'ordine della barra: l'ordine in cui il Personalizzato le
 /// propone.
 export const FEATURES: readonly FeatureSpec[] = LEVEL_ORDER.flatMap((level) => [
-  ...TOOLS.filter((tool) => tool.id !== "select" && tool.levels.vector === level).map(
-    (tool): FeatureSpec => ({ id: tool.id as Feature, level, label: tool.label }),
+  ...TOOLS.filter((tool) => !isViewTool(tool.id) && tool.levels.vector === level).map(
+    (tool): FeatureSpec => ({ id: tool.id as Feature, level, label: tool.label, ...(tool.simple === true ? { simple: true } : {}) }),
   ),
   ...COMMANDS.filter((command) => command.level === level),
 ]);
@@ -280,6 +304,36 @@ export const FEATURES: readonly FeatureSpec[] = LEVEL_ORDER.flatMap((level) => [
 /// Le parti del Personalizzato quando nessuno le ha scelte: quelle
 /// dell'Essenziale.
 export const CUSTOM_DEFAULT: readonly Feature[] = FEATURES.filter((feature) => feature.level === "essential").map((feature) => feature.id);
+
+/// Lo spazio di lavoro: «Completo» ha tutto, «Semplice» le parti per
+/// disegnare a mano o col dito, con pulsanti grandi. Nessuno dei due toglie
+/// una funzione a chi la cerca: «Completo» è a un clic.
+export type Workspace = "full" | "simple";
+
+/// Gli spazi di lavoro, il primo è quello di serie.
+export const WORKSPACES: readonly Workspace[] = ["full", "simple"];
+
+/// Vero se `value` è il nome di uno spazio di lavoro.
+export function isWorkspace(value: unknown): value is Workspace {
+  return typeof value === "string" && (WORKSPACES as readonly string[]).includes(value);
+}
+
+/// Le parti dello spazio «Semplice», nell'ordine delle parti.
+export const SIMPLE_PARTS: readonly Feature[] = FEATURES.filter((feature) => feature.simple === true).map((feature) => feature.id);
+
+/// Il livello con cui l'editor offre lo spazio `workspace`: «Completo» è
+/// l'Esperto, che ha tutte le parti; «Semplice» il Personalizzato con le
+/// parti semplici, e nelle annotazioni di un PDF l'Essenziale.
+export function workspaceLevel(workspace: Workspace, profile: ToolProfile = "vector"): { readonly level: Level; readonly custom: readonly Feature[] } {
+  if (workspace === "full") return { level: "expert", custom: CUSTOM_DEFAULT };
+  return profile === "pdf" ? { level: "essential", custom: CUSTOM_DEFAULT } : { level: "custom", custom: SIMPLE_PARTS };
+}
+
+/// Lo spazio di lavoro che vale per un livello delle versioni precedenti:
+/// l'Essenziale è «Semplice», gli altri «Completo».
+export function workspaceOfLevel(level: Level): Workspace {
+  return level === "essential" ? "simple" : "full";
+}
 
 /// Vero se `value` è il nome di un livello.
 export function isLevel(value: unknown): value is Level {
@@ -313,7 +367,7 @@ export function featuresFor(level: Level, custom: readonly unknown[] = CUSTOM_DE
   if (profile === "pdf") {
     const preset = level === "custom" ? "standard" : level;
     return new Set(
-      TOOLS.filter((tool) => tool.id !== "select" && tool.levels.pdf !== undefined && reaches(preset, tool.levels.pdf)).map((tool) => tool.id as Feature),
+      TOOLS.filter((tool) => !isViewTool(tool.id) && tool.levels.pdf !== undefined && reaches(preset, tool.levels.pdf)).map((tool) => tool.id as Feature),
     );
   }
   if (level === "custom") return new Set(custom.filter(isFeature));
@@ -321,9 +375,9 @@ export function featuresFor(level: Level, custom: readonly unknown[] = CUSTOM_DE
 }
 
 /// Gli strumenti delle parti `features`, nell'ordine della barra: la
-/// Selezione c'è sempre.
+/// Selezione, la Mano e la Lente ci sono sempre.
 export function toolsOf(features: ReadonlySet<Feature>): readonly ToolSpec[] {
-  return TOOLS.filter((tool) => tool.id === "select" || features.has(tool.id));
+  return TOOLS.filter((tool) => (isViewTool(tool.id) ? true : features.has(tool.id)));
 }
 
 /// Gli strumenti di un livello pronto in un profilo: i suoi e quelli dei
@@ -353,11 +407,25 @@ export function toolSpec(id: ToolId): ToolSpec {
   return TOOLS.find((tool) => tool.id === id)!;
 }
 
-/// Lo strumento di un tasto premuto senza modificatori, fra quelli di
-/// `tools`.
-export function toolForKey(tools: readonly ToolSpec[], key: string): ToolSpec | null {
-  const lower = key.toLowerCase();
-  return tools.find((tool) => tool.shortcut === lower) ?? null;
+/// Lo strumento di un tasto premuto senza modificatori, o col solo
+/// Maiuscolo (`shift`), fra quelli di `tools`: prima il suo tasto, poi gli
+/// altri, così un tasto proprio vince sull'alias di un altro.
+export function toolForKey(tools: readonly ToolSpec[], key: string, shift = false): ToolSpec | null {
+  const pressed = `${shift ? "Shift-" : ""}${key.toLowerCase()}`;
+  return tools.find((tool) => tool.shortcut === pressed) ?? tools.find((tool) => tool.aliases?.includes(pressed)) ?? null;
+}
+
+/// Un tasto di strumento come si legge, che è anche la forma di
+/// `aria-keyshortcuts`: `Shift-p` è «Shift+P».
+export function toolKeyText(binding: string): string {
+  const shift = binding.startsWith("Shift-");
+  const letter = (shift ? binding.slice("Shift-".length) : binding).toUpperCase();
+  return shift ? `Shift+${letter}` : letter;
+}
+
+/// I tasti di uno strumento per l'elenco dei tasti: il suo, poi gli altri.
+export function toolKeys(spec: ToolSpec): string {
+  return [spec.shortcut, ...(spec.aliases ?? [])].join(" ");
 }
 
 /// Una riga dell'elenco dei tasti: i tasti, nella forma delle scorciatoie

@@ -32,6 +32,11 @@
 //!   finché non preme; una penna sospesa non disegna mai. Il mouse disegna col
 //!   tasto principale, senza canale di pressione: il pennello la simula. Lo
 //!   stesso per il dito.
+//! - **La penna ha tre tratti.** La punta fa il tratto dell'inchiostro, la
+//!   gomma della penna girata e il tasto laterale fanno il loro, che
+//!   [`StrokeStart::role`] distingue: chi disegna decide che cosa farne. Ogni
+//!   tratto vive finché è premuto il suo tasto (il bit 1, 32 o 2 di
+//!   `buttons`).
 //! - **Il palmo non disegna.** I ruoli dei puntatori sono quelli di
 //!   [`crate::roles`].
 //! - **Al massimo `max_samples` campioni.** Oltre, il tratto si chiude e ne
@@ -65,9 +70,6 @@ use crate::sample::{Sample, MAX_SAMPLES};
 use crate::stabilizer::{Stabilizer, StabilizerConfig};
 use crate::tilt::{pen_angles, reports_tilt, PenAngles};
 
-/// Il bit del tasto principale in `buttons`.
-const PRIMARY_BUTTON: u32 = 1;
-
 /// L'inizio di un tratto.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct StrokeStart {
@@ -81,6 +83,9 @@ pub struct StrokeStart {
     pub time_stamp: f64,
     /// Il tratto continua quello appena chiuso al limite dei campioni.
     pub continued: bool,
+    /// Chi fa il tratto: la punta ([`PointerRole::Ink`]), la gomma della
+    /// penna girata o il tasto laterale.
+    pub role: PointerRole,
 }
 
 /// Un tratto concluso alzando il puntatore, o chiuso al limite dei campioni.
@@ -203,6 +208,8 @@ struct PointerEntry {
 struct Stroke {
     pointer_id: i64,
     kind: PointerKind,
+    /// Chi fa il tratto; il suo bit di `buttons` lo tiene vivo.
+    role: PointerRole,
     pressure: bool,
     continued: bool,
     /// `None` finché il tratto non è annunciato con [`Effect::Start`]: una
@@ -361,18 +368,19 @@ impl Session {
             }
         }
         // Un tratto alla volta.
-        if role == PointerRole::Ink && self.stroke.is_some() {
+        if role.strokes() && self.stroke.is_some() {
             role = PointerRole::Ignore;
         }
         self.pointers
             .insert(event.pointer_id, PointerEntry { kind, role });
-        if role != PointerRole::Ink {
+        if !role.strokes() {
             return self.take_effects();
         }
         self.effects.push(Effect::Capture(event.pointer_id));
         let mut stroke = Stroke {
             pointer_id: event.pointer_id,
             kind,
+            role,
             pressure: kind == PointerKind::Pen,
             continued: false,
             id: None,
@@ -407,9 +415,9 @@ impl Session {
             Some(stroke) => stroke,
             None => return self.take_effects(),
         };
-        // Il tasto principale rilasciato con un altro ancora premuto non manda
+        // Il tasto del tratto rilasciato con un altro ancora premuto non manda
         // `pointerup`: il tratto finisce qui.
-        if event.buttons & PRIMARY_BUTTON == 0 {
+        if event.buttons & stroke.role.button_mask() == 0 {
             self.finish(stroke, Vec::new(), None);
             return self.take_effects();
         }
@@ -607,7 +615,7 @@ impl Session {
     /// finché non si alza, e la cattura torna al browser.
     fn retire(&mut self, pointer_id: i64) {
         if let Some(entry) = self.pointers.get_mut(&pointer_id) {
-            if entry.role == PointerRole::Ink {
+            if entry.role.strokes() {
                 entry.role = PointerRole::Ignore;
             }
         }
@@ -686,6 +694,7 @@ impl Session {
             pressure: stroke.pressure,
             time_stamp: stroke.origin,
             continued: stroke.continued,
+            role: stroke.role,
         }));
     }
 
@@ -709,6 +718,7 @@ impl Session {
                 pressure: stroke.pressure,
                 time_stamp: stroke.origin,
                 continued: stroke.continued,
+                role: stroke.role,
             },
             samples,
             tilt,

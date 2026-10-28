@@ -10,8 +10,8 @@
 // Una coreografia è un gesto che fa partire un movimento, e il gesto che lo
 // disfa. Sta scritta come le scene di `scene.mjs`: da che scena si parte, che
 // cosa si preme, come si riconosce l'arrivo. L'elenco è **chiuso**: ogni file
-// di `src/shells/scrittoio`, di `src/panels` e di `src/kit` che fa partire una corsa di `moto`
-// è la sorgente di una coreografia, oppure sta in `UNCOVERED` con la sua
+// di `src/shells/scrittoio`, di `src/panels`, di `src/kit` e di `src/editors/rich`
+// che fa partire una corsa di `moto` è la sorgente di una coreografia, oppure sta in `UNCOVERED` con la sua
 // ragione. Lo verifica `motion.test.ts`, perché un movimento nuovo che il banco
 // non guarda è un verde che non dice niente.
 //
@@ -243,6 +243,76 @@ const shellCommand = (id) => (page) =>
     if (!entry?.run) throw new Error(`nessun comando ${command}`);
     await entry.run();
   }, id);
+/// La modalità del documento a fuoco, come la chiede la shell: senza un
+/// bottone, il cui hover ha transizioni sue.
+const richMode = (mode) => (page) =>
+  page.evaluate(async (m) => {
+    const { setMode } = await import("/src/state/document-controller.ts");
+    await setMode(m);
+  }, mode);
+const richShown = (mode) => has(`.rich-surface[data-mode="${mode}"]`);
+/// Un bottone premuto dal suo `click()`, senza il puntatore sopra.
+const click = (selector) => (page) => page.evaluate((s) => document.querySelector(s)?.click(), selector);
+/// Quanti fogli ha la scrivania, rispetto a quelli contati da `countSheets`.
+const countSheets = (page) =>
+  page.evaluate(() => {
+    window.__richSheets = document.querySelectorAll(".rich-sheets > .rich-sheet").length;
+  });
+const sheetsMore = (more) => (page) =>
+  page.evaluate((n) => document.querySelectorAll(".rich-sheets > .rich-sheet").length === window.__richSheets + n, more);
+/// Il cursore all'inizio del primo paragrafo, senza il clic di Playwright: la
+/// carta è più larga della colonna, e un clic che trova il bersaglio coperto
+/// da una corsa riprova scorrendo la vista per centrarlo. Lo scorrimento non è
+/// una corsa da misurare, e cambierebbe fra la corsa ferma e quella mossa.
+const firstPara = (page) =>
+  page.evaluate(() => {
+    const para = document.querySelector(".rich-content > .rich-para");
+    const content = para?.closest("[contenteditable]");
+    if (!para || !(content instanceof HTMLElement)) throw new Error("manca il primo paragrafo");
+    const range = document.createRange();
+    range.setStart(para, 0);
+    range.collapse(true);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+    content.focus({ preventScroll: true });
+  });
+/// La scheda Commenti dell'ispettore, con il primo paragrafo selezionato:
+/// il posto di un commento nuovo.
+const commentsOpen = async (page) => {
+  await firstPara(page);
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Shift+End");
+  await page.evaluate(() => document.querySelector('[aria-controls="surface-panel-rich-side-comments"]')?.click());
+  await page.evaluate(() => {
+    const author = document.querySelector(".rich-side-comments .rich-side-compose input");
+    if (author && !author.value) {
+      author.value = "Banco";
+      author.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  });
+};
+/// Un commento nuovo dal modulo del pannello, e quello tolto col suo bottone.
+const NOTE = "Nota del banco";
+const commentAdd = (page) =>
+  page.evaluate((note) => {
+    const form = document.querySelector(".rich-side-comments .rich-side-compose");
+    const said = form?.querySelector("textarea");
+    if (!form || !said) throw new Error("nessun modulo dei commenti");
+    said.value = note;
+    form.querySelector('button[type="submit"]')?.click();
+  }, NOTE);
+const commentDrop = (page) =>
+  page.evaluate((note) => {
+    const item = [...document.querySelectorAll(".rich-side-comments .rich-side-comment")].find((el) => el.textContent.includes(note));
+    const drop = [...(item?.querySelectorAll(".rich-side-actions button") ?? [])].pop();
+    if (!drop) throw new Error("nessun commento del banco");
+    drop.click();
+  }, NOTE);
+const commentShown = (yes) => (page) =>
+  page.evaluate(
+    ([note, want]) => [...document.querySelectorAll(".rich-side-comments .rich-side-comment")].some((el) => el.textContent.includes(note)) === want,
+    [NOTE, yes],
+  );
 const light = (theme) => (page) =>
   page.evaluate(
     (t) => document.documentElement.dataset.theme === t && document.querySelector(".light-scene") === null,
@@ -562,6 +632,118 @@ export const CHOREOGRAPHIES = [
     undo: null,
     irreversible: "il ritorno segue un rilascio: riprendere la maniglia è un altro trascinamento",
     track: ["#sample-splitter"],
+  },
+  {
+    id: "rich-mode",
+    title: "Documento: entrando in Pagina la carta si allarga dalla colonna del testo, che resta al suo posto",
+    sources: ["src/editors/rich/rich-motion.ts"],
+    scene: "document-docx",
+    setup: richMode("writing"),
+    act: richMode("document"),
+    arrived: richShown("document"),
+    undo: richMode("writing"),
+    returned: richShown("writing"),
+  },
+  {
+    id: "rich-reading",
+    title: "Documento: in Lettura la barra sparisce e la carta sale; tornando, la barra entra dal suo bordo",
+    sources: ["src/editors/rich/rich-motion.ts"],
+    scene: "document-docx",
+    act: richMode("reading"),
+    arrived: has('.rich-surface[data-mode="reading"] > .rich-ribbon-host[hidden]'),
+    undo: richMode("document"),
+    returned: has('.rich-surface[data-mode="document"] > .rich-ribbon-host:not([hidden])'),
+  },
+  {
+    id: "rich-zoom",
+    title: "Documento: la pagina intera scala la carta attorno al centro della vista",
+    sources: ["src/editors/rich/rich-motion.ts"],
+    scene: "document-docx",
+    act: click("#status-fit-page"),
+    arrived: has('#status-fit-page[aria-pressed="true"]'),
+    undo: click("#status-fit-page"),
+    returned: has('#status-fit-page[aria-pressed="false"]'),
+  },
+  {
+    id: "rich-page-break",
+    title: "Documento: il foglio nuovo esce da quello sopra e i fogli sotto scivolano; tolto, la sua sagoma si dissolve",
+    sources: ["src/editors/rich/rich-motion.ts"],
+    scene: "document-docx",
+    // Il cursore in fondo al primo paragrafo, dove il salto apre un foglio.
+    // La finestra è alta quanto basta per vedere il cursore prima e dopo il
+    // salto, e larga quanto la carta: altrimenti la vista scorre per mostrarlo,
+    // e lo scorrimento non è una corsa da misurare.
+    setup: async (page) => {
+      await page.setViewportSize({ width: 1600, height: 1600 });
+      await page.locator(".rich-content > .rich-para >> nth=0").click();
+      await page.keyboard.press("End");
+      await countSheets(page);
+    },
+    act: (page) => page.keyboard.press("Control+Enter"),
+    arrived: sheetsMore(1),
+    undo: (page) => page.keyboard.press("Control+KeyZ"),
+    // Il disegno dei fogli aspetta il fotogramma dopo la modifica: l'inversione
+    // si misura quando c'è.
+    reversing: sheetsMore(0),
+    returned: sheetsMore(0),
+  },
+  {
+    id: "rich-goto",
+    title: "Documento: andando a una revisione la vista la porta a un terzo, e un anello sopra di lei si stringe e sfuma",
+    sources: ["src/editors/rich/rich-motion.ts"],
+    scene: "document-docx",
+    // Il bottone della barra, dal suo `click()`: la scheda Revisione può non
+    // essere quella aperta.
+    act: click('[data-command="rich.rev.next"] button'),
+    arrived: (page) =>
+      page.evaluate(() => {
+        const selection = document.getSelection();
+        return !!selection && !selection.isCollapsed && !!selection.anchorNode && !!document.querySelector(".rich-content")?.contains(selection.anchorNode);
+      }),
+    undo: null,
+    irreversible: "andare a un punto non si disfa: il punto dopo è un altro salto, con il suo anello",
+  },
+  {
+    id: "rich-review-list",
+    title: "Documento: nel pannello un commento nuovo entra di 4 px e gli altri scendono; tolto, esce come immagine e gli altri salgono",
+    sources: ["src/editors/rich/side.ts"],
+    scene: "document-docx",
+    setup: commentsOpen,
+    act: commentAdd,
+    arrived: commentShown(true),
+    undo: commentDrop,
+    returned: commentShown(false),
+    exit: true,
+  },
+  {
+    id: "rich-record",
+    title: "Documento: «Registra» si accende nella banda e accanto al chip dello stato con un battito solo, e non lampeggia",
+    sources: ["src/shells/scrittoio/frame/status-band.ts", "src/panels/standing.ts"],
+    scene: "document-docx",
+    // Il nome di chi rivede, scritto nei Commenti: senza, «Registra» apre
+    // Revisioni invece di accendersi.
+    setup: commentsOpen,
+    act: click('[data-command="rich.track"] button'),
+    arrived: (page) =>
+      page.evaluate(
+        () => !!document.querySelector('[data-surface-item="tracking"]') && document.querySelector(".pane-standing-rec")?.hidden === false,
+      ),
+    undo: click('[data-command="rich.track"] button'),
+    returned: (page) =>
+      page.evaluate(
+        () => !document.querySelector('[data-surface-item="tracking"]') && document.querySelector(".pane-standing-rec")?.hidden !== false,
+      ),
+  },
+  {
+    id: "rich-header",
+    title: "Documento: mentre si scrive l'intestazione il corpo si attenua, e chiudendo torna",
+    sources: ["src/editors/rich/rich-motion.ts"],
+    scene: "document-docx",
+    setup: firstPara,
+    act: click('[data-command="rich.header"] button'),
+    arrived: has(".rich-desk-running .rich-running-area"),
+    undo: (page) => page.keyboard.press("Escape"),
+    returned: lacks(".rich-desk-running"),
   },
 ];
 

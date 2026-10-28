@@ -47,8 +47,15 @@ Nuove decisioni usano il [template](template.md).
 | [0212 — La preservazione di un `.docx` si misura sul pacchetto, e la garanzia è di Fub](0212-preservazione-misurata-sul-pacchetto.md) | accolta | storage | — |
 | [0213 — I motori esterni sono una copia derivata, con proprietari e aggiornamenti decisi](0213-provenienza-dei-motori-esterni.md) | accolta | sicurezza | — |
 | [0214 — GridCraft è il motore del foglio di calcolo, e una cartella di Excel si apre in sola lettura](0214-gridcraft-motore-del-foglio-di-calcolo.md) | accolta | contratto | — |
+| [0215 — Un salvataggio che tocca soltanto il corpo di un `.docx` è un innesto nel file com'era](0215-salvataggio-docx-per-innesto.md) | accolta | storage | — |
 | [0216 — Il protocollo `grid` 2 apre una sorgente a byte nella custodia dell'host, e la modifica è un giornale di celle](0216-protocollo-grid-2-sorgente-a-byte.md) | accolta | contratto | 0214 (in parte) |
 | [0218 — Il `.fubsheet` e la versione 1 di `grid` escono da Fub](0218-via-il-fubsheet-e-la-versione-1-di-grid.md) | accolta | contratto | 0201 (in parte) |
 | [0219 — La cartella di Excel si modifica con i comandi di GridCraft, e il giornale diventa di comandi](0219-la-cartella-si-modifica-con-i-comandi-di-gridcraft.md) | proposta | contratto | 0216, 0214 (in parte) |
 | [0220 — Gli oggetti dei fogli viaggiano con le finestre, e i grafici arrivano disegnati](0220-gli-oggetti-dei-fogli-viaggiano-con-le-finestre.md) | proposta | contratto | — |
 | [0221 — I motori esterni si seguono da vicino: la loro toolchain, le patch a tre vie e un avviso pianificato](0221-i-motori-si-seguono-da-vicino.md) | proposta | sicurezza | — |
+| [0222 — Tre strati in ogni superficie, e l'aspetto del contenuto lo dichiara la modalità](0222-tre-strati-e-l-aspetto-del-contenuto.md) | proposta | frontend | — |
+| [0223 — L'editor dei disegni: strumenti a sinistra, proprietà nell'ispettore, fatti nella banda](0223-l-editor-dei-disegni-strumenti-ispettore-e-banda.md) | proposta | frontend | — |
+| [0224 — Scrittura, il nucleo del testo ricco](0224-scrittura-il-nucleo-del-testo-ricco.md) | proposta | frontend | — |
+| [0225 — Tabella, un componente per tutte le tabelle](0225-tabella-un-componente-per-tutte-le-tabelle.md) | proposta | frontend | — |
+| [0226 — Inchiostro e disegni nei documenti](0226-inchiostro-e-disegni-nei-documenti.md) | proposta | contratto | — |
+| [0227 — Le penne sono ricette del pennello, e la punta piatta è un pennello nuovo](0227-le-penne-e-la-punta-piatta.md) | proposta | contratto | — |

@@ -3,14 +3,23 @@ import { S, SELECTABLE, type PartAnatomy } from "./types";
 
 export const DRAW: PartAnatomy = {
   part: "draw",
+  layer: "cornice",
   components: [
     {
       name: "draw-editor",
       states: SELECTABLE,
+      // Il foglio è il disegno, con la sua carta; la griglia, le guide, i
+      // righelli, il cursore e i segni dei collegamenti sono di Fub.
+      layers: {
+        "draw-surface": "contenuto", "draw-page": "contenuto", "draw-grid": "segno", "draw-guides": "segno",
+        "draw-cursor": "segno", "draw-link-layer": "segno", "draw-link-mark": "segno", "draw-zoom-box": "segno",
+        "draw-navigator": "segno",
+      },
       hooks: [
-        "draw-header", "draw-toolbar", "draw-group", "draw-button", "draw-zoom-level", "draw-layer-button",
-        "draw-layer-state", "draw-swatch-frame", "draw-swatch", "draw-width-bar", "draw-size-glyph", "draw-title",
-        "draw-title-input", "draw-surface", "draw-arrange", "draw-arrange-input", "draw-arrange-suffix", "draw-page",
+        "draw-header", "draw-toolbar", "draw-export", "draw-export-text", "draw-rail", "draw-group", "draw-button", "draw-zoom-level", "draw-layer-button",
+        "draw-layer-state", "draw-swatch-frame", "draw-swatch", "draw-width-bar", "draw-size-glyph", "draw-pen-choice", "draw-pen-name", "draw-pen-gallery", "draw-pen-gallery-heading", "draw-pen-gallery-list", "draw-pen-gallery-item", "draw-pen-gallery-empty", "draw-pen-gallery-save", "draw-pen-preview", "draw-pen-saved-remove", "draw-pen-size", "draw-eraser-mode", "draw-eraser-mode-name", "draw-text-proof-spelling", "draw-text-proof-grammar", "draw-title",
+        "draw-title-input", "draw-surface", "draw-zoom-box", "draw-navigator", "draw-navigator-sheets",
+        "draw-navigator-shapes", "draw-navigator-view", "draw-arrange", "draw-arrange-input", "draw-arrange-suffix", "draw-page",
         "draw-sheet-name", "draw-grid", "draw-guides", "draw-rulers", "draw-cursor", "draw-objects",
         "draw-objects-header", "draw-objects-title", "draw-objects-count", "draw-objects-empty",
         "draw-objects-filter", "draw-objects-search", "draw-objects-kind", "draw-objects-status", "draw-objects-tree",
@@ -40,11 +49,11 @@ export const DRAW: PartAnatomy = {
         "draw-inspector-table", "draw-inspector-key", "draw-inspector-value", "draw-inspector-actions",
         "draw-inspector-field", "draw-inspector-input", "draw-inspector-swatch", "draw-inspector-note",
         "draw-inspector-error", "draw-inspector-add", "draw-inspector-add-title", "draw-inspector-add-button",
-        "draw-properties", "draw-properties-header", "draw-properties-title", "draw-properties-subject",
+        "draw-properties", "draw-properties-header", "draw-properties-lead", "draw-properties-title", "draw-properties-subject",
         "draw-properties-section", "draw-properties-toggle", "draw-properties-body", "draw-properties-field",
         "draw-properties-label", "draw-properties-number", "draw-properties-paint", "draw-properties-input",
         "draw-properties-unit", "draw-properties-picker", "draw-properties-switch", "draw-properties-note",
-        "draw-properties-error", "draw-properties-actions", "draw-properties-bar", "draw-properties-apply",
+        "draw-properties-error", "draw-properties-actions", "draw-properties-bar", "draw-properties-apply", "draw-properties-export",
         "draw-properties-menu", "draw-properties-contrast", "draw-swatches", "draw-swatches-target",
         "draw-swatches-group", "draw-swatches-heading", "draw-swatches-grid", "draw-swatches-chip",
         "draw-swatches-count", "draw-swatches-add", "draw-swatches-form", "draw-swatches-form-title",
@@ -76,6 +85,7 @@ export const DRAW: PartAnatomy = {
     {
       name: "draw-presentation",
       states: [S("rest"), S("focused")],
+      layers: { "draw-present-board": "contenuto", "draw-present-stage": "contenuto", "draw-present-ink": "segno", "draw-present-laser": "segno" },
       hooks: [
         "draw-present-board", "draw-present-stage", "draw-present-ink", "draw-present-laser", "draw-present-end",
         "draw-present-end-title", "draw-present-end-hint",

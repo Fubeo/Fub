@@ -1,21 +1,19 @@
 {
   "file": "docx/scritture.docx",
-  "sha256": "fb3a81f11a5b00f3a34d68592e94a2c0d1513a901931eea8f25277fa88d0d215",
+  "sha256": "303073df7cdc6c96069068c306f379ec2a68e92d53209cc23d5228b35651aa39",
   "open": {
-    "readonly": "codec",
-    "projection": "ee587bcfe61ca9970526c677b8b120b302628db9413866c844de456a34715ad0",
+    "readonly": null,
+    "projection": "5e249fc4278f1e5b3e3f133b2ac17f28045a0ab31abec4a1e358138d6e28b1e2",
     "blocks": 4,
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 7",
+    "differenze all'apertura: 4",
     "  document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts>: 1 → 0",
-    "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
     "  document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hint=\"eastAsia\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
-    "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
     "  block 0: document: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts>: 1 → 0",
     "  block 0: document: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}rFonts @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hint=\"eastAsia\": 1 → 0",
+    "blocchi chiusi: {0}; scrittura intera: false",
     "normalizzazione «w:id»: 1 nel file, 1 nella prova a vuoto",
     "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
   ],
@@ -34,11 +32,34 @@
     "wordxml": []
   },
   "edits": {
-    "E0": "readonly",
-    "E1": "readonly",
-    "E2": "readonly",
-    "E3": "readonly",
-    "E4": "readonly",
-    "E5": "readonly"
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "error": "locked",
+      "message": "rich document has closed parts: block None"
+    },
+    "E5": "n/a",
+    "E6": {
+      "error": "locked",
+      "message": "rich document has closed parts: block Some(0)"
+    },
+    "E7": {
+      "error": "fidelity",
+      "message": "rich document would not read back as written"
+    }
   }
 }

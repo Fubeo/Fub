@@ -29,7 +29,7 @@ altri formati di testo (`formats`: OpenDocument, RTF e gli altri).
 | `crates/proof/` | `crates/proof/` | nessuna |
 | `crates/geom/` | `crates/geom/` | nessuna |
 | `crates/doc/` | `crates/doc/` | nessuna |
-| `crates/docx/` | `crates/docx/` | `src/package.rs` e otto file di `tests/` per `zip` 9; `src/write/settings_merge.rs`, `src/write/mod.rs` e `src/lib.rs` per una verifica in più |
+| `crates/docx/` | `crates/docx/` | `src/package.rs` e otto file di `tests/` per `zip` 9; `src/write/settings_merge.rs`, `src/write/mod.rs` e `src/lib.rs` per una verifica in più; `src/ink.rs` nuovo, `src/read/story.rs` e `src/write/story.rs` per inchiostro e immagini SVG |
 | `crates/docbin/` | `crates/docbin/` | nessuna |
 | `crates/formats/` | `crates/formats/` | un test di `src/odt.rs` per `zip` 9 |
 | `assets/hyphenation/` | `assets/hyphenation/` | nessuna |
@@ -80,6 +80,15 @@ Le patch di `patches/`, una per ragione:
   chiave `SETTINGS_ORIG` della copia originale. Serve a `fub-format-rich`, che
   rifiuta di scrivere un documento che perderebbe impostazioni in silenzio; il
   resto del codec non cambia. Va proposta all'upstream.
+- `0004-inchiostro-e-svg`: il modulo pubblico nuovo `docx/src/ink.rs`.
+  `new_ink` crea un inchiostro nativo come lo scrive Word: la parte InkML in
+  un `w14:contentPart` dentro `mc:AlternateContent`, con un'immagine VML di
+  ripiego, tutto tenuto come un `Graphic` d'inchiostro letto da un file;
+  `ink_markup` legge l'InkML di un inchiostro tenuto. `new_svg_picture` crea
+  un'immagine PNG con un SVG compagno, che `src/write/story.rs` scrive come
+  `asvg:svgBlip` (Office 2016) e `src/read/story.rs` rilegge da un file;
+  `svg_of` lo dà. Servono a `fub-format-rich` per l'inchiostro e i disegni
+  nei documenti; il resto del codec non cambia. Va proposta all'upstream.
 
 Le dipendenze del workspace di questa cartella hanno, per quelle in comune con
 Fub, la stessa versione del `[workspace.dependencies]` di Fub, perché il grafo
@@ -143,6 +152,16 @@ I dizionari Hunspell (`it_IT`, `pl_PL`, `pt_BR`, `ru_RU`, `cs_CZ`, `hr_HR`,
 `tr_TR`, `id_ID`) non sono inclusi, come nell'upstream: il dizionario italiano è sotto
 GPL. Il crate li legge dal sistema quando ci sono; senza, la lingua non ha
 segni d'ortografia ma conserva le regole grammaticali.
+
+## Segnalazioni aperte all'upstream
+
+Le perdite del codec che il corpus di `fub-format-rich` conosce e che spettano a
+WordCraft. Quando una si chiude, l'aggiornamento della copia cambia gli
+`expected` del corpus (`UPDATE_CORPUS=1`) e il `perché` del `MANIFEST`.
+
+| Segnalazione | Cosa si perde al salvataggio |
+| --- | --- |
+| [storytold/wordcraft#3541](https://github.com/storytold/wordcraft/issues/3541) | il tema rigenerato, `tblInd` degli stili di tabella, `w:rFonts/@w:hint`, `w:annotationRef` e `w:initials` vuoto dei commenti, `dc:language` e `cp:contentStatus` |
 
 ## Aggiornare
 

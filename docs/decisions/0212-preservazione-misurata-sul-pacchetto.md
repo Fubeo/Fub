@@ -37,14 +37,19 @@ perdere un campo nel salvataggio senza che nessuno lo vedesse.
   (motivo `codec`).
 - **A ogni salvataggio** i blocchi e le parti che l'utente non ha toccato
   escono identici alla riscrittura a vuoto della base; ciò che ha toccato lo
-  verifica la rilettura del modello della 0209. Un salvataggio che non passa
-  non scrive, e il testo resta nel buffer.
+  verifica la rilettura del modello della 0209, e nei blocchi toccati resta
+  ciò che la proiezione non porta. Un salvataggio che non passa non scrive,
+  e il testo resta nel buffer.
+- Dentro un blocco conta anche **dove**: il controllo legge il corpo come
+  flusso di caratteri e oggetti con le loro proprietà, e un segno o una
+  proprietà spostati sono una perdita come un elemento sparito.
 - I dati opachi hanno uno schema (`OPAQUE_SCHEMA`), che la proiezione v2
   dichiara (`opaque_schema`). Uno schema più nuovo di quello che Fub sa
   leggere si rifiuta con un errore tipizzato e la bozza resta; un dato che,
-  decodificato, perderebbe un campo si rifiuta. La forma dei dati del corpus
-  è un golden: se cambia con lo stesso schema, lo schema sale, con le fixture
-  dello schema precedente.
+  decodificato, perderebbe un campo si rifiuta, anche un campo sconosciuto
+  vuoto. La superficie serde dei tipi dei dati, letta dai sorgenti, è un
+  golden: se cambia con lo stesso schema, lo schema sale, ogni schema
+  precedente ha la sua regola di lettura e ogni schema la sua bozza.
 
 ## Conseguenze
 
@@ -87,7 +92,8 @@ invece di sorvegliarlo.
 - `crates/fub-format-rich/tests/preservation.rs` e `tests/corpus.rs`: i file
   del corpus all'apertura, alle esportazioni e alle modifiche standard;
 - `crates/fub-format-rich/src/blob.rs` e `tests/opaque_schema.rs`: il
-  controllo di contenimento, il golden della forma e la bozza dello schema 0;
+  controllo di contenimento, il golden della superficie serde e la bozza di
+  ogni schema;
 - `crates/fub-host/tests/rich_documents.rs`: una bozza di uno schema futuro
   non si salva e resta;
 - `apps/client/src/editors/rich/fixture.test.ts`: la shell ricopia versione

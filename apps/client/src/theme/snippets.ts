@@ -85,7 +85,7 @@ function compile(raw: string, rejectInvalid: boolean): { css: string; statuses: 
     let error: string | undefined;
     if (snippet.enabled) {
       try {
-        chunks.push(sanitizeUserCss(snippet.css, allowedHooks()));
+        chunks.push(sanitizeUserCss(snippet.css, allowedHooks(), themeProfile().gate));
       } catch (reason) {
         error = reason instanceof Error ? reason.message : String(reason);
         if (rejectInvalid) throw new Error(`${snippet.id}: ${error}`);
@@ -225,7 +225,7 @@ export async function importObsidianSnippets(payload: unknown): Promise<SnippetI
     }
     let fits = true;
     try {
-      sanitizeUserCss(file.css, allowedHooks());
+      sanitizeUserCss(file.css, allowedHooks(), themeProfile().gate);
     } catch {
       fits = false;
       out.lost.push(file.name);

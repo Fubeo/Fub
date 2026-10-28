@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { activeMotions, createManualDriver, setMotionDriver, setMotionPreference } from "../moto";
 import { trapFocus } from "../ui/a11y";
+import { attachTooltip, resetTooltips, TOOLTIP_DELAY_MS } from "../ui/tooltip";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
 import { openLayers } from "./layers";
 import { openPopover, placePopover, type AnchorBox, type PopoverCloseReason } from "./popover";
@@ -153,6 +154,26 @@ describe("l'ancora", () => {
     popover.close();
     expect(anchor.getAttribute("aria-expanded")).toBe("false");
     expect(anchor.getAttribute("aria-controls")).toBe("di-prima");
+  });
+
+  it("chiude il suggerimento del pulsante che l'ha aperto", () => {
+    vi.useFakeTimers();
+    try {
+      const dispose = attachTooltip(anchor, "Azioni");
+      anchor.dispatchEvent(new MouseEvent("mouseenter"));
+      vi.advanceTimersByTime(TOOLTIP_DELAY_MS);
+      const tooltip = document.querySelector<HTMLElement>('[role="tooltip"]')!;
+      expect(tooltip.hidden).toBe(false);
+      const popover = openPopover({ anchor, content: content("uno"), lifetime: life });
+      expect(tooltip.hidden).toBe(true);
+      vi.advanceTimersByTime(TOOLTIP_DELAY_MS);
+      expect(tooltip.hidden).toBe(true);
+      popover.close();
+      dispose();
+    } finally {
+      resetTooltips();
+      vi.useRealTimers();
+    }
   });
 
   it("toglie il controllo che aveva messo", () => {

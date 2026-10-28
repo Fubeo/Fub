@@ -26,7 +26,8 @@ import { describe, expect, it } from "vitest";
 
 import { contrast } from "./contrast";
 import { fromHex } from "./oklch";
-import { CONTRASTS, LIGHTS, SHEETS, VARIANTS, palette, roles, sheet } from "./scrittoio/recipe";
+import { THEME_2_OPTIONAL_PAIRS } from "./scrittoio/profile";
+import { CONTRASTS, LIGHTS, OPTIONAL_ROLES, SHEETS, VARIANTS, palette, roles, sheet } from "./scrittoio/recipe";
 import darkHigh from "./scrittoio/sheet-dark-high.css?raw";
 import dark from "./scrittoio/sheet-dark.css?raw";
 import lightHigh from "./scrittoio/sheet-light-high.css?raw";
@@ -97,6 +98,42 @@ describe("ogni pieno porta un controcolore che regge", () => {
       "un pieno su cui né il nero né il bianco reggono è un pieno che non può " +
         "portare testo: si abbassa la mira del pieno, non si sceglie un terzo colore",
     ).toEqual([]);
+  });
+});
+
+describe("i ruoli facoltativi: i segni sulle due carte", () => {
+  // `--doc-ins`, `--doc-find`, `--paper-*`: la serie li dichiara tutti, un
+  // tema di terzi può non dichiararli. Non entrano fra i ruoli obbligatori, o
+  // ogni tema `theme-2` di oggi verrebbe rifiutato.
+  it("non sono fra i ruoli obbligatori, e i ruoli obbligatori restano 154", () => {
+    // 26 segni e carte, più i sei colori degli autori su ognuna delle due, e
+    // la scrivania del disegno.
+    expect(OPTIONAL_ROLES.length).toBe(39);
+    expect(roles().filter((role) => OPTIONAL_ROLES.includes(role))).toEqual([]);
+    expect(roles()).toHaveLength(154);
+  });
+
+  it("ogni coppia facoltativa nomina due ruoli della serie, e almeno uno è facoltativo", () => {
+    const declared = new Set([...roles(), ...OPTIONAL_ROLES]);
+    for (const [ink, background] of THEME_2_OPTIONAL_PAIRS) {
+      expect(declared.has(ink) && declared.has(background), `${ink} su ${background}`).toBe(true);
+      expect(OPTIONAL_ROLES.includes(ink) || OPTIONAL_ROLES.includes(background), `${ink} su ${background}`).toBe(true);
+    }
+  });
+
+  it.each(VARIANTS)("$light × $contrast: ogni ruolo c'è e ogni coppia regge", ({ light, contrast: level }) => {
+    const values = palette(light, level);
+    for (const role of OPTIONAL_ROLES) expect(values[role], role).toBeTruthy();
+    const weak = THEME_2_OPTIONAL_PAIRS.map(
+      ([ink, background, minimum, where]) => [where, contrast(values[ink]!, values[background]!), minimum] as const,
+    ).filter(([, measured, minimum]) => measured < minimum);
+    expect(weak.map(([where, measured]) => `${where}: ${measured.toFixed(2)}:1`)).toEqual([]);
+  });
+
+  it.each(LIGHTS)("%s: la carta di un file è bianca, anche di notte", (light) => {
+    const values = palette(light, "normal");
+    expect(values["paper-bg"]).toBe("#ffffff");
+    expect(fromHex(values["paper-ink"]!).l).toBeLessThan(0.3);
   });
 });
 

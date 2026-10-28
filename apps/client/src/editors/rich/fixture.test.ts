@@ -8,6 +8,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Node as PmNode } from "prosemirror-model";
 import { TextSelection } from "prosemirror-state";
+import closedFixture from "../../__fixtures__/rich-closed.json";
 import projectionFixture from "../../__fixtures__/rich-projection.json";
 import type { EditorChange } from "../core/text-operation";
 import { RichEngine } from "./engine";
@@ -21,6 +22,8 @@ import { setReviewAuthor, setTracking } from "./track";
 
 const SOURCE = projectionFixture.source;
 const SCHEMA = (JSON.parse(SOURCE) as { opaque_schema: number }).opaque_schema;
+/// Un paragrafo e una tabella che il formato non riscriverebbe senza perdite.
+const CLOSED = closedFixture.source;
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -28,6 +31,18 @@ afterEach(() => {
   engines = [];
   document.body.replaceChildren();
 });
+
+/// La proiezione senza `roles`, byte per byte come il resto.
+function withoutRoles(source: string): string {
+  const start = source.indexOf(`,"roles":{`);
+  if (start < 0) return source;
+  let depth = 0;
+  for (let i = source.indexOf("{", start); i < source.length; i++) {
+    if (source[i] === "{") depth++;
+    else if (source[i] === "}" && --depth === 0) return source.slice(0, start) + source.slice(i + 1);
+  }
+  throw new Error("roles non si chiude");
+}
 
 function engine(changes: EditorChange[] = []): RichEngine {
   const parent = document.createElement("div");
@@ -62,41 +77,112 @@ describe("la proiezione del codec", () => {
     const projection = parseProjection(SOURCE);
     // Lo schema è quello che il formato scrive: lo si legge dalla fixture.
     expect(Number.isInteger(SCHEMA)).toBe(true);
-    expect([projection.version, projection.opaque_schema]).toEqual([2, SCHEMA]);
+    expect([projection.version, projection.opaque_schema]).toEqual([4, SCHEMA]);
+    // Una bozza di versione 3, di prima dell'inchiostro, resta di versione 3.
+    const v3 = SOURCE.replace(`"version":4,`, `"version":3,`);
+    expect(v3).not.toBe(SOURCE);
+    expect(writeProjection(parseProjection(v3))).toBe(v3);
+    // Le bozze di prima non avevano l'aspetto dei ruoli, che è della 3.
+    const older = withoutRoles(SOURCE);
+    // Una bozza di versione 2, di prima dei segni, resta di versione 2.
+    const v2 = older.replace(`"version":4,`, `"version":2,`);
+    expect(v2).not.toBe(SOURCE);
+    expect(writeProjection(parseProjection(v2))).toBe(v2);
     // Una bozza di versione 1, di prima dello schema, resta di versione 1.
-    const v1 = SOURCE.replace(`"version":2,"opaque_schema":${SCHEMA},`, `"version":1,`);
+    const v1 = older.replace(`"version":4,"opaque_schema":${SCHEMA},`, `"version":1,`);
     expect(v1).not.toBe(SOURCE);
     expect(writeProjection(parseProjection(v1))).toBe(v1);
     // Uno schema che la shell non conosce lo decide il formato: si ricopia.
     const later = SOURCE.replace(`"opaque_schema":${SCHEMA}`, `"opaque_schema":7`);
     expect(writeProjection(parseProjection(later))).toBe(later);
-    const changes: EditorChange[] = [];
-    const e = engine(changes);
-    e.setDoc(v1);
-    e.select(find(e.state.doc, "Fine."));
-    e.dispatch(e.state.tr.insertText("!"));
-    expect(changes.length).toBeGreaterThan(0);
-    const written = JSON.parse(changes[changes.length - 1]!.text) as Record<string, unknown>;
-    expect([written.version, "opaque_schema" in written]).toEqual([1, false]);
+    for (const [draft, version] of [
+      [v1, 1],
+      [v2, 2],
+      [v3, 3],
+    ] as const) {
+      const changes: EditorChange[] = [];
+      const e = engine(changes);
+      e.setDoc(draft);
+      e.select(find(e.state.doc, "Fine."));
+      e.dispatch(e.state.tr.insertText("!"));
+      expect(changes.length).toBeGreaterThan(0);
+      const written = JSON.parse(changes[changes.length - 1]!.text) as Record<string, unknown>;
+      expect([written.version, "opaque_schema" in written]).toEqual([version, version >= 2]);
+    }
   });
 
   it("rifiuta una versione futura e le chiavi dell'altra versione", () => {
     for (const bad of [
-      SOURCE.replace(`"version":2`, `"version":3`),
-      SOURCE.replace(`"version":2,"opaque_schema":${SCHEMA},`, `"version":2,`),
-      SOURCE.replace(`"version":2,`, `"version":1,`),
+      SOURCE.replace(`"version":4`, `"version":5`),
+      SOURCE.replace(`"version":4,"opaque_schema":${SCHEMA},`, `"version":4,`),
+      SOURCE.replace(`"version":4,`, `"version":1,`),
       SOURCE.replace(`"opaque_schema":${SCHEMA}`, `"opaque_schema":-1`),
       SOURCE.replace(`"opaque_schema":${SCHEMA}`, `"opaque_schema":"1"`),
+      // I segni della versione 3 non stanno in una bozza di versione 2.
+      CLOSED.replace(`"version":4,`, `"version":2,`).replace(`"body_only":true,`, ""),
+      CLOSED.replace(`"version":4,`, `"version":2,`).replaceAll(`"locked":true,`, ""),
+      CLOSED.replace(`"locked":true`, `"locked":1`),
+      CLOSED.replace(`"body_only":true`, `"body_only":"sì"`),
     ]) {
       expect(bad).not.toBe(SOURCE);
+      expect(bad).not.toBe(CLOSED);
       expect(() => parseProjection(bad)).toThrow();
     }
+  });
+
+  it("con i blocchi chiusi si riscrive identica, segni compresi", () => {
+    const projection = parseProjection(CLOSED);
+    expect(projection.body_only).toBe(true);
+    expect(projection.blocks.map((block) => block.locked === true)).toEqual([false, true, true, false]);
+    expect(writeProjection(projection)).toBe(CLOSED);
+    const blocks = new BlockWriter().write(toDoc(projection));
+    expect(writeProjection(projection, blocks)).toBe(CLOSED);
+    const changes: EditorChange[] = [];
+    const e = engine(changes);
+    e.setDoc(CLOSED);
+    expect(e.getDoc()).toBe(CLOSED);
+    expect(changes).toEqual([]);
+    // Un paragrafo aperto si scrive, e i segni restano dove sono.
+    e.select(find(e.state.doc, "Ancora aperto", "Ancora aperto".length));
+    e.dispatch(e.state.tr.insertText("!"));
+    const written = parseProjection(changes[changes.length - 1]!.text);
+    expect(written.body_only).toBe(true);
+    expect(written.blocks.map((block) => block.locked === true)).toEqual([false, true, true, false]);
   });
 
   it("passa dal documento ProseMirror e torna identica", () => {
     const projection = parseProjection(SOURCE);
     const blocks = new BlockWriter().write(toDoc(projection));
     expect(writeProjection(projection, blocks)).toBe(SOURCE);
+  });
+
+  it("porta inchiostro, disegni e posti degli oggetti, nei due versi", () => {
+    // La versione 4: un inchiostro nuovo davanti al testo, un disegno nuovo
+    // in linea e un inchiostro tenuto, coi campi nell'ordine di serde.
+    const ink = `{"strokes":[{"color":"#0072B2","width":2.0,"xy":[0.0,0.0,10.5,4.0],"p":[0.5,0.75]},{"color":"#F0E442","width":8.0,"hl":true,"xy":[1.0,1.0,2.0,2.0]}]}`;
+    const body = `[{"t":"para","role":{"kind":"body"},"c":[`
+      + `{"t":"atom","kind":"ink","label":"Inchiostro","w":10.5,"h":4.0,"data":"${PNG}","ink":${ink},"float":{"wrap":"front","x":12.0,"y":-3.5}},`
+      + `{"t":"text","x":"Testo"},`
+      + `{"t":"atom","kind":"drawing","label":"Un pino","w":72.0,"h":48.0,"data":"${PNG}","svg":"<svg xmlns=\\"http://www.w3.org/2000/svg\\"/>"},`
+      + `{"t":"atom","k":"K","kind":"ink","w":10.5,"h":4.0,"ink":${ink}}`
+      + `]}]`;
+    const source = SOURCE.replace(/"blocks":\[.*\]\}$/s, `"blocks":${body}}`);
+    expect(source).not.toBe(SOURCE);
+    const projection = parseProjection(source);
+    const atoms = projection.blocks[0]!.t === "para" ? (projection.blocks[0]!.c ?? []) : [];
+    expect(atoms.map((inline) => (inline.t === "atom" ? inline.kind : inline.t))).toEqual(["ink", "text", "drawing", "ink"]);
+    expect(writeProjection(projection)).toBe(source);
+    expect(writeProjection(projection, new BlockWriter().write(toDoc(projection)))).toBe(source);
+    // Un posto su un oggetto nuovo che sta nel testo, o un inchiostro senza
+    // tratti, non sono la versione 4.
+    for (const bad of [
+      source.replace(`"kind":"drawing"`, `"kind":"note"`),
+      source.replace(`"ink":${ink},"float"`, `"float"`),
+      source.replace(`"wrap":"front"`, `"wrap":"sopra"`),
+    ]) {
+      expect(bad).not.toBe(source);
+      expect(() => parseProjection(bad)).toThrow();
+    }
   });
 
   it("aperta nella superficie non cambia finché nessuno scrive", () => {

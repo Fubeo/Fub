@@ -36,7 +36,7 @@ arriva, cambia o se ne va nel vault cambia subito i disegni aperti.
 
 ## Scegliere il carattere
 
-Dall'Esperto, o nel [Personalizzato](drawing-custom.md) con la parte
+Nel Completo, o per chi monta l'editor con le sue [parti](drawing-custom.md#che-cosa-porta-una-parte) con la parte
 «Caratteri del vault», le famiglie del vault sono nel menu «Carattere» del
 [pannello delle proprietà](drawing-properties.md) e fra le scelte di
 `font-family` negli [attributi](drawing-expert.md#attributi), dopo i tre
@@ -46,8 +46,8 @@ somiglia: `Roboto, sans-serif`, `"Fira Code", monospace`. La generica la dice
 il file: la spaziatura fissa, le parole del nome («Sans», «Serif», «Mono»,
 «Script»), poi la classificazione del disegnatore, poi la forma delle lettere.
 
-Un disegno che usa già un carattere del vault lo mostra a ogni livello, anche
-all'Essenziale: il livello sceglie che cosa si può fare, non che cosa si vede.
+Un disegno che usa già un carattere del vault lo mostra in tutti e due gli spazi, anche
+nel Semplice: lo spazio sceglie che cosa si può fare, non che cosa si vede.
 
 Un nome che il formato del disegno non saprebbe rileggere uguale, con una
 barra rovesciata, un carattere di controllo o con spazi in testa o in coda,

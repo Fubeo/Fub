@@ -688,6 +688,10 @@ fn canonical_chord_cases() -> Vec<Value> {
         // Control, che sul Mac non è Cmd.
         "Ctrl-Tab",
         "Shift-Ctrl-Tab",
+        // I tasti funzione, che non scrivono e possono stare nudi.
+        "F6",
+        "Shift-F6",
+        "f12",
         // Ciò che questa app non sa premere.
         "Meta-k",     // il modificatore che non esiste
         "Mod-Ctrl-k", // fuori dal Mac, Ctrl tenuto due volte
@@ -695,6 +699,9 @@ fn canonical_chord_cases() -> Vec<Value> {
         "Mod-",       // l'accordo senza tasto
         "Mod-Mod-k",  // il modificatore ripetuto
         "-",          // il meno nudo
+        "F25",        // non è un tasto funzione
+        "F06",        // nemmeno
+        "Fx",         // né questo
         "",
         "   ",
     ]

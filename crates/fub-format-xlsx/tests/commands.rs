@@ -985,3 +985,110 @@ fn modificare_un_commento_tiene_le_risposte() {
     assert_eq!(thread.replies, [("Bob".to_owned(), "risposta".to_owned())]);
     assert!(thread.threaded && thread.resolved);
 }
+
+#[test]
+fn incollare_da_un_intervallo_della_cartella_porta_formule_e_si_rifa() {
+    let bytes = one_sheet(BODY);
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    for id in ["fub.pasteFrom", "fub.copyHtml"] {
+        assert!(
+            state(&session.commands, id).is_some_and(|command| command.enabled),
+            "{id}"
+        );
+    }
+    // La formula copiata segue la cella, come in GridCraft.
+    let copied = give(
+        &mut provider,
+        &session.instance,
+        &session.revision,
+        command("fub.pasteFrom", r#"{"source":"B1"}"#, "B2"),
+    )
+    .unwrap();
+    let journal = journal_of(&copied.commit.edit.inserted);
+    assert_eq!(journal.commands().len(), 1);
+    assert_eq!(journal.commands()[0].id, "fub.pasteFrom");
+    let shown = cells(
+        &mut provider,
+        &session.instance,
+        &copied.commit.revision,
+        "s1",
+    );
+    assert_eq!(input(&shown, "s1", "B2"), "=A2*10");
+    assert_eq!(display(&shown, "s1", "B2"), "20");
+
+    // Spostare svuota la sorgente e porta con sé i riferimenti.
+    let moved = give(
+        &mut provider,
+        &session.instance,
+        &copied.commit.revision,
+        command("fub.pasteFrom", r#"{"source":"A1:A2","move":true}"#, "C1"),
+    )
+    .unwrap();
+    let shown = cells(
+        &mut provider,
+        &session.instance,
+        &moved.commit.revision,
+        "s1",
+    );
+    assert_eq!(input(&shown, "s1", "A1"), "");
+    assert_eq!(input(&shown, "s1", "C1"), "1");
+    assert_eq!(input(&shown, "s1", "C2"), "2");
+    assert_eq!(input(&shown, "s1", "B1"), "=C1*10");
+    assert_eq!(input(&shown, "s1", "B2"), "=C2*10");
+
+    // Il giornale si rifà all'apertura: niente appunti della facciata in
+    // mezzo.
+    let text = after(&after("", &copied.commit.edit), &moved.commit.edit);
+    let (mut again, reopened) = open(&bytes, &journal_of(&text));
+    let shown = cells(&mut again, &reopened.instance, &reopened.revision, "s1");
+    assert_eq!(input(&shown, "s1", "C2"), "2");
+    assert_eq!(input(&shown, "s1", "B2"), "=C2*10");
+    assert_eq!(input(&shown, "s1", "A2"), "");
+}
+
+#[test]
+fn copiare_in_html_legge_soltanto_e_i_parametri_sbagliati_si_rifiutano() {
+    let bytes = one_sheet(BODY);
+    let (mut provider, session) = open(&bytes, &GridJournal::new());
+    let copied = give(
+        &mut provider,
+        &session.instance,
+        &session.revision,
+        command("fub.copyHtml", r#"{"range":"A1:B1"}"#, "A1"),
+    )
+    .unwrap();
+    assert_eq!(copied.commit.revision, session.revision);
+    let result: serde_json::Value =
+        serde_json::from_str(copied.result.as_deref().unwrap()).unwrap();
+    assert_eq!(result["text"], "1\t10\n");
+    assert!(result["html"]
+        .as_str()
+        .is_some_and(|html| html.contains("<table")));
+    // Gli appunti della facciata non restano: un incolla della facciata non
+    // si serve, e il comando composto chiede la sua sorgente.
+    for refused in [
+        command("fub.pasteFrom", "{}", "C1"),
+        command(
+            "fub.pasteFrom",
+            r#"{"source":"A1","sourceSheet":"s9"}"#,
+            "C1",
+        ),
+        command(
+            "fub.pasteFrom",
+            r#"{"source":"A1","move":true,"what":"values"}"#,
+            "C1",
+        ),
+        command("fub.pasteFrom", r#"{"source":"A1","move":"sì"}"#, "C1"),
+    ] {
+        let params = refused.params.clone();
+        assert!(
+            matches!(
+                give(&mut provider, &session.instance, &session.revision, refused),
+                Err(PluginError::BadArgs(_))
+            ),
+            "{params}"
+        );
+    }
+    let shown = cells(&mut provider, &session.instance, &session.revision, "s1");
+    assert_eq!(input(&shown, "s1", "C1"), "");
+}

@@ -6,7 +6,7 @@
 > come lo segue la linea, che cosa dice il pannello delle proprietà, e che
 > cosa ne fanno i comandi, la Lettura e l'export.
 
-Dallo Standard lo strumento **Connettore** (`X`, la lettera di FigJam) unisce
+Nello spazio Completo lo strumento **Connettore** (`X`, la lettera di FigJam) unisce
 due oggetti con una linea che li segue: se uno si sposta, si ridimensiona o
 si gira, la linea si ricalcola e resta attaccata. Sta nel gruppo delle
 forme, e porta con sé la sezione «Connettore» del [pannello delle
@@ -143,7 +143,7 @@ Il comando è un passo di annulla, anche se fa più connettori.
   copie fra loro. Un connettore copiato senza uno dei suoi oggetti ha quel
   capo libero ([Disegni, appunti](drawing-clipboard.md)).
 - **I Nodi non cambiano un connettore:** il suo percorso lo calcola FubDraw, e
-  lo strumento lo dice. Si cambia il tipo o gli agganci. All'Esperto la
+  lo strumento lo dice. Si cambia il tipo o gli agganci. Nel Completo la
   tabella degli attributi mostra il `d` del connettore, e dice lo stesso.
 - **Le punte** si danno come a ogni linea ([Disegni, punte delle
   linee](drawing-tips.md)); con «Inverti» passano all'altro capo.
@@ -190,11 +190,11 @@ non ricalcola la linea quando un oggetto si sposta. La grammatica, gli
 agganci e il percorso sono in [Formato della scena,
 connettori](../reference/scene-format-connectors.md).
 
-## Livelli e parti
+## Spazi e parti
 
-Il Connettore viene dallo Standard; nel [Personalizzato](drawing-custom.md) la
+Il Connettore viene nello spazio Completo; per chi monta l'editor con le sue [parti](drawing-custom.md#che-cosa-porta-una-parte) la
 parte è lo strumento «Connettore», che porta con sé la sezione del pannello e
-«Collega le forme scelte». A un livello che non l'ha, i connettori restano nel
+«Collega le forme scelte». In uno spazio che non l'ha, i connettori restano nel
 disegno, si vedono e continuano a seguire gli oggetti: è un fatto del file.
 Mancano il modo di farne e quello di cambiarli. In un documento in sola
 lettura la sezione mostra i connettori, e non li cambia.

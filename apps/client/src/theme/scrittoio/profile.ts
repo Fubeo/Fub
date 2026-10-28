@@ -18,7 +18,7 @@
 import type { ThemeCssVocabulary } from "../../ui/sanitize-css";
 import { THEME_CONTRAST_PAIRS, type ContrastPair } from "../contrast-fixture";
 import type { ThemeProfile } from "../loader";
-import { HOOKS } from "./anatomia";
+import { CONTENT_GATE, HOOKS } from "./anatomia";
 import { CHROME_MEASURE_TOKENS } from "./measures";
 import { COLOR_TOKENS } from "./recipe";
 
@@ -59,6 +59,37 @@ export const SCRITTOIO_PAIRS: readonly ContrastPair[] = [
 ];
 
 export const THEME_2_CONTRAST_PAIRS: readonly ContrastPair[] = [...THEME_CONTRAST_PAIRS, ...SCRITTOIO_PAIRS];
+
+/**
+ * Le coppie dei ruoli facoltativi (`OPTIONAL_ROLES` della ricetta): i segni di
+ * Fub sulla carta del tema e sulla carta chiara di un file. Stanno a parte
+ * perché i ruoli obbligatori sono proprio i ruoli delle coppie qui sopra; il
+ * cancello le conta soltanto quando il tema dichiara i due ruoli.
+ */
+export const THEME_2_OPTIONAL_PAIRS: readonly ContrastPair[] = [
+  ["doc-ins", "doc-bg", AA, "il testo inserito di una revisione"],
+  ["doc-del", "doc-bg", AA, "il testo tolto di una revisione"],
+  ["doc-proof-spell", "doc-bg", UI, "l'onda di una parola sconosciuta"],
+  ["doc-proof-gram", "doc-bg", UI, "l'onda di un suggerimento di grammatica"],
+  ["doc-comment", "doc-bg", UI, "il filo di un commento"],
+  ...[1, 2, 3, 4, 5, 6].map((n): ContrastPair => [`doc-author-${n}`, "doc-bg", AA, `il testo di una revisione del ${n}° autore`]),
+  ["doc-fg", "doc-find", AA, "il testo di un risultato della ricerca"],
+  ["doc-fg", "doc-find-now", AA, "il testo del risultato corrente"],
+  ["paper-ink", "paper-bg", AA, "il testo automatico sulla carta di un file"],
+  ["paper-ink", "paper-selection", AA, "il testo selezionato sulla carta di un file"],
+  ["paper-ink", "paper-active-line", AA, "la riga del cursore sulla carta di un file"],
+  ["paper-link", "paper-bg", AA, "un collegamento di Fub sulla carta di un file"],
+  ["paper-danger", "paper-bg", AA, "un errore sulla carta di un file"],
+  ["paper-ins", "paper-bg", AA, "il testo inserito, sulla carta di un file"],
+  ["paper-del", "paper-bg", AA, "il testo tolto, sulla carta di un file"],
+  ...[1, 2, 3, 4, 5, 6].map((n): ContrastPair => [`paper-author-${n}`, "paper-bg", AA, `il testo di una revisione del ${n}° autore, sulla carta di un file`]),
+  ["paper-caret", "paper-bg", UI, "il cursore sulla carta di un file"],
+  ["paper-proof-spell", "paper-bg", UI, "l'onda del correttore sulla carta di un file"],
+  ["paper-proof-gram", "paper-bg", UI, "l'onda della grammatica sulla carta di un file"],
+  ["paper-comment", "paper-bg", UI, "il filo di un commento sulla carta di un file"],
+  ["paper-ink", "paper-find", AA, "un risultato della ricerca sulla carta di un file"],
+  ["paper-ink", "paper-find-now", AA, "il risultato corrente sulla carta di un file"],
+];
 
 export const THEME_2_REQUIRED_ROLES: readonly string[] = [
   ...new Set(THEME_2_CONTRAST_PAIRS.flatMap(([ink, background]) => [ink, background])),
@@ -171,6 +202,8 @@ export const THEME_2_PROFILE: ThemeProfile = {
   hooks: HOOKS,
   requiredRoles: THEME_2_REQUIRED_ROLES,
   contrastPairs: THEME_2_CONTRAST_PAIRS,
+  optionalPairs: THEME_2_OPTIONAL_PAIRS,
   preferenceTokens: THEME_2_PREFERENCE_TOKENS,
   vocabulary: THEME_2_VOCABULARY,
+  gate: CONTENT_GATE,
 };

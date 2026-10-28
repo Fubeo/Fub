@@ -14,12 +14,31 @@ import type { GridBook, GridCellStyle, GridObject, GridSheetView, GridTable } fr
 import { resultList } from "../dialogs/result";
 import type { RibbonKey } from "./strings";
 
-/// I parametri di un comando, che diventano il suo testo JSON.
-export type Params = Readonly<Record<string, unknown>>;
+import type {
+  ButtonControl as KitButtonControl,
+  CheckControl as KitCheckControl,
+  ControlBase,
+  FieldControl as KitFieldControl,
+  KitControl,
+  MenuControl as KitMenuControl,
+  MenuEntry as KitMenuEntry,
+  Params,
+  RibbonColumn as KitRibbonColumn,
+  RibbonGroup as KitRibbonGroup,
+  RibbonTab as KitRibbonTab,
+  SelectControl as KitSelectControl,
+  SplitControl as KitSplitControl,
+  Text as KitText,
+} from "../../../kit/ribbon/types";
+
+// La forma delle schede è quella del kit (`kit/ribbon/types.ts`), con la vista
+// e le chiavi della griglia; la tavolozza e le gallerie sono specie sue.
+export { columnControls, groupControls } from "../../../kit/ribbon/types";
+export type { Params };
 
 /// Un testo da mostrare: una chiave del catalogo, o un valore com'è (il nome
 /// di una funzione, di un carattere, di un foglio).
-export type Text = RibbonKey | { readonly raw: string };
+export type Text = KitText<RibbonKey>;
 
 /// Ciò che le schede leggono per dire lo stato dei controlli.
 export interface RibbonView {
@@ -41,79 +60,21 @@ export interface RibbonView {
 }
 
 /// Una voce di menu: un comando con i suoi parametri, una finestra, una
-/// formula da cominciare, o un menu più in là.
-export interface MenuEntry {
-  readonly label: Text;
-  readonly id?: string;
-  readonly params?: Params;
-  /// Apre questa finestra con `params` invece di dare il comando `id`.
-  readonly dialog?: string;
-  /// Scrive nella cella `=` e questo testo invece di dare un comando.
-  readonly write?: string;
-  /// Un menu che si apre al posto di questo, con i comandi che lo fanno vedere.
-  readonly submenu?: () => readonly MenuEntry[] | Promise<readonly MenuEntry[]>;
-  readonly requires?: readonly string[];
-  readonly icon?: string;
-  readonly swatches?: readonly string[];
-  readonly description?: string;
-  readonly separator?: boolean;
-  readonly checked?: boolean;
-  readonly choice?: "radio" | "checkbox";
-}
+/// formula da cominciare (`write`, scritta nella cella dopo `=`), o un menu
+/// più in là.
+export type MenuEntry = KitMenuEntry<RibbonKey>;
 
-interface Base {
-  readonly label: RibbonKey;
-  /// I tasti dopo la lettera della scheda.
-  readonly keytip: string;
-  /// Un'icona di `icons.ts`, o un segno scritto come «B».
-  readonly icon?: string;
-  readonly glyph?: string;
-  /// Grande: icona sopra il nome. Piccolo: in una fila, con il nome soltanto
-  /// se `labelled`.
-  readonly size?: "large" | "small";
-  readonly labelled?: boolean;
-  /// Una classe in più sul controllo, per il segno («grassetto»).
-  readonly className?: string;
-  /// Si vede soltanto se vale, oltre al catalogo: un controllo che serve a un
-  /// tipo di oggetto e non agli altri.
-  readonly when?: (view: RibbonView) => boolean;
-}
+type Base = ControlBase<RibbonView, RibbonKey>;
 
-/// Un pulsante che dà un comando; `pressed` lo fa interruttore.
-export interface ButtonControl extends Base {
-  readonly kind: "button";
-  readonly id: string;
-  readonly params?: Params | ((view: RibbonView) => Params);
-  /// Apre questa finestra con `params` invece di dare il comando `id`; la
-  /// finestra può dipendere dallo stato («Proteggi cartella» o la sua
-  /// rimozione).
-  readonly dialog?: string | ((view: RibbonView) => string);
-  /// Chiede alla shell un'azione sua invece di dare il comando `id`, che
-  /// resta la condizione perché il pulsante si veda: l'esportazione in PDF è
-  /// un comando dell'host, non della cartella.
-  readonly shell?: "exportPdf";
-  readonly pressed?: (view: RibbonView) => boolean;
-}
-
-/// Un pulsante diviso: la parte grande dà il comando, la freccia apre un menu
-/// di varianti. Con `remember`, la parte grande ripete l'ultima scelta.
-export interface SplitControl extends Base {
-  readonly kind: "split";
-  readonly id: string;
-  readonly params?: Params;
-  readonly menu: (view: RibbonView) => readonly MenuEntry[];
-  readonly menuLabel: RibbonKey;
-  readonly remember?: boolean;
-  readonly pressed?: (view: RibbonView) => boolean;
-}
-
-/// Un pulsante che apre soltanto un menu.
-export interface MenuControl extends Base {
-  readonly kind: "menu";
-  readonly items: (view: RibbonView) => readonly MenuEntry[] | Promise<readonly MenuEntry[]>;
-  /// I comandi che lo fanno vedere, quando le voci arrivano dopo.
-  readonly requires?: readonly string[];
-}
+/// Un pulsante che dà un comando; `pressed` lo fa interruttore. Con `shell`
+/// (`exportPdf`) chiede l'esportazione in PDF, che è un comando dell'host e
+/// non della cartella.
+export type ButtonControl = KitButtonControl<RibbonView, RibbonKey>;
+export type SplitControl = KitSplitControl<RibbonView, RibbonKey>;
+export type MenuControl = KitMenuControl<RibbonView, RibbonKey>;
+export type SelectControl = KitSelectControl<RibbonView, RibbonKey>;
+export type CheckControl = KitCheckControl<RibbonView, RibbonKey>;
+export type FieldControl = KitFieldControl<RibbonView, RibbonKey>;
 
 /// Un colore: la parte grande ripete l'ultimo, la freccia apre la tavolozza.
 export interface ColorControl extends Base {
@@ -129,24 +90,6 @@ export interface ColorControl extends Base {
   readonly hex?: boolean;
 }
 
-/// Un elenco a discesa nativo: il carattere, la dimensione, il formato.
-export interface SelectControl extends Base {
-  readonly kind: "select";
-  readonly id: string;
-  readonly width: number;
-  readonly options: (view: RibbonView) => readonly { readonly value: string; readonly label: Text }[];
-  readonly value: (view: RibbonView) => string | null;
-  readonly params: (value: string) => Params | null;
-}
-
-/// Una casella da spuntare.
-export interface CheckControl extends Base {
-  readonly kind: "check";
-  readonly id: string;
-  readonly checked: (view: RibbonView) => boolean;
-  readonly params: (on: boolean, view: RibbonView) => Params;
-}
-
 /// Una galleria di stili di tabella o di cella.
 export interface GalleryControl extends Base {
   readonly kind: "gallery";
@@ -156,56 +99,20 @@ export interface GalleryControl extends Base {
   readonly current?: (view: RibbonView) => string | null;
 }
 
-/// Un campo di testo che dà il comando quando cambia.
-export interface FieldControl extends Base {
-  readonly kind: "field";
-  readonly id: string;
-  readonly width: number;
-  readonly value: (view: RibbonView) => string;
-  readonly params: (value: string, view: RibbonView) => Params;
-}
+/// Le specie che disegna la griglia, oltre a quelle del kit.
+export type GridExtraControl = ColorControl | GalleryControl;
 
-export type RibbonControl =
-  | ButtonControl
-  | SplitControl
-  | MenuControl
-  | ColorControl
-  | SelectControl
-  | CheckControl
-  | GalleryControl
-  | FieldControl;
+export type RibbonControl = KitControl<RibbonView, RibbonKey> | GridExtraControl;
 
 /// Una colonna di un gruppo: un controllo grande, o righe di controlli piccoli.
-export type RibbonColumn = RibbonControl | { readonly rows: readonly (readonly RibbonControl[])[] };
+export type RibbonColumn = KitRibbonColumn<RibbonControl>;
 
-export interface RibbonGroup {
-  readonly id: string;
-  readonly label: RibbonKey;
-  /// L'icona del gruppo raccolto, quando la barra è stretta.
-  readonly icon: string;
-  /// Il tasto del gruppo raccolto.
-  readonly keytip: string;
-  readonly columns: readonly RibbonColumn[];
-}
+export type RibbonGroup = KitRibbonGroup<RibbonControl, RibbonKey>;
 
-export interface RibbonTab {
-  readonly id: string;
-  readonly label: RibbonKey;
-  readonly keytip: string;
-  readonly groups: readonly RibbonGroup[];
+export interface RibbonTab extends KitRibbonTab<RibbonControl, RibbonKey> {
   /// Una scheda che c'è soltanto quando la selezione è in una tabella, o
   /// quando è selezionato un grafico, o un oggetto qualsiasi.
   readonly contextual?: "table" | "chart" | "object";
-}
-
-/// I controlli di una colonna, nell'ordine in cui si leggono.
-export function columnControls(column: RibbonColumn): readonly RibbonControl[] {
-  return "rows" in column ? column.rows.flat() : [column];
-}
-
-/// I controlli di un gruppo.
-export function groupControls(group: RibbonGroup): readonly RibbonControl[] {
-  return group.columns.flatMap(columnControls);
 }
 
 // ── I valori che il provider conosce ────────────────────────────────────

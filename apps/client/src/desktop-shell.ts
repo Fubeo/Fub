@@ -70,12 +70,14 @@ import { mountSplitter } from "./kit";
 import { mountActivity } from "./panels/activity";
 import { mountSettings } from "./panels/settings";
 import { currentTheme, mountTheme } from "./theme/theme";
+import { onContentLookChange } from "./theme/content-look";
 import { focusedContextMode } from "./state/document-controller";
 import { reducedMotion } from "./theme/reduced-motion";
 import {
   mountDocument,
   openDocument,
   openDocumentBeside,
+  refreshLooks,
   reveal,
   setEditorTheme,
   synchronize,
@@ -755,6 +757,9 @@ async function init(): Promise<Teardown> {
   // riconfigurarlo subito dopo.
   reducedMotion();
   mountTheme(pageWindowLifetime, setEditorTheme);
+  // L'aspetto del contenuto segue l'impostazione e il contrasto, che il tema
+  // rilegge: la classe `look-*` di ogni riquadro si ridice.
+  pageWindowLifetime.add(onContentLookChange(refreshLooks));
   mountWheelTextSize(pageWindowLifetime);
 
   // Le stringhe accanto al tema, e per la stessa ragione (§12.4): sono le due

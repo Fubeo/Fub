@@ -331,6 +331,14 @@ beforeEach(() => {
   localStorage.clear();
 });
 
+// L'ultimo montaggio del file non ha un `beforeEach` dopo di sé: il suo
+// risponditore si ferma qui, prima che l'ambiente se ne vada.
+afterAll(() => {
+  activeStop?.();
+  activeStop = null;
+  stopAnswering();
+});
+
 describe("la menubar applicativa", () => {
   it("apre File, seleziona una voce, si chiude e si rimonta senza errori", async () => {
     const first = await mount({});
@@ -590,6 +598,27 @@ describe("navigazione accessibile dell'esploratore", () => {
       document.querySelector('#file-list li[data-path="note"]')?.getAttribute("aria-expanded"),
     ).toBe("true");
     expect(document.querySelector(".sheet-title-edit")).toBeNull();
+  });
+});
+
+describe("il formato si vede", () => {
+  it("un Word ha la sua icona nell'albero e nella scheda, e «WORD» accanto al percorso; una nota no", async () => {
+    const rich = JSON.stringify({ format: "fub-rich", version: 1, blocks: [{ t: "para", role: { kind: "body" }, c: [{ t: "text", x: "ciao" }] }] });
+    await start({ ...VAULT, "Lettera.docx": rich });
+    const row = (path: string) => document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"] > .tree-row`);
+    await waitFor("il Word è nell'albero", () => !!row("Lettera.docx"));
+    expect(row("Lettera.docx")!.querySelector(".row-icon svg")).not.toBeNull();
+    expect(row("Benvenuto.md")!.classList.contains("no-icon")).toBe(true);
+    row("Lettera.docx")!.click();
+    const tag = () => document.querySelector<HTMLElement>(".pane.focus .pane-toolbar > .pane-format");
+    await waitFor("il Word si apre", () => tag()?.hidden === false);
+    expect(tag()!.textContent).toBe("WORD");
+    const tab = document.querySelector<HTMLElement>('.pane.focus .tab[aria-selected="true"]')!;
+    expect(tab.querySelector(".tab-format")).not.toBeNull();
+    expect(tab.getAttribute("aria-label")).toContain("Documento di Word");
+    row("Benvenuto.md")!.click();
+    await waitFor("la nota si apre", () => tag()?.hidden === true);
+    expect(document.querySelector('.pane.focus .tab[aria-selected="true"] .tab-format')).toBeNull();
   });
 });
 

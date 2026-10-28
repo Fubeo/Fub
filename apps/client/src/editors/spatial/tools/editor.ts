@@ -125,6 +125,7 @@ import type { TextOperation } from "../../core/text-operation";
 import type { FontNotes, VaultFontPort } from "../fonts/vault";
 import type { SymbolLibraryPort } from "./symbol-libraries";
 import type { TouchPolicy } from "../../../ink/input/roles";
+import type { SavedPen } from "../../../ink/pens";
 import type { ContainerNode, DocumentModel } from "../scene/model";
 import type { SceneEngine } from "../scene/engine";
 import { ROOT, type Op } from "../scene/ops";
@@ -142,11 +143,16 @@ import type { Suggested } from "./suggestions";
 import { exportBox, type ExportScene } from "./export-plan";
 import type { ImageCodec } from "./images";
 import { RECENT_COLORS } from "./palette";
-import type { Feature, Level, ToolId, ToolProfile } from "./registry";
+import type { Feature, Level, ToolId, ToolProfile, Workspace } from "./registry";
 import type { TracerFactory } from "./trace-runner";
 import { checkedGrid } from "./editor/helpers";
 import type { EditorContext } from "./editor/context";
+import type { DrawChrome } from "./editor/chrome/hosts";
 import { installState } from "./editor/state";
+import { installBare } from "./editor/chrome/bare";
+import { installOutline } from "./editor/chrome/outline";
+import { installCommandSearch } from "./editor/chrome/command-search";
+import { installStatus, type DrawStatus } from "./editor/chrome/status";
 import { installToolbar } from "./editor/toolbar";
 import { installBars } from "./editor/bars";
 import { installStage } from "./editor/stage";
@@ -164,6 +170,9 @@ import { installBoardTool } from "./editor/board-tool";
 import { installCutting } from "./editor/cutting";
 import { installWidthTool } from "./editor/width-tool";
 import { installDropperTool } from "./editor/dropper-tool";
+import { installNib } from "./editor/nib";
+import { installReplay, type ReplaySpeed } from "./editor/replay";
+import { installRuler } from "./editor/ruler-ink";
 import { installGradientTool } from "./editor/gradient-tool";
 import { installGradientGesture } from "./editor/gradient-gesture";
 import { installNodeGestures } from "./editor/node-gestures";
@@ -173,6 +182,11 @@ import { installShapesConnector } from "./editor/shapes-connector";
 import { installBezierTool } from "./editor/bezier-tool";
 import { installCurvatureTool } from "./editor/curvature-tool";
 import { installTextTool } from "./editor/text-tool";
+import type { DrawCommand } from "./editor/chrome/commands";
+import { installCommands } from "./editor/chrome/commands";
+import { installNavigator } from "./editor/chrome/navigator";
+import { installWorkspace } from "./editor/chrome/workspace";
+import { installHandZoom } from "./editor/hand-zoom";
 import { installInput } from "./editor/input";
 import { installArranging } from "./editor/arranging";
 import { installSelectionCommands } from "./editor/selection-commands";
@@ -183,6 +197,7 @@ import { installKeys } from "./editor/keys";
 import { installClipboardCommands } from "./editor/clipboard-commands";
 import { installVaultImages } from "./editor/vault-images";
 import { installLife } from "./editor/life";
+import { installTextProof, type DrawProof } from "./editor/text-proof";
 export { DRAW_SCALE_LIMITS } from "./editor/constants";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
@@ -289,6 +304,16 @@ export interface DrawEditorOptions {
   /// Le parti del livello Personalizzato, per nome (default quelle
   /// dell'Essenziale): un nome che l'editor non conosce non conta.
   readonly custom?: readonly string[];
+  /// Lo spazio di lavoro: se c'è, sceglie lui il livello e le parti; cambia
+  /// con `setWorkspace`.
+  readonly workspace?: Workspace;
+  /// Gli strumenti della colonna, in ordine (default vuoto: quelli di serie).
+  readonly toolbar?: readonly ToolId[];
+  /// Chi disegna ha scelto un altro spazio dal menu ≡.
+  readonly onWorkspace?: (workspace: Workspace) => void;
+  /// Chi disegna ha salvato la colonna da «Personalizza la barra…»: vuota è
+  /// quella di serie.
+  readonly onToolbar?: (toolbar: readonly ToolId[]) => void;
   /// Il profilo, che sceglie gli strumenti (default `vector`).
   readonly profile?: ToolProfile;
   /// Il foglio delle annotazioni; senza, il documento è un disegno.
@@ -301,6 +326,9 @@ export interface DrawEditorOptions {
   /// nel foglio delle annotazioni, il pannello «Simboli» mostra i soli
   /// simboli del disegno.
   readonly symbolLibraries?: SymbolLibraryPort;
+  /// Il correttore per il testo che si scrive. Senza, il testo non si
+  /// controlla.
+  readonly proof?: DrawProof;
   /// Ciò che il disegno dice dei suoi caratteri è cambiato: quelli che non
   /// carica, e perché.
   onFontNotes?(notes: FontNotes): void;
@@ -319,6 +347,10 @@ export interface DrawEditorOptions {
   /// Chi disegna ha scelto un colore: i colori recenti di adesso, dal più
   /// recente.
   readonly onColorsChange?: (colors: readonly string[]) => void;
+  /// Le penne salvate (`draw.pens`, default nessuna).
+  readonly pens?: readonly SavedPen[];
+  /// Chi disegna ha salvato o tolto una penna: le penne salvate di adesso.
+  readonly onPensChange?: (pens: readonly SavedPen[]) => void;
   readonly links?: DrawLinks;
   readonly place?: DrawPlace;
   readonly onChange?: (change: DrawChange) => void;
@@ -335,6 +367,14 @@ export interface DrawEditorOptions {
   readonly onSuggestionsSwitch?: (on: boolean) => void;
   /// Un suggerimento è stato mostrato, o non serve più: quelli di adesso.
   readonly onSuggestedChange?: (seen: readonly string[]) => void;
+  /// «Esporta» nella barra in alto e nel menu del disegno: chi monta
+  /// l'editor apre la sua finestra, già sulla selezione se `what` lo
+  /// chiede («Esporta la selezione» dell'ispettore). Senza, il pulsante non
+  /// c'è.
+  readonly onExport?: (what?: "selection") => void;
+  /// Dove stanno barra, colonna, foglio e pannelli (default
+  /// `inlineChrome()`: tutto dentro l'editor).
+  readonly chrome?: DrawChrome;
 }
 
 /// Ciò che la finestra «Esporta» chiede al disegno.
@@ -392,11 +432,15 @@ export interface DrawEditor {
   /// cronologia restano. Uno strumento che il livello non ha più torna alla
   /// penna, o al primo che c'è, e un colore personalizzato al nero.
   setLevel(level: Level, custom?: readonly string[]): void;
+  /// Un altro spazio di lavoro, dal vivo, e con `toolbar` un'altra colonna.
+  setWorkspace(workspace: Workspace, toolbar?: readonly ToolId[]): void;
   setTool(id: ToolId): void;
   /// Il colore dello strumento di adesso: uno della tavolozza o, dal livello
   /// Standard, uno a piacere, come lo legge `customColor`.
   setColor(color: string): void;
   setWidth(width: number): void;
+  /// Riproduce il disegno coi tempi dei campioni (P12); il file non cambia.
+  replay(speed: ReplaySpeed): void;
   /// La griglia: se si vede, se aggancia, e il passo.
   readonly grid: Grid;
   /// Un'altra griglia, da chi monta l'editor: non si annuncia e non torna a
@@ -405,6 +449,9 @@ export interface DrawEditor {
   /// Altri colori recenti, da chi monta l'editor: non tornano a
   /// `onColorsChange`.
   setRecentColors(colors: readonly string[]): void;
+  /// Altre penne salvate, da chi monta l'editor: non tornano a
+  /// `onPensChange`.
+  setSavedPens(pens: readonly SavedPen[]): void;
   /// Ciò che chi monta l'editor ricorda dei suggerimenti, letto o cambiato
   /// altrove: non torna a `onSuggestedChange`, se non con quelli visti qui
   /// che gli mancavano.
@@ -425,6 +472,11 @@ export interface DrawEditor {
   /// Ciò che la finestra «Esporta» chiede al disegno: gli oggetti scelti,
   /// per id, col riquadro che li contiene, e le tavole nel loro ordine.
   exportScene(): DrawExport;
+  /// Le voci della banda di stato: zoom, puntatore, misure, oggetti.
+  readonly status: DrawStatus;
+  /// Il catalogo dei comandi di adesso: ciò che il disegno sa fare, col
+  /// posto, il tasto e se si può.
+  commands(): readonly DrawCommand[];
   focus(): void;
   dispose(): void;
 }
@@ -435,6 +487,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // contesto ciò che i precedenti hanno dato.
   const ctx = { host, initial, owner, options } as EditorContext;
   installState(ctx);
+  installStatus(ctx);
+  installBare(ctx);
+  installOutline(ctx);
+  installCommands(ctx);
+  installCommandSearch(ctx);
   installToolbar(ctx);
   installBars(ctx);
   installStage(ctx);
@@ -452,6 +509,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   installCutting(ctx);
   installWidthTool(ctx);
   installDropperTool(ctx);
+  installNib(ctx);
+  installReplay(ctx);
+  installRuler(ctx);
   installGradientTool(ctx);
   installGradientGesture(ctx);
   installNodeGestures(ctx);
@@ -461,7 +521,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   installBezierTool(ctx);
   installCurvatureTool(ctx);
   installTextTool(ctx);
+  installTextProof(ctx);
   installInput(ctx);
+  installHandZoom(ctx);
+  installNavigator(ctx);
+  installWorkspace(ctx);
   installArranging(ctx);
   installSelectionCommands(ctx);
   installImageCommands(ctx);
@@ -499,6 +563,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
   return {
     element: root,
+    status: ctx.status,
+    commands: () => ctx.commands(),
     get engine() {
       return ctx.engine;
     },
@@ -533,12 +599,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     setGrid(next) {
       if (ctx.disposed) return;
       ctx.grid = checkedGrid(next, ctx.grid);
+      if (ctx.grid.penId !== undefined && ctx.grid.penId !== "highlighter") ctx.penId = ctx.grid.penId;
       suggestions.relabel();
       showGrid();
       showGuideLines();
       showHandles();
       panel.setClosed(ctx.grid.closed as readonly SectionId[]);
-      if (ctx.grid.panel !== null && has("properties") && ctx.grid.panel === panel.element.hidden) showPanel(ctx.grid.panel, false, false);
+      // Nell'ispettore il pannello sta nella sua scheda: aperto o chiuso lo
+      // dice chi la tiene.
+      if (ctx.chrome.reveal === undefined && ctx.grid.panel !== null && has("properties") && ctx.grid.panel === panel.element.hidden) showPanel(ctx.grid.panel, false, false);
       syncProperties();
     },
     setSuggestions(suggested) {
@@ -548,6 +617,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (ctx.disposed) return;
       ctx.recentColors = colors.slice(0, RECENT_COLORS);
       syncProperties();
+    },
+    setSavedPens(pens) {
+      if (ctx.disposed) return;
+      ctx.savedPens = pens;
+      ctx.syncPenOptions();
     },
     setEngine(next) {
       if (ctx.disposed) return;
@@ -593,9 +667,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     adopt,
     makeDrawingEditable: () => makeEditable({ kind: "all" }, true),
     setLevel,
+    setWorkspace: (workspace, toolbar) => ctx.setWorkspace(workspace, toolbar),
     setTool,
     setColor: (color) => setColor(color),
     setWidth,
+    replay: (speed) => ctx.replay(speed),
     select,
     deleteSelection,
     undo,

@@ -114,6 +114,11 @@ export default defineConfig({
           if (/\/node_modules\/(@codemirror\/lang-|@lezer\/)(markdown|html|css|javascript)\//.test(id)) {
             return "markdown-grammar";
           }
+          // Scrittura, il nucleo del testo ricco, con ProseMirror: la usano
+          // i documenti e il testo dei disegni, che la carica dopo il
+          // montaggio. Da sola non pesa sul primo disegno e resta in cache
+          // fra i due editor.
+          if (/\/src\/scrittura\/|\/node_modules\/prosemirror-/.test(id)) return "scrittura";
           // Il formato dei disegni e la sua pittura: il modello, la lettura,
           // le operazioni e il tratto a mano libera. Cambiano col formato, non
           // con l'editor che ci lavora sopra, e non dipendono da lui.
@@ -152,9 +157,10 @@ export default defineConfig({
           // le scelte dell'export.
           // E gli aiuti degli strumenti senza DOM: la cornice di
           // trasformazione, le forme coi parametri, il contagocce, le guide
-          // intelligenti e la griglia.
+          // intelligenti e la griglia; le librerie di simboli, i nodi di
+          // Bézier, dove va la barra della selezione e l'ordine cambiato.
           // Dipendono dal formato e dalla geometria, e l'editor li chiama.
-          if (/\/src\/editors\/spatial\/(tools\/(hit|clips|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|repeat-ops|symmetry|clipboard|history|audit|attributes|quantity|export-plan|frame|reshape|eyedropper|guides|grid)|describe)\.ts$/.test(id)) {
+          if (/\/src\/editors\/spatial\/(tools\/(hit|clips|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|repeat-ops|symmetry|clipboard|history|audit|attributes|quantity|export-plan|frame|reshape|eyedropper|guides|grid|symbol-library|symbol-libraries|bezier|bar|order-changes)|describe)\.ts$/.test(id)) {
             return "drawing-commands";
           }
           // I pannelli dei disegni: le proprietà coi loro campi e coi colori
@@ -162,14 +168,31 @@ export default defineConfig({
           // connettore, gli oggetti, le tavole, la cronologia, l'accessibilità,
           // l'ispettore degli attributi, la finestra «Esporta», le forme e i
           // simboli, con la finestra dell'aggiornamento di un simbolo, la
-          // finestra di «Rendi modificabile», le finestre «Penna e dita» e
-          // «Guide», il menu radiale, la nota di un'annotazione, i
-          // suggerimenti sotto il foglio e il campo dove si scrive un testo.
+          // finestra di «Rendi modificabile», le finestre «Penna e dita»,
+          // «Personalizza la barra…» e «Guide», il menu radiale, la nota di
+          // un'annotazione, i suggerimenti sotto il foglio e il campo dove si
+          // scrive un testo;
+          // con loro le finestre a moduli e l'elenco dei tasti, che soltanto
+          // i disegni aprono.
           // Sono DOM attorno al foglio, che l'editor e la superficie montano e
           // che leggono i comandi; non dipendono dall'editor, e cambiano con
           // la loro interfaccia.
-          if (/\/src\/editors\/spatial\/tools\/(properties|swatches-panel|gradient-panel|hatch-panel|effects-panel|connector-panel|objects|boards-panel|history-panel|accessibility-panel|inspector|export-dialog|library-panel|symbols-panel|symbol-update-dialog|editable-dialog|fields|touch-dialog|guide-dialog|radial|note|suggestions|text-field)\.ts$/.test(id)) {
+          if (/\/src\/editors\/spatial\/tools\/(properties|swatches-panel|gradient-panel|hatch-panel|effects-panel|connector-panel|objects|boards-panel|history-panel|accessibility-panel|inspector|export-dialog|library-panel|symbols-panel|symbol-update-dialog|editable-dialog|fields|touch-dialog|toolbar-dialog|guide-dialog|radial|note|suggestions|text-field)\.ts$/.test(id) || /\/src\/ui\/form-dialog\.ts$/.test(id)) {
             return "drawing-panels";
+          }
+          // Le cromature dell'editor e i suoi installatori più grossi: si
+          // chiamano soltanto al montaggio, nessuno lavora mentre il modulo si
+          // valuta, e da soli tengono `surface` sotto la soglia.
+          if (/\/src\/editors\/spatial\/tools\/editor\/(chrome\/[a-z-]+|curvature-tool|image-commands|selection-commands|tree)\.ts$/.test(id)) {
+            return "drawing-editor-parts";
+          }
+          // I controlli del kit che le superfici condividono: il selettore e il
+          // pozzo del colore, il campo numerico con le unità, la scelta del
+          // carattere, la colonna degli strumenti e la barra delle opzioni. Li
+          // usano il disegno e, domani, i documenti e il foglio: non sono
+          // dell'editor che li monta.
+          if (/\/src\/kit\/(color\/|number-field\.ts$|quantity\.ts$|font-picker\.ts$|tool-rail\.ts$|options-bar\.ts$)/.test(id)) {
+            return "kit-controls";
           }
           // La pelle composta è testo, come il catalogo delle stringhe: cresce
           // con ogni superficie, e dentro la serie ne consumava tutto il

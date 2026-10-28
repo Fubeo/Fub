@@ -5,7 +5,7 @@
 > **Risultato:** sapere come si disegnano poligoni e stelle, come si cambiano
 > dopo e come se ne arrotondano gli angoli, anche di un rettangolo.
 
-Dal [livello Standard](drawing.md#il-livello-standard) la barra di un
+Nello spazio [Completo](drawing.md#completo-e-semplice) la barra di un
 [disegno](drawing.md) ha il **Poligono** (`Y`), dopo il Connettore: poligoni
 regolari e stelle che restano tali. Un esagono disegnato si fa ottagono,
 stella o forma dagli angoli tondi in un passo, senza ridisegnarlo. Nel file è
@@ -92,7 +92,7 @@ angoli, e ogni cambio riscrive il `d` da lì:
 ```
 
 Spostare, scalare e ruotare cambiano soltanto `transform`, come per gli altri
-oggetti. All'[Esperto](drawing-expert.md) lo strumento Nodi mostra i vertici:
+oggetti. Fra gli [strumenti avanzati](drawing-expert.md) lo strumento Nodi mostra i vertici:
 portarli tutti insieme sposta la forma, che resta un poligono o una stella;
 spostarne uno ne fa un tracciato. «Oggetto in tracciato» toglie i parametri e
 lascia il `d`.
@@ -103,5 +103,5 @@ La grammatica è in [Formato della scena, poligoni e stelle](../reference/scene-
 Lo strumento sta in `apps/client/src/editors/spatial/tools/shapes.ts`, la
 sezione «Forma» e la maniglia degli angoli in `reshape.ts`, la geometria e il
 `d` in `apps/client/src/editors/spatial/scene/parametric.ts`. Non c'è niente
-da montare: il Poligono viene col livello Standard, e nel Personalizzato è
-la parte «Poligono» ([Disegni, livello Personalizzato](drawing-custom.md)).
+da montare: il Poligono viene con lo spazio Completo, e per chi monta l'editor con le sue parti è
+la parte «Poligono» ([Disegni, spazio di lavoro e barra](drawing-custom.md)).

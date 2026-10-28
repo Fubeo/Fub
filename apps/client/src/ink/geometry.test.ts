@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mappedSamples, straight, toLocal } from "./geometry";
+import { mappedSamples, straight, STRAIGHT_SNAP, toLocal } from "./geometry";
 import { INK_MAX_SAMPLES, quantizeInk, type InkSample } from "./sample";
 
 describe("i campioni portati da una trasformazione", () => {
@@ -68,6 +68,16 @@ describe("il tratto dritto", () => {
     const out = straight([{ x: 4, y: 4, t: 0 }, { x: 4, y: 4, t: 10 }]);
     expect(out.length).toBe(2);
     expect(() => quantizeInk(out)).not.toThrow();
+  });
+
+  it("con il passo, la direzione va al multiplo più vicino e la lunghezza resta", () => {
+    const out = straight([{ x: 0, y: 0, t: 0 }, { x: 10, y: 1, t: 50 }], STRAIGHT_SNAP);
+    const end = out[out.length - 1]!;
+    expect(end.y).toBeCloseTo(0, 9);
+    expect(end.x).toBeCloseTo(Math.hypot(10, 1), 9);
+    const steep = straight([{ x: 0, y: 0, t: 0 }, { x: 10, y: 9, t: 50 }], STRAIGHT_SNAP);
+    const tip = steep[steep.length - 1]!;
+    expect((Math.atan2(tip.y, tip.x) * 180) / Math.PI).toBeCloseTo(45, 9);
   });
 
   it("una distanza enorme non supera il limite dei campioni, ed è deterministica", () => {

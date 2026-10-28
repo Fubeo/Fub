@@ -54,6 +54,8 @@ pub struct Package<'a> {
     pub sheet_rels: Vec<(usize, String)>,
     /// Il tipo di contenuto della parte principale; vuoto per `.xlsx`.
     pub main_type: &'a str,
+    /// Gli stili di `styles.xml`; vuoto per `STYLES`.
+    pub styles: &'a str,
 }
 
 impl Package<'_> {
@@ -130,7 +132,15 @@ impl Package<'_> {
             ),
             (
                 "xl/styles.xml".into(),
-                format!(r#"{HEAD}<styleSheet {NS}>{STYLES}</styleSheet>"#).into_bytes(),
+                format!(
+                    r#"{HEAD}<styleSheet {NS}>{}</styleSheet>"#,
+                    if self.styles.is_empty() {
+                        STYLES
+                    } else {
+                        self.styles
+                    }
+                )
+                .into_bytes(),
             ),
         ];
         for (index, part) in self.sheets.iter().enumerate() {

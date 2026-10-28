@@ -10,6 +10,7 @@ import {
   exportPieces,
   exportRequest,
   hasPages,
+  asking,
   initialState,
   memoryOf,
   offered,
@@ -99,6 +100,15 @@ describe("initialState", () => {
     expect(initialState(SELECTED, memory({ what: "selection" })).what).toBe("selection");
     expect(initialState(BOARDS, memory({ what: "selection" })).what).toBe("boards");
     expect(initialState({ selection: null, boards: [] }, memory({ what: "boards" })).what).toBe("drawing");
+  });
+
+  it("asking chiede che cosa esportare, e tiene le altre scelte ricordate", () => {
+    const page = print({ paper: "a4", bleed: 3, crop: true });
+    const remembered = memory({ what: "boards", off: ["b2"], format: "pdf", size: { pixels: 1200 }, background: "none", print: page });
+    expect(asking(remembered, "selection")).toEqual({ ...remembered, what: "selection" });
+    expect(initialState(SELECTED, asking(null, "selection"))).toEqual({ what: "selection", off: new Set(), format: "png", size: { scale: 2 }, background: "paper", print: PLAIN_PRINT });
+    // Senza una selezione da esportare, vale ciò che si fa di solito.
+    expect(initialState(BOARDS, asking(null, "selection")).what).toBe("boards");
   });
 
   it("dimentica le tavole che non ci sono più, e se le tolte erano tutte ripartono tutte", () => {

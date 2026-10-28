@@ -3,13 +3,15 @@
   "sha256": "7cb0ff7e8d33da9cd34e45108f21f120450e743a39bec8c89acc8ebe1e4c7eba",
   "open": {
     "readonly": null,
-    "projection": "fb3b34ea84e709a02228420bea5dc2d0714c1992e40cdd3e0657444b06b16924",
+    "projection": "c261bf0c93c2eebd7e34c0b3cec5d8b6db3c03ffe4bfa7edeb3ec70c09c2fffe",
     "blocks": 8,
     "comments": 0
   },
   "preservation": [
     "differenze all'apertura: 0",
+    "blocchi chiusi: {}; scrittura intera: true",
     "normalizzazione «w:id»: 6 nel file, 6 nella prova a vuoto",
+    "normalizzazione «sporgente nullo»: 0 nel file, 8 nella prova a vuoto",
     "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
   ],
   "model": {
@@ -65,6 +67,12 @@
       "saved": true,
       "readonly": null,
       "reopened": "same"
+    },
+    "E6": "n/a",
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "different"
     }
   }
 }

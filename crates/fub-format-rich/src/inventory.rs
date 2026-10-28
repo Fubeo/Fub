@@ -49,9 +49,11 @@
 //! un limite superato, uno zip illeggibile o un XML malformato sono un
 //! [`InventoryError`], e chi chiama fallisce chiuso.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
+use std::fmt::Write as _;
 use std::io::{Cursor, Read};
+use std::sync::Arc;
 
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::ResolveResult;
@@ -107,34 +109,62 @@ impl fmt::Display for InventoryError {
     }
 }
 
+/// Un nome di una chiave. Un documento grande ripete pochi nomi milioni di
+/// volte: le chiavi li condividono ([`Names`]).
+pub(crate) type Name = Arc<str>;
+
+/// I nomi già visti da un inventario.
+#[derive(Default)]
+struct Names {
+    seen: HashSet<Name>,
+    buf: String,
+}
+
+impl Names {
+    fn get(&mut self, name: &str) -> Name {
+        if let Some(seen) = self.seen.get(name) {
+            return Arc::clone(seen);
+        }
+        let name: Name = Arc::from(name);
+        self.seen.insert(Arc::clone(&name));
+        name
+    }
+
+    /// Il nome espanso `{ns}name`.
+    fn expanded(&mut self, ns: &str, name: &str) -> Name {
+        let mut buf = std::mem::take(&mut self.buf);
+        buf.clear();
+        let _ = write!(buf, "{{{ns}}}{name}");
+        let out = self.get(&buf);
+        self.buf = buf;
+        out
+    }
+}
+
 /// Una cosa che il pacchetto contiene, e che si conta.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum Key {
     /// Un elemento, per classe della parte e nome espanso.
-    Element {
-        class: String,
-        ns: String,
-        name: String,
-    },
+    Element { class: Name, ns: Name, name: Name },
     /// Un attributo, per classe, elemento che lo porta, nome espanso e valore
     /// canonico ([`crate::canonical`]). Il valore di un riferimento a una
     /// relazione (`r:id`, `r:embed`) è la relazione stessa, tipo e
     /// destinazione: un codec che rinumera gli id non cambia la chiave, uno
     /// che punta altrove sì.
     Attribute {
-        class: String,
-        element: String,
-        ns: String,
-        name: String,
-        value: String,
+        class: Name,
+        element: Name,
+        ns: Name,
+        name: Name,
+        value: Name,
     },
     /// Il testo di un paragrafo (`w:p`, i soli `w:t`, `w:delText`, `m:t` e le
     /// istruzioni dei campi), o di un altro elemento che ne ha, per impronta.
     /// Il paragrafo e non il run: il codec unisce i run uguali.
     Text {
-        class: String,
-        element: String,
-        sha256: String,
+        class: Name,
+        element: Name,
+        sha256: Name,
     },
     /// Una relazione, per classe della sorgente, tipo e destinazione.
     Relationship {
@@ -203,14 +233,14 @@ pub(crate) const PACKAGE: &str = "package";
 /// La classe del documento principale.
 pub(crate) const DOCUMENT: &str = "document";
 
-const NS_RELATIONSHIPS: &str =
+pub(crate) const NS_RELATIONSHIPS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-const NS_W: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-const NS_W14: &str = "http://schemas.microsoft.com/office/word/2010/wordml";
-const NS_W15: &str = "http://schemas.microsoft.com/office/word/2012/wordml";
-const NS_W16CID: &str = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
-const NS_M: &str = "http://schemas.openxmlformats.org/officeDocument/2006/math";
-const NS_MC: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+pub(crate) const NS_W: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+pub(crate) const NS_W14: &str = "http://schemas.microsoft.com/office/word/2010/wordml";
+pub(crate) const NS_W15: &str = "http://schemas.microsoft.com/office/word/2012/wordml";
+pub(crate) const NS_W16CID: &str = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
+pub(crate) const NS_M: &str = "http://schemas.openxmlformats.org/officeDocument/2006/math";
+pub(crate) const NS_MC: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 const NS_EXTENDED: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
 const WML: &str = "application/vnd.openxmlformats-officedocument.wordprocessingml.";
@@ -229,7 +259,9 @@ pub(crate) fn class_of(content_type: &str) -> Option<String> {
         return Some(DOCUMENT.into());
     }
     if let Some(rest) = content_type.strip_prefix(WML) {
-        return Some(rest.trim_end_matches("+xml").to_string());
+        // Un tipo senza `+xml` non è XML: le impostazioni della stampante, un
+        // documento incorporato. Il codec lo copia.
+        return rest.strip_suffix("+xml").map(str::to_string);
     }
     let regenerated = [
         (
@@ -270,6 +302,11 @@ pub(crate) struct Inventory {
 }
 
 impl Inventory {
+    /// Quante chiavi tiene, corpo compreso.
+    pub fn entries(&self) -> usize {
+        self.all.len() + self.body.iter().map(BTreeMap::len).sum::<usize>()
+    }
+
     /// Le chiavi del pacchetto fuori dal corpo del documento principale.
     pub fn outside_body(&self) -> Counts {
         let mut out = self.all.clone();
@@ -286,10 +323,12 @@ impl Inventory {
 }
 
 /// Le parti di uno zip, lette nei limiti.
-struct Zip {
+pub(crate) struct Zip {
     /// Per nome in minuscolo, senza la barra iniziale: in OPC i nomi delle
     /// parti non distinguono maiuscole e minuscole.
-    parts: BTreeMap<String, Vec<u8>>,
+    pub parts: BTreeMap<String, Vec<u8>>,
+    /// Il nome di ogni voce come lo zip lo scrive, nell'ordine dello zip.
+    pub names: Vec<String>,
 }
 
 fn zip_error(error: impl fmt::Display) -> InventoryError {
@@ -297,7 +336,7 @@ fn zip_error(error: impl fmt::Display) -> InventoryError {
 }
 
 impl Zip {
-    fn read(bytes: &[u8], limits: &Limits) -> Result<Zip, InventoryError> {
+    pub(crate) fn read(bytes: &[u8], limits: &Limits) -> Result<Zip, InventoryError> {
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(zip_error)?;
         if archive.len() > limits.entries {
             return Err(InventoryError::Limit("zip entries"));
@@ -313,6 +352,7 @@ impl Zip {
             }
         }
         let mut parts = BTreeMap::new();
+        let mut names = Vec::new();
         let mut total = 0u64;
         for index in 0..archive.len() {
             let mut file = archive.by_index(index).map_err(zip_error)?;
@@ -340,8 +380,9 @@ impl Zip {
             if parts.insert(key, out).is_some() {
                 return Err(InventoryError::Zip(format!("duplicate entry {name}")));
             }
+            names.push(name);
         }
-        Ok(Zip { parts })
+        Ok(Zip { parts, names })
     }
 }
 
@@ -417,13 +458,13 @@ fn central_names(bytes: &[u8], limits: &Limits) -> Result<Vec<String>, Inventory
 }
 
 /// I tipi di contenuto del pacchetto (`[Content_Types].xml`).
-struct ContentTypes {
-    defaults: BTreeMap<String, String>,
-    overrides: BTreeMap<String, String>,
+pub(crate) struct ContentTypes {
+    pub defaults: BTreeMap<String, String>,
+    pub overrides: BTreeMap<String, String>,
 }
 
 impl ContentTypes {
-    fn read(zip: &Zip, limits: &Limits) -> Result<ContentTypes, InventoryError> {
+    pub(crate) fn read(zip: &Zip, limits: &Limits) -> Result<ContentTypes, InventoryError> {
         let bytes = zip
             .parts
             .get("[content_types].xml")
@@ -458,7 +499,7 @@ impl ContentTypes {
         Ok(types)
     }
 
-    fn of(&self, part: &str) -> String {
+    pub(crate) fn of(&self, part: &str) -> String {
         if let Some(ct) = self.overrides.get(part) {
             return ct.clone();
         }
@@ -468,14 +509,15 @@ impl ContentTypes {
 }
 
 /// Una relazione letta da una parte `.rels`.
-struct Relationship {
-    id: String,
-    kind: String,
-    target: String,
-    external: bool,
+#[derive(Clone, Debug)]
+pub(crate) struct Relationship {
+    pub id: String,
+    pub kind: String,
+    pub target: String,
+    pub external: bool,
 }
 
-fn rels_of(part: &str) -> String {
+pub(crate) fn rels_of(part: &str) -> String {
     match part.rsplit_once('/') {
         Some((dir, file)) => format!("{dir}/_rels/{file}.rels"),
         None if part.is_empty() => "_rels/.rels".into(),
@@ -484,7 +526,7 @@ fn rels_of(part: &str) -> String {
 }
 
 /// La parte che una destinazione relativa nomina, dalla cartella della sorgente.
-fn resolve(source: &str, target: &str) -> String {
+pub(crate) fn resolve(source: &str, target: &str) -> String {
     let target = target.split('#').next().unwrap_or_default();
     let mut path: Vec<&str> = if target.starts_with('/') {
         Vec::new()
@@ -506,7 +548,11 @@ fn resolve(source: &str, target: &str) -> String {
     path.join("/").to_ascii_lowercase()
 }
 
-fn read_rels(zip: &Zip, part: &str, limits: &Limits) -> Result<Vec<Relationship>, InventoryError> {
+pub(crate) fn read_rels(
+    zip: &Zip,
+    part: &str,
+    limits: &Limits,
+) -> Result<Vec<Relationship>, InventoryError> {
     let name = rels_of(part);
     let Some(bytes) = zip.parts.get(&name) else {
         return Ok(Vec::new());
@@ -536,6 +582,44 @@ pub(crate) fn sha256(bytes: &[u8]) -> String {
     out
 }
 
+/// La destinazione di una relazione di `source` come la chiave la scrive:
+/// l'URL se è esterna, la classe se è una parte che il codec riscrive,
+/// l'impronta del contenuto se è una parte da copiare.
+pub(crate) fn target_of(
+    zip: &Zip,
+    types: &ContentTypes,
+    source: &str,
+    rel: &Relationship,
+) -> String {
+    if rel.external {
+        return format!("url:{}", rel.target);
+    }
+    let path = resolve(source, &rel.target);
+    match zip.parts.get(&path) {
+        None => format!("missing:{path}"),
+        Some(bytes) => match class_of(&types.of(&path)) {
+            Some(class) => format!("class:{class}"),
+            None => format!("sha256:{}", sha256(bytes)),
+        },
+    }
+}
+
+/// Le relazioni di `part` per id, descritte come le scrive la chiave di un
+/// riferimento: tipo e destinazione.
+pub(crate) fn described(
+    zip: &Zip,
+    types: &ContentTypes,
+    part: &str,
+    rels: &[Relationship],
+) -> BTreeMap<String, String> {
+    rels.iter()
+        .map(|rel| {
+            let target = target_of(zip, types, part, rel);
+            (rel.id.clone(), format!("{} → {target}", rel.kind))
+        })
+        .collect()
+}
+
 /// L'inventario di un pacchetto `.docx`.
 pub(crate) fn inventory(bytes: &[u8]) -> Result<Inventory, InventoryError> {
     inventory_with(bytes, &LIMITS)
@@ -561,24 +645,13 @@ pub(crate) fn inventory_with(bytes: &[u8], limits: &Limits) -> Result<Inventory,
         // La destinazione di ogni relazione, come la chiave la scrive.
         let mut targets = Vec::with_capacity(rels.len());
         for rel in &rels {
-            let target = if rel.external {
-                format!("url:{}", rel.target)
-            } else {
+            if !rel.external {
                 let path = resolve(&part, &rel.target);
-                match zip.parts.get(&path) {
-                    None => format!("missing:{path}"),
-                    Some(bytes) => {
-                        if seen.insert(path.clone()) {
-                            todo.push(path.clone());
-                        }
-                        match class_of(&types.of(&path)) {
-                            Some(class) => format!("class:{class}"),
-                            None => format!("sha256:{}", sha256(bytes)),
-                        }
-                    }
+                if zip.parts.contains_key(&path) && seen.insert(path.clone()) {
+                    todo.push(path);
                 }
-            };
-            targets.push(target);
+            }
+            targets.push(target_of(&zip, &types, &part, rel));
         }
         let by_id: BTreeMap<&str, String> = rels
             .iter()
@@ -681,6 +754,26 @@ fn namespace(result: &ResolveResult<'_>) -> String {
     }
 }
 
+/// Lo spazio dei nomi di [`namespace`], fra i nomi già visti.
+fn namespace_in(names: &mut Names, result: &ResolveResult<'_>) -> Name {
+    match result {
+        ResolveResult::Bound(ns) => match std::str::from_utf8(ns.as_ref()) {
+            Ok(ns) => names.get(ns),
+            Err(_) => names.get(&namespace(result)),
+        },
+        ResolveResult::Unbound => names.get(""),
+        ResolveResult::Unknown(_) => names.get(&namespace(result)),
+    }
+}
+
+/// Il nome locale, fra i nomi già visti.
+fn local_in(names: &mut Names, local: &[u8]) -> Name {
+    match std::str::from_utf8(local) {
+        Ok(local) => names.get(local),
+        Err(_) => names.get(&String::from_utf8_lossy(local)),
+    }
+}
+
 /// Dove [`count_xml`] mette i conteggi di un elemento.
 #[derive(Clone, Copy)]
 enum Target {
@@ -700,9 +793,9 @@ const PARAGRAPH_TEXT: &[(&str, &str)] = &[(NS_W, "t"), (NS_W, "delText"), (NS_M,
 const INSTRUCTIONS: &[(&str, &str)] = &[(NS_W, "instrText"), (NS_W, "delInstrText")];
 /// I contenitori di blocchi trasparenti: i loro figli sono blocchi del
 /// modello, e le loro proprietà vanno con il primo.
-const WRAPPERS: &[&str] = &["customXml", "smartTag", "ins", "moveTo"];
+pub(crate) const WRAPPERS: &[&str] = &["customXml", "smartTag", "ins", "moveTo"];
 /// I segni fra due blocchi, che il modello mette nel paragrafo che segue.
-const MARKERS: &[&str] = &[
+pub(crate) const MARKERS: &[&str] = &[
     "bookmarkStart",
     "bookmarkEnd",
     "commentRangeStart",
@@ -717,12 +810,15 @@ const MARKERS: &[&str] = &[
 
 /// Un elemento aperto.
 struct Open {
-    ns: String,
-    name: String,
+    ns: Name,
+    name: Name,
     /// Il suo testo diretto.
     text: String,
     /// Una normalizzazione lo salta: il suo testo non conta.
     skipped: bool,
+    /// Un contenitore di proprietà ancora senza figli: la sua chiave conta
+    /// soltanto al primo figlio.
+    deferred: Option<Key>,
 }
 
 /// Gli elementi della forma dei run. Il codec unisce i run uguali e le loro
@@ -762,7 +858,9 @@ fn count_xml(
     context: &Context<'_>,
     elements: &mut u64,
 ) -> Result<Parsed, InventoryError> {
-    let (part, class, limits) = (context.part, context.class, context.limits);
+    let (part, limits) = (context.part, context.limits);
+    let mut names = Names::default();
+    let class = names.get(context.class);
     let mut reader = NsReader::from_reader(bytes);
     reader.config_mut().check_end_names = true;
     let mut parsed = Parsed {
@@ -788,13 +886,17 @@ fn count_xml(
     let mut pending = Counts::new();
     // La profondità delle proprietà del run aperto, `w:r/w:rPr`.
     let mut run_props: Option<usize> = None;
+    // L'ultimo blocco del corpo è una tabella.
+    let mut table = false;
+    // Quanti elementi aperti hanno la chiave rinviata (`Open::deferred`).
+    let mut deferred = 0usize;
     loop {
         let event = reader
             .read_event_into(&mut buf)
             .map_err(|error| xml_error(part, error))?;
         let (start, empty) = match &event {
-            Event::Start(start) => (Some(start.clone().into_owned()), false),
-            Event::Empty(start) => (Some(start.clone().into_owned()), true),
+            Event::Start(start) => (Some(start), false),
+            Event::Empty(start) => (Some(start), true),
             Event::Text(text) => {
                 let text = text
                     .xml_content(quick_xml::XmlVersion::Implicit1_0)
@@ -830,10 +932,46 @@ fn count_xml(
                 (None, false)
             }
             Event::End(_) => {
-                let Some(open) = stack.pop() else {
+                let Some(mut open) = stack.pop() else {
                     return Err(xml_error(part, "unbalanced end"));
                 };
-                let pair = (open.ns.as_str(), open.name.as_str());
+                if let Some(key) = open.deferred.take() {
+                    deferred -= 1;
+                    if open.text.trim().is_empty() {
+                        if let Some(what) = empty_properties(&open.ns, &open.name) {
+                            *parsed.normalized.entry(what).or_default() += 1;
+                        }
+                    } else {
+                        // Un testo lo riempie: conta, con il testo.
+                        put(&mut parsed, &mut pending, target, key);
+                    }
+                }
+                let pair = (&*open.ns, &*open.name);
+                if context.main
+                    && pair == (NS_W, "body")
+                    && stack.len() == 1
+                    && table
+                    && pending.is_empty()
+                {
+                    // Il paragrafo vuoto che il modello mette dopo una tabella
+                    // finale: un blocco, come nella prova a vuoto.
+                    *parsed.normalized.entry(TRAILING_PARAGRAPH).or_default() += 1;
+                    parsed.body.push(Counts::new());
+                    for key in [
+                        Key::Element {
+                            class: Arc::clone(&class),
+                            ns: names.get(NS_W),
+                            name: names.get("p"),
+                        },
+                        Key::Text {
+                            class: Arc::clone(&class),
+                            element: names.expanded(NS_W, "p"),
+                            sha256: sha256("\u{0}".as_bytes()).into(),
+                        },
+                    ] {
+                        put(&mut parsed, &mut pending, Target::Block, key);
+                    }
+                }
                 let inside = paragraphs.last_mut().filter(|p| p.level < stack.len());
                 if PARAGRAPH_TEXT.contains(&pair) && inside.is_some() {
                     if let Some(paragraph) = inside {
@@ -855,17 +993,17 @@ fn count_xml(
                         paragraph.instructions.split_whitespace().collect();
                     let content = format!("{}\u{0}{}", paragraph.text, instructions.join(" "));
                     let key = Key::Text {
-                        class: class.to_string(),
-                        element: format!("{{{}}}{}", open.ns, open.name),
-                        sha256: sha256(content.as_bytes()),
+                        class: Arc::clone(&class),
+                        element: names.expanded(&open.ns, &open.name),
+                        sha256: sha256(content.as_bytes()).into(),
                     };
                     put(&mut parsed, &mut pending, target, key);
                 } else if !open.skipped && !open.text.trim().is_empty() {
                     let value = crate::canonical::value(&open.ns, &open.text);
                     let key = Key::Text {
-                        class: class.to_string(),
-                        element: format!("{{{}}}{}", open.ns, open.name),
-                        sha256: sha256(value.as_bytes()),
+                        class: Arc::clone(&class),
+                        element: names.expanded(&open.ns, &open.name),
+                        sha256: sha256(value.as_bytes()).into(),
                     };
                     put(&mut parsed, &mut pending, target, key);
                 }
@@ -910,9 +1048,17 @@ fn count_xml(
                 root = true;
             }
             let (ns, local) = reader.resolver().resolve_element(start.name());
-            let ns = namespace(&ns);
-            let name = String::from_utf8_lossy(local.as_ref()).into_owned();
-            let w = ns == NS_W;
+            let ns = namespace_in(&mut names, &ns);
+            let mut name = local_in(&mut names, local.as_ref());
+            let w = &*ns == NS_W;
+            if let Some((what, left)) = stack
+                .last()
+                .filter(|parent| w && &*parent.ns == NS_W)
+                .and_then(|parent| side_element(&parent.name, &name))
+            {
+                *parsed.normalized.entry(what).or_default() += 1;
+                name = names.get(left);
+            }
             let mut attributes = Vec::new();
             for attr in start.attributes() {
                 let attr = attr.map_err(|error| xml_error(part, error))?;
@@ -922,15 +1068,14 @@ fn count_xml(
                 }
                 let (attr_ns, attr_local) = reader.resolver().resolve_attribute(qname);
                 let (attr_ns, attr_name) = (
-                    namespace(&attr_ns),
-                    String::from_utf8_lossy(attr_local.as_ref()).into_owned(),
+                    namespace_in(&mut names, &attr_ns),
+                    local_in(&mut names, attr_local.as_ref()),
                 );
                 let value = attr
                     .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                     .map_err(|error| xml_error(part, error))?
                     .into_owned();
-                if attr_ns == NS_MC && matches!(attr_name.as_str(), "Ignorable" | "MustUnderstand")
-                {
+                if &*attr_ns == NS_MC && matches!(&*attr_name, "Ignorable" | "MustUnderstand") {
                     // Un elenco di prefissi: conta lo spazio dei nomi di
                     // ognuno, perché il prefisso può cambiare e l'elenco può
                     // crescere senza perdita.
@@ -943,6 +1088,15 @@ fn count_xml(
                     }
                     continue;
                 }
+                if let Some((what, equivalent)) =
+                    equivalent_attribute(w, &name, &attr_ns, &attr_name, &value)
+                {
+                    *parsed.normalized.entry(what).or_default() += 1;
+                    if let Some((attr_name, value)) = equivalent {
+                        attributes.push((attr_ns, names.get(&attr_name), value));
+                    }
+                    continue;
+                }
                 attributes.push((attr_ns, attr_name, value));
             }
             let level = stack.len();
@@ -952,7 +1106,35 @@ fn count_xml(
                     name: name.clone(),
                     text: String::new(),
                     skipped: false,
+                    deferred: None,
                 });
+            }
+            if let (Some(what), Some(paragraph)) = (simple_field(&ns, &name), paragraphs.last_mut())
+            {
+                *parsed.normalized.entry(what).or_default() += 1;
+                for (attr_ns, attr_name, value) in attributes {
+                    if let Some(what) = skipped_attribute(&attr_ns, &attr_name) {
+                        *parsed.normalized.entry(what).or_default() += 1;
+                    } else if &*attr_ns == NS_W && &*attr_name == "instr" {
+                        paragraph.instructions.push_str(&value);
+                        paragraph.instructions.push(' ');
+                    } else {
+                        let value = crate::canonical::value(&attr_ns, &value);
+                        let key = Key::Attribute {
+                            class: Arc::clone(&class),
+                            element: names.expanded(NS_W, "fldChar"),
+                            ns: names.get(&attr_ns),
+                            name: names.get(&attr_name),
+                            value: names.get(&value),
+                        };
+                        put(&mut parsed, &mut pending, target, key);
+                    }
+                }
+                if let (false, Some(open)) = (empty, stack.last_mut()) {
+                    open.skipped = true;
+                }
+                buf.clear();
+                continue;
             }
             if let Some(what) = skipped_element(&ns, &name) {
                 *parsed.normalized.entry(what).or_default() += 1;
@@ -962,7 +1144,7 @@ fn count_xml(
                 buf.clear();
                 continue;
             }
-            if w && name == "p" && !empty {
+            if w && &*name == "p" && !empty {
                 paragraphs.push(Paragraph {
                     level,
                     text: String::new(),
@@ -975,11 +1157,11 @@ fn count_xml(
             // è un blocco: resta con il resto del documento.
             let top = context.main
                 && level == 2
-                && stack[1].ns == NS_W
-                && stack[1].name == "body"
-                && stack[0].name == "document";
+                && &*stack[1].ns == NS_W
+                && &*stack[1].name == "body"
+                && &*stack[0].name == "document";
             if top || block_levels.last() == Some(&level) {
-                if w && name == "sdt" {
+                if w && &*name == "sdt" {
                     // Un content control di blocco (un sommario, un campo di
                     // un modulo) raggruppa più blocchi del modello: i blocchi
                     // sono i figli del suo `w:sdtContent`, e l'involucro va
@@ -988,7 +1170,7 @@ fn count_xml(
                     if !empty {
                         sdt_levels.push(level);
                     }
-                } else if w && WRAPPERS.contains(&name.as_str()) {
+                } else if w && WRAPPERS.contains(&&*name) {
                     // Lo stesso per un contenitore trasparente: i suoi figli
                     // sono blocchi.
                     target = Target::Pending;
@@ -997,37 +1179,40 @@ fn count_xml(
                         block_levels.push(level + 1);
                     }
                 } else if w
-                    && (MARKERS.contains(&name.as_str())
-                        || (!top && matches!(name.as_str(), "customXmlPr" | "smartTagPr")))
+                    && (MARKERS.contains(&&*name)
+                        || (!top && matches!(&*name, "customXmlPr" | "smartTagPr")))
                 {
                     target = Target::Pending;
-                } else if top && w && name == "sectPr" {
+                } else if top && w && &*name == "sectPr" {
                     target = Target::Outside;
                 } else {
                     parsed.body.push(std::mem::take(&mut pending));
                     target = Target::Block;
                 }
+                if top && !(w && (MARKERS.contains(&&*name) || &*name == "sectPr")) {
+                    table = w && &*name == "tbl";
+                }
             } else if level > 0 && sdt_levels.last() == Some(&(level - 1)) {
-                if w && name == "sdtContent" {
+                if w && &*name == "sdtContent" {
                     target = Target::Pending;
                     if !empty {
                         block_levels.push(level + 1);
                     }
-                } else if w && name == "sdtEndPr" && !parsed.body.is_empty() {
+                } else if w && &*name == "sdtEndPr" && !parsed.body.is_empty() {
                     target = Target::Block;
                 } else {
                     target = Target::Pending;
                 }
             }
-            let element = format!("{{{ns}}}{name}");
-            if w && name == "rPr" && !empty && level > 0 {
+            let element = names.expanded(&ns, &name);
+            if w && &*name == "rPr" && !empty && level > 0 {
                 let parent = &stack[level - 1];
-                if parent.ns == NS_W && parent.name == "r" {
+                if &*parent.ns == NS_W && &*parent.name == "r" {
                     run_props = Some(level);
                 }
             }
             let run_shape = paragraphs.last().is_some()
-                && ((w && RUN_SHAPE.contains(&name.as_str())) || run_props.is_some());
+                && ((w && RUN_SHAPE.contains(&&*name)) || run_props.is_some());
             let mut emit = |parsed: &mut Parsed, pending: &mut Counts, key: Key| match paragraphs
                 .last_mut()
                 .filter(|_| run_shape)
@@ -1037,15 +1222,39 @@ fn count_xml(
                 }
                 None => put(parsed, pending, target, key),
             };
-            emit(
-                &mut parsed,
-                &mut pending,
-                Key::Element {
-                    class: class.to_string(),
-                    ns,
-                    name,
-                },
-            );
+            // Un contenitore di proprietà vuoto non conta: la sua chiave
+            // aspetta il primo figlio, e con lei quelle dei contenitori vuoti
+            // che lo contengono.
+            let bare = empty_properties(&ns, &name).filter(|_| {
+                attributes
+                    .iter()
+                    .all(|(attr_ns, attr_name, _)| skipped_attribute(attr_ns, attr_name).is_some())
+            });
+            let key = Key::Element {
+                class: Arc::clone(&class),
+                ns: names.get(&ns),
+                name: names.get(&name),
+            };
+            match bare {
+                None => {
+                    if deferred > 0 {
+                        for open in &mut stack[..level] {
+                            if let Some(key) = open.deferred.take() {
+                                emit(&mut parsed, &mut pending, key);
+                                deferred -= 1;
+                            }
+                        }
+                    }
+                    emit(&mut parsed, &mut pending, key);
+                }
+                Some(what) if empty => *parsed.normalized.entry(what).or_default() += 1,
+                Some(_) => {
+                    if let Some(open) = stack.last_mut() {
+                        open.deferred = Some(key);
+                        deferred += 1;
+                    }
+                }
+            }
             for (attr_ns, attr_name, value) in attributes {
                 if let Some(what) = skipped_attribute(&attr_ns, &attr_name) {
                     *parsed.normalized.entry(what).or_default() += 1;
@@ -1056,7 +1265,7 @@ fn count_xml(
                 {
                     *parsed.normalized.entry(what).or_default() += 1;
                     kept
-                } else if attr_ns == NS_RELATIONSHIPS {
+                } else if &*attr_ns == NS_RELATIONSHIPS {
                     let described = context
                         .rels
                         .get(value.as_str())
@@ -1068,11 +1277,11 @@ fn count_xml(
                     crate::canonical::value(&attr_ns, &value)
                 };
                 let key = Key::Attribute {
-                    class: class.to_string(),
-                    element: element.clone(),
-                    ns: attr_ns,
-                    name: attr_name,
-                    value,
+                    class: Arc::clone(&class),
+                    element: Arc::clone(&element),
+                    ns: names.get(&attr_ns),
+                    name: names.get(&attr_name),
+                    value: names.get(&value),
                 };
                 emit(&mut parsed, &mut pending, key);
             }
@@ -1184,7 +1393,42 @@ pub(crate) enum Skip {
         name: &'static str,
         stem: &'static str,
     },
+    /// La forma semplice di un campo (`w:fldSimple`), che conta come la forma
+    /// complessa in cui il codec la riscrive: l'istruzione va con quelle del
+    /// paragrafo, gli altri attributi con l'inizio del campo (`w:fldChar`), i
+    /// figli (il risultato) contano come sempre.
+    Field {
+        ns: &'static str,
+        name: &'static str,
+    },
+    /// Il paragrafo vuoto dopo una tabella che chiude il corpo: nel file si
+    /// conta come se ci fosse.
+    TrailingParagraph,
+    /// I nomi dei lati di ISO 29500 (`start`, `end`), che contano come i nomi
+    /// che il codec scrive (`left`, `right`): gli elementi di questi
+    /// contenitori, gli attributi di questi elementi, il valore `w:val` di
+    /// questi altri.
+    Sides {
+        boxes: &'static [&'static str],
+        attributes: &'static [&'static str],
+        values: &'static [&'static str],
+    },
+    /// Questi contenitori di proprietà quando sono vuoti, senza attributi né
+    /// figli: non contano. Con un figlio contano come sempre.
+    EmptyProperties {
+        ns: &'static str,
+        names: &'static [&'static str],
+    },
+    /// Il `w:val` vero (`true`, `1`, `on`) di questi interruttori di
+    /// WordprocessingML (`CT_OnOff`): conta come la sua assenza.
+    ImplicitTrue { elements: &'static [&'static str] },
+    /// Lo sporgente nullo (`w:hanging="0"`) di `w:ind`: conta come la prima
+    /// riga nulla (`w:firstLine="0"`).
+    ZeroHanging,
 }
+
+/// Il nome della normalizzazione del paragrafo dopo una tabella finale.
+pub(crate) const TRAILING_PARAGRAPH: &str = "paragrafo dopo la tabella finale";
 
 /// Una differenza che il codec produce senza perdere niente, con la ragione e
 /// il test che lo dimostra. Una voce entra soltanto se Word stesso la
@@ -1197,10 +1441,11 @@ pub(crate) struct Normalization {
     pub skip: Skip,
 }
 
-/// Le normalizzazioni dichiarate. I test sono
-/// `le_normalizzazioni_saltano_soltanto_ciò_che_dichiarano` qui sotto e il file
-/// `docx/segni-di-word.docx` del corpus, che le porta tutte e si apre
-/// modificabile.
+/// Le normalizzazioni dichiarate. Ciascuna ha il suo test qui sotto (il primo è
+/// `le_normalizzazioni_saltano_soltanto_ciò_che_dichiarano`), e i file del
+/// corpus le portano: `docx/segni-di-word.docx` i segni di Word, e si apre
+/// modificabile; `docx/falsi-allarmi.docx` e `docx/libreoffice.docx` le forme
+/// della norma e di LibreOffice.
 pub(crate) const NORMALIZATIONS: &[Normalization] = &[
     Normalization {
         what: "w:id",
@@ -1240,6 +1485,67 @@ pub(crate) const NORMALIZATIONS: &[Normalization] = &[
         skip: Skip::Attributes {
             ns: &[NS_W],
             prefix: "rsid",
+        },
+    },
+    Normalization {
+        what: TRAILING_PARAGRAPH,
+        why: "un corpo che finisce con una tabella: Word la fa sempre seguire \
+              da un paragrafo, e il modello anche; il paragrafo vuoto in più \
+              è un blocco anche nel file, e l'innesto non lo scrive finché \
+              nessuno lo tocca",
+        skip: Skip::TrailingParagraph,
+    },
+    Normalization {
+        what: "start e end",
+        why: "i nomi dei lati di ISO 29500 (`w:start`, `w:end`, `w:startChars`, \
+              `jc=\"start\"`), che LibreOffice scrive: Word li legge come \
+              `left` e `right`, che in un paragrafo da destra a sinistra \
+              indicano già l'inizio e la fine, e il codec li riscrive così. Il \
+              valore resta, e conta",
+        skip: Skip::Sides {
+            boxes: &["tblCellMar", "tcMar", "tblBorders", "tcBorders", "pBdr"],
+            attributes: &["ind"],
+            values: &["jc", "lvlJc", "tab"],
+        },
+    },
+    Normalization {
+        what: "proprietà vuote",
+        why: "un contenitore di proprietà senza attributi né figli (`<w:rPr/>`, \
+              `<w:pPr></w:pPr>`) dice soltanto che non c'è niente da dire: il \
+              run, il paragrafo, la riga o la cella hanno le proprietà che \
+              avrebbero senza. LibreOffice li scrive, il codec no. \
+              `w:sectPr` e `w:tblPr` non ci sono: la loro assenza conta",
+        skip: Skip::EmptyProperties {
+            ns: NS_W,
+            names: &["rPr", "pPr", "trPr", "tcPr"],
+        },
+    },
+    Normalization {
+        what: "vero implicito",
+        why: "un interruttore di WordprocessingML (`CT_OnOff`) senza `w:val` è \
+              acceso: `<w:keepNext w:val=\"true\"/>`, che LibreOffice scrive, \
+              e `<w:keepNext/>`, che scrive il codec, dicono la stessa cosa. Un \
+              valore spento conta, e un `w:val` di un altro elemento anche",
+        skip: Skip::ImplicitTrue { elements: ON_OFF },
+    },
+    Normalization {
+        what: "sporgente nullo",
+        why: "un rientro della prima riga nullo, scritto come sporgente \
+              (`w:hanging=\"0\"`, come fa LibreOffice) o come prima riga \
+              (`w:firstLine=\"0\"`, come fa il codec): nei due casi la prima \
+              riga non sporge e non rientra, e annulla quello dello stile. Uno \
+              sporgente non nullo conta",
+        skip: Skip::ZeroHanging,
+    },
+    Normalization {
+        what: "w:fldSimple",
+        why: "un campo scritto nella forma semplice: il codec lo riscrive nella \
+              forma complessa (inizio, istruzione, separatore, risultato, fine), \
+              che Word legge e scrive allo stesso modo; l'istruzione, gli \
+              attributi e il risultato contano ancora",
+        skip: Skip::Field {
+            ns: NS_W,
+            name: "fldSimple",
         },
     },
     Normalization {
@@ -1303,8 +1609,224 @@ pub(crate) const NORMALIZATIONS: &[Normalization] = &[
     },
 ];
 
+/// La normalizzazione che conta questo elemento come un campo complesso, se
+/// c'è.
+pub(crate) fn simple_field(ns: &str, name: &str) -> Option<&'static str> {
+    NORMALIZATIONS.iter().find_map(|n| match n.skip {
+        Skip::Field {
+            ns: n_ns,
+            name: n_name,
+        } if ns == n_ns && name == n_name => Some(n.what),
+        _ => None,
+    })
+}
+
+/// Il nome che il codec scrive per un lato di ISO 29500.
+fn side(name: &str) -> Option<&'static str> {
+    match name {
+        "start" => Some("left"),
+        "end" => Some("right"),
+        "startChars" => Some("leftChars"),
+        "endChars" => Some("rightChars"),
+        _ => None,
+    }
+}
+
+/// Il nome con cui conta l'elemento `name` di WordprocessingML dentro
+/// `parent`, con la normalizzazione, se è un lato.
+pub(crate) fn side_element(parent: &str, name: &str) -> Option<(&'static str, &'static str)> {
+    NORMALIZATIONS.iter().find_map(|n| match n.skip {
+        Skip::Sides { boxes, .. } if boxes.contains(&parent) && matches!(name, "start" | "end") => {
+            side(name).map(|left| (n.what, left))
+        }
+        _ => None,
+    })
+}
+
+/// Gli interruttori di WordprocessingML (`CT_OnOff` di ECMA-376): un `w:val`
+/// che manca vale vero.
+const ON_OFF: &[&str] = &[
+    // Il carattere.
+    "b",
+    "bCs",
+    "i",
+    "iCs",
+    "caps",
+    "smallCaps",
+    "strike",
+    "dstrike",
+    "outline",
+    "shadow",
+    "emboss",
+    "imprint",
+    "noProof",
+    "snapToGrid",
+    "vanish",
+    "webHidden",
+    "rtl",
+    "cs",
+    "specVanish",
+    "oMath",
+    // Il paragrafo.
+    "keepNext",
+    "keepLines",
+    "pageBreakBefore",
+    "widowControl",
+    "suppressLineNumbers",
+    "suppressAutoHyphens",
+    "kinsoku",
+    "wordWrap",
+    "overflowPunct",
+    "topLinePunct",
+    "autoSpaceDE",
+    "autoSpaceDN",
+    "bidi",
+    "adjustRightInd",
+    "contextualSpacing",
+    "mirrorIndents",
+    "suppressOverlap",
+    // La sezione, la tabella, la riga, la cella.
+    "titlePg",
+    "noEndnote",
+    "rtlGutter",
+    "formProt",
+    "bidiVisual",
+    "cantSplit",
+    "tblHeader",
+    "hidden",
+    "noWrap",
+    "tcFitText",
+    "hideMark",
+    // Lo stile, la numerazione, il controllo del contenuto.
+    "semiHidden",
+    "unhideWhenUsed",
+    "qFormat",
+    "locked",
+    "autoRedefine",
+    "personal",
+    "personalCompose",
+    "personalReply",
+    "isLgl",
+    "temporary",
+    "showingPlcHdr",
+    // Le impostazioni.
+    "autoHyphenation",
+    "doNotHyphenateCaps",
+    "evenAndOddHeaders",
+    "mirrorMargins",
+    "gutterAtTop",
+    "trackRevisions",
+    "doNotTrackMoves",
+    "doNotTrackFormatting",
+    "updateFields",
+    "embedTrueTypeFonts",
+    "embedSystemFonts",
+    "saveSubsetFonts",
+    "hideSpellingErrors",
+    "hideGrammaticalErrors",
+    "bordersDoNotSurroundHeader",
+    "bordersDoNotSurroundFooter",
+    "alignBordersAndEdges",
+    "linkStyles",
+    "removePersonalInformation",
+    "removeDateAndTime",
+    "doNotShadeFormData",
+    "printTwoOnOne",
+    "bookFoldPrinting",
+    "bookFoldRevPrinting",
+    "strictFirstAndLastChars",
+    "noPunctuationKerning",
+    "savePreviewPicture",
+    "doNotIncludeSubdocsInStats",
+    "doNotAutoCompressPictures",
+    "styleLockTheme",
+    "styleLockQFSet",
+    "formsDesign",
+    "autoFormatOverride",
+    "displayBackgroundShape",
+    "doNotDisplayPageBoundaries",
+    "printFormsData",
+    "saveFormsData",
+    "printPostScriptOverText",
+    "printFractionalCharacterWidth",
+    "showEnvelope",
+    "alwaysShowPlaceholderText",
+    "alwaysMergeEmptyNamespace",
+    "forceUpgrade",
+];
+
+/// Come conta un attributo dell'elemento `element` di WordprocessingML (`w`)
+/// per una normalizzazione: con il nome e il valore dati, o (`None`) per
+/// niente. `None` fuori se l'attributo conta com'è.
+pub(crate) fn equivalent_attribute(
+    w: bool,
+    element: &str,
+    ns: &str,
+    name: &str,
+    value: &str,
+) -> Option<(&'static str, Option<(String, String)>)> {
+    if !w || ns != NS_W {
+        return None;
+    }
+    if let Some((what, name, value)) = side_attribute(element, name, value) {
+        return Some((what, Some((name, value))));
+    }
+    NORMALIZATIONS.iter().find_map(|n| match n.skip {
+        Skip::ImplicitTrue { elements }
+            if name == "val"
+                && elements.contains(&element)
+                && matches!(value.trim(), "true" | "1" | "on") =>
+        {
+            Some((n.what, None))
+        }
+        Skip::ZeroHanging
+            if element == "ind"
+                && name == "hanging"
+                && crate::canonical::value(NS_W, value) == "0" =>
+        {
+            Some((n.what, Some(("firstLine".to_string(), value.to_string()))))
+        }
+        _ => None,
+    })
+}
+
+/// Il nome e il valore con cui conta un attributo dell'elemento `element` di
+/// WordprocessingML, con la normalizzazione, se nomina un lato.
+fn side_attribute(
+    element: &str,
+    name: &str,
+    value: &str,
+) -> Option<(&'static str, String, String)> {
+    NORMALIZATIONS.iter().find_map(|n| match n.skip {
+        Skip::Sides {
+            attributes, values, ..
+        } => {
+            if attributes.contains(&element) {
+                side(name).map(|left| (n.what, left.to_string(), value.to_string()))
+            } else if values.contains(&element) && name == "val" && matches!(value, "start" | "end")
+            {
+                side(value).map(|left| (n.what, name.to_string(), left.to_string()))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    })
+}
+
+/// La normalizzazione che non conta questo contenitore di proprietà quando è
+/// vuoto, se c'è.
+pub(crate) fn empty_properties(ns: &str, name: &str) -> Option<&'static str> {
+    NORMALIZATIONS.iter().find_map(|n| match n.skip {
+        Skip::EmptyProperties { ns: n_ns, names } if ns == n_ns && names.contains(&name) => {
+            Some(n.what)
+        }
+        _ => None,
+    })
+}
+
 /// La normalizzazione che salta questo elemento, se c'è.
-fn skipped_element(ns: &str, name: &str) -> Option<&'static str> {
+pub(crate) fn skipped_element(ns: &str, name: &str) -> Option<&'static str> {
     NORMALIZATIONS.iter().find_map(|n| match n.skip {
         Skip::Elements { ns: n_ns, names } if ns == n_ns && names.contains(&name) => Some(n.what),
         _ => None,
@@ -1318,7 +1840,12 @@ fn integer(value: &str) -> bool {
 
 /// La normalizzazione che toglie il numero al valore di questo attributo di
 /// `element`, se c'è, con il valore che resta.
-fn renumbered(element: &str, ns: &str, name: &str, value: &str) -> Option<(&'static str, String)> {
+pub(crate) fn renumbered(
+    element: &str,
+    ns: &str,
+    name: &str,
+    value: &str,
+) -> Option<(&'static str, String)> {
     NORMALIZATIONS.iter().find_map(|n| match n.skip {
         Skip::Number {
             ns: n_ns,
@@ -1342,7 +1869,7 @@ fn renumbered(element: &str, ns: &str, name: &str, value: &str) -> Option<(&'sta
 }
 
 /// La normalizzazione che salta questo attributo, se c'è.
-fn skipped_attribute(ns: &str, name: &str) -> Option<&'static str> {
+pub(crate) fn skipped_attribute(ns: &str, name: &str) -> Option<&'static str> {
     NORMALIZATIONS.iter().find_map(|n| match n.skip {
         Skip::Attributes { ns: n_ns, prefix } if n_ns.contains(&ns) && name.starts_with(prefix) => {
             Some(n.what)
@@ -1381,6 +1908,40 @@ pub(crate) fn open_differences(original: &Inventory, dry: &Inventory) -> Vec<Dif
         });
     }
     out
+}
+
+/// Le differenze della regola all'apertura ([`open_differences`]), divise fra
+/// i blocchi del corpo e il resto del pacchetto.
+pub(crate) struct Losses {
+    /// Fuori dal corpo del documento principale, con i riferimenti che
+    /// resterebbero senza la loro relazione.
+    pub outside: Vec<Difference>,
+    /// Blocco per blocco del corpo, nell'ordine.
+    pub blocks: Vec<Vec<Difference>>,
+}
+
+/// La regola all'apertura divisa per luogo: `None` se la prova a vuoto non ha
+/// i blocchi del file.
+pub(crate) fn open_losses(original: &Inventory, dry: &Inventory) -> Option<Losses> {
+    if original.body.len() != dry.body.len() {
+        return None;
+    }
+    let mut outside = losses(&original.outside_body(), &dry.outside_body(), "");
+    for dangling in dry.dangling.difference(&original.dangling) {
+        outside.push(Difference {
+            key: format!("dangling reference {dangling}"),
+            before: 0,
+            after: 1,
+        });
+    }
+    let blocks = original
+        .body
+        .iter()
+        .zip(&dry.body)
+        .enumerate()
+        .map(|(at, (before, after))| losses(before, after, &format!("block {at}: ")))
+        .collect();
+    Some(Losses { outside, blocks })
 }
 
 /// Le chiavi che diminuiscono, e le parti copiate che cambiano numero.
@@ -1466,6 +2027,158 @@ mod tests {
             r#"<w:document {W} xmlns:w14="{NS_W14}"><w:body>{body}<w:sectPr/></w:body></w:document>"#
         );
         inventory(&docx(&document, &rels(""), &[])).unwrap()
+    }
+
+    #[test]
+    fn un_tipo_senza_xml_si_copia() {
+        assert_eq!(class_of(&format!("{WML}printerSettings")), None);
+        assert_eq!(class_of(&format!("{WML}document")), None);
+        assert_eq!(
+            class_of(&format!("{WML}header+xml")).as_deref(),
+            Some("header")
+        );
+    }
+
+    #[test]
+    fn il_paragrafo_dopo_una_tabella_finale_conta_come_nella_prova_a_vuoto() {
+        let table =
+            r#"<w:tbl><w:tr><w:tc><w:p><w:r><w:t>cella</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"#;
+        let file = body_of(table);
+        let dry = body_of(&format!("{table}<w:p></w:p>"));
+        assert_eq!(file.normalized.get(TRAILING_PARAGRAPH), Some(&1));
+        assert_eq!(file.body.len(), 2);
+        assert_eq!(open_differences(&file, &dry), Vec::new());
+        // Non dopo un paragrafo, né dopo una tabella seguita da un segno.
+        assert_eq!(
+            body_of(&format!("{table}<w:p/>"))
+                .normalized
+                .get(TRAILING_PARAGRAPH),
+            None
+        );
+        let marked = body_of(&format!(
+            r#"{table}<w:bookmarkStart w:id="0" w:name="x"/><w:bookmarkEnd w:id="0"/>"#
+        ));
+        assert_eq!(marked.normalized.get(TRAILING_PARAGRAPH), None);
+    }
+
+    #[test]
+    fn un_campo_semplice_conta_come_il_campo_complesso_che_il_codec_scrive() {
+        let simple = body_of(
+            r#"<w:p><w:fldSimple w:instr=" PAGE  \* MERGEFORMAT " w:dirty="1"><w:r><w:t>3</w:t></w:r></w:fldSimple></w:p>"#,
+        );
+        let complex = |instr: &str, result: &str| {
+            body_of(&format!(
+                r#"<w:p><w:r><w:fldChar w:fldCharType="begin" w:dirty="1"/></w:r><w:r><w:instrText xml:space="preserve">{instr}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>{result}</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>"#
+            ))
+        };
+        assert_eq!(simple.normalized.get("w:fldSimple"), Some(&1));
+        let same = complex(" PAGE \\* MERGEFORMAT ", "3");
+        assert_eq!(open_differences(&simple, &same), Vec::new());
+        // L'istruzione, il risultato e gli altri attributi contano ancora.
+        for (instr, result) in [(" NUMPAGES ", "3"), (" PAGE \\* MERGEFORMAT ", "4")] {
+            assert_ne!(
+                open_differences(&simple, &complex(instr, result)),
+                Vec::new(),
+                "{instr} {result}"
+            );
+        }
+        let undirty = body_of(
+            r#"<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText> PAGE \* MERGEFORMAT </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>3</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>"#,
+        );
+        assert_ne!(open_differences(&simple, &undirty), Vec::new());
+    }
+
+    #[test]
+    fn un_contenitore_di_proprietà_vuoto_non_conta_e_uno_pieno_sì() {
+        let empty = body_of(
+            r#"<w:p><w:pPr><w:rPr></w:rPr></w:pPr><w:r><w:rPr/><w:t>Testo</w:t></w:r></w:p><w:tbl><w:tr><w:trPr w:rsidR="00AA11BB"></w:trPr><w:tc><w:tcPr/><w:p/></w:tc></w:tr></w:tbl>"#,
+        );
+        let plain = body_of(
+            r#"<w:p><w:r><w:t>Testo</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"#,
+        );
+        assert_eq!(empty.normalized.get("proprietà vuote"), Some(&5));
+        assert_eq!(open_differences(&empty, &plain), Vec::new());
+        assert_eq!(empty.body, plain.body);
+        // Il contenitore di un contenitore con un figlio conta, tutti e due.
+        let full = body_of(
+            r#"<w:p><w:pPr><w:rPr><w:b/></w:rPr></w:pPr><w:r><w:t>Testo</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"#,
+        );
+        assert_eq!(full.normalized.get("proprietà vuote"), None);
+        let differences: Vec<String> = open_differences(&full, &plain)
+            .into_iter()
+            .map(|d| d.key)
+            .collect();
+        for name in ["}pPr", "}rPr", "}b"] {
+            assert!(
+                differences.iter().any(|d| d.contains(name)),
+                "{name}: {differences:?}"
+            );
+        }
+        // Un attributo che conta lo fa contare.
+        let marked = body_of(
+            r#"<w:p><w:pPr w:foo="1"/><w:r><w:t>Testo</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"#,
+        );
+        assert_ne!(open_differences(&marked, &plain), Vec::new());
+        // Una `w:tblPr` vuota conta.
+        let table = body_of(
+            r#"<w:p><w:r><w:t>Testo</w:t></w:r></w:p><w:tbl><w:tblPr/><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"#,
+        );
+        assert_ne!(open_differences(&table, &plain), Vec::new());
+    }
+
+    #[test]
+    fn i_lati_di_iso_29500_contano_come_left_e_right() {
+        let iso = body_of(
+            r#"<w:p><w:pPr><w:jc w:val="start"/><w:ind w:start="340" w:hanging="0"/><w:tabs><w:tab w:val="end" w:pos="9000"/></w:tabs></w:pPr><w:r><w:t>Testo</w:t></w:r></w:p><w:tbl><w:tblPr><w:tblCellMar><w:start w:w="55" w:type="dxa"/><w:end w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"#,
+        );
+        let transitional = |indent: &str| {
+            body_of(&format!(
+                r#"<w:p><w:pPr><w:jc w:val="left"/><w:ind w:left="{indent}" w:hanging="0"/><w:tabs><w:tab w:val="right" w:pos="9000"/></w:tabs></w:pPr><w:r><w:t>Testo</w:t></w:r></w:p><w:tbl><w:tblPr><w:tblCellMar><w:left w:w="55" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>"#
+            ))
+        };
+        assert_eq!(iso.normalized.get("start e end"), Some(&5));
+        assert_eq!(open_differences(&iso, &transitional("340")), Vec::new());
+        // Il valore conta ancora.
+        assert_ne!(open_differences(&iso, &transitional("0")), Vec::new());
+        // Fuori dai contenitori dei lati `w:start` resta sé stesso: il primo
+        // numero di un elenco.
+        let start = body_of(r#"<w:p><w:pPr><w:start w:val="3"/></w:pPr></w:p>"#);
+        assert_eq!(start.normalized.get("start e end"), None);
+    }
+
+    #[test]
+    fn un_interruttore_acceso_e_uno_sporgente_nullo_contano_come_li_scrive_il_codec() {
+        let libreoffice = body_of(
+            r#"<w:p><w:pPr><w:keepNext w:val="true"/><w:ind w:left="0" w:hanging="0"/></w:pPr><w:r><w:rPr><w:b w:val="1"/><w:i w:val="on"/></w:rPr><w:t>Testo</w:t></w:r></w:p>"#,
+        );
+        let codec = body_of(
+            r#"<w:p><w:pPr><w:keepNext/><w:ind w:left="0" w:firstLine="0"/></w:pPr><w:r><w:rPr><w:b/><w:i/></w:rPr><w:t>Testo</w:t></w:r></w:p>"#,
+        );
+        assert_eq!(libreoffice.normalized.get("vero implicito"), Some(&3));
+        assert_eq!(libreoffice.normalized.get("sporgente nullo"), Some(&1));
+        assert_eq!(open_differences(&libreoffice, &codec), Vec::new());
+        // Un interruttore spento, uno sporgente non nullo e il `w:val` di un
+        // elemento che non è un interruttore contano.
+        for (file, written) in [
+            (
+                r#"<w:p><w:pPr><w:keepNext w:val="false"/></w:pPr></w:p>"#,
+                r#"<w:p><w:pPr><w:keepNext/></w:pPr></w:p>"#,
+            ),
+            (
+                r#"<w:p><w:pPr><w:ind w:hanging="360"/></w:pPr></w:p>"#,
+                r#"<w:p><w:pPr><w:ind w:firstLine="360"/></w:pPr></w:p>"#,
+            ),
+            (
+                r#"<w:p><w:pPr><w:ilvl w:val="1"/></w:pPr></w:p>"#,
+                r#"<w:p><w:pPr><w:ilvl/></w:pPr></w:p>"#,
+            ),
+        ] {
+            assert_ne!(
+                open_differences(&body_of(file), &body_of(written)),
+                Vec::new(),
+                "{file}"
+            );
+        }
     }
 
     #[test]

@@ -6,9 +6,9 @@
 > rilascia una maschera, e che cosa ne fanno la selezione, gli altri comandi
 > e l'export.
 
-Dal livello Standard un'immagine si **ritaglia** sul foglio, come in
+Nello spazio Completo un'immagine si **ritaglia** sul foglio, come in
 Illustrator o in PowerPoint: se ne sceglie la parte da mostrare, e l'immagine
-resta intera nel file, pronta a mostrarne un'altra. All'[Esperto](drawing-expert.md)
+resta intera nel file, pronta a mostrarne un'altra. Fra gli [strumenti avanzati](drawing-expert.md)
 le **maschere** fanno lo stesso con ogni oggetto: la forma in cima ritaglia
 quelle sotto, o ne fa la trasparenza col suo chiaro e il suo scuro. Il
 ritaglio è in `apps/client/src/editors/spatial/tools/crop.ts`, le maschere in
@@ -67,7 +67,7 @@ lascia, e i margini quando l'immagine si sposta.
 
 ## Le maschere
 
-All'Esperto **«Maschera»**, nella barra «Disponi», apre un menu con tre voci:
+Nel Completo **«Maschera»**, nella barra «Disponi», apre un menu con tre voci:
 
 - **«Crea maschera di ritaglio»** (`Ctrl+7`, `⌘7`): l'oggetto in cima fra
   quelli scelti ritaglia gli altri. Ritaglia una forma o un testo; si vede
@@ -147,10 +147,10 @@ Una maschera di ritaglio è un `clipPath` con la forma, una d'opacità una
 in [Formato della scena,
 risorse](../reference/scene-format-resources.md#i-ritagli-e-le-maschere).
 
-## Livelli e parti
+## Spazi e parti
 
-Il ritaglio delle immagini viene dallo Standard, le maschere dall'Esperto.
-Nel [Personalizzato](drawing-custom.md) li portano le parti «Ritaglia
-immagine» e «Maschere di ritaglio e d’opacità». A un livello che non li ha, i
+Il ritaglio delle immagini e le maschere vengono nello spazio Completo.
+Per chi monta l'editor con le sue [parti](drawing-custom.md#che-cosa-porta-una-parte) li portano le parti «Ritaglia
+immagine» e «Maschere di ritaglio e d’opacità». In uno spazio che non li ha, i
 ritagli e le maschere restano nel disegno, si vedono e valgono per la
 selezione; mancano i comandi. In un documento in sola lettura non ci sono.

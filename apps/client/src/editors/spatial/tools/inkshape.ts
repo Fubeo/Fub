@@ -22,7 +22,7 @@
 //   restano come sono, e non si contano. Un tratto a penna che non somiglia
 //   a una forma resta inchiostro, e il comando lo conta.
 
-import { parseBrush } from "../../../ink/brush";
+import { parseInkBrush } from "../../../ink/brush";
 import { decodeInk, inkLength, inkPoint } from "../ink/codec";
 import { BoundsBuilder, type Bounds } from "../scene/geometry";
 import { apply, compose, IDENTITY, invert, type Matrix, type Point } from "../scene/matrix";
@@ -86,7 +86,7 @@ export function strokeShapeElem(node: ElementPart, shape: Recognized, frame: Mat
   if (before === null) return null;
   let width: number;
   try {
-    width = parseBrush(fubAttributes(node).get("brush") ?? "").size;
+    width = parseInkBrush(fubAttributes(node).get("brush") ?? "").size;
   } catch {
     return null;
   }

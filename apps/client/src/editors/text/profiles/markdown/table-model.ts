@@ -15,6 +15,7 @@
 //
 // Le pipe dentro una cella sono dati: nel testo sono `\|`, nel modello `|`.
 
+import { sortOrder } from "../../../../tabella/sort";
 import { parseTsv as parseSheetTsv, tsvRows } from "../../../core/tsv";
 
 export type TableAlign = "left" | "center" | "right" | null;
@@ -319,33 +320,14 @@ export function moveColumns(data: TableData, from: number, to: number, delta: -1
   return { rows: mutable(data).map(shift), aligns: shift([...data.aligns]) };
 }
 
-/// Il valore di una cella che è un numero: segno, cifre e al più un
-/// separatore decimale, punto o virgola. `null` se la cella è altro.
-function cellNumber(text: string): number | null {
-  const match = /^([-+−]?)(\d+)(?:[.,](\d+))?$/u.exec(text.trim());
-  if (!match) return null;
-  const value = Number(`${match[2]}.${match[3] ?? "0"}`);
-  return match[1] === "-" || match[1] === "−" ? -value : value;
-}
-
-/// Ordina il corpo secondo una colonna. I numeri si confrontano come valori
+/// Ordina il corpo secondo una colonna, con l'ordine della Tabella
+/// (`tabella/sort.ts`): i numeri si confrontano come valori
 /// (`-10 < -2 < 1,11 < 1.2`), e vengono prima del testo, che si confronta in
 /// ordine naturale; le celle vuote restano in fondo in tutte e due le
 /// direzioni. A parità, l'ordine di prima (D08).
 export function sortRows(data: TableData, col: number, direction: 1 | -1): TableData {
   const [header, ...body] = mutable(data);
-  const rank = (text: string) => (text.trim() === "" ? 2 : cellNumber(text) === null ? 1 : 0);
-  const ordered = body
-    .map((row, index) => ({ row, index, text: row[col] ?? "" }))
-    .sort((a, b) => {
-      const ra = rank(a.text), rb = rank(b.text);
-      if (ra !== rb) return ra === 2 || rb === 2 ? ra - rb : direction * (ra - rb);
-      const order = ra === 0
-        ? cellNumber(a.text)! - cellNumber(b.text)!
-        : a.text.localeCompare(b.text, undefined, { numeric: true });
-      return direction * order || a.index - b.index;
-    })
-    .map(({ row }) => row);
+  const ordered = sortOrder(body.map((row) => row[col] ?? ""), direction).map((index) => body[index]!);
   return { rows: header ? [header, ...ordered] : ordered, aligns: data.aligns };
 }
 

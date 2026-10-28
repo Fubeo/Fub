@@ -39,9 +39,13 @@
 
 import { resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
-import { icon, iconEl, registerIcon } from "../../../ui/icons";
+import { iconEl } from "../../../ui/icons";
+import { ensureDrawIcons } from "../icons";
 import type { Lifetime } from "../../../ui/lifetime";
 import { closeContextMenu, showContextMenu, type MenuItem, type MenuSample } from "../../../ui/menu";
+import { createColorPicker, type ColorPicker } from "../../../kit/color/picker";
+import { openPopover, type PopoverHandle } from "../../../kit/popover";
+import { drawPickerText } from "./color-text";
 import { contrast, MIN_CONTRAST, MIN_TEXT_CONTRAST, over } from "../scene/analysis";
 import { paint } from "../scene/values";
 import { t, type DrawKey } from "../strings";
@@ -58,22 +62,25 @@ import { createSwatchesPanel, type ColorsView, type PaintTarget, type SwatchesPa
 /// Le sezioni, nell'ordine in cui si vedono.
 export type SectionId =
   | "place"
-  | "shape"
-  | "symmetry"
-  | "repeat"
+  | "transform"
+  | "arrange"
   | "look"
-  | "connector"
+  | "fill"
   | "gradient"
   | "hatch"
+  | "stroke"
   | "effects"
-  | "colors"
   | "text"
-  | "arrange"
-  | "transform"
+  | "shape"
+  | "connector"
+  | "repeat"
+  | "symmetry"
+  | "exportSelection"
   | "attributes"
-  | "board"
   | "document"
-  | "view";
+  | "board"
+  | "view"
+  | "colors";
 
 export type NumberId =
   | "x"
@@ -347,6 +354,8 @@ export interface PropertiesView {
   readonly actions: Readonly<Partial<Record<ActionId, ActionState>>>;
   /// Vero se il pannello ospita gli attributi.
   readonly attributes: boolean;
+  /// Vero se c'è «Esporta la selezione».
+  readonly exportSelection?: boolean;
   /// I campioni del documento, che i campi dei colori scrivono per nome e
   /// offrono nel menu del loro campione.
   readonly swatches?: readonly FieldSwatch[];
@@ -385,6 +394,8 @@ export interface PropertiesOptions {
   readonly hatch: Omit<HatchPanelOptions, "announce">;
   /// I gesti della sezione «Effetti» (`effects-panel.ts`).
   readonly effects: Omit<EffectsPanelOptions, "announce" | "reveal">;
+  /// «Esporta…» di «Esporta la selezione»: la finestra, sulla selezione.
+  onExportSelection?(): void;
   /// «Applica a» cambia, in una delle due sezioni che lo hanno.
   onTarget(target: PaintTarget): void;
   /// Dice `text` a chi usa uno screen reader.
@@ -398,6 +409,9 @@ export interface Properties {
   readonly element: HTMLElement;
   /// Dove sta il pannello degli attributi, quando questo lo ospita.
   readonly attributes: HTMLElement;
+  /// Fra il titolo e le sezioni: ciò che l'editor ci mette (il titolo del
+  /// disegno).
+  readonly lead: HTMLElement;
   update(view: PropertiesView): void;
   /// Il fuoco al primo campo che si scrive, o al pannello.
   focus(): void;
@@ -458,17 +472,17 @@ const SPECS: readonly Spec[] = [
   { id: "repeatAngle", kind: "number", section: "repeat", column: "1" },
   { id: "repeatDistance", kind: "number", section: "repeat", column: "2" },
   { id: "lookStyle", kind: "menu", section: "look", column: "all" },
-  { id: "fill", kind: "paint", section: "look", column: "all" },
-  { id: "stroke", kind: "paint", section: "look", column: "all" },
-  { id: "strokeWidth", kind: "number", section: "look", column: "1" },
-  { id: "opacity", kind: "number", section: "look", column: "2" },
+  { id: "opacity", kind: "number", section: "look", column: "1" },
   { id: "blend", kind: "choice", section: "look", column: "all" },
   { id: "isolate", kind: "switch", section: "look", column: "all" },
-  { id: "dash", kind: "choice", section: "look", column: "all" },
-  { id: "cap", kind: "choice", section: "look", column: "1" },
-  { id: "join", kind: "choice", section: "look", column: "2" },
-  { id: "tipStart", kind: "menu", section: "look", column: "all" },
-  { id: "tipEnd", kind: "menu", section: "look", column: "all" },
+  { id: "fill", kind: "paint", section: "fill", column: "all" },
+  { id: "stroke", kind: "paint", section: "stroke", column: "all" },
+  { id: "strokeWidth", kind: "number", section: "stroke", column: "1" },
+  { id: "dash", kind: "choice", section: "stroke", column: "all" },
+  { id: "cap", kind: "choice", section: "stroke", column: "1" },
+  { id: "join", kind: "choice", section: "stroke", column: "2" },
+  { id: "tipStart", kind: "menu", section: "stroke", column: "all" },
+  { id: "tipEnd", kind: "menu", section: "stroke", column: "all" },
   { id: "textStyle", kind: "menu", section: "text", column: "all" },
   { id: "preset", kind: "choice", section: "text", column: "all" },
   { id: "family", kind: "choice", section: "text", column: "all" },
@@ -508,22 +522,25 @@ const SPECS: readonly Spec[] = [
 
 const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey }> = [
   { id: "place", label: "draw.properties.selection" },
-  { id: "shape", label: "draw.properties.shape" },
-  { id: "symmetry", label: "draw.properties.symmetry" },
-  { id: "repeat", label: "draw.properties.repeat" },
+  { id: "transform", label: "draw.properties.transform" },
+  { id: "arrange", label: "draw.properties.arrange" },
   { id: "look", label: "draw.properties.look" },
-  { id: "connector", label: "draw.properties.connector" },
+  { id: "fill", label: "draw.properties.fill" },
   { id: "gradient", label: "draw.properties.gradient" },
   { id: "hatch", label: "draw.properties.hatch" },
+  { id: "stroke", label: "draw.properties.stroke" },
   { id: "effects", label: "draw.properties.effects" },
-  { id: "colors", label: "draw.properties.colors" },
   { id: "text", label: "draw.properties.text" },
-  { id: "arrange", label: "draw.properties.arrange" },
-  { id: "transform", label: "draw.properties.transform" },
+  { id: "shape", label: "draw.properties.shape" },
+  { id: "connector", label: "draw.properties.connector" },
+  { id: "repeat", label: "draw.properties.repeat" },
+  { id: "symmetry", label: "draw.properties.symmetry" },
+  { id: "exportSelection", label: "draw.properties.export_section" },
   { id: "attributes", label: "draw.attributes" },
-  { id: "board", label: "draw.properties.board_section" },
   { id: "document", label: "draw.properties.document_section" },
-  { id: "view", label: "draw.view" },
+  { id: "board", label: "draw.properties.board_section" },
+  { id: "view", label: "draw.properties.view_section" },
+  { id: "colors", label: "draw.properties.colors" },
 ];
 
 /// I comandi di «Disponi», in tre barre: allineare, distribuire, ordinare.
@@ -567,61 +584,6 @@ const PROBLEMS: Readonly<Record<QuantityProblem, DrawKey>> = {
   finite: "draw.properties.problem.finite",
 };
 
-/// Le icone del pannello, col costrutto di `ui/icons.ts`.
-const ICONS: Readonly<Record<string, readonly string[]>> = {
-  "draw-align-left": ["M4 3v18", "M8 6h12v4H8z", "M8 14h7v4H8z"],
-  "draw-align-center": ["M12 3v18", "M6 6h12v4H6z", "M8.5 14h7v4h-7z"],
-  "draw-align-right": ["M20 3v18", "M4 6h12v4H4z", "M9 14h7v4H9z"],
-  "draw-align-top": ["M3 4h18", "M6 8h4v12H6z", "M14 8h4v7h-4z"],
-  "draw-align-middle": ["M3 12h18", "M6 6h4v12H6z", "M14 8.5h4v7h-4z"],
-  "draw-align-bottom": ["M3 20h18", "M6 4h4v12H6z", "M14 9h4v7h-4z"],
-  "draw-distribute-x": ["M4 4v16", "M20 4v16", "M10 7h4v10h-4z"],
-  "draw-distribute-y": ["M4 4h16", "M4 20h16", "M7 10h10v4H7z"],
-  "draw-order-front": ["M5 4h14", "M12 20V8", "M7 13l5-5 5 5"],
-  "draw-order-forward": ["M12 19V6", "M7 11l5-5 5 5"],
-  "draw-order-backward": ["M12 5v13", "M7 13l5 5 5-5"],
-  "draw-order-back": ["M5 20h14", "M12 4v12", "M7 11l5 5 5-5"],
-  "draw-anchor-start": ["M4 6h16", "M4 10h10", "M4 14h16", "M4 18h10"],
-  "draw-anchor-middle": ["M4 6h16", "M7 10h10", "M4 14h16", "M7 18h10"],
-  "draw-anchor-end": ["M4 6h16", "M10 10h10", "M4 14h16", "M10 18h10"],
-  "draw-text-point": ["M8 5h10", "M13 5v12", "M3 19h4", "M5 17v4"],
-  "draw-text-area": ["M4 4h16v16H4z", "M8 8h8", "M12 8v8"],
-  "draw-text-bold": ["M7 5h6a3.5 3.5 0 0 1 0 7H7z", "M7 12h7a3.5 3.5 0 0 1 0 7H7z"],
-  "draw-text-italic": ["M10 5h8", "M6 19h8", "M14 5l-4 14"],
-  "draw-text-underline": ["M7 4v7a5 5 0 0 0 10 0V4", "M5 20h14"],
-  "draw-text-strike": ["M4 12h16", "M16 7.5C15.4 6 13.8 5 12 5c-2.2 0-4 1.2-4 3 0 1.3.8 2.1 2 2.6", "M8 16.5c.6 1.5 2.2 2.5 4 2.5 2.2 0 4-1.2 4-3 0-.7-.2-1.2-.6-1.6"],
-  "draw-ratio": ["M9 8V6.5a3 3 0 0 1 6 0V8", "M9 16v1.5a3 3 0 0 0 6 0V16", "M12 10v4"],
-  "draw-portrait": ["M7 3h10v18H7z"],
-  "draw-landscape": ["M3 7h18v10H3z"],
-  "draw-section": ["M8 10l4 4 4-4"],
-  // Le punte delle linee: una linea orizzontale con la punta a sinistra
-  // (l'inizio) o a destra (la fine). Le icone sono soltanto tratti: una forma
-  // piena è il suo contorno con dentro altri contorni a un'unità l'uno
-  // dall'altro, che a 16 e a 24 px si vedono come un riempimento.
-  "draw-tip-none": ["M3 12h18"],
-  "draw-tip-triangle-start": ["M21 12h-9.5", "M11.5 6.5 3 12l8.5 5.5z", "M10.5 8.34 4.84 12l5.66 3.66z", "M9.5 10.18 6.68 12l2.82 1.82z", "M8.5 12h.01"],
-  "draw-tip-triangle-end": ["M3 12h9.5", "M12.5 6.5 21 12l-8.5 5.5z", "M13.5 8.34 19.16 12l-5.66 3.66z", "M14.5 10.18 17.32 12l-2.82 1.82z", "M15.5 12h.01"],
-  "draw-tip-vee-start": ["M3 12h18", "M9.5 7 3 12l6.5 5"],
-  "draw-tip-vee-end": ["M3 12h18", "M14.5 7 21 12l-6.5 5"],
-  "draw-tip-circle-start": ["M21 12h-9", "M3 12a4.5 4.5 0 1 0 9 0 4.5 4.5 0 1 0-9 0z", "M4 12a3.5 3.5 0 1 0 7 0 3.5 3.5 0 1 0-7 0z", "M5 12a2.5 2.5 0 1 0 5 0 2.5 2.5 0 1 0-5 0z", "M6 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0z", "M7 12a.5 .5 0 1 0 1 0 .5 .5 0 1 0-1 0z"],
-  "draw-tip-circle-end": ["M3 12h9", "M12 12a4.5 4.5 0 1 0 9 0 4.5 4.5 0 1 0-9 0z", "M13 12a3.5 3.5 0 1 0 7 0 3.5 3.5 0 1 0-7 0z", "M14 12a2.5 2.5 0 1 0 5 0 2.5 2.5 0 1 0-5 0z", "M15 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0z", "M16 12a.5 .5 0 1 0 1 0 .5 .5 0 1 0-1 0z"],
-  "draw-tip-square-start": ["M21 12h-10", "M3 8h8v8H3z", "M4 9h6v6H4z", "M5 10h4v4H5z", "M6 11h2v2H6z"],
-  "draw-tip-square-end": ["M3 12h10", "M13 8h8v8h-8z", "M14 9h6v6h-6z", "M15 10h4v4h-4z", "M16 11h2v2h-2z"],
-  "draw-tip-diamond-start": ["M21 12h-8", "M13 12l-5-5-5 5 5 5z", "M11.59 12 8 8.41 4.41 12 8 15.59z", "M10.17 12 8 9.83 5.83 12 8 14.17z", "M7.24 12 8 11.24 8.76 12 8 12.76z"],
-  "draw-tip-diamond-end": ["M3 12h8", "M11 12l5-5 5 5-5 5z", "M12.41 12 16 8.41 19.59 12 16 15.59z", "M13.83 12 16 9.83 18.17 12 16 14.17z", "M15.24 12 16 11.24 16.76 12 16 12.76z"],
-  "draw-tip-bar-start": ["M21 12H4", "M4 6.5v11"],
-  "draw-tip-bar-end": ["M3 12h17", "M20 6.5v11"],
-  // Una punta che non è della raccolta: un punto interrogativo al posto della forma.
-  "draw-tip-other-start": ["M13 12h8", "M5.6 9.2a2.9 2.9 0 1 1 4.6 2.3c-1.2.8-1.8 1.4-1.8 2.7", "M8.4 17.6h.01"],
-  "draw-tip-other-end": ["M3 12h8", "M13.6 9.2a2.9 2.9 0 1 1 4.6 2.3c-1.2.8-1.8 1.4-1.8 2.7", "M16.4 17.6h.01"],
-  "draw-tips-swap": ["M4 8h14", "M14.5 4.5 18 8l-3.5 3.5", "M20 16H6", "M9.5 12.5 6 16l3.5 3.5"],
-};
-
-/// Registra le icone una volta per tutte le superfici, come l'editor le sue.
-function ensureIcons(): void {
-  for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
-}
-
 /// Il formato dei numeri dei campi, nella lingua di adesso: senza
 /// separatore delle migliaia, che un campo non rilegge.
 const formats = new Map<number, Intl.NumberFormat>();
@@ -663,7 +625,6 @@ interface Line {
   readonly chip: HTMLButtonElement | null;
   readonly chipFrame: HTMLElement | null;
   readonly chipColor: HTMLElement | null;
-  readonly picker: HTMLInputElement | null;
   readonly contrast: HTMLElement | null;
   /// I pulsanti di una scelta a pulsanti, per valore.
   readonly segments: Map<string, HTMLButtonElement>;
@@ -762,7 +723,7 @@ function chipShape(value: string | null, sample?: PaintSample): string {
   if (value === "none") return "none";
   const code = seenColor(value, sample);
   if (code === null) return "mixed";
-  return swatchOf(code)?.shape ?? "ring";
+  return "circle";
 }
 
 /// Le soglie di AAA di WCAG 2.2: il testo normale, e il grande.
@@ -797,7 +758,7 @@ function contrastText(code: string, against: PaintContrast): string | null {
 }
 
 export function createProperties(life: Lifetime, options: PropertiesOptions): Properties {
-  ensureIcons();
+  ensureDrawIcons();
   const element = document.createElement("section");
   element.className = "draw-properties";
   element.id = identifier("draw-properties");
@@ -812,8 +773,10 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   header.append(heading, subjectLine);
   const scroller = document.createElement("div");
   scroller.className = "draw-properties-scroll";
+  const lead = document.createElement("div");
+  lead.className = "draw-properties-lead";
   element.setAttribute("aria-labelledby", heading.id);
-  element.append(header, scroller);
+  element.append(header, lead, scroller);
 
   let view: PropertiesView = { key: "", subject: "", editable: false, fields: {}, actions: {}, attributes: false };
   /// Vero mentre i campi si ridisegnano: un campo che se ne va non scrive.
@@ -985,16 +948,23 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       if (glyph !== null) control.append(glyph);
       bar.append(control);
       actionButtons.set(id, control);
-      life.listen(control, "click", () => {
+      /// Un comando che adesso non si usa resta raggiungibile, e dice
+      /// perché.
+      const refused = (): boolean => {
         const state = view.actions[id];
-        if (state === undefined) return;
-        // Un comando che adesso non si usa resta raggiungibile, e dice
-        // perché.
-        if (state.disabled === true || !view.editable) {
-          options.announce(state.note ?? state.label);
-          return;
-        }
-        options.onAction(id);
+        if (state === undefined) return true;
+        if (state.disabled !== true && view.editable) return false;
+        options.announce(state.note ?? state.label);
+        return true;
+      };
+      life.listen(control, "click", () => {
+        if (!refused()) options.onAction(id);
+      });
+      // Da tastiera uno spento non fa clic: lo dice soltanto.
+      life.listen(control, "keydown", (event) => {
+        if ((event.key !== "Enter" && event.key !== " ") || control.getAttribute("aria-disabled") !== "true") return;
+        event.preventDefault();
+        refused();
       });
     }
     arrangeRows.append(bar);
@@ -1064,7 +1034,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     let chip: HTMLButtonElement | null = null;
     let chipFrame: HTMLElement | null = null;
     let chipColor: HTMLElement | null = null;
-    let picker: HTMLInputElement | null = null;
     let contrast: HTMLElement | null = null;
     let picture: HTMLElement | null = null;
     let caption: HTMLElement | null = null;
@@ -1092,7 +1061,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         chip = document.createElement("button");
         chip.type = "button";
         chip.className = "draw-button draw-properties-chip";
-        chip.setAttribute("aria-haspopup", "menu");
+        chip.setAttribute("aria-haspopup", "dialog");
         chip.setAttribute("aria-expanded", "false");
         chip.id = identifier("draw-properties-chip");
         chipFrame = document.createElement("span");
@@ -1101,12 +1070,9 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         chipColor.className = "draw-swatch";
         chipFrame.append(chipColor);
         chip.append(chipFrame);
-        picker = document.createElement("input");
-        picker.type = "color";
-        picker.className = "draw-properties-picker";
         const row = document.createElement("div");
         row.className = "draw-properties-paint";
-        row.append(chip, input, picker);
+        row.append(chip, input);
         contrast = document.createElement("p");
         contrast.className = "draw-properties-note draw-properties-contrast";
         contrast.id = identifier("draw-properties-contrast");
@@ -1210,7 +1176,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         break;
       }
     }
-    return { spec, root, name, note, error, differs, ask: null, control, unit, spoken, chip, chipFrame, chipColor, picker, contrast, segments, picture, caption, state: null, shown: "", options: "" };
+    return { spec, root, name, note, error, differs, ask: null, control, unit, spoken, chip, chipFrame, chipColor, contrast, segments, picture, caption, state: null, shown: "", options: "" };
   };
 
   // Un campo entra nella sua sezione la prima volta che ha di che mostrarsi:
@@ -1219,25 +1185,21 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   for (const spec of SPECS) {
     const line = createLine(spec);
     lines.set(spec.id, line);
-    if (line.chip !== null) life.listen(line.chip, "click", () => openSwatches(line));
-    if (line.picker !== null) {
-      const picker = line.picker;
-      // Mentre si sceglie, il campo e il campione seguono; il colore parte
-      // quando la scelta finisce, in un passo.
-      life.listen(picker, "input", () => {
-        (line.control as HTMLInputElement).value = picker.value;
-        showChip(line, picker.value);
-        showContrast(line, picker.value);
-        showError(line, null);
-      });
-      life.listen(picker, "change", () => commitPaint(line, picker.value, true));
-    }
+    // Un secondo clic sul campione chiude il selettore, come dice
+    // `aria-expanded`.
+    if (line.chip !== null) life.listen(line.chip, "click", () => (choosing?.line === line ? choosing.popover.close() : openPicker(line)));
     if (spec.kind === "press") life.listen(line.control, "click", () => press(line));
     // Un secondo clic sul pulsante lo chiude, come dice `aria-expanded`.
     if (spec.kind === "menu") life.listen(line.control, "click", () => (line.control.getAttribute("aria-expanded") === "true" ? closeContextMenu() : openMenu(line)));
     if (spec.kind === "choice" || spec.kind === "switch") life.listen(line.control, "change", () => choose(line));
   }
   transformBody.append(applyButton);
+
+  const exportButton = document.createElement("button");
+  exportButton.type = "button";
+  exportButton.className = "draw-button draw-properties-export";
+  life.listen(exportButton, "click", () => options.onExportSelection?.());
+  sections.get("exportSelection")!.body.append(exportButton);
 
   /// Mette il campo al suo posto, nell'ordine di `SPECS`, prima del campo
   /// seguente già entrato o di «Applica».
@@ -1283,7 +1245,6 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       const chipText = t("draw.properties.swatches", { label });
       line.chip.setAttribute("aria-label", chipText);
       line.chip.title = chipText;
-      line.picker!.setAttribute("aria-label", t("draw.properties.picker", { label }));
     } else if (line.spec.kind === "press") {
       line.control.setAttribute("aria-label", label);
       (line.control as HTMLButtonElement).title = label;
@@ -1388,11 +1349,9 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     showChip(line, written, sample);
     showContrast(line, written, sample);
     nameButtons(line, state.label);
-    line.picker!.value = seenColor(state.value, state.sample) ?? "#000000";
     const off = !view.editable || state.disabled === true;
     input.readOnly = off;
     line.chip!.disabled = off;
-    line.picker!.disabled = off;
   };
 
   const paintChoice = (line: Line, state: ChoiceState): void => {
@@ -1919,42 +1878,66 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     else showError(line, null);
   }
 
-  /// Il menu del campione: nessuno, i campioni del documento, i colori della
-  /// tavolozza e i recenti che non ne sono, ciascuno col suo nome; quello di
-  /// adesso è segnato.
-  function openSwatches(line: Line): void {
+  /// Il selettore del colore aperto, e per quale campo.
+  let choosing: { readonly line: Line; readonly popover: PopoverHandle; readonly picker: ColorPicker } | null = null;
+  life.add(() => choosing?.popover.close());
+
+  /// Il selettore del kit sotto il campione di `line`: nessuno, i colori
+  /// consigliati, i campioni del documento e i recenti, ciascuno col suo nome,
+  /// poi un colore qualunque. Mentre si tira, il campo e il campione seguono;
+  /// il colore parte quando la scelta finisce, in un passo. Un colore uguale a
+  /// un campione del documento lo lega.
+  function openPicker(line: Line): void {
     const state = line.state;
     const chip = line.chip!;
     if (state === null || state.kind !== "paint" || !view.editable) return;
-    const item = (label: string, written: WrittenPaint, color: string | null, extra: Partial<MenuItem> = {}): MenuItem => ({
-      label,
-      choice: "radio",
-      checked: samePaint(state.value, written.value),
-      ...(color === null ? {} : { swatches: [color] }),
-      ...extra,
-      run: () => commitValue(line, written, true),
-    });
+    choosing?.popover.close();
+    const swatches = fieldSwatches();
     const none = t("draw.properties.none");
-    const groups: MenuItem[][] = [
-      fieldSwatches().map((swatch) =>
-        item(swatch.name, { value: `url(#${swatch.id}) ${swatch.color}`, text: swatch.name }, swatch.color, {
-          description: t("draw.colors.menu.swatch_note", { code: swatch.color }),
-        }),
-      ),
-      PALETTE.map((swatch) => item(t(swatch.label), { value: swatch.color, text: swatch.color }, swatch.color)),
-      (view.recent ?? []).filter((code) => swatchOf(code) === null).map((code) => item(code, { value: code, text: code }, code)),
-    ];
-    const items: MenuItem[] = [item(none, { value: "none", text: none }, null)];
-    for (const group of groups) {
-      if (group.length === 0) continue;
-      group[0]!.separator = true;
-      items.push(...group);
-    }
-    chip.setAttribute("aria-expanded", "true");
-    showContextMenu(chip, items, {
-      labelledBy: chip.id,
-      onClose: () => chip.setAttribute("aria-expanded", "false"),
+    const writtenOf = (color: string): WrittenPaint => {
+      if (color === "none") return { value: "none", text: none };
+      const swatch = swatches.find((each) => each.color === color.toLowerCase());
+      return swatch === undefined ? { value: color, text: color } : { value: `url(#${swatch.id}) ${swatch.color}`, text: swatch.name };
+    };
+    /// Un colore tirato e non ancora lasciato.
+    let pending = false;
+    const picker = createColorPicker({
+      value: state.value === null ? null : (seenColor(state.value, state.sample) ?? (state.value === "none" ? "none" : null)),
+      text: drawPickerText(),
+      allowNone: true,
+      recommended: PALETTE.map((swatch) => ({ color: swatch.color, name: t(swatch.label) })),
+      documentColors: swatches.map((swatch) => ({ color: swatch.color, name: swatch.name || swatch.color })),
+      recent: (view.recent ?? []).filter((code) => swatchOf(code) === null).map((code) => ({ color: code, name: code })),
+      lifetime: life,
+      onInput: (color) => {
+        pending = true;
+        (line.control as HTMLInputElement).value = color;
+        showChip(line, color);
+        showContrast(line, color);
+        showError(line, null);
+      },
+      onChange: (color) => {
+        pending = false;
+        if (choosing?.line === line && line.state?.kind === "paint") commitValue(line, writtenOf(color), true);
+      },
     });
+    chip.setAttribute("aria-expanded", "true");
+    const popover = openPopover({
+      anchor: chip,
+      content: picker.element,
+      label: (state as PaintState).label,
+      className: "kit-color-popover",
+      lifetime: life,
+      onClose: () => {
+        chip.setAttribute("aria-expanded", "false");
+        if (choosing?.popover === popover) choosing = null;
+        // Un colore tirato e lasciato a metà torna a quello del disegno.
+        const now = line.state;
+        if (pending && now !== null && now.kind === "paint") revertPaint(line, now);
+      },
+    });
+    choosing = { line, popover, picker };
+    picker.focus();
   }
 
   /// «Applica»: di quanto ruotare, scalare e inclinare, come è scritto.
@@ -2099,6 +2082,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       nameButtons(line, line.state?.label ?? t(key));
     }
     applyButton.textContent = t("draw.properties.apply");
+    exportButton.textContent = t("draw.chrome.export.dialog");
     colors.relabel();
     connector.relabel();
     gradient.relabel();
@@ -2142,6 +2126,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       applyButton.hidden = !shown.has("transform");
       applyButton.disabled = !next.editable;
       if (next.attributes) shown.add("attributes");
+      if (next.exportSelection === true && options.onExportSelection !== undefined) shown.add("exportSelection");
       if (next.colors !== undefined) {
         shown.add("colors");
         colors.update(next.colors, next.editable);
@@ -2183,6 +2168,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   return {
     element,
     attributes,
+    lead,
     update,
     focus() {
       for (const section of sections.values()) {

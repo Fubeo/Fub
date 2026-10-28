@@ -68,7 +68,7 @@ export interface RadialItem {
   /// Un'icona registrata (`ui/icons.ts`).
   readonly icon?: string;
   /// Un campione di colore, con la forma che lo distingue senza colore.
-  readonly swatch?: { readonly color: string; readonly shape: string };
+  readonly swatch?: { readonly color: string };
   /// La scorciatoia del comando fuori dal menu, scritta come si preme.
   readonly hint?: string;
   /// La voce c'è ma adesso non fa niente.
@@ -180,7 +180,7 @@ export function openRadial(x: number, y: number, items: readonly (RadialItem | n
     } else if (item.swatch !== undefined) {
       const frame = document.createElement("span");
       frame.className = "draw-swatch-frame";
-      frame.dataset.shape = item.swatch.shape;
+      frame.dataset.shape = "circle";
       const chip = document.createElement("span");
       chip.className = "draw-swatch";
       chip.style.setProperty("--swatch", item.swatch.color);

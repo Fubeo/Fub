@@ -13,9 +13,9 @@ import { directionCursor, type GripCursor } from "../frame";
 import { gridLines, gridStep } from "../grid";
 import { unitSuffix } from "../guide-dialog";
 import { fieldMin, fieldText, fromUnit, RULER_PX, toUnit, UNIT_PLACES } from "../rulers";
-import { fitView, toScene, toScreen, turnTo, viewTransform, zoomAt, type View } from "../../view";
+import { fitView, placedAt, toScene, toScreen, turnTo, viewTransform, zoomAt, type View } from "../../view";
 import type { Feature } from "../registry";
-import { DRAW_SCALE_LIMITS, FIT_PAD } from "./constants";
+import { DRAW_SCALE_LIMITS, FIT_PAD, OPEN_MARGIN_PX } from "./constants";
 import type { EditorContext } from "./context";
 import { union } from "./helpers";
 
@@ -70,6 +70,8 @@ export interface ViewContext {
   announceTurn: () => void;
   turnView: (angle: number) => void;
   fit: () => void;
+  /// Inquadra la selezione, e lo dice se non c'è niente di scelto.
+  fitSelection: () => void;
 }
 
 /// Monta gli annunci, la camera, l'unità e i righelli.
@@ -527,6 +529,9 @@ export function installView(ctx: EditorContext): void {
   ctx.turnView = turnView;
 
   function fit(): void {
+    // L'inquadratura d'apertura, prima che chi disegna muova la vista: un
+    // margine fisso, e al più il 100%, così un disegno piccolo non si gonfia.
+    const opening = !ctx.placed;
     const page = currentPage();
     const list = boardsNow();
     // Con le tavole si inquadrano loro e il disegno: la pagina può essere
@@ -542,9 +547,31 @@ export function installView(ctx: EditorContext): void {
       setCamera({ scale: 1, angle: ctx.camera.angle, tx: area.x, ty: area.y });
       return;
     }
-    setCamera(fitted(bounds, area));
+    if (!opening) {
+      setCamera(fitted(bounds, area));
+      return;
+    }
+    const margin = Math.min(OPEN_MARGIN_PX, area.w / 4, area.h / 4);
+    const inset = { x: area.x + margin, y: area.y + margin, w: area.w - 2 * margin, h: area.h - 2 * margin };
+    const view = fitView(bounds, inset, 0, ctx.camera.angle, DRAW_SCALE_LIMITS);
+    if (view.scale <= 1) {
+      setCamera(view);
+      return;
+    }
+    const center: Point = [(bounds.min[0] + bounds.max[0]) / 2, (bounds.min[1] + bounds.max[1]) / 2];
+    setCamera(placedAt({ scale: 1, angle: view.angle, tx: 0, ty: 0 }, center, [area.x + area.w / 2, area.y + area.h / 2]));
   }
   ctx.fit = fit;
+
+  ctx.fitSelection = () => {
+    const bounds = ctx.boundsOf(ctx.selectedUnits());
+    if (bounds === null) {
+      ctx.announce(t("draw.fit.selection.none"));
+      return;
+    }
+    ctx.placed = true;
+    setCamera(fitted(bounds, viewArea()));
+  };
 
   // Il primo inquadramento aspetta che il foglio abbia una misura.
   if (typeof ResizeObserver !== "undefined") {

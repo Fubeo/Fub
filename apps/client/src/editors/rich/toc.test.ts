@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { t } from "../../i18n/strings";
 import { RichEngine } from "./engine";
 import { parseProjection, type Block, type Para } from "./projection";
-import { mountStrip } from "./strip";
+import { mountRichRibbon } from "./ribbon";
 import { insertToc } from "./toc";
 
 let engines: RichEngine[] = [];
@@ -61,14 +61,14 @@ describe("sommario", () => {
     expect((parseProjection(e.getDoc()).blocks[1] as Para).c).toEqual([{ t: "text", x: "Uno" }]);
   });
 
-  it("senza titoli non c'è sommario da fare, e la striscia lo dice spento", () => {
+  it("senza titoli non c'è sommario da fare, e la barra lo dice spento", () => {
     const e = engine([para("solo testo")]);
     e.select(2);
     expect(e.apply(insertToc("Sommario"))).toBe(false);
-    const strip = mountStrip(e, () => null);
-    document.body.append(strip.element);
-    const find = () => [...strip.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.toc"))!;
-    expect(find().disabled).toBe(true);
-    strip.destroy();
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
+    const find = () => [...ribbon.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.toc"))!;
+    expect(find().getAttribute("aria-disabled")).toBe("true");
+    ribbon.destroy();
   });
 });

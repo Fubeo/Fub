@@ -3,6 +3,7 @@ import { INTERACTIVE, REST, S, SELECTABLE, type PartAnatomy } from "./types";
 
 export const GRAPH: PartAnatomy = {
   part: "graph",
+  layer: "cornice",
   components: [
     { name: "pane-tabs", states: SELECTABLE, hooks: ["tab-name", "tab-view"] },
     // La tela (carta del foglio) e le annotazioni che non si toccano.

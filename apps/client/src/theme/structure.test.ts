@@ -175,6 +175,44 @@ describe("la struttura regge senza il foglio", () => {
   });
 });
 
+describe("l'aspetto file: i segni sulla carta chiara", () => {
+  // `.look-file` ricollega i segni di Fub alla carta del file, con il ripiego
+  // per un tema che non dichiara `--paper-*`: il ripiego è il valore della
+  // serie, perché la carta di un file è la stessa in ogni luce.
+  const withoutComments = structure.replace(/\/\*[\s\S]*?\*\//g, "");
+  const rule = parseTokens(block(withoutComments, ".look-file"));
+
+  it("ogni segno passa al suo ruolo della carta, con il ripiego della serie", () => {
+    expect(Object.keys(rule).length).toBeGreaterThan(5);
+    for (const [name, value] of Object.entries(rule)) {
+      const paper = name.replace(/^doc-/, "paper-");
+      expect(value, name).toBe(`var(--${paper}, ${LIGHT[paper]})`);
+      expect(DARK[paper], paper).toBe(LIGHT[paper]);
+    }
+  });
+
+  it("la carta stessa non si ricollega sulla radice: la ricollega la superficie che la dipinge", () => {
+    for (const name of ["doc-bg", "doc-fg", "doc-rule", "doc-rule-soft", "doc-highlight", "doc-link", "doc-heading"]) {
+      expect(rule[name], name).toBeUndefined();
+    }
+  });
+
+  // Il documento dipinge la carta del file sulla sua scrivania, il foglio di
+  // calcolo nella sua vista: lì la carta passa ai ruoli `--paper-*`, e il
+  // testo non resta l'inchiostro chiaro del tema scuro su un foglio bianco.
+  it("la scrivania del documento e la vista del foglio ricollegano la carta ai ruoli della carta del file", () => {
+    const desk = parseTokens(block(withoutComments, ".look-file .rich-desk,\n.look-file .grid-viewport"));
+    const paperOf: Readonly<Record<string, string>> = { "doc-fg": "paper-ink", "doc-heading": "paper-ink" };
+    for (const name of ["doc-bg", "doc-fg", "doc-heading", "doc-link", "doc-rule", "doc-rule-soft", "doc-highlight"]) {
+      const paper = paperOf[name] ?? name.replace(/^doc-/, "paper-");
+      expect(desk[name], name).toBe(`var(--${paper}, ${LIGHT[paper]})`);
+    }
+    // Il testo dei segni è l'inchiostro verso la carta: niente di nuovo da
+    // dichiarare in un tema.
+    expect(desk["doc-gutter-fg"]).toMatch(/^color-mix\(in oklab, var\(--paper-ink, [^)]+\) \d+%, var\(--paper-bg, [^)]+\)\)$/);
+  });
+});
+
 describe("i due fogli sono gemelli: stesso vocabolario", () => {
   it("dichiarano lo stesso insieme di nomi, e sono pieni (floor > 75)", () => {
     const namesDark = Object.keys(DARK).sort();
@@ -260,11 +298,14 @@ describe("i due fogli hanno i valori non-colore identici", () => {
     // ogni volta che qualcuno aggiunge un ruolo.
     //
     // Un'eccezione vera sarebbe un **controcolore** che due conti indipendenti
-    // portano allo stesso esito; oggi non ce n'è.
+    // portano allo stesso esito; oggi non ce n'è. L'altra è la carta di un file
+    // (`--paper-*`): è bianca in ogni luce per scelta, perché è la carta del
+    // file e non della scrivania.
     const MATCHING_COLORS: string[] = [];
     const outsideList = Object.keys(DARK).filter(
       (n) =>
         DARK[n] === LIGHT[n] &&
+        !n.startsWith("paper-") &&
         !IDENTICAL_NON_COLOR.includes(n as never) &&
         !MATCHING_COLORS.includes(n),
     );

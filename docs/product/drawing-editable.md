@@ -8,7 +8,7 @@
 
 FubDraw tiene le parti di altri programmi come sono, byte per byte: si
 vedono, si spostano e si scelgono, ma le proprietà non le cambiano. Dal
-[livello Esperto](drawing-expert.md), **«Rendi modificabile»** le riscrive
+[strumenti avanzati](drawing-expert.md), **«Rendi modificabile»** le riscrive
 nel formato di FubDraw, dove si può senza che cambi ciò che si vede; ciò che
 non si può resta com'è, e il comando dice perché. Fuori dal comando niente
 si riscrive. Il piano è in
@@ -106,9 +106,9 @@ comincia con una famiglia generica, come `sans-serif`: prima la sceglie il
 browser, dopo è quella di Fub ([Disegni, caratteri del
 vault](drawing-fonts.md)).
 
-## Livelli e parti
+## Spazi e parti
 
-Nel [Personalizzato](drawing-custom.md) la parte **«Rendi modificabile»**,
-dall'Esperto, porta le due voci e il pulsante sull'avviso. Senza, le parti di
+Per chi monta l'editor con le sue [parti](drawing-custom.md#che-cosa-porta-una-parte) la parte **«Rendi modificabile»**,
+nel Completo, porta le due voci e il pulsante sull'avviso. Senza, le parti di
 altri programmi restano come sono, e un SVG estraneo si adotta con
 «Modifica».

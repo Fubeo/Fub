@@ -12,6 +12,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
 
+use wordcraft_doc::graphic::{Embedded, GraphicItem, GraphicKind};
 use wordcraft_doc::para::NoteKind;
 use wordcraft_doc::section::HeaderSet;
 use wordcraft_doc::{
@@ -211,6 +212,22 @@ pub(crate) fn canonical(mut document: Document) -> Document {
             }
         },
     );
+    // Il markup conservato di un oggetto (un inchiostro, un grafico) nomina le
+    // sue relazioni e il suo `wp:docPr`: l'innesto dà a un oggetto nuovo
+    // numeri liberi nel file, diversi da quelli che il codec sceglie
+    // scrivendo il documento intero. Contano le parti a cui portano, non i
+    // numeri.
+    document.objects_mut(
+        &|o| matches!(o, InlineObject::Graphic { graphic, .. } if graphic.source.is_some()),
+        &mut |o| {
+            if let InlineObject::Graphic { graphic, .. } = o {
+                if let Some(source) = Arc::make_mut(graphic).source.as_mut() {
+                    *source = Arc::new(canonical_embedded(source));
+                }
+            }
+        },
+    );
+    canonical_ink_parts(&mut document);
     for block in document.body.iter_mut() {
         if let Block::Para(paragraph) = &**block {
             if paragraph.section.is_none() {
@@ -242,6 +259,87 @@ pub(crate) fn canonical(mut document: Document) -> Document {
         .collect();
     canonical_revisions(&mut document);
     document
+}
+
+/// Le parti degli inchiostri (InkML, immagine di ripiego) nominate
+/// nell'ordine in cui gli inchiostri le usano. Il codec le chiama secondo le
+/// parti che trova; l'innesto riusa quella del file coi byte uguali, anche se
+/// di un inchiostro tolto, o ne sceglie una libera nel file: lo stesso
+/// inchiostro, con le parti chiamate in un altro modo. Lo stesso per il nome
+/// dell'immagine di ripiego che l'inchiostro mostra: i byte sono quelli della
+/// sua parte.
+fn canonical_ink_parts(document: &mut Document) {
+    let mut names: BTreeMap<String, String> = BTreeMap::new();
+    let mut media: BTreeMap<String, String> = BTreeMap::new();
+    document.objects_mut(
+        &|o| matches!(o, InlineObject::Graphic { graphic, .. } if graphic.kind == GraphicKind::Ink && graphic.source.is_some()),
+        &mut |o| {
+            if let InlineObject::Graphic { graphic, .. } = o {
+                let graphic = Arc::make_mut(graphic);
+                for item in graphic.items.iter_mut() {
+                    if let GraphicItem::Image { media: name, .. } = item {
+                        let next = format!("\u{1}ink{}.png", media.len());
+                        *name = media.entry(name.clone()).or_insert(next).clone();
+                    }
+                }
+                if let Some(source) = graphic.source.as_mut() {
+                    for rel in Arc::make_mut(source).refs.iter_mut().filter(|r| !r.external) {
+                        let next = format!("\u{1}ink{}", names.len());
+                        rel.target = names.entry(rel.target.clone()).or_insert(next).clone();
+                    }
+                }
+            }
+        },
+    );
+    if names.is_empty() {
+        return;
+    }
+    for (old, new) in &names {
+        if let Some(part) = document.passthrough.remove(old) {
+            document.passthrough.insert(new.clone(), part);
+        }
+    }
+    let key = wordcraft_docx::ink::EMBEDDED_PARTS;
+    if let Some(list) = document.passthrough.get(key) {
+        let mut lines: Vec<String> = String::from_utf8_lossy(list)
+            .lines()
+            .map(|line| {
+                let mut fields: Vec<&str> = line.split('\t').collect();
+                if let Some(new) = fields.get(1).and_then(|name| names.get(*name)) {
+                    fields[1] = new;
+                }
+                fields.join("\t")
+            })
+            .collect();
+        // L'elenco va per nome: rinominate, le righe si rimettono in ordine,
+        // le parti prima delle loro relazioni.
+        lines.sort_by(|a, b| (!a.starts_with("P\t"), a).cmp(&(!b.starts_with("P\t"), b)));
+        document
+            .passthrough
+            .insert(key.into(), Arc::new(lines.join("\n").into_bytes()));
+    }
+}
+
+/// Il markup conservato con le relazioni numerate nell'ordine dei suoi
+/// riferimenti e l'id del disegno azzerato.
+fn canonical_embedded(source: &Embedded) -> Embedded {
+    let mut xml = source.xml.clone();
+    let mut refs = source.refs.clone();
+    // In due passi, perché un nome nuovo non sia preso per uno vecchio.
+    for (at, rel) in refs.iter_mut().enumerate() {
+        xml = xml.replace(&format!("\"{}\"", rel.id), &format!("\"\u{1}{at}\""));
+        rel.id = format!("rel{}", at + 1);
+    }
+    for at in 0..refs.len() {
+        xml = xml.replace(&format!("\"\u{1}{at}\""), &format!("\"rel{}\"", at + 1));
+    }
+    const DOC_PR: &str = "<wp:docPr id=\"";
+    if let Some(start) = xml.find(DOC_PR).map(|at| at + DOC_PR.len()) {
+        if let Some(end) = xml[start..].find('"').map(|len| start + len) {
+            xml.replace_range(start..end, "0");
+        }
+    }
+    Embedded { xml, refs }
 }
 
 /// Le revisioni numerate nell'ordine in cui il testo le usa (il corpo, poi

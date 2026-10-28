@@ -44,19 +44,28 @@ export function mappedSamples(samples: readonly InkSample[], m: Affine): InkSamp
 /// Un tratto dritto dal primo all'ultimo campione: un campione ogni unità e
 /// mezza, con la pressione e il tempo distribuiti in mezzo. Un tratto di un
 /// campione solo (o senza campioni) resta com'è, e i campioni non superano mai
-/// il limite del formato.
-export function straight(samples: readonly InkSample[]): InkSample[] {
+/// il limite del formato. Con `snap` la direzione va a passi di `snap` gradi.
+export function straight(samples: readonly InkSample[], snap = 0): InkSample[] {
   const first = samples[0];
   const last = samples[samples.length - 1];
   if (first === undefined || last === undefined || first === last) return [...samples];
-  const steps = Math.min(
-    INK_MAX_SAMPLES - 1,
-    Math.max(1, Math.ceil(Math.hypot(last.x - first.x, last.y - first.y) / STRAIGHT_STEP)),
-  );
+  const length = Math.hypot(last.x - first.x, last.y - first.y);
+  let [dx, dy] = [last.x - first.x, last.y - first.y];
+  if (snap > 0 && length > 0) {
+    // La direzione va al multiplo di `snap` gradi più vicino; la lunghezza
+    // resta quella del tratto.
+    const step = (snap * Math.PI) / 180;
+    const angle = Math.round(Math.atan2(dy, dx) / step) * step;
+    [dx, dy] = [Math.cos(angle) * length, Math.sin(angle) * length];
+  }
+  const steps = Math.min(INK_MAX_SAMPLES - 1, Math.max(1, Math.ceil(length / STRAIGHT_STEP)));
   const out: InkSample[] = [];
   for (let i = 0; i <= steps; i++) {
     const k = i / steps;
-    out.push({ ...first, x: first.x + (last.x - first.x) * k, y: first.y + (last.y - first.y) * k, t: first.t + (last.t - first.t) * k });
+    out.push({ ...first, x: first.x + dx * k, y: first.y + dy * k, t: first.t + (last.t - first.t) * k });
   }
   return out;
 }
+
+/// Il passo, in gradi, del tratto raddrizzato con Maiusc.
+export const STRAIGHT_SNAP = 15;

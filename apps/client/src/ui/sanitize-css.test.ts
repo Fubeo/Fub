@@ -216,3 +216,95 @@ describe("user CSS trust boundary", () => {
     expect(() => sanitizeUserCss(".markdown-preview[data-private] { color: red; }", hooks)).toThrow(ThemeCssError);
   });
 });
+
+describe("il gate del contenuto", () => {
+  // Il documento offre `file` e `adattato`: lì il contenuto lo disegna il
+  // file, e una pelle lo veste soltanto in Scrittura, sotto `.look-tema`.
+  const gate = { hooks: ["rich-para", "rich-heading"], scopes: ["rich-page"] };
+  const hooks = ["look-tema", "look-file", "rich-page", "rich-para", "rich-heading", "rich-atom", "pane-editor"];
+  const skin: ThemeCssPolicy = { assetNamespace: "", allowedHooks: hooks, kind: "skin", gate };
+  const codes = (css: string, policy: ThemeCssPolicy = skin) =>
+    themeCssViolations(css, policy).filter(({ code }) => code === "content-look");
+
+  it("ammette il contenuto sotto .look-tema, e i segni e la cornice dovunque", () => {
+    for (const css of [
+      ".look-tema .rich-para { color: var(--doc-fg); }",
+      ".look-tema .rich-heading[data-level=\"1\"] { font-size: 2em; }",
+      ".look-tema .rich-para strong { color: red !important; }",
+      ".look-tema > .rich-page .rich-para + .rich-para { margin-top: 0; }",
+      ".rich-page { background: var(--bg); }",
+      ".rich-page .rich-atom { color: var(--doc-fg); }",
+      ".look-tema .rich-page mark { background: yellow; }",
+      ".pane-editor * { animation: none !important; }",
+      "@keyframes rich-para { from { opacity: 0; } }",
+    ]) {
+      expect(codes(css), css).toEqual([]);
+    }
+  });
+
+  it("rifiuta una classe di contenuto fuori da .look-tema, nominandola e suggerendo .look-tema", () => {
+    const found = codes(".rich-para { font-family: serif; }");
+    expect(found).toHaveLength(1);
+    expect(found[0]!.detail).toContain(".rich-para");
+    expect(found[0]!.detail).toContain(".look-tema .rich-para");
+    expect(found[0]!.line).toBe(1);
+    expect(found[0]!.column).toBe(1);
+    for (const css of [
+      ".rich-para { color: red !important; }",
+      ".look-file .rich-para { color: red; }",
+      ".pane-editor .rich-heading { color: red; }",
+      ".look-tema.rich-para { color: red; }",
+      ":not(.look-tema) .rich-para { color: red; }",
+      ".rich-atom:not(.rich-para) { color: red; }",
+      ".rich-page, .rich-para { color: red; }",
+      "@media (min-width: 1px) { .rich-heading { color: red; } }",
+      ".rich-\\70 ara { color: red; }",
+    ]) {
+      expect(codes(css), css).toHaveLength(1);
+    }
+  });
+
+  it("dentro la pagina del documento anche un selettore di tipo è contenuto", () => {
+    for (const css of [".rich-page p { color: red; }", ".rich-page mark { background: red; }", ".rich-page * { font-family: serif !important; }"]) {
+      const found = codes(css);
+      expect(found, css).toHaveLength(1);
+      expect(found[0]!.detail).toContain(".rich-page");
+    }
+  });
+
+  it("vale per i fogli e per i frammenti come per le pelli", () => {
+    expect(codes(".rich-para { color: red; }", { assetNamespace: "", allowedHooks: hooks, gate })).toHaveLength(1);
+    expect(() => sanitizeUserCss(".rich-para { color: red; }", hooks, gate)).toThrow(ThemeCssError);
+    const fine = ".look-tema .rich-para { color: red; }";
+    expect(sanitizeUserCss(fine, hooks, gate)).toBe(fine);
+  });
+
+  it("senza gate non cambia niente", () => {
+    expect(codes(".rich-para { color: red; }", { ...skin, gate: undefined })).toEqual([]);
+  });
+
+  // Il foglio di calcolo offre soltanto `file` e `adattato`: le celle non le
+  // veste nessuna pelle, e i segni si appoggiano alla riga, che è cornice.
+  it("nel foglio di calcolo le celle sono contenuto, e i segni passano dalla riga", () => {
+    const grid = { hooks: ["grid-cell", "no-gridlines"], scopes: ["grid-viewport"] };
+    const gridHooks = ["look-tema", "grid-viewport", "grid-row", "grid-cell", "grid-header", "no-gridlines", "selected", "active"];
+    const sheet: ThemeCssPolicy = { assetNamespace: "", allowedHooks: gridHooks, kind: "skin", gate: grid };
+    for (const css of [
+      ".grid-row .selected { box-shadow: inset 0 0 0 999px var(--accent-veil); }",
+      ".grid-row .active { box-shadow: inset 0 0 0 2px var(--accent); }",
+      ".grid-header.selected { color: var(--accent); }",
+      ".grid-viewport:focus-visible { box-shadow: none; }",
+    ]) {
+      expect(codes(css, sheet), css).toEqual([]);
+    }
+    for (const css of [
+      ".grid-cell { color: var(--doc-fg); }",
+      ".grid-cell.selected { box-shadow: none; }",
+      ".grid-viewport.no-gridlines .grid-header { border-color: transparent; }",
+      ".grid-cell { background: red !important; }",
+      ".grid-viewport span { color: red; }",
+    ]) {
+      expect(codes(css, sheet), css).toHaveLength(1);
+    }
+  });
+});

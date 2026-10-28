@@ -67,6 +67,47 @@
   box-sizing: border-box;
 }
 
+/* ── Gli aspetti del contenuto ──────────────────────────────────────────────
+ *
+ * La radice del contenuto di un riquadro porta `look-tema`, `look-file` o
+ * `look-adattato` (`theme/content-look.ts`). La meccanica sta qui, e non in una
+ * pelle, perché dice di chi è un colore e non che colore è.
+ *
+ * In `look-file` il contenuto sta sulla carta del file, che è chiara anche di
+ * notte: i segni di Fub sul contenuto (cursore, selezione, riga attiva,
+ * revisioni, correttore, ricerca, commenti) prendono i colori di quella carta,
+ * `--paper-*`, o un cursore fatto per il foglio scuro sparirebbe. Il ripiego è
+ * per un tema che non li dichiara: sono i valori della serie. `look-adattato`
+ * e `look-tema` lasciano i segni alla carta del tema.
+ *
+ * La carta stessa (`--doc-bg`, `--doc-fg`, i filetti, l'evidenziatore) passa a
+ * `--paper-*` con la superficie che la dipinge, il documento: le superfici
+ * `file` di oggi (immagini, anteprima SVG, diapositive, disegno) disegnano
+ * ancora sulla carta del tema, e ricollegarne l'inchiostro senza il fondo
+ * metterebbe un testo scuro su un fondo scuro.
+ *
+ * Un ruolo facoltativo della carta del tema (`--doc-ins`, `--doc-find`, …) non
+ * ha un ripiego qui: dichiararlo su una classe vincerebbe sul foglio del tema.
+ * Chi lo legge porta il suo, `var(--doc-ins, var(--doc-link))`. */
+.look-file {
+  --doc-caret: var(--paper-caret, #2c57cd);
+  --doc-selection: var(--paper-selection, #d0defd);
+  --doc-active-line: var(--paper-active-line, #f4f7fb);
+  --doc-ins: var(--paper-ins, #2c57cd);
+  --doc-del: var(--paper-del, #c60817);
+  --doc-proof-spell: var(--paper-proof-spell, #d01d21);
+  --doc-proof-gram: var(--paper-proof-gram, #a16500);
+  --doc-find: var(--paper-find, #f6e697);
+  --doc-find-now: var(--paper-find-now, #fac053);
+  --doc-comment: var(--paper-comment, #b16f00);
+  --doc-author-1: var(--paper-author-1, #0060bf);
+  --doc-author-2: var(--paper-author-2, #b02a2d);
+  --doc-author-3: var(--paper-author-3, #007219);
+  --doc-author-4: var(--paper-author-4, #813faa);
+  --doc-author-5: var(--paper-author-5, #934f00);
+  --doc-author-6: var(--paper-author-6, #006d72);
+}
+
 /* ── Le garanzie ─────────────────────────────────────────────────────────── */
 
 [hidden] {
@@ -494,6 +535,8 @@ body {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  border-width: 0;
+  border-inline-end-width: 1px;
 }
 
 #views-right > .declared-view-panel[hidden] {
@@ -831,6 +874,35 @@ body {
   order: 1;
 }
 
+/* L'etichetta del formato sta subito dopo il percorso: il titolo, che di
+   solito spinge il resto a destra (`sheets/sheets.css`), le cede lo spazio. */
+.pane-toolbar > .pane-format {
+  flex: none;
+  order: 1;
+  margin-inline-end: auto;
+  white-space: nowrap;
+}
+.pane-toolbar:has(> .pane-format:not([hidden])) > .muted,
+.pane-toolbar:has(> .pane-standing:not([hidden])) > .muted {
+  margin-right: 0;
+}
+
+/* Lo stato del documento viene dopo il formato, e spinge lui il resto a
+   destra. */
+.pane-toolbar > .pane-standing {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  order: 1;
+  margin-inline-end: auto;
+}
+.pane-toolbar > .pane-standing[hidden] {
+  display: none;
+}
+.pane-toolbar:has(> .pane-standing:not([hidden])) > .pane-format {
+  margin-inline-end: 0;
+}
+
 /* Se lo spazio non basta cede prima lo stato, che la banda ripete, poi il
    selettore; mai il menu, che è la sola strada, dal foglio, per dividerlo e
    chiuderlo. Il fattore minimo fa cedere il selettore solo a stato esaurito. */
@@ -869,6 +941,10 @@ body {
 @container sheet-head (max-width: 300px) {
   .pane-toolbar > .muted {
     visibility: hidden;
+  }
+  .pane-toolbar > .pane-format,
+  .pane-toolbar > .pane-standing {
+    display: none;
   }
   .pane-toolbar > .pane-status-slot {
     display: none;
@@ -909,6 +985,13 @@ body {
   display: flex;
   align-items: center;
   min-width: 0;
+}
+
+/* Il documento a fuoco conta le sue parole (`EditorSurface.status`): il
+   conteggio della view dichiarata (`fub.stats`) si fa da parte, che lo stesso
+   numero da due fonti non si dice. */
+#status-band[data-surface-counts] #views-status > [data-view-id="stats"] {
+  display: none;
 }
 
 .format-bar {
@@ -1371,10 +1454,13 @@ body {
   overflow: auto;
 }
 
+/* Il canvas dà la misura dello scorrimento e viene dopo le righe: non prende
+   il puntatore, che va alle celle sotto. */
 .grid-canvas {
   position: relative;
   min-width: 100%;
   min-height: 100%;
+  pointer-events: none;
 }
 
 .grid-cells,
@@ -1408,6 +1494,39 @@ body {
 /* Il testo sta sopra la barra di dati, e si taglia dove la cella finisce.
    Un testo che passa nelle celle vuote accanto è largo quanto serve, fino
    al limite che la griglia gli dà. */
+/* Le celle sono contenuto con l'aspetto del file (`GRID_MODES`): in
+   `look-file` stanno sulla carta del file, chiara in ogni luce, con i
+   riempimenti e i colori del file; in `look-adattato` sulla carta del tema,
+   con i colori del file portati su di lei da `editors/grid/paint.ts`, fondo e
+   testo in coppia. Il testo automatico è l'inchiostro della carta, e i fili
+   della griglia sono quelli della carta. Le intestazioni di righe e colonne
+   sono cornice, e restano del tema. */
+.look-file .grid-viewport,
+.look-adattato .grid-viewport { background-color: var(--doc-bg, #ffffff); }
+.look-file .grid-cell,
+.look-adattato .grid-cell {
+  border-right: 1px solid var(--doc-rule, rgb(20 22 26 / 30%));
+  border-bottom: 1px solid var(--doc-rule, rgb(20 22 26 / 30%));
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
+.look-file .grid-cell {
+  background-color: var(--file-fill, transparent);
+  color: var(--file-color, var(--doc-fg, #14161a));
+}
+.look-adattato .grid-cell {
+  background-color: var(--file-fill-a, transparent);
+  color: var(--file-color-a, var(--doc-fg, #14161a));
+}
+/* Un foglio senza griglia: i fili delle celle spariscono, i bordi del file
+   restano. */
+.look-file .no-gridlines .grid-cell,
+.look-adattato .no-gridlines .grid-cell { border-color: transparent; }
+/* Ciò che resta fermo ha la carta sotto, perché le celle che scorrono gli
+   passano dietro. */
+.look-file .grid-cell.frozen { background-color: var(--file-fill, var(--doc-bg, #ffffff)); }
+.look-adattato .grid-cell.frozen { background-color: var(--file-fill-a, var(--doc-bg, #ffffff)); }
+
 .grid-cell-text {
   position: relative;
   min-width: 0;
@@ -1424,7 +1543,13 @@ body {
 }
 
 /* Righe e colonne bloccate restano ferme sopra quelle che scorrono; i fili
-   del blocco stanno sopra tutte. */
+   del blocco stanno sopra tutte. Ogni riga sta sopra il canvas, che viene
+   dopo nel DOM: senza puntatore non copre nulla, ma chi misura il contrasto
+   lo crederebbe davanti al testo delle celle. */
+.grid-row {
+  z-index: 1;
+}
+
 .grid-row.frozen {
   z-index: 6;
 }
@@ -1442,6 +1567,12 @@ body {
   position: absolute;
   z-index: 7;
   pointer-events: none;
+}
+
+/* La riga delle intestazioni sta sopra tutto: anche sopra la cella aperta
+   di una riga scorsa sotto di lei, che il disegno tiene per l'editor. */
+.grid-column-header-row {
+  z-index: 8;
 }
 
 /* I bordi del file stanno sui fili della griglia, in un riquadro sopra la
@@ -1602,9 +1733,14 @@ body {
 }
 
 /* Il quadratino di riempimento sta sopra le celle che scorrono e sotto le
-   righe bloccate; il contorno del riempimento tirato non prende il puntatore. */
+   righe bloccate; il contorno del riempimento tirato e le formiche di un
+   taglio non prendono il puntatore. */
+.grid-selection,
 .grid-fill-handle,
-.grid-fill-preview {
+.grid-fill-preview,
+.grid-move-preview,
+.grid-formula-ref,
+.grid-cut-mark {
   position: absolute;
   z-index: 3;
   box-sizing: border-box;
@@ -1615,7 +1751,39 @@ body {
   cursor: crosshair;
 }
 
-.grid-fill-preview {
+/* Il bordo fra due intestazioni si tira: la guida e la misura stanno sopra
+   tutto, anche sulle intestazioni ferme, e non prendono il puntatore. */
+.grid-resize-guide,
+.grid-resize-label {
+  position: absolute;
+  z-index: 9;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.grid-resize-label {
+  white-space: nowrap;
+}
+
+.grid-viewport.resize-column {
+  cursor: col-resize;
+}
+
+.grid-viewport.resize-row {
+  cursor: row-resize;
+}
+
+/* Il bordo della selezione si tira per spostarla. */
+.grid-viewport.move-selection,
+.grid-viewport.moving {
+  cursor: move;
+}
+
+.grid-selection,
+.grid-fill-preview,
+.grid-move-preview,
+.grid-formula-ref,
+.grid-cut-mark {
   pointer-events: none;
 }
 
@@ -1692,28 +1860,36 @@ body {
    schede, poi i gruppi di una scheda in una striscia d'altezza fissa. Un
    gruppo che non ci sta si raccoglie nel suo pulsante (`data-collapsed`); le
    lettere di Excel sono distintivi posati sopra i controlli. */
-.grid-ribbon-host { flex: none; min-width: 0; }
-.grid-ribbon {
+.grid-ribbon-host,
+.rich-ribbon-host { flex: none; min-width: 0; }
+.grid-ribbon,
+.rich-ribbon {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-.grid-ribbon-head {
+.grid-ribbon-head,
+.rich-ribbon-head {
   display: flex;
   align-items: center;
   min-width: 0;
 }
-.grid-ribbon-tabs {
+.grid-ribbon-tabs,
+.rich-ribbon-tabs {
   flex: 1;
   min-width: 0;
   overflow-x: auto;
 }
 .grid-ribbon-tabs .kit-tab,
 .grid-ribbon-item,
-.grid-ribbon-group {
+.grid-ribbon-group,
+.rich-ribbon-tabs .kit-tab,
+.rich-ribbon-item,
+.rich-ribbon-group {
   position: relative;
 }
-.grid-ribbon-toggle {
+.grid-ribbon-toggle,
+.rich-ribbon-toggle {
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -1722,35 +1898,44 @@ body {
   height: 28px;
   padding: 0;
 }
-.grid-ribbon-toggle svg { width: 16px; height: 16px; }
-.grid-ribbon-panel { min-width: 0; }
-.grid-ribbon-toolbar {
+.grid-ribbon-toggle svg,
+.rich-ribbon-toggle svg { width: 16px; height: 16px; }
+.grid-ribbon-panel,
+.rich-ribbon-panel { min-width: 0; }
+.grid-ribbon-toolbar,
+.rich-ribbon-toolbar {
   display: flex;
   align-items: stretch;
   height: 102px;
   min-width: 0;
   overflow: hidden;
 }
-.grid-ribbon-group {
+.grid-ribbon-group,
+.rich-ribbon-group {
   display: flex;
   flex: none;
   flex-direction: column;
 }
-.grid-ribbon-group-body {
+.grid-ribbon-group-body,
+.rich-ribbon-group-body {
   display: flex;
   flex: 1;
   align-items: flex-start;
 }
 .grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-body,
-.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-label {
+.grid-ribbon-group[data-collapsed="true"] > .grid-ribbon-group-label,
+.rich-ribbon-group[data-collapsed="true"] > .rich-ribbon-group-body,
+.rich-ribbon-group[data-collapsed="true"] > .rich-ribbon-group-label {
   display: none;
 }
-.grid-ribbon-group-label {
+.grid-ribbon-group-label,
+.rich-ribbon-group-label {
   flex: none;
   white-space: nowrap;
   text-align: center;
 }
-.grid-ribbon-stack {
+.grid-ribbon-stack,
+.rich-ribbon-stack {
   display: flex;
   flex-direction: column;
 }
@@ -1758,60 +1943,82 @@ body {
 .grid-ribbon-item,
 .grid-ribbon-field,
 .grid-ribbon-check,
-.grid-ribbon-chevron {
+.grid-ribbon-chevron,
+.rich-ribbon-row,
+.rich-ribbon-item,
+.rich-ribbon-field,
+.rich-ribbon-check,
+.rich-ribbon-chevron {
   display: inline-flex;
   align-items: center;
 }
-.grid-ribbon-row { display: flex; }
-.grid-ribbon-button {
+.grid-ribbon-row,
+.rich-ribbon-row { display: flex; }
+.grid-ribbon-button,
+.rich-ribbon-button {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   white-space: nowrap;
 }
-.grid-ribbon-small {
+.grid-ribbon-small,
+.rich-ribbon-small {
   min-width: 24px;
   height: 24px;
 }
-.grid-ribbon-small svg { flex: none; width: 16px; height: 16px; }
-.grid-ribbon-large {
+.grid-ribbon-small svg,
+.rich-ribbon-small svg { flex: none; width: 16px; height: 16px; }
+.grid-ribbon-large,
+.rich-ribbon-large {
   flex-direction: column;
   justify-content: flex-start;
   min-width: 44px;
   max-width: 96px;
   height: 76px;
 }
-.grid-ribbon-large svg { flex: none; width: 26px; height: 26px; }
+.grid-ribbon-large svg,
+.rich-ribbon-large svg { flex: none; width: 26px; height: 26px; }
 /* Il nome di un pulsante grande sta in due righe al più, sopra il nome del
    gruppo. */
-.grid-ribbon-large .grid-ribbon-label {
+.grid-ribbon-large .grid-ribbon-label,
+.rich-ribbon-large .rich-ribbon-label {
   max-height: 2.5em;
   overflow: hidden;
   white-space: normal;
   text-align: center;
 }
 .grid-ribbon-large .grid-ribbon-chevron svg,
-.grid-ribbon-chevron svg { width: 10px; height: 10px; }
-.grid-ribbon-split-large { flex-direction: column; }
-.grid-ribbon-split-large > .grid-ribbon-large { height: 58px; }
-.grid-ribbon-split-large > .grid-ribbon-arrow { align-self: stretch; height: 18px; }
-.grid-ribbon-arrow { min-width: 14px; }
-.grid-ribbon-glyph {
+.grid-ribbon-chevron svg,
+.rich-ribbon-large .rich-ribbon-chevron svg,
+.rich-ribbon-chevron svg { width: 10px; height: 10px; }
+.grid-ribbon-split-large,
+.rich-ribbon-split-large { flex-direction: column; }
+.grid-ribbon-split-large > .grid-ribbon-large,
+.rich-ribbon-split-large > .rich-ribbon-large { height: 58px; }
+.grid-ribbon-split-large > .grid-ribbon-arrow,
+.rich-ribbon-split-large > .rich-ribbon-arrow { align-self: stretch; height: 18px; }
+.grid-ribbon-arrow,
+.rich-ribbon-arrow { min-width: 14px; }
+.grid-ribbon-glyph,
+.rich-ribbon-glyph {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 16px;
 }
-.grid-ribbon-color-bar {
+.grid-ribbon-color-bar,
+.rich-ribbon-color-bar {
   position: absolute;
   left: 4px;
   right: 4px;
   bottom: 2px;
   height: 3px;
 }
-.grid-ribbon-panel[data-compact="true"] .grid-ribbon-small .grid-ribbon-label { display: none; }
-.grid-ribbon-keytip {
+.grid-ribbon-panel[data-compact="true"] .grid-ribbon-small .grid-ribbon-label,
+.rich-ribbon-panel[data-compact="true"] .rich-ribbon-small .rich-ribbon-label { display: none; }
+.grid-ribbon-keytip,
+.rich-ribbon-keytip {
   position: absolute;
   left: 50%;
   bottom: -4px;
@@ -1820,7 +2027,8 @@ body {
   pointer-events: none;
   white-space: nowrap;
 }
-.grid-ribbon-popup-group { display: flex; }
+.grid-ribbon-popup-group,
+.rich-ribbon-popup-group { display: flex; }
 .grid-ribbon-palette,
 .grid-ribbon-gallery {
   display: flex;
@@ -2015,27 +2223,262 @@ body {
   min-height: 0;
 }
 .rich-notice { flex: none; margin: 0; }
-.rich-strip {
-  flex: none;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  min-width: 0;
-}
-.rich-strip-group { display: flex; align-items: center; }
-.rich-strip-field { display: inline-flex; }
-.rich-strip-button { position: relative; }
-.rich-strip-bar {
+/* Il pulsante che, sul telefono, apre il pannello del documento: in basso a
+   destra, sopra la carta. Altrove il pannello sta di lato, e lui non c'è
+   (`shells/scrittoio/mobile/mobile.css` lo mostra). */
+.rich-surface { position: relative; }
+.rich-side-open {
   position: absolute;
-  left: 6px;
-  right: 6px;
-  bottom: 3px;
-  height: 3px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1;
+  display: none;
+  align-items: center;
+  gap: 4px;
+}
+/* La barra del documento (`editors/rich/ribbon.ts`) è quella del kit, con le
+   regole della barra del foglio; qui soltanto ciò che il foglio non ha:
+   l'accesso rapido accanto alle schede e la galleria degli stili. */
+.rich-ribbon-quick { display: flex; flex: none; align-items: center; }
+.rich-ribbon-styles { display: flex; align-items: stretch; height: 64px; }
+.rich-ribbon-styles-cells { display: flex; align-items: stretch; min-width: 0; }
+.rich-ribbon-style {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  min-width: 0;
+  overflow: hidden;
+}
+.rich-ribbon-style-sample {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rich-strip-swatches { display: grid; grid-template-columns: repeat(6, 24px); }
 .rich-strip-swatch-none,
 .rich-strip-swatch-custom { grid-column: 1 / -1; }
-.rich-page { flex: 1; min-height: 0; overflow-y: auto; }
+/* La barra di ricerca del documento, fra la barra multifunzione e il foglio. */
+.rich-findbar { flex: none; display: flex; flex-direction: column; }
+.rich-findbar-row { display: flex; flex-wrap: wrap; align-items: center; }
+.rich-findbar-row > .kit-field { flex: 0 1 240px; }
+.rich-findbar-close { margin-left: auto; }
+/* I riquadri della barra: titolo, campi, azioni in fondo. */
+.rich-strip-panel { display: flex; flex-direction: column; width: 288px; max-width: 100%; }
+.rich-strip-panel-body { display: flex; flex-direction: column; }
+.rich-strip-panel-pairs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rich-strip-panel-pairs > .rich-strip-panel-note { grid-column: 1 / -1; }
+.rich-strip-panel-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; }
+.rich-strip-panel-check { display: flex; align-items: center; }
+.rich-strip-panel-fields { display: flex; flex-wrap: wrap; }
+.rich-strip-panel-area .kit-field-box { height: auto; }
+.rich-strip-panel-area textarea { resize: vertical; }
+.rich-strip-panel .rich-strip-swatches { padding: 0; }
+/* Il pannello del documento nell'ispettore (`editors/rich/side.ts`). */
+.rich-side, .rich-side-compose, .rich-side-list, .rich-side-item, .rich-side-answer { display: flex; flex-direction: column; }
+.rich-side-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.rich-side-actions { display: flex; flex-wrap: wrap; }
+.rich-side-quote { display: block; width: 100%; text-align: start; overflow-wrap: anywhere; }
+.rich-side-reply[data-depth="2"] { margin-inline-start: 12px; }
+.rich-side-reply[data-depth="3"] { margin-inline-start: 24px; }
+.rich-side-section { display: flex; flex-direction: column; }
+.rich-side-preview { display: flex; justify-content: center; }
+.rich-side-preview-sheet { position: relative; aspect-ratio: var(--preview-ratio, 595.3 / 841.9); height: 132px; max-width: 100%; }
+.rich-side-preview-text { position: absolute; top: var(--preview-top, 6.7%); bottom: var(--preview-bottom, 6.7%); left: var(--preview-left, 9.5%); right: var(--preview-right, 9.5%); display: flex; }
+.rich-side-preview-column { flex: 1 1 0; min-width: 0; }
+.rich-side-facts { display: grid; grid-template-columns: auto 1fr; margin: 0; }
+.rich-side-facts dd { margin: 0; overflow-wrap: anywhere; }
+.rich-side-dot { display: inline-block; width: 8px; height: 8px; margin-inline-end: 6px; border-radius: 50%; vertical-align: middle; }
+/* La barra di modifica nel margine sinistro, accanto al paragrafo che ha una
+   revisione; in una cella non esce dalla cella. */
+.rich-changed { position: relative; }
+.rich-changed::after { content: ""; position: absolute; top: 0; bottom: 0; inset-inline-start: -18px; width: 2px; pointer-events: none; }
+.rich-cell .rich-changed::after { content: none; }
+.rich-strip-table-grid { display: grid; grid-template-columns: repeat(10, 20px); }
+.rich-strip-table-cell { width: 20px; height: 20px; }
+.rich-strip-count td { text-align: end; }
+.rich-strip-count th[scope="row"] { text-align: start; }
+.rich-page { flex: 1; min-height: 0; overflow: auto; }
+/* La scrivania: dietro il testo, le sagome della carta, che la pelle dipinge;
+   sopra, il testo trasparente. In Scrittura la carta non c'è, e il testo sta
+   nella colonna del tema. */
+.rich-desk { position: relative; }
+.rich-sheets { position: absolute; inset: 0; pointer-events: none; }
+.rich-sheet { position: absolute; inset: 0; }
+/* La carta di un foglio è la sua sagoma, che il moto muove da sola
+   (`editors/rich/rich-motion.ts`): l'intestazione e il piè, sopra, stanno
+   fermi. Di un foglio tolto resta per un momento la sagoma. La sagoma
+   risponde al puntatore, sotto il testo che le sta sopra, perché chi cerca
+   lo sfondo del testo (il controllo del contrasto) trovi la carta e non la
+   scrivania. */
+.rich-sheet-paper { position: absolute; inset: 0; box-sizing: border-box; pointer-events: auto; }
+.rich-sheet-ghost { position: absolute; pointer-events: none; }
+/* L'anello sopra un punto raggiunto: sulla scrivania, dopo il testo, e
+   largo quanto la riga più il suo bordo. */
+.rich-goto-ring { position: absolute; box-sizing: content-box; margin: -4px 0 0 -4px; padding: 2px; pointer-events: none; }
+.look-tema .rich-sheets { display: none; }
+/* Un foglio per interruzione (`editors/rich/sheets.ts`): le sagome stanno
+   in linea dove la misura le mette, e dove un foglio finisce il testo lascia
+   uno spazio alto quanto serve perché il foglio dopo cominci al suo margine.
+   In Scrittura lo spazio non c'è, e l'interruzione è una riga con un nome. */
+.rich-sheet-gap { display: block; }
+.look-tema .rich-sheet-gap { display: none; }
+/* L'intestazione e il piè di un foglio, coi numeri veri; il nome di
+   un'interruzione sta nello spazio fra due fogli. */
+.rich-sheet-head,
+.rich-sheet-foot {
+  position: absolute;
+  overflow: hidden;
+  white-space: pre-wrap;
+  font-family: Calibri, Carlito, sans-serif;
+  font-size: 11pt;
+  line-height: 1.2;
+}
+.rich-sheet-foot { display: flex; flex-direction: column; justify-content: flex-end; }
+.rich-sheet-name {
+  position: absolute;
+  inset-inline: 0;
+  transform: translateY(-50%);
+  text-align: center;
+  white-space: nowrap;
+  font-family: var(--font-ui, system-ui, sans-serif);
+  font-size: 11px;
+  line-height: 1.5;
+}
+/* Scrivendo l'intestazione il corpo si attenua, come in Word. */
+.rich-desk-running > .rich-content { opacity: 0.45; }
+.rich-running { position: absolute; z-index: 1; box-sizing: border-box; }
+.rich-running-bar {
+  position: absolute;
+  inset-inline-start: 0;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.rich-running[data-kind="header"] .rich-running-bar { bottom: 100%; }
+.rich-running[data-kind="footer"] .rich-running-bar { top: 100%; }
+.rich-running-area {
+  min-height: 1.2em;
+  outline: none;
+  white-space: pre-wrap;
+  font-family: Calibri, Carlito, sans-serif;
+  font-size: 11pt;
+  line-height: 1.2;
+}
+.rich-token { display: inline-block; white-space: nowrap; user-select: all; }
+/* In Pagina e in Lettura la carta è quella vera: 1 pt è 1/72 di pollice, e
+   al 100 % un Letter è largo 816 px. Non si stringe col riquadro: si scorre.
+   Le misure sono del documento (`--page-*`, `page.ts`); senza, quelle
+   dell'ODT, un A4 con i margini di 2 cm. */
+.look-file .rich-page,
+.look-adattato .rich-page { padding: 24px; scrollbar-gutter: stable; }
+.look-file .rich-desk,
+.look-adattato .rich-desk {
+  width: var(--page-w, 595.3pt);
+  min-height: var(--page-h, 841.9pt);
+  margin-inline: auto;
+}
+.look-file .rich-content,
+.look-adattato .rich-content {
+  min-height: var(--desk-h, var(--page-h, 841.9pt));
+  padding: var(--page-top, 56.7pt) var(--page-right, 56.7pt) var(--page-bottom, 56.7pt) var(--page-left, 56.7pt);
+}
+/* La carta del file. In `look-file` il documento sta sulla carta del file,
+   chiara in ogni luce: la scrivania ricollega la carta (`--doc-*`) ai ruoli
+   `--paper-*`, con i valori della serie per un tema che non li dichiara. In
+   `look-adattato` la carta resta quella del tema, e i colori del file li porta
+   sulla carta `editors/rich/tints.ts`. La griglia di una cartella di Excel fa
+   lo stesso, nella sua vista. */
+.look-file .rich-desk,
+.look-file .grid-viewport {
+  --doc-bg: var(--paper-bg, #ffffff);
+  --doc-fg: var(--paper-ink, #14161a);
+  --doc-heading: var(--paper-ink, #14161a);
+  --doc-link: var(--paper-link, #2c57cd);
+  --doc-danger: var(--paper-danger, #c60817);
+  --doc-rule: var(--paper-rule, rgb(20 22 26 / 30%));
+  --doc-rule-soft: var(--paper-rule-soft, rgb(20 22 26 / 16%));
+  --doc-fill: var(--paper-fill, rgb(20 22 26 / 8%));
+  --doc-fill-soft: var(--paper-fill-soft, rgb(20 22 26 / 5%));
+  --doc-highlight: var(--paper-highlight, rgb(250 222 78 / 55%));
+  /* Il testo dei segni di Fub (il nome di un'interruzione, un segnaposto):
+     l'inchiostro verso la carta, a 5,5:1 sul bianco. */
+  --doc-gutter-fg: color-mix(in oklab, var(--paper-ink, #14161a) 60%, var(--paper-bg, #ffffff));
+}
+/* Il testo del file: carattere, misura, colore, spazi e interlinea risolti
+   dal formato, come variabili di dato sull'elemento (`--file-*`,
+   `editors/rich/schema.ts`). Un paragrafo che non ne dice uno prende quello
+   del documento, che sta sulla radice; senza, quelli di un documento nuovo di
+   Word: Calibri 11, 8 pt dopo il paragrafo, interlinea 1,08. Gli stili del
+   browser per titoli, collegamenti ed evidenziato non sono del file. */
+.look-file .rich-content,
+.look-adattato .rich-content {
+  color: var(--doc-fg, #14161a);
+  font-family: var(--file-font, Calibri, Carlito, sans-serif);
+  font-size: var(--file-size, 11pt);
+  caret-color: var(--doc-caret, #2c57cd);
+}
+.look-file .rich-para,
+.look-adattato .rich-para {
+  margin-block: var(--file-before, 0) var(--file-after, 8pt);
+  font-family: var(--file-font, Calibri, Carlito, sans-serif);
+  font-size: var(--file-size, 11pt);
+  font-weight: 400;
+  line-height: var(--file-line, calc(1.2 * 1.08));
+}
+.look-file .rich-content [data-rich-font],
+.look-adattato .rich-content [data-rich-font] { font-family: var(--file-font, Calibri, Carlito, sans-serif); }
+.look-file .rich-content [data-rich-size],
+.look-adattato .rich-content [data-rich-size] { font-size: var(--file-size, 11pt); }
+.look-file .rich-content .rich-link,
+.look-adattato .rich-content .rich-link { color: inherit; text-decoration: none; }
+/* «Automatico» è l'inchiostro della carta, anche dentro un paragrafo di un
+   altro colore. */
+.look-file .rich-para { color: var(--file-color, var(--doc-fg, #14161a)); }
+.look-file .rich-content [data-rich-color] { color: var(--file-color, var(--doc-fg, #14161a)); }
+.look-file .rich-content [data-rich-color="auto"],
+.look-adattato .rich-content [data-rich-color="auto"] { color: var(--doc-fg, #14161a); }
+.look-file .rich-content mark { background-color: var(--file-hl, #ffff00); color: inherit; }
+/* Sulla carta del tema i colori del file sono quelli adattati, che
+   `editors/rich/tints.ts` mette accanto ai valori del file. */
+.look-adattato .rich-content mark { background-color: var(--doc-highlight, rgb(250 222 78 / 55%)); color: inherit; }
+.look-adattato .rich-tinted,
+.look-adattato .rich-tint[data-tint-color] { color: var(--file-color-a, currentColor); }
+.look-adattato .rich-tint[data-tint-hl] { background-color: var(--file-hl-a, transparent); }
+/* Le tabelle del file: il filo della griglia e i margini delle celle di Word
+   (0,19 cm). Il bordo del file non viaggia nella proiezione. */
+.look-file .rich-cell,
+.look-adattato .rich-cell {
+  padding: 0 5.4pt;
+  border: 0.5pt solid var(--doc-rule, rgb(20 22 26 / 30%));
+}
+/* Le interruzioni e le sezioni sulla carta, con il loro nome. */
+.look-file .rich-section,
+.look-adattato .rich-section {
+  margin-block: 12pt;
+  border-top: 3px double var(--doc-rule, rgb(20 22 26 / 30%));
+}
+.look-file .rich-break-page,
+.look-adattato .rich-break-page { border-top: 1px dashed var(--doc-rule, rgb(20 22 26 / 30%)); }
+.look-file .rich-break-column,
+.look-adattato .rich-break-column { border-top: 1px dotted var(--doc-rule-soft, rgb(20 22 26 / 16%)); }
+.look-file .rich-break[data-name]::after,
+.look-file .rich-section[data-name]::after,
+.look-adattato .rich-break[data-name]::after,
+.look-adattato .rich-section[data-name]::after {
+  background: var(--doc-bg, #ffffff);
+  color: var(--doc-gutter-fg, #5d626d);
+  font-family: var(--font-ui, system-ui, sans-serif);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+/* Un'interruzione che apre un foglio non è più una riga: il foglio dopo la
+   dice, e il suo nome sta fra i due fogli. */
+.look-file .rich-cut,
+.look-adattato .rich-cut { margin-block: 0; border-top: 0; }
+.look-file .rich-cut[data-name]::after,
+.look-adattato .rich-cut[data-name]::after { display: none; }
 .rich-content {
   position: relative;
   box-sizing: border-box;
@@ -2130,8 +2573,62 @@ body {
   user-select: none;
 }
 .rich-atom-marker { display: inline; }
+/* Un segnaposto con una misura: il segno e il nome al centro della casella. */
+.rich-atom-image,
+.rich-atom-graphic,
+.rich-atom-shape,
+.rich-atom-text_box,
+.rich-atom-group {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  white-space: normal;
+  text-align: center;
+}
+.rich-atom-equation { display: inline-flex; align-items: baseline; }
+.rich-atom-name { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+/* Il richiamo di una nota, in apice: il suo numero, o un segno finché non
+   ce l'ha. */
+.rich-atom-note { vertical-align: super; }
+.rich-atom-note::before { content: "*"; }
+.rich-atom-note[data-number]::before { content: attr(data-number); }
+/* Un oggetto fuori dal testo (`float` della proiezione): davanti o dietro
+   sta al suo posto dal paragrafo dell'ancora, che è il riferimento e la pila;
+   «Quadrato» va all'inizio della riga col testo attorno. */
+.rich-para { position: relative; z-index: 0; }
+.rich-atom-float { position: absolute; max-width: none; overflow: visible; }
+.rich-atom-float-front { z-index: 1; }
+.rich-atom-float-behind { z-index: -1; pointer-events: none; }
+.rich-atom-float-square { position: static; float: inline-start; margin-inline-end: 0.5em; }
+/* L'inchiostro si disegna dai suoi tratti; l'evidenziatore si mescola col
+   testo che copre, come un pennarello sulla carta. */
+.rich-ink { display: block; width: 100%; height: 100%; overflow: visible; }
+.rich-ink-highlight { mix-blend-mode: multiply; }
+/* Il velo della scheda «Disegna»: sopra il documento mentre si disegna,
+   prende il puntatore e disegna l'anteprima del tratto. */
+.rich-ink-veil { position: absolute; inset: 0; z-index: 3; touch-action: none; cursor: crosshair; }
+.rich-ink-veil[data-tool="eraser"] { cursor: cell; }
+.rich-ink-veil[data-tool="lasso"] { cursor: default; }
+.rich-ink-veil > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+/* Un disegno del documento aperto nell'editor dei disegni: sopra l'oggetto,
+   o alla finestra con «Apri grande». */
+.rich-drawing-editor { position: absolute; z-index: 4; display: flex; flex-direction: column; overflow: hidden; }
+.rich-drawing-large { position: fixed; inset: 24px; width: auto !important; height: auto !important; z-index: 40; }
+.rich-drawing-bar { flex: none; display: flex; align-items: center; }
+.rich-drawing-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rich-drawing-stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .rich-break-page,
-.rich-break-column { display: block; height: 0; margin-block: 0.75em; }
+.rich-break-column { display: block; height: 0; margin-block: 1em; }
+/* Il nome di un'interruzione sta sul suo filo, al centro. */
+.rich-break[data-name]::after,
+.rich-section[data-name]::after {
+  content: attr(data-name);
+  display: table;
+  margin: -0.75em auto 0;
+  padding-inline: 0.5em;
+  white-space: nowrap;
+}
 
 /* Il sorgente di un canvas troppo grande per la tela: scorre dentro il foglio. */
 .canvas-source {
@@ -2456,16 +2953,22 @@ body {
   min-height: 0;
   container-type: inline-size;
 }
-.draw-header,
-.draw-toolbar {
+/* La barra in alto (B4) è una riga sola: menu, Annulla e Ripeti, la riga
+   delle opzioni, che manda in «…» ciò che non ci sta, ed «Esporta». */
+.draw-header {
   display: flex;
   flex: none;
-  flex-wrap: wrap;
   align-items: center;
   min-width: 0;
 }
 .draw-toolbar {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
+}
+.draw-top {
+  flex: none;
+}
+.draw-top:last-child {
+  margin-inline-start: auto;
 }
 .draw-group {
   display: inline-flex;
@@ -2486,6 +2989,11 @@ body {
     min-width: 44px;
     min-height: 44px;
   }
+  /* Col dito le caselle della colonna sono bersagli da 44 px. */
+  .kit-rail-slot {
+    width: 44px;
+    height: 44px;
+  }
 }
 .draw-zoom-level {
   min-width: 64px;
@@ -2495,6 +3003,63 @@ body {
    il nome, fino a un tetto, e coi puntini oltre. Lo stato resta intero. */
 .draw-layer-button {
   max-width: 14rem;
+}
+.draw-pen-choice {
+  max-width: 12rem;
+}
+.draw-pen-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* La galleria delle penne: due elenchi in colonna, ogni penna con
+   l'anteprima del tratto accanto al nome. */
+.draw-pen-gallery {
+  display: flex;
+  flex-direction: column;
+  width: 16rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.draw-pen-gallery-list {
+  display: flex;
+  flex-direction: column;
+}
+.draw-pen-gallery-item {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: start;
+}
+.draw-pen-preview {
+  flex: none;
+  width: 60px;
+  height: 28px;
+}
+.draw-pen-saved {
+  display: flex;
+  align-items: center;
+}
+.draw-pen-saved-remove {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+/* La misura: il campo e il cursore uno accanto all'altro. */
+.draw-pen-size {
+  display: flex;
+  align-items: center;
+}
+.draw-pen-size-slider {
+  width: 7rem;
+}
+/* I campi della misura e dell'opacità hanno l'etichetta nascosta: una
+   colonna sola, larga per «200» e «100 %», che non si stringe nella barra. */
+.draw-pen-size > .kit-number,
+.draw-pen-opacity {
+  flex: none;
+  grid-template-columns: 4.5rem;
 }
 .draw-layer-name {
   min-width: 0;
@@ -2627,6 +3192,57 @@ body {
    uniscono. */
 .draw-surface[data-tool="builder"][data-region] {
   cursor: copy;
+}
+/* Sopra la punta che si vede, il cursore è la punta. */
+.draw-surface[data-nib] {
+  cursor: none;
+}
+/* La Mano prende e trascina la vista; Spazio tenuto la presta a ogni
+   strumento. La Lente ingrandisce. */
+.draw-surface[data-tool="hand"],
+.draw-surface[data-view="grab"] {
+  cursor: grab;
+}
+.draw-surface[data-view="grabbing"] {
+  cursor: grabbing;
+}
+.draw-surface[data-tool="zoom"] {
+  cursor: zoom-in;
+}
+/* Con l'interfaccia nascosta (Ctrl+.) resta il foglio. */
+.draw-editor[data-bare] .draw-header,
+.draw-editor[data-bare] .draw-rail,
+.draw-editor[data-bare] .draw-arrange {
+  display: none;
+}
+/* Il navigatore, nell'angolo in basso a destra del foglio. */
+.draw-navigator {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 168px;
+  height: 120px;
+  cursor: pointer;
+  touch-action: none;
+}
+.draw-navigator[hidden],
+.draw-editor[data-bare] .draw-navigator {
+  display: none;
+}
+.draw-navigator-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Il riquadro che la Lente inquadra, sopra il foglio. */
+.draw-zoom-box {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 1;
 }
 /* Sopra una maniglia della cornice, e mentre la si tira: la direzione in cui
    ridimensiona, o la presa che ruota. */
@@ -3015,8 +3631,8 @@ body {
   max-width: calc(100% - 40px);
 }
 /* Accanto alla selezione, la barra parte dall'angolo del foglio e l'editor
-   la sposta dove va (`tools/bar.ts`). Durante un gesto non si vede, ma
-   tiene il suo posto e le sue misure. */
+   la sposta dove va (`tools/bar.ts`). Durante un gesto o uno zoom non si
+   vede, ma tiene il suo posto e le sue misure. */
 .draw-stage > .draw-arrange[data-beside],
 .draw-stage[data-rulers] > .draw-arrange[data-beside] {
   top: 0;
@@ -3024,6 +3640,10 @@ body {
 }
 .draw-arrange[data-gesture] {
   visibility: hidden;
+}
+/* Oltre la sesta, le azioni della barra stanno nel suo «…» (B7). */
+.draw-arrange > [data-more] {
+  display: none;
 }
 /* Il campo dell'opacità della barra: il numero, largo quattro cifre e un
    poco di più per «Misto», e il «%» accanto, alti come i pulsanti. */
@@ -3357,10 +3977,59 @@ body {
    sotto il foglio. Una riga dell'albero misura almeno 44 px: è un bersaglio
    come gli altri, e l'albero virtualizzato conta su quell'altezza. */
 .draw-body {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   flex: 1;
   min-width: 0;
   min-height: 0;
+}
+/* La colonna degli strumenti, a sinistra del foglio: scorre in verticale
+   quando la finestra è bassa; sotto la colonna, le immagini del vault. */
+.draw-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-width: 0;
+  border-inline-end-width: 1px;
+}
+/* «Completo», in fondo alla colonna dello spazio Semplice. */
+.draw-rail-full {
+  flex: none;
+  min-height: 44px;
+  margin-block-start: auto;
+  white-space: nowrap;
+}
+/* Su uno schermo stretto (`data-narrow`: finestra fino a 700 px, o riquadro
+   fino a 480) la colonna va sotto il foglio, in una riga che scorre di lato. */
+.draw-editor[data-narrow] .draw-body {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.draw-editor[data-narrow] .draw-stage {
+  grid-column: 1;
+  grid-row: 1;
+}
+.draw-editor[data-narrow] .draw-dock {
+  grid-column: 2;
+  grid-row: 1;
+}
+.draw-editor[data-narrow] .draw-rail {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  flex-direction: row;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-inline-end-width: 0;
+  border-block-start-width: 1px;
+}
+.draw-editor[data-narrow] .draw-rail-full {
+  margin-block-start: 0;
+  margin-inline-start: auto;
 }
 /* Il lato del bordo segue la disposizione, che è della struttura; il colore
    e il tratto sono della pelle. Gli attributi vogliono più spazio dei nomi
@@ -3369,14 +4038,14 @@ body {
 .draw-dock {
   display: flex;
   flex-direction: column;
-  flex: 0 0 min(20rem, 40%);
+  width: min(20rem, 40cqi);
   min-width: 0;
   min-height: 0;
   border-width: 0;
   border-inline-start-width: 1px;
 }
 .draw-dock[data-wide] {
-  flex-basis: min(26rem, 45%);
+  width: min(26rem, 45cqi);
 }
 /* I pannelli aperti si dividono l'altezza, con un filo fra loro; le
    proprietà, che hanno più da mostrare, ne prendono il doppio. */
@@ -3398,8 +4067,19 @@ body {
 .draw-properties {
   flex-grow: 2;
 }
-.draw-dock > :not([hidden]) ~ :not([hidden]) {
+.draw-dock > :not([hidden]) ~ :not([hidden]),
+.draw-sheet > :not([hidden]) ~ :not([hidden]) {
   border-block-start-width: 1px;
+}
+/* Una scheda del disegno nell'ispettore (C1): i suoi pannelli in colonna,
+   come nel dock, ciascuno alto quanto ciò che mostra; scorre l'ispettore. */
+.draw-sheet {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-sheet > * {
+  flex: none;
 }
 .draw-objects-header {
   display: flex;
@@ -4344,6 +5024,10 @@ textarea.draw-inspector-input {
   grid-column: 1 / -1;
   justify-self: end;
 }
+.draw-properties-export {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
 .draw-properties-number,
 .draw-properties-paint {
   display: flex;
@@ -4751,13 +5435,31 @@ textarea.draw-properties-input {
 }
 @container (max-width: 36rem) {
   .draw-body {
-    flex-direction: column;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .draw-body:has(> .draw-dock:not([hidden])) {
+    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
   }
   .draw-dock,
   .draw-dock[data-wide] {
-    flex: 0 0 40%;
+    grid-column: 1 / -1;
+    width: auto;
     border-inline-start-width: 0;
     border-block-start-width: 1px;
+  }
+  .draw-editor[data-narrow] .draw-body,
+  .draw-editor[data-narrow] .draw-body:has(> .draw-dock:not([hidden])) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .draw-editor[data-narrow] .draw-body:has(> .draw-dock:not([hidden])) {
+    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr) auto;
+  }
+  .draw-editor[data-narrow] .draw-dock {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .draw-editor[data-narrow] .draw-rail {
+    grid-row: -2;
   }
 }
 /* La superficie del disegno nella shell: una riga d'avviso in cima, quando il

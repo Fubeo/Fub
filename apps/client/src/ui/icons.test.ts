@@ -37,12 +37,13 @@ const sources = import.meta.glob("../**/*.{ts,tsx,js,mjs,html,css}", {
 describe("il costrutto delle icone", () => {
   it("tutte le icone rispettano griglia e tratto dichiarati", () => {
     const names = iconNames();
-    // Il set conta trentasei icone (§31.4, misurabile con questo test): la
+    // Il set conta quaranta icone (§31.4, misurabile con questo test): la
     // ventottesima è la puntina delle tab appuntate, tre sono quelle che le
     // view di sincronizzazione e pubblicazione dichiarano, la casa è quella
-    // della striscia degli spazi, e le ultime quattro (informazioni,
-    // componente, tastiera, schermo) sono delle schede delle impostazioni.
-    expect(names).toHaveLength(36);
+    // della striscia degli spazi, quattro (informazioni, componente,
+    // tastiera, schermo) sono delle schede delle impostazioni, e quattro
+    // dicono il formato di un documento (Word, OpenDocument, foglio, disegno).
+    expect(names).toHaveLength(40);
     expect(new Set(names).size).toBe(names.length);
 
     for (const name of names) {
@@ -80,6 +81,9 @@ describe("il costrutto delle icone", () => {
       // La finestra di una cartella porta i grafici come SVG del motore:
       // `workbook.ts` ne controlla la forma, è un dato del documento.
       .filter(([path]) => !path.endsWith("/editors/grid/workbook.ts"))
+      // Il disegno nuovo e l'inchiostro di un documento di Word sono SVG del
+      // documento (ADR 0226), non icone della shell.
+      .filter(([path]) => !path.endsWith("/editors/rich/drawing.ts") && !path.endsWith("/editors/rich/ink-shape.ts"))
       .filter(([, text]) => /<svg\b/i.test(text))
       .map(([path]) => path);
     expect(offenders, `SVG fuori dal modulo icone: ${offenders.join(", ")}`).toEqual([]);

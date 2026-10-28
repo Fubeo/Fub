@@ -113,7 +113,21 @@ export type OverlayHandle =
   /// contorno quando prende l'aspetto, e il suo nome. Sta in alto a destra
   /// del punto, dove la mano non lo copre, o dall'altra parte vicino a un
   /// bordo; `lifted`, sotto un dito, più lontano e proprio sopra.
-  | { readonly kind: "sample"; readonly x: number; readonly y: number; readonly fill: SamplePaint | null; readonly ring?: SamplePaint; readonly text: string; readonly lifted?: boolean };
+  | { readonly kind: "sample"; readonly x: number; readonly y: number; readonly fill: SamplePaint | null; readonly ring?: SamplePaint; readonly text: string; readonly lifted?: boolean }
+  /// La punta sotto la penna sospesa: il contorno di ciò che lascerebbe, alla
+  /// misura vera, col mirino in mezzo (vedi [`NibShape`]). `width` e `height`
+  /// sono in unità della scena, girate di `angle` gradi nella scena; per la
+  /// gomma, `width` è il diametro in pixel CSS, che non cambia con lo zoom.
+  | { readonly kind: "nib"; readonly x: number; readonly y: number; readonly shape: NibShape; readonly width: number; readonly height: number; readonly angle: number }
+  /// Il righello (P13): una riga larga `width` pixel dello schermo, col
+  /// centro e il bordo girato di `angle` gradi nella scena, le tacche sui due
+  /// bordi e l'angolo scritto in mezzo; `active` mentre lo si tira.
+  | { readonly kind: "ruler"; readonly center: Point; readonly angle: number; readonly width: number; readonly text: string; readonly active?: boolean };
+
+/// La forma della punta: `round` un cerchio, `flat` l'ellisse stretta della
+/// punta piatta, `block` il rettangolo tondo dell'evidenziatore, `eraser` il
+/// cerchio tratteggiato della gomma.
+export type NibShape = "round" | "flat" | "block" | "eraser";
 
 /// Ciò che mostra l'anteprima del contagocce: un colore CSS, nessun colore o
 /// un motivo.
@@ -202,6 +216,10 @@ const LABEL_SIZE = 12;
 const LABEL_PAD = 4;
 const LABEL_GAP = 12;
 
+/// Quanto spazio prende sotto il suo punto una scritta di una riga, in
+/// pixel CSS: la barra della selezione ci si mette sotto.
+export const LABEL_ROOM_PX = LABEL_GAP + LABEL_SIZE + 2 * LABEL_PAD;
+
 /// Mezzo braccio del segno a croce, e mezza stanghetta di una misura, in
 /// pixel CSS.
 const CROSS = 3;
@@ -219,6 +237,17 @@ const SAMPLE_REACH = 26;
 const SAMPLE_LIFT = 60;
 const SAMPLE_GAP = 6;
 const SAMPLE_CHECK = 5;
+
+/// La punta: quanto sporgono le stanghette del mirino, e la misura più
+/// piccola del contorno sullo schermo, in pixel CSS.
+const NIB_TICK = 4;
+const NIB_MIN = 2;
+/// Il righello: quanto copre la sua carta, il passo delle tacche e la loro
+/// lunghezza, corta e lunga ogni cinque, in pixel dello schermo.
+const RULER_ALPHA = 0.72;
+const RULER_TICK_STEP = 10;
+const RULER_TICK = 6;
+const RULER_TICK_LONG = 12;
 
 /// Monta lo strato dentro `host`, sopra ciò che c'è.
 export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay {
@@ -268,6 +297,10 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     const value = getComputedStyle(canvas).getPropertyValue("--bg").trim();
     return value === "" ? "Canvas" : value;
   };
+
+  /// Il righello sta sulla carta, che è bianca in tutti e due i temi
+  /// (DEC-13): è un righello chiaro anche col tema scuro.
+  const rulerPaper = (): string => (typeof matchMedia === "function" && matchMedia("(forced-colors: active)").matches ? "Canvas" : "#ffffff");
 
   /// Il testo sopra il colore della linea.
   const onAccent = (): string => {
@@ -653,8 +686,9 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     const line = accent();
     ctx.strokeStyle = line;
     ctx.lineWidth = 1;
-    // Le regioni sotto ogni altra cosa.
+    // Le regioni sotto ogni altra cosa, e il righello sopra di loro.
     for (const handle of handles) if (handle.kind === "region") drawRegion(ctx, handle, line);
+    for (const handle of handles) if (handle.kind === "ruler") drawRuler(ctx, handle, line, rulerPaper());
     for (const handle of handles) {
       if (handle.kind === "box") {
         const [a, b, c, d, e, f] = handle.matrix;
@@ -849,8 +883,93 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         drawLabel(ctx, px, py, handle.text, line, "center");
       }
     }
-    // L'anteprima del contagocce sopra ogni altra cosa.
+    // L'anteprima del contagocce sopra ogni altra cosa, e la punta.
     for (const handle of handles) if (handle.kind === "sample") drawSample(ctx, handle, line, fill);
+    for (const handle of handles) if (handle.kind === "nib") drawNib(ctx, handle, line, fill);
+  };
+
+  /// Il righello: una striscia di carta un po' trasparente che passa da un
+  /// bordo all'altro della vista, i due bordi, le tacche e l'angolo.
+  const drawRuler = (ctx: CanvasRenderingContext2D, ruler: Extract<OverlayHandle, { kind: "ruler" }>, line: string, base: string): void => {
+    const [cx, cy] = screen(ruler.center[0], ruler.center[1]);
+    const turn = ((ruler.angle + view.angle) * Math.PI) / 180;
+    const reach = Math.ceil((width + height) / RULER_TICK_STEP) * RULER_TICK_STEP;
+    const half = ruler.width / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(turn);
+    ctx.setLineDash([]);
+    ctx.globalAlpha = RULER_ALPHA;
+    ctx.fillStyle = base;
+    ctx.fillRect(-reach, -half, 2 * reach, 2 * half);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = line;
+    ctx.lineWidth = ruler.active === true ? 2 : 1;
+    ctx.beginPath();
+    ctx.moveTo(-reach, -half);
+    ctx.lineTo(reach, -half);
+    ctx.moveTo(-reach, half);
+    ctx.lineTo(reach, half);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = -reach, k = -reach / RULER_TICK_STEP; x <= reach; x += RULER_TICK_STEP, k++) {
+      const tick = k % 5 === 0 ? RULER_TICK_LONG : RULER_TICK;
+      ctx.moveTo(x, -half);
+      ctx.lineTo(x, -half + tick);
+      ctx.moveTo(x, half);
+      ctx.lineTo(x, half - tick);
+    }
+    ctx.stroke();
+    ctx.restore();
+    drawLabel(ctx, cx, cy, ruler.text, line, "center");
+  };
+
+  /// La punta: il contorno su un filo di carta più largo, perché si veda
+  /// sopra ogni colore, e il mirino.
+  const drawNib = (ctx: CanvasRenderingContext2D, nib: Extract<OverlayHandle, { kind: "nib" }>, line: string, base: string): void => {
+    const [px, py] = screen(nib.x, nib.y);
+    const fixed = nib.shape === "eraser";
+    const w = Math.max(NIB_MIN, fixed ? nib.width : nib.width * view.scale);
+    const h = Math.max(NIB_MIN, fixed ? nib.width : nib.height * view.scale);
+    const turn = ((nib.angle + view.angle) * Math.PI) / 180;
+    const outline = (): void => {
+      ctx.beginPath();
+      if (nib.shape === "block") {
+        const r = Math.min(w, h) / 4;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(turn);
+        if (typeof ctx.roundRect === "function") ctx.roundRect(-w / 2, -h / 2, w, h, r);
+        else ctx.rect(-w / 2, -h / 2, w, h);
+        ctx.restore();
+      } else {
+        ctx.ellipse(px, py, w / 2, h / 2, turn, 0, 2 * Math.PI);
+      }
+    };
+    ctx.save();
+    ctx.setLineDash(nib.shape === "eraser" ? [3, 3] : []);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = base;
+    outline();
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = line;
+    outline();
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(px - NIB_TICK, py);
+    ctx.lineTo(px + NIB_TICK, py);
+    ctx.moveTo(px, py - NIB_TICK);
+    ctx.lineTo(px, py + NIB_TICK);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = base;
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = line;
+    ctx.stroke();
+    ctx.restore();
   };
 
   const draw = (): void => {

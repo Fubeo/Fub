@@ -2,7 +2,6 @@
 // di createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
-import { displayBinding } from "../../../../ui/commands";
 import { BoundsBuilder, type Bounds } from "../../scene/geometry";
 import { apply, compose, IDENTITY, type Matrix, type Point } from "../../scene/matrix";
 import { elementChildren, type DocumentModel, type ElementPart } from "../../scene/model";
@@ -14,12 +13,13 @@ import { plainAttributes } from "../arrange";
 import { holdsFilters, visibleBox } from "../effects";
 import { MIN_SIZE } from "../frame";
 import { lineBeyond } from "../grid";
+import { toolCommand } from "./chrome/commands";
 import { openRadial, type Radial, type RadialItem, type RadialPointer } from "../radial";
 import { nextTurn, normalTurn, panned, turnBy, turnTo, zoomAt } from "../../view";
 import type { Unit } from "../hit";
 import { isLight, PALETTE, swatchOf } from "../palette";
-import { toolSpec, type ToolId } from "../registry";
-import { DRAW_SCALE_LIMITS } from "./constants";
+import { toolKeyText, toolSpec, type ToolId } from "../registry";
+import { DRAW_SCALE_LIMITS, ZOOM_SETTLE_MS } from "./constants";
 import type { EditorContext } from "./context";
 import { sign, union } from "./helpers";
 
@@ -59,9 +59,11 @@ export interface InputContext {
   /// radiale aperto dal suo clic destro lo segue.
   down: { readonly id: number; readonly type: string } | null;
   colorName: (code: string) => string;
-  toolIcon: (id: ToolId) => string;
   showRadial: (x: number, y: number, held: RadialPointer | null, keyboard?: boolean) => void;
   toolbarFocus: { readonly sync: (target: HTMLButtonElement | null) => void; readonly current: () => HTMLButtonElement | null; };
+  /// Lo zoom con la rotella o il pizzico è in corso: la barra accanto alla
+  /// selezione non si vede finché la vista non si ferma (B7).
+  zooming: boolean;
   arrangeFocus: { readonly sync: (target: HTMLButtonElement | null) => void; readonly current: () => HTMLButtonElement | null; };
   nodesFocus: { readonly sync: (target: HTMLButtonElement | null) => void; readonly current: () => HTMLButtonElement | null; };
   boundsOf: (units: readonly Unit[]) => Bounds | null;
@@ -77,9 +79,9 @@ export interface InputContext {
 /// Monta la navigazione, il menu radiale e la tastiera.
 export function installInput(ctx: EditorContext): void {
   const {
-    life, has, measureText, style, toolLabel, history, toolbar, surface, suggestions, titleInput, arrangeBar, nodesBar, textLayer, editable, grownPage,
+    life, has, measureText, style, history, toolbar, surface, suggestions, titleInput, arrangeBar, nodesBar, textLayer, editable, grownPage,
     newIds, announce, setCamera, stepNow, lengthSpoken, localPoint, viewCenter, announceTurn, selectedUnits, inOrder, showHandles, currentTitle,
-    syncControls, commit, undo, redo, moveSelection, setColor, pickTool, cancelGesture, undoable, redoable, pen
+    syncControls, commit, undo, redo, moveSelection, setColor, pickTool, cancelGesture, pen
   } = ctx;
   // --- Navigazione: tasto centrale, dita, rotella ------------------------------
 
@@ -115,6 +117,11 @@ export function installInput(ctx: EditorContext): void {
 
   const followPinch = (): void => {
     const next = measure();
+    // Le dita appoggiate sul righello muovono lui, non il foglio (P13).
+    if (ctx.rulerPinch(pinch, next)) {
+      pinch = next;
+      return;
+    }
     if (next !== null && pinch !== null && next.key === pinch.key) {
       const at: Point = [pinch.center.x, pinch.center.y];
       let c = ctx.camera;
@@ -204,22 +211,30 @@ export function installInput(ctx: EditorContext): void {
   };
   ctx.colorName = colorName;
 
-  const toolIcon = (id: ToolId): string =>
-    id === "polygon" && ctx.polygonTool.shape === "star" ? "draw-star" : id === "bezier" && ctx.curvature ? "draw-curvature" : toolSpec(id).icon;
-  ctx.toolIcon = toolIcon;
+  const { toolIcon } = ctx;
 
   /// Le otto voci, dall'alto in senso orario: in alto annulla e in basso
   /// ripete; a destra gli strumenti di prima, il più recente in orizzontale;
   /// a sinistra, allo stesso modo, i colori.
   const radialItems = (): (RadialItem | null)[] => {
-    const toolItem = (id: ToolId | undefined): RadialItem | null =>
-      id === undefined ? null : { label: t(toolLabel(id)), icon: toolIcon(id), hint: toolSpec(id).shortcut.toUpperCase(), run: () => pickTool(id) };
+    // Gli strumenti, Annulla e Ripeti vengono dal catalogo dei comandi.
+    const fromCatalog = (id: string): RadialItem | null => {
+      const command = ctx.command(id);
+      if (command === null) return null;
+      return { label: command.label, ...(command.icon === undefined ? {} : { icon: command.icon }), ...(command.hint === undefined ? {} : { hint: command.hint }), disabled: command.disabled, run: command.run };
+    };
+    const toolItem = (id: ToolId | undefined): RadialItem | null => {
+      if (id === undefined) return null;
+      const item = fromCatalog(toolCommand(id));
+      // Dal radiale lo strumento si prende come dalla colonna, col suo tasto.
+      return item === null ? null : { ...item, hint: toolKeyText(toolSpec(id).shortcut), run: () => pickTool(id) };
+    };
     const colorItem = (code: string | undefined): RadialItem | null =>
       code === undefined
         ? null
         : {
             label: t("draw.radial.color", { color: colorName(code) }),
-            swatch: { color: code, shape: swatchOf(code)?.shape ?? "ring" },
+            swatch: { color: code },
             run: () => {
               setColor(code);
               announce(t("draw.announce.color", { color: colorName(code) }));
@@ -229,11 +244,11 @@ export function installInput(ctx: EditorContext): void {
     const palette = PALETTE.map((swatch) => swatch.color);
     const [color1, color2, color3] = threeOf(ctx.recentColors, palette, style().color, (code) => swatchOf(code) !== null || has("colors"));
     return [
-      { label: t("draw.undo"), icon: "draw-undo", hint: displayBinding("Mod-z"), disabled: !undoable(), run: () => undo() },
+      fromCatalog("draw.undo"),
       toolItem(tool2),
       toolItem(tool1),
       toolItem(tool3),
-      { label: t("draw.redo"), icon: "draw-redo", hint: displayBinding("Mod-Shift-z"), disabled: !redoable(), run: () => redo() },
+      fromCatalog("draw.redo"),
       colorItem(color3),
       colorItem(color1),
       colorItem(color2),
@@ -290,6 +305,16 @@ export function installInput(ctx: EditorContext): void {
 
   life.listen(surface, "pointerdown", onPointer);
   life.listen(surface, "pointermove", onPointer);
+  // Dove sta il puntatore, per la banda di stato: un tocco non ha un posto
+  // quando il dito se ne va.
+  life.listen(surface, "pointermove", (event: PointerEvent) => {
+    ctx.statusPointer = ctx.sceneAt(event.clientX, event.clientY);
+    ctx.statusChanged();
+  });
+  life.listen(surface, "pointerleave", () => {
+    ctx.statusPointer = null;
+    ctx.statusChanged();
+  });
   life.listen(surface, "pointerup", onPointerEnd);
   life.listen(surface, "pointercancel", onPointerEnd);
   life.listen(surface, "lostpointercapture", onPointerEnd);
@@ -300,6 +325,8 @@ export function installInput(ctx: EditorContext): void {
     const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? surface.clientHeight : 1;
     const dx = event.deltaX * unit;
     const dy = event.deltaY * unit;
+    // Sopra il righello la rotella lo gira (P13).
+    if (!event.ctrlKey && !event.metaKey && ctx.rulerWheel(event.clientX, event.clientY, dy !== 0 ? dy : dx, event.shiftKey)) return;
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && has("gestures")) {
       // Gira la vista a passi di 15°, attorno al puntatore. Con Maiusc alcuni
       // sistemi mandano la rotella come orizzontale.
@@ -316,6 +343,9 @@ export function installInput(ctx: EditorContext): void {
       // mouse a passi da 100: il limite tiene lo scatto entro il 22%.
       const step = Math.max(-50, Math.min(50, dy));
       const local = localPoint(event.clientX, event.clientY);
+      ctx.zooming = true;
+      clearTimeout(zoomTimer);
+      zoomTimer = setTimeout(settleZoom, ZOOM_SETTLE_MS);
       setCamera(zoomAt(ctx.camera, Math.exp(-step * 0.005), [local.x, local.y], DRAW_SCALE_LIMITS));
     } else if (event.shiftKey && dx === 0) {
       setCamera(panned(ctx.camera, -dy, 0));
@@ -325,6 +355,15 @@ export function installInput(ctx: EditorContext): void {
   };
   /// La rotella che gira la vista, raccolta finché non fa un passo.
   let wheelTurn = 0;
+  /// Lo zoom finisce quando la rotella tace per `ZOOM_SETTLE_MS`: allora la
+  /// barra della selezione torna, al suo posto nuovo.
+  ctx.zooming = false;
+  let zoomTimer: ReturnType<typeof setTimeout> | undefined;
+  const settleZoom = (): void => {
+    ctx.zooming = false;
+    ctx.placeBar();
+  };
+  life.add(() => clearTimeout(zoomTimer));
   life.listen(surface, "wheel", onWheel, { passive: false });
   life.listen(textLayer, "wheel", onWheel, { passive: false });
 
@@ -343,11 +382,11 @@ export function installInput(ctx: EditorContext): void {
   const rove = (bar: HTMLElement): { readonly sync: (target: HTMLButtonElement | null) => void; readonly current: () => HTMLButtonElement | null } => {
     let current: HTMLButtonElement | null = null;
     const focusable = (): HTMLButtonElement[] =>
-      [...bar.querySelectorAll<HTMLButtonElement>("button")].filter((control) => !control.disabled && !control.hidden);
+      [...bar.querySelectorAll<HTMLButtonElement>("button")].filter((control) => !control.disabled && !control.hidden && !control.hasAttribute("data-more") && control.closest("[hidden]") === null);
     /// I pulsanti e i campi di numeri che le frecce raggiungono.
     const reachable = (): HTMLElement[] =>
       [...bar.querySelectorAll<HTMLElement>("button, input.draw-arrange-input")].filter(
-        (control) => !(control as HTMLButtonElement | HTMLInputElement).disabled && !control.hidden && control.closest("[hidden]") === null,
+        (control) => !(control as HTMLButtonElement | HTMLInputElement).disabled && !control.hidden && !control.hasAttribute("data-more") && control.closest("[hidden]") === null,
       );
     const sync = (target: HTMLButtonElement | null): void => {
       const controls = focusable();

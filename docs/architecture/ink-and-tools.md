@@ -42,9 +42,10 @@ e la geometria sono funzioni che il prodotto chiama.
 | nucleo, Rust | `crates/fub-ink` | campione, ruoli, pressione, inclinazione, stabilizzatore, sessione |
 | nucleo, TypeScript | `apps/client/src/ink/input/` | le stesse regole, per il percorso caldo |
 | formato dei campioni | `apps/client/src/ink/sample.ts` | `fub:ink`, quantizzazione, limite dei campioni |
-| pennello | `apps/client/src/ink/brush.ts`, `pf1.ts`, `pf1-live.ts` | `fub:brush`, contorno, contorno che cresce |
+| pennello | `apps/client/src/ink/brush.ts`, `pf1.ts`, `pf1-live.ts`, `nib1.ts` | `fub:brush`, contorno, contorno che cresce, punta piatta |
+| penne | `apps/client/src/ink/pens.ts` | le sette ricette del pennello con un nome, misura, opacità, fusione |
 | geometria | `apps/client/src/ink/geometry.ts` | trasformazioni dei campioni, tratto dritto |
-| strumenti | `apps/client/src/ink/tools/` | contratto, registro, penna, evidenziatore, gomma |
+| strumenti | `apps/client/src/ink/tools/` | contratto, registro, penna, evidenziatore, gomma, taglio dei tratti (`split.ts`) |
 | adattatore del browser | `apps/client/src/ink/dom/` | `attachInkInput` |
 
 ## Un nucleo in due lingue
@@ -97,7 +98,11 @@ Le regole che la sessione garantisce:
 ### Chi disegna
 
 `roles` decide che cosa fa ogni puntatore: disegna, muove la vista o è
-ignorato. La punta della penna disegna. Il mouse disegna col tasto principale.
+ignorato. La punta della penna disegna; la penna girata (`button` 5) e il
+tasto laterale (`button` 2) fanno anch'essi un tratto, coi ruoli `erase` e
+`barrel`, che `StrokeStart.role` porta a chi disegna. Ogni tratto vive finché
+è premuto il suo bit di `buttons` (1, 32, 2). Il mouse disegna col tasto
+principale.
 Un dito non disegna mentre una penna tocca lo schermo o è sospesa: è il palmo, e
 un suo tratto già cominciato si annulla quando la penna arriva. Con due dita
 giù il gesto è di navigazione. Altrimenti decide la politica del tocco
@@ -142,6 +147,12 @@ molti coalescenti. Al limite dei campioni arriva al tratto che continua. Non
 arriva dopo la fine o l'annullamento del tratto, né dopo una consegna
 interrotta.
 
+Dove il browser lo dà, l'adattatore ascolta anche `pointerrawupdate`, che
+arriva prima del `pointermove` del fotogramma: i suoi campioni vanno subito
+alla sessione, e il `pointermove` che segue non ripete quelli già arrivati.
+L'anteprima resta incrementale (`pf1-live.ts`) e non usa
+`requestAnimationFrame` (DEC-26).
+
 Un evento nello stesso punto dello schermo dell'ultimo evento vero dello stesso
 puntatore riprende il suo punto nella scena, invece di rileggere la vista con
 `toScene`. Se la vista si muove sotto un puntatore fermo, alzarlo non aggiunge
@@ -157,7 +168,7 @@ ricetta del tratto. Non ha stato, non conosce scena, camera o formato di file.
 
 | Genere | Campi | Strumenti |
 |---|---|---|
-| `stroke` | `id`, `opacity`, `capabilities`, `brush(width, input)` | `pen`, `highlighter` |
+| `stroke` | `id`, `opacity`, `capabilities`, `brush(width, input, pen?)` | `pen`, `highlighter` |
 | `erase` | `id`, `radius(pointer)` | `eraser` |
 
 Le capacità (`pressure`, `straightWithModifier`, `symmetry`, `holdsToShape`,
@@ -174,6 +185,21 @@ plugin installabile. Il contratto non tocca il DOM e passa solo numeri e oggetti
 semplici, quindi può un giorno stare dietro un componente senza cambiare forma.
 
 Il registro degli strumenti dell'inchiostro dice **che cosa fa** uno strumento.
+
+### Le penne
+
+Una penna (`ink/pens.ts`) è una ricetta del pennello con un nome: sei sono
+`pf1` con altri numeri, la Calligrafia è `nib1`, la punta piatta
+([ADR 0227](../decisions/0227-le-penne-e-la-punta-piatta.md)). Lo strumento
+`stroke` riceve la penna scelta in `brush(width, input, pen)` e scrive il suo
+nome nel pennello come `pen=<id>`; una penna che non segue la pressione non la
+simula nemmeno col mouse. La penna dice anche quanto copre e come si fonde
+(`penLook`): l'evidenziatore moltiplica. La forma è in
+[`scene-format-pens.md`](../reference/scene-format-pens.md).
+
+La gomma precisa usa `ink/tools/split.ts`: i campioni di un tratto si tagliano
+dove il cerchio della gomma tocca l'inchiostro, e ogni pezzo resta un tratto
+coi suoi campioni, il suo pennello senza rastremazione ai tagli e il suo tempo.
 Il registro della barra di FubDraw (`editors/spatial/tools/registry.ts`) dice
 **come lo offre**: icona, etichetta, tasto, livello. Usano gli stessi id e il
 test `ink-tools.test.ts` li lega: uno strumento presente da una parte sola è

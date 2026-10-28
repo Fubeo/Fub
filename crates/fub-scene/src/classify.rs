@@ -25,7 +25,7 @@ use std::collections::{HashMap, HashSet};
 use serde::Serialize;
 
 use crate::analysis::{use_target, Context, Swatches, Tally};
-use crate::brush::{Brush, BrushError};
+use crate::brush::{BrushError, InkBrush};
 use crate::connectors::{
     read_connector_end, read_connector_geom, read_label_place, ConnectorEnd, ConnectorGeom,
     LabelPlace,
@@ -2225,7 +2225,7 @@ impl Builder<'_, '_> {
             .map_or(Err(InkError::Missing), Ink::decode);
         let brush = element
             .value(NS_FUB, "brush")
-            .map_or(Err(BrushError::Missing), Brush::parse);
+            .map_or(Err(BrushError::Missing), InkBrush::parse);
         let mut problems = Vec::new();
         if let Err(error) = &ink {
             let mut detail = format!("fub:ink {}", error.kind());

@@ -172,17 +172,17 @@ describe("tabelle in Live", () => {
     });
     engine.setDoc(doc);
     const cell = (row: number, col: number) =>
-      parent.querySelector<HTMLElement>(`.cm-md-grid [data-row="${row}"][data-col="${col}"]`)!;
+      parent.querySelector<HTMLElement>(`.tb-grid [data-row="${row}"][data-col="${col}"]`)!;
     return { parent, engine, cell, cleanup: () => { engine.destroy(); parent.remove(); } };
   }
 
   it("sono griglie anche col cursore dentro, e non tornano sorgente", () => {
     const { parent, engine, cell, cleanup } = editorWith(table);
     try {
-      expect(parent.querySelectorAll(".cm-md-grid-block").length).toBe(1);
+      expect(parent.querySelectorAll(".tb-frame").length).toBe(1);
       expect(cell(1, 1).textContent).toBe("2");
       engine.revealByteOffset("Testo\n\n| a | b |\n| --- | --- |\n| ".length);
-      expect(parent.querySelectorAll(".cm-md-grid-block").length).toBe(1);
+      expect(parent.querySelectorAll(".tb-frame").length).toBe(1);
       expect(parent.querySelectorAll(".cm-markdown-block").length).toBe(0);
     } finally {
       cleanup();
@@ -192,7 +192,7 @@ describe("tabelle in Live", () => {
   it("scrivere in una cella cambia soltanto quella cella, e annulla la riporta", () => {
     const { parent, engine, cell, cleanup } = editorWith(table);
     try {
-      const grid = parent.querySelector<HTMLElement>(".cm-md-grid")!;
+      const grid = parent.querySelector<HTMLElement>(".tb-grid")!;
       cell(1, 0).dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, button: 0 }));
       grid.dispatchEvent(new KeyboardEvent("keydown", { key: "u", bubbles: true, cancelable: true }));
       const input = cell(1, 0).querySelector("input")!;
@@ -211,10 +211,10 @@ describe("tabelle in Live", () => {
   it("una riga aggiunta dalla griglia riscrive la tabella in forma canonica", () => {
     const { parent, engine, cleanup } = editorWith("|a|b|\n|---|---|\n|1|2|\n\nFine");
     try {
-      const add = parent.querySelector<HTMLButtonElement>('.cm-md-grid-add[data-add="row"]')!;
+      const add = parent.querySelector<HTMLButtonElement>('.tb-add[data-add="row"]')!;
       add.click();
       expect(engine.getDoc()).toBe("| a | b |\n| --- | --- |\n| 1 | 2 |\n|  |  |\n\nFine");
-      expect(parent.querySelectorAll(".cm-md-grid tbody tr").length).toBe(3);
+      expect(parent.querySelectorAll(".tb-grid tbody tr").length).toBe(3);
     } finally {
       cleanup();
     }

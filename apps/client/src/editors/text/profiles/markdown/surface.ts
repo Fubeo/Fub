@@ -69,9 +69,9 @@ import { codeBlockAt, headingAt, linkAt, listAt, tableRowAt, taskAt, type Markdo
 export type MarkdownMode = "source" | "live_preview" | "reading";
 
 export const MARKDOWN_MODES: readonly SurfaceMode[] = [
-  { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source" },
-  { id: "live_preview", label: () => t("mode.live"), presentation: "surface", contextMode: "live_preview" },
-  { id: "reading", label: () => t("mode.reading"), presentation: "rendered", contextMode: "reading" },
+  { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source", looks: ["tema"] },
+  { id: "live_preview", label: () => t("mode.live"), presentation: "surface", contextMode: "live_preview", looks: ["tema"] },
+  { id: "reading", label: () => t("mode.reading"), presentation: "rendered", contextMode: "reading", looks: ["tema"] },
 ];
 
 /// Le sole capacità di shell necessarie alla palette slash.
@@ -246,7 +246,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     copied = null;
     if (mode === "reading" || !(event.target instanceof Element) || !event.target.closest(".cm-content")) return;
     // La griglia di una tabella copia le sue celle da sé.
-    if (event.target.closest(".cm-md-grid-block")) return;
+    if (event.target.closest(".tb-frame")) return;
     copied = engine.readState((state) => {
       const parts = state.selection.ranges.filter((range) => !range.empty)
         .map((range) => state.sliceDoc(range.from, range.to));
@@ -270,7 +270,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       event.altKey || event.ctrlKey || event.metaKey || readOnly || mode === "reading" ||
       !(event.target instanceof Element) || !event.target.closest(".cm-content") ||
       // Una griglia di tabella scrive le sue celle: il `/` è testo.
-      event.target.closest(".cm-md-grid-block")
+      event.target.closest(".tb-frame")
     ) return;
     if (slash.currentDoc() !== documentId) return;
     // «e/o», 24/09, URL, path e codice restano testo: la palette si apre su

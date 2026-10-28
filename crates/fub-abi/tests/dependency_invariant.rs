@@ -681,7 +681,7 @@ fn the_ink_core_stands_alone() {
 }
 
 /// Chi può dipendere dal nucleo dell'inchiostro. Elenco chiuso.
-const INK_ALLOWED_DEPENDENTS: &[&str] = &["fub-scene"];
+const INK_ALLOWED_DEPENDENTS: &[&str] = &["fub-scene", "fub-format-rich"];
 
 /// La sessione live sta **fuori dal core**: `fub-live` non vede il contratto,
 /// il kernel, il montaggio né il toolkit (ADR 0205).

@@ -200,7 +200,7 @@ const written = (host: FakeHost, doc: string): string[] =>
 
 /// Il livello dell'editor come lo dichiara il bundle `fub.draw`, col valore
 /// `value`: il finto non conosce nessuna feature, e la riga gliela dà il banco.
-function drawLevel(value: string): SettingEntry {
+function drawLevel(value: string, source: "default" | "vault" = value === "essential" ? "default" : "vault"): SettingEntry {
   return {
     spec: {
       key: "draw.level",
@@ -219,9 +219,40 @@ function drawLevel(value: string): SettingEntry {
       program_writable: false,
     },
     value,
-    source: value === "essential" ? "default" : "vault",
+    source,
   };
 }
+
+/// Lo spazio di lavoro come lo dichiara il bundle `fub.draw`, col valore
+/// `value`; `source` dice se qualcuno l'ha scelto.
+function drawWorkspace(value: string, source: "default" | "vault" = "vault"): SettingEntry {
+  return {
+    spec: {
+      key: "draw.workspace",
+      label: "Spazio di lavoro",
+      description: "",
+      group: "Disegni",
+      scope: "vault",
+      kind: {
+        kind: "choice",
+        default: "full",
+        options: [
+          { value: "full", label: "Completo" },
+          { value: "simple", label: "Semplice" },
+        ],
+      },
+      program_writable: false,
+    },
+    value,
+    source,
+  };
+}
+
+/// Gli strumenti della colonna del Completo, coi primi delle tendine.
+const FULL_TOOLS = ["select", "hand", "board", "pen", "eraser", "rect", "connector", "bezier", "text", "eyedropper"];
+
+/// Gli strumenti della colonna del Semplice.
+const SIMPLE_TOOLS = ["select", "hand", "pen", "eraser", "rect", "text"];
 
 /// Le parti del Personalizzato come le dichiara `fub.draw`, col valore `value`.
 function drawCustom(value: string[]): SettingEntry {
@@ -497,22 +528,29 @@ describe("uno screenshot incollato", () => {
 });
 
 describe("il livello e la griglia del disegno", () => {
-  it("il livello si sceglie nelle impostazioni del vault, e vale subito nel disegno aperto", async () => {
-    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawLevel("essential")] }));
+  it("lo spazio di lavoro si sceglie nelle impostazioni del vault, e vale subito nel disegno aperto", async () => {
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")] }));
     await open("casa.svg");
     const editor = focusedPane().querySelector(".draw-editor");
-    expect(tools()).toEqual(["select", "pen", "eraser", "rect", "ellipse", "line", "arrow"]);
+    expect(tools()).toEqual(FULL_TOOLS);
 
-    await host.module.api.setSetting("draw.level", "standard");
-    await waitFor("l'evidenziatore compare", () => tools().includes("highlighter"));
-    expect(tools()).toEqual(["select", "lasso", "board", "eyedropper", "gradient", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "connector", "polygon", "text"]);
+    await host.module.api.setSetting("draw.workspace", "simple");
+    await waitFor("il Semplice", () => !tools().includes("connector"));
+    expect(tools()).toEqual(SIMPLE_TOOLS);
     expect(focusedPane().querySelector(".draw-editor"), "lo stesso editor, non uno nuovo").toBe(editor);
 
-    await host.module.api.setSetting("draw.level", "essential");
-    await waitFor("l'evidenziatore se ne va", () => !tools().includes("highlighter"));
-    // Il livello cambia gli strumenti, non il disegno.
+    await host.module.api.setSetting("draw.workspace", "full");
+    await waitFor("il Completo", () => tools().includes("connector"));
+    // Lo spazio cambia gli strumenti, non il disegno.
     expect(written(host, "casa.svg")).toEqual([]);
     expect(host.files()["casa.svg"]).toBe(HOUSE);
+  });
+
+  it("il livello Essenziale di prima vale come «Semplice», finché nessuno sceglie lo spazio", async () => {
+    await start(createFakeHost({ file: VAULT, draw: true, settings: [drawLevel("essential", "vault"), drawWorkspace("full", "default")] }));
+    await open("casa.svg");
+    await waitFor("il Semplice", () => tools().length > 0 && !tools().includes("connector"));
+    expect(tools()).toEqual(SIMPLE_TOOLS);
   });
 
   it("le parti del Personalizzato si scelgono nelle Impostazioni, e valgono subito nel disegno aperto", async () => {
@@ -536,10 +574,10 @@ describe("il livello e la griglia del disegno", () => {
     expect(host.files()["casa.svg"]).toBe(HOUSE);
   });
 
-  it("dallo Standard, Ctrl+K collega l'oggetto scelto a una nota del vault, e Alt+Invio la apre", async () => {
+  it("dal Completo, Ctrl+K collega l'oggetto scelto a una nota del vault, e Alt+Invio la apre", async () => {
     const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawLevel("standard")] }));
     await open("casa.svg");
-    await waitFor("il livello Standard", () => tools().includes("highlighter"));
+    await waitFor("il Completo", () => tools().includes("connector"));
     const sheet = focusedPane().querySelector<HTMLElement>(".draw-surface")!;
     sheet.focus();
     press("a", { ctrlKey: true });
@@ -565,7 +603,7 @@ describe("il livello e la griglia del disegno", () => {
   it("la griglia scelta resta per i disegni aperti dopo, anche dopo un riavvio, e non entra nel vault", async () => {
     const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawLevel("standard")] }));
     await open("casa.svg");
-    await waitFor("il livello Standard", () => tools().includes("highlighter"));
+    await waitFor("il Completo", () => tools().includes("connector"));
     focusedPane().querySelector<HTMLElement>(".draw-surface")!.focus();
     expect(gridShown()).toBe(false);
     press("#");
@@ -590,7 +628,7 @@ describe("il livello e la griglia del disegno", () => {
 });
 
 describe("le immagini del vault nel disegno", () => {
-  it("dallo Standard, Ctrl+I ne sceglie una con la miniatura, il disegno la scrive per riferimento e la Lettura la mostra", async () => {
+  it("dal Completo, Ctrl+I ne sceglie una con la miniatura, il disegno la scrive per riferimento e la Lettura la mostra", async () => {
     // happy-dom non decodifica immagini e non dice che cosa si vede.
     vi.stubGlobal("createImageBitmap", async () => ({ width: 64, height: 48, close() {} }));
     vi.stubGlobal("IntersectionObserver", undefined);
@@ -598,7 +636,7 @@ describe("le immagini del vault nel disegno", () => {
     try {
       const host = await start(createFakeHost({ file: { ...VAULT, "immagini/gatto.jpg": "jpg" }, draw: true, settings: [drawLevel("standard")] }));
       await open("casa.svg");
-      await waitFor("il livello Standard", () => tools().includes("highlighter"));
+      await waitFor("il Completo", () => tools().includes("connector"));
       const sheet = focusedPane().querySelector<HTMLElement>(".draw-surface")!;
       sheet.focus();
       press("i", { ctrlKey: true });
@@ -697,7 +735,7 @@ describe("«Esporta…» su un disegno", () => {
     expect(await offered(EXPORT_COMMANDS)).toEqual([]);
   });
 
-  it("chiede il formato, salva prima l'ultimo gesto e apre il centro attività", async () => {
+  it("dalla finestra, salva prima l'ultimo gesto e apre il centro attività", async () => {
     const host = await start(withExport());
     await open("casa.svg");
     drawRect();
@@ -706,12 +744,11 @@ describe("«Esporta…» su un disegno", () => {
     expect(written(host, "casa.svg")).toEqual([]);
     expect(document.getElementById("activity-panel")!.hidden).toBe(true);
     await run("shell.doc.export");
-    await waitFor("si sceglie il formato", () => choices().length === 2);
-    expect(choices().map((choice) => choice.querySelector(".palette-title")!.textContent)).toEqual(["PNG", "PDF"]);
-    choices()[1]!.click();
+    await waitFor("la finestra si apre", () => document.querySelector(".draw-export form") !== null);
+    document.querySelector<HTMLFormElement>(".draw-export form")!.requestSubmit();
     await waitFor("l'export è chiesto", () => requests(host).length === 1);
     expect(requests(host)).toEqual([
-      { target: "draw.pdf", selection: { kind: "documents", value: ["casa.svg"] }, options: {} },
+      { target: "draw.png", selection: { kind: "documents", value: ["casa.svg"] }, options: { background: "paper", scope: "drawing", scale: 2 } },
     ]);
     const saved = host.calls.findIndex((call) => call.gate === "writeDocument" && call.args[0] === "casa.svg");
     const asked = host.calls.findIndex((call) => call.gate === "invokeCommand");
@@ -742,11 +779,11 @@ describe("«Esporta…» su un disegno", () => {
     ]);
   });
 
-  it("dallo Standard apre la finestra «Esporta», e manda le sue scelte", async () => {
+  it("dal Completo apre la finestra «Esporta», e manda le sue scelte", async () => {
     const host = await start(createFakeHost({ file: VAULT, draw: true, commands: [EXPORT_RUN], settings: [drawLevel("standard")] }));
     const { t } = await import("./i18n/strings");
     await open("casa.svg");
-    await waitFor("lo Standard", () => tools().includes("highlighter"));
+    await waitFor("il Completo", () => tools().includes("connector"));
     await run("shell.doc.export");
     await waitFor("la finestra si apre", () => document.querySelector(".draw-export form") !== null);
     expect(choices(), "non la scelta del formato").toEqual([]);
@@ -777,10 +814,10 @@ describe("presentare un disegno con le tavole", () => {
     + '  <view id="bmnopqrst" fub:role="board" viewBox="960 0 400 200"><title>Pioggia</title></view>\n'
     + '  <g id="l1" fub:layer="Livello 1">\n    <rect id="o1a2b3c4d" x="600" y="50" width="20" height="20" fill="#000000"/>\n  </g>\n</svg>\n';
 
-  it("dallo Standard, F5 presenta dalla prima tavola, due passi avanti, ed Esc torna al foglio sulla tavola dov'era arrivata", async () => {
+  it("dal Completo, F5 presenta dalla prima tavola, due passi avanti, ed Esc torna al foglio sulla tavola dov'era arrivata", async () => {
     const host = await start(createFakeHost({ file: { ...VAULT, "ciclo.svg": DECK }, draw: true, settings: [drawLevel("standard")] }));
     await open("ciclo.svg");
-    await waitFor("il livello Standard", () => tools().includes("highlighter"));
+    await waitFor("il Completo", () => tools().includes("connector"));
     const sheet = focusedPane().querySelector<HTMLElement>(".draw-surface")!;
     sheet.focus();
     press("F5");

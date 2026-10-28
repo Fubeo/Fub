@@ -8,7 +8,7 @@
 > uno screen reader incontra gli oggetti, come si descrive un'immagine appena
 > aggiunta, e come si usa tutto da tastiera.
 
-Dal [livello Standard](drawing.md#il-livello-standard) **«Accessibilità»**,
+Nello spazio [Completo](drawing.md#completo-e-semplice) **«Accessibilità»**,
 nella barra dopo «Cronologia», apre accanto al foglio, sotto gli altri
 pannelli aperti, due sezioni che si aprono e si chiudono: **«Problemi»**, ciò
 che rende il disegno difficile da leggere, ciascuno con la sua correzione, e
@@ -105,7 +105,7 @@ campo: «Descrivi l’immagine appena aggiunta».
 
 La barra non è una finestra: il foglio resta in uso mentre c'è. Se ne va da
 sola quando le immagini se ne vanno, con annulla o cancellandole, e quando il
-disegno passa in sola lettura o se ne apre un altro. All'Essenziale le
+disegno passa in sola lettura o se ne apre un altro. Nel Semplice le
 immagini entrano senza domande.
 
 ## Da tastiera e coi lettori di schermo
@@ -129,8 +129,8 @@ qui: «Vai a» e l'ordine di lettura si percorrono, ma non si cambia niente.
 
 ## Quando se ne va
 
-Tornati all'Essenziale, o tolta la parte nel
-[Personalizzato](drawing-custom.md), il pannello si chiude, il pulsante
+Passati al Semplice, o tolta la
+[parte](drawing-custom.md#che-cosa-porta-una-parte), il pannello si chiude, il pulsante
 sparisce e la barra della descrizione non si apre più. Ciò che le correzioni
 hanno scritto resta nel file: titoli, colori, descrizioni e immagini
 decorative. Come il formato le scrive, e come si misurano i problemi, sta in

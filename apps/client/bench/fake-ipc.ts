@@ -39,6 +39,9 @@
 import { createFakeHost, type GridBytesFake, type Options } from "../src/host/fake";
 import { MARKDOWN_SYNTAX } from "../src/rules/syntax.generated";
 import XLSX_GRID from "../src/__fixtures__/xlsx-grid.json";
+import RICH_PROJECTION from "../src/__fixtures__/rich-projection.json";
+import RICH_BENCH from "../src/__fixtures__/rich-bench.json";
+import RICH_CLOSED from "../src/__fixtures__/rich-closed.json";
 import type {
   BundleInfo,
   CommandSpec,
@@ -260,6 +263,21 @@ globalThis.__fubLargeBench = Object.freeze({
 /// restano quelli delle loro baseline. Sessione e finestre sono quelle che
 /// `fub-format-xlsx` produce davvero (`tests/ts_grid.rs`).
 const WORKBOOK_DOC = params.get("workbook") === "1" ? "Dati/Conti.xlsx" : null;
+
+/// Il documento di videoscrittura delle scene `document-*` (`?rich=…`), con
+/// la proiezione che `fub-format-rich` dà davvero del file: quella con un po'
+/// di tutto (`tests/ts_projection.rs`), oppure un `.odt`, uno pieno di
+/// oggetti e uno protetto (`tests/ts_bench.rs`), o uno con due blocchi chiusi
+/// (`tests/ts_projection.rs`). Come la cartella di Excel,
+/// soltanto la sua scena lo ha.
+const RICH_DOCS: Readonly<Record<string, { doc: string; text: string }>> = {
+  docx: { doc: "Documenti/Prova.docx", text: RICH_PROJECTION.source },
+  odt: { doc: "Documenti/Verbale.odt", text: RICH_BENCH.odt },
+  objects: { doc: "Documenti/Oggetti.docx", text: RICH_BENCH.objects },
+  readonly: { doc: "Documenti/Riservato.docx", text: RICH_BENCH.readonly },
+  closed: { doc: "Documenti/Chiuso.docx", text: RICH_CLOSED.source },
+};
+const RICH_DOC = RICH_DOCS[params.get("rich") ?? ""] ?? null;
 
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
 const DRAWING = BOARDS !== null
@@ -671,6 +689,44 @@ const DRAW_LEVEL: SettingEntry = {
   source: "vault",
 };
 
+/// Lo spazio di lavoro e la colonna dei disegni, di serie: lo spazio scelto
+/// dal menu del disegno si scrive qui.
+const DRAW_WORKSPACE: readonly SettingEntry[] = [
+  {
+    spec: {
+      key: "draw.workspace",
+      label: "Spazio di lavoro",
+      description: "",
+      group: "Disegni",
+      scope: "vault",
+      kind: {
+        kind: "choice",
+        default: "full",
+        options: [
+          { value: "full", label: "Completo" },
+          { value: "simple", label: "Semplice" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "full",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "draw.toolbar",
+      label: "Strumenti della colonna",
+      description: "",
+      group: "Disegni",
+      scope: "vault",
+      kind: { kind: "list", default: [] },
+      program_writable: false,
+    },
+    value: [],
+    source: "default",
+  },
+];
+
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
 /// `satisfies` è deliberato: queste fixture attraversano lo stesso confine
@@ -994,12 +1050,14 @@ const options: Options = {
     ...(DRAWING === null ? {} : { [DRAWING.doc]: DRAWING.text }),
     // Il testo di una cartella è il suo giornale, vuoto sul disco.
     ...(WORKBOOK_DOC === null ? {} : { [WORKBOOK_DOC]: "" }),
+    // Il testo di un documento di videoscrittura è la sua proiezione.
+    ...(RICH_DOC === null ? {} : { [RICH_DOC.doc]: RICH_DOC.text }),
   },
   resources: RESOURCES,
   root: ROOT,
   view: VIEWS,
   commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : BENCH_COMMANDS,
-  settings: DRAWING === null ? SETTINGS : [...SETTINGS, DRAW_LEVEL],
+  settings: DRAWING === null ? SETTINGS : [...SETTINGS, DRAW_LEVEL, ...DRAW_WORKSPACE],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.

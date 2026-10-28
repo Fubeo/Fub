@@ -214,6 +214,14 @@ pub const APPEARANCE_DIAGRAM_STYLE: &str = "appearance.diagram-style";
 /// Gli stili offerti, il predefinito per primo.
 pub const DIAGRAM_STYLES: [&str; 5] =
     ["armonia", "acquerello", "aurora", "blueprint", "inchiostro"];
+/// Come si mostra il contenuto di un file che ha un aspetto suo (un documento,
+/// un foglio di calcolo): `auto` è la pagina del file, o la pagina adattata con
+/// il contrasto alto; `file` tiene i colori del file sulla sua carta;
+/// `adattato` li porta sulla carta del tema. Vale per le modalità che offrono
+/// quell'aspetto; le altre restano al loro.
+pub const APPEARANCE_CONTENT_LOOK: &str = "appearance.content-look";
+/// Gli aspetti offerti, il predefinito per primo.
+pub const CONTENT_LOOKS: [&str; 3] = ["auto", "file", "adattato"];
 pub const DEFAULT_ZOOM: f64 = 1.0;
 /// La cartella del vault in cui la shell deposita e cerca gli allegati.
 ///
@@ -811,6 +819,17 @@ fn appearance_settings() -> Vec<SettingSpec> {
             ],
         ),
         choice(
+            APPEARANCE_CONTENT_LOOK,
+            C_CONTENT_LOOK,
+            C_CONTENT_LOOK_DESC,
+            CONTENT_LOOKS[0],
+            vec![
+                UiOption::new(CONTENT_LOOKS[0], Text::key(C_CONTENT_LOOK_AUTO)),
+                UiOption::new(CONTENT_LOOKS[1], Text::key(C_CONTENT_LOOK_FILE)),
+                UiOption::new(CONTENT_LOOKS[2], Text::key(C_CONTENT_LOOK_ADAPTED)),
+            ],
+        ),
+        choice(
             APPEARANCE_FONT,
             C_FONT,
             C_FONT_DESC,
@@ -1302,6 +1321,11 @@ const C_DIAGRAM_STYLE_ACQUERELLO: &str = "core.diagram_style.acquerello";
 const C_DIAGRAM_STYLE_AURORA: &str = "core.diagram_style.aurora";
 const C_DIAGRAM_STYLE_BLUEPRINT: &str = "core.diagram_style.blueprint";
 const C_DIAGRAM_STYLE_INCHIOSTRO: &str = "core.diagram_style.inchiostro";
+const C_CONTENT_LOOK: &str = "core.content_look";
+const C_CONTENT_LOOK_DESC: &str = "core.content_look.desc";
+const C_CONTENT_LOOK_AUTO: &str = "core.content_look.auto";
+const C_CONTENT_LOOK_FILE: &str = "core.content_look.file";
+const C_CONTENT_LOOK_ADAPTED: &str = "core.content_look.adattato";
 const C_GROUP_CHROME: &str = "core.group.chrome";
 const C_CHROME_SCHEMA: &str = "core.chrome.schema";
 const C_CHROME_SCHEMA_DESC: &str = "core.chrome.schema.desc";
@@ -1472,6 +1496,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.rich.missing", "Il contenuto da salvare in «{doc}» nomina {what}, che il documento non ha.")
         .with("host.rich.duplicate", "Il contenuto da salvare in «{doc}» mostra due volte la stessa nota o casella di testo.")
         .with("host.rich.fidelity", "«{doc}» non è stato salvato: il file nuovo non si rileggeva uguale a ciò che si voleva scrivere.")
+        .with("host.rich.locked.block", "«{doc}» non è stato salvato: il paragrafo o la tabella {block} del testo ha parti che Fub non sa riscrivere senza perderle, e da qui non si cambia.")
+        .with("host.rich.locked.outside", "«{doc}» non è stato salvato: la modifica tocca parti del file fuori dal testo che Fub non sa riscrivere senza perderle. Si salvano soltanto i paragrafi e le tabelle del testo.")
         .with("host.rich.codec", "«{doc}» non si legge o non si scrive nel suo formato: {why}")
         .with("host.xlsx.readonly", "«{doc}» è una cartella di Excel: Fub ne cambia soltanto i valori delle celle, e non la copre con altri byte.")
         .with("host.xlsx.missing", "«{doc}» non c'è più: Fub non crea una cartella di Excel dalle celle cambiate.")
@@ -1855,6 +1881,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DIAGRAM_STYLE_AURORA, "Aurora — colori vivi e profondi")
         .with(C_DIAGRAM_STYLE_BLUEPRINT, "Blueprint — tavola tecnica")
         .with(C_DIAGRAM_STYLE_INCHIOSTRO, "Inchiostro — editoriale")
+        .with(C_CONTENT_LOOK, "Aspetto dei documenti")
+        .with(
+            C_CONTENT_LOOK_DESC,
+            "Come si mostra un file che ha un aspetto suo, come un documento: la sua pagina, o la pagina adattata alla luce del tema. Automatico sceglie la pagina, e quella adattata con il contrasto alto.",
+        )
+        .with(C_CONTENT_LOOK_AUTO, "Automatico")
+        .with(C_CONTENT_LOOK_FILE, "Pagina")
+        .with(C_CONTENT_LOOK_ADAPTED, "Pagina adattata")
         .with(C_CSS_SNIPPETS, "Frammenti CSS locali")
         .with(C_CSS_SNIPPETS_DESC, "Frammenti attivabili, locali e limitati agli hook visivi; nessuna rete o importazione CSS.")
         .with(C_GROUP_SYNC, "Sincronizzazione")
@@ -1974,6 +2008,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.rich.missing", "The content to save into “{doc}” names {what}, which the document does not have.")
         .with("host.rich.duplicate", "The content to save into “{doc}” shows the same note or text box twice.")
         .with("host.rich.fidelity", "“{doc}” was not saved: the new file did not read back the same as what was to be written.")
+        .with("host.rich.locked.block", "“{doc}” was not saved: paragraph or table {block} of the text has parts Fub cannot rewrite without losing them, and it cannot be changed from here.")
+        .with("host.rich.locked.outside", "“{doc}” was not saved: the change touches parts of the file outside the text that Fub cannot rewrite without losing them. Only the paragraphs and tables of the text are saved.")
         .with("host.rich.codec", "“{doc}” cannot be read or written in its format: {why}")
         .with("host.xlsx.readonly", "“{doc}” is an Excel workbook: Fub only changes the values of its cells and does not overwrite it with other bytes.")
         .with("host.xlsx.missing", "“{doc}” no longer exists: Fub does not create an Excel workbook from changed cells.")
@@ -2348,6 +2384,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_DIAGRAM_STYLE_AURORA, "Aurora — vivid and deep")
         .with(C_DIAGRAM_STYLE_BLUEPRINT, "Blueprint — technical drawing")
         .with(C_DIAGRAM_STYLE_INCHIOSTRO, "Ink — editorial")
+        .with(C_CONTENT_LOOK, "Document appearance")
+        .with(
+            C_CONTENT_LOOK_DESC,
+            "How a file with a look of its own, such as a document, is shown: its own page, or the page adapted to the theme's light. Automatic picks the page, and the adapted one with high contrast.",
+        )
+        .with(C_CONTENT_LOOK_AUTO, "Automatic")
+        .with(C_CONTENT_LOOK_FILE, "Page")
+        .with(C_CONTENT_LOOK_ADAPTED, "Adapted page")
         .with(C_CSS_SNIPPETS, "Local CSS snippets")
         .with(C_CSS_SNIPPETS_DESC, "Toggleable, local, paint-only snippets scoped to visual hooks; no network or CSS imports.")
         .with(C_GROUP_SYNC, "Synchronization")

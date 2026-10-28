@@ -100,15 +100,17 @@
   font-weight: var(--weight-bold);
 }
 /* Fra le appuntate la stessa nota ha soltanto un punto blu sul bordo: la riga
-   accesa è una, nell'albero. */
+   accesa è una, nell'albero. Sta su pixel interi: a mezzo pixel il suo
+   bordo si sfuma in modo diverso secondo gli strati della pagina, e le foto
+   di un'andata e ritorno non tornano uguali. */
 .tree-row[aria-current="true"]::before {
   content: "";
   position: absolute;
   top: 50%;
   left: var(--space-2);
-  width: 5px;
-  height: 5px;
-  margin-top: -2.5px;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
   border-radius: 50%;
   background: var(--accent);
 }

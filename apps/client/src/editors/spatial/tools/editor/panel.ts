@@ -81,10 +81,10 @@ export interface PanelContext {
   showDescription: () => void;
   syncDescriptions: () => void;
   moveInReading: (key: string, later: boolean, confirmed: boolean) => string | null;
-  showObjects: (open: boolean) => void;
+  showObjects: (open: boolean, focus?: boolean) => void;
   syncInspector: () => void;
   settledSubject: (subject: Subject) => Subject;
-  showAttributes: (open: boolean) => void;
+  showAttributes: (open: boolean, focus?: boolean) => void;
   changeObject: (label: DrawKey, ops: readonly Op[], id: string) => string | null;
   nestedNow: () => boolean;
   syncDock: () => void;
@@ -268,7 +268,15 @@ export function installPanel(ctx: EditorContext): void {
   ctx.moveInReading = moveInReading;
 
   /// Apre o chiude l'albero; aperto, il fuoco ci va.
-  function showObjects(open: boolean): void {
+  function showObjects(open: boolean, focus = true): void {
+    // Nell'ispettore: la sua scheda, e il fuoco ci va.
+    if (ctx.routed("layers", open)) {
+      // La scheda si è appena mostrata: l'albero si porta al disegno prima
+      // che l'osservatore lo veda.
+      if (open && !tree.element.hidden) syncTree(true);
+      if (open && focus && !tree.element.hidden) tree.focus();
+      return;
+    }
     if (!open && tree.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     tree.element.hidden = !open;
     objectsButton.setAttribute("aria-expanded", String(open));
@@ -276,7 +284,7 @@ export function installPanel(ctx: EditorContext): void {
     if (open) {
       ctx.treeShown = null;
       syncTree();
-      tree.focus();
+      if (focus) tree.focus();
     }
   }
   ctx.showObjects = showObjects;
@@ -353,11 +361,16 @@ export function installPanel(ctx: EditorContext): void {
 
   /// Apre o chiude gli attributi; aperti, il fuoco ci va. Chiusi, un valore
   /// scritto a metà parte prima, come lasciando il campo.
-  function showAttributes(open: boolean): void {
+  function showAttributes(open: boolean, focus = true): void {
     if (open && !has("attributes")) return;
+    // Nell'ispettore: la sua scheda, e il fuoco ci va.
     // Nel pannello delle proprietà gli attributi sono una sua sezione.
     if (nestedNow()) {
       if (open) focusAttributes();
+      return;
+    }
+    if (ctx.routed("design", open)) {
+      if (open && focus && !inspector.element.hidden) inspector.focus();
       return;
     }
     if (!open && inspector.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
@@ -367,7 +380,7 @@ export function installPanel(ctx: EditorContext): void {
     if (open) {
       inspectorShown = null;
       syncInspector();
-      inspector.focus();
+      if (focus) inspector.focus();
     }
   }
   ctx.showAttributes = showAttributes;
@@ -418,7 +431,8 @@ export function installPanel(ctx: EditorContext): void {
     if (nested === nestedNow()) return;
     if (inspector.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     if (nested) panel.attributes.append(inspector.element);
-    else dock.insertBefore(inspector.element, historyPanel.element);
+    else if (historyPanel.element.parentElement === dock) dock.insertBefore(inspector.element, historyPanel.element);
+    else dock.append(inspector.element);
     inspector.nest(nested);
     inspector.element.hidden = !nested;
     attributesButton.setAttribute("aria-expanded", "false");
@@ -433,6 +447,11 @@ export function installPanel(ctx: EditorContext): void {
   /// campo. Se `remember`, è una scelta di chi disegna, e si ricorda.
   function showPanel(open: boolean, focus = open, remember = true): void {
     if (open && !has("properties")) return;
+    // Nell'ispettore: la sua scheda, e il fuoco ci va.
+    if (ctx.routed("design", open)) {
+      if (open && focus && !panel.element.hidden) panel.focus();
+      return;
+    }
     if (!open && panel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
     panel.element.hidden = !open;
     propertiesButton.setAttribute("aria-expanded", String(open));
@@ -455,6 +474,8 @@ export function installPanel(ctx: EditorContext): void {
   /// la scelta aspetta la prima; senza modo di saperla, il pannello si apre.
   function showPanelByDefault(): void {
     ctx.panelPending = false;
+    // Nell'ispettore le schede le apre chi lo tiene.
+    if (ctx.chrome.reveal !== undefined) return;
     if (!has("properties") || !panel.element.hidden) return;
     if (ctx.grid.panel !== null) {
       if (ctx.grid.panel) showPanel(true, false, false);
@@ -571,6 +592,8 @@ export function installPanel(ctx: EditorContext): void {
     // La simmetria della penna, con la penna e l'evidenziatore.
     const symmetryPanel = (ctx.tool === "pen" || ctx.tool === "highlighter") && has("symmetry") ? ctx.symmetryNow() : null;
     const boardNow = ctx.tool === "board" ? (chosenSheet()?.board ?? null) : null;
+    // Il titolo del disegno è del documento: con una selezione, no.
+    ctx.titleField.hidden = ctx.selection.length > 0;
     // Il colore con cui si disegna, col campione da cui viene.
     const drawing = `${style().color} ${style().swatch ?? ""}`;
     const last = ctx.panelShown;
@@ -626,6 +649,7 @@ export function installPanel(ctx: EditorContext): void {
         grid: ctx.grid,
         bar: BAR_FEATURES.some(has),
         attributes: nestedNow() && units.length === 1,
+        exportSelection: ctx.options.onExport !== undefined && has("export"),
         tool: polygonNow === null ? null : toolFacts(polygonNow),
         symmetry: symmetryPanel,
         board:

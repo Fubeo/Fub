@@ -8,8 +8,10 @@ import { t } from "../../i18n/strings";
 import { insertImage, insertNote, insertTable, linkAt, setLink } from "./commands";
 import { RichEngine } from "./engine";
 import { parseProjection, writeBlock, type AtomInline, type Block, type Para, type Table, type TextInline } from "./projection";
+import { roman } from "./notes";
 import { filterSlice } from "./paste";
-import { base64, fitImage, mountStrip } from "./strip";
+import { base64, fitImage } from "./panels";
+import { mountRichRibbon } from "./ribbon";
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -76,10 +78,10 @@ describe("i link", () => {
     ]);
   });
 
-  it("Mod-k chiede l'indirizzo alla striscia, che lo scrive", () => {
+  it("Mod-k chiede l'indirizzo alla barra, che lo scrive", () => {
     const e = engine([para([{ t: "text", x: "una parola" }])]);
-    const strip = mountStrip(e, () => null);
-    document.body.append(strip.element);
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
     const from = at(e, "parola");
     e.select(from, from + "parola".length);
     expect(e.run("rich.link")).toBe(true);
@@ -93,8 +95,8 @@ describe("i link", () => {
     address.form!.requestSubmit();
     expect(texts(e)[1]).toEqual({ t: "text", x: "parola", href: "https://fub.app" });
     expect(document.querySelector("form")).toBeNull();
-    strip.destroy();
-    // Senza la striscia nessuno chiede: l'accordo non fa niente.
+    ribbon.destroy();
+    // Senza la barra nessuno chiede: l'accordo non fa niente.
     expect(e.run("rich.link")).toBe(false);
   });
 });
@@ -141,18 +143,18 @@ describe("le tabelle nuove", () => {
     expect(shape(e)).toEqual(["p", "1x2", "p"]);
   });
 
-  it("la striscia le dimensiona con la griglia, col mouse e con le frecce", () => {
+  it("la barra le dimensiona con la griglia, col mouse e con le frecce", () => {
     const e = engine([para([{ t: "text", x: "testo" }])]);
     e.select(at(e, "testo"));
-    const strip = mountStrip(e, () => null);
-    document.body.append(strip.element);
-    const open = () => strip.element.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.table")}"]`)!.click();
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
+    const open = () => ribbon.element.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.table")}"]`)!.click();
     open();
     const cell = (rows: number, cols: number) =>
       document.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.table.cells", { rows: String(rows), cols: String(cols) })}"]`)!;
     cell(2, 3).dispatchEvent(new Event("pointerover", { bubbles: true }));
-    expect(cell(1, 2).style.backgroundColor).not.toBe("");
-    expect(cell(3, 1).style.backgroundColor).toBe("");
+    expect(cell(1, 2).hasAttribute("data-inside")).toBe(true);
+    expect(cell(3, 1).hasAttribute("data-inside")).toBe(false);
     cell(2, 3).click();
     expect(shape(e)).toEqual(["p", "2x3", "p"]);
     // Con le frecce: una a destra e una in giù.
@@ -164,7 +166,13 @@ describe("le tabelle nuove", () => {
     expect(document.activeElement).toBe(cell(2, 2));
     cell(2, 2).click();
     expect(shape(e)).toEqual(["p", "2x2", "p", "2x3", "p"]);
-    strip.destroy();
+    // «Inserisci», l'azione principale del riquadro, mette la misura indicata.
+    e.select(at(e, "testo"));
+    open();
+    cell(3, 2).dispatchEvent(new Event("pointerover", { bubbles: true }));
+    [...document.querySelectorAll<HTMLButtonElement>(".rich-strip-panel-actions button")].find((b) => b.textContent === t("rich.table.apply"))!.click();
+    expect(shape(e)).toEqual(["p", "3x2", "p", "2x2", "p", "2x3", "p"]);
+    ribbon.destroy();
   });
 });
 
@@ -281,7 +289,36 @@ describe("le immagini e le note nuove", () => {
     // L'immagine nuova si vede; la nota si annuncia col suo testo.
     const img = document.querySelector<HTMLImageElement>(".rich-atom-image img")!;
     expect(img.getAttribute("src")).toBe(`data:image/png;base64,${PNG}`);
-    expect(document.querySelector(".rich-atom-note")!.getAttribute("aria-label")).toBe(`${t("rich.atom.note")}: Vedi sopra.`);
+    expect(document.querySelector(".rich-atom-note")!.getAttribute("aria-label")).toBe(`${t("rich.atom.footnote", { n: "1" })}: Vedi sopra.`);
+  });
+
+  it("le note si numerano nell'ordine del documento: 1, 2 a piè di pagina, i, ii in chiusura", () => {
+    const e = engine([
+      para([
+        { t: "text", x: "uno " },
+        { t: "atom", k: "kept-foot", kind: "note", note: "Tenuta.\nSu due righe." },
+        { t: "text", x: " due " },
+        { t: "atom", k: "kept-end", kind: "note", note: "In chiusura.", end: true },
+        { t: "text", x: " tre" },
+      ]),
+    ]);
+    e.select(at(e, "tre") + 3);
+    expect(e.apply(insertNote("Nuova in fondo.", true))).toBe(true);
+    // Una nota scritta prima di quella tenuta prende l'1 e la sposta al 2.
+    e.select(at(e, "uno"));
+    expect(e.apply(insertNote("Nuova.", false))).toBe(true);
+    const calls = [...document.querySelectorAll<HTMLElement>(".rich-atom-note")];
+    expect(calls.map((call) => call.dataset.number)).toEqual(["1", "2", "i", "ii"]);
+    expect(calls[1]!.getAttribute("aria-label")).toBe(`${t("rich.atom.footnote", { n: "2" })}: Tenuta.\nSu due righe.`);
+    expect(calls[2]!.title).toBe(`${t("rich.atom.endnote", { n: "i" })}: In chiusura.`);
+    // Il numero non entra nella proiezione: la nota tenuta torna com'era.
+    const written = writeBlock(parseProjection(e.getDoc()).blocks[0]!);
+    expect(written).not.toContain("data-number");
+    expect(written).toContain(`{"t":"atom","k":"kept-end","kind":"note","note":"In chiusura.","end":true}`);
+  });
+
+  it("le cifre romane delle note di chiusura", () => {
+    expect([1, 2, 3, 4, 9, 14, 40, 90, 400, 1994].map(roman)).toEqual(["i", "ii", "iii", "iv", "ix", "xiv", "xl", "xc", "cd", "mcmxciv"]);
   });
 
   it("una nota vuota o su più righe non entra", () => {
@@ -295,14 +332,31 @@ describe("le immagini e le note nuove", () => {
   it("la proiezione rifiuta un oggetto né tenuto né nuovo", () => {
     const doc = (atom: unknown) => JSON.stringify({ format: "fub-rich", version: 1, blocks: [para([atom])] });
     expect(() => parseProjection(doc({ t: "atom", kind: "image", data: PNG, w: 1, h: 1 }))).not.toThrow();
+    // Una nota tenuta porta il suo testo e la sua specie da leggere.
+    expect(() => parseProjection(doc({ t: "atom", k: "x", kind: "note", note: "tenuta", end: true }))).not.toThrow();
     for (const bad of [
       { t: "atom", kind: "field", data: PNG },
       { t: "atom", kind: "image" },
-      { t: "atom", k: "x", kind: "note", note: "e anche tenuta" },
+      { t: "atom", k: "x", kind: "image", note: "una nota tenuta su un'immagine" },
+      { t: "atom", k: "x", kind: "field", end: true },
+      { t: "atom", k: "x", kind: "note", note: "n", data: PNG },
+      { t: "atom", k: "x", kind: "field", data: PNG },
       { t: "atom", kind: "note", note: "n", end: "sì" },
     ]) {
       expect(() => parseProjection(doc(bad)), JSON.stringify(bad)).toThrow();
     }
+  });
+
+  it("un'immagine tenuta porta i suoi byte da vedere: si disegna, e si riscrive com'era", () => {
+    const kept = { t: "atom", k: "I", kind: "image", label: "Un pino", w: 72, h: 36, data: PNG } as const;
+    const e = engine([para([{ t: "text", x: "qui" }, kept])]);
+    expect(atoms(e)).toEqual([kept]);
+    const img = document.querySelector<HTMLImageElement>(".rich-atom-image img")!;
+    expect(img.getAttribute("src")).toBe(`data:image/png;base64,${PNG}`);
+    // Si vede: non è più la casella di un segnaposto, e il suggerimento non
+    // dice più che l'oggetto resta senza disegno.
+    expect(document.querySelector(".rich-atom-image")!.classList.contains("rich-atom-drawn")).toBe(true);
+    expect(document.querySelector(".rich-atom-image")!.getAttribute("title")).not.toContain(t("rich.atom.kept"));
   });
 
   it("incollate restano, e un oggetto senza k che non è nuovo cade", () => {
@@ -320,16 +374,16 @@ describe("le immagini e le note nuove", () => {
     expect(kinds).toEqual(["image", "note"]);
   });
 
-  it("la striscia sceglie un'immagine e la riduce alla colonna; scrive una nota dal modulo", async () => {
+  it("la barra sceglie un'immagine e la riduce alla colonna; scrive una nota dal modulo", async () => {
     const bytes = Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0));
     vi.stubGlobal("createImageBitmap", async () => ({ width: 1248, height: 312, close() {} }));
     try {
       const e = engine([para([{ t: "text", x: "qui" }])]);
       e.select(at(e, "qui") + 3);
       let answer: Blob | "unreadable" | null = new Blob([bytes], { type: "image/png" });
-      const strip = mountStrip(e, () => null, { pickImage: async () => answer });
-      document.body.append(strip.element);
-      const press = (key: Parameters<typeof t>[0]) => strip.element.querySelector<HTMLButtonElement>(`[aria-label="${t(key)}"]`)!.click();
+      const ribbon = mountRichRibbon(e, () => null, { pickImage: async () => answer });
+      document.body.append(ribbon.element);
+      const press = (key: Parameters<typeof t>[0]) => ribbon.element.querySelector<HTMLButtonElement>(`[aria-label="${t(key)}"]`)!.click();
       press("rich.image");
       await vi.waitFor(() => expect(atoms(e)).toHaveLength(1));
       expect(atoms(e)[0]).toEqual({ t: "atom", kind: "image", w: 468, h: 117, data: PNG });
@@ -345,10 +399,10 @@ describe("le immagini e le note nuove", () => {
       field.form!.requestSubmit();
       expect(atoms(e)[1]).toEqual({ t: "atom", kind: "note", note: "Di chiusura.", end: true });
       expect(document.querySelector("form")).toBeNull();
-      strip.destroy();
+      ribbon.destroy();
       // Senza chi sceglie, niente pulsante dell'immagine.
-      const bare = mountStrip(e, () => null);
-      expect(bare.element.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.image")}"]`)!.hidden).toBe(true);
+      const bare = mountRichRibbon(e, () => null);
+      expect(bare.element.querySelector<HTMLElement>('[data-command="rich.image"]')!.hidden).toBe(true);
       bare.destroy();
     } finally {
       vi.unstubAllGlobals();

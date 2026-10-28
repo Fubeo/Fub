@@ -13,6 +13,7 @@
 import { DURATION, animate, exitGhost } from "../moto";
 import { focusableElements, identifier } from "../ui/a11y";
 import { openLifetime, type Lifetime, type Teardown } from "../ui/lifetime";
+import { dismissTooltip } from "../ui/tooltip";
 import { dismissChildren, isTopLayer, layerHolds, openLayer } from "./layers";
 import { adopt } from "./owned";
 
@@ -309,6 +310,8 @@ export function openPopover(options: PopoverOptions): PopoverHandle {
   if (button) {
     button.setAttribute("aria-expanded", "true");
     button.setAttribute("aria-controls", surface.id);
+    // La didascalia del bottone starebbe sopra il riquadro che ha aperto.
+    dismissTooltip(button);
   }
 
   if (options.dismissOnEscape !== false) {

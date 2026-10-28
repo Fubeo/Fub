@@ -6,7 +6,7 @@
 > passo e si riparte da lì, che cosa sono i segni e quanto durano, e come la si
 > usa da tastiera e con un lettore di schermo.
 
-Dal [livello Standard](drawing.md#il-livello-standard) **«Cronologia»**,
+Nello spazio [Completo](drawing.md#completo-e-semplice) **«Cronologia»**,
 nella barra dopo «Oggetti», apre accanto al foglio, sotto gli altri pannelli
 aperti, i passi del disegno: un clic su uno qualsiasi riporta il disegno lì,
 in un colpo. La cronologia è la stessa di annulla e ripeti, vista tutta
@@ -89,7 +89,7 @@ e nient'altro.
 
 ## Quando se ne va
 
-Tornati all'Essenziale, o tolta la parte nel
-[Personalizzato](drawing-custom.md), il pannello si chiude e il pulsante
+Passati al Semplice, o tolta la
+[parte](drawing-custom.md#che-cosa-porta-una-parte), il pannello si chiude e il pulsante
 sparisce. La cronologia resta, coi suoi segni: annulla e ripeti continuano, e
 riaperta la si ritrova com'era.

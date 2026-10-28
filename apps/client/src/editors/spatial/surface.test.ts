@@ -226,7 +226,7 @@ describe("un documento che non si modifica subito", () => {
   it("un SVG estraneo è l'immagine del documento intero, e «Modifica» lo adotta", () => {
     const { surface, changes } = mount(FOREIGN);
     expect(shown()).toEqual({
-      notice: "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è.",
+      notice: "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è. «Rendi modificabile…» riscrive anche le sue parti nel formato di FubDraw, dove si può senza che cambi ciò che si vede.",
       adopt: true,
       draw: false,
       read: true,
@@ -699,6 +699,22 @@ const level = (value: string): SettingEntry => ({
   source: "vault",
 });
 
+/// Una chiave di `fub.draw` delle nuove, di serie finché non si sceglie.
+const drawSetting = (key: "draw.workspace" | "draw.toolbar", value: string | string[] = key === "draw.workspace" ? "full" : []): SettingEntry =>
+  ({
+    spec: {
+      key,
+      label: key,
+      description: "",
+      group: "Disegni",
+      scope: "vault",
+      kind: key === "draw.workspace" ? { kind: "choice", default: "full", options: [{ value: "full", label: "Completo" }, { value: "simple", label: "Semplice" }] } : { kind: "list", default: [] },
+      program_writable: false,
+    },
+    value,
+    source: "default",
+  }) as SettingEntry;
+
 /// Le parti del Personalizzato, col valore `value`.
 const custom = (value: string[]): SettingEntry => ({
   spec: {
@@ -721,7 +737,7 @@ async function fresh(host: FakeHost) {
   vi.resetModules();
   const { mountVectorSurface: mountFresh } = await import("./surface");
   await (await import("../../state/kernel")).startKernelRouter();
-  return (at: HTMLElement, shell: Pick<VectorSurfaceOptions, "images"> = {}, text = SOURCE): EditorSurface => {
+  return (at: HTMLElement, shell: Pick<VectorSurfaceOptions, "images" | "onExport"> = {}, text = SOURCE): EditorSurface => {
     const surface = mountFresh(
       { paneId: `p${mounted.length + 1}`, documentId: "disegni/casa.svg", parent: at },
       { onChange: () => {}, onSelectionChange: () => {}, fonts: NO_FONTS, ...shell },
@@ -732,86 +748,120 @@ async function fresh(host: FakeHost) {
   };
 }
 
-describe("il livello e la griglia", () => {
+describe("lo spazio di lavoro e la griglia", () => {
   const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
   const tools = (at: HTMLElement): string[] =>
-    [...at.querySelectorAll<HTMLElement>(".draw-tool")].filter((control) => control.closest("[hidden]") === null).map((control) => control.dataset.tool!);
+    [...at.querySelectorAll<HTMLElement>(".draw-tool")].filter((control) => control.closest("[hidden]") === null).flatMap((control) => control.dataset.tools!.split(" "));
   const gridShown = (at: HTMLElement): boolean => at.querySelector<HTMLElement>(".draw-grid")!.style.display !== "none";
   const reads = (host: FakeHost): number =>
     host.atGate("queryIndex").filter((call) => (call.args[0] as { kind: string }).kind === "settings").length;
 
-  it("una superficie nuova parte dall'ultimo livello e dall'ultima griglia, senza aspettare la lettura", async () => {
-    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+  it("una superficie nuova parte dall'ultimo spazio e dall'ultima griglia, senza aspettare la lettura", async () => {
+    // L'Essenziale scelto nelle versioni precedenti vale «Semplice».
+    const mountFresh = await fresh(createFakeHost({ settings: [level("essential")] }));
     mountFresh(parent);
-    expect(tools(parent), "prima della lettura").not.toContain("highlighter");
+    expect(tools(parent), "prima della lettura, Completo").toContain("bezier");
     await settle();
+    expect(tools(parent)).not.toContain("bezier");
     expect(tools(parent)).toContain("highlighter");
-    key(parent, { key: "#" });
-    expect(gridShown(parent)).toBe(true);
 
     const other = document.createElement("div");
     document.body.append(other);
     try {
       mountFresh(other);
-      expect(tools(other), "subito").toContain("highlighter");
-      expect(gridShown(other), "subito").toBe(true);
+      expect(tools(other), "subito").not.toContain("bezier");
     } finally {
       other.remove();
     }
+
+    // La griglia, in Completo.
+    const full = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const second = document.createElement("div");
+    const third = document.createElement("div");
+    document.body.append(second, third);
+    try {
+      full(second);
+      await settle();
+      key(second, { key: "#" });
+      expect(gridShown(second)).toBe(true);
+      full(third);
+      expect(gridShown(third), "subito").toBe(true);
+    } finally {
+      second.remove();
+      third.remove();
+    }
   });
 
-  it("segue il livello finché vive, e smette quando si distrugge", async () => {
-    const host = createFakeHost({ settings: [level("essential")] });
+  it("segue lo spazio di lavoro finché vive, e smette quando si distrugge", async () => {
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace", "simple"), drawSetting("draw.toolbar")] });
+    host.module.api.setSetting("draw.workspace", "simple");
     const mountFresh = await fresh(host);
     const surface = mountFresh(parent);
     await settle();
-    expect(tools(parent)).not.toContain("highlighter");
-    // Quando nasce legge il livello e i suggerimenti; poi un cambio del
-    // livello lo rilegge una volta.
+    expect(tools(parent)).not.toContain("bezier");
+    expect(parent.querySelector<HTMLElement>(".draw-rail-full")!.hidden).toBe(false);
+    // Quando nasce legge lo spazio e i suggerimenti; poi un cambio dello
+    // spazio lo rilegge una volta.
     const born = reads(host);
 
-    await host.module.api.setSetting("draw.level", "standard");
+    await host.module.api.setSetting("draw.workspace", "full");
     await settle();
-    expect(tools(parent)).toContain("highlighter");
+    expect(tools(parent)).toContain("bezier");
     expect(reads(host)).toBe(born + 1);
+
+    // «Completo» in fondo alla colonna scrive la scelta.
+    await host.module.api.setSetting("draw.workspace", "simple");
+    await settle();
+    parent.querySelector<HTMLButtonElement>(".draw-rail-full")!.click();
+    await settle();
+    expect(host.atGate("setSetting").map((call) => call.args).pop()).toEqual(["draw.workspace", "full"]);
+    expect(tools(parent)).toContain("bezier");
 
     surface.destroy();
     mounted = [];
-    await host.module.api.setSetting("draw.level", "essential");
+    const before = reads(host);
+    await host.module.api.setSetting("draw.workspace", "simple");
     await settle();
-    expect(reads(host), "una superficie distrutta non rilegge").toBe(born + 1);
+    expect(reads(host), "una superficie distrutta non rilegge").toBe(before);
   });
 
   it("i colori recenti vengono dallo stato di vista, si ricordano scelti, e una superficie nuova parte da lì", async () => {
-    /// I recenti della sezione «Colori del documento», col pannello aperto.
-    const recent = (at: HTMLElement): string[] => {
-      const panel = at.querySelector<HTMLElement>(".draw-properties")!;
-      if (panel.hidden) at.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!.click();
-      return [...panel.querySelectorAll<HTMLElement>('.draw-swatches-group[data-group="recent"] .draw-swatches-chip')].map((chip) => chip.dataset.key!);
+    /// I recenti della sezione «Colori del documento», nella scheda Design
+    /// dell'ispettore montata per leggerli.
+    const recent = (surface: EditorSurface): string[] => {
+      const design = surface.panels!.list().find((tab) => tab.id === "draw.design")!;
+      const sheet = document.createElement("div");
+      const unmount = design.mount(sheet);
+      try {
+        return [...sheet.querySelectorAll<HTMLElement>('.draw-swatches-group[data-group="recent"] .draw-swatches-chip')].map((chip) => chip.dataset.key!);
+      } finally {
+        unmount();
+      }
     };
     const host = createFakeHost({ settings: [level("standard")] });
     await host.module.api.setViewState("draw.colors", { colors: ["#cc79a7"] });
     const mountFresh = await fresh(host);
-    mountFresh(parent);
+    const surface = mountFresh(parent);
     await settle();
-    expect(recent(parent)).toEqual(["#cc79a7"]);
-    parent.querySelector<HTMLButtonElement>('[role="toolbar"] .draw-color[aria-label="Vermiglio"]')!.click();
-    expect(recent(parent)).toEqual(["#d55e00", "#000000", "#cc79a7"]);
+    expect(recent(surface)).toEqual(["#cc79a7"]);
+    parent.querySelector<HTMLButtonElement>(".draw-toolbar .kit-color-well-button")!.click();
+    document.querySelector<HTMLButtonElement>('.kit-color-popover .kit-color-swatch[aria-label="Vermiglio"]')!.click();
+    parent.querySelector<HTMLButtonElement>(".draw-toolbar .kit-color-well-button")!.click();
+    expect(recent(surface)).toEqual(["#d55e00", "#000000", "#cc79a7"]);
     await settle();
     expect(await host.module.api.viewState("draw.colors")).toEqual({ colors: ["#d55e00", "#000000", "#cc79a7"] });
 
     const other = document.createElement("div");
     document.body.append(other);
     try {
-      mountFresh(other);
-      expect(recent(other), "subito").toEqual(["#d55e00", "#000000", "#cc79a7"]);
+      expect(recent(mountFresh(other)), "subito").toEqual(["#d55e00", "#000000", "#cc79a7"]);
     } finally {
       other.remove();
     }
   });
 
-  it("il Personalizzato ha le parti scelte, anche su una superficie nuova, e ne segue i cambi", async () => {
-    const host = createFakeHost({ settings: [level("custom"), custom(["rect", "text"])] });
+  it("la colonna scelta vale, anche su una superficie nuova; non scelta, la danno le parti del Personalizzato", async () => {
+    const host = createFakeHost({ settings: [level("custom"), custom(["rect", "text", "layers"]), drawSetting("draw.toolbar")] });
     const mountFresh = await fresh(host);
     mountFresh(parent);
     await settle();
@@ -819,15 +869,177 @@ describe("il livello e la griglia", () => {
 
     await host.module.api.setSetting("draw.custom", ["ellipse", "highlighter"]);
     await settle();
-    expect(tools(parent)).toEqual(["select", "highlighter", "ellipse"]);
+    expect(tools(parent)).toEqual(["select", "ellipse", "highlighter"]);
+
+    // La colonna scelta vince sulle parti.
+    await host.module.api.setSetting("draw.toolbar", ["pen", "select", "text"]);
+    await settle();
+    expect(tools(parent)).toEqual(["pen", "select", "text"]);
 
     const other = document.createElement("div");
     document.body.append(other);
     try {
       mountFresh(other);
-      expect(tools(other), "subito").toEqual(["select", "highlighter", "ellipse"]);
+      expect(tools(other), "subito").toEqual(["pen", "select", "text"]);
     } finally {
       other.remove();
+    }
+  });
+});
+
+describe("le schede dell'ispettore (C1)", () => {
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+  const ids = (surface: EditorSurface): string[] => surface.panels!.list().map((tab) => tab.id);
+  const tab = (surface: EditorSurface, id: string) => surface.panels!.list().find((each) => each.id === id)!;
+
+  it("il disegno porta Design, Livelli, Risorse, Cronologia e Accessibilità, non il dock, e lascia fuori i titoli, le note e le proprietà", async () => {
+    const host = createFakeHost({ settings: [level("expert")] });
+    const surface = (await fresh(host))(parent);
+    await settle();
+    expect(ids(surface)).toEqual(["draw.design", "draw.layers", "draw.resources", "draw.history", "draw.accessibility"]);
+    expect(surface.panels!.list().map((each) => each.title())).toEqual(["Design", "Livelli", "Risorse", "Cronologia del disegno", "Accessibilità"]);
+    expect(surface.panels!.covers).toEqual(["outline", "footnotes", "properties"]);
+    expect(parent.querySelector(".draw-dock"), "il dock non sta nel foglio").toBeNull();
+    expect(parent.querySelector(".draw-properties")).toBeNull();
+  });
+
+  it("le schede seguono lo spazio, e il Semplice (dall'Essenziale) non ne porta che quelle che ha", async () => {
+    const host = createFakeHost({ settings: [level("expert")] });
+    const surface = (await fresh(host))(parent);
+    await settle();
+    let told = 0;
+    surface.panels!.subscribe(() => (told += 1));
+    await host.module.api.setSetting("draw.level", "essential");
+    await settle();
+    expect(told).toBeGreaterThan(0);
+    expect(ids(surface)).toEqual(["draw.design", "draw.layers"]);
+  });
+
+  it("montata, una scheda mostra i suoi pannelli; smontata, li chiude e li riprende", async () => {
+    const host = createFakeHost({ settings: [level("expert")] });
+    const surface = (await fresh(host))(parent);
+    await settle();
+    const sheet = document.createElement("div");
+    document.body.append(sheet);
+    try {
+      const unmount = tab(surface, "draw.design").mount(sheet);
+      const properties = sheet.querySelector<HTMLElement>(".draw-sheet > .draw-properties")!;
+      expect(properties.hidden).toBe(false);
+      expect(sheet.querySelector(".draw-sheet > .draw-boards")!.hasAttribute("hidden")).toBe(false);
+      expect(document.activeElement, "montare non prende il fuoco").not.toBe(properties);
+      unmount();
+      expect(sheet.childElementCount).toBe(0);
+      expect(properties.isConnected).toBe(false);
+      expect(properties.hidden).toBe(true);
+    } finally {
+      sheet.remove();
+    }
+  });
+
+  it("Risorse ha una ricerca sola, per le forme e i simboli; smontata, i simboli riprendono la loro", async () => {
+    const host = createFakeHost({ settings: [level("expert")] });
+    const surface = (await fresh(host))(parent);
+    await settle();
+    const sheet = document.createElement("div");
+    document.body.append(sheet);
+    try {
+      const unmount = tab(surface, "draw.resources").mount(sheet);
+      const search = sheet.querySelector<HTMLInputElement>(".draw-library-search")!;
+      const own = sheet.querySelector<HTMLInputElement>(".draw-symbols-search")!;
+      expect(search.placeholder).toBe("Cerca fra forme e simboli");
+      expect(own.closest<HTMLElement>(".draw-symbols-find")!.hidden).toBe(true);
+      search.value = "freccia";
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+      expect(own.value, "i simboli cercano la stessa cosa").toBe("freccia");
+      unmount();
+      expect(own.closest<HTMLElement>(".draw-symbols-find")!.hidden).toBe(false);
+      expect(search.placeholder).toBe("Cerca una forma");
+    } finally {
+      sheet.remove();
+    }
+  });
+
+  it("la banda di stato dice zoom, oggetti, misure della selezione e puntatore, al posto delle parole", async () => {
+    const host = createFakeHost({ settings: [level("standard")] });
+    const surface = (await fresh(host))(parent);
+    await settle();
+    const status = surface.status!;
+    expect(status.counts, "un disegno non conta parole").toBe(true);
+    let told = 0;
+    const stop = status.subscribe(() => told++);
+    try {
+      const ids = (): string[] => status.items().map((item) => item.id);
+      const text = (id: string): string | undefined => status.items().find((item) => item.id === id)?.text;
+      expect(ids()).toEqual(["zoom", "objects"]);
+      expect(text("objects")).toBe("1 oggetto");
+      key(parent, { key: "a", ctrlKey: true });
+      expect(told).toBeGreaterThan(0);
+      expect(ids()).toEqual(["zoom", "size", "objects"]);
+      expect(text("objects")).toBe("1 di 1 scelti");
+      expect(text("size"), "il contorno è compreso").toBe("22 × 22");
+      const sheet = parent.querySelector<HTMLElement>(".draw-surface")!;
+      sheet.dispatchEvent(new PointerEvent("pointermove", { ...MOUSE, clientX: 5, clientY: 5, bubbles: true }));
+      expect(text("pointer")).toMatch(/^X -?\d+(,\d)?  Y -?\d+(,\d)?$/);
+      sheet.dispatchEvent(new PointerEvent("pointerleave", { ...MOUSE }));
+      expect(ids()).not.toContain("pointer");
+      surface.setMode("read");
+      expect(status.items(), "in Lettura il foglio non c'è").toEqual([]);
+    } finally {
+      stop();
+    }
+  });
+
+  it("«Proprietà» e «Cronologia» nella barra chiedono la loro scheda, e la chiedono sempre", async () => {
+    const host = createFakeHost({ settings: [level("expert")] });
+    const surface = (await fresh(host))(parent);
+    await settle();
+    const asked: string[] = [];
+    surface.panels!.onShow((id) => asked.push(id));
+    const sheet = document.createElement("div");
+    document.body.append(sheet);
+    try {
+      const unmount = tab(surface, "draw.design").mount(sheet);
+      const properties = parent.querySelector<HTMLButtonElement>('button[aria-label="Proprietà"]')!;
+      properties.click();
+      properties.click();
+      parent.querySelector<HTMLButtonElement>('button[aria-label="Cronologia"]')!.click();
+      expect(asked).toEqual(["draw.design", "draw.design", "draw.history"]);
+      expect(sheet.querySelector<HTMLElement>(".draw-properties")!.hidden, "un secondo clic non la chiude").toBe(false);
+      unmount();
+    } finally {
+      sheet.remove();
+    }
+  });
+
+  it("in Lettura non ci sono schede, e tornano nel Disegno", async () => {
+    const host = createFakeHost({ settings: [level("expert")] });
+    const surface = (await fresh(host))(parent);
+    await settle();
+    let told = 0;
+    surface.panels!.subscribe(() => (told += 1));
+    surface.setMode!("read");
+    expect(ids(surface)).toEqual([]);
+    expect(told).toBe(1);
+    surface.setMode!("draw");
+    expect(ids(surface)).toHaveLength(5);
+  });
+
+  it("una superficie distrutta con una scheda montata chiude i pannelli e non ne offre più", async () => {
+    const host = createFakeHost({ settings: [level("expert")] });
+    const surface = (await fresh(host))(parent);
+    await settle();
+    const sheet = document.createElement("div");
+    document.body.append(sheet);
+    try {
+      const design = tab(surface, "draw.design");
+      const unmount = design.mount(sheet);
+      surface.destroy();
+      mounted.pop();
+      expect(sheet.querySelector(".draw-properties")).toBeNull();
+      expect(() => unmount()).not.toThrow();
+      expect(surface.panels!.list()).toEqual([]);
+    } finally {
+      sheet.remove();
     }
   });
 });
@@ -845,13 +1057,14 @@ describe("«Rendi modificabile…» nell'avviso di un SVG estraneo", () => {
     for (const open of document.querySelectorAll(".shell-dialog")) open.remove();
   });
 
-  it("c'è dall'Esperto, accanto a «Modifica», e la frase dice che cosa fa", async () => {
-    const host = createFakeHost({ settings: [level("standard")] });
+  it("c'è in Completo, accanto a «Modifica», e la frase dice che cosa fa", async () => {
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace", "simple")] });
+    host.module.api.setSetting("draw.workspace", "simple");
     (await fresh(host))(parent, {}, STYLED);
     await settle();
     expect(shown()).toMatchObject({ notice: "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è.", adopt: true });
     expect(editable().hidden).toBe(true);
-    await host.module.api.setSetting("draw.level", "expert");
+    await host.module.api.setSetting("draw.workspace", "full");
     await settle();
     expect(editable().hidden).toBe(false);
     expect(editable().textContent).toBe("Rendi modificabile…");
@@ -1097,13 +1310,14 @@ describe("la finestra «Esporta»", () => {
     for (const modal of document.querySelectorAll(".modale")) modal.remove();
   });
 
-  it("c'è dallo Standard, su un disegno che si legge", async () => {
-    const host = createFakeHost({ settings: [level("essential")] });
+  it("c'è nei due spazi, su un disegno che si legge", async () => {
+    const host = createFakeHost({ settings: [drawSetting("draw.workspace", "simple")] });
+    host.module.api.setSetting("draw.workspace", "simple");
     const mountFresh = await fresh(host);
     const surface = mountFresh(parent);
     await settle();
-    expect(surface.exportWindow!.available()).toBe(false);
-    await host.module.api.setSetting("draw.level", "standard");
+    expect(surface.exportWindow!.available()).toBe(true);
+    await host.module.api.setSetting("draw.workspace", "full");
     await settle();
     expect(surface.exportWindow!.available()).toBe(true);
     surface.buffer!.setDoc("<svg");
@@ -1190,6 +1404,36 @@ describe("la finestra «Esporta»", () => {
     });
   });
 
+  it("«Esporta la selezione» dell'ispettore apre la finestra già sulla selezione, per quella volta", async () => {
+    let asked = 0;
+    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const surface = mountFresh(parent, { onExport: () => (asked += 1) });
+    await settle();
+    key(parent, { key: "a", ctrlKey: true });
+    const selection = (): HTMLInputElement =>
+      [...dialog()!.querySelectorAll<HTMLLabelElement>("label.draw-export-option")].find((each) => each.textContent!.startsWith("La selezione"))!.querySelector("input")!;
+    const sheet = document.createElement("div");
+    document.body.append(sheet);
+    try {
+      const unmount = surface.panels!.list().find((each) => each.id === "draw.design")!.mount(sheet);
+      sheet.querySelector<HTMLButtonElement>(".draw-properties-export")!.click();
+      expect(asked, "la shell apre la sua finestra").toBe(1);
+      const answer = surface.exportWindow!.open();
+      await settle();
+      expect(selection().checked).toBe(true);
+      cancel();
+      expect(await answer).toBeNull();
+      const again = surface.exportWindow!.open();
+      await settle();
+      expect(selection().checked, "la volta dopo vale la scelta di sempre").toBe(false);
+      cancel();
+      await again;
+      unmount();
+    } finally {
+      sheet.remove();
+    }
+  });
+
   it("in Lettura la selezione non si vede, e non si offre", async () => {
     const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
     const surface = mountFresh(parent);
@@ -1239,5 +1483,30 @@ describe("i caratteri del vault che mancano", () => {
     surface.setMode!("read");
     await settle();
     expect(said()).toEqual([]);
+  });
+});
+
+describe("F6 fra le zone del disegno (H3)", () => {
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("va dalla tela alla colonna e alla barra in alto, poi lascia il giro alla shell; Maiusc+F6 torna indietro", async () => {
+    const host = createFakeHost({ settings: [level("expert")] });
+    const surface = (await fresh(host))(parent);
+    await settle();
+    const canvas = parent.querySelector<HTMLElement>(".draw-surface")!;
+    const rail = parent.querySelector<HTMLElement>(".draw-rail")!;
+    const header = parent.querySelector<HTMLElement>(".draw-header")!;
+    expect(surface.zone!(1)).toBe(true);
+    expect(document.activeElement).toBe(canvas);
+    expect(surface.zone!(1)).toBe(true);
+    expect(rail.contains(document.activeElement)).toBe(true);
+    expect(surface.zone!(1)).toBe(true);
+    expect(header.contains(document.activeElement)).toBe(true);
+    expect(surface.zone!(1), "dopo la barra il giro è della shell").toBe(false);
+    expect(surface.zone!(-1)).toBe(true);
+    expect(rail.contains(document.activeElement)).toBe(true);
+    (document.activeElement as HTMLElement).blur();
+    expect(surface.zone!(-1), "da fuori, all'indietro, si entra dall'ultima").toBe(true);
+    expect(header.contains(document.activeElement)).toBe(true);
   });
 });

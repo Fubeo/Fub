@@ -6,7 +6,9 @@ mod common;
 
 use common::{at, doc, findings, load};
 use fub_scene::ink::{INK_MAX_BYTES, INK_MAX_SAMPLES, MAX_SAFE_INTEGER};
-use fub_scene::{Brush, BrushError, Code, Ink, InkError, Role, Sample, Scale, Severity};
+use fub_scene::{
+    Brush, BrushError, Code, Ink, InkBrush, InkError, Nib1Brush, Role, Sample, Scale, Severity,
+};
 
 /// Un generatore pseudo-casuale con seme fisso: xorshift64*.
 struct Rng(u64);
@@ -442,6 +444,53 @@ fn every_malformed_brush_has_its_error() {
     }
 }
 
+#[test]
+fn nib1_reads_like_typescript_with_its_defaults_and_unknown_keys() {
+    let brush = Nib1Brush::parse("nib1 angle=20 future=x size=6").unwrap();
+    assert_eq!(
+        brush,
+        Nib1Brush {
+            angle: 20.0,
+            size: 6.0,
+            unknown: vec![("future".to_owned(), "x".to_owned())],
+            ..Nib1Brush::default()
+        }
+    );
+    let canonical = "nib1 size=12 tip=1 angle=35 fixation=0.9 thinning=0.3 tilt=1 smoothing=0.6 streamline=0.5 sim=0 pen=calligraphy";
+    let InkBrush::Nib1(read) = InkBrush::parse(canonical).unwrap() else {
+        panic!("nib1");
+    };
+    assert_eq!(read.unknown, [("pen".to_owned(), "calligraphy".to_owned())]);
+    assert!(read.tilt && !read.sim);
+    // Chi chiede soltanto pf1 lo rifiuta, e viceversa.
+    assert_eq!(Brush::parse(canonical), Err(BrushError::Algorithm));
+    assert_eq!(Nib1Brush::parse("pf1 size=4"), Err(BrushError::Algorithm));
+    // `pen` è una chiave sconosciuta anche per pf1.
+    let pf1 = InkBrush::parse("pf1 size=2 pen=ballpoint").unwrap();
+    assert_eq!(pf1.unknown(), [("pen".to_owned(), "ballpoint".to_owned())]);
+}
+
+#[test]
+fn every_malformed_nib1_has_the_errors_of_typescript() {
+    for (text, error) in [
+        ("nib1 size=0", BrushError::Range("size")),
+        ("nib1 angle=181", BrushError::Range("angle")),
+        ("nib1 angle=-180.5", BrushError::Range("angle")),
+        ("nib1 tilt=2", BrushError::Range("tilt")),
+        ("nib1 tip=-1", BrushError::Range("tip")),
+        ("nib1 thinning=-0.1", BrushError::Range("thinning")),
+        ("nib1 fixation=1.5", BrushError::Range("fixation")),
+        ("nib1 tip=x", BrushError::Number("tip")),
+        ("nib1 tip=1 tip=2", BrushError::Repeated("tip")),
+        ("nib1 tip", BrushError::Entry),
+        ("nib2 size=1", BrushError::Algorithm),
+        ("NIB1", BrushError::Algorithm),
+    ] {
+        assert_eq!(InkBrush::parse(text), Err(error), "{text:?}");
+    }
+    assert!(InkBrush::parse("nib1 angle=-180 tip=0").is_ok());
+}
+
 /// Un tratto con inchiostro e pennello dati.
 fn stroke_doc(attributes: &str) -> String {
     doc(&format!(
@@ -450,6 +499,22 @@ fn stroke_doc(attributes: &str) -> String {
 }
 
 const BRUSH: &str = r#"fub:brush="pf1 size=4 sim=0""#;
+
+#[test]
+fn a_calligraphy_stroke_is_redrawable() {
+    let scene = load(&stroke_doc(
+        r#"fub:brush="nib1 size=12 sim=0 pen=calligraphy" fub:ink="1 s100 cxypt 12050,3020,128,0 25,-3,2,8""#,
+    ));
+    assert!(
+        at(&scene, &[0])
+            .unwrap()
+            .stroke
+            .as_ref()
+            .unwrap()
+            .redrawable
+    );
+    assert!(findings(&scene).is_empty());
+}
 
 #[test]
 fn a_valid_stroke_is_redrawable() {
@@ -486,6 +551,10 @@ fn an_invalid_ink_or_brush_is_s004_and_keeps_the_stroke_editable() {
         (
             r#"fub:ink="2 s10 cxy 0,0" fub:brush="pf2""#.to_owned(),
             vec!["fub:ink version", "fub:brush algorithm"],
+        ),
+        (
+            r#"fub:ink="1 s10 cxy 0,0" fub:brush="nib1 angle=200""#.to_owned(),
+            vec!["fub:brush range angle"],
         ),
     ] {
         let source = stroke_doc(&attributes);

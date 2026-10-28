@@ -233,6 +233,23 @@ describe("il livello del disegno", () => {
   });
 });
 
+describe("le mie penne", () => {
+  it("si leggono da draw.pens, si salvano in fila, e una chiave illeggibile non ne dà", async () => {
+    const host = createFakeHost();
+    const { currentSavedPens, readSavedPens, saveSavedPens } = await boot(host);
+    expect(await readSavedPens(), "niente di ricordato").toEqual([]);
+    const pen = { name: "Blu largo", pen: "brush", size: 12.5, color: "#0072b2", opacity: 0.8 } as const;
+    saveSavedPens([pen]);
+    expect(currentSavedPens()).toEqual([pen]);
+    expect(await readSavedPens()).toEqual([pen]);
+    expect(await host.module.api.viewState("draw.pens")).toEqual({ pens: [pen] });
+    for (const broken of ["penne", { pens: "x" }, { pens: [{ name: "", pen: "brush", size: 1, color: "#000000", opacity: 1 }] }, { pens: [{ ...pen, pen: "piuma" }] }, { pens: [{ ...pen, size: 500 }] }]) {
+      await host.module.api.setViewState("draw.pens", broken);
+      expect(await readSavedPens(), JSON.stringify(broken)).toEqual([]);
+    }
+  });
+});
+
 describe("la griglia ricordata", () => {
   it("si legge dallo stato di vista, e ciò che non è una griglia vale quella di serie", async () => {
     const host = createFakeHost();
@@ -302,6 +319,17 @@ describe("la griglia ricordata", () => {
     const grid = await readGrid();
     expect(grid.shown).toBe(true);
     expect("steady" in grid).toBe(false);
+  });
+
+  it("la gomma e la penna ricordate tornano; quelle che non si leggono valgono quelle di serie", async () => {
+    const host = createFakeHost();
+    const { readGrid } = await boot(host);
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, eraser: "precise", penId: "fountain", barrel: "lasso", output: "path", fidelity: "low" });
+    expect(await readGrid()).toMatchObject({ eraser: "precise", penId: "fountain", barrel: "lasso", output: "path", fidelity: "low" });
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, eraser: "half", penId: "quill", barrel: "jump", output: "svg", fidelity: 3 });
+    const grid = await readGrid();
+    expect(grid.shown).toBe(true);
+    expect("eraser" in grid || "penId" in grid || "barrel" in grid || "output" in grid || "fidelity" in grid).toBe(false);
   });
 
   it("se lo stato di vista non si legge, resta l'ultima griglia", async () => {
@@ -651,5 +679,95 @@ describe("i suggerimenti ricordati", () => {
     expect(bare.recentNotices().map((notice) => notice.text)).toEqual([expect.stringMatching(/^Non riesco a cambiare i suggerimenti dei disegni: .+/)]);
     expect(back[back.length - 1], "la casella torna accesa").toEqual({ on: true, seen: [] });
     expect(bare.currentSuggested()).toEqual({ on: true, seen: [] });
+  });
+});
+
+/// Una riga di `fub.draw` con la chiave `key`: scelta (`vault`) o di serie.
+function drawEntry(key: string, value: unknown, chosen = true): SettingEntry {
+  const list = Array.isArray(value);
+  return {
+    spec: {
+      key,
+      label: key,
+      description: "",
+      group: "Disegni",
+      scope: "vault",
+      kind: list
+        ? { kind: "list", default: [] }
+        : { kind: "choice", default: key === "draw.workspace" ? "full" : "essential", options: [{ value: String(value), label: String(value) }] },
+      program_writable: false,
+    },
+    value,
+    source: chosen ? "vault" : "default",
+  } as SettingEntry;
+}
+
+describe("lo spazio di lavoro del disegno", () => {
+  it("una chiave nuova scelta vale; non scelta, la deduce la vecchia, che resta", async () => {
+    const { workspaceOf } = await boot(createFakeHost({ settings: [] }));
+    // Niente scelto: Completo, colonna di serie, anche col livello di serie.
+    expect(workspaceOf([])).toEqual({ workspace: "full", toolbar: [] });
+    expect(workspaceOf([drawEntry("draw.level", "essential", false)])).toEqual({ workspace: "full", toolbar: [] });
+    // Il livello scelto: l'Essenziale è Semplice, gli altri Completo.
+    expect(workspaceOf([drawEntry("draw.level", "essential")])).toEqual({ workspace: "simple", toolbar: [] });
+    expect(workspaceOf([drawEntry("draw.level", "expert")])).toEqual({ workspace: "full", toolbar: [] });
+    // Il Personalizzato dà la colonna coi suoi strumenti; le parti che non
+    // sono strumenti non contano.
+    expect(workspaceOf([drawEntry("draw.level", "custom"), drawEntry("draw.custom", ["pen", "layers", "rect", "pen", 7])])).toEqual({
+      workspace: "full",
+      toolbar: ["pen", "rect"],
+    });
+    // Le chiavi nuove scelte vincono sulle vecchie.
+    expect(
+      workspaceOf([
+        drawEntry("draw.level", "essential"),
+        drawEntry("draw.custom", ["pen"]),
+        drawEntry("draw.workspace", "full"),
+        drawEntry("draw.toolbar", ["select", "text", "domani"]),
+      ]),
+    ).toEqual({ workspace: "full", toolbar: ["select", "text"] });
+    // Uno spazio sconosciuto ricade sul vecchio livello.
+    expect(workspaceOf([drawEntry("draw.level", "essential"), drawEntry("draw.workspace", "tablet")]).workspace).toBe("simple");
+  });
+
+  it("segue le quattro chiavi, e scrive le scelte dell'editor senza cancellare le vecchie", async () => {
+    const host = createFakeHost({
+      settings: [drawEntry("draw.level", "essential"), drawEntry("draw.custom", ["pen"]), drawEntry("draw.workspace", "full", false), drawEntry("draw.toolbar", [], false), OTHER],
+    });
+    const { currentWorkspace, saveToolbar, saveWorkspace, watchWorkspace } = await boot(host);
+    const applied: unknown[] = [];
+    const stop = watchWorkspace((choice) => applied.push(choice));
+    await settle();
+    expect(applied).toEqual([{ workspace: "simple", toolbar: [] }]);
+
+    await host.module.api.setSetting("editor.line_numbers", false);
+    await settle();
+    expect(settingsReads(host), "un'altra impostazione non fa rileggere").toHaveLength(1);
+
+    saveWorkspace("full");
+    expect(currentWorkspace().workspace, "subito, per chi apre un altro disegno").toBe("full");
+    await settle();
+    saveToolbar(["select", "pen"]);
+    await settle();
+    expect(host.atGate("setSetting").map((call) => call.args).slice(1)).toEqual([
+      ["draw.workspace", "full"],
+      ["draw.toolbar", ["select", "pen"]],
+    ]);
+    expect(applied[applied.length - 1]).toEqual({ workspace: "full", toolbar: ["select", "pen"] });
+    expect(host.atGate("resetSetting"), "le vecchie restano").toEqual([]);
+
+    stop();
+    await host.module.api.setSetting("draw.workspace", "simple");
+    await settle();
+    expect(applied[applied.length - 1], "dopo stop").toEqual({ workspace: "full", toolbar: ["select", "pen"] });
+  });
+
+  it("una scrittura che non riesce lo dice", async () => {
+    const host = createFakeHost({ settings: [drawEntry("draw.workspace", "full", false)] });
+    const bare = await boot(host);
+    host.fault("setSetting", "disco pieno");
+    bare.saveWorkspace("simple");
+    await settle();
+    expect(bare.recentNotices().map((notice) => notice.text)).toEqual([expect.stringMatching(/disco pieno/)]);
   });
 });

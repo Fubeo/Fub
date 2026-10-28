@@ -6,7 +6,7 @@
 > usa la riga «Stile» del pannello delle proprietà, che cosa fanno i comandi
 > del suo menu e che cosa succede agli stili negli appunti.
 
-Dal livello Standard un disegno ha i suoi **stili**: aspetti con un nome,
+Nello spazio Completo un disegno ha i suoi **stili**: aspetti con un nome,
 che gli oggetti seguono. Uno **stile di testo** dice il carattere e il colore
 di un testo, «Titolo del capitolo»; uno **stile grafico** dice l'aspetto di
 una forma, «Riquadro di avviso». Cambiare uno stile cambia in un passo gli
@@ -152,13 +152,13 @@ Uno stile non si disegna. L'SVG pulito lo toglie, con le sue sfumature e
 attributi ([Disegni, esportare](drawing-export.md)). Un programma che non
 conosce gli stili vede lo stesso disegno, e li conserva.
 
-## Livelli e parti
+## Spazi e parti
 
-Gli stili sono la parte «Stili del documento» del
-[Personalizzato](drawing-custom.md), dallo Standard; stanno nel pannello
+Gli stili sono la parte «Stili del documento» delle
+[parti dell'editor](drawing-custom.md#che-cosa-porta-una-parte), nello spazio Completo; stanno nel pannello
 delle proprietà, e si vedono con lui. Con loro lo stile di serie del testo
-sta nel menu dello stile di testo; senza, all'Essenziale o nel
-Personalizzato, torna il menu «Stile» che cambia soltanto il corpo e il
+sta nel menu dello stile di testo; senza, nel Semplice o per chi monta l'editor con le sue
+parti, torna il menu «Stile» che cambia soltanto il corpo e il
 peso, e gli stili restano nel disegno: chi li segue si vede col suo aspetto.
 In un documento in sola lettura la riga mostra lo stile, ma il pulsante non
 cambia niente.

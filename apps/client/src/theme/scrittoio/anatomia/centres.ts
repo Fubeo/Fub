@@ -3,6 +3,7 @@ import { REST, S, type PartAnatomy } from "./types";
 
 export const CENTRES: PartAnatomy = {
   part: "centres",
+  layer: "cornice",
   components: [
     // Il toast: il solo che interrompe. Le sue azioni sono parole.
     { name: "toast", states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["toast", "toast-stack", "toast-text", "toast-action", "toast-more", "toast-close"] },

@@ -6,7 +6,7 @@
 > punti nel pannello delle proprietà e sul foglio, e che cosa ne fanno i
 > comandi.
 
-Dal livello Standard il riempimento e il contorno di un oggetto possono
+Nello spazio Completo il riempimento e il contorno di un oggetto possono
 essere una **sfumatura**: lineare, lungo una linea da un capo all'altro, o
 radiale, dal centro al bordo di un cerchio o di un'ellisse. I suoi **punti**
 dicono quale colore, e quanto opaco, sta dove. La sezione «Sfumatura» del
@@ -75,7 +75,7 @@ sceglie anche nell'altra.
   Cielo, Tramonto, Prato e Crepuscolo.
 - **Angolo**, in gradi fra -180 e 180: gira la linea attorno al suo mezzo,
   o una radiale attorno al centro.
-- **Oltre i capi**, all'Esperto: come continua la sfumatura prima del primo
+- **Oltre i capi**, nel Completo: come continua la sfumatura prima del primo
   punto e dopo l'ultimo. «Estendi» tiene il colore dei capi, «Rifletti» va
   avanti e indietro, «Ripeti» ricomincia.
 
@@ -149,18 +149,17 @@ Con più sfumature ciò che si dice nomina quale, «Sfumatura 2 di 3».
 - **Separa, il costruttore di forme e le forbici** lasciano agli oggetti che
   nascono la stessa sfumatura, che usano insieme finché uno di loro non la
   cambia.
-- **«Applica trasformazione»**, all'Esperto, riscrive la sfumatura nelle
-  coordinate nuove, e la si vede dov'era ([Disegni, livello
-  Esperto](drawing-expert.md#applica-trasformazione)).
+- **«Applica trasformazione»**, nel Completo, riscrive la sfumatura nelle
+  coordinate nuove, e la si vede dov'era ([Disegni, strumenti avanzati](drawing-expert.md#applica-trasformazione)).
 - **In Lettura e nell'export** la sfumatura è quella del file, uguale a
   quella del foglio.
 
-## Livelli e parti
+## Spazi e parti
 
-All'Essenziale le sfumature restano nel disegno e si vedono, ma la sezione e
-lo strumento non ci sono. Nel [Personalizzato](drawing-custom.md) la parte
+Nel Semplice le sfumature restano nel disegno e si vedono, ma la sezione e
+lo strumento non ci sono. Per chi monta l'editor con le sue [parti](drawing-custom.md#che-cosa-porta-una-parte) la parte
 «Sfumatura» porta insieme lo strumento e la sezione, e «Oltre i capi» c'è
-come all'Esperto. Senza la parte chi aveva in mano lo strumento riprende la
+come nel Completo. Senza la parte chi aveva in mano lo strumento riprende la
 Selezione. `?` elenca i tasti della Sfumatura nella sua tabella, dopo quella
 del Contagocce.
 

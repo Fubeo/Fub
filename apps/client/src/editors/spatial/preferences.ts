@@ -1,11 +1,15 @@
 // Il livello e la griglia con cui la superficie apre l'editor del disegno.
 //
-// - **Il livello** è l'impostazione del vault `draw.level`, che dichiara il
-//   bundle `fub.draw`, e le parti del Personalizzato sono `draw.custom`: si
-//   leggono dal canale dati e si seguono con `setting_changed`, così un
-//   cambio nelle Impostazioni vale subito anche nei disegni aperti. Un
-//   livello che l'editor non conosce vale l'Essenziale; senza `draw.custom`
-//   il Personalizzato ha le parti dell'Essenziale.
+// - **Lo spazio di lavoro** è l'impostazione del vault `draw.workspace`
+//   («Completo» o «Semplice»), che dichiara il bundle `fub.draw`, e gli
+//   strumenti della colonna sono `draw.toolbar`: si leggono dal canale dati e
+//   si seguono con `setting_changed`, così un cambio nelle Impostazioni vale
+//   subito anche nei disegni aperti. L'editor le scrive dal menu «Disegno» e
+//   da «Personalizza la barra…». Finché nessuno le ha scelte, valgono il
+//   livello `draw.level` e le parti `draw.custom` delle versioni precedenti:
+//   l'Essenziale è «Semplice», gli altri «Completo», e il Personalizzato dà
+//   alla colonna i suoi strumenti. Quelle due non si scrivono né si
+//   cancellano più: un'app di prima che apre il vault le ritrova.
 // - **La griglia**, con le guide intelligenti, è uno stato della vista, della
 //   macchina e non del vault: l'ultima scelta, con cui si apre ogni disegno
 //   dopo. Non entra né nel file del disegno né in quello delle impostazioni
@@ -33,9 +37,11 @@ import { onEvent } from "../../state/kernel";
 import { notify } from "../../ui/notify";
 import { validCurve } from "../../ink/input/pressure";
 import { exportMemoryOf, type ExportMemory } from "./tools/export-plan";
-import { DEFAULT_GRID, validClosed, validStep, validSteady, validSteps, type Grid } from "./tools/grid";
+import { isPenId, savedPensOf, type SavedPen } from "../../ink/pens";
+import { DEFAULT_GRID, isBarrelAction, isEraseMode, isFidelity, isPenOutput, validClosed, validStep, validSteady, validSteps, type Grid } from "./tools/grid";
 import { RECENT_COLORS } from "./tools/palette";
-import { CUSTOM_DEFAULT, isLevel, type Level } from "./tools/registry";
+import { CUSTOM_DEFAULT, isLevel, isWorkspace, TOOLS, type Level, type ToolId, type Workspace } from "./tools/registry";
+import type { SettingEntry } from "../../host/contract";
 import type { Suggested } from "./tools/suggestions";
 
 /// Il bundle che dichiara il livello.
@@ -46,6 +52,12 @@ export const LEVEL_KEY = "draw.level";
 
 /// L'impostazione delle parti del Personalizzato.
 export const CUSTOM_KEY = "draw.custom";
+
+/// L'impostazione dello spazio di lavoro.
+export const WORKSPACE_KEY = "draw.workspace";
+
+/// L'impostazione degli strumenti della colonna.
+export const TOOLBAR_KEY = "draw.toolbar";
 
 /// La chiave dello stato di vista che ricorda la griglia.
 export const GRID_KEY = "draw.grid";
@@ -59,6 +71,9 @@ export const EXPORT_MEMORIES = 100;
 
 /// La chiave dello stato di vista che ricorda i colori recenti.
 export const COLORS_KEY = "draw.colors";
+
+/// La chiave dello stato di vista che ricorda le penne salvate.
+export const PENS_KEY = "draw.pens";
 
 /// L'impostazione della macchina che accende i suggerimenti brevi.
 export const SUGGESTIONS_KEY = "draw.suggestions";
@@ -99,6 +114,101 @@ let suggesting: Promise<void> = Promise.resolve();
 let suggestedSaves = 0;
 /// Le superfici aperte che seguono i suggerimenti.
 const suggestedWatchers = new Set<(suggested: Suggested) => void>();
+
+/// Lo spazio di lavoro e gli strumenti della colonna, come li dicono le
+/// impostazioni.
+export interface WorkspaceChoice {
+  readonly workspace: Workspace;
+  /// Vuoto: la colonna di serie.
+  readonly toolbar: readonly ToolId[];
+}
+
+let lastWorkspace: WorkspaceChoice = { workspace: "full", toolbar: [] };
+let workspaceReads = 0;
+let workspaceRead = 0;
+
+/// Gli strumenti di `value`, in ordine e una volta sola; ciò che non è uno
+/// strumento non conta.
+function toolbarOf(value: unknown): ToolId[] {
+  if (!Array.isArray(value)) return [];
+  const known = new Set<string>(TOOLS.map((tool) => tool.id));
+  return [...new Set(value.filter((item): item is ToolId => typeof item === "string" && known.has(item)))];
+}
+
+/// Lo spazio e la colonna dalle impostazioni `entries` del bundle. Una
+/// chiave nuova scelta vale; non scelta, la deduce la vecchia: il livello
+/// Essenziale è «Semplice», gli altri «Completo», e il Personalizzato dà la
+/// colonna con i suoi strumenti. Nessuna scelta: «Completo», colonna di serie.
+export function workspaceOf(entries: readonly SettingEntry[]): WorkspaceChoice {
+  const entry = (key: string): SettingEntry | undefined => entries.find((one) => one.spec.key === key);
+  const chosen = (key: string): unknown => {
+    const one = entry(key);
+    return one === undefined || one.source === "default" ? undefined : one.value;
+  };
+  const level = chosen(LEVEL_KEY);
+  const workspaceValue = chosen(WORKSPACE_KEY);
+  const workspace: Workspace = isWorkspace(workspaceValue) ? workspaceValue : level === "essential" ? "simple" : "full";
+  const toolbarValue = chosen(TOOLBAR_KEY);
+  const toolbar = toolbarValue !== undefined ? toolbarOf(toolbarValue) : level === "custom" ? toolbarOf(chosen(CUSTOM_KEY)) : [];
+  return { workspace, toolbar };
+}
+
+/// Lo spazio e la colonna dell'ultima lettura.
+export function currentWorkspace(): WorkspaceChoice {
+  return lastWorkspace;
+}
+
+/// Legge lo spazio e la colonna adesso e a ogni cambio delle quattro chiavi,
+/// e li dà a `apply`; una lettura superata da una più recente non arriva, e
+/// una che non riesce lascia gli ultimi letti. Torna la funzione che smette.
+export function watchWorkspace(apply: (choice: WorkspaceChoice) => void): () => void {
+  let generation = 0;
+  let stopped = false;
+  const read = (): void => {
+    const ticket = ++generation;
+    const reading = ++workspaceReads;
+    void settings(DRAW_BUNDLE)
+      .then((entries) => {
+        const choice = workspaceOf(entries);
+        if (reading > workspaceRead) {
+          workspaceRead = reading;
+          lastWorkspace = choice;
+        }
+        return choice;
+      })
+      .catch(() => lastWorkspace)
+      .then((choice) => {
+        if (!stopped && ticket === generation) apply(choice);
+      });
+  };
+  const stop = onEvent("setting_changed", (event) => {
+    if (event.key === WORKSPACE_KEY || event.key === TOOLBAR_KEY || event.key === LEVEL_KEY || event.key === CUSTOM_KEY) read();
+  });
+  read();
+  return () => {
+    stopped = true;
+    stop();
+  };
+}
+
+/// Scrive la scelta dello spazio `workspace`, dal menu del disegno; le
+/// superfici aperte la rileggono col suo cambio. Una scrittura che non
+/// riesce lo dice.
+export function saveWorkspace(workspace: Workspace): void {
+  lastWorkspace = { ...lastWorkspace, workspace };
+  void Promise.resolve()
+    .then(() => api.setSetting(WORKSPACE_KEY, workspace))
+    .catch((error: unknown) => notify(t("vector.workspace.save_failed", { reason: errorText(error) }), "guasto"));
+}
+
+/// Scrive gli strumenti della colonna, da «Personalizza la barra…»; vuoto
+/// torna alla colonna di serie.
+export function saveToolbar(toolbar: readonly ToolId[]): void {
+  lastWorkspace = { ...lastWorkspace, toolbar };
+  void Promise.resolve()
+    .then(() => api.setSetting(TOOLBAR_KEY, [...toolbar]))
+    .catch((error: unknown) => notify(t("vector.workspace.save_failed", { reason: errorText(error) }), "guasto"));
+}
 
 /// Il livello dell'ultima lettura.
 export function currentLevel(): Level {
@@ -174,7 +284,7 @@ export function watchLevel(apply: (level: Level, custom: readonly string[]) => v
 /// penna com'è. Un passo ricordato che la griglia non accetta non conta.
 function gridOf(value: unknown): Grid | null {
   if (typeof value !== "object" || value === null) return null;
-  const { shown, snap, step, steps, guides, rulers, rulerGuides, panel, bar, shapes, closed, twist, taps, pen, steady } = value as Record<string, unknown>;
+  const { shown, snap, step, steps, guides, rulers, rulerGuides, panel, bar, shapes, closed, twist, taps, pen, steady, eraser, penId, barrel, output, fidelity } = value as Record<string, unknown>;
   if (typeof shown !== "boolean" || typeof snap !== "boolean" || typeof step !== "number" || !validStep(step)) return null;
   for (const flag of [guides, rulers, rulerGuides, bar, shapes, twist, taps]) if (flag !== undefined && typeof flag !== "boolean") return null;
   if (panel !== undefined && panel !== null && typeof panel !== "boolean") return null;
@@ -201,6 +311,12 @@ function gridOf(value: unknown): Grid | null {
     taps: (taps as boolean | undefined) ?? DEFAULT_GRID.taps,
     pen: curve,
     ...(steadied === null ? {} : { steady: steadied }),
+    // Una gomma che non si legge vale quella di serie.
+    ...(isEraseMode(eraser) ? { eraser } : {}),
+    ...(typeof penId === "string" && isPenId(penId) ? { penId } : {}),
+    ...(isBarrelAction(barrel) ? { barrel } : {}),
+    ...(isPenOutput(output) ? { output } : {}),
+    ...(isFidelity(fidelity) ? { fidelity } : {}),
   };
 }
 
@@ -274,6 +390,40 @@ export function saveRecentColors(colors: readonly string[]): void {
   lastColors = colors;
   colorSaves += 1;
   coloring = coloring.then(() => api.setViewState(COLORS_KEY, { colors })).catch(() => undefined);
+}
+
+let lastPens: readonly SavedPen[] = [];
+let penning: Promise<unknown> = Promise.resolve();
+let penSaves = 0;
+
+/// Le penne salvate dell'ultima lettura o dell'ultimo salvataggio.
+export function currentSavedPens(): readonly SavedPen[] {
+  return lastPens;
+}
+
+/// Legge le penne salvate: nessuna se non ce ne sono. Legge dopo le
+/// scritture in corso, e se la lettura non riesce restano quelle di prima.
+export async function readSavedPens(): Promise<readonly SavedPen[]> {
+  await penning;
+  const ticket = penSaves;
+  try {
+    const read = savedPensOf(await api.viewState<unknown>(PENS_KEY));
+    if (ticket === penSaves) lastPens = read;
+  } catch {
+    // Lo stato di vista che non si legge lascia le ultime penne.
+  }
+  return lastPens;
+}
+
+/// Ricorda `pens` per i disegni che si aprono dopo. Le scritture vanno in
+/// fila, così resta l'ultima; una che non riesce lo dice, perché una penna
+/// salvata è una scelta di chi disegna e non una comodità.
+export function saveSavedPens(pens: readonly SavedPen[]): void {
+  lastPens = pens;
+  penSaves += 1;
+  penning = penning
+    .then(() => api.setViewState(PENS_KEY, { pens }))
+    .catch((error: unknown) => notify(t("vector.pens.save_failed", { reason: errorText(error) }), "guasto"));
 }
 
 /// Un disegno ricordato da «Esporta»: il suo `DocId` e le sue scelte.

@@ -22,6 +22,8 @@ import { CAP_LABELS, DASH_LABELS, JOIN_LABELS } from "../fields";
 import { isInstance } from "../symbols";
 import { attachable } from "../connectors";
 import { applyOps } from "../apply";
+import { repenOps, type Repen } from "../repen";
+import { stabilizerOf } from "../grid";
 import { pathOps } from "../topath";
 import type { Join } from "../offset";
 import { holdsShape, holdsStroke, inkPathOps, offsetOps, outlineStrokeOps, simplifyOps } from "../paths";
@@ -115,6 +117,9 @@ export interface SelectionCommandsContext {
   outlineItems: () => MenuItem[];
   transformDialog: () => Promise<void>;
   applySelection: () => void;
+  /// Ripenna i tratti a penna scelti con `change`, in un passo di Annulla
+  /// (P10). Falso, e non dice niente, se fra gli scelti non ce n'è uno.
+  repenSelection: (change: Repen) => boolean;
   pathItems: () => MenuItem[];
   joinSelection: () => void;
   closePaths: () => void;
@@ -547,6 +552,47 @@ export function installSelectionCommands(ctx: EditorContext): void {
   }
   ctx.applySelection = applySelection;
 
+  /// I tratti a penna fra `units`, anche dentro i loro gruppi e collegamenti.
+  const strokesIn = (units: readonly Unit[]): Unit[] =>
+    units.flatMap((unit) => (unit.role === "group" || unit.role === "link" ? strokesIn(currentIndex().children(unit)) : ctx.holdsPenStroke(unit) ? [unit] : []));
+
+  /// Ripenna (P10): i tratti scelti si ridisegnano dai loro campioni. La
+  /// selezione resta quella, coi nomi nuovi di chi ne riceve uno.
+  function repenSelection(change: Repen): boolean {
+    if (!editable() || ctx.engine.model === null) return false;
+    const chosen = selectedUnits();
+    const strokes = strokesIn(chosen);
+    if (strokes.length === 0) return false;
+    cancelGesture();
+    const done = repenOps(ctx.engine.model, strokes, change, newIds());
+    const kept = done.kept === 0 ? "" : ` ${plural(done.kept, "draw.repen.kept.one", "draw.repen.kept.other")}`;
+    if (done.ops.length === 0) {
+      announce(`${t("draw.unchanged")}${kept}`);
+      return true;
+    }
+    const renamed = new Map(strokes.map((unit, at) => [unit.key, done.keys[at]!]));
+    const keys = chosen.map((unit) => renamed.get(unit.key) ?? unit.key);
+    const label: DrawKey = change.smooth !== undefined ? "draw.action.smooth" : "draw.action.repen";
+    if (arrange(label, { ops: done.ops, keys }) !== null) announce(`${plural(done.changed, "draw.repenned.one", "draw.repenned.other")}${kept}`);
+    return true;
+  }
+  ctx.repenSelection = repenSelection;
+
+  /// Quanto leviga «Leviga» se lo stabilizzatore è spento.
+  const SMOOTH_AMOUNT = 0.5;
+
+  /// «Ripenna» e «Leviga» dal menu: con la penna, la misura, il colore e
+  /// l'opacità della Penna, o con lo stabilizzatore di «Penna e dita».
+  function repenFromMenu(smooth: boolean): void {
+    if (arranging("path") === null) return;
+    const style = ctx.styles.pen;
+    // Con lo stabilizzatore spento, «Leviga» usa la media a metà.
+    const steady = stabilizerOf(ctx.grid.steady);
+    const config = steady.amount > 0 ? steady : { ...steady, amount: SMOOTH_AMOUNT, pulledString: false };
+    const change: Repen = smooth ? { smooth: { config, zoom: ctx.camera.scale } } : { pen: ctx.penId, size: style.width, color: style.color, opacity: ctx.inkOpacity.pen };
+    if (!repenSelection(change)) announce(t("draw.repen.none"));
+  }
+
   /// «Oggetto in tracciato», dal livello Esperto: gli oggetti scelti
   /// diventano `path`, che i nodi sanno modificare.
   function traceSelection(): void {
@@ -573,6 +619,8 @@ export function installSelectionCommands(ctx: EditorContext): void {
       { label: t("draw.to_path"), ...when(units.length > 0, "draw.selected.none"), run: () => traceSelection() },
       { label: t("draw.outline_stroke"), ...when(holdsStroke(index, units), "draw.outline_stroke.none"), run: () => strokeToPath() },
       { label: t("draw.ink_path"), ...when(units.some(ctx.holdsPenStroke), "draw.ink_path.none"), run: () => inkPathSelection() },
+      { label: t("draw.repen"), ...when(units.some(ctx.holdsPenStroke), "draw.repen.none"), run: () => repenFromMenu(false) },
+      { label: t("draw.smooth"), ...when(units.some(ctx.holdsPenStroke), "draw.repen.none"), run: () => repenFromMenu(true) },
       { label: t("draw.offset"), separator: true, ...when(shapes, "draw.paths.no_shape"), run: () => openPaths("offset") },
       { label: t("draw.simplify"), ...when(shapes, "draw.paths.no_shape"), run: () => openPaths("simplify") },
       { label: t("draw.join"), separator: true, hint: displayBinding("Mod-j"), ...when(holdsOpenPath(ctx.engine.model!, units), "draw.join.none"), run: () => joinSelection() },
@@ -642,7 +690,7 @@ export function installSelectionCommands(ctx: EditorContext): void {
   function inkPathSelection(): void {
     const units = arranging("path");
     if (units === null) return;
-    const done = inkPathOps(ctx.engine.model!, currentIndex(), units, newIds());
+    const done = inkPathOps(ctx.engine.model!, currentIndex(), units, newIds(), ctx.grid.fidelity ?? "medium");
     const refused = done.refused === 0 ? "" : ` ${plural(done.refused, "draw.inked.refused.one", "draw.inked.refused.other")}`;
     if (done.ops.length === 0) {
       announce(`${t("draw.unchanged")}${refused}`);

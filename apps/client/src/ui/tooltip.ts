@@ -12,6 +12,7 @@ type Registration = {
   disposed: boolean;
   show: () => void;
   hide: () => void;
+  cancel: () => void;
   update: (text: string) => void;
   dispose: () => void;
 };
@@ -34,7 +35,7 @@ export function attachTooltip(target: HTMLElement, text: string): () => void {
   registration.disposed = false;
 
   const schedule = () => {
-    if (registration.disposed || registration.text.trim() === "") return;
+    if (registration.disposed || registration.text.trim() === "" || expanded(target)) return;
     ownerWindow.clearTimeout(registration.timer);
     registration.timer = ownerWindow.setTimeout(registration.show, TOOLTIP_DELAY_MS);
   };
@@ -55,14 +56,14 @@ export function attachTooltip(target: HTMLElement, text: string): () => void {
     current = { target, registration, element };
     if (keyboardFocus(target)) schedule();
   };
-  const cancel = () => {
+  const cancel = (registration.cancel = () => {
     ownerWindow.clearTimeout(registration.timer);
     registration.timer = undefined;
     if (current?.target === target) registration.hide();
-  };
+  });
   registration.show = () => {
     registration.timer = undefined;
-    if (registration.disposed || registration.text.trim() === "") return;
+    if (registration.disposed || registration.text.trim() === "" || expanded(target)) return;
     // Un ridisegno può rimuovere il bersaglio mentre il ritardo è ancora in
     // corso. Quel nodo non riceverà più `mouseleave`, quindi il suo timer non
     // verrà cancellato: senza questo cancello aprirebbe un tooltip senza
@@ -127,6 +128,19 @@ export function setTooltip(target: HTMLElement, text: string): void {
   const existing = registrations.get(target);
   if (existing) existing.update(text);
   else attachTooltip(target, text);
+}
+
+/// Chiude il suggerimento di `target` e ne ferma il ritardo: lo chiama chi
+/// apre il riquadro di quel controllo (`kit/popover.ts`). Finché il riquadro è
+/// aperto (`aria-expanded="true"`) il suggerimento non torna: la regola è una
+/// sola, qui, per ogni controllo che apre qualcosa.
+export function dismissTooltip(target: HTMLElement): void {
+  registrations.get(target)?.cancel();
+}
+
+/// Il controllo ha aperto il suo riquadro: la didascalia gli starebbe sopra.
+function expanded(target: HTMLElement): boolean {
+  return target.getAttribute("aria-expanded") === "true";
 }
 
 /// Il fuoco è arrivato dalla tastiera, o il motore lo mostrerebbe come tale?

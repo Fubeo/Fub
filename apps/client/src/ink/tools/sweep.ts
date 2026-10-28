@@ -52,4 +52,9 @@ export class EraseSweep<U extends Erasable> {
   get size(): number {
     return this.seen.size;
   }
+
+  /// Il raggio della gomma, in pixel dello schermo.
+  get radius(): number {
+    return this.radiusPx;
+  }
 }

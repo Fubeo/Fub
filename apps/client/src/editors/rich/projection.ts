@@ -1,4 +1,4 @@
-// La proiezione modificabile dei documenti di videoscrittura, versioni 1 e 2:
+// La proiezione modificabile dei documenti di videoscrittura, versioni da 1 a 4:
 // il testo che il buffer della sessione porta per uno di quei documenti.
 //
 // La forma la possiede `fub-format-rich` (`crates/fub-format-rich/src/projection.rs`):
@@ -22,13 +22,17 @@
 // vuoti), così un blocco non toccato si riscrive com'era arrivato.
 //
 // La versione 2 dichiara lo schema dei dati opachi (`opaque_schema`), la 1
-// (le bozze di prima) no. La shell ricopia versione e schema come li ha
-// ricevuti e non li cambia mai: non può dichiarare uno schema per dati opachi
-// scritti con un altro. Quale schema si legga lo decide il formato.
+// (le bozze di prima) no. La 3 aggiunge i segni di ciò che il formato non
+// riscriverebbe senza perdite: `locked` su un blocco del corpo, `body_only`
+// sul documento. La shell ricopia versione e schema come li ha ricevuti e non
+// li cambia mai: non può dichiarare uno schema per dati opachi scritti con un
+// altro. Quale schema si legga lo decide il formato. La 4 aggiunge
+// l'inchiostro e i disegni: gli oggetti `ink` e `drawing`, con i tratti
+// (`ink`), l'SVG (`svg`) e il posto fuori dal testo (`float`).
 
 export const PROJECTION_FORMAT = "fub-rich";
 /// Le versioni che la shell legge, ciascuna con le sue chiavi.
-export const PROJECTION_VERSIONS = [1, 2] as const;
+export const PROJECTION_VERSIONS = [1, 2, 3, 4] as const;
 export type ProjectionVersion = (typeof PROJECTION_VERSIONS)[number];
 
 export type ReadOnlyReason = "revisions" | "track_changes" | "protected" | "projection" | "codec" | "import";
@@ -40,6 +44,19 @@ export const READ_ONLY_REASONS: readonly ReadOnlyReason[] = [
   "codec",
   "import",
 ];
+
+/// Che cosa manca a un documento in sola lettura, quando ha un posto: una
+/// revisione di formato, le revisioni di una specie di parte, un blocco che
+/// non torna identico, o qualcosa fuori dal corpo.
+export type MissingWhat = "format" | "header" | "footer" | "note" | "comment" | "text_box" | "changed" | "outside";
+export const MISSING_WHATS: readonly MissingWhat[] = ["format", "header", "footer", "note", "comment", "text_box", "changed", "outside"];
+
+/// Una voce di «Che cosa manca?»: `block` è l'indice del blocco del corpo in
+/// cui sta, quando sta in un blocco.
+export interface Missing {
+  readonly what: MissingWhat;
+  readonly block?: number;
+}
 
 export type Role =
   | { readonly kind: "body" }
@@ -92,6 +109,8 @@ export interface ParaStyle {
   readonly id: string;
   readonly name: string;
   readonly f?: Look;
+  /// L'allineamento che dà al paragrafo; assente, a sinistra.
+  readonly align?: Align;
 }
 
 /// Il giallo che un tratto evidenziato senza `hl` porta.
@@ -102,6 +121,7 @@ export const ATOM_KINDS = [
   "image",
   "graphic",
   "shape",
+  "text_box",
   "group",
   "field",
   "note",
@@ -109,8 +129,41 @@ export const ATOM_KINDS = [
   "ruby",
   "opaque",
   "marker",
+  "ink",
+  "drawing",
 ] as const;
 export type AtomKind = (typeof ATOM_KINDS)[number];
+
+/// Un tratto d'inchiostro: colore `#rrggbb`, spessore in punti, i punti
+/// `x, y` uno dopo l'altro e, se la penna la dà, la pressione di ognuno da 0
+/// a 1. `hl`: un evidenziatore.
+export interface InkLine {
+  readonly color: string;
+  readonly width: number;
+  readonly hl?: boolean;
+  readonly xy: readonly number[];
+  readonly p?: readonly number[];
+  /// La penna di Fub (`ink/pens.ts`), assente per quella di serie.
+  readonly pen?: string;
+}
+
+/// I tratti di un inchiostro, in punti dall'angolo in alto a sinistra
+/// dell'oggetto.
+export interface InkShape {
+  readonly strokes: readonly InkLine[];
+}
+
+export const PLACE_WRAPS = ["square", "front", "behind"] as const;
+export type PlaceWrap = (typeof PLACE_WRAPS)[number];
+
+/// Dove sta un oggetto fuori dal testo: come il testo gli gira attorno, e a
+/// che distanza in punti dal margine sinistro della colonna e dall'inizio del
+/// paragrafo in cui è ancorato.
+export interface Place {
+  readonly wrap: PlaceWrap;
+  readonly x: number;
+  readonly y: number;
+}
 
 /// Una revisione tracciata: chi l'ha fatta e quando. Due con gli stessi campi
 /// sono la stessa revisione. `mv` è il nome dello spostamento di cui è un capo.
@@ -144,7 +197,13 @@ export interface Anchor {
 /// Un oggetto. Senza `k` è nuovo: un'immagine con i suoi byte (`data`, base64)
 /// e la sua misura in punti, una nota con il suo testo (`note`), di chiusura
 /// se `end`, o il segno di un commento (`marker` con `comment`). Il formato lo
-/// scrive alla sua maniera. In un oggetto tenuto `comment` è un suggerimento.
+/// scrive alla sua maniera. In un oggetto tenuto `comment` è un suggerimento;
+/// in una nota tenuta `note` ed `end` si leggono soltanto, e in un'immagine
+/// tenuta `data` si vede soltanto: il file la porta in PNG, JPEG o GIF.
+/// Un inchiostro nuovo porta i suoi tratti (`ink`) e un disegno nuovo il suo
+/// SVG (`svg`), entrambi con il PNG di ripiego in `data`; in uno tenuto si
+/// leggono, e cambiarli vuol dire sostituirlo con uno nuovo. `float`, assente
+/// in linea, sposta anche un oggetto tenuto.
 export interface AtomInline extends Tracked {
   readonly t: "atom";
   readonly k?: string;
@@ -158,6 +217,9 @@ export interface AtomInline extends Tracked {
   /// Un sommario nuovo (`field`) dei titoli fino a quel livello.
   readonly toc?: number;
   readonly comment?: Anchor;
+  readonly ink?: InkShape;
+  readonly svg?: string;
+  readonly float?: Place;
 }
 
 export type Inline = TextInline | AtomInline;
@@ -165,6 +227,9 @@ export type Inline = TextInline | AtomInline;
 export interface Para {
   readonly t: "para";
   readonly role: Role;
+  /// Il formato non riscriverebbe il blocco senza perdite: si mostra e non si
+  /// cambia (versione 3). Lo porta soltanto un blocco del corpo.
+  readonly locked?: boolean;
   readonly align?: Align;
   readonly k?: string;
   readonly sect?: string;
@@ -202,6 +267,8 @@ export interface Row {
 
 export interface Table {
   readonly t: "table";
+  /// Come `Para.locked`.
+  readonly locked?: boolean;
   readonly k?: string;
   readonly rows: readonly Row[];
 }
@@ -225,21 +292,48 @@ export interface CommentView {
 export interface Projection {
   readonly format: typeof PROJECTION_FORMAT;
   readonly version: ProjectionVersion;
-  /// Lo schema dei dati opachi: c'è nella versione 2, non nella 1.
+  /// Lo schema dei dati opachi: c'è dalla versione 2, non nella 1.
   readonly opaque_schema?: number;
   readonly readonly?: ReadOnlyReason;
+  /// Con `readonly`, dove sta ciò che manca (versione 3). Il ritorno lo
+  /// ignora.
+  readonly missing?: readonly Missing[];
+  /// Il formato non riscriverebbe senza perdite qualcosa fuori dal corpo: si
+  /// salvano soltanto i paragrafi e le tabelle del corpo (versione 3).
+  readonly body_only?: boolean;
   /// Registra le modifiche: ciò che si scrive diventa una revisione tracciata.
   readonly track?: boolean;
   readonly lang?: string;
   /// Suggerimento: il carattere e la dimensione di un paragrafo senza stile.
   readonly f?: Look;
   readonly styles?: readonly ParaStyle[];
+  /// Suggerimento: il carattere e la dimensione che ogni ruolo dà al testo,
+  /// come li dà lo stile che il salvataggio gli scrive.
+  readonly roles?: RoleLooks;
   /// La pagina dell'ultima sezione, quella che nessun paragrafo chiude.
   readonly page?: Page;
   readonly header?: RunningText;
   readonly footer?: RunningText;
   readonly comments?: readonly CommentView[];
   readonly blocks: readonly Block[];
+}
+
+/// L'aspetto del testo dei ruoli che non sono il corpo. `h` va dal livello 1;
+/// un livello vuoto (`{}`), o oltre la fine, è uno che il codec non sa dire.
+export interface RoleLooks {
+  readonly h?: readonly Look[];
+  readonly quote?: Look;
+  readonly list?: Look;
+  readonly align?: RoleAligns;
+}
+
+/// L'allineamento che lo stile di ogni ruolo dà al paragrafo, compreso il
+/// corpo senza stile; assente (o `null` fra i titoli), a sinistra.
+export interface RoleAligns {
+  readonly body?: Align;
+  readonly h?: readonly (Align | null)[];
+  readonly quote?: Align;
+  readonly list?: Align;
 }
 
 /// La pagina di una sezione, in punti: i lati (già scambiati se è
@@ -252,7 +346,13 @@ export interface Page {
   readonly left: number;
   readonly right: number;
   readonly cols?: number;
+  /// Dove comincia la sezione; assente, a pagina nuova.
+  readonly start?: SectionStart;
 }
+
+/// Dove comincia una sezione, come lo dice in Word la fine della sezione prima.
+export type SectionStart = "next_page" | "continuous" | "even_page" | "odd_page" | "next_column";
+export const SECTION_STARTS: readonly SectionStart[] = ["next_page", "continuous", "even_page", "odd_page", "next_column"];
 
 const PAGE_LENGTHS = ["w", "h", "top", "bottom", "left", "right"] as const;
 
@@ -461,11 +561,59 @@ function readComment(value: unknown, where: string): CommentView {
 
 function readStyle(value: unknown, where: string): ParaStyle {
   const style = record(value, where);
-  closed(style, ["id", "name", "f"], where);
+  closed(style, ["id", "name", "f", "align"], where);
+  const align = readAlign(style.align, `${where}.align`);
   return {
     id: text(style.id, `${where}.id`),
     name: text(style.name, `${where}.name`),
     ...withLook(readLook(style.f, `${where}.f`)),
+    ...(align ? { align } : {}),
+  };
+}
+
+const ALIGNS: readonly Align[] = ["left", "center", "right", "justify"];
+
+function readAlign(value: unknown, where: string): Align | undefined {
+  if (value === undefined) return undefined;
+  if (!(ALIGNS as readonly unknown[]).includes(value)) throw new ProjectionError(`${where}: allineamento sconosciuto`);
+  return value as Align;
+}
+
+function readAligns(value: unknown, where: string): RoleAligns {
+  const aligns = record(value, where);
+  closed(aligns, ["body", "h", "quote", "list"], where);
+  const body = readAlign(aligns.body, `${where}.body`);
+  const quote = readAlign(aligns.quote, `${where}.quote`);
+  const listed = readAlign(aligns.list, `${where}.list`);
+  return {
+    ...(body ? { body } : {}),
+    ...(aligns.h !== undefined ? { h: list(aligns.h, `${where}.h`).map((h, i) => (h === null ? null : readAlign(h, `${where}.h[${i}]`)!)) } : {}),
+    ...(quote ? { quote } : {}),
+    ...(listed ? { list: listed } : {}),
+  };
+}
+
+function readMissing(value: unknown, where: string): Missing {
+  const missing = record(value, where);
+  closed(missing, ["what", "block"], where);
+  if (!(MISSING_WHATS as readonly unknown[]).includes(missing.what)) throw new ProjectionError(`${where}.what: sconosciuto`);
+  const block = missing.block;
+  if (block !== undefined && !(typeof block === "number" && Number.isSafeInteger(block) && block >= 0)) {
+    throw new ProjectionError(`${where}.block: atteso un intero`);
+  }
+  return { what: missing.what as MissingWhat, ...(block !== undefined ? { block } : {}) };
+}
+
+function readRoles(value: unknown, where: string): RoleLooks {
+  const roles = record(value, where);
+  closed(roles, ["h", "quote", "list", "align"], where);
+  const quote = readLook(roles.quote, `${where}.quote`);
+  const listed = readLook(roles.list, `${where}.list`);
+  return {
+    ...(roles.h !== undefined ? { h: list(roles.h, `${where}.h`).map((h, i) => readLook(h, `${where}.h[${i}]`) ?? {}) } : {}),
+    ...(quote ? { quote } : {}),
+    ...(listed ? { list: listed } : {}),
+    ...(roles.align !== undefined ? { align: readAligns(roles.align, `${where}.align`) } : {}),
   };
 }
 
@@ -488,7 +636,7 @@ function readInline(value: unknown, where: string): Inline {
     };
   }
   if (inline.t === "atom") {
-    closed(inline, ["t", "k", "kind", "label", "w", "h", "data", "note", "end", "toc", "comment", "ins", "del"], where);
+    closed(inline, ["t", "k", "kind", "label", "w", "h", "data", "note", "end", "toc", "comment", "ink", "svg", "float", "ins", "del"], where);
     if (!(ATOM_KINDS as readonly unknown[]).includes(inline.kind)) {
       throw new ProjectionError(`${where}: oggetto sconosciuto`);
     }
@@ -504,15 +652,32 @@ function readInline(value: unknown, where: string): Inline {
     if (inline.end !== undefined && typeof inline.end !== "boolean") {
       throw new ProjectionError(`${where}.end: atteso un sì o un no`);
     }
+    const ink = inline.ink === undefined ? undefined : readInkShape(inline.ink, `${where}.ink`);
+    const svg = optionalText(inline.svg, `${where}.svg`);
+    const placed = inline.float === undefined ? undefined : readPlace(inline.float, `${where}.float`);
+    const bare = note === undefined && inline.end !== true && toc === undefined && comment === undefined;
     // Un oggetto o si tiene (`k`) o è nuovo: un'immagine, una nota, un
     // sommario o il segno di un commento.
     const fresh = toc !== undefined
       ? inline.kind === "field" && comment === undefined && data === undefined && note === undefined && inline.end !== true
       : comment !== undefined
         ? inline.kind === "marker" && data === undefined && note === undefined && inline.end !== true
-        : (inline.kind === "image" && data !== undefined && note === undefined && inline.end !== true)
+        : (inline.kind === "image" && data !== undefined && note === undefined && inline.end !== true && ink === undefined && svg === undefined)
+          || (inline.kind === "ink" && ink !== undefined && data !== undefined && svg === undefined && bare)
+          || (inline.kind === "drawing" && svg !== undefined && data !== undefined && ink === undefined && bare)
           || (inline.kind === "note" && note !== undefined && data === undefined);
-    if (k !== undefined ? data !== undefined || note !== undefined || inline.end === true || toc !== undefined : !fresh) {
+    // Una nota tenuta porta, da leggere, il suo testo e se è di chiusura;
+    // un'immagine tenuta, da vedere, i suoi byte.
+    const kept = toc === undefined
+      && (data === undefined || inline.kind === "image" || inline.kind === "ink" || inline.kind === "drawing")
+      && (inline.kind === "note" || (note === undefined && inline.end !== true))
+      && (ink === undefined || inline.kind === "ink")
+      && (svg === undefined || inline.kind === "drawing");
+    // Soltanto un oggetto che può stare fuori dal testo ha un posto.
+    if (placed !== undefined && k === undefined && !["image", "ink", "drawing"].includes(inline.kind as string)) {
+      throw new ProjectionError(`${where}.float: questo oggetto sta nel testo`);
+    }
+    if (k !== undefined ? !kept : !fresh) {
       throw new ProjectionError(`${where}: oggetto né tenuto né nuovo`);
     }
     return {
@@ -527,15 +692,76 @@ function readInline(value: unknown, where: string): Inline {
       ...(inline.end === true ? { end: true } : {}),
       ...(toc !== undefined ? { toc } : {}),
       ...(comment ? { comment } : {}),
+      ...(ink ? { ink } : {}),
+      ...(svg !== undefined ? { svg } : {}),
+      ...(placed ? { float: placed } : {}),
       ...readTracked(inline, where),
     };
   }
   throw new ProjectionError(`${where}: elemento sconosciuto`);
 }
 
+function readInkShape(value: unknown, where: string): InkShape {
+  const shape = record(value, where);
+  closed(shape, ["strokes"], where);
+  const strokes = list(shape.strokes, `${where}.strokes`).map((item, i): InkLine => {
+    const at = `${where}.strokes[${i}]`;
+    const line = record(item, at);
+    closed(line, ["color", "width", "hl", "xy", "p"], at);
+    const width = optionalNumber(line.width, `${at}.width`);
+    if (width === undefined) throw new ProjectionError(`${at}: manca lo spessore`);
+    if (line.hl !== undefined && typeof line.hl !== "boolean") throw new ProjectionError(`${at}.hl: atteso un sì o un no`);
+    const numbers = (v: unknown, w: string) => list(v, w).map((n, j) => {
+      const x = optionalNumber(n, `${w}[${j}]`);
+      if (x === undefined) throw new ProjectionError(`${w}[${j}]: atteso un numero`);
+      return x;
+    });
+    const xy = numbers(line.xy, `${at}.xy`);
+    const p = line.p === undefined ? [] : numbers(line.p, `${at}.p`);
+    return {
+      color: text(line.color, `${at}.color`),
+      width,
+      ...(line.hl === true ? { hl: true } : {}),
+      xy,
+      ...(p.length > 0 ? { p } : {}),
+    };
+  });
+  return { strokes };
+}
+
+function readPlace(value: unknown, where: string): Place {
+  const place = record(value, where);
+  closed(place, ["wrap", "x", "y"], where);
+  if (!(PLACE_WRAPS as readonly unknown[]).includes(place.wrap)) throw new ProjectionError(`${where}.wrap: disposizione sconosciuta`);
+  const x = optionalNumber(place.x, `${where}.x`);
+  const y = optionalNumber(place.y, `${where}.y`);
+  if (x === undefined || y === undefined) throw new ProjectionError(`${where}: manca il posto`);
+  return { wrap: place.wrap as PlaceWrap, x, y };
+}
+
+/// I tratti di un inchiostro letti da un valore qualunque (un attributo del
+/// DOM copiato), `null` se non hanno la forma della proiezione.
+export function inkShapeOf(value: unknown): InkShape | null {
+  try {
+    return readInkShape(value, "ink");
+  } catch {
+    return null;
+  }
+}
+
+/// Il posto di un oggetto letto da un valore qualunque, `null` se non ha la
+/// forma della proiezione.
+export function placeOf(value: unknown): Place | null {
+  try {
+    return readPlace(value, "float");
+  } catch {
+    return null;
+  }
+}
+
 function readPage(value: unknown, where: string): Page {
   const page = record(value, where);
-  closed(page, [...PAGE_LENGTHS, "cols"], where);
+  closed(page, [...PAGE_LENGTHS, "cols", "start"], where);
   const out: Record<string, number> = {};
   for (const key of PAGE_LENGTHS) {
     const n = optionalNumber(page[key], `${where}.${key}`);
@@ -544,7 +770,13 @@ function readPage(value: unknown, where: string): Page {
   }
   const cols = optionalNumber(page.cols, `${where}.cols`);
   if (cols !== undefined && (!Number.isInteger(cols) || cols < 1)) throw new ProjectionError(`${where}: colonne non valide`);
-  return { ...(out as Omit<Page, "cols">), ...(cols !== undefined && cols !== 1 ? { cols } : {}) };
+  if (page.start !== undefined && !SECTION_STARTS.includes(page.start as SectionStart)) throw new ProjectionError(`${where}.start: inizio sconosciuto`);
+  const start = page.start as SectionStart | undefined;
+  return {
+    ...(out as Omit<Page, "cols" | "start">),
+    ...(cols !== undefined && cols !== 1 ? { cols } : {}),
+    ...(start !== undefined && start !== "next_page" ? { start } : {}),
+  };
 }
 
 function readRunning(value: unknown, where: string): RunningText {
@@ -577,13 +809,20 @@ export function writeRunning(running: RunningText): string {
 export function writePage(page: Page): string {
   const fields = PAGE_LENGTHS.map((key) => `"${key}":${float(page[key])}`);
   if (page.cols !== undefined && page.cols !== 1) fields.push(`"cols":${page.cols}`);
+  if (page.start !== undefined && page.start !== "next_page") fields.push(`"start":"${page.start}"`);
   return `{${fields.join(",")}}`;
 }
 
-function readBlock(value: unknown, where: string): Block {
+function readLocked(block: Json, version: ProjectionVersion, where: string): { locked?: true } {
+  if (block.locked === undefined) return {};
+  if (version < 3 || typeof block.locked !== "boolean") throw new ProjectionError(`${where}.locked: atteso un sì o un no`);
+  return block.locked ? { locked: true } : {};
+}
+
+function readBlock(value: unknown, version: ProjectionVersion, where: string): Block {
   const block = record(value, where);
   if (block.t === "para") {
-    closed(block, ["t", "role", "align", "k", "sect", "page", "header", "footer", "p", "s", "f", "ins", "del", "c"], where);
+    closed(block, ["t", "role", "locked", "align", "k", "sect", "page", "header", "footer", "p", "s", "f", "ins", "del", "c"], where);
     const align = block.align;
     if (align !== undefined && !["left", "center", "right", "justify"].includes(align as string)) {
       throw new ProjectionError(`${where}: allineamento sconosciuto`);
@@ -592,6 +831,7 @@ function readBlock(value: unknown, where: string): Block {
     return {
       t: "para",
       role: readRole(block.role, `${where}.role`),
+      ...readLocked(block, version, where),
       ...(align !== undefined ? { align: align as Align } : {}),
       ...(block.k !== undefined ? { k: text(block.k, `${where}.k`) } : {}),
       ...(block.sect !== undefined ? { sect: text(block.sect, `${where}.sect`) } : {}),
@@ -606,7 +846,7 @@ function readBlock(value: unknown, where: string): Block {
     };
   }
   if (block.t === "table") {
-    closed(block, ["t", "k", "rows"], where);
+    closed(block, ["t", "locked", "k", "rows"], where);
     const rows = list(block.rows, `${where}.rows`).map((value, r) => {
       const row = record(value, `${where}.rows[${r}]`);
       closed(row, ["k", "cells"], `${where}.rows[${r}]`);
@@ -619,12 +859,12 @@ function readBlock(value: unknown, where: string): Block {
         return {
           ...(cell.k !== undefined ? { k: text(cell.k, `${at}.k`) } : {}),
           ...(span !== undefined && span > 1 ? { span } : {}),
-          blocks: list(cell.blocks, `${at}.blocks`).map((b, i) => readBlock(b, `${at}.blocks[${i}]`)),
+          blocks: list(cell.blocks, `${at}.blocks`).map((b, i) => readBlock(b, version, `${at}.blocks[${i}]`)),
         };
       });
       return { ...(row.k !== undefined ? { k: text(row.k, `${where}.rows[${r}].k`) } : {}), cells };
     });
-    return { t: "table", ...(block.k !== undefined ? { k: text(block.k, `${where}.k`) } : {}), rows };
+    return { t: "table", ...readLocked(block, version, where), ...(block.k !== undefined ? { k: text(block.k, `${where}.k`) } : {}), rows };
   }
   throw new ProjectionError(`${where}: blocco sconosciuto`);
 }
@@ -640,14 +880,21 @@ export function parseProjection(source: string): Projection {
   }
   const root = record(value, "proiezione");
   if (root.format !== PROJECTION_FORMAT) throw new ProjectionError("formato sconosciuto");
-  const version = root.version;
-  if (version !== 1 && version !== 2) throw new ProjectionError(`versione ${String(version)}`);
-  const keys = ["format", "version", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"];
-  closed(root, version === 2 ? ["format", "version", "opaque_schema", ...keys.slice(2)] : keys, "proiezione");
+  const version = root.version as ProjectionVersion;
+  if (!PROJECTION_VERSIONS.includes(version)) throw new ProjectionError(`versione ${String(version)}`);
+  // Le chiavi di ogni versione, nell'ordine di serde.
+  const keys = {
+    1: ["format", "version", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"],
+    2: ["format", "version", "opaque_schema", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"],
+    3: ["format", "version", "opaque_schema", "readonly", "missing", "body_only", "track", "lang", "f", "styles", "roles", "page", "header", "footer", "comments", "blocks"],
+    4: ["format", "version", "opaque_schema", "readonly", "missing", "body_only", "track", "lang", "f", "styles", "roles", "page", "header", "footer", "comments", "blocks"],
+  }[version];
+  closed(root, keys, "proiezione");
   const schema = root.opaque_schema;
-  if (version === 2 && !(typeof schema === "number" && Number.isSafeInteger(schema) && schema >= 0)) {
+  if (version >= 2 && !(typeof schema === "number" && Number.isSafeInteger(schema) && schema >= 0)) {
     throw new ProjectionError("opaque_schema: atteso un intero");
   }
+  if (root.body_only !== undefined && typeof root.body_only !== "boolean") throw new ProjectionError("body_only: atteso un sì o no");
   const readonly = root.readonly;
   if (readonly !== undefined && !(READ_ONLY_REASONS as readonly unknown[]).includes(readonly)) {
     throw new ProjectionError("motivo di sola lettura sconosciuto");
@@ -656,17 +903,20 @@ export function parseProjection(source: string): Projection {
   return {
     format: PROJECTION_FORMAT,
     version,
-    ...(version === 2 ? { opaque_schema: schema as number } : {}),
+    ...(version >= 2 ? { opaque_schema: schema as number } : {}),
     ...(readonly !== undefined ? { readonly: readonly as ReadOnlyReason } : {}),
+    ...(root.missing !== undefined ? { missing: list(root.missing, "missing").map((m, i) => readMissing(m, `missing[${i}]`)) } : {}),
+    ...(root.body_only === true ? { body_only: true } : {}),
     ...(root.track === true ? { track: true } : {}),
     ...(root.lang !== undefined ? { lang: text(root.lang, "lang") } : {}),
     ...withLook(readLook(root.f, "f")),
     ...(root.styles !== undefined ? { styles: list(root.styles, "styles").map((s, i) => readStyle(s, `styles[${i}]`)) } : {}),
+    ...(root.roles !== undefined ? { roles: readRoles(root.roles, "roles") } : {}),
     ...(root.page !== undefined ? { page: readPage(root.page, "page") } : {}),
     ...(root.header !== undefined ? { header: readRunning(root.header, "header") } : {}),
     ...(root.footer !== undefined ? { footer: readRunning(root.footer, "footer") } : {}),
     ...(root.comments !== undefined ? { comments: list(root.comments, "comments").map((c, i) => readComment(c, `comments[${i}]`)) } : {}),
-    blocks: list(root.blocks, "blocks").map((b, i) => readBlock(b, `blocks[${i}]`)),
+    blocks: list(root.blocks, "blocks").map((b, i) => readBlock(b, version, `blocks[${i}]`)),
   };
 }
 
@@ -702,14 +952,38 @@ function float(n: number): string {
   return Number.isInteger(n) && Math.abs(n) < 1e16 ? `${n}.0` : String(n);
 }
 
-function writeLook(look: Look | undefined): string {
-  if (!look) return "";
+function writeLook(look: Look | undefined, key = "f"): string {
+  const body = lookBody(look);
+  return body === "{}" ? "" : `,"${key}":${body}`;
+}
+
+function lookBody(look: Look | undefined): string {
   const fields: string[] = [];
-  if (look.font !== undefined) fields.push(`"font":${JSON.stringify(look.font)}`);
-  if (look.size !== undefined) fields.push(`"size":${float(look.size)}`);
-  if (look.color !== undefined) fields.push(`"color":${JSON.stringify(look.color)}`);
-  if (look.hl !== undefined) fields.push(`"hl":${JSON.stringify(look.hl)}`);
-  return fields.length > 0 ? `,"f":{${fields.join(",")}}` : "";
+  if (look?.font !== undefined) fields.push(`"font":${JSON.stringify(look.font)}`);
+  if (look?.size !== undefined) fields.push(`"size":${float(look.size)}`);
+  if (look?.color !== undefined) fields.push(`"color":${JSON.stringify(look.color)}`);
+  if (look?.hl !== undefined) fields.push(`"hl":${JSON.stringify(look.hl)}`);
+  return `{${fields.join(",")}}`;
+}
+
+function writeRoles(roles: RoleLooks | undefined): string {
+  if (!roles) return "";
+  let body = "";
+  if (roles.h && roles.h.length > 0) body += `,"h":[${roles.h.map(lookBody).join(",")}]`;
+  body += writeLook(roles.quote, "quote") + writeLook(roles.list, "list");
+  const aligns = writeAligns(roles.align);
+  if (aligns) body += `,"align":${aligns}`;
+  return body === "" ? "" : `,"roles":{${body.slice(1)}}`;
+}
+
+function writeAligns(aligns: RoleAligns | undefined): string {
+  if (!aligns) return "";
+  const fields: string[] = [];
+  if (aligns.body) fields.push(`"body":"${aligns.body}"`);
+  if (aligns.h && aligns.h.length > 0) fields.push(`"h":[${aligns.h.map((h) => (h ? `"${h}"` : "null")).join(",")}]`);
+  if (aligns.quote) fields.push(`"quote":"${aligns.quote}"`);
+  if (aligns.list) fields.push(`"list":"${aligns.list}"`);
+  return fields.length > 0 ? `{${fields.join(",")}}` : "";
 }
 
 function writeLayout(layout: Layout | undefined): string {
@@ -775,13 +1049,28 @@ function writeInline(inline: Inline): string {
   if (inline.end) out += `,"end":true`;
   if (inline.toc !== undefined) out += `,"toc":${inline.toc}`;
   if (inline.comment) out += `,"comment":${writeAnchor(inline.comment)}`;
+  if (inline.ink) out += `,"ink":${writeInkShape(inline.ink)}`;
+  if (inline.svg !== undefined) out += `,"svg":${JSON.stringify(inline.svg)}`;
+  if (inline.float) out += `,"float":{"wrap":"${inline.float.wrap}","x":${float(inline.float.x)},"y":${float(inline.float.y)}}`;
   return out + writeTracked(inline) + "}";
+}
+
+function writeInkShape(shape: InkShape): string {
+  const strokes = shape.strokes.map((line) => {
+    let out = `{"color":${JSON.stringify(line.color)},"width":${float(line.width)}`;
+    if (line.hl) out += `,"hl":true`;
+    out += `,"xy":[${line.xy.map(float).join(",")}]`;
+    if (line.p && line.p.length > 0) out += `,"p":[${line.p.map(float).join(",")}]`;
+    return out + "}";
+  });
+  return `{"strokes":[${strokes.join(",")}]}`;
 }
 
 /// Un blocco in JSON, con i campi nell'ordine di serde.
 export function writeBlock(block: Block): string {
   if (block.t === "para") {
     let out = `{"t":"para","role":${writeRole(block.role)}`;
+    if (block.locked) out += `,"locked":true`;
     if (block.align !== undefined) out += `,"align":"${block.align}"`;
     if (block.k !== undefined) out += `,"k":${JSON.stringify(block.k)}`;
     if (block.sect !== undefined) out += `,"sect":${JSON.stringify(block.sect)}`;
@@ -804,23 +1093,29 @@ export function writeBlock(block: Block): string {
     });
     return `{${key(row.k, ",")}"cells":[${cells.join(",")}]}`;
   });
-  return `{"t":"table",${key(block.k, ",")}"rows":[${rows.join(",")}]}`;
+  return `{"t":"table",${block.locked ? `"locked":true,` : ""}${key(block.k, ",")}"rows":[${rows.join(",")}]}`;
 }
 
 /// L'intestazione della proiezione fino all'elenco dei blocchi escluso.
-export function writeHead(projection: Pick<Projection, "version" | "opaque_schema" | "readonly" | "track" | "lang" | "f" | "styles" | "page" | "header" | "footer" | "comments">): string {
+export function writeHead(projection: Pick<Projection, "version" | "opaque_schema" | "readonly" | "missing" | "body_only" | "track" | "lang" | "f" | "styles" | "roles" | "page" | "header" | "footer" | "comments">): string {
   let out = `{"format":"${PROJECTION_FORMAT}","version":${projection.version}`;
   if (projection.opaque_schema !== undefined) out += `,"opaque_schema":${projection.opaque_schema}`;
   if (projection.readonly !== undefined) out += `,"readonly":"${projection.readonly}"`;
+  if (projection.missing && projection.missing.length > 0) {
+    const missing = projection.missing.map((m) => `{"what":"${m.what}"${m.block !== undefined ? `,"block":${m.block}` : ""}}`);
+    out += `,"missing":[${missing.join(",")}]`;
+  }
+  if (projection.body_only) out += `,"body_only":true`;
   if (projection.track) out += `,"track":true`;
   if (projection.lang !== undefined) out += `,"lang":${JSON.stringify(projection.lang)}`;
   out += writeLook(projection.f);
   if (projection.styles && projection.styles.length > 0) {
     const styles = projection.styles.map(
-      (s) => `{"id":${JSON.stringify(s.id)},"name":${JSON.stringify(s.name)}${writeLook(s.f)}}`,
+      (s) => `{"id":${JSON.stringify(s.id)},"name":${JSON.stringify(s.name)}${writeLook(s.f)}${s.align ? `,"align":"${s.align}"` : ""}}`,
     );
     out += `,"styles":[${styles.join(",")}]`;
   }
+  out += writeRoles(projection.roles);
   if (projection.page) out += `,"page":${writePage(projection.page)}`;
   if (projection.header) out += `,"header":${writeRunning(projection.header)}`;
   if (projection.footer) out += `,"footer":${writeRunning(projection.footer)}`;

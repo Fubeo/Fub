@@ -56,13 +56,13 @@ const vite = await createServer({
   logLevel: "warn",
 });
 
-/** @type {{ VARIANTS: readonly { light: string, contrast: string }[], SHEETS: Record<string,Record<string,string>>, sheet: (l: string, c: string) => string, roles: () => string[] }} */
+/** @type {{ VARIANTS: readonly { light: string, contrast: string }[], SHEETS: Record<string,Record<string,string>>, sheet: (l: string, c: string) => string, roles: () => string[], OPTIONAL_ROLES: readonly string[] }} */
 const recipe = await vite.ssrLoadModule("/src/theme/scrittoio/recipe.ts");
 /** @type {{ SKIN: string, assemble: (c: Record<string,string>) => string }} */
 const skin = await vite.ssrLoadModule("/src/theme/scrittoio/skin/order.ts");
-/** @type {{ HOOKS: readonly string[], STATE_NAMES: readonly string[], COMPONENTS: readonly { name: string, part: string, hooks: readonly string[], states: readonly { name: string }[] }[] }} */
+/** @type {{ HOOKS: readonly string[], HOOK_LAYERS: Readonly<Record<string, string>>, LAYERS: readonly string[], STATE_NAMES: readonly string[], COMPONENTS: readonly { name: string, part: string, hooks: readonly string[], states: readonly { name: string }[] }[] }} */
 const anatomy = await vite.ssrLoadModule("/src/theme/scrittoio/anatomia.ts");
-/** @type {{ THEME_2_ENGINE: string, THEME_2_PROFILE: { requiredRoles: readonly string[], contrastPairs: readonly unknown[], preferenceTokens: readonly string[], vocabulary: { properties?: readonly string[], functions?: readonly string[], atRules?: readonly string[] } } }} */
+/** @type {{ THEME_2_ENGINE: string, THEME_2_PROFILE: { requiredRoles: readonly string[], contrastPairs: readonly unknown[], optionalPairs?: readonly unknown[], preferenceTokens: readonly string[], vocabulary: { properties?: readonly string[], functions?: readonly string[], atRules?: readonly string[] } } }} */
 const profile = await vite.ssrLoadModule("/src/theme/scrittoio/profile.ts");
 
 let diffCount = 0;
@@ -119,6 +119,8 @@ try {
     engine,
     required_roles: roles,
     hooks: [...anatomy.HOOKS],
+    layers: Object.fromEntries(anatomy.HOOKS.map((hook) => [hook, anatomy.HOOK_LAYERS[hook]])),
+    content_gate: anatomy.CONTENT_GATE,
     states: [...anatomy.STATE_NAMES],
     components: anatomy.COMPONENTS.map((component) => ({
       name: component.name,
@@ -127,10 +129,13 @@ try {
       states: component.states.map((state) => state.name),
     })),
     contrast_pairs: profile.THEME_2_PROFILE.contrastPairs,
+    optional_roles: [...recipe.OPTIONAL_ROLES],
+    optional_pairs: profile.THEME_2_PROFILE.optionalPairs ?? [],
     preference_tokens: [...profile.THEME_2_PROFILE.preferenceTokens],
     vocabulary: profile.THEME_2_PROFILE.vocabulary,
     counts: {
       required_roles: roles.length,
+      optional_roles: recipe.OPTIONAL_ROLES.length,
       hooks: anatomy.HOOKS.length,
       state_names: anatomy.STATE_NAMES.length,
       assigned_states: assignedStates,
@@ -139,6 +144,7 @@ try {
     },
   };
   const contractText = `${JSON.stringify(authorContract, null, 2)}\n`;
+  const layerCount = (layer) => anatomy.HOOKS.filter((hook) => anatomy.HOOK_LAYERS[hook] === layer).length;
   await derived("contract.json", contractText, "a ricetta, anatomia e profilo", AUTHOR);
 
   const guide = [
@@ -147,6 +153,20 @@ try {
     "Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.",
     "",
     `Il contratto richiede **${roles.length} ruoli**, espone **${anatomy.HOOKS.length} hook**, **${anatomy.STATE_NAMES.length} stati** (${assignedStates} assegnazioni su ${anatomy.COMPONENTS.length} componenti) e lascia ridichiarare alla persona **${profile.THEME_2_PROFILE.preferenceTokens.length} token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in \`contract.json\`, generato dalle sorgenti della shell.`,
+    "",
+    `Dichiara anche **${recipe.OPTIONAL_ROLES.length} ruoli facoltativi** (\`optional_roles\`): i segni di Fub sulla carta del tema (\`--doc-ins\`, \`--doc-find\`, …) e la carta chiara di un file (\`--paper-*\`). Un tema che non li dichiara ha i ripieghi della struttura; se li dichiara, le loro coppie (\`optional_pairs\`) si contano come le altre.`,
+    "",
+    "## Strati",
+    "",
+    "Ogni hook appartiene a uno strato, e `contract.json` lo dice in `layers`:",
+    "",
+    `- **cornice** (${layerCount("cornice")} hook): barre, pannelli, menu, righelli, scrivania. È del tema, sempre.`,
+    `- **segno** (${layerCount("segno")} hook): ciò che Fub disegna sul contenuto, cioè selezione, cursore, fuoco, ricerca, revisioni, correttore, commenti e maniglie. È del tema, con i colori della carta su cui sta (\`--doc-*\`).`,
+    `- **contenuto** (${layerCount("contenuto")} hook): ciò che il file dice. Chi ne ha l'autorità lo dichiara la modalità della superficie, con uno di tre aspetti che la shell mette sulla radice del contenuto: \`look-tema\`, \`look-file\` o \`look-adattato\`.`,
+    "",
+    "Una regola sul contenuto vale quando il tema lo veste: si scrive sotto `.look-tema`, come `.look-tema .rich-heading`.",
+    "",
+    `Dove una superficie offre anche \`file\` o \`adattato\` il cancello lo fa rispettare (\`content_gate\`): una regola che nomina una delle ${anatomy.CONTENT_GATE.hooks.length} classi di contenuto di \`hooks\` fuori da \`.look-tema\` è rifiutata (\`content-look\`), con \`!important\` o senza, e lo stesso un selettore di tipo o \`*\` dentro una cornice di \`scopes\` (${anatomy.CONTENT_GATE.scopes.map((hook) => `\`.${hook}\``).join(", ")}). Vale per i fogli, le pelli e i frammenti CSS.`,
     "",
     "## Struttura minima",
     "",

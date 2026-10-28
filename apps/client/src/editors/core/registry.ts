@@ -1,4 +1,5 @@
 import type { Theme } from "../../theme/theme";
+import type { Look } from "../../theme/content-look";
 import type { SourceKind } from "../../host/enums.generated";
 import type { PaneMode, SelectionSet, Span, SyntaxForm } from "../../host/contract";
 import type { DocumentUpdate, EditorChange } from "./text-operation";
@@ -34,6 +35,12 @@ export interface SurfaceMode {
    * as stored, a rendering the user edits, or a rendering without a caret.
    */
   readonly contextMode: PaneMode;
+  /**
+   * Who owns the look of the content in this mode, the default first: the
+   * theme (`tema`), the file on its own paper (`file`), or the file's tints on
+   * the theme's paper (`adattato`). Every mode declares it.
+   */
+  readonly looks: readonly Look[];
 }
 
 export interface SurfaceMountContext {
@@ -186,6 +193,132 @@ export interface SurfaceExportWindow {
   open(): Promise<SurfaceExport | null>;
 }
 
+/** How a page fits its pane: to the pane's width, or whole in view. */
+export type PaperFit = "width" | "page";
+
+/**
+ * The page of a document can be fitted to its pane. The band of the frame
+ * offers the fits while the surface shows a page; `null` is the real size.
+ */
+export interface SurfacePaperFit {
+  /** The fits on offer now: none in a mode without a page. */
+  offers(): readonly PaperFit[];
+  current(): PaperFit | null;
+  set(fit: PaperFit | null): void;
+  /** Called when the offers or the current fit change, as when the page arrives. */
+  subscribe(listener: () => void): () => void;
+}
+
+/** A fact about the document that the status band shows while the surface has the focus. */
+export interface SurfaceStatusItem {
+  /** Stable within the surface: the band keeps the element across redraws. */
+  readonly id: string;
+  readonly text: string;
+  /** Said by the tooltip; with `open`, what a click does. */
+  readonly hint?: string;
+  /** A click opens more about it: the band draws a button. */
+  readonly open?: () => void;
+  /**
+   * A sign that switches on, as Track changes: when it appears while the
+   * document keeps the focus, it enters with one beat. Never on a redraw.
+   */
+  readonly beat?: boolean;
+}
+
+/**
+ * The surface's own entries in the status band: page, words, language. A
+ * surface that `counts` its words is the one source for them, and the declared
+ * word count steps aside while it has the focus.
+ */
+export interface SurfaceStatus {
+  readonly counts: boolean;
+  items(): readonly SurfaceStatusItem[];
+  /** Called when an item may have changed: an edit, the selection, the mode. */
+  subscribe(listener: () => void): () => void;
+}
+
+/** How far the document can be written, as the chip by its path says it. */
+export type SurfaceStandingKind = "writes" | "closed" | "body" | "readonly";
+
+/** A gesture the standing offers: going to a place, finding, recording. */
+export interface SurfaceStandingAction {
+  readonly label: string;
+  run(): void;
+}
+
+/** A place the popover lists: with `run`, a «Vai» goes there. */
+export interface SurfaceStandingPlace {
+  readonly label: string;
+  run?(): void;
+}
+
+/** What the chip says and what its popover explains. */
+export interface SurfaceStandingState {
+  readonly kind: SurfaceStandingKind;
+  /** The chip's own words: «Si scrive», «2 parti chiuse». */
+  readonly text: string;
+  readonly title: string;
+  readonly body: string;
+  /** Where the rule comes from, or where the file is saved. */
+  readonly source?: string;
+  /** The places that stay as the file has them, each with its «Vai». */
+  readonly places?: readonly SurfaceStandingPlace[];
+  /**
+   * With a question («Che cosa manca?»), the places start folded behind a
+   * button that asks it; without one, they are listed as they are.
+   */
+  readonly placesAsk?: string;
+  readonly actions?: readonly SurfaceStandingAction[];
+  /** Changes are being tracked: the chip shows «Registra» next to itself. */
+  readonly recording: boolean;
+  /** What tracking means, said by the «Registra» sign. */
+  readonly recordingHint?: string;
+}
+
+/**
+ * The document says how far it can be written: the shell draws the chip next
+ * to the path and its popover. `null` while there is nothing to say yet, as
+ * before the editor arrives or when the document cannot be read.
+ */
+export interface SurfaceStanding {
+  current(): SurfaceStandingState | null;
+  /** Called when the standing may have changed: an edit, the mode, tracking. */
+  subscribe(listener: () => void): () => void;
+}
+
+/** A tab the document brings to the side panel, next to the declared views. */
+export interface SurfacePanel {
+  /** Stable within the surface: the panel keeps its tab across rebuilds. */
+  readonly id: string;
+  title(): string;
+  /** A shell icon name, as the declared views use. */
+  readonly icon: string;
+  /** Draws the panel into `host`; returns its teardown. */
+  mount(host: HTMLElement): () => void;
+}
+
+/**
+ * The tabs of the document (comments, revisions, properties). They follow the
+ * pane in focus and leave with the document.
+ */
+export interface SurfacePanels {
+  /** The tabs on offer now: none before the editor is ready. */
+  list(): readonly SurfacePanel[];
+  /** Called when the list may have changed. */
+  subscribe(listener: () => void): () => void;
+  /**
+   * The surface asks to bring one of its tabs into view, as when its bar
+   * opens Comments: the shell shows the panel and selects the tab.
+   */
+  onShow(listener: (id: string) => void): () => void;
+  /**
+   * Declared views (by id) that these tabs stand in for, or that say nothing
+   * about this document: the inspector leaves them out while the surface is
+   * in focus, as a drawing does with the outline of headings.
+   */
+  readonly covers?: readonly string[];
+}
+
 /**
  * A mounted shell-owned surface. No DOM or CodeMirror value crosses its
  * boundary. Past the first five members everything is a capability: the shell
@@ -212,6 +345,27 @@ export interface EditorSurface {
    * the shell then searches the note on its own.
    */
   find?(): boolean;
+  /**
+   * F6 inside the pane: moves the focus to the surface's next own zone (its
+   * bar, its page) in the direction of `step`. From outside the surface it
+   * enters at the first zone, or at the last one going back. `false` when no
+   * zone is left that way, and the shell moves on to its own.
+   */
+  zone?(step: 1 | -1): boolean;
+  /**
+   * The surface draws its own bar of commands (the document ribbon): the
+   * shell's format bar then stays out of the way, while the selection
+   * bubble and the `fub.editor.action` commands keep working.
+   */
+  readonly ownBar?: boolean;
+  /** The page fits the pane, to its width or whole. */
+  readonly paperFit?: SurfacePaperFit;
+  /** The document's own tabs in the side panel. */
+  readonly panels?: SurfacePanels;
+  /** The document's entries in the status band. */
+  readonly status?: SurfaceStatus;
+  /** How far the document can be written, by its path. */
+  readonly standing?: SurfaceStanding;
   /**
    * Brings the view to a place in the document. `false` when this surface
    * cannot get there, so that the shell says it instead of doing nothing.

@@ -3,6 +3,7 @@ import { INTERACTIVE, REST, S, type PartAnatomy } from "./types";
 
 export const DRAWERS: PartAnatomy = {
   part: "drawers",
+  layer: "cornice",
   components: [
     // I due contenitori. `drawer-*-open` è lo stato «in sovrapposizione» che
     // la shell scrive su `#layout`, `peek-*` quello del cassetto chiuso che si

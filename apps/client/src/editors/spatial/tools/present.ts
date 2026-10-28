@@ -41,8 +41,9 @@
 import { reducedMotion } from "../../../theme/reduced-motion";
 import { identifier, trapFocus } from "../../../ui/a11y";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import { brushForInput, PF1_DEFAULTS, type Pf1Brush } from "../../../ink/brush";
-import { outlinePath, pf1Outline } from "../../../ink/pf1";
+import { brushForInput, PF1_DEFAULTS, type InkBrush } from "../../../ink/brush";
+import { inkOutline } from "../../../ink/outline";
+import { outlinePath } from "../../../ink/pf1";
 import { quantizeInk, type InkSample } from "../../../ink/sample";
 import type { Page } from "../painter/paint";
 import { attachInkInput } from "../../../ink/dom/pointer-adapter";
@@ -221,7 +222,7 @@ interface Mark {
 interface Writing {
   readonly id: number;
   readonly mouse: boolean;
-  readonly brush: Pf1Brush;
+  readonly brush: InkBrush;
   readonly samples: InkSample[];
   readonly mark: Mark;
 }
@@ -451,7 +452,7 @@ export function present(options: PresentOptions, owner: Lifetime): Presentation 
   const drawWriting = (w: Writing, final: boolean): void => {
     let d = "";
     try {
-      d = outlinePath(pf1Outline(quantizeInk(w.samples), w.brush, { last: final }));
+      d = outlinePath(inkOutline(quantizeInk(w.samples), w.brush, { last: final }));
     } catch {
       d = "";
     }

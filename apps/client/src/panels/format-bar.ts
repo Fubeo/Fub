@@ -529,8 +529,11 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     update(specs) {
       if (life.closed) return;
       const surface = host.surface()?.editorActions;
-      const all = host.writing() ? toolbarGroups(specs, surface) : [];
       const only = host.only;
+      // Una superficie con la sua barra (il documento) non ne vuole una
+      // seconda sopra; la bolla della selezione (`only`) resta.
+      const own = !only && host.surface()?.ownBar === true;
+      const all = host.writing() && !own ? toolbarGroups(specs, surface) : [];
       const next = only ? all.filter((group) => only.includes(group.id)) : all;
       // La lingua fa parte della forma: gruppi ed etichette sono della shell.
       const shape = t("format_bar.label") + "#" + next.map((group) =>

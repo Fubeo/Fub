@@ -19,6 +19,7 @@ import { recurve, type CurveKind } from "../curvature";
 import { GUIDE_HIT_PX, guideAt } from "../rulers";
 import { toScene, toScreen } from "../../view";
 import { elemBounds, type ForeignBlock, type Unit } from "../hit";
+import { preciseEraseOps, type StrokeCut } from "../erase-precise";
 import { cornerCursor } from "../reshape";
 import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, DRAG_PX, HIT_PX, MADE, NO_KINDS, NODE_PX } from "./constants";
 import type { EditorContext } from "./context";
@@ -48,6 +49,9 @@ export interface CurvatureToolContext {
   replayBezier: (draft: Drafting, origin: "undo" | "redo") => void;
   readModifiers: (event: PointerEvent) => void;
   radialHere: () => boolean;
+  /// Il menu del clic destro e di Maiusc+F10 aperto in `at`: quello della
+  /// selezione e, con gli strumenti che disegnano, il menu radiale in fondo.
+  canvasMenu: (under: ForeignBlock | null, at: { readonly clientX: number; readonly clientY: number }) => MenuItem[];
   handlers: InkInputOptions;
   pen: InkInput;
 }
@@ -325,6 +329,10 @@ export function installCurvatureTool(ctx: EditorContext): void {
 
   const finishErase = (g: EraseGesture): void => {
     const units = g.sweep.marked();
+    if (ctx.grid.eraser === "precise") {
+      finishPrecise(g, units);
+      return;
+    }
     if (units.length === 0) {
       painter.setDraft(null);
       return;
@@ -332,6 +340,31 @@ export function installCurvatureTool(ctx: EditorContext): void {
     if (commit("draw.action.erase", asGesture(removeOps(withLabels(units)))) !== null) {
       announce(`${plural(units.length, "draw.erased.one", "draw.erased.other")} ${objects()}`);
     }
+  };
+
+  /// La gomma precisa: i tratti tagliati restano a pezzi, gli oggetti che
+  /// non sono tratti, e i tratti cancellati tutti, se ne vanno interi.
+  const finishPrecise = (g: EraseGesture, units: readonly Unit[]): void => {
+    const whole: Unit[] = [];
+    const cuts: StrokeCut[] = [];
+    for (const unit of units) {
+      const cut = g.cuts.get(unit.key);
+      if (cut === undefined) continue;
+      if (cut === "whole") whole.push(unit);
+      else cuts.push(cut);
+    }
+    const gone = whole.length + cuts.filter((cut) => cut.pieces.length === 0).length;
+    if (whole.length === 0 && cuts.length === 0) {
+      painter.setDraft(null);
+      return;
+    }
+    const planned = preciseEraseOps(ctx.engine.model!, cuts, withLabels(whole), newIds());
+    if (commit("draw.action.erase", asGesture(planned.ops)) === null) return;
+    const said = [
+      ...(planned.cut > 0 ? [plural(planned.cut, "draw.erased.part.one", "draw.erased.part.other")] : []),
+      ...(gone > 0 || planned.cut === 0 ? [plural(gone, "draw.erased.one", "draw.erased.other")] : []),
+    ];
+    announce(`${said.join(" ")} ${objects()}`);
   };
 
   const toPoint = (sample: InkSample): Point => [sample.x, sample.y];
@@ -453,9 +486,11 @@ export function installCurvatureTool(ctx: EditorContext): void {
         hoverCut(event.buttons === 0 ? point : null, pointer);
         hoverWidth(event.buttons === 0 ? point : null, pointer);
         hoverDropper(event.buttons === 0 ? point : null, pointer);
+        ctx.hoverNib(event.buttons === 0 ? point : null, pointer);
         hoverGradient(event.buttons === 0 ? point : null, pointer);
         hoverConnector(event.buttons === 0 ? point : null, pointer);
         hoverSymmetry(event.buttons === 0 ? toScreen(ctx.camera, point) : null, pointer);
+        ctx.hoverRuler(event.buttons === 0 ? point : null, pointer);
       }
       // Con Alt, le misure seguono il puntatore.
       if (ctx.current === null && ctx.pressed === null && (ctx.alt || ctx.measured)) showHandles();
@@ -494,6 +529,13 @@ export function installCurvatureTool(ctx: EditorContext): void {
   const radialHere = (): boolean => has("gestures") && editable() && !selectingTool();
   ctx.radialHere = radialHere;
 
+  const canvasMenu = (under: ForeignBlock | null, at: { readonly clientX: number; readonly clientY: number }): MenuItem[] => {
+    const items = ctx.selectionItems(under);
+    if (radialHere()) items.push({ label: t("draw.radial"), separator: true, run: () => ctx.showRadial(at.clientX, at.clientY, null, true) });
+    return items;
+  };
+  ctx.canvasMenu = canvasMenu;
+
   // Col tasto destro, o col tocco lungo, i righelli e le guide del
   // documento hanno il loro menu, con qualunque strumento e anche per una
   // guida bloccata, che solo da qui si sblocca col puntatore. Altrove il
@@ -518,9 +560,10 @@ export function installCurvatureTool(ctx: EditorContext): void {
     const kind = "pointerType" in event ? (event as PointerEvent).pointerType : "mouse";
     const touch = kind === "touch";
     const items = menuItemsAt(p, touch);
-    // Con gli strumenti che disegnano, il menu radiale. Il tocco lungo che lo
-    // apre non lascia un punto sul foglio; un tratto del mouse a metà resta.
-    if (items === null && radialHere()) {
+    // Con gli strumenti che disegnano, la penna e il dito aprono il menu
+    // radiale; il mouse il menu, che lo offre in fondo. Il tocco lungo che lo
+    // apre non lascia un punto sul foglio.
+    if (items === null && radialHere() && kind !== "mouse") {
       if (ctx.pressed !== null || (ctx.current !== null && !(touch && ctx.current.pointer === "touch"))) return;
       event.preventDefault();
       // Se il puntatore è ancora giù, il menu lo segue.
@@ -532,7 +575,11 @@ export function installCurvatureTool(ctx: EditorContext): void {
     // un oggetto che non è scelto, prima lo sceglie. Un tocco lungo che non
     // ha ancora mosso niente lo apre anche lui.
     const still = ctx.current === null || (ctx.current.kind === "select" && ctx.current.mode === "pending") || (ctx.current.kind === "lasso" && !ctx.current.dragging);
-    const selecting = items === null && selectingTool() && ctx.pressed === null && still;
+    const picking = items === null && selectingTool() && ctx.pressed === null && still;
+    // Con gli strumenti che disegnano il mouse apre lo stesso menu, sulla
+    // selezione che c'è, senza scegliere ciò che sta sotto.
+    const drawing = items === null && !picking && has("selection") && ctx.pressed === null && ctx.current === null;
+    const selecting = picking || drawing;
     if (!selecting && (items === null || items.length === 0)) return;
     // Il tocco lungo che apre il menu non tira anche una guida.
     if (!selecting && ctx.current !== null && ctx.current.kind !== "guide") return;
@@ -545,14 +592,19 @@ export function installCurvatureTool(ctx: EditorContext): void {
     const scenePoint = toScene(ctx.camera, p);
     const tolerance = HIT_PX[touch ? "touch" : "mouse"] / ctx.camera.scale;
     const hit = currentIndex().at(scenePoint, tolerance);
-    if (hit !== null && !selectedUnits().some((unit) => unit.key === hit.key || holdsPath(hit.path, unit.path))) select([hit.key]);
-    showContextMenu(event, ctx.selectionItems(has("editable") ? foreignAt(scenePoint, tolerance, hit) : null), { labelledBy: selectionButton.id });
+    if (picking && hit !== null && !selectedUnits().some((unit) => unit.key === hit.key || holdsPath(hit.path, unit.path))) select([hit.key]);
+    showContextMenu(event, canvasMenu(picking && has("editable") ? foreignAt(scenePoint, tolerance, hit) : null, event), { labelledBy: selectionButton.id });
   });
   // Il tasto laterale della penna apre il menu radiale dove la penna è, e la
   // penna lo guida finché il tasto è giù. Sui righelli, sulle guide e con
   // gli strumenti che scelgono resta al sistema, che ne fa un clic destro.
   life.listen(surface, "pointerdown", (event) => {
-    if (event.pointerType !== "pen" || event.button !== 2 || ctx.radial !== null || ctx.current !== null || ctx.pressed !== null) return;
+    // Il tratto del tasto laterale, se la pipeline l'ha già visto, è rifiutato
+    // e il menu lo annulla.
+    const busy = ctx.current !== null && ctx.current.kind !== "refused";
+    if (event.pointerType !== "pen" || event.button !== 2 || ctx.radial !== null || busy || ctx.pressed !== null) return;
+    // Chi ha dato al tasto laterale un altro lavoro lo trova nel tratto.
+    if ((ctx.grid.barrel ?? "radial") !== "radial") return;
     const local = localPoint(event.clientX, event.clientY);
     if (menuItemsAt([local.x, local.y], false) !== null || !radialHere()) return;
     event.preventDefault();
@@ -578,6 +630,7 @@ export function installCurvatureTool(ctx: EditorContext): void {
     hoverCut(null, "mouse");
     hoverWidth(null, "mouse");
     hoverDropper(null, "mouse");
+    ctx.hoverNib(null, "mouse");
     hoverConnector(null, "mouse");
     if (ctx.hover !== null) {
       ctx.hover = null;
@@ -629,7 +682,8 @@ export function installCurvatureTool(ctx: EditorContext): void {
             break;
           }
           // Il contorno si rifà in `onSettled`, una volta per evento.
-          for (const sample of samples) {
+          for (const each of samples) {
+            const sample = ctx.ruled(each, g.ruler);
             g.scene.push(sample);
             g.local.push(toLocal(sample, g.to.inverse));
           }
@@ -698,6 +752,9 @@ export function installCurvatureTool(ctx: EditorContext): void {
         case "symmetry":
           symmetryUpdate(g, toPoint(samples[samples.length - 1]!));
           break;
+        case "ruler":
+          ctx.rulerUpdate(g, toPoint(samples[samples.length - 1]!));
+          break;
         case "note":
           g.at ??= toPoint(samples[0]!);
           break;
@@ -735,6 +792,9 @@ export function installCurvatureTool(ctx: EditorContext): void {
       if (g !== null && g.stroke === id && g.kind === "ink" && g.held === null) drawInk(g);
     },
     onEnd(stroke) {
+      // Il sistema manda un clic destro dietro al tasto laterale: il menu
+      // non si apre sopra il lazo o la gomma appena finiti.
+      if (stroke.role === "barrel") ctx.radialLift = stroke.timeStamp + (stroke.samples[stroke.samples.length - 1]?.t ?? 0);
       const g = ctx.current;
       if (g === null || g.stroke !== stroke.id) return;
       if (stroke.split && (g.kind !== "ink" || g.held !== null)) return;
@@ -807,6 +867,9 @@ export function installCurvatureTool(ctx: EditorContext): void {
         case "symmetry":
           symmetryEnd(g);
           return;
+        case "ruler":
+          ctx.rulerEnd(g);
+          return;
         case "note":
           ctx.current = null;
           noteAt(g.at, g.pointer);
@@ -815,7 +878,7 @@ export function installCurvatureTool(ctx: EditorContext): void {
           ctx.current = null;
           const at = g.at;
           // Il puntatore resta sopra il foglio: l'anteprima torna a seguirlo.
-          if (at !== null && g.pointer !== "touch") ctx.dropperHover = { index: currentIndex(), at, pointer: g.pointer, keyboard: g.stroke < 0, seen: g.seen };
+          if (at !== null && g.pointer !== "touch" && ctx.tool === "eyedropper") ctx.dropperHover = { index: currentIndex(), at, pointer: g.pointer, keyboard: g.stroke < 0, seen: g.seen };
           showHandles();
           // Maiusc conta quando si rilascia.
           if (at !== null) void takeAt(at, g.pointer, ctx.shift);
@@ -844,6 +907,8 @@ export function installCurvatureTool(ctx: EditorContext): void {
       if (g.kind === "select" || g.kind === "guide" || g.kind === "board" || g.kind === "gradient" || g.kind === "connector" || g.kind === "symmetry") showGrip(null);
       // Il centro della simmetria torna dov'era.
       if (g.kind === "symmetry") setSymmetry({ ...ctx.symmetry, center: g.before });
+      // E il righello.
+      if (g.kind === "ruler") ctx.rulerCancel(g);
       // I nodi tornano com'erano, e le forme e gli oggetti con loro.
       if (g.kind === "nodes") {
         ctx.focused = g.shapes;

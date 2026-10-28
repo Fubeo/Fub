@@ -63,7 +63,7 @@ vi.mock("../../../i18n/strings", () => ({
   },
   resolvedLanguage: () => "it",
 }));
-vi.mock("../../../ui/tooltip", () => ({ setTooltip: () => {}, attachTooltip: () => () => {} }));
+vi.mock("../../../ui/tooltip", () => ({ setTooltip: () => {}, attachTooltip: () => () => {}, dismissTooltip: () => {} }));
 vi.mock("../../../ui/icons", () => ({ iconEl: () => null }));
 
 import { mountSaveState } from "./save-state";

@@ -3,6 +3,7 @@ import { INTERACTIVE, REST, S, SELECTABLE, type PartAnatomy } from "./types";
 
 export const FRAME: PartAnatomy = {
   part: "frame",
+  layer: "cornice",
   components: [
     {
       name: "titlebar",

@@ -1413,6 +1413,10 @@ const OWN_LIST_FIELDS = new Map<string, () => Promise<OwnListField>>([
     () => import("../editors/spatial/custom-field").then(({ customField, describeCustom }) => ({ field: customField, describe: describeCustom })),
   ],
   [
+    "draw.toolbar",
+    () => import("../editors/spatial/custom-field").then(({ toolbarField, describeToolbar }) => ({ field: toolbarField, describe: describeToolbar })),
+  ],
+  [
     "uri.allowed",
     () => import("../ui/uri-allowed-field").then(({ uriAllowedField, describeUriAllowed }) => ({ field: uriAllowedField, describe: describeUriAllowed })),
   ],

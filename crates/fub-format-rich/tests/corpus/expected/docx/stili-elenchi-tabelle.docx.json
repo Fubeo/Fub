@@ -2,20 +2,20 @@
   "file": "docx/stili-elenchi-tabelle.docx",
   "sha256": "c72ad55224f314f336eb42ca2fc6c4ab7ac7686f3e3b6e55879809116bf16e6b",
   "open": {
-    "readonly": "codec",
-    "projection": "8658e45a37ab08d707a11eabe03c3e96ec4b258da537b23c83dd3cf47fd5cc77",
+    "readonly": null,
+    "projection": "b8e6fa0cc11024291d723b18e88eb91421df0b8b209b009f22a58095f6975a92",
     "blocks": 8,
     "comments": 0
   },
   "preservation": [
-    "differenze all'apertura: 6",
-    "  header: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}fldSimple>: 1 → 0",
+    "differenze all'apertura: 3",
     "  styles: <{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd>: 1 → 0",
-    "  header: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}fldSimple @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}instr=\" PAGE \": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}type=\"dxa\": 1 → 0",
     "  styles: {http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblInd @{http://schemas.openxmlformats.org/wordprocessingml/2006/main}w=\"0\": 1 → 0",
-    "  header: text of {http://schemas.openxmlformats.org/wordprocessingml/2006/main}p b9d9f2de6ebd: 1 → 0",
+    "blocchi chiusi: {}; scrittura intera: false",
     "normalizzazione «w:id»: 6 nel file, 6 nella prova a vuoto",
+    "normalizzazione «sporgente nullo»: 0 nel file, 8 nella prova a vuoto",
+    "normalizzazione «w:fldSimple»: 1 nel file, 0 nella prova a vuoto",
     "normalizzazione «statistiche di app.xml»: 0 nel file, 3 nella prova a vuoto"
   ],
   "model": {
@@ -46,11 +46,36 @@
     "wordxml": []
   },
   "edits": {
-    "E0": "readonly",
-    "E1": "readonly",
-    "E2": "readonly",
-    "E3": "readonly",
-    "E4": "readonly",
-    "E5": "readonly"
+    "E0": "unchanged",
+    "E1": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E2": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E3": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E4": {
+      "error": "locked",
+      "message": "rich document has closed parts: block None"
+    },
+    "E5": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "same"
+    },
+    "E6": "n/a",
+    "E7": {
+      "saved": true,
+      "readonly": null,
+      "reopened": "different"
+    }
   }
 }

@@ -192,6 +192,15 @@ fn plugin_error(doc: &DocId, error: fub_format_rich::RichError) -> PluginError {
         RichError::Fidelity => {
             PluginError::Internal(Text::message("host.rich.fidelity", vec![doc_arg()]))
         }
+        // Il numero del paragrafo da uno, come lo conta chi legge.
+        RichError::Locked(Some(block)) => PluginError::PermissionDenied(Text::message(
+            "host.rich.locked.block",
+            vec![doc_arg(), Arg::text("block", (block + 1).to_string())],
+        )),
+        RichError::Locked(None) => PluginError::PermissionDenied(Text::message(
+            "host.rich.locked.outside",
+            vec![doc_arg()],
+        )),
         RichError::Codec(why) => PluginError::Internal(Text::message(
             "host.rich.codec",
             vec![doc_arg(), Arg::text("why", why)],

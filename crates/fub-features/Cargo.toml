@@ -118,8 +118,15 @@ serde_json = { workspace = true }
 serde_yaml_ng = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true }
 # Opzionale, e dietro `search`: è l'unica dipendenza pesante del crate ed è di
-# una feature sola.
-tantivy = { version = "0.26", optional = true }
+# una feature sola. Senza `columnar-zstd-compression` dei default: l'indice è
+# ricostruibile e comprime con lz4, e zstd 0.13 (l'unica versione che
+# tantivy-sstable accetta) ha gli avvisi RUSTSEC-2026-0391 e seguenti.
+tantivy = { version = "0.26", optional = true, default-features = false, features = [
+    "mmap",
+    "stopwords",
+    "lz4-compression",
+    "stemmer",
+] }
 regex = { workspace = true, optional = true }
 # Dietro `draw`, e solo lì. `resvg` senza i default, che sono `system-fonts` e
 # `memmap-fonts`: i caratteri sono quelli di Fub, incorporati, e nient'altro.

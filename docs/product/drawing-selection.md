@@ -6,7 +6,7 @@
 > gruppi, come si isola un gruppo e come si bloccano e si nascondono gli
 > oggetti uno per uno.
 
-Dal livello Standard il [disegno](drawing.md) sceglie in più modi della sola
+Nello spazio Completo il [disegno](drawing.md) sceglie in più modi della sola
 freccia: il Lazo, il menu «Selezione avanzata», i clic dentro i gruppi, i
 gruppi isolati; e gli oggetti si bloccano e si nascondono uno per uno, non
 solo per livello. Scegliere e isolare non cambiano il file; bloccare e
@@ -78,10 +78,12 @@ da soli.
 ## Il menu della selezione
 
 «Selezione avanzata», nella barra dopo «Elimina», apre il menu della
-selezione. Lo stesso menu si apre col tasto destro, o col tocco lungo, sul
-foglio con la freccia o il Lazo in mano, e dalla tastiera con `Maiusc+F10` o
-col tasto del menu, sotto la selezione. Il tasto destro su un oggetto che non
-è scelto prima lo sceglie.
+selezione. Lo stesso menu si apre col tasto destro del mouse sul foglio, con
+ogni strumento, col tocco lungo con la freccia o il Lazo in mano, e dalla
+tastiera con `Maiusc+F10` o col tasto del menu, sotto la selezione. Con la
+freccia o il Lazo il tasto destro su un oggetto che non è scelto prima lo
+sceglie; con gli strumenti che disegnano il menu finisce con «Menu radiale»
+([Disegni, vista, gesti e menu radiale](drawing-view.md#il-menu-radiale)).
 
 - **Seleziona tutto** (`Ctrl+A`) e **Inverti la selezione**, che sceglie
   tutto il resto: di un gruppo con dentro un oggetto scelto, gli altri oggetti
@@ -130,12 +132,12 @@ stesso `Ctrl+Maiusc+L` e `Ctrl+Maiusc+H` sulla riga attiva, e il cambio si
 dice: «Gruppo, 2 oggetti: nascosto.». Ciò che sta in un livello o in un
 gruppo bloccato si sblocca da lui, e il suo segno non si tocca.
 
-## Livelli e tasti
+## Spazi e tasti
 
-All'Essenziale non c'è niente di questa pagina: la freccia sceglie gli
+Nel Semplice non c'è niente di questa pagina: la freccia sceglie gli
 oggetti in cima, e gli oggetti bloccati o nascosti da un file restano tali.
-Nel Personalizzato il Lazo e la «Selezione avanzata» sono due parti, come
-dice [Disegni, livello Personalizzato](drawing-custom.md); senza la seconda
+Per chi monta l'editor con le sue parti il Lazo e la «Selezione avanzata» sono due parti, come
+dice [Disegni, spazio di lavoro e barra](drawing-custom.md); senza la seconda
 non ci sono il menu, il clic dentro i gruppi, l'isolamento e il blocco, i
 gruppi dell'albero non si aprono e i suoi segni dicono lo stato senza
 cambiarlo. In un documento in sola lettura si sceglie, si isola e si

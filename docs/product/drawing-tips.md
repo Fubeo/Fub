@@ -5,7 +5,7 @@
 > **Risultato:** sapere quali punte ci sono, dove si scelgono, di che colore
 > e quanto grandi vengono, e che cosa ne fanno i comandi.
 
-Dal livello Standard una linea, una spezzata, un connettore o un tracciato
+Nello spazio Completo una linea, una spezzata, un connettore o un tracciato
 aperto possono avere una **punta** all'inizio e una alla fine, come nel
 pannello Traccia di Illustrator. Si scelgono in «Aspetto», nel [pannello
 delle proprietà](drawing-properties.md). Il modello è in
@@ -106,7 +106,7 @@ risorse](../reference/scene-format-resources.md#le-punte-delle-linee).
   nodo che diventa il capo.
 - **Le operazioni booleane e il costruttore di forme** fanno regioni, che
   non hanno punte.
-- **«Contorno in tracciato»**, all'Esperto, fa delle punte della raccolta
+- **«Contorno in tracciato»**, nel Completo, fa delle punte della raccolta
   una forma sola col contorno. Una linea con «Un’altra punta», o con un
   marcatore sui nodi di mezzo, resta com'è, e il comando la conta fra
   quelle che non riesce a cambiare.
@@ -126,9 +126,9 @@ risorse](../reference/scene-format-resources.md#le-punte-delle-linee).
 - **In Lettura e nell'export** le punte sono quelle del file, uguali a
   quelle del foglio.
 
-## Livelli e parti
+## Spazi e parti
 
-All'Essenziale le punte restano nel disegno e si vedono, ma i due campi non
-ci sono. Nel [Personalizzato](drawing-custom.md) li porta la parte «Punte
+Nel Semplice le punte restano nel disegno e si vedono, ma i due campi non
+ci sono. Per chi monta l'editor con le sue [parti](drawing-custom.md#che-cosa-porta-una-parte) li porta la parte «Punte
 delle linee». In un documento in sola lettura i campi mostrano le punte, e
 non si aprono.

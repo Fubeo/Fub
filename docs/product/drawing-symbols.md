@@ -9,7 +9,7 @@
 > pannello delle proprietà, come si usano il pannello «Simboli» e le librerie
 > del vault, e che cosa succede ai simboli negli appunti.
 
-Dal [livello Esperto](drawing-expert.md) un disegno ha i suoi **simboli**:
+Nello spazio Completo, fra gli [strumenti avanzati](drawing-expert.md), un disegno ha i suoi **simboli**:
 disegni piccoli con un nome, che si mostrano tante volte quante servono. Ogni
 volta che un simbolo compare è un'**istanza**, che lo mostra dov'è, girata e
 grande come lei; cambiare il simbolo cambia tutte le istanze. Le operazioni
@@ -268,10 +268,10 @@ un simbolo, che in ogni istanza ha un fondo diverso. Un testo troppo piccolo
 o un'immagine senza descrizione dentro un simbolo li segnala una volta sola,
 nelle coordinate del simbolo, qualunque sia l'istanza.
 
-## Livelli e parti
+## Spazi e parti
 
-I simboli sono la parte «Simboli» del [Personalizzato](drawing-custom.md),
-dall'Esperto: portano «Crea simbolo» e «Scollega dal simbolo», la riga
+I simboli sono la parte «Simboli» delle [parti dell'editor](drawing-custom.md#che-cosa-porta-una-parte),
+nel Completo: portano «Crea simbolo» e «Scollega dal simbolo», la riga
 «Simbolo» e il pannello «Simboli». Senza, i simboli restano nel disegno e le
 istanze si vedono, si scelgono e si spostano come ogni oggetto; un'istanza
 apre il suo simbolo dove si isola un gruppo, con la selezione avanzata.

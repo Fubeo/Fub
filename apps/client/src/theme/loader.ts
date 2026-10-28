@@ -36,6 +36,7 @@ import {
   themeAssetReferences,
   themeAssetUrls,
   themeCssViolations,
+  type ContentGate,
   type ThemeCssVocabulary,
 } from "../ui/sanitize-css";
 import { contrast } from "./contrast";
@@ -63,9 +64,14 @@ export interface ThemeProfile {
   readonly hooks: readonly string[];
   readonly requiredRoles: readonly string[];
   readonly contrastPairs: readonly ContrastPair[];
+  /** Le coppie dei ruoli facoltativi: si contano solo se il tema li dichiara. */
+  readonly optionalPairs?: readonly ContrastPair[];
   readonly preferenceTokens: readonly string[];
   /** Assente = il vocabolario comune, quello dei frammenti CSS. */
   readonly vocabulary?: ThemeCssVocabulary;
+  /** Le classi di contenuto che una pelle veste soltanto sotto `.look-tema`:
+   * valgono per i fogli, le pelli e i frammenti. */
+  readonly gate?: ContentGate;
 }
 
 
@@ -263,7 +269,10 @@ function tokensOf(css: string): Record<string, string> {
 function contrastReasons(sheet: string): string[] {
   const tokens = tokensOf(sheet);
   const reasons: string[] = [];
-  for (const [ink, background, threshold, where] of profile.contrastPairs) {
+  // Una coppia con un ruolo che il foglio non dichiara non si conta: per le
+  // obbligatorie lo dice già il cancello dei ruoli, le facoltative valgono
+  // solo per chi le dichiara.
+  for (const [ink, background, threshold, where] of [...profile.contrastPairs, ...(profile.optionalPairs ?? [])]) {
     const foreground = tokens[ink];
     const surface = tokens[background];
     if (foreground === undefined || surface === undefined) continue;
@@ -297,6 +306,7 @@ export function validateThemeBundle(bundle: ThemeBundle, light: ThemeLight): str
     allowedHooks: profile.hooks,
     requiredRoles: profile.requiredRoles,
     vocabulary: profile.vocabulary,
+    gate: profile.gate,
   };
   if (typeof bundle.sheet === "string") {
     for (const violation of themeCssViolations(bundle.sheet, policy)) {

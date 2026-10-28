@@ -26,7 +26,10 @@ describe("il disegno del banco delle tavole", () => {
     );
     expect(boards.map((board) => board.paper !== null)).toEqual(fixture.boards.map((board) => board.paper !== null));
     expect(new Set(fixture.boards.map((board) => board.name)).size).toBe(count);
-  });
+    // Mille tavole sono sessantamila oggetti da leggere tre volte: la prova
+    // è che il disegno sia giusto, non quanto in fretta si legge su una
+    // macchina carica.
+  }, 30_000);
 
   it("ha da 40 a 80 oggetti per tavola, e 40 a mille tavole", () => {
     const twenty = boardsFixture(20);

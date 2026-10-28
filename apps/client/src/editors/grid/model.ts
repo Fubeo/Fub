@@ -55,6 +55,9 @@ export interface GridPosition {
 export interface GridSelection {
   readonly anchor: GridPosition;
   readonly focus: GridPosition;
+  /// La cella attiva, quando Invio o Tab la portano dentro un intervallo di
+  /// più celle senza cambiarlo; senza, è `focus`.
+  readonly active?: GridPosition;
 }
 
 export function coordinateAt(sheet: GridSheet, position: GridPosition): GridCoordinate | undefined {

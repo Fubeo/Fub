@@ -34,7 +34,8 @@
 
 import { resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
-import { icon, iconEl, registerIcon } from "../../../ui/icons";
+import { iconEl } from "../../../ui/icons";
+import { ensureDrawIcons } from "../icons";
 import type { Lifetime } from "../../../ui/lifetime";
 import { showContextMenu, type MenuItem } from "../../../ui/menu";
 import type { DocumentModel, ElementPart } from "../scene/model";
@@ -58,15 +59,6 @@ import type { Measure } from "./measure";
 import { customColor } from "./palette";
 import { evaluate, lengthUnits, PERCENT_UNITS, type QuantityProblem } from "./quantity";
 import { FIELD_PLACES, fromUnit, toUnit } from "./rulers";
-
-/// Le icone della sezione, col costrutto di `ui/icons.ts`.
-const ICONS: Readonly<Record<string, readonly string[]>> = {
-  "draw-effect-add": ["M12 5v14", "M5 12h14"],
-  "draw-effect-remove": ["M5 12h14"],
-  "draw-effect-shown": ["M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z", "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"],
-  "draw-effect-hidden": ["M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z", "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z", "M4 4l16 16"],
-  "draw-effect-chevron": ["M8 10l4 4 4-4"],
-};
 
 /// Oltre questo numero di oggetti scelti non si chiede a ciascuno se prende
 /// gli effetti: la misura di un gruppo o di un testo costa, e mille oggetti
@@ -349,7 +341,7 @@ function setText(node: HTMLElement, text: string): void {
 }
 
 export function createEffectsPanel(life: Lifetime, options: EffectsPanelOptions): EffectsPanel {
-  for (const [name, paths] of Object.entries(ICONS)) if (icon(name) === "") registerIcon(name, paths);
+  ensureDrawIcons();
   const element = document.createElement("div");
   element.className = "draw-effects";
 

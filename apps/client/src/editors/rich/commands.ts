@@ -19,7 +19,7 @@
 import { chainCommands, deleteSelection, joinBackward, joinForward, selectNodeBackward, selectNodeForward, toggleMark } from "prosemirror-commands";
 import { redo, redoDepth, undo, undoDepth } from "prosemirror-history";
 import type { Mark as PmMark, MarkType, Node as PmNode, ResolvedPos } from "prosemirror-model";
-import { NodeSelection, Plugin, TextSelection, type Command, type EditorState, type Transaction } from "prosemirror-state";
+import { NodeSelection, Plugin, PluginKey, TextSelection, type Command, type EditorState, type Transaction } from "prosemirror-state";
 import {
   BODY,
   COLOR_AUTO,
@@ -31,9 +31,13 @@ import {
   type LayoutLength,
   type Line,
   type Look,
+  type ParaStyle,
   type Role,
+  type RoleLooks,
 } from "./projection";
+import { FONT_SIZES, lookCommands, markActive, MAX_FONT_SIZE, MIN_FONT_SIZE, type LookState } from "../../scrittura/look";
 import { safeHref } from "./paste";
+import { cellAt, cellBoxes, selectedCells } from "./cell-selection";
 import { canComment } from "./comments";
 import { goToRevision, resolveAll, resolveRevision } from "./review";
 import { richSchema } from "./schema";
@@ -69,6 +73,96 @@ export function selectedRole(state: EditorState): Role | null {
 
 /// Dà `role` ai paragrafi selezionati. `toggle`: se l'hanno già tutti, tornano
 /// testo normale.
+/// Gli aspetti che il documento dà ai ruoli e ai suoi stili: chi cambia il
+/// ruolo o lo stile di un paragrafo li legge qui, perché il paragrafo si
+/// mostri subito come verrà salvato.
+export interface ParaLooks {
+  /// Il testo senza stile.
+  readonly body?: Look;
+  readonly roles?: RoleLooks;
+  readonly styles?: readonly ParaStyle[];
+}
+
+const PARA_LOOKS = new PluginKey("rich-para-looks");
+
+/// Porta nello stato gli aspetti del documento di adesso: `looks` si legge a
+/// ogni cambio, così un documento ricaricato non lascia quelli di prima.
+export function paraLooksPlugin(looks: () => ParaLooks): Plugin {
+  return new Plugin({ key: PARA_LOOKS, looks });
+}
+
+function paraLooks(state: EditorState): ParaLooks {
+  const looks = PARA_LOOKS.get(state)?.spec.looks as (() => ParaLooks) | undefined;
+  return looks?.() ?? {};
+}
+
+/// L'aspetto (`f`) di un paragrafo che prende il ruolo `role` con lo stile
+/// `s`: quello che lo stile del ruolo gli darà. Un titolo di cui il codec non
+/// sa dire l'aspetto torna al testo senza stile, non tiene quello di prima.
+export function roleLook(state: EditorState, role: Role, s: string | null, current: Look | null): Look | null {
+  const looks = paraLooks(state);
+  const known = (look: Look | undefined) => (look && Object.keys(look).length > 0 ? look : undefined);
+  const body = known(looks.body) ?? null;
+  switch (role.kind) {
+    case "heading":
+      return known(looks.roles?.h?.[role.level - 1]) ?? body;
+    case "quote":
+      return known(looks.roles?.quote) ?? body;
+    case "list":
+      // Una voce con uno stile suo lo tiene: il salvataggio non lo cambia.
+      return s ? current : (known(looks.roles?.list) ?? body);
+    case "body":
+      return s ? (known(looks.styles?.find((style) => style.id === s)?.f) ?? current) : body;
+  }
+}
+
+/// Le marche dei valori che uno stile nuovo può togliere.
+const DIRECT_LOOK: readonly MarkType[] = [richSchema.marks.font, richSchema.marks.size, richSchema.marks.color];
+
+/// Come Word: dando uno stile a un paragrafo, il carattere, la dimensione o il
+/// colore scritti a mano su più di metà del suo testo se ne vanno, e il
+/// paragrafo prende l'aspetto dello stile. Su un tratto più breve restano,
+/// come l'enfasi.
+function dropMostlyDirect(tr: Transaction, pos: number): void {
+  const node = tr.doc.nodeAt(pos);
+  if (!node) return;
+  let total = 0;
+  const covered = new Map<MarkType, number>();
+  node.forEach((child) => {
+    if (!child.isText) return;
+    total += child.nodeSize;
+    for (const type of DIRECT_LOOK) if (type.isInSet(child.marks)) covered.set(type, (covered.get(type) ?? 0) + child.nodeSize);
+  });
+  for (const [type, size] of covered) if (size * 2 > total) tr.removeMark(pos + 1, pos + node.nodeSize - 1, type);
+}
+
+/// L'allineamento che lo stile del ruolo `role`, o lo stile `s`, dà al
+/// paragrafo; `null` a sinistra.
+function styleAlign(state: EditorState, role: Role, s: string | null): Align | null {
+  const looks = paraLooks(state);
+  const aligns = looks.roles?.align;
+  const own = s ? looks.styles?.find((style) => style.id === s) : undefined;
+  switch (role.kind) {
+    case "heading":
+      return aligns?.h?.[role.level - 1] ?? null;
+    case "quote":
+      return aligns?.quote ?? null;
+    case "list":
+      return (own ? own.align : aligns?.list) ?? null;
+    case "body":
+      return (own ? own.align : aligns?.body) ?? null;
+  }
+}
+
+/// L'allineamento di un paragrafo che passa al ruolo `role` con lo stile `s`.
+/// Come in Word: uno che seguiva il suo stile prende quello del nuovo, uno
+/// scritto a mano resta.
+function restyledAlign(state: EditorState, node: PmNode, role: Role, s: string | null): Align | null {
+  const now = (node.attrs.align as Align | null) ?? null;
+  const shown = now === "left" ? null : now;
+  return shown === styleAlign(state, node.attrs.role as Role, node.attrs.s as string | null) ? styleAlign(state, role, s) : shown;
+}
+
 export function setRole(role: Role, toggle = false): Command {
   return (state, dispatch) => {
     const paras = selectedParas(state);
@@ -78,7 +172,13 @@ export function setRole(role: Role, toggle = false): Command {
     if (paras.every(({ node }) => sameRole(node.attrs.role as Role, next))) return false;
     if (dispatch) {
       const tr = state.tr;
-      for (const { node, pos } of paras) tr.setNodeMarkup(pos, null, { ...node.attrs, role: next });
+      for (const { node, pos } of paras) {
+        const s = node.attrs.s as string | null;
+        const f = roleLook(state, next, s, node.attrs.f as Look | null);
+        tr.setNodeMarkup(pos, null, { ...node.attrs, role: next, f, align: restyledAlign(state, node, next, s) });
+        // Un elenco non è uno stile: la voce tiene il suo aspetto.
+        if (next.kind !== "list") dropMostlyDirect(tr, pos);
+      }
       dispatch(tr.scrollIntoView());
     }
     return true;
@@ -107,21 +207,7 @@ export function shiftListLevel(delta: number): Command {
   };
 }
 
-/// La marca è attiva su tutta la selezione (o nelle marche del cursore).
-export function markActive(state: EditorState, type: MarkType): boolean {
-  const { from, to, empty, $from } = state.selection;
-  if (empty) return !!type.isInSet(state.storedMarks ?? $from.marks());
-  let all = true;
-  let any = false;
-  state.doc.nodesBetween(from, to, (node) => {
-    if (!node.isInline) return true;
-    if (node.type.name === "atom") return false;
-    any = true;
-    if (!type.isInSet(node.marks)) all = false;
-    return false;
-  });
-  return any && all;
-}
+export { markActive };
 
 /// Le marche dell'aspetto di un tratto: ciò che «Copia formato» porta e
 /// «Cancella formattazione» toglie. Il link e le proprietà opache no.
@@ -155,154 +241,22 @@ export const clearFormatting: Command = (state, dispatch) => {
 
 // ── L'aspetto del carattere ─────────────────────────────────────────────────
 
-/// Le dimensioni che i menu propongono e su cui «Ingrandisci» e «Riduci»
-/// fanno un passo, come in Word.
-export const FONT_SIZES: readonly number[] = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
-export const MIN_FONT_SIZE = 1;
-export const MAX_FONT_SIZE = 1638;
+export { FONT_SIZES, MAX_FONT_SIZE, MIN_FONT_SIZE, type LookState };
 
-/// L'aspetto del testo selezionato: un campo è `null` dove la selezione ne
-/// mescola più d'uno. `hl` è `null` anche dove il testo non è evidenziato.
-export interface LookState {
-  readonly font: string | null;
-  readonly size: number | null;
-  readonly color: string | null;
-  readonly hl: string | null;
-}
+/// I comandi del carattere di Scrittura, sui paragrafi del documento: un
+/// tratto uguale all'aspetto del paragrafo non lo riscrive.
+const LOOK = lookCommands(
+  {
+    schema: richSchema,
+    paragraph: (node) => node.type === para,
+    base: (paragraph) => (paragraph.attrs.f as Look | null) ?? null,
+    fallbackSize: 11,
+    highlight: HIGHLIGHT_DEFAULT,
+  },
+  COLOR_AUTO,
+);
 
-/// L'aspetto di un testo con queste marche nel paragrafo `paragraph`.
-function lookAt(marks: readonly PmMark[], paragraph: PmNode | null): { font?: string; size?: number; color: string; hl: string | null } {
-  const base = (paragraph?.attrs.f as Look | null) ?? null;
-  let font = base?.font;
-  let size = base?.size;
-  let color = COLOR_AUTO;
-  let hl: string | null = null;
-  for (const mark of marks) {
-    const name = mark.type.name;
-    if (name === "font") font = mark.attrs.family as string;
-    else if (name === "size") size = mark.attrs.pt as number;
-    else if (name === "color") color = mark.attrs.value as string;
-    else if (name === "h") hl = (mark.attrs.color as string | null) ?? HIGHLIGHT_DEFAULT;
-  }
-  return { font, size, color, hl };
-}
-
-export function selectedLook(state: EditorState): LookState {
-  const { from, to, empty, $from } = state.selection;
-  if (empty) {
-    const look = lookAt(state.storedMarks ?? $from.marks(), $from.parent.type === para ? $from.parent : null);
-    return { font: look.font ?? null, size: look.size ?? null, color: look.color, hl: look.hl };
-  }
-  const seen: ReturnType<typeof lookAt>[] = [];
-  state.doc.nodesBetween(from, to, (node, _pos, parent) => {
-    if (!node.isInline) return true;
-    if (node.type.name !== "atom") seen.push(lookAt(node.marks, parent));
-    return false;
-  });
-  if (seen.length === 0) return { font: null, size: null, color: null, hl: null };
-  const common = <T>(pick: (look: ReturnType<typeof lookAt>) => T): T | null =>
-    seen.every((look) => pick(look) === pick(seen[0])) ? pick(seen[0]) : null;
-  return {
-    font: common((look) => look.font ?? null),
-    size: common((look) => look.size ?? null),
-    color: common((look) => look.color),
-    hl: common((look) => look.hl),
-  };
-}
-
-/// I tratti di testo della selezione, ciascuno col suo paragrafo.
-function selectedRuns(state: EditorState): { from: number; to: number; paragraph: PmNode; node: PmNode }[] {
-  const out: { from: number; to: number; paragraph: PmNode; node: PmNode }[] = [];
-  const { from, to } = state.selection;
-  state.doc.nodesBetween(from, to, (node, pos, parent) => {
-    if (!node.isInline) return true;
-    if (node.type.name !== "atom" && parent) {
-      out.push({ from: Math.max(from, pos), to: Math.min(to, pos + node.nodeSize), paragraph: parent, node });
-    }
-    return false;
-  });
-  return out;
-}
-
-/// Mette su ogni tratto selezionato la marca che `make` sceglie per lui
-/// (`null`: nessuna). Senza selezione vale per ciò che si scrive dopo.
-function setMarkPerRun(type: MarkType, make: (run: { paragraph: PmNode; marks: readonly PmMark[] }) => PmMark | null): Command {
-  return (state, dispatch) => {
-    const { empty, $from } = state.selection;
-    if (empty) {
-      if ($from.parent.type !== para) return false;
-      if (dispatch) {
-        const marks = type.removeFromSet(state.storedMarks ?? $from.marks());
-        const mark = make({ paragraph: $from.parent, marks: state.storedMarks ?? $from.marks() });
-        dispatch(state.tr.setStoredMarks(mark ? mark.addToSet(marks) : marks));
-      }
-      return true;
-    }
-    const runs = selectedRuns(state);
-    if (runs.length === 0) return false;
-    if (dispatch) {
-      const tr = state.tr;
-      for (const run of runs) {
-        tr.removeMark(run.from, run.to, type);
-        const mark = make({ paragraph: run.paragraph, marks: run.node.marks });
-        if (mark) tr.addMark(run.from, run.to, mark);
-      }
-      dispatch(tr);
-    }
-    return true;
-  };
-}
-
-/// Il carattere della selezione. Quello del paragrafo non si scrive: il
-/// tratto torna a seguirlo.
-export function setFont(family: string | null): Command {
-  const type = richSchema.marks.font;
-  return setMarkPerRun(type, ({ paragraph }) => {
-    const base = (paragraph.attrs.f as Look | null)?.font;
-    return family && family !== base ? type.create({ family }) : null;
-  });
-}
-
-function clampSize(pt: number): number {
-  return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.round(pt * 2) / 2));
-}
-
-/// La dimensione della selezione, in punti.
-export function setSize(pt: number | null): Command {
-  const type = richSchema.marks.size;
-  return setMarkPerRun(type, ({ paragraph }) => {
-    if (pt === null || !Number.isFinite(pt)) return null;
-    const size = clampSize(pt);
-    const base = (paragraph.attrs.f as Look | null)?.size;
-    return size !== base ? type.create({ pt: size }) : null;
-  });
-}
-
-/// Un passo della scala `FONT_SIZES` per ogni tratto, dalla sua dimensione.
-export function stepSize(direction: 1 | -1): Command {
-  const type = richSchema.marks.size;
-  return setMarkPerRun(type, ({ paragraph, marks }) => {
-    const base = (paragraph.attrs.f as Look | null)?.size;
-    const current = (type.isInSet(marks)?.attrs.pt as number | undefined) ?? base ?? 11;
-    const next =
-      direction > 0
-        ? FONT_SIZES.find((size) => size > current) ?? clampSize(current + 10)
-        : [...FONT_SIZES].reverse().find((size) => size < current) ?? clampSize(current - 1);
-    return next !== base ? type.create({ pt: next }) : null;
-  });
-}
-
-/// Il colore del testo selezionato; `null` lo riporta a quello del paragrafo.
-export function setColor(value: string | null): Command {
-  const type = richSchema.marks.color;
-  return setMarkPerRun(type, () => (value ? type.create({ value }) : null));
-}
-
-/// L'evidenziatore sulla selezione, nel colore dato; `null` lo toglie.
-export function setHighlight(color: string | null): Command {
-  const type = richSchema.marks.h;
-  return setMarkPerRun(type, () => (color ? type.create({ color: color === HIGHLIGHT_DEFAULT ? null : color }) : null));
-}
+export const { selectedLook, setFont, setSize, stepSize, setColor, setHighlight } = LOOK;
 
 /// Le marche d'aspetto all'inizio della selezione: ciò che «Copia formato»
 /// prende.
@@ -338,7 +292,11 @@ export const splitParagraph: Command = (state, dispatch) => {
   const recording = tracking(state.doc);
   if (paragraph.content.size === 0 && role.kind === "list" && !recording) {
     // Una voce vuota esce dall'elenco invece di farne un'altra.
-    if (dispatch) dispatch(state.tr.setNodeMarkup($from.before(), null, { ...paragraph.attrs, role: BODY }));
+    if (dispatch) {
+      const s = paragraph.attrs.s as string | null;
+      const f = roleLook(state, BODY, s, paragraph.attrs.f as Look | null);
+      dispatch(state.tr.setNodeMarkup($from.before(), null, { ...paragraph.attrs, role: BODY, f, align: restyledAlign(state, paragraph, BODY, s) }));
+    }
     return true;
   }
   if (!dispatch) return true;
@@ -348,7 +306,11 @@ export const splitParagraph: Command = (state, dispatch) => {
   const atEnd = $pos.parentOffset === $pos.parent.content.size;
   const leavesHeading = atEnd && role.kind === "heading";
   const marks = state.storedMarks ?? $pos.marks();
-  tr.split($pos.pos, 1, [{ type: para, attrs: { ...paragraph.attrs, role: leavesHeading ? BODY : role } }]);
+  // Dopo un titolo si scrive testo normale, con l'aspetto del testo.
+  const after = leavesHeading
+    ? { role: BODY, s: null, f: roleLook(state, BODY, null, null), align: restyledAlign(state, paragraph, BODY, null) }
+    : { role };
+  tr.split($pos.pos, 1, [{ type: para, attrs: { ...paragraph.attrs, ...after } }]);
   // Il segno di fine revisionato resta in fondo, al secondo: il primo ne ha
   // uno nuovo, di chi scrive.
   if (tracksMark(paragraph) && !recording) tr.setNodeMarkup($pos.before(), null, { ...tr.doc.nodeAt($pos.before())!.attrs, ins: null, del: null });
@@ -694,15 +656,27 @@ function cellPos(at: InRow, index: number): number {
   return pos;
 }
 
-/// Unisce le celle che la selezione tocca in una riga: la prima copre le
-/// colonne di tutte e ne raccoglie i blocchi, tranne i paragrafi vuoti.
+/// Unisce le celle che la selezione tocca in una riga, o le celle scelte se
+/// stanno in una riga: la prima copre le colonne di tutte e ne raccoglie i
+/// blocchi, tranne i paragrafi vuoti.
 export const mergeCells: Command = (state, dispatch) => {
   const { $from, $to } = state.selection;
   const at = rowAt($from);
-  const end = rowAt($to);
-  if (!at || !end || at.rowPos !== end.rowPos) return false;
-  const from = $from.index(at.depth);
-  const to = $to.index(at.depth);
+  if (!at) return false;
+  let from: number;
+  let to: number;
+  const chosen = selectedCells(state);
+  if (chosen) {
+    const row = chosen.boxes[0]!.row;
+    if (chosen.boxes.some((box) => box.row !== row) || chosen.tablePos !== at.tablePos || row !== at.rowIndex) return false;
+    from = chosen.boxes[0]!.index;
+    to = chosen.boxes[chosen.boxes.length - 1]!.index;
+  } else {
+    const end = rowAt($to);
+    if (!end || at.rowPos !== end.rowPos) return false;
+    from = $from.index(at.depth);
+    to = $to.index(at.depth);
+  }
   if (from >= to) return false;
   let span = 0;
   const content: PmNode[] = [];
@@ -724,6 +698,25 @@ export const mergeCells: Command = (state, dispatch) => {
   }
   return true;
 };
+
+/// Tab e Maiusc+Tab in una tabella, come in Word: alla cella dopo o prima,
+/// col suo testo scelto; Tab nell'ultima cella aggiunge una riga come
+/// l'ultima. Fuori da una tabella il tasto resta a chi viene dopo.
+export function cellTab(step: 1 | -1): Command {
+  return (state, dispatch) => {
+    const here = cellAt(state.selection.$head);
+    if (!here) return false;
+    const boxes = cellBoxes(here.table, here.tablePos);
+    const next = boxes[boxes.indexOf(boxes.find((box) => box.pos === here.box.pos)!) + step];
+    if (!next) return step > 0 && !here.table.attrs.locked ? insertRow("after")(state, dispatch) : true;
+    if (dispatch) {
+      const start = TextSelection.near(state.doc.resolve(next.pos + 1)).from;
+      const end = TextSelection.near(state.doc.resolve(next.pos + next.node.nodeSize - 1), -1).to;
+      dispatch(state.tr.setSelection(TextSelection.create(state.doc, start, Math.max(start, end))).scrollIntoView());
+    }
+    return true;
+  };
+}
 
 /// Divide la cella unita del cursore: tiene il contenuto in una colonna, e
 /// le altre tornano celle vuote come lei.
@@ -929,7 +922,7 @@ export const LINE_SPACINGS: readonly number[] = [1, 1.15, 1.5, 2, 2.5, 3];
 
 /// Cambia gli attributi dei paragrafi selezionati con `change`; `false` se
 /// nessuno cambierebbe.
-function updateParas(change: (node: PmNode) => Record<string, unknown> | null): Command {
+function updateParas(change: (node: PmNode) => Record<string, unknown> | null, after?: (tr: Transaction, pos: number) => void): Command {
   return (state, dispatch) => {
     const edits: { pos: number; attrs: Record<string, unknown> }[] = [];
     for (const { node, pos } of selectedParas(state)) {
@@ -941,7 +934,10 @@ function updateParas(change: (node: PmNode) => Record<string, unknown> | null): 
     if (edits.length === 0) return false;
     if (dispatch) {
       const tr = state.tr;
-      for (const { pos, attrs } of edits) tr.setNodeMarkup(pos, null, attrs);
+      for (const { pos, attrs } of edits) {
+        tr.setNodeMarkup(pos, null, attrs);
+        after?.(tr, pos);
+      }
       dispatch(tr.scrollIntoView());
     }
     return true;
@@ -1036,12 +1032,20 @@ export function selectedStyle(state: EditorState): string | null {
 /// documento li fa testo normale con quello stile; un ruolo toglie lo stile.
 /// `look` è l'aspetto del testo senza stile: quello che un paragrafo di corpo
 /// torna a mostrare.
+/// Il carattere, la dimensione o il colore scritti su più di metà del testo
+/// se ne vanno (`dropMostlyDirect`).
 export function setStyle(pick: StylePick, look: Look | undefined): Command {
-  return updateParas(() => {
-    if ("s" in pick) return { role: BODY, s: pick.s, f: pick.f ?? look ?? null };
-    if (pick.role.kind === "body") return { role: BODY, s: null, f: look ?? null };
-    return { role: pick.role, s: null };
-  });
+  return (state, dispatch) =>
+    updateParas((node) => {
+      if ("s" in pick) return { role: BODY, s: pick.s, f: pick.f ?? look ?? null, align: restyledAlign(state, node, BODY, pick.s) };
+      if (pick.role.kind === "body") return { role: BODY, s: null, f: look ?? null, align: restyledAlign(state, node, BODY, null) };
+      return {
+        role: pick.role,
+        s: null,
+        f: roleLook(state, pick.role, null, node.attrs.f as Look | null),
+        align: restyledAlign(state, node, pick.role, null),
+      };
+    }, dropMostlyDirect)(state, dispatch);
 }
 
 // ── Il catalogo ──────────────────────────────────────────────────────────────

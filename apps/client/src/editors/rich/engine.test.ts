@@ -9,6 +9,7 @@ import { RichEngine } from "./engine";
 import { parseProjection, type Block, type Projection } from "./projection";
 import { extractSegments, replaceChecked } from "./proof";
 import { richSchema, toDoc } from "./schema";
+import { t } from "../../i18n/strings";
 import { safeHref } from "./paste";
 
 let engines: RichEngine[] = [];
@@ -47,6 +48,28 @@ function at(doc: PmNode, needle: string, offset = 0): number {
 const blocksOf = (e: RichEngine) => parseProjection(e.getDoc()).blocks;
 
 describe("il motore ricco", () => {
+  it("il Tab si ferma sul foglio: Invio porta a scrivere, e dopo un Esc il Tab esce invece di scrivere", () => {
+    const e = engine(source([para("uno")]));
+    const page = document.querySelector<HTMLElement>(".rich-desk")!.parentElement!;
+    const editable = document.querySelector<HTMLElement>(".rich-content")!;
+    expect(page.tabIndex).toBe(0);
+    expect(page.getAttribute("role")).toBe("document");
+    expect(page.getAttribute("aria-label")).toBe("documento");
+    expect(editable.getAttribute("tabindex")).toBe("-1");
+    page.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(editable);
+    e.select(at(e.state.doc, "uno"));
+    const tab = () => editable.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", keyCode: 9, bubbles: true, cancelable: true }));
+    // Un Tab scrive una tabulazione e il browser non sposta il fuoco.
+    expect(tab()).toBe(false);
+    expect(e.state.doc.textContent).toBe("\tuno");
+    editable.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true, cancelable: true }));
+    expect(tab()).toBe(true);
+    expect(e.state.doc.textContent).toBe("\tuno");
+    e.destroy();
+    expect(page.hasAttribute("tabindex")).toBe(false);
+  });
+
   it("un testo che non si legge non si scrive, e non diventa un documento vuoto salvabile", () => {
     const changes: EditorChange[] = [];
     const e = engine("{non è una proiezione", changes);
@@ -57,7 +80,7 @@ describe("il motore ricco", () => {
     expect(changes).toEqual([]);
   });
 
-  it("un oggetto si annuncia per specie e testo alternativo, e senza etichetta mostra un segno", () => {
+  it("un oggetto si annuncia per specie e testo alternativo, e il segnaposto dice che cosa è", () => {
     engine(
       source([
         {
@@ -75,12 +98,50 @@ describe("il motore ricco", () => {
     const [image, note, marker] = [...document.body.querySelectorAll<HTMLElement>(".rich-atom")];
     expect(image.getAttribute("role")).toBe("img");
     expect(image.getAttribute("aria-label")).toMatch(/: Un pino$/);
-    expect(image.textContent).toBe("Un pino");
+    expect(image.textContent).toBe(`▣${t("rich.atom.image")}`);
+    expect(image.title).toBe(`${image.getAttribute("aria-label")}. ${t("rich.atom.kept")}`);
     expect(note.getAttribute("aria-label")).not.toBe("");
     expect(note.getAttribute("aria-label")).not.toContain(":");
-    expect(note.textContent).toBe("*");
+    // Il richiamo è il suo numero, scritto dal tema (`notes.ts`).
+    expect(note.textContent).toBe("");
+    expect(note.dataset.number).toBe("1");
     expect(marker.hasAttribute("role")).toBe(false);
     expect(marker.textContent).toBe("");
+  });
+
+  it("i segnaposto dicono specie e misura: un'immagine, una forma, una casella di testo, una formula", () => {
+    engine(
+      source([
+        {
+          t: "para",
+          role: { kind: "body" },
+          k: "P",
+          c: [
+            { t: "atom", k: "I", kind: "image", label: "Il cortile", w: 113.4, h: 85.05 },
+            { t: "atom", k: "S", kind: "shape", w: 72, h: 36 },
+            { t: "atom", k: "B", kind: "text_box", w: 72, h: 36 },
+            { t: "atom", k: "E", kind: "equation", label: "a+b" },
+          ],
+        } as Block,
+      ]),
+    );
+    const said = [...document.body.querySelectorAll<HTMLElement>(".rich-atom-name")].map((el) => el.textContent);
+    expect(said).toEqual([
+      `${t("rich.atom.image")} · 4 × 3 cm`,
+      `${t("rich.atom.shape")} · 2,5 × 1,3 cm`,
+      `${t("rich.atom.text_box")} · 2,5 × 1,3 cm`,
+      `${t("rich.atom.equation")} a+b`,
+    ]);
+    for (const atom of document.body.querySelectorAll<HTMLElement>(".rich-atom")) expect(atom.title).toContain(t("rich.atom.kept"));
+  });
+
+  it("una casella troppo stretta per il nome mostra il segno, e il nome resta nel suggerimento", () => {
+    engine(source([{ t: "para", role: { kind: "body" }, k: "P", c: [{ t: "atom", k: "I", kind: "image", w: 40, h: 30 }] } as Block]));
+    const atom = document.body.querySelector<HTMLElement>(".rich-atom")!;
+    expect(atom.querySelector(".rich-atom-name")).toBeNull();
+    expect(atom.querySelector(".rich-atom-glyph")).not.toBeNull();
+    expect(atom.title).toBe(`${t("rich.atom.image")} · 1,4 × 1,1 cm. ${t("rich.atom.kept")}`);
+    expect(atom.getAttribute("aria-label")).toBe(t("rich.atom.image"));
   });
 
   it("una proiezione in sola lettura non si scrive", () => {

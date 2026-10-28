@@ -12,7 +12,7 @@ import type { NodeKey } from "../nodes";
 import { GRID_MAJOR } from "../grid";
 import { sceneArrow } from "../../view";
 import type { Unit } from "../hit";
-import { featuresFor, levelsAbove, presentKeyGroups, presentStartRows, toolsOf, type Feature, type Level } from "../registry";
+import { featuresFor, levelsAbove, presentKeyGroups, presentStartRows, toolKeys, toolsOf, type Feature, type Level } from "../registry";
 import {
   ATTRIBUTES_BINDING,
   BAR_FEATURES,
@@ -384,6 +384,13 @@ export function installKeys(ctx: EditorContext): void {
             ["Mod-Shift-[ Shift-PageDown", t("draw.order.back")],
           ] as const)
         : []),
+      ...(arrange
+        ? ([
+            ["Alt-a Alt-d Alt-w Alt-s", t("draw.keys.align")],
+            ["Alt-h Alt-v", t("draw.keys.center")],
+            ["Alt-Shift-h Alt-Shift-v", t("draw.keys.distribute")],
+          ] as const)
+        : []),
       ...(at.has("transform") ? [[TRANSFORM_BINDING, t("draw.transform")] as const] : []),
       ["Alt-F10", t("draw.keys.arrange")],
     ];
@@ -397,7 +404,7 @@ export function installKeys(ctx: EditorContext): void {
           {
             title: t("draw.keys.grid"),
             rows: [
-              ["#", t("draw.keys.grid.show")],
+              ["# Mod-'", t("draw.keys.grid.show")],
               ["%", t("draw.keys.grid.snap")],
               ["Mod", t("draw.keys.grid.free")],
             ],
@@ -412,6 +419,7 @@ export function installKeys(ctx: EditorContext): void {
           {
             title: t("draw.keys.guides"),
             rows: [
+              ["Mod-u", t("draw.keys.guides.toggle")],
               ["Mod", t("draw.keys.guides.free")],
               ["Alt", t("draw.keys.guides.measure")],
             ],
@@ -427,7 +435,7 @@ export function installKeys(ctx: EditorContext): void {
             title: t("draw.keys.rulers"),
             rows: [
               [RULERS_BINDING, t("draw.keys.rulers.show")],
-              ["|", t("draw.keys.rulers.guides")],
+              ["| Mod-;", t("draw.keys.rulers.guides")],
               ["Mod", t("draw.keys.rulers.free")],
             ],
           },
@@ -803,12 +811,13 @@ export function installKeys(ctx: EditorContext): void {
         ];
 
   const keyGroups = (at: ReadonlySet<Feature>): KeyGroup[] => [
-    { title: t("draw.keys.tools"), rows: toolsOf(at).map((spec) => [spec.shortcut, t(spec.label)] as const) },
+    { title: t("draw.keys.tools"), rows: toolsOf(at).map((spec) => [toolKeys(spec), t(spec.label)] as const) },
     {
       title: t("draw.keys.cursor"),
       rows: [
         [ARROW_KEYS, t(gridOn(at) ? "draw.keys.cursor.move.grid" : "draw.keys.cursor.move")],
         ["Space Enter", t("draw.keys.cursor.press")],
+        ["Space", t("draw.keys.space.hand")],
         ["Escape", t("draw.keys.cancel")],
       ],
     },
@@ -818,6 +827,8 @@ export function installKeys(ctx: EditorContext): void {
         [ARROW_KEYS, t(gridOn(at) ? "draw.keys.nudge.grid" : "draw.keys.nudge")],
         [`Mod-${ARROW_KEYS}`, t(gridOn(at) ? "draw.keys.resize.grid" : "draw.keys.resize")],
         ["[ ]", t("draw.keys.rotate")],
+        ["[ ]", t("draw.keys.nib")],
+        ["Shift-h Shift-v", t("draw.keys.flip")],
         ["Tab Shift-Tab", t("draw.keys.walk")],
         ["Home End", t("draw.keys.ends")],
         ["Enter", t(at.has("properties") ? "draw.keys.properties.panel" : "draw.properties")],
@@ -858,19 +869,23 @@ export function installKeys(ctx: EditorContext): void {
       rows: [
         ["+", t("draw.zoom_in")],
         ["-", t("draw.zoom_out")],
-        ["0", t("draw.keys.actual")],
+        ["0 Mod-0", t("draw.keys.actual")],
         ["Shift-1", t("draw.fit")],
+        ["Shift-2", t("draw.fit.selection")],
+        ["Mod-y", t("draw.outlines")],
+        ["Mod-/", t("draw.keys.commands")],
+        ["Mod-.", t("draw.bare")],
         ...presentStartRows(at, t),
-        ...(at.has("gestures")
-          ? ([["4", t("draw.turn.left")], ["6", t("draw.turn.right")], ["5", t("draw.turn.straighten")], ["Shift-F10", t("draw.keys.radial")]] as const)
-          : []),
+        ...(at.has("gestures") ? ([["4", t("draw.turn.left")], ["6", t("draw.turn.right")], ["5", t("draw.turn.straighten")]] as const) : []),
+        // Col menu della selezione il radiale sta in fondo a quel menu.
+        ...(at.has("gestures") && !at.has("selection") ? ([["Shift-F10", t("draw.keys.radial")]] as const) : []),
       ],
     },
     {
       title: t("draw.edit"),
       rows: [
         ["Mod-z", t("draw.undo")],
-        ["Mod-Shift-z Mod-y", t("draw.redo")],
+        ["Mod-Shift-z", t("draw.redo")],
         ["Mod-x", t("draw.cut")],
         ["Mod-c", t("draw.copy")],
         ["Mod-v", t("draw.keys.paste")],
@@ -889,7 +904,7 @@ export function installKeys(ctx: EditorContext): void {
   /// I tasti che i livelli sopra quello di adesso aggiungono, col livello da
   /// cui valgono: una riga è nuova se il suo gruppo non aveva i suoi tasti.
   /// Per il Personalizzato sono quelli delle parti che non ha, col livello
-  /// pronto da cui valgono.
+  /// pronto da cui valgono; con uno spazio di lavoro, quelli di Completo.
   const moreKeys = (): MoreKeys => {
     const seen = new Set<string>();
     const remember = (group: KeyGroup, keys: string): boolean => {
@@ -900,6 +915,14 @@ export function installKeys(ctx: EditorContext): void {
     };
     for (const group of keyGroups(ctx.features)) for (const [keys] of group.rows) remember(group, keys);
     const groups: KeyGroup[] = [];
+    // Con uno spazio di lavoro, i tasti che mancano sono quelli di Completo.
+    if (ctx.byWorkspace) {
+      for (const group of keyGroups(featuresFor("expert"))) {
+        const rows = group.rows.filter(([keys]) => remember(group, keys));
+        if (rows.length > 0) groups.push({ title: group.title, rows });
+      }
+      return { groups, note: t("draw.keys.more.workspace") };
+    }
     for (const above of levelsAbove(ctx.level)) {
       for (const group of keyGroups(featuresFor(above))) {
         const rows = group.rows.filter(([keys]) => remember(group, keys));
@@ -907,6 +930,19 @@ export function installKeys(ctx: EditorContext): void {
       }
     }
     return { groups, note: ctx.level === "custom" ? t("draw.keys.more.custom") : t("draw.keys.more", { level: t(LEVEL_NAMES[ctx.level]) }) };
+  };
+
+  /// I tasti che fanno altro rispetto a prima, per chi li ha in mano: quelli
+  /// degli strumenti che ci sono, Spazio e il menu.
+  const changedKeys = (): { changed?: KeyGroup } => {
+    const tools = new Set(toolsOf(ctx.features).map((spec) => spec.id));
+    const rows: [string, string][] = [];
+    if (tools.has("hand")) rows.push(["h", t("draw.keys.changed.hand")]);
+    if (tools.has("nodes")) rows.push(["a", t("draw.keys.changed.nodes")]);
+    if (tools.has("hand")) rows.push(["Space", t("draw.keys.changed.space")]);
+    if (has("selection") && has("gestures")) rows.push(["Shift-F10", t("draw.keys.changed.menu")]);
+    rows.push(["Mod-y", t("draw.keys.changed.outline")]);
+    return rows.length === 0 ? {} : { changed: { title: t("draw.keys.changed"), rows } };
   };
 
   /// «?»: l'elenco dei tasti di questo livello, e con «Mostra tutto» quelli
@@ -918,7 +954,10 @@ export function installKeys(ctx: EditorContext): void {
     cancelGesture();
     try {
       // Sul foglio i livelli non si cambiano: niente tasti degli altri.
-      await showKeys(t("draw.keys"), keyGroups(ctx.features), folio === undefined ? moreKeys() : undefined);
+      await showKeys(t("draw.keys"), keyGroups(ctx.features), folio === undefined ? moreKeys() : undefined, {
+        search: { label: t("draw.keys.search"), empty: t("draw.keys.search.none") },
+        ...changedKeys(),
+      });
     } finally {
       ctx.asking = false;
     }
