@@ -97,7 +97,7 @@ export interface TreeContext {
     readonly count: number;
     keys: string;
   } | null;
-  syncTree: () => void;
+  syncTree: (now?: boolean) => void;
   canRename: (key: string) => boolean;
   renameRow: (key: string, name: string) => string | null;
   placing: (keys: readonly string[], drop: TreeDrop) => Placing | DrawKey | null;
@@ -278,9 +278,26 @@ export function installTree(ctx: EditorContext): void {
 
   ctx.treeShown = null;
 
-  /// Porta l'albero, se è aperto, alla scena e alla selezione di adesso.
-  function syncTree(): void {
-    if (tree.element.hidden) return;
+  /// Vero se l'albero si vede. Nell'ispettore dello Scrittoio la scheda dei
+  /// livelli resta montata anche dietro un'altra, e rifare l'albero a ogni
+  /// scelta in un disegno grande che nessuno guarda rallenta il clic: si
+  /// rifà quando torna in vista. Si parte visibili, e l'osservatore lo dice
+  /// dopo.
+  let treeInView = true;
+  if (typeof IntersectionObserver !== "undefined") {
+    const viewer = new IntersectionObserver((records) => {
+      treeInView = records[records.length - 1]!.isIntersecting;
+      if (treeInView) syncTree();
+    });
+    viewer.observe(tree.element);
+    ctx.life.add(() => viewer.disconnect());
+  }
+
+  /// Porta l'albero, se è aperto e si vede, alla scena e alla selezione di
+  /// adesso; con `now` anche se l'osservatore non l'ha ancora visto
+  /// tornare.
+  function syncTree(now = false): void {
+    if (tree.element.hidden || (!now && !treeInView)) return;
     const index = currentIndex();
     const keys = ctx.selection.join("\n");
     const layer = has("layers") ? ctx.currentLayer() : null;
@@ -508,7 +525,8 @@ export function installTree(ctx: EditorContext): void {
       announce(t("draw.rename.none"));
       return;
     }
-    if (tree.element.hidden) ctx.showObjects(true);
+    if (tree.element.hidden || !treeInView) ctx.showObjects(true);
+    syncTree(true);
     tree.rename(units[0]!.key);
   }
   ctx.renameSelection = renameSelection;

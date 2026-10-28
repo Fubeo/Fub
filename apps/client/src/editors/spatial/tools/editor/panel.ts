@@ -271,6 +271,9 @@ export function installPanel(ctx: EditorContext): void {
   function showObjects(open: boolean, focus = true): void {
     // Nell'ispettore: la sua scheda, e il fuoco ci va.
     if (ctx.routed("layers", open)) {
+      // La scheda si è appena mostrata: l'albero si porta al disegno prima
+      // che l'osservatore lo veda.
+      if (open && !tree.element.hidden) syncTree(true);
       if (open && focus && !tree.element.hidden) tree.focus();
       return;
     }
