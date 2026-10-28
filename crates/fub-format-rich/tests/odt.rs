@@ -1404,6 +1404,9 @@ fn new_atom(kind: AtomKind, data: Option<&[u8]>, note: Option<&str>, end: bool) 
         end,
         toc: None,
         comment: None,
+        ink: None,
+        svg: None,
+        float: None,
     }
 }
 

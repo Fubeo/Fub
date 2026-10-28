@@ -819,11 +819,19 @@ impl Remap<'_> {
             };
         }
         let digest = sha256(bytes);
+        // Le parti di un inchiostro sono soltanto sue: riprese da un'altra
+        // relazione coi byte uguali, l'immagine di ripiego avrebbe il nome di
+        // un'altra immagine, o di un inchiostro tolto. Si riprende soltanto
+        // la parte col suo stesso nome.
+        let own = path.starts_with("word/ink/");
         for o in &self.o.rels {
             if o.external || o.kind != rel.kind {
                 continue;
             }
             let o_path = resolve(&self.o.part, &o.target);
+            if own && o_path != path {
+                continue;
+            }
             if self
                 .o
                 .zip
@@ -834,12 +842,9 @@ impl Remap<'_> {
                 return Ok(o.id.clone());
             }
         }
-        if let Some(added) = self
-            .additions
-            .parts
-            .iter()
-            .position(|(_, added)| sha256(added) == digest)
-        {
+        if let Some(added) = self.additions.parts.iter().position(|(name, added)| {
+            (!own || name.eq_ignore_ascii_case(&path)) && sha256(added) == digest
+        }) {
             let name = self.additions.parts[added].0.clone();
             if let Some(found) = self.additions.rels.iter().find(|r| {
                 r.kind == rel.kind && resolve(&self.o.part, &r.target) == name.to_ascii_lowercase()

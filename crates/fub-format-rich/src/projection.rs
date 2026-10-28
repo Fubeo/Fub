@@ -23,7 +23,8 @@ use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use wordcraft_doc::para::{NoteKind, OBJ};
+use wordcraft_doc::graphic::{GraphicItem, GraphicKind};
+use wordcraft_doc::para::{NoteKind, Wrap, OBJ};
 use wordcraft_doc::section::SectionStart;
 
 use wordcraft_doc::props::{Highlight, LineSpacing, TextColor, Underline, VertAlign};
@@ -48,10 +49,17 @@ type Budget = std::cell::Cell<usize>;
 
 /// Il nome del formato della proiezione.
 pub const FORMAT: &str = "fub-rich";
-/// La versione che questo crate scrive. Legge anche la 1 e la 2: la 3
+/// La versione che questo crate scrive. Legge anche la 1, la 2 e la 3: la 3
 /// aggiunge alla 2 i segni di ciò che il codec non riscriverebbe senza
-/// perdite (`locked`, `body_only`), che il ritorno non legge.
-pub const VERSION: u32 = 3;
+/// perdite (`locked`, `body_only`), che il ritorno non legge; la 4 aggiunge
+/// alla 3 l'inchiostro e i disegni (`ink`, `drawing`, con `ink`, `svg` e
+/// `float` sugli oggetti).
+pub const VERSION: u32 = 4;
+/// L'SVG più pesante di un disegno che la proiezione porta da modificare.
+pub const MAX_SHOWN_SVG_BYTES: usize = 4 * 1024 * 1024;
+/// Il namespace della scena di FubDraw: un'immagine SVG che lo porta è un
+/// disegno che si modifica.
+pub const SCENE_NS: &str = "https://fubeo.github.io/ns/scene/1";
 pub use crate::blob::OPAQUE_SCHEMA;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -720,12 +728,74 @@ pub enum Inline {
         /// ciò che lo descrive, in uno che c'è già è un suggerimento.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         comment: Option<Anchor>,
+        /// I tratti di un inchiostro (`ink`): in uno nuovo sono ciò che il
+        /// formato scrive, in uno tenuto sono da leggere e da modificare,
+        /// quando il file li porta in InkML che si legge (versione 4).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ink: Option<InkShape>,
+        /// L'SVG di un disegno (`drawing`): in uno nuovo è ciò che il formato
+        /// scrive, con `data` come immagine di ripiego; in uno tenuto è da
+        /// modificare (versione 4).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        svg: Option<String>,
+        /// Dove sta un oggetto che non è in linea col testo (versione 4).
+        /// Assente, in linea. Cambiarlo in un oggetto tenuto lo sposta.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        float: Option<Place>,
         /// Un oggetto inserito o eliminato con le revisioni tracciate.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ins: Option<Rev>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         del: Option<Rev>,
     },
+}
+
+/// I tratti di un inchiostro, in punti dall'angolo in alto a sinistra
+/// dell'oggetto.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InkShape {
+    pub strokes: Vec<InkLine>,
+}
+
+/// Un tratto: colore, spessore, i punti `x, y` uno dopo l'altro e, se la
+/// penna la dà, la pressione di ognuno da 0 a 1.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InkLine {
+    /// `#rrggbb`.
+    pub color: String,
+    pub width: f32,
+    /// Un evidenziatore: trasparente, sotto il testo.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hl: bool,
+    pub xy: Vec<f32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub p: Vec<f32>,
+    /// La penna di Fub (`ballpoint`, `fountain`…), se non è quella di serie.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pen: Option<String>,
+}
+
+/// Dove sta un oggetto fuori dal testo: come il testo gli gira attorno, e a
+/// che distanza in punti dal margine sinistro della colonna e dall'inizio
+/// del paragrafo in cui è ancorato.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Place {
+    pub wrap: PlaceWrap,
+    pub x: f32,
+    pub y: f32,
+}
+
+/// Come il testo gira attorno a un oggetto. «Stretto», «Attraverso» e
+/// «Sopra e sotto» di Word si mostrano come `square`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaceWrap {
+    Square,
+    Front,
+    Behind,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -768,6 +838,11 @@ pub enum AtomKind {
     Ruby,
     Opaque,
     Marker,
+    /// Un inchiostro: quello di Word, o uno scritto qui (versione 4).
+    Ink,
+    /// Un disegno di FubDraw: un'immagine SVG con il PNG di ripiego
+    /// (versione 4).
+    Drawing,
 }
 
 impl AtomKind {
@@ -914,8 +989,8 @@ impl Projection {
         let schema = match (head.version, head.opaque_schema) {
             (1, None) => 0,
             (1, Some(_)) => return Err(RichError::Malformed("opaque_schema in version 1".into())),
-            (2 | 3, Some(schema)) => schema,
-            (2 | 3, None) => return Err(RichError::Malformed("missing opaque_schema".into())),
+            (2..=4, Some(schema)) => schema,
+            (2..=4, None) => return Err(RichError::Malformed("missing opaque_schema".into())),
             (version, _) => return Err(RichError::Version(version)),
         };
         if !blob::readable(schema) {
@@ -1250,8 +1325,16 @@ fn para(document: &Document, paragraph: &Paragraph, left: &Budget) -> Result<Par
 /// GIF, intera (un ritaglio disegnato per intero mentirebbe) ed entro i pesi.
 /// Chi scrive li ignora: l'immagine è quella tenuta in `k`.
 fn shown(document: &Document, object: &InlineObject, left: &Budget) -> Option<String> {
-    let InlineObject::Image { media, crop, .. } = object else {
-        return None;
+    // Un inchiostro mostra la sua immagine di ripiego, quando c'è.
+    let (media, crop) = match object {
+        InlineObject::Image { media, crop, .. } => (media, *crop),
+        InlineObject::Graphic { graphic, .. } if graphic.kind == GraphicKind::Ink => {
+            match graphic.items.first() {
+                Some(GraphicItem::Image { media, .. }) => (media, [0.0; 4]),
+                _ => return None,
+            }
+        }
+        _ => return None,
     };
     let bytes = document.media.get(media)?;
     if crop.iter().any(|side| *side != 0.0)
@@ -1263,6 +1346,164 @@ fn shown(document: &Document, object: &InlineObject, left: &Budget) -> Option<St
     }
     left.set(left.get() - bytes.len());
     Some(STANDARD.encode(&bytes[..]))
+}
+
+/// L'SVG di un disegno di FubDraw, quando l'immagine ne porta uno entro
+/// [`MAX_SHOWN_SVG_BYTES`].
+fn drawing_svg(document: &Document, object: &InlineObject) -> Option<String> {
+    let InlineObject::Image { media, crop, .. } = object else {
+        return None;
+    };
+    if crop.iter().any(|side| *side != 0.0) {
+        return None;
+    }
+    let bytes = wordcraft_docx::ink::svg_of(document, media)?;
+    if bytes.len() > MAX_SHOWN_SVG_BYTES {
+        return None;
+    }
+    let text = std::str::from_utf8(bytes).ok()?;
+    text.contains(SCENE_NS).then(|| text.to_string())
+}
+
+/// I tratti di un inchiostro tenuto, quando il suo InkML si legge: in punti
+/// dall'angolo dell'oggetto, i tratti portati nella sua misura.
+fn ink_shape(document: &Document, object: &InlineObject, left: &Budget) -> Option<InkShape> {
+    let InlineObject::Graphic { w, h, graphic, .. } = object else {
+        return None;
+    };
+    let bytes = wordcraft_docx::ink::ink_markup(document, graphic)?;
+    if bytes.len() > left.get() {
+        return None;
+    }
+    let ink = fub_ink::inkml::from_inkml(std::str::from_utf8(bytes).ok()?).ok()?;
+    left.set(left.get() - bytes.len());
+    Some(InkShape::fitted(&ink, *w, *h))
+}
+
+impl InkShape {
+    /// I tratti di `ink` portati in un riquadro `w` × `h` dall'angolo in alto
+    /// a sinistra, senza deformarli.
+    pub fn fitted(ink: &fub_ink::inkml::InkDocument, w: f32, h: f32) -> InkShape {
+        let points = ink.strokes.iter().flat_map(|stroke| stroke.samples.iter());
+        let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+        for sample in points {
+            x0 = x0.min(sample.x);
+            y0 = y0.min(sample.y);
+            x1 = x1.max(sample.x);
+            y1 = y1.max(sample.y);
+        }
+        let (bw, bh) = ((x1 - x0).max(1e-6), (y1 - y0).max(1e-6));
+        // Un riquadro vuoto o fuori misura lascia i tratti nella loro scala.
+        let scale = if x0 <= x1 && w > 0.0 && h > 0.0 {
+            (f64::from(w) / bw).min(f64::from(h) / bh).min(1.0)
+        } else {
+            1.0
+        };
+        let (x0, y0) = if x0 <= x1 { (x0, y0) } else { (0.0, 0.0) };
+        InkShape {
+            strokes: ink
+                .strokes
+                .iter()
+                .map(|stroke| InkLine {
+                    color: stroke.brush.color.clone(),
+                    width: (stroke.brush.width * scale) as f32,
+                    hl: stroke.brush.highlighter,
+                    pen: if stroke.brush.highlighter {
+                        None
+                    } else {
+                        stroke.brush.pen.clone()
+                    },
+                    xy: stroke
+                        .samples
+                        .iter()
+                        .flat_map(|s| [((s.x - x0) * scale) as f32, ((s.y - y0) * scale) as f32])
+                        .collect(),
+                    p: if stroke.samples.iter().all(|s| s.p.is_some()) {
+                        stroke
+                            .samples
+                            .iter()
+                            .map(|s| s.p.unwrap_or(0.5) as f32)
+                            .collect()
+                    } else {
+                        Vec::new()
+                    },
+                })
+                .collect(),
+        }
+    }
+
+    /// Lo stesso inchiostro per InkML.
+    pub fn to_ink(&self) -> fub_ink::inkml::InkDocument {
+        fub_ink::inkml::InkDocument {
+            strokes: self
+                .strokes
+                .iter()
+                .map(|line| fub_ink::inkml::InkStroke {
+                    brush: line.brush(),
+                    samples: line
+                        .xy
+                        .chunks_exact(2)
+                        .enumerate()
+                        .map(|(i, xy)| fub_ink::sample::Sample {
+                            x: f64::from(xy[0]),
+                            y: f64::from(xy[1]),
+                            p: line.p.get(i).map(|p| f64::from(*p)),
+                            t: i as f64 * 8.0,
+                            tilt: None,
+                        })
+                        .collect(),
+                })
+                .collect(),
+        }
+    }
+}
+
+impl InkLine {
+    /// Il pennello InkML del tratto. La penna di Fub diventa ciò che Word sa
+    /// fare: la Calligrafia una punta rettangolare dritta, alta quanto il suo
+    /// taglio (angolo e fissità si perdono); il Pennarello uno spessore che
+    /// non segue la pressione. Il nome della penna viaggia in `fubPen`.
+    pub fn brush(&self) -> fub_ink::inkml::InkBrush {
+        let width = f64::from(self.width);
+        let pen = if self.hl { None } else { self.pen.as_deref() };
+        let calligraphy = pen == Some("calligraphy");
+        fub_ink::inkml::InkBrush {
+            color: self.color.clone(),
+            width,
+            height: if calligraphy { width.min(1.0) } else { width },
+            tip: if self.hl || calligraphy {
+                fub_ink::inkml::InkTip::Rectangle
+            } else {
+                fub_ink::inkml::InkTip::Ellipse
+            },
+            highlighter: self.hl,
+            transparency: if self.hl { 128 } else { 0 },
+            ignore_pressure: pen == Some("marker"),
+            pen: pen.map(str::to_owned),
+        }
+    }
+}
+
+/// Dove sta un oggetto fuori dal testo, come la proiezione lo mostra.
+pub(crate) fn place_of(object: &InlineObject) -> Option<Place> {
+    let float = match object {
+        InlineObject::Image { float, .. }
+        | InlineObject::Graphic { float, .. }
+        | InlineObject::Shape { float, .. }
+        | InlineObject::Group { float, .. } => float,
+        _ => return None,
+    };
+    let wrap = match float.wrap {
+        Wrap::Inline => return None,
+        Wrap::InFrontOfText => PlaceWrap::Front,
+        Wrap::BehindText => PlaceWrap::Behind,
+        _ => PlaceWrap::Square,
+    };
+    Some(Place {
+        wrap,
+        x: float.x,
+        y: float.y,
+    })
 }
 
 /// La revisione `index` del documento, come la proiezione la mostra.
@@ -1282,7 +1523,13 @@ fn atom(
     left: &Budget,
 ) -> Result<Inline, RichError> {
     let (kind, label, size) = match object {
+        InlineObject::Image { w, h, alt, .. } if drawing_svg(document, object).is_some() => {
+            (AtomKind::Drawing, alt.clone(), Some((*w, *h)))
+        }
         InlineObject::Image { w, h, alt, .. } => (AtomKind::Image, alt.clone(), Some((*w, *h))),
+        InlineObject::Graphic {
+            w, h, alt, graphic, ..
+        } if graphic.kind == GraphicKind::Ink => (AtomKind::Ink, alt.clone(), Some((*w, *h))),
         InlineObject::Graphic { w, h, alt, .. } => (AtomKind::Graphic, alt.clone(), Some((*w, *h))),
         InlineObject::Shape { w, h, story, .. } => (
             if story.is_some() {
@@ -1332,6 +1579,18 @@ fn atom(
         note,
         end,
         toc: None,
+        ink: kind
+            .eq(&AtomKind::Ink)
+            .then(|| ink_shape(document, object, left))
+            .flatten(),
+        svg: drawing_svg(document, object).and_then(|svg| {
+            let fits = svg.len() <= left.get();
+            fits.then(|| {
+                left.set(left.get() - svg.len());
+                svg
+            })
+        }),
+        float: place_of(object),
         comment: match object {
             InlineObject::CommentStart { id } => Some(Anchor {
                 id: *id,

@@ -9,6 +9,7 @@ description = "Documenti di videoscrittura (.docx, .odt, .rtf, .doc) con il mode
 [dependencies]
 fub-abi = { workspace = true }
 fub-format-markdown = { workspace = true }
+fub-ink = { workspace = true }
 wordcraft-doc = { workspace = true }
 wordcraft-docx = { workspace = true }
 wordcraft-formats = { workspace = true }

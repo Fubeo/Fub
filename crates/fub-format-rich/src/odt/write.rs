@@ -1571,6 +1571,9 @@ impl<'a> Writer<'a> {
                         end: false,
                         toc: None,
                         comment: None,
+                        ink: None,
+                        svg: None,
+                        float: None,
                         ins: None,
                         del: None,
                     });
@@ -1829,12 +1832,80 @@ impl<'a> Writer<'a> {
     fn new_atom(&mut self, atom: &Inline) -> Result<(AtomKind, String), RichError> {
         let source = String::from_utf8_lossy(&self.base.content.source).into_owned();
         match atom {
+            // Un disegno nuovo: l'SVG di FubDraw e, per chi non legge l'SVG,
+            // il PNG di ripiego nella stessa cornice. Riletto, è un'immagine.
+            Inline::Atom {
+                kind: AtomKind::Drawing,
+                svg: Some(svg),
+                data: Some(data),
+                ink: None,
+                float: None,
+                note: None,
+                end: false,
+                toc: None,
+                label,
+                w,
+                h,
+                ..
+            } => {
+                let png = fresh::png(data)?;
+                let (w, h) = fresh::size(*w, *h)?;
+                if svg.len() > crate::projection::MAX_SHOWN_SVG_BYTES || !svg.contains("<svg") {
+                    return Err(RichError::Malformed("a new drawing that is not SVG".into()));
+                }
+                let stem = format!("{:016x}", fub_abi::Fnv1a::hash(svg.as_bytes()));
+                let (svg_path, png_path) = (
+                    format!("Pictures/{stem}.svg"),
+                    format!("Pictures/{stem}.png"),
+                );
+                let name = loop {
+                    self.framed += 1;
+                    let name = format!("Disegno{}", self.framed);
+                    if !source.contains(&format!("draw:name=\"{name}\"")) {
+                        break name;
+                    }
+                };
+                let image = |path: &str| {
+                    format!(
+                        "<draw:image xlink:href=\"{path}\" xlink:type=\"simple\" \
+                         xlink:show=\"embed\" xlink:actuate=\"onLoad\"/>"
+                    )
+                };
+                let mut xml = format!(
+                    "<draw:frame draw:name=\"{name}\" text:anchor-type=\"as-char\" \
+                     svg:width=\"{w:.2}pt\" svg:height=\"{h:.2}pt\" draw:z-index=\"0\">{}{}",
+                    image(&svg_path),
+                    image(&png_path)
+                );
+                if !label.is_empty() {
+                    xml.push_str("<svg:title>");
+                    escape_text(label, &mut xml);
+                    xml.push_str("</svg:title>");
+                }
+                xml.push_str("</draw:frame>");
+                for (path, mime, bytes) in [
+                    (svg_path, "image/svg+xml", svg.as_bytes().to_vec()),
+                    (png_path, "image/png", png),
+                ] {
+                    if !self.pictures.iter().any(|(p, ..)| *p == path) {
+                        self.pictures.push((path, mime, bytes));
+                    }
+                }
+                Ok((AtomKind::Image, xml))
+            }
+            Inline::Atom {
+                kind: AtomKind::Ink,
+                ..
+            } => Err(RichError::Malformed(
+                "ink in an OpenDocument file is written as a drawing".into(),
+            )),
             Inline::Atom {
                 kind: AtomKind::Image,
                 data: Some(data),
                 note: None,
                 end: false,
                 toc: None,
+                float: None,
                 label,
                 w,
                 h,

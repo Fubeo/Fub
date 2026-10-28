@@ -23,8 +23,9 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
+use wordcraft_doc::graphic::GraphicKind;
 use wordcraft_doc::numbering::ListKind;
-use wordcraft_doc::para::{NoteKind, Run, OBJ};
+use wordcraft_doc::para::{Anchor, Float, NoteKind, Run, Wrap, OBJ};
 use wordcraft_doc::props::{Highlight, NumRef, Underline, VertAlign};
 use wordcraft_doc::{
     Align as WcAlign, Block as WcBlock, CharProps, Comment, Document, InlineObject, ParaProps,
@@ -61,6 +62,7 @@ pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Docu
         notes: Vec::new(),
         claimed: HashSet::new(),
         sections: Vec::new(),
+        ink: false,
     };
     // Prima i commenti: un segno del testo resta soltanto se il suo c'è.
     comments(projection, &mut document, &mut state)?;
@@ -75,7 +77,129 @@ pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Docu
     document.balance_controls();
     document.prune_text_boxes();
     document.normalize_runs();
+    // Anche quando un inchiostro se n'è andato, l'ultimo compreso: le sue
+    // parti escono dall'elenco di quelle conservate solo passando di qui.
+    if state.ink || inks(&document) < inks(base) {
+        settle_ink(&mut document)?;
+    }
     Ok(document)
+}
+
+fn inks(document: &Document) -> usize {
+    let mut count = 0;
+    document.objects_in_reading_order(&mut |object| {
+        count += usize::from(matches!(object, InlineObject::Graphic { graphic, .. } if graphic.kind == GraphicKind::Ink));
+    });
+    count
+}
+
+/// Gli inchiostri come il codec li rilegge dal documento intero. Il markup di
+/// un inchiostro porta numeri che il codec assegna scrivendo, secondo il posto
+/// nel file (l'id del disegno, quelli delle relazioni): un inchiostro nuovo li
+/// prende da una scrittura e una lettura del documento, e da lì in poi ogni
+/// salvataggio li riscrive uguali. Cambia soltanto il markup degli inchiostri;
+/// se la rilettura non ne dà altrettanti, della stessa misura e coi loro
+/// dati, il documento è rifiutato.
+fn settle_ink(document: &mut Document) -> Result<(), RichError> {
+    let unusable = || RichError::Malformed("ink: the codec does not read it back".into());
+    let is_ink = |object: &InlineObject| matches!(object, InlineObject::Graphic { graphic, .. } if graphic.kind == GraphicKind::Ink);
+    let bytes = wordcraft_docx::write(document).map_err(|_| unusable())?;
+    let mut reread = wordcraft_docx::read(&bytes).map_err(|_| unusable())?;
+    let mut settled = Vec::new();
+    reread.objects_mut(&is_ink, &mut |object| settled.push(object.clone()));
+    let mut wanted = Vec::new();
+    document.objects_mut(&is_ink, &mut |object| wanted.push(object.clone()));
+    let same_place = wanted.len() == settled.len()
+        && wanted.iter().zip(&settled).all(|(a, b)| match (a, b) {
+            (
+                InlineObject::Graphic {
+                    graphic: a,
+                    alt: alt_a,
+                    ..
+                },
+                InlineObject::Graphic {
+                    graphic: b,
+                    alt: alt_b,
+                    ..
+                },
+            ) => {
+                alt_a == alt_b
+                    && a.items == b.items
+                    && wordcraft_docx::ink::ink_markup(document, a)
+                        == wordcraft_docx::ink::ink_markup(&reread, b)
+            }
+            _ => false,
+        });
+    if !same_place {
+        return Err(unusable());
+    }
+    // Le parti degli inchiostri (InkML, immagine di ripiego) col nome e il
+    // posto che il codec dà loro; l'elenco delle parti conservate è il suo.
+    let targets = |objects: &[InlineObject]| -> Vec<String> {
+        objects
+            .iter()
+            .filter_map(|object| match object {
+                InlineObject::Graphic { graphic, .. } => graphic.source.as_deref(),
+                _ => None,
+            })
+            .flat_map(|source| {
+                source
+                    .refs
+                    .iter()
+                    .filter(|r| !r.external)
+                    .map(|r| r.target.clone())
+            })
+            .collect()
+    };
+    for target in targets(&wanted) {
+        document.passthrough.remove(&target);
+    }
+    for target in targets(&settled) {
+        let part = reread.passthrough.remove(&target).ok_or_else(unusable)?;
+        document.passthrough.insert(target, part);
+    }
+    // Le parti dell'elenco che il codec non scrive più (quelle di un oggetto
+    // tolto) se ne vanno con lui: tenute, il codec non le scriverebbe e la
+    // rilettura le perderebbe.
+    let listed = |document: &Document| -> BTreeSet<String> {
+        document
+            .passthrough
+            .get(wordcraft_docx::ink::EMBEDDED_PARTS)
+            .map(|list| {
+                String::from_utf8_lossy(list)
+                    .lines()
+                    .filter_map(|line| line.strip_prefix("P\t")?.split('\t').next())
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let still = listed(&reread);
+    for gone in listed(document).difference(&still) {
+        document.passthrough.remove(gone);
+    }
+    match reread
+        .passthrough
+        .remove(wordcraft_docx::ink::EMBEDDED_PARTS)
+    {
+        Some(parts) => document
+            .passthrough
+            .insert(wordcraft_docx::ink::EMBEDDED_PARTS.into(), parts),
+        None => document
+            .passthrough
+            .remove(wordcraft_docx::ink::EMBEDDED_PARTS),
+    };
+    let mut settled = settled.into_iter();
+    document.objects_mut(&is_ink, &mut |object| {
+        if let (
+            InlineObject::Graphic { graphic, .. },
+            Some(InlineObject::Graphic { graphic: back, .. }),
+        ) = (object, settled.next())
+        {
+            Arc::make_mut(graphic).source.clone_from(&back.source);
+        }
+    });
+    Ok(())
 }
 
 struct State {
@@ -93,6 +217,9 @@ struct State {
     /// Le storie portate dalle sezioni già incontrate, con il loro posto: più
     /// sezioni possono mostrare la stessa intestazione.
     sections: Vec<(BTreeMap<u32, Part>, BTreeMap<u32, u32>)>,
+    /// Un inchiostro nuovo: il suo markup prende la forma che il codec gli dà
+    /// soltanto dentro il documento ([`settle_ink`]).
+    ink: bool,
 }
 
 /// L'id provvisorio della nota nuova `index`: nessun documento ne ha tanti.
@@ -348,17 +475,25 @@ fn paragraph(
             // Una nota tenuta porta il suo testo e la sua specie da leggere,
             // un'immagine tenuta i suoi byte da vedere: vale ciò che è tenuto
             // in `k`.
+            // Un disegno o un inchiostro tenuto porta anche il suo SVG o i suoi
+            // tratti, da modificare: valgono quelli in `k`, e `float` lo sposta.
             Inline::Atom {
                 k: Some(k),
                 kind,
                 data,
                 note,
                 end,
+                ink,
+                svg,
+                float,
                 ins,
                 del,
                 ..
-            } if (data.is_none() || *kind == AtomKind::Image)
-                && (*kind == AtomKind::Note || (note.is_none() && !*end)) =>
+            } if (data.is_none()
+                || matches!(kind, AtomKind::Image | AtomKind::Ink | AtomKind::Drawing))
+                && (*kind == AtomKind::Note || (note.is_none() && !*end))
+                && (ink.is_none() || *kind == AtomKind::Ink)
+                && (svg.is_none() || *kind == AtomKind::Drawing) =>
             {
                 let AtomKeep {
                     props,
@@ -378,6 +513,12 @@ fn paragraph(
                     carried = stories::restore(document, parts, &|id| !claimed.contains(&id))?;
                     state.claimed.extend(carried.values().copied());
                     stories::remap_object(&mut object, &carried);
+                }
+                if float.as_ref() != projection::place_of(&object).as_ref() {
+                    place(&mut object, float.as_ref())?;
+                    // L'inchiostro tiene la cornice nel suo markup: spostato,
+                    // la riprende dal codec.
+                    state.ink |= matches!(&object, InlineObject::Graphic { graphic, .. } if graphic.kind == GraphicKind::Ink);
                 }
                 let Some(object) = known_object(object, document, state, &carried)? else {
                     continue;
@@ -418,6 +559,9 @@ fn paragraph(
                 end: false,
                 toc: None,
                 comment: None,
+                ink: None,
+                svg: None,
+                float,
                 label,
                 w,
                 h,
@@ -429,7 +573,7 @@ fn paragraph(
                 let media = media_key(document, image);
                 let props = tracked(CharProps::default(), ins.as_ref(), del.as_ref(), document);
                 push(&mut out, &OBJ.to_string(), props);
-                out.objects.push(InlineObject::Image {
+                let mut object = InlineObject::Image {
                     media,
                     w,
                     h,
@@ -437,7 +581,81 @@ fn paragraph(
                     float: Default::default(),
                     crop: [0.0; 4],
                     ole: None,
-                });
+                };
+                place(&mut object, float.as_ref())?;
+                out.objects.push(object);
+            }
+            // Un inchiostro nuovo: InkML col suo PNG di ripiego, come Word.
+            Inline::Atom {
+                k: None,
+                kind: AtomKind::Ink,
+                ink: Some(ink),
+                data: Some(data),
+                svg: None,
+                note: None,
+                end: false,
+                toc: None,
+                comment: None,
+                float,
+                label,
+                w,
+                h,
+                ins,
+                del,
+            } => {
+                let png = fresh::png(data)?;
+                let (w, h) = fresh::size(*w, *h)?;
+                let inkml = fub_ink::inkml::to_inkml(&ink.to_ink());
+                let float = placed(float.as_ref())?;
+                let object = wordcraft_docx::ink::new_ink(
+                    document,
+                    inkml.as_bytes(),
+                    &png,
+                    w,
+                    h,
+                    label,
+                    float,
+                )
+                .map_err(|error| RichError::Malformed(format!("ink: {error}")))?;
+                state.ink = true;
+                let props = tracked(CharProps::default(), ins.as_ref(), del.as_ref(), document);
+                push(&mut out, &OBJ.to_string(), props);
+                out.objects.push(object);
+            }
+            // Un disegno nuovo: l'SVG di FubDraw col suo PNG di ripiego.
+            Inline::Atom {
+                k: None,
+                kind: AtomKind::Drawing,
+                svg: Some(svg),
+                data: Some(data),
+                ink: None,
+                note: None,
+                end: false,
+                toc: None,
+                comment: None,
+                float,
+                label,
+                w,
+                h,
+                ins,
+                del,
+            } => {
+                let png = fresh::png(data)?;
+                let (w, h) = fresh::size(*w, *h)?;
+                let float = placed(float.as_ref())?;
+                let object = wordcraft_docx::ink::new_svg_picture(
+                    document,
+                    svg.as_bytes(),
+                    &png,
+                    w,
+                    h,
+                    label,
+                    float,
+                )
+                .map_err(|error| RichError::Malformed(format!("drawing: {error}")))?;
+                let props = tracked(CharProps::default(), ins.as_ref(), del.as_ref(), document);
+                push(&mut out, &OBJ.to_string(), props);
+                out.objects.push(object);
             }
             Inline::Atom {
                 k: None,
@@ -499,7 +717,7 @@ fn paragraph(
             }
             Inline::Atom { .. } => {
                 return Err(RichError::Malformed(
-                    "an object that is neither kept nor a new image, note or table of contents"
+                    "an object that is neither kept nor a new image, ink, drawing, note or table of contents"
                         .into(),
                 ));
             }
@@ -896,6 +1114,69 @@ fn known_section(section: &SectionProps, document: &Document) -> bool {
 /// L'oggetto, se ciò che nomina c'è. `None` per un segno di commento che non
 /// ha più il suo commento (incollato da un altro documento): senza commento il
 /// segno non segna niente.
+/// Il `Float` di Word per un oggetto messo dove dice `place`: in linea se
+/// assente, altrimenti a `x`, `y` punti dalla colonna e dal paragrafo.
+fn placed(place: Option<&projection::Place>) -> Result<Float, RichError> {
+    let mut float = Float::default();
+    let Some(place) = place else {
+        return Ok(float);
+    };
+    if !place.x.is_finite() || !place.y.is_finite() {
+        return Err(RichError::Malformed("an object placed nowhere".into()));
+    }
+    float.wrap = match place.wrap {
+        projection::PlaceWrap::Square => Wrap::Square,
+        projection::PlaceWrap::Front => Wrap::InFrontOfText,
+        projection::PlaceWrap::Behind => Wrap::BehindText,
+    };
+    float.h_rel = Anchor::Column;
+    float.v_rel = Anchor::Paragraph;
+    float.x = place.x.clamp(-1584.0, 1584.0);
+    float.y = place.y.clamp(-1584.0, 1584.0);
+    Ok(float)
+}
+
+/// Mette un oggetto dove dice `place`, tenendo del suo `Float` ciò che la
+/// proiezione non mostra (distanze, rotazione, testo alternativo, ordine).
+fn place(object: &mut InlineObject, place: Option<&projection::Place>) -> Result<(), RichError> {
+    let wanted = placed(place)?;
+    let Some(float) = object.float_mut() else {
+        return match place {
+            None => Ok(()),
+            Some(_) => Err(RichError::Malformed("this object can't float".into())),
+        };
+    };
+    if place.is_none() {
+        // In linea un oggetto non ha posto, àncora né ordine: tiene misure,
+        // distanze, rotazione e testo alternativo.
+        if float.wrap != Wrap::Inline {
+            *float = Float {
+                dist: float.dist,
+                dist_top: float.dist_top,
+                dist_bottom: float.dist_bottom,
+                effect: float.effect,
+                rot: float.rot,
+                flip_h: float.flip_h,
+                flip_v: float.flip_v,
+                alt: std::mem::take(&mut float.alt),
+                hidden: float.hidden,
+                ..wanted
+            };
+        }
+        return Ok(());
+    }
+    float.wrap = wanted.wrap;
+    {
+        float.h_rel = wanted.h_rel;
+        float.v_rel = wanted.v_rel;
+        float.h_align = None;
+        float.v_align = None;
+        float.x = wanted.x;
+        float.y = wanted.y;
+    }
+    Ok(())
+}
+
 fn known_object(
     object: InlineObject,
     document: &Document,

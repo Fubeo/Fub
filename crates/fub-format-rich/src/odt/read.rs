@@ -815,6 +815,9 @@ impl<'a> Inlines<'_, 'a> {
             end: false,
             toc: None,
             comment: None,
+            ink: None,
+            svg: None,
+            float: None,
             ins: None,
             del: None,
         })

@@ -609,6 +609,9 @@ fn un_immagine_nuova_entra_con_relazione_e_tipo() {
         end: false,
         toc: None,
         comment: None,
+        ink: None,
+        svg: None,
+        float: None,
     });
     let out = saved(&file, &p);
     let rest = grafted(&file, &out);
