@@ -42,14 +42,22 @@ import {
 import { commentsOf } from "./comments";
 import type { RichEngine } from "./engine";
 import { useRichIcons } from "./icons";
-import { fontStack } from "./fonts";
+import { tableRibbonTab } from "../../tabella/ribbon";
+import { fontStack } from "../../scrittura/fonts";
 import { columns, landscape, MARGIN_PRESETS, PAPER_SIZES, pageAt, paperLabel, paperName, setColumns, setLandscape, setMargins, setPaper } from "./page";
 import { mountRichPanels, RICH_PANEL_IDS, type RichMedia, type RichPanelId } from "./panels";
-import { COLOR_AUTO, type Page } from "./projection";
+import { COLOR_AUTO, type Page, type PlaceWrap } from "./projection";
 import { goToRevision } from "./review";
 import type { RichSide } from "./side";
 import { reviewAuthor, setTracking } from "./track";
 import { insertToc } from "./toc";
+import { RichInk, RICH_INK_TOOLS, type RichInkTool } from "./ink";
+import { placeObject, RichDrawing, selectedObject, selectedWrap } from "./drawing";
+import { notify } from "../../ui/notify";
+import { INK_PALETTE, inkSwatchOf } from "../../ink/palette";
+import { isPenId, PEN_IDS, PENS, type PenId } from "../../ink/pens";
+import { colorWell, type ColorPickerText } from "../../kit";
+import { openLifetime } from "../../ui/lifetime";
 import type { Look } from "../../theme/content-look";
 
 export type { RichMedia } from "./panels";
@@ -72,6 +80,20 @@ export interface RichView {
   readonly adapted: boolean;
   /// La pagina della sezione del cursore, `null` se il formato non la porta.
   readonly page: Page | null;
+  /// La scheda «Disegna»: lo strumento, il colore, lo spessore per posizione,
+  /// se il dito scorre la pagina e se la gomma toglie tratti interi.
+  /// L'oggetto scelto che si dispone (immagine, disegno, inchiostro) e come
+  /// sta col testo; `null` senza.
+  readonly object: { readonly kind: string; readonly wrap: PlaceWrap | "inline" } | null;
+  readonly ink: {
+    readonly tool: RichInkTool;
+    readonly color: string;
+    readonly width: number;
+    /// La penna della Penna, dalla stessa galleria del disegno.
+    readonly pen: PenId;
+    readonly penOnly: boolean;
+    readonly whole: boolean;
+  };
 }
 
 /// Le modalità che Visualizza offre, col comando di ciascuna.
@@ -97,16 +119,40 @@ interface StylesControl extends ExtraControl<RichView, Key> {
   readonly kind: "styles";
 }
 
-type RichExtra = SwatchControl | StylesControl;
+/// Il colore dell'inchiostro: un pozzo col colore e il suo nome, che apre il
+/// selettore del kit (niente tavolozza fissa nella barra).
+interface WellControl extends ExtraControl<RichView, Key> {
+  readonly kind: "well";
+}
+
+type RichExtra = SwatchControl | StylesControl | WellControl;
 export type RichControl = KitControl<RichView, Key> | RichExtra;
 export type RichTab = RibbonTab<RichControl, Key>;
 
 /// Le gallerie della pagina, un comando ciascuna con il suo valore.
 const PAGE_GALLERIES: readonly string[] = ["rich.margins", "rich.orientation", "rich.paper", "rich.columns"];
 
+/// Gli strumenti della scheda «Disegna», col loro comando.
+export const RICH_INK_COMMANDS: Readonly<Record<string, RichInkTool>> = Object.fromEntries(RICH_INK_TOOLS.map((tool) => [`rich.ink.${tool}`, tool]));
+/// Gli spessori, per posizione.
+const INK_WIDTH_COMMANDS: readonly string[] = ["rich.ink.thin", "rich.ink.medium", "rich.ink.thick"];
+
+/// Inserisci › Disegno, la disposizione di un oggetto e la modifica di un
+/// disegno.
+const DRAWING_COMMANDS: readonly string[] = ["rich.drawing.new", "rich.drawing.vault", "rich.drawing.edit", "rich.place"];
+/// Le disposizioni, nell'ordine del menu di Word.
+const WRAPS: readonly (PlaceWrap | "inline")[] = ["inline", "square", "behind", "front"];
+
 /// I comandi della barra che non sono azioni del catalogo del motore: valori
 /// che il motore scrive e gesti della barra.
 export const RICH_RIBBON_COMMANDS: ReadonlySet<string> = new Set([
+  ...Object.keys(RICH_INK_COMMANDS),
+  ...INK_WIDTH_COMMANDS,
+  "rich.ink.color",
+  "rich.ink.kind",
+  ...DRAWING_COMMANDS,
+  "rich.ink.pen_only",
+  "rich.ink.whole",
   "rich.font",
   "rich.size",
   "rich.style",
@@ -166,6 +212,7 @@ export const COMMON_FONTS: readonly string[] = [
 /// I comandi che leggono il documento senza scriverlo: restano accesi in sola
 /// lettura.
 const READING: ReadonlySet<string> = new Set([
+  "rich.ink.select",
   FIND_ACTION,
   "rich.count",
   "rich.page",
@@ -192,6 +239,17 @@ const modeButton = (id: string, label: Key, keytip: string, icon: string): RichC
   icon,
   size: "large",
   pressed: (view) => view.mode === RICH_MODE_COMMANDS[id],
+});
+
+/// Uno strumento della scheda «Disegna»: premuto quando è quello di adesso.
+const inkTool = (tool: RichInkTool, keytip: string, icon: string): RichControl => ({
+  kind: "button",
+  id: `rich.ink.${tool}`,
+  label: `rich.ink.${tool}` as Key,
+  keytip,
+  icon,
+  size: "large",
+  pressed: (view) => view.ink.tool === tool,
 });
 
 const toggle = (id: string, label: Key, keytip: string, figure: { icon?: string; glyph?: string; className?: string }): RichControl => ({
@@ -243,6 +301,35 @@ function spacingEntries(view: RichView): readonly MenuEntry<Key>[] {
     }),
     { id: "rich.spacing", dialog: "rich.spacing", label: "rich.ribbon.line.options", separator: true },
   ];
+}
+
+/// Le penne della Penna, le stesse della galleria del disegno (P15).
+function penEntries(view: RichView): readonly MenuEntry<Key>[] {
+  return PEN_IDS.filter((pen) => PENS[pen].tool === "pen").map((pen): MenuEntry<Key> => ({
+    id: "rich.ink.kind",
+    params: { pen },
+    label: `rich.ink.kind.${pen}` as Key,
+    choice: "radio",
+    checked: view.ink.pen === pen,
+  }));
+}
+
+function drawingEntries(): readonly MenuEntry<Key>[] {
+  return [
+    { id: "rich.drawing.new", label: "rich.drawing.new", icon: "rc-drawing" },
+    { id: "rich.drawing.vault", label: "rich.drawing.vault", icon: "rc-image" },
+  ];
+}
+
+function wrapEntries(view: RichView): readonly MenuEntry<Key>[] {
+  return WRAPS.map((wrap): MenuEntry<Key> => ({
+    id: "rich.place",
+    params: { wrap },
+    label: `rich.place.${wrap}` as Key,
+    icon: `rc-wrap-${wrap}`,
+    choice: "radio",
+    checked: view.object?.wrap === wrap,
+  }));
 }
 
 /// La voce che chiude ogni galleria della pagina: il resto è in Proprietà.
@@ -457,7 +544,10 @@ export const RICH_TABS: readonly RichTab[] = [
         label: "rich.ribbon.group.illustrations",
         icon: "rc-image",
         keytip: "ZI",
-        columns: [action("rich.image", "rich.image", "P", "rc-image", "large")],
+        columns: [
+          action("rich.image", "rich.image", "P", "rc-image", "large"),
+          { kind: "menu", label: "rich.drawing", keytip: "D", icon: "rc-drawing", size: "large", items: drawingEntries, requires: ["rich.drawing.new", "rich.drawing.vault"] },
+        ],
       },
       {
         id: "links",
@@ -484,6 +574,55 @@ export const RICH_TABS: readonly RichTab[] = [
             rows: [
               [action("rich.break.column", "rich.break.column", "C", "rc-break-column", "small", true)],
               [action("rich.toc", "rich.toc", "S", "rc-toc", "small", true)],
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "draw",
+    label: "rich.ribbon.tab.draw",
+    keytip: "JI",
+    groups: [
+      {
+        id: "ink-tools",
+        label: "rich.ribbon.group.ink_tools",
+        icon: "rc-ink-pen",
+        keytip: "ZS",
+        columns: [
+          inkTool("select", "S", "rc-ink-select"),
+          inkTool("lasso", "L", "rc-ink-lasso"),
+          inkTool("pen", "P", "rc-ink-pen"),
+          inkTool("highlighter", "H", "rc-ink-highlighter"),
+          inkTool("eraser", "E", "rc-ink-eraser"),
+        ],
+      },
+      {
+        id: "pens",
+        label: "rich.ribbon.group.pens",
+        icon: "rc-ink-medium",
+        keytip: "ZP",
+        columns: [
+          { kind: "menu", label: "rich.ink.kind", keytip: "N", icon: "rc-ink-pen", size: "large", items: penEntries, requires: ["rich.ink.kind"] },
+          { kind: "well", id: "rich.ink.color", label: "rich.ink.color", keytip: "C" },
+          {
+            rows: INK_WIDTH_COMMANDS.map((id, at) => [
+              { kind: "button", id, label: id as Key, keytip: String(at + 1), icon: id.replace("rich.ink.", "rc-ink-"), size: "small", labelled: true, pressed: (view: RichView) => view.ink.width === at } as RichControl,
+            ]),
+          },
+        ],
+      },
+      {
+        id: "ink-options",
+        label: "rich.ribbon.group.ink_options",
+        icon: "rc-ink-pen-only",
+        keytip: "ZO",
+        columns: [
+          {
+            rows: [
+              [{ kind: "button", id: "rich.ink.pen_only", label: "rich.ink.pen_only", keytip: "T", icon: "rc-ink-pen-only", size: "small", labelled: true, pressed: (view: RichView) => view.ink.penOnly }],
+              [{ kind: "button", id: "rich.ink.whole", label: "rich.ink.whole", keytip: "W", icon: "rc-ink-stroke", size: "small", labelled: true, pressed: (view: RichView) => view.ink.whole }],
             ],
           },
         ],
@@ -607,52 +746,22 @@ export const RICH_TABS: readonly RichTab[] = [
       },
     ],
   },
+  tableRibbonTab<RichView>({ merge: true }),
   {
-    id: "table",
-    label: "rich.ribbon.tab.table",
-    keytip: "JT",
-    contextual: "table",
+    id: "object",
+    label: "rich.ribbon.tab.object",
+    keytip: "JO",
+    contextual: "object",
     groups: [
       {
-        id: "rows",
-        label: "rich.ribbon.group.rows",
-        icon: "rc-table",
-        keytip: "ZW",
+        id: "arrange",
+        label: "rich.ribbon.group.arrange",
+        icon: "rc-wrap",
+        keytip: "ZA",
         columns: [
-          {
-            rows: [
-              [
-                action("markdown.table.row.before", "rich.ribbon.row.before", "RA", "rc-row-before", "small", true),
-                action("markdown.table.row.after", "rich.ribbon.row.after", "RB", "rc-row-after", "small", true),
-              ],
-              [
-                action("markdown.table.row.up", "rich.ribbon.row.up", "RU", "rc-row-up", "small", true),
-                action("markdown.table.row.down", "rich.ribbon.row.down", "RD", "rc-row-down", "small", true),
-              ],
-              [action("markdown.table.row.delete", "rich.ribbon.row.delete", "RX", "rc-row-delete", "small", true)],
-            ],
-          },
-          {
-            rows: [
-              [
-                action("markdown.table.column.before", "rich.ribbon.column.before", "CL", "rc-column-before", "small", true),
-                action("markdown.table.column.after", "rich.ribbon.column.after", "CR", "rc-column-after", "small", true),
-              ],
-              [
-                action("markdown.table.column.left", "rich.ribbon.column.left", "ML", "rc-column-left", "small", true),
-                action("markdown.table.column.right", "rich.ribbon.column.right", "MR", "rc-column-right", "small", true),
-              ],
-              [action("markdown.table.column.delete", "rich.ribbon.column.delete", "CX", "rc-column-delete", "small", true)],
-            ],
-          },
+          { kind: "menu", label: "rich.place", keytip: "W", icon: "rc-wrap", size: "large", items: wrapEntries, requires: ["rich.place"] },
+          { kind: "button", id: "rich.drawing.edit", label: "rich.drawing.edit", keytip: "E", icon: "rc-drawing-edit", size: "large", when: (view: RichView) => view.object?.kind === "drawing" },
         ],
-      },
-      {
-        id: "cells",
-        label: "rich.ribbon.group.cells",
-        icon: "rc-merge",
-        keytip: "ZU",
-        columns: [action("rich.table.merge", "rich.table.merge", "UM", "rc-merge", "large"), action("rich.table.split", "rich.table.split", "UD", "rc-split", "large")],
       },
     ],
   },
@@ -732,6 +841,14 @@ export function mountRichRibbon(
   const host = options.host ?? document.createElement("div");
   if (!options.host) host.className = "rich-ribbon-host";
   const panels = mountRichPanels(engine, media, () => ribbon.refresh());
+  const life = openLifetime();
+  // La scheda «Disegna»: OpenDocument riceve l'inchiostro come disegno.
+  const ink = new RichInk(engine, { asDrawing: media.format === "odt" });
+  const stopInk = ink.onChange(() => ribbon.refresh());
+  // Inserisci › Disegno e la modifica sul posto; un disegno si copia dal
+  // vault con la scelta delle immagini.
+  const drawing = new RichDrawing(engine, { ...(media.pickImage ? { pick: media.pickImage } : {}), notify: (text, tone) => notify(text, tone) });
+  const stopDrawing = drawing.onChange(() => ribbon.refresh());
 
   let view: RichView | null = null;
   function readView(): RichView {
@@ -753,6 +870,11 @@ export function mountRichRibbon(
       mode: options.display?.mode() ?? "document",
       adapted: options.display?.look() === "adattato",
       page: engine.read(pageAt)?.page ?? null,
+      ink: { tool: ink.tool, color: ink.color, width: ink.widthIndex, pen: ink.pen, penOnly: ink.touch === "navigate", whole: ink.wholeStrokes },
+      object: engine.read((state) => {
+        const object = selectedObject(state);
+        return object ? { kind: object.node.attrs.kind as string, wrap: selectedWrap(state)! } : null;
+      }),
     };
     documentFonts.set(next, engine.fonts());
     view = next;
@@ -819,6 +941,21 @@ export function mountRichRibbon(
       }
       put("rich.toc", free && engine.allows(insertToc("")));
     }
+    // La scheda «Disegna»: Seleziona torna sempre al testo.
+    for (const id of Object.keys(RICH_INK_COMMANDS)) put(id, id === "rich.ink.select" || editable);
+    for (const id of [...INK_WIDTH_COMMANDS, "rich.ink.color"]) put(id, editable && ink.tool !== "eraser" && ink.tool !== "lasso" && ink.tool !== "select");
+    // Un disegno entra dove entra un'immagine.
+    const objectRoom = editable && engine.read(insertNote("·", false)) && engine.allows(insertBreak("\n"));
+    put("rich.drawing.new", objectRoom && !drawing.editing);
+    if (media.pickImage) put("rich.drawing.vault", objectRoom && !drawing.editing);
+    const object = engine.read(selectedObject);
+    if (object) {
+      put("rich.place", engine.allows(placeObject(object.node.attrs.float ? "inline" : "square")));
+      if (object.node.attrs.kind === "drawing") put("rich.drawing.edit", editable && object.node.attrs.svg !== null && !drawing.editing);
+    }
+    put("rich.ink.kind", editable);
+    put("rich.ink.pen_only", editable);
+    put("rich.ink.whole", editable);
     put("rich.find.replace", editable);
     put("rich.count", true);
     if (media.review || hasComments) put("rich.comments", true);
@@ -869,7 +1006,32 @@ export function mountRichRibbon(
     const params = JSON.parse(json) as Params;
     if (ACTION_ROLES[id]) return setStyleValue(ACTION_ROLES[id]);
     if (RICH_MODE_COMMANDS[id]) return options.display?.setMode(RICH_MODE_COMMANDS[id]);
+    if (RICH_INK_COMMANDS[id]) return ink.setTool(RICH_INK_COMMANDS[id]);
+    if (INK_WIDTH_COMMANDS.includes(id)) return ink.setWidth(INK_WIDTH_COMMANDS.indexOf(id));
     switch (id) {
+      case "rich.ink.kind":
+        if (typeof params.pen === "string" && isPenId(params.pen)) ink.setPen(params.pen);
+        return;
+      case "rich.drawing.new":
+        void drawing.insertNew();
+        return;
+      case "rich.drawing.vault":
+        void drawing.insertFromVault();
+        return;
+      case "rich.drawing.edit": {
+        const object = engine.read(selectedObject);
+        if (object) void drawing.edit(object.pos);
+        return;
+      }
+      case "rich.place":
+        if (typeof params.wrap === "string" && (WRAPS as readonly string[]).includes(params.wrap)) engine.apply(placeObject(params.wrap as PlaceWrap | "inline"));
+        return;
+      case "rich.ink.pen_only":
+        ink.setTouch(ink.touch === "navigate" ? "auto" : "navigate");
+        return;
+      case "rich.ink.whole":
+        ink.setWholeStrokes(!ink.wholeStrokes);
+        return;
       case RICH_ADAPTED_COMMAND:
         options.display?.setLook(options.display.look() === "adattato" ? "file" : "adattato");
         return;
@@ -984,7 +1146,7 @@ export function mountRichRibbon(
     commands,
     commandable: () => true,
     view: readView,
-    contextShown: (context, now) => context === "table" && now.inTable,
+    contextShown: (context, now) => (context === "table" && now.inTable) || (context === "object" && now.object !== null),
     command,
     openDialog,
     chord: (id) => {
@@ -995,8 +1157,44 @@ export function mountRichRibbon(
     shell: (action) => options.shell?.(action) ?? null,
     focus: () => engine.focus(),
     languages: onLanguage,
-    extra: (control, group, parts) => (control.kind === "swatch" ? swatchItem(control, group, parts) : stylesItem(control, group, parts)),
+    extra: (control, group, parts) =>
+      control.kind === "swatch" ? swatchItem(control, group, parts) : control.kind === "well" ? wellItem(control, group, parts) : stylesItem(control, group, parts),
   });
+
+  // ── Il colore dell'inchiostro ─────────────────────────────────────────
+  function wellItem(control: WellControl, group: RibbonGroup<RichControl, Key>, parts: RibbonParts<RichView, Key>): RibbonItem<RichView, RichControl, Key> {
+    const wrap = parts.wrap(control);
+    const inkName = (color: string): string => {
+      const swatch = inkSwatchOf(color);
+      return swatch ? t(`rich.ink.color.${swatch.id}` as Key) : color.toLowerCase();
+    };
+    const well = colorWell({
+      label: t("rich.ink.color"),
+      mixedText: t("rich.ink.color"),
+      text: inkPickerText(),
+      value: ink.color,
+      nameOf: inkName,
+      lifetime: life,
+      now: () => ({ recommended: INK_PALETTE.map((swatch) => ({ color: swatch.color, name: inkName(swatch.color) })) }),
+      onChange: (color) => ink.setColor(color),
+    });
+    well.button.id = parts.id();
+    well.button.tabIndex = -1;
+    well.button.dataset.command = control.id;
+    wrap.append(well.element);
+    return {
+      control,
+      group,
+      wrap,
+      shown: true,
+      update(now) {
+        well.setValue(now.ink.color);
+        parts.availability(well.button, control.id, t("rich.ink.color"));
+      },
+      activate: () => well.open(),
+      relabel: () => well.relabel({ label: t("rich.ink.color"), mixedText: t("rich.ink.color"), text: inkPickerText() }),
+    };
+  }
 
   // ── Il colore ─────────────────────────────────────────────────────────
   function swatchItem(control: SwatchControl, group: RibbonGroup<RichControl, Key>, parts: RibbonParts<RichView, Key>): RibbonItem<RichView, RichControl, Key> {
@@ -1153,6 +1351,11 @@ export function mountRichRibbon(
       for (const stop of stopAsks) stop();
       stopEngine();
       stopLock();
+      stopInk();
+      ink.destroy();
+      stopDrawing();
+      drawing.destroy();
+      life.close();
       panels.destroy();
       ribbon.destroy();
       if (!options.host) host.remove();
@@ -1232,3 +1435,23 @@ const ACTIVE_IDS: readonly string[] = [
   "rich.align.justify",
   ...LINE_SPACINGS.map((multiple) => `rich.line.${multiple}`),
 ];
+
+/// I testi del selettore del colore dell'inchiostro, nella lingua di adesso.
+function inkPickerText(): ColorPickerText {
+  return {
+    area: t("rich.ink.picker.area"),
+    areaValue: (saturation, value) => t("rich.ink.picker.area.value", { s: String(saturation), v: String(value) }),
+    hue: t("rich.ink.picker.hue"),
+    alpha: t("rich.ink.picker.alpha"),
+    format: t("rich.ink.picker.format"),
+    formats: { hex: "HEX", rgb: "RGB", hsl: "HSL", oklch: "OKLCH" },
+    code: t("rich.ink.picker.code"),
+    invalid: t("rich.ink.picker.invalid"),
+    eyedropper: t("rich.ink.picker.eyedropper"),
+    recommended: t("rich.ink.picker.recommended"),
+    documentColors: t("rich.ink.picker.document"),
+    recent: t("rich.ink.picker.recent"),
+    theme: t("rich.ink.picker.theme"),
+    none: t("rich.ink.picker.none"),
+  };
+}

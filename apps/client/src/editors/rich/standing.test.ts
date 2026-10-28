@@ -152,6 +152,32 @@ describe("lo stato del documento", () => {
     expect(standing(SOURCE, false).now().actions).toEqual([]);
   });
 
+  it("un inchiostro del file che non si legge resta com'è, e «Che cosa manca?» dice dove", () => {
+    const opaque = { t: "atom", k: "I", kind: "ink", label: "", w: 40, h: 12, data: "iVBORw0KGgo=" };
+    const read = { ...opaque, k: "J", ink: { strokes: [{ color: "#000000", width: 2, xy: [1, 2, 39, 2] }] } };
+    const source = JSON.stringify({
+      format: "fub-rich",
+      version: 4,
+      opaque_schema: 3,
+      blocks: [
+        { t: "para", role: { kind: "body" }, k: "P", c: [{ t: "text", x: "firma", k: "R" }, opaque, opaque] },
+        { t: "para", role: { kind: "body" }, k: "Q", c: [read] },
+      ],
+    });
+    const { now, engine } = standing(source);
+    const state = now();
+    expect(state.kind).toBe("writes");
+    expect(state.placesAsk).toBe(t("rich.standing.missing"));
+    expect(state.places!.map((place) => place.label)).toEqual([
+      t("rich.standing.missing.ink.at", { place: t("rich.standing.place.page", { place: t("rich.standing.place.para", { excerpt: "firma" }), page: 1 }) }),
+    ]);
+    engine.select(engine.read((doc) => doc.doc.content.size) - 1);
+    state.places![0]!.run!();
+    expect(engine.read((doc) => doc.selection.from)).toBe(1);
+    // Senza inchiostri opachi l'elenco non c'è.
+    expect(standing(SOURCE).now().places).toBeUndefined();
+  });
+
   it("la superficie lo dà al posto della riga di avviso, e lo dice quando cambia", async () => {
     const parent = document.createElement("div");
     document.body.append(parent);

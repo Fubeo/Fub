@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { groupControls } from "../../kit/ribbon/types";
 import { t } from "../../i18n/strings";
 import { reservedChord } from "../../ui/commands";
+import { closeContextMenu } from "../../ui/menu";
 import { SHELL_KEYS } from "../../ui/shell-keys.generated";
 import { RichEngine } from "./engine";
 import type { Block } from "./projection";
@@ -43,6 +44,8 @@ const VIEW: RichView = {
   mode: "document",
   adapted: false,
   page: null,
+  ink: { tool: "select", color: "#000000", width: 1, pen: "ballpoint", penOnly: false, whole: true },
+  object: null,
 };
 
 /// Le azioni del motore che la barra non mostra, ciascuna col posto dove sta.
@@ -170,6 +173,41 @@ describe("la barra del documento", () => {
     );
     adapted.click();
     expect(asked).toHaveLength(2);
+    ribbon.destroy();
+  });
+
+  it("Disegna sceglie la penna, mette il velo e lo toglie con Seleziona", () => {
+    const e = engine([para("testo")]);
+    const ribbon = mountRichRibbon(e, () => null);
+    document.body.append(ribbon.element);
+    expect(RICH_TABS.map((tab) => tab.id)).toContain("draw");
+    const press = (id: string) => ribbon.element.querySelector<HTMLButtonElement>(`[data-command="${id}"] button`)!;
+    press("rich.ink.pen").click();
+    expect(press("rich.ink.pen").getAttribute("aria-pressed")).toBe("true");
+    expect(document.querySelector(".rich-ink-veil")).not.toBeNull();
+    press("rich.ink.select").click();
+    expect(document.querySelector(".rich-ink-veil")).toBeNull();
+    press("rich.ink.pen").click();
+    ribbon.destroy();
+    expect(document.querySelector(".rich-ink-veil")).toBeNull();
+  });
+
+  it("Tipo di penna sceglie una penna della galleria del disegno", () => {
+    const ribbon = mountRichRibbon(engine([para("testo")]), () => null);
+    document.body.append(ribbon.element);
+    const kind = [...ribbon.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.ink.kind") || b.textContent === t("rich.ink.kind"))!;
+    const items = () => [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
+    kind.click();
+    expect(items().map((el) => el.textContent)).toContain(t("rich.ink.kind.fountain"));
+    expect(items().find((el) => el.getAttribute("aria-checked") === "true")!.textContent).toContain(t("rich.ink.kind.ballpoint"));
+    items().find((el) => el.textContent?.startsWith(t("rich.ink.kind.fountain")))!.click();
+    closeContextMenu();
+    kind.click();
+    expect(items().find((el) => el.getAttribute("aria-checked") === "true")!.textContent).toContain(t("rich.ink.kind.fountain"));
+    // La penna sceglie anche la Penna, come in Word.
+    const pen = ribbon.element.querySelector<HTMLButtonElement>('[data-command="rich.ink.pen"] button')!;
+    expect(pen.getAttribute("aria-pressed")).toBe("true");
+    closeContextMenu();
     ribbon.destroy();
   });
 

@@ -28,6 +28,7 @@ import { ProofClient, type ProofPorts } from "../core/proof";
 import {
   applyFormat,
   backspace,
+  cellTab,
   deleteForward,
   formatAt,
   selectedLook,
@@ -48,6 +49,7 @@ import { DEFAULT_PAGE, pageVariables, samePage, setRunningAt } from "./page";
 import { openRunningEditor, type RunningEditor } from "./running";
 import { DESK_INSET, fitScale, PX_PER_PT, runningInset, SheetDesk, sheetAt, sheetElement, sheetPlanOf, sheetsPlugin } from "./sheets";
 import { richProof } from "./proof";
+import { cellSelectionPlugin } from "./cell-selection";
 import { GO_TO, lineBoxes, RichMotion, type Rect } from "./rich-motion";
 import { commentPlugin, commentsOf } from "./comments";
 import { notePlugin } from "./notes";
@@ -90,8 +92,8 @@ export class RichEngine {
   readonly #proofClient: ProofClient | null;
   /// L'intestazione dell'ultima proiezione letta. Versione e schema si
   /// ricopiano come sono arrivati; prima di ogni lettura non si scrive niente
-  /// che un formato accetti, ma la forma resta quella della versione 3.
-  #head: Pick<Projection, "version" | "opaque_schema" | "readonly" | "missing" | "body_only" | "lang" | "f" | "styles" | "roles"> = { version: 3 };
+  /// che un formato accetti, ma la forma resta quella della versione 4.
+  #head: Pick<Projection, "version" | "opaque_schema" | "readonly" | "missing" | "body_only" | "lang" | "f" | "styles" | "roles"> = { version: 4 };
   /// Il testo del buffer come lo tiene il motore: quello ricevuto finché
   /// nessuno lo cambia, poi quello riscritto.
   #source = "";
@@ -216,6 +218,7 @@ export class RichEngine {
     const plugins: Plugin[] = [
       history(),
       fillTableKeys,
+      cellSelectionPlugin,
       findPlugin,
       revisionPlugin,
       commentPlugin,
@@ -248,8 +251,8 @@ export class RichEngine {
       Delete: chainCommands(deleteForward, deleteChar(1)),
       "Mod-y": redo,
       // Dopo un Esc il Tab porta fuori dal documento, come nell'editor di testo.
-      Tab: (state, dispatch) => Date.now() > this.#tabLeaves && chainCommands(shiftListLevel(1), insertTab)(state, dispatch),
-      "Shift-Tab": (state, dispatch) => Date.now() > this.#tabLeaves && shiftListLevel(-1)(state, dispatch),
+      Tab: (state, dispatch) => Date.now() > this.#tabLeaves && chainCommands(cellTab(1), shiftListLevel(1), insertTab)(state, dispatch),
+      "Shift-Tab": (state, dispatch) => Date.now() > this.#tabLeaves && chainCommands(cellTab(-1), shiftListLevel(-1))(state, dispatch),
       Escape: () => {
         this.#tabLeaves = Date.now() + 2000;
         if (!this.#painter) return false;
@@ -919,6 +922,23 @@ export class RichEngine {
     this.#view.destroy();
     this.#desk.remove();
     this.#proofClient?.dispose();
+  }
+
+  /// Il testo come lo mostra la pagina (`.rich-content`): la scheda
+  /// «Disegna» ci posa sopra il suo velo, nel banco dello stesso foglio.
+  contentElement(): HTMLElement {
+    return this.#view.dom;
+  }
+
+  /// L'elemento del nodo in `pos` (un paragrafo, un oggetto), se si vede.
+  elementAt(pos: number): HTMLElement | null {
+    const node = this.#view.nodeDOM(pos);
+    return node instanceof HTMLElement ? node : null;
+  }
+
+  /// Lo zoom del foglio: i pixel dello schermo per pixel CSS del documento.
+  zoom(): number {
+    return Number.parseFloat(this.#desk.style.zoom) || 1;
   }
 
   /// Per i test: lo stato corrente.

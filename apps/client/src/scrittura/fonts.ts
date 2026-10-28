@@ -1,5 +1,6 @@
-// La pila CSS di un carattere del documento. Il file nomina il carattere con
-// cui è stato scritto, che il sistema spesso non ha: prima del generico si
+// La pila CSS di un carattere del testo ricco (Scrittura), per i documenti e
+// per il testo dei disegni. Il file nomina il carattere con cui è stato
+// scritto, che il sistema spesso non ha: prima del generico si
 // provano i sostituti metrici, che hanno le stesse larghezze e quindi gli
 // stessi a-capo, poi la famiglia generica ricavata dal nome. Nessun carattere
 // è spedito con Fub: si usa ciò che il sistema ha.

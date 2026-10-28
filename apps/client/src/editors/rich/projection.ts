@@ -1,4 +1,4 @@
-// La proiezione modificabile dei documenti di videoscrittura, versioni 1, 2 e 3:
+// La proiezione modificabile dei documenti di videoscrittura, versioni da 1 a 4:
 // il testo che il buffer della sessione porta per uno di quei documenti.
 //
 // La forma la possiede `fub-format-rich` (`crates/fub-format-rich/src/projection.rs`):
@@ -26,11 +26,13 @@
 // riscriverebbe senza perdite: `locked` su un blocco del corpo, `body_only`
 // sul documento. La shell ricopia versione e schema come li ha ricevuti e non
 // li cambia mai: non può dichiarare uno schema per dati opachi scritti con un
-// altro. Quale schema si legga lo decide il formato.
+// altro. Quale schema si legga lo decide il formato. La 4 aggiunge
+// l'inchiostro e i disegni: gli oggetti `ink` e `drawing`, con i tratti
+// (`ink`), l'SVG (`svg`) e il posto fuori dal testo (`float`).
 
 export const PROJECTION_FORMAT = "fub-rich";
 /// Le versioni che la shell legge, ciascuna con le sue chiavi.
-export const PROJECTION_VERSIONS = [1, 2, 3] as const;
+export const PROJECTION_VERSIONS = [1, 2, 3, 4] as const;
 export type ProjectionVersion = (typeof PROJECTION_VERSIONS)[number];
 
 export type ReadOnlyReason = "revisions" | "track_changes" | "protected" | "projection" | "codec" | "import";
@@ -127,8 +129,41 @@ export const ATOM_KINDS = [
   "ruby",
   "opaque",
   "marker",
+  "ink",
+  "drawing",
 ] as const;
 export type AtomKind = (typeof ATOM_KINDS)[number];
+
+/// Un tratto d'inchiostro: colore `#rrggbb`, spessore in punti, i punti
+/// `x, y` uno dopo l'altro e, se la penna la dà, la pressione di ognuno da 0
+/// a 1. `hl`: un evidenziatore.
+export interface InkLine {
+  readonly color: string;
+  readonly width: number;
+  readonly hl?: boolean;
+  readonly xy: readonly number[];
+  readonly p?: readonly number[];
+  /// La penna di Fub (`ink/pens.ts`), assente per quella di serie.
+  readonly pen?: string;
+}
+
+/// I tratti di un inchiostro, in punti dall'angolo in alto a sinistra
+/// dell'oggetto.
+export interface InkShape {
+  readonly strokes: readonly InkLine[];
+}
+
+export const PLACE_WRAPS = ["square", "front", "behind"] as const;
+export type PlaceWrap = (typeof PLACE_WRAPS)[number];
+
+/// Dove sta un oggetto fuori dal testo: come il testo gli gira attorno, e a
+/// che distanza in punti dal margine sinistro della colonna e dall'inizio del
+/// paragrafo in cui è ancorato.
+export interface Place {
+  readonly wrap: PlaceWrap;
+  readonly x: number;
+  readonly y: number;
+}
 
 /// Una revisione tracciata: chi l'ha fatta e quando. Due con gli stessi campi
 /// sono la stessa revisione. `mv` è il nome dello spostamento di cui è un capo.
@@ -165,6 +200,10 @@ export interface Anchor {
 /// scrive alla sua maniera. In un oggetto tenuto `comment` è un suggerimento;
 /// in una nota tenuta `note` ed `end` si leggono soltanto, e in un'immagine
 /// tenuta `data` si vede soltanto: il file la porta in PNG, JPEG o GIF.
+/// Un inchiostro nuovo porta i suoi tratti (`ink`) e un disegno nuovo il suo
+/// SVG (`svg`), entrambi con il PNG di ripiego in `data`; in uno tenuto si
+/// leggono, e cambiarli vuol dire sostituirlo con uno nuovo. `float`, assente
+/// in linea, sposta anche un oggetto tenuto.
 export interface AtomInline extends Tracked {
   readonly t: "atom";
   readonly k?: string;
@@ -178,6 +217,9 @@ export interface AtomInline extends Tracked {
   /// Un sommario nuovo (`field`) dei titoli fino a quel livello.
   readonly toc?: number;
   readonly comment?: Anchor;
+  readonly ink?: InkShape;
+  readonly svg?: string;
+  readonly float?: Place;
 }
 
 export type Inline = TextInline | AtomInline;
@@ -594,7 +636,7 @@ function readInline(value: unknown, where: string): Inline {
     };
   }
   if (inline.t === "atom") {
-    closed(inline, ["t", "k", "kind", "label", "w", "h", "data", "note", "end", "toc", "comment", "ins", "del"], where);
+    closed(inline, ["t", "k", "kind", "label", "w", "h", "data", "note", "end", "toc", "comment", "ink", "svg", "float", "ins", "del"], where);
     if (!(ATOM_KINDS as readonly unknown[]).includes(inline.kind)) {
       throw new ProjectionError(`${where}: oggetto sconosciuto`);
     }
@@ -610,19 +652,31 @@ function readInline(value: unknown, where: string): Inline {
     if (inline.end !== undefined && typeof inline.end !== "boolean") {
       throw new ProjectionError(`${where}.end: atteso un sì o un no`);
     }
+    const ink = inline.ink === undefined ? undefined : readInkShape(inline.ink, `${where}.ink`);
+    const svg = optionalText(inline.svg, `${where}.svg`);
+    const placed = inline.float === undefined ? undefined : readPlace(inline.float, `${where}.float`);
+    const bare = note === undefined && inline.end !== true && toc === undefined && comment === undefined;
     // Un oggetto o si tiene (`k`) o è nuovo: un'immagine, una nota, un
     // sommario o il segno di un commento.
     const fresh = toc !== undefined
       ? inline.kind === "field" && comment === undefined && data === undefined && note === undefined && inline.end !== true
       : comment !== undefined
         ? inline.kind === "marker" && data === undefined && note === undefined && inline.end !== true
-        : (inline.kind === "image" && data !== undefined && note === undefined && inline.end !== true)
+        : (inline.kind === "image" && data !== undefined && note === undefined && inline.end !== true && ink === undefined && svg === undefined)
+          || (inline.kind === "ink" && ink !== undefined && data !== undefined && svg === undefined && bare)
+          || (inline.kind === "drawing" && svg !== undefined && data !== undefined && ink === undefined && bare)
           || (inline.kind === "note" && note !== undefined && data === undefined);
     // Una nota tenuta porta, da leggere, il suo testo e se è di chiusura;
     // un'immagine tenuta, da vedere, i suoi byte.
     const kept = toc === undefined
-      && (data === undefined || inline.kind === "image")
-      && (inline.kind === "note" || (note === undefined && inline.end !== true));
+      && (data === undefined || inline.kind === "image" || inline.kind === "ink" || inline.kind === "drawing")
+      && (inline.kind === "note" || (note === undefined && inline.end !== true))
+      && (ink === undefined || inline.kind === "ink")
+      && (svg === undefined || inline.kind === "drawing");
+    // Soltanto un oggetto che può stare fuori dal testo ha un posto.
+    if (placed !== undefined && k === undefined && !["image", "ink", "drawing"].includes(inline.kind as string)) {
+      throw new ProjectionError(`${where}.float: questo oggetto sta nel testo`);
+    }
     if (k !== undefined ? !kept : !fresh) {
       throw new ProjectionError(`${where}: oggetto né tenuto né nuovo`);
     }
@@ -638,10 +692,71 @@ function readInline(value: unknown, where: string): Inline {
       ...(inline.end === true ? { end: true } : {}),
       ...(toc !== undefined ? { toc } : {}),
       ...(comment ? { comment } : {}),
+      ...(ink ? { ink } : {}),
+      ...(svg !== undefined ? { svg } : {}),
+      ...(placed ? { float: placed } : {}),
       ...readTracked(inline, where),
     };
   }
   throw new ProjectionError(`${where}: elemento sconosciuto`);
+}
+
+function readInkShape(value: unknown, where: string): InkShape {
+  const shape = record(value, where);
+  closed(shape, ["strokes"], where);
+  const strokes = list(shape.strokes, `${where}.strokes`).map((item, i): InkLine => {
+    const at = `${where}.strokes[${i}]`;
+    const line = record(item, at);
+    closed(line, ["color", "width", "hl", "xy", "p"], at);
+    const width = optionalNumber(line.width, `${at}.width`);
+    if (width === undefined) throw new ProjectionError(`${at}: manca lo spessore`);
+    if (line.hl !== undefined && typeof line.hl !== "boolean") throw new ProjectionError(`${at}.hl: atteso un sì o un no`);
+    const numbers = (v: unknown, w: string) => list(v, w).map((n, j) => {
+      const x = optionalNumber(n, `${w}[${j}]`);
+      if (x === undefined) throw new ProjectionError(`${w}[${j}]: atteso un numero`);
+      return x;
+    });
+    const xy = numbers(line.xy, `${at}.xy`);
+    const p = line.p === undefined ? [] : numbers(line.p, `${at}.p`);
+    return {
+      color: text(line.color, `${at}.color`),
+      width,
+      ...(line.hl === true ? { hl: true } : {}),
+      xy,
+      ...(p.length > 0 ? { p } : {}),
+    };
+  });
+  return { strokes };
+}
+
+function readPlace(value: unknown, where: string): Place {
+  const place = record(value, where);
+  closed(place, ["wrap", "x", "y"], where);
+  if (!(PLACE_WRAPS as readonly unknown[]).includes(place.wrap)) throw new ProjectionError(`${where}.wrap: disposizione sconosciuta`);
+  const x = optionalNumber(place.x, `${where}.x`);
+  const y = optionalNumber(place.y, `${where}.y`);
+  if (x === undefined || y === undefined) throw new ProjectionError(`${where}: manca il posto`);
+  return { wrap: place.wrap as PlaceWrap, x, y };
+}
+
+/// I tratti di un inchiostro letti da un valore qualunque (un attributo del
+/// DOM copiato), `null` se non hanno la forma della proiezione.
+export function inkShapeOf(value: unknown): InkShape | null {
+  try {
+    return readInkShape(value, "ink");
+  } catch {
+    return null;
+  }
+}
+
+/// Il posto di un oggetto letto da un valore qualunque, `null` se non ha la
+/// forma della proiezione.
+export function placeOf(value: unknown): Place | null {
+  try {
+    return readPlace(value, "float");
+  } catch {
+    return null;
+  }
 }
 
 function readPage(value: unknown, where: string): Page {
@@ -772,6 +887,7 @@ export function parseProjection(source: string): Projection {
     1: ["format", "version", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"],
     2: ["format", "version", "opaque_schema", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"],
     3: ["format", "version", "opaque_schema", "readonly", "missing", "body_only", "track", "lang", "f", "styles", "roles", "page", "header", "footer", "comments", "blocks"],
+    4: ["format", "version", "opaque_schema", "readonly", "missing", "body_only", "track", "lang", "f", "styles", "roles", "page", "header", "footer", "comments", "blocks"],
   }[version];
   closed(root, keys, "proiezione");
   const schema = root.opaque_schema;
@@ -933,7 +1049,21 @@ function writeInline(inline: Inline): string {
   if (inline.end) out += `,"end":true`;
   if (inline.toc !== undefined) out += `,"toc":${inline.toc}`;
   if (inline.comment) out += `,"comment":${writeAnchor(inline.comment)}`;
+  if (inline.ink) out += `,"ink":${writeInkShape(inline.ink)}`;
+  if (inline.svg !== undefined) out += `,"svg":${JSON.stringify(inline.svg)}`;
+  if (inline.float) out += `,"float":{"wrap":"${inline.float.wrap}","x":${float(inline.float.x)},"y":${float(inline.float.y)}}`;
   return out + writeTracked(inline) + "}";
+}
+
+function writeInkShape(shape: InkShape): string {
+  const strokes = shape.strokes.map((line) => {
+    let out = `{"color":${JSON.stringify(line.color)},"width":${float(line.width)}`;
+    if (line.hl) out += `,"hl":true`;
+    out += `,"xy":[${line.xy.map(float).join(",")}]`;
+    if (line.p && line.p.length > 0) out += `,"p":[${line.p.map(float).join(",")}]`;
+    return out + "}";
+  });
+  return `{"strokes":[${strokes.join(",")}]}`;
 }
 
 /// Un blocco in JSON, con i campi nell'ordine di serde.

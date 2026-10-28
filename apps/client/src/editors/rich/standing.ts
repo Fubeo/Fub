@@ -4,6 +4,7 @@
 //
 // Le ragioni sono quelle del formato: la sola lettura arriva con la
 // proiezione, i blocchi chiusi e il solo corpo anche (`closed.ts`).
+import type { Node as PmNode } from "prosemirror-model";
 import type { SurfaceStandingAction, SurfaceStandingPlace, SurfaceStandingState } from "../core/registry";
 import { plural, t, type Key } from "../../i18n/strings";
 import { blockStart, closedPlaces, excerptAt, goToBlock, type ClosedPlace } from "./closed";
@@ -74,6 +75,10 @@ export function richStanding(engine: RichEngine, host: RichStandingHost): () => 
     if (pos === null || placed === null) return { label: t(MISSING_KEYS[item.what]) };
     return { label: t(placed, { place: named(pos) }), run: () => void engine.browse(goToBlock(pos)) };
   };
+  /// Gli inchiostri che il file porta e che qui non si leggono: restano come
+  /// sono, col loro ripiego, e si dice dove.
+  const ink = (): SurfaceStandingPlace[] =>
+    engine.read((state) => opaqueInk(state.doc)).map((pos) => ({ label: t("rich.standing.missing.ink.at", { place: named(pos) }), run: () => void engine.browse(goToBlock(pos)) }));
   return () => {
     const intake = engine.intake();
     if (intake.kind !== "ok") return null;
@@ -114,6 +119,7 @@ export function richStanding(engine: RichEngine, host: RichStandingHost): () => 
         title: t("rich.standing.body.title"),
         body: t("rich.standing.body.body"),
         ...(format ? { source: t("rich.standing.body.source", { format }) } : {}),
+        ...whatIsMissing(ink()),
         ...sign,
       };
     }
@@ -128,10 +134,25 @@ export function richStanding(engine: RichEngine, host: RichStandingHost): () => 
       title: t("rich.standing.writes.title"),
       body: t("rich.standing.writes.body"),
       ...(format ? { source: t("rich.standing.writes.source", { format }) } : {}),
+      ...whatIsMissing(ink()),
       actions,
       ...sign,
     };
   };
+}
+
+/// Dove cominciano i paragrafi con un inchiostro che non si legge: un atomo
+/// `ink` senza tratti, che si mostra soltanto col suo ripiego.
+export function opaqueInk(doc: PmNode): number[] {
+  const out: number[] = [];
+  doc.descendants((node, pos) => {
+    if (node.type.name !== "para") return true;
+    node.forEach((child) => {
+      if (child.type.name === "atom" && child.attrs.kind === "ink" && !child.attrs.ink && out[out.length - 1] !== pos) out.push(pos);
+    });
+    return false;
+  });
+  return out;
 }
 
 /// L'elenco di «Che cosa manca?», se il formato lo sa dire.

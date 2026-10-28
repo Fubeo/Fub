@@ -22,7 +22,9 @@
 // scritto si ritrova nella cache per nodo (i nodi sono immutabili), così una
 // battuta riscrive un paragrafo e non il documento.
 import { resolvedLanguage, t, type Key } from "../../i18n/strings";
-import { fontStack } from "./fonts";
+import { fontStack } from "../../scrittura/fonts";
+import { lineOpacity, lineOutline } from "./ink-shape";
+import { colorValue, writingMarks } from "../../scrittura/marks";
 import { Fragment, Schema, type Mark as PmMark, type Node as PmNode, type NodeSpec, type MarkSpec } from "prosemirror-model";
 import {
   BODY,
@@ -34,6 +36,10 @@ import {
   plainLook,
   writeBlock,
   type Anchor,
+  type InkShape,
+  inkShapeOf,
+  placeOf,
+  type Place,
   type AtomKind,
   type Block,
   type Cell,
@@ -128,12 +134,9 @@ export function lookVariables(look: Look): string[] {
   return style;
 }
 
-/// Un colore che la proiezione accetta: `#rrggbb` minuscolo.
-export function colorValue(value: string | null): string | null {
-  if (!value) return null;
-  const lower = value.trim().toLowerCase();
-  return /^#[0-9a-f]{6}$/.test(lower) ? lower : null;
-}
+/// Un colore che la proiezione accetta: `#rrggbb` minuscolo, come le marche
+/// di Scrittura.
+export { colorValue };
 
 function headingTag(level: number): string {
   return level <= 6 ? `h${level}` : "p";
@@ -240,10 +243,26 @@ const ATOM_NAMES: Readonly<Record<AtomKind, Key>> = {
   ruby: "rich.atom.ruby",
   opaque: "rich.atom.opaque",
   marker: "rich.atom.opaque",
+  ink: "rich.atom.ink",
+  drawing: "rich.atom.drawing",
 };
 
 /// Le specie con una misura nel documento: la casella ne prende la forma.
-const DRAWN: ReadonlySet<AtomKind> = new Set<AtomKind>(["image", "graphic", "shape", "text_box", "group"]);
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+/// Il valore JSON di un attributo, letto da `read`; `null` se manca o non si
+/// legge.
+function jsonAttribute<T>(el: HTMLElement, name: string, read: (value: unknown) => T | null): T | null {
+  const text = el.getAttribute(name);
+  if (text === null) return null;
+  try {
+    return read(JSON.parse(text));
+  } catch {
+    return null;
+  }
+}
+
+const DRAWN: ReadonlySet<AtomKind> = new Set<AtomKind>(["image", "graphic", "shape", "text_box", "group", "ink", "drawing"]);
 
 /// Le specie che si mostrano come segnaposto, con un nome e una misura.
 const PLACEHOLDERS: ReadonlySet<AtomKind> = new Set<AtomKind>([...DRAWN, "equation"]);
@@ -282,6 +301,8 @@ const ATOM_GLYPHS: Readonly<Record<AtomKind, string>> = {
   ruby: "ア",
   opaque: "◆",
   marker: "",
+  ink: "✎",
+  drawing: "◇",
 };
 
 const nodes: Record<string, NodeSpec> = {
@@ -380,7 +401,9 @@ const nodes: Record<string, NodeSpec> = {
     atom: true,
     // Senza `k` l'oggetto è nuovo: `data` sono i byte di un'immagine, `note`
     // il testo di una nota (di chiusura se `end`), `toc` i livelli di un
-    // sommario, `comment` il segno di un commento.
+    // sommario, `comment` il segno di un commento. `ink` sono i tratti di un
+    // inchiostro, `svg` il disegno di FubDraw (con `data` come ripiego), e
+    // `float` il posto di un oggetto fuori dal testo.
     attrs: {
       k: { default: null },
       kind: {},
@@ -392,6 +415,9 @@ const nodes: Record<string, NodeSpec> = {
       end: { default: false },
       toc: { default: null },
       comment: { default: null },
+      ink: { default: null },
+      svg: { default: null },
+      float: { default: null },
     },
     selectable: true,
     parseDOM: [
@@ -419,6 +445,12 @@ const nodes: Record<string, NodeSpec> = {
             comment: el.hasAttribute("data-comment")
               ? { id: Number(el.getAttribute("data-comment")), ...(el.hasAttribute("data-comment-end") ? { end: true } : {}) }
               : null,
+            // I tratti, il disegno e il posto viaggiano con l'oggetto copiato;
+            // ciò che non si legge torna com'era assente, e il filtro
+            // dell'incolla decide.
+            ink: jsonAttribute(el, "data-ink", (value) => inkShapeOf(value)),
+            svg: el.getAttribute("data-svg"),
+            float: jsonAttribute(el, "data-float", (value) => placeOf(value)),
           };
         },
       },
@@ -451,6 +483,18 @@ const nodes: Record<string, NodeSpec> = {
         // Punti tipografici in pixel CSS, entro la colonna del testo.
         attrs.style = `width: ${Math.max(8, w * (4 / 3))}px; aspect-ratio: ${Math.max(w, 1)} / ${Math.max(h, 1)}`;
       }
+      const ink = node.attrs.ink as InkShape | null;
+      if (ink) attrs["data-ink"] = JSON.stringify(ink);
+      const svg = node.attrs.svg as string | null;
+      if (svg !== null) attrs["data-svg"] = svg;
+      const place = node.attrs.float as Place | null;
+      if (place) attrs["data-float"] = JSON.stringify(place);
+      if (place) {
+        // Fuori dal testo: davanti o dietro sta al suo posto dal paragrafo,
+        // «Quadrato» va a sinistra col testo attorno.
+        attrs.class += ` rich-atom-float rich-atom-float-${place.wrap}`;
+        if (place.wrap !== "square") attrs.style = `${attrs.style ?? ""}; left: ${place.x * (4 / 3)}px; top: ${place.y * (4 / 3)}px`;
+      }
       if (kind === "marker") return ["span", attrs];
       // Un oggetto si annuncia per specie (e per testo alternativo, se ne ha);
       // senza un'etichetta si vede un segno della sua specie.
@@ -459,6 +503,20 @@ const nodes: Record<string, NodeSpec> = {
       const told = note ?? label;
       attrs["aria-label"] = told ? `${name}: ${told}` : name;
       attrs.title = attrs["aria-label"];
+      // Un inchiostro coi suoi tratti si disegna da quelli, nitido a ogni
+      // zoom: l'evidenziatore trasparente, sopra il testo che copre.
+      if (kind === "ink" && ink && w !== null && h !== null) {
+        attrs.class += " rich-atom-drawn";
+        const paths = ink.strokes.map((line) => {
+          const look: Record<string, string> = { d: lineOutline(line), fill: line.color };
+          const opacity = lineOpacity(line);
+          if (opacity !== null) look["fill-opacity"] = String(opacity);
+          if (line.hl) look.class = "rich-ink-highlight";
+          return [`${SVG_NS} path`, look] as const;
+        });
+        const box = { viewBox: `0 0 ${w} ${h}`, class: "rich-ink", "aria-hidden": "true", preserveAspectRatio: "none" };
+        return ["span", attrs, [`${SVG_NS} svg`, box, ...paths]];
+      }
       // Un'immagine nuova si vede, e una del file quando la proiezione ne
       // porta i byte: non è più un segnaposto.
       const mime = data !== null ? imageMime(data) : null;
@@ -520,6 +578,13 @@ function revisionMark(kind: "ins" | "del"): MarkSpec {
   };
 }
 
+/// L'enfasi e l'aspetto del carattere sono le marche di Scrittura.
+const WRITING = writingMarks({ highlight: HIGHLIGHT_DEFAULT, auto: COLOR_AUTO });
+
+function pick(specs: Record<string, MarkSpec>, names: readonly string[]): Record<string, MarkSpec> {
+  return Object.fromEntries(names.map((name) => [name, specs[name]!]));
+}
+
 const marks: Record<string, MarkSpec> = {
   ins: revisionMark("ins"),
   del: revisionMark("del"),
@@ -541,21 +606,7 @@ const marks: Record<string, MarkSpec> = {
     parseDOM: [{ tag: "span[data-rich-run]", getAttrs: (dom) => ({ k: (dom as HTMLElement).getAttribute("data-rich-run") }) }],
     toDOM: (mark) => ["span", { "data-rich-run": mark.attrs.k as string }, 0],
   },
-  b: { parseDOM: [{ tag: "strong" }, { tag: "b" }, { style: "font-weight=bold" }], toDOM: () => ["strong", 0] },
-  i: { parseDOM: [{ tag: "em" }, { tag: "i" }, { style: "font-style=italic" }], toDOM: () => ["em", 0] },
-  u: { parseDOM: [{ tag: "u" }], toDOM: () => ["u", 0] },
-  s: { parseDOM: [{ tag: "s" }, { tag: "del" }, { tag: "strike" }], toDOM: () => ["s", 0] },
-  /// L'evidenziatore; `color` nullo è il giallo.
-  h: {
-    attrs: { color: { default: null } },
-    parseDOM: [{ tag: "mark", getAttrs: (dom) => ({ color: colorValue((dom as HTMLElement).getAttribute("data-rich-hl")) }) }],
-    toDOM: (mark) => {
-      const color = mark.attrs.color as string | null;
-      return ["mark", { ...(color ? { "data-rich-hl": color } : {}), style: `--file-hl: ${color ?? HIGHLIGHT_DEFAULT}` }, 0];
-    },
-  },
-  sup: { excludes: "sup sub", parseDOM: [{ tag: "sup" }], toDOM: () => ["sup", 0] },
-  sub: { excludes: "sup sub", parseDOM: [{ tag: "sub" }], toDOM: () => ["sub", 0] },
+  ...pick(WRITING, ["b", "i", "u", "s", "h", "sup", "sub"]),
   caps: {
     parseDOM: [{ tag: "span[data-rich-caps]" }],
     toDOM: () => ["span", { "data-rich-caps": "", style: "text-transform: uppercase" }, 0],
@@ -565,40 +616,7 @@ const marks: Record<string, MarkSpec> = {
     toDOM: () => ["span", { "data-rich-small-caps": "", style: "font-variant-caps: small-caps" }, 0],
   },
   /// L'aspetto dove differisce da quello del paragrafo: valori, non enfasi.
-  font: {
-    attrs: { family: {} },
-    parseDOM: [{ tag: "span[data-rich-font]", getAttrs: (dom) => ({ family: (dom as HTMLElement).getAttribute("data-rich-font") }) }],
-    toDOM: (mark) => {
-      const family = mark.attrs.family as string;
-      return ["span", { "data-rich-font": family, style: `--file-font: ${fontStack(family)}` }, 0];
-    },
-  },
-  size: {
-    attrs: { pt: {} },
-    parseDOM: [
-      {
-        tag: "span[data-rich-size]",
-        getAttrs: (dom) => {
-          const pt = Number((dom as HTMLElement).getAttribute("data-rich-size"));
-          return Number.isFinite(pt) && pt > 0 ? { pt } : false;
-        },
-      },
-    ],
-    toDOM: (mark) => {
-      const pt = mark.attrs.pt as number;
-      return ["span", { "data-rich-size": String(pt), style: `--file-size: ${pt}pt` }, 0];
-    },
-  },
-  color: {
-    attrs: { value: {} },
-    parseDOM: [{ tag: "span[data-rich-color]", getAttrs: (dom) => ({ value: (dom as HTMLElement).getAttribute("data-rich-color") }) }],
-    toDOM: (mark) => {
-      const value = mark.attrs.value as string;
-      const attrs: Record<string, string> = { "data-rich-color": value };
-      if (value !== COLOR_AUTO) attrs.style = `--file-color: ${value}`;
-      return ["span", attrs, 0];
-    },
-  },
+  ...pick(WRITING, ["font", "size", "color"]),
 };
 
 export const richSchema = new Schema({ nodes, marks });
@@ -642,6 +660,9 @@ function inlineNodes(c: readonly Inline[]): PmNode[] {
           end: inline.end === true,
           toc: inline.toc ?? null,
           comment: inline.comment ?? null,
+          ink: inline.ink ?? null,
+          svg: inline.svg ?? null,
+          float: inline.float ?? null,
         }, null, revisionMarks(inline)),
       );
       continue;
@@ -809,6 +830,9 @@ export function inlinesOf(paragraph: PmNode): Inline[] {
       const data = child.attrs.data as string | null;
       const note = child.attrs.note as string | null;
       const comment = child.attrs.comment as Anchor | null;
+      const ink = child.attrs.ink as InkShape | null;
+      const svg = child.attrs.svg as string | null;
+      const place = child.attrs.float as Place | null;
       out.push({
         t: "atom",
         ...(k !== null ? { k } : {}),
@@ -821,6 +845,9 @@ export function inlinesOf(paragraph: PmNode): Inline[] {
         ...(child.attrs.end ? { end: true } : {}),
         ...(child.attrs.toc !== null ? { toc: child.attrs.toc as number } : {}),
         ...(comment ? { comment } : {}),
+        ...(ink ? { ink } : {}),
+        ...(svg !== null ? { svg } : {}),
+        ...(place ? { float: place } : {}),
         ...trackedOf(child.marks),
       });
       return;

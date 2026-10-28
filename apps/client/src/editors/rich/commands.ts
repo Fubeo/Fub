@@ -35,7 +35,9 @@ import {
   type Role,
   type RoleLooks,
 } from "./projection";
+import { FONT_SIZES, lookCommands, markActive, MAX_FONT_SIZE, MIN_FONT_SIZE, type LookState } from "../../scrittura/look";
 import { safeHref } from "./paste";
+import { cellAt, cellBoxes, selectedCells } from "./cell-selection";
 import { canComment } from "./comments";
 import { goToRevision, resolveAll, resolveRevision } from "./review";
 import { richSchema } from "./schema";
@@ -205,21 +207,7 @@ export function shiftListLevel(delta: number): Command {
   };
 }
 
-/// La marca è attiva su tutta la selezione (o nelle marche del cursore).
-export function markActive(state: EditorState, type: MarkType): boolean {
-  const { from, to, empty, $from } = state.selection;
-  if (empty) return !!type.isInSet(state.storedMarks ?? $from.marks());
-  let all = true;
-  let any = false;
-  state.doc.nodesBetween(from, to, (node) => {
-    if (!node.isInline) return true;
-    if (node.type.name === "atom") return false;
-    any = true;
-    if (!type.isInSet(node.marks)) all = false;
-    return false;
-  });
-  return any && all;
-}
+export { markActive };
 
 /// Le marche dell'aspetto di un tratto: ciò che «Copia formato» porta e
 /// «Cancella formattazione» toglie. Il link e le proprietà opache no.
@@ -253,154 +241,22 @@ export const clearFormatting: Command = (state, dispatch) => {
 
 // ── L'aspetto del carattere ─────────────────────────────────────────────────
 
-/// Le dimensioni che i menu propongono e su cui «Ingrandisci» e «Riduci»
-/// fanno un passo, come in Word.
-export const FONT_SIZES: readonly number[] = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
-export const MIN_FONT_SIZE = 1;
-export const MAX_FONT_SIZE = 1638;
+export { FONT_SIZES, MAX_FONT_SIZE, MIN_FONT_SIZE, type LookState };
 
-/// L'aspetto del testo selezionato: un campo è `null` dove la selezione ne
-/// mescola più d'uno. `hl` è `null` anche dove il testo non è evidenziato.
-export interface LookState {
-  readonly font: string | null;
-  readonly size: number | null;
-  readonly color: string | null;
-  readonly hl: string | null;
-}
+/// I comandi del carattere di Scrittura, sui paragrafi del documento: un
+/// tratto uguale all'aspetto del paragrafo non lo riscrive.
+const LOOK = lookCommands(
+  {
+    schema: richSchema,
+    paragraph: (node) => node.type === para,
+    base: (paragraph) => (paragraph.attrs.f as Look | null) ?? null,
+    fallbackSize: 11,
+    highlight: HIGHLIGHT_DEFAULT,
+  },
+  COLOR_AUTO,
+);
 
-/// L'aspetto di un testo con queste marche nel paragrafo `paragraph`.
-function lookAt(marks: readonly PmMark[], paragraph: PmNode | null): { font?: string; size?: number; color: string; hl: string | null } {
-  const base = (paragraph?.attrs.f as Look | null) ?? null;
-  let font = base?.font;
-  let size = base?.size;
-  let color = COLOR_AUTO;
-  let hl: string | null = null;
-  for (const mark of marks) {
-    const name = mark.type.name;
-    if (name === "font") font = mark.attrs.family as string;
-    else if (name === "size") size = mark.attrs.pt as number;
-    else if (name === "color") color = mark.attrs.value as string;
-    else if (name === "h") hl = (mark.attrs.color as string | null) ?? HIGHLIGHT_DEFAULT;
-  }
-  return { font, size, color, hl };
-}
-
-export function selectedLook(state: EditorState): LookState {
-  const { from, to, empty, $from } = state.selection;
-  if (empty) {
-    const look = lookAt(state.storedMarks ?? $from.marks(), $from.parent.type === para ? $from.parent : null);
-    return { font: look.font ?? null, size: look.size ?? null, color: look.color, hl: look.hl };
-  }
-  const seen: ReturnType<typeof lookAt>[] = [];
-  state.doc.nodesBetween(from, to, (node, _pos, parent) => {
-    if (!node.isInline) return true;
-    if (node.type.name !== "atom") seen.push(lookAt(node.marks, parent));
-    return false;
-  });
-  if (seen.length === 0) return { font: null, size: null, color: null, hl: null };
-  const common = <T>(pick: (look: ReturnType<typeof lookAt>) => T): T | null =>
-    seen.every((look) => pick(look) === pick(seen[0])) ? pick(seen[0]) : null;
-  return {
-    font: common((look) => look.font ?? null),
-    size: common((look) => look.size ?? null),
-    color: common((look) => look.color),
-    hl: common((look) => look.hl),
-  };
-}
-
-/// I tratti di testo della selezione, ciascuno col suo paragrafo.
-function selectedRuns(state: EditorState): { from: number; to: number; paragraph: PmNode; node: PmNode }[] {
-  const out: { from: number; to: number; paragraph: PmNode; node: PmNode }[] = [];
-  const { from, to } = state.selection;
-  state.doc.nodesBetween(from, to, (node, pos, parent) => {
-    if (!node.isInline) return true;
-    if (node.type.name !== "atom" && parent) {
-      out.push({ from: Math.max(from, pos), to: Math.min(to, pos + node.nodeSize), paragraph: parent, node });
-    }
-    return false;
-  });
-  return out;
-}
-
-/// Mette su ogni tratto selezionato la marca che `make` sceglie per lui
-/// (`null`: nessuna). Senza selezione vale per ciò che si scrive dopo.
-function setMarkPerRun(type: MarkType, make: (run: { paragraph: PmNode; marks: readonly PmMark[] }) => PmMark | null): Command {
-  return (state, dispatch) => {
-    const { empty, $from } = state.selection;
-    if (empty) {
-      if ($from.parent.type !== para) return false;
-      if (dispatch) {
-        const marks = type.removeFromSet(state.storedMarks ?? $from.marks());
-        const mark = make({ paragraph: $from.parent, marks: state.storedMarks ?? $from.marks() });
-        dispatch(state.tr.setStoredMarks(mark ? mark.addToSet(marks) : marks));
-      }
-      return true;
-    }
-    const runs = selectedRuns(state);
-    if (runs.length === 0) return false;
-    if (dispatch) {
-      const tr = state.tr;
-      for (const run of runs) {
-        tr.removeMark(run.from, run.to, type);
-        const mark = make({ paragraph: run.paragraph, marks: run.node.marks });
-        if (mark) tr.addMark(run.from, run.to, mark);
-      }
-      dispatch(tr);
-    }
-    return true;
-  };
-}
-
-/// Il carattere della selezione. Quello del paragrafo non si scrive: il
-/// tratto torna a seguirlo.
-export function setFont(family: string | null): Command {
-  const type = richSchema.marks.font;
-  return setMarkPerRun(type, ({ paragraph }) => {
-    const base = (paragraph.attrs.f as Look | null)?.font;
-    return family && family !== base ? type.create({ family }) : null;
-  });
-}
-
-function clampSize(pt: number): number {
-  return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.round(pt * 2) / 2));
-}
-
-/// La dimensione della selezione, in punti.
-export function setSize(pt: number | null): Command {
-  const type = richSchema.marks.size;
-  return setMarkPerRun(type, ({ paragraph }) => {
-    if (pt === null || !Number.isFinite(pt)) return null;
-    const size = clampSize(pt);
-    const base = (paragraph.attrs.f as Look | null)?.size;
-    return size !== base ? type.create({ pt: size }) : null;
-  });
-}
-
-/// Un passo della scala `FONT_SIZES` per ogni tratto, dalla sua dimensione.
-export function stepSize(direction: 1 | -1): Command {
-  const type = richSchema.marks.size;
-  return setMarkPerRun(type, ({ paragraph, marks }) => {
-    const base = (paragraph.attrs.f as Look | null)?.size;
-    const current = (type.isInSet(marks)?.attrs.pt as number | undefined) ?? base ?? 11;
-    const next =
-      direction > 0
-        ? FONT_SIZES.find((size) => size > current) ?? clampSize(current + 10)
-        : [...FONT_SIZES].reverse().find((size) => size < current) ?? clampSize(current - 1);
-    return next !== base ? type.create({ pt: next }) : null;
-  });
-}
-
-/// Il colore del testo selezionato; `null` lo riporta a quello del paragrafo.
-export function setColor(value: string | null): Command {
-  const type = richSchema.marks.color;
-  return setMarkPerRun(type, () => (value ? type.create({ value }) : null));
-}
-
-/// L'evidenziatore sulla selezione, nel colore dato; `null` lo toglie.
-export function setHighlight(color: string | null): Command {
-  const type = richSchema.marks.h;
-  return setMarkPerRun(type, () => (color ? type.create({ color: color === HIGHLIGHT_DEFAULT ? null : color }) : null));
-}
+export const { selectedLook, setFont, setSize, stepSize, setColor, setHighlight } = LOOK;
 
 /// Le marche d'aspetto all'inizio della selezione: ciò che «Copia formato»
 /// prende.
@@ -800,15 +656,27 @@ function cellPos(at: InRow, index: number): number {
   return pos;
 }
 
-/// Unisce le celle che la selezione tocca in una riga: la prima copre le
-/// colonne di tutte e ne raccoglie i blocchi, tranne i paragrafi vuoti.
+/// Unisce le celle che la selezione tocca in una riga, o le celle scelte se
+/// stanno in una riga: la prima copre le colonne di tutte e ne raccoglie i
+/// blocchi, tranne i paragrafi vuoti.
 export const mergeCells: Command = (state, dispatch) => {
   const { $from, $to } = state.selection;
   const at = rowAt($from);
-  const end = rowAt($to);
-  if (!at || !end || at.rowPos !== end.rowPos) return false;
-  const from = $from.index(at.depth);
-  const to = $to.index(at.depth);
+  if (!at) return false;
+  let from: number;
+  let to: number;
+  const chosen = selectedCells(state);
+  if (chosen) {
+    const row = chosen.boxes[0]!.row;
+    if (chosen.boxes.some((box) => box.row !== row) || chosen.tablePos !== at.tablePos || row !== at.rowIndex) return false;
+    from = chosen.boxes[0]!.index;
+    to = chosen.boxes[chosen.boxes.length - 1]!.index;
+  } else {
+    const end = rowAt($to);
+    if (!end || at.rowPos !== end.rowPos) return false;
+    from = $from.index(at.depth);
+    to = $to.index(at.depth);
+  }
   if (from >= to) return false;
   let span = 0;
   const content: PmNode[] = [];
@@ -830,6 +698,25 @@ export const mergeCells: Command = (state, dispatch) => {
   }
   return true;
 };
+
+/// Tab e Maiusc+Tab in una tabella, come in Word: alla cella dopo o prima,
+/// col suo testo scelto; Tab nell'ultima cella aggiunge una riga come
+/// l'ultima. Fuori da una tabella il tasto resta a chi viene dopo.
+export function cellTab(step: 1 | -1): Command {
+  return (state, dispatch) => {
+    const here = cellAt(state.selection.$head);
+    if (!here) return false;
+    const boxes = cellBoxes(here.table, here.tablePos);
+    const next = boxes[boxes.indexOf(boxes.find((box) => box.pos === here.box.pos)!) + step];
+    if (!next) return step > 0 && !here.table.attrs.locked ? insertRow("after")(state, dispatch) : true;
+    if (dispatch) {
+      const start = TextSelection.near(state.doc.resolve(next.pos + 1)).from;
+      const end = TextSelection.near(state.doc.resolve(next.pos + next.node.nodeSize - 1), -1).to;
+      dispatch(state.tr.setSelection(TextSelection.create(state.doc, start, Math.max(start, end))).scrollIntoView());
+    }
+    return true;
+  };
+}
 
 /// Divide la cella unita del cursore: tiene il contenuto in una colonna, e
 /// le altre tornano celle vuote come lei.
