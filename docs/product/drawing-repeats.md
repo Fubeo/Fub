@@ -8,12 +8,12 @@
 
 Due modi di ripetere, per due bisogni diversi:
 
-- **La ripetizione**, dal [livello Esperto](drawing-expert.md), mostra un
+- **La ripetizione**, nello spazio Completo, fra gli [strumenti avanzati](drawing-expert.md), mostra un
   oggetto più volte con una regola: le copie sono vive, e cambiare
   l'originale le cambia tutte. Le operazioni sono in
   `apps/client/src/editors/spatial/tools/repeat-ops.ts`; il file in
   [formato della scena, ripetizioni](../reference/scene-format-repeats.md).
-- **La penna in simmetria**, dal [livello Standard](drawing.md#il-livello-standard),
+- **La penna in simmetria**, nello spazio [Completo](drawing.md#completo-e-semplice),
   scrive con ogni tratto anche le sue copie, riflesse o girate: inchiostro
   vero, che dopo si modifica da solo. La simmetria è dello strumento, non del
   disegno, ed è in `tools/symmetry.ts`.
@@ -183,14 +183,14 @@ attributi di FubDraw; il PNG, il JPEG e il PDF disegnano ogni copia
 ([Disegni, esportare](drawing-export.md)). I tratti della penna in
 simmetria sono tratti come gli altri, anche fuori da FubDraw.
 
-## Livelli e parti
+## Spazi e parti
 
-Nel [Personalizzato](drawing-custom.md):
+Per chi monta l'editor con le sue [parti](drawing-custom.md#che-cosa-porta-una-parte):
 
-- **«Ripetizioni»**, dall'Esperto, portano il menu «Ripeti» e la sezione
+- **«Ripetizioni»**, nel Completo, portano il menu «Ripeti» e la sezione
   «Ripetizione». Senza, le ripetizioni restano nel disegno, si vedono e si
   scelgono come un oggetto; si aprono dove si isola un gruppo e si separano
   come un gruppo.
-- **«Simmetria della penna»**, dallo Standard, porta la sezione «Simmetria».
+- **«Simmetria della penna»**, nello spazio Completo, porta la sezione «Simmetria».
   Senza, la penna scrive un tratto solo; la simmetria scelta torna con la
   parte. Le annotazioni dei PDF non l'hanno.

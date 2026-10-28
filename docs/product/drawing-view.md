@@ -1,18 +1,74 @@
-# Disegni, vista ruotata, gesti e menu radiale
+# Disegni, vista, gesti e menu radiale
 
 > **Per chi:** chi disegna con la penna o con le dita, su una tavoletta o su
 > uno schermo che si tocca, e vuole girare il foglio come un quaderno,
 > annullare con un tocco e avere gli strumenti sotto la mano.
-> **Risultato:** sapere come si gira la vista e la si raddrizza, che cosa
-> fanno i tocchi di due e di tre dita, come si sceglie dal menu radiale col
-> mouse, con la penna, col dito e da tastiera, e come si regola la pressione
-> della penna.
+> **Risultato:** sapere come si muove, si ingrandisce, si gira e si
+> raddrizza la vista, che cosa fanno i tocchi di due e di tre dita, come si
+> sceglie dal menu radiale con la penna, col dito, col mouse e da tastiera, e
+> come si regola la pressione della penna.
 
-Dal [livello Standard](drawing.md#il-livello-standard) il foglio gira come un
+In tutti e due gli spazi di [lavoro](drawing.md#completo-e-semplice) il foglio gira come un
 quaderno sul tavolo, le dita annullano e ripetono, e un menu attorno al
 puntatore porta gli strumenti e i colori di prima. Niente di tutto questo
 cambia il disegno: l'angolo è della vista, e il file resta quello che sarebbe
 stato col foglio dritto.
+
+## Muovere e ingrandire la vista
+
+In tutti e due gli spazi, e nelle annotazioni di un PDF, la colonna degli strumenti ha
+la **Mano** (`H`) e, nella sua tendina, lo **Zoom** (`Z`). Nessuno dei due
+cambia il disegno.
+
+- La **Mano** trascina la vista. `Spazio` tenuto giù col mouse fermo sul
+  foglio la presta a ogni strumento finché non lo si lascia; da tastiera, o col
+  cursore del foglio in vista, `Spazio` resta il «premi» del cursore.
+- Lo **Zoom** ingrandisce due volte dove si fa clic, rimpicciolisce con `Alt`,
+  e trascinato inquadra il riquadro che si tira.
+- Da tastiera `+` e `-` ingrandiscono e rimpiccioliscono; `0`, e `Ctrl+0` col
+  foglio a fuoco, tornano al 100%; `Maiusc+1` mostra tutto il disegno e
+  `Maiusc+2` la selezione.
+- `Ctrl+'` mostra e nasconde la griglia, `Ctrl+;` le guide dei righelli,
+  `Ctrl+U` accende e spegne le guide intelligenti, `Maiusc+R` i righelli.
+- `Ctrl+.` nasconde la colonna, la riga delle opzioni e la barra della
+  selezione, e lascia il foglio; lo stesso tasto le riporta.
+- `Ctrl+Y`, col foglio a fuoco, mostra i **contorni**: ogni tracciato è un
+  filo di un pixel, senza riempimenti, effetti né maschere, il testo resta
+  pieno e le immagini si velano. Serve a trovare ciò che sta sotto o è
+  nascosto. Lo stesso tasto torna al disegno pieno; sul foglio Ripeti è
+  `Ctrl+Maiusc+Z`, e fuori dal foglio `Ctrl+Y` resta Ripeti.
+
+Le stesse voci stanno nel menu **Disegno › Vista**: Mostra tutto, Mostra la
+selezione, 100%, Contorni, **Navigatore** e Nascondi l'interfaccia. Il
+navigatore è una panoramica del disegno nell'angolo in basso a destra del
+foglio, col riquadro di ciò che si vede: premere lì porta la vista in quel
+punto, e trascinare la sposta. È un aiuto del puntatore; da tastiera gli
+stessi spostamenti si fanno coi tasti qui sopra.
+
+Sotto la selezione ferma ci sono le sue misure, larghezza per altezza, e la
+barra della selezione si mette sotto di loro; mentre si ridimensiona le
+misure seguono, e mentre si gira l'angolo.
+
+Nella banda di stato dello Scrittoio il disegno dice lo zoom (un clic torna al
+100%), l'angolo della vista girata (un clic la raddrizza), la vista dei
+contorni (un clic torna al disegno pieno), dove sta il puntatore, la misura
+della selezione e quanti oggetti ci sono o sono scelti.
+
+## Cercare un comando
+
+`?` elenca i tasti del livello di adesso, e «Mostra tutto» quelli dei livelli
+sopra. Un campo in cima cerca fra le righe, anche fra quelle tenute da parte;
+«Che cosa è cambiato», chiuso sopra l'elenco, dice i tasti che hanno cambiato
+posto: `H` è la Mano, `A` i Nodi, `Spazio` tenuto la Mano, `Maiusc+F10` il menu
+della selezione, `Ctrl+Y` i contorni.
+
+`Ctrl+/` cerca fra i comandi del disegno: gli strumenti, Annulla e Ripeti, le
+voci del menu «Disegno» coi loro sottomenu, i pulsanti della barra e, con una
+selezione, le azioni della sua barra. Ogni comando ha il tasto e il posto da
+cui viene. Un comando spento dice perché, e i comandi usati da poco stanno in
+cima. Con uno strumento che disegna c'è anche «Menu radiale», che apre il
+radiale in mezzo alla vista da tastiera. La palette dello Scrittoio resta
+`Ctrl+Maiusc+P`.
 
 ## Girare il foglio
 
@@ -56,7 +112,7 @@ scrive nel verso delle sue righe. Il resto si adatta allo schermo:
   ([Disegni, righelli e guide](drawing-rulers.md));
 - un'immagine messa nel disegno sta in ciò che si vede del foglio.
 
-Tornati all'Essenziale, o tolta la parte nel Personalizzato, la vista si
+Tolta la parte a chi monta l'editor con le sue parti, la vista si
 raddrizza.
 
 ## I tocchi delle dita
@@ -71,7 +127,7 @@ lettura i tocchi non fanno niente.
 
 ## Il menu radiale
 
-Con uno strumento che disegna, il clic destro sul foglio apre attorno al
+Con uno strumento che disegna, la penna e il dito aprono attorno al
 puntatore il **menu radiale**: otto voci in cerchio, sempre allo stesso
 posto, così la mano impara la direzione e non deve leggere.
 
@@ -89,16 +145,14 @@ strumenti e i colori finché il disegno è aperto.
 
 Il menu si apre:
 
-- col **clic destro**. Col tasto ancora giù si va verso la voce e si
-  rilascia; rilasciato subito, come fa Windows, il menu resta aperto e si
-  sceglie con un clic;
 - col **tasto laterale della penna**: tenendolo premuto si appoggia la penna,
-  e il menu si apre lì. Si va verso la voce e si alza la penna;
+  e il menu si apre lì. Si va verso la voce e si alza la penna. Il tasto
+  può fare altro, si sceglie in «Penna e dita»;
 - col **tocco lungo di un dito**, sui sistemi che lo fanno valere come clic
   destro. Il tocco non lascia un punto sul foglio, e il menu resta aperto per
   il tocco che sceglie;
-- da tastiera, con **`Maiusc+F10`** o il tasto del menu, al cursore del
-  foglio.
+- col mouse e da tastiera, dalla voce **«Menu radiale»** in fondo al menu
+  del clic destro, che si apre anche con `Maiusc+F10` o col tasto del menu.
 
 Mentre il puntatore è giù conta la direzione: oltre 28 pixel dal centro, la
 voce è quella verso cui punta, anche lontano dalle voci, così il gesto può
@@ -119,11 +173,12 @@ tastierino numerico: `8` in alto, `9` in alto a destra, `6` a destra, fino a
 `7` in alto a sinistra; `5` chiude. Il lettore di schermo legge un menu con le
 sue voci e le loro scorciatoie.
 
-Il menu radiale lascia il posto agli altri menu del clic destro: sui righelli
-e sulle guide si aprono i loro, con la Selezione e il Lazo quello della
-selezione ([Disegni, selezione](drawing-selection.md)), e `Maiusc+F10` apre
-quello della selezione anche con gli altri strumenti, quando c'è qualcosa di
-scelto. In sola lettura il menu radiale non c'è.
+Il clic destro del mouse apre con ogni strumento il menu della selezione
+([Disegni, selezione](drawing-selection.md)): con la Selezione e il Lazo
+sceglie prima l'oggetto sotto il puntatore, con gli altri strumenti resta sulla
+selezione che c'è. Sui righelli e sulle guide si aprono i loro menu. Dove il
+menu della selezione non c'è, `Maiusc+F10` apre il menu radiale. In sola
+lettura il menu radiale non c'è.
 
 Il menu resta diritto anche sul foglio girato. Compare crescendo appena dal
 centro; col movimento ridotto del sistema compare e sparisce senza
@@ -157,6 +212,12 @@ puntatore solo quando la corda è tesa, e un tremito più corto della corda non
 lo muove. Il tratto finisce comunque dove si è alzato il puntatore. Come la
 curva, vale su questo dispositivo in tutti i disegni.
 
+In fondo, **I tasti della penna**. La penna girata cancella con qualunque
+strumento, come la gomma scelta, e lo strumento in mano resta. Il **Tasto
+laterale** apre il menu radiale (di partenza), sceglie col lazo, cancella o
+non fa niente. Il clic destro che il sistema manda dopo il tasto non apre il
+menu della selezione.
+
 Le scelte valgono con **OK**: «Penna e dita aggiornate.».
 
 Come la griglia, sono scelte di questo dispositivo, perché ogni tavoletta e
@@ -184,5 +245,5 @@ Le due caselle e la curva sono `twist`, `taps` e `pen` nella griglia che
 l'editor riceve e restituisce con `onGridChange`.
 
 Non c'è niente da montare: la vista ruotata, i gesti e il menu radiale
-vengono col livello Standard, e nel Personalizzato sono la parte «Vista
-ruotata, gesti e menu radiale» ([Disegni, livello Personalizzato](drawing-custom.md)).
+ci sono nei due spazi, e per chi monta l'editor con le sue parti sono la parte «Vista
+ruotata, gesti e menu radiale» ([Disegni, spazio di lavoro e barra](drawing-custom.md)).

@@ -5,7 +5,7 @@
 > **Risultato:** sapere quando le guide agganciano, che cosa mostrano e
 > dicono, e come si spengono o si scavalcano.
 
-Dal livello Standard, mentre si sposta, si ridimensiona o si disegna, ciò che
+Nello spazio Completo, mentre si sposta, si ridimensiona o si disegna, ciò che
 si muove si ferma in linea con gli altri oggetti e con la pagina, e una linea
 sottile lo mostra. Come la griglia, le guide sono un aiuto della vista e non
 entrano nel file del [disegno](drawing.md)
@@ -95,6 +95,6 @@ griglia e senza le guide. Le frecce non agganciano alle guide, e nemmeno il
 tocco che apre un testo nuovo: senza trascinare non c'è una linea che mostri
 dove si andrebbe.
 
-All'Essenziale le guide non ci sono. Nel Personalizzato sono la parte «Guide
+Nel Semplice le guide non ci sono. Per chi monta l'editor con le sue parti sono la parte «Guide
 intelligenti», anche senza «Pagina e griglia»: il pulsante, allora, ha
 soltanto la loro casella. `?` elenca i loro tasti.

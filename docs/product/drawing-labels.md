@@ -6,7 +6,7 @@
 > dove sta e come segue la forma, quando se ne va, e che cosa ne fanno i
 > comandi, la Lettura e l'export.
 
-Dallo Standard una forma chiusa ha un'etichetta: un testo scritto dentro di
+In tutti e due gli spazi una forma chiusa ha un'etichetta: un testo scritto dentro di
 lei, al centro, che va a capo nella sua larghezza. Una forma chiusa è un
 rettangolo, un'ellisse, un cerchio, un poligono, una stella o un tracciato
 chiuso. Quando la forma si sposta, si gira o cambia misura, l'etichetta
@@ -146,10 +146,10 @@ centro quando la forma cambia. Chi è l'etichetta di chi, il riquadro del
 testo e il seguire sono in [Formato della scena,
 etichette](../reference/scene-format-labels.md).
 
-## Livelli e parti
+## Spazi e parti
 
-Le etichette vengono col Testo: dallo Standard, e nel
-[Personalizzato](drawing-custom.md) con la parte «Testo». A un livello che
+Le etichette vengono col Testo: nei due spazi, e fra le
+[parti dell'editor](drawing-custom.md#che-cosa-porta-una-parte) con la parte «Testo». In uno spazio che
 non l'ha, le etichette restano nel disegno, si vedono e continuano a seguire
 le forme: è un fatto del file. Manca il modo di scriverle. In un documento in
 sola lettura i due tocchi non aprono il campo.

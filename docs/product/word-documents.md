@@ -56,7 +56,12 @@ Si modificano:
   copia le proprietà delle celle accanto e la griglia si rifà alla larghezza
   di prima, nelle proporzioni delle colonne. Dalla scheda **Tabella** le celle che la
   selezione tocca in una riga si uniscono (i loro paragrafi, tranne i vuoti,
-  vanno nella prima) e una cella unita si divide;
+  vanno nella prima) e una cella unita si divide.
+  Tab e Maiusc+Tab vanno alla cella dopo e prima, col suo testo scelto, e
+  Tab nell'ultima cella aggiunge una riga. Maiusc con una freccia alla fine
+  (o all'inizio) del testo di una cella, o il trascinamento da una cella a
+  un'altra, sceglie più celle: Canc le svuota, Ctrl+C e Ctrl+X le copiano
+  come un foglio di calcolo, «Unisci celle» le unisce se stanno in una riga;
 - le immagini e le note nuove, dalla scheda **Inserisci**:
   **Immagine** sceglie un PNG, un JPEG o un GIF del vault (fino a 16 MB) e lo
   mette al cursore, nel testo, alla sua misura (un pixel CSS è tre quarti di
@@ -298,6 +303,30 @@ delle correzioni.
 Sopra il menu c'è la mini-barra, come in Word: carattere, dimensione, A⁺ e
 A⁻, grassetto, corsivo, sottolineato e copia formato. Sulla selezione compare da sola quando la barra di
 formattazione è spenta, secondo l'impostazione «Mini-barra di formattazione».
+
+## Disegnare e inserire un disegno
+
+La scheda «Disegna» (`editors/rich/ink.ts`) mette un velo sopra la pagina
+quando è scelto uno strumento che disegna, e raccoglie i tratti con
+l'adattatore dell'inchiostro (`ink/dom/pointer-adapter.ts`). I tratti di una
+sessione diventano un oggetto `ink` davanti al testo, ancorato al paragrafo
+più vicino, in un passo di Annulla; la geometria pura (riquadro, gomma, lazo,
+contorno) sta in `editors/rich/ink-shape.ts`. In un documento OpenDocument la
+sessione entra come `drawing`. Un inchiostro del file che non si legge resta
+opaco, e il chip dello stato lo dice in «Che cosa manca?».
+
+Il menu **«Tipo di penna»** sceglie una delle sei penne del disegno
+([penne](drawing-pen.md)); la penna di ogni tratto entra nel pennello come
+Word lo conosce, e il suo nome in `fubPen`. Le penne salvate del disegno
+qui non ci sono.
+
+Inserisci › Disegno e la scheda «Oggetto» stanno in `editors/rich/drawing.ts`:
+un disegno nuovo o copiato dal vault, la disposizione di immagini, disegni e
+inchiostri, e la modifica sul posto con l'editor dei disegni, caricato
+soltanto allora (`editors/rich/drawing-editor.ts`). Il PNG di ripiego lo fa
+il client. I campi `ink`, `svg` e `float` sono in [Proiezione dei
+documenti](../reference/rich-projection.md); il perché è
+nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
 
 ## OpenDocument
 

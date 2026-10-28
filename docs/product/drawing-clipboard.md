@@ -7,13 +7,13 @@
 
 Gli appunti di un [disegno](drawing.md) parlano SVG: ciò che si copia è un
 documento SVG completo, e un SVG incollato entra coi suoi elementi. Copiare,
-tagliare e incollare ci sono a ogni livello, anche senza nessuna parte del
-Personalizzato; copiare e incollare lo stile vengono dallo Standard.
+tagliare e incollare ci sono in tutti e due gli spazi, anche senza nessuna delle
+parti dell'editor; copiare e incollare lo stile vengono nello spazio Completo.
 
 ## Copiare e tagliare
 
-`Ctrl+C` o `⌘C` copia gli oggetti scelti, `Ctrl+X` o `⌘X` li taglia; dallo
-Standard i comandi sono anche nel menu della selezione. Negli appunti va un
+`Ctrl+C` o `⌘C` copia gli oggetti scelti, `Ctrl+X` o `⌘X` li taglia; nello
+spazio Completo i comandi sono anche nel menu della selezione. Negli appunti va un
 documento SVG che si apre anche da solo: ha un `viewBox` attorno a ciò che si
 vede della selezione, `width` e `height` nell'unità del disegno, e ogni
 elemento col suo testo, com'è scritto nel file. Un oggetto dentro un gruppo
@@ -121,12 +121,12 @@ disegno cambia mentre l'incolla lavora, l'incolla non entra e lo dice.
 
 ## Lo stile
 
-Dal [livello Standard](drawing.md#il-livello-standard), **«Copia lo stile»**
+Nello spazio [Completo](drawing.md#completo-e-semplice), **«Copia lo stile»**
 (`Ctrl+Alt+C` o `⌘⌥C`) prende lo stile del primo oggetto scelto, e **«Incolla
 lo stile»** (`Ctrl+Alt+V` o `⌘⌥V`) lo dà agli oggetti scelti, in un passo; i
 comandi sono anche nel menu della selezione. Lo stile è il riempimento, il
 contorno con spessore, tratteggio, estremi e angoli, l'opacità, gli effetti
-e il modo di fusione, a ogni livello, perché si copia ciò che si vede
+e il modo di fusione, in tutti e due gli spazi, perché si copia ciò che si vede
 ([Disegni, effetti e fusione](drawing-effects.md#con-gli-altri-comandi)) e,
 per un testo, il carattere del suo primo carattere che si vede: famiglia,
 corpo, peso, corsivo, spaziatura e decorazioni, e l'interlinea di un testo di più

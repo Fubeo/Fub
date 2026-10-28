@@ -40,7 +40,8 @@ Obbligatorio:
    legate da una fixture generata e da un test gemello. Una regola cambia in
    Rust e si rigenera la fixture; non si cambia da un lato solo.
 2. **`fub-ink` non dipende da niente** e compila per `wasm32-wasip2`. Chi può
-   dipenderne è un elenco chiuso, che ora contiene `fub-scene`. Aggiungere un cliente
+   dipenderne è un elenco chiuso, che ora contiene `fub-scene` e
+   `fub-format-rich` (InkML, ADR 0226). Aggiungere un cliente
    è una decisione: si scrive qui e poi nell'elenco di
    `dependency_invariant.rs`.
 3. **`apps/client/src/ink/` non conosce i prodotti.** Importa soltanto se stesso,

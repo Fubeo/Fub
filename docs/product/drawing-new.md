@@ -95,9 +95,9 @@ che gli somiglia:
 
 | Dopo | Il suggerimento |
 | --- | --- |
-| un tratto fatto col dito | due dita spostano il foglio, e allargandole o stringendole lo avvicinano o lo allontanano; dal livello Standard, coi gesti accesi, anche che un tocco di due dita annulla e uno di tre ripete |
-| un tratto che somiglia a una forma, dal livello Standard | tenendo fermo mezzo secondo alla fine del tratto, prima di lasciare, il tratto diventa una forma pulita ([forme dal tratto](drawing-ink-shapes.md)) |
-| una forma nuova, quando ce ne sono almeno due senza testo, dal livello Standard | due tocchi o `F2` scrivono dentro una forma |
+| un tratto fatto col dito | due dita spostano il foglio, e allargandole o stringendole lo avvicinano o lo allontanano; nello spazio Completo, coi gesti accesi, anche che un tocco di due dita annulla e uno di tre ripete |
+| un tratto che somiglia a una forma, nello spazio Completo | tenendo fermo mezzo secondo alla fine del tratto, prima di lasciare, il tratto diventa una forma pulita ([forme dal tratto](drawing-ink-shapes.md)) |
+| una forma nuova, quando ce ne sono almeno due senza testo, nello spazio Completo | due tocchi o `F2` scrivono dentro una forma |
 
 - **Uno alla volta, e una volta sola.** Un suggerimento mostrato non torna, in
   nessun disegno. Chi fa già il gesto da sé, per esempio sposta il foglio con

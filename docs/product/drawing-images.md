@@ -35,7 +35,7 @@ Le regole stanno in `apps/client/src/editors/spatial/tools/images.ts`.
 
 ## Dal vault
 
-Dal [livello Standard](drawing.md#il-livello-standard), **«Immagine dal
+In tutti e due gli spazi di [lavoro](drawing.md#completo-e-semplice), **«Immagine dal
 vault…»** (`Ctrl+I` o `⌘I`) mette nel disegno un'immagine che è già nel vault,
 senza copiarla: l'`<image>` la nomina col percorso, scritto come l'`href` di un
 [collegamento](drawing.md#collegamenti), e il disegno resta leggero. La
@@ -68,7 +68,7 @@ la copia che si vede da sola, coi caratteri, in `picture.ts` accanto.
 
 ## La descrizione
 
-Dal [livello Standard](drawing.md#il-livello-standard) un'immagine che entra,
+Nello spazio [Completo](drawing.md#completo-e-semplice) un'immagine che entra,
 incollata, lasciata sul foglio o presa dal vault, chiede che cosa mostra: una
 barra in fondo al foglio ne scrive la descrizione, ciò che uno screen reader
 dice al posto dei pixel, oppure la dichiara decorativa, da saltare. Si può
@@ -77,15 +77,15 @@ anche lasciarla senza, e ritrovarla poi fra i problemi della verifica:
 
 ## Ritagliare
 
-Dal [livello Standard](drawing.md#il-livello-standard) «Ritaglia…», o due
+Nello spazio [Completo](drawing.md#completo-e-semplice) «Ritaglia…», o due
 tocchi sull'immagine, ne sceglie la parte da mostrare: l'immagine resta
 intera nel file, e il ritaglio si cambia o si toglie quando si vuole.
-All'Esperto le maschere ritagliano o sfumano anche le immagini con una
+Nel Completo le maschere ritagliano o sfumano anche le immagini con una
 forma: [Disegni, ritagli e maschere](drawing-masks.md).
 
 ## Ricalcare
 
-Dal [livello Esperto](drawing-expert.md), «Ricalca immagine…» fa di
+Nello spazio Completo, fra gli [strumenti avanzati](drawing-expert.md), «Ricalca immagine…» fa di
 un'immagine incollata o del vault un gruppo di tracciati pieni, da
 modificare come le altre forme, e la lascia nascosta sotto il gruppo:
 [Disegni, ricalco delle immagini](drawing-trace.md).

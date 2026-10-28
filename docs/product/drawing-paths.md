@@ -6,12 +6,11 @@
 > regolano lo scostamento e la semplificazione guardandone l'anteprima, e
 > che cosa resta dell'oggetto di prima.
 
-Dal [livello Esperto](drawing-expert.md) la barra della selezione ha il
+Nello spazio Completo, fra gli [strumenti avanzati](drawing-expert.md), la barra della selezione ha il
 menu **«Tracciato»**, con sei voci:
 
 - **«Oggetto in tracciato»** fa degli oggetti scelti dei tracciati (`path`),
-  con ciò che si vede e le stesse regole di sempre ([Disegni, livello
-  Esperto](drawing-expert.md#oggetto-in-tracciato));
+  con ciò che si vede e le stesse regole di sempre ([Disegni, strumenti avanzati](drawing-expert.md#oggetto-in-tracciato));
 - **«Contorno in tracciato»** fa del contorno una forma piena;
 - **«Inchiostro in tracciato»** fa di un tratto a penna un tracciato coi
   nodi;
@@ -176,7 +175,6 @@ semplificazione in `simplify.ts` e `fit.ts`, la spina dell'inchiostro in
 misura dello scarto su un corpus di tracciati, nei due versi, è in
 `simplify.test.ts`.
 
-Non c'è niente da montare: il menu viene col livello Esperto, e nel
-Personalizzato è la parte «Tracciato: oggetti, contorni e inchiostro in
-tracciato, scostamento, semplifica, unisci» ([Disegni, livello
-Personalizzato](drawing-custom.md)).
+Non c'è niente da montare: il menu viene con lo spazio Completo, e per chi monta l'editor con le sue
+parti è la parte «Tracciato: oggetti, contorni e inchiostro in
+tracciato, scostamento, semplifica, unisci» ([Disegni, spazio di lavoro e barra](drawing-custom.md)).

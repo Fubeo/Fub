@@ -1,14 +1,13 @@
-# Disegni, livello Esperto
+# Disegni, strumenti avanzati
 
 > **Per chi:** chi disegna in un vault e vuole il file sotto il disegno.
-> **Risultato:** sapere che cosa aggiunge il livello Esperto a un disegno, e
+> **Risultato:** sapere che cosa aggiungono le parti avanzate a un disegno, e
 > come si legge e si cambia un oggetto attributo per attributo.
 
-Il livello Esperto è il terzo dei livelli d'interfaccia dell'editor dei
-[disegni](drawing.md), dopo l'Essenziale e lo Standard, e comprende tutto ciò
-che offrono loro. Si sceglie come gli altri, nelle Impostazioni, con «Livello
-d'interfaccia». Come gli altri filtra soltanto ciò che si offre: un disegno si
-apre uguale a ogni livello.
+Il livello Esperto era il terzo livello d'interfaccia dei
+[disegni](drawing.md); le sue parti stanno nello spazio di lavoro
+**Completo** ([Disegni, spazio di lavoro e barra](drawing-custom.md)), le più
+rare nelle tendine della colonna, e ogni comando si trova con `Ctrl+/`.
 
 ## Attributi
 
@@ -16,7 +15,7 @@ Gli attributi sono il tag dell'oggetto scelto come lo scrive il file, una
 riga per attributo, in una sezione del [pannello delle
 proprietà](drawing-properties.md), chiusa di partenza: `Ctrl+Maiusc+X`, come
 l'editor XML di Inkscape, la apre e le porta il fuoco, e di nuovo torna al
-foglio. Nel Personalizzato senza il pannello, «Attributi», nella barra, apre
+foglio. Per chi monta l'editor con le sue parti senza il pannello, «Attributi», nella barra, apre
 accanto al foglio un pannello loro, sotto l'albero degli oggetti se è aperto
 anche quello. È il modo più corto di dare un valore preciso, e per chi non
 vede il foglio una tabella da leggere, col nome dell'attributo come nome del
@@ -65,7 +64,7 @@ il pannello in `apps/client/src/editors/spatial/tools/inspector.ts`.
   foglio, e `Ctrl+G` e `Ctrl+Maiusc+G` raggruppano e separano.
 
 Un documento in sola lettura si legge tutto e non si scrive. Scendendo
-dall'Esperto la sezione se ne va dal pannello delle proprietà.
+dal Completo la sezione se ne va dal pannello delle proprietà.
 
 ## Contorno
 
@@ -104,7 +103,7 @@ angoli vengono i profili dello [spessore variabile](drawing-width.md#i-profili).
 «Trasforma…», nella barra della selezione (`Ctrl+Maiusc+M`, come la finestra
 di Inkscape), porta il fuoco alla sezione «Trasforma» del [pannello delle
 proprietà](drawing-properties.md), che ruota, scala e inclina gli oggetti
-scelti di quanto si scrive, con «Applica»; nel Personalizzato senza il
+scelti di quanto si scrive, con «Applica»; per chi monta l'editor con le sue parti senza il
 pannello apre una finestra con gli stessi campi. I campi partono da ciò che
 non cambia niente: rotazione e inclinazioni a zero, scale al cento per cento,
 e dopo «Applica» restano come sono, così un secondo «Applica» ripete la
@@ -445,5 +444,5 @@ Il file intero, mentre si disegna, sta nel riquadro accanto: «Apri come
 sorgente accanto», nella palette e nel menu del riquadro, apre il testo SVG a
 destra del disegno, sullo stesso documento. Ogni gesto si legge subito nel
 testo, e ciò che si scrive nel testo si vede subito nel disegno. Il comando è
-della shell e c'è a ogni livello, come [«Apri come
+della shell e c'è in tutti e due gli spazi, come [«Apri come
 sorgente»](drawing.md#apri-come-sorgente).

@@ -149,7 +149,7 @@ descritto sopra è invece un gate CI esplicito e limitato alla fixture canonica.
 ## I disegni grandi
 
 Il banco delle scene grandi ([`large.mjs`](../../apps/client/bench/large.mjs))
-apre nell'app vera, al livello Standard, tre lavagne di 5 000, 20 000 e
+apre nell'app vera, nello spazio Completo, tre lavagne di 5 000, 20 000 e
 49 900 elementi, e ne controlla ogni passo: lo zoom coi tasti, la rotella,
 Ctrl+rotella, la rotella e Ctrl+rotella da vicino, la scelta, i tasti di due
 strumenti, un tratto a penna e Annulla. Il tempo di un passo va dall'arrivo

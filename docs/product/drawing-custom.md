@@ -1,40 +1,70 @@
-# Disegni, livello Personalizzato
+# Disegni, spazio di lavoro e barra
 
-> **Per chi:** chi vuole nella barra del disegno proprio le parti che usa.
-> **Risultato:** sapere come si sceglie il livello Personalizzato, quali parti
-> ha e che cosa porta ciascuna.
+> **Per chi:** chi vuole l'editor del disegno a misura di come disegna.
+> **Risultato:** sapere che cosa offrono gli spazi Completo e Semplice, come
+> si sceglie quali strumenti stanno nella colonna, e che cosa porta ogni parte.
 
-Il Personalizzato è il quarto livello d'interfaccia dell'editor dei
-[disegni](drawing.md). L'Essenziale, lo Standard e l'Esperto sono gradini,
-ognuno con tutto ciò che hanno quelli sotto; il Personalizzato ha soltanto le
-parti che si scelgono, una per una, da tutti e tre. Una classe può avere la
-penna, il testo e i livelli senza la gomma; chi disegna schemi, le forme, la
-griglia e i collegamenti senza l'evidenziatore. Come gli altri filtra soltanto
-ciò che si offre: un disegno si apre uguale a ogni livello, e cambiare le
-parti non lo modifica.
+L'editor dei [disegni](drawing.md) ha due spazi di lavoro. **Completo**, quello
+di partenza, offre tutto: ogni strumento, ogni comando, ogni pannello; gli
+strumenti rari stanno nelle tendine della colonna e tutto si trova con la
+ricerca dei comandi (`Ctrl+/`). **Semplice** è per disegnare a mano o col dito:
+nella colonna, con caselle grandi da 44 px, la Selezione, la Mano, lo Zoom, la
+Penna, l'Evidenziatore, la Gomma, il Rettangolo, l'Ellisse, la Linea, la
+Freccia e il Testo; poi i colori, i gesti delle dita, le immagini, il
+pannello delle proprietà, dove sta anche il titolo, ed «Esporta». In fondo alla colonna il pulsante **Completo** riporta tutto con un
+clic. Nelle annotazioni di un PDF il Semplice ha gli strumenti di partenza
+delle annotazioni. Lo spazio filtra soltanto ciò che si offre: un disegno si
+apre uguale nei due, e cambiare spazio non lo modifica.
 
 ## Sceglierlo
 
-Nelle Impostazioni, nel gruppo «Disegni», «Livello d'interfaccia» ha anche
-Personalizzato, e la riga «Parti del Personalizzato» ha una casella per
-parte, nei gruppi dei livelli da cui vengono e nel loro ordine. Le parti sono
-un'altra impostazione del vault, `draw.custom`: un elenco di nomi che vale per
-chiunque apra il vault e che, come il livello, un plugin o una macro non
-cambiano. Valgono soltanto col Personalizzato, e si possono preparare con un
-altro livello scelto. Di partenza sono quelle dell'Essenziale, e «Azzera» le
-riporta lì.
+Dal menu ≡ «Disegno», **Spazio di lavoro** ha Completo e Semplice. Si sceglie
+anche nelle Impostazioni, nel gruppo «Disegni», con «Spazio di lavoro». È
+un'impostazione del vault, `draw.workspace`, che vale per chiunque lo apra e
+che un plugin o una macro non cambiano. Cambia dal vivo, anche nei disegni
+aperti, senza riaprirli e senza perdere la selezione o la cronologia; chi
+monta l'editor lo sceglie con `workspace` e `setWorkspace`
+(`apps/client/src/editors/spatial/tools/editor.ts`).
 
-Ogni casella scrive subito, e i disegni aperti cambiano dal vivo, senza
-riaprirli e senza perdere la selezione o la cronologia. Si possono togliere
-tutte: resta la Selezione, che c'è a ogni livello, e ciò che è nel disegno si
-sceglie, si sposta e si elimina. Dall'editor le parti non si cambiano, come il
-livello.
+In una finestra larga al più 700 px, o in un riquadro largo al più 480, la
+colonna va sotto il foglio, in una riga che scorre di lato; col dito, a ogni
+larghezza, le caselle sono da 44 px.
+
+## Personalizza la barra
+
+Dal menu ≡, **Personalizza la barra…** apre l'elenco degli strumenti offerti,
+uno per riga, prima quelli della colonna nel loro ordine e poi gli altri. La
+casella mette o toglie uno strumento; le frecce ↑ e ↓, o il trascinamento,
+cambiano il posto. La Selezione non si toglie. La colonna cambia mentre si
+sceglie; **Salva** la tiene, **Annulla** la rimette com'era, **Ripristina**
+torna a quella di serie. Uno strumento tolto dalla colonna resta col suo tasto
+e nella ricerca dei comandi.
+
+La colonna è un'altra impostazione del vault, `draw.toolbar`: l'elenco degli
+strumenti nel loro ordine, vuoto per quella di serie, e «Azzera» la riporta lì.
+Nelle Impostazioni ha una casella per strumento; l'ordine si sceglie
+nell'editor, e le Impostazioni lo conservano.
+
+## Dalle versioni precedenti
+
+Prima degli spazi l'editor aveva quattro livelli d'interfaccia, Essenziale,
+Standard, Esperto e Personalizzato, in `draw.level`, e le parti del
+Personalizzato in `draw.custom`. Le due impostazioni restano, segnate
+«(versioni precedenti)», e non si cancellano: una versione più vecchia
+dell'app le ritrova. Finché `draw.workspace` e `draw.toolbar` non sono scelte,
+l'editor le deduce da loro: l'Essenziale è Semplice, gli altri livelli
+Completo, e gli strumenti del Personalizzato fanno la colonna.
 
 ## Che cosa porta una parte
 
-Una parte porta i suoi pulsanti e i suoi tasti, e senza di lei non ci sono.
-Ciascuna fa ciò che dice la sezione del suo livello, in [Disegni](drawing.md) o
-in [Disegni, livello Esperto](drawing-expert.md).
+Una parte porta i suoi pulsanti e i suoi tasti. Completo le ha tutte; il
+Semplice ha la Penna, l'Evidenziatore, la Gomma, il Rettangolo, l'Ellisse, la
+Linea, la Freccia, il Testo, i colori personalizzati, la vista ruotata coi
+gesti, le immagini dal vault, il pannello delle proprietà e la finestra
+«Esporta». La colonna «Livello» dice
+da quale livello delle versioni precedenti veniva ciascuna. Ciascuna fa ciò
+che dice la sezione del suo livello, in [Disegni](drawing.md) o in [Disegni,
+livello Esperto](drawing-expert.md).
 
 | Parte | Livello | Che cosa porta |
 | --- | --- | --- |
@@ -43,7 +73,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Tavola | Standard | lo strumento (`F`); il pulsante «Tavole» col suo elenco; `Alt+PagSu` e `Alt+PagGiù`; nel pannello delle proprietà la sezione «Tavola» ([Disegni, tavole](drawing-boards.md)) |
 | Contagocce | Standard | lo strumento (`I`); `I` e `Maiusc+I` sulla riga attiva dell'albero degli oggetti ([Disegni, colori](drawing-colors.md#il-contagocce)) |
 | Sfumatura | Standard | lo strumento (`G`); nel pannello delle proprietà la sezione «Sfumatura», con «Oltre i capi» ([Disegni, sfumature](drawing-gradients.md)) |
-| Evidenziatore | Standard | lo strumento (`H`) |
+| Evidenziatore | Standard | lo strumento (`Maiusc+P`) |
 | Poligono | Standard | lo strumento (`Y`), per poligoni e stelle; la sezione «Forma» delle proprietà e la maniglia degli angoli arrotondati |
 | Connettore | Standard | lo strumento (`X`); nel pannello delle proprietà la sezione «Connettore»; «Collega le forme scelte» nella barra «Disponi», nel menu «Selezione avanzata» e col tasto destro ([Disegni, connettori](drawing-connectors.md)) |
 | Testo | Standard | lo strumento (`T`), e cambiare un testo che c'è: due tocchi, `F2`, «Modifica il testo»; gli stessi gesti scrivono l'etichetta di una forma chiusa ([Disegni, etichette nelle forme](drawing-labels.md)) |
@@ -71,7 +101,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Copia e incolla lo stile | Standard | «Copia lo stile» (`Ctrl+Alt+C`) e «Incolla lo stile» (`Ctrl+Alt+V`) |
 | Pannello delle proprietà | Standard | «Proprietà», il pannello accanto al foglio; senza, `Invio` apre le finestre «Posizione e misure» e «Proprietà del disegno» |
 | Finestra «Esporta» | Standard | «Esporta…» apre la finestra con il disegno, la selezione o le tavole, i sei formati, la misura e l'anteprima; senza, chiede soltanto PNG o PDF ([Disegni, esportare](drawing-export.md)) |
-| Nodi, Costruttore di forme, Forbici, Spessore, Bézier | Esperto | lo strumento (`N`, `M`, `C`, `W`, `B`); lo Spessore anche i profili in «Contorno» |
+| Nodi, Costruttore di forme, Forbici, Spessore, Bézier | Esperto | lo strumento (`A` o `N`, `M`, `C`, `W`, `B`); lo Spessore anche i profili in «Contorno» |
 | Attributi | Esperto | la loro sezione nelle proprietà, o senza il pannello «Attributi» (`Ctrl+Maiusc+X`) |
 | Contorno: tratteggio, estremi e angoli | Esperto | «Contorno» |
 | Trasforma: rotazione, scala e inclinazione | Esperto | «Trasforma…» (`Ctrl+Maiusc+M`) e la sua sezione nelle proprietà |
@@ -101,19 +131,16 @@ col suo segno, e «Apri come sorgente».
 
 ## Quando una parte se ne va
 
-Togliere una parte mentre la si usa fa ciò che fa tornare a un livello più
-basso: chi aveva in mano il suo strumento riprende la penna, o il primo
-strumento che c'è, o la Selezione; chi sceglieva, col Lazo, coi Nodi, col
-Costruttore di forme o con la Tavola, e chi aveva il Contagocce o la
-Sfumatura, riprende la Selezione; un tracciato di Bézier a metà si conclude
-com'è; un colore a piacere torna al colore di partenza, e uno che seguiva un
-campione resta da solo; da un gruppo isolato si esce; la vista girata si
-raddrizza; l'elenco delle tavole si chiude; il pannello delle forme si chiude;
-la cronologia si chiude, e la si ritrova riaprendola. Il disegno non cambia.
+Passare al Semplice mentre si usa una parte che non ha fa ciò che faceva
+tornare a un livello più basso: chi aveva in mano il suo strumento riprende la
+penna, o il primo strumento che c'è, o la Selezione; chi sceglieva, col Lazo,
+coi Nodi, col Costruttore di forme o con la Tavola, e chi aveva il Contagocce
+o la Sfumatura, riprende la Selezione; un tracciato di Bézier a metà si
+conclude com'è; da un gruppo isolato si esce; l'elenco delle tavole, il
+pannello delle forme e la cronologia si chiudono. Il disegno non cambia.
 
-`?` elenca i tasti delle parti scelte, e **Mostra tutto** aggiunge in fondo
-quelli delle parti che mancano, ciascuno col livello da cui viene e con una
-frase che dice dove si aggiungono.
+`?` elenca i tasti delle parti offerte, e nel Semplice **Mostra tutto**
+aggiunge in fondo quelli di Completo, con una frase che dice dove si sceglie.
 
 Un nome dell'elenco che l'editor non conosce, scritto da una versione più
 nuova, resta dov'è e non conta: la versione che lo conosce lo ritrova.

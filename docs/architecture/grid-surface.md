@@ -28,8 +28,11 @@ con le celle da rileggere. Le modifiche in coda partono una dopo l'altra.
 Finché il giornale ha soltanto celle l'undo è locale alla superficie; in
 modalità a comandi annulla e ripeti sono del documento (`edit.undo`,
 `edit.redo`). Un giornale cambiato altrove (un altro
-riquadro, un salvataggio, una ricarica) riapre la sessione, chiude la
-precedente e annulla la bozza aperta. Se non c'è una superficie compatibile,
+riquadro, un salvataggio, una ricarica) riapre la sessione e chiude la
+precedente; la bozza aperta resta, con il cursore e il fuoco. Se la sua cella
+è cambiata sotto, un avviso chiede «Tieni la tua» o «Prendi quella nuova»; se
+il foglio non c'è più, la bozza si chiude e l'avviso lo dice. Se non c'è una
+superficie compatibile,
 la sessione non si apre o una finestra fallisce, la superficie dichiara
 `data-grid-protocol="unavailable"`, lo dice nell'avviso e non scrive; il
 linguaggio delle formule non si duplica in TypeScript.
@@ -56,13 +59,87 @@ segni (selezione, cella attiva, valore non ricalcolato, conflitto) si scrivono
 dalla riga, `.grid-row .selected`. Gli oggetti del foglio non sono ancora sotto
 il gate.
 
+## Scrivere nelle celle
+
+Come in Excel e LibreOffice, una battuta apre la cella in «Inserisci»:
+Invio e Maiuscolo+Invio confermano e scendono o salgono, Tab e Maiuscolo+Tab
+confermano e vanno a destra o a sinistra, le frecce confermano e si
+spostano. Invio dopo una serie di Tab torna alla colonna da cui la serie è
+partita. F2 e il doppio clic aprono in «Modifica», dove le frecce muovono il
+cursore; F2 alterna i due modi, e la banda di stato dice il modo
+(«Pronto», «Inserisci», «Modifica»). Alt+Invio va a capo, Ctrl+Invio scrive
+la bozza in tutta la selezione, Esc annulla. Un clic su un'altra cella, o il
+fuoco che lascia l'editor, conferma; dalla cella alla barra della formula la
+bozza passa con il fuoco. Sulla selezione Invio e Tab spostano la cella
+attiva senza aprirla, dentro l'intervallo se è più di una cella. La regola
+pura di dove andare sta in `apps/client/src/tabella/navigation.ts`, quella
+del riempimento in `tabella/selection.ts` (`fillRange`): sono le regole di
+ogni tabella ([ADR 0225](../decisions/0225-tabella-un-componente-per-tutte-le-tabelle.md)).
+
+Una battuta vera (stampabile, un tasto morto o una composizione dell'IME)
+mette il fuoco nel campo della cella durante il `keydown` e non si ferma: il
+carattere lo scrive il browser, come lo manda il sistema. Una battuta
+sintetica, che il browser non scrive, apre la cella col suo carattere
+(`typingOpens`). PagSu e PagGiù scorrono di una schermata di righe vere, con
+le loro altezze, e la cella attiva resta allo stesso punto dello schermo;
+Alt+PagSu e Alt+PagGiù fanno lo stesso di lato, Ctrl+Backspace riporta in
+vista la cella attiva. Le frecce senza Maiuscolo partono dalla cella attiva.
+
+Nelle formule si punta come nei fogli di calcolo. Dove la formula aspetta un
+operando (`operandSlot` in `profiles/formula.ts`: dopo `=`, un operatore,
+`(`, `,` o `;`), un clic su una cella scrive il suo riferimento, un
+trascinamento lo allarga a un intervallo, e un altro clic lo sostituisce
+finché il cursore resta alla sua fine. La cella aperta e la selezione non
+cambiano, e il fuoco resta nel campo. In «Inserisci» le frecce muovono il
+riferimento puntato, partendo dalla cella aperta, e con Maiuscolo lo
+allargano. F4 alterna i `$` del riferimento al cursore. Ogni riferimento ha
+uno di sei colori (`--doc-author-1…6`), lo stesso nel testo e nel contorno
+del suo intervallo sulla griglia; un riferimento a un altro foglio si
+contorna solo su quel foglio. Puntare celle di un altro foglio non c'è
+ancora: il riferimento si scrive a mano.
+
+Il disegno riusa gli elementi che non cambiano (`#reconcile`): una cella
+uguale a quella di prima resta lo stesso nodo e cambia soltanto le classi
+della selezione, così il doppio clic arriva e l'editor aperto non perde il
+fuoco. Lo scorrimento disegna al più una volta per fotogramma.
+
+La riga delle intestazioni, l'angolo, i numeri delle righe e le righe
+bloccate stanno fermi con `position: sticky`: sono nel flusso del riquadro,
+davanti al canvas che dà la misura, e li tiene a posto il compositore nello
+stesso fotogramma dello scorrimento, non il disegno che segue. Le colonne
+bloccate e i fili del blocco si rimettono ancora a posto nel disegno.
+
 ## La selezione e il riempimento
 
 Il puntatore seleziona trascinando: da una cella un intervallo, da
 un'intestazione colonne o righe intere, dall'angolo il foglio; Maiuscolo
-estende dall'àncora. Fuori dal bordo la griglia scorre da sé, più svelta
+estende dall'àncora, che resta la cella attiva. Fuori dal bordo la griglia scorre da sé, più svelta
 quanto più il puntatore è lontano. Con righe o colonne intere la cella
 attiva resta sulla prima colonna o sulla prima riga.
+
+Un intervallo si disegna con un rettangolo solo, a bordo d'accento, sopra le
+celle velate; la cella attiva resta senza velo, con un filo. Con una cella
+sola il bordo è quello della cella attiva. Il riquadro non ha un anello,
+salvo quando nessuna cella si vede: il fuoco è la cella attiva, che la
+griglia indica con `aria-activedescendant`.
+Le intestazioni della selezione prendono il velo e un filo d'accento verso
+le celle; quella che segue righe o colonne nascoste ha una tacca doppia.
+
+Il bordo fra due intestazioni, preso a 4 px, si tira quando la cartella
+serve `home.columnWidth` (o `home.rowHeight`): il cursore cambia, una guida
+segue il puntatore con la misura nelle unità di Excel e in pixel del file, e
+al rilascio parte un solo comando. Il doppio clic sul bordo dà
+`home.autofitColumnWidth` (o `home.autofitRowHeight`). Se la colonna sta fra
+quelle scelte intere, la misura vale per tutte. Senza il comando servito il
+bordo non si prende.
+
+Ctrl+clic e Ctrl+trascina aggiungono un intervallo a quelli scelti;
+Maiuscolo estende l'ultimo, un clic semplice ricomincia. Da tastiera
+Maiuscolo+F8 tiene ciò che è scelto mentre ci si sposta, finché non si
+ripete o si preme Esc. I comandi ricevono tutti gli intervalli, separati da
+virgole come in GridCraft, che spegne col suo motivo quelli che non li
+reggono. Canc li svuota tutti; copia e taglia li rifiutano e lo dicono, e il
+quadratino di riempimento non c'è.
 
 In una cartella a comandi che serve `edit.autoFill` la selezione ha il
 quadratino di riempimento nell'angolo in basso a destra. Tirato fuori dalla
@@ -72,6 +149,38 @@ più e, al rilascio, dà un solo `edit.autoFill` con sorgente e bersaglio
 fin dove arriva la colonna accanto, nelle righe che la griglia ha letto. Le
 serie le calcola il provider; Ctrl+D e Ctrl+R restano i riempimenti da
 tastiera.
+
+## Gli appunti
+
+Copia scrive il TSV degli input, formule comprese, e una tabella HTML di ciò
+che si vede, segnata `data-fub-table`. Incolla legge la tabella HTML di
+Excel, LibreOffice, Sheets o Word quando c'è (le celle unite lasciano celle
+vuote), altrimenti il TSV; quella di Fub cede al TSV accanto, che porta gli
+input. Si incolla dall'angolo in alto a sinistra della selezione: un valore,
+o un blocco che la selezione contiene un numero intero di volte, la riempie,
+e dopo la selezione è ciò che si è scritto. Taglia non svuota: segna
+l'intervallo con le formiche, e l'incolla che segue sposta gli input e
+svuota ciò che resta fuori in un passo solo di Annulla; Esc, una copia o
+una scrittura tolgono il segno. Le regole pure stanno in
+`apps/client/src/tabella/clipboard.ts`.
+
+Dentro una cartella a comandi l'incolla che trova negli appunti il testo
+appena copiato dalla cartella non scrive gli input: dà il comando composto
+`fub.pasteFrom` con la sorgente, il suo foglio e `move` per un taglio, sulla
+selezione di arrivo. Il provider lo esegue con `edit.copy` (o `edit.cut`) e
+`edit.pasteSpecial` della facciata in un passo, senza appunti che restano,
+così formule con i riferimenti relativi, formati e unioni seguono come in
+GridCraft, e il giornale lo rifà. Un taglio si incolla una volta; Esc, una
+scrittura o un altro comando dimenticano la sorgente, e l'incolla torna agli
+input. `fub.copyHtml` legge il testo e la tabella HTML di GridCraft di un
+intervallo senza cambiare niente. Senza `fub.pasteFrom` nel catalogo gli
+appunti portano gli input.
+
+Il bordo della selezione, preso a 3 px fuori dal quadratino, si tira quando
+la cartella serve `fub.pasteFrom`: il contorno segue il puntatore e al
+rilascio un solo `fub.pasteFrom` sposta l'intervallo (con Ctrl tenuto lo
+copia), e la selezione è dove lo si è lasciato. Righe o colonne intere e
+più intervalli non si tirano.
 
 ## La barra multifunzione
 

@@ -6,7 +6,7 @@
 > punti, che cosa tagliano le Forbici e il Coltello e dove vanno i pezzi, e
 > come «Unisci» e lo strumento Nodi ricuciono i tracciati.
 
-Dal [livello Esperto](drawing-expert.md) ci sono quattro modi di lavorare
+Nello spazio Completo, fra gli [strumenti avanzati](drawing-expert.md), ci sono quattro modi di lavorare
 sui tracciati oltre ai nodi: la **Curvatura**, il secondo modo della penna
 di Bézier; le **Forbici**, che con un trascinamento sono il **Coltello**;
 **«Unisci»**, nel menu [«Tracciato»](drawing-paths.md); e, nello strumento

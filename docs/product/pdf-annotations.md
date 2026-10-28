@@ -49,7 +49,7 @@ oggetto: aprire non scrive niente.
 
 ## Gli strumenti
 
-Le annotazioni si aprono al livello Standard, con l'evidenziatore in mano.
+Le annotazioni si aprono nello spazio Completo, con l'evidenziatore in mano.
 Ogni strumento ha un tasto, che vale col fuoco sul foglio:
 
 - **Selezione** (`V`), **Penna** (`P`) e **Gomma** (`E`), come nel disegno;

@@ -49,16 +49,18 @@ si apre, e costruito soltanto allora.
 
 ## Disegnare
 
-Il livello Essenziale ha sette strumenti, ciascuno con un tasto: selezione
-(`V`), penna (`P`), gomma per oggetto (`E`), rettangolo (`R`), ellisse (`O`),
-linea (`L`) e freccia (`A`). I colori sono gli otto della tavolozza di
-Okabe–Ito, ognuno con una forma nel suo pulsante, così non si distinguono solo
-dal colore; gli spessori sono tre. Il campo «Che cosa hai disegnato?» scrive il
-titolo del disegno.
+Gli strumenti stanno nella colonna a sinistra, a gruppi; i più rari nelle
+tendine, che si aprono tenendo premuta la casella, col tasto destro o con la
+freccia a destra. Ogni strumento ha un tasto: selezione (`V`), penna (`P`),
+evidenziatore (`Maiusc+P`), gomma per oggetto (`E`), rettangolo (`R`),
+ellisse (`O`), linea (`L`), freccia (`Maiusc+L`) e testo (`T`); la
+**Mano** (`H`) e lo **Zoom** (`Z`) muovono la vista in tutti e due gli spazi
+([Disegni, vista](drawing-view.md#muovere-e-ingrandire-la-vista)). Il colore
+si sceglie col selettore, gli otto colori consigliati in cima, tondi e col
+nome ([Disegni, colori](drawing-colors.md)); gli spessori sono tre.
 
-La barra è un solo punto di tabulazione e si percorre con le frecce. Tasto
-centrale, due dita e rotella muovono la vista. Ogni gesto si annuncia a chi
-usa un lettore di schermo.
+Tasto centrale, due dita, rotella e `Spazio` tenuto col mouse sul foglio
+muovono la vista. Ogni gesto si annuncia a chi usa un lettore di schermo.
 
 Con la selezione gli oggetti scelti stanno in una cornice, con le maniglie
 che li ridimensionano e li ruotano: [Disegni, trasformare](drawing-transform.md).
@@ -66,25 +68,23 @@ Copia, taglia e incolla parlano SVG, fra i disegni e con gli altri programmi
 ([Disegni, appunti](drawing-clipboard.md)); un'immagine entra coi suoi byte, o
 dal vault per riferimento ([Disegni, immagini](drawing-images.md)).
 
-## Il livello Standard
+## Completo e Semplice
 
-L'editor ha più livelli d'interfaccia: l'Essenziale, quello di partenza, lo
-Standard, che aggiunge strumenti alla stessa barra, e l'Esperto, che mostra il
-file sotto il disegno (vedi «Il livello Esperto»); il Personalizzato ha le
-parti che si scelgono una per una da tutti e tre (vedi «Il livello
-Personalizzato»). Si sceglie nelle Impostazioni, nel gruppo «Disegni», con
-«Livello d'interfaccia»: è un'impostazione del vault, `draw.level`, che vale
-per chiunque lo apra e che un plugin o una macro non cambiano. Il livello
-filtra soltanto ciò che si offre: un disegno si apre uguale a ogni livello, e
-cambiare livello non lo modifica. Cambia dal vivo, anche nei disegni aperti,
-senza riaprirli e senza perdere la selezione o la cronologia; chi monta
-l'editor lo sceglie con `level` e `setLevel` (`apps/client/src/editors/spatial/tools/editor.ts`).
+L'editor ha due spazi di lavoro: **Completo**, quello di partenza, offre
+tutto; **Semplice** offre gli strumenti per disegnare a mano o col dito, con
+caselle grandi, e il pulsante «Completo» in fondo alla colonna. Si sceglie dal
+menu ≡ «Disegno», con «Spazio di lavoro», o nelle Impostazioni, nel gruppo
+«Disegni»: è un'impostazione del vault, `draw.workspace`. «Personalizza la
+barra…», nello stesso menu, sceglie quali strumenti stanno nella colonna e in
+che ordine ([Disegni, spazio di lavoro e barra](drawing-custom.md)). Lo spazio
+filtra soltanto ciò che si offre: un disegno si apre uguale nei due, e
+cambiare spazio non lo modifica.
 
-Dall'editor il livello non si cambia, così l'Essenziale resta tale anche in
-mano a un bambino. **Mostra tutto**, in fondo ai tasti di `?`, aggiunge quelli
-dei livelli sopra, col livello da cui vale ciascuno e dove si sceglie.
+Chi monta l'editor senza uno spazio sceglie ancora un livello delle versioni
+precedenti con `level` e `setLevel`
+(`apps/client/src/editors/spatial/tools/editor.ts`).
 
-Lo Standard aggiunge:
+Oltre agli strumenti per disegnare, il Completo ha:
 
 - il **Lazo** (`Q`), dopo la Selezione, e la **«Selezione avanzata»**: i simili, i gruppi isolati, gli oggetti bloccati e nascosti ([Disegni, selezione](drawing-selection.md));
 - la **Tavola** (`F`), dopo il Lazo, e l'elenco **«Tavole»**: le pagine del disegno, ognuna col suo nome e la sua carta ([Disegni, tavole](drawing-boards.md));
@@ -94,9 +94,10 @@ Lo Standard aggiunge:
 - la **Sfumatura** (`G`), dopo il Contagocce, e nelle «Proprietà» la sezione
   **«Sfumatura»**: lineare o radiale, coi suoi punti ([Disegni, sfumature](drawing-gradients.md)); e la sezione **«Campitura»**: righe e puntini ([Disegni, campiture e motivi](drawing-patterns.md));
 - nelle «Proprietà» gli **stili** di testo e grafici ([Disegni, stili](drawing-styles.md)), le **punte delle linee** ([Disegni, punte delle linee](drawing-tips.md)), e nella barra «Disponi» **«Ritaglia…»** per le immagini ([Disegni, ritagli e maschere](drawing-masks.md)) e l'**«Opacità»** ([Disegni, effetti e fusione](drawing-effects.md#lopacità-nella-barra));
-- l'**evidenziatore** (`H`), dopo la penna: un tratto largo, costante e a
-  punte piatte, che lascia vedere ciò che copre, scritto come un tratto a penna
-  con `fub:tool="highlighter"` e `fill-opacity="0.4"`. Parte giallo, con colore
+- l'**evidenziatore** (`Maiusc+P`), dopo la penna: un tratto largo, costante e a
+  punte piatte, che lascia vedere ciò che copre senza ingrigirlo, scritto come
+  un tratto a penna con `fub:tool="highlighter"`, `fill-opacity="0.5"` e la
+  fusione Moltiplica ([penne](drawing-pen.md)). Parte giallo, con colore
   e spessori suoi, 8, 16 e 24 unità, e la penna ritrova i propri quando torna;
 - le **forme dal tratto**: un tratto a penna tenuto fermo alla fine diventa
   una forma pulita ([Disegni, forme dal tratto](drawing-ink-shapes.md)); e la **penna in simmetria**: ogni tratto scrive anche le sue copie, riflesse su un asse o girate intorno a un centro ([Disegni, ripetizioni e simmetria](drawing-repeats.md#la-penna-in-simmetria));
@@ -114,20 +115,21 @@ Lo Standard aggiunge:
 - l'albero degli oggetti come **pannello dei livelli**: i nomi, il filtro, le
   miniature e le righe da trascinare ([Disegni, pannello dei livelli](drawing-layers.md));
 - la **vista ruotata**, i **gesti** delle dita, il **menu radiale** e la curva
-  della penna ([Disegni, vista ruotata, gesti e menu radiale](drawing-view.md));
+  della penna ([Disegni, vista, gesti e menu radiale](drawing-view.md));
 - la **«Cronologia»**, accanto al foglio: i passi, per tornare a uno qualsiasi
   in un colpo, e i segni ([Disegni, cronologia](drawing-history.md));
 - la verifica dell'**«Accessibilità»**, accanto al foglio: i problemi, ognuno
   con la sua correzione, e l'ordine di lettura ([Disegni, accessibilità](drawing-accessibility.md)).
 
-Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
-chi aveva in mano l'evidenziatore, il Connettore o il Poligono riprende la penna,
-chi aveva il Lazo, la Tavola, il Contagocce o la Sfumatura la Selezione, un
-colore a piacere torna al colore di partenza e la vista girata si raddrizza.
+Di queste il Semplice tiene l'evidenziatore, «Altro colore…», «Immagine dal
+vault…», il pannello delle proprietà e la vista ruotata coi gesti. Passati al
+Semplice, il resto sparisce dalla colonna: chi aveva in mano il Connettore o
+il Poligono riprende la penna, chi aveva il Lazo, la Tavola, il Contagocce o
+la Sfumatura la Selezione.
 
 ## Disporre
 
-Dal livello Standard, finché c'è qualcosa di scelto, accanto alla selezione
+Nello spazio Completo, finché c'è qualcosa di scelto, accanto alla selezione
 galleggia la barra «Disponi», o in cima al foglio se lo si sceglie nelle
 proprietà: `Alt+F10` ci porta il fuoco ed `Esc` lo riporta al foglio. Ogni
 comando è un passo di annulla, e la selezione segue ciò che ha fatto.
@@ -160,7 +162,7 @@ aspetto si scrive lo stile di prima ([Disegni, appunti](drawing-clipboard.md)).
 ## Livelli
 
 Un livello del disegno è un gruppo figlio della radice con `fub:layer`, che
-ne porta il nome. Dal livello Standard la barra ha il pulsante «Livelli»: mostra
+ne porta il nome. Nello spazio Completo la barra ha il pulsante «Livelli»: mostra
 il livello in cui si disegna, quello corrente, col suo nome e, a parole, il suo
 stato, «bloccato» o «nascosto». Il suo menu elenca i livelli dalla cima, e
 sceglierne uno lo rende corrente; poi ha i comandi su quello corrente:
@@ -190,12 +192,12 @@ che ereditavano. Il menu spegne il livello che li ha già tutti e quelli nascost
 o bloccati; senza un altro livello dove portarli il pulsante non c'è.
 
 Ogni comando è un passo di annulla, e annullarlo rende corrente il livello
-che ha toccato, se c'è ancora. All'Essenziale il pulsante non c'è, e il
+che ha toccato, se c'è ancora. Nel Semplice il pulsante non c'è, e il
 disegno va nel livello più alto che si vede e non è bloccato.
 
 ## Griglia e pagina
 
-Dal livello Standard la barra ha il pulsante «Pagina e griglia». La griglia è
+Nello spazio Completo la barra ha il pulsante «Pagina e griglia». La griglia è
 un aiuto della vista e non entra nel file: un disegno si apre uguale con la
 griglia e senza. Resta l'ultima scelta, su questa macchina: un disegno aperto
 dopo, anche dopo un riavvio, ha la griglia com'era nell'ultimo. Non entra
@@ -247,12 +249,12 @@ fino a numeri interi. Riscrive `viewBox`, `width` e `height` della radice e la
 carta, gli oggetti restano dove sono, ed è un passo di annulla. La voce si
 spegne, e dice perché, quando il disegno è vuoto o la pagina è già adattata.
 
-All'Essenziale il pulsante non c'è, la griglia non si vede e non aggancia; le
-scelte restano, e tornano col livello Standard.
+Nel Semplice il pulsante non c'è, la griglia non si vede e non aggancia; le
+scelte restano, e tornano con lo spazio Completo.
 
 ## Testo
 
-Dal livello Standard lo strumento **Testo** (`T`) viene dopo le forme. Un
+In tutti e due gli spazi lo strumento **Testo** (`T`) viene dopo le forme. Un
 tocco sul foglio apre lì un campo, con la prima riga a metà sul punto
 toccato; un tocco su un testo lo apre com'è. Con la selezione un testo si
 apre con due tocchi, con `F2` o con «Modifica il testo» nella barra
@@ -290,7 +292,7 @@ Cambiare un testo che c'è riscrive solo le sue righe, e il resto resta come
 l'ha scritto chi l'ha fatto, anche in un altro programma: una riga nuova
 copia la precedente e ne prende l'interlinea. Si cambia sul posto un testo che
 non sta in un gruppo, un `tspan` per riga coi suoi pezzi: grassetto, corsivo,
-colori e il resto, e all'Esperto i testi in area e su tracciato, sono in [Disegni, tipografia](drawing-typography.md).
+colori e il resto, e nel Completo i testi in area e su tracciato, sono in [Disegni, tipografia](drawing-typography.md).
 
 ## Collegamenti
 
@@ -299,7 +301,7 @@ verso un documento del vault: una nota, un altro disegno, un PDF. Gli altri
 programmi lo seguono come un link, e in Fub backlink e grafo contano i
 collegamenti dei disegni come quelli delle note.
 
-Dal livello Standard, nella barra «Disponi»:
+Nello spazio Completo, nella barra «Disponi»:
 
 - **Collega a una nota…** (`Ctrl+K`) chiede il documento in un elenco dei
   file del vault, da filtrare per nome o percorso, e mette gli oggetti scelti
@@ -322,7 +324,7 @@ sembra uno schema (`nota:1.md`) prende `./` davanti. Quando il documento cambia
 nome o cartella, Fub riscrive il collegamento del disegno come quelli delle note
 ([formato della scena](../reference/scene-format.md), §9).
 
-A ogni livello, ogni collegamento che si vede ha un segno sopra l'angolo in alto
+In tutti e due gli spazi, ogni collegamento che si vede ha un segno sopra l'angolo in alto
 a destra, anche dentro un gruppo o in un livello bloccato. Con la Selezione, o
 in un disegno che non si modifica, un tocco sul segno apre il documento; con gli
 altri strumenti il segno si vede soltanto, e il foglio resta di chi disegna.
@@ -338,20 +340,14 @@ apre, per esempio perché non c'è più, lo dice con un avviso.
 Chi monta l'editor sceglie e apre i documenti con `links`; senza, il disegno
 non ha segni né «Collega a una nota…», e un collegamento si toglie lo stesso.
 
-## Il livello Esperto
+## Le parti avanzate
 
-L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e cambiare uno
+Il Completo ha anche gli attributi di ogni oggetto, da leggere e cambiare uno
 per uno, il contorno, le trasformazioni in numeri, «Applica trasformazione»,
 il menu «Tracciato», le operazioni booleane, il Costruttore di forme, lo
 strumento Nodi, la penna di Bézier con la Curvatura, le Forbici, lo Spessore,
-«Ricalca immagine», le maschere, il testo in area e su tracciato, gli effetti e la fusione, i motivi del documento, i simboli con le librerie del vault, le ripetizioni, «Rendi modificabile» per le parti di altri programmi: [Disegni, livello Esperto](drawing-expert.md), [motivi](drawing-patterns.md#i-motivi-del-documento), [simboli](drawing-symbols.md), [ripetizioni](drawing-repeats.md), [rendere modificabile](drawing-editable.md), [curve e
+«Ricalca immagine», le maschere, il testo in area e su tracciato, gli effetti e la fusione, i motivi del documento, i simboli con le librerie del vault, le ripetizioni, «Rendi modificabile» per le parti di altri programmi: [Disegni, strumenti avanzati](drawing-expert.md), [motivi](drawing-patterns.md#i-motivi-del-documento), [simboli](drawing-symbols.md), [ripetizioni](drawing-repeats.md), [rendere modificabile](drawing-editable.md), [curve e
 tagli](drawing-curves.md), [spessore variabile](drawing-width.md), [ricalco delle immagini](drawing-trace.md), [maschere](drawing-masks.md#le-maschere), [tipografia](drawing-typography.md#il-testo-in-area), [effetti e fusione](drawing-effects.md).
-
-## Il livello Personalizzato
-
-Il Personalizzato ha soltanto le parti che si scelgono, una per una, dagli
-altri tre livelli, nelle Impostazioni sotto il livello: [Disegni, livello
-Personalizzato](drawing-custom.md).
 
 ## Da tastiera
 
@@ -369,9 +365,9 @@ ruotano di 15°, `{` e `}` di 90°. `Tab` e `Maiusc+Tab` passano all'oggetto
 dopo e a quello prima, e lo dicono col nome e la posizione; oltre l'ultimo il
 fuoco esce dal foglio, che non lo trattiene mai. `Home` e `Fine` scelgono il
 primo e l'ultimo oggetto. `Invio` porta al pannello delle proprietà;
-all'Essenziale apre posizione e misure della selezione, o senza selezione
-titolo, descrizione e pagina. `?` elenca i tasti del livello di adesso, e
-«Mostra tutto» quelli dei livelli sopra. Ridimensionare scrive un
+senza il pannello apre posizione e misure della selezione, o senza selezione
+titolo, descrizione e pagina. `?` elenca i tasti, e `Ctrl+/` cerca fra i
+comandi ([come](drawing-view.md#cercare-un-comando)). Ridimensionare scrive un
 `transform`: anche lo spessore del contorno segue la scala, e il riquadro che
 si chiede è quello che l'oggetto occupa.
 
@@ -396,7 +392,7 @@ perché non si modifica, in un avviso in cima.
   logo esportato da un altro programma, si mostra come immagine del documento
   intero. «Modifica» lo adotta: aggiunge `xmlns:fub` e `fub:version` alla
   radice e lascia il resto com'è. L'adozione è un passo di annulla; annullarla
-  riporta all'immagine. All'Esperto, accanto, «Rendi modificabile…» adotta il file e nello stesso passo riscrive le sue parti nel formato ([Disegni, rendere modificabile](drawing-editable.md)).
+  riporta all'immagine. Nel Completo, accanto, «Rendi modificabile…» adotta il file e nello stesso passo riscrive le sue parti nel formato ([Disegni, rendere modificabile](drawing-editable.md)).
 - **Sola lettura.** Una dichiarazione DOCTYPE, una codifica diversa da UTF-8,
   una versione non valida o più recente, due elementi con lo stesso id, un file
   oltre i limiti dell'editor (`MAX_EDIT_BYTES` e `MAX_ELEMENTS` in

@@ -73,6 +73,7 @@ flowchart TD
     canvas --> markdown
     rich --> abi
     rich --> markdown
+    rich --> ink
     importers --> abi
     features --> abi
     features --> base
@@ -231,9 +232,11 @@ di eventi per sessione.
 niente, nemmeno da `fub-abi`, perché deve poterlo usare ogni prodotto che
 raccoglie inchiostro e, un domani, un componente `wasm32-wasip2`. Lo
 verificano `dependency_invariant.rs` e la compilazione per quel bersaglio nella
-CI. L'unica freccia in ingresso è quella di `fub-scene`, che ne usa il campione
-del tratto; chi altro può dipenderne è un elenco chiuso, deciso nell'[ADR
-0204](../decisions/0204-nucleo-inchiostro.md).
+CI. Le frecce in ingresso sono quella di `fub-scene`, che ne usa il campione
+del tratto, e quella di `fub-format-rich`, che ne scrive e legge l'InkML
+dell'inchiostro dei documenti; chi altro può dipenderne è un elenco chiuso,
+deciso nell'[ADR 0204](../decisions/0204-nucleo-inchiostro.md) e allargato
+nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).
 
 `fub-scene`, il lettore delle scene di FubDraw, ha come sola freccia in uscita
 `fub-ink`: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché

@@ -6,7 +6,7 @@
 > sceglie, la si sposta e la si duplica, come le tavole si mettono in ordine
 > e si rinominano, e come una nota ne mostra una sola.
 
-Dal [livello Standard](drawing.md#il-livello-standard) un [disegno](drawing.md)
+Nello spazio [Completo](drawing.md#completo-e-semplice) un [disegno](drawing.md)
 può avere più **tavole**: pagine sulla stessa tela, ognuna col suo nome e la
 sua carta, una accanto all'altra. Gli oggetti restano nei livelli, e una
 tavola non li contiene: è un rettangolo sulla tela. Ciò che le sta sopra però
@@ -55,7 +55,7 @@ alla volta: [Disegni, presentare](drawing-present.md).
 ## Lo strumento Tavola
 
 Lo strumento **Tavola** (`F`, la lettera del Frame di Figma) è l'ultimo degli
-strumenti che scelgono, prima della penna: allo Standard viene dopo il Lazo.
+strumenti che scelgono, prima della penna: nel Completo viene dopo il Lazo.
 Sceglie tavole, non oggetti: prenderlo svuota la selezione e, se nessuna
 tavola è scelta, sceglie quella che si guarda, o la prima, e lo dice:
 «Strumento: Tavola. Copertina, tavola 1 di 2, 400 × 200.». In un disegno
@@ -90,7 +90,7 @@ dividere il disegno in pagine.».
   tavole. L'annuncio dice dove: «Agganciato: il bordo sinistro in linea con
   quello di Evaporazione.». `Ctrl` o `⌘` tenuto la lascia libera.
 
-Il nome di ogni tavola sta sopra la sua carta, a ogni livello e con ogni
+Il nome di ogni tavola sta sopra la sua carta, in tutti e due gli spazi e con ogni
 strumento, e gira col foglio; una tavola troppo stretta sullo schermo non lo
 mostra. È un'etichetta del foglio: nell'immagine del disegno non c'è.
 
@@ -278,12 +278,12 @@ In un documento in sola lettura le tavole si guardano e ci si va, con
 `Alt+PagSu`, `Alt+PagGiù` e con l'elenco, e si presentano, ma non cambiano;
 nell'elenco gli altri tasti dicono perché non fanno niente.
 
-## Livelli e parti
+## Spazi e parti
 
-All'Essenziale le tavole restano nel disegno e si vedono, coi loro nomi, e un
+Nel Semplice le tavole restano nel disegno e si vedono, coi loro nomi, e un
 collegamento a una tavola la inquadra anche lì; non ci sono lo strumento,
-l'elenco, `Alt+PagSu` e `Alt+PagGiù`. Sono la parte «Tavola» del
-[Personalizzato](drawing-custom.md). Tornati all'Essenziale, o tolta la
+l'elenco, `Alt+PagSu` e `Alt+PagGiù`. Sono la parte «Tavola» delle
+[parti dell'editor](drawing-custom.md#che-cosa-porta-una-parte). Passati al Semplice, o tolta la
 parte, chi aveva in mano la Tavola riprende la Selezione, l'elenco si chiude
 e il suo pulsante sparisce; il disegno non cambia. «Presenta da qui» c'è
 quando c'è anche la parte «Presentare».

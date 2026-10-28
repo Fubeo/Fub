@@ -6,7 +6,7 @@
 > spostano, si bloccano e si eliminano le guide, anche coi numeri, e come
 > l'unità del documento cambia ciò che si legge e si scrive.
 
-Dal livello Standard il [disegno](drawing.md) ha i righelli, in alto e a
+Nello spazio Completo il [disegno](drawing.md) ha i righelli, in alto e a
 sinistra, e le guide che se ne tirano: linee orizzontali e verticali che
 attraversano il foglio e a cui ciò che si muove si aggancia. A differenza
 delle [guide intelligenti](drawing-guides.md), che compaiono durante un
@@ -37,7 +37,7 @@ o il tasto destro su un righello, apre il menu dei righelli: l'unità del
 documento, **Mostra le guide**, **Guide…**, bloccare o sbloccare tutte le
 guide, eliminarle tutte e **Nascondi i righelli**.
 
-Sul foglio girato ([Disegni, vista ruotata, gesti e menu radiale](drawing-view.md))
+Sul foglio girato ([Disegni, vista, gesti e menu radiale](drawing-view.md))
 i righelli aspettano: niente tacche, numeri e fasce, perché nessuna misura
 lungo il bordo dello schermo sarebbe dritta nel disegno, e nell'angolo, al
 posto della sigla, una freccia segna dov'è l'alto del disegno. Il loro menu
@@ -152,10 +152,10 @@ l'editor non le mostra, non le cambia coi gesti e lo dice, e «Guide…» le
 riscrive da capo. La grammatica è in
 [Formato della scena, unità e guide](../reference/scene-format-rulers.md).
 
-## Livelli e tasti
+## Spazi e tasti
 
-All'Essenziale i righelli e le guide non ci sono; le guide scritte nel file
-restano. Nel Personalizzato sono la parte «Righelli e guide», anche senza
+Nel Semplice i righelli e le guide non ci sono; le guide scritte nel file
+restano. Per chi monta l'editor con le sue parti sono la parte «Righelli e guide», anche senza
 «Pagina e griglia»: il pulsante, allora, ha le loro voci. `?` elenca i loro
 tasti: `Maiusc+R`, `|`, che vale come si scrive anche con `AltGr`, e `Ctrl` o
 `⌘` tenuto mentre si tira una guida.

@@ -5,13 +5,17 @@
 > **Risultato:** sapere che cosa c'è nel pannello delle proprietà, come vi si
 > scrive un valore, e dove sta la barra della selezione.
 
-Dal livello Standard il [disegno](drawing.md) ha accanto al foglio il
-pannello delle proprietà. Con una selezione dice com'è fatta e come si vede,
+In tutti e due gli spazi di lavoro il [disegno](drawing.md) ha il pannello
+delle proprietà, nella scheda «Design» dell'ispettore. Con una selezione dice com'è fatta e come si vede,
 in campi che si scrivono: posizione e misure, colori e contorno, il testo,
 come disporla. Senza selezione dice com'è fatto il disegno: i suoi colori,
-la pagina, l'unità di misura, la descrizione e come si vede il foglio. Il
-pannello sta con l'albero degli oggetti, sotto di lui, e prende più altezza;
-su un riquadro stretto, come gli altri pannelli, va sotto il foglio
+la pagina, l'unità di misura, la descrizione e come si vede il foglio.
+Nello Scrittoio il pannello sta nella scheda **Design** dell'ispettore, a
+destra, con gli attributi e le tavole; le altre schede del disegno sono
+Livelli (l'albero degli oggetti), Risorse (forme e simboli, con una ricerca
+sola quando ci sono tutti e due), Cronologia e Accessibilità. Dove l'editor
+tiene i pannelli con sé, come nei test, il pannello sta con l'albero degli
+oggetti, sotto di lui, e su un riquadro stretto va sotto il foglio
 (`apps/client/src/editors/spatial/tools/properties.ts`, i campi in
 `apps/client/src/editors/spatial/tools/fields.ts`).
 
@@ -34,7 +38,7 @@ Il pannello ha in cima ciò di cui parla, «Rettangolo», «3 oggetti», «Tavol
 2 di 5» o «Il disegno», e sotto le sezioni. L'intestazione di una sezione è un
 pulsante che la apre e la chiude; le sezioni chiuse si ricordano con la vista,
 in `grid.closed`. Di partenza sono chiuse «Trasforma» e «Attributi», le due
-dell'Esperto. Una sezione senza niente da mostrare non c'è.
+del Completo. Una sezione senza niente da mostrare non c'è.
 
 - **Posizione e misure.** X e Y sono l'angolo in alto a sinistra della
   cornice, anche di un oggetto ruotato; Larghezza e Altezza le misure lungo i
@@ -46,74 +50,78 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
   testo o un'immagine, che deformati non sarebbero più loro, e aperto per le
   sole forme; aperto o chiuso a mano, resta così finché la selezione non
   cambia. Il lato di una linea dritta, alto zero, si legge e non si scrive.
+- **Trasforma**, nel Completo: rotazione in senso orario, scale e inclinazioni,
+  come la finestra «Trasforma…». I campi dicono di quanto trasformare, non
+  quanto l'oggetto è trasformato: partono da ciò che non cambia niente e
+  aspettano **Applica**. Dopo restano come sono, e un secondo «Applica»
+  ripete la trasformazione.
+- **Disponi.** Allineare i bordi e i centri, distribuire in orizzontale e in
+  verticale, e l'ordine, come la barra «Disponi» di [Disegni](drawing.md). Un
+  comando che adesso non serve resta raggiungibile, sbiadito, e dice perché.
+- **Aspetto.** In testa, con la parte «Stili del documento», lo Stile
+  grafico che gli oggetti seguono ([Disegni, stili](drawing-styles.md)); poi
+  l'Opacità e, nel Completo, la Fusione, con «Isola la fusione» per gruppi e
+  collegamenti ([Disegni, effetti e fusione](drawing-effects.md#la-fusione)).
+- **Riempimento**, con la parte «Colori personalizzati»: il colore che
+  riempie gli oggetti, con sotto il contrasto con la carta.
+- **Sfumatura.** Il tipo, Pieno, Lineare o Radiale, la barra dei punti coi
+  campi del punto scelto, le sfumature pronte, «Inverti» e l'Angolo;
+  nel Completo anche «Oltre i capi» ([Disegni, sfumature](drawing-gradients.md)).
+- **Campitura.** Il tipo, fra le campiture pronte e, nel Completo, i motivi
+  del documento, e i campi della campitura: Colore, Fondo, Passo, Spessore
+  e Angolo ([Disegni, campiture e motivi](drawing-patterns.md)).
+- **Contorno.** Il colore, con la parte «Colori personalizzati», lo
+  Spessore e il Tratteggio; nel Completo anche Estremi e Angoli, come il menu
+  «Contorno» di [Disegni, strumenti avanzati](drawing-expert.md); per linee,
+  connettori e tracciati aperti, «Punta d’inizio» e «Punta di fine»
+  ([Disegni, punte delle linee](drawing-tips.md)).
+- **Effetti**, nel Completo: le ombre, i bagliori e la sfocatura dell'oggetto,
+  una riga per effetto, con «Aggiungi effetto» nell'intestazione ([Disegni,
+  effetti e fusione](drawing-effects.md#la-sezione-effetti)).
+- **Testo.** Con la parte «Stili del documento» lo Stile di testo, coi suoi
+  stili di serie; senza, lo Stile, un corpo e un peso insieme. Poi
+  Carattere, fra Inter, Literata e JetBrains Mono e, con la parte «Caratteri
+  del vault» del Completo, i [caratteri del vault](drawing-fonts.md), con
+  sotto il carattere usato quando uno non si carica; Dimensione, Peso,
+  l'Enfasi (grassetto, corsivo, sottolineato e barrato), Interlinea,
+  Spaziatura e Allineamento, per tutto il testo anche quando le sue parole
+  sono diverse ([Disegni, tipografia](drawing-typography.md)).
+  Con la parte «Testo in area e su tracciato», del Completo, anche il Tipo
+  di testo, da punto o in area, e la Larghezza del riquadro di un testo in
+  area ([il testo in area](drawing-typography.md#il-testo-in-area)).
 - **Forma**, per poligoni, stelle e rettangoli: Tipo, Lati o Punte, Raggio
   interno di una stella e Raggio degli angoli; senza selezione, col Poligono
   in mano, quelli dello strumento ([Disegni, poligoni e stelle](drawing-shapes.md)).
   In testa, con la parte «Simboli», il Simbolo delle istanze scelte
   ([Disegni, simboli](drawing-symbols.md#la-riga-simbolo)).
-- **Simmetria**, senza selezione, con la penna o l'evidenziatore in mano: il
-  Tipo, gli Spicchi e «Specchiata» di una radiale, e il Centro ([Disegni,
-  ripetizioni e simmetria](drawing-repeats.md#la-penna-in-simmetria)).
-- **Ripetizione**, all'Esperto, per una ripetizione scelta: il Tipo, con
+- **Connettore**, per i connettori scelti: il Tipo, fra Dritto, A gomito e
+  Curvo; l'Aggancio d’inizio e quello di fine; l'Etichetta; e «Inverti», che
+  scambia inizio e fine ([Disegni, connettori](drawing-connectors.md)).
+- **Ripetizione**, nel Completo, per una ripetizione scelta: il Tipo, con
   «Espandi la ripetizione», e i suoi valori, le Volte, il Raggio e il Centro
   di una radiale, le Colonne, le Righe e i passi di una griglia, l'Angolo e
   la Distanza dell'asse di uno specchio ([Disegni, ripetizioni e
   simmetria](drawing-repeats.md#la-sezione-ripetizione)).
-- **Connettore**, per i connettori scelti: il Tipo, fra Dritto, A gomito e
-  Curvo; l'Aggancio d’inizio e quello di fine; l'Etichetta; e «Inverti», che
-  scambia inizio e fine ([Disegni, connettori](drawing-connectors.md)).
-- **Aspetto.** In testa, con la parte «Stili del documento», lo Stile
-  grafico che gli oggetti seguono ([Disegni, stili](drawing-styles.md)).
-  Riempimento e Contorno, con la parte «Colori personalizzati»;
-  Spessore del contorno, Opacità e Tratteggio; all'Esperto anche Estremi e
-  Angoli, come il menu «Contorno» di [Disegni, livello
-  Esperto](drawing-expert.md), e la Fusione, con «Isola la fusione» per
-  gruppi e collegamenti ([Disegni, effetti e fusione](drawing-effects.md#la-fusione));
-  per linee, connettori e tracciati aperti, «Punta d’inizio» e «Punta di fine»
-  ([Disegni, punte delle linee](drawing-tips.md)).
-- **Sfumatura.** Il tipo, Pieno, Lineare o Radiale, la barra dei punti coi
-  campi del punto scelto, le sfumature pronte, «Inverti» e l'Angolo;
-  all'Esperto anche «Oltre i capi» ([Disegni, sfumature](drawing-gradients.md)).
-- **Campitura.** Il tipo, fra le campiture pronte e, all'Esperto, i motivi
-  del documento, e i campi della campitura: Colore, Fondo, Passo, Spessore
-  e Angolo ([Disegni, campiture e motivi](drawing-patterns.md)).
-- **Effetti**, all'Esperto: le ombre, i bagliori e la sfocatura dell'oggetto,
-  una riga per effetto, con «Aggiungi effetto» nell'intestazione ([Disegni,
-  effetti e fusione](drawing-effects.md#la-sezione-effetti)).
-- **Colori del documento**, anche senza selezione, e allora per prima: i
-  campioni, i colori usati e i recenti, da dare agli oggetti scelti o con cui
-  disegnare ([Disegni, colori](drawing-colors.md#la-sezione-colori-del-documento)).
-- **Testo.** Con la parte «Stili del documento» lo Stile di testo, coi suoi
-  stili di serie; senza, lo Stile, un corpo e un peso insieme. Poi
-  Carattere, fra Inter, Literata e JetBrains Mono e, con la parte «Caratteri
-  del vault» dell'Esperto, i [caratteri del vault](drawing-fonts.md), con
-  sotto il carattere usato quando uno non si carica; Dimensione, Peso,
-  l'Enfasi (grassetto, corsivo, sottolineato e barrato), Interlinea,
-  Spaziatura e Allineamento, per tutto il testo anche quando le sue parole
-  sono diverse ([Disegni, tipografia](drawing-typography.md)).
-  Con la parte «Testo in area e su tracciato», dell'Esperto, anche il Tipo
-  di testo, da punto o in area, e la Larghezza del riquadro di un testo in
-  area ([il testo in area](drawing-typography.md#il-testo-in-area)).
-- **Disponi.** Allineare i bordi e i centri, distribuire in orizzontale e in
-  verticale, e l'ordine, come la barra «Disponi» di [Disegni](drawing.md). Un
-  comando che adesso non serve resta raggiungibile, sbiadito, e dice perché.
-- **Trasforma**, all'Esperto: rotazione in senso orario, scale e inclinazioni,
-  come la finestra «Trasforma…». I campi dicono di quanto trasformare, non
-  quanto l'oggetto è trasformato: partono da ciò che non cambia niente e
-  aspettano **Applica**. Dopo restano come sono, e un secondo «Applica»
-  ripete la trasformazione.
-- **Attributi**, all'Esperto: la tabella degli attributi dell'oggetto, dentro
+- **Simmetria**, senza selezione, con la penna o l'evidenziatore in mano: il
+  Tipo, gli Spicchi e «Specchiata» di una radiale, e il Centro ([Disegni,
+  ripetizioni e simmetria](drawing-repeats.md#la-penna-in-simmetria)).
+- **Esporta la selezione**, con oggetti scelti e la finestra «Esporta»
+  disponibile: «Esporta…» apre la finestra con la selezione già scelta come
+  cosa da esportare, e lì si scelgono formato e scala.
+- **Attributi**, nel Completo: la tabella degli attributi dell'oggetto, dentro
   il pannello.
+- **Documento**, senza selezione: in un disegno senza tavole Formato e
+  Orientamento della pagina, con le misure pronte delle tavole; poi Larghezza
+  e Altezza della pagina, l'unità di misura e la descrizione. Il titolo sta
+  in cima al pannello.
 - **Tavola**, senza selezione, con lo strumento Tavola e una tavola scelta:
   Nome, Formato, Orientamento, X, Y, Larghezza e Altezza della tavola
   ([Disegni, tavole](drawing-boards.md#le-proprietà)).
-- **Documento**, senza selezione: in un disegno senza tavole Formato e
-  Orientamento della pagina, con le misure pronte delle tavole; poi Larghezza
-  e Altezza della pagina, l'unità di misura e la descrizione. Il titolo resta
-  nella barra.
-- **Vista**, senza selezione: le caselle della griglia, dell'aggancio, delle
-  guide intelligenti, dei righelli e delle guide, e quella della barra della
-  selezione, come in «Pagina e griglia».
+- **Griglia e guide**, senza selezione: le caselle della griglia,
+  dell'aggancio, delle guide intelligenti, dei righelli e delle guide, e
+  quella della barra della selezione, come in «Pagina e griglia».
+- **Colori del documento**, in fondo, con e senza selezione: i campioni, i
+  colori usati e i recenti, da dare agli oggetti scelti o con cui disegnare ([Disegni, colori](drawing-colors.md#la-sezione-colori-del-documento)).
 
 ## Scrivere un valore
 
@@ -133,9 +141,12 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
   scale in percentuale.
 - **Un colore** si scrive come codice, `#0072b2`, come nome, `red`, col nome
   di un campione del documento, o «nessuno». Il pulsante del colore accanto
-  al campo apre la tavolozza; il selettore del sistema, dopo, sceglie un
-  colore qualunque. Sotto, il contrasto con la carta ([Disegni,
-  colori](drawing-colors.md#il-campo-del-colore-e-il-contrasto)).
+  al campo apre il selettore dei colori: in cima i consigliati, tondi e col
+  nome, poi i colori del documento e i recenti, e sotto un colore qualunque
+  col quadrato, la tinta e l'opacità, o scritto. Il colore si vede mentre lo
+  si tira e si scrive quando lo si lascia; uno uguale a un campione del
+  documento si scrive come quel campione. Sotto il campo, il contrasto con
+  la carta ([Disegni, colori](drawing-colors.md#il-campo-del-colore-e-il-contrasto)).
 - **Un campo misto dice «Misto»**: gli oggetti scelti hanno valori diversi.
   Scriverlo dà il valore a tutti, in un passo solo.
 - **Un valore che non va non parte.** Resta scritto, il campo è segnato e
@@ -162,7 +173,7 @@ non si scrivono.
 
 ## La barra accanto alla selezione
 
-Dal livello Standard la barra «Disponi» sta accanto a ciò che si è scelto, e
+Nello spazio Completo la barra «Disponi» sta accanto a ciò che si è scelto, e
 non in cima al foglio, dove l'occhio e il puntatore dovrebbero andarla a
 cercare (`apps/client/src/editors/spatial/tools/bar.ts`):
 
@@ -174,20 +185,19 @@ cercare (`apps/client/src/editors/spatial/tools/bar.ts`):
 
 Durante un gesto, spostare, ridimensionare o ruotare, la barra non si vede,
 e torna quando il gesto finisce. `Alt+F10` le porta il fuoco come sempre.
-La casella «Barra accanto alla selezione», nella sezione «Vista», la riporta
+La casella «Barra accanto alla selezione», nella sezione «Griglia e guide», la riporta
 in cima al foglio, e il cambiamento si annuncia; la scelta si ricorda con la
 vista, in `grid.bar`.
 
-## Livelli e tasti
+## Spazi e tasti
 
-All'Essenziale il pannello non c'è: `Invio` apre la finestra «Posizione e
-misure» della selezione o, senza selezione, «Proprietà del disegno». Nel
-Personalizzato il pannello è la parte «Pannello delle proprietà»; senza,
-valgono le finestre. Col pannello e gli «Attributi», gli attributi sono una
+Il pannello c'è nei due spazi. Per chi monta l'editor con le sue parti è la
+parte «Pannello delle proprietà»; senza, `Invio` apre la finestra «Posizione e
+misure» della selezione o, senza selezione, «Proprietà del disegno». Col pannello e gli «Attributi», gli attributi sono una
 sezione del pannello e il loro pulsante non c'è: `Ctrl+Maiusc+X` porta il
 fuoco alla sezione e, di nuovo, al foglio. «Trasforma…» e `Ctrl+Maiusc+M`
-portano il fuoco alla sezione «Trasforma»; la finestra resta per i livelli
-senza il pannello.
+portano il fuoco alla sezione «Trasforma»; la finestra resta per chi
+monta l'editor senza il pannello.
 
 `?` elenca i tasti del pannello: `Invio`, le frecce su e giù,
 `Ctrl+Invio` nella descrizione ed `Esc`.

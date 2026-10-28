@@ -6,7 +6,7 @@
 > come si spostano le righe fra i livelli e i gruppi e che cosa mostrano le
 > miniature.
 
-Dal livello Standard l'albero degli oggetti del [disegno](drawing.md) diventa
+Nello spazio Completo l'albero degli oggetti del [disegno](drawing.md) diventa
 il pannello dei livelli. Ogni riga ha la sua miniatura, il nome, l'occhio e il
 lucchetto; i nomi si cambiano da qui, un filtro cerca fra le righe e le righe
 si trascinano per mettere in ordine il disegno. L'ordine è quello che si
@@ -126,12 +126,12 @@ l'oggetto, ciò che lo contiene o la pagina.
 - **Oltre**, o per un oggetto che il disegno non sa leggere, la riga non ha
   miniatura e ne tiene il posto vuoto, perché i nomi restino in colonna.
 
-## Livelli e tasti
+## Spazi e tasti
 
-All'Essenziale l'albero non ha niente di questa pagina: le righe non hanno
-miniatura e non si rinominano, non si cercano e non si spostano. Nel
-Personalizzato tutto viene con la parte «Livelli», come dice [Disegni,
-livello Personalizzato](drawing-custom.md). In un documento in sola lettura
+Nel Semplice l'albero non ha niente di questa pagina: le righe non hanno
+miniatura e non si rinominano, non si cercano e non si spostano. Per chi monta l'editor con le sue
+parti tutto viene con la parte «Livelli», come dice [Disegni,
+spazio di lavoro e barra](drawing-custom.md). In un documento in sola lettura
 il filtro e le miniature ci sono, e le righe non si rinominano né si
 spostano.
 

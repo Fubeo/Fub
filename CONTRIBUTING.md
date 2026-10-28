@@ -40,6 +40,7 @@ npm run bench:motion
 npm run bench:fidelity
 npm run bench:boards
 npm run bench:connectors
+npm run bench:grid
 npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
 npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
 npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
@@ -68,10 +69,13 @@ cargo test --workspace --no-fail-fast
 npm run typecheck
 npm test
 npm run build
+npm run bench:grid
 node .github/scripts/check-host-workspace-boundary.mjs
 node .github/scripts/check-error-literals.mjs
 node .github/scripts/check-rust-comments.mjs
 node .github/scripts/check-codemirror-boundary.mjs
+node .github/scripts/check-tabella-boundary.mjs
+node .github/scripts/check-prosemirror-boundary.mjs
 node .github/scripts/check-inline-theme.mjs
 node .github/scripts/check-doc-links.mjs
 node .github/scripts/check-doc-orphans.mjs

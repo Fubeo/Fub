@@ -6,7 +6,7 @@
 > contorno dove si vuole, che cosa fanno i profili del menu «Contorno», e
 > come la linea vive con gli altri comandi.
 
-Dal [livello Esperto](drawing-expert.md) lo strumento **Spessore** e i
+Nello spazio Completo, fra gli [strumenti avanzati](drawing-expert.md), lo strumento **Spessore** e i
 **profili** del menu «Contorno» fanno di un contorno una **linea a spessore
 variabile**: una linea centrale, con un profilo di larghezze lungo il
 percorso, a sinistra e a destra. Nel file è una forma piena del colore del
@@ -108,5 +108,10 @@ quante ne ha lasciate.
   tracciato pieno che si vede, senza la linea e il profilo; **«Semplifica…»**
   semplifica la linea centrale, e il contorno si rifà; lo **Scostamento** e
   le **operazioni booleane** la trattano come la forma piena che è.
+- **Un tratto a penna** diventa una linea a spessore variabile quando passa
+  in tracciato, con «Inchiostro in tracciato» o con l'«Uscita» della penna
+  ([penne](drawing-pen.md)): il profilo viene dalla pressione dei campioni,
+  se il pennello la segue e il tratto la porta. Senza pressione, o con la
+  punta piatta, resta un contorno uniforme.
 - **Nell'albero e per chi legge col lettore di schermo** si chiama «Linea a
   spessore variabile», col suo colore.

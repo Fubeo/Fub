@@ -54,3 +54,8 @@ Nuove decisioni usano il [template](template.md).
 | [0220 — Gli oggetti dei fogli viaggiano con le finestre, e i grafici arrivano disegnati](0220-gli-oggetti-dei-fogli-viaggiano-con-le-finestre.md) | proposta | contratto | — |
 | [0221 — I motori esterni si seguono da vicino: la loro toolchain, le patch a tre vie e un avviso pianificato](0221-i-motori-si-seguono-da-vicino.md) | proposta | sicurezza | — |
 | [0222 — Tre strati in ogni superficie, e l'aspetto del contenuto lo dichiara la modalità](0222-tre-strati-e-l-aspetto-del-contenuto.md) | proposta | frontend | — |
+| [0223 — L'editor dei disegni: strumenti a sinistra, proprietà nell'ispettore, fatti nella banda](0223-l-editor-dei-disegni-strumenti-ispettore-e-banda.md) | proposta | frontend | — |
+| [0224 — Scrittura, il nucleo del testo ricco](0224-scrittura-il-nucleo-del-testo-ricco.md) | proposta | frontend | — |
+| [0225 — Tabella, un componente per tutte le tabelle](0225-tabella-un-componente-per-tutte-le-tabelle.md) | proposta | frontend | — |
+| [0226 — Inchiostro e disegni nei documenti](0226-inchiostro-e-disegni-nei-documenti.md) | proposta | contratto | — |
+| [0227 — Le penne sono ricette del pennello, e la punta piatta è un pennello nuovo](0227-le-penne-e-la-punta-piatta.md) | proposta | contratto | — |

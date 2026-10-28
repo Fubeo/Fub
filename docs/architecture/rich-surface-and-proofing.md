@@ -41,7 +41,8 @@ l'IPC.
   dello stato dice perché. Ciò che arriva da un altro riquadro o dal disco
   entra com'è.
 - `editors/rich/schema.ts` traduce la proiezione in un documento ProseMirror
-  e ritorno. Ogni nodo porta con sé il proprio `k`, i dati originali opachi
+  e ritorno, con marche, comandi e caratteri del nucleo di Scrittura
+  (`apps/client/src/scrittura/`, [ADR 0224](../decisions/0224-scrittura-il-nucleo-del-testo-ricco.md)). Ogni nodo porta con sé il proprio `k`, i dati originali opachi
   che la shell non legge e copia così come sono. Il loro schema lo dichiara la
   proiezione (`opaque_schema`) e la shell lo ricopia; il formato
   (`fub-format-rich/src/blob.rs`) rifiuta uno schema più nuovo e, a ogni
@@ -167,8 +168,9 @@ l'IPC.
   o dal disco sostituisce i blocchi diversi fuori dalla cronologia.
   Come nell'editor di testo il Tab si ferma sul foglio che scorre
   (`.rich-page`, `role="document"`), non dentro il documento: Invio porta a
-  scrivere, dove Tab scrive una tabulazione o sposta il livello di un
-  elenco, e dopo un Esc, per due secondi, Tab esce.
+  scrivere, dove Tab scrive una tabulazione, sposta il livello di un
+  elenco o, in una tabella, va di cella in cella (`cell-selection.ts`, che
+  sceglie anche più celle), e dopo un Esc, per due secondi, Tab esce.
 - `editors/rich/ribbon.ts` è la barra multifunzione del documento, caricata
   col motore: la barra del kit (`kit/ribbon/ribbon.ts`, la stessa del
   foglio) con le schede Home, Inserisci, Layout, Revisione, Visualizza e la
@@ -422,6 +424,11 @@ il testo verbatim, gli oggetti come `U+FFFC` e gli a-capo e i salti come
 separatori. I segni sono decorazioni ProseMirror e una correzione è una
 transazione della superficie, nella sua cronologia e nella sessione.
 
+Il testo dei disegni (`editors/spatial/tools/editor/text-proof.ts`) usa lo
+stesso client: un segmento per riga, i segni come decorazioni del campo di
+Scrittura, i suggerimenti sul tasto destro. Le porte gliele dà
+`editors/core/bootstrap.ts` (`drawingProof`).
+
 La superficie Markdown carica client e adattatore con un import dinamico e li monta con
 `MarkdownProfile.setProof` e `TextEngine.reconfigure()`; la sua `Lifetime`
 chiude il client. Le porte (`editors/core/proof-ports.ts`) le compone
@@ -430,11 +437,13 @@ chiude il client. Le porte (`editors/core/proof-ports.ts`) le compone
 ## Dove si trova
 
 - `apps/client/src/editors/rich/`: superficie, motore, schema, comandi,
-  incolla e correttore della superficie ricca;
-- `apps/client/src/editors/core/proof.ts` e `proof-ports.ts`;
-- `apps/client/src/editors/text/profiles/markdown/proof.ts`;
+  incolla, inchiostro, disegni e correttore della superficie ricca;
+- `apps/client/src/scrittura/`: il nucleo condiviso e il profilo a righe
+  del testo dei disegni;
+- `editors/core/proof.ts`, `proof-ports.ts`, `profiles/markdown/proof.ts`;
 - `crates/fub-features/src/proof.rs` e `crates/fub-format-rich/`.
 
 Il perché della garanzia sul pacchetto è nell'[ADR
 0212](../decisions/0212-preservazione-misurata-sul-pacchetto.md), quello della
-copia di WordCraft nell'[ADR 0213](../decisions/0213-provenienza-dei-motori-esterni.md).
+copia di WordCraft nell'[ADR 0213](../decisions/0213-provenienza-dei-motori-esterni.md);
+inchiostro e disegni (`ink.ts`, `drawing.ts`) nell'[ADR 0226](../decisions/0226-inchiostro-e-disegni-nei-documenti.md).

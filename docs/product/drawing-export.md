@@ -17,19 +17,20 @@ PDF](pdf-annotations.md#esportare).
 
 ## Da dove
 
-- **All'Essenziale «Esporta…»**, nella palette dei comandi, chiede il formato:
-  PNG o PDF, ciascuno con una riga che dice che cosa dà, per il disegno
-  intero.
-- **Dallo Standard «Esporta…»** apre la finestra «Esporta», qui sotto. Nel
-  [Personalizzato](drawing-custom.md) è la parte «Finestra «Esporta»».
+- **In tutti e due gli spazi «Esporta…»** apre la finestra «Esporta», qui
+  sotto. Fra le [parti dell'editor](drawing-custom.md#che-cosa-porta-una-parte)
+  è la parte «Finestra «Esporta»».
+- **Senza la finestra**, per chi monta l'editor senza quella parte,
+  «Esporta…», nella palette dei comandi, chiede il formato: PNG o PDF,
+  ciascuno con una riga che dice che cosa dà, per il disegno intero.
 - **Il menu del riquadro** ha una voce per formato, «Esporta come PNG» ed
-  «Esporta come PDF», i due export di serie del disegno intero; dallo
-  Standard, prima di loro, «Esporta…», che apre la finestra.
+  «Esporta come PDF», i due export di serie del disegno intero; con la
+  finestra, prima di loro, «Esporta…», che la apre.
 
 L'export lo fa l'host leggendo il file del vault, quindi c'è in Disegno e in
 Lettura, in un disegno in sola lettura, in un SVG che l'editor mostra senza
 modificarlo, e anche quando il codice dell'editor non è ancora arrivato o non
-arriva: allora «Esporta…» chiede il formato come all'Essenziale. Serve la
+arriva: allora «Esporta…» chiede il formato come senza la finestra. Serve la
 feature `draw` dell'host, la stessa che apre i disegni; senza, le voci non ci
 sono.
 
@@ -47,7 +48,7 @@ l'anteprima va sopra.
   una riga che dice che cosa dà.
 - **La misura**, per PNG e JPEG: la scala, da 1× a 4×, o la larghezza in
   pixel, da 1 a 16 384, che parte da quella della scala di prima.
-- **La pagina**, per il PDF, dall'Esperto: la carta, l'abbondanza e i
+- **La pagina**, per il PDF, nel Completo: la carta, l'abbondanza e i
   segni, descritti in [Per la stampa](#per-la-stampa).
 - **Lo sfondo:** la carta, o trasparente. Il JPEG non ha la trasparenza: esce
   sempre con la carta, e la finestra lo dice.
@@ -138,7 +139,7 @@ PDF grande quanto il disegno misura il disegno, la tavola o la selezione, a
 ## Per la stampa
 
 Il gruppo «Pagina» della finestra dice su che carta va il PDF. C'è
-all'Esperto, e nel Personalizzato con la parte «Pagina di stampa del PDF»;
+nel Completo, e per chi monta l'editor con le sue parti, con la parte «Pagina di stampa del PDF»;
 senza, e di serie, la carta è «Grande quanto il disegno»: la pagina misura
 il disegno, come sempre. Le scelte della pagina si ricordano anche quando
 il gruppo non c'è.

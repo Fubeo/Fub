@@ -209,8 +209,8 @@ Ciò che non è modificabile è **estraneo** (§8).
 <path id="o7k2m9x4q" fub:tool="pen" fub:at="2026-10-01T09:20:31.250Z" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0" d="M120.5 30.2 Q121 30.1 …" fill="#0072b2" fub:ink="1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8"/>
 ```
 
-L'evidenziatore usa `fub:tool="highlighter"`, `fill-opacity="0.4"` e, per
-default, il giallo.
+L'evidenziatore usa `fub:tool="highlighter"` e, per default, il giallo. Le
+[penne e la punta piatta `nib1`](scene-format-pens.md) dicono l'aspetto.
 
 ### `fub:ink`
 
@@ -275,9 +275,9 @@ passata a `getStroke` è `p / 255`.
   `size=16`, `thinning=0.5`, `smoothing=0.5`, `streamline=0.5`,
   `taperStart=0`, `taperEnd=0`, `capStart=1`, `capEnd=1`, `sim=1`.
 - **Chiavi sconosciute:** si tengono in ordine, anche ripetute, e si ignorano.
-- **Pennello non valido:** un `fub:brush` che non comincia con `pf1`, una
-  chiave nota ripetuta o con un valore fuori dall'intervallo producono S004
-  come l'inchiostro non valido: il tratto non si ridisegna.
+- **Pennello non valido:** un `fub:brush` che non comincia con `pf1` o `nib1`,
+  una chiave nota ripetuta o con un valore fuori dall'intervallo producono
+  S004 come l'inchiostro non valido: il tratto non si ridisegna.
 - **Campioni:** `d` si calcola dai campioni quantizzati, cioè dagli interi di
   `fub:ink` divisi per la scala, mai dai valori del dispositivo. Così chi
   ricalcola `d` dal file ottiene la stessa stringa di chi l'ha scritto.
@@ -325,8 +325,8 @@ la linea che unisce due oggetti e li segue: [connettori](scene-format-connectors
 - Oggetti `o`, livelli `l`, risorse `r`, tavole `b`, carte delle tavole `c`,
   seguiti da 8 caratteri base36 casuali. Carta: `fub-paper`; `defs`: `fub-defs`.
 - Un id è unico nel documento: un id casuale già usato si rigenera.
-- Un id esistente cambia solo se lo si chiede, dagli attributi del livello
-  Esperto. La superficie aggiunge un id solo agli elementi che crea o modifica.
+- Un id esistente cambia solo se lo si chiede, dagli attributi dello
+  spazio Completo. La superficie aggiunge un id solo agli elementi che crea o modifica.
 - Un documento con id duplicati si apre in sola lettura, con l'errore S003.
 
 ### Scrittura canonica

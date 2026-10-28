@@ -7,14 +7,14 @@
 > delle proprietà, come si sceglie un modo di fusione, dov'è l'opacità nella
 > barra, e che cosa ne fanno i comandi e l'export.
 
-All'[Esperto](drawing-expert.md) un oggetto ha i suoi **effetti**, come
+Fra gli [strumenti avanzati](drawing-expert.md) un oggetto ha i suoi **effetti**, come
 l'Aspetto di Illustrator o gli Effetti di Figma: ombre e bagliori, fuori e
 dentro la forma, e una sfocatura, uno sopra l'altro nell'ordine della lista.
 Ogni effetto si cambia coi numeri, si nasconde senza perderlo e si toglie, e
 l'oggetto resta quello che era: spostarlo, ridimensionarlo o cambiarne il
 contorno porta con sé i suoi effetti. Il **modo di fusione** dice come
 l'oggetto si mescola coi colori sotto di lui, Moltiplica o Scolora come in
-Photoshop. Dallo Standard la barra «Disponi» ha l'**opacità** degli oggetti
+Photoshop. Nello spazio Completo la barra «Disponi» ha l'**opacità** degli oggetti
 scelti. Il modello è in `apps/client/src/editors/spatial/tools/effects.ts`,
 la sezione in `tools/effects-panel.ts`, la fusione e l'opacità in
 `tools/look.ts`.
@@ -46,7 +46,7 @@ la sezione in `tools/effects-panel.ts`, la fusione e l'opacità in
 
 ## La sezione «Effetti»
 
-All'Esperto il [pannello delle proprietà](drawing-properties.md) ha la
+Nel Completo il [pannello delle proprietà](drawing-properties.md) ha la
 sezione «Effetti» dopo «Sfumatura», con oggetti scelti che prendono effetti:
 le forme, anche le frecce, i poligoni e le stelle, i tratti a penna, le linee
 a spessore variabile, i testi, le immagini, i gruppi e i collegamenti.
@@ -110,7 +110,7 @@ ciascuno.
 
 ## La fusione
 
-All'Esperto la sezione «Aspetto» ha, dopo «Opacità», **«Fusione»**: come i
+Nel Completo la sezione «Aspetto» ha, dopo «Opacità», **«Fusione»**: come i
 colori dell'oggetto si mescolano con ciò che sta sotto. I sedici modi, coi
 nomi e nei gruppi di Illustrator e di Photoshop:
 
@@ -136,7 +136,7 @@ nomi e nei gruppi di Illustrator e di Photoshop:
 
 ## L'opacità nella barra
 
-Dallo Standard la barra «Disponi», accanto alla selezione, ha il campo
+Nello spazio Completo la barra «Disponi», accanto alla selezione, ha il campo
 **«Opacità»**, come il pannello Controllo di Illustrator: la stessa opacità
 della sezione «Aspetto», in percentuale, senza aprire il pannello. Con
 opacità diverse è vuoto e dice «Misto».
@@ -174,8 +174,7 @@ opacità diverse è vuoto e dice «Misto».
   tutto ciò che contengono.
 - **«Applica trasformazione»** lascia la sua trasformazione a un oggetto con
   degli effetti, anche nascosti: sono nelle sue coordinate, e riscriverli
-  cambierebbe com'è l'ombra ([Disegni, livello
-  Esperto](drawing-expert.md#applica-trasformazione)).
+  cambierebbe com'è l'ombra ([Disegni, strumenti avanzati](drawing-expert.md#applica-trasformazione)).
 - **«Ritaglia…»** non ritaglia un'immagine con degli effetti, che il
   ritaglio taglierebbe, e lo dice; per un'immagine ritagliata con l'ombra si
   raggruppa l'immagine e si dà l'ombra al gruppo.
@@ -210,12 +209,12 @@ fusione sta in `style`, perché i browser leggono soltanto lì
 La grammatica, il filtro e quando un filtro è di FubDraw sono in [Formato
 della scena, effetti e fusione](../reference/scene-format-effects.md).
 
-## Livelli e parti
+## Spazi e parti
 
-L'opacità nella barra viene dallo Standard, con la barra «Disponi». Gli
-effetti e la fusione vengono dall'Esperto; nel
-[Personalizzato](drawing-custom.md) li portano le parti «Ombre, bagliori e
-sfocatura» e «Metodi di fusione». A un livello che non li ha gli effetti e
+L'opacità nella barra viene nello spazio Completo, con la barra «Disponi». Gli
+effetti e la fusione vengono nel Completo; fra le
+[parti dell'editor](drawing-custom.md#che-cosa-porta-una-parte) li portano le parti «Ombre, bagliori e
+sfocatura» e «Metodi di fusione». In uno spazio che non li ha gli effetti e
 le fusioni restano nel disegno e si vedono; mancano la sezione e il campo.
 In un documento in sola lettura la sezione mostra gli effetti, e non li
 cambia.

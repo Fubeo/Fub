@@ -7,12 +7,12 @@
 > cosa cambiano la barra e il pannello, come un testo va a capo in un
 > riquadro o scorre lungo un tracciato, e che cosa entra nel file.
 
-Dal [livello Standard](drawing.md#il-livello-standard) un testo si scrive sul
+In tutti e due gli spazi di [lavoro](drawing.md#completo-e-semplice) un testo si scrive sul
 posto con lo strumento **Testo**, come descrive [Disegni](drawing.md#testo).
 Questa pagina dice il resto: le righe e i **pezzi** di una riga, cioè le
 parole con un aspetto loro, i tasti che li fanno, la barra e il pannello
-delle proprietà mentre si scrive e dopo. Dal [livello
-Esperto](drawing.md#il-livello-esperto) un testo va anche a capo da sé in un
+delle proprietà mentre si scrive e dopo. Nello [spazio
+Completo](drawing.md#completo-e-semplice) un testo va anche a capo da sé in un
 riquadro, [in area](#il-testo-in-area), o scorre lungo una linea, [su
 tracciato](#il-testo-su-tracciato). Come il file li scrive è in [formato della
 scena, testo](../reference/scene-format-text.md).
@@ -39,9 +39,21 @@ si fa più alta e tiene la sua linea di base.
   Chiuso il campo, tutto ciò che si è fatto nel testo è un passo solo del
   disegno.
 
-Il campo è una casella di testo di più righe, col controllo ortografico del
-browser. `Esc`, `Tab` e `Ctrl+Invio` o `⌘Invio` concludono, come un tocco
-fuori dal campo.
+Il campo è lo stesso editor di testo dei documenti di Word, ridotto a righe
+e pezzi. Arriva subito dopo il disegno, mentre non si scrive ancora; se non
+arriva, Fub lo dice e il testo resta com'era. `Esc`, `Tab` e `Ctrl+Invio` o
+`⌘Invio` concludono, come un tocco fuori dal campo.
+
+### Il correttore
+
+Mentre si scrive, il correttore di Fub segna una parola sbagliata con
+un'ondulata rossa e un dubbio di grammatica con una ambra, come nei
+documenti; la lingua e le opzioni sono quelle di
+[Correttore](proofing.md). Il tasto destro su un segno, o il tasto del menu
+col cursore lì, offre fino a quattro suggerimenti, «Aggiungi al dizionario»
+e «Ignora». Una correzione è una battuta del campo, quindi entra nel passo
+di Annulla del testo. Il controllo del browser resta spento, per non avere
+due ondulate sulla stessa parola.
 
 ## Formattare mentre si scrive
 
@@ -50,7 +62,7 @@ fuori dal campo.
 | `Ctrl+B` o `⌘B` | Grassetto |
 | `Ctrl+I` o `⌘I` | Corsivo |
 | `Ctrl+U` o `⌘U` | Sottolineato |
-| `Ctrl+Maiusc+X` o `⌘⇧X` | Barrato; fuori dal campo, all'Esperto, porta agli attributi |
+| `Ctrl+Maiusc+X` o `⌘⇧X` | Barrato; fuori dal campo, nel Completo, porta agli attributi |
 
 Un tasto vale per ciò che è scelto nel campo: lo accende se una parte della
 scelta non l'ha, e lo spegne se l'ha tutta. Senza scelta vale per ciò che si
@@ -58,6 +70,13 @@ scriverà lì: dentro una parola in grassetto, `Ctrl+B` fa uscire in tondo ciò
 che si scrive dopo.
 Il campo dice com'è adesso: «Grassetto attivato.», «Corsivo disattivato.». I
 comandi di formato che il browser manda al campo fanno lo stesso.
+
+Mentre si scrive, la riga delle opzioni in alto mostra il gruppo
+**Carattere**: la scelta del carattere, con la ricerca e i caratteri di Fub e
+del vault, il corpo, e grassetto, corsivo, sottolineato e barrato. Dice com'è
+ciò che è scelto nel campo, «Misto» se le parti sono diverse, e vale per ciò
+che è scelto come i tasti; aprirlo non chiude il campo, che riprende il
+fuoco dopo.
 
 Il colore e la dimensione della barra, mentre si scrive, valgono per ciò che
 è scelto nel campo. Senza scelta valgono per tutto un testo nuovo, che è
@@ -112,15 +131,15 @@ Un tocco con lo strumento Testo scrive un testo **da punto**, che va a capo
 soltanto dove si preme `Invio`. Un testo **in area** va a capo da sé, nella
 larghezza di un riquadro, come una colonna di giornale.
 
-- **Trascinare lo strumento Testo** disegna il riquadro: dal livello
-  Esperto, o nel Personalizzato con la parte «Testo in area e su tracciato».
+- **Trascinare lo strumento Testo** disegna il riquadro: nello spazio
+  Completo, o per chi monta l'editor con le sue parti, con la parte «Testo in area e su tracciato».
   È largo quanto il trascinamento, e almeno quanto il corpo; l'altezza non
   si disegna, perché segue le righe. La prima riga sta in cima, e
   l'aggancio vale per tutti e due gli angoli.
-- **Sotto l'Esperto**, o senza quella parte, trascinare lo strumento Testo
+- **Nel Semplice**, o senza quella parte, trascinare lo strumento Testo
   scrive un testo da punto dove il trascinamento comincia, come un tocco.
 - **Il campo** di un testo in area è largo quanto il riquadro e va a capo
-  mentre si scrive, a ogni livello: anche dove il riquadro non si disegna,
+  mentre si scrive, in tutti e due gli spazi: anche dove il riquadro non si disegna,
   un testo in area che c'è si scrive così. Gli a capo del campo sono quelli
   che il file scrive e che l'esportazione mostra, misurati coi caratteri del
   foglio.
@@ -171,7 +190,7 @@ del suo riquadro, non il corpo:
   nell'unità del documento.
 
 Senza quella parte la cornice scala un testo in area come ogni oggetto, e
-un testo in area che c'è va a capo da sé a ogni livello, quando si scrive.
+un testo in area che c'è va a capo da sé in tutti e due gli spazi, quando si scrive.
 
 ## Il testo su tracciato
 
@@ -180,8 +199,8 @@ forma, su una riga sola, e non va a capo. Il tracciato non si vede: dice
 soltanto dove passa il testo, che sta dalla parte sinistra del suo verso,
 sopra una linea tracciata da sinistra a destra.
 
-Il menu «Testo su tracciato», nella barra della selezione, c'è dal livello
-Esperto, o nel Personalizzato con la parte «Testo in area e su tracciato»,
+Il menu «Testo su tracciato», nella barra della selezione, c'è nello spazio
+Completo, o per chi monta l'editor con le sue parti, con la parte «Testo in area e su tracciato»,
 quando fra gli oggetti scelti c'è un testo. Ha tre comandi, un passo di
 annulla ciascuno col suo nome; una voce che adesso non serve è spenta e dice
 perché.
@@ -221,8 +240,7 @@ escono dal tracciato non si vedono.
   di formato, la barra e il pannello valgono come in ogni testo.
 - **Toccare:** il testo si prende lungo il tracciato, lettera per lettera;
   una lettera che esce dal tracciato non si vede e non si tocca.
-- **Lo strumento Nodi** ([Disegni, livello
-  Esperto](drawing-expert.md#nodi)), su un testo su tracciato, mostra i nodi
+- **Lo strumento Nodi** ([Disegni, strumenti avanzati](drawing-expert.md#nodi)), su un testo su tracciato, mostra i nodi
   del tracciato che il testo segue. Spostare i nodi e le maniglie, e i
   comandi dei nodi, cambiano quel tracciato, in un passo di annulla, e il
   testo lo segue già mentre si trascina; un altro testo che segue lo stesso
@@ -295,7 +313,12 @@ comincia, qui a metà; un browser lo disegna come il foglio.
 
 ## Chi monta l'editor
 
-Il campo sta in `apps/client/src/editors/spatial/tools/text-field.ts`, il
+Il campo sta in `apps/client/src/editors/spatial/tools/text-field.ts`, e
+scrive con il profilo a righe di Scrittura
+(`apps/client/src/scrittura/profiles/lines.ts` e `line-writer.ts`, caricati
+da `tools/writing.ts`, [ADR 0224](../decisions/0224-scrittura-il-nucleo-del-testo-ricco.md));
+il gruppo «Carattere» sta in `tools/editor/chrome/character.ts`, il
+correttore in `tools/editor/text-proof.ts`. Il
 modello delle righe e dei pezzi in `rich.ts`, la lettura e la scrittura del
 pannello in `look.ts` e `fields.ts`, i caratteri in `text.ts` e
 `picture.ts`, gli a capo del testo in area in `wrap.ts`, con le misure dei

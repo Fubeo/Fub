@@ -5,7 +5,7 @@
 > che le accompagnano, e che cosa resta scritto nel file del
 > [disegno](drawing.md).
 
-Con lo strumento Selezione, a ogni livello, gli oggetti scelti stanno in una
+Con lo strumento Selezione, in tutti e due gli spazi, gli oggetti scelti stanno in una
 cornice: otto maniglie quadrate, una per angolo e una per lato, e sopra una
 maniglia tonda, legata al lato in alto, che ruota. La cornice comprende il
 contorno. Si vede finché il disegno si modifica, e si toglie di mezzo mentre
@@ -39,14 +39,14 @@ si sposta la selezione o si sceglie col riquadro
   a penna, dei testi e delle immagini, che deformati non sarebbero più loro.
   Le forme le tengono con `Maiusc`; per gli altri `Maiusc` le lascia libere.
 - Un [testo in area](drawing-typography.md#il-testo-in-area) scelto da solo,
-  con la parte «Testo in area e su tracciato» dell'Esperto, cambia la
+  con la parte «Testo in area e su tracciato» del Completo, cambia la
   larghezza del suo riquadro, non il corpo: le maniglie tirano di lato, il
   bordo opposto resta dov'è e il testo va di nuovo a capo mentre si
   trascina. Senza quella parte la cornice lo scala come ogni oggetto.
 - Con l'aggancio alla griglia, a cornice dritta, il bordo tirato va sulla
   riga più vicina. Conta la geometria, senza il contorno, come negli
   spostamenti; `Ctrl` o `⌘` lascia libero.
-- Dal livello Standard il bordo tirato si ferma anche in linea con gli altri
+- Nello spazio Completo il bordo tirato si ferma anche in linea con gli altri
   oggetti e con la pagina, e una linea lo mostra: [Disegni, guide
   intelligenti](drawing-guides.md).
 - Un lato non scende sotto un'unità, e l'oggetto non si ribalta tirando oltre
@@ -76,8 +76,8 @@ Come per le frecce, i colpi di fila si annullano insieme.
 ## Che cosa si scrive
 
 Ogni gesto è un passo di annulla, «Ridimensionamento» o «Rotazione», e scrive
-un `transform` sugli oggetti, come la trasformazione in numeri del livello
-Esperto: la forma resta scritta com'era, lo spessore del contorno segue la
+un `transform` sugli oggetti, come la trasformazione in numeri del spazio
+Completo: la forma resta scritta com'era, lo spessore del contorno segue la
 scala, e la pagina cresce se un oggetto ne esce. Un tocco su una maniglia,
 senza tirarla, non cambia niente, ed `Esc` a metà del gesto lascia tutto
 com'era. Se un oggetto diventerebbe troppo piccolo per scriverne la
