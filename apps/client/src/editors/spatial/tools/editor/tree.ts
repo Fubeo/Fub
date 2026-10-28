@@ -687,11 +687,26 @@ export function installTree(ctx: EditorContext): void {
   };
   ctx.accessName = accessName;
 
-  /// Porta la verifica, se è aperta, al disegno di adesso. L'ordine di
-  /// lettura segue subito; i problemi di un disegno cambiato si rileggono un
-  /// momento dopo l'ultimo cambio, o subito con `now`.
+  /// Vero se la verifica si vede. Nell'ispettore dello Scrittoio la sua
+  /// scheda resta montata anche dietro un'altra, e rileggere a ogni cambio
+  /// un disegno grande che nessuno guarda ferma la pagina: si rilegge quando
+  /// torna in vista. Si parte visibili, e l'osservatore lo dice dopo.
+  let accessInView = true;
+  if (typeof IntersectionObserver !== "undefined") {
+    const viewer = new IntersectionObserver((records) => {
+      accessInView = records[records.length - 1]!.isIntersecting;
+      if (accessInView) syncAccess(true);
+      else clearTimeout(ctx.auditTimer);
+    });
+    viewer.observe(accessPanel.element);
+    ctx.life.add(() => viewer.disconnect());
+  }
+
+  /// Porta la verifica, se è aperta e si vede, al disegno di adesso. L'ordine
+  /// di lettura segue subito; i problemi di un disegno cambiato si rileggono
+  /// un momento dopo l'ultimo cambio, o subito con `now`.
   function syncAccess(now = false): void {
-    if (accessPanel.element.hidden) return;
+    if (accessPanel.element.hidden || !accessInView) return;
     const text = ctx.engine.text;
     if (ctx.audited === null || ctx.audited.text !== text) {
       clearTimeout(ctx.auditTimer);
