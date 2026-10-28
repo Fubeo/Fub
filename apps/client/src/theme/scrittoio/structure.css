@@ -535,6 +535,8 @@ body {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  border-width: 0;
+  border-inline-end-width: 1px;
 }
 
 #views-right > .declared-view-panel[hidden] {
@@ -1452,10 +1454,13 @@ body {
   overflow: auto;
 }
 
+/* Il canvas dà la misura dello scorrimento e viene dopo le righe: non prende
+   il puntatore, che va alle celle sotto. */
 .grid-canvas {
   position: relative;
   min-width: 100%;
   min-height: 100%;
+  pointer-events: none;
 }
 
 .grid-cells,
@@ -1556,6 +1561,12 @@ body {
   position: absolute;
   z-index: 7;
   pointer-events: none;
+}
+
+/* La riga delle intestazioni sta sopra tutto: anche sopra la cella aperta
+   di una riga scorsa sotto di lei, che il disegno tiene per l'editor. */
+.grid-column-header-row {
+  z-index: 8;
 }
 
 /* I bordi del file stanno sui fili della griglia, in un riquadro sopra la
@@ -1716,9 +1727,14 @@ body {
 }
 
 /* Il quadratino di riempimento sta sopra le celle che scorrono e sotto le
-   righe bloccate; il contorno del riempimento tirato non prende il puntatore. */
+   righe bloccate; il contorno del riempimento tirato e le formiche di un
+   taglio non prendono il puntatore. */
+.grid-selection,
 .grid-fill-handle,
-.grid-fill-preview {
+.grid-fill-preview,
+.grid-move-preview,
+.grid-formula-ref,
+.grid-cut-mark {
   position: absolute;
   z-index: 3;
   box-sizing: border-box;
@@ -1729,7 +1745,39 @@ body {
   cursor: crosshair;
 }
 
-.grid-fill-preview {
+/* Il bordo fra due intestazioni si tira: la guida e la misura stanno sopra
+   tutto, anche sulle intestazioni ferme, e non prendono il puntatore. */
+.grid-resize-guide,
+.grid-resize-label {
+  position: absolute;
+  z-index: 9;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.grid-resize-label {
+  white-space: nowrap;
+}
+
+.grid-viewport.resize-column {
+  cursor: col-resize;
+}
+
+.grid-viewport.resize-row {
+  cursor: row-resize;
+}
+
+/* Il bordo della selezione si tira per spostarla. */
+.grid-viewport.move-selection,
+.grid-viewport.moving {
+  cursor: move;
+}
+
+.grid-selection,
+.grid-fill-preview,
+.grid-move-preview,
+.grid-formula-ref,
+.grid-cut-mark {
   pointer-events: none;
 }
 
@@ -2539,6 +2587,31 @@ body {
 .rich-atom-note { vertical-align: super; }
 .rich-atom-note::before { content: "*"; }
 .rich-atom-note[data-number]::before { content: attr(data-number); }
+/* Un oggetto fuori dal testo (`float` della proiezione): davanti o dietro
+   sta al suo posto dal paragrafo dell'ancora, che è il riferimento e la pila;
+   «Quadrato» va all'inizio della riga col testo attorno. */
+.rich-para { position: relative; z-index: 0; }
+.rich-atom-float { position: absolute; max-width: none; overflow: visible; }
+.rich-atom-float-front { z-index: 1; }
+.rich-atom-float-behind { z-index: -1; pointer-events: none; }
+.rich-atom-float-square { position: static; float: inline-start; margin-inline-end: 0.5em; }
+/* L'inchiostro si disegna dai suoi tratti; l'evidenziatore si mescola col
+   testo che copre, come un pennarello sulla carta. */
+.rich-ink { display: block; width: 100%; height: 100%; overflow: visible; }
+.rich-ink-highlight { mix-blend-mode: multiply; }
+/* Il velo della scheda «Disegna»: sopra il documento mentre si disegna,
+   prende il puntatore e disegna l'anteprima del tratto. */
+.rich-ink-veil { position: absolute; inset: 0; z-index: 3; touch-action: none; cursor: crosshair; }
+.rich-ink-veil[data-tool="eraser"] { cursor: cell; }
+.rich-ink-veil[data-tool="lasso"] { cursor: default; }
+.rich-ink-veil > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+/* Un disegno del documento aperto nell'editor dei disegni: sopra l'oggetto,
+   o alla finestra con «Apri grande». */
+.rich-drawing-editor { position: absolute; z-index: 4; display: flex; flex-direction: column; overflow: hidden; }
+.rich-drawing-large { position: fixed; inset: 24px; width: auto !important; height: auto !important; z-index: 40; }
+.rich-drawing-bar { flex: none; display: flex; align-items: center; }
+.rich-drawing-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rich-drawing-stage { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .rich-break-page,
 .rich-break-column { display: block; height: 0; margin-block: 1em; }
 /* Il nome di un'interruzione sta sul suo filo, al centro. */
@@ -2874,16 +2947,22 @@ body {
   min-height: 0;
   container-type: inline-size;
 }
-.draw-header,
-.draw-toolbar {
+/* La barra in alto (B4) è una riga sola: menu, Annulla e Ripeti, la riga
+   delle opzioni, che manda in «…» ciò che non ci sta, ed «Esporta». */
+.draw-header {
   display: flex;
   flex: none;
-  flex-wrap: wrap;
   align-items: center;
   min-width: 0;
 }
 .draw-toolbar {
-  flex: 0 1 auto;
+  flex: 1 1 auto;
+}
+.draw-top {
+  flex: none;
+}
+.draw-top:last-child {
+  margin-inline-start: auto;
 }
 .draw-group {
   display: inline-flex;
@@ -2904,6 +2983,11 @@ body {
     min-width: 44px;
     min-height: 44px;
   }
+  /* Col dito le caselle della colonna sono bersagli da 44 px. */
+  .kit-rail-slot {
+    width: 44px;
+    height: 44px;
+  }
 }
 .draw-zoom-level {
   min-width: 64px;
@@ -2913,6 +2997,63 @@ body {
    il nome, fino a un tetto, e coi puntini oltre. Lo stato resta intero. */
 .draw-layer-button {
   max-width: 14rem;
+}
+.draw-pen-choice {
+  max-width: 12rem;
+}
+.draw-pen-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* La galleria delle penne: due elenchi in colonna, ogni penna con
+   l'anteprima del tratto accanto al nome. */
+.draw-pen-gallery {
+  display: flex;
+  flex-direction: column;
+  width: 16rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.draw-pen-gallery-list {
+  display: flex;
+  flex-direction: column;
+}
+.draw-pen-gallery-item {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: start;
+}
+.draw-pen-preview {
+  flex: none;
+  width: 60px;
+  height: 28px;
+}
+.draw-pen-saved {
+  display: flex;
+  align-items: center;
+}
+.draw-pen-saved-remove {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+/* La misura: il campo e il cursore uno accanto all'altro. */
+.draw-pen-size {
+  display: flex;
+  align-items: center;
+}
+.draw-pen-size-slider {
+  width: 7rem;
+}
+/* I campi della misura e dell'opacità hanno l'etichetta nascosta: una
+   colonna sola, larga per «200» e «100 %», che non si stringe nella barra. */
+.draw-pen-size > .kit-number,
+.draw-pen-opacity {
+  flex: none;
+  grid-template-columns: 4.5rem;
 }
 .draw-layer-name {
   min-width: 0;
@@ -3045,6 +3186,57 @@ body {
    uniscono. */
 .draw-surface[data-tool="builder"][data-region] {
   cursor: copy;
+}
+/* Sopra la punta che si vede, il cursore è la punta. */
+.draw-surface[data-nib] {
+  cursor: none;
+}
+/* La Mano prende e trascina la vista; Spazio tenuto la presta a ogni
+   strumento. La Lente ingrandisce. */
+.draw-surface[data-tool="hand"],
+.draw-surface[data-view="grab"] {
+  cursor: grab;
+}
+.draw-surface[data-view="grabbing"] {
+  cursor: grabbing;
+}
+.draw-surface[data-tool="zoom"] {
+  cursor: zoom-in;
+}
+/* Con l'interfaccia nascosta (Ctrl+.) resta il foglio. */
+.draw-editor[data-bare] .draw-header,
+.draw-editor[data-bare] .draw-rail,
+.draw-editor[data-bare] .draw-arrange {
+  display: none;
+}
+/* Il navigatore, nell'angolo in basso a destra del foglio. */
+.draw-navigator {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 168px;
+  height: 120px;
+  cursor: pointer;
+  touch-action: none;
+}
+.draw-navigator[hidden],
+.draw-editor[data-bare] .draw-navigator {
+  display: none;
+}
+.draw-navigator-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Il riquadro che la Lente inquadra, sopra il foglio. */
+.draw-zoom-box {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 1;
 }
 /* Sopra una maniglia della cornice, e mentre la si tira: la direzione in cui
    ridimensiona, o la presa che ruota. */
@@ -3433,8 +3625,8 @@ body {
   max-width: calc(100% - 40px);
 }
 /* Accanto alla selezione, la barra parte dall'angolo del foglio e l'editor
-   la sposta dove va (`tools/bar.ts`). Durante un gesto non si vede, ma
-   tiene il suo posto e le sue misure. */
+   la sposta dove va (`tools/bar.ts`). Durante un gesto o uno zoom non si
+   vede, ma tiene il suo posto e le sue misure. */
 .draw-stage > .draw-arrange[data-beside],
 .draw-stage[data-rulers] > .draw-arrange[data-beside] {
   top: 0;
@@ -3442,6 +3634,10 @@ body {
 }
 .draw-arrange[data-gesture] {
   visibility: hidden;
+}
+/* Oltre la sesta, le azioni della barra stanno nel suo «…» (B7). */
+.draw-arrange > [data-more] {
+  display: none;
 }
 /* Il campo dell'opacità della barra: il numero, largo quattro cifre e un
    poco di più per «Misto», e il «%» accanto, alti come i pulsanti. */
@@ -3775,10 +3971,59 @@ body {
    sotto il foglio. Una riga dell'albero misura almeno 44 px: è un bersaglio
    come gli altri, e l'albero virtualizzato conta su quell'altezza. */
 .draw-body {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   flex: 1;
   min-width: 0;
   min-height: 0;
+}
+/* La colonna degli strumenti, a sinistra del foglio: scorre in verticale
+   quando la finestra è bassa; sotto la colonna, le immagini del vault. */
+.draw-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-width: 0;
+  border-inline-end-width: 1px;
+}
+/* «Completo», in fondo alla colonna dello spazio Semplice. */
+.draw-rail-full {
+  flex: none;
+  min-height: 44px;
+  margin-block-start: auto;
+  white-space: nowrap;
+}
+/* Su uno schermo stretto (`data-narrow`: finestra fino a 700 px, o riquadro
+   fino a 480) la colonna va sotto il foglio, in una riga che scorre di lato. */
+.draw-editor[data-narrow] .draw-body {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.draw-editor[data-narrow] .draw-stage {
+  grid-column: 1;
+  grid-row: 1;
+}
+.draw-editor[data-narrow] .draw-dock {
+  grid-column: 2;
+  grid-row: 1;
+}
+.draw-editor[data-narrow] .draw-rail {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  flex-direction: row;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-inline-end-width: 0;
+  border-block-start-width: 1px;
+}
+.draw-editor[data-narrow] .draw-rail-full {
+  margin-block-start: 0;
+  margin-inline-start: auto;
 }
 /* Il lato del bordo segue la disposizione, che è della struttura; il colore
    e il tratto sono della pelle. Gli attributi vogliono più spazio dei nomi
@@ -3787,14 +4032,14 @@ body {
 .draw-dock {
   display: flex;
   flex-direction: column;
-  flex: 0 0 min(20rem, 40%);
+  width: min(20rem, 40cqi);
   min-width: 0;
   min-height: 0;
   border-width: 0;
   border-inline-start-width: 1px;
 }
 .draw-dock[data-wide] {
-  flex-basis: min(26rem, 45%);
+  width: min(26rem, 45cqi);
 }
 /* I pannelli aperti si dividono l'altezza, con un filo fra loro; le
    proprietà, che hanno più da mostrare, ne prendono il doppio. */
@@ -3816,8 +4061,19 @@ body {
 .draw-properties {
   flex-grow: 2;
 }
-.draw-dock > :not([hidden]) ~ :not([hidden]) {
+.draw-dock > :not([hidden]) ~ :not([hidden]),
+.draw-sheet > :not([hidden]) ~ :not([hidden]) {
   border-block-start-width: 1px;
+}
+/* Una scheda del disegno nell'ispettore (C1): i suoi pannelli in colonna,
+   come nel dock, ciascuno alto quanto ciò che mostra; scorre l'ispettore. */
+.draw-sheet {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-sheet > * {
+  flex: none;
 }
 .draw-objects-header {
   display: flex;
@@ -4762,6 +5018,10 @@ textarea.draw-inspector-input {
   grid-column: 1 / -1;
   justify-self: end;
 }
+.draw-properties-export {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
 .draw-properties-number,
 .draw-properties-paint {
   display: flex;
@@ -5169,13 +5429,31 @@ textarea.draw-properties-input {
 }
 @container (max-width: 36rem) {
   .draw-body {
-    flex-direction: column;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .draw-body:has(> .draw-dock:not([hidden])) {
+    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
   }
   .draw-dock,
   .draw-dock[data-wide] {
-    flex: 0 0 40%;
+    grid-column: 1 / -1;
+    width: auto;
     border-inline-start-width: 0;
     border-block-start-width: 1px;
+  }
+  .draw-editor[data-narrow] .draw-body,
+  .draw-editor[data-narrow] .draw-body:has(> .draw-dock:not([hidden])) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .draw-editor[data-narrow] .draw-body:has(> .draw-dock:not([hidden])) {
+    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr) auto;
+  }
+  .draw-editor[data-narrow] .draw-dock {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .draw-editor[data-narrow] .draw-rail {
+    grid-row: -2;
   }
 }
 /* La superficie del disegno nella shell: una riga d'avviso in cima, quando il

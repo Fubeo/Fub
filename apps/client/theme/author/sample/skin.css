@@ -949,6 +949,424 @@ kbd,
   padding-right: calc(var(--space-4) - var(--space-2) + 20px + var(--space-3));
 }
 
+/* Il campo numerico: etichetta corta a sinistra, il numero coi numeri
+   tabellari, l'unità dentro il bordo e l'errore sotto. */
+.kit-number {
+  display: grid;
+  grid-template-columns: minmax(0, 72px) minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
+  min-width: 0;
+}
+.kit-number-label {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+}
+.kit-number.scrubbing .kit-number-label {
+  color: var(--accent);
+}
+.kit-number-box {
+  display: flex;
+  align-items: center;
+  height: var(--control-h);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+}
+.kit-number-box:hover {
+  border-color: var(--text);
+}
+.kit-number-box:has(> .kit-number-input:focus-visible) {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 4px var(--accent-veil);
+}
+.kit-number-box:has(> .kit-number-input[aria-invalid="true"]) {
+  border-color: var(--danger);
+}
+.kit-number-box:has(> .kit-number-input:disabled) {
+  opacity: 0.4;
+}
+.kit-number-input,
+.kit-number-input:hover,
+.kit-number-input:focus-visible,
+.kit-number-input:disabled {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--space-3);
+  border: none;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.kit-number-unit {
+  padding-right: var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.kit-number-error {
+  grid-column: 2;
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+/* Il selettore del colore. I campioni sono tondi e uguali: il nome lo dicono
+   il suggerimento e la spunta, non la forma. */
+.kit-color {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 248px;
+  padding: var(--space-4);
+}
+.kit-color-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.kit-color-group-title {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+}
+.kit-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.kit-color-swatch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+}
+.kit-color-swatch:hover {
+  border-color: var(--outline);
+}
+.kit-color-swatch:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.kit-color-chip {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--text);
+  border-radius: 50%;
+}
+.kit-color-chip.none {
+  background: linear-gradient(135deg, transparent 45%, var(--danger) 45% 55%, transparent 55%);
+}
+.kit-color-chip.mixed {
+  background: linear-gradient(90deg, var(--text) 50%, var(--bg-input) 50%);
+}
+.kit-color-check {
+  position: absolute;
+  color: var(--sheet);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  opacity: 0;
+}
+.kit-color-swatch.selected {
+  border-color: var(--accent);
+}
+.kit-color-swatch.selected .kit-color-check {
+  opacity: 1;
+}
+.kit-color-area,
+.kit-color-hue,
+.kit-color-alpha {
+  border-radius: var(--radius-sm);
+}
+.kit-color-hue,
+.kit-color-alpha {
+  height: 12px;
+}
+.kit-color-area:focus-visible,
+.kit-color-hue:focus-visible,
+.kit-color-alpha:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.kit-color-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #000000;
+}
+.kit-color-code {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.kit-color-format,
+.kit-color-input {
+  height: var(--control-h);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.kit-color-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 var(--space-3);
+  font-variant-numeric: tabular-nums;
+}
+.kit-color-input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.kit-color-dropper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+}
+.kit-color-dropper:hover {
+  background: var(--bg-hover);
+}
+/* Il pozzo: il colore tondo e il suo nome. */
+.kit-color-well-button {
+  display: inline-flex;
+  gap: var(--space-3);
+  align-items: center;
+  height: var(--control-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.kit-color-well-button:hover {
+  border-color: var(--text);
+}
+.kit-color-well-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.kit-color-well.large .kit-color-well-button {
+  height: 44px;
+  font-size: var(--text-base);
+}
+.kit-color-well.large .kit-color-chip {
+  width: 28px;
+  height: 28px;
+}
+
+/* La scelta del carattere: la ricerca in cima, le famiglie sotto, ognuna nel
+   suo carattere; i gruppi sono titoletti. */
+.kit-font {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 260px;
+  padding: var(--space-4);
+}
+.kit-font-list {
+  max-height: 320px;
+  overflow: auto;
+}
+.kit-font-group {
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+}
+.kit-font-item {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+}
+.kit-font-name {
+  overflow: hidden;
+  font-size: var(--text-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-font-note,
+.kit-font-empty {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+.kit-font-button {
+  display: inline-flex;
+  align-items: center;
+  max-width: 180px;
+  height: var(--control-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+}
+.kit-font-button:hover {
+  border-color: var(--text);
+}
+.kit-font-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.kit-font-button .kit-font-name {
+  font-size: var(--text-sm);
+}
+
+/* La colonna degli strumenti: caselle quadrate a gruppi, separati da un filo;
+   lo strumento scelto ha il fondo tenue dell'accento, non un bordo. */
+.kit-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+.kit-rail[data-orientation="horizontal"] {
+  flex-direction: row;
+}
+.kit-rail-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.kit-rail[data-orientation="horizontal"] .kit-rail-group {
+  flex-direction: row;
+}
+.kit-rail-rule {
+  align-self: stretch;
+  border-top: 1px solid var(--outline);
+}
+.kit-rail[data-orientation="horizontal"] .kit-rail-rule {
+  border-top: none;
+  border-left: 1px solid var(--outline);
+}
+.kit-rail-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.kit-rail[data-size="large"] .kit-rail-slot {
+  width: 44px;
+  height: 44px;
+}
+.kit-rail-slot:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-rail-slot:active {
+  background: var(--overlay-active);
+}
+.kit-rail-slot[aria-pressed="true"],
+.kit-rail-slot[aria-pressed="true"]:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.kit-rail-slot:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+/* Nella colonna le icone sono da 20 px, sulla stessa griglia di 24. */
+.kit-rail-icon {
+  display: inline-flex;
+}
+.kit-rail-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.kit-rail-corner {
+  border-top: 4px solid transparent;
+  border-right: 4px solid currentColor;
+  opacity: 0.6;
+}
+.kit-rail-flyout {
+  padding: var(--space-2);
+}
+.kit-rail-flyout-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 180px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.kit-rail-flyout-label {
+  flex: 1;
+}
+.kit-rail-flyout-keys {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+/* La barra delle opzioni: una riga che non va a capo; ciò che non ci sta va
+   in «…». */
+.kit-options {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.kit-options-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.kit-options-more {
+  height: var(--control-h);
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.kit-options-more:hover {
+  background: var(--overlay-hover);
+}
+.kit-options-more:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+.kit-options-overflow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
 .kit-field-icon {
   display: inline-flex;
   grid-row: 1;
@@ -4847,78 +5265,6 @@ kbd,
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: 1px;
 }
-/* La griglia della Live. Le intestazioni di riga escono nel margine: la prima
-   colonna resta a filo del testo, come in Lettura, e le maniglie compaiono
-   accanto senza spostarla. */
-.cm-editor .cm-content .cm-md-grid-block {
-  padding: 0;
-}
-.cm-editor .cm-content .cm-md-grid {
-  margin-left: calc(-1 * var(--space-7));
-  padding: 0;
-}
-.cm-editor .cm-content .cm-md-grid table {
-  display: table;
-  margin: 0;
-  overflow: visible;
-}
-.cm-editor .cm-content .cm-md-grid .cm-md-grid-corner,
-.cm-editor .cm-content .cm-md-grid .cm-md-grid-letter,
-.cm-editor .cm-content .cm-md-grid .cm-md-grid-rowhead {
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--doc-gutter-fg);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  line-height: var(--leading-relaxed);
-  text-align: center;
-  vertical-align: middle;
-}
-.cm-editor .cm-content .cm-md-grid .cm-md-grid-corner,
-.cm-editor .cm-content .cm-md-grid .cm-md-grid-rowhead {
-  width: var(--space-7);
-  min-width: var(--space-7);
-}
-.cm-editor .cm-content .cm-md-grid .cm-md-grid-letter.is-selected,
-.cm-editor .cm-content .cm-md-grid .cm-md-grid-rowhead.is-selected {
-  color: var(--accent);
-  font-weight: var(--weight-bold);
-}
-.cm-editor .cm-content .cm-md-grid:focus-within .cm-md-grid-cell.is-selected {
-  background: var(--accent-veil);
-}
-/* La testata scelta tiene il suo fondo sotto il velo, o sparirebbe la riga
-   d'intestazione proprio mentre la si seleziona. */
-.cm-editor .cm-content .cm-md-grid:focus-within .cm-md-grid-head.is-selected {
-  background: linear-gradient(var(--accent-veil), var(--accent-veil)), var(--sheet-2);
-}
-.cm-editor .cm-content .cm-md-grid:focus-within .cm-md-grid-cell.is-active {
-  border-radius: 2px;
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-.cm-editor .cm-content .cm-md-grid-add {
-  padding: var(--space-1) var(--space-4);
-  border-radius: var(--radius-chip);
-  color: var(--muted);
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
-}
-.cm-editor .cm-content .cm-md-grid-add:hover {
-  background: var(--sheet-2);
-  color: var(--text);
-}
-.cm-editor .cm-content .cm-md-grid-add:active {
-  background: var(--accent-wash);
-  color: var(--accent);
-}
-.cm-editor .cm-content .cm-md-grid-adders {
-  gap: var(--space-2);
-  min-height: calc(var(--text-reading) * var(--leading-relaxed));
-  padding-left: var(--space-7);
-  align-items: center;
-}
 
 /* ── Filetti, formule, immagini ──────────────────────────────────────────── */
 
@@ -5381,6 +5727,108 @@ kbd,
     var(--shadow-3);
 }
 
+/* ── skin/tabella.css ───────────────────────────────────────────────────── */
+
+/* ── La Tabella ──────────────────────────────────────────────────────────
+   Una pelle per la cornice delle tabelle (`src/tabella/frame/`): le lettere
+   delle colonne, i numeri delle righe, la selezione, la cella attiva, la
+   maniglia di riempimento e i «+». L'aspetto del contenuto resta del
+   formato: qui c'è soltanto la cornice. */
+
+/* La griglia della Live, cioè la cornice della Tabella attorno a una tabella
+   Markdown. Le intestazioni di riga escono nel margine: la prima
+   colonna resta a filo del testo, come in Lettura, e le maniglie compaiono
+   accanto senza spostarla. */
+.cm-editor .cm-content .tb-frame {
+  padding: 0;
+}
+.cm-editor .cm-content .tb-grid {
+  margin-left: calc(-1 * var(--space-7));
+  padding: 0;
+}
+.cm-editor .cm-content .tb-grid table {
+  display: table;
+  margin: 0;
+  overflow: visible;
+}
+.cm-editor .cm-content .tb-grid .tb-corner,
+.cm-editor .cm-content .tb-grid .tb-letter,
+.cm-editor .cm-content .tb-grid .tb-rowhead {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--doc-gutter-fg);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-relaxed);
+  text-align: center;
+  vertical-align: middle;
+}
+.cm-editor .cm-content .tb-grid .tb-corner,
+.cm-editor .cm-content .tb-grid .tb-rowhead {
+  width: var(--space-7);
+  min-width: var(--space-7);
+}
+.cm-editor .cm-content .tb-grid .tb-letter.is-selected,
+.cm-editor .cm-content .tb-grid .tb-rowhead.is-selected {
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+.cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-selected {
+  background: var(--accent-veil);
+}
+/* La testata scelta tiene il suo fondo sotto il velo, o sparirebbe la riga
+   d'intestazione proprio mentre la si seleziona. */
+.cm-editor .cm-content .tb-grid:focus-within .tb-head.is-selected {
+  background: linear-gradient(var(--accent-veil), var(--accent-veil)), var(--sheet-2);
+}
+.cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-active {
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.cm-editor .cm-content .tb-add {
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.cm-editor .cm-content .tb-add:hover {
+  background: var(--sheet-2);
+  color: var(--text);
+}
+.cm-editor .cm-content .tb-add:active {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.cm-editor .cm-content .tb-adders {
+  gap: var(--space-2);
+  min-height: calc(var(--text-reading) * var(--leading-relaxed));
+  padding-left: var(--space-7);
+  align-items: center;
+}
+/* La maniglia di riempimento all'angolo della selezione, e le celle che il
+   riempimento raggiungerà mentre la si tira. */
+.cm-editor .cm-content .tb-grid .tb-fill {
+  border-color: var(--doc-bg);
+  border-radius: 1px;
+  background: var(--accent);
+}
+.cm-editor .cm-content .tb-grid:focus-within .tb-cell.is-fill {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+/* Le celle scelte di una tabella del documento (`editors/rich/cell-selection.ts`):
+   il velo d'accento sopra il fondo della cella, che resta quello del file, e
+   nessuna selezione di testo del browser che le attraversi. È un segno della
+   Tabella, non l'aspetto del file: vale con ogni aspetto. */
+.has-cell-selection .is-cell-selected {
+  box-shadow: inset 0 0 0 100vmax var(--accent-veil);
+}
+.has-cell-selection ::selection {
+  background: transparent;
+}
+
 /* ── skin/editors.css ───────────────────────────────────────────────────── */
 
 /* Le superfici dei formati: canvas, base, foglio di calcolo. */
@@ -5782,7 +6230,10 @@ kbd,
 .grid-viewport {
   outline: none;
 }
-.grid-viewport:focus-visible {
+/* Niente anello attorno al riquadro: il fuoco è il bordo della cella attiva,
+   che la griglia indica con `aria-activedescendant`. Senza una cella attiva
+   da mostrare (ogni asse nascosto) l'anello torna. */
+.grid-viewport:focus-visible:not([aria-activedescendant]) {
   box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
 }
 .grid-header,
@@ -5803,6 +6254,21 @@ kbd,
 .grid-header.selected {
   box-shadow: inset 0 0 0 999px var(--accent-veil);
   color: var(--accent);
+}
+/* E un filo d'accento sul lato verso le celle. */
+.grid-column-header.selected {
+  box-shadow: inset 0 -2px 0 var(--accent), inset 0 0 0 999px var(--accent-veil);
+}
+.grid-row-header.selected {
+  box-shadow: inset -2px 0 0 var(--accent), inset 0 0 0 999px var(--accent-veil);
+}
+/* Dove ci sono colonne o righe nascoste, una tacca doppia sull'intestazione
+   che le segue. */
+.grid-column-header.after-hidden {
+  border-left: 3px double var(--muted);
+}
+.grid-row-header.after-hidden {
+  border-top: 3px double var(--muted);
 }
 /* Il filo del blocco è quello di Excel. */
 .grid-freeze {
@@ -5915,6 +6381,14 @@ kbd,
 .grid-row .active {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
+/* Dentro un intervallo la cella attiva resta bianca, con un filo: il bordo
+   forte è quello del rettangolo. */
+.grid-viewport.ranged .grid-row .active {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.grid-selection {
+  border: 2px solid var(--accent);
+}
 /* Il quadratino all'angolo della selezione, e il riempimento tirato a
    tratteggio come in Excel. */
 .grid-fill-handle {
@@ -5923,6 +6397,73 @@ kbd,
 }
 .grid-fill-preview {
   border: 2px dashed var(--accent);
+}
+/* Dove andrà la selezione tirata per il bordo. */
+.grid-move-preview {
+  border: 2px solid var(--muted);
+}
+/* I riferimenti della formula aperta: ogni intervallo è contornato del
+   colore che il riferimento ha nel testo. */
+.grid-formula-ref-1 {
+  border: 2px solid var(--doc-author-1);
+}
+.grid-formula-ref-2 {
+  border: 2px solid var(--doc-author-2);
+}
+.grid-formula-ref-3 {
+  border: 2px solid var(--doc-author-3);
+}
+.grid-formula-ref-4 {
+  border: 2px solid var(--doc-author-4);
+}
+.grid-formula-ref-5 {
+  border: 2px solid var(--doc-author-5);
+}
+.grid-formula-ref-6 {
+  border: 2px solid var(--doc-author-6);
+}
+.grid-cell-editor .cm-formula-ref-1,
+.grid-formula-editor .cm-formula-ref-1 {
+  color: var(--doc-author-1);
+}
+.grid-cell-editor .cm-formula-ref-2,
+.grid-formula-editor .cm-formula-ref-2 {
+  color: var(--doc-author-2);
+}
+.grid-cell-editor .cm-formula-ref-3,
+.grid-formula-editor .cm-formula-ref-3 {
+  color: var(--doc-author-3);
+}
+.grid-cell-editor .cm-formula-ref-4,
+.grid-formula-editor .cm-formula-ref-4 {
+  color: var(--doc-author-4);
+}
+.grid-cell-editor .cm-formula-ref-5,
+.grid-formula-editor .cm-formula-ref-5 {
+  color: var(--doc-author-5);
+}
+.grid-cell-editor .cm-formula-ref-6,
+.grid-formula-editor .cm-formula-ref-6 {
+  color: var(--doc-author-6);
+}
+/* Le formiche di un taglio: il tratteggio fitto dice «si sposta». Stanno
+   ferme: un moto che non finisce è ammesso solo per un lavoro in corso. */
+.grid-cut-mark {
+  border: 2px dashed var(--accent);
+}
+/* La guida di una misura tirata, e la misura accanto. */
+.grid-resize-guide {
+  background: var(--accent);
+}
+.grid-resize-label {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
 }
 .grid-cell-editor {
   border: 2px solid var(--accent);
@@ -5950,6 +6491,22 @@ kbd,
   border-bottom: 1px solid var(--border);
   color: var(--text);
   font-size: var(--text-sm);
+}
+/* La bozza la cui cella è cambiata sotto: la domanda e i due pulsanti. */
+.grid-draft-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-9);
+  background: var(--warning-wash);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.grid-draft-notice > p {
+  flex: 1 1 auto;
+  margin: 0;
 }
 /* Le schede dei fogli stanno sotto la griglia, come nei fogli di calcolo. */
 .grid-sheets {
@@ -7103,6 +7660,22 @@ kbd,
 .rich-findbar-close {
   color: var(--muted);
 }
+.rich-drawing-editor {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-menu);
+  background: var(--sheet);
+  box-shadow: var(--shadow-3);
+}
+.rich-drawing-bar {
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.rich-drawing-title {
+  color: var(--muted);
+}
 .rich-strip-panel {
   gap: var(--space-4);
   padding: var(--space-4);
@@ -7613,6 +8186,15 @@ kbd,
 .draw-toolbar {
   gap: var(--space-2) var(--space-5);
 }
+/* La colonna degli strumenti: lo stesso fondo della barra, un filo verso il
+   foglio. */
+.draw-rail {
+  gap: var(--space-2);
+  padding: var(--space-1);
+  background: var(--bg-elev);
+  border-style: solid;
+  border-color: var(--border);
+}
 .draw-group {
   gap: var(--space-1);
 }
@@ -7629,15 +8211,13 @@ kbd,
   color: var(--text);
 }
 /* Lo strumento, il colore e lo spessore scelti, e nelle proprietà
-   l'opzione premuta: il fondo attivo, e un filo sotto nel colore del testo,
-   che dice la scelta anche a chi non distingue i due fondi. */
+   l'opzione premuta: il fondo tenue dell'accento e l'icona nell'accento,
+   come nella colonna degli strumenti; non un bordo. Lo dicono due segni, il
+   fondo e il colore del segno, non uno solo. */
 .draw-button[aria-checked="true"],
 .draw-button[aria-pressed="true"] {
-  background: var(--bg-active);
-  color: var(--text);
-  box-shadow:
-    inset 0 -3px 0 var(--text),
-    var(--shadow-sm);
+  background: var(--accent-wash);
+  color: var(--accent);
 }
 /* Un'enfasi che una parte della scelta ha e un'altra no: il filo sotto a
    tratti, a metà fra premuto e no. */
@@ -7657,6 +8237,93 @@ kbd,
 .draw-zoom-level {
   padding: 0 var(--space-2);
   font-size: var(--text-sm);
+}
+/* «Esporta»: l'icona e la parola, l'unico pulsante della barra in alto con
+   un nome scritto. */
+.draw-export {
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.draw-export-text {
+  font-size: var(--text-sm);
+}
+/* La penna della Penna e il modo della Gomma: pulsanti col nome scritto,
+   come «Esporta», perché le penne e i modi si distinguono dal nome. */
+.draw-pen-choice,
+.draw-eraser-mode {
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+.draw-pen-name,
+.draw-eraser-mode-name {
+  color: inherit;
+}
+/* La galleria delle penne: l'anteprima è inchiostro su carta, bianca anche
+   col buio, come il foglio. La penna scelta ha il bordo d'accento. */
+.draw-pen-gallery {
+  gap: var(--space-1);
+  padding: var(--space-3);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.draw-pen-gallery-heading {
+  margin: var(--space-2) 0 var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+.draw-pen-gallery-list {
+  gap: var(--space-1);
+}
+.draw-pen-gallery-item,
+.draw-pen-saved-remove,
+.draw-pen-gallery-save {
+  gap: var(--space-2);
+  padding: var(--space-1);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px transparent;
+}
+.draw-pen-gallery-item:hover,
+.draw-pen-saved-remove:hover,
+.draw-pen-gallery-save:hover:not(:disabled) {
+  background: var(--overlay-hover);
+}
+.draw-pen-gallery-item[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.draw-pen-gallery-item:focus-visible,
+.draw-pen-saved-remove:focus-visible,
+.draw-pen-gallery-save:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.draw-pen-gallery-save:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+.draw-pen-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: #ffffff;
+}
+.draw-pen-gallery-empty {
+  margin: 0;
+  padding: var(--space-1);
+  color: var(--muted);
+}
+.draw-pen-gallery-save {
+  margin-top: var(--space-2);
+  text-align: start;
+}
+.draw-pen-size {
+  gap: var(--space-2);
 }
 /* Il pulsante dei livelli: l'icona, il nome e lo stato in corsivo, che si
    distingue dal nome anche senza colore. */
@@ -7686,6 +8353,17 @@ kbd,
   font-weight: var(--weight-bold);
   line-height: 1;
 }
+/* Il correttore nel testo che si scrive: l'ondulata dei documenti, rossa
+   per l'ortografia e ambra per la grammatica. La carta è bianca in tutti e
+   due i lumi, e così i colori. */
+.draw-text-proof-spelling {
+  text-decoration: underline wavy #c60817 1px;
+  text-underline-offset: 3px;
+}
+.draw-text-proof-grammar {
+  text-decoration: underline wavy #9a5b00 1px;
+  text-underline-offset: 3px;
+}
 .draw-title {
   gap: var(--space-1) var(--space-3);
   color: var(--muted);
@@ -7697,16 +8375,41 @@ kbd,
   font-size: var(--text-base);
 }
 .draw-surface {
-  background: var(--bg);
+  background: var(--draw-desk, var(--bg));
+}
+.draw-navigator {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--draw-desk, var(--bg));
+  box-shadow: var(--shadow-sm);
+}
+.draw-navigator-sheets {
+  fill: #ffffff;
+  stroke: var(--border);
+  stroke-width: 1px;
+}
+.draw-navigator-shapes {
+  fill: color-mix(in oklch, var(--muted) 35%, transparent);
+}
+.draw-navigator-view {
+  fill: color-mix(in oklch, var(--accent) 12%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1.5px;
+}
+.draw-zoom-box {
+  border: 1px dashed var(--accent);
+  background: color-mix(in oklch, var(--accent) 8%, transparent);
 }
 .draw-surface[data-unbounded],
 .draw-page {
   background: #ffffff;
 }
+/* La carta posa sulla scrivania con un'ombra leggera, uguale nei due temi:
+   la carta è bianca in tutti e due. */
 .draw-page {
   box-shadow:
     0 0 0 1px var(--border),
-    var(--shadow-sm);
+    0 1px 3px rgb(0 0 0 / 0.18);
 }
 /* Il nome di una tavola, sul tavolo sopra di lei: quello della tavola
    scelta più scuro. */
@@ -7814,14 +8517,15 @@ kbd,
   font-size: var(--text-sm);
 }
 
-/* La barra della selezione galleggia sul disegno: il fondo della barra in
-   cima, un filo e un'ombra che la staccano da ciò che copre. */
+/* La barra della selezione galleggia sul disegno: una pillola col fondo
+   della barra in cima, un filo e un'ombra che la staccano da ciò che
+   copre. */
 .draw-arrange {
   gap: var(--space-1);
   padding: var(--space-1);
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   box-shadow: var(--shadow-md);
 }
 
@@ -8753,6 +9457,11 @@ button.draw-isolation-crumb:hover {
   gap: var(--space-1);
   padding: 0 var(--space-4);
 }
+/* Ciò che sta fra il titolo e le sezioni, come il titolo del disegno, ha
+   il margine del titolo. */
+.draw-properties-lead {
+  padding: var(--space-2) var(--space-4) 0;
+}
 .draw-properties-title {
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
@@ -8847,7 +9556,8 @@ button.draw-isolation-crumb:hover {
 .draw-properties-bar {
   gap: var(--space-1);
 }
-.draw-properties-apply {
+.draw-properties-apply,
+.draw-properties-export {
   padding: 0 var(--space-4);
   border: 1px solid var(--border);
   color: var(--text);
@@ -13407,6 +14117,134 @@ h6.ui-heading {
   color: var(--muted);
   font-size: var(--text-sm);
 }
+/* La ricerca in cima all'elenco dei tasti, la frase quando non trova niente,
+   e ciò che è cambiato, chiuso finché non lo si apre. */
+.modale .keys-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+.modale .keys-search input {
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+}
+.modale .keys-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.modale .keys-empty:empty {
+  display: none;
+}
+.modale .keys-changed {
+  font-size: var(--text-sm);
+}
+.modale .keys-changed summary {
+  min-height: 44px;
+  padding: var(--space-2) 0;
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+}
+/* La ricerca dei comandi del disegno: il campo, l'elenco che scorre, e per
+   ogni comando il nome, da dove viene, il tasto e, se è spento, perché. */
+.draw-commands-dialog {
+  width: min(560px, 100%);
+}
+.draw-commands {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.draw-commands-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+.draw-commands-field input {
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+}
+.draw-commands-list {
+  max-height: 50vh;
+  overflow: auto;
+}
+.draw-commands-row {
+  flex-wrap: wrap;
+}
+.draw-commands-label {
+  flex: 1;
+}
+.draw-commands-path,
+.draw-commands-key,
+.draw-commands-why {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.draw-commands-why {
+  flex-basis: 100%;
+}
+.draw-commands-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.draw-commands-empty:empty {
+  display: none;
+}
+/* «Personalizza la barra…»: una riga per strumento, con la casella, il
+   nome e le frecce; la riga presa si trascina. */
+.draw-toolbar-dialog {
+  width: min(420px, 100%);
+}
+.draw-toolbar-custom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.draw-toolbar-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 50vh;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.draw-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 44px;
+  border-bottom: 1px solid var(--border);
+  cursor: grab;
+}
+.draw-toolbar-row label {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+}
+.draw-toolbar-move {
+  min-width: 44px;
+  min-height: 44px;
+}
+.draw-toolbar-reset {
+  align-self: flex-start;
+  min-height: 44px;
+}
 /* «Aggiorna dalla libreria» e «Rendi modificabile»: prima e dopo, sullo
    stesso fondo chiaro dei riquadri del pannello, col nome sotto in tinta
    tenue. */
@@ -13501,7 +14339,8 @@ h6.ui-heading {
 }
 .modale .draw-guides-remove,
 .modale .draw-guides-tools button,
-.modale .draw-touch-tools button {
+.modale .draw-touch-tools button,
+.draw-hand-panel .draw-touch-tools button {
   min-height: 44px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -13523,11 +14362,13 @@ h6.ui-heading {
   gap: var(--space-2);
 }
 .modale .draw-guides-tools button,
-.modale .draw-touch-tools button {
+.modale .draw-touch-tools button,
+.draw-hand-panel .draw-touch-tools button {
   padding: var(--space-2) var(--space-4);
 }
 .modale .draw-guides-tools button:disabled,
-.modale .draw-touch-tools button:disabled {
+.modale .draw-touch-tools button:disabled,
+.draw-hand-panel .draw-touch-tools button:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -13547,7 +14388,8 @@ h6.ui-heading {
    spazio non basta; sotto, il riquadro dove provare la penna, che non fa
    scorrere né ingrandire la pagina mentre ci si disegna. Il tratto
    d'esempio è più tenue di quello che la penna lascia, che è il vero. */
-.modale .draw-touch-group {
+.modale .draw-touch-group,
+.draw-hand-panel .draw-touch-group {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -13556,11 +14398,13 @@ h6.ui-heading {
   padding: 0;
   border: 0;
 }
-.modale .draw-touch-group legend {
+.modale .draw-touch-group legend,
+.draw-hand-panel .draw-touch-group legend {
   padding: 0 0 var(--space-2);
   font-weight: var(--weight-bold);
 }
-.modale .palette-form .draw-touch-check {
+.modale .palette-form .draw-touch-check,
+.draw-hand-panel .draw-touch-check {
   flex-direction: row;
   align-items: center;
   gap: var(--space-3);
@@ -13568,24 +14412,28 @@ h6.ui-heading {
   font-weight: normal;
   cursor: pointer;
 }
-.modale .draw-touch-check input {
+.modale .draw-touch-check input,
+.draw-hand-panel .draw-touch-check input {
   flex: none;
   width: 1.25rem;
   height: 1.25rem;
   margin: 0;
 }
-.modale .draw-touch-hint {
+.modale .draw-touch-hint,
+.draw-hand-panel .draw-touch-hint {
   margin: 0;
   color: var(--muted);
   font-size: var(--text-sm);
 }
-.modale .draw-touch-pressure {
+.modale .draw-touch-pressure,
+.draw-hand-panel .draw-touch-pressure {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4);
 }
-.modale .draw-touch-curve {
+.modale .draw-touch-curve,
+.draw-hand-panel .draw-touch-curve {
   flex: none;
   width: 8rem;
   height: 8rem;
@@ -13594,26 +14442,30 @@ h6.ui-heading {
   background: var(--bg-input);
   overflow: visible;
 }
-.modale .draw-touch-knobs {
+.modale .draw-touch-knobs,
+.draw-hand-panel .draw-touch-knobs {
   display: flex;
   flex: 1 1 12rem;
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
 }
-.modale .palette-form .draw-touch-knob {
+.modale .palette-form .draw-touch-knob,
+.draw-hand-panel .draw-touch-knob {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 0 var(--space-2);
   font-weight: normal;
 }
-.modale .draw-touch-knob output {
+.modale .draw-touch-knob output,
+.draw-hand-panel .draw-touch-knob output {
   color: var(--muted);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
-.modale .draw-touch-knob input[type="range"] {
+.modale .draw-touch-knob input[type="range"],
+.draw-hand-panel .draw-touch-knob input[type="range"] {
   grid-column: 1 / -1;
   min-height: 44px;
   margin: 0;
@@ -13621,21 +14473,25 @@ h6.ui-heading {
   border: 0;
   background: none;
 }
-.modale .draw-touch-diagonal {
+.modale .draw-touch-diagonal,
+.draw-hand-panel .draw-touch-diagonal {
   fill: none;
   stroke: var(--muted);
 }
-.modale .draw-touch-line {
+.modale .draw-touch-line,
+.draw-hand-panel .draw-touch-line {
   fill: none;
   stroke: var(--accent);
   stroke-width: 3;
 }
-.modale .draw-touch-dot {
+.modale .draw-touch-dot,
+.draw-hand-panel .draw-touch-dot {
   fill: var(--accent);
   stroke: var(--bg-input);
   stroke-width: 2;
 }
-.modale .draw-touch-pad {
+.modale .draw-touch-pad,
+.draw-hand-panel .draw-touch-pad {
   display: block;
   width: 100%;
   height: auto;
@@ -13645,19 +14501,41 @@ h6.ui-heading {
   background: var(--bg-input);
   cursor: crosshair;
 }
-.modale .draw-touch-sample {
+.modale .draw-touch-sample,
+.draw-hand-panel .draw-touch-sample {
   fill: var(--muted);
 }
-.modale .draw-touch-strokes line {
+.modale .draw-touch-strokes line,
+.draw-hand-panel .draw-touch-strokes line {
   stroke: var(--text);
 }
-.modale .draw-touch-tools {
+.modale .draw-touch-tools,
+.draw-hand-panel .draw-touch-tools {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
-.modale .draw-touch-tools button:not(:disabled):hover {
+.modale .draw-touch-tools button:not(:disabled):hover,
+.draw-hand-panel .draw-touch-tools button:not(:disabled):hover {
   border-color: var(--accent);
+}
+
+/* Il pannello «Mano» della Penna: gli stessi gruppi di «Penna e dita», in
+   un riquadro accanto al pulsante, che scorre se lo spazio non basta. */
+.draw-hand-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 22rem;
+  max-width: 90vw;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: var(--space-3);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.draw-hand-panel .draw-touch-check {
+  display: flex;
 }
 
 /* La finestra «Esporta»: le scelte a sinistra, in gruppi coi loro titoli, e

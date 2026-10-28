@@ -1,5 +1,5 @@
 /** L'anatomia del pezzo `skin/document.css`. Il documento reso: anteprima, lettura, incorporamenti. */
-import { INTERACTIVE, REST, S, SELECTABLE, type PartAnatomy } from "./types";
+import { INTERACTIVE, REST, S, type PartAnatomy } from "./types";
 
 export const DOCUMENT: PartAnatomy = {
   part: "document",
@@ -16,7 +16,6 @@ export const DOCUMENT: PartAnatomy = {
     { name: "document-callout", states: [S("rest"), S("focused")], hooks: ["callout", "callout-title"] },
     { name: "document-task", states: [S("rest"), S("hover"), S("selected"), S("focused"), S("disabled")], hooks: ["task", "cm-fub-checkbox", "cm-fub-done"] },
     { name: "document-code", layers: { "markdown-code-copy": "cornice" }, states: [S("rest"), S("hover"), S("pressed"), S("focused")], hooks: ["cm-fub-code-line", "cm-fub-codeblock", "markdown-code-copy"] },
-    { name: "document-table", layers: { "cm-md-grid-corner": "cornice", "cm-md-grid-letter": "cornice", "cm-md-grid-rowhead": "cornice", "cm-md-grid-adders": "cornice", "cm-md-grid-add": "cornice", "is-selected": "segno", "is-active": "segno" }, states: SELECTABLE, hooks: ["cm-md-grid-block", "cm-md-grid", "cm-md-grid-corner", "cm-md-grid-letter", "cm-md-grid-rowhead", "cm-md-grid-cell", "cm-md-grid-head", "cm-md-grid-adders", "cm-md-grid-add", "is-selected", "is-active"] },
     { name: "document-figure", states: REST, hooks: ["cm-fub-hr", "math-block", "katex-display", "image-missing", "image-remote", "image-remote-load"] },
     { name: "document-embed", states: REST, hooks: ["embed", "embed-cycle", "embed-too-deep", "embed-media"] },
     { name: "document-diagram", layers: { "mermaid-bar": "cornice", "mermaid-action": "cornice", "mermaid-swatches": "cornice" }, states: INTERACTIVE, hooks: ["mermaid-diagram", "mermaid-bar", "mermaid-action", "mermaid-swatches"] },

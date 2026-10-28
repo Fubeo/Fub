@@ -287,16 +287,109 @@ export const SCENE = onPage("shell", [
     id: "grid-workbook",
     title: "Grid v2: una cartella di Excel sui suoi byte",
     query: "workbook=1",
+    prepare: openWorkbook,
+  },
+  // **I gesti della griglia**, sulla stessa cartella: gli stati che i
+  // cantieri dei gesti (Q1–Q8) cambiano, e che `bench/grid-gestures.mjs`
+  // controlla con input veri.
+  {
+    id: "grid-selection",
+    title: "Grid v2: un intervallo B2:C4 scelto trascinando",
+    query: "workbook=1",
     prepare: async (page) => {
-      await openFolder(page, "Dati");
-      await page.click('#file-list .tree-row[data-path="Dati/Conti.xlsx"]');
-      await page.waitForFunction(() => {
-        const grid = document.querySelector(".grid-surface");
-        return grid?.getAttribute("data-grid-protocol") === "v2"
-          && (grid?.querySelectorAll('[role="gridcell"]').length ?? 0) > 0;
-      });
+      await openWorkbook(page);
+      const from = await gridCellCenter(page, 1, 1);
+      const to = await gridCellCenter(page, 3, 2);
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 6 });
+      await page.mouse.up();
+      await page.waitForFunction(() => document.querySelectorAll(".pane.focus .grid-cell.selected").length >= 6);
     },
   },
+  {
+    id: "grid-editing",
+    title: "Grid v2: la cella A7 aperta, con una bozza scritta",
+    query: "workbook=1",
+    prepare: async (page) => {
+      await openWorkbook(page);
+      await writeInCell(page, 6, 0, "Bozza in corso");
+    },
+  },
+  {
+    id: "grid-formula",
+    title: "Grid v2: la formula «=1+» a metà, nella cella B7",
+    query: "workbook=1",
+    prepare: async (page) => {
+      await openWorkbook(page);
+      await writeInCell(page, 6, 1, "=1+");
+    },
+  },
+  {
+    id: "grid-resize",
+    title: "Grid v2: il puntatore sul bordo fra le intestazioni B e C",
+    query: "workbook=1",
+    prepare: openWorkbook,
+    // Il bordo destro dell'intestazione B, a metà altezza: dove si prende la
+    // colonna per allargarla.
+    hover: async (page) => {
+      const header = await page.evaluate(() => {
+        const b = [...document.querySelectorAll(".pane.focus .grid-column-header")].find((h) => h.textContent === "B");
+        const box = b?.getBoundingClientRect();
+        return box ? { x: box.right, y: box.top + box.height / 2 } : null;
+      });
+      if (!header) throw new Error("l'intestazione B non c'è");
+      await page.mouse.move(header.x, header.y);
+    },
+  },
+  // **Il disegno**: il disegno dei connettori (`?connectors=6`, vedi
+  // `fake-ipc.ts`), aperto e guardato com'è prima che l'impianto nuovo lo
+  // rifaccia, largo e stretto. Le scene della colonna, dell'ispettore, del
+  // menu e di «Semplice» arrivano con i loro cantieri.
+  {
+    id: "draw-open",
+    title: "Il disegno appena aperto",
+    query: "connectors=6",
+    prepare: openDrawing,
+  },
+  {
+    id: "draw-selection",
+    title: "Il disegno con un oggetto scelto da tastiera",
+    query: "connectors=6",
+    prepare: async (page) => {
+      await openDrawing(page);
+      await page.keyboard.press("v");
+      // L'ellisse del disegno: la prima forma.
+      const shape = await page.locator(".draw-editor .draw-surface ellipse[data-scene-id]").first().boundingBox();
+      if (!shape) throw new Error("l'ellisse del disegno non c'è");
+      await page.mouse.click(shape.x + shape.width / 2, shape.y + shape.height / 2);
+    },
+  },
+  {
+    id: "draw-text",
+    title: "Il disegno con un testo in scrittura",
+    query: "connectors=6",
+    prepare: async (page) => {
+      await openDrawing(page);
+      await page.keyboard.press("t");
+      const box = await page.locator(".draw-editor .draw-page").first().boundingBox();
+      if (!box) throw new Error("la pagina del disegno non c'è");
+      await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.85);
+      await page.keyboard.type("Una scritta");
+    },
+  },
+  // Stretto: 900 px, e 800, la finestra minima del desktop (sotto, la shell
+  // è quella del telefono).
+  ...[
+    ["draw-narrow", 900, "Il disegno in una finestra di 900 px"],
+    ["draw-narrow-800", 800, "Il disegno nella finestra minima, 800 px"],
+  ].map(([id, width, title]) => ({
+    id,
+    title,
+    query: "connectors=6",
+    viewport: { width, height: 800 },
+    prepare: openDrawing,
+  })),
   // **I documenti di videoscrittura**: un `.docx` e un `.odt` aperti dalla
   // proiezione vera del codec (`?rich=…`, vedi `fake-ipc.ts`), largo e nella
   // finestra di un documento appena aperto.
@@ -853,6 +946,88 @@ async function openRichDocument(page, path) {
     await page.click("#sidebar-scrim", { position: { x: scrim.width - 8, y: 8 } });
     await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
   }
+}
+
+/// Apre il disegno dei connettori e aspetta che sia dipinto, col fuoco sulla
+/// tela, come `connectors.mjs`.
+async function openDrawing(page) {
+  const fixture = await page.evaluate(() => globalThis.__fubConnectorsBench?.fixture ?? null);
+  if (fixture === null) throw new Error("la pagina non ha il disegno dei connettori");
+  const compact = await page.evaluate(() => document.querySelector("#layout")?.classList.contains("layout-compact") ?? false);
+  if (compact) {
+    await page.click('#views-ribbon .rail-btn[data-panel="files"]');
+    await page.waitForSelector("#sidebar-scrim:not([hidden])");
+  }
+  await page.click(`#file-list .tree-row[data-path="${fixture.doc}"]`);
+  await page.waitForSelector(".draw-editor .draw-surface");
+  if (compact && await page.isVisible("#sidebar-scrim")) {
+    const scrim = await page.locator("#sidebar-scrim").boundingBox();
+    await page.click("#sidebar-scrim", { position: { x: scrim.width - 8, y: 8 } });
+    await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
+  }
+  const objects = fixture.shapes.length + fixture.connectors.length + fixture.labels.length;
+  await page.waitForFunction(
+    (painted) => (document.querySelector(".draw-editor .draw-surface")?.querySelectorAll("[data-scene-id]").length ?? 0) >= painted,
+    objects,
+  );
+  await page.evaluate(() => document.fonts.ready);
+  await page.focus(".draw-editor .draw-surface");
+}
+
+/// Apre la cartella di Excel della scena `grid-workbook` e aspetta che la
+/// griglia v2 abbia disegnato le sue celle.
+async function openWorkbook(page) {
+  await openFolder(page, "Dati");
+  await page.click('#file-list .tree-row[data-path="Dati/Conti.xlsx"]');
+  await page.waitForFunction(() => {
+    const grid = document.querySelector(".grid-surface");
+    return grid?.getAttribute("data-grid-protocol") === "v2"
+      && (grid?.querySelectorAll('[role="gridcell"]').length ?? 0) > 0;
+  });
+}
+
+/// Il centro di una cella della griglia, per riga e colonna da zero, quando
+/// la cella sta ferma: la griglia si monta prima della barra multifunzione e
+/// dell'avviso sopra di lei, che arrivano dopo e la spingono in giù. Un
+/// punto preso prima cade sull'avviso, e il trascinamento diventa una
+/// selezione del testo della pagina.
+async function gridCellCenter(page, row, column) {
+  const center = await page.waitForFunction(
+    ([r, c]) => {
+      const cell = document.querySelector(`.pane.focus .grid-cell[data-row="${r}"][data-column="${c}"]`);
+      if (!cell) return null;
+      const box = cell.getBoundingClientRect();
+      const now = `${box.x},${box.y},${box.width},${box.height}`;
+      const before = window.__gridCellBox;
+      window.__gridCellBox = now;
+      return before === now ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : null;
+    },
+    [row, column],
+    { polling: 100 },
+  );
+  return center.jsonValue();
+}
+
+/// Sceglie una cella con un clic e ci scrive: la prima battuta la apre, e la
+/// scena aspetta che il campo della cella abbia tutto il testo.
+async function writeInCell(page, row, column, text) {
+  const { x, y } = await gridCellCenter(page, row, column);
+  await page.mouse.click(x, y);
+  await page.waitForFunction(
+    ([r, c]) => {
+      const active = document.querySelector(".pane.focus .grid-cell.active");
+      return active?.dataset.row === String(r) && active?.dataset.column === String(c);
+    },
+    [row, column],
+  );
+  await page.keyboard.type(text);
+  await page.waitForFunction(
+    (t) => {
+      const host = document.querySelector(".pane.focus .grid-cell-editor");
+      return host !== null && !host.hidden && host.querySelector(".cm-content")?.textContent === t;
+    },
+    text,
+  );
 }
 
 /// Apre una cartella dell'albero, se non è già aperta. Il `data-path` della

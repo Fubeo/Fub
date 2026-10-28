@@ -75,6 +75,134 @@
   color: var(--muted);
   font-size: var(--text-sm);
 }
+/* La ricerca in cima all'elenco dei tasti, la frase quando non trova niente,
+   e ciò che è cambiato, chiuso finché non lo si apre. */
+.modale .keys-search {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+.modale .keys-search input {
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+}
+.modale .keys-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.modale .keys-empty:empty {
+  display: none;
+}
+.modale .keys-changed {
+  font-size: var(--text-sm);
+}
+.modale .keys-changed summary {
+  min-height: 44px;
+  padding: var(--space-2) 0;
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+}
+/* La ricerca dei comandi del disegno: il campo, l'elenco che scorre, e per
+   ogni comando il nome, da dove viene, il tasto e, se è spento, perché. */
+.draw-commands-dialog {
+  width: min(560px, 100%);
+}
+.draw-commands {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.draw-commands-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+.draw-commands-field input {
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: inherit;
+  font: inherit;
+}
+.draw-commands-list {
+  max-height: 50vh;
+  overflow: auto;
+}
+.draw-commands-row {
+  flex-wrap: wrap;
+}
+.draw-commands-label {
+  flex: 1;
+}
+.draw-commands-path,
+.draw-commands-key,
+.draw-commands-why {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.draw-commands-why {
+  flex-basis: 100%;
+}
+.draw-commands-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.draw-commands-empty:empty {
+  display: none;
+}
+/* «Personalizza la barra…»: una riga per strumento, con la casella, il
+   nome e le frecce; la riga presa si trascina. */
+.draw-toolbar-dialog {
+  width: min(420px, 100%);
+}
+.draw-toolbar-custom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.draw-toolbar-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 50vh;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.draw-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 44px;
+  border-bottom: 1px solid var(--border);
+  cursor: grab;
+}
+.draw-toolbar-row label {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+}
+.draw-toolbar-move {
+  min-width: 44px;
+  min-height: 44px;
+}
+.draw-toolbar-reset {
+  align-self: flex-start;
+  min-height: 44px;
+}
 /* «Aggiorna dalla libreria» e «Rendi modificabile»: prima e dopo, sullo
    stesso fondo chiaro dei riquadri del pannello, col nome sotto in tinta
    tenue. */
@@ -169,7 +297,8 @@
 }
 .modale .draw-guides-remove,
 .modale .draw-guides-tools button,
-.modale .draw-touch-tools button {
+.modale .draw-touch-tools button,
+.draw-hand-panel .draw-touch-tools button {
   min-height: 44px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -191,11 +320,13 @@
   gap: var(--space-2);
 }
 .modale .draw-guides-tools button,
-.modale .draw-touch-tools button {
+.modale .draw-touch-tools button,
+.draw-hand-panel .draw-touch-tools button {
   padding: var(--space-2) var(--space-4);
 }
 .modale .draw-guides-tools button:disabled,
-.modale .draw-touch-tools button:disabled {
+.modale .draw-touch-tools button:disabled,
+.draw-hand-panel .draw-touch-tools button:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -215,7 +346,8 @@
    spazio non basta; sotto, il riquadro dove provare la penna, che non fa
    scorrere né ingrandire la pagina mentre ci si disegna. Il tratto
    d'esempio è più tenue di quello che la penna lascia, che è il vero. */
-.modale .draw-touch-group {
+.modale .draw-touch-group,
+.draw-hand-panel .draw-touch-group {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -224,11 +356,13 @@
   padding: 0;
   border: 0;
 }
-.modale .draw-touch-group legend {
+.modale .draw-touch-group legend,
+.draw-hand-panel .draw-touch-group legend {
   padding: 0 0 var(--space-2);
   font-weight: var(--weight-bold);
 }
-.modale .palette-form .draw-touch-check {
+.modale .palette-form .draw-touch-check,
+.draw-hand-panel .draw-touch-check {
   flex-direction: row;
   align-items: center;
   gap: var(--space-3);
@@ -236,24 +370,28 @@
   font-weight: normal;
   cursor: pointer;
 }
-.modale .draw-touch-check input {
+.modale .draw-touch-check input,
+.draw-hand-panel .draw-touch-check input {
   flex: none;
   width: 1.25rem;
   height: 1.25rem;
   margin: 0;
 }
-.modale .draw-touch-hint {
+.modale .draw-touch-hint,
+.draw-hand-panel .draw-touch-hint {
   margin: 0;
   color: var(--muted);
   font-size: var(--text-sm);
 }
-.modale .draw-touch-pressure {
+.modale .draw-touch-pressure,
+.draw-hand-panel .draw-touch-pressure {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4);
 }
-.modale .draw-touch-curve {
+.modale .draw-touch-curve,
+.draw-hand-panel .draw-touch-curve {
   flex: none;
   width: 8rem;
   height: 8rem;
@@ -262,26 +400,30 @@
   background: var(--bg-input);
   overflow: visible;
 }
-.modale .draw-touch-knobs {
+.modale .draw-touch-knobs,
+.draw-hand-panel .draw-touch-knobs {
   display: flex;
   flex: 1 1 12rem;
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
 }
-.modale .palette-form .draw-touch-knob {
+.modale .palette-form .draw-touch-knob,
+.draw-hand-panel .draw-touch-knob {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 0 var(--space-2);
   font-weight: normal;
 }
-.modale .draw-touch-knob output {
+.modale .draw-touch-knob output,
+.draw-hand-panel .draw-touch-knob output {
   color: var(--muted);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
-.modale .draw-touch-knob input[type="range"] {
+.modale .draw-touch-knob input[type="range"],
+.draw-hand-panel .draw-touch-knob input[type="range"] {
   grid-column: 1 / -1;
   min-height: 44px;
   margin: 0;
@@ -289,21 +431,25 @@
   border: 0;
   background: none;
 }
-.modale .draw-touch-diagonal {
+.modale .draw-touch-diagonal,
+.draw-hand-panel .draw-touch-diagonal {
   fill: none;
   stroke: var(--muted);
 }
-.modale .draw-touch-line {
+.modale .draw-touch-line,
+.draw-hand-panel .draw-touch-line {
   fill: none;
   stroke: var(--accent);
   stroke-width: 3;
 }
-.modale .draw-touch-dot {
+.modale .draw-touch-dot,
+.draw-hand-panel .draw-touch-dot {
   fill: var(--accent);
   stroke: var(--bg-input);
   stroke-width: 2;
 }
-.modale .draw-touch-pad {
+.modale .draw-touch-pad,
+.draw-hand-panel .draw-touch-pad {
   display: block;
   width: 100%;
   height: auto;
@@ -313,19 +459,41 @@
   background: var(--bg-input);
   cursor: crosshair;
 }
-.modale .draw-touch-sample {
+.modale .draw-touch-sample,
+.draw-hand-panel .draw-touch-sample {
   fill: var(--muted);
 }
-.modale .draw-touch-strokes line {
+.modale .draw-touch-strokes line,
+.draw-hand-panel .draw-touch-strokes line {
   stroke: var(--text);
 }
-.modale .draw-touch-tools {
+.modale .draw-touch-tools,
+.draw-hand-panel .draw-touch-tools {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
-.modale .draw-touch-tools button:not(:disabled):hover {
+.modale .draw-touch-tools button:not(:disabled):hover,
+.draw-hand-panel .draw-touch-tools button:not(:disabled):hover {
   border-color: var(--accent);
+}
+
+/* Il pannello «Mano» della Penna: gli stessi gruppi di «Penna e dita», in
+   un riquadro accanto al pulsante, che scorre se lo spazio non basta. */
+.draw-hand-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 22rem;
+  max-width: 90vw;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: var(--space-3);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.draw-hand-panel .draw-touch-check {
+  display: flex;
 }
 
 /* La finestra «Esporta»: le scelte a sinistra, in gruppi coi loro titoli, e

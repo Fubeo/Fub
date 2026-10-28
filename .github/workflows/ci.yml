@@ -253,6 +253,14 @@ jobs:
         working-directory: apps/client
       - name: il confine CodeMirror resta nel package testuale
         run: node .github/scripts/check-codemirror-boundary.mjs
+      - name: ProseMirror resta in Scrittura e nei documenti
+        run: |
+          node .github/scripts/check-prosemirror-boundary.mjs --self-test
+          node .github/scripts/check-prosemirror-boundary.mjs
+      - name: la Tabella importa soltanto kit, moto, i18n e tsv
+        run: |
+          node .github/scripts/check-tabella-boundary.mjs --self-test
+          node .github/scripts/check-tabella-boundary.mjs
       - name: un editor non scrive un ruolo del tema sull'elemento
         run: |
           node .github/scripts/check-inline-theme.mjs --self-test
@@ -386,6 +394,20 @@ jobs:
         with:
           name: banco-connettori-${{ github.sha }}
           path: apps/client/bench/.output/connectors-300.json
+          include-hidden-files: true
+      - name: i gesti della griglia tengono bozza, fuoco e cella attiva
+        id: bench_grid
+        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        run: npm run bench:grid
+        working-directory: apps/client
+      - name: il referto e le foto del banco dei gesti della griglia
+        if: ${{ failure() && steps.bench_grid.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: banco-griglia-${{ github.sha }}
+          path: |
+            apps/client/bench/.output/grid-gestures.json
+            apps/client/bench/.output/grid-gestures/
           include-hidden-files: true
       - name: cinquantamila elementi si aprono e si muovono senza scatti
         id: bench_large

@@ -135,6 +135,7 @@
   --elevation-dialog-surface: #ffffff;
   --elevation-dialog-border: #666b76;
   --elevation-dialog-shadow: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+  --draw-desk: #edeef1;
   --graph-node: #656c78;
   --graph-node-active: #1235ab;
   --graph-node-hover: #1235ab;

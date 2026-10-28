@@ -12,6 +12,7 @@ const world = vi.hoisted(() => ({
   focus: "p1",
   panes: new Map<string, unknown>(),
   shown: [] as HTMLElement[][],
+  covers: [] as string[][],
   selected: [] as string[],
   revealed: [] as string[],
 }));
@@ -26,7 +27,10 @@ vi.mock("../../../state/layout", () => ({
   },
 }));
 vi.mock("../../../ui/views", () => ({
-  showSurfacePanels: (els: readonly HTMLElement[]) => world.shown.push([...els]),
+  showSurfacePanels: (els: readonly HTMLElement[], covers: readonly string[] = []) => {
+    world.shown.push([...els]);
+    world.covers.push([...covers]);
+  },
   selectInspectorTab: (id: string) => world.selected.push(id),
 }));
 vi.mock("../../../ui/side-panels", () => ({ revealSidePanel: (side: string) => world.revealed.push(side) }));
@@ -34,7 +38,7 @@ vi.mock("../../../ui/side-panels", () => ({ revealSidePanel: (side: string) => w
 import { mountDocumentPanels } from "./document-panels";
 
 /// Una superficie con le sue schede; conta chi è montato e chi ascolta.
-function surface(ids: readonly string[]) {
+function surface(ids: readonly string[], covers?: readonly string[]) {
   const live = new Set<string>();
   const listeners = new Set<() => void>();
   const asks = new Set<(id: string) => void>();
@@ -58,6 +62,7 @@ function surface(ids: readonly string[]) {
       asks.add(listener);
       return () => asks.delete(listener);
     },
+    ...(covers === undefined ? {} : { covers }),
   };
   return {
     pane: { surface: { panels } },
@@ -82,6 +87,7 @@ beforeEach(() => {
   world.focus = "p1";
   world.panes.clear();
   world.shown = [];
+  world.covers = [];
   world.selected = [];
   world.revealed = [];
   life = openLifetime();
@@ -103,6 +109,19 @@ describe("le schede del documento", () => {
     expect(first.querySelector(".panel-title")?.textContent).toBe("scheda doc.comments");
     expect(first.querySelector(".declared-view")?.textContent).toBe("doc.comments");
     expect([...one.live]).toEqual(["doc.comments", "doc.revisions"]);
+  });
+
+  it("le view che il documento lascia fuori vanno all'ispettore con le sue schede, e tornano col fuoco altrove", () => {
+    const drawing = surface(["draw.design"], ["outline"]);
+    const note = surface([]);
+    world.panes.set("p1", drawing.pane);
+    world.panes.set("p2", note.pane);
+    mountDocumentPanels(life);
+    expect(world.covers[world.covers.length - 1]).toEqual(["outline"]);
+    world.focus = "p2";
+    emit("layout");
+    expect(world.covers[world.covers.length - 1]).toEqual([]);
+    expect(last()).toEqual([]);
   });
 
   it("un avviso senza schede nuove non rimonta niente", () => {

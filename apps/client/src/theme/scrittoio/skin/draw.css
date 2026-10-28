@@ -14,6 +14,15 @@
 .draw-toolbar {
   gap: var(--space-2) var(--space-5);
 }
+/* La colonna degli strumenti: lo stesso fondo della barra, un filo verso il
+   foglio. */
+.draw-rail {
+  gap: var(--space-2);
+  padding: var(--space-1);
+  background: var(--bg-elev);
+  border-style: solid;
+  border-color: var(--border);
+}
 .draw-group {
   gap: var(--space-1);
 }
@@ -30,15 +39,13 @@
   color: var(--text);
 }
 /* Lo strumento, il colore e lo spessore scelti, e nelle proprietà
-   l'opzione premuta: il fondo attivo, e un filo sotto nel colore del testo,
-   che dice la scelta anche a chi non distingue i due fondi. */
+   l'opzione premuta: il fondo tenue dell'accento e l'icona nell'accento,
+   come nella colonna degli strumenti; non un bordo. Lo dicono due segni, il
+   fondo e il colore del segno, non uno solo. */
 .draw-button[aria-checked="true"],
 .draw-button[aria-pressed="true"] {
-  background: var(--bg-active);
-  color: var(--text);
-  box-shadow:
-    inset 0 -3px 0 var(--text),
-    var(--shadow-sm);
+  background: var(--accent-wash);
+  color: var(--accent);
 }
 /* Un'enfasi che una parte della scelta ha e un'altra no: il filo sotto a
    tratti, a metà fra premuto e no. */
@@ -58,6 +65,93 @@
 .draw-zoom-level {
   padding: 0 var(--space-2);
   font-size: var(--text-sm);
+}
+/* «Esporta»: l'icona e la parola, l'unico pulsante della barra in alto con
+   un nome scritto. */
+.draw-export {
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.draw-export-text {
+  font-size: var(--text-sm);
+}
+/* La penna della Penna e il modo della Gomma: pulsanti col nome scritto,
+   come «Esporta», perché le penne e i modi si distinguono dal nome. */
+.draw-pen-choice,
+.draw-eraser-mode {
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+.draw-pen-name,
+.draw-eraser-mode-name {
+  color: inherit;
+}
+/* La galleria delle penne: l'anteprima è inchiostro su carta, bianca anche
+   col buio, come il foglio. La penna scelta ha il bordo d'accento. */
+.draw-pen-gallery {
+  gap: var(--space-1);
+  padding: var(--space-3);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.draw-pen-gallery-heading {
+  margin: var(--space-2) 0 var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+.draw-pen-gallery-list {
+  gap: var(--space-1);
+}
+.draw-pen-gallery-item,
+.draw-pen-saved-remove,
+.draw-pen-gallery-save {
+  gap: var(--space-2);
+  padding: var(--space-1);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px transparent;
+}
+.draw-pen-gallery-item:hover,
+.draw-pen-saved-remove:hover,
+.draw-pen-gallery-save:hover:not(:disabled) {
+  background: var(--overlay-hover);
+}
+.draw-pen-gallery-item[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.draw-pen-gallery-item:focus-visible,
+.draw-pen-saved-remove:focus-visible,
+.draw-pen-gallery-save:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.draw-pen-gallery-save:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+.draw-pen-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: #ffffff;
+}
+.draw-pen-gallery-empty {
+  margin: 0;
+  padding: var(--space-1);
+  color: var(--muted);
+}
+.draw-pen-gallery-save {
+  margin-top: var(--space-2);
+  text-align: start;
+}
+.draw-pen-size {
+  gap: var(--space-2);
 }
 /* Il pulsante dei livelli: l'icona, il nome e lo stato in corsivo, che si
    distingue dal nome anche senza colore. */
@@ -87,6 +181,17 @@
   font-weight: var(--weight-bold);
   line-height: 1;
 }
+/* Il correttore nel testo che si scrive: l'ondulata dei documenti, rossa
+   per l'ortografia e ambra per la grammatica. La carta è bianca in tutti e
+   due i lumi, e così i colori. */
+.draw-text-proof-spelling {
+  text-decoration: underline wavy #c60817 1px;
+  text-underline-offset: 3px;
+}
+.draw-text-proof-grammar {
+  text-decoration: underline wavy #9a5b00 1px;
+  text-underline-offset: 3px;
+}
 .draw-title {
   gap: var(--space-1) var(--space-3);
   color: var(--muted);
@@ -98,16 +203,41 @@
   font-size: var(--text-base);
 }
 .draw-surface {
-  background: var(--bg);
+  background: var(--draw-desk, var(--bg));
+}
+.draw-navigator {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--draw-desk, var(--bg));
+  box-shadow: var(--shadow-sm);
+}
+.draw-navigator-sheets {
+  fill: #ffffff;
+  stroke: var(--border);
+  stroke-width: 1px;
+}
+.draw-navigator-shapes {
+  fill: color-mix(in oklch, var(--muted) 35%, transparent);
+}
+.draw-navigator-view {
+  fill: color-mix(in oklch, var(--accent) 12%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1.5px;
+}
+.draw-zoom-box {
+  border: 1px dashed var(--accent);
+  background: color-mix(in oklch, var(--accent) 8%, transparent);
 }
 .draw-surface[data-unbounded],
 .draw-page {
   background: #ffffff;
 }
+/* La carta posa sulla scrivania con un'ombra leggera, uguale nei due temi:
+   la carta è bianca in tutti e due. */
 .draw-page {
   box-shadow:
     0 0 0 1px var(--border),
-    var(--shadow-sm);
+    0 1px 3px rgb(0 0 0 / 0.18);
 }
 /* Il nome di una tavola, sul tavolo sopra di lei: quello della tavola
    scelta più scuro. */
@@ -215,14 +345,15 @@
   font-size: var(--text-sm);
 }
 
-/* La barra della selezione galleggia sul disegno: il fondo della barra in
-   cima, un filo e un'ombra che la staccano da ciò che copre. */
+/* La barra della selezione galleggia sul disegno: una pillola col fondo
+   della barra in cima, un filo e un'ombra che la staccano da ciò che
+   copre. */
 .draw-arrange {
   gap: var(--space-1);
   padding: var(--space-1);
   background: var(--bg-elev);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   box-shadow: var(--shadow-md);
 }
 
@@ -1154,6 +1285,11 @@ button.draw-isolation-crumb:hover {
   gap: var(--space-1);
   padding: 0 var(--space-4);
 }
+/* Ciò che sta fra il titolo e le sezioni, come il titolo del disegno, ha
+   il margine del titolo. */
+.draw-properties-lead {
+  padding: var(--space-2) var(--space-4) 0;
+}
 .draw-properties-title {
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
@@ -1248,7 +1384,8 @@ button.draw-isolation-crumb:hover {
 .draw-properties-bar {
   gap: var(--space-1);
 }
-.draw-properties-apply {
+.draw-properties-apply,
+.draw-properties-export {
   padding: 0 var(--space-4);
   border: 1px solid var(--border);
   color: var(--text);

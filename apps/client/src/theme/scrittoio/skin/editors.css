@@ -397,7 +397,10 @@
 .grid-viewport {
   outline: none;
 }
-.grid-viewport:focus-visible {
+/* Niente anello attorno al riquadro: il fuoco è il bordo della cella attiva,
+   che la griglia indica con `aria-activedescendant`. Senza una cella attiva
+   da mostrare (ogni asse nascosto) l'anello torna. */
+.grid-viewport:focus-visible:not([aria-activedescendant]) {
   box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
 }
 .grid-header,
@@ -418,6 +421,21 @@
 .grid-header.selected {
   box-shadow: inset 0 0 0 999px var(--accent-veil);
   color: var(--accent);
+}
+/* E un filo d'accento sul lato verso le celle. */
+.grid-column-header.selected {
+  box-shadow: inset 0 -2px 0 var(--accent), inset 0 0 0 999px var(--accent-veil);
+}
+.grid-row-header.selected {
+  box-shadow: inset -2px 0 0 var(--accent), inset 0 0 0 999px var(--accent-veil);
+}
+/* Dove ci sono colonne o righe nascoste, una tacca doppia sull'intestazione
+   che le segue. */
+.grid-column-header.after-hidden {
+  border-left: 3px double var(--muted);
+}
+.grid-row-header.after-hidden {
+  border-top: 3px double var(--muted);
 }
 /* Il filo del blocco è quello di Excel. */
 .grid-freeze {
@@ -530,6 +548,14 @@
 .grid-row .active {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
+/* Dentro un intervallo la cella attiva resta bianca, con un filo: il bordo
+   forte è quello del rettangolo. */
+.grid-viewport.ranged .grid-row .active {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.grid-selection {
+  border: 2px solid var(--accent);
+}
 /* Il quadratino all'angolo della selezione, e il riempimento tirato a
    tratteggio come in Excel. */
 .grid-fill-handle {
@@ -538,6 +564,73 @@
 }
 .grid-fill-preview {
   border: 2px dashed var(--accent);
+}
+/* Dove andrà la selezione tirata per il bordo. */
+.grid-move-preview {
+  border: 2px solid var(--muted);
+}
+/* I riferimenti della formula aperta: ogni intervallo è contornato del
+   colore che il riferimento ha nel testo. */
+.grid-formula-ref-1 {
+  border: 2px solid var(--doc-author-1);
+}
+.grid-formula-ref-2 {
+  border: 2px solid var(--doc-author-2);
+}
+.grid-formula-ref-3 {
+  border: 2px solid var(--doc-author-3);
+}
+.grid-formula-ref-4 {
+  border: 2px solid var(--doc-author-4);
+}
+.grid-formula-ref-5 {
+  border: 2px solid var(--doc-author-5);
+}
+.grid-formula-ref-6 {
+  border: 2px solid var(--doc-author-6);
+}
+.grid-cell-editor .cm-formula-ref-1,
+.grid-formula-editor .cm-formula-ref-1 {
+  color: var(--doc-author-1);
+}
+.grid-cell-editor .cm-formula-ref-2,
+.grid-formula-editor .cm-formula-ref-2 {
+  color: var(--doc-author-2);
+}
+.grid-cell-editor .cm-formula-ref-3,
+.grid-formula-editor .cm-formula-ref-3 {
+  color: var(--doc-author-3);
+}
+.grid-cell-editor .cm-formula-ref-4,
+.grid-formula-editor .cm-formula-ref-4 {
+  color: var(--doc-author-4);
+}
+.grid-cell-editor .cm-formula-ref-5,
+.grid-formula-editor .cm-formula-ref-5 {
+  color: var(--doc-author-5);
+}
+.grid-cell-editor .cm-formula-ref-6,
+.grid-formula-editor .cm-formula-ref-6 {
+  color: var(--doc-author-6);
+}
+/* Le formiche di un taglio: il tratteggio fitto dice «si sposta». Stanno
+   ferme: un moto che non finisce è ammesso solo per un lavoro in corso. */
+.grid-cut-mark {
+  border: 2px dashed var(--accent);
+}
+/* La guida di una misura tirata, e la misura accanto. */
+.grid-resize-guide {
+  background: var(--accent);
+}
+.grid-resize-label {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
 }
 .grid-cell-editor {
   border: 2px solid var(--accent);
@@ -565,6 +658,22 @@
   border-bottom: 1px solid var(--border);
   color: var(--text);
   font-size: var(--text-sm);
+}
+/* La bozza la cui cella è cambiata sotto: la domanda e i due pulsanti. */
+.grid-draft-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-9);
+  background: var(--warning-wash);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.grid-draft-notice > p {
+  flex: 1 1 auto;
+  margin: 0;
 }
 /* Le schede dei fogli stanno sotto la griglia, come nei fogli di calcolo. */
 .grid-sheets {
@@ -1716,6 +1825,22 @@
   gap: var(--space-2) var(--space-4);
 }
 .rich-findbar-close {
+  color: var(--muted);
+}
+.rich-drawing-editor {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-menu);
+  background: var(--sheet);
+  box-shadow: var(--shadow-3);
+}
+.rich-drawing-bar {
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.rich-drawing-title {
   color: var(--muted);
 }
 .rich-strip-panel {

@@ -46,6 +46,8 @@ export function mountDocumentPanels(lifetime: Lifetime): void {
   let watched: SurfacePanels | null = null;
   let stopWatching: (() => void) | null = null;
   let shown: Shown[] = [];
+  /// Le view dichiarate che il documento lascia fuori, com'erano all'ultimo giro.
+  let covered = "";
 
   const clear = () => {
     for (const each of shown) each.unmount();
@@ -56,6 +58,7 @@ export function mountDocumentPanels(lifetime: Lifetime): void {
     stopWatching = null;
     watched = null;
     clear();
+    covered = "";
     showSurfacePanels([]);
   });
 
@@ -85,15 +88,17 @@ export function mountDocumentPanels(lifetime: Lifetime): void {
         : null;
     }
     const list = panels?.list() ?? [];
+    const covers = panels?.covers ?? [];
     // La stessa superficie avvisa a ogni battuta: le schede si rifanno
     // soltanto quando cambia quali sono.
-    if (list.length === shown.length && list.every((panel, i) => shown[i]!.panel === panel)) return;
+    if (list.length === shown.length && list.every((panel, i) => shown[i]!.panel === panel) && covers.join("\n") === covered) return;
     clear();
+    covered = covers.join("\n");
     shown = list.map((panel) => {
       const { el, title, body } = frame(panel);
       return { panel, el, title, unmount: panel.mount(body) };
     });
-    showSurfacePanels(shown.map((each) => each.el));
+    showSurfacePanels(shown.map((each) => each.el), covers);
   };
 
   draw();
@@ -107,7 +112,7 @@ export function mountDocumentPanels(lifetime: Lifetime): void {
   lifetime.add(
     onLanguage(() => {
       for (const each of shown) each.title.textContent = each.panel.title();
-      if (shown.length > 0) showSurfacePanels(shown.map((each) => each.el));
+      if (shown.length > 0 || covered !== "") showSurfacePanels(shown.map((each) => each.el), covered === "" ? [] : covered.split("\n"));
     }),
   );
 }

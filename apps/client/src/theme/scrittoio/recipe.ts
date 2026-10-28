@@ -378,6 +378,10 @@ export function palette(
     "elevation-dialog-border": high ? border : raise,
     "elevation-dialog-shadow": levels[4]!,
 
+    // La scrivania del disegno, attorno alla carta bianca: chiara di giorno,
+    // e di notte abbastanza chiara da non far abbagliare la carta.
+    "draw-desk": toHex(day ? lch(0.95, 0.004, 260) : lch(0.3, 0.008, 260)),
+
     // Il grafo.
     "graph-node": graphNode,
     "graph-node-active": accent,
@@ -537,13 +541,13 @@ export const COLOR_TOKENS: readonly string[] = Object.keys(palette("light", "nor
 /**
  * I ruoli che la serie dichiara e che un tema può non dichiarare: i segni
  * sulla carta del tema (`--doc-ins`, `--doc-find`, …) e la carta chiara di un
- * file (`--paper-*`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
+ * file (`--paper-*`), e la scrivania del disegno (`--draw-desk`). Facoltativi perché un ruolo obbligatorio nuovo farebbe
  * rifiutare ogni tema `theme-2` di oggi; chi non li dichiara ha il ripiego di
  * `structure.css`, e le loro coppie si contano solo quando ci sono
  * (`THEME_2_OPTIONAL_PAIRS`).
  */
 export const OPTIONAL_ROLES: readonly string[] = COLOR_TOKENS.filter(
-  (name) => name.startsWith("paper-") || name.startsWith("doc-author-") || ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment"].includes(name),
+  (name) => name.startsWith("paper-") || name.startsWith("doc-author-") || ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk"].includes(name),
 );
 
 /** Ogni ruolo che un foglio della serie dichiara e che un tema deve dichiarare. */

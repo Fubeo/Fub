@@ -689,6 +689,44 @@ const DRAW_LEVEL: SettingEntry = {
   source: "vault",
 };
 
+/// Lo spazio di lavoro e la colonna dei disegni, di serie: lo spazio scelto
+/// dal menu del disegno si scrive qui.
+const DRAW_WORKSPACE: readonly SettingEntry[] = [
+  {
+    spec: {
+      key: "draw.workspace",
+      label: "Spazio di lavoro",
+      description: "",
+      group: "Disegni",
+      scope: "vault",
+      kind: {
+        kind: "choice",
+        default: "full",
+        options: [
+          { value: "full", label: "Completo" },
+          { value: "simple", label: "Semplice" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "full",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "draw.toolbar",
+      label: "Strumenti della colonna",
+      description: "",
+      group: "Disegni",
+      scope: "vault",
+      kind: { kind: "list", default: [] },
+      program_writable: false,
+    },
+    value: [],
+    source: "default",
+  },
+];
+
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
 /// `satisfies` è deliberato: queste fixture attraversano lo stesso confine
@@ -1019,7 +1057,7 @@ const options: Options = {
   root: ROOT,
   view: VIEWS,
   commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : BENCH_COMMANDS,
-  settings: DRAWING === null ? SETTINGS : [...SETTINGS, DRAW_LEVEL],
+  settings: DRAWING === null ? SETTINGS : [...SETTINGS, DRAW_LEVEL, ...DRAW_WORKSPACE],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.

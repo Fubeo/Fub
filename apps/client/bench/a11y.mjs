@@ -396,6 +396,11 @@ async function inspectKeyboard(page) {
         if (ap && a.tabIndex !== b.tabIndex) return a.tabIndex - b.tabIndex;
         return a.index - b.index;
       });
+    // Un controllo che nel frattempo si è nascosto (l'editor di una cella che
+    // si chiude quando il fuoco esce) terrebbe il numero vecchio, che ora è
+    // anche di un altro: `querySelector` troverebbe lui, e il tasto si
+    // conterebbe sul controllo sbagliato.
+    for (const stale of document.querySelectorAll("[data-a11y-probe]")) delete stale.dataset.a11yProbe;
     ordered.forEach(({ el }, index) => {
       el.dataset.a11yProbe = String(index);
     });
@@ -416,6 +421,12 @@ async function inspectKeyboard(page) {
       const active = document.activeElement;
       if (active instanceof HTMLElement) active.blur();
       window.scrollTo(0, 0);
+    });
+    // Chi perde il fuoco reagisce dopo (l'editor di una cella si conferma e si
+    // smonta in un microtask): si aspetta che la pagina si assesti, così il
+    // punto di partenza qui sotto non lo sposta il suo smontaggio.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await page.evaluate(() => {
       // `blur()` lascia Chromium con il punto di partenza della navigazione
       // precedente. Mettere a fuoco temporaneamente il body riallinea il
       // primo Tab con il primo candidato del documento.
@@ -486,11 +497,24 @@ async function inspectKeyboard(page) {
         const rowIndicator =
           row !== null &&
           hasIndicator(getComputedStyle(row), getComputedStyle(row, "::before"), getComputedStyle(row, "::after"));
-        const indicator =
-          (el.matches(":focus-visible") && (hasIndicator(style, pseudo, after) || rowIndicator)) ||
-          (el.tagName === "IFRAME" && shellIndicator);
+        // Il campo numerico del kit è un `input` dentro la sua scatola, con
+        // l'unità e le frecce: l'anello lo dipinge la scatola, con
+        // `:has(> input:focus-visible)`, attorno a tutto il campo.
+        const box = el.parentElement?.classList.contains("kit-number-box") ? el.parentElement : null;
+        const boxIndicator =
+          box !== null &&
+          hasIndicator(getComputedStyle(box), getComputedStyle(box, "::before"), getComputedStyle(box, "::after"));
         const descendantId = el.getAttribute("aria-activedescendant");
         const descendant = descendantId ? document.getElementById(descendantId) : null;
+        // Un composito col discendente attivo mostra il fuoco su di lui (la
+        // griglia: il bordo della cella attiva), non con un anello attorno a
+        // tutto il riquadro.
+        const descendantIndicator =
+          descendant !== null &&
+          hasIndicator(getComputedStyle(descendant), getComputedStyle(descendant, "::before"), getComputedStyle(descendant, "::after"));
+        const indicator =
+          (el.matches(":focus-visible") && (hasIndicator(style, pseudo, after) || rowIndicator || boxIndicator || descendantIndicator)) ||
+          (el.tagName === "IFRAME" && shellIndicator);
         return {
           probe: el.dataset.a11yProbe ?? null,
           indicator,
@@ -498,6 +522,10 @@ async function inspectKeyboard(page) {
             ? `${descendantId}:${descendant.getAttribute("aria-rowindex")}:${descendant.getAttribute("aria-colindex")}`
             : null,
           composite: el.getAttribute("role") === "grid" && descendant !== null,
+          // Un'applicazione tiene i suoi tasti, Tab compreso: il foglio del
+          // disegno percorre gli oggetti con Tab, ed esce dopo l'ultimo, che
+          // Fine raggiunge.
+          application: el.getAttribute("role") === "application",
         };
       });
     let candidates = await refreshProbes();
@@ -520,6 +548,12 @@ async function inspectKeyboard(page) {
         actual.descendant !== previousDescendant
       ) {
         await page.keyboard.press("Control+End");
+        await page.keyboard.press("Tab");
+        await refreshProbes();
+        actual = await readActual();
+      }
+      if (actual?.application && actual.probe !== expected.probe && actual.probe === previousProbe) {
+        await page.keyboard.press("End");
         await page.keyboard.press("Tab");
         await refreshProbes();
         actual = await readActual();

@@ -27,6 +27,7 @@ import { NODES } from "./anatomia/nodes";
 import { SEARCH } from "./anatomia/search";
 import { SETTINGS } from "./anatomia/settings";
 import { SHEETS } from "./anatomia/sheets";
+import { TABELLA } from "./anatomia/tabella";
 import { TREE } from "./anatomia/tree";
 import { WELCOME } from "./anatomia/welcome";
 import type { Layer, PartAnatomy, ShellComponent } from "./anatomia/types";
@@ -45,6 +46,7 @@ const DECLARED: readonly PartAnatomy[] = [
   SEARCH,
   SHEETS,
   DOCUMENT,
+  TABELLA,
   EDITORS,
   DRAW,
   MEDIA,

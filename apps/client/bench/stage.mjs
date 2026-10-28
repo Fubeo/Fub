@@ -195,8 +195,11 @@ export async function prepareScene(page, scene, light, base, url) {
   // I gesti di Playwright lasciano il puntatore sopra l'ultimo controllo.
   // Un tooltip con ritardo può così comparire fra i due scatti a seconda
   // del carico del runner. Lo spostiamo in un angolo neutro: il banco
-  // fotografa lo stato preparato, non un hover accidentale.
+  // fotografa lo stato preparato, non un hover accidentale. Una scena che
+  // fotografa proprio un puntatore (`hover`) lo rimette dove vuole: è il suo
+  // ultimo gesto, dopo quello che lo ha portato via.
   await page.mouse.move(0, 0);
+  if (scene.hover) await scene.hover(page);
   await page.evaluate(() => document.fonts.ready);
   // Anche le immagini: un `<img>` che arriva da un lease si decodifica dopo
   // il montaggio, e fotografarlo a metà è un pixel che cambia a ogni corsa.
