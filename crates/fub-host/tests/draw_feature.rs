@@ -169,6 +169,8 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
     #[cfg(not(feature = "draw"))]
     {
         for key in [
+            "draw.workspace",
+            "draw.toolbar",
             "draw.level",
             "draw.custom",
             "draw.templates",
@@ -201,6 +203,8 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
         assert_eq!(
             keys,
             [
+                "draw.workspace",
+                "draw.toolbar",
                 "draw.level",
                 "draw.custom",
                 "draw.templates",
@@ -210,6 +214,8 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
         );
         let entry = |key: &str| entries.iter().find(|entry| entry.spec.key == key).unwrap();
         // I valori di serie.
+        assert_eq!(entry("draw.workspace").value, text("full"));
+        assert_eq!(entry("draw.toolbar").value, SettingValue::List(vec![]));
         assert_eq!(entry("draw.level").value, text("essential"));
         assert_eq!(
             entry("draw.custom").value,
@@ -223,6 +229,8 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
         assert_eq!(entry("draw.symbols").value, text("Symbols"));
         assert_eq!(entry("draw.suggestions").value, SettingValue::Toggle(true));
         // Il vault le porta con sé, la macchina i suggerimenti.
+        assert_eq!(entry("draw.workspace").spec.scope, SettingScope::Vault);
+        assert_eq!(entry("draw.toolbar").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.level").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.templates").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.symbols").spec.scope, SettingScope::Vault);
@@ -242,6 +250,15 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
             SettingValue::Toggle(true)
         );
         assert!(ws.set_setting("draw.suggestions", text("no")).is_err());
+
+        // Lo spazio di lavoro ha i due nomi dell'editor, e nessun altro; la
+        // colonna è un elenco.
+        ws.set_setting("draw.workspace", text("simple")).unwrap();
+        assert_eq!(ws.setting("draw.workspace").unwrap(), text("simple"));
+        assert!(ws.set_setting("draw.workspace", text("expert")).is_err());
+        let column = SettingValue::List(vec!["pen".into(), "select".into()]);
+        ws.set_setting("draw.toolbar", column.clone()).unwrap();
+        assert_eq!(ws.setting("draw.toolbar").unwrap(), column);
 
         // Il livello ha i quattro nomi dell'editor, e nessun altro.
         for level in ["standard", "expert", "custom", "essential"] {
@@ -263,6 +280,8 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
 
         let written = std::fs::read_to_string(root.join(".fub").join("settings.json")).unwrap();
         for key in [
+            "draw.workspace",
+            "draw.toolbar",
             "draw.level",
             "draw.custom",
             "draw.templates",

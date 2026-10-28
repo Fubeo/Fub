@@ -81,11 +81,13 @@
 //!
 //! # Le impostazioni
 //!
-//! [`settings`] dichiara quattro chiavi, nel gruppo «Disegni»: il livello
-//! d'interfaccia dell'editor e le parti del Personalizzato, la cartella dei
-//! modelli del vault e i suggerimenti brevi. Le prime due le legge l'editor,
-//! che le segue dal vivo; la terza la legge la galleria di «Nuovo disegno»; la
-//! quarta la scrive la casella «Non mostrare più suggerimenti».
+//! [`settings`] dichiara sette chiavi, nel gruppo «Disegni»: lo spazio di
+//! lavoro e gli strumenti della colonna, il livello e le parti del
+//! Personalizzato delle versioni precedenti, le cartelle dei modelli e delle
+//! librerie di simboli del vault e i suggerimenti brevi. Le prime quattro le
+//! legge l'editor, che le segue dal vivo, e le due vecchie servono soltanto a
+//! dedurre le nuove; le cartelle le leggono «Nuovo disegno» e «Simboli»; i
+//! suggerimenti li scrive la casella «Non mostrare più suggerimenti».
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -155,13 +157,29 @@ pub const DRAW_EXCALIDRAW: &str = "draw.excalidraw";
 /// tavola.
 pub const DRAW_DRAWIO: &str = "draw.drawio";
 
-/// L'impostazione del livello d'interfaccia dell'editor: quali strumenti offre.
+/// L'impostazione dello spazio di lavoro dell'editor: Completo, con tutto, o
+/// Semplice, per disegnare a mano o col dito.
+pub const DRAW_WORKSPACE_KEY: &str = "draw.workspace";
+/// I valori dello spazio di lavoro: il primo è quello di serie. Sono i nomi
+/// che l'editor conosce (`Workspace` in `tools/registry.ts`), e il test del
+/// client `editors/spatial/draw-settings-mirror.test.ts` li confronta.
+pub const DRAW_WORKSPACES: [&str; 2] = ["full", "simple"];
+/// L'impostazione degli strumenti della colonna, in ordine: vuota, la colonna
+/// di serie. Uno strumento che non c'è resta raggiungibile dai tasti e dalla
+/// ricerca dei comandi.
+pub const DRAW_TOOLBAR_KEY: &str = "draw.toolbar";
+/// L'impostazione del livello d'interfaccia delle versioni precedenti.
+/// Resta dichiarata, e l'editor la legge soltanto per dedurre lo spazio di
+/// lavoro quando [`DRAW_WORKSPACE_KEY`] non è scelta; non si cancella, così un
+/// vault aperto da un'app di prima la ritrova.
 pub const DRAW_LEVEL_KEY: &str = "draw.level";
 /// I valori del livello, dal più semplice: il primo è quello di serie. Sono i
 /// nomi che l'editor conosce (`Level` in `tools/registry.ts`), e il test del
 /// client `editors/spatial/draw-settings-mirror.test.ts` li confronta.
 pub const DRAW_LEVELS: [&str; 4] = ["essential", "standard", "expert", "custom"];
 /// L'impostazione delle parti del livello Personalizzato: un elenco di nomi.
+/// Come [`DRAW_LEVEL_KEY`], si legge soltanto per dedurre la colonna quando
+/// [`DRAW_TOOLBAR_KEY`] non è scelta.
 pub const DRAW_CUSTOM_KEY: &str = "draw.custom";
 /// Le parti del Personalizzato quando nessuno le ha scelte: quelle
 /// dell'Essenziale, nell'ordine della barra. La fonte è `CUSTOM_DEFAULT` in
@@ -197,6 +215,12 @@ const E_NO_DRAWINGS: &str = "e_no_drawings";
 const E_NONE_EXPORTED: &str = "e_none_exported";
 const E_WRITE: &str = "e_write";
 const S_GROUP: &str = "s_group";
+const S_WORKSPACE: &str = "s_workspace";
+const S_WORKSPACE_DESC: &str = "s_workspace_desc";
+const S_FULL: &str = "s_full";
+const S_SIMPLE: &str = "s_simple";
+const S_TOOLBAR: &str = "s_toolbar";
+const S_TOOLBAR_DESC: &str = "s_toolbar_desc";
 const S_LEVEL: &str = "s_level";
 const S_LEVEL_DESC: &str = "s_level_desc";
 const S_ESSENTIAL: &str = "s_essential";
@@ -214,6 +238,14 @@ const S_SUGGESTIONS_DESC: &str = "s_suggestions_desc";
 
 /// Lo schema delle impostazioni dei disegni.
 ///
+/// - **Lo spazio di lavoro** e **la colonna degli strumenti** sono del
+///   **vault**, come il livello che sostituiscono: chi prepara il vault per
+///   una classe lo lascia in Semplice. Non `program_writable`. Li scrive anche
+///   l'editor, dal menu «Disegno» e da «Personalizza la barra…». Nessuno dei
+///   due nasconde una funzione: Semplice offre meno strumenti nella colonna e
+///   nella barra, e «Completo» è a un clic.
+/// - **Il livello** e **le parti del Personalizzato** restano per le versioni
+///   precedenti, che li leggono ancora.
 /// - **Il livello** e **le parti del Personalizzato** sono del **vault**,
 ///   perché le sceglie chi prepara il vault: chi insegna e lo lascia
 ///   all'Essenziale per una classe lo lascia su ogni macchina che apre quel
@@ -234,7 +266,28 @@ const S_SUGGESTIONS_DESC: &str = "s_suggestions_desc";
 ///   suggerimenti», quindi dall'interfaccia; non `program_writable`.
 pub fn settings() -> Vec<SettingSpec> {
     let [essential, standard, expert, custom] = DRAW_LEVELS;
+    let [full, simple] = DRAW_WORKSPACES;
     vec![
+        SettingSpec::new(
+            DRAW_WORKSPACE_KEY,
+            Text::key(S_WORKSPACE),
+            SettingKind::Choice {
+                default: full.into(),
+                options: vec![
+                    UiOption::new(full, Text::key(S_FULL)),
+                    UiOption::new(simple, Text::key(S_SIMPLE)),
+                ],
+            },
+        )
+        .describing(Text::key(S_WORKSPACE_DESC))
+        .grouped(Text::key(S_GROUP)),
+        SettingSpec::new(
+            DRAW_TOOLBAR_KEY,
+            Text::key(S_TOOLBAR),
+            SettingKind::List { default: vec![] },
+        )
+        .describing(Text::key(S_TOOLBAR_DESC))
+        .grouped(Text::key(S_GROUP)),
         SettingSpec::new(
             DRAW_LEVEL_KEY,
             Text::key(S_LEVEL),
@@ -309,25 +362,42 @@ pub fn catalog() -> Vec<StringCatalog> {
         )
         .with(E_WRITE, "Non ho scritto «{path}»: {reason}")
         .with(S_GROUP, "Disegni")
-        .with(S_LEVEL, "Livello d'interfaccia")
+        .with(S_WORKSPACE, "Spazio di lavoro")
+        .with(
+            S_WORKSPACE_DESC,
+            "Completo offre tutti gli strumenti, l'ispettore e i menu; \
+             Semplice ha pulsanti grandi per disegnare a mano o col dito: \
+             penna, evidenziatore, gomma, forme di base, testo e immagini. \
+             Tutto resta raggiungibile dai tasti e dalla ricerca dei comandi, \
+             e «Completo» è a un clic. Vale subito anche per i disegni aperti.",
+        )
+        .with(S_FULL, "Completo")
+        .with(S_SIMPLE, "Semplice")
+        .with(S_TOOLBAR, "Strumenti della colonna")
+        .with(
+            S_TOOLBAR_DESC,
+            "Gli strumenti che la colonna dell'editor mostra, in ordine; \
+             vuota, quelli di serie. Si sceglie anche da «Personalizza la \
+             barra…» nel menu «Disegno».",
+        )
+        .with(S_LEVEL, "Livello d'interfaccia (versioni precedenti)")
         .with(
             S_LEVEL_DESC,
-            "Quali strumenti offre l'editor dei disegni. L'Essenziale ha gli \
-             strumenti di base, uno per tasto; lo Standard ne aggiunge altri; \
-             l'Esperto mostra anche il file sotto il disegno; il Personalizzato \
-             ha le parti scelte in «Parti del Personalizzato». Cambiare livello \
-             non modifica i disegni, e vale subito anche per quelli aperti.",
+            "Il livello che leggevano le versioni precedenti dell'editor. \
+             Questa lo legge soltanto per scegliere lo spazio di lavoro quando \
+             nessuno lo ha scelto: l'Essenziale vale Semplice, gli altri \
+             Completo.",
         )
         .with(S_ESSENTIAL, "Essenziale")
         .with(S_STANDARD, "Standard")
         .with(S_EXPERT, "Esperto")
         .with(S_CUSTOM_LEVEL, "Personalizzato")
-        .with(S_CUSTOM, "Parti del Personalizzato")
+        .with(S_CUSTOM, "Parti del Personalizzato (versioni precedenti)")
         .with(
             S_CUSTOM_DESC,
-            "Le parti dell'editor che il livello Personalizzato offre, una per \
-             una. Valgono soltanto con quel livello, e si possono preparare \
-             anche con un altro scelto.",
+            "Le parti del livello Personalizzato delle versioni precedenti. \
+             Questa le legge soltanto per gli strumenti della colonna, quando \
+             nessuno li ha scelti e il livello è il Personalizzato.",
         )
         .with(S_TEMPLATES, "Cartella dei modelli")
         .with(
@@ -363,24 +433,41 @@ pub fn catalog() -> Vec<StringCatalog> {
         )
         .with(E_WRITE, "Could not write «{path}»: {reason}")
         .with(S_GROUP, "Drawings")
-        .with(S_LEVEL, "Interface level")
+        .with(S_WORKSPACE, "Workspace")
+        .with(
+            S_WORKSPACE_DESC,
+            "Full offers every tool, the inspector and the menus; Simple has \
+             large buttons for drawing by hand or with a finger: pen, \
+             highlighter, eraser, basic shapes, text and images. Everything \
+             stays reachable from keys and the command search, and «Full» is \
+             one click away. Takes effect at once, open drawings included.",
+        )
+        .with(S_FULL, "Full")
+        .with(S_SIMPLE, "Simple")
+        .with(S_TOOLBAR, "Tool column")
+        .with(
+            S_TOOLBAR_DESC,
+            "The tools the editor's column shows, in order; empty, the default \
+             ones. Also chosen from «Customize the toolbar…» in the «Drawing» \
+             menu.",
+        )
+        .with(S_LEVEL, "Interface level (earlier versions)")
         .with(
             S_LEVEL_DESC,
-            "Which tools the drawing editor offers. Essential has the basic \
-             tools, one key each; Standard adds more; Expert also shows the file \
-             under the drawing; Custom has the parts chosen in «Custom level \
-             parts». Changing the level does not modify drawings, and takes \
-             effect at once, open ones included.",
+            "The level earlier versions of the editor read. This one reads it \
+             only to choose the workspace when nobody has: Essential means \
+             Simple, the others Full.",
         )
         .with(S_ESSENTIAL, "Essential")
         .with(S_STANDARD, "Standard")
         .with(S_EXPERT, "Expert")
         .with(S_CUSTOM_LEVEL, "Custom")
-        .with(S_CUSTOM, "Custom level parts")
+        .with(S_CUSTOM, "Custom level parts (earlier versions)")
         .with(
             S_CUSTOM_DESC,
-            "The editor parts the Custom level offers, one by one. They only \
-             apply with that level, and can be prepared while another is chosen.",
+            "The Custom level parts of earlier versions. This one reads them \
+             only for the tool column, when nobody has chosen it and the level \
+             is Custom.",
         )
         .with(S_TEMPLATES, "Templates folder")
         .with(
@@ -3009,13 +3096,15 @@ mod tests {
     }
 
     #[test]
-    fn the_settings_are_five_in_one_group_with_their_defaults() {
+    fn the_settings_are_seven_in_one_group_with_their_defaults() {
         use fub_abi::settings::{SettingScope, SettingValue};
         let specs = settings();
         let keys: Vec<_> = specs.iter().map(|spec| spec.key.as_str()).collect();
         assert_eq!(
             keys,
             [
+                "draw.workspace",
+                "draw.toolbar",
                 "draw.level",
                 "draw.custom",
                 "draw.templates",
@@ -3026,6 +3115,8 @@ mod tests {
         assert_eq!(
             keys,
             [
+                DRAW_WORKSPACE_KEY,
+                DRAW_TOOLBAR_KEY,
                 DRAW_LEVEL_KEY,
                 DRAW_CUSTOM_KEY,
                 DRAW_TEMPLATES_KEY,
@@ -3042,18 +3133,23 @@ mod tests {
                 SettingScope::Vault,
                 SettingScope::Vault,
                 SettingScope::Vault,
+                SettingScope::Vault,
+                SettingScope::Vault,
                 SettingScope::Machine
             ]
         );
-        // Un componente non alza il livello, non sceglie le parti e non spegne
-        // i suggerimenti da sé: soltanto le cartelle sono di tutti.
+        // Un componente non cambia lo spazio di lavoro, la colonna, il
+        // livello o le parti e non spegne i suggerimenti da sé: soltanto le
+        // cartelle sono di tutti.
         let writable: Vec<_> = specs.iter().map(|spec| spec.program_writable).collect();
-        assert_eq!(writable, [false, false, true, true, false]);
+        assert_eq!(writable, [false, false, false, false, true, true, false]);
 
         let defaults: Vec<_> = specs.iter().map(|spec| spec.kind.default_value()).collect();
         assert_eq!(
             defaults,
             [
+                SettingValue::Text("full".into()),
+                SettingValue::List(vec![]),
                 SettingValue::Text("essential".into()),
                 SettingValue::List(
                     ["pen", "eraser", "rect", "ellipse", "line", "arrow"]
@@ -3066,6 +3162,17 @@ mod tests {
             ]
         );
         let SettingKind::Choice { options, .. } = &specs[0].kind else {
+            panic!("lo spazio di lavoro è una scelta")
+        };
+        let workspaces: Vec<_> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(workspaces, DRAW_WORKSPACES);
+        assert_eq!(workspaces, ["full", "simple"]);
+        let named: Vec<_> = options
+            .iter()
+            .map(|option| said(&option.label, "it"))
+            .collect();
+        assert_eq!(named, ["Completo", "Semplice"]);
+        let SettingKind::Choice { options, .. } = &specs[2].kind else {
             panic!("il livello è una scelta")
         };
         let levels: Vec<_> = options.iter().map(|option| option.value.as_str()).collect();
@@ -3098,23 +3205,31 @@ mod tests {
                 }
             }
         }
-        assert_eq!(said(&specs[0].label, "it"), "Livello d'interfaccia");
-        assert_eq!(said(&specs[1].label, "it"), "Parti del Personalizzato");
-        assert_eq!(said(&specs[2].label, "it"), "Cartella dei modelli");
+        assert_eq!(said(&specs[0].label, "it"), "Spazio di lavoro");
+        assert_eq!(said(&specs[1].label, "it"), "Strumenti della colonna");
+        assert_eq!(
+            said(&specs[2].label, "it"),
+            "Livello d'interfaccia (versioni precedenti)"
+        );
         assert_eq!(
             said(&specs[3].label, "it"),
+            "Parti del Personalizzato (versioni precedenti)"
+        );
+        assert_eq!(said(&specs[4].label, "it"), "Cartella dei modelli");
+        assert_eq!(
+            said(&specs[5].label, "it"),
             "Cartella delle librerie di simboli"
         );
         // Il pannello si chiama come nell'editor.
-        assert!(said(&specs[3].description, "it").contains("«Simboli»"));
-        assert!(said(&specs[3].description, "en").contains("«Symbols»"));
+        assert!(said(&specs[5].description, "it").contains("«Simboli»"));
+        assert!(said(&specs[5].description, "en").contains("«Symbols»"));
         // L'interruttore dei suggerimenti parla come l'editor: stessa parola
         // nell'etichetta e nella descrizione, e il nome della casella è
         // quello che l'editor mostra (apostrofo tipografico nell'inglese).
-        assert_eq!(said(&specs[4].label, "it"), "Suggerimenti brevi");
-        assert_eq!(said(&specs[4].label, "en"), "Short tips");
-        let it = said(&specs[4].description, "it");
-        let en = said(&specs[4].description, "en");
+        assert_eq!(said(&specs[6].label, "it"), "Suggerimenti brevi");
+        assert_eq!(said(&specs[6].label, "en"), "Short tips");
+        let it = said(&specs[6].description, "it");
+        let en = said(&specs[6].description, "en");
         assert!(it.contains("suggerimenti"), "{it}");
         assert!(it.contains("«Non mostrare più suggerimenti»"), "{it}");
         assert!(en.contains("tips"), "{en}");
@@ -3135,7 +3250,7 @@ mod tests {
         assert!(kind.rejects(&SettingValue::Toggle(true)).is_none());
         assert!(kind.rejects(&SettingValue::Text("no".into())).is_some());
         // Il livello ammette i quattro nomi e nessun altro.
-        let level = &specs[0].kind;
+        let level = &specs[2].kind;
         for name in DRAW_LEVELS {
             assert!(level.rejects(&SettingValue::Text(name.into())).is_none());
         }
