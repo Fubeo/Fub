@@ -1543,7 +1543,13 @@ body {
 }
 
 /* Righe e colonne bloccate restano ferme sopra quelle che scorrono; i fili
-   del blocco stanno sopra tutte. */
+   del blocco stanno sopra tutte. Ogni riga sta sopra il canvas, che viene
+   dopo nel DOM: senza puntatore non copre nulla, ma chi misura il contrasto
+   lo crederebbe davanti al testo delle celle. */
+.grid-row {
+  z-index: 1;
+}
+
 .grid-row.frozen {
   z-index: 6;
 }
