@@ -53,7 +53,7 @@ const pending = new WeakMap<EditorView, { from: number; selection: GridSelection
 /// Le griglie montate di una vista.
 function mounted(view: EditorView): TableController[] {
   const found: TableController[] = [];
-  for (const element of view.contentDOM.querySelectorAll<HTMLElement>(".cm-md-grid-block")) {
+  for (const element of view.contentDOM.querySelectorAll<HTMLElement>(".tb-frame")) {
     const controller = controllers.get(element);
     if (controller) found.push(controller);
   }
@@ -294,10 +294,10 @@ function enter(view: EditorView, direction: 1 | -1): boolean {
 }
 
 const theme = EditorView.baseTheme({
-  ".cm-md-grid-block": { position: "relative", padding: "0.2em 0 0.4em" },
-  ".cm-md-grid": { overflowX: "auto", outline: "none", padding: "2px" },
-  ".cm-md-grid table": { borderCollapse: "collapse", margin: "0" },
-  ".cm-md-grid .cm-md-grid-corner, .cm-md-grid .cm-md-grid-letter, .cm-md-grid .cm-md-grid-rowhead": {
+  ".tb-frame": { position: "relative", padding: "0.2em 0 0.4em" },
+  ".tb-grid": { position: "relative", overflowX: "auto", outline: "none", padding: "2px" },
+  ".tb-grid table": { borderCollapse: "collapse", margin: "0" },
+  ".tb-grid .tb-corner, .tb-grid .tb-letter, .tb-grid .tb-rowhead": {
     visibility: "hidden",
     border: "none",
     background: "transparent",
@@ -309,22 +309,36 @@ const theme = EditorView.baseTheme({
     userSelect: "none",
     cursor: "pointer",
   },
-  ".cm-md-grid:focus-within .cm-md-grid-letter, .cm-md-grid:focus-within .cm-md-grid-rowhead, .cm-md-grid:focus-within .cm-md-grid-corner, .cm-md-grid:hover .cm-md-grid-letter, .cm-md-grid:hover .cm-md-grid-rowhead": {
+  ".tb-grid:focus-within .tb-letter, .tb-grid:focus-within .tb-rowhead, .tb-grid:focus-within .tb-corner, .tb-grid:hover .tb-letter, .tb-grid:hover .tb-rowhead": {
     visibility: "visible",
   },
-  ".cm-md-grid .cm-md-grid-letter.is-selected, .cm-md-grid .cm-md-grid-rowhead.is-selected": {
+  ".tb-grid .tb-letter.is-selected, .tb-grid .tb-rowhead.is-selected": {
     color: "var(--accent, #4a7dff)",
     fontWeight: "700",
   },
-  ".cm-md-grid-cell": { position: "relative", minWidth: "4em", cursor: "cell" },
-  ".cm-md-grid:focus-within .cm-md-grid-cell.is-selected": {
+  ".tb-cell": { position: "relative", minWidth: "4em", cursor: "cell" },
+  ".tb-grid:focus-within .tb-cell.is-selected": {
     background: "var(--doc-selection, rgba(74, 125, 255, 0.18))",
   },
-  ".cm-md-grid:focus-within .cm-md-grid-cell.is-active": {
+  ".tb-grid:focus-within .tb-cell.is-active": {
     boxShadow: "inset 0 0 0 2px var(--accent, #4a7dff)",
   },
-  ".cm-md-grid-content": { minHeight: "1.4em" },
-  ".cm-md-grid-input": {
+  ".tb-grid:focus-within .tb-cell.is-fill": {
+    boxShadow: "inset 0 0 0 1px var(--accent, #4a7dff)",
+  },
+  ".tb-fill": {
+    position: "absolute",
+    width: "7px",
+    height: "7px",
+    margin: "-4px 0 0 -4px",
+    boxSizing: "border-box",
+    background: "var(--accent, #4a7dff)",
+    border: "1px solid var(--doc-bg, #fff)",
+    cursor: "crosshair",
+  },
+  ".tb-fill[hidden]": { display: "none" },
+  ".tb-content": { minHeight: "1.4em" },
+  ".tb-input": {
     boxSizing: "border-box",
     width: "100%",
     minWidth: "6em",
@@ -336,21 +350,19 @@ const theme = EditorView.baseTheme({
     color: "inherit",
     font: "inherit",
   },
-  ".cm-md-grid-adders": { display: "flex", gap: "0.5em", paddingLeft: "2.4em", minHeight: "1.6em" },
-  ".cm-md-grid-add": {
+  ".tb-adders": { display: "flex", gap: "0.5em", paddingLeft: "2.4em", minHeight: "1.6em" },
+  ".tb-add": {
     visibility: "hidden",
     border: "none",
     background: "transparent",
-    color: "var(--doc-gutter-fg, var(--muted, #888))",
     font: "inherit",
     fontSize: "0.8em",
     padding: "0.1em 0.4em",
     borderRadius: "var(--radius-xs, 3px)",
     cursor: "pointer",
   },
-  ".cm-md-grid-block:hover .cm-md-grid-add, .cm-md-grid-block:focus-within .cm-md-grid-add": { visibility: "visible" },
-  ".cm-md-grid-add:hover": { background: "var(--overlay-hover, rgba(128, 128, 128, 0.15))", color: "var(--doc-fg, inherit)" },
-  ".cm-md-grid-add[hidden]": { display: "none" },
+  ".tb-frame:hover .tb-add, .tb-frame:focus-within .tb-add": { visibility: "visible" },
+  ".tb-add[hidden]": { display: "none" },
 });
 
 /// La parte della Live che conosce le griglie: la tastiera per entrarci, la

@@ -1011,7 +1011,9 @@ export class TextEngine {
         ...completionKeymap,
         ...lintKeymap,
       ]),
-      keymap.of([indentWithTab]),
+      // Un campo non indenta: Tab è di chi lo ospita (la cella conferma e va
+      // a destra), e il fuoco non resta intrappolato.
+      ...(this.options.field === true ? [] : [keymap.of([indentWithTab])]),
       this.theme.of(editorTheme(this.currentTheme)),
       this.listener,
     ];

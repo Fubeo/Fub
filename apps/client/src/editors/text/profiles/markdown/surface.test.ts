@@ -662,11 +662,11 @@ describe("le tabelle della superficie Markdown", () => {
   it("sono griglie soltanto in Live", () => {
     const { ed, parent } = editor();
     ed.buffer.setDoc(table);
-    expect(parent.querySelectorAll(".cm-md-grid-block").length).toBe(1);
+    expect(parent.querySelectorAll(".tb-frame").length).toBe(1);
     ed.setMode("source");
-    expect(parent.querySelectorAll(".cm-md-grid-block").length).toBe(0);
+    expect(parent.querySelectorAll(".tb-frame").length).toBe(0);
     ed.setMode("live_preview");
-    expect(parent.querySelectorAll(".cm-md-grid-block").length).toBe(1);
+    expect(parent.querySelectorAll(".tb-frame").length).toBe(1);
     ed.destroy();
   });
 
@@ -674,7 +674,7 @@ describe("le tabelle della superficie Markdown", () => {
     const texts: string[] = [];
     const { ed, parent } = editor((text) => texts.push(text));
     ed.buffer.setDoc(table);
-    parent.querySelector<HTMLElement>(".cm-md-grid")!.focus();
+    parent.querySelector<HTMLElement>(".tb-grid")!.focus();
     expect(ed.editorActions.state("markdown.heading.1").enabled).toBe(false);
     expect(ed.editorActions.state("markdown.table.column.after").enabled).toBe(true);
     expect(ed.editorActions.run("markdown.bold")).toBe(true);

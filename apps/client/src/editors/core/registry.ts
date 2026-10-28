@@ -311,6 +311,12 @@ export interface SurfacePanels {
    * opens Comments: the shell shows the panel and selects the tab.
    */
   onShow(listener: (id: string) => void): () => void;
+  /**
+   * Declared views (by id) that these tabs stand in for, or that say nothing
+   * about this document: the inspector leaves them out while the surface is
+   * in focus, as a drawing does with the outline of headings.
+   */
+  readonly covers?: readonly string[];
 }
 
 /**

@@ -23,7 +23,6 @@ import type {
 import { GRID_BYTES_PROTOCOL_VERSION } from "../../host/contract";
 import { errorText, isErrorKind } from "../../host/errors";
 import { operationFromText, type EditorChangeOrigin, type TextOperation } from "../core/text-operation";
-import { parseTsv } from "../core/tsv";
 import {
   gridJournalEntry,
   gridJournalText,
@@ -35,10 +34,13 @@ import { adapter, type Adapter, type Paper } from "../../theme/adapt";
 import type { Theme } from "../../theme/theme";
 import type { PdfEngineLoader } from "../media/pdf-view";
 import { t, onLanguage, plural, resolvedLanguage, type Key } from "../../i18n/strings";
-import { createTabs, type TabsHandle } from "../../kit";
+import { createTabs, textButton, type TabsHandle } from "../../kit";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { createTextEngine, type TextEngine } from "../text/engine";
-import { createFormulaProfile } from "../text/profiles/formula";
+import { createFormulaProfile, formulaReferences, operandSlot, type FormulaMove } from "../text/profiles/formula";
+import { isMultiCell, nextCell, nextInRange, type Move, type Shape } from "../../tabella/navigation";
+import { clipboardData, clipboardRows, pasteTargets, type ClipboardCell } from "../../tabella/clipboard";
+import { fillRange, touches, withRange } from "../../tabella/selection";
 import {
   columnLabel,
   coordinateAt,
@@ -106,6 +108,17 @@ const NOT_SHOWN_KEYS: Readonly<Record<string, Key>> = {
 };
 /// Il comando con cui una formula, o un input, entra in una sessione a comandi.
 const SET_VALUES = "range.setValues";
+/// Copia o sposta un intervallo della cartella in un passo solo, con
+/// formule, formati e unioni (comando composto di `fub-format-xlsx`).
+const PASTE_FROM = "fub.pasteFrom";
+
+/// Un intervallo copiato, o tagliato (`move`), dalla cartella.
+interface Copied {
+  readonly sheet: string;
+  readonly range: GridRange;
+  readonly text: string;
+  readonly move: boolean;
+}
 /// I comandi del catalogo che soltanto leggono, e che `query` può chiedere.
 const QUERIES: ReadonlySet<string> = new Set([
   "formulas.functions",
@@ -335,6 +348,8 @@ export interface GridEngineOptions {
   readonly onDialog?: (dialog: GridDialog) => void;
   /// La cartella mostrata è cambiata: vista del foglio, tabelle o libro.
   readonly onView?: () => void;
+  /// Il modo della cella è cambiato (`GridEngine.editMode`).
+  readonly onEditMode?: () => void;
   readonly grid?: GridHost;
   readonly theme?: Theme;
   /// Il lettore dei PDF della shell: l'anteprima di stampa ci disegna le
@@ -354,24 +369,64 @@ interface AxisLayout {
 /// rifare il gesto quando la griglia scorre sotto un puntatore fermo.
 type CellDrag =
   | { readonly kind: "cells" | "rows" | "columns"; readonly anchor: GridPosition; x: number; y: number }
-  | { readonly kind: "fill"; readonly source: GridRange; target: GridRange; x: number; y: number };
+  | { readonly kind: "fill"; readonly source: GridRange; target: GridRange; x: number; y: number }
+  | { readonly kind: "move"; readonly source: GridRange; readonly grab: GridPosition; target: GridRange; x: number; y: number }
+  | { readonly kind: "point"; readonly anchor: GridPosition; x: number; y: number };
+
+/// Il riferimento puntato in una formula aperta: dove sta nel testo, che
+/// testo c'era dopo averlo scritto, e le celle che dice. Vale finché il testo
+/// e il cursore sono quelli.
+interface Pointing {
+  readonly from: number;
+  readonly to: number;
+  readonly text: string;
+  readonly anchor: GridPosition;
+  readonly focus: GridPosition;
+}
+
+/// Un bordo fra due intestazioni preso col puntatore: la colonna (o la riga)
+/// `index` che finisce lì, e le linee che si misurano insieme.
+interface ResizeEdge {
+  readonly axis: "column" | "row";
+  readonly index: number;
+}
+
+/// La misura che si tira: `size` all'inizio, `now` adesso, in pixel dello
+/// schermo; `from` è dove il puntatore è partito.
+interface ResizeDrag extends ResizeEdge {
+  readonly from: number;
+  readonly size: number;
+  now: number;
+}
+
+/// Quanto vicino al bordo fra due intestazioni il puntatore lo prende.
+const RESIZE_SLOP = 4;
+/// Quanto vicino al bordo della selezione il puntatore la prende per
+/// spostarla.
+const MOVE_SLOP = 3;
+
+/// I pixel del file in caratteri di Excel, come la sua finestra Larghezza
+/// colonne: è l'inverso di `chars_to_points` di GridCraft.
+export function pixelsToChars(pixels: number): number {
+  if (pixels <= 0) return 0;
+  return pixels < 12 ? pixels / 12 : (pixels - 5) / 7;
+}
 
 /// Ogni quanto la griglia scorre mentre un gesto esce dal bordo, e di quanto
 /// al più per passo.
 const DRAG_SCROLL_MS = 30;
 const DRAG_SCROLL_MAX = 60;
 
-/// Il riempimento che il quadratino porta da `source` verso `position`: come
-/// in Excel, lungo l'asse su cui il puntatore è uscito di più, fino alla riga o
-/// alla colonna del puntatore. Dentro la sorgente non c'è riempimento.
+/// Il riempimento che il quadratino porta da `source` verso `position`: la
+/// regola della Tabella (`fillRange`); dentro la sorgente resta la sorgente.
 export function fillTarget(source: GridRange, position: GridPosition): GridRange {
-  const vertical = Math.max(position.row - source.rowEnd, source.rowStart - position.row, 0);
-  const horizontal = Math.max(position.column - source.columnEnd, source.columnStart - position.column, 0);
-  if (vertical === 0 && horizontal === 0) return source;
-  if (vertical >= horizontal) {
-    return position.row > source.rowEnd ? { ...source, rowEnd: position.row } : { ...source, rowStart: position.row };
-  }
-  return position.column > source.columnEnd ? { ...source, columnEnd: position.column } : { ...source, columnStart: position.column };
+  const range = fillRange(tableRange(source), position);
+  return range ? { rowStart: range.r0, columnStart: range.c0, rowEnd: range.r1, columnEnd: range.c1 } : source;
+}
+
+/// Un intervallo della griglia in quello della Tabella.
+function tableRange(range: GridRange): { r0: number; c0: number; r1: number; c1: number } {
+  return { r0: range.rowStart, c0: range.columnStart, r1: range.rowEnd, c1: range.columnEnd };
 }
 
 function sameRange(a: GridRange, b: GridRange): boolean {
@@ -380,9 +435,35 @@ function sameRange(a: GridRange, b: GridRange): boolean {
 
 interface EditingState {
   readonly position: GridPosition;
-  readonly original: string;
+  /// L'input della cella quando si è aperta: confermare scrive soltanto se
+  /// la bozza è diversa.
+  original: string;
   draft: string;
   readonly owner: "cell" | "formula";
+  /// «Inserisci», aperta da una battuta: le frecce confermano e spostano.
+  /// «Modifica», aperta con F2 o il doppio clic: le frecce muovono il
+  /// cursore. F2 alterna.
+  mode: GridEditMode;
+  /// L'input che la cella ha preso sotto la bozza, da un salvataggio o da un
+  /// altro riquadro, finché non si sceglie quale tenere.
+  theirs: string | null;
+}
+
+/// Il modo della cella aperta, come lo dice la banda di stato.
+export type GridEditMode = "ready" | "insert" | "edit";
+
+/// Che cosa fa una battuta su una cella scelta. Un tasto vero (`isTrusted`)
+/// stampabile, morto o di composizione (`Process`, `isComposing`) apre la
+/// cella e lascia che il browser ci scriva: così passano tasti morti e IME.
+/// Un evento sintetico non scrive niente da sé, e la cella si apre col suo
+/// carattere. Le scorciatoie (Ctrl, Cmd, Alt senza AltGr) non aprono.
+export function typingOpens(event: KeyboardEvent): "browser" | "seed" | null {
+  const altGraph = event.getModifierState?.("AltGraph") ?? false;
+  if (event.ctrlKey && !altGraph) return null;
+  if (event.metaKey || (event.altKey && !altGraph)) return null;
+  const composing = event.isComposing || event.key === "Process" || event.key === "Dead";
+  if (event.isTrusted && (composing || event.key.length === 1)) return "browser";
+  return !composing && event.key.length === 1 ? "seed" : null;
 }
 
 function axisLayout(
@@ -454,6 +535,27 @@ export function uniformRowRange(total: number, scrollTop: number, viewportHeight
 function clamp(value: number, maximum: number): number {
   return Math.max(0, Math.min(maximum, value));
 }
+/// Gli elementi che `#render` disegna direttamente nella griglia.
+const DRAWN = ".grid-row, .grid-freeze, .grid-object, .grid-selection, .grid-fill-handle, .grid-fill-preview, .grid-cut-mark, .grid-resize-guide, .grid-resize-label, .grid-move-preview, .grid-formula-ref";
+
+/// Dà a `target` gli attributi di `source`, e toglie quelli che lui non ha.
+function syncAttributes(target: Element, source: Element): void {
+  for (const attribute of [...target.attributes]) {
+    if (!source.hasAttribute(attribute.name)) target.removeAttribute(attribute.name);
+  }
+  for (const attribute of source.attributes) {
+    if (target.getAttribute(attribute.name) !== attribute.value) target.setAttribute(attribute.name, attribute.value);
+  }
+}
+
+/// Se `range` è esattamente un'unione: una cella sola, per Invio e Tab.
+function mergeCovers(merges: readonly GridMerge[], range: GridRange): boolean {
+  const merge = mergeAt(merges, { row: range.rowStart, column: range.columnStart });
+  return Boolean(merge)
+    && merge!.row === range.rowStart && merge!.column === range.columnStart
+    && merge!.row + merge!.rows - 1 === range.rowEnd && merge!.column + merge!.columns - 1 === range.columnEnd;
+}
+
 function samePosition(left: GridPosition, right: GridPosition): boolean {
   return left.row === right.row && left.column === right.column;
 }
@@ -549,6 +651,20 @@ export class GridEngine {
   #rows: AxisLayout = { offsets: [0], sizes: [], total: 0 };
   #columns: AxisLayout = { offsets: [0], sizes: [], total: 0 };
   #editing: EditingState | null = null;
+  #pointing: Pointing | null = null;
+  /// Ciò che si è tagliato e non ancora incollato: le formiche attorno
+  /// all'intervallo, e il testo che l'incolla riconosce per spostarlo.
+  #cutMark: { readonly sheet: string; readonly range: GridRange; readonly text: string } | null = null;
+  /// Ciò che copia o taglia hanno preso dalla cartella: l'incolla che trova
+  /// lo stesso testo negli appunti lo rifà con `fub.pasteFrom`.
+  #copied: Copied | null = null;
+  /// La colonna dove una serie di Tab è cominciata: Invio ci torna.
+  #tabStart: number | null = null;
+  /// Il disegno chiesto dallo scorrimento, uno per fotogramma.
+  #renderFrame: number | null = null;
+  /// Ciò che ogni elemento disegnato era quando è nato, senza la selezione:
+  /// un elemento uguale a quello nuovo resta al suo posto (`#reconcile`).
+  readonly #drawn = new WeakMap<Element, string>();
   #readOnly = false;
   #destroyed = false;
   #providerCommitTail: Promise<void> = Promise.resolve();
@@ -557,6 +673,12 @@ export class GridEngine {
   /// Il gesto del puntatore sulle celle: una selezione che si allarga
   /// (celle, righe o colonne intere) o il quadratino di riempimento tirato.
   #drag: CellDrag | null = null;
+  #resize: ResizeDrag | null = null;
+  /// Gli altri intervalli di una selezione a più intervalli, sul foglio
+  /// mostrato; quello in cui si lavora è `#selection`.
+  #others: GridRange[] = [];
+  /// Maiusc+F8: i movimenti tengono gli intervalli già scelti.
+  #adding = false;
   /// Lo scorrimento mentre il gesto esce dal bordo della griglia.
   #dragScroll: ReturnType<typeof setInterval> | null = null;
   /// Il catalogo dei comandi sulla selezione, come il provider l'ha dato.
@@ -599,6 +721,9 @@ export class GridEngine {
   #objectText: { readonly key: string; readonly field: HTMLTextAreaElement; readonly original: string } | null = null;
   /// Ciò che si dice a chi non vede quando un oggetto si seleziona.
   readonly #objectsAnnounce: HTMLElement;
+  /// L'avviso di una bozza la cui cella è cambiata sotto, con i due pulsanti.
+  readonly #draftNotice: HTMLElement;
+  readonly #draftText: HTMLElement;
   /// Ciò che vive quanto la griglia e si toglie con una vita: la scheda delle
   /// note e dei commenti.
   readonly #life: Lifetime = openLifetime();
@@ -612,6 +737,16 @@ export class GridEngine {
     this.#notice.className = "grid-notice";
     this.#notice.setAttribute("role", "status");
     this.#notice.hidden = true;
+    this.#draftNotice = document.createElement("div");
+    this.#draftNotice.className = "grid-draft-notice";
+    this.#draftNotice.setAttribute("role", "alert");
+    this.#draftNotice.hidden = true;
+    this.#draftText = document.createElement("p");
+    this.#draftNotice.append(
+      this.#draftText,
+      textButton({ label: t("grid.draft.keep"), kind: "primary", onPress: () => this.#keepDraft() }),
+      textButton({ label: t("grid.draft.take"), onPress: () => this.#takeTheirs() }),
+    );
     this.#ribbonHost = document.createElement("div");
     this.#ribbonHost.className = "grid-ribbon-host";
     this.#sheetBar = document.createElement("div");
@@ -649,7 +784,7 @@ export class GridEngine {
     this.#objectsAnnounce = document.createElement("p");
     this.#objectsAnnounce.className = "grid-objects-announce sr-only";
     this.#objectsAnnounce.setAttribute("role", "status");
-    this.#root.append(this.#ribbonHost, this.#notice, formula, this.#viewport, this.#objectsSummary, this.#objectsAnnounce, this.#sheetBar);
+    this.#root.append(this.#ribbonHost, this.#notice, this.#draftNotice, formula, this.#viewport, this.#objectsSummary, this.#objectsAnnounce, this.#sheetBar);
     parent.replaceChildren(this.#root);
     this.#stopLanguage = onLanguage(() => {
       this.#viewport.setAttribute("aria-label", t("grid.surface"));
@@ -660,9 +795,12 @@ export class GridEngine {
       this.#render();
     });
 
+    // La barra della formula è sempre in «Modifica»: le frecce muovono il
+    // cursore, Invio e Tab confermano e spostano come nella cella.
     const formulaProfile = createFormulaProfile({
+      singleLine: false,
       callbacks: {
-        commit: () => this.#finishEditing(true, "input"),
+        commit: (_value, move, arrow) => this.#commitAndMove(move, arrow),
         cancel: () => this.#finishEditing(false, "input"),
       },
     });
@@ -674,9 +812,13 @@ export class GridEngine {
       extensions: () => formulaProfile.extensions(),
     });
     const cellProfile = createFormulaProfile({
+      singleLine: false,
       callbacks: {
-        commit: () => this.#finishEditing(true, "input"),
+        commit: (_value, move, arrow) => this.#commitAndMove(move, arrow),
         cancel: () => this.#finishEditing(false, "input"),
+        arrowsCommit: () => this.#editing?.mode === "insert",
+        toggleMode: () => this.#toggleEditMode(),
+        point: (move, extend) => this.#pointByKey(move, extend),
       },
     });
     this.#cellEditor = createTextEngine(this.#cellEditorHost, {
@@ -688,7 +830,7 @@ export class GridEngine {
     });
 
     this.#viewport.addEventListener("scroll", () => {
-      this.#render();
+      this.#scheduleRender();
       void this.#loadViewport();
     }, { signal });
     // L'editor della cella sta dentro la griglia, e i suoi eventi salgono fin
@@ -703,10 +845,12 @@ export class GridEngine {
     this.#viewport.addEventListener("pointerdown", grid((event) => this.#pointerDown(event)), { signal });
     this.#viewport.addEventListener("pointermove", grid((event) => this.#pointerMove(event)), { signal });
     this.#viewport.addEventListener("pointerup", (event) => {
+      this.#endResize(true);
       this.#endDrag(true, event.ctrlKey || event.metaKey);
       this.#endObjectGesture(event, true);
     }, { signal });
     this.#viewport.addEventListener("pointercancel", (event) => {
+      this.#endResize(false);
       this.#endDrag(false, false);
       this.#endObjectGesture(event, false);
     }, { signal });
@@ -715,21 +859,56 @@ export class GridEngine {
     this.#viewport.addEventListener("cut", grid((event) => this.#cut(event)), { signal });
     this.#viewport.addEventListener("paste", grid((event) => this.#paste(event)), { signal });
     this.#viewport.addEventListener("dblclick", grid((event) => {
-      if (event.target instanceof Element && event.target.closest(".grid-object-text-editor")) return;
-      if (event.target instanceof Element && event.target.closest(".grid-fill-handle")) {
+      // Sul bordo di un'intestazione il doppio clic adatta la misura.
+      const edge = this.#resizeEdge(event.clientX, event.clientY);
+      if (edge) {
+        const id = edge.axis === "column" ? "home.autofitColumnWidth" : "home.autofitRowHeight";
+        const lines = this.#resizeLines(edge);
+        if (this.#serves(id)) this.command(id, JSON.stringify(edge.axis === "column" ? { cols: lines } : { rows: lines }));
+        return;
+      }
+      // Il puntatore è catturato dalla griglia dal `pointerdown`: il browser
+      // dà il doppio clic a lei, e ciò che c'era sotto lo dice il punto.
+      // Due clic che puntano una formula non aprono un'altra cella.
+      if (this.#pointing) return;
+      const target = event.target === this.#viewport
+        ? document.elementFromPoint?.(event.clientX, event.clientY) ?? null
+        : event.target instanceof Element ? event.target : null;
+      if (!target || !this.#viewport.contains(target)) return;
+      if (target.closest(".grid-object-text-editor")) return;
+      if (target.closest(".grid-fill-handle")) {
         this.#fillToNeighbour();
         return;
       }
-      const object = event.target instanceof Element ? event.target.closest<HTMLElement>(".grid-object") : null;
+      const object = target.closest<HTMLElement>(".grid-object");
       if (object) {
         if (object.dataset.object) this.#beginObjectText(object.dataset.object);
         return;
       }
-      const position = this.#eventPosition(event);
-      if (position) this.#beginEditing("cell", position);
+      const cell = target.closest<HTMLElement>(".grid-cell");
+      const position = cell ? this.#positionOf(cell) : null;
+      if (position) this.#beginEditing("cell", position, undefined, "edit");
     }), { signal });
-    this.#formulaHost.addEventListener("focusin", () => this.#beginEditing("formula", this.#selection.focus), { signal });
+    this.#formulaHost.addEventListener("focusin", () => {
+      // Dalla cella aperta alla barra la bozza passa con lei.
+      if (this.#editing?.owner === "cell") {
+        const draft = this.#editing.draft;
+        this.#finishEditing(false, "input", false);
+        this.#beginEditing("formula", this.#active(), draft, "edit");
+        return;
+      }
+      this.#beginEditing("formula", this.#active());
+    }, { signal });
     this.#formulaHost.addEventListener("focusout", () => this.#commitAfterBlur("formula"), { signal });
+    // Un clic altrove, o il fuoco che se ne va, conferma la cella, come la
+    // barra della formula; non quando il fuoco passa alla barra.
+    this.#cellEditorHost.addEventListener("focusout", (event) => {
+      if (
+        event.relatedTarget instanceof Node
+        && (this.#formulaHost.contains(event.relatedTarget) || this.#draftNotice.contains(event.relatedTarget))
+      ) return;
+      this.#commitAfterBlur("cell");
+    }, { signal });
     attachCommentCards({
       root: this.#viewport,
       lifetime: this.#life,
@@ -770,10 +949,15 @@ export class GridEngine {
 
   getDoc(): string { return this.#journal; }
   selection(): GridSelection {
-    return {
-      anchor: { ...this.#selection.anchor },
-      focus: { ...this.#selection.focus },
-    };
+    const { anchor, focus, active } = this.#selection;
+    return active
+      ? { anchor: { ...anchor }, focus: { ...focus }, active: { ...active } }
+      : { anchor: { ...anchor }, focus: { ...focus } };
+  }
+
+  /// Il modo della cella: «Pronto», «Inserisci» o «Modifica».
+  editMode(): GridEditMode {
+    return this.#editing?.mode ?? "ready";
   }
 
   renderedCellCount(): number {
@@ -853,7 +1037,7 @@ export class GridEngine {
 
   /// Lo stile della cella attiva, per lo stato dei controlli della barra.
   activeStyle(): GridBytesStyle | undefined {
-    return this.#workbookCell(this.#selection.focus)?.style;
+    return this.#workbookCell(this.#active())?.style;
   }
 
   /// Dove la barra multifunzione si monta, sopra la barra della formula.
@@ -927,7 +1111,7 @@ export class GridEngine {
       editor.focus();
       return written;
     }
-    this.#beginEditing("cell", this.#selection.focus, `=${text}`);
+    this.#beginEditing("cell", this.#active(), `=${text}`);
     if (!this.#editing) return false;
     this.#cellEditor.focus();
     return true;
@@ -1046,6 +1230,7 @@ export class GridEngine {
     }
     if (next) {
       this.#finishEditing(true, "input", false);
+      this.#others = [];
       this.#selection = next;
       this.#syncFormulaBar();
       this.#render();
@@ -1073,7 +1258,12 @@ export class GridEngine {
     if (this.#destroyed || !this.#workbook) return;
     const sheet = this.#sheet();
     if (this.#selectedObject !== null) this.#selectObject(null);
-    this.#selection = { anchor: { row: Math.max(0, sheet.rows.length - 1), column: Math.max(0, sheet.columns.length - 1) }, focus: { row: 0, column: 0 } };
+    this.#others = [];
+    this.#selection = {
+      anchor: { row: Math.max(0, sheet.rows.length - 1), column: Math.max(0, sheet.columns.length - 1) },
+      focus: { row: 0, column: 0 },
+      active: { row: this.#edgeVisible("row", false), column: this.#edgeVisible("column", false) },
+    };
     this.#syncFormulaBar();
     this.#render();
     this.#selectionChanged();
@@ -1101,7 +1291,7 @@ export class GridEngine {
     return {
       sheet: this.#sheet().name,
       range: rangeA1(this.#selectedRange()),
-      active: cellA1(this.#selection.focus),
+      active: cellA1(this.#active()),
     };
   }
 
@@ -1131,6 +1321,8 @@ export class GridEngine {
   #give(id: string, params: string, history: boolean, done?: (run: GridRun) => void): void {
     const selection = this.#commandSelection();
     const command: GridCommand = { id, params, ...selection };
+    // Un comando cambia la cartella sotto ciò che si è copiato.
+    if (id !== PASTE_FROM) this.#copied = null;
     this.#undo = [];
     this.#redo = [];
     this.#pendingCommandMode += 1;
@@ -1216,8 +1408,8 @@ export class GridEngine {
   }
 
   /// La selezione che un comando ha lasciato: il foglio, l'intervallo che
-  /// contiene la cella attiva e la cella attiva, che resta il fuoco quando è
-  /// un angolo dell'intervallo.
+  /// contiene la cella attiva e la cella attiva, che è l'àncora quando è un
+  /// angolo dell'intervallo.
   #adoptSelection(selection: GridCommandSelection): void {
     const index = this.#workbook?.sheets.findIndex((sheet) => sheet.id === selection.sheet) ?? -1;
     const active = parseCellA1(selection.active);
@@ -1226,6 +1418,8 @@ export class GridEngine {
     const area = areas.find((candidate) =>
       active.row >= candidate.rowStart && active.row <= candidate.rowEnd
       && active.column >= candidate.columnStart && active.column <= candidate.columnEnd);
+    // Gli altri intervalli restano scelti, come li ha lasciati il comando.
+    this.#others = areas.filter((candidate) => candidate !== area);
     let next: GridSelection = { anchor: active, focus: active };
     if (area) {
       const row = active.row === area.rowStart ? area.rowEnd : area.rowStart;
@@ -1233,11 +1427,16 @@ export class GridEngine {
       const corner = (active.row === area.rowStart || active.row === area.rowEnd)
         && (active.column === area.columnStart || active.column === area.columnEnd);
       next = corner
-        ? { anchor: { row, column }, focus: active }
-        : { anchor: { row: area.rowStart, column: area.columnStart }, focus: { row: area.rowEnd, column: area.columnEnd } };
+        ? { anchor: active, focus: { row, column } }
+        : { anchor: { row: area.rowStart, column: area.columnStart }, focus: { row: area.rowEnd, column: area.columnEnd }, active };
     }
     const sameSheet = index === this.#sheetIndex;
-    if (sameSheet && samePosition(next.anchor, this.#selection.anchor) && samePosition(next.focus, this.#selection.focus)) return;
+    if (
+      sameSheet
+      && samePosition(next.anchor, this.#selection.anchor)
+      && samePosition(next.focus, this.#selection.focus)
+      && samePosition(next.active ?? next.anchor, this.#active())
+    ) return;
     if (!sameSheet) {
       this.#finishEditing(false, "input", false);
       this.#sheetIndex = index;
@@ -1289,6 +1488,8 @@ export class GridEngine {
     this.#destroyed = true;
     this.#stopLanguage();
     this.#abort.abort();
+    if (this.#renderFrame !== null) cancelAnimationFrame(this.#renderFrame);
+    this.#renderFrame = null;
     this.#bytesEpoch++;
     this.#closeBytes();
     this.#sheetTabs?.lifetime.close();
@@ -1329,9 +1530,10 @@ export class GridEngine {
     this.#journal = journal;
     this.#bytesOpening = true;
     this.#root.dataset.gridProfile = "workbook";
-    // Una bozza aperta parte dall'input di prima: confermata sul giornale
-    // nuovo coprirebbe ciò che l'altro riquadro ha scritto.
-    this.#finishEditing(false, "input", false);
+    // Una bozza aperta resta: la riapertura dopo un salvataggio, proprio o di
+    // un altro riquadro, non la butta. Se la sua cella è cambiata sotto, si
+    // chiede quale tenere (`#checkDraft`). Un documento nuovo la chiude.
+    if (reset) this.#finishEditing(false, "input", false);
     if (reset) {
       this.#undo = [];
       this.#redo = [];
@@ -1388,6 +1590,7 @@ export class GridEngine {
       this.#bytesMessage = null;
       this.#root.dataset.gridProtocol = "v2";
       this.#showView(sheet.id, top);
+      this.#checkDraft(top);
       this.#followMedia();
     } catch (error) {
       if (this.#destroyed || epoch !== this.#bytesEpoch) return;
@@ -1504,7 +1707,10 @@ export class GridEngine {
     this.#workbook = view.workbook;
     const index = view.workbook.sheets.findIndex((sheet) => sheet.id === sheetId);
     this.#sheetIndex = index >= 0 ? index : view.active;
-    if (top) this.#selection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
+    if (top) {
+      this.#selection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
+      this.#others = [];
+    }
     this.#showNotice();
     this.#showSheetTabs();
     this.#showSheet(top);
@@ -1646,6 +1852,10 @@ export class GridEngine {
   /// in coda, e la sua risposta corregge il giornale e la history.
   #commitCells(writes: readonly CellWrite[], origin: EditorChangeOrigin, recordHistory: boolean): boolean {
     if (!this.#view || this.#readOnly || !writes.length) return false;
+    // Scrivere toglie le formiche di un taglio e ciò che si è copiato, come
+    // nei fogli di calcolo.
+    this.#cutMark = null;
+    this.#copied = null;
     let journal: GridJournal;
     try {
       journal = parseGridJournal(this.#journal);
@@ -1900,6 +2110,8 @@ export class GridEngine {
     this.#selectedObject = null;
     this.#sheetIndex = index;
     this.#selection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
+    this.#others = [];
+    this.#adding = false;
     this.#showSheet(true);
     this.#sheetTabs?.handle.select(this.#sheet().id);
     void this.#loadViewport();
@@ -2011,24 +2223,24 @@ export class GridEngine {
       rowElement.dataset.row = String(row);
       rowElement.setAttribute("role", "row");
       rowElement.setAttribute("aria-rowindex", String(row + 2));
-      this.#place(
-        rowElement,
-        0,
-        frame.columnHeader + this.#rows.offsets[row] + (frozen ? scrollTop : 0),
-        frame.rowHeader + this.#columns.total,
-        this.#rows.sizes[row],
-      );
+      // Una riga bloccata sta ferma da sé (`#stick`), le altre scorrono.
+      if (frozen) {
+        this.#stick(rowElement, frame.columnHeader + this.#rows.offsets[row], frame.rowHeader + this.#columns.total, this.#rows.sizes[row]);
+      } else {
+        this.#place(rowElement, 0, frame.columnHeader + this.#rows.offsets[row], frame.rowHeader + this.#columns.total, this.#rows.sizes[row]);
+      }
       if (frame.rowHeader > 0) {
         const header = document.createElement("div");
         header.className = "grid-header grid-row-header";
-        if (row >= range.rowStart && row <= range.rowEnd) header.classList.add("selected");
+        if ([range, ...this.#others].some((area) => row >= area.rowStart && row <= area.rowEnd)) header.classList.add("selected");
+        if (row > 0 && this.#rows.sizes[row - 1] === 0) header.classList.add("after-hidden");
         header.setAttribute("role", "rowheader");
         header.setAttribute("aria-rowindex", String(row + 2));
         header.setAttribute("aria-colindex", "1");
         header.textContent = String(row + 1);
         header.style.pointerEvents = "none";
         if (frame.zoom !== 1) header.style.fontSize = `calc(var(--text-sm) * ${frame.zoom})`;
-        this.#place(header, scrollLeft, 0, frame.rowHeader, this.#rows.sizes[row]);
+        this.#stickLeft(header, frame.rowHeader, this.#rows.sizes[row]);
         rowElement.append(header);
       }
       const borders: HTMLElement[] = [];
@@ -2051,18 +2263,34 @@ export class GridEngine {
     }
     rows.push(...this.#objectElements());
     rows.push(...this.#freezeLines());
+    rows.push(...this.#selectionMarks(range));
     rows.push(...this.#fillMarks(range));
+    rows.push(...this.#cutMarks());
+    rows.push(...this.#resizeMarks());
+    rows.push(...this.#moveMarks());
+    rows.push(...this.#referenceMarks());
     this.#viewport.classList.toggle("filling", this.#drag?.kind === "fill");
+    this.#viewport.classList.toggle("moving", this.#drag?.kind === "move");
+    this.#viewport.classList.toggle("ranged", !this.#lone(range) || this.#others.length > 0);
 
-    this.#detachCellEditor();
-    for (const row of this.#viewport.querySelectorAll<HTMLElement>(".grid-row, .grid-freeze, .grid-object, .grid-fill-handle, .grid-fill-preview")) row.remove();
-    this.#viewport.append(...rows);
-    this.#fitCells(measures);
+    // Ciò che non cambia resta: la cella sotto il puntatore riceve il clic e
+    // il doppio clic, e l'editor aperto non perde il fuoco.
+    const focused = this.#cellEditorHost.contains(document.activeElement);
+    const drawn = [...this.#viewport.children].filter((element): element is HTMLElement =>
+      element instanceof HTMLElement && element.matches(DRAWN));
+    // Tutto va prima del canvas: ciò che sta fermo da sé è nel flusso, e
+    // davanti al canvas la sua posizione naturale è in cima, dove `sticky`
+    // lo tiene.
+    this.#reconcile(this.#viewport, drawn, rows, this.#canvas);
+    this.#fitCells(measures.filter((cell) => cell.isConnected));
     const editing = this.#editing?.owner === "cell" ? this.#editing : null;
     if (editing) {
       const cell = this.#findCell(editing.position);
       if (cell && this.#isVisiblePosition(editing.position)) {
-        cell.append(this.#cellEditorHost);
+        if (this.#cellEditorHost.parentElement !== cell) {
+          cell.append(this.#cellEditorHost);
+          if (focused) this.#cellEditor.focus();
+        }
         this.#cellEditorHost.hidden = false;
         this.#cellEditorHost.removeAttribute("aria-hidden");
         this.#positionEditor(editing.position);
@@ -2073,15 +2301,93 @@ export class GridEngine {
         this.#canvas.append(this.#cellEditorHost);
       }
     }
-    if (this.#isVisiblePosition(this.#selection.focus) && this.#findCell(this.#selection.focus)) {
-      this.#viewport.setAttribute("aria-activedescendant", this.#cellId(this.#selection.focus));
+    const active = this.#active();
+    if (this.#isVisiblePosition(active) && this.#findCell(active)) {
+      this.#viewport.setAttribute("aria-activedescendant", this.#cellId(active));
     } else {
       this.#viewport.removeAttribute("aria-activedescendant");
     }
     const name = this.#root.querySelector<HTMLElement>(".grid-cell-name");
     if (name) {
-      name.textContent = this.#isVisiblePosition(this.#selection.focus) ? cellA1(this.#selection.focus) : "";
+      name.textContent = this.#isVisiblePosition(active) ? cellA1(active) : "";
     }
+  }
+
+  /// Mette in `parent` gli elementi `fresh`, nell'ordine, al posto dei
+  /// `drawn`. Un elemento disegnato uguale a quello nuovo resta dov'è: una
+  /// riga con la stessa chiave prende gli attributi nuovi e si riconcilia
+  /// dentro, una cella uguale (`#drawn`) prende soltanto la selezione, il
+  /// resto si confronta per intero. Gli oggetti si rifanno sempre.
+  #reconcile(parent: HTMLElement, drawn: readonly HTMLElement[], fresh: readonly HTMLElement[], end: ChildNode | null = null): void {
+    const key = (element: HTMLElement): string | null => {
+      if (element.classList.contains("grid-object")) return null;
+      if (element.classList.contains("grid-cell")) return `cell:${element.dataset.row}:${element.dataset.column}`;
+      if (element.classList.contains("grid-column-header-row")) return "headers";
+      if (element.classList.contains("grid-row")) return `row:${element.dataset.row}`;
+      return `html:${element.outerHTML}`;
+    };
+    const old = new Map<string, HTMLElement>();
+    for (const element of drawn) {
+      const name = key(element);
+      if (name !== null && !old.has(name)) old.set(name, element);
+    }
+    const kept = new Set<HTMLElement>();
+    const placed = fresh.map((element) => {
+      const name = key(element);
+      const before = name === null ? undefined : old.get(name);
+      if (!before) return element;
+      if (element.classList.contains("grid-cell")) {
+        if (this.#drawn.get(before) !== this.#drawn.get(element)) return element;
+        before.className = element.className;
+        before.setAttribute("aria-selected", element.getAttribute("aria-selected") ?? "false");
+      } else if (element.classList.contains("grid-row")) {
+        syncAttributes(before, element);
+        this.#reconcile(before, [...before.children] as HTMLElement[], [...element.children] as HTMLElement[]);
+      }
+      old.delete(name!);
+      kept.add(before);
+      return before;
+    });
+    for (const element of drawn) if (!kept.has(element)) element.remove();
+    // Dal fondo: un elemento già al suo posto non si muove.
+    let next: ChildNode | null = end;
+    for (let index = placed.length - 1; index >= 0; index -= 1) {
+      const element = placed[index];
+      if (element.parentNode !== parent || element.nextSibling !== next) parent.insertBefore(element, next);
+      next = element;
+    }
+  }
+
+  /// Se la selezione è la sola cella attiva, o l'unione che la contiene.
+  #lone(range: GridRange): boolean {
+    const active = this.#active();
+    const merge = mergeAt(this.#merges(), active);
+    const cell = merge
+      ? { rowStart: merge.row, rowEnd: merge.row + merge.rows - 1, columnStart: merge.column, columnEnd: merge.column + merge.columns - 1 }
+      : { rowStart: active.row, rowEnd: active.row, columnStart: active.column, columnEnd: active.column };
+    return sameRange(range, cell);
+  }
+
+  /// Il rettangolo dell'intervallo scelto, uno solo e non cella per cella:
+  /// con una cella sola il bordo è quello della cella attiva, su un taglio
+  /// sono le formiche.
+  #selectionMarks(range: GridRange): HTMLElement[] {
+    const marks = this.#others.flatMap((area) => this.#rangeMark(area));
+    if (this.#lone(range) && !marks.length) return [];
+    // Sulle formiche di un taglio il bordo pieno le coprirebbe.
+    const cut = this.#cutMark;
+    if (cut && cut.sheet === this.#sheet().id && sameRange(cut.range, range)) return marks;
+    return [...marks, ...this.#rangeMark(range)];
+  }
+
+  #rangeMark(range: GridRange): HTMLElement[] {
+    const box = this.#rangeBox(range);
+    if (!box) return [];
+    const element = document.createElement("div");
+    element.className = "grid-selection";
+    element.setAttribute("aria-hidden", "true");
+    this.#place(element, box.left, box.top, box.width, box.height);
+    return [element];
   }
 
   /// Il quadratino di riempimento all'angolo della selezione e, mentre lo si
@@ -2107,10 +2413,176 @@ export class GridEngine {
       handle.className = "grid-fill-handle";
       handle.setAttribute("aria-hidden", "true");
       handle.title = t("grid.fill.handle");
-      this.#place(handle, box.left + box.width - 4, box.top + box.height - 4, 7, 7);
+      this.#place(handle, box.left + box.width - 4, box.top + box.height - 4, 8, 8);
       marks.push(handle);
     }
     return marks;
+  }
+
+  /// Mentre si tira il bordo di un'intestazione: la guida dove cadrà e la
+  /// misura, nelle unità di Excel e in pixel del file.
+  #resizeMarks(): HTMLElement[] {
+    const resize = this.#resize;
+    if (!resize) return [];
+    const frame = this.#frame;
+    const guide = document.createElement("div");
+    guide.className = "grid-resize-guide";
+    guide.setAttribute("aria-hidden", "true");
+    const label = document.createElement("div");
+    label.className = "grid-resize-label";
+    label.setAttribute("aria-hidden", "true");
+    const pixels = Math.round(resize.now / (WORKBOOK_SCALE * frame.zoom));
+    const number = (value: number) => new Intl.NumberFormat(resolvedLanguage(), { maximumFractionDigits: 2 }).format(value);
+    const left = this.#viewport.scrollLeft;
+    const top = this.#viewport.scrollTop;
+    if (resize.axis === "column") {
+      const x = this.#columnLeft(resize.index) + resize.now;
+      this.#place(guide, x - 1, top, 2, this.#viewport.clientHeight);
+      label.textContent = t("grid.resize.width", { chars: number(pixelsToChars(pixels)), px: String(pixels) });
+      label.style.position = "absolute";
+      label.style.left = `${x + 6}px`;
+      label.style.top = `${top + frame.columnHeader + 4}px`;
+    } else {
+      const offset = frame.columnHeader + this.#rows.offsets[resize.index] + (resize.index < frame.frozenRows ? top : 0);
+      const y = offset + resize.now;
+      this.#place(guide, left, y - 1, this.#viewport.clientWidth, 2);
+      label.textContent = t("grid.resize.height", { points: number(pixels * 0.75), px: String(pixels) });
+      label.style.position = "absolute";
+      label.style.left = `${left + frame.rowHeader + 4}px`;
+      label.style.top = `${y + 6}px`;
+    }
+    return [guide, label];
+  }
+
+  /// Il bordo fra due intestazioni sotto il punto, se si può misurare: un
+  /// bordo è preso a `RESIZE_SLOP` pixel, e senza il comando servito non c'è.
+  #resizeEdge(x: number, y: number): ResizeEdge | null {
+    if (!this.commandable() || this.#editing || this.#selectedObject !== null) return null;
+    const frame = this.#frame;
+    const rect = this.#viewport.getBoundingClientRect();
+    const px = x - rect.left - this.#viewport.clientLeft;
+    const py = y - rect.top - this.#viewport.clientTop;
+    const nearest = (point: number, header: number, frozen: number, scroll: number, layout: AxisLayout): number | null => {
+      const inside = point - header;
+      const offset = inside < frozen ? inside : inside + scroll;
+      let best: number | null = null;
+      let distance = RESIZE_SLOP + 1;
+      for (let index = 0; index < layout.sizes.length; index += 1) {
+        if (layout.sizes[index] === 0) continue;
+        const gap = Math.abs(layout.offsets[index + 1] - offset);
+        if (gap <= distance) {
+          best = index;
+          distance = gap;
+        }
+        if (layout.offsets[index] > offset + RESIZE_SLOP) break;
+      }
+      return best;
+    };
+    if (py >= 0 && py < frame.columnHeader && px >= frame.rowHeader && px < this.#viewport.clientWidth) {
+      if (!this.#serves("home.columnWidth")) return null;
+      const index = nearest(px, frame.rowHeader, frame.frozenWidth, this.#viewport.scrollLeft, this.#columns);
+      return index === null ? null : { axis: "column", index };
+    }
+    if (px >= 0 && px < frame.rowHeader && py >= frame.columnHeader && py < this.#viewport.clientHeight) {
+      if (!this.#serves("home.rowHeight")) return null;
+      const index = nearest(py, frame.columnHeader, frame.frozenHeight, this.#viewport.scrollTop, this.#rows);
+      return index === null ? null : { axis: "row", index };
+    }
+    return null;
+  }
+
+  /// Le linee che una misura tocca: tutte quelle scelte intere, se `index` è
+  /// fra loro, come in Excel; altrimenti `index` sola. In A1 per GridCraft.
+  #resizeLines(edge: ResizeEdge): string {
+    const range = this.#selectedRange();
+    const sheet = this.#sheet();
+    if (edge.axis === "column") {
+      const whole = range.rowStart === 0 && range.rowEnd >= sheet.rows.length - 1;
+      const [a, b] = whole && edge.index >= range.columnStart && edge.index <= range.columnEnd
+        ? [range.columnStart, range.columnEnd]
+        : [edge.index, edge.index];
+      return `${columnLabel(a)}:${columnLabel(b)}`;
+    }
+    const whole = range.columnStart === 0 && range.columnEnd >= sheet.columns.length - 1;
+    const [a, b] = whole && edge.index >= range.rowStart && edge.index <= range.rowEnd
+      ? [range.rowStart, range.rowEnd]
+      : [edge.index, edge.index];
+    return `${a + 1}:${b + 1}`;
+  }
+
+  #endResize(commit: boolean): void {
+    const resize = this.#resize;
+    if (!resize) return;
+    this.#resize = null;
+    this.#render();
+    if (!commit || Math.round(resize.now) === Math.round(resize.size)) return;
+    const pixels = Math.round(resize.now / (WORKBOOK_SCALE * this.#frame.zoom));
+    const lines = this.#resizeLines(resize);
+    if (resize.axis === "column") this.command("home.columnWidth", JSON.stringify({ cols: lines, width: pixels }));
+    else this.command("home.rowHeight", JSON.stringify({ rows: lines, height: pixels }));
+  }
+
+  /// Mentre si tira il bordo della selezione: il contorno di dove andrà.
+  #moveMarks(): HTMLElement[] {
+    const drag = this.#drag?.kind === "move" ? this.#drag : null;
+    if (!drag || sameRange(drag.source, drag.target)) return [];
+    const box = this.#rangeBox(drag.target);
+    if (!box) return [];
+    const element = document.createElement("div");
+    element.className = "grid-move-preview";
+    element.setAttribute("aria-hidden", "true");
+    this.#place(element, box.left, box.top, box.width, box.height);
+    return [element];
+  }
+
+  /// Se il punto sta sul bordo della selezione, a `MOVE_SLOP` pixel, e la
+  /// selezione si può spostare: un intervallo solo, di celle, con
+  /// `fub.pasteFrom` servito. L'angolo del quadratino resta al riempimento.
+  #onSelectionEdge(x: number, y: number): boolean {
+    if (!this.commandable() || !this.#serves(PASTE_FROM) || this.#editing || this.#selectedObject !== null || this.#others.length) return false;
+    const range = this.#selectedRange();
+    const sheet = this.#sheet();
+    const whole = (range.rowStart === 0 && range.rowEnd >= sheet.rows.length - 1)
+      || (range.columnStart === 0 && range.columnEnd >= sheet.columns.length - 1);
+    const box = whole ? null : this.#rangeBox(range);
+    if (!box) return false;
+    const rect = this.#viewport.getBoundingClientRect();
+    const left = rect.left + this.#viewport.clientLeft + box.left - this.#viewport.scrollLeft;
+    const top = rect.top + this.#viewport.clientTop + box.top - this.#viewport.scrollTop;
+    const right = left + box.width;
+    const bottom = top + box.height;
+    const outside = x < left - MOVE_SLOP || x > right + MOVE_SLOP || y < top - MOVE_SLOP || y > bottom + MOVE_SLOP;
+    const inside = x > left + MOVE_SLOP && x < right - MOVE_SLOP && y > top + MOVE_SLOP && y < bottom - MOVE_SLOP;
+    const handle = this.#fillServed() && x >= right - 6 && y >= bottom - 6;
+    return !outside && !inside && !handle;
+  }
+
+  /// Lo spostamento (o con `copy` la copia) di `source` in `target`, con
+  /// `fub.pasteFrom`; dopo, la selezione è dove si è lasciato.
+  #moveRange(source: GridRange, target: GridRange, copy: boolean): void {
+    const sheet = this.#sheet().id;
+    this.#others = [];
+    this.#selection = {
+      anchor: { row: target.rowStart, column: target.columnStart },
+      focus: { row: target.rowEnd, column: target.columnEnd },
+    };
+    this.#syncFormulaBar();
+    this.#render();
+    this.#selectionChanged();
+    this.command(PASTE_FROM, JSON.stringify({ source: rangeA1(source), sourceSheet: sheet, move: !copy }));
+  }
+
+  /// Le formiche attorno a ciò che si è tagliato, sul suo foglio.
+  #cutMarks(): HTMLElement[] {
+    const mark = this.#cutMark;
+    if (!mark || mark.sheet !== this.#sheet().id) return [];
+    const box = this.#rangeBox(mark.range);
+    if (!box) return [];
+    const element = document.createElement("div");
+    element.className = "grid-cut-mark";
+    element.setAttribute("aria-hidden", "true");
+    this.#place(element, box.left, box.top, box.width, box.height);
+    return [element];
   }
 
   /// Il rettangolo di `range` nella griglia, come lo disegnano le celle.
@@ -2130,18 +2602,19 @@ export class GridEngine {
     row.className = "grid-row grid-column-header-row";
     row.setAttribute("role", "row");
     row.setAttribute("aria-rowindex", "1");
-    this.#place(row, 0, this.#viewport.scrollTop, frame.rowHeader + this.#columns.total, frame.columnHeader);
+    this.#stick(row, 0, frame.rowHeader + this.#columns.total, frame.columnHeader);
     this.#corner.className = "grid-corner";
     this.#corner.setAttribute("role", "presentation");
     this.#corner.textContent = "";
     this.#corner.style.pointerEvents = "none";
-    this.#place(this.#corner, this.#viewport.scrollLeft, 0, frame.rowHeader, frame.columnHeader);
+    this.#stickLeft(this.#corner, frame.rowHeader, frame.columnHeader);
     row.append(this.#corner);
     for (const column of columns) {
       if (this.#columns.sizes[column] === 0) continue;
       const header = document.createElement("div");
       header.className = column < frame.frozenColumns ? "grid-header grid-column-header frozen" : "grid-header grid-column-header";
-      if (column >= range.columnStart && column <= range.columnEnd) header.classList.add("selected");
+      if ([range, ...this.#others].some((area) => column >= area.columnStart && column <= area.columnEnd)) header.classList.add("selected");
+      if (column > 0 && this.#columns.sizes[column - 1] === 0) header.classList.add("after-hidden");
       header.setAttribute("role", "columnheader");
       header.setAttribute("aria-rowindex", "1");
       header.setAttribute("aria-colindex", String(column + 2));
@@ -2526,10 +2999,7 @@ export class GridEngine {
       element.setAttribute("aria-rowspan", String(merge.rows));
       element.setAttribute("aria-colspan", String(merge.columns));
     }
-    const selected = row <= range.rowEnd && lastRow >= range.rowStart && column <= range.columnEnd && lastColumn >= range.columnStart;
-    element.setAttribute("aria-selected", String(selected));
-    if (selected) element.classList.add("selected");
-    if (samePosition(position, this.#selection.focus)) element.classList.add("active");
+    const selected = this.#inSelection(range, row, column, lastRow, lastColumn);
     const text = document.createElement("span");
     text.className = "grid-cell-text";
     text.textContent = workbookCell?.cell.input ?? "";
@@ -2601,6 +3071,12 @@ export class GridEngine {
       paintBorders(border, borders);
       this.#place(border, this.#columnLeft(column) - 1, top - 1, width + 1, height + 1);
     }
+    // Ciò che la cella è senza la selezione: `#reconcile` tiene quella
+    // disegnata se è uguale.
+    this.#drawn.set(element, element.outerHTML);
+    element.setAttribute("aria-selected", String(selected));
+    if (selected) element.classList.add("selected");
+    if (samePosition(position, this.#active())) element.classList.add("active");
     return { cell: element, border, measure };
   }
 
@@ -2668,6 +3144,29 @@ export class GridEngine {
     }
   }
 
+  /// Un elemento che sta fermo in alto mentre la griglia scorre: è nel
+  /// flusso, con la posizione naturale in cima (il margine negativo non gli
+  /// fa occupare posto), e `sticky` lo tiene a `top` dal bordo del riquadro.
+  /// Lo fa il compositore, nello stesso fotogramma dello scorrimento.
+  #stick(element: HTMLElement, top: number, width: number, height: number): void {
+    element.style.position = "sticky";
+    element.style.left = "";
+    element.style.top = `${top}px`;
+    element.style.width = `${width}px`;
+    element.style.height = `${height}px`;
+    element.style.marginBottom = `${-height}px`;
+  }
+
+  /// Un elemento che sta fermo a sinistra dentro la sua riga: il primo figlio
+  /// nel flusso, `sticky` al bordo sinistro del riquadro.
+  #stickLeft(element: HTMLElement, width: number, height: number): void {
+    element.style.position = "sticky";
+    element.style.left = "0px";
+    element.style.top = "";
+    element.style.width = `${width}px`;
+    element.style.height = `${height}px`;
+  }
+
   #place(element: HTMLElement, left: number, top: number, width: number, height: number): void {
     element.style.position = "absolute";
     element.style.left = `${left}px`;
@@ -2699,7 +3198,7 @@ export class GridEngine {
 
   #syncFormulaBar(): void {
     if (!this.#workbook) return;
-    const bytes = this.#workbookCell(this.#selection.focus)?.bytes;
+    const bytes = this.#workbookCell(this.#active())?.bytes;
     this.#formulaEditor.setReadOnly(this.#readOnly || Boolean(bytes?.lock));
     this.#formulaEditor.setDoc(localInput(bytes?.input ?? "", this.#decimal));
   }
@@ -2713,18 +3212,31 @@ export class GridEngine {
   #commandSelection(): GridCommandSelection {
     return {
       sheet: this.#sheet().id,
-      selection: rangeA1(this.#selectedRange()),
-      active: cellA1(this.#selection.focus),
+      selection: [...this.#others, this.#selectedRange()].map(rangeA1).join(","),
+      active: cellA1(this.#active()),
     };
+  }
+
+  /// Gli intervalli della Tabella in quelli della griglia.
+  #rangesOf(ranges: readonly { r0: number; c0: number; r1: number; c1: number }[]): GridRange[] {
+    return ranges.map((range) => ({ rowStart: range.r0, columnStart: range.c0, rowEnd: range.r1, columnEnd: range.c1 }));
+  }
+
+  /// Se `position` (o l'unione da lì a `last`) sta in un intervallo scelto.
+  #inSelection(range: GridRange, row: number, column: number, lastRow = row, lastColumn = column): boolean {
+    return [range, ...this.#others].some((area) => touches(tableRange(area), row, column, lastRow, lastColumn));
   }
 
   #select(position: GridPosition, extend: boolean): void {
     const clamped = this.#clampedPosition(position);
     const merge = mergeAt(this.#merges(), clamped);
     const focus = merge && !extend ? { row: merge.row, column: merge.column } : clamped;
+    const active = this.#selection.active;
+    if (!extend && !this.#adding) this.#others = [];
     this.#selection = extend
-      ? { anchor: this.#selection.anchor, focus }
+      ? (active ? { anchor: this.#selection.anchor, focus, active } : { anchor: this.#selection.anchor, focus })
       : { anchor: focus, focus };
+    this.#tabStart = null;
     if (!this.#editing) this.#syncFormulaBar();
     this.#ensureVisible(focus);
     this.#render();
@@ -2740,10 +3252,18 @@ export class GridEngine {
   }
 
   #clampedSelection(selection: GridSelection): GridSelection {
-    return {
+    const clamped = {
       anchor: this.#clampedPosition(selection.anchor),
       focus: this.#clampedPosition(selection.focus),
     };
+    return selection.active ? { ...clamped, active: this.#clampedPosition(selection.active) } : clamped;
+  }
+
+  /// La cella attiva: dove si scrive, che la barra della formula mostra.
+  /// Estendere la selezione muove l'altro capo, e la cella attiva resta
+  /// all'àncora, come nei fogli di calcolo.
+  #active(): GridPosition {
+    return this.#selection.active ?? this.#selection.anchor;
   }
 
   #isVisiblePosition(position: GridPosition): boolean {
@@ -2767,7 +3287,8 @@ export class GridEngine {
       row: this.#nearestVisible("row", position.row),
       column: this.#nearestVisible("column", position.column),
     });
-    return { anchor: visible(selection.anchor), focus: visible(selection.focus) };
+    const shown = { anchor: visible(selection.anchor), focus: visible(selection.focus) };
+    return selection.active ? { ...shown, active: visible(selection.active) } : shown;
   }
 
   #nextVisible(axis: "row" | "column", from: number, step: number): number {
@@ -2798,8 +3319,10 @@ export class GridEngine {
 
   /// Un passo del cursore. Da un'unione si parte dal suo bordo, e in
   /// un'unione si arriva nella sua cella in alto a sinistra.
+  /// Senza Maiusc si parte dalla cella attiva; con Maiusc si muove l'altro
+  /// capo della selezione.
   #move(rowStep: number, columnStep: number, extend: boolean): void {
-    const focus = this.#selection.focus;
+    const focus = extend ? this.#selection.focus : this.#active();
     const merge = mergeAt(this.#merges(), focus);
     const row = merge && rowStep > 0 ? merge.row + merge.rows - 1 : focus.row;
     const column = merge && columnStep > 0 ? merge.column + merge.columns - 1 : focus.column;
@@ -2819,10 +3342,11 @@ export class GridEngine {
   #jump(rowStep: -1 | 0 | 1, columnStep: -1 | 0 | 1, extend: boolean): void {
     const axis = rowStep ? "row" : "column";
     const step = rowStep || columnStep;
+    const from = extend ? this.#selection.focus : this.#active();
     const at = (index: number): GridPosition => axis === "row"
-      ? { row: index, column: this.#selection.focus.column }
-      : { row: this.#selection.focus.row, column: index };
-    let index = axis === "row" ? this.#selection.focus.row : this.#selection.focus.column;
+      ? { row: index, column: from.column }
+      : { row: from.row, column: index };
+    let index = axis === "row" ? from.row : from.column;
     let next = this.#nextVisible(axis, index, step);
     if (next === index) return;
     if (this.#filled(at(index)) && this.#filled(at(next))) {
@@ -2841,14 +3365,40 @@ export class GridEngine {
     this.#select(at(index), extend);
   }
 
-  /// Le righe di una pagina, per PagSu e PagGiù.
-  #pageRows(): number {
-    return Math.max(1, Math.floor((this.#viewport.clientHeight - this.#frame.columnHeader - this.#frame.frozenHeight) / (DEFAULT_ROW_HEIGHT * this.#frame.zoom)));
+  /// PagSu e PagGiù (con Alt, PagSu e PagGiù di lato): una schermata di
+  /// righe vere, con le loro altezze; la vista scorre di tanto quanto la
+  /// cella si sposta, così la cella resta allo stesso punto dello schermo.
+  #page(axis: "row" | "column", step: -1 | 1, extend: boolean): void {
+    const layout = axis === "row" ? this.#rows : this.#columns;
+    if (!layout.sizes.length) return;
+    const frame = this.#frame;
+    const extent = axis === "row"
+      ? this.#viewport.clientHeight - frame.columnHeader - frame.frozenHeight
+      : this.#viewport.clientWidth - frame.rowHeader - frame.frozenWidth;
+    const from = extend ? this.#selection.focus : this.#active();
+    const index = axis === "row" ? from.row : from.column;
+    // Le righe intere che una schermata contiene, contate dalla cella verso
+    // dove si va: su e giù fanno lo stesso numero di passi.
+    let landed = index;
+    let used = 0;
+    for (;;) {
+      const next = this.#nextVisible(axis, landed, step);
+      if (next === landed) break;
+      used += layout.sizes[step > 0 ? landed : next] ?? 0;
+      if (used > extent && landed !== index) break;
+      landed = next;
+    }
+    if (landed === index) return;
+    const delta = (layout.offsets[landed] ?? 0) - (layout.offsets[index] ?? 0);
+    if (axis === "row") this.#viewport.scrollTop = Math.max(0, this.#viewport.scrollTop + delta);
+    else this.#viewport.scrollLeft = Math.max(0, this.#viewport.scrollLeft + delta);
+    this.#select(axis === "row" ? { row: landed, column: from.column } : { row: from.row, column: landed }, extend);
   }
 
   /// Seleziona le righe (o le colonne) intere della selezione.
   #selectWhole(axis: "row" | "column"): void {
     const range = this.#selectedRange();
+    this.#others = [];
     this.#selection = axis === "row"
       ? {
         anchor: { row: range.rowStart, column: this.#edgeVisible("column", false) },
@@ -2953,38 +3503,74 @@ export class GridEngine {
       this.#selectAll();
       return;
     }
+    if (modifier && event.key === "Backspace") {
+      event.preventDefault();
+      this.#ensureVisible(this.#active());
+      return;
+    }
     const extend = event.shiftKey;
     switch (event.key) {
       case "ArrowUp": this.#move(-1, 0, extend); break;
       case "ArrowDown": this.#move(1, 0, extend); break;
       case "ArrowLeft": this.#move(0, -1, extend); break;
       case "ArrowRight": this.#move(0, 1, extend); break;
-      case "Tab": if (!this.#tab(extend ? -1 : 1)) return; break;
-      case "Enter":
-      case "F2": this.#beginEditing("cell", this.#selection.focus); break;
+      // Invio e Tab spostano la cella attiva, dentro la selezione se è più
+      // di una cella; Tab sull'ultima colonna va a capo, e oltre l'ultima
+      // cella lascia andare il fuoco.
+      case "Tab": if (!this.#advance(extend ? "left" : "right") && !this.#tab(extend ? -1 : 1)) return; break;
+      case "Enter": if (!event.altKey && !modifier) this.#advance(extend ? "up" : "down"); break;
+      case "F2": this.#beginEditing("cell", this.#active(), undefined, "edit"); break;
+      // Maiusc+F8 aggiunge alla selezione: ciò che è scelto resta, e ci si
+      // sposta per scegliere un altro intervallo; di nuovo, o Esc, smette.
+      case "F8":
+        if (!extend) return;
+        this.#adding = !this.#adding;
+        if (this.#adding) {
+          this.#others = this.#rangesOf(withRange(this.#others.map(tableRange), tableRange(this.#selectedRange())));
+        }
+        this.#render();
+        break;
       case "Home": this.#select({
-        row: modifier ? this.#edgeVisible("row", false) : this.#selection.focus.row,
+        row: modifier ? this.#edgeVisible("row", false) : (extend ? this.#selection.focus : this.#active()).row,
         column: this.#edgeVisible("column", false),
       }, extend); break;
       case "End": this.#select({
-        row: modifier ? this.#edgeVisible("row", true) : this.#selection.focus.row,
+        row: modifier ? this.#edgeVisible("row", true) : (extend ? this.#selection.focus : this.#active()).row,
         column: this.#edgeVisible("column", true),
       }, extend); break;
-      case "PageUp": this.#move(-this.#pageRows(), 0, extend); break;
-      case "PageDown": this.#move(this.#pageRows(), 0, extend); break;
+      case "PageUp": this.#page(event.altKey ? "column" : "row", -1, extend); break;
+      case "PageDown": this.#page(event.altKey ? "column" : "row", 1, extend); break;
       case "Delete":
       case "Backspace": this.#clearSelection(); break;
-      default:
-        if (!modifier && !event.altKey && event.key.length === 1 && !this.#readOnly) {
-          this.#beginEditing("cell", this.#selection.focus, event.key);
-        } else {
+      case "Escape":
+        this.#copied = null;
+        if (!this.#cutMark && !this.#adding) return;
+        this.#cutMark = null;
+        this.#adding = false;
+        this.#render();
+        break;
+      default: {
+        const typing = this.#readOnly ? null : typingOpens(event);
+        if (typing === "browser") {
+          // Il fuoco va nel campo durante il keydown e il tasto non si
+          // ferma: il carattere, il tasto morto o la composizione arrivano al
+          // campo dal browser, come li manda il sistema.
+          this.#beginEditing("cell", this.#active(), "");
+          if (this.#editing?.owner === "cell") this.#cellEditor.focus();
           return;
         }
+        if (typing === "seed") {
+          this.#beginEditing("cell", this.#active(), event.key);
+          break;
+        }
+        return;
+      }
     }
     event.preventDefault();
   }
 
   #selectAll(): void {
+    this.#others = [];
     this.#selection = {
       anchor: {
         row: this.#edgeVisible("row", false),
@@ -2999,7 +3585,14 @@ export class GridEngine {
     this.#selectionChanged();
   }
 
-  #beginEditing(owner: "cell" | "formula", position: GridPosition, initial?: string): void {
+  /// Apre la cella (o la barra della formula) su `position`. Una battuta
+  /// (`initial`) apre in «Inserisci», F2 e il doppio clic in «Modifica».
+  #beginEditing(
+    owner: "cell" | "formula",
+    position: GridPosition,
+    initial?: string,
+    mode: "insert" | "edit" = initial === undefined ? "edit" : "insert",
+  ): void {
     if (this.#readOnly || !this.#workbook || !this.#isVisiblePosition(position)) return;
     const refusal = this.#writeRefusal(position);
     if (refusal) {
@@ -3010,7 +3603,7 @@ export class GridEngine {
     if (this.#editing && (!samePosition(this.#editing.position, position) || this.#editing.owner !== owner)) {
       this.#finishEditing(true, "input", false);
     }
-    this.#editing = { position, original: current, draft: initial ?? current, owner };
+    this.#editing = { position, original: current, draft: initial ?? current, owner, mode, theirs: null };
     if (owner === "cell") {
       const cell = this.#findCell(position);
       if (!cell) {
@@ -3028,17 +3621,233 @@ export class GridEngine {
     } else {
       this.#formulaEditor.setDoc(this.#editing.draft);
     }
+    this.#options.onEditMode?.();
+  }
+
+  /// Lo scorrimento chiede un disegno: uno per fotogramma.
+  #scheduleRender(): void {
+    if (this.#renderFrame !== null) return;
+    this.#renderFrame = requestAnimationFrame(() => {
+      this.#renderFrame = null;
+      if (!this.#destroyed) this.#render();
+    });
+  }
+
+  /// F2 nella cella aperta: «Inserisci» ⇄ «Modifica».
+  #toggleEditMode(): void {
+    const editing = this.#editing;
+    if (editing?.owner !== "cell") return;
+    editing.mode = editing.mode === "insert" ? "edit" : "insert";
+    this.#options.onEditMode?.();
+  }
+
+  /// Invio, Tab o una freccia nella cella aperta: conferma e si sposta.
+  /// Ctrl+Invio scrive la bozza in tutta la selezione e resta.
+  #commitAndMove(move: FormulaMove, arrow = false): void {
+    const editing = this.#editing;
+    if (!editing) return;
+    if (move === "fill") {
+      this.#fillDraft(editing);
+      return;
+    }
+    this.#finishEditing(true, "input");
+    this.#advance(move);
+    // Soltanto Tab comincia una serie: una freccia la chiude.
+    if (arrow) this.#tabStart = null;
+  }
+
+  /// La bozza in ogni cella visibile della selezione.
+  #fillDraft(editing: EditingState): void {
+    const range = this.#selectedRange();
+    const inside = editing.position.row >= range.rowStart && editing.position.row <= range.rowEnd
+      && editing.position.column >= range.columnStart && editing.position.column <= range.columnEnd;
+    if (!inside) {
+      this.#finishEditing(true, "input");
+      return;
+    }
+    this.#finishEditing(false, "input");
+    if (!this.#rangeRead(range)) {
+      this.#refuse(t("grid.workbook.not_loaded"));
+      return;
+    }
+    const after = fileInput(editing.draft, this.#decimal);
+    const writes: CellWrite[] = [];
+    for (let row = range.rowStart; row <= range.rowEnd; row += 1) {
+      for (let column = range.columnStart; column <= range.columnEnd; column += 1) {
+        const position = { row, column };
+        if (!this.#isVisiblePosition(position)) continue;
+        const merge = mergeAt(this.#merges(), position);
+        if (merge && (merge.row !== row || merge.column !== column)) continue;
+        writes.push({ position, after });
+      }
+    }
+    this.#commitCells(writes, "input", true);
+  }
+
+  /// Sposta la cella attiva di un passo di Invio o di Tab: dentro la
+  /// selezione se è più di una cella, altrimenti accanto (Invio torna alla
+  /// colonna dove una serie di Tab era cominciata). Falso se oltre non c'è
+  /// niente.
+  #advance(move: Move): boolean {
+    const shape: Shape = {
+      step: (axis, from, step) => this.#nextVisible(axis, from, step),
+      visible: (axis, index) => ((axis === "row" ? this.#rows.sizes : this.#columns.sizes)[index] ?? 0) > 0,
+    };
+    const range = this.#selectedRange();
+    const active = this.#active();
+    const bounds = { r0: range.rowStart, c0: range.columnStart, r1: range.rowEnd, c1: range.columnEnd };
+    if (isMultiCell(bounds) && !mergeCovers(this.#merges(), range)) {
+      const cell = nextInRange(bounds, active, move, shape);
+      this.#selection = { ...this.#selection, active: cell };
+      this.#ensureVisible(cell);
+      this.#syncFormulaBar();
+      this.#render();
+      this.#selectionChanged();
+      return true;
+    }
+    // Da un'unione si parte dal suo bordo.
+    const merge = mergeAt(this.#merges(), active);
+    const from = merge
+      ? {
+        row: move === "down" ? merge.row + merge.rows - 1 : active.row,
+        column: move === "right" ? merge.column + merge.columns - 1 : active.column,
+      }
+      : active;
+    const step = nextCell(from, move, this.#tabStart, shape);
+    if (!step) return false;
+    this.#select(step.cell, false);
+    this.#tabStart = step.tabStart;
+    return true;
   }
 
   #draftFromEditor(owner: "cell" | "formula", draft: string): void {
-    if (this.#editing?.owner === owner) this.#editing.draft = draft;
+    const editing = this.#editing;
+    if (editing?.owner !== owner) return;
+    // I contorni dei riferimenti seguono la formula.
+    const formula = draft.startsWith("=") || editing.draft.startsWith("=");
+    editing.draft = draft;
+    if (formula) this.#scheduleRender();
+  }
+
+  /// Il campo della formula aperta.
+  #openEditor(): TextEngine | null {
+    const editing = this.#editing;
+    if (!editing) return null;
+    return editing.owner === "cell" ? this.#cellEditor : this.#formulaEditor;
+  }
+
+  /// Dove un riferimento puntato andrebbe adesso: quello appena puntato, se
+  /// il cursore è ancora alla sua fine, o un posto dove la formula aspetta un
+  /// operando.
+  #pointSlot(): { readonly from: number; readonly to: number } | null {
+    const editor = this.#openEditor();
+    if (!editor) return null;
+    const text = editor.getDoc();
+    const head = editor.cursorContext().head;
+    const pointing = this.#pointing;
+    if (pointing && pointing.text === text && head === pointing.to) return { from: pointing.from, to: pointing.to };
+    this.#pointing = null;
+    return operandSlot(text, head);
+  }
+
+  /// Scrive al posto di `slot` il riferimento da `anchor` a `focus`, con il
+  /// cursore dopo, come una battuta.
+  #writeReference(slot: { readonly from: number; readonly to: number }, anchor: GridPosition, focus: GridPosition): void {
+    const editor = this.#openEditor();
+    if (!editor) return;
+    const reference = rangeA1({
+      rowStart: Math.min(anchor.row, focus.row),
+      rowEnd: Math.max(anchor.row, focus.row),
+      columnStart: Math.min(anchor.column, focus.column),
+      columnEnd: Math.max(anchor.column, focus.column),
+    });
+    if (!editor.applyUserEdit(slot.from, slot.to, reference)) return;
+    editor.placeCursor(slot.from + reference.length);
+    this.#pointing = { from: slot.from, to: slot.from + reference.length, text: editor.getDoc(), anchor, focus };
+    this.#scheduleRender();
+  }
+
+  /// Un clic (o l'inizio di un trascinamento) su una cella mentre la formula
+  /// aspetta un operando scrive il riferimento, e la cella resta aperta.
+  #pointerReference(event: PointerEvent): boolean {
+    const slot = this.#pointSlot();
+    if (!slot) return false;
+    const hit = this.#eventPosition(event) ?? this.#hit(event.clientX, event.clientY, false);
+    if (!hit || hit.row === null || hit.column === null) return false;
+    // Il fuoco resta nel campo della formula.
+    event.preventDefault();
+    const position = { row: hit.row, column: hit.column };
+    this.#writeReference(slot, position, position);
+    this.#drag = { kind: "point", anchor: position, x: event.clientX, y: event.clientY };
+    this.#viewport.setPointerCapture?.(event.pointerId);
+    return true;
+  }
+
+  /// Le frecce nel modo «Inserisci» dove la formula aspetta un operando:
+  /// muovono il riferimento puntato (dalla cella aperta, la prima volta), e
+  /// con Maiuscolo lo allargano.
+  #pointByKey(move: "down" | "up" | "right" | "left", extend: boolean): boolean {
+    const editing = this.#editing;
+    if (!editing || editing.owner !== "cell") return false;
+    const slot = this.#pointSlot();
+    if (!slot) return false;
+    const pointing = this.#pointing;
+    const focus = this.#stepPosition(pointing?.focus ?? editing.position, move);
+    this.#writeReference(slot, extend && pointing ? pointing.anchor : focus, focus);
+    return true;
+  }
+
+  /// La cella accanto a `from` verso `move`, oltre righe e colonne nascoste.
+  #stepPosition(from: GridPosition, move: "down" | "up" | "right" | "left"): GridPosition {
+    const rows = move === "down" ? 1 : move === "up" ? -1 : 0;
+    const columns = move === "right" ? 1 : move === "left" ? -1 : 0;
+    let { row, column } = from;
+    do {
+      row += rows;
+      column += columns;
+    } while (
+      row >= 0 && column >= 0 && row < this.#rows.sizes.length && column < this.#columns.sizes.length
+      && (this.#rows.sizes[row] === 0 || this.#columns.sizes[column] === 0)
+    );
+    return this.#clampedPosition({ row, column });
+  }
+
+  /// Il contorno di ogni riferimento della formula aperta che sta sul foglio
+  /// mostrato, del colore che ha nel testo.
+  #referenceMarks(): HTMLElement[] {
+    const draft = this.#editing?.draft ?? "";
+    if (!draft.startsWith("=")) return [];
+    const name = this.#sheet().name.toLowerCase();
+    return formulaReferences(draft).flatMap((reference) => {
+      const bang = reference.text.lastIndexOf("!");
+      if (bang >= 0) {
+        const sheet = reference.text.slice(0, bang).replace(/^'(.*)'$/, "$1").replace(/''/g, "'");
+        if (sheet.toLowerCase() !== name) return [];
+      }
+      const range = parseRangeA1(reference.text.slice(bang + 1).toUpperCase());
+      const box = range ? this.#rangeBox(range) : null;
+      if (!box) return [];
+      const element = document.createElement("div");
+      element.className = `grid-formula-ref grid-formula-ref-${reference.color + 1}`;
+      element.setAttribute("aria-hidden", "true");
+      this.#place(element, box.left, box.top, box.width, box.height);
+      return [element];
+    });
   }
 
   #commitAfterBlur(owner: "cell" | "formula"): void {
     queueMicrotask(() => {
       if (this.#destroyed || this.#editing?.owner !== owner) return;
+      // Un clic che punta un riferimento può portare via il fuoco: torna al
+      // campo della formula, che resta aperto.
+      if (this.#drag?.kind === "point") {
+        this.#openEditor()?.focus();
+        return;
+      }
       const host = owner === "cell" ? this.#cellEditorHost : this.#formulaHost;
-      if (!host.contains(document.activeElement)) this.#finishEditing(true, "input");
+      // Il fuoco è andato altrove di sua volontà: la cella si conferma e il
+      // fuoco resta dove è andato.
+      if (!host.contains(document.activeElement)) this.#finishEditing(true, "input", false);
     });
   }
 
@@ -3046,15 +3855,63 @@ export class GridEngine {
     const editing = this.#editing;
     if (!editing) return;
     this.#editing = null;
+    this.#pointing = null;
+    this.#draftNotice.hidden = true;
     this.#detachCellEditor();
     this.#cellEditorHost.hidden = true;
     this.#cellEditorHost.setAttribute("aria-hidden", "true");
+    this.#options.onEditMode?.();
     if (commit && editing.draft !== editing.original) {
       this.#commitCells([{ position: editing.position, after: fileInput(editing.draft, this.#decimal) }], origin, true);
     }
     this.#syncFormulaBar();
     this.#render();
-    if (restoreFocus) queueMicrotask(() => this.#viewport.focus());
+    // Il fuoco torna alla griglia, se nel frattempo non si è aperta un'altra
+    // cella: le toglierebbe il fuoco, e la confermerebbe.
+    if (restoreFocus) queueMicrotask(() => {
+      if (!this.#destroyed && !this.#editing) this.#viewport.focus();
+    });
+  }
+
+  /// Dopo una riapertura: una bozza la cui cella è cambiata sotto resta, e
+  /// si chiede quale tenere; su un foglio che non c'è più si chiude, e lo si
+  /// dice. Niente si perde in silenzio.
+  #checkDraft(top: boolean): void {
+    const editing = this.#editing;
+    if (!editing) return;
+    if (top) {
+      this.#finishEditing(false, "input", false);
+      if (editing.draft !== editing.original) this.#refuse(t("grid.draft.gone", { draft: editing.draft }));
+      return;
+    }
+    if (!this.#windowAt(editing.position)) return;
+    const now = localInput(this.#workbookCell(editing.position)?.bytes.input ?? "", this.#decimal);
+    if (now === editing.original || now === editing.theirs) return;
+    if (now === editing.draft) {
+      editing.original = now;
+      editing.theirs = null;
+      this.#draftNotice.hidden = true;
+      return;
+    }
+    editing.theirs = now;
+    this.#draftText.textContent = t("grid.draft.changed", { cell: cellA1(editing.position), theirs: now });
+    this.#draftNotice.hidden = false;
+  }
+
+  /// «Tieni la tua»: la bozza resta, e confermata scrive sopra la cella nuova.
+  #keepDraft(): void {
+    const editing = this.#editing;
+    if (!editing || editing.theirs === null) return;
+    editing.original = editing.theirs;
+    editing.theirs = null;
+    this.#draftNotice.hidden = true;
+    (editing.owner === "cell" ? this.#cellEditor : this.#formulaEditor).focus();
+  }
+
+  /// «Prendi quella nuova»: la bozza si chiude e la cella mostra ciò che c'è.
+  #takeTheirs(): void {
+    if (this.#editing?.theirs === null) return;
+    this.#finishEditing(false, "input");
   }
 
   #positionEditor(position: GridPosition): void {
@@ -3089,58 +3946,199 @@ export class GridEngine {
   #clearSelection(): void {
     if (this.#readOnly) return;
     const range = normalizedSelection(this.#selection);
-    if (!this.#rangeRead(range)) {
+    if (![range, ...this.#others].every((area) => this.#rangeRead(area))) {
       this.#refuse(t("grid.workbook.not_loaded"));
       return;
     }
     const writes: CellWrite[] = [];
     for (const [key, cell] of this.#view?.sheets[this.#sheetIndex]?.cells ?? []) {
       const position = keyPosition(key);
-      if (
-        cell.bytes.input !== ""
-        && position.row >= range.rowStart && position.row <= range.rowEnd
-        && position.column >= range.columnStart && position.column <= range.columnEnd
-      ) writes.push({ position, after: "" });
+      if (cell.bytes.input !== "" && this.#inSelection(range, position.row, position.column)) writes.push({ position, after: "" });
     }
     this.#commitCells(writes, "input", true);
   }
 
+  /// Copia scrive il TSV degli input e una tabella HTML di ciò che si
+  /// vede, come i fogli di calcolo; toglie le formiche di un taglio.
   #copy(event: ClipboardEvent): void {
     if (!event.clipboardData) return;
     event.preventDefault();
-    event.clipboardData.setData("text/plain", selectionTsv(this.#selection, (position) => this.#cellAt(position)));
+    // Come in Excel: più intervalli non si copiano insieme.
+    if (this.#others.length) {
+      this.#refuse(t("grid.multi.refused"));
+      return;
+    }
+    const { text, html } = this.#clipboard();
+    event.clipboardData.setData("text/plain", text);
+    event.clipboardData.setData("text/html", html);
+    this.#copied = { sheet: this.#sheet().id, range: this.#selectedRange(), text, move: false };
+    if (this.#cutMark) {
+      this.#cutMark = null;
+      this.#render();
+    }
   }
 
+  /// Taglia non svuota subito: segna l'intervallo con le formiche, e
+  /// l'incolla che segue lo sposta. Esc toglie il segno.
   #cut(event: ClipboardEvent): void {
-    if (this.#readOnly) return;
+    if (this.#readOnly || !event.clipboardData) return;
     this.#copy(event);
-    this.#clearSelection();
+    if (this.#others.length) return;
+    this.#cutMark = { sheet: this.#sheet().id, range: this.#selectedRange(), text: this.#clipboard().text };
+    this.#copied = { ...this.#cutMark, move: true };
+    this.#render();
   }
 
   #paste(event: ClipboardEvent): void {
     if (this.#readOnly || !event.clipboardData) return;
     event.preventDefault();
-    this.#pasteTsv(event.clipboardData.getData("text/plain"));
+    const text = event.clipboardData.getData("text/plain");
+    const copied = this.#copied;
+    if (copied && copied.text === text && this.#pasteFrom(copied)) return;
+    const mark = this.#cutMark;
+    if (mark && mark.text === text && mark.sheet === this.#sheet().id) {
+      this.#pasteCut(mark);
+      return;
+    }
+    this.#pasteRows(clipboardRows(text, event.clipboardData.getData("text/html")));
+  }
+
+  /// L'incolla di ciò che si è copiato dalla cartella, quando il catalogo
+  /// serve `fub.pasteFrom`: dall'angolo della selezione, ripetuto dove la
+  /// selezione ne contiene più copie. Un taglio si incolla una volta.
+  #pasteFrom(copied: Copied): boolean {
+    if (!this.commandable() || !this.#serves(PASTE_FROM) || this.#others.length) return false;
+    const params = { source: rangeA1(copied.range), sourceSheet: copied.sheet, move: copied.move };
+    if (!this.command(PASTE_FROM, JSON.stringify(params))) return false;
+    if (copied.move) {
+      this.#copied = null;
+      this.#cutMark = null;
+      this.#render();
+    }
+    return true;
+  }
+
+  #clipboard(): { readonly text: string; readonly html: string } {
+    const range = this.#selectedRange();
+    const rows: ClipboardCell[][] = [];
+    for (let row = range.rowStart; row <= range.rowEnd; row += 1) {
+      const cells: ClipboardCell[] = [];
+      for (let column = range.columnStart; column <= range.columnEnd; column += 1) {
+        const bytes = this.#workbookCell({ row, column })?.bytes;
+        const input = this.#cellAt({ row, column })?.input ?? "";
+        cells.push({ input, shown: bytes?.display || input });
+      }
+      rows.push(cells);
+    }
+    return clipboardData(rows);
   }
 
   #pasteTsv(text: string): void {
-    const sheet = this.#sheet();
-    const focus = this.#selection.focus;
+    this.#pasteRows(clipboardRows(text, ""));
+  }
+
+  /// Incolla dall'angolo in alto a sinistra della selezione. Un valore, o un
+  /// blocco che la selezione contiene un numero intero di volte, la riempie.
+  /// Dopo, la selezione è ciò che si è scritto.
+  #pasteRows(values: readonly (readonly string[])[]): void {
+    const block = { rows: values.length, columns: Math.max(0, ...values.map((row) => row.length)) };
+    const range = this.#selectedRange();
+    const targets = pasteTargets(
+      { r0: range.rowStart, c0: range.columnStart, r1: range.rowEnd, c1: range.columnEnd },
+      block,
+    );
+    if (!targets.length) return;
+    const writes = new Map<string, CellWrite>();
+    for (const target of targets) {
+      values.forEach((row, rowOffset) => row.forEach((value, columnOffset) => {
+        const position = { row: target.r0 + rowOffset, column: target.c0 + columnOffset };
+        writes.set(`${position.row}:${position.column}`, { position, after: fileInput(value, this.#decimal) });
+      }));
+    }
+    const last = targets[targets.length - 1];
+    this.#writePasted([...writes.values()], { rowStart: targets[0].r0, columnStart: targets[0].c0, rowEnd: last.r1, columnEnd: last.c1 });
+  }
+
+  /// L'incolla dopo un taglio: gli input vanno all'angolo della selezione e
+  /// le celle tagliate che restano fuori si svuotano, in un passo solo.
+  #pasteCut(mark: { readonly range: GridRange; readonly text: string }): void {
+    const target = this.#selectedRange();
+    const rows = mark.range.rowEnd - mark.range.rowStart;
+    const columns = mark.range.columnEnd - mark.range.columnStart;
+    const to: GridRange = {
+      rowStart: target.rowStart,
+      columnStart: target.columnStart,
+      rowEnd: target.rowStart + rows,
+      columnEnd: target.columnStart + columns,
+    };
+    const inside = (range: GridRange, row: number, column: number) =>
+      row >= range.rowStart && row <= range.rowEnd && column >= range.columnStart && column <= range.columnEnd;
     const writes: CellWrite[] = [];
-    parseTsv(text).forEach((values, row) => values.forEach((value, column) => {
-      const position = { row: focus.row + row, column: focus.column + column };
-      if (position.row < sheet.rows.length && position.column < sheet.columns.length) {
-        writes.push({ position, after: fileInput(value, this.#decimal) });
+    for (let row = mark.range.rowStart; row <= mark.range.rowEnd; row += 1) {
+      for (let column = mark.range.columnStart; column <= mark.range.columnEnd; column += 1) {
+        const input = this.#cellAt({ row, column })?.input ?? "";
+        const moved = { row: row - mark.range.rowStart + to.rowStart, column: column - mark.range.columnStart + to.columnStart };
+        if (!inside(to, row, column) && input !== "") writes.push({ position: { row, column }, after: "" });
+        writes.push({ position: moved, after: input });
       }
-    }));
-    this.#commitCells(writes, "input", true);
+    }
+    this.#cutMark = null;
+    this.#writePasted(writes, to);
+  }
+
+  #writePasted(writes: readonly CellWrite[], range: GridRange): void {
+    const sheet = this.#sheet();
+    const fits = writes.filter(({ position }) => position.row < sheet.rows.length && position.column < sheet.columns.length);
+    if (!this.#commitCells(fits, "input", true)) {
+      this.#render();
+      return;
+    }
+    const anchor = { row: range.rowStart, column: range.columnStart };
+    const focus = this.#clampedPosition({ row: range.rowEnd, column: range.columnEnd });
+    this.#others = [];
+    this.#selection = { anchor, focus };
+    this.#syncFormulaBar();
+    this.#render();
+    this.#selectionChanged();
   }
 
   #pointerDown(event: PointerEvent): void {
     // Solo il tasto principale; un evento senza tasto vale come quello.
     if (event.button > 0) return;
+    // Una formula aperta che aspetta un operando prende il riferimento.
+    if (this.#editing && this.#pointerReference(event)) return;
+    // La cella aperta si conferma prima di scegliere altro, come in un foglio
+    // di calcolo; il disegno che segue tiene la cella sotto il puntatore.
+    if (this.#editing?.owner === "cell") this.#finishEditing(true, "input", false);
     const object = event.target instanceof Element ? event.target.closest<HTMLElement>(".grid-object") : null;
     if (object && this.#objectPointerDown(event, object)) return;
+    const edge = this.#resizeEdge(event.clientX, event.clientY);
+    if (edge) {
+      event.preventDefault();
+      const size = (edge.axis === "column" ? this.#columns : this.#rows).sizes[edge.index];
+      this.#resize = { ...edge, from: edge.axis === "column" ? event.clientX : event.clientY, size, now: size };
+      this.#viewport.setPointerCapture?.(event.pointerId);
+      this.#viewport.focus();
+      this.#render();
+      return;
+    }
+    if (this.#onSelectionEdge(event.clientX, event.clientY)) {
+      const hit = this.#hit(event.clientX, event.clientY, true);
+      if (hit && hit.row !== null && hit.column !== null) {
+        event.preventDefault();
+        const source = this.#selectedRange();
+        // La cella presa dentro la selezione, più vicina al punto.
+        const grab = {
+          row: Math.min(source.rowEnd, Math.max(source.rowStart, hit.row)) - source.rowStart,
+          column: Math.min(source.columnEnd, Math.max(source.columnStart, hit.column)) - source.columnStart,
+        };
+        this.#drag = { kind: "move", source, grab, target: source, x: event.clientX, y: event.clientY };
+        this.#viewport.setPointerCapture?.(event.pointerId);
+        this.#viewport.focus();
+        this.#render();
+        return;
+      }
+    }
     const handle = event.target instanceof Element && event.target.closest(".grid-fill-handle");
     if (handle && this.#fillServed()) {
       event.preventDefault();
@@ -3164,11 +4162,22 @@ export class GridEngine {
     // Sull'intestazione di una colonna si prende la colonna intera, su quella
     // di una riga la riga, sull'angolo il foglio, come in Excel.
     const kind = hit.row === null && hit.column === null ? "all" : hit.row === null ? "columns" : hit.column === null ? "rows" : "cells";
+    // Ctrl+clic (e Ctrl+trascina) aggiunge un intervallo a quelli scelti;
+    // Maiuscolo estende l'ultimo; un clic semplice ricomincia.
+    const adding = (event.ctrlKey || event.metaKey) && !event.shiftKey && kind !== "all";
+    if (adding) this.#others = this.#rangesOf(withRange(this.#others.map(tableRange), tableRange(this.#selectedRange())));
+    else if (!event.shiftKey && !this.#adding) this.#others = [];
     if (kind === "all") {
-      this.#selection = { anchor: { row: lastRow, column: lastColumn }, focus: { row: 0, column: 0 } };
+      this.#others = [];
+      this.#selection = {
+        anchor: { row: lastRow, column: lastColumn },
+        focus: { row: 0, column: 0 },
+        active: { row: this.#edgeVisible("row", false), column: this.#edgeVisible("column", false) },
+      };
     } else {
       const position = this.#anchorOf({ row: hit.row ?? 0, column: hit.column ?? 0 });
       const anchor = event.shiftKey ? this.#selection.anchor : position;
+      this.#tabStart = null;
       this.#drag = { kind, anchor, x: event.clientX, y: event.clientY };
       this.#selection = this.#dragSelection(kind, anchor, position);
     }
@@ -3184,8 +4193,26 @@ export class GridEngine {
       this.#objectPointerMove(event, this.#objectGesture);
       return;
     }
+    const resize = this.#resize;
+    if (resize) {
+      if (event.buttons === 0) {
+        this.#endResize(false);
+        return;
+      }
+      const point = resize.axis === "column" ? event.clientX : event.clientY;
+      // Fino a zero, che nasconde, come in Excel.
+      resize.now = Math.max(0, resize.size + point - resize.from);
+      this.#render();
+      return;
+    }
     const drag = this.#drag;
-    if (!drag) return;
+    if (!drag) {
+      const edge = this.#resizeEdge(event.clientX, event.clientY);
+      this.#viewport.classList.toggle("resize-column", edge?.axis === "column");
+      this.#viewport.classList.toggle("resize-row", edge?.axis === "row");
+      this.#viewport.classList.toggle("move-selection", !edge && this.#onSelectionEdge(event.clientX, event.clientY));
+      return;
+    }
     if (event.buttons === 0) {
       this.#endDrag(false, false);
       return;
@@ -3202,6 +4229,24 @@ export class GridEngine {
     const hit = this.#hit(drag.x, drag.y, true);
     if (!hit) return;
     const position = { row: hit.row ?? 0, column: hit.column ?? 0 };
+    if (drag.kind === "point") {
+      const pointing = this.#pointing;
+      if (!pointing || samePosition(pointing.focus, position)) return;
+      this.#writeReference({ from: pointing.from, to: pointing.to }, drag.anchor, position);
+      return;
+    }
+    if (drag.kind === "move") {
+      const sheet = this.#sheet();
+      const rows = drag.source.rowEnd - drag.source.rowStart;
+      const columns = drag.source.columnEnd - drag.source.columnStart;
+      const rowStart = Math.max(0, Math.min(Math.max(0, sheet.rows.length - 1 - rows), position.row - drag.grab.row));
+      const columnStart = Math.max(0, Math.min(Math.max(0, sheet.columns.length - 1 - columns), position.column - drag.grab.column));
+      const target = { rowStart, columnStart, rowEnd: rowStart + rows, columnEnd: columnStart + columns };
+      if (sameRange(target, drag.target)) return;
+      drag.target = target;
+      this.#render();
+      return;
+    }
     if (drag.kind === "fill") {
       const target = fillTarget(drag.source, position);
       if (sameRange(target, drag.target)) return;
@@ -3224,11 +4269,21 @@ export class GridEngine {
     const sheet = this.#sheet();
     const lastRow = Math.max(0, sheet.rows.length - 1);
     const lastColumn = Math.max(0, sheet.columns.length - 1);
+    // Righe e colonne intere: la cella attiva è la prima visibile di quella
+    // da cui si è partiti.
     if (kind === "rows") {
-      return { anchor: { row: anchor.row, column: lastColumn }, focus: { row: position.row, column: 0 } };
+      return {
+        anchor: { row: anchor.row, column: lastColumn },
+        focus: { row: position.row, column: 0 },
+        active: { row: anchor.row, column: this.#edgeVisible("column", false) },
+      };
     }
     if (kind === "columns") {
-      return { anchor: { row: lastRow, column: anchor.column }, focus: { row: 0, column: position.column } };
+      return {
+        anchor: { row: lastRow, column: anchor.column },
+        focus: { row: 0, column: position.column },
+        active: { row: this.#edgeVisible("row", false), column: anchor.column },
+      };
     }
     return { anchor, focus: position };
   }
@@ -3282,6 +4337,11 @@ export class GridEngine {
     this.#stopDragScroll();
     if (!drag) return;
     this.#drag = null;
+    if (drag.kind === "move") {
+      if (commit && !sameRange(drag.source, drag.target)) this.#moveRange(drag.source, drag.target, alternate);
+      else this.#render();
+      return;
+    }
     if (drag.kind !== "fill") return;
     if (commit && !sameRange(drag.source, drag.target)) this.#autoFill(drag.source, drag.target, alternate);
     else this.#render();
@@ -3289,9 +4349,10 @@ export class GridEngine {
 
   #autoFill(source: GridRange, target: GridRange, alternate: boolean): void {
     // La cella attiva resta al primo angolo, il riempimento è selezionato.
+    this.#others = [];
     this.#selection = {
-      anchor: { row: target.rowEnd, column: target.columnEnd },
-      focus: { row: target.rowStart, column: target.columnStart },
+      anchor: { row: target.rowStart, column: target.columnStart },
+      focus: { row: target.rowEnd, column: target.columnEnd },
     };
     this.#syncFormulaBar();
     this.#render();
@@ -3321,7 +4382,7 @@ export class GridEngine {
   /// Se il quadratino di riempimento si può tirare: una sessione a comandi che
   /// serve `edit.autoFill`, nessuna cella aperta, nessun oggetto scelto.
   #fillServed(): boolean {
-    return this.commandable() && this.#serves("edit.autoFill") && !this.#editing && this.#selectedObject === null;
+    return this.commandable() && this.#serves("edit.autoFill") && !this.#editing && this.#selectedObject === null && !this.#others.length;
   }
 
   /// La cella che comanda in `position`: l'angolo dell'unione che la copre.

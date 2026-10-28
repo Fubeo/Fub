@@ -47,7 +47,7 @@ const EXCEPTIONS = new Map([
   [`${EDITORS}text/profiles/markdown/profile.ts`, 9],
   [`${EDITORS}text/profiles/markdown/proof.ts`, 2],
   [`${EDITORS}text/profiles/markdown/properties.ts`, 5],
-  [`${EDITORS}text/profiles/markdown/table-widget.ts`, 10],
+  [`${EDITORS}text/profiles/markdown/table-widget.ts`, 9],
 ]);
 
 const rootArgument = process.argv.slice(2).find((argument) => !argument.startsWith("--"));

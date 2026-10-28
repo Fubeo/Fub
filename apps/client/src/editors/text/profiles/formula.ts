@@ -11,7 +11,7 @@ import {
 } from "@codemirror/autocomplete";
 import { StreamLanguage, type StreamParser, type StringStream } from "@codemirror/language";
 import { EditorSelection, EditorState, Prec, Transaction, type Extension } from "@codemirror/state";
-import { keymap, type KeyBinding } from "@codemirror/view";
+import { Decoration, keymap, ViewPlugin, type DecorationSet, type EditorView, type KeyBinding, type ViewUpdate } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 
 export type FormulaTokenKind =
@@ -126,6 +126,97 @@ export function tokenizeFormula(input: string): readonly FormulaToken[] {
   }
 
   return tokens;
+}
+
+/// Dove una formula aspetta un operando al cursore `at`: dopo `=`, un
+/// operatore, `(`, `,` o `;`, e prima della fine, di un operatore, di `)`,
+/// `,` o `;`. Lì un clic, un trascinamento o le frecce scrivono un
+/// riferimento, come nei fogli di calcolo; altrove confermano.
+export function operandSlot(text: string, at: number): { readonly from: number; readonly to: number } | null {
+  if (!text.startsWith("=") || at < 1 || at > text.length) return null;
+  const tokens = tokenizeFormula(text);
+  if (tokens.some((item) => item.from < at && at < item.to)) return null;
+  const preceding = tokens.filter((item) => item.to <= at);
+  const before = preceding[preceding.length - 1];
+  const after = tokens.find((item) => item.from >= at);
+  const opens = before !== undefined && (before.kind === "operator" || (before.kind === "punctuation" && "(,;".includes(before.text)));
+  const closes = after === undefined || after.kind === "operator" || (after.kind === "punctuation" && "),;".includes(after.text));
+  return opens && closes ? { from: at, to: at } : null;
+}
+
+/// Il riferimento che il cursore `at` tocca, o `null`.
+export function referenceAt(text: string, at: number): FormulaToken | null {
+  if (!text.startsWith("=")) return null;
+  return tokenizeFormula(text).find((item) => item.kind === "reference" && item.from <= at && at <= item.to) ?? null;
+}
+
+/// F4: `A1` → `$A$1` → `A$1` → `$A1` → `A1`, per ogni capo di un
+/// intervallo, col foglio davanti com'è.
+export function cycleReference(reference: string): string {
+  const bang = reference.lastIndexOf("!");
+  const sheet = bang >= 0 ? reference.slice(0, bang + 1) : "";
+  const cycle = (cell: string): string => {
+    const match = /^(\$?)([A-Za-z]{1,3})(\$?)(\d+)$/.exec(cell);
+    if (!match) return cell;
+    const [, column, letters, row, digits] = match;
+    const next = column && row ? ["", "$"] : !column && row ? ["$", ""] : column && !row ? ["", ""] : ["$", "$"];
+    return `${next[0]}${letters}${next[1]}${digits}`;
+  };
+  return sheet + reference.slice(bang + 1).split(":").map(cycle).join(":");
+}
+
+/// I colori dei riferimenti: tanti quanti i colori degli autori del tema.
+export const FORMULA_REFERENCE_COLORS = 6;
+
+export interface FormulaReference extends FormulaToken {
+  /// Il colore, da 0: lo stesso riferimento (senza `$`) ha lo stesso colore.
+  readonly color: number;
+}
+
+/// I riferimenti di una formula, nell'ordine, ognuno col suo colore.
+export function formulaReferences(text: string): readonly FormulaReference[] {
+  if (!text.startsWith("=")) return [];
+  const colors = new Map<string, number>();
+  return tokenizeFormula(text)
+    .filter((item) => item.kind === "reference")
+    .map((item) => {
+      const key = item.text.replace(/\$/g, "").toUpperCase();
+      if (!colors.has(key)) colors.set(key, colors.size % FORMULA_REFERENCE_COLORS);
+      return { ...item, color: colors.get(key)! };
+    });
+}
+
+function referenceDecorations(view: EditorView): DecorationSet {
+  return Decoration.set(formulaReferences(view.state.doc.toString()).map((reference) =>
+    Decoration.mark({ class: `cm-formula-ref cm-formula-ref-${reference.color + 1}` }).range(reference.from, reference.to)));
+}
+
+/// Ogni riferimento ha il colore del suo contorno sulla griglia.
+const referenceColors = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+    constructor(view: EditorView) {
+      this.decorations = referenceDecorations(view);
+    }
+    update(update: ViewUpdate): void {
+      if (update.docChanged) this.decorations = referenceDecorations(update.view);
+    }
+  },
+  { decorations: (plugin) => plugin.decorations },
+);
+
+/// F4 sul riferimento al cursore alterna i `$`, e il cursore va alla sua fine.
+function absoluteReference(view: EditorView): boolean {
+  const text = view.state.doc.toString();
+  const reference = referenceAt(text, view.state.selection.main.head);
+  if (!reference) return false;
+  const next = cycleReference(reference.text);
+  view.dispatch({
+    changes: { from: reference.from, to: reference.to, insert: next },
+    selection: { anchor: reference.from + next.length },
+    userEvent: "input",
+  });
+  return true;
 }
 
 export interface FormulaParserState {
@@ -332,16 +423,30 @@ function singleLineExtension(): Extension {
   });
 }
 
+/// Dove va chi conferma: Invio e Maiusc+Invio, Tab e Maiusc+Tab, le frecce in
+/// «Inserisci»; `fill` è Ctrl+Invio, che scrive in tutta la selezione.
+export type FormulaMove = "down" | "up" | "right" | "left" | "fill";
+
 export interface FormulaProfileCallbacks {
-  readonly commit?: (value: string) => void;
+  /// `arrow` quando a confermare è stata una freccia: non comincia una serie
+  /// di Tab.
+  readonly commit?: (value: string, move: FormulaMove, arrow?: boolean) => void;
   readonly cancel?: (value: string) => void;
+  /// Se le frecce confermano e spostano, come nel modo «Inserisci» dei fogli
+  /// di calcolo; altrimenti («Modifica», o senza) muovono il cursore.
+  readonly arrowsCommit?: () => boolean;
+  /// F2 alterna «Inserisci» e «Modifica».
+  readonly toggleMode?: () => void;
+  /// Le frecce (con Maiuscolo, `extend`) dove la formula aspetta un
+  /// operando: vero se hanno puntato un riferimento.
+  readonly point?: (move: "down" | "up" | "right" | "left", extend: boolean) => boolean;
 }
 
 export interface FormulaProfileOptions {
   readonly singleLine?: boolean;
   readonly completions?: FormulaCompletionSources;
   readonly callbacks?: FormulaProfileCallbacks;
-  readonly onCommit?: (value: string) => void;
+  readonly onCommit?: (value: string, move: FormulaMove, arrow?: boolean) => void;
   readonly onCancel?: (value: string) => void;
 }
 
@@ -357,6 +462,27 @@ const formulaCompletionKeymap = completionKeymap.filter(
 function formulaKeyBindings(options: FormulaProfileOptions): readonly KeyBinding[] {
   const commit = options.callbacks?.commit ?? options.onCommit;
   const cancel = options.callbacks?.cancel ?? options.onCancel;
+  const arrowsCommit = options.callbacks?.arrowsCommit;
+  const toggleMode = options.callbacks?.toggleMode;
+  const point = options.callbacks?.point;
+  const singleLine = options.singleLine ?? true;
+  const confirm = (move: FormulaMove) => (view: EditorView) => {
+    closeCompletion(view);
+    commit?.(view.state.doc.toString(), move);
+    return true;
+  };
+  // In «Inserisci» una freccia conferma e sposta; con un suggerimento aperto
+  // lo percorre, e in «Modifica» muove il cursore.
+  const arrow = (move: "down" | "up" | "right" | "left") => (view: EditorView) => {
+    if (completionStatus(view.state) === "active" || !arrowsCommit?.()) return false;
+    if (point?.(move, false)) return true;
+    commit?.(view.state.doc.toString(), move, true);
+    return true;
+  };
+  // Con Maiuscolo le frecce allargano il riferimento puntato; senza un
+  // riferimento da puntare scelgono il testo.
+  const extend = (move: "down" | "up" | "right" | "left") => (view: EditorView) =>
+    completionStatus(view.state) !== "active" && arrowsCommit?.() === true && point?.(move, true) === true;
   return [
     {
       key: "Enter",
@@ -365,15 +491,18 @@ function formulaKeyBindings(options: FormulaProfileOptions): readonly KeyBinding
           acceptCompletion(view);
           return true;
         }
-        commit?.(view.state.doc.toString());
+        commit?.(view.state.doc.toString(), "down");
         return true;
       },
     },
+    { key: "Shift-Enter", run: confirm("up") },
+    { key: "Mod-Enter", run: confirm("fill") },
+    // Alt+Invio va a capo nella cella, come nei fogli di calcolo.
     {
-      key: "Shift-Enter",
+      key: "Alt-Enter",
       run: (view) => {
-        closeCompletion(view);
-        commit?.(view.state.doc.toString());
+        if (singleLine) return true;
+        view.dispatch(view.state.replaceSelection("\n"), { scrollIntoView: true, userEvent: "input" });
         return true;
       },
     },
@@ -388,12 +517,42 @@ function formulaKeyBindings(options: FormulaProfileOptions): readonly KeyBinding
     {
       key: "Tab",
       run: (view) => {
-        if (completionStatus(view.state) !== "active") return false;
-        acceptCompletion(view);
+        if (completionStatus(view.state) === "active") {
+          acceptCompletion(view);
+          return true;
+        }
+        if (!commit) return false;
+        commit(view.state.doc.toString(), "right");
+        return true;
+      },
+    },
+    {
+      key: "Shift-Tab",
+      run: (view) => {
+        if (!commit) return false;
+        closeCompletion(view);
+        commit(view.state.doc.toString(), "left");
+        return true;
+      },
+    },
+    { key: "F4", run: absoluteReference },
+    {
+      key: "F2",
+      run: () => {
+        if (!toggleMode) return false;
+        toggleMode();
         return true;
       },
     },
     ...formulaCompletionKeymap,
+    { key: "ArrowDown", run: arrow("down") },
+    { key: "ArrowUp", run: arrow("up") },
+    { key: "ArrowRight", run: arrow("right") },
+    { key: "ArrowLeft", run: arrow("left") },
+    { key: "Shift-ArrowDown", run: extend("down") },
+    { key: "Shift-ArrowUp", run: extend("up") },
+    { key: "Shift-ArrowRight", run: extend("right") },
+    { key: "Shift-ArrowLeft", run: extend("left") },
   ];
 }
 
@@ -413,6 +572,9 @@ export function createFormulaProfile(options: FormulaProfileOptions = {}): Formu
         formulaLanguage,
         formulaCompletions(options.completions),
         formulaKeymap(options),
+        // Precedenza alta: il segno sta dentro quello della sintassi, e il
+        // colore del riferimento vince.
+        Prec.highest(referenceColors),
         ...(singleLine ? [singleLineExtension()] : []),
       ];
     },

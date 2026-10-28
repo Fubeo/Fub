@@ -7,6 +7,10 @@ import { EditorView } from "@codemirror/view";
 import { createTextEngine, type TextEngine } from "../engine";
 import {
   createFormulaProfile,
+  cycleReference,
+  formulaReferences,
+  operandSlot,
+  referenceAt,
   tokenizeFormula,
   type FormulaProfile,
 } from "./formula";
@@ -153,7 +157,7 @@ describe("FormulaProfile", () => {
     expect(cancel).toHaveBeenCalledWith("=A1+B2");
 
     keydown(initial, "Enter");
-    expect(commit).toHaveBeenCalledWith("=A1+B2");
+    expect(commit).toHaveBeenCalledWith("=A1+B2", "down");
     expect(engine.getDoc()).toBe("=A1+B2");
     engine.destroy();
   });
@@ -210,7 +214,7 @@ describe("FormulaProfile", () => {
 
     initial.focus();
     keydown(initial, "Enter");
-    expect(commit).toHaveBeenCalledWith("=A1\n+B2");
+    expect(commit).toHaveBeenCalledWith("=A1\n+B2", "down");
     engine.destroy();
   });
 
@@ -233,7 +237,7 @@ describe("FormulaProfile", () => {
       expect(completionStatus(editor.state)).toBeNull();
       expect(editor.dom.querySelector(".cm-tooltip-autocomplete")).toBeNull();
       keydown(editor, "Enter");
-      expect(commit).toHaveBeenCalledWith("=SUM");
+      expect(commit).toHaveBeenCalledWith("=SUM", "down");
     } finally {
       engine.destroy();
       vi.useRealTimers();
@@ -302,7 +306,7 @@ describe("FormulaProfile", () => {
     expect(engine.getDoc()).toBe("=SU");
     expect(completionStatus(editor.state)).toBeNull();
     expect(editor.dom.querySelector(".cm-tooltip-autocomplete")).toBeNull();
-    expect(commit).toHaveBeenCalledWith("=SU");
+    expect(commit).toHaveBeenCalledWith("=SU", "up");
     engine.destroy();
   });
 
@@ -334,5 +338,122 @@ describe("FormulaProfile", () => {
       engine.destroy();
       vi.useRealTimers();
     }
+  });
+
+  it("Tab e Maiusc+Tab confermano di lato, Ctrl+Invio riempie, Alt+Invio va a capo", () => {
+    const commit = vi.fn();
+    const profile = createFormulaProfile({ singleLine: false, onCommit: commit });
+    const { engine, view } = mounted(profile);
+    const editor = view();
+    try {
+      engine.setDoc("riga");
+      editor.dispatch({ selection: EditorSelection.cursor(editor.state.doc.length) });
+      editor.focus();
+      keydown(editor, "Tab");
+      expect(commit).toHaveBeenLastCalledWith("riga", "right");
+      keydown(editor, "Tab", { shiftKey: true });
+      expect(commit).toHaveBeenLastCalledWith("riga", "left");
+      keydown(editor, "Enter", { ctrlKey: true });
+      expect(commit).toHaveBeenLastCalledWith("riga", "fill");
+      expect(engine.getDoc()).not.toContain("\t");
+      keydown(editor, "Enter", { altKey: true });
+      expect(engine.getDoc()).toBe("riga\n");
+      expect(commit).toHaveBeenCalledTimes(3);
+    } finally {
+      engine.destroy();
+    }
+  });
+
+  it("le frecce confermano soltanto in «Inserisci», e F2 alterna il modo", () => {
+    const commit = vi.fn();
+    let insert = true;
+    const toggleMode = vi.fn(() => {
+      insert = !insert;
+    });
+    const profile = createFormulaProfile({
+      callbacks: { commit, cancel: () => {}, arrowsCommit: () => insert, toggleMode },
+    });
+    const { engine, view } = mounted(profile);
+    const editor = view();
+    try {
+      engine.setDoc("7");
+      editor.dispatch({ selection: EditorSelection.cursor(1) });
+      editor.focus();
+      keydown(editor, "ArrowDown");
+      expect(commit).toHaveBeenLastCalledWith("7", "down", true);
+      keydown(editor, "F2");
+      expect(toggleMode).toHaveBeenCalledTimes(1);
+      keydown(editor, "ArrowLeft");
+      expect(commit).toHaveBeenCalledTimes(1);
+      expect(editor.state.selection.main.head).toBe(0);
+    } finally {
+      engine.destroy();
+    }
+  });
+});
+
+describe("le formule col puntatore", () => {
+  it("trova dove va un operando", () => {
+    expect(operandSlot("=", 1)).toEqual({ from: 1, to: 1 });
+    expect(operandSlot("=1+", 3)).toEqual({ from: 3, to: 3 });
+    expect(operandSlot("=SUM(", 5)).toEqual({ from: 5, to: 5 });
+    expect(operandSlot("=SUM(A1;", 8)).toEqual({ from: 8, to: 8 });
+    expect(operandSlot("=SUM()", 5)).toEqual({ from: 5, to: 5 });
+    expect(operandSlot("=1+*2", 3)).toEqual({ from: 3, to: 3 });
+    // Dopo un operando, dentro un token, in un testo o fuori da una formula no.
+    expect(operandSlot("=1", 2)).toBeNull();
+    expect(operandSlot("=A1", 3)).toBeNull();
+    expect(operandSlot("=A1+B2", 2)).toBeNull();
+    expect(operandSlot("=1+2", 3)).toBeNull();
+    expect(operandSlot('="a+', 4)).toBeNull();
+    expect(operandSlot("1+", 2)).toBeNull();
+    expect(operandSlot("=", 0)).toBeNull();
+  });
+
+  it("F4 alterna i $ di ogni capo, col foglio davanti", () => {
+    expect(cycleReference("A1")).toBe("$A$1");
+    expect(cycleReference("$A$1")).toBe("A$1");
+    expect(cycleReference("A$1")).toBe("$A1");
+    expect(cycleReference("$A1")).toBe("A1");
+    expect(cycleReference("B2:C3")).toBe("$B$2:$C$3");
+    expect(cycleReference("'Il foglio'!B2")).toBe("'Il foglio'!$B$2");
+    expect(referenceAt("=1+B2*3", 5)?.text).toBe("B2");
+    expect(referenceAt("=1+B2*3", 6)).toBeNull();
+  });
+
+  it("dà a ogni riferimento il suo colore, lo stesso allo stesso", () => {
+    const references = formulaReferences("=A1+$B$2*a1+C3:D4");
+    expect(references.map((reference) => [reference.text, reference.color])).toEqual([
+      ["A1", 0],
+      ["$B$2", 1],
+      ["a1", 0],
+      ["C3:D4", 2],
+    ]);
+    expect(formulaReferences("A1")).toEqual([]);
+  });
+
+  it("F4 nell'editor cambia il riferimento al cursore, e le frecce puntano dove serve", () => {
+    const pointed: string[] = [];
+    const { engine, view } = mounted(createFormulaProfile({
+      callbacks: {
+        arrowsCommit: () => true,
+        point: (move, extend) => {
+          pointed.push(`${move}${extend ? "+" : ""}`);
+          return true;
+        },
+        commit: () => pointed.push("commit"),
+      },
+    }));
+    engine.setDoc("=1+B2");
+    const editor = view();
+    editor.dispatch({ selection: { anchor: 5 } });
+    keydown(editor, "F4");
+    expect(editor.state.doc.toString()).toBe("=1+$B$2");
+    expect(editor.state.selection.main.head).toBe(7);
+    expect(editor.dom.querySelectorAll(".cm-formula-ref-1")).toHaveLength(1);
+    keydown(editor, "ArrowDown");
+    keydown(editor, "ArrowRight", { shiftKey: true });
+    expect(pointed).toEqual(["down", "right+"]);
+    engine.destroy();
   });
 });

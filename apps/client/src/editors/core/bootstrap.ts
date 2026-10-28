@@ -193,6 +193,9 @@ function staticSurface(
   };
 }
 
+/// Le parole della banda per il modo della cella di una cartella.
+const GRID_MODE_KEYS = { ready: "grid.mode.ready", insert: "grid.mode.insert", edit: "grid.mode.edit" } as const satisfies Record<string, Key>;
+
 const loadPdf = makePdfJsLoader(
   () => import("pdfjs-dist/build/pdf.min.mjs") as unknown as Promise<PdfJsModule>,
   pdfWorkerUrl,
@@ -321,6 +324,9 @@ export function createDocumentSurfaceRegistry(
         let dialogs: GridDialogs | null = null;
         let waiting: GridDialog | null = null;
         let destroyed = false;
+        // Il modo della cella, nella banda di stato: «Pronto», «Inserisci» o
+        // «Modifica», come nei fogli di calcolo.
+        const statusListeners = new Set<() => void>();
         const engine = new GridEngine(context.parent, {
           surfaceId: context.paneId,
           formatId: context.formatId,
@@ -334,6 +340,9 @@ export function createDocumentSurfaceRegistry(
           },
           onCommands: () => ribbon?.schedule(),
           onView: () => ribbon?.schedule(),
+          onEditMode: () => {
+            for (const listener of statusListeners) listener();
+          },
           onDialog: (dialog) => {
             if (dialogs) dialogs.open(dialog);
             else waiting = dialog;
@@ -390,8 +399,21 @@ export function createDocumentSurfaceRegistry(
           },
           contextMenu: (at) => gridContextMenu(menuHost, at),
           miniBar: () => gridMiniBar(menuHost),
+          status: {
+            counts: false,
+            items: () => [{
+              id: "grid-mode",
+              text: t(GRID_MODE_KEYS[engine.editMode()]),
+              hint: t("grid.mode.hint"),
+            }],
+            subscribe(listener) {
+              statusListeners.add(listener);
+              return () => statusListeners.delete(listener);
+            },
+          },
           destroy: () => {
             destroyed = true;
+            statusListeners.clear();
             looks.disconnect();
             ribbon?.destroy();
             ribbon = null;
@@ -424,6 +446,12 @@ export function createDocumentSurfaceRegistry(
           drawingImages: options.drawingImages,
           drawingFonts: options.drawingFonts,
           drawingSymbols: options.drawingSymbols,
+          // Il testo dei disegni si corregge come i documenti.
+          drawingProof: {
+            ports: proofPorts(openVaultRoot()),
+            notify: options.slash ? (message) => options.slash!.notify(message) : undefined,
+          },
+          shellCommand: options.runShellCommand,
           renderMarkdownForCard: options.renderCanvasMarkdown
             ? (nodeId, text, host, forms) => options.renderCanvasMarkdown!(nodeId, text, host, context.documentId, forms)
             : undefined,
