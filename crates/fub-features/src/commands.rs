@@ -52,7 +52,7 @@ use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::model::{Block, DocId, DocumentModel, Span, TaskMarker, FOLDER_PAGE_STEM};
 use fub_abi::settings::{SettingEntry, SettingKind, SettingSource, SettingValue};
-use fub_abi::text::{Arg, StringCatalog, Text};
+use fub_abi::text::{Arg, StringCatalog, Strings, Text};
 use fub_abi::traits::{
     BacklinkRef, CommandProvider, FolderScope, HostApi, IndexQuery, IndexResult,
 };
@@ -109,10 +109,16 @@ pub const VAULT_UNDO: &str = "vault.undo";
 /// Il `ns` con cui l'esito di `settings.export` arriva alla shell.
 pub const SETTINGS_NS: &str = fub_abi::ui::SETTINGS_EXPORT_NS;
 
-/// Il nome di una nota senza nome. L'estensione la sceglie l'impostazione del
-/// core `files.new-note-extension`, la stessa che legge il kernel (vedi
-/// [`crate::formats::new_note_extension`]).
-const UNTITLED: &str = "Untitled";
+/// La chiave del nome di una nota senza nome, nella lingua di chi la crea: è
+/// il nome che la descrizione di `note.create` promette. L'estensione la
+/// sceglie l'impostazione del core `files.new-note-extension`, la stessa che
+/// legge il kernel (vedi [`crate::formats::new_note_extension`]).
+const N_UNTITLED: &str = "note.untitled";
+
+/// Il nome di una nota senza nome, dal catalogo di questo componente.
+pub(crate) fn untitled(host: &dyn HostApi) -> String {
+    Strings::new(&catalog(), "it", &host.user_locale()).render(&Text::key(N_UNTITLED))
+}
 
 /// Un comando del core, col titolo e la descrizione presi dal catalogo.
 ///
@@ -377,6 +383,7 @@ fn catalog_it() -> StringCatalog {
              se quel nome è preso «Senza titolo 1», «2», … Un nome senza \
              estensione diventa una nota markdown.",
         )
+        .with(N_UNTITLED, "Senza titolo")
         .with("note.create.name.title", "Nome")
         .with(
             "note.create.name.desc",
@@ -849,6 +856,7 @@ fn catalog_en() -> StringCatalog {
              «Untitled», and if that name is taken «Untitled 1», «2», … A name \
              without extension becomes a markdown note.",
         )
+        .with(N_UNTITLED, "Untitled")
         .with("note.create.name.title", "Name")
         .with(
             "note.create.name.desc",
@@ -1813,7 +1821,10 @@ fn notes_create(
         )),
         // Il nome libero lo chiede all'host: la convenzione D3 è una sola, e
         // sta nel vault che è l'unico a sapere cosa è occupato.
-        None => host.free_name(&DocId::new(placed(&format!("{UNTITLED}.{extension}")))),
+        None => host.free_name(&DocId::new(placed(&format!(
+            "{}.{extension}",
+            untitled(host)
+        )))),
     };
     // Le proprietà iniziali sono un frontmatter: davanti a un `.base` o a un
     // canvas corromperebbero il file che nasce.
@@ -3736,7 +3747,7 @@ mod tests {
             InvokeMode::Apply,
         )
         .unwrap();
-        assert_eq!(navigate(first).as_str(), format!("Progetti/{UNTITLED}.md"));
+        assert_eq!(navigate(first).as_str(), "Progetti/Senza titolo.md");
         let named = invoke(
             &mut host,
             NOTES_CREATE,

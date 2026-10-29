@@ -31,7 +31,7 @@ use fub_abi::rules::text_policy;
 use fub_abi::rules::yaml as yaml_rule;
 use fub_abi::session::ContextMask;
 use fub_abi::settings::{SettingKind, SettingSpec};
-use fub_abi::text::{Arg, StringCatalog, Text};
+use fub_abi::text::{Arg, StringCatalog, Strings, Text};
 use fub_abi::traits::{
     CommandProvider, HostApi, IndexQuery, IndexResult, ReadApi, ViewInstance, ViewInterests,
     ViewProvider, ViewSpec, ViewSurface,
@@ -66,7 +66,6 @@ const FOLDER_TEMPLATES: &str = "Templates";
 const FOLDER_DAILY: &str = "Daily";
 /// Senza estensione: la sceglie `files.new-note-extension`, come per le note.
 const DAILY_TEMPLATE: &str = "Templates/Daily";
-const UNTITLED: &str = "Untitled";
 /// Cartella delle giornaliere decisa nelle impostazioni (vault: viaggia con le
 /// note, come il formato delle date delle proprietà).
 pub const DAILY_FOLDER_KEY: &str = "daily.folder";
@@ -302,6 +301,7 @@ fn catalog_it() -> StringCatalog {
         )
         .with("note.unique.name.title", "Nome")
         .with("note.unique.name.desc", "Il nome o il path voluto. Assente: «Senza titolo».")
+        .with(N_UNTITLED, "Senza titolo")
         .with("note.unique.random.title", "Nome casuale")
         .with(
             "note.unique.random.desc",
@@ -546,6 +546,7 @@ fn catalog_en() -> StringCatalog {
         )
         .with("note.unique.name.title", "Name")
         .with("note.unique.name.desc", "The wanted name or path. Absent: “Untitled”.")
+        .with(N_UNTITLED, "Untitled")
         .with("note.unique.random.title", "Random name")
         .with(
             "note.unique.random.desc",
@@ -1787,6 +1788,15 @@ fn unique(
     ))
 }
 
+/// La chiave del nome di una nota unica senza nome né prefisso, nella lingua
+/// di chi la crea. È la stessa parola di `note.create`, ma con una voce sua:
+/// i moduli di feature non si nominano fra loro.
+const N_UNTITLED: &str = "note.unique.untitled";
+
+fn untitled(host: &dyn HostApi) -> String {
+    Strings::new(&catalog(), "it", &host.user_locale()).render(&Text::key(N_UNTITLED))
+}
+
 fn unique_name(args: Args<'_>, host: &dyn HostApi) -> Result<DocId, PluginError> {
     if args.flag(RANDOM, false) {
         return random_name(host);
@@ -1797,7 +1807,7 @@ fn unique_name(args: Args<'_>, host: &dyn HostApi) -> Result<DocId, PluginError>
         (Some(prefix), Some(name)) => format!("{prefix} {name}"),
         (Some(prefix), None) => prefix.to_string(),
         (None, Some(name)) => name.to_string(),
-        (None, None) => UNTITLED.to_string(),
+        (None, None) => untitled(host),
     };
     Ok(host.free_name(&DocId::new(with_extension(host, &name)?)))
 }
