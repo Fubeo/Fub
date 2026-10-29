@@ -1,5 +1,6 @@
-import { mountMarkdownSurface, type EditorSlashHost } from "../text/profiles/markdown/surface";
+import { mountMarkdownSurface, type EditorSlashHost, type PageIcons } from "../text/profiles/markdown/surface";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
+import type { LinkCardSource } from "../text/profiles/markdown/link-card";
 import { api } from "../../host/ipc";
 import { openVaultRoot, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
@@ -43,6 +44,15 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onImportRemoteImage?: (url: string, from: string) => Promise<string | null>;
   readonly onOpenDocument: (doc: string) => void | Promise<void>;
   readonly onSearchTag: (tag: string) => void;
+  /// Rinomina una pagina dal titolo della testata dei Blocchi: `null` se è
+  /// andata, altrimenti la frase che dice perché no.
+  readonly onRenamePage?: (doc: string, name: string) => Promise<string | null>;
+  /// «Nuova sottopagina» dalla testata dei Blocchi.
+  readonly onNewSubpage?: (doc: string, name: string) => Promise<string | null>;
+  /// Le icone delle pagine per i wikilink della Live.
+  readonly pageIcons?: PageIcons;
+  /// Le schede dei collegamenti della Live (K8).
+  readonly linkCards?: LinkCardSource;
   /// Un comando della shell dato da dentro una superficie, come dalla
   /// palette: lo zoom della barra del documento.
   readonly runShellCommand?: (id: string) => void;
@@ -240,6 +250,10 @@ export function createDocumentSurfaceRegistry(
             onOpenPath: options.onOpenPath,
             onImportRemoteImage: options.onImportRemoteImage,
             onSearchTag: options.onSearchTag,
+            onRenamePage: options.onRenamePage,
+            onNewSubpage: options.onNewSubpage,
+            pageIcons: options.pageIcons,
+            linkCards: options.linkCards,
             completions: options.completions,
             slash: options.slash,
             proof: {

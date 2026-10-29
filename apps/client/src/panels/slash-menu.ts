@@ -39,6 +39,12 @@ const MARKDOWN_HINTS: Readonly<Record<string, string>> = {
   "markdown.embed": "![[",
   "markdown.footnote": "[^",
   "markdown.comment": "%%",
+  "markdown.details": "<details>",
+  "markdown.columns": "> [!columns]",
+  "markdown.toc": "```toc",
+  "markdown.mention": "@",
+  "markdown.date": "@",
+  "markdown.linkcard": "https://",
 };
 
 /// Altri nomi con cui si cerca la stessa voce, in tutte e due le lingue: chi
@@ -69,11 +75,18 @@ const ALIASES: Readonly<Record<string, string>> = {
   "markdown.footnote": "nota piè pagina footnote",
   "markdown.property.add": "proprietà property frontmatter yaml",
   "markdown.comment": "commento comment",
+  "markdown.details": "ripiegabile toggle details apri chiudi collapse fisarmonica",
+  "markdown.columns": "colonne columns affianca griglia layout fianco side",
+  "markdown.toc": "indice sommario toc table of contents titoli headings outline contents",
+  "markdown.mention": "persona menziona menzione people person mention contatto @",
+  "markdown.date": "data giorno oggi domani scadenza date day today tomorrow due reminder @",
+  "markdown.linkcard": "segnalibro web link collegamento url sito anteprima scheda bookmark web link preview card",
+  "markdown.underline": "sottolineato underline",
 };
 
 /// La sezione di un'azione dell'editor.
 function sectionOf(id: string): SlashSection {
-  if (id === "markdown.paragraph" || id.startsWith("markdown.heading.") || id === "markdown.quote" || id === "markdown.callout") {
+  if (id === "markdown.paragraph" || id.startsWith("markdown.heading.") || id === "markdown.quote" || id === "markdown.callout" || id === "markdown.details") {
     return "text";
   }
   if (id.startsWith("markdown.list.")) return "lists";

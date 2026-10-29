@@ -141,6 +141,7 @@ export class TableGrid implements TableGridActions {
     this.#host = host;
     this.#data = data;
     this.#frame = new TableFrame({
+      tabStop: false,
       size: () => ({ rows: this.#data.rows.length, columns: tableWidth(this.#data) }),
       caps: () => CAPS,
       cellText: (row, column) => this.#data.rows[row]?.[column] ?? "",

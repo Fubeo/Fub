@@ -64,6 +64,16 @@ export interface Signals {
   /// apre e la porta in vista. Il verso è questo perché la testata è della
   /// vista del documento e l'albero dell'esplora, che non si conoscono.
   "reveal-folder": [folder: string];
+  /// Le icone delle pagine (`icon:` nel frontmatter) sono cambiate: chi le
+  /// mostra fuori dalla nota — esplora, schede, wikilink — le rilegge da
+  /// `state/page-icons.ts`.
+  "page-icons": [];
+  /// La cartella delle persone (`files.people-folder`) è cambiata: i
+  /// wikilink alle persone si ridecorano (`state/people.ts`).
+  people: [];
+  /// Una scheda di collegamento (K8) è arrivata o cambiata: la Live
+  /// ridisegna i segnalibri web (`state/link-cards.ts`).
+  "link-cards": [];
 }
 
 type Listener = (...args: never[]) => unknown;

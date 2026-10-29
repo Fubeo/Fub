@@ -36,6 +36,19 @@ pub const MAX_DOCUMENT_DEPTH: u32 = 64;
 
 use crate::rules::composition::composed;
 
+/// Il nome, senza estensione, del file che fa da pagina alla sua cartella:
+/// `Viaggio/_index.md` è la pagina «Viaggio». Un nome fisso, che nessuno dà a
+/// una nota per caso (ADR 0229).
+pub const FOLDER_PAGE_STEM: &str = "_index";
+
+/// Il nome di un file senza l'ultima estensione; un dotfile non ne ha.
+fn stem_of(base: &str) -> &str {
+    match base.rsplit_once('.') {
+        Some((stem, _ext)) if !stem.is_empty() => stem,
+        _ => base,
+    }
+}
+
 /// L'identità di un documento nel vault: **il path**, e non un'altra cosa.
 ///
 /// È il path relativo al vault, normalizzato con separatori `/` e senza
@@ -97,12 +110,26 @@ impl DocId {
     /// La gemella TypeScript è `pageName` in `apps/client/src/rules/mirrored.ts`, e
     /// a tenerle uguali sui nomi ostili non è più un elenco copiato a mano ma la
     /// fixture generata di `tests/rules_mirror.rs` (§6.2).
+    ///
+    /// **La pagina della cartella** ([ADR 0229](../../../docs/decisions/0229-pagina-della-cartella.md)):
+    /// `X/_index.<ext>` si chiama come la sua cartella, `X`. Così `[[X]]` la
+    /// trova, e schede, ricerca, grafo e cestino dicono «X». Nella radice del
+    /// vault `_index.md` non ha una cartella da nominare e resta `_index`.
     pub fn page_name(&self) -> &str {
-        let after_slash = self.0.rsplit('/').next().unwrap_or(&self.0);
-        match after_slash.rsplit_once('.') {
-            Some((stem, _ext)) if !stem.is_empty() => stem,
-            _ => after_slash,
+        match self.0.rsplit_once('/') {
+            Some((folder, base)) if stem_of(base) == FOLDER_PAGE_STEM => {
+                folder.rsplit('/').next().unwrap_or(folder)
+            }
+            Some((_, base)) => stem_of(base),
+            None => stem_of(&self.0),
         }
+    }
+
+    /// È la pagina di una cartella (`X/_index.<ext>`, non nella radice)?
+    pub fn is_folder_page(&self) -> bool {
+        self.0
+            .rsplit_once('/')
+            .is_some_and(|(_, base)| stem_of(base) == FOLDER_PAGE_STEM)
     }
 }
 
@@ -674,6 +701,10 @@ pub enum Inline {
     HardBreak,
     /// A-capo **morbido**: la riga continua, e nella resa è uno spazio.
     SoftBreak,
+    /// `~pedice~`: un pedice inline, l'estensione `subscript` di comrak
+    /// (decisione 0228). Il gemello di [`Inline::Superscript`]; `~~…~~` resta
+    /// barrato. In coda per la stessa ragione degli a-capo.
+    Subscript(Vec<Inline>),
 }
 
 /// Intento di link **non risolto**. Il provider dice "questo è un wikilink alla
@@ -2763,6 +2794,7 @@ mod tests {
             Inline::Strikethrough(vec![Inline::Text("d".into())]),
             Inline::HardBreak,
             Inline::SoftBreak,
+            Inline::Subscript(vec![Inline::Text("p".into())]),
         ] {
             round_trip("Inline", the);
         }

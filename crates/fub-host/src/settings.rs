@@ -194,9 +194,18 @@ pub const EDITOR_MINIBAR: &str = "editor.minibar";
 /// Il «/» a inizio riga o dopo uno spazio apre il menu dei blocchi e dei
 /// comandi, filtrato da ciò che si scrive dopo. Spento, il «/» resta testo.
 pub const EDITOR_SLASH: &str = "editor.slash";
-/// In che modalità si apre un riquadro nuovo: `source`, `live_preview` o
-/// `reading`, gli id delle modalità della superficie testuale.
+/// In che modalità si apre un riquadro nuovo: `source`, `live_preview`,
+/// `blocks` o `reading`, gli id delle modalità della superficie testuale.
 pub const EDITOR_DEFAULT_MODE: &str = "editor.default-mode";
+/// Quanto della sintassi Markdown si vede in Live: `mai` scrive come in Word,
+/// senza segni nemmeno col cursore dentro; `elemento` rivela, attenuati, i
+/// segni degli elementi che contengono il cursore; `riga` quelli dell'intera
+/// riga del cursore. I segni si vedono sempre in Sorgente.
+pub const EDITOR_LIVE_REVEAL: &str = "editor.live-reveal";
+/// La guida di Live: un segno aperto a mano mette subito lo stile al testo che
+/// segue e mostra in grigio la chiusura che manca; lo spazio chiude apice e
+/// pedice. Spenta, i segni restano testo finché non si chiudono.
+pub const EDITOR_LIVE_GUIDE: &str = "editor.live-guide";
 /// Le animazioni della shell: `""` segue il sistema, `calm` toglie rimbalzi e
 /// scene, `reduced` le spegne anche quando il sistema non lo chiede. Nessun
 /// valore scavalca la richiesta di moto ridotto del sistema.
@@ -249,6 +258,10 @@ pub const FILES_TRASH_VAULT: &str = "vault";
 /// Chiedere prima di cestinare una cartella con tutto ciò che contiene. Spenta,
 /// la cartella va nel cestino subito, e l'«Annulla» dell'avviso la riporta.
 pub const FILES_CONFIRM_TRASH: &str = "files.confirm-trash";
+/// Riconoscere come pagina di una cartella `X` anche i vecchi nomi, `X/X.<ext>`
+/// e `X/index.<ext>`, dopo `X/_index.<ext>` (decisione 0229). Spenta di
+/// default: sono note normali, e Fub non le rinomina da solo.
+pub const FILES_LEGACY_FOLDER_PAGES: &str = "files.legacy-folder-pages";
 /// I collegamenti `fub://` che scrivono senza chiedere: `new`, `daily`,
 /// `unique`, `capture`. Di macchina, e vuota di default: un vault arrivato da
 /// fuori non può decidere che un link del browser scriva in silenzio.
@@ -276,6 +289,10 @@ pub const FILES_STARTUP_NEW: &str = "new";
 pub const FILES_STARTUP_FIXED: &str = "note";
 /// Il percorso nel vault della nota che `files.startup = note` apre.
 pub const FILES_STARTUP_NOTE: &str = "files.startup-note";
+/// La cartella delle persone: `@` in una nota propone le note che ci stanno e
+/// scrive `[[Persone/Nome|Nome]]`; una persona nuova vi nasce. Vuota, `@` non
+/// propone persone.
+pub const FILES_PEOPLE_FOLDER: &str = "files.people-folder";
 
 /// La shell ricorda cosa si è cercato e cosa si è aperto? (chiave dell'app)
 ///
@@ -413,9 +430,29 @@ pub fn core_settings() -> Vec<SettingSpec> {
         .grouped(Text::key(C_GROUP_FILES)),
     );
     settings.push(
+        SettingSpec::new(
+            FILES_PEOPLE_FOLDER,
+            Text::key(C_FILES_PEOPLE_FOLDER),
+            SettingKind::Text {
+                default: "Persone".into(),
+            },
+        )
+        .describing(Text::key(C_FILES_PEOPLE_FOLDER_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
         SettingSpec::toggle(FILES_CONFIRM_TRASH, Text::key(C_FILES_CONFIRM_TRASH), true)
             .describing(Text::key(C_FILES_CONFIRM_TRASH_DESC))
             .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::toggle(
+            FILES_LEGACY_FOLDER_PAGES,
+            Text::key(C_FILES_LEGACY_FOLDER_PAGES),
+            false,
+        )
+        .describing(Text::key(C_FILES_LEGACY_FOLDER_PAGES_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
     );
     settings.push(
         SettingSpec::new(
@@ -543,10 +580,22 @@ fn editor_settings() -> Vec<SettingSpec> {
         "live_preview",
         vec![
             UiOption::new("live_preview", Text::key(C_MODE_LIVE)),
+            UiOption::new("blocks", Text::key(C_MODE_BLOCKS)),
             UiOption::new("source", Text::key(C_MODE_SOURCE)),
             UiOption::new("reading", Text::key(C_MODE_READING)),
         ],
     )];
+    settings.push(choice(
+        EDITOR_LIVE_REVEAL,
+        C_EDITOR_LIVE_REVEAL,
+        C_EDITOR_LIVE_REVEAL_DESC,
+        "mai",
+        vec![
+            UiOption::new("mai", Text::key(C_EDITOR_LIVE_REVEAL_NEVER)),
+            UiOption::new("elemento", Text::key(C_EDITOR_LIVE_REVEAL_ELEMENT)),
+            UiOption::new("riga", Text::key(C_EDITOR_LIVE_REVEAL_LINE)),
+        ],
+    ));
     settings.extend(
         [
             (
@@ -571,6 +620,12 @@ fn editor_settings() -> Vec<SettingSpec> {
                 EDITOR_CLOSE_BRACKETS,
                 C_EDITOR_CLOSE_BRACKETS,
                 C_EDITOR_CLOSE_BRACKETS_DESC,
+                true,
+            ),
+            (
+                EDITOR_LIVE_GUIDE,
+                C_EDITOR_LIVE_GUIDE,
+                C_EDITOR_LIVE_GUIDE_DESC,
                 true,
             ),
             (
@@ -1187,6 +1242,8 @@ const C_FILES_TRASH_VAULT: &str = "core.files_trash.vault";
 const C_FILES_TRASH_SYSTEM: &str = "core.files_trash.system";
 const C_FILES_CONFIRM_TRASH: &str = "core.files_confirm_trash";
 const C_FILES_CONFIRM_TRASH_DESC: &str = "core.files_confirm_trash.desc";
+const C_FILES_LEGACY_FOLDER_PAGES: &str = "core.files_legacy_folder_pages";
+const C_FILES_LEGACY_FOLDER_PAGES_DESC: &str = "core.files_legacy_folder_pages.desc";
 const C_URI_ALLOWED: &str = "core.uri_allowed";
 const C_URI_ALLOWED_DESC: &str = "core.uri_allowed.desc";
 const C_FILES_LINK_STYLE: &str = "core.files_link_style";
@@ -1206,6 +1263,8 @@ const C_FILES_STARTUP_NEW: &str = "core.files_startup.new";
 const C_FILES_STARTUP_FIXED: &str = "core.files_startup.note";
 const C_FILES_STARTUP_NOTE: &str = "core.files_startup_note";
 const C_FILES_STARTUP_NOTE_DESC: &str = "core.files_startup_note.desc";
+const C_FILES_PEOPLE_FOLDER: &str = "core.files_people_folder";
+const C_FILES_PEOPLE_FOLDER_DESC: &str = "core.files_people_folder.desc";
 
 const C_GROUP_APPEARANCE: &str = "core.group.appearance";
 const C_GROUP_EDITOR: &str = "core.group.editor";
@@ -1255,8 +1314,16 @@ const C_EDITOR_SLASH: &str = "core.editor.slash";
 const C_EDITOR_SLASH_DESC: &str = "core.editor.slash.desc";
 const C_EDITOR_DEFAULT_MODE: &str = "core.editor.default_mode";
 const C_EDITOR_DEFAULT_MODE_DESC: &str = "core.editor.default_mode.desc";
+const C_EDITOR_LIVE_REVEAL: &str = "core.editor.live_reveal";
+const C_EDITOR_LIVE_REVEAL_DESC: &str = "core.editor.live_reveal.desc";
+const C_EDITOR_LIVE_REVEAL_NEVER: &str = "core.editor.live_reveal.never";
+const C_EDITOR_LIVE_REVEAL_ELEMENT: &str = "core.editor.live_reveal.element";
+const C_EDITOR_LIVE_REVEAL_LINE: &str = "core.editor.live_reveal.line";
+const C_EDITOR_LIVE_GUIDE: &str = "core.editor.live_guide";
+const C_EDITOR_LIVE_GUIDE_DESC: &str = "core.editor.live_guide.desc";
 const C_MODE_SOURCE: &str = "core.mode.source";
 const C_MODE_LIVE: &str = "core.mode.live";
+const C_MODE_BLOCKS: &str = "core.mode.blocks";
 const C_MODE_READING: &str = "core.mode.reading";
 const C_GROUP_DIAGNOSTICS: &str = "core.group.diagnostics";
 const C_GROUP_PRIVACY: &str = "core.group.privacy";
@@ -1677,6 +1744,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_FILES_CONFIRM_TRASH_DESC,
             "Spenta, la cartella va subito nel cestino del vault; «Annulla» nell'avviso la riporta. Svuotare il cestino chiede sempre.",
         )
+        .with(
+            C_FILES_LEGACY_FOLDER_PAGES,
+            "Riconosci i vecchi nomi della pagina della cartella",
+        )
+        .with(
+            C_FILES_LEGACY_FOLDER_PAGES_DESC,
+            "Oltre a Cartella/_index.md, apre come pagina della cartella anche Cartella/Cartella.md e Cartella/index.md, come Obsidian. Nessun file cambia nome.",
+        )
         .with(C_URI_ALLOWED, "Collegamenti fub:// che scrivono senza chiedere")
         .with(
             C_URI_ALLOWED_DESC,
@@ -1710,6 +1785,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_FILES_STARTUP_NOTE_DESC,
             "Il percorso nel vault della nota che «Una nota precisa» apre; senza estensione vale .md.",
+        )
+        .with(C_FILES_PEOPLE_FOLDER, "Cartella delle persone")
+        .with(
+            C_FILES_PEOPLE_FOLDER_DESC,
+            "@ in una nota propone le note di questa cartella e scrive il link alla persona; una persona nuova nasce qui. Vuota, @ non propone persone.",
         )
         .with(C_GROUP_APPEARANCE, "Aspetto")
         .with(C_GROUP_CHROME, "Interfaccia")
@@ -1785,8 +1865,16 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_SLASH_DESC, "Un «/» a inizio riga o dopo uno spazio apre i blocchi e i comandi, filtrati da ciò che si scrive dopo. Esc lo lascia come testo.")
         .with(C_EDITOR_DEFAULT_MODE, "Modalità iniziale")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "La modalità di una finestra nuova o di un vault aperto per la prima volta. Un riquadro diviso eredita quella del riquadro da cui nasce, e ognuno ricorda la sua.")
+        .with(C_EDITOR_LIVE_REVEAL, "Segni del Markdown in Live")
+        .with(C_EDITOR_LIVE_REVEAL_DESC, "I segni del Markdown si vedono in Sorgente; qui si sceglie se mostrarli anche in Live.")
+        .with(C_EDITOR_LIVE_REVEAL_NEVER, "Mai, come in Word")
+        .with(C_EDITOR_LIVE_REVEAL_ELEMENT, "Dell'elemento del cursore")
+        .with(C_EDITOR_LIVE_REVEAL_LINE, "Della riga del cursore")
+        .with(C_EDITOR_LIVE_GUIDE, "Guida mentre scrivi")
+        .with(C_EDITOR_LIVE_GUIDE_DESC, "In Live un segno aperto dà subito lo stile al testo e mostra in grigio la chiusura che manca; lo spazio chiude apice e pedice.")
         .with(C_MODE_SOURCE, "Sorgente")
         .with(C_MODE_LIVE, "Live")
+        .with(C_MODE_BLOCKS, "Blocchi")
         .with(C_MODE_READING, "Lettura")
         .with(C_GROUP_PRIVACY, "Privacy")
         .with(C_HISTORY, "Ricerche e note recenti")
@@ -2212,6 +2300,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_FILES_CONFIRM_TRASH_DESC,
             "When off, the folder goes straight to the vault trash; Undo in the notice brings it back. Deleting from the trash always asks.",
         )
+        .with(
+            C_FILES_LEGACY_FOLDER_PAGES,
+            "Recognise the old folder page names",
+        )
+        .with(
+            C_FILES_LEGACY_FOLDER_PAGES_DESC,
+            "Besides Folder/_index.md, opens Folder/Folder.md and Folder/index.md as the folder page too, like Obsidian. No file is renamed.",
+        )
         .with(C_URI_ALLOWED, "fub:// links that write without asking")
         .with(
             C_URI_ALLOWED_DESC,
@@ -2245,6 +2341,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_FILES_STARTUP_NOTE_DESC,
             "The vault path of the note that «A specific note» opens; without an extension it means .md.",
+        )
+        .with(C_FILES_PEOPLE_FOLDER, "People folder")
+        .with(
+            C_FILES_PEOPLE_FOLDER_DESC,
+            "@ in a note offers the notes in this folder and writes the link to the person; a new person is created here. Empty, @ offers no people.",
         )
         .with(C_GROUP_APPEARANCE, "Appearance")
         .with(C_GROUP_EDITOR, "Editor")
@@ -2294,8 +2395,16 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_SLASH_DESC, "A «/» at the start of a line or after a space opens blocks and commands, filtered by what you type next. Esc leaves it as text.")
         .with(C_EDITOR_DEFAULT_MODE, "Initial mode")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "The mode of a new window or of a vault opened for the first time. A split pane inherits the mode of the pane it comes from, and each pane remembers its own.")
+        .with(C_EDITOR_LIVE_REVEAL, "Markdown marks in Live")
+        .with(C_EDITOR_LIVE_REVEAL_DESC, "Markdown marks are visible in Source; here you choose whether Live shows them too.")
+        .with(C_EDITOR_LIVE_REVEAL_NEVER, "Never, as in Word")
+        .with(C_EDITOR_LIVE_REVEAL_ELEMENT, "Of the element at the cursor")
+        .with(C_EDITOR_LIVE_REVEAL_LINE, "Of the line at the cursor")
+        .with(C_EDITOR_LIVE_GUIDE, "Guide while typing")
+        .with(C_EDITOR_LIVE_GUIDE_DESC, "In Live an opened mark styles the text at once and shows the missing close in grey; a space closes superscript and subscript.")
         .with(C_MODE_SOURCE, "Source")
         .with(C_MODE_LIVE, "Live")
+        .with(C_MODE_BLOCKS, "Blocks")
         .with(C_MODE_READING, "Reading")
         .with(C_PLUGINS_DISABLED, "Disabled components")
         .with(
@@ -2655,6 +2764,21 @@ fn set_log_levels(
 mod tests {
     use super::*;
 
+    /// La cartella delle persone (K5) è del vault, viaggia con lui, e parte da
+    /// `Persone`: `@` propone le note che ci stanno.
+    #[test]
+    fn the_people_folder_is_a_vault_text_starting_at_persone() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == FILES_PEOPLE_FOLDER)
+            .expect("la cartella delle persone è fra le impostazioni");
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Vault);
+        assert!(matches!(
+            &spec.kind,
+            SettingKind::Text { default } if default == "Persone"
+        ));
+    }
+
     fn map(rows: &[(&str, &str)]) -> BTreeMap<String, String> {
         rows.iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -2758,6 +2882,27 @@ mod tests {
             assert!(matches!(&spec.kind, SettingKind::Toggle { default } if *default == expected));
             assert!(!spec.program_writable);
         }
+    }
+
+    /// La Live si scrive come in Word se nessuno sceglie altro: i segni si
+    /// vedono soltanto in Sorgente, e le Preferenze offrono le altre due
+    /// politiche, subito dopo la modalità iniziale.
+    #[test]
+    fn live_reveal_defaults_to_never_next_to_the_initial_mode() {
+        let machine = core_machine_settings();
+        let at = |key: &str| machine.iter().position(|spec| spec.key == key);
+        assert_eq!(
+            at(EDITOR_LIVE_REVEAL),
+            at(EDITOR_DEFAULT_MODE).map(|i| i + 1)
+        );
+        let spec = &machine[at(EDITOR_LIVE_REVEAL).expect("la rivelazione in Live")];
+        let SettingKind::Choice { default, options } = &spec.kind else {
+            panic!("la rivelazione è una scelta");
+        };
+        assert_eq!(default, "mai");
+        let values: Vec<&str> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(values, ["mai", "elemento", "riga"]);
+        assert!(!spec.program_writable);
     }
 
     /// Il default è il massimo dello schermo, e ogni tetto offerto dal pannello

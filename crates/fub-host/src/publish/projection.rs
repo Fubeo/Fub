@@ -394,11 +394,13 @@ fn inlines_into(
             Inline::Emph(inner)
             | Inline::Strong(inner)
             | Inline::Superscript(inner)
+            | Inline::Subscript(inner)
             | Inline::Strikethrough(inner) => {
                 let tag = match inline {
                     Inline::Emph(_) => "em",
                     Inline::Strong(_) => "strong",
                     Inline::Superscript(_) => "sup",
+                    Inline::Subscript(_) => "sub",
                     _ => "del",
                 };
                 out.push_str(&format!("<{tag}>"));

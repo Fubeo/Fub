@@ -62,6 +62,32 @@ path è già occupato da una cartella o da un file, l'esito è un conflitto e il
 disco resta invariato. La prova a vuoto esegue lo stesso controllo senza
 scrivere. La creazione non è annullabile dal registro dei comandi.
 
+## La pagina della cartella
+
+La pagina di una cartella `X` è la nota `X/_index.<ext>`
+([0229](../decisions/0229-pagina-della-cartella.md)). Cliccare la cartella la
+apre, e la lista dei figli non la mostra. Il suo nome è quello della cartella in
+schede, ricerca, grafo e wikilink: `[[Viaggio]]` porta a `Viaggio/_index.md`, e
+quando la cartella cambia nome i link seguono. Alla radice del vault
+`_index.md` è una nota normale. `X/X.md` e `X/index.md` sono note come le
+altre, e Fub non rinomina niente da solo. L'opzione del vault
+`files.legacy-folder-pages`, spenta, li riconosce ancora come pagina dopo
+`_index`, per chi apre il vault anche con Obsidian. Il comando
+`note.folder_page` («Usa come pagina della cartella», dalla palette; `doc`, in
+mancanza la nota aperta) rinomina la nota in `_index` con `note.rename`, link e
+annullamento compresi, e rifiuta se la cartella ha già una pagina o se la nota
+sta nella radice. «Converti in cartella» porta `Nota.md` a `Nota/_index.md`.
+
+`note.subpage` («Nuova sottopagina», dalla testata dei Blocchi; `doc` e
+`name`) crea `Viaggio/Nome.md`. Se `Viaggio.md` non è ancora una pagina di
+cartella, prima la porta in `Viaggio/_index.md` con `note.rename`, e
+`[[Viaggio]]` continua a trovarla; se la cartella c'è già senza pagina, la nota
+ci entra. Una cartella con la sua pagina o una nota col nome chiesto fermano
+tutto prima del primo passo; se la creazione fallisce dopo lo spostamento, la
+pagina torna dov'era. Si annulla in un gesto solo: la sottopagina va nel
+cestino e la pagina torna al suo posto. Il link `[[Nome]]` lo scrive la
+testata nel testo aperto.
+
 ## Rinominare, spostare e cestinare una cartella
 
 `folder.rename` (`folder` e `to` obbligatori) porta una cartella intera a un

@@ -272,6 +272,7 @@ fn testo(albero: &DocumentTree, refs: &[u32], out: &mut String) {
             Inline::Emph(v)
             | Inline::Strong(v)
             | Inline::Superscript(v)
+            | Inline::Subscript(v)
             | Inline::Strikethrough(v) => testo(albero, v, out),
             Inline::Link(l) => match &l.label {
                 Some(v) => testo(albero, v, out),

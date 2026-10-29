@@ -91,7 +91,8 @@ describe("Alt-Invio", () => {
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     const anchor = editor("[Vai](#seconda-parte)\n\n# Prima\n\n# Seconda parte\n", 2);
     expect(anchor.press()).toBe(true);
-    expect(anchor.view.state.selection.main.head).toBe(anchor.view.state.doc.toString().indexOf("# Seconda"));
+    // Con «mai» il cursore non sta nei `#`: arriva al testo del titolo.
+    expect(anchor.view.state.selection.main.head).toBe(anchor.view.state.doc.toString().indexOf("Seconda parte"));
     anchor.dispose();
     const missing = editor("[Vai](#altrove)\n\n# Prima\n", 2);
     expect(missing.press()).toBe(false);

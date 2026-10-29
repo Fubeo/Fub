@@ -262,17 +262,25 @@ uno spegne il pulsante di chi lo nomina. La superficie Markdown conosce:
 
 - `text.undo`, `text.redo`;
 - `markdown.paragraph`, `markdown.heading.1` … `markdown.heading.6`;
-- `markdown.bold`, `markdown.italic`, `markdown.strikethrough`,
+- `markdown.bold`, `markdown.italic`, `markdown.underline`,
+  `markdown.strikethrough`, `markdown.superscript`, `markdown.subscript`,
   `markdown.highlight`, `markdown.code`, `markdown.math`, `markdown.comment`,
   `markdown.clear`;
+- `markdown.color.<colore>` e `markdown.background.<colore>`, con i nove
+  colori del contenuto (`gray`, `brown`, `orange`, `yellow`, `green`, `blue`,
+  `purple`, `pink`, `red`) o `default`, che toglie il colore: scrivono
+  `<span class="fub-color-…">` e `<mark class="fub-bg-…">`;
 - `markdown.link`, `markdown.wikilink`, `markdown.image`, `markdown.footnote`,
   `markdown.footnote.delete`;
 - `markdown.list.bullet`, `markdown.list.ordered`, `markdown.list.task`,
   `markdown.list.indent`, `markdown.list.dedent`;
-- `markdown.quote`, `markdown.callout`, `markdown.codeblock`,
-  `markdown.mathblock`, `markdown.rule`, `markdown.table`;
+- `markdown.quote`, `markdown.callout`, `markdown.details`, `markdown.columns`, `markdown.codeblock`,
+  `markdown.mathblock`, `markdown.rule`, `markdown.toc`, `markdown.table`;
 - `markdown.embed` (una nota incorporata `![[`) e `markdown.diagram` (un
   blocco `mermaid`), che riaprono il completamento delle note e dei modelli;
+- `markdown.mention` e `markdown.date`, che scrivono `@` e aprono le proposte
+  di persone e date;
+- `markdown.linkcard`, che apre un paragrafo per un indirizzo web;
 - `markdown.property.add`, `markdown.property.up`, `markdown.property.down`;
 - `markdown.table.row.before`, `.row.after`, `.row.up`, `.row.down`,
   `.row.delete`, `.column.before`, `.column.after`, `.column.left`,

@@ -8,6 +8,7 @@ import {
   type StateCommand,
 } from "@codemirror/state";
 import { EditorView, keymap, type KeyBinding } from "@codemirror/view";
+import { isolateHistory } from "@codemirror/commands";
 import { indentUnit, syntaxTree } from "@codemirror/language";
 import type { SyntaxNodeRef } from "@lezer/common";
 import { taskChecked } from "../../../../rules/mirrored";
@@ -16,19 +17,22 @@ import { isStrictlyInsideCode } from "./parser";
 import { textKeymap } from "../../commands";
 import { smartLists } from "../../smart-lists";
 import { addProperty, moveProperty } from "./properties";
+import { elementMarksAt, type CursorElement } from "./cursor-elements";
+import { openedPair } from "./empty-pair";
+import { renumberLists } from "./renumber";
 
 // ── Formattazione inline ─────────────────────────────────────────────────────
 
 /// Corsa di `*` contigui a ridosso di `pos`, verso sinistra o destra. Serve a
 /// non scambiare il `**` del grassetto per un `*` di corsivo: `*x*`, `**x**` e
 /// `***x***` si distinguono per la *parità* della corsa, non guardando un solo
-/// carattere.
-function starRun(state: EditorState, pos: number, dir: -1 | 1): number {
+/// carattere. Lo stesso per `~`: il pedice è una tilde sola, `~~` è barrato.
+function starRun(state: EditorState, pos: number, dir: -1 | 1, mark = "*"): number {
   let n = 0;
   for (;;) {
     const p = dir === -1 ? pos - n - 1 : pos + n;
     if (p < 0 || p >= state.doc.length) return n;
-    if (state.sliceDoc(p, p + 1) !== "*") return n;
+    if (state.sliceDoc(p, p + 1) !== mark) return n;
     n += 1;
   }
 }
@@ -46,6 +50,7 @@ function wrappedOutside(
   if (from < open.length) return false;
   if (state.sliceDoc(from - open.length, from) !== open) return false;
   if (state.sliceDoc(to, to + close.length) !== close) return false;
+  if (open === "~") return starRun(state, from, -1, "~") === 1 && starRun(state, to, 1, "~") === 1;
   if (open !== "*") return true;
   return starRun(state, from, -1) % 2 === 1 && starRun(state, to, 1) % 2 === 1;
 }
@@ -55,6 +60,7 @@ function wrappedOutside(
 function wrappedInside(sel: string, open: string, close: string): boolean {
   if (sel.length < open.length + close.length) return false;
   if (!sel.startsWith(open) || !sel.endsWith(close)) return false;
+  if (open === "~") return !sel.startsWith("~~") && !sel.endsWith("~~");
   if (open !== "*") return true;
   let l = 0;
   while (l < sel.length && sel.charAt(l) === "*") l += 1;
@@ -67,7 +73,11 @@ function wrappedInside(sel: string, open: string, close: string): boolean {
 /// cursore, o (senza parola) su una coppia vuota col cursore in mezzo. "Già
 /// formattato" vale sia coi marcatori inclusi nella selezione sia con la
 /// parola dentro i marcatori: nei due casi si tolgono, altrimenti si avvolge.
-function toggleWrap(open: string, close: string = open): StateCommand {
+///
+/// Con `element`, come in Word: il cursore dentro quell'elemento lo toglie
+/// tutto, lasciandone il testo scelto; la coppia vuota che si apre senza parola
+/// sparisce se il cursore se ne va senza scrivere (`empty-pair.ts`, in Live).
+function toggleWrap(open: string, close: string = open, element?: CursorElement): StateCommand {
   return ({ state, dispatch }) => {
     if (state.readOnly) return false;
     dispatch(
@@ -93,6 +103,23 @@ function toggleWrap(open: string, close: string = open): StateCommand {
               from += lead;
               to -= trail;
             }
+          }
+          const around = element && range.empty ? elementMarksAt(state, range, element) : null;
+          if (around) {
+            // Resta scelto il testo che era dell'elemento, come prima per la parola.
+            // I segni di un elemento annidato ai bordi (`***x***`) restano fuori.
+            const content = state.sliceDoc(around.openTo, around.closeFrom);
+            const lead = content.length - content.replace(/^[*_~^=]+/, "").length;
+            const trail = content.length - content.replace(/[*_~^=]+$/, "").length;
+            const start = around.from + (lead < content.length ? lead : 0);
+            const end = around.from + content.length - (lead < content.length ? trail : 0);
+            return {
+              changes: [
+                { from: around.from, to: around.openTo },
+                { from: around.closeFrom, to: around.to },
+              ],
+              range: EditorSelection.range(start, end),
+            };
           }
           if (from === to && range.empty) {
             if (
@@ -136,6 +163,7 @@ function toggleWrap(open: string, close: string = open): StateCommand {
             return {
               changes: { from, insert: open + close },
               range: EditorSelection.cursor(from + open.length),
+              effects: element ? openedPair.of({ from, open: open.length, close: close.length }) : [],
             };
           }
           if (wrappedInside(state.sliceDoc(from, to), open, close)) {
@@ -171,9 +199,13 @@ function toggleWrap(open: string, close: string = open): StateCommand {
   };
 }
 
-export const toggleBold = toggleWrap("**");
-export const toggleItalic = toggleWrap("*");
-export const toggleStrikethrough = toggleWrap("~~");
+export const toggleBold = toggleWrap("**", "**", "strong");
+export const toggleItalic = toggleWrap("*", "*", "em");
+export const toggleStrikethrough = toggleWrap("~~", "~~", "strike");
+/// Sottolineato, apice e pedice: `<u>` della Lettura, `^x^` e `~x~` (0228).
+export const toggleUnderline = toggleWrap("<u>", "</u>", "underline");
+export const toggleSuperscript = toggleWrap("^", "^", "sup");
+export const toggleSubscript = toggleWrap("~", "~", "sub");
 /// I delimitatori devono essere più lunghi di ogni corsa di backtick nel
 /// contenuto. Il padding CommonMark separa i backtick ai bordi e preserva gli
 /// spazi significativi; il parser individua il tratto da liberare al toggle.
@@ -236,7 +268,7 @@ export const toggleWikilink = toggleWrap("[[", "]]");
 export const toggleEmbed = toggleWrap("![[", "]]");
 /// I delimitatori dichiarati dalle regole ufficiali (`fub:highlight`,
 /// `fub:comments`) e il math in riga: stessa meccanica del grassetto.
-export const toggleHighlight = toggleWrap("==");
+export const toggleHighlight = toggleWrap("==", "==", "highlight");
 export const toggleComment = toggleWrap("%%");
 export const toggleInlineMath = toggleWrap("$");
 
@@ -249,6 +281,55 @@ export const toggleInlineMath = toggleWrap("$");
 // `> - [ ] x` la vivi preview disegnava una checkbox e questo file leggeva una
 // citazione, quindi `Mod-Enter` non la spuntava; su `-  [ ] x` (due spazi) la
 // vivi preview vedeva una todo e questo file un bullet.
+
+// ── Il recinto che si chiude da solo ─────────────────────────────────────────
+
+const FENCE_OPEN = /^( {0,3})(`{3,}|~{3,})(.*)$/;
+const FENCE_CLOSE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/;
+
+/// Il recinto aperto e non chiuso alla fine delle righe `[from, to]`, partendo
+/// fuori da ogni recinto; `null` se a `to` si è fuori.
+function openFenceAfter(state: EditorState, from: number, to: number): { char: string; length: number } | null {
+  let open: { char: string; length: number } | null = null;
+  for (let number = from; number <= to; number++) {
+    const text = state.doc.line(number).text;
+    if (!open) {
+      const found = FENCE_OPEN.exec(text);
+      if (found && !(found[2]![0] === "`" && found[3]!.includes("`"))) open = { char: found[2]![0]!, length: found[2]!.length };
+    } else {
+      const found = FENCE_CLOSE.exec(text);
+      if (found && found[1]![0] === open.char && found[1]!.length >= open.length) open = null;
+    }
+  }
+  return open;
+}
+
+/// `Invio` a fine della riga ` ```lingua ` (o `~~~`) di un recinto senza
+/// chiusura: scrive la riga vuota e il recinto che lo chiude, e mette il
+/// cursore in mezzo. Senza chiusura vuol dire che i recinti dopo di lui si
+/// chiudono fra loro: un recinto più avanti nel file appartiene al suo blocco,
+/// non a questo.
+export const closeFenceEnter: StateCommand = ({ state, dispatch }) => {
+  const range = state.selection.main;
+  if (state.readOnly || state.selection.ranges.length > 1 || !range.empty) return false;
+  const line = state.doc.lineAt(range.head);
+  if (range.head !== line.to) return false;
+  const found = FENCE_OPEN.exec(line.text);
+  if (!found || (found[2]![0] === "`" && found[3]!.includes("`"))) return false;
+  // La riga apre soltanto fuori da un recinto, e resta aperta soltanto se
+  // quelli dopo si chiudono fra loro.
+  if (line.number > 1 && openFenceAfter(state, 1, line.number - 1)) return false;
+  if (line.number < state.doc.lines && openFenceAfter(state, line.number + 1, state.doc.lines)) return false;
+  const indent = found[1]!;
+  const fence = found[2]![0]!.repeat(found[2]!.length);
+  dispatch(state.update({
+    changes: { from: line.to, insert: `\n${indent}\n${indent}${fence}` },
+    selection: { anchor: line.to + 1 + indent.length },
+    scrollIntoView: true,
+    userEvent: "input",
+  }));
+  return true;
+};
 
 /// `Enter` dentro una lista: continua la voce (il testo dopo il cursore scende
 /// sulla riga nuova), rinumera le numerate a valle, e su una voce vuota toglie
@@ -740,11 +821,42 @@ export function autoPairDecision(
   return null;
 }
 
+/// Le scorciatoie di Notion a inizio riga: `[]` e spazio diventano una voce da
+/// fare, `[x]` e spazio una voce fatta (anche `[|]`, chiuso da sé dalle
+/// parentesi). Soltanto fuori dal codice; il risultato sostituisce la riga.
+export function taskShortcut(state: EditorState, from: number, to: number, typed: string): ChangeSpec & { from: number; to: number; insert: string } | null {
+  if (typed !== " " || from !== to || isStrictlyInsideCode(state, from)) return null;
+  const line = state.doc.lineAt(from);
+  const before = state.sliceDoc(line.from, from);
+  const after = state.sliceDoc(from, line.to);
+  const closed = /^([ \t]*)\[([xX]?)\]$/.exec(before);
+  const open = /^([ \t]*)\[$/.exec(before);
+  const shape = closed && after === "" ? { indent: closed[1]!, done: closed[2] !== "" }
+    : open && after === "]" ? { indent: open[1]!, done: false }
+    : null;
+  if (!shape) return null;
+  return { from: line.from, to: line.to, insert: `${shape.indent}- [${shape.done ? "x" : " "}] ` };
+}
+
 // L'unico punto del modulo che tocca la view: applica la decisione presa
 // sopra. `from + text.length` per lo skip = subito oltre il carattere gemello
 // già presente (le battute qui sono sempre singole).
 const autoPair = EditorView.inputHandler.of((view, from, to, text) => {
   if (view.state.selection.ranges.length > 1) return false;
+  // `[]` e spazio: prima lo spazio, poi la voce, così un annulla torna a `[] `.
+  const task = taskShortcut(view.state, from, to, text);
+  if (task) {
+    view.dispatch({ changes: { from, insert: " " }, selection: { anchor: from + 1 }, userEvent: "input.type" });
+    const line = view.state.doc.lineAt(from);
+    view.dispatch({
+      changes: { from: line.from, to: line.to, insert: task.insert },
+      selection: { anchor: line.from + task.insert.length },
+      annotations: isolateHistory.of("before"),
+      scrollIntoView: true,
+      userEvent: "input.complete",
+    });
+    return true;
+  }
   const decision = autoPairDecision(view.state, from, to, text);
   if (decision === null) return false;
   view.dispatch(
@@ -775,8 +887,11 @@ const markdownKeymapPrefix: KeyBinding[] = [
   { key: "Mod-b", run: prose(toggleBold) },
   { key: "Mod-i", run: prose(toggleItalic) },
   { key: "Mod-Shift-x", run: prose(toggleStrikethrough) },
+  // Come in Word: sopra l'annulla della selezione di CodeMirror.
+  { key: "Mod-u", run: prose(toggleUnderline) },
   { key: "Mod-`", run: toggleInlineCode },
   { key: "Mod-k", run: prose(toggleWikilink) },
+  { key: "Enter", run: closeFenceEnter },
   { key: "Enter", run: smartListEnter },
   { key: "Mod-Enter", run: prose(toggleCheckbox) },
   { key: "Tab", run: prose(indentListItem) },
@@ -819,5 +934,5 @@ export const obsidianKeymap: KeyBinding[] = [
 
 /// Le estensioni del profilo Markdown, pronte per l'adapter compatibile.
 export function markdownEditingExtensions(): Extension {
-  return [Prec.high(keymap.of(obsidianKeymap)), autoPair];
+  return [Prec.high(keymap.of(obsidianKeymap)), autoPair, renumberLists];
 }

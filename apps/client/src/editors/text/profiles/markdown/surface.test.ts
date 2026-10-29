@@ -771,7 +771,8 @@ describe("i disegni incorporati nella Lettura", () => {
       // scena entrano nella nota. La shell ne legge i byte per portarvi dentro
       // caratteri e immagini; qui la lettura non riesce, e il disegno si
       // mostra dal file.
-      expect(reading().querySelector("svg, script, figure, foreignObject")).toBeNull();
+      // (Una figura con la didascalia, K10, è della nota: non è la scena.)
+      expect(reading().querySelector("svg, script, figure[data-embed-kind], foreignObject")).toBeNull();
       expect(new Set(host.opened)).toEqual(new Set([FLUSSO, ACQUA]));
       const first = images().map((img) => img.getAttribute("src"));
       const leases = first.map((src) => src!.replace("fub-asset://localhost/", ""));
@@ -789,5 +790,37 @@ describe("i disegni incorporati nella Lettura", () => {
       vi.restoreAllMocks();
     }
     expect(host.closed).toHaveLength(10);
+  });
+});
+
+describe("i Blocchi in due riquadri (H16)", () => {
+  it("la selezione di blocchi resta del suo riquadro e le modifiche dell'altro non sono battute", async () => {
+    const { blockSelection } = await import("./blocks/selection");
+    const doc = "Uno\n\nDue\n\nTre";
+    const blocks = editor();
+    const source = editor();
+    blocks.ed.buffer.setDoc(doc);
+    source.ed.buffer.setDoc(doc);
+    blocks.ed.setMode("blocks");
+    source.ed.setMode("source");
+    await vi.waitFor(() => expect(blocks.view().scrollDOM.querySelector(".cm-fub-block-handles")).not.toBeNull());
+
+    blocks.view().dispatch({ selection: { anchor: doc.indexOf("Tre") } });
+    blocks.view().contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(blocks.view().state.field(blockSelection)).not.toBeNull();
+    expect(source.view().state.field(blockSelection, false) ?? null).toBeNull();
+
+    // L'altro riquadro scrive in cima; qui arriva come sincronizzazione.
+    const next = `Zero\n\n${doc}`;
+    source.view().dispatch({ changes: { from: 0, insert: "Zero\n\n" }, userEvent: "input.type" });
+    blocks.ed.buffer.syncDoc(next);
+    const view = blocks.view();
+    expect(view.state.doc.toString()).toBe(next);
+    expect(view.state.field(blockSelection)).not.toBeNull();
+    expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe("Tre");
+    expect(blocks.ed.undo()).toBe(false);
+    expect(source.ed.undo()).toBe(true);
+    blocks.ed.destroy();
+    source.ed.destroy();
   });
 });

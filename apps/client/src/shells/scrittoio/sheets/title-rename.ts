@@ -31,11 +31,13 @@
 import "./sheets.css";
 
 import { errorText } from "../../../host/errors";
-import { onLanguage, t, type Key } from "../../../i18n/strings";
+import { onLanguage, t } from "../../../i18n/strings";
 import { openPopover, textButton, textField, type PopoverHandle } from "../../../kit";
-import { nameFault, normalizedName, pageName, type NameFault } from "../../../rules/mirrored";
+import { nameFault, pageName } from "../../../rules/mirrored";
 import { searchedName } from "../../../rules/searched-name";
 import { flushPendingSave, renameKeepingBuffer } from "../../../state/document-session";
+import { NAME_FAULT, pageRenameTarget } from "../../../state/page-rename";
+import { renameFolder } from "../../../state/vault";
 import { activeDoc } from "../../../state/layout";
 import { identifier } from "../../../ui/a11y";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
@@ -44,19 +46,6 @@ import { setTooltip } from "../../../ui/tooltip";
 import { paneIdOf, watchParts } from "./panes";
 
 const TITLE = "sheet-title";
-
-/// Perché un nome non si può usare: le stesse frasi dell'esplora.
-const FAULT: Record<NameFault, Key> = {
-  empty: "name_fault.empty",
-  traversal: "name_fault.traversal",
-  machine: "name_fault.machine",
-  control: "name_fault.control",
-  reserved: "name_fault.reserved",
-  device: "name_fault.device",
-  "trailing-dot": "name_fault.trailing_dot",
-  hidden: "name_fault.hidden",
-  "too-long": "name_fault.too_long",
-};
 
 interface Edit {
   /// Il documento da rinominare, fissato all'apertura.
@@ -72,15 +61,6 @@ interface Edit {
   note: PopoverHandle | null;
 }
 
-/// `p/Nome.md` con un altro nome di pagina: stessa cartella, stessa estensione.
-function renamed(from: string, name: string): string {
-  const slash = from.lastIndexOf("/");
-  const dir = slash === -1 ? "" : from.slice(0, slash + 1);
-  const dot = from.lastIndexOf(".");
-  const ext = dot > slash ? from.slice(dot) : "";
-  return normalizedName(`${dir}${name}${ext}`);
-}
-
 /// Il nome che si può usare al posto di uno rifiutato, o `null`.
 ///
 /// La pulizia è quella di «non l'ho trovata, creala» (`searchedName`: via i
@@ -91,7 +71,7 @@ function renamed(from: string, name: string): string {
 export function proposedName(from: string, typed: string): string | null {
   const clean = searchedName(typed);
   if (clean === null || clean === typed.trim() || clean === pageName(from)) return null;
-  return nameFault(renamed(from, clean), "new") === null ? clean : null;
+  return nameFault(pageRenameTarget(from, clean).to, "new") === null ? clean : null;
 }
 
 export function mountTitleRename(lifetime: Lifetime): void {
@@ -224,14 +204,17 @@ export function mountTitleRename(lifetime: Lifetime): void {
       close(true);
       return;
     }
-    const to = renamed(from, name);
-    if (to === from) {
+    // La pagina di una cartella si chiama come la cartella: il titolo nuovo
+    // rinomina la cartella, e il file resta `_index` (decisione 0229).
+    const target = pageRenameTarget(from, name);
+    const to = target.to;
+    if (to === target.from) {
       close(true);
       return;
     }
     const fault = nameFault(to, "new");
     if (fault !== null) {
-      fail(mine, t("explorer.bad_name", { name, reason: t(FAULT[fault]) }), "info", proposedName(from, name));
+      fail(mine, t("explorer.bad_name", { name, reason: t(NAME_FAULT[fault]) }), "info", proposedName(from, name));
       return;
     }
     mine.busy = true;
@@ -244,6 +227,17 @@ export function mountTitleRename(lifetime: Lifetime): void {
       const pending = await flushPendingSave();
       if (pending.length > 0) {
         fail(mine, t("document.unsaved_blocks", { doc: pending.join(", ") }), "guasto");
+        return;
+      }
+      if (target.kind === "folder") {
+        try {
+          await renameFolder(target.from, to);
+        } catch (error) {
+          fail(mine, t("explorer.folder_move_failed", { folder: target.from, to, reason: errorText(error) }), "guasto");
+          return;
+        }
+        mine.busy = false;
+        if (edit === mine) close(true);
         return;
       }
       const outcome = await renameKeepingBuffer(from, to);

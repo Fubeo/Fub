@@ -946,6 +946,7 @@ fn shift_spans(d: &mut DocumentModel, delta: usize) {
                 Inline::Emph(within)
                 | Inline::Strong(within)
                 | Inline::Superscript(within)
+                | Inline::Subscript(within)
                 | Inline::Strikethrough(within) => within_inlines(within, delta),
                 // I due a-capo non portano span: come Text e Code.
                 Inline::Text(_) | Inline::Code(_) | Inline::HardBreak | Inline::SoftBreak => {}

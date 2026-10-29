@@ -156,6 +156,8 @@ pub fn corpus() -> Vec<Case> {
         // loro, e stanno qui come ogni altro costrutto.
         case("barrato", "~~barrato~~\n"),
         case("apice", "testo ^apice^ qui\n"),
+        // La tilde sola è pedice, due sono barrato (decisione 0228).
+        case("pedice", "acqua H~2~O e ~~via~~\n"),
         case("link di riferimento", "[a][rif]\n\n[rif]: nota.md\n"),
         // Una reference definition non è un paragrafo: comrak la consuma senza
         // lasciare un nodo, e il parser la recupera dalla sorgente. Se non ci

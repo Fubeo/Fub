@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { EditorState } from "@codemirror/state";
+import { EditorSelection, EditorState } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { markdownGrammar } from "./grammar";
-import { activeLinesOf, computeDecorations, type LiveDeco, type LiveDecoKind } from "./livepreview";
+import {
+  activeLinesOf,
+  computeDecorations,
+  footnoteLabelsField,
+  pillLabel,
+  revealOf,
+  firstFootnoteReference,
+  type LiveDeco,
+  type LiveDecoKind,
+} from "./livepreview";
+import type { RevealPolicy } from "../../live-reveal";
 
 // La vivi preview si testa qui, headless: la funzione pura riceve un
 // EditorState (che porta con sé l'albero Lezer) e le righe attive, e
@@ -130,9 +140,27 @@ describe("apici, pedici, elenchi e note", () => {
     const doc = "Vedi[^uno] e[^due].\n\n[^uno]: la nota";
     const ds = decorate(doc);
     expect(ofKind(ds, "sup")).toEqual([{ from: 6, to: 9, kind: "sup" }]);
-    expect(ofKind(ds, "hide").map((d) => [d.from, d.to])).toEqual([[4, 6], [9, 10]]);
+    // [21, 23] è il `[^` della definizione, che diventa etichetta e ↩ (D5).
+    expect(ofKind(ds, "hide").map((d) => [d.from, d.to])).toEqual([[4, 6], [9, 10], [21, 23]]);
     expect(ofKind(ds, "link")).toEqual([]);
     expect(ofKind(decorate(doc, [1]), "sup")).toEqual([]);
+  });
+
+  it("le etichette delle note si rileggono soltanto quando cambia una riga con `[^`", () => {
+    const doc = "Vedi[^uno].\n\nProsa.\n\n[^uno]: la nota";
+    let current = EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar }), footnoteLabelsField] });
+    const sups = () => ofKind(computeDecorations(current, new Set()), "sup").length;
+    expect(sups()).toBe(1);
+    const first = current.field(footnoteLabelsField).labels;
+    expect(first).toEqual(new Set(["UNO"]));
+    // Una battuta nella prosa: le stesse etichette, senza scorrere il file.
+    current = current.update({ changes: { from: doc.indexOf("Prosa") + 5, insert: "x" } }).state;
+    expect(sups()).toBe(1);
+    expect(current.field(footnoteLabelsField).labels).toBe(first);
+    // La definizione cambia etichetta: si rilegge, e il rimando resta testo.
+    current = current.update({ changes: { from: current.doc.toString().indexOf("uno]:") + 3, insert: "x" } }).state;
+    expect(sups()).toBe(0);
+    expect(current.field(footnoteLabelsField).labels).toEqual(new Set(["UNOX"]));
   });
 });
 
@@ -615,5 +643,180 @@ describe("immagini in mezzo al testo", () => {
     for (let i = 1; i < replaces.length; i++) {
       expect(replaces[i].from).toBeGreaterThanOrEqual(replaces[i - 1].to);
     }
+  });
+});
+
+describe("la politica di rivelazione", () => {
+  /// Le decorazioni col cursore a `at`, per la politica data.
+  const at = (doc: string, cursor: number, policy: RevealPolicy) => {
+    const current = state(doc, { anchor: cursor });
+    return computeDecorations(current, revealOf(current, policy));
+  };
+  const hidden = (doc: string, cursor: number, policy: RevealPolicy, from: number, to: number) =>
+    at(doc, cursor, policy).some((d) => d.kind === "hide" && d.from === from && d.to === to);
+
+  // Ogni riga della tabella della sezione 06: un elemento in riga, il suo segno
+  // d'apertura e i quattro punti del cursore (inizio, in mezzo, fine e subito
+  // dopo l'elemento, una lettera più in là).
+  const inline: readonly { name: string; doc: string; sign: [number, number]; element: [number, number] }[] = [
+    { name: "grassetto", doc: "a **bo** z q", sign: [2, 4], element: [2, 8] },
+    { name: "corsivo", doc: "a *bo* z q", sign: [2, 3], element: [2, 6] },
+    { name: "barrato", doc: "a ~~bo~~ z q", sign: [2, 4], element: [2, 8] },
+    { name: "apice", doc: "a ^bo^ z q", sign: [2, 3], element: [2, 6] },
+    { name: "pedice", doc: "a ~bo~ z q", sign: [2, 3], element: [2, 6] },
+    { name: "codice", doc: "a `bo` z q", sign: [2, 3], element: [2, 6] },
+    { name: "evidenziato", doc: "a ==bo== z q", sign: [2, 4], element: [2, 8] },
+  ];
+  for (const { name, doc, sign, element } of inline) {
+    const [start, end] = element;
+    const points = [start, start + 2, end, end + 2];
+    it(`${name}: «riga» rivela su tutta la riga, «elemento» dentro l'elemento, «mai» mai`, () => {
+      expect(points.map((p) => hidden(doc, p, "riga", ...sign))).toEqual([false, false, false, false]);
+      expect(points.map((p) => hidden(doc, p, "elemento", ...sign))).toEqual([false, false, false, true]);
+      expect(points.map((p) => hidden(doc, p, "mai", ...sign))).toEqual([true, true, true, true]);
+    });
+  }
+
+  it("titolo: il prefisso si rivela con «elemento» soltanto col cursore nel prefisso", () => {
+    const doc = "## Titolo\naltro";
+    const points = [0, 5, 9, 12];
+    expect(points.map((p) => hidden(doc, p, "riga", 0, 3))).toEqual([false, false, false, true]);
+    expect(points.map((p) => hidden(doc, p, "elemento", 0, 3))).toEqual([false, true, true, true]);
+    expect(points.map((p) => hidden(doc, p, "mai", 0, 3))).toEqual([true, true, true, true]);
+    expect(hidden(doc, 3, "elemento", 0, 3)).toBe(true);
+  });
+
+  it("un segno rivelato è attenuato (A5): con «elemento» e «riga», mai con «mai»", () => {
+    const near = (doc: string, cursor: number, policy: RevealPolicy) =>
+      at(doc, cursor, policy).filter((d) => d.kind === "near").map((d) => [d.from, d.to]);
+    expect(near("a **bo** z", 4, "elemento")).toEqual([[2, 4], [6, 8]]);
+    expect(near("a **bo** z", 4, "riga")).toEqual([[2, 4], [6, 8]]);
+    expect(near("a **bo** z", 4, "mai")).toEqual([]);
+    expect(near("a `bo` z", 4, "elemento")).toEqual([[2, 3], [5, 6]]);
+    expect(near("## Titolo ##", 1, "elemento")).toEqual([[0, 2], [10, 12]]);
+    expect(near("## Titolo", 1, "mai")).toEqual([]);
+  });
+
+  it("la definizione di una nota: l'etichetta resta, «]:» diventa ↩ (D5)", () => {
+    const doc = "uno[^a] due[^a]\n\n[^a]: la nota";
+    const def = doc.indexOf("[^a]:");
+    const kinds = (p: number, policy: RevealPolicy) => at(doc, p, policy)
+      .filter((d) => d.from >= def && (d.kind === "hide" || d.kind.startsWith("footnote")))
+      .map((d) => [d.kind, doc.slice(d.from, d.to)]);
+    const rendered = [["hide", "[^"], ["footnote-label", "a"], ["footnote-back", "]: "]];
+    expect(kinds(0, "mai")).toEqual(rendered);
+    expect(kinds(def + 2, "mai")).toEqual(rendered);
+    expect(kinds(def + 2, "elemento")).toEqual([]);
+    expect(kinds(def + 8, "elemento")).toEqual(rendered);
+    expect(kinds(def + 8, "riga")).toEqual([]);
+    expect(firstFootnoteReference(state(doc).doc, "a")).toBe(7);
+    expect(firstFootnoteReference(state("[^a]: sola").doc, "a")).toBeNull();
+  });
+
+  it("la punteggiatura dopo un pezzo sostituito non va a capo da sola (E2)", () => {
+    const glued = (doc: string, cursor: number, policy: RevealPolicy) =>
+      at(doc, cursor, policy).filter((d) => d.kind === "nobreak").map((d) => doc.slice(d.from, d.to));
+    // Uno stile che finisce sulla lettera non si taglia: il fondo e il
+    // margine del codice o dell'evidenziato si vedrebbero due volte.
+    expect(glued("x **bo**, poi", 12, "mai")).toEqual(["**,"]);
+    expect(glued("vedi [sito](https://x.it). Poi", 0, "mai")).toEqual(["](https://x.it)."]);
+    expect(glued("da ==ricordare==, poi", 0, "mai")).toEqual(["==,"]);
+    expect(glued("vale $x$; poi", 0, "mai")).toEqual(["$x$;"]);
+    expect(glued("x **bo** poi", 12, "mai")).toEqual([]);
+  });
+
+  it("citazione: il segno come il prefisso di un titolo", () => {
+    const doc = "> testo\naltro";
+    expect([0, 4, 7, 10].map((p) => hidden(doc, p, "elemento", 0, 2))).toEqual([false, true, true, true]);
+    expect([0, 4, 7, 10].map((p) => hidden(doc, p, "mai", 0, 2))).toEqual([true, true, true, true]);
+  });
+
+  it("voce puntata e casella: con «mai» il pallino e la casella restano col cursore sulla riga", () => {
+    const bullet = (doc: string, p: number, policy: RevealPolicy) => ofKind(at(doc, p, policy), "list-bullet").length;
+    expect([0, 3, 6].map((p) => bullet("- voce\nx", p, "mai"))).toEqual([1, 1, 1]);
+    expect([0, 3, 6].map((p) => bullet("- voce\nx", p, "elemento"))).toEqual([0, 1, 1]);
+    expect([0, 3, 6].map((p) => bullet("- voce\nx", p, "riga"))).toEqual([0, 0, 0]);
+    const box = (p: number, policy: RevealPolicy) => ofKind(at("- [ ] fare\nx", p, policy), "checkbox").length;
+    expect([2, 3, 7].map((p) => box(p, "mai"))).toEqual([1, 1, 1]);
+    expect([2, 3, 7].map((p) => box(p, "elemento"))).toEqual([0, 0, 1]);
+    expect([2, 3, 7].map((p) => box(p, "riga"))).toEqual([0, 0, 0]);
+  });
+
+  it("rimando a una nota: con «mai» resta apice col cursore dentro", () => {
+    const doc = "nota[^1] qui\n\n[^1]: testo";
+    expect([4, 6, 8, 10].map((p) => hidden(doc, p, "mai", 4, 6))).toEqual([true, true, true, true]);
+    expect([4, 6, 8, 10].map((p) => hidden(doc, p, "elemento", 4, 6))).toEqual([false, false, false, true]);
+  });
+
+  it("con «mai» un link non mostra mai l'indirizzo: col cursore dentro c'è la pastiglia (A4)", () => {
+    const link = "vedi [t](https://www.esempio.it/a) qui";
+    const end = link.indexOf(" qui");
+    for (const p of [5, 7, end, end + 3]) {
+      expect(hidden(link, p, "mai", 5, 6), `«[» con il cursore in ${p}`).toBe(true);
+    }
+    expect(ofKind(at(link, 7, "mai"), "link-pill")).toEqual([{ from: 7, to: end, kind: "link-pill", data: "https://www.esempio.it/a" }]);
+    expect(ofKind(at(link, end + 3, "mai"), "link-pill")).toEqual([]);
+    expect(hidden(link, end + 3, "mai", 7, end)).toBe(true);
+    // Con `elemento` il link col cursore torna sorgente, con `riga` sulla riga.
+    expect(hidden(link, 7, "elemento", 5, 6)).toBe(false);
+    expect(hidden(link, 14, "riga", 5, 6)).toBe(false);
+    expect(pillLabel("https://www.esempio.it/a")).toBe("esempio.it");
+    expect(pillLabel("mailto:a@b.it")).toBe("a@b.it");
+    expect(pillLabel("[[Viaggio#Lisbona]]")).toBe("Viaggio › Lisbona");
+    expect(pillLabel("../capitoli/Uno%20due.md")).toBe("../capitoli/Uno due.md");
+  });
+
+  it("di un wikilink con alias, col cursore dentro, la pastiglia dice la nota", () => {
+    const doc = "a [[Viaggio#Lisbona|il viaggio]] b";
+    const close = doc.indexOf("]]");
+    expect(ofKind(at(doc, 22, "mai"), "link-pill")).toEqual([{ from: close, to: close + 2, kind: "link-pill", data: "[[Viaggio#Lisbona]]" }]);
+    expect(ofKind(at(doc, 0, "mai"), "link-pill")).toEqual([]);
+    // Senza alias il testo è già la nota.
+    expect(ofKind(at("a [[Viaggio]] b", 5, "mai"), "link-pill")).toEqual([]);
+    expect(hidden("a [[Viaggio]] b", 5, "mai", 2, 4)).toBe(true);
+  });
+
+  it("con `mai` la formula resta resa col cursore dentro; con `elemento` torna sorgente e porta il TeX (C6)", () => {
+    const math = (p: number, policy: RevealPolicy) => ofKind(at("x $a+b$ y z", p, policy), "math").length;
+    expect([2, 4, 7, 9].map((p) => math(p, "mai"))).toEqual([1, 1, 1, 1]);
+    expect([2, 4, 7, 9].map((p) => math(p, "elemento"))).toEqual([0, 0, 0, 1]);
+    expect(ofKind(at("x $a+b$ y z", 4, "elemento"), "math-source").map((d) => d.data)).toEqual(["a+b"]);
+  });
+
+  it("una coppia di tag ammessi nasconde i tag e dà l'elemento al contenuto (D6)", () => {
+    const doc = "Premi <kbd>Ctrl</kbd> e <u>qui</u>, non <b>qui</b> né <u>aperto";
+    const hides = (p: number, policy: RevealPolicy) => ofKind(at(doc, p, policy), "hide").map((d) => doc.slice(d.from, d.to));
+    expect(hides(0, "mai")).toEqual(["<kbd>", "</kbd>", "<u>", "</u>"]);
+    expect(ofKind(at(doc, 0, "mai"), "html").map((d) => [doc.slice(d.from, d.to), d.data])).toEqual([["Ctrl", "kbd"], ["qui", "u"]]);
+    // Col cursore dentro, `mai` non li mostra; `elemento` sì, attenuati.
+    expect(hides(13, "mai")).toEqual(["<kbd>", "</kbd>", "<u>", "</u>"]);
+    expect(hides(13, "elemento")).toEqual(["<u>", "</u>"]);
+    expect(ofKind(at(doc, 13, "elemento"), "near").map((d) => doc.slice(d.from, d.to))).toEqual(["<kbd>", "</kbd>"]);
+  });
+
+  it("riga orizzontale e commento si rivelano sulla riga del cursore in ogni politica", () => {
+    for (const policy of ["mai", "elemento", "riga"] as const) {
+      expect(ofKind(at("a\n\n---\n\nb", 3, policy), "hr")).toEqual([]);
+      expect(ofKind(at("a\n\n---\n\nb", 0, policy), "hr")).toHaveLength(1);
+      expect(at("x %%nota%% y", 0, policy).some((d) => d.kind === "hide")).toBe(false);
+    }
+  });
+
+  it("con più cursori ognuno rivela il suo elemento", () => {
+    const doc = "**a** e *b* e `c`";
+    const current = EditorState.create({
+      doc,
+      selection: EditorSelection.create([EditorSelection.cursor(1), EditorSelection.cursor(15)]),
+      extensions: [markdown({ base: markdownGrammar }), EditorState.allowMultipleSelections.of(true)],
+    });
+    const hides = computeDecorations(current, revealOf(current, "elemento")).filter((d) => d.kind === "hide");
+    expect(hides.map((d) => doc.slice(d.from, d.to))).toEqual(["*", "*"]);
+  });
+
+  it("una selezione con «elemento» rivela gli elementi di cui attraversa i segni", () => {
+    const doc = "a **b** c *d* e";
+    const current = state(doc, { anchor: 0, head: 9 });
+    const hides = computeDecorations(current, revealOf(current, "elemento")).filter((d) => d.kind === "hide");
+    expect(hides.map((d) => d.from)).toEqual([10, 12]);
   });
 });

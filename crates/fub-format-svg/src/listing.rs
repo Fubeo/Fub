@@ -238,6 +238,7 @@ fn render_inlines(inlines: &[Inline], out: &mut String) {
             Inline::Emph(inner)
             | Inline::Strong(inner)
             | Inline::Superscript(inner)
+            | Inline::Subscript(inner)
             | Inline::Strikethrough(inner) => render_inlines(inner, out),
             Inline::HardBreak => out.push_str("<br>"),
             Inline::SoftBreak => out.push(' '),

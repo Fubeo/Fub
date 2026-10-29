@@ -66,6 +66,19 @@ fn page_name_cases() -> Vec<Value> {
         "dir.with.dots/note.md",
         "ends-with-dot.",
         "Long Note.md",
+        // La pagina della cartella (ADR 0229): il nome della cartella, anche
+        // con altre estensioni, cartelle annidate, punti e accenti in NFD; nella
+        // radice `_index` resta sé stesso, e `_index` col nome diverso no.
+        "Viaggio/_index.md",
+        "Viaggio/_index.canvas",
+        "a/b.c/_index.md",
+        "Citta\u{300}/_index.md",
+        "_index.md",
+        "Viaggio/_Index.md",
+        "Viaggio/_index.bak.md",
+        "Viaggio/Viaggio.md",
+        "Viaggio/index.md",
+        "Viaggio/._index",
     ]
     .into_iter()
     .map(|id| json!({"id": id, "out": DocId::new(id).page_name()}))

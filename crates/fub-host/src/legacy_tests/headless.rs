@@ -144,6 +144,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
         "fub.formatting",
         "fub.graph",
         "fub.importers",
+        "fub.linkcard",
         "fub.maintenance",
         "fub.markdown",
         "fub.outline",

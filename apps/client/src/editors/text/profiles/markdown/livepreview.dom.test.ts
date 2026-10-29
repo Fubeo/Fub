@@ -1,11 +1,13 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { EditorState, Prec } from "@codemirror/state";
+import { EditorView, runScopeHandlers } from "@codemirror/view";
+import { cursorCharLeft, cursorCharRight, undo } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { markdownGrammar } from "./grammar";
 import { createTextEngine } from "../../engine";
-import { livePreview } from "./livepreview";
+import { livePreview, pageIconsChanged } from "./livepreview";
+import { liveReveal, type RevealPolicy } from "../../live-reveal";
 import { closeContextMenu } from "../../../../ui/menu";
 
 // I diagrammi del test non passano da Mermaid: basta un'immagine qualsiasi.
@@ -73,7 +75,7 @@ describe("checkbox Live Preview", () => {
 });
 
 describe("Live ibrida: testo nativo, widget solo non testuali", () => {
-  function editorWith(source: string) {
+  function editorWith(source: string, policy?: RevealPolicy) {
     const parent = document.createElement("div");
     document.body.append(parent);
     const engine = createTextEngine(parent, {
@@ -82,13 +84,26 @@ describe("Live ibrida: testo nativo, widget solo non testuali", () => {
       extensions: () => [
         markdown({ base: markdownGrammar }),
         livePreview({ openWikilink() {}, searchTag() {} }),
+        ...(policy ? [Prec.highest(liveReveal.of(policy))] : []),
       ],
     });
     engine.setDoc(source);
     return { parent, engine, cleanup: () => { engine.destroy(); parent.remove(); } };
   }
-  it("un paragrafo di sole immagini è reso fuori dal cursore, sorgente col cursore dentro", () => {
+  it("con «mai» un paragrafo di sole immagini resta testo, con l'immagine figura in riga (D8, K10)", () => {
     const { parent, engine, cleanup } = editorWith("Testo sopra\n\n![Schema](schema.png)\n\nTesto sotto ![a](b.png)\n");
+    try {
+      expect(parent.querySelectorAll(".cm-markdown-block").length).toBe(0);
+      expect(parent.querySelector(".cm-fub-image figure figcaption")?.textContent).toBe("Schema");
+      engine.revealByteOffset("Testo sopra\n\n![".length);
+      expect(parent.querySelectorAll(".cm-fub-image").length).toBe(2);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("con «riga» un paragrafo di sole immagini è reso fuori dal cursore, sorgente col cursore dentro", () => {
+    const { parent, engine, cleanup } = editorWith("Testo sopra\n\n![Schema](schema.png)\n\nTesto sotto ![a](b.png)\n", "riga");
     try {
       // Il cursore sta in cima (setDoc): l'immagine sola diventa un blocco,
       // quella in mezzo alla prosa resta testo.
@@ -101,7 +116,7 @@ describe("Live ibrida: testo nativo, widget solo non testuali", () => {
   });
 
   it("il cursore che entra, gira ed esce da un blocco reso lo segue ogni volta", () => {
-    const { parent, engine, cleanup } = editorWith("Testo sopra\n\n![Schema](schema.png)\n\nTesto sotto\n");
+    const { parent, engine, cleanup } = editorWith("Testo sopra\n\n![Schema](schema.png)\n\nTesto sotto\n", "riga");
     const blocks = () => parent.querySelectorAll(".cm-markdown-block").length;
     try {
       expect(blocks()).toBe(1);
@@ -150,6 +165,87 @@ describe("wikilink in Live", () => {
         link.dataset.wikilinkHeading,
         link.dataset.wikilinkBlock,
       ])).toEqual([["Nota", "Sez", "b1"], ["Altra", undefined, undefined]]);
+    } finally {
+      engine.destroy();
+      parent.remove();
+    }
+  });
+
+  it("porta l'icona della pagina nominata, e la cambia quando le icone cambiano (K9)", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const icons = new Map([["Nota", "🌱"]]);
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [
+        markdown({ base: markdownGrammar }),
+        livePreview({ openWikilink() {}, searchTag() {}, pageIcon: (page) => icons.get(page) ?? null }),
+      ],
+    });
+    const marks = () => [...parent.querySelectorAll<HTMLElement>(".cm-fub-wikilink")].map((link) => link.dataset.pageIcon);
+    try {
+      engine.setDoc("Primo\n\nVai a [[Nota|la nota]], [[Altra]] e [[#Sez]]");
+      expect(marks()).toEqual(["🌱", undefined, undefined]);
+      icons.set("Altra", "📦");
+      engine.runViewCommand((view) => {
+        view.dispatch({ effects: pageIconsChanged.of(null) });
+        return true;
+      });
+      expect(marks()).toEqual(["🌱", "📦", undefined]);
+      // L'icona non è testo: il documento resta quello scritto.
+      expect(engine.getDoc()).toBe("Primo\n\nVai a [[Nota|la nota]], [[Altra]] e [[#Sez]]");
+    } finally {
+      engine.destroy();
+      parent.remove();
+    }
+  });
+
+  it("mostra come pastiglia il link a una persona, e la rifà quando la cartella cambia (K5)", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    let folder = "Persone";
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [
+        markdown({ base: markdownGrammar }),
+        livePreview({ openWikilink() {}, searchTag() {}, isPerson: (page) => page.startsWith(`${folder}/`) }),
+      ],
+    });
+    const people = () => [...parent.querySelectorAll<HTMLElement>(".cm-fub-wikilink")].map((link) => link.classList.contains("cm-fub-person"));
+    try {
+      engine.setDoc("Primo\n\nCon [[Persone/Anna|Anna]] e [[Gente/Lia|Lia]]");
+      expect(people()).toEqual([true, false]);
+      folder = "Gente";
+      engine.runViewCommand((view) => {
+        view.dispatch({ effects: pageIconsChanged.of(null) });
+        return true;
+      });
+      expect(people()).toEqual([false, true]);
+    } finally {
+      engine.destroy();
+      parent.remove();
+    }
+  });
+
+  it("dà al testo colorato le classi del tag e nasconde i tag (K1)", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} })],
+    });
+    try {
+      engine.setDoc('Primo\n\nUn <span class="fub-color-red">rosso</span> e <mark class="fub-bg-blue fub-color-gray">blu</mark> e <span class="altro">x</span>');
+      const red = parent.querySelector<HTMLElement>("span.fub-color-red");
+      expect(red?.textContent).toBe("rosso");
+      const blue = parent.querySelector<HTMLElement>("mark.fub-bg-blue");
+      expect(blue?.classList.contains("fub-color-gray")).toBe(true);
+      expect(blue?.textContent).toBe("blu");
+      expect(parent.querySelector(".altro")).toBeNull();
+      expect(parent.querySelector(".cm-content")?.textContent).not.toContain("fub-color-red");
     } finally {
       engine.destroy();
       parent.remove();
@@ -221,6 +317,35 @@ describe("tabelle in Live", () => {
   });
 });
 
+describe("un blocco reso spostato da una modifica sopra", () => {
+  it("tiene il suo DOM e rimette le coordinate al posto nuovo", () => {
+    const note = "Testo\n\n> [!note] Titolo\n> corpo\n\nFine";
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [markdown({ base: markdownGrammar }), livePreview({ openWikilink() {}, searchTag() {} })],
+    });
+    try {
+      engine.setDoc(note);
+      const before = parent.querySelector<HTMLElement>(".cm-markdown-block")!;
+      const from = note.indexOf(">");
+      expect(before.dataset.sourceFrom).toBe(String(from));
+      expect(before.querySelector<HTMLElement>("[data-md-from]")!.dataset.mdFrom).toBe(String(from));
+      const view = EditorView.findFromDOM(parent.querySelector(".cm-editor")!)!;
+      view.dispatch({ changes: { from: 0, insert: "Più " }, selection: { anchor: 4 } });
+      const after = parent.querySelector<HTMLElement>(".cm-markdown-block")!;
+      expect(after).toBe(before);
+      expect(after.dataset.sourceFrom).toBe(String(from + 4));
+      expect(after.querySelector<HTMLElement>("[data-md-from]")!.dataset.mdFrom).toBe(String(from + 4));
+    } finally {
+      engine.destroy();
+      parent.remove();
+    }
+  });
+});
+
 describe("un diagramma in Live", () => {
   const note = "Testo\n\n```mermaid\nflowchart LR\nA-->B\n```\n\nFine";
 
@@ -279,7 +404,7 @@ describe("un diagramma in Live", () => {
 describe("un'immagine in mezzo al testo, in Live", () => {
   const note = "Il logo ![Marchio|120](Risorse/logo.png) in riga\n\nAltro";
 
-  function mountNote() {
+  function mountNote(policy: RevealPolicy = "riga") {
     const parent = document.createElement("div");
     document.body.append(parent);
     const mounted: { html: string; container: HTMLElement; disposed: boolean }[] = [];
@@ -288,6 +413,7 @@ describe("un'immagine in mezzo al testo, in Live", () => {
       onSelectionChange() {},
       extensions: () => [
         markdown({ base: markdownGrammar }),
+        Prec.highest(liveReveal.of(policy)),
         livePreview({
           openWikilink() {},
           searchTag() {},
@@ -327,6 +453,24 @@ describe("un'immagine in mezzo al testo, in Live", () => {
     }
   });
 
+  it("con «mai» l'immagine resta resa anche col cursore accanto; selezionarla non la rimonta", () => {
+    const { parent, view, mounted, cleanup } = mountNote("mai");
+    try {
+      view.dispatch({ selection: { anchor: 3 } });
+      expect(parent.querySelector(".cm-fub-image")).not.toBeNull();
+      expect(mounted[0]!.disposed).toBe(false);
+      const from = note.indexOf("![");
+      view.dispatch({ selection: { anchor: from } });
+      expect(parent.querySelector(".cm-fub-image")).not.toBeNull();
+      view.dispatch({ selection: { anchor: from, head: note.indexOf(") in") + 1 } });
+      expect(parent.querySelector(".cm-fub-image.cm-fub-image-selected")).not.toBeNull();
+      expect(mounted).toHaveLength(1);
+      expect(mounted[0]!.disposed).toBe(false);
+    } finally {
+      cleanup();
+    }
+  });
+
   it("scrivere altrove non rimonta l'immagine, cambiarla sì", () => {
     const { view, mounted, cleanup } = mountNote();
     try {
@@ -353,6 +497,130 @@ describe("un'immagine in mezzo al testo, in Live", () => {
       expect(parent.querySelector(".cm-fub-image")).not.toBeNull();
     } finally {
       cleanup();
+    }
+  });
+});
+
+describe("con «mai», accanto ai segni nascosti", () => {
+  function mount(doc: string, cursor: number) {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [
+        markdown({ base: markdownGrammar }),
+        Prec.highest(liveReveal.of("mai")),
+        livePreview({ openWikilink() {}, searchTag() {} }),
+      ],
+    });
+    engine.setDoc(doc);
+    const view = EditorView.findFromDOM(parent.querySelector<HTMLElement>(".cm-editor")!)!;
+    view.dispatch({ selection: { anchor: cursor } });
+    const press = (key: string) => runScopeHandlers(view, new KeyboardEvent("keydown", { key }), "editor");
+    return { view, press, cleanup: () => { engine.destroy(); parent.remove(); } };
+  }
+
+  // Un segno per riga della tabella: la fine dell'elemento è un punto solo a
+  // schermo e due nel file.
+  const signs = [
+    ["grassetto", "a **treno** b", "**"],
+    ["corsivo", "a *treno* b", "*"],
+    ["barrato", "a ~~treno~~ b", "~~"],
+    ["apice", "a ^treno^ b", "^"],
+    ["pedice", "a ~treno~ b", "~"],
+    ["codice", "a `treno` b", "`"],
+  ] as const;
+  for (const [name, doc, sign] of signs) {
+    it(`${name}: le due fermate al bordo, Backspace e Canc saltano il segno`, () => {
+      const inside = doc.indexOf("treno") + 5;
+      const outside = inside + sign.length;
+      const { view, press, cleanup } = mount(doc, inside);
+      try {
+        // Da dentro, la prima → porta fuori, di là dal segno.
+        cursorCharRight(view);
+        expect(view.state.selection.main.head).toBe(outside);
+        // Da fuori, ← rientra.
+        cursorCharLeft(view);
+        expect(view.state.selection.main.head).toBe(inside);
+        // Backspace da fuori salta il segno e cancella la lettera.
+        view.dispatch({ selection: { anchor: outside } });
+        expect(press("Backspace")).toBe(true);
+        expect(view.state.doc.toString()).toBe(doc.replace("treno", "tren"));
+        expect(view.state.selection.main.head).toBe(inside - 1);
+        // Canc prima del segno d'apertura lo salta e cancella la prima lettera.
+        const opening = doc.indexOf(sign);
+        view.dispatch({ selection: { anchor: opening } });
+        expect(press("Delete")).toBe(true);
+        expect(view.state.doc.toString()).toBe(doc.replace("treno", "ren"));
+      } finally {
+        cleanup();
+      }
+    });
+  }
+
+  it("l'ultima lettera di un elemento porta via i suoi segni, anche annidati", () => {
+    const { view, press, cleanup } = mount("a **x** b", 5);
+    try {
+      expect(press("Backspace")).toBe(true);
+      expect(view.state.doc.toString()).toBe("a  b");
+      expect(view.state.selection.main.head).toBe(2);
+      undo(view);
+      expect(view.state.doc.toString()).toBe("a **x** b");
+    } finally {
+      cleanup();
+    }
+    const nested = mount("a ***x*** b", 6);
+    try {
+      expect(nested.press("Backspace")).toBe(true);
+      expect(nested.view.state.doc.toString()).toBe("a  b");
+    } finally {
+      nested.cleanup();
+    }
+  });
+
+  it("lontano dai segni Backspace resta quello di sempre", () => {
+    const { view, press, cleanup } = mount("a **treno** b", 7);
+    try {
+      press("Backspace");
+      expect(view.state.doc.toString()).toBe("a **trno** b");
+      view.dispatch({ selection: { anchor: 1, head: 4 } });
+      press("Backspace");
+      expect(view.state.doc.toString()).toBe("atrno** b");
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+describe("la rivelazione e la composizione", () => {
+  it("durante una composizione niente si rivela, e a compositionend sì", async () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const engine = createTextEngine(parent, {
+      onChange() {},
+      onSelectionChange() {},
+      extensions: () => [
+        markdown({ base: markdownGrammar }),
+        Prec.highest(liveReveal.of("elemento")),
+        livePreview({ openWikilink() {}, searchTag() {} }),
+      ],
+    });
+    try {
+      engine.setDoc("a **treno** b");
+      const view = EditorView.findFromDOM(parent.querySelector<HTMLElement>(".cm-editor")!)!;
+      view.dispatch({ selection: { anchor: 0 } });
+      const text = () => parent.querySelector(".cm-line")!.textContent;
+      expect(text()).toBe("a treno b");
+      view.contentDOM.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+      expect(view.compositionStarted).toBe(true);
+      view.dispatch({ selection: { anchor: 6 } });
+      expect(text()).toBe("a treno b");
+      view.contentDOM.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }));
+      await vi.waitFor(() => expect(text()).toBe("a **treno** b"));
+    } finally {
+      engine.destroy();
+      parent.remove();
     }
   });
 });

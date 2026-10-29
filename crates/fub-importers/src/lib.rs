@@ -58,6 +58,7 @@ pub mod html;
 pub mod json_import;
 pub mod migration;
 pub mod normalize;
+pub mod notion;
 pub mod onenote;
 pub mod pipeline;
 pub mod receipts;
@@ -104,12 +105,19 @@ pub const PLUGIN_NAME: &str = "Importers";
 pub const PLUGIN_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The official manifest for Main's bundle table: vault read/write plus
-/// network restricted to the two documented API hosts.
+/// network restricted to the two documented API hosts and to the hosts where
+/// Notion keeps the files of a page (L3), which the import downloads.
 pub fn manifest() -> PluginManifest {
     let mut granted = PluginPermissions::core().granted;
     granted.set(
         fub_abi::options::permission::NETWORK,
-        serde_json::json!(["api.notion.com", "api.airtable.com"]),
+        serde_json::json!([
+            "api.notion.com",
+            "api.airtable.com",
+            "prod-files-secure.s3.us-west-2.amazonaws.com",
+            "s3.us-west-2.amazonaws.com",
+            "file.notion.so"
+        ]),
     );
     PluginManifest {
         id: PLUGIN_ID.to_string(),

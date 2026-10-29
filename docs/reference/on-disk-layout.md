@@ -137,6 +137,7 @@ consenso e non ripiega mai sul vault privato.
 | Percorso | Classe | Contenuto |
 |---|---|---|
 | `**/*.md` e altri formati registrati | utente | documenti |
+| `X/_index.<ext>` | utente | pagina della cartella `X` ([0229](../decisions/0229-pagina-della-cartella.md)) |
 | allegati e file sconosciuti | utente | contenuto da preservare |
 | `.trash/` | utente | file cestinati |
 | `.fub/` | servizio | stato, cache e storage namespaced |
@@ -164,6 +165,7 @@ nomi simili restano dati dell'utente.
 | `.fub/data/trash/*.json` | sidecar | 1 | provenienza del cestino |
 | `.fub/plugins/<id>/` | per-plugin | proprio | storage persistente namespaced |
 | `.fub/plugins/fub.commands/archive-recovery.json` | autorevole operativo | 1 | `fub.commands` |
+| `.fub/data/plugins/fub.linkcard/cards/*.json` | derivata | 1 | schede dei collegamenti |
 
 `properties.types` è un valore autorevole dentro `.fub/settings.json`. Il valore
 ha un proprio schema JSON `{ "version": 1, "types": { ... } }`: separa la

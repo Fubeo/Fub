@@ -61,6 +61,7 @@ import { inShellLanguage } from "./fake-english";
 import { BOARDS_DOC, boardsFixture, type BoardsFixture } from "./boards-fixture";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
+import { LIVE_DOC, liveCase } from "./live-fixture";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import {
   generateGraphFixture as graphFixture,
@@ -256,6 +257,17 @@ globalThis.__fubLargeBench = Object.freeze({
         digest: LARGE.digest,
       })
     : null,
+});
+
+// `?live=<caso>` mette nel vault la nota delle scene della Live
+// (`live-fixture.ts`), con il punto del cursore che la scena legge da qui.
+// Soltanto le scene che la chiedono la hanno.
+const LIVE = liveCase(params.get("live"));
+
+globalThis.__fubLiveBench = Object.freeze({
+  doc: LIVE === null ? null : LIVE_DOC,
+  cursor: LIVE?.cursor ?? null,
+  head: LIVE?.head ?? null,
 });
 
 /// La cartella di Excel della scena `grid-workbook` (`?workbook=1`). È un
@@ -1052,6 +1064,8 @@ const options: Options = {
     ...(WORKBOOK_DOC === null ? {} : { [WORKBOOK_DOC]: "" }),
     // Il testo di un documento di videoscrittura è la sua proiezione.
     ...(RICH_DOC === null ? {} : { [RICH_DOC.doc]: RICH_DOC.text }),
+    // La nota della Live, per le scene che la chiedono.
+    ...(LIVE === null ? {} : { [LIVE_DOC]: LIVE.text }),
   },
   resources: RESOURCES,
   root: ROOT,
@@ -1086,6 +1100,7 @@ declare global {
   var __fubBoardsBench: BoardsBenchMetadata;
   var __fubConnectorsBench: ConnectorsBenchMetadata;
   var __fubLargeBench: LargeBenchMetadata;
+  var __fubLiveBench: Readonly<{ doc: string | null; cursor: number | null; head: number | null }>;
   interface Window {
     bench: {
       emit: typeof host.emit;
@@ -1259,8 +1274,29 @@ function snippetOf(doc: string, text: string): Pick<DocumentMatch, "snippet" | "
 export const api: typeof host.module.api = {
   ...behind,
   queryIndex: async (q) => {
+    // Le note con un'icona (`icon:` nel frontmatter), come le legge l'indice:
+    // il finto non sa leggere le proprietà, e del banco ce l'ha solo la nota
+    // della Live delle scene della pagina.
+    const asked = q.kind === "documents" ? q.matching.any[0]?.all[0]?.predicate : undefined;
+    if (q.kind === "documents" && asked?.kind === "property" && asked.filter.key === "icon") {
+      const icon = LIVE === null ? undefined : /^---\n(?:.*\n)*?icon: (.+)\n/.exec(LIVE.text)?.[1];
+      const items = icon === undefined ? [] : [{ doc: LIVE_DOC, properties: [{ key: "icon", value: icon }] }];
+      return { kind: "documents", value: { items, offset: 0, total: items.length } };
+    }
     const response = RESPONSES[q.kind];
     const result = response ? response(q) : await behind.queryIndex(q);
+    if (q.kind === "documents" && result.kind === "documents" && LIVE !== null && q.select?.kind === "keys") {
+      // Le classi della nota della Live (`cssclasses: [wide]`), come le
+      // leggerebbe l'indice dal frontmatter: le scene della pagina larga.
+      const classes = /^---\n(?:.*\n)*?cssclasses: \[([^\]]*)\]\n/.exec(LIVE.text)?.[1];
+      if (classes !== undefined && result.value.items.some((hit) => hit.doc === LIVE_DOC)) {
+        const value = classes.split(",").map((name) => name.trim()).filter(Boolean);
+        return {
+          ...result,
+          value: { ...result.value, items: result.value.items.map((hit) => hit.doc === LIVE_DOC ? { ...hit, properties: [{ key: "cssclasses", value }] } : hit) },
+        };
+      }
+    }
     if (q.kind === "documents" && result.kind === "documents") {
       const text = searchedText(q.matching);
       if (text) {

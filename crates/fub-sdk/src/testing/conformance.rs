@@ -1138,6 +1138,7 @@ fn inlines_are_disjoint_and_contained(
             Inline::Emph(inner)
             | Inline::Strong(inner)
             | Inline::Superscript(inner)
+            | Inline::Subscript(inner)
             | Inline::Strikethrough(inner) => {
                 inlines_are_disjoint_and_contained(inner, parent, source, context, claim);
                 continue;
@@ -1242,6 +1243,7 @@ fn collect_inlines(inlines: &[Inline], link: &mut Vec<Link>, tag: &mut Vec<Tag>)
             Inline::Emph(contained)
             | Inline::Strong(contained)
             | Inline::Superscript(contained)
+            | Inline::Subscript(contained)
             | Inline::Strikethrough(contained) => collect_inlines(contained, link, tag),
             Inline::Text(_)
             | Inline::Code(_)
@@ -1322,6 +1324,7 @@ fn bom_in_inlines(the: &Inline, check: &impl Fn(&str, &str)) {
         Inline::Emph(contained)
         | Inline::Strong(contained)
         | Inline::Superscript(contained)
+        | Inline::Subscript(contained)
         | Inline::Strikethrough(contained) => {
             for the in contained {
                 bom_in_inlines(the, check);

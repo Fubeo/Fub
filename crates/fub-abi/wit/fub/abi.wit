@@ -257,6 +257,9 @@ interface model {
         strikethrough(list<inline-ref>),
         hard-break,
         soft-break,
+        /// `~pedice~` (decisione 0228): in coda, il discriminante di ciò che
+        /// c'era non si muove.
+        subscript(list<inline-ref>),
     }
 
     // Ogni blocco porta un `anchor`: per un heading è lo slug del titolo

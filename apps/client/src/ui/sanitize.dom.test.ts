@@ -138,3 +138,19 @@ describe("le immagini del vault restano inerti", () => {
     expect(remote!.hasAttribute(VAULT_SRC_ATTRIBUTE)).toBe(false);
   });
 });
+
+describe("l'HTML scritto nella nota", () => {
+  it("conserva il colore e la sottolineatura, non il resto delle classi né lo stile", async () => {
+    const { sanitizeMarkdownHtml } = await import("./sanitize");
+    const holder = document.createElement("div");
+    holder.append(sanitizeMarkdownHtml(
+      '<span class="fub-color-red x" style="color: blue">a</span>' +
+        '<span class="altro">b</span><mark class="fub-bg-yellow" data-x="1">c</mark>' +
+        '<u class="fub-color-red">d</u><table><tr><td style="text-align:center">e</td></tr></table>',
+    ));
+    expect(holder.innerHTML).toBe(
+      '<span class="fub-color-red">a</span><span>b</span><mark class="fub-bg-yellow">c</mark>' +
+        '<u>d</u><table><tbody><tr><td style="text-align:center">e</td></tr></tbody></table>',
+    );
+  });
+});

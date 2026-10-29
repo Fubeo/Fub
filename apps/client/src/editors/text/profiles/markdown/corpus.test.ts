@@ -33,6 +33,9 @@ interface CorpusCase {
   wikilink: { page: string; embed: boolean; from: number; to: number }[];
   task: { symbol: string; from: number; to: number }[];
   math: { from: number; to: number; tex: string; block: boolean }[];
+  /// Gli stili in riga del modello, in ordine di documento e da fuori verso
+  /// dentro.
+  style: string[];
 }
 
 const cases = corpus as CorpusCase[];
@@ -73,6 +76,8 @@ const DIVERGENCES: Record<string, string> = {
   "crlf/wikilink": "un `\r\n` diventa `\n` nel buffer: da lì gli offset scalano di uno",
   "terminatori misti/wikilink": "un `\r\n` diventa `\n` nel buffer: gli offset scalano",
 };
+
+const STYLES: ReadonlySet<LiveDecoKind> = new Set(["strong", "em", "strike", "sup", "sub", "code"]);
 
 function stateOf(doc: string): EditorState {
   return EditorState.create({ doc, extensions: [markdown({ base: markdownGrammar })] });
@@ -131,6 +136,7 @@ describe("il corpus: le due passate dicono la stessa cosa", () => {
     expect(count((c) => c.wikilink)).toBeGreaterThan(2);
     expect(count((c) => c.task)).toBeGreaterThan(2);
     expect(count((c) => c.math)).toBeGreaterThan(2);
+    expect(count((c) => c.style)).toBeGreaterThan(2);
   });
 
   // **Nessun caso si salta, nemmeno quello che il modello vede vuoto.** È la
@@ -205,6 +211,18 @@ describe("il corpus: le due passate dicono la stessa cosa", () => {
           .filter((m) => !blocks.some((b) => b.from <= m.from && m.to <= b.to))
           .map((m) => [m.from, m.to, m.tex]),
         ofKind(inactive, "math").map((d) => [d.from, d.to, d.data]),
+      );
+
+      // --- gli stili in riga: la Live decora quelli che il modello ha ---
+      // Il codice di un blocco recintato è un'altra cosa: si guarda soltanto
+      // quello in riga, che la Live marca `code`; e un rimando a una nota la
+      // Live lo disegna in apice, ma nel modello è una nota, non un apice.
+      const reference = (d: LiveDeco) => d.kind === "sup" && testCase.source.slice(d.from - 2, d.from) === "[^";
+      compare(
+        testCase,
+        "stile",
+        testCase.style,
+        inactive.filter((d) => STYLES.has(d.kind) && !reference(d)).map((d) => d.kind),
       );
     });
   }

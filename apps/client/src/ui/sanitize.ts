@@ -56,7 +56,7 @@ const ALLOWED_TAGS = new Set([
   "blockquote", "pre", "code",
   "ul", "ol", "li", "dl", "dt", "dd",
   // enfasi e decorazioni
-  "em", "strong", "del", "ins", "mark", "sub", "sup", "small", "abbr", "kbd", "samp", "var",
+  "em", "strong", "del", "ins", "mark", "sub", "sup", "small", "abbr", "kbd", "samp", "var", "u",
   // tabelle
   "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "colgroup", "col",
   // legame e media (il `src` di un'immagine passa comunque da `isAllowedResource`)
@@ -322,15 +322,35 @@ export function sanitizeFragment(html: string): DocumentFragment {
   return out;
 }
 
+/// I nove colori del contenuto, come Notion. Si scrivono come classi chiuse,
+/// `fub-color-*` per il testo e `fub-bg-*` per lo sfondo; i colori veri li dà
+/// il tema, in entrambe le luci.
+export const CONTENT_COLORS = ["gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red"] as const;
+const CONTENT_CLASS = new RegExp(`^fub-(?:color|bg)-(?:${CONTENT_COLORS.join("|")})$`);
+
+/// Le classi che l'HTML scritto dall'autore conserva: soltanto quelle dei
+/// colori, e soltanto su `span` e `mark`. Tutte le altre sono il contratto della
+/// resa con la shell, e l'autore non le può imitare.
+export function contentClasses(tag: string, value: string): string {
+  const name = tag.toLowerCase();
+  if (name !== "span" && name !== "mark") return "";
+  return value.split(/\s+/).filter((token) => CONTENT_CLASS.test(token)).join(" ");
+}
+
 /**
  * HTML authored inside Markdown gets the document allowlist but never the
  * renderer's private class/data contract. Note markup therefore cannot
- * impersonate wikilinks, source spans, UI slots, tags, or embed owners.
+ * impersonate wikilinks, source spans, UI slots, tags, or embed owners. The
+ * only classes it keeps are the closed colour vocabulary (`contentClasses`),
+ * and `style` survives only as the cell alignment the base allowlist admits.
  */
 export function sanitizeMarkdownHtml(html: string): DocumentFragment {
   const fragment = sanitizeFragment(html);
   for (const element of fragment.querySelectorAll("*")) {
-    element.removeAttribute("class");
+    const classes = contentClasses(element.localName, element.getAttribute("class") ?? "");
+    if (classes) element.setAttribute("class", classes);
+    else element.removeAttribute("class");
+    if (!ALLOWED_ATTRIBUTES[element.localName]?.has("style")) element.removeAttribute("style");
     for (const attribute of Array.from(element.attributes)) {
       if (attribute.name.toLowerCase().startsWith("data-")) {
         element.removeAttribute(attribute.name);

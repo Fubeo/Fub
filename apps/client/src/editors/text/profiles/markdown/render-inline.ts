@@ -3,6 +3,7 @@ import { inlineDelimiters, scanTags, textSpans, wikilink, type FoundWikilink } f
 import { markdownGrammar } from "./grammar";
 import { decodeDestination, decodeEntities, normalizeLabel } from "./link-syntax";
 import type { MarkdownRenderContext } from "./render-types";
+import { CONTENT_COLORS } from "../../../../ui/sanitize";
 
 const ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 export function escapeHtml(value: string): string {
@@ -23,19 +24,75 @@ const INLINE_MARKS: Record<string, true> = {
 /// sanitizzatore ammette, nudi, senza attributi. `Premi <kbd>Ctrl</kbd>` mostra
 /// un tasto e non i segni del tag (L01); ogni altro tag resta testo, e il
 /// sanitizzatore decide comunque l'ultima parola sul DOM.
-const INLINE_HTML = /^<(\/?)(em|strong|del|ins|mark|sub|sup|small|abbr|kbd|samp|var|code|span)>$|^<br\s*\/?>$/i;
+const INLINE_HTML = /^<(\/?)(em|strong|del|ins|mark|sub|sup|small|abbr|kbd|samp|var|code|span|u)>$|^<br\s*\/?>$/i;
+/// `<span>` e `<mark>` con le sole classi dei colori (K1): l'unico attributo
+/// che passa, come in `render.rs`.
+const COLORED_HTML = /^<(span|mark)\s+class\s*=\s*(?:"([^"]*)"|'([^']*)')\s*>$/i;
+const TEXT_COLOR = new RegExp(`^fub-color-(?:${CONTENT_COLORS.join("|")})$`);
+const FILL_COLOR = new RegExp(`^fub-bg-(?:${CONTENT_COLORS.join("|")})$`);
+
+/// Le classi dei colori di un tag, al più una per il testo e una per il fondo,
+/// in quest'ordine; `null` se c'è altro.
+export function colorClasses(value: string): string | null {
+  let text: string | null = null;
+  let fill: string | null = null;
+  for (const token of value.split(/\s+/).filter(Boolean)) {
+    if (TEXT_COLOR.test(token) && text === null) text = token;
+    else if (FILL_COLOR.test(token) && fill === null) fill = token;
+    else return null;
+  }
+  const classes = [text, fill].filter((each): each is string => each !== null);
+  return classes.length ? classes.join(" ") : null;
+}
+
+type InlineTag = { name: string; closing: boolean; classes: string | null };
+
+/// Un tag in riga del vocabolario: `"br"`, un elemento, o `null`.
+function inlineTag(raw: string): InlineTag | "br" | null {
+  const colored = COLORED_HTML.exec(raw);
+  if (colored) {
+    const classes = colorClasses(colored[2] ?? colored[3] ?? "");
+    return classes ? { name: colored[1]!.toLowerCase(), closing: false, classes } : null;
+  }
+  const tag = INLINE_HTML.exec(raw);
+  if (!tag) return null;
+  if (!tag[2]) return "br";
+  return { name: tag[2].toLowerCase(), closing: tag[1] === "/", classes: null };
+}
+
 /// Il tag ha il suo compagno fra i fratelli dello stesso contenitore? Un `<em>`
 /// lasciato aperto il parser HTML lo riaprirebbe nei paragrafi seguenti.
 function pairedTag(source: string, node: SyntaxNode, name: string, closing: boolean): boolean {
   let depth = 0;
   for (let other = closing ? node.prevSibling : node.nextSibling; other; other = closing ? other.prevSibling : other.nextSibling) {
     if (other.name !== "HTMLTag") continue;
-    const tag = INLINE_HTML.exec(source.slice(other.from, other.to));
-    if (!tag?.[2] || tag[2].toLowerCase() !== name) continue;
-    if ((tag[1] === "/") === closing) depth++;
+    const tag = inlineTag(source.slice(other.from, other.to));
+    if (tag === null || tag === "br" || tag.name !== name) continue;
+    if (tag.closing === closing) depth++;
     else if (depth-- === 0) return true;
   }
   return false;
+}
+
+/// Il tag che chiude un tag in riga ammesso (D6): il nome, le classi dei
+/// colori e il nodo di chiusura, con la stessa regola dell'accoppiamento della
+/// Lettura. `null` per un tag non ammesso, una chiusura, un `<br>` o un tag
+/// senza compagno.
+export function inlineHtmlPartner(
+  slice: (from: number, to: number) => string,
+  node: SyntaxNode,
+): { name: string; classes: string | null; close: SyntaxNode } | null {
+  const tag = inlineTag(slice(node.from, node.to));
+  if (tag === null || tag === "br" || tag.closing) return null;
+  let depth = 0;
+  for (let other = node.nextSibling; other; other = other.nextSibling) {
+    if (other.name !== "HTMLTag") continue;
+    const found = inlineTag(slice(other.from, other.to));
+    if (found === null || found === "br" || found.name !== tag.name) continue;
+    if (!found.closing) depth++;
+    else if (depth-- === 0) return { name: tag.name, classes: tag.classes, close: other };
+  }
+  return null;
 }
 
 const LITERAL_NODES: Record<string, true> = {
@@ -73,6 +130,13 @@ export function imageHtml(label: string, href: string, caption?: string, attrs =
   const presentation = imagePresentation(label);
   const titleAttr = caption === undefined ? "" : ` title="${attribute(caption)}"`;
   return `<img src="${attribute(href)}" alt="${attribute(presentation.alt)}"${titleAttr}${presentation.dimensions}${attrs}>`;
+}
+
+/// Un'immagine da sola nel suo paragrafo (K10): la didascalia è il testo
+/// alternativo, senza la dimensione. Senza testo alternativo resta l'immagine.
+export function figureHtml(image: string, label: string, attrs = ""): string | null {
+  const alt = imagePresentation(label).alt.trim();
+  return alt ? `<figure${attrs}>${image}<figcaption>${escapeHtml(alt)}</figcaption></figure>` : null;
 }
 
 /// `120` o `200x100` dopo la barra di un embed: una dimensione, non un'etichetta.
@@ -541,9 +605,11 @@ function renderNode(context: MarkdownRenderContext, node: SyntaxNode): string {
     return `<code${sourceAttributes(from, to)}>${escapeHtml(value)}</code>`;
   }
   if (node.name === "HTMLTag") {
-    const tag = INLINE_HTML.exec(raw);
-    if (tag && !tag[2]) return "<br>";
-    if (tag && pairedTag(source, node, tag[2]!.toLowerCase(), tag[1] === "/")) return `<${tag[1]}${tag[2]!.toLowerCase()}>`;
+    const tag = inlineTag(raw);
+    if (tag === "br") return "<br>";
+    if (tag && pairedTag(source, node, tag.name, tag.closing)) {
+      return `<${tag.closing ? "/" : ""}${tag.name}${tag.classes ? ` class="${tag.classes}"` : ""}>`;
+    }
   }
   if (node.name === "Escape") return text(context, node.from + 1, node.to);
   if (node.name === "Entity") return `<span${attrs}>${raw}</span>`;

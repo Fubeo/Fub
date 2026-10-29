@@ -66,6 +66,11 @@ import { applyNoteCssClasses } from "../theme/snippets";
 import { Queue } from "../ui/race";
 import { openWebPage } from "../ui/web-viewer";
 import { invalidateDocumentCaches, renameInDocumentCaches } from "./document-caches";
+import { newSubpage, renamePage } from "./page-rename";
+import { linkedPageIcon } from "./page-icons";
+import { createPerson, isPersonTarget, peopleFolder, searchPeople } from "./people";
+import { dailyPath, firstWeekday } from "./dates";
+import { linkCardView, requestLinkCard } from "./link-cards";
 import type { Theme } from "../theme/theme";
 import { contentLookPreference, markLook, resolveLook, type Look } from "../theme/content-look";
 import { api } from "../host/ipc";
@@ -806,6 +811,25 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       },
     },
     onSearchTag: (tag) => deps.searchTag(tag),
+    onRenamePage: renamePage,
+    onNewSubpage: newSubpage,
+    pageIcons: {
+      icon: linkedPageIcon,
+      isPerson: (page) => isPersonTarget(page),
+      watch: (changed) => {
+        const icons = on("page-icons", changed);
+        const people = on("people", changed);
+        return () => {
+          icons();
+          people();
+        };
+      },
+    },
+    linkCards: {
+      view: linkCardView,
+      request: requestLinkCard,
+      watch: (changed) => on("link-cards", changed),
+    },
     runShellCommand: (id) => deps.runCommand(id),
     requestMode: (paneId, mode) => {
       if (layout.focus !== paneId) focusPane(paneId);
@@ -837,6 +861,8 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       headingsOf: (page: string) => noteHeadings(page).catch(() => []),
       searchHeadings: (text: string) => vaultHeadings(text).catch(() => []),
       blocksOf: (page: string) => noteBlocks(page).catch(() => []),
+      people: { folder: peopleFolder, search: searchPeople, create: createPerson },
+      dates: { dailyPath, firstDay: firstWeekday },
     },
     gridHost: api,
     exportDocument: {
@@ -985,6 +1011,16 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       for (const id of openDocuments()) void reloadDocument(id);
     }),
   );
+
+  // Le schede portano l'icona della pagina (K9): cambiata nell'indice, si
+  // ridipingono.
+  lifetime.add(on("page-icons", () => {
+    for (const id of layoutPanes()) {
+      const pane = panes.get(id);
+      const current = paneState(id);
+      if (pane && current) view.drawTabs(pane, current.tabs, current.active);
+    }
+  }));
 
   // Lo stato di salvataggio e le etichette delle modalità sono disegnati da
   // questo modulo, quindi seguono esplicitamente il cambio di lingua.

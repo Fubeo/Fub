@@ -101,6 +101,7 @@ impl Layout {
                 Inline::Emph(children)
                 | Inline::Strong(children)
                 | Inline::Superscript(children)
+                | Inline::Subscript(children)
                 | Inline::Strikethrough(children) => self.inlines(children),
                 Inline::Link {
                     label: Some(label), ..

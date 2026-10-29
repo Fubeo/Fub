@@ -133,6 +133,12 @@ describe("la griglia", () => {
     expect(grid.selection.focus).toEqual({ row: 2, col: 1 });
   });
 
+  it("la griglia non è una fermata del Tab: ci si arriva dal testo con le frecce", () => {
+    const { root } = mount(ROWS);
+    expect(root.getAttribute("role")).toBe("grid");
+    expect(root.tabIndex).toBe(-1);
+  });
+
   it("Canc svuota le celle selezionate", () => {
     const { grid, root, writes } = mount(ROWS);
     grid.focus({ row: 1, col: 0 });

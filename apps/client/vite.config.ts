@@ -6,10 +6,46 @@ const CHUNK_BUDGET = 500_000;
 // Il parser upstream arriva già precompilato: resta separato e solo lazy.
 const MERMAID_PARSER_BUDGET = 700_000;
 
+/// Il CSS senza i commenti; un `/*` dentro una stringa resta. Le regole sono
+/// le stesse: il sanitizer e il browser i commenti li saltano comunque.
+function withoutComments(css: string): string {
+  let out = "";
+  let i = 0;
+  while (i < css.length) {
+    const c = css[i]!;
+    if (c === '"' || c === "'") {
+      let j = i + 1;
+      while (j < css.length && css[j] !== c) j += css[j] === "\\" ? 2 : 1;
+      out += css.slice(i, j + 1);
+      i = j + 1;
+    } else if (c === "/" && css[i + 1] === "*") {
+      const end = css.indexOf("*/", i + 2);
+      i = end === -1 ? css.length : end + 2;
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  return out.replace(/\n[ \t]*\n(?:[ \t]*\n)+/g, "\n\n");
+}
+
 // Config allineata a Tauri: porta fissa 1420, niente clear screen.
 export default defineConfig({
   clearScreen: false,
   plugins: [{
+    // La pelle composta arriva come testo (`?raw`), e Vite non minimizza il
+    // testo: un terzo erano commenti, che documentano i pezzi ma nel bundle
+    // pesano come regole. Nella build si tolgono; in sviluppo e al banco la
+    // pelle resta quella scritta.
+    name: "skin-without-comments",
+    apply: "build",
+    transform(code, id) {
+      if (!/\/src\/theme\/scrittoio\/skin\.css\?raw$/.test(id)) return null;
+      const match = /^export default (".*");?\s*$/s.exec(code);
+      if (!match) this.error(`${id}: il testo della pelle non ha più la forma di \`?raw\``);
+      return { code: `export default ${JSON.stringify(withoutComments(JSON.parse(match[1]!) as string))};`, map: null };
+    },
+  }, {
     name: "bundle-size-budgets",
     apply: "build",
     generateBundle: {

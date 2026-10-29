@@ -85,6 +85,10 @@ import {
 import { flushPendingSave } from "./state/document-session";
 import { drainDocumentWindows, openCurrentInNewWindow } from "./state/document-windows";
 import { mountExplorer } from "./panels/explorer";
+import { mountPageIcons } from "./state/page-icons";
+import { mountPeople } from "./state/people";
+import { mountDates } from "./state/dates";
+import { mountLinkCards } from "./state/link-cards";
 import { closeInDocumentSearch, mountDocSearch } from "./panels/doc-search";
 import { mountGraph } from "./panels/graph";
 import { mountQuickSwitcher } from "./panels/quick-switcher";
@@ -829,6 +833,11 @@ async function init(): Promise<Teardown> {
   // l'altra la dice il provider quando ha finito qualcosa che il vault non
   // vede.
   mountViewInvalidation(pageWindowLifetime);
+  // Le icone delle pagine prima dell'esplora: la sua prima lista le trova già.
+  mountPageIcons(pageWindowLifetime);
+  mountPeople(pageWindowLifetime);
+  mountDates(pageWindowLifetime);
+  mountLinkCards(pageWindowLifetime);
   mountExplorer(pageWindowLifetime);
   mountLinkPreview(pageWindowLifetime);
   mountBookmarksPanel(pageWindowLifetime);

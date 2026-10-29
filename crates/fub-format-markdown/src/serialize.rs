@@ -661,6 +661,12 @@ fn write_inline(inline: &Inline, blank_after: bool, out: &mut String) -> Result<
             write_inlines(children, false, out)?;
             out.push('^');
         }
+        // Il pedice ha la tilde sola (decisione 0228): due sono il barrato.
+        Inline::Subscript(children) => {
+            out.push('~');
+            write_inlines(children, false, out)?;
+            out.push('~');
+        }
         Inline::Strikethrough(children) => {
             out.push_str("~~");
             write_inlines(children, false, out)?;

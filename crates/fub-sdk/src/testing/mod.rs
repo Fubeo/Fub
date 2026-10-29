@@ -318,6 +318,17 @@ impl MemoryHost {
         self
     }
 
+    /// Prepara un **annullamento**: il job è stato fermato con la richiesta in
+    /// volo, e il trasporto risponde `Cancelled` come quello dell'host vero.
+    /// Chi scarica deve smettere, non trasformarlo in un guasto da riferire.
+    pub fn with_network_cancelled(self) -> Self {
+        self.answers
+            .lock()
+            .unwrap()
+            .push_back(Err(PluginError::Cancelled("job annullato".into())));
+        self
+    }
+
     /// D'ora in poi `data_write` su questo path **fallisce**.
     ///
     /// Non è una crudeltà del doppio: è il disco pieno, la quota finita, il
