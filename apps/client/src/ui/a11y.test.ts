@@ -232,6 +232,30 @@ describe("una modale non lascia uscire il fuoco", () => {
     expect(document.activeElement?.id, "e torna da dove era partito").toBe("fuori");
   });
 
+  it("Escape in una ricerca piena la svuota, e solo il secondo chiude", () => {
+    document.body.innerHTML = `
+      <button id="fuori">Apri</button>
+      <div id="modale" tabindex="-1"><input id="cerca" type="search" value="zzz"></div>`;
+    const modal = document.querySelector<HTMLElement>("#modale")!;
+    const field = document.querySelector<HTMLInputElement>("#cerca")!;
+    let closed = 0;
+    let inputs = 0;
+    field.addEventListener("input", () => (inputs += 1));
+    const releaseTrap = trapFocus(modal, () => {
+      closed += 1;
+      releaseTrap();
+    });
+    field.focus();
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(field.value, "il primo Escape svuota il campo").toBe("");
+    expect(inputs, "e lo dice a chi filtra").toBe(1);
+    expect(closed, "senza chiudere la modale").toBe(0);
+
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(closed).toBe(1);
+  });
+
   it("il tab non esce dalla modale", () => {
     document.body.innerHTML = `
       <button id="fuori">Apri</button>
