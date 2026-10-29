@@ -30,6 +30,7 @@ import {
   mainElements,
   type CursorElement,
 } from "./cursor-elements";
+import { pairElementsAt } from "./empty-pair";
 import { addProperty, canMoveProperty, moveProperty } from "./properties";
 import { colorsAt, CONTENT_COLORS, setContentColor } from "./color";
 import {
@@ -89,7 +90,8 @@ const FENCED = nodeSet("FencedCode");
 const TABLE = nodeSet("Table");
 
 /// Lo stato premuto di un elemento in riga, dal cursore principale.
-const pressed = (element: CursorElement) => (state: EditorState): boolean => mainElements(state).has(element);
+const pressed = (element: CursorElement) => (state: EditorState): boolean =>
+  mainElements(state).has(element) || pairElementsAt(state).has(element);
 
 /// Dove comincia il contenuto di una riga: dopo citazione, pallino e casella.
 function contentStart(text: string): number {

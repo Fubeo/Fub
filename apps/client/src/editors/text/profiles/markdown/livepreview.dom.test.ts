@@ -584,9 +584,11 @@ describe("con «mai», accanto ai segni nascosti", () => {
     try {
       press("Backspace");
       expect(view.state.doc.toString()).toBe("a **trno** b");
+      // Una scelta che prende lo spazio e i segni nascosti toglie lo spazio:
+      // i segni da soli resterebbero a vista, e il grassetto resta.
       view.dispatch({ selection: { anchor: 1, head: 4 } });
       press("Backspace");
-      expect(view.state.doc.toString()).toBe("atrno** b");
+      expect(view.state.doc.toString()).toBe("a**trno** b");
     } finally {
       cleanup();
     }

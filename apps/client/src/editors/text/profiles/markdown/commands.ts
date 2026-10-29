@@ -17,8 +17,7 @@ import { isStrictlyInsideCode } from "./parser";
 import { textKeymap } from "../../commands";
 import { smartLists } from "../../smart-lists";
 import { addProperty, moveProperty } from "./properties";
-import { elementMarksAt, type CursorElement } from "./cursor-elements";
-import { openedPair } from "./empty-pair";
+import { toggleFormat } from "./format-toggle";
 import { renumberLists } from "./renumber";
 
 // ── Formattazione inline ─────────────────────────────────────────────────────
@@ -73,11 +72,8 @@ function wrappedInside(sel: string, open: string, close: string): boolean {
 /// cursore, o (senza parola) su una coppia vuota col cursore in mezzo. "Già
 /// formattato" vale sia coi marcatori inclusi nella selezione sia con la
 /// parola dentro i marcatori: nei due casi si tolgono, altrimenti si avvolge.
-///
-/// Con `element`, come in Word: il cursore dentro quell'elemento lo toglie
-/// tutto, lasciandone il testo scelto; la coppia vuota che si apre senza parola
-/// sparisce se il cursore se ne va senza scrivere (`empty-pair.ts`, in Live).
-function toggleWrap(open: string, close: string = open, element?: CursorElement): StateCommand {
+/// I formati della barra passano da `toggleFormat` (`format-toggle.ts`).
+function toggleWrap(open: string, close: string = open): StateCommand {
   return ({ state, dispatch }) => {
     if (state.readOnly) return false;
     dispatch(
@@ -103,23 +99,6 @@ function toggleWrap(open: string, close: string = open, element?: CursorElement)
               from += lead;
               to -= trail;
             }
-          }
-          const around = element && range.empty ? elementMarksAt(state, range, element) : null;
-          if (around) {
-            // Resta scelto il testo che era dell'elemento, come prima per la parola.
-            // I segni di un elemento annidato ai bordi (`***x***`) restano fuori.
-            const content = state.sliceDoc(around.openTo, around.closeFrom);
-            const lead = content.length - content.replace(/^[*_~^=]+/, "").length;
-            const trail = content.length - content.replace(/[*_~^=]+$/, "").length;
-            const start = around.from + (lead < content.length ? lead : 0);
-            const end = around.from + content.length - (lead < content.length ? trail : 0);
-            return {
-              changes: [
-                { from: around.from, to: around.openTo },
-                { from: around.closeFrom, to: around.to },
-              ],
-              range: EditorSelection.range(start, end),
-            };
           }
           if (from === to && range.empty) {
             if (
@@ -163,7 +142,6 @@ function toggleWrap(open: string, close: string = open, element?: CursorElement)
             return {
               changes: { from, insert: open + close },
               range: EditorSelection.cursor(from + open.length),
-              effects: element ? openedPair.of({ from, open: open.length, close: close.length }) : [],
             };
           }
           if (wrappedInside(state.sliceDoc(from, to), open, close)) {
@@ -199,13 +177,13 @@ function toggleWrap(open: string, close: string = open, element?: CursorElement)
   };
 }
 
-export const toggleBold = toggleWrap("**", "**", "strong");
-export const toggleItalic = toggleWrap("*", "*", "em");
-export const toggleStrikethrough = toggleWrap("~~", "~~", "strike");
+export const toggleBold = toggleFormat("strong");
+export const toggleItalic = toggleFormat("em");
+export const toggleStrikethrough = toggleFormat("strike");
 /// Sottolineato, apice e pedice: `<u>` della Lettura, `^x^` e `~x~` (0228).
-export const toggleUnderline = toggleWrap("<u>", "</u>", "underline");
-export const toggleSuperscript = toggleWrap("^", "^", "sup");
-export const toggleSubscript = toggleWrap("~", "~", "sub");
+export const toggleUnderline = toggleFormat("underline");
+export const toggleSuperscript = toggleFormat("sup");
+export const toggleSubscript = toggleFormat("sub");
 /// I delimitatori devono essere più lunghi di ogni corsa di backtick nel
 /// contenuto. Il padding CommonMark separa i backtick ai bordi e preserva gli
 /// spazi significativi; il parser individua il tratto da liberare al toggle.
@@ -268,7 +246,7 @@ export const toggleWikilink = toggleWrap("[[", "]]");
 export const toggleEmbed = toggleWrap("![[", "]]");
 /// I delimitatori dichiarati dalle regole ufficiali (`fub:highlight`,
 /// `fub:comments`) e il math in riga: stessa meccanica del grassetto.
-export const toggleHighlight = toggleWrap("==", "==", "highlight");
+export const toggleHighlight = toggleFormat("highlight");
 export const toggleComment = toggleWrap("%%");
 export const toggleInlineMath = toggleWrap("$");
 

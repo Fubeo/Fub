@@ -108,6 +108,14 @@ export function pendingMarks(text: string, column: number): PendingMark[] {
       at++;
       continue;
     }
+    // Il testo di un apice o di un pedice è letterale, come per Lezer: niente
+    // vi si apre, e il primo `^` o `~` lo chiude.
+    const top = stack[stack.length - 1];
+    if (top && (top.key === "^" || top.key === "~")) {
+      if (c === top.key) stack.pop();
+      at++;
+      continue;
+    }
     if (c === "`") {
       const length = runLength(text, at, "`");
       const close = runAt(text, at + length, "`", length);
@@ -230,7 +238,9 @@ function opaqueLine(state: EditorState, line: Line): boolean {
 function openAt(state: EditorState, pos: number): boolean {
   for (let node = syntaxTree(state).resolveInner(pos, 1); node; node = node.parent!) {
     if (OPAQUE_INLINE.has(node.name)) return false;
-    if (node.from === pos && node.name.endsWith("Mark")) return false;
+    // Anche dentro una corsa di segni già letti: in `***~b~***` l'ultimo `*`
+    // chiude il corsivo, e non resta in sospeso.
+    if (node.from <= pos && pos < node.to && node.name.endsWith("Mark")) return false;
     if (!node.parent) break;
   }
   return true;
@@ -365,6 +375,46 @@ const spaceCloses = EditorView.inputHandler.of((view, from, to, text) => {
   return true;
 });
 
+/// I segni che apice e pedice non portano dentro.
+const NOT_IN_LEAF = new Set(["~", "^", "*", "`"]);
+const LEAF_MARKS = new Set(["SuperscriptMark", "SubscriptMark", "StrikethroughMark"]);
+
+/// La decisione di un segno scritto accanto a un apice o a un pedice, come
+/// `spaceClosing`. In sospeso, un segno che non ci starebbe dentro prima lo
+/// chiude: `x^2` e `~` danno `x^2^~`, e Backspace toglie la chiusura. Subito
+/// dopo il segno d'apertura, `~` e `^` lo cambiano: `x^` e `~` danno `x~`.
+export function leafTyping(state: EditorState, text: string): TransactionSpec | null {
+  if (!NOT_IN_LEAF.has(text) || !state.facet(liveGuide) || state.readOnly) return null;
+  const selection = state.selection;
+  if (selection.ranges.length > 1 || !selection.main.empty) return null;
+  const head = selection.main.head;
+  const guide = guideAt(state);
+  const inner = guide?.marks[guide.marks.length - 1];
+  if (guide?.ghost && inner && (inner.kind === "sup" || inner.kind === "sub")) {
+    if (text === inner.close) return null;
+    return closing(inner.close, head, head + inner.close.length + text.length, inner.close + text);
+  }
+  if (text !== "~" && text !== "^") return null;
+  const other = text === "~" ? "^" : "~";
+  if (state.sliceDoc(head - 1, head) !== other || state.sliceDoc(head - 2, head - 1) === other) return null;
+  if (opaqueLine(state, state.doc.lineAt(head))) return null;
+  if (LEAF_MARKS.has(syntaxTree(state).resolveInner(head - 1, 1).name)) return null;
+  return {
+    changes: { from: head - 1, to: head, insert: text },
+    selection: { anchor: head },
+    userEvent: "input.type",
+    scrollIntoView: true,
+  };
+}
+
+const leafCloses = EditorView.inputHandler.of((view, from, to, text) => {
+  if (from !== to || view.compositionStarted) return false;
+  const spec = leafTyping(view.state, text);
+  if (!spec) return false;
+  view.dispatch(spec);
+  return true;
+});
+
 // ── Che cosa si vede ─────────────────────────────────────────────────────────
 
 class GhostWidget extends WidgetType {
@@ -471,7 +521,7 @@ const theme = EditorView.baseTheme({
 /// che chiude apice e pedice, l'ondulato. `editor.live-guide` la spegne.
 export function pendingGuide(): Extension {
   return [
-    written, dismissed, guidePlugin, theme, spaceCloses,
+    written, dismissed, guidePlugin, theme, spaceCloses, leafCloses,
     // Sopra il rientro delle voci e il Backspace della Live: vincono soltanto
     // quando la chiusura in grigio c'è, o è appena stata scritta.
     Prec.highest(keymap.of([

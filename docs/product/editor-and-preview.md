@@ -140,25 +140,25 @@ di espansione e dimensione mostra un errore leggibile e conserva il testo.
 La resa condivisa supporta task, highlight, callout annidati e ripiegabili,
 wikilink con alias, heading e block id, tabelle, note a piè di pagina etichettate
 e inline. Nelle immagini Markdown il suffisso dell'alt `|larghezza` o
-`|larghezzaxaltezza` è una dimensione, non testo alternativo.
+`|larghezzaxaltezza` è una dimensione, non testo alternativo. I commenti `%%…%%`
+restano nel file, non nella resa; in Live sono attenuati sulla riga del cursore.
+Evidenziati e commenti non attraversano link, wikilink, tag, codice, enfasi,
+formule o note in riga; una nota attraversata si perde.
 
-I commenti `%%…%%` restano nel file, non nella resa; in Live sono attenuati
-sulla riga del cursore. Evidenziati e commenti non attraversano link, wikilink,
-tag, codice, enfasi, formule o note in riga; una nota attraversata si perde.
-
-`editor.live-reveal` dice quanto si vede dei segni. Con `mai`, il predefinito,
-`**`, `^…^`, `~…~`, `#` e `>` non si vedono col cursore dentro: la barra dice
-gli stili premuti, il cursore si ferma due volte al bordo, Backspace cancella
-oltre i segni o il prefisso. Un link ha una pastiglia col dominio: Mod-k o un
-clic aprono «Collegamento». Mod-b, Mod-i e Mod-u in un elemento lo tolgono, e la
-loro coppia vuota sparisce se non si scrive. `elemento` e `riga` mostrano i segni
-attenuati. `~x~` è pedice (ADR 0228); un rimando `[^nota]` definito è un apice e
-la definizione ha un ↩. La guida (`editor.live-guide`) dà lo stile al testo dopo
-un segno aperto a mano e mostra in grigio la chiusura: → o Tab la scrivono, Esc
-la spegne, lo spazio chiude apice e pedice e Backspace lo annulla; un segno
-lasciato aperto è ondulato. Il titolo del cursore ha «H2» nel margine, che apre i
-livelli; la riga vuota un segnaposto. Invio su un recinto senza chiusura la
-scrive; `[] ` diventa `- [ ] `.
+`editor.live-reveal` dice quanto si vede dei segni. Con `mai`, il predefinito, `**`,
+`^…^`, `~…~`, `#` e `>` non si vedono col cursore dentro: la barra dice gli stili
+premuti, il cursore si ferma due volte al bordo, Backspace cancella oltre i segni o il
+prefisso. Un link ha una pastiglia col dominio: Mod-k o un clic aprono «Collegamento».
+I gesti di formato, come in Word, a metà di una parola la formattano tutta, al bordo
+aprono una coppia nascosta che sparisce se resta vuota, in un elemento lo tolgono e
+alla fine ne escono. Segni che non reggono (`^a b^`) passano al tag gemello (`<sup>`);
+un taglio a metà elemento ne tiene i segni. `elemento` e `riga` mostrano i segni
+attenuati. `~x~` è pedice (ADR 0228); un rimando `[^nota]` definito è un apice e la
+definizione ha un ↩. La guida (`editor.live-guide`) dà lo stile al testo dopo un segno
+aperto a mano e mostra in grigio la chiusura: → o Tab la scrivono, Esc la spegne, lo
+spazio chiude apice e pedice e Backspace lo annulla; un segno lasciato aperto è
+ondulato. Il titolo del cursore ha «H2» nel margine, che apre i livelli; la riga vuota
+un segnaposto. Invio su un recinto senza chiusura la scrive; `[] ` diventa `- [ ] `.
 
 Immagini e media del vault si risolvono con la regola dei link del kernel:
 un'immagine Markdown con path relativo parte dalla nota, un embed `![[nome]]`
@@ -244,12 +244,11 @@ macOS e `Ctrl-Shift-z` su Linux. `Mod-u` annulla l'ultima selezione e `Alt-u`
 la rifà; su macOS il redo della selezione è `Mod-Shift-u`. `Mod` indica il
 modificatore della piattaforma.
 
-Gli undo e redo del contenuto sono disponibili anche negli eventi di modifica
-del browser `historyUndo` e `historyRedo`. Le battute adiacenti vengono
-raggruppate secondo le regole native dell'editor; composizione, incolla,
-cancellazione, sostituzione e modifiche multi-cursore conservano i propri
-confini osservabili. La history della selezione è distinta da quella del
-contenuto.
+Gli undo e redo del contenuto sono disponibili anche negli eventi di modifica del
+browser `historyUndo` e `historyRedo`. Le battute adiacenti vengono raggruppate
+secondo le regole native dell'editor; composizione, incolla, cancellazione,
+sostituzione e modifiche multi-cursore conservano i propri confini osservabili. La
+history della selezione è distinta da quella del contenuto.
 
 Una modifica ricevuta da un altro riquadro aggiorna il testo ma non diventa una
 battuta nella history della superficie destinataria. Se il cambio esterno è

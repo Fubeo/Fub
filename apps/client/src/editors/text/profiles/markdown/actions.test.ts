@@ -99,7 +99,7 @@ describe("testo in riga", () => {
     expect(stateAt("markdown.highlight", "==im|portante==").active).toBe(true);
     expect(stateAt("markdown.highlight", "niente| qui").active).toBe(false);
     expect(stateAt("markdown.comment", "%%na|scosto%%").active).toBe(true);
-    expect(run("markdown.highlight", "paro|la")).toBe("==‹parola›==");
+    expect(run("markdown.highlight", "paro|la")).toBe("==paro|la==");
   });
 
   it("la formula in riga è premuta dentro `$…$`", () => {

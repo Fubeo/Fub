@@ -47,13 +47,20 @@ const run = (id: string, spec: string) => show(apply(id, mk(spec)));
 
 describe("col cursore dentro un elemento, il gesto lo toglie tutto", () => {
   it("grassetto, corsivo, barrato, sottolineato, apice e pedice", () => {
-    expect(run("markdown.bold", "a **due pa|role** b")).toBe("a ‹due parole› b");
-    expect(run("markdown.italic", "a **x *due pa|role* y** b")).toBe("a **x ‹due parole› y** b");
-    expect(run("markdown.strikethrough", "~~via d|a~~")).toBe("‹via da›");
-    expect(run("markdown.underline", "un <u>tratto so|tto</u>")).toBe("un ‹tratto sotto›");
-    expect(run("markdown.superscript", "mc^2|^ e")).toBe("mc‹2› e");
-    expect(run("markdown.subscript", "H~2|~O")).toBe("H‹2›O");
-    expect(run("markdown.highlight", "==tutto| qui==")).toBe("‹tutto qui›");
+    expect(run("markdown.bold", "a **due pa|role** b")).toBe("a due pa|role b");
+    expect(run("markdown.italic", "a **x *due pa|role* y** b")).toBe("a **x due pa|role y** b");
+    expect(run("markdown.strikethrough", "~~via d|a~~")).toBe("via d|a");
+    expect(run("markdown.underline", "un <u>tratto so|tto</u>")).toBe("un tratto so|tto");
+    expect(run("markdown.superscript", "mc^2|3^ e")).toBe("mc2|3 e");
+    expect(run("markdown.subscript", "H~2|3~O")).toBe("H2|3O");
+    expect(run("markdown.highlight", "==tutto| qui==")).toBe("tutto| qui");
+  });
+
+  it("alla fine o all'inizio del testo dell'elemento il gesto ne esce, come in Word", () => {
+    expect(run("markdown.bold", "a **forte|** b")).toBe("a **forte**| b");
+    expect(run("markdown.bold", "a **|forte** b")).toBe("a |**forte** b");
+    expect(run("markdown.superscript", "mc^2|^ e")).toBe("mc^2^| e");
+    expect(run("markdown.subscript", "H~2|~O")).toBe("H~2~|O");
   });
 
   it("fuori dall'elemento il gesto avvolge, come prima", () => {

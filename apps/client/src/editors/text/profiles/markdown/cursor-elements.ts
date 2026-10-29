@@ -73,6 +73,13 @@ export const WIKILINK_PAIR = /\[\[[^\]\n]*\]\]/g;
 export const EMBED_PAIR = /!\[\[[^\]\n]*\]\]/g;
 export const UNDERLINE_PAIR = /<u>(?:(?!<\/u>)[^\n])*?<\/u>/g;
 
+/// I tag che un gesto scrive quando i segni non reggono (`<sup>a b</sup>`):
+/// valgono come l'elemento dei segni.
+export const HTML_TWIN: Partial<Record<CursorElement, string>> = {
+  strong: "strong", em: "em", strike: "del", sup: "sup", sub: "sub", highlight: "mark",
+};
+const htmlPair = (tag: string): RegExp => new RegExp(`<${tag}>(?:(?!</${tag}>)[^\\n])*?</${tag}>`, "g");
+
 /// Dentro una formula `$…$`, letta sul suo contenitore come fa la Lettura: può
 /// cominciare su una riga e chiudere sulla seguente.
 export function insideInlineMathAt(state: EditorState, range: Span): boolean {
@@ -94,12 +101,14 @@ const NODES: readonly [CursorElement, ReadonlySet<string>][] = [
   ["code", new Set(["InlineCode"])],
   ["link", new Set(["Link"])],
 ];
+const HTML_PAIRS = new Map(Object.entries(HTML_TWIN).map(([name, tag]) => [name as CursorElement, htmlPair(tag)] as const));
 const PAIRS: readonly [CursorElement, RegExp][] = [
   ["highlight", HIGHLIGHT_PAIR],
   ["comment", COMMENT_PAIR],
   ["wikilink", WIKILINK_PAIR],
   ["embed", EMBED_PAIR],
   ["underline", UNDERLINE_PAIR],
+  ...HTML_PAIRS,
 ];
 
 /// Un elemento coi suoi segni: `[from, openTo)` apre, `[closeFrom, to)` chiude.
@@ -114,23 +123,32 @@ const MARK_OF: Partial<Record<CursorElement, string>> = {
   strong: "EmphasisMark", em: "EmphasisMark", strike: "StrikethroughMark", sup: "SuperscriptMark", sub: "SubscriptMark",
 };
 const PAIR_MARKS: Partial<Record<CursorElement, readonly [number, number]>> = { highlight: [2, 2], underline: [3, 4] };
+const TWIN_MARKS = (tag: string): readonly [number, number] => [tag.length + 2, tag.length + 3];
 
 /// L'elemento `element` più interno che contiene `range`, coi suoi segni: ciò
 /// che un gesto «alla Word» toglie quando il cursore ci sta dentro.
 export function elementMarksAt(state: EditorState, range: Span, element: CursorElement): ElementMarks | null {
   const mark = MARK_OF[element];
   const nodes = NODES.find(([name]) => name === element)?.[1];
+  let found: ElementMarks | null = null;
   if (mark && nodes) {
     const node = enclosingAt(state, range, nodes);
     const marks = node?.getChildren(mark) ?? [];
-    if (!node || marks.length < 2) return null;
-    return { from: marks[0]!.from, openTo: marks[0]!.to, closeFrom: marks[marks.length - 1]!.from, to: marks[marks.length - 1]!.to };
+    if (node && marks.length >= 2) {
+      found = { from: marks[0]!.from, openTo: marks[0]!.to, closeFrom: marks[marks.length - 1]!.from, to: marks[marks.length - 1]!.to };
+    }
   }
-  const lengths = PAIR_MARKS[element];
-  const pattern = PAIRS.find(([name]) => name === element)?.[1];
-  const pair = lengths && pattern ? pairAt(state, range, pattern) : null;
-  if (!pair || !lengths) return null;
-  return { from: pair.from, openTo: pair.from + lengths[0], closeFrom: pair.to - lengths[1], to: pair.to };
+  const twin = HTML_TWIN[element];
+  for (const [name, pattern] of PAIRS) {
+    if (name !== element) continue;
+    // `==` e `<mark>` sono lo stesso evidenziato, coi loro segni.
+    const lengths = pattern !== HTML_PAIRS.get(element) ? PAIR_MARKS[element] : twin ? TWIN_MARKS(twin) : undefined;
+    const pair = lengths ? pairAt(state, range, pattern) : null;
+    // Fra i segni e i tag vince il più interno.
+    if (!pair || !lengths || (found && found.from > pair.from)) continue;
+    found = { from: pair.from, openTo: pair.from + lengths[0], closeFrom: pair.to - lengths[1], to: pair.to };
+  }
+  return found;
 }
 
 /// Gli elementi che contengono `range`.

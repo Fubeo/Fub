@@ -4,7 +4,7 @@ import { EditorState } from "@codemirror/state";
 import { ensureSyntaxTree } from "@codemirror/language";
 import { markdownGrammar } from "./grammar";
 import { liveGuide } from "../../live-reveal";
-import { guideAt, openMarksInView, pendingMarks, spaceClosing } from "./pending";
+import { guideAt, leafTyping, openMarksInView, pendingMarks, spaceClosing } from "./pending";
 
 // La guida (B1–B4, F5). `|` è il cursore.
 
@@ -91,6 +91,45 @@ describe("lo spazio chiude apice e pedice", () => {
   it("col grassetto non fa niente, con la guida spenta nemmeno", () => {
     expect(spaceClosing(mk("**a|"))).toBeNull();
     expect(spaceClosing(mk("mc^2|", false))).toBeNull();
+  });
+});
+
+describe("apice e pedice accanto ad altri segni", () => {
+  /// Scrive `text` dov'è il cursore, con la regola se c'è: com'è il testo dopo.
+  const type = (spec: string, text: string) => {
+    const state = mk(spec);
+    const rule = leafTyping(state, text);
+    const next = rule ? state.update(rule).state : state.update(state.replaceSelection(text)).state;
+    const head = next.selection.main.head;
+    const doc = next.doc.toString();
+    return doc.slice(0, head) + "|" + doc.slice(head);
+  };
+
+  it("il testo di un apice è letterale: dentro non si apre niente", () => {
+    expect(kinds("x^2~3|")).toEqual([["sup", "^"]]);
+    expect(kinds("x^a*b|")).toEqual([["sup", "^"]]);
+    expect(kinds("x^2^~3|")).toEqual([["sub", "~"]]);
+  });
+
+  it("un pedice scritto dentro un apice in sospeso prima lo chiude, e viceversa", () => {
+    expect(type("x^2|", "~")).toBe("x^2^~|");
+    expect(type("H~2|", "^")).toBe("H~2~^|");
+    expect(type("x^2|", "*")).toBe("x^2^*|");
+    // Il proprio segno chiude, come sempre.
+    expect(type("x^2|", "^")).toBe("x^2^|");
+  });
+
+  it("subito dopo il segno d'apertura, l'altro segno lo cambia", () => {
+    expect(type("x^|", "~")).toBe("x~|");
+    expect(type("x~|", "^")).toBe("x^|");
+    // `~~` resta l'inizio di un barrato, e una chiusura resta una chiusura.
+    expect(type("x~|", "~")).toBe("x~~|");
+    expect(type("x^2^|", "~")).toBe("x^2^~|");
+  });
+
+  it("con la guida spenta i segni si scrivono come sono", () => {
+    expect(leafTyping(mk("x^2|", false), "~")).toBeNull();
+    expect(leafTyping(mk("x^|", false), "~")).toBeNull();
   });
 });
 

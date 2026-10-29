@@ -47,6 +47,9 @@ import {
 import { decodeDestination, normalizeLabel } from "./link-syntax";
 import { FOOTNOTE_DEFINITION } from "./grammar";
 import { emptyPairsExtension } from "./empty-pair";
+import { edgeSpaces } from "./edge-space";
+import { keepMarks } from "./keep-marks";
+import { signsOnFirstLetter } from "./format-toggle";
 import type { MarkdownBlock, MarkdownDocument, MarkdownLinkDefinition, MountMarkdown } from "./render-types";
 import { mountMarkdown } from "./mount";
 import { mountMathBlocks } from "./math";
@@ -2388,7 +2391,7 @@ export function livePreview(
     }
   });
   return [
-    theme, footnoteLabelsField, blocks, plugin, blockPrefixes(), emptyPairsExtension(), pendingGuide(), codeBlocks(), calloutGestures(), detailsLive(), imageGestures(), hangingIndent(), mathPopovers((view, pos, side) => formulaIn(view.plugin(plugin)?.decorations, pos, side)), liveHints(() => callbacks.slashEnabled?.() ?? false), deleteKeys, realign, tableGrids(callbacks),
+    theme, footnoteLabelsField, blocks, plugin, blockPrefixes(), emptyPairsExtension(), pendingGuide(), edgeSpaces(), keepMarks(), signsOnFirstLetter(), codeBlocks(), calloutGestures(), detailsLive(), imageGestures(), hangingIndent(), mathPopovers((view, pos, side) => formulaIn(view.plugin(plugin)?.decorations, pos, side)), liveHints(() => callbacks.slashEnabled?.() ?? false), deleteKeys, realign, tableGrids(callbacks),
     propertiesExtension(),
     callbacks.linkCard ? linkCardGestures(callbacks.linkCard) : [],
   ];
