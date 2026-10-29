@@ -1092,6 +1092,7 @@ function drawToolbar(r: Pane): void {
   frameOf(r).standing.follow(tab?.k === "doc" ? r.surface?.standing ?? null : null);
   group.setAttribute("aria-label", t("document.toolbar.modes"));
   menu.setAttribute("aria-label", t("document.pane.menu"));
+  setTooltip(menu, t("document.pane.menu"));
   const modes = r.surface && r.surface.modes.length > 1 ? r.surface.modes : [];
   const active = selectedMode(r);
   group.hidden = modes.length <= 1;
