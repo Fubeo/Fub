@@ -28,7 +28,6 @@ export interface TouchChoice {
 /// Le azioni del tasto laterale, nell'ordine in cui si offrono.
 const BARREL_ACTIONS: ReadonlyArray<{ readonly action: BarrelAction; readonly label: DrawKey }> = [
   { action: "radial", label: "draw.touch.barrel.radial" },
-  { action: "lasso", label: "draw.touch.barrel.lasso" },
   { action: "eraser", label: "draw.touch.barrel.eraser" },
   { action: "none", label: "draw.touch.barrel.none" },
 ];

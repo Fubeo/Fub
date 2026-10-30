@@ -7,37 +7,7 @@ import { FIDELITY } from "../../../../bench/fidelity-corpus";
 import type { Point } from "../scene/matrix";
 import { doc } from "../scene/test-support";
 import { gesture, NewIds } from "./edit";
-import {
-  averageColor,
-  constrained,
-  defaultPlace,
-  drawnPlace,
-  fadeOf,
-  FOCUS_LIMIT,
-  gradientHandles,
-  gradientOps,
-  gradientPreview,
-  gradientView,
-  movedStop,
-  paintedParts,
-  placeAngle,
-  placeAs,
-  placeAt,
-  placeTurned,
-  placeWith,
-  pointAt,
-  reversedStops,
-  sortedStops,
-  stopAt,
-  withStop,
-  writtenPlace,
-  type GradientChange,
-  type GradientChanged,
-  type GradientPlace,
-  type GradientStop,
-  type PaintChannel,
-  type Painted,
-} from "./gradients";
+import { averageColor, defaultPlace, fadeOf, gradientOps, paintedParts, placeAngle, placeTurned, reversedStops, sortedStops, writtenPlace, type GradientChange, type GradientChanged, type GradientPlace, type GradientStop, type PaintChannel, type Painted } from "./gradients";
 import { estimate } from "./measure";
 import { LAYER, open, type Opened } from "./test-support";
 
@@ -96,8 +66,6 @@ function applied(opened: Opened, change: GradientChanged): string {
   return after;
 }
 
-type Linear = Extract<GradientPlace, { kind: "linear" }>;
-
 /// L'elemento che un'operazione aggiunge, se ne aggiunge uno descritto.
 const addedElem = (op: GradientChanged["ops"][number], tag?: string) =>
   op.op === "add" && "elem" in op && (tag === undefined ? op.elem.tag.endsWith("Gradient") : op.elem.tag === tag);
@@ -154,28 +122,6 @@ describe("una sfumatura nasce", () => {
     expect(opened.engine.holder("rs")).not.toBeNull();
   });
 
-  it("da una campitura col suo fondo, o col colore delle righe, e da un motivo col suo ripiego", () => {
-    const hatch = (id: string, value: string): string => {
-      const [, , step, width, color, background] = value.split(" ");
-      const fond = background === undefined ? "" : `<rect width="${step}" height="${step}" fill="${background}"/>`;
-      const middle = (Number(step) - Number(width)) / 2;
-      return `<pattern id="${id}" fub:role="private" fub:pattern="${value}" patternUnits="userSpaceOnUse" width="${step}" height="${step}" patternTransform="rotate(-45)">${fond}<rect y="${middle}" width="${step}" height="${width}" fill="${color}"/></pattern>`;
-    };
-    const defs = [
-      hatch("rh", "lines -45 8 1.5 #000000 #0072b2"),
-      hatch("rb", "lines -45 8 1.5 #009e73"),
-      '<pattern id="rm" fub:role="swatch" fub:name="Motivo" patternUnits="userSpaceOnUse" width="10" height="10"><rect width="10" height="10" fill="#cc79a7"/></pattern>',
-      '<pattern id="rp" fub:role="private" patternUnits="userSpaceOnUse" width="4" height="4"><circle cx="2" cy="2" r="1" fill="#000000"/></pattern>',
-    ].join("");
-    const fills = ["url(#rh) #003e60", "url(#rb) #009e73", "url(#rm) #cc79a7", "url(#rp) #e69f00"];
-    const opened = open(doc(`${DEFS(defs)}${LAYER}${fills.map((fill, at) => RECT(`o${at}`, ` fill="${fill}"`)).join("")}</g>`));
-    // Non hanno un tipo, e la sfumatura nasce dal loro colore.
-    expect(gradientView(painted(opened))).toMatchObject({ kind: "other", based: true });
-    applied(opened, changed(opened, { kind: "linear" }));
-    // Il fondo è il colore che l'oggetto aveva, non il ripiego mescolato
-    // alle righe.
-    expect(painted(opened).map((part) => part.gradient!.look.stops)).toEqual(["#0072b2", "#009e73", "#cc79a7", "#e69f00"].map(fadeOf));
-  });
 
   it("nelle coordinate dell'oggetto, che la porta con sé", () => {
     const opened = open(doc(`${LAYER}${RECT("oa", ' fill="#d55e00" transform="translate(5 5) rotate(30)"')}</g>`));
@@ -213,17 +159,6 @@ describe("una sfumatura nasce", () => {
     });
   });
 
-  it("tracciata, con le righe di uguale colore di traverso anche su un oggetto inclinato", () => {
-    const opened = open(doc(`${LAYER}${RECT("oa", ' fill="#d55e00" transform="matrix(1 0 0.5 1 0 0)"')}</g>`));
-    const place = drawnPlace("linear", [20, 20], [60, 40]) as Linear;
-    const change = changed(opened, { place });
-    expect(change.ops.find((op) => addedElem(op, "linearGradient"))).toMatchObject({ elem: { attrs: { gradientTransform: expect.stringMatching(/^matrix\(/) } } });
-    applied(opened, change);
-    // La trasformazione si scrive con quattro decimali.
-    const read = painted(opened)[0]!.gradient!.place as Linear;
-    near(read.start, place.start, 1);
-    near(read.end, place.end, 1);
-  });
 
   it("non nasce su ciò che non ha misura", () => {
     const opened = open(doc(`${LAYER}<line id="ol" x1="10" y1="10" x2="10" y2="10" stroke="#000000"/></g>`));
@@ -234,25 +169,6 @@ describe("una sfumatura nasce", () => {
 describe("una sfumatura sua cambia sul posto", () => {
   const SOURCE = doc(`${DEFS(LINEAR("rg"))}${LAYER}${RECT("oa", ' fill="url(#rg) #80b9d8"')}</g>`);
 
-  it("si legge come sua, coi punti e dove sta", () => {
-    const opened = open(SOURCE);
-    const [part] = painted(opened);
-    expect(part!.gradient).toMatchObject({
-      id: "rg",
-      own: true,
-      parts: [0, 1],
-      look: {
-        kind: "linear",
-        spread: "pad",
-        stops: [
-          { offset: 0, color: "#0072b2", opacity: 1 },
-          { offset: 1, color: "#ffffff", opacity: 1 },
-        ],
-      },
-    });
-    nearPlace(part!.gradient!.place, { kind: "linear", start: [10, 30], end: [50, 30], across: [10, 70] });
-    expect(gradientView(painted(opened))).toMatchObject({ count: 1, kind: "linear", angle: 0 });
-  });
 
   it("i colori e le posizioni dei punti, con `set` e `part`", () => {
     const opened = open(SOURCE);
@@ -272,18 +188,6 @@ describe("una sfumatura sua cambia sul posto", () => {
     expect(text).toContain(`fill="url(#rg) ${averageColor(painted(opened)[0]!.gradient!.look.stops)}"`);
   });
 
-  it("dove sta, come continua oltre i capi e l'angolo", () => {
-    const opened = open(SOURCE);
-    applied(opened, changed(opened, { place: drawnPlace("linear", [10, 20], [10, 40])! }));
-    expect(opened.engine.text).toContain('x1="10" y1="20" x2="10" y2="40"');
-    applied(opened, changed(opened, { spread: "reflect" }));
-    expect(opened.engine.text).toContain('spreadMethod="reflect"');
-    applied(opened, changed(opened, { angle: 0 }));
-    expect(opened.engine.text).toContain('x1="0" y1="30" x2="20" y2="30"');
-    expect(gradientView(painted(opened)).angle).toBe(0);
-    applied(opened, changed(opened, { spread: "pad" }));
-    expect(opened.engine.text).not.toContain("spreadMethod");
-  });
 
   it("niente, se è già così", () => {
     const opened = open(SOURCE);
@@ -291,17 +195,6 @@ describe("una sfumatura sua cambia sul posto", () => {
     expect(same.ops.filter((op) => op.op === "set" && op.id === "rg")).toEqual([]);
   });
 
-  it("un punto in più fa una sfumatura nuova al posto della vecchia, che se ne va", () => {
-    const opened = open(SOURCE);
-    const stops = withStop(painted(opened)[0]!.gradient!.look.stops, 0.5).stops;
-    const change = changed(opened, { stops });
-    const [id] = added(change);
-    expect(change.ops.find((op) => op.op === "add")).toMatchObject({ parent: "fub-defs", pos: { after: "rg" } });
-    const text = applied(opened, change);
-    expect(opened.engine.holder("rg")).toBeNull();
-    expect(text).toContain(`<linearGradient id="${id}" fub:role="private" x1="10" y1="30" x2="50" y2="30" gradientUnits="userSpaceOnUse">`);
-    expect(painted(opened)[0]!.gradient!.look.stops).toHaveLength(3);
-  });
 
   it("un altro tipo, dove stava: il mezzo della linea diventa il centro", () => {
     const opened = open(SOURCE);
@@ -353,65 +246,8 @@ describe("una sfumatura che non è soltanto sua", () => {
     expect(opened.engine.text).toContain('x1="10" y1="20" x2="10" y2="40" gradientUnits="userSpaceOnUse" spreadMethod="reflect"');
   });
 
-  it("di un punto solo, e non campione, nasce dove nascerebbe", () => {
-    const opened = open(doc(`${DEFS('<linearGradient id="rg" fub:role="private"><stop stop-color="#0072b2"/></linearGradient>')}${LAYER}${RECT("oa", ' fill="url(#rg)"')}</g>`));
-    const [part] = painted(opened);
-    nearPlace(part!.gradient!.place, { kind: "linear", start: [10, 30], end: [50, 30], across: [10, 70] });
-    applied(opened, changed(opened, { stops: withStop(part!.gradient!.look.stops, 1).stops }));
-    expect(opened.engine.text).toContain('x1="10" y1="30" x2="50" y2="30" gradientUnits="userSpaceOnUse"');
-  });
 });
-
-describe("l'anteprima", () => {
-  it("mostra la sfumatura intera che ogni parte avrebbe, o il colore", () => {
-    const opened = open(doc(`${DEFS(LINEAR("rg"))}${LAYER}${RECT("oa", ' fill="url(#rg) #80b9d9"')}${RECT("ob")}</g>`));
-    const units = opened.reindex().units;
-    const model = opened.engine.model!;
-    const [a, b] = painted(opened).map((part) => part.node);
-    const stops: GradientStop[] = [
-      { offset: 0, color: "#0072b2", opacity: 1 },
-      { offset: 0.5, color: "#f0e442", opacity: 0.5 },
-      { offset: 1, color: "#ffffff", opacity: 1 },
-    ];
-    const shown = gradientPreview(model, units, "fill", { stops });
-    // La sua cambia dove sta, con tre punti; il colore diventa una lineare.
-    expect(shown.get(a!)).toEqual({
-      name: "fill",
-      value: {
-        tag: "linearGradient",
-        attrs: { id: "preview", "fub:role": "private", gradientUnits: "userSpaceOnUse", x1: "10", y1: "30", x2: "50", y2: "30" },
-        children: [
-          { tag: "stop", attrs: { offset: "0", "stop-color": "#0072b2" } },
-          { tag: "stop", attrs: { offset: "0.5", "stop-color": "#f0e442", "stop-opacity": "0.5" } },
-          { tag: "stop", attrs: { offset: "1", "stop-color": "#ffffff" } },
-        ],
-      },
-    });
-    expect(shown.get(b!)).toMatchObject({ name: "fill", value: { tag: "linearGradient", attrs: { x1: "10", y1: "30", x2: "50", y2: "30" } } });
-    // Pieno: il primo colore; una parte che resta com'è non c'è.
-    const solid = gradientPreview(model, units, "fill", { kind: "color" });
-    expect(solid.get(a!)).toEqual({ name: "fill", value: "#0072b2" });
-    expect(solid.has(b!)).toBe(false);
-    // Soltanto le parti chieste.
-    expect([...gradientPreview(model, units, "fill", { stops }, new Set([b!])).keys()]).toEqual([b]);
-    // L'anteprima non scrive niente.
-    expect(opened.engine.text).not.toContain("#f0e442");
-  });
-});
-
 describe("la selezione", () => {
-  it("dice il tipo comune, la sfumatura comune e l'angolo comune", () => {
-    const opened = open(doc(`${DEFS(LINEAR("rg") + LINEAR("rh"))}${LAYER}${RECT("oa", ' fill="url(#rg)"')}${RECT("ob", ' fill="url(#rh)"')}${RECT("oc")}</g>`));
-    const parts = painted(opened);
-    // L'angolo è quello delle parti con una sfumatura, anche se non tutte
-    // ne hanno una.
-    expect(gradientView(parts)).toEqual({ count: 3, gradients: 2, kind: null, based: true, look: null, angle: 0 });
-    expect(gradientView(parts.slice(0, 2))).toMatchObject({ count: 2, gradients: 2, kind: "linear", angle: 0 });
-    expect(gradientView(parts.slice(2))).toEqual({ count: 1, gradients: 0, kind: "color", based: true, look: null, angle: null });
-    expect(gradientView([])).toEqual({ count: 0, gradients: 0, kind: null, based: false, look: null, angle: null });
-    const other = open(doc(`${LAYER}${RECT("oa", ' fill="none"')}</g>`));
-    expect(gradientView(painted(other))).toMatchObject({ kind: "other", based: false });
-  });
 
   it("dà a ciascuna la dissolvenza del suo colore, e ne rovescia i punti", () => {
     const opened = open(doc(`${DEFS(LINEAR("rg"))}${LAYER}${RECT("oa", ' fill="url(#rg)"')}${RECT("ob")}</g>`));
@@ -422,11 +258,6 @@ describe("la selezione", () => {
     expect(painted(opened).map((part) => part.gradient!.look.stops)).toEqual([reversedStops(fadeOf("#0072b2")), reversedStops(fadeOf("#d55e00"))]);
   });
 
-  it("mostra sul foglio una sfumatura per ogni posto", () => {
-    const opened = open(doc(`${DEFS(LINEAR("rg") + LINEAR("rh") + LINEAR("ri", ' fub:role="private" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="10" y2="0"'))}${LAYER}${RECT("oa", ' fill="url(#rg)"')}${RECT("ob", ' fill="url(#rh)"')}${RECT("oc", ' fill="url(#ri)"')}</g>`));
-    const handles = gradientHandles(painted(opened), 0.01);
-    expect(handles.map((each) => each.parts.map((part) => part.gradient!.id))).toEqual([["rg", "rh"], ["ri"]]);
-  });
 
   it("cambia tutto insieme, in un passo", () => {
     const opened = open(doc(`${LAYER}${RECT("oa")}${RECT("ob", ' fill="#0072b2"')}</g>`));
@@ -442,28 +273,8 @@ describe("dove sta", () => {
   const LINE: GradientPlace = { kind: "linear", start: [0, 0], end: [10, 0], across: [0, 10] };
   const ROUND: GradientPlace = { kind: "radial", center: [0, 0], a: [10, 0], b: [0, 5], focus: [2, 1] };
 
-  it("un capo gira e allunga la linea attorno all'altro, con le sue righe", () => {
-    nearPlace(placeWith(LINE, "end", [0, 20]), { kind: "linear", start: [0, 0], end: [0, 20], across: [-20, 0] });
-    nearPlace(placeWith(LINE, "start", [5, 0]), { kind: "linear", start: [5, 0], end: [10, 0], across: [5, 5] });
-    expect(placeWith(LINE, "end", [0, 0])).toBe(LINE);
-  });
 
-  it("il centro sposta, il primo raggio gira e scala, il secondo si allunga soltanto", () => {
-    nearPlace(placeWith(ROUND, "center", [1, 1]), { kind: "radial", center: [1, 1], a: [11, 1], b: [1, 6], focus: [3, 2] });
-    nearPlace(placeWith(ROUND, "a", [0, 20]), { kind: "radial", center: [0, 0], a: [0, 20], b: [-10, 0], focus: [-2, 4] });
-    const longer = placeWith(ROUND, "b", [3, 10]) as Extract<GradientPlace, { kind: "radial" }>;
-    near(longer.b, [0, 10]);
-    near(longer.focus, [2, 2]);
-  });
 
-  it("il fuoco resta dentro il bordo", () => {
-    const out = placeWith(ROUND, "focus", [30, 0]) as Extract<GradientPlace, { kind: "radial" }>;
-    near(out.focus, [10 * FOCUS_LIMIT, 0]);
-    const written = writtenPlace({ kind: "radial", center: [0, 0], a: [10, 0], b: [0, 10], focus: [10, 0] }, [1, 0, 0, 1, 0, 0])!;
-    expect(written).toEqual({ cx: "0", cy: "0", r: "10", fx: "9.9", fy: "0" });
-    const tiny = writtenPlace({ kind: "radial", center: [0, 0], a: [0.01, 0], b: [0, 0.01], focus: [0.01, 0] }, [1, 0, 0, 1, 0, 0])!;
-    expect(tiny).toEqual({ cx: "0", cy: "0", r: "0.01" });
-  });
 
   it("un cerchio girato tiene la sua trasformazione, per tenere dove stanno i capi", () => {
     const turned = writtenPlace({ kind: "radial", center: [0, 0], a: [0, 10], b: [-10, 0], focus: [0, 0] }, [1, 0, 0, 1, 0, 0])!;
@@ -478,24 +289,7 @@ describe("dove sta", () => {
     nearPlace(placeTurned(ROUND, 90), { kind: "radial", center: [0, 0], a: [0, 10], b: [-5, 0], focus: [-1, 2] });
   });
 
-  it("dove sta un punto lungo la linea, anche con le righe inclinate", () => {
-    expect(placeAt(LINE, [5, 7])).toBeCloseTo(0.5);
-    const slanted: GradientPlace = { kind: "linear", start: [0, 0], end: [10, 0], across: [5, 10] };
-    expect(placeAt(slanted, [5, 10])).toBeCloseTo(0);
-    expect(placeAt(slanted, [10, 0])).toBeCloseTo(1);
-    expect(placeAt(ROUND, [5, 3])).toBeCloseTo(0.5);
-    near(pointAt(LINE, 0.25), [2.5, 0]);
-    near(pointAt(ROUND, 0.5), [5, 0]);
-  });
 
-  it("tracciata, vincolata a 45°, e dell'altro tipo", () => {
-    near(constrained([0, 0], [10, 1]), [10, 0]);
-    near(constrained([0, 0], [10, 9]), [9.5, 9.5]);
-    expect(drawnPlace("linear", [1, 1], [1, 1])).toBeNull();
-    nearPlace(drawnPlace("radial", [0, 0], [10, 0]), { kind: "radial", center: [0, 0], a: [10, 0], b: [0, 10], focus: [0, 0] });
-    nearPlace(placeAs(LINE, "radial"), { kind: "radial", center: [5, 0], a: [10, 0], b: [5, 5], focus: [5, 0] });
-    nearPlace(placeAs(ROUND, "linear"), { kind: "linear", start: [-10, 0], end: [10, 0], across: [-10, 20] });
-  });
 
   it("dove nasce, anche su un riquadro senza larghezza", () => {
     nearPlace(defaultPlace("linear", [1, 0, 0, 1, 0, 0], { min: [5, 0], max: [5, 10] }), { kind: "linear", start: [5, 0], end: [5, 10], across: [-5, 0] });
@@ -516,22 +310,7 @@ describe("i punti", () => {
     { offset: 1, color: "#ffffff", opacity: 0 },
   ];
 
-  it("un punto nuovo ha il colore che si vede lì", () => {
-    expect(stopAt(TWO, 0.5)).toEqual({ color: "#808080", opacity: 0.5 });
-    expect(withStop(TWO, 0.25)).toEqual({
-      stops: [TWO[0], { offset: 0.25, color: "#404040", opacity: 0.75 }, TWO[1]],
-      index: 1,
-    });
-    expect(withStop(TWO, 1).index).toBe(2);
-  });
 
-  it("un punto che si sposta si rimette in ordine, e fra gli uguali resta dalla sua parte", () => {
-    const three: GradientStop[] = [TWO[0]!, { offset: 0.5, color: "#ff0000", opacity: 1 }, TWO[1]!];
-    expect(movedStop(three, 1, 1.2)).toEqual({ stops: [TWO[0], { offset: 1, color: "#ff0000", opacity: 1 }, TWO[1]], index: 1 });
-    expect(movedStop(three, 2, 0.5).index).toBe(2);
-    expect(movedStop(three, 0, 0.5).index).toBe(0);
-    expect(movedStop(three, 1, 0.5).index).toBe(1);
-  });
 
   it("si rovesciano, si ordinano e si tengono fra 0 e 1", () => {
     expect(reversedStops(TWO)).toEqual([

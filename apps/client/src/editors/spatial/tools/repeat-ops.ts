@@ -1,4 +1,4 @@
-// Le ripetizioni nell'editor (Disegni, ripetizioni e simmetria; formato
+// Le ripetizioni nell'editor (Disegni e ripetizioni; formato
 // della scena, ripetizioni): ripetere gli oggetti scelti, cambiare una
 // ripetizione, espanderla, separarla e tenerla vera mentre il disegno cambia.
 // Ogni comando diventa un `batch` solo, come quelli di `arrange.ts`.

@@ -4,7 +4,6 @@
 
 import { iconEl } from "../../../../ui/icons";
 import { linkName } from "../../describe";
-import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Bounds } from "../../scene/geometry";
 import { apply, compose, IDENTITY, type Matrix, type Point } from "../../scene/matrix";
 import { SVG_NS } from "../../scene/read";
@@ -28,23 +27,12 @@ import {
 } from "../frame";
 import { screenBox } from "../../view";
 import type { Unit } from "../hit";
-import { cornerGrip, cornerSpot, type CornerGrip } from "../reshape";
-import { NODE_PX } from "./constants";
 import type { EditorContext } from "./context";
-import { comparePaths, holdsPath, matrixText, scaleOf, translated, union } from "./helpers";
+import { comparePaths, holdsPath, matrixText, translated, union } from "./helpers";
 
 /// Di quanto il segno di un collegamento scelto si scosta, in pixel CSS, in
 /// alto e a destra: oltre la maniglia d'angolo, che sporge di 4 dalla cornice.
 const MARK_CLEAR_PX = FRAME_PX + 4;
-
-/// Quanto dentro il vertice sta la maniglia degli angoli oltre il centro
-/// dell'arco, in pixel: lontana dalle maniglie della cornice anche quando il
-/// raggio è zero.
-const CORNER_INSET_PX = 16;
-
-/// Quanto deve poter scorrere sullo schermo la maniglia degli angoli perché
-/// si mostri, in pixel: su una forma più piccola coprirebbe la forma.
-const CORNER_ROOM_PX = 32;
 
 /// Un collegamento che si vede, col suo segno sul foglio.
 interface LinkMark {
@@ -63,7 +51,6 @@ export interface MarksContext {
   frameCursor: (frame: Frame, grip: Grip) => GripCursor;
   measuresText: (arg0: readonly [number, number]) => string;
   degreesText: (degrees: number) => string;
-  cornerAt: (p: Point, pointer: InkPointerType, view: FrameView | null, grip: Grip | null) => ReturnType<() => { readonly unit: Unit; readonly grip: CornerGrip; readonly spot: Point; } | null>;
   showGrip: (cursor: GripCursor | "rotating" | "move" | "copy" | null) => void;
   showHandles: () => void;
   /// I collegamenti che si vedono, ognuno col suo segno: si ricostruiscono
@@ -77,8 +64,8 @@ export interface MarksContext {
 /// Monta i segni sul foglio: la selezione, la cornice e i collegamenti.
 export function installMarks(ctx: EditorContext): void {
   const {
-    life, has, relabels, surface, linkLayer, painter, previewLayer, overlay, clearInk, indexer, editable, currentIndex, readFirst, numberText,
-    coordText, lengthText, showRulers, showGuideLines, options
+    life, relabels, surface, linkLayer, painter, previewLayer, overlay, clearInk, indexer, editable, currentIndex, readFirst, numberText,
+    coordText, lengthText, options
   } = ctx;
   // --- Selezione e anteprime ----------------------------------------------
 
@@ -136,7 +123,7 @@ export function installMarks(ctx: EditorContext): void {
   /// mentre si sposta o si sceglie col riquadro, nessuna, e nemmeno mentre
   /// si ritaglia, che ha i suoi segni.
   const frameNow = (): FrameView | null => {
-    if (ctx.tool !== "select" || !editable() || ctx.selection.length === 0 || ctx.cropping !== null) return null;
+    if (ctx.tool !== "select" || !editable() || ctx.selection.length === 0) return null;
     const g = ctx.current?.kind === "select" ? ctx.current : null;
     if (g !== null && (g.mode === "move" || g.mode === "marquee")) return null;
     if (g !== null && g.grip !== null) return frameView(g.matrix === null ? g.grip.frame : movedFrame(g.grip.frame, g.matrix), ctx.camera.scale);
@@ -169,13 +156,6 @@ export function installMarks(ctx: EditorContext): void {
     for (const { grip, at } of view.spots) {
       out.push(grip === "rotate" ? { kind: "rotor", x: at[0], y: at[1], stem: view.stem } : { kind: "grip", x: at[0], y: at[1] });
     }
-    const corner = cornerNow();
-    if (corner !== null) {
-      out.push({ kind: "corner", x: corner.spot[0], y: corner.spot[1] });
-      // Mentre la si tira, il raggio sotto di lei.
-      const drag = ctx.current?.kind === "select" && ctx.current.mode === "corner" ? ctx.current.corner : null;
-      if (drag !== null) out.push({ kind: "label", x: corner.spot[0], y: corner.spot[1], text: lengthText(drag.radius * scaleOf(drag.unit.matrix)) });
-    }
     const g = ctx.current?.kind === "select" && (ctx.current.mode === "resize" || ctx.current.mode === "rotate") ? ctx.current : null;
     if (g !== null || ctx.current === null) {
       const corners = [min, [max[0], min[1]], max, [min[0], max[1]]].map((corner) => apply(view.frame.matrix, corner as Point));
@@ -187,40 +167,6 @@ export function installMarks(ctx: EditorContext): void {
     return out;
   };
 
-  /// La maniglia degli angoli che si vede: con lo strumento Selezione e un
-  /// poligono, una stella o un rettangolo scelto da solo, abbastanza grande
-  /// sullo schermo perché la maniglia abbia dove scorrere; durante il suo
-  /// gesto, dove la si tira. Mentre la cornice si tira, nessuna.
-  const cornerNow = (): { readonly unit: Unit; readonly grip: CornerGrip; readonly spot: Point } | null => {
-    const g = ctx.current?.kind === "select" ? ctx.current : null;
-    const inset = (unit: Unit): number => CORNER_INSET_PX / (scaleOf(unit.matrix) * ctx.camera.scale);
-    if (g !== null && g.corner !== null) {
-      const { unit, grip, radius } = g.corner;
-      return { unit, grip, spot: cornerSpot(grip, unit.matrix, radius, inset(unit)) };
-    }
-    if ((g !== null && g.mode !== "pending") || ctx.tool !== "select" || !editable() || !has("polygon") || ctx.selection.length !== 1) return null;
-    const unit = selectedUnits()[0];
-    const grip = unit === undefined ? null : cornerGrip(unit.node, unit.role, unit.matrix);
-    if (unit === undefined || grip === null) return null;
-    const k = scaleOf(unit.matrix) * ctx.camera.scale;
-    if (!(k > 0) || grip.max * grip.reach * k < CORNER_ROOM_PX) return null;
-    return { unit, grip, spot: cornerSpot(grip, unit.matrix, grip.radius, inset(unit)) };
-  };
-
-  /// La maniglia degli angoli sotto `p`, col puntatore `pointer`: se c'è, e
-  /// se è più vicina della maniglia `grip` della cornice `view`, che `p`
-  /// prende anche lei.
-  const cornerAt = (p: Point, pointer: InkPointerType, view: FrameView | null, grip: Grip | null): ReturnType<typeof cornerNow> => {
-    const corner = cornerNow();
-    if (corner === null) return null;
-    const away = Math.hypot(p[0] - corner.spot[0], p[1] - corner.spot[1]) * ctx.camera.scale;
-    if (away > NODE_PX[pointer]) return null;
-    const spot = grip === null ? undefined : view?.spots.find((each) => each.grip === grip);
-    if (spot !== undefined && Math.hypot(p[0] - spot.at[0], p[1] - spot.at[1]) * ctx.camera.scale < away) return null;
-    return corner;
-  };
-  ctx.cornerAt = cornerAt;
-
   /// Il cursore del foglio sopra una maniglia, o durante il suo gesto; sopra
   /// una tavola, con lo strumento Tavola, quello che sposta, o con Alt,
   /// mentre la si sposta, quello che copia.
@@ -231,8 +177,7 @@ export function installMarks(ctx: EditorContext): void {
   ctx.showGrip = showGrip;
 
   /// Le cornici della selezione e il riquadro di un trascinamento sul
-  /// vuoto. Le misure della banda di stato
-  /// seguono.
+  /// vuoto. Le misure della banda di stato seguono.
   const showHandles = (): void => {
     readFirst(placeHandles);
     ctx.statusChanged();
@@ -246,8 +191,7 @@ export function installMarks(ctx: EditorContext): void {
     const shaping = ctx.current?.kind === "select" && (ctx.current.mode === "resize" || ctx.current.mode === "rotate") ? ctx.current.matrix : null;
     let band: Bounds | null = null;
     for (const unit of selectedUnits()) {
-      const cropped = ctx.cropping?.key === unit.key ? ctx.cropping.crop.rect : null;
-      const frame = cropped ?? unit.frame();
+      const frame = unit.frame();
       if (frame === null) continue;
       let matrix = unit.matrix;
       if (delta !== null) {
@@ -256,14 +200,12 @@ export function installMarks(ctx: EditorContext): void {
       } else if (shaping !== null) {
         matrix = compose(shaping, matrix);
       }
-      // I righelli segnano dove sta la selezione, anche a metà gesto.
+      // La barra della selezione sa dove sta la selezione, anche a metà
+      // gesto.
       for (const corner of [frame.min, [frame.max[0], frame.min[1]], frame.max, [frame.min[0], frame.max[1]]] as const) {
         const [x, y] = apply(matrix, corner as Point);
         band = union(band, { min: [x, y], max: [x, y] });
       }
-      // Un'immagine che si ritaglia mostra i segni del ritaglio, non la
-      // cornice.
-      if (cropped !== null) continue;
       // Il margine è lo stesso sullo schermo lungo i due assi, anche per un
       // oggetto scalato più in un verso che nell'altro.
       const sx = Math.hypot(matrix[0], matrix[1]) * ctx.camera.scale;
@@ -280,13 +222,7 @@ export function installMarks(ctx: EditorContext): void {
       });
     }
     handles.push(...frameHandles());
-    handles.push(...ctx.boardHandles());
-    handles.push(...ctx.dropperHandles());
     handles.push(...ctx.nibHandles());
-    handles.push(...ctx.gradientOverlay());
-    handles.push(...ctx.cropHandles());
-    handles.push(...ctx.connectorHandles());
-    handles.push(...ctx.symmetryHandles());
     handles.push(...ctx.rulerHandles());
     const lasso = ctx.current?.kind === "select" && ctx.current.mode === "marquee" ? ctx.current : null;
     if (lasso !== null && lasso.from !== null && lasso.end !== null) {
@@ -295,16 +231,8 @@ export function installMarks(ctx: EditorContext): void {
       const slanted = ctx.slantedMarquee(lasso.from, lasso.end);
       handles.push({ kind: "lasso", points: slanted === null ? [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] : [...slanted.corners] });
     }
-    if (ctx.current?.kind === "lasso" && ctx.current.dragging) handles.push({ kind: "lasso", points: [...ctx.current.points] });
-    // Le guide e le misure stanno sopra a tutto.
-    const guides = ctx.guideHandles();
-    const measures = ctx.measureHandles();
-    ctx.guiding = guides.length > 0;
-    ctx.measured = measures.length > 0;
-    handles.push(...guides, ...measures, ...ctx.guideLabel());
     overlay.setHandles(handles);
     ctx.selectionBand = band;
-    showRulers();
     ctx.placeBar();
     showLinks(delta);
     const keys = ctx.selection.join("\n");
@@ -315,12 +243,9 @@ export function installMarks(ctx: EditorContext): void {
       ctx.syncProperties();
       options.onSelectionChange?.();
     }
-    // La tavola scelta è la selezione dello strumento Tavola.
-    const board = ctx.tool === "board" ? ctx.boardChosen : null;
-    if (board !== ctx.noticedBoard) {
-      ctx.noticedBoard = board;
+    if (null !== ctx.noticedBoard) {
+      ctx.noticedBoard = null;
       ctx.syncProperties();
-      ctx.syncBoards();
     }
   };
 
@@ -384,7 +309,6 @@ export function installMarks(ctx: EditorContext): void {
   const openLink = (target: string): void => {
     const links = options.links;
     if (links === undefined) return;
-    ctx.finishText();
     ctx.cancelGesture();
     links.open(target);
   };
@@ -425,8 +349,6 @@ export function installMarks(ctx: EditorContext): void {
     clearInk();
     showShape(null, [1, 0, 0, 1, 0, 0]);
     painter.setDraft(null);
-    ctx.gradientShown = false;
-    showGuideLines();
     showHandles();
     overlay.flush();
   };

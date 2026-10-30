@@ -463,11 +463,6 @@ export function createDocumentSurfaceRegistry(
           onPickDrawingLink: options.onPickDrawingLink,
           drawingImages: options.drawingImages,
           drawingFonts: options.drawingFonts,
-          // Il testo dei disegni si corregge come i documenti.
-          drawingProof: {
-            ports: proofPorts(openVaultRoot()),
-            notify: options.slash ? (message) => options.slash!.notify(message) : undefined,
-          },
           shellCommand: options.runShellCommand,
           renderMarkdownForCard: options.renderCanvasMarkdown
             ? (nodeId, text, host, forms) => options.renderCanvasMarkdown!(nodeId, text, host, context.documentId, forms)

@@ -7,7 +7,6 @@ import { keyOf } from "../../describe";
 import { plural, t, type DrawKey } from "../../strings";
 import { gesture as asGesture } from "../edit";
 import { nodeOf } from "../arrange";
-import { attachable } from "../connectors";
 import { repenOps, type Repen } from "../repen";
 import { screenBox, toScreen } from "../../view";
 import type { Unit } from "../hit";
@@ -45,7 +44,7 @@ export interface SelectionCommandsContext {
 export function installSelectionCommands(ctx: EditorContext): void {
   const {
     has, surface, editable, isolatedNode, currentIndex, newIds, announce, announceSelection, selectedUnits, outlineNow, describeNode, renameSelection, commit, select,
-    leaveIsolation, isolable, isolateSelection, cancelGesture, connectSelection, labelHost, cursorPoint, boundsOf, arranging,
+    leaveIsolation, isolable, isolateSelection, cancelGesture, cursorPoint, boundsOf, arranging,
     arrange
   } = ctx;
   // --- La selezione avanzata -------------------------------------------------
@@ -112,7 +111,6 @@ export function installSelectionCommands(ctx: EditorContext): void {
   /// sono loro la selezione, quelli che si scelgono.
   const unflagAll = (flag: Flag): void => {
     if (!has("selection") || !editable()) return;
-    ctx.settleCrop();
     const model = ctx.engine.model;
     if (model === null) return;
     const nodes = flagged(model, isolatedNode(), flag);
@@ -195,11 +193,10 @@ export function installSelectionCommands(ctx: EditorContext): void {
       // F2 sul foglio scrive un testo, o l'etichetta di una forma chiusa: per
       // loro il tasto non vale.
       const lone = units.length === 1;
-      const text = lone && has("text") && (units[0]!.look !== null || labelHost(units[0]!));
       items.push({
         label: t("draw.rename"),
         separator: true,
-        ...(lone && !text ? { hint: displayBinding("F2") } : {}),
+        ...(lone ? { hint: displayBinding("F2") } : {}),
         disabled: !canEdit || !lone,
         ...(canEdit && !lone ? { description: t("draw.rename.none") } : {}),
         run: () => renameSelection(),
@@ -226,10 +223,6 @@ export function installSelectionCommands(ctx: EditorContext): void {
       { label: t("draw.unlock_all"), disabled: !unlockable, ...(canEdit && !unlockable ? { description: t("draw.unlocked.none") } : {}), run: () => unflagAll("locked") },
       { label: t("draw.show_all"), disabled: !showable, ...(canEdit && !showable ? { description: t("draw.shown.none") } : {}), run: () => unflagAll("hidden") },
     );
-    if (has("connector")) {
-      const few = units.filter((unit) => attachable(unit.node)).length < 2;
-      items.push({ label: t("draw.connect"), separator: true, disabled: !canEdit || few, ...(canEdit && few ? { description: t("draw.connect.few") } : {}), run: () => connectSelection() });
-    }
     // Un'istanza scelta da sola apre il suo simbolo.
     const lone = units.length === 1 ? units[0]! : null;
     const single = lone !== null && isolable(lone);

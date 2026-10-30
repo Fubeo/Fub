@@ -51,7 +51,7 @@ export interface OperationsContext {
   deleteSelection: () => void;
   hookedIn: (units: readonly Unit[]) => ReadonlySet<string>;
   detachedNote: (hooked: ReadonlySet<string>) => string;
-  moveSelection: (units: readonly Unit[], dx: number, dy: number, note?: string) => void;
+  moveSelection: (units: readonly Unit[], dx: number, dy: number) => void;
   select: (keys: readonly string[]) => void;
   keyOfNode: (node: ElementPart) => string;
   nameOfNode: (node: ElementPart) => string;
@@ -64,7 +64,6 @@ export interface OperationsContext {
   isolateAt: (depth: number) => void;
   isolable: (unit: Unit) => boolean;
   isolateSelection: () => void;
-  editSymbol: () => void;
   frameBounds: (bounds: Bounds | null) => void;
   reveal: (offset: number) => boolean;
   adopt: () => boolean;
@@ -75,8 +74,8 @@ export interface OperationsContext {
 export function installOperations(ctx: EditorContext): void {
   const {
     folio, has, history, surface, historyPanel, isolationBar, isolationPath, nameIsolation, painter, indexer, boardsNow,
-    chosenSheet, editable, isolatedNode, isolatedThrough, isolationOf, isolationSteps, isolationChain, currentIndex, grownPage, newIds, announce, objects,
-    announceSelection, showPage, setCamera, viewArea, fitted, selectedUnits, inOrder, frameOf, showHandles, clearPreviews, outlineNow,
+    editable, isolatedNode, isolatedThrough, isolationOf, isolationSteps, isolationChain, currentIndex, grownPage, newIds, announce, objects,
+    announceSelection, setCamera, viewArea, fitted, selectedUnits, inOrder, frameOf, showHandles, clearPreviews, outlineNow,
     labelOf, syncTree, syncHistory, oneRound, choose, followSelection, syncControls, refresh, options
   } = ctx;
   // --- Operazioni -----------------------------------------------------------
@@ -130,23 +129,8 @@ export function installOperations(ctx: EditorContext): void {
   const landed = (ids: readonly string[]): void => oneRound(() => landOn(ids));
 
   const landOn = (ids: readonly string[]): void => {
-    // Il posto della tavola scelta, prima del passo.
-    const chosenAt = ctx.tool === "board" && ctx.boardChosen !== null ? boardsNow().findIndex((each) => each.id === ctx.boardChosen) : -1;
     refresh();
-    // Con lo strumento Tavola si sceglie la tavola toccata, non gli oggetti;
-    // se il passo ha tolto quella scelta, quella che le stava prima, o la
-    // pagina quando non ce n'è più: chi annulla la tavola nuova ritrova
-    // quella da cui era partito.
-    const board = ctx.tool === "board" ? boardsNow().find((each) => ids.includes(each.id)) : undefined;
-    if (board !== undefined) {
-      ctx.boardChosen = board.id;
-      showPage();
-    } else if (chosenAt >= 0 && chosenSheet() === null) {
-      const list = boardsNow();
-      ctx.boardChosen = list.length === 0 ? ctx.sheetInView() : list[Math.min(Math.max(chosenAt - 1, 0), list.length - 1)]!.id;
-      showPage();
-    }
-    const touched = ctx.tool === "board" ? [] : inOrder(ids);
+    const touched = inOrder(ids);
     if (touched.length > 0) ctx.selection = touched;
     const layer = has("layers") ? currentIndex().layers.find((other) => other.id !== null && ids.includes(other.id)) : undefined;
     if (layer !== undefined) choose(layer);
@@ -184,9 +168,6 @@ export function installOperations(ctx: EditorContext): void {
   /// come cambiando strumento. `mark` è il segno da cui ci si va, per dirlo.
   function goToPoint(at: number, mark: Mark | null): void {
     if (!editable()) return;
-    // Un salto che sposta il disegno lascia il ritaglio aperto, come annulla.
-    if (at !== history.position) ctx.cancelCrop();
-    ctx.finishText();
     ctx.cancelGesture();
     const jump = history.goTo(ctx.engine, at);
     if (jump === null) {
@@ -237,13 +218,6 @@ export function installOperations(ctx: EditorContext): void {
 
   function undo(): void {
     if (!editable()) return;
-    // Mentre si ritaglia, annulla è il ritaglio che si lascia, come con Esc;
-    // il disegno resta com'è.
-    if (ctx.cropping !== null) {
-      ctx.cancelCrop();
-      return;
-    }
-    ctx.finishText();
     ctx.cancelGesture();
     if (!history.canUndo) return;
     replay(history.undo(ctx.engine), "undo");
@@ -252,9 +226,6 @@ export function installOperations(ctx: EditorContext): void {
 
   function redo(): void {
     if (!editable()) return;
-    // Il ritaglio aperto si lascia, e poi si ripete come sempre.
-    ctx.cancelCrop();
-    ctx.finishText();
     ctx.cancelGesture();
     if (!history.canRedo) return;
     replay(history.redo(ctx.engine), "redo");
@@ -279,7 +250,6 @@ export function installOperations(ctx: EditorContext): void {
 
   function deleteSelection(): void {
     if (!editable()) return;
-    ctx.settleCrop();
     const units = selectedUnits();
     if (units.length === 0) return;
     ctx.cancelGesture();
@@ -325,7 +295,7 @@ export function installOperations(ctx: EditorContext): void {
   /// Sposta gli oggetti scelti e ne tiene la selezione: un oggetto senza id
   /// lo riceve, e la sua chiave diventa quella. `note` dice, dopo, a che cosa
   /// lo spostamento si è agganciato.
-  const moveSelection = (units: readonly Unit[], dx: number, dy: number, note = ""): void => {
+  const moveSelection = (units: readonly Unit[], dx: number, dy: number): void => {
     if (units.length === 0 || (dx === 0 && dy === 0)) return;
     // La cornice che più oggetti tengono si sposta con loro.
     const frame = units.length > 1 ? frameOf(units) : null;
@@ -347,14 +317,13 @@ export function installOperations(ctx: EditorContext): void {
       if (frame !== null && frame.matrix !== IDENTITY) ctx.kept = { index: currentIndex(), keys: ctx.selection.join("\n"), frame: movedFrame(frame, translate(dx, dy)) };
       syncAll();
     }
-    announce(ctx.noted(ctx.noted(plural(units.length, "draw.moved.one", "draw.moved.other"), note), detachedNote(hooked)));
+    announce(ctx.noted(plural(units.length, "draw.moved.one", "draw.moved.other"), detachedNote(hooked)));
   };
   ctx.moveSelection = moveSelection;
 
   function select(keys: readonly string[]): void {
     // Scegliere altro applica il ritaglio, come un tocco fuori; le chiavi per
     // percorso che si avevano in mano seguono ciò che il ritaglio ha scritto.
-    if (ctx.cropping !== null && !(keys.length === 1 && keys[0] === ctx.cropping.key)) keys = keys.map(ctx.settleCrop());
     ctx.selection = inOrder(keys);
     syncAll();
   }
@@ -487,7 +456,6 @@ export function installOperations(ctx: EditorContext): void {
   /// da cui si esce, o l'istanza da cui si era entrati nel simbolo.
   function leaveIsolation(all: boolean): boolean {
     if (isolatedNode() === null) return false;
-    ctx.settleCrop();
     const steps = isolationSteps();
     if (steps === null) return false;
     const left = steps[steps.length - 1]!;
@@ -511,7 +479,6 @@ export function installOperations(ctx: EditorContext): void {
   /// esce, il primo del percorso dentro quello a cui si torna.
   function isolateAt(depth: number): void {
     if (isolationSteps() === null) return;
-    ctx.settleCrop();
     const steps = isolationSteps();
     if (steps === null) return;
     const step = depth < 0 ? null : steps[depth];
@@ -539,13 +506,6 @@ export function installOperations(ctx: EditorContext): void {
   };
   ctx.isolateSelection = isolateSelection;
 
-  /// «Modifica simbolo»: entra nel simbolo dell'istanza scelta da sola.
-  const editSymbol = (): void => {
-    const units = selectedUnits();
-    const unit = units.length === 1 && units[0]!.role === "instance" ? units[0]! : null;
-    if (unit === null || !isolate(unit, null)) announce(t("draw.symbol.edit.none"));
-  };
-  ctx.editSymbol = editSymbol;
 
   /// Porta `bounds` in vista: resta dov'è se si vede già intero, va al
   /// centro se ci sta allo zoom di adesso, altrimenti si inquadra.
@@ -582,14 +542,12 @@ export function installOperations(ctx: EditorContext): void {
       if (item.kind !== "element" || offset < item.bytes[0] || offset >= item.bytes[1]) continue;
       const at = item.id === null ? -1 : list.findIndex((board) => board.id === item.id);
       if (at >= 0) {
-        ctx.finishText();
         return ctx.visitBoard(at, true);
       }
       found = index.get(item.id ?? `@${item.path.join(".")}`) ?? null;
       if (found !== null) break;
     }
     if (found === null) return false;
-    ctx.finishText();
     ctx.cancelGesture();
     select([found.key]);
     frameBounds(found.bounds);
@@ -623,8 +581,6 @@ export function installOperations(ctx: EditorContext): void {
 
   function setReadOnly(readOnly: boolean): void {
     if (readOnly === ctx.locked) return;
-    // Un documento che non si scrive più non riceve il testo in corso.
-    if (readOnly) ctx.finishText(false);
     ctx.locked = readOnly;
     if (ctx.locked) ctx.cancelGesture();
     syncControls();

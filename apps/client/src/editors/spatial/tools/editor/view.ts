@@ -12,9 +12,8 @@ import { pageRect, type Board, type Rect } from "../boards";
 import { directionCursor, type GripCursor } from "../frame";
 import { gridLines, gridStep } from "../grid";
 import { unitSuffix } from "../guide-dialog";
-import { fieldMin, fieldText, fromUnit, RULER_PX, toUnit, UNIT_PLACES } from "../rulers";
+import { fieldMin, fieldText, fromUnit, toUnit, UNIT_PLACES } from "../rulers";
 import { fitView, placedAt, toScene, toScreen, turnTo, viewTransform, zoomAt, type View } from "../../view";
-import type { Feature } from "../registry";
 import { DRAW_SCALE_LIMITS, FIT_PAD, OPEN_MARGIN_PX } from "./constants";
 import type { EditorContext } from "./context";
 import { union } from "./helpers";
@@ -33,7 +32,6 @@ export interface ViewContext {
   objects: () => string;
   selectionSaid: () => string;
   announceSelection: () => void;
-  sheetRect: (board: Board | null) => Rect | null;
   showPage: () => void;
   surfaceSize: () => { readonly w: number; readonly h: number };
   readFirst: <T>(run: () => T) => T;
@@ -50,19 +48,13 @@ export interface ViewContext {
   lengthSpoken: (value: number) => string;
   lengthField: (id: string, label: string, value: number, min?: number) => FormField;
   fieldValue: (text: string) => number;
-  rulersShown: (at?: ReadonlySet<Feature>) => boolean;
-  guidesShown: (at?: ReadonlySet<Feature>) => boolean;
   viewArea: () => { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
-  rulerAt: (p: Point) => "top" | "left" | "corner" | null;
   /// Il riquadro della selezione che i righelli segnano, nella scena: lo
   /// tiene aggiornato `showHandles`, anche mentre la si sposta o la si
   /// ridimensiona.
   selectionBand: Bounds | null;
-  showRulers: () => void;
-  showGuideLines: () => void;
   localPoint: (clientX: number, clientY: number) => { x: number; y: number };
   sceneAt: (clientX: number, clientY: number) => Point;
-  sceneLevel: () => boolean;
   axisCursor: (axis: "x" | "y") => GripCursor;
   viewCenter: () => Point;
   zoomBy: (factor: number) => void;
@@ -77,8 +69,8 @@ export interface ViewContext {
 /// Monta gli annunci, la camera, l'unità e i righelli.
 export function installView(ctx: EditorContext): void {
   const {
-    life, folio, has, relabels, zoomText, turnText, root, surface, live, zoomLevel, turnButton, stage, paper, sheetLayer, gridMark, gridMinor, gridMajor,
-    painter, previewCamera, nameLayer, guideLines, overlay, cursorMark, tickFormats, rulers, boardsNow, currentIndex, currentPage
+    life, folio, has, relabels, zoomText, turnText, root, surface, live, zoomLevel, turnButton, paper, sheetLayer, gridMark, gridMinor, gridMajor,
+    painter, previewCamera, nameLayer, overlay, cursorMark, boardsNow, currentIndex, currentPage
   } = ctx;
   // --- Annunci ------------------------------------------------------------
 
@@ -141,15 +133,6 @@ export function installView(ctx: EditorContext): void {
     element.toggleAttribute("data-chosen", chosen);
   };
 
-  /// Il rettangolo che il gesto dello strumento Tavola dà adesso alla
-  /// tavola `board`, o alla pagina con `null`, mentre la sposta o ne tira una
-  /// maniglia; `null` se il gesto non la tocca.
-  const sheetRect = (board: Board | null): Rect | null => {
-    const g = ctx.current?.kind === "board" ? ctx.current : null;
-    if (g === null || g.sheet === null || g.rect === null || (g.mode !== "move" && g.mode !== "resize") || ctx.boardCopies(g)) return null;
-    return (g.sheet.board?.id ?? null) === (board?.id ?? null) ? g.rect : null;
-  };
-  ctx.sheetRect = sheetRect;
 
   /// Le carte e i nomi delle tavole, una coppia per tavola, riusati da una
   /// volta all'altra.
@@ -163,7 +146,7 @@ export function installView(ctx: EditorContext): void {
     const list = boardsNow();
     surface.toggleAttribute("data-unbounded", page === null && list.length === 0);
     paper.hidden = page === null || list.length > 0;
-    if (!paper.hidden) placeSheet(paper, sheetRect(null) ?? pageRect(page!));
+    if (!paper.hidden) placeSheet(paper, pageRect(page!));
     while (boardSheets.length < list.length) {
       const sheet = document.createElement("div");
       sheet.className = "draw-page";
@@ -178,13 +161,11 @@ export function installView(ctx: EditorContext): void {
       boardSheets.pop()!.remove();
       boardNames.pop()!.remove();
     }
-    const chosen = ctx.tool === "board" ? ctx.boardChosen : null;
     list.forEach((board, at) => {
-      const rect = sheetRect(board) ?? board.rect;
+      const rect = board.rect;
       placeSheet(boardSheets[at]!, rect);
-      placeName(boardNames[at]!, board, rect, board.id === chosen);
+      placeName(boardNames[at]!, board, rect, board.id === null);
     });
-    ctx.syncBoards();
   };
   ctx.showPage = showPage;
 
@@ -264,11 +245,9 @@ export function installView(ctx: EditorContext): void {
     previewCamera.setAttribute("transform", viewTransform(next));
     showPage();
     showGrid();
-    showGuideLines();
     showZoom();
     showTurn();
     showCursor();
-    ctx.placeText();
     // Le cornici hanno un margine e le maniglie una misura sullo schermo; i
     // righelli seguono la cornice.
     ctx.showHandles();
@@ -294,13 +273,7 @@ export function installView(ctx: EditorContext): void {
     coordinates = null;
     hundredths = null;
     unitFormats = null;
-    tickFormats.clear();
     showZoom(true);
-    // Le tacche si riscrivono coi numeri della lingua nuova.
-    if (rulersShown()) {
-      rulers.show(null);
-      showRulers();
-    }
   });
 
   // --- L'unità del documento ----------------------------------------------------
@@ -396,81 +369,21 @@ export function installView(ctx: EditorContext): void {
 
   // --- Righelli e guide del documento ---------------------------------------------
 
-  /// I righelli si vedono: se il livello li offre e chi disegna li vuole.
-  const rulersShown = (at: ReadonlySet<Feature> = ctx.features): boolean => at.has("rulers") && ctx.grid.rulers;
-  ctx.rulersShown = rulersShown;
 
-  /// Le guide del documento si vedono, e agganciano, se il livello offre i
-  /// righelli e chi disegna le vuole.
-  const guidesShown = (at: ReadonlySet<Feature> = ctx.features): boolean => at.has("rulers") && ctx.grid.rulerGuides;
-  ctx.guidesShown = guidesShown;
 
   /// La parte del foglio che si vede, in pixel: i righelli coprono i bordi
   /// in alto e a sinistra, e ciò che si inquadra va accanto a loro.
   const viewArea = (): { readonly x: number; readonly y: number; readonly w: number; readonly h: number } => {
-    const inset = rulersShown() ? RULER_PX : 0;
+    const inset = 0;
     const size = surfaceSize();
     return { x: inset, y: inset, w: Math.max(0, size.w - inset), h: Math.max(0, size.h - inset) };
   };
   ctx.viewArea = viewArea;
 
-  /// Dove sta il punto `p` del foglio rispetto ai righelli: su quello in
-  /// alto, su quello a sinistra, sull'angolo fra i due, o su nessuno.
-  const rulerAt = (p: Point): "top" | "left" | "corner" | null => {
-    if (!rulersShown()) return null;
-    const top = p[1] >= 0 && p[1] < RULER_PX;
-    const left = p[0] >= 0 && p[0] < RULER_PX;
-    return top && left ? "corner" : top ? "top" : left ? "left" : null;
-  };
-  ctx.rulerAt = rulerAt;
 
   ctx.selectionBand = null;
 
-  /// I righelli sullo schermo, se si vedono: la pagina, la selezione e il
-  /// puntatore. Il foglio sa se ci sono, e sposta le barre che galleggiano
-  /// in cima.
-  const showRulers = (): void => {
-    const shown = rulersShown();
-    stage.toggleAttribute("data-rulers", shown);
-    if (!shown) {
-      rulers.show(null);
-      return;
-    }
-    const size = surfaceSize();
-    rulers.show({
-      camera: ctx.camera,
-      width: size.w,
-      height: size.h,
-      unit: docUnit(),
-      page: ctx.rulerPage(),
-      selection: ctx.selectionBand,
-      pointer: ctx.pointerAt?.at ?? null,
-    });
-  };
-  ctx.showRulers = showRulers;
 
-  /// Le guide del documento sullo schermo, se si vedono: quella sotto il
-  /// puntatore accesa, e quella che si trascina dove la porta il gesto.
-  const showGuideLines = (): void => {
-    const g = ctx.current?.kind === "guide" ? ctx.current : null;
-    // Una guida nuova si vede mentre la si tira anche con le guide nascoste.
-    const guides = guidesShown() ? (ctx.scene.root.guides ?? []) : [];
-    if (guides.length === 0 && (g === null || !g.moved)) {
-      guideLines.show(null);
-      return;
-    }
-    const size = surfaceSize();
-    guideLines.show({
-      camera: ctx.camera,
-      width: size.w,
-      height: size.h,
-      guides,
-      hot: g === null ? ctx.hotGuide : null,
-      hidden: g?.index ?? null,
-      moving: g === null || !g.moved ? null : { axis: g.axis, at: g.at, away: g.away },
-    });
-  };
-  ctx.showGuideLines = showGuideLines;
 
   const localPoint = (clientX: number, clientY: number): { x: number; y: number } => {
     const rect = surface.getBoundingClientRect();
@@ -485,10 +398,6 @@ export function installView(ctx: EditorContext): void {
   };
   ctx.sceneAt = sceneAt;
 
-  /// Vero se l'asse x della scena si vede più orizzontale che verticale: sul
-  /// foglio girato fino a 45°, o oltre 135°.
-  const sceneLevel = (): boolean => Math.abs(ctx.camera.angle) <= 45 || Math.abs(ctx.camera.angle) >= 135;
-  ctx.sceneLevel = sceneLevel;
 
   /// Il cursore di una guida della scena lungo `axis`, che si sposta di
   /// traverso: sul foglio girato gira con lei.
@@ -579,8 +488,6 @@ export function installView(ctx: EditorContext): void {
       if (!ctx.placed) fit();
       else folio?.view?.(ctx.camera, surface.clientWidth, surface.clientHeight);
       showGrid();
-      showGuideLines();
-      showRulers();
       ctx.placeBar();
       if (ctx.panelPending && root.clientWidth > 0) ctx.showPanelByDefault();
     });

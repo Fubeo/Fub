@@ -3,9 +3,7 @@ import { readConnectorGeom, readLabelPlace, writeConnectorGeom } from "../scene/
 import { translate, type Point } from "../scene/matrix";
 import { roundHalfUp } from "../number";
 import { doc } from "../scene/test-support";
-import { connectOps, ConnectorPreview, followConnectors, labelNormal, labelsOf, route, Router, STUB, type EndSpec } from "./connectors";
-import { destination, NewIds } from "./edit";
-import { DEFAULT_TIP_SIZE, Shelf } from "./tips";
+import { ConnectorPreview, followConnectors, labelNormal, labelsOf, route, Router, STUB, type EndSpec } from "./connectors";
 import { estimate } from "./measure";
 import { LAYER, open, type Opened } from "./test-support";
 import { applied } from "./tip-support";
@@ -528,83 +526,6 @@ describe("l'anteprima, fotogramma per fotogramma", () => {
       expect(roundHalfUp(value / 3, 100) / 100, `${value / 3}`).toBe(read.points[1]![0]);
       expect(roundHalfUp(value * 1.005, 100) / 100, `${value * 1.005}`).toBe(read.points[1]![1]);
     }
-  });
-});
-
-describe("Collega le forme scelte", () => {
-
-  const rect = (id: string | null, x: number, y: number): string =>
-    `<rect${id === null ? "" : ` id="${id}"`} x="${x}" y="${y}" width="100" height="60" fill="#e69f00"/>`;
-
-  /// «Collega le forme scelte» su tutti gli oggetti di `body`, applicato.
-  function connected(body: string, kind: "straight" | "elbow" | "curved" = "elbow"): { opened: Opened; skipped: number; lines: readonly string[] } | null {
-    const opened = sheet(body);
-    const ids = new NewIds((id) => opened.engine.holder(id) !== null);
-    const to = destination(opened.index, ids)!;
-    // Come l'editor: la punta viene dalla raccolta, e si aggiunge prima.
-    const shelf = new Shelf(opened.engine.model!, ids);
-    const tip = shelf.idFor({ shape: "triangle", size: DEFAULT_TIP_SIZE }, "end", { paint: "#000000", opacity: 1 });
-    const made = connectOps(opened.engine.model!, opened.index.units, kind, { paint: "#000000", width: 2, tip }, to, ids, estimate);
-    if (made === null) return null;
-    if (made.adds.length > 0) applied(opened, [...to.prelude, ...made.idents, ...shelf.ops(), ...made.adds]);
-    return { opened, skipped: made.skipped, lines: made.lines };
-  }
-
-  it("unisce da sinistra a destra quando gli oggetti sono distesi in larghezza, qualunque sia l'ordine nel file", () => {
-    const out = connected(`${rect("c3", 500, 120)}${rect("c1", 100, 100)}${rect("c2", 300, 80)}`)!;
-    expect(out.lines).toHaveLength(2);
-    const [first, second] = out.lines;
-    expect(attr(out.opened, first!, "fub:from")).toBe("c1 auto");
-    expect(attr(out.opened, first!, "fub:to")).toBe("c2 auto");
-    expect(attr(out.opened, second!, "fub:from")).toBe("c2 auto");
-    expect(attr(out.opened, second!, "fub:to")).toBe("c3 auto");
-    expect(attr(out.opened, first!, "marker-end")).toMatch(/^url\(#r[a-z0-9]+\)$/);
-    expect(attr(out.opened, first!, "fill")).toBe("none");
-  });
-
-  it("unisce dall'alto in basso quando sono distesi in altezza", () => {
-    const out = connected(`${rect("b", 120, 300)}${rect("c", 80, 500)}${rect("a", 100, 100)}`)!;
-    expect(out.lines.map((id) => [attr(out.opened, id, "fub:from"), attr(out.opened, id, "fub:to")])).toEqual([
-      ["a auto", "b auto"],
-      ["b auto", "c auto"],
-    ]);
-  });
-
-  it("il capo tocca il lato rivolto verso l'altro oggetto", () => {
-    const out = connected(`${rect("a", 100, 100)}${rect("b", 300, 100)}`, "straight")!;
-    const geom = points(out.opened, out.lines[0]!);
-    expect(geom[0]).toEqual([200, 130]);
-    expect(geom[geom.length - 1]).toEqual([300, 130]);
-  });
-
-  it("non unisce di nuovo due oggetti già uniti, in un verso o nell'altro", () => {
-    const back = '<path id="k" fub:shape="connector" fub:geom="straight 300 130 200 130" fub:from="b auto" fub:to="a auto" d="M300 130 L200 130" fill="none" stroke="#000000"/>';
-    const out = connected(`${rect("a", 100, 100)}${rect("b", 300, 100)}${rect("c", 500, 100)}${back}`)!;
-    expect(out.skipped).toBe(1);
-    expect(out.lines).toHaveLength(1);
-    expect(attr(out.opened, out.lines[0]!, "fub:from")).toBe("b auto");
-    expect(attr(out.opened, out.lines[0]!, "fub:to")).toBe("c auto");
-  });
-
-  it("dice quando non c'è niente di nuovo da unire", () => {
-    const back = '<path id="k" fub:shape="connector" fub:geom="straight 200 130 300 130" fub:from="a auto" fub:to="b auto" d="M200 130 L300 130" fill="none" stroke="#000000"/>';
-    const out = connected(`${rect("a", 100, 100)}${rect("b", 300, 100)}${back}`)!;
-    expect(out.lines).toEqual([]);
-    expect(out.skipped).toBe(1);
-  });
-
-  it("vuole almeno due oggetti a cui agganciarsi: i connettori non contano", () => {
-    const line = '<path id="k" fub:shape="connector" fub:geom="straight 0 0 10 10" d="M0 0 L10 10" fill="none" stroke="#000000"/>';
-    expect(connected(`${rect("a", 100, 100)}${line}`)).toBeNull();
-    expect(connected("")).toBeNull();
-  });
-
-  it("dà un id all'oggetto che non lo ha, nello stesso passo", () => {
-    const out = connected(`${rect("a", 100, 100)}${rect(null, 300, 100)}`)!;
-    const to = attr(out.opened, out.lines[0]!, "fub:to")!;
-    const [id, anchor] = to.split(" ");
-    expect(anchor).toBe("auto");
-    expect(out.opened.engine.text).toContain(`<rect id="${id}" x="300"`);
   });
 });
 

@@ -3,13 +3,12 @@
 // contesto che i pezzi condividono.
 
 import { identifier } from "../../../../ui/a11y";
-import { ariaBinding, displayBinding, modifierName } from "../../../../ui/commands";
+import { ariaBinding, displayBinding } from "../../../../ui/commands";
 import { iconEl } from "../../../../ui/icons";
 import { linkName } from "../../describe";
 import { t, type DrawKey } from "../../strings";
 import { NAME_MAX } from "../naming";
 import { ensureTextFont } from "../text";
-import { createTextField, type TextField } from "../text-field";
 import type { EditorContext } from "./context";
 
 /// Un'azione della barra della selezione, col suo pulsante.
@@ -32,7 +31,6 @@ export interface BarsContext {
   barCommands: BarCommand[];
   /// «…» della barra: le azioni oltre le prime `ARRANGE_SHOWN`, in un menu.
   arrangeMore: HTMLButtonElement;
-  textButton: HTMLButtonElement;
   duplicateButton: HTMLButtonElement;
   groupButton: HTMLButtonElement;
   ungroupButton: HTMLButtonElement;
@@ -52,17 +50,10 @@ export interface BarsContext {
   /// quale selezione. Un numero scritto a metà per la stessa selezione resta
   /// dov'è.
   opacityShown: { readonly percent: number | null; readonly text: string; readonly keys: string } | null;
-  connectButton: HTMLButtonElement;
   shapeButton: HTMLButtonElement;
-  cropButton: HTMLButtonElement;
-  uncropButton: HTMLButtonElement;
   isolationBar: HTMLElement;
   isolationPath: HTMLOListElement;
   nameIsolation: (symbol: boolean) => void;
-  textLayer: HTMLDivElement;
-  field: TextField;
-  textInput: HTMLElement;
-  labelText: () => void;
   linkLayer: HTMLDivElement;
   progressBar: HTMLDivElement;
   progressLabel: HTMLSpanElement;
@@ -79,7 +70,7 @@ export interface BarsContext {
 /// Monta le barre della selezione, dei nodi, del gruppo isolato e dei tracciati.
 export function installBars(ctx: EditorContext): void {
   const {
-    life, relabels, drawingFonts, surface, button, options
+    life, relabels, surface, button, options
   } = ctx;
   // I comandi della selezione, dal livello Standard: una barra che galleggia
   // in cima al foglio finché c'è qualcosa di scelto, così sceglie non sposta
@@ -113,9 +104,6 @@ export function installBars(ctx: EditorContext): void {
     relabels.push(() => nameArrange(control, text(), binding));
     return control;
   };
-  // Un testo scelto da solo si cambia sul posto.
-  const textButton = arrangeButton("draw.text.edit", "draw-text-edit", "F2", () => ctx.editSelectedText());
-  ctx.textButton = textButton;
   const duplicateButton = arrangeButton("draw.duplicate", "draw-duplicate", "Mod-d", () => ctx.duplicateSelection());
   ctx.duplicateButton = duplicateButton;
   const groupButton = arrangeButton("draw.group", "draw-group", "Mod-g", () => ctx.groupSelection());
@@ -176,21 +164,10 @@ export function installBars(ctx: EditorContext): void {
     opacityField.title = name;
     ctx.opacityShown = null;
   });
-  // Dal livello Standard, col Connettore: ogni oggetto scelto si unisce al
-  // seguente sul foglio. C'è quando ce ne sono almeno due da unire.
-  const connectButton = arrangeButton("draw.connect", "draw-connector", null, () => ctx.connectSelection());
-  ctx.connectButton = connectButton;
-  // Dal livello Standard: i tratti a penna scelti diventano le forme a cui
-  // somigliano. C'è solo quando ce n'è uno.
+  // I tratti a penna scelti diventano le forme a cui somigliano. C'è solo
+  // quando ce n'è uno.
   const shapeButton = arrangeButton("draw.to_shape", "draw-to-shape", null, () => ctx.shapeSelectedInk());
   ctx.shapeButton = shapeButton;
-  // Dal livello Standard: un'immagine scelta da sola si ritaglia sul
-  // foglio, coi segni e coi margini in una barra; le immagini ritagliate
-  // tornano intere.
-  const cropButton = arrangeButton("draw.crop", "draw-crop", null, () => ctx.openCrop(true));
-  ctx.cropButton = cropButton;
-  const uncropButton = arrangeButton("draw.uncrop", "draw-uncrop", null, () => ctx.uncropSelection());
-  ctx.uncropButton = uncropButton;
   // Le azioni oltre le prime `ARRANGE_SHOWN` restano nella barra, nascoste
   // con `data-more`, e il «…» le offre in un menu: la barra resta una
   // pillola corta accanto alla selezione (B7).
@@ -253,41 +230,7 @@ export function installBars(ctx: EditorContext): void {
     });
   }
 
-  // Il campo in cui si scrive un testo: sopra il foglio e fuori dalla sua
-  // pipeline, nascosto finché non si scrive. Lo strato lo taglia ai bordi
-  // del foglio e non scorre mai.
-  const textLayer = document.createElement("div");
-  ctx.textLayer = textLayer;
-  textLayer.className = "draw-text-layer";
-  textLayer.hidden = true;
-  const field = createTextField(life, {
-    onChange: () => {
-      ctx.placeText();
-      ctx.syncCharacter();
-      ctx.proofText();
-    },
-    onFinish: () => ctx.finishText(),
-    announce: (text) => ctx.announce(text),
-    family: drawingFonts.live,
-    onLook: () => ctx.syncCharacter(),
-  });
-  ctx.field = field;
-  const textInput = field.element;
-  ctx.textInput = textInput;
-  const textHint = document.createElement("span");
-  textHint.className = "sr-only";
-  textHint.id = identifier("draw-text-hint");
-  textInput.setAttribute("aria-describedby", textHint.id);
-  textLayer.append(textInput, textHint);
-  /// Il nome del campo: l'etichetta di una forma, un testo nuovo, o uno che
-  /// c'è.
-  const labelText = (): void =>
-    textInput.setAttribute("aria-label", t(ctx.typing?.label != null ? "draw.label.field" : ctx.typing !== null && ctx.typing.key !== null ? "draw.text.change" : "draw.text.new"));
-  ctx.labelText = labelText;
-  relabels.push(() => {
-    textHint.textContent = t("draw.text.hint", { key: modifierName("Mod") ?? "Ctrl" });
-    labelText();
-  });
+  // I caratteri coi nomi che il file del disegno scrive, per i suoi testi.
   ensureTextFont();
 
   // I segni dei collegamenti: uno sull'angolo in alto a destra di ogni

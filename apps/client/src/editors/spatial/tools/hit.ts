@@ -1970,28 +1970,6 @@ function textLook(shape: PaintShape | null, style: Style, wrap: number | null = 
   };
 }
 
-/// Il riquadro nella scena delle righe `lines` scritte come `look`, con
-/// `matrix` dalle coordinate del testo a quelle della scena: la stessa stima
-/// con cui poi le si tocca. `null` se non c'è niente da leggere.
-export function linesBounds(look: TextLook, lines: readonly string[], matrix: Matrix): Bounds | null {
-  const out = new BoundsBuilder();
-  // Un testo su tracciato sta lungo il suo tracciato, non in righe.
-  if (look.along !== null) return null;
-  if (look.wrap !== null && lines.length > 0) {
-    const top = look.y - ASCENT_EM * look.size;
-    out.path(rectPath(lineStart(look.x, look.wrap, look.anchor), top, look.wrap, (lines.length - 1) * look.leading + (ASCENT_EM + DESCENT_EM) * look.size, 0, 0), matrix);
-  }
-  lines.forEach((line, i) => {
-    const chars = readable(line);
-    if (chars === 0) return;
-    const width = CHAR_EM * look.size * chars;
-    const left = lineStart(look.x, width, look.anchor);
-    const top = look.y + i * look.leading - ASCENT_EM * look.size;
-    out.path(rectPath(left, top, width, (ASCENT_EM + DESCENT_EM) * look.size, 0, 0), matrix);
-  });
-  return out.finish();
-}
-
 /// Una riga di un testo che uno strumento sta per scrivere, come la legge il
 /// painter.
 function elemLine(child: Elem): TextRun {

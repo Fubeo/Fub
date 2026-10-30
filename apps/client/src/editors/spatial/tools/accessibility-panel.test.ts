@@ -31,8 +31,8 @@ const SUN: Problem = {
 };
 const PHOTO: Problem = { code: "S012", severity: "warning", key: "ob2b2b2b2", role: "image", detail: null, threshold: null, fix: { kind: "describe" } };
 const NOTE: Problem = { code: "S013", severity: "info", key: "oc3c3c3c3", role: "text", detail: "8.00", threshold: null, fix: { kind: "size", size: 12 } };
-/// Due colori di codice che si distinguono soltanto per la tinta: tre aree del
-/// primo, la prima è l'oggetto della riga.
+/// Due colori di codice che si distinguono soltanto per la tinta; la prima area
+/// è l'oggetto della riga.
 const CODE: Problem = {
   code: "S017",
   severity: "info",
@@ -40,7 +40,7 @@ const CODE: Problem = {
   role: "rect",
   detail: "#88b4d2 #a6cee3 1.32",
   threshold: 3,
-  fix: { kind: "hatch", color: "#88b4d2", keys: ["oa1a1a1a1", "ob2b2b2b2", "oc3c3c3c3"] },
+  fix: null,
 };
 
 let host: HTMLElement;
@@ -128,7 +128,7 @@ describe("i problemi", () => {
     expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 
-  it("due colori che si distinguono soltanto per la tinta: i campioni, il testo e una campitura per tutte le aree", () => {
+  it("due colori che si distinguono soltanto per la tinta: i campioni e il testo, senza correzione", () => {
     mount({ problems: [CODE] });
     const row = rows()[0]!;
     expect(row.dataset.severity).toBe("info");
@@ -143,31 +143,18 @@ describe("i problemi", () => {
       ["#88b4d2", "true"],
       ["#a6cee3", "true"],
     ]);
-    expect(buttonsOf(row)).toEqual(["Nome oa1a1a1a1", "Dai una campitura"]);
-    const fix = row.querySelector<HTMLButtonElement>('[data-action="fix"]')!;
-    expect(fix.getAttribute("aria-label")).toBe("Dai una campitura alle 3 aree di colore #88b4d2");
-    fix.click();
-    expect(calls).toEqual(["fix S017 oa1a1a1a1"]);
+    expect(buttonsOf(row)).toEqual(["Nome oa1a1a1a1"]);
     expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 
-  it("una campitura per un'area sola, in sola lettura nessuna, e in inglese le parole dell'inglese", () => {
-    mount({ problems: [{ ...CODE, fix: { kind: "hatch", color: "#88b4d2", keys: ["oa1a1a1a1"] } }] });
-    expect(rows()[0]!.querySelector('[data-action="fix"]')!.getAttribute("aria-label")).toBe("Dai una campitura all’area di colore #88b4d2");
+  it("in inglese le parole dell'inglese", () => {
+    mount({ problems: [CODE] });
     vi.stubGlobal("navigator", { language: "en-GB" });
     panel.relabel();
     expect(rows()[0]!.querySelector(".draw-access-what")!.textContent).toBe("Note: Two colors are told apart only by hue");
     expect(rows()[0]!.querySelector(".draw-access-detail")!.textContent).toBe(
       "Areas of color #88b4d2 and areas of color #a6cee3 have a contrast of 1.32:1, at least 3:1 is needed: someone who can’t see hues can’t tell which go together.",
     );
-    const fix = rows()[0]!.querySelector<HTMLButtonElement>('[data-action="fix"]')!;
-    expect([fix.textContent, fix.getAttribute("aria-label")]).toEqual(["Add a hatch", "Add a hatch to the area of color #88b4d2"]);
-    state.problems = [CODE];
-    panel.update(view());
-    expect(rows()[0]!.querySelector('[data-action="fix"]')!.getAttribute("aria-label")).toBe("Add a hatch to the 3 areas of color #88b4d2");
-    state.editable = false;
-    panel.update(view());
-    expect(buttonsOf(rows()[0]!)).toEqual(["Nome oa1a1a1a1"]);
   });
 
   it("i pulsanti portano all'oggetto e correggono; il fuoco passa alla riga che prende il posto", () => {

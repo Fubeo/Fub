@@ -37,19 +37,15 @@
 import { Context, WHITE, type Role } from "../scene/analysis";
 import { elementChildren, readHead, writtenOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Elem } from "../scene/serialize";
-import { paint, paintReference, type Paint, type Rgb } from "../scene/values";
+import { paint, type Paint, type Rgb } from "../scene/values";
 import { NS_SVG, SVG_NS } from "../scene/xml";
 import { t } from "../strings";
-import { elemOf, plainAttributes, Plan, type Arranged } from "./arrange";
-import type { NewIds } from "./edit";
-import type { SceneIndex, Unit } from "./hit";
+import { elemOf, plainAttributes, type Arranged } from "./arrange";
 import { hatchOf } from "./hatches";
 import { FILLED, INKED, OUTLINED, paintText } from "./look";
 import { cleanName, NAME_MAX, nameKey } from "./naming";
 import { customColor } from "./palette";
-import { homeOf, resourcesOf, swatchPaint } from "./resources";
 import { richOf, visibleSpans, type Rich } from "./rich";
-import { allUnits } from "./selecting";
 
 /// Un campione del documento, come lo mostra il pannello.
 export interface DocumentSwatch {
@@ -452,14 +448,6 @@ export function paperColor(model: DocumentModel): string | null {
   return hexOf(WHITE);
 }
 
-/// Gli oggetti che si scelgono e che mostrano `value`, un colore `#rrggbb` o
-/// un campione `url(#id)`: a ogni profondità, in ordine di documento.
-export function unitsShowing(model: DocumentModel, index: SceneIndex, value: string): Unit[] {
-  const showing = new Set<ElementPart>();
-  for (const use of new Walk(model).uses) if (use.object && use.value === value) showing.add(use.node);
-  return allUnits(index).filter((unit) => showing.has(unit.node));
-}
-
 // ---------------------------------------------------------------------------
 // I nomi.
 // ---------------------------------------------------------------------------
@@ -497,158 +485,7 @@ export function freshSwatchName(swatches: readonly Named[], base: string): strin
 // Scrivere.
 // ---------------------------------------------------------------------------
 
-/// Gli attributi da scrivere, elemento per elemento e parte per parte: un
-/// `set` ciascuno.
-class Writes {
-  private readonly targets = new Map<ElementPart, Map<string, { readonly part: readonly number[] | null; readonly attrs: Record<string, string> }>>();
-
-  write(node: ElementPart, part: readonly number[] | null, name: Channel, value: string): void {
-    let parts = this.targets.get(node);
-    if (parts === undefined) this.targets.set(node, (parts = new Map()));
-    const key = part === null ? "" : part.join(".");
-    let target = parts.get(key);
-    if (target === undefined) parts.set(key, (target = { part, attrs: {} }));
-    target.attrs[name] = value;
-  }
-
-  /// I `set`, dopo ciò che `plan` ha già.
-  into(plan: Plan): void {
-    for (const [node, parts] of this.targets) {
-      for (const { part, attrs } of parts.values()) {
-        if (part === null) plan.ops.push({ op: "set", id: plan.idOf(node, node.details?.role === "layer" ? "layer" : "object"), attrs });
-        else plan.ops.push({ op: "set", id: node.facts.id!, part, attrs });
-      }
-    }
-  }
-}
-
-/// Le operazioni di `plan`, con le chiavi di `units` dopo.
-function finish(plan: Plan, units: readonly Unit[], kept: number): SwatchChange {
-  return { ...plan.finish(units.map((unit) => plan.keyOf(unit.node, unit.key))), kept };
-}
-
 /// Il colore `#rrggbb` di un ripiego; `null` per `none`.
 function hexOf(value: Paint): string | null {
   return value === "none" ? null : `#${value.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
-}
-
-/// Un campione nuovo: una sfumatura con un punto solo, nello spazio d'uso,
-/// così che colori anche una linea orizzontale, che non ha altezza.
-function swatchElem(id: string, name: string, color: string): Elem {
-  return {
-    tag: "linearGradient",
-    attrs: { id, "fub:role": "swatch", "fub:name": name, gradientUnits: "userSpaceOnUse" },
-    children: [{ tag: "stop", attrs: { "stop-color": color } }],
-  };
-}
-
-/// Fa usare il campione `id` a chi usa `color` scritto: negli attributi che
-/// lo scrivono e, dove nessuno lo scrive o lo scrive la radice,
-/// sull'elemento che lo mostra. Torna quanti elementi lo tengono scritto.
-function linkTo(plan: Plan, walk: Walk, id: string, color: string): number {
-  const value = swatchPaint({ id, color });
-  const writes = new Writes();
-  for (const site of walk.sites) {
-    if (site.free && site.paints && paintText(site.value) === color) writes.write(site.node, site.part, site.name, value);
-  }
-  const kept = new Set<number>();
-  for (const use of walk.uses) {
-    if (use.value !== color) continue;
-    const source = use.source;
-    if (source !== null && source !== "piece" && source.free) continue;
-    const unwritten = source === null || (source !== "piece" && source.node === walk.model.root);
-    if (unwritten && use.free) writes.write(use.node, use.part, use.name, value);
-    else kept.add(use.element);
-  }
-  writes.into(plan);
-  return kept.size;
-}
-
-/// Le operazioni che fanno il campione `name`, già pulito, del colore
-/// `color`, `#rrggbb` minuscolo: nasce in fondo alle risorse e, se `link`,
-/// chi usa `color` scritto passa a lui. `id` è il suo.
-export function newSwatchOps(model: DocumentModel, color: string, name: string, link: boolean, units: readonly Unit[], ids: NewIds): SwatchChange & { readonly id: string } {
-  const plan = new Plan(model, ids);
-  const id = ids.next("resource");
-  const home = homeOf(model);
-  plan.ops.push(...home.prelude, { op: "add", parent: home.parent, pos: { last: true }, elem: swatchElem(id, name, color) });
-  const kept = link ? linkTo(plan, new Walk(model), id, color) : 0;
-  return { ...finish(plan, units, kept), id };
-}
-
-/// Le operazioni che fanno usare il campione `id` a chi usa il suo colore
-/// scritto.
-export function linkSwatchOps(model: DocumentModel, id: string, units: readonly Unit[], ids: NewIds): SwatchChange {
-  const walk = new Walk(model);
-  const swatch = walk.swatches.find((each) => each.id === id);
-  const plan = new Plan(model, ids);
-  return finish(plan, units, swatch === undefined ? 0 : linkTo(plan, walk, id, swatch.color));
-}
-
-/// Le operazioni che danno al campione `id` il colore `color`, `#rrggbb`
-/// minuscolo: il suo punto e il ripiego di chi lo usa, in un passo. Chi non
-/// si riscrive cambia colore col campione, e tiene il ripiego, che si vede
-/// soltanto dove il campione non si legge.
-export function recolorSwatchOps(model: DocumentModel, id: string, color: string, units: readonly Unit[], ids: NewIds): Arranged {
-  const walk = new Walk(model);
-  const swatch = walk.swatches.find((each) => each.id === id);
-  const plan = new Plan(model, ids);
-  if (swatch === undefined) return finish(plan, units, 0);
-  if (swatch.color !== color) plan.ops.push({ op: "set", id, part: swatch.stop, attrs: { "stop-color": color } });
-  const writes = new Writes();
-  for (const site of walk.sites) {
-    const used = paintReference(site.value);
-    if (used?.id !== id || !site.free || (used.fallback !== null && hexOf(used.fallback) === color)) continue;
-    writes.write(site.node, site.part, site.name, swatchPaint({ id, color }));
-  }
-  writes.into(plan);
-  return finish(plan, units, 0);
-}
-
-/// Le operazioni che danno al campione `id` il nome `name`, già pulito e
-/// libero; nessuna se è lo stesso.
-export function renameSwatchOps(model: DocumentModel, id: string, name: string, units: readonly Unit[], ids: NewIds): SwatchChange {
-  const plan = new Plan(model, ids);
-  const swatch = resourcesOf(model).get(id)?.details?.swatch;
-  if (swatch !== undefined && swatch.name !== name) plan.ops.push({ op: "set", id, attrs: { "fub:name": name } });
-  return finish(plan, units, 0);
-}
-
-/// Le operazioni che tolgono il campione `id`: chi lo usa torna al suo
-/// colore, scritto, e il campione se ne va. Se lo usa ancora qualcuno che
-/// non si riscrive, resta come risorsa condivisa e senza nome, e `kept`
-/// dice quanti sono.
-export function removeSwatchOps(model: DocumentModel, id: string, units: readonly Unit[], ids: NewIds): SwatchChange {
-  const walk = new Walk(model);
-  const swatch = walk.swatches.find((each) => each.id === id);
-  const plan = new Plan(model, ids);
-  if (swatch === undefined) return finish(plan, units, 0);
-  const writes = new Writes();
-  // Chi lo usa, e se tutto ciò che in lui lo usa si riscrive.
-  const owners = new Map<ElementPart, boolean>();
-  for (const site of walk.sites) {
-    if (paintReference(site.value)?.id !== id) continue;
-    owners.set(site.node, (owners.get(site.node) ?? true) && site.free);
-    if (site.free) writes.write(site.node, site.part, site.name, swatch.color);
-  }
-  writes.into(plan);
-  const kept = referrers(model, id).filter((node) => owners.get(node) !== true).length;
-  plan.ops.push(kept === 0 ? { op: "remove", target: id } : { op: "set", id, attrs: { "fub:role": "shared", "fub:name": null } });
-  return finish(plan, units, kept);
-}
-
-/// Gli elementi che rimandano a `id`: un contenitore coi suoi attributi,
-/// un'unità con tutto ciò che contiene, fogli di stile compresi.
-function referrers(model: DocumentModel, id: string): ElementPart[] {
-  const out: ElementPart[] = [];
-  const visit = (node: ElementPart): void => {
-    if (node.kind === "leaf") {
-      if (node.refs.includes(id)) out.push(node);
-      return;
-    }
-    if (node.facts.refs.includes(id)) out.push(node);
-    for (const child of elementChildren(node)) visit(child);
-  };
-  visit(model.root);
-  return out;
 }

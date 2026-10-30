@@ -252,8 +252,6 @@ export function createAccessPanel(life: Lifetime, options: AccessPanelOptions): 
       }
       case "size":
         return [button(t("draw.access.fix.size"), "fix", t("draw.access.fix.size.label", { size: number(fix.size) }))];
-      case "hatch":
-        return [button(t("draw.access.fix.hatch"), "fix", plural(fix.keys.length, "draw.access.fix.hatch.label.one", "draw.access.fix.hatch.label.other", { color: fix.color }))];
       case "describe":
         if (problem.key === null) return [];
         if (describing?.key === problem.key) return [describing.field];

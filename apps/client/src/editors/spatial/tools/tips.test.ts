@@ -15,7 +15,6 @@ import { doc, Mulberry32 } from "../scene/test-support";
 import { elemOf, plainAttributes } from "./arrange";
 import { gesture, NewIds } from "./edit";
 import { arrowPath } from "./shapes";
-import { recolorSwatchOps, removeSwatchOps } from "./swatches";
 import { LAYER, open, type Opened } from "./test-support";
 import { BLUE, CUSTOM, DEFS, ENDS, ids, MARKER, markersIn, RED, written } from "./tip-support";
 import { DEFAULT_TIP_SIZE, TIP_ENDS, TIP_SHAPES, TIP_SIZES, Shelf, Tipper, followTips, markerTip, tipElem, tipOps, tippable, tipsLookOf, tipsStyleOf, type MarkerTip, type Tip, type TipChange, type TipEnd, type TipShape, type TipSize, type Tipped } from "./tips";
@@ -1134,37 +1133,7 @@ describe.each([
     expect(usedBy(opened, "oa", "end")).toBe("mb");
   });
 
-  it("un campione ricolorato porta con sé la punta, e non c'è altro da fare", () => {
-    const source = doc(
-      DEFS(SWATCH("rs", BLUE), MARKER("mr", "triangle", "medium", "end", "url(#rs) #0072b2")) +
-        LAYER +
-        LINE("oa", ` stroke="url(#rs) #0072b2" stroke-width="2"${ENDS(null, "mr")}`) +
-        "</g>",
-    );
-    const opened = followed(source, index);
-    const made = recolorSwatchOps(opened.engine.model!, "rs", PINK, opened.reindex().units, ids(opened));
-    const forward = step(opened, gesture(made.ops)!);
-    expect(adds(forward)).toHaveLength(0);
-    expect(shown(opened, "oa", "end")).toMatchObject({ id: "mr", paint: "url(#rs) #cc79a7" });
-    expect(opened.engine.text).toContain('stroke="url(#rs) #cc79a7"');
-    settled(opened);
-  });
 
-  it("un campione tolto lascia la punta del colore che la linea scrive adesso", () => {
-    const source = doc(
-      DEFS(SWATCH("rs", BLUE), MARKER("mr", "circle", "small", "end", "url(#rs) #0072b2")) +
-        LAYER +
-        LINE("oa", ` stroke="url(#rs) #0072b2" stroke-width="2"${ENDS(null, "mr")}`) +
-        "</g>",
-    );
-    const opened = followed(source, index);
-    const made = removeSwatchOps(opened.engine.model!, "rs", opened.reindex().units, ids(opened));
-    step(opened, gesture(made.ops)!);
-    expect(shown(opened, "oa", "end")).toMatchObject({ tip: tip("circle", "small"), paint: BLUE });
-    expect(opened.engine.text).not.toContain('id="rs"');
-    expect(opened.engine.text).not.toContain("url(#rs)");
-    settled(opened);
-  });
 
   it("una linea che passa a una sfumatura prende il colore del vertice, e lo cambia con lui", () => {
     const source = doc(DEFS(RAMP("rg"), MARKER("mr", "triangle", "medium", "end")) + LAYER + LINE("oa", ` stroke="${RED}" stroke-width="2"${ENDS(null, "mr")}`) + "</g>");
@@ -1489,6 +1458,7 @@ describe("a caso", () => {
     }
   }
 
+
   it("le punte restano del colore della linea, il motore non rifiuta il seguito, e un annulla torna al byte", () => {
     let applied = 0;
     for (let seed = 1; seed <= 60; seed++) {
@@ -1507,6 +1477,7 @@ describe("a caso", () => {
         switch (rng.below(10)) {
           case 0:
           case 1:
+          case 6:
             op = { op: "set", id: target, attrs: { stroke: rng.below(10) === 0 ? null : rng.below(10) === 0 ? pick(WRONG) : pick(STROKES) } };
             break;
           case 2:
@@ -1527,9 +1498,6 @@ describe("a caso", () => {
             op = gesture(tipped(opened, change, units).ops);
             break;
           }
-          case 6:
-            op = gesture(recolorSwatchOps(opened.engine.model!, pick(["rs", "rt"]), pick(COLORS), opened.reindex().units, ids(opened)).ops);
-            break;
           case 7:
             op = { op: "set", id: "rg", attrs: { x2: pick(["20", "50", "100", "200"]) } };
             break;

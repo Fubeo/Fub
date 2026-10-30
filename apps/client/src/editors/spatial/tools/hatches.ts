@@ -20,7 +20,6 @@
 //   coprono; senza fondo, il colore delle righe.
 
 import { formatNumber } from "../number";
-import { contrast } from "../scene/analysis";
 import type { ElementPart } from "../scene/model";
 import type { Elem } from "../scene/serialize";
 import { number, paint, trim, type Rgb } from "../scene/values";
@@ -52,8 +51,6 @@ export interface Hatch {
 /// orizzontale, puntinata, quadrettata.
 export type HatchPreset = "diagonal" | "cross" | "horizontal" | "dots" | "grid";
 
-export const HATCH_PRESETS: readonly HatchPreset[] = ["diagonal", "cross", "horizontal", "dots", "grid"];
-
 /// Il genere e l'angolo di ciascuna.
 const PRESET_FORMS: Readonly<Record<HatchPreset, { readonly kind: HatchKind; readonly angle: number }>> = {
   diagonal: { kind: "lines", angle: -45 },
@@ -78,7 +75,6 @@ export const MAX_SPACING = 1000;
 export const MIN_WIDTH = 0.1;
 
 const BLACK = "#000000";
-const WHITE = "#ffffff";
 
 const HEX = /^#[0-9a-f]{6}$/;
 
@@ -127,15 +123,6 @@ export function presetHatch(preset: HatchPreset, from: Hatch | null = null): Hat
   if (from === null) return { kind, angle, spacing: DEFAULT_SPACING, width: defaultWidth(kind, DEFAULT_SPACING), color: BLACK, background: null };
   const sameMark = (from.kind === "dots") === (kind === "dots");
   return { ...from, kind, angle, width: sameMark ? from.width : defaultWidth(kind, from.spacing) };
-}
-
-/// La campitura pronta che `hatch` è, a parte il passo, lo spessore e i
-/// colori; `null` se non è nessuna. Le righe si guardano a meno di mezzo
-/// giro, le righe incrociate e i puntini a meno di un quarto.
-export function presetOf(hatch: Hatch): HatchPreset | null {
-  const turn = hatch.kind === "lines" ? 180 : 90;
-  const mod = (angle: number): number => ((angle % turn) + turn) % turn;
-  return HATCH_PRESETS.find((preset) => PRESET_FORMS[preset].kind === hatch.kind && Math.abs(mod(PRESET_FORMS[preset].angle) - mod(hatch.angle)) < 0.005) ?? null;
 }
 
 /// La campitura di `fub:pattern`; `null` se il valore non si legge.
@@ -232,15 +219,6 @@ export function hatchFallback(hatch: Hatch): string {
   const ink = rgbOf(hatch.color);
   const under = rgbOf(hatch.background);
   return hex(ink.map((value, at) => c * value + (1 - c) * under[at]!));
-}
-
-/// Il colore delle righe che si legge meglio su `background`: il nero o il
-/// bianco, quello col contrasto più alto, il nero a parità; il nero senza
-/// fondo.
-export function inkFor(background: string | null): string {
-  if (background === null) return BLACK;
-  const under = rgbOf(background);
-  return contrast(rgbOf(WHITE), under) > contrast(rgbOf(BLACK), under) ? WHITE : BLACK;
 }
 
 /// L'immagine CSS di `hatch` per il campione del pannello, grande intorno ai

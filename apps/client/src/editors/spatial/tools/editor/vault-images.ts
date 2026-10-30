@@ -33,12 +33,11 @@ export interface VaultImagesContext {
 /// Monta le immagini del vault.
 export function installVaultImages(ctx: EditorContext): void {
   const {
-    life, folio, has, root, surface, selectionButton, tree, historyPanel, accessPanel, boardsPanel, libraryPanel, panel,
-    titleInput, opacityInput, textLayer, textInput, describeBar, cropBar, boardsNow, editable, currentIndex, announce,
-    announceSelection, sceneAt, zoomBy, turnView, fit, selectedUnits, showHandles, renameSelection, undo, redo, deleteSelection, select, leaveIsolation, isolateSelection, pickTool, cancelGesture, drawInk, drawShape,
-    polygonKey, rotateSelection, selectUpdate, boardUpdate, duplicateSheet, removeBoard, renameBoard, visitBoard, stepBoard, leaveBoard, takeAt, gradientNow, gradientUpdate,
-    gradientKeysOn, gradientEntries, visitGradient, deleteGradientStop, insertGradientStop, unpickGradient, editGradient, editSelectedNote, keyboardAdd, drawHeld, radialHere, editLabel, editSelectedText, openText, finishText, cursorPoint, press, release, showRadial, duplicateSelection, orderSelection,
-    groupSelection, ungroupSelection, linkSelection, unlinkSelection, openSelectedLink, menuPoint, flagSelection, cancelCrop, applyCrop, cropUpdate, changeGrid, focusArrange, arrows, visit, walk, walkList, properties, keys, codec,
+    life, folio, has, root, surface, selectionButton, tree, historyPanel, accessPanel, panel,
+    titleInput, opacityInput, describeBar, editable, currentIndex, announce,
+    announceSelection, sceneAt, zoomBy, turnView, fit, renameSelection, undo, redo, deleteSelection, select, leaveIsolation, isolateSelection, pickTool, cancelGesture, drawInk, drawShape,
+    rotateSelection, selectUpdate, editSelectedNote, keyboardAdd, drawHeld, radialHere, press, release, showRadial, duplicateSelection, orderSelection,
+    groupSelection, ungroupSelection, linkSelection, unlinkSelection, openSelectedLink, menuPoint, flagSelection, changeGrid, focusArrange, arrows, visit, walk, walkList, properties, keys, codec,
     placeImages, carriedBy, pasteCarried, copyStyle, pasteStyle, options
   } = ctx;
   // --- Le immagini del vault --------------------------------------------------
@@ -63,7 +62,6 @@ export function installVaultImages(ctx: EditorContext): void {
       announce(t("draw.image.unreadable"));
       return;
     }
-    finishText();
     ctx.asking = true;
     cancelGesture();
     const loaded = ctx.loads;
@@ -117,12 +115,8 @@ export function installVaultImages(ctx: EditorContext): void {
     }
     void pasteCarried(carried, sceneAt(event.clientX, event.clientY), false);
   };
-  // Anche sul campo del testo, che sta sopra il foglio: un'immagine lasciata
-  // lì conclude il testo ed entra nel disegno.
-  for (const target of [surface, textLayer]) {
-    life.listen(target, "dragover", onDragOver);
-    life.listen(target, "drop", onDrop);
-  }
+  life.listen(surface, "dragover", onDragOver);
+  life.listen(surface, "drop", onDrop);
 
   /// Maiusc, Ctrl o ⌘, o Alt premuti o lasciati a metà gesto: la forma, lo
   /// spostamento e la cornice si ridisegnano subito.
@@ -135,20 +129,12 @@ export function installVaultImages(ctx: EditorContext): void {
     else if (ctx.current?.kind === "ink" && ctx.current.held !== null && event.key === "Shift") drawHeld(ctx.current);
     else if (ctx.current?.kind === "ink" && ctx.current.tool === "highlighter" && event.key === "Shift") drawInk(ctx.current);
     else if (ctx.current?.kind === "select" && (ctx.current.mode === "move" || ctx.current.mode === "resize" || ctx.current.mode === "rotate")) selectUpdate(ctx.current);
-    // Maiusc o Alt a metà di un segno tirato: il ritaglio si rifà subito,
-    // dall'ultimo punto del puntatore.
-    else if (ctx.current?.kind === "crop" && ctx.current.dragging) cropUpdate(ctx.current);
-    else if (ctx.current?.kind === "board" && ctx.current.mode !== "pending") boardUpdate(ctx.current);
-    else if (ctx.current?.kind === "gradient" && ctx.current.dragging) gradientUpdate(ctx.current);
-    // Col contagocce Maiusc passa dall'aspetto al colore.
-    else if (ctx.current?.kind === "dropper" || (ctx.current === null && ctx.dropperHover !== null)) showHandles();
-    else if (ctx.current === null && (ctx.alt || ctx.measured)) showHandles();
   };
 
   life.listen(root, "keyup", onModifiers);
   life.listen(root, "keydown", (event) => {
     onModifiers(event);
-    if (event.defaultPrevented || event.target === titleInput || event.target === textInput || event.target === opacityInput) return;
+    if (event.defaultPrevented || event.target === titleInput || event.target === opacityInput) return;
     // I campi del foglio, come il numero della pagina, tengono i loro tasti.
     if (event.target instanceof HTMLInputElement && folio?.controls?.contains(event.target) === true) return;
     // Esc ferma l'incolla in corso, da ogni parte dell'editor.
@@ -164,9 +150,9 @@ export function installVaultImages(ctx: EditorContext): void {
     // raggruppa e separa.
     const treeField =
       (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) &&
-      (tree.element.contains(event.target) || historyPanel.element.contains(event.target) || boardsPanel.element.contains(event.target));
-    const inAccess = event.target instanceof Node && (accessPanel.element.contains(event.target) || describeBar.contains(event.target) || cropBar.contains(event.target));
-    if (event.target instanceof Node && (panel.element.contains(event.target) || libraryPanel.element.contains(event.target) || treeField || inAccess)) {
+      (tree.element.contains(event.target) || historyPanel.element.contains(event.target));
+    const inAccess = event.target instanceof Node && (accessPanel.element.contains(event.target) || describeBar.contains(event.target));
+    if (event.target instanceof Node && (panel.element.contains(event.target) || treeField || inAccess)) {
       const key = event.key.toLowerCase();
       const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
       const field = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
@@ -174,11 +160,6 @@ export function installVaultImages(ctx: EditorContext): void {
     }
     const onSurface = event.target === surface;
     const inTree = event.target instanceof Node && tree.element.contains(event.target);
-    // Mentre si disegna un poligono, le frecce e i tasti di pagina sono suoi.
-    if (ctx.current?.kind === "shape" && ctx.current.tool === "polygon" && !event.ctrlKey && !event.metaKey && !event.altKey && polygonKey(event)) {
-      event.preventDefault();
-      return;
-    }
     if (onSurface && !event.altKey && arrows(event)) {
       event.preventDefault();
       return;
@@ -204,18 +185,6 @@ export function installVaultImages(ctx: EditorContext): void {
     if ((event.key === "#" || event.key === "%") && (altGraph || !mod) && has("grid")) {
       if (event.key === "#") changeGrid({ ...ctx.grid, shown: !ctx.grid.shown });
       else changeGrid({ ...ctx.grid, snap: !ctx.grid.snap });
-      event.preventDefault();
-      return;
-    }
-    // Maiusc+R mostra e nasconde i righelli; «|», come si scrive, le loro
-    // guide.
-    if (has("rulers") && !mod && !event.altKey && event.shiftKey && event.key.toLowerCase() === "r") {
-      changeGrid({ ...ctx.grid, rulers: !ctx.grid.rulers });
-      event.preventDefault();
-      return;
-    }
-    if (event.key === "|" && (altGraph || !mod) && has("rulers")) {
-      changeGrid({ ...ctx.grid, rulerGuides: !ctx.grid.rulerGuides });
       event.preventDefault();
       return;
     }
@@ -263,8 +232,6 @@ export function installVaultImages(ctx: EditorContext): void {
       } else if (key === "a" && !event.shiftKey) {
         select(currentIndex().units.map((unit) => unit.key));
         announceSelection();
-      } else if (key === "d" && !event.shiftKey && ctx.tool === "board" && has("board") && editable()) {
-        if (ctx.pressed === null && ctx.current === null) duplicateSheet();
       } else if (key === "d" && !event.shiftKey && arranges("arrange")) {
         duplicateSelection();
       } else if (key === "g" && has("arrange") && editable()) {
@@ -289,11 +256,6 @@ export function installVaultImages(ctx: EditorContext): void {
         zoomBy(1 / ctx.camera.scale);
       } else if (event.key === "'" && has("grid")) {
         changeGrid({ ...ctx.grid, shown: !ctx.grid.shown });
-      } else if (event.key === ";" && has("rulers")) {
-        // Il punto e virgola come si scrive: sulla tastiera italiana con Maiusc.
-        changeGrid({ ...ctx.grid, rulerGuides: !ctx.grid.rulerGuides });
-      } else if (key === "u" && !event.shiftKey && has("guides")) {
-        changeGrid({ ...ctx.grid, guides: !ctx.grid.guides });
       } else if (event.key === "." && !event.shiftKey) {
         ctx.setBare(!ctx.bare);
       } else {
@@ -306,9 +268,6 @@ export function installVaultImages(ctx: EditorContext): void {
       if (onSurface && event.key === "Enter" && !event.shiftKey && options.links !== undefined) {
         if (ctx.pressed !== null) return;
         if (!openSelectedLink()) announce(t("draw.link.open.none"));
-      } else if (onSurface && (event.key === "PageUp" || event.key === "PageDown") && !event.shiftKey && has("board")) {
-        if (ctx.pressed !== null || ctx.current !== null) return;
-        stepBoard(event.key === "PageDown" ? 1 : -1);
       } else if (onSurface && !event.shiftKey && ALIGN_KEYS[event.code] !== undefined && arranges("arrange")) {
         // Alt con A, D, W e S allinea, per posizione come le frecce di un
         // gioco; Alt con H e V centra, e con Maiusc distribuisce.
@@ -353,46 +312,24 @@ export function installVaultImages(ctx: EditorContext): void {
       if (ctx.pressed !== null) return;
       if (event.key === "PageUp") orderSelection(event.shiftKey ? "front" : "forward");
       else orderSelection(event.shiftKey ? "back" : "backward");
-    } else if (onSurface && (event.key === "Home" || event.key === "End") && gradientKeysOn()) {
-      const read = gradientNow()!;
-      visitGradient(event.key === "Home" ? 0 : gradientEntries(read).length - 1);
-    } else if (onSurface && (event.key === "Home" || event.key === "End") && ctx.tool === "board") {
-      if (ctx.pressed !== null || !visitBoard(event.key === "Home" ? 0 : boardsNow().length - 1)) return;
     } else if (onSurface && (event.key === "Home" || event.key === "End")) {
       const units = walkList(ctx.selection.length === 0 ? null : currentIndex().get(ctx.selection[0]!));
       if (ctx.pressed !== null || !visit(units, event.key === "Home" ? 0 : units.length - 1)) return;
     } else if (onSurface && event.key === " ") {
       if (event.repeat) {
         // Tenuto giù: un tasto, un passo.
-      } else if (ctx.pressed === null && ctx.tool === "text") openText(cursorPoint(), "mouse");
-      // Il contagocce prende subito; con Maiusc il solo colore.
-      else if (ctx.pressed === null && ctx.tool === "eyedropper") void takeAt(cursorPoint(), "mouse", event.shiftKey);
-      else if (ctx.pressed === null) press(event.timeStamp);
+      } else if (ctx.pressed === null) press(event.timeStamp);
       else release();
     } else if (onSurface && event.key === "F2" && folio !== undefined) {
       if (ctx.pressed !== null || !editSelectedNote()) return;
-    } else if (onSurface && event.key === "F2" && ctx.tool === "board") {
-      if (ctx.pressed !== null) return;
-      void renameBoard();
-    } else if (onSurface && event.key === "F2" && (has("text") || has("layers"))) {
-      if (ctx.pressed !== null) return;
-      // Un testo si scrive, e così l'etichetta di una forma chiusa; un altro
-      // oggetto, coi livelli, si rinomina.
-      const units = selectedUnits();
-      const text = units.length === 1 && units[0]!.look !== null;
-      if (units.length === 1 && !text && editLabel(units[0]!)) {
-        // L'etichetta della forma scelta, nuova o da cambiare.
-      } else if (has("layers") && editable() && !(text && has("text"))) renameSelection();
-      else editSelectedText();
+    } else if (onSurface && event.key === "F2" && has("layers")) {
+      // Coi livelli, l'oggetto scelto si rinomina; un testo non si scrive
+      // più sul posto (ADR 0231).
+      if (ctx.pressed !== null || !editable()) return;
+      renameSelection();
     } else if (onSurface && event.key === "Enter") {
       if (ctx.pressed !== null) release();
-      else if (ctx.cropping !== null) {
-        // A metà gesto il ritaglio aspetta che il gesto finisca.
-        if (ctx.current === null) applyCrop();
-      } else if (gradientKeysOn() && has("properties")) {
-        // Con lo strumento Sfumatura, il colore del punto scelto.
-        editGradient();
-      } else if (folio === undefined) {
+      else if (folio === undefined) {
         void properties();
       } else if (ctx.selection.length > 0) {
         // Sul foglio una nota scelta si cambia, e il resto mostra le sue
@@ -402,36 +339,18 @@ export function installVaultImages(ctx: EditorContext): void {
       } else if (ctx.current === null) {
         keyboardAdd();
       }
-    } else if (onSurface && event.key === "F5" && !mod && !event.altKey && ctx.has("present")) {
-      ctx.present(event.shiftKey ? ctx.currentBoard()?.id ?? null : null);
     } else if (event.key === "?") {
       void keys();
-    } else if ((event.key === "Delete" || event.key === "Backspace") && gradientKeysOn()) {
-      // Con lo strumento Sfumatura, il punto scelto, mai l'oggetto.
-      if (ctx.current !== null) return;
-      deleteGradientStop();
-    } else if ((event.key === "Delete" || event.key === "Backspace") && ctx.tool === "board" && ctx.selection.length === 0) {
-      // Con lo strumento Tavola, la tavola scelta; il disegno resta.
-      if (ctx.pressed !== null || ctx.current !== null) return;
-      removeBoard();
     } else if (event.key === "Delete" || event.key === "Backspace") {
       if (ctx.selection.length === 0) return;
       deleteSelection();
-    } else if (event.key === "Insert" && !event.shiftKey && onSurface && gradientKeysOn()) {
-      if (ctx.current !== null) return;
-      insertGradientStop();
     } else if (event.shiftKey && onSurface && (event.code === "KeyH" || event.code === "KeyV") && ctx.selection.length > 0 && editable()) {
       // Maiusc+H e Maiusc+V riflettono la selezione, come in Illustrator e Figma.
       if (ctx.current !== null || ctx.pressed !== null) return;
       ctx.flipSelection(event.code === "KeyH" ? "x" : "y");
     } else if (event.key === "Escape") {
       if (ctx.current !== null) cancelGesture();
-      else if (ctx.cropping !== null) cancelCrop();
-      else if (gradientKeysOn() && unpickGradient()) {
-        // Con lo strumento Sfumatura, il capo o il punto scelto si lascia.
-      } else if (ctx.tool === "board" && ctx.selection.length === 0 && leaveBoard()) {
-        // Con lo strumento Tavola, la tavola scelta si lascia.
-      } else if (leaveIsolation(false)) {
+      else if (leaveIsolation(false)) {
         // Fuori di un gruppo, scelto quello da cui si è usciti.
       } else if (ctx.selection.length > 0) {
         select([]);

@@ -752,6 +752,8 @@ describe("lo spazio di lavoro e la griglia", () => {
   const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
   const tools = (at: HTMLElement): string[] =>
     [...at.querySelectorAll<HTMLElement>(".draw-tool")].filter((control) => control.closest("[hidden]") === null).flatMap((control) => control.dataset.tools!.split(" "));
+  /// Vero nel Semplice: in fondo alla colonna c'è «Completo».
+  const simple = (at: HTMLElement): boolean => at.querySelector<HTMLElement>(".draw-rail-full")?.hidden === false;
   const gridShown = (at: HTMLElement): boolean => at.querySelector<HTMLElement>(".draw-grid")!.style.display !== "none";
   const reads = (host: FakeHost): number =>
     host.atGate("queryIndex").filter((call) => (call.args[0] as { kind: string }).kind === "settings").length;
@@ -760,16 +762,16 @@ describe("lo spazio di lavoro e la griglia", () => {
     // L'Essenziale scelto nelle versioni precedenti vale «Semplice».
     const mountFresh = await fresh(createFakeHost({ settings: [level("essential")] }));
     mountFresh(parent);
-    expect(tools(parent), "prima della lettura, Completo").toContain("lasso");
+    expect(simple(parent), "prima della lettura, Completo").toBe(false);
     await settle();
-    expect(tools(parent)).not.toContain("lasso");
+    expect(simple(parent)).toBe(true);
     expect(tools(parent)).toContain("highlighter");
 
     const other = document.createElement("div");
     document.body.append(other);
     try {
       mountFresh(other);
-      expect(tools(other), "subito").not.toContain("lasso");
+      expect(simple(other), "subito").toBe(true);
     } finally {
       other.remove();
     }
@@ -798,7 +800,7 @@ describe("lo spazio di lavoro e la griglia", () => {
     const mountFresh = await fresh(host);
     const surface = mountFresh(parent);
     await settle();
-    expect(tools(parent)).not.toContain("lasso");
+    expect(simple(parent)).toBe(true);
     expect(parent.querySelector<HTMLElement>(".draw-rail-full")!.hidden).toBe(false);
     // Quando nasce legge lo spazio e i suggerimenti; poi un cambio dello
     // spazio lo rilegge una volta.
@@ -806,7 +808,7 @@ describe("lo spazio di lavoro e la griglia", () => {
 
     await host.module.api.setSetting("draw.workspace", "full");
     await settle();
-    expect(tools(parent)).toContain("lasso");
+    expect(simple(parent)).toBe(false);
     expect(reads(host)).toBe(born + 1);
 
     // «Completo» in fondo alla colonna scrive la scelta.
@@ -815,7 +817,7 @@ describe("lo spazio di lavoro e la griglia", () => {
     parent.querySelector<HTMLButtonElement>(".draw-rail-full")!.click();
     await settle();
     expect(host.atGate("setSetting").map((call) => call.args).pop()).toEqual(["draw.workspace", "full"]);
-    expect(tools(parent)).toContain("lasso");
+    expect(simple(parent)).toBe(false);
 
     surface.destroy();
     mounted = [];
@@ -826,35 +828,34 @@ describe("lo spazio di lavoro e la griglia", () => {
   });
 
   it("i colori recenti vengono dallo stato di vista, si ricordano scelti, e una superficie nuova parte da lì", async () => {
-    /// I recenti della sezione «Colori del documento», nella scheda Design
-    /// dell'ispettore montata per leggerli.
-    const recent = (surface: EditorSurface): string[] => {
-      const design = surface.panels!.list().find((tab) => tab.id === "draw.design")!;
-      const sheet = document.createElement("div");
-      const unmount = design.mount(sheet);
+    /// I recenti nel selettore del colore della barra, che i colori della
+    /// tavolozza lasciano ai «Consigliati».
+    const recent = (at: HTMLElement): string[] => {
+      at.querySelector<HTMLButtonElement>(".draw-toolbar .kit-color-well-button")!.click();
       try {
-        return [...sheet.querySelectorAll<HTMLElement>('.draw-swatches-group[data-group="recent"] .draw-swatches-chip')].map((chip) => chip.dataset.key!);
+        const group = [...document.querySelectorAll<HTMLElement>(".kit-color-popover .kit-color-group")].find((each) => each.querySelector(".kit-color-group-title")!.textContent === "Recenti");
+        return group === undefined ? [] : [...group.querySelectorAll<HTMLElement>(".kit-color-swatch")].map((swatch) => swatch.dataset.color!);
       } finally {
-        unmount();
+        at.querySelector<HTMLButtonElement>(".draw-toolbar .kit-color-well-button")!.click();
       }
     };
     const host = createFakeHost({ settings: [level("standard")] });
-    await host.module.api.setViewState("draw.colors", { colors: ["#cc79a7"] });
+    await host.module.api.setViewState("draw.colors", { colors: ["#123456"] });
     const mountFresh = await fresh(host);
-    const surface = mountFresh(parent);
+    mountFresh(parent);
     await settle();
-    expect(recent(surface)).toEqual(["#cc79a7"]);
+    expect(recent(parent)).toEqual(["#123456"]);
     parent.querySelector<HTMLButtonElement>(".draw-toolbar .kit-color-well-button")!.click();
     document.querySelector<HTMLButtonElement>('.kit-color-popover .kit-color-swatch[aria-label="Vermiglio"]')!.click();
     parent.querySelector<HTMLButtonElement>(".draw-toolbar .kit-color-well-button")!.click();
-    expect(recent(surface)).toEqual(["#d55e00", "#000000", "#cc79a7"]);
     await settle();
-    expect(await host.module.api.viewState("draw.colors")).toEqual({ colors: ["#d55e00", "#000000", "#cc79a7"] });
+    expect(await host.module.api.viewState("draw.colors")).toEqual({ colors: ["#d55e00", "#000000", "#123456"] });
 
     const other = document.createElement("div");
     document.body.append(other);
     try {
-      expect(recent(mountFresh(other)), "subito").toEqual(["#d55e00", "#000000", "#cc79a7"]);
+      mountFresh(other);
+      expect(recent(other), "subito").toEqual(["#123456"]);
     } finally {
       other.remove();
     }
@@ -865,22 +866,23 @@ describe("lo spazio di lavoro e la griglia", () => {
     const mountFresh = await fresh(host);
     mountFresh(parent);
     await settle();
-    expect(tools(parent)).toEqual(["select", "rect", "text"]);
+    // Il Testo se n'è andato (ADR 0231): il suo nome resta e non conta.
+    expect(tools(parent)).toEqual(["select", "rect"]);
 
     await host.module.api.setSetting("draw.custom", ["ellipse", "highlighter"]);
     await settle();
     expect(tools(parent)).toEqual(["select", "ellipse", "highlighter"]);
 
     // La colonna scelta vince sulle parti.
-    await host.module.api.setSetting("draw.toolbar", ["pen", "select", "text"]);
+    await host.module.api.setSetting("draw.toolbar", ["pen", "select", "line"]);
     await settle();
-    expect(tools(parent)).toEqual(["pen", "select", "text"]);
+    expect(tools(parent)).toEqual(["pen", "select", "line"]);
 
     const other = document.createElement("div");
     document.body.append(other);
     try {
       mountFresh(other);
-      expect(tools(other), "subito").toEqual(["pen", "select", "text"]);
+      expect(tools(other), "subito").toEqual(["pen", "select", "line"]);
     } finally {
       other.remove();
     }
@@ -892,12 +894,12 @@ describe("le schede dell'ispettore (C1)", () => {
   const ids = (surface: EditorSurface): string[] => surface.panels!.list().map((tab) => tab.id);
   const tab = (surface: EditorSurface, id: string) => surface.panels!.list().find((each) => each.id === id)!;
 
-  it("il disegno porta Design, Livelli, Risorse, Cronologia e Accessibilità, non il dock, e lascia fuori i titoli, le note e le proprietà", async () => {
+  it("il disegno porta Design, Livelli, Cronologia e Accessibilità, non Risorse (ADR 0231) né il dock, e lascia fuori i titoli, le note e le proprietà", async () => {
     const host = createFakeHost({ settings: [level("expert")] });
     const surface = (await fresh(host))(parent);
     await settle();
-    expect(ids(surface)).toEqual(["draw.design", "draw.layers", "draw.resources", "draw.history", "draw.accessibility"]);
-    expect(surface.panels!.list().map((each) => each.title())).toEqual(["Design", "Livelli", "Risorse", "Cronologia del disegno", "Accessibilità"]);
+    expect(ids(surface)).toEqual(["draw.design", "draw.layers", "draw.history", "draw.accessibility"]);
+    expect(surface.panels!.list().map((each) => each.title())).toEqual(["Design", "Livelli", "Cronologia del disegno", "Accessibilità"]);
     expect(surface.panels!.covers).toEqual(["outline", "footnotes", "properties"]);
     expect(parent.querySelector(".draw-dock"), "il dock non sta nel foglio").toBeNull();
     expect(parent.querySelector(".draw-properties")).toBeNull();
@@ -925,28 +927,12 @@ describe("le schede dell'ispettore (C1)", () => {
       const unmount = tab(surface, "draw.design").mount(sheet);
       const properties = sheet.querySelector<HTMLElement>(".draw-sheet > .draw-properties")!;
       expect(properties.hidden).toBe(false);
-      expect(sheet.querySelector(".draw-sheet > .draw-boards")!.hasAttribute("hidden")).toBe(false);
+      expect(sheet.querySelector(".draw-boards"), "l'elenco delle tavole se n'è andato (ADR 0231)").toBeNull();
       expect(document.activeElement, "montare non prende il fuoco").not.toBe(properties);
       unmount();
       expect(sheet.childElementCount).toBe(0);
       expect(properties.isConnected).toBe(false);
       expect(properties.hidden).toBe(true);
-    } finally {
-      sheet.remove();
-    }
-  });
-
-  it("Risorse ha la ricerca delle forme, senza i simboli (ADR 0231)", async () => {
-    const host = createFakeHost({ settings: [level("expert")] });
-    const surface = (await fresh(host))(parent);
-    await settle();
-    const sheet = document.createElement("div");
-    document.body.append(sheet);
-    try {
-      const unmount = tab(surface, "draw.resources").mount(sheet);
-      expect(sheet.querySelector<HTMLInputElement>(".draw-library-search")!.placeholder).toBe("Cerca una forma");
-      expect(sheet.querySelector(".draw-symbols-search")).toBeNull();
-      unmount();
     } finally {
       sheet.remove();
     }
@@ -1014,7 +1000,7 @@ describe("le schede dell'ispettore (C1)", () => {
     expect(ids(surface)).toEqual([]);
     expect(told).toBe(1);
     surface.setMode!("draw");
-    expect(ids(surface)).toHaveLength(5);
+    expect(ids(surface)).toHaveLength(4);
   });
 
   it("una superficie distrutta con una scheda montata chiude i pannelli e non ne offre più", async () => {

@@ -6,7 +6,6 @@ import { resolvedLanguage } from "../../../../i18n/strings";
 import { ensureDrawIcons } from "../../icons";
 import { openLifetime, type Lifetime } from "../../../../ui/lifetime";
 import { DrawingFonts, vaultFontsOf } from "../../fonts/vault";
-import { DEFAULT_SYMMETRY, type PenSymmetry } from "../symmetry";
 import { fontSheets, type FontSheets } from "../../picture";
 import type { InkSample } from "../../../../ink/sample";
 import type { StrokeStart } from "../../../../ink/input/session";
@@ -39,13 +38,12 @@ import {
   type Width,
 } from "../palette";
 import { CUSTOM_DEFAULT, featuresFor, startTool, toolsOf, toolSpec, workspaceLevel, workspaceOfLevel, type Feature, type Level, type ToolId, type ToolProfile, type ToolSpec } from "../registry";
-import { POLYGON_TOOL, type PolygonTool } from "../shapes";
 import { browserMeasure, estimate, type Font, type Measure } from "../measure";
-import { TEXT_SIZE, TEXT_SIZES } from "../text";
+import { TEXT_SIZE } from "../text";
 import type { DrawSheet } from "../editor";
 import type { EditorContext } from "./context";
 import { checkedGrid } from "./helpers";
-import type { DrawStyle, DropperHover, Entered, Gesture, Typing } from "./types";
+import type { DrawStyle, Entered, Gesture } from "./types";
 
 /// Ciò che lo stato dell'editor dà agli altri pezzi dell'editor.
 export interface StateContext {
@@ -72,19 +70,9 @@ export interface StateContext {
   styles: Record<Tool | "cover", DrawStyle>;
   textStyle: DrawStyle;
   style: () => DrawStyle;
-  /// Come disegna lo strumento Poligono: poligono o stella, i lati, le punte,
-  /// il rapporto interno e il raggio degli angoli. Vale finché l'editor vive,
-  /// come il colore; lo cambiano i tasti mentre si disegna e il pannello
-  /// delle proprietà.
-  polygonTool: PolygonTool;
-  /// La simmetria della penna e dell'evidenziatore: il tipo, gli spicchi e
-  /// il centro. Vale finché l'editor vive, come lo strumento Poligono; il
-  /// centro torna al suo posto con un altro disegno.
-  symmetry: PenSymmetry;
   toolLabel: (id: ToolId) => DrawKey;
   toolHint: (id: ToolId) => DrawKey;
-  /// L'icona dello strumento `id` come disegna adesso: la stella, la
-  /// Curvatura.
+  /// L'icona dello strumento `id`.
   toolIcon: (id: ToolId) => string;
   widthsNow: () => readonly Width[];
   /// L'ultimo colore scelto a piacere: un campione in più nella barra.
@@ -145,11 +133,6 @@ export interface StateContext {
   /// cambiano per altro. Una rotazione dopo l'altra gira così sempre
   /// attorno allo stesso centro.
   kept: { readonly index: SceneIndex; readonly keys: string; readonly frame: Frame } | null;
-  /// Il testo che si sta scrivendo nel campo sopra il foglio.
-  typing: Typing | null;
-  /// Il puntatore è sceso sul foglio mentre si scriveva: quel tocco chiude il
-  /// testo, e lo strumento Testo non ne apre un altro.
-  closedTyping: boolean;
   /// L'ultimo tocco della selezione su un oggetto, per il doppio tocco.
   lastTap: { readonly key: string; readonly time: number; readonly at: Point } | null;
   /// Il gruppo, il collegamento o il simbolo isolato: si sceglie solo lì
@@ -161,9 +144,6 @@ export interface StateContext {
   /// Il nodo isolato nel modello di adesso, e le istanze da cui ci si
   /// arriva, cercati una volta per modello.
   isolatedFor: { readonly model: DocumentModel; readonly node: ContainerNode | null; readonly through: readonly LeafNode[] } | null;
-  /// Ciò che il contagocce vede sotto il puntatore che passa, o sotto il
-  /// cursore della tastiera: l'anteprima di ciò che prenderebbe.
-  dropperHover: DropperHover | null;
   /// La penna con cui scrive la Penna (`ink/pens.ts`); l'evidenziatore ha la
   /// sua. Vale finché l'editor vive.
   penId: PenId;
@@ -180,8 +160,6 @@ export interface StateContext {
   downAt: Point | null;
   /// La guida del documento sotto il puntatore che passa, che si accende.
   hotGuide: number | null;
-  /// L'ultimo tocco su una guida, per il doppio tocco che apre «Guide».
-  lastGuideTap: { readonly index: number; readonly time: number; readonly at: Point } | null;
   history: History;
 }
 
@@ -267,9 +245,9 @@ export function installState(ctx: EditorContext): void {
   /// Il colore e lo spessore di chi scrive: la penna, le forme e le note li
   /// condividono, l'evidenziatore e la copertura hanno i loro.
   const styles: Record<Tool | "cover", DrawStyle> = {
-    pen: { color: DEFAULT_COLOR, width: DEFAULT_WIDTH, swatch: null },
-    highlighter: { color: HIGHLIGHTER_COLOR, width: HIGHLIGHTER_WIDTH, swatch: null },
-    cover: { color: COVER_COLOR, width: DEFAULT_WIDTH, swatch: null },
+    pen: { color: DEFAULT_COLOR, width: DEFAULT_WIDTH },
+    highlighter: { color: HIGHLIGHTER_COLOR, width: HIGHLIGHTER_WIDTH },
+    cover: { color: COVER_COLOR, width: DEFAULT_WIDTH },
   };
   ctx.styles = styles;
   /// Il testo ha il colore della penna, col suo campione, e il corpo suo,
@@ -281,32 +259,20 @@ export function installState(ctx: EditorContext): void {
     set color(value: string) {
       styles.pen.color = value;
     },
-    get swatch(): string | null {
-      return styles.pen.swatch;
-    },
-    set swatch(value: string | null) {
-      styles.pen.swatch = value;
-    },
     width: TEXT_SIZE,
   };
   ctx.textStyle = textStyle;
-  const style = (): DrawStyle => (ctx.tool === "text" ? textStyle : styles[ctx.tool === "highlighter" || ctx.tool === "cover" ? ctx.tool : "pen"]);
+  const style = (): DrawStyle => (styles[ctx.tool === "highlighter" || ctx.tool === "cover" ? ctx.tool : "pen"]);
   ctx.style = style;
-  ctx.polygonTool = POLYGON_TOOL;
-  ctx.symmetry = DEFAULT_SYMMETRY;
-  /// Il nome dello strumento `id`: il Poligono, quando disegna stelle, si
-  /// chiama Stella.
-  const toolLabel = (id: ToolId): DrawKey =>
-    id === "polygon" && ctx.polygonTool.shape === "star" ? "draw.tool.star" : toolSpec(id).label;
+  /// Il nome dello strumento `id`.
+  const toolLabel = (id: ToolId): DrawKey => toolSpec(id).label;
   ctx.toolLabel = toolLabel;
-  const toolHint = (id: ToolId): DrawKey =>
-    id === "polygon" && ctx.polygonTool.shape === "star" ? "draw.tool.star.hint" : toolSpec(id).description;
+  const toolHint = (id: ToolId): DrawKey => toolSpec(id).description;
   ctx.toolHint = toolHint;
-  ctx.toolIcon = (id) =>
-    id === "polygon" && ctx.polygonTool.shape === "star" ? "draw-star" : toolSpec(id).icon;
+  ctx.toolIcon = (id) => toolSpec(id).icon;
   /// Gli spessori, o le dimensioni del testo, che la barra offre allo
   /// strumento di adesso.
-  const widthsNow = (): readonly Width[] => (ctx.tool === "highlighter" ? HIGHLIGHTER_WIDTHS : ctx.tool === "text" ? TEXT_SIZES : WIDTHS);
+  const widthsNow = (): readonly Width[] => (ctx.tool === "highlighter" ? HIGHLIGHTER_WIDTHS : WIDTHS);
   ctx.widthsNow = widthsNow;
   ctx.custom = null;
   ctx.recentTools = [];
@@ -338,19 +304,15 @@ export function installState(ctx: EditorContext): void {
   ctx.free = false;
   ctx.alt = false;
   ctx.kept = null;
-  ctx.typing = null;
-  ctx.closedTyping = false;
   ctx.lastTap = null;
   ctx.isolation = null;
   ctx.isolatedFor = null;
-  ctx.dropperHover = null;
   ctx.penId = DEFAULT_PEN;
   ctx.lastInk = null;
   ctx.inkOpacity = { pen: 1, highlighter: 1 };
   ctx.savedPens = options.pens ?? [];
   ctx.downAt = null;
   ctx.hotGuide = null;
-  ctx.lastGuideTap = null;
   const history = new History();
   ctx.history = history;
 }

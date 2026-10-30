@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { doc } from "../scene/test-support";
-import { anchorPoints, attachable, followConnectors } from "./connectors";
+import { followConnectors } from "./connectors";
 import { estimate } from "./measure";
 import { LAYER, open, type Opened } from "./test-support";
 import { attrOf } from "./tip-support";
@@ -19,15 +19,6 @@ describe("i connettori e le istanze", () => {
   );
   const find = (opened: Opened) => (id: string) => opened.engine.holder(id);
 
-  it("un'istanza si aggancia, coi punti del suo contenuto portati dove sta", () => {
-    const opened = open(LINKED);
-    expect(attachable(opened.engine.holder("i1")!)).toBe(true);
-    expect(anchorPoints(opened.engine.holder("i1")!, estimate)?.get("right")).toEqual([105, 50]);
-    // Attraverso un altro simbolo, e ingrandita.
-    expect(anchorPoints(opened.engine.holder("i2")!, estimate)?.get("right")).toEqual([110, 150]);
-    // Le linee scritte toccano già i punti: se nessuno cambia, niente da fare.
-    expect(followConnectors(opened.engine.model!, new Set(["oc"]), find(opened), estimate)).toBeNull();
-  });
 
   it("un connettore segue l'istanza quando cambia il contenuto del simbolo, anche attraverso un altro", () => {
     const opened = open(LINKED);

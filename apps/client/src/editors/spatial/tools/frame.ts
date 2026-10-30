@@ -21,7 +21,7 @@
 //   proiettando il puntatore sulla diagonale. Un lato non scende sotto una
 //   misura minima e non passa oltre quello opposto: ribaltare è un'altra
 //   cosa. A cornice dritta, il bordo tirato va sulla riga della griglia più
-//   vicina, o sul bersaglio delle guide intelligenti, se è più vicino.
+//   vicina.
 // - **Ruotare** segue l'angolo del puntatore attorno al centro, al decimo
 //   di grado. A passi fissi, l'angolo dell'oggetto va sui loro multipli; se
 //   no, vicino a un angolo retto ci si ferma lì, come una calamita leggera.
@@ -31,10 +31,9 @@
 
 import type { InkPointerType } from "../../../ink/input/pointer";
 import type { Bounds } from "../scene/geometry";
-import { apply, compose, IDENTITY, invert, type Matrix, type Point } from "../scene/matrix";
+import { apply, compose, invert, type Matrix, type Point } from "../scene/matrix";
 import { boxMatrix } from "./edit";
 import { lineBeyond, snapValue } from "./grid";
-import { nearer, type GuideIndex } from "./guides";
 import { numericMatrix, UNCHANGED } from "./transform";
 
 /// Una maniglia che ridimensiona, coi punti cardinali della cornice: `n` è
@@ -221,24 +220,6 @@ export function frameView(frame: Frame, scale: number): FrameView | null {
   return { frame, padded, spots, stem, size };
 }
 
-/// La cornice di `box`, un rettangolo dritto della scena come una tavola,
-/// vista a `scale` pixel per unità: le maniglie stanno sui suoi bordi, senza
-/// margine, perché il bordo è quello del foglio, e non ruota. Un lato corto
-/// sullo schermo ha soltanto gli angoli. `null` se la scala non è positiva.
-export function edgeView(box: Bounds, scale: number): FrameView | null {
-  if (!(scale > 0)) return null;
-  const size: [number, number] = [extent(box, 0) * scale, extent(box, 1) * scale];
-  const [cx, cy] = center(box);
-  const spots: GripSpot[] = [];
-  for (const grip of RESIZE_GRIPS) {
-    if (!isCorner(grip) && size[pull(grip, 0) !== 0 ? 1 : 0] < SIDE_PX) continue;
-    const x = pull(grip, 0) < 0 ? box.min[0] : pull(grip, 0) > 0 ? box.max[0] : cx;
-    const y = pull(grip, 1) < 0 ? box.min[1] : pull(grip, 1) > 0 ? box.max[1] : cy;
-    spots.push({ grip, at: [x, y] });
-  }
-  return { frame: { matrix: IDENTITY, box, geometry: box }, padded: box, spots, stem: [cx, box.min[1]], size };
-}
-
 /// La maniglia sotto il punto `p` della scena, o `null`: la più vicina fra
 /// quelle a portata del puntatore.
 export function gripAt(view: FrameView, p: Point, scale: number, pointer: InkPointerType): Grip | null {
@@ -295,15 +276,6 @@ export interface FrameSnap {
   beyond(axis: Axis, value: number, direction: 1 | -1): number;
 }
 
-/// Le guide intelligenti lungo gli assi della cornice.
-export interface FrameGuides {
-  /// Il bersaglio più vicino a `value` lungo `axis`, entro la soglia;
-  /// `null` se non ce n'è.
-  near(axis: Axis, value: number): number | null;
-  /// Quanti pixel dello schermo misura un'unità della cornice lungo `axis`.
-  pixels(axis: Axis): number;
-}
-
 /// La griglia di passo `step` per la cornice di matrice `m`; `null` se la
 /// cornice è ruotata o inclinata, e i suoi bordi non stanno sulle righe.
 export function gridSnap(m: Matrix, step: number): FrameSnap | null {
@@ -320,22 +292,6 @@ export function gridSnap(m: Matrix, step: number): FrameSnap | null {
   };
 }
 
-/// Le guide della cornice di matrice `m`, coi bersagli di `index` entro
-/// `px` pixel dello schermo alla scala `scale`: `null` se la cornice è
-/// ruotata o inclinata, e i suoi bordi non corrono lungo gli assi.
-export function frameGuides(index: GuideIndex, m: Matrix, px: number, scale: number): FrameGuides | null {
-  if (!upright(m) || m[0] === 0 || m[3] === 0 || !(scale > 0)) return null;
-  const factor = (axis: Axis): number => (axis === 0 ? m[0] : m[3]);
-  const offset = (axis: Axis): number => (axis === 0 ? m[4] : m[5]);
-  return {
-    near: (axis, value) => {
-      const target = index.nearest(axis, factor(axis) * value + offset(axis), px / scale);
-      return target === null ? null : (target - offset(axis)) / factor(axis);
-    },
-    pixels: (axis) => Math.abs(factor(axis)) * scale,
-  };
-}
-
 /// Come si ridimensiona.
 export interface ResizeOptions {
   /// Un angolo tiene le proporzioni.
@@ -347,9 +303,6 @@ export interface ResizeOptions {
   readonly minimum: readonly [number, number];
   /// La griglia, o `null`.
   readonly snap: FrameSnap | null;
-  /// Le guide, o `null`. Fra un bersaglio e la riga vince il più vicino al
-  /// puntatore, a pari distanza il bersaglio.
-  readonly guides?: FrameGuides | null;
 }
 
 /// Il riquadro `box` dopo aver tirato la maniglia `grip` di `delta`, tutto
@@ -375,10 +328,7 @@ export function resized(box: Bounds, grip: ResizeGrip, delta: Point, options: Re
       // Sul punto fermo o oltre: la prima riga dopo di lui.
       if ((line - anchor[axis]) * direction <= 0) line = options.snap.beyond(axis, anchor[axis], direction);
     }
-    // Un bersaglio sul punto fermo o oltre ribalterebbe: non vale.
-    const guide = options.guides?.near(axis, pointed) ?? null;
-    const target = nearer(pointed, guide !== null && (guide - anchor[axis]) * direction > 0 ? guide : null, line);
-    factor[axis] = (target - anchor[axis]) / (edge[axis] - anchor[axis]);
+    factor[axis] = ((line ?? pointed) - anchor[axis]) / (edge[axis] - anchor[axis]);
   }
   if (options.ratio && live.length === 2) {
     // Il puntatore proiettato sulla diagonale; con la griglia il bordo
@@ -386,29 +336,14 @@ export function resized(box: Bounds, grip: ResizeGrip, delta: Point, options: Re
     const ux = edge[0] - anchor[0];
     const uy = edge[1] - anchor[1];
     let f = ((edge[0] + delta[0] - anchor[0]) * ux + (edge[1] + delta[1] - anchor[1]) * uy) / (ux * ux + uy * uy);
-    // Il bordo che si ferma: quello della riga, o quello di uno dei due assi
-    // più vicino a un bersaglio, misurato sullo schermo.
-    let best: { readonly f: number; readonly px: number } | null = null;
-    const guides = options.guides ?? null;
-    if (guides !== null) {
-      for (const axis of [0, 1] as const) {
-        const at = anchor[axis] + f * (edge[axis] - anchor[axis]);
-        const target = guides.near(axis, at);
-        if (target === null || (target - anchor[axis]) * pull(grip, axis) <= 0) continue;
-        const px = Math.abs(target - at) * guides.pixels(axis);
-        if (best === null || px < best.px) best = { f: (target - anchor[axis]) / (edge[axis] - anchor[axis]), px };
-      }
-    }
     if (options.snap !== null) {
       const axis: Axis = extent(box, 0) >= extent(box, 1) ? 0 : 1;
       const direction = pull(grip, axis) as 1 | -1;
       const at = anchor[axis] + f * (edge[axis] - anchor[axis]);
       let target = options.snap.near(axis, at);
       if ((target - anchor[axis]) * direction <= 0) target = options.snap.beyond(axis, anchor[axis], direction);
-      const px = guides === null ? 0 : Math.abs(target - at) * guides.pixels(axis);
-      if (best === null || px < best.px) best = { f: (target - anchor[axis]) / (edge[axis] - anchor[axis]), px };
+      f = (target - anchor[axis]) / (edge[axis] - anchor[axis]);
     }
-    if (best !== null) f = best.f;
     f = Math.max(f, floor[0], floor[1]);
     factor[0] = f;
     factor[1] = f;

@@ -37,26 +37,7 @@ import { paintedParts } from "./gradients";
 import type { Unit } from "./hit";
 import type { Measure } from "./measure";
 import { DEFAULT_COLOR } from "./palette";
-import { editableText, textElem, textLines, TEXT_SIZE, type TextStyle } from "./text";
-
-/// Dove sta un capo, come lo dice il pannello: uno dei punti d'aggancio, o
-/// `free` se il capo non è agganciato, o lo è a ciò che non vale più.
-export type AnchorChoice = Anchor | "free";
-
-/// I connettori scelti, come li mostra il pannello. Ogni valore è quello che
-/// hanno in comune; `null` se sono diversi.
-export interface ConnectorView {
-  /// Quanti connettori ci sono fra gli oggetti scelti.
-  readonly count: number;
-  readonly kind: ConnectorKind | null;
-  readonly from: AnchorChoice | null;
-  readonly to: AnchorChoice | null;
-  /// Il testo della prima etichetta di ogni connettore, in ordine di
-  /// documento; vuoto se non ne ha.
-  readonly label: string | null;
-  /// Quanti dei connettori non si possono cambiare, perché bloccati.
-  readonly locked: number;
-}
+import { textElem, textLines, TEXT_SIZE, type TextStyle } from "./text";
 
 /// Un cambio dei connettori scelti: il tipo, l'aggancio di un capo, il testo
 /// dell'etichetta (vuoto la toglie), o il verso.
@@ -145,39 +126,6 @@ function labelsOf(model: DocumentModel, ids: ReadonlySet<string>): Map<string, E
 /// è libero.
 function attached(line: Line, end: ConnectorEnd | null, find: (id: string) => ElementPart | null): ConnectorEnd | null {
   return end !== null && targetOf(line.node, end.id, find) !== null ? end : null;
-}
-
-/// Il valore che hanno tutti, o `null` se differiscono.
-function shared<T>(values: readonly T[]): T | null {
-  const first = values[0]!;
-  return values.every((value) => value === first) ? first : null;
-}
-
-/// Il testo di un'etichetta, con le righe a capo e senza le righe vuote che
-/// SVG non mostra in testa e in coda.
-const textOf = (label: ElementPart): string => editableText(label.details?.lines ?? []);
-
-/// I connettori fra gli oggetti scelti `units`, come li mostra il pannello;
-/// `null` se non ce n'è nessuno. `find` dà l'elemento di un id, per dire se
-/// l'oggetto di un capo vale.
-export function connectorView(model: DocumentModel, units: readonly Unit[], find: (id: string) => ElementPart | null): ConnectorView | null {
-  const lines = connectorsOf(model, units);
-  if (lines.length === 0) return null;
-  const ids = new Set<string>();
-  for (const line of lines) if (line.node.facts.id !== null) ids.add(line.node.facts.id);
-  const labels = labelsOf(model, ids);
-  const choice = (line: Line, end: ConnectorEnd | null): AnchorChoice => attached(line, end, find)?.anchor ?? "free";
-  return {
-    count: lines.length,
-    kind: shared(lines.map((line) => line.facts.geom.kind)),
-    from: shared(lines.map((line) => choice(line, line.facts.from))),
-    to: shared(lines.map((line) => choice(line, line.facts.to))),
-    label: shared(lines.map((line) => {
-      const first = labels.get(line.node.facts.id ?? "")?.[0];
-      return first === undefined ? "" : textOf(first);
-    })),
-    locked: lines.filter((line) => line.locked).length,
-  };
 }
 
 // ---------------------------------------------------------------------------
