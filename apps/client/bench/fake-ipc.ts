@@ -59,7 +59,6 @@ import type {
 } from "../src/host/contract";
 import { inShellLanguage } from "./fake-english";
 import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
-import { BOARDS_DOC, boardsFixture, type BoardsFixture } from "./boards-fixture";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { LIVE_DOC, liveCase } from "./live-fixture";
@@ -78,21 +77,8 @@ type GraphBenchMetadata = Readonly<{
   }> | null;
 }>;
 
-/// Ciò che il banco delle tavole (`boards.mjs`) legge del disegno che
-/// naviga: dove sta, le tavole nel loro ordine, quanto è grande.
-type BoardsBenchMetadata = Readonly<{
-  fixture: Readonly<{
-    doc: string;
-    boards: BoardsFixture["boards"];
-    objects: number;
-    elements: number;
-    bytes: number;
-    digest: string;
-  }> | null;
-}>;
-
-/// Ciò che il banco dei connettori (`connectors.mjs`) legge del disegno che
-/// sposta: dove sta, le forme e i connettori con ciò che li unisce, i nodi.
+/// Ciò che le scene del disegno (`scene.mjs`) leggono del disegno dei
+/// connettori: dove sta, le forme e i connettori con ciò che li unisce, i nodi.
 type ConnectorsBenchMetadata = Readonly<{
   fixture: Readonly<{
     doc: string;
@@ -175,33 +161,11 @@ globalThis.__fubGraphBench = Object.freeze({
     : null,
 });
 
-// `?boards=N` mette nel vault il disegno di N tavole del banco delle tavole
-// (`boards-fixture.ts`), accende la feature `draw`, che apre un `.svg` come
-// disegno, e mette l'editor al livello Standard, il primo che ha le tavole.
-// Senza, il vault e le impostazioni restano quelli che le foto conoscono.
-const boardsParam = params.get("boards");
-let BOARDS: BoardsFixture | null = null;
-if (boardsParam !== null) {
-  if (!/^[1-9]\d*$/.test(boardsParam)) throw new RangeError("boards must be a positive decimal integer");
-  BOARDS = boardsFixture(Number(boardsParam));
-}
-
-globalThis.__fubBoardsBench = Object.freeze({
-  fixture: BOARDS
-    ? Object.freeze({
-        doc: BOARDS_DOC,
-        boards: BOARDS.boards,
-        objects: BOARDS.objects,
-        elements: BOARDS.elements,
-        bytes: new TextEncoder().encode(BOARDS.text).length,
-        digest: BOARDS.digest,
-      })
-    : null,
-});
-
-// `?connectors=N` mette nel vault il disegno di N connettori del banco dei
-// connettori (`connectors-fixture.ts`), con due forme ogni tre connettori, e
-// accende l'editor come `?boards=N`. I due disegni non stanno insieme.
+// `?connectors=N` mette nel vault il disegno di N connettori
+// (`connectors-fixture.ts`), con due forme ogni tre connettori, accende la
+// feature `draw`, che apre un `.svg` come disegno, e mette l'editor al livello
+// Standard. Senza, il vault e le impostazioni restano quelli che le foto
+// conoscono.
 //
 // Questo modulo sta nel giro fra le stringhe della shell e l'host
 // (`i18n/strings.ts` legge le impostazioni dall'host, che qui è lui): ciò che
@@ -212,7 +176,6 @@ globalThis.__fubBoardsBench = Object.freeze({
 const connectorsParam = params.get("connectors");
 let CONNECTORS: ConnectorsFixture | null = null;
 if (connectorsParam !== null) {
-  if (BOARDS !== null) throw new RangeError("boards and connectors are two different drawings");
   if (!/^[1-9]\d*$/.test(connectorsParam)) throw new RangeError("connectors must be a positive decimal integer");
   CONNECTORS = connectorsFixture(Number(connectorsParam));
 }
@@ -233,12 +196,12 @@ globalThis.__fubConnectorsBench = Object.freeze({
 });
 
 // `?large=N` mette nel vault la lavagna di N elementi del banco delle scene
-// grandi (`large-fixture.ts`), e accende l'editor come `?boards=N`. Non sta
-// insieme agli altri due disegni.
+// grandi (`large-fixture.ts`), e accende l'editor come `?connectors=N`. Non
+// sta insieme all'altro disegno.
 const largeParam = params.get("large");
 let LARGE: LargeFixture | null = null;
 if (largeParam !== null) {
-  if (BOARDS !== null || CONNECTORS !== null) throw new RangeError("large is a drawing of its own");
+  if (CONNECTORS !== null) throw new RangeError("large is a drawing of its own");
   if (!/^[1-9]\d*$/.test(largeParam)) throw new RangeError("large must be a positive decimal integer");
   LARGE = largeFixture(Number(largeParam));
 }
@@ -293,13 +256,11 @@ const RICH_DOCS: Readonly<Record<string, { doc: string; text: string }>> = {
 const RICH_DOC = RICH_DOCS[params.get("rich") ?? ""] ?? null;
 
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
-const DRAWING = BOARDS !== null
-  ? { doc: BOARDS_DOC, text: BOARDS.text }
-  : CONNECTORS !== null
-    ? { doc: CONNECTORS_DOC, text: CONNECTORS.text }
-    : LARGE !== null
-      ? { doc: LARGE_DOC, text: LARGE.text }
-      : null;
+const DRAWING = CONNECTORS !== null
+  ? { doc: CONNECTORS_DOC, text: CONNECTORS.text }
+  : LARGE !== null
+    ? { doc: LARGE_DOC, text: LARGE.text }
+    : null;
 
 // Il ramo Darwin deve nascere prima che `mountTitlebar` legga la piattaforma:
 // la query prepara il browser del banco, mai la shell di produzione.
@@ -1103,7 +1064,6 @@ const host = createFakeHost(options);
 /// codice che non condivide il grafo dei moduli con la pagina.
 declare global {
   var __fubGraphBench: GraphBenchMetadata;
-  var __fubBoardsBench: BoardsBenchMetadata;
   var __fubConnectorsBench: ConnectorsBenchMetadata;
   var __fubLargeBench: LargeBenchMetadata;
   var __fubLiveBench: Readonly<{ doc: string | null; cursor: number | null; head: number | null }>;

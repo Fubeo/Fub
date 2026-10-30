@@ -1,4 +1,4 @@
-// Il disegno del banco dei connettori (`connectors.mjs`): forme su una griglia
+// Il disegno delle scene del disegno (`scene.mjs`): forme su una griglia
 // larga, unite da connettori, come le lascia chi disegna un diagramma di
 // flusso. Con `count` connettori ci sono due forme ogni tre connettori, e
 // una etichetta ogni dieci: a 300 connettori, 200 forme e 30 etichette.

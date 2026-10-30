@@ -38,8 +38,6 @@ npm run bench:a11y
 npm run bench:verify
 npm run bench:motion
 npm run bench:fidelity
-npm run bench:boards
-npm run bench:connectors
 npm run bench:grid
 npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
 npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
