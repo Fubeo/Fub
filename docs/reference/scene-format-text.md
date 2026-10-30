@@ -16,6 +16,12 @@
 > e `typefaces.rs`, con la stessa scelta in `fonts/faces.ts` e i vettori di
 > `apps/client/src/__fixtures__/scene-fonts/choose.json`.
 
+Lo strumento Testo se n'è andato col livello Standard, e il testo in area
+e su tracciato con l'Esperto
+([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)): il testo
+dei file si legge, si vede, si sposta e resta identico, ma l'editor non lo
+scrive più.
+
 Una parte del [formato della scena](scene-format.md), §4: un `text` è un
 oggetto modificabile, e ogni suo `tspan` è una riga. Una riga può avere,
 oltre al suo testo, dei pezzi con un aspetto loro: una parola in grassetto,

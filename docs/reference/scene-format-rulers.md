@@ -7,6 +7,11 @@
 > `apps/client/src/__fixtures__/scene-rulers/cases.json`, che valgono per
 > tutte e due le letture.
 
+Righelli e guide se ne sono andati col livello Standard
+([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)):
+`fub:guides` si legge e resta com'è, e l'editor non lo scrive più;
+`fub:units` si sceglie ancora, nella sezione Documento delle proprietà.
+
 Due attributi facoltativi della radice del
 [formato della scena](scene-format.md): l'unità in cui la superficie mostra le
 misure e le guide tirate dai righelli. Non cambiano il disegno e gli altri
