@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "note": "targets: gli obiettivi di N0, da tarare dopo la prima misura su ogni WebView. ci: la soglia di peggioramento del runner senza scheda grafica (job webview).",
+  "targets": {
+    "S1.keyToPaint.p95": 16.7,
+    "S2.noteSwitch.p95": 100,
+    "S3.frameGap.p95": 16.7,
+    "S3.frameGap.max": 50,
+    "S5.penFrameGap.max": 33,
+    "S6.coldStart": 1500
+  },
+  "ci": {
+    "S1.keyToPaint.p95": 16.7,
+    "S2.noteSwitch.p95": 100,
+    "S3.frameGap.p95": 16.7,
+    "S3.frameGap.max": 50
+  }
+}
