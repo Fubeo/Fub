@@ -46,7 +46,7 @@ afterEach(() => {
 });
 
 function mount(options: DrawEditorOptions = {}): void {
-  editor = createDrawEditor(host, SceneEngine.open(SOURCE), owner, { level: "standard", ...options });
+  editor = createDrawEditor(host, SceneEngine.open(SOURCE), owner, options);
   host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!.click();
 }
 
@@ -109,13 +109,13 @@ describe("la lettura degli oggetti scelti, nel pannello delle proprietà", () =>
     expect(rereads(() => editor.select([A]))).toEqual({ facts: 1 });
   });
 
-  it("cambiando il livello si rilegge", () => {
+  it("cambiando lo spazio si rilegge", () => {
     mount();
     editor.select([A]);
-    expect(rereads(() => editor.setLevel("expert"))).toEqual({ facts: 1 });
-    // Lo stesso livello non cambia niente.
-    expect(rereads(() => editor.setLevel("expert"))).toEqual({ facts: 0 });
-    expect(rereads(() => editor.setLevel("standard"))).toEqual({ facts: 1 });
+    expect(rereads(() => editor.setWorkspace("simple"))).toEqual({ facts: 1 });
+    // Lo stesso spazio non cambia niente.
+    expect(rereads(() => editor.setWorkspace("simple"))).toEqual({ facts: 0 });
+    expect(rereads(() => editor.setWorkspace("full"))).toEqual({ facts: 1 });
   });
 
   it("cambiando la scena si rilegge, e il pannello mostra la scena nuova", () => {

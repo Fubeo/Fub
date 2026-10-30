@@ -37,7 +37,7 @@ import {
   WIDTHS,
   type Width,
 } from "../palette";
-import { CUSTOM_DEFAULT, featuresFor, startTool, toolsOf, toolSpec, workspaceLevel, workspaceOfLevel, type Feature, type Level, type ToolId, type ToolProfile, type ToolSpec } from "../registry";
+import { featuresFor, startTool, toolsOf, toolSpec, type Feature, type ToolId, type ToolProfile, type ToolSpec } from "../registry";
 import { browserMeasure, estimate, type Font, type Measure } from "../measure";
 import { TEXT_SIZE } from "../text";
 import type { DrawSheet } from "../editor";
@@ -50,10 +50,6 @@ export interface StateContext {
   life: Lifetime;
   profile: ToolProfile;
   folio: DrawSheet | undefined;
-  level: Level;
-  /// Le parti scelte per il Personalizzato, anche mentre il livello è un
-  /// altro: tornando al Personalizzato valgono di nuovo.
-  picked: readonly string[];
   features: ReadonlySet<Feature>;
   tools: readonly ToolSpec[];
   has: (feature: Feature) => boolean;
@@ -177,17 +173,12 @@ export function installState(ctx: EditorContext): void {
   ctx.profile = profile;
   const folio = options.sheet;
   ctx.folio = folio;
-  // Lo spazio di lavoro, se c'è, sceglie il livello; senza, lo dice il
-  // livello.
-  const offered = options.workspace === undefined ? null : workspaceLevel(options.workspace, profile);
-  ctx.level = offered?.level ?? options.level ?? "essential";
-  ctx.picked = offered?.custom ?? options.custom ?? CUSTOM_DEFAULT;
-  ctx.workspace = options.workspace ?? workspaceOfLevel(ctx.level);
-  ctx.byWorkspace = options.workspace !== undefined;
+  // Lo spazio di lavoro sceglie le parti; senza, è il Completo.
+  ctx.workspace = options.workspace ?? "full";
   ctx.column = options.toolbar ?? [];
-  ctx.features = featuresFor(ctx.level, ctx.picked, profile);
+  ctx.features = featuresFor(ctx.workspace, profile);
   ctx.tools = toolsOf(ctx.features);
-  /// Vero se il livello di adesso offre `feature`.
+  /// Vero se lo spazio di adesso offre `feature`.
   const has = (feature: Feature): boolean => ctx.features.has(feature);
   ctx.has = has;
   const relabels: Array<() => void> = [];

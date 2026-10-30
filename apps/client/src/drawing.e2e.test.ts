@@ -198,31 +198,6 @@ const last = <T>(items: readonly T[]): T | undefined => items[items.length - 1];
 const written = (host: FakeHost, doc: string): string[] =>
   host.atGate("writeDocument").filter((call) => call.args[0] === doc).map((call) => String(call.args[1]));
 
-/// Il livello dell'editor come lo dichiara il bundle `fub.draw`, col valore
-/// `value`: il finto non conosce nessuna feature, e la riga gliela dà il banco.
-function drawLevel(value: string, source: "default" | "vault" = value === "essential" ? "default" : "vault"): SettingEntry {
-  return {
-    spec: {
-      key: "draw.level",
-      label: "Livello d'interfaccia",
-      description: "",
-      group: "Disegni",
-      scope: "vault",
-      kind: {
-        kind: "choice",
-        default: "essential",
-        options: [
-          { value: "essential", label: "Essenziale" },
-          { value: "standard", label: "Standard" },
-        ],
-      },
-      program_writable: false,
-    },
-    value,
-    source,
-  };
-}
-
 /// Lo spazio di lavoro come lo dichiara il bundle `fub.draw`, col valore
 /// `value`; `source` dice se qualcuno l'ha scelto.
 function drawWorkspace(value: string, source: "default" | "vault" = "vault"): SettingEntry {
@@ -251,23 +226,6 @@ function drawWorkspace(value: string, source: "default" | "vault" = "vault"): Se
 /// Gli strumenti della colonna, coi primi delle tendine: il Completo e il
 /// Semplice hanno la stessa colonna, e cambiano i comandi.
 const COLUMN_TOOLS = ["select", "hand", "pen", "eraser", "rect"];
-
-/// Le parti del Personalizzato come le dichiara `fub.draw`, col valore `value`.
-function drawCustom(value: string[]): SettingEntry {
-  return {
-    spec: {
-      key: "draw.custom",
-      label: "Parti del Personalizzato",
-      description: "",
-      group: "Disegni",
-      scope: "vault",
-      kind: { kind: "list", default: ["pen", "eraser", "rect", "ellipse", "line", "arrow"] },
-      program_writable: false,
-    },
-    value,
-    source: "vault",
-  };
-}
 
 /// Lo spazio di lavoro del disegno nel riquadro attivo.
 const workspace = (): string | undefined => focusedPane().querySelector<HTMLElement>(".draw-editor")?.dataset.workspace;
@@ -528,7 +486,7 @@ describe("uno screenshot incollato", () => {
   });
 });
 
-describe("il livello e la griglia del disegno", () => {
+describe("lo spazio e la griglia del disegno", () => {
   it("lo spazio di lavoro si sceglie nelle impostazioni del vault, e vale subito nel disegno aperto", async () => {
     const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")] }));
     await open("casa.svg");
@@ -547,36 +505,8 @@ describe("il livello e la griglia del disegno", () => {
     expect(host.files()["casa.svg"]).toBe(HOUSE);
   });
 
-  it("il livello Essenziale di prima vale come «Semplice», finché nessuno sceglie lo spazio", async () => {
-    await start(createFakeHost({ file: VAULT, draw: true, settings: [drawLevel("essential", "vault"), drawWorkspace("full", "default")] }));
-    await open("casa.svg");
-    await waitFor("il Semplice", () => workspace() === "simple");
-    expect(tools()).toEqual(COLUMN_TOOLS);
-  });
-
-  it("le parti del Personalizzato si scelgono nelle Impostazioni, e valgono subito nel disegno aperto", async () => {
-    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawLevel("custom"), drawCustom(["rect"])] }));
-    await open("casa.svg");
-    await waitFor("il Personalizzato", () => tools().join() === "select,rect");
-    const editor = focusedPane().querySelector(".draw-editor");
-
-    document.querySelector<HTMLButtonElement>("#open-settings")!.click();
-    await waitFor("la casella dell'ellisse", () => document.getElementById("setting-draw.custom-ellipse") !== null);
-    const ellipse = document.getElementById("setting-draw.custom-ellipse") as HTMLInputElement;
-    expect(ellipse.closest("label")!.textContent).toBe("Ellisse");
-    ellipse.click();
-
-    await waitFor("l'ellisse compare", () => tools().includes("ellipse"));
-    expect(tools()).toEqual(["select", "rect", "ellipse"]);
-    expect(host.atGate("setSetting").map((call) => call.args), "l'elenco intero, nell'ordine delle parti").toEqual([["draw.custom", ["rect", "ellipse"]]]);
-    expect(focusedPane().querySelector(".draw-editor"), "lo stesso editor, non uno nuovo").toBe(editor);
-    // Le parti cambiano gli strumenti, non il disegno.
-    expect(written(host, "casa.svg")).toEqual([]);
-    expect(host.files()["casa.svg"]).toBe(HOUSE);
-  });
-
   it("dal Completo, Ctrl+K collega l'oggetto scelto a una nota del vault, e Alt+Invio la apre", async () => {
-    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawLevel("standard")] }));
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")] }));
     await open("casa.svg");
     await waitFor("il Completo", () => workspace() === "full");
     const sheet = focusedPane().querySelector<HTMLElement>(".draw-surface")!;
@@ -602,7 +532,7 @@ describe("il livello e la griglia del disegno", () => {
   });
 
   it("la griglia scelta resta per i disegni aperti dopo, anche dopo un riavvio, e non entra nel vault", async () => {
-    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawLevel("standard")] }));
+    const host = await start(createFakeHost({ file: VAULT, draw: true, settings: [drawWorkspace("full", "default")] }));
     await open("casa.svg");
     await waitFor("il Completo", () => workspace() === "full");
     focusedPane().querySelector<HTMLElement>(".draw-surface")!.focus();
@@ -635,7 +565,7 @@ describe("le immagini del vault nel disegno", () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     const created = vi.spyOn(URL, "createObjectURL");
     try {
-      const host = await start(createFakeHost({ file: { ...VAULT, "immagini/gatto.jpg": "jpg" }, draw: true, settings: [drawLevel("standard")] }));
+      const host = await start(createFakeHost({ file: { ...VAULT, "immagini/gatto.jpg": "jpg" }, draw: true, settings: [drawWorkspace("full", "default")] }));
       await open("casa.svg");
       await waitFor("il Completo", () => workspace() === "full");
       const sheet = focusedPane().querySelector<HTMLElement>(".draw-surface")!;
@@ -783,7 +713,7 @@ describe("«Esporta…» su un disegno", () => {
   });
 
   it("dal Completo apre la finestra «Esporta», e manda le sue scelte", async () => {
-    const host = await start(createFakeHost({ file: VAULT, draw: true, commands: [EXPORT_RUN], settings: [drawLevel("standard")] }));
+    const host = await start(createFakeHost({ file: VAULT, draw: true, commands: [EXPORT_RUN], settings: [drawWorkspace("full", "default")] }));
     const { t } = await import("./i18n/strings");
     await open("casa.svg");
     await waitFor("il Completo", () => workspace() === "full");

@@ -26,7 +26,7 @@ let editor: DrawEditor;
 let clock = 100;
 
 function mount(source = PAGE, options: DrawEditorOptions = {}): DrawEditor {
-  editor = createDrawEditor(host, SceneEngine.open(source), owner, { level: "standard", ...options });
+  editor = createDrawEditor(host, SceneEngine.open(source), owner, options);
   return editor;
 }
 
@@ -412,7 +412,7 @@ describe("la galleria delle penne e le mie penne", () => {
   });
 
   it("in «Semplice» le opzioni della penna non ci sono", () => {
-    mount(PAGE, { level: "essential" });
+    mount(PAGE, { workspace: "simple" });
     editor.setTool("pen");
     expect(host.querySelector<HTMLElement>(".draw-pen-choice")!.closest<HTMLElement>(".draw-group")!.hidden).toBe(true);
   });

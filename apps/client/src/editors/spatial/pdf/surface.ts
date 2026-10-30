@@ -329,9 +329,9 @@ export function mountPdfSurface(context: SurfaceMountContext, options: PdfSurfac
     const owner = openLifetime();
     const mounted = createDrawEditor(drawHost, engine, owner, {
       profile: "pdf",
-      // Le note e le forme sono del livello Standard: chi annota un PDF le
-      // ha subito.
-      level: "standard",
+      // Le note e le forme sono del Completo: chi annota un PDF le ha
+      // subito.
+      workspace: "full",
       sheet,
       onChange: (change) => {
         text = change.text;

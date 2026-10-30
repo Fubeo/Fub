@@ -92,7 +92,7 @@ import { createDrawEditor, type DrawEditor, type DrawExport, type DrawImages, ty
 import { inspectorChrome, type InspectorChrome } from "./tools/editor/chrome/hosts";
 import { exportDialog } from "./tools/export-dialog";
 import { asking } from "./tools/export-plan";
-import { featuresFor, workspaceLevel } from "./tools/registry";
+import { featuresFor } from "./tools/registry";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, type ImageRef } from "./read-images";
 import { fontSheets, picture, type FontSheets } from "./picture";
 import { noteSceneChange, offerStage } from "./live/registry";
@@ -321,10 +321,8 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   let connectedText: string | null = null;
   let connectedLanguage: string | null = null;
   /// Lo spazio di lavoro, la colonna e la griglia dell'editor: quelli
-  /// dell'ultima lettura, finché non arriva quella di questa superficie. Il
-  /// livello e le parti sono quelli con cui l'editor offre lo spazio.
+  /// dell'ultima lettura, finché non arriva quella di questa superficie.
   let workspace = currentWorkspace();
-  let { level, custom } = workspaceLevel(workspace.workspace);
   let grid = currentGrid();
   /// Chi disegna ha già scelto la griglia qui: la lettura non la riporta
   /// indietro.
@@ -782,7 +780,6 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
 
   life.add(watchWorkspace((next) => {
     workspace = next;
-    ({ level, custom } = workspaceLevel(next.workspace));
     editor?.setWorkspace(next.workspace, next.toolbar);
     paint();
   }));
@@ -846,7 +843,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   /// legge. Quando si esporta la selezione, gli oggetti scelti senza id lo
   /// ricevono in un passo che si annulla; le scelte si ricordano.
   const exportWindow: SurfaceExportWindow = {
-    available: () => featuresFor(level, custom).has("export") && shownEngine() !== null,
+    available: () => featuresFor(workspace.workspace).has("export") && shownEngine() !== null,
     open: async () => {
       // Ciò che l'editor ha chiesto vale per questa apertura soltanto.
       const asked = exportAsked;
