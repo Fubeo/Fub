@@ -117,6 +117,34 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector("#context-menu:not([hidden])");
     },
   },
+  // Il tasto destro: un menu per posto, aperto col mouse, con la testata, i
+  // gruppi e il piede che invita a scrivere.
+  ...[
+    ["menu-testo", "Il tasto destro su un paragrafo della nota, in Live", (page) =>
+      page.click('.pane.focus .cm-content .cm-line:has-text("Questa è la nota")', { button: "right", position: { x: 60, y: 8 } })],
+    ["menu-link", "Il tasto destro su un link a una nota, in Live", (page) =>
+      page.click(".pane.focus .cm-content >> text=Sintassi di Fub", { button: "right" })],
+    ["menu-titolo", "Il tasto destro su un titolo della nota, in Live", (page) =>
+      page.click(".pane.focus .cm-content >> text=Benvenuto in Fub", { button: "right" })],
+    ["menu-albero-nota", "Il tasto destro su una nota dell'albero", async (page) => {
+      await openFolder(page, "Guida");
+      await page.click('#file-list li[data-path="Guida/Frammenti di codice.md"] > .tree-row', { button: "right" });
+    }],
+    ["menu-albero-cartella", "Il tasto destro su una cartella dell'albero", (page) =>
+      page.click('#file-list li[data-path="Progetti"] > .tree-row', { button: "right" })],
+    ["menu-albero-titolo", "Il tasto destro sul titolo dell'albero: creare, ordinare, importare", (page) =>
+      page.click("#files-title", { button: "right" })],
+    ["menu-scheda", "Il tasto destro sulla scheda attiva", (page) =>
+      page.click('.pane.focus .tab[aria-selected="true"]', { button: "right" })],
+    ["menu-riquadro", "Il menu ⋯ del riquadro", (page) => page.click(".pane.focus [data-pane-menu]")],
+  ].map(([id, title, open]) => ({
+    id,
+    title,
+    prepare: async (page) => {
+      await open(page);
+      await page.waitForSelector("#context-menu .menu-head");
+    },
+  })),
   {
     id: "settings",
     title: "Le preferenze: la configurazione",
