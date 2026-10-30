@@ -1,17 +1,20 @@
 // L'editor del disegno: le funzioni di servizio, che più pezzi di
 // createDrawEditor condividono.
 
+import { resolvedLanguage } from "../../../../i18n/strings";
 import { validCurve } from "../../../../ink/input/pressure";
 import type { Bounds } from "../../scene/geometry";
 import type { Matrix, Point } from "../../scene/matrix";
 import { elementChildren, type DocumentModel, type ElementPart } from "../../scene/model";
 import { t, type DrawKey } from "../../strings";
 import type { Destination } from "../edit";
-import { nodeKey, type NodeKey, type NodeKind, type Subpath } from "../nodes";
 import { isPenId } from "../../../../ink/pens";
 import { isBarrelAction, isEraseMode, isFidelity, isPenOutput, validClosed, validSteady, validStep, validSteps, type EraseMode, type Grid, type Steady } from "../grid";
 import type { LayerInfo } from "../hit";
 import { MAX_LAYER_NAME } from "../layers";
+
+/// Una frazione come percentuale, nella lingua dell'interfaccia.
+export const percentText = (value: number): string => new Intl.NumberFormat(resolvedLanguage(), { style: "percent", maximumFractionDigits: 1 }).format(value);
 
 /// Il nodo di `model` al percorso `path`; `null` se lì non c'è.
 export function nodeAtPath(model: DocumentModel, path: readonly number[]): ElementPart | null {
@@ -60,49 +63,6 @@ export function translated(bounds: Bounds | null, dx: number, dy: number): Bound
 /// Vero se i riquadri `a` e `b` non si toccano.
 export function disjoint(a: Bounds, b: Bounds): boolean {
   return a.max[0] < b.min[0] || a.min[0] > b.max[0] || a.max[1] < b.min[1] || a.min[1] > b.max[1];
-}
-
-export function samePath(a: readonly number[], b: readonly number[]): boolean {
-  return a.length === b.length && a.every((at, i) => at === b[i]);
-}
-
-/// Vero se il nodo `at` ha un segmento da tutti e due i lati: solo lui ha un
-/// tipo, e si spezza.
-export function innerNode(sub: Subpath, at: number): boolean {
-  return sub.closed ? sub.nodes.length > 1 : at > 0 && at < sub.nodes.length - 1;
-}
-
-/// I nodi di `subs`, in ordine.
-export function allNodes(subs: readonly Subpath[]): NodeKey[] {
-  return subs.flatMap((sub, s) => sub.nodes.map((_, at) => nodeKey(s, at)));
-}
-
-/// I tipi dati ai nodi, portati dove una modifica porta i nodi.
-export function remapped(kinds: ReadonlyMap<NodeKey, NodeKind>, moved: ReadonlyMap<NodeKey, NodeKey>): Map<NodeKey, NodeKind> {
-  const out = new Map<NodeKey, NodeKind>();
-  for (const [key, kind] of kinds) {
-    const to = moved.get(key);
-    if (to !== undefined) out.set(to, kind);
-  }
-  return out;
-}
-
-/// I segmenti fra due nodi scelti: se ce n'è uno, se uno non è una linea, e
-/// se uno non è una cubica.
-export function linksBetween(subs: readonly Subpath[], selected: ReadonlySet<NodeKey>): { readonly any: boolean; readonly toLine: boolean; readonly toCurve: boolean } {
-  let any = false;
-  let toLine = false;
-  let toCurve = false;
-  subs.forEach((sub, s) => {
-    sub.links.forEach((link, i) => {
-      const end = (i + 1) % sub.nodes.length;
-      if (end === i || !selected.has(nodeKey(s, i)) || !selected.has(nodeKey(s, end))) return;
-      any = true;
-      if (link.kind !== "line") toLine = true;
-      if (link.kind !== "cubic") toCurve = true;
-    });
-  });
-  return { any, toLine, toCurve };
 }
 
 export function sameDestination(a: Destination, b: Destination): boolean {

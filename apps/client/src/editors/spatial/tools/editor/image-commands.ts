@@ -1,30 +1,20 @@
-// L'editor del disegno: ricalcare e ritagliare le immagini. Un pezzo di
+// L'editor del disegno: ritagliare le immagini. Un pezzo di
 // createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
-import type { MenuItem } from "../../../../ui/menu";
 import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Bounds } from "../../scene/geometry";
 import { apply, IDENTITY, invert, type Matrix, type Point } from "../../scene/matrix";
-import { elementsIn } from "../../scene/model";
-import { MAX_EDIT_BYTES, MAX_ELEMENTS } from "../../scene/read";
-import { utf8Length } from "../../scene/text";
-import { MAX_VALUE_BYTES } from "../../scene/ops";
-import type { Elem } from "../../scene/serialize";
-import { href as parseHref } from "../../scene/values";
 import { plural, t, type DrawKey } from "../../strings";
 import type { OverlayHandle } from "../../painter/overlay";
 import { evaluate, lengthUnits, type QuantityProblem } from "../quantity";
 import { resourceHome } from "../resources";
 import { effectsState } from "../effects";
 import { gripCursor, type GripCursor } from "../frame";
-import type { BooleanKind } from "../boolean";
-import { combineOps, isShape, type Refused } from "../combine";
 import { unitSuffix } from "../guide-dialog";
 import { fieldText, fromUnit, toUnit } from "../rulers";
 import { toScreen } from "../../view";
 import type { Unit } from "../hit";
-import { dataBlob } from "../images";
 import { inkShapeOps, isPenStroke } from "../inkshape";
 import {
   cropOps,
@@ -40,25 +30,10 @@ import {
   type CropHandle,
   type Margins,
 } from "../crop";
-import { imageWindow, traceOps, tracedGroup, traceSource, weightOf } from "../trace-ops";
-import { inlineTracer, workerTracer, type TracerFactory } from "../trace-runner";
-import { MAX_SHAPES, TRACE_PRESETS, type TracePreset, type TraceSettings } from "../trace-settings";
 import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, DRAG_PX, HIT_PX, NODE_PX } from "./constants";
 import type { EditorContext } from "./context";
 import { holdsPath, insideBounds, scaleOf } from "./helpers";
-import type { CropGesture, Tracing } from "./types";
-
-/// I pixel di un'immagine che «Ricalca immagine» legge, al più: quattro
-/// volte quelli su cui lavora il ricalco, che li rimpicciolisce con la
-/// media dei pixel, meglio del browser.
-const TRACE_PIXELS = 8_000_000;
-
-/// Chi ricalca se chi monta l'editor non lo dice: un worker e, dove non
-/// ce ne sono, la pagina, col ricalco caricato quando serve.
-const defaultTracer: TracerFactory = (raster) =>
-  typeof Worker === "function"
-    ? workerTracer(raster, () => new Worker(new URL("../trace-worker.ts", import.meta.url), { type: "module" }))
-    : inlineTracer(raster, () => import("../trace"));
+import type { CropGesture } from "./types";
 
 /// Il lato più corto di un ritaglio mentre lo si tira, in pixel.
 const CROP_MIN_PX = 4;
@@ -80,31 +55,8 @@ function segmentDistance(p: Point, a: Point, b: Point): number {
   return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
 }
 
-/// Le operazioni booleane, nell'ordine del menu: il nome della voce e quello
-/// del passo di annulla.
-const BOOLEANS: ReadonlyArray<{ readonly kind: BooleanKind; readonly label: DrawKey; readonly action: DrawKey }> = [
-  { kind: "union", label: "draw.boolean.union", action: "draw.action.union" },
-  { kind: "difference", label: "draw.boolean.difference", action: "draw.action.difference" },
-  { kind: "intersection", label: "draw.boolean.intersection", action: "draw.action.intersection" },
-  { kind: "exclusion", label: "draw.boolean.exclusion", action: "draw.action.exclusion" },
-  { kind: "division", label: "draw.boolean.division", action: "draw.action.division" },
-];
-
-/// Che cosa si dice quando un'operazione booleana non si fa.
-const REFUSALS: Readonly<Record<Exclude<Refused["reason"], "not_shapes">, DrawKey>> = {
-  few: "draw.boolean.few",
-  empty: "draw.boolean.empty",
-  whole: "draw.boolean.whole",
-  foreign: "draw.boolean.foreign",
-  failed: "draw.boolean.failed",
-};
-
-/// Ciò che ricalcare e ritagliare le immagini dà agli altri pezzi dell'editor.
+/// Ciò che ritagliare le immagini dà agli altri pezzi dell'editor.
 export interface ImageCommandsContext {
-  openTracing: () => Promise<void>;
-  showTracing: () => void;
-  syncTracing: () => void;
-  closeTracing: () => void;
   openCrop: (focus: boolean) => void;
   closeCrop: () => void;
   cancelCrop: () => void;
@@ -122,317 +74,14 @@ export interface ImageCommandsContext {
   uncropSelection: () => void;
   holdsPenStroke: (unit: Unit) => boolean;
   shapeSelectedInk: () => void;
-  booleanItems: () => MenuItem[];
 }
 
-/// Monta ricalcare e ritagliare le immagini.
+/// Monta il ritaglio delle immagini.
 export function installImageCommands(ctx: EditorContext): void {
   const {
-    life, has, surface, traceBar, presetSelect, thresholdRange, colorsRange, detailRange, whiteInput, whiteField, traceStatus, traceApply, traceCancel,
-    settingsLast, cropBar, cropSides, cropStatus, cropApply, cropCancel, painter, editable, currentIndex, newIds, announce, docUnit, lengthSpoken,
-    selectedUnits, measuresText, showGrip, showHandles, closeDescriptions, select, setTool, cancelGesture, arranging, arrange, closePaths, options
+    life, has, surface, cropBar, cropSides, cropStatus, cropApply, cropCancel, painter, editable, currentIndex, newIds, announce, docUnit, lengthSpoken,
+    selectedUnits, measuresText, showGrip, showHandles, closeDescriptions, select, setTool, cancelGesture, arranging, arrange
   } = ctx;
-  // --- Ricalca immagine ----------------------------------------------------------
-
-  /// «Ricalca immagine…»: la barra si apre sull'immagine scelta da sola, ne
-  /// legge i pixel che si vedono e la ricalca, col tipo e i valori
-  /// dell'ultima volta.
-  async function openTracing(): Promise<void> {
-    const units = arranging("trace");
-    if (units === null) return;
-    const unit = units.length === 1 && units[0]!.role === "image" ? units[0]! : null;
-    const source = unit === null ? null : traceSource(unit.node);
-    if (unit === null || source === null) {
-      announce(t("draw.trace_image.none"));
-      return;
-    }
-    const kind = parseHref(source.href).kind;
-    if (kind === "remote") {
-      announce(t("draw.trace_image.remote"));
-      return;
-    }
-    if (ctx.codec === null || (kind !== "vault" && kind !== "data")) {
-      announce(t("draw.image.unreadable"));
-      return;
-    }
-    closePaths();
-    closeDescriptions();
-    closeTracing();
-    const now: Tracing = { key: unit.key, source, loaded: ctx.loads, ready: null, presets: 0, settled: 0, asked: 0, answered: 0, shown: null, applying: false, failed: false };
-    ctx.tracing = now;
-    presetSelect.value = ctx.presetLast;
-    showTracing();
-    presetSelect.focus({ preventScroll: true });
-    const gone = (): boolean => ctx.tracing !== now;
-    const port = options.images;
-    const blob = kind === "data" ? dataBlob(source.href) : port === undefined ? null : await port.read(source.href).catch(() => null);
-    if (gone()) return;
-    const decoded = blob === null ? null : await ctx.codec.decode(blob).catch(() => null);
-    if (gone()) {
-      decoded?.close();
-      return;
-    }
-    let seen: ReturnType<typeof imageWindow> = null;
-    let pixels: ImageData | null = null;
-    if (decoded !== null) {
-      try {
-        seen = imageWindow(source.box, source.aspect, [decoded.width, decoded.height]);
-        pixels = seen === null ? null : decoded.pixels?.(seen.pixels, TRACE_PIXELS) ?? null;
-      } finally {
-        decoded.close();
-      }
-    }
-    if (seen === null || pixels === null) {
-      closeTracing();
-      // Un file del vault che non si apre forse non c'è più; un data URI
-      // che non si legge non è un'immagine che il disegno sa leggere.
-      announce(t(blob === null && kind === "vault" ? "draw.image.gone" : "draw.image.unreadable"));
-      return;
-    }
-    now.ready = { tracer: (options.tracer ?? defaultTracer)({ width: pixels.width, height: pixels.height, data: pixels.data }), target: seen.target };
-    showTracing();
-    await loadPreset(now);
-  }
-  ctx.openTracing = openTracing;
-
-  /// Le impostazioni del tipo scelto, quelle pronte per l'immagine coi
-  /// valori dell'ultima volta; poi il ricalco. Un tipo scelto nel frattempo
-  /// vince.
-  async function loadPreset(now: Tracing): Promise<void> {
-    const ready = now.ready;
-    if (ready === null) return;
-    const preset = presetNow();
-    const asked = ++now.presets;
-    showTracing();
-    let settings: TraceSettings;
-    try {
-      settings = await ready.tracer.settings(preset);
-    } catch {
-      if (ctx.tracing !== now) return;
-      closeTracing();
-      announce(t("draw.trace_image.failed"));
-      return;
-    }
-    if (ctx.tracing !== now || asked !== now.presets) return;
-    now.settled = asked;
-    const last = settingsLast.get(preset);
-    showSettings(last === undefined ? settings : { ...last, threshold: preset === "bw" ? settings.threshold : last.threshold });
-    traceNow();
-  }
-
-  /// Il tipo scelto nella barra.
-  function presetNow(): TracePreset {
-    return TRACE_PRESETS.find((preset) => preset === presetSelect.value) ?? "colors";
-  }
-
-  /// Le impostazioni scritte nella barra.
-  function settingsNow(): TraceSettings {
-    return {
-      preset: presetNow(),
-      threshold: Number(thresholdRange.input.value),
-      colors: Number(colorsRange.input.value),
-      detail: Number(detailRange.input.value),
-      ignoreWhite: whiteInput.checked,
-    };
-  }
-
-  /// Scrive `settings` nella barra.
-  function showSettings(settings: TraceSettings): void {
-    presetSelect.value = settings.preset;
-    thresholdRange.input.value = String(Math.round(settings.threshold));
-    colorsRange.input.value = String(settings.colors);
-    detailRange.input.value = String(settings.detail);
-    whiteInput.checked = settings.ignoreWhite;
-    for (const range of [thresholdRange, colorsRange, detailRange]) range.show();
-    showTracing();
-  }
-
-  /// Chiede il ricalco coi valori della barra: quando arriva, lo mostrano
-  /// l'anteprima e la barra. Uno superato da un altro già arrivato non
-  /// conta.
-  function traceNow(): void {
-    const now = ctx.tracing;
-    const ready = now?.ready ?? null;
-    // Le impostazioni di un tipo appena scelto ricalcano quando arrivano.
-    if (now === null || ready === null || now.settled < now.presets) return;
-    const asked = ++now.asked;
-    now.failed = false;
-    showTracing();
-    ready.tracer.trace(settingsNow()).then(
-      (traced) => {
-        if (ctx.tracing !== now || traced === null || asked <= now.answered) return;
-        const unit = currentIndex().get(now.key);
-        if (unit === null) return;
-        now.answered = asked;
-        now.shown = { traced, group: tracedGroup(unit.node, traced, ready.target, null) };
-        coverTracing();
-        showTracing();
-        if (now.applying && asked === now.asked) applyTracing();
-      },
-      () => {
-        if (ctx.tracing !== now || asked !== now.asked) return;
-        now.answered = asked;
-        now.failed = true;
-        now.applying = false;
-        showTracing();
-      },
-    );
-  }
-
-  /// La barra com'è adesso: i campi del tipo scelto, spenti finché
-  /// l'immagine si legge o finché arrivano le impostazioni del tipo, che li
-  /// riscrivono; e ciò che il ricalco ha trovato.
-  function showTracing(): void {
-    const now = ctx.tracing;
-    traceBar.hidden = now === null;
-    if (now === null) return;
-    const preset = presetNow();
-    const ink = preset === "bw" || preset === "sketch";
-    thresholdRange.field.hidden = !ink;
-    colorsRange.field.hidden = ink;
-    whiteField.hidden = ink;
-    for (const control of [thresholdRange.input, colorsRange.input, detailRange.input, whiteInput]) control.disabled = now.ready === null || now.settled < now.presets;
-    traceStatus.textContent = tracingStatus(now);
-  }
-  ctx.showTracing = showTracing;
-
-  /// Ciò che dice la barra: che si legge o si ricalca, o che cosa ha
-  /// trovato il ricalco, e se il disegno non lo regge.
-  function tracingStatus(now: Tracing): string {
-    if (now.ready === null) return t("draw.trace_image.reading");
-    if (now.failed) return t("draw.trace_image.failed");
-    if (now.shown === null || now.settled < now.presets || now.answered < now.asked) return t("draw.trace_image.working");
-    const { traced, group } = now.shown;
-    if (traced.shapes.length === 0) return t("draw.trace_image.empty");
-    const found = t("draw.trace_image.result", {
-      shapes: plural(traced.shapes.length, "draw.trace_image.shapes.one", "draw.trace_image.shapes.other"),
-      nodes: plural(traced.nodes, "draw.trace_image.nodes.one", "draw.trace_image.nodes.other"),
-      tints: plural(traced.colors, "draw.trace_image.tints.one", "draw.trace_image.tints.other"),
-    });
-    const capped = traced.shapes.length >= MAX_SHAPES ? [t("draw.trace_image.capped", { count: MAX_SHAPES })] : [];
-    const problem = traceProblem(group);
-    return [found, ...capped, ...(problem === null ? [] : [problem])].join(" ");
-  }
-
-  /// Perché il gruppo `group` non entra nel disegno; `null` se entra.
-  function traceProblem(group: Elem): string | null {
-    const model = ctx.engine.model;
-    const weight = weightOf(group);
-    if (weight.longest > MAX_VALUE_BYTES) return t("draw.trace_image.intricate");
-    if (utf8Length(ctx.engine.text) + weight.bytes > MAX_EDIT_BYTES) return t("draw.trace_image.heavy", { limit: ctx.sizeText(MAX_EDIT_BYTES) });
-    if (model !== null && elementsIn(model.root) + weight.elements > MAX_ELEMENTS) return t("draw.trace_image.crowded", { count: MAX_ELEMENTS });
-    return null;
-  }
-
-  /// Al posto dell'immagine il gruppo dell'ultimo ricalco, o l'immagine se
-  /// non ce n'è; il painter cambia solo se è cambiato.
-  function coverTracing(): void {
-    const now = ctx.tracing;
-    const unit = now === null ? null : currentIndex().get(now.key);
-    const group = now?.shown?.group ?? null;
-    const next = unit === null || group === null ? null : { paints: unit.paints, group };
-    if (next?.paints === ctx.covered?.paints && next?.group === ctx.covered?.group) return;
-    ctx.covered = next;
-    painter.setCovers(next === null ? null : new Map(next.paints.map((paint) => [paint, next.group])));
-  }
-
-  /// Dopo ogni cambio: la barra si chiude se il livello o il documento non
-  /// la vogliono più, se l'immagine non è più scelta da sola, o se cambia
-  /// che cosa se ne vede. Una trasformazione no: l'anteprima la segue.
-  function syncTracing(): void {
-    const now = ctx.tracing;
-    if (now === null) return;
-    const unit = currentIndex().get(now.key);
-    const source = unit === null ? null : traceSource(unit.node);
-    const same = source !== null
-      && source.href === now.source.href
-      && source.aspect === now.source.aspect
-      && [0, 1].every((axis) => source.box.min[axis] === now.source.box.min[axis] && source.box.max[axis] === now.source.box.max[axis]);
-    if (!has("trace") || !editable() || ctx.loads !== now.loaded || ctx.selection.length !== 1 || ctx.selection[0] !== now.key || !same) {
-      closeTracing();
-      return;
-    }
-    coverTracing();
-    showTracing();
-  }
-  ctx.syncTracing = syncTracing;
-
-  /// Chiude la barra e toglie l'anteprima; il ricalco in corso si ferma, e
-  /// il fuoco, se era nella barra, torna al foglio.
-  function closeTracing(): void {
-    const now = ctx.tracing;
-    if (now === null) return;
-    const focused = traceBar.contains(document.activeElement);
-    ctx.tracing = null;
-    now.ready?.tracer.dispose();
-    traceBar.hidden = true;
-    coverTracing();
-    if (focused) surface.focus({ preventScroll: true });
-  }
-  ctx.closeTracing = closeTracing;
-
-  /// «Applica» e Invio: il ricalco si scrive, in un passo di annulla, e la
-  /// barra si chiude. Se l'ultimo ricalco non è ancora arrivato, lo
-  /// aspetta; se non c'è niente da scrivere, la barra resta e dice perché.
-  function applyTracing(): void {
-    const now = ctx.tracing;
-    if (now === null) return;
-    const ready = now.ready;
-    if (ready === null || now.settled < now.presets || now.answered < now.asked) {
-      now.applying = true;
-      return;
-    }
-    now.applying = false;
-    const shown = now.shown;
-    const model = ctx.engine.model;
-    const unit = currentIndex().get(now.key);
-    if (model === null || unit === null) return;
-    if (now.failed || shown === null || shown.traced.shapes.length === 0) {
-      announce(tracingStatus(now));
-      return;
-    }
-    const problem = traceProblem(shown.group);
-    if (problem !== null) {
-      announce(problem);
-      return;
-    }
-    const settings = settingsNow();
-    ctx.presetLast = settings.preset;
-    settingsLast.set(settings.preset, settings);
-    const arranged = traceOps(model, unit.node, shown.traced, ready.target, newIds());
-    closeTracing();
-    surface.focus({ preventScroll: true });
-    if (arrange("draw.action.trace_image", arranged) !== null) {
-      announce(plural(shown.traced.shapes.length, "draw.trace_image.done.one", "draw.trace_image.done.other"));
-    }
-  }
-
-  life.listen(presetSelect, "change", () => {
-    const now = ctx.tracing;
-    if (now !== null) void loadPreset(now);
-  });
-  for (const range of [thresholdRange, colorsRange, detailRange]) life.listen(range.input, "input", () => traceNow());
-  life.listen(whiteInput, "change", () => traceNow());
-  life.listen(traceApply, "click", () => applyTracing());
-  life.listen(traceCancel, "click", () => closeTracing());
-  // Come nella barra dei tracciati: Invio in un campo applica, Esc chiude.
-  life.listen(traceBar, "keydown", (event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      closeTracing();
-      surface.focus({ preventScroll: true });
-      return;
-    }
-    if (event.key !== "Enter" || event.isComposing || !(event.target instanceof HTMLInputElement)) return;
-    event.preventDefault();
-    applyTracing();
-  });
-  life.add(() => {
-    ctx.tracing?.ready?.tracer.dispose();
-    ctx.tracing = null;
-  });
-
   // --- Ritaglia immagine --------------------------------------------------------
 
   /// L'immagine che si ritaglia, nell'indice di adesso.
@@ -500,8 +149,6 @@ export function installImageCommands(ctx: EditorContext): void {
       return;
     }
     closeDescriptions();
-    closePaths();
-    closeTracing();
     // I segni si tirano con la Selezione: lo strumento Selezione li mostra.
     if (ctx.tool !== "select") setTool("select");
     ctx.cropping = { key: unit.key, loaded: ctx.loads, start: state.crop, crop: state.crop };
@@ -917,38 +564,4 @@ export function installImageCommands(ctx: EditorContext): void {
   }
   ctx.shapeSelectedInk = shapeSelectedInk;
 
-  /// Perché un'operazione booleana non si fa, a parole.
-  const refusal = (refused: Refused): string =>
-    refused.reason === "not_shapes" ? plural(refused.count, "draw.boolean.not_shapes.one", "draw.boolean.not_shapes.other") : t(REFUSALS[refused.reason]);
-
-  /// Un'operazione booleana, dal livello Esperto: la forma più in basso fra
-  /// quelle scelte diventa il risultato, o i pezzi della divisione, e le
-  /// altre se ne vanno.
-  function combineSelection(kind: BooleanKind): void {
-    const units = arranging("boolean");
-    if (units === null) return;
-    const combined = combineOps(ctx.engine.model!, units, kind, newIds());
-    if ("reason" in combined) {
-      announce(refusal(combined));
-      return;
-    }
-    const { label, action } = BOOLEANS.find((entry) => entry.kind === kind)!;
-    if (arrange(action, combined) === null) return;
-    announce(kind === "division" ? t("draw.divided", { count: combined.pieces }) : plural(units.length, "draw.combined.one", "draw.combined.other", { action: t(label) }));
-  }
-
-  /// Le voci delle operazioni booleane: spente, e dicono perché, se fra gli
-  /// oggetti scelti c'è qualcosa che non è una forma, o se le forme sono
-  /// poche.
-  const booleanItems = (): MenuItem[] => {
-    const units = selectedUnits();
-    const others = units.filter((unit) => !isShape(unit)).length;
-    return BOOLEANS.map(({ kind, label }) => {
-      const reason = others > 0
-        ? refusal({ reason: "not_shapes", count: others })
-        : units.length < (kind === "union" ? 1 : 2) ? refusal({ reason: "few" }) : null;
-      return { label: t(label), disabled: reason !== null, ...(reason === null ? {} : { description: reason }), run: () => combineSelection(kind) };
-    });
-  };
-  ctx.booleanItems = booleanItems;
 }

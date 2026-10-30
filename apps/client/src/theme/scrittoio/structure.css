@@ -3954,15 +3954,6 @@ body {
   width: min(14rem, 50vw);
   min-height: 44px;
 }
-/* Il valore di un cursore del ricalco, accanto: le cifre non ballano. */
-.draw-paths-value {
-  min-width: 3ch;
-  font-variant-numeric: tabular-nums;
-  text-align: end;
-}
-.draw-paths-check {
-  min-height: 44px;
-}
 .draw-paths-action {
   flex: none;
   min-height: 44px;
@@ -4053,7 +4044,6 @@ body {
    proprietà, che hanno più da mostrare, ne prendono il doppio. */
 .draw-objects,
 .draw-properties,
-.draw-inspector,
 .draw-history,
 .draw-boards,
 .draw-library,
@@ -4507,157 +4497,6 @@ body {
   pointer-events: none;
   overflow: visible;
 }
-/* I simboli: come le forme, il titolo col conteggio, il campo di ricerca e
-   sotto le sezioni, che scorrono: quella del disegno e una per libreria,
-   e in fondo la riga che dice dove si cercano le librerie. Un riquadro ha
-   l'anteprima sopra, quadrata, e il nome sotto, su due righe al più; nel
-   suo angolo, un segno: il numero delle istanze, la spunta o
-   l'aggiornamento. Una sezione che non mostra simboli dice perché al posto
-   della griglia. */
-.draw-symbols-header {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  align-items: baseline;
-}
-.draw-symbols-title {
-  margin: 0;
-}
-.draw-symbols-count {
-  margin-inline-start: auto;
-}
-.draw-symbols-find {
-  display: flex;
-  flex: none;
-  align-items: center;
-}
-.draw-symbols-search {
-  box-sizing: border-box;
-  flex: 1;
-  min-width: 0;
-  min-height: 44px;
-}
-.draw-symbols-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-.draw-symbols-group {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.draw-symbols-heading,
-.draw-symbols-note,
-.draw-symbols-empty,
-.draw-symbols-footer {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.draw-symbols-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
-}
-.draw-symbols-tile {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  box-sizing: border-box;
-  min-width: 44px;
-  min-height: 44px;
-  text-align: center;
-  cursor: default;
-  touch-action: pan-y;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-}
-.draw-symbols-frame {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  aspect-ratio: 1;
-  min-height: 0;
-  pointer-events: none;
-}
-.draw-symbols-preview {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  pointer-events: none;
-}
-.draw-symbols-name {
-  display: -webkit-box;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-.draw-symbols-badge {
-  position: absolute;
-  inset-block-start: 0;
-  inset-inline-end: 0;
-  pointer-events: none;
-}
-.draw-symbols-tile[hidden],
-.draw-symbols-group[hidden],
-.draw-symbols-grid[hidden],
-.draw-symbols-preview[hidden],
-.draw-symbols-badge[hidden] {
-  display: none;
-}
-/* «Aggiorna dalla libreria» e «Rendi modificabile»: le due anteprime
-   affiancate, della stessa misura, ognuna col suo nome sotto. */
-.draw-symbol-update-pair,
-.draw-editable-pair {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.draw-symbol-update-side,
-.draw-editable-side {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  min-width: 0;
-  margin: 0;
-}
-.draw-symbol-update-frame,
-.draw-editable-frame {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  aspect-ratio: 4 / 3;
-  min-height: 0;
-}
-.draw-symbol-update-preview,
-.draw-editable-preview {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-.draw-symbol-update-caption,
-.draw-editable-caption {
-  overflow-wrap: anywhere;
-  text-align: center;
-}
-/* «Rendi modificabile»: gli elenchi di ciò che cambia e di ciò che resta
-   scorrono, e la frase e i pulsanti restano in vista. */
-.draw-editable-details {
-  overflow-y: auto;
-  max-height: 40vh;
-  min-height: 0;
-}
-.draw-editable-list {
-  margin: 0;
-  padding-inline-start: 1.25em;
-}
-.draw-editable-list li {
-  overflow-wrap: anywhere;
-}
 .draw-editor[data-library-drop="copy"],
 .draw-editor[data-library-drop="copy"] * {
   cursor: copy !important;
@@ -4867,87 +4706,6 @@ body {
   white-space: nowrap;
   pointer-events: none;
 }
-/* Gli attributi: una tabella col nome, il valore e il pulsante che lo
-   toglie. Il nome va a capo dove serve; il valore prende il resto, e il campo
-   che si scrive è un bersaglio da 44 px. Sotto, il riquadro per aggiungerne
-   uno. */
-.draw-inspector-header {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-}
-.draw-inspector-title,
-.draw-inspector-subject,
-.draw-inspector-empty,
-.draw-inspector-note,
-.draw-inspector-error,
-.draw-inspector-add-title {
-  margin: 0;
-}
-.draw-inspector-subject {
-  overflow-wrap: anywhere;
-}
-.draw-inspector-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-.draw-inspector-table {
-  width: 100%;
-  table-layout: fixed;
-  border-collapse: collapse;
-}
-.draw-inspector-key {
-  width: 38%;
-  text-align: start;
-  vertical-align: top;
-  overflow-wrap: anywhere;
-}
-.draw-inspector-key > label {
-  display: flex;
-  align-items: center;
-  min-height: 44px;
-}
-.draw-inspector-value {
-  vertical-align: top;
-}
-.draw-inspector-actions {
-  width: 44px;
-  vertical-align: top;
-}
-.draw-inspector-field {
-  display: flex;
-  align-items: center;
-}
-.draw-inspector-input {
-  box-sizing: border-box;
-  flex: 1;
-  width: 100%;
-  min-width: 0;
-  min-height: 44px;
-}
-textarea.draw-inspector-input {
-  resize: vertical;
-}
-.draw-inspector-swatch {
-  display: block;
-  flex: none;
-  width: 20px;
-  height: 20px;
-  forced-color-adjust: none;
-}
-.draw-inspector-note,
-.draw-inspector-error {
-  overflow-wrap: anywhere;
-}
-.draw-inspector-add {
-  display: flex;
-  flex-direction: column;
-}
-.draw-inspector-add-value {
-  display: flex;
-}
 /* Il pannello delle proprietà: il titolo e, sotto, le sezioni che
    scorrono. L'intestazione di una sezione è un pulsante largo quanto il
    pannello, con la freccia che dice se è aperta. I campi stanno in due
@@ -5018,8 +4776,7 @@ textarea.draw-inspector-input {
   grid-column: 3;
 }
 .draw-properties-field[data-column="all"],
-.draw-properties-actions,
-.draw-properties-body > .draw-inspector {
+.draw-properties-actions {
   grid-column: 1 / -1;
 }
 .draw-properties-apply {
@@ -5297,15 +5054,12 @@ textarea.draw-properties-input {
   flex-direction: column;
   min-width: 0;
 }
-.draw-hatch-fields,
-.draw-hatch-motif {
+.draw-hatch-fields {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: end;
 }
-.draw-hatch-fields > .draw-properties-error,
-.draw-hatch-motif > .draw-properties-error,
-.draw-hatch-motif > .draw-button {
+.draw-hatch-fields > .draw-properties-error {
   grid-column: 1 / -1;
 }
 /* Il connettore non ha una riga sua: i suoi campi sono le celle della
@@ -5335,105 +5089,6 @@ textarea.draw-properties-input {
   flex: 1;
   width: auto;
   min-width: 0;
-}
-.draw-effects {
-  display: flex;
-  grid-column: 1 / -1;
-  flex-direction: column;
-  min-width: 0;
-}
-.draw-effects-add {
-  flex: none;
-}
-.draw-effects-state {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.draw-effects-list {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.draw-effects-list[hidden],
-.draw-effects-actions[hidden],
-.draw-effect-fields[hidden],
-.draw-effect-chip[hidden] {
-  display: none;
-}
-.draw-effect {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.draw-effect-head {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-.draw-effect-show,
-.draw-effect-remove {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0;
-}
-.draw-effect-name {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  box-sizing: border-box;
-  min-width: 0;
-  min-height: 44px;
-  text-align: start;
-}
-.draw-effect-chip {
-  display: block;
-  flex: none;
-  box-sizing: border-box;
-  width: 16px;
-  height: 16px;
-  forced-color-adjust: none;
-}
-.draw-effect-title {
-  flex: none;
-}
-.draw-effect-summary {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.draw-effect-name > svg {
-  flex: none;
-}
-.draw-effect-name[aria-expanded="false"] > svg {
-  transform: rotate(-90deg);
-}
-.draw-effect-fields {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: end;
-}
-.draw-effect-fields > .draw-properties-error {
-  grid-column: 1 / -1;
-}
-.draw-effects-actions {
-  display: flex;
-  flex-direction: column;
-}
-/* Gli attributi, come sezione delle proprietà, scorrono con loro e non
-   hanno un titolo loro. */
-.draw-inspector[data-nested] {
-  flex: none;
-}
-.draw-inspector[data-nested] > .draw-inspector-scroll {
-  flex: none;
-  overflow: visible;
 }
 @container (max-width: 36rem) {
   .draw-body {
@@ -5715,12 +5370,6 @@ textarea.draw-properties-input {
   }
   /* Il campione di un effetto tiene il suo colore, col bordo del testo; la
      riga aperta ha il bordo dell'evidenza, oltre alla freccia che si volta. */
-  .draw-effect-chip {
-    border-color: CanvasText;
-  }
-  .draw-effect[data-open] {
-    border-color: Highlight;
-  }
   .draw-cursor::before,
   .draw-cursor::after {
     border-color: CanvasText;
@@ -5756,8 +5405,7 @@ textarea.draw-properties-input {
   }
   /* Il riquadro sollevato dal dito: il fondo e l'ombra si forzano, e
      l'anello dell'evidenza dice che è in mano. */
-  .draw-library-tile[data-lifted],
-  .draw-symbols-tile[data-lifted] {
+  .draw-library-tile[data-lifted] {
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }

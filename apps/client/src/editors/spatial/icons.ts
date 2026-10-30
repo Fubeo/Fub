@@ -41,10 +41,6 @@ const STATE: Readonly<Record<string, readonly string[]>> = {
   "draw-duplicate": ["M9 9h11v11H9z", "M15 9V4H4v11h5"],
   "draw-group": ["M3 7V3h4", "M17 3h4v4", "M21 17v4h-4", "M7 21H3v-4", "M7 7h6v6H7z", "M11 11h6v6h-6z"],
   "draw-ungroup": ["M3 3h8v8H3z", "M13 13h8v8h-8z"],
-  "draw-symbol": ["M12 2l3 3-3 3-3-3z", "M12 16l3 3-3 3-3-3z", "M5 9l3 3-3 3-3-3z", "M19 9l3 3-3 3-3-3z"],
-  "draw-detach": ["M7 3l3 3-3 3-3-3z", "M17 15l3 3-3 3-3-3z", "M4 20L20 4"],
-  // Tre petali uguali intorno a un centro: un originale e le sue copie.
-  "draw-repeat": ["M12 14C10 10.7 10 7.3 12 4C14 7.3 14 10.7 12 14z", "M12 14C15.9 13.9 18.8 15.6 20.7 19C16.8 19.1 13.9 17.4 12 14z", "M12 14C10.1 17.4 7.2 19.1 3.3 19C5.2 15.6 8.1 13.9 12 14z"],
   "draw-order": ["M10 14H4V4h10v6", "M10 10h10v10H10z"],
   "draw-align": ["M4 3v18", "M8 6h12v5H8z", "M8 14h7v5H8z"],
   "draw-layers": ["M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5", "M3 17.5l9 5 9-5"],
@@ -63,40 +59,11 @@ const STATE: Readonly<Record<string, readonly string[]>> = {
   "draw-link": ["M9.5 14.5l5-5", "M11 6.5l1.5-1.5a3.5 3.5 0 0 1 5 5L16 11.5", "M8 12.5L6.5 14a3.5 3.5 0 0 0 5 5L13 17.5"],
   "draw-unlink": ["M11 6.5l1.5-1.5a3.5 3.5 0 0 1 5 5L16 11.5", "M8 12.5L6.5 14a3.5 3.5 0 0 0 5 5L13 17.5", "M4 8h2.5", "M8 4v2.5", "M20 16h-2.5", "M16 20v-2.5"],
   "draw-open-link": ["M14 4h6v6", "M20 4l-9 9", "M18 14v6H4V6h6"],
-  "draw-attributes": ["M8 7l-5 5 5 5", "M16 7l5 5-5 5", "M13.5 5l-3 14"],
-  "draw-outline": ["M3 6h18", "M3 12h4", "M10 12h4", "M17 12h4", "M3.5 18h0", "M8.5 18h0", "M13.5 18h0", "M18.5 18h0"],
-  "draw-transform": ["M4 10h10v10H4z", "M10 4a10 10 0 0 1 10 10", "M16.5 11.5L20 14l2.5-3.5"],
-  "draw-apply-transform": ["M2 17L6 5h9l-4 12z", "M15 16.5l2.5 2.5L22 14"],
-  "draw-to-path": ["M5 19C5 11 11 5 19 5", "M3 17h4v4H3z", "M17 3h4v4h-4z"],
   "draw-to-shape": ["M3 19c2-3 3.5 0 5.5-2.5S12 16 14 13", "M13 3h8v8h-8z"],
-  "draw-boolean": ["M3 10a7 7 0 1 0 14 0a7 7 0 1 0-14 0", "M7 14a7 7 0 1 0 14 0a7 7 0 1 0-14 0"],
-  // Un'immagine coi suoi monti, e sotto il tracciato che se ne ricava.
-  "draw-trace-image": ["M3 3h11v9H3z", "M3 10l3-3 3 3 2-2 3 3", "M6 21c3 0 4-5 7.5-5s4 3 6.5 3", "M19.5 17.5h3v3h-3z"],
-  "draw-text-path": ["M3 20C6 12 18 12 21 20", "M7 4h10", "M12 4v9"],
   // Le due squadre della taglierina, che si incrociano.
   "draw-crop": ["M6 2v16h16", "M2 6h16v16"],
   // Le stesse, barrate.
   "draw-uncrop": ["M6 2v16h16", "M2 6h16v16", "M3 3l18 18"],
-  // Un cerchio pieno in un quadrato a tratti: fuori dalla forma non si vede.
-  "draw-mask": ["M3 6V3h3", "M10 3h4", "M18 3h3v3", "M21 10v4", "M21 18v3h-3", "M14 21h-4", "M6 21H3v-3", "M3 14v-4", "M6 12a6 6 0 1 0 12 0a6 6 0 1 0-12 0"],
-  "draw-nodes": ["M4 3v12l3.2-3.1 2.3 5.1 2-.9-2.3-5H15z", "M16 16h5v5h-5z"],
-  "draw-builder": ["M3 9a6 6 0 1 0 12 0a6 6 0 1 0-12 0", "M9 9h11v11H9z", "M5 17v5", "M2.5 19.5h5"],
-  // Due anelli in basso, e le lame che si incrociano verso l'alto.
-  "draw-scissors": ["M3.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0", "M15.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0", "M7.8 16.2L17 3", "M16.2 16.2L7 3"],
-  // Una linea che si gonfia in mezzo, e il punto che la allarga.
-  "draw-width": ["M2 12C6 7.5 18 7.5 22 12C18 16.5 6 16.5 2 12z", "M12 3v18", "M10 5l2-2 2 2", "M10 19l2 2 2-2"],
-  "draw-bezier": ["M12 21L7 12l3-8h4l3 8z", "M12 21v-7.5", "M10.5 12a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
-  // Tre punti, e la curva che vi passa.
-  "draw-curvature": ["M4 18C4 11 7.5 7 12 7s8 4 8 11", "M2.5 18a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M10.5 7a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M18.5 18a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
-  "draw-node-add": ["M3 19c4-6 14-6 18 0", "M10.5 13h3v3h-3z", "M12 3v6", "M9 6h6"],
-  "draw-node-delete": ["M3 19c4-6 14-6 18 0", "M10.5 13h3v3h-3z", "M9 6h6"],
-  "draw-node-corner": ["M3 20l9-13 9 13", "M12 4l3 3-3 3-3-3z"],
-  "draw-node-smooth": ["M3 20C3 13 7 8 12 8s9 5 9 12", "M10.5 6.5h3v3h-3z", "M7 8h3.5", "M13.5 8H20"],
-  "draw-node-symmetric": ["M3 20C3 13 7 8 12 8s9 5 9 12", "M10.5 8a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M5 8h5.5", "M13.5 8H19"],
-  "draw-segment-line": ["M3 17h4v4H3z", "M17 3h4v4h-4z", "M7 17L17 7"],
-  "draw-segment-curve": ["M3 17h4v4H3z", "M17 3h4v4h-4z", "M7 19c7 0 12-5 12-12"],
-  "draw-node-break": ["M2 12h6", "M16 12h6", "M8 10h3v4H8z", "M13 10h3v4h-3z"],
-  "draw-node-join": ["M2 12h4", "M18 12h4", "M10.5 10.5h3v3h-3z", "M6 9l3 3-3 3", "M18 9l-3 3 3 3"],
   "draw-lasso": ["M3.5 9.5a8.5 5.5 0 1 0 17 0a8.5 5.5 0 1 0-17 0", "M8 14.5c-2 1.5-2 4 0 4.5s3.5 0 3.5 2.5"],
   "draw-selection": ["M4 7V4h3", "M10 4h4", "M17 4h3v3", "M20 10v4", "M20 17v3h-3", "M14 20h-4", "M7 20H4v-3", "M4 14v-4"],
   "draw-back": ["M10 6l-6 6 6 6", "M4 12h16"],
@@ -130,8 +97,6 @@ const PROPERTIES: Readonly<Record<string, readonly string[]>> = {
   "draw-anchor-start": ["M4 6h16", "M4 10h10", "M4 14h16", "M4 18h10"],
   "draw-anchor-middle": ["M4 6h16", "M7 10h10", "M4 14h16", "M7 18h10"],
   "draw-anchor-end": ["M4 6h16", "M10 10h10", "M4 14h16", "M10 18h10"],
-  "draw-text-point": ["M8 5h10", "M13 5v12", "M3 19h4", "M5 17v4"],
-  "draw-text-area": ["M4 4h16v16H4z", "M8 8h8", "M12 8v8"],
   "draw-text-bold": ["M7 5h6a3.5 3.5 0 0 1 0 7H7z", "M7 12h7a3.5 3.5 0 0 1 0 7H7z"],
   "draw-text-italic": ["M10 5h8", "M6 19h8", "M14 5l-4 14"],
   "draw-text-underline": ["M7 4v7a5 5 0 0 0 10 0V4", "M5 20h14"],
@@ -248,16 +213,6 @@ const HATCH_PANEL: Readonly<Record<string, readonly string[]>> = {
   "draw-hatch-pattern": [FRAME, "M12 4v8h8", "M4 12h8v8"],
 };
 
-// Gli effetti.
-/// Le icone della sezione, col costrutto di `ui/icons.ts`.
-const EFFECTS_PANEL: Readonly<Record<string, readonly string[]>> = {
-  "draw-effect-add": ["M12 5v14", "M5 12h14"],
-  "draw-effect-remove": ["M5 12h14"],
-  "draw-effect-shown": ["M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z", "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"],
-  "draw-effect-hidden": ["M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z", "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z", "M4 4l16 16"],
-  "draw-effect-chevron": ["M8 10l4 4 4-4"],
-};
-
 // L'impianto nuovo: la mano e lo zoom, il menu, gli interruttori della vista,
 // le schede dell'ispettore, il riempimento e il contorno.
 const CHROME: Readonly<Record<string, readonly string[]>> = {
@@ -298,7 +253,6 @@ export const DRAW_ICONS: Readonly<Record<string, readonly string[]>> = {
   ...CONNECTOR_PANEL,
   ...GRADIENT_PANEL,
   ...HATCH_PANEL,
-  ...EFFECTS_PANEL,
   ...CHROME,
 };
 

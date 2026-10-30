@@ -173,7 +173,7 @@ export const DEFAULT_GRID: Grid = {
   panel: null,
   bar: true,
   shapes: true,
-  closed: ["transform", "attributes"],
+  closed: [],
   twist: true,
   taps: true,
   pen: DEFAULT_CURVE,

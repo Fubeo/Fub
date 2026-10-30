@@ -1,7 +1,10 @@
 // I selettori dei fogli di stile: che cosa si legge, e che cosa scelgono.
 
 import { describe, expect, it } from "vitest";
-import { Matcher, readSheet, type Maybe, type StyleNode } from "./selectors";
+import { Matcher, readSheets, type Maybe, type Sheet, type StyleNode } from "./selectors";
+
+/// Le regole del foglio `css`, da solo.
+const readSheet = (css: string): Sheet => readSheets([{ id: "0", css }]);
 
 const SVG = "http://www.w3.org/2000/svg";
 const XML = "http://www.w3.org/XML/1998/namespace";

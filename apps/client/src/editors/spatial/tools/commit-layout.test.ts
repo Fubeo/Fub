@@ -70,7 +70,7 @@ function arrow(surface: HTMLElement, name: string, init: KeyboardEventInit = {})
 }
 
 describe("la misura del foglio e la barra, in un passo", () => {
-  const SHOWN = { shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: true, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true } as const;
+  const SHOWN = { shown: true, snap: false, step: 20, guides: true, steps: {}, rulers: true, rulerGuides: true, panel: null, bar: true, shapes: true, closed: [], twist: true, taps: true } as const;
 
   for (const [name, options] of [
     ["con il foglio com'è", {}],

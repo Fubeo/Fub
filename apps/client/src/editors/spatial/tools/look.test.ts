@@ -575,17 +575,6 @@ describe("il testo in area", () => {
   /// Il testo di `text` senza gli a capo e i rientri.
   const flat = (text: string): string => text.replace(/\n\s*/g, "");
 
-  it("si legge col suo tipo e la larghezza del riquadro; un testo su tracciato non ha né l'uno né l'altra", () => {
-    const opened = open(
-      doc(
-        '<defs id="fub-defs"><path id="rpppppppp" fub:role="private" d="M 0 50 L 200 50"/></defs>' +
-          `${LAYER}${AREA()}${TEXT("obbbbbbbb", ["Uno"])}<text id="occcccccc"><textPath href="#rpppppppp">Lungo</textPath></text></g>`,
-      ),
-    );
-    expect(look(opened).form).toEqual({ count: 2, value: null });
-    expect(look(opened).wrap).toEqual({ count: 1, value: 60 });
-  });
-
   it("va di nuovo a capo quando cambia il carattere, e lo dice se un carattere non ci sta", () => {
     const opened = open(doc(`${LAYER}${AREA()}</g>`));
     const after = flat(applied(opened, restyled(opened, { size: 20 })));
@@ -605,27 +594,11 @@ describe("il testo in area", () => {
     expect(flat(applied(lined, restyled(lined, { underline: true })))).toContain(">Il testo va a capo</tspan></text>");
   });
 
-  it("con l'allineamento e la larghezza il riquadro tiene il bordo sinistro", () => {
+  it("con l'allineamento il riquadro tiene il bordo sinistro", () => {
     const opened = open(doc(`${LAYER}${AREA()}</g>`));
     // Al centro: x va a metà del riquadro, e le righe con lei.
     const centered = flat(applied(opened, restyled(opened, { anchor: "middle" })));
     expect(centered).toMatch(/<text id="oaaaaaaaa" fub:wrap="60" x="50" y="40" font-size="10" text-anchor="middle"><tspan x="50" dy="0">Il testo<\/tspan><tspan fub:join="space" x="50" dy="12.5">/);
-    // Allineato a destra e largo 100: x è il bordo destro, da -40 a 60, e
-    // le righe vanno di nuovo a capo.
-    const ended = open(doc(`${LAYER}${AREA(' text-anchor="end"').replace(/x="20"/g, 'x="20"')}</g>`));
-    const wider = flat(applied(ended, restyled(ended, { wrap: 100 })));
-    expect(wider).toContain('fub:wrap="100" x="60"');
-    expect(wider).toContain('<tspan x="60" dy="0">Il testo va a</tspan><tspan fub:join="space" x="60" dy="12.5">capo</tspan>');
-  });
-
-  it("un testo da punto diventa in area largo quanto la riga più larga, e torna da punto, senza muoversi", () => {
-    const opened = open(doc(`${LAYER}<text id="oaaaaaaaa" x="20" y="40" font-size="10"><tspan x="20" dy="0">Sul colle</tspan><tspan x="20" dy="12.5">e oltre</tspan></text></g>`));
-    const area = flat(applied(opened, restyled(opened, { form: "area" })));
-    expect(area).toContain('<text id="oaaaaaaaa" fub:wrap="54" x="20" y="40" font-size="10"><tspan x="20" dy="0">Sul colle</tspan><tspan x="20" dy="12.5">e oltre</tspan></text>');
-    expect(look(open(area)).form).toEqual({ count: 1, value: "area" });
-    const back = open(doc(`${LAYER}${AREA()}</g>`));
-    const point = flat(applied(back, restyled(back, { form: "point" })));
-    expect(point).toContain('<text id="oaaaaaaaa" x="20" y="40" font-size="10"><tspan x="20" dy="0">Il testo</tspan><tspan x="20" dy="12.5">va a capo</tspan></text>');
   });
 });
 

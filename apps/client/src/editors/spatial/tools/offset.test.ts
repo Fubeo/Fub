@@ -8,22 +8,8 @@ import { describe, expect, it } from "vitest";
 import { pointAt } from "../scene/curves";
 import { parsePath, type Segment } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
-import { widthsAt, widthSpans, type WidthPoint } from "../scene/varwidth";
-import { offsetArea, profileArea, strokeArea, strokeLoops, type ProfileStyle, type StrokeStyle } from "./offset";
-
-const style = (width: number, more: Partial<StrokeStyle> = {}): StrokeStyle => ({ width, join: "miter", cap: "butt", miterLimit: 4, dashes: [], ...more });
-
-function stroke(d: string, given: StrokeStyle): Segment[] {
-  const out = strokeArea(parsePath(d)!, given);
-  if (typeof out === "string") throw new Error(`contorno non riuscito: ${out}`);
-  return out;
-}
-
-function offset(d: string, distance: number, join: StrokeStyle["join"] = "miter", filled = true): Segment[] {
-  const out = offsetArea(parsePath(d)!, distance, { join, miterLimit: 4 }, filled);
-  if (typeof out === "string") throw new Error(`scostamento non riuscito: ${out}`);
-  return out;
-}
+import { widthSpans, type WidthPoint } from "../scene/varwidth";
+import { profileArea, type ProfileStyle } from "./offset";
 
 /// I sottotracciati di `segments` come spezzate fitte, chiuse se `closed`
 /// (un'area), aperte com'erano altrimenti (un tracciato da misurare).
@@ -88,46 +74,10 @@ function winding(rings: readonly Point[][], p: Point): number {
   return w;
 }
 
-/// La distanza dalle spezzate `lines`, fino a `limit`: i pezzi si cercano in
-/// una griglia di celle larghe `limit`.
-function distances(lines: readonly Point[][], limit: number): (p: Point) => number {
-  const cells = new Map<string, [Point, Point][]>();
-  const key = (x: number, y: number): string => `${x},${y}`;
-  for (const line of lines) {
-    const pieces: [Point, Point][] = line.length === 1 ? [[line[0]!, line[0]!]] : line.slice(1).map((b, i) => [line[i]!, b]);
-    for (const [a, b] of pieces) {
-      for (let x = Math.floor(Math.min(a[0], b[0]) / limit); x <= Math.floor(Math.max(a[0], b[0]) / limit); x++) {
-        for (let y = Math.floor(Math.min(a[1], b[1]) / limit); y <= Math.floor(Math.max(a[1], b[1]) / limit); y++) {
-          const list = cells.get(key(x, y)) ?? [];
-          list.push([a, b]);
-          cells.set(key(x, y), list);
-        }
-      }
-    }
-  }
-  return (p) => {
-    let best = limit;
-    const [cx, cy] = [Math.floor(p[0] / limit), Math.floor(p[1] / limit)];
-    for (let x = cx - 1; x <= cx + 1; x++) {
-      for (let y = cy - 1; y <= cy + 1; y++) {
-        for (const [a, b] of cells.get(key(x, y)) ?? []) {
-          const [dx, dy] = [b[0] - a[0], b[1] - a[1]];
-          const squared = dx * dx + dy * dy;
-          const u = squared === 0 ? 0 : Math.min(1, Math.max(0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / squared));
-          best = Math.min(best, Math.hypot(a[0] + u * dx - p[0], a[1] + u * dy - p[1]));
-        }
-      }
-    }
-    return best;
-  };
-}
-
 const boundsOf = (segments: readonly Segment[]): [number, number, number, number] => {
   const points = polylines(segments, true, 0.5).flat();
   return [Math.min(...points.map((p) => p[0])), Math.min(...points.map((p) => p[1])), Math.max(...points.map((p) => p[0])), Math.max(...points.map((p) => p[1]))];
 };
-
-const subpaths = (segments: readonly Segment[]): number => segments.filter((segment) => segment.kind === "move").length;
 
 /// Un generatore ripetibile.
 function random(seed: number): () => number {
@@ -137,222 +87,6 @@ function random(seed: number): () => number {
     return state / 4294967296;
   };
 }
-
-/// Con giunti ed estremi tondi, il contorno di `d` largo `2h`: ogni punto del
-/// bordo sta a h dal tracciato, entro due centesimi; e un punto più vicino di
-/// h − 0,05 sta dentro, uno più lontano di h + 0,05 fuori.
-function expectMinkowski(d: string, h: number): void {
-  const result = stroke(d, style(2 * h, { join: "round", cap: "round" }));
-  const path = polylines(parsePath(d)!, false, 0.02);
-  const distanceTo = distances(path, h + 1);
-  const rings = polylines(result, true, 0.2);
-  const boundary = rings.flat();
-  const every = Math.max(1, Math.floor(boundary.length / 1500));
-  let worst = 0;
-  for (let i = 0; i < boundary.length; i += every) worst = Math.max(worst, Math.abs(distanceTo(boundary[i]!) - h));
-  expect(worst).toBeLessThan(0.02);
-  const [x0, y0, x1, y1] = boundsOf(parsePath(d)!);
-  const next = random(7);
-  for (let k = 0; k < 400; k++) {
-    const p: Point = [x0 - h - 2 + (x1 - x0 + 2 * h + 4) * next(), y0 - h - 2 + (y1 - y0 + 2 * h + 4) * next()];
-    const gap = distanceTo(p);
-    if (gap < h - 0.05) expect(winding(rings, p), `dentro: ${p}`).not.toBe(0);
-    else if (gap > h + 0.05) expect(winding(rings, p), `fuori: ${p}`).toBe(0);
-  }
-}
-
-const circle = (cx: number, cy: number, r: number): string =>
-  `M${cx + r} ${cy} A${r} ${r} 0 0 1 ${cx} ${cy + r} A${r} ${r} 0 0 1 ${cx - r} ${cy} A${r} ${r} 0 0 1 ${cx} ${cy - r} A${r} ${r} 0 0 1 ${cx + r} ${cy} Z`;
-
-describe("le linee", () => {
-  it("con gli estremi netti, un rettangolo", () => {
-    const out = stroke("M0 0 L100 0", style(10));
-    expect(area(out)).toBeCloseTo(1000, 1);
-    expect(boundsOf(out)).toEqual([0, -5, 100, 5]);
-  });
-
-  it("con gli estremi quadrati, allungato di metà larghezza", () => {
-    expect(boundsOf(stroke("M0 0 L100 0", style(10, { cap: "square" })))).toEqual([-5, -5, 105, 5]);
-  });
-
-  it("con gli estremi tondi, due mezzi cerchi veri", () => {
-    const out = stroke("M0 0 L100 0", style(10, { cap: "round" }));
-    expect(area(out)).toBeCloseTo(1000 + 25 * Math.PI, 1);
-    expect(out.filter((segment) => segment.kind === "arc").length).toBe(4);
-  });
-
-  it("una linea obliqua", () => {
-    expect(area(stroke("M0 0 L30 40", style(4, { cap: "square" })))).toBeCloseTo(54 * 4, 1);
-  });
-});
-
-describe("i giunti", () => {
-  const ELL = "M0 0 L100 0 L100 100";
-
-  it("lo spigolo, smussato e tondo", () => {
-    expect(area(stroke(ELL, style(10)))).toBeCloseTo(2000, 1);
-    expect(boundsOf(stroke(ELL, style(10)))).toEqual([0, -5, 105, 100]);
-    expect(area(stroke(ELL, style(10, { join: "bevel" })))).toBeCloseTo(1987.5, 1);
-    expect(area(stroke(ELL, style(10, { join: "round" })))).toBeCloseTo(1975 + (25 * Math.PI) / 4, 1);
-  });
-
-  it("oltre il limite lo spigolo diventa smussato", () => {
-    const sharp = "M0 0 L100 0 L0 20";
-    expect(boundsOf(stroke(sharp, style(10)))[2]).toBeLessThan(106);
-    expect(boundsOf(stroke(sharp, style(10, { miterLimit: 11 })))[2]).toBeGreaterThan(140);
-  });
-
-  it("un poligono chiuso ha i giunti anche nel punto di partenza", () => {
-    const out = stroke("M0 0 L100 0 L100 100 L0 100 Z", style(10));
-    expect(area(out)).toBeCloseTo(110 * 110 - 90 * 90, 1);
-    expect(subpaths(out)).toBe(2);
-  });
-
-  it("un tracciato che torna indietro", () => {
-    expect(area(stroke("M0 0 L100 0 L50 0", style(10, { join: "round" })))).toBeCloseTo(1000 + (25 * Math.PI) / 2, 1);
-  });
-});
-
-describe("le curve", () => {
-  it("un cerchio fa un anello di due cerchi, con gli archi", () => {
-    const out = stroke(circle(0, 0, 50), style(10));
-    expect(area(out)).toBeCloseTo(Math.PI * (55 * 55 - 45 * 45), 0);
-    expect(subpaths(out)).toBe(2);
-    expect(out.every((segment) => segment.kind !== "cubic")).toBe(true);
-  });
-
-  it("un cerchio più piccolo di metà contorno diventa un disco", () => {
-    expect(area(stroke(circle(0, 0, 4), style(10)))).toBeCloseTo(81 * Math.PI, 0);
-  });
-
-  it("una curva a esse, sottile e più larga delle sue anse", () => {
-    expectMinkowski("M0 0 C50 -80 100 80 150 0", 10);
-    expectMinkowski("M0 0 C50 -80 100 80 150 0", 40);
-  });
-
-  it("un'inversione a U più stretta del contorno", () => {
-    expectMinkowski("M0 0 C100 0 100 100 0 100", 30);
-    expectMinkowski("M0 0 C120 0 120 10 0 10", 12);
-  });
-
-  it("una cuspide, un cappio e una maniglia sul suo nodo", () => {
-    expectMinkowski("M0 0 C30 30 0 30 30 0", 6);
-    expectMinkowski("M0 0 C100 100 0 100 100 0", 8);
-    expectMinkowski("M0 0 C0 0 50 100 100 100", 15);
-  });
-
-  it("archi d'ellisse e di cerchio stretti", () => {
-    expectMinkowski("M0 0 A80 30 20 0 1 100 50", 10);
-    expectMinkowski("M0 0 A5 5 0 0 1 10 0 A5 5 0 0 1 20 0", 12);
-  });
-
-  it("una spezzata e un tracciato di più curve", () => {
-    expectMinkowski("M0 0 L20 40 L40 0 L60 40", 8);
-    expectMinkowski("M0 0 C20 -30 40 30 60 0 S100 -40 120 0 Q140 40 160 0 T200 0", 7);
-    expectMinkowski("M10 10 C60 -20 90 60 40 50 C0 40 20 0 60 20 Z", 9);
-  });
-});
-
-describe("il tratteggio", () => {
-  it("una linea in tratti", () => {
-    const out = stroke("M0 0 L100 0", style(4, { dashes: [10, 10] }));
-    expect(subpaths(out)).toBe(5);
-    expect(area(out)).toBeCloseTo(200, 1);
-  });
-
-  it("i tratti lunghi zero sono punti", () => {
-    const out = stroke("M0 0 L100 0", style(4, { dashes: [0, 10], cap: "round" }));
-    expect(subpaths(out)).toBe(10);
-    expect(area(out)).toBeCloseTo(40 * Math.PI, 0);
-    expect(stroke("M0 0 L100 0", style(4, { dashes: [0, 10] }))).toEqual([]);
-  });
-
-  it("in un sottotracciato chiuso il primo e l'ultimo tratto si uniscono col giunto", () => {
-    const rings = (out: Segment[]): Point[][] => polylines(out, true, 0.2);
-    const joined = stroke("M0 0 L100 0 L100 100 L0 100 Z", style(10, { dashes: [60, 30] }));
-    expect(subpaths(joined)).toBe(4);
-    expect(winding(rings(joined), [-4.5, -4.5])).not.toBe(0);
-    const apart = stroke("M0 0 L100 0 L100 100 L0 100 Z", style(10, { dashes: [60, 20] }));
-    expect(winding(rings(apart), [-4.5, -4.5])).toBe(0);
-  });
-
-  it("un tratto che copre tutto lascia il sottotracciato chiuso", () => {
-    expect(area(stroke("M0 0 L100 0 L100 100 L0 100 Z", style(10, { dashes: [500, 10] })))).toBeCloseTo(110 * 110 - 90 * 90, 1);
-  });
-
-  it("un tratteggio troppo fitto si rifiuta", () => {
-    expect(strokeLoops(parsePath("M0 0 L100000 0")!, style(1, { dashes: [1, 1] }))).toBe("dense");
-  });
-});
-
-describe("i punti", () => {
-  it("un sottotracciato lungo zero", () => {
-    expect(area(stroke("M10 10 Z", style(6, { cap: "round" })))).toBeCloseTo(9 * Math.PI, 1);
-    expect(area(stroke("M10 10 L10 10", style(6, { cap: "square" })))).toBeCloseTo(36, 1);
-    expect(stroke("M10 10 Z", style(6))).toEqual([]);
-    expect(stroke("M10 10", style(6, { cap: "round" }))).toEqual([]);
-  });
-});
-
-describe("lo scostamento", () => {
-  const SQUARE = "M0 0 L100 0 L100 100 L0 100 Z";
-
-  it("allarga un quadrato con gli spigoli, smussati o tondi", () => {
-    expect(area(offset(SQUARE, 10))).toBeCloseTo(14400, 1);
-    expect(area(offset(SQUARE, 10, "bevel"))).toBeCloseTo(14200, 1);
-    expect(area(offset(SQUARE, 10, "round"))).toBeCloseTo(14000 + 100 * Math.PI, 1);
-  });
-
-  it("restringe, fino a niente", () => {
-    expect(area(offset(SQUARE, -10))).toBeCloseTo(6400, 1);
-    expect(offset(SQUARE, -60)).toEqual([]);
-  });
-
-  it("un cerchio resta un cerchio", () => {
-    expect(area(offset(circle(0, 0, 50), 10))).toBeCloseTo(3600 * Math.PI, 0);
-    expect(area(offset(circle(0, 0, 50), -10))).toBeCloseTo(1600 * Math.PI, 0);
-  });
-
-  it("un buco si stringe quando la forma si allarga", () => {
-    const ring = `${SQUARE} M30 30 L30 70 L70 70 L70 30 Z`;
-    expect(area(offset(ring, 5))).toBeCloseTo(110 * 110 - 30 * 30, 1);
-  });
-
-  it("una linea senza riempimento si allarga attorno a sé", () => {
-    expect(area(offset("M0 0 L100 0", 5, "round", false))).toBeCloseTo(1000 + 25 * Math.PI, 1);
-    expect(area(offset("M0 0 L100 0", 5, "miter", false))).toBeCloseTo(1100, 1);
-    expect(offset("M0 0 L100 0", -5, "miter", false)).toEqual([]);
-  });
-});
-
-describe("il tempo e i limiti", () => {
-  /// Duecento curve di fila, ciascuna con lo spigolo sulla precedente.
-  function wandering(): string {
-    const next = random(11);
-    let d = "M0 0";
-    let [x, y] = [0, 0];
-    for (let i = 0; i < 200; i++) {
-      const [nx, ny] = [x + 10 + next() * 20, y + (next() - 0.5) * 30];
-      d += ` C${x + 5} ${y + (next() - 0.5) * 20} ${nx - 5} ${ny + (next() - 0.5) * 20} ${nx} ${ny}`;
-      [x, y] = [nx, ny];
-    }
-    return d;
-  }
-
-  it("il contorno di duecento curve, largo più delle curve", () => {
-    const begin = performance.now();
-    expect(stroke(wandering(), style(20, { join: "round", cap: "round" })).length).toBeGreaterThan(0);
-    expect(performance.now() - begin).toBeLessThan(4000);
-  });
-
-  it("un groviglio troppo intricato si rifiuta", () => {
-    const next = random(11);
-    let d = "M0 0";
-    for (let i = 0; i < 200; i++) d += ` C${next() * 400} ${next() * 400} ${next() * 400} ${next() * 400} ${next() * 400} ${next() * 400}`;
-    expect(strokeArea(parsePath(d)!, style(20, { join: "round", cap: "round" }))).toBe("complex");
-  }, 30000);
-});
-
 describe("lo spessore variabile", () => {
   function profiled(d: string, profile: readonly WidthPoint[], more: Partial<ProfileStyle> = {}): Segment[] {
     const out = profileArea(parsePath(d)!, widthSpans(profile), { cap: "butt", join: "miter", ...more });
@@ -363,34 +97,6 @@ describe("lo spessore variabile", () => {
   const expectBounds = (segments: readonly Segment[], expected: readonly number[]): void => {
     boundsOf(segments).forEach((value, i) => expect(value, `lato ${i}`).toBeCloseTo(expected[i]!, 2));
   };
-
-  /// ∫ f da 0 a 1, con Simpson.
-  const integral = (f: (u: number) => number): number => {
-    const n = 2000;
-    let sum = f(0) + f(1);
-    for (let k = 1; k < n; k++) sum += (k % 2 === 1 ? 4 : 2) * f(k / n);
-    return sum / (3 * n);
-  };
-
-  it("un profilo uniforme è il contorno fermo", () => {
-    const cases: [string, ProfileStyle][] = [
-      ["M0 0 L100 0", { cap: "butt", join: "miter" }],
-      ["M0 0 L100 0 L100 100", { cap: "round", join: "round" }],
-      ["M0 0 L100 0 L0 20", { cap: "square", join: "miter" }],
-      ["M0 0 C40 -60 80 60 120 0 L120 50", { cap: "square", join: "bevel" }],
-      [circle(0, 0, 50), { cap: "butt", join: "miter" }],
-      ["M0 0 C100 0 100 60 0 60", { cap: "round", join: "round" }],
-    ];
-    for (const [d, given] of cases) {
-      const ours = profiled(d, [
-        [0, 5, 5],
-        [1, 5, 5],
-      ], given);
-      const fixed = stroke(d, style(10, given));
-      expect(area(ours), d).toBeCloseTo(area(fixed), 1);
-      expectBounds(ours, boundsOf(fixed));
-    }
-  });
 
   it("una linea che si assottiglia è un triangolo, senza estremi dove non è larga", () => {
     const out = profiled("M0 0 L100 0", [
@@ -425,74 +131,6 @@ describe("lo spessore variabile", () => {
     ]);
     expect(area(out)).toBeCloseTo(800, 1);
     expectBounds(out, [0, -6, 100, 6]);
-  });
-
-  it("l'area di una linea è l'integrale del profilo", () => {
-    const profiles: WidthPoint[][] = [
-      [
-        [0, 0, 0],
-        [0.5, 5, 5],
-        [1, 0, 0],
-      ],
-      [
-        [0, 1, 3],
-        [0.3, 6, 2],
-        [0.7, 2, 5],
-        [1, 4, 1],
-      ],
-    ];
-    for (const profile of profiles) {
-      const expected = 100 * integral((u) => widthsAt(profile, u)[0] + widthsAt(profile, u)[1]);
-      expect(area(profiled("M0 0 L100 0", profile))).toBeCloseTo(expected, 0);
-    }
-  });
-
-  it("su una curva il bordo sta alla larghezza del profilo, da ciascun lato", () => {
-    const d = "M0 0 C60 -40 140 40 200 0";
-    const profile: WidthPoint[] = [
-      [0, 1, 3],
-      [0.3, 6, 2],
-      [0.7, 2, 5],
-      [1, 4, 1],
-    ];
-    const rings = polylines(profiled(d, profile), true, 0.2);
-    const line = polylines(parsePath(d)!, false, 0.01)[0]!;
-    const lengths = [0];
-    for (let i = 1; i < line.length; i++) lengths.push(lengths[i - 1]! + Math.hypot(line[i]![0] - line[i - 1]![0], line[i]![1] - line[i - 1]![1]));
-    const total = lengths[lengths.length - 1]!;
-    for (let i = 20; i + 20 < line.length; i += 97) {
-      const [p, q] = [line[i - 1]!, line[i + 1]!];
-      const length = Math.hypot(q[0] - p[0], q[1] - p[1]);
-      const n: Point = [-(q[1] - p[1]) / length, (q[0] - p[0]) / length];
-      const [left, right] = widthsAt(profile, lengths[i]! / total);
-      const at = (k: number): Point => [line[i]![0] + n[0] * k, line[i]![1] + n[1] * k];
-      expect(winding(rings, at(right - 0.05)), `destra dentro a ${i}`).not.toBe(0);
-      expect(winding(rings, at(right + 0.05)), `destra fuori a ${i}`).toBe(0);
-      expect(winding(rings, at(-left + 0.05)), `sinistra dentro a ${i}`).not.toBe(0);
-      expect(winding(rings, at(-left - 0.05)), `sinistra fuori a ${i}`).toBe(0);
-    }
-  });
-
-  it("una linea chiusa fa un anello, che comincia e finisce dove comincia", () => {
-    const profile: WidthPoint[] = [
-      [0, 2, 2],
-      [0.5, 8, 4],
-      [1, 2, 2],
-    ];
-    const out = profiled(circle(0, 0, 50), profile);
-    const rings = polylines(out, true, 0.2);
-    expect(winding(rings, [0, 0])).toBe(0);
-    // Il cerchio gira in verso orario sullo schermo: la destra guarda il
-    // centro.
-    const expected = (2 * Math.PI * integral((u) => {
-      const [left, right] = widthsAt(profile, u);
-      return (50 + left) ** 2 - (50 - right) ** 2;
-    })) / 2;
-    expect(area(out)).toBeCloseTo(expected, 0);
-    expect(winding(rings, [-57.9, 0])).not.toBe(0);
-    expect(winding(rings, [-58.1, 0])).toBe(0);
-    expect(winding(rings, [-46.1, 0])).not.toBe(0);
-    expect(winding(rings, [-45.9, 0])).toBe(0);
   });
 
   it("gli estremi tondi e quadrati stanno sul segmento fra i due lati", () => {

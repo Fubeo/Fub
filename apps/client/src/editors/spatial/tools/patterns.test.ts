@@ -11,19 +11,7 @@ import { NewIds } from "./edit";
 import { hatchFallback, hatchOf, type Hatch } from "./hatches";
 import type { Unit } from "./hit";
 import { estimate } from "./measure";
-import {
-  contentColor,
-  deleteMotifOps,
-  distinguishOps,
-  documentPatterns,
-  filledParts,
-  hatchOps,
-  hatchView,
-  motifOps,
-  renameMotifOps,
-  type HatchChange,
-  type HatchChanged,
-} from "./patterns";
+import { contentColor, distinguishOps, documentPatterns, filledParts, hatchOps, hatchView, type HatchChange, type HatchChanged } from "./patterns";
 import { resourcesOf } from "./resources";
 import { documentColors, linkSwatchOps, newSwatchOps } from "./swatches";
 import { LAYER, open, type Opened } from "./test-support";
@@ -266,93 +254,6 @@ describe("distinguere le aree", () => {
 });
 
 describe("i motivi del documento", () => {
-  const SOURCE = doc(`${LAYER}<rect id="oa" x="10" y="20" width="10" height="10" fill="#d55e00"/><g id="og" opacity="0.5" fill="#0072b2"><circle id="ob" cx="40" cy="25" r="5" transform="translate(0 5)"/></g></g>`);
-
-  it("«Motivo dalla selezione» copia gli oggetti dove sono, nel riquadro di ciò che disegnano; la selezione resta", () => {
-    const opened = open(SOURCE);
-    const units = unitsOf(opened, ["oa", "ob"]);
-    expect(units).toHaveLength(1);
-    const chosen = [...units, ...opened.reindex().units.filter((unit) => unit.key === "og")];
-    const made = motifOps(opened.engine.model!, chosen, "Motivo", ids(opened));
-    if (typeof made === "string") throw new Error(made);
-    expect(made.name).toBe("Motivo");
-    expect(made.keys).toEqual(["oa", "og"]);
-    const text = applied(opened, made.ops);
-    expect(text).toContain(
-      `    <pattern id="${made.id}" fub:role="swatch" fub:name="Motivo" x="10" y="20" width="35" height="15" patternUnits="userSpaceOnUse">
-      <rect x="10" y="20" width="10" height="10" fill="#d55e00" transform="matrix(1 0 0 1 -10 -20)"/>
-      <g fill="#0072b2" opacity="0.5" transform="matrix(1 0 0 1 -10 -20)">
-        <circle cx="40" cy="25" r="5" transform="translate(0 5)"/>
-      </g>
-    </pattern>`,
-    );
-    const [motif] = documentPatterns(opened.engine.model!);
-    expect(motif).toEqual({ id: made.id, name: "Motivo", color: expect.stringMatching(/^#[0-9a-f]{6}$/) });
-    // Un altro prende il primo nome libero.
-    const again = motifOps(opened.engine.model!, unitsOf(opened, ["oa"]), "Motivo", ids(opened));
-    expect(typeof again !== "string" && again.name).toBe("Motivo 2");
-  });
-
-  it("si applica col suo colore medio come ripiego, si rinomina e si elimina", () => {
-    const opened = open(
-      doc(
-        `${DEFS('<pattern id="rm" fub:role="swatch" fub:name="Pois" patternUnits="userSpaceOnUse" width="10" height="10"><rect width="10" height="5" fill="#ff0000"/><rect y="5" width="10" height="5" fill="#0000ff"/></pattern>')}${LAYER}${RECT("oa")}${RECT("ob", ' fill="#d55e00" fub:locked="true"')}</g>`,
-      ),
-    );
-    expect(documentPatterns(opened.engine.model!)).toEqual([{ id: "rm", name: "Pois", color: "#800080" }]);
-    expect(applied(opened, changed(opened, { pattern: "rm" }).ops)).toContain('<rect id="oa" x="10" y="20" width="40" height="20" fill="url(#rm) #800080"/>');
-    expect(hatchView(filledParts(opened.engine.model!, unitsOf(opened, ["oa"])))).toMatchObject({ choice: "pattern:rm" });
-    applied(opened, renameMotifOps(opened.engine.model!, "rm", "Quadri", unitsOf(opened), ids(opened)).ops);
-    expect(documentPatterns(opened.engine.model!)[0]!.name).toBe("Quadri");
-    const removed = deleteMotifOps(opened.engine.model!, "rm", unitsOf(opened), ids(opened));
-    expect(removed.kept).toBe(0);
-    expect(applied(opened, removed.ops)).toContain('<rect id="oa" x="10" y="20" width="40" height="20" fill="#800080"/>');
-    expect(opened.engine.holder("rm")).toBeNull();
-  });
-
-  it("chi lo usa e non si riscrive lo tiene: il motivo resta condiviso, senza nome", () => {
-    const opened = open(
-      doc(
-        `${DEFS('<pattern id="rm" fub:role="swatch" fub:name="Pois" patternUnits="userSpaceOnUse" width="10" height="10"><rect width="10" height="10" fill="#ff0000"/></pattern>')}${LAYER}${RECT("oa", ' fill="url(#rm) #ff0000" fub:locked="true"')}</g>`,
-      ),
-    );
-    const removed = deleteMotifOps(opened.engine.model!, "rm", [], ids(opened));
-    expect(removed.kept).toBe(1);
-    expect(applied(opened, removed.ops)).toContain('<pattern id="rm" fub:role="shared" width="10" height="10" patternUnits="userSpaceOnUse">');
-    expect(documentPatterns(opened.engine.model!)).toEqual([]);
-  });
-
-  it("non si fa con ciò che un motivo non contiene", () => {
-    const refusal = (body: string, keys: readonly string[], defs = ""): string | null => {
-      const opened = open(doc(`${defs === "" ? "" : DEFS(defs)}${LAYER}${body}</g>`));
-      const made = motifOps(opened.engine.model!, unitsOf(opened, keys), "Motivo", ids(opened));
-      return typeof made === "string" ? made : null;
-    };
-    expect(refusal('<image id="oi" x="0" y="0" width="10" height="10" href="data:image/png;base64,AA=="/>', ["oi"])).toBe("kind");
-    // Una campitura o un motivo, anche ereditati: il formato non lascia che
-    // il contenuto di un motivo ne usi un altro.
-    const MOTIF = '<pattern id="rm" fub:role="swatch" fub:name="Pois" patternUnits="userSpaceOnUse" width="10" height="10"><rect width="5" height="5" fill="#ff0000"/></pattern>';
-    expect(refusal(RECT("oa", ' fill="url(#rh) #0d64a0"'), ["oa"], HATCH("rh"))).toBe("content");
-    expect(refusal(`<g id="og" fill="url(#rh) #0d64a0">${RECT("oa", "")}</g>`, ["og"], HATCH("rh"))).toBe("content");
-    expect(refusal(RECT("oa", ' fill="url(#rm) #ff0000"'), ["oa"], MOTIF)).toBe("content");
-    expect(refusal(RECT("oa", ' clip-path="url(#rc)"'), ["oa"], '<clipPath id="rc" fub:role="private"><rect x="10" y="20" width="5" height="5"/></clipPath>')).toBe("content");
-    expect(refusal(`<g id="og" filter="url(#rf)">${RECT("oa")}</g>`, ["og"], '<filter id="rf" fub:role="private"><feGaussianBlur stdDeviation="2"/></filter>')).toBe("content");
-    expect(refusal("", [])).toBe("empty");
-  });
-
-  it("le sfumature private degli oggetti diventano copie del motivo", () => {
-    const opened = open(
-      doc(
-        `${DEFS('<linearGradient id="rg" fub:role="private" gradientUnits="userSpaceOnUse" x1="10" y1="0" x2="50" y2="0"><stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#ffffff"/></linearGradient>')}${LAYER}${RECT("oa", ' fill="url(#rg) #808080"')}</g>`,
-      ),
-    );
-    const made = motifOps(opened.engine.model!, unitsOf(opened), "Motivo", ids(opened));
-    if (typeof made === "string") throw new Error(made);
-    const text = applied(opened, made.ops);
-    const copies = [...text.matchAll(/<linearGradient id="([^"]+)"/g)].map((match) => match[1]);
-    expect(copies).toHaveLength(2);
-    expect(text).toContain(`<rect x="10" y="20" width="40" height="20" fill="url(#${copies[1]}) #808080" transform="matrix(1 0 0 1 -10 -20)"/>`);
-  });
 
   it("il colore medio pesa le aree e l'opacità; senza riempimenti, i contorni; altrimenti il nero", () => {
     expect(contentColor([{ tag: "rect", attrs: { width: "30", height: "10", fill: "#ffffff" } }, { tag: "rect", attrs: { width: "10", height: "10", fill: "#000000" } }])).toBe("#bfbfbf");

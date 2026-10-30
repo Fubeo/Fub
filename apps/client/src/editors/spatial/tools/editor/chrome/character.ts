@@ -14,7 +14,6 @@ import { fontButton, type FontChoice } from "../../../../../kit/font-picker";
 import { numberField } from "../../../../../kit/number-field";
 import { formatNumber } from "../../../number";
 import { t, type DrawKey } from "../../../strings";
-import { vaultFamilyOptions } from "../../fields";
 import type { Emphasis } from "../../rich";
 import { TEXT_FAMILIES } from "../../text";
 import type { EditorContext } from "../context";
@@ -49,7 +48,7 @@ function genericOf(stack: string): string | undefined {
 }
 
 export function installCharacter(ctx: EditorContext, group: HTMLElement): void {
-  const { life, drawingFonts, has } = ctx;
+  const { life, drawingFonts } = ctx;
   group.hidden = true;
 
   /// Le famiglie che si scelgono: quelle di Fub, poi quelle del vault con la
@@ -65,7 +64,6 @@ export function installCharacter(ctx: EditorContext, group: HTMLElement): void {
       out.push({ family, source, generic: genericOf(stack) });
     };
     for (const stack of TEXT_FAMILIES) add(stack, "system");
-    if (has("fonts")) for (const option of vaultFamilyOptions(drawingFonts.families())) add(option.value, "vault");
     return out;
   };
 

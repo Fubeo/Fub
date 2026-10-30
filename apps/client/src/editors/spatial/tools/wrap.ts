@@ -337,37 +337,6 @@ export function sameFonts(a: Rich, b: Rich): boolean {
   return fonts(a) === fonts(b);
 }
 
-/// `rich`, un testo da punto, fatto testo in area: il riquadro è largo
-/// quanto la riga più larga, almeno quanto il corpo, e ogni riga è un
-/// paragrafo che cominciano tutti dalla `x` del testo. Le righe restano
-/// dove si vedevano.
-export function areaText(rich: Rich, measure: Measure): Rich {
-  if (wrapOf(rich) !== null) return rich;
-  const widest = Math.max(fontIn(rich, rich.lines[0] ?? { attrs: {}, spans: [] }, null).size, ...rich.lines.map((line) => lineWidth(rich, line, measure)));
-  // Arrotondato in su: la riga più larga ci sta.
-  const written = Number(wrapValue(widest));
-  const width = written >= widest ? written : written + 0.01;
-  const x = rich.attrs.x;
-  return {
-    ...rich,
-    attrs: { ...rich.attrs, [WRAP]: wrapValue(width) },
-    lines: rich.lines.map((line) => {
-      const attrs: Record<string, string> = { ...withoutJoin(line.attrs) };
-      if (x !== undefined && attrs.x !== undefined) attrs.x = x;
-      return { attrs, spans: line.spans };
-    }),
-  };
-}
-
-/// `rich`, un testo in area, fatto testo da punto: ogni riga che si vede
-/// resta una riga, al suo posto.
-export function pointText(rich: Rich): Rich {
-  if (rich.attrs[WRAP] === undefined) return rich;
-  const attrs: Record<string, string> = { ...rich.attrs };
-  delete attrs[WRAP];
-  return { ...rich, attrs, lines: rich.lines.map((line) => ({ attrs: withoutJoin(line.attrs), spans: line.spans })) };
-}
-
 /// Quanto del riquadro sta prima di `x`, in volte la sua larghezza, con
 /// ogni allineamento del testo.
 const BEFORE_X: Readonly<Record<string, number>> = { start: 0, middle: 0.5, end: 1 };
@@ -396,20 +365,6 @@ export function keepBox(before: Rich, rich: Rich): Rich {
   if (was === null || is === null) return rich;
   const share = (of: Rich): number => BEFORE_X[(of.attrs["text-anchor"] ?? of.inherited["text-anchor"] ?? "start").trim()] ?? 0;
   return shiftedX(rich, share(rich) * is - share(before) * was);
-}
-
-/// Il bordo del riquadro che resta fermo quando cambia la larghezza.
-export type Side = "left" | "right";
-
-/// `rich`, un testo in area, col riquadro largo `width`. Col bordo `fixed`
-/// a destra il testo si sposta di quanto il riquadro cresce, perché
-/// [`keepBox`], che tiene il sinistro, lasci fermo il destro.
-export function withWrap(rich: Rich, width: number, fixed: Side = "left"): Rich {
-  const was = wrapOf(rich);
-  if (was === null) return rich;
-  const value = wrapValue(width);
-  const sized: Rich = { ...rich, attrs: { ...rich.attrs, [WRAP]: value } };
-  return fixed === "left" ? sized : shiftedX(sized, was - Number(value));
 }
 
 /// `now`, il testo in area che era `before` e che un comando ha cambiato:

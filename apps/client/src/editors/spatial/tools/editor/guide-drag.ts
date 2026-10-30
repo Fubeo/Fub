@@ -44,7 +44,7 @@ export interface GuideDragContext {
 export function installGuideDrag(ctx: EditorContext): void {
   const {
     has, style, surface, overlay, editable, newIds, announce, docUnit, stepNow, lengthText, lengthSpoken, guidesShown, viewArea, rulerAt, showGuideLines,
-    sceneLevel, axisCursor, viewCenter, resolveNodes, frameNow, showGrip, showHandles, commit, cancelGesture, target, gridOn, guidesOn, guideReach,
+    sceneLevel, axisCursor, viewCenter, frameNow, showGrip, showHandles, commit, cancelGesture, target, gridOn, guidesOn, guideReach,
     guidesFor, options
   } = ctx;
   // --- Il gesto delle guide del documento ----------------------------------------
@@ -366,13 +366,6 @@ export function installGuideDrag(ctx: EditorContext): void {
       }
       case "connector":
         return { ...base, kind: "connector", ids: newIds(), from: null, end: null, grab: null, start: null, hook: null, dragging: false };
-      case "bezier": {
-        // Il livello si guarda a ogni nodo: se non riceve più, lo si dice e
-        // il nodo non entra.
-        const to = target(newIds());
-        if (to === null) return { ...base, kind: "refused" };
-        return { ...base, kind: "bezier", to, curve: ctx.curvature, mode: null, path: null, reshaped: null, index: -1, from: null, end: null, at: null, dragging: false };
-      }
       case "eraser":
         return eraseGesture(base);
       case "note":
@@ -391,7 +384,6 @@ export function installGuideDrag(ctx: EditorContext): void {
           hit: null,
           grip: null,
           corner: null,
-          area: null,
           matrix: null,
           angle: 0,
           lines: null,
@@ -404,32 +396,9 @@ export function installGuideDrag(ctx: EditorContext): void {
         // L'anteprima del gesto prende il posto di quella che passava.
         ctx.dropperHover = null;
         return { ...base, kind: "dropper", at: null, seen: null };
-      case "nodes":
-        resolveNodes();
-        return {
-          ...base,
-          kind: "nodes",
-          from: null,
-          end: null,
-          grab: null,
-          dragging: false,
-          nodes: ctx.nodeSelection,
-          shapes: ctx.edits.map((edit) => edit.path),
-          selection: [...ctx.selection],
-          draft: null,
-          side: null,
-          reshaped: null,
-          missed: null,
-        };
-      case "builder":
-        return { ...base, kind: "builder", from: null, end: null, mode: null, additive: false, crossed: [], trail: [], base: [...ctx.selection], dragging: false };
-      case "scissors":
-        return { ...base, kind: "cut", from: null, end: null, trail: [], dragging: false };
-      case "width":
-        return { ...base, kind: "width", from: null, end: null, spot: null, shape: null, index: -1, side: 0, dragging: false };
       case "text":
         // Il tocco che ha concluso un testo non ne apre un altro.
-        return ctx.closedTyping ? { ...base, kind: "refused" } : { ...base, kind: "text", from: null, end: null, dragging: false };
+        return ctx.closedTyping ? { ...base, kind: "refused" } : { ...base, kind: "text", from: null };
       case "gradient":
         return {
           ...base,

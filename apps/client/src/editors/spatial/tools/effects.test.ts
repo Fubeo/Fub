@@ -9,7 +9,6 @@ import { quantizeInk, type InkSample } from "../../../ink/sample";
 import { parsePath } from "../scene/geometry";
 import type { Elem } from "../scene/serialize";
 import { doc } from "../scene/test-support";
-import { applyOps } from "./apply";
 import { duplicateOps, ungroupOps } from "./arrange";
 import { NewIds, strokeElem } from "./edit";
 import {
@@ -404,12 +403,4 @@ describe("con gli altri comandi", () => {
     expect(a.kind === "effects" && b.kind === "effects" && a.filter !== null && b.filter !== null && a.filter !== b.filter).toBe(true);
   });
 
-  it("chi ha degli effetti, anche nascosti, tiene la sua trasformazione: sono nelle sue coordinate", () => {
-    const scene = (effect: string): string => `<rect id="r" width="10" height="10" transform="matrix(0 1 -1 0 50 0)" ${effect}/><g id="g" transform="matrix(2 0 0 2 0 0)" ${effect}><rect id="s" width="10" height="10"/></g>`;
-    const opened = sheet(scene(HIDDEN));
-    const out = applyOps(opened.engine.model!, units(opened, "r", "g"), ids(opened));
-    expect([out.changed, out.kept]).toEqual([0, 2]);
-    const plain = sheet(scene(""));
-    expect(applyOps(plain.engine.model!, units(plain, "r", "g"), ids(plain)).changed).toBe(2);
-  });
 });

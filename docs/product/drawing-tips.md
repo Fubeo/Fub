@@ -95,25 +95,6 @@ risorse](../reference/scene-format-resources.md#le-punte-delle-linee).
 
 ## Con gli altri comandi
 
-- **Le Forbici e il Coltello** lasciano la punta d'inizio al pezzo che
-  comincia dove cominciava la linea, e quella di fine al pezzo che finisce
-  dove finiva; i pezzi in mezzo non ne hanno, e nemmeno quelli di una forma
-  chiusa.
-- **«Unisci»** dà al tracciato unito le punte dei capi rimasti liberi, al
-  capo dove stanno, e lo strumento Nodi fa lo stesso quando unisce due capi.
-  Un tracciato che si chiude non ne ha più. Aggiungere, togliere o spostare
-  nodi le lascia ai capi: se si toglie il nodo di un capo, la punta passa al
-  nodo che diventa il capo.
-- **Le operazioni booleane e il costruttore di forme** fanno regioni, che
-  non hanno punte.
-- **«Contorno in tracciato»**, nel Completo, fa delle punte della raccolta
-  una forma sola col contorno. Una linea con «Un’altra punta», o con un
-  marcatore sui nodi di mezzo, resta com'è, e il comando la conta fra
-  quelle che non riesce a cambiare.
-- **«Scostamento»** dà un tracciato senza punte; «Semplifica» e «Oggetto in
-  tracciato» le lasciano dove sono.
-- **Lo strumento Spessore e il profilo** non cambiano una linea con le
-  punte, e lo dicono: prima si tolgono le punte.
 - **«Incolla lo stile» e il contagocce** portano le punte della raccolta,
   anche in un altro disegno; un capo con «Un’altra punta» resta com'era.
   Il contagocce su una punta prende l'aspetto della sua linea.

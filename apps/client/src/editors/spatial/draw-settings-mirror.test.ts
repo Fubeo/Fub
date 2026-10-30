@@ -6,10 +6,10 @@
 // `draw.toolbar` (gli strumenti della colonna), `draw.level` (con i suoi
 // quattro valori, letto ancora per dedurre lo spazio dalle versioni
 // precedenti), `draw.custom` (con le parti di partenza del Personalizzato),
-// `draw.suggestions` e le cartelle dei modelli e delle librerie di simboli
+// `draw.suggestions` e la cartella dei modelli
 // (`crates/fub-features/src/draw.rs`); il client li legge da
-// `preferences.ts`, da `templates/choices.ts` e da
-// `tools/symbol-libraries.ts`, e li interpreta con `tools/registry.ts`. Una parte
+// `preferences.ts` e da `templates/choices.ts`, e li interpreta con
+// `tools/registry.ts`. Una parte
 // rinominata da una parte sola non fa rumore: il livello scritto dal pannello
 // Impostazioni non lo riconosce più l'editor, e ricade in silenzio sul livello
 // di serie. Per questo un test le tiene ferme tutte e due.
@@ -25,7 +25,6 @@ import { describe, expect, it } from "vitest";
 import DRAW_RS from "../../../../../crates/fub-features/src/draw.rs?raw";
 import { CUSTOM_KEY, LEVEL_KEY, SUGGESTIONS_KEY, TOOLBAR_KEY, WORKSPACE_KEY, currentCustom, currentLevel, currentWorkspace } from "./preferences";
 import { CUSTOM_DEFAULT, WORKSPACES, isFeature, isLevel, levelsAbove } from "./tools/registry";
-import { SYMBOLS_FOLDER, SYMBOLS_SETTING, symbolsFolder } from "./tools/symbol-libraries";
 import { DRAW_BUNDLE, TEMPLATES_FOLDER, TEMPLATES_SETTING, templatesFolder } from "./templates/choices";
 
 /// Il valore, come testo, della costante pubblica `name` di `draw.rs`.
@@ -71,15 +70,13 @@ describe("le impostazioni dei disegni, Rust e client", () => {
     expect(text("DRAW_CUSTOM_KEY")).toBe(CUSTOM_KEY);
     expect(text("DRAW_SUGGESTIONS_KEY")).toBe(SUGGESTIONS_KEY);
     expect(text("DRAW_TEMPLATES_KEY")).toBe(TEMPLATES_SETTING);
-    expect(text("DRAW_SYMBOLS_KEY")).toBe(SYMBOLS_SETTING);
+    expect(DRAW_RS).not.toContain("DRAW_SYMBOLS_KEY");
     expect(text("DRAW_ID")).toBe(DRAW_BUNDLE);
   });
 
-  it("le cartelle di serie sono quelle che il client usa quando l'impostazione non dice niente", () => {
+  it("la cartella di serie è quella che il client usa quando l'impostazione non dice niente", () => {
     expect(text("DRAW_TEMPLATES_DEFAULT")).toBe(TEMPLATES_FOLDER);
     expect(templatesFolder(undefined)).toBe(text("DRAW_TEMPLATES_DEFAULT"));
-    expect(text("DRAW_SYMBOLS_DEFAULT")).toBe(SYMBOLS_FOLDER);
-    expect(symbolsFolder(undefined)).toBe(text("DRAW_SYMBOLS_DEFAULT"));
   });
 
   it("i livelli sono quelli del registro, nello stesso ordine, e il primo è quello di serie", () => {

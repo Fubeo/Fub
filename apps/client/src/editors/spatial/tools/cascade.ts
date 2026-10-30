@@ -1237,13 +1237,6 @@ export class Cascade {
   }
 }
 
-/// Il valore di `p` scritto `text` su un elemento da solo, come lo calcola la
-/// cascata: per dare un contesto.
-export function plainValue(p: string, text: string): Value {
-  const node: CascadeNode = { uri: SVG_NS, local: "g", attrs: [{ uri: "", local: p, value: text }], parent: null, children: [], text: false };
-  return new Cascade({ rules: [], selectors: [], deep: false, imports: [] }, node, () => "plain", new Set()).value(node, p);
-}
-
 /// La finestra del contenuto di un `symbol`, larga e alta: il suo `viewBox`;
 /// `null` se non ne ha uno che si legge.
 function boxOf(symbol: CascadeNode): readonly [number, number] | null {

@@ -43,7 +43,7 @@ describe("il registro degli strumenti", () => {
     ]);
     // L'Esperto e il Personalizzato non aggiungono niente, e nessun comando.
     expect(toolsFor("expert", "pdf")).toEqual(toolsFor("standard", "pdf"));
-    expect(featuresFor("custom", ["layers", "text", "nodes"], "pdf")).toEqual(featuresFor("standard", [], "pdf"));
+    expect(featuresFor("custom", ["layers", "text"], "pdf")).toEqual(featuresFor("standard", [], "pdf"));
     expect([...featuresFor("expert", [], "pdf")].some((feature) => FEATURES.some((spec) => spec.id === feature && !TOOLS.some((tool) => tool.id === feature)))).toBe(false);
     // Note e copertura non sono del disegno, né parti del Personalizzato.
     expect(toolsFor("expert", "vector").some((tool) => tool.id === "note" || tool.id === "cover")).toBe(false);
@@ -53,12 +53,12 @@ describe("il registro degli strumenti", () => {
     expect(defaultTool("pdf")).toBe("highlighter");
     expect(startTool(toolsFor("essential", "pdf"), "pdf")).toBe("highlighter");
     expect(toolAfter(toolsFor("standard", "pdf"), "cover", "pdf")).toBe("highlighter");
-    // La «N» e la «C» sono delle note e della copertura nel PDF, dei Nodi e
-    // delle Forbici nel disegno.
+    // La «N» e la «C» sono delle note e della copertura nel PDF; nel
+    // disegno non sono di nessuno.
     expect(toolForKey(toolsFor("standard", "pdf"), "n")?.id).toBe("note");
     expect(toolForKey(toolsFor("standard", "pdf"), "C")?.id).toBe("cover");
-    expect(toolForKey(toolsFor("expert"), "n")?.id).toBe("nodes");
-    expect(toolForKey(toolsFor("expert"), "c")?.id).toBe("scissors");
+    expect(toolForKey(toolsFor("standard"), "n")).toBeNull();
+    expect(toolForKey(toolsFor("standard"), "c")).toBeNull();
   });
 
   it("aggiunge allo Standard il lazo, la Tavola, il contagocce e la Sfumatura accanto alla selezione, l'evidenziatore dopo la penna, il Connettore dopo la freccia, il poligono dopo il Connettore e il testo in fondo", () => {
@@ -95,29 +95,10 @@ describe("il registro degli strumenti", () => {
     expect(reaches("essential", "standard")).toBe(false);
   });
 
-  it("aggiunge all'Esperto i nodi e il Costruttore accanto alla selezione e la penna di Bézier dopo le forme", () => {
-    expect(toolsFor("expert").map((tool) => tool.id)).toEqual([
-      "select", "hand", "zoom", "lasso", "nodes", "builder", "scissors", "width", "board", "eyedropper", "gradient", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "connector", "polygon", "bezier", "text",
-    ]);
-    expect(toolSpec("nodes")).toMatchObject({ levels: { vector: "expert" }, group: "pick", shortcut: "a", aliases: ["n"] });
-    expect(toolSpec("bezier")).toMatchObject({ levels: { vector: "expert" }, group: "shape", shortcut: "b" });
-    expect(toolForKey(toolsFor("standard"), "n")).toBeNull();
-    expect(toolForKey(toolsFor("standard"), "b")).toBeNull();
-    expect(toolForKey(toolsFor("expert"), "N")?.id).toBe("nodes");
-    expect(toolForKey(toolsFor("expert"), "B")?.id).toBe("bezier");
-    // Il Costruttore ha la lettera di Illustrator, senza Maiusc.
-    expect(toolSpec("builder")).toMatchObject({ levels: { vector: "expert" }, group: "pick", shortcut: "m" });
-    expect(toolForKey(toolsFor("standard"), "m")).toBeNull();
-    expect(toolForKey(toolsFor("expert"), "M")?.id).toBe("builder");
-    expect(toolAfter(toolsFor("expert"), "builder")).toBe("select");
-    // Le Forbici anche.
-    expect(toolSpec("scissors")).toMatchObject({ levels: { vector: "expert" }, group: "pick", shortcut: "c" });
-    expect(toolForKey(toolsFor("standard"), "c")).toBeNull();
-    expect(toolForKey(toolsFor("expert"), "C")?.id).toBe("scissors");
-    // E lo Spessore, che in Illustrator è Maiusc+W.
-    expect(toolSpec("width")).toMatchObject({ levels: { vector: "expert" }, group: "pick", shortcut: "w" });
-    expect(toolForKey(toolsFor("standard"), "w")).toBeNull();
-    expect(toolForKey(toolsFor("expert"), "W")?.id).toBe("width");
+  it("all'Esperto non aggiunge più niente: i suoi strumenti se ne sono andati (ADR 0231)", () => {
+    expect(toolsFor("expert").map((tool) => tool.id)).toEqual(toolsFor("standard").map((tool) => tool.id));
+    expect([...featuresFor("expert")]).toEqual([...featuresFor("standard")]);
+    for (const key of ["a", "n", "b", "m", "c", "w"]) expect(toolForKey(toolsFor("expert"), key)).toBeNull();
   });
 
   it("riconosce i nomi dei livelli, e sa quali stanno sopra", () => {
@@ -134,7 +115,6 @@ describe("il registro degli strumenti", () => {
     expect(FEATURES.map((feature) => feature.id)).toEqual([
       "pen", "eraser", "rect", "ellipse", "line", "arrow",
       "lasso", "board", "eyedropper", "gradient", "highlighter", "connector", "polygon", "text", "colors", "swatches", "styles", "tips", "hatches", "selection", "arrange", "layers", "grid", "guides", "rulers", "recognize", "symmetry", "gestures", "links", "images", "crop", "library", "properties", "style", "history", "accessibility", "export", "present",
-      "nodes", "builder", "scissors", "width", "bezier", "attributes", "outline", "transform", "apply", "path", "boolean", "trace", "masks", "typeset", "fonts", "effects", "blend", "motifs", "print", "symbols", "repeat", "editable",
     ]);
     expect(new Set(FEATURES.map((feature) => feature.label)).size).toBe(FEATURES.length);
     // Ogni strumento del disegno è una parte, tranne quelli della vista
@@ -147,9 +127,8 @@ describe("il registro degli strumenti", () => {
   it("dà a un livello pronto le sue parti e quelle sotto, e al Personalizzato quelle scelte che conosce", () => {
     expect([...featuresFor("essential")]).toEqual(CUSTOM_DEFAULT);
     expect(featuresFor("standard").has("layers")).toBe(true);
-    expect(featuresFor("standard").has("nodes")).toBe(false);
     expect(featuresFor("expert").size).toBe(FEATURES.length);
-    expect([...featuresFor("custom", ["boolean", "pen", "futuro", 3, "select"])]).toEqual(["boolean", "pen"]);
+    expect([...featuresFor("custom", ["boolean", "pen", "futuro", 3, "select"])]).toEqual(["pen"]);
     // Senza una scelta, il Personalizzato parte dall'Essenziale.
     expect(featuresFor("custom")).toEqual(featuresFor("essential"));
     expect(CUSTOM_DEFAULT).toEqual(["pen", "eraser", "rect", "ellipse", "line", "arrow"]);
@@ -176,15 +155,14 @@ describe("il registro degli strumenti", () => {
 
   it("dà sempre la Selezione, la Mano e la Lente, e comincia dalla penna o dal primo strumento che disegna", () => {
     expect(toolsOf(new Set()).map((tool) => tool.id)).toEqual(["select", "hand", "zoom"]);
-    expect(toolsOf(featuresFor("custom", ["text", "nodes"])).map((tool) => tool.id)).toEqual(["select", "hand", "zoom", "nodes", "text"]);
+    expect(toolsOf(featuresFor("custom", ["text", "lasso"])).map((tool) => tool.id)).toEqual(["select", "hand", "zoom", "lasso", "text"]);
     expect(startTool(toolsFor("essential"))).toBe(DEFAULT_TOOL);
-    expect(startTool(toolsOf(featuresFor("custom", ["text", "nodes", "ellipse"])))).toBe("ellipse");
-    expect(startTool(toolsOf(featuresFor("custom", ["nodes"])))).toBe("select");
+    expect(startTool(toolsOf(featuresFor("custom", ["text", "lasso", "ellipse"])))).toBe("ellipse");
+    expect(startTool(toolsOf(featuresFor("custom", ["lasso"])))).toBe("select");
   });
 
   it("dopo uno strumento che sceglie riprende la Selezione, dopo gli altri lo strumento di partenza", () => {
     expect(toolAfter(toolsFor("essential"), "lasso")).toBe("select");
-    expect(toolAfter(toolsFor("standard"), "nodes")).toBe("select");
     expect(toolAfter(toolsFor("standard"), "board")).toBe("select");
     expect(toolAfter(toolsFor("essential"), "highlighter")).toBe(DEFAULT_TOOL);
     expect(toolAfter(toolsOf(featuresFor("custom", ["text"])), "pen")).toBe("text");
@@ -207,13 +185,11 @@ describe("il registro degli strumenti", () => {
     expect(toolForKey(tools, "R")?.id).toBe("rect");
     expect(toolForKey(tools, "x")).toBeNull();
     expect(toolForKey(tools, "Enter")).toBeNull();
-    // I tasti della grafica: Maiuscolo con L per la freccia, A per i nodi
-    // e N accanto.
+    // I tasti della grafica: Maiuscolo con L per la freccia.
     expect(toolForKey(tools, "l")?.id).toBe("line");
     expect(toolForKey(tools, "L", true)?.id).toBe("arrow");
     const expert = toolsFor("expert");
-    expect(toolForKey(expert, "a")?.id).toBe("nodes");
-    expect(toolForKey(expert, "n")?.id).toBe("nodes");
+    expect(toolForKey(expert, "a")).toBeNull();
     expect(toolForKey(expert, "P", true)?.id).toBe("highlighter");
     // H e Z sono la Mano e la Lente, come in Illustrator e Affinity.
     expect(toolForKey(expert, "h")?.id).toBe("hand");

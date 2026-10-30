@@ -340,14 +340,15 @@ apre, per esempio perché non c'è più, lo dice con un avviso.
 Chi monta l'editor sceglie e apre i documenti con `links`; senza, il disegno
 non ha segni né «Collega a una nota…», e un collegamento si toglie lo stesso.
 
-## Le parti avanzate
+## Ciò che il disegno porta
 
-Il Completo ha anche gli attributi di ogni oggetto, da leggere e cambiare uno
-per uno, il contorno, le trasformazioni in numeri, «Applica trasformazione»,
-il menu «Tracciato», le operazioni booleane, il Costruttore di forme, lo
-strumento Nodi, la penna di Bézier con la Curvatura, le Forbici, lo Spessore,
-«Ricalca immagine», le maschere, il testo in area e su tracciato, gli effetti e la fusione, i motivi del documento, i simboli con le librerie del vault, le ripetizioni, «Rendi modificabile» per le parti di altri programmi: [Disegni, strumenti avanzati](drawing-expert.md), [motivi](drawing-patterns.md#i-motivi-del-documento), [simboli](drawing-symbols.md), [ripetizioni](drawing-repeats.md), [rendere modificabile](drawing-editable.md), [curve e
-tagli](drawing-curves.md), [spessore variabile](drawing-width.md), [ricalco delle immagini](drawing-trace.md), [maschere](drawing-masks.md#le-maschere), [tipografia](drawing-typography.md#il-testo-in-area), [effetti e fusione](drawing-effects.md).
+Un disegno può portare ciò che Fub disegna ma non crea più da quando il
+livello Esperto se n'è andato (decisione 0231): le maschere, gli effetti e la
+fusione, i simboli, le ripetizioni, i testi in area e su tracciato, le linee a
+spessore variabile, i caratteri del vault. Si vedono, si scelgono, si
+spostano e si esportano come gli altri oggetti: [maschere](drawing-masks.md),
+[effetti e fusione](drawing-effects.md), [simboli](drawing-symbols.md),
+[ripetizioni](drawing-repeats.md), [caratteri del vault](drawing-fonts.md).
 
 ## Da tastiera
 
@@ -392,7 +393,7 @@ perché non si modifica, in un avviso in cima.
   logo esportato da un altro programma, si mostra come immagine del documento
   intero. «Modifica» lo adotta: aggiunge `xmlns:fub` e `fub:version` alla
   radice e lascia il resto com'è. L'adozione è un passo di annulla; annullarla
-  riporta all'immagine. Nel Completo, accanto, «Rendi modificabile…» adotta il file e nello stesso passo riscrive le sue parti nel formato ([Disegni, rendere modificabile](drawing-editable.md)).
+  riporta all'immagine.
 - **Sola lettura.** Una dichiarazione DOCTYPE, una codifica diversa da UTF-8,
   una versione non valida o più recente, due elementi con lo stesso id, un file
   oltre i limiti dell'editor (`MAX_EDIT_BYTES` e `MAX_ELEMENTS` in

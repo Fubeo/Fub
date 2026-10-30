@@ -123,7 +123,6 @@
 import type { Lifetime } from "../../../ui/lifetime";
 import type { TextOperation } from "../../core/text-operation";
 import type { FontNotes, VaultFontPort } from "../fonts/vault";
-import type { SymbolLibraryPort } from "./symbol-libraries";
 import type { TouchPolicy } from "../../../ink/input/roles";
 import type { SavedPen } from "../../../ink/pens";
 import type { ContainerNode, DocumentModel } from "../scene/model";
@@ -144,7 +143,6 @@ import { exportBox, type ExportScene } from "./export-plan";
 import type { ImageCodec } from "./images";
 import { RECENT_COLORS } from "./palette";
 import type { Feature, Level, ToolId, ToolProfile, Workspace } from "./registry";
-import type { TracerFactory } from "./trace-runner";
 import { checkedGrid } from "./editor/helpers";
 import type { EditorContext } from "./editor/context";
 import type { DrawChrome } from "./editor/chrome/hosts";
@@ -167,19 +165,15 @@ import { installTooling } from "./editor/tooling";
 import { installGuideDrag } from "./editor/guide-drag";
 import { installPenSymmetry } from "./editor/pen-symmetry";
 import { installBoardTool } from "./editor/board-tool";
-import { installCutting } from "./editor/cutting";
-import { installWidthTool } from "./editor/width-tool";
 import { installDropperTool } from "./editor/dropper-tool";
 import { installNib } from "./editor/nib";
 import { installReplay, type ReplaySpeed } from "./editor/replay";
 import { installRuler } from "./editor/ruler-ink";
 import { installGradientTool } from "./editor/gradient-tool";
 import { installGradientGesture } from "./editor/gradient-gesture";
-import { installNodeGestures } from "./editor/node-gestures";
+import { installInkGestures } from "./editor/ink-gestures";
 import { installInserts } from "./editor/inserts";
-import { installSymbolPanel } from "./editor/symbol-panel";
 import { installShapesConnector } from "./editor/shapes-connector";
-import { installBezierTool } from "./editor/bezier-tool";
 import { installCurvatureTool } from "./editor/curvature-tool";
 import { installTextTool } from "./editor/text-tool";
 import type { DrawCommand } from "./editor/chrome/commands";
@@ -191,7 +185,6 @@ import { installInput } from "./editor/input";
 import { installArranging } from "./editor/arranging";
 import { installSelectionCommands } from "./editor/selection-commands";
 import { installImageCommands } from "./editor/image-commands";
-import { installMasksNodes } from "./editor/masks-nodes";
 import { installLayersGrid } from "./editor/layers-grid";
 import { installKeys } from "./editor/keys";
 import { installClipboardCommands } from "./editor/clipboard-commands";
@@ -322,10 +315,6 @@ export interface DrawEditorOptions {
   /// I caratteri del vault: chi li elenca e li legge. Senza, e nel foglio
   /// delle annotazioni, i testi scrivono con le sole famiglie di Fub.
   readonly vaultFonts?: VaultFontPort;
-  /// Le librerie di simboli del vault: chi le elenca e le legge. Senza, e
-  /// nel foglio delle annotazioni, il pannello «Simboli» mostra i soli
-  /// simboli del disegno.
-  readonly symbolLibraries?: SymbolLibraryPort;
   /// Il correttore per il testo che si scrive. Senza, il testo non si
   /// controlla.
   readonly proof?: DrawProof;
@@ -356,9 +345,6 @@ export interface DrawEditorOptions {
   readonly onChange?: (change: DrawChange) => void;
   /// La selezione è cambiata: altri oggetti, o gli stessi con chiavi nuove.
   readonly onSelectionChange?: () => void;
-  /// Chi ricalca i pixel di un'immagine per «Ricalca immagine»: se non è
-  /// dato, un worker, o la pagina dove i worker non ci sono.
-  readonly tracer?: TracerFactory;
   /// I suggerimenti brevi: se si mostrano, e quelli già visti. Senza, o
   /// `null` finché chi monta l'editor non li ha letti, non se ne mostra
   /// nessuno: senza memoria tornerebbero a ogni disegno.
@@ -423,10 +409,6 @@ export interface DrawEditor {
   /// di annulla. `false` se il documento non è estraneo o la scrittura è
   /// tolta.
   adopt(): boolean;
-  /// «Rendi modificabile…» su tutto il disegno, anche su un SVG estraneo,
-  /// che si adotta nello stesso passo: la finestra, poi un passo di
-  /// annulla. Vero se il disegno è cambiato.
-  makeDrawingEditable(): Promise<boolean>;
   /// Un altro livello, dal vivo, e le parti del Personalizzato (default
   /// quelle di prima): la barra e i tasti cambiano, il documento e la
   /// cronologia restano. Uno strumento che il livello non ha più torna alla
@@ -506,19 +488,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   installGuideDrag(ctx);
   installPenSymmetry(ctx);
   installBoardTool(ctx);
-  installCutting(ctx);
-  installWidthTool(ctx);
   installDropperTool(ctx);
   installNib(ctx);
   installReplay(ctx);
   installRuler(ctx);
   installGradientTool(ctx);
   installGradientGesture(ctx);
-  installNodeGestures(ctx);
+  installInkGestures(ctx);
   installInserts(ctx);
-  installSymbolPanel(ctx);
   installShapesConnector(ctx);
-  installBezierTool(ctx);
   installCurvatureTool(ctx);
   installTextTool(ctx);
   installTextProof(ctx);
@@ -529,7 +507,6 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   installArranging(ctx);
   installSelectionCommands(ctx);
   installImageCommands(ctx);
-  installMasksNodes(ctx);
   installLayersGrid(ctx);
   installKeys(ctx);
   installClipboardCommands(ctx);
@@ -538,8 +515,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const {
     has, following, styles, style, history, root, surface, labelSurface, suggestions, panel, cursorMark, boardsNow, editable, newIds, showGrid,
     showGuideLines, fit, selectedUnits, showHandles, closeDescriptions, showPanel, syncProperties, refresh, commit, undo, redo, deleteSelection, select,
-    reveal, adopt, makeEditable, setReadOnly, setLevel, setTool, setColor, setWidth, cancelGesture, setSymmetry, dropBezier, undoable, redoable,
-    finishText, visibleBoundsOf, closeTracing, closeCrop, dispose
+    reveal, adopt, setReadOnly, setLevel, setTool, setColor, setWidth, cancelGesture, setSymmetry, undoable, redoable,
+    finishText, visibleBoundsOf, closeCrop, dispose
   } = ctx;
   const stage: DrawStage = {
     get overlay() {
@@ -629,7 +606,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // Chi sposta o cancella guarda oggetti che il testo nuovo può non
       // avere più: il gesto si annulla. Tratto e forma si scrivono alla fine,
       // sul livello che c'è allora.
-      if (ctx.current !== null && (ctx.current.kind === "select" || ctx.current.kind === "nodes" || ctx.current.kind === "erase" || ctx.current.kind === "board")) cancelGesture();
+      if (ctx.current !== null && (ctx.current.kind === "select" || ctx.current.kind === "erase" || ctx.current.kind === "board")) cancelGesture();
       ctx.engine = following(next);
       refresh();
     },
@@ -637,14 +614,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (ctx.disposed) return;
       if (next.model === null) throw new Error("documento in sola lettura: non si monta nell'editor");
       cancelGesture();
-      // Il testo in corso era del documento di prima, e così il tracciato
-      // della penna.
+      // Il testo in corso era del documento di prima.
       finishText(false);
-      dropBezier();
       ctx.engine = following(next);
       ctx.loads++;
       closeDescriptions();
-      closeTracing();
       closeCrop();
       history.clear();
       ctx.selection = [];
@@ -665,7 +639,6 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     setReadOnly,
     reveal,
     adopt,
-    makeDrawingEditable: () => makeEditable({ kind: "all" }, true),
     setLevel,
     setWorkspace: (workspace, toolbar) => ctx.setWorkspace(workspace, toolbar),
     setTool,

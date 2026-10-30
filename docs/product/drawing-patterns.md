@@ -12,9 +12,10 @@ righe, righe incrociate o puntini che si ripetono, sopra un fondo o sul
 trasparente, come i motivi di base di Illustrator o le campiture di un
 programma di disegno tecnico. Una campitura distingue un'area anche dove i
 colori non bastano: in bianco e nero, in fotocopia, per chi non vede
-alcune tinte. Fra gli [strumenti avanzati](drawing-expert.md) gli oggetti scelti
-diventano un **motivo del documento**, col suo nome, che riempie altri
-oggetti ripetendosi. La sezione «Campitura» del [pannello delle
+alcune tinte. Un disegno può portare anche dei **motivi del documento**, scritti da
+una versione precedente o da un altro programma, che riempiono gli oggetti
+ripetendosi: Fub li disegna e li conserva, ma non ne crea più
+(decisione 0231). La sezione «Campitura» del [pannello delle
 proprietà](drawing-properties.md) dà e cambia le une e gli altri. Il
 modello delle campiture è in `apps/client/src/editors/spatial/tools/hatches.ts`,
 quello dei motivi in `tools/patterns.ts`, la sezione in `tools/hatch-panel.ts`.
@@ -54,12 +55,12 @@ La sezione viene dopo «Sfumatura», con oggetti scelti che hanno un
 riempimento.
 
 - **Tipo** è un menu: Nessuna e le cinque campiture pronte, ciascuna con la
-  sua figura; nel Completo, sotto, i motivi del documento per nome, col loro
-  colore, e «Motivo dalla selezione». Una scelta vale per tutti gli oggetti
+  sua figura. Una scelta vale per tutti gli oggetti
   scelti che hanno un riempimento, è un passo di annulla, e si sente dire a
   quanti è arrivata. Nessuna lascia il fondo della campitura, o il colore di
   ripiego di un motivo. Una campitura cambiata nei campi, che non è più una
-  di quelle pronte, il menu la dice «Personalizzata».
+  di quelle pronte, il menu la dice «Personalizzata»; un motivo del documento
+  si legge per nome nel pulsante, e non è una voce da scegliere.
 - **Colore** delle righe e **Fondo**, scritti come codice, come nome o col
   nome di un campione, di cui si prende il colore: la campitura non resta
   legata al campione. Il campione accanto al campo apre i colori del
@@ -79,25 +80,12 @@ sezione mostra ciò che hanno in comune, e un valore diverso è vuoto e dice
 dice quanti sono. Un motivo scritto da un altro programma il menu lo dice
 «Altro motivo»: FubDraw lo lascia com'è, finché non se ne sceglie un altro.
 
-Nel Completo, con un motivo del documento, la sezione ne mostra il **Nome**,
-che si riscrive con le regole dei nomi dei campioni, ed **«Elimina
-motivo»**: chi lo usava torna al suo colore di ripiego, il colore medio del
-motivo, in un passo di annulla. Come per un campione, chi non si cambia,
-un oggetto bloccato o un foglio di stile, lo tiene, e il motivo resta fra
-le risorse senza nome finché lo usa.
-
 ## I motivi del documento
 
-Nel Completo **«Motivo dalla selezione»**, nella barra «Disponi» accanto
-alle maschere, nel menu «Selezione avanzata», anche col tasto destro, e nel
-menu della campitura, fa un motivo degli oggetti scelti, come trascinarli
-nei campioni di Illustrator. Quando non si può, le voci dei menu sono
-spente e dicono perché, e il pulsante lo dice a voce. Il motivo è una copia
-degli oggetti, nel riquadro di ciò che disegnano: un oggetto riempito col
-motivo mostra gli originali al loro posto, ripetuti uno accanto all'altro
-senza spazio. Gli oggetti restano, e restano scelti; il motivo prende il
-primo nome libero, «Motivo», «Motivo 2», e lo si sente dire. È un passo di
-annulla, «Motivo dalla selezione».
+Un motivo del documento è una copia di oggetti, nel riquadro di ciò che
+disegnano, che riempie un oggetto ripetendosi uno accanto all'altro senza
+spazio. Fub non ne fa più dalla selezione (decisione 0231): li disegna, li
+conserva e li copia con gli oggetti che li usano.
 
 - **La distanza fra le ripetizioni** la dà il riquadro: per lasciare
   spazio, si sceglie anche un rettangolo senza riempimento né contorno,
@@ -107,16 +95,6 @@ annulla, «Motivo dalla selezione».
   resta anche quando nessuno lo usa, e il suo nome è diverso da quelli dei
   campioni e degli altri motivi. Chi lo usa scrive come ripiego il colore
   medio del motivo, che il campione del pannello mostra accanto al nome.
-- **Non entrano in un motivo** un'immagine, un collegamento e un testo su
-  tracciato; un oggetto con un ritaglio, una maschera, degli effetti, delle
-  punte, un altro motivo o una campitura, o un tratto che non si
-  ridisegna; un oggetto dentro un gruppo con un ritaglio, una maschera,
-  degli effetti, o nascosto. Il comando dice perché, e il disegno resta
-  com'è. Un foglio di stile che farebbe vedere il motivo diverso dagli
-  oggetti lo ferma allo stesso modo.
-- **Le sfumature degli oggetti** entrano nel motivo come copie: cambiarle
-  negli oggetti non cambia il motivo.
-
 ## Distinguere le aree
 
 Un grafico, una mappa o uno schema che affidano un significato al colore
@@ -138,9 +116,6 @@ si vede. Le aree bloccate restano.
   della campitura, e lo stesso motivo del documento; in un altro disegno,
   che quel motivo non ha, il suo colore di ripiego ([Disegni,
   colori](drawing-colors.md#il-contagocce)).
-- **«Applica trasformazione»**, nel Completo, lascia la trasformazione a un
-  oggetto con una campitura o un motivo, che vivono nelle sue coordinate
-  ([Disegni, strumenti avanzati](drawing-expert.md#applica-trasformazione)).
 - **I colori del documento** contano i colori delle campiture fra quelli
   usati, e li si sceglie da lì; un campione fatto da uno di quei colori, o
   un colore sostituito, non riscrive le righe, che si cambiano nella
@@ -180,11 +155,9 @@ risorse](../reference/scene-format-resources.md#le-campiture-e-i-motivi).
 
 ## Spazi e parti
 
-Le campiture vengono nello spazio Completo, i motivi del documento
-nel Completo; per chi monta l'editor con le sue [parti](drawing-custom.md#che-cosa-porta-una-parte) li portano le parti
-«Campiture» e «Motivi del documento». In uno spazio che non le ha, le
-campiture e i motivi restano nel disegno e si vedono: senza «Campiture»
-manca la sezione, senza «Motivi del documento» il menu non offre i motivi
-né «Motivo dalla selezione», e un motivo scelto non si rinomina. «Dai una
-campitura» viene con la verifica dell'accessibilità. In un documento in
-sola lettura la sezione mostra la campitura, e non la cambia.
+Le campiture vengono nello spazio Completo; per chi monta l'editor con le
+sue [parti](drawing-custom.md#che-cosa-porta-una-parte) le porta la parte
+«Campiture». In uno spazio che non la ha, le campiture e i motivi restano
+nel disegno e si vedono, e manca la sezione. «Dai una campitura» viene con
+la verifica dell'accessibilità. In un documento in sola lettura la sezione
+mostra la campitura, e non la cambia.

@@ -1,19 +1,21 @@
 # Disegni, ritagli e maschere
 
-> **Per chi:** chi vuole mostrare soltanto una parte di una foto, e chi
-> compone forme che si ritagliano o si sfumano a vicenda.
-> **Risultato:** sapere come si ritaglia un'immagine, come si fa e si
-> rilascia una maschera, e che cosa ne fanno la selezione, gli altri comandi
-> e l'export.
+> **Per chi:** chi vuole mostrare soltanto una parte di una foto, e chi apre
+> un disegno con forme che si ritagliano o si sfumano a vicenda.
+> **Risultato:** sapere come si ritaglia un'immagine, che cosa fanno le
+> maschere che un disegno porta, e che cosa ne fanno la selezione, gli altri
+> comandi e l'export.
 
 Nello spazio Completo un'immagine si **ritaglia** sul foglio, come in
 Illustrator o in PowerPoint: se ne sceglie la parte da mostrare, e l'immagine
-resta intera nel file, pronta a mostrarne un'altra. Fra gli [strumenti avanzati](drawing-expert.md)
-le **maschere** fanno lo stesso con ogni oggetto: la forma in cima ritaglia
-quelle sotto, o ne fa la trasparenza col suo chiaro e il suo scuro. Il
-ritaglio è in `apps/client/src/editors/spatial/tools/crop.ts`, le maschere in
-`tools/masks.ts`; la parte che si vede, per la selezione e i riquadri, in
-`tools/clips.ts`.
+resta intera nel file, pronta a mostrarne un'altra. Le **maschere** fanno lo
+stesso con ogni oggetto: una forma ritaglia gli oggetti di un gruppo, o ne fa
+la trasparenza col suo chiaro e il suo scuro. Fub le mostra e le rispetta
+quando un disegno le porta, scritte da un altro programma o da una versione
+precedente, ma non le crea e non le rilascia: i comandi «Maschera» se ne sono
+andati col livello Esperto (decisione 0231). Il ritaglio è in
+`apps/client/src/editors/spatial/tools/crop.ts`; la parte che si vede, per la
+selezione e i riquadri, in `tools/clips.ts`.
 
 ## Ritagliare un'immagine
 
@@ -65,47 +67,6 @@ frecce, `Invio` ed `Esc`; la barra mostra i margini e quanto si vede, e `?`
 elenca i tasti del ritaglio. Poi dice la misura che si vede quando un segno si
 lascia, e i margini quando l'immagine si sposta.
 
-## Le maschere
-
-Nel Completo **«Maschera»**, nella barra «Disponi», apre un menu con tre voci:
-
-- **«Crea maschera di ritaglio»** (`Ctrl+7`, `⌘7`): l'oggetto in cima fra
-  quelli scelti ritaglia gli altri. Ritaglia una forma o un testo; si vede
-  ciò che sta dentro la sua area, e il colore non conta.
-- **«Crea maschera d’opacità»**: l'oggetto in cima fa la trasparenza degli
-  altri. Il bianco mostra, il nero nasconde, il grigio lascia vedere a metà:
-  una sfumatura dal bianco al nero li dissolve. Può essere anche un gruppo
-  di forme e testi.
-- **«Rilascia maschera»** (`Ctrl+Alt+7`, `⌘⌥7`): la forma della maschera
-  torna un oggetto, subito sopra chi la usava, col suo aspetto. Un gruppo
-  che non aveva altro di suo si separa.
-
-Gli oggetti mascherati entrano in un gruppo nuovo, al posto del più alto e
-nel suo livello, come con «Raggruppa», e il gruppo resta scelto. Una forma in
-cima che stava in un gruppo semitrasparente porta con sé quella trasparenza
-nella maschera d'opacità, e mostra quanto si vedeva. Ogni comando
-è un passo di annulla, che il nome dice: «Maschera di ritaglio», «Maschera
-d’opacità» o «Rilascia maschera».
-
-Una maschera non si crea, e il comando dice perché, con meno di due oggetti
-scelti; quando quello in cima è un'immagine, un collegamento o un testo su
-tracciato, o un gruppo per un ritaglio; quando è una linea, che non ha area;
-quando porta già un ritaglio, una maschera, degli effetti che si vedono o un
-filtro, e per una maschera d'opacità motivi o punte, che cambierebbero ciò che
-mostra; gli effetti nascosti ci vanno, e tornano col rilascio; quando il
-livello ha una trasformazione che lo schiaccia; quando l'oggetto in cima sta in
-un gruppo con un ritaglio, una maschera, degli effetti o un filtro, o uno stile
-del disegno ne cambierebbe l'aspetto dentro la maschera. Anche un rilascio si rifiuta, e lo
-dice, se i pezzi finirebbero fuori posto o uno stile del disegno li farebbe
-vedere diversi. Le voci spente del menu lo dicono prima, con le parole che il
-comando direbbe, e il menu mostra i tasti di «Crea maschera di ritaglio» e di
-«Rilascia maschera». «Separa» su un gruppo mascherato non lo separa, e ricorda
-che una maschera si rilascia dal menu «Maschera».
-
-Su una tastiera dove `AltGr+7` scrive un carattere, come la tedesca, dove
-scrive «{», Windows manda `Ctrl+Alt` per AltGr: `Ctrl+Alt+7` scrive quel
-carattere e non rilascia. La voce del menu c'è sempre.
-
 ## Ciò che si vede è ciò che si tocca
 
 La selezione, la cornice, l'aggancio, le guide intelligenti, il lazo, la
@@ -120,8 +81,6 @@ oggetti.
 
 ## Con gli altri comandi
 
-- **«Applica trasformazione»** porta il ritaglio di un'immagine nella sua
-  geometria nuova: l'immagine ruotata resta ruotata, e il ritaglio la segue.
 - **Duplicare, copiare e incollare** portano il ritaglio e la maschera con
   l'oggetto, ognuno coi suoi: cambiare il ritaglio di una copia non tocca
   l'originale.
@@ -143,14 +102,16 @@ dell'immagine; spostare l'immagine sotto il ritaglio cambia soltanto `x` e `y`.
 ```
 
 Una maschera di ritaglio è un `clipPath` con la forma, una d'opacità una
-`mask`, e il gruppo li usa con `clip-path` o `mask`. Come li scrive il file è
+`mask`, e il gruppo li usa con `clip-path` o `mask`. «Separa» su un gruppo
+mascherato non lo separa, e dice perché. Come li scrive il file è
 in [Formato della scena,
 risorse](../reference/scene-format-resources.md#i-ritagli-e-le-maschere).
 
 ## Spazi e parti
 
-Il ritaglio delle immagini e le maschere vengono nello spazio Completo.
-Per chi monta l'editor con le sue [parti](drawing-custom.md#che-cosa-porta-una-parte) li portano le parti «Ritaglia
-immagine» e «Maschere di ritaglio e d’opacità». In uno spazio che non li ha, i
-ritagli e le maschere restano nel disegno, si vedono e valgono per la
-selezione; mancano i comandi. In un documento in sola lettura non ci sono.
+Il ritaglio delle immagini viene nello spazio Completo. Per chi monta
+l'editor con le sue [parti](drawing-custom.md#che-cosa-porta-una-parte) lo
+porta la parte «Ritaglia immagine». In uno spazio che non l'ha, e per le
+maschere sempre, i ritagli e le maschere restano nel disegno, si vedono e
+valgono per la selezione; mancano i comandi. In un documento in sola lettura
+non ci sono.

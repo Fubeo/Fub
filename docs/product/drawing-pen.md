@@ -54,8 +54,8 @@ Accanto stanno:
 - **«Uscita»**: **Inchiostro** (il tratto coi suoi campioni), o
   **Tracciato fedele**, **Tracciato** e **Tracciato leggero**, che al
   rilascio trasformano il tratto in una linea di Bézier, con lo spessore della
-  pressione nel profilo che lo strumento Spessore legge
-  ([spessore](drawing-width.md)). Il tracciato non tiene i campioni: non si
+  pressione in una linea a spessore variabile
+  ([formato](../reference/scene-format-width.md)). Il tracciato non tiene i campioni: non si
   ripenna, non si leviga e non si riproduce.
 
 La penna, il modo della gomma e l'uscita sono della macchina e si ritrovano

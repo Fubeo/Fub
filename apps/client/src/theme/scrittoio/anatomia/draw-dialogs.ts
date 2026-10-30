@@ -42,23 +42,6 @@ export const DRAW_DIALOGS: PartAnatomy = {
       ],
     },
     {
-      name: "draw-symbol-update-dialog",
-      states: INTERACTIVE,
-      hooks: [
-        "draw-symbol-update-message", "draw-symbol-update-pair", "draw-symbol-update-side",
-        "draw-symbol-update-frame", "draw-symbol-update-caption",
-      ],
-    },
-    {
-      name: "draw-editable-dialog",
-      states: INTERACTIVE,
-      hooks: [
-        "draw-editable-message", "draw-editable-pair", "draw-editable-side", "draw-editable-frame",
-        "draw-editable-caption", "draw-editable-details", "draw-editable-heading", "draw-editable-list",
-        "draw-editable-more",
-      ],
-    },
-    {
       name: "draw-touch-dialog",
       states: INTERACTIVE,
       hooks: [

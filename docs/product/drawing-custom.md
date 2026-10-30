@@ -63,8 +63,10 @@ Linea, la Freccia, il Testo, i colori personalizzati, la vista ruotata coi
 gesti, le immagini dal vault, il pannello delle proprietà e la finestra
 «Esporta». La colonna «Livello» dice
 da quale livello delle versioni precedenti veniva ciascuna. Ciascuna fa ciò
-che dice la sezione del suo livello, in [Disegni](drawing.md) o in [Disegni,
-livello Esperto](drawing-expert.md).
+che dice la sezione del suo livello, in [Disegni](drawing.md). Le parti del
+livello Esperto se ne sono andate (decisione 0231): il loro nome, in
+`draw.custom`, resta dov'è e non conta, come quello di una versione più
+nuova.
 
 | Parte | Livello | Che cosa porta |
 | --- | --- | --- |
@@ -101,24 +103,6 @@ livello Esperto](drawing-expert.md).
 | Copia e incolla lo stile | Standard | «Copia lo stile» (`Ctrl+Alt+C`) e «Incolla lo stile» (`Ctrl+Alt+V`) |
 | Pannello delle proprietà | Standard | «Proprietà», il pannello accanto al foglio; senza, `Invio` apre le finestre «Posizione e misure» e «Proprietà del disegno» |
 | Finestra «Esporta» | Standard | «Esporta…» apre la finestra con il disegno, la selezione o le tavole, i sei formati, la misura e l'anteprima; senza, chiede soltanto PNG o PDF ([Disegni, esportare](drawing-export.md)) |
-| Nodi, Costruttore di forme, Forbici, Spessore, Bézier | Esperto | lo strumento (`A` o `N`, `M`, `C`, `W`, `B`); lo Spessore anche i profili in «Contorno» |
-| Attributi | Esperto | la loro sezione nelle proprietà, o senza il pannello «Attributi» (`Ctrl+Maiusc+X`) |
-| Contorno: tratteggio, estremi e angoli | Esperto | «Contorno» |
-| Trasforma: rotazione, scala e inclinazione | Esperto | «Trasforma…» (`Ctrl+Maiusc+M`) e la sua sezione nelle proprietà |
-| Applica trasformazione | Esperto | «Applica trasformazione» |
-| Tracciato: oggetti, contorni e inchiostro in tracciato, scostamento, semplifica, unisci | Esperto | il menu «Tracciato»: «Oggetto in tracciato», «Contorno in tracciato», «Inchiostro in tracciato», «Scostamento…», «Semplifica…» e «Unisci» (`Ctrl+J`) |
-| Operazioni booleane | Esperto | «Operazioni booleane» |
-| Ricalca immagine | Esperto | «Ricalca immagine…», con un'immagine scelta da sola |
-| Maschere di ritaglio e d’opacità | Esperto | il menu «Maschera»: «Crea maschera di ritaglio» (`Ctrl+7`), «Crea maschera d’opacità» e «Rilascia maschera» (`Ctrl+Alt+7`) |
-| Testo in area e su tracciato | Esperto | col Testo, trascinare per il riquadro di un testo in area; il menu «Testo su tracciato»; nelle proprietà «Tipo di testo» e «Larghezza del riquadro»; le maniglie della cornice di un testo in area ne cambiano la larghezza |
-| Caratteri del vault | Esperto | le famiglie dei file di caratteri del vault nel menu «Carattere» delle proprietà e fra le scelte di `font-family` negli attributi ([Disegni, caratteri del vault](drawing-fonts.md)); un disegno che le usa le mostra comunque |
-| Ombre, bagliori e sfocatura | Esperto | nelle proprietà la sezione «Effetti» ([Disegni, effetti e fusione](drawing-effects.md)) |
-| Metodi di fusione | Esperto | nelle proprietà «Fusione» e «Isola la fusione», in «Aspetto» |
-| Motivi del documento | Esperto | «Motivo dalla selezione», nella barra «Disponi», in «Selezione avanzata» e col tasto destro; nella sezione «Campitura» i motivi del documento, il loro nome ed «Elimina motivo» |
-| Pagina di stampa del PDF | Esperto | nella finestra «Esporta», per il PDF, il gruppo «Pagina»: la carta, i margini, l'abbondanza e i segni ([Disegni, esportare](drawing-export.md#per-la-stampa)); senza, il PDF è grande quanto il disegno |
-| Simboli | Esperto | «Crea simbolo» e «Scollega dal simbolo», nella barra «Disponi», in «Selezione avanzata» e col tasto destro; nelle proprietà la riga «Simbolo»; il pulsante «Simboli» e il suo pannello, coi simboli del disegno e le librerie del vault ([Disegni, simboli](drawing-symbols.md)); senza, le istanze si vedono e si scelgono come ogni oggetto, e il loro simbolo si modifica dove si isola un gruppo |
-| Ripetizioni | Esperto | il menu «Ripeti», nella barra «Disponi», in «Selezione avanzata» e col tasto destro, con «Espandi la ripetizione»; nelle proprietà la sezione «Ripetizione» ([Disegni, ripetizioni e simmetria](drawing-repeats.md)); senza, le ripetizioni si vedono e si scelgono come ogni oggetto, si aprono dove si isola un gruppo e si separano come un gruppo |
-| Rendi modificabile | Esperto | «Rendi modificabile…» e «Rendi modificabile il disegno…», in «Selezione avanzata» e col tasto destro; «Rendi modificabile…» sull'avviso di un SVG estraneo, accanto a «Modifica» ([Disegni, rendere modificabile](drawing-editable.md)); senza, le parti di altri programmi restano come sono |
 
 Senza «Livelli» il disegno va nel livello più alto che si vede e non è
 bloccato, come all'Essenziale. La barra «Disponi» compare quando, per la
@@ -133,10 +117,9 @@ col suo segno, e «Apri come sorgente».
 
 Passare al Semplice mentre si usa una parte che non ha fa ciò che faceva
 tornare a un livello più basso: chi aveva in mano il suo strumento riprende la
-penna, o il primo strumento che c'è, o la Selezione; chi sceglieva, col Lazo,
-coi Nodi, col Costruttore di forme o con la Tavola, e chi aveva il Contagocce
-o la Sfumatura, riprende la Selezione; un tracciato di Bézier a metà si
-conclude com'è; da un gruppo isolato si esce; l'elenco delle tavole, il
+penna, o il primo strumento che c'è, o la Selezione; chi sceglieva, col Lazo
+o con la Tavola, e chi aveva il Contagocce o la Sfumatura, riprende la
+Selezione; da un gruppo isolato si esce; l'elenco delle tavole, il
 pannello delle forme e la cronologia si chiudono. Il disegno non cambia.
 
 `?` elenca i tasti delle parti offerte, e nel Semplice **Mostra tutto**

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // Il pannello delle proprietà da solo, con un editor finto che tiene i
 // valori: le sezioni, i numeri che si calcolano, i colori, le scelte, i
-// comandi, «Trasforma», e un disegno che cambia mentre si scrive.
+// comandi e un disegno che cambia mentre si scrive.
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
@@ -20,12 +20,9 @@ import {
   type Properties,
   type PropertiesView,
   type SectionId,
-  type TransformId,
 } from "./properties";
 import { lengthUnits, PERCENT_UNITS } from "./quantity";
-import { defaultEffect } from "./effects";
 import type { ConnectorPanelView } from "./connector-panel";
-import type { EffectsPanelView } from "./effects-panel";
 import type { GradientPanelView } from "./gradient-panel";
 import type { HatchPanelView } from "./hatch-panel";
 import type { PaintSample } from "./resources";
@@ -61,8 +58,6 @@ let state: {
   gradient: GradientPanelView | null;
   /// La sezione «Campitura», se c'è.
   hatch: HatchPanelView | null;
-  /// La sezione «Effetti», se c'è.
-  effects: EffectsPanelView | null;
   dash: string | null;
   anchor: string | null;
   bold: boolean | null;
@@ -73,7 +68,6 @@ let state: {
   /// Il nome di una tavola, che c'è se non è `null`.
   name: string | null;
   actions: Partial<Record<string, ActionState>>;
-  transform: boolean;
   /// Le punte delle due estremità, se i campi a menu ci sono.
   tips: { start: TipLook; end: TipLook } | null;
   /// La riga «Stile» dell'aspetto, se c'è.
@@ -183,16 +177,6 @@ function view(): PropertiesView {
   }
   if (state.styleMenu !== null) fields.lookStyle = state.styleMenu;
   if (state.name !== null) fields.boardName = { kind: "line", label: "Nome", value: state.name, max: 20 };
-  if (state.transform) {
-    const draft = (label: string, value: number, unit: string): NumberState => ({ kind: "number", label, value, unit, units: { [unit]: 1 }, relative: false, places: 2 });
-    Object.assign(fields, {
-      turn: draft("Ruota di", 0, "°"),
-      scaleX: draft("Scala in larghezza", 100, "%"),
-      scaleY: draft("Scala in altezza", 100, "%"),
-      skewX: draft("Inclina in orizzontale", 0, "°"),
-      skewY: draft("Inclina in verticale", 0, "°"),
-    });
-  }
   const shown = state.only === null ? fields : Object.fromEntries(state.only.map((id) => [id, fields[id]]));
   return {
     key: state.key,
@@ -200,14 +184,12 @@ function view(): PropertiesView {
     editable: state.editable,
     fields: shown,
     actions: state.actions,
-    attributes: false,
     ...(state.swatches === null ? {} : { swatches: state.swatches }),
     ...(state.recent === null ? {} : { recent: state.recent }),
     ...(state.colors === null ? {} : { colors: state.colors }),
     ...(state.connector === null ? {} : { connector: state.connector }),
     ...(state.gradient === null ? {} : { gradient: state.gradient }),
     ...(state.hatch === null ? {} : { hatch: state.hatch }),
-    ...(state.effects === null ? {} : { effects: state.effects }),
   };
 }
 
@@ -255,10 +237,6 @@ function mount(): Properties {
     closed,
     onChange: change,
     onAction: (id) => calls.push(`action ${id}`),
-    onTransform: (values: Readonly<Record<TransformId, number>>) => {
-      calls.push(`transform ${values.turn} ${values.scaleX} ${values.scaleY} ${values.skewX} ${values.skewY}`);
-      return refusal;
-    },
     onSection: (id, open) => calls.push(`section ${id} ${open ? "open" : "closed"}`),
     onExportSelection: () => calls.push("export selection"),
     colors: {
@@ -280,13 +258,6 @@ function mount(): Properties {
     },
     hatch: {
       onChange: (change, label) => (calls.push(`hatch ${JSON.stringify(change)} ${label}`), null),
-      onMotif: () => calls.push("motif"),
-      motifReason: () => null,
-      onRename: (id, name) => (calls.push(`motif rename ${id} ${name}`), null),
-      onDelete: (id) => (calls.push(`motif delete ${id}`), null),
-    },
-    effects: {
-      onChange: (change, label) => (calls.push(`effects ${JSON.stringify(change)} ${label}`), null),
     },
     onTarget: (target) => calls.push(`target ${target}`),
     announce: (text) => announced.push(text),
@@ -341,7 +312,6 @@ beforeEach(() => {
     connector: null,
     gradient: null,
     hatch: null,
-    effects: null,
     dash: "solid",
     anchor: "start",
     bold: null,
@@ -351,7 +321,6 @@ beforeEach(() => {
     desc: "",
     name: null,
     actions: {},
-    transform: false,
     tips: null,
     styleMenu: null,
     differs: null,
@@ -880,7 +849,6 @@ describe("la sezione «Campitura»", () => {
     unit: "pt",
     swatches: [],
     motifs: [],
-    expert: false,
   };
   const GRADIENT: GradientPanelView = {
     key: "oaaaaaaaa",
@@ -906,25 +874,15 @@ describe("la sezione «Campitura»", () => {
 
   afterEach(() => closeContextMenu());
 
-  it("non c'è senza la campitura nella vista, e sta dopo la sfumatura e prima degli effetti", () => {
+  it("non c'è senza la campitura nella vista, e sta dopo la sfumatura e prima del contorno", () => {
     state.gradient = GRADIENT;
-    state.effects = {
-      key: "oaaaaaaaa",
-      count: 1,
-      body: { kind: "list", effects: [defaultEffect("shadow")] },
-      refusal: null,
-      full: false,
-      blurred: false,
-      unit: "pt",
-      swatches: [],
-    };
     state.colors = COLORS;
     mount();
     expect(section("hatch").hidden).toBe(true);
-    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "stroke", "effects", "text", "document", "view", "colors"]);
+    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "stroke", "text", "document", "view", "colors"]);
     state.hatch = HATCH;
     panel.update(view());
-    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "hatch", "stroke", "effects", "text", "document", "view", "colors"]);
+    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "hatch", "stroke", "text", "document", "view", "colors"]);
     expect(toggle("hatch").textContent).toBe("Campitura");
     state.hatch = null;
     panel.update(view());
@@ -1248,103 +1206,6 @@ describe("la sezione «Connettore»", () => {
     toggle("connector").click();
     expect(calls).toEqual(["section connector closed"]);
     expect(section("connector").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(true);
-  });
-});
-
-describe("la sezione «Effetti»", () => {
-  const EFFECTS: EffectsPanelView = {
-    key: "oaaaaaaaa",
-    count: 1,
-    body: { kind: "list", effects: [defaultEffect("shadow")] },
-    refusal: null,
-    full: false,
-    blurred: false,
-    unit: "pt",
-    swatches: [],
-  };
-  const COLORS: ColorsView = {
-    swatches: [],
-    used: [{ color: "#000000", uses: 2 }],
-    hidden: 0,
-    recent: [],
-    targets: ["fill", "stroke"],
-    current: { fill: "#0072b2", stroke: "#000000" },
-    drawing: "#000000",
-    drawingSwatch: null,
-  };
-  const GRADIENT: GradientPanelView = {
-    key: "oaaaaaaaa",
-    channels: { fill: { count: 1, gradients: 0, kind: "color", based: true, look: null, angle: null } },
-    stop: null,
-    expert: false,
-    swatches: [],
-  };
-  const visibleSections = (): Array<string | undefined> =>
-    [...host.querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
-  const menuItems = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")];
-
-  afterEach(() => closeContextMenu());
-
-  it("non c'è senza gli effetti nella vista, e c'è dopo il contorno e prima del testo", () => {
-    state.gradient = GRADIENT;
-    state.colors = COLORS;
-    mount();
-    expect(section("effects").hidden).toBe(true);
-    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "stroke", "text", "document", "view", "colors"]);
-    state.effects = EFFECTS;
-    panel.update(view());
-    expect(visibleSections()).toEqual(["place", "look", "fill", "gradient", "stroke", "effects", "text", "document", "view", "colors"]);
-    expect(toggle("effects").textContent).toBe("Effetti");
-    state.effects = null;
-    panel.update(view());
-    expect(section("effects").hidden).toBe(true);
-    expect(formatIssues(checkAccessibility(host))).toBe("");
-  });
-
-  it("«Aggiungi effetto» sta nell'intestazione, e le righe nel corpo della sezione", () => {
-    state.effects = EFFECTS;
-    mount();
-    const add = section("effects").querySelector<HTMLButtonElement>(".draw-properties-heading > .draw-effects-add")!;
-    expect(add.getAttribute("aria-label")).toBe("Aggiungi effetto");
-    expect(add.getAttribute("aria-haspopup")).toBe("menu");
-    expect(section("effects").querySelector(".draw-properties-body .draw-effects-list [role=listitem]")).not.toBeNull();
-    expect(section("effects").querySelectorAll(".draw-properties-body .draw-effects-add")).toHaveLength(0);
-    // Un pulsante preso col puntatore non prende il fuoco, nemmeno questo.
-    const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-    add.dispatchEvent(press);
-    expect(press.defaultPrevented).toBe(true);
-  });
-
-  it("aggiungere un effetto va all'editor, e apre la sezione se è chiusa", () => {
-    closed = ["effects"];
-    state.effects = EFFECTS;
-    mount();
-    expect(section("effects").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(true);
-    section("effects").querySelector<HTMLButtonElement>(".draw-effects-add")!.click();
-    expect(menuItems().map((item) => item.textContent)).toEqual(["Ombra esterna", "Ombra interna", "Bagliore esterno", "Bagliore interno", "Sfocatura"]);
-    menuItems()[2]!.click();
-    expect(section("effects").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(false);
-    expect(calls).toEqual(["section effects open", `effects ${JSON.stringify({ kind: "add", effect: defaultEffect("glow") })} draw.action.effect_add.glow`]);
-    expect(announced).toEqual(["Aggiunto: Bagliore esterno."]);
-  });
-
-  it("si riscrive nella lingua di adesso con il pannello", () => {
-    state.effects = EFFECTS;
-    mount();
-    expect(section("effects").querySelector(".draw-effect-title")!.textContent).toBe("Ombra esterna");
-    panel.relabel();
-    expect(toggle("effects").textContent).toBe("Effetti");
-  });
-
-  it("il fuoco va alla sezione, e all'intestazione se non c'è niente da scrivere", () => {
-    state.effects = { ...EFFECTS, body: { kind: "none" } };
-    mount();
-    expect(panel.focusSection("effects")).toBe(true);
-    expect(document.activeElement).toBe(toggle("effects"));
-    state.effects = EFFECTS;
-    panel.update(view());
-    expect(panel.focusSection("effects")).toBe(true);
-    expect(document.activeElement).toBe(section("effects").querySelector(".draw-effect-show"));
   });
 });
 
@@ -1820,40 +1681,6 @@ describe("la riga «Stile»", () => {
   });
 });
 
-describe("«Trasforma»", () => {
-  it("dice di quanto, e applica con Invio o col pulsante", () => {
-    state.transform = true;
-    mount();
-    expect(input("scaleX").value).toBe("100");
-    write(input("turn"), "15");
-    write(input("scaleX"), "50*3");
-    // Lasciare il campo non applica niente.
-    input("scaleX").blur();
-    expect(calls).toEqual([]);
-    press(input("scaleX"), "Enter");
-    expect(calls).toEqual(["transform 15 150 100 0 0"]);
-    // I valori restano, per un'altra selezione; le frecce li cambiano senza
-    // applicare.
-    state.key = "obbbbbbbb";
-    panel.update(view());
-    expect(input("turn").value).toBe("15");
-    press(input("turn"), "ArrowUp");
-    expect(input("turn").value).toBe("16");
-    host.querySelector<HTMLButtonElement>('[data-section="transform"] .draw-properties-apply')!.click();
-    expect(calls).toEqual(["transform 15 150 100 0 0", "transform 16 150 100 0 0"]);
-  });
-
-  it("non applica un valore che non si legge, e lo segna", () => {
-    state.transform = true;
-    mount();
-    write(input("skewY"), "10mm");
-    host.querySelector<HTMLButtonElement>('[data-section="transform"] .draw-properties-apply')!.click();
-    expect(calls).toEqual([]);
-    expect(error("skewY").hidden).toBe(false);
-    expect(document.activeElement).toBe(input("skewY"));
-  });
-});
-
 describe("«Esporta la selezione»", () => {
   it("c'è se la vista lo dice, dopo le sezioni dell'oggetto, e apre la finestra sulla selezione", () => {
     mount();
@@ -1887,7 +1714,6 @@ describe("le sezioni", () => {
     expect(toggle("fill").getAttribute("aria-expanded")).toBe("true");
     expect(document.activeElement).toBe(field("fill").querySelector(".draw-properties-chip"));
     expect(calls).toEqual(["section fill open"]);
-    expect(panel.focusSection("transform")).toBe(false);
   });
 
   it("il fuoco va al primo campo, e da un campo che se ne va alla sua sezione", () => {

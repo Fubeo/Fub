@@ -25,15 +25,33 @@
 
 import type { Bounds } from "../scene/geometry";
 import { apply, invert, type Point } from "../scene/matrix";
-import type { DocumentModel, LeafNode } from "../scene/model";
-import { paintReference, trim, viewBoxMatrix } from "../scene/values";
-import { elemOf } from "./arrange";
+import type { DocumentModel, ElementPart, LeafNode } from "../scene/model";
+import { length, paintReference, trim, viewBoxMatrix } from "../scene/values";
+import { elemOf, hrefOf, plainAttributes } from "./arrange";
 import { geometryBox, type ForeignBlock, type Sampled, type Unit } from "./hit";
 import { styleOf, type Style } from "./look";
 import { cleanName } from "./naming";
 import { customColor } from "./palette";
 import { gradientColor, gradientOf, paintCode, resourcesOf } from "./resources";
-import { traceSource, type TraceSource } from "./trace-ops";
+
+/// Ciò che il contagocce legge di un'immagine: l'`href` com'è scritto, il
+/// riquadro e il `preserveAspectRatio`.
+export interface PictureSource {
+  readonly href: string;
+  readonly box: Bounds;
+  readonly aspect: string;
+}
+
+/// Ciò che il contagocce legge di `image`; `null` senza `href` o con un
+/// riquadro vuoto, che non mostra niente.
+export function pictureSource(image: ElementPart): PictureSource | null {
+  const attrs = plainAttributes(image);
+  const href = hrefOf(image);
+  const at = (name: string): number => length(attrs.get(name) ?? "0") ?? 0;
+  const [x, y, width, height] = [at("x"), at("y"), at("width"), at("height")];
+  if (href === null || !(width > 0 && height > 0)) return null;
+  return { href, box: { min: [x, y], max: [x + width, y + height] }, aspect: attrs.get("preserveAspectRatio") ?? "" };
+}
 
 /// Ciò che il contagocce vede in un punto della scena.
 export type Sight =
@@ -41,7 +59,7 @@ export type Sight =
   | { readonly kind: "shape"; readonly unit: Unit; readonly sampled: Sampled }
   /// Un'immagine: l'oggetto, ciò che di lui si vede, l'immagine e il punto
   /// nelle sue coordinate.
-  | { readonly kind: "image"; readonly unit: Unit; readonly sampled: Sampled; readonly source: TraceSource; readonly local: Point }
+  | { readonly kind: "image"; readonly unit: Unit; readonly sampled: Sampled; readonly source: PictureSource; readonly local: Point }
   /// Qualcosa che si vede ma non si legge: un blocco estraneo.
   | { readonly kind: "foreign" };
 
@@ -94,7 +112,7 @@ function sightOf(unit: Unit, sampled: Sampled, p: Point): Sight {
   const role = sampled.leaf.details?.role;
   if (role === undefined) return FOREIGN;
   if (role !== "image") return { kind: "shape", unit, sampled };
-  const source = traceSource(sampled.leaf);
+  const source = pictureSource(sampled.leaf);
   const back = invert(sampled.matrix);
   if (source === null || back === null) return FOREIGN;
   return { kind: "image", unit, sampled, source, local: apply(back, p) };

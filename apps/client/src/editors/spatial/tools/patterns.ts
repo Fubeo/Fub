@@ -25,15 +25,14 @@
 //   col colore medio del motivo come ripiego; eliminarlo riporta chi lo usa
 //   al suo ripiego.
 
-import { formatNumber } from "../number";
 import { BoundsBuilder, type Bounds } from "../scene/geometry";
-import { apply, compose, IDENTITY, translate, type Matrix } from "../scene/matrix";
+import { apply, compose, IDENTITY, type Matrix } from "../scene/matrix";
 import type { DocumentModel, ElementPart, LeafNode } from "../scene/model";
-import type { AddOp, Op } from "../scene/ops";
+import type { Op } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
-import { opacity as svgOpacity, paint, paintReference, transform as parseTransform, trim, urlIds } from "../scene/values";
-import { elemOf, INHERITED, nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
-import { transformValue, type NewIds } from "./edit";
+import { opacity as svgOpacity, paint, paintReference, transform as parseTransform, trim } from "../scene/values";
+import { elemOf, type Arranged } from "./arrange";
+import type { NewIds } from "./edit";
 import { elemChanges } from "./effects";
 import { averageColor, paintedParts, type Painted } from "./gradients";
 import {
@@ -53,12 +52,10 @@ import {
 } from "./hatches";
 import { geometryBox, type Unit } from "./hit";
 import { paintEachOps, type Restyled } from "./look";
-import { contentOf, inheritedStyle, maskProblem, onPath } from "./masks";
 import type { Measure } from "./measure";
 import { customColor } from "./palette";
-import { homeOf, paintCode, ResourceCopies, resourcesOf, usersOf, type Home } from "./resources";
-import { keepCarried, refused } from "./styled";
-import { documentSwatches, freshSwatchName, removeMotifOps, type SwatchChange } from "./swatches";
+import { homeOf, paintCode, resourcesOf, usersOf, type Home } from "./resources";
+import { documentSwatches } from "./swatches";
 
 export type { HatchPreset } from "./hatches";
 
@@ -460,59 +457,6 @@ export function contentColor(children: readonly Elem[]): string {
 /// filtro o è nascosto; lo stile del disegno lo farebbe vedere diverso.
 export type MotifRefusal = "empty" | "kind" | "content" | "container" | "style";
 
-/// Gli attributi che usano una risorsa e un contenuto non porta.
-const EFFECTS: readonly string[] = ["clip-path", "mask", "filter"];
-
-/// I decimali dell'opacità che il contenuto porta dai contenitori.
-const OPACITY_PLACES = 4;
-
-/// `elem` senza titoli e descrizioni, a ogni livello: un motivo non li ha.
-function untitled(elem: Elem): Elem {
-  if (elem.children === undefined) return elem;
-  return { ...elem, children: elem.children.filter((child) => child.tag !== "title" && child.tag !== "desc").map(untitled) };
-}
-
-/// Ciò che `unit` diventa nel contenuto di un motivo il cui riquadro parte
-/// da `origin`: senza id, con lo stile che ereditava e la trasformazione che
-/// lo tiene dov'era; o il perché no.
-function motifPiece(model: DocumentModel, unit: Unit, origin: readonly [number, number], resources: ReadonlyMap<string, LeafNode>): { readonly elem: Elem; readonly node: ElementPart; readonly fades: readonly ElementPart[] } | MotifRefusal {
-  const node = nodeOf(model, unit);
-  const elem = elemOf(node);
-  if (elem === null || onPath(elem)) return "kind";
-  const problem = maskProblem(elem, resources);
-  if (problem !== null) return problem === "top" ? "kind" : "content";
-  if (node.details?.stroke?.redrawable === false) return "content";
-  const inherited = inheritedStyle(node);
-  // Un motivo che l'oggetto eredita cambierebbe il contenuto come uno suo.
-  for (const name of ["fill", "stroke"]) {
-    const value = inherited.get(name);
-    if (value === undefined || urlIds(value).length === 0) continue;
-    const used = paintReference(value);
-    const kind = used === null ? undefined : resources.get(used.id)?.facts.local;
-    if (kind !== "linearGradient" && kind !== "radialGradient") return "content";
-  }
-  const fades: ElementPart[] = [];
-  let fade = 1;
-  for (let at = node.parent; at !== null && at !== model.root; at = at.parent) {
-    const held = plainAttributes(at);
-    if (EFFECTS.some((name) => held.has(name) && trim(held.get(name)!) !== "none") || trim(held.get("display") ?? "") === "none") return "container";
-    fades.push(at);
-    fade *= svgOpacity(held.get("opacity") ?? "1") ?? 1;
-  }
-  const content = untitled(contentOf(elem, false, resources));
-  const attrs = content.attrs as Record<string, string>;
-  delete attrs.transform;
-  for (const [name, value] of inherited) {
-    const own = attrs[name];
-    if (own === undefined || trim(own) === "inherit") attrs[name] = value;
-  }
-  for (const name of INHERITED) if (attrs[name] !== undefined && trim(attrs[name]!) === "inherit") delete attrs[name];
-  if (fade !== 1) attrs.opacity = formatNumber((svgOpacity(attrs.opacity ?? "1") ?? 1) * fade, OPACITY_PLACES);
-  const value = transformValue(compose(translate(-origin[0], -origin[1]), unit.matrix));
-  if (value !== null) attrs.transform = value;
-  return { elem: content, node, fades };
-}
-
 /// Il comando pronto di «Motivo dalla selezione»: le operazioni, la
 /// selezione che resta, l'id e il nome del motivo.
 export interface MotifMade extends Arranged {
@@ -520,89 +464,3 @@ export interface MotifMade extends Arranged {
   readonly name: string;
 }
 
-/// I centesimi per difetto e per eccesso.
-const down = (value: number): number => Math.floor(Math.round(value * 1e6) / 1e4) / 100;
-const up = (value: number): number => Math.ceil(Math.round(value * 1e6) / 1e4) / 100;
-const place = (value: number): string => formatNumber(value, 2);
-
-/// «Motivo dalla selezione»: un motivo del documento col primo nome libero
-/// da `base`, fatto con una copia di `units` in ordine di documento, nel
-/// riquadro di ciò che disegnano, ai centesimi per eccesso. Gli oggetti e la
-/// selezione restano.
-export function motifOps(model: DocumentModel, units: readonly Unit[], base: string, ids: NewIds): MotifMade | MotifRefusal {
-  const ordered = [...units].sort((a, b) => {
-    for (let i = 0; i < Math.min(a.path.length, b.path.length); i++) if (a.path[i] !== b.path[i]) return a.path[i]! - b.path[i]!;
-    return a.path.length - b.path.length;
-  });
-  const box = new BoundsBuilder();
-  for (const unit of ordered) {
-    if (unit.bounds === null) continue;
-    box.include(unit.bounds.min);
-    box.include(unit.bounds.max);
-  }
-  const seen = box.finish();
-  if (seen === null) return "empty";
-  const x = down(seen.min[0]);
-  const y = down(seen.min[1]);
-  const width = up(seen.max[0]) - x;
-  const height = up(seen.max[1]) - y;
-  if (!(width > 0 && height > 0)) return "empty";
-  const resources = resourcesOf(model);
-  const pieces: Array<{ readonly elem: Elem; readonly node: ElementPart; readonly fades: readonly ElementPart[] }> = [];
-  for (const unit of ordered) {
-    if (unit.bounds === null) continue;
-    const piece = motifPiece(model, unit, [x, y], resources);
-    if (typeof piece === "string") return piece;
-    pieces.push(piece);
-  }
-  // Le sfumature private degli oggetti diventano copie del motivo.
-  const copies = new ResourceCopies(model, ids, elemOf);
-  const children: Elem[] = [];
-  for (const piece of pieces) {
-    const adopted = copies.adopt(piece.elem);
-    if (adopted === null) return "content";
-    children.push(adopted);
-  }
-  const plan = new Plan(model, ids);
-  const id = ids.next("resource");
-  const name = freshSwatchName(swatchNames(model), base);
-  const copied = copies.ops();
-  if (copied.length === 0) plan.ops.push(...homeOf(model).prelude);
-  else plan.ops.push(...copied);
-  const parent = homeOf(model).parent;
-  const made: AddOp = {
-    op: "add",
-    parent,
-    pos: { last: true },
-    elem: { tag: "pattern", attrs: { id, "fub:role": "swatch", "fub:name": name, patternUnits: "userSpaceOnUse", x: place(x), y: place(y), width: place(width), height: place(height) }, children },
-  };
-  plan.ops.push(made);
-  const arranged = plan.finish(units.map((unit) => plan.keyOf(unit.node, unit.key)));
-  // Con un foglio di stile il contenuto potrebbe vedersi diverso dagli
-  // oggetti: si confronta, e si scrive ciò che manca.
-  const kept = keepCarried(
-    model,
-    arranged.ops,
-    pieces.map((piece, at) => ({ from: piece.node, down: [], into: made, inside: [at], mode: "mask" as const, fades: piece.fades })),
-  );
-  if (refused(kept)) return "style";
-  return { ...arranged, ops: kept.ops, id, name };
-}
-
-/// Le operazioni che danno al motivo `id` il nome `name`, già pulito e
-/// libero; nessuna se è lo stesso.
-export function renameMotifOps(model: DocumentModel, id: string, name: string, units: readonly Unit[], ids: NewIds): Arranged {
-  const plan = new Plan(model, ids);
-  const motif = resourcesOf(model).get(id)?.details?.motif;
-  if (motif !== undefined && motif.name !== name) plan.ops.push({ op: "set", id, attrs: { "fub:name": name } });
-  return plan.finish(units.map((unit) => plan.keyOf(unit.node, unit.key)));
-}
-
-/// Le operazioni che eliminano il motivo `id`: chi lo usa torna al suo
-/// ripiego, o al colore medio del motivo se non ne scrive uno, e il motivo se
-/// ne va. Se lo usa ancora qualcuno che non si riscrive, resta come risorsa
-/// condivisa e senza nome.
-export function deleteMotifOps(model: DocumentModel, id: string, units: readonly Unit[], ids: NewIds): SwatchChange {
-  const node = resourcesOf(model).get(id);
-  return removeMotifOps(model, id, node?.details?.motif === undefined ? "#000000" : motifColor(node), units, ids);
-}

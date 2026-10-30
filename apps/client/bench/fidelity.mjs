@@ -13,18 +13,7 @@
 // le sfumature, le punte, i ritagli e le maschere, gli effetti e le fusioni
 // che mancano, una campitura girata di qualche grado, le carte delle tavole che mancano, una tavola mostrata senza
 // ritaglio, un disegno mostrato senza la sua finestra, i caratteri del vault che mancano, i simboli tagliati
-// al riquadro dell'istanza, i fogli di stile persi da «Rendi modificabile», deve farlo diventare rosso.
-//
-// # Rendi modificabile
-//
-// Le scene da rendere modificabili sono disegni con parti di altri
-// programmi: la pagina li rende modificabili tutti, col piano del comando, e
-// le tre strade mostrano il disegno di dopo. Una quarta, il prima, è il file
-// com'era nell'immagine del browser, e il foglio si confronta anche con lei:
-// ciò che diventa modificabile si vede come prima, con lo stesso limite.
-// Anche i caratteri: il testo di Mermaid nomina il suo soltanto nel foglio di
-// stile, coi nomi che Mermaid scrive, e prima e dopo si vede nel carattere di
-// Fub che l'export userebbe, qualunque carattere abbia il sistema.
+// al riquadro dell'istanza, deve farlo diventare rosso.
 //
 // # La soglia
 //
@@ -88,11 +77,10 @@ const PLANTED = [
   ["modello-diagramma", "finestra"],
   ["caratteri-vault", "vault"],
   ["simboli", "taglio"],
-  ["modificabile-illustrator", "foglio"],
 ];
 const ROADS = ["read", "export"];
 /// Le strade a parole.
-const ROAD_NAMES = { read: "Lettura", export: "export", before: "prima di «Rendi modificabile»" };
+const ROAD_NAMES = { read: "Lettura", export: "export" };
 const out = join(OUTPUT, "fidelity");
 
 const { base, browser, close } = await openStage();
@@ -113,14 +101,12 @@ try {
   const shootIn = async (page, scene, variant) => {
     await page.goto(`${base}/bench/fidelity.html?scene=${scene}${variant ? `&variant=${variant}` : ""}`);
     await page.waitForFunction(() => document.documentElement.dataset.fidelity !== undefined, null, { timeout: 30_000 });
-    const state = await page.evaluate(() => [document.documentElement.dataset.fidelity, document.documentElement.dataset.error, document.documentElement.dataset.before !== undefined]);
+    const state = await page.evaluate(() => [document.documentElement.dataset.fidelity, document.documentElement.dataset.error]);
     if (state[0] !== "ready") throw new Error(`${scene}: ${state[1]}`);
-    // Una scena resa modificabile ha anche il prima.
-    const roads = state[2] ? [...ROADS, "before"] : ROADS;
     const shots = {};
-    for (const road of ["surface", ...roads]) shots[road] = PNG.sync.read(await page.locator(`#${road}`).screenshot());
+    for (const road of ["surface", ...ROADS]) shots[road] = PNG.sync.read(await page.locator(`#${road}`).screenshot());
     const result = {};
-    for (const road of roads) {
+    for (const road of ROADS) {
       const { width, height } = shots.surface;
       const diff = new PNG({ width, height });
       const count = pixelmatch(shots.surface.data, shots[road].data, diff.data, width, height, { threshold: BLURRED.has(scene) ? BLUR_THRESHOLD : THRESHOLD });

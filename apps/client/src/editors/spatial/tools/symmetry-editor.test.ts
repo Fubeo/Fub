@@ -167,13 +167,13 @@ afterEach(() => {
 });
 
 describe("la sezione «Simmetria» del pannello", () => {
-  it("c'è con la penna e l'evidenziatore senza niente di scelto, dopo «Ripetizione», e all'Essenziale no", () => {
+  it("c'è con la penna e l'evidenziatore senza niente di scelto, dopo «Connettore», e all'Essenziale no", () => {
     mount();
     openPanel();
     expect(sectionShown()).toBe(true);
     expect(section()!.querySelector(".draw-properties-toggle-text")!.textContent).toBe("Simmetria");
     const order = [...properties().querySelectorAll<HTMLElement>(".draw-properties-section")].map((each) => each.dataset.section);
-    expect(order.indexOf("symmetry")).toBe(order.indexOf("repeat") + 1);
+    expect(order.indexOf("symmetry")).toBe(order.indexOf("connector") + 1);
     // Spenta, si vede solo il tipo.
     expect(symmetryRows()).toEqual(["Nessuna"]);
     face("symmetry").click();
