@@ -634,12 +634,85 @@ describe("le azioni dell'editor della superficie", () => {
     view().posAtCoords = ((_coords: { x: number; y: number }) => 8) as typeof original;
     const point = vi.spyOn(document, "elementFromPoint").mockReturnValue(view().contentDOM);
     const menu = ed.contextMenu!({ x: 1, y: 1 });
-    expect(menu?.target.kind, "le voci parlano del link sotto il puntatore").toBe("link");
+    expect(menu?.target.kind, "le voci parlano del link sotto il puntatore").toBe("wikilink");
     expect(view().state.selection.main.head).toBe(0);
     ed.setMode("source");
-    expect(ed.contextMenu!({ x: 1, y: 1 })?.target.kind).toBe("link");
+    expect(ed.contextMenu!({ x: 1, y: 1 })?.target.kind).toBe("wikilink");
     expect(view().state.selection.main.head, "in Sorgente il cursore va lì, come il clic").toBe(8);
     point.mockRestore();
+    ed.destroy();
+  });
+
+  // Le voci di primo livello, coi separatori come «—»: ciò che la superficie
+  // dà al compositore, nei gruppi in cui lo dà.
+  const contextLabels = (menu: ReturnType<NonNullable<MarkdownSurface["contextMenu"]>>): string[] =>
+    (menu?.context ?? []).map((entry) => typeof entry === "string" ? entry : entry.label);
+  const entryOf = (menu: ReturnType<NonNullable<MarkdownSurface["contextMenu"]>>, label: string) =>
+    (menu?.context ?? []).find((entry) => typeof entry !== "string" && entry.label === label) as
+      | { run?: () => void; items?: readonly unknown[]; slash?: string; find?: { where: string; query: string } }
+      | undefined;
+  const at = (ed: MarkdownSurface, view: () => EditorView, doc: string, anchor: number, head = anchor) => {
+    ed.buffer.setDoc(doc);
+    view().dispatch({ selection: { anchor, head } });
+    return ed.contextMenu!(null);
+  };
+
+  it("il menu dice che cosa sta sotto il cursore: tag, titolo, elenco, attività, codice", () => {
+    const { ed, view } = editor();
+    ed.setMode("source");
+    const tag = at(ed, view, "Testo #esame qui\n", 8);
+    expect(tag?.target).toMatchObject({ kind: "tag", name: "#esame" });
+    expect(entryOf(tag, t("editor_menu.tag.panel"))?.find).toEqual({ where: "tags", query: "esame" });
+    expect(entryOf(tag, t("editor_menu.tag.rename"))?.slash).toBe("tag.rename");
+
+    const heading = at(ed, view, "## Formula\ntesto\n", 4);
+    expect(heading?.target).toMatchObject({ kind: "heading", label: t("editor_menu.heading", { level: 2 }), name: "Formula" });
+    expect(contextLabels(heading)[0]).toBe(t("editor_menu.anchor_heading"));
+
+    const first = at(ed, view, "- uno\n- due\n", 2);
+    expect(first?.target.kind).toBe("list");
+    expect(contextLabels(first), "la prima voce non ha dove rientrare").not.toContain(t("editor_menu.list.indent"));
+    const second = at(ed, view, "- uno\n- due\n", 8);
+    expect(contextLabels(second)).toContain(t("editor_menu.list.indent"));
+    expect(contextLabels(second), "una voce al margine non esce").not.toContain(t("editor_menu.list.dedent"));
+
+    const task = at(ed, view, "- [ ] fare\n", 8);
+    expect(task?.target.kind).toBe("task");
+    entryOf(task, t("editor_menu.task.done"))!.run!();
+    expect(ed.buffer.getDoc()).toBe("- [x] fare\n");
+
+    const code = at(ed, view, "```py\nx = 1\n```\n", 8);
+    expect(code?.target).toMatchObject({ kind: "code", name: "py" });
+    expect(code?.miniBar, "nel codice niente formato").toBeFalsy();
+    entryOf(code, t("editor_menu.code.unwrap"))!.run!();
+    expect(ed.buffer.getDoc()).toBe("x = 1\n");
+    ed.destroy();
+  });
+
+  it("la selezione si nomina in parole e offre di copiarla come Markdown, HTML o testo", () => {
+    const { ed, view } = editor();
+    ed.setMode("source");
+    const menu = at(ed, view, "due parole qui\n", 0, 10);
+    expect(menu?.target).toMatchObject({ kind: "selection", name: t("editor_menu.words.many", { count: 2 }) });
+    expect(menu?.clipboard?.copyAs?.map((item) => item.label)).toEqual([
+      t("editor_menu.copy_as.markdown"), t("editor_menu.copy_as.html"), t("editor_menu.copy_as.text"),
+    ]);
+    expect(entryOf(menu, t("editor_menu.search_vault"))?.find).toEqual({ where: "vault", query: "due parole" });
+    expect(menu?.miniBar).toBe(true);
+    ed.destroy();
+  });
+
+  it("nel testo semplice ci sono il blocco da inserire e «Trasforma il blocco», in Lettura «Modifica qui»", () => {
+    const { ed, view } = editor();
+    ed.setMode("source");
+    const text = at(ed, view, "Un paragrafo\n", 3);
+    expect(text?.target.kind).toBe("text");
+    expect(entryOf(text, t("editor_menu.transform_block"))?.items?.length).toBeGreaterThan(6);
+    expect(text?.clipboard?.offers).toMatchObject({ paste: true, "paste-plain": true });
+    ed.setMode("reading");
+    const reading = ed.contextMenu!(null);
+    expect(reading?.target).toMatchObject({ kind: "page", label: t("editor_menu.head.reading") });
+    expect(contextLabels(reading)[0]).toBe(t("editor_menu.edit_here"));
     ed.destroy();
   });
 

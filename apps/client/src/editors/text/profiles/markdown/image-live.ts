@@ -270,59 +270,67 @@ const active = (state: EditorState) => {
   return policy === "mai" || policy === "elemento";
 };
 
-/// I gesti dell'immagine in Live: selezione, riquadro, maniglia.
-export function imageGestures(): Extension {
-  const plugin = ViewPlugin.fromClass(
-    class {
-      readonly life = openLifetime();
-      dialog: PopoverHandle | null = null;
-      constructor(readonly view: EditorView) {}
-      /// Invio o doppio clic sull'immagine fra `from` e `to`.
-      open(from: number, to: number): boolean {
-        const view = this.view;
-        if (view.state.facet(liveReveal) === "elemento") {
-          view.dispatch({ selection: { anchor: Math.min(from + 2, to) }, userEvent: "select" });
-          return true;
-        }
-        const anchor = rootAt(view, from);
-        if (!anchor) return false;
-        this.dialog?.close();
-        this.dialog = openImageDialog(view, from, to, anchor, this.life);
-        return this.dialog !== null;
+/// Chi tiene il riquadro e la maniglia di ogni vista.
+const imagePlugin = ViewPlugin.fromClass(
+  class {
+    readonly life = openLifetime();
+    dialog: PopoverHandle | null = null;
+    constructor(readonly view: EditorView) {}
+    /// Invio o doppio clic sull'immagine fra `from` e `to`.
+    open(from: number, to: number): boolean {
+      const view = this.view;
+      if (view.state.facet(liveReveal) === "elemento") {
+        view.dispatch({ selection: { anchor: Math.min(from + 2, to) }, userEvent: "select" });
+        return true;
       }
-      destroy(): void { this.life.close(); }
-    },
-    {
-      eventHandlers: {
-        mousedown(event, view) {
-          if (event.button !== 0 || event.ctrlKey || event.metaKey || !active(view.state)) return false;
-          const target = event.target instanceof Element ? event.target : null;
-          const root = target?.closest<HTMLElement>(".cm-fub-image[data-fub-image]");
-          const range = root ? rangeOf(view, root) : null;
-          if (!root || !range) return false;
-          event.preventDefault();
-          if (target?.closest(".cm-fub-image-handle")) return true;
-          if (event.detail >= 2) return this.open(range.from, range.to);
-          view.dispatch({ selection: EditorSelection.single(range.from, range.to), userEvent: "select.pointer" });
-          view.focus();
-          return true;
-        },
-        pointerdown(event, view) {
-          if (event.button !== 0 || !active(view.state)) return false;
-          const handle = event.target instanceof Element ? event.target.closest<HTMLElement>(".cm-fub-image-handle") : null;
-          const root = handle?.closest<HTMLElement>(".cm-fub-image[data-fub-image]");
-          if (!handle || !root) return false;
-          event.preventDefault();
-          drag(view, root, handle, event, this.life);
-          return true;
-        },
+      const anchor = rootAt(view, from);
+      if (!anchor) return false;
+      this.dialog?.close();
+      this.dialog = openImageDialog(view, from, to, anchor, this.life);
+      return this.dialog !== null;
+    }
+    destroy(): void { this.life.close(); }
+  },
+  {
+    eventHandlers: {
+      mousedown(event, view) {
+        if (event.button !== 0 || event.ctrlKey || event.metaKey || !active(view.state)) return false;
+        const target = event.target instanceof Element ? event.target : null;
+        const root = target?.closest<HTMLElement>(".cm-fub-image[data-fub-image]");
+        const range = root ? rangeOf(view, root) : null;
+        if (!root || !range) return false;
+        event.preventDefault();
+        if (target?.closest(".cm-fub-image-handle")) return true;
+        if (event.detail >= 2) return this.open(range.from, range.to);
+        view.dispatch({ selection: EditorSelection.single(range.from, range.to), userEvent: "select.pointer" });
+        view.focus();
+        return true;
+      },
+      pointerdown(event, view) {
+        if (event.button !== 0 || !active(view.state)) return false;
+        const handle = event.target instanceof Element ? event.target.closest<HTMLElement>(".cm-fub-image-handle") : null;
+        const root = handle?.closest<HTMLElement>(".cm-fub-image[data-fub-image]");
+        if (!handle || !root) return false;
+        event.preventDefault();
+        drag(view, root, handle, event, this.life);
+        return true;
       },
     },
-  );
+  },
+);
+
+/// Il riquadro «Immagine» per l'immagine fra `from` e `to`, come Invio o il
+/// doppio clic (il menu «Sostituisci l'immagine…»).
+export function openImageAt(view: EditorView, from: number, to: number): boolean {
+  return view.plugin(imagePlugin)?.open(from, to) ?? false;
+}
+
+/// I gesti dell'immagine in Live: selezione, riquadro, maniglia.
+export function imageGestures(): Extension {
   const enter = (view: EditorView): boolean => {
     if (!active(view.state)) return false;
     const found = selectedImage(view.state);
-    return found ? view.plugin(plugin)?.open(found.from, found.to) ?? false : false;
+    return found ? view.plugin(imagePlugin)?.open(found.from, found.to) ?? false : false;
   };
-  return [plugin, Prec.high(keymap.of([{ key: "Enter", run: enter }]))];
+  return [imagePlugin, Prec.high(keymap.of([{ key: "Enter", run: enter }]))];
 }

@@ -437,7 +437,7 @@ describe("menu di un'immagine", () => {
       picture.dispatchEvent(event);
       expect(event.defaultPrevented).toBe(true);
       const items = () => Array.from(document.querySelectorAll<HTMLElement>("#context-menu [role=menuitem]"));
-      expect(items().map((item) => item.textContent?.trim())).toEqual(["Copia immagine", "Copia il percorso"]);
+      expect(items().map((item) => item.textContent?.trim())).toEqual(["Copia l'immagine", "Copia il percorso"]);
       items()[0]!.click();
       await vi.waitFor(() => expect(written).toEqual([["image/png"]]));
       picture.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));

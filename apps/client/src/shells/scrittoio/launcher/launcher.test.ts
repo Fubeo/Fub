@@ -12,7 +12,7 @@ import {
   type ShellCommand,
 } from "../../../ui/commands";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import { closeContextMenu, showContextMenu } from "../../../ui/menu";
+import { closeContextMenu, menuFind, showContextMenu } from "../../../ui/menu";
 import { setSearchPort } from "../../../state/search-port";
 import { state } from "../../../state/store";
 import type { Listing, Row } from "./sources";
@@ -259,6 +259,14 @@ describe("i comandi che lo aprono", () => {
     expect(document.querySelector("#context-menu .menu-foot kbd")).toBeNull();
     closeContextMenu();
     lifetime = openLifetime();
+  });
+
+  it("dai menu contestuali «Cerca nel vault» e i tag aprono la ricerca e i tag con il testo", () => {
+    expect(menuFind("vault", "statistica")).toBe(true);
+    expect(world.asked[world.asked.length - 1]).toEqual(["search", "statistica"]);
+    expect(menuFind("tags", "esame")).toBe(true);
+    expect(world.asked[world.asked.length - 1]).toEqual(["tags", "esame"]);
+    launcher.close();
   });
 
   it("ognuno dei cinque suoi apre il suo modo", () => {

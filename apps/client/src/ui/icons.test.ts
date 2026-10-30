@@ -37,13 +37,15 @@ const sources = import.meta.glob("../**/*.{ts,tsx,js,mjs,html,css}", {
 describe("il costrutto delle icone", () => {
   it("tutte le icone rispettano griglia e tratto dichiarati", () => {
     const names = iconNames();
-    // Il set conta quaranta icone (§31.4, misurabile con questo test): la
+    // Il set conta quarantadue icone (§31.4, misurabile con questo test): la
     // ventottesima è la puntina delle tab appuntate, tre sono quelle che le
     // view di sincronizzazione e pubblicazione dichiarano, la casa è quella
     // della striscia degli spazi, quattro (informazioni, componente,
     // tastiera, schermo) sono delle schede delle impostazioni, e quattro
-    // dicono il formato di un documento (Word, OpenDocument, foglio, disegno).
-    expect(names).toHaveLength(40);
+    // dicono il formato di un documento (Word, OpenDocument, foglio, disegno);
+    // le forbici e i due fogli sono Taglia e Copia nella riga degli appunti
+    // dei menu.
+    expect(names).toHaveLength(42);
     expect(new Set(names).size).toBe(names.length);
 
     for (const name of names) {

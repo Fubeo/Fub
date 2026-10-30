@@ -7,12 +7,14 @@
 // Fra le due passano soltanto id, testi, booleani e funzioni senza argomenti:
 // nessun DOM, nessun oggetto CodeMirror.
 //
-// # Le sezioni
+// # Le parti
 //
-// Ogni menu dell'editor ha la stessa anatomia, nello stesso ordine, e una
-// sezione vuota non c'è: ciò che sta sotto il puntatore (`context`), gli
-// appunti (`clipboard`), il formato (`format`, `transform`, `edit`), cosa
-// inserire (`insert`), i comandi del vault (`commands`) e le utilità (`tail`).
+// Ogni menu dell'editor ha la stessa anatomia: la testata (che cosa c'è sotto
+// il puntatore, `target`), la riga degli appunti (`clipboard`), le voci di
+// quel posto (`context`) divise in gruppi da `MENU_RULE`, e in fondo, in
+// rosso, ciò che cancella. Il resto — il formato quando c'è la mini-barra,
+// i comandi del vault, le utilità, `searchable` — non sta al primo livello:
+// si trova scrivendo.
 //
 // # Le voci
 //
@@ -48,7 +50,15 @@ export type SurfaceMenuTargetKind =
   | "group"
   | "empty"
   | "page"
-  | "media";
+  | "media"
+  | "wikilink"
+  | "tag"
+  | "task"
+  | "spelling"
+  | "block";
+
+/// Fra due voci di `context`: chiude un gruppo e ne apre un altro.
+export const MENU_RULE = "—";
 
 export interface SurfaceMenuItem {
   /// L'id stabile della voce: un'azione, un comando, o un nome della superficie.
@@ -69,10 +79,22 @@ export interface SurfaceMenuItem {
   readonly items?: readonly SurfaceMenuEntry[];
   readonly run?: () => void;
   /// Un comando della palette da eseguire dopo `run`, o al suo posto: «Modifica
-  /// da qui» porta il cursore e poi chiede alla shell di cambiare modalità.
+  /// qui» porta il cursore e poi chiede alla shell di cambiare modalità.
   readonly command?: string;
+  /// Un'azione dell'editor da eseguire col nome di questa voce: «Titolo 2» in
+  /// «Livello ›» è `markdown.heading.2`. Spenta e segnata come l'azione.
+  readonly action?: string;
+  /// Un comando del registro da eseguire dopo `run`, per la via del «/»
+  /// (moduli, piano, flush): «Estrai la sezione in una nota» sceglie la
+  /// sezione e poi chiede `note.extract`. Senza quel comando la voce non c'è.
+  readonly slash?: string;
+  /// Cerca nel vault o fra i tag: la voce c'è dove la shell sa cercare.
+  readonly find?: { readonly where: "vault" | "tags"; readonly query: string };
+  /// Una scelta fra più (`radio`) invece di una spunta.
+  readonly radio?: boolean;
 }
 
+/// Una voce, l'id di una voce, o `MENU_RULE`.
 export type SurfaceMenuEntry = string | SurfaceMenuItem;
 
 /// Un gesto degli appunti, eseguito dalla superficie sui suoi dati.
@@ -88,16 +110,25 @@ export interface SurfaceMenuClipboard {
 }
 
 export interface SurfaceMenu {
-  readonly target: { readonly kind: SurfaceMenuTargetKind; readonly ref?: string };
+  /// Che cosa c'è sotto il puntatore. `label` è il tipo come lo legge la
+  /// testata quando quello del catalogo non basta («Titolo 2», «Elenco
+  /// puntato»); `name` è il nome della cosa («Media», «#esame»).
+  readonly target: {
+    readonly kind: SurfaceMenuTargetKind;
+    readonly ref?: string;
+    readonly label?: string;
+    readonly name?: string;
+  };
   /// Dove aprire il menu quando la richiesta non porta un punto (il tasto
   /// Menu, Maiusc+F10): sotto il cursore o la cosa scelta, in coordinate della
   /// finestra. Senza, il menu si apre sul riquadro.
   readonly at?: { readonly x: number; readonly y: number };
-  /// La sezione 1: le voci per ciò che sta sotto il puntatore, le correzioni
-  /// del correttore per prime.
+  /// Le voci per ciò che sta sotto il puntatore, in gruppi separati da
+  /// `MENU_RULE`: al più nove voci e quattro gruppi.
   readonly context?: readonly SurfaceMenuEntry[];
   readonly clipboard?: SurfaceMenuClipboard;
-  /// «Formato ▸»: i gesti sul carattere.
+  /// «Formato ▸»: i gesti sul carattere. Con la mini-barra non sta nel menu:
+  /// si trova scrivendo.
   readonly format?: readonly SurfaceMenuEntry[];
   /// «Trasforma in ▸»: i gesti sul blocco.
   readonly transform?: readonly SurfaceMenuEntry[];
@@ -105,12 +136,15 @@ export interface SurfaceMenu {
   readonly edit?: readonly SurfaceMenuEntry[];
   /// «Inserisci ▸».
   readonly insert?: readonly SurfaceMenuEntry[];
-  /// Offre «Comandi ▸»: i comandi del registro dichiarati per il «/».
+  /// I comandi del registro dichiarati per il «/», da trovare scrivendo.
   readonly commands?: boolean;
   /// La nota o il file del vault sotto il puntatore, per le voci dei plugin.
   readonly note?: { readonly kind: "note" | "file"; readonly id: string } | null;
-  /// La sezione 6: le utilità, in fondo.
+  /// Le utilità: si trovano scrivendo.
   readonly tail?: readonly SurfaceMenuEntry[];
+  /// Le altre voci di questo posto, fuori dal primo livello: si trovano
+  /// scrivendo.
+  readonly searchable?: readonly SurfaceMenuEntry[];
   /// La superficie vuole la mini-barra sopra il menu: si formatta qui.
   readonly miniBar?: boolean;
 }

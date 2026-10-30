@@ -113,7 +113,13 @@ export interface MenuHeader {
 export interface MenuSearch {
   run(query: string): void;
   hint(): string;
+  /// Cerca `query` nel vault o fra i tag: «Cerca nel vault», «Cerca le note
+  /// con questo tag», «Mostra nel pannello dei tag».
+  find?(where: MenuFind, query: string): void;
 }
+
+/// Dove cerca una voce del menu che porta fuori di lui.
+export type MenuFind = "vault" | "tags";
 
 let menuSearch: MenuSearch | null = null;
 
@@ -123,6 +129,18 @@ export function registerMenuSearch(search: MenuSearch): () => void {
   return () => {
     if (menuSearch === search) menuSearch = null;
   };
+}
+
+/// Si può cercare nel vault o fra i tag da un menu, adesso.
+export function canMenuFind(): boolean {
+  return menuSearch?.find !== undefined;
+}
+
+/// Cerca `query` dove dice `where`; `false` se nessuno sa cercare.
+export function menuFind(where: MenuFind, query: string): boolean {
+  if (menuSearch?.find === undefined) return false;
+  menuSearch.find(where, query);
+  return true;
 }
 
 /// Le voci in più del menu principale: testata, appunti, ricerca.

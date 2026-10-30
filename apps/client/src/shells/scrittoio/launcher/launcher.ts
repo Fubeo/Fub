@@ -690,6 +690,7 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
     registerMenuSearch({
       run: (query) => launcher.open("commands", query),
       hint: () => displayBinding(allCommands().find((entry) => entry.id === "shell.palette")?.binding),
+      find: (where, query) => launcher.open(where === "tags" ? "tags" : "search", query),
     }),
   );
   lifetime.add(() => launcher.close());

@@ -329,6 +329,7 @@ export function mountExplorer(lifetime: Lifetime): void {
   lifetime.add(on("organization", renderFileList));
   lifetime.add(on("page-icons", renderFileList));
   lifetime.add(on("reveal-folder", (folder) => void revealPath(folder, true)));
+  lifetime.add(on("reveal-path", (path) => void revealPath(path, false)));
   // L'elenco dei comandi arriva dopo l'apertura del vault: un albero vuoto
   // offre «Nuovo disegno…» solo da quel momento, e lo toglie se il comando se
   // ne va. Un albero con delle note non ha niente da ridisegnare.

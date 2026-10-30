@@ -135,7 +135,7 @@ import {
   type LayoutNode,
   type Tab,
 } from "./layout";
-import { createNote, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
+import { createNote, handToSystem, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
 import { confirm } from "../platform/confirm";
 import { registerShellCommand } from "../ui/commands";
 import { registerLiveCommands } from "../editors/spatial/live/commands";
@@ -771,6 +771,21 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     },
     onOpenWikilink: (page, heading, block) =>
       openWikilink(page, heading ?? undefined, block ?? undefined),
+    onOpenWikilinkBeside: async (page, heading, block) => {
+      const target = await resolvedReference({ kind: "wiki", value: { page, heading, block } }, activeDoc() ?? undefined);
+      if (!target) throw new Error(t("preview.target_missing"));
+      await openDocumentBeside(target.doc, "row");
+      if (target.at) await reveal(target.doc, { span: target.at.span });
+    },
+    onShowFile: async (file, from, where) => {
+      const id = file.kind === "vault" ? file.value : (await resolvedReference(
+        file.kind === "wiki" ? { kind: "wiki", value: { page: file.value, heading: null, block: null } } : { kind: "path", value: file.value },
+        from,
+      ))?.doc;
+      if (!id) throw new Error(t("preview.target_missing"));
+      if (where === "app") await handToSystem(id, true);
+      else emit("reveal-path", id);
+    },
     onOpenDocument: (doc) => openDocument(doc),
     onOpenPath: async (path, from) => {
       const target = await resolvedReference({ kind: "path", value: path }, from ?? activeDoc() ?? undefined);

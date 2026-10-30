@@ -21,7 +21,7 @@ import { Race, type Expected } from "../../../../ui/race";
 import { isAllowedLink, sanitizeMarkdownHtml, setSanitizedHtml } from "../../../../ui/sanitize";
 import { clipboardSupports, writeClipboardData, writeClipboardText } from "../../../../platform/clipboard";
 import { pngOf } from "../../../core/png";
-import { showContextMenu } from "../../../../ui/menu";
+import { showContextMenu, type MenuItem } from "../../../../ui/menu";
 import { openWebLink } from "../../../../ui/web-viewer";
 import { routeHref } from "./link-syntax";
 
@@ -50,6 +50,17 @@ export interface MarkdownMountOptions {
   readonly declaredFences?: ReadonlySet<string>;
   /** Draws every diagram in one light, whatever the theme (print is paper). */
   readonly diagramAppearance?: DiagramLight;
+  /**
+   * What the right click on a rendered vault image can do besides copying:
+   * open it in the viewer, open it with another app, show it in the
+   * explorer. `imageMenu: false` leaves the right click to whoever hosts the
+   * render (the Live has its own image menu).
+   */
+  readonly imageActions?: {
+    open?(id: string): void;
+    show?(id: string, where: "app" | "explorer"): void;
+  };
+  readonly imageMenu?: boolean;
 }
 
 const MAX_EMBED_DEPTH = 5;
@@ -293,7 +304,7 @@ function enhanceContent(
   life.add(mountMathBlocks(container));
   wireContent(container, options, life);
   wireFootnotePreviews(container, life);
-  wireImageMenu(container, life);
+  if (options.imageMenu !== false) wireImageMenu(container, life, options.imageActions);
   showRemoteImages(container, life, options.importRemoteImage);
   life.add(highlightMarkdownCode(container));
 }
@@ -313,10 +324,11 @@ function wireFootnotePreviews(container: HTMLElement, life: Lifetime): void {
   }
 }
 
-/// Il tasto destro su un'immagine resa: copiarla negli appunti come PNG, e
-/// per un'immagine del vault anche il suo percorso. Un incorporamento dentro
-/// l'altro risponde per primo, e il menu esterno non si apre sopra il suo.
-function wireImageMenu(container: HTMLElement, life: Lifetime): void {
+/// Il tasto destro su un'immagine resa: aprirla, copiarla negli appunti come
+/// PNG, copiarne il link, e per un'immagine del vault passarla al sistema. Un
+/// incorporamento dentro l'altro risponde per primo, e il menu esterno non si
+/// apre sopra il suo.
+function wireImageMenu(container: HTMLElement, life: Lifetime, actions: MarkdownMountOptions["imageActions"]): void {
   life.listen(container, "contextmenu", (event) => {
     if (event.defaultPrevented) return;
     const target = event.target instanceof Element ? event.target : null;
@@ -324,10 +336,12 @@ function wireImageMenu(container: HTMLElement, life: Lifetime): void {
     if (!picture || !container.contains(picture) || picture.closest("[data-ui-slot]")) return;
     event.preventDefault();
     const id = picture.dataset.vaultId;
-    showContextMenu(event, [
-      {
-        label: t("preview.image.copy"),
-        disabled: !clipboardSupports("image/png") || !(picture.currentSrc || picture.src),
+    const copyable = clipboardSupports("image/png") && Boolean(picture.currentSrc || picture.src);
+    const name = id ? id.slice(id.lastIndexOf("/") + 1) : picture.alt || undefined;
+    const items: MenuItem[] = [
+      ...(id && actions?.open ? [{ label: t("editor_menu.image.open"), run: () => actions.open!(id) }] : []),
+      ...(copyable ? [{
+        label: t("editor_menu.image.copy"),
         run: () => {
           // La promessa dei byte entra subito negli appunti, dentro il gesto:
           // alcuni motori non lasciano scrivere dopo.
@@ -338,7 +352,7 @@ function wireImageMenu(container: HTMLElement, life: Lifetime): void {
             () => notify(t("preview.image.copy_failed"), "guasto"),
           );
         },
-      },
+      }] : []),
       ...(id ? [{
         label: t("tabmenu.copy_path"),
         run: () => {
@@ -348,7 +362,13 @@ function wireImageMenu(container: HTMLElement, life: Lifetime): void {
           );
         },
       }] : []),
-    ]);
+      ...(id && actions?.show ? [
+        { label: t("editor_menu.open_outside"), separator: true, run: () => actions.show!(id, "app") },
+        { label: t("editor_menu.reveal"), run: () => actions.show!(id, "explorer") },
+      ] : []),
+    ];
+    if (items.length === 0) return;
+    showContextMenu(event, items, { header: { icon: "fmt-image", kind: t("editor_menu.head.image"), ...(name ? { name } : {}) } });
   });
 }
 
