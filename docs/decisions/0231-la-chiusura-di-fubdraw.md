@@ -77,6 +77,9 @@ Le scelte che restano valide: la scena SVG modificata con operazioni testuali
 - chi voleva un programma di grafica dentro Fub deve aprire un'app Craft;
 - i disegni con simboli, sfumature o testo su tracciato non si modificano più
   in Fub: si vedono e si conservano.
+- un vault lasciato all'Essenziale si riapre in Completo: `draw.level` e
+  `draw.custom` restano nel suo file, ma nessuno li legge più, e lo spazio
+  Semplice si sceglie di nuovo con `draw.workspace`.
 
 ## Alternative scartate
 

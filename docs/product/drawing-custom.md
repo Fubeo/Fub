@@ -49,67 +49,58 @@ nell'editor, e le Impostazioni lo conservano.
 
 Prima degli spazi l'editor aveva quattro livelli d'interfaccia, Essenziale,
 Standard, Esperto e Personalizzato, in `draw.level`, e le parti del
-Personalizzato in `draw.custom`. Le due impostazioni restano, segnate
-«(versioni precedenti)», e non si cancellano: una versione più vecchia
-dell'app le ritrova. Finché `draw.workspace` e `draw.toolbar` non sono scelte,
-l'editor le deduce da loro: l'Essenziale è Semplice, gli altri livelli
-Completo, e gli strumenti del Personalizzato fanno la colonna.
+Personalizzato in `draw.custom`. I livelli se ne sono andati (decisione 0231),
+e con loro le due impostazioni: un vault che le ha le tiene nel suo file, ma
+nessuno le legge né le scrive più. Senza `draw.workspace` scelto l'editor
+parte da Completo, qualunque livello ci fosse prima.
 
 ## Che cosa porta una parte
 
 Una parte porta i suoi pulsanti e i suoi tasti. Completo le ha tutte; il
-Semplice ha la Penna, l'Evidenziatore, la Gomma, il Rettangolo, l'Ellisse, la
-Linea, la Freccia, i colori personalizzati, la vista ruotata coi
-gesti, le immagini dal vault, il pannello delle proprietà e la finestra
-«Esporta». La colonna «Livello» dice
-da quale livello delle versioni precedenti veniva ciascuna. Ciascuna fa ciò
-che dice la sezione del suo livello, in [Disegni](drawing.md). Le parti del
-livello Esperto se ne sono andate (decisione 0231), e con loro quelle dello
-Standard che non erano dell'Essenziale: Lazo, Tavola, Contagocce, Sfumatura,
-Poligono, Connettore, Testo, i colori e gli stili del documento, le campiture,
-le guide intelligenti, i righelli e le guide, la simmetria della penna,
-presentare, il ritaglio e le raccolte di forme. Il loro nome, in
-`draw.custom`, resta dov'è e non conta, come quello di una versione più
-nuova.
+Semplice ha gli stessi strumenti, i colori personalizzati, la vista ruotata
+coi gesti, le immagini dal vault, il pannello delle proprietà e la finestra
+«Esporta». Ciascuna fa ciò che dice la sua sezione in [Disegni](drawing.md).
+Le parti dell'Esperto e quelle dello Standard che non sono rimaste se ne sono
+andate (decisione 0231): Lazo, Tavola, Contagocce, Sfumatura, Poligono,
+Connettore, Testo, i colori e gli stili del documento, le campiture, le guide
+intelligenti, i righelli e le guide, la simmetria della penna, presentare, il
+ritaglio e le raccolte di forme.
 
-| Parte | Livello | Che cosa porta |
+| Parte | Spazio | Che cosa porta |
 | --- | --- | --- |
-| Penna, Gomma, Rettangolo, Ellisse, Linea, Freccia | Essenziale | lo strumento, col suo tasto |
-| Evidenziatore | Standard | lo strumento (`Maiusc+P`) |
-| Colori personalizzati | Standard | «Altro colore…» e l'anello del colore scelto |
-| Punte delle linee | Standard | nel pannello delle proprietà «Punta d’inizio» e «Punta di fine», in «Aspetto» ([Disegni, punte delle linee](drawing-tips.md)) |
-| Seleziona simili, isola i gruppi, blocca e nascondi | Standard | il menu «Selezione avanzata», anche col tasto destro e `Maiusc+F10`; il clic con `Ctrl` dentro i gruppi e i gruppi nell'albero; isolare un gruppo; bloccare e nascondere gli oggetti, coi segni dell'albero |
-| Duplica, raggruppa, ordina, allinea e distribuisci | Standard | questi comandi della barra «Disponi», coi loro tasti, e il suo campo «Opacità» |
-| Livelli | Standard | il pulsante «Livelli» e «Sposta in un livello»; scegliere oggetti rende corrente il loro livello; nell'albero i nomi, il filtro, le miniature e le righe da trascinare |
-| Pagina e griglia | Standard | il pulsante «Pagina e griglia», `#` e `%` |
-| Forme dal tratto | Standard | il tratto a penna tenuto fermo che diventa una forma, la sua casella in «Pagina e griglia», e «Rendi forma» nella barra «Disponi» |
-| Vista ruotata, gesti e menu radiale | Standard | girare la vista (`4`, `6`, `5`, `Ctrl+Maiusc` con la rotella, due dita) e il pulsante dell'angolo; i tocchi di due e tre dita; il menu radiale (clic destro, tasto della penna, `Maiusc+F10`); «Penna e dita…» in «Pagina e griglia» |
-| Cronologia | Standard | il pulsante «Cronologia» e il suo pannello: i passi, i salti e i segni |
-| Verifica dell'accessibilità | Standard | il pulsante «Accessibilità» e il suo pannello: i problemi con le correzioni e l'ordine di lettura; la descrizione chiesta a ogni immagine che entra |
-| Collegamenti alle note | Standard | «Collega a una nota…» (`Ctrl+K`) e «Togli il collegamento» (`Ctrl+Maiusc+K`) |
-| Immagini dal vault | Standard | «Immagine dal vault…» (`Ctrl+I`) |
-| Copia e incolla lo stile | Standard | «Copia lo stile» (`Ctrl+Alt+C`) e «Incolla lo stile» (`Ctrl+Alt+V`) |
-| Pannello delle proprietà | Standard | «Proprietà», il pannello accanto al foglio; senza, `Invio` apre le finestre «Posizione e misure» e «Proprietà del disegno» |
-| Finestra «Esporta» | Standard | «Esporta…» apre la finestra con il disegno, la selezione o le tavole, i sei formati, la misura e l'anteprima; senza, chiede soltanto PNG o PDF ([Disegni, esportare](drawing-export.md)) |
+| Penna, Evidenziatore, Gomma, Rettangolo, Ellisse, Linea, Freccia | Semplice | lo strumento, col suo tasto (l'Evidenziatore con `Maiusc+P`) |
+| Colori personalizzati | Semplice | «Altro colore…» e l'anello del colore scelto |
+| Vista ruotata, gesti e menu radiale | Semplice | girare la vista (`4`, `6`, `5`, `Ctrl+Maiusc` con la rotella, due dita) e il pulsante dell'angolo; i tocchi di due e tre dita; il menu radiale (clic destro, tasto della penna, `Maiusc+F10`); «Penna e dita…» in «Pagina e griglia» |
+| Immagini dal vault | Semplice | «Immagine dal vault…» (`Ctrl+I`) |
+| Pannello delle proprietà | Semplice | «Proprietà», il pannello accanto al foglio |
+| Finestra «Esporta» | Semplice | «Esporta…» apre la finestra con il disegno, la selezione o le tavole, i sei formati, la misura e l'anteprima ([Disegni, esportare](drawing-export.md)) |
+| Punte delle linee | Completo | nel pannello delle proprietà «Punta d’inizio» e «Punta di fine», in «Aspetto» ([Disegni, punte delle linee](drawing-tips.md)) |
+| Seleziona simili, isola i gruppi, blocca e nascondi | Completo | il menu «Selezione avanzata», anche col tasto destro e `Maiusc+F10`; il clic con `Ctrl` dentro i gruppi e i gruppi nell'albero; isolare un gruppo; bloccare e nascondere gli oggetti, coi segni dell'albero |
+| Duplica, raggruppa, ordina, allinea e distribuisci | Completo | questi comandi della barra «Disponi», coi loro tasti, e il suo campo «Opacità» |
+| Livelli | Completo | il pulsante «Livelli» e «Sposta in un livello»; scegliere oggetti rende corrente il loro livello; nell'albero i nomi, il filtro, le miniature e le righe da trascinare |
+| Pagina e griglia | Completo | la griglia, `#` e `%`, nel pulsante «Pagina e griglia» |
+| Forme dal tratto | Completo | il tratto a penna tenuto fermo che diventa una forma, la sua casella in «Pagina e griglia», e «Rendi forma» nella barra «Disponi» |
+| Cronologia | Completo | il pulsante «Cronologia» e il suo pannello: i passi, i salti e i segni |
+| Verifica dell'accessibilità | Completo | il pulsante «Accessibilità» e il suo pannello: i problemi con le correzioni e l'ordine di lettura; la descrizione chiesta a ogni immagine che entra |
+| Collegamenti alle note | Completo | «Collega a una nota…» (`Ctrl+K`) e «Togli il collegamento» (`Ctrl+Maiusc+K`) |
+| Copia e incolla lo stile | Completo | «Copia lo stile» (`Ctrl+Alt+C`) e «Incolla lo stile» (`Ctrl+Alt+V`) |
 
-Senza «Livelli» il disegno va nel livello più alto che si vede e non è
-bloccato, come all'Essenziale. La barra «Disponi» compare quando, per la
-selezione, ha almeno un comando delle parti scelte, e sta accanto alla
-selezione; senza il pannello delle proprietà, la casella che la riporta in
-cima al foglio è in «Pagina e griglia». Ci sono a ogni livello,
-anche senza nessuna parte: la Selezione, copia, taglia e incolla, le immagini
-incollate, l'albero degli oggetti, aprire un collegamento con `Alt+Invio` o
-col suo segno, e «Apri come sorgente».
+Senza «Livelli», nel Semplice, il disegno va nel livello più alto che si vede
+e non è bloccato. La barra «Disponi» compare quando, per la selezione, ha
+almeno un comando, e sta accanto alla selezione; la casella che la riporta in
+cima al foglio è in «Pagina e griglia». Ci sono nei due spazi: la Selezione,
+copia, taglia e incolla, le immagini incollate, l'albero degli oggetti, aprire
+un collegamento con `Alt+Invio` o col suo segno, e «Apri come sorgente».
 
 ## Quando una parte se ne va
 
-Passare al Semplice mentre si usa una parte che non ha fa ciò che faceva
-tornare a un livello più basso: chi aveva in mano il suo strumento riprende la
-penna, o il primo strumento che c'è, o la Selezione; da un gruppo isolato
-si esce; la cronologia si chiude. Il disegno non cambia.
+Passare al Semplice mentre si usa una parte che non ha la chiude: da un
+gruppo isolato si esce, la cronologia e la verifica dell'accessibilità si
+chiudono. Il disegno non cambia.
 
 `?` elenca i tasti delle parti offerte, e nel Semplice **Mostra tutto**
 aggiunge in fondo quelli di Completo, con una frase che dice dove si sceglie.
 
-Un nome dell'elenco che l'editor non conosce, scritto da una versione più
-nuova, resta dov'è e non conta: la versione che lo conosce lo ritrova.
+Uno strumento di `draw.toolbar` che l'editor non conosce, scritto da una
+versione più nuova o tolto come il Testo, resta dov'è e non conta: la versione
+che lo conosce lo ritrova.
