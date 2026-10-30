@@ -150,6 +150,10 @@ export default defineConfig({
           if (/\/node_modules\/(@codemirror\/lang-|@lezer\/)(markdown|html|css|javascript)\//.test(id)) {
             return "markdown-grammar";
           }
+          // Il sanificatore del CSS dei temi, con PostCSS: lo usano il caricatore
+          // dei temi e gli snippet, non l'editor dei documenti. Cambia col
+          // vocabolario della pelle, e da solo non pesa sul chunk dei documenti.
+          if (/\/src\/ui\/sanitize-css\.ts$|\/node_modules\/(postcss|nanoid|picocolors|source-map-js)\//.test(id)) return "css-sanitizer";
           // Scrittura, il nucleo del testo ricco, con ProseMirror: la usano
           // i documenti e il testo dei disegni, che la carica dopo il
           // montaggio. Da sola non pesa sul primo disegno e resta in cache

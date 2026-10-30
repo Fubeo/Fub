@@ -16,6 +16,7 @@ import { blockSelection } from "./selection";
 import { addBelow, colorRanges, gripLabel, handlesView } from "./handles";
 import { setContentColor } from "../color";
 import { blockModel } from "./model";
+import { openSlashMenu, slashMenuExtension, type SlashMenuSource } from "../slash";
 
 // I Blocchi nell'editor vero: maniglie, menu, selezione di blocchi, tasti.
 
@@ -125,6 +126,28 @@ describe("le maniglie", () => {
     const blocks = state.field(blockModel).blocks;
     expect(addBelow(state, blocks, 0).changes).toEqual({ from: 6, insert: "\n2. " });
     expect(addBelow(state, blocks, 2).changes).toEqual({ from: state.doc.length, insert: "\n\n" });
+  });
+
+  it("il «+» mette un blocco vuoto e ci apre il «/»; senza il «/» resta il paragrafo vuoto", () => {
+    const source: SlashMenuSource = {
+      enabled: () => true,
+      panel: () => ({ dom: document.createElement("div"), listId: "lista", update() {}, key: () => false, placed() {}, close() {} }),
+      choose() {},
+    };
+    const add = (view: EditorView) => {
+      const handles = view.plugin(handlesView)!;
+      const block = view.state.field(blockModel).blocks[0]!;
+      handles.shown = { from: block.from, depth: block.depth };
+      handles.addBlock();
+    };
+    const view = mount("Testo", 2, vi.fn(), slashMenuExtension(source));
+    add(view);
+    expect(view.state.doc.toString()).toBe("Testo\n\n/");
+    expect(openSlashMenu(view.state)).toMatchObject({ from: 7, query: "" });
+    const plain = mount("Testo", 2, vi.fn(), slashMenuExtension({ ...source, enabled: () => false }));
+    add(plain);
+    expect(plain.state.doc.toString()).toBe("Testo\n\n");
+    expect(openSlashMenu(plain.state)).toBeNull();
   });
 
   it("«Colore» colora il paragrafo intero e la prima riga di titoli e voci (K1)", () => {

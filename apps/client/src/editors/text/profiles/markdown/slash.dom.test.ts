@@ -1,40 +1,63 @@
 // @vitest-environment happy-dom
 //
-// Il «/» nel testo su un editor vero: si apre scrivendo, si filtra, una
-// scelta toglie la query e si annulla in un passo, Esc lascia il testo.
-import { describe, expect, it, vi } from "vitest";
-import {
-  acceptCompletion,
-  completionStatus,
-  currentCompletions,
-} from "@codemirror/autocomplete";
+// Il «/» nel testo su un editor vero: il pannello si apre scrivendo e riceve
+// ciò che si scrive, una scelta toglie la query e si annulla in un passo, Esc
+// lascia il testo, e l'editor dice di avere un elenco finché il pannello è aperto.
+import { describe, expect, it } from "vitest";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { undo } from "@codemirror/commands";
-import type { SlashMenuEntry } from "../../../core/editor-menu";
+import type { SlashChoice, SlashMenuEntry, SlashPanel, SlashPlace } from "../../../core/editor-menu";
 import { createTextEngine } from "../../engine";
 import { markdownCompletions } from "./completions";
 import { markdownGrammar } from "./grammar";
-import { runSlashAction, type SlashMenuSource } from "./slash";
+import { openSlashAt, openSlashMenu, openSlashTransform, runSlashAction, type SlashMenuSource, type SlashPanelCore } from "./slash";
 
-const ENTRIES: SlashMenuEntry[] = [
-  { id: "markdown.heading.2", label: "Titolo 2", description: "", icon: "", hint: "##", section: "text", action: true },
-  { id: "markdown.list.task", label: "Attività", description: "", icon: "", hint: "- [ ]", section: "lists", action: true },
-  { id: "markdown.diagram", label: "Diagramma", description: "", icon: "", hint: null, section: "insert", action: true },
-  { id: "note.daily", label: "Nota del giorno", description: "", icon: "", hint: null, section: "vault", action: false },
-];
+function entry(id: string, action = true): SlashMenuEntry {
+  return { id, label: id, description: "", icon: "", hint: null, section: "text", action, picker: null, params: {}, quick: false, span: null, why: null };
+}
+
+/// Un pannello finto: ricorda ciò che riceve e lascia scegliere al test.
+interface FakePanel {
+  events: SlashPanelCore;
+  transform: boolean;
+  updates: { query: string; place: SlashPlace }[];
+  keys: string[];
+  closed: boolean;
+}
 
 function editor() {
   const parent = document.createElement("div");
   document.body.append(parent);
-  const chosen: string[] = [];
+  const panels: FakePanel[] = [];
+  const chosen: { id: string; transform: boolean; params: Readonly<Record<string, unknown>> }[] = [];
   const menu: SlashMenuSource = {
-    entries: (query) => ENTRIES.filter((entry) => entry.label.toLowerCase().includes(query.toLowerCase())),
-    choose(view, entry, from, to) {
-      if (entry.action) runSlashAction(view, entry.id, from, to);
+    enabled: () => true,
+    panel(events, transform): SlashPanel {
+      const fake: FakePanel = { events, transform, updates: [], keys: [], closed: false };
+      panels.push(fake);
+      const dom = document.createElement("div");
+      return {
+        dom,
+        listId: "lista-finta",
+        update: (query, place) => void fake.updates.push({ query, place }),
+        key: (event) => {
+          fake.keys.push(event.key);
+          return event.key === "ArrowDown";
+        },
+        placed: () => {},
+        close: () => {
+          fake.closed = true;
+        },
+      };
+    },
+    choose(view, choice, from, to, transform) {
+      chosen.push({ id: choice.entry.id, transform, params: choice.params });
+      // «Trasforma» lo esegue la superficie sulla selezione (`surface.ts`).
+      if (transform) return;
+      if (choice.entry.action) runSlashAction(view, choice.entry.id, from, to, choice.params, choice.below);
       else view.dispatch({ changes: { from, to }, userEvent: "input.complete" });
-      chosen.push(entry.id);
     },
   };
   const engine = createTextEngine(parent, {
@@ -52,35 +75,39 @@ function editor() {
       view.dispatch({ changes: { from: at, insert: char }, selection: EditorSelection.cursor(at + 1), userEvent: "input.type" });
     }
   };
-  const labels = () => currentCompletions(view.state).map((option) => option.label);
+  const panel = () => panels[panels.length - 1]!;
+  const pick = (id: string, action = true, params: Readonly<Record<string, unknown>> = {}, below = false) => {
+    const choice: SlashChoice = { entry: entry(id, action), params, below };
+    panel().events.choose(choice);
+  };
+  const key = (name: string) => view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }));
   const destroy = () => {
     engine.destroy();
     parent.remove();
   };
-  return { engine, view, type, labels, chosen, destroy };
+  return { engine, view, type, panels, panel, pick, key, chosen, destroy };
 }
 
-const open = async (view: EditorView) => vi.waitFor(() => expect(completionStatus(view.state)).toBe("active"));
-/// Il completamento ha finito di chiedere: aperto o chiuso, non in attesa.
-/// CodeMirror ignora un Invio arrivato appena dopo l'apertura del menu.
-const ready = () => new Promise((resolve) => setTimeout(resolve, 100));
-const settled = async (view: EditorView) => vi.waitFor(() => expect(completionStatus(view.state)).not.toBe("pending"));
-
 describe("il menu «/» nel testo", () => {
-  it("si apre a inizio riga, filtra mentre si scrive, e la scelta toglie la query in un solo passo", async () => {
-    const { engine, view, type, labels, chosen, destroy } = editor();
+  it("si apre a inizio riga, riceve ciò che si scrive, e la scelta toglie la query in un solo passo", () => {
+    const { engine, view, type, panel, pick, chosen, destroy } = editor();
     try {
       engine.setDoc("Riunione\n");
       view.dispatch({ selection: EditorSelection.cursor(engine.getDoc().length) });
       type("/");
-      await open(view);
-      expect(labels()).toEqual(["Titolo 2", "Attività", "Diagramma", "Nota del giorno"]);
+      expect(openSlashMenu(view.state)).toMatchObject({ from: 9, query: "" });
+      expect(view.contentDOM.getAttribute("aria-haspopup")).toBe("listbox");
+      expect(view.contentDOM.getAttribute("aria-controls")).toBe("lista-finta");
       type("tit");
-      await vi.waitFor(() => expect(labels()).toEqual(["Titolo 2"]));
-      await ready();
-      expect(acceptCompletion(view)).toBe(true);
+      expect(panel().updates.map((each) => each.query)).toEqual(["", "t", "ti", "tit"]);
+      expect(panel().updates[0]!.place).toEqual({ line: "empty", above: "paragraph", inList: false });
+      pick("markdown.heading.2");
       expect(engine.getDoc()).toBe("Riunione\n## ");
-      expect(chosen).toEqual(["markdown.heading.2"]);
+      expect(chosen.map((each) => each.id)).toEqual(["markdown.heading.2"]);
+      expect(openSlashMenu(view.state)).toBeNull();
+      expect(panel().closed).toBe(true);
+      expect(view.contentDOM.hasAttribute("aria-haspopup")).toBe(false);
+      expect(view.contentDOM.hasAttribute("aria-controls")).toBe(false);
       undo(view);
       expect(engine.getDoc()).toBe("Riunione\n/tit");
     } finally {
@@ -88,86 +115,127 @@ describe("il menu «/» nel testo", () => {
     }
   });
 
-  it("su una riga con del testo la trasforma", async () => {
-    const { engine, view, type, labels, destroy } = editor();
+  it("dopo del testo il blocco nasce sotto, e la riga resta com'era", () => {
+    const { engine, view, type, panel, pick, destroy } = editor();
     try {
       engine.setDoc("Comprare il pane ");
       view.dispatch({ selection: EditorSelection.cursor(engine.getDoc().length) });
       type("/att");
-      await vi.waitFor(() => expect(labels()).toEqual(["Attività"]));
-      await ready();
-      acceptCompletion(view);
-      expect(engine.getDoc()).toBe("- [ ] Comprare il pane ");
+      expect(panel().updates[panel().updates.length - 1]!.place.line).toBe("after-text");
+      pick("markdown.list.task");
+      expect(engine.getDoc()).toBe("Comprare il pane\n- [ ] ");
     } finally {
       destroy();
     }
   });
 
-  it("un comando del vault toglie la query e passa alla shell", async () => {
-    const { engine, view, type, labels, chosen, destroy } = editor();
+  it("⇧↵ mette il blocco sotto anche su una riga vuota", () => {
+    const { engine, type, pick, destroy } = editor();
+    try {
+      engine.setDoc("");
+      type("/tit");
+      pick("markdown.heading.2", true, {}, true);
+      expect(engine.getDoc()).toBe("\n## ");
+    } finally {
+      destroy();
+    }
+  });
+
+  it("gli argomenti del passo arrivano all'azione: la tabella 2 × 3", () => {
+    const { engine, type, pick, destroy } = editor();
+    try {
+      engine.setDoc("");
+      type("/tab");
+      pick("markdown.table", true, { rows: 2, cols: 3 });
+      expect(engine.getDoc().split("\n").filter((line) => line.startsWith("|"))).toHaveLength(3);
+    } finally {
+      destroy();
+    }
+  });
+
+  it("un comando del vault toglie la query e passa alla shell", () => {
+    const { engine, type, pick, chosen, destroy } = editor();
     try {
       engine.setDoc("");
       type("/nota");
-      await vi.waitFor(() => expect(labels()).toEqual(["Nota del giorno"]));
-      await ready();
-      acceptCompletion(view);
+      pick("note.daily", false);
       expect(engine.getDoc()).toBe("");
-      expect(chosen).toEqual(["note.daily"]);
+      expect(chosen).toEqual([{ id: "note.daily", transform: false, params: {} }]);
     } finally {
       destroy();
     }
   });
 
-  it("Esc chiude e lascia il testo, e scrivendo dopo non si riapre", async () => {
-    const { engine, view, type, destroy } = editor();
+  it("i tasti vanno al pannello finché è aperto; quelli che non prende restano all'editor", () => {
+    const { engine, type, panel, key, destroy } = editor();
     try {
       engine.setDoc("");
       type("/ti");
-      await open(view);
-      view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
-      expect(completionStatus(view.state)).toBeNull();
+      expect(key("ArrowDown")).toBe(false);
+      expect(key("x")).toBe(true);
+      expect(panel().keys).toEqual(["ArrowDown", "x"]);
+    } finally {
+      destroy();
+    }
+  });
+
+  it("Esc lascia il testo, e scrivendo dopo non si riapre", () => {
+    const { engine, view, type, panel, panels, destroy } = editor();
+    try {
+      engine.setDoc("");
+      type("/ti");
+      panel().events.dismiss();
+      expect(openSlashMenu(view.state)).toBeNull();
       type("t");
-      await settled(view);
-      expect(completionStatus(view.state)).toBeNull();
+      expect(openSlashMenu(view.state)).toBeNull();
+      expect(panels).toHaveLength(1);
       expect(engine.getDoc()).toBe("/tit");
     } finally {
       destroy();
     }
   });
 
-  it("dentro una parola, nel codice e senza risultati non si apre", async () => {
+  it("dentro una parola e nel codice resta testo", () => {
     const { engine, view, type, destroy } = editor();
     try {
       engine.setDoc("e");
       view.dispatch({ selection: EditorSelection.cursor(1) });
       type("/o");
-      await settled(view);
-      expect(completionStatus(view.state)).toBeNull();
+      expect(openSlashMenu(view.state)).toBeNull();
       engine.setDoc("```\ncodice \n```");
       view.dispatch({ selection: EditorSelection.cursor(11) });
       type("/t");
-      await settled(view);
-      expect(completionStatus(view.state)).toBeNull();
-      engine.setDoc("");
-      type("/zzz");
-      await settled(view);
-      expect(completionStatus(view.state)).toBeNull();
+      expect(openSlashMenu(view.state)).toBeNull();
     } finally {
       destroy();
     }
   });
 
-  it("il diagramma apre il recinto e riapre il completamento coi modelli", async () => {
-    const { engine, view, type, labels, destroy } = editor();
+  it("il «+» della maniglia apre il pannello sul «/» che ha scritto", () => {
+    const { engine, view, panels, destroy } = editor();
     try {
-      engine.setDoc("");
-      type("/diag");
-      await vi.waitFor(() => expect(labels()).toEqual(["Diagramma"]));
-      await ready();
-      acceptCompletion(view);
-      expect(engine.getDoc()).toBe("```mermaid\n\n```");
-      await open(view);
-      expect(labels().length).toBeGreaterThan(0);
+      engine.setDoc("Uno\n/");
+      view.dispatch({ selection: EditorSelection.cursor(5) });
+      expect(openSlashMenu(view.state)).toBeNull();
+      expect(openSlashAt(view, 4)).toBe(true);
+      expect(panels).toHaveLength(1);
+      expect(openSlashMenu(view.state)).toMatchObject({ from: 4, transform: false });
+    } finally {
+      destroy();
+    }
+  });
+
+  it("il «/» su una selezione apre «Trasforma», che agisce sulla selezione", () => {
+    const { engine, view, panel, pick, chosen, destroy } = editor();
+    try {
+      engine.setDoc("Primo\nSecondo");
+      view.dispatch({ selection: EditorSelection.range(0, 13) });
+      expect(openSlashTransform(view)).toBe(true);
+      expect(panel().transform).toBe(true);
+      pick("markdown.list.bullet");
+      expect(chosen[0]).toMatchObject({ id: "markdown.list.bullet", transform: true });
+      expect(engine.getDoc()).toBe("Primo\nSecondo");
+      expect(openSlashMenu(view.state)).toBeNull();
     } finally {
       destroy();
     }

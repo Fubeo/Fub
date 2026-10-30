@@ -37,18 +37,13 @@ import { isTaskLine, mentionDates } from "./dates";
 import { isStrictlyInsideCode } from "./parser";
 import { liveStrings } from "./strings";
 import { catalogLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
-import { childName, pageName, resolutionKey } from "../../../../rules/mirrored";
+import { pageName, resolutionKey } from "../../../../rules/mirrored";
 import { TAG_CHARACTER } from "../../../../rules/mirrored";
 import { tagInProgress } from "../../../../rules/syntax";
-import {
-  calloutTypeSource,
-  codeLanguageSource,
-  dismissSlashMenu,
-  slashDismissed,
-  slashIcon,
-  slashSource,
-  type SlashMenuSource,
-} from "./slash";
+import { calloutTypeSource, codeLanguageSource, slashMenuExtension, type SlashMenuSource } from "./slash";
+import { headingLinkText, noteTargets, pathWithoutExtension } from "./kinds";
+
+export { headingLinkText };
 
 /// Le sorgenti dati dei completamenti.
 ///
@@ -228,12 +223,6 @@ export function vaultHeadingContext(before: string): ContextMatch | null {
   return { from: open + 2, query: inner.slice(2) };
 }
 
-/// Un titolo come lo scrive un link: senza i caratteri che il wikilink usa
-/// per sé, che lo chiuderebbero o ne aprirebbero un altro campo.
-export function headingLinkText(text: string): string {
-  return text.replace(/[[\]|#^]/g, " ").replace(/\s+/g, " ").trim();
-}
-
 /// Il cursore è su un token `#...` a inizio parola?
 ///
 /// Le regole non sono di questo file: sono quelle di `tagInCorso`, cioè le
@@ -252,14 +241,6 @@ export function tagContext(before: string): ContextMatch | null {
 /// cursore, altrimenti si raddoppierebbe.
 export function wikilinkInsertText(name: string, textAfterCursor: string): string {
   return textAfterCursor.startsWith("]]") ? name : `${name}]]`;
-}
-
-/// Il path di un DocId senza l'ultima estensione (`Progetti/Alpha.md` →
-/// `Progetti/Alpha`): la forma univoca di un wikilink quando il solo nome
-/// pagina è ambiguo.
-function pathWithoutExtension(doc: string): string {
-  const base = childName(doc);
-  return doc.slice(0, doc.length - base.length) + pageName(doc);
 }
 
 /// Le opzioni per il completamento wikilink. `label` = nome pagina, `detail` =
@@ -285,22 +266,12 @@ export function noteCompletions(
   alreadyClosed: boolean,
   preservePath = false,
 ): Completion[] {
-  const seen = new Map<string, number>();
-  for (const doc of docs) {
-    const key = resolutionKey(pageName(doc));
-    seen.set(key, (seen.get(key) ?? 0) + 1);
-  }
-  return docs.map((doc) => {
-    const name = pageName(doc);
-    const ambiguous = (seen.get(resolutionKey(name)) ?? 0) > 1;
-    const insert = preservePath || ambiguous ? pathWithoutExtension(doc) : name;
-    return {
-      label: name,
-      detail: doc,
-      apply: wikilinkInsertText(insert, alreadyClosed ? "]]" : ""),
-      type: "text",
-    };
-  });
+  return noteTargets(docs, preservePath).map((note) => ({
+    label: note.label,
+    detail: note.detail,
+    apply: wikilinkInsertText(note.target, alreadyClosed ? "]]" : ""),
+    type: "text",
+  }));
 }
 
 /// Le opzioni per il completamento tag: `label` = `#nome` (il `#` fa parte del
@@ -731,6 +702,15 @@ export function personCompletions(docs: readonly string[], query: string, people
   return options;
 }
 
+/// Il link alla giornaliera di `iso`: dove sta e il giorno per esteso, come
+/// lo scrive `@` (`[[target|text]]`).
+export function dailyLink(iso: string, dates: DateSource): { target: string; text: string } {
+  const language = catalogLanguage(resolvedLanguage()) === "it" ? "it" : "en";
+  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
+  const text = new Intl.DateTimeFormat(language, { day: "numeric", month: "long", year: "numeric" }).format(new Date(y, m - 1, d));
+  return { target: dates.dailyPath(iso), text };
+}
+
 /// Le opzioni di `@` per le date: il link alla giornaliera di ogni giorno
 /// riconosciuto, col giorno scritto per esteso come testo; in un compito,
 /// anche la scadenza `📅 YYYY-MM-DD`.
@@ -738,14 +718,13 @@ export function dateCompletions(query: string, dates: DateSource, task: boolean)
   const language = catalogLanguage(resolvedLanguage()) === "it" ? "it" : "en";
   const found = mentionDates(query, dates.today?.() ?? new Date(), dates.firstDay(), language);
   const long = new Intl.DateTimeFormat(language, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-  const short = new Intl.DateTimeFormat(language, { day: "numeric", month: "long", year: "numeric" });
   const section = liveStrings.t("mention.dates");
   const due = liveStrings.t("mention.due");
   return found.flatMap(({ iso, said }): Completion[] => {
     const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
     const date = new Date(y, m - 1, d);
-    const text = short.format(date);
-    const link: Completion = { label: `@${said}`, displayLabel: long.format(date), detail: said, type: "text", section, apply: personLink(dates.dailyPath(iso), text) };
+    const { target, text } = dailyLink(iso, dates);
+    const link: Completion = { label: `@${said}`, displayLabel: long.format(date), detail: said, type: "text", section, apply: personLink(target, text) };
     return task ? [link, { label: `@${said} 📅`, displayLabel: `📅 ${text}`, detail: due, type: "text", section, apply: `📅 ${iso}` }] : [link];
   });
 }
@@ -777,13 +756,10 @@ export function mentionSource(sources: { people?: PeopleSource; dates?: DateSour
 /// qui completiamo note, tag e modelli di diagramma, non parole qualsiasi.
 export function markdownCompletions(sources: CompletionSources): Extension {
   return [
-    Prec.highest(keymap.of([
-      { key: "Tab", run: completeTagSegment },
-      // Esc sul menu «/» lo chiude e lascia il testo: prima del keymap del
-      // completamento, che lo chiuderebbe soltanto.
-      ...(sources.slash ? [{ key: "Escape", run: dismissSlashMenu }] : []),
-    ])),
-    ...(sources.slash ? [slashDismissed] : []),
+    Prec.highest(keymap.of([{ key: "Tab", run: completeTagSegment }])),
+    // Il «/» ha il suo pannello, non un completamento: prima, perché i suoi
+    // tasti vengono prima di quelli del completamento.
+    ...(sources.slash ? [slashMenuExtension(sources.slash)] : []),
     autocompletion({
       override: [
         wikilinkSource(sources.searchNotes),
@@ -796,9 +772,7 @@ export function markdownCompletions(sources: CompletionSources): Extension {
         ...(sources.people || sources.dates ? [mentionSource(sources)] : []),
         calloutTypeSource(),
         codeLanguageSource(),
-        ...(sources.slash ? [slashSource(sources.slash)] : []),
       ],
-      ...(sources.slash ? { addToOptions: [slashIcon(sources.slash)] } : {}),
       activateOnTyping: true,
     }),
   ];

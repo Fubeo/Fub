@@ -122,10 +122,15 @@ export interface SurfaceMiniBar {
 }
 
 /// Le sezioni del menu «/» nel testo, nell'ordine in cui si vedono.
-export type SlashSection = "recent" | "text" | "lists" | "insert" | "vault";
+export type SlashSection =
+  | "suggested" | "favorites" | "recent" | "text" | "lists" | "blocks" | "code"
+  | "media" | "people" | "style" | "page" | "vault";
+
+/// Il passo che una voce con «›» apre nello stesso riquadro.
+export type SlashPicker = "table" | "color" | "date" | "callout" | "note" | "embed" | "code" | "diagram";
 
 /// Una voce del menu «/» nel testo, già filtrata e ordinata dalla shell
-/// (`panels/slash-menu.ts`): la superficie la disegna e, scelta, la esegue.
+/// (`panels/slash/entries.ts`): la superficie la disegna e, scelta, la esegue.
 export interface SlashMenuEntry {
   readonly id: string;
   readonly label: string;
@@ -138,17 +143,95 @@ export interface SlashMenuEntry {
   /// Un'azione dell'editor che la superficie esegue da sé; altrimenti un
   /// comando del registro, che esegue la shell.
   readonly action: boolean;
+  /// La voce apre un passo invece di eseguirsi subito.
+  readonly picker: SlashPicker | null;
+  /// Gli argomenti già detti, per un comando rapido («/tab 3x4»).
+  readonly params: Readonly<Record<string, unknown>>;
+  /// Un comando rapido, scritto con gli argomenti.
+  readonly quick: boolean;
+  /// La parte del nome che risponde a ciò che si è scritto.
+  readonly span: readonly [number, number] | null;
+  /// Trovata per le iniziali o con un errore di battitura.
+  readonly why: "iniziali" | "forse" | null;
+}
+
+/// Dove si scrive il «/»: lo dice la superficie, lo usano la testata e i
+/// Suggeriti.
+export interface SlashPlace {
+  /// Su una riga vuota il blocco scelto prende la riga; dopo del testo ne
+  /// nasce uno sotto.
+  readonly line: "empty" | "after-text";
+  /// Il blocco sopra il cursore.
+  readonly above: "heading" | "task" | "list" | "quote" | "paragraph" | null;
+  /// Il cursore sta in un elenco.
+  readonly inList: boolean;
+}
+
+/// Una scelta fatta nel pannello: la voce, i suoi argomenti (dal passo o dal
+/// comando rapido) e se il blocco va sotto (⇧↵).
+export interface SlashChoice {
+  readonly entry: SlashMenuEntry;
+  readonly params: Readonly<Record<string, unknown>>;
+  readonly below: boolean;
+}
+
+/// Il «/» su una selezione: il pannello diventa «Trasforma».
+export interface SlashTransform {
+  /// Quante righe sono scelte.
+  readonly lines: number;
+  /// Il testo scelto, com'è.
+  readonly before: string;
+  /// Il testo dopo l'azione `id`, senza eseguirla; `null` se non cambia
+  /// niente o se l'azione non sa farlo.
+  after(id: string): string | null;
+}
+
+/// Ciò che il pannello dice alla superficie, e ciò che le chiede.
+export interface SlashPanelEvents {
+  choose(choice: SlashChoice): void;
+  /// Esc: il pannello si chiude e il «/testo» resta.
+  dismiss(): void;
+  /// La voce attiva è cambiata: la superficie aggiorna `aria-activedescendant`.
+  active(id: string | null): void;
+  /// I titoli della pagina, per l'anteprima dell'Indice.
+  outline(): readonly { readonly level: number; readonly text: string }[];
+  /// Ctrl+/, o Invio senza risultati: la palette di tutti i comandi, con ciò
+  /// che si è scritto.
+  palette(query: string): void;
+  /// Presente quando il «/» agisce su una selezione.
+  readonly transform?: SlashTransform;
+}
+
+/// Il pannello del «/», disegnato dalla shell coi pezzi del kit: la
+/// superficie lo posa accanto al cursore e gli passa ciò che si scrive.
+export interface SlashPanel {
+  readonly dom: HTMLElement;
+  /// L'id dell'elenco, per `aria-controls`.
+  readonly listId: string;
+  /// Ciò che si è scritto dopo il «/» è cambiato.
+  update(query: string, place: SlashPlace): void;
+  /// Un tasto mentre il pannello è aperto: `true` se l'ha preso.
+  key(event: KeyboardEvent): boolean;
+  /// Posato sotto o sopra il cursore, dentro il contenitore dei tooltip;
+  /// `caretX` è dove sta il cursore, in coordinate del pannello: l'entrata
+  /// nasce da lì. Torna a ogni nuova posa; l'entrata parte la prima volta.
+  placed(above: boolean, caretX: number): void;
+  /// Chiude, con la sua uscita.
+  close(): void;
 }
 
 /// Ciò che la shell dà alla superficie per il menu «/» nel testo.
 export interface SlashMenuHost {
   /// L'impostazione `editor.slash`: spenta, il «/» è testo.
   enabled(): boolean;
-  /// Le voci per ciò che si è scritto dopo il «/». `has` dice quali azioni
-  /// dell'editor la superficie sa eseguire.
-  entries(query: string, has: (id: string) => boolean): readonly SlashMenuEntry[];
+  /// Un pannello nuovo. `has` dice quali azioni dell'editor la superficie sa
+  /// eseguire adesso.
+  panel(events: SlashPanelEvents, has: (id: string) => boolean): SlashPanel;
   /// Una voce è stata scelta, e il «/query» è già sparito: la shell la
   /// ricorda fra i recenti e, se è un comando, lo esegue accanto al cursore
   /// (`anchor`) dell'editor che sta in `owner`.
-  chosen(entry: SlashMenuEntry, owner: HTMLElement, anchor: SelectionBox | null): void;
+  chosen(entry: SlashMenuEntry, owner: HTMLElement, anchor: SelectionBox | null, selection?: string): void;
+  /// La palette di tutti i comandi accanto al cursore, già filtrata da
+  /// `query`.
+  palette(query: string, owner: HTMLElement, anchor: SelectionBox | null): void;
 }

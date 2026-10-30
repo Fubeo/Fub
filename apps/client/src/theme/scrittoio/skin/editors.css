@@ -298,21 +298,6 @@
   font-size: var(--text-sm);
   font-style: normal;
 }
-/* Il menu «/» nel testo: l'icona della voce al posto di quella del tipo. */
-.pane-editor .cm-editor .cm-completionIcon-fub-slash {
-  display: none;
-}
-.pane-editor .cm-editor .cm-fub-slash-icon {
-  display: inline-flex;
-  width: 1rem;
-  height: 1rem;
-  margin-right: var(--space-3);
-  color: var(--muted);
-}
-.pane-editor .cm-editor .cm-fub-slash-icon svg {
-  width: 100%;
-  height: 100%;
-}
 .pane-editor .cm-editor .cm-tooltip.cm-completionInfo {
   margin: 0 var(--space-2);
   padding: var(--space-4) var(--space-5);

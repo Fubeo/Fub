@@ -40,9 +40,9 @@ import type {
 import type { EditorChange } from "../../../core/text-operation";
 import { createTextEngine } from "../../engine";
 import type { CompletionSources } from "./completions";
-import { cursorIsLiteral, runSlashAction, type SlashMenuSource } from "./slash";
-import type { SlashMenuHost } from "../../../core/editor-menu";
-import { iconEl } from "../../../../ui/icons";
+import { cursorIsLiteral, openSlashTransform, runSlashAction, type SlashMenuSource } from "./slash";
+import { dailyLink } from "./completions";
+import type { SlashMenuHost, SlashTransform } from "../../../core/editor-menu";
 
 export { cursorIsLiteral };
 import { createMarkdownProfile } from "./profile";
@@ -52,7 +52,7 @@ import { deleteFootnoteAt, footnoteAt, MARKDOWN_ACTIONS, markdownActionState, re
 import { foldAll, unfoldAll } from "@codemirror/language";
 import { foldLess, foldMore, toggleFold } from "../../fold-levels";
 import type { EditorView } from "@codemirror/view";
-import type { Extension } from "@codemirror/state";
+import type { EditorState, Extension, Transaction } from "@codemirror/state";
 import {
   ACTION_UNAVAILABLE,
   type EditorActionState,
@@ -195,6 +195,49 @@ function isMarkdownMode(mode: string): mode is MarkdownMode {
   return MARKDOWN_MODES.some((candidate) => candidate.id === mode);
 }
 
+/// I titoli della pagina, fuori dai blocchi di codice: l'anteprima
+/// dell'Indice nel «/» mostra questi.
+export function outlineOf(state: EditorState): { level: number; text: string }[] {
+  const out: { level: number; text: string }[] = [];
+  let fence: string | null = null;
+  for (let n = 1; n <= state.doc.lines; n++) {
+    const text = state.doc.line(n).text;
+    const mark = /^\s{0,3}(`{3,}|~{3,})/.exec(text)?.[1];
+    if (mark) {
+      if (fence === null) fence = mark[0]!;
+      else if (mark[0] === fence) fence = null;
+      continue;
+    }
+    if (fence !== null) continue;
+    const heading = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(text);
+    if (heading) out.push({ level: heading[1]!.length, text: heading[2]! });
+  }
+  return out;
+}
+
+/// Il prima e il dopo di «Trasforma»: le righe scelte e come diventano con
+/// un'azione, provata su una copia dello stato.
+export function transformOf(state: EditorState): SlashTransform {
+  const { from, to } = state.selection.main;
+  const first = state.doc.lineAt(from);
+  const last = state.doc.lineAt(to);
+  return {
+    lines: last.number - first.number + 1,
+    before: state.sliceDoc(first.from, last.to),
+    after(id) {
+      const action = MARKDOWN_ACTIONS.get(id);
+      if (!action || !markdownActionState(action, state).enabled) return null;
+      let next: Transaction | null = null;
+      if (!action.run({ state, dispatch: (tr) => { next = tr; } }) || !next) return null;
+      const tr = next as Transaction;
+      const start = tr.state.doc.lineAt(tr.changes.mapPos(first.from, -1));
+      const end = tr.state.doc.lineAt(tr.changes.mapPos(last.to, 1));
+      const after = tr.state.sliceDoc(start.from, end.to);
+      return after === this.before ? null : after;
+    },
+  };
+}
+
 /// Monta la superficie Markdown dentro `context.parent`.
 export function mountMarkdownSurface(context: SurfaceMountContext, opts: MarkdownSurfaceOptions): MarkdownSurface {
   const parent = context.parent;
@@ -210,16 +253,37 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   // che non è più quello del riquadro, non ha voci e il «/» resta testo.
   const slashHost = opts.slash?.menu;
   const slashMenu: SlashMenuSource | undefined = slashHost && {
-    entries: (query) =>
-      !slashHost.enabled() || readOnly || mode === "reading" || opts.slash?.currentDoc() !== documentId
-        ? []
-        : slashHost.entries(query, (id) => editorActions.has(id) && editorActions.state(id).enabled),
-    choose: (view, entry, from, to) => {
-      if (entry.action) runSlashAction(view, entry.id, from, to);
-      else view.dispatch({ changes: { from, to }, userEvent: "input.complete" });
-      slashHost.chosen(entry, parent, engine.anchorBox());
+    enabled: () =>
+      slashHost.enabled() && !readOnly && mode !== "reading" && opts.slash?.currentDoc() === documentId && !tableGrid,
+    panel: (events, transform) => slashHost.panel({
+      ...events,
+      outline: () => engine.readState(outlineOf),
+      palette: (query) => slashHost.palette(query, parent, engine.anchorBox()),
+      ...(transform ? { transform: engine.readState(transformOf) } : {}),
+    }, (id) => editorActions.has(id) && editorActions.state(id).enabled),
+    choose: (view, choice, from, to, transform) => {
+      const { entry } = choice;
+      const params = actionParams(entry.id, choice.params);
+      const selection = transform ? engine.selections().primary.text : undefined;
+      if (entry.action && transform) {
+        const action = MARKDOWN_ACTIONS.get(entry.id);
+        const command = action && (Object.keys(params).length > 0 ? action.withParams?.(params) : action.run);
+        if (command) engine.runCommand(command);
+      } else if (entry.action) {
+        runSlashAction(view, entry.id, from, to, params, choice.below);
+      } else if (from < to) {
+        view.dispatch({ changes: { from, to }, userEvent: "input.complete" });
+      }
+      slashHost.chosen(entry, parent, engine.anchorBox(), selection);
     },
-    icon: (name) => iconEl(name),
+  };
+  /// Gli argomenti di un'azione come li vuole il profilo: la data detta
+  /// diventa il link alla sua giornaliera, che sa dove sta soltanto la shell.
+  const actionParams = (id: string, params: Readonly<Record<string, unknown>>): Readonly<Record<string, unknown>> => {
+    const dates = opts.completions.dates;
+    const iso = params["date"];
+    if (id !== "markdown.date" || typeof iso !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return params;
+    return dates ? dailyLink(iso, dates) : {};
   };
   const profile = createMarkdownProfile({
     callbacks: {
@@ -311,8 +375,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     const cursor = engine.cursorContext();
     if (cursor.empty && (cursorIsLiteral(cursor) || !slashOpensAt(cursor.lineBefore))) return;
     // Senza selezione il «/» si scrive, e il menu nel testo lo prende da lì;
-    // spento, resta testo. La palette resta per la selezione.
+    // spento, resta testo. Con una selezione il menu diventa «Trasforma»; la
+    // palette resta per chi non ha il menu.
     if (cursor.empty && slash.menu) return;
+    if (!cursor.empty && slash.menu && engine.runViewCommand(openSlashTransform)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     const text = engine.getDoc();
@@ -680,7 +750,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       if (!action) return ACTION_UNAVAILABLE;
       return engine.readState((state) => markdownActionState(action, state));
     },
-    run(id) {
+    run(id, params = {}) {
       if (!editable()) return false;
       closeSlashPalette(parent);
       if (id === "text.undo") return engine.undo();
@@ -691,7 +761,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return false;
       if (!engine.readState((state) => markdownActionState(action, state)).enabled) return false;
-      return engine.runCommand(action.run);
+      const given = actionParams(id, params);
+      const command = Object.keys(given).length > 0 ? action.withParams?.(given) : action.run;
+      return command ? engine.runCommand(command) : false;
     },
     chord(id) {
       if (id === "text.undo") return "Mod-z";

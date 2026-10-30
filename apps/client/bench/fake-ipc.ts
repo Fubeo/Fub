@@ -58,6 +58,7 @@ import type {
   ViewSpec,
 } from "../src/host/contract";
 import { inShellLanguage } from "./fake-english";
+import { SPECS as SLASH_SPECS } from "../src/panels/slash/fixture.test-data";
 import { BOARDS_DOC, boardsFixture, type BoardsFixture } from "./boards-fixture";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
@@ -427,6 +428,11 @@ const FORMAT_COMMANDS: CommandSpec[] = (
     ["markdown.quote", "Citazione"],
   ] as const
 ).map(([id, title]) => ({ ...command(id, title, title, null, true), surfaces: ["toolbar"] }));
+
+/// Le voci del «/», come le dà `fub.formatting`: soltanto nelle scene che
+/// fotografano il menu (`?slash=1`), perché la palette elenca ogni comando e
+/// le sue foto sono fatte coi soli comandi del banco.
+const SLASH_COMMANDS: readonly CommandSpec[] = params.get("slash") === "1" ? SLASH_SPECS : [];
 
 /// Le settings: una per **ogni** specie di `SettingKind`, perché il pannello
 /// disegna un controllo diverso per ciascuna e una scena che ne mostrasse solo
@@ -1070,7 +1076,7 @@ const options: Options = {
   resources: RESOURCES,
   root: ROOT,
   view: VIEWS,
-  commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : BENCH_COMMANDS,
+  commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
   settings: DRAWING === null ? SETTINGS : [...SETTINGS, DRAW_LEVEL, ...DRAW_WORKSPACE],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(WORKBOOK_DOC === null ? {} : {

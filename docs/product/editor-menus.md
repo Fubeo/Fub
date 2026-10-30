@@ -50,18 +50,51 @@ selezione con la barra accesa), `menu` (solo col tasto destro) e `off`.
 
 ## Il «/» nel testo
 
-Il **«/»** scritto a inizio riga o dopo uno spazio apre il menu dei blocchi:
-Testo (paragrafo, titoli, citazione, riquadro), Elenchi, Inserisci (tabella,
-separatore, codice, formula, diagramma, immagine, link a una nota, nota
-incorporata, nota a piè di pagina) e i comandi del vault, con i recenti in
-testa. Ciò che si scrive dopo il «/» filtra il menu, anche in inglese («/h2»,
-«/todo»). Scegliere una voce toglie il «/…» e applica il blocco come una sola
-modifica: un Annulla fa tornare il testo scritto. Escape chiude il menu e
-lascia il testo. «e/o», «24/09» e gli indirizzi non lo aprono, né dentro
-codice, link e formule. L'impostazione «Menu «/» nel testo» (`editor.slash`)
-lo spegne. Con una selezione il «/» apre il menu dei comandi sulla selezione,
-col suo campo. I blocchi sono dichiarati da `fub.formatting`: spento il
-plugin, il «/» offre soltanto i comandi del vault.
+Il **«/»** scritto a inizio riga o dopo uno spazio apre il pannello dei blocchi
+sotto la riga, o sopra se sotto non c'è posto. In Live e in Blocchi è lo
+stesso; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
+
+- **La testata** mostra ciò che si è scritto, il contesto («riga vuota:
+  diventa il blocco scelto», «dopo il testo: un blocco nuovo sotto») e il
+  conto dei risultati, letto dal lettore di schermo.
+- **Le sezioni** sono linguette: Suggeriti (guardano il blocco sopra),
+  Preferiti, Recenti, Testo, Elenchi, Blocchi, Codice e formule, Collegamenti
+  e media, Persone e date, Stile, Pagina, Dal vault. Tab salta di sezione.
+- **Le righe** hanno un'icona, il nome e a destra la sintassi Markdown come
+  un tasto, oppure «›» per le voci che aprono un passo. Una pillola d'accento
+  segue la scelta.
+- **L'anteprima** a destra mostra il blocco coi caratteri della nota, che
+  cosa fa e come scriverlo senza menu. La stella mette la voce fra i
+  Preferiti; «Nascondi dal menu» la toglie dal «/», e resta un comando.
+- **Trovare.** Con due lettere valgono gli inizi di parola, dei nomi in
+  italiano e in inglese, e le iniziali («/ea» trova Elenco di attività); mai
+  lettere sparse. Da tre lettere conta anche l'interno delle parole, da
+  quattro si perdona un errore («/tabela» trova Tabella). Al massimo 12
+  risultati. I comandi rapidi vanno in cima: «/tab 3x4», «/col 3», «/code
+  py», «/h2», «/domani», «/venerdì», «/fra una settimana».
+- **I passi.** Tabella (una griglia fino a 6 × 8), Colore (dieci testi e
+  dieci fondi, col nome), Data (i giorni vicini e il mese), Riquadro (la
+  galleria dei tipi), Link a una nota e Incorpora (le note, poi una sezione),
+  Blocco di codice (i linguaggi) e Diagramma (i modelli Mermaid) si scelgono
+  nello stesso riquadro; ⌫ o Esc tornano all'elenco. I venti colori non sono
+  più voci del «/»: stanno sotto «Colore ›» e si trovano scrivendo («/blu»).
+- **Niente trovato.** Il pannello resta aperto e lo dice; Invio o Ctrl+/
+  cercano fra tutti i comandi, Esc lascia il testo com'è.
+- **Con una selezione** il «/» apre «Trasforma»: solo ciò che cambia le righe
+  scelte, con il prima e il dopo.
+
+Scegliere una voce toglie il «/…» e applica il blocco come una sola modifica:
+un Annulla fa tornare il testo scritto. «e/o», «24/09» e gli indirizzi non lo
+aprono, né dentro codice, link e formule. Sotto i 760 px di finestra resta
+solo l'elenco; sotto i 600 px, o col dito, il pannello è un foglio dal basso
+con righe da 44 px.
+
+Le impostazioni, in Editor: «Menu «/» nel testo» (`editor.slash`) lo spegne;
+`editor.slash.hidden` elenca gli id delle voci nascoste; `editor.slash.sections`
+ordina le sezioni dopo Suggeriti, Preferiti e Recenti. I blocchi sono
+dichiarati da `fub.formatting`: spento il plugin, il «/» offre soltanto i
+comandi del vault. Ogni voce resta un comando del registro, con i suoi
+parametri (`markdown.table` con `rows` e `cols`).
 
 ## Gli altri editor
 
@@ -96,8 +129,9 @@ griglia delle tabelle in Live ha il suo
 - `apps/client/src/ui/system-menu.ts`: il menu della WebView spento dove Fub
   non ne ha uno;
 - `apps/client/src/panels/mini-bar.ts`: la mini-barra;
-- `apps/client/src/panels/slash-menu.ts` e
-  `apps/client/src/editors/text/profiles/markdown/slash.ts`: il «/» nel testo;
+- `apps/client/src/panels/slash/` (voci, classifica, comandi rapidi, passi,
+  pannello) e `apps/client/src/editors/text/profiles/markdown/slash.ts`
+  (contesto e stato): il «/» nel testo;
 - `crates/fub-features/src/formatting.rs`: le voci di blocco del «/»;
 - [Superfici dell'editor](../architecture/editor-surfaces.md): le capacità
   `contextMenu` e `miniBar`.
