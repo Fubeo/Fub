@@ -1,4 +1,5 @@
-// Gli scenari di N0, e S7 di N13, nella WebView vera, guidati da WebDriver.
+// Gli scenari di N0, S7 di N13 e la memoria di K0 (R1), nella WebView vera,
+// guidati da WebDriver.
 //
 //   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
@@ -22,6 +23,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openSession, waitForDriver } from "./driver.mjs";
 import { noteName, writeFixtures } from "./fixtures.mjs";
+import { settled } from "./memory.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
@@ -29,7 +31,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7").split(","));
+const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7,R1").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 const port = Number(args.port ?? 4444);
@@ -42,6 +44,25 @@ const SHIFT = "";
 const ALT = "";
 
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
+
+/// Il processo del driver: la memoria di R1 si legge sui suoi discendenti.
+let driverPid = null;
+
+/// Quanto si aspetta prima di leggere la memoria: che l'app abbia finito di
+/// disegnare e di indicizzare ciò che ha appena aperto.
+const MEMORY_QUIET_MS = 3_000;
+
+/// Un file per modalità, nell'ordine in cui R1 li apre: il nome che si cerca
+/// col selettore rapido e la modalità che il referto nomina.
+const MODES = [
+  ["Lunga", "nota"],
+  ["Lavagna", "lavagna"],
+  ["Foglio", "disegno"],
+  ["Documento", "documento"],
+  ["Tabella", "foglio di calcolo"],
+  ["Stampa", "pdf"],
+  ["Immagine", "immagine"],
+];
 
 /// Un accordo: il modificatore giù, il tasto, su tutti e due.
 async function chord(session, modifier, key) {
@@ -245,6 +266,47 @@ const SCENARIOS = {
     const report = await stop(session);
     return { report, values: { "S7.frameGap.p95": report.frames.p95, "S7.frameGap.max": report.frames.max }, samples: report.frames.count };
   },
+  /// La memoria (K0): dopo l'avvio, dopo aver aperto un file per modalità e
+  /// dopo «chiudi tutto». PSS dell'app e dei processi della WebView.
+  async R1(session) {
+    if (process.platform !== "linux") return { skipped: "la memoria si legge da /proc: soltanto Linux" };
+    await pause(MEMORY_QUIET_MS);
+    // L'app riapre la sessione di prima: le schede riaperte stanno nel referto.
+    const restored = await session.execute("return document.querySelectorAll('.tab').length;");
+    const startup = await settled(driverPid, pause);
+    const steps = [];
+    for (const [name, mode] of MODES) {
+      await openByName(session, name, "");
+      await session.waitFor("return [...document.querySelectorAll('.pane.focus .tab[aria-selected=true] .tab-name')].some((el) => el.textContent.includes(arguments[0]))", [name], 60_000);
+      await pause(MEMORY_QUIET_MS);
+      // Che cosa si è aperto davvero: una superficie d'errore non è una modalità.
+      const surface = await session.execute("const p = document.querySelector('.pane.focus .pane-editor, .pane.focus [role=tabpanel] > *'); return p ? (p.className || p.tagName) : null;");
+      steps.push({ name, mode, surface, memory: await settled(driverPid, pause) });
+    }
+    const tabs = await session.execute("return document.querySelectorAll('.tab').length;");
+    for (let i = 0; i < 50; i++) {
+      const left = await session.execute("const close = document.querySelector('.tab-close'); close?.click(); return document.querySelectorAll('.tab').length;");
+      if (left === 0) break;
+      await pause(200);
+    }
+    await pause(MEMORY_QUIET_MS);
+    const closed = await settled(driverPid, pause);
+    const opened = steps.at(-1)?.memory ?? null;
+    return {
+      restored,
+      startup,
+      steps,
+      tabs,
+      closed,
+      values: {
+        "R1.avvio.MiB": startup?.pss ?? null,
+        "R1.aperti.MiB": opened?.pss ?? null,
+        "R1.chiusi.MiB": closed?.pss ?? null,
+        "R1.residuo.MiB": closed && startup ? Math.round((closed.pss - startup.pss) * 10) / 10 : null,
+      },
+      samples: 3,
+    };
+  },
   /// Avvio a freddo fino alla prima nota visibile: l'app riapre la nota che
   /// S1 ha lasciato aperta.
   async S6(session) {
@@ -285,6 +347,7 @@ async function main() {
     "--port", String(port),
     ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
   ], { env: { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config }, stdio: ["ignore", "inherit", "inherit"] });
+  driverPid = driver.pid;
   const results = {};
   let failed = 0;
   try {
@@ -304,7 +367,7 @@ async function main() {
       await warm.close();
     }
     // S6 dopo S1: l'avvio da misurare riapre la nota che S1 ha lasciato.
-    const order = ["S1", "S6", "S2", "S3", "S4", "S5", "S7"].filter((id) => only.has(id));
+    const order = ["S1", "S6", "S2", "S3", "S4", "S5", "S7", "R1"].filter((id) => only.has(id));
     for (const id of order) {
       const session = await openSession(base, app);
       try {
@@ -320,7 +383,7 @@ async function main() {
           const limit = limits[key];
           const over = limit !== undefined && (value === null || value > limit);
           if (over) failed++;
-          console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ms${limit !== undefined ? ` (soglia ${limit})` : ""} · ${result.samples} campioni`);
+          console.log(`${over ? "✗" : "✓"} ${key} = ${value ?? "—"} ${key.endsWith("MiB") ? "MiB" : "ms"}${limit !== undefined ? ` (soglia ${limit})` : ""} · ${result.samples} campioni`);
         }
       } catch (error) {
         failed++;

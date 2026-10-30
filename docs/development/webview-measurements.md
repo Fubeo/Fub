@@ -39,6 +39,15 @@ ascolta niente e non chiede fotogrammi.
 | S5 | tratto di penna di 3 s su un disegno di 2.000 tracciati | massimo fra fotogrammi |
 | S6 | avvio a freddo fino alla prima nota | ms |
 | S7 | Blocchi su una nota di 2.000 righe: un blocco trascinato su e giù per 3 s, poi dieci trasformazioni da paragrafo a titolo e ritorno | p95 e massimo fra fotogrammi |
+| R1 | la memoria: dopo l'avvio, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» | PSS in MiB dell'app e dei processi della WebView, soltanto Linux |
+
+R1 legge `/proc/<pid>/smaps_rollup` dei processi che discendono dal driver,
+tolti i driver (`memory.mjs`): la PSS divide le pagine condivise fra chi le
+usa, quindi la somma non conta due volte le librerie. Ogni lettura è la
+mediana di tre a mezzo secondo, dopo 3 s di quiete. Il referto dà anche la
+RSS, i gruppi (app, WebView, rete) e la superficie che ogni file ha aperto.
+`R1.residuo.MiB` è quanto resta dopo «chiudi tutto» rispetto all'avvio: la
+tolleranza la fissa K0 del piano dei componenti, dopo le prime misure.
 
 Le fixture nascono in una cartella temporanea
 (`apps/client/bench/webview/fixtures.mjs`); il vault vero di chi misura non
@@ -73,7 +82,7 @@ e il referto scrive lo scenario come saltato, senza numero.
 Il referto va in `apps/client/bench/.output/webview/referto.json`. Il comando
 esce con 1 se un valore supera la soglia scelta.
 
-Il job `webview` della CI fa lo stesso con S1–S3 e S7, sotto Xvfb e senza scheda
+Il job `webview` della CI fa lo stesso con S1–S3, S7 e R1, sotto Xvfb e senza scheda
 grafica, e carica il referto come artifact `webview-<sha>`.
 
 ## macOS
