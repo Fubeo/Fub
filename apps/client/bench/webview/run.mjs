@@ -274,7 +274,9 @@ async function main() {
     }
   } finally {
     driver.kill();
-    rmSync(root, { recursive: true, force: true });
+    // WebKitWebDriver e i suoi processi possono scrivere nel vault ancora un
+    // attimo dopo `kill`: la rimozione riprova invece di fermare il banco.
+    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }
   const report = {
     commit: git("rev-parse", "HEAD"),
