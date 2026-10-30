@@ -6,7 +6,8 @@
 // copiano, e il cursore non ci entra.
 import { EditorSelection, type EditorState, type Extension, Facet } from "@codemirror/state";
 import { EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
-import { createList, openPopover, type PopoverHandle } from "../../../../../kit";
+import { closeContextMenu, showContextMenu, type MenuItem } from "../../../../../ui/menu";
+import { displayBinding } from "../../../../../ui/commands";
 import { writeClipboardText } from "../../../../../platform/clipboard";
 import { type Lifetime, openLifetime } from "../../../../../ui/lifetime";
 import { openSlashAt, slashAvailable } from "../slash";
@@ -95,12 +96,29 @@ export const TARGETS: readonly TransformTarget[] = [
 /// Quanto del testo del blocco dice la maniglia.
 const EXCERPT = 40;
 
-/// Il nome accessibile della maniglia: «Blocco: Titolo 2, Cose da fare».
-export function gripLabel(state: EditorState, blocks: readonly Block[], index: number): string {
+/// Il testo con cui il blocco si fa riconoscere: la prima riga non vuota,
+/// accorciata; vuoto per un blocco che non ne ha.
+function gripExcerpt(state: EditorState, blocks: readonly Block[], index: number): string {
   const block = blocks[index]!;
   const parts = canTransform(block) ? unwrap(state, blocks, index) : null;
   const raw = (parts?.own.find((line) => line.trim() !== "") ?? (block.kind === "paragraph" ? state.doc.lineAt(block.from).text : "")).trim();
-  const text = raw.length > EXCERPT ? `${raw.slice(0, EXCERPT - 1)}…` : raw;
+  return raw.length > EXCERPT ? `${raw.slice(0, EXCERPT - 1)}…` : raw;
+}
+
+/// I gruppi di voci in fila, con una riga fra l'uno e l'altro; un gruppo
+/// rimasto vuoto non lascia righe doppie.
+function groupGaps(groups: readonly (readonly MenuItem[])[]): MenuItem[] {
+  return groups.filter((group) => group.length > 0).flatMap((group, at) =>
+    group.map((item, index) => (at > 0 && index === 0 ? { ...item, separator: true } : item)));
+}
+
+/// «grigio» → «Grigio»: i colori dei sottomenu si leggono come voci.
+const capitalized = (text: string): string => text.charAt(0).toLocaleUpperCase() + text.slice(1);
+
+/// Il nome accessibile della maniglia: «Blocco: Titolo 2, Cose da fare».
+export function gripLabel(state: EditorState, blocks: readonly Block[], index: number): string {
+  const block = blocks[index]!;
+  const text = gripExcerpt(state, blocks, index);
   const kind = kindName(block);
   return text === "" ? liveStrings.t("blocks.grip", { kind }) : liveStrings.t("blocks.grip.text", { kind, text });
 }
@@ -131,17 +149,6 @@ function runFor(state: EditorState, blocks: readonly Block[], index: number): Bl
   const run = value ? runOfSelection(blocks, value) : null;
   if (run && blocks[run.first]!.parent === blocks[index]!.parent && index >= run.first && index <= run.last) return run;
   return { first: index, last: index };
-}
-
-interface MenuItem {
-  readonly id: string;
-  readonly label: string;
-  readonly role?: "menuitem" | "menuitemradio" | "menuitemcheckbox";
-  readonly checked?: boolean;
-  readonly disabled?: boolean;
-  /// Il campione di un colore (K1): «A» nel colore del testo o sul fondo.
-  readonly swatch?: { readonly kind: ColorKind; readonly color: ContentColor | null };
-  readonly run: () => void;
 }
 
 /// I blocchi che «Colore» sa colorare, e quanta parte: tutto il paragrafo, o
@@ -203,12 +210,11 @@ class HandlesView {
   /// Il blocco della maniglia che ha il fuoco, o del menu aperto.
   pinned: BlockKey | null = null;
   shown: BlockKey | null = null;
-  menu: PopoverHandle | null = null;
+  /// Il menu della maniglia è aperto.
+  menu = false;
   drag: Drag | null = null;
   /// Il clic che segue un trascinamento non apre il menu.
   swallowClick = false;
-  /// Il menu aperto l'ha aperto il puntatore: le sue pagine si aprono come lui.
-  menuByPointer = false;
   readonly hoverable: boolean;
 
   constructor(readonly view: EditorView) {
@@ -270,14 +276,15 @@ class HandlesView {
         this.swallowClick = false;
         return;
       }
-      this.openMenu("main", event.detail > 0);
+      this.openMenu(event.detail > 0);
     });
     // Il tasto destro sulla maniglia è il menu del blocco, non quello del testo.
     life.listen(this.root, "contextmenu", (event) => {
       event.preventDefault();
       event.stopPropagation();
       if (event.target instanceof Node && this.grip.contains(event.target)) {
-        this.openMenu("main", event.button === 2 && (event.clientX !== 0 || event.clientY !== 0));
+        const pointer = event.button === 2 && (event.clientX !== 0 || event.clientY !== 0);
+        this.openMenu(pointer, pointer ? event : null);
       }
     });
     life.listen(this.grip, "pointerdown", (event) => this.startDrag(event));
@@ -392,11 +399,13 @@ class HandlesView {
     view.focus();
   }
 
-  /// Il menu del blocco, sotto la maniglia. Mentre è aperto i blocchi su cui
-  /// lavora restano selezionati, così si vede che cosa toccherà.
-  openMenu(page: "main" | "transform" | "color" = "main", pointer = this.menuByPointer): void {
-    this.menu?.close();
-    this.menuByPointer = pointer;
+  /// Il menu del blocco, sotto la maniglia: lo stesso menu del tasto destro
+  /// del resto di Fub, coi suoi gruppi, le scorciatoie e ciò che elimina in
+  /// fondo. Mentre è aperto i blocchi su cui lavora restano selezionati, così
+  /// si vede che cosa toccherà, e i tasti della selezione (Mod-d, Canc) sono
+  /// quelli che le voci dicono.
+  openMenu(pointer = false, at: MouseEvent | null = null): void {
+    if (this.menu) closeContextMenu();
     const view = this.view;
     const blocks = view.state.field(blockModel).blocks;
     const index = indexOf(blocks, this.shown);
@@ -406,66 +415,23 @@ class HandlesView {
     if (!value || runOfSelection(blocks, value)?.first !== run.first) view.dispatch(selectBlocks(view.state, blocks, run.first, run.last));
     this.pinned = keyOf(blocks[index]!);
     const key = this.pinned;
-    const list = document.createElement("div");
-    list.className = "cm-fub-block-menu";
-    list.setAttribute("aria-label", liveStrings.t("blocks.menu"));
-    const life = openLifetime();
     const act = (run: () => void) => () => {
-      popover.close();
       run();
       view.focus();
     };
-    const items = page === "main" ? this.mainItems(key, act)
-      : page === "color" ? this.colorItems(key, act)
-      : this.transformItems(key, act);
-    const handle = createList<MenuItem>({
-      container: list,
-      role: "menu",
-      items,
-      key: (item) => item.id,
-      render: (item, row) => {
-        row.textContent = item.label;
-        row.setAttribute("role", item.role ?? "menuitem");
-        if (item.role === "menuitemradio" || item.role === "menuitemcheckbox") row.setAttribute("aria-checked", String(item.checked === true));
-        if (item.swatch) row.prepend(colorSwatch(item.swatch.kind, item.swatch.color));
-        if (item.id === "delete") row.dataset.danger = "true";
-      },
-      disabled: (item) => item.disabled === true,
-      onActivate: (item) => item.run(),
-      focus: "roving",
-      lifetime: life,
-    });
-    if (!pointer) handle.setActive(items.find((item) => !item.disabled)?.id ?? null);
-    else list.tabIndex = -1;
-    const popover = openPopover({
-      anchor: this.grip,
-      content: list,
-      // Un nome lo fa dialogo, come la scelta della lingua del codice: fuori
-      // dai punti di riferimento della pagina un gruppo anonimo non sta.
-      label: liveStrings.t("blocks.menu"),
-      placement: "bottom",
-      align: "start",
-      className: "cm-fub-block-popover",
-      lifetime: this.life,
-      autoFocus: !pointer,
-      returnFocus: false,
-      onClose: (reason) => {
-        life.close();
-        if (this.menu === popover) this.menu = null;
-        this.grip.setAttribute("aria-expanded", "false");
-        // Esc torna alla maniglia; un'azione torna al testo.
-        if (reason === "escape") this.grip.focus();
-        else if (reason !== "manual") {
-          this.pinned = null;
-          this.schedule();
-        }
-      },
-    });
-    // Aperto dal mouse il fuoco sta nella lista e su nessuna voce: la prima
-    // freccia sceglie la prima.
-    if (pointer) list.focus({ preventScroll: true });
+    const excerpt = gripExcerpt(view.state, blocks, index);
+    this.menu = true;
     this.grip.setAttribute("aria-expanded", "true");
-    this.menu = popover;
+    showContextMenu(at ?? this.grip, this.mainItems(key, act), {
+      pointer,
+      header: { icon: "outline", kind: liveStrings.t("blocks.menu.head"), ...(excerpt ? { name: excerpt } : {}) },
+      onClose: () => {
+        this.menu = false;
+        this.grip.setAttribute("aria-expanded", "false");
+        this.pinned = null;
+        this.schedule();
+      },
+    });
   }
 
   /// Ritrova il blocco e la sua tratta al momento dell'azione: il testo può
@@ -497,61 +463,55 @@ class HandlesView {
           : [];
         view.dispatch({ ...move, effects: [...effects, EditorView.announce.of(liveStrings.t("blocks.moved"))] });
       });
-    return [
-      {
-        id: "transform",
-        label: `${liveStrings.t("blocks.menu.transform")} …`,
-        disabled: !transformable,
-        run: () => this.openMenu("transform"),
-      },
-      {
-        id: "color",
-        label: `${liveStrings.t("blocks.menu.color")} …`,
-        disabled: this.colorRanges(key).length === 0,
-        run: () => this.openMenu("color"),
-      },
+    const colors = this.colorItems(key, act);
+    // Ciò che adesso non si può fare non si vede: una voce grigia senza un
+    // perché è soltanto rumore.
+    const groups: (MenuItem | false)[][] = [[
+      transformable && { label: liveStrings.t("blocks.menu.transform"), items: this.transformItems(key, act) },
+      colors.length > 0 && { label: liveStrings.t("blocks.menu.color"), items: colors },
       // Un ripiegabile: se la nota lo apre già aperto (K2). La freccia
       // invece apre e chiude soltanto nella vista.
-      ...(blocks[index]?.kind === "details" ? [{
-        id: "details-open",
+      blocks[index]?.kind === "details" && {
         label: liveStrings.t("blocks.menu.details-open"),
-        role: "menuitemcheckbox" as const,
+        choice: "checkbox",
         checked: detailsAt(view.state, blocks[index]!.from)?.head.open === true,
         run: act(() => this.withRun(key, (state, all, _found, at) => {
           const pair = detailsAt(state, all[at]!.from);
           const spec = pair && setDetailsDefault(state, pair.open.from, !pair.head.open);
           if (spec) view.dispatch(spec);
         })),
-      }] : []),
-      // Il blocco col fratello che lo segue, o la tratta, uno per colonna (K3).
+      },
+    ], [
       {
-        id: "columns",
+        label: liveStrings.t("blocks.menu.duplicate"),
+        hint: displayBinding("Mod-d"),
+        run: act(() => this.withRun(key, (state, all, found) => view.dispatch(duplicateRun(state, all, found)))),
+      },
+      run.first === run.last && { label: liveStrings.t("blocks.menu.link"), run: act(() => this.copyLink(key)) },
+    ], [
+      sibs.indexOf(run.first) > 0 && {
+        label: liveStrings.t("blocks.menu.up"), hint: displayBinding("Mod-Shift-ArrowUp"), run: act(moveSpec(-1)),
+      },
+      sibs.indexOf(run.last) < sibs.length - 1 && {
+        label: liveStrings.t("blocks.menu.down"), hint: displayBinding("Mod-Shift-ArrowDown"), run: act(moveSpec(1)),
+      },
+      // Il blocco col fratello che lo segue, o la tratta, uno per colonna (K3).
+      columnsRun(view.state, blocks, run) !== null && {
         label: liveStrings.t("blocks.menu.columns"),
-        disabled: columnsRun(view.state, blocks, run) === null,
         run: act(() => this.withRun(key, (state, all, found) => {
           const picked = columnsRun(state, all, found);
           if (picked) view.dispatch(intoColumns(state, all, picked));
         })),
       },
+    ], [
       {
-        id: "duplicate",
-        label: liveStrings.t("blocks.menu.duplicate"),
-        run: act(() => this.withRun(key, (state, all, found) => view.dispatch(duplicateRun(state, all, found)))),
-      },
-      {
-        id: "link",
-        label: liveStrings.t("blocks.menu.link"),
-        disabled: run.first !== run.last,
-        run: act(() => this.copyLink(key)),
-      },
-      { id: "up", label: liveStrings.t("blocks.menu.up"), disabled: sibs.indexOf(run.first) <= 0, run: act(moveSpec(-1)) },
-      { id: "down", label: liveStrings.t("blocks.menu.down"), disabled: sibs.indexOf(run.last) >= sibs.length - 1, run: act(moveSpec(1)) },
-      {
-        id: "delete",
         label: liveStrings.t("blocks.menu.delete"),
+        hint: displayBinding("Delete"),
+        danger: true,
         run: act(() => this.withRun(key, (state, all, found) => view.dispatch(deleteRun(state, all, found)))),
       },
-    ];
+    ]];
+    return groupGaps(groups.map((group) => group.filter((item): item is MenuItem => item !== false)));
   }
 
   transformItems(key: BlockKey, act: (run: () => void) => () => void): MenuItem[] {
@@ -559,23 +519,16 @@ class HandlesView {
     const blocks = view.state.field(blockModel).blocks;
     const index = indexOf(blocks, key);
     const current = index >= 0 ? targetOf(blocks[index]!) : null;
-    return [
-      {
-        id: "back",
-        label: `‹ ${liveStrings.t("blocks.menu.back")}`,
-        run: () => this.openMenu("main"),
-      },
-      ...TARGETS.map((target): MenuItem => ({
-        id: target,
-        label: TARGET_NAMES[target](),
-        role: "menuitemradio",
-        checked: target === current,
-        run: act(() => this.withRun(key, (state, all, found) => {
-          const sibs = siblingsOf(all, found.first).filter((i) => i >= found.first && i <= found.last);
-          transformTo(target, sibs)({ state, dispatch: (tr) => view.dispatch(tr) });
-        })),
+    return TARGETS.map((target): MenuItem => ({
+      label: TARGET_NAMES[target](),
+      choice: "radio",
+      checked: target === current,
+      separator: target === "bullet" || target === "quote",
+      run: act(() => this.withRun(key, (state, all, found) => {
+        const sibs = siblingsOf(all, found.first).filter((i) => i >= found.first && i <= found.last);
+        transformTo(target, sibs)({ state, dispatch: (tr) => view.dispatch(tr) });
       })),
-    ];
+    }));
   }
 
   colorRanges(key: BlockKey): { from: number; to: number }[] {
@@ -584,40 +537,35 @@ class HandlesView {
     return index < 0 ? [] : colorRanges(this.view.state, blocks, index);
   }
 
-  /// «Colore»: il testo e il fondo dei blocchi, coi nove colori e il
-  /// predefinito. È spuntato il colore che hanno tutti.
+  /// «Colore ▸»: «Testo ▸» e «Fondo ▸», coi nove colori e il predefinito.
+  /// È spuntato il colore che hanno tutti; senza niente da colorare, niente.
   colorItems(key: BlockKey, act: (run: () => void) => () => void): MenuItem[] {
     const view = this.view;
     const ranges = this.colorRanges(key);
+    if (ranges.length === 0) return [];
     const shared = (kind: ColorKind): ContentColor | null | undefined => {
       const found = new Set(ranges.map((range) => colorsAt(view.state.update({ selection: EditorSelection.range(range.from, range.to) }).state)[kind]));
       return found.size === 1 ? [...found][0] : undefined;
     };
-    const items: MenuItem[] = [{
-      id: "back",
-      label: `‹ ${liveStrings.t("blocks.menu.back")}`,
-      run: () => this.openMenu("main"),
-    }];
-    for (const kind of ["text", "fill"] as const) {
+    return (["text", "fill"] as const).map((kind): MenuItem => {
       const current = shared(kind);
-      for (const color of [null, ...CONTENT_COLORS]) {
-        items.push({
-          id: `${kind}-${color ?? "default"}`,
-          label: liveStrings.t(kind === "text" ? "blocks.color.text" : "blocks.color.fill", {
-            color: liveStrings.t(color ? (`blocks.color.${color}` as const) : "blocks.color.default"),
-          }),
-          role: "menuitemradio",
+      return {
+        label: liveStrings.t(kind === "text" ? "blocks.menu.color.text" : "blocks.menu.color.fill"),
+        items: [null, ...CONTENT_COLORS].map((color): MenuItem => ({
+          label: color
+            ? capitalized(liveStrings.t(`blocks.color.${color}` as const))
+            : liveStrings.t(kind === "text" ? "blocks.menu.color.default" : "blocks.menu.color.none"),
+          choice: "radio",
           checked: current === color,
-          swatch: { kind, color },
+          ...(color ? { swatches: [kind === "text" ? `var(--doc-color-${color})` : `var(--doc-tint-${color})`] } : {}),
           run: act(() => {
             for (const range of this.colorRanges(key)) {
               setContentColor(kind, color, range)({ state: view.state, dispatch: (tr) => view.dispatch(tr) });
             }
           }),
-        });
-      }
-    }
-    return items;
+        })),
+      };
+    });
   }
 
   /// Scrive l'id se manca e copia il link; lo dice, perché negli appunti non
@@ -654,7 +602,7 @@ class HandlesView {
       if (!drag.moving) {
         drag.moving = true;
         this.view.dom.classList.add("cm-fub-blocks-dragging");
-        this.menu?.close();
+        if (this.menu) closeContextMenu();
       }
       this.track();
     });
@@ -839,15 +787,3 @@ export const blockHandles: Extension = [
   }),
 ];
 
-/// Il campione di un colore nel menu: «A» colorata, o sul suo fondo. Fuori
-/// dall'editor le classi del contenuto non valgono, quindi le tinte del tema
-/// si danno qui.
-function colorSwatch(kind: ColorKind, color: ContentColor | null): HTMLElement {
-  const swatch = document.createElement("span");
-  swatch.className = "cm-fub-color-swatch";
-  swatch.setAttribute("aria-hidden", "true");
-  swatch.textContent = "A";
-  if (color && kind === "text") swatch.style.color = `var(--doc-color-${color})`;
-  if (color && kind === "fill") swatch.style.background = `var(--doc-tint-${color})`;
-  return swatch;
-}

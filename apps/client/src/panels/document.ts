@@ -44,9 +44,9 @@ import {
   type Tab,
 } from "../state/layout";
 import { $ } from "../ui/dom";
-import { showContextMenu } from "../ui/menu";
+import { showContextMenu, type MenuItem } from "../ui/menu";
 import { confirm } from "../platform/confirm";
-import { allCommands, ariaBinding, canCreateDrawing, displayBinding, newDrawing } from "../ui/commands";
+import { allCommands, ariaBinding, canCreateDrawing, displayBinding, newDrawing, type CommandEntry } from "../ui/commands";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
 import { t, type Key } from "../i18n/strings";
@@ -62,6 +62,7 @@ import { platformSupports } from "../platform/capabilities";
 import { writeClipboardText } from "../platform/clipboard";
 import {
   chooseExport,
+  closeAllAndRelease,
   closeOthersAndRelease,
   closeRightAndRelease,
   closeTabAt,
@@ -726,9 +727,10 @@ function buildTab(r: PaneFrame, target: Tab, index: number): HTMLElement {
   return item;
 }
 
-/// Il contestuale di una tab (P06/F21): appunta, spunta, chiudi le altre,
-/// chiudi le non appuntate, sposta a sinistra/destra. Le appuntate non si
-/// chiudono per sbaglio: «chiudi le altre» le tiene.
+/// Il contestuale di una tab (P06/F21): chiudere, tenere, dividere e dove
+/// sta il file. Le appuntate non si chiudono per sbaglio: «Chiudi le altre» le
+/// tiene. Spostare la scheda si fa trascinando o coi tasti: nel menu quelle
+/// voci si trovano scrivendo, con le pile quando non ce n'è ancora una.
 function openTabMenu(r: PaneFrame, index: number, target: Tab, at: MouseEvent): void {
   const pinned = target.pinned === true;
   const paneIds = layoutPanes().filter((id) => id !== r.id);
@@ -738,29 +740,82 @@ function openTabMenu(r: PaneFrame, index: number, target: Tab, at: MouseEvent): 
     displayBinding(allCommands().find((entry) => entry.id === id)?.binding ?? null) || undefined;
   const doc = target.k === "doc" ? target.doc : null;
   const hasRight = tabs.some((tab, i) => i > index && !tab.pinned);
+  const hasUnpinned = tabs.some((tab) => !tab.pinned);
+  const closeAlso: MenuItem[] = [
+    ...(hasRight ? [{ label: t("tabmenu.close_also.right"), run: () => void closeRightAndRelease(r.id, index) }] : []),
+    ...(hasUnpinned ? [{ label: t("tabmenu.close_also.unpinned"), run: () => void closeUnpinnedAndRelease(r.id) }] : []),
+    { label: t("tabmenu.close_also.all"), run: () => void closeAllAndRelease(r.id) },
+  ];
+  const stackItems: MenuItem[] = [
+    ...stacks.filter((name) => name !== target.stack).map((name) => ({
+      label: t("tabmenu.to_stack", { stack: name }),
+      run: () => {
+        setTabStack(r.id, index, name);
+        void synchronize();
+      },
+    })),
+    ...(target.stack ? [{
+      label: t("tabmenu.leave_stack"),
+      run: () => {
+        setTabStack(r.id, index, null);
+        void synchronize();
+      },
+    }] : []),
+    {
+      separator: true,
+      label: t("tabmenu.new_stack"),
+      run: async () => {
+        const name = await promptText({ title: t("tabmenu.new_stack"), label: t("tabmenu.stack_name") });
+        if (name?.trim()) {
+          setTabStack(r.id, index, name);
+          void synchronize();
+        }
+      },
+    },
+  ];
+  const moves: MenuItem[] = [
+    ...(index > 0 ? [{
+      label: t("tabmenu.left"),
+      hint: chord("shell.tab.move.left"),
+      run: () => {
+        if (moveTab(r.id, index, index - 1)) void synchronize();
+      },
+    }] : []),
+    ...(index < tabs.length - 1 ? [{
+      label: t("tabmenu.right"),
+      hint: chord("shell.tab.move.right"),
+      run: () => {
+        if (moveTab(r.id, index, index + 1)) void synchronize();
+      },
+    }] : []),
+    // Gli stessi quattro bordi su cui si rilascia una linguetta: il gesto col
+    // mouse ha il suo comando (§18.2).
+    ...(!pinned && tabs.length > 1
+      ? (["left", "right", "top", "bottom"] as const).map((edge) => ({
+          label: t(`tabmenu.move_split.${edge}` as const),
+          run: () => {
+            if (splitWithTab(r.id, index, r.id, edge)) void synchronize();
+          },
+        }))
+      : []),
+    ...(!pinned ? paneIds.map((id) => ({
+      label: t("tabmenu.to_pane", { pane: String(layoutPanes().indexOf(id) + 1) }),
+      run: () => { if (moveTabToPane(r.id, index, id)) void synchronize(); },
+    })) : []),
+  ];
   showContextMenu(at, [
     {
       label: t("tabmenu.close"),
       hint: chord("shell.tab.close"),
       run: () => void closeTabAt(r.id, index),
     },
-    {
-      label: t("tabmenu.close_others"),
-      disabled: tabs.length < 2,
-      run: () => void closeOthersAndRelease(r.id, index),
-    },
-    {
-      label: t("tabmenu.close_right"),
-      disabled: !hasRight,
-      run: () => void closeRightAndRelease(r.id, index),
-    },
-    {
-      label: t("tabmenu.close_unpinned"),
-      run: () => void closeUnpinnedAndRelease(r.id),
-    },
+    ...(tabs.length > 1 ? [{ label: t("tabmenu.close_others"), run: () => void closeOthersAndRelease(r.id, index) }] : []),
+    { label: t("tabmenu.close_also"), items: closeAlso },
     {
       separator: true,
-      label: t(pinned ? "tabmenu.unpin" : "tabmenu.pin"),
+      label: t("tabmenu.pinned"),
+      choice: "checkbox",
+      checked: pinned,
       run: () => {
         setPinnedTab(r.id, index, !pinned);
         void synchronize();
@@ -768,6 +823,7 @@ function openTabMenu(r: PaneFrame, index: number, target: Tab, at: MouseEvent): 
     },
     ...(doc ? [{
       label: t("tabmenu.split_right"),
+      hint: chord("shell.pane.split.right"),
       run: () => {
         const added = split(r.id, "row");
         if (added) {
@@ -779,21 +835,8 @@ function openTabMenu(r: PaneFrame, index: number, target: Tab, at: MouseEvent): 
       label: t("tabmenu.new_window"),
       run: () => void import("../state/document-windows").then((windows) => windows.openCurrentInNewWindow(doc)),
     }] : [])] : []),
-    // Gli stessi quattro bordi su cui si rilascia una linguetta: il gesto col
-    // mouse ha il suo comando (§18.2).
-    ...(!pinned && tabs.length > 1
-      ? (["left", "right", "top", "bottom"] as const).map((edge, i) => ({
-          separator: i === 0,
-          label: t(`tabmenu.move_split.${edge}` as const),
-          run: () => {
-            if (splitWithTab(r.id, index, r.id, edge)) void synchronize();
-          },
-        }))
-      : []),
-    ...(!pinned ? paneIds.map((id) => ({
-      label: t("tabmenu.to_pane", { pane: String(layoutPanes().indexOf(id) + 1) }),
-      run: () => { if (moveTabToPane(r.id, index, id)) void synchronize(); },
-    })) : []),
+    // Le pile compaiono soltanto quando ce n'è una.
+    ...(stacks.length > 0 ? [{ label: t("tabmenu.stacks"), items: stackItems }] : []),
     ...(doc ? [{
       separator: true,
       label: t("tabmenu.copy_path"),
@@ -804,56 +847,16 @@ function openTabMenu(r: PaneFrame, index: number, target: Tab, at: MouseEvent): 
         );
       },
     }, {
-      label: t("commands.explorer.reveal"),
+      label: t("tabmenu.reveal"),
       run: () => {
         activateTab(r.id, index);
         void synchronize().then(() => allCommands().find((entry) => entry.id === "shell.explorer.reveal")?.run?.());
       },
     }] : []),
-    {
-      separator: true,
-      label: t("tabmenu.left"),
-      hint: chord("shell.tab.move.left"),
-      disabled: index === 0,
-      run: () => {
-        if (moveTab(r.id, index, index - 1)) void synchronize();
-      },
-    },
-    {
-      label: t("tabmenu.right"),
-      hint: chord("shell.tab.move.right"),
-      disabled: index >= tabs.length - 1,
-      run: () => {
-        if (moveTab(r.id, index, index + 1)) void synchronize();
-      },
-    },
-    ...stacks.filter((name) => name !== target.stack).map((name, i) => ({
-      separator: i === 0,
-      label: t("tabmenu.to_stack", { stack: name }),
-      run: () => {
-        setTabStack(r.id, index, name);
-        void synchronize();
-      },
-    })),
-    {
-      separator: stacks.filter((name) => name !== target.stack).length === 0,
-      label: t("tabmenu.new_stack"),
-      run: async () => {
-        const name = await promptText({ title: t("tabmenu.new_stack"), label: t("tabmenu.stack_name") });
-        if (name?.trim()) {
-          setTabStack(r.id, index, name);
-          void synchronize();
-        }
-      },
-    },
-    ...(target.stack ? [{
-      label: t("tabmenu.leave_stack"),
-      run: () => {
-        setTabStack(r.id, index, null);
-        void synchronize();
-      },
-    }] : []),
-  ]);
+  ], {
+    header: { icon: "notes", kind: t("tabmenu.head"), name: describeTab(target).label },
+    searchable: [...moves, ...(stacks.length > 0 ? [] : stackItems.slice(-1))],
+  });
 }
 
 /// Il drag di una tab (P06/F21): riordino dentro il riquadro, spostamento fra
@@ -1134,62 +1137,71 @@ function hostPaneStatus(slot: HTMLElement): void {
   group.hidden = false;
 }
 
-/// Menu riquadro con sole azioni esistenti (U25): split/close via comandi
-/// registrati, focus/mode dal percorso esistente. Registratore, slide e stampa
-/// seguono le capacità che la superficie montata dichiara.
+/// Menu riquadro con sole azioni esistenti (U25): dividere, la sorgente,
+/// esportare e stampare, presentare e registrare, e in fondo le due chiusure,
+/// dove la mano le cerca. Registratore, slide e stampa seguono le capacità
+/// che la superficie montata dichiara.
 function openPaneMenu(r: Pane, event: MouseEvent): void {
-  const entries = allCommands().filter((entry) =>
-    ["shell.pane.split.right", "shell.pane.split.down", "shell.pane.close", "shell.tab.close"].includes(entry.id),
-  );
+  const command = (id: string): CommandEntry | undefined => allCommands().find((entry) => entry.id === id);
+  const chord = (id: string): string | undefined => displayBinding(command(id)?.binding ?? null) || undefined;
+  const runCommand = (id: string): void => {
+    focusPane(r.id);
+    void command(id)?.run?.();
+  };
+  const offered = (id: string, label: string): MenuItem[] =>
+    command(id) ? [{ label, hint: chord(id), run: () => runCommand(id) }] : [];
   const doc = activeDoc(r.id);
   const surface = r.surface;
   // La vista sorgente si chiede a **questo** riquadro, non a quello col fuoco
   // come farebbe `available`: il menu si apre anche su un riquadro accanto.
   const sourceView = offeredSourceView(r);
   const sourceShown = tabOverride(activeTab(r.id)) !== null;
-  showContextMenu(event, [
-    ...entries.map((entry) => ({
-      label: entry.title,
+  const exports: MenuItem[] = [
+    ...offeredExports(r).map((format) => ({
+      label: t("pane.menu.export_as", { what: format.label() }),
       run: () => {
         focusPane(r.id);
-        void entry.run?.();
+        if (r.shown?.k === "doc") void runExport(r.shown.doc, format);
       },
     })),
-    ...(sourceView || sourceShown ? [{
-      label: t(sourceShown ? "commands.doc.source.close" : "commands.doc.source.open"),
-      run: () => {
-        focusPane(r.id);
-        void showSourceView(r.id, sourceShown ? null : sourceView);
-      },
-    }] : []),
-    ...(sourceView ? [{
-      label: t("commands.doc.source.side"),
-      run: () => {
-        focusPane(r.id);
-        void openSourceViewBeside(r.id);
-      },
-    }] : []),
-    ...(doc && surface?.insertReferences ? [{
-      label: t(r.disposeRecorder ? "pane.recorder.close" : "pane.recorder.open"),
-      run: () => void toggleRecorder(r, doc),
-    }] : []),
-    ...(doc && surface?.mountPresentation ? [{ label: t("pane.slides"), run: () => presentSlides(r, doc) }] : []),
-    ...(doc && surface?.printable ? [{ label: t("pane.print"), run: () => void presentPrint(r, doc) }] : []),
     ...(exportWindow(r) ? [{
-      label: t("commands.doc.export"),
+      label: t("pane.menu.export_other"),
       run: () => {
         focusPane(r.id);
         void chooseExport(r.id);
       },
     }] : []),
-    ...offeredExports(r).map((offered) => ({
-      label: t("pane.export", { what: offered.label() }),
+  ];
+  showContextMenu(event, [
+    ...offered("shell.pane.split.right", t("pane.menu.split_right")),
+    ...offered("shell.pane.split.down", t("pane.menu.split_down")),
+    ...(sourceView ? [{
+      label: t("pane.menu.source_side"),
       run: () => {
         focusPane(r.id);
-        if (r.shown?.k === "doc") void runExport(r.shown.doc, offered);
+        void openSourceViewBeside(r.id);
       },
-    })),
-  ]);
+    }] : []),
+    ...(exports.length > 0 ? [{ separator: true, label: t("pane.menu.export"), items: exports }] : []),
+    ...(doc && surface?.printable ? [{ separator: exports.length === 0, label: t("pane.print"), run: () => void presentPrint(r, doc) }] : []),
+    ...(doc && surface?.mountPresentation ? [{ label: t("pane.slides"), run: () => presentSlides(r, doc) }] : []),
+    ...(doc && surface?.insertReferences ? [{
+      label: t(r.disposeRecorder ? "pane.recorder.close" : "pane.recorder.open"),
+      run: () => void toggleRecorder(r, doc),
+    }] : []),
+    ...offered("shell.tab.close", t("pane.menu.close_tab")).map((item) => ({ ...item, separator: true })),
+    ...offered("shell.pane.close", t("pane.menu.close_pane")),
+  ], {
+    header: { icon: "layout-dashboard", kind: t("pane.menu.head") },
+    search: true,
+    searchable: sourceView || sourceShown ? [{
+      label: t(sourceShown ? "commands.doc.source.close" : "commands.doc.source.open"),
+      run: () => {
+        focusPane(r.id);
+        void showSourceView(r.id, sourceShown ? null : sourceView);
+      },
+    }] : [],
+  });
 }
 
 /// Banner conflitto persistente nel riquadro coinvolto (U59-U60): documento,

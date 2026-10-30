@@ -42,7 +42,8 @@ import {
 import { $ } from "../ui/dom";
 import { FORMAT_ICON, formatKindOf } from "../ui/format-kind";
 import { iconEl } from "../ui/icons";
-import { pickIcon, showContextMenu, type MenuItem } from "../ui/menu";
+import { pickIcon, showContextMenu, type ContextMenuOptions, type MenuItem } from "../ui/menu";
+import { selectInspectorTab } from "../ui/views";
 import {
   canCreateDrawing,
   canImportDrawing,
@@ -53,6 +54,8 @@ import {
   newDrawing,
   pickDrawingImport,
   registerShellCommand,
+  allCommands,
+  displayBinding,
 } from "../ui/commands";
 import { VAULT_EXPORT } from "../ui/vault-export";
 import { DEFAULT_ATTACHMENT_FOLDER } from "../editors/media/attachment-target";
@@ -61,7 +64,7 @@ import { showPanel } from "./sidebar";
 import { writeClipboardText } from "../platform/clipboard";
 import { searchFor } from "../state/search-port";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
-import { canShowFile, focusEditor, openDocument, openDocumentBeside } from "../state/document-controller";
+import { canShowFile, copyNoteLinks, focusEditor, openDocument, openDocumentBeside } from "../state/document-controller";
 import { addBookmark, loadBookmarks, type BookmarkTarget } from "../state/bookmarks";
 import { openCurrentInNewWindow } from "../state/document-windows";
 import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../state/document-session";
@@ -159,24 +162,17 @@ export function mountExplorer(lifetime: Lifetime): void {
   });
   lifetime.listen($("#new-note"), "click", () => void newNote());
   // Il titolo del pannello è la radice di ciò che si vede (il vault o lo
-  // spazio attivo): il suo contestuale crea lì un disegno, se il kernel sa
-  // farli, e una cartella.
+  // spazio attivo), e così lo spazio vuoto sotto l'ultima riga: il loro
+  // contestuale crea lì, importa e ordina l'albero.
   lifetime.listen(filesTitleEl, "contextmenu", (e) => {
     e.preventDefault();
-    showContextMenu(e, [
-      ...(canCreateDrawing()
-        ? [{ label: t("explorer.new_drawing_here"), run: () => void newDrawing(state.activeSpace ?? "") }]
-        : []),
-      ...(canImportDrawing()
-        ? [{ label: t("explorer.import_drawing_here"), run: () => void pickDrawingImport(state.activeSpace ?? "") }]
-        : []),
-      { label: t("explorer.new_folder"), run: () => startNewFolder(state.activeSpace ?? "") },
-      { separator: true, label: t("explorer.import_files"), run: () => pickImport(state.activeSpace ?? "", false) },
-      { label: t("explorer.import_folder"), run: () => pickImport(state.activeSpace ?? "", true) },
-      { separator: true, label: t("explorer.sort"), run: () => sortMenu(e) },
-      { label: t("explorer.collapse_all"), run: () => collapseAll() },
-      { label: t("explorer.expand_all"), run: () => void expandAll() },
-    ]);
+    rootMenu(e);
+  });
+  lifetime.listen(fileListEl, "contextmenu", (e) => {
+    // Una riga ha già aperto il suo menu.
+    if (e.defaultPrevented) return;
+    e.preventDefault();
+    rootMenu(e);
   });
   lifetime.listen(spaceTitleEl, "click", openSpaceNote);
   registerShellCommand({
@@ -296,6 +292,7 @@ export function mountExplorer(lifetime: Lifetime): void {
     move: (paths) => pickMoveFolders(paths),
     group: (paths) => groupIntoNewFolder(paths),
     copy: (paths) => copyEntries(paths),
+    copyLinks: (paths) => copyNoteLinks(paths),
     lifetime,
   });
   lifetime.add(() => {
@@ -329,6 +326,7 @@ export function mountExplorer(lifetime: Lifetime): void {
   lifetime.add(on("organization", renderFileList));
   lifetime.add(on("page-icons", renderFileList));
   lifetime.add(on("reveal-folder", (folder) => void revealPath(folder, true)));
+  lifetime.add(on("reveal-path", (path) => void revealPath(path, false)));
   // L'elenco dei comandi arriva dopo l'apertura del vault: un albero vuoto
   // offre «Nuovo disegno…» solo da quel momento, e lo toglie se il comando se
   // ne va. Un albero con delle note non ha niente da ridisegnare.
@@ -917,24 +915,9 @@ function fileRow(id: string): HTMLElement {
     if (canShowFile(id)) void openDocument(id);
     else if (!(canImportFile(id) && importDrawing({ kind: "vault", path: id }))) notify(t("explorer.no_viewer", { name: childName(id) }), "info");
   });
-  // Un allegato si rinomina (l'estensione resta) e si cestina come una nota:
-  // il kernel li tratta allo stesso modo, e il cestino li ripristina uguali.
-  // Uno che si importa lo offre per primo, anche quando Fub lo mostra, come
-  // l'SVG o il PNG che draw.io esporta col disegno dentro.
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    if (selectionMenu(e, id)) return;
-    showMenuFor(
-      e,
-      [
-        ...(canImportFile(id) ? [{ label: t("explorer.import_drawing"), run: () => void importDrawing({ kind: "vault", path: id }) }] : []),
-        { label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
-        { label: t("explorer.copy"), run: () => copyEntries(pickedOr(id)) },
-        { label: t("explorer.move"), run: () => void pickMoveFolder(id) },
-        { separator: true, label: t("explorer.delete"), hint: "Del", danger: true, run: () => void trashWithConfirm(id) },
-      ],
-      { kind: "file", id },
-    );
+    fileMenu(e, row, id);
   });
   return row;
 }
@@ -943,21 +926,50 @@ function fileRow(id: string): HTMLElement {
 /// che agisce su tutte, invece di quello di una voce sola. `false` se la voce
 /// non è in una scelta di almeno due.
 function selectionMenu(at: MouseEvent, id: string): boolean {
-  const items = selection?.menuFor(id);
-  if (!items) return false;
-  showContextMenu(at, items);
+  const menu = selection?.menuFor(id);
+  if (!menu) return false;
+  const count = selection?.paths().length ?? 0;
+  showContextMenu(at, menu.items, {
+    header: { icon: "collection", kind: t("explorer.menu.many", { count: String(count) }) },
+    searchable: menu.searchable,
+  });
   return true;
 }
 
 /// Apre un contestuale con le voci della shell e, se ci sono view sulla
 /// superficie `context_menu`, in coda le loro. Senza view non c'è niente da
-/// aspettare e il menu compare subito, com'era.
-function showMenuFor(at: MouseEvent, items: MenuItem[], target: ContextTarget): void {
+/// aspettare e il menu compare subito, com'era. Ciò che cancella resta in
+/// fondo anche dopo le voci dei plugin.
+function showMenuFor(at: MouseEvent, items: MenuItem[], target: ContextTarget, options: ContextMenuOptions = {}): void {
   if (!hasContextMenuViews()) {
-    showContextMenu(at, items);
+    showContextMenu(at, items, options);
     return;
   }
-  void contextMenuItems(target).then((extra) => showContextMenu(at, [...items, ...extra]));
+  void contextMenuItems(target).then((extra) => {
+    const danger = items.findIndex((item) => item.danger);
+    const head = danger < 0 ? items : items.slice(0, danger);
+    const tail = danger < 0 ? [] : items.slice(danger);
+    showContextMenu(at, [...head, ...extra.map((item, i) => (i === 0 ? { ...item, separator: true } : item)), ...tail], options);
+  });
+}
+
+/// I gesti di «Copia ▸» di una voce dell'albero: il link, il percorso e il
+/// file stesso, che l'albero incolla altrove.
+function copyItems(id: string, file = t("explorer.copy.file")): MenuItem {
+  return {
+    label: t("explorer.copy.menu"),
+    items: [
+      { label: t("explorer.copy.link"), run: () => void copyNoteLinks(pickedOr(id)) },
+      { label: t("explorer.copy.path"), run: () => void copyPath(id) },
+      { label: file, hint: displayBinding("Mod-c"), run: () => copyEntries(pickedOr(id)) },
+    ],
+  };
+}
+
+/// «Sposta prima» e «Sposta dopo» fra le sorelle: soltanto con l'ordine a
+/// mano, perché con un altro ordine lo spostamento non si vedrebbe.
+function reorderItems(id: string): MenuItem[] {
+  return state.explorerSort === "manual" ? reorderActions(id) : [];
 }
 
 /// Le voci del contestuale di una **nota**, dalla stessa strada del click
@@ -966,30 +978,64 @@ function showMenuFor(at: MouseEvent, items: MenuItem[], target: ContextTarget): 
 function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
   if (selectionMenu(at, id)) return;
   const pinned = state.meta.pinned.includes(id);
-  const move = voceSpostamento(id);
-  const reorder = reorderActions(id);
+  const reorder = reorderItems(id);
   showMenuFor(at, [
-    { label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
     { label: t("explorer.open_beside"), run: () => void openDocumentBeside(id, "row") },
     { label: t("explorer.open_window"), run: () => void openCurrentInNewWindow(id) },
+    { separator: true, label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
+    { label: t("explorer.move"), run: () => void pickMoveFolder(id) },
     { label: t("explorer.duplicate"), run: () => void duplicateEntry(id) },
-    { label: t("explorer.copy"), run: () => copyEntries(pickedOr(id)) },
-    { label: t("explorer.copy_path"), run: () => void copyPath(id) },
-    { label: t("explorer.reveal_system"), run: () => void handToSystem(id, false) },
-    { label: t("explorer.open_system"), run: () => void handToSystem(id, true) },
-    { label: t("explorer.bookmark"), run: () => void bookmarkEntry({ k: "doc", doc: id }, id) },
-    ...(move ? [move] : []),
-    { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
-    ...folderPageAction(id),
-    { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, id) },
+    { ...copyItems(id), separator: true },
+    { label: t("explorer.pin_state"), choice: "checkbox", checked: pinned, run: () => togglePin(id) },
     {
-      label: pinned ? t("explorer.unpin") : t("explorer.pin"),
-      run: () => togglePin(id),
+      label: t("explorer.organize"),
+      items: [
+        { label: t("explorer.icon"), run: () => chooseIcon(at, id) },
+        { label: t("explorer.bookmark"), run: () => void bookmarkEntry({ k: "doc", doc: id }, id) },
+        { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
+        ...folderPageAction(id),
+        ...reorder,
+        { separator: true, label: t("explorer.reveal_system"), run: () => void handToSystem(id, false) },
+        { label: t("explorer.open_system"), run: () => void handToSystem(id, true) },
+      ],
     },
-    ...reorder.map((action, index) => ({ ...action, separator: index === 0 })),
-    { separator: true, label: t("explorer.delete"), hint: "Del", danger: true, run: () => void trashWithConfirm(id) },
-  ], { kind: "note", id });
+    { separator: true, label: t("explorer.trash"), hint: displayBinding("Delete"), danger: true, run: () => void trashWithConfirm(id) },
+  ], { kind: "note", id }, { header: { icon: "notes", kind: t("explorer.menu.note"), name: pageName(id) } });
 }
+
+/// Le voci del contestuale di un **allegato**: un file che non è una nota. Si
+/// rinomina (l'estensione resta) e si cestina come una nota: il kernel li
+/// tratta allo stesso modo, e il cestino li ripristina uguali. Uno che si
+/// importa in un disegno lo offre per primo, anche quando Fub lo mostra, come
+/// l'SVG o il PNG che draw.io esporta col disegno dentro.
+function fileMenu(at: MouseEvent, row: HTMLElement, id: string): void {
+  if (selectionMenu(at, id)) return;
+  const shown = canShowFile(id);
+  showMenuFor(at, [
+    ...(canImportFile(id) ? [{ label: t("explorer.import_drawing"), run: () => void importDrawing({ kind: "vault", path: id }) }] : []),
+    ...(shown
+      ? [
+          { label: t("explorer.open"), run: () => void openDocument(id) },
+          { label: t("explorer.open_beside"), run: () => void openDocumentBeside(id, "row") },
+        ]
+      : []),
+    { label: t("explorer.open_system"), run: () => void handToSystem(id, true) },
+    { separator: true, label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
+    { label: t("explorer.move"), run: () => void pickMoveFolder(id) },
+    copyItems(id, t("explorer.copy.file_short")),
+    ...(shown ? [{ separator: true, label: t("explorer.used_by"), run: () => void showUsers(id) }] : []),
+    { separator: true, label: t("explorer.trash"), hint: displayBinding("Delete"), danger: true, run: () => void trashWithConfirm(id) },
+  ], { kind: "file", id }, { header: { icon: "fmt-image", kind: t("explorer.menu.file"), name: childName(id) } });
+}
+
+/// «Mostra le note che lo usano»: apre il file e, accanto, il pannello dei
+/// collegamenti, che elenca chi lo richiama.
+async function showUsers(id: string): Promise<void> {
+  await openDocument(id);
+  revealSidePanel("inspector");
+  if (!selectInspectorTab("backlinks")) notify(t("explorer.used_by_missing"), "info");
+}
+
 // Returns actions only when another sibling of the same kind is visible.
 function reorderActions(id: string): Array<{ label: string; run: () => void }> {
   const row = entry(id);
@@ -1059,11 +1105,6 @@ function renameEntry(id: string, row: HTMLElement | null = entryRow(id)): boolea
   if (!row) return false;
   startRename(row, id);
   return true;
-}
-
-/// Voce "Sposta in…" senza drag (U10): apre il selettore di destinazione.
-function voceSpostamento(id: string): { label: string; run: () => void } | null {
-  return { label: t("explorer.move"), run: () => void pickMoveFolder(id) };
 }
 
 /// Destinazione dello spostamento senza drag (U10): le cartelle del vault in
@@ -1224,47 +1265,101 @@ function folderRow(folder: VaultFolder): HTMLElement {
   return row;
 }
 
+/// L'accordo di un comando della palette, scritto come si preme.
+function chordOf(id: string): string | undefined {
+  return displayBinding(allCommands().find((entry) => entry.id === id)?.binding ?? null) || undefined;
+}
+
+/// «Importa ▸» in `folder`: i file, una cartella, le note di un'altra app e un
+/// disegno, ognuno se il kernel lo sa fare.
+function importItems(folder: string): MenuItem {
+  return {
+    label: t("explorer.import"),
+    items: [
+      { label: t("explorer.import.files"), run: () => pickImport(folder, false) },
+      { label: t("explorer.import.folder"), run: () => pickImport(folder, true) },
+      ...(hasKernelCommand(IMPORT_PREPARE)
+        ? [{ label: t("explorer.import.notes"), run: () => void launchCommand(IMPORT_PREPARE, { folder }) }]
+        : []),
+      ...(canImportDrawing() ? [{ label: t("explorer.import.drawing"), run: () => void pickDrawingImport(folder) }] : []),
+    ],
+  };
+}
+
 /// Le voci del contestuale di una **cartella**: stesse voci del click destro e
 /// del tasto Menu, un punto solo.
 function folderMenu(at: MouseEvent, path: string): void {
-  const reorder = reorderActions(path);
+  const reorder = reorderItems(path);
+  const pasting = copied.length > 0 && copied[0]!.vault === openVaultRoot();
   showMenuFor(
     at,
     [
-      { label: t("explorer.new_note_here"), run: () => void newNote(path) },
-      // Accanto alla nota, se il kernel sa fare disegni: la cartella arriva alla
-      // galleria già scelta.
-      ...(canCreateDrawing()
-        ? [{ label: t("explorer.new_drawing_here"), run: () => void newDrawing(path) }]
-        : []),
-      ...(canImportDrawing()
-        ? [{ label: t("explorer.import_drawing_here"), run: () => void pickDrawingImport(path) }]
-        : []),
-      { label: t("explorer.new_folder"), run: () => startNewFolder(path) },
-      ...(copied.length > 0 && copied[0]!.vault === openVaultRoot()
-        ? [{ label: t("explorer.paste"), run: () => void pasteEntries(path) }]
-        : []),
-      { label: t("explorer.import_files"), run: () => pickImport(path, false) },
-      { label: t("explorer.import_folder"), run: () => pickImport(path, true) },
-      ...(hasKernelCommand(IMPORT_PREPARE)
-        ? [{ label: t("explorer.import_notes"), run: () => void launchCommand(IMPORT_PREPARE, { folder: path }) }]
-        : []),
-      ...(hasKernelCommand(VAULT_EXPORT)
-        ? [{ label: t("explorer.export_folder"), run: () => void launchCommand(VAULT_EXPORT, { folder: path }) }]
-        : []),
+      { label: t("explorer.new_note_here"), hint: chordOf("shell.note.new"), run: () => void newNote(path) },
+      {
+        label: t("explorer.new_menu"),
+        items: [
+          { label: t("explorer.new.folder"), run: () => startNewFolder(path) },
+          // Il disegno nasce se il kernel sa farli: la cartella arriva alla
+          // galleria già scelta.
+          ...(canCreateDrawing() ? [{ label: t("explorer.new.drawing"), run: () => void newDrawing(path) }] : []),
+        ],
+      },
+      importItems(path),
       { separator: true, label: t("explorer.rename"), hint: "F2", run: () => void renameFolderRow(path) },
       { label: t("explorer.move"), run: () => void pickMoveFolders([path]) },
-      { label: t("explorer.copy_path"), run: () => void copyPath(path) },
-      { label: t("explorer.reveal_system"), run: () => void handToSystem(path, false) },
-      { label: t("explorer.bookmark"), run: () => void bookmarkEntry({ k: "folder", path }, path) },
       { label: t("explorer.search_in_folder"), run: () => searchInFolder(path) },
-      { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, path) },
-      { label: t("explorer.as_space"), run: () => addSpace(path) },
-      ...reorder.map((action, index) => ({ ...action, separator: index === 0 })),
-      { separator: true, label: t("explorer.delete"), hint: "Del", danger: true, run: () => void trashFolderWithConfirm(path) },
+      {
+        separator: true,
+        label: t("explorer.organize"),
+        items: [
+          { label: t("explorer.icon"), run: () => chooseIcon(at, path) },
+          { label: t("explorer.as_space"), run: () => addSpace(path) },
+          { label: t("explorer.bookmark"), run: () => void bookmarkEntry({ k: "folder", path }, path) },
+          ...reorder,
+          { separator: true, label: t("explorer.copy_path"), run: () => void copyPath(path) },
+          ...(hasKernelCommand(VAULT_EXPORT)
+            ? [{ label: t("explorer.export_folder"), run: () => void launchCommand(VAULT_EXPORT, { folder: path }) }]
+            : []),
+          { label: t("explorer.reveal_system"), run: () => void handToSystem(path, false) },
+        ],
+      },
+      { separator: true, label: t("explorer.trash"), hint: displayBinding("Delete"), danger: true, run: () => void trashFolderWithConfirm(path) },
     ],
     { kind: "folder", id: path },
+    {
+      header: { icon: "folder", kind: t("explorer.menu.folder"), name: childName(path) },
+      // I file copiati nell'albero si incollano qui: l'unico gesto degli
+      // appunti, quindi una voce in cima.
+      ...(pasting ? { clipboard: [{ label: t("explorer.paste"), icon: "template", hint: displayBinding("Mod-v"), run: () => void pasteEntries(path) }] } : {}),
+    },
   );
+}
+
+/// Il contestuale del titolo del pannello e dello spazio vuoto sotto l'ultima
+/// riga: crea e importa nella radice di ciò che si vede (il vault o lo spazio
+/// attivo), e ordina l'albero.
+function rootMenu(at: MouseEvent): void {
+  const root = state.activeSpace ?? "";
+  showContextMenu(at, [
+    { label: t("explorer.new_note"), hint: chordOf("shell.note.new"), run: () => void newNote(state.activeSpace) },
+    { label: t("explorer.new_folder"), run: () => startNewFolder(root) },
+    ...(canCreateDrawing() ? [{ label: t("explorer.new_drawing_menu"), run: () => void newDrawing(root) }] : []),
+    {
+      separator: true,
+      label: t("explorer.sort"),
+      items: EXPLORER_SORTS.map((mode) => ({
+        label: t(SORT_LABELS[mode]),
+        choice: "radio" as const,
+        checked: state.explorerSort === mode,
+        run: () => setSort(mode),
+      })),
+    },
+    { label: t("explorer.collapse_all"), run: () => collapseAll() },
+    { separator: true, ...importItems(root) },
+  ], {
+    header: { icon: "folder", kind: spaceTitleEl.textContent?.trim() || t("explorer.menu.folder") },
+    searchable: [{ label: t("explorer.expand_all"), run: () => void expandAll() }],
+  });
 }
 
 /// L'icona di una riga: quella scelta da chi scrive, che resta com'è, o
@@ -1622,18 +1717,6 @@ const SORT_LABELS = {
   "modified-new": "explorer.sort.modified-new",
   "modified-old": "explorer.sort.modified-old",
 } as const satisfies Record<ExplorerSort, string>;
-
-/// Il sotto-menu dell'ordine, con quello in uso selezionato.
-function sortMenu(at: MouseEvent): void {
-  showContextMenu(
-    at,
-    EXPLORER_SORTS.map((mode) => ({
-      label: t(SORT_LABELS[mode]),
-      selected: state.explorerSort === mode,
-      run: () => setSort(mode),
-    })),
-  );
-}
 
 /// Cambia l'ordine dell'albero e lo ridisegna: l'impronta lo include.
 function setSort(mode: ExplorerSort): void {

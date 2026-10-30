@@ -88,6 +88,95 @@ export interface ContextMenuOptions {
   /// la prima freccia sceglie la prima voce. Senza, lo dice l'evento: il tasto
   /// destro del mouse sì, il tasto Menu, Maiusc+F10 e un clic sintetico no.
   pointer?: boolean;
+  /// Che cosa si è toccato: la testata in cima, che non si sceglie e dà il
+  /// nome al menu.
+  header?: MenuHeader;
+  /// Taglia, Copia, Incolla: con almeno due voci stanno in una riga di
+  /// pulsanti in cima; con una sola, quella è la prima voce.
+  clipboard?: readonly MenuItem[];
+  /// Le voci che non stanno nel menu: si trovano scrivendo.
+  searchable?: readonly MenuItem[];
+  /// Scrivere filtra le voci, col piede che lo dice. Di serie sì nei menu
+  /// aperti in un punto; un menu a tendina va invece all'iniziale.
+  search?: boolean;
+}
+
+/// La testata: l'icona e il tipo dell'oggetto, poi il suo nome.
+export interface MenuHeader {
+  readonly icon?: string;
+  readonly kind: string;
+  readonly name?: string;
+}
+
+/// Chi cerca fra tutti i comandi quando le voci del menu non bastano, e il
+/// tasto che lo fa da fuori.
+export interface MenuSearch {
+  run(query: string): void;
+  hint(): string;
+  /// Cerca `query` nel vault o fra i tag: «Cerca nel vault», «Cerca le note
+  /// con questo tag», «Mostra nel pannello dei tag».
+  find?(where: MenuFind, query: string): void;
+}
+
+/// Dove cerca una voce del menu che porta fuori di lui.
+export type MenuFind = "vault" | "tags";
+
+let menuSearch: MenuSearch | null = null;
+
+/// Registra chi cerca fra tutti i comandi; torna come ritirarlo.
+export function registerMenuSearch(search: MenuSearch): () => void {
+  menuSearch = search;
+  return () => {
+    if (menuSearch === search) menuSearch = null;
+  };
+}
+
+/// Si può cercare nel vault o fra i tag da un menu, adesso.
+export function canMenuFind(): boolean {
+  return menuSearch?.find !== undefined;
+}
+
+/// Cerca `query` dove dice `where`; `false` se nessuno sa cercare.
+export function menuFind(where: MenuFind, query: string): boolean {
+  if (menuSearch?.find === undefined) return false;
+  menuSearch.find(where, query);
+  return true;
+}
+
+/// Le voci in più del menu principale: testata, appunti, ricerca.
+interface Chrome {
+  readonly header?: MenuHeader;
+  readonly clipboard: readonly MenuItem[];
+  readonly searchable: readonly MenuItem[];
+  readonly search: boolean;
+}
+
+/// Quante voci trovate mostra la ricerca, come il tetto di un menu.
+const SEARCH_LIMIT = 9;
+
+/// Il confronto della ricerca: minuscole e senza accenti.
+const fold = (text: string): string => text.toLocaleLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+/// Una voce trovata scrivendo e il sottomenu da cui viene.
+interface Row {
+  readonly item: MenuItem;
+  readonly path?: string;
+}
+
+/// Le voci che si possono scegliere, sottomenu compresi, col loro percorso.
+/// Un sottomenu preparato quando serve conta se è già pronto.
+function flatten(items: readonly MenuItem[], ready: ReadonlyMap<MenuItem, readonly MenuItem[]>, path = ""): Row[] {
+  const out: Row[] = [];
+  for (const item of items) {
+    if (item.disabled) continue;
+    const children = Array.isArray(item.items) ? item.items : ready.get(item);
+    if (item.items !== undefined) {
+      if (children) out.push(...flatten(children, ready, path ? `${path} › ${item.label}` : item.label));
+      continue;
+    }
+    out.push(path ? { item, path } : { item });
+  }
+  return out;
 }
 
 /// Un `contextmenu` o un clic del puntatore, non della tastiera: il tasto Menu
@@ -171,7 +260,14 @@ export function showContextMenu(
     showContextMenu({ x, y }, [back, ...children], { ...options, strip: undefined });
   };
   const pointer = options.pointer ?? byPointer(at);
-  const root = renderMenu(items, lifetime, replaceWith);
+  const clipboard = options.clipboard ?? [];
+  const chrome: Chrome = {
+    header: options.header,
+    clipboard: clipboard.length >= 2 ? clipboard : [],
+    searchable: options.searchable ?? [],
+    search: options.search ?? anchor === null,
+  };
+  const root = renderMenu(clipboard.length === 1 ? [clipboard[0]!, ...items] : items, lifetime, replaceWith, chrome);
   const menu = root.menu;
   menu.id = "context-menu";
   if (options.labelledBy) menu.setAttribute("aria-labelledby", options.labelledBy);
@@ -230,6 +326,7 @@ function renderMenu(
   items: readonly MenuItem[],
   lifetime: Lifetime,
   replaceWith: (item: MenuItem) => Promise<void>,
+  chrome: Chrome | null = null,
 ): RenderedMenu {
   const menu = document.createElement("div");
   menu.className = "context-menu";
@@ -240,8 +337,6 @@ function renderMenu(
   menu.tabIndex = -1;
   const buttons: HTMLButtonElement[] = [];
   const usable: MenuItem[] = [];
-  const pictured = items.some((item) => item.sample !== undefined || (item.icon !== undefined && icon(item.icon) !== ""));
-  let group = null as { name: string; node: HTMLElement } | null;
   // Il sottomenu aperto, se ce n'è uno: la voce da cui parte e come chiuderlo.
   let open: { button: HTMLButtonElement; lifetime: Lifetime; focusFirst: () => void; sub: HTMLElement } | null = null;
   // Dove stava il puntatore al movimento prima e adesso: la mira si legge da qui.
@@ -307,126 +402,229 @@ function renderMenu(
     if (focus) child.focusActive();
     else button.focus();
   };
-  for (const item of items) {
-    // Un gruppo con un nome è un `role="group"` per chi ascolta e una riga per
-    // chi guarda; una riga semplice chiude il gruppo aperto.
-    const named = item.group ?? null;
-    if (named !== (group?.name ?? null) || item.separator) {
-      if (menu.childElementCount > 0 && (item.separator || named !== null || group !== null)) {
-        const rule = document.createElement("div");
-        rule.className = "menu-separator";
-        rule.setAttribute("role", "separator");
-        menu.appendChild(rule);
-      }
-      group = null;
-      if (named !== null) {
-        const node = document.createElement("div");
-        node.className = "menu-group";
-        node.setAttribute("role", "group");
-        node.setAttribute("aria-label", named);
-        menu.appendChild(node);
-        group = { name: named, node };
-      }
+  // Le voci stanno in un elenco loro, fra la testata e gli appunti sopra e il
+  // piede sotto: scrivere le sostituisce e il resto non si muove.
+  const list = document.createElement("div");
+  list.className = "menu-items";
+  list.setAttribute("role", "none");
+  // La riga degli appunti, se c'è: pulsanti che sono voci del menu, prima
+  // delle altre nel giro delle frecce.
+  const quick: HTMLButtonElement[] = [];
+  const quickItems: MenuItem[] = [];
+  if (chrome?.header) {
+    const head = document.createElement("div");
+    head.className = "menu-head";
+    head.setAttribute("aria-hidden", "true");
+    const glyph = chrome.header.icon === undefined ? null : iconEl(chrome.header.icon);
+    if (glyph !== null) head.append(glyph);
+    const kind = document.createElement("span");
+    kind.className = "menu-head-kind";
+    kind.textContent = chrome.header.kind;
+    head.append(kind);
+    if (chrome.header.name) {
+      const name = document.createElement("span");
+      name.className = "menu-head-name";
+      name.textContent = chrome.header.name;
+      head.append(name);
     }
-    const host = group?.node ?? menu;
-    const b = document.createElement("button");
-    b.setAttribute("role", item.choice ? `menuitem${item.choice}` : "menuitem");
-    if (item.choice) b.setAttribute("aria-checked", String(item.checked === true));
-    b.tabIndex = -1;
-    if (item.swatches?.length) {
-      const strip = document.createElement("span");
-      strip.className = "menu-swatches";
-      strip.setAttribute("aria-hidden", "true");
-      for (const color of item.swatches) {
-        const swatch = document.createElement("span");
-        swatch.className = "menu-swatch";
-        swatch.style.background = color;
-        strip.append(swatch);
-      }
-      b.append(strip);
-    }
-    const glyph = item.sample !== undefined || item.icon === undefined ? null : iconEl(item.icon);
-    if (glyph !== null || pictured) {
-      const picture = document.createElement("span");
-      picture.className = "menu-icon";
-      picture.setAttribute("aria-hidden", "true");
-      if (glyph !== null) picture.append(glyph);
-      if (item.sample !== undefined) {
-        const sample = document.createElement("span");
-        sample.className = item.sample.text === "" ? "menu-sample menu-sample-box" : "menu-sample";
-        sample.textContent = item.sample.text;
-        for (const [name, value] of Object.entries(item.sample.css)) sample.style.setProperty(name, value);
-        picture.append(sample);
-      }
-      b.append(picture);
-    }
-    const label = document.createElement("span");
-    label.className = "menu-label";
-    label.textContent = item.label;
-    if (item.description) {
-      const body = document.createElement("span");
-      body.className = "menu-body";
-      const description = document.createElement("span");
-      description.className = "menu-description";
-      description.textContent = item.description;
-      body.append(label, description);
-      b.append(body);
-    } else {
-      b.append(label);
-    }
-    if (item.choice) {
-      const check = document.createElement("span");
-      check.className = "menu-check";
-      check.setAttribute("aria-hidden", "true");
-      check.textContent = item.checked ? "✓" : "";
-      b.append(check);
-    }
-    if (item.hint) {
-      const hint = document.createElement("kbd");
-      hint.className = "menu-hint";
-      hint.textContent = item.hint;
-      b.append(hint);
-      b.setAttribute("aria-keyshortcuts", item.hint);
-    }
-    const nested = item.items !== undefined;
-    if (item.submenu || nested) {
-      const more = document.createElement("span");
-      more.className = "menu-hint menu-more";
-      more.setAttribute("aria-hidden", "true");
-      more.textContent = "›";
-      b.append(more);
-      b.setAttribute("aria-haspopup", "menu");
-      if (nested) b.setAttribute("aria-expanded", "false");
-    }
-    if (item.danger) b.className = "danger";
-    // Il passaggio del puntatore: su una voce con un sottomenu lo apre, su
-    // un'altra chiude quello aperto. Sempre dopo una pausa breve, e più lunga
-    // se il puntatore sta andando verso il sottomenu aperto: attraversa, non
-    // sceglie.
-    b.addEventListener("pointerenter", (e) => {
-      if (e.pointerType === "touch") return;
-      cancelHover();
-      const aiming = open !== null && open.button !== b && pointer !== null &&
-        aimsAt(pointer.from, { x: e.clientX, y: e.clientY }, open.sub.getBoundingClientRect());
-      hoverTimer = setTimeout(() => {
-        hoverTimer = null;
-        if (nested && !item.disabled) void cascade(b, item, false);
-        else if (open !== null && open.button !== b) closeOpen();
-      }, aiming ? AIM_DELAY : HOVER_DELAY);
-    });
-    if (item.disabled) {
-      b.setAttribute("aria-disabled", "true");
-      host.appendChild(b);
-      continue;
-    }
-    // L'attivazione da tastiera passa dal click nativo del button (Invio/Spazio):
-    // nessun gestore keydown qui, così il browser osserva esattamente un click
-    // e l'azione resta una sola grazie alla guardia in `activate`.
-    b.addEventListener("click", () => activate(b, item));
-    buttons.push(b);
-    usable.push(item);
-    host.appendChild(b);
+    menu.append(head);
+    menu.setAttribute("aria-label", chrome.header.name ? `${chrome.header.kind} · ${chrome.header.name}` : chrome.header.kind);
   }
+  if (chrome && chrome.clipboard.length > 0) {
+    const row = document.createElement("div");
+    row.className = "menu-clipboard";
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", t("context.clipboard"));
+    for (const item of chrome.clipboard) {
+      const b = document.createElement("button");
+      b.className = "menu-quick";
+      b.setAttribute("role", "menuitem");
+      b.tabIndex = -1;
+      const glyph = item.icon === undefined ? null : iconEl(item.icon);
+      if (glyph !== null) {
+        glyph.setAttribute("aria-hidden", "true");
+        b.append(glyph);
+      }
+      const label = document.createElement("span");
+      label.textContent = item.label;
+      b.append(label);
+      if (item.hint) b.setAttribute("aria-keyshortcuts", item.hint);
+      b.addEventListener("click", () => activate(b, item));
+      row.append(b);
+      quick.push(b);
+      quickItems.push(item);
+    }
+    menu.append(row);
+  }
+  menu.append(list);
+  // Il piede: invita a scrivere, poi dice che cosa si è scritto e quanto si è
+  // trovato. Per chi ascolta parlano le voci trovate, che prendono il fuoco.
+  const foot = chrome?.search ? document.createElement("div") : null;
+  if (foot !== null) {
+    foot.className = "menu-foot";
+    foot.setAttribute("aria-hidden", "true");
+    menu.append(foot);
+  }
+  let query = "";
+  const drawFoot = (found: number): void => {
+    if (foot === null) return;
+    const text = document.createElement("span");
+    text.className = "menu-foot-text";
+    if (query === "") {
+      text.textContent = t("context.foot.search");
+    } else {
+      const typed = document.createElement("span");
+      typed.className = "menu-foot-query";
+      typed.textContent = query;
+      text.append(typed, ` · ${found === 1 ? t("context.foot.one") : t("context.foot.many", { count: String(found) })}`);
+    }
+    foot.replaceChildren(text);
+    const hint = menuSearch?.hint() ?? "";
+    if (hint !== "") {
+      const kbd = document.createElement("kbd");
+      kbd.textContent = hint;
+      foot.append(kbd);
+    }
+  };
+
+  /// Mette nell'elenco le voci `rows`, al posto di quelle di prima.
+  function fill(rows: readonly Row[]): void {
+    list.replaceChildren();
+    buttons.length = 0;
+    usable.length = 0;
+    buttons.push(...quick);
+    usable.push(...quickItems);
+    const pictured = rows.some(({ item }) => item.sample !== undefined || (item.icon !== undefined && icon(item.icon) !== ""));
+    let group = null as { name: string; node: HTMLElement } | null;
+    for (const { item, path } of rows) {
+      // Un gruppo con un nome è un `role="group"` per chi ascolta e una riga per
+      // chi guarda; una riga semplice chiude il gruppo aperto.
+      const named = item.group ?? null;
+      if (named !== (group?.name ?? null) || item.separator) {
+        if (list.childElementCount > 0 && (item.separator || named !== null || group !== null)) {
+          const rule = document.createElement("div");
+          rule.className = "menu-separator";
+          rule.setAttribute("role", "separator");
+          list.appendChild(rule);
+        }
+        group = null;
+        if (named !== null) {
+          const node = document.createElement("div");
+          node.className = "menu-group";
+          node.setAttribute("role", "group");
+          node.setAttribute("aria-label", named);
+          list.appendChild(node);
+          group = { name: named, node };
+        }
+      }
+      const host = group?.node ?? list;
+      const b = document.createElement("button");
+      b.setAttribute("role", item.choice ? `menuitem${item.choice}` : "menuitem");
+      if (item.choice) b.setAttribute("aria-checked", String(item.checked === true));
+      b.tabIndex = -1;
+      if (item.swatches?.length) {
+        const strip = document.createElement("span");
+        strip.className = "menu-swatches";
+        strip.setAttribute("aria-hidden", "true");
+        for (const color of item.swatches) {
+          const swatch = document.createElement("span");
+          swatch.className = "menu-swatch";
+          swatch.style.background = color;
+          strip.append(swatch);
+        }
+        b.append(strip);
+      }
+      const glyph = item.sample !== undefined || item.icon === undefined ? null : iconEl(item.icon);
+      if (glyph !== null || pictured) {
+        const picture = document.createElement("span");
+        picture.className = "menu-icon";
+        picture.setAttribute("aria-hidden", "true");
+        if (glyph !== null) picture.append(glyph);
+        if (item.sample !== undefined) {
+          const sample = document.createElement("span");
+          sample.className = item.sample.text === "" ? "menu-sample menu-sample-box" : "menu-sample";
+          sample.textContent = item.sample.text;
+          for (const [name, value] of Object.entries(item.sample.css)) sample.style.setProperty(name, value);
+          picture.append(sample);
+        }
+        b.append(picture);
+      }
+      if (path) {
+        const trail = document.createElement("span");
+        trail.className = "menu-path";
+        trail.textContent = `${path} ›`;
+        b.append(trail);
+      }
+      const label = document.createElement("span");
+      label.className = "menu-label";
+      label.textContent = item.label;
+      if (item.description) {
+        const body = document.createElement("span");
+        body.className = "menu-body";
+        const description = document.createElement("span");
+        description.className = "menu-description";
+        description.textContent = item.description;
+        body.append(label, description);
+        b.append(body);
+      } else {
+        b.append(label);
+      }
+      if (item.choice) {
+        const check = document.createElement("span");
+        check.className = "menu-check";
+        check.setAttribute("aria-hidden", "true");
+        check.textContent = item.checked ? "✓" : "";
+        b.append(check);
+      }
+      if (item.hint) {
+        const hint = document.createElement("kbd");
+        hint.className = "menu-hint";
+        hint.textContent = item.hint;
+        b.append(hint);
+        b.setAttribute("aria-keyshortcuts", item.hint);
+      }
+      const nested = item.items !== undefined;
+      if (item.submenu || nested) {
+        const more = document.createElement("span");
+        more.className = "menu-hint menu-more";
+        more.setAttribute("aria-hidden", "true");
+        more.textContent = "›";
+        b.append(more);
+        b.setAttribute("aria-haspopup", "menu");
+        if (nested) b.setAttribute("aria-expanded", "false");
+      }
+      if (item.danger) b.className = "danger";
+      // Il passaggio del puntatore: su una voce con un sottomenu lo apre, su
+      // un'altra chiude quello aperto. Sempre dopo una pausa breve, e più lunga
+      // se il puntatore sta andando verso il sottomenu aperto: attraversa, non
+      // sceglie.
+      b.addEventListener("pointerenter", (e) => {
+        if (e.pointerType === "touch") return;
+        cancelHover();
+        const aiming = open !== null && open.button !== b && pointer !== null &&
+          aimsAt(pointer.from, { x: e.clientX, y: e.clientY }, open.sub.getBoundingClientRect());
+        hoverTimer = setTimeout(() => {
+          hoverTimer = null;
+          if (nested && !item.disabled) void cascade(b, item, false);
+          else if (open !== null && open.button !== b) closeOpen();
+        }, aiming ? AIM_DELAY : HOVER_DELAY);
+      });
+      if (item.disabled) {
+        b.setAttribute("aria-disabled", "true");
+        host.appendChild(b);
+        continue;
+      }
+      // L'attivazione da tastiera passa dal click nativo del button (Invio/Spazio):
+      // nessun gestore keydown qui, così il browser osserva esattamente un click
+      // e l'azione resta una sola grazie alla guardia in `activate`.
+      b.addEventListener("click", () => activate(b, item));
+      buttons.push(b);
+      usable.push(item);
+      host.appendChild(b);
+    }
+  }
+  fill(items.map((item) => ({ item })));
+  drawFoot(0);
   const initial = Math.max(
     0,
     usable.findIndex((item) => item.selected),
@@ -487,6 +685,11 @@ function renderMenu(
     } else if (e.key === "End") {
       e.preventDefault();
       focusItem(buttons.length - 1);
+    } else if ((e.key === "ArrowRight" || e.key === "ArrowLeft") && at >= 0 && at < quick.length) {
+      // Dentro la riga degli appunti le frecce di lato vanno da un pulsante
+      // all'altro, e si fermano agli estremi.
+      e.preventDefault();
+      focusItem(Math.min(quick.length - 1, Math.max(0, at + (e.key === "ArrowRight" ? 1 : -1))));
     } else if (e.key === "ArrowRight") {
       const item = usable[active];
       if (item?.items !== undefined) {
@@ -494,12 +697,89 @@ function renderMenu(
         if (coarse()) void replaceWith(item);
         else void cascade(buttons[active]!, item, true);
       }
-    } else if (e.key.length === 1 && e.key !== " " && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      if (typeahead(e.key)) e.preventDefault();
+    } else if (chrome?.search && e.key === "Backspace" && query !== "") {
+      e.preventDefault();
+      search(query.slice(0, -1));
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Lo spazio sceglie la voce col fuoco, finché non si sta scrivendo.
+      if (chrome?.search) {
+        if (e.key === " " && query === "") return;
+        e.preventDefault();
+        search(query + e.key);
+      } else if (e.key !== " " && typeahead(e.key)) {
+        e.preventDefault();
+      }
     }
   };
   menu.addEventListener("keydown", onKey);
   lifetime.add(() => menu.removeEventListener("keydown", onKey));
+  // Esc svuota la ricerca prima di chiudere: la trappola del fuoco ascolta in
+  // cattura sul documento, e questo ascolta prima di lei, sulla finestra.
+  if (chrome?.search) {
+    lifetime.listen(
+      window,
+      "keydown",
+      (e) => {
+        if (e.key !== "Escape" || query === "" || !(e.target instanceof Node) || !menu.contains(e.target)) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        search("");
+      },
+      { capture: true },
+    );
+  }
+  // I sottomenu preparati quando servono si preparano alla prima lettera, e la
+  // ricerca li guarda appena sono pronti.
+  const ready = new Map<MenuItem, readonly MenuItem[]>();
+  let preparing = false;
+  const prepare = (): void => {
+    if (preparing) return;
+    preparing = true;
+    const pending = [...items, ...(chrome?.searchable ?? [])].filter((item) => typeof item.items === "function");
+    for (const item of pending) {
+      void itemsOf(item).then((children) => {
+        if (lifetime.closed) return;
+        ready.set(item, children);
+        if (query !== "") search(query);
+      });
+    }
+  };
+
+  /// Filtra le voci con `text`: le trovate al posto del menu, col loro
+  /// percorso, e la prima col fuoco; niente scritto, il menu com'era.
+  function search(text: string): void {
+    query = text;
+    closeOpen();
+    if (query === "") {
+      fill(items.map((item) => ({ item })));
+      drawFoot(0);
+      focusItem(quick.length);
+      return;
+    }
+    prepare();
+    const wanted = fold(query);
+    const hits = flatten([...items, ...(chrome?.searchable ?? [])], ready).filter(
+      ({ item, path }) => fold(item.label).includes(wanted) || (path !== undefined && fold(path).includes(wanted)),
+    );
+    // Trovate, le voci perdono i gruppi: è un elenco solo.
+    const rows: Row[] = hits.slice(0, SEARCH_LIMIT).map(({ item, path }) => ({ item: { ...item, group: undefined, separator: undefined, selected: false }, path }));
+    const all = menuSearch;
+    if (rows.length === 0 && all !== null) {
+      const typed = query;
+      rows.push({ item: { label: t("context.search.all", { query: typed }), run: () => all.run(typed) } });
+    }
+    fill(rows);
+    if (rows.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "menu-empty";
+      empty.setAttribute("aria-hidden", "true");
+      empty.textContent = t("context.search.none");
+      list.append(empty);
+    }
+    drawFoot(hits.length);
+    if (buttons.length > quick.length) focusItem(quick.length);
+    else menu.focus({ preventScroll: true });
+  }
   function activate(button: HTMLButtonElement, item: MenuItem): void {
     // Una voce già chiusa non deve rispondere a click tardivi.
     if (lifetime.closed) return;

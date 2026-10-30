@@ -53,6 +53,21 @@ export function linkTarget(element: Element | null): { link: HTMLElement; target
   };
 }
 
+/// Chi apre la scheda adesso, finché l'ascoltatore è montato: il menu del
+/// tasto destro («Anteprima») la chiede senza passare dal puntatore.
+let openNow: ((link: HTMLElement) => void) | null = null;
+
+/// La scheda si può chiedere: l'ascoltatore è montato.
+export function canPreviewLink(): boolean {
+  return openNow !== null;
+}
+
+/// La scheda del wikilink `element` subito, senza modificatore.
+export function previewLink(element: Element): void {
+  const hit = linkTarget(element);
+  if (hit && openNow) openNow(hit.link);
+}
+
 export function mountLinkPreview(life: Lifetime): void {
   let box: HTMLElement | null = null;
   let current: HTMLElement | null = null;
@@ -161,4 +176,12 @@ export function mountLinkPreview(life: Lifetime): void {
     if (box && !(event.target instanceof Node && box.contains(event.target))) close();
   }, { capture: true, passive: true });
   life.add(close);
+  const now = (link: HTMLElement) => {
+    const hit = linkTarget(link);
+    if (hit) void open(hit.link, hit.target, true);
+  };
+  openNow = now;
+  life.add(() => {
+    if (openNow === now) openNow = null;
+  });
 }

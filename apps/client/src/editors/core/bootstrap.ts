@@ -1,4 +1,4 @@
-import { mountMarkdownSurface, type EditorSlashHost, type PageIcons } from "../text/profiles/markdown/surface";
+import { mountMarkdownSurface, type EditorSlashHost, type PageIcons, type SystemTarget } from "../text/profiles/markdown/surface";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import type { LinkCardSource } from "../text/profiles/markdown/link-card";
 import { api } from "../../host/ipc";
@@ -39,6 +39,11 @@ import {
 export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onOpenWikilink: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
   readonly onOpenPath: (path: string, from?: string) => void | Promise<void>;
+  /// «Apri a lato» dal menu di un wikilink: la nota in un riquadro accanto.
+  readonly onOpenWikilinkBeside?: (page: string, heading: string | null, block: string | null) => void | Promise<void>;
+  /// Un file nominato da una nota aperto con un'altra app o mostrato
+  /// nell'esploratore.
+  readonly onShowFile?: (target: SystemTarget, from: string, where: "app" | "explorer") => void | Promise<void>;
   /// Scarica nel vault un'immagine remota di una nota, col consenso
   /// dell'utente: il link relativo del file, o `null` se ha detto di no.
   readonly onImportRemoteImage?: (url: string, from: string) => Promise<string | null>;
@@ -248,6 +253,9 @@ export function createDocumentSurfaceRegistry(
             onSelectionChange: () => options.onSelectionChange(context.paneId),
             onOpenWikilink: options.onOpenWikilink,
             onOpenPath: options.onOpenPath,
+            onOpenWikilinkBeside: options.onOpenWikilinkBeside,
+            onOpenDocument: options.onOpenDocument,
+            onShowFile: options.onShowFile,
             onImportRemoteImage: options.onImportRemoteImage,
             onSearchTag: options.onSearchTag,
             onRenamePage: options.onRenamePage,

@@ -4,7 +4,7 @@ import { t } from "../../../../i18n/strings";
 import { declareClipboard } from "../../../../platform/clipboard";
 import { closeContextMenu } from "../../../../ui/menu";
 import { caseApplies, playCase, TABLE_CONFORMANCE } from "../../../../tabella/conformance";
-import { TableGrid, type TableGridHost } from "./table-grid";
+import { TableGrid, tableMenu, type TableGridHost } from "./table-grid";
 import type { TableData } from "./table-model";
 
 const grids: TableGrid[] = [];
@@ -220,14 +220,45 @@ describe("la griglia", () => {
     expect(cell(2, 0).querySelector("input")?.value).toBe("Bea");
   });
 
-  it("il menu contestuale inserisce una riga sotto", () => {
+  it("il menu contestuale inserisce una riga sotto, da «Inserisci ▸»", async () => {
     const { cell, writes } = mount(ROWS);
     mouse(cell(1, 0), "contextmenu", { button: 2 });
-    const item = [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")]
-      .find((button) => button.textContent === t("table.menu.row_below"))!;
-    item.click();
+    const items = () => [...document.querySelectorAll<HTMLButtonElement>("[role=menuitem]")];
+    expect(document.querySelector("#context-menu .menu-head")?.textContent).toContain(t("table.menu.head.cell", { row: 1, column: "Nome" }));
+    items().find((button) => button.textContent?.startsWith(t("table.menu.insert")))!.click();
+    await vi.waitFor(() => expect(items().some((button) => button.textContent === t("table.menu.sub.row_below"))).toBe(true));
+    items().find((button) => button.textContent === t("table.menu.sub.row_below"))!.click();
     expect(writes[0]!.rows).toHaveLength(4);
     expect(writes[0]!.rows[2]).toEqual(["", ""]);
+  });
+
+  it("il menu della griglia: appunti in riga, sottomenu, ciò che elimina in fondo e da solo", () => {
+    const run = () => {};
+    const entry = (id: string, disabled = false) => ({ id, label: id, separator: false, disabled, run });
+    const menu = tableMenu([
+      entry("table.cut"), entry("table.copy"),
+      entry("markdown.table.row.before"), entry("markdown.table.row.after"), entry("markdown.table.column.before"), entry("markdown.table.column.after"),
+      entry("markdown.table.row.up", true), entry("markdown.table.row.down"), entry("markdown.table.column.left", true), entry("markdown.table.column.right"),
+      entry("markdown.table.row.delete"), entry("markdown.table.column.delete"),
+      entry("markdown.table.sort.ascending"), entry("markdown.table.sort.descending"),
+      entry("table.align.left"), entry("table.align.center"), entry("table.align.right"), entry("table.align.default"),
+      entry("table.clear"),
+    ], { align: "center", paste: run });
+    expect(menu.clipboard.map((item) => item.label)).toEqual([t("editor_menu.cut"), t("editor_menu.copy"), t("editor_menu.paste")]);
+    expect(menu.items.map((item) => `${item.separator ? "— " : ""}${item.label}`)).toEqual([
+      t("table.menu.insert"), t("table.menu.move"),
+      `— ${t("table.menu.sort")}`, t("table.menu.align"),
+      `— ${t("table.menu.clear_cell")}`,
+      `— ${t("table.menu.delete_row")}`, t("table.menu.delete_column"),
+    ]);
+    const move = menu.items[1]!.items as { label: string }[];
+    expect(move.map((item) => item.label), "ciò che adesso non vale non si vede").toEqual([t("table.menu.sub.row_down"), t("table.menu.sub.column_right")]);
+    const align = menu.items[3]!.items as { label: string; checked?: boolean }[];
+    expect(align.find((item) => item.checked)?.label).toBe(t("table.menu.sub.align_center"));
+    expect(menu.items.filter((item) => item.danger).length).toBe(2);
+    const reading = tableMenu([entry("table.cut", true), entry("table.copy")], { align: null, paste: null });
+    expect(reading.clipboard.map((item) => item.label)).toEqual([t("editor_menu.copy")]);
+    expect(reading.items).toEqual([]);
   });
 
   it("taglia dal menu svuota le celle che ha copiato, anche se la selezione si sposta prima degli appunti", async () => {
