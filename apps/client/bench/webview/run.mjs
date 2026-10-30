@@ -208,7 +208,10 @@ const SCENARIOS = {
     const line = await session.execute("const lines = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].filter((l) => l.textContent.startsWith('Blocco')); const r = lines[Math.floor(lines.length / 2)]?.getBoundingClientRect(); return r ? { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } : null;");
     if (!line) throw new Error("nessuna riga di blocco in vista");
     await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [{ type: "pointerMove", x: line.x, y: line.y, duration: 0, origin: "viewport" }] }]);
-    await session.waitFor("return !!document.querySelector('.pane.focus .cm-fub-block-handles[data-active=\"true\"]')", [], 10_000);
+    // Una WebView senza un puntatore che sorvola (`hover: none`, come quella
+    // del runner) mostra la maniglia del blocco col cursore, non di quello
+    // sotto il puntatore: va bene tutte e due.
+    await session.waitFor("const h = document.querySelector('.pane.focus .cm-fub-block-handles'); return !!h && !h.hidden && (h.dataset.active === 'true' || !matchMedia('(hover: hover)').matches);", [], 10_000);
     const grip = await centerOf(session, ".pane.focus .cm-fub-block-grip");
     await start(session);
     const steps = Math.round(3_000 / 16);
