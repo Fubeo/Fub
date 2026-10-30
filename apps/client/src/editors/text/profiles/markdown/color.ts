@@ -10,6 +10,8 @@
 // toglie la classe, e con l'ultima il tag.
 import { EditorSelection, type ChangeSpec, type EditorState, type StateCommand } from "@codemirror/state";
 import { CONTENT_COLORS } from "../../../../ui/sanitize";
+import { blockGesture } from "./block-gesture";
+import { liveStrings } from "./strings";
 import { colorClasses } from "./render-inline";
 
 export type ContentColor = (typeof CONTENT_COLORS)[number];
@@ -119,7 +121,9 @@ export function setContentColor(kind: ColorKind, color: ContentColor | null, at?
     const selection = at ? undefined : main.empty
       ? EditorSelection.cursor(Math.max(range.from + shift, main.head + shift))
       : EditorSelection.range(range.from + shift, range.to + shift);
-    dispatch(state.update({ changes, selection, userEvent: "input.format", scrollIntoView: true }));
+    const lead = { from: state.doc.lineAt(range.from).from, to: range.to };
+    const annotations = blockGesture.of({ kind: "color", lead, ...(color ? {} : { say: liveStrings.t("blocks.colored.none") }) });
+    dispatch(state.update({ changes, selection, userEvent: "input.format", scrollIntoView: true, annotations }));
     return true;
   };
 }

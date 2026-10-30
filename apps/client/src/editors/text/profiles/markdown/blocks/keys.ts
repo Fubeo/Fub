@@ -37,7 +37,7 @@ function moveBy(dir: -1 | 1): Command {
     if (!run) return false;
     const spec = moveRun(state, blocks, run, dir);
     if (!spec) return true;
-    const { follow, ...move } = spec;
+    const { follow, origin, moved, ...move } = spec;
     // La selezione di blocchi si porta dietro i suoi capi.
     const effects = selected
       ? setBlockSelection.of({ anchor: follow(selected.anchor) ?? selected.anchor, head: follow(selected.head) ?? selected.head, depth: selected.depth })

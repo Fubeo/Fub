@@ -18,6 +18,7 @@ import {
 import { Decoration, type DecorationSet, EditorView, keymap, type KeyBinding } from "@codemirror/view";
 import { getCM } from "@replit/codemirror-vim";
 import { liveStrings } from "../strings";
+import { blockGesture } from "../block-gesture";
 import { blockModel, type Block } from "./model";
 import { type BlockRun, siblingsOf } from "./move";
 import { modelOf } from "./transform";
@@ -134,7 +135,8 @@ export function deleteRun(state: EditorState, blocks: readonly Block[], run: Blo
   return {
     changes: range,
     selection: EditorSelection.cursor(range.from),
-    effects: [setBlockSelection.of(null), EditorView.announce.of(text)],
+    effects: setBlockSelection.of(null),
+    annotations: blockGesture.of({ kind: "gone", say: text }),
     userEvent: "delete.block",
     scrollIntoView: true,
   };
@@ -157,6 +159,7 @@ export function duplicateRun(state: EditorState, blocks: readonly Block[], run: 
     changes: { from: span.to, insert: gap + text },
     selection: EditorSelection.single(from, from + text.length),
     effects: setBlockSelection.of(value),
+    annotations: blockGesture.of({ kind: "born", lead: { from, to: from + text.length } }),
     userEvent: "input.duplicate",
     scrollIntoView: true,
   };
