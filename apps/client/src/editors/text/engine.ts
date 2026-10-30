@@ -76,6 +76,7 @@ import { propertiesDisplay, propertiesDisplayOf, type PropertiesDisplay } from "
 import { liveGuide, liveReveal, revealPolicyOf, type RevealPolicy } from "./live-reveal";
 import { pasteHtml } from "./paste-html";
 import { indentGuides } from "./indent-guides";
+import { softCursor } from "./soft-cursor";
 import {
   operationFromText,
   tryApplyOperation,
@@ -130,6 +131,7 @@ export const EDITOR_SMART_LISTS_KEY = "editor.smart-lists";
 export const EDITOR_PASTE_HTML_KEY = "editor.paste-html";
 export const EDITOR_INDENT_GUIDES_KEY = "editor.indent-guides";
 export const EDITOR_CURSOR_BLINK_KEY = "editor.cursor-blink";
+export const EDITOR_SOFT_CURSOR_KEY = "editor.soft-cursor";
 export const EDITOR_RTL_KEY = "editor.rtl";
 export const EDITOR_PROPERTIES_KEY = "editor.properties";
 export const EDITOR_LIVE_REVEAL_KEY = "editor.live-reveal";
@@ -146,6 +148,7 @@ const INPUT_KEYS = new Set([
   EDITOR_PASTE_HTML_KEY,
   EDITOR_INDENT_GUIDES_KEY,
   EDITOR_CURSOR_BLINK_KEY,
+  EDITOR_SOFT_CURSOR_KEY,
   EDITOR_RTL_KEY,
   EDITOR_PROPERTIES_KEY,
   EDITOR_LIVE_REVEAL_KEY,
@@ -172,6 +175,8 @@ interface LayoutPreferences {
   /// Il cursore lampeggia. Di serie sta fermo: un segno che si accende e si
   /// spegne accanto al testo è moto dentro il foglio.
   readonly cursorBlink: boolean;
+  /// Nei Blocchi il cursore scivola fra due posizioni (N13). Di serie salta.
+  readonly softCursor: boolean;
   /// Il testo va da destra a sinistra.
   readonly rtl: boolean;
   /// Come Live mostra il frontmatter (`properties-display.ts`).
@@ -191,6 +196,7 @@ const DEFAULT_LAYOUT: LayoutPreferences = {
   pasteHtml: true,
   indentGuides: false,
   cursorBlink: false,
+  softCursor: false,
   rtl: false,
   properties: "source",
   reveal: "mai",
@@ -226,6 +232,7 @@ function layoutExtensions(layout: LayoutPreferences): Extension {
     // sui 1200 ms di `drawSelection()`, e un'animazione di zero ms non spegne
     // mai il cursore.
     layout.cursorBlink ? [] : drawSelection({ cursorBlinkRate: 0 }),
+    softCursor.of(layout.softCursor),
     // Sopra il `dir: "auto"` di sempre, che altrimenti vince: un documento che
     // comincia in latino (il frontmatter) partirebbe da sinistra.
     layout.rtl ? Prec.highest(EditorView.contentAttributes.of({ dir: "rtl" })) : [],
@@ -575,6 +582,7 @@ export class TextEngine {
       && next.pasteHtml === this.layout.pasteHtml
       && next.indentGuides === this.layout.indentGuides
       && next.cursorBlink === this.layout.cursorBlink
+      && next.softCursor === this.layout.softCursor
       && next.rtl === this.layout.rtl
       && next.properties === this.layout.properties
       && next.reveal === this.layout.reveal
@@ -654,6 +662,7 @@ export class TextEngine {
         pasteHtml: value(EDITOR_PASTE_HTML_KEY) !== false,
         indentGuides: value(EDITOR_INDENT_GUIDES_KEY) === true,
         cursorBlink: value(EDITOR_CURSOR_BLINK_KEY) === true,
+        softCursor: value(EDITOR_SOFT_CURSOR_KEY) === true,
         rtl: value(EDITOR_RTL_KEY) === true,
         properties: propertiesDisplayOf(value(EDITOR_PROPERTIES_KEY)),
         reveal: revealPolicyOf(value(EDITOR_LIVE_REVEAL_KEY)),
