@@ -8,11 +8,12 @@
 // lo annulla lui.
 //
 // Il menu del sistema resta dove serve: nei campi di testo (Taglia, Copia,
-// Incolla, il correttore), sul testo scelto (Copia) e con Maiuscolo, il gesto
-// di chi lo vuole apposta.
+// Incolla, il correttore), sul testo scelto (Copia), sul lettore audio e video
+// (velocità, ciclo, immagine nell'immagine) e con Maiuscolo, il gesto di chi
+// lo vuole apposta.
 import type { Lifetime } from "./lifetime";
 
-const EDITABLE = "input, textarea, [contenteditable]:not([contenteditable='false'])";
+const NATIVE = "input, textarea, [contenteditable]:not([contenteditable='false']), video, audio";
 
 function onSelectedText(target: Node): boolean {
   const selection = window.getSelection();
@@ -28,7 +29,7 @@ export function mountSystemMenuGuard(lifetime: Lifetime): void {
     if (e.defaultPrevented || e.shiftKey) return;
     const target = e.target;
     if (!(target instanceof Element)) return;
-    if (target.closest(EDITABLE) || onSelectedText(target)) return;
+    if (target.closest(NATIVE) || onSelectedText(target)) return;
     e.preventDefault();
   });
 }

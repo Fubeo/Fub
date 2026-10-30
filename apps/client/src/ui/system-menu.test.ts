@@ -19,7 +19,9 @@ describe("il menu della WebView", () => {
       <div id="vuoto"></div>
       <input id="campo">
       <div id="testo" contenteditable="true">testo</div>
-      <div id="suo"></div>`;
+      <div id="suo"></div>
+      <video id="video"><source src="x.mp4"></video>
+      <audio id="audio" controls></audio>`;
     document.querySelector("#suo")!.addEventListener("contextmenu", (e) => e.preventDefault());
   });
 
@@ -43,6 +45,11 @@ describe("il menu della WebView", () => {
     range.selectNodeContents(empty);
     window.getSelection()!.addRange(range);
     expect(rightClick(empty).defaultPrevented, "Copia del sistema sul testo scelto").toBe(false);
+  });
+
+  it("resta sul lettore audio e video, che ha i suoi comandi", () => {
+    expect(rightClick(document.querySelector("#video source")!).defaultPrevented).toBe(false);
+    expect(rightClick(document.querySelector("#audio")!).defaultPrevented).toBe(false);
   });
 
   it("smontato, lascia fare la piattaforma", () => {

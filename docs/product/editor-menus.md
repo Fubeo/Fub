@@ -37,8 +37,8 @@ con la freccia su. Dal tasto Menu o da Maiusc+F10 il fuoco va subito alla
 prima voce.
 
 Dove Fub non ha un menu, il tasto destro non apre quello della WebView: resta
-nei campi di testo, sul testo scelto e con Maiusc+tasto destro, che dà sempre
-il menu del sistema.
+nei campi di testo, sul testo scelto, sul lettore audio e video e con
+Maiusc+tasto destro, che dà sempre il menu del sistema.
 
 ## La mini-barra
 
