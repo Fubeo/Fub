@@ -1359,7 +1359,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       const section = engine.readState((state) => sectionAt(state, pos));
       return {
         ...common,
-        target: { kind: "heading", label: t("editor_menu.heading", { level }), name: engine.readState((state) => headingText(state, pos)) },
+        target: { kind: "heading", label: t("editor_menu.heading", { level }), icon: `fmt-h${level}`, name: engine.readState((state) => headingText(state, pos)) },
         context: [
           anchorItem(t("editor_menu.anchor_heading")),
           {

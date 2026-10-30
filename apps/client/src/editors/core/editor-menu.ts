@@ -112,11 +112,13 @@ export interface SurfaceMenuClipboard {
 export interface SurfaceMenu {
   /// Che cosa c'è sotto il puntatore. `label` è il tipo come lo legge la
   /// testata quando quello del catalogo non basta («Titolo 2», «Elenco
-  /// puntato»); `name` è il nome della cosa («Media», «#esame»).
+  /// puntato»); `icon` è la sua icona quando quella del tipo non basta (il
+  /// livello di un titolo); `name` è il nome della cosa («Media», «#esame»).
   readonly target: {
     readonly kind: SurfaceMenuTargetKind;
     readonly ref?: string;
     readonly label?: string;
+    readonly icon?: string;
     readonly name?: string;
   };
   /// Dove aprire il menu quando la richiesta non porta un punto (il tasto

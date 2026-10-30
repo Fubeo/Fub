@@ -666,7 +666,8 @@ describe("le azioni dell'editor della superficie", () => {
     expect(entryOf(tag, t("editor_menu.tag.rename"))?.slash).toBe("tag.rename");
 
     const heading = at(ed, view, "## Formula\ntesto\n", 4);
-    expect(heading?.target).toMatchObject({ kind: "heading", label: t("editor_menu.heading", { level: 2 }), name: "Formula" });
+    expect(heading?.target).toMatchObject({ kind: "heading", label: t("editor_menu.heading", { level: 2 }), icon: "fmt-h2", name: "Formula" });
+    expect(at(ed, view, "# Uno\n", 2)?.target.icon, "l'icona dice il livello").toBe("fmt-h1");
     expect(contextLabels(heading)[0]).toBe(t("editor_menu.anchor_heading"));
 
     const first = at(ed, view, "- uno\n- due\n", 2);

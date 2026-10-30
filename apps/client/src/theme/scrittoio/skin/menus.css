@@ -20,6 +20,11 @@
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
 }
+/* Aperto col mouse il menu tiene il fuoco su di sé soltanto per le frecce:
+   non è una cosa da scegliere, e l'anello va sulle voci. */
+.context-menu:focus-visible {
+  outline: none;
+}
 
 /* Una voce: alta quanto una riga e mai meno di 28, con il segno, il nome e la
    scorciatoia su una riga sola. */

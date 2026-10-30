@@ -127,7 +127,8 @@ export function composeEditorMenu(menu: SurfaceMenu, host: EditorMenuHost): Comp
     ? { label: t("editor_menu.paste_plain"), hint: displayBinding("Mod-Shift-v") || undefined, run: () => menu.clipboard!.run("paste-plain") }
     : null;
   const row = quick.length >= 2 ? quick : [];
-  const loose: MenuItem[] = row.length > 0 ? [] : [...quick, ...(plain ? [plain] : [])];
+  // Senza la riga, un gesto è una voce come le altre: senza icona.
+  const loose: MenuItem[] = row.length > 0 ? [] : [...quick.map(({ icon: _icon, ...item }) => item), ...(plain ? [plain] : [])];
   if (row.length > 0 && plain) searchable.push(plain);
   const copyAs = resolve(menu.clipboard?.copyAs);
   if (copyAs.length > 0) loose.push({ label: t("editor_menu.copy_as"), items: copyAs });
@@ -217,11 +218,11 @@ export function composeEditorMenu(menu: SurfaceMenu, host: EditorMenuHost): Comp
 /// tipo senza nome qui (una pagina, che è di una nota come di un PDF) ha la
 /// testata soltanto se la superficie lo nomina.
 function headerOf(menu: SurfaceMenu): MenuHeader | undefined {
-  const { kind, label, name } = menu.target;
+  const { kind, label, icon, name } = menu.target;
   const known = HEAD_LABELS[kind];
   const text = label ?? (known === undefined ? null : t(known));
   if (text === null) return undefined;
-  return { icon: HEAD_ICONS[kind], kind: text, ...(name ? { name } : {}) };
+  return { icon: icon ?? HEAD_ICONS[kind], kind: text, ...(name ? { name } : {}) };
 }
 
 /// Una voce della superficie come voce del menu, o `null` se adesso non

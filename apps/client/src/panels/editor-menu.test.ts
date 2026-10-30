@@ -110,6 +110,14 @@ describe("il compositore del menu dell'editor", () => {
     expect(first.clipboard).toEqual([]);
     expect(groupsOf(first.items)).toEqual([["Incolla", "Incolla senza formattazione"], ["Inserisci un blocco…"]]);
     expect(first.header?.kind).toBe("Paragrafo");
+    // Le icone stanno nella testata e nella riga degli appunti, non sulle voci.
+    expect(first.items.filter((item) => item.icon !== undefined)).toEqual([]);
+  });
+
+  it("la testata prende l'icona che la superficie dà, o quella del tipo", () => {
+    const host = hostFor(surfaceWith({}), []);
+    expect(composeEditorMenu({ target: { kind: "heading", label: "Titolo 1", icon: "fmt-h1" } }, host).header?.icon).toBe("fmt-h1");
+    expect(composeEditorMenu({ target: { kind: "tag" } }, host).header?.icon).toBe("tag");
   });
 
   it("ciò che cancella va in fondo, da solo, qualunque posto la superficie gli dia", () => {
