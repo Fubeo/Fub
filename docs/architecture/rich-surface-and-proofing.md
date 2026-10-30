@@ -424,10 +424,9 @@ il testo verbatim, gli oggetti come `U+FFFC` e gli a-capo e i salti come
 separatori. I segni sono decorazioni ProseMirror e una correzione è una
 transazione della superficie, nella sua cronologia e nella sessione.
 
-Il testo dei disegni (`editors/spatial/tools/editor/text-proof.ts`) usa lo
-stesso client: un segmento per riga, i segni come decorazioni del campo di
-Scrittura, i suggerimenti sul tasto destro. Le porte gliele dà
-`editors/core/bootstrap.ts` (`drawingProof`).
+Il testo dei disegni non ha più il correttore: con lo strumento Testo se n'è
+andato lo scrivere sul posto (decisione 0231), e non c'è testo da correggere
+mentre si scrive.
 
 La superficie Markdown carica client e adattatore con un import dinamico e li monta con
 `MarkdownProfile.setProof` e `TextEngine.reconfigure()`; la sua `Lifetime`

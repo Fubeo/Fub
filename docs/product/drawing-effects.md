@@ -86,28 +86,22 @@ opacità diverse è vuoto e dice «Misto».
 
 ## Con gli altri comandi
 
-- **La selezione, la cornice, l'aggancio, le guide intelligenti, il lazo e
-  il riquadro** restano sulla geometria dell'oggetto, come in Illustrator e
+- **La selezione, la cornice, l'aggancio e il riquadro** restano sulla geometria dell'oggetto, come in Illustrator e
   in Figma: un'ombra non si sceglie, e non sposta la cornice.
 - **L'export della selezione e «Adatta la pagina al disegno»** contengono
   ciò che gli effetti dipingono fuori dalla geometria: un'ombra non esce
   tagliata. La pagina che cresce da sé, quando un oggetto ne esce, guarda
   la geometria: un'ombra che sfiora il bordo non la allarga.
 - **Duplicare, copiare e incollare** danno alla copia i suoi effetti e il
-  suo filtro: cambiare quelli della copia non tocca l'originale
-  ([Disegni, risorse](drawing-resources.md#i-comandi)).
-- **«Incolla lo stile» e il contagocce** portano gli effetti e il modo di
-  fusione, con l'opacità, come il contagocce di Illustrator prende
-  l'aspetto ([Disegni, colori](drawing-colors.md#il-contagocce)). Un oggetto
+  suo filtro ([Disegni, risorse](drawing-resources.md#i-comandi)).
+- **«Incolla lo stile»** porta gli effetti e il modo di fusione, con
+  l'opacità. Un oggetto
   che non prende effetti tiene i suoi, e prende il resto dello stile.
   L'isolamento della fusione no: dice come è fatto un gruppo, non come si
   vede.
 - **Separa e «Togli il collegamento»** lasciano interi un gruppo o un
   collegamento con degli effetti, anche nascosti, e lo dicono: valgono per
   tutto ciò che contengono.
-- **«Ritaglia…»** non ritaglia un'immagine con degli effetti, che il
-  ritaglio taglierebbe, e lo dice; per un'immagine ritagliata con l'ombra si
-  raggruppa l'immagine e si dà l'ombra al gruppo.
 
 ## In Lettura e nell'export
 

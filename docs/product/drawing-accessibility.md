@@ -51,10 +51,9 @@ un'icona e una parola, «Avviso» o «Nota», mai il solo colore.
   il disegno usa come codice, ciascuno in almeno due aree piene, come le
   fette di un grafico e la legenda, hanno fra loro un contrasto sotto 3:1;
   in bianco e nero, o per chi non vede le tinte, non si sa quali aree vanno
-  insieme. La riga mostra i due colori. **«Dai una campitura»** dà a tutte
-  le aree di quel colore la [campitura](drawing-patterns.md) pronta che il
-  disegno usa meno, sul loro colore, e lo dice: «Campitura diagonale su 3
-  aree.». Le aree bloccate restano.
+  insieme. La riga mostra i due colori e porta alle aree; non ha una
+  correzione in un clic, perché la campitura che la dava se n'è andata
+  (decisione 0231), e il colore si cambia a mano.
 
 Il pulsante col nome dell'oggetto, **«Vai a …»**, lo sceglie sul foglio e lo
 mostra.
@@ -65,7 +64,7 @@ all'oggetto.
 
 Ogni correzione è un passo, col nome di annulla e ripeti: «Riempimento»,
 «Colore del contorno», «Dimensione del testo», «Descrivi l’immagine»,
-«Immagine decorativa», «Dai una campitura». Corretto un problema la sua
+«Immagine decorativa». Corretto un problema la sua
 riga se ne va, e il fuoco passa alla riga che prende il suo posto, sullo
 stesso genere di pulsante: i problemi si correggono uno dopo l'altro con
 `Invio`. Quando non ce n'è più nessuno, il pannello lo dice.

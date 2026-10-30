@@ -12,7 +12,7 @@ Due attributi facoltativi della radice del
 misure e le guide tirate dai righelli. Non cambiano il disegno e gli altri
 programmi li ignorano: il file resta in unità utente, e cambiare unità non
 riscrive la geometria. Come si usano sta in
-[Disegni, righelli e guide](../product/drawing-rulers.md); la superficie li
+[Disegni, unità e guide](../product/drawing-rulers.md); la superficie li
 cambia soltanto col `set` sulla radice delle
 [operazioni sulla scena](scene-operations.md), §2. Le sezioni del formato si
 citano come «formato della scena, §N».

@@ -86,8 +86,8 @@ disegni che si aprono dopo. Spenta, i tratti tenuti fermi restano inchiostro;
 
 La forma è scritta come la scrivono gli strumenti: un `rect`, un'`ellipse`,
 una `line`, la freccia come quella della barra, il triangolo e il poligono
-come `polygon`, quelli regolari e la stella come il
-[Poligono](drawing-shapes.md), che li cambia anche dopo. Il colore del tratto
+come `polygon`, quelli regolari e la stella come un
+[poligono](drawing-shapes.md), con `fub:shape` e `fub:geom`. Il colore del tratto
 diventa il contorno, lo spessore del pennello il suo spessore, e la forma non
 si riempie:
 
@@ -104,7 +104,7 @@ rotazione in `transform`.
 
 Il riconoscimento sta in `apps/client/src/editors/spatial/tools/recognize.ts`,
 la forma che prende il posto del tratto in `inkshape.ts`, la tenuta ferma in
-`editor/shapes-connector.ts`. L'interruttore è `shapes` nella griglia che
+`editor/stroke-shapes.ts`. L'interruttore è `shapes` nella griglia che
 l'editor riceve e restituisce con `onGridChange`. Il corpus dei tratti registrati, ciascuno
 con la forma attesa nel suo titolo, è in `apps/client/src/__fixtures__/ink-shapes/`.
 
