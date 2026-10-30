@@ -93,7 +93,7 @@ flowchart LR
 
 - [Workflow](development/workflow.md)
 - [Test e qualità](development/testing-and-quality.md)
-- Prove manuali: [l'inchiostro](development/ink-input-smoke-test.md), [il moto](development/motion-smoke-test.md)
+- Prove manuali: [l'inchiostro](development/ink-input-smoke-test.md), [il moto](development/motion-smoke-test.md); [misure nella WebView](development/webview-measurements.md) e [le misure prese](misure/README.md)
 - [Creare un plugin](development/plugin-authoring.md)
 - [Stile della documentazione](development/documentation-style.md)
 - [Versionamento e release](development/versioning-and-releases.md)

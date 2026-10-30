@@ -1,0 +1,31 @@
+# Misure
+
+Questa cartella conserva le misure dei tempi di Fub nella WebView vera, una
+pagina per macchina e commit.
+
+> **Per chi:** chi confronta i tempi fra versioni, sistemi e WebView, e chi
+> tara le soglie della CI.
+> **Risultato:** sapere quanto ha misurato quale macchina, su quale commit.
+
+Come si prendono le misure lo dice [Misure nella WebView](../development/webview-measurements.md).
+Gli obiettivi stanno in `apps/client/bench/webview/budgets.json`.
+
+## Il formato
+
+Un file per misura, chiamato `AAAA-MM-GG-sistema-webview.md`, con:
+
+- commit, data e chi ha misurato;
+- macchina: processore, nuclei, memoria, scheda grafica, schermo, fattore di
+  scala e frequenza di aggiornamento;
+- sistema: nome, versione e, su Linux, sessione Wayland o X11;
+- WebView e versione, dallo user agent del referto;
+- una tabella con scenario, valore, obiettivo, campioni ed esito;
+- gli scenari saltati, col motivo, e quelli non provati.
+
+Un numero si scrive soltanto se è stato misurato. Uno scenario non provato
+resta **non provato**.
+
+## Le misure
+
+| Data | Sistema | WebView | Pagina |
+|---|---|---|---|

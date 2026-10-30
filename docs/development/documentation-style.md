@@ -31,6 +31,7 @@ Non svolge più ruoli insieme.
 | riferimento | forma precisa di un contratto | `reference/` |
 | progetto | stato, direzione e TODO attivi | `project/` |
 | ADR | motivazione di una scelta costosa | `decisions/` |
+| misura | numeri presi con macchina, sistema, WebView e commit | `misure/` |
 
 Una GitHub Issue resta il tracker di attività, owner, priorità e PR. Un piano
 approvato può avere un TODO dettagliato in `project/` quando la sequenza tecnica
