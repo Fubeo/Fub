@@ -214,7 +214,7 @@ export function mountTreeSelection(host: TreeSelectionHost): TreeSelection {
       { label: t("explorer.selection.move"), run: () => void act(host.move) },
       { label: t("explorer.selection.group"), run: () => void act(host.group) },
       { label: t("explorer.selection.clear"), run: () => clear() },
-      { separator: true, label: t("explorer.selection.trash"), hint: "Del", danger: true, run: () => void act(host.trash) },
+      { separator: true, label: t("explorer.selection.trash"), danger: true, run: () => void act(host.trash) },
     ];
   };
 

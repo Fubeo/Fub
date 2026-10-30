@@ -57,6 +57,7 @@ describe("scelta multipla dell'albero", () => {
     const menu = sel.menuFor("b.md")!;
     expect(menu.map((item) => item.label)).toEqual(["Copia", "Sposta in…", "In una cartella nuova", "Deseleziona", "Sposta nel cestino"]);
     expect(menu[menu.length - 1]!.danger, "il pericoloso per ultimo").toBe(true);
+    expect(menu.some((item) => item.hint), "Canc nell'albero cestina la nota del fuoco, non la scelta: nessun accordo promesso").toBe(false);
     expect(menu.some((item) => item.label === "Rinomina"), "rinominare è di una nota sola").toBe(false);
     menu[0]!.run!();
     expect(copy).toHaveBeenCalledWith(["a.md", "b.md"]);
