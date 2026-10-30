@@ -336,6 +336,13 @@ class BlockMotion {
 
   update(update: ViewUpdate): void {
     if (update.docChanged) this.lastEdit = Date.now();
+    // La selezione di blocchi che si spegne: il livello toglie i suoi
+    // riquadri, e la loro immagine si spegne da dov'era, anche a metà entrata.
+    if (update.startState.field(blockSelection, false) && !update.state.field(blockSelection, false)) {
+      for (const mark of Array.from(this.view.scrollDOM.querySelectorAll<HTMLElement>(".cm-fub-block-mark"))) {
+        prepareExit(mark).play({ layer: this.float, to: { opacity: 0 }, duration: GONE_MS, easing: "ease-out" });
+      }
+    }
     const told = update.transactions.map((tr) => tr.annotation(blockGesture)).find((each) => each !== undefined);
     const gesture = told ?? (update.docChanged ? inferGesture(update) : null);
     if (gesture) {
