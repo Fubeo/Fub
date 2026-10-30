@@ -14,12 +14,14 @@
 // la freccia giù, Escape torna al testo dopo la tabella.
 import type { EditorActionState } from "../../../core/editor-actions";
 import { displayBinding } from "../../../../ui/commands";
-import { showContextMenu } from "../../../../ui/menu";
+import { showContextMenu, type MenuItem } from "../../../../ui/menu";
+import { notify } from "../../../../ui/notify";
+import { t, type Key } from "../../../../i18n/strings";
 import { setSanitizedHtml } from "../../../../ui/sanitize";
-import { writeClipboardText } from "../../../../platform/clipboard";
-import type { TableCaps, TableEdit } from "../../../../tabella/adapter";
+import { readClipboard, writeClipboardText } from "../../../../platform/clipboard";
+import type { TableAlign, TableCaps, TableEdit, TableMenuEntry } from "../../../../tabella/adapter";
 import type { TableTarget } from "../../../../tabella/commands";
-import { TableFrame } from "../../../../tabella/frame/frame";
+import { columnName, TableFrame } from "../../../../tabella/frame/frame";
 import type { TableFormat } from "../../../../tabella/keys";
 import type { Range } from "../../../../tabella/navigation";
 import {
@@ -132,6 +134,93 @@ export function applyTableEdit(data: TableData, edit: TableEdit): TableData {
   }
 }
 
+/// Dove sta ogni voce piatta della cornice nel menu a gruppi: gli appunti in
+/// riga, l'inserire e lo spostare in sottomenu, il cancellare in fondo.
+const MENU_PLACES: Readonly<Record<string, { readonly under: "insert" | "move" | "sort"; readonly label: Key; readonly rule?: true }>> = {
+  "markdown.table.row.before": { under: "insert", label: "table.menu.sub.row_above" },
+  "markdown.table.row.after": { under: "insert", label: "table.menu.sub.row_below" },
+  "markdown.table.column.before": { under: "insert", label: "table.menu.sub.column_left", rule: true },
+  "markdown.table.column.after": { under: "insert", label: "table.menu.sub.column_right" },
+  "markdown.table.row.up": { under: "move", label: "table.menu.sub.row_up" },
+  "markdown.table.row.down": { under: "move", label: "table.menu.sub.row_down" },
+  "markdown.table.column.left": { under: "move", label: "table.menu.sub.column_left" },
+  "markdown.table.column.right": { under: "move", label: "table.menu.sub.column_right" },
+  "markdown.table.sort.ascending": { under: "sort", label: "table.menu.sub.sort_ascending" },
+  "markdown.table.sort.descending": { under: "sort", label: "table.menu.sub.sort_descending" },
+};
+
+const ALIGN_LABELS: Readonly<Record<string, Key>> = {
+  "table.align.default": "table.menu.sub.align_auto",
+  "table.align.left": "table.menu.sub.align_left",
+  "table.align.center": "table.menu.sub.align_center",
+  "table.align.right": "table.menu.sub.align_right",
+};
+
+/// Il menu della griglia dalle voci piatte della cornice (`TableFrame.menu`):
+/// gli appunti, «Inserisci ▸», «Sposta ▸», «Ordina la colonna ▸», «Allinea la
+/// colonna ▸», «Svuota la cella», e per ultimo, da solo, ciò che elimina. Una
+/// voce che adesso non vale non si vede; un sottomenu senza voci nemmeno.
+export function tableMenu(
+  entries: readonly TableMenuEntry[],
+  options: { readonly align: TableAlign; readonly paste: (() => void) | null },
+): { readonly clipboard: MenuItem[]; readonly items: MenuItem[] } {
+  const live = entries.filter((entry) => !entry.disabled);
+  const byId = new Map(live.map((entry) => [entry.id, entry]));
+  const clipboard: MenuItem[] = [];
+  const cut = byId.get("table.cut");
+  const copy = byId.get("table.copy");
+  if (cut) clipboard.push({ label: t("editor_menu.cut"), icon: "cut", hint: displayBinding("Mod-x"), run: cut.run });
+  if (copy) clipboard.push({ label: t("editor_menu.copy"), icon: "copy", hint: displayBinding("Mod-c"), run: copy.run });
+  if (options.paste) clipboard.push({ label: t("editor_menu.paste"), icon: "template", hint: displayBinding("Mod-v"), run: options.paste });
+  const under = (where: "insert" | "move" | "sort"): MenuItem[] => {
+    const items: MenuItem[] = [];
+    for (const [id, place] of Object.entries(MENU_PLACES)) {
+      const entry = byId.get(id);
+      if (place.under !== where || !entry) continue;
+      items.push({ label: t(place.label), separator: place.rule === true && items.length > 0, run: entry.run });
+    }
+    return items;
+  };
+  const nest = (key: Key, items: MenuItem[], separator = false): MenuItem[] =>
+    items.length === 0 ? [] : [{ label: t(key), items, separator }];
+  const aligns = ["table.align.default", "table.align.left", "table.align.center", "table.align.right"]
+    .flatMap((id) => {
+      const entry = byId.get(id);
+      if (!entry) return [];
+      const value = id === "table.align.default" ? null : id.slice("table.align.".length);
+      return [{ label: t(ALIGN_LABELS[id]!), choice: "radio" as const, checked: options.align === value, run: entry.run }];
+    });
+  const clear = byId.get("table.clear");
+  const danger = ([
+    ["markdown.table.row.delete", "table.menu.delete_row"],
+    ["markdown.table.column.delete", "table.menu.delete_column"],
+  ] as const).flatMap(([id, label], index) => {
+    const entry = byId.get(id);
+    return entry ? [{ label: t(label), danger: true, separator: index === 0, run: entry.run }] : [];
+  });
+  const sorted = [...nest("table.menu.sort", under("sort"), true), ...nest("table.menu.align", aligns)];
+  const items: MenuItem[] = [
+    ...nest("table.menu.insert", under("insert")),
+    ...nest("table.menu.move", under("move")),
+    ...sorted,
+    ...(clear ? [{ label: t("table.menu.clear_cell"), hint: displayBinding("Delete"), separator: true, run: clear.run }] : []),
+    ...danger,
+  ];
+  // Le voci in più dei plugin, dopo quelle della tabella.
+  const known = new Set(["table.cut", "table.copy", "table.clear", "markdown.table.row.delete", "markdown.table.column.delete", ...Object.keys(MENU_PLACES), ...Object.keys(ALIGN_LABELS)]);
+  const extra = live.filter((entry) => !known.has(entry.id)).map((entry, index) => ({
+    label: entry.label,
+    separator: index === 0,
+    ...(entry.keys ? { hint: displayBinding(entry.keys) } : {}),
+    run: entry.run,
+  }));
+  if (sorted.length === 0 && items.length > 0 && items[0]!.separator) items[0] = { ...items[0]!, separator: false };
+  const dangerAt = items.findIndex((item) => item.danger);
+  if (dangerAt >= 0 && extra.length > 0) items.splice(dangerAt, 0, ...extra);
+  else items.push(...extra);
+  return { clipboard, items: items.map((item, index) => index === 0 ? { ...item, separator: false } : item) };
+}
+
 export class TableGrid implements TableGridActions {
   readonly #host: TableGridHost;
   readonly #frame: TableFrame;
@@ -160,13 +249,24 @@ export class TableGrid implements TableGridActions {
       activate: (event) => host.activate(event),
       format: (which) => this.runAction(FORMATS[which]),
       formatInput: (which, input) => wrapInput(input, which === "bold" ? "**" : which === "italic" ? "*" : "~~"),
-      openMenu: (entries, at) => showContextMenu(at, entries.map((entry) => ({
-        label: entry.label,
-        separator: entry.separator,
-        disabled: entry.disabled,
-        ...(entry.keys ? { hint: displayBinding(entry.keys) } : {}),
-        run: entry.run,
-      }))),
+      openMenu: (entries, at) => {
+        const { focus } = this.#frame.selection;
+        const menu = tableMenu(entries, {
+          align: this.#data.aligns[focus.column] ?? null,
+          paste: host.readOnly() ? null : () => this.#paste(),
+        });
+        const column = (this.#data.rows[0]?.[focus.column] ?? "").trim();
+        showContextMenu(at, menu.items, {
+          header: {
+            icon: "fmt-table",
+            kind: t("editor_menu.head.table"),
+            name: focus.row === 0
+              ? t("table.menu.head.header", { column: column || columnName(focus.column) })
+              : t("table.menu.head.cell", { row: focus.row, column: column || columnName(focus.column) }),
+          },
+          clipboard: menu.clipboard,
+        });
+      },
       writeClipboard: (data) => writeClipboardText(data.text),
       focused: () => host.focused(),
       changed: () => host.changed(),
@@ -246,6 +346,20 @@ export class TableGrid implements TableGridActions {
       return true;
     }
     return this.#frame.runCommand(id);
+  }
+
+  /// «Incolla» dal menu: gli appunti si leggono, poi la cornice li scrive
+  /// sulla selezione di quel momento, come Mod-v.
+  #paste(): void {
+    void readClipboard().then(async (entries) => {
+      let text = "";
+      let html = "";
+      for (const entry of entries) {
+        if (!text && entry.types.includes("text/plain")) text = await (await entry.getType("text/plain")).text();
+        if (!html && entry.types.includes("text/html")) html = await (await entry.getType("text/html")).text();
+      }
+      this.#frame.pasteData(text, html);
+    }).catch(() => notify(t("editor_menu.paste_failed"), "guasto"));
   }
 
   // ── Scrittura ──────────────────────────────────────────────────────────────
