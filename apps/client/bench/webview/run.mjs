@@ -57,8 +57,17 @@ async function ready(session) {
 /// Apre un documento col selettore rapido (Ctrl+O), come chi lo cerca per
 /// nome, e aspetta che il riquadro a fuoco dica `text`.
 async function openByName(session, name, text, mark = null) {
-  await chord(session, CTRL, "o");
-  await session.waitFor("return document.activeElement?.classList.contains('palette-input') === true");
+  // L'app che ha appena riaperto la sessione può perdere il primo accordo:
+  // si riprova, ma al più tre volte.
+  for (let attempt = 1; ; attempt++) {
+    await chord(session, CTRL, "o");
+    try {
+      await session.waitFor("return document.activeElement?.classList.contains('palette-input') === true", [], 10_000);
+      break;
+    } catch (error) {
+      if (attempt === 3) throw error;
+    }
+  }
   await session.keys(name);
   // L'elenco deve avere il risultato prima di Invio: si aspetta la prima voce.
   await session.waitFor("return (document.querySelector('.palette-list [role=option]')?.textContent ?? '').includes(arguments[0])", [name]);

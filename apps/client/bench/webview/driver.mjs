@@ -32,7 +32,13 @@ export async function openSession(base, application, { timeoutMs = 120_000 } = {
   const id = value.sessionId;
   const session = `/session/${id}`;
   await call(base, "POST", `${session}/timeouts`, { script: timeoutMs, implicit: 0, pageLoad: timeoutMs });
-  const element = (value) => value?.[ELEMENT];
+  // La chiave W3C; un driver che ne usa un'altra (il vecchio `ELEMENT`)
+  // ha comunque un solo campo, il riferimento.
+  const element = (value, css) => {
+    const id = value?.[ELEMENT] ?? value?.ELEMENT ?? Object.values(value ?? {})[0];
+    if (typeof id !== "string") throw new Error(`nessun riferimento per «${css}»: ${JSON.stringify(value)}`);
+    return id;
+  };
   const keyActions = (text) => [...text].flatMap((ch) => [{ type: "keyDown", value: ch }, { type: "keyUp", value: ch }]);
   return {
     /// Dalla richiesta della sessione alla sessione pronta, in ms.
@@ -42,7 +48,7 @@ export async function openSession(base, application, { timeoutMs = 120_000 } = {
     /// col risultato.
     executeAsync: (script, args = []) => call(base, "POST", `${session}/execute/async`, { script, args }),
     async find(css) {
-      return element(await call(base, "POST", `${session}/element`, { using: "css selector", value: css }));
+      return element(await call(base, "POST", `${session}/element`, { using: "css selector", value: css }), css);
     },
     async click(css) {
       const id = await this.find(css);
