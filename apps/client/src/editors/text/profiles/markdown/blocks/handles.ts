@@ -206,6 +206,8 @@ class HandlesView {
   drag: Drag | null = null;
   /// Il clic che segue un trascinamento non apre il menu.
   swallowClick = false;
+  /// Il menu aperto l'ha aperto il puntatore: le sue pagine si aprono come lui.
+  menuByPointer = false;
   readonly hoverable: boolean;
 
   constructor(readonly view: EditorView) {
@@ -260,12 +262,22 @@ class HandlesView {
       this.schedule();
     });
     life.listen(this.add, "click", () => this.addBlock());
-    life.listen(this.grip, "click", () => {
+    // Col mouse il menu si apre senza l'anello su una voce; da Invio o Spazio
+    // (un clic senza `detail`) la prima voce ha già il fuoco.
+    life.listen(this.grip, "click", (event) => {
       if (this.swallowClick) {
         this.swallowClick = false;
         return;
       }
-      this.openMenu();
+      this.openMenu("main", event.detail > 0);
+    });
+    // Il tasto destro sulla maniglia è il menu del blocco, non quello del testo.
+    life.listen(this.root, "contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.target instanceof Node && this.grip.contains(event.target)) {
+        this.openMenu("main", event.button === 2 && (event.clientX !== 0 || event.clientY !== 0));
+      }
     });
     life.listen(this.grip, "pointerdown", (event) => this.startDrag(event));
     this.schedule();
@@ -377,8 +389,9 @@ class HandlesView {
 
   /// Il menu del blocco, sotto la maniglia. Mentre è aperto i blocchi su cui
   /// lavora restano selezionati, così si vede che cosa toccherà.
-  openMenu(page: "main" | "transform" | "color" = "main"): void {
+  openMenu(page: "main" | "transform" | "color" = "main", pointer = this.menuByPointer): void {
     this.menu?.close();
+    this.menuByPointer = pointer;
     const view = this.view;
     const blocks = view.state.field(blockModel).blocks;
     const index = indexOf(blocks, this.shown);
@@ -417,7 +430,8 @@ class HandlesView {
       focus: "roving",
       lifetime: life,
     });
-    handle.setActive(items.find((item) => !item.disabled)?.id ?? null);
+    if (!pointer) handle.setActive(items.find((item) => !item.disabled)?.id ?? null);
+    else list.tabIndex = -1;
     const popover = openPopover({
       anchor: this.grip,
       content: list,
@@ -428,6 +442,7 @@ class HandlesView {
       align: "start",
       className: "cm-fub-block-popover",
       lifetime: this.life,
+      autoFocus: !pointer,
       returnFocus: false,
       onClose: (reason) => {
         life.close();
@@ -441,6 +456,9 @@ class HandlesView {
         }
       },
     });
+    // Aperto dal mouse il fuoco sta nella lista e su nessuna voce: la prima
+    // freccia sceglie la prima.
+    if (pointer) list.focus({ preventScroll: true });
     this.grip.setAttribute("aria-expanded", "true");
     this.menu = popover;
   }
@@ -760,8 +778,11 @@ class HandlesView {
   }
 }
 
+/// Le maniglie: esportate perché i test guardino il menu senza un layout.
+export const handlesView = ViewPlugin.fromClass(HandlesView);
+
 export const blockHandles: Extension = [
-  ViewPlugin.fromClass(HandlesView),
+  handlesView,
   EditorView.baseTheme({
     // I colori sono della pelle (`document.css`); qui soltanto la forma.
     ".cm-fub-block-handles": {

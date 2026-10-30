@@ -13,7 +13,7 @@ import { liveReveal } from "../../../live-reveal";
 import { blockIdMarks } from "../block-id";
 import { blocksMode } from "./index";
 import { blockSelection } from "./selection";
-import { addBelow, colorRanges, gripLabel } from "./handles";
+import { addBelow, colorRanges, gripLabel, handlesView } from "./handles";
 import { setContentColor } from "../color";
 import { blockModel } from "./model";
 
@@ -198,5 +198,48 @@ describe("Vim e composizione (H15)", () => {
     press(view, "ArrowUp", { ctrlKey: true, shiftKey: true });
     expect(view.state.doc.toString()).toBe("Uno\n\nDue");
     expect(press(view, "Escape")).toBe(false);
+  });
+});
+
+describe("il menu della maniglia", () => {
+  const rows = () => [...document.querySelectorAll<HTMLElement>(".cm-fub-block-menu [role^=menuitem]")];
+
+  it("col tasto destro è il menu del blocco, senza anello su una voce, e parla coi nomi dei comandi", () => {
+    const view = mount("Uno\n\nDue", 1);
+    const handles = view.plugin(handlesView)!;
+    const block = view.state.field(blockModel).blocks[0]!;
+    handles.shown = { from: block.from, depth: block.depth };
+    let textMenus = 0;
+    const count = () => textMenus++;
+    document.body.addEventListener("contextmenu", count);
+    const grip = view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!;
+    const right = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 3, clientY: 3 });
+    grip.dispatchEvent(right);
+    expect(right.defaultPrevented).toBe(true);
+    document.body.removeEventListener("contextmenu", count);
+    expect(textMenus, "il menu del testo non si apre").toBe(0);
+    const menu = document.querySelector<HTMLElement>(".cm-fub-block-menu")!;
+    expect(document.activeElement, "il fuoco è nella lista, su nessuna voce").toBe(menu);
+    expect(rows().map((row) => row.textContent)).toEqual(expect.arrayContaining(["Colonne", "Elimina il blocco"]));
+    menu.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(document.activeElement).toBe(rows().find((row) => row.getAttribute("aria-disabled") !== "true"));
+  });
+
+  it("aperto da Invio ha già la prima voce", () => {
+    const view = mount("Uno\n\nDue", 1);
+    const handles = view.plugin(handlesView)!;
+    const block = view.state.field(blockModel).blocks[0]!;
+    handles.shown = { from: block.from, depth: block.depth };
+    view.dom.querySelector<HTMLElement>(".cm-fub-block-grip")!.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 }));
+    expect(rows()).toContain(document.activeElement);
+  });
+
+  it("«Trasforma in» dice Riquadro, Elenco di attività e Blocco di codice", () => {
+    const view = mount("Uno\n\nDue", 1);
+    const handles = view.plugin(handlesView)!;
+    const block = view.state.field(blockModel).blocks[0]!;
+    handles.shown = { from: block.from, depth: block.depth };
+    handles.openMenu("transform", false);
+    expect(rows().map((row) => row.textContent)).toEqual(expect.arrayContaining(["Riquadro", "Elenco di attività", "Blocco di codice"]));
   });
 });
