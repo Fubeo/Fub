@@ -644,30 +644,6 @@ const SETTINGS: SettingEntry[] = [
   },
 ];
 
-/// Il livello dell'editor dei disegni come lo dichiara il bundle `fub.draw`,
-/// a Standard: serve ai banchi che aprono un disegno, e sta fuori da
-/// `SETTINGS` perché il pannello delle impostazioni si fotografa senza.
-const DRAW_LEVEL: SettingEntry = {
-  spec: {
-    key: "draw.level",
-    label: "Livello d'interfaccia",
-    description: "",
-    group: "Disegni",
-    scope: "vault",
-    kind: {
-      kind: "choice",
-      default: "essential",
-      options: [
-        { value: "essential", label: "Essenziale" },
-        { value: "standard", label: "Standard" },
-      ],
-    },
-    program_writable: false,
-  },
-  value: "standard",
-  source: "vault",
-};
-
 /// Lo spazio di lavoro e la colonna dei disegni, di serie: lo spazio scelto
 /// dal menu del disegno si scrive qui.
 const DRAW_WORKSPACE: readonly SettingEntry[] = [
@@ -1038,7 +1014,7 @@ const options: Options = {
   root: ROOT,
   view: VIEWS,
   commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : [...BENCH_COMMANDS, ...SLASH_COMMANDS],
-  settings: DRAWING === null ? SETTINGS : [...SETTINGS, DRAW_LEVEL, ...DRAW_WORKSPACE],
+  settings: DRAWING === null ? SETTINGS : [...SETTINGS, ...DRAW_WORKSPACE],
   syntaxForms: [...MARKDOWN_SYNTAX],
   ...(WORKBOOK_DOC === null ? {} : {
     // Il JSON allarga le unioni del contratto (`kind`, `lock`) a `string`.
