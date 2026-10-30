@@ -70,6 +70,8 @@ export async function openSession(base, application, { timeoutMs = 120_000 } = {
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
     },
+    /// La finestra com'è, in PNG: per capire uno scenario fallito.
+    screenshot: async () => Buffer.from(await call(base, "GET", `${session}/screenshot`), "base64"),
     close: () => call(base, "DELETE", session).catch(() => null),
   };
 }

@@ -56,13 +56,13 @@ async function ready(session) {
 
 /// Apre un documento col selettore rapido (Ctrl+O), come chi lo cerca per
 /// nome, e aspetta che il riquadro a fuoco dica `text`.
-async function openByName(session, name, text, mark = null) {
+async function openByName(session, name, text, mark = null, timeoutMs = 60_000) {
   // L'app che ha appena riaperto la sessione può perdere il primo accordo:
   // si riprova, ma al più tre volte.
   for (let attempt = 1; ; attempt++) {
     await chord(session, CTRL, "o");
     try {
-      await session.waitFor("return document.activeElement?.classList.contains('palette-input') === true", [], 10_000);
+      await session.waitFor("return document.activeElement?.classList.contains('palette-input') === true", [], timeoutMs / 3);
       break;
     } catch (error) {
       if (attempt === 3) throw error;
@@ -70,7 +70,7 @@ async function openByName(session, name, text, mark = null) {
   }
   await session.keys(name);
   // L'elenco deve avere il risultato prima di Invio: si aspetta la prima voce.
-  await session.waitFor("return (document.querySelector('.palette-list [role=option]')?.textContent ?? '').includes(arguments[0])", [name]);
+  await session.waitFor("return (document.querySelector('.palette-list [role=option]')?.textContent ?? '').includes(arguments[0])", [name], timeoutMs);
   if (mark) {
     await session.execute("window.__fubWait = window.__fubProbe.waitFor(arguments[0], arguments[1], 15000, arguments[2]); return true;", [mark, ".pane.focus .cm-content", text]);
   }
@@ -189,6 +189,18 @@ const SCENARIOS = {
   },
 };
 
+/// Ciò che si vedeva quando uno scenario è fallito: la finestra e il fuoco,
+/// accanto al referto.
+async function keep(session, id) {
+  try {
+    writeFileSync(join(out, `${id}-fallito.png`), await session.screenshot());
+    const state = await session.execute("return { focus: document.activeElement?.className ?? null, title: document.title, palette: document.querySelector('.palette-list')?.textContent?.slice(0, 400) ?? null, pane: document.querySelector('.pane.focus')?.textContent?.slice(0, 200) ?? null };");
+    writeFileSync(join(out, `${id}-fallito.json`), JSON.stringify(state, null, 2) + "\n");
+  } catch {
+    // Una sessione già persa non ha niente da mostrare.
+  }
+}
+
 function git(...command) {
   try {
     return execFileSync("git", command, { encoding: "utf8" }).trim();
@@ -212,6 +224,20 @@ async function main() {
   let failed = 0;
   try {
     await waitForDriver(base);
+    // Il primo avvio sul vault nuovo costruisce gli indici di diecimila note:
+    // una sessione che non misura aspetta che la ricerca per nome risponda,
+    // così gli scenari partono da un vault già indicizzato.
+    const warm = await openSession(base, app);
+    try {
+      await ready(warm);
+      await openByName(warm, "Lunga", "Una nota lunga", null, 300_000);
+      console.log("· vault indicizzato");
+    } catch (error) {
+      await keep(warm, "riscaldamento");
+      console.log(`✗ riscaldamento: ${String(error?.message ?? error)}`);
+    } finally {
+      await warm.close();
+    }
     // S6 dopo S1: l'avvio da misurare riapre la nota che S1 ha lasciato.
     const order = ["S1", "S6", "S2", "S3", "S4", "S5"].filter((id) => only.has(id));
     for (const id of order) {
@@ -233,6 +259,7 @@ async function main() {
         }
       } catch (error) {
         failed++;
+        await keep(session, id);
         results[id] = { error: String(error?.message ?? error) };
         console.log(`✗ ${id}: ${results[id].error}`);
       } finally {
