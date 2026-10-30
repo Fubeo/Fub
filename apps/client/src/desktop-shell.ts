@@ -56,6 +56,7 @@ import { openPrimaryView, opensWithoutParams, primaryViews } from "./ui/primary-
 import { mountTitlebar } from "./ui/titlebar";
 import { mountLongPressMenus } from "./ui/long-press";
 import { mountSystemMenuGuard } from "./ui/system-menu";
+import { mountPerfProbe } from "./perf/mount";
 import { platformSupports } from "./platform/capabilities";
 import { mountAppMenu } from "./ui/app-menu";
 import { mountWebviewFocusMonitor } from "./ui/node";
@@ -794,6 +795,9 @@ async function init(): Promise<Teardown> {
   mountLongPressMenus(pageWindowLifetime);
   // Dove Fub non ha un menu, il tasto destro non apre quello della WebView.
   mountSystemMenuGuard(pageWindowLifetime);
+  // La sonda delle prestazioni, se l'impostazione di macchina la vuole: presto,
+  // perché l'avvio a freddo si misura fino alla prima nota.
+  mountPerfProbe(pageWindowLifetime);
   registerMermaidRenderer();
   registerBaseRenderer((doc) => openDocument(doc));
   // I tre collegamenti iniettati, e la ragione per cui lo sono: il pannello del
