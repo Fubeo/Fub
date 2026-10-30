@@ -32,13 +32,16 @@ parte di quel blocco e si sposta con lui.
 Al passaggio del puntatore, e sul blocco del cursore, a sinistra del blocco
 compaiono il **«+»**, che aggiunge sotto un paragrafo vuoto (o una voce sorella
 sotto una voce), e la **maniglia**. La maniglia ha il nome del blocco («Blocco:
-Titolo 2, Cose da fare») e apre un menu con:
+Titolo 2, Elenco di attività») e apre un menu col clic o col tasto destro.
+Aperto col mouse, nessuna voce ha l'anello del fuoco finché una freccia non
+la sceglie; da tastiera il fuoco va subito alla prima voce. Il menu ha:
 
-- **Trasforma in…**: paragrafo, titoli, elenchi, attività, citazione, callout,
-  codice, ripiegabile. Il testo resta, cambiano soltanto i segni; un titolo che
+- **Trasforma in…**: paragrafo, titoli, elenchi, elenco di attività, citazione,
+  riquadro, blocco di codice, ripiegabile. Il testo resta, cambiano soltanto i segni; un titolo che
   prende più righe le unisce con uno spazio, e le sottovoci restano blocchi
   sotto. Una tabella non si trasforma;
-- **Duplica**, **Sposta su**, **Sposta giù**, **Elimina**;
+- **Duplica**, **Sposta su**, **Sposta giù** e, per ultimo, **Elimina il
+  blocco**;
 - **Copia il link al blocco**: scrive negli appunti `[[Nota#Titolo]]` per un
   titolo e `[[Nota#^id]]` per il resto. Se il blocco non ha un id, ne riceve uno
   di sei caratteri: in coda all'ultima riga per paragrafi, titoli e voci, su una
@@ -178,8 +181,8 @@ La Lettura, la Live e i Blocchi le mettono in griglia, alla pari, e un foglio
 largo meno di 700 px le mette una sotto l'altra. Col cursore dentro, la Live
 le mostra una sotto l'altra con l'etichetta «Colonna 1», «Colonna 2»…, e il
 testo si scrive lì. Le crea «Colonne» (`markdown.columns`) dalla barra o dal
-«/», con un blocco per colonna delle righe selezionate; nei Blocchi anche «In
-colonne» nel menu del blocco, che mette il blocco accanto al fratello che lo
+«/», con un blocco per colonna delle righe selezionate; nei Blocchi anche
+«Colonne» nel menu del blocco, che mette il blocco accanto al fratello che lo
 segue (o la selezione di blocchi, una colonna per blocco), e il blocco
 trascinato e lasciato sul bordo destro di un altro, che gli va accanto o in
 fondo alle sue colonne. Un callout `[!columns]` con un solo `[!column]`, più

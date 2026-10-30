@@ -22,12 +22,23 @@ Markdown in scrittura sono:
 4. «Inserisci», con i blocchi del «/»;
 5. «Comandi», con i comandi del vault dichiarati per il «/», e le voci dei
    plugin per la nota;
-6. Cerca nella nota, Copia link a questo punto, Seleziona tutto.
+6. Copia link a questo punto, Cerca nel documento, Seleziona tutto. «Cerca
+   nel documento» c'è dove l'editor ha la sua barra di ricerca: note,
+   documenti di Word, codice; non su PDF, immagini, fogli e lavagne.
 
 Il tasto destro fuori dalla selezione porta lì il cursore; dentro, la lascia.
 Una voce che adesso non si può fare, come in sola lettura, è spenta. In
 Lettura il menu copia il testo scelto o il Markdown della nota, esporta e offre
-«Modifica da qui». Maiusc+tasto destro dà il menu del sistema.
+«Modifica da qui»; «Copia il link a questo punto» copia il punto cliccato.
+Il tasto destro su un link in Live lascia il cursore dov'è, così la sintassi
+del link resta nascosta. Aperto col mouse, il menu tiene il fuoco su di sé e
+nessuna voce ha l'anello: la prima freccia sceglie la prima voce, o l'ultima
+con la freccia su. Dal tasto Menu o da Maiusc+F10 il fuoco va subito alla
+prima voce.
+
+Dove Fub non ha un menu, il tasto destro non apre quello della WebView: resta
+nei campi di testo, sul testo scelto e con Maiusc+tasto destro, che dà sempre
+il menu del sistema.
 
 ## La mini-barra
 
@@ -64,6 +75,14 @@ plugin, il «/» offre soltanto i comandi del vault.
 | PDF | copia e copia con la citazione `[[file.pdf#page=N]]` del testo scelto, copia il link alla pagina, annota, il link `![[ ]]`, apri esterno |
 | Audio e video | sul lettore il menu del sistema; attorno, il link `![[ ]]` e apri esterno |
 
+In modalità Blocchi la maniglia di un blocco apre il suo menu col clic e col
+tasto destro: Trasforma in, Colore, Colonne, Duplica, Copia il link al blocco,
+Sposta su e giù, e «Elimina il blocco» per ultimo.
+
+Nell'albero, il tasto destro su una nota della scelta multipla apre il menu
+della scelta: Copia, Sposta in…, In una cartella nuova, Deseleziona e «Sposta
+nel cestino» per ultimo. Fuori dalla scelta vale il menu della nota.
+
 Il disegno ha i suoi menu ([Disegni, selezione](drawing-selection.md)); la
 griglia delle tabelle in Live ha il suo
 ([Editor e anteprima](editor-and-preview.md#tabelle-in-live)).
@@ -73,6 +92,9 @@ griglia delle tabelle in Live ha il suo
 - `apps/client/src/editors/core/editor-menu.ts`: le forme del menu di una
   superficie;
 - `apps/client/src/panels/editor-menu.ts`: il compositore e l'apertura;
+- `apps/client/src/ui/menu.ts`: il menu, il fuoco e la tastiera;
+- `apps/client/src/ui/system-menu.ts`: il menu della WebView spento dove Fub
+  non ne ha uno;
 - `apps/client/src/panels/mini-bar.ts`: la mini-barra;
 - `apps/client/src/panels/slash-menu.ts` e
   `apps/client/src/editors/text/profiles/markdown/slash.ts`: il «/» nel testo;
