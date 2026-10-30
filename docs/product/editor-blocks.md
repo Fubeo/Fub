@@ -15,6 +15,10 @@ ogni blocco una maniglia, un menu, il trascinamento e una selezione di blocchi.
 Il file resta Markdown puro: nessun blocco ha un id nascosto né un formato a
 parte, e Sorgente mostra gli stessi byte.
 
+Ci si arriva dal menu Vista («Blocchi») o con **Mod+Shift+B**
+(`shell.mode.blocks`), che c'è soltanto sulle note; «Passa a Live» dai Blocchi
+porta alla Live, e Mod+E dalla Lettura torna ai Blocchi se venivi da lì.
+
 Il codice della modalità è un pezzo a parte, caricato la prima volta che un
 riquadro passa a Blocchi. Finché arriva, il riquadro scrive come la Live.
 
@@ -49,8 +53,8 @@ la sceglie; da tastiera il fuoco va subito alla prima voce. Il menu ha:
 
 La maniglia si trascina: una linea mostra dove il blocco cade, fra i fratelli
 dello stesso livello; vicino ai bordi la nota scorre; Esc annulla. Le maniglie
-stanno fuori dal testo e non sono fermate di Tab; con Vim acceso restano
-cliccabili.
+stanno fuori dal testo ma sono pulsanti veri: il «+» e la maniglia del blocco
+del cursore si raggiungono con Tab, e con Vim acceso restano cliccabili.
 
 ## La selezione di blocchi
 
@@ -76,6 +80,39 @@ sono selezionati.
 
 Durante una composizione (IME) e con Vim fuori dal modo inserimento questi tasti
 si fanno da parte: Esc resta di Vim.
+
+## Il movimento
+
+I Blocchi si muovono soltanto per un gesto di blocco, mai per una battuta: la
+transazione porta l'annotazione `blockGesture`, e un plugin legge i riquadri
+delle righe prima che CodeMirror le riscriva e le anima dal posto vecchio con
+`moto`, soltanto con `transform` e `opacity`.
+
+- **Sollevare e posare.** Trascinato, il blocco sale (scala 1,015 e ombra) e i
+  fratelli fra il suo posto e la linea si scostano. Al rilascio ognuno scivola
+  al suo posto e il blocco atterra dall'immagine sollevata con un piccolo
+  rimbalzo e un alone d'accento; Esc lo riporta indietro allo stesso modo.
+- **Scambiare.** Mod+Shift+↑/↓ fa scivolare le righe dal posto vecchio.
+- **Trasformare.** Il testo cresce o cala sul posto con la scala dei
+  caratteri, il segno nuovo entra con un rimbalzo e i blocchi sotto scivolano.
+  Un gesto che ne interrompe uno ancora in corsa riparte da dov'era.
+- **Nascere e sparire.** Una riga nuova scende di 8 px e appare; una tolta si
+  alza di 4 px e svanisce entro 120 ms mentre le altre salgono.
+- **Ripiegare.** Il contenuto entra uno dopo l'altro, la freccia ruota.
+- **Colore, colonne, casella.** Il fondo vecchio si ritira, l'etichetta della
+  colonna cresce, la casella fa un rimbalzo.
+- **La selezione.** Il velo dei blocchi scelti (`--doc-block-selected`) appare
+  di blocco in blocco.
+
+Oltre 60 righe in movimento, le righe si limitano a una dissolvenza. Col moto
+ridotto non si muove niente: chi nasce appare soltanto in dissolvenza, e
+l'immagine sollevata e le righe scostate stanno ferme dove il gesto le mette.
+Ogni gesto si dice anche nella regione viva dei Blocchi («Blocco spostato: ora
+è il terzo», «Ora è Titolo 2», «Aperto»).
+
+**Cursore morbido** (`editor.soft-cursor`, spento di norma) fa scivolare il
+cursore fra le righe quando ci si muove senza scrivere; vale soltanto nei
+Blocchi, e mai col moto ridotto.
 
 ## Gli id di blocco
 
@@ -259,7 +296,9 @@ schede stanno nella cache del bundle, ricostruibile. «Pagina web»
 ## Dove si trova
 
 - `apps/client/src/editors/text/profiles/markdown/blocks/`: modello, maniglie,
-  selezione, spostamenti, trasformazioni, link;
+  selezione, spostamenti, trasformazioni, link, movimento (`motion.ts`);
+- `apps/client/src/editors/text/profiles/markdown/block-gesture.ts`: i gesti
+  di blocco, annotati anche dalla Live;
 - `apps/client/src/editors/text/profiles/markdown/block-id.ts`: gli id nascosti;
 - `apps/client/src/editors/text/profiles/markdown/details.ts`: la regola dei
   ripiegabili, gemella di `crates/fub-format-markdown/src/render.rs`;
@@ -276,4 +315,5 @@ schede stanno nella cache del bundle, ricostruibile. «Pagina web»
 - `apps/client/src/editors/text/profiles/markdown/link-card.ts` e
   `apps/client/src/state/link-cards.ts`: la scheda nella Live e le risposte di
   `crates/fub-host/src/link_card.rs`;
-- `crates/fub-host/src/settings.rs`: la modalità dei riquadri nuovi.
+- `crates/fub-host/src/settings.rs`: la modalità dei riquadri nuovi e il
+  cursore morbido.

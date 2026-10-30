@@ -1,10 +1,11 @@
 // I Blocchi (H1–H8, C4): la Live con la politica `mai` più l'interfaccia dei
-// blocchi — modello, maniglie, menu, trascinamento, selezione e tasti. È un
+// blocchi — modello, maniglie, menu, trascinamento, selezione, tasti e moto. È un
 // pezzo a parte, che la superficie carica la prima volta che serve.
 import { type Extension } from "@codemirror/state";
 import { blockHandles, type BlocksOptions, blocksOptions } from "./handles";
 import { blockKeysExtension } from "./keys";
 import { blockModel } from "./model";
+import { blockMotionExtension } from "./motion";
 import { blockSelectionExtension } from "./selection";
 import { pageHeaderExtension } from "./page";
 
@@ -19,5 +20,7 @@ export function blocksMode(options: BlocksOptions = {}): Extension {
     blockKeysExtension,
     blockHandles,
     pageHeaderExtension,
+    // Il blocco vivo (N13): i gesti si vedono accadere.
+    blockMotionExtension,
   ];
 }

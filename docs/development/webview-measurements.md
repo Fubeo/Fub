@@ -1,7 +1,7 @@
 # Misure nella WebView
 
 Questa guida dice come misurare i tempi di Fub nella WebView vera, con la
-sonda delle prestazioni e i sei scenari del banco WebView.
+sonda delle prestazioni e i sette scenari del banco WebView.
 
 > **Per chi:** chi cambia l'editor, il passaggio fra le note, la lavagna, il
 > grafo, l'inchiostro o l'avvio, e chi prepara una versione.
@@ -28,7 +28,7 @@ Da fuori la si guida con `window.__fubProbe`: `start()`, `stop()`, che rende
 il referto, e `waitFor(nome, selettore, ms, testo?)`. Spenta, la sonda non
 ascolta niente e non chiede fotogrammi.
 
-## I sei scenari
+## Gli scenari
 
 | Scenario | Gesto | Valore |
 |---|---|---|
@@ -38,6 +38,7 @@ ascolta niente e non chiede fotogrammi.
 | S4 | trascinamento del grafo di 10.000 nodi | p95 e massimo fra fotogrammi |
 | S5 | tratto di penna di 3 s su un disegno di 2.000 tracciati | massimo fra fotogrammi |
 | S6 | avvio a freddo fino alla prima nota | ms |
+| S7 | Blocchi su una nota di 2.000 righe: un blocco trascinato su e giù per 3 s, poi dieci trasformazioni da paragrafo a titolo e ritorno | p95 e massimo fra fotogrammi |
 
 Le fixture nascono in una cartella temporanea
 (`apps/client/bench/webview/fixtures.mjs`); il vault vero di chi misura non
@@ -72,7 +73,7 @@ e il referto scrive lo scenario come saltato, senza numero.
 Il referto va in `apps/client/bench/.output/webview/referto.json`. Il comando
 esce con 1 se un valore supera la soglia scelta.
 
-Il job `webview` della CI fa lo stesso con S1–S3, sotto Xvfb e senza scheda
+Il job `webview` della CI fa lo stesso con S1–S3 e S7, sotto Xvfb e senza scheda
 grafica, e carica il referto come artifact `webview-<sha>`.
 
 ## macOS

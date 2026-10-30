@@ -1,4 +1,4 @@
-// I sei scenari di N0 nella WebView vera, guidati da WebDriver.
+// Gli scenari di N0, e S7 di N13, nella WebView vera, guidati da WebDriver.
 //
 //   node bench/webview/run.mjs --app=../../target/release/fub [--only=S1,S2,S3]
 //        [--driver=tauri-driver] [--native-driver=/usr/bin/WebKitWebDriver]
@@ -29,7 +29,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const app = resolve(args.app ?? join(here, "../../../../target/release/fub"));
-const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6").split(","));
+const only = new Set((args.only ?? "S1,S2,S3,S4,S5,S6,S7").split(","));
 const out = resolve(args.out ?? join(here, "../.output/webview"));
 const budgetsKind = args.budgets ?? "ci";
 const port = Number(args.port ?? 4444);
@@ -38,6 +38,8 @@ const base = `http://127.0.0.1:${port}`;
 const CTRL = "";
 const ENTER = "";
 const END = "";
+const SHIFT = "";
+const ALT = "";
 
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
@@ -87,6 +89,14 @@ async function openByName(session, name, text, mark = null, timeoutMs = 60_000) 
   } else {
     await session.waitFor("return (document.querySelector('.pane.focus')?.textContent ?? '').includes(arguments[0])", [text], 30_000);
   }
+}
+
+/// Un accordo di due modificatori e un tasto.
+async function chord2(session, first, second, key) {
+  await session.actions([{ type: "key", id: "tastiera", actions: [
+    { type: "keyDown", value: first }, { type: "keyDown", value: second }, { type: "keyDown", value: key },
+    { type: "keyUp", value: key }, { type: "keyUp", value: second }, { type: "keyUp", value: first },
+  ] }]);
 }
 
 /// Un trascinamento lungo `ms`, a passi di un fotogramma, col pulsante e la
@@ -186,6 +196,55 @@ const SCENARIOS = {
     const report = await stop(session);
     return { report, values: { "S5.penFrameGap.max": report.frames.max }, samples: report.input.pen.count };
   },
+  /// I Blocchi su una nota di 2.000 righe: un blocco trascinato su e giù per
+  /// tre secondi e posato, poi dieci trasformazioni da paragrafo a titolo e
+  /// ritorno (N13).
+  async S7(session) {
+    await openByName(session, "Blocchi", "Una nota a blocchi");
+    await session.click(".pane.focus .cm-content");
+    await chord2(session, CTRL, SHIFT, "b");
+    await session.waitFor("return !!document.querySelector('.pane.focus .cm-fub-block-handles')", [], 30_000);
+    // La maniglia compare sul blocco sotto il puntatore: la riga a metà vista.
+    const line = await session.execute("const lines = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].filter((l) => l.textContent.startsWith('Blocco')); const r = lines[Math.floor(lines.length / 2)]?.getBoundingClientRect(); return r ? { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } : null;");
+    if (!line) throw new Error("nessuna riga di blocco in vista");
+    await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [{ type: "pointerMove", x: line.x, y: line.y, duration: 0, origin: "viewport" }] }]);
+    // La maniglia sta sul blocco sotto il puntatore, o su quello del cursore
+    // quando la WebView non manda il sorvolo di un puntatore che WebDriver
+    // muove (la WebKitGTK del runner sotto Xvfb): va bene tutte e due, perché
+    // il trascinamento parte dalla maniglia dove si vede.
+    try {
+      await session.waitFor("const h = document.querySelector('.pane.focus .cm-fub-block-handles'); return !!h && !h.hidden;", [], 10_000);
+    } catch (error) {
+      // Che cosa vedeva la pagina: senza, il referto dice soltanto che
+      // l'attesa è scaduta.
+      const seen = await session.execute("const h = document.querySelector('.pane.focus .cm-fub-block-handles'); const a = document.activeElement; return JSON.stringify({ handles: !!h, hidden: h?.hidden ?? null, active: h?.dataset.active ?? null, hover: matchMedia('(hover: hover)').matches, focus: a ? a.className || a.tagName : null });");
+      throw new Error(`${error.message} — ${seen}`);
+    }
+    const grip = await centerOf(session, ".pane.focus .cm-fub-block-grip");
+    await start(session);
+    const steps = Math.round(3_000 / 16);
+    const actions = [{ type: "pointerMove", x: grip.x, y: grip.y, duration: 0, origin: "viewport" }, { type: "pointerDown", button: 0 }];
+    for (let i = 1; i <= steps; i++) {
+      actions.push({ type: "pointerMove", x: grip.x, y: Math.round(grip.y + 160 * Math.sin((i / steps) * Math.PI * 2)), duration: 16, origin: "viewport" });
+    }
+    actions.push({ type: "pointerUp", button: 0 });
+    await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions }]);
+    await session.releaseActions();
+    await pause(500);
+    // Il cursore su un paragrafo in vista, non su una riga vuota.
+    const text = await session.execute("const l = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].find((l) => / un paragrafo /.test(l.textContent) && l.getBoundingClientRect().top > 100); const r = l?.getBoundingClientRect(); return r ? { x: Math.round(r.right - 8), y: Math.round(r.top + r.height / 2) } : null;");
+    if (!text) throw new Error("nessun paragrafo in vista");
+    await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [
+      { type: "pointerMove", x: text.x, y: text.y, duration: 0, origin: "viewport" }, { type: "pointerDown", button: 0 }, { type: "pointerUp", button: 0 },
+    ] }]);
+    await session.releaseActions();
+    for (let i = 0; i < 10; i++) {
+      await chord2(session, CTRL, ALT, i % 2 === 0 ? "2" : "0");
+      await pause(300);
+    }
+    const report = await stop(session);
+    return { report, values: { "S7.frameGap.p95": report.frames.p95, "S7.frameGap.max": report.frames.max }, samples: report.frames.count };
+  },
   /// Avvio a freddo fino alla prima nota visibile: l'app riapre la nota che
   /// S1 ha lasciato aperta.
   async S6(session) {
@@ -245,7 +304,7 @@ async function main() {
       await warm.close();
     }
     // S6 dopo S1: l'avvio da misurare riapre la nota che S1 ha lasciato.
-    const order = ["S1", "S6", "S2", "S3", "S4", "S5"].filter((id) => only.has(id));
+    const order = ["S1", "S6", "S2", "S3", "S4", "S5", "S7"].filter((id) => only.has(id));
     for (const id of order) {
       const session = await openSession(base, app);
       try {

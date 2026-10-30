@@ -10,6 +10,7 @@ import { syntaxTree } from "@codemirror/language";
 import { EditorSelection, type EditorState, type Extension, MapMode, type Range, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 import { liveReveal } from "../../live-reveal";
+import { blockGesture } from "./block-gesture";
 import { type DetailsPair, pairDetails, type TopBlock } from "./details";
 import { liveStrings } from "./strings";
 
@@ -78,7 +79,9 @@ class DetailsArrowWidget extends WidgetType {
     arrow.className = "cm-fub-details-arrow";
     arrow.setAttribute("aria-expanded", String(this.open));
     arrow.setAttribute("aria-label", liveStrings.t(this.open ? "live.details.open" : "live.details.closed"));
-    arrow.textContent = this.open ? "▾" : "▸";
+    // Un segno solo, che gira: aperto è lo stesso ▸ voltato in giù, e il moto
+    // dei Blocchi lo fa girare da una posa all'altra (N13).
+    arrow.textContent = "▸";
     holder.append(arrow);
     if (this.empty) {
       const hint = document.createElement("span");
@@ -214,9 +217,12 @@ function toggleAt(view: EditorView, pos: number): boolean {
   const body = bodyOf(state, pair);
   const inside = state.selection.ranges.some((range) => range.head >= body.from && range.head <= body.to);
   const summaryEnd = pair.head.summary ? pair.open.from + pair.head.summary.to : state.doc.lineAt(pair.open.from).to;
+  const lead = { from: state.doc.lineAt(pair.open.from).from, to: summaryEnd };
+  const say = liveStrings.t(open ? "blocks.folded.open" : "blocks.folded.closed");
   view.dispatch({
     effects: setDetailsOpen.of({ at: pair.open.from, open }),
     ...(!open && inside ? { selection: EditorSelection.cursor(summaryEnd) } : {}),
+    annotations: blockGesture.of({ kind: "fold", lead, say, ...(open ? {} : { hides: body }) }),
   });
   return true;
 }
@@ -250,6 +256,7 @@ const theme = EditorView.baseTheme({
     width: "1.25em",
     cursor: "pointer",
   },
+  ".cm-fub-details-arrow[aria-expanded=\"true\"]": { rotate: "90deg" },
   // Il rientro è un margine: il `padding` delle righe è della pelle e del
   // rientro sospeso degli elenchi (`hanging.ts`), che si sommano.
   ...Object.fromEntries([1, 2, 3, 4, 5, 6].map((depth) => [

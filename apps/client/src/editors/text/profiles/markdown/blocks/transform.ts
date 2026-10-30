@@ -7,6 +7,7 @@ import { type ChangeSpec, type EditorState, EditorSelection, type StateCommand }
 import { type KeyBinding } from "@codemirror/view";
 import { backtickFence } from "../actions";
 import { calloutHead } from "../callout-head";
+import { blockGesture } from "../block-gesture";
 import { blockModel, buildBlocks, subtreeEnd, type Block, type BlockKind } from "./model";
 
 export type TransformTarget =
@@ -268,7 +269,11 @@ export function transformTo(target: TransformTarget, only?: readonly number[]): 
         selection = EditorSelection.single(Math.min(from + head.column + offset, changeSet.newLength));
       }
     }
-    dispatch(state.update({ changes: changeSet, selection, userEvent: "input", scrollIntoView: true }));
+    // Il protagonista è il primo blocco trasformato, nel documento nuovo.
+    const first = blocks[indices.find((index) => heads.some((head) => head.from === blocks[index]?.from)) ?? -1];
+    const lead = first ? { from: changeSet.mapPos(first.from, -1), to: changeSet.mapPos(first.to, 1) } : undefined;
+    const annotations = blockGesture.of({ kind: "transform", ...(lead ? { lead } : {}) });
+    dispatch(state.update({ changes: changeSet, selection, userEvent: "input", scrollIntoView: true, annotations }));
     return true;
   };
 }

@@ -345,7 +345,7 @@ dall'utente non ricade sull'editor a seconda della modalità. Dalla lettura il
 toggle torna all'ultima scrittura del riquadro per quella famiglia, se la
 superficie la dichiara; altrimenti alla `defaultMode` se è di scrittura, poi
 alla prima scrittura dichiarata. La command palette usa la stessa proiezione e
-non conosce nomi di profilo.
+non conosce nomi di profilo; `shell.mode.blocks` (`Mod-Shift-B`) nomina l'id.
 
 ### L'aspetto del contenuto
 

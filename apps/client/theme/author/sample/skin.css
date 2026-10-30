@@ -5052,12 +5052,27 @@ kbd,
   outline-offset: 1px;
 }
 .cm-editor .cm-fub-block-drop {
-  background: var(--doc-link);
+  background: var(--doc-drop-line);
 }
-/* (0,4,0): batte la riga attiva resa trasparente in Live e il fondo del
-   codice, che altrimenti lascerebbero fuori una riga della selezione. */
-.cm-editor .cm-content .cm-line.cm-fub-block-selected {
-  background: var(--doc-selection);
+/* Il blocco vivo (N13). La selezione di blocchi è un velo sopra le righe,
+   così passa sopra il fondo del codice e la riga attiva; l'alone del blocco
+   appena posato e la passata del colore nuovo si spengono da soli; il blocco
+   sollevato galleggia sul foglio con la sua ombra. */
+.cm-editor .cm-fub-block-mark {
+  background: var(--doc-block-selected);
+  border-radius: 4px;
+}
+.cm-editor .cm-fub-block-halo {
+  background: var(--doc-block-selected);
+  box-shadow: 0 0 0 2px var(--doc-drop-line);
+}
+.cm-editor .cm-fub-block-pass {
+  background: var(--doc-block-hover);
+}
+.cm-editor .cm-fub-block-lift {
+  background: var(--doc-bg);
+  border-radius: 4px;
+  box-shadow: var(--shadow-3);
 }
 /* Sul fondo della selezione l'indirizzo del link vuole l'inchiostro pieno. */
 .cm-editor .cm-content .cm-fub-block-selected .cm-fub-link-pill {

@@ -12,15 +12,18 @@ import { writeClipboardText } from "../../../../../platform/clipboard";
 import { type Lifetime, openLifetime } from "../../../../../ui/lifetime";
 import { openSlashAt, slashAvailable } from "../slash";
 import { liveStrings } from "../strings";
+import { blockGesture } from "../block-gesture";
 import { detailsOf, setDetailsDefault } from "../details-live";
 import type { DetailsPair } from "../details";
 import { colorsAt, CONTENT_COLORS, lineText, setContentColor, type ColorKind, type ContentColor } from "../color";
 import { blockAnchor, blockLink } from "./anchor";
 import { columnsRun, dropAsColumn, intoColumns } from "./columns";
-import { blockModel, type Block } from "./model";
+import { blockModel, kindName, type Block } from "./model";
 import { type BlockRun, moveRun, moveSiblings, siblingsOf } from "./move";
 import { blockSelection, cursorBlock, deleteRun, duplicateRun, runOfSelection, selectBlocks, setBlockSelection } from "./selection";
 import { canTransform, targetOf, transformTo, type TransformTarget, unwrap } from "./transform";
+import { dragPose, type DragPose, LIFT_SCALE, setDragPose } from "./motion";
+import { animate, halt, liveState } from "../../../../../moto";
 
 export interface BlocksOptions {
   /// Il nome della pagina, per il link al blocco: `[[Pagina#^id]]`.
@@ -63,12 +66,6 @@ function indexOf(blocks: readonly Block[], key: BlockKey | null): number {
     if (block.from === key.from && block.depth === key.depth) return i;
   }
   return -1;
-}
-
-/// Il nome della specie, per la maniglia e per «Trasforma in».
-export function kindName(block: Pick<Block, "kind" | "level">): string {
-  if (block.kind === "heading") return liveStrings.t("blocks.kind.heading", { level: String(block.level) });
-  return liveStrings.t(`blocks.kind.${block.kind}`);
 }
 
 const TARGET_NAMES: Record<TransformTarget, () => string> = {
@@ -189,6 +186,31 @@ interface Drag {
   before: number | null;
   /// Il fratello sul cui bordo destro cadrebbe, come colonna accanto (K3).
   beside: number | null;
+  /// L'immagine sollevata del blocco (N13), con lo scorrimento di quando è
+  /// partita: segue il puntatore anche mentre la vista scorre. Col moto
+  /// ridotto c'è lo stesso, ferma: è uno stato, e soltanto i passaggi saltano.
+  lift: { readonly el: HTMLElement; readonly scroll: number } | null;
+}
+
+/// Dove sarebbero le coordinate `seen` della riga di `pos` a corsa finita: il
+/// moto dei Blocchi (N13) può star portando la riga altrove, e le maniglie
+/// vanno dove la riga arriva, non dove passa. Le righe si scalano dal loro
+/// angolo (`motion.ts`).
+function atRest(view: EditorView, pos: number, seen: { left: number; right: number; top: number; bottom: number }) {
+  const node = view.domAtPos(pos).node;
+  const line = (node instanceof Element ? node : node.parentElement)?.closest(".cm-line");
+  const live = line ? liveState(line) : null;
+  if (!line || !live) return seen;
+  const rect = line.getBoundingClientRect();
+  const { x = 0, y = 0, scaleX = 1, scaleY = 1 } = live.pose;
+  const left = rect.left - x;
+  const top = rect.top - y;
+  return {
+    left: left + (seen.left - rect.left) / scaleX,
+    right: left + (seen.right - rect.left) / scaleX,
+    top: top + (seen.top - rect.top) / scaleY,
+    bottom: top + (seen.bottom - rect.top) / scaleY,
+  };
 }
 
 /// La parte destra del testo, in frazione della sua larghezza, dove un blocco
@@ -348,8 +370,9 @@ class HandlesView {
         const block = blocks[index]!;
         const line = view.state.doc.lineAt(block.from);
         const start = line.from + /^\s*/.exec(line.text)![0].length;
-        const coords = view.coordsAtPos(Math.min(start, line.to), 1) ?? view.coordsAtPos(line.from, 1);
-        if (!coords) return null;
+        const seen = view.coordsAtPos(Math.min(start, line.to), 1) ?? view.coordsAtPos(line.from, 1);
+        if (!seen) return null;
+        const coords = atRest(view, block.from, seen);
         const scroller = view.scrollDOM.getBoundingClientRect();
         const lineBlock = view.lineBlockAt(block.from);
         // Centrate sulla prima riga di testo, non sul blocco di riga: un
@@ -456,12 +479,12 @@ class HandlesView {
       this.withRun(key, (state, all, found) => {
         const spec = moveRun(state, all, found, dir);
         if (!spec) return;
-        const { follow, ...move } = spec;
+        const { follow, origin, moved, ...move } = spec;
         const value = state.field(blockSelection, false);
         const effects = value
           ? [setBlockSelection.of({ anchor: follow(value.anchor) ?? value.anchor, head: follow(value.head) ?? value.head, depth: value.depth })]
           : [];
-        view.dispatch({ ...move, effects: [...effects, EditorView.announce.of(liveStrings.t("blocks.moved"))] });
+        view.dispatch({ ...move, effects });
       });
     const colors = this.colorItems(key, act);
     // Ciò che adesso non si può fare non si vede: una voce grigia senza un
@@ -500,7 +523,7 @@ class HandlesView {
         label: liveStrings.t("blocks.menu.columns"),
         run: act(() => this.withRun(key, (state, all, found) => {
           const picked = columnsRun(state, all, found);
-          if (picked) view.dispatch(intoColumns(state, all, picked));
+          if (picked) view.dispatch({ ...intoColumns(state, all, picked), annotations: blockGesture.of({ kind: "columns" }) });
         })),
       },
     ], [
@@ -591,7 +614,7 @@ class HandlesView {
     const index = indexOf(blocks, this.shown);
     if (index < 0) return;
     const life = openLifetime();
-    const drag: Drag = { pointer: event.pointerId, startY: event.clientY, key: keyOf(blocks[index]!), life, moving: false, x: event.clientX, y: event.clientY, before: null, beside: null };
+    const drag: Drag = { pointer: event.pointerId, startY: event.clientY, key: keyOf(blocks[index]!), life, moving: false, x: event.clientX, y: event.clientY, before: null, beside: null, lift: null };
     this.drag = drag;
     try { this.grip.setPointerCapture(event.pointerId); } catch { /* un puntatore finto */ }
     life.listen(this.grip, "pointermove", (move) => {
@@ -603,6 +626,7 @@ class HandlesView {
         drag.moving = true;
         this.view.dom.classList.add("cm-fub-blocks-dragging");
         if (this.menu) closeContextMenu();
+        this.liftUp(drag);
       }
       this.track();
     });
@@ -638,6 +662,7 @@ class HandlesView {
     if (index < 0) return this.endDrag(false);
     const run = runFor(state, blocks, index);
     const sibs = siblingsOf(blocks, run.first);
+    if (drag.lift) drag.lift.el.style.translate = `0 ${this.liftOffset(drag)}px`;
     const height = drag.y - view.documentTop;
     const content = view.contentDOM.getBoundingClientRect();
     const scroller = view.scrollDOM.getBoundingClientRect();
@@ -658,6 +683,7 @@ class HandlesView {
         this.drop.style.left = `${content.right - scroller.left + view.scrollDOM.scrollLeft - 2}px`;
         this.drop.style.width = "2px";
         this.drop.style.height = `${Math.max(16, bottom - top)}px`;
+        this.part(drag, null);
         return;
       }
     }
@@ -674,6 +700,7 @@ class HandlesView {
     const b = sibs.indexOf(run.last);
     // Davanti a sé o subito dopo di sé non si sposta niente.
     drag.before = gap >= a && gap <= b + 1 ? null : before;
+    this.part(drag, drag.before === null ? null : this.parting(blocks, sibs, run, a, b, gap));
     if (drag.before === null) {
       this.drop.hidden = true;
       return;
@@ -687,10 +714,133 @@ class HandlesView {
     this.drop.style.width = `${Math.max(40, content.right - (first?.left ?? content.left))}px`;
   }
 
-  endDrag(commit: boolean): void {
+  /// Solleva il blocco: un'immagine delle sue righe galleggia sopra il
+  /// foglio e segue il puntatore, mentre al suo posto resta il vuoto.
+  liftUp(drag: Drag): void {
+    const view = this.view;
+    const span = this.liftedSpan(drag);
+    if (!span) return;
+    const rows = Array.from(view.contentDOM.children).filter((child): child is HTMLElement => {
+      if (!(child instanceof HTMLElement)) return false;
+      try {
+        const pos = view.posAtDOM(child, 0);
+        return pos >= span.from && pos <= span.to;
+      } catch {
+        return false;
+      }
+    });
+    if (rows.length === 0) return;
+    const scroller = view.scrollDOM.getBoundingClientRect();
+    const rects = rows.map((row) => row.getBoundingClientRect());
+    const top = Math.min(...rects.map((rect) => rect.top));
+    const left = Math.min(...rects.map((rect) => rect.left));
+    const el = document.createElement("div");
+    el.className = "cm-fub-block-lift";
+    el.setAttribute("aria-hidden", "true");
+    el.style.top = `${top - scroller.top + view.scrollDOM.scrollTop}px`;
+    el.style.left = `${left - scroller.left + view.scrollDOM.scrollLeft}px`;
+    el.style.width = `${Math.max(...rects.map((rect) => rect.right)) - left}px`;
+    // Dentro un contenuto finto, perché le righe copiate prendano la pelle.
+    const inner = document.createElement("div");
+    inner.className = view.contentDOM.className;
+    inner.style.padding = "0";
+    for (const row of rows) inner.append(row.cloneNode(true));
+    el.append(inner);
+    view.scrollDOM.append(el);
+    drag.life.add(() => el.remove());
+    drag.lift = { el, scroll: view.scrollDOM.scrollTop };
+    view.dispatch({ effects: setDragPose.of({ lifted: span, parted: null }) });
+    animate(el, { from: { scale: 1 / LIFT_SCALE }, spring: "snap" });
+  }
+
+  /// Il tratto del blocco trascinato, o di quello sollevato adesso.
+  liftedSpan(drag: Drag | null = null): { from: number; to: number } | null {
+    const state = this.view.state;
+    if (!drag) return state.field(dragPose).lifted;
+    const blocks = state.field(blockModel).blocks;
+    const index = indexOf(blocks, drag.key);
+    if (index < 0) return null;
+    const run = runFor(state, blocks, index);
+    return { from: blocks[run.first]!.from, to: blocks[run.last]!.to };
+  }
+
+  /// Di quanto (px) l'immagine sollevata sta sotto il posto vecchio.
+  liftOffset(drag: Drag): number {
+    return drag.lift ? drag.y - drag.startY + this.view.scrollDOM.scrollTop - drag.lift.scroll : 0;
+  }
+
+  /// Dove si vede adesso l'immagine sollevata rispetto al posto da cui è
+  /// partita, con la scala che ha in quell'istante (anche a metà salita).
+  liftPose(drag: Drag): { x: number; y: number; scale: number } | null {
+    if (!drag.lift) return null;
+    const { el } = drag.lift;
+    const scrollDOM = this.view.scrollDOM;
+    const scroller = scrollDOM.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
+    const left = parseFloat(el.style.left) + scroller.left - scrollDOM.scrollLeft;
+    const top = parseFloat(el.style.top) + scroller.top - scrollDOM.scrollTop;
+    return { x: rect.left - left, y: rect.top - top, scale: el.offsetWidth > 0 ? rect.width / el.offsetWidth : 1 };
+  }
+
+  /// Le righe che si scostano perché il blocco cada davanti al fratello
+  /// `gap`: scendendo, quelle fra il suo posto e l'arrivo salgono a coprire il
+  /// vuoto; salendo, quelle fra l'arrivo e il suo posto scendono a fargli
+  /// spazio. Soltanto le righe in vista.
+  parting(blocks: readonly Block[], sibs: readonly number[], run: BlockRun, a: number, b: number, gap: number): DragPose["parted"] {
+    const view = this.view;
+    const top = view.lineBlockAt(blocks[run.first]!.from).top;
+    const height = b + 1 < sibs.length
+      ? view.lineBlockAt(blocks[sibs[b + 1]!]!.from).top - top
+      : view.lineBlockAt(blocks[run.last]!.to).bottom - top;
+    const [from, to, dy] = gap > b + 1
+      ? [blocks[sibs[b + 1]!]!.from, blocks[sibs[gap - 1]!]!.to, -height]
+      : [blocks[sibs[gap]!]!.from, blocks[sibs[a - 1]!]!.to, height];
+    const shown = { from: Math.max(from, view.viewport.from), to: Math.min(to, view.viewport.to) };
+    return shown.from > shown.to ? null : { ...shown, dy };
+  }
+
+  /// Mette le righe nella posa `parted`, e quelle che cambiano posto ci
+  /// arrivano scivolando da dove si vedevano.
+  part(drag: Drag, parted: DragPose["parted"]): void {
+    if (!drag.lift) return;
+    const view = this.view;
+    const pose = view.state.field(dragPose);
+    const was = pose.parted;
+    if (was === parted || (was && parted && was.from === parted.from && was.to === parted.to && was.dy === parted.dy)) return;
+    const shift = (value: DragPose["parted"], pos: number) => (value && pos >= value.from && pos <= value.to ? value.dy : 0);
+    const rows: { el: Element; pos: number; y: number }[] = [];
+    for (const child of Array.from(view.contentDOM.children)) {
+      let pos: number;
+      try {
+        pos = view.posAtDOM(child, 0);
+      } catch {
+        continue;
+      }
+      if (shift(was, pos) === shift(parted, pos)) continue;
+      const live = liveState(child);
+      rows.push({ el: child, pos, y: live?.pose.y ?? 0 });
+    }
+    view.dispatch({ effects: setDragPose.of({ lifted: pose.lifted, parted }) });
+    for (const row of rows) {
+      const live = liveState(row.el);
+      halt(row.el);
+      animate(row.el, {
+        from: { y: row.y + shift(was, row.pos) - shift(parted, row.pos) },
+        ...(live ? { velocity: live.velocity } : {}),
+        spring: "soft",
+      });
+    }
+  }
+
+  /// `quiet`: lo smontaggio, che non può più toccare la vista.
+  endDrag(commit: boolean, quiet = false): void {
     const drag = this.drag;
     if (!drag) return;
     this.drag = null;
+    // Dove si vedeva l'immagine sollevata rispetto al posto vecchio: da lì
+    // parte l'atterraggio, o il ritorno se il gesto non sposta niente. Si
+    // legge prima che l'immagine se ne vada.
+    const lift = drag.moving ? this.liftPose(drag) : null;
     drag.life.close();
     this.drop.hidden = true;
     this.view.dom.classList.remove("cm-fub-blocks-dragging");
@@ -698,7 +848,15 @@ class HandlesView {
     // Il clic che segue il rilascio: lo consuma la maniglia, o lo azzera il
     // prossimo trascinamento.
     this.swallowClick = true;
-    if (!commit || (drag.before === null && drag.beside === null)) return;
+    const settle = (): void => {
+      const lead = this.liftedSpan();
+      if (quiet || (!lift && !lead)) return;
+      this.view.dispatch({
+        effects: setDragPose.of(null),
+        annotations: blockGesture.of({ kind: "drop", say: "", ...(lead ? { lead } : {}), ...(lift ? { lift } : {}) }),
+      });
+    };
+    if (!commit || (drag.before === null && drag.beside === null)) return settle();
     const view = this.view;
     const state = view.state;
     const blocks = state.field(blockModel).blocks;
@@ -707,25 +865,28 @@ class HandlesView {
     const run = runFor(state, blocks, index);
     if (drag.beside !== null) {
       const spec = dropAsColumn(state, blocks, run, drag.beside);
-      if (!spec) return;
-      view.dispatch({ ...spec, effects: [setBlockSelection.of(null), EditorView.announce.of(liveStrings.t("blocks.columned"))] });
+      if (!spec) return settle();
+      view.dispatch({ ...spec, effects: [setBlockSelection.of(null), setDragPose.of(null)], annotations: blockGesture.of({ kind: "columns" }) });
       view.focus();
       return;
     }
-    if (drag.before === null) return;
+    if (drag.before === null) return settle();
     const spec = moveSiblings(state, blocks, run.first, run.last, drag.before);
-    if (!spec) return;
-    const { follow, ...move } = spec;
+    if (!spec) return settle();
+    const { follow, origin, moved, ...move } = spec;
     const value = state.field(blockSelection, false);
-    const effects = value
-      ? [setBlockSelection.of({ anchor: follow(value.anchor) ?? value.anchor, head: follow(value.head) ?? value.head, depth: value.depth })]
-      : [];
-    view.dispatch({ ...move, userEvent: "move.drop", effects: [...effects, EditorView.announce.of(liveStrings.t("blocks.moved"))] });
+    const effects = [
+      setDragPose.of(null),
+      ...(value ? [setBlockSelection.of({ anchor: follow(value.anchor) ?? value.anchor, head: follow(value.head) ?? value.head, depth: value.depth })] : []),
+    ];
+    // L'atterraggio parte da dove si vedeva l'immagine sollevata.
+    const gesture = blockGesture.of({ kind: "drop", origin, lead: moved, ...(lift ? { lift } : {}) });
+    view.dispatch({ ...move, userEvent: "move.drop", effects, annotations: gesture });
     view.focus();
   }
 
   destroy(): void {
-    this.endDrag(false);
+    this.endDrag(false, true);
     this.view.dom.classList.remove("cm-fub-blocks-dragging");
     this.life.close();
   }

@@ -1,4 +1,4 @@
-// Il vault e la configurazione dei sei scenari, scritti in una cartella
+// Il vault e la configurazione degli scenari, scritti in una cartella
 // temporanea: mai il vault di chi misura.
 //
 // - `S1/Lunga.md`: una nota di 5.000 righe (S1);
@@ -6,12 +6,14 @@
 //   titolo e tre collegamenti alle vicine, così sono anche il grafo di S4;
 // - `S3/Lavagna.canvas`: trecento schede, venti delle quali note vive;
 // - `S5/Foglio.svg`: un disegno pesante, duemila tracciati, per la penna;
+// - `S7/Blocchi.md`: una nota di 2.000 righe a blocchi, per i Blocchi;
 // - `config/settings.json`: le impostazioni di macchina con la sonda accesa.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const NOTES = 10_000;
 export const LONG_LINES = 5_000;
+export const BLOCK_LINES = 2_000;
 export const CARDS = 300;
 export const LIVE_CARDS = 20;
 
@@ -25,6 +27,17 @@ function longNote() {
     else lines.push(`Riga ${i}: il corso di analisi del lunedì, con **una parola** in grassetto e un [[${noteName((i % NOTES) + 1)}]].`);
   }
   return lines.slice(0, LONG_LINES).join("\n") + "\n";
+}
+
+/// Paragrafi, titoli e voci separati da righe vuote: un blocco ogni due righe.
+function blocksNote() {
+  const lines = ["# Una nota a blocchi", ""];
+  for (let i = 1; lines.length < BLOCK_LINES; i++) {
+    if (i % 25 === 0) lines.push(`## Capitolo ${i / 25}`, "");
+    else if (i % 7 === 0) lines.push(`- Blocco ${i}: una voce dell'elenco`, "");
+    else lines.push(`Blocco ${i}: un paragrafo da spostare, con **una parola** in grassetto.`, "");
+  }
+  return lines.slice(0, BLOCK_LINES).join("\n") + "\n";
 }
 
 function note(i) {
@@ -61,12 +74,13 @@ function drawing() {
 export function writeFixtures(root) {
   const vault = join(root, "vault");
   const config = join(root, "config");
-  for (const dir of ["S1", "S2", "S3", "S5"]) mkdirSync(join(vault, dir), { recursive: true });
+  for (const dir of ["S1", "S2", "S3", "S5", "S7"]) mkdirSync(join(vault, dir), { recursive: true });
   mkdirSync(config, { recursive: true });
   writeFileSync(join(vault, "S1", "Lunga.md"), longNote());
   for (let i = 1; i <= NOTES; i++) writeFileSync(join(vault, "S2", `${noteName(i)}.md`), note(i));
   writeFileSync(join(vault, "S3", "Lavagna.canvas"), board());
   writeFileSync(join(vault, "S5", "Foglio.svg"), drawing());
+  writeFileSync(join(vault, "S7", "Blocchi.md"), blocksNote());
   // Il formato del livello macchina (`fub_kernel::settings`, schema 2).
   writeFileSync(join(config, "settings.json"), JSON.stringify({ version: 2, values: { "perf.probe": true } }, null, 2) + "\n");
   return { vault, config };

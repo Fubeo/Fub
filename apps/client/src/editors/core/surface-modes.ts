@@ -24,6 +24,14 @@ export function offersContext(modes: readonly SurfaceMode[], context: PaneMode):
   return modes.length > 1 && modes.some((mode) => mode.contextMode === context);
 }
 
+/// La superficie ha più di una modalità, e una si chiama `id`. Serve ai pochi
+/// comandi che nominano una modalità e non un ruolo: i Blocchi di una nota
+/// (`shell.mode.blocks`) hanno il ruolo della Live, e «Passa a Live» non li
+/// raggiungerebbe mai.
+export function offersMode(modes: readonly SurfaceMode[], id: string): boolean {
+  return modes.length > 1 && modes.some((mode) => mode.id === id);
+}
+
 /// La modalità che un comando di ruolo raggiunge: quella corrente, se ha già
 /// quel ruolo (due modalità con lo stesso ruolo non si scavalcano a vicenda),
 /// altrimenti la prima dichiarata con quel ruolo. `undefined` dove il ruolo

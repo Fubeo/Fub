@@ -34,6 +34,7 @@ export const SHELL_KEYS = {
   "shell.mode.reading": "Mod-e",
   "shell.mode.live": null,
   "shell.mode.source": null,
+  "shell.mode.blocks": "Mod-Shift-b",
   "shell.doc.source.open": null,
   "shell.doc.source.side": null,
   "shell.doc.source.close": null,

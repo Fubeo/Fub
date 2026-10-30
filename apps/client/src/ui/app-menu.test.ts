@@ -381,8 +381,8 @@ describe("il menu Vista e le scelte", () => {
     };
     let items = open();
     const radios = items.filter((item) => item.getAttribute("role") === "menuitemradio");
-    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Modalità Live", "Modalità Sorgente", "Modalità Lettura"]);
-    expect(radios.map((item) => item.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
+    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Modalità Live", "Modalità Blocchi", "Modalità Sorgente", "Modalità Lettura"]);
+    expect(radios.map((item) => item.getAttribute("aria-checked"))).toEqual(["false", "false", "true", "false"]);
     expect(items.map((item) => item.querySelector(".menu-label")?.textContent)).toContain("Passa alla luce giorno");
     closeContextMenu();
 
