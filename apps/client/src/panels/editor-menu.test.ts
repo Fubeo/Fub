@@ -133,6 +133,10 @@ describe("il compositore del menu dell'editor", () => {
     expect(more.label).toBe("Altro");
     expect(labels(more.items as MenuItem[])).toContain("Seleziona tutto");
     expect(labels(more.items as MenuItem[])).toContain("Voce 9");
+    const inside = more.items as MenuItem[];
+    const firstUtility = inside.findIndex((item) => item.label === "Seleziona tutto");
+    expect(inside[firstUtility]!.separator, "le utilità si staccano dalla coda della prima sezione").toBe(true);
+    expect(inside.filter((item) => item.separator)).toHaveLength(1);
   });
 
   it("una voce con un comando lo esegue dopo il suo gesto", () => {

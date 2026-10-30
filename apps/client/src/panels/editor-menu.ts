@@ -159,7 +159,8 @@ export function composeEditorMenu(menu: SurfaceMenu, host: EditorMenuHost): Menu
   let kept = context;
   if (count > MAX_TOP) {
     kept = context.slice(0, CONTEXT_KEPT);
-    more.push(...context.slice(CONTEXT_KEPT), ...tail.map((item, index) => ({ ...item, separator: index === 0 && more.length > 0 })));
+    const overflow = context.slice(CONTEXT_KEPT);
+    more.push(...overflow, ...tail.map((item, index) => ({ ...item, separator: index === 0 && overflow.length > 0 })));
   }
   section(t("editor_menu.group.context"), kept);
   section(t("editor_menu.group.clipboard"), clipboard);
