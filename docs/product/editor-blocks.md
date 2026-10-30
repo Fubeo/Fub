@@ -253,7 +253,7 @@ Preferenze: la scheda in cache torna subito nell'effetto `custom` con `ns`
 `fub.linkcard`, quella scaricata arriva col `job_done` del job
 `linkcard.fetch`. Della pagina si leggono soltanto i metadati della testa, fino a
 1 MiB; l'icona entra se è un'immagine raster entro 64 KiB, mai un SVG. Le
-schede stanno nella cache del bundle, ricostruibile. «Segnalibro web»
+schede stanno nella cache del bundle, ricostruibile. «Pagina web»
 (`markdown.linkcard`) apre dal «/» un paragrafo con `https://`.
 
 ## Dove si trova
