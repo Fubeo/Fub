@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "targets: gli obiettivi di N0, da tarare dopo la prima misura su ogni WebView. ci: la soglia di peggioramento del runner senza scheda grafica (job webview), una volta e mezza la sua misura vera; S3 dal run 40983466224 (p95 224 ms, max 411 ms, WebKitGTK sotto Xvfb, rendering software), che non dice nulla di una macchina con la GPU.",
+  "note": "targets: gli obiettivi di N0, da tarare dopo la prima misura su ogni WebView. ci: la soglia di peggioramento del runner senza scheda grafica (job webview), una volta e mezza la misura peggiore vista sul runner, che non dice nulla di una macchina con la GPU. WebKitGTK sotto Xvfb, rendering software: S1 p95 220 ms (run 40988538177), S2 p95 517 ms e S3 p95 238 ms, max 638 ms (run 40999650702); vedi docs/misure/2026-10-30-linux-webkitgtk-runner.md.",
   "targets": {
     "S1.keyToPaint.p95": 16.7,
     "S2.noteSwitch.p95": 100,
@@ -10,9 +10,9 @@
     "S6.coldStart": 1500
   },
   "ci": {
-    "S1.keyToPaint.p95": 16.7,
-    "S2.noteSwitch.p95": 100,
-    "S3.frameGap.p95": 340,
-    "S3.frameGap.max": 620
+    "S1.keyToPaint.p95": 330,
+    "S2.noteSwitch.p95": 780,
+    "S3.frameGap.p95": 360,
+    "S3.frameGap.max": 960
   }
 }
