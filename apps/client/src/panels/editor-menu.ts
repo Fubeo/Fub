@@ -280,6 +280,7 @@ export function openEditorMenu(event: MouseEvent, pane: HTMLElement, host: Edito
   host.focusPane();
   const strip = menu.miniBar ? host.miniBar?.(menu) ?? null : null;
   showContextMenu(pointOf(keyboard ? null : event, menu, pane), items, {
+    pointer: !keyboard,
     ...(strip ? { strip, stripLabel: t("editor_menu.mini_bar") } : {}),
   });
   return true;

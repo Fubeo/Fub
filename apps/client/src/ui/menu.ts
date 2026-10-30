@@ -83,6 +83,19 @@ export interface ContextMenuOptions {
   strip?: (host: HTMLElement) => () => void;
   /// Il nome della barra per chi ascolta.
   stripLabel?: string;
+  /// Il menu l'ha aperto il puntatore: il fuoco va al menu e non a una voce,
+  /// che altrimenti avrebbe l'anello della tastiera e sembrerebbe già scelta;
+  /// la prima freccia sceglie la prima voce. Senza, lo dice l'evento: il tasto
+  /// destro del mouse sì, il tasto Menu, Maiusc+F10 e un clic sintetico no.
+  pointer?: boolean;
+}
+
+/// Un `contextmenu` o un clic del puntatore, non della tastiera: il tasto Menu
+/// e Maiusc+F10 non hanno il tasto destro, o non hanno un punto.
+function byPointer(at: MouseEvent | HTMLElement | MenuPoint): boolean {
+  if (!(at instanceof MouseEvent)) return false;
+  if (at.clientX === 0 && at.clientY === 0) return false;
+  return at.type === "contextmenu" ? at.button === 2 : at.detail > 0;
 }
 
 type MenuClose = () => void;
@@ -157,6 +170,7 @@ export function showContextMenu(
     const back: MenuItem = { label: `‹ ${item.label}`, run: () => showContextMenu({ x, y }, items, options) };
     showContextMenu({ x, y }, [back, ...children], { ...options, strip: undefined });
   };
+  const pointer = options.pointer ?? byPointer(at);
   const root = renderMenu(items, lifetime, replaceWith);
   const menu = root.menu;
   menu.id = "context-menu";
@@ -186,7 +200,9 @@ export function showContextMenu(
   lifetime.add(trapFocus(menu, closeContextMenu));
   // `trapFocus` conserva e ripristina il fuoco precedente; il fuoco operativo
   // del menu, però, è una sola voce, secondo la regola del roving tabindex.
-  root.focusActive();
+  // Aperto dal puntatore, il fuoco sta nel menu finché una freccia non sceglie.
+  if (pointer) root.menu.focus({ preventScroll: true });
+  else root.focusActive();
   // Un click nella barra o in un menu, invece, è un gesto dentro la superficie:
   // la barra lavora coi suoi controlli, una voce chiude da sé quando agisce, e
   // quella di un sottomenu lo apre.
@@ -427,9 +443,15 @@ function renderMenu(
     });
     buttons[active]?.focus();
   };
+  // La fermata del roving tabindex c'è da subito, anche quando il fuoco resta
+  // al menu: Tab e il ritorno dal sottomenu trovano la voce attiva.
+  if (buttons[active]) buttons[active].tabIndex = 0;
   const move = (delta: number): void => {
     const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    focusItem((at >= 0 ? at : active) + delta);
+    // Nessuna voce col fuoco (il menu aperto dal puntatore): giù va alla voce
+    // attiva, su a quella prima, e dalla prima all'ultima.
+    if (at < 0) focusItem(delta > 0 ? active : active - 1);
+    else focusItem(at + delta);
   };
   // La ricerca per iniziale: una lettera porta alla prossima voce che comincia
   // così, e ripeterla scorre fra quelle che cominciano uguale.

@@ -136,6 +136,29 @@ describe("tastiera e fuoco del menu", () => {
     expect(document.activeElement).toBe(items[2]);
   });
 
+  it("aperto col tasto destro del mouse non mette l'anello su una voce: la prima freccia la sceglie", () => {
+    showContextMenu(new MouseEvent("contextmenu", { clientX: 10, clientY: 10, button: 2 }), [
+      { label: "Prima", run: () => {} },
+      { label: "Seconda", run: () => {} },
+    ]);
+    const menu = document.getElementById("context-menu")!;
+    const items = [...menu.querySelectorAll<HTMLButtonElement>("[role=menuitem]")];
+    expect(document.activeElement, "il fuoco è nel menu, non su una voce").toBe(menu);
+    expect(items.map((item) => item.tabIndex)).toEqual([0, -1]);
+    menu.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(document.activeElement).toBe(items[0]);
+    closeContextMenu();
+
+    showContextMenu({ x: 10, y: 10 }, [
+      { label: "Prima", run: () => {} },
+      { label: "Seconda", run: () => {} },
+    ], { pointer: true });
+    const again = document.getElementById("context-menu")!;
+    expect(document.activeElement).toBe(again);
+    again.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+    expect(document.activeElement, "e la freccia su va all'ultima").toBe([...again.querySelectorAll("[role=menuitem]")][1]);
+  });
+
   it("attiva una sola volta e restituisce il fuoco anche chiudendo con Escape", () => {
     const opener = document.createElement("button");
     document.body.appendChild(opener);
