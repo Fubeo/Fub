@@ -191,7 +191,7 @@ soglia delle scene grandi, con le stesse tre serie di corse.
 Quanto lo Scrittoio ci mette a rispondere a un gesto, col moto pieno e con
 l'ora vera. Lo misura [`interaction.mjs`](../../apps/client/bench/interaction.mjs),
 in Chromium con l'host finto; la stessa domanda nell'app vera, con la sua
-WebView, la fanno i sei scenari di [Misure nella WebView](../development/webview-measurements.md):
+WebView, la fanno i sette scenari di [Misure nella WebView](../development/webview-measurements.md):
 
 ```bash
 cd apps/client
