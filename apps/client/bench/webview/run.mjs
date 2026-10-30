@@ -208,10 +208,18 @@ const SCENARIOS = {
     const line = await session.execute("const lines = [...document.querySelectorAll('.pane.focus .cm-content > .cm-line')].filter((l) => l.textContent.startsWith('Blocco')); const r = lines[Math.floor(lines.length / 2)]?.getBoundingClientRect(); return r ? { x: Math.round(r.left + 40), y: Math.round(r.top + r.height / 2) } : null;");
     if (!line) throw new Error("nessuna riga di blocco in vista");
     await session.actions([{ type: "pointer", id: "mouse", parameters: { pointerType: "mouse" }, actions: [{ type: "pointerMove", x: line.x, y: line.y, duration: 0, origin: "viewport" }] }]);
-    // Una WebView senza un puntatore che sorvola (`hover: none`, come quella
-    // del runner) mostra la maniglia del blocco col cursore, non di quello
-    // sotto il puntatore: va bene tutte e due.
-    await session.waitFor("const h = document.querySelector('.pane.focus .cm-fub-block-handles'); return !!h && !h.hidden && (h.dataset.active === 'true' || !matchMedia('(hover: hover)').matches);", [], 10_000);
+    // La maniglia sta sul blocco sotto il puntatore, o su quello del cursore
+    // quando la WebView non manda il sorvolo di un puntatore che WebDriver
+    // muove (la WebKitGTK del runner sotto Xvfb): va bene tutte e due, perché
+    // il trascinamento parte dalla maniglia dove si vede.
+    try {
+      await session.waitFor("const h = document.querySelector('.pane.focus .cm-fub-block-handles'); return !!h && !h.hidden;", [], 10_000);
+    } catch (error) {
+      // Che cosa vedeva la pagina: senza, il referto dice soltanto che
+      // l'attesa è scaduta.
+      const seen = await session.execute("const h = document.querySelector('.pane.focus .cm-fub-block-handles'); const a = document.activeElement; return JSON.stringify({ handles: !!h, hidden: h?.hidden ?? null, active: h?.dataset.active ?? null, hover: matchMedia('(hover: hover)').matches, focus: a ? a.className || a.tagName : null });");
+      throw new Error(`${error.message} — ${seen}`);
+    }
     const grip = await centerOf(session, ".pane.focus .cm-fub-block-grip");
     await start(session);
     const steps = Math.round(3_000 / 16);
