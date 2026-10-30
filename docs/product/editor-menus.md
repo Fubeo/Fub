@@ -71,7 +71,7 @@ stesso; il «+» della maniglia mette un blocco vuoto e ci apre il «/».
   lettere sparse. Da tre lettere conta anche l'interno delle parole, da
   quattro si perdona un errore («/tabela» trova Tabella). Al massimo 12
   risultati. I comandi rapidi vanno in cima: «/tab 3x4», «/col 3», «/code
-  py», «/h2», «/oggi», «/venerdì», «/fra una settimana».
+  py», «/h2», «/domani», «/venerdì», «/fra una settimana».
 - **I passi.** Tabella (una griglia fino a 6 × 8), Colore (dieci testi e
   dieci fondi, col nome), Data (i giorni vicini e il mese), Riquadro (la
   galleria dei tipi), Link a una nota e Incorpora (le note, poi una sezione),
