@@ -1021,8 +1021,8 @@ export const IT = { // --- la scocca -------------------------------------------
 "docsearch.title": "Cerca nella nota",
 "docsearch.placeholder": "Cerca in questa nota…",
 "docsearch.no_doc": "Nessuna nota aperta",
-"commands.doc.search": "Cerca nella nota",
-"commands.doc.search.desc": "Cerca dentro la nota aperta, con lo stesso motore del vault.",
+"commands.doc.search": "Cerca nel documento",
+"commands.doc.search.desc": "Cerca dentro il documento aperto, con lo stesso motore del vault.",
 
 // --- il quick switcher (§21.5) -----------------------------------------
 //
@@ -3803,8 +3803,8 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "docsearch.title": "Search in note",
 "docsearch.placeholder": "Search in this note…",
 "docsearch.no_doc": "No note open",
-"commands.doc.search": "Search in note",
-"commands.doc.search.desc": "Search inside the open note, with the same engine as the vault.",
+"commands.doc.search": "Search in document",
+"commands.doc.search.desc": "Search inside the open document, with the same engine as the vault.",
 
 "switcher.title": "Go to note",
 "switcher.placeholder": "Go to note…",
