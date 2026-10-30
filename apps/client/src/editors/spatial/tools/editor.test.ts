@@ -5606,7 +5606,7 @@ describe("gli appunti", () => {
         { op: "set", id: A, attrs: { fill: "url(#rs1s1s1s1) #56b4e9" } },
       ],
     };
-    expect(editor.perform("draw.action.swatch_recolor", recolor)).toBe(true);
+    expect(editor.perform("draw.action.fill", recolor)).toBe(true);
     editor.select([B]);
     key("v", { ctrlKey: true, altKey: true });
     expect(rects()[1]).toBe(`<rect id="${B}" x="50" y="10" width="20" height="20" fill="url(#rs1s1s1s1) #56b4e9"/>`);
