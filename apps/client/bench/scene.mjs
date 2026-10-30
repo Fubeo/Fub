@@ -504,7 +504,7 @@ export const SCENE = onPage("shell", [
         await page.waitForSelector(".pane.focus .cm-fub-block-selected");
       } else {
         await page.click(".pane.focus .cm-fub-block-grip");
-        await page.waitForSelector(".cm-fub-block-menu");
+        await page.waitForSelector("#context-menu");
       }
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     },
