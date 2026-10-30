@@ -1,13 +1,12 @@
-// Il connettore nelle proprietà (livello Standard): che cosa ne legge il
-// pannello, e le operazioni che ne cambiano il tipo, gli agganci, l'etichetta
-// e il verso (formato della scena, connettori). Senza DOM: la sezione che le
-// mostra è `connector-panel.ts`, e l'editor le applica in un passo che si
-// annulla.
+// Le operazioni che cambiano il tipo, gli agganci, l'etichetta e il verso di
+// un connettore (formato della scena, connettori), senza DOM. L'editor non ha
+// più lo strumento Connettore né la sua sezione (ADR 0231): le usa soltanto il
+// foglio dei modelli di «Nuovo disegno» (`templates/sheet.ts`), per scrivere
+// i connettori dei diagrammi come li scriveva l'editor.
 //
-// - **Contano i connettori scelti.** Un gruppo che ne contiene non conta: il
-//   pannello parla degli oggetti che si sono scelti. Un connettore bloccato,
-//   o dentro un livello o un gruppo bloccato, si legge e non cambia; il
-//   pannello dice quanti sono.
+// - **Contano i connettori scelti.** Un gruppo che ne contiene non conta. Un
+//   connettore bloccato, o dentro un livello o un gruppo bloccato, si legge e
+//   non cambia: lo dice il suo `locked`.
 // - **Il tipo e gli agganci riscrivono il percorso.** Il motore dei connettori
 //   (`connectors.ts`) lo calcola con il tipo o gli agganci nuovi, e qui si
 //   scrive insieme a `fub:geom`: un capo libero resta dov'è. Si cambia l'aggancio
