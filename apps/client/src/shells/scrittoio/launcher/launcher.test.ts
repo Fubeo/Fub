@@ -12,6 +12,7 @@ import {
   type ShellCommand,
 } from "../../../ui/commands";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { closeContextMenu, showContextMenu } from "../../../ui/menu";
 import { setSearchPort } from "../../../state/search-port";
 import { state } from "../../../state/store";
 import type { Listing, Row } from "./sources";
@@ -242,6 +243,22 @@ describe("i comandi che lo aprono", () => {
     expect(selectedMode()).toContain("launcher.mode.commands");
     expect(common.switcher).not.toHaveBeenCalled();
     expect(common.palette).not.toHaveBeenCalled();
+  });
+
+  it("dai menu contestuali «Cerca fra tutti i comandi» apre i comandi con ciò che si è scritto, e smontato non risponde più", () => {
+    showContextMenu(new MouseEvent("contextmenu", { clientX: 10, clientY: 10 }), [{ label: "Apri", run: () => {} }], { pointer: false });
+    const foot = document.querySelector("#context-menu .menu-foot kbd");
+    expect(foot?.textContent).toBe("Ctrl+Shift+P");
+    for (const ch of "zz") document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: ch, bubbles: true, cancelable: true }));
+    document.querySelector<HTMLButtonElement>("#context-menu .menu-items [role=menuitem]")!.click();
+    expect(selectedMode()).toContain("launcher.mode.commands");
+    expect(world.asked[world.asked.length - 1]).toEqual(["commands", "zz"]);
+    launcher.close();
+    lifetime.close();
+    showContextMenu(new MouseEvent("contextmenu", { clientX: 10, clientY: 10 }), [{ label: "Apri", run: () => {} }], { pointer: false });
+    expect(document.querySelector("#context-menu .menu-foot kbd")).toBeNull();
+    closeContextMenu();
+    lifetime = openLifetime();
   });
 
   it("ognuno dei cinque suoi apre il suo modo", () => {

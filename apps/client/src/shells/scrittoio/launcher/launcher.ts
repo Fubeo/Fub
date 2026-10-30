@@ -17,10 +17,11 @@ import { platformSupports } from "../../../platform/capabilities";
 import { pageName } from "../../../rules/mirrored";
 import { focusEditor } from "../../../state/document-controller";
 import { identifier, trapFocus } from "../../../ui/a11y";
-import { ariaBinding, displayBinding, matchesBinding } from "../../../ui/commands";
+import { allCommands, ariaBinding, displayBinding, matchesBinding } from "../../../ui/commands";
 import { highlighted, markedTerms } from "../../../ui/highlight";
 import { FORMAT_ICON, formatKindOf } from "../../../ui/format-kind";
 import { iconEl } from "../../../ui/icons";
+import { registerMenuSearch } from "../../../ui/menu";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { notify } from "../../../ui/notify";
 import { scopeLabel } from "../../../ui/palette";
@@ -683,6 +684,14 @@ export function mountLauncher(lifetime: Lifetime): Launcher {
   };
 
   declareLauncherCommands(lifetime, launcher);
+  // Il piede dei menu contestuali: quando le voci non bastano, «Cerca fra tutti
+  // i comandi» apre qui i comandi con ciò che si è scritto.
+  lifetime.add(
+    registerMenuSearch({
+      run: (query) => launcher.open("commands", query),
+      hint: () => displayBinding(allCommands().find((entry) => entry.id === "shell.palette")?.binding),
+    }),
+  );
   lifetime.add(() => launcher.close());
   return launcher;
 }
