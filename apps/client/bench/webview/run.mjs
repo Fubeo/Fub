@@ -54,6 +54,12 @@ async function ready(session) {
   await session.waitFor("return !!window.__fubProbe && !!document.querySelector('#file-list .tree-row')", [], 120_000);
 }
 
+// Ctrl+O apre il lanciatore dello Scrittoio; finché lo Scrittoio non l'ha
+// montato, nei primi istanti dopo l'avvio, apre ancora il selettore comune.
+// Lo scenario va bene con tutti e due.
+const PICKER_INPUT = ".palette-input, .launcher-input";
+const PICKER_FIRST = ".palette-list [role=option], .launcher-list [role=option]";
+
 /// Apre un documento col selettore rapido (Ctrl+O), come chi lo cerca per
 /// nome, e aspetta che il riquadro a fuoco dica `text`.
 async function openByName(session, name, text, mark = null, timeoutMs = 60_000) {
@@ -62,7 +68,7 @@ async function openByName(session, name, text, mark = null, timeoutMs = 60_000) 
   for (let attempt = 1; ; attempt++) {
     await chord(session, CTRL, "o");
     try {
-      await session.waitFor("return document.activeElement?.classList.contains('palette-input') === true", [], timeoutMs / 3);
+      await session.waitFor(`return document.activeElement?.matches(${JSON.stringify(PICKER_INPUT)}) === true`, [], timeoutMs / 3);
       break;
     } catch (error) {
       if (attempt === 3) throw error;
@@ -70,7 +76,7 @@ async function openByName(session, name, text, mark = null, timeoutMs = 60_000) 
   }
   await session.keys(name);
   // L'elenco deve avere il risultato prima di Invio: si aspetta la prima voce.
-  await session.waitFor("return (document.querySelector('.palette-list [role=option]')?.textContent ?? '').includes(arguments[0])", [name], timeoutMs);
+  await session.waitFor(`return (document.querySelector(${JSON.stringify(PICKER_FIRST)})?.textContent ?? '').includes(arguments[0])`, [name], timeoutMs);
   if (mark) {
     await session.execute("window.__fubWait = window.__fubProbe.waitFor(arguments[0], arguments[1], 15000, arguments[2]); return true;", [mark, ".pane.focus .cm-content", text]);
   }
@@ -194,7 +200,7 @@ const SCENARIOS = {
 async function keep(session, id) {
   try {
     writeFileSync(join(out, `${id}-fallito.png`), await session.screenshot());
-    const state = await session.execute("return { focus: document.activeElement?.className ?? null, title: document.title, palette: document.querySelector('.palette-list')?.textContent?.slice(0, 400) ?? null, pane: document.querySelector('.pane.focus')?.textContent?.slice(0, 200) ?? null };");
+    const state = await session.execute("return { focus: document.activeElement?.className ?? null, title: document.title, palette: document.querySelector('.palette-list, .launcher-list')?.textContent?.slice(0, 400) ?? null, pane: document.querySelector('.pane.focus')?.textContent?.slice(0, 200) ?? null };");
     writeFileSync(join(out, `${id}-fallito.json`), JSON.stringify(state, null, 2) + "\n");
   } catch {
     // Una sessione già persa non ha niente da mostrare.

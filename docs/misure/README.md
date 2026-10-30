@@ -29,3 +29,4 @@ resta **non provato**.
 
 | Data | Sistema | WebView | Pagina |
 |---|---|---|---|
+| 2026-10-30 | Linux 7.0 (Azure), X11 sotto Xvfb | WebKitGTK, Safari 605.1.15 | [Runner della CI](2026-10-30-linux-webkitgtk-runner.md) |
