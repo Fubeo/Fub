@@ -590,6 +590,22 @@ async function copyAnchorLink(): Promise<void> {
   );
 }
 
+/// «Copia il link» dall'albero: un link per ogni voce, scritto come vuole il
+/// vault, uno per riga. Come per «Copia il link a questo punto», un link
+/// Markdown negli appunti non sa dove andrà e parte dalla radice.
+export async function copyNoteLinks(docs: readonly string[]): Promise<void> {
+  if (docs.length === 0) return;
+  const preference = await linkPreference();
+  const links = await Promise.all(docs.map(async (doc) => preference.style === "markdown"
+    ? `[${pageName(doc).replace(/[[\]\\]/g, "\\$&")}](${markdownDestination("", doc, "absolute")})`
+    : `[[${await wikiTarget(doc, preference.format)}]]`));
+  const text = links.join("\n");
+  await writeClipboardText(text).then(
+    () => notify(links.length === 1 ? t("document.anchor_copied", { link: text }) : t("explorer.links_copied", { count: String(links.length) }), "info"),
+    () => notify(t("tabmenu.copy_failed"), "guasto"),
+  );
+}
+
 /// Il riferimento più corto che porta davvero alla nota: il nome, poi il nome
 /// con l'estensione, poi il percorso senza estensione, poi il percorso intero.
 /// Lo decide la risoluzione del vault, non una regola copiata qui.
@@ -1827,6 +1843,16 @@ export async function closeUnpinnedAndRelease(paneId: string): Promise<void> {
   const tabs = paneState(paneId)?.tabs ?? [];
   const victims = tabs.filter((tab) => !tab.pinned);
   closeUnpinned(paneId);
+  for (const tab of victims) await releaseTab(paneId, tab);
+  await synchronize();
+}
+
+/// Chiude tutte le tab di un riquadro, anche le appuntate: chi lo chiede dal
+/// menu della scheda le ha nominate tutte.
+export async function closeAllAndRelease(paneId: string): Promise<void> {
+  const tabs = paneState(paneId)?.tabs ?? [];
+  const victims = [...tabs];
+  for (let i = tabs.length - 1; i >= 0; i--) closeTab(paneId, i);
   for (const tab of victims) await releaseTab(paneId, tab);
   await synchronize();
 }

@@ -34,6 +34,8 @@ export interface TreeSelectionHost {
   group(paths: string[]): Promise<unknown>;
   /// Le note scelte negli appunti dell'albero, per incollarle altrove.
   copy(paths: string[]): void;
+  /// I link alle note scelte negli appunti del sistema.
+  copyLinks(paths: string[]): Promise<unknown>;
   readonly lifetime: Lifetime;
 }
 
@@ -43,9 +45,10 @@ export interface TreeSelection {
   clear(): void;
   paths(): string[];
   /// Il menu del tasto destro su `path` quando è scelta insieme ad altre: i
-  /// gesti del gruppo, che valgono per tutte. `null` se `path` non è in una
-  /// scelta di almeno due, e allora vale il menu della nota.
-  menuFor(path: string): MenuItem[] | null;
+  /// gesti del gruppo, che valgono per tutte, e quelli che si trovano
+  /// scrivendo. `null` se `path` non è in una scelta di almeno due, e allora
+  /// vale il menu della nota.
+  menuFor(path: string): { readonly items: MenuItem[]; readonly searchable: MenuItem[] } | null;
 }
 
 export function mountTreeSelection(host: TreeSelectionHost): TreeSelection {
@@ -207,15 +210,20 @@ export function mountTreeSelection(host: TreeSelectionHost): TreeSelection {
   lifetime.add(() => picked.clear());
   repaint();
 
-  const menuFor = (path: string): MenuItem[] | null => {
+  const menuFor = (path: string): { items: MenuItem[]; searchable: MenuItem[] } | null => {
     if (!picked.has(path) || picked.size < 2) return null;
-    return [
-      { label: t("explorer.copy"), run: () => host.copy([...picked]) },
-      { label: t("explorer.selection.move"), run: () => void act(host.move) },
-      { label: t("explorer.selection.group"), run: () => void act(host.group) },
-      { label: t("explorer.selection.clear"), run: () => clear() },
-      { separator: true, label: t("explorer.selection.trash"), danger: true, run: () => void act(host.trash) },
-    ];
+    return {
+      items: [
+        { label: t("explorer.selection.move"), run: () => void act(host.move) },
+        { label: t("explorer.selection.group_menu"), run: () => void act(host.group) },
+        { separator: true, label: t("explorer.selection.copy_links"), run: () => void host.copyLinks([...picked]) },
+        { separator: true, label: t("explorer.selection.trash"), danger: true, run: () => void act(host.trash) },
+      ],
+      searchable: [
+        { label: t("explorer.selection.copy_files"), run: () => host.copy([...picked]) },
+        { label: t("explorer.selection.clear"), run: () => clear() },
+      ],
+    };
   };
 
   return { repaint, clear, paths: () => [...picked], menuFor };

@@ -111,13 +111,30 @@ function openContextMenu(on: HTMLElement): string[] {
   return menuLabels();
 }
 
-/// Sceglie la voce di quel nome nel menu già aperto.
-async function choose(entry: string): Promise<void> {
+/// Sceglie la voce di quel nome nel menu già aperto; ogni nome prima
+/// dell'ultimo apre un sottomenu.
+async function choose(...path: string[]): Promise<void> {
+  let menu = document.getElementById("context-menu");
+  for (const [i, entry] of path.entries()) {
+    const buttons = [...(menu?.querySelectorAll("button") ?? [])];
+    const selected = buttons.find((b) => labelOf(b) === entry);
+    if (!selected) throw new Error(`nel menu non c'è «${entry}», ci sono: ${buttons.map(labelOf)}`);
+    (selected as HTMLElement).click();
+    await settle();
+    if (i < path.length - 1) menu = document.querySelector<HTMLElement>(".context-submenu");
+  }
+}
+
+/// Le voci del sottomenu che `entry` apre nel menu già aperto.
+async function submenuLabels(entry: string): Promise<string[]> {
   const menu = document.getElementById("context-menu");
   const selected = [...(menu?.querySelectorAll("button") ?? [])].find((b) => labelOf(b) === entry);
   if (!selected) throw new Error(`nel menu non c'è «${entry}», ci sono: ${menuLabels()}`);
   (selected as HTMLElement).click();
   await settle();
+  const sub = document.querySelector<HTMLElement>(".context-submenu");
+  if (!sub) throw new Error(`«${entry}» non ha aperto il suo sottomenu`);
+  return [...sub.querySelectorAll("button")].map(labelOf);
 }
 
 /// Un diagramma di draw.io con due forme, che entrano com'erano.
@@ -243,11 +260,11 @@ describe("il menu File e la palette", () => {
 });
 
 describe("i contestuali dell'albero", () => {
-  it("«Importa un disegno qui…» di una cartella sceglie dal disco e fa nascere il disegno in quella cartella", async () => {
+  it("«Importa ▸ Un disegno…» di una cartella sceglie dal disco e fa nascere il disegno in quella cartella", async () => {
     const host = await start(VAULT, [drawingCreateSpec()]);
     const picked = catchPicker();
     openContextMenu(folderRow("note"));
-    await choose("Importa un disegno qui…");
+    await choose("Importa", "Un disegno…");
     pick(picked[0]!, new File([DRAWIO], "flusso.drawio.xml"));
     await importReady();
     expect(fieldInputs().map((input) => input.value)).toEqual(["flusso", "note"]);
@@ -259,7 +276,7 @@ describe("i contestuali dell'albero", () => {
     await start(VAULT, [drawingCreateSpec()]);
     const picked = catchPicker();
     openContextMenu(title());
-    await choose("Importa un disegno qui…");
+    await choose("Importa", "Un disegno…");
     pick(picked[0]!, new File([DRAWIO], "a.drawio"));
     await importReady();
     expect(fieldInputs()[1]!.value).toBe("");
@@ -269,7 +286,7 @@ describe("i contestuali dell'albero", () => {
     const { state } = await import("./state/store");
     state.activeSpace = "note";
     openContextMenu(title());
-    await choose("Importa un disegno qui…");
+    await choose("Importa", "Un disegno…");
     pick(picked[1]!, new File([DRAWIO], "b.drawio"));
     await importReady();
     expect(fieldInputs()[1]!.value).toBe("note");
@@ -289,12 +306,14 @@ describe("i contestuali dell'albero", () => {
   it("una nota non lo offre, né lo offre un file che si importa senza il comando dei disegni", async () => {
     await start(VAULT, [drawingCreateSpec()]);
     expect(openContextMenu(folderRow("Benvenuto.md"))).not.toContain("Importa in un disegno…");
-    expect(openContextMenu(folderRow("note"))).toContain("Importa un disegno qui…");
+    openContextMenu(folderRow("note"));
+    expect(await submenuLabels("Importa")).toContain("Un disegno…");
 
     await start(VAULT, []);
     expect(openContextMenu(folderRow("rete.drawio"))).not.toContain("Importa in un disegno…");
-    expect(openContextMenu(folderRow("note"))).not.toContain("Importa un disegno qui…");
-    expect(openContextMenu(title())).toEqual(["Nuova cartella", "Importa file…", "Importa una cartella…", "Ordina…", "Comprimi tutto", "Espandi tutto"]);
+    openContextMenu(folderRow("note"));
+    expect(await submenuLabels("Importa")).not.toContain("Un disegno…");
+    expect(openContextMenu(title())).toEqual(["Nuova nota", "Nuova cartella", "Ordina", "Comprimi tutto", "Importa"]);
   });
 });
 

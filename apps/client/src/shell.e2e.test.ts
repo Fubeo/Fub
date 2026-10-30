@@ -254,19 +254,27 @@ function row(name: string): HTMLElement {
 }
 
 /// Apre il menu contestuale su una riga e sceglie la voce con quell'etichetta.
-async function contextMenu(on: HTMLElement, entry: string): Promise<void> {
+async function contextMenu(on: HTMLElement, ...path: string[]): Promise<void> {
   on.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
-  const menu = document.getElementById("context-menu");
+  let menu = document.getElementById("context-menu");
   if (!menu) throw new Error("il menu contestuale non si è aperto");
-  const buttons = [...menu.querySelectorAll("button")];
   // L'etichetta, non il testo intero: accanto può esserci la scorciatoia.
   const label = (b: Element) => b.querySelector(".menu-label")?.textContent ?? b.textContent;
-  const selected = buttons.find((b) => label(b) === entry);
-  if (!selected) {
-    throw new Error(`nel menu non c'è «${entry}», ci sono: ${buttons.map(label)}`);
+  // Ogni nome prima dell'ultimo apre un sottomenu.
+  for (const [i, entry] of path.entries()) {
+    const buttons = [...menu.querySelectorAll("button")];
+    const selected = buttons.find((b) => label(b) === entry);
+    if (!selected) {
+      throw new Error(`nel menu non c'è «${entry}», ci sono: ${buttons.map(label)}`);
+    }
+    selected.click();
+    await settle();
+    if (i < path.length - 1) {
+      const sub = document.querySelector<HTMLElement>(".context-submenu");
+      if (!sub) throw new Error(`«${entry}» non ha aperto il suo sottomenu`);
+      menu = sub;
+    }
   }
-  selected.click();
-  await settle();
 }
 
 /// Una riga di impostazione che è la scorciatoia di un comando **della shell**,
@@ -717,6 +725,47 @@ describe("copia il link a questo punto", () => {
   });
 });
 
+describe("i menu dell'albero e della scheda", () => {
+  const tree = (path: string) => document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"] > .tree-row`)!;
+
+  it("«Copia ▸ Il link» di una nota mette negli appunti il suo [[link]]", async () => {
+    await start(VAULT);
+    const copied: string[] = [];
+    const { declareClipboard } = await import("./platform/clipboard");
+    const undeclare = declareClipboard(async (text) => { copied.push(text); });
+    await contextMenu(tree("Benvenuto.md"), "Copia", "Il link");
+    await waitFor("il link è negli appunti", () => copied.length === 1);
+    expect(copied).toEqual(["[[Benvenuto]]"]);
+    undeclare();
+  });
+
+  it("«Chiudi anche ▸ Tutte» chiude anche le schede appuntate, e ogni sessione si chiude", async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("Benvenuto.md");
+    await openDocument("note/Spesa.md");
+    await settle();
+    const { layout, setPinnedTab } = await import("./state/layout");
+    const pane = layout.focus;
+    setPinnedTab(pane, 0, true);
+    await settle();
+    expect(document.querySelectorAll(".pane .tab").length).toBe(2);
+    await contextMenu(document.querySelector<HTMLElement>(".pane .tab")!, "Chiudi anche", "Tutte");
+    await waitFor("le schede se ne vanno", () => document.querySelectorAll(".pane .tab").length === 0);
+  });
+
+  it("«Mostra le note che lo usano» apre il file e porta l'ispettore sui collegamenti", async () => {
+    await start({ ...VAULT, "foto.png": "png" });
+    const { setSidePanelController } = await import("./ui/side-panels");
+    const revealed: string[] = [];
+    const restore = setSidePanelController({ visible: () => false, reveal: (side) => void revealed.push(side), toggle: () => {} });
+    await contextMenu(tree("foto.png"), "Mostra le note che lo usano");
+    await waitFor("il file si apre", () => [...document.querySelectorAll(".pane .tab")].some((tab) => tab.textContent?.includes("foto")));
+    expect(revealed).toEqual(["inspector"]);
+    restore();
+  });
+});
+
 describe("comprimi ed espandi tutto dall'albero", () => {
   const folderItem = (path: string) =>
     document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"]`);
@@ -1089,7 +1138,7 @@ describe("apri un vault", () => {
     folder?.click();
     await waitFor("l'allegato compare", () => !!fileRow());
 
-    await contextMenu(fileRow()!, "Elimina");
+    await contextMenu(fileRow()!, "Sposta nel cestino");
     await waitFor("l'allegato è nel cestino", () => host.trash().length === 1);
     expect(Object.keys(host.files())).not.toContain("note/foto.png");
     expect(host.atGate("invokeCommand").map((call) => call.args.slice(0, 2))).toEqual([
@@ -1516,7 +1565,7 @@ describe("una sessione e le sue superfici", () => {
 
   it("«Aggiungi ai segnalibri» dal menu della riga salva la nota tra i segnalibri", async () => {
     await start(VAULT);
-    await contextMenu(row("Benvenuto"), "Aggiungi ai segnalibri");
+    await contextMenu(row("Benvenuto"), "Organizza", "Aggiungi ai segnalibri");
     const { listBookmarks } = await import("./state/bookmarks");
     await waitFor("il segnalibro è salvato", () =>
       listBookmarks().some((b) => b.target.k === "doc" && b.title.includes("Benvenuto")));
@@ -1656,7 +1705,7 @@ describe("nuova cartella", () => {
       await settle();
     };
 
-    await contextMenu(folderRow("note")!, "Nuova cartella");
+    await contextMenu(folderRow("note")!, "Nuovo", "Cartella");
     await typeFolder("Progetti");
     await waitFor("la sottocartella compare aperta sotto la madre", () => !!folderRow("note/Progetti"));
     expect(host.atGate("invokeCommand").map((call) => call.args.slice(0, 2))).toEqual([
@@ -2227,7 +2276,7 @@ describe("chiudere linguette e superfici", () => {
     typeInEditor("testo della nota cancellata");
     const unlock = host.throttle("invokeCommand");
 
-    await contextMenu(row("Benvenuto"), "Elimina");
+    await contextMenu(row("Benvenuto"), "Sposta nel cestino");
     await waitFor(
       "la cancellazione arriva al kernel",
       () => host.atGate("invokeCommand").some((c) => c.args[0] === "note.trash"),
@@ -2611,7 +2660,7 @@ describe("spostare un file col testo non ancora sul disco", () => {
     const host = await start(VAULT);
     typeInEditor("battuta prima di convertire");
 
-    await contextMenu(row("Benvenuto"), "Converti in cartella");
+    await contextMenu(row("Benvenuto"), "Organizza", "Converti in cartella");
     await settle(20);
 
     const writing = host.calls.findIndex((c) => c.gate === "writeDocument");
@@ -2787,7 +2836,7 @@ describe("ripristina", () => {
   it("una nota cestinata torna dalla view del cestino, che la shell non conosce", async () => {
     const host = await start(VAULT);
 
-    await contextMenu(row("Benvenuto"), "Elimina");
+    await contextMenu(row("Benvenuto"), "Sposta nel cestino");
     await waitFor("la nota è nel cestino", () => host.trash().length === 1);
     expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
 
@@ -2830,7 +2879,7 @@ describe("il cestino scelto", () => {
     } as SettingEntry;
     const host = await start(VAULT, [choice]);
 
-    await contextMenu(row("Benvenuto"), "Elimina");
+    await contextMenu(row("Benvenuto"), "Sposta nel cestino");
     await waitFor("la nota è nel cestino", () => host.trash().length === 1);
     expect(host.atGate("invokeCommand").map((call) => call.args[0])).toEqual(["trash.os"]);
     const { recentNotices } = await import("./ui/notify");
@@ -3381,6 +3430,46 @@ describe("portare a schermo un punto", () => {
     // La tela si stampa dal suo provider; non ha una resa da presentare né
     // una sintassi in cui scrivere un rimando.
     expect(await offered(), "la tela").toEqual([t("pane.print")]);
+  });
+
+  it("i menu dell'albero, delle schede e del riquadro stanno nel bilancio e parlano col lessico", async () => {
+    await start({ ...VAULT, "dati.zip": "zip" });
+    const { openDocument } = await import("./panels/document");
+    await openDocument("Benvenuto.md");
+    await settle();
+    const { forbiddenIn } = await import("./i18n/lexicon");
+    const { closeContextMenu } = await import("./ui/menu");
+    const tree = (path: string) => document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"] > .tree-row`)!;
+    const places: [string, () => HTMLElement, "click" | "contextmenu"][] = [
+      ["una nota", () => tree("Benvenuto.md"), "contextmenu"],
+      ["un altro file", () => tree("dati.zip"), "contextmenu"],
+      ["una cartella", () => tree("note"), "contextmenu"],
+      ["il titolo dell'albero", () => document.querySelector<HTMLElement>("#files-title")!, "contextmenu"],
+      ["una scheda", () => document.querySelector<HTMLElement>(".pane .tab")!, "contextmenu"],
+      ["il riquadro", () => panes()[0]!.querySelector<HTMLElement>("[data-pane-menu]")!, "click"],
+    ];
+    for (const [place, on, gesture] of places) {
+      if (gesture === "click") on().click();
+      else on().dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+      await settle();
+      const menu = document.getElementById("context-menu");
+      expect(menu, place).not.toBeNull();
+      const entries = [...menu!.querySelectorAll<HTMLElement>(".menu-items [role^=menuitem]")];
+      const clipboard = menu!.querySelector(".menu-clipboard") ? 1 : 0;
+      const groups = menu!.querySelectorAll(".menu-items .menu-separator").length + 1 + clipboard;
+      const labels = entries.map((entry) => entry.querySelector(".menu-label")?.textContent ?? "");
+      expect(entries.length + clipboard, `${place}: ${labels.join(", ")}`).toBeLessThanOrEqual(9);
+      expect(groups, place).toBeLessThanOrEqual(4);
+      const danger = entries.findIndex((entry) => entry.classList.contains("danger"));
+      if (danger >= 0) expect(entries.slice(danger).every((entry) => entry.classList.contains("danger")), place).toBe(true);
+      expect(labels.filter((label) => forbiddenIn(label) !== null), place).toEqual([]);
+      expect(menu!.querySelector(".menu-head"), `${place} ha la sua testata`).not.toBeNull();
+      if (place === "il titolo dell'albero") {
+        expect(menu!.querySelector(".menu-head-kind")!.textContent, "il nome dello spazio, senza il bottone accanto").toBe(document.getElementById("space-title")!.textContent);
+      }
+      closeContextMenu();
+      await settle();
+    }
   });
 
   it("la stampa salva prima ciò che il buffer ha, e su afterprint non lascia niente", async () => {

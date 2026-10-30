@@ -448,8 +448,14 @@ describe("la vista sorgente di una scheda", () => {
   it("il menu del riquadro la apre e la chiude", async () => {
     await start();
     await open("schizzo.draw");
-    const choose = async (label: string) => {
+    // Aprire e chiudere la sorgente si trova scrivendo nel menu; «Sorgente
+    // accanto» è una voce.
+    const choose = async (label: string, typed = "") => {
       focusedPane().querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
+      await settle();
+      for (const ch of typed) {
+        (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key: ch, bubbles: true, cancelable: true }));
+      }
       await settle();
       const entry = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")]
         .find((button) => button.querySelector(".menu-label")?.textContent === label);
@@ -458,12 +464,12 @@ describe("la vista sorgente di una scheda", () => {
       await settle();
       await settle();
     };
-    await choose("Apri come sorgente");
+    await choose("Apri come sorgente", "apri come");
     expect(mountedTextEditors()).toHaveLength(1);
-    await choose("Chiudi la vista sorgente");
+    await choose("Chiudi la vista sorgente", "chiudi la vista");
     expect(mountedTextEditors()).toHaveLength(0);
     expect(liveDraws()).toHaveLength(1);
-    await choose("Apri come sorgente accanto");
+    await choose("Sorgente accanto");
     expect(mountedTextEditors()).toHaveLength(1);
     expect(liveDraws()).toHaveLength(1);
     expect(document.querySelectorAll(".pane")).toHaveLength(2);

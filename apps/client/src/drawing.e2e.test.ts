@@ -692,6 +692,17 @@ describe("le immagini del vault nel disegno", () => {
 
 describe("«Esporta…» su un disegno", () => {
   const withExport = () => createFakeHost({ file: VAULT, draw: true, commands: [EXPORT_RUN] });
+  /// Le voci di «Esporta ▸» nel menu del riquadro a fuoco, coi loro bottoni.
+  const exportEntries = async (): Promise<{ labels: string[]; entries: HTMLButtonElement[] }> => {
+    const { t } = await import("./i18n/strings");
+    focusedPane().querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
+    await settle();
+    const top = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")];
+    top.find((button) => button.querySelector(".menu-label")?.textContent === t("pane.menu.export"))!.click();
+    await settle();
+    const entries = [...document.querySelectorAll<HTMLButtonElement>(".context-submenu button")];
+    return { labels: entries.map((button) => button.querySelector(".menu-label")?.textContent ?? ""), entries };
+  };
   const choices = () => [...document.querySelectorAll<HTMLElement>(".shell-dialog [role=option]")];
   const requests = (host: FakeHost) => host.atGate("invokeCommand")
     .filter((call) => call.args[0] === "export.run")
@@ -714,15 +725,12 @@ describe("«Esporta…» su un disegno", () => {
     const { t } = await import("./i18n/strings");
     await open("Benvenuto.md");
     expect(await offered(EXPORT_COMMANDS)).toEqual(EXPORT_COMMANDS);
-    focusedPane().querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
-    await settle();
-    const entries = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")];
-    const labels = entries.map((button) => button.querySelector(".menu-label")?.textContent ?? "");
-    expect(labels.filter((label) => label.startsWith(t("pane.export", { what: "" })))).toEqual([
-      t("pane.export", { what: t("markdown.export.html") }),
-      t("pane.export", { what: t("markdown.export.pdf") }),
+    const { labels, entries } = await exportEntries();
+    expect(labels.slice(0, 2)).toEqual([
+      t("pane.menu.export_as", { what: t("markdown.export.html") }),
+      t("pane.menu.export_as", { what: t("markdown.export.pdf") }),
     ]);
-    entries[labels.indexOf(t("pane.export", { what: t("markdown.export.html") }))]!.click();
+    entries[0]!.click();
     await waitFor("l'export è chiesto", () => requests(host).length === 1);
     expect(requests(host)).toEqual([
       { target: "importers.html", selection: { kind: "documents", value: ["Benvenuto.md"] }, options: {} },
@@ -760,19 +768,13 @@ describe("«Esporta…» su un disegno", () => {
     expect(focusedPane().contains(document.activeElement)).toBe(true);
   });
 
-  it("dal menu del riquadro ogni formato è una voce", async () => {
+  it("dal menu del riquadro ogni formato è una voce di «Esporta ▸»", async () => {
     const host = await start(withExport());
     const { t } = await import("./i18n/strings");
     await open("casa.svg");
-    focusedPane().querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
-    await settle();
-    const entries = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")];
-    const labels = entries.map((button) => button.querySelector(".menu-label")?.textContent ?? "");
-    expect(labels.filter((label) => label.startsWith(t("pane.export", { what: "" })))).toEqual([
-      t("pane.export", { what: "PNG" }),
-      t("pane.export", { what: "PDF" }),
-    ]);
-    entries[labels.indexOf(t("pane.export", { what: "PNG" }))]!.click();
+    const { labels, entries } = await exportEntries();
+    expect(labels.slice(0, 2)).toEqual([t("pane.menu.export_as", { what: "PNG" }), t("pane.menu.export_as", { what: "PDF" })]);
+    entries[0]!.click();
     await waitFor("l'export è chiesto", () => requests(host).length === 1);
     expect(requests(host)).toEqual([
       { target: "draw.png", selection: { kind: "documents", value: ["casa.svg"] }, options: {} },
@@ -796,13 +798,9 @@ describe("«Esporta…» su un disegno", () => {
     expect(requests(host)).toEqual([
       { target: "draw.pdf", selection: { kind: "documents", value: ["casa.svg"] }, options: { background: "paper", scope: "drawing" } },
     ]);
-    // Il menu del riquadro ha la finestra prima dei formati.
-    focusedPane().querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
-    await settle();
-    const labels = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")].map((button) => button.querySelector(".menu-label")?.textContent ?? "");
-    const at = labels.indexOf(t("commands.doc.export"));
-    expect(at).toBeGreaterThanOrEqual(0);
-    expect(labels.slice(at, at + 3)).toEqual([t("commands.doc.export"), t("pane.export", { what: "PNG" }), t("pane.export", { what: "PDF" })]);
+    // «Esporta ▸» ha i formati e, dopo, la finestra.
+    const { labels } = await exportEntries();
+    expect(labels).toEqual([t("pane.menu.export_as", { what: "PNG" }), t("pane.menu.export_as", { what: "PDF" }), t("pane.menu.export_other")]);
   });
 });
 

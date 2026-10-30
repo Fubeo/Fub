@@ -115,13 +115,30 @@ function openContextMenu(on: HTMLElement): string[] {
   return menuLabels();
 }
 
-/// Sceglie la voce di quel nome nel menu già aperto.
-async function choose(entry: string): Promise<void> {
+/// Sceglie la voce di quel nome nel menu già aperto; ogni nome prima
+/// dell'ultimo apre un sottomenu.
+async function choose(...path: string[]): Promise<void> {
+  let menu = document.getElementById("context-menu");
+  for (const [i, entry] of path.entries()) {
+    const buttons = [...(menu?.querySelectorAll("button") ?? [])];
+    const selected = buttons.find((b) => labelOf(b) === entry);
+    if (!selected) throw new Error(`nel menu non c'è «${entry}», ci sono: ${buttons.map(labelOf)}`);
+    (selected as HTMLElement).click();
+    await settle();
+    if (i < path.length - 1) menu = document.querySelector<HTMLElement>(".context-submenu");
+  }
+}
+
+/// Le voci del sottomenu che `entry` apre nel menu già aperto.
+async function submenuLabels(entry: string): Promise<string[]> {
   const menu = document.getElementById("context-menu");
   const selected = [...(menu?.querySelectorAll("button") ?? [])].find((b) => labelOf(b) === entry);
   if (!selected) throw new Error(`nel menu non c'è «${entry}», ci sono: ${menuLabels()}`);
   (selected as HTMLElement).click();
   await settle();
+  const sub = document.querySelector<HTMLElement>(".context-submenu");
+  if (!sub) throw new Error(`«${entry}» non ha aperto il suo sottomenu`);
+  return [...sub.querySelectorAll("button")].map(labelOf);
 }
 
 /// Registra un modulo proprio per `drawing.create` sul registro vivo della shell.
@@ -195,14 +212,14 @@ describe("il menu File", () => {
 });
 
 describe("il contestuale di una cartella", () => {
-  it("offre «Nuovo disegno qui…» dopo la nota, poi l'importazione e la cartella, e passa la cartella al modulo", async () => {
+  it("offre «Nuovo ▸ Disegno…» dopo la nota, accanto alla cartella, e passa la cartella al modulo", async () => {
     await start(VAULT, [drawingCreateSpec()]);
     const opened = await registerForm();
     const labels = openContextMenu(folderRow("note"));
-    expect(labels.indexOf("Nuovo disegno qui…")).toBe(labels.indexOf("Nuova nota qui") + 1);
-    expect(labels.indexOf("Importa un disegno qui…")).toBe(labels.indexOf("Nuovo disegno qui…") + 1);
-    expect(labels.indexOf("Nuova cartella")).toBe(labels.indexOf("Importa un disegno qui…") + 1);
-    await choose("Nuovo disegno qui…");
+    expect(labels.slice(0, 3)).toEqual(["Nuova nota qui", "Nuovo", "Importa"]);
+    expect(await submenuLabels("Nuovo")).toEqual(["Cartella", "Disegno…"]);
+    openContextMenu(folderRow("note"));
+    await choose("Nuovo", "Disegno…");
     expect(opened).toEqual([{ folder: "note" }]);
   });
 
@@ -210,8 +227,7 @@ describe("il contestuale di una cartella", () => {
     await start(VAULT, []);
     const labels = openContextMenu(folderRow("note"));
     expect(labels).toContain("Nuova nota qui");
-    expect(labels).not.toContain("Nuovo disegno qui…");
-    expect(labels).not.toContain("Importa un disegno qui…");
+    expect(await submenuLabels("Nuovo")).toEqual(["Cartella"]);
   });
 
   it("senza un modulo registrato apre la palette sullo stesso comando, con la cartella nel campo, e confermarla crea il disegno lì", async () => {
@@ -231,7 +247,7 @@ describe("il contestuale di una cartella", () => {
     resetCommandForms();
     expect(hasCommandForm("drawing.create")).toBe(false);
     openContextMenu(folderRow("note"));
-    await choose("Nuovo disegno qui…");
+    await choose("Nuovo", "Disegno…");
     await waitFor("la palette si apre sul modulo del comando", () => document.getElementById("command-palette") !== null);
     expect(document.querySelector(".draw-new")).toBeNull();
     const overlay = document.getElementById("command-palette")!;
@@ -253,7 +269,7 @@ describe("il contestuale di una cartella", () => {
     const { hasCommandForm } = await import("./ui/commands");
     expect(hasCommandForm("drawing.create")).toBe(true);
     openContextMenu(folderRow("note"));
-    await choose("Nuovo disegno qui…");
+    await choose("Nuovo", "Disegno…");
     // Il codice della galleria si carica tardi, con un `import()`.
     await waitFor("la galleria si apre", () => document.querySelector(".draw-new") !== null);
     // Il suo posto non lo prende la palette.
@@ -293,24 +309,24 @@ describe("il contestuale di una cartella", () => {
 describe("il contestuale del titolo dell'albero", () => {
   const title = (): HTMLElement => document.querySelector<HTMLElement>("#files-title")!;
 
-  it("offre «Nuovo disegno qui…» e l'importazione prima della cartella: nella radice senza cartella, in uno spazio con la sua", async () => {
+  it("offre «Nuovo disegno…» dopo la nota e la cartella: nella radice senza cartella, in uno spazio con la sua", async () => {
     await start(VAULT, [drawingCreateSpec()]);
     const opened = await registerForm();
     const labels = openContextMenu(title());
-    expect(labels).toEqual(["Nuovo disegno qui…", "Importa un disegno qui…", "Nuova cartella", "Importa file…", "Importa una cartella…", "Ordina…", "Comprimi tutto", "Espandi tutto"]);
-    await choose("Nuovo disegno qui…");
+    expect(labels).toEqual(["Nuova nota", "Nuova cartella", "Nuovo disegno…", "Ordina", "Comprimi tutto", "Importa"]);
+    await choose("Nuovo disegno…");
     expect(opened).toEqual([{}]);
 
     const { state } = await import("./state/store");
     state.activeSpace = "note";
     openContextMenu(title());
-    await choose("Nuovo disegno qui…");
+    await choose("Nuovo disegno…");
     expect(opened).toEqual([{}, { folder: "note" }]);
   });
 
   it("senza il comando ha soltanto la cartella", async () => {
     await start(VAULT, []);
-    expect(openContextMenu(title())).toEqual(["Nuova cartella", "Importa file…", "Importa una cartella…", "Ordina…", "Comprimi tutto", "Espandi tutto"]);
+    expect(openContextMenu(title())).toEqual(["Nuova nota", "Nuova cartella", "Ordina", "Comprimi tutto", "Importa"]);
   });
 });
 
