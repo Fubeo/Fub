@@ -52,10 +52,11 @@ function freshId(state: EditorState, random: () => number): string {
 
 const cryptoRandom = (): number => crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32;
 
-/// Il punto da collegare dove sta il cursore principale, o `null` fuori da un
-/// titolo o da un paragrafo (una riga vuota, un blocco di codice, una tabella).
-export function anchorAtCursor(state: EditorState, random: () => number = cryptoRandom): AnchorAtCursor | null {
-  const node = enclosingBlock(state, state.selection.main.head);
+/// Il punto da collegare dove sta il cursore principale (o in `pos`), o `null`
+/// fuori da un titolo o da un paragrafo (una riga vuota, un blocco di codice,
+/// una tabella).
+export function anchorAtCursor(state: EditorState, random: () => number = cryptoRandom, pos = state.selection.main.head): AnchorAtCursor | null {
+  const node = enclosingBlock(state, pos);
   if (!node) return null;
   const slice = state.sliceDoc(node.from, node.to);
   const written = findTrailingAnchor(slice);
