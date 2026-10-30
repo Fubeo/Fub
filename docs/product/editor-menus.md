@@ -8,33 +8,53 @@
 ## L'anatomia del menu
 
 Il tasto destro, il tasto Menu o Maiusc+F10 aprono in ogni editor un menu con
-le stesse sezioni, nello stesso ordine; una sezione vuota non c'è. In una nota
-Markdown in scrittura sono:
+le stesse parti, nello stesso ordine; una parte vuota non c'è.
 
-1. ciò che sta sotto il puntatore: le correzioni del correttore, il link
-   (apri, copia la destinazione, rimuovi il link), la casella di un'attività,
-   il rientro di una voce di lista, il contenuto di un blocco di codice, le
-   righe e colonne di una tabella in Sorgente, le proprietà, la nota a piè di
-   pagina;
-2. Taglia, Copia, Incolla, Incolla come testo semplice, «Copia come»
-   (Markdown, HTML, testo semplice);
-3. «Formato» e «Trasforma in»;
-4. «Inserisci», con i blocchi del «/»;
-5. «Comandi», con i comandi del vault dichiarati per il «/», e le voci dei
-   plugin per la nota;
-6. Copia link a questo punto, Cerca nel documento, Seleziona tutto. «Cerca
-   nel documento» c'è dove l'editor ha la sua barra di ricerca: note,
-   documenti di Word, codice; non su PDF, immagini, fogli e lavagne.
+1. **La testata**: che cosa sta sotto il puntatore, con la sua icona e il suo
+   nome, per esempio «Titolo 2 · Formula» o «Link alla nota · Media».
+2. **La riga degli appunti**: Taglia, Copia e Incolla come tre pulsanti, se
+   almeno due si possono fare; con uno solo, «Incolla» è una voce come le
+   altre.
+3. **Le voci del posto**, nei loro gruppi.
+4. «Formato ▸», soltanto dove non c'è la mini-barra.
+5. «Dai plugin ▸», dopo le voci di Fub.
+6. In fondo, in rosso, ciò che cancella.
+
+Tutto il resto non ruba un posto: si trova **scrivendo** nel piede del menu.
+Lì stanno Incolla senza formattazione, i comandi del vault dichiarati per il
+«/», Cerca nel documento, Seleziona tutto e le voci in più dell'editor. «Cerca
+nel documento» c'è dove l'editor ha la sua barra di ricerca: note, documenti
+di Word, codice; non su PDF, immagini, fogli e lavagne.
+
+Ogni menu tiene al massimo nove voci e quattro gruppi al primo livello. Una
+voce che adesso non si può fare non c'è; resta grigia soltanto quando dice
+perché. Le parole sono quelle del lessico dei menu (`i18n/lexicon.ts`): «Togli
+il link», «Apri con un'altra app», «Mostra nell'esploratore», «Incolla senza
+formattazione».
+
+In una nota Markdown in scrittura le voci del posto sono:
+
+| Sotto il puntatore | Voci |
+|---|---|
+| Testo | Incolla, Trasforma il blocco ▸, Inserisci un blocco…, Copia il link a questo punto |
+| Selezione | la riga degli appunti, Copia come ▸, Collega a una nota…, Estrai in una nota nuova |
+| Link alla nota | Apri, Apri a lato, Copia il link, Togli il link |
+| Indirizzo web | Apri nel browser, Copia l'indirizzo, Togli il link |
+| Immagine | Apri nel visore, Copia l'immagine, Larghezza ▸, Sostituisci l'immagine…, Mostra nell'esploratore |
+| Tag | Cerca le note con questo tag, Rinomina il tag ovunque…, Copia il tag |
+| Titolo | Copia il link al titolo, Piega la sezione, Estrai la sezione in una nota, Livello ▸ |
+| Elenco e attività | Segna come fatta, Aumenta o Riduci il rientro, Tipo di elenco ▸ |
+| Blocco di codice | Copia il codice, Linguaggio ▸, «Togli il blocco, tieni il testo» in fondo |
+| Tabella in Sorgente | Inserisci ▸, Sposta ▸, Elimina la riga e Elimina la colonna in fondo |
+| Parola sbagliata | le correzioni, Aggiungi al dizionario, Ignora in questa nota |
 
 Il tasto destro fuori dalla selezione porta lì il cursore; dentro, la lascia.
-Una voce che adesso non si può fare, come in sola lettura, è spenta. In
-Lettura il menu copia il testo scelto o il Markdown della nota, esporta e offre
-«Modifica da qui»; «Copia il link a questo punto» copia il punto cliccato.
-Il tasto destro su un link in Live lascia il cursore dov'è, così la sintassi
-del link resta nascosta. Aperto col mouse, il menu tiene il fuoco su di sé e
-nessuna voce ha l'anello: la prima freccia sceglie la prima voce, o l'ultima
-con la freccia su. Dal tasto Menu o da Maiusc+F10 il fuoco va subito alla
-prima voce.
+In Lettura il menu offre «Modifica qui», che porta il cursore nel punto
+cliccato, «Copia il link a questo punto» e «Copia la nota come ▸». Il tasto
+destro su un link in Live lascia il cursore dov'è, così la sintassi del link
+resta nascosta. Aperto col mouse, il menu tiene il fuoco su di sé e nessuna
+voce ha l'anello: la prima freccia sceglie la prima voce, o l'ultima con la
+freccia su. Dal tasto Menu o da Maiusc+F10 il fuoco va subito alla prima voce.
 
 Dove Fub non ha un menu, il tasto destro non apre quello della WebView: resta
 nei campi di testo, sul testo scelto, sul lettore audio e video e con
@@ -104,13 +124,17 @@ parametri (`markdown.table` con `rows` e `cols`).
 | Fogli di Excel | cella, intestazione di riga o di colonna, angolo, scheda del foglio, oggetto; la mini-barra di Excel |
 | Tela (`.canvas`) | sulla carta: modifica, apri, colore, duplica, ordine, allinea e distribuisci, inquadra, elimina; sull'arco: colore, inverti, elimina; sul vuoto: aggiungi qui (testo, file, link, gruppo) nel punto cliccato, inquadra, zoom |
 | Base (`.base`) | sulla riga o la scheda: apri la nota, copia il link `[[ ]]`, copia la riga; sulla cella: copia il valore, cerca questo valore, svuota la cella; sull'intestazione: raggruppa per la colonna, copia la colonna; in fondo la vista, la nota nuova e il CSV |
-| Immagini | copia l'immagine, zoom, il link `![[ ]]`, apri con l'applicazione esterna, mostra nell'albero |
+| Immagini | copia l'immagine, zoom, il link `![[ ]]`, apri con un'altra app, mostra nell'esploratore |
 | PDF | copia e copia con la citazione `[[file.pdf#page=N]]` del testo scelto, copia il link alla pagina, annota, il link `![[ ]]`, apri esterno |
 | Audio e video | sul lettore il menu del sistema; attorno, il link `![[ ]]` e apri esterno |
 
 In modalità Blocchi la maniglia di un blocco apre il suo menu col clic e col
-tasto destro: Trasforma in, Colore, Colonne, Duplica, Copia il link al blocco,
-Sposta su e giù, e «Elimina il blocco» per ultimo.
+tasto destro, con la testata «Blocco» e l'inizio del testo: Trasforma in ▸,
+Colore ▸ (Testo e Fondo, coi nove colori dei Blocchi), Duplica, Copia il link
+al blocco, Sposta su e giù, Affianca in colonne, e «Elimina il blocco» per
+ultimo. La griglia delle tabelle in Live ha la testata «Tabella», la riga
+degli appunti, Inserisci ▸, Sposta ▸, Ordina la colonna ▸, Allinea la colonna
+▸, Svuota la cella, e in fondo Elimina la riga e Elimina la colonna.
 
 Nell'albero, il tasto destro su una nota della scelta multipla apre il menu
 della scelta: Copia, Sposta in…, In una cartella nuova, Deseleziona e «Sposta
@@ -126,6 +150,11 @@ griglia delle tabelle in Live ha il suo
   superficie;
 - `apps/client/src/panels/editor-menu.ts`: il compositore e l'apertura;
 - `apps/client/src/ui/menu.ts`: il menu, il fuoco e la tastiera;
+- `apps/client/src/editors/text/profiles/markdown/surface.ts` e `menu.ts`: le
+  voci di una nota e ciò che sta sotto il puntatore;
+- `apps/client/src/i18n/lexicon.ts`: il lessico dei menu;
+- `apps/client/src/ui/menu-budget.test.ts` coi casi di `ui/menu-cases.ts`: il
+  bilancio di ogni menu;
 - `apps/client/src/ui/system-menu.ts`: il menu della WebView spento dove Fub
   non ne ha uno;
 - `apps/client/src/panels/mini-bar.ts`: la mini-barra;
