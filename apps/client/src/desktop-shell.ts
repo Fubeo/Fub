@@ -67,6 +67,7 @@ import { mountWebViewer } from "./ui/web-viewer";
 import { confirm } from "./platform/confirm";
 import { registerBaseRenderer } from "./editors/base/surface";
 import { applyRailMachineSettings, mountRail, refreshRailShortcuts, syncRail } from "./panels/rail";
+import { applySlashSettings } from "./panels/slash/prefs";
 import { mountStrings, onLanguage, resolvedLanguage, t, type Key } from "./i18n/strings";
 import { mountSplitter } from "./kit";
 import { mountActivity } from "./panels/activity";
@@ -145,6 +146,7 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
     const values = new Map(entries.map((entry) => [entry.spec.key, entry.value]));
     const valid = values.get("chrome.schema") === 1;
     applyRailMachineSettings(entries);
+    applySlashSettings(entries);
     // Non c'è più una barra in fondo: l'impostazione accende e spegne lo stato
     // del documento nella toolbar del riquadro (`#pane-status`).
     document.getElementById("app")?.toggleAttribute("data-status-off", valid && values.get("chrome.status.visible") === false);
@@ -183,7 +185,7 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
     }
   };
   lifetime.add(onEvent("setting_changed", ({ key }) => {
-    if (key.startsWith("chrome.") || key === MINIBAR_SETTING || key === "editor.slash") void reread();
+    if (key.startsWith("chrome.") || key === MINIBAR_SETTING || key.startsWith("editor.slash")) void reread();
   }));
   await reread();
 }

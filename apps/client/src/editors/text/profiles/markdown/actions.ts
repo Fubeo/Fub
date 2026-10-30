@@ -17,6 +17,7 @@ import {
   type EditorState,
   type Line,
   type StateCommand,
+  type Transaction,
 } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
 import type { SyntaxNode } from "@lezer/common";
@@ -61,6 +62,7 @@ import {
   toggleWikilink,
 } from "./commands";
 import { decodeDestination, escapeLinkLabel, linkDestination, normalizeLabel } from "./link-syntax";
+import { CALLOUT_TYPES } from "./kinds";
 
 export interface MarkdownAction {
   readonly run: StateCommand;
@@ -73,6 +75,10 @@ export interface MarkdownAction {
   readonly prose?: boolean;
   /// L'accordo della keymap del profilo, per il suggerimento del pulsante.
   readonly chord?: string;
+  /// L'azione con gli argomenti di un comando rapido («/tab 3x4»): `null`
+  /// se non sono buoni; senza argomenti è `run`. Assente per chi non ne
+  /// prende.
+  readonly withParams?: (params: Readonly<Record<string, unknown>>) => StateCommand | null;
 }
 
 // ── Letture ──────────────────────────────────────────────────────────────────
@@ -304,11 +310,18 @@ const insertCallout: StateCommand = ({ state, dispatch }) => {
   if (state.readOnly) return false;
   const callout = enclosingCallout(state);
   if (callout) return removeCallout(state, dispatch, callout);
+  return wrapCallout(state, dispatch, null);
+};
+
+/// Il riquadro attorno alle righe scelte. Senza tipo è `note`, selezionato
+/// perché lo si riscriva; con un tipo il cursore va alla fine del corpo.
+function wrapCallout(state: EditorState, dispatch: (tr: Transaction) => void, type: string | null): boolean {
+  const kind = type ?? "note";
   const lines = selectedLines(state);
   const first = lines[0]!;
   const last = lines[lines.length - 1]!;
   if (lines.length === 1 && first.text.trim() === "") {
-    const insert = `> [!note]${state.lineBreak}> `;
+    const insert = `> [!${kind}]${state.lineBreak}> `;
     dispatch(state.update({
       changes: { from: first.from, to: first.to, insert },
       selection: EditorSelection.cursor(first.from + insert.length),
@@ -319,22 +332,29 @@ const insertCallout: StateCommand = ({ state, dispatch }) => {
   }
   const body = state.doc.sliceString(first.from, last.to).split(state.lineBreak)
     .map((text) => (text.trim() === "" ? ">" : `> ${text}`));
-  const insert = [`> [!note]`, ...body].join(state.lineBreak);
+  const insert = [`> [!${kind}]`, ...body].join(state.lineBreak);
   dispatch(state.update({
     changes: { from: first.from, to: last.to, insert },
     // Il tipo, `note`, fra `> [!` e `]`: lo si riscrive per scegliere un altro.
-    selection: EditorSelection.range(first.from + 4, first.from + 8),
+    selection: type === null
+      ? EditorSelection.range(first.from + 4, first.from + 8)
+      : EditorSelection.cursor(first.from + insert.length),
     scrollIntoView: true,
     userEvent: "input",
   }));
   return true;
-};
+}
 
 /// Le colonne (K3): `[!columns]` con un `[!column]` per ogni blocco delle
 /// righe selezionate, da due a quattro; un blocco solo va nella prima e la
 /// seconda resta vuota, e su una riga vuota due colonne vuote, col cursore
 /// nella prima.
-const insertColumns: StateCommand = ({ state, dispatch }) => {
+const insertColumns: StateCommand = (target) => columnsOf(2)(target);
+
+/// Le colonne, almeno `count`: i blocchi scelti, e colonne vuote fino a
+/// `count`.
+function columnsOf(count: number): StateCommand {
+  return ({ state, dispatch }) => {
   if (state.readOnly) return false;
   const nl = state.lineBreak;
   const lines = selectedLines(state);
@@ -348,7 +368,7 @@ const insertColumns: StateCommand = ({ state, dispatch }) => {
   }
   const blocks = chunks.filter((chunk) => chunk.length > 0);
   if (blocks.length > 4) return false;
-  while (blocks.length < 2) blocks.push([""]);
+  while (blocks.length < count) blocks.push([""]);
   const column = (body: string[]) => [`> > [!column]`, ...body.map((text) => text === "" ? "> > " : `> > ${text}`)].join(nl);
   const text = [`> [!columns]`, blocks.map(column).join(`${nl}>${nl}`)].join(nl);
   const cursor = first.from + `> [!columns]${nl}> > [!column]${nl}> > `.length + (blocks[0]![0]?.length ?? 0);
@@ -359,7 +379,8 @@ const insertColumns: StateCommand = ({ state, dispatch }) => {
     userEvent: "input",
   }));
   return true;
-};
+  };
+}
 
 /// Un ripiegabile (K2, H9): `<details>` con il sommario intorno alle righe
 /// selezionate, che diventano il contenuto; su una riga vuota lo scheletro,
@@ -547,6 +568,43 @@ export function backtickFence(content: string): string {
 }
 
 const toggleCodeBlock = toggleFence(backtickFence, enclosingCodeFence);
+
+/// Il blocco di codice in `language`: su una riga vuota un recinto nuovo col
+/// cursore dentro; altrimenti il blocco della barra, col linguaggio scritto
+/// sulla sua apertura.
+function codeBlockIn(language: string): StateCommand {
+  return ({ state, dispatch }) => {
+    if (state.readOnly) return false;
+    const here = state.doc.lineAt(state.selection.main.head);
+    if (state.selection.main.empty && here.text.trim() === "" && !enclosingCodeFence(state)) {
+      const nl = state.lineBreak;
+      const open = "```" + language;
+      dispatch(state.update({
+        changes: { from: here.from, to: here.to, insert: `${open}${nl}${nl}` + "```" },
+        selection: EditorSelection.cursor(here.from + open.length + nl.length),
+        scrollIntoView: true,
+        userEvent: "input",
+      }));
+      return true;
+    }
+    let made: Transaction | null = null;
+    if (!toggleCodeBlock({ state, dispatch: (tr) => { made = tr; } }) || !made) return false;
+    const tr = made as Transaction;
+    const fence = enclosingCodeFence(tr.state);
+    dispatch(fence
+      ? state.update({ changes: tr.changes.compose(tr.state.changes({ from: fence.open.to, insert: language })), selection: tr.selection, scrollIntoView: true, userEvent: "input" })
+      : tr);
+    return true;
+  };
+}
+
+/// Il riquadro di tipo `type`, col cursore nel corpo.
+function calloutOf(type: string): StateCommand {
+  return ({ state, dispatch }) => {
+    if (state.readOnly || enclosingCallout(state)) return false;
+    return wrapCallout(state, dispatch, type);
+  };
+}
 /// Nel codice i `$$` sono testo: il blocco di formula non li tocca.
 const toggleMathBlock = prose(toggleFence(() => "$$", enclosingMathFence));
 
@@ -641,6 +699,28 @@ const insertTable: StateCommand = ({ state, dispatch }) => {
   return insertBlock(state, dispatch, lines, (start) => ({ anchor: start + 2, head: start + 2 + first.length }));
 };
 
+/// Una tabella di `rows` righe per `cols` colonne, intestazione compresa, col
+/// primo titolo selezionato.
+function tableOf(rows: number, cols: number): StateCommand {
+  return ({ state, dispatch }) => {
+    const heads = Array.from({ length: cols }, (_, i) => t("editor.table.column", { n: i + 1 }));
+    const empty = `| ${Array(cols).fill("").join(" | ")} |`;
+    const lines = [`| ${heads.join(" | ")} |`, `| ${Array(cols).fill("---").join(" | ")} |`, ...Array<string>(rows - 1).fill(empty)];
+    return insertBlock(state, dispatch, lines, (start) => ({ anchor: start + 2, head: start + 2 + heads[0]!.length }));
+  };
+}
+
+/// Un intero dentro i limiti, o `null` se non è un numero.
+function whole(value: unknown, low: number, high: number): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.min(high, Math.max(low, Math.round(value)));
+}
+
+/// Gli argomenti di un'azione: vuoti vuol dire l'azione della barra.
+function given(params: Readonly<Record<string, unknown>>): boolean {
+  return Object.keys(params).length > 0;
+}
+
 /// Il link: la selezione ne diventa il testo, o l'indirizzo se lo è già; il
 /// cursore finisce dove resta da scrivere. Dentro un link lo toglie, e resta
 /// il testo.
@@ -705,6 +785,79 @@ const insertDiagram: StateCommand = ({ state, dispatch }) => {
   }));
   return true;
 };
+
+// I modelli stanno in un chunk loro, come per il completamento: il «/» li
+// chiede quando si apre, e un modello chiesto prima che arrivino dà il
+// recinto vuoto, dove il completamento li propone.
+type DiagramTemplates = typeof import("./diagram-templates");
+let diagramTemplates: DiagramTemplates | null = null;
+let diagramTemplatesLoading: Promise<void> | null = null;
+
+/// Chiede i modelli dei diagrammi, una volta sola.
+export function loadDiagramTemplates(): Promise<void> {
+  diagramTemplatesLoading ??= import("./diagram-templates").then(
+    (module) => void (diagramTemplates = module),
+    (error: unknown) => {
+      diagramTemplatesLoading = null;
+      console.warn("Fub: i modelli dei diagrammi non si caricano.", error);
+    },
+  );
+  return diagramTemplatesLoading;
+}
+
+/// Un diagramma dal modello `id`: il recinto `mermaid` col corpo del modello,
+/// nella lingua dell'interfaccia, e il cursore alla fine del corpo.
+function diagramOf(id: string): StateCommand | null {
+  if (!diagramTemplates) {
+    void loadDiagramTemplates();
+    return insertDiagram;
+  }
+  const { DIAGRAM_TEMPLATES, templateText } = diagramTemplates;
+  const template = DIAGRAM_TEMPLATES.find((each) => each.id === id);
+  if (!template) return null;
+  return ({ state, dispatch }) => {
+    if (state.readOnly) return false;
+    const line = state.doc.lineAt(state.selection.main.head);
+    const nl = state.lineBreak;
+    const blank = line.text.trim() === "";
+    const before = blank ? "" : nl;
+    const indent = /^[\s>]*/.exec(line.text)![0];
+    const body = templateText(template, t("slash.locale").slice(0, 2), indent).split("\n").join(nl);
+    const open = "```mermaid";
+    const at = blank ? line.from : line.to;
+    const insert = `${before}${open}${nl}${body}${nl}\`\`\``;
+    dispatch(state.update({
+      changes: { from: at, to: blank ? line.to : at, insert },
+      selection: EditorSelection.cursor(at + insert.length - 3 - nl.length),
+      scrollIntoView: true,
+      userEvent: "input",
+    }));
+    return true;
+  };
+}
+
+/// Un testo al cursore, staccato dalla parola prima e seguito da uno spazio:
+/// il link a una nota, a una sezione, alla giornaliera di una data.
+function insertInline(text: string): StateCommand {
+  return ({ state, dispatch }) => {
+    if (state.readOnly) return false;
+    const range = state.selection.main;
+    const before = state.sliceDoc(Math.max(0, range.from - 1), range.from);
+    const insert = `${before === "" || /\s/.test(before) ? "" : " "}${text} `;
+    dispatch(state.update({
+      changes: { from: range.from, to: range.to, insert },
+      selection: EditorSelection.cursor(range.from + insert.length),
+      scrollIntoView: true,
+      userEvent: "input",
+    }));
+    return true;
+  };
+}
+
+/// Il bersaglio di un wikilink scelto in un passo: niente `]]`, `|` o a-capo.
+function linkTarget(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" && !/[\]|\r\n]/.test(value) ? value.trim() : null;
+}
 
 /// Una nota a piè di pagina: il richiamo dopo la selezione col primo numero
 /// libero, la definizione in fondo al documento, e il cursore lì a scriverla.
@@ -988,8 +1141,27 @@ export const MARKDOWN_ACTIONS: ReadonlyMap<string, MarkdownAction> = new Map<str
   ["markdown.comment", { run: toggleComment, active: pressed("comment"), prose: true }],
   ["markdown.clear", { run: clearFormatting, applicable: wouldRun(clearFormatting), prose: true }],
   ["markdown.link", { run: toggleLink, active: pressed("link"), prose: true }],
-  ["markdown.wikilink", { run: toggleWikilink, active: pressed("wikilink"), prose: true, chord: "Mod-k" }],
-  ["markdown.embed", { run: toggleEmbed, active: pressed("embed"), prose: true }],
+  ["markdown.wikilink", {
+    run: toggleWikilink,
+    active: pressed("wikilink"),
+    prose: true,
+    chord: "Mod-k",
+    withParams: (params) => {
+      if (!given(params)) return toggleWikilink;
+      const target = linkTarget(params["target"]);
+      return target === null ? null : insertInline(`[[${target}]]`);
+    },
+  }],
+  ["markdown.embed", {
+    run: toggleEmbed,
+    active: pressed("embed"),
+    prose: true,
+    withParams: (params) => {
+      if (!given(params)) return toggleEmbed;
+      const target = linkTarget(params["target"]);
+      return target === null ? null : insertInline(`![[${target}]]`);
+    },
+  }],
   ["markdown.image", { run: insertImage, prose: true }],
   ["markdown.footnote", { run: insertFootnote, prose: true }],
   ["markdown.footnote.delete", {
@@ -1017,18 +1189,70 @@ export const MARKDOWN_ACTIONS: ReadonlyMap<string, MarkdownAction> = new Map<str
     chord: "Shift-Tab",
   }],
   ["markdown.quote", { run: toggleQuote, active: quoteActive, prose: true }],
-  ["markdown.callout", { run: insertCallout, active: calloutActive, prose: true }],
+  ["markdown.callout", {
+    run: insertCallout,
+    active: calloutActive,
+    prose: true,
+    withParams: (params) => {
+      if (!given(params)) return insertCallout;
+      const type = params["type"];
+      return typeof type === "string" && (CALLOUT_TYPES as readonly string[]).includes(type) ? calloutOf(type) : null;
+    },
+  }],
   ["markdown.details", { run: insertDetails, prose: true }],
-  ["markdown.columns", { run: insertColumns, prose: true }],
-  ["markdown.codeblock", { run: toggleCodeBlock, active: (s) => enclosingCodeFence(s) !== null }],
+  ["markdown.columns", {
+    run: insertColumns,
+    prose: true,
+    withParams: (params) => {
+      if (!given(params)) return insertColumns;
+      const count = params["count"];
+      return typeof count === "number" && Number.isInteger(count) && count >= 2 && count <= 4 ? columnsOf(count) : null;
+    },
+  }],
+  ["markdown.codeblock", {
+    run: toggleCodeBlock,
+    active: (s) => enclosingCodeFence(s) !== null,
+    withParams: (params) => {
+      if (!given(params)) return toggleCodeBlock;
+      const language = params["language"];
+      return typeof language === "string" && /^[\w+#.-]{0,32}$/.test(language) ? codeBlockIn(language) : null;
+    },
+  }],
   ["markdown.mathblock", { run: toggleMathBlock, active: (s) => enclosingMathFence(s) !== null, prose: true }],
-  ["markdown.diagram", { run: insertDiagram, prose: true }],
+  ["markdown.diagram", {
+    run: insertDiagram,
+    prose: true,
+    withParams: (params) => {
+      if (!given(params)) return insertDiagram;
+      return typeof params["template"] === "string" ? diagramOf(params["template"]) : null;
+    },
+  }],
   ["markdown.rule", { run: insertRule, prose: true }],
   ["markdown.toc", { run: insertToc, prose: true }],
   ["markdown.mention", { run: insertMention, prose: true }],
-  ["markdown.date", { run: insertMention, prose: true }],
+  ["markdown.date", {
+    run: insertMention,
+    prose: true,
+    // La data detta: il link alla sua giornaliera, che la superficie sa dove
+    // sta (`target`), col giorno scritto per esteso (`text`).
+    withParams: (params) => {
+      if (!given(params)) return insertMention;
+      const target = linkTarget(params["target"]);
+      const text = params["text"];
+      return target === null || typeof text !== "string" || /[\]|\r\n]/.test(text) ? null : insertInline(`[[${target}|${text}]]`);
+    },
+  }],
   ["markdown.linkcard", { run: insertLinkCard, prose: true }],
-  ["markdown.table", { run: insertTable, prose: true }],
+  ["markdown.table", {
+    run: insertTable,
+    prose: true,
+    withParams: (params) => {
+      if (!given(params)) return insertTable;
+      const rows = whole(params["rows"] ?? 2, 1, 50);
+      const cols = whole(params["cols"] ?? 2, 1, 12);
+      return rows === null || cols === null ? null : tableOf(rows, cols);
+    },
+  }],
   ["markdown.property.add", { run: addProperty, chord: "Mod-;" }],
   ["markdown.property.up", { run: moveProperty(-1), applicable: canMoveProperty(-1), chord: "Alt-ArrowUp" }],
   ["markdown.property.down", { run: moveProperty(1), applicable: canMoveProperty(1), chord: "Alt-ArrowDown" }],

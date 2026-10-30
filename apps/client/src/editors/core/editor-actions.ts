@@ -14,7 +14,8 @@
 
 /// Il `ns` dell'intento con cui un comando chiede alla shell di eseguire
 /// un'azione dell'editor sulla superficie col fuoco (`fub_abi::ui::EDITOR_ACTION_NS`).
-/// Il payload è `{ "action": "<id>" }`.
+/// Il payload è `{ "action": "<id>" }`, con `"params"` quando il comando ha
+/// ricevuto degli argomenti (`markdown.table` con `rows` e `cols`).
 export const EDITOR_ACTION_NS = "fub.editor.action";
 
 /// Lo stato di un'azione dove sta adesso il cursore principale.
@@ -48,8 +49,10 @@ export interface SurfaceEditorActions {
   editable(): boolean;
   state(id: string): EditorActionState;
   /// Esegue l'azione come una battuta dell'utente: nella cronologia locale e
-  /// nella sessione del documento. `false` se adesso non ha fatto niente.
-  run(id: string): boolean;
+  /// nella sessione del documento. `params` sono gli argomenti di un comando
+  /// rapido; un'azione che non ne prende li ignora. `false` se adesso non ha
+  /// fatto niente.
+  run(id: string, params?: Readonly<Record<string, unknown>>): boolean;
   /// L'accordo con cui la stessa azione si esegue da tastiera nell'editor,
   /// nella sintassi delle scorciatoie (`Mod-b`); `null` se non ne ha.
   chord(id: string): string | null;
@@ -67,4 +70,11 @@ export function editorActionOf(payload: unknown): string | null {
   if (typeof payload !== "object" || payload === null) return null;
   const action = (payload as { action?: unknown }).action;
   return typeof action === "string" && action !== "" ? action : null;
+}
+
+/// Gli argomenti di un intento `fub.editor.action`: un oggetto, o vuoto.
+export function editorActionParams(payload: unknown): Readonly<Record<string, unknown>> {
+  if (typeof payload !== "object" || payload === null) return {};
+  const params = (payload as { params?: unknown }).params;
+  return typeof params === "object" && params !== null && !Array.isArray(params) ? params as Record<string, unknown> : {};
 }

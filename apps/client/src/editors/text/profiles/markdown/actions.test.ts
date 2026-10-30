@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { EditorSelection, EditorState, type Transaction } from "@codemirror/state";
-import { MARKDOWN_ACTIONS, markdownActionState, relinkImage } from "./actions";
+import { loadDiagramTemplates, MARKDOWN_ACTIONS, markdownActionState, relinkImage } from "./actions";
 import { markdownKeymap } from "./commands";
 import { t } from "../../../../i18n/strings";
 
@@ -352,5 +352,61 @@ describe("un'immagine remota scaricata nel vault (L04)", () => {
 
   it("non scrive niente se l'indirizzo non c'è più", () => {
     expect(relink("![a](https://e.it/b.png)", url, "a.png")).toBeNull();
+  });
+});
+
+describe("le azioni con gli argomenti dei comandi rapidi", () => {
+  function runWith(id: string, params: Record<string, unknown>, spec: string): string | null {
+    const command = action(id).withParams?.(params);
+    if (!command) return null;
+    let out: Transaction | null = null;
+    const ran = command({ state: mk(spec), dispatch: (tr) => { out = tr; } });
+    return ran && out ? show((out as Transaction).state) : null;
+  }
+
+  it("una tabella di righe per colonne, intestazione compresa, col cursore nella prima", () => {
+    const [a, b, c] = [1, 2, 3].map((n) => t("editor.table.column", { n }));
+    expect(runWith("markdown.table", { rows: 3, cols: 3 }, "|"))
+      .toBe(`| ‹${a}› | ${b} | ${c} |\n| --- | --- | --- |\n|  |  |  |\n|  |  |  |\n`);
+    expect(runWith("markdown.table", { rows: 99, cols: 99 }, "|")!.split("\n").length).toBe(52);
+    expect(runWith("markdown.table", { rows: "tre" }, "|")).toBeNull();
+  });
+
+  it("le colonne quante se ne chiedono, da due a quattro", () => {
+    expect(runWith("markdown.columns", { count: 3 }, "|")!.match(/\[!column\]/g)).toHaveLength(3);
+    expect(runWith("markdown.columns", { count: 9 }, "|")).toBeNull();
+  });
+
+  it("il blocco di codice col suo linguaggio", () => {
+    expect(runWith("markdown.codeblock", { language: "python" }, "|")).toBe("```python\n|\n```");
+    expect(runWith("markdown.codeblock", { language: "py thon" }, "|")).toBeNull();
+  });
+
+  it("il riquadro del tipo chiesto, col cursore nel corpo", () => {
+    expect(runWith("markdown.callout", { type: "warning" }, "|")).toBe("> [!warning]\n> |");
+    expect(runWith("markdown.callout", { type: "nonesiste" }, "|")).toBeNull();
+  });
+
+  it("il link a una nota scelta, e l'incorporo, staccati dal testo prima", () => {
+    expect(runWith("markdown.wikilink", { target: "Statistica/Media" }, "Vedi|")).toBe("Vedi [[Statistica/Media]] |");
+    expect(runWith("markdown.embed", { target: "Media#Formula" }, "|")).toBe("![[Media#Formula]] |");
+    expect(runWith("markdown.wikilink", { target: "a]]b" }, "|")).toBeNull();
+  });
+
+  it("la data detta: il link alla giornaliera col giorno per esteso", () => {
+    expect(runWith("markdown.date", { target: "Diario/2026-10-30", text: "30 ottobre 2026" }, "Entro |"))
+      .toBe("Entro [[Diario/2026-10-30|30 ottobre 2026]] |");
+    expect(runWith("markdown.date", { target: "Diario/2026-10-30" }, "|")).toBeNull();
+  });
+
+  it("il diagramma dal suo modello, quando i modelli sono arrivati; prima, il recinto vuoto", async () => {
+    expect(runWith("markdown.diagram", { template: "flowchart" }, "|")).toBe("```mermaid\n|\n```");
+    await loadDiagramTemplates();
+    expect(runWith("markdown.diagram", { template: "flowchart" }, "|")).toMatch(/^```mermaid\nflowchart[^]*\n```$/);
+    expect(runWith("markdown.diagram", { template: "nessuno" }, "|")).toBeNull();
+  });
+
+  it("senza argomenti, le stesse azioni della barra", () => {
+    expect(action("markdown.table").withParams?.({})).toBe(action("markdown.table").run);
   });
 });

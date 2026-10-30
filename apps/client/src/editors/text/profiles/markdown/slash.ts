@@ -1,32 +1,40 @@
-// Il menu «/» nel testo, come in AnyType: si scrive «/tit» nella nota e il
-// menu dei blocchi e dei comandi si filtra mentre si scrive. Scelta una voce,
-// «/tit» sparisce e la voce si esegue; con Esc il menu si chiude e il testo
-// resta com'è.
+// Il menu «/» nel testo: si scrive «/tit» nella nota e il pannello dei
+// blocchi e dei comandi si filtra mentre si scrive. Scelta una voce, «/tit»
+// sparisce e la voce si esegue; con Esc il pannello si chiude e il testo resta
+// com'è.
 //
-// È una sorgente dell'autocompletamento di CodeMirror, come `[[` e `#`
-// (`completions.ts`): le voci le dà la shell (`panels/slash-menu.ts`), già
-// filtrate, e la superficie dice come eseguirle (`SlashMenuSource.choose`).
-// Qui stanno il riconoscimento del contesto, puro sul testo come gli altri, e
-// i completamenti che una voce riapre dopo di sé: il tipo di callout e il
-// linguaggio di un blocco di codice.
-import {
-  closeCompletion,
-  completionStatus,
-  selectedCompletion,
-  startCompletion,
-  type Completion,
-  type CompletionContext,
-  type CompletionResult,
-  type CompletionSource,
-} from "@codemirror/autocomplete";
+// Il pannello è della shell (`panels/slash/panel.ts`), disegnato coi pezzi
+// del kit; qui stanno il riconoscimento del contesto, puro sul testo, e lo
+// stato: uno `StateField` con dove sta il «/» e ciò che si è scritto dopo. Il
+// campo dà un tooltip di CodeMirror (`showTooltip`) che posa il pannello sotto
+// la riga, o sopra se sotto non c'è posto, e un keymap a precedenza alta passa
+// al pannello i tasti mentre è aperto. Restano qui anche i completamenti che
+// una voce riapre dopo di sé quando la si esegue senza il suo passo: il tipo
+// di riquadro e il linguaggio di un blocco di codice.
+import { startCompletion, type Completion, type CompletionSource } from "@codemirror/autocomplete";
 import { syntaxTree } from "@codemirror/language";
-import { EditorSelection, StateEffect, StateField, type StateCommand, type Transaction } from "@codemirror/state";
-import type { EditorView } from "@codemirror/view";
+import {
+  EditorSelection,
+  Facet,
+  Prec,
+  StateEffect,
+  StateField,
+  type EditorState,
+  type Extension,
+  type StateCommand,
+  type Transaction,
+} from "@codemirror/state";
+import { EditorView, keymap, showTooltip, ViewPlugin, type Tooltip, type TooltipView } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
-import type { SlashMenuEntry, SlashSection } from "../../../core/editor-menu";
-import { t, type Key } from "../../../../i18n/strings";
+import type { SlashChoice, SlashPanel, SlashPanelEvents, SlashPlace } from "../../../core/editor-menu";
+
+/// Ciò che il pannello dice all'editor; il resto glielo aggiunge la superficie.
+export type SlashPanelCore = Pick<SlashPanelEvents, "choose" | "dismiss" | "active">;
 import type { ContextMatch } from "./completions";
-import { MARKDOWN_ACTIONS, markdownActionState } from "./actions";
+import { loadDiagramTemplates, MARKDOWN_ACTIONS, markdownActionState } from "./actions";
+import { CALLOUT_TYPES, CODE_LANGUAGES } from "./kinds";
+
+export { CALLOUT_TYPES, CODE_LANGUAGES };
 
 /// Quanto si scrive dopo il «/» prima che smetta di essere una ricerca.
 export const SLASH_QUERY_MAX = 32;
@@ -56,112 +64,279 @@ export function slashContext(before: string): ContextMatch | null {
   return { from: before.length - match[1]!.length - 1, query: match[1]! };
 }
 
-/// Le voci e il modo di eseguirle: la superficie li dà al profilo.
+/// Il pannello e il modo di eseguire una scelta: la superficie li dà al
+/// profilo.
 export interface SlashMenuSource {
-  entries(query: string): readonly SlashMenuEntry[];
-  /// Esegue la voce: `from..to` è il «/query» da togliere.
-  choose(view: EditorView, entry: SlashMenuEntry, from: number, to: number): void;
-  /// L'icona di una voce, dal repertorio della shell.
-  icon?(name: string): Element | null;
+  /// Il «/» può aprire il pannello adesso: acceso, in scrittura, sul
+  /// documento del riquadro. Altrimenti resta testo.
+  enabled(): boolean;
+  /// Un pannello nuovo, per un'apertura; `transform` quando agisce sulla
+  /// selezione.
+  panel(events: SlashPanelCore, transform: boolean): SlashPanel;
+  /// Esegue la scelta: `from..to` è il «/query» da togliere; `transform`
+  /// quando agisce sulla selezione, che resta dov'è.
+  choose(view: EditorView, choice: SlashChoice, from: number, to: number, transform: boolean): void;
 }
 
-const SECTION_KEYS: Readonly<Record<SlashSection, Key>> = {
-  recent: "slash_menu.section.recent",
-  text: "slash_menu.section.text",
-  lists: "slash_menu.section.lists",
-  insert: "slash_menu.section.insert",
-  vault: "slash_menu.section.vault",
-};
-const SECTION_RANK: Readonly<Record<SlashSection, number>> = { recent: 0, text: 1, lists: 2, insert: 3, vault: 4 };
+/// Il menu della superficie: uno solo per editor.
+const slashMenu = Facet.define<SlashMenuSource, SlashMenuSource | null>({ combine: (values) => values[0] ?? null });
 
-/// Il tipo delle voci del «/»: lo legge chi disegna l'icona e chi gestisce Esc.
-export const SLASH_TYPE = "fub-slash";
+/// Un «/» aperto: dove sta, ciò che si è scritto dopo, e il tooltip che lo
+/// mostra, lo stesso finché il «/» resta lì.
+interface SlashOpen {
+  readonly from: number;
+  readonly query: string;
+  readonly tooltip: Tooltip;
+  /// Il «/» su una selezione («Trasforma»): niente «/» nel testo, e la query
+  /// la tiene il pannello.
+  readonly transform: boolean;
+}
 
-/// Le voci di ogni completamento del «/», per disegnarne l'icona.
-const entryOf = new WeakMap<Completion, SlashMenuEntry>();
+interface SlashValue {
+  readonly open: SlashOpen | null;
+  /// Il «/» che Esc ha lasciato come testo: finché resta lì, il pannello non
+  /// si riapre da sé scrivendo dopo.
+  readonly dismissed: number | null;
+}
 
-/// Il «/» che Esc ha lasciato come testo: finché resta lì, il menu non si
-/// riapre da sé scrivendo dopo.
-const dismissSlash = StateEffect.define<number>();
-export const slashDismissed = StateField.define<number | null>({
-  create: () => null,
-  update(value, tr) {
-    for (const effect of tr.effects) if (effect.is(dismissSlash)) return effect.value;
-    if (value === null || !tr.docChanged) return value;
-    const at = tr.changes.mapPos(value, 1, 1);
-    // Il «/» cancellato porta via anche la scelta di lasciarlo.
-    return at === null || at < 0 || tr.newDoc.sliceString(at, at + 1) !== "/" ? null : at;
-  },
-});
+/// Apre il pannello sul «/» che sta in `pos` (il «+» della maniglia).
+const openSlash = StateEffect.define<number>();
+/// Apre «Trasforma» sulla selezione.
+const openTransform = StateEffect.define<null>();
+/// Chiude il pannello; con `dismiss` il «/query» resta testo anche scrivendo
+/// dopo.
+const closeSlash = StateEffect.define<{ readonly dismiss: boolean }>();
 
 /// Il «/» aperto alla posizione `pos`, letto sullo stato: dove comincia, la
 /// query, e se il punto è testo letterale.
-function slashAt(ctx: Pick<CompletionContext, "state" | "pos">): { from: number; query: string } | null {
-  const line = ctx.state.doc.lineAt(ctx.pos);
-  const before = ctx.state.sliceDoc(line.from, ctx.pos);
+function slashAt(state: EditorState, pos: number): { from: number; query: string } | null {
+  const line = state.doc.lineAt(pos);
+  const before = state.sliceDoc(line.from, pos);
   const match = slashContext(before);
   if (!match) return null;
   const from = line.from + match.from;
   const nodes: string[] = [];
-  for (let node: SyntaxNode | null = syntaxTree(ctx.state).resolveInner(from, -1); node; node = node.parent) {
+  for (let node: SyntaxNode | null = syntaxTree(state).resolveInner(from, -1); node; node = node.parent) {
     nodes.push(node.name);
   }
   if (cursorIsLiteral({ nodes, lineBefore: before.slice(0, match.from) })) return null;
   return { from, query: match.query };
 }
 
-/// La sorgente del «/»: niente a contesto spento, nel letterale, dopo Esc o
-/// quando nessuna voce risponde — allora il menu si chiude e il testo resta.
-export function slashSource(menu: SlashMenuSource): CompletionSource {
-  return (ctx: CompletionContext): CompletionResult | null => {
-    const slash = slashAt(ctx);
-    if (!slash || ctx.state.field(slashDismissed, false) === slash.from) return null;
-    const entries = menu.entries(slash.query);
-    if (entries.length === 0) return null;
-    const filtering = slash.query !== "";
-    const options = entries.map((entry, index): Completion => {
-      const option: Completion = {
-        label: entry.label,
-        ...(entry.hint ? { detail: entry.hint } : {}),
-        ...(entry.description ? { info: entry.description } : {}),
-        type: SLASH_TYPE,
-        // Le sezioni a menu appena aperto; filtrando conta la pertinenza.
-        ...(filtering ? {} : { section: { name: t(SECTION_KEYS[entry.section]), rank: SECTION_RANK[entry.section] } }),
-        boost: Math.max(-99, 99 - index),
-        apply: (view: EditorView, _completion: Completion, from: number, to: number) => menu.choose(view, entry, from, to),
-      };
-      entryOf.set(option, entry);
-      return option;
-    });
-    return { from: slash.from, to: ctx.pos, options, filter: false };
-  };
+const LIST_MARK = /^\s*(?:[-*+]|\d+[.)])\s+(?:\[.\]\s+)?/;
+
+/// Il genere di una riga, per i Suggeriti.
+function kindOf(text: string): SlashPlace["above"] {
+  if (/^#{1,6}\s/.test(text)) return "heading";
+  if (/^\s*[-*+]\s+\[.\]/.test(text)) return "task";
+  if (LIST_MARK.test(text)) return "list";
+  if (/^\s*>/.test(text)) return "quote";
+  return "paragraph";
 }
 
-/// L'icona di una voce del «/», nella riga del completamento.
-export function slashIcon(menu: SlashMenuSource): { render(completion: Completion): Node | null; position: number } {
+/// Dove si scrive il «/» in `from..to`: la riga vuota o col testo, il blocco
+/// sopra, l'elenco.
+export function slashPlace(state: EditorState, from: number, to: number): SlashPlace {
+  const line = state.doc.lineAt(from);
+  const rest = (state.sliceDoc(line.from, from) + state.sliceDoc(to, line.to)).replace(LIST_MARK, "").replace(/^\s*>\s?/, "");
+  let above: SlashPlace["above"] = null;
+  for (let n = line.number - 1; n >= 1; n--) {
+    const text = state.doc.line(n).text;
+    if (text.trim() === "") continue;
+    above = kindOf(text);
+    break;
+  }
+  return { line: rest.trim() === "" ? "empty" : "after-text", above, inList: LIST_MARK.test(line.text) };
+}
+
+function tooltipAt(from: number): Tooltip {
+  return { pos: from, above: false, strictSide: false, create: (view) => slashTooltip(view) };
+}
+
+/// La selezione che «Trasforma» guarda, finché resta quella.
+function transformOf(value: SlashValue, tr: Transaction): SlashValue {
+  if (!tr.docChanged && !tr.selection) return value;
+  return { open: null, dismissed: value.dismissed };
+}
+
+const slashField = StateField.define<SlashValue>({
+  create: () => ({ open: null, dismissed: null }),
+  update(value, tr) {
+    let dismissed = value.dismissed;
+    if (dismissed !== null && tr.docChanged) {
+      const at = tr.changes.mapPos(dismissed, 1, 1);
+      // Il «/» cancellato porta via anche la scelta di lasciarlo.
+      dismissed = at === null || at < 0 || tr.newDoc.sliceString(at, at + 1) !== "/" ? null : at;
+    }
+    let explicit: number | null = null;
+    for (const effect of tr.effects) {
+      if (effect.is(closeSlash)) {
+        if (effect.value.dismiss && value.open && !value.open.transform) dismissed = tr.changes.mapPos(value.open.from, 1);
+        return { open: null, dismissed };
+      }
+      if (effect.is(openSlash)) explicit = effect.value;
+      if (effect.is(openTransform)) {
+        const main = tr.state.selection.main;
+        if (main.empty || !tr.state.facet(slashMenu)?.enabled()) return { open: null, dismissed };
+        return { open: { from: main.from, query: "", tooltip: tooltipAt(main.from), transform: true }, dismissed };
+      }
+    }
+    if (value.open?.transform) return transformOf(value, tr);
+    const was = value.open;
+    if (!was && explicit === null && !tr.isUserEvent("input.type")) return dismissed === value.dismissed ? value : { open: null, dismissed };
+    if (!was && explicit === null && !tr.state.facet(slashMenu)?.enabled()) return { open: null, dismissed };
+    if (explicit !== null && !tr.state.facet(slashMenu)?.enabled()) return { open: null, dismissed };
+    const main = tr.state.selection.main;
+    const at = main.empty && tr.state.selection.ranges.length === 1 ? slashAt(tr.state, main.head) : null;
+    if (!at || at.from === dismissed || (explicit !== null && at.from !== explicit)) return { open: null, dismissed };
+    const mapped = was ? tr.changes.mapPos(was.from, 1) : null;
+    if (was && mapped === at.from) {
+      return was.query === at.query && mapped === was.from ? value : { open: { ...was, from: at.from, query: at.query }, dismissed };
+    }
+    // Un «/» nuovo, o lo stesso spostato da una modifica prima: un tooltip
+    // nuovo, perché CodeMirror lo riconosce dall'identità.
+    if (was && mapped !== at.from && explicit === null && !tr.isUserEvent("input.type")) return { open: null, dismissed };
+    return { open: { from: at.from, query: at.query, tooltip: tooltipAt(at.from), transform: false }, dismissed };
+  },
+  provide: (field) => [
+    showTooltip.from(field, (value) => value.open?.tooltip ?? null),
+    // Finché il pannello è aperto l'editor dice che ha un elenco che completa,
+    // come il completamento di CodeMirror: resta una casella di testo a più
+    // righe (`aria-multiline`), che il ruolo combobox non ammette.
+    EditorView.contentAttributes.from(field, (value): Record<string, string> =>
+      value.open ? { "aria-haspopup": "listbox", "aria-autocomplete": "list" } : {}),
+  ],
+});
+
+/// Il «/» aperto adesso, o `null`.
+export function openSlashMenu(state: EditorState): { from: number; query: string; transform: boolean } | null {
+  const open = state.field(slashField, false)?.open;
+  return open ? { from: open.from, query: open.query, transform: open.transform } : null;
+}
+
+/// I pannelli aperti, per editor: il keymap passa loro i tasti.
+const panels = new WeakMap<EditorView, SlashPanel>();
+
+function slashTooltip(view: EditorView): TooltipView {
+  const menu = view.state.facet(slashMenu)!;
+  // Il passo «Diagramma» mette un modello: che ci sia quando lo si sceglie.
+  void loadDiagramTemplates();
+  const current = () => view.state.field(slashField, false)?.open ?? null;
+  let placed = false;
+  const events: SlashPanelCore = {
+    choose(choice) {
+      const open = current();
+      if (!open) return;
+      const to = open.transform ? open.from : open.from + 1 + open.query.length;
+      view.dispatch({ effects: closeSlash.of({ dismiss: false }) });
+      menu.choose(view, choice, open.from, to, open.transform);
+      view.focus();
+    },
+    dismiss() {
+      view.dispatch({ effects: closeSlash.of({ dismiss: true }) });
+      view.focus();
+    },
+    active(id) {
+      if (id) view.contentDOM.setAttribute("aria-activedescendant", id);
+      else view.contentDOM.removeAttribute("aria-activedescendant");
+    },
+  };
+  const panel = menu.panel(events, current()?.transform ?? false);
+  let seen = "";
+  const refresh = () => {
+    const open = current();
+    if (!open) return;
+    if (open.transform) {
+      if (seen === "") panel.update("", slashPlace(view.state, open.from, open.from));
+      seen = "transform";
+      return;
+    }
+    const place = slashPlace(view.state, open.from, open.from + 1 + open.query.length);
+    const key = `${open.query}\u0000${place.line}\u0000${place.above}\u0000${place.inList}`;
+    if (key === seen) return;
+    seen = key;
+    panel.update(open.query, place);
+  };
   return {
-    position: 20,
-    render(completion) {
-      const entry = entryOf.get(completion);
-      if (!entry) return null;
-      const box = document.createElement("span");
-      box.className = "cm-fub-slash-icon";
-      box.setAttribute("aria-hidden", "true");
-      const icon = entry.icon ? menu.icon?.(entry.icon) ?? null : null;
-      if (icon) box.append(icon);
-      return box;
+    dom: panel.dom,
+    offset: { x: -16, y: 8 },
+    mount() {
+      panels.set(view, panel);
+      view.contentDOM.setAttribute("aria-controls", panel.listId);
+      refresh();
+    },
+    update(update) {
+      if (update.docChanged || update.selectionSet) refresh();
+    },
+    positioned() {
+      // Qui CodeMirror sta scrivendo la sua misura e non lascia leggere il
+      // layout: la posizione del «/» si legge nella misura che segue.
+      const open = placed ? null : current();
+      placed = true;
+      view.requestMeasure({
+        key: panel,
+        read: () => {
+          const caret = open ? view.coordsAtPos(open.from) : null;
+          return caret ? caret.left - panel.dom.getBoundingClientRect().left : 0;
+        },
+        write: (caretX) => panel.placed(panel.dom.classList.contains("cm-tooltip-above"), caretX),
+      });
+    },
+    destroy() {
+      if (panels.get(view) === panel) panels.delete(view);
+      view.contentDOM.removeAttribute("aria-controls");
+      view.contentDOM.removeAttribute("aria-activedescendant");
+      panel.close();
     },
   };
 }
 
-/// Esc su un menu «/» aperto: si chiude e il «/query» resta testo, anche
-/// scrivendo dopo.
-export function dismissSlashMenu(view: EditorView): boolean {
-  if (completionStatus(view.state) !== "active" || selectedCompletion(view.state)?.type !== SLASH_TYPE) return false;
-  const slash = slashAt({ state: view.state, pos: view.state.selection.main.head });
-  if (slash) view.dispatch({ effects: dismissSlash.of(slash.from) });
-  closeCompletion(view);
-  return true;
+/// Apre il pannello su un «/» appena scritto in `pos` (il «+» della
+/// maniglia, che mette un blocco vuoto e ci scrive il «/»).
+/// Il «/» può aprire il pannello in questo editor, adesso.
+export function slashAvailable(state: EditorState): boolean {
+  return state.facet(slashMenu)?.enabled() ?? false;
+}
+
+export function openSlashAt(view: EditorView, pos: number): boolean {
+  if (!view.state.facet(slashMenu)?.enabled()) return false;
+  view.dispatch({ effects: openSlash.of(pos) });
+  return openSlashMenu(view.state) !== null;
+}
+
+/// Apre «Trasforma» sulla selezione: il «/» premuto con del testo scelto.
+export function openSlashTransform(view: EditorView): boolean {
+  if (view.state.selection.main.empty || !view.state.facet(slashMenu)?.enabled()) return false;
+  view.dispatch({ effects: openTransform.of(null) });
+  return openSlashMenu(view.state) !== null;
+}
+
+/// Chiude il pannello quando il «/» se ne va, **prima** che CodeMirror tolga
+/// il tooltip: l'uscita parte dal pannello ancora al suo posto, con le righe
+/// che stavano entrando. Sta prima del campo, così il suo aggiornamento
+/// precede quello dei tooltip.
+const closeBeforeRemoval = ViewPlugin.define((view) => ({
+  update(update) {
+    const was = update.startState.field(slashField, false)?.open ?? null;
+    const now = update.state.field(slashField, false)?.open ?? null;
+    if (was && was.tooltip !== now?.tooltip) panels.get(view)?.close();
+  },
+}));
+
+/// Il «/» nel testo: il campo, il tooltip e i tasti del pannello.
+export function slashMenuExtension(menu: SlashMenuSource): Extension {
+  return [
+    slashMenu.of(menu),
+    closeBeforeRemoval,
+    slashField,
+    Prec.highest(keymap.of([{
+      any: (view, event) => {
+        const panel = panels.get(view);
+        if (!panel || !openSlashMenu(view.state) || event.isComposing) return false;
+        return panel.key(event);
+      },
+    }])),
+  ];
 }
 
 /// Toglie `from..to` ed esegue `command` sul testo che resta, in una sola
@@ -187,25 +362,71 @@ export function removeThenRun(view: EditorView, from: number, to: number, comman
   return true;
 }
 
+/// Le azioni che fanno un blocco: dopo del testo nasce un blocco nuovo sotto,
+/// invece di trasformare la riga. Le altre entrano nel testo dov'è il «/».
+const BLOCK_ACTIONS = new Set([
+  "markdown.paragraph", "markdown.heading.1", "markdown.heading.2", "markdown.heading.3",
+  "markdown.heading.4", "markdown.heading.5", "markdown.heading.6", "markdown.list.bullet",
+  "markdown.list.ordered", "markdown.list.task", "markdown.quote", "markdown.callout",
+  "markdown.details", "markdown.columns", "markdown.table", "markdown.rule", "markdown.codeblock",
+  "markdown.mathblock", "markdown.diagram", "markdown.toc", "markdown.linkcard",
+]);
+
+/// `command` su una riga nuova sotto quella del cursore: la riga perde gli
+/// spazi in coda, e la nuova eredita il rientro dell'elenco o della citazione.
+function onNewLineBelow(command: StateCommand): StateCommand {
+  return ({ state, dispatch }) => {
+    const line = state.doc.lineAt(state.selection.main.head);
+    const tail = /\s*$/.exec(line.text)![0].length;
+    const split = state.update({
+      changes: { from: line.to - tail, to: line.to, insert: state.lineBreak },
+      selection: EditorSelection.cursor(line.to - tail + state.lineBreak.length),
+    });
+    let next: Transaction | null = null;
+    if (!command({ state: split.state, dispatch: (tr) => { next = tr; } }) || !next) return false;
+    const after = next as Transaction;
+    dispatch(state.update({
+      changes: split.changes.compose(after.changes),
+      ...(after.selection ? { selection: after.selection } : {}),
+      effects: after.effects,
+      scrollIntoView: true,
+      userEvent: "input",
+    }));
+    return true;
+  };
+}
+
 /// Esegue dal «/» l'azione dell'editor `id`: toglie «/query», applica
-/// l'azione nella stessa transazione e, per le voci che chiedono un seguito,
-/// riapre il completamento dove serve — le note dopo `[[` e `![[`, i modelli
-/// nel recinto `mermaid`, il tipo del callout, il linguaggio del codice.
-export function runSlashAction(view: EditorView, id: string, from: number, to: number): boolean {
+/// l'azione nella stessa transazione e, per le voci eseguite senza il loro
+/// passo, riapre il completamento dove serve — le note dopo `[[` e `![[`, i
+/// modelli nel recinto `mermaid`, il tipo del riquadro, il linguaggio del
+/// codice. `params` sono gli argomenti del passo o del comando rapido;
+/// `below` (⇧↵) mette il blocco sotto anche su una riga vuota.
+export function runSlashAction(
+  view: EditorView,
+  id: string,
+  from: number,
+  to: number,
+  params: Readonly<Record<string, unknown>> = {},
+  below = false,
+): boolean {
   const action = MARKDOWN_ACTIONS.get(id);
-  const lineStart = view.state.doc.lineAt(from).from;
-  const ran = action !== undefined &&
-    removeThenRun(view, from, to, (target) =>
-      markdownActionState(action, target.state).enabled && action.run(target));
-  if (!action) {
+  const given = Object.keys(params).length > 0;
+  const base = action ? (given ? action.withParams?.(params) ?? null : action.run) : null;
+  if (!action || !base) {
     view.dispatch({ changes: { from, to }, selection: EditorSelection.cursor(from), userEvent: "input.complete" });
     return false;
   }
-  if (!ran) return false;
+  const lineStart = view.state.doc.lineAt(from).from;
+  const under = BLOCK_ACTIONS.has(id) && (below || slashPlace(view.state, from, to).line === "after-text");
+  const command = under ? onNewLineBelow(base) : base;
+  const ran = removeThenRun(view, from, to, (target) =>
+    markdownActionState(action, target.state).enabled && command(target));
+  if (!ran || given) return ran;
   if (id === "markdown.callout" || id === "markdown.codeblock") {
     // Il tipo e il linguaggio stanno sulla prima riga del blocco, che comincia
-    // dove cominciava la riga del «/».
-    const head = view.state.doc.lineAt(lineStart);
+    // dove cominciava la riga del «/», o sulla riga dopo se è nato sotto.
+    const head = under ? view.state.doc.line(view.state.doc.lineAt(lineStart).number + 1) : view.state.doc.lineAt(lineStart);
     const at = id === "markdown.callout"
       ? (() => {
           const open = head.text.indexOf("[!");
@@ -223,12 +444,6 @@ export function runSlashAction(view: EditorView, id: string, from: number, to: n
 }
 
 // ── I completamenti che una voce riapre ──────────────────────────────────────
-
-/// I tipi di callout, come li riconosce la resa.
-export const CALLOUT_TYPES = [
-  "note", "abstract", "info", "todo", "tip", "success", "question",
-  "warning", "failure", "danger", "bug", "example", "quote",
-] as const;
 
 /// Il tipo di un callout che si sta scrivendo: `> [!` e la parola fino al
 /// cursore, con la `]` dopo o ancora da scrivere.
@@ -265,13 +480,6 @@ export function calloutTypeSource(): CompletionSource {
     return { from, to: ctx.pos + word.length, options, filter: false };
   };
 }
-
-/// I linguaggi proposti su un recinto di codice appena aperto: i più comuni.
-export const CODE_LANGUAGES = [
-  "bash", "c", "cpp", "csharp", "css", "diff", "go", "html", "java", "javascript", "json",
-  "kotlin", "latex", "markdown", "mermaid", "php", "python", "ruby", "rust", "sql", "swift",
-  "toml", "typescript", "xml", "yaml",
-] as const;
 
 /// Il linguaggio di un recinto: la riga d'apertura, fino al cursore, e niente
 /// dopo.

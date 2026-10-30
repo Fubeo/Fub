@@ -350,6 +350,11 @@ export function recentCommands(): readonly string[] {
   return paletteHistory.recent;
 }
 
+/// I comandi preferiti, nell'ordine scelto.
+export function favoriteCommands(): readonly string[] {
+  return paletteHistory.favorites;
+}
+
 /// Ricorda un lancio riuscito: la cosa in cima, senza doppioni, al tetto.
 /// Pura la regola, impura la scrittura — come `rememberSearch`.
 export function rememberCommand(id: string): void {
@@ -494,6 +499,7 @@ export async function openSlashPalette(
   onDismiss?: () => void,
   anchor: SelectionBox | null = null,
   command: string | null = null,
+  query = "",
 ): Promise<void> {
   closeCommandPalette();
   slashOwner = owner;
@@ -550,6 +556,7 @@ export async function openSlashPalette(
   list.setAttribute("role", "listbox");
   list.setAttribute("aria-label", t("palette.title"));
   input.setAttribute("aria-controls", LIST_ID);
+  input.value = query;
   box.append(input, list);
   let visible = entries;
   let selected = 0;

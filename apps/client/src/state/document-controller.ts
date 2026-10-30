@@ -145,13 +145,33 @@ import { showActivity } from "../panels/activity";
 import { notify } from "../ui/notify";
 import { applyIntent } from "../ui/intents";
 import { slashContextDoc } from "./slash";
-import { openSlashPalette, recentCommands, rememberCommand } from "../ui/palette";
-import { slashMenuEntries } from "../panels/slash-menu";
+import { favoriteCommands, openSlashPalette, recentCommands, rememberCommand, toggleFavorite } from "../ui/palette";
+import { slashCatalog, slashMenuEntries, type SlashUse } from "../panels/slash/entries";
+import { hideSlashEntry, slashPrefs } from "../panels/slash/prefs";
+import type * as SlashPanelModule from "../panels/slash/panel";
+import { noteTargets } from "../editors/text/profiles/markdown/kinds";
 import type { SelectionBox } from "../editors/core/editor-actions";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
 import { errorText } from "../host/errors";
+import { writeChrome } from "./machine-chrome";
 import { onLanguage, t } from "../i18n/strings";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
+
+// Il pannello del «/», coi passi e l'anteprima, è un chunk suo: si chiede
+// quando si monta il controllore dei documenti, e finché non c'è il «/»
+// resta testo.
+let slashPanelModule: typeof SlashPanelModule | null = null;
+let slashPanelLoading: Promise<void> | null = null;
+function slashPanelReady(): boolean {
+  slashPanelLoading ??= import("../panels/slash/panel").then(
+    (module) => void (slashPanelModule = module),
+    (error: unknown) => {
+      slashPanelLoading = null;
+      console.warn("Fub: il pannello del «/» non si carica.", error);
+    },
+  );
+  return slashPanelModule !== null;
+}
 import { writeClipboardText } from "../platform/clipboard";
 
 export interface DocumentDeps {
@@ -731,6 +751,7 @@ function refreshNoteClasses(r: Pane, doc: string): void {
 export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, paneView: PaneView): void {
   deps = d;
   view = paneView;
+  slashPanelReady();
   // Una finestra documento a parte non apre niente da sé: i link e i tag che
   // vi si cliccano tornano qui, dove ci sono i riquadri e la ricerca.
   setDocumentWindowNavigation({ navigate: followRemote });
@@ -846,11 +867,47 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       flushPendingSave,
       publishContext,
       menu: {
-        enabled: () => document.getElementById("app")?.dataset["slash"] !== "off",
-        entries: (query, has) => slashMenuEntries(state.commandSpecs, query, has, recentCommands()),
-        chosen: (entry, owner, anchor) => {
+        enabled: () => slashPanelReady() && document.getElementById("app")?.dataset["slash"] !== "off",
+        panel: (events, has) => {
+          const use = (): SlashUse => ({ recent: recentCommands(), favorites: favoriteCommands(), chord: () => null, today: new Date(), ...slashPrefs() });
+          return slashPanelModule!.createSlashPanel(events, {
+            entries: (query, place) => slashMenuEntries(state.commandSpecs, query, has, place, use()),
+            favorite: (id) => favoriteCommands().includes(id),
+            toggleFavorite,
+            hide: (entry) => {
+              hideSlashEntry(entry.id, writeChrome).then(
+                () => notify(t("slash.panel.hidden", { label: entry.label }), "info"),
+                (error: unknown) => notify(t("slash.panel.hide_failed", { label: entry.label, reason: errorText(error) }), "guasto"),
+              );
+            },
+            today: () => new Date(),
+            colors: () => {
+              const { colors } = slashCatalog(state.commandSpecs, has, use());
+              return {
+                text: colors.filter((entry) => entry.id.startsWith("markdown.color.")),
+                fill: colors.filter((entry) => entry.id.startsWith("markdown.background.")),
+              };
+            },
+            notes: async (query) => noteTargets(await (query ? notesByName(query) : existingRecentNotes()).catch(() => [])),
+            headings: (target) => noteHeadings(target).catch(() => []),
+          });
+        },
+        chosen: (entry, owner, anchor, selection) => {
           rememberCommand(entry.id);
-          if (!entry.action) runSlashCommand(owner, entry.id, "", anchor);
+          if (!entry.action) runSlashCommand(owner, entry.id, selection ?? "", anchor);
+        },
+        palette: (query, owner, anchor) => {
+          const doc = slashContextDoc();
+          void openSlashPalette(
+            owner,
+            "",
+            () => owner.isConnected && slashContextDoc() === doc,
+            { onEffect: applyIntent, notify, flushPendingSave, publishContext },
+            undefined,
+            anchor,
+            null,
+            query,
+          );
         },
       },
     },
@@ -2308,12 +2365,12 @@ export function editorActionReady(action: string): boolean {
   return !!actions?.has(action) && actions.editable();
 }
 
-export function runEditorAction(action: string): "done" | "nothing" | "unavailable" {
+export function runEditorAction(action: string, params: Readonly<Record<string, unknown>> = {}): "done" | "nothing" | "unavailable" {
   const r = panes.get(layout.focus);
   const surface = r?.shown?.k === "doc" ? r.surface : null;
   const actions = surface?.editorActions;
   if (!actions || !editorActionReady(action)) return "unavailable";
-  if (!actions.run(action)) return "nothing";
+  if (!actions.run(action, params)) return "nothing";
   surface?.focus?.();
   return "done";
 }
