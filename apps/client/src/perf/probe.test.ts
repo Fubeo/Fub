@@ -141,6 +141,23 @@ describe("la sonda", () => {
     pane.remove();
   });
 
+  it("chi aspetta prima del gesto misura dal gesto, non da quando ha cominciato ad aspettare", async () => {
+    lifetime = openLifetime();
+    const clock = fakeClock();
+    const probe = createProbe(lifetime, clock);
+    probe.start();
+    const shown = probe.waitFor("noteSwitch", "#dopo", 1_000);
+    clock.frame(100);
+    document.dispatchEvent(keydown(100));
+    const note = document.createElement("div");
+    note.id = "dopo";
+    document.body.append(note);
+    for (let i = 0; i < 3; i++) clock.frame(16);
+    await expect(shown).resolves.toBe(true);
+    expect(probe.stop().marks.noteSwitch!.max).toBe(48);
+    note.remove();
+  });
+
   it("un segno che non arriva entro il tempo dice false e non lascia fotogrammi in attesa", async () => {
     lifetime = openLifetime();
     const clock = fakeClock();

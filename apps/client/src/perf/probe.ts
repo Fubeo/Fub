@@ -180,7 +180,9 @@ export function createProbe(lifetime: Lifetime, clock: ProbeClock = BROWSER_CLOC
       coldStart = Math.round(ms);
     },
     waitFor(name, selector, timeout, text) {
-      const since = lastGesture ?? clock.now();
+      // Si misura dall'ultimo gesto **quando il segno compare**: chi aspetta
+      // può mettersi in ascolto prima del gesto che lo provoca.
+      const opened = clock.now();
       const deadline = clock.now() + timeout;
       const matches = (): boolean => {
         const found = document.querySelector(selector);
@@ -196,6 +198,7 @@ export function createProbe(lifetime: Lifetime, clock: ProbeClock = BROWSER_CLOC
         const look = (): void => {
           if (!running) return resolve(false);
           if (matches()) {
+            const since = lastGesture ?? opened;
             // Visto in questo fotogramma: il prossimo lo disegna, quello dopo
             // sa che è stato consegnato.
             nextFrame(() => nextFrame(() => {
