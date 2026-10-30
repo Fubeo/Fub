@@ -3342,7 +3342,8 @@ describe("la selezione avanzata, nel Completo", () => {
   const selectionButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Selezione avanzata"]')!;
   const menu = (): HTMLButtonElement[] => {
     const open = document.querySelectorAll<HTMLElement>(".context-menu");
-    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+    // Le voci, fuori dalla riga degli appunti.
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(.menu-quick)')];
   };
   const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
   const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
@@ -3618,6 +3619,49 @@ describe("la selezione avanzata, nel Completo", () => {
     expect(document.querySelectorAll(".context-menu")).toHaveLength(1);
     closeContextMenu();
     expect(key("ContextMenu").defaultPrevented).toBe(true);
+    closeContextMenu();
+  });
+
+  it("il tasto destro sul foglio vuoto dà le sole voci che fanno qualcosa, e il piede invita a scrivere", () => {
+    mount(SET);
+    editor.setTool("select");
+    expect(rightClick(150, 150).defaultPrevented).toBe(true);
+    expect(editor.selection).toEqual([]);
+    expect(document.querySelector("#context-menu .menu-clipboard")).toBeNull();
+    expect(menu().map(labelOf)).toEqual(["Incolla", "Incolla nello stesso punto", "Seleziona tutto", "Mostra tutto il disegno", "Menu radiale"]);
+    expect(menu().every((entry) => entry.getAttribute("aria-disabled") === null)).toBe(true);
+    expect(document.querySelector("#context-menu .menu-foot")!.textContent).toContain("Scrivi per cercare");
+    item("Seleziona tutto").click();
+    expect(editor.selection).toEqual([A, B, G]);
+    // Il resto si trova scrivendo.
+    editor.select([]);
+    rightClick(150, 150);
+    for (const letter of "inverti") key(letter, {}, document.activeElement as HTMLElement);
+    expect(menu().map(labelOf)).toEqual(["Inverti la selezione"]);
+    closeContextMenu();
+    // A chi legge soltanto non resta che vedere il disegno.
+    editor.setReadOnly(true);
+    rightClick(150, 150);
+    expect(menu().map(labelOf)).toEqual(["Seleziona tutto", "Mostra tutto il disegno"]);
+    closeContextMenu();
+  });
+
+  it("con una selezione il tasto destro dà gli appunti in cima e le sue voci, sempre sotto nove", () => {
+    mount(SET);
+    editor.setTool("select");
+    rightClick(60, 20);
+    expect(editor.selection).toEqual([B]);
+    const row = document.querySelector<HTMLElement>("#context-menu .menu-clipboard")!;
+    expect([...row.querySelectorAll("[role=menuitem]")].map((b) => b.textContent)).toEqual(["Taglia", "Copia", "Incolla"]);
+    const labels = menu().map(labelOf);
+    expect(labels).toEqual(["Copia lo stile", "Incolla lo stile", "Seleziona simili", "Blocca", "Nascondi", "Isola il gruppo", "Menu radiale"]);
+    expect(labels.length).toBeLessThan(9);
+    closeContextMenu();
+    // Dentro un gruppo, con l'uscita.
+    doubleTap(20, 70);
+    rightClick(20, 70);
+    expect(menu().map(labelOf)).toContain("Esci dal gruppo");
+    expect(menu().length).toBeLessThan(9);
     closeContextMenu();
   });
 
@@ -5997,12 +6041,12 @@ describe("il menu radiale", () => {
     expect(document.activeElement).toBe(surface());
   });
 
-  it("col mouse e con Maiusc+F10 si apre il menu della selezione, e il radiale è la sua ultima voce, col fuoco sulla prima voce che vale", () => {
+  it("col mouse e con Maiusc+F10 si apre il menu del foglio, e il radiale è la sua ultima voce, col fuoco sulla prima voce che vale", () => {
     mount(SOURCE);
     size(200, 100);
     expect(rightClick(100, 50, { pointerType: "mouse" }).defaultPrevented).toBe(true);
     expect(radial()).toBeNull();
-    expect(entries().map((one) => one.querySelector(".menu-label")!.textContent).slice(0, 2)).toEqual(["Taglia", "Copia"]);
+    expect(entries().map((one) => one.querySelector(".menu-label")!.textContent).slice(0, 2)).toEqual(["Incolla", "Incolla nello stesso punto"]);
     closeContextMenu();
     surface().focus();
     expect(key("F10", { shiftKey: true }).defaultPrevented).toBe(true);
