@@ -35,7 +35,7 @@ export type { MotionLevel, MotionPreference } from "./level";
 export { createManualDriver, motionDriver, setMotionDriver } from "./driver";
 export type { DriverRun, DriverTiming, ManualDriver, MotionDriver, RecordedPlay } from "./driver";
 
-export { activeMotions, animate, liveState } from "./animate";
+export { activeMotions, animate, halt, liveState } from "./animate";
 export type { Motion, MotionSpec, MotionState, Pose } from "./animate";
 
 export { flip } from "./flip";
