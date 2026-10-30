@@ -486,10 +486,14 @@ export const SCENE = onPage("shell", [
     prepare: async (page) => {
       await openLive(page, [], "top", "blocks");
       await page.waitForSelector(".pane.focus .cm-fub-block-handles");
+      // La testata della pagina arriva dopo che il cursore è stato portato in
+      // vista: secondo chi vince, la nota resta in cima o scende di 78 px. Il
+      // banco aspetta la testata e riparte dalla cima, ogni volta.
+      await page.waitForSelector(".pane.focus .cm-fub-page-title");
+      await page.evaluate(() => { document.querySelector(".pane.focus .cm-scroller").scrollTop = 0; });
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       if (gesture === "hover") return;
       if (gesture === "page") {
-        await page.waitForSelector(".pane.focus .cm-fub-page-title");
-        await page.evaluate(() => { document.querySelector(".pane.focus .cm-scroller").scrollTop = 0; });
         if (live === "pagina-larga") await page.waitForSelector(".pane.focus.fub-note--wide");
         await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         return;
