@@ -12,7 +12,10 @@ on:
         default: false
   push:
     branches: [main]
+  # `ready_for_review`: segnare pronta una PR in bozza fa partire la CI
+  # completa (vedi il job `test` e i banchi).
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   schedule:
     - cron: "0 6 * * 1"
 
@@ -33,6 +36,33 @@ env:
   FUB_FUZZ_TRASFERIMENTO: ${{ (github.event_name == 'schedule' || inputs.fuzz_completo) && '20000' || '2000' }}
 
 jobs:
+  # Una PR in bozza è lavoro in corso: riceve la CI corta (Linux, niente
+  # banchi). Segnata pronta riceve tutto, e i banchi solo se tocca il client.
+  # Su `main`, sul cron e a mano gira sempre tutto. Questo job dice ai banchi
+  # se il client è toccato.
+  changes:
+    name: cosa cambia
+    runs-on: ubuntu-latest
+    outputs:
+      client: ${{ steps.diff.outputs.client }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - name: il client è toccato?
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "client=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^(apps/client/|\.github/workflows/ci\.yml$)'; then
+            echo "client=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "client=false" >> "$GITHUB_OUTPUT"
+          fi
+
   invariants:
     name: invarianti (abi↔WIT, additività, dipendenze)
     if: github.event_name != 'schedule'
@@ -156,7 +186,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # In bozza solo Linux: Windows e macOS girano quando la PR è pronta.
+        os: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.draft) && '["ubuntu-latest"]' || '["ubuntu-latest", "windows-latest", "macos-latest"]') }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
@@ -345,6 +376,8 @@ jobs:
   # dietro di lui. Tutti sull'immagine delle baseline.
   visual:
     name: banco visivo (scene uguali alle baseline)
+    needs: changes
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -374,6 +407,8 @@ jobs:
     # Le due luci sono due corse separate dello stesso banco: in fila
     # costavano quasi quattordici minuti.
     name: contrasto e tastiera (${{ matrix.light }})
+    needs: changes
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true')
     strategy:
       fail-fast: false
       matrix:
@@ -397,6 +432,8 @@ jobs:
 
   graph:
     name: banchi del grafo (scala e heap)
+    needs: changes
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -469,6 +506,8 @@ jobs:
 
   benches:
     name: banchi del movimento, dei disegni, delle tavole e della griglia
+    needs: changes
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
