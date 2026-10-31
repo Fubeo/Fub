@@ -27,6 +27,7 @@ const repo = join(here, "../..");
 const PROVE = [
   { dir: "vettori", motore: "VectorCraft", file: ["Foglio.svg"] },
   { dir: "pdf", motore: "PdfCraft", file: ["Stampa.pdf", "Lungo.pdf"] },
+  { dir: "pdf-dominio", motore: "PdfCraft, crate di dominio", file: ["Stampa.pdf", "Lungo.pdf"] },
   { dir: "foto", motore: "PhotoCraft", file: ["Immagine.png", "Foto.png"] },
   { dir: "luce", motore: "LightCraft", file: ["Immagine.png", "Foto.png"] },
   { dir: "documenti", motore: "WordCraft", file: ["Documento.docx"] },

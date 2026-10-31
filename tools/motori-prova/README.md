@@ -16,6 +16,7 @@ Una cartella per motore, ognuna con un workspace suo:
 |---|---|---|---|
 | `vettori/` | VectorCraft `ed733b7` | Git | apre un SVG e lo disegna a 2880 × 1800 |
 | `pdf/` | PdfCraft `c735fb7` | Git | apre un PDF e disegna ogni pagina a scala 2 |
+| `pdf-dominio/` | i 13 crate di dominio di PdfCraft, senza facciata | Git | come `pdf/`, con il renderer preso direttamente (P0) |
 | `foto/` | PhotoCraft `b1cfff9` | Git | apre un'immagine e la compone ridotta a 2880 × 1800 |
 | `luce/` | LightCraft `445dd31` | Git | importa una foto e la sviluppa a 2880 × 1800, sul processore |
 | `documenti/` | WordCraft `9130181` (v0.10.0), con la facciata engine | Git | apre un documento, lo impagina e disegna ogni pagina a scala 2 |

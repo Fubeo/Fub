@@ -136,6 +136,45 @@ Codice C e rete:
 - Il crate `cc` (compilazione di C) entra con PdfCraft, PhotoCraft e
   LightCraft.
 
+## PdfCraft senza la facciata
+
+Il piano di PdfCraft (decisione D1) prende i 13 crate di dominio, non la
+facciata engine: `geom`, `filters`, `crypt`, `cos`, `content`, `model`,
+`fonts`, `render`, `annot`, `forms`, `xfdf`, `edit`, `organize`. La prova
+`pdf-dominio` li collega da soli, con il renderer preso direttamente.
+
+| | Con la facciata (`pdf`) | Crate di dominio (`pdf-dominio`) |
+|---|---|---|
+| Programma senza simboli | 24,0 MiB | 7,8 MiB |
+| `.text` | 15,2 MiB | 4,9 MiB |
+| Pacchetti esterni | 504 | 172 |
+| Nuovi rispetto a Fub | 181 | 22 |
+| Doppie con Fub | 41 | 18 |
+| `Lungo.pdf`, prima apertura | 369 ms, 22,4 MiB | 357 ms, 17,4 MiB |
+| `Lungo.pdf`, dopo `malloc_trim` | 13,1 MiB | 7,8 MiB |
+
+Le doppie che restano sono hayro (0.7 contro 0.5), vello (0.0.8/0.0.9
+contro 0.0.5) e i caratteri: quelle che il piano risolve con un hayro solo
+(D9). I 22 nuovi sono i crate di PdfCraft e le sue copie corrette di hayro,
+`lopdf` e vello.
+
+`cargo deny` con il `deny.toml` di Fub sui crate di dominio:
+
+- advisories e bans: ok;
+- licenze: ok per tutte le dipendenze; falliscono soltanto i due crate della
+  prova, che non dichiarano una licenza;
+- sorgenti: falliscono i 22 pacchetti presi da Git, cioè i crate di PdfCraft
+  e le sue copie. Nella copia derivata in `vendor/pdfcraft` diventano
+  dipendenze per percorso.
+
+Codice C: nessuno sulle piattaforme di Fub. Il solo `cc` della chiusura è la
+dipendenza di compilazione di `iana-time-zone-haiku`, per Haiku, che arriva
+con `chrono` ed è già in Fub.
+
+È il primo punto di P0 misurato prima della copia derivata. Il resto di P0
+aspetta ciò che il piano chiede di preparare prima: lo specchio
+`Fubeo/pdfcraft`, il corpus dei 60 PDF, le tre macchine di riferimento.
+
 ## Le patch
 
 Le `[patch.crates-io]` dei motori non viaggiano con loro: chi li incorpora le
