@@ -7,7 +7,8 @@
 // Scrive in DIR un referto JSON per prova (`<prova>.json`) e il riassunto
 // (`misure.json`). Non tocca il vault di nessuno: i file di esempio sono quelli
 // del banco WebView, scritti in DIR/campioni, più una foto e un PDF lungo
-// generati qui.
+// generati qui. Confronta ogni prova con `budgets.json`: esce con 1 se una
+// supera un tetto di peso o di librerie.
 //
 // Il peso per crate viene da `cargo bloat` (va installato a parte, `cargo
 // install cargo-bloat`, e trovato nel PATH); senza, il referto lo dice. La memoria la legge la prova stessa, soltanto su Linux.
@@ -254,6 +255,38 @@ function machine() {
   return { cpu, nuclei: cores, memoria_gib: mem ? Math.round(mem / 1048576) : null, sistema: os, kernel, rustc, commit };
 }
 
+// --- I tetti ---------------------------------------------------------------
+
+const budgets = JSON.parse(readFileSync(join(here, "budgets.json"), "utf8"));
+
+/// Il referto di una prova contro `budgets.json`: `oltre` sono i tetti
+/// superati, che fanno fallire; `obiettivi` i tempi e la memoria oltre la
+/// misura della macchina di riferimento, che valgono soltanto lì.
+function against(budgets, referto) {
+  const oltre = [];
+  const tetto = budgets.tetti[referto.prova];
+  if (!tetto) {
+    oltre.push("nessun tetto in budgets.json");
+  } else {
+    const mib = Math.round((referto.peso.spoglio_byte / 2 ** 20) * 10) / 10;
+    if (mib > tetto.spoglio_mib) oltre.push(`peso ${mib} MiB, tetto ${tetto.spoglio_mib}`);
+    if (referto.librerie.nuovi > tetto.nuove_librerie) oltre.push(`librerie nuove ${referto.librerie.nuovi}, tetto ${tetto.nuove_librerie}`);
+    const doppie = referto.librerie.doppie_con_fub.length;
+    if (doppie > tetto.doppie_con_fub) oltre.push(`doppie con Fub ${doppie}, tetto ${tetto.doppie_con_fub}`);
+  }
+  const obiettivi = [];
+  for (const f of referto.file) {
+    const goal = budgets.obiettivi[referto.prova]?.[f.file];
+    if (!goal) continue;
+    const step = (name) => f.passi.find((p) => p.passo === name);
+    const first = step("prima apertura")?.ms ?? null;
+    const left = step("dopo malloc_trim") ? Math.round((step("dopo malloc_trim").rss_mib - f.memoria_iniziale.rss_mib) * 10) / 10 : null;
+    if (first !== null && first > goal.prima_apertura_ms) obiettivi.push(`${f.file} prima apertura ${first} ms, obiettivo ${goal.prima_apertura_ms}`);
+    if (left !== null && left > goal.residuo_mib) obiettivi.push(`${f.file} residuo ${left} MiB, obiettivo ${goal.residuo_mib}`);
+  }
+  return { oltre, obiettivi };
+}
+
 // --- Il giro ---------------------------------------------------------------
 
 function main() {
@@ -288,11 +321,17 @@ function main() {
       librerie: libraries(dir),
       file: prova.file.map((f) => timings(binary, join(campioni, f), opts.giri, env)),
     };
+    referto.tetti = against(budgets, referto);
     writeFileSync(join(opts.out, `${prova.dir}.json`), JSON.stringify(referto, null, 2) + "\n");
     summary.prove.push(referto);
   }
   writeFileSync(join(opts.out, "misure.json"), JSON.stringify(summary, null, 2) + "\n");
   process.stderr.write(`· fatto: ${join(opts.out, "misure.json")}\n`);
+  const over = summary.prove.flatMap((p) => p.tetti.oltre.map((o) => `${p.prova}: ${o}`));
+  const slow = summary.prove.flatMap((p) => p.tetti.obiettivi.map((o) => `${p.prova}: ${o}`));
+  for (const line of slow) process.stderr.write(`· oltre l'obiettivo (soltanto sulla sua macchina): ${line}\n`);
+  for (const line of over) process.stderr.write(`✗ oltre il tetto: ${line}\n`);
+  if (over.length > 0) process.exitCode = 1;
 }
 
 main();

@@ -79,3 +79,16 @@ del banco WebView (`S5/Foglio.svg` e la cartella `R1/`), più una foto di
 legge un vault vero.
 
 I numeri vanno in `docs/misure/motori-*.md`, con macchina, sistema e commit.
+
+## I tetti
+
+`budgets.json` ha due sezioni, scritte dalla prima misura:
+
+- `tetti`, per prova: il peso senza simboli in MiB, le librerie nuove e
+  quelle doppie con Fub. `misura.mjs` esce con 1 se una prova ne supera uno.
+  Un tetto si abbassa quando la misura scende, non si alza;
+- `obiettivi`, per prova e file: la prima apertura a freddo e la memoria che
+  resta dopo «tutto chiuso» e `malloc_trim`, rispetto alla partenza. Sono
+  misurati sulla macchina di
+  [`motori-2026-10-31-linux-ryzen`](../../docs/misure/motori-2026-10-31-linux-ryzen.md)
+  e valgono soltanto lì: lo script li segnala senza fallire.
