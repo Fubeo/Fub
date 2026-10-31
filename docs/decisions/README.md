@@ -62,3 +62,4 @@ Nuove decisioni usano il [template](template.md).
 | [0228 — `~x~` è pedice, `~~x~~` barrato](0228-il-pedice-con-una-tilde.md) | proposta | contratto | — |
 | [0229 — La pagina della cartella è `_index`](0229-pagina-della-cartella.md) | proposta | contratto | — |
 | [0231 — La chiusura di FubDraw](0231-la-chiusura-di-fubdraw.md) | proposta | frontend | — |
+| [0232 — Il server MCP di Fub sta in `fub-cli`, ed è scritto lì](0232-il-server-mcp-di-fub.md) | proposta | sicurezza | — |

@@ -101,7 +101,7 @@ flowchart LR
 | `wordcraft-doc`, `-docx`, `-docbin`, `-formats`, `-geom` | modello del documento, codec DOCX, lettore di Word 97-2003, importatori ed esportatori e unità di misura di WordCraft, vendorizzati in `vendor/wordcraft/`, usati soltanto da `fub-format-rich` | dipendenze da Fub |
 | `gridcraft-core`, `-formula`, `-functions`, `-numfmt`, `-model`, `-calc`, `-xlsx` | dominio del foglio di calcolo di GridCraft: modello, formule e funzioni di Excel, formati numerici, calcolo e codec, vendorizzati in `vendor/gridcraft/`, usati soltanto da `fub-format-xlsx` | dipendenze da Fub |
 | `fub-wasm-host` | Wasmtime, binding, traduzione, store e lifecycle dei plugin installati | policy duplicata |
-| `fub-cli` | automazione locale sopra `Host`, senza Tauri | un secondo coordinatore di job o di scrittura |
+| `fub-cli` | automazione locale sopra `Host`, senza Tauri, e il server MCP per gli agenti | un secondo coordinatore di job o di scrittura |
 | `fub-services` | servizio self-hostable separato per account, sync e publish | kernel, host, app |
 | `fub-live` | sessione live di FubDraw: protocollo, abbinamento, TLS con certificato effimero, server sul PC e client dello scrittore ([riferimento](../reference/live-session.md)) | contratto, kernel, host, Tauri, validazione delle operazioni |
 | `frontend` | layout, interazione, resa, editor | accesso diretto al kernel |

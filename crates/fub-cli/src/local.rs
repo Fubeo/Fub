@@ -60,7 +60,7 @@ fn confirm_write(global: &GlobalArgs, prompt: &str) -> Result<(), Failure> {
     }
 }
 
-fn outcome_json(outcome: &fub_abi::CommandOutcome) -> serde_json::Value {
+pub(crate) fn outcome_json(outcome: &fub_abi::CommandOutcome) -> serde_json::Value {
     serde_json::to_value(outcome).unwrap_or(serde_json::Value::Null)
 }
 
@@ -561,7 +561,7 @@ fn build_matching(args: &QueryArgs) -> Result<fub_abi::QueryExpr, Failure> {
     }
     Ok(QueryExpr { any: clauses })
 }
-fn match_json(item: &fub_abi::DocumentMatch) -> serde_json::Value {
+pub(crate) fn match_json(item: &fub_abi::DocumentMatch) -> serde_json::Value {
     serde_json::json!({
         "doc": item.doc.as_str(),
         "score": item.score,
@@ -666,6 +666,19 @@ fn collect_tasks(blocks: &[fub_abi::Block], rows: &mut Vec<serde_json::Value>) {
     }
 }
 
+/// Il bersaglio di un link scritto a mano: un URL, un `[[wikilink]]` o un
+/// path. Lo leggono `query --resolve` e lo strumento `fub_query` dell'MCP.
+pub(crate) fn link_target(raw: &str) -> fub_abi::LinkTarget {
+    if raw.contains("://") || raw.starts_with("//") {
+        fub_abi::LinkTarget::Url(raw.to_string())
+    } else if raw.starts_with("[[") && raw.ends_with("]]") {
+        let inner = raw.trim_start_matches('[').trim_end_matches(']').trim();
+        fub_abi::model::parse_wikilink_inner(inner).target
+    } else {
+        fub_abi::LinkTarget::Path(raw.to_string())
+    }
+}
+
 pub fn query(
     connection: &Connection,
     global: &GlobalArgs,
@@ -747,14 +760,7 @@ pub fn query(
         }
     }
     if let Some(raw) = args.resolve.as_deref() {
-        let target = if raw.contains("://") || raw.starts_with("//") {
-            fub_abi::LinkTarget::Url(raw.to_string())
-        } else if raw.starts_with("[[") && raw.ends_with("]]") {
-            let inner = raw.trim_start_matches('[').trim_end_matches(']').trim();
-            fub_abi::model::parse_wikilink_inner(inner).target
-        } else {
-            fub_abi::LinkTarget::Path(raw.to_string())
-        };
+        let target = link_target(raw);
         match connection
             .host
             .query_index(
@@ -808,17 +814,18 @@ pub fn query(
     }
 }
 
-pub fn search(
-    connection: &Connection,
-    global: &GlobalArgs,
-    _format: &OutputFormat,
-    args: SearchArgs,
-    print: impl Fn(&serde_json::Value),
-) -> Result<(), Failure> {
-    vault_required(connection)?;
+/// La `QueryExpr` di una ricerca: la riga con la sintassi della barra, o un
+/// testo solo con `fields`/`phrase`, più tag e cartella in AND. La usano
+/// `search` e lo strumento `fub_search` dell'MCP.
+pub(crate) fn search_expr(
+    query: &str,
+    field_names: &[String],
+    phrase: bool,
+    tag: Option<&str>,
+    folder: Option<&str>,
+) -> Result<fub_abi::QueryExpr, Failure> {
     use fub_abi::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextQuery};
-    let fields = args
-        .field
+    let fields = field_names
         .iter()
         .map(|f| match f.trim().to_ascii_lowercase().as_str() {
             "name" | "title" => Ok(fub_abi::TextField::Name),
@@ -831,8 +838,8 @@ pub fn search(
         })
         .collect::<Result<Vec<_>, _>>()?;
     let text = TextQuery {
-        text: args.query.clone(),
-        mode: if args.phrase {
+        text: query.to_string(),
+        mode: if phrase {
             fub_abi::TextMode::Phrase
         } else {
             fub_abi::TextMode::Terms
@@ -845,8 +852,8 @@ pub fn search(
     // Senza campi o frase espliciti la riga è la sintassi della barra della
     // shell (`fub_abi::rules::search_syntax`): stessi operatori, stessa
     // `QueryExpr`. Con `--field`/`--phrase` resta un testo solo, come chiesto.
-    let mut clauses = if args.field.is_empty() && !args.phrase {
-        fub_abi::rules::search_syntax::parse(&args.query, false)
+    let mut clauses = if field_names.is_empty() && !phrase {
+        fub_abi::rules::search_syntax::parse(query, false)
             .map_err(|fault| {
                 Failure::bad_args(format!(
                     "sintassi di ricerca: {} al byte {}",
@@ -867,7 +874,7 @@ pub fn search(
         clauses.push(QueryClause { all: Vec::new() });
     }
     let mut literals = Vec::new();
-    if let Some(tag) = args.tag.as_deref() {
+    if let Some(tag) = tag {
         literals.push(QueryLiteral {
             negated: false,
             predicate: QueryPredicate::Tag {
@@ -876,7 +883,7 @@ pub fn search(
             },
         });
     }
-    if let Some(folder) = args.folder.as_deref() {
+    if let Some(folder) = folder {
         literals.push(QueryLiteral {
             negated: false,
             predicate: QueryPredicate::Folder {
@@ -888,7 +895,24 @@ pub fn search(
     for clause in &mut clauses {
         clause.all.extend(literals.iter().cloned());
     }
-    let matching = QueryExpr { any: clauses };
+    Ok(QueryExpr { any: clauses })
+}
+
+pub fn search(
+    connection: &Connection,
+    global: &GlobalArgs,
+    _format: &OutputFormat,
+    args: SearchArgs,
+    print: impl Fn(&serde_json::Value),
+) -> Result<(), Failure> {
+    vault_required(connection)?;
+    let matching = search_expr(
+        &args.query,
+        &args.field,
+        args.phrase,
+        args.tag.as_deref(),
+        args.folder.as_deref(),
+    )?;
     let select = if args.select.is_empty() {
         fub_abi::PropertySelect::None
     } else {

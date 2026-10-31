@@ -1397,13 +1397,23 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-cli/src/local.rs::search",
+            "crates/fub-cli/src/local.rs::search_expr",
             (
                 Family::AsciiCase,
                 "abbassa i nomi dei campi (`name|body|tags|heading`) e taglia gli slash della \
-                 cartella del filtro: come in `files`, il vocabolario decide e il confine tollera. \
+                 cartella del filtro: la stessa per `search` e per `fub_search` del server MCP; come in `files`, il vocabolario decide e il confine tollera. \
                  Diverge da `build_matching` perché qui i nomi si validano contro `TextField`, là \
                  si compongono in `FolderScope`.",
+            ),
+        ),
+        (
+            "crates/fub-cli/src/mcp.rs::mime_of",
+            (
+                Family::AsciiCase,
+                "non è identità di un nome del vault: sceglie il `mimeType` che una risorsa MCP \
+                 dichiara dall'estensione, `.MD` come `.md`. È un'etichetta per il client, non \
+                 decide quale nota si legge; l'alfabeto delle estensioni è ASCII e una \
+                 piegatura Unicode inventerebbe equivalenze.",
             ),
         ),
         (

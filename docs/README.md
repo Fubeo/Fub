@@ -96,6 +96,7 @@ flowchart LR
 - [Layout su disco](reference/on-disk-layout.md)
 - [Contratto IPC](reference/ipc-contract.md)
 - [Permessi e sicurezza](reference/permissions-and-security.md)
+- [Server MCP](reference/mcp-server.md)
 - [Formato della scena](reference/scene-format.md)
 - [Formato della scena, unità e guide](reference/scene-format-rulers.md)
 - [Formato della scena, poligoni e stelle](reference/scene-format-shapes.md)
