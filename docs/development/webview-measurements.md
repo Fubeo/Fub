@@ -82,7 +82,22 @@ si tocca. Gli obiettivi e le soglie stanno in
 S5 chiede la feature `draw` dell'app: senza, un `.svg` si apre come immagine
 e il referto scrive lo scenario come saltato, senza numero.
 
-## Linux e Windows
+## Linux, con un comando solo
+
+Dalla radice del repository:
+
+```bash
+apps/client/bench/webview/misura.sh
+```
+
+Lo script costruisce il client e l'app di release, installa `tauri-driver`
+in `target/tauri-driver`, senza toccare il sistema, e misura tutti gli
+scenari con le soglie `targets`. Se manca un display usa `xvfb-run`. Prima
+gli serve WebKitWebDriver, cioè il pacchetto `webkit2gtk-driver`, e senza
+display anche `xvfb`: se mancano, lo script lo dice e si ferma. Gli argomenti
+in più vanno a `run.mjs`, per esempio `--only=R1,T1`.
+
+## Linux e Windows, passo per passo
 
 1. Costruisci il client e l'app:
 
