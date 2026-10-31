@@ -39,6 +39,10 @@ ascolta niente e non chiede fotogrammi.
 | S5 | tratto di penna di 3 s su un disegno di 2.000 tracciati | massimo fra fotogrammi |
 | S6 | avvio a freddo fino alla prima nota | ms |
 
+Ogni scenario è un avvio dell'app. L'avvio indicizza il vault da capo, e la
+shell risponde prima che abbia finito: tranne S6, gli scenari partono quando
+`vault_status` non dice più `running`, perché misurano un vault pronto.
+
 Le fixture nascono in una cartella temporanea
 (`apps/client/bench/webview/fixtures.mjs`); il vault vero di chi misura non
 si tocca. Gli obiettivi e le soglie stanno in
