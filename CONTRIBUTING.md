@@ -18,7 +18,13 @@ Usa `npm ci`, non sostituire npm con un altro package manager.
 
 ## Ciclo locale
 
-Dalla radice:
+Lo stesso ciclo sta in un comando solo, `scripts/check.sh`: fa quello che la
+CI fa su Linux, banchi esclusi, e stampa una riga per passo. Con `--rapido`
+controlla soltanto ciò che il diff tocca e i crate che lo usano; con `--banchi`
+aggiunge i banchi del client. `check-locale-loop.mjs` verifica che contenga
+ogni comando del blocco `ci-required` qui sotto.
+
+I comandi uno per uno, dalla radice:
 
 ```bash
 cargo fmt --all --check
@@ -26,6 +32,13 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace --no-fail-fast
 cargo deny check
 ```
+
+La CI fa girare gli stessi test con `cargo nextest run`, che li distribuisce
+anche fra un eseguibile e l'altro, più gli esempi della documentazione con
+`cargo test --doc`. I fuzzer del Markdown girano a 2000 casi; per la prova a
+fondo si passano `FUB_FUZZ_CASI=20000` e `FUB_FUZZ_TRASFERIMENTO=20000`, che la
+CI usa nella corsa settimanale e quando la si lancia a mano con
+`fuzz_completo`.
 
 Dentro `apps/client/`:
 
@@ -63,7 +76,8 @@ I comandi seguenti costituiscono il nucleo che deve rimanere presente in CI.
 ```text
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace --no-fail-fast
+cargo nextest run --workspace --no-fail-fast
+cargo test --workspace --doc --no-fail-fast
 npm run typecheck
 npm test
 npm run build

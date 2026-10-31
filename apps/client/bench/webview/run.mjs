@@ -86,6 +86,25 @@ async function ready(session) {
   await session.waitFor("return !!window.__fubProbe && !!document.querySelector('#file-list .tree-row')", [], 120_000);
 }
 
+/// L'indice dell'avvio arrivato in fondo. Ogni avvio sul vault del banco
+/// indicizza le diecimila note da capo, e la shell risponde prima che abbia
+/// finito: gli scenari misurano un vault pronto, non l'indicizzazione, tranne
+/// I1 che misura proprio quella.
+async function indexed(session, timeoutMs = 300_000) {
+  const since = Date.now();
+  for (;;) {
+    const running = await session.executeAsync(`
+      const done = arguments[arguments.length - 1];
+      window.__TAURI_INTERNALS__.invoke("query_index", { query: { kind: "vault_status" }, vault: null })
+        .then((status) => done(JSON.stringify(status).includes('"indexing":"running"')), (error) => done(String(error)));
+    `);
+    if (running === false) return;
+    if (typeof running === "string") throw new Error(`vault_status: ${running}`);
+    if (Date.now() - since > timeoutMs) throw new Error(`l'indice non è pronto dopo ${timeoutMs / 1000} s`);
+    await pause(250);
+  }
+}
+
 // Ctrl+O apre il lanciatore dello Scrittoio; finché lo Scrittoio non l'ha
 // montato, nei primi istanti dopo l'avvio, apre ancora il selettore comune.
 // Lo scenario va bene con tutti e due.
@@ -473,6 +492,21 @@ async function keep(session, id) {
   }
 }
 
+/// Ferma `tauri-driver` e ciò che ha avviato, e aspetta che esca (al più 10 s).
+async function stopDriver(driver) {
+  const exited = new Promise((done) => {
+    if (driver.exitCode !== null || driver.signalCode !== null) done();
+    else driver.once("exit", done);
+  });
+  try {
+    if (process.platform === "win32") driver.kill();
+    else process.kill(-driver.pid, "SIGTERM");
+  } catch {
+    // Già uscito.
+  }
+  await Promise.race([exited, new Promise((done) => setTimeout(done, 10_000).unref())]);
+}
+
 function git(...command) {
   try {
     return execFileSync("git", command, { encoding: "utf8" }).trim();
@@ -491,15 +525,22 @@ async function main() {
   const driver = spawn(args.driver ?? "tauri-driver", [
     "--port", String(port),
     ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
-  ], { env: { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config }, stdio: ["ignore", "inherit", "inherit"] });
+  ], {
+    env: { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config },
+    stdio: ["ignore", "inherit", "inherit"],
+    // Un gruppo di processi suo: alla fine si ferma il driver con l'app e
+    // WebKitWebDriver che ha avviato, non soltanto `tauri-driver`.
+    detached: process.platform !== "win32",
+  });
   driverPid = driver.pid;
   const results = {};
   let failed = 0;
   try {
     await waitForDriver(base);
-    // Il primo avvio sul vault nuovo costruisce gli indici di diecimila note:
-    // una sessione che non misura aspetta che la ricerca per nome risponda,
-    // così gli scenari partono da un vault già indicizzato.
+    // Il primo avvio sul vault nuovo legge dal disco diecimila note: lo fa una
+    // sessione che non misura, e aspetta che la ricerca per nome risponda. Gli
+    // avvii dopo indicizzano di nuovo da capo, e ogni scenario aspetta che
+    // l'indice sia pronto (`indexed`).
     const warm = await openSession(base, app);
     try {
       await ready(warm);
@@ -530,6 +571,8 @@ async function main() {
       }
       try {
         if (id !== "S6") await ready(session);
+        // I1 misura proprio l'indicizzazione dell'avvio: non la aspetta.
+        if (id !== "S6" && id !== "I1") await indexed(session);
         const result = await SCENARIOS[id](session);
         results[id] = result;
         writeFileSync(join(out, `${id}.json`), JSON.stringify(result, null, 2) + "\n");
@@ -553,10 +596,15 @@ async function main() {
       }
     }
   } finally {
-    driver.kill();
-    // WebKitWebDriver e i suoi processi possono scrivere nel vault ancora un
-    // attimo dopo `kill`: la rimozione riprova invece di fermare il banco.
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    await stopDriver(driver);
+    // L'app che si chiude può scrivere nel vault ancora un attimo: la
+    // rimozione riprova, e una cartella temporanea che resta non cancella le
+    // misure già prese.
+    try {
+      rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    } catch (error) {
+      console.log(`· la cartella temporanea resta: ${root} (${error?.code ?? error})`);
+    }
   }
   const report = {
     commit: git("rev-parse", "HEAD"),

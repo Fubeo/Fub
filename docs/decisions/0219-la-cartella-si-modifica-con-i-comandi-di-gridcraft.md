@@ -22,7 +22,7 @@ stato acceso o spento con il motivo e una cronologia. Riscrivere quei comandi
 in Fub vorrebbe dire un secondo motore del foglio, contro la direzione
 dell'[ADR 0214](0214-gridcraft-motore-del-foglio-di-calcolo.md).
 
-Tre vincoli restano: nessuna perdita silenziosa (`AGENTS.md`), nessun
+Tre vincoli restano: nessuna perdita silenziosa (`CLAUDE.md`), nessun
 ricalcolo di ciò che una modifica non raggiunge, e l'host custode dei byte
 del file.
 

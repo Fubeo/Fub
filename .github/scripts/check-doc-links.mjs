@@ -6,7 +6,7 @@ import path from "node:path";
 const root = process.cwd();
 const entryFiles = [
   "README.md",
-  "AGENTS.md",
+  "CLAUDE.md",
   "CONTRIBUTING.md",
   "SECURITY.md",
   "CODE_OF_CONDUCT.md",

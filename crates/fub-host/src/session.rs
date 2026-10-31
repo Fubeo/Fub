@@ -3361,7 +3361,7 @@ impl Host {
     ///
     /// Chi chiama un provider, un handler o altro codice esterno parte da qui:
     /// tenere `sessions.read()` durante quella chiamata è la regola che
-    /// `AGENTS.md` vieta per il workspace, e un writer in attesa su `sessions`
+    /// `CLAUDE.md` vieta per il workspace, e un writer in attesa su `sessions`
     /// (aprire, chiudere) basta a trasformarla in un blocco circolare.
     fn session_workspace(&self, vault: Option<&str>) -> Result<Custody<Workspace>, PluginError> {
         self.with_session(vault, |session| session.workspace.clone())

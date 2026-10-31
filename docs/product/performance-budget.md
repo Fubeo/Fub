@@ -26,8 +26,8 @@ npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
 npm run bench:verify
 ```
 
-La stessa sequenza di scala è nel workflow CI
-[`ci.yml`](../../.github/workflows/ci.yml#L277-L335). Il timeout di sicurezza
+La stessa sequenza di scala è nel job «banchi del grafo (scala e heap)» di
+[`ci.yml`](../../.github/workflows/ci.yml). Il timeout di sicurezza
 canonico resta **30 s per campione**. Il referto `pass` include i controlli hard di lifecycle e, sul comando
 10k/seed 6 con almeno 16 finestre, anche il gate di stabilizzazione heap.
 I budget di frame time restano osservazionali e non sono applicati dalla CI.

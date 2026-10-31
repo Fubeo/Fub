@@ -1,0 +1,14 @@
+# Il profilo con cui la CI fa girare i test del workspace (`--profile ci`).
+# In locale `cargo test --workspace --no-fail-fast` prova le stesse cose.
+
+[profile.ci]
+# Un test rosso non ferma gli altri: si vuole l'elenco intero.
+fail-fast = false
+# Nessun secondo tentativo: un test instabile deve restare rosso, non sparire.
+retries = 0
+# L'uscita di un test rosso subito e di nuovo nel riepilogo finale.
+failure-output = "immediate-final"
+# Un test che supera il minuto si segnala mentre gira, e il riepilogo finale
+# elenca i lenti: è lì che si vede dove va il tempo.
+slow-timeout = { period = "60s" }
+final-status-level = "slow"

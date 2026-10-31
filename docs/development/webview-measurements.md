@@ -91,6 +91,10 @@ avvio sul vault del banco indicizza le diecimila note, e i comandi che passano
 dal workspace non devono aspettare la fine di una fetta. Lo scenario fallisce
 se l'indice era già pronto all'avvio, perché allora non ha misurato niente.
 
+Ogni scenario è un avvio dell'app. L'avvio indicizza il vault da capo, e la
+shell risponde prima che abbia finito: tranne S6, gli scenari partono quando
+`vault_status` non dice più `running`, perché misurano un vault pronto.
+
 Le fixture nascono in una cartella temporanea
 (`apps/client/bench/webview/fixtures.mjs`); il vault vero di chi misura non
 si tocca. Gli obiettivi e le soglie stanno in

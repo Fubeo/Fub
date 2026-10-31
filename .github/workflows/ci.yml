@@ -1,20 +1,68 @@
 name: CI
 
+# Un push su un ramo con una PR aperta faceva girare tutto due volte, una per
+# `push` e una per `pull_request`. Il push conta solo su `main`; gli altri rami
+# passano dalla PR, o da `workflow_dispatch`.
 on:
   workflow_dispatch:
+    inputs:
+      fuzz_completo:
+        description: "i fuzzer del Markdown a 20 000 casi invece di 2000"
+        type: boolean
+        default: false
   push:
-    branches: ["**"]
+    branches: [main]
+  # `ready_for_review`: segnare pronta una PR in bozza fa partire la CI
+  # completa (vedi il job `test` e i banchi).
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   schedule:
     - cron: "0 6 * * 1"
 
 permissions:
   contents: read
 
+# Un push nuovo su una PR annulla la corsa vecchia della stessa PR. Su `main`
+# ogni commit tiene la sua corsa: il cancello del rilascio la cerca per SHA.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
+  # I fuzzer del Markdown girano a 2000 casi. I 20 000 sono per la corsa
+  # settimanale e per chi li chiede a mano, quando serve una prova a fondo.
+  FUB_FUZZ_CASI: ${{ (github.event_name == 'schedule' || inputs.fuzz_completo) && '20000' || '2000' }}
+  FUB_FUZZ_TRASFERIMENTO: ${{ (github.event_name == 'schedule' || inputs.fuzz_completo) && '20000' || '2000' }}
 
 jobs:
+  # Una PR in bozza è lavoro in corso: riceve la CI corta (Linux, niente
+  # banchi). Segnata pronta riceve tutto, e i banchi solo se tocca il client.
+  # Su `main`, sul cron e a mano gira sempre tutto. Questo job dice ai banchi
+  # se il client è toccato.
+  changes:
+    name: cosa cambia
+    runs-on: ubuntu-latest
+    outputs:
+      client: ${{ steps.diff.outputs.client }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - name: il client è toccato?
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "client=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^(apps/client/|\.github/workflows/ci\.yml$)'; then
+            echo "client=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "client=false" >> "$GITHUB_OUTPUT"
+          fi
+
   invariants:
     name: invarianti (abi↔WIT, additività, dipendenze)
     if: github.event_name != 'schedule'
@@ -23,6 +71,8 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: le action esterne sono pin a commit
         run: node .github/scripts/check-actions-pinned.mjs
       - name: Conformità abi ↔ crates/fub-abi/wit/fub/abi.wit
@@ -114,6 +164,8 @@ jobs:
           components: rustfmt, clippy
           targets: x86_64-pc-windows-msvc
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Dipendenze di sistema di Tauri
         run: |
           sudo apt-get update
@@ -134,13 +186,33 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # In bozza solo Linux: Windows e macOS girano quando la PR è pronta.
+        os: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.draft) && '["ubuntu-latest"]' || '["ubuntu-latest", "windows-latest", "macos-latest"]') }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+      # Su Windows il collegamento di circa 270 eseguibili di prova costava da
+      # solo 26 minuti. `rust-lld` collega più in fretta del linker di MSVC, e
+      # le sole righe nel debug alleggeriscono i PDB senza togliere file e riga
+      # ai backtrace. Prima della cache, perché ne cambia la chiave.
+      - name: su Windows, rust-lld e il debug delle sole righe
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld.exe" >> "$GITHUB_ENV"
+          echo "CARGO_PROFILE_DEV_DEBUG=line-tables-only" >> "$GITHUB_ENV"
+      # Il budget delle cache è di 10 GB per tutto il repository, e quando si
+      # sfora se ne va la più vecchia: i job che compilano un sottoinsieme di
+      # questo leggono la cache dei test di Linux (`shared-key: test`) invece
+      # di salvarne una loro.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-on-failure: true
+          shared-key: test
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2
+        with:
+          tool: cargo-nextest
       - name: Dipendenze di sistema di Tauri
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -153,24 +225,49 @@ jobs:
           cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
           cargo check -p fub-scene --target wasm32-wasip2 --all-targets --locked
           cargo check -p fub-ink --target wasm32-wasip2 --all-targets --locked
-      - name: CAS del backend reale, con diagnostica isolata
-        run: cargo test -p fub-kernel --test rooted_cas -- --nocapture
-      - name: regressioni unitarie dei backend storage
-        run: "cargo test -p fub-kernel --lib storage:: -- --nocapture"
-      - name: cestino e ripristino attraverso il contratto
-        run: cargo test -p fub-kernel --test trash --test structural_host -- --nocapture
-      - run: cargo test --workspace --no-fail-fast
+      # Gli stessi test di `cargo test --workspace`, ma in parallelo anche fra
+      # un eseguibile e l'altro. Il profilo `ci` di `.config/nextest.toml`
+      # stampa l'uscita di ogni test rosso e, alla fine, quelli lenti.
+      - name: i test del workspace
+        run: cargo nextest run --workspace --no-fail-fast --profile ci
+      - name: gli esempi della documentazione
+        run: cargo test --workspace --doc --no-fail-fast
+      # Ogni processo di prova copia il componente che usa: le copie non
+      # servono alla corsa dopo, e non entrano nella cache.
+      - name: via le copie dei componenti
+        if: always()
+        shell: bash
+        run: rm -f target/tmp/*.wasm
+
+  variants:
+    # Le varianti di feature non dipendono dal sistema: girano qui, accanto ai
+    # tre job dei test, invece di allungarli. Lo stesso per i workspace dei
+    # motori, che hanno il loro lock.
+    name: varianti di feature e motori in vendor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+        with:
+          targets: wasm32-wasip2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: false
+          shared-key: test
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2
+        with:
+          tool: cargo-nextest
+      - name: il componente d'esempio, prima dei test che lo pretendono
+        run: cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
       - name: l'host senza la feature `draw`, con gli SVG come allegati
-        run: cargo test -p fub-host --no-default-features --features notify-watcher,http-client,official-features,rich --no-fail-fast
+        run: cargo nextest run -p fub-host --no-default-features --features notify-watcher,http-client,official-features,rich --no-fail-fast --profile ci
       - name: «Nuovo disegno» e l'export dei disegni, con la feature `draw` delle feature (FUORI_DAL_DEFAULT)
-        run: cargo test -p fub-features --features draw --no-fail-fast
+        run: cargo nextest run -p fub-features --features draw --no-fail-fast --profile ci
       - name: i test dei motori di WordCraft, nel workspace loro e con il loro lock
-        if: matrix.os == 'ubuntu-latest'
         env:
           CARGO_TARGET_DIR: target/wordcraft
         run: cargo test --manifest-path vendor/wordcraft/Cargo.toml --workspace --locked --no-fail-fast
       - name: i test dei motori di GridCraft, nel workspace loro e con il loro lock
-        if: matrix.os == 'ubuntu-latest'
         env:
           CARGO_TARGET_DIR: target/gridcraft
         run: cargo test --manifest-path vendor/gridcraft/Cargo.toml --workspace --locked --no-fail-fast
@@ -183,6 +280,9 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: false
+          shared-key: test
       - name: LibreOffice senza interfaccia
         run: |
           sudo apt-get update
@@ -271,6 +371,79 @@ jobs:
         run: node .github/scripts/check-races.mjs
       - name: nessun pacchetto npm in due copie
         run: node .github/scripts/check-npm-copies.mjs
+
+  # I banchi girano in job loro accanto a quello dei test, invece che in fila
+  # dietro di lui. Tutti sull'immagine delle baseline.
+  visual:
+    name: banco visivo (scene uguali alle baseline)
+    needs: changes
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      - run: npm ci
+        working-directory: apps/client
+      - name: il browser del banco visivo, alla revisione che il lock pinna
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/client
+      - name: le scene restano uguali alle baseline del runner
+        id: bench_verify
+        run: npm run bench:verify
+        working-directory: apps/client
+      - name: differenze e foglio di contatto del banco visivo
+        if: ${{ failure() && steps.bench_verify.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: banco-visivo-${{ github.sha }}
+          path: apps/client/bench/.output/
+          include-hidden-files: true
+
+  a11y:
+    # Le due luci sono due corse separate dello stesso banco: in fila
+    # costavano quasi quattordici minuti.
+    name: contrasto e tastiera (${{ matrix.light }})
+    needs: changes
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true')
+    strategy:
+      fail-fast: false
+      matrix:
+        light: [dark, light]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      - run: npm ci
+        working-directory: apps/client
+      - name: il browser del banco visivo, alla revisione che il lock pinna
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/client
+      - name: il contrasto della pagina vera e i gesti della tastiera
+        run: npm run bench:a11y -- --light=${{ matrix.light }}
+        working-directory: apps/client
+
+  graph:
+    name: banchi del grafo (scala e heap)
+    needs: changes
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      - run: npm ci
+        working-directory: apps/client
       - name: il browser del banco visivo, alla revisione che il lock pinna
         run: npx playwright install --with-deps chromium
         working-directory: apps/client
@@ -330,27 +503,30 @@ jobs:
           path: apps/client/bench/.output/graph-scale.json
           if-no-files-found: error
           include-hidden-files: true
-      - name: le scene restano uguali alle baseline del runner
-        id: bench_verify
-        run: npm run bench:verify
-        working-directory: apps/client
-      - name: differenze e foglio di contatto del banco visivo
-        if: ${{ failure() && steps.bench_verify.outcome == 'failure' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+
+  benches:
+    name: banchi del movimento, dei disegni e della griglia
+    needs: changes
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && needs.changes.outputs.client == 'true')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          name: banco-visivo-${{ github.sha }}
-          path: apps/client/bench/.output/
-          include-hidden-files: true
-      - name: il contrasto della pagina vera, in tutte e due le luci
-        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
-        run: npm run bench:a11y
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      - run: npm ci
+        working-directory: apps/client
+      - name: il browser del banco visivo, alla revisione che il lock pinna
+        run: npx playwright install --with-deps chromium
         working-directory: apps/client
       # Le coreografie si misurano contro sé stesse, non contro una baseline:
       # stato finale uguale col moto e senza, nessun residuo, solo transform e
       # opacità, un'inversione a metà che torna al punto di partenza.
       - name: il movimento rispetta le sue quattro regole
         id: bench_motion
-        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        if: ${{ !cancelled() }}
         run: npm run bench:motion
         working-directory: apps/client
       - name: referto e fotogrammi del banco del movimento
@@ -361,7 +537,7 @@ jobs:
           path: apps/client/bench/.output/moto/
       - name: i disegni si vedono uguali sul foglio, in Lettura e nell'export
         id: bench_fidelity
-        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        if: ${{ !cancelled() }}
         run: npm run bench:fidelity
         working-directory: apps/client
       - name: le immagini del banco di fedeltà
@@ -373,7 +549,7 @@ jobs:
           include-hidden-files: true
       - name: i gesti della griglia tengono bozza, fuoco e cella attiva
         id: bench_grid
-        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        if: ${{ !cancelled() }}
         run: npm run bench:grid
         working-directory: apps/client
       - name: il referto e le foto del banco dei gesti della griglia
@@ -387,7 +563,7 @@ jobs:
           include-hidden-files: true
       - name: cinquantamila elementi si aprono e si muovono senza scatti
         id: bench_large
-        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        if: ${{ !cancelled() }}
         run: npm run bench:large
         working-directory: apps/client
       - name: il referto del banco delle scene grandi
@@ -411,6 +587,7 @@ jobs:
         with:
           cache-on-failure: true
           key: webview
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22.12.0
@@ -450,7 +627,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Una PR bozza la prova solo su Linux, come i test.
+        os: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.draft) && '["ubuntu-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

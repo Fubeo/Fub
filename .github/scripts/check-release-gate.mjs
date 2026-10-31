@@ -23,6 +23,12 @@ export const REQUIRED_JOBS = [
   "build + test (macos-latest)",
   "documentazione canonica",
   "client",
+  "varianti di feature e motori in vendor",
+  "banco visivo",
+  "contrasto e tastiera (dark)",
+  "contrasto e tastiera (light)",
+  "banchi del grafo",
+  "banchi del movimento",
 ];
 
 export const SIGNING = {
