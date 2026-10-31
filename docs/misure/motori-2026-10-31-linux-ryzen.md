@@ -66,6 +66,34 @@ Il programma comprende la libreria standard di Rust e `fub-abi`; i crate
 sono in MiB di `.text`. Il crate più grande di PdfCraft è l'interprete
 JavaScript (`boa_engine`), che arriva con la facciata engine.
 
+### VectorCraft con LTO
+
+La tabella sopra usa il `release` delle prove: senza LTO e con 16 unità di
+codice. VectorCraft è stato misurato ancora con lo stesso programma e
+`vectorcraft-engine` con `default-features = false`, quindi senza
+`bundled-fonts`. `cargo tree -e features` lo conferma: nessun crate accende
+quella feature. Cambiano soltanto `lto` e `codegen-units = 1`, attraverso
+`CARGO_PROFILE_*`, sullo stesso commit `ed733b7` e sulla stessa macchina.
+
+| Profilo | Senza simboli | `.text` | `vectorcraft_engine` | `std` | Build |
+|---|---|---|---|---|---|
+| senza LTO, 16 unità (sopra) | 64,6 MiB | 50,3 MiB | 11,8 | — | — |
+| `lto = "thin"`, 1 unità (il `release` di VectorCraft) | 55,3 MiB | 44,7 MiB | 8,1 | 7,6 | 349 s |
+| `lto = "fat"`, 1 unità | 51,0 MiB | 41,8 MiB | 8,3 | 6,7 | 521 s |
+
+- La LTO toglie da 9 a 14 MiB, cioè dal 14 al 21%.
+- Con la LTO `cargo bloat` attribuisce a `std` il codice generico che
+  l'ottimizzatore ha fuso dentro le sue funzioni. I numeri per crate
+  diventano meno affidabili, il totale no.
+- Con LTO, i crate più grandi dopo l'engine sono:
+  - `vectorcraft_doc` (3,2–3,5);
+  - `serde_json` (1,6–1,8);
+  - `vectorcraft_tools` (1,5);
+  - `image` (1,3–1,4).
+- Il tetto di `budgets.json` resta sul profilo delle prove, quello senza LTO,
+  perché il confronto fra i motori sia alla pari. Il peso di un'edizione si
+  misura in K4, col profilo di consegna di Fub.
+
 ## La memoria e i tempi
 
 RSS in MiB dopo ogni passo, picco fra parentesi; tempo del passo in

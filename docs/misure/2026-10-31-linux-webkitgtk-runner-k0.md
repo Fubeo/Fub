@@ -15,7 +15,9 @@ tre vie per la tela dei motori.
   della PR #269), 2026-10-31;
 - misurato dal job «la WebView vera (WebKitGTK, S1–S3)» della CI, run
   41163700163, artifact `webview-24ac1120…`; secondo giro nel run
-  41165492127 (commit `082f2b1e`);
+  41165492127 (commit `082f2b1e`); terzo, con la procedura fissa di R1, la
+  memoria per processo e `fub-asset:` con CORS, nel run 41193655323 (commit
+  `a2149269`, merge `42e51ff4`, artifact `webview-42e51ff4…`);
 - comando: `node bench/webview/run.mjs --only=S1,S2,S3,S7,R1,T1`.
 
 ## La macchina e la WebView
@@ -59,6 +61,33 @@ fra la lavagna e l'immagine, con le schede ancora aperte. Un residuo si
 legge soltanto su più giri, e chiudere le schede non lo abbassa in nessuno
 dei due.
 
+### Il terzo giro, con la procedura fissa
+
+Il terzo giro segue la procedura di
+[Misure nella WebView](../development/webview-measurements.md): chiuse le
+schede riaperte e 10 s di quiete, poi un file per modalità, poi tutto chiuso,
+con una lettura dopo 10 s e una dopo 60 s.
+
+| Momento | Totale | App | WebView |
+|---|---|---|---|
+| vuota | 981,0 | 371,5 | 589,5 |
+| aperte, 7 schede | 1145,5 | 387,5 | 737,0 |
+| chiuse, dopo 10 s | 1146,0 | 387,0 | 738,1 |
+| chiuse, dopo 60 s | 1146,0 | 387,0 | 738,0 |
+| **residuo** | **165,0** | **15,5** | **148,5** |
+
+- Il residuo è quasi tutto della WebView (148,5 MiB su 165). Il processo
+  dell'app tiene 15,5 MiB.
+- In un minuto non torna niente: la lettura a 60 s è uguale a quella a 10 s.
+- Il residuo è memoria che le schede chiuse tengono ancora. Vengono da qui:
+  - le cache: caratteri, immagini decodificate, tessere;
+  - i motori rimasti caldi;
+  - la memoria di JavaScript che la WebView non ha ancora raccolto;
+  - le pagine che l'allocatore ha liberato ma non ha reso al sistema.
+- Un residuo che cresce di misura in misura è memoria che non si libera. Uno
+  che oscilla è la raccolta della WebView. Nei tre giri vale 318,6, 97,3 e
+  165 MiB: per ora oscilla. La tolleranza è il cancello di K3.
+
 ## T1, le tessere
 
 Un PNG di 20,7 MB (2880 × 1800 RGBA, senza compressione), aperto con
@@ -72,21 +101,50 @@ millisecondi.
 | intervallo fra fotogrammi, una tessera per fotogramma | 27 | 43 | 172 | 120 |
 | `putImageData` di un fotogramma intero | 5 | 6 | 14 | 30 |
 | intervallo fra fotogrammi, un fotogramma intero per fotogramma | 29 | 35 | 53 | 30 |
-| una tessera da `fub-asset:` con `Range` | non misurata | | | |
-| il fotogramma da `fub-asset:` a finestre di 1 MiB | non misurato | | | |
+| una tessera da `fub-asset:` con `Range` | non misurata, vedi il terzo giro | | | |
+| il fotogramma da `fub-asset:` a finestre di 1 MiB | non misurato, vedi il terzo giro | | | |
 
-- **La pagina non legge `fub-asset:` con `fetch`**, né con `Range` né il file
-  intero: WebKitGTK risponde «Load failed». Il protocollo serve gli elementi
-  `img` e `video`, che non chiedono CORS; la risposta non porta
-  `Access-Control-Allow-Origin`, e una `fetch` dall'origine della pagina verso
-  un altro schema lo richiede. È l'ipotesi più probabile, non provata. Per la
-  via delle tessere servirebbe quell'intestazione per l'origine fidata, in
-  `fub-app/src/resources.rs`.
+- Nei primi due giri **la pagina non legge `fub-asset:` con `fetch`**, né
+  con `Range` né il file intero: WebKitGTK risponde «Load failed». Il
+  protocollo serve gli elementi `img` e `video`, che non chiedono CORS. La
+  risposta non portava `Access-Control-Allow-Origin`, e una `fetch`
+  dall'origine della pagina verso un altro schema lo richiede. Il terzo
+  giro, con l'intestazione, lo conferma.
 - La IPC regge la mediana (14 ms per 256 KiB) ma ha una coda di quasi due
   secondi: una tessera su venti arriva tardi di cento fotogrammi. Il
   secondo giro conferma: p50 11, p95 2138, max 3099 ms.
 - Il disegno non è il collo di bottiglia: un fotogramma intero si posa in
   5 ms anche senza GPU.
+
+### Il terzo giro: da dove viene la coda
+
+Il terzo giro misura la IPC due volte. La prima subito dopo l'avvio, mentre
+l'app indicizza il vault di 10.000 note. La seconda dopo che `vault_status`
+non dice più che l'indice lavora. Fra una tessera e l'altra c'è un comando
+che non tocca il vault (`plugin:app|version`), anche lui sul thread
+principale.
+
+| Misura | p50 | p95 | max |
+|---|---|---|---|
+| una tessera dalla IPC, durante l'indicizzazione | 13 | 1477 | 1816 |
+| il comando senza vault, nello stesso giro | 1 | 12 | 104 |
+| una tessera dalla IPC, a indice finito | 6 | 20 | 28 |
+| il comando senza vault, a indice finito | 1 | 11 | 14 |
+| una tessera da `fub-asset:` con `Range`, a indice finito | 3 | 3 | 5 |
+| il fotogramma da `fub-asset:` a finestre di 1 MiB | 158 | 173 | 173 |
+| il file intero da `fub-asset:`, 20,7 MB | 174 | | |
+
+- Le tessere lente sono quattro su sessanta, una ogni 1,5–1,9 s circa, e
+  ognuna aspetta 1–1,8 s. Il comando subito dopo risponde in 1–2 ms.
+- La coda non è dunque del thread principale né della IPC. È
+  l'indicizzazione dell'avvio. `Host::resource_read`
+  (`crates/fub-host/src/session.rs`) prende `session.workspace.read()` per
+  preparare la lettura, e quel lock aspetta dietro a chi scrive l'indice.
+- A indice finito la IPC porta una tessera di 256 KiB con un p95 di 20 ms.
+- Con l'intestazione CORS (`aed40848`) la pagina legge `fub-asset:` con
+  `fetch`, e una tessera con `Range` arriva in 3 ms. Questa misura è
+  avvenuta a indice finito, quindi non dice se il protocollo aspetta
+  anche lui l'indice.
 
 ## Cosa non dice
 
@@ -96,7 +154,7 @@ quella di WKWebView o di WebView2.
 
 ## Non provati
 
-- `fub-asset:` con `fetch`: manca l'intestazione, vedi sopra;
+- `fub-asset:` durante l'indicizzazione dell'avvio;
 - R1 e T1 su macOS, Windows e una macchina Linux con scheda grafica;
 - le altre due vie per la tela (wgpu nativo, egui nella finestra): servono una
   macchina con GPU e uno schermo.
