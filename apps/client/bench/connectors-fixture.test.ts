@@ -19,7 +19,7 @@ function attr(engine: SceneEngine, id: string, name: string): string | null {
   return new RegExp(`\\s${name}="([^"]*)"`).exec(element)?.[1] ?? null;
 }
 
-describe("il disegno del banco dei connettori", () => {
+describe("il disegno dei connettori delle scene", () => {
   const fixture = connectorsFixture(300);
   const engine = SceneEngine.open(fixture.text);
 

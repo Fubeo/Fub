@@ -1154,7 +1154,7 @@ async function openRichDocument(page, path) {
 }
 
 /// Apre il disegno dei connettori e aspetta che sia dipinto, col fuoco sulla
-/// tela, come `connectors.mjs`.
+/// tela.
 async function openDrawing(page) {
   const fixture = await page.evaluate(() => globalThis.__fubConnectorsBench?.fixture ?? null);
   if (fixture === null) throw new Error("la pagina non ha il disegno dei connettori");
