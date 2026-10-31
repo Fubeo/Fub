@@ -27,6 +27,13 @@ cargo test --workspace --no-fail-fast
 cargo deny check
 ```
 
+La CI fa girare gli stessi test con `cargo nextest run`, che li distribuisce
+anche fra un eseguibile e l'altro, più gli esempi della documentazione con
+`cargo test --doc`. I fuzzer del Markdown girano a 2000 casi; per la prova a
+fondo si passano `FUB_FUZZ_CASI=20000` e `FUB_FUZZ_TRASFERIMENTO=20000`, che la
+CI usa nella corsa settimanale e quando la si lancia a mano con
+`fuzz_completo`.
+
 Dentro `apps/client/`:
 
 ```bash
@@ -63,7 +70,8 @@ I comandi seguenti costituiscono il nucleo che deve rimanere presente in CI.
 ```text
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace --no-fail-fast
+cargo nextest run --workspace --no-fail-fast
+cargo test --workspace --doc --no-fail-fast
 npm run typecheck
 npm test
 npm run build
