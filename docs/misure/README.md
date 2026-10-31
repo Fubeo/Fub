@@ -41,3 +41,12 @@ e librerie.
 | Data | Sistema | Macchina | Pagina |
 |---|---|---|---|
 | 2026-10-31 | Debian 13, kernel 6.12 | AMD Ryzen 7 7730U, senza scheda grafica | [I sei motori da soli](motori-2026-10-31-linux-ryzen.md) |
+
+## Gli inventari
+
+Gli inventari di K0 sul codice dei motori: che cosa vive dove, con righe
+contate e revisione.
+
+| Data | Motore | Pagina |
+|---|---|---|
+| 2026-10-31 | PhotoCraft `b1cfff9` | [Gli strumenti dentro l'interfaccia](photocraft-strumenti-2026-10-31.md) |
