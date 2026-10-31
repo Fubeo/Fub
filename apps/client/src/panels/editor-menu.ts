@@ -14,7 +14,8 @@
 // 4. «Inserisci ▸»;
 // 5. «Comandi ▸»: i comandi del registro dichiarati per il «/», gli stessi
 //    del menu «/», e le voci dei plugin per la nota sotto il puntatore;
-// 6. le utilità: Copia link a questo punto, Cerca nella nota, Seleziona tutto.
+// 6. le utilità: Copia link a questo punto, Cerca nel documento (dove la
+//    superficie ha la sua barra di ricerca), Seleziona tutto.
 //
 // Al primo livello stanno al più `MAX_TOP` voci: oltre, le utilità e la coda
 // della prima sezione scendono in «Altro ▸». Sopra il menu, dove la superficie
@@ -141,6 +142,10 @@ export function composeEditorMenu(menu: SurfaceMenu, host: EditorMenuHost): Menu
   const tail = resolve(menu.tail);
   for (const id of UTILITIES) {
     if (id === "shell.doc.copy_anchor_link" && !surface?.anchorHere) continue;
+    // Cercare serve dove c'è del testo da cercare: dove la superficie ha la
+    // sua barra (note, documenti, codice). Su un PDF, un'immagine, un foglio
+    // o una lavagna la ricerca dell'indice non troverebbe niente da mostrare.
+    if (id === "shell.doc.search" && !surface?.find) continue;
     const item = resolveEntry(id, surface, commands, titles, host);
     if (item) tail.push(item);
   }
@@ -159,7 +164,8 @@ export function composeEditorMenu(menu: SurfaceMenu, host: EditorMenuHost): Menu
   let kept = context;
   if (count > MAX_TOP) {
     kept = context.slice(0, CONTEXT_KEPT);
-    more.push(...context.slice(CONTEXT_KEPT), ...tail.map((item, index) => ({ ...item, separator: index === 0 && more.length > 0 })));
+    const overflow = context.slice(CONTEXT_KEPT);
+    more.push(...overflow, ...tail.map((item, index) => ({ ...item, separator: index === 0 && overflow.length > 0 })));
   }
   section(t("editor_menu.group.context"), kept);
   section(t("editor_menu.group.clipboard"), clipboard);
@@ -274,6 +280,7 @@ export function openEditorMenu(event: MouseEvent, pane: HTMLElement, host: Edito
   host.focusPane();
   const strip = menu.miniBar ? host.miniBar?.(menu) ?? null : null;
   showContextMenu(pointOf(keyboard ? null : event, menu, pane), items, {
+    pointer: !keyboard,
     ...(strip ? { strip, stripLabel: t("editor_menu.mini_bar") } : {}),
   });
   return true;

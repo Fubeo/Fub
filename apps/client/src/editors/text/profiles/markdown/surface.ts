@@ -596,9 +596,14 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     );
   }
 
+  /// Il blocco della Lettura su cui si è aperto l'ultimo menu: in Lettura è
+  /// «questo punto» di «Copia il link a questo punto».
+  let readingPoint: number | null = null;
+
   function setMode(next: MarkdownMode): void {
     closeSlashPalette(parent);
     if (next === mode) return;
+    readingPoint = null;
     const previous = mode;
     if (previous !== "reading" && next === "reading") {
       const anchor = engine.getScrollAnchor();
@@ -828,7 +833,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         // Il tasto destro dentro la selezione la lascia com'è; fuori porta il
         // cursore lì, come il clic, perché le voci parlino di quel punto.
         const inside = engine.readState((state) => state.selection.ranges.some((range) => !range.empty && range.from <= point && point <= range.to));
-        if (!inside) engine.placeCursor(point);
+        // In Live un link resta com'è: il cursore dentro ne mostrerebbe la
+        // sintassi, e il testo salterebbe proprio mentre il menu si apre.
+        const onLink = mode === "live_preview" && engine.readState((state) => linkAt(state, point)) !== null;
+        if (!inside && !onLink) engine.placeCursor(point);
         pos = inside ? pos : point;
       }
     }
@@ -909,6 +917,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       transform: TRANSFORM_IDS,
       insert: INSERT_IDS,
       commands: writable,
+      note: { kind: "note", id: resources?.documentId ?? documentId },
       miniBar: writable,
     };
   }
@@ -923,6 +932,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     const source = element?.closest<HTMLElement>("[data-md-from]");
     const from = source && !source.closest(".embed-loaded") && /^\d+$/.test(source.dataset.mdFrom ?? "")
       ? Number(source.dataset.mdFrom) : null;
+    // In Lettura «questo punto» è il blocco cliccato: il cursore di scrittura
+    // non si vede, e il link non deve parlare di lui.
+    readingPoint = from;
     const context: SurfaceMenuEntry[] = [];
     if (!readOnly) {
       context.push({
@@ -952,6 +964,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           { id: "markdown.copy.source", label: t("editor_menu.copy_as.source"), run: () => copyText(engine.getDoc(), t("mode.reading.source_copied")) },
         ],
       },
+      note: { kind: "note", id: resources?.documentId ?? documentId },
       tail: ["shell.doc.export"],
     };
   }
@@ -1049,7 +1062,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     find: () => !life.closed && mode !== "reading" && engine.openFind(),
     anchorHere: () => {
       if (life.closed) return null;
-      const found = engine.readState((state) => anchorAtCursor(state));
+      const point = mode === "reading" ? readingPoint : null;
+      const found = engine.readState((state) => anchorAtCursor(state, undefined, point !== null && point <= state.doc.length ? point : undefined));
       if (!found) return null;
       // L'id nuovo si scrive solo dove si scrive: in Lettura o in sola lettura
       // un blocco senza id non ha ancora un link.

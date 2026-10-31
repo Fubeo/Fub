@@ -21,6 +21,7 @@
 // di sessioni, di cestino o di rinomina.
 import { t } from "../i18n/strings";
 import type { Lifetime } from "../ui/lifetime";
+import type { MenuItem } from "../ui/menu";
 
 export interface TreeSelectionHost {
   /// L'albero (`#file-list`).
@@ -31,6 +32,8 @@ export interface TreeSelectionHost {
   move(paths: string[]): Promise<unknown>;
   /// Una cartella nuova, con dentro le note scelte.
   group(paths: string[]): Promise<unknown>;
+  /// Le note scelte negli appunti dell'albero, per incollarle altrove.
+  copy(paths: string[]): void;
   readonly lifetime: Lifetime;
 }
 
@@ -39,6 +42,10 @@ export interface TreeSelection {
   repaint(): void;
   clear(): void;
   paths(): string[];
+  /// Il menu del tasto destro su `path` quando è scelta insieme ad altre: i
+  /// gesti del gruppo, che valgono per tutte. `null` se `path` non è in una
+  /// scelta di almeno due, e allora vale il menu della nota.
+  menuFor(path: string): MenuItem[] | null;
 }
 
 export function mountTreeSelection(host: TreeSelectionHost): TreeSelection {
@@ -200,5 +207,16 @@ export function mountTreeSelection(host: TreeSelectionHost): TreeSelection {
   lifetime.add(() => picked.clear());
   repaint();
 
-  return { repaint, clear, paths: () => [...picked] };
+  const menuFor = (path: string): MenuItem[] | null => {
+    if (!picked.has(path) || picked.size < 2) return null;
+    return [
+      { label: t("explorer.copy"), run: () => host.copy([...picked]) },
+      { label: t("explorer.selection.move"), run: () => void act(host.move) },
+      { label: t("explorer.selection.group"), run: () => void act(host.group) },
+      { label: t("explorer.selection.clear"), run: () => clear() },
+      { separator: true, label: t("explorer.selection.trash"), danger: true, run: () => void act(host.trash) },
+    ];
+  };
+
+  return { repaint, clear, paths: () => [...picked], menuFor };
 }

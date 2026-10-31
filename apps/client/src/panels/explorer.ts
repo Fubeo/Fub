@@ -295,6 +295,7 @@ export function mountExplorer(lifetime: Lifetime): void {
     trash: (paths) => trashManyWithConfirm(paths),
     move: (paths) => pickMoveFolders(paths),
     group: (paths) => groupIntoNewFolder(paths),
+    copy: (paths) => copyEntries(paths),
     lifetime,
   });
   lifetime.add(() => {
@@ -922,6 +923,7 @@ function fileRow(id: string): HTMLElement {
   // l'SVG o il PNG che draw.io esporta col disegno dentro.
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
+    if (selectionMenu(e, id)) return;
     showMenuFor(
       e,
       [
@@ -935,6 +937,16 @@ function fileRow(id: string): HTMLElement {
     );
   });
   return row;
+}
+
+/// Il tasto destro su una voce scelta insieme ad altre: il menu del gruppo,
+/// che agisce su tutte, invece di quello di una voce sola. `false` se la voce
+/// non è in una scelta di almeno due.
+function selectionMenu(at: MouseEvent, id: string): boolean {
+  const items = selection?.menuFor(id);
+  if (!items) return false;
+  showContextMenu(at, items);
+  return true;
 }
 
 /// Apre un contestuale con le voci della shell e, se ci sono view sulla
@@ -952,6 +964,7 @@ function showMenuFor(at: MouseEvent, items: MenuItem[], target: ContextTarget): 
 /// destro e del tasto Menu/Shift+F10: un punto solo, o le due strade
 /// divergono alla prima voce aggiunta.
 function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
+  if (selectionMenu(at, id)) return;
   const pinned = state.meta.pinned.includes(id);
   const move = voceSpostamento(id);
   const reorder = reorderActions(id);
