@@ -558,3 +558,46 @@ jobs:
           name: banco-scene-grandi-${{ github.sha }}
           path: apps/client/bench/.output/large.json
           include-hidden-files: true
+
+  webview:
+    # N0: le misure nella WebView vera e non nel Chromium dei banchi. Su un
+    # runner senza scheda grafica i numeri non sono assoluti: la sezione `ci`
+    # di `bench/webview/budgets.json` è una soglia di peggioramento.
+    name: la WebView vera (WebKitGTK, S1–S3)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-on-failure: true
+          key: webview
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      - name: Dipendenze di sistema di Tauri, WebKitWebDriver e un display virtuale
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev webkit2gtk-driver xvfb
+      - run: npm ci
+        working-directory: apps/client
+      - run: npm run build
+        working-directory: apps/client
+      - name: l'app come la si distribuisce, con la shell dentro
+        run: cargo build --release --locked -p fub-app --features tauri/custom-protocol
+      - name: tauri-driver, alla versione fissata
+        run: cargo install tauri-driver --version "=2.1.0" --locked
+      - name: S1–S3 nella WebKitGTK
+        run: xvfb-run -a -s "-screen 0 1280x800x24" npm run bench:webview -- --only=S1,S2,S3 --native-driver=/usr/bin/WebKitWebDriver
+        working-directory: apps/client
+      - name: il referto delle misure
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: webview-${{ github.sha }}
+          path: apps/client/bench/.output/webview
+          include-hidden-files: true

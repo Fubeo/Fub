@@ -25,6 +25,7 @@
     "bench:connectors": "node bench/connectors.mjs",
     "bench:grid": "node bench/grid-gestures.mjs",
     "bench:large": "node bench/large.mjs",
+    "bench:webview": "node bench/webview/run.mjs",
     "theme:generate": "node theme/generate.mjs",
     "theme:verify": "node theme/generate.mjs --verify"
   },

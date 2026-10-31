@@ -329,6 +329,14 @@ pub const LOG_LEVEL: &str = "log.level";
 /// questo componente*.
 pub const LOG_VERBOSE: &str = "log.verbose";
 
+/// La sonda delle prestazioni (N0): misura dall'evento al fotogramma che lo
+/// mostra, e i fotogrammi lunghi, nella WebView vera. Di **macchina** come il
+/// log: misura questo PC e questa WebView, non un vault, e serve anche quando
+/// un vault non si apre. Spenta di default: accesa, la shell tiene i campioni
+/// in memoria e li consegna a chi li chiede (il banco guidato da WebDriver);
+/// niente esce dall'app.
+pub const PERF_PROBE: &str = "perf.probe";
+
 /// Preferenze locali della replica; identità, pairing e chiavi non sono impostazioni.
 pub const SYNC_SERVER_URL: &str = "sync.server_url";
 pub const SYNC_PAUSED: &str = "sync.paused";
@@ -521,6 +529,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     settings.push(history_enabled_spec());
     settings.push(log_level_spec());
     settings.push(log_verbose_spec());
+    settings.push(perf_probe_spec());
     #[cfg(feature = "http-client")]
     settings.extend(service_settings());
     settings.extend(live_settings());
@@ -1223,6 +1232,18 @@ fn log_verbose_spec() -> SettingSpec {
     .for_machine()
 }
 
+/// La sonda delle prestazioni come [`SettingSpec`]: vedi [`PERF_PROBE`].
+fn perf_probe_spec() -> SettingSpec {
+    SettingSpec::new(
+        PERF_PROBE,
+        Text::key(C_PERF_PROBE),
+        SettingKind::Toggle { default: false },
+    )
+    .describing(Text::key(C_PERF_PROBE_DESC))
+    .grouped(Text::key(C_GROUP_DIAGNOSTICS))
+    .for_machine()
+}
+
 /// Le chiavi delle stringhe del core. Le `locale.*` non stanno qui: stanno
 /// accanto alle impostazioni che descrivono, in `fub_kernel::locale`, e
 /// arrivano al montaggio come secondo catalogo della stessa lingua.
@@ -1420,6 +1441,8 @@ const C_LOG_LEVEL: &str = "core.log.level";
 const C_LOG_LEVEL_DESC: &str = "core.log.level.desc";
 const C_LOG_VERBOSE: &str = "core.log.verbose";
 const C_LOG_VERBOSE_DESC: &str = "core.log.verbose.desc";
+const C_PERF_PROBE: &str = "core.perf.probe";
+const C_PERF_PROBE_DESC: &str = "core.perf.probe.desc";
 const C_GROUP_SYNC: &str = "core.group.sync";
 const C_SYNC_SERVER_URL: &str = "core.sync.server_url";
 const C_SYNC_SERVER_URL_DESC: &str = "core.sync.server_url.desc";
@@ -2032,6 +2055,13 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "Gli id dei componenti di cui vedere tutto, fino al debug, qualunque \
              sia il livello. È il modo di seguire un solo componente senza \
              alzare il rumore di tutti gli altri.",
+        )
+        .with(C_PERF_PROBE, "Sonda delle prestazioni")
+        .with(
+            C_PERF_PROBE_DESC,
+            "Misura quanto passa da un tasto, un clic o un tratto di penna al \
+             fotogramma che lo mostra, e conta i fotogrammi lunghi. I numeri \
+             restano su questo computer: servono ai banchi di misura.",
         );
     for level in fub_kernel::log::Level::ALL {
         it = it.with(
@@ -2556,6 +2586,13 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             "The ids of the components to see in full, down to debug, whatever the \
              global level. It is how you follow a single component without raising \
              the noise of all the others.",
+        )
+        .with(C_PERF_PROBE, "Performance probe")
+        .with(
+            C_PERF_PROBE_DESC,
+            "Measures the time from a key, a click or a pen stroke to the frame \
+             that shows it, and counts the long frames. The numbers stay on this \
+             computer: they feed the measurement benches.",
         );
     for level in fub_kernel::log::Level::ALL {
         en = en.with(
@@ -2819,6 +2856,21 @@ mod tests {
     fn a_vault_without_keys_not_asks_nothing() {
         assert!(keys_to_watch(&BTreeMap::new(), &BTreeMap::new()).is_empty());
         assert!(keys_to_watch(&BTreeMap::new(), &map(&[("keys.a", "Mod-a")])).is_empty());
+    }
+
+    #[test]
+    fn the_performance_probe_is_a_machine_switch_off_by_default() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == PERF_PROBE)
+            .expect("il core dichiara la sonda delle prestazioni");
+        // Diagnostica di questo PC: vale anche senza un vault aperto, e un
+        // vault che la scrivesse non viene ascoltato.
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Machine);
+        assert_eq!(spec.kind, SettingKind::Toggle { default: false });
+        assert!(core_machine_settings()
+            .iter()
+            .any(|spec| spec.key == PERF_PROBE));
     }
 
     #[test]
