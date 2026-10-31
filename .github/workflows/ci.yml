@@ -170,10 +170,15 @@ jobs:
         run: |
           echo "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=rust-lld.exe" >> "$GITHUB_ENV"
           echo "CARGO_PROFILE_DEV_DEBUG=line-tables-only" >> "$GITHUB_ENV"
+      # Il budget delle cache è di 10 GB per tutto il repository, e quando si
+      # sfora se ne va la più vecchia: i job che compilano un sottoinsieme di
+      # questo leggono la cache dei test di Linux (`shared-key: test`) invece
+      # di salvarne una loro.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-on-failure: true
+          shared-key: test
       - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2
         with:
           tool: cargo-nextest
@@ -196,6 +201,12 @@ jobs:
         run: cargo nextest run --workspace --no-fail-fast --profile ci
       - name: gli esempi della documentazione
         run: cargo test --workspace --doc --no-fail-fast
+      # Ogni processo di prova copia il componente che usa: le copie non
+      # servono alla corsa dopo, e non entrano nella cache.
+      - name: via le copie dei componenti
+        if: always()
+        shell: bash
+        run: rm -f target/tmp/*.wasm
 
   variants:
     # Le varianti di feature non dipendono dal sistema: girano qui, accanto ai
@@ -210,9 +221,8 @@ jobs:
           targets: wasm32-wasip2
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: true
-          key: variants
+          save-if: false
+          shared-key: test
       - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2
         with:
           tool: cargo-nextest
@@ -240,7 +250,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@035fceb3c12fb0c6a9461b52775e16473133e591 # 1.95
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: false
+          shared-key: test
       - name: LibreOffice senza interfaccia
         run: |
           sudo apt-get update
