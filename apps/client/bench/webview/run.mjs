@@ -43,6 +43,7 @@ const ENTER = "";
 const END = "";
 const SHIFT = "";
 const ALT = "";
+const ESCAPE = "";
 
 const pause = (ms) => new Promise((done) => setTimeout(done, ms));
 
@@ -87,18 +88,23 @@ const PICKER_FIRST = ".palette-list [role=option], .launcher-list [role=option]"
 /// Apre un documento col selettore rapido (Ctrl+O), come chi lo cerca per
 /// nome, e aspetta che il riquadro a fuoco dica `text`.
 async function openByName(session, name, text, mark = null, timeoutMs = 60_000) {
-  // L'app che ha appena riaperto la sessione può perdere il primo accordo:
-  // si riprova, ma al più tre volte.
+  // L'app che ha appena riaperto la sessione può perdere il primo accordo, o
+  // riprendersi il fuoco a metà del nome quando la scheda riaperta finisce di
+  // caricare: si riprova, ma al più tre volte.
   for (let attempt = 1; ; attempt++) {
     await chord(session, CTRL, "o");
     try {
       await session.waitFor(`return document.activeElement?.matches(${JSON.stringify(PICKER_INPUT)}) === true`, [], timeoutMs / 3);
+      await session.keys(name);
+      const typed = await session.execute(`const el = document.activeElement; return el?.matches(${JSON.stringify(PICKER_INPUT)}) ? el.value : null;`);
+      if (typed !== name) throw new Error(`il selettore ha «${typed ?? "perso il fuoco"}» invece di «${name}»`);
       break;
     } catch (error) {
       if (attempt === 3) throw error;
+      await session.keys(ESCAPE);
+      await pause(1000);
     }
   }
-  await session.keys(name);
   // L'elenco deve avere il risultato prima di Invio: si aspetta la prima voce.
   await session.waitFor(`return (document.querySelector(${JSON.stringify(PICKER_FIRST)})?.textContent ?? '').includes(arguments[0])`, [name], timeoutMs);
   if (mark) {
