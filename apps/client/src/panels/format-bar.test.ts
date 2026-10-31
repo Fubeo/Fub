@@ -257,6 +257,20 @@ describe("la barra di un riquadro", () => {
     expect(style.getAttribute("aria-expanded")).toBe("false");
   });
 
+  it("ogni tendina si chiama col suo gruppo, non tutte «Operazioni sulla tabella»", () => {
+    const fake = fakeActions(["markdown.embed", "markdown.table.row.after", "markdown.color.red"]);
+    const { bar } = mount(surfaceWith(fake.actions));
+    bar.update([
+      spec("markdown.color.red", "Rosso"),
+      spec("markdown.embed", "Incorpora"),
+      spec("markdown.table.row.after", "Riga sotto"),
+    ]);
+    const names = [...bar.element.querySelectorAll<HTMLButtonElement>(".format-bar-menu:not(.format-bar-overflow)")].map((menu) =>
+      menu.getAttribute("aria-label"),
+    );
+    expect(names).toEqual(["Colore e sfondo", "Altri collegamenti", "Operazioni sulla tabella"]);
+  });
+
   it("smontata, non segue più la superficie", () => {
     const fake = fakeActions(["markdown.bold"]);
     const { bar } = mount(surfaceWith(fake.actions));

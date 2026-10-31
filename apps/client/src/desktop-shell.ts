@@ -55,6 +55,7 @@ import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
 import { openPrimaryView, opensWithoutParams, primaryViews } from "./ui/primary-views";
 import { mountTitlebar } from "./ui/titlebar";
 import { mountLongPressMenus } from "./ui/long-press";
+import { mountSystemMenuGuard } from "./ui/system-menu";
 import { platformSupports } from "./platform/capabilities";
 import { mountAppMenu } from "./ui/app-menu";
 import { mountWebviewFocusMonitor } from "./ui/node";
@@ -791,6 +792,8 @@ async function init(): Promise<Teardown> {
   // Un dito apre i menu contestuali con la pressione lunga: gli stessi del
   // tasto destro, senza che ogni menu debba saperlo.
   mountLongPressMenus(pageWindowLifetime);
+  // Dove Fub non ha un menu, il tasto destro non apre quello della WebView.
+  mountSystemMenuGuard(pageWindowLifetime);
   registerMermaidRenderer();
   registerBaseRenderer((doc) => openDocument(doc));
   // I tre collegamenti iniettati, e la ragione per cui lo sono: il pannello del

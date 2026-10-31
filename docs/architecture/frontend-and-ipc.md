@@ -282,8 +282,9 @@ Ciò che la shell fa sopra le porte generiche, senza contratti propri:
 - **Albero.** Ctrl/Cmd-clic e Ctrl-Spazio aggiungono o tolgono una nota dalla
   scelta, Maiusc-clic sceglie l'intervallo fra le note visibili, Esc la
   azzera. Una barra sopra l'albero dice quante sono e offre «Sposta in…»,
-  «Cestina» e «Deseleziona»; la scelta è solo su ciò che l'albero mostra, e
-  ciò che esce dal DOM esce dalla scelta.
+  «Sposta nel cestino» e «Deseleziona»; il tasto destro su una nota scelta
+  apre lo stesso menu, con «Copia» e «In una cartella nuova». La scelta è solo
+  su ciò che l'albero mostra, e ciò che esce dal DOM esce dalla scelta.
 - **Binario.** Riordino e nascondimento sono `chrome.rail.order` e
   `chrome.rail.hidden`; la voce «Ripristina ordine e icone predefiniti» li
   riporta a `[]`.

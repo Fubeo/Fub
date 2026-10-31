@@ -7,7 +7,7 @@ import { renderMarkdown } from "../render";
 import { blockModel } from "./model";
 import { columnCount, columnsRun, dropAsColumn, intoColumns } from "./columns";
 
-// Le colonne coi blocchi (K3): «In colonne» e il blocco lasciato sul bordo
+// Le colonne coi blocchi (K3): «Colonne» e il blocco lasciato sul bordo
 // destro di un altro, a byte esatti; il risultato si legge in griglia.
 
 function stateOf(doc: string): EditorState {
@@ -20,7 +20,7 @@ const at = (state: EditorState, text: string) => blocksOf(state).findIndex((bloc
 const apply = (state: EditorState, spec: TransactionSpec) => state.update(spec).state.doc.toString();
 const grid = (doc: string) => /data-columns="(\d)"/.exec(renderMarkdown(doc).html)?.[1] ?? null;
 
-describe("«In colonne»", () => {
+describe("«Colonne»", () => {
   it("un blocco va accanto al fratello che lo segue", () => {
     const state = stateOf("Uno\n\n- a\n- b\n\nTre");
     const one = at(state, "Uno");

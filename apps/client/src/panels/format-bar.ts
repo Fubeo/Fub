@@ -54,6 +54,16 @@ const GROUP_LABELS: Record<GroupId, Key> = {
   other: "format_bar.group.other",
 };
 
+/// Il nome della tendina di un gruppo, per chi ascolta e nel suggerimento. Lo
+/// stile del paragrafo dice lo stile corrente; un gruppo senza nome suo dice
+/// «Altro in «gruppo»».
+const MENU_LABELS: Partial<Record<GroupId, Key>> = {
+  inline: "format_bar.menu.inline",
+  links: "format_bar.menu.links",
+  blocks: "format_bar.menu.blocks",
+  table: "format_bar.table.more",
+};
+
 /// Come si presenta un'azione dell'editor. `menu`: sta nel menu a tendina del
 /// gruppo invece che in riga (i sei titoli, le operazioni sulla tabella).
 interface Look {
@@ -439,7 +449,7 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
   /// stile corrente («Titolo 2»), come il selettore di un elaboratore di testi.
   function drawMenu(group: Group): HTMLButtonElement {
     const style = group.id === "block";
-    const label = style ? t(GROUP_LABELS[group.id]) : t("format_bar.table.more");
+    const label = style ? t(GROUP_LABELS[group.id]) : t(MENU_LABELS[group.id] ?? "format_bar.menu.more", { group: t(GROUP_LABELS[group.id]) });
     const trigger = button(style ? "format-bar-menu format-bar-style" : "format-bar-menu", label, null);
     trigger.setAttribute("aria-haspopup", "menu");
     trigger.setAttribute("aria-expanded", "false");
