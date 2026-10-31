@@ -14,6 +14,11 @@
 > seguire in `tools/labels.ts`; il vettore di prova 80 ([operazioni sulla
 > scena](scene-operations.md), §9).
 
+L'editor non scrive più le etichette: lo scrivere sul posto se n'è andato
+con lo strumento Testo ([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)).
+Quelle dei file si leggono, si vedono e seguono ancora la forma; ne
+scrivono ancora i modelli di «Nuovo disegno».
+
 Un `text` con `fub:inside`, che porta l'id della forma, nello stesso gruppo
 della forma. Il suo `transform` lo mette già al centro: un altro programma
 vede il testo dove FubDraw lo mostra. FubDraw legge `fub:inside` per
@@ -92,8 +97,9 @@ rettangolo più grande che sta dentro la forma, dritto nelle sue coordinate.
   dall'altra.
 - **Il corpo** resta quello scritto: il testo non cresce con la forma. Ciò
   che non ci sta in altezza esce sopra e sotto in parti uguali.
-- **Un'etichetta nuova** ha `x` e `y` a 0, `text-anchor="middle"`, righe con
-  `x="0"`, e il colore, il carattere e il corpo dello strumento Testo.
+- **Un'etichetta nuova**, come quelle dei modelli di «Nuovo disegno», ha `x`
+  e `y` a 0, `text-anchor="middle"`, righe con `x="0"`, e il colore, il
+  carattere e il corpo che le si danno.
 
 ## 5. Seguire la forma
 
@@ -108,7 +114,7 @@ rettangolo più grande che sta dentro la forma, dritto nelle sue coordinate.
 - **Una forma tolta,** uscita dal gruppo o non più chiusa: l'etichetta,
   quando un'operazione tocca lei o la forma, perde `fub:inside` e resta un
   testo.
-- **Un id cambiato** alla forma, dal pannello degli attributi, porta
+- **Un id cambiato** alla forma porta
   `fub:inside` e i riferimenti dei connettori (`fub:from`, `fub:to`,
   `fub:along`) all'id nuovo, nelle stesse operazioni. Se uno di loro sta in
   un livello o in un gruppo bloccato, l'id non si cambia: il riferimento

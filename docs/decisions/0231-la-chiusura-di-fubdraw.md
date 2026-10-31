@@ -100,4 +100,10 @@ mantenere, e VectorCraft fa già quel lavoro meglio.
   strumenti che restano, e i test del registro lo provano;
 - i test di lettura di `fub-scene` e del provider SVG aprono i disegni del
   corpus e li riscrivono identici quando non cambiano;
-- `node tools/fubdraw-inventory.mjs --orfani` non elenca moduli.
+- `apps/client/src/editors/spatial/corpus-open.test.ts` apre ogni disegno del
+  corpus nel Disegno, in Lettura e come sorgente, e prova che il buffer resta
+  coi byte del file;
+- `node tools/fubdraw-inventory.mjs --orfani` non elenca moduli `morto`. I
+  `solo-test` che restano sono i supporti dei test e i generatori dei file
+  di prova: i modelli di «Nuovo disegno» (`templates/build.ts`, `sheet.ts` e
+  le operazioni dei connettori che usano) e il corpus delle forme dal tratto.

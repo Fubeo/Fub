@@ -13,6 +13,11 @@
 > vettori di prova da 89 a 93 ([operazioni sulla scena](scene-operations.md),
 > §9); l'SVG pulito in `crates/fub-scene/src/export/clean.rs`.
 
+Le ripetizioni non si creano più: se ne sono andate col livello Esperto
+([decisione 0231](../decisions/0231-la-chiusura-di-fubdraw.md)). Quelle
+dei file si leggono, si vedono, si esportano, e le operazioni tengono vere
+le copie quando l'originale cambia.
+
 Una parte del [formato della scena](scene-format.md), §4. Una ripetizione
 mostra più volte un oggetto: i petali di un fiore intorno al centro, le
 sedie di una sala in file, le due metà di un volto. L'oggetto è l'originale,
