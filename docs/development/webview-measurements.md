@@ -76,7 +76,9 @@ ha restituito al sistema. I giri dicono se cresce: `R1.giri.primo.MiB` e
 per giro, e `R1.giri.tardi.MiB` il residuo un minuto dopo l'ultimo giro; gli
 stessi valori ci sono per ogni gruppo. Una pendenza vicina a zero è memoria
 che torna o si riusa; una pendenza positiva è memoria che ogni giro lascia.
-La tolleranza è il cancello di K3.
+La tolleranza, fissata in K0, sta in `budgets.json`: come obiettivo (il
+cancello di K3) residuo entro 50 MiB e pendenza entro 1 MiB per giro, sul
+runner una volta e mezza il peggiore visto.
 
 T1 è la prima delle tre vie del piano dei componenti per la tela dei motori
 (tessere verso la WebView, superficie wgpu nativa, egui): misura il trasporto

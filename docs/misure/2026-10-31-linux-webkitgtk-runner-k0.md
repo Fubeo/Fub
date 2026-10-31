@@ -87,6 +87,42 @@ con una lettura dopo 10 s e una dopo 60 s.
   che oscilla è la raccolta della WebView. Nei tre giri vale 318,6, 97,3 e
   165 MiB: per ora oscilla. La tolleranza è il cancello di K3.
 
+### Il quarto giro: dieci volte apri tutto e chiudi tutto
+
+Il quarto giro (run 41197858474, ramo di prova `prova/k0-con-274`, merge
+`583765b3`) segue la procedura con i giri: dopo la prima chiusura, dieci
+volte tutti i file aperti e poi tutto chiuso, una lettura 10 s dopo ogni
+chiusura e una 60 s dopo l'ultima. I valori sono PSS in MiB.
+
+| Momento | Totale | App | WebView | Rete |
+|---|---|---|---|---|
+| vuota | 1041,7 | 387,3 | 634,5 | 19,9 |
+| aperte, 7 schede | 1068,9 | 393,0 | 655,0 | 20,9 |
+| chiuse, dopo 60 s | 1055,7 | 392,4 | 642,4 | 20,9 |
+| **residuo** | **14,0** | **5,1** | **7,9** | **1,0** |
+
+| Giri | Totale | App | WebView |
+|---|---|---|---|
+| residuo dopo il primo giro | 142,9 | 8,7 | 133,3 |
+| residuo dopo il decimo giro | 206,2 | 15,5 | 189,6 |
+| pendenza, MiB per giro | 11,88 | 0,65 | 11,22 |
+| residuo 60 s dopo l'ultimo giro | 202,7 | 15,5 | 186,2 |
+
+- **Il residuo cresce con i giri**, di circa 12 MiB a giro, e un minuto dopo
+  l'ultimo giro non torna. Non sale a ogni giro: il massimo è al nono
+  (263,3 MiB), il decimo scende a 206,2. Con tutto aperto la memoria va da
+  1488,8 MiB al primo giro a 1754,4 al nono. Quasi tutto è della WebView (11,2 MiB a giro);
+  il processo dell'app cresce di 0,65 MiB a giro.
+- Il primo giro lascia molto più della prima chiusura (142,9 contro 14
+  MiB): nei giri le schede si aprono una dopo l'altra senza la pausa di 3 s
+  fra l'una e l'altra.
+- La partenza è divisa per processo: l'app 387,3 MiB, la WebView 634,5, il
+  processo di rete 19,9.
+- Dopo S3 il job si è fermato: l'avvio dell'app per S7 non ha trovato il
+  display («Failed to initialize GTK»), quindi in questo giro S7, T1 e I1
+  mancano. La causa non è provata; il banco adesso registra l'errore nello
+  scenario e prosegue, e Xvfb accetta fino a 2048 client.
+
 ## T1, le tessere
 
 Un PNG di 20,7 MB (2880 × 1800 RGBA, senza compressione), aperto con
