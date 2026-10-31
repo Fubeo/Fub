@@ -85,11 +85,25 @@ quella feature. Cambiano soltanto `lto` e `codegen-units = 1`, attraverso
 - Con la LTO `cargo bloat` attribuisce a `std` il codice generico che
   l'ottimizzatore ha fuso dentro le sue funzioni. I numeri per crate
   diventano meno affidabili, il totale no.
-- Con LTO, i crate più grandi dopo l'engine sono:
-  - `vectorcraft_doc` (3,2–3,5);
-  - `serde_json` (1,6–1,8);
-  - `vectorcraft_tools` (1,5);
-  - `image` (1,3–1,4).
+- I dieci crate più pesanti, in MiB di `.text`, secondo
+  `cargo bloat --release --crates -n 10`:
+
+  | # | Senza LTO | MiB | `lto = "fat"` | MiB |
+  |---|---|---|---|---|
+  | 1 | `vectorcraft_engine` | 11,8 | `vectorcraft_engine` | 8,3 |
+  | 2 | `vectorcraft_doc` | 4,1 | `std` | 6,7 |
+  | 3 | `std` | 2,8 | `vectorcraft_doc` | 3,2 |
+  | 4 | `vectorcraft_format` | 2,7 | `serde_json` | 1,6 |
+  | 5 | `vectorcraft_tools` | 2,0 | `vectorcraft_tools` | 1,5 |
+  | 6 | `vectorcraft_brush` | 1,8 | `image` | 1,3 |
+  | 7 | `vectorcraft_pdf` | 1,7 | `serde_core` | 1,1 |
+  | 8 | `vectorcraft_eps` | 1,7 | `vectorcraft_pdf` | 1,0 |
+  | 9 | `vectorcraft_effects` | 1,5 | `vectorcraft_eps` | 1,0 |
+  | 10 | `vectorcraft_render` | 1,2 | `zune_jpeg` | 0,9 |
+  | | gli altri 117 | 18,5 | gli altri 118 | 15,2 |
+
+  Con la LTO `vectorcraft_format` e `vectorcraft_brush` escono dai primi
+  dieci: il loro codice finisce dentro i crate che li chiamano.
 - Il tetto di `budgets.json` resta sul profilo delle prove, quello senza LTO,
   perché il confronto fra i motori sia alla pari. Il peso di un'edizione si
   misura in K4, col profilo di consegna di Fub.
