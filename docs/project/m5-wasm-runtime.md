@@ -2,7 +2,7 @@
 
 > **Retrospettiva della milestone consegnata in `main` dalla PR #53.**
 
-## Statosso della milestone
+## Stato della milestone
 
 M5 è consegnata in `main` dalla
 [PR #53](https://github.com/Fubeo/Fub/pull/53), merge commit

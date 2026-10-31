@@ -17,11 +17,13 @@ Fub/
 │   ├── fub-format-markdown/
 │   ├── fub-features/
 │   └── fub-wasm-host/
-├── apps/client/               shell Vite e TypeScript
-├── esempi/                 componenti WASM eseguiti dai test
-├── tools/                  verifiche fuori dal workspace
-├── docs/                   documentazione canonica
-└── .github/                workflow e guard
+├── apps/client/           shell Vite e TypeScript
+├── apps/clipper/          estensione del browser
+├── vendor/                i motori copiati: wordcraft, gridcraft
+├── esempi/                componenti WASM eseguiti dai test
+├── tools/                 verifiche fuori dal workspace
+├── docs/                  documentazione canonica
+└── .github/               workflow e guard
 ```
 
 ## Dove modificare cosa
@@ -56,6 +58,7 @@ Fub/
 | `fub-format-base` | provider `.base`: viste YAML sulle proprietà delle note |
 | `fub-format-canvas` | provider JSON Canvas (`.canvas`) |
 | `fub-format-rich` | documenti di videoscrittura (`.docx`, `.odt`, `.rtf`, `.doc`) |
+| `fub-format-xlsx` | cartelle di Excel (`.xlsx`) sopra i motori di GridCraft |
 | `fub-format-svg` | provider delle scene di FubDraw (`.svg`) |
 | `fub-features` | feature ufficiali dietro feature Cargo |
 | `fub-importers` | import ed export ufficiali (HTML, CSV, ZIP, ENEX, PDF, connettori) |
@@ -101,3 +104,7 @@ e dagli esempi in `esempi/`.
 
 Il grafo completo è in
 [`architecture/components-and-boundaries.md`](../architecture/components-and-boundaries.md).
+Le mappe di orientamento — il disegno d'insieme, la tabella di chi possiede
+ogni regola e l'indice «dove sta X» — stanno in
+[`map/repo.md`](../map/repo.md), [`map/ownership.md`](../map/ownership.md) e
+[`map/dove-sta-x.md`](../map/dove-sta-x.md).

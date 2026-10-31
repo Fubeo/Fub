@@ -29,10 +29,12 @@ necessario saltato o una modifica architetturale non verificata.
 4. Leggi **solo** la pagina canonica dell'area e gli approfondimenti necessari.
    Per modifiche trasversali usa
    [`docs/architecture/components-and-boundaries.md`](docs/architecture/components-and-boundaries.md).
+   Per orientarti su percorsi, ownership di una regola o «dove è definito
+   questo», parti da [`docs/map/`](docs/map/).
 5. Se tocchi un contratto pubblico o persistente, leggi il riferimento
    pertinente in [`docs/reference/`](docs/reference/).
 6. Leggi un ADR soltanto quando serve il perché di una scelta o quando valuti di
-   cambiarla. Leggi roadmap e TODO soltanto se il task riguarda quel lavoro.
+   cambiarla. Leggi stato e TODO soltanto se il task riguarda quel lavoro.
 7. Verifica nel codice e nei test che la documentazione descriva ancora il
    presente prima di basare una modifica su di essa.
 
@@ -53,10 +55,10 @@ Quando le fonti divergono, usa questo ordine:
 2. WIT, schemi persistenti e formati serializzati;
 3. pagine di architettura e riferimenti canonici;
 4. ADR, limitatamente alla motivazione delle decisioni;
-5. stato, roadmap e TODO attivi;
+5. stato e TODO attivi;
 6. cronologia Git.
 
-Una roadmap, un TODO o un'API candidata **non è architettura corrente**. Non
+Una pagina di stato, un TODO o un'API candidata **non è architettura corrente**. Non
 promuovere in `fub-abi`, WIT o IPC una forma futura soltanto perché è descritta
 in dettaglio. I contratti pubblici nascono quando casi reali, compatibilità,
 limiti e fallback li hanno dimostrati.

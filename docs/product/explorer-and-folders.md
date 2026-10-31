@@ -112,11 +112,11 @@ nel cestino, le altre vengono ripristinate. L'annullamento ripristina ogni voce
 al suo path; le sottocartelle vuote non tornano.
 
 Nell'explorer il menu contestuale di una cartella offre «Rinomina» (F2), «Sposta
-in…» ed «Elimina» (Canc), che chiede conferma finché l'impostazione del vault
-`files.confirm-trash` non è spenta; l'esito offre «Annulla». Una cartella trascinata su
-un'altra, o sul fondo del pannello, ci entra con `folder.rename`, mai dentro sé
-stessa. Prima del comando la shell salva i buffer aperti; le cartelle espanse e
-lo spazio attivo seguono il path nuovo, e l'esito offre «Annulla».
+in…» e «Sposta nel cestino» (Canc), che chiede conferma finché l'impostazione del
+vault `files.confirm-trash` non è spenta; l'esito offre «Annulla». Una cartella
+trascinata su un'altra, o sul fondo del pannello, ci entra con `folder.rename`, mai
+dentro sé stessa. Prima del comando la shell salva i buffer aperti; le cartelle
+espanse e lo spazio attivo seguono il path nuovo, e l'esito offre «Annulla».
 
 ## Trascinare
 

@@ -28,8 +28,8 @@ oltre al suo testo, dei pezzi con un aspetto loro: una parola in grassetto,
 un'altra in corsivo o di un altro colore. Un testo ha tre forme: **da
 punto**, che va a capo soltanto dove lo si spezza; **in area**, che FubDraw
 manda a capo nella larghezza di un riquadro (§4); **su tracciato**, una riga
-sola lungo un tracciato delle risorse (§5). Come si scrive e si cambia il
-testo è in [Disegni, tipografia](../product/drawing-typography.md). Le
+sola lungo un tracciato delle risorse (§5). Che cosa ne cambia l'editor è in
+[Disegni, tipografia](../product/drawing-typography.md). Le
 sezioni del formato si citano come «formato della scena, §N»; quelle di
 questa pagina col solo numero.
 

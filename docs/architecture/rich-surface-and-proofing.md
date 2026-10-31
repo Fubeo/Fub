@@ -332,9 +332,10 @@ l'IPC.
   codec aggiunge al documento gli stili che mancano. Un sommario scritto da
   Word senza il campo nel suo titolo non si riconosce e resta.
 
-Gli import `prosemirror-*` stanno sotto `editors/rich/`, ma nessun guard lo
-verifica ancora come per CodeMirror. Il Markdown non dipende da questa famiglia;
-senza la feature `rich` dell'host questi documenti tornano file a byte.
+Gli import `prosemirror-*` stanno sotto `editors/rich/` e nel nucleo
+`scrittura/`, ma nessun guard lo verifica ancora come per CodeMirror. Il
+Markdown non dipende da questa famiglia; senza la feature `rich` dell'host
+questi documenti tornano file a byte.
 
 L'aspetto del contenuto
 ([ADR 0222](../decisions/0222-tre-strati-e-l-aspetto-del-contenuto.md)): le

@@ -443,7 +443,7 @@ Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).
   con `UnservedExports`, come chi importa una famiglia host non servita;
 - i comandi che l'host esegue in proprio (`mount.*`, `folder.create`,
   `trash.os`, `vault.snapshot.*`, `vault.export`, `capture.apply`,
-  `settings.import_obsidian`, `connector.token`, `connector.tokens`,
-  `uri.pending`, `uri.apply`) sono
+  `web.clip`, `settings.import_obsidian`, `connector.token`,
+  `connector.tokens`, `uri.pending`, `uri.apply`) sono
   riservati nel registro al mount: un plugin che li invoca con `run_command` riceve `Unserved`, e
   nessun provider può registrarne un omonimo.
