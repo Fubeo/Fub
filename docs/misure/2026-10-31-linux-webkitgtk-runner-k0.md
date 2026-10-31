@@ -108,20 +108,29 @@ chiusura e una 60 s dopo l'ultima. I valori sono PSS in MiB.
 | pendenza, MiB per giro | 11,88 | 0,65 | 11,22 |
 | residuo 60 s dopo l'ultimo giro | 202,7 | 15,5 | 186,2 |
 
-- **Il residuo cresce con i giri**, di circa 12 MiB a giro, e un minuto dopo
-  l'ultimo giro non torna. Non sale a ogni giro: il massimo è al nono
-  (263,3 MiB), il decimo scende a 206,2. Con tutto aperto la memoria va da
-  1488,8 MiB al primo giro a 1754,4 al nono. Quasi tutto è della WebView (11,2 MiB a giro);
-  il processo dell'app cresce di 0,65 MiB a giro.
-- Il primo giro lascia molto più della prima chiusura (142,9 contro 14
-  MiB): nei giri le schede si aprono una dopo l'altra senza la pausa di 3 s
-  fra l'una e l'altra.
+Lo stesso giro, rifatto due volte (run 41201112077 sul ramo di K0, run
+41200961175 su `prova/k0-con-274`):
+
+| Run | Pendenza in tutto | App | WebView | Residuo 60 s dopo l'ultimo giro |
+|---|---|---|---|---|
+| 41197858474 | 11,88 | 0,65 | 11,22 | 202,7 |
+| 41201112077 | −14,84 | 0,14 | −15,00 | 256,6 |
+| 41200961175 | 12,29 | 0,07 | 12,22 | 129,1 |
+
+- **Il residuo non cresce in modo regolare.** Il processo dell'app resta
+  fermo (da 0,07 a 0,65 MiB per giro). La WebView oscilla: la pendenza
+  cambia segno da un run all'altro, e nel terzo run il residuo dopo il
+  decimo giro (561,1 MiB) scende a 129,1 un minuto dopo. È la raccolta
+  della WebView, non memoria che l'app tiene.
+- Il primo giro lascia più della prima chiusura (fra 140 e 218 MiB contro
+  fra −37,5 e 52,3): nei giri le schede si aprono una dopo l'altra, senza
+  la pausa di 3 s fra l'una e l'altra.
 - La partenza è divisa per processo: l'app 387,3 MiB, la WebView 634,5, il
   processo di rete 19,9.
-- Dopo S3 il job si è fermato: l'avvio dell'app per S7 non ha trovato il
-  display («Failed to initialize GTK»), quindi in questo giro S7, T1 e I1
-  mancano. La causa non è provata; il banco adesso registra l'errore nello
-  scenario e prosegue, e Xvfb accetta fino a 2048 client.
+- In due run su tre un avvio dell'app non ha trovato il display («Failed to
+  initialize GTK»): nel primo dopo S3, nel terzo prima di S1, anche con
+  Xvfb a 2048 client. La causa non è provata. Il banco registra l'errore
+  nello scenario e prosegue.
 
 ## T1, le tessere
 
@@ -180,6 +189,22 @@ principale.
   `fetch`, e una tessera con `Range` arriva in 3 ms. Questa misura è
   avvenuta a indice finito, quindi non dice se il protocollo aspetta
   anche lui l'indice.
+
+## I1, il vault durante l'indicizzazione
+
+Una nota aperta con `read_document` e una tessera letta dalla IPC, una dopo
+l'altra, finché l'indice delle 10.000 note non è pronto. Tempi in
+millisecondi, p95.
+
+| Ramo | Run | Nota | Tessera | Campioni |
+|---|---|---|---|---|
+| `fase/k0-misure`, senza #274 | 41201112077 | 1485 | 2574 | 13 |
+| `prova/k0-con-274`, con #274 | 41200961175 | 8 | 29 | 183 |
+
+Con le prese brevi dell'apertura (#274) i due comandi non aspettano più la
+fine di una fetta, e nello stesso tempo d'indicizzazione ne passano 183
+invece di 13. Le soglie di `budgets.json` sono 100 ms sul runner e 50 ms
+come obiettivo.
 
 ## Cosa non dice
 
