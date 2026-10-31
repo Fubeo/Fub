@@ -330,7 +330,7 @@ jobs:
       - name: nessun pacchetto npm in due copie
         run: node .github/scripts/check-npm-copies.mjs
 
-  # I banchi girano in tre job accanto a quello dei test, invece che in fila
+  # I banchi girano in job loro accanto a quello dei test, invece che in fila
   # dietro di lui. Tutti sull'immagine delle baseline.
   visual:
     name: banco visivo (scene uguali alle baseline)
@@ -384,8 +384,8 @@ jobs:
         run: npm run bench:a11y -- --light=${{ matrix.light }}
         working-directory: apps/client
 
-  benches:
-    name: banchi del grafo, del movimento, dei disegni e della griglia
+  graph:
+    name: banchi del grafo (scala e heap)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -455,6 +455,22 @@ jobs:
           path: apps/client/bench/.output/graph-scale.json
           if-no-files-found: error
           include-hidden-files: true
+
+  benches:
+    name: banchi del movimento, dei disegni e della griglia
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      - run: npm ci
+        working-directory: apps/client
+      - name: il browser del banco visivo, alla revisione che il lock pinna
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/client
       # Le coreografie si misurano contro sé stesse, non contro una baseline:
       # stato finale uguale col moto e senza, nessun residuo, solo transform e
       # opacità, un'inversione a metà che torna al punto di partenza.
@@ -511,8 +527,20 @@ jobs:
   webview:
     # N0: le misure nella WebView vera e non nel Chromium dei banchi. Su un
     # runner senza scheda grafica i numeri non sono assoluti: la sezione `ci`
-    # di `bench/webview/budgets.json` è una soglia di peggioramento.
-    name: la WebView vera (WebKitGTK, S1–S3)
+    # di `bench/webview/budgets.json` è una soglia di peggioramento. La memoria
+    # (R1, dieci giri per tre campioni) da sola vale più di tutto il resto:
+    # gira in un job suo, accanto agli altri scenari.
+    name: la WebView vera (WebKitGTK, ${{ matrix.parte }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - parte: S1–S3, S7, T1, I1
+            scenari: S1,S2,S3,S7,T1,I1
+            referto: tempi
+          - parte: R1
+            scenari: R1
+            referto: memoria
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -540,14 +568,14 @@ jobs:
         run: cargo build --release --locked -p fub-app --features tauri/custom-protocol
       - name: tauri-driver, alla versione fissata
         run: cargo install tauri-driver --version "=2.1.0" --locked
-      - name: S1–S3, S7, la memoria (R1) e le tessere (T1) nella WebKitGTK
-        run: xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048" npm run bench:webview -- --only=S1,S2,S3,S7,R1,T1,I1 --native-driver=/usr/bin/WebKitWebDriver
+      - name: gli scenari ${{ matrix.scenari }} nella WebKitGTK
+        run: xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048" npm run bench:webview -- --only=${{ matrix.scenari }} --native-driver=/usr/bin/WebKitWebDriver
         working-directory: apps/client
       - name: il referto delle misure
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: webview-${{ github.sha }}
+          name: webview-${{ matrix.referto }}-${{ github.sha }}
           path: apps/client/bench/.output/webview
           include-hidden-files: true
 

@@ -24,21 +24,23 @@ use camino::Utf8PathBuf;
 ///   differenza** dentro il componente — il manifest senza `read-vault`, il
 ///   mondo che chiede anche la rete — e non un secondo esempio.
 ///
-/// # Una cartella per variante, un lucchetto fra i processi
+/// # Una cartella per tutti gli esempi, un lucchetto fra i processi
 ///
 /// I binari di integrazione sono processi distinti, e una dozzina chiede gli
-/// stessi esempi. Ogni variante ha una `--target-dir` sua, condivisa da tutti:
-/// il primo binario la compila, gli altri trovano cargo fresco in pochi
-/// millisecondi. Una variante non scrive mai nella cartella di un'altra, quindi
-/// chi chiede il ping normale non apre i byte della variante senza permessi.
+/// stessi esempi. Tutti gli esempi e tutte le varianti compilano in una sola
+/// `--target-dir`: le dipendenze comuni si compilano una volta, e ogni
+/// variante ricompila soltanto il proprio crate. Con una cartella per variante
+/// le stesse dipendenze si compilavano trentatré volte, ed era quasi tutto il
+/// tempo dei test di questo crate in CI.
 ///
-/// Due processi che chiedono la **stessa** variante si contendono invece il
+/// Nella cartella comune due varianti dello stesso esempio si contendono il
 /// `.wasm` finale: cargo, anche quando non ricompila, lo rimette al suo posto
-/// togliendolo e ricollegandolo, e chi lo copia in quel momento non lo trova.
-/// Compilazione e copia stanno allora dentro un `File::lock` sulla
-/// variante, che mette in fila i processi oltre ai thread. La copia porta il
-/// nonce del processo, composto da pid e istante di avvio del banco: il file
-/// che una prova apre non lo tocca nessun altro. Dentro un processo la prima
+/// togliendolo e ricollegandolo, e lo ricollega alla variante appena chiesta.
+/// Compilazione e copia stanno allora dentro un solo `File::lock`, che mette in
+/// fila i processi oltre ai thread: chi copia ha davanti i byte della variante
+/// che ha compilato lui, non quelli di un altro. La copia porta il nonce del
+/// processo, composto da pid e istante di avvio del banco: il file che una
+/// prova apre non lo tocca nessun altro. Dentro un processo la prima
 /// compilazione viene memorizzata e le prove successive riusano quel file.
 pub fn component(example: &str, artifact: &str, feature: &str) -> Utf8PathBuf {
     static BUILT: OnceLock<Mutex<HashMap<String, Utf8PathBuf>>> = OnceLock::new();
@@ -67,7 +69,7 @@ pub fn component(example: &str, artifact: &str, feature: &str) -> Utf8PathBuf {
         .join(example);
     let variant = if feature.is_empty() { "base" } else { feature };
     let tmp = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
-    let output = tmp.join(format!("{example}-{variant}"));
+    let output = tmp.join("esempi-wasm");
     let copy = tmp.join(format!("{artifact}-{variant}-{nonce}.wasm"));
 
     // Il lucchetto vive fino alla fine della funzione: compilazione e copia
@@ -76,9 +78,9 @@ pub fn component(example: &str, artifact: &str, feature: &str) -> Utf8PathBuf {
         .create(true)
         .truncate(false)
         .write(true)
-        .open(tmp.join(format!("{example}-{variant}.lock")))
-        .expect("the lock file of the variant opens");
-    lock.lock().expect("the lock of the variant is taken");
+        .open(tmp.join("esempi-wasm.lock"))
+        .expect("the lock file of the examples opens");
+    lock.lock().expect("the lock of the examples is taken");
 
     let mut cargo = std::process::Command::new(env!("CARGO"));
     cargo

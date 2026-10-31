@@ -28,6 +28,7 @@ export const REQUIRED_JOBS = [
   "contrasto e tastiera (dark)",
   "contrasto e tastiera (light)",
   "banchi del grafo",
+  "banchi del movimento",
 ];
 
 export const SIGNING = {
