@@ -273,6 +273,55 @@ export const clearProperties: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 
+/// Il valore di una proprietà, come lo legge il widget; `null` se non c'è.
+export function propertyValue(state: EditorState, key: string): string | null {
+  return propertyBlock(state)?.entries.find((entry) => entry.key === key)?.value ?? null;
+}
+
+/// Un valore YAML su una riga: fra virgolette quando, nudo, YAML lo leggerebbe
+/// come un'altra cosa (un `#` di commento, `: `, un segno iniziale riservato,
+/// spazi ai bordi, `true`, un numero).
+function scalar(value: string, inList = false): string {
+  const plain = value !== "" && value.trim() === value
+    && !/^[-?:,[\]{}#&*!|>'"%@`]/.test(value)
+    && !(inList && /[,[\]{}]/.test(value))
+    && !/: |\s#/.test(value)
+    && !/^(?:true|false|yes|no|on|off|null|~|[-+]?\d[\d._]*)$/i.test(value);
+  return plain ? value : `"${value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")}"`;
+}
+
+/// Scrive (o toglie, con `null`) la proprietà `key`, con tutte le righe della
+/// voce che c'era; senza frontmatter lo crea in cima. È la modifica, da
+/// mandare con una transazione: chi chiama sceglie l'evento.
+export function setProperty(state: EditorState, key: string, value: string | readonly string[] | null): { from: number; to: number; insert: string } | null {
+  const text = value === null ? null
+    : typeof value === "string" ? `${key}: ${scalar(value)}`
+    : `${key}: [${value.map((item) => scalar(item, true)).join(", ")}]`;
+  const block = propertyBlock(state);
+  if (!block) {
+    if (text === null) return null;
+    const at = state.doc.sliceString(0, 1) === "\ufeff" ? 1 : 0;
+    return { from: at, to: at, insert: `---\n${text}\n---\n` };
+  }
+  const entry = block.entries.find((item) => item.key === key);
+  if (entry) {
+    if (text === null) {
+      const to = entry.to < state.doc.length ? entry.to + 1 : entry.to;
+      return { from: entry.from, to, insert: "" };
+    }
+    return { from: entry.from, to: entry.to, insert: text };
+  }
+  if (text === null) return null;
+  const closing = state.doc.line(block.closing);
+  return { from: closing.from, to: closing.from, insert: `${text}\n` };
+}
+
+/// Le voci di una proprietà a elenco (`[a, b]` o una per riga), una per una.
+export function propertyList(state: EditorState, key: string): string[] {
+  const value = propertyValue(state, key);
+  return value === null ? [] : value.split(/,\s*|\s+/).map((item) => item.trim()).filter(Boolean);
+}
+
 /// La voce sulla cui riga di chiave sta l'unico cursore, con le vicine.
 function entryAtCursor(state: EditorState): { block: PropertyBlock; index: number } | null {
   if (state.selection.ranges.length !== 1) return null;

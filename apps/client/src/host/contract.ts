@@ -2475,6 +2475,8 @@ export const COMMANDS = {
   createFolder: "folder.create",
   renameFolder: "folder.rename",
   trashFolder: "folder.trash",
+  folderPage: "note.folder_page",
+  subpage: "note.subpage",
   osTrash: "trash.os",
   undo: "vault.undo",
   replace: "vault.replace",

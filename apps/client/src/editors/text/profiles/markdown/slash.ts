@@ -215,7 +215,7 @@ export function runSlashAction(view: EditorView, id: string, from: number, to: n
       : /^[\s>]*(?:`{3,}|~{3,})/.test(head.text) ? head.to : null;
     if (at === null) return true;
     view.dispatch({ selection: EditorSelection.cursor(at) });
-  } else if (id !== "markdown.wikilink" && id !== "markdown.embed" && id !== "markdown.diagram") {
+  } else if (id !== "markdown.wikilink" && id !== "markdown.embed" && id !== "markdown.diagram" && id !== "markdown.mention" && id !== "markdown.date") {
     return true;
   }
   startCompletion(view);

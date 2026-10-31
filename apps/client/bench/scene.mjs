@@ -430,6 +430,92 @@ export const SCENE = onPage("shell", [
       await page.waitForSelector('.pane[data-mode="reading"] .pane-preview');
     },
   },
+  // **La Live** (`?live=<caso>`, vedi `live-fixture.ts`): le scene del piano
+  // «Live e Blocchi», ognuna con il suo testo, il cursore nel punto che il caso
+  // dice e, dove serve, i tasti che scrive. È il «prima» con cui ogni fase si
+  // confronta. Il numero è quello delle foto del piano; la 18 non c'è.
+  ...[
+    ["live-01-panoramica", "panoramica", "La Live dall'alto, senza cursore: ogni costrutto della nota"],
+    ["live-02-riga-attiva", "riga-attiva", "La Live col cursore nel paragrafo degli stili"],
+    ["live-03-titolo-attivo", "titolo-attivo", "La Live col cursore su un titolo di livello 2"],
+    ["live-04-codice-attivo", "codice-attivo", "La Live col cursore in un blocco di codice"],
+    ["live-05-callout-attivo", "callout-attivo", "La Live col cursore nel corpo di un callout"],
+    ["live-06-elenco-attivo", "elenco-attivo", "La Live col cursore su una voce numerata"],
+    ["live-07-html-attivo", "html-attivo", "La Live col cursore sulla riga della formula e dell'HTML"],
+    ["live-08-apice-digitando", "apice-digitando", "La Live mentre si scrive un apice non ancora chiuso", ["^2"]],
+    ["live-09-pedice-digitando", "pedice-digitando", "La Live mentre si scrive un pedice non ancora chiuso", ["~2"]],
+    ["live-10-apice-chiuso", "apice-chiuso", "La Live con un apice appena chiuso e il cursore dopo", ["^2^", " e poi"]],
+    ["live-11-grassetto-digitando", "grassetto-digitando", "La Live mentre si scrive un grassetto non ancora chiuso", ["**importante"]],
+    ["live-12-stretta", "panoramica", "La Live dall'alto nella finestra minima, 800 px", [], { width: 800, height: 800 }],
+    ["live-13-panoramica-fondo", "panoramica-fondo", "La Live in fondo alla nota: formula, HTML e definizione della nota"],
+    ["live-14-tabella-attiva", "tabella-attiva", "La Live col cursore in una cella della tabella"],
+    ["live-15-callout-titolo", "callout-titolo", "La Live col cursore sul titolo di un callout"],
+    ["live-16-elenco-a-capo", "elenco-a-capo", "La Live con voci lunghe che vanno a capo, a 900 px", [], { width: 900, height: 800 }],
+    ["live-17-recinto-digitando", "recinto-digitando", "La Live mentre si apre un recinto di codice", ["```js", "@Enter", "const a = 1;"]],
+    ["live-19-link-in-modifica", "link-in-modifica", "La Live col cursore sulla riga di un link lungo"],
+    ["live-20-wikilink-alias", "wikilink-alias", "La Live col cursore sulla riga di un wikilink con alias"],
+    ["live-21-riga-vuota", "riga-vuota", "La Live su una nota nuova, col cursore sulla riga vuota"],
+    ["live-22-immagine-selezionata", "immagine-selezionata", "La Live con un'immagine da sola nel paragrafo, selezionata: contorno, maniglia e didascalia"],
+    ["live-23-colori", "colori", "La Live coi nove colori del testo e del fondo"],
+    ["live-24-ripiegabile", "ripiegabile", "La Live con un ripiegabile chiuso e uno aperto con un altro dentro"],
+    ["live-25-colonne", "colonne", "La Live con due e tre colonne, a 900 px", [], { width: 900, height: 800 }],
+    ["live-27-indice", "indice", "La Live con l'indice dei titoli in cima alla nota"],
+    ["live-26-colonne-stretta", "colonne", "La Live con le colonne nella finestra minima, 800 px", [], { width: 800, height: 800 }],
+  ].map(([id, live, title, keys = [], viewport]) => ({
+    id,
+    title,
+    query: `live=${live}`,
+    ...(viewport ? { viewport } : {}),
+    prepare: (page) => openLive(page, keys, live === "panoramica-fondo" ? "bottom" : "top"),
+  })),
+  // I Blocchi: la stessa nota, con la maniglia del blocco sotto il puntatore e
+  // quella del blocco del cursore; poi la selezione di blocchi e il menu.
+  ...[
+    ["blocchi-01-passaggio", "riga-attiva", "I Blocchi col puntatore su un titolo: «+» e maniglia accanto", "hover"],
+    ["blocchi-02-selezione", "riga-attiva", "I Blocchi con due blocchi selezionati (Esc, Shift+↓)", "select"],
+    ["blocchi-03-menu", "titolo-attivo", "I Blocchi col menu della maniglia aperto", "menu"],
+    ["blocchi-04-stretta", "riga-attiva", "I Blocchi nella finestra minima, 800 px, col puntatore su un titolo", "hover", { width: 800, height: 800 }],
+    ["blocchi-05-pagina", "pagina", "I Blocchi con la testata della pagina: icona, copertina, titolo e proprietà", "page"],
+    ["blocchi-06-pagina-larga", "pagina-larga", "I Blocchi con la pagina a tutta larghezza, a 900 px", "page", { width: 900, height: 800 }],
+    ["blocchi-07-pagina-larga-stretta", "pagina-larga", "I Blocchi con la pagina a tutta larghezza, a 800 px", "page", { width: 800, height: 800 }],
+  ].map(([id, live, title, gesture, viewport]) => ({
+    id,
+    title,
+    query: `live=${live}`,
+    ...(viewport ? { viewport } : {}),
+    prepare: async (page) => {
+      await openLive(page, [], "top", "blocks");
+      await page.waitForSelector(".pane.focus .cm-fub-block-handles");
+      // La testata della pagina arriva dopo che il cursore è stato portato in
+      // vista: secondo chi vince, la nota resta in cima o scende di 78 px. Il
+      // banco aspetta la testata e riparte dalla cima, ogni volta.
+      await page.waitForSelector(".pane.focus .cm-fub-page-title");
+      await page.evaluate(() => { document.querySelector(".pane.focus .cm-scroller").scrollTop = 0; });
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      if (gesture === "hover") return;
+      if (gesture === "page") {
+        if (live === "pagina-larga") await page.waitForSelector(".pane.focus.fub-note--wide");
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        return;
+      }
+      if (gesture === "select") {
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("Shift+ArrowDown");
+        await page.waitForSelector(".pane.focus .cm-fub-block-selected");
+      } else {
+        await page.click(".pane.focus .cm-fub-block-grip");
+        await page.waitForSelector(".cm-fub-block-menu");
+      }
+      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    },
+    // Il puntatore è l'ultimo gesto: `prepareScene` lo porta via prima.
+    ...(gesture === "hover" ? {
+      hover: async (page) => {
+        await page.hover(".pane.focus .cm-content .cm-line:has-text('Cose da fare')");
+        await page.waitForSelector(".pane.focus .cm-fub-block-handles[data-active=\"true\"]");
+      },
+    } : {}),
+  })),
   {
     id: "compact",
     title: "Lo spazio dell'interfaccia al passo più stretto: le barre si ritirano, il foglio no",
@@ -924,6 +1010,59 @@ async function openNote(page, path) {
       false,
     name,
   );
+}
+
+/// Apre la nota della Live (`?live=…`), passa alla Live, mette il cursore dove
+/// il caso dice e scrive i tasti della scena (`@Invio` è un tasto, il resto
+/// testo). Senza cursore la nota si guarda dall'alto e senza fuoco; `scroll`
+/// dice se dall'alto o dal fondo.
+async function openLive(page, keys, scroll, mode = "live_preview") {
+  const doc = await page.evaluate(() => globalThis.__fubLiveBench?.doc ?? null);
+  if (doc === null) throw new Error("la pagina non ha la nota della Live");
+  // In una finestra stretta l'albero sta nel cassetto, e le modalità sono un
+  // bottone solo: come in `openRichDocument` e in `nota-tre-modi`.
+  const compact = await page.evaluate(() => document.querySelector("#layout")?.classList.contains("layout-compact") ?? false);
+  if (compact) {
+    await page.click('#views-ribbon .rail-btn[data-panel="files"]');
+    await page.waitForSelector("#sidebar-scrim:not([hidden])");
+  }
+  await openNote(page, doc);
+  if (compact && await page.isVisible("#sidebar-scrim")) {
+    const scrim = await page.locator("#sidebar-scrim").boundingBox();
+    await page.click("#sidebar-scrim", { position: { x: scrim.width - 8, y: 8 } });
+    await page.waitForSelector("#sidebar-scrim", { state: "hidden" });
+  }
+  const live = page.locator(`.pane.focus .pane-toolbar button[data-mode="${mode}"]`);
+  if (await live.isVisible()) await live.click();
+  else if (!(await page.isVisible(`.pane.focus[data-mode="${mode}"]`))) {
+    await page.click(".pane.focus .pane-toolbar .pane-mode-current");
+    await page.click(`#context-menu [role="menuitemradio"]:has-text("${mode === "blocks" ? "Blocchi" : "Live"}")`);
+  }
+  await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .cm-content`);
+  await page.evaluate(async (bottom) => {
+    // La vista si prende dal modulo del pacchetto testuale, lo stesso che la
+    // shell ha già caricato: il banco non tocca CodeMirror da sé.
+    const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+    const pane = document.querySelector(".pane.focus .cm-editor")?.parentElement;
+    if (!pane) throw new Error("il riquadro non ha l'editor");
+    const view = findTextEditorOrThrow(pane);
+    const cursor = globalThis.__fubLiveBench.cursor;
+    if (cursor === null) {
+      view.dispatch({ selection: { anchor: 0 } });
+      view.contentDOM.blur();
+    } else {
+      const head = globalThis.__fubLiveBench.head ?? cursor;
+      view.dispatch({ selection: { anchor: cursor, head }, scrollIntoView: true });
+      view.focus();
+    }
+    if (bottom) view.scrollDOM.scrollTop = view.scrollDOM.scrollHeight;
+  }, scroll === "bottom");
+  for (const key of keys) {
+    if (key.startsWith("@")) await page.keyboard.press(key.slice(1));
+    else await page.keyboard.type(key);
+  }
+  // Due fotogrammi: la misura di CodeMirror dopo l'ultima transazione.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
 /// Apre un documento di videoscrittura dall'albero e aspetta che la

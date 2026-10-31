@@ -59,3 +59,5 @@ Nuove decisioni usano il [template](template.md).
 | [0225 — Tabella, un componente per tutte le tabelle](0225-tabella-un-componente-per-tutte-le-tabelle.md) | proposta | frontend | — |
 | [0226 — Inchiostro e disegni nei documenti](0226-inchiostro-e-disegni-nei-documenti.md) | proposta | contratto | — |
 | [0227 — Le penne sono ricette del pennello, e la punta piatta è un pennello nuovo](0227-le-penne-e-la-punta-piatta.md) | proposta | contratto | — |
+| [0228 — `~x~` è pedice, `~~x~~` barrato](0228-il-pedice-con-una-tilde.md) | proposta | contratto | — |
+| [0229 — La pagina della cartella è `_index`](0229-pagina-della-cartella.md) | proposta | contratto | — |

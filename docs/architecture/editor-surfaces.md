@@ -282,8 +282,8 @@ Reading ridisegna dal buffer corrente, senza salvataggio imposto.
 I blocchi Live inattivi e Reading condividono lo stesso renderer locale in
 `apps/client/src/editors/text/profiles/markdown/render*.ts` e lo stesso
 montaggio in `apps/client/src/editors/text/profiles/markdown/mount.ts`; i blocchi selezionati mostrano
-la sorgente. Il task passa da normale modifica undoabile della sessione e
-`readOnly` disabilita l'input.
+la sorgente. Il task passa da normale modifica undoabile della sessione e `readOnly` disabilita l'input.
+Dopo una modifica la Live rende di nuovo i soli blocchi toccati ([la battuta](../product/performance-budget.md#la-battuta)).
 
 Le tabelle GFM di primo livello fanno eccezione in Live: restano un widget
 anche col cursore dentro, la griglia di `profiles/markdown/table-widget.ts`. Il

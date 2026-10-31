@@ -340,6 +340,7 @@ impl Printer<'_> {
             Inline::Emph(children)
             | Inline::Strong(children)
             | Inline::Superscript(children)
+            | Inline::Subscript(children)
             | Inline::Strikethrough(children) => {
                 for child in children {
                     self.inline(child, out);

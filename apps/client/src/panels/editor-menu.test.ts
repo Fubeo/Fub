@@ -32,7 +32,7 @@ function spec(id: string, title = id, surfaces: CommandSpec["surfaces"] = ["tool
   };
 }
 
-function surfaceWith(known: Record<string, EditorActionState>, menu: SurfaceMenu | null = null): EditorSurface {
+function surfaceWith(known: Record<string, EditorActionState>, menu: SurfaceMenu | null = null, find = true): EditorSurface {
   const run = vi.fn(() => true);
   return {
     family: "text",
@@ -51,6 +51,7 @@ function surfaceWith(known: Record<string, EditorActionState>, menu: SurfaceMenu
       subscribe: () => () => {},
     },
     contextMenu: () => menu,
+    ...(find ? { find: () => true } : {}),
   };
 }
 
@@ -72,7 +73,7 @@ describe("il compositore del menu dell'editor", () => {
   it("mette le sezioni nell'ordine di sempre, ognuna col suo gruppo", () => {
     const surface = surfaceWith({ "markdown.bold": { enabled: true, active: false } });
     const host = hostFor(surface, [spec("markdown.bold", "Grassetto"), spec("note.daily", "Nota del giorno", ["slash"])], [
-      { id: "shell.doc.search", title: "Cerca nella nota", description: "", layer: "document", binding: "Mod-f", declared: null, spec: null, run: null },
+      { id: "shell.doc.search", title: "Cerca nel documento", description: "", layer: "document", binding: "Mod-f", declared: null, spec: null, run: null },
     ]);
     const items = composeEditorMenu({
       target: { kind: "text" },
@@ -87,11 +88,18 @@ describe("il compositore del menu dell'editor", () => {
       "Copia",
       "Formato",
       "Comandi",
-      "Cerca nella nota",
+      "Cerca nel documento",
       "Seleziona tutto",
     ]);
     expect(items.find((item) => item.label === "Taglia")?.disabled).toBe(true);
     expect(new Set(items.map((item) => item.group)).size).toBe(5);
+  });
+
+  it("«Cerca nel documento» c'è solo dove la superficie ha la sua ricerca", () => {
+    const search: CommandEntry = { id: "shell.doc.search", title: "Cerca nel documento", description: "", layer: "document", binding: "Mod-f", declared: null, spec: null, run: null };
+    const menu: SurfaceMenu = { target: { kind: "media" } };
+    expect(labels(composeEditorMenu(menu, hostFor(surfaceWith({}, null, true), [], [search])))).toEqual(["Cerca nel documento"]);
+    expect(composeEditorMenu(menu, hostFor(surfaceWith({}, null, false), [], [search])), "un PDF, un'immagine, un foglio, una lavagna").toEqual([]);
   });
 
   it("un'azione prende nome dal comando che la dichiara, icona, stato e accordo; senza comando non c'è", () => {
@@ -133,6 +141,10 @@ describe("il compositore del menu dell'editor", () => {
     expect(more.label).toBe("Altro");
     expect(labels(more.items as MenuItem[])).toContain("Seleziona tutto");
     expect(labels(more.items as MenuItem[])).toContain("Voce 9");
+    const inside = more.items as MenuItem[];
+    const firstUtility = inside.findIndex((item) => item.label === "Seleziona tutto");
+    expect(inside[firstUtility]!.separator, "le utilità si staccano dalla coda della prima sezione").toBe(true);
+    expect(inside.filter((item) => item.separator)).toHaveLength(1);
   });
 
   it("una voce con un comando lo esegue dopo il suo gesto", () => {

@@ -10,7 +10,7 @@ export const DEFAULT_CSS_SNIPPETS = '{"version":1,"snippets":[]}';
 
 // Deliberately finite. A frontmatter value never becomes an arbitrary selector.
 export const NOTE_CSS_CLASSES = [
-  "wide", "narrow", "compact", "serif", "sans", "minimal",
+  "wide", "narrow", "compact", "serif", "sans", "minimal", "small", "mono",
 ] as const;
 const NOTE_HOOKS = NOTE_CSS_CLASSES.map((name) => `fub-note--${name}`);
 // Gli hook sono quelli del profilo in vigore: un frammento nomina le classi

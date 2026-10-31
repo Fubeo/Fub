@@ -15,8 +15,240 @@ pub fn render_html(model: &DocumentModel, opts: &RenderOptions) -> String {
     // La capacità si stima dal corpo: il numero di blocchi per una media
     // grezza di byte resi. Non tocca i byte, solo le riallocazioni.
     let mut out = String::with_capacity(model.body.len() * 128);
-    render_blocks(&model.body, opts, &mut out);
+    render_top_blocks(&model.body, opts, &mut out);
     out
+}
+
+/// I blocchi di primo livello, coi ripiegabili (K2): un `<details>` accoppiato
+/// alla sua chiusura avvolge i blocchi fra loro, come in Lettura
+/// (`pairDetails` in `details.ts`). Un'apertura senza chiusura resta HTML.
+fn render_top_blocks(blocks: &[Block], opts: &RenderOptions, out: &mut String) {
+    let roles = details_roles(blocks);
+    let mut toc: Option<Vec<TocEntry>> = None;
+    for (block, role) in blocks.iter().zip(roles) {
+        // L'indice (K4): un recinto `toc` diventa i titoli della nota, come
+        // in Lettura (`toc.ts`).
+        if let Block::CodeBlock {
+            lang: Some(lang),
+            code,
+            ..
+        } = block
+        {
+            if lang.eq_ignore_ascii_case("toc") {
+                let entries = toc.get_or_insert_with(|| toc_entries(blocks));
+                render_toc(block, code, entries, out);
+                continue;
+            }
+        }
+        match role {
+            Some(DetailsRole::Open { open, summary }) => write!(
+                out,
+                "<details class=\"fub-details\"{}{}><summary>{}</summary>",
+                block_attrs(block),
+                if open { " open" } else { "" },
+                escape(summary.unwrap_or_default())
+            )
+            .unwrap(),
+            Some(DetailsRole::Close) => out.push_str("</details>"),
+            None => render_block(block, opts, out),
+        }
+    }
+}
+
+/// Un titolo per l'indice: il livello, il testo, l'id che la resa gli dà.
+struct TocEntry {
+    level: u8,
+    text: String,
+    id: String,
+}
+
+/// I titoli della nota in ordine, anche quelli dentro citazioni ed elenchi.
+fn toc_entries(blocks: &[Block]) -> Vec<TocEntry> {
+    fn walk(blocks: &[Block], out: &mut Vec<TocEntry>) {
+        for block in blocks {
+            match block {
+                Block::Heading {
+                    level,
+                    inlines,
+                    anchor: Some(id),
+                    ..
+                } if !id.is_empty() => {
+                    let mut text = String::new();
+                    plain_text(inlines, &mut text);
+                    out.push(TocEntry {
+                        level: (*level).clamp(1, 6),
+                        text: text.trim().to_owned(),
+                        id: id.clone(),
+                    });
+                }
+                Block::Quote { blocks, .. } => walk(blocks, out),
+                Block::List { items, .. } => {
+                    for item in items {
+                        walk(&item.blocks, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(blocks, &mut out);
+    out
+}
+
+/// I livelli che il recinto chiede con `livelli: a-b` (o `levels:`); tutti
+/// se non lo dice.
+fn toc_levels(code: &str) -> (u8, u8) {
+    for line in code.lines() {
+        let line = line.trim();
+        let Some(rest) = strip_ci(line, "livelli").or_else(|| strip_ci(line, "levels")) else {
+            continue;
+        };
+        let Some(rest) = rest.trim_start().strip_prefix(':') else {
+            continue;
+        };
+        let level = |text: &str| match text.trim().parse::<u8>() {
+            Ok(n @ 1..=6) => Some(n),
+            _ => None,
+        };
+        let parsed = match rest.split_once('-') {
+            Some((a, b)) => level(a).zip(level(b)),
+            None => level(rest).map(|n| (n, n)),
+        };
+        if let Some((a, b)) = parsed {
+            return (a.min(b), a.max(b));
+        }
+    }
+    (1, 6)
+}
+
+fn render_toc(block: &Block, code: &str, entries: &[TocEntry], out: &mut String) {
+    let (from, to) = toc_levels(code);
+    let shown: Vec<&TocEntry> = entries
+        .iter()
+        .filter(|entry| entry.level >= from && entry.level <= to)
+        .collect();
+    let Some(top) = shown.iter().map(|entry| entry.level).min() else {
+        write!(
+            out,
+            "<div class=\"fub-toc\" data-empty=\"true\"{}></div>",
+            block_attrs(block)
+        )
+        .unwrap();
+        return;
+    };
+    write!(out, "<div class=\"fub-toc\"{}><ul>", block_attrs(block)).unwrap();
+    for entry in shown {
+        write!(
+            out,
+            "<li class=\"fub-toc-item\" data-depth=\"{}\"><a{}>{}</a></li>",
+            entry.level - top,
+            attr("href", &format!("#{}", entry.id)),
+            escape(&entry.text)
+        )
+        .unwrap();
+    }
+    out.push_str("</ul></div>");
+}
+
+#[derive(Clone, Copy)]
+enum DetailsRole<'a> {
+    Open {
+        open: bool,
+        summary: Option<&'a str>,
+    },
+    Close,
+}
+
+fn html_block(block: &Block) -> Option<&str> {
+    match block {
+        Block::Custom {
+            custom_kind, attrs, ..
+        } if custom_kind == custom_kind::HTML => attrs.get("html")?.as_str(),
+        _ => None,
+    }
+}
+
+/// Chi apre e chi chiude, accoppiati dall'interno; il resto non ha ruolo.
+fn details_roles(blocks: &[Block]) -> Vec<Option<DetailsRole<'_>>> {
+    let mut roles = vec![None; blocks.len()];
+    let mut stack: Vec<(usize, DetailsRole<'_>)> = Vec::new();
+    for (at, block) in blocks.iter().enumerate() {
+        let Some(html) = html_block(block) else {
+            continue;
+        };
+        if let Some((open, summary)) = details_head(html) {
+            stack.push((at, DetailsRole::Open { open, summary }));
+        } else if is_details_close(html) {
+            if let Some((opened, role)) = stack.pop() {
+                roles[opened] = Some(role);
+                roles[at] = Some(DetailsRole::Close);
+            }
+        }
+    }
+    roles
+}
+
+/// Gli spazi e le tabulazioni in testa.
+fn blank(text: &str) -> &str {
+    text.trim_start_matches([' ', '\t'])
+}
+
+/// Il prefisso `prefix`, senza badare alle maiuscole.
+fn strip_ci<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
+    let head = text.get(..prefix.len())?;
+    head.eq_ignore_ascii_case(prefix)
+        .then(|| &text[prefix.len()..])
+}
+
+/// Fino a tre spazi o tabulazioni di rientro, come un blocco HTML.
+fn strip_indent(text: &str) -> Option<&str> {
+    let rest = blank(text);
+    (text.len() - rest.len() <= 3).then_some(rest)
+}
+
+/// L'apertura di un ripiegabile: `<details>` o `<details open>`, poi
+/// facoltativo `<summary>testo</summary>` sulla stessa riga o sulla seguente,
+/// e nient'altro. È `HEAD` di `details.ts`.
+fn details_head(html: &str) -> Option<(bool, Option<&str>)> {
+    let text = strip_indent(html.trim_end_matches(['\n', '\r']))?;
+    let rest = strip_ci(text, "<details")?;
+    let (open, rest) = match strip_ci(blank(rest), "open") {
+        Some(after) if blank(rest).len() < rest.len() => match blank(after).strip_prefix('=') {
+            Some(value) => {
+                let value = blank(value);
+                let rest = ["\"\"", "''", "\"open\"", "'open'"]
+                    .iter()
+                    .find_map(|quoted| strip_ci(value, quoted))?;
+                (true, rest)
+            }
+            None => (true, after),
+        },
+        _ => (false, rest),
+    };
+    let rest = blank(blank(rest).strip_prefix('>')?);
+    let rest = rest
+        .strip_prefix("\r\n")
+        .or_else(|| rest.strip_prefix('\n'))
+        .map(blank)
+        .unwrap_or(rest);
+    if rest.is_empty() {
+        return Some((open, None));
+    }
+    let inner = strip_ci(rest, "<summary>")?;
+    let end = inner.find(['<', '\n', '\r'])?;
+    let (summary, tail) = inner.split_at(end);
+    blank(strip_ci(tail, "</summary>")?)
+        .is_empty()
+        .then_some((open, Some(summary)))
+}
+
+/// La chiusura `</details>`, da sola.
+fn is_details_close(html: &str) -> bool {
+    strip_indent(html.trim_end_matches(['\n', '\r']))
+        .and_then(|rest| strip_ci(rest, "</details"))
+        .and_then(|rest| blank(rest).strip_prefix('>'))
+        .is_some_and(|rest| blank(rest).is_empty())
 }
 
 fn render_blocks(blocks: &[Block], opts: &RenderOptions, out: &mut String) {
@@ -62,6 +294,17 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                     "<div{html_attrs} class=\"math-block\"{}>{}</div>",
                     attr("data-tex", source.trim()),
                     escape(source.trim())
+                )
+                .unwrap();
+            } else if let Some(caption) = lone_image_caption(inlines) {
+                // Un'immagine da sola nel paragrafo è una figura, con la
+                // didascalia dal testo alternativo, come in Lettura (K10).
+                write!(out, "<figure{html_attrs}>").unwrap();
+                render_inlines(inlines, opts, out);
+                write!(
+                    out,
+                    "<figcaption>{}</figcaption></figure>",
+                    escape(&caption)
                 )
                 .unwrap();
             } else {
@@ -288,10 +531,226 @@ fn display_math(inlines: &[Inline]) -> Option<&str> {
     found
 }
 
-fn render_inlines(inlines: &[Inline], opts: &RenderOptions, out: &mut String) {
+/// La didascalia di un paragrafo fatto soltanto di un'immagine `![alt](x)`:
+/// il testo alternativo senza la dimensione (`alt|320`). Senza testo
+/// alternativo non c'è didascalia, e il paragrafo resta un paragrafo.
+fn lone_image_caption(inlines: &[Inline]) -> Option<String> {
+    let mut found = None;
     for inline in inlines {
-        render_inline(inline, opts, out);
+        match inline {
+            Inline::Link {
+                target: LinkTarget::Path(_) | LinkTarget::Url(_),
+                label,
+                embed: true,
+                ..
+            } if found.is_none() => {
+                let mut text = String::new();
+                plain_text(label.as_deref().unwrap_or_default(), &mut text);
+                found = Some(text);
+            }
+            Inline::Text(text) if text.trim().is_empty() => {}
+            _ => return None,
+        }
     }
+    let text = found?;
+    let alt = match text.rsplit_once('|') {
+        Some((alt, size)) if is_size(size) => alt,
+        _ => text.as_str(),
+    };
+    let alt = alt.trim();
+    (!alt.is_empty()).then(|| alt.to_owned())
+}
+
+/// `320` o `320x200`: la dimensione dopo la barra del testo alternativo.
+fn is_size(text: &str) -> bool {
+    let mut parts = text.splitn(2, 'x');
+    let number = |part: &str| {
+        (1..=5).contains(&part.len())
+            && part.bytes().all(|b| b.is_ascii_digit())
+            && !part.starts_with('0')
+    };
+    parts.next().is_some_and(number) && parts.next().is_none_or(number)
+}
+
+fn plain_text(inlines: &[Inline], out: &mut String) {
+    for inline in inlines {
+        match inline {
+            Inline::Text(text) | Inline::Code(text) => out.push_str(text),
+            Inline::SoftBreak | Inline::HardBreak => out.push(' '),
+            Inline::Emph(children)
+            | Inline::Strong(children)
+            | Inline::Strikethrough(children)
+            | Inline::Superscript(children)
+            | Inline::Subscript(children) => plain_text(children, out),
+            _ => {}
+        }
+    }
+}
+
+fn render_inlines(inlines: &[Inline], opts: &RenderOptions, out: &mut String) {
+    for (at, inline) in inlines.iter().enumerate() {
+        match paired_html(inlines, at) {
+            Some(tag) => out.push_str(&tag),
+            None => render_inline(inline, opts, out),
+        }
+    }
+}
+
+/// I tag HTML in riga che la resa ricostruisce: quelli di testo, nudi, senza
+/// attributi. È lo stesso vocabolario chiuso di `INLINE_HTML` in
+/// `render-inline.ts`, così la stampa e l'export dicono ciò che dice la
+/// Lettura: `Premi <kbd>Ctrl</kbd>` mostra un tasto, `<u>` sottolinea. Ogni
+/// altro tag resta testo escapato.
+const INLINE_HTML: &[&str] = &[
+    "em", "strong", "del", "ins", "mark", "sub", "sup", "small", "abbr", "kbd", "samp", "var",
+    "code", "span", "u",
+];
+
+/// I nove colori del contenuto, come Notion (K1): `<span class="fub-color-*">`
+/// per il testo, `fub-bg-*` per il fondo. Lo stesso vocabolario chiuso di
+/// `CONTENT_COLORS` in `ui/sanitize.ts`; i colori veri li dà il tema.
+const CONTENT_COLORS: &[&str] = &[
+    "gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red",
+];
+
+/// Le classi di `<span>` e `<mark>` che la resa tiene: soltanto quelle dei
+/// colori, al più una per il testo e una per il fondo. Altrimenti il tag resta
+/// testo, come ogni tag con attributi.
+fn content_classes(value: &str) -> Option<String> {
+    let mut text = None;
+    let mut fill = None;
+    for token in value.split_ascii_whitespace() {
+        let (slot, color) = if let Some(color) = token.strip_prefix("fub-color-") {
+            (&mut text, color)
+        } else if let Some(color) = token.strip_prefix("fub-bg-") {
+            (&mut fill, color)
+        } else {
+            return None;
+        };
+        if slot.is_some() || !CONTENT_COLORS.contains(&color) {
+            return None;
+        }
+        *slot = Some(token);
+    }
+    let classes: Vec<&str> = text.into_iter().chain(fill).collect();
+    (!classes.is_empty()).then(|| classes.join(" "))
+}
+
+/// `name class="…"` (o con l'apice semplice): il nome e le classi dei colori,
+/// se il tag ha soltanto quell'attributo e il nome è `span` o `mark`.
+fn colored_tag(inner: &str) -> Option<(&'static str, String)> {
+    let (name, rest) = inner.split_once(|c: char| c.is_ascii_whitespace())?;
+    let name: &'static str = match name.to_ascii_lowercase().as_str() {
+        "span" => "span",
+        "mark" => "mark",
+        _ => return None,
+    };
+    let value = rest
+        .trim()
+        .strip_prefix("class")?
+        .trim_start()
+        .strip_prefix('=')?
+        .trim_start();
+    let quote = value.chars().next().filter(|c| *c == '"' || *c == '\'')?;
+    let value = value[1..].strip_suffix(quote)?;
+    if value.contains(quote) {
+        return None;
+    }
+    Some((name, content_classes(value)?))
+}
+
+enum HtmlTag {
+    Break,
+    Element {
+        name: &'static str,
+        closing: bool,
+        classes: Option<String>,
+    },
+}
+
+fn html_tag(inline: &Inline) -> Option<HtmlTag> {
+    let Inline::Custom {
+        custom_kind, attrs, ..
+    } = inline
+    else {
+        return None;
+    };
+    if custom_kind != custom_kind::HTML {
+        return None;
+    }
+    let raw = attrs.get("html")?.as_str()?;
+    let original = raw.strip_prefix('<')?.strip_suffix('>')?;
+    if let Some((name, classes)) = colored_tag(original) {
+        return Some(HtmlTag::Element {
+            name,
+            closing: false,
+            classes: Some(classes),
+        });
+    }
+    let inner = original.to_ascii_lowercase();
+    if let Some(rest) = inner.strip_prefix("br") {
+        let rest = rest.trim_start();
+        return rest
+            .strip_prefix('/')
+            .unwrap_or(rest)
+            .is_empty()
+            .then_some(HtmlTag::Break);
+    }
+    let (closing, name) = match inner.strip_prefix('/') {
+        Some(name) => (true, name),
+        None => (false, inner.as_str()),
+    };
+    let name = INLINE_HTML.iter().find(|known| **known == name)?;
+    Some(HtmlTag::Element {
+        name,
+        closing,
+        classes: None,
+    })
+}
+
+/// Il tag in `at`, se è del vocabolario e ha il suo compagno fra i fratelli:
+/// un `<em>` lasciato aperto il browser lo riaprirebbe nei paragrafi seguenti.
+fn paired_html(inlines: &[Inline], at: usize) -> Option<String> {
+    let (name, closing, classes) = match html_tag(&inlines[at])? {
+        HtmlTag::Break => return Some("<br />".into()),
+        HtmlTag::Element {
+            name,
+            closing,
+            classes,
+        } => (name, closing, classes),
+    };
+    let others: Box<dyn Iterator<Item = &Inline>> = if closing {
+        Box::new(inlines[..at].iter().rev())
+    } else {
+        Box::new(inlines[at + 1..].iter())
+    };
+    let mut depth = 0usize;
+    for other in others {
+        let Some(HtmlTag::Element {
+            name: other_name,
+            closing: other_closing,
+            ..
+        }) = html_tag(other)
+        else {
+            continue;
+        };
+        if other_name != name {
+            continue;
+        }
+        if other_closing == closing {
+            depth += 1;
+        } else if depth == 0 {
+            let slash = if closing { "/" } else { "" };
+            let class = classes
+                .as_deref()
+                .map(|classes| format!(" class=\"{classes}\""))
+                .unwrap_or_default();
+            return Some(format!("<{slash}{name}{class}>"));
+        } else {
+            depth -= 1;
+        }
+    }
+    None
 }
 
 fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
@@ -309,6 +768,11 @@ fn render_inline(inline: &Inline, opts: &RenderOptions, out: &mut String) {
             out.push_str("<sup>");
             render_inlines(children, opts, out);
             out.push_str("</sup>");
+        }
+        Inline::Subscript(children) => {
+            out.push_str("<sub>");
+            render_inlines(children, opts, out);
+            out.push_str("</sub>");
         }
         Inline::Strikethrough(children) => {
             out.push_str("<del>");

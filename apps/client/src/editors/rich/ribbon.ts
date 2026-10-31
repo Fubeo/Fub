@@ -252,7 +252,7 @@ const inkTool = (tool: RichInkTool, keytip: string, icon: string): RichControl =
   pressed: (view) => view.ink.tool === tool,
 });
 
-const toggle = (id: string, label: Key, keytip: string, figure: { icon?: string; glyph?: string; className?: string }): RichControl => ({
+const toggle = (id: string, label: Key, keytip: string, figure: { icon?: string; glyph?: string | (() => string); className?: string }): RichControl => ({
   kind: "button",
   id,
   label,
@@ -441,9 +441,9 @@ export const RICH_TABS: readonly RichTab[] = [
                 action("markdown.clear", "rich.ribbon.clear", "E", "rc-clear"),
               ],
               [
-                toggle("markdown.bold", "rich.bold", "1", { glyph: "G", className: "rich-ribbon-bold" }),
-                toggle("markdown.italic", "rich.italic", "2", { glyph: "C", className: "rich-ribbon-italic" }),
-                toggle("rich.underline", "rich.underline", "3", { glyph: "S", className: "rich-ribbon-underline" }),
+                toggle("markdown.bold", "rich.bold", "1", { glyph: () => t("rich.glyph.bold"), className: "rich-ribbon-bold" }),
+                toggle("markdown.italic", "rich.italic", "2", { glyph: () => t("rich.glyph.italic"), className: "rich-ribbon-italic" }),
+                toggle("rich.underline", "rich.underline", "3", { glyph: () => t("rich.glyph.underline"), className: "rich-ribbon-underline" }),
                 toggle("markdown.strikethrough", "rich.ribbon.strike", "4", { glyph: "abc", className: "rich-ribbon-strike" }),
                 toggle("rich.subscript", "rich.subscript", "5", { glyph: "x₂" }),
                 toggle("rich.superscript", "rich.superscript", "6", { glyph: "x²" }),

@@ -103,11 +103,11 @@ describe("formattazione inline", () => {
   });
 
   it("avvolge la parola sotto il cursore", () => {
-    expect(run(toggleBold, "ciao mon|do").out).toBe("ciao **‹mondo›**");
+    expect(run(toggleBold, "ciao mon|do").out).toBe("ciao **mon|do**");
   });
 
   it("toglie i marcatori se la parola è già formattata", () => {
-    expect(run(toggleBold, "**gras|setto** x").out).toBe("‹grassetto› x");
+    expect(run(toggleBold, "**gras|setto** x").out).toBe("gras|setto x");
   });
 
   it("toglie i marcatori inclusi nella selezione", () => {
@@ -115,26 +115,29 @@ describe("formattazione inline", () => {
   });
 
   it("senza parola inserisce la coppia col cursore in mezzo", () => {
-    expect(run(toggleBold, "|").out).toBe("**|**");
+    // Da sola nella riga, vuota, `****` sarebbe una linea: aspetta coi tag, e
+    // la prima lettera li riporta ai segni (`signsOnFirstLetter`).
+    expect(run(toggleBold, "|").out).toBe("<strong>|</strong>");
+    expect(run(toggleBold, "a |").out).toBe("a **|**");
     expect(run(toggleWikilink, "vedi |").out).toBe("vedi [[|]]");
   });
 
   it("il corsivo non scambia il ** del grassetto per un *", () => {
-    expect(run(toggleItalic, "**gras|setto**").out).toBe("***‹grassetto›***");
+    expect(run(toggleItalic, "**gras|setto**").out).toBe("***gras|setto***");
   });
 
   it("da ***…*** il corsivo toglie solo il suo *", () => {
-    expect(run(toggleItalic, "***en|trambi***").out).toBe("**‹entrambi›**");
+    expect(run(toggleItalic, "***en|trambi***").out).toBe("**en|trambi**");
   });
 
   it("corsivo semplice: avvolge e toglie", () => {
-    expect(run(toggleItalic, "cor|sivo").out).toBe("*‹corsivo›*");
-    expect(run(toggleItalic, "*cor|sivo*").out).toBe("‹corsivo›");
+    expect(run(toggleItalic, "cor|sivo").out).toBe("*cor|sivo*");
+    expect(run(toggleItalic, "*cor|sivo*").out).toBe("cor|sivo");
   });
 
   it("barrato e codice inline", () => {
     expect(run(toggleStrikethrough, "‹via›").out).toBe("~~‹via›~~");
-    expect(run(toggleStrikethrough, "~~vi|a~~").out).toBe("‹via›");
+    expect(run(toggleStrikethrough, "~~vi|a~~").out).toBe("vi|a");
     expect(run(toggleInlineCode, "co|de").out).toBe("`‹code›`");
     expect(run(toggleInlineCode, "`co|de`").out).toBe("‹code›");
   });
@@ -145,8 +148,8 @@ describe("formattazione inline", () => {
   });
 
   it("gli accenti fanno parte della parola e le emoji non spostano gli offset", () => {
-    expect(run(toggleBold, "🎯 per|ò!").out).toBe("🎯 **‹però›**!");
-    expect(run(toggleItalic, "città 🎯 è|à").out).toBe("città 🎯 *‹èà›*");
+    expect(run(toggleBold, "🎯 per|ò!").out).toBe("🎯 **per|ò**!");
+    expect(run(toggleItalic, "città 🎯 è|à").out).toBe("città 🎯 *è|à*");
   });
 
   it("codice inline con backtick dentro: usa il fence doppio", () => {

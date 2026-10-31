@@ -99,7 +99,7 @@ describe("testo in riga", () => {
     expect(stateAt("markdown.highlight", "==im|portante==").active).toBe(true);
     expect(stateAt("markdown.highlight", "niente| qui").active).toBe(false);
     expect(stateAt("markdown.comment", "%%na|scosto%%").active).toBe(true);
-    expect(run("markdown.highlight", "paro|la")).toBe("==‹parola›==");
+    expect(run("markdown.highlight", "paro|la")).toBe("==paro|la==");
   });
 
   it("la formula in riga è premuta dentro `$…$`", () => {
@@ -214,6 +214,32 @@ describe("blocchi", () => {
   it("il callout mette l'intestazione sopra le righe e seleziona il tipo", () => {
     expect(run("markdown.callout", "|")).toBe("> [!note]\n> |");
     expect(run("markdown.callout", "Nota|")).toBe("> [!‹note›]\n> Nota");
+  });
+
+  it("il ripiegabile mette il sommario sopra le righe, col cursore nel sommario", () => {
+    expect(run("markdown.details", "|")).toBe("<details>\n<summary>|</summary>\n\n\n\n</details>");
+    expect(run("markdown.details", "‹uno\ndue›")).toBe("<details>\n<summary>|</summary>\n\nuno\ndue\n\n</details>");
+  });
+
+  it("l'indice è un recinto `toc` vuoto, col cursore sotto (K4)", () => {
+    expect(run("markdown.toc", "Testo|")).toBe("Testo\n\n```toc\n```\n|");
+  });
+
+  it("persona e data scrivono una `@` staccata dalla parola prima (K5, K6)", () => {
+    expect(run("markdown.mention", "Con|")).toBe("Con @|");
+    expect(run("markdown.date", "Entro |")).toBe("Entro @|");
+    expect(run("markdown.mention", "|")).toBe("@|");
+  });
+
+  it("il segnalibro web apre un paragrafo con `https://` (K8)", () => {
+    expect(run("markdown.linkcard", "Testo|")).toBe("Testo\n\nhttps://|\n");
+    expect(run("markdown.linkcard", "|")).toBe("https://|\n");
+  });
+
+  it("le colonne mettono un blocco per colonna, da due a quattro (K3)", () => {
+    expect(run("markdown.columns", "|")).toBe("> [!columns]\n> > [!column]\n> > |\n>\n> > [!column]\n> > ");
+    expect(run("markdown.columns", "‹uno\n\ndue\ntre›")).toBe("> [!columns]\n> > [!column]\n> > uno|\n>\n> > [!column]\n> > due\n> > tre");
+    expect(run("markdown.columns", "‹a\n\nb\n\nc\n\nd\n\ne›")).toBe("‹a\n\nb\n\nc\n\nd\n\ne›");
   });
 
   it("dentro un callout lo toglie e lascia il testo, titolo compreso", () => {

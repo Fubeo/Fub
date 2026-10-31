@@ -221,3 +221,50 @@ revisione Playwright fissata, 1280 × 800). Il primo fotogramma ha la soglia dei
 per tetto la misura nella tabella con un margine: la coda di una molla che si assesta
 conta, anche se l'occhio non la vede più, e un tetto più basso si sceglie
 quando cambia il moto, non prima.
+
+### La battuta
+
+Quanto costa un carattere scritto in una nota grande: dalla transazione al
+layout forzato, senza il disegno. Lo stesso banco la misura su due note
+sintetiche (`live-fixture.ts`, sezioni da diciotto righe con titolo, stili,
+wikilink, tag, codice, apice, evidenziato, compito, voce, recinto, callout e
+tabella), con trenta battute e venti spostamenti del cursore di 200 caratteri:
+
+```bash
+cd apps/client
+node bench/interaction.mjs --only=battuta
+```
+
+Il budget è una **mediana di 4 ms** per battuta, in ogni modalità di
+scrittura, anche su 7.201 righe. Le cifre sono mediana · novantesimo
+percentile · massimo, su server-di-fub (AMD Ryzen 7 7730U, Chromium della
+revisione Playwright fissata).
+
+| Nota | Modalità | Battuta | Cursore |
+|---|---|---:|---:|
+| 901 righe | Sorgente | 1,9 · 2,6 · 7,5 ms | 1,9 · 2,4 · 2,5 ms |
+| 901 righe | Live | 2,9 · 4,0 · 9,6 ms | 3,2 · 3,7 · 3,9 ms |
+| 901 righe | Blocchi | 2,9 · 4,1 · 9,4 ms | 2,8 · 3,1 · 3,2 ms |
+| 7.201 righe | Sorgente | 3,8 · 4,7 · 12,0 ms | 2,1 · 2,3 · 2,4 ms |
+| 7.201 righe | Live | 6,4 · 8,8 · 17,6 ms | 3,7 · 4,3 · 4,3 ms |
+| 7.201 righe | Blocchi | 6,4 · 8,9 · 17,2 ms | 3,0 · 3,5 · 3,5 ms |
+
+La Live rende di nuovo soltanto i blocchi che una modifica tocca
+(`renderMarkdownState` con la resa di prima e le modifiche della transazione).
+Un blocco di primo livello che l'albero nuovo ha nello stesso punto, con lo
+stesso nome e lo stesso testo, torna dalla resa di prima con le sue
+definizioni, spostato; se cambiano le definizioni del documento (riferimenti,
+note, ancore dei titoli, sintassi) si rende tutto. Il widget di un blocco
+tornato resta quello di prima: il suo `eq` non guarda la posizione, e dopo
+l'aggiornamento della vista le coordinate `data-md-*` del DOM tornano al posto
+nuovo.
+Prima di questa resa incrementale la battuta sulla nota grande costava
+13,8 · 17,3 · 26,6 ms. Sulla nota grande la Live, e con lei Blocchi, supera ancora il budget: a
+ogni battuta scorre tutti i blocchi di primo livello (2.800 su 7.201 righe),
+e la Sorgente da sola sta già a 3,8 ms. La cifra dell'Intel N150 della tabella
+sopra va ancora misurata là.
+
+Siccome questo banco non sta nella CI, la guardia in CI è il test che conta le
+rese della Live (`render-incremental.test.ts`): una battuta in un paragrafo
+rende quel paragrafo e basta, e dopo ogni modifica la resa è uguale a una resa
+da capo.

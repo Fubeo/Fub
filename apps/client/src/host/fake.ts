@@ -967,7 +967,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       case "search.open":
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
       case "note.create": {
-        const name = typeof args?.name === "string" && args.name ? args.name : "Untitled";
+        const name = typeof args?.name === "string" && args.name ? args.name : "Senza titolo";
         const doc = `${name}.md`;
         write(doc, "");
         emit({ type: "document_changed", id: doc });

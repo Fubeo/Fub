@@ -73,6 +73,7 @@ import { editorTheme } from "./theme";
 import { HistoryFootprints } from "./history-footprints";
 import { smartLists } from "./smart-lists";
 import { propertiesDisplay, propertiesDisplayOf, type PropertiesDisplay } from "./properties-display";
+import { liveGuide, liveReveal, revealPolicyOf, type RevealPolicy } from "./live-reveal";
 import { pasteHtml } from "./paste-html";
 import { indentGuides } from "./indent-guides";
 import {
@@ -131,6 +132,8 @@ export const EDITOR_INDENT_GUIDES_KEY = "editor.indent-guides";
 export const EDITOR_CURSOR_BLINK_KEY = "editor.cursor-blink";
 export const EDITOR_RTL_KEY = "editor.rtl";
 export const EDITOR_PROPERTIES_KEY = "editor.properties";
+export const EDITOR_LIVE_REVEAL_KEY = "editor.live-reveal";
+export const EDITOR_LIVE_GUIDE_KEY = "editor.live-guide";
 const INPUT_KEYS = new Set([
   EDITOR_SPELLCHECK_KEY,
   EDITOR_VIM_KEY,
@@ -145,6 +148,8 @@ const INPUT_KEYS = new Set([
   EDITOR_CURSOR_BLINK_KEY,
   EDITOR_RTL_KEY,
   EDITOR_PROPERTIES_KEY,
+  EDITOR_LIVE_REVEAL_KEY,
+  EDITOR_LIVE_GUIDE_KEY,
 ]);
 
 /// Come si dispone il testo: numeri di riga (visibili solo in Sorgente, Live
@@ -171,6 +176,10 @@ interface LayoutPreferences {
   readonly rtl: boolean;
   /// Come Live mostra il frontmatter (`properties-display.ts`).
   readonly properties: PropertiesDisplay;
+  /// Quanto della sintassi si vede in Live (`live-reveal.ts`).
+  readonly reveal: RevealPolicy;
+  /// La guida della Live: stile in sospeso e chiusura in grigio.
+  readonly guide: boolean;
 }
 const DEFAULT_LAYOUT: LayoutPreferences = {
   lineNumbers: true,
@@ -184,6 +193,8 @@ const DEFAULT_LAYOUT: LayoutPreferences = {
   cursorBlink: false,
   rtl: false,
   properties: "source",
+  reveal: "mai",
+  guide: true,
 };
 const FIELD_LAYOUT: LayoutPreferences = { ...DEFAULT_LAYOUT, lineNumbers: false };
 
@@ -208,6 +219,8 @@ function layoutExtensions(layout: LayoutPreferences): Extension {
     smartLists.of(layout.smartLists),
     pasteHtml.of(layout.pasteHtml),
     propertiesDisplay.of(layout.properties),
+    liveReveal.of(layout.reveal),
+    liveGuide.of(layout.guide),
     layout.indentGuides ? indentGuides : [],
     // Il facet tiene la cadenza più breve fra quelle dichiarate: lo zero vince
     // sui 1200 ms di `drawSelection()`, e un'animazione di zero ms non spegne
@@ -563,7 +576,9 @@ export class TextEngine {
       && next.indentGuides === this.layout.indentGuides
       && next.cursorBlink === this.layout.cursorBlink
       && next.rtl === this.layout.rtl
-      && next.properties === this.layout.properties;
+      && next.properties === this.layout.properties
+      && next.reveal === this.layout.reveal
+      && next.guide === this.layout.guide;
     if (this.disposed || same) return;
     this.layout = next;
     this.reconfigureInput();
@@ -641,6 +656,8 @@ export class TextEngine {
         cursorBlink: value(EDITOR_CURSOR_BLINK_KEY) === true,
         rtl: value(EDITOR_RTL_KEY) === true,
         properties: propertiesDisplayOf(value(EDITOR_PROPERTIES_KEY)),
+        reveal: revealPolicyOf(value(EDITOR_LIVE_REVEAL_KEY)),
+        guide: value(EDITOR_LIVE_GUIDE_KEY) !== false,
       });
     } catch {
       // Defaults remain available before a vault is open or when settings fail.

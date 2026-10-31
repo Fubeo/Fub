@@ -32,6 +32,7 @@
  */
 import { contrast } from "../contrast";
 import { toHex, type Oklch } from "../oklch";
+import type { CONTENT_COLORS } from "../../ui/sanitize";
 
 export type Light = "light" | "dark";
 export const LIGHTS = ["light", "dark"] as const;
@@ -63,6 +64,20 @@ interface Thresholds {
 const THRESHOLDS: Readonly<Record<ContrastLevel, Thresholds>> = {
   normal: { text: 4.5, ui: 3 },
   high: { text: 7, ui: 4.5 },
+};
+
+/// I nove colori del contenuto (`fub-color-*`, `fub-bg-*`): la tinta e la
+/// croma di partenza; il grigio non ha tinta.
+export const CONTENT_HUES: Readonly<Record<(typeof CONTENT_COLORS)[number], readonly [number, number]>> = {
+  gray: [0, 0],
+  brown: [50, 0.07],
+  orange: [55, 0.16],
+  yellow: [90, 0.14],
+  green: [150, 0.14],
+  blue: [250, 0.15],
+  purple: [305, 0.15],
+  pink: [350, 0.15],
+  red: [27, 0.19],
 };
 
 /// Le tinte degli autori, nell'ordine dei posti: blu, rosso, verde, viola,
@@ -284,6 +299,21 @@ export function palette(
   const docAuthors = Object.fromEntries(
     AUTHOR_HUES.map((tint, i) => [`doc-author-${i + 1}`, hold(day ? lch(0.5, 0.17, tint) : lch(0.76, 0.12, tint), papers, T.text, light)]),
   );
+  // ── La Live e i Blocchi ─────────────────────────────────────────────────
+  // Un segno che si vede ancora in Live sta un passo sotto la sintassi della
+  // Sorgente, ma si distingue come un confine; il testo fantasma e l'onda di
+  // un segno aperto pure. I nove colori del contenuto si leggono come il
+  // testo, e i loro fondi lasciano leggere l'inchiostro.
+  const docSyntaxNear = hold(day ? lch(0.64, 0.08, 150) : lch(0.62, 0.07, 150), papers, T.ui, light);
+  const docGhost = hold(day ? lch(0.64, 0.015, pen) : lch(0.6, 0.015, pen), papers, T.ui, light);
+  const docWavy = hold(day ? lch(0.6, 0.14, 70) : lch(0.72, 0.13, 75), papers, T.ui, light);
+  const contentColors = Object.fromEntries(Object.entries(CONTENT_HUES).flatMap(([name, [tint, chroma]]) => {
+    const neutral = chroma === 0 ? pen : tint;
+    return [
+      [`doc-color-${name}`, hold(day ? lch(0.5, chroma || 0.015, neutral) : lch(0.76, chroma ? chroma * 0.75 : 0.015, neutral), papers, T.text, light)],
+      [`doc-tint-${name}`, hold(day ? lch(0.93, chroma ? chroma * 0.35 : 0.01, neutral) : lch(0.32, chroma ? chroma * 0.4 : 0.012, neutral), [docFg], T.text, away)],
+    ];
+  }));
   const docFindNow = hold(day ? lch(0.84, 0.14, 80) : lch(0.46, 0.09, 75), [docFg], T.text, away);
 
   // ── La carta chiara di un file ──────────────────────────────────────────
@@ -414,6 +444,13 @@ export function palette(
     "doc-find-now": docFindNow,
     "doc-comment": docComment,
     ...docAuthors,
+    "doc-syntax-near": docSyntaxNear,
+    "doc-ghost": docGhost,
+    "doc-wavy": docWavy,
+    "doc-block-hover": inkVeil(day ? 4 : 6),
+    "doc-block-selected": veil(accent, day ? 12 : 20),
+    "doc-drop-line": accent,
+    ...contentColors,
 
     // La carta chiara di un file, con i suoi segni: facoltativi anche questi.
     "paper-bg": paperBg,
@@ -547,7 +584,9 @@ export const COLOR_TOKENS: readonly string[] = Object.keys(palette("light", "nor
  * (`THEME_2_OPTIONAL_PAIRS`).
  */
 export const OPTIONAL_ROLES: readonly string[] = COLOR_TOKENS.filter(
-  (name) => name.startsWith("paper-") || name.startsWith("doc-author-") || ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk"].includes(name),
+  (name) => name.startsWith("paper-") || name.startsWith("doc-author-") || name.startsWith("doc-color-") || name.startsWith("doc-tint-") ||
+    ["doc-ins", "doc-del", "doc-proof-spell", "doc-proof-gram", "doc-find", "doc-find-now", "doc-comment", "draw-desk",
+      "doc-syntax-near", "doc-ghost", "doc-wavy", "doc-block-hover", "doc-block-selected", "doc-drop-line"].includes(name),
 );
 
 /** Ogni ruolo che un foglio della serie dichiara e che un tema deve dichiarare. */

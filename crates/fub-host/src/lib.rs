@@ -96,6 +96,9 @@ mod custody;
 mod export_folder;
 pub mod format_source;
 pub mod jobs;
+/// La scheda di un collegamento: titolo e icona di un URL, soltanto su richiesta.
+#[cfg(feature = "http-client")]
+pub mod link_card;
 pub mod mount;
 /// Il filo verso fuori (§23.3), dietro la cargo feature `http-client` per la
 /// ragione del watcher: il trait esiste anche per i montaggi che una rete non

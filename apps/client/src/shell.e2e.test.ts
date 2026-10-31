@@ -520,8 +520,8 @@ describe("vita della finestra", () => {
 });
 
 describe("navigazione accessibile dell'esploratore", () => {
-  it("espande e richiude senza aprire la folder note né perdere il focus", async () => {
-    await start({ ...VAULT, "note/note.md": "La folder note.\n" });
+  it("espande e richiude senza aprire la pagina della cartella né perdere il focus", async () => {
+    await start({ ...VAULT, "note/_index.md": "La pagina della cartella.\n" });
     const original = textToVideo();
     const chevron = () => document.querySelector<HTMLButtonElement>(
       '#file-list li[data-path="note"] > .tree-row > .chevron',
@@ -708,6 +708,10 @@ describe("copia il link a questo punto", () => {
     await waitFor("il link è negli appunti", () => copied.length === 1);
     const id = /^\[\[Benvenuto#\^([a-z0-9]{6})\]\]$/.exec(copied[0]!)?.[1];
     expect(id).toBeDefined();
+    // In Live l'id del blocco non si vede: il testo si legge in Sorgente.
+    const { setMode } = await import("./panels/document");
+    await setMode("source");
+    await settle();
     expect(textToVideo()).toContain(`Il primo documento di questo vault. ^${id}`);
     undeclare();
   });
@@ -1157,7 +1161,7 @@ describe("apri un vault", () => {
         (button) => button.dataset.mode,
       );
 
-    expect(modes()).toEqual(["source", "live_preview", "reading"]);
+    expect(modes()).toEqual(["source", "live_preview", "blocks", "reading"]);
     // `start` rimonta i moduli dopo i mock: serve l'esemplare vivo del pannello,
     // non un import statico catturato prima di `vi.resetModules`.
     const { openDocument } = await import("./panels/document");
@@ -1179,7 +1183,7 @@ describe("apri un vault", () => {
     expect(document.querySelector<HTMLElement>(".pane.focus")?.dataset.mode).toBe("source");
     document.querySelector<HTMLElement>(".tab")?.click();
     await settle();
-    expect(modes()).toEqual(["source", "live_preview", "reading"]);
+    expect(modes()).toEqual(["source", "live_preview", "blocks", "reading"]);
     expect(
       document.querySelector<HTMLElement>(".pane.focus .pane-toolbar button[aria-pressed='true']")
         ?.dataset.mode,
@@ -1786,6 +1790,10 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
 
   it("un file dell'albero lasciato in una nota diventa un rimando relativo, non il suo path", async () => {
     await start({ ...VAULT, "img/foto.png": "png" });
+    // In Live l'immagine lasciata si vede resa: il rimando si legge in Sorgente.
+    const { setMode } = await import("./panels/document");
+    await setMode("source");
+    await settle();
     row("img")!.click();
     await waitFor("la cartella si apre", () => !!row("img/foto.png"));
     const offered = new Map<string, string>();
@@ -1817,6 +1825,10 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
       source: "vault",
     } as SettingEntry;
     await start(VAULT, [style]);
+    // In Live il link è una pillola: il testo si legge in Sorgente.
+    const { setMode } = await import("./panels/document");
+    await setMode("source");
+    await settle();
     row("note")!.click();
     await waitFor("la cartella si apre", () => !!row("note/Spesa.md"));
     const offered = new Map<string, string>();
@@ -1833,6 +1845,9 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
 
   it("un collegamento web lasciato in una nota diventa un link, il resto un allegato", async () => {
     const host = await start(VAULT);
+    const { setMode } = await import("./panels/document");
+    await setMode("source");
+    await settle();
     const shortcut = new File(["[InternetShortcut]\r\nURL=https://example.org/pagina\r\n"], "Pagina utile.url");
     const files = [shortcut, new File([new Uint8Array([1, 2, 3])], "foto.png")];
     const drop = new Event("drop", { bubbles: true, cancelable: true });
@@ -2610,6 +2625,8 @@ describe("spostare un file col testo non ancora sul disco", () => {
         "è ancora solo in RAM mentre il kernel riscrive i wikilink",
     ).toBeGreaterThan(-1);
     expect(writing).toBeLessThan(moved);
+    // La nota diventa la pagina della cartella nuova (decisione 0229).
+    expect(host.calls[moved].args[1]).toMatchObject({ doc: "Benvenuto.md", to: "Benvenuto/_index.md" });
   });
 });
 
@@ -3418,7 +3435,7 @@ describe("la modalità di ogni famiglia di superfici", () => {
     current.click();
     expect(current.getAttribute("aria-expanded")).toBe("true");
     const radios = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitemradio]")];
-    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Sorgente", "Live", "Lettura"]);
+    expect(radios.map((item) => item.querySelector(".menu-label")?.textContent)).toEqual(["Sorgente", "Live", "Blocchi", "Lettura"]);
     expect(radios.filter((item) => item.getAttribute("aria-checked") === "true")).toHaveLength(1);
     radios[0]!.click();
     await settle();

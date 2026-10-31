@@ -88,3 +88,31 @@ fn render_uses_each_constructs_own_element() {
     assert!(html.contains("<del>barrato</del>"), "html: {html}");
     assert!(html.contains("<sup>apice</sup>"), "html: {html}");
 }
+
+/// **`~x~` è pedice, `~~x~~` barrato** (decisione 0228). La tilde sola era
+/// barrato per il GFM di comrak e pedice per la Live: due letture dello stesso
+/// segno. Adesso il pedice ha la sua variante, si riscrive con una tilde e si
+/// rende `<sub>`, e il giro riparte identico.
+#[test]
+fn a_single_tilde_is_a_subscript_and_two_are_strikethrough() {
+    let source = "H~2~O e ~~via~~ qui\n";
+    let doc = parse(source);
+    assert_eq!(
+        inlines(&doc),
+        &[
+            Inline::Text("H".into()),
+            Inline::Subscript(vec![Inline::Text("2".into())]),
+            Inline::Text("O e ".into()),
+            Inline::Strikethrough(vec![Inline::Text("via".into())]),
+            Inline::Text(" qui".into()),
+        ],
+    );
+    let rewritten = serialize(&doc);
+    assert_eq!(rewritten, source, "the rewrite changes the document");
+    assert_eq!(parse(&rewritten), doc, "the pass is not stable");
+    let html = MarkdownProvider::new()
+        .render_html(&doc, &fub_abi::format::RenderOptions::default())
+        .expect("the model renders");
+    assert!(html.contains("H<sub>2</sub>O"), "{html}");
+    assert!(html.contains("<del>via</del>"), "{html}");
+}

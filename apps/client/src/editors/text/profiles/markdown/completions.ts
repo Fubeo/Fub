@@ -33,7 +33,9 @@ import { syntaxTree } from "@codemirror/language";
 import { Prec, type EditorState, type Extension } from "@codemirror/state";
 import { keymap, type EditorView } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
+import { isTaskLine, mentionDates } from "./dates";
 import { isStrictlyInsideCode } from "./parser";
+import { liveStrings } from "./strings";
 import { catalogLanguage, resolvedLanguage, t } from "../../../../i18n/strings";
 import { childName, pageName, resolutionKey } from "../../../../rules/mirrored";
 import { TAG_CHARACTER } from "../../../../rules/mirrored";
@@ -77,6 +79,33 @@ export interface CompletionSources {
   blocksOf?(page: string): Promise<readonly BlockOption[]>;
   /// Il menu «/» nel testo (`slash.ts`). Assente, il «/» è testo.
   slash?: SlashMenuSource;
+  /// Le persone per `@` (K5). Assente, `@` non propone persone.
+  people?: PeopleSource;
+  /// Le date per `@` (K6). Assente, `@` non propone date.
+  dates?: DateSource;
+}
+
+/// Le date come le vede `@`: dove sta la giornaliera di un giorno
+/// (`daily.folder` e `daily.format` di `fub.template`, `state/dates.ts`) e
+/// quando comincia la settimana.
+export interface DateSource {
+  /// Il path della giornaliera di `iso` (`YYYY-MM-DD`), senza estensione.
+  dailyPath(iso: string): string;
+  /// Il primo giorno della settimana: 1 = lunedì … 7 = domenica.
+  firstDay(): number;
+  /// Oggi; assente, l'orologio.
+  today?(): Date;
+}
+
+/// Le persone come le vede `@`: note di una cartella del vault
+/// (`files.people-folder`, `state/people.ts`).
+export interface PeopleSource {
+  /// La cartella, senza barre ai bordi; vuota, `@` non propone persone.
+  folder(): string;
+  /// Le persone il cui nome combacia con `text`, già in ordine.
+  search(text: string): Promise<string[]>;
+  /// Crea la nota della persona nella cartella.
+  create(name: string): Promise<string | null>;
 }
 
 /// Un blocco da proporre: il suo id e l'inizio del suo testo.
@@ -575,6 +604,173 @@ export function diagramTemplateSource(today: () => Date = () => new Date()): Com
   };
 }
 
+/// `:nome` prima del cursore (H14): i due punti a inizio riga o dopo uno
+/// spazio o una parentesi, poi almeno due caratteri di nome. Dopo una lettera
+/// o una cifra non vale, così `ore 10:30`, `http:` e `chiave:valore` restano
+/// testo.
+export function emojiContext(before: string): ContextMatch | null {
+  const match = /(?:^|[\s([{"'«])(:([\p{L}\p{N}_+'-]{2,}))$/u.exec(before);
+  if (!match) return null;
+  return { from: before.length - match[1]!.length, query: match[2]! };
+}
+
+type EmojiData = typeof import("./emoji-data");
+let emojiData: Promise<EmojiData> | undefined;
+
+/// Il punteggio di un nome per `query`: 0 se comincia così, 1 se una sua
+/// parola comincia così, -1 se non c'entra.
+function emojiScore(names: readonly string[], query: string): number {
+  let best = -1;
+  for (const name of names) {
+    if (name.startsWith(query)) return 0;
+    if (name.split(/[_']/).some((part) => part.startsWith(query))) best = 1;
+  }
+  return best;
+}
+
+/// Le emoji che rispondono a `query`, prima i nomi della lingua dell'app,
+/// poi gli altri; a pari merito, l'ordine dei dati.
+export function matchEmoji(
+  entries: EmojiData["EMOJI"],
+  query: string,
+  language: "it" | "en",
+): { char: string; name: string }[] {
+  const q = query.toLowerCase();
+  const scored: { char: string; name: string; score: number; at: number }[] = [];
+  entries.forEach((entry, at) => {
+    const own = language === "it" ? entry.it : entry.en;
+    const other = language === "it" ? entry.en : entry.it;
+    const a = emojiScore(own, q);
+    const b = emojiScore(other, q);
+    if (a < 0 && b < 0) return;
+    const score = a >= 0 ? a : 2 + b;
+    // Il nome mostrato è quello che ha risposto, così si vede perché c'è.
+    const hit = (a >= 0 ? own : other).find((name) => name.startsWith(q) || name.split(/[_']/).some((part) => part.startsWith(q)));
+    scored.push({ char: entry.char, name: hit ?? own[0] ?? "", score, at });
+  });
+  scored.sort((x, y) => x.score - y.score || x.at - y.at);
+  return scored.slice(0, 40).map(({ char, name }) => ({ char, name }));
+}
+
+/// La sorgente CM6 delle emoji. I dati arrivano con un `import()` alla prima
+/// richiesta, come i modelli di diagramma; il filtro è `matchEmoji`, che
+/// cerca nelle due lingue.
+export function emojiSource(): CompletionSource {
+  return (ctx: CompletionContext): Promise<CompletionResult | null> | null => {
+    if (isStrictlyInsideCode(ctx.state, ctx.pos)) return null;
+    const line = ctx.state.doc.lineAt(ctx.pos);
+    const match = emojiContext(ctx.state.sliceDoc(line.from, ctx.pos));
+    if (!match) return null;
+    emojiData ??= import("./emoji-data").catch((error: unknown) => {
+      emojiData = undefined;
+      throw error;
+    });
+    return emojiData.then(({ EMOJI }) => {
+      const language = catalogLanguage(resolvedLanguage()) === "it" ? "it" : "en";
+      const section = liveStrings.t("emoji.section");
+      const options = matchEmoji(EMOJI, match.query, language).map(({ char, name }): Completion => ({
+        label: `${char} ${name}`,
+        displayLabel: `${char}  ${name.replace(/_/g, " ")}`,
+        type: "text",
+        section,
+        apply: char,
+      }));
+      if (options.length === 0) return null;
+      // Un `:` di chiusura già scritto (`:fuoco:`) va via con il nome.
+      const to = ctx.state.sliceDoc(ctx.pos, ctx.pos + 1) === ":" ? ctx.pos + 1 : ctx.pos;
+      return { from: line.from + match.from, to, options, filter: false };
+    });
+  };
+}
+
+/// `@nome` all'inizio di una parola: chi si sta nominando (K5). `from` è la
+/// `@`, che il completamento sostituisce; `query` sono fino a quattro parole
+/// separate da uno spazio. Uno spazio in fondo, o una `@` attaccata a una
+/// parola (`mario@posta.it`), non è una menzione.
+export function mentionContext(before: string): ContextMatch | null {
+  const match = /(?:^|[\s([{"'«])(@((?:[\p{L}\p{N}_.'-]+(?: [\p{L}\p{N}_.'-]+){0,3})?))$/u.exec(before);
+  if (!match) return null;
+  return { from: before.length - match[1]!.length, query: match[2]! };
+}
+
+/// Il nome di una persona nuova, come diventa il nome della sua nota: senza i
+/// segni che un wikilink o un path non reggono.
+export function personName(query: string): string {
+  return query.replace(/[[\]|#^/\\:]/g, "").replace(/\s+/g, " ").trim();
+}
+
+/// Il wikilink a una persona: il path senza estensione, così resta univoco,
+/// e il nome come testo, così si legge il nome e non la cartella.
+export function personLink(path: string, name: string): string {
+  return `[[${path}|${name}]]`;
+}
+
+/// Le opzioni di `@` per le persone: quelle trovate, nell'ordine dell'indice,
+/// e in fondo «Nuova persona» se nessuna si chiama come ciò che si è scritto.
+export function personCompletions(docs: readonly string[], query: string, people: PeopleSource): Completion[] {
+  const section = liveStrings.t("mention.people");
+  const options: Completion[] = docs.map((doc) => {
+    const name = pageName(doc);
+    return { label: `@${name}`, displayLabel: name, detail: doc, type: "text", section, apply: personLink(pathWithoutExtension(doc), name) };
+  });
+  const name = personName(query);
+  const folder = people.folder();
+  if (name && folder && !docs.some((doc) => resolutionKey(pageName(doc)) === resolutionKey(name))) {
+    options.push({
+      label: `@${name}`,
+      displayLabel: liveStrings.t("mention.new_person", { name }),
+      type: "text",
+      section,
+      apply: (view, _completion, from, to) => {
+        const insert = personLink(`${folder}/${name}`, name);
+        view.dispatch({ changes: { from, to, insert }, selection: { anchor: from + insert.length }, userEvent: "input.complete" });
+        void people.create(name).catch(() => {});
+      },
+    });
+  }
+  return options;
+}
+
+/// Le opzioni di `@` per le date: il link alla giornaliera di ogni giorno
+/// riconosciuto, col giorno scritto per esteso come testo; in un compito,
+/// anche la scadenza `📅 YYYY-MM-DD`.
+export function dateCompletions(query: string, dates: DateSource, task: boolean): Completion[] {
+  const language = catalogLanguage(resolvedLanguage()) === "it" ? "it" : "en";
+  const found = mentionDates(query, dates.today?.() ?? new Date(), dates.firstDay(), language);
+  const long = new Intl.DateTimeFormat(language, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const short = new Intl.DateTimeFormat(language, { day: "numeric", month: "long", year: "numeric" });
+  const section = liveStrings.t("mention.dates");
+  const due = liveStrings.t("mention.due");
+  return found.flatMap(({ iso, said }): Completion[] => {
+    const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
+    const date = new Date(y, m - 1, d);
+    const text = short.format(date);
+    const link: Completion = { label: `@${said}`, displayLabel: long.format(date), detail: said, type: "text", section, apply: personLink(dates.dailyPath(iso), text) };
+    return task ? [link, { label: `@${said} 📅`, displayLabel: `📅 ${text}`, detail: due, type: "text", section, apply: `📅 ${iso}` }] : [link];
+  });
+}
+
+/// La sorgente CM6 di `@`: le persone (K5) e le date (K6). Fuori dal codice e
+/// fuori da un wikilink aperto, dove `@` è testo del nome.
+export function mentionSource(sources: { people?: PeopleSource; dates?: DateSource }): CompletionSource {
+  const { people, dates } = sources;
+  return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
+    if (isStrictlyInsideCode(ctx.state, ctx.pos)) return null;
+    const line = ctx.state.doc.lineAt(ctx.pos);
+    const before = ctx.state.sliceDoc(line.from, ctx.pos);
+    if (wikilinkContext(before)) return null;
+    const match = mentionContext(before);
+    if (!match) return null;
+    const docs = people?.folder() ? await people.search(match.query).catch(() => []) : [];
+    const options = [
+      ...(dates ? dateCompletions(match.query, dates, isTaskLine(line.text)) : []),
+      ...(people?.folder() ? personCompletions(docs, match.query, people) : []),
+    ];
+    if (options.length === 0) return null;
+    return { from: line.from + match.from, options, filter: false };
+  };
+}
+
 /// L'estensione CM6 dell'autocompletamento: attiva durante la digitazione, ma
 /// SOLO dentro i suoi contesti (fuori, le sorgenti rispondono null e nessun
 /// popup compare). `override` scavalca le sorgenti di default del linguaggio:
@@ -596,6 +792,8 @@ export function markdownCompletions(sources: CompletionSources): Extension {
         ...(sources.blocksOf ? [blockSource(sources.blocksOf)] : []),
         tagSource(sources.listTags),
         diagramTemplateSource(),
+        emojiSource(),
+        ...(sources.people || sources.dates ? [mentionSource(sources)] : []),
         calloutTypeSource(),
         codeLanguageSource(),
         ...(sources.slash ? [slashSource(sources.slash)] : []),

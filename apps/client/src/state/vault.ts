@@ -146,6 +146,22 @@ export async function renameFolder(from: string, to: string): Promise<CommandOut
   return outcome;
 }
 
+/// Fa della nota la pagina della sua cartella (`note.folder_page`): la rinomina
+/// in `_index`, e il kernel si porta dietro i link (decisione 0229).
+export async function useAsFolderPage(doc: string): Promise<CommandOutcome> {
+  const outcome = await api.invokeCommand(COMMANDS.folderPage, { doc }, undefined, openVaultRoot());
+  refreshDocuments();
+  return outcome;
+}
+
+/// «Nuova sottopagina» (`note.subpage`): `doc` diventa la pagina della sua
+/// cartella, se non lo è già, e lì nasce `name`.
+export async function createSubpage(doc: string, name: string): Promise<CommandOutcome> {
+  const outcome = await api.invokeCommand(COMMANDS.subpage, { doc, name }, undefined, openVaultRoot());
+  refreshDocuments();
+  return outcome;
+}
+
 /// Manda nel cestino del vault una cartella intera (`folder.trash`).
 export async function trashFolder(folder: string): Promise<CommandOutcome> {
   const outcome = await api.invokeCommand(COMMANDS.trashFolder, { folder }, undefined, openVaultRoot());

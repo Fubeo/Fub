@@ -8,6 +8,7 @@ import {
   isAllowedResource,
   isAllowedStyle,
   attributeValue,
+  contentClasses,
 } from "./sanitize";
 
 // La **politica** del punto unico di sanitizzazione (§3.6): funzioni pure, e
@@ -139,5 +140,22 @@ describe("cosa entra nella webview", () => {
     );
     // Il segnaposto dei wikilink: un `#` solo non nomina niente.
     expect(attributeValue("href", "#")).toBe("#");
+  });
+});
+
+describe("ciò che l'HTML dell'autore conserva", () => {
+  it("la sottolineatura è un tag ammesso", () => {
+    expect(resultOfTag("u")).toBe("tieni");
+  });
+
+  it("delle classi restano soltanto i nove colori, su span e mark", () => {
+    expect(contentClasses("span", "fub-color-red x")).toBe("fub-color-red");
+    expect(contentClasses("mark", "fub-bg-yellow")).toBe("fub-bg-yellow");
+    expect(contentClasses("span", "altro")).toBe("");
+    // Un colore che non è fra i nove, o un nome della resa, non passa.
+    expect(contentClasses("span", "fub-color-teal wikilink")).toBe("");
+    // Su un altro tag il colore non ha posto.
+    expect(contentClasses("div", "fub-color-red")).toBe("");
+    expect(contentClasses("SPAN", "fub-bg-blue  fub-color-gray")).toBe("fub-bg-blue fub-color-gray");
   });
 });

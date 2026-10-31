@@ -1060,7 +1060,8 @@ body {
   min-width: 0;
 }
 
-.pane-editor[data-markdown-mode="live_preview"] .cm-gutters {
+.pane-editor[data-markdown-mode="live_preview"] .cm-gutters,
+.pane-editor[data-markdown-mode="blocks"] .cm-gutters {
   display: none !important;
 }
 
@@ -1076,7 +1077,8 @@ body {
 }
 
 .pane-editor[data-markdown-mode="source"] > .pane-preview,
-.pane-editor[data-markdown-mode="live_preview"] > .pane-preview {
+.pane-editor[data-markdown-mode="live_preview"] > .pane-preview,
+.pane-editor[data-markdown-mode="blocks"] > .pane-preview {
   display: none;
 }
 

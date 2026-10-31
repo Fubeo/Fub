@@ -1,14 +1,18 @@
-import { syntaxTree } from "@codemirror/language";
-import type { EditorState } from "@codemirror/state";
+import { ensureSyntaxTree } from "@codemirror/language";
+import type { ChangeDesc, EditorState } from "@codemirror/state";
 import type { SyntaxNode, Tree } from "@lezer/common";
 import type { SyntaxForm } from "../../../../host/contract";
 import { declaredFences } from "../../../../rules/syntax";
 import { normalizeLineBreaks } from "../../../../rules/offsets";
 import { taskChecked } from "../../../../rules/mirrored";
 import { FOOTNOTE_DEFINITION, markdownGrammar } from "./grammar";
+import { CALLOUT_HEAD } from "./callout-head";
+import { type DetailsHead, pairDetails, type TopBlock } from "./details";
+import { tocHtml, type TocEntry } from "./toc";
 import { decodeDestination } from "./link-syntax";
 import {
   escapeHtml,
+  figureHtml,
   mathBlock,
   mathOf,
   normalizeLabel,
@@ -27,6 +31,8 @@ import type {
 
 // Block-level renderer sharing one Lezer GFM parse between the two surfaces.
 // Live reuses CodeMirror's tree when complete, otherwise it parses the buffer.
+// After an edit Live passes the previous document too: blocks the change did
+// not touch come back from it, moved by the edit, without a new render.
 // Source attributes are UTF-16 offsets on LF-normalized text; inline detail
 // comes from `render-inline`. Allowed raw HTML blocks remain inert data until
 // the shared mount sanitizes them into fresh DOM nodes.
@@ -57,8 +63,14 @@ export function detectFrontmatter(source: string): { from: number; to: number } 
 /// documento enorme non va copiato per intero a ogni battuta.
 const FRONTMATTER_WINDOW = 64 * 1024;
 
-/// Il frontmatter di un documento CodeMirror, guardando solo la sua cima.
+/// Il frontmatter di un documento CodeMirror, guardando solo la sua cima: un
+/// documento che non comincia con `---` non si copia affatto.
 export function frontmatterRange(doc: { length: number; sliceString(from: number, to?: number): string }): { from: number; to: number } | null {
+  const head = doc.sliceString(0, Math.min(doc.length, 256));
+  const end = head.indexOf("\n");
+  if ((end !== -1 || head.length === doc.length) && head.slice(0, end === -1 ? undefined : end).replace(/^\uFEFF/, "").trim() !== "---") {
+    return null;
+  }
   return detectFrontmatter(doc.sliceString(0, Math.min(doc.length, FRONTMATTER_WINDOW)));
 }
 
@@ -98,8 +110,8 @@ function validAnchor(id: string): boolean {
 
 class HeadingSlugs {
   private taken = new Set<string>();
-  next(text: string): string {
-    const base = headingSlug(text);
+  /// Lo slug libero per `base`, che è già passato da `headingSlug`.
+  next(base: string): string {
     if (!this.taken.has(base)) {
       this.taken.add(base);
       return base;
@@ -153,6 +165,12 @@ function rawHtmlBlock(source: string, from: number, to: number): string {
   return `<div class="block-html block-html-allowed"${mdAttrs(from, to)} data-md-raw-html="${escapeHtml(raw)}"><pre>${escapeHtml(raw)}</pre></div>`;
 }
 
+/// L'apertura di un ripiegabile accoppiato: il sommario è testo.
+function detailsOpening(slice: string, head: DetailsHead, from: number, to: number): string {
+  const summary = head.summary ? escapeHtml(slice.slice(head.summary.from, head.summary.to)) : "";
+  return `<details class="fub-details"${mdAttrs(from, to)}${head.open ? " open" : ""}><summary>${summary}</summary>`;
+}
+
 interface FootnoteDef {
   readonly labelNorm: string;
   readonly from: number;
@@ -164,6 +182,8 @@ interface Collected {
   readonly references: ReadonlyMap<string, MarkdownLinkDefinition>;
   readonly footnotes: ReadonlyMap<string, MarkdownFootnote>;
   readonly headingIds: ReadonlyMap<number, string>;
+  /// I titoli in ordine, per l'indice (K4).
+  readonly toc: readonly TocEntry[];
 }
 
 function stripDelimiters(value: string): string {
@@ -177,43 +197,82 @@ function stripDelimiters(value: string): string {
   return value;
 }
 
-function collectDefinitions(source: string, tree: Tree): Collected {
-  const references = new Map<string, MarkdownLinkDefinition>();
-  const refOffsets = new Map<string, number[]>();
-  const defs: FootnoteDef[] = [];
-  const defSeen = new Set<string>();
-  const refOrder: string[] = [];
-  const refSeen = new Set<string>();
-  const headingIds = new Map<number, string>();
-  const slugs = new HeadingSlugs();
+/// I blocchi che contengono altri blocchi: titoli, definizioni e paragrafi
+/// possono stare soltanto qui dentro.
+const CONTAINERS = new Set(["Document", "Blockquote", "BulletList", "OrderedList", "ListItem"]);
 
-  const footnoteRefPattern = /^\[\^[^\]\r\n]+\]$/;
+/// Dove comincia ogni `[^` della sorgente, in ordine.
+function footnoteOpeners(source: string): number[] {
+  const found: number[] = [];
+  for (let at = source.indexOf("[^"); at !== -1; at = source.indexOf("[^", at + 2)) found.push(at);
+  return found;
+}
+
+/// Se un `[^` comincia in `[from, to)`.
+function hasOpener(openers: readonly number[], from: number, to: number): boolean {
+  let low = 0;
+  let high = openers.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (openers[middle]! < from) low = middle + 1;
+    else high = middle;
+  }
+  return low < openers.length && openers[low]! < to;
+}
+
+const HEADINGS = new Set(["ATXHeading1", "ATXHeading2", "ATXHeading3", "ATXHeading4", "ATXHeading5", "ATXHeading6", "SetextHeading1", "SetextHeading2"]);
+
+const FOOTNOTE_REFERENCE_TEXT = /^\[\^[^\]\r\n]+\]$/;
+
+/// Quello che un blocco di primo livello porta alle definizioni del documento,
+/// nell'ordine del testo e con le posizioni relative al suo inizio: un blocco
+/// che la modifica non tocca lo riporta com'è.
+interface Found {
+  /// Le definizioni di nota.
+  readonly defs: readonly FootnoteDef[];
+  /// I titoli: l'ID scritto (`^id`) o lo slug del testo, e la base con cui
+  /// l'uno o l'altro occupa uno slug del documento.
+  readonly headings: readonly { readonly at: number; readonly anchor: string | null; readonly slug: string; readonly base: string; readonly level: number; readonly text: string }[];
+  /// Le definizioni dei link.
+  readonly references: readonly (readonly [string, MarkdownLinkDefinition])[];
+  /// I richiami di nota.
+  readonly calls: readonly { readonly key: string; readonly at: number }[];
+}
+
+/// Le definizioni di un blocco di primo livello, lette dal suo albero.
+function findDefinitions(source: string, top: SyntaxNode, openers: readonly number[]): Found {
+  const base = top.from;
+  const defs: FootnoteDef[] = [];
+  const headings: { at: number; anchor: string | null; slug: string; base: string; level: number; text: string }[] = [];
+  const references: [string, MarkdownLinkDefinition][] = [];
+  const calls: { key: string; at: number }[] = [];
+  // Dentro un blocco foglia l'albero ha soltanto nodi in riga, e fra questi
+  // conta il richiamo di una nota: chi non contiene un `[^` non va visitato.
+  const descend = (node: SyntaxNode): boolean => CONTAINERS.has(node.name) || hasOpener(openers, node.from, node.to);
 
   function visit(node: SyntaxNode, insideFootnoteDef: boolean): void {
     const name = node.name;
     // La grammatica fa di ogni definizione di nota un paragrafo.
-    const definition = !insideFootnoteDef && name === "Paragraph"
+    const definition = !insideFootnoteDef && name === "Paragraph" && source.startsWith("[^", node.from)
       ? FOOTNOTE_DEFINITION.exec(source.slice(node.from, node.to))
       : null;
     if (definition) {
       const key = normalizeLabel(definition[1]!);
-      if (key !== "" && !defSeen.has(key)) {
-        defSeen.add(key);
+      if (key !== "") {
         let contentFrom = node.from + definition[0].length;
         while (source[contentFrom] === " " || source[contentFrom] === "\t") contentFrom++;
-        defs.push({ labelNorm: key, from: node.from, to: node.to, contentFrom });
+        defs.push({ labelNorm: key, from: node.from - base, to: node.to - base, contentFrom: contentFrom - base });
       }
-    } else
-    if (/^(ATXHeading[1-6]|SetextHeading[1-2])$/.test(name)) {
-      const slice = source.slice(node.from, node.to);
-      const anchor = findTrailingAnchor(slice);
+    } else if (HEADINGS.has(name)) {
+      const anchor = findTrailingAnchor(source.slice(node.from, node.to));
+      const level = headingLevel(name);
+      const shown = visibleText(source, node);
       if (anchor) {
-        const canonical = canonicalAnchor(anchor.raw);
-        headingIds.set(node.from, anchor.raw);
-        slugs.next(canonical);
+        const text = shown.replace(/[ \t]*\^[A-Za-z0-9-]+[ \t]*$/, "").trim();
+        headings.push({ at: node.from - base, anchor: anchor.raw, slug: "", base: headingSlug(canonicalAnchor(anchor.raw)), level, text });
       } else {
-        const slug = headingSlug(visibleText(source, node));
-        if (slug !== "") headingIds.set(node.from, slugs.next(slug));
+        const slug = headingSlug(shown);
+        headings.push({ at: node.from - base, anchor: null, slug, base: headingSlug(slug), level, text: shown.trim() });
       }
     } else if (name === "LinkReference") {
       const labelNode = node.getChild("LinkLabel");
@@ -221,32 +280,25 @@ function collectDefinitions(source: string, tree: Tree): Collected {
       if (labelNode && urlNode) {
         const rawLabel = source.slice(labelNode.from + 1, labelNode.to - 1);
         const key = normalizeLabel(rawLabel);
-        if (key !== "" && !references.has(key)) {
+        if (key !== "") {
           const href = decodeDestination(source.slice(urlNode.from, urlNode.to));
           const titleNode = node.getChild("LinkTitle");
           const title = titleNode ? stripDelimiters(source.slice(titleNode.from, titleNode.to)) : undefined;
-          references.set(key, title === undefined ? { href } : { href, title });
+          references.push([key, title === undefined ? { href } : { href, title }]);
         }
       }
     } else if (name === "Link" && !insideFootnoteDef) {
       const text = source.slice(node.from, node.to);
       if (
-        footnoteRefPattern.test(text) &&
+        FOOTNOTE_REFERENCE_TEXT.test(text) &&
         node.getChildren("URL").length === 0 &&
         node.getChildren("LinkLabel").length === 0
       ) {
         const key = normalizeLabel(text.slice(2, -1));
-        if (key !== "") {
-          const offsets = refOffsets.get(key) ?? [];
-          offsets.push(node.from);
-          refOffsets.set(key, offsets);
-          if (!refSeen.has(key)) {
-            refSeen.add(key);
-            refOrder.push(key);
-          }
-        }
+        if (key !== "") calls.push({ key, at: node.from - base });
       }
     }
+    if (!descend(node)) return;
     const isDefPara =
       name === "Paragraph" && FOOTNOTE_DEFINITION.test(source.slice(node.from, node.to));
     for (let child = node.firstChild; child; child = child.nextSibling) {
@@ -254,17 +306,58 @@ function collectDefinitions(source: string, tree: Tree): Collected {
     }
   }
 
-  const top = tree.topNode;
-  for (let child = top.firstChild; child; child = child.nextSibling) visit(child, false);
+  visit(top, false);
+  return { defs, headings, references, calls };
+}
+
+/// Le definizioni del documento, dai blocchi di primo livello in ordine: vince
+/// la prima definizione di ogni etichetta, e gli slug dei titoli si contano
+/// dall'inizio.
+function combineDefinitions(parts: readonly { readonly found: Found; readonly from: number }[]): Collected {
+  const references = new Map<string, MarkdownLinkDefinition>();
+  const refOffsets = new Map<string, number[]>();
+  const defs: FootnoteDef[] = [];
+  const defSeen = new Set<string>();
+  const refOrder: string[] = [];
+  const headingIds = new Map<number, string>();
+  const toc: TocEntry[] = [];
+  const slugs = new HeadingSlugs();
+
+  for (const { found, from } of parts) {
+    for (const def of found.defs) {
+      if (defSeen.has(def.labelNorm)) continue;
+      defSeen.add(def.labelNorm);
+      defs.push({ labelNorm: def.labelNorm, from: def.from + from, to: def.to + from, contentFrom: def.contentFrom + from });
+    }
+    for (const heading of found.headings) {
+      if (heading.anchor !== null) {
+        headingIds.set(heading.at + from, heading.anchor);
+        slugs.next(heading.base);
+        toc.push({ level: heading.level, text: heading.text, id: heading.anchor });
+      } else if (heading.slug !== "") {
+        const id = slugs.next(heading.base);
+        headingIds.set(heading.at + from, id);
+        toc.push({ level: heading.level, text: heading.text, id });
+      }
+    }
+    for (const [key, definition] of found.references) if (!references.has(key)) references.set(key, definition);
+    for (const call of found.calls) {
+      const offsets = refOffsets.get(call.key);
+      if (offsets) offsets.push(call.at + from);
+      else {
+        refOffsets.set(call.key, [call.at + from]);
+        refOrder.push(call.key);
+      }
+    }
+  }
 
   // Una nota ha un numero se il testo la richiama, nell'ordine dei richiami,
   // come per il core: una definizione che nessuno richiama resta nella
   // sorgente ma non è una nota della resa (D23).
-  const defKeys = new Set(defs.map((d) => d.labelNorm));
   const numbers = new Map<string, number>();
   let next = 1;
   for (const key of refOrder) {
-    if (defKeys.has(key) && !numbers.has(key)) numbers.set(key, next++);
+    if (defSeen.has(key) && !numbers.has(key)) numbers.set(key, next++);
   }
   const footnotes = new Map<string, MarkdownFootnote>();
   for (const def of defs) {
@@ -281,16 +374,29 @@ function collectDefinitions(source: string, tree: Tree): Collected {
       references: ordinals,
     });
   }
-  return { references, footnotes, headingIds };
+  return { references, footnotes, headingIds, toc };
+}
+
+function collectDefinitions(source: string, tree: Tree): Collected {
+  const openers = footnoteOpeners(source);
+  const parts: { found: Found; from: number }[] = [];
+  for (let child = tree.topNode.firstChild; child; child = child.nextSibling) {
+    parts.push({ found: findDefinitions(source, child, openers), from: child.from });
+  }
+  return combineDefinitions(parts);
 }
 
 interface RenderAux {
   readonly ctx: MarkdownRenderContext;
   readonly headingIds: ReadonlyMap<number, string>;
   readonly declared: ReadonlySet<string>;
+  readonly toc: readonly TocEntry[];
 }
 
 const MATH_INFOS: Record<string, true> = { math: true, latex: true, tex: true };
+
+/// L'apertura di un recinto ```toc``` (K4).
+const TOC_FENCE = /^ {0,3}(?:`{3,}|~{3,})[ \t]*toc(?:[ \t]|\r?\n|$)/i;
 
 /// Un recinto con questa info, se il vault lo dichiara, è una formula.
 export function isMathInfo(info: string): boolean {
@@ -302,6 +408,14 @@ function headingLevel(name: string): number {
   if (name === "SetextHeading2") return 2;
   const match = /^ATXHeading([1-6])$/.exec(name);
   return match ? Number(match[1]) : 1;
+}
+
+/// Un paragrafo fatto soltanto di un'immagine è una figura, con la didascalia
+/// dal testo alternativo (K10); `null` altrimenti, o senza testo alternativo.
+function loneFigure(paragraph: SyntaxNode, source: string, to: number, inner: string, attrs: string): string | null {
+  const image = paragraph.firstChild;
+  if (image?.name !== "Image" || image.from !== paragraph.from || source.slice(image.to, to).trim() !== "") return null;
+  return figureHtml(inner, visibleText(source, image), attrs);
 }
 
 function renderParagraphSegments(
@@ -380,6 +494,8 @@ function renderInnerBlock(
       const tex = paragraphMathBlock(mathOf(aux.ctx, node), slice);
       if (tex !== null) return mathBlockHtml(tex, node.from, node.to, id);
       const inner = renderParagraphSegments(node, aux, quoteMarks, node.from, to);
+      const figure = quoteMarks.length === 0 ? loneFigure(node, source, to, inner, `${idAttr(id)}${mdAttrs(node.from, node.to)}`) : null;
+      if (figure) return figure;
       return `<p${idAttr(id)}${mdAttrs(node.from, node.to)}>${inner}</p>`;
     }
     case "BulletList":
@@ -542,43 +658,80 @@ function nestedMarks(
   return marks.filter((mark) => mark.from >= node.from && mark.to <= node.to);
 }
 
+/// Il contenuto di un callout, senza la riga della testata.
+function calloutBody(node: SyntaxNode, aux: RenderAux, marks: readonly { from: number; to: number }[]): string {
+  const source = aux.ctx.source;
+  let body = "";
+  let firstParaSkipped = false;
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (child.name === "QuoteMark") continue;
+    const childMarks = nestedMarks(child, marks);
+    if (child.name === "Paragraph" && !firstParaSkipped) {
+      firstParaSkipped = true;
+      const newline = source.indexOf("\n", child.from);
+      if (newline !== -1 && newline < child.to) {
+        let rest = newline + 1;
+        while (rest < child.to && (source[rest] === ">" || source[rest] === " " || source[rest] === "\t")) {
+          if (source[rest] === ">") {
+            rest++;
+            if (source[rest] === " " || source[rest] === "\t") rest++;
+            break;
+          }
+          rest++;
+        }
+        if (rest < child.to) {
+          const inner = renderParagraphSegments(child, aux, childMarks, rest, child.to);
+          if (inner !== "") body += `<p>${inner}</p>`;
+        }
+        continue;
+      }
+      continue;
+    }
+    body += renderInnerBlock(child, aux, childMarks);
+  }
+  return body;
+}
+
+/// Le colonne (K3): `[!columns]` con soltanto da due a quattro `[!column]`
+/// dentro, una per colonna. Altrimenti è un callout come gli altri.
+function columnNodes(node: SyntaxNode, source: string): SyntaxNode[] | null {
+  const columns: SyntaxNode[] = [];
+  let head = false;
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (child.name === "QuoteMark") continue;
+    if (!head && child.name === "Paragraph" && !source.slice(child.from, child.to).includes("\n")) {
+      head = true;
+      continue;
+    }
+    if (child.name !== "Blockquote" || !isColumnNode(child, source)) return null;
+    columns.push(child);
+  }
+  return head && columns.length >= 2 && columns.length <= 4 ? columns : null;
+}
+
+function isColumnNode(node: SyntaxNode, source: string): boolean {
+  const first = strippedQuoteLines(source, node.from, node.to)[0] ?? "";
+  return CALLOUT_HEAD.exec(first.trim())?.[1]?.trim().toLowerCase() === "column";
+}
+
 function renderBlockquoteNode(node: SyntaxNode, aux: RenderAux): string {
   const source = aux.ctx.source;
   const marks = directChildren(node, "QuoteMark").map((m) => ({ from: m.from, to: m.to }));
   const lines = strippedQuoteLines(source, node.from, node.to);
   const first = (lines[0] ?? "").trim();
-  const callout = /^\[!([^\]]+)\]([+-])?[ \t]*(.*)$/.exec(first);
+  const callout = CALLOUT_HEAD.exec(first);
   if (callout) {
     const kind = callout[1]!.trim().toLowerCase();
     const title = callout[3]!.trim();
-    let body = "";
-    let firstParaSkipped = false;
-    for (let child = node.firstChild; child; child = child.nextSibling) {
-      if (child.name === "QuoteMark") continue;
-      const childMarks = nestedMarks(child, marks);
-      if (child.name === "Paragraph" && !firstParaSkipped) {
-        firstParaSkipped = true;
-        const newline = source.indexOf("\n", child.from);
-        if (newline !== -1 && newline < child.to) {
-          let rest = newline + 1;
-          while (rest < child.to && (source[rest] === ">" || source[rest] === " " || source[rest] === "\t")) {
-            if (source[rest] === ">") {
-              rest++;
-              if (source[rest] === " " || source[rest] === "\t") rest++;
-              break;
-            }
-            rest++;
-          }
-          if (rest < child.to) {
-            const inner = renderParagraphSegments(child, aux, childMarks, rest, child.to);
-            if (inner !== "") body += `<p>${inner}</p>`;
-          }
-          continue;
-        }
-        continue;
+    if (kind === "columns") {
+      const columns = columnNodes(node, source);
+      if (columns) {
+        const inner = columns.map((column) =>
+          `<div class="fub-column"${mdAttrs(column.from, column.to)}>${calloutBody(column, aux, [...nestedMarks(column, marks), ...directChildren(column, "QuoteMark")])}</div>`).join("");
+        return `<div class="fub-columns" data-columns="${columns.length}"${mdAttrs(node.from, node.to)}>${inner}</div>`;
       }
-      body += renderInnerBlock(child, aux, childMarks);
     }
+    const body = calloutBody(node, aux, marks);
     const paragraph = node.getChild("Paragraph");
     let titleFrom = source.indexOf("]", node.from) + 1 + (callout[2] ? 1 : 0);
     while (source[titleFrom] === " " || source[titleFrom] === "\t") titleFrom++;
@@ -605,6 +758,8 @@ function renderCodeNode(node: SyntaxNode, aux: RenderAux): string {
   if (langLower !== "" && MATH_INFOS[langLower] === true && aux.declared.has(langLower) && code.trim() !== "") {
     return `<div class="math-block" data-tex="${escapeHtml(code)}"${mdAttrs(node.from, node.to)}>${escapeHtml(code)}</div>`;
   }
+  // L'indice (K4): i titoli della nota al posto del recinto.
+  if (langLower === "toc") return tocHtml(code, aux.toc, mdAttrs(node.from, node.to));
   const classAttr = lang === "" ? "" : ` class="language-${escapeHtml(lang)}"`;
   // Un recinto dichiarato dal vault (mermaid, …) lo porta scritto: chi lo
   // idrata guarda questo, non la sola classe, e un recinto che il vault non
@@ -701,17 +856,38 @@ interface BlockRecord {
   id: string | null;
   readonly render: (id: string | null) => string;
   readonly cells?: () => ReadonlyMap<number, string>;
+  /// Il nodo di primo livello da cui viene: un blocco della resa dopo torna
+  /// da questo soltanto se l'albero nuovo ha lo stesso nodo nello stesso
+  /// punto. Vuoto per il frontmatter e per un blocco con il suo ID a parte.
+  readonly node: string;
+  /// Le definizioni che il nodo porta al documento.
+  readonly found?: Found;
 }
 
 class LazyBlock implements MarkdownBlock {
   private cached: string | undefined;
   private cachedCells: ReadonlyMap<number, string> | undefined;
-  constructor(private readonly record: BlockRecord) {}
+  /// `origin` è la resa da cui viene un blocco che la modifica non ha
+  /// toccato, `delta` quanto la modifica l'ha spostato; `null` per uno reso
+  /// da questa sorgente. Sempre un blocco reso davvero: la catena non si
+  /// allunga a ogni battuta. `generation` è il giro di resa che ha letto la
+  /// sorgente del blocco.
+  constructor(
+    readonly record: BlockRecord,
+    readonly generation: number,
+    readonly origin: LazyBlock | null = null,
+    private readonly delta = 0,
+  ) {}
+  /// Il blocco `previous` della resa di prima, che ora comincia a `from`.
+  static moved(previous: LazyBlock, from: number): LazyBlock {
+    const origin = previous.origin ?? previous;
+    return new LazyBlock(origin.record, origin.generation, origin, from - origin.record.from);
+  }
   get from(): number {
-    return this.record.from;
+    return this.record.from + this.delta;
   }
   get to(): number {
-    return this.record.to;
+    return this.record.to + this.delta;
   }
   get kind(): string {
     return this.record.kind;
@@ -720,12 +896,21 @@ class LazyBlock implements MarkdownBlock {
     return this.record.source;
   }
   get html(): string {
-    if (this.cached === undefined) this.cached = this.record.render(this.record.id);
+    if (this.cached === undefined) {
+      this.cached = this.origin ? shiftPositions(this.origin.html, this.delta) : this.record.render(this.record.id);
+    }
     return this.cached;
   }
   get cells(): ReadonlyMap<number, string> | undefined {
     if (!this.record.cells) return undefined;
-    if (this.cachedCells === undefined) this.cachedCells = this.record.cells();
+    if (this.cachedCells === undefined) {
+      // Le chiavi delle celle sono relative all'inizio del blocco, le
+      // posizioni nella loro resa no.
+      const origin = this.origin;
+      this.cachedCells = origin
+        ? new Map([...origin.cells!].map(([at, html]) => [at, shiftPositions(html, this.delta)]))
+        : this.record.cells();
+    }
     return this.cachedCells;
   }
 }
@@ -733,15 +918,44 @@ class LazyBlock implements MarkdownBlock {
 class LazyDocument implements MarkdownDocument {
   private cached: string | undefined;
   constructor(
-    readonly blocks: readonly MarkdownBlock[],
+    readonly source: string,
+    readonly blocks: readonly LazyBlock[],
     readonly dependencies: string,
     readonly anchors: ReadonlyMap<string, number>,
+    /// Quanti blocchi questo giro ha reso dalla sorgente.
+    readonly fresh: number,
   ) {}
   get html(): string {
     if (this.cached === undefined) this.cached = this.blocks.map((block) => block.html).join("");
     return this.cached;
   }
 }
+
+/// Quanti blocchi la resa ha letto dalla sorgente: gli altri sono tornati dalla
+/// resa di prima. Per i test, che contano il lavoro di una battuta.
+export function freshBlocks(document: MarkdownDocument): number | null {
+  return document instanceof LazyDocument ? document.fresh : null;
+}
+
+/// Il blocco reso davvero da cui `block` viene: lo stesso per una resa nuova.
+/// Chi ricava qualcosa dal solo testo di un blocco lo ricorda qui.
+export function blockOrigin(block: MarkdownBlock): object {
+  return block instanceof LazyBlock ? block.origin ?? block : block;
+}
+
+/// Le posizioni scritte nella resa di un blocco, spostate di `delta`: soltanto
+/// gli attributi della resa, perché il testo dell'utente ha le virgolette
+/// già sfuggite.
+const POSITIONS = / data-md-(from|to|task)="(\d+)"/g;
+function shiftPositions(html: string, delta: number): string {
+  if (delta === 0) return html;
+  return html.replace(POSITIONS, (_all, key: string, value: string) => ` data-md-${key}="${Number(value) + delta}"`);
+}
+
+/// Quante sorgenti vecchie una resa può tenere vive attraverso i blocchi che
+/// riusa: oltre, si rifà tutta.
+const GENERATIONS = 8;
+let generations = 0;
 
 function buildDependencies(collected: Collected, source: string): string {
   const parts: string[] = [];
@@ -754,9 +968,79 @@ function buildDependencies(collected: Collected, source: string): string {
   return parts.join("\n");
 }
 
-function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]): MarkdownDocument {
+/// La resa di prima e le modifiche che la separano da questa sorgente.
+export interface PreviousRender {
+  readonly document: MarkdownDocument;
+  readonly changes: ChangeDesc;
+}
+
+/// I blocchi della resa di prima che la modifica non tocca, per dove
+/// cominciano ora. Blocchi e modifiche sono in ordine: si scorrono insieme.
+function untouchedBlocks(previous: PreviousRender | undefined): Map<number, LazyBlock> {
+  const untouched = new Map<number, LazyBlock>();
+  if (!previous || !(previous.document instanceof LazyDocument)) return untouched;
+  const changed: { fromA: number; toA: number; delta: number }[] = [];
+  previous.changes.iterChangedRanges((fromA, toA, _fromB, toB) => changed.push({ fromA, toA, delta: toB - toA }));
+  let next = 0;
+  let delta = 0;
+  for (const block of previous.document.blocks) {
+    // Una modifica che finisce prima del blocco lo sposta e basta; una che lo
+    // tocca, anche soltanto ai bordi, lo fa rendere di nuovo.
+    while (next < changed.length && changed[next]!.toA < block.from) delta = changed[next++]!.delta;
+    if (block.record.node === "" || (next < changed.length && changed[next]!.fromA <= block.to)) continue;
+    untouched.set(block.from + delta, block);
+  }
+  return untouched;
+}
+
+function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[], previous?: PreviousRender): MarkdownDocument {
+  const generation = ++generations;
   const frontmatter = detectFrontmatter(source);
-  const collected = collectDefinitions(source, tree);
+  // Un nodo di primo livello che l'albero nuovo ha nello stesso punto, con
+  // lo stesso nome e lo stesso testo, è il blocco di prima: ne tornano le
+  // definizioni e, se quelle del documento non cambiano, la resa.
+  const untouched = untouchedBlocks(previous);
+  let openers: number[] | null = null;
+  // Il cursore scorre i figli senza farne nodi: il nodo serve soltanto a chi
+  // va letto di nuovo.
+  const tops: { from: number; node: SyntaxNode | null; found: Found; before: LazyBlock | null }[] = [];
+  const htmlTops: TopBlock[] = [];
+  let hasToc = false;
+  const cursor = tree.cursor();
+  if (cursor.firstChild()) {
+    do {
+      const { from, to, name } = cursor;
+      if (name === "HTMLBlock") htmlTops.push({ from, to, html: source.slice(from, to) });
+      else if (name === "FencedCode" && TOC_FENCE.test(source.slice(from, Math.min(to, from + 16)))) hasToc = true;
+      const candidate = untouched.get(from);
+      const before = candidate && candidate.record.node === name && candidate.record.found
+        && candidate.to - candidate.from === to - from ? candidate : null;
+      if (before) tops.push({ from, node: null, found: before.record.found!, before });
+      else {
+        const node = cursor.node;
+        tops.push({ from, node, found: findDefinitions(source, node, openers ??= footnoteOpeners(source)), before: null });
+      }
+    } while (cursor.nextSibling());
+  }
+  // I ripiegabili (K2): un'apertura accoppiata si rende `<details>` aperto,
+  // la sua chiusura `</details>`, e il contenuto fra loro ci cade dentro. Chi
+  // è accoppiato a chi dipende dagli altri blocchi: la sequenza delle aperture
+  // e delle chiusure entra nelle dipendenze, così un blocco riusato non tiene
+  // un'apertura che ha perso la sua chiusura.
+  const details = pairDetails(htmlTops);
+  const detailsOpen = new Map(details.pairs.map((pair) => [pair.open.from, pair.head]));
+  const detailsClose = new Set(details.pairs.map((pair) => pair.close.from));
+  const detailsShape = htmlTops.map((top) => detailsOpen.has(top.from) ? "o" : detailsClose.has(top.from) ? "c" : "").join("");
+  const collected = combineDefinitions(tops);
+  // Un indice (K4) cambia con i livelli e i testi dei titoli, non soltanto
+  // coi loro id: con un indice nella nota entrano nelle dipendenze.
+  const tocShape = hasToc ? collected.toc.map((entry) => `${entry.level}${entry.text}`) : null;
+  const written = JSON.stringify([buildDependencies(collected, source), [...collected.headingIds.values()], forms, detailsShape, tocShape]);
+  // Con altre definizioni ogni blocco può rendersi diverso. Uguali, si tiene
+  // la stringa di prima: chi confronta i widget la trova identica senza
+  // rileggerla.
+  const reuse = previous?.document.dependencies === written;
+  const dependencies = reuse ? previous!.document.dependencies : written;
   const ctx: MarkdownRenderContext = {
     source,
     forms,
@@ -767,16 +1051,19 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
     ctx,
     headingIds: collected.headingIds,
     declared: new Set(declaredFences(forms).map((info) => info.toLowerCase())),
+    toc: collected.toc,
   };
-  const records: BlockRecord[] = [];
-
-  const pushTopLevel = (node: SyntaxNode): void => {
+  const blocks: LazyBlock[] = [];
+  const pushTopLevel = (node: SyntaxNode, found: Found): void => {
     const from = node.from;
     const to = node.to;
     const slice = source.slice(from, to);
+    const push = (record: Omit<BlockRecord, "node" | "found">): void => {
+      blocks.push(new LazyBlock({ ...record, node: node.name, found }, generation));
+    };
     switch (node.name) {
       case "HorizontalRule":
-        records.push({
+        push({
           from,
           to,
           kind: "hr",
@@ -786,7 +1073,7 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
         });
         return;
       case "LinkReference":
-        records.push({
+        push({
           from,
           to,
           kind: "definition",
@@ -795,18 +1082,21 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
           render: () => "",
         });
         return;
-      case "HTMLBlock":
-        records.push({
+      case "HTMLBlock": {
+        const head = detailsOpen.get(from);
+        const closing = detailsClose.has(from);
+        push({
           from,
           to,
           kind: "html",
           source: slice,
           id: null,
-          render: () => rawHtmlBlock(source, from, to),
+          render: () => head ? detailsOpening(slice, head, from, to) : closing ? "</details>" : rawHtmlBlock(source, from, to),
         });
         return;
+      }
       case "CommentBlock":
-        records.push({
+        push({
           from,
           to,
           kind: "html",
@@ -816,7 +1106,7 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
         });
         return;
       case "ProcessingInstructionBlock":
-        records.push({
+        push({
           from,
           to,
           kind: "html",
@@ -831,9 +1121,10 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
         // Un recinto con info string **dichiarata** (mermaid, math, …) è un
         // blocco reso, non codice: la Live lo mostra come la Lettura.
         const info = node.getChild("CodeInfo");
-        const declared = info !== null
-          && aux.declared.has(source.slice(info.from, info.to).trim().split(/\s+/)[0]!.toLowerCase());
-        records.push({
+        const infoWord = info === null ? "" : source.slice(info.from, info.to).trim().split(/\s+/)[0]!.toLowerCase();
+        // Così l'indice (K4): non si scrive come codice, si legge reso.
+        const declared = info !== null && (aux.declared.has(infoWord) || infoWord === "toc");
+        push({
           from,
           to,
           kind: !closed ? "incomplete" : declared ? "diagram" : "code",
@@ -844,7 +1135,7 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
         return;
       }
       case "Table":
-        records.push({
+        push({
           from,
           to,
           kind: "table",
@@ -856,7 +1147,7 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
         return;
       case "BulletList":
       case "OrderedList":
-        records.push({
+        push({
           from,
           to,
           kind: "list",
@@ -866,7 +1157,7 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
         });
         return;
       case "Blockquote":
-        records.push({
+        push({
           from,
           to,
           kind: isCalloutNode(node, source) ? "callout" : "blockquote",
@@ -879,7 +1170,7 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
         const tex = paragraphMathBlock(mathOf(aux.ctx, node), slice);
         if (tex !== null) {
           const anchor = findTrailingAnchor(slice);
-          records.push({
+          push({
             from,
             to,
             kind: "math",
@@ -890,7 +1181,7 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
           return;
         }
         if (FOOTNOTE_DEFINITION.test(slice)) {
-          records.push({
+          push({
             from,
             to,
             kind: "footnote-definition",
@@ -901,18 +1192,19 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
           return;
         }
         const lone = /^\^([^\s]+)[ \t]*$/.exec(slice.trim());
-        const previous = records[records.length - 1];
+        const previous = blocks[blocks.length - 1];
         if (lone && validAnchor(lone[1]!) && previous) {
           const id = canonicalAnchor(lone[1]!);
-          records[records.length - 1] = {
-            from: previous.from,
+          const { from: previousFrom, to: previousTo } = previous;
+          blocks[blocks.length - 1] = new LazyBlock({
+            from: previousFrom,
             to,
             kind: previous.kind,
-            source: source.slice(previous.from, to),
+            source: source.slice(previousFrom, to),
             id,
-            render: () =>
-              `<div${idAttr(id)}${mdAttrs(previous.from, previous.to)}>${previous.render(previous.id)}</div>`,
-          };
+            node: "",
+            render: () => `<div${idAttr(id)}${mdAttrs(previousFrom, previousTo)}>${previous.html}</div>`,
+          }, generation);
           return;
         }
         const anchor = findTrailingAnchor(slice);
@@ -923,7 +1215,7 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
           contentTo = from + anchor.start;
           while (contentTo > from && (source[contentTo - 1] === " " || source[contentTo - 1] === "\t")) contentTo--;
         }
-        records.push({
+        push({
           from,
           to,
           kind: "paragraph",
@@ -931,7 +1223,8 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
           id,
           render: (resolved) => {
             const inner = from < contentTo ? renderInline(aux.ctx, from, contentTo, node) : "";
-            return `<p${idAttr(resolved)}${mdAttrs(from, to)}>${inner}</p>`;
+            return loneFigure(node, source, contentTo, inner, `${idAttr(resolved)}${mdAttrs(from, to)}`)
+              ?? `<p${idAttr(resolved)}${mdAttrs(from, to)}>${inner}</p>`;
           },
         });
         return;
@@ -940,7 +1233,7 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
         if (/^(ATXHeading[1-6]|SetextHeading[1-2])$/.test(node.name)) {
           const rawId = collected.headingIds.get(from) ?? null;
           const level = headingLevel(node.name);
-          records.push({
+          push({
             from,
             to,
             kind: `heading-${level}`,
@@ -950,7 +1243,7 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
           });
           return;
         }
-        records.push({
+        push({
           from,
           to,
           kind: "paragraph",
@@ -964,30 +1257,47 @@ function buildDocument(source: string, tree: Tree, forms?: readonly SyntaxForm[]
 
   if (frontmatter) {
     const slice = source.slice(frontmatter.from, frontmatter.to);
-    records.push({
+    blocks.push(new LazyBlock({
       from: frontmatter.from,
       to: frontmatter.to,
       kind: "frontmatter",
       source: slice,
       id: null,
+      node: "",
       render: () =>
         `<div class="block-frontmatter-unparsed"${mdAttrs(frontmatter.from, frontmatter.to)}><pre>${escapeHtml(slice)}</pre></div>`,
-    });
+    }, generation));
   }
-  const top = tree.topNode;
-  for (let child = top.firstChild; child; child = child.nextSibling) {
-    if (frontmatter && child.from < frontmatter.to) continue;
-    pushTopLevel(child);
+  let fresh = 0;
+  const kept = new Set<number>();
+  for (const top of tops) {
+    if (frontmatter && top.from < frontmatter.to) continue;
+    if (top.before && reuse) {
+      const moved = LazyBlock.moved(top.before, top.from);
+      kept.add(moved.generation);
+      blocks.push(moved);
+      continue;
+    }
+    fresh++;
+    // Un blocco tornato con le definizioni ma da rendere di nuovo.
+    pushTopLevel(top.node ?? nodeAt(tree, top.from), top.found);
   }
-  const blocks = records.map((record) => new LazyBlock(record));
+  if (kept.size >= GENERATIONS) return buildDocument(source, tree, forms);
   const anchors = new Map<string, number>();
   for (const [position, id] of collected.headingIds) if (id) anchors.set(id, position);
-  for (const record of records) if (record.id) anchors.set(record.id, record.from);
+  for (const block of blocks) if (block.record.id) anchors.set(block.record.id, block.from);
   for (const note of collected.footnotes.values()) {
     anchors.set(`fn-${note.number}`, note.from);
     for (const [position, occurrence] of note.references) anchors.set(`fnref-${note.number}-${occurrence}`, position);
   }
-  return new LazyDocument(blocks, JSON.stringify([buildDependencies(collected, source), [...collected.headingIds.values()], forms]), anchors);
+  return new LazyDocument(source, blocks, dependencies, anchors, frontmatter ? fresh + 1 : fresh);
+}
+
+/// Il nodo di primo livello che comincia a `from`.
+function nodeAt(tree: Tree, from: number): SyntaxNode {
+  let node = tree.topNode.childAfter(from)!;
+  while (node.from < from) node = node.nextSibling!;
+  return node;
 }
 
 function isCalloutNode(node: SyntaxNode, source: string): boolean {
@@ -995,7 +1305,7 @@ function isCalloutNode(node: SyntaxNode, source: string): boolean {
     .slice(node.from, node.to)
     .split("\n")
     .map((line) => line.replace(/^\s*(?:>\s?)+/, ""));
-  return /^\[!([^\]]+)\]/.test((lines[0] ?? "").trim());
+  return CALLOUT_HEAD.test((lines[0] ?? "").trim());
 }
 
 export function renderMarkdown(source: string, forms?: readonly SyntaxForm[]): MarkdownDocument {
@@ -1004,9 +1314,15 @@ export function renderMarkdown(source: string, forms?: readonly SyntaxForm[]): M
   return buildDocument(normalized, tree, forms);
 }
 
-export function renderMarkdownState(state: EditorState, forms?: readonly SyntaxForm[]): MarkdownDocument {
+/// La resa di uno stato dell'editor. Con la resa di prima e le modifiche
+/// della transazione, i blocchi che la modifica non tocca tornano da quella.
+export function renderMarkdownState(
+  state: EditorState,
+  forms?: readonly SyntaxForm[],
+  previous?: PreviousRender,
+): MarkdownDocument {
   const { source, tree } = stateTree(state);
-  return buildDocument(source, tree, forms);
+  return buildDocument(source, tree, forms, previous);
 }
 
 /// Le definizioni dei link di uno stato, per chiave normalizzata: quelle che
@@ -1016,11 +1332,16 @@ export function linkReferences(state: EditorState): ReadonlyMap<string, Markdown
   return collectDefinitions(source, tree).references;
 }
 
-/// L'albero di CodeMirror quando copre tutto il documento, altrimenti uno nuovo.
+/// Quanto lavoro concedere al parser dell'editor perché arrivi in fondo, in
+/// millisecondi, prima di rifare l'albero da capo.
+const TREE_BUDGET = 200;
+
+/// L'albero di CodeMirror, portato in fondo al documento; uno nuovo soltanto se
+/// l'editor non ha un parser Markdown o non ci arriva in tempo.
 function stateTree(state: EditorState): { source: string; tree: Tree } {
   const source = state.doc.toString();
-  let tree = syntaxTree(state);
-  if (tree.length !== source.length || tree.topNode.name !== "Document") {
+  let tree = ensureSyntaxTree(state, state.doc.length, TREE_BUDGET);
+  if (!tree || tree.length !== source.length || tree.topNode.name !== "Document") {
     tree = markdownGrammar.parser.parse(source);
   }
   return { source, tree };

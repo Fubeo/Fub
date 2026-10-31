@@ -23,8 +23,16 @@ import type { SyntaxNode } from "@lezer/common";
 import { listItem } from "../../../../rules/syntax";
 import { t } from "../../../../i18n/strings";
 import { isStrictlyInsideCode } from "./parser";
-import { containerMath, isMathContainer } from "./render-inline";
+import {
+  COMMENT_PAIR,
+  enclosingAt,
+  HIGHLIGHT_PAIR,
+  mainElements,
+  type CursorElement,
+} from "./cursor-elements";
+import { pairElementsAt } from "./empty-pair";
 import { addProperty, canMoveProperty, moveProperty } from "./properties";
+import { colorsAt, CONTENT_COLORS, setContentColor } from "./color";
 import {
   dedentListItem,
   deleteTableColumn,
@@ -46,6 +54,9 @@ import {
   toggleItalic,
   toggleOrderedList,
   toggleStrikethrough,
+  toggleSubscript,
+  toggleSuperscript,
+  toggleUnderline,
   toggleEmbed,
   toggleWikilink,
 } from "./commands";
@@ -70,63 +81,17 @@ export interface MarkdownAction {
 /// principale. A cursore vuoto conta l'interno stretto: subito fuori da
 /// `**x**` il grassetto non è premuto.
 function enclosing(state: EditorState, names: ReadonlySet<string>): SyntaxNode | null {
-  const { from, to, empty } = state.selection.main;
-  let node: SyntaxNode | null = syntaxTree(state).resolveInner(from, 1);
-  for (; node; node = node.parent) {
-    if (!names.has(node.name)) continue;
-    if (empty ? node.from < from && from < node.to : node.from <= from && to <= node.to) return node;
-  }
-  if (!empty) return null;
-  // A fine nodo `resolveInner(pos, 1)` guarda già oltre: si riprova a sinistra.
-  node = syntaxTree(state).resolveInner(from, -1);
-  for (; node; node = node.parent) {
-    if (names.has(node.name) && node.from < from && from < node.to) return node;
-  }
-  return null;
+  return enclosingAt(state, state.selection.main, names);
 }
 
 const nodeSet = (...names: string[]): ReadonlySet<string> => new Set(names);
-const STRONG = nodeSet("StrongEmphasis");
-const EMPHASIS = nodeSet("Emphasis");
-const STRIKE = nodeSet("Strikethrough");
-const INLINE_CODE = nodeSet("InlineCode");
 const LINK = nodeSet("Link");
 const FENCED = nodeSet("FencedCode");
 const TABLE = nodeSet("Table");
 
-/// Una coppia di delimitatori sulla riga del cursore contiene la selezione?
-/// Per `==` e `%%`, che l'albero Lezer non conosce.
-function insidePair(state: EditorState, pattern: RegExp): boolean {
-  const { from, to } = state.selection.main;
-  const line = state.doc.lineAt(from);
-  if (to > line.to) return false;
-  const start = from - line.from;
-  const end = to - line.from;
-  for (const match of line.text.matchAll(pattern)) {
-    const at = match.index;
-    if (at < start && end < at + match[0].length || (at <= start && end <= at + match[0].length && start !== end)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-const HIGHLIGHT_PAIR = /==(?=\S)(?:[^=\n]|=(?!=))*?\S==/g;
-const COMMENT_PAIR = /%%[^\n]*?%%/g;
-const WIKILINK_PAIR = /\[\[[^\]\n]*\]\]/g;
-const EMBED_PAIR = /!\[\[[^\]\n]*\]\]/g;
-
-/// Dentro una formula `$…$`, letta sul suo contenitore come fa la Lettura: può
-/// cominciare su una riga e chiudere sulla seguente.
-function insideInlineMath(state: EditorState): boolean {
-  const { from, to } = state.selection.main;
-  let container: SyntaxNode | null = syntaxTree(state).resolveInner(from, 1);
-  while (container && !isMathContainer(container.name)) container = container.parent;
-  if (!container) return false;
-  return containerMath(state.sliceDoc(container.from, container.to), container).formulas.some((math) =>
-    !math.display && (from === to ? math.from < from && from < math.to : math.from <= from && to <= math.to)
-  );
-}
+/// Lo stato premuto di un elemento in riga, dal cursore principale.
+const pressed = (element: CursorElement) => (state: EditorState): boolean =>
+  mainElements(state).has(element) || pairElementsAt(state).has(element);
 
 /// Dove comincia il contenuto di una riga: dopo citazione, pallino e casella.
 function contentStart(text: string): number {
@@ -159,7 +124,7 @@ function setextAt(state: EditorState, line: Line): Setext | null {
 }
 
 /// Il livello del titolo della riga, ATX o Setext; `0` se non lo è.
-function lineHeading(state: EditorState, line: Line): number {
+export function lineHeading(state: EditorState, line: Line): number {
   return setextAt(state, line)?.level ?? headingLevel(line.text);
 }
 
@@ -365,6 +330,67 @@ const insertCallout: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 
+/// Le colonne (K3): `[!columns]` con un `[!column]` per ogni blocco delle
+/// righe selezionate, da due a quattro; un blocco solo va nella prima e la
+/// seconda resta vuota, e su una riga vuota due colonne vuote, col cursore
+/// nella prima.
+const insertColumns: StateCommand = ({ state, dispatch }) => {
+  if (state.readOnly) return false;
+  const nl = state.lineBreak;
+  const lines = selectedLines(state);
+  const first = lines[0]!;
+  const last = lines[lines.length - 1]!;
+  const chunks: string[][] = [];
+  for (const line of lines) {
+    if (line.text.trim() === "") { if (chunks.length > 0 && chunks[chunks.length - 1]!.length > 0) chunks.push([]); continue; }
+    if (chunks.length === 0) chunks.push([]);
+    chunks[chunks.length - 1]!.push(line.text);
+  }
+  const blocks = chunks.filter((chunk) => chunk.length > 0);
+  if (blocks.length > 4) return false;
+  while (blocks.length < 2) blocks.push([""]);
+  const column = (body: string[]) => [`> > [!column]`, ...body.map((text) => text === "" ? "> > " : `> > ${text}`)].join(nl);
+  const text = [`> [!columns]`, blocks.map(column).join(`${nl}>${nl}`)].join(nl);
+  const cursor = first.from + `> [!columns]${nl}> > [!column]${nl}> > `.length + (blocks[0]![0]?.length ?? 0);
+  dispatch(state.update({
+    changes: { from: first.from, to: last.to, insert: text },
+    selection: EditorSelection.cursor(cursor),
+    scrollIntoView: true,
+    userEvent: "input",
+  }));
+  return true;
+};
+
+/// Un ripiegabile (K2, H9): `<details>` con il sommario intorno alle righe
+/// selezionate, che diventano il contenuto; su una riga vuota lo scheletro,
+/// col cursore nel sommario. Le righe vuote dentro tengono il contenuto
+/// Markdown, che senza si leggerebbe come HTML.
+const insertDetails: StateCommand = ({ state, dispatch }) => {
+  if (state.readOnly) return false;
+  const nl = state.lineBreak;
+  const lines = selectedLines(state);
+  const first = lines[0]!;
+  const last = lines[lines.length - 1]!;
+  const open = `<details>${nl}<summary>`;
+  if (lines.length === 1 && first.text.trim() === "") {
+    dispatch(state.update({
+      changes: { from: first.from, to: first.to, insert: `${open}</summary>${nl}${nl}${nl}${nl}</details>` },
+      selection: EditorSelection.cursor(first.from + open.length),
+      scrollIntoView: true,
+      userEvent: "input",
+    }));
+    return true;
+  }
+  const body = state.doc.sliceString(first.from, last.to);
+  dispatch(state.update({
+    changes: { from: first.from, to: last.to, insert: `${open}</summary>${nl}${nl}${body}${nl}${nl}</details>` },
+    selection: EditorSelection.cursor(first.from + open.length),
+    scrollIntoView: true,
+    userEvent: "input",
+  }));
+  return true;
+};
+
 // ── Liste ────────────────────────────────────────────────────────────────────
 
 /// Le righe diventano attività; se lo sono già tutte, tornano voci semplici.
@@ -514,7 +540,7 @@ function toggleFence(
 
 /// Il recinto deve essere più lungo di ogni corsa di backtick a inizio riga
 /// nel contenuto, altrimenti lo chiuderebbe il contenuto stesso.
-function backtickFence(content: string): string {
+export function backtickFence(content: string): string {
   let width = 3;
   for (const match of content.matchAll(/^\s*(`{3,})/gm)) width = Math.max(width, match[1]!.length + 1);
   return "`".repeat(width);
@@ -561,6 +587,32 @@ function insertBlock(
 
 const insertRule: StateCommand = ({ state, dispatch }) =>
   insertBlock(state, dispatch, ["---"], (start) => ({ anchor: start + 3 + state.lineBreak.length }));
+
+/// L'indice dei titoli (K4, H9): un recinto ```toc``` vuoto, che la resa
+/// riempie; il cursore va sotto, dove l'indice si legge già reso.
+const insertToc: StateCommand = ({ state, dispatch }) =>
+  insertBlock(state, dispatch, ["```toc", "```"], (start) => ({ anchor: start + "```toc```".length + 2 * state.lineBreak.length }));
+
+/// Il segnalibro web (K8, H9): un paragrafo che comincia con `https://`, col
+/// cursore in fondo per scriverci o incollarci l'indirizzo.
+const insertLinkCard: StateCommand = ({ state, dispatch }) =>
+  insertBlock(state, dispatch, ["https://"], (start) => ({ anchor: start + "https://".length }));
+
+/// Persona e data (K5, K6, H9): una `@` al cursore, staccata dalla parola prima,
+/// che apre le proposte di `@`.
+const insertMention: StateCommand = ({ state, dispatch }) => {
+  if (state.readOnly) return false;
+  const range = state.selection.main;
+  const before = state.sliceDoc(Math.max(0, range.from - 1), range.from);
+  const insert = before === "" || /\s/.test(before) ? "@" : " @";
+  dispatch(state.update({
+    changes: { from: range.from, to: range.to, insert },
+    selection: EditorSelection.cursor(range.from + insert.length),
+    scrollIntoView: true,
+    userEvent: "input",
+  }));
+  return true;
+};
 
 /// Una tabella da due colonne, con la prima intestazione selezionata per
 /// scriverci sopra. Righe separate da tabulazioni (incollate da un foglio)
@@ -887,6 +939,24 @@ function tableAction(run: StateCommand): MarkdownAction {
   return { run, applicable: (state) => inTable(state) && wouldRun(run)(state) };
 }
 
+/// «Colore» (K1): un'azione per colore del testo e del fondo, e
+/// «Predefinito» che lo toglie. Premuta quando il tratto ha quel colore.
+function colorActions(): [string, MarkdownAction][] {
+  const entries: [string, MarkdownAction][] = [];
+  for (const [kind, prefix] of [["text", "markdown.color"], ["fill", "markdown.background"]] as const) {
+    for (const color of [null, ...CONTENT_COLORS]) {
+      const run = setContentColor(kind, color);
+      entries.push([`${prefix}.${color ?? "default"}`, {
+        run,
+        active: (state) => colorsAt(state)[kind] === color,
+        applicable: wouldRun(run),
+        prose: true,
+      }]);
+    }
+  }
+  return entries;
+}
+
 function heading(level: number): MarkdownAction {
   return { run: setHeading(level), active: headingActive(level), prose: true };
 }
@@ -901,22 +971,25 @@ export const MARKDOWN_ACTIONS: ReadonlyMap<string, MarkdownAction> = new Map<str
   ["markdown.heading.4", heading(4)],
   ["markdown.heading.5", heading(5)],
   ["markdown.heading.6", heading(6)],
-  ["markdown.bold", { run: toggleBold, active: (s) => enclosing(s, STRONG) !== null, prose: true, chord: "Mod-b" }],
-  ["markdown.italic", { run: toggleItalic, active: (s) => enclosing(s, EMPHASIS) !== null, prose: true, chord: "Mod-i" }],
+  ["markdown.bold", { run: toggleBold, active: pressed("strong"), prose: true, chord: "Mod-b" }],
+  ["markdown.italic", { run: toggleItalic, active: pressed("em"), prose: true, chord: "Mod-i" }],
   ["markdown.strikethrough", {
     run: toggleStrikethrough,
-    active: (s) => enclosing(s, STRIKE) !== null,
+    active: pressed("strike"),
     prose: true,
     chord: "Mod-Shift-x",
   }],
-  ["markdown.highlight", { run: toggleHighlight, active: (s) => insidePair(s, HIGHLIGHT_PAIR), prose: true }],
-  ["markdown.code", { run: toggleInlineCode, active: (s) => enclosing(s, INLINE_CODE) !== null, chord: "Mod-`" }],
-  ["markdown.math", { run: toggleInlineMath, active: insideInlineMath, prose: true }],
-  ["markdown.comment", { run: toggleComment, active: (s) => insidePair(s, COMMENT_PAIR), prose: true }],
+  ["markdown.underline", { run: toggleUnderline, active: pressed("underline"), prose: true, chord: "Mod-u" }],
+  ["markdown.superscript", { run: toggleSuperscript, active: pressed("sup"), prose: true }],
+  ["markdown.subscript", { run: toggleSubscript, active: pressed("sub"), prose: true }],
+  ["markdown.highlight", { run: toggleHighlight, active: pressed("highlight"), prose: true }],
+  ["markdown.code", { run: toggleInlineCode, active: pressed("code"), chord: "Mod-`" }],
+  ["markdown.math", { run: toggleInlineMath, active: pressed("math"), prose: true }],
+  ["markdown.comment", { run: toggleComment, active: pressed("comment"), prose: true }],
   ["markdown.clear", { run: clearFormatting, applicable: wouldRun(clearFormatting), prose: true }],
-  ["markdown.link", { run: toggleLink, active: (s) => enclosing(s, LINK) !== null, prose: true }],
-  ["markdown.wikilink", { run: toggleWikilink, active: (s) => insidePair(s, WIKILINK_PAIR), prose: true, chord: "Mod-k" }],
-  ["markdown.embed", { run: toggleEmbed, active: (s) => insidePair(s, EMBED_PAIR), prose: true }],
+  ["markdown.link", { run: toggleLink, active: pressed("link"), prose: true }],
+  ["markdown.wikilink", { run: toggleWikilink, active: pressed("wikilink"), prose: true, chord: "Mod-k" }],
+  ["markdown.embed", { run: toggleEmbed, active: pressed("embed"), prose: true }],
   ["markdown.image", { run: insertImage, prose: true }],
   ["markdown.footnote", { run: insertFootnote, prose: true }],
   ["markdown.footnote.delete", {
@@ -945,10 +1018,16 @@ export const MARKDOWN_ACTIONS: ReadonlyMap<string, MarkdownAction> = new Map<str
   }],
   ["markdown.quote", { run: toggleQuote, active: quoteActive, prose: true }],
   ["markdown.callout", { run: insertCallout, active: calloutActive, prose: true }],
+  ["markdown.details", { run: insertDetails, prose: true }],
+  ["markdown.columns", { run: insertColumns, prose: true }],
   ["markdown.codeblock", { run: toggleCodeBlock, active: (s) => enclosingCodeFence(s) !== null }],
   ["markdown.mathblock", { run: toggleMathBlock, active: (s) => enclosingMathFence(s) !== null, prose: true }],
   ["markdown.diagram", { run: insertDiagram, prose: true }],
   ["markdown.rule", { run: insertRule, prose: true }],
+  ["markdown.toc", { run: insertToc, prose: true }],
+  ["markdown.mention", { run: insertMention, prose: true }],
+  ["markdown.date", { run: insertMention, prose: true }],
+  ["markdown.linkcard", { run: insertLinkCard, prose: true }],
   ["markdown.table", { run: insertTable, prose: true }],
   ["markdown.property.add", { run: addProperty, chord: "Mod-;" }],
   ["markdown.property.up", { run: moveProperty(-1), applicable: canMoveProperty(-1), chord: "Alt-ArrowUp" }],
@@ -965,6 +1044,7 @@ export const MARKDOWN_ACTIONS: ReadonlyMap<string, MarkdownAction> = new Map<str
   ["markdown.table.column.delete", { ...tableAction(deleteTableColumn), chord: "Mod-Alt-Shift-Backspace" }],
   ["markdown.table.sort.ascending", { ...tableAction(sortTableRows(1)), chord: "Mod-Alt-s" }],
   ["markdown.table.sort.descending", { ...tableAction(sortTableRows(-1)), chord: "Mod-Alt-Shift-s" }],
+  ...colorActions(),
 ]);
 
 /// Lo stato di un'azione del catalogo, già deciso per chi non scrive (sola

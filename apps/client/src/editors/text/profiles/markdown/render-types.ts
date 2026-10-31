@@ -39,6 +39,8 @@ export interface MarkdownBlock {
 }
 
 export interface MarkdownDocument {
+  /** The rendered text, LF-normalized: block offsets index into it. */
+  readonly source: string;
   readonly blocks: readonly MarkdownBlock[];
   readonly anchors: ReadonlyMap<string, number>;
   /** Reference definitions that can affect otherwise unchanged blocks. */

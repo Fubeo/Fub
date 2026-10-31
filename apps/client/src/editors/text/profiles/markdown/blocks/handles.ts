@@ -1,0 +1,848 @@
+// La maniglia e il «+» (H3), il menu del blocco (H4) e il trascinamento (H5).
+// Una colonna a sinistra del testo con due pulsanti per il blocco sotto il
+// puntatore, per quello del cursore e per quello che ha il fuoco; sugli
+// schermi senza passaggio restano sul blocco del cursore. Stanno nello
+// scorrimento dell'editor, non nel contenuto: non sono nel file, non si
+// copiano, e il cursore non ci entra.
+import { EditorSelection, type EditorState, type Extension, Facet } from "@codemirror/state";
+import { EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+import { createList, openPopover, type PopoverHandle } from "../../../../../kit";
+import { writeClipboardText } from "../../../../../platform/clipboard";
+import { type Lifetime, openLifetime } from "../../../../../ui/lifetime";
+import { liveStrings } from "../strings";
+import { detailsOf, setDetailsDefault } from "../details-live";
+import type { DetailsPair } from "../details";
+import { colorsAt, CONTENT_COLORS, lineText, setContentColor, type ColorKind, type ContentColor } from "../color";
+import { blockAnchor, blockLink } from "./anchor";
+import { columnsRun, dropAsColumn, intoColumns } from "./columns";
+import { blockModel, type Block } from "./model";
+import { type BlockRun, moveRun, moveSiblings, siblingsOf } from "./move";
+import { blockSelection, cursorBlock, deleteRun, duplicateRun, runOfSelection, selectBlocks, setBlockSelection } from "./selection";
+import { canTransform, targetOf, transformTo, type TransformTarget, unwrap } from "./transform";
+
+export interface BlocksOptions {
+  /// Il nome della pagina, per il link al blocco: `[[Pagina#^id]]`.
+  readonly page?: () => string | null;
+  /// Dice all'utente com'è andata un'azione che non si vede nel testo.
+  readonly notify?: (message: string, tone: "info" | "guasto") => void;
+  /// La nota è la pagina di una cartella (`X/_index.md`): il titolo è il nome
+  /// della cartella, e cambiarlo rinomina la cartella.
+  readonly folderPage?: () => boolean;
+  /// Rinomina la pagina col titolo scritto nella testata: `null` se è andata,
+  /// altrimenti la frase che dice perché no. Senza, il titolo non si modifica.
+  readonly rename?: (name: string) => Promise<string | null>;
+  /// Monta un'immagine (l'HTML della resa) nella copertina, e ne dà lo
+  /// smontaggio: la stessa resa delle immagini della Live.
+  readonly mountImage?: (root: HTMLElement, html: string) => () => void;
+  /// «Nuova sottopagina»: la pagina diventa quella della sua cartella, se non
+  /// lo è già, e lì nasce `name`. `null` se è andata, altrimenti la frase che
+  /// dice perché no. Senza, la testata non la offre.
+  readonly subpage?: (name: string) => Promise<string | null>;
+}
+
+export const blocksOptions = Facet.define<BlocksOptions, BlocksOptions>({ combine: (values) => values[0] ?? {} });
+
+/// Un blocco detto con ciò che sopravvive alle modifiche: dove comincia e a
+/// che profondità sta.
+interface BlockKey {
+  readonly from: number;
+  readonly depth: number;
+}
+
+function keyOf(block: Block): BlockKey {
+  return { from: block.from, depth: block.depth };
+}
+
+function indexOf(blocks: readonly Block[], key: BlockKey | null): number {
+  if (!key) return -1;
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i]!;
+    if (block.from > key.from) break;
+    if (block.from === key.from && block.depth === key.depth) return i;
+  }
+  return -1;
+}
+
+/// Il nome della specie, per la maniglia e per «Trasforma in».
+export function kindName(block: Pick<Block, "kind" | "level">): string {
+  if (block.kind === "heading") return liveStrings.t("blocks.kind.heading", { level: String(block.level) });
+  return liveStrings.t(`blocks.kind.${block.kind}`);
+}
+
+const TARGET_NAMES: Record<TransformTarget, () => string> = {
+  paragraph: () => liveStrings.t("blocks.kind.paragraph"),
+  heading1: () => liveStrings.t("blocks.kind.heading", { level: "1" }),
+  heading2: () => liveStrings.t("blocks.kind.heading", { level: "2" }),
+  heading3: () => liveStrings.t("blocks.kind.heading", { level: "3" }),
+  heading4: () => liveStrings.t("blocks.kind.heading", { level: "4" }),
+  heading5: () => liveStrings.t("blocks.kind.heading", { level: "5" }),
+  heading6: () => liveStrings.t("blocks.kind.heading", { level: "6" }),
+  bullet: () => liveStrings.t("blocks.kind.bullet"),
+  ordered: () => liveStrings.t("blocks.kind.ordered"),
+  task: () => liveStrings.t("blocks.kind.task"),
+  quote: () => liveStrings.t("blocks.kind.quote"),
+  callout: () => liveStrings.t("blocks.kind.callout"),
+  code: () => liveStrings.t("blocks.kind.code"),
+  details: () => liveStrings.t("blocks.kind.details"),
+};
+
+/// I bersagli di «Trasforma in», nell'ordine dei tasti di Notion.
+export const TARGETS: readonly TransformTarget[] = [
+  "paragraph", "heading1", "heading2", "heading3", "bullet", "ordered", "task", "quote", "callout", "code", "details",
+];
+
+/// Quanto del testo del blocco dice la maniglia.
+const EXCERPT = 40;
+
+/// Il nome accessibile della maniglia: «Blocco: Titolo 2, Cose da fare».
+export function gripLabel(state: EditorState, blocks: readonly Block[], index: number): string {
+  const block = blocks[index]!;
+  const parts = canTransform(block) ? unwrap(state, blocks, index) : null;
+  const raw = (parts?.own.find((line) => line.trim() !== "") ?? (block.kind === "paragraph" ? state.doc.lineAt(block.from).text : "")).trim();
+  const text = raw.length > EXCERPT ? `${raw.slice(0, EXCERPT - 1)}…` : raw;
+  const kind = kindName(block);
+  return text === "" ? liveStrings.t("blocks.grip", { kind }) : liveStrings.t("blocks.grip.text", { kind, text });
+}
+
+/// La riga nuova che «+» aggiunge sotto il blocco: una voce sorella per una
+/// voce, un paragrafo vuoto altrimenti. Ridà la modifica e dove va il cursore.
+export function addBelow(state: EditorState, blocks: readonly Block[], index: number): { changes: { from: number; insert: string }; cursor: number } {
+  const block = blocks[index]!;
+  const end = blocks[index]!.to;
+  const first = state.doc.lineAt(block.from).text;
+  if (block.kind === "bullet" || block.kind === "task" || block.kind === "ordered") {
+    const head = /^(\s*)([-*+]|(\d{1,9})([.)]))/.exec(first);
+    if (head) {
+      const marker = head[3] ? `${Number(head[3]) + 1}${head[4]}` : head[2]!;
+      const insert = `\n${head[1]}${marker} ${block.kind === "task" ? "[ ] " : ""}`;
+      return { changes: { from: end, insert }, cursor: end + insert.length };
+    }
+  }
+  const indent = /^\s*/.exec(first)![0];
+  const insert = `\n\n${block.depth > 0 ? indent : ""}`;
+  return { changes: { from: end, insert }, cursor: end + insert.length };
+}
+
+/// La tratta su cui lavorano menu e trascinamento: la selezione di blocchi se
+/// comprende il blocco, altrimenti il blocco da solo.
+function runFor(state: EditorState, blocks: readonly Block[], index: number): BlockRun {
+  const value = state.field(blockSelection, false);
+  const run = value ? runOfSelection(blocks, value) : null;
+  if (run && blocks[run.first]!.parent === blocks[index]!.parent && index >= run.first && index <= run.last) return run;
+  return { first: index, last: index };
+}
+
+interface MenuItem {
+  readonly id: string;
+  readonly label: string;
+  readonly role?: "menuitem" | "menuitemradio" | "menuitemcheckbox";
+  readonly checked?: boolean;
+  readonly disabled?: boolean;
+  /// Il campione di un colore (K1): «A» nel colore del testo o sul fondo.
+  readonly swatch?: { readonly kind: ColorKind; readonly color: ContentColor | null };
+  readonly run: () => void;
+}
+
+/// I blocchi che «Colore» sa colorare, e quanta parte: tutto il paragrafo, o
+/// la prima riga degli altri (il titolo, la voce, la citazione).
+const COLORABLE: Partial<Record<Block["kind"], "all" | "first">> = {
+  paragraph: "all", heading: "first", bullet: "first", ordered: "first", task: "first", quote: "first",
+};
+
+/// I tratti di testo che «Colore» tocca nei blocchi della tratta di `index`,
+/// dal fondo: cambiarne uno non sposta quelli prima.
+export function colorRanges(state: EditorState, blocks: readonly Block[], index: number): { from: number; to: number }[] {
+  const run = runFor(state, blocks, index);
+  const ranges: { from: number; to: number }[] = [];
+  for (const i of siblingsOf(blocks, run.first).filter((i) => i >= run.first && i <= run.last)) {
+    const block = blocks[i]!;
+    const span = COLORABLE[block.kind];
+    const range = span && lineText(state, block.from, span === "all" ? block.to : block.from);
+    if (range) ranges.push(range);
+  }
+  return ranges.reverse();
+}
+
+/// Il ripiegabile il cui blocco comincia alla riga di `from`.
+function detailsAt(state: EditorState, from: number): DetailsPair | undefined {
+  return detailsOf(state).pairs.find((pair) => state.doc.lineAt(pair.open.from).from === from);
+}
+
+/// Lo stato di un trascinamento: dove è partito e dove cadrebbe.
+interface Drag {
+  readonly pointer: number;
+  readonly startY: number;
+  readonly key: BlockKey;
+  readonly life: Lifetime;
+  moving: boolean;
+  x: number;
+  y: number;
+  /// Il fratello davanti a cui cadrebbe, `-1` in fondo, `null` da nessuna parte.
+  before: number | null;
+  /// Il fratello sul cui bordo destro cadrebbe, come colonna accanto (K3).
+  beside: number | null;
+}
+
+/// La parte destra del testo, in frazione della sua larghezza, dove un blocco
+/// lasciato va accanto a quello sotto il puntatore invece che fra le righe.
+const BESIDE = 0.8;
+
+/// Il margine dove la vista scorre da sola durante un trascinamento.
+const EDGE = 40;
+/// Di quanto il puntatore deve muoversi perché un clic diventi un trascinamento.
+const SLOP = 4;
+
+class HandlesView {
+  readonly life = openLifetime();
+  readonly root = document.createElement("div");
+  readonly add = document.createElement("button");
+  readonly grip = document.createElement("button");
+  readonly drop = document.createElement("div");
+  hovered: BlockKey | null = null;
+  /// Il blocco della maniglia che ha il fuoco, o del menu aperto.
+  pinned: BlockKey | null = null;
+  shown: BlockKey | null = null;
+  menu: PopoverHandle | null = null;
+  drag: Drag | null = null;
+  /// Il clic che segue un trascinamento non apre il menu.
+  swallowClick = false;
+  /// Il menu aperto l'ha aperto il puntatore: le sue pagine si aprono come lui.
+  menuByPointer = false;
+  readonly hoverable: boolean;
+
+  constructor(readonly view: EditorView) {
+    this.hoverable = typeof matchMedia !== "function" || matchMedia("(hover: hover)").matches;
+    this.root.className = "cm-fub-block-handles";
+    this.root.hidden = true;
+    this.add.type = "button";
+    this.add.className = "cm-fub-block-add";
+    // Il «+» è disegnato, come i puntini della maniglia: non dipende dal
+    // carattere del documento, che lo farebbe piccolo o sottile.
+    const plus = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    plus.setAttribute("class", "cm-fub-block-add-plus");
+    plus.setAttribute("viewBox", "0 0 12 12");
+    plus.setAttribute("aria-hidden", "true");
+    const cross = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    cross.setAttribute("d", "M6 1.5v9M1.5 6h9");
+    plus.append(cross);
+    this.add.append(plus);
+    this.add.setAttribute("aria-label", liveStrings.t("blocks.add"));
+    this.grip.type = "button";
+    this.grip.className = "cm-fub-block-grip";
+    this.grip.setAttribute("aria-haspopup", "menu");
+    this.grip.setAttribute("aria-expanded", "false");
+    const dots = document.createElement("span");
+    dots.className = "cm-fub-block-grip-dots";
+    dots.setAttribute("aria-hidden", "true");
+    this.grip.append(dots);
+    this.root.append(this.add, this.grip);
+    this.drop.className = "cm-fub-block-drop";
+    this.drop.hidden = true;
+    view.scrollDOM.append(this.root, this.drop);
+    this.life.add(() => {
+      this.root.remove();
+      this.drop.remove();
+    });
+
+    const life = this.life;
+    life.listen(view.scrollDOM, "mousemove", (event) => this.pointAt(event.clientX, event.clientY, event.target));
+    life.listen(view.scrollDOM, "mouseleave", () => {
+      this.hovered = null;
+      this.schedule();
+    });
+    // Un clic sui pulsanti non toglie il fuoco al testo: Tab, Invio e Spazio
+    // invece li raggiungono e li premono.
+    life.listen(this.root, "mousedown", (event) => event.preventDefault());
+    life.listen(this.root, "focusin", () => {
+      this.pinned = this.shown;
+    });
+    life.listen(this.root, "focusout", (event) => {
+      if (this.menu || this.root.contains(event.relatedTarget as Node | null)) return;
+      this.pinned = null;
+      this.schedule();
+    });
+    life.listen(this.add, "click", () => this.addBlock());
+    // Col mouse il menu si apre senza l'anello su una voce; da Invio o Spazio
+    // (un clic senza `detail`) la prima voce ha già il fuoco.
+    life.listen(this.grip, "click", (event) => {
+      if (this.swallowClick) {
+        this.swallowClick = false;
+        return;
+      }
+      this.openMenu("main", event.detail > 0);
+    });
+    // Il tasto destro sulla maniglia è il menu del blocco, non quello del testo.
+    life.listen(this.root, "contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.target instanceof Node && this.grip.contains(event.target)) {
+        this.openMenu("main", event.button === 2 && (event.clientX !== 0 || event.clientY !== 0));
+      }
+    });
+    life.listen(this.grip, "pointerdown", (event) => this.startDrag(event));
+    this.schedule();
+  }
+
+  update(update: ViewUpdate): void {
+    if (update.docChanged) {
+      const map = (key: BlockKey | null) => (key ? { from: update.changes.mapPos(key.from, 1), depth: key.depth } : null);
+      this.hovered = map(this.hovered);
+      this.pinned = map(this.pinned);
+    }
+    if (update.docChanged || update.selectionSet || update.focusChanged || update.geometryChanged || update.viewportChanged ||
+      update.state.field(blockModel) !== update.startState.field(blockModel)) {
+      this.schedule();
+    }
+  }
+
+  /// Il blocco sotto il punto `(x, y)` della finestra.
+  pointAt(x: number, y: number, target: EventTarget | null): void {
+    if (this.drag || (target instanceof Node && this.root.contains(target))) return;
+    const pos = this.view.posAtCoords({ x, y }, false);
+    const blocks = this.view.state.field(blockModel).blocks;
+    let found = -1;
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i]!;
+      if (block.from > pos) break;
+      if (pos <= block.to) found = i;
+    }
+    const key = found >= 0 ? keyOf(blocks[found]!) : null;
+    if (key && this.hovered && key.from === this.hovered.from && key.depth === this.hovered.depth) return;
+    if (key) this.hovered = key;
+    this.schedule();
+  }
+
+  /// Il blocco che le maniglie servono adesso.
+  current(): number {
+    const state = this.view.state;
+    if (state.readOnly) return -1;
+    const blocks = state.field(blockModel).blocks;
+    for (const key of [this.pinned, this.hoverable ? this.hovered : null]) {
+      const index = indexOf(blocks, key);
+      if (index >= 0) return index;
+    }
+    if (!this.view.hasFocus) return -1;
+    const value = state.field(blockSelection, false);
+    if (value) {
+      const run = runOfSelection(blocks, value);
+      if (run) return run.head;
+    }
+    return cursorBlock(state, blocks);
+  }
+
+  schedule(): void {
+    this.view.requestMeasure({
+      key: this,
+      read: (view) => {
+        const index = this.current();
+        if (index < 0) return null;
+        const blocks = view.state.field(blockModel).blocks;
+        const block = blocks[index]!;
+        const line = view.state.doc.lineAt(block.from);
+        const start = line.from + /^\s*/.exec(line.text)![0].length;
+        const coords = view.coordsAtPos(Math.min(start, line.to), 1) ?? view.coordsAtPos(line.from, 1);
+        if (!coords) return null;
+        const scroller = view.scrollDOM.getBoundingClientRect();
+        const lineBlock = view.lineBlockAt(block.from);
+        // Centrate sulla prima riga di testo, non sul blocco di riga: un
+        // titolo ha aria sopra, e le maniglie starebbero in alto.
+        const glyph = coords.bottom - coords.top;
+        return {
+          index,
+          key: keyOf(block),
+          label: gripLabel(view.state, blocks, index),
+          left: coords.left - scroller.left + view.scrollDOM.scrollLeft,
+          top: glyph > 0
+            ? coords.top - scroller.top + view.scrollDOM.scrollTop
+            : lineBlock.top + view.documentTop - scroller.top + view.scrollDOM.scrollTop,
+          height: glyph > 0 ? glyph : lineBlock.height,
+        };
+      },
+      write: (place) => {
+        if (!place) {
+          this.shown = null;
+          if (!this.root.contains(document.activeElement)) this.root.hidden = true;
+          return;
+        }
+        this.shown = place.key;
+        this.root.hidden = false;
+        this.root.dataset.active = String(this.hoverable && this.hovered !== null && place.key.from === this.hovered.from);
+        this.grip.setAttribute("aria-label", place.label);
+        this.root.style.top = `${place.top}px`;
+        this.root.style.left = `${place.left}px`;
+        this.root.style.height = `${place.height}px`;
+      },
+    });
+  }
+
+  /// «+»: una riga nuova sotto il blocco, col cursore dentro.
+  addBlock(): void {
+    const view = this.view;
+    const blocks = view.state.field(blockModel).blocks;
+    const index = indexOf(blocks, this.shown);
+    if (index < 0 || view.state.readOnly) return;
+    const { changes, cursor } = addBelow(view.state, blocks, index);
+    view.dispatch({ changes, selection: EditorSelection.cursor(cursor), userEvent: "input", scrollIntoView: true });
+    this.pinned = null;
+    view.focus();
+  }
+
+  /// Il menu del blocco, sotto la maniglia. Mentre è aperto i blocchi su cui
+  /// lavora restano selezionati, così si vede che cosa toccherà.
+  openMenu(page: "main" | "transform" | "color" = "main", pointer = this.menuByPointer): void {
+    this.menu?.close();
+    this.menuByPointer = pointer;
+    const view = this.view;
+    const blocks = view.state.field(blockModel).blocks;
+    const index = indexOf(blocks, this.shown);
+    if (index < 0) return;
+    const run = runFor(view.state, blocks, index);
+    const value = view.state.field(blockSelection, false);
+    if (!value || runOfSelection(blocks, value)?.first !== run.first) view.dispatch(selectBlocks(view.state, blocks, run.first, run.last));
+    this.pinned = keyOf(blocks[index]!);
+    const key = this.pinned;
+    const list = document.createElement("div");
+    list.className = "cm-fub-block-menu";
+    list.setAttribute("aria-label", liveStrings.t("blocks.menu"));
+    const life = openLifetime();
+    const act = (run: () => void) => () => {
+      popover.close();
+      run();
+      view.focus();
+    };
+    const items = page === "main" ? this.mainItems(key, act)
+      : page === "color" ? this.colorItems(key, act)
+      : this.transformItems(key, act);
+    const handle = createList<MenuItem>({
+      container: list,
+      role: "menu",
+      items,
+      key: (item) => item.id,
+      render: (item, row) => {
+        row.textContent = item.label;
+        row.setAttribute("role", item.role ?? "menuitem");
+        if (item.role === "menuitemradio" || item.role === "menuitemcheckbox") row.setAttribute("aria-checked", String(item.checked === true));
+        if (item.swatch) row.prepend(colorSwatch(item.swatch.kind, item.swatch.color));
+        if (item.id === "delete") row.dataset.danger = "true";
+      },
+      disabled: (item) => item.disabled === true,
+      onActivate: (item) => item.run(),
+      focus: "roving",
+      lifetime: life,
+    });
+    if (!pointer) handle.setActive(items.find((item) => !item.disabled)?.id ?? null);
+    else list.tabIndex = -1;
+    const popover = openPopover({
+      anchor: this.grip,
+      content: list,
+      // Un nome lo fa dialogo, come la scelta della lingua del codice: fuori
+      // dai punti di riferimento della pagina un gruppo anonimo non sta.
+      label: liveStrings.t("blocks.menu"),
+      placement: "bottom",
+      align: "start",
+      className: "cm-fub-block-popover",
+      lifetime: this.life,
+      autoFocus: !pointer,
+      returnFocus: false,
+      onClose: (reason) => {
+        life.close();
+        if (this.menu === popover) this.menu = null;
+        this.grip.setAttribute("aria-expanded", "false");
+        // Esc torna alla maniglia; un'azione torna al testo.
+        if (reason === "escape") this.grip.focus();
+        else if (reason !== "manual") {
+          this.pinned = null;
+          this.schedule();
+        }
+      },
+    });
+    // Aperto dal mouse il fuoco sta nella lista e su nessuna voce: la prima
+    // freccia sceglie la prima.
+    if (pointer) list.focus({ preventScroll: true });
+    this.grip.setAttribute("aria-expanded", "true");
+    this.menu = popover;
+  }
+
+  /// Ritrova il blocco e la sua tratta al momento dell'azione: il testo può
+  /// essere cambiato mentre il menu era aperto.
+  withRun(key: BlockKey, run: (state: EditorState, blocks: readonly Block[], found: BlockRun, index: number) => void): void {
+    const state = this.view.state;
+    const blocks = state.field(blockModel).blocks;
+    const index = indexOf(blocks, key);
+    if (index < 0 || state.readOnly) return;
+    run(state, blocks, runFor(state, blocks, index), index);
+    this.pinned = null;
+  }
+
+  mainItems(key: BlockKey, act: (run: () => void) => () => void): MenuItem[] {
+    const view = this.view;
+    const blocks = view.state.field(blockModel).blocks;
+    const index = indexOf(blocks, key);
+    const run = runFor(view.state, blocks, index);
+    const sibs = siblingsOf(blocks, run.first);
+    const transformable = sibs.filter((i) => i >= run.first && i <= run.last).some((i) => canTransform(blocks[i]!));
+    const moveSpec = (dir: -1 | 1) => () =>
+      this.withRun(key, (state, all, found) => {
+        const spec = moveRun(state, all, found, dir);
+        if (!spec) return;
+        const { follow, ...move } = spec;
+        const value = state.field(blockSelection, false);
+        const effects = value
+          ? [setBlockSelection.of({ anchor: follow(value.anchor) ?? value.anchor, head: follow(value.head) ?? value.head, depth: value.depth })]
+          : [];
+        view.dispatch({ ...move, effects: [...effects, EditorView.announce.of(liveStrings.t("blocks.moved"))] });
+      });
+    return [
+      {
+        id: "transform",
+        label: `${liveStrings.t("blocks.menu.transform")} …`,
+        disabled: !transformable,
+        run: () => this.openMenu("transform"),
+      },
+      {
+        id: "color",
+        label: `${liveStrings.t("blocks.menu.color")} …`,
+        disabled: this.colorRanges(key).length === 0,
+        run: () => this.openMenu("color"),
+      },
+      // Un ripiegabile: se la nota lo apre già aperto (K2). La freccia
+      // invece apre e chiude soltanto nella vista.
+      ...(blocks[index]?.kind === "details" ? [{
+        id: "details-open",
+        label: liveStrings.t("blocks.menu.details-open"),
+        role: "menuitemcheckbox" as const,
+        checked: detailsAt(view.state, blocks[index]!.from)?.head.open === true,
+        run: act(() => this.withRun(key, (state, all, _found, at) => {
+          const pair = detailsAt(state, all[at]!.from);
+          const spec = pair && setDetailsDefault(state, pair.open.from, !pair.head.open);
+          if (spec) view.dispatch(spec);
+        })),
+      }] : []),
+      // Il blocco col fratello che lo segue, o la tratta, uno per colonna (K3).
+      {
+        id: "columns",
+        label: liveStrings.t("blocks.menu.columns"),
+        disabled: columnsRun(view.state, blocks, run) === null,
+        run: act(() => this.withRun(key, (state, all, found) => {
+          const picked = columnsRun(state, all, found);
+          if (picked) view.dispatch(intoColumns(state, all, picked));
+        })),
+      },
+      {
+        id: "duplicate",
+        label: liveStrings.t("blocks.menu.duplicate"),
+        run: act(() => this.withRun(key, (state, all, found) => view.dispatch(duplicateRun(state, all, found)))),
+      },
+      {
+        id: "link",
+        label: liveStrings.t("blocks.menu.link"),
+        disabled: run.first !== run.last,
+        run: act(() => this.copyLink(key)),
+      },
+      { id: "up", label: liveStrings.t("blocks.menu.up"), disabled: sibs.indexOf(run.first) <= 0, run: act(moveSpec(-1)) },
+      { id: "down", label: liveStrings.t("blocks.menu.down"), disabled: sibs.indexOf(run.last) >= sibs.length - 1, run: act(moveSpec(1)) },
+      {
+        id: "delete",
+        label: liveStrings.t("blocks.menu.delete"),
+        run: act(() => this.withRun(key, (state, all, found) => view.dispatch(deleteRun(state, all, found)))),
+      },
+    ];
+  }
+
+  transformItems(key: BlockKey, act: (run: () => void) => () => void): MenuItem[] {
+    const view = this.view;
+    const blocks = view.state.field(blockModel).blocks;
+    const index = indexOf(blocks, key);
+    const current = index >= 0 ? targetOf(blocks[index]!) : null;
+    return [
+      {
+        id: "back",
+        label: `‹ ${liveStrings.t("blocks.menu.back")}`,
+        run: () => this.openMenu("main"),
+      },
+      ...TARGETS.map((target): MenuItem => ({
+        id: target,
+        label: TARGET_NAMES[target](),
+        role: "menuitemradio",
+        checked: target === current,
+        run: act(() => this.withRun(key, (state, all, found) => {
+          const sibs = siblingsOf(all, found.first).filter((i) => i >= found.first && i <= found.last);
+          transformTo(target, sibs)({ state, dispatch: (tr) => view.dispatch(tr) });
+        })),
+      })),
+    ];
+  }
+
+  colorRanges(key: BlockKey): { from: number; to: number }[] {
+    const blocks = this.view.state.field(blockModel).blocks;
+    const index = indexOf(blocks, key);
+    return index < 0 ? [] : colorRanges(this.view.state, blocks, index);
+  }
+
+  /// «Colore»: il testo e il fondo dei blocchi, coi nove colori e il
+  /// predefinito. È spuntato il colore che hanno tutti.
+  colorItems(key: BlockKey, act: (run: () => void) => () => void): MenuItem[] {
+    const view = this.view;
+    const ranges = this.colorRanges(key);
+    const shared = (kind: ColorKind): ContentColor | null | undefined => {
+      const found = new Set(ranges.map((range) => colorsAt(view.state.update({ selection: EditorSelection.range(range.from, range.to) }).state)[kind]));
+      return found.size === 1 ? [...found][0] : undefined;
+    };
+    const items: MenuItem[] = [{
+      id: "back",
+      label: `‹ ${liveStrings.t("blocks.menu.back")}`,
+      run: () => this.openMenu("main"),
+    }];
+    for (const kind of ["text", "fill"] as const) {
+      const current = shared(kind);
+      for (const color of [null, ...CONTENT_COLORS]) {
+        items.push({
+          id: `${kind}-${color ?? "default"}`,
+          label: liveStrings.t(kind === "text" ? "blocks.color.text" : "blocks.color.fill", {
+            color: liveStrings.t(color ? (`blocks.color.${color}` as const) : "blocks.color.default"),
+          }),
+          role: "menuitemradio",
+          checked: current === color,
+          swatch: { kind, color },
+          run: act(() => {
+            for (const range of this.colorRanges(key)) {
+              setContentColor(kind, color, range)({ state: view.state, dispatch: (tr) => view.dispatch(tr) });
+            }
+          }),
+        });
+      }
+    }
+    return items;
+  }
+
+  /// Scrive l'id se manca e copia il link; lo dice, perché negli appunti non
+  /// si vede.
+  copyLink(key: BlockKey): void {
+    const view = this.view;
+    const options = view.state.facet(blocksOptions);
+    this.withRun(key, (state, blocks, _run, index) => {
+      const anchor = blockAnchor(state, blocks, index);
+      if (anchor.changes) view.dispatch({ changes: anchor.changes, userEvent: "input" });
+      const link = blockLink(options.page?.() ?? null, anchor.fragment);
+      writeClipboardText(link).then(
+        () => options.notify?.(liveStrings.t("blocks.link.copied", { link }), "info"),
+        (error: unknown) => options.notify?.(liveStrings.t("blocks.link.failed", { reason: error instanceof Error ? error.message : String(error) }), "guasto"),
+      );
+    });
+  }
+
+  startDrag(event: PointerEvent): void {
+    if (event.button !== 0 || this.drag || this.view.state.readOnly) return;
+    this.swallowClick = false;
+    const blocks = this.view.state.field(blockModel).blocks;
+    const index = indexOf(blocks, this.shown);
+    if (index < 0) return;
+    const life = openLifetime();
+    const drag: Drag = { pointer: event.pointerId, startY: event.clientY, key: keyOf(blocks[index]!), life, moving: false, x: event.clientX, y: event.clientY, before: null, beside: null };
+    this.drag = drag;
+    try { this.grip.setPointerCapture(event.pointerId); } catch { /* un puntatore finto */ }
+    life.listen(this.grip, "pointermove", (move) => {
+      if (move.pointerId !== drag.pointer) return;
+      drag.x = move.clientX;
+      drag.y = move.clientY;
+      if (!drag.moving && Math.abs(move.clientY - drag.startY) < SLOP) return;
+      if (!drag.moving) {
+        drag.moving = true;
+        this.view.dom.classList.add("cm-fub-blocks-dragging");
+        this.menu?.close();
+      }
+      this.track();
+    });
+    life.listen(this.grip, "pointerup", () => this.endDrag(true));
+    life.listen(this.grip, "pointercancel", () => this.endDrag(false));
+    life.listen(this.grip, "lostpointercapture", () => this.endDrag(false));
+    life.listen(window, "keydown", (key) => {
+      if (key.key !== "Escape" || !drag.moving) return;
+      key.preventDefault();
+      key.stopPropagation();
+      this.endDrag(false);
+    }, { capture: true });
+    // Vicino ai bordi la vista scorre, e la linea d'arrivo la segue.
+    const timer = setInterval(() => {
+      if (!drag.moving) return;
+      const box = this.view.scrollDOM.getBoundingClientRect();
+      const speed = drag.y < box.top + EDGE ? -(box.top + EDGE - drag.y) : drag.y > box.bottom - EDGE ? drag.y - (box.bottom - EDGE) : 0;
+      if (speed === 0) return;
+      this.view.scrollDOM.scrollTop += Math.max(-24, Math.min(24, speed / 2));
+      this.track();
+    }, 16);
+    life.add(() => clearInterval(timer));
+  }
+
+  /// Dove cadrebbe il blocco con il puntatore a `drag.y`, e la linea che lo dice.
+  track(): void {
+    const drag = this.drag;
+    if (!drag) return;
+    const view = this.view;
+    const state = view.state;
+    const blocks = state.field(blockModel).blocks;
+    const index = indexOf(blocks, drag.key);
+    if (index < 0) return this.endDrag(false);
+    const run = runFor(state, blocks, index);
+    const sibs = siblingsOf(blocks, run.first);
+    const height = drag.y - view.documentTop;
+    const content = view.contentDOM.getBoundingClientRect();
+    const scroller = view.scrollDOM.getBoundingClientRect();
+    // Sul bordo destro di un fratello fuori dalla tratta: accanto, in colonna.
+    drag.beside = null;
+    if (drag.x > content.left + content.width * BESIDE) {
+      for (const sib of sibs) {
+        if (sib >= run.first && sib <= run.last) continue;
+        const top = view.lineBlockAt(blocks[sib]!.from).top;
+        const bottom = view.lineBlockAt(blocks[sib]!.to).bottom;
+        if (height < top || height > bottom) continue;
+        if (!dropAsColumn(state, blocks, run, sib)) break;
+        drag.beside = sib;
+        drag.before = null;
+        this.drop.hidden = false;
+        this.drop.dataset.beside = "true";
+        this.drop.style.top = `${top + view.documentTop - scroller.top + view.scrollDOM.scrollTop}px`;
+        this.drop.style.left = `${content.right - scroller.left + view.scrollDOM.scrollLeft - 2}px`;
+        this.drop.style.width = "2px";
+        this.drop.style.height = `${Math.max(16, bottom - top)}px`;
+        return;
+      }
+    }
+    delete this.drop.dataset.beside;
+    this.drop.style.height = "";
+    let gap = 0;
+    for (const sib of sibs) {
+      const top = view.lineBlockAt(blocks[sib]!.from).top;
+      const bottom = view.lineBlockAt(blocks[sib]!.to).bottom;
+      if (height > (top + bottom) / 2) gap++;
+    }
+    const before = gap < sibs.length ? sibs[gap]! : -1;
+    const a = sibs.indexOf(run.first);
+    const b = sibs.indexOf(run.last);
+    // Davanti a sé o subito dopo di sé non si sposta niente.
+    drag.before = gap >= a && gap <= b + 1 ? null : before;
+    if (drag.before === null) {
+      this.drop.hidden = true;
+      return;
+    }
+    const edge = before === -1 ? view.lineBlockAt(blocks[sibs[sibs.length - 1]!]!.to).bottom : view.lineBlockAt(blocks[before]!.from).top;
+    const first = view.coordsAtPos(blocks[sibs[0]!]!.from, 1);
+    const left = (first?.left ?? content.left) - scroller.left + view.scrollDOM.scrollLeft;
+    this.drop.hidden = false;
+    this.drop.style.top = `${edge + view.documentTop - scroller.top + view.scrollDOM.scrollTop - 1}px`;
+    this.drop.style.left = `${left}px`;
+    this.drop.style.width = `${Math.max(40, content.right - (first?.left ?? content.left))}px`;
+  }
+
+  endDrag(commit: boolean): void {
+    const drag = this.drag;
+    if (!drag) return;
+    this.drag = null;
+    drag.life.close();
+    this.drop.hidden = true;
+    this.view.dom.classList.remove("cm-fub-blocks-dragging");
+    if (!drag.moving) return;
+    // Il clic che segue il rilascio: lo consuma la maniglia, o lo azzera il
+    // prossimo trascinamento.
+    this.swallowClick = true;
+    if (!commit || (drag.before === null && drag.beside === null)) return;
+    const view = this.view;
+    const state = view.state;
+    const blocks = state.field(blockModel).blocks;
+    const index = indexOf(blocks, drag.key);
+    if (index < 0) return;
+    const run = runFor(state, blocks, index);
+    if (drag.beside !== null) {
+      const spec = dropAsColumn(state, blocks, run, drag.beside);
+      if (!spec) return;
+      view.dispatch({ ...spec, effects: [setBlockSelection.of(null), EditorView.announce.of(liveStrings.t("blocks.columned"))] });
+      view.focus();
+      return;
+    }
+    if (drag.before === null) return;
+    const spec = moveSiblings(state, blocks, run.first, run.last, drag.before);
+    if (!spec) return;
+    const { follow, ...move } = spec;
+    const value = state.field(blockSelection, false);
+    const effects = value
+      ? [setBlockSelection.of({ anchor: follow(value.anchor) ?? value.anchor, head: follow(value.head) ?? value.head, depth: value.depth })]
+      : [];
+    view.dispatch({ ...move, userEvent: "move.drop", effects: [...effects, EditorView.announce.of(liveStrings.t("blocks.moved"))] });
+    view.focus();
+  }
+
+  destroy(): void {
+    this.endDrag(false);
+    this.view.dom.classList.remove("cm-fub-blocks-dragging");
+    this.life.close();
+  }
+}
+
+/// Le maniglie: esportate perché i test guardino il menu senza un layout.
+export const handlesView = ViewPlugin.fromClass(HandlesView);
+
+export const blockHandles: Extension = [
+  handlesView,
+  EditorView.baseTheme({
+    // I colori sono della pelle (`document.css`); qui soltanto la forma.
+    ".cm-fub-block-handles": {
+      position: "absolute",
+      // Sopra il margine dei numeri (che CodeMirror tiene a 200): il «+» ci
+      // cade dentro per metà.
+      zIndex: "201",
+      display: "flex",
+      alignItems: "center",
+      gap: "2px",
+      transform: "translateX(calc(-100% - 0.4rem))",
+    },
+    ".cm-fub-block-handles[hidden]": { display: "none" },
+    ".cm-fub-block-add, .cm-fub-block-grip": {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      width: "1.4rem",
+      height: "1.5rem",
+      padding: "0",
+      border: "0",
+      borderRadius: "4px",
+      background: "transparent",
+      cursor: "pointer",
+      font: "inherit",
+      fontSize: "1rem",
+      lineHeight: "1",
+    },
+    ".cm-fub-block-grip": { cursor: "grab", touchAction: "none" },
+    "&.cm-fub-blocks-dragging .cm-fub-block-grip": { cursor: "grabbing" },
+    ".cm-fub-block-add-plus": {
+      width: "0.75rem",
+      height: "0.75rem",
+      fill: "none",
+      stroke: "currentColor",
+      strokeWidth: "1.5",
+      strokeLinecap: "round",
+    },
+    ".cm-fub-block-grip-dots": {
+      width: "0.5rem",
+      height: "0.85rem",
+      backgroundImage: "radial-gradient(circle, currentColor 1.2px, transparent 1.4px)",
+      backgroundSize: "0.25rem 0.28rem",
+    },
+    ".cm-fub-block-drop": { position: "absolute", zIndex: "3", height: "2px", borderRadius: "1px", pointerEvents: "none" },
+    ".cm-fub-block-drop[hidden]": { display: "none" },
+    "&.cm-fub-blocks-selecting .cm-selectionBackground": { display: "none" },
+    "&.cm-fub-blocks-selecting .cm-content ::selection": { background: "transparent" },
+  }),
+];
+
+/// Il campione di un colore nel menu: «A» colorata, o sul suo fondo. Fuori
+/// dall'editor le classi del contenuto non valgono, quindi le tinte del tema
+/// si danno qui.
+function colorSwatch(kind: ColorKind, color: ContentColor | null): HTMLElement {
+  const swatch = document.createElement("span");
+  swatch.className = "cm-fub-color-swatch";
+  swatch.setAttribute("aria-hidden", "true");
+  swatch.textContent = "A";
+  if (color && kind === "text") swatch.style.color = `var(--doc-color-${color})`;
+  if (color && kind === "fill") swatch.style.background = `var(--doc-tint-${color})`;
+  return swatch;
+}

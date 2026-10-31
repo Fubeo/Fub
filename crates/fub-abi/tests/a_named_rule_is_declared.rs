@@ -444,6 +444,77 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
         ),
         // -- CasoAscii: dove è dimostrabilmente la stessa risposta ----------
         (
+            "crates/fub-format-markdown/src/render.rs::html_tag",
+            (
+                Family::AsciiCase,
+                "riconosce un tag HTML in riga del vocabolario chiuso (`<u>`, `<kbd>`, `<br>`) \
+                 senza badare al maiuscolo, come `INLINE_HTML` con la `i` in `render-inline.ts`: \
+                 i nomi dei tag HTML sono ASCII e il browser li piega allo stesso modo. Non è il \
+                 nome di una nota, di un tag Fub o di un path.",
+            ),
+        ),
+        (
+            "crates/fub-format-markdown/src/render.rs::colored_tag",
+            (
+                Family::AsciiCase,
+                "riconosce `<span>` e `<mark>` con una classe di colore del contenuto (K1) senza badare al \
+                 maiuscolo del nome del tag, come `html_tag` qui sopra: i nomi dei tag HTML sono \
+                 ASCII e il browser li piega allo stesso modo. Non è il nome di una nota.",
+            ),
+        ),
+        (
+            "crates/fub-format-markdown/src/render.rs::render_top_blocks",
+            (
+                Family::AsciiCase,
+                "riconosce l'info string `toc` di un recinto (K4) senza badare al maiuscolo, come la \
+                 lingua di un recinto: un identificatore ASCII del vocabolario chiuso, non un nome \
+                 di nota, di tag o di path.",
+            ),
+        ),
+        (
+            "crates/fub-format-markdown/src/render.rs::strip_ci",
+            (
+                Family::AsciiCase,
+                "toglie un prefisso HTML fisso (`<details`, `<summary>`, i loro `</…>`) senza badare al \
+                 maiuscolo, per il ripiegabile (K2): i nomi dei tag sono ASCII e il browser li piega \
+                 allo stesso modo. Non confronta nomi di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/link_card.rs::card",
+            (
+                Family::AsciiCase,
+                "legge il `Content-Type` di una risposta HTTP per sapere se è HTML: i tipi MIME sono \
+                 ASCII e senza distinzione di maiuscole per RFC 9110. Non è un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/link_card.rs::icon_data",
+            (
+                Family::AsciiCase,
+                "legge il tipo MIME di un'icona scaricata per il segnalibro web (K8): ASCII e senza \
+                 distinzione di maiuscole per RFC 9110. Non è un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/link_card.rs::read",
+            (
+                Family::AsciiCase,
+                "cerca `<head>`, `<title>`, `<meta>` e `<link>` nella pagina di un sito per la scheda \
+                 del segnalibro web (K8): i nomi dei tag HTML sono ASCII e il browser li piega allo \
+                 stesso modo. La copia minuscola ha gli stessi byte, quindi gli offset valgono anche \
+                 sull'originale. Non è un nome di Fub.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/link_card.rs::tag_attrs",
+            (
+                Family::AsciiCase,
+                "legge i nomi degli attributi di un tag HTML (`property`, `content`, `rel`, `href`) \
+                 senza badare al maiuscolo, come il browser: sono ASCII. Non è un nome di Fub.",
+            ),
+        ),
+        (
             "crates/fub-format-rich/src/odt/styles.rs::hex",
             (
                 Family::AsciiCase,

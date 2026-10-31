@@ -101,6 +101,7 @@ fn declared_bundles_are_inventory_plus_host_infrastructure() {
         expected.insert(fub_host::remote::views::SYNC_ID.to_string());
         expected.insert(fub_host::publish::views::PUBLISH_ID.to_string());
         expected.insert(fub_host::updates::UPDATES_ID.to_string());
+        expected.insert(fub_host::link_card::LINK_CARD_ID.to_string());
     }
 
     let extra: Vec<&String> = declared.difference(&expected).collect();

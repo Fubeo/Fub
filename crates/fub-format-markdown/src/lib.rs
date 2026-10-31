@@ -770,6 +770,122 @@ mod tests {
     ///
     /// Che il testo esca **escapato** è la metà che non cambia: resta dato, non
     /// torna markup.
+    /// L'HTML di testo in riga esce reso come in Lettura, se nudo e chiuso fra
+    /// i fratelli: `<u>` sottolinea anche nell'export. Il resto resta testo.
+    #[test]
+    fn inline_text_html_renders_like_reading_and_the_rest_stays_text() {
+        let html = MarkdownProvider::new()
+            .render_html(
+                &parse("a <u>sotto</u>, <KBD>Ctrl</KBD><br/> <em>aperto e <b>no</b> <span class=\"fub-color-red\">x</span>\n"),
+                &RenderOptions::preview(),
+            )
+            .unwrap();
+        assert!(html.contains("<u>sotto</u>"), "html: {html}");
+        assert!(html.contains("<kbd>Ctrl</kbd><br />"), "html: {html}");
+        assert!(
+            !html.contains("<em>"),
+            "un tag senza compagno resta testo: {html}"
+        );
+        assert!(html.contains("&lt;b&gt;</span>no"), "html: {html}");
+        // I colori del contenuto (K1) sono la sola classe che passa.
+        assert!(
+            html.contains("<span class=\"fub-color-red\">x</span>"),
+            "html: {html}"
+        );
+    }
+
+    /// Un colore fuori dal vocabolario, un attributo in più, due colori di
+    /// testo o un tag diverso da `span`/`mark` lasciano il tag come testo.
+    #[test]
+    fn only_the_closed_colour_classes_render() {
+        let render = |source: &str| {
+            MarkdownProvider::new()
+                .render_html(&parse(source), &RenderOptions::preview())
+                .unwrap()
+        };
+        let html = render("<mark class='fub-bg-yellow fub-color-blue'>a</mark>\n");
+        assert!(
+            html.contains("<mark class=\"fub-color-blue fub-bg-yellow\">a</mark>"),
+            "html: {html}"
+        );
+        for source in [
+            "<span class=\"fub-color-teal\">a</span>\n",
+            "<span class=\"fub-color-red x\">a</span>\n",
+            "<span class=\"fub-color-red fub-color-blue\">a</span>\n",
+            "<span class=\"fub-color-red\" onclick=\"x\">a</span>\n",
+            "<em class=\"fub-color-red\">a</em>\n",
+            "<span class=\"fub-color-red\">a\n",
+        ] {
+            let html = render(source);
+            assert!(!html.contains("class=\"fub-"), "{source} → {html}");
+        }
+    }
+
+    /// Il ripiegabile (K2): l'apertura e la chiusura accoppiate avvolgono il
+    /// contenuto Markdown; senza chiusura resta HTML, come in Lettura.
+    #[test]
+    fn a_toc_fence_lists_the_headings_with_their_ids() {
+        let render = |source: &str| {
+            MarkdownProvider::new()
+                .render_html(&parse(source), &RenderOptions::preview())
+                .unwrap()
+        };
+        let html = render(
+            "# Viaggio\n\n```toc\n```\n\n## Il *mare*\n\n### Spiagge\n\n## Il mare\n\n## Monti ^alti\n",
+        );
+        assert!(html.contains("<div class=\"fub-toc\""), "html: {html}");
+        assert!(!html.contains("language-toc"), "html: {html}");
+        for item in [
+            "data-depth=\"0\"><a href=\"#viaggio\">Viaggio</a>",
+            "data-depth=\"1\"><a href=\"#il-mare\">Il mare</a>",
+            "data-depth=\"2\"><a href=\"#spiagge\">Spiagge</a>",
+            "data-depth=\"1\"><a href=\"#il-mare-1\">Il mare</a>",
+            "data-depth=\"1\"><a href=\"#alti\">Monti</a>",
+        ] {
+            assert!(html.contains(item), "{item} in html: {html}");
+        }
+        let levels = render("# A\n\n```toc\nlivelli: 2-3\n```\n\n## B\n\n#### D\n");
+        assert!(
+            levels.contains("data-depth=\"0\"><a href=\"#b\">B</a>"),
+            "html: {levels}"
+        );
+        assert!(!levels.contains("#a\""), "html: {levels}");
+        assert!(!levels.contains("#d\""), "html: {levels}");
+        let empty = render("```toc\n```\n\nTesto\n");
+        assert!(empty.contains("data-empty=\"true\""), "html: {empty}");
+    }
+
+    #[test]
+    fn a_paired_details_wraps_its_markdown() {
+        let render = |source: &str| {
+            MarkdownProvider::new()
+                .render_html(&parse(source), &RenderOptions::preview())
+                .unwrap()
+        };
+        let html = render(
+            "<details open>\n<summary>Ingredienti & co</summary>\n\n- **farina**\n\n<details>\n<summary>Dentro</summary>\n\nDue\n\n</details>\n\n</details>\n\nDopo\n",
+        );
+        assert!(
+            html.starts_with("<details class=\"fub-details\""),
+            "html: {html}"
+        );
+        assert!(
+            html.contains(" open><summary>Ingredienti &amp; co</summary><ul"),
+            "html: {html}"
+        );
+        assert!(html.contains("<strong>farina</strong>"), "html: {html}");
+        assert!(
+            html.contains("><summary>Dentro</summary><p"),
+            "html: {html}"
+        );
+        assert!(html.contains("</details></details><p"), "html: {html}");
+        let unclosed = render("<details>\n<summary>Solo</summary>\n\nTesto\n");
+        assert!(!unclosed.contains("fub-details"), "html: {unclosed}");
+        assert!(unclosed.contains("&lt;details&gt;"), "html: {unclosed}");
+        let other = render("<details class=\"x\">\n\nTesto\n\n</details>\n");
+        assert!(!other.contains("fub-details"), "html: {other}");
+    }
+
     #[test]
     fn a_block_without_children_does_not_lose_its_own_text() {
         let html = MarkdownProvider::new()
@@ -1276,6 +1392,32 @@ mod tests {
             "html: {html}"
         );
         assert!(!html.contains("<img"), "html: {html}");
+    }
+
+    /// Un'immagine da sola nel paragrafo è una figura con la didascalia dal
+    /// testo alternativo, senza la dimensione (K10). In mezzo al testo, o
+    /// senza testo alternativo, resta nel paragrafo.
+    #[test]
+    fn lone_image_is_a_figure_with_its_alt_as_caption() {
+        let html = |source: &str| {
+            MarkdownProvider::new()
+                .render_html(&parse(source), &RenderOptions::default())
+                .unwrap()
+        };
+        let figure = html("![Il ponte *rosso*|320](allegati/ponte.png)\n");
+        assert!(figure.starts_with("<figure"), "html: {figure}");
+        assert!(
+            figure.contains("<figcaption>Il ponte rosso</figcaption></figure>"),
+            "html: {figure}"
+        );
+        assert!(
+            figure.contains("data-embed-path=\"allegati/ponte.png\""),
+            "html: {figure}"
+        );
+        let inline = html("Il ![ponte](allegati/ponte.png) in riga\n");
+        assert!(!inline.contains("<figure"), "html: {inline}");
+        let bare = html("![](allegati/ponte.png)\n");
+        assert!(!bare.contains("<figure"), "html: {bare}");
     }
 
     /// Le proprietà tipizzate lette dal frontmatter vero, non da un JSON

@@ -15,7 +15,10 @@ use fub_abi::event::Actor;
 use fub_abi::model::DocId;
 use fub_abi::traits::{FolderScope, IndexQuery, IndexResult};
 use fub_abi::PluginError;
-use fub_features::{CoreCommands, COMMANDS_ID, FOLDER_RENAME, FOLDER_TRASH, VAULT_UNDO};
+use fub_features::{
+    CoreCommands, COMMANDS_ID, FOLDER_RENAME, FOLDER_TRASH, NOTES_FOLDER_PAGE, NOTES_SUBPAGE,
+    VAULT_UNDO,
+};
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace};
 
@@ -433,4 +436,271 @@ fn the_icon_and_the_chosen_order_follow_the_folder() {
         org.order.get("Progetti").unwrap(),
         &["schema.png", "Piano.md"]
     );
+}
+
+/// La pagina della cartella è `X/_index.<ext>`, e il suo nome è quello della
+/// cartella (decisione 0229): `[[Viaggio]]` la trova, e quando la cartella
+/// cambia nome i link la seguono con il nome nuovo, lasciando intatti titolo
+/// e alias.
+#[test]
+fn the_folder_page_answers_to_the_folders_name_and_follows_it() {
+    let vault = Vault::with(&[
+        ("Viaggio/_index.md", "# Tappe\n"),
+        ("Viaggio/Lisbona.md", "Parte di [[Viaggio]]."),
+        ("Diario.md", "[[Viaggio]] e [[Viaggio#Tappe|le tappe]]."),
+    ]);
+    let mut ws = vault.open();
+    assert_eq!(
+        readers(&ws, "Viaggio/_index.md"),
+        ["Diario.md", "Viaggio/Lisbona.md"]
+    );
+    run(
+        &mut ws,
+        FOLDER_RENAME,
+        serde_json::json!({ "folder": "Viaggio", "to": "Vacanze" }),
+    )
+    .unwrap();
+    assert_eq!(
+        text(&ws, "Diario.md"),
+        "[[Vacanze]] e [[Vacanze#Tappe|le tappe]]."
+    );
+    assert_eq!(text(&ws, "Vacanze/Lisbona.md"), "Parte di [[Vacanze]].");
+    assert_eq!(
+        readers(&ws, "Vacanze/_index.md"),
+        ["Diario.md", "Vacanze/Lisbona.md"]
+    );
+}
+
+/// Accanto a una nota omonima il nome è conteso come fra due note qualsiasi:
+/// la regola degli omonimi resta quella di sempre, e la rinomina della
+/// cartella scrive un riferimento che non si confonde.
+#[test]
+fn a_folder_page_and_a_homonym_note_contend_the_name_like_two_notes() {
+    let vault = Vault::with(&[
+        ("Viaggio/_index.md", "# Pagina\n"),
+        ("Altro/Viaggio.md", "# Nota\n"),
+        ("Diario.md", "[[Viaggio/_index]] e [[Altro/Viaggio]]."),
+    ]);
+    let mut ws = vault.open();
+    assert_eq!(readers(&ws, "Viaggio/_index.md"), ["Diario.md"]);
+    assert_eq!(readers(&ws, "Altro/Viaggio.md"), ["Diario.md"]);
+    run(
+        &mut ws,
+        FOLDER_RENAME,
+        serde_json::json!({ "folder": "Viaggio", "to": "Vacanze" }),
+    )
+    .unwrap();
+    // Nessuno contende più «Vacanze»: il riferimento diventa il nome.
+    assert_eq!(text(&ws, "Diario.md"), "[[Vacanze]] e [[Altro/Viaggio]].");
+    assert_eq!(readers(&ws, "Vacanze/_index.md"), ["Diario.md"]);
+    assert_eq!(readers(&ws, "Altro/Viaggio.md"), ["Diario.md"]);
+}
+
+/// Alla radice `_index.md` non è la pagina di nessuna cartella: è una nota
+/// che si chiama `_index`, e nessun file si rinomina da solo.
+#[test]
+fn an_index_at_the_root_is_an_ordinary_note() {
+    let vault = Vault::with(&[
+        ("_index.md", "# Radice\n"),
+        ("Viaggio/Viaggio.md", "# Vecchio nome\n"),
+        ("Diario.md", "[[_index]] e [[Viaggio]]."),
+    ]);
+    let ws = vault.open();
+    assert_eq!(DocId::new("_index.md").page_name(), "_index");
+    assert_eq!(readers(&ws, "_index.md"), ["Diario.md"]);
+    // `Viaggio/Viaggio.md` è una nota normale: si chiama ancora «Viaggio».
+    assert_eq!(readers(&ws, "Viaggio/Viaggio.md"), ["Diario.md"]);
+    assert!(vault.on_disk("Viaggio/Viaggio.md"));
+    assert!(!vault.on_disk("Viaggio/_index.md"));
+}
+
+/// «Usa come pagina della cartella» rinomina la nota in `_index`, con la
+/// rinomina del kernel: i link la seguono col nome della cartella, e
+/// l'annullamento la riporta com'era.
+#[test]
+fn use_as_folder_page_renames_to_index_and_undoes() {
+    let vault = Vault::with(&[
+        ("Viaggio/Viaggio.md", "# Tappe\n"),
+        ("Diario.md", "Vedi [[Viaggio/Viaggio|il viaggio]]."),
+    ]);
+    let mut ws = vault.open();
+    run(
+        &mut ws,
+        NOTES_FOLDER_PAGE,
+        serde_json::json!({ "doc": "Viaggio/Viaggio.md" }),
+    )
+    .unwrap();
+    assert!(vault.on_disk("Viaggio/_index.md"));
+    assert!(!vault.on_disk("Viaggio/Viaggio.md"));
+    assert_eq!(text(&ws, "Diario.md"), "Vedi [[Viaggio|il viaggio]].");
+    assert_eq!(readers(&ws, "Viaggio/_index.md"), ["Diario.md"]);
+
+    run(&mut ws, VAULT_UNDO, serde_json::json!({})).unwrap();
+    assert!(vault.on_disk("Viaggio/Viaggio.md"));
+    assert!(!vault.on_disk("Viaggio/_index.md"));
+    assert_eq!(readers(&ws, "Viaggio/Viaggio.md"), ["Diario.md"]);
+}
+
+/// Una pagina che c'è già, con qualunque estensione, non si sostituisce; la
+/// radice non ha una pagina; una pagina non diventa pagina due volte. In tutti
+/// i casi il disco resta com'era.
+#[test]
+fn use_as_folder_page_never_overwrites_and_names_why() {
+    let vault = Vault::with(&[
+        ("Viaggio/_index.md", "# Pagina\n"),
+        ("Viaggio/Tappe.md", "# Tappe\n"),
+        ("Diario.md", "# Diario\n"),
+    ]);
+    let mut ws = vault.open();
+    let taken = run(
+        &mut ws,
+        NOTES_FOLDER_PAGE,
+        serde_json::json!({ "doc": "Viaggio/Tappe.md" }),
+    );
+    assert!(
+        matches!(taken, Err(PluginError::AlreadyExists(_))),
+        "{taken:?}"
+    );
+    let root = run(
+        &mut ws,
+        NOTES_FOLDER_PAGE,
+        serde_json::json!({ "doc": "Diario.md" }),
+    );
+    assert!(matches!(root, Err(PluginError::BadArgs(_))), "{root:?}");
+    let again = run(
+        &mut ws,
+        NOTES_FOLDER_PAGE,
+        serde_json::json!({ "doc": "Viaggio/_index.md" }),
+    );
+    assert!(matches!(again, Err(PluginError::BadArgs(_))), "{again:?}");
+    assert_eq!(text(&ws, "Viaggio/_index.md"), "# Pagina\n");
+    assert!(vault.on_disk("Viaggio/Tappe.md"));
+    assert!(vault.on_disk("Diario.md"));
+}
+
+/// «Nuova sottopagina» su una nota qualunque: la nota diventa la pagina della
+/// sua cartella con la rinomina del kernel, e `[[Viaggio]]` la trova ancora
+/// col nome della cartella; nella cartella nasce la sottopagina. Si annulla
+/// all'incontrario, e tutto torna com'era.
+#[test]
+fn a_subpage_turns_the_note_into_its_folder_page_and_undoes() {
+    let vault = Vault::with(&[
+        ("Viaggio.md", "# Viaggio\n"),
+        ("Diario.md", "Vedi [[Viaggio]]."),
+    ]);
+    let mut ws = vault.open();
+    run(
+        &mut ws,
+        NOTES_SUBPAGE,
+        serde_json::json!({ "doc": "Viaggio.md", "name": "Tappe" }),
+    )
+    .unwrap();
+    assert!(vault.on_disk("Viaggio/_index.md"));
+    assert!(vault.on_disk("Viaggio/Tappe.md"));
+    assert!(!vault.on_disk("Viaggio.md"));
+    assert_eq!(text(&ws, "Viaggio/_index.md"), "# Viaggio\n");
+    assert_eq!(text(&ws, "Diario.md"), "Vedi [[Viaggio]].");
+    assert_eq!(readers(&ws, "Viaggio/_index.md"), ["Diario.md"]);
+
+    run(&mut ws, VAULT_UNDO, serde_json::json!({})).unwrap();
+    assert!(vault.on_disk("Viaggio.md"));
+    assert!(!vault.on_disk("Viaggio/_index.md"));
+    assert!(!vault.on_disk("Viaggio/Tappe.md"));
+    assert_eq!(readers(&ws, "Viaggio.md"), ["Diario.md"]);
+}
+
+/// Su una pagina di cartella la sottopagina nasce accanto e basta; in una
+/// cartella che c'è già senza pagina, la nota ci entra e le voci restano.
+#[test]
+fn a_subpage_of_a_folder_page_only_creates_and_an_existing_folder_is_entered() {
+    let vault = Vault::with(&[
+        ("Viaggio/_index.md", "# Viaggio\n"),
+        ("Casa.md", "# Casa\n"),
+        ("Casa/Cucina.md", "# Cucina\n"),
+    ]);
+    let mut ws = vault.open();
+    run(
+        &mut ws,
+        NOTES_SUBPAGE,
+        serde_json::json!({ "doc": "Viaggio/_index.md", "name": "Tappe" }),
+    )
+    .unwrap();
+    assert!(vault.on_disk("Viaggio/_index.md"));
+    assert!(vault.on_disk("Viaggio/Tappe.md"));
+
+    run(
+        &mut ws,
+        NOTES_SUBPAGE,
+        serde_json::json!({ "doc": "Casa.md", "name": "Bagno" }),
+    )
+    .unwrap();
+    assert!(vault.on_disk("Casa/_index.md"));
+    assert!(vault.on_disk("Casa/Bagno.md"));
+    assert_eq!(text(&ws, "Casa/Cucina.md"), "# Cucina\n");
+}
+
+/// Niente si sovrascrive, e niente si muove prima di saperlo: una cartella
+/// che ha già la sua pagina, una sottopagina col nome già preso, un nome
+/// vuoto o con una cartella dentro.
+#[test]
+fn a_subpage_never_overwrites_and_moves_nothing_first() {
+    let vault = Vault::with(&[
+        ("Viaggio.md", "# Viaggio\n"),
+        ("Viaggio/_index.md", "# Pagina\n"),
+        ("Casa.md", "# Casa\n"),
+        ("Casa/Cucina.md", "# Cucina\n"),
+    ]);
+    let mut ws = vault.open();
+    let page = run(
+        &mut ws,
+        NOTES_SUBPAGE,
+        serde_json::json!({ "doc": "Viaggio.md", "name": "Tappe" }),
+    );
+    assert!(
+        matches!(page, Err(PluginError::AlreadyExists(_))),
+        "{page:?}"
+    );
+    let taken = run(
+        &mut ws,
+        NOTES_SUBPAGE,
+        serde_json::json!({ "doc": "Casa.md", "name": "Cucina" }),
+    );
+    assert!(
+        matches!(taken, Err(PluginError::AlreadyExists(_))),
+        "{taken:?}"
+    );
+    for name in ["  ", "a/b"] {
+        let bad = run(
+            &mut ws,
+            NOTES_SUBPAGE,
+            serde_json::json!({ "doc": "Casa.md", "name": name }),
+        );
+        assert!(matches!(bad, Err(PluginError::BadArgs(_))), "{bad:?}");
+    }
+    assert_eq!(text(&ws, "Viaggio.md"), "# Viaggio\n");
+    assert_eq!(text(&ws, "Viaggio/_index.md"), "# Pagina\n");
+    assert!(vault.on_disk("Casa.md"));
+    assert!(!vault.on_disk("Casa/_index.md"));
+    assert!(!vault.on_disk("Viaggio/Tappe.md"));
+}
+
+/// Se la creazione fallisce dopo lo spostamento — un nome che la regola dei
+/// nomi nuovi rifiuta — la pagina torna dov'era, con i link.
+#[test]
+fn a_subpage_that_cannot_be_created_puts_the_page_back() {
+    let vault = Vault::with(&[
+        ("Viaggio.md", "# Viaggio\n"),
+        ("Diario.md", "Vedi [[Viaggio]]."),
+    ]);
+    let mut ws = vault.open();
+    let failed = run(
+        &mut ws,
+        NOTES_SUBPAGE,
+        serde_json::json!({ "doc": "Viaggio.md", "name": "Tappe." }),
+    );
+    assert!(failed.is_err(), "{failed:?}");
+    assert!(vault.on_disk("Viaggio.md"));
+    assert!(!vault.on_disk("Viaggio/_index.md"));
+    assert_eq!(text(&ws, "Diario.md"), "Vedi [[Viaggio]].");
+    assert_eq!(readers(&ws, "Viaggio.md"), ["Diario.md"]);
 }

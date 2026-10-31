@@ -39,6 +39,24 @@ export function childName(path: string): string {
 /// `note.backup` il kernel risolveva `note` e la UI mostrava `note.backup`.
 export function pageName(id: string): string {
   const base = childName(id);
+  const stem = stemOf(base);
+  if (stem !== FOLDER_PAGE_STEM || base.length === id.length) return stem;
+  // La pagina della cartella (ADR 0229): `X/_index.md` si chiama `X`.
+  return childName(id.slice(0, id.length - base.length - 1));
+}
+
+/// Il nome, senza estensione, del file che fa da pagina alla sua cartella.
+/// Gemello di `fub_abi::model::FOLDER_PAGE_STEM`.
+export const FOLDER_PAGE_STEM = "_index";
+
+/// È la pagina di una cartella (`X/_index.<ext>`, non nella radice)? Gemella
+/// di `DocId::is_folder_page`.
+export function isFolderPage(id: string): boolean {
+  const base = childName(id);
+  return base.length !== id.length && stemOf(base) === FOLDER_PAGE_STEM;
+}
+
+function stemOf(base: string): string {
   const dot = base.lastIndexOf(".");
   return dot > 0 ? base.slice(0, dot) : base;
 }

@@ -442,14 +442,16 @@ export function mountRibbon<V, K extends string, X extends ExtraControl<V, K> = 
   }
 
   // ── I pezzi dei controlli ─────────────────────────────────────────────
-  function figure(control: { icon?: string; glyph?: string; className?: string }): Element | null {
+  function figure(control: { icon?: string; glyph?: string | (() => string); className?: string }): Element | null {
     if (control.icon) return iconEl(control.icon);
-    if (!control.glyph) return null;
+    const said = control.glyph;
+    if (!said) return null;
     const glyph = document.createElement("span");
     glyph.className = cls("glyph");
     if (control.className) glyph.classList.add(control.className);
     glyph.setAttribute("aria-hidden", "true");
-    glyph.textContent = control.glyph;
+    glyph.textContent = typeof said === "function" ? said() : said;
+    if (typeof said === "function") relabels.push(() => (glyph.textContent = said()));
     return glyph;
   }
 

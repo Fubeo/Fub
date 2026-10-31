@@ -9,9 +9,10 @@ import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE, type DraggedEntry } from "../ui/drag
 import { revealSidePanel } from "../ui/side-panels";
 import { pickFromList, promptText } from "../ui/dialogs";
 import { vaultEntries, vaultFolders, folderContent, existingDocuments, settings, WITHOUT_PAGE } from "../host/query";
+import { pageIcon } from "../state/page-icons";
 import { mountExplorerFilter, type ExplorerFilter, type FilterEntry } from "./explorer-filter";
 import { Race } from "../ui/race";
-import type { VaultFolder } from "../host/contract";
+import { COMMANDS, type VaultFolder } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import {
   loadOrganization,
@@ -21,7 +22,7 @@ import {
   setSpace,
 } from "../state/organization";
 import { on, saveActiveSpace, saveExpanded, saveExplorerSort, state } from "../state/store";
-import { createFolder, createNote, duplicateNote, handToSystem, importIntoVault, openVaultRoot, refreshDocuments, renameFolder, trashFolder, undoLastOperation } from "../state/vault";
+import { createFolder, createNote, duplicateNote, handToSystem, importIntoVault, openVaultRoot, refreshDocuments, renameFolder, trashFolder, undoLastOperation, useAsFolderPage } from "../state/vault";
 import { carriesFiles, offerOutside, pickedFiles, readDropped, type Dropped } from "../ui/vault-transfer";
 import { confirm } from "../platform/confirm";
 import {
@@ -69,7 +70,7 @@ import { trashManyWithConfirm, trashWithConfirm } from "./trash";
 import { mountTreeSelection, type TreeSelection } from "./explorer-selection";
 import { beginTreeMotion, type TreeMotion } from "./explorer-motion";
 import { errorText } from "../host/errors";
-import { folderForNote, nameFault, normalizedName } from "../rules/mirrored";
+import { FOLDER_PAGE_STEM, folderForNote, isFolderPage, nameFault, normalizedName } from "../rules/mirrored";
 import { onLanguage, plural, t } from "../i18n/strings";
 import { notify } from "../ui/notify";
 import type { Lifetime } from "../ui/lifetime";
@@ -294,6 +295,7 @@ export function mountExplorer(lifetime: Lifetime): void {
     trash: (paths) => trashManyWithConfirm(paths),
     move: (paths) => pickMoveFolders(paths),
     group: (paths) => groupIntoNewFolder(paths),
+    copy: (paths) => copyEntries(paths),
     lifetime,
   });
   lifetime.add(() => {
@@ -325,6 +327,7 @@ export function mountExplorer(lifetime: Lifetime): void {
   // L'organizzazione cambiata ridisegna la stessa vista senza richiederla:
   // icone, pin e ordine non passano dal kernel.
   lifetime.add(on("organization", renderFileList));
+  lifetime.add(on("page-icons", renderFileList));
   lifetime.add(on("reveal-folder", (folder) => void revealPath(folder, true)));
   // L'elenco dei comandi arriva dopo l'apertura del vault: un albero vuoto
   // offre «Nuovo disegno…» solo da quel momento, e lo toglie se il comando se
@@ -341,8 +344,21 @@ export function mountExplorer(lifetime: Lifetime): void {
     if (entries) autoReveal = entries.find((entry) => entry.spec.key === FILES_AUTO_REVEAL)?.value === true;
   });
   void readAutoReveal();
+  // I vecchi nomi della pagina della cartella (decisione 0229): cambiano quale
+  // nota la cartella apre e quale la lista dei figli nasconde.
+  const legacyReads = new Race();
+  const readLegacyPages = () => legacyReads.last(async (expected) => {
+    const entries = await expected(settings().catch(() => null));
+    if (!entries) return;
+    const next = entries.find((entry) => entry.spec.key === FILES_LEGACY_FOLDER_PAGES)?.value === true;
+    if (next === legacyPages) return;
+    legacyPages = next;
+    await refreshFromKernel(true);
+  });
+  void readLegacyPages();
   lifetime.add(onEvent("setting_changed", (event) => {
     if (event.key === FILES_AUTO_REVEAL) void readAutoReveal();
+    if (event.key === FILES_LEGACY_FOLDER_PAGES) void readLegacyPages();
   }));
   lifetime.add(on("active-doc", () => { if (autoReveal) void followActive(); }));
 
@@ -420,7 +436,7 @@ async function refreshFromKernel(force = false): Promise<void> {
     const folders = await expected(loadVisible());
     const expectedItems = [
       ...[...folders.values()].flatMap((c) =>
-        c.folders.flatMap((f) => folderNoteCandidates(f.path, state.handledExtensions)),
+        c.folders.flatMap((f) => folderNoteCandidates(f.path, state.handledExtensions, legacyPages)),
       ),
       ...state.meta.pinned,
     ];
@@ -767,7 +783,7 @@ function renderChildren(path: string, ul: HTMLElement): void {
     }
     ul.appendChild(li);
   }
-  const folderNoteId = folderNoteOf(node, state.handledExtensions);
+  const folderNoteId = folderNoteOf(node, state.handledExtensions, legacyPages);
   for (const id of node.notes) {
     if (id === folderNoteId) continue;
     const li = document.createElement("li");
@@ -844,7 +860,8 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   row.className = "tree-row note";
   row.dataset.path = id;
   setTooltip(row, id);
-  const icon = state.meta.icons[id];
+  // L'icona data dall'esplora vince; altrimenti quella della pagina (`icon:`).
+  const icon = state.meta.icons[id] ?? pageIcon(id);
   const kind = formatKindOf(id);
   if (icon) row.appendChild(rowIcon(icon));
   // Un documento che non è una nota dice il suo formato: un Word, un ODT e
@@ -906,6 +923,7 @@ function fileRow(id: string): HTMLElement {
   // l'SVG o il PNG che draw.io esporta col disegno dentro.
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
+    if (selectionMenu(e, id)) return;
     showMenuFor(
       e,
       [
@@ -919,6 +937,16 @@ function fileRow(id: string): HTMLElement {
     );
   });
   return row;
+}
+
+/// Il tasto destro su una voce scelta insieme ad altre: il menu del gruppo,
+/// che agisce su tutte, invece di quello di una voce sola. `false` se la voce
+/// non è in una scelta di almeno due.
+function selectionMenu(at: MouseEvent, id: string): boolean {
+  const items = selection?.menuFor(id);
+  if (!items) return false;
+  showContextMenu(at, items);
+  return true;
 }
 
 /// Apre un contestuale con le voci della shell e, se ci sono view sulla
@@ -936,6 +964,7 @@ function showMenuFor(at: MouseEvent, items: MenuItem[], target: ContextTarget): 
 /// destro e del tasto Menu/Shift+F10: un punto solo, o le due strade
 /// divergono alla prima voce aggiunta.
 function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
+  if (selectionMenu(at, id)) return;
   const pinned = state.meta.pinned.includes(id);
   const move = voceSpostamento(id);
   const reorder = reorderActions(id);
@@ -951,6 +980,7 @@ function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
     { label: t("explorer.bookmark"), run: () => void bookmarkEntry({ k: "doc", doc: id }, id) },
     ...(move ? [move] : []),
     { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
+    ...folderPageAction(id),
     { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, id) },
     {
       label: pinned ? t("explorer.unpin") : t("explorer.pin"),
@@ -1163,17 +1193,20 @@ function folderRow(folder: VaultFolder): HTMLElement {
     });
   }
   row.appendChild(chevron);
-  row.appendChild(rowIcon(state.meta.icons[folder.path] ?? null, "folder"));
+
+  // La folder note di una cartella **non aperta** non si sa guardandoci dentro
+  // — guardarci dentro è il giro che questa voce toglie. Si sa perché il
+  // kernel ha già detto quali, fra i path che potrebbero esserlo, esistono.
+  const folderNoteId = folderNoteIn(folder.path, state.handledExtensions, view.existing, legacyPages);
+  // L'icona della cartella è quella della sua pagina, se l'esplora non gliene
+  // ha data una sua.
+  const pageMark = folderNoteId ? pageIcon(folderNoteId) : null;
+  row.appendChild(rowIcon(state.meta.icons[folder.path] ?? pageMark, "folder"));
 
   const name = document.createElement("span");
   name.className = "row-name";
   name.textContent = childName(folder.path);
   row.appendChild(name);
-
-  // La folder note di una cartella **non aperta** non si sa guardandoci dentro
-  // — guardarci dentro è il giro che questa voce toglie. Si sa perché il
-  // kernel ha già detto quali, fra i path che potrebbero esserlo, esistono.
-  const folderNoteId = folderNoteIn(folder.path, state.handledExtensions, view.existing);
   if (folderNoteId) row.classList.add("has-note");
   row.addEventListener("click", () => {
     if (folderNoteId) {
@@ -1275,9 +1308,12 @@ function toggleFolder(path: string): void {
 /// tab nell'albero, così chi ci entra da tastiera parte da lì.
 const FILES_AUTO_REVEAL = "files.auto-reveal";
 const FILES_CONFIRM_TRASH = "files.confirm-trash";
+const FILES_LEGACY_FOLDER_PAGES = "files.legacy-folder-pages";
 
 /// Vero se la macchina vuole che l'albero segua la nota aperta.
 let autoReveal = false;
+/// Vero se il vault riconosce anche `X/X` e `X/index` come pagina di `X`.
+let legacyPages = false;
 
 /// Apre le cartelle della nota aperta e la porta in vista, senza toccare il
 /// pannello laterale né il filtro di spazio: se la nota è fuori dallo spazio
@@ -1571,7 +1607,7 @@ async function pickNewSpace(at: MouseEvent): Promise<void> {
 function openSpaceNote(): void {
   if (state.activeSpace === null) return;
   const node = children(state.activeSpace);
-  const folderNoteId = node && folderNoteOf(node, state.handledExtensions);
+  const folderNoteId = node && folderNoteOf(node, state.handledExtensions, legacyPages);
   if (folderNoteId) void openDocument(folderNoteId);
 }
 
@@ -2080,6 +2116,27 @@ async function ensureSaved(): Promise<boolean> {
 /// L'estensione non si sceglie: è quella che la nota ha già (`childName`). Prima
 /// era `.md` cablata, che avrebbe cambiato formato a una nota per il solo fatto
 /// di spostarla in una cartella.
+/// «Usa come pagina della cartella», col titolo del comando registrato: c'è se
+/// il comando c'è, e soltanto per una nota dentro una cartella che non ne è
+/// già la pagina (decisione 0229).
+function folderPageAction(id: string): MenuItem[] {
+  const spec = state.commandSpecs.find((c) => c.id === COMMANDS.folderPage);
+  if (!spec || !parentOf(id) || isFolderPage(id)) return [];
+  return [{ label: spec.title, run: () => void makeFolderPage(id, spec.title) }];
+}
+
+async function makeFolderPage(id: string, title: string): Promise<void> {
+  if (await ensureSaved()) return;
+  try {
+    const outcome = await useAsFolderPage(id);
+    if (outcome.notify) notify(outcome.notify, "info", undoGesture(outcome.undo !== null));
+  } catch (e) {
+    notify(`${title}: ${errorText(e)}`, "guasto");
+    return;
+  }
+  void refreshFromKernel(true);
+}
+
 async function convertToFolder(id: string): Promise<void> {
   // Sposta un file esattamente come la rinomina — è una rinomina — e prima non
   // metteva in salvo niente affatto (difetto 0206).
@@ -2087,8 +2144,14 @@ async function convertToFolder(id: string): Promise<void> {
   const stem = pageName(id);
   const dir = parentOf(id);
   const folderPath = dir ? `${dir}/${stem}` : stem;
+  // La nota diventa la **pagina** della cartella nuova, `_index` con la sua
+  // estensione (decisione 0229): così la cartella si chiama come lei e i link
+  // `[[Nome]]` la trovano ancora.
+  const name = childName(id);
+  const dot = name.lastIndexOf(".");
+  const ext = dot > 0 ? name.slice(dot) : "";
   try {
-    const outcome = await renameKeepingBuffer(id, `${folderPath}/${childName(id)}`);
+    const outcome = await renameKeepingBuffer(id, `${folderPath}/${FOLDER_PAGE_STEM}${ext}`);
     if (outcome.kind === "collision") {
       notify(t("explorer.to_folder_failed", { doc: id, reason: t("explorer.destination_open") }), "guasto");
       return;

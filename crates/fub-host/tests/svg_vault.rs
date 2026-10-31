@@ -23,7 +23,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_abi::model::{DocId, LinkTarget};
+use fub_abi::model::{DocId, LinkTarget, FOLDER_PAGE_STEM};
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{
     EntryKind, Excerpts, IndexQuery, IndexResult, LinkDirection, Page, PropertySelect,
@@ -129,8 +129,9 @@ fn vault() -> (tempfile::TempDir, Utf8PathBuf) {
         "<svg xmlns=\"http://www.w3.org/2000/svg\"><g></svg>\n",
     );
     write(&root, "archivio.svgz", GZIP);
-    // Note di cartella: accanto alla cartella, dentro con il nome della
-    // cartella, dentro come `index`. Un disegno e una nota per ciascuna.
+    // Pagine di cartella: accanto alla cartella, dentro come `_index`, e i
+    // vecchi nomi (dentro con il nome della cartella, dentro come `index`).
+    // Un disegno e una nota per ciascuna.
     write(&root, "disegno.svg", drawing("Disegno accanto"));
     write(&root, "disegno/dettaglio.md", "# Dettaglio\n");
     write(&root, "appunti.md", "# Appunti accanto\n");
@@ -139,6 +140,8 @@ fn vault() -> (tempfile::TempDir, Utf8PathBuf) {
     write(&root, "quaderno/quaderno.md", "# Quaderno\n");
     write(&root, "album/index.svg", drawing("Album"));
     write(&root, "raccolta/index.md", "# Raccolta\n");
+    write(&root, "tavole/_index.svg", drawing("Tavole"));
+    write(&root, "viaggio/_index.md", "# Viaggio\n");
     (dir, root)
 }
 
@@ -218,11 +221,17 @@ fn existing(ws: &fub_kernel::Workspace, docs: &[String]) -> Vec<String> {
 }
 
 /// La regola della shell (`folderNoteCandidates` in
-/// `apps/client/src/rules/organizer.ts`): `X/X.<ext>`, poi `X/index.<ext>`,
-/// per ogni estensione che il backend dichiara.
-fn folder_note(ws: &fub_kernel::Workspace, folder: &str) -> Option<String> {
+/// `apps/client/src/rules/organizer.ts`): `X/_index.<ext>`, e con `legacy`
+/// anche `X/X.<ext>` e `X/index.<ext>`, per ogni estensione che il backend
+/// dichiara.
+fn folder_note(ws: &fub_kernel::Workspace, folder: &str, legacy: bool) -> Option<String> {
     let name = folder.rsplit('/').next().unwrap();
-    let candidates: Vec<String> = [name, "index"]
+    let stems: &[&str] = if legacy {
+        &[FOLDER_PAGE_STEM, name, "index"]
+    } else {
+        &[FOLDER_PAGE_STEM]
+    };
+    let candidates: Vec<String> = stems
         .iter()
         .flat_map(|stem| {
             ws.extensions()
@@ -651,8 +660,9 @@ fn a_drawing_in_a_note_is_an_image_named_after_its_title() {
     }
 }
 
-/// La nota di cartella è dentro la cartella, `X/X.<ext>` o `X/index.<ext>`,
-/// e un disegno lo è come una nota: con lo stesso esito, nei tre casi.
+/// La pagina di cartella è dentro la cartella, `X/_index.<ext>`, e un
+/// disegno lo è come una nota. I vecchi nomi, `X/X.<ext>` e `X/index.<ext>`,
+/// valgono soltanto con l'opzione accesa (decisione 0229).
 #[test]
 fn a_drawing_is_a_folder_note_exactly_like_a_note() {
     let (_dir, root) = vault();
@@ -660,24 +670,44 @@ fn a_drawing_is_a_folder_note_exactly_like_a_note() {
     let ws = &mounted.workspace;
     assert!(ws.extensions().iter().any(|ext| ext == "svg"));
 
-    // Accanto alla cartella non è la sua nota, per nessuno dei due.
-    assert_eq!(folder_note(ws, "disegno"), None);
-    assert_eq!(folder_note(ws, "appunti"), None);
-    // Dentro, con il nome della cartella.
+    for legacy in [false, true] {
+        // Accanto alla cartella non è la sua pagina, per nessuno dei due.
+        assert_eq!(folder_note(ws, "disegno", legacy), None);
+        assert_eq!(folder_note(ws, "appunti", legacy), None);
+        // Dentro, come `_index`.
+        assert_eq!(
+            folder_note(ws, "tavole", legacy).as_deref(),
+            Some("tavole/_index.svg")
+        );
+        assert_eq!(
+            folder_note(ws, "viaggio", legacy).as_deref(),
+            Some("viaggio/_index.md")
+        );
+    }
+    // I vecchi nomi sono note normali, finché l'opzione è spenta.
+    for folder in ["progetto", "quaderno", "album", "raccolta"] {
+        assert_eq!(folder_note(ws, folder, false), None, "{folder}");
+    }
     assert_eq!(
-        folder_note(ws, "progetto").as_deref(),
+        folder_note(ws, "progetto", true).as_deref(),
         Some("progetto/progetto.svg")
     );
     assert_eq!(
-        folder_note(ws, "quaderno").as_deref(),
+        folder_note(ws, "quaderno", true).as_deref(),
         Some("quaderno/quaderno.md")
     );
-    // Dentro, come `index`.
-    assert_eq!(folder_note(ws, "album").as_deref(), Some("album/index.svg"));
     assert_eq!(
-        folder_note(ws, "raccolta").as_deref(),
+        folder_note(ws, "album", true).as_deref(),
+        Some("album/index.svg")
+    );
+    assert_eq!(
+        folder_note(ws, "raccolta", true).as_deref(),
         Some("raccolta/index.md")
     );
+    // Il nome della pagina è quello della cartella, per un disegno come per
+    // una nota.
+    assert_eq!(id("tavole/_index.svg").page_name(), "tavole");
+    assert_eq!(id("viaggio/_index.md").page_name(), "viaggio");
 }
 
 #[test]

@@ -11,6 +11,8 @@
   "vault.archive": null,
   "folder.rename": null,
   "folder.trash": null,
+  "note.folder_page": null,
+  "note.subpage": null,
   "note.task.toggle": null,
   "settings.set": null,
   "settings.reset": null,

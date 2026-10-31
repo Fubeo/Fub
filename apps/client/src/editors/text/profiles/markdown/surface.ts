@@ -12,8 +12,11 @@
 import { currentTheme as getCurrentTheme, type Theme } from "../../../../theme/theme";
 import type { SyntaxForm } from "../../../../host/contract";
 import { byteToNormalizedCharIndices, normalizeLineBreaks } from "../../../../rules/offsets";
-import { taskChecked } from "../../../../rules/mirrored";
+import { isFolderPage, pageName, taskChecked } from "../../../../rules/mirrored";
 import { t } from "../../../../i18n/strings";
+import { liveStrings } from "./strings";
+import { pageIconsChanged } from "./livepreview";
+import { linkCardsChanged, type LinkCardSource } from "./link-card";
 import { mountMarkdown, sourceElementAt, type MarkdownMountOptions } from "./mount";
 import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
 import { settings } from "../../../../host/query";
@@ -49,6 +52,7 @@ import { deleteFootnoteAt, footnoteAt, MARKDOWN_ACTIONS, markdownActionState, re
 import { foldAll, unfoldAll } from "@codemirror/language";
 import { foldLess, foldMore, toggleFold } from "../../fold-levels";
 import type { EditorView } from "@codemirror/view";
+import type { Extension } from "@codemirror/state";
 import {
   ACTION_UNAVAILABLE,
   type EditorActionState,
@@ -64,13 +68,16 @@ import type { SurfaceMenu, SurfaceMenuEntry, SurfaceMenuItem } from "../../../co
 import { forEachDiagnostic } from "@codemirror/lint";
 import { codeBlockAt, headingAt, linkAt, listAt, tableRowAt, taskAt, type MarkdownLinkAt } from "./menu";
 
-/// Le tre viste esclusive sullo stesso buffer. `source` e `live_preview`
-/// scrivono nella stessa vista; `reading` la nasconde e mostra il reso.
-export type MarkdownMode = "source" | "live_preview" | "reading";
+/// Le quattro viste esclusive sullo stesso buffer. `source`, `live_preview`
+/// e `blocks` scrivono nella stessa vista; `reading` la nasconde e mostra il
+/// reso. I Blocchi sono la Live con maniglie, menu e trascinamento: per i
+/// comandi della shell hanno il ruolo della Live.
+export type MarkdownMode = "source" | "live_preview" | "blocks" | "reading";
 
 export const MARKDOWN_MODES: readonly SurfaceMode[] = [
   { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source", looks: ["tema"] },
   { id: "live_preview", label: () => t("mode.live"), presentation: "surface", contextMode: "live_preview", looks: ["tema"] },
+  { id: "blocks", label: () => liveStrings.t("blocks.mode"), presentation: "surface", contextMode: "live_preview", looks: ["tema"] },
   { id: "reading", label: () => t("mode.reading"), presentation: "rendered", contextMode: "reading", looks: ["tema"] },
 ];
 
@@ -80,6 +87,16 @@ export type EditorSlashHost = Parameters<typeof openSlashPalette>[3] & {
   /// Il menu «/» nel testo: senza, il «/» senza selezione apre la palette.
   menu?: SlashMenuHost;
 };
+
+/// Le icone delle pagine come le legge la shell (`state/page-icons.ts`).
+export interface PageIcons {
+  /// L'icona della pagina che un wikilink nomina, o `null`.
+  icon(page: string): string | null;
+  /// Il wikilink nomina una persona (K5): la Live lo mostra come pastiglia.
+  isPerson?(page: string): boolean;
+  /// Avvisa quando le icone o le persone cambiano; torna lo smontaggio.
+  watch(changed: () => void): () => void;
+}
 
 export interface MarkdownSurfaceOptions {
   /// Invocato a ogni modifica fatta dall'utente.
@@ -95,6 +112,18 @@ export interface MarkdownSurfaceOptions {
   onImportRemoteImage?(url: string, from: string): Promise<string | null>;
   /// Click su un `#tag` nella resa.
   onSearchTag(tag: string): void;
+  /// Rinomina la pagina dal titolo della testata dei Blocchi: `null` se è
+  /// andata, altrimenti la frase che dice perché no. Senza, il titolo resta
+  /// fermo.
+  onRenamePage?(doc: string, name: string): Promise<string | null>;
+  /// «Nuova sottopagina» dalla testata dei Blocchi: `null` se è andata,
+  /// altrimenti la frase che dice perché no.
+  onNewSubpage?(doc: string, name: string): Promise<string | null>;
+  /// Le icone delle pagine (`icon:`) per i wikilink della Live (K9): la
+  /// lettura per nome, e chi avvisa quando cambiano.
+  pageIcons?: PageIcons;
+  /// Le schede dei collegamenti (K8): senza, un URL da solo resta un link.
+  linkCards?: LinkCardSource;
   /// Sorgenti per i completamenti del profilo Markdown.
   completions: CompletionSources;
   /// La slash palette è disponibile solo se la shell ne fornisce le capacità.
@@ -205,6 +234,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
             if (!life.closed) notify(t("preview.open_failed", { page: path, reason: errorText(error) }), "guasto");
           });
       },
+      slashEnabled: () => Boolean(slashMenu && slashHost?.enabled()),
+      pageIcon: opts.pageIcons?.icon,
+      isPerson: opts.pageIcons?.isPerson,
+      linkCard: opts.linkCards,
       tableGrid: {
         active: (grid) => {
           tableGrid = grid;
@@ -315,6 +348,22 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     theme: getCurrentTheme(),
     extensions: () => profile.extensions(),
   });
+  if (opts.linkCards) {
+    life.add(opts.linkCards.watch(() => {
+      engine.runViewCommand((view) => {
+        view.dispatch({ effects: linkCardsChanged.of(null) });
+        return true;
+      });
+    }));
+  }
+  if (opts.pageIcons) {
+    life.add(opts.pageIcons.watch(() => {
+      engine.runViewCommand((view) => {
+        view.dispatch({ effects: pageIconsChanged.of(null) });
+        return true;
+      });
+    }));
+  }
 
   const reading = document.createElement("div");
   reading.className = "pane-preview markdown-preview markdown-rendered";
@@ -513,15 +562,54 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     if (anchor) scrollReadingTo(anchor.from, anchor.top);
   }
 
+  // I Blocchi stanno in un pezzo a parte, caricato la prima volta che
+  // servono: chi non li usa non lo paga. Finché arriva, la Live con la
+  // politica `mai`; poi si rimonta con le loro estensioni.
+  let blocksExtension: Extension | null = null;
+  let blocksLoading = false;
+  function presentation(next: MarkdownMode): void {
+    profile.setLivePreview(next === "live_preview" || next === "blocks");
+    profile.setBlocks(next === "blocks" ? (blocksExtension ?? []) : null);
+    if (next !== "blocks" || blocksExtension || blocksLoading) return;
+    blocksLoading = true;
+    void import("./blocks").then(
+      ({ blocksMode }) => {
+        blocksLoading = false;
+        if (life.closed) return;
+        blocksExtension = blocksMode({
+          page: () => pageName(resources?.documentId ?? documentId),
+          notify: (message, tone) => notify(message, tone),
+          folderPage: () => isFolderPage(resources?.documentId ?? documentId),
+          rename: opts.onRenamePage
+            ? (name) => opts.onRenamePage!(resources?.documentId ?? documentId, name)
+            : undefined,
+          mountImage: (root, html) => mountMarkdown(root, html, renderedOptions()),
+          subpage: opts.onNewSubpage
+            ? (name) => opts.onNewSubpage!(resources?.documentId ?? documentId, name)
+            : undefined,
+        });
+        if (mode !== "blocks") return;
+        profile.setBlocks(blocksExtension);
+        engine.reconfigure();
+      },
+      () => { blocksLoading = false; },
+    );
+  }
+
+  /// Il blocco della Lettura su cui si è aperto l'ultimo menu: in Lettura è
+  /// «questo punto» di «Copia il link a questo punto».
+  let readingPoint: number | null = null;
+
   function setMode(next: MarkdownMode): void {
     closeSlashPalette(parent);
     if (next === mode) return;
+    readingPoint = null;
     const previous = mode;
     if (previous !== "reading" && next === "reading") {
       const anchor = engine.getScrollAnchor();
       mode = next;
       parent.dataset.markdownMode = next;
-      profile.setLivePreview(false);
+      presentation(next);
       engine.reconfigure();
       renderReading();
       scrollReadingTo(anchor.offset, anchor.top);
@@ -533,7 +621,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       parent.dataset.markdownMode = next;
       unmountReading?.();
       unmountReading = null;
-      profile.setLivePreview(next === "live_preview");
+      presentation(next);
       engine.reconfigure();
       // La selezione di scrittura non si è mai mossa: la lettura non la
       // tocca, e qui si rimette solo la vista dov'era.
@@ -548,7 +636,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     const anchor = engine.getScrollAnchor();
     mode = next;
     parent.dataset.markdownMode = next;
-    profile.setLivePreview(next === "live_preview");
+    presentation(next);
     engine.reconfigure();
     engine.restoreScrollAnchor(anchor);
   }
@@ -625,17 +713,18 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// I gesti di formato del menu: gli stessi id della barra, divisi come in
   /// un elaboratore di testi fra il carattere e il blocco.
   const FORMAT_IDS = [
-    "markdown.bold", "markdown.italic", "markdown.strikethrough", "markdown.highlight",
+    "markdown.bold", "markdown.italic", "markdown.underline", "markdown.strikethrough",
+    "markdown.superscript", "markdown.subscript", "markdown.highlight",
     "markdown.code", "markdown.math", "markdown.comment", "markdown.clear",
   ];
   const TRANSFORM_IDS = [
     "markdown.paragraph", "markdown.heading.1", "markdown.heading.2", "markdown.heading.3",
     "markdown.heading.4", "markdown.heading.5", "markdown.heading.6",
     "markdown.list.bullet", "markdown.list.ordered", "markdown.list.task",
-    "markdown.quote", "markdown.callout", "markdown.codeblock",
+    "markdown.quote", "markdown.callout", "markdown.details", "markdown.codeblock",
   ];
   const INSERT_IDS = [
-    "markdown.table", "markdown.rule", "markdown.codeblock", "markdown.diagram", "markdown.mathblock",
+    "markdown.table", "markdown.columns", "markdown.toc", "markdown.rule", "markdown.codeblock", "markdown.diagram", "markdown.mathblock",
     "markdown.image", "markdown.link", "markdown.wikilink", "markdown.embed", "markdown.footnote",
     "markdown.property.add",
   ];
@@ -744,7 +833,10 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         // Il tasto destro dentro la selezione la lascia com'è; fuori porta il
         // cursore lì, come il clic, perché le voci parlino di quel punto.
         const inside = engine.readState((state) => state.selection.ranges.some((range) => !range.empty && range.from <= point && point <= range.to));
-        if (!inside) engine.placeCursor(point);
+        // In Live un link resta com'è: il cursore dentro ne mostrerebbe la
+        // sintassi, e il testo salterebbe proprio mentre il menu si apre.
+        const onLink = mode === "live_preview" && engine.readState((state) => linkAt(state, point)) !== null;
+        if (!inside && !onLink) engine.placeCursor(point);
         pos = inside ? pos : point;
       }
     }
@@ -825,6 +917,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       transform: TRANSFORM_IDS,
       insert: INSERT_IDS,
       commands: writable,
+      note: { kind: "note", id: resources?.documentId ?? documentId },
       miniBar: writable,
     };
   }
@@ -839,6 +932,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     const source = element?.closest<HTMLElement>("[data-md-from]");
     const from = source && !source.closest(".embed-loaded") && /^\d+$/.test(source.dataset.mdFrom ?? "")
       ? Number(source.dataset.mdFrom) : null;
+    // In Lettura «questo punto» è il blocco cliccato: il cursore di scrittura
+    // non si vede, e il link non deve parlare di lui.
+    readingPoint = from;
     const context: SurfaceMenuEntry[] = [];
     if (!readOnly) {
       context.push({
@@ -868,6 +964,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
           { id: "markdown.copy.source", label: t("editor_menu.copy_as.source"), run: () => copyText(engine.getDoc(), t("mode.reading.source_copied")) },
         ],
       },
+      note: { kind: "note", id: resources?.documentId ?? documentId },
       tail: ["shell.doc.export"],
     };
   }
@@ -965,7 +1062,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     find: () => !life.closed && mode !== "reading" && engine.openFind(),
     anchorHere: () => {
       if (life.closed) return null;
-      const found = engine.readState((state) => anchorAtCursor(state));
+      const point = mode === "reading" ? readingPoint : null;
+      const found = engine.readState((state) => anchorAtCursor(state, undefined, point !== null && point <= state.doc.length ? point : undefined));
       if (!found) return null;
       // L'id nuovo si scrive solo dove si scrive: in Lettura o in sola lettura
       // un blocco senza id non ha ancora un link.

@@ -304,6 +304,9 @@ fn from_inline(i: &wm::Inline) -> Result<arena::Inline, FormatError> {
         }
         wm::Inline::HardBreak => arena::Inline::HardBreak,
         wm::Inline::SoftBreak => arena::Inline::SoftBreak,
+        wm::Inline::Subscript(v) => {
+            arena::Inline::Subscript(v.iter().copied().map(arena::InlineRef).collect())
+        }
     })
 }
 
@@ -646,6 +649,7 @@ fn inline_children(
         wm::Inline::Emph(v)
         | wm::Inline::Strong(v)
         | wm::Inline::Superscript(v)
+        | wm::Inline::Subscript(v)
         | wm::Inline::Strikethrough(v) => v.iter().for_each(&mut refs),
         wm::Inline::Link(v) => {
             validate_span(v.span, source)?;
@@ -781,6 +785,7 @@ fn exceeds_depth(body: &[rm::Block]) -> bool {
                         rm::Inline::Emph(children)
                         | rm::Inline::Strong(children)
                         | rm::Inline::Superscript(children)
+                        | rm::Inline::Subscript(children)
                         | rm::Inline::Strikethrough(children) => {
                             pending.push(Pending::Inlines(children, down));
                         }
@@ -877,6 +882,7 @@ fn discard_inlines(inlines: Vec<rm::Inline>) {
                 rm::Inline::Emph(children)
                 | rm::Inline::Strong(children)
                 | rm::Inline::Superscript(children)
+                | rm::Inline::Subscript(children)
                 | rm::Inline::Strikethrough(children) => pending.push(children),
                 rm::Inline::Link {
                     label: Some(label), ..
@@ -1229,6 +1235,7 @@ impl Arena {
             rm::Inline::Strikethrough(v) => wm::Inline::Strikethrough(self.inline(v, down)?),
             rm::Inline::HardBreak => wm::Inline::HardBreak,
             rm::Inline::SoftBreak => wm::Inline::SoftBreak,
+            rm::Inline::Subscript(v) => wm::Inline::Subscript(self.inline(v, down)?),
         };
         self.place_inline(translated)
     }

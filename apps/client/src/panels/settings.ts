@@ -2922,6 +2922,13 @@ function renderVaultRow(vault: KnownVault, index: number): HTMLElement {
   open.type = "button";
   open.className = "settings-btn";
   open.textContent = t("settings.open");
+  // Il vault di questa finestra è già aperto: riaprirlo svuoterebbe le sessioni
+  // e ripartirebbe da capo, mentre il chip del vault lo tratta come un no-op.
+  if (vault.root === state.vaultRoot) {
+    open.textContent = t("settings.open.current");
+    open.disabled = true;
+    setTooltip(open, t("settings.open.current.hint"));
+  }
   open.addEventListener("click", () => {
     void (async () => {
       try {

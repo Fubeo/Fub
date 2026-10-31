@@ -4,6 +4,7 @@
 //     npm run bench:interaction                  # tutte, cinque giri ciascuna
 //     node bench/interaction.mjs --only=palette  # solo quelle
 //     node bench/interaction.mjs --rounds=9
+//     node bench/interaction.mjs --only=battuta  # la battuta nelle note grandi
 //
 // Per ogni interazione due numeri, dal momento del gesto (`timeStamp`
 // dell'evento che lo fa partire):
@@ -13,6 +14,12 @@
 // - **la fine del moto**: il primo fotogramma dopo il quale non resta niente in
 //   corsa, né una corsa di `moto` né un'animazione o transizione del documento.
 //   È il «posso andare avanti».
+//
+// **La battuta** è un'altra misura: quanto costa un carattere scritto in una
+// nota grande, dalla transazione al layout forzato, senza il disegno. Due note
+// sintetiche (`live-fixture.ts`, 901 e 7.201 righe) in ogni modalità di
+// scrittura; trenta battute e venti spostamenti del cursore di 200 caratteri.
+// Il budget è la mediana della battuta.
 //
 // Si tiene la mediana dei giri: il primo giro paga la compilazione dei moduli,
 // e un giro solo non dice niente su una macchina che fa anche altro. I budget
@@ -72,6 +79,22 @@ const INTERACTIONS = [
     budget: { first: 100, settled: 700 },
   },
 ];
+
+/// La battuta: le note, per numero di sezioni, e le modalità in cui si
+/// scrive. Il budget vale per la mediana della battuta, in millisecondi.
+const TYPING = {
+  id: "battuta",
+  title: "Una battuta in una nota grande",
+  notes: [50, 400],
+  modes: [
+    ["source", "Sorgente"],
+    ["live_preview", "Live"],
+    ["blocks", "Blocchi"],
+  ],
+  keystrokes: 30,
+  moves: 20,
+  budget: 4,
+};
 
 const only = process.argv
   .find((arg) => arg.startsWith("--only="))
@@ -182,7 +205,65 @@ async function measure(stage, interaction, scene) {
   };
 }
 
+/// Apre la nota sintetica nella modalità data e misura battute e cursore.
+async function measureTyping(stage, sections, mode) {
+  const scene = { id: `battuta-${sections}`, query: `live=battuta-${sections}`, prepare: async () => {} };
+  const page = await openPage(stage.browser, "dark", { clock: false });
+  try {
+    await prepareScene(page, scene, "dark", stage.base, sceneUrl);
+    await click(page, '#sidebar li[role="treeitem"][data-path="Guida"] .chevron');
+    await click(page, '#sidebar .tree-row[data-path="Guida/Live.md"]');
+    await page.waitForSelector(tabOf("Guida/Live.md"));
+    await click(page, `.pane.focus .pane-toolbar button[data-mode="${mode}"]`);
+    await page.waitForSelector(`.pane.focus[data-mode="${mode}"] .cm-content`);
+    // I Blocchi arrivano in un pezzo a parte: si misura quando ci sono.
+    if (mode === "blocks") await page.waitForSelector(".pane.focus .cm-fub-block-handles", { state: "attached" });
+    return await page.evaluate(async ({ keystrokes, moves }) => {
+      const { findTextEditorOrThrow } = await import("/src/editors/text/test-support.ts");
+      const view = findTextEditorOrThrow(document.querySelector(".pane.focus .cm-editor").parentElement);
+      const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+      // La nota si assesta prima: il primo parse e la prima resa non sono
+      // battute.
+      for (let i = 0; i < 30; i += 1) await frame();
+      view.dispatch({ selection: { anchor: globalThis.__fubLiveBench.cursor }, scrollIntoView: true });
+      view.focus();
+      for (let i = 0; i < 30; i += 1) await frame();
+      const typed = [];
+      for (let k = 0; k < keystrokes; k += 1) {
+        const head = view.state.selection.main.head;
+        const start = performance.now();
+        view.dispatch({ changes: { from: head, insert: "a" }, selection: { anchor: head + 1 }, userEvent: "input.type" });
+        view.dom.getBoundingClientRect();
+        typed.push(performance.now() - start);
+        await frame();
+      }
+      const moved = [];
+      for (let k = 0; k < moves; k += 1) {
+        const head = view.state.selection.main.head;
+        const start = performance.now();
+        view.dispatch({ selection: { anchor: k % 2 ? head + 200 : Math.max(0, head - 200) } });
+        view.dom.getBoundingClientRect();
+        moved.push(performance.now() - start);
+        await frame();
+      }
+      const stats = (samples) => {
+        const sorted = [...samples].sort((a, b) => a - b);
+        const round = (n) => Math.round(n * 10) / 10;
+        return {
+          median: round(sorted[Math.floor(sorted.length / 2)]),
+          p90: round(sorted[Math.floor(sorted.length * 0.9)]),
+          max: round(sorted[sorted.length - 1]),
+        };
+      };
+      return { lines: view.state.doc.lines, chars: view.state.doc.length, type: stats(typed), move: stats(moved) };
+    }, { keystrokes: TYPING.keystrokes, moves: TYPING.moves });
+  } finally {
+    await page.context().close();
+  }
+}
+
 const chosen = only ? INTERACTIONS.filter((i) => only.includes(i.id)) : INTERACTIONS;
+const typing = !only || only.includes(TYPING.id);
 await mkdir(REPORT, { recursive: true });
 const stage = await openStage();
 const report = [];
@@ -205,6 +286,35 @@ try {
       `${row.pass ? "·" : "✗"} ${row.id} — ${row.title}\n` +
         `    primo fotogramma ${row.first} ms (≤ ${row.budget.first}) · fine del moto ${row.settled} ms (≤ ${row.budget.settled})`,
     );
+  }
+  if (typing) {
+    for (const sections of TYPING.notes) {
+      for (const [mode, label] of TYPING.modes) {
+        let row;
+        try {
+          const result = await measureTyping(stage, sections, mode);
+          row = {
+            id: `${TYPING.id}-${result.lines}-${mode}`,
+            title: `${TYPING.title}: ${result.lines} righe, ${label}`,
+            budget: { type: TYPING.budget },
+            ...result,
+            pass: result.type.median <= TYPING.budget,
+          };
+        } catch (error) {
+          row = { id: `${TYPING.id}-${sections}-${mode}`, title: `${TYPING.title}: ${label}`, pass: false, error: String(error?.message ?? error).split("\n")[0] };
+        }
+        report.push(row);
+        if (row.error) {
+          console.log(`✗ ${row.id} — ${row.title}\n    non misurata: ${row.error}`);
+          continue;
+        }
+        const ms = (s) => `${s.median} · ${s.p90} · ${s.max} ms`;
+        console.log(
+          `${row.pass ? "·" : "✗"} ${row.id} — ${row.title}\n` +
+            `    battuta ${ms(row.type)} (mediana ≤ ${TYPING.budget}) · cursore ${ms(row.move)}`,
+        );
+      }
+    }
   }
 } finally {
   await stage.close();

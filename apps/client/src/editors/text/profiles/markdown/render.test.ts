@@ -252,6 +252,13 @@ describe("contenuto Markdown reso", () => {
 });
 
 describe("note, immagini, codice e HTML in riga", () => {
+  it("un'immagine da sola nel paragrafo è una figura con la didascalia dal testo alternativo (K10)", () => {
+    const figure = renderMarkdown("![Il ponte|320](ponte.png)").html;
+    expect(figure).toMatch(/^<figure[^>]*><img src="ponte.png" alt="Il ponte"[^>]*width="320"[^>]*><figcaption>Il ponte<\/figcaption><\/figure>$/);
+    expect(renderMarkdown("Il ![ponte](ponte.png) in riga").html).not.toContain("<figure");
+    expect(renderMarkdown("![](ponte.png)").html).not.toContain("<figure");
+  });
+
   it("una definizione ripetuta non ripete l'id, una non richiamata non è una nota (D07, D23)", () => {
     const root = content("Testo[^a]\n\n[^a]: Prima\n\n[^a]: Seconda\n\n[^b]: Mai richiamata\n");
     expect(Array.from(root.querySelectorAll(".block-footnote-definition"), (note) => [note.id.replace(/^.*(?=fn-)/, ""), note.textContent?.trim()]))
@@ -280,8 +287,9 @@ describe("note, immagini, codice e HTML in riga", () => {
   });
 
   it("l'HTML di testo comune si vede reso, il resto resta testo (L01)", () => {
-    const root = content("Premi <kbd>Ctrl</kbd>, H<sub>2</sub>O, x<SUP>2</SUP><br>e <em>aperto\n\n<b>no</b> <span class=\"x\">no</span>\n");
+    const root = content("Premi <kbd>Ctrl</kbd>, H<sub>2</sub>O, x<SUP>2</SUP><br>e <em>aperto <u>sotto</u>\n\n<b>no</b> <span class=\"x\">no</span>\n");
     expect(root.querySelector("kbd")?.textContent).toBe("Ctrl");
+    expect(root.querySelector("u")?.textContent).toBe("sotto");
     expect(root.querySelector("sub")?.textContent).toBe("2");
     expect(root.querySelector("sup")?.textContent).toBe("2");
     expect(root.querySelector("br")).not.toBeNull();

@@ -8,6 +8,9 @@ import {
   blockSource,
   diagramFenceContext,
   diagramTemplateSource,
+  emojiContext,
+  emojiSource,
+  matchEmoji,
   headingContext,
   headingSource,
   noteCompletions,
@@ -464,5 +467,52 @@ describe("blocchi", () => {
     expect(res.from).toBe(13);
     expect(res.options.map((o) => [o.label, o.detail, o.apply])).toEqual([["uno", "Primo paragrafo", "uno]]"]]);
     expect(await wikilinkSource(async () => ["Nota.md"])(ctxAt(doc, doc.length))).toBeNull();
+  });
+});
+
+describe("le emoji (H14)", () => {
+  it("`:nome` vale a inizio riga e dopo uno spazio, non dopo una lettera o una cifra", () => {
+    expect(emojiContext(":fu")).toEqual({ from: 0, query: "fu" });
+    expect(emojiContext("Che bello :fuo")).toEqual({ from: 10, query: "fuo" });
+    expect(emojiContext("(:ok")).toEqual({ from: 1, query: "ok" });
+    expect(emojiContext("ore 10:30")).toBeNull();
+    expect(emojiContext("http:ab")).toBeNull();
+    expect(emojiContext("chiave:valore")).toBeNull();
+    expect(emojiContext(":f")).toBeNull();
+    expect(emojiContext(": fuoco")).toBeNull();
+  });
+
+  it("cerca nei nomi italiani e inglesi, prima quelli della lingua", async () => {
+    const { EMOJI } = await import("./emoji-data");
+    expect(matchEmoji(EMOJI, "fuoco", "it")[0]).toEqual({ char: "🔥", name: "fuoco" });
+    expect(matchEmoji(EMOJI, "fire", "it")[0]).toEqual({ char: "🔥", name: "fire" });
+    expect(matchEmoji(EMOJI, "tada", "en")[0]!.char).toBe("🎉");
+    // Una parola dentro un nome composto.
+    expect(matchEmoji(EMOJI, "check", "en").map((hit) => hit.char)).toContain("✅");
+    expect(matchEmoji(EMOJI, "zzzzqq", "it")).toEqual([]);
+  });
+
+  it("i dati non hanno emoji ripetute né righe senza nomi", async () => {
+    const { EMOJI } = await import("./emoji-data");
+    expect(EMOJI.length).toBeGreaterThan(200);
+    expect(new Set(EMOJI.map((entry) => entry.char)).size).toBe(EMOJI.length);
+    for (const entry of EMOJI) {
+      expect(entry.it.length * entry.en.length, entry.char).toBeGreaterThan(0);
+    }
+  });
+
+  it("la sorgente scrive il carattere al posto di `:nome`, e del `:` di chiusura", async () => {
+    const doc = "Brucia :fuoco:";
+    const res = await emojiSource()(ctxAt(doc, doc.length - 1)) as CompletionResult;
+    expect(res.from).toBe(7);
+    expect(res.to).toBe(doc.length);
+    expect(res.options[0]!.apply).toBe("🔥");
+  });
+
+  it("dentro il codice tace", () => {
+    const doc = "```\n:fuoco\n```";
+    expect(emojiSource()(ctxAt(doc, doc.indexOf("co") + 2))).toBeNull();
+    const inline = "`a :fuoco`";
+    expect(emojiSource()(ctxAt(inline, inline.length - 1))).toBeNull();
   });
 });
