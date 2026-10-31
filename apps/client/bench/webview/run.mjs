@@ -512,11 +512,22 @@ async function main() {
       await warm.close();
     }
     // R1 subito dopo il riscaldamento: l'avvio riapre soltanto la nota del
-    // riscaldamento, non le schede degli altri scenari. S6 dopo S1: l'avvio
-    // da misurare riapre la nota che S1 ha lasciato.
-    const order = ["R1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "T1", "I1"].filter((id) => only.has(id));
+    // riscaldamento, non le schede degli altri scenari. I1 subito dopo, con
+    // poche schede da riaprire. S6 dopo S1: l'avvio da misurare riapre la
+    // nota che S1 ha lasciato.
+    const order = ["R1", "I1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "T1"].filter((id) => only.has(id));
     for (const id of order) {
-      const session = await openSession(base, app);
+      // Un'app che non parte è un risultato dello scenario, non la fine del
+      // banco: gli altri scenari e il referto vanno avanti.
+      let session;
+      try {
+        session = await openSession(base, app);
+      } catch (error) {
+        failed++;
+        results[id] = { error: `l'app non è partita: ${String(error?.message ?? error)}` };
+        console.log(`✗ ${id}: ${results[id].error}`);
+        continue;
+      }
       try {
         if (id !== "S6") await ready(session);
         const result = await SCENARIOS[id](session);

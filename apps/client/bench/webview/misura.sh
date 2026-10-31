@@ -31,7 +31,7 @@ if [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
     echo "  sudo apt-get install xvfb" >&2
     exit 2
   fi
-  wrap=(xvfb-run -a -s "-screen 0 1280x800x24")
+  wrap=(xvfb-run -a -s "-screen 0 1280x800x24 -maxclients 2048")
 fi
 
 echo "== il client"
