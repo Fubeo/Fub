@@ -280,14 +280,14 @@ const SCENARIOS = {
       await openByName(session, name, "");
       await session.waitFor("return [...document.querySelectorAll('.pane.focus .tab[aria-selected=true] .tab-name')].some((el) => el.textContent.includes(arguments[0]))", [name], 60_000);
       await pause(MEMORY_QUIET_MS);
-      // Che cosa si è aperto davvero: una superficie d'errore non è una modalità.
-      const surface = await session.execute("const p = document.querySelector('.pane.focus .pane-editor, .pane.focus [role=tabpanel] > *'); return p ? (p.className || p.tagName) : null;");
+      // Che cosa si è aperto davvero: l'etichetta della scheda dice il formato.
+      const surface = await session.execute("return document.querySelector('.pane.focus .tab[aria-selected=true]')?.getAttribute('aria-label') ?? null;");
       steps.push({ name, mode, surface, memory: await settled(driverPid, pause) });
     }
     const tabs = await session.execute("return document.querySelectorAll('.tab').length;");
-    for (let i = 0; i < 50; i++) {
-      const left = await session.execute("const close = document.querySelector('.tab-close'); close?.click(); return document.querySelectorAll('.tab').length;");
-      if (left === 0) break;
+    let left = tabs;
+    for (let i = 0; i < 100 && left > 0; i++) {
+      left = await session.execute("const close = document.querySelector('.tab-close'); close?.click(); return document.querySelectorAll('.tab').length;");
       await pause(200);
     }
     await pause(MEMORY_QUIET_MS);
@@ -298,6 +298,7 @@ const SCENARIOS = {
       startup,
       steps,
       tabs,
+      left,
       closed,
       values: {
         "R1.avvio.MiB": startup?.pss ?? null,
@@ -313,19 +314,21 @@ const SCENARIOS = {
   /// una tela di 2880 × 1800 (`tiles.mjs`).
   async T1(session) {
     const report = await session.executeAsync(TILES_SCRIPT, ["T1/Tessere.png", 60]);
-    if (report.errors.length > 0) throw new Error(report.errors.join("; "));
+    // Una strada che non va è un risultato, scritto nel referto: lo scenario
+    // fallisce soltanto se non si misura niente.
+    if (!report.ipcTile && !report.drawTile) throw new Error(Object.values(report.errors).join("; "));
     return {
       report,
       values: {
-        "T1.ipc.tessera.p95": report.ipcTile.p95,
-        "T1.asset.tessera.p95": report.assetTile.p95,
-        "T1.asset.fotogramma.p50": report.assetFrame.p50,
-        "T1.disegno.tessera.p95": report.drawTile.put.p95,
-        "T1.disegno.fotogramma.p50": report.drawFrame.put.p50,
-        "T1.frameGap.tessera.p95": report.drawTile.frameGap.p95,
-        "T1.frameGap.fotogramma.p95": report.drawFrame.frameGap.p95,
+        "T1.ipc.tessera.p95": report.ipcTile?.p95 ?? null,
+        "T1.asset.tessera.p95": report.assetTile?.p95 ?? null,
+        "T1.asset.fotogramma.p50": report.assetFrame?.p50 ?? null,
+        "T1.disegno.tessera.p95": report.drawTile?.put.p95 ?? null,
+        "T1.disegno.fotogramma.p50": report.drawFrame?.put.p50 ?? null,
+        "T1.frameGap.tessera.p95": report.drawTile?.frameGap.p95 ?? null,
+        "T1.frameGap.fotogramma.p95": report.drawFrame?.frameGap.p95 ?? null,
       },
-      samples: report.ipcTile.count,
+      samples: report.ipcTile?.count ?? report.drawTile?.put.count ?? 0,
     };
   },
   /// Avvio a freddo fino alla prima nota visibile: l'app riapre la nota che
@@ -387,8 +390,10 @@ async function main() {
     } finally {
       await warm.close();
     }
-    // S6 dopo S1: l'avvio da misurare riapre la nota che S1 ha lasciato.
-    const order = ["S1", "S6", "S2", "S3", "S4", "S5", "S7", "R1", "T1"].filter((id) => only.has(id));
+    // R1 subito dopo il riscaldamento: l'avvio riapre soltanto la nota del
+    // riscaldamento, non le schede degli altri scenari. S6 dopo S1: l'avvio
+    // da misurare riapre la nota che S1 ha lasciato.
+    const order = ["R1", "S1", "S6", "S2", "S3", "S4", "S5", "S7", "T1"].filter((id) => only.has(id));
     for (const id of order) {
       const session = await openSession(base, app);
       try {

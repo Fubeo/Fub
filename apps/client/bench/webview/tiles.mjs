@@ -6,8 +6,9 @@
 //
 // - la IPC di Tauri, `resource_read_chunk`, a pezzi di 64 KiB (una tessera di
 //   256 × 256 RGBA sono quattro pezzi);
-// - il protocollo `fub-asset:`, con `Range`: una tessera per richiesta, e un
-//   fotogramma intero a finestre di 1 MiB in parallelo.
+// - il protocollo `fub-asset:` con `fetch`: il file intero, poi con `Range`
+//   una tessera per richiesta e un fotogramma a finestre di 1 MiB in
+//   parallelo.
 //
 // Poi disegna su una tela di 2880 × 1800, un fotogramma alla volta: prima una
 // tessera per fotogramma (il pennello), poi il fotogramma intero (uno
@@ -69,7 +70,7 @@ const p = (xs, q) => {
 const stats = (xs) => ({ count: xs.length, p50: p(xs, 0.5), p95: p(xs, 0.95), max: p(xs, 1) });
 const frame = () => new Promise((r) => requestAnimationFrame(r));
 (async () => {
-  const out = { errors: [] };
+  const out = { errors: {} };
   const internals = window.__TAURI_INTERNALS__;
   let handle = null;
   try {
@@ -94,9 +95,26 @@ const frame = () => new Promise((r) => requestAnimationFrame(r));
       ipc.push(performance.now() - t0);
     }
     out.ipcTile = stats(ipc);
+  } catch (error) {
+    out.errors.ipc = String(error?.message ?? error);
+  }
+  try {
+    if (handle === null) throw new Error("nessun lease");
+    const len = out.len;
+    const tileBytes = TILE * TILE * 4;
+    const at = (i) => (i * 7919 * CHUNK) % Math.max(1, len - tileBytes);
     // 2. fub-asset: una tessera per richiesta, poi il fotogramma intero.
     const url = internals.convertFileSrc(handle, "fub-asset");
     out.url = url.replace(/[0-9]+$/, "N");
+    // Il file intero, senza Range: dice se la pagina legge fub-asset: con
+    // fetch anche quando le richieste con intervallo non passano.
+    try {
+      const t0 = performance.now();
+      const n = (await (await fetch(url)).arrayBuffer()).byteLength;
+      out.assetWhole = { bytes: n, ms: Math.round((performance.now() - t0) * 100) / 100 };
+    } catch (error) {
+      out.errors.assetWhole = String(error?.message ?? error);
+    }
     const range = async (from, to) => {
       const r = await fetch(url, { headers: { Range: "bytes=" + from + "-" + (to - 1) } });
       if (r.status !== 206) throw new Error("fub-asset: stato " + r.status);
@@ -122,7 +140,7 @@ const frame = () => new Promise((r) => requestAnimationFrame(r));
     }
     out.assetFrame = stats(whole);
   } catch (error) {
-    out.errors.push(String(error?.message ?? error));
+    out.errors.asset = String(error?.message ?? error);
   } finally {
     if (handle !== null) await internals.invoke("resource_close", { handle }).catch(() => {});
   }
@@ -159,7 +177,7 @@ const frame = () => new Promise((r) => requestAnimationFrame(r));
     });
     canvas.remove();
   } catch (error) {
-    out.errors.push(String(error?.message ?? error));
+    out.errors.draw = String(error?.message ?? error);
   }
   out.devicePixelRatio = devicePixelRatio;
   done(out);
