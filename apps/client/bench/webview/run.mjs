@@ -225,6 +225,21 @@ async function keep(session, id) {
   }
 }
 
+/// Ferma `tauri-driver` e ciò che ha avviato, e aspetta che esca (al più 10 s).
+async function stopDriver(driver) {
+  const exited = new Promise((done) => {
+    if (driver.exitCode !== null || driver.signalCode !== null) done();
+    else driver.once("exit", done);
+  });
+  try {
+    if (process.platform === "win32") driver.kill();
+    else process.kill(-driver.pid, "SIGTERM");
+  } catch {
+    // Già uscito.
+  }
+  await Promise.race([exited, new Promise((done) => setTimeout(done, 10_000).unref())]);
+}
+
 function git(...command) {
   try {
     return execFileSync("git", command, { encoding: "utf8" }).trim();
@@ -243,7 +258,13 @@ async function main() {
   const driver = spawn(args.driver ?? "tauri-driver", [
     "--port", String(port),
     ...(args["native-driver"] ? ["--native-driver", args["native-driver"]] : []),
-  ], { env: { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config }, stdio: ["ignore", "inherit", "inherit"] });
+  ], {
+    env: { ...process.env, FUB_VAULT: vault, FUB_CONFIG_DIR: config },
+    stdio: ["ignore", "inherit", "inherit"],
+    // Un gruppo di processi suo: alla fine si ferma il driver con l'app e
+    // WebKitWebDriver che ha avviato, non soltanto `tauri-driver`.
+    detached: process.platform !== "win32",
+  });
   const results = {};
   let failed = 0;
   try {
@@ -295,10 +316,15 @@ async function main() {
       }
     }
   } finally {
-    driver.kill();
-    // WebKitWebDriver e i suoi processi possono scrivere nel vault ancora un
-    // attimo dopo `kill`: la rimozione riprova invece di fermare il banco.
-    rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    await stopDriver(driver);
+    // L'app che si chiude può scrivere nel vault ancora un attimo: la
+    // rimozione riprova, e una cartella temporanea che resta non cancella le
+    // misure già prese.
+    try {
+      rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    } catch (error) {
+      console.log(`· la cartella temporanea resta: ${root} (${error?.code ?? error})`);
+    }
   }
   const report = {
     commit: git("rev-parse", "HEAD"),
