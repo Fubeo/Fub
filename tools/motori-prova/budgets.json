@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "note": "K0 del piano dei componenti. tetti: il peso del programma di prova senza simboli (profilo spoglio), le librerie che il motore porta e Fub non ha, e quelle in due versioni con il Cargo.lock di Fub; misura.mjs esce con 1 se una prova li supera. Si possono soltanto abbassare. obiettivi: la prima apertura a freddo e la memoria che resta dopo tutto chiuso e malloc_trim, rispetto alla partenza, misurate sulla macchina della pagina docs/misure/motori-2026-10-31-linux-ryzen.md: valgono soltanto lì, e misura.mjs li segnala senza fallire.",
+  "tetti": {
+    "vettori": {
+      "spoglio_mib": 65,
+      "nuove_librerie": 54,
+      "doppie_con_fub": 30
+    },
+    "pdf": {
+      "spoglio_mib": 24,
+      "nuove_librerie": 181,
+      "doppie_con_fub": 41
+    },
+    "pdf-dominio": {
+      "spoglio_mib": 8,
+      "nuove_librerie": 22,
+      "doppie_con_fub": 18
+    },
+    "foto": {
+      "spoglio_mib": 51,
+      "nuove_librerie": 138,
+      "doppie_con_fub": 23
+    },
+    "luce": {
+      "spoglio_mib": 36,
+      "nuove_librerie": 148,
+      "doppie_con_fub": 23
+    },
+    "documenti": {
+      "spoglio_mib": 35,
+      "nuove_librerie": 30,
+      "doppie_con_fub": 16
+    },
+    "fogli": {
+      "spoglio_mib": 7,
+      "nuove_librerie": 0,
+      "doppie_con_fub": 2
+    }
+  },
+  "obiettivi": {
+    "macchina": "motori-2026-10-31-linux-ryzen",
+    "vettori": {
+      "Foglio.svg": {
+        "prima_apertura_ms": 43,
+        "residuo_mib": 23
+      }
+    },
+    "pdf": {
+      "Stampa.pdf": {
+        "prima_apertura_ms": 4,
+        "residuo_mib": 8
+      },
+      "Lungo.pdf": {
+        "prima_apertura_ms": 369,
+        "residuo_mib": 7
+      }
+    },
+    "pdf-dominio": {
+      "Stampa.pdf": {
+        "prima_apertura_ms": 3,
+        "residuo_mib": 5
+      },
+      "Lungo.pdf": {
+        "prima_apertura_ms": 358,
+        "residuo_mib": 4
+      }
+    },
+    "foto": {
+      "Immagine.png": {
+        "prima_apertura_ms": 7,
+        "residuo_mib": 18
+      },
+      "Foto.png": {
+        "prima_apertura_ms": 197,
+        "residuo_mib": 113
+      }
+    },
+    "luce": {
+      "Immagine.png": {
+        "prima_apertura_ms": 147,
+        "residuo_mib": 15
+      },
+      "Foto.png": {
+        "prima_apertura_ms": 249,
+        "residuo_mib": 102
+      }
+    },
+    "documenti": {
+      "Documento.docx": {
+        "prima_apertura_ms": 11,
+        "residuo_mib": 17
+      }
+    },
+    "fogli": {
+      "Tabella.xlsx": {
+        "prima_apertura_ms": 2,
+        "residuo_mib": 3
+      }
+    }
+  }
+}

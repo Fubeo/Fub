@@ -55,8 +55,8 @@ della selezione e quanti oggetti ci sono o sono scelti.
 
 ## Cercare un comando
 
-`?` elenca i tasti del livello di adesso, e «Mostra tutto» quelli dei livelli
-sopra. Un campo in cima cerca fra le righe, anche fra quelle tenute da parte;
+`?` elenca i tasti dello spazio di adesso, e «Mostra tutto» quelli che il
+Completo aggiunge. Un campo in cima cerca fra le righe, anche fra quelle tenute da parte;
 «Che cosa è cambiato», chiuso sopra l'elenco, dice i tasti che hanno cambiato
 posto: `H` è la Mano, `Spazio` tenuto la Mano, `Maiusc+F10` il menu
 della selezione, `Ctrl+Y` i contorni.
@@ -136,8 +136,10 @@ Al centro c'è l'icona dello strumento in mano, in un anello del colore di
 adesso. Lo strumento e il colore in mano non sono fra le voci, perché ci sono
 già. Finché se ne sono usati meno di tre, completano le voci gli strumenti che
 si alternano di più alla penna, a partire da gomma, selezione ed
-evidenziatore, e i colori della tavolozza nel loro ordine. L'editor ricorda gli
-strumenti e i colori finché il disegno è aperto.
+evidenziatore, e i colori della tavolozza nel loro ordine. Gli strumenti usati
+si ricordano finché il disegno è aperto; i colori sono i recenti, che la
+macchina ricorda per tutti i disegni
+([Disegni, colori](drawing-colors.md#i-colori-recenti)).
 
 Il menu si apre:
 

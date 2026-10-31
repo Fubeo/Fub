@@ -316,6 +316,6 @@ la regola va nel nucleo.
 
 ## Fuori dall'ambito
 
-Nessun prodotto ha una penna propria. Gli editor PDF e le annotazioni sono
-sospesi: non hanno profili, modalità o rotte di inchiostro in più, e un
-prodotto futuro userà questi stessi strumenti.
+Nessun prodotto ha una penna propria. Le annotazioni dei PDF (il profilo
+`pdf` della famiglia `canvas`) usano questi stessi strumenti di sistema, senza
+rotte di inchiostro proprie, e un prodotto futuro userà gli stessi.

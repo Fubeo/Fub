@@ -424,8 +424,8 @@ virtualizzata. Supporta tastiera, schede dei fogli, formula bar e copia TSV
 le celle visibili; raggiunti i due estremi, lasciano la griglia e proseguono
 verso gli altri controlli della shell. Nessuna battuta attraversa IPC.
 
-Una cartella di Excel si apre in sola lettura con i valori salvati nel file,
-senza ricalcolo; la forma è descritta nel [modello del
+Una cartella di Excel si apre con i valori salvati nel file, senza ricalcolo,
+e si modifica a comandi; la forma è descritta nel [modello del
 documento](../architecture/document-model.md). Il protocollo Grid a byte (la
 versione 2) porta finestre, patch e giornale fra la shell e un provider nativo
 o WASM; famiglia, versione e fallback sono negoziati prima dell'invocazione.
@@ -446,4 +446,4 @@ WIT](../reference/abi-and-wit.md).
 - `crates/fub-abi/src/session.rs`
 - `crates/fub-kernel/src/drafts.rs`
 - `apps/client/src/editors/grid/`
-- `crates/fub-format-xlsx/src/convert.rs`
+- `crates/fub-format-xlsx/src/grid.rs`

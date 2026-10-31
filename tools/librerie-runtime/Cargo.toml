@@ -1,0 +1,20 @@
+# La prova delle librerie a runtime (livello 3 del piano dei componenti, K0):
+# due componenti in librerie dinamiche, le dipendenze comuni in una libreria
+# condivisa, un ospite che li carica a runtime. Vedi `README.md`.
+#
+# Un workspace a sé, fuori da quello di Fub: si compila con `-C
+# prefer-dynamic`, che il resto di Fub non usa.
+[workspace]
+members = ["comune", "componente-a", "componente-b", "ospite"]
+resolver = "3"
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+[profile.release]
+# Come Fub: niente `panic = "abort"`, perché un panic deve poter essere preso
+# al confine del componente.
+strip = true

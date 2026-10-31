@@ -396,9 +396,36 @@ pub struct AssetResponse {
 /// Una singola risposta Range resta bounded anche se il client chiede tutto il file.
 pub const ASSET_MAX_RANGE_BYTES: u64 = 1024 * 1024;
 
+/// Le origini della shell che possono leggere `fub-asset:` con `fetch`: le
+/// stesse di [`is_local_origin`], scritte come le manda il campo `Origin`
+/// (schema e host, senza percorso). `tauri://localhost` su Linux e macOS,
+/// `http(s)://tauri.localhost` su Windows, Android e iOS.
+const ASSET_CORS_ORIGINS: [&str; 3] = [
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+];
+
+/// Quale `Access-Control-Allow-Origin` merita una richiesta a `fub-asset:`.
+///
+/// `img` e `video` leggono il protocollo senza CORS; `fetch` da un'altra
+/// origine (la pagina è `tauri:`, il protocollo `fub-asset:`) ha bisogno
+/// dell'intestazione. La si dà soltanto a una `GET` che viene da un'origine
+/// esatta dell'app, ripetendo quell'origine: mai `*`, mai un'origine per
+/// prefisso. `dev` è l'origine di `devUrl`, che il chiamante passa soltanto
+/// nelle build di sviluppo. I controlli sul percorso e sulla finestra
+/// restano quelli di [`handle_asset_request`]: l'intestazione non apre
+/// niente che la finestra non potesse già leggere.
+pub fn asset_cors_origin(method: &str, origin: Option<&str>, dev: Option<&str>) -> Option<String> {
+    let origin = origin?;
+    let allowed = ASSET_CORS_ORIGINS.contains(&origin) || dev.is_some_and(|dev| dev == origin);
+    (method == "GET" && allowed).then(|| origin.to_owned())
+}
+
 /** Turns the guarded byte result into protocol headers, including a real 416. */
 pub fn asset_http_response(
     served: AssetResponse,
+    cors: Option<String>,
 ) -> Result<tauri::http::Response<Vec<u8>>, PluginError> {
     let mut builder = tauri::http::Response::builder()
         .status(served.status)
@@ -409,6 +436,15 @@ pub fn asset_http_response(
         .header("x-content-type-options", "nosniff");
     if let Some(range) = served.content_range {
         builder = builder.header("content-range", range);
+    }
+    if let Some(origin) = cors {
+        builder = builder
+            .header("access-control-allow-origin", origin)
+            .header(
+                "access-control-expose-headers",
+                "content-range, content-length",
+            )
+            .header("vary", "origin");
     }
     builder
         .body(served.body)
@@ -1046,7 +1082,7 @@ mod tests {
     fn protocol_response_keeps_range_and_no_sniff_headers() {
         let host = MemoryHost::seeded(vec![1; 100]);
         let served = handle_asset_request(&host, "main", LOCAL, "/1", Some("bytes=100-")).unwrap();
-        let response = asset_http_response(served).unwrap();
+        let response = asset_http_response(served, None).unwrap();
         assert_eq!(
             response.status(),
             tauri::http::StatusCode::RANGE_NOT_SATISFIABLE
@@ -1054,6 +1090,70 @@ mod tests {
         assert_eq!(response.headers()["content-range"], "bytes */100");
         assert_eq!(response.headers()["content-length"], "0");
         assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+        assert!(!response
+            .headers()
+            .contains_key("access-control-allow-origin"));
+    }
+
+    #[test]
+    fn only_a_get_from_an_exact_app_origin_may_fetch_assets() {
+        for origin in ASSET_CORS_ORIGINS {
+            assert_eq!(
+                asset_cors_origin("GET", Some(origin), None).as_deref(),
+                Some(origin)
+            );
+        }
+        let dev = Some("http://localhost:1420");
+        assert_eq!(
+            asset_cors_origin("GET", dev, dev).as_deref(),
+            dev,
+            "devUrl only when the caller passes it"
+        );
+        for other in [
+            "https://esempio.it",
+            "tauri://localhost.esempio.it",
+            "tauri://localhost:1",
+            "tauri://localhost/",
+            "http://tauri.localhost.esempio.it",
+            "http://localhost:1420",
+            "fub-asset://localhost",
+            "null",
+            "*",
+            "",
+        ] {
+            assert_eq!(
+                asset_cors_origin("GET", Some(other), None),
+                None,
+                "{other:?}"
+            );
+        }
+        assert_eq!(asset_cors_origin("GET", None, dev), None);
+        for method in ["HEAD", "OPTIONS", "POST", "PUT", "get"] {
+            assert_eq!(
+                asset_cors_origin(method, Some("tauri://localhost"), dev),
+                None,
+                "{method}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_allowed_origin_is_echoed_never_a_wildcard() {
+        let host = MemoryHost::seeded(vec![1; 100]);
+        let served = handle_asset_request(&host, "main", LOCAL, "/1", Some("bytes=0-9")).unwrap();
+        let cors = asset_cors_origin("GET", Some("tauri://localhost"), None);
+        let response = asset_http_response(served, cors).unwrap();
+        assert_eq!(
+            response.headers()["access-control-allow-origin"],
+            "tauri://localhost"
+        );
+        assert_eq!(response.headers()["vary"], "origin");
+        let served = handle_asset_request(&host, "main", LOCAL, "/1", Some("bytes=0-9")).unwrap();
+        let other = asset_cors_origin("GET", Some("https://esempio.it"), None);
+        let response = asset_http_response(served, other).unwrap();
+        assert!(!response
+            .headers()
+            .contains_key("access-control-allow-origin"));
     }
 
     #[test]

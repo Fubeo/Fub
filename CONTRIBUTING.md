@@ -146,7 +146,11 @@ Segui
 
 Una pagina canonica descrive il presente. Un lavoro aperto diventa una GitHub
 Issue. Una decisione architetturale usa il template ADR. Non creare cartelle
-`archive`, alias Markdown o verbali di implementazione.
+`archive`, alias Markdown o verbali di implementazione. Chi chiude una fase
+di lavoro aggiorna
+[`docs/project/status.md`](docs/project/status.md): la riga della fase, i
+collegamenti alle PR e, se un cancello è passato, i numeri in
+[`docs/misure/`](docs/misure/).
 
 ## Baseline visuali
 

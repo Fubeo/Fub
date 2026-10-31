@@ -23,8 +23,8 @@ Un `text` con `fub:inside`, che porta l'id della forma, nello stesso gruppo
 della forma. Il suo `transform` lo mette già al centro: un altro programma
 vede il testo dove FubDraw lo mostra. FubDraw legge `fub:inside` per
 rimetterlo al centro, e per rifargli la larghezza, quando la forma si sposta,
-si gira o cambia misura. Come si scrive un'etichetta è in [Disegni,
-etichette nelle forme](../product/drawing-labels.md).
+si gira o cambia misura. Dove sta l'etichetta e come segue la forma è in
+[Disegni, etichette nelle forme](../product/drawing-labels.md).
 Le sezioni del formato si citano come «formato della scena, §N»; quelle di
 questa pagina col solo numero.
 

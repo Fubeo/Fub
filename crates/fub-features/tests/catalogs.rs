@@ -36,7 +36,7 @@
 //! # Su quali componenti, e come lo sa
 //!
 //! Gli otto erano elencati a mano qui sotto, ed era il difetto del
-//! [§16.7](../../../docs/project/roadmap.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
+//! §16.7 della vecchia roadmap
 //! nella sua forma più larga: non solo la quinta view sarebbe entrata muta, ma
 //! la **nona feature** — una che non registra nessuna view — sarebbe entrata
 //! senza che nessuno guardasse il suo catalogo. Adesso l'elenco viene da

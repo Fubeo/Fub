@@ -1,0 +1,21 @@
+[package]
+name = "librerie-runtime-componente-a"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+name = "componente_a"
+# `dylib` per il caricamento a runtime (si lega a `comune` dinamica),
+# `rlib` per l'ospite statico.
+crate-type = ["dylib", "rlib"]
+
+[features]
+# Il simbolo d'ingresso per il caricamento a runtime. L'ospite statico lo
+# spegne: con due componenti nello stesso binario il simbolo sarebbe doppio.
+default = ["ingresso"]
+ingresso = []
+
+[dependencies]
+comune = { package = "librerie-runtime-comune", path = "../comune" }

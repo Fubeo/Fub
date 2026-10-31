@@ -1,0 +1,47 @@
+# I 13 crate di dominio di PdfCraft, senza la facciata engine (P0 del piano
+# di PdfCraft, decisione D1). Vedi `../README.md`.
+[package]
+name = "prova-pdf-dominio"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+[workspace]
+
+[dependencies]
+motori-prova-comune = { path = "../comune" }
+fub-abi = { path = "../../../crates/fub-abi" }
+serde_json = "1"
+pdfcraft-geom = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+pdfcraft-filters = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+pdfcraft-crypt = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+pdfcraft-cos = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+pdfcraft-content = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+pdfcraft-model = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+pdfcraft-fonts = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+pdfcraft-render = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+pdfcraft-annot = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+pdfcraft-forms = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+pdfcraft-xfdf = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+pdfcraft-edit = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+pdfcraft-organize = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+
+[profile.release]
+strip = false
+
+[profile.spoglio]
+inherits = "release"
+strip = true
+
+# Le stesse patch di `../pdf`: le copie corrette di PdfCraft.
+[patch.crates-io]
+hayro-interpret = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+hayro = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+hayro-syntax = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+hayro-cmap = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+hayro-postscript = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+hayro-jbig2 = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+lopdf = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+vello_common = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }
+vello_cpu = { git = "https://github.com/storytold/pdfcraft", rev = "c735fb7da55264e7cd84eed0688ec0cec5e628d4" }

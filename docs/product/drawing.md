@@ -20,11 +20,16 @@ Le annotazioni di un PDF usano lo stesso editor, con le pagine del PDF sotto:
 le descrive [Annotazioni dei PDF](pdf-annotations.md).
 
 Il file resta un SVG che qualunque browser o editor apre; «Esporta…» ne fa un
-PNG, un JPEG, un SVG pulito o un PDF ([Disegni, esportare](drawing-export.md)).
-I dati che servono a Fub stanno in pochi attributi del namespace `fub`: la
+PNG, un JPEG, un SVG pulito, un PDF o un file di Excalidraw o di draw.io
+([Disegni, esportare](drawing-export.md)).
+Un disegno che viene da Excalidraw o da draw.io entra con
+[Disegni, importare](drawing-import.md); i dati che servono a Fub stanno in
+pochi attributi del namespace `fub`: la
 forma esatta è nel [formato della scena](../reference/scene-format.md), le
 modifiche che il disegno ci scrive nelle [operazioni sulla scena](../reference/scene-operations.md),
-il perché nell'[ADR 0203](../decisions/0203-superfici-spaziali.md).
+il perché nell'[ADR 0203](../decisions/0203-superfici-spaziali.md). Quanto
+regge un disegno di decine di migliaia di elementi lo dicono i
+[disegni grandi](drawing-large.md).
 
 ## Modalità
 
@@ -80,9 +85,8 @@ che ordine ([Disegni, spazio di lavoro e barra](drawing-custom.md)). Lo spazio
 filtra soltanto ciò che si offre: un disegno si apre uguale nei due, e
 cambiare spazio non lo modifica.
 
-Chi monta l'editor senza uno spazio sceglie ancora un livello delle versioni
-precedenti con `level` e `setLevel`
-(`apps/client/src/editors/spatial/tools/editor.ts`).
+Chi monta l'editor sceglie lo spazio con `workspace` e lo cambia dal vivo con
+`setWorkspace` (`apps/client/src/editors/spatial/tools/editor.ts`).
 
 Oltre agli strumenti per disegnare, il Completo ha:
 
@@ -241,7 +245,8 @@ Con l'aggancio:
   incollata ha l'angolo in alto a sinistra sull'incrocio più vicino.
 
 L'unità del documento si sceglie nella sezione «Documento» delle proprietà
-([Disegni, proprietà](drawing-properties.md)).
+([Disegni, proprietà](drawing-properties.md)); le guide tirate dai righelli
+e le altre misure stanno in [Disegni, unità e guide](drawing-rulers.md).
 
 **Adatta la pagina al disegno** porta la pagina attorno a tutto il disegno,
 livelli nascosti e bloccati compresi, con 20 unità di margine, e la allarga
@@ -319,7 +324,9 @@ fusione, i simboli, le ripetizioni, i testi in area e su tracciato, le linee a
 spessore variabile, i caratteri del vault. Si vedono, si scelgono, si
 spostano e si esportano come gli altri oggetti: [maschere](drawing-masks.md),
 [effetti e fusione](drawing-effects.md), [simboli](drawing-symbols.md),
-[ripetizioni](drawing-repeats.md), [caratteri del vault](drawing-fonts.md).
+[ripetizioni](drawing-repeats.md), [caratteri del vault](drawing-fonts.md),
+[poligoni e stelle](drawing-shapes.md), e le
+[risorse](drawing-resources.md) da cui attingono.
 
 ## Da tastiera
 

@@ -238,9 +238,9 @@ fn no_feature_module_names_at_root() {
          \n\
          Cosa fare, in quest'ordine:\n\
          \n\
-           1. leggi la §16.3 in `../../../docs/project/roadmap.md`\n\
-              e la decisione 0071, che le hanno lasciate scritte la condizione e\n\
-              la ragione;\n\
+           1. leggi la decisione 0198\n\
+              (`docs/decisions/0198-feature-ufficiali-modulari.md`), che ha\n\
+              lasciato scritte la condizione e la ragione;\n\
            2. se ciò che hai scritto è davvero un accoppiamento fra due feature,\n\
               la voce è tua: lo split è il lavoro, e questo banco è ciò che te\n\
               l'ha detto;\n\

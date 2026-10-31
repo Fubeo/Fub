@@ -15,7 +15,7 @@ incorporato nel kernel.
 ```mermaid
 flowchart LR
     ENTRY["apps/client/src/main.ts"] --> DESKTOP["shell desktop"]
-    ENTRY -. futuro .-> MOBILE["shell mobile"]
+    ENTRY["entrypoints/mobile-main.ts"] --> MOBILE["shell mobile"]
     DESKTOP --> SHARED["editor · stato · feature condivise"]
     MOBILE --> SHARED
     SHARED --> APP["fub-app<br/>Tauri e IPC"]
@@ -75,10 +75,11 @@ La procedura completa, inclusi build, test e problemi comuni, è in
 
 Il punto d'ingresso unico è [`docs/README.md`](docs/README.md).
 
+- [La mappa del repository](docs/map/repo.md), [chi possiede che cosa](docs/map/ownership.md) e [dove sta X](docs/map/dove-sta-x.md)
 - [Panoramica del prodotto](docs/product/overview.md)
 - [Architettura](docs/architecture/overview.md)
 - [Workflow di sviluppo](docs/development/workflow.md)
-- [Stato e roadmap](docs/project/status.md)
+- [Stato del progetto](docs/project/status.md)
 - [Decisioni architetturali](docs/decisions/README.md)
 
 La documentazione descrive il presente. Le attività eseguibili vivono nelle

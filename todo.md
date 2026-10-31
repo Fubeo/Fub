@@ -173,7 +173,7 @@ non una decisione presa.
 7. Deadline e limiti di memoria per-store non sono quote assolute CPU/RAM del processo. Il limite è tracciato in [#58](https://github.com/Fubeo/Fub/issues/58).
 8. Watcher, ricongiungimento del filesystem e sincronizzazione tra superfici sono locali. [#9](https://github.com/Fubeo/Fub/issues/9) riguarda una capacità distribuita ancora da costruire.
 9. L'host utilizzabile senza watcher è un'infrastruttura, non una CLI utente, un servizio headless o un'app mobile già pronti.
-10. [Stato](docs/project/status.md) e [roadmap](docs/project/roadmap.md) non dichiarano una release pubblicata. Il primo candidato resta distinto dall'intero programma di estensione.
+10. [Stato](docs/project/status.md) non dichiara una release pubblicata. Il primo candidato resta distinto dall'intero programma di estensione.
 
 ## Inventario funzionale e destinazione
 
@@ -650,4 +650,4 @@ Il programma è completo quando:
 - [Layout su disco](docs/reference/on-disk-layout.md)
 - [Permessi e sicurezza](docs/reference/permissions-and-security.md)
 - [Test e qualità](docs/development/testing-and-quality.md)
-- [Stato](docs/project/status.md) e [roadmap](docs/project/roadmap.md)
+- [Stato](docs/project/status.md)

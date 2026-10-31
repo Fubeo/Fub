@@ -39,6 +39,57 @@ ascolta niente e non chiede fotogrammi.
 | S5 | tratto di penna di 3 s su un disegno di 2.000 tracciati | massimo fra fotogrammi |
 | S6 | avvio a freddo fino alla prima nota | ms |
 | S7 | Blocchi su una nota di 2.000 righe: un blocco trascinato su e giù per 3 s, poi dieci trasformazioni da paragrafo a titolo e ritorno | p95 e massimo fra fotogrammi |
+| R1 | la memoria: l'app vuota, aprendo un file per modalità (nota, lavagna, disegno, documento Word, foglio Excel, PDF, immagine), dopo «chiudi tutto» e un minuto dopo | PSS in MiB, in tutto e per processo (app, WebView), soltanto Linux |
+| T1 | le tessere: un fotogramma di 2880 × 1800 RGBA letto a tessere di 256 × 256 dalla IPC (`resource_read_chunk`) e da `fub-asset:` con `Range`, poi disegnato su una tela, una tessera e un fotogramma intero per fotogramma | p95 per tessera, mediana per fotogramma, ms |
+| I1 | il vault durante l'indicizzazione dell'avvio (10.000 note): una nota aperta con `read_document` e una tessera letta dalla IPC, una dopo l'altra, finché `vault_status` non dice che l'indice è pronto | p95 per nota e per tessera, ms |
+
+R1 legge `/proc/<pid>/smaps_rollup` dei processi che discendono dal driver,
+tolti i driver (`memory.mjs`): la PSS divide le pagine condivise fra chi le
+usa, quindi la somma non conta due volte le librerie. Ogni lettura è la
+mediana di tre a mezzo secondo. Il referto dà anche la RSS, i gruppi per
+processo (`app` è l'host Rust con la finestra, `webview` i processi
+WebKitWebProcess, poi `rete` e `gpu`) e la superficie che ogni file ha
+aperto.
+
+La procedura è fissa:
+
+1. **vuota**: chiuse le schede che l'app riapre, 10 s di quiete, una lettura;
+2. **aperte**: un file per modalità, senza chiudere i precedenti, una lettura
+   3 s dopo ognuno;
+3. **chiuse**: chiuse tutte le schede, una lettura dopo 10 s e una dopo 60 s
+   (**chiuse.tardi**);
+4. **giri**: dieci volte tutti i file aperti e poi tutto chiuso, una lettura
+   10 s dopo ogni chiusura, e alla fine una dopo 60 s.
+
+Ogni momento si legge in tutto e per gruppo di processi
+(`R1.vuota.app.MiB`, `R1.vuota.webview.MiB` e così via), e il referto tiene
+anche ogni processo con la sua PSS e la sua RSS.
+
+Il **residuo dopo la chiusura** (`R1.residuo.MiB`, e `R1.residuo.app.MiB`,
+`R1.residuo.webview.MiB` per processo) è «chiuse.tardi» meno «vuota»: la
+memoria che le schede chiuse tengono ancora un minuto dopo. Lo fanno le cache
+(caratteri, immagini decodificate, tessere), la memoria di JavaScript che la
+WebView non ha ancora raccolto e le pagine che l'allocatore ha liberato ma non
+ha restituito al sistema. I giri dicono se cresce: `R1.giri.primo.MiB` e
+`R1.giri.ultimo.MiB` sono il residuo dopo il primo e dopo il decimo giro,
+`R1.giri.pendenza.MiB` la retta dei minimi quadrati sui dieci residui, in MiB
+per giro, e `R1.giri.tardi.MiB` il residuo un minuto dopo l'ultimo giro; gli
+stessi valori ci sono per ogni gruppo. Una pendenza vicina a zero è memoria
+che torna o si riusa; una pendenza positiva è memoria che ogni giro lascia.
+La tolleranza, fissata in K0, sta in `budgets.json`: come obiettivo (il
+cancello di K3) residuo entro 50 MiB e pendenza entro 1 MiB per giro, sul
+runner una volta e mezza il peggiore visto.
+
+T1 è la prima delle tre vie del piano dei componenti per la tela dei motori
+(tessere verso la WebView, superficie wgpu nativa, egui): misura il trasporto
+e il disegno senza motore (`tiles.mjs`). Il tempo del motore per un fotogramma
+sta nelle prove di `tools/motori-prova`. Le chiamate passano da
+`__TAURI_INTERNALS__`, come fa `@tauri-apps/api`.
+
+I1 controlla che l'indicizzazione non fermi il vault (`indexing.mjs`): ogni
+avvio sul vault del banco indicizza le diecimila note, e i comandi che passano
+dal workspace non devono aspettare la fine di una fetta. Lo scenario fallisce
+se l'indice era già pronto all'avvio, perché allora non ha misurato niente.
 
 Le fixture nascono in una cartella temporanea
 (`apps/client/bench/webview/fixtures.mjs`); il vault vero di chi misura non
@@ -49,7 +100,22 @@ si tocca. Gli obiettivi e le soglie stanno in
 S5 chiede la feature `draw` dell'app: senza, un `.svg` si apre come immagine
 e il referto scrive lo scenario come saltato, senza numero.
 
-## Linux e Windows
+## Linux, con un comando solo
+
+Dalla radice del repository:
+
+```bash
+apps/client/bench/webview/misura.sh
+```
+
+Lo script costruisce il client e l'app di release, installa `tauri-driver`
+in `target/tauri-driver`, senza toccare il sistema, e misura tutti gli
+scenari con le soglie `targets`. Se manca un display usa `xvfb-run`. Prima
+gli serve WebKitWebDriver, cioè il pacchetto `webkit2gtk-driver`, e senza
+display anche `xvfb`: se mancano, lo script lo dice e si ferma. Gli argomenti
+in più vanno a `run.mjs`, per esempio `--only=R1,T1`.
+
+## Linux e Windows, passo per passo
 
 1. Costruisci il client e l'app:
 
@@ -73,8 +139,8 @@ e il referto scrive lo scenario come saltato, senza numero.
 Il referto va in `apps/client/bench/.output/webview/referto.json`. Il comando
 esce con 1 se un valore supera la soglia scelta.
 
-Il job `webview` della CI fa lo stesso con S1–S3 e S7, sotto Xvfb e senza scheda
-grafica, e carica il referto come artifact `webview-<sha>`.
+Il job `webview` della CI fa lo stesso con S1–S3, S7, R1, T1 e I1, sotto Xvfb e
+senza scheda grafica, e carica il referto come artifact `webview-<sha>`.
 
 ## macOS
 

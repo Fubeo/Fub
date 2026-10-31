@@ -1,0 +1,21 @@
+[package]
+name = "librerie-runtime-ospite"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "ospite"
+path = "src/main.rs"
+
+[features]
+# L'ospite con i due componenti dentro, per confrontare il peso: l'edizione
+# (livello 2) contro le librerie a runtime (livello 3).
+statico = ["dep:componente-a", "dep:componente-b"]
+
+[dependencies]
+comune = { package = "librerie-runtime-comune", path = "../comune" }
+componente-a = { package = "librerie-runtime-componente-a", path = "../componente-a", default-features = false, optional = true }
+componente-b = { package = "librerie-runtime-componente-b", path = "../componente-b", default-features = false, optional = true }
+libloading = "0.8"

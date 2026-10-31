@@ -42,7 +42,7 @@ non come passato.
 
 ## Con il mouse
 
-Strumenti: penna (`P`), evidenziatore (`H`), gomma (`E`).
+Strumenti: penna (`P`), evidenziatore (`Maiusc+P`), gomma (`E`).
 
 | N. | Gesto | Atteso |
 |---|---|---|

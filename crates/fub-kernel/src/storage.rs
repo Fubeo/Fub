@@ -29,7 +29,7 @@
 //! [`VaultStorage::write`] dice «questi byte, a questo path», **o niente**: chi
 //! rilegge dopo un crash trova il contenuto di prima o quello nuovo, mai un file
 //! a metà. Non era così quando questo modulo è nato — era una `std::fs::write` —
-//! ed è l'ordine che la [seduta 15](../../../docs/project/roadmap.md) aveva
+//! ed è l'ordine che la seduta 15 della vecchia roadmap aveva
 //! dichiarato: il §15.1 fa il posto, il §15.2 ci mette dentro la proprietà
 //! ([0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)),
 //! invece di scriverla due volte — una accanto all'astrazione e una dentro.

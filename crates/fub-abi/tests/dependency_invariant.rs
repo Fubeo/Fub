@@ -421,8 +421,8 @@ fn official_features_do_not_depend_on_the_kernel() {
 /// Il confine sdk↔kernel: **l'SDK è ciò che un guest importa**, e il kernel non
 /// ci può stare (§16.1).
 ///
-/// Questa rete è nata da una premessa trovata falsa. La [seduta
-/// 16](../../../docs/project/roadmap.md) dava per scontato
+/// Questa rete è nata da una premessa trovata falsa. La seduta
+/// 16 della vecchia roadmap dava per scontato
 /// che mettere `fub-kernel` in `fub-sdk` «violerebbe l'invariante che
 /// `dependency_invariant.rs` presidia» — e questo file, letto riga per riga, non
 /// nominava `fub-sdk` da nessuna parte: l'allowlist copre `fub-abi` e

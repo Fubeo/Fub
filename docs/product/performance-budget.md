@@ -1,8 +1,10 @@
 # Budget prestazionale
 
-> **Ambito:** evidenza osservazionale e criteri provvisori per la Graph View;
-> budget applicati in CI per i [disegni grandi](#i-disegni-grandi); il
-> [budget d'interazione](#il-budget-dinterazione) dello Scrittoio, fuori dalla CI.
+> **Ambito:** i numeri e i gate di prestazione del prodotto: la Graph View
+> (evidenza osservazionale e criteri provvisori), i
+> [disegni grandi](#i-disegni-grandi) applicati in CI e il
+> [budget d'interazione](#il-budget-dinterazione) dello Scrittoio, fuori
+> dalla CI, che include [la battuta](#la-battuta).
 > **Snapshot applicativo della Graph View:** SHA `4383a7c9d54b1e6557d070501e5ad998224ff294`.
 
 Questa pagina documenta tre distribuzioni dello stesso codice (locale, CI push e
@@ -14,7 +16,7 @@ non sono claim universali sulle macchine, sui browser o sui grafi arbitrari.
 Il runner registra Node, Chromium, piattaforma, CPU, viewport e preferenze media
 nel referto. I comandi canonici sono lo script
 [`graph-scale.mjs`](../../apps/client/bench/graph-scale.mjs), richiamato dagli
-script npm in [`apps/client/package.json`](../../apps/client/package.json#L12-L16):
+script npm in [`apps/client/package.json`](../../apps/client/package.json#L15-L26):
 
 ```bash
 cd apps/client
@@ -25,7 +27,7 @@ npm run bench:verify
 ```
 
 La stessa sequenza di scala è nel workflow CI
-[`ci.yml`](../../.github/workflows/ci.yml#L195-L222). Il timeout di sicurezza
+[`ci.yml`](../../.github/workflows/ci.yml#L277-L335). Il timeout di sicurezza
 canonico resta **30 s per campione**. Il referto `pass` include i controlli hard di lifecycle e, sul comando
 10k/seed 6 con almeno 16 finestre, anche il gate di stabilizzazione heap.
 I budget di frame time restano osservazionali e non sono applicati dalla CI.

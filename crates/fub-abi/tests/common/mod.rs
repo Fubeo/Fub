@@ -100,7 +100,7 @@ pub fn read_enum(file: &str, name: &str) -> RustEnum {
 /// deterministico (file, poi dichiarazione).
 ///
 /// È un elenco *per costruzione* e non a memoria — il criterio del
-/// [§16.7](../../../../docs/project/roadmap.md): un enum
+/// §16.7 della vecchia roadmap: un enum
 /// nuovo entra qui senza che nessuno se ne ricordi, e ciò che ne dipende
 /// diventa rosso da solo. Un elenco scritto a mano avrebbe smesso di coprire in
 /// silenzio, che è esattamente il difetto per cui questo modulo esiste.

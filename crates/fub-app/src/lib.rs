@@ -2516,7 +2516,25 @@ pub fn run() {
                         uri.path(),
                         range,
                     )?;
-                    resources::asset_http_response(served)
+                    // `devUrl` vale soltanto nelle build di sviluppo.
+                    let dev = if cfg!(debug_assertions) {
+                        app.config()
+                            .build
+                            .dev_url
+                            .as_ref()
+                            .map(|url| url.origin().ascii_serialization())
+                    } else {
+                        None
+                    };
+                    let cors = resources::asset_cors_origin(
+                        request.method().as_str(),
+                        request
+                            .headers()
+                            .get(tauri::http::header::ORIGIN)
+                            .and_then(|value| value.to_str().ok()),
+                        dev.as_deref(),
+                    );
+                    resources::asset_http_response(served, cors)
                 })();
                 let response = result.unwrap_or_else(|error| {
                     let status = match error {

@@ -9,6 +9,23 @@
 
 ## La griglia
 
+Il confine della pagina in una figura: i byte non lasciano il provider, e la
+shell parla soltanto col giornale e con le finestre.
+
+```mermaid
+flowchart LR
+    INPUT["battute della shell"] --> GIORNALE["giornale della DocumentSession"]
+    GIORNALE --> PROVIDER["fub-format-xlsx"]
+    BYTE["byte della cartella"] --> PROVIDER
+    PROVIDER --> FINESTRA["finestre delle celle"]
+    FINESTRA --> MOTORE["GridEngine disegna"]
+    PROVIDER --> SALVA["salvataggio: innesto o riscrittura misurata"]
+    SALVA --> BYTE
+```
+
+Il salvataggio riparte sempre dai byte del file, non dalla griglia: il
+giornale non è una copia della cartella.
+
 La famiglia `grid` ha un profilo, `workbook`, che apre una cartella di Excel
 con la versione 2 del protocollo: la sorgente a byte resta nell'host, e il
 testo della `DocumentSession` è il **giornale** della cartella, con le celle

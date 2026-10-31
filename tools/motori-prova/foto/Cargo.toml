@@ -1,0 +1,28 @@
+# PhotoCraft collegato a Fub da solo (K0 del piano dei componenti). Vedi
+# `../README.md`.
+[package]
+name = "prova-foto"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+[workspace]
+
+[dependencies]
+motori-prova-comune = { path = "../comune" }
+fub-abi = { path = "../../../crates/fub-abi" }
+serde_json = "1"
+# PhotoCraft alla revisione che il piano fissa (b1cfff9).
+photocraft-engine = { git = "https://github.com/storytold/photocraft", rev = "b1cfff9d30298eea4f446a8f6a5e4285cb43c6e7" }
+photocraft-compose = { git = "https://github.com/storytold/photocraft", rev = "b1cfff9d30298eea4f446a8f6a5e4285cb43c6e7" }
+
+[profile.release]
+strip = false
+
+[profile.spoglio]
+inherits = "release"
+strip = true
+
+# PhotoCraft (b1cfff9) ha soltanto le patch dell'interfaccia (egui, winit),
+# che la prova non compila: qui nessuna.

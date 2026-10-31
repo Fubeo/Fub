@@ -1,131 +1,120 @@
 # Documentazione di Fub
 
-Questa è la mappa canonica del progetto. La documentazione descrive **ciò che
-esiste**. Le attività eseguibili vivono nelle GitHub Issues. Un prossimo passo
-approvato può avere un TODO operativo in `project/` quando richiede una
-sequenza tecnica estesa: il TODO deve essere collegato a un'issue, dichiarare
-stato e regola di uscita e sparire quando il lavoro è concluso. Le decisioni
-architetturali spiegano il perché delle scelte ancora rilevanti. La cronologia
-completa resta in Git.
+Questa è la porta della documentazione: una riga per pagina, e per prima
+cosa la domanda «che cosa devi fare?». La documentazione descrive **ciò che
+esiste**; le attività eseguibili vivono nelle GitHub Issues; una decisione
+costosa da invertire vive negli ADR; la cronologia resta in Git.
 
 ```mermaid
 flowchart LR
-    START["Che cosa devi fare?"]
-    START --> USE["Usare o capire Fub"]
+    START["Che cosa devi fare?"] --> ORIENTA["Orientarsi"]
+    START --> USARE["Usare o capire Fub"]
     START --> CODE["Modificare il codice"]
     START --> DESIGN["Capire l'architettura"]
     START --> STATUS["Vedere stato e direzione"]
-    USE --> PRODUCT["product/"]
+    ORIENTA --> MAP["map/"]
+    USARE --> PRODUCT["product/"]
     CODE --> DEV["development/"]
     DESIGN --> ARCH["architecture/ e reference/"]
-    STATUS --> PROJECT["project/"]
+    STATUS --> PROJECT["project/ e decisions/"]
 ```
+
+## Orientarsi
+
+| Pagina | Risponde |
+|---|---|
+| [La mappa del repository](map/repo.md) | dove sta ogni cosa, e come si prova da sola |
+| [Chi possiede che cosa](map/ownership.md) | ogni regola, il file che la possiede e il test che la presidia |
+| [Dove sta X](map/dove-sta-x.md) | un tipo, un comando, un'impostazione: il file che lo definisce |
+| [Orientarsi nella repository](getting-started/repository-tour.md) | il percorso guidato, per chi comincia |
 
 ## Iniziare
 
 - [Installare, avviare e verificare](getting-started/install-and-run.md)
-- [Orientarsi nella repository](getting-started/repository-tour.md)
 
 ## Capire il prodotto
 
-- [Panoramica](product/overview.md)
-- [Vault e file](product/vault-and-files.md), [explorer e cartelle](product/explorer-and-folders.md) e [importare ed esportare](product/import-and-export.md)
-- [Editor e anteprima](product/editor-and-preview.md), [Blocchi](product/editor-blocks.md), [tasto destro, mini-barra e «/»](product/editor-menus.md), [correttore](product/proofing.md) e [documenti di Word](product/word-documents.md)
-- [Disegni](product/drawing.md) e [penne](product/drawing-pen.md)
-- [Disegni, modelli e suggerimenti](product/drawing-new.md)
-- [Disegni, importare da Excalidraw e draw.io](product/drawing-import.md)
-- [Disegni, trasformare](product/drawing-transform.md) e [selezione](product/drawing-selection.md)
-- [Disegni, pannello dei livelli](product/drawing-layers.md)
-- [Disegni, unità e guide](product/drawing-rulers.md)
-- [Disegni, proprietà](product/drawing-properties.md)
-- [Disegni, colori](product/drawing-colors.md)
-- [Disegni, stili](product/drawing-styles.md)
-- [Disegni, sfumature](product/drawing-gradients.md)
-- [Disegni, campiture e motivi](product/drawing-patterns.md)
-- [Disegni, punte delle linee](product/drawing-tips.md)
-- [Disegni, immagini](product/drawing-images.md)
-- [Disegni, ritagli e maschere](product/drawing-masks.md)
-- [Disegni, effetti e fusione](product/drawing-effects.md)
-- [Disegni, appunti](product/drawing-clipboard.md)
-- [Disegni, esportare](product/drawing-export.md)
-- [Disegni, poligoni e stelle](product/drawing-shapes.md)
-- [Disegni, connettori](product/drawing-connectors.md)
-- [Disegni, etichette nelle forme](product/drawing-labels.md)
-- [Disegni, forme dal tratto](product/drawing-ink-shapes.md)
-- [Disegni, vista ruotata, gesti e menu radiale](product/drawing-view.md)
-- [Disegni, cronologia](product/drawing-history.md)
-- [Disegni, accessibilità](product/drawing-accessibility.md)
-- [Disegni, tavole](product/drawing-boards.md)
-- [Disegni grandi](product/drawing-large.md)
-- [Disegni, tipografia](product/drawing-typography.md)
-- [Disegni, caratteri del vault](product/drawing-fonts.md)
-- [Disegni, simboli](product/drawing-symbols.md)
-- [Disegni e ripetizioni](product/drawing-repeats.md)
-- [Disegni, risorse](product/drawing-resources.md)
-- [Disegni, spazio di lavoro e barra](product/drawing-custom.md)
-- [Annotazioni dei PDF](product/pdf-annotations.md)
-- [Ricerca, link e grafo](product/search-links-and-graph.md)
-- [Plugin ed estensioni](product/plugins-and-extensions.md)
-- [Budget prestazionale](product/performance-budget.md)
-- [Criteri di accettazione](product/acceptance.md)
+| Pagina | Risponde |
+|---|---|
+| [Panoramica](product/overview.md) | che cosa offre Fub |
+| [Vault e file](product/vault-and-files.md) | che cosa Fub legge, scrive e conserva |
+| [Explorer e cartelle](product/explorer-and-folders.md) | l'albero, le appuntate, gli spazi |
+| [Editor e anteprima](product/editor-and-preview.md) | le superfici di scrittura |
+| [Blocchi](product/editor-blocks.md) | la superficie a blocchi |
+| [Tasto destro, mini-barra e «/»](product/editor-menus.md) | i menu degli editor |
+| [Correttore](product/proofing.md) | l'ortografia mentre si scrive |
+| [Documenti di Word](product/word-documents.md) | la videoscrittura nel vault |
+| [Annotazioni dei PDF](product/pdf-annotations.md) | scrivere accanto ai PDF |
+| [Ricerca, link e grafo](product/search-links-and-graph.md) | trovare e seguire |
+| [Importare ed esportare](product/import-and-export.md) | dentro e fuori dal vault |
+| [Plugin ed estensioni](product/plugins-and-extensions.md) | come Fub cresce |
+| [Budget prestazionali](product/performance-budget.md) | i numeri e i gate della CI |
+| [Criteri di accettazione](product/acceptance.md) | quando una modifica è accettabile |
+
+I disegni sono una famiglia di trenta pagine, con l'indice dentro
+[Disegni](product/drawing.md): dalla penna alle tavole, dall'import
+all'export, dalla sessione dal tablet ai disegni grandi.
 
 ## Capire l'architettura
 
-- [Vista d'insieme](architecture/overview.md)
-- [Componenti e confini](architecture/components-and-boundaries.md)
-- [Modello del documento](architecture/document-model.md)
-- [Storage e identità](architecture/storage-and-identity.md)
+- [Vista d'insieme](architecture/overview.md) e
+  [Componenti e confini](architecture/components-and-boundaries.md)
+- [Modello del documento](architecture/document-model.md) e
+  [Storage e identità](architecture/storage-and-identity.md)
 - [Runtime, eventi e job](architecture/runtime-events-and-jobs.md)
 - [Frontend e IPC](architecture/frontend-and-ipc.md)
-- [Superfici dell'editor](architecture/editor-surfaces.md), [superficie ricca e correttore](architecture/rich-surface-and-proofing.md) e [superficie dei fogli](architecture/grid-surface.md)
+- [Superfici dell'editor](architecture/editor-surfaces.md), la
+  [superficie ricca e il correttore](architecture/rich-surface-and-proofing.md)
+  e la [superficie dei fogli](architecture/grid-surface.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md)
 
 ## Sviluppare
 
-- [Workflow](development/workflow.md)
-- [Test e qualità](development/testing-and-quality.md)
-- Prove manuali: [l'inchiostro](development/ink-input-smoke-test.md), [il moto](development/motion-smoke-test.md); [misure nella WebView](development/webview-measurements.md) e [le misure prese](misure/README.md)
+- [Workflow](development/workflow.md) e [test e qualità](development/testing-and-quality.md)
+- Prove manuali: [l'inchiostro](development/ink-input-smoke-test.md) e [il moto](development/motion-smoke-test.md)
+- [Le misure nella WebView](development/webview-measurements.md) e [le misure prese](misure/README.md)
 - [Creare un plugin](development/plugin-authoring.md)
-- [Stile della documentazione](development/documentation-style.md)
-- [Versionamento e release](development/versioning-and-releases.md)
+- [Stile della documentazione](development/documentation-style.md) e [versionamento e release](development/versioning-and-releases.md)
 
 ## Consultare i contratti
 
-- [ABI e WIT](reference/abi-and-wit.md)
-- [Layout su disco](reference/on-disk-layout.md)
-- [Contratto IPC](reference/ipc-contract.md)
-- [Permessi e sicurezza](reference/permissions-and-security.md)
-- [Server MCP](reference/mcp-server.md)
-- [Formato della scena](reference/scene-format.md)
-- [Formato della scena, unità e guide](reference/scene-format-rulers.md)
-- [Formato della scena, poligoni e stelle](reference/scene-format-shapes.md)
-- [Formato della scena, spessore variabile](reference/scene-format-width.md)
-- [Formato della scena, connettori](reference/scene-format-connectors.md)
-- [Formato della scena, etichette](reference/scene-format-labels.md)
-- [Formato della scena, testo](reference/scene-format-text.md)
-- [Formato della scena, penne e punta piatta](reference/scene-format-pens.md)
-- [Formato della scena, accessibilità](reference/scene-format-accessibility.md)
-- [Formato della scena, risorse](reference/scene-format-resources.md)
-- [Formato della scena, effetti e fusione](reference/scene-format-effects.md)
-- [Formato della scena, stili](reference/scene-format-styles.md)
-- [Formato della scena, simboli](reference/scene-format-symbols.md)
-- [Formato della scena, ripetizioni](reference/scene-format-repeats.md)
-- [Formato della scena, tavole](reference/scene-format-boards.md)
-- [Formato della scena, export](reference/scene-format-export.md)
-- [Operazioni sulla scena](reference/scene-operations.md)
-- [Formato delle annotazioni PDF](reference/annotation-format.md)
-- [Sessione live](reference/live-session.md)
+- [ABI e WIT](reference/abi-and-wit.md), [contratto IPC](reference/ipc-contract.md),
+  [layout su disco](reference/on-disk-layout.md) e
+  [permessi e sicurezza](reference/permissions-and-security.md)
+- [Il formato della scena](reference/scene-format.md) con le sue
+  quindici pagine di dettaglio, e le
+  [operazioni sulla scena](reference/scene-operations.md)
+- [Le annotazioni PDF](reference/annotation-format.md), la
+  [proiezione dei documenti di videoscrittura](reference/rich-projection.md)
+  e la [sessione live](reference/live-session.md)
+- [Il server MCP](reference/mcp-server.md)
 
 ## Vedere stato e direzione
 
-- [Stato corrente](project/status.md)
-- [Roadmap](project/roadmap.md)
-- [M5: runtime WASM](project/m5-wasm-runtime.md)
+- [Stato del progetto](project/status.md): dove siamo, l'ordine di lavoro, il
+  rilascio
+- [M5, il runtime WASM](project/m5-wasm-runtime.md): la retrospettiva
 
 ## Capire le decisioni
 
 - [Indice ADR](decisions/README.md)
+
+## Le pagine che verranno
+
+Nomi già scelti, pagine non ancora scritte: ciascuna nasce quando la sua
+fase passa il cancello (l'ordine sta in [Stato](project/status.md)).
+
+| Pagina | La fase che la scrive |
+|---|---|
+| `misure/motori-*.md` | K0, le misure dei motori |
+| `architecture/componenti.md` | K1 e K2, il modello a componenti |
+| `reference/fub-motori.md` | K3, lo strato dei motori |
+| `product/lavagna.md` | la lavagna, prima versione |
+| `product/pdf-lettore.md` | P2, il visore PDF |
+| `product/pdf-completo.md` | P5, la modifica completa |
+| `product/disegno-completo.md` | K6, tutti gli strumenti del disegno |
+| `product/foto.md` e `product/libreria-foto.md` | K7 e K8 |
 
 ## Gerarchia delle fonti
 
@@ -135,7 +124,7 @@ Quando due fonti divergono, usa questo ordine:
 2. WIT, schemi e formati persistenti;
 3. pagine architetturali e riferimenti canonici;
 4. ADR, limitatamente alla motivazione;
-5. stato, roadmap e TODO attivi;
+5. stato e TODO attivi;
 6. cronologia Git.
 
 Una pagina non sostituisce il codice. Deve spiegare i confini, i flussi e le
